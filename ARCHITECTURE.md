@@ -431,6 +431,13 @@ loads with `deckent terminal` / the arg-less TTY opening (`workSurfaceLabels`/`r
 MCP client" for the stdio MCP entry. Measured by the lane: `deckent --version` 468 → 247 ms, SDK import 311 → 237 ms. Next: the whole
 `adapters/index.js` barrel on process entries (remaining cost is ESM compile/resolve); a compile cache is a separate decision.
 
+The shared-ledger `model-invocation-process` contract test (whose temporary 45 s bound this slice removed to the 30 s default) exceeded
+that default on a GitHub runner roughly 2× slower than local; `DECKENT_TEST_STARTUP_COST=1` records each phase (SDK import/client, CLI
+client, runtime ready/stop, invoke-to-provider, durable settlement, MCP ready/call/close, cleanup) opt-in. The measured root cause was 64
+sequential process launches inside one `it` (CI-FIX F6, sixteenth batch); the file is now five steps sharing one `beforeAll` fixture and
+process-identical assertion counts, longest step ≈ 7 s locally (`b9b2ce15`). The earlier 22–23 s single-test measurement predates the
+split and is no longer current evidence; a real GitHub runner run is the open proof.
+
 ### Operator terminal contract v1 (accepted target, partial implementation)
 
 The operator terminal is a presentation of the same typed operator actions as CLI, MCP and (later) Desktop,
@@ -1788,7 +1795,10 @@ Candidate preparation and verification likewise validate `before` entries agains
 candidate equals base + patch by the same hash-diff; manifest digests still cover the whole candidate read.
 Exhausted Git output/time bounds and scan budgets are typed `PATCH_LIMIT` with a bounded `detail`
 (`git-output|git-timeout|time|bytes|entries|depth|path`) surfaced as error params; `PATCH_UNAVAILABLE` means
-missing custody or Git. `execution.git.outputBytes` defaults to 4 MiB, sized for tens of thousands of tracked
+missing custody or Git. A `BAD` blob-size sentinel in an otherwise successful `ls-tree -l` (a blob Git cannot
+size, for example one missing from a partial/promisor clone) is `PATCH_UNAVAILABLE` too, not a malformed-size
+refusal (CI-FIX F5, sixteenth batch, Git 2.55 `show_tree_long`); path/type/mode validation and genuine
+malformed-size refusals are unchanged. `execution.git.outputBytes` defaults to 4 MiB, sized for tens of thousands of tracked
 paths; the workspace itself is still read in full (twice) within the byte budget.
 
 Ledger29 protects the new optional dispatch receipt from older writers; explicit existing migration
@@ -2036,7 +2046,8 @@ so the runtime client sees the code); a deny stays open everywhere (open decisio
 refused terminally (`POLICY_DENIED` → `refused/EFFECT_REJECTED`; no new refusal value). Audit event v1 gains `authority-refusal` (`stage
 decide|submit|settle`, code, command/approval ids; no change content). The approval summary of an authority operation is a redacted,
 human-readable diff (`describePolicyChange`, ≤ 2048 characters, cut by code point) through `OperationApprovalBroker`'s `describe`; no
-protocol field. Remaining: P4 installation root, P5 authority surface, model tool M3, ledger v43 archive.
+protocol field. Remaining: P4 installation root, P5 authority surface, model tool M3, ledger v44+ archive
+(v43 is the model catalog since WORKER-CURRENCY-1, sixteenth batch; see "Worker model currency, slice 1" below).
 
 **Company scope registry (H34 S1, ledger v39).** Every request scope resolves to a company or is refused with typed `SCOPE_UNKNOWN`;
 no flag relaxes this. Ledger v39 adds `companies(company_id)` and `scope_registry(scope_id PK, company_id FK, origin
@@ -2381,3 +2392,28 @@ because the layout revision (part of attempt identity) hashes the resource regis
 candidates under the workspaces resource. `atStartup` emits the read-only currency report after `runtime serve` is ready and never
 builds. Codex workers now run with `-c check_for_update_on_startup=false`; Claude workers keep `DISABLE_AUTOUPDATER=1`; Cursor stays an
 explicit unsupported exception.
+
+### Worker model currency, slice 1 (WORKER-CURRENCY-1, ledger v43; owner 2026-09-30, sixteenth batch)
+
+Models are pinned by exact API model id; aliases are refused, never resolved. The model catalog lives in the ledger (v43):
+`model_catalog_channels(channel_id)` and `model_catalog_models(channel_id, model_id)` are installation-wide facts written from a
+provider catalog **document** (schemaVersion 2: channel `{kind native-cli|http-api|local-server, cli, aliases}`, per model exact
+`nativeId`, `lifecycle {state active|legacy|deprecated|retired, deprecatedOn, retireNotBefore, retiredOn, source{url, observedOn}}`,
+`minCliVersion`, `efforts`, `aliases`); `model_catalog_activations(scope_id, channel_id, model_id)` is per-scope, hierarchical activation
+(channel row = empty model id); `model_catalog_receipts(scope_id, command_id)`. One governed command (`register | activate | deactivate`,
+SDK `applyModelCatalog`) with receipt; authority = the existing `model-activation` policy resource (register/activate need `activate`,
+deactivate needs `deactivate`; target id = sha256 of `deckent.model-catalog-target.v1`). v43 is additive and shape-checked (IF NOT EXISTS
+like v39/v41); the service-start upgrade backs up v42; a v42 build refuses v43 (`ATTEMPT_STORE_VERSION`). The chat catalog (config
+`provider_catalog` v1) and chat activation are unchanged (golden binding digest test); chat moves onto the ledger copy in a later slice.
+Native coding invocation v4 pins `{channelId, modelId, auxiliaryModelIds}`; `nativeSubscription` v2 carries it; argv carries only the
+exact id (never a fallback model). `coding prepare` refuses CLI aliases (adapter data `commands.json#modelAliases`) and `-latest` names
+(`WORKER_MODEL_ALIAS_REFUSED`). New Run admission (composition resolve hook, read-only ledger view, before any write) refuses native
+tasks with typed codes: `WORKER_MODEL_UNPINNED` (v1 profile), `WORKER_MODEL_ALIAS_REFUSED`, `WORKER_CHANNEL_NOT_ACTIVE`,
+`WORKER_CHANNEL_MISMATCH`, `WORKER_MODEL_UNKNOWN`, `WORKER_MODEL_RETIRED` (state retired or `retiredOn` day passed),
+`WORKER_MODEL_NOT_CURRENT` (legacy/deprecated), `WORKER_MODEL_NOT_ACTIVE`, `WORKER_MODEL_CLI_TOO_OLD` (profile preflight CLI pin, which
+the container preflight enforces equal to the image CLI, < catalog `minCliVersion`) — for the model and every declared helper model.
+Admitted Runs are untouched (replay/inspect/reserve read the frozen snapshot). Post-run: Claude `session.ended.models` = `result.modelUsage`
+keys; after the gateway closes the host seals one `model.verification` event (`verified` | `substituted` + unexpected ids | `unverified`
+for Codex/Cursor, v1 profiles or missing usage); a worker-sent verdict is dropped. The verdict does not yet gate acceptance. Landing
+consequence: existing native profiles (`nativeSubscription` v1, alias models such as `--model sonnet`) are refused with
+`WORKER_MODEL_UNPINNED` on their next new Run until re-prepared against the catalog (operational note, WORKER-IMAGE-R4 docs-delta).

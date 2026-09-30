@@ -4,8 +4,9 @@ Bu belge yalnız güncel durumu tutar; önceki sürümü Git geçmişinde, kanı
 
 ## Durum
 - **Canlı (2026-09-30, 15. parti):** `origin/main` = `47a76adf` (Astra 2194 PASS); instance `85d99b8d`, Node 24.21; tam erişimde model curl → HTTP/2 200
-  (istem v6). Kanıt `proof/LIVE-SWITCH-BATCH15-2026-09-30/README.md`. **Sıradaki (owner 2026-09-30):** dogfood — terminal kalan/UI-UX/komut kartlarını
-  Deckent'in kendi Run döngüsüyle yaptırmak (D1 canlı profil, D2 ilk döngü).
+  (istem v6). Kanıt `proof/LIVE-SWITCH-BATCH15-2026-09-30/README.md`. **Sıradaki (owner 2026-09-30):** on altıncı parti (`integrate/2026-09-30-q`)
+  dogfood D1-0..D1-2 + CI-FIX F1–F6 + WORKER-IMAGE-R4 + WORKER-CURRENCY-1'i birleştirdi (ayrıntı aşağıda); sıradaki adım tam verify → Astra → push →
+  owner'ın substitution kararı → WORKER-CURRENCY-2.
 - **On dördüncü parti (2026-09-30):** `integrate/2026-09-30-o` (worktree `/home/alperen/deckent-next-integrate-n`, taban `02601269`) =
   Astra 2189 REVISE düzeltmeleri: R7 ata pinleri (açık + kapalı yazılabilir görünüm; lane/r7-ancestor), gömülü bwrap kopya yarışı (link ile yayın),
   R8 doctor MCP launch kuralı (lane/r8-doctor-mcp). Tam verify 490/3467 0 skip (Docker imajıyla) → Astra 2190 PASS → `origin/main` = `51b19dc5` (push 2026-09-30).
@@ -21,6 +22,17 @@ Bu belge yalnız güncel durumu tutar; önceki sürümü Git geçmişinde, kanı
   Astra 2192 REVISE R9 P2 (istem config'i koşulsuz mühürlü diyordu; full-access içinde owner-approved çağrı mevcut config içeriğini yazabilir)
   → `0542196b`: yapısal taban (durum/policy/kimlik) ile config kuralı (onaysız salt okunur, onaylı çağrı mevcut içeriği değiştirebilir) ayrı;
   `posture().configuration` `shellWritePosture('owner-approved')` kaynağından; Astra reviewer testi gerçek serviste kırmızı→yeşil (r9/). Sıradaki: tam verify → Astra. Kanıt `proof/R7-R8-FIX-2026-09-30/`.
+- **On altıncı parti (2026-09-30):** `integrate/2026-09-30-q` — dogfood ilk döngüleri D1-0..D1-2 Deckent'in kendi Run/verify/benimseme döngüsüyle
+  benimsendi (N1 izole kurulum, topoloji a′: canlıya yazım yok; `c7b44469` → `844048e6` → `0e4fa003` → `b61b34b9`; lead test düzeltmesi `02cff460`;
+  kanıt `../deckent-refactor-work/proof/DOGFOOD-D1-2026-09-30/README.md`); CI-FIX F1–F6 (Codex lane + lead F6 düzeltmesi `b9b2ce15`/`28f6bfe0`;
+  required Linux job artık bwrap'ı aşamalıyor (F1–F3), PTY fixture CI'de yeşil (F4), git patch `ls-tree` BAD sentinel'i `PATCH_UNAVAILABLE` (F5),
+  shared-ledger testi 5 adıma bölündü, en uzun adım ~7 s (F6); GitHub koşusu push sonrası gerekli, C0–C2 DONE/PASS yazılmadı; kanıt
+  `../deckent-refactor-work/proof/CI-FIX-2026-09-30/`); WORKER-IMAGE-R4 (`0fd2df1b`; r4 imajı `sha256:bf6973ec…`, Claude 2.1.285/Codex 0.159.2/
+  Cursor 2026.09.28; kanıt `../deckent-refactor-work/proof/WORKER-IMAGE-R4-2026-09-30/`); WORKER-CURRENCY-1 (`2231ac8f`; ledger v43 model kataloğu
+  sağlayıcı kanalı başına, tam model ID pinleme (takma ad reddi), admission ret kodları, `model.verification`; kanıt
+  `../deckent-refactor-work/proof/WORKER-CURRENCY-1-2026-09-30/`). Açık: model kataloğu CLI/MCP seed yüzeyi yok (yalnız SDK); substitution
+  henüz kabulü engellemiyor (owner kararı bekliyor); Codex/Cursor model kanıtı doğrulanmadı; verify imajında bwrap yok; ağaç dışı `node_modules`
+  SBOM açığı sürüyor. Sıradaki: tam verify → Astra → push → owner'ın substitution kararı → WORKER-CURRENCY-2.
 - **Canlı (2026-09-29 18:07'den beri):** yedinci–on ikinci partiler `4a2ac04` build'iyle canlıda; `origin/main` = `4a2ac04` (push `0e0ca63` → `9a3ef2c`
   Astra 2181 PASS → `4a2ac04` Astra 2186/2187 PASS). Instance `74e4359e` (ilk `0b044e1a`, global kök düzeltmesiyle yeniden başlatıldı), Node 24.21,
   protokol v18; eski v16 servisi eski build'in kendi CLI'ıyla durduruldu. Mod göçü dry-run → `--grant-full-access` (bindings v3 + owner full-access
@@ -152,8 +164,9 @@ izlemek yerine bağın kendisini sayıyor. Aktif kartlar, son üç günün kanı
   protokol paketinde; yanıt dili son-kontrolü ayrı kart. Açık bulgu: `mcp add`/`remove` kayıt dosyasını denetimden önce yazıyor.
 
 ## Sıradaki
-1. On üçüncü parti (`integrate/2026-09-29-n`: main `0360bab9` + REALM-NOTICE + LANG-CRASH + OPEN-SANDBOX + bütçe taşıması + belge commit'leri):
-   tam verify → Astra → PASS'te push (`0360bab9` dahil). Canlıya alma ayrı owner onayı; o yeniden başlatmada canlı config `language: tr`.
+1. On altıncı parti (`integrate/2026-09-30-q`: dogfood D1-0..D1-2 + CI-FIX F1–F6 + WORKER-IMAGE-R4 + WORKER-CURRENCY-1): tam verify → Astra →
+   PASS'te push. Ardından owner'ın substitution kararı (model.verification'ın kabulü engelleyip engellemeyeceği) → WORKER-CURRENCY-2
+   (CLI/MCP seed yüzeyi, sohbet yolunun ledger kataloğuna taşınması).
 2. REALM-NOTICE açığı: MCP ön-başlatma launch kartı gerçek realm'i önceden adlandırmıyor — (a) `usable()` ön-seçimi / (b) olduğu gibi; lead/owner.
 3. Owner kararları: SHELL-OVERLAY O1/O3/O5/O6/O7; `format` denetleyicisi, şema korpusu ölçümü, AppArmor kurulum belgesi, CI `bwrap-bundle.yml` ilk koşu;
    DEPS-SCHEMA C1 kanıtı; sabah listesi `proof/MORNING-REPORT-2026-09-29.md` (P1 tasarımları: OTel / uzak MCP, anahtar zinciri K2; zod 4 hata kodları;

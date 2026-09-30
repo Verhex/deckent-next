@@ -4,6 +4,28 @@ Human-curated. One line per landing, keyed by PLAN.md card id. No product code w
 
 ## Unreleased
 
+- CHANGED (DOGFOOD-D1, sixteenth batch): the first governed dogfood cycles were adopted by Deckent's own Run/verify/adoption loop (isolated
+  N1 clone, no writes to the live installation) — the root help line documents `--delivery-command-id` and `--replaces-command-id`, the
+  terminal workline's `deckent> ` input prefix is gone (with a placeholder hint on an empty line), and `/new` is removed and renamed to
+  `/clear` (a rename, not an alias; owner decision). Adopted commits `c7b44469`..`b61b34b9`; lead test fixes `02cff460`. Evidence
+  `proof/DOGFOOD-D1-2026-09-30/README.md`.
+- FIX/TEST (CI-FIX F1–F6, sixteenth batch): the required Linux CI job now pins an official Node Docker image by resolved local id,
+  preflights Docker and stages/builds the bundled bubblewrap before tests (`build-bwrap.mjs` check → stage → build → compiled `doctor`
+  selection); the interactive PTY fixture renders under CI's deferred Ink frames (F4); a `BAD` blob-size sentinel in a successful
+  `git ls-tree -l` (a blob Git cannot size, for example one missing from a partial clone) is now `PATCH_UNAVAILABLE`, not treated as unsafe
+  (F5, Git 2.55; path/type/mode and malformed-size refusals unchanged); the shared-ledger `model-invocation-process` contract test — whose
+  single `it` launched 64 processes and exceeded the CI runner's slower wall clock — is now five sequential steps sharing one fixture,
+  longest step ≈ 7 s (F6). GitHub runner confirmation still pending after push.
+- CHANGED (WORKER-IMAGE-R4): the packaged worker image recipe/Dockerfile carry the `r3-20260922` lineage (byte-identical to what the
+  product update path built on 2026-09-22), so `toolchains update` plans `r4-<day>` instead of a second r3. The builder refuses a history
+  whose revision counters do not strictly decrease (`WORKER_HISTORY_COUNTER`) and a build whose counter does not exceed every
+  `r<N>-<date>` tag the local daemon already holds for the repository (`WORKER_VERSION_COUNTER_TAKEN`). New image
+  `deckent/worker:r4-20260930` = `sha256:bf6973ec…` (Claude Code 2.1.285, Codex 0.159.2, Cursor Agent 2026.09.28-64d2043), built
+  through `toolchains update --apply`; not yet referenced by any live installation profile (the N1 dogfood D1-2 card ran on it directly).
+- ADDED (WORKER-CURRENCY-1): ledger v43 model catalog (channel + exact model id, lifecycle, CLI minimum, scoped hierarchical activation,
+  receipts; SDK `applyModelCatalog`); native coding invocation v4 / nativeSubscription v2 exact model pin; alias refusal at prepare and
+  admission; new-Run admission refusals `WORKER_*`; Claude `modelUsage` keys recorded and host `model.verification` sealed.
+  Breaking for operators: native profiles without a catalog reference cannot start new Runs.
 - SECURITY (OPEN-SANDBOX): full access: shell calls run in an open bubblewrap sandbox — network and HOME available, Deckent's state roots
   sealed read-only/hidden and credential-pattern files in HOME masked; without bubblewrap a full-access call runs on the host
   (prefer-sandbox) or stays closed (require-sandbox), with a visible notice. Existing non-product subdirectories of the project's
