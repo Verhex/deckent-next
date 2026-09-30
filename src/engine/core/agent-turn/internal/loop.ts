@@ -69,6 +69,22 @@ export const AGENT_TURN_NO_PROGRESS_NOTE = '[deckent] The last two rounds made n
 export const AGENT_TURN_MECHANICAL_COMPACTION_NOTE = '[deckent] Earlier messages were compacted without a model summary (its summary could'
   + ' not be read): they are kept as a shortened excerpt, and details from them may be missing. Repeat what still matters, or start a new conversation.';
 const NO_PROGRESS_STATUSES: ReadonlySet<AgentToolCallStatus> = new Set(['duplicate', 'invalid-arguments', 'error']);
+/**
+ * What the model is told about a call of a round that reached its output limit (TRUNCATED-TOOLCALL, live 2026-09-30: large write_file / run_shell
+ * arguments cut at exactly 8192 completion tokens, streamed by vLLM v0.30.0 as finish_reason "tool_calls"). Protocol text like every `[deckent]`
+ * result: English, in code; the call is labelled `invalid-arguments` (its arguments are incomplete; Jev 6192a348, safest reversible option).
+ */
+export function agentTurnTruncatedCallResult(name: string, limitTokens: number | null): string {
+  return `[deckent] ${name}: error=output-limit (this answer reached the output limit${limitTokens === null ? '' : ` of ${limitTokens} tokens`} while writing the call,`
+    + ' so its arguments are incomplete; nothing ran). Do not send the same call again. Write large content in parts: create the file with its first'
+    + ' part, then add each next part with edit_file (old_string = the current last lines), or write the parts with scratch_write and join them with'
+    + ' one run_shell command. Keep each call well below the limit.';
+}
+/** Closure-note sentence of a turn in which calls were refused because their round reached the output limit (TRUNCATED-TOOLCALL). */
+export function agentTurnTruncatedCallsNote(count: number, limitTokens: number | null): string {
+  return `[deckent] ${count} tool call${count === 1 ? ' was' : 's were'} cut at the model's output limit${limitTokens === null ? '' : ` (${limitTokens} tokens)`}`
+    + ' and not run; the model was asked to write in smaller parts.';
+}
 
 /** A tool call's position in its turn: the model round and its index in that round's response. */
 export interface AgentToolExecution { readonly round: number; readonly index: number }
@@ -85,7 +101,13 @@ export interface AgentTurnInput {
    */
   readonly admission?: { readonly outputReserveTokens: number; readonly safetyReserveTokens: number; readonly requestMaxBytes?: number;
     /** Bytes the client's next request adds after this round: the longest answer and one user message (owner 2026-09-26, Astra 2106 R2). */
-    readonly requestReserveBytes?: number };
+    readonly requestReserveBytes?: number;
+    /**
+     * The completion limit every round requests (TRUNCATED-TOOLCALL). A round whose reported completion count reaches it, or whose finish is
+     * `length`, is truncated: none of its tool calls runs (a provider may report such a round as `tool_calls`, vLLM v0.30.0 does). Absent: only
+     * `length` marks a round.
+     */
+    readonly completionLimitTokens?: number };
 }
 
 export interface AgentTurnResult {
@@ -142,7 +164,8 @@ export async function runAgentTurn(input: AgentTurnInput, ports: AgentTurnPorts)
   // Read dedupe answers only with a result the model can still see: entries leave with compaction and after a successful edit. An
   // entry is bound to the result message itself, never to the provider's call id (providers reuse ids across rounds; Astra 2106 R1).
   const seenReads = new Map<string, { readonly callId: string; readonly message: AgentTurnMessage }>();
-  let rounds = 0, toolCalls = 0, compactions = 0, mechanical = 0, appendedCount = 0, stalled = 0, last: AgentTurnMessage | null = null;
+  let rounds = 0, toolCalls = 0, compactions = 0, mechanical = 0, cut = 0, appendedCount = 0, stalled = 0, last: AgentTurnMessage | null = null;
+  const limitTokens = input.admission?.completionLimitTokens ?? null;
   // Same value as sha256('agent-turn-appended:1\0' + JSON.stringify(appended)), built incrementally.
   const appendedHash = createHash('sha256').update('agent-turn-appended:1\0[');
   const push = (message: AgentTurnMessage) => {
@@ -151,8 +174,9 @@ export async function runAgentTurn(input: AgentTurnInput, ports: AgentTurnPorts)
     return message;
   };
   const finish = (value: AgentTurnFinish, closure: string | null): AgentTurnResult => {
-    // A mechanical compaction is never silent: the turn's note says what the kept context is and what to do.
-    const note = mechanical ? [closure, AGENT_TURN_MECHANICAL_COMPACTION_NOTE].filter(Boolean).join(' ') : closure;
+    // A mechanical compaction and refused truncated calls are never silent: the turn's note says what happened and what to do.
+    const extra = [...(cut ? [agentTurnTruncatedCallsNote(cut, limitTokens)] : []), ...(mechanical ? [AGENT_TURN_MECHANICAL_COMPACTION_NOTE] : [])];
+    const note = extra.length ? [closure, ...extra].filter(Boolean).join(' ') : closure;
     emit({ kind: 'done', finish: value, note });
     const final = last as AgentTurnMessage | null;
     const answer = final?.role === 'assistant' && final.toolCalls.length === 0 && final.content ? final.content : null;
@@ -228,6 +252,8 @@ export async function runAgentTurn(input: AgentTurnInput, ports: AgentTurnPorts)
         : `The model returned no answer. ${summary()}.`);
     }
     let progressed = outcome.content.trim() !== '';
+    // A round that reached its output limit carries incomplete calls, whatever its finish says and whether or not the arguments parse.
+    const truncated = outcome.finish === 'length' || (limitTokens !== null && outcome.usage !== null && outcome.usage.completionTokens >= limitTokens);
     for (const [index, call] of outcome.toolCalls.entries()) {
       const tool = byName.get(call.name), started = ports.now();
       let digestOf: string | null = null, targetOf: string | null = null;
@@ -241,6 +267,8 @@ export async function runAgentTurn(input: AgentTurnInput, ports: AgentTurnPorts)
         return message;
       };
       if (signal.aborted) { emit({ kind: 'tool.started', callId: call.id, name: call.name, target: null }); await result('cancelled', `[deckent] ${call.name}: error=cancelled`); continue; }
+      // Never run a cut call (no partial effect): no argument check, no policy question, no approval, no execution.
+      if (truncated) { cut++; emit({ kind: 'tool.started', callId: call.id, name: call.name, target: null }); await result('invalid-arguments', agentTurnTruncatedCallResult(call.name, limitTokens)); continue; }
       if (!tool) { emit({ kind: 'tool.started', callId: call.id, name: call.name, target: null }); await result('error', `[deckent] ${call.name}: error=unknown-tool`); continue; }
       const checked = checkArguments(tool, call.argumentsJson);
       targetOf = checked.ok ? ports.describe(tool, checked.args) : null;

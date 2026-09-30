@@ -31,7 +31,9 @@ const sqlite = { busyTimeoutMs: 1_000, journalMode: 'delete' as const, durabilit
 export const principal = { id: `os:${userInfo().uid}`, issuer: hostname(), subject: String(userInfo().uid), assurance: 'os-user' as const, scopeIds: ['scope'] };
 export const me = [{ issuer: principal.issuer, subject: principal.subject }];
 
-export type Script = { toolCall?: { name: string; arguments: string }; content?: string; hold?: boolean; summary?: string; status?: number };
+export type Script = { toolCall?: { name: string; arguments: string }; content?: string; hold?: boolean; summary?: string; status?: number;
+  /** TRUNCATED-TOOLCALL: the usage chunk's completion count (default 8); the fixture's `maxCompletionTokens` is 128. */
+  completionTokens?: number };
 export async function runtime(options: { toolGrant?: boolean | 'approval'; tokenize?: boolean; windowTokens?: number; countedTokens?: number;
   count?: (body: { messages: unknown[] }) => number; approvalTtlMs?: number; extraGrants?: Record<string, unknown>[];
   /** TL-C: the catalog declares the thinking switch; the data root lies inside the project (like the live `.deckent/live-data`). */
@@ -55,8 +57,8 @@ export async function runtime(options: { toolGrant?: boolean | 'approval'; token
   const state = { requests: [] as Record<string, unknown>[], raw: [] as string[], tokenize: [] as Record<string, unknown>[], script: [] as Script[], closed: 0 };
   const chunk = (delta: Record<string, unknown>, finish: string | null = null) => `data: ${JSON.stringify({ id: 'chatcmpl-turn',
     object: 'chat.completion.chunk', created: 1, model: 'native-chat', choices: [{ index: 0, delta, finish_reason: finish }] })}\n\n`;
-  const usage = `data: ${JSON.stringify({ id: 'chatcmpl-turn', object: 'chat.completion.chunk', created: 1, model: 'native-chat', choices: [],
-    usage: { prompt_tokens: 20, completion_tokens: 8, total_tokens: 28 } })}\n\n`;
+  const usageOf = (completion = 8) => `data: ${JSON.stringify({ id: 'chatcmpl-turn', object: 'chat.completion.chunk', created: 1, model: 'native-chat', choices: [],
+    usage: { prompt_tokens: 20, completion_tokens: completion, total_tokens: 20 + completion } })}\n\n`;
   const server = createServer((req: IncomingMessage, res: ServerResponse) => {
     const body: Buffer[] = []; req.on('data', part => body.push(part));
     req.on('end', () => {
@@ -82,6 +84,7 @@ export async function runtime(options: { toolGrant?: boolean | 'approval'; token
           usage: { prompt_tokens: 50, completion_tokens: 20, total_tokens: 70 } })); return;
       }
       res.writeHead(200, { 'content-type': 'text/event-stream' }); res.on('close', () => { state.closed++; });
+      const usage = usageOf(step.completionTokens);
       const parts = step.hold ? [] : step.toolCall
         ? [chunk({ role: 'assistant', content: '' }), chunk({ tool_calls: [{ index: 0, id: 'call_1', type: 'function', function: { name: step.toolCall.name, arguments: '' } }] }),
           chunk({ tool_calls: [{ index: 0, function: { arguments: step.toolCall.arguments } }] }), chunk({}, 'tool_calls'), usage, 'data: [DONE]\n\n']
