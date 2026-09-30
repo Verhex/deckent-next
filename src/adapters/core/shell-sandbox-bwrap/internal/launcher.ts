@@ -1,6 +1,6 @@
 import { execFile } from 'node:child_process';
 import { createHash, randomBytes } from 'node:crypto';
-import { chmodSync, closeSync, fsyncSync, lstatSync, mkdirSync, openSync, readFileSync, realpathSync, renameSync, rmSync, writeSync, type BigIntStats } from 'node:fs';
+import { chmodSync, closeSync, fsyncSync, linkSync, lstatSync, mkdirSync, openSync, readFileSync, realpathSync, renameSync, rmSync, writeSync, type BigIntStats } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { bubblewrapObservation, nativeShellKernelProbe, probeShellCapabilities, type BubblewrapCapability, type BubblewrapLauncher, type BubblewrapRestriction,
@@ -16,6 +16,11 @@ export const BUBBLEWRAP_MINIMUM_SYSTEM_VERSION = '0.12.0';
 export const BUBBLEWRAP_OVERLAY_VERSION = '0.11.0';
 const BUNDLED_MAX_BYTES = 4 * 1024 * 1024;
 const VERSION_TIMEOUT_MS = 500, SMOKE_TIMEOUT_MS = 1_000;
+/** A copy another process is publishing at this moment (its temporary name still linked: two links) settles within microseconds unless that
+ * process is descheduled; the verification waits for it this many times, this long each (≤ 0.5 s, synchronous: the measurement runs once
+ * per process), then treats it as foreign and replaces it (measured: a cold start of 8 processes once waited past 100 ms). */
+const SETTLE_ATTEMPTS = 100, SETTLE_PAUSE_MS = 5;
+const pause = (ms: number) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
 /** The launcher's own run: every namespace the realm uses, a fresh /proc, our `true`, nothing of the caller's (env empty). */
 const SMOKE_ARGS = ['--unshare-all', '--die-with-parent', '--new-session', '--ro-bind', '/', '/', '--proc', '/proc', '--dev', '/dev', '--', '/bin/true'];
 /** What bubblewrap prints when the kernel lets it create a user namespace without the capabilities to set it up, or not at all. */
@@ -131,10 +136,26 @@ function verifiedCopy(path: string, expected: string): string | null {
   return identity;
 }
 
+/** `verifiedCopy`, waiting (bounded) while the target is still another name's too — a concurrent publisher between its `link` and the
+ * removal of its temporary name — or was replaced under the check (`nlink` 0). */
+function settledCopy(path: string, expected: string): string | null {
+  for (let attempt = 1; ; attempt++) {
+    const identity = verifiedCopy(path, expected);
+    let links: bigint;
+    try { links = lstatSync(path, { bigint: true }).nlink; } catch { return identity; }
+    if (identity || links === 1n || attempt >= SETTLE_ATTEMPTS) return identity;
+    pause(SETTLE_PAUSE_MS);
+  }
+}
+
 /**
  * The bundled build (S1 second choice): the package file's bytes are read once and hashed; the same bytes are written to
- * `<stateDir>/bin/bwrap-<sha256>` (a 0700 directory, file 0500, temporary + fsync + rename) and that copy is what runs. The package file's
- * mode is not a rule (umask 002 installs it 0775): only its content is, and the copy is ours alone.
+ * `<stateDir>/bin/bwrap-<sha256>` (a 0700 directory, file 0500) and that copy is what runs. The package file's mode is not a rule (umask
+ * 002 installs it 0775): only its content is, and the copy is ours alone.
+ * Concurrent placement (processes of one installation measuring at once): the copy is written under a unique temporary name, synced, and
+ * published with `link` — which never replaces — so an existing copy wins and every process runs the same inode. A replacing `rename`
+ * made a concurrent writer's just-verified inode vanish under its check (`lstat` of a replaced inode reads `nlink` 0: measured 29 of 120
+ * processes refused as "did not verify after writing"). Only a target that does not verify (stale, tampered, foreign) is replaced.
  */
 function bundledCandidate(options: BubblewrapSelectOptions): Candidate | { readonly none: string } {
   const path = options.bundledPath === undefined ? defaultBundledPath() : options.bundledPath;
@@ -164,11 +185,18 @@ function bundledCandidate(options: BubblewrapSelectOptions): Candidate | { reado
     const digest = sha256(bytes);
     if (digest !== expected) return { ok: false, reason: `bundled bwrap at ${path} does not match the shipped build (sha256 ${expected}); found ${digest}` };
     const temporary = `${target}.${randomBytes(6).toString('hex')}.tmp`;
-    const fd = openSync(temporary, 'wx', 0o500);
-    try { writeSync(fd, bytes); fsyncSync(fd); } finally { closeSync(fd); }
-    try { chmodSync(temporary, 0o500); renameSync(temporary, target); } catch (error) { rmSync(temporary, { force: true }); throw error; }
-    const written = verifiedCopy(target, expected);
-    return written ? launcher(written) : { ok: false, reason: `the bundled bwrap copy at ${target} did not verify after writing` };
+    try {
+      const fd = openSync(temporary, 'wx', 0o500);
+      try { for (let offset = 0; offset < bytes.length;) offset += writeSync(fd, bytes, offset); fsyncSync(fd); } finally { closeSync(fd); }
+      chmodSync(temporary, 0o500);
+      let published = true;
+      try { linkSync(temporary, target); } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error; published = false; }
+      if (published) rmSync(temporary, { force: true });
+      // The target is ours (just linked) or a concurrent writer's (it may still hold its temporary name for a moment): its own check decides.
+      let written = settledCopy(target, expected);
+      if (!written && !published) { renameSync(temporary, target); written = settledCopy(target, expected); }
+      return written ? launcher(written) : { ok: false, reason: `the bundled bwrap copy at ${target} did not verify after writing` };
+    } finally { rmSync(temporary, { force: true }); }
   } catch (error) { return { ok: false, reason: `the bundled bwrap could not be placed under ${bin} (${errorText(error)})` }; }
 }
 const defaultBundledPath = () => fileURLToPath(new URL(`../bundled/linux-${process.arch}/bwrap`, import.meta.url));
