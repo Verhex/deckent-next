@@ -2,7 +2,7 @@ import { SystemTrustedClock } from '#platform/index.js';
 import { constants } from 'node:fs';
 import { open } from 'node:fs/promises';
 import { join } from 'node:path';
-import type { WorkerEvent } from '#domain/index.js';
+import type { WorkerEvent, WorkerModelVerification } from '#domain/index.js';
 import { observationDirectory } from './files.js';
 
 /** Live, append-only projection of validated worker events next to the attempt's other sidecars (`worker.events`, NDJSON, 0600).
@@ -43,4 +43,21 @@ async function writeAll(handle: EventFile, bytes: Buffer) {
     offset += Math.max(0, bytesWritten);
   }
   return offset === bytes.length;
+}
+
+/**
+ * The retained event log of an ended attempt, as JSON lines: the received events, then the host's model verdict when there is one and one
+ * `event-cap` marker for batches refused after the gateway's budget was spent (never silent); then as many lines as fit the artifact limit
+ * (less 256 bytes), the rest as one `byte-cap` marker. No lines when there is nothing to seal.
+ */
+export function sealWorkerEventLog(events: readonly WorkerEvent[], verification: WorkerModelVerification | null, unreported: number, maxBytes: number): string[] {
+  const received = verification ? [...events, { schemaVersion: 1 as const, sequence: (events.at(-1)?.sequence ?? 0) + 1,
+    atMs: events.at(-1)?.atMs ?? 0, kind: 'model.verification' as const, ...verification }] : events;
+  const sealed = unreported > 0 ? [...received, { schemaVersion: 1 as const, sequence: (received.at(-1)?.sequence ?? 0) + 1, atMs: received.at(-1)?.atMs ?? 0,
+    kind: 'dropped' as const, reason: 'event-cap' as const, count: unreported }] : received;
+  const lines: string[] = []; let bytes = 0, kept = 0;
+  for (const event of sealed) { const line = JSON.stringify(event) + '\n'; if (bytes + Buffer.byteLength(line) > maxBytes - 256) break; lines.push(line); bytes += Buffer.byteLength(line); kept++; }
+  if (kept < sealed.length) lines.push(JSON.stringify({ schemaVersion: 1, sequence: (sealed[kept - 1]?.sequence ?? 0) + 1, atMs: sealed[kept - 1]?.atMs ?? 0,
+    kind: 'dropped', reason: 'byte-cap', count: sealed.length - kept }) + '\n');
+  return lines;
 }

@@ -3,7 +3,7 @@ import { dirname, resolve } from 'node:path';
 import { prepareProductDirectory, ErrorRegistry, type ConfigLoadOptions } from '#platform/index.js';
 import { attemptIdentitySchema, type AttemptIdentity } from '#domain/index.js';
 import { DockerSupervisor, GitWorkspaceBroker, GitRunWorkspaceProvider, FileArtifactStore, openSqliteAttemptStore, resolveGitWorkTarget,
-  validateDockerSupervisorProfile, resolveDockerTaskProfile, resolveDockerReadOnlyMounts, readLocalNativeCredential, openNativeConnection, startWorkerObservation, openWorkerEventSink } from '#adapters/index.js';
+  validateDockerSupervisorProfile, resolveDockerTaskProfile, resolveDockerReadOnlyMounts, readLocalNativeCredential, openNativeConnection, startWorkerObservation, openWorkerEventSink, sealWorkerEventLog } from '#adapters/index.js';
 import { authenticate, DispatchApplication, DispatchPolicyAuthorization, RunWorkspaceAcquisitionApplication, selectReservedTaskProfile, RunStoreError, DispatchError, TaskInputApplication, selectTaskInputArtifact } from '#engine/index.js';
 import { createLayoutPolicySource } from '#composition/core/policy/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
@@ -92,22 +92,15 @@ export async function executeConfiguredTask(projectRoot: string, input: AttemptI
         // Batches refused after the gateway's budget was spent are sealed as one final loss marker (never silent).
         const unreported = connection?.statistics().eventsUnreported ?? 0;
         const verification = connection?.modelVerification() ?? null;
-        const received = verification ? [...(closedSink?.events ?? []), { schemaVersion: 1 as const, sequence: (closedSink?.events.at(-1)?.sequence ?? 0) + 1,
-          atMs: closedSink?.events.at(-1)?.atMs ?? 0, kind: 'model.verification' as const, ...verification }] : closedSink?.events ?? [];
-        const sealed = unreported > 0 ? [...received, { schemaVersion: 1 as const, sequence: (received.at(-1)?.sequence ?? 0) + 1, atMs: received.at(-1)?.atMs ?? 0,
-          kind: 'dropped' as const, reason: 'event-cap' as const, count: unreported }] : received;
-        if (sealed.length) {
-          try {
-            // Keep the events that fit the artifact limit; the loss stays visible as a byte-cap marker, never silent.
-            const lines: string[] = []; let bytes = 0, kept = 0;
-            for (const event of sealed) { const line = JSON.stringify(event) + '\n'; if (bytes + Buffer.byteLength(line) > config.artifacts.maxBytes - 256) break; lines.push(line); bytes += Buffer.byteLength(line); kept++; }
-            if (kept < sealed.length) lines.push(JSON.stringify({ schemaVersion: 1, sequence: (sealed[kept - 1]?.sequence ?? 0) + 1, atMs: sealed[kept - 1]?.atMs ?? 0,
-              kind: 'dropped', reason: 'byte-cap', count: sealed.length - kept }) + '\n');
+        try {
+          // Keep the events that fit the artifact limit; the loss stays visible as a byte-cap marker, never silent.
+          const lines = sealWorkerEventLog(closedSink?.events ?? [], verification, unreported, config.artifacts.maxBytes);
+          if (lines.length) {
             const receipt = await artifacts.put(identity.scopeId, Buffer.from(lines.join('')));
             await store.saveWorkerEventLog({ schemaVersion: 1, identity, events: receipt, eventCount: lines.length, sealedAt: Date.now(),
               projection: closedSink?.projectionComplete === false ? 'partial' : 'complete' });
-          } catch { /* live sidecar remains; sealing is observation, not execution */ }
-        }
+          }
+        } catch { /* live sidecar remains; sealing is observation, not execution */ }
       }
     } finally { store.close(); }
   } catch (error) { throw queryFailure(error); }
