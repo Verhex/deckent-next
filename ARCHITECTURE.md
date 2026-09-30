@@ -1609,8 +1609,16 @@ resolve as in the tested `dist`. Outputs that define esbuild's `__require` shim 
 `sbom.cdx.json` (CycloneDX 1.6 from the bundler metafile: a package is shipped only if it contributed bytes; components embedded inside a
 shipped package are listed under it only when the embedding file was bundled) and `THIRD-PARTY-NOTICES.md`; `deps-watch --sbom` and
 OSV-Scanner read it. `scripts/pack-smoke.mjs` installs the tarball offline with an empty cache and drives version, MCP server, MCP client,
-runtime service, terminal and native addon per supported Node. Publication is gated (`summary.json publishable`) while public declarations
-name third-party packages, LICENSE is absent or a shipped component lacks license text. Core is Apache-2.0 (DEPS-P0: the full
+runtime service, the terminal start contract and native addon per supported Node. Terminal contract (PACK-SMOKE, 2026-09-30; texts from the shipped
+catalogs): a TTY `deckent` opens the workline (banner, status `Ready`, composer placeholder, no line-mode prompt; Ctrl+C twice exits 0); piped
+`deckent terminal` is refused with `TERMINAL_TTY_REQUIRED` (exit 2); `deckent terminal session` on a TTY shows the line-mode banner and prompt
+(`deckent> ` / tr `deckent› `), piped it shows neither. A fast subset (build-dist into a temporary directory + pack-smoke `--root`
+version/mcp/native/lazy/imports/terminal, `tests/contracts/tooling/pack-smoke-dist.test.ts`) runs inside `npm run verify` on Linux and fails on any
+publish blocker except host bubblewrap staging and on an unused locked license text; the tarball install path, runtime/client checks and `--types`
+stay release gates. Components whose installed copy ships no license text (today `yoga-layout@3.2.1`, `content-type@1.0.5`) take it only from
+`packaging/licenses/licenses.lock.json`: byte copies of a named upstream artifact for that exact name@version and SPDX id, sha256-checked at build;
+an altered, missing or escaping text is a blocker. Publication is gated by `summary.json publishable` (blockers empty at PACK-SMOKE `1cd52ad1` with
+the staged bubblewrap); the remaining publication item is the owner's LICENSE addendum/NOTICE decision. Core is Apache-2.0 (DEPS-P0: the full
 apache.org LICENSE-2.0 text at the root, `package.json` `license`); no NOTICE file yet.
 Declarations (DEPS-TYPES, tenth batch): `scripts/dist-types.mjs` ships the declaration closure TypeScript loads from `dist/index.d.ts` under
 NodeNext and under Bundler (a specifier resolving differently in the two, not resolving, a non-node `/// <reference types>`, or a
@@ -1618,8 +1626,8 @@ NodeNext and under Bundler (a specifier resolving differently in the two, not re
 `dist/vendor/types/<name>@<version>/<path>` with their package `type`, and bare specifiers are rewritten to relative paths with the
 format-preserving extension (`.d.cts`→`.cjs`, `.d.mts`→`.mjs`). Only `node:` built-ins stay external (the consumer's `@types/node`). Release
 gate: `smoke:dist --types` over TypeScript 5.9/6.0(/7.0) × NodeNext/Bundler with `skipLibCheck: false` and a consumer that uses values,
-derived types (proved non-`any` with `@ts-expect-error`) and a hand-written Standard Schema. Publication stays gated on LICENSE (DEPS-P0) and
-the missing license texts of shipped components.
+derived types (proved non-`any` with `@ts-expect-error`) and a hand-written Standard Schema. `pathApi` has an explicit `node:path` return type so
+published declarations never name a bare `path` (PACK-SMOKE, after the BWRAP-SELECT regression).
 **Bundled bubblewrap (BWRAP-SELECT, owner S4/S5 2026-09-29, eleventh batch).** The package ships the bundled bubblewrap of the lock's
 `shipArches` (today x86_64) under `dist/adapters/core/shell-sandbox-bwrap/bundled/` with `NOTICE-bubblewrap.txt`, `licenses/` and `source/`
 (the 0.13.0 tarball, `build.sh`, `bwrap.lock.json`: LGPL-2.1 §4 corresponding source, owner S4). `build-dist --bwrap <build-bwrap output>`
@@ -2544,3 +2552,21 @@ onto the ledger catalog; Codex/Cursor output-side model evidence (none documente
   run in lane/integration worktrees, and the live checkout is built only in the governed switch (full verify + independent PASS + push +
   owner-approved restart). A rule, not a hook (a hook would also block the governed switch build). U2 (versioned side-by-side
   installation; owner option C, design `proof/U2-VERSIONED-INSTALL-DESIGN-2026-09-30`) replaces the rule by construction.
+- **DEV-U2-0 versioned dev releases (2026-09-30; host tooling only, no `src/` change).** `.agents/refactor/dev-release.mjs`
+  (`stage|switch|rollback|start|status|prune`) keeps `versions/<commit12>-<tree12>/` (unpacked build-dist package + `release.json` +
+  per-file sha256 `manifest.json`), an atomic relative `current` symlink, `previous`, and `switches.jsonl` under
+  `$DECKENT_NEXT_INSTALL_ROOT` (default `~/.local/share/deckent-next-dev`; inside the project it is refused). `next-entry.mjs` runs
+  `realpath(current)` (a process loads lazily from its own version directory for life); an invalid `current` is the typed
+  `NEXT_ENTRY_CURRENT_INVALID` refusal, never a silent fall-back to the checkout `dist`; cwd is the project root. `stage` clones the live repo
+  with `git clone --local --no-hardlinks` (Jev 2b6f9f73; the live `.git` is not written), builds, runs `build-dist --pack --bwrap` and pack-smoke
+  (tarball and `--root`) and installs atomically; unknown, dirty-symbolic, unpushed, unpublishable or smoke-failing sources are refused
+  (`--waive-smoke <check>` is recorded in `release.json` and is an emergency option only: pack-smoke now passes the terminal check).
+  `switch` stops the old service through its own CLI (governed shutdown), flips the pointer, starts the new service detached and verifies
+  describe `build.sourceCommit`; a mismatch restores the pointer and the old service, or, when the ledger already advanced,
+  `DEV_RELEASE_OPERATOR_REQUIRED`. `rollback` is pointer-only when the target opens the live ledger version; otherwise
+  `rollback --restore-ledger` (Jev 39e921e3) stops the service, prints a loss report plus a token bound to the stopped ledger state, and
+  `--confirm <token>` recomputes it under the native ledger lock (stale token refused; replaced ledger files are kept as `rolledback` backups,
+  never deleted). U1 host guard: `build|verify|tsc` is refused while a process runs from the target's `dist/`. Open limits: no typed drain (K5;
+  governed shutdown + grace, the in-flight turn closes `interrupted`); G5/G6 are operating rules (after a switch reopen terminals and MCP host
+  sessions; never `/service-restart` from an old terminal; old processes fail on a protocol bump); the manifest is checked only before `switch`,
+  not at every start; the install root must join the sealed set in U2-1. Evidence `proof/DEV-U2-0-2026-09-30/`.

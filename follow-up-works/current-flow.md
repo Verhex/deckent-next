@@ -3,6 +3,12 @@
 Bu belge yalnız güncel durumu tutar; önceki sürümü Git geçmişinde, kanıtlar `deckent-refactor-work/proof/`.
 
 ## Durum
+- **On sekizinci parti (2026-09-30; `integrate/2026-09-30-s`, worktree `/home/alperen/deckent-next-integrate-s`):** on yedinci partinin (`e7b6d675`, hâlâ Sol 2201 incelemesinde) üstüne
+  `lane/dev-u2-0` (sürümlü dev kurulumu: `dev-release.mjs`, `next-entry` `current`, U1 guard; uç `5fdee2a4`) ve `lane/pack-smoke` (terminal sözleşmesi, verify hızlı alt kümesi, kilitli lisans metinleri,
+  `path` tip sızıntısı; uç `1cd52ad1`) birleştirildi. Yayın engelleri kapandı (`publishable.ok=true`); `--waive-smoke terminal` artık gerekmez (acil seçenek). Kanıt `proof/DEV-U2-0-2026-09-30/`,
+  `proof/PACK-SMOKE-2026-09-30/`; host testleri 71/71 (şerit), tam verify yok. Açık sınırlar: tipli boşaltma yok (K5), G5/G6 işletim kuralı, manifest yalnız switch öncesi (ayrıntı PLAN 18. parti).
+  IDE'nin `pack-smoke-dist.test.ts:8` "unused @ts-expect-error" uyarısı yanlış pozitif: `tsc --noEmit` ve eslint temiz (diğer `.mjs` içe aktarmalarıyla aynı kalıp).
+  **Sıradaki:** tam verify (yeni pack-smoke testinin süresini ölç) → Sol incelemesi (17 + 18) → push → ilk canlı switch `dev-release` ile (owner onayı; komutlar DEV-U2-0 README §5).
 - **On yedinci parti (2026-09-30 gece; `integrate/2026-09-30-r`, worktree `/home/alperen/deckent-next-integrate-r`, taban `74ce44c4`, HEAD belge commit'inden önce `9758cceb`):**
   FA-TRACKED-WARN (`9e0bcf10`, v18'de yalnız sonuç metni), WORK-TARGETS dilim 1 (`f70c47ac`/`7f5c6d72`), WORKER-CURRENCY-2 (`ae6ce536`; owner kural A uygulandı — beyan edilen
   yardımcı serbest, beyan dışı model → deneme kabul edilmez, model çağrıları görünür), dogfood D2-1..D2-3 (`30988c66` → `4f823ee8`), TRUNCATED-TOOLCALL (`ba11dc77`, istem v7),
