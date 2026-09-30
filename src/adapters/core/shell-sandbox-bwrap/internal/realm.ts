@@ -5,7 +5,7 @@ import type { ShellRealm, ShellRealmRequest, ShellRealmResult } from '#domain/in
 import { BASH_LAUNCH, describeShellWritePosture, fsOpsFor, gitWorktreeRepository, longLivedWritePosture, runShellProcess, sandboxWriteView, scanGitDirectory, type FsOps,
   type ShellCapabilities, type ShellSandbox, type ShellSandboxLayout, type ShellSandboxWriteView } from '#adapters/core/host-shell/index.js';
 import { BASELINE_IGNORED_DIRS } from '#adapters/core/workspace-read/index.js';
-import { BUBBLEWRAP_OPEN_ANCESTOR_MAX, BUBBLEWRAP_SYSTEM_PATHS, bubblewrapArguments, openViewAncestors, type BubblewrapView } from './arguments.js';
+import { BUBBLEWRAP_ANCESTOR_PIN_MAX, BUBBLEWRAP_SYSTEM_PATHS, bubblewrapArguments, ancestorPins, type BubblewrapView } from './arguments.js';
 import { BUBBLEWRAP_OVERLAY_VERSION, verifyBubblewrapLauncher } from './launcher.js';
 /** The approval card's line for a bubblewrap run (merge Astra 2170 x MODES-3): the write part comes from the same view the sandbox
  * itself enforces (`describeShellWritePosture`), never a second copy of it. */
@@ -127,13 +127,13 @@ async function maskHomeCredentials(home: string, denied: (rel: string) => boolea
 }
 
 /**
- * Astra 2189 R7: whether every ancestor the open view pins (`openViewAncestors`) can be made a mount point — within the bound, and each a
+ * Astra 2189 R7: whether every ancestor a view pins (`ancestorPins`) can be made a mount point — within the bound, and each a
  * canonical directory (`lstat` a directory, its own real path: a symbolic link in the chain would pin the link's target, not the name a
  * rename moves). Otherwise the view is refused; the command never runs with a renamable ancestor.
  */
 async function canPinAncestors(view: BubblewrapView): Promise<string | null> {
-  const pins = openViewAncestors(view);
-  if (pins.length > BUBBLEWRAP_OPEN_ANCESTOR_MAX) return `protected-path ancestors over their bound (${BUBBLEWRAP_OPEN_ANCESTOR_MAX})`;
+  const pins = ancestorPins(view);
+  if (pins.length > BUBBLEWRAP_ANCESTOR_PIN_MAX) return `protected-path ancestors over their bound (${BUBBLEWRAP_ANCESTOR_PIN_MAX})`;
   for (const path of pins) {
     try { if ((await lstat(path)).isDirectory() && await realpath(path) === path) continue; } catch { /* refused below */ }
     return `an ancestor of a protected path is not a canonical directory (${path})`;
@@ -314,8 +314,11 @@ export async function resolveBubblewrapView(layout: ShellSandboxLayout, environm
     return refusedPins ? { ok: false, reason: refusedPins } : { ok: true, view };
   }
   const toolchainPaths = await toolchainOf(environment['PATH'], { enclosed: [root, ...(scratchDir ? [scratchDir] : [])], home: homeDir });
-  return { ok: true, view: Object.freeze({ projectRoot: root, ...(overlay ? { overlay } : write.projectReadOnly ? { projectReadOnly: true } : {}), scratchDir, home: homeDir, systemPaths: BUBBLEWRAP_SYSTEM_PATHS,
-    toolchainPaths, readOnlyPaths: [...readOnly], ...(writable.size ? { writablePaths: [...writable] } : {}), maskedDirectories, maskedFiles }) };
+  const view: BubblewrapView = Object.freeze({ projectRoot: root, ...(overlay ? { overlay } : write.projectReadOnly ? { projectReadOnly: true } : {}), scratchDir, home: homeDir,
+    systemPaths: BUBBLEWRAP_SYSTEM_PATHS, toolchainPaths, readOnlyPaths: [...readOnly], ...(writable.size ? { writablePaths: [...writable] } : {}), maskedDirectories, maskedFiles });
+  // R7 follow-up: a closed view with a writable project pins the in-project ancestors of its masks and read-only paths too.
+  const refusedPins = await canPinAncestors(view);
+  return refusedPins ? { ok: false, reason: refusedPins } : { ok: true, view };
 }
 
 /**

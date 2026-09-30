@@ -96,3 +96,61 @@ describe.skipIf(process.platform !== 'linux')('R7: the open view pins every ance
     expect(await f.bytes(join(f.project, 'src2/b.ts'))).toBe('s\n');
   }, 60_000);
 });
+
+/**
+ * R7 follow-up, the closed views: with the project bound writable (a standart owner-approved call; an unattended narrow one with the write
+ * floor read-only) a masked file's in-project ancestor could be renamed the same way — the mask travelled, the host path was recreated.
+ * Its in-project ancestors are pinned now. A read-only project (EROFS) and an overlay write set (the rename lands in the upper layer; the
+ * masked file cannot be copied up) are unchanged and pin nothing.
+ */
+describe.skipIf(process.platform !== 'linux')('R7 follow-up: closed views with a writable project pin in-project ancestors', () => {
+  async function closedFixture() {
+    const root = await mkdtemp(join(tmpdir(), 'deckent-r7-closed-')); roots.push(root);
+    const project = join(root, 'project'), home = join(root, 'home'), upper = join(root, 'upper'), work = join(root, 'work');
+    await Promise.all([mkdir(join(project, 'a/b'), { recursive: true }), mkdir(join(project, 'src'), { recursive: true }), mkdir(home), mkdir(upper, { mode: 0o700 }), mkdir(work, { mode: 0o700 })]);
+    await writeFile(join(project, 'a/b/.env'), ORIGINAL);
+    const deny = DEFAULT_WORKSPACE_READ_DENY.filter(pattern => !REPOSITORY_INTERNALS_DENY.includes(pattern));
+    const layout: ShellSandboxLayout = { project: await createWorkspaceScope(project, deny), scratchDir: null, writeFloor: () => false, repositoryWritable: true };
+    const env = { HOME: home, PATH: '/usr/bin:/bin' };
+    const run = async (write: Parameters<typeof resolveBubblewrapView>[3], command: string) => {
+      const view = await resolveBubblewrapView(layout, env, {}, write);
+      if (!view.ok) throw new Error(view.reason);
+      const out = spawnSync(launcher!, [...bubblewrapArguments(view.view), '--', '/bin/bash', '--noprofile', '--norc', '-c', command], { encoding: 'utf8', env, timeout: 20_000 });
+      return { status: out.status, output: `${out.stdout}${out.stderr}` };
+    };
+    return { project, upper, work, run };
+  }
+  const replace = (project: string) => `mv '${project}/a' '${project}/a-moved' && mkdir -p '${project}/a/b' && printf REPLACED-SYNTHETIC > '${project}/a/b/.env'`;
+
+  it.skipIf(!launcher)('writable project (owner-approved; unattended narrow with the floor read-only): the rename fails with EBUSY, bytes and inode kept', async () => {
+    const results = [];
+    for (const [posture, write] of [['owner-approved', {}], ['unattended-narrow', { floorReadOnly: true }]] as const) {
+      const f = await closedFixture(), file = join(f.project, 'a/b/.env'), inode = (await stat(file)).ino;
+      const outcome = await f.run(write, replace(f.project));
+      results.push({ posture, status: outcome.status, busy: /Device or resource busy/u.test(outcome.output), current: await readFile(file, 'utf8').catch(() => null),
+        sameInode: await stat(file).then(info => info.ino === inode, () => false) });
+      // Positives: a project write and a rename of a directory holding nothing protected still land.
+      const positive = await f.run(write, `echo s > '${f.project}/src/b.ts' && mv '${f.project}/src' '${f.project}/src2' && echo POSITIVE_OK`);
+      expect({ posture, status: positive.status, ok: positive.output.includes('POSITIVE_OK') }).toEqual({ posture, status: 0, ok: true });
+      expect(await readFile(join(f.project, 'src2/b.ts'), 'utf8')).toBe('s\n');
+    }
+    console.log('R7_CLOSED_WRITABLE', JSON.stringify(results));
+    for (const result of results) expect(result).toEqual({ posture: result.posture, status: 1, busy: true, current: ORIGINAL, sameInode: true });
+  }, 60_000);
+
+  it.skipIf(!launcher)('read-only project (EROFS) and overlay write set (the masked file is not copied up) are unchanged: the host keeps its bytes', async () => {
+    const results = [];
+    for (const posture of ['read-only-project', 'overlay'] as const) {
+      const f = await closedFixture(), file = join(f.project, 'a/b/.env'), inode = (await stat(file)).ino;
+      const write = posture === 'overlay' ? { floorReadOnly: true, writeSet: { upper: f.upper, work: f.work } } : { floorReadOnly: true, projectReadOnly: true };
+      const outcome = await f.run(write, replace(f.project));
+      results.push({ posture, failed: outcome.status !== 0, reason: /Read-only file system|Operation not permitted/u.exec(outcome.output)?.[0] ?? outcome.output.slice(0, 200),
+        current: await readFile(file, 'utf8').catch(() => null), sameInode: await stat(file).then(info => info.ino === inode, () => false),
+        hostMoved: await stat(join(f.project, 'a-moved')).then(() => true, () => false) });
+    }
+    console.log('R7_CLOSED_UNCHANGED', JSON.stringify(results));
+    expect(results).toEqual([
+      { posture: 'read-only-project', failed: true, reason: 'Read-only file system', current: ORIGINAL, sameInode: true, hostMoved: false },
+      { posture: 'overlay', failed: true, reason: 'Operation not permitted', current: ORIGINAL, sameInode: true, hostMoved: false }]);
+  }, 60_000);
+});
