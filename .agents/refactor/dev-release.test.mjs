@@ -7,7 +7,8 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { fakeRepository } from './dev-release-fake.mjs';
-import { ledgerLock } from './dev-release.mjs';
+import { EventEmitter } from 'node:events';
+import { layout, ledgerLock, rollback, start, switchTo } from './dev-release.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const { DatabaseSync } = createRequire(import.meta.url)('node:sqlite');
@@ -234,4 +235,67 @@ test('prune lists only versions beyond the last three that no process uses; the 
   assert.match(pruned.json.ownerCommand, /^rm -rf /);
   const inside = spawnSync(process.execPath, [join(f.repo, '.agents/refactor/dev-release.mjs'), 'status'], { env: { ...f.env, DECKENT_NEXT_INSTALL_ROOT: join(f.repo, '.deckent/versions') }, encoding: 'utf8' });
   assert.equal(JSON.parse(inside.stdout).code, 'DEV_RELEASE_INSTALL_ROOT_INSIDE_PROJECT');
+});
+
+// Sol U2-R1: a launcher that cannot be created (spawn ENOENT/EACCES/EAGAIN, reported asynchronously as an 'error' event) must become a typed,
+// recorded failure that goes through the same discard / ledger-compatibility / pointer-rollback path as a service that exits.
+test('launcher creation failure (ENOENT, EACCES, EAGAIN) is a typed, recorded failure: switch restores the pointer and old service, start and rollback refuse', async t => {
+  const f = fixture(); t.after(f.cleanup);
+  const ids = Object.fromEntries(['a', 'b'].map(label => [label, f.tool('stage', f.fake.commit(label)).json.id]));
+  assert.equal(f.tool('switch', ids.a).status, 0);
+  const L = layout({ env: { DECKENT_NEXT_INSTALL_ROOT: f.installRoot }, home: f.home, launcher: join(f.repo, '.agents/refactor/next-entry.mjs') });
+  const base = { node: process.execPath, stopTimeoutMs: 20_000, startTimeoutMs: 20_000, waiveSmoke: [] };
+  const nonExecutable = join(f.base, 'not-executable'); writeFileSync(nonExecutable, '#!/bin/sh\n', { mode: 0o644 });
+  const failing = (kind, times = 1) => { let left = times; return (command, args, options) => {
+    if (left-- <= 0) return spawn(command, args, options);
+    if (kind === 'ENOENT') return spawn(join(f.base, 'missing-node'), args, options); // real spawn, real asynchronous ENOENT
+    if (kind === 'EACCES') return spawn(nonExecutable, args, options); // real spawn, real asynchronous EACCES
+    const child = new EventEmitter(); child.unref = () => undefined; // EAGAIN (fork limit) cannot be provoked safely: same event shape as Node
+    process.nextTick(() => child.emit('error', Object.assign(new Error('spawn EAGAIN'), { code: 'EAGAIN', errno: -11, syscall: 'spawn' })));
+    return child; }; };
+  const records = () => readFileSync(join(f.installRoot, 'switches.jsonl'), 'utf8').trim().split('\n').map(line => JSON.parse(line));
+  const launchers = () => readdirSync('/proc').filter(name => /^\d+$/.test(name)).filter(pid => {
+    try { const argv = readFileSync(`/proc/${pid}/cmdline`, 'utf8'); return argv.includes(`${f.repo}/.agents/refactor/next-entry.mjs`) && argv.includes('serve'); } catch { return false; } });
+  const serviceA = f.describe(); assert.equal(serviceA.build.sourceCommit, JSON.parse(readFileSync(join(f.installRoot, 'versions', ids.a, 'release.json'), 'utf8')).sourceCommit);
+
+  for (const kind of ['ENOENT', 'EACCES', 'EAGAIN']) {
+    await assert.rejects(switchTo(L, ids.b, { ...base, spawn: failing(kind) }), error => {
+      assert.equal(error.code, 'DEV_RELEASE_SWITCH_FAILED'); assert.equal(error.detail.reason, `launcher failed: ${kind}`);
+      assert.equal(error.detail.pointer, ids.a); assert.equal(error.detail.previousService.ok, true); return true; });
+    assert.equal(f.current(), `versions/${ids.a}`, `${kind}: pointer restored`);
+    assert.equal(f.describe().build.sourceCommit, serviceA.build.sourceCommit, `${kind}: old service serves again`);
+    const last = records().at(-1);
+    assert.deepEqual([last.to, last.ok, last.state, last.launchError], [ids.b, false, 'rolled-back', kind]);
+    assert.equal(launchers().length, 1, `${kind}: only the restored service's launcher runs, no orphan`);
+  }
+  assert.equal(records().some(entry => entry.to === ids.b && entry.ok), false, 'no success record for the failed target');
+
+  // start: the service is down and the launcher cannot be created → typed refusal, nothing left running.
+  const running = f.describe();
+  assert.equal(f.cli('runtime', 'shutdown', '--service', 'runtime', '--instance', running.instanceId, '--command-id', 'test-stop', '--reason', 'test', '--json').status, 0);
+  for (let i = 0; i < 100 && (f.describe() || launchers().length); i++) await sleep(100);
+  assert.equal(launchers().length, 0, 'service and its launcher gone before start');
+  await assert.rejects(start(L, { ...base, spawn: failing('ENOENT') }), error => error.code === 'DEV_RELEASE_START_FAILED' && error.detail.launchError === 'ENOENT');
+  assert.equal(f.describe(), null); assert.equal(launchers().length, 0);
+  assert.equal(f.tool('start').status, 0);
+
+  // rollback on the same error path: pointer moved to the target as asked, typed refusal, failed record; `start` recovers.
+  assert.equal(f.tool('switch', ids.b).status, 0);
+  await assert.rejects(rollback(L, { ...base, spawn: failing('EAGAIN') }), error => error.code === 'DEV_RELEASE_START_FAILED' && error.launchError === undefined && error.detail.launchError === 'EAGAIN');
+  const failedRollback = records().at(-1);
+  assert.deepEqual([failedRollback.action, failedRollback.to, failedRollback.ok, failedRollback.launchError], ['rollback', ids.a, false, 'EAGAIN']);
+  assert.equal(f.current(), `versions/${ids.a}`); assert.equal(f.describe(), null); assert.equal(launchers().length, 0);
+  assert.equal(f.tool('start').json.service.build.sourceCommit, serviceA.build.sourceCommit);
+});
+
+test('a new version that migrates the ledger and then fails keeps the old code closed (operator required), unchanged by U2-R1', async t => {
+  const f = fixture(); t.after(f.cleanup);
+  const old = f.tool('stage', f.fake.commit('v43')).json.id, bad = f.tool('stage', f.fake.commit('v44-exits', { ledger: 44, behavior: { serveExit: true } })).json.id;
+  assert.equal(f.tool('switch', old).status, 0);
+  const failed = f.tool('switch', bad);
+  assert.equal(failed.json.code, 'DEV_RELEASE_OPERATOR_REQUIRED', failed.stdout); assert.equal(failed.json.ledgerNow, 44);
+  assert.equal(f.describe(), null, 'the old v43 code is not started on a v44 ledger');
+  assert.equal(f.current(), `versions/${bad}`);
+  const last = readFileSync(join(f.installRoot, 'switches.jsonl'), 'utf8').trim().split('\n').map(line => JSON.parse(line)).at(-1);
+  assert.deepEqual([last.to, last.ok, last.state], [bad, false, 'operator-required']);
 });

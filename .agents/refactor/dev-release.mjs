@@ -255,23 +255,34 @@ async function startService(L, expect, opts) {
   mkdirSync(join(L.installRoot, 'logs'), { recursive: true, mode: 0o700 });
   const log = join(L.installRoot, 'logs', `serve-${stamp()}-${expect.label}.log`);
   const fd = openSync(log, 'a', 0o600);
-  const child = spawn(opts.node, [L.launcher, 'cli', 'runtime', 'serve', '--json'], { cwd: L.project, env: { ...process.env, DECKENT_NEXT_INSTALL_ROOT: L.installRoot },
-    detached: true, stdio: ['ignore', fd, fd] });
-  closeSync(fd);
-  let exited = null; child.on('exit', (code, signal) => { exited = { code, signal }; }); child.unref();
+  // Sol U2-R1: a launcher that cannot be created (ENOENT, EACCES, EAGAIN…) is reported by Node as an asynchronous 'error' event (or, for
+  // invalid arguments, a synchronous throw). It is listened for before anything else and becomes a failed result with no pid, so the
+  // callers' discard / ledger-compatibility / pointer-rollback / record path runs instead of an unhandled event killing the tool.
+  let child = null, launchError = null, exited = null;
+  try {
+    child = (opts.spawn ?? spawn)(opts.node, [L.launcher, 'cli', 'runtime', 'serve', '--json'], { cwd: L.project, env: { ...process.env, DECKENT_NEXT_INSTALL_ROOT: L.installRoot },
+      detached: true, stdio: ['ignore', fd, fd] });
+    child.on('error', error => { launchError ??= error; });
+    child.on('exit', (code, signal) => { exited = { code, signal }; });
+    child.unref?.();
+  } catch (error) { launchError = error; } finally { closeSync(fd); }
   const cli = join(codeDir(L, expect.id), CLI_ENTRY), started = Date.now();
   const events = () => readFileSync(log, 'utf8').split('\n').flatMap(line => { try { return [JSON.parse(line)]; } catch { return []; } });
+  const launchFailed = () => ({ ok: false, log, launchError: launchError.code ?? 'SPAWN_FAILED', launcherPid: null, startMs: Date.now() - started, ledgerUpgrade: null,
+    tail: `launcher not created: ${launchError.message}` });
   while (Date.now() - started < opts.startTimeoutMs) {
+    if (launchError) return launchFailed();
     await sleep(150);
+    if (launchError) return launchFailed();
     const { descriptor } = describe(L, cli, opts.node);
     const upgraded = events().find(event => event.event === 'ledger-upgraded') ?? null;
     if (descriptor) {
       const ok = descriptor.build?.sourceCommit === expect.sourceCommit && descriptor.build?.sourceTreeSha256 === expect.sourceTreeSha256;
-      return { ok, log, launcherPid: child.pid, descriptor, startMs: Date.now() - started, ledgerUpgrade: upgraded };
+      return { ok, log, launcherPid: child?.pid ?? null, descriptor, startMs: Date.now() - started, ledgerUpgrade: upgraded };
     }
     if (exited) return { ok: false, log, exited, startMs: Date.now() - started, ledgerUpgrade: upgraded, tail: readFileSync(log, 'utf8').slice(-800) };
   }
-  return { ok: false, log, timeout: true, launcherPid: child.pid, ledgerUpgrade: null, tail: readFileSync(log, 'utf8').slice(-800) };
+  return { ok: false, log, timeout: true, launcherPid: child?.pid ?? null, ledgerUpgrade: null, tail: readFileSync(log, 'utf8').slice(-800) };
 }
 /** Stop a started service that failed verification: governed when it answers, else the launcher's process group. */
 async function discard(L, started, opts, id) {
@@ -388,7 +399,8 @@ export async function switchTo(L, id, opts) {
     const started = await startService(L, expectOf(L, id), opts);
     const ledgerAfter = ledgerVersion(paths.ledger);
     const base = { action: 'switch', from, to: id, fromBuild: stopped.build ?? null, shutdownCommandId: stopped.commandId ?? null, stoppedVia: stopped.cli ?? null, stopMs: stopped.stopMs ?? null,
-      startMs: started.startMs, ledgerBefore, ledgerAfter, ledgerBackup: started.ledgerUpgrade?.backupPath ?? null, snapshot, log: started.log };
+      startMs: started.startMs, ledgerBefore, ledgerAfter, ledgerBackup: started.ledgerUpgrade?.backupPath ?? null, snapshot, log: started.log,
+      launchError: started.launchError ?? null };
     if (started.ok) {
       writePrevious(L, from); record(L, { ...base, ok: true, instanceId: started.descriptor.instanceId });
       return { ok: true, ...base, service: started.descriptor };
@@ -402,7 +414,7 @@ export async function switchTo(L, id, opts) {
     setCurrent(L, from);
     const restored = stopped.state === 'stopped' ? await startService(L, expectOf(L, from), opts) : null;
     record(L, { ...base, ok: false, state: 'rolled-back', restarted: restored?.ok ?? null });
-    fail('DEV_RELEASE_SWITCH_FAILED', { ...base, reason: started.exited ? 'service exited' : started.timeout ? 'no answer' : 'build mismatch',
+    fail('DEV_RELEASE_SWITCH_FAILED', { ...base, reason: started.launchError ? `launcher failed: ${started.launchError}` : started.exited ? 'service exited' : started.timeout ? 'no answer' : 'build mismatch',
       reported: started.descriptor?.build ?? null, tail: started.tail, pointer: from, previousService: restored ? { ok: restored.ok, build: restored.descriptor?.build ?? null } : 'was not running' });
   } finally { unlock(); }
 }
@@ -460,7 +472,7 @@ export async function rollback(L, opts) {
     }
     setCurrent(L, to); writePrevious(L, from);
     const started = await startService(L, expectOf(L, to), opts);
-    const entry = { action: 'rollback', from, to, ledgerBefore: ledgerNow, ledgerAfter: ledgerVersion(paths.ledger), restored, stateChanges, stateRestored,
+    const entry = { action: 'rollback', from, to, ledgerBefore: ledgerNow, ledgerAfter: ledgerVersion(paths.ledger), restored, stateChanges, stateRestored, launchError: started.launchError ?? null,
       shutdownCommandId: stopped.commandId ?? null, log: started.log, ok: started.ok };
     record(L, entry);
     if (!started.ok) fail('DEV_RELEASE_START_FAILED', { ...entry, tail: started.tail, reported: started.descriptor?.build ?? null });
@@ -476,7 +488,7 @@ export async function start(L, opts) {
     if (running) return { ok: true, already: true, service: running };
     if (ledgerHeld(dataPaths(L.project).lock)) fail('DEV_RELEASE_SERVICE_UNREACHABLE', {});
     const started = await startService(L, expectOf(L, id), opts);
-    if (!started.ok) { await discard(L, started, opts, id); fail('DEV_RELEASE_START_FAILED', { id, tail: started.tail, reported: started.descriptor?.build ?? null }); }
+    if (!started.ok) { await discard(L, started, opts, id); fail('DEV_RELEASE_START_FAILED', { id, launchError: started.launchError ?? null, tail: started.tail, reported: started.descriptor?.build ?? null }); }
     return { ok: true, id, service: started.descriptor, log: started.log };
   } finally { unlock(); }
 }
