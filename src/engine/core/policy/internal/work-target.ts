@@ -1,5 +1,5 @@
-import { evaluatePolicy, policyResources, type VerifiedPrincipal } from '#domain/index.js';
-import type { DispatchIdentityAuthorization } from '#engine/core/dispatch/index.js';
+import { evaluatePolicy, policyResources, type AttemptIdentity, type CorePolicyAction, type VerifiedPrincipal } from '#domain/index.js';
+import type { DispatchAuthorization, DispatchIdentityAuthorization } from '#engine/core/dispatch/index.js';
 import { PolicyAuthorizationError, type PolicySource } from './authorize.js';
 import { PoolPolicyAuthorization, type PoolAuthorization } from './pool.js';
 
@@ -28,14 +28,32 @@ export function executionResourceAuthorization(source: PolicySource, workTargetI
     await target.authorize('use', workTargetId, scopeId, principal);
   } };
 }
-/** Attempt authorization for adoption: adopting or rolling back also moves the configured work target's branch, so both need
- * `work-target:adopt` on that target in addition to their attempt action, at every check (the first one and the re-check before the
- * effect). Without a target id the attempt authorization is returned unchanged. */
-export function workTargetAdoptionAuthorization(attempts: DispatchIdentityAuthorization, source: PolicySource, workTargetId: string | null): DispatchIdentityAuthorization {
+/** `work-target:use` on a configured target before an operation reads or writes it outside an attempt check (a delivery-pinned Run
+ * reads the target to pin its base). No target id: nothing to check. */
+export async function authorizeWorkTargetUse(source: PolicySource, workTargetId: string | null, scopeId: string, principal: VerifiedPrincipal): Promise<void> {
+  if (workTargetId !== null) await new WorkTargetPolicyAuthorization(source).authorize('use', workTargetId, scopeId, principal);
+}
+/** Target action each attempt action consumes (Sol WT-R1, lead 2026-09-30: no target is consumed without authority, reading it included).
+ * execute clones the target, prepare-integration observes and clones it, deliver-integration observes it and writes its delivery ref:
+ * `use`. Adopt/rollback move its branch: `adopt`. read-output/recover-output consume it only in operations that read the target
+ * (`readsTarget`: patch preparation, integration check/prepare, delivery, adoption); elsewhere they read ledger/artifacts only. */
+const TARGET_ACTIONS: Readonly<Partial<Record<CorePolicyAction<'attempt'>, WorkTargetAction>>> = Object.freeze({ execute: 'use',
+  'prepare-integration': 'use', 'deliver-integration': 'use', 'adopt-integration': 'adopt', 'rollback-integration': 'adopt' });
+/** Attempt authorization when a work target is configured: the attempt action AND the target action it consumes, at every check the
+ * attempt authorization already has (the first check and each freshness re-check, e.g. the launch gate of DispatchApplication, the
+ * publication re-check of delivery and the adoption re-check before the effect). attempt actions never substitute for the target action;
+ * the attempt gate runs first and is never bypassed. The caller passes the id of the target the same operation consumes (one config
+ * snapshot). Without a target id: unchanged. */
+export function workTargetAttemptAuthorization<A extends DispatchAuthorization & DispatchIdentityAuthorization>(attempts: A, source: PolicySource,
+  workTargetId: string | null, readsTarget = false): DispatchAuthorization & DispatchIdentityAuthorization {
   if (workTargetId === null) return attempts;
   const target = new WorkTargetPolicyAuthorization(source);
-  return { async authorizeIdentity(action, identity, principal) {
+  const consumed = (action: CorePolicyAction<'attempt'>): WorkTargetAction | null => TARGET_ACTIONS[action]
+    ?? (readsTarget && (action === 'read-output' || action === 'recover-output') ? 'use' : null);
+  const authorizeIdentity = async (action: CorePolicyAction<'attempt'>, identity: AttemptIdentity, principal: VerifiedPrincipal) => {
     await attempts.authorizeIdentity(action, identity, principal);
-    if (action === 'adopt-integration' || action === 'rollback-integration') await target.authorize('adopt', workTargetId, identity.scopeId, principal);
-  } };
+    const targetAction = consumed(action);
+    if (targetAction) await target.authorize(targetAction, workTargetId, identity.scopeId, principal);
+  };
+  return { authorizeIdentity, authorize: (action, request, principal) => authorizeIdentity(action, request.identity, principal) };
 }

@@ -1,20 +1,22 @@
 import { createHash } from 'node:crypto';
 import { execFile } from 'node:child_process';
-import { chmod, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, mkdtemp, readdir, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import { hostname, tmpdir, userInfo } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
 import { DatabaseSync } from 'node:sqlite';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { adoptConfiguredWorkspaceIntegration, checkConfiguredWorkspaceIntegration, createConfiguredRuntimeClient, deliverConfiguredWorkspaceIntegration,
-  evaluateTask, prepareConfiguredWorkspaceIntegration, prepareConfiguredWorkspacePatch, rollbackConfiguredWorkspaceIntegration,
+  evaluateTask, inspectConfiguredWorkspaceIntegration, prepareConfiguredWorkspaceIntegration, prepareConfiguredWorkspacePatch, previewConfiguredWorkspacePatch,
+  rollbackConfiguredWorkspaceIntegration,
   startConfiguredRuntimeService } from '../../../src/index.js';
 import { executeConfiguredTask } from '../../../src/composition/core/execution/index.js';
-import { createConfiguredRun, reserveConfiguredRunTasks } from '../../../src/composition/core/runs/index.js';
+import { createConfiguredDeliveryRun, createConfiguredRun, reserveConfiguredRunTasks } from '../../../src/composition/core/runs/index.js';
 import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
 import { openConfiguredWorkspaceBroker } from '../../../src/composition/core/workspaces/index.js';
-import { getPolicyVocabulary } from '#domain/index.js';
-import { DockerSupervisor } from '#adapters/index.js';
+import { evaluatePolicy, getPolicyVocabulary, type AttemptIdentity } from '#domain/index.js';
+import { DockerSupervisor, fingerprintGitSource } from '#adapters/index.js';
+import { RunWorkspaceAcquisitionApplication } from '#engine/index.js';
 import { clearConfigCache, productResourcePath } from '#platform/index.js';
 import { fixtureDockerRegistry } from '../support/execution-registry.js';
 
@@ -23,6 +25,7 @@ import { fixtureDockerRegistry } from '../support/execution-registry.js';
 const exec = promisify(execFile);
 const roots: string[] = [], cleanup: (() => Promise<void>)[] = [];
 afterEach(async () => {
+  vi.restoreAllMocks();
   for (const close of cleanup.splice(0).reverse()) await close();
   clearConfigCache(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true })));
 });
@@ -71,16 +74,32 @@ async function fixture({ workTarget = 'clone' as 'clone' | 'none' | ((r: { root:
   await config(workTarget === 'none' ? null : [{ id: 'n1', kind: 'git', path, baseRef: BASE }]);
   const opened = await openConfiguredAttemptStore(project, options);
   await opened.store.createExecutionPool({ schemaVersion: 1, poolId: 'p', capacity: { executionSlots: 2, inFlightSlots: 2 } }); opened.store.close();
-  const policy = (actions: readonly string[] = targetActions, attempts: readonly string[] = attemptActions) => writeFile(productResourcePath(opened.layout, 'policy'), JSON.stringify({
+  const policy = (actions: readonly string[] = targetActions, attempts: readonly string[] = attemptActions, targetEffect = 'allow') => writeFile(productResourcePath(opened.layout, 'policy'), JSON.stringify({
     schemaVersion: 1, revision: `work-target-${actions.join('-')}`, restrictions: [], grants: [
       { id: 'run', effect: 'allow', actions: ['create', 'reserve', 'inspect'], scopes: ['s'], principals, resource: { kind: 'run', ids: 'all' } },
       { id: 'pool', effect: 'allow', actions: ['use'], scopes: ['s'], principals, resource: { kind: 'pool', ids: ['p'] } },
       { id: 'attempt', effect: 'allow', actions: attempts, scopes: ['s'], principals, resource: { kind: 'attempt', ids: 'all' } },
-      ...(actions.length ? [{ id: 'target', effect: 'allow', actions, scopes: ['s'], principals, resource: { kind: 'work-target', ids: ['n1'] } }] : []),
+      ...(actions.length ? [{ id: 'target', effect: targetEffect, actions, scopes: ['s'], principals, resource: { kind: 'work-target', ids: ['n1'] } }] : []),
     ] }), { mode: 0o600 });
   await policy();
   const runs = () => { const db = new DatabaseSync(opened.path, { readOnly: true }); try { return db.prepare('SELECT count(*) AS n FROM runs').get()!.n; } finally { db.close(); } };
-  return { root, project, target, data, base, options, policy, config, runs, layout: opened.layout };
+  /** The trusted policy's own decision for one request of this principal (proves which gate refused). */
+  const decision = async (kind: string, action: string, id: string) => evaluatePolicy(JSON.parse(await readFile(productResourcePath(opened.layout, 'policy'), 'utf8')),
+    { principal: { id: 'p', issuer: principals[0]!.issuer, subject: principals[0]!.subject, assurance: 'os-user', scopeIds: ['s'] } as never, action, scopeId: 's',
+      resource: { kind, id } }).decision;
+  /** Nothing of the target was consumed for this attempt: no Run workspace custody, no lease/clone, no dispatch claim or launch. */
+  const unconsumed = async (identity: AttemptIdentity) => {
+    const store = await openConfiguredAttemptStore(project, options);
+    try {
+      expect(await store.store.loadRunWorkspaceCustody(identity.scopeId, identity.runId)).toBeNull();
+      expect(await store.store.loadBoundDispatch(identity)).toBeNull();
+    } finally { store.store.close(); }
+    expect(await readdir(join(data, 'workspaces')).catch(() => [])).toEqual([]);
+  };
+  /** A second independent clone with its own base branch (the config may switch to it). */
+  const secondTarget = async () => { const path = join(root, 'target2'); await exec('/usr/bin/git', ['clone', '-q', project, path]);
+    await git(path, 'branch', 'dogfood/adopted', base); await git(path, 'checkout', '-q', '--detach', base); return path; };
+  return { root, project, target, data, base, options, policy, config, runs, layout: opened.layout, decision, unconsumed, secondTarget };
 }
 
 describe.skipIf(process.platform !== 'linux')('work target registry: typed refusals and work-target:use through the runtime service', () => {
@@ -135,6 +154,65 @@ describe.skipIf(process.platform !== 'linux')('work target registry: typed refus
     } finally { await service.stop(); await service.done; }
   });
 
+  // Sol WT-R1: execution consumes the target, so it needs work-target:use on the target of the same config snapshot, before any Git.
+  async function reserved(f: Awaited<ReturnType<typeof fixture>>, client: ReturnType<typeof createConfiguredRuntimeClient>, runId: string) {
+    await client.createRun({ schemaVersion: 1, commandId: `create-${runId}`, scopeId: 's', runId, graph });
+    return (await client.reserveRunTasks({ schemaVersion: 1, commandId: `reserve-${runId}`, scopeId: 's', runId, expectedRevision: 0 })).reservation.identities[0]!;
+  }
+  it('refuses execution through the runtime service when only target use was revoked after reservation; nothing is consumed', async () => {
+    const f = await fixture();
+    const service = await startConfiguredRuntimeService(f.project, { async onPage() {}, async onError() {} }, f.options);
+    const client = createConfiguredRuntimeClient(f.project, f.options);
+    try {
+      const identity = await reserved(f, client, 'r1');
+      await f.policy(['adopt']);
+      expect(await f.decision('attempt', 'execute', identity.attemptId)).toBe('allow');
+      expect(await f.decision('work-target', 'use', 'n1')).toBe('deny');
+      await expect(client.executeTask(identity)).rejects.toMatchObject({ code: 'POLICY_DENIED' });
+      await f.unconsumed(identity);
+      // require-approval on the target never becomes allow (no approval broker outside the operation catalog).
+      await f.policy(['use', 'adopt'], attemptActions, 'require-approval');
+      await expect(client.executeTask(identity)).rejects.toMatchObject({ code: 'POLICY_APPROVAL_UNSUPPORTED' });
+      // The target grant does not bypass a missing attempt:execute.
+      await f.policy(['use', 'adopt'], attemptActions.filter(action => action !== 'execute'));
+      expect(await f.decision('work-target', 'use', 'n1')).toBe('allow');
+      await expect(client.executeTask(identity)).rejects.toMatchObject({ code: 'POLICY_DENIED' });
+      await f.unconsumed(identity);
+    } finally { await service.stop(); await service.done; }
+  });
+  it('refuses execution when the config switched to another target without use before the first acquisition; nothing is consumed', async () => {
+    const f = await fixture();
+    const service = await startConfiguredRuntimeService(f.project, { async onPage() {}, async onError() {} }, f.options);
+    const client = createConfiguredRuntimeClient(f.project, f.options);
+    try {
+      const identity = await reserved(f, client, 'r1');
+      await f.config([{ id: 'n2', kind: 'git', path: await f.secondTarget(), baseRef: BASE }]); clearConfigCache();
+      expect(await f.decision('attempt', 'execute', identity.attemptId)).toBe('allow');
+      expect(await f.decision('work-target', 'use', 'n1')).toBe('allow');
+      expect(await f.decision('work-target', 'use', 'n2')).toBe('deny');
+      await expect(client.executeTask(identity)).rejects.toMatchObject({ code: 'POLICY_DENIED' });
+      await f.unconsumed(identity);
+    } finally { await service.stop(); await service.done; }
+  });
+  it('re-checks target use at the launch gate: a revocation between the first check and acquisition prevents any launch', async () => {
+    const f = await fixture();
+    await createConfiguredRun(f.project, { schemaVersion: 1, commandId: 'create', scopeId: 's', runId: 'r1', graph }, f.options);
+    const identity = (await reserveConfiguredRunTasks(f.project, { schemaVersion: 1, commandId: 'reserve', scopeId: 's', runId: 'r1', expectedRevision: 0 }, f.options)).reservation.identities[0]!;
+    const acquire = RunWorkspaceAcquisitionApplication.prototype.acquire;
+    const spy = vi.spyOn(RunWorkspaceAcquisitionApplication.prototype, 'acquire').mockImplementationOnce(async function (this: RunWorkspaceAcquisitionApplication, input: unknown) {
+      await f.policy(['adopt']); return acquire.call(this, input);
+    });
+    await expect(executeConfiguredTask(f.project, identity, f.options)).rejects.toMatchObject({ code: 'POLICY_DENIED' });
+    expect(await f.decision('attempt', 'execute', identity.attemptId)).toBe('allow');
+    // Existing freshness contract (as for attempt:execute): acquisition is not an effect; the launch gate refuses before any claim.
+    const store = await openConfiguredAttemptStore(f.project, f.options);
+    try {
+      expect(spy).toHaveBeenCalledTimes(1); // the first check passed and acquisition ran: the refusal came from the later gate
+      expect(await store.store.loadRunWorkspaceCustody('s', 'r1')).not.toBeNull();
+      expect(await store.store.loadBoundDispatch(identity)).toBeNull();
+    } finally { store.store.close(); }
+  });
+
   it('without a configured target needs no work-target grant (unchanged admission)', async () => {
     const f = await fixture({ workTarget: 'none', targetActions: [] });
     await createConfiguredRun(f.project, { schemaVersion: 1, commandId: 'create', scopeId: 's', runId: 'r1', graph }, f.options);
@@ -155,7 +233,8 @@ describe.skipIf(process.platform !== 'linux' || !docker)('work target cycle: ref
     expect((await executeConfiguredTask(f.project, identity, f.options)).execution.terminal?.exitCode).toBe(0);
     await prepareConfiguredWorkspacePatch(f.project, identity, f.options);
     const checked = await checkConfiguredWorkspaceIntegration(f.project, identity, f.options);
-    await prepareConfiguredWorkspaceIntegration(f.project, { schemaVersion: 1, commandId: `candidate-${runId}`, identity, proposal: checked.proposal }, f.options);
+    const prepareIntegration = () => prepareConfiguredWorkspaceIntegration(f.project, { schemaVersion: 1, commandId: `candidate-${runId}`, identity, proposal: checked.proposal }, f.options);
+    await prepareIntegration();
     const deliver = () => deliverConfiguredWorkspaceIntegration(f.project, { schemaVersion: 1, commandId: `delivery-${runId}`, identity, integrationCommandId: `candidate-${runId}` }, f.options);
     const evaluate = async () => {
       const opened = await openConfiguredAttemptStore(f.project, f.options);
@@ -163,7 +242,7 @@ describe.skipIf(process.platform !== 'linux' || !docker)('work target cycle: ref
       expect((await evaluateTask(f.project, { schemaVersion: 1, commandId: `evaluation-${runId}`, identity, expectedRevision: revision }, f.options)).evaluation.run.tasks[0]!.phase).toBe('accepted');
     };
     const adopt = (commandId: string) => adoptConfiguredWorkspaceIntegration(f.project, { schemaVersion: 2, commandId, identity, deliveryCommandId: `delivery-${runId}`, targetRef: BASE }, f.options);
-    return { identity, deliver, evaluate, adopt };
+    return { identity, deliver, evaluate, adopt, prepareIntegration };
   }
 
   it('runs a full cycle against the target: live project refs, HEAD, index and config unchanged; adoption advances the base; next Run starts there', async () => {
@@ -172,9 +251,27 @@ describe.skipIf(process.platform !== 'linux' || !docker)('work target cycle: ref
     // Owner WIP in the target checkout is not a precondition (nothing is applied to that checkout).
     await writeFile(join(f.target, 'note.txt'), 'owner-wip-in-target\n');
     const first = await executed(f, 'r1');
+    // Lead 2026-09-30 (WT-R1 extension): every operation that reads or writes the target needs work-target:use; the attempt action
+    // never substitutes for it. Ledger/artifact-only reads (patch preview, integration inspect) do not touch the target.
+    await f.policy(['adopt']);
+    expect(await f.decision('attempt', 'deliver-integration', first.identity.attemptId)).toBe('allow');
+    await expect(first.deliver()).rejects.toMatchObject({ code: 'POLICY_DENIED' });
+    expect(await git(f.target, 'for-each-ref', '--format=%(refname)', 'refs/deckent/')).toBe('');
+    await expect(checkConfiguredWorkspaceIntegration(f.project, first.identity, f.options)).rejects.toMatchObject({ code: 'POLICY_DENIED' });
+    await expect(prepareConfiguredWorkspacePatch(f.project, first.identity, f.options)).rejects.toMatchObject({ code: 'POLICY_DENIED' });
+    await expect(first.prepareIntegration()).rejects.toMatchObject({ code: 'POLICY_DENIED' });
+    expect((await previewConfiguredWorkspacePatch(f.project, first.identity, f.options)).patch.changes.length).toBeGreaterThan(0);
+    expect(await inspectConfiguredWorkspaceIntegration(f.project, { schemaVersion: 1, identity: first.identity, commandId: 'candidate-r1' }, f.options)).toBeDefined();
+    await f.policy(['use', 'adopt']);
     const delivered = await first.deliver();
     expect(delivered).toMatchObject({ status: 'reference-delivered', plan: { baseCommit: f.base } });
     expect(await git(f.target, 'for-each-ref', '--format=%(objectname)', delivered.plan.ref)).toBe(delivered.plan.commit);
+    // A Run pinned to the delivery reads the target to pin its base: use first, before any target Git.
+    const pinned = (commandId: string) => createConfiguredDeliveryRun(f.project, { schemaVersion: 1, commandId, scopeId: 's', runId: 'rv', graph, deliveryCommandId: 'delivery-r1' }, f.options);
+    await f.policy(['adopt']);
+    await expect(pinned('verify-denied')).rejects.toMatchObject({ code: 'POLICY_DENIED' });
+    await f.policy(['use', 'adopt']);
+    expect((await pinned('verify')).admission.run.runId).toBe('rv');
     await first.evaluate();
     // work-target:adopt is checked for adoption and rollback; the attempt grant alone does not move the target's branch.
     await f.policy(['use']);
@@ -195,6 +292,29 @@ describe.skipIf(process.platform !== 'linux' || !docker)('work target cycle: ref
     expect(await readFile(join(f.target, 'note.txt'), 'utf8')).toBe('owner-wip-in-target\n');
     expect(await repositoryDigest(f.project)).toBe(liveBefore);
     expect(await git(f.project, 'for-each-ref', '--format=%(refname)', 'refs/deckent/')).toBe('');
+  }, 120_000);
+
+  it('executes through the runtime service against the target of the same config snapshot once its use is granted', async () => {
+    const f = await fixture();
+    const service = await startConfiguredRuntimeService(f.project, { async onPage() {}, async onError() {} }, f.options);
+    const client = createConfiguredRuntimeClient(f.project, f.options);
+    try {
+      await client.createRun({ schemaVersion: 1, commandId: 'create', scopeId: 's', runId: 'r1', graph });
+      const identity = (await client.reserveRunTasks({ schemaVersion: 1, commandId: 'reserve', scopeId: 's', runId: 'r1', expectedRevision: 0 })).reservation.identities[0]!;
+      cleanup.push(async () => { const opened = await openConfiguredAttemptStore(f.project, f.options);
+        try { const record = await opened.store.loadBoundDispatch(identity);
+          if (record) { const supervisor = await DockerSupervisor.restoreProfile(record.profile); await supervisor.cancel(record.request); await supervisor.release(record.request); } }
+        finally { opened.store.close(); } });
+      const n2 = await f.secondTarget();
+      await f.config([{ id: 'n2', kind: 'git', path: n2, baseRef: BASE }]); clearConfigCache();
+      await expect(client.executeTask(identity)).rejects.toMatchObject({ code: 'POLICY_DENIED' });
+      await f.unconsumed(identity);
+      await writeFile(productResourcePath(f.layout, 'policy'), (await readFile(productResourcePath(f.layout, 'policy'), 'utf8')).replace('"ids":["n1"]', '"ids":["n2"]'));
+      expect((await client.executeTask(identity)).execution.terminal?.exitCode).toBe(0);
+      const opened = await openConfiguredAttemptStore(f.project, f.options);
+      try { expect((await opened.store.loadRunWorkspaceCustody('s', 'r1'))!.source.sourceFingerprint)
+        .toBe(fingerprintGitSource({ schemaVersion: 1, sourceRoot: n2, repositoryRoot: n2 })); } finally { opened.store.close(); }
+    } finally { await service.stop(); await service.done; }
   }, 120_000);
 
   it('turns a moved base branch into PATCH_BASE_ADVANCED (not PATCH_CONFLICT) and refuses a target made unsafe after admission', async () => {

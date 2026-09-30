@@ -3,8 +3,10 @@ import { dirname, resolve } from 'node:path';
 import { prepareProductDirectory, ErrorRegistry, type ConfigLoadOptions } from '#platform/index.js';
 import { attemptIdentitySchema, type AttemptIdentity } from '#domain/index.js';
 import { DockerSupervisor, GitWorkspaceBroker, GitRunWorkspaceProvider, FileArtifactStore, openSqliteAttemptStore, resolveGitWorkTarget,
-  validateDockerSupervisorProfile, resolveDockerTaskProfile, resolveDockerReadOnlyMounts, readLocalNativeCredential, openNativeConnection, startWorkerObservation, openWorkerEventSink, sealWorkerEventLog } from '#adapters/index.js';
-import { authenticate, DispatchApplication, DispatchPolicyAuthorization, RunWorkspaceAcquisitionApplication, selectReservedTaskProfile, RunStoreError, DispatchError, TaskInputApplication, selectTaskInputArtifact } from '#engine/index.js';
+  validateDockerSupervisorProfile, resolveDockerTaskProfile, resolveDockerReadOnlyMounts, readLocalNativeCredential, openNativeConnection,
+  startWorkerObservation, openWorkerEventSink, sealWorkerEventLog, selectWorkTarget } from '#adapters/index.js';
+import { authenticate, DispatchApplication, DispatchPolicyAuthorization, RunWorkspaceAcquisitionApplication, selectReservedTaskProfile,
+  RunStoreError, DispatchError, TaskInputApplication, selectTaskInputArtifact, workTargetAttemptAuthorization } from '#engine/index.js';
 import { createLayoutPolicySource } from '#composition/core/policy/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
@@ -17,7 +19,7 @@ export async function executeConfiguredTask(projectRoot: string, input: AttemptI
     const identity = attemptIdentitySchema.parse(input);
     const { config, layout, principal, path } = await loadConfiguredScopeContext(projectRoot, identity.scopeId, options, 'write');
     const os = userInfo(); const verifier = { async verify() { return principal; } };
-    const authorization = new DispatchPolicyAuthorization(createLayoutPolicySource(layout, os.uid, config.inspection.policyMaxBytes));
+    const policy = createLayoutPolicySource(layout, os.uid, config.inspection.policyMaxBytes), authorization = workTargetAttemptAuthorization(new DispatchPolicyAuthorization(policy), policy, selectWorkTarget(config.execution)?.id ?? null);
     await authorization.authorizeIdentity('execute', identity, await authenticate(verifier, undefined, identity.scopeId));
     const store = await openSqliteAttemptStore(await path(), config.storage.sqlite, 'forbid', { validate: validateDockerSupervisorProfile });
     try {

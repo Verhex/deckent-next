@@ -33,7 +33,7 @@ export async function prepareConfiguredWorkspaceIntegration(root: string, input:
 export async function inspectConfiguredWorkspaceIntegration(root: string, input: IntegrationQuery, options: ConfigLoadOptions = {}) {
   try {
     const query = integrationQuerySchema.parse(input);
-    const c = await workspacePatchContext(root, query.identity, options, false, 'read');
+    const c = await workspacePatchContext(root, query.identity, options, false, 'read', false);
     const store = await openSqliteInventoryReader(await c.path(), { busyTimeoutMs: c.config.storage.sqlite.busyTimeoutMs });
     try { return await new WorkspaceIntegrationInspection(store, c.artifacts, c.verifier, c.authorization, c.config.artifacts.maxBytes).inspect(query); }
     finally { store.close(); }
