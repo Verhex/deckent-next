@@ -417,6 +417,10 @@ STARTUP-COST ile yedinci partide kaldırıldı (varsayılan 30 s); yerelde doğr
   sağlayıcı aktif mi → altındaki modeller aktif mi; katalog sürekli güncel ve izinli yönetilir (mevcut provider-catalog/model-activation sahipleri genişletilir). (4) Owner main'den Deckent'in işini izleyebilmeli: B09-3 kalanı (canlı `workers watch` üreticisi, `report workers`)
   + terminalden Run/teslim/doğrulama/benimseme (bugün yalnız CLI). Eski directives.md/.task karşılığı: D15b `do` → RunProposal → G31 (tasarımda).
   Teslim durumu: bkz. "On altıncı parti" (WORKER-IMAGE-R4 `0fd2df1b`, WORKER-CURRENCY-1 `2231ac8f`).
+- **SURROGATE-CUT (canlı bulgu 2026-09-30, 16. partide `57016f1c`):** sıkıştırma özeti `cut(argumentsJson,200)` ile bir emojiyi ikiye böldü → tek `\ud83d` → yerel
+  sunucu her turu HTTP 400 (`TextEncodeInput…`) ile reddetti, oturum kalıcı bozuldu. Düzeltme: domain `modelTextPrefix`/`wellFormedModelText`, tüm model yönlü kesmeler +
+  `parseOpenAiChatTextRequest` sınır temizliği (U+FFFD); owner oturumu oynatıldı: yalnız 1 → 0. Açık: OpenRouter ayrıştırıcısı, model yönlü olmayan kesmeler, sağlayıcı
+  hata mesajının sınırlı gösterimi (`proof/SURROGATE-CUT-2026-09-30/`). Ayrıca canlı terminal ajanı tam erişimde `rm CHANGELOG.md` çalıştırdı (15:27); lead geri yükledi.
 - **On altıncı parti (`integrate/2026-09-30-q`).** Dogfood D1-0..D1-2 benimsendi (Deckent'in kendi adopted commit'leri `c7b44469`..`b61b34b9`;
   lead test düzeltmesi `02cff460`); CI-FIX F1–F6 (Codex lane + lead F6 düzeltmesi `b9b2ce15`/`28f6bfe0`; GitHub koşusu push sonrası hâlâ gerekli, C0–C2
   DONE/PASS yazılmadı); WORKER-IMAGE-R4 (`0fd2df1b`; r4 imajı `sha256:bf6973ec…`, Claude 2.1.285 / Codex 0.159.2 / Cursor 2026.09.28); WORKER-CURRENCY-1

@@ -4,6 +4,7 @@ Human-curated. One line per landing, keyed by PLAN.md card id. No product code w
 
 ## Unreleased
 
+- SURROGATE-CUT (live finding 2026-09-30): model-bound text truncation (compaction, shell echo, sandbox reason, MCP pin/approve/failure texts) never splits a UTF-16 surrogate pair; the OpenAI-chat request parser replaces any remaining lone surrogate with U+FFFD, so a session poisoned by an earlier split works again; a rejected round names its HTTP status ("rejected: HTTP 400").
 - CHANGED (DOGFOOD-D1, sixteenth batch): the first governed dogfood cycles were adopted by Deckent's own Run/verify/adoption loop (isolated
   N1 clone, no writes to the live installation) — the root help line documents `--delivery-command-id` and `--replaces-command-id`, the
   terminal workline's `deckent> ` input prefix is gone (with a placeholder hint on an empty line), and `/new` is removed and renamed to
