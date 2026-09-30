@@ -50,6 +50,16 @@ export async function observeIntegration(options: GitWorkspaceOptions, limits: P
     catch (error) { throw gitFailure(error); }
   };
   const repository = (await git(['rev-parse', '--show-toplevel'])).trim();
+  if (options.baseRef !== undefined) {
+    // Work target (WORK-TARGETS): the precondition is the named base branch, never the target checkout. Nothing is applied to that
+    // checkout (ref-only delivery), the candidate is a fresh clone of the base and every `before` is checked against the base listing,
+    // so its index and files are not read; a moved base branch is the typed PATCH_BASE_ADVANCED before any other comparison.
+    const tip = (await git(['rev-parse', '--verify', `${options.baseRef}^{commit}`])).trim();
+    if (source !== repository || fingerprintGitSource({ schemaVersion: 1, sourceRoot: source, repositoryRoot: repository }) !== patch.source.sourceFingerprint)
+      throw new WorkspacePatchError('PATCH_CONFLICT');
+    if (tip !== patch.baseCommit) throw new WorkspacePatchError('PATCH_BASE_ADVANCED');
+    return Object.freeze({ source, head: tip, digest: patchDigest(JSON.stringify({ source, baseRef: options.baseRef, head: tip })) });
+  }
   const head = (await git(['rev-parse', '--verify', 'HEAD^{commit}'])).trim();
   if (source !== repository || head !== patch.baseCommit || fingerprintGitSource({ schemaVersion: 1, sourceRoot: source, repositoryRoot: repository }) !== patch.source.sourceFingerprint)
     throw new WorkspacePatchError('PATCH_CONFLICT');

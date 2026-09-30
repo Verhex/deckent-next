@@ -2,7 +2,7 @@ import { userInfo } from 'node:os';
 import { dirname, resolve } from 'node:path';
 import { prepareProductDirectory, ErrorRegistry, type ConfigLoadOptions } from '#platform/index.js';
 import { attemptIdentitySchema, type AttemptIdentity } from '#domain/index.js';
-import { DockerSupervisor, GitWorkspaceBroker, GitRunWorkspaceProvider, FileArtifactStore, openSqliteAttemptStore,
+import { DockerSupervisor, GitWorkspaceBroker, GitRunWorkspaceProvider, FileArtifactStore, openSqliteAttemptStore, resolveGitWorkTarget,
   validateDockerSupervisorProfile, resolveDockerTaskProfile, resolveDockerReadOnlyMounts, readLocalNativeCredential, openNativeConnection, startWorkerObservation, openWorkerEventSink } from '#adapters/index.js';
 import { authenticate, DispatchApplication, DispatchPolicyAuthorization, RunWorkspaceAcquisitionApplication, selectReservedTaskProfile, RunStoreError, DispatchError, TaskInputApplication, selectTaskInputArtifact } from '#engine/index.js';
 import { createLayoutPolicySource } from '#composition/core/policy/index.js';
@@ -59,7 +59,7 @@ export async function executeConfiguredTask(projectRoot: string, input: AttemptI
         const path = binding.output ? (await artifacts.prepareReadOnlyFile(identity.scopeId, binding.receipt)).path : envelopePath;
         inputs.push({ ...binding, path });
       }
-      const broker = new GitWorkspaceBroker({ ...config.execution.git, sourceRoot: resolve(projectRoot), workspaceRoot });
+      const broker = new GitWorkspaceBroker({ ...config.execution.git, ...(await resolveGitWorkTarget(resolve(projectRoot), config.execution, layout)).git, workspaceRoot });
       const lease = await new RunWorkspaceAcquisitionApplication(store, new GitRunWorkspaceProvider(broker)).acquire(identity);
       // Worker-reported events (redacted in the container, validated by the gateway) project live next to the other sidecars.
       const events = profile.nativeSubscription ? await openWorkerEventSink(dirname(lease.workspace)).catch(() => undefined) : undefined;

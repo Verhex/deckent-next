@@ -7,7 +7,7 @@ import { randomUUID } from 'node:crypto';
 import { setTimeout as wait } from 'node:timers/promises';
 import { ErrorRegistry, inspectProductFile, loadConfig, ManagedFileError, readBuildIdentity, prepareProductCompanionPath, prepareProductDirectory, prepareProductSocket, type ConfigLoadOptions } from '#platform/index.js';
 import { registerProviderConfig, acquireLocalRuntimeSocketGuard, LocalRuntimeSocketError, upgradeExistingProductLedger, validateDockerSupervisorProfile, type LedgerUpgrade,
-  type LocalRuntimeSocketGuard, openSqliteAgentTurnStore, openSqliteApprovalStore, openLocalIntegrityAuthority, createScratchActivity, readTerminalScratchConfig,
+  type LocalRuntimeSocketGuard, openSqliteAgentTurnStore, openSqliteApprovalStore, openLocalIntegrityAuthority, createScratchActivity, readTerminalScratchConfig, resolveGitWorkTarget,
   startScratchSweeper, sweepScratch, createRuntimeWorkspaceFileHost, type HttpFetchTransport, type ScratchSweepResult, type ShellSandboxFactory } from '#adapters/index.js';
 import { ModelInvocationControllers, runtimeServiceModelOwnerId, RuntimeServiceLifecycle, classifyRuntimeServiceOperation, isRuntimeServiceEffectOperation, isRuntimeServicePermissionModeOperation, runtimeServiceDescriptorSchema, runtimeServiceDescriptionInputSchema,
   serviceInstanceSchema, ServiceShutdownError, type ShutdownAdmission, type RuntimeServiceDrainResult } from '#engine/index.js';
@@ -93,6 +93,7 @@ async function startService(projectRoot: string, observer: ConfiguredRuntimeServ
   registerProviderConfig();
   const config = await loadConfig(projectRoot, { ...options, heal: false });
   if (!config.cancellationRuntime || !config.cancellation) throw ErrorRegistry.createError('CANCELLATION_NOT_CONFIGURED');
+  await resolveGitWorkTarget(projectRoot, config.execution, config.productLayout); // WORK-TARGETS: typed refusal before any custody or write
   const endpoint = await prepareProductSocket(config.productLayout, 'runtimeSocket');
   // Ledger custody, then endpoint custody, before the ledger is backed up or migrated: one service per ledger whatever its endpoint
   // (LEDGER-SINGLETON), so a second start fails here and never touches that host's schema; kept until the listener is up (Astra 2054 R1).

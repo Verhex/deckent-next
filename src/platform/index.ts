@@ -65,7 +65,7 @@ export { inspectProductLayout, type ProductPathInspection } from '#platform/core
 export { inspectProductPaths } from '#platform/core/config/index.js';
 export { SQLITE_STORAGE_OPTIONS } from '#platform/core/config-fields/index.js';
 export { prepareProductFile, prepareProductCompanionPath, prepareProductSocket, inspectProductFile, prepareProductDirectory, inspectProductDirectory, ManagedFileError } from '#platform/core/managed-files/index.js';
-export { DOCKER_EXECUTION_SETTINGS, GIT_EXECUTION_SETTINGS, ARTIFACT_STORAGE_LIMITS } from '#platform/core/config-fields/index.js';
+export { DOCKER_EXECUTION_SETTINGS, GIT_EXECUTION_SETTINGS, ARTIFACT_STORAGE_LIMITS, WORK_TARGET_SETTINGS } from '#platform/core/config-fields/index.js';
 
 export * from '#platform/core/bootstrap-state/index.js';
 export { SystemTrustedClock, MAX_WALL_SKEW_MS } from '#platform/core/clock/index.js';
