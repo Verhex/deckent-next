@@ -29,6 +29,7 @@ const observed = await selectBubblewrapLauncher({ stateDir, systemPaths: [], bun
 process.stdout.write(JSON.stringify({ status: observed.status, path: observed.launcher?.path ?? null, identity: observed.launcher?.identity ?? null, detail: observed.detail }) + '\\n');
 `;
 
+type ChildResult = { status: string; path: string | null; identity: string | null; detail: string | null };
 async function round(root: string, index: number, bundled: string, sha: string) {
   const state = join(root, `state-${index}`), go = join(root, `go-${index}`);
   const outputs: Promise<string>[] = [], ready: Promise<void>[] = [];
@@ -41,7 +42,8 @@ async function round(root: string, index: number, bundled: string, sha: string) 
   }
   await Promise.all(ready);
   await writeFile(go, '');
-  return { state, results: (await Promise.all(outputs)).map(out => JSON.parse(out.split('\n')[1] ?? '{}') as { status: string; path: string | null; identity: string | null; detail: string | null }) };
+  const parse = (out: string) => { const line = out.split('\n').find(text => text.startsWith('{')); if (!line) throw new Error(`child output: ${out.slice(0, 400)}`); return JSON.parse(line) as ChildResult; };
+  return { state, results: (await Promise.all(outputs)).map(parse) };
 }
 
 describe.skipIf(process.platform !== 'linux' || !existsSync(dist))('bundled bwrap copy: concurrent placement', () => {
@@ -51,19 +53,22 @@ describe.skipIf(process.platform !== 'linux' || !existsSync(dist))('bundled bwra
     const script = `#!/bin/sh\nexit 0\n${'#'.repeat(80)}\n`.repeat(2_048);
     const bundled = join(root, 'bwrap'); await writeFile(bundled, script); await chmod(bundled, 0o755);
     const sha = createHash('sha256').update(script).digest('hex');
-    const summary: { round: number; statuses: Record<string, number>; identities: number; refused: string[] }[] = [];
+    const summary: { round: number; selected: number; statuses: Record<string, number>; inodes: number; copyRefusals: string[]; names: string[]; links: number }[] = [];
     for (let index = 0; index < ROUNDS; index++) {
       const { state, results } = await round(root, index, bundled, sha);
-      const statuses: Record<string, number> = {};
+      const target = join(state, 'bin', `bwrap-${sha}`), statuses: Record<string, number> = {};
       for (const result of results) statuses[result.status] = (statuses[result.status] ?? 0) + 1;
-      summary.push({ round: index, statuses, identities: new Set(results.map(result => result.identity)).size,
-        refused: results.flatMap(result => result.detail ? [result.detail.slice(result.detail.indexOf('the bundled'))] : []) });
-      const target = join(state, 'bin', `bwrap-${sha}`);
-      expect({ index, names: await readdir(join(state, 'bin')), links: Number((await lstat(target)).nlink) }).toEqual({ index, names: [`bwrap-${sha}`], links: 1 });
+      summary.push({ round: index, selected: results.filter(result => result.path === target).length, statuses, inodes: new Set(results.map(result => result.identity?.split(':')[1])).size,
+        copyRefusals: results.flatMap(result => result.detail && /bundled bwrap (copy|could not)/u.test(result.detail) ? [result.detail] : []),
+        names: await readdir(join(state, 'bin')), links: Number((await lstat(target)).nlink) });
     }
     console.log('BWRAP_COPY_RACE', JSON.stringify(summary));
-    // Every process selects the bundled build; the copy is normally one inode for all (`identities` 1). A publisher descheduled past the
+    // The race's outcome is the selection: every process selects the bundled copy (its smoke run's status is the host's, reported only), no
+    // copy refusal, one name with one link left. The copy is normally one inode for all (`inodes` 1); a publisher descheduled past the
     // settle bound makes a later one replace its copy (still verified): reported, not asserted.
-    for (const entry of summary) expect({ ...entry, identities: 0 }).toEqual({ round: entry.round, statuses: { available: PROCESSES }, identities: 0, refused: [] });
+    for (const entry of summary) {
+      expect({ round: entry.round, selected: entry.selected, copyRefusals: entry.copyRefusals, names: entry.names, links: entry.links })
+        .toEqual({ round: entry.round, selected: PROCESSES, copyRefusals: [], names: [`bwrap-${sha}`], links: 1 });
+    }
   }, 120_000);
 });

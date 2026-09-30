@@ -139,11 +139,11 @@ function verifiedCopy(path: string, expected: string): string | null {
 /** `verifiedCopy`, waiting (bounded) while the target is still another name's too — a concurrent publisher between its `link` and the
  * removal of its temporary name — or was replaced under the check (`nlink` 0). */
 function settledCopy(path: string, expected: string): string | null {
+  const links = () => { try { const info = lstatSync(path, { bigint: true }); return `${info.ino}:${info.nlink}`; } catch { return null; } };
   for (let attempt = 1; ; attempt++) {
-    const identity = verifiedCopy(path, expected);
-    let links: bigint;
-    try { links = lstatSync(path, { bigint: true }).nlink; } catch { return identity; }
-    if (identity || links === 1n || attempt >= SETTLE_ATTEMPTS) return identity;
+    const before = links(), identity = verifiedCopy(path, expected), after = links();
+    // Settled (one link, the same inode around the check) and still not verifying: not a publisher's moment — foreign or stale.
+    if (identity || attempt >= SETTLE_ATTEMPTS || (before === after && before?.endsWith(':1'))) return identity;
     pause(SETTLE_PAUSE_MS);
   }
 }
