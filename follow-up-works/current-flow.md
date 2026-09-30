@@ -6,7 +6,10 @@ Bu belge yalnız güncel durumu tutar; önceki sürümü Git geçmişinde, kanı
 - **On dördüncü parti (2026-09-30):** `integrate/2026-09-30-o` (worktree `/home/alperen/deckent-next-integrate-n`, taban `02601269`) =
   Astra 2189 REVISE düzeltmeleri: R7 ata pinleri (açık + kapalı yazılabilir görünüm; lane/r7-ancestor), gömülü bwrap kopya yarışı (link ile yayın),
   R8 doctor MCP launch kuralı (lane/r8-doctor-mcp). Tam verify 490/3467 0 skip (Docker imajıyla) → Astra 2190 PASS → `origin/main` = `51b19dc5` (push 2026-09-30).
-  Sıradaki: owner onayıyla canlı yeniden başlatma (`language: tr`). Canlı hâlâ `4a2ac04` build'i. Kanıt `proof/R7-R8-FIX-2026-09-30/`.
+  **Canlı (2026-09-30):** instance `6eb54a8c`, build main `979b4b02` (= `51b19dc5` + belge), Node 24.21, config `language: tr`;
+  doğrulama: Türkçe yanıt, tam erişimde gerçek HOME, `.deckent/mcp.json` read-only, bubblewrap gömülü (bildirim yok), context7 ok.
+  Canlı bulgu: tam erişim turunda istem "Network access: none" diyor → model ağı reddediyor; düzeltme lane/prompt-posture (istem v6).
+  Kanıt `proof/LIVE-SWITCH-BATCH14-2026-09-30/README.md`. Birleşmiş worktree/dallar temizlendi. Kanıt `proof/R7-R8-FIX-2026-09-30/`.
 - **Canlı (2026-09-29 18:07'den beri):** yedinci–on ikinci partiler `4a2ac04` build'iyle canlıda; `origin/main` = `4a2ac04` (push `0e0ca63` → `9a3ef2c`
   Astra 2181 PASS → `4a2ac04` Astra 2186/2187 PASS). Instance `74e4359e` (ilk `0b044e1a`, global kök düzeltmesiyle yeniden başlatıldı), Node 24.21,
   protokol v18; eski v16 servisi eski build'in kendi CLI'ıyla durduruldu. Mod göçü dry-run → `--grant-full-access` (bindings v3 + owner full-access
