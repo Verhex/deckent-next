@@ -66,11 +66,28 @@ export function recursiveRm(command) {
 
 export function buildCommand(command) {
   return segments(command).some(([verb, ...args]) => {
-    if (verb === 'npm' || verb === 'pnpm' || verb === 'yarn') return args[0] === 'run' ? ['build', 'verify'].includes(args[1]) : ['build', 'verify'].includes(args[0]);
+    if (verb === 'npm' || verb === 'pnpm' || verb === 'yarn') {
+      const words = args.filter((a, i) => !a.startsWith('-') && !['--prefix', '-C'].includes(args[i - 1]));
+      return words[0] === 'run' ? ['build', 'verify'].includes(words[1]) : ['build', 'verify'].includes(words[0]);
+    }
     if (verb === 'node') return args.some(a => a.endsWith('scripts/build.mjs'));
     if (verb === 'tsc' || verb === 'npx' && args[0] === 'tsc') return !args.includes('--noEmit');
     return false;
   });
+}
+
+/** U1 (owner K1 = W2, 2026-09-30): the directories a build/verify command rebuilds (build.mjs deletes `<dir>/dist` first). Follows `cd`
+ *  like `legacyExecution`, `npm --prefix <dir>` and `node <dir>/scripts/build.mjs`; `cwd` is the hook's working directory. */
+export function buildTargets(command, cwd) {
+  let dir = resolve(cwd); const out = [];
+  for (const [verb, ...args] of segments(command)) {
+    if (verb === 'cd' || verb === 'pushd') { if (args[0] && !args[0].startsWith('-')) dir = resolve(dir, args[0].replace(/^~(?=\/|$)/u, process.env.HOME ?? '~')); continue; }
+    if (!buildCommand([verb, ...args].join(' '))) continue;
+    const prefix = args.findIndex(a => a === '--prefix' || a === '-C');
+    const script = verb === 'node' ? args.find(a => a.endsWith('scripts/build.mjs')) : undefined;
+    out.push(script ? resolve(dir, script, '../..') : prefix >= 0 && args[prefix + 1] ? resolve(dir, args[prefix + 1]) : dir);
+  }
+  return out;
 }
 
 export function guard(event, input, ctx) {
@@ -86,6 +103,12 @@ export function guard(event, input, ctx) {
       if (legacyExecution(command, legacy)) return deny('deckent-dev is a frozen read-only reference (CLAUDE.md). Executing its runtime/workers is not allowed; read it with cat/grep/git instead.');
       if (recursiveRm(command)) return deny('Recursive rm is reserved for the owner (memory: owner runs blocked rm). Ask the owner to run it or move the path to the scratchpad.');
       if (buildCommand(command) && ctx.vitestRunning()) return deny('A vitest suite is running (CLAUDE.md: no build during an active test suite). Wait for it to finish, then build or verify.');
+      if (buildCommand(command)) {
+        for (const target of buildTargets(command, typeof input?.cwd === 'string' ? input.cwd : root)) {
+          const users = ctx.distUsers(target);
+          if (users.length) return deny(`U1: processes run from ${target}/dist (pids ${users.slice(0, 8).join(', ')}; e.g. the live runtime service or MCP servers). A build deletes that dist under them. Build in a worktree, or stage a reviewed commit with .agents/refactor/dev-release.mjs and switch; rebuild here only after those processes stop.`);
+        }
+      }
       return pass();
     }
     if ((tool === 'Edit' || tool === 'Write' || tool === 'NotebookEdit') && filePath && inside(filePath, legacy)) {
@@ -136,10 +159,19 @@ export function defaultContext(root, legacy) {
       return execFileSync('ps', ['-eo', 'args='], { encoding: 'utf8' }).split('\n').some(isVitestProcess);
     } catch { return false; }
   };
+  /** Pids whose command line runs a file under `<dir>/dist/` (the live service, MCP servers, terminals started from that checkout). */
+  const distUsers = (dir) => {
+    try {
+      const prefix = `${resolve(dir)}${sep}dist${sep}`;
+      return execFileSync('ps', ['-eo', 'pid=,args='], { encoding: 'utf8' }).split('\n').map(line => line.trim().split(/\s+/u))
+        .filter(([pid, ...args]) => Number(pid) !== process.pid && args.some(arg => arg.startsWith(prefix))).map(([pid]) => Number(pid));
+    } catch { return []; }
+  };
   return {
     root,
     legacy,
     vitestRunning,
+    distUsers,
     readLines: (p) => readFileSync(p, 'utf8').split('\n').filter((l, i, a) => i < a.length - 1 || l !== '').length,
     refreshMemoryManifest: () => {
       const script = resolve(root, 'scripts', 'lint-core-memory.mjs');
