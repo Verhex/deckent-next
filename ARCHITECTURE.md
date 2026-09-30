@@ -328,16 +328,16 @@ refresh, usage and dogfood closure remain open.
   v17 was introduced 2026-09-29 (MODES-3) as the single v17 package: permission-mode names `standart | full-auto | full-access`, view
   `askEdits`/`fullAccess`, command `askEdits?`, `chatTurn.fullAccess?: true`; lifecycle window [17,16]. The owner-approved v17 items
   (question cards, Agent OS catalog, card standing scopes) add to it without a further bump until it is pushed. With it: bindings v3;
-  audit event schema 1 (additive kinds `full-access-turn`, `full-access-call`, summary `fetch`; old mode names stay readable); ledger
+  audit event schema 1 (additive kinds `full-access-turn`, `full-access-call`, `tracked-files-changed`, summary `fetch`; old mode names stay readable); ledger
   unchanged. v17 was pushed with `7fbe476c` (released; further changes bump).
   v18 was introduced 2026-09-29 (SECRET-WRITE, lead decision under this rule) as the single v18 package: the control operations
   `setSecret` / `deleteSecret`; lifecycle window [18,17]; every other v17 operation is unchanged in v18. It is unreleased until pushed, and
   further v18 items add to it without another bump. Like every bump, the window's older version is lifecycle-only: a v17 client can
   describe and stop a v18 service, nothing else; a mismatched envelope is closed unanswered (the client's typed `LOCAL_RUNTIME_TRANSPORT` —
   there is no dedicated version-refusal code), and a v18 terminal's describe of a v17 service retries at v17 and shows the build skew. The
-  live service runs v16: at the next live switch it moves to v18 in one step with the terminal and CLI of the same build; v16 is outside
-  [18,17], so the old service is stopped by the owner (the terminal's restart and `deckent runtime shutdown` cannot reach it) — or the window is widened to [18,17,16] for that
-  one switch (open lead/owner choice).
+  live service has run v18 since the 2026-09-29 switch (the v16 service was stopped with the old build's own CLI). FA-TRACKED-WARN adds no
+  wire field: a v18 frame never carries `tool.finished.trackedChanges` (the released parser rejects it); the typed field waits for the v19
+  bundle (with `chatTurn.language`), and until then the warning reaches every client as result text (see FA-TRACKED-WARN).
 - Schema evolution has backup/restore, exclusive migration ownership, expand/contract where applicable and an
   explicit rollback floor. Installing an older binary is not a rollback after an incompatible data migration.
 - Legacy successes and known bugs are separate acceptance inputs. HMAC authenticity is not an asymmetric
@@ -616,6 +616,23 @@ turn ends with one `done`; a turn without a model answer (reasoning spent the ou
 an engine-written closure note instead of silence. Identical read calls in one turn are answered with a reference to the earlier
 result, other classes are never deduplicated. The runtime operation, context admission/compaction and terminal rendering are
 implemented in the slices below; the T-L5 review limits remain open.
+**Truncated rounds (TRUNCATED-TOOLCALL, Jev 6192a348; live with the next switch).** A round is truncated when its reported completion
+count reaches the completion limit every round requests (`AgentTurnAdmission.completionLimitTokens` = `terminal.chat.
+maxCompletionTokens`) or its finish is `length`; the finish alone is not trusted (vLLM v0.30.0 streams a tool call cut at
+`max_completion_tokens` as `tool_calls` — serving.py overwrites `length`, fixed upstream by PR #46303 after v0.30.0 — and its
+qwen3_xml parser may leave unterminated or, with PR #53739, terminated half arguments). No call of a truncated round runs:
+each is refused before argument checks, policy, approval and execution (no partial effect), recorded as `invalid-arguments`
+without an argument digest, answered to the model with the engine protocol text `error=output-limit` naming the limit and how
+to write in parts, and counted as no progress; the turn's note names the refused calls. A text answer cut by `length` keeps
+its behaviour (finish `length`). Without a known limit only `length` marks a round. The openai-chat adapter still rejects a
+response that carries calls with a finish other than `tool_calls` (`invalid-response`, T-L2), so a provider that reports
+`length` honestly fails the round instead (no effect). Tool-call arguments in history stay the provider's raw text (vLLM coerces
+unparsable history arguments to `{}`, PR #48922). Timeouts: the profile's `limits.timeoutMs` bounds the model call, while
+`service.responseTimeoutMs` only bounds the final frame write (`server.ts`), so a raised `maxCompletionTokens` must raise the profile's
+`maxOutputTokens` and `limits.timeoutMs` together. Open decision (lead/owner): a distinct `truncated` tool-call status (Jev 0.84,
+below the 0.90 criterion, so the safest reversible `invalid-arguments` was kept; needs domain/wire `callStatusSchema`, sqlite record
+enum, en/tr label keys, v18 or v19).
+
 **Durable agent turns (T-L3b2, ledger v37, Astra 2074 D3).** `runDurableAgentTurn` claims `(scopeId, turnId)` before any round:
 the turn id is bound to the principal key and the composition's request digest. A new id runs the loop; the same request of the
 same principal after the turn finished returns the stored outcome (the last answer and `done` are re-emitted, no model round);
@@ -786,6 +803,8 @@ System prompt **v6** (PROMPT-POSTURE, live 2026-09-30): fetch_url and the shell 
 (the realm and open-view rule of the turn's calls: open bubblewrap = network, real HOME, Deckent state sealed, the configuration written
 only by an owner-approved call (Astra 2192 R9); closed = no network; host; unavailable), and `Network access: none` stays only when the
 shell has no network. Every turn's request digest changes again.
+System prompt **v7** (TRUNCATED-TOOLCALL, 2026-09-30): when an edit tool is offered it names the per-answer output limit
+(`terminal.chat.maxCompletionTokens`) and the write-in-parts recipe; every turn's request digest changes again.
 **Agent tool deny floor per layout (TL-C finding, TERM-FEEDBACK-1).** Agent read tools (and through the same `WorkspaceScope`: edit and
 shell path classification, the bubblewrap and Landlock deny views, `@file`) deny the Core floor plus every product resource of the
 layout that lies inside the project except the configuration (`AGENT_READABLE_PRODUCT_RESOURCES = ['config']`, default-deny for
@@ -1418,6 +1437,34 @@ deny drops `REPOSITORY_INTERNALS_DENY` (`.git`, `.git/**`, `**/.git`, `**/.git/*
 (`ShellSandboxLayout.repositoryWritable`: bubblewrap binds no `.git` read-only and binds a worktree's common repository read-write;
 Landlock gives clean Git entries `w`; the inode floor's masks stay); the sandbox posture is the full-access bullet above. Host realm (explicit, or a fallback): the
 shell hard floor stays name-based (a command naming product state is refused; an expanded name is not caught).
+**FA-TRACKED-WARN (owner 2026-09-30, option A).** A full-access shell call keeps running without asking. What it measurably did to
+the project's git-tracked files is shown and audited — never blocked, never a card.
+
+- **Measurement.** Before the call, `git ls-files -z -s` lists the tracked files of the repository that holds the project. It runs
+  from the project root with a fixed environment: no system/global config, `core.fsmonitor=false`, `core.hooksPath=/dev/null`,
+  `GIT_OPTIONAL_LOCKS=0`. It reads the index only and hashes no content, so no filter or other repository-configured program runs.
+  Each listed file is `lstat`ed before and after the call. Present before and gone after = deleted; inode, size, mtime or ctime
+  changed = overwritten. No git process runs after the command, so a rewritten `.git` cannot hide anything or make Deckent run anything.
+- **Output (protocol v18: result text only).** The result's first line starts with `[deckent] run_shell: tracked: deleted=N
+  overwritten=M; …`, the first metadata after the tool prefix and before the realm marker, exit status and command, so neither the
+  command's text nor its output can supply it. The finished tool line reads the counts only from there (`trackedChangesOfToolResult`)
+  and shows the `terminal.render.toolTracked` suffix in the warning tone. The end of the result carries `[deckent] tracked files changed:
+  deleted N (a, b, … +k more), overwritten M (…) — during this full-access call; nothing was blocked.` (at most 8 names per list, control
+  characters shown as `?`), also streamed to stderr. A marker printed or written by the command produces no suffix (forgery tests).
+- **Audit.** A sealed `tracked-files-changed` event (audit event schema 1, additive) is written after the effect with the call reference
+  and policy revision of the call's `full-access-call` event, at most 50 paths per list plus the full count; paths are plain text (hashed
+  paths for SIEM export are a follow-up). If it cannot be written, the line says so.
+- **Coverage.** A stopped or timed-out run is measured too. Only `authority === 'full-access'` calls are measured; standart, full-auto
+  and an owner-approved card call in a full-access turn are unchanged; `write_file`/`edit_file` keep their own audit.
+- **Bounds.** At most 100,000 tracked files, otherwise the line says "not checked". The listing is capped at 64 MiB / 5 s, and the
+  `lstat` passes yield to the event loop every 4,096 files. A non-git project is a no-op; a linked worktree and a project inside a
+  repository resolve as git resolves them (paths relative to the project root); a nested repository's files are its own.
+- **Limits.** A change another process makes during the call is attributed to it. A `chmod` or a new hard link reads as overwritten
+  (ctime); a rename reads as a deletion. Submodule entries and files absent before the call are not measured. git is looked up on the
+  fixed PATH `/usr/bin:/bin`.
+- **v19.** The typed `tool.finished.trackedChanges` (hook: `agentToolOutcomeSchema`, turn event schema on a v19 envelope, loop,
+  shell outcome, terminal-chat delta, `ToolDelta`, text reading kept as fallback) waits for the v19 bundle (Jev 34a8df5c).
+
 **Open view (OPEN-SANDBOX, owner MODES-3 checkpoint 4; live findings 3/4 of session 1d428e9f).** A full-access call in a realm that
 `opens` (bubblewrap) runs with `--unshare-all --share-net`, `--bind / /` then a fresh `/proc` and minimal `/dev` (PID namespace,
 `--die-with-parent`, `--new-session` kept): host network, the real HOME readable and writable, the project and `.git` writable. The hard floor
@@ -1618,6 +1665,7 @@ lives in the transient tracker and external refactor archive, not an append-only
 
 | Date | Decision | Why |
 |---|---|---|
+| 2026-09-30 | Seventeenth-batch tooling and provider fixes, no new contract: (1) CI-F8 — the package-metadata freshness check compares the generated JSON after CRLF→LF normalization only (a Windows checkout's line endings); any other difference (name, version, engine, content, format) is still stale; real Windows confirmation needs a hosted run. (2) SURROGATE-OPENROUTER — the OpenRouter request parser (`provider-openrouter-pricing` `quote.ts`) runs the domain `wellFormedModelJson` on the parsed request (lone surrogate → U+FFFD), same helper as the OpenAI-chat boundary; the request schema is **not** widened (assistant `tool_calls` and top-level `tools` stay refused `INVALID_REQUEST`), the tariff `bodyDigest` is the sha256 of the sent bytes, `arch.json` edge `provider-openrouter-pricing → agent-tool`. (3) CI-TERMINAL-CLI — the workline passes `interactive: true` to Ink when stdout is a TTY, because Ink 7.1.1 treats `CI` as non-interactive and defers frames (`workline.tsx`); non-TTY output stays on Ink's own detection. | Hosted run 36741640264 (30988c66): only the terminal-cli prefix test failed on Node 24; a user shell with `CI` set would see the same half-drawn terminal. |
 | 2026-09-30 | Fourteenth batch (COMPOSITION-RELIEF) keeps `src/composition` within its 5500-line budget by moving five pure or I/O responsibilities to their owners, behavior-identical: the kept approval previews (`keepFullPreview`, `dropFullPreview`, `sweepFullPreviews`; managed-file I/O) to `adapters/core/approval-store`; the worker event-log sealing (verdict, `event-cap`, `byte-cap` markers) as `sealWorkerEventLog` to `adapters/core/worker-observation`; the scope budget lookup as `providerSpendingBudgetFor` beside `providerSpendingSchema` in `adapters/core/contract`; the `RUN_CAPACITY_OR_ORDER` parameters as `reservationDiagnosticParams` to `engine/core/scheduling`; and the runtime client's two hand-written copies of the bounded-result operation set replaced by the protocol's `isRuntimeServiceBoundedResultOperation` (`engine/core/runtime`). 5520 → 5454 lines. | FA-TRACKED-WARN, WORK-TARGETS, WORKER-CURRENCY-2 and D2 together passed the budget by 20 lines; FOUNDATION: move responsibility, never raise the budget. |
 | 2026-09-30 | Thirteenth batch keeps `src/composition` within its 5500-line budget by moving the agent's workspace/product-state posture derivation to a new adapter unit `adapters/core/agent-workspace-floor`, byte-identical: `AGENT_READABLE_PRODUCT_RESOURCES`, `agentWorkspaceDeny`, `agentAuthorityPaths`, `agentShellHardFloor`, `agentProductStateDeny` (from agent-turn `turn.ts`) and `classifySandboxWritePath` (from `sandbox-writes.ts`); composition keeps the wiring. 5506 → 5423 lines. | OPEN-SANDBOX + LANG-CRASH passed the budget; pure path derivation over workspace-read/-write, host-shell, mcp-client and platform host symbols is not wiring (FOUNDATION: move responsibility, never raise the budget). |
 | 2026-09-30 | OPEN-SANDBOX: a full-access shell call runs in an open bubblewrap view (host network, real HOME, project + `.git` writable) with a structural hard floor (Deckent state roots read-only/hidden, Core credential patterns masked in HOME); owner Y: existing non-product subdirectories of the sealed `.deckent` are writable; credentials stay name patterns for now (follow-up OPEN-SANDBOX-HIDDEN-PATHS, policy-managed hidden paths). | Owner MODES-3 checkpoint 4 ("full access is comprehensive") and live session 1d428e9f findings 3/4 (a hard-floor name created from a full-access sandbox; no network/HOME in full access). |
@@ -2431,6 +2479,68 @@ tasks with typed codes: `WORKER_MODEL_UNPINNED` (v1 profile), `WORKER_MODEL_ALIA
 the container preflight enforces equal to the image CLI, < catalog `minCliVersion`) — for the model and every declared helper model.
 Admitted Runs are untouched (replay/inspect/reserve read the frozen snapshot). Post-run: Claude `session.ended.models` = `result.modelUsage`
 keys; after the gateway closes the host seals one `model.verification` event (`verified` | `substituted` + unexpected ids | `unverified`
-for Codex/Cursor, v1 profiles or missing usage); a worker-sent verdict is dropped. The verdict does not yet gate acceptance. Landing
+for Codex/Cursor, v1 profiles or missing usage); a worker-sent verdict is dropped. Slice 1 alone did not gate acceptance; slice 2 does (below). Landing
 consequence: existing native profiles (`nativeSubscription` v1, alias models such as `--model sonnet`) are refused with
 `WORKER_MODEL_UNPINNED` on their next new Run until re-prepared against the catalog (operational note, WORKER-IMAGE-R4 docs-delta).
+
+### Worker model currency, slice 2 (WORKER-CURRENCY-2; owner 2026-09-30 rule A, seventeenth batch)
+
+Owner rule A: a profile declares its main model and its helper (auxiliary) models; a declared helper is allowed, an undeclared model
+makes the attempt not accepted, and model calls stay visible. The consequence lives in the existing acceptance owner, not a new flow.
+`TaskEvaluationApplication` reads the host-sealed worker event log of an attempt whose frozen Run profile pins a model
+(`nativeSubscription.model`) and records typed model evidence with the evaluation (`TaskEvaluation.model`: provider, requested pin, init =
+`session.started.model`, usage = `session.ended.models`, verdict `verified|substituted|unverified`, unexpected ids, evidence
+`sealed|absent`; additive optional field, tasks without a pin keep identical bytes). Domain conclusion (`taskModelConclusion`):
+`substituted` → Task **failed**; a pinned **Claude** attempt without a sealed `verified` verdict (no log, log without verdict, sealed
+`unverified`) → **held** (`evaluating`, re-evaluable after sealing; Jev 933e43f2, 58ffe1c9); Codex/Cursor → accepted by their
+criteria, visibly `unverified`. A present but invalid sealed log refuses evaluation (`TASK_EVIDENCE_INVALID`, nothing written). The
+engine transition, re-run by the ledger commit, requires model evidence exactly for pinned tasks and for the Run's own pin. The verdict
+compares **worker-reported** usage received by the host with the pin; it is not provider attestation (withholding usage holds a Claude
+attempt, it never passes it). A hold waits for an operator (`task evaluate` with a new command id once the log is sealed, or
+`run cancel`); automatic progression evaluates once per attempt revision, so it never loops; a lost seal shows as `evidence absent`.
+
+Visibility (one typed row, domain `viewWorkerModels`: requested → init → usage → verdict + evidence `sealed|invalid|live|none|denied`):
+`workers list|watch` (sealed verdict, else live `pending`), `run inspect` (`models[]`; each attempt needs `read-output`, else `denied`),
+the `task transcript` report view, SDK/MCP through the same composition. Catalog operator surface, one application
+(`ModelCatalogApplication.apply|inspect`): CLI `models catalog list|register|activate|deactivate`, MCP `inspect_model_catalog`
+(read-only) / `apply_model_catalog` (destructive, idempotent by the (scope, commandId) receipt), SDK `applyModelCatalog` /
+`inspectModelCatalog`; listing needs the scoped `model-activation` `inspect` decision per channel (else `denied`); `register --seed
+<name>` reads the packaged `assets/model-catalog/<name>.json`, `--file PATH|-` an operator document. Authority unchanged from WC-R1.
+Open: the `deckent models --help` text (`cli.help.models`) does not yet list `catalog` (changing it breaks the i18n-parity snapshot of
+unaffected templates; en/tr together with the snapshot); terminal `/models` read-only view and the `/workers` verdict word; chat path
+onto the ledger catalog; Codex/Cursor output-side model evidence (none documented); a real Claude run showing `verified` with a helper.
+
+### Work targets, slice 1 (WORK-TARGETS; owner 2026-09-30 K1 = W2, K2 = A, K4 = A; Jev a2053c1c; seventeenth batch)
+
+- **Registry.** `execution.workTargets` `{ schemaVersion: 1, targets: [{ id, kind: 'git', path, baseRef }] }`, optional, one target in
+  slice 1 (`max(1)`), additive under config schema 3. Execution stays strict, so a build without this field refuses such a config
+  instead of silently targeting the project root. `kind` is the extension seam; business systems (ERP) are not work targets — their
+  effects stay on the C11 operation catalog / EffectTarget port. A future non-Git workspace kind is another adapter producing the same
+  `WorkTargetObservation`.
+- **One resolver.** `resolveGitWorkTarget(projectRoot, execution, layout)` (adapter `git-workspace`) is the only source of the Git source
+  root for Run base capture, execution, patch preparation, integration, delivery, adoption, delivery-pinned Runs and
+  `openConfiguredWorkspaceBroker`, and runs at service start. Absent config: returns the project root unchanged, no Git call.
+- **Typed refusals** (engine `assertWorkTarget`, fixed order; service start before any custody/write and every acquisition):
+  `WORK_TARGET_PATH_INVALID`, `WORK_TARGET_UNSAFE` (not owned by the service user, or group/other-writable), `WORK_TARGET_IN_DATA_ROOT`,
+  `WORK_TARGET_IS_PROJECT`, `WORK_TARGET_NOT_WORKTREE`, `WORK_TARGET_SHARES_PROJECT_REPOSITORY` (same Git common dir as the running
+  project: Deckent never targets its running source), `WORK_TARGET_ALTERNATES`, `WORK_TARGET_BASE_MISSING`. Git runs only inside a
+  canonical, owned, not group/other-writable directory, with the shared local invocation (no network/hooks/fsmonitor/system+global
+  config; now owned by `git-workspace`, re-exported by `git-patch`).
+- **Named baseRef.** Run base = `baseRef` tip (not checkout HEAD); delivery `update-ref` verifies `baseRef`; the integration observation
+  compares the `baseRef` tip and does not read the target checkout's index or files. A moved base branch is the typed
+  `PATCH_BASE_ADVANCED` (observation and delivery) instead of `PATCH_CONFLICT`; recovery = a new Run on the current base. K4 = A: for a
+  self/dogfood target `baseRef` is the adoption target branch and the target checkout HEAD is detached; the fenced adoption advances the
+  base and the next Run starts from the adopted commit (proven).
+- **Policy.** Vocabulary (schema 1, additive) `work-target {use, adopt}`, resource id = target id. `use` at Run admission and reservation
+  next to `pool:use`; `adopt` for adoption and rollback at the engine's first check and the re-check before the effect. No target
+  configured: no work-target check. Installed policies need a grant before a configured target can be used.
+- **Versions.** Config schema 3, policy vocabulary schema 1 (additive kind), runtime protocol v18, ledger 43, Run snapshot unchanged;
+  `WorkspacePatchError` +`PATCH_BASE_ADVANCED`; error registry +9 codes.
+- **Open limits.** The Run does not record its target id (a config change between admission and first acquisition retargets a pending
+  Run; re-authorized at reservation, custody fingerprint binds it from first acquisition) — next slice with more than one target.
+  Adoption is local SDK/CLI only. `merge-tree` "update branch" is a later slice. The foreign-owner refusal is exercised through the
+  group/other-writable branch only. Node 26 not measured.
+- **U1 (owner 2026-09-30).** No `npm run build` / `npm run verify` in the live checkout `/home/alperen/deckent-next`; build and verify
+  run in lane/integration worktrees, and the live checkout is built only in the governed switch (full verify + independent PASS + push +
+  owner-approved restart). A rule, not a hook (a hook would also block the governed switch build). U2 (versioned side-by-side
+  installation; owner option C, design `proof/U2-VERSIONED-INSTALL-DESIGN-2026-09-30`) replaces the rule by construction.

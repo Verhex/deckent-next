@@ -10,6 +10,7 @@ Tamamlanan işlerin ayrıntısı [COMPLETED-PLAN.md](COMPLETED-PLAN.md)'dedir; P
 Owner ile kısa, görünür adımlar; uzun goal kapalı; inceleme kanalı Opus↔Astra açık (owner 2026-09-23). Jev danışmandır, kabul otoritesi değildir.
 
 Owner 2026-09-23: Next'te Opus ↔ Astra inceleme kanalı açıldı; Opus uygular, Astra analiz/inceleme yapar, owner karar verir.
+**Owner 2026-09-30:** bağımsız inceleyen artık **GPT-6.1 Sol**; kanal adresi `astra` olarak kalır (`.agents/refactor/channel.mjs`). Bu belgede "Astra" geçmiş incelemeler içindir; yeni REQUEST_REVIEW Sol'a gider.
 Terminal ve yerel sunum hattı 2026-09-23'ten beri Opus'tadır (Cursor paketleri A–C main'de). İşlenen kanal kayıtları alıcı tarafından tüketilir.
 Bu rol düzeni yeni ürün kapsamı, DOGFOOD aktivasyonu veya push izni vermez; eski kanal arşivdir.
 
@@ -358,6 +359,11 @@ Uygulanan Acil satırı (ambient keşif kapalı, sürümlü profil istisnası) v
   `~/.config/gh`, `~/.codex/auth.json`, `~/.gnupg`, keyfi adlı `~/.ssh` anahtarları, `~/.docker/config.json`; gh token ile push çatışması ve ajan soketi
   seçeneği `proof/OPEN-SANDBOX-2026-09-29/review.md`'de). Kalan diğerleri: Landlock açık görünümü; doctor'da `opens`; canlı uçtan uca ölçüm; açık görünüm
   Deckent kodunu (HOME'daki node, `dist/`) mühürlemez.
+- **FA-TRACKED-WARN (owner 2026-09-30, seçenek A; lane `9e0bcf10`, 17. parti):** tam erişimde bir kabuk çağrısının git-izli dosyayı sildiği/üzerine yazdığı
+  engellenmeden gösterilir ve audit'lenir (`tracked-files-changed`). Protokol v18'de tipli alan yok (Jev 34a8df5c, bundle v19): uyarı sonuç metninin **ilk satırında**
+  güvenilir öncü metadata (`tracked: deleted=N overwritten=M; …`; komut çıktısı taklit edemez), sonunda adlı satır ve stderr; biten araç satırı `toolTracked` ekini
+  öncü metadata'dan okur. Açık: tipli `tool.finished.trackedChanges` v19 ile (kanca lane docs-delta'da); full-access turunda owner onaylı çağrı ölçülmez (kartı vardı);
+  `write_file`/`edit_file` kendi audit'inde, bu satırda değil; SIEM için yol özetleme takip.
 - **Owner terminal oturumu 1d428e9f (canlı, 2026-09-29 akşam; analiz `proof/TERMINAL-SESSION-1d428e9f-2026-09-29/analysis.md`).** Bulgular ve durum:
   (1) MCP (context7) çağrıları policy'de `mcp.tool.call` / `mcp__*` grant'ı olmadığı için reddedildi (kök neden policy, veri kökü değil) — **owner MCP grant'ını
   canlıda ekledi**; (2) terminal modeli yanlış teşhisle `src/platform/core/config/internal/layers.ts`'i değiştirdi (build edilseydi canlı ürün durumunu global köke
@@ -384,6 +390,9 @@ Uygulanan Acil satırı (ambient keşif kapalı, sürümlü profil istisnası) v
 - **Terminal ajan döngüsü — owner canlı oturumu (2026-09-27 sabah, eski build): AÇIK, analiz tamam.** Kök nedenler (ledger + oturum kanıtı, `proof/TERM-LOOP-UX-2026-09-27/analysis.md`): ilk tur model round'una hiç ulaşmadan sessiz otomatik sıkıştırmada iptal edildi; ikinci tur aynı 130 mesajı baştan özetledi (62 sn sessizlik); 576 sn'nin %88'i 26 model round'u (Qwen3 düşünme, ~70 token/sn), %11 sıkıştırma, %1,4 araç; gerçek döngü yok (tekrar okumalar 16 KiB sayfalama, aynı argümanlı çağrı yok, tekilleştirme çalışıyor); `grep` satırı deseni göstermiyor (görüntü hatası), `grep`'e `context` verilince geçersiz argüman; sistem istemi tek cümle, araçlarla çelişiyor, yerleşim ipucu yok; Esc iptal notu yüzeye ulaşmıyor. Dilim önerisi D1 sessiz aşamalar görünür → D2 araç satırı deseni/özeti → D3 okuma sınırı config + `grep` şeması → D4 model-yüzü sistem istemi → D5 iptal görünürlüğü → D6–D9 owner kararına bağlı (düşünme ön izlemesi, ilerlemesiz round dürtüsü, özet çağrısında thinking kapatma, plan aracı). Sınır: bütçe/sert limit yok (owner terminal yönü). Composition bütçesi 4826/5000 (COMP-BUDGET-2, 2026-09-28: OpenAI chat tel şekli adapter'a, özet protokolü ve önizleme sınırı engine'e taşındı; owner gerekirse yükseltmeye izin verdi, öneri: baskı dönerse 5500'e FOUNDATION kararıyla; önceki adım: kabul formülü tek kaynak olarak engine'de, araç satırı türetimi yüzeyde; composition çalışma zamanında yüzey katmanını yüklemez — SDK import 0,42 → 0,22 sn; bütçe yükseltilmedi). TL-B uygulandı (sonraki parti): araç satırında desen ve sonuç özeti (onay kaynağı aynı), okuma 64 KiB + `terminal.chat.readResultMaxBytes`, `grep` `context`/`maxHits`. TL-A uygulandı (sonraki parti): özetleme/model aşamaları sayaçla görünür, Esc ipucu ve aşamalı iptal notu, soluk düşünme ön izlemesi + `/reasoning` (v15 değişmedi). Canlıda doğrulanan hata: iptal edilen çağrı `unknown` kalıp eşzamanlılık slotunu tutuyor (`local-qwen-terminal` `in_flight=1/2`) → INFLIGHT-FIX uygulandı (sonraki parti; owner 2026-09-28). TL-C uygulandı (sonraki parti): model-yüzü sistem istemi, ilerlemesiz round notu, özetlemede düşünme kapalı (ölçüm 81,7 → 16,1 sn; canlı katalog `chat-template-enable-thinking` yeteneğini bildirince etkin), yerleşime bağlı ajan okuma yasağı (güvenlik düzeltmesi: `.deckent/live-data/approvals` ve onay önizlemeleri ajan araçlarıyla okunabiliyordu). `@file` yerleşime bağlı yasağı kullanıyor ve `/reasoning off` tüm turlarda düşünmeyi kapatıyor (protokol v16, owner 2026-09-28; yeteneği bildirmeyen model turu adıyla reddeder — canlı katalog yeteneği bildirmeli).
 - **Owner kararları 2026-09-27 — M1 Hat B tasarımı (H34 company + C12 genel onay + A04 registry; tasarım notları `deckent-refactor-work/proof/{H34-COMPANY-DESIGN,C12-A04-DESIGN}-2026-09-27/`, paket `proof/OWNER-DECISIONS-2026-09-27/`).** H34: (a) company **ledger sütunu** (ledger v39, yedekli göç); (b) varsayılan company kimliği config `company.id` (varsayılan `default`, doctor'da görünür); (c) zincir düzeyi **work session** (`workSessionId`; kimlik kirası ve terminal konuşması ayrı tipler); (d) rol bağlamaları **ayrı bindings layout kaynağı** (policy'den ayrı, aynı dosya güvencesi); (e) `tenant` sözlük yasağı her yerde, yalnız `tests/contracts/HARVEST.json` istisna; (f) tenant alanları kaldırılırken **hepsi sürüm artışı** (config şeması 3, layout 3, doctor JSON 2); (g) üyelik **her zaman fail-closed**, bayrak yok (solo kurulum ilk açılışta varsayılan company'yi kaydeder). C12/A04: Q1 onay → intent → etki; Q2 çekirdek bloklamaz, terminal/SDK isteğe bağlı bekler, "bekliyor" bir **sonuç** (EffectResult v2, aynı `commandId` ile yeniden gönderim); Q3 ayrı **`admitWithinMs`** (tanımlayıcı/policy verisi); Q4 okuma operasyonları **ayrı sorgu portu** (intent yok; policy + denetim olayı); Q5 Enterprise overlay **yalnız ekler**; Q6 dört-göz **policy v2 alanı, H34 rol modeliyle aynı şema artışında** (genel C12 ilk dilimleri dört-gözsüz); Q7 Enterprise modülleri **imzalı manifest**; Q8 katalog dışı `require-approval` noktaları önce tipli `POLICY_APPROVAL_UNSUPPORTED`, sonra katalog operasyonlarına taşınır. Jev (15 çağrı) owner eşiğini geçmedi (bağlam yeterliliği ≤ 0,54 < 0,85; seçim < 0,90) — kararlar owner'ın doğrudan seçimidir. Sıralama notu: H34 company sütunu ve C12 G1/G2 onay CHECK değişikliği ikisi de ledger v39 istiyor → tek göçte birleştirme ya da v39/v40 sırası lead/owner planında netleşir.
 
+- **TRUNCATED-TOOLCALL açık sınırları (17. parti, Jev 6192a348):** kesilen turun çağrısı hiç çalışmaz, `invalid-arguments` olarak etiketlenir (ayrı `truncated` durumu lead/sahip
+  kararı, Jev 0,84 < 0,90; gerekirse domain+wire `callStatusSchema`, sqlite enum, en/tr etiket, v18/v19); dürüst `length` + araç çağrısı bildiren sağlayıcıda tur `invalid-response` ile
+  biter; kesik argümanlar geçmişte ham kalır (vLLM `{}` gösterir); `maxCompletionTokens` artarken profil `maxOutputTokens` ve `limits.timeoutMs` birlikte değişmeli (aşağıda canlı config).
 - **TERMINAL T-L5 açık sınırları:** büyük `compacted` olayı tek çerçeveye sığmayınca tur iptali; eşik üstü kuyruğun her tur yeniden özetlenmesi; `maxCompletionTokens × 4` payı evrensel tokenizer bayt üst sınırı değildir (kapanan inceleme [COMPLETED-PLAN](COMPLETED-PLAN.md)).
 
 - **PROVIDERS — aralıklı `unknown`: AÇIK.** Teşhis owner kararıyla sınırlandırıldı; hata çözülmüş sayılmaz. 800 tekrarda özgün unknown yakalanmadı; bir çağrı öncesi fiyat yetkisi reddi görüldü. Güvenlik/bütçe denetimi ve belirsiz etki koruması değiştirilmedi. Gerçek tekrar veya yeni kanıtta yeniden açılır. [Kanıt](../deckent-refactor-work/proof/UNKNOWN-BOUNDED-DIAGNOSIS/verification.json).
@@ -407,11 +416,49 @@ STARTUP-COST ile yedinci partide kaldırıldı (varsayılan 30 s); yerelde doğr
 - **On altıncı parti canlıda (2026-09-30 19:05):** Astra 2197 REVISE (WC-R1..R3) → düzeltme → Astra 2199 PASS (REVIEW 2200); push `47a76adf..30988c66`;
   instance `0c8a0709`, ledger v42→v43 (yedek `state/backups/ledger-v42-2026-09-30T16-05-51-181Z.db`). Kanıt `proof/LIVE-SWITCH-BATCH16-2026-09-30/README.md`.
   Ortam: WSL 3.0.1.0 otomatik güncellemesi (16:27) yeniden başlattı; nvm default 24.21 olduğundan 24.15 altındaki global araçlar aynı sürümlerle 24.21'e kuruldu.
+- **On yedinci parti (`integrate/2026-09-30-r`, taban `74ce44c4`; tam verify, Sol incelemesi ve push bekliyor).** Birleşenler: FA-TRACKED-WARN (yukarıda); WORK-TARGETS dilim 1;
+  WORKER-CURRENCY-2; dogfood D2-1..D2-3 (benimsenen `30988c66` → `4f823ee8`); TRUNCATED-TOOLCALL; CI-F8 CRLF; SURROGATE-OPENROUTER; COMPOSITION-RELIEF; CI-TERMINAL-CLI; belge commit'i.
+  - **WORK-TARGETS dilim 1 (K1 = W2, K2 = A, K4 = A; `f70c47ac`, `7f5c6d72`):** `execution.workTargets` kaydı (tek Git hedefi), tek çözücü `resolveGitWorkTarget`, tipli
+    `WORK_TARGET_*` retleri, adlandırılmış `baseRef` + `PATCH_BASE_ADVANCED`, `work-target` policy türü (`use`, `adopt`). Açık: Run hedef kimliğini kaydetmez, çoklu hedef seçimi,
+    N1 için canlı config/policy yazımı (owner), `merge-tree` güncelleme, U2. U1 kuralı: canlı checkout'ta build/verify yok (kural, kanca değil; U2 yapısal çözer).
+  - **WORKER-CURRENCY-2 (owner kural A uygulandı; `8359b314`, `bd007992`, `688bae09`, `ae6ce536`):** Task değerlendirmesinde ikame → Task başarısız; sabitlenmiş Claude denemesi
+    mühürlü `verified` hüküm olmadan **bekletilir** (`evaluating`; operatör `task evaluate` yeni komut kimliğiyle ya da `run cancel`); Codex/Cursor görünür `unverified` kalır;
+    `workers list|watch`, `run inspect`, `task transcript` istenen → init → kullanım → hüküm gösterir; CLI `models catalog list|register|activate|deactivate` (+ `--seed`), MCP
+    `inspect_model_catalog`/`apply_model_catalog`, SDK `inspectModelCatalog`. Hüküm worker'ın bildirdiği kullanımdır, sağlayıcı kanıtı değil. **Açık (sıradaki):**
+    `deckent models --help` (`cli.help.models`) `catalog` satırını listelemiyor (i18n-parity snapshot'ıyla birlikte en/tr güncellenmeli); terminal `/models` görünümü ve `/workers`
+    hüküm kelimesi; N1 profillerinin katalogla yeniden hazırlanıp r4 imajıyla gerçek bir Claude Run'ında `verified` gösterilmesi; efor C1; sohbet yolunun ledger kataloğuna taşınması;
+    Codex/Cursor çıkış-tarafı model kanıtı (belgelenmiş yok).
+  - **TRUNCATED-TOOLCALL (`ba11dc77`):** çıktı sınırına ulaşan turun hiçbir araç çağrısı çalışmaz; model `error=output-limit` ile parça parça yazmaya yönlendirilir; istem v7. vLLM v0.30.0
+    kesilmiş çağrıyı `length` yerine `tool_calls` bildiriyor (serving.py üzerine yazıyor; upstream PR #46303 v0.30.0 sonrası düzeltti; qwen3_xml kesik argümanı PR #53739 ile ilgili;
+    geçmişteki çözülemez argüman vLLM'de `{}` — PR #48922), bu yüzden `finish` tek başına güvenilmez, tamamlama sayısı limite ulaştı mı da bakılır. Ayrı `truncated` durumu açık karar (yukarıda).
+  - **CI-F8 CRLF (`f7848e07`):** package metadata tazelik denetimi yalnız CRLF→LF eşdeğerliğini tolere eder; gerçek stale name/version/engine ve diğer içerik/biçim farkları LF ve CRLF'de reddedilir.
+    Yerel: Node 24.21.0 hedefli 13/13, gerçek Git filtresi girdisiyle CLI kırmızı→yeşil. **Gerçek Windows GitHub koşusu olmadan F8 CI kapanışı yazılmaz.** CRLF tarihsel kesin neden olarak
+    yükseltilmedi (runner baytları/`core.autocrlf` doğrulanmadı).
+  - **SURROGATE-OPENROUTER (`04892147`):** yalnız OpenRouter ayrıştırıcısı (`quote.ts`) etki alanı `wellFormedModelJson`'dan geçer (tek vekil → U+FFFD); `tool_calls` şeması **genişletilmedi**
+    (asistan `tool_calls` ve üst düzey `tools` reddedilir, negatif test; Cursor şeridinin genişletmesi lead tarafından geri alındı); `arch.json` kenarı `provider-openrouter-pricing → agent-tool`.
+  - **COMPOSITION-RELIEF (`2c50a2ca`..`c7e4148e`):** composition 5520 → **5454** / 5500 (46 satır pay; bütçe yükseltilmedi); beş sorumluluk davranış-özdeş sahibine taşındı (ayrıntı ARCHITECTURE karar
+    kaydı "Fourteenth batch"). Bilinçli taşınmayanlar: `renderMcpStartNotice`, `terminal-chat` `toDelta`/`settle`, `turn.ts`/provider stream, `shell.ts`/`mode.ts`. Tam verify yok; hedefli 26 dosya 201/201.
+  - **CI-TERMINAL-CLI (`8ff96a2d`):** Ink 7.1.1 `CI` ayarlıyken TTY'de bile etkileşimsiz sayıp kareleri erteliyordu; workline TTY'de `interactive: true` verir. `CI=true` kırmızı→yeşil (terminal-cli + workline + composer + PTY 67/67 CI'siz ve CI'li).
+  - **Dogfood D2 (`30988c66` → `814cf987` → `c07fa4da` → `4f823ee8`; `proof/DOGFOOD-D2-2026-09-30/README.md`; DOGFOOD resmî olarak OFF, bağımsız inceleme değil):** üç benimseme `verified`;
+    dört kodlama worker'ında `model.verification` = `verified` (`claude-sonnet-5-5`). Kart başı: D2-1 12 tur/95,6 s/$0,32, verify 3328/0 434 s; D2-2 ilk deneme verify'da eski davranışı sabitleyen testte **düştü**
+    (ret doğru), ikinci deneme 8 tur/40 s/$0,15, 3331/0; D2-3 15 tur/86 s/$0,33, 3342/0; toplam 4 çağrı $0,94, kota 5 sa %5→%15. N1 yenileme `30988c66`, katalog tohumu + v2 kodlama profilleri
+    (invocation v4, r4); negatif kanıt `WORKER_MODEL_ALIAS_REFUSED` ve `WORKER_MODEL_UNPINNED`. **K7 ince köprü:** `/home/alperen/deckent-dogfood/bin/` (`cli.sh`, `status`, `cycle.sh`; dilim 3+5 gelince silinir).
+    **Lead incelemesi bekleyen notlar:** D2-1 `--stat` sayıları diff metninden sayılıyor (çok büyük dosyada +0 −0), `arch.json` kenarı `composition/core/cli → adapters/core/workspace-write` lead-only teyit;
+    D2-2 ölü `if (!run)` dalı; D2-3 envanter sayfaları sınırsız dolaşılıyor. **D3 sürtünme adayları:** katalog CLI/terminal yüzeyi (WC2 ile kısmen kapandı), `workers list` insan çıktısı ham JSON, admission kararı
+    yanıtta görünmüyor, kart şablonuna "eski davranışı sabitleyen testleri güncelle" maddesi, kararsız `terminal-mode-pty-process` testi, worker kabukla yazıyor (edit aracı 0; K6 bekliyor), kart başı yeni profil sürümü (K3).
+    Gözlem: canlı config 18:58:47Z'de başka aktörce değişti (aşağıdaki canlı config satırı); D2 başında canlı config SHA'sı alınmadı (sonraki şeritte başta alınmalı).
+  - **Canlı config değişikliği (2026-09-30, owner onaylı, Jev 10d392b3 `t16384_600s` .94; `proof/MAX-COMPLETION-2026-09-30/`):** `terminal.chat.maxCompletionTokens` 8192 → **16384**;
+    profil `local-qwen` v6 → **v7** `maxOutputTokens` 16384, `limits.timeoutMs` 300000 → **600000**. `service.responseTimeoutMs` yalnız son çerçeve yazımını sınırlar (`server.ts:108`); model çağrısını
+    profilin `timeoutMs` alanı sınırlar.
+  - **Barındırılan GitHub CI — `30988c66`, koşu 36741640264 (kayıt `proof/CI-RUN-36741640264/`; yerel verify'dan AYRI):** bwrap-bundle **SUCCESS (ilk kez)**; zorunlu ubuntu/Node24 3542 geçti **1 kaldı** (terminal-cli
+    ön ek testi → `lane/ci-terminal-cli` ile düzeltildi); ubuntu/Node26 **2 kaldı** (aynısı + `provider-openai-chat-stream` F7); Windows `PACKAGE_METADATA_STALE` (F8 düzeltmesi bu partide);
+    macOS ~425 kaldı (F9, kapsam dışı). **CI-FIX C0–C2 kapanışı bir sonraki barındırılan koşuyu bekler**; F7 (Node 26) bu partide ele alınmadı.
 - **Owner kararları 2026-09-30 akşam — dogfood kontrolü (K1–K9, her biri araştırma + loglu Jev; `proof/K1-WORK-TARGET-RESEARCH-2026-09-30`,
-  `proof/DOGFOOD-K-DECISIONS-2026-09-30`).** İkame kuralı A (profil ana + yardımcı modelleri beyan eder; beyan dışı model → deneme kabul edilmez;
-  model çağrıları izlenebilir) → WORKER-CURRENCY-2. Tam erişimde izlenen dosya silme/üzerine yazma uyarı + audit (FA-TRACKED-WARN, 17. parti).
+  `proof/DOGFOOD-K-DECISIONS-2026-09-30`).** **İkame: owner seçenek A'yı KARARLAŞTIRDI** (profil ana + yardımcı modelleri beyan eder; beyan edilen yardımcı serbest, beyan dışı model → deneme kabul edilmez; model
+  çağrıları izlenebilir) — WORKER-CURRENCY-2 bunu 17. partide uygular (aşağıda); bekleyen owner kararı kalmadı. Tam erişimde izlenen dosya silme/üzerine yazma uyarı + audit (FA-TRACKED-WARN, 17. parti).
   K1 **W2**: Core `workTargets` kaydı (ilk dilim tek Git hedefi; ERP ayrı port), checkout HEAD yerine adlandırılmış `baseRef` ve tipli "taban
-  ilerledi", kendini hedefleme bariyeri; U1 canlı checkout'ta build/verify yok; U2 yan yana sürüm kurulumu ayrı kart (Jev e05e02e6 .92/.80).
+  ilerledi", kendini hedefleme bariyeri; U1 canlı checkout'ta build/verify yok; U2 yan yana sürüm kurulumu ayrı kart (Jev e05e02e6 .92/.80); **owner U2 seçenek C'yi kabul etti** (DEV-U2-0 şeridi çalışıyor; tasarım `proof/U2-VERSIONED-INSTALL-DESIGN-2026-09-30`, Jev c2956e5d .94/.68;
+  ilk DEV-U2-0 geçişi şerit inince yapılır).
   K2 A `work-target` policy türü (use/adopt). K3 A Run grafı v3 tipli `workInput` + profil şablonu (RunProposal v1 D15b ile). K4 A öz-hedefte
   `baseRef` = benimseme hedefi, HEAD ayrık (W2'deki "hedef ≠ baseRef" maddesi kalktı). K5 A tipli havuz bekletme. K6 A yama hazırlığında kapsam
   sınıflaması: önce uyarı, `enforce` ile tipli ret. K7 A ince köprü (dilim 3+5 gelince silinir). K8 A canlı ledger + ayrı proje scope'u.
@@ -431,7 +478,7 @@ STARTUP-COST ile yedinci partide kaldırıldı (varsayılan 30 s); yerelde doğr
   Teslim durumu: bkz. "On altıncı parti" (WORKER-IMAGE-R4 `0fd2df1b`, WORKER-CURRENCY-1 `2231ac8f`).
 - **SURROGATE-CUT (canlı bulgu 2026-09-30, 16. partide `57016f1c`):** sıkıştırma özeti `cut(argumentsJson,200)` ile bir emojiyi ikiye böldü → tek `\ud83d` → yerel
   sunucu her turu HTTP 400 (`TextEncodeInput…`) ile reddetti, oturum kalıcı bozuldu. Düzeltme: domain `modelTextPrefix`/`wellFormedModelText`, tüm model yönlü kesmeler +
-  `parseOpenAiChatTextRequest` sınır temizliği (U+FFFD); owner oturumu oynatıldı: yalnız 1 → 0. Açık: OpenRouter ayrıştırıcısı, model yönlü olmayan kesmeler, sağlayıcı
+  `parseOpenAiChatTextRequest` sınır temizliği (U+FFFD); owner oturumu oynatıldı: yalnız 1 → 0. OpenRouter ayrıştırıcısı 17. partide kapandı (aşağıda). Açık: model yönlü olmayan kesmeler, sağlayıcı
   hata mesajının sınırlı gösterimi (`proof/SURROGATE-CUT-2026-09-30/`). Ayrıca canlı terminal ajanı tam erişimde `rm CHANGELOG.md` çalıştırdı (15:27); lead geri yükledi.
 - **On altıncı parti (`integrate/2026-09-30-q`).** Dogfood D1-0..D1-2 benimsendi (Deckent'in kendi adopted commit'leri `c7b44469`..`b61b34b9`;
   lead test düzeltmesi `02cff460`); CI-FIX F1–F6 (Codex lane + lead F6 düzeltmesi `b9b2ce15`/`28f6bfe0`; GitHub koşusu push sonrası hâlâ gerekli, C0–C2
@@ -442,8 +489,8 @@ STARTUP-COST ile yedinci partide kaldırıldı (varsayılan 30 s); yerelde doğr
   attempt kimliği el ile kazınıyor; `task patch-preview` insan çıktısı 8 satırlık farkı 574 KB basıyor (unified diff/`--stat` yok); yama gitignore'lu
   dosyaları (`node_modules/.vite/...`) içerebiliyor; başarısız Run'ın nedeni `run inspect`'te yok (yalnız "Failed"); her kart = registry değişikliği
   (terminalden kart başlatma yok); `modelUsage` ürün kaydına girmiyordu — **bu son madde artık WORKER-CURRENCY-1'in `model.verification` olayıyla
-  karşılanıyor**. Açık: model kataloğu için CLI/MCP seed yüzeyi yok (yalnız SDK) — yeni Run'lardan önce native profiller seed edilmeli; substitution
-  henüz kabulü engellemiyor (owner kararı bekliyor); Codex/Cursor model kanıtı doğrulanmadı; verify imajında bwrap yok; ağaç dışı `node_modules`
+  karşılanıyor**. Açık (16. parti anındaki durum; kapanışlar 17. partide): model kataloğu CLI/MCP seed yüzeyi → WORKER-CURRENCY-2 `models catalog` + SDK/MCP; substitution kabul kapısı
+  → WORKER-CURRENCY-2 (owner A); Codex/Cursor model kanıtı doğrulanmadı; verify imajında bwrap yok; ağaç dışı `node_modules`
   SBOM açığı sürüyor.
 - **Açık (dağıtım/SBOM, Astra 2192 teyitli):** `dist-sbom.mjs` ve dist-ajv-stub gömülü kopya tespiti `node_modules/<ad>` yol önekine bakıyor;
   proje dışı/sembolik bağlı `node_modules` (pnpm düzeni, worktree bağı) altında gömülü fast-uri/cf-worker satırları raporlanmıyor. Ürün çalışma

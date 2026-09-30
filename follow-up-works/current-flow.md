@@ -3,13 +3,22 @@
 Bu belge yalnız güncel durumu tutar; önceki sürümü Git geçmişinde, kanıtlar `deckent-refactor-work/proof/`.
 
 ## Durum
-- **2026-09-30 akşam:** `origin/main` = `30988c66` canlıda (16. parti; instance `0c8a0709`, ledger v43). Owner K1–K9 kararları PLAN'da.
-  Çalışanlar: lane/work-targets (K1/K2/K4), lane/worker-currency-2 (kural A + görünürlük + katalog CLI), dogfood D2 (N1 yenileme, katalog tohumu,
-  r4 profilleri, ince köprü, D2-1..D2-3). Bekleyen: lane/fa-tracked-warn `9e0bcf10` (17. partiye). Kanıt `proof/DOGFOOD-K-DECISIONS-2026-09-30`.
+- **On yedinci parti (2026-09-30 gece; `integrate/2026-09-30-r`, worktree `/home/alperen/deckent-next-integrate-r`, taban `74ce44c4`, HEAD belge commit'inden önce `9758cceb`):**
+  FA-TRACKED-WARN (`9e0bcf10`, v18'de yalnız sonuç metni), WORK-TARGETS dilim 1 (`f70c47ac`/`7f5c6d72`), WORKER-CURRENCY-2 (`ae6ce536`; owner kural A uygulandı — beyan edilen
+  yardımcı serbest, beyan dışı model → deneme kabul edilmez, model çağrıları görünür), dogfood D2-1..D2-3 (`30988c66` → `4f823ee8`), TRUNCATED-TOOLCALL (`ba11dc77`, istem v7),
+  CI-F8 CRLF (`f7848e07`), SURROGATE-OPENROUTER (`04892147`, yalnız ayrıştırıcı temizliği), COMPOSITION-RELIEF (composition 5520 → 5454), CI-TERMINAL-CLI (`8ff96a2d`).
+  **Doğrulama durumu:** yalnız hedefli testler (lane kanıtları); tam verify yok. **Barındırılan CI (`30988c66`, koşu 36741640264) yerel verify'dan ayrı:** bwrap-bundle SUCCESS (ilk kez);
+  ubuntu/Node24 3542 geçti 1 kaldı (→ ci-terminal-cli); Node26 2 kaldı (aynısı + F7); Windows F8 (bu partide); macOS ~425 F9 (kapsam dışı); CI-FIX C0–C2 kapanışı sonraki barındırılan koşuyu bekler.
+  **Sıradaki:** tam verify (Docker imajı + bwrap'lı build) → **Sol** REQUEST_REVIEW (bağımsız inceleyen GPT-6.1 Sol, `astra` kanal adresi; owner 2026-09-30) → PASS'te push → canlı geçiş
+  (owner onaylı yeniden başlatma; U1: canlı checkout yalnız o geçişte derlenir) → DEV-U2-0 şeridi (owner U2 seçenek C; Jev c2956e5d .94/.68) inince ilk DEV-U2-0 geçişi.
+  Canlı config zaten değişti (owner onaylı, Jev 10d392b3 .94): `terminal.chat.maxCompletionTokens` 16384, `local-qwen` v7 `maxOutputTokens` 16384, `limits.timeoutMs` 600000
+  (`service.responseTimeoutMs` yalnız son çerçeve yazımını sınırlar; model çağrısını profil `timeoutMs` sınırlar; kanıt `proof/MAX-COMPLETION-2026-09-30/`).
+  Açık: `deckent models --help` `catalog` satırı (i18n-parity ile); ayrı `truncated` araç durumu (Jev 0,84, karar); D2 lead inceleme notları (PLAN); K3/K5/K6.
+- **2026-09-30 akşam:** `origin/main` = `30988c66` canlıda (16. parti; instance `0c8a0709`, ledger v43). Owner K1–K9 kararları PLAN'da (ikame seçenek A **kararlaştırıldı**,
+  17. partide uygulandı). Kanıt `proof/DOGFOOD-K-DECISIONS-2026-09-30`.
 - **Canlı (2026-09-30, 15. parti):** `origin/main` = `47a76adf` (Astra 2194 PASS); instance `85d99b8d`, Node 24.21; tam erişimde model curl → HTTP/2 200
   (istem v6). Kanıt `proof/LIVE-SWITCH-BATCH15-2026-09-30/README.md`. **Sıradaki (owner 2026-09-30):** on altıncı parti (`integrate/2026-09-30-q`)
-  dogfood D1-0..D1-2 + CI-FIX F1–F6 + WORKER-IMAGE-R4 + WORKER-CURRENCY-1'i birleştirdi (ayrıntı aşağıda); sıradaki adım tam verify → Astra → push →
-  owner'ın substitution kararı → WORKER-CURRENCY-2.
+  dogfood D1-0..D1-2 + CI-FIX F1–F6 + WORKER-IMAGE-R4 + WORKER-CURRENCY-1'i birleştirdi (ayrıntı aşağıda; 30988c66 ile canlıya alındı).
 - **On dördüncü parti (2026-09-30):** `integrate/2026-09-30-o` (worktree `/home/alperen/deckent-next-integrate-n`, taban `02601269`) =
   Astra 2189 REVISE düzeltmeleri: R7 ata pinleri (açık + kapalı yazılabilir görünüm; lane/r7-ancestor), gömülü bwrap kopya yarışı (link ile yayın),
   R8 doctor MCP launch kuralı (lane/r8-doctor-mcp). Tam verify 490/3467 0 skip (Docker imajıyla) → Astra 2190 PASS → `origin/main` = `51b19dc5` (push 2026-09-30).
@@ -33,9 +42,8 @@ Bu belge yalnız güncel durumu tutar; önceki sürümü Git geçmişinde, kanı
   `../deckent-refactor-work/proof/CI-FIX-2026-09-30/`); WORKER-IMAGE-R4 (`0fd2df1b`; r4 imajı `sha256:bf6973ec…`, Claude 2.1.285/Codex 0.159.2/
   Cursor 2026.09.28; kanıt `../deckent-refactor-work/proof/WORKER-IMAGE-R4-2026-09-30/`); WORKER-CURRENCY-1 (`2231ac8f`; ledger v43 model kataloğu
   sağlayıcı kanalı başına, tam model ID pinleme (takma ad reddi), admission ret kodları, `model.verification`; kanıt
-  `../deckent-refactor-work/proof/WORKER-CURRENCY-1-2026-09-30/`). Açık: model kataloğu CLI/MCP seed yüzeyi yok (yalnız SDK); substitution
-  henüz kabulü engellemiyor (owner kararı bekliyor); Codex/Cursor model kanıtı doğrulanmadı; verify imajında bwrap yok; ağaç dışı `node_modules`
-  SBOM açığı sürüyor. Sıradaki: tam verify → Astra → push → owner'ın substitution kararı → WORKER-CURRENCY-2.
+  `../deckent-refactor-work/proof/WORKER-CURRENCY-1-2026-09-30/`). Açık (16. parti anında; katalog CLI/MCP ve ikame kabul kapısı 17. partide
+  WORKER-CURRENCY-2 ile kapandı): Codex/Cursor model kanıtı doğrulanmadı; verify imajında bwrap yok; ağaç dışı `node_modules` SBOM açığı sürüyor.
 - **Canlı (2026-09-29 18:07'den beri):** yedinci–on ikinci partiler `4a2ac04` build'iyle canlıda; `origin/main` = `4a2ac04` (push `0e0ca63` → `9a3ef2c`
   Astra 2181 PASS → `4a2ac04` Astra 2186/2187 PASS). Instance `74e4359e` (ilk `0b044e1a`, global kök düzeltmesiyle yeniden başlatıldı), Node 24.21,
   protokol v18; eski v16 servisi eski build'in kendi CLI'ıyla durduruldu. Mod göçü dry-run → `--grant-full-access` (bindings v3 + owner full-access
@@ -167,9 +175,8 @@ izlemek yerine bağın kendisini sayıyor. Aktif kartlar, son üç günün kanı
   protokol paketinde; yanıt dili son-kontrolü ayrı kart. Açık bulgu: `mcp add`/`remove` kayıt dosyasını denetimden önce yazıyor.
 
 ## Sıradaki
-1. On altıncı parti (`integrate/2026-09-30-q`: dogfood D1-0..D1-2 + CI-FIX F1–F6 + WORKER-IMAGE-R4 + WORKER-CURRENCY-1): tam verify → Astra →
-   PASS'te push. Ardından owner'ın substitution kararı (model.verification'ın kabulü engelleyip engellemeyeceği) → WORKER-CURRENCY-2
-   (CLI/MCP seed yüzeyi, sohbet yolunun ledger kataloğuna taşınması).
+1. On yedinci parti (`integrate/2026-09-30-r`, yukarıda): tam verify → Sol REQUEST_REVIEW → PASS'te push → canlı geçiş; ardından DEV-U2-0 ilk geçişi. Sonra WORKER-CURRENCY-2
+   artıkları (`models --help` satırı, terminal `/models`, sohbet yolunun ledger kataloğuna taşınması), K3 → K5/K6 → U2.
 2. REALM-NOTICE açığı: MCP ön-başlatma launch kartı gerçek realm'i önceden adlandırmıyor — (a) `usable()` ön-seçimi / (b) olduğu gibi; lead/owner.
 3. Owner kararları: SHELL-OVERLAY O1/O3/O5/O6/O7; `format` denetleyicisi, şema korpusu ölçümü, AppArmor kurulum belgesi, CI `bwrap-bundle.yml` ilk koşu;
    DEPS-SCHEMA C1 kanıtı; sabah listesi `proof/MORNING-REPORT-2026-09-29.md` (P1 tasarımları: OTel / uzak MCP, anahtar zinciri K2; zod 4 hata kodları;
