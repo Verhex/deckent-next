@@ -1,4 +1,4 @@
-import type { ShellRealm, ShellRealmContainment, ShellRealmMode } from '#domain/index.js';
+import { modelTextPrefix, type ShellRealm, type ShellRealmContainment, type ShellRealmMode } from '#domain/index.js';
 import type { ShellPermissionTier } from '#engine/index.js';
 import type { ShellCapabilities } from './probe.js';
 import { runHostShell } from './run.js';
@@ -104,7 +104,7 @@ export const SANDBOX_REASON_MAX_CHARS = 480;
 export function boundSandboxReason(reason: string): string {
   // eslint-disable-next-line no-control-regex
   const line = reason.replace(/[\u0000-\u001f\u007f]+/gu, ' ').trim();
-  return line.length > SANDBOX_REASON_MAX_CHARS ? `${line.slice(0, SANDBOX_REASON_MAX_CHARS - 1)}…` : line;
+  return line.length > SANDBOX_REASON_MAX_CHARS ? `${modelTextPrefix(line, SANDBOX_REASON_MAX_CHARS - 1)}…` : line;
 }
 /** `bubblewrap: <reason>; landlock: <reason>` — the rejections as every sandbox notice names them. */
 export const describeSandboxRejections = (rejected: readonly Pick<ShellSandboxRejection, 'kind' | 'reason'>[]) =>

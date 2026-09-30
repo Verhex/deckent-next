@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { z } from 'zod';
 import { withConfigWriteLock } from '#platform/index.js';
 import { MCP_SCOPES } from './registry.js';
+import { modelTextPrefix } from '#domain/index.js';
 
 /**
  * The last start failure of a server in this project (MCP-SANDBOX-PATHS follow-up, 2026-09-29): written when a turn could not start a server
@@ -62,7 +63,7 @@ export function mcpStartFailureOf(error: unknown): Pick<McpStartFailure, 'code' 
   if (code !== 'MCP_SANDBOX_COMMAND_UNREACHABLE' && code !== 'MCP_SERVER_START_FAILED' && code !== 'MCP_SANDBOX_UNAVAILABLE') return null;
   const params = (error as { params?: Record<string, unknown> }).params ?? {}, cause = (error as { cause?: unknown }).cause;
   const parsed = diagnosisSchema.safeParse(cause);
-  return { code, ...(typeof params['reason'] === 'string' ? { detail: params['reason'].slice(0, 200) } : {}), ...(parsed.success ? { diagnosis: parsed.data } : {}) };
+  return { code, ...(typeof params['reason'] === 'string' ? { detail: modelTextPrefix(params['reason'], 200) } : {}), ...(parsed.success ? { diagnosis: parsed.data } : {}) };
 }
 
 /**

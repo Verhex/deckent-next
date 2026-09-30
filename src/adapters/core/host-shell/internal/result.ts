@@ -1,4 +1,4 @@
-import type { ShellRealmResult as HostShellResult } from '#domain/index.js';
+import { modelTextPrefix, type ShellRealmResult as HostShellResult } from '#domain/index.js';
 import { HOST_SHELL_RUN_OPERATION } from './target.js';
 
 /**
@@ -21,7 +21,7 @@ export function hostShellCleanupNote(cleanup: HostShellResult['cleanup']): strin
 export function describeHostShellResult(command: string, result: HostShellResult, realm: { readonly marker: string | null; readonly notice: string | null } | null): string {
   const how = result.status === 'exited' ? `exit ${result.exitCode ?? `signal ${result.signal ?? '?'}`}` : result.status;
   const note = hostShellCleanupNote(result.cleanup), notice = realm?.notice ?? null;
-  return `[deckent] run_shell: ${realm?.marker ? `${realm.marker}; ` : ''}${how} after ${(result.durationMs / 1000).toFixed(1)}s (${command.length > 120 ? `${command.slice(0, 119)}…` : command})\n${result.output}`
+  return `[deckent] run_shell: ${realm?.marker ? `${realm.marker}; ` : ''}${how} after ${(result.durationMs / 1000).toFixed(1)}s (${command.length > 120 ? `${modelTextPrefix(command, 119)}…` : command})\n${result.output}`
     + (notice ? `\n${notice}` : '')
     + (note ? `${!notice && (result.output.endsWith('\n') || result.output === '') ? '' : '\n'}${note}` : '');
 }

@@ -14,6 +14,7 @@ import { openLocalIntegrityAuthority } from '#adapters/core/local-keyring/index.
 import { expandMcpEntry, mcpRegistryPaths, mcpServerEntrySchema, MCP_SERVER_NAME, readMcpRegistryFile, resolveMcpRegistry, type ManagedMcpPolicy,
   type McpRegistryProblem, type McpScope, type McpServerEntry } from './registry.js';
 import { findMcpTrust, MCP_TRUST_FILE, readMcpTrust, type McpTrustRecord } from './trust.js';
+import { modelTextPrefix } from '#domain/index.js';
 
 /** What the registry needs from its host: the project, its layout (trust lives in the data root), the environment and secret resolver of the
  * launch, and the company policy (none in Core yet). */
@@ -205,7 +206,7 @@ export async function runMcpCommand(request: McpCommandRequest, context: McpComm
   if (request.verb === 'add') {
     if (!MCP_SERVER_NAME.test(request.name)) throw fail('MCP_SERVER_NAME_INVALID', { name: request.name });
     const entry = mcpServerEntrySchema.safeParse(request.entry);
-    if (!entry.success) throw fail('MCP_SERVER_ENTRY_INVALID', { name: request.name, reason: (entry.error.issues[0]?.message ?? 'schema').slice(0, 200) });
+    if (!entry.success) throw fail('MCP_SERVER_ENTRY_INVALID', { name: request.name, reason: modelTextPrefix(entry.error.issues[0]?.message ?? 'schema', 200) });
     const path = fileOf(view, request.scope);
     await mutateRegistry(path, request.scope === 'project' ? 0o644 : 0o600, raw => {
       const servers = serversOf(raw, request.scope, view.projectKey, true)!;
@@ -317,7 +318,7 @@ export async function openTurnMcp(input: { readonly registry: McpRegistryContext
     // A server over its restart bound keeps the diagnosis of its last real start failure.
     if (state.reason === 'restart-limit' && known) { notices.push(mcpStartFailedNotice(server.name, { ...known, phase: 'trusted' })); continue; }
     const record: McpStartFailure = { scope: server.scope as McpStartFailure['scope'], name: server.name, definitionDigest: server.definitionDigest, phase: 'trusted', atMs: now(),
-      code: state.reason, ...(state.detail ? { detail: state.detail.slice(0, 200) } : {}),
+      code: state.reason, ...(state.detail ? { detail: modelTextPrefix(state.detail, 200) } : {}),
       ...(state.reason === 'sandbox-unreachable' ? { diagnosis: displayMcpDiagnosis(state.diagnosis, server.entry) } : {}) };
     notices.push(mcpStartFailedNotice(server.name, record));
     await remember(server, record);
