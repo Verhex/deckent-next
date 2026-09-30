@@ -3,7 +3,7 @@ import { SystemTrustedClock, ErrorRegistry, inspectProductDirectory, type Config
 import { GitIntegrationAdoption, GitIntegrationDelivery, GitRunWorkspaceProvider, GitWorkspaceBroker, LocalOsSessionAuthority, openSqliteAttemptStore,
   resolveGitWorkTarget, validateDockerSupervisorProfile } from '#adapters/index.js';
 import type { AttemptIdentity } from '#domain/index.js';
-import { RunPolicyAuthorization, WorkspaceAdoptionApplication, integrationAdoptionCommandSchema, integrationRollbackCommandSchema, workTargetAdoptionAuthorization,
+import { RunPolicyAuthorization, WorkspaceAdoptionApplication, integrationAdoptionCommandSchema, integrationRollbackCommandSchema, workTargetAttemptAuthorization,
   type IntegrationAdoptionCommand, type IntegrationRollbackCommand } from '#engine/index.js';
 import { criterionWithin } from '#capabilities/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
@@ -16,7 +16,7 @@ async function withAdoption<T>(root: string, identity: AttemptIdentity, options:
     await c.authorization.authorizeIdentity(action, identity, c.principal);
     if (!c.config.execution) throw ErrorRegistry.createError('EXECUTION_NOT_CONFIGURED');
     // K2 = A: moving a configured work target's branch also needs work-target:adopt on it (engine checks it first and before the effect).
-    const target = await resolveGitWorkTarget(resolve(root), c.config.execution, c.layout), authorization = workTargetAdoptionAuthorization(c.authorization, c.policySource, target.id);
+    const target = await resolveGitWorkTarget(resolve(root), c.config.execution, c.layout), authorization = workTargetAttemptAuthorization(c.authorization, c.policySource, target.id);
     const git = { ...c.config.execution.git, ...target.git, workspaceRoot: await inspectProductDirectory(c.layout, 'workspaces') };
     const clock = new SystemTrustedClock();
     const sessions = await LocalOsSessionAuthority.create(c.principal.scopeIds, c.config.approvals.sessionTtlMs, clock);

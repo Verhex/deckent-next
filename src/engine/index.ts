@@ -41,7 +41,7 @@ export * from '#engine/core/model-invocation/index.js';
 export { ModelActivationPolicyAuthorization, ModelCatalogPolicyAuthorization } from '#engine/core/policy/index.js';
 export { ModelInvocationPolicyAuthorization } from '#engine/core/policy/index.js';
 export { ProviderSpendAccountPolicyAuthorization, AgentToolPolicyAuthorization } from '#engine/core/policy/index.js';
-export { WorkTargetPolicyAuthorization, executionResourceAuthorization, workTargetAdoptionAuthorization } from '#engine/core/policy/index.js';
+export { WorkTargetPolicyAuthorization, executionResourceAuthorization, workTargetAttemptAuthorization } from '#engine/core/policy/index.js';
 export type { WorkTargetAction } from '#engine/core/policy/index.js';
 export * from '#engine/core/provider-spend/index.js';
 export * from '#engine/core/model-allocation/index.js';

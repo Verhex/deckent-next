@@ -1,5 +1,5 @@
-import { evaluatePolicy, policyResources, type VerifiedPrincipal } from '#domain/index.js';
-import type { DispatchIdentityAuthorization } from '#engine/core/dispatch/index.js';
+import { evaluatePolicy, policyResources, type AttemptIdentity, type CorePolicyAction, type VerifiedPrincipal } from '#domain/index.js';
+import type { DispatchAuthorization, DispatchIdentityAuthorization } from '#engine/core/dispatch/index.js';
 import { PolicyAuthorizationError, type PolicySource } from './authorize.js';
 import { PoolPolicyAuthorization, type PoolAuthorization } from './pool.js';
 
@@ -28,14 +28,21 @@ export function executionResourceAuthorization(source: PolicySource, workTargetI
     await target.authorize('use', workTargetId, scopeId, principal);
   } };
 }
-/** Attempt authorization for adoption: adopting or rolling back also moves the configured work target's branch, so both need
- * `work-target:adopt` on that target in addition to their attempt action, at every check (the first one and the re-check before the
- * effect). Without a target id the attempt authorization is returned unchanged. */
-export function workTargetAdoptionAuthorization(attempts: DispatchIdentityAuthorization, source: PolicySource, workTargetId: string | null): DispatchIdentityAuthorization {
+/** Attempt authorization when a work target is configured: the attempt action AND the target action it consumes, at every check the
+ * attempt authorization already has (the first check and each freshness re-check, e.g. the launch gate of DispatchApplication and the
+ * adoption re-check before the effect). `execute` consumes the target (`work-target:use`, Sol WT-R1: attempt:execute never substitutes
+ * for it); adopting or rolling back moves the target's branch (`work-target:adopt`). The attempt gate runs first and is never bypassed.
+ * The caller passes the id of the target the same operation consumes (one config snapshot). Without a target id: unchanged. */
+export function workTargetAttemptAuthorization<A extends DispatchAuthorization & DispatchIdentityAuthorization>(attempts: A, source: PolicySource,
+  workTargetId: string | null): DispatchAuthorization & DispatchIdentityAuthorization {
   if (workTargetId === null) return attempts;
   const target = new WorkTargetPolicyAuthorization(source);
-  return { async authorizeIdentity(action, identity, principal) {
+  const consumed = (action: CorePolicyAction<'attempt'>): WorkTargetAction | null => action === 'execute' ? 'use'
+    : action === 'adopt-integration' || action === 'rollback-integration' ? 'adopt' : null;
+  const authorizeIdentity = async (action: CorePolicyAction<'attempt'>, identity: AttemptIdentity, principal: VerifiedPrincipal) => {
     await attempts.authorizeIdentity(action, identity, principal);
-    if (action === 'adopt-integration' || action === 'rollback-integration') await target.authorize('adopt', workTargetId, identity.scopeId, principal);
-  } };
+    const targetAction = consumed(action);
+    if (targetAction) await target.authorize(targetAction, workTargetId, identity.scopeId, principal);
+  };
+  return { authorizeIdentity, authorize: (action, request, principal) => authorizeIdentity(action, request.identity, principal) };
 }
