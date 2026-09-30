@@ -128,7 +128,8 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
   const signal = AbortSignal.any([channel.signal, cancel.signal, host.signal]);
   let store: Awaited<ReturnType<typeof openSqliteAgentTurnStore>> | null = null, registered = false;
   try {
-    // FETCH: egress `none` (the default) builds no fetch at all — no tool, no transport use; the prompt then says there is no network.
+    // FETCH: egress `none` (the default) builds no fetch at all — no tool, no transport use; the prompt then says fetch_url is not offered (and,
+    // v6, no network at all unless the shell's posture reaches it).
     const fetchSettings = readTerminalFetchConfig(config), fetcher = scratch && fetchSettings.egress !== 'none' ? createAgentFetch({ settings: fetchSettings,
       transport: host.fetchTransport, scratch, peer, context, scopeId: command.scopeId, turnId: command.turnId }) : null;
     // MCP-CLIENT: the scoped registry files; a server nobody decided on asks now (first-use trust cards), trusted ones offer their pinned tools.
@@ -153,7 +154,9 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
     const language = resolveLocale(undefined, options.env ?? process.env, context.config.language);
     const systemPrompt = renderAgentTurnSystemPrompt({ projectRoot, layout: context.layout, tools, scratch: scratch && { dir: scratch.dir, retentionDays: scratch.limits.retentionDays },
       model: { ...chat.reference, nativeId: binding.definition.model.nativeId }, language,
-      network: fetcher && { allowedHosts: fetchSettings.allowedHosts, others: fetchSettings.egress === 'approval' ? 'ask' : 'refused' }, mcp: mcp?.prompt ?? null });
+      network: fetcher && { allowedHosts: fetchSettings.allowedHosts, others: fetchSettings.egress === 'approval' ? 'ask' : 'refused' }, mcp: mcp?.prompt ?? null,
+      // v6 PROMPT-POSTURE: the shell's posture from the realm its calls resolve (the shell owns it), apart from fetch_url.
+      shell: shell ? await shell.posture() : null });
     const requestDigest = sha256(`chat-turn-request:1\0${canonical({ messages: command.messages, reference: chat.reference, catalogRevision: binding.catalogRevision,
       binding: binding.binding, maxCompletionTokens: chat.maxCompletionTokens, tools: tools.map(tool => `${tool.name}@${tool.version}`), systemPrompt: sha256(systemPrompt),
       ...(command.reasoning ? { reasoning: command.reasoning } : {}), ...(command.sessionId ? { sessionId: command.sessionId } : {}), ...(fullAccess ? { fullAccess } : {}) })}`);

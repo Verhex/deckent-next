@@ -41,7 +41,7 @@ describe.skipIf(process.platform !== 'linux')('agent scratch area through the ru
     expect(f.rows('SELECT target_kind, target_id, state FROM effect_intents')).toEqual([{ target_kind: 'scratch-file', target_id: `${key}/notes/plan.md`, state: 'settled' }]);
     // The model was told where the area is (system prompt v2) and which tools work there.
     const system = (f.state.requests[0]!['messages'] as { role: string; content: string }[])[0]!.content;
-    expect(system.startsWith('[Deckent runtime instructions v5]')).toBe(true);
+    expect(system.startsWith('[Deckent runtime instructions v6]')).toBe(true);
     expect(system).toContain(`Scratch area: ${dir}`); expect(system).toContain('Edit tools: edit_file, write_file, scratch_write');
     // Nothing reached the project.
     await expect(lstat(join(f.project, 'notes'))).rejects.toMatchObject({ code: 'ENOENT' });

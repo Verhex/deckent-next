@@ -458,7 +458,7 @@ it('names the running model from its catalog reference and tells the model that 
   const layout = resolveProductLayout({ projectRoot: '/p', root: '/p/.deckent/live-data' });
   const prompt = renderAgentTurnSystemPrompt({ projectRoot: '/p', layout, tools: [readFile],
     model: { providerId: 'vllm-local', providerVersion: 2, modelId: 'qwen', modelVersion: 3, nativeId: 'Qwen/Qwen3-Coder' }, language: 'en' });
-  expect(AGENT_TURN_SYSTEM_PROMPT_VERSION).toBe(5); expect(prompt.startsWith('[Deckent runtime instructions v5]')).toBe(true);
+  expect(AGENT_TURN_SYSTEM_PROMPT_VERSION).toBe(6); expect(prompt.startsWith('[Deckent runtime instructions v6]')).toBe(true);
   expect(prompt).toContain('- Model: you are Qwen/Qwen3-Coder (Deckent catalog: provider vllm-local v2, model qwen v3), running inside Deckent.');
   expect(prompt).toMatch(/When asked who or which model you are, answer with this/);
   expect(prompt).toMatch(/ledger, saved conversations and history, logs, the runtime socket, approvals[^\n]*are protected/);
@@ -488,4 +488,49 @@ it('states the reply language of the locale first and last (v5); the compaction 
   expect(agentCompactionInstruction('tr')).toMatch(/Write every string in Turkish \(Türkçe\); paths, code, commands and identifiers stay as written\.$/);
   expect(agentCompactionInstruction('en')).toMatch(/Write every string in English; /);
   expect(agentCompactionInstruction('tr')).not.toContain('language of the conversation');
+});
+
+// PROMPT-POSTURE (live 2026-09-30: a full-access model refused `curl` "by policy" because the v5 prompt said "Network access: none" whenever
+// fetch_url was absent). v6 keeps fetch_url and the shell apart: the shell note states the posture composition resolved for the turn.
+it('states the shell posture it is given, separately from fetch_url (v6)', () => {
+  const layout = resolveProductLayout({ projectRoot: '/p', root: '/p/.deckent/live-data' });
+  const model = { providerId: 'vllm-local', providerVersion: 2, modelId: 'qwen', modelVersion: 3, nativeId: 'Qwen/Qwen3-Coder' };
+  const shell: AgentToolSpec = { name: 'run_shell', version: 1, toolClass: 'shell', description: 'Run.', inputSchema: { type: 'object', required: ['command'], properties: { command: { type: 'string' } } } };
+  const fetchLine = '- Network: fetch_url fetches one https:// URL (GET, no credentials). Allowlisted hosts (docs.example) run at once; any other host is refused.';
+  const noNetwork = '- Network access: none. This installation allows no fetching: do not guess what a web page says, and do not try to reach the network another way.';
+  const render = (posture: Parameters<typeof renderAgentTurnSystemPrompt>[0]['shell'], fetch = false) => renderAgentTurnSystemPrompt({ projectRoot: '/p', layout,
+    tools: [readFile, shell], model, language: 'en', shell: posture, ...(fetch ? { network: { allowedHosts: ['docs.example'], others: 'refused' as const } } : {}) });
+  const shellLine = (prompt: string) => prompt.split('\n').find(line => line.startsWith('- Shell tool: run_shell.'))!;
+  expect(AGENT_TURN_SYSTEM_PROMPT_VERSION).toBe(6);
+
+  const open = render({ kind: 'sandbox', realm: 'bubblewrap', open: true });
+  expect(open.startsWith('[Deckent runtime instructions v6]')).toBe(true);
+  expect(shellLine(open)).toBe('- Shell tool: run_shell. It runs in the project root in an open bubblewrap sandbox (full access): shell commands have network access'
+    + ' (for example curl, git fetch, npm install), your real home directory (HOME) is visible and writable, and the project and its .git are writable.'
+    + ' Deckent\'s own state, policy and credential files and its configuration file stay sealed: they are hidden or read-only, and a write to them fails.');
+  expect(open).toContain('- Network: fetch_url is not offered (this installation configures no fetching); shell commands do have network access in this turn'
+    + ' (see the shell tool). Do not guess what a web page says.');
+  expect(open).not.toContain('Network access: none'); expect(open).not.toContain('do not try to reach the network');
+
+  const closed = render({ kind: 'sandbox', realm: 'landlock', open: false });
+  expect(shellLine(closed)).toBe('- Shell tool: run_shell. It runs in the project root in a closed landlock sandbox: shell commands have no network access and your'
+    + ' home directory is hidden; what a command may write is decided per call by policy and the permission mode.');
+  expect(closed).toContain(noNetwork);
+
+  const host = render({ kind: 'host' });
+  expect(shellLine(host)).toBe('- Shell tool: run_shell. It runs in the project root directly on the user\'s machine, not in a sandbox: files, processes and the network'
+    + ' are reachable as the user; Deckent\'s own state is protected by name only.');
+  expect(host).not.toContain('Network access: none');
+  expect(shellLine(render({ kind: 'unavailable' }))).toBe('- Shell tool: run_shell. It cannot run commands here: no shell realm the configuration permits is usable'
+    + ' on this machine, so every call is refused.');
+  expect(render({ kind: 'unavailable' })).toContain(noNetwork);
+
+  // fetch_url configured: its line is the same whatever the shell posture; only the shell note differs.
+  for (const posture of [{ kind: 'sandbox', realm: 'bubblewrap', open: true }, { kind: 'sandbox', realm: 'bubblewrap', open: false }, { kind: 'host' }] as const) {
+    const withFetch = render(posture, true);
+    expect(withFetch).toContain(fetchLine); expect(withFetch).not.toContain('Network access: none'); expect(withFetch).not.toContain('fetch_url is not offered');
+  }
+  // No shell posture (no shell tool offered): the v5 no-network line and the plain shell note.
+  const plain = renderAgentTurnSystemPrompt({ projectRoot: '/p', layout, tools: [readFile], model, language: 'en' });
+  expect(plain).toContain(noNetwork);
 });

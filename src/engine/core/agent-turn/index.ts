@@ -8,4 +8,5 @@ export { AGENT_COMPACTION_HIGH_WATER, agentCompactionInstruction, AGENT_COMPACTI
 export type { AgentCompactionPlan, AgentCompactionSummary } from './internal/compaction.js';
 export { agentTurnAdmission, type AgentTurnAdmission } from './internal/admission.js';
 export { APPROVAL_PREVIEW_MAX_BYTES, boundApprovalPreview } from './internal/approval-preview.js';
-export { AGENT_TURN_REPLY_LANGUAGES, AGENT_TURN_SYSTEM_PROMPT_VERSION, agentTurnReplyLanguageRule, renderAgentTurnSystemPrompt, withAgentTurnSystemPrompt, type AgentTurnReplyLanguage } from './internal/system-prompt.js';
+export { AGENT_TURN_REPLY_LANGUAGES, AGENT_TURN_SYSTEM_PROMPT_VERSION, agentTurnReplyLanguageRule, renderAgentTurnSystemPrompt, withAgentTurnSystemPrompt, type AgentTurnReplyLanguage,
+  type AgentTurnShellPosture } from './internal/system-prompt.js';

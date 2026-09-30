@@ -1,6 +1,6 @@
 import { relative, resolve, sep } from 'node:path';
 import { EffectError, type AgentToolOutcome, type EffectCommand } from '#domain/index.js';
-import { EffectApplication, OperationPolicyAuthorization, agentToolArgumentsDigest, boundApprovalPreview, classifyReadOnlyShellCommand, classifyShellContainment, classifyShellMutation,
+import { EffectApplication, OperationPolicyAuthorization, agentToolArgumentsDigest, type AgentTurnShellPosture, boundApprovalPreview, classifyReadOnlyShellCommand, classifyShellContainment, classifyShellMutation,
   classifyShellRisk, shellPermissionTier, type EffectApprovalGate, type ShellPermissionTier, type ShellRiskClassification } from '#engine/index.js';
 import { globalStateRoot, loadConfig, SystemTrustedClock, type ConfigLoadOptions } from '#platform/index.js';
 import { agentShellEffectCommandId, createGlobMatcher, createLocalPeerSession, createShellPathContext, createShellProtectedNames, createShellWriteContext, describeHostShellResult,
@@ -48,11 +48,16 @@ export function createAgentShell(input: { readonly scope: WorkspaceScope; readon
     && productState.some(match => match(relative(scope.root, resolve(scope.root, detail)).split(sep).join('/')));
   const plans = new Map<string, ShellPlan>();
   const key = (tool: string, args: Record<string, unknown>) => agentToolArgumentsDigest(tool, args);
+  /** The realm a call of this turn resolves: the configured mode against the service's (memoized) host measurement and the turn's providers. */
+  const resolveRealm = async () => resolveShellRealm(input.config.realm, await shellSandboxCapabilities(globalStateRoot()), input.sandboxes);
+  /** OPEN-SANDBOX: the realm a call runs in — an open write posture on a realm that cannot open moves or says so (`openShellRealm`). One rule
+   * for the card, the effect and the prompt's posture. */
+  const callRealm = (realm: Extract<ShellRealmResolution, { ok: true }>, open: boolean) => open ? openShellRealm(realm, input.config.realm) : realm;
   const plan = async (tool: string, args: Record<string, unknown>): Promise<ShellPlan> => {
     const command = typeof args['command'] === 'string' ? args['command'] : '';
     if (command.trim() === '') return { ok: false, text: '[deckent] run_shell: error=empty-command' };
     if (command.length > HOST_SHELL_COMMAND_MAX_CHARS) return { ok: false, text: `[deckent] run_shell: error=command-too-long (max ${HOST_SHELL_COMMAND_MAX_CHARS} characters)` };
-    const realm = resolveShellRealm(input.config.realm, await shellSandboxCapabilities(globalStateRoot()), input.sandboxes);
+    const realm = await resolveRealm();
     if (!realm.ok) return { ok: false, text: `[deckent] run_shell: error=${realm.code}; nothing was run` };
     const paths = createShellPathContext(scope, undefined, roots);
     const readOnly = await classifyReadOnlyShellCommand(command, paths);
@@ -70,6 +75,22 @@ export function createAgentShell(input: { readonly scope: WorkspaceScope; readon
   };
   return {
     plan,
+    /**
+     * v6 PROMPT-POSTURE: the posture the system prompt states for this turn's shell, from the same realm resolution and open-view rule its
+     * calls take. A full-access turn's calls run as `full-access` or `owner-approved`, both open (`shellWritePosture`; the tier does not
+     * change `open` for either); any other turn's calls are closed whatever their authority. The realm is known now: the configuration, the
+     * memoized host measurement and the turn's providers are those of every call. Per call only an exception differs, and that call's result
+     * says so (its `sandbox:` marker and notices): a full-access call whose grant no longer holds runs unattended in the closed view, and an
+     * open view that cannot be built (a state root holding HOME, the HOME walk over its bound) refuses the call.
+     */
+    async posture(): Promise<AgentTurnShellPosture> {
+      const resolved = await resolveRealm();
+      if (!resolved.ok) return { kind: 'unavailable' };
+      const fullAccess = input.fullAccess === true, open = shellWritePosture(fullAccess ? 'full-access' : 'owner-approved', 'other-modify', fullAccess).open;
+      const realm = callRealm(resolved, open);
+      if (realm.containment === 'host' || realm.realm.kind === 'host') return { kind: 'host' };
+      return { kind: 'sandbox', realm: realm.realm.kind, open: open && realm.opens === true };
+    },
     /** The planned command's permission tier (the mode decision's cell), or null when it was not planned. */
     tier(tool: string, args: Record<string, unknown>): ShellPermissionTier | null { const planned = plans.get(key(tool, args)); return planned?.ok ? planned.tier : null; },
     /** SHELL-AUTONOMY: the planned realm's containment and whether the command is contained (the decision's `shell` input). */
@@ -86,7 +107,7 @@ export function createAgentShell(input: { readonly scope: WorkspaceScope; readon
       const write = shellWritePosture('owner-approved', planned.tier, input.fullAccess === true);
       const view = sandboxWriteView({ repositoryWritable: input.fullAccess === true }, write);
       // OPEN-SANDBOX: the card names the realm the call will actually run in (an open posture on a realm that cannot open moves or says so).
-      const realm = write.open ? openShellRealm(planned.realm, input.config.realm) : planned.realm;
+      const realm = callRealm(planned.realm, write.open);
       return boundApprovalPreview(`$ ${planned.command}\nrisk: ${planned.risk.risk} (${planned.risk.reason})\n${realm.posture(view)}`);
     },
     /** Runs the call as a C11 effect; `gate` is the caller's durable-record approval gate for exactly this call (C12 G3). */
@@ -128,7 +149,7 @@ export function createAgentShell(input: { readonly scope: WorkspaceScope; readon
       const { writeFloorReadOnly } = posture, projectReadOnly = posture.projectReadOnly || (posture.writeSet && !directory);
       const unavailable = posture.writeSet && !directory ? `\n${HOST_SHELL_NOTES.writeSetUnavailable}` : '';
       // OPEN-SANDBOX: the open view where the realm builds it, else `openShellRealm` (host under prefer-sandbox, closed under require-sandbox).
-      const realm = posture.open ? openShellRealm(planned.realm, input.config.realm) : planned.realm, open = posture.open && realm.opens === true;
+      const realm = callRealm(planned.realm, posture.open), open = posture.open && realm.opens === true;
       const target = new HostShellTarget(scope.root, { realm, ...(open ? { open: true } : {}), timeoutMs: input.config.timeoutMs, extraEnv: input.config.environment, signal, onOutput, writeFloorReadOnly, projectReadOnly,
         ...(directory ? { writeSet: { upper: directory.upper, work: directory.work } } : {}),
         ...(input.scratch ? { fixedEnv: { TMPDIR: input.scratch.dir } } : {}), onResult: value => { result = value; } });

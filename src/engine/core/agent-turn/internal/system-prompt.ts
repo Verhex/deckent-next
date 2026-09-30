@@ -1,14 +1,39 @@
 import { isAbsolute, relative, sep } from 'node:path';
-import type { AgentToolSpec, AgentTurnMessage } from '#domain/index.js';
+import type { AgentToolSpec, AgentTurnMessage, ShellRealm } from '#domain/index.js';
 import type { ProductLayout } from '#platform/index.js';
 
 /**
  * Version of the model-facing system prompt (TL-C D4; v2 SCR-A: the scratch area; v3 FETCH: network access; v4 TERM-FEEDBACK-1: the running
  * model's identity, and Deckent's own state named as protected instead of pointed at; v5 LANG-CRASH: the reply language of the person's
- * locale, first and last). The text is protocol, like tool descriptions: English, in code, never a catalog string. Any change of its wording
- * is a new version; the turn's request digest binds the rendered text.
+ * locale, first and last; v6 PROMPT-POSTURE: the shell's posture for the turn, apart from fetch_url). The text is protocol, like tool
+ * descriptions: English, in code, never a catalog string. Any change of its wording is a new version; the turn's request digest binds the
+ * rendered text.
  */
-export const AGENT_TURN_SYSTEM_PROMPT_VERSION = 5;
+export const AGENT_TURN_SYSTEM_PROMPT_VERSION = 6;
+/**
+ * v6 PROMPT-POSTURE (live 2026-09-30: a full-access model refused `curl` "by policy" because v5 said "Network access: none" whenever fetch_url
+ * was absent): where this turn's shell commands run, as composition resolved it from the realm the turn's shell calls take (the same
+ * resolution and open-view rule as each call) — never re-derived here. `sandbox`: bubblewrap or Landlock; `open` is the full-access open
+ * view (host network, the real HOME, the project and .git writable, Deckent's state, policy, credentials and configuration sealed). `host`:
+ * no sandbox (the explicit host realm or a fallback to it) — files, processes and the network are reachable. `unavailable`: no realm the
+ * configuration permits is usable, so every shell call is refused.
+ */
+export type AgentTurnShellPosture = { readonly kind: 'sandbox'; readonly realm: Exclude<ShellRealm['kind'], 'host'>; readonly open: boolean }
+  | { readonly kind: 'host' } | { readonly kind: 'unavailable' };
+/** The shell tool's note for one posture (absent: no posture was resolved — the pre-v6 neutral note). */
+function shellNote(posture: AgentTurnShellPosture | null | undefined): string {
+  if (!posture) return ' It runs in the project root on the user\'s machine.';
+  if (posture.kind === 'unavailable') return ' It cannot run commands here: no shell realm the configuration permits is usable on this machine, so every call is refused.';
+  if (posture.kind === 'host') return ' It runs in the project root directly on the user\'s machine, not in a sandbox: files, processes and the network are reachable'
+    + ' as the user; Deckent\'s own state is protected by name only.';
+  if (!posture.open) return ` It runs in the project root in a closed ${posture.realm} sandbox: shell commands have no network access and your home directory is`
+    + ' hidden; what a command may write is decided per call by policy and the permission mode.';
+  return ` It runs in the project root in an open ${posture.realm} sandbox (full access): shell commands have network access (for example curl, git fetch,`
+    + ' npm install), your real home directory (HOME) is visible and writable, and the project and its .git are writable. Deckent\'s own state, policy'
+    + ' and credential files and its configuration file stay sealed: they are hidden or read-only, and a write to them fails.';
+}
+/** Whether shell commands of this posture reach the network (the open view and the host); a closed, unavailable or unknown shell does not. */
+const shellHasNetwork = (posture: AgentTurnShellPosture | null | undefined) => posture?.kind === 'host' || (posture?.kind === 'sandbox' && posture.open);
 /**
  * The reply language as the model is told it, per supported locale (protocol text). Keyed like the catalog's locales: composition passes a
  * catalog `Locale`, so a locale added to the catalog without an entry here does not compile.
@@ -50,13 +75,16 @@ export function renderAgentTurnSystemPrompt(input: { readonly projectRoot: strin
   /** TERM-FEEDBACK-1: the bound catalog model (provider and model reference, native id) the turn runs on. */
   readonly model: { readonly providerId: string; readonly providerVersion: number; readonly modelId: string; readonly modelVersion: number; readonly nativeId: string };
   /** v5 LANG-CRASH: the person's locale; the reply language the model is told, first and again as the last line. */
-  readonly language: AgentTurnReplyLanguage }): string {
-  const { projectRoot, layout, tools, scratch, network, model, mcp, language } = input;
+  readonly language: AgentTurnReplyLanguage;
+  /** v6 PROMPT-POSTURE: the shell's posture for this turn when the shell tool is offered (composition resolves it); absent or null = none
+   * resolved (no shell tool): the shell note stays neutral and, without fetch_url, the prompt says there is no network access. */
+  readonly shell?: AgentTurnShellPosture | null }): string {
+  const { projectRoot, layout, tools, scratch, network, model, mcp, language, shell } = input;
   const hosts = network ? (network.allowedHosts.length > NAMED_HOSTS_MAX ? `${network.allowedHosts.length} hosts` : network.allowedHosts.join(', ')) : '';
   const data = shown(projectRoot, layout.root);
   const named = (toolClass: AgentToolSpec['toolClass']) => tools.filter(tool => tool.toolClass === toolClass).map(tool => tool.name).join(', ');
   const classes = [['Read tools', named('read'), ' They change nothing.'], ['Edit tools', named('edit'), ''],
-    ['Shell tool', named('shell'), ' It runs in the project root on the user\'s machine.']] as const;
+    ['Shell tool', named('shell'), shellNote(shell)]] as const;
   const lines = [
     `[Deckent runtime instructions v${AGENT_TURN_SYSTEM_PROMPT_VERSION}]`,
     'These instructions come from the Deckent runtime service, not from the user. You are the coding assistant of the Deckent operator'
@@ -78,7 +106,10 @@ export function renderAgentTurnSystemPrompt(input: { readonly projectRoot: strin
     network ? `- Network: fetch_url fetches one https:// URL (GET, no credentials). ${hosts ? `Allowlisted hosts (${hosts}) run at once;` : 'No host is allowlisted;'}`
       + ` ${network.others === 'ask' ? 'any other host waits for the operator\'s approval' : 'any other host is refused'}. The body is saved in the scratch area under`
       + ' fetch/ and the result shows its first 16 KiB; read the rest with scratch_read.'
-      : '- Network access: none. This installation allows no fetching: do not guess what a web page says, and do not try to reach the network another way.',
+      // v6: fetch_url and the shell's network are separate; only a shell without network makes "none" true.
+      : shellHasNetwork(shell) ? '- Network: fetch_url is not offered (this installation configures no fetching); shell commands do have network access in this'
+        + ' turn (see the shell tool). Do not guess what a web page says.'
+        : '- Network access: none. This installation allows no fetching: do not guess what a web page says, and do not try to reach the network another way.',
   ];
   if (tools.length) {
     lines.push('', 'Tools:', ...classes.flatMap(([label, names, note]) => names ? [`- ${label}: ${names}.${note}`] : []),
