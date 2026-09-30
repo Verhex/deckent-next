@@ -3,6 +3,9 @@
 Bu belge yalnız güncel durumu tutar; önceki sürümü Git geçmişinde, kanıtlar `deckent-refactor-work/proof/`.
 
 ## Durum
+- **Sol 2202 REVISE (WT-R1) → düzeltildi:** yürütme, tükettiği hedef için aynı config anlık görüntüsünden `work-target:use` ister; hedefi okuyan/yazan her attempt
+  işlemi (yürütme, yama hazırlama, entegrasyon denetim/hazırlama, teslim, teslime sabit Run) `use`, benimseme/geri alma `use`+`adopt` (owner K2'den daha sıkı; okuma tüketimdir).
+  Aday artık 17+18 birleşik: `integrate/2026-09-30-s`. Kanıt `proof/WORK-TARGETS-2026-09-30/README.md` §8–8.1, Sol metni `proof/SOL-2201-2026-09-30/review.txt`.
 - **On sekizinci parti (2026-09-30; `integrate/2026-09-30-s`, worktree `/home/alperen/deckent-next-integrate-s`):** on yedinci partinin (`e7b6d675`, hâlâ Sol 2201 incelemesinde) üstüne
   `lane/dev-u2-0` (sürümlü dev kurulumu: `dev-release.mjs`, `next-entry` `current`, U1 guard; uç `5fdee2a4`) ve `lane/pack-smoke` (terminal sözleşmesi, verify hızlı alt kümesi, kilitli lisans metinleri,
   `path` tip sızıntısı; uç `1cd52ad1`) birleştirildi. Yayın engelleri kapandı (`publishable.ok=true`); `--waive-smoke terminal` artık gerekmez (acil seçenek). Kanıt `proof/DEV-U2-0-2026-09-30/`,
