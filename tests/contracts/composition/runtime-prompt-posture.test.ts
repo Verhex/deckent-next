@@ -38,7 +38,7 @@ describe.skipIf(process.platform !== 'linux')('the shell posture in the system p
     expect(prompt).not.toContain('Network access: none'); expect(prompt).not.toContain('do not try to reach the network');
     expect(shellLine(prompt)).toContain('in an open bubblewrap sandbox (full access): shell commands have network access');
     expect(shellLine(prompt)).toMatch(/your real home directory \(HOME\) is visible and writable, and the project and its \.git are writable/u);
-    expect(shellLine(prompt)).toMatch(/Deckent's own state, policy and credential files and its configuration file stay sealed/u);
+    expect(shellLine(prompt)).toMatch(/Deckent's own state, policy and credential files stay sealed[^\n]*Its configuration file is read-only unless the owner approves the call/u);
     expect(prompt).toContain('- Network: fetch_url is not offered (this installation configures no fetching); shell commands do have network access in this turn');
   }, 60_000);
 

@@ -767,8 +767,9 @@ wire: terminal and service differ only for `terminal --lang` or a service starte
 the live installation sets `language: tr` in its configuration at the next live restart; A — `chatTurn.language?` on the wire — needs protocol
 v19 (v18 is released) and ships with the next protocol bundle.
 System prompt **v6** (PROMPT-POSTURE, live 2026-09-30): fetch_url and the shell are separate; the shell note states `createAgentShell().posture()`
-(the realm and open-view rule of the turn's calls: open bubblewrap = network, real HOME, Deckent state sealed; closed = no network; host;
-unavailable), and `Network access: none` stays only when the shell has no network. Every turn's request digest changes again.
+(the realm and open-view rule of the turn's calls: open bubblewrap = network, real HOME, Deckent state sealed, the configuration written
+only by an owner-approved call (Astra 2192 R9); closed = no network; host; unavailable), and `Network access: none` stays only when the
+shell has no network. Every turn's request digest changes again.
 **Agent tool deny floor per layout (TL-C finding, TERM-FEEDBACK-1).** Agent read tools (and through the same `WorkspaceScope`: edit and
 shell path classification, the bubblewrap and Landlock deny views, `@file`) deny the Core floor plus every product resource of the
 layout that lies inside the project except the configuration (`AGENT_READABLE_PRODUCT_RESOURCES = ['config']`, default-deny for

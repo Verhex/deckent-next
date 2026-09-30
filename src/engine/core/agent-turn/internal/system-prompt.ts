@@ -14,11 +14,13 @@ export const AGENT_TURN_SYSTEM_PROMPT_VERSION = 6;
  * v6 PROMPT-POSTURE (live 2026-09-30: a full-access model refused `curl` "by policy" because v5 said "Network access: none" whenever fetch_url
  * was absent): where this turn's shell commands run, as composition resolved it from the realm the turn's shell calls take (the same
  * resolution and open-view rule as each call) — never re-derived here. `sandbox`: bubblewrap or Landlock; `open` is the full-access open
- * view (host network, the real HOME, the project and .git writable, Deckent's state, policy, credentials and configuration sealed). `host`:
- * no sandbox (the explicit host realm or a fallback to it) — files, processes and the network are reachable. `unavailable`: no realm the
- * configuration permits is usable, so every shell call is refused.
+ * view (host network, the real HOME, the project and .git writable, Deckent's state, policy and credentials sealed structurally), with
+ * `configuration` the configuration file's rule in it (Astra 2192 R9: the turn's write floor — read-only for a call no card approved;
+ * `owner-approved`: a call the owner approves writes its existing content). `host`: no sandbox (the explicit host realm or a fallback to it) —
+ * files, processes and the network are reachable. `unavailable`: no realm the configuration permits is usable, so every shell call is refused.
  */
-export type AgentTurnShellPosture = { readonly kind: 'sandbox'; readonly realm: Exclude<ShellRealm['kind'], 'host'>; readonly open: boolean }
+export type AgentTurnShellPosture = { readonly kind: 'sandbox'; readonly realm: Exclude<ShellRealm['kind'], 'host'>; readonly open: false }
+  | { readonly kind: 'sandbox'; readonly realm: Exclude<ShellRealm['kind'], 'host'>; readonly open: true; readonly configuration: 'read-only' | 'owner-approved' }
   | { readonly kind: 'host' } | { readonly kind: 'unavailable' };
 /** The shell tool's note for one posture (absent: no posture was resolved — the pre-v6 neutral note). */
 function shellNote(posture: AgentTurnShellPosture | null | undefined): string {
@@ -30,7 +32,8 @@ function shellNote(posture: AgentTurnShellPosture | null | undefined): string {
     + ' hidden; what a command may write is decided per call by policy and the permission mode.';
   return ` It runs in the project root in an open ${posture.realm} sandbox (full access): shell commands have network access (for example curl, git fetch,`
     + ' npm install), your real home directory (HOME) is visible and writable, and the project and its .git are writable. Deckent\'s own state, policy'
-    + ' and credential files and its configuration file stay sealed: they are hidden or read-only, and a write to them fails.';
+    + ' and credential files stay sealed: they are hidden or read-only, and a write to them fails. Its configuration file is read-only'
+    + (posture.configuration === 'owner-approved' ? ' unless the owner approves the call: an approved call can change its existing content.' : ' in every call.');
 }
 /** Whether shell commands of this posture reach the network (the open view and the host); a closed, unavailable or unknown shell does not. */
 const shellHasNetwork = (posture: AgentTurnShellPosture | null | undefined) => posture?.kind === 'host' || (posture?.kind === 'sandbox' && posture.open);

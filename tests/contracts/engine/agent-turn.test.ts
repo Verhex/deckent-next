@@ -503,11 +503,15 @@ it('states the shell posture it is given, separately from fetch_url (v6)', () =>
   const shellLine = (prompt: string) => prompt.split('\n').find(line => line.startsWith('- Shell tool: run_shell.'))!;
   expect(AGENT_TURN_SYSTEM_PROMPT_VERSION).toBe(6);
 
-  const open = render({ kind: 'sandbox', realm: 'bubblewrap', open: true });
+  const open = render({ kind: 'sandbox', realm: 'bubblewrap', open: true, configuration: 'owner-approved' });
   expect(open.startsWith('[Deckent runtime instructions v6]')).toBe(true);
   expect(shellLine(open)).toBe('- Shell tool: run_shell. It runs in the project root in an open bubblewrap sandbox (full access): shell commands have network access'
     + ' (for example curl, git fetch, npm install), your real home directory (HOME) is visible and writable, and the project and its .git are writable.'
-    + ' Deckent\'s own state, policy and credential files and its configuration file stay sealed: they are hidden or read-only, and a write to them fails.');
+    + ' Deckent\'s own state, policy and credential files stay sealed: they are hidden or read-only, and a write to them fails. Its configuration file is'
+    + ' read-only unless the owner approves the call: an approved call can change its existing content.');
+  // Astra 2192 R9: the configuration's rule is the posture's, not a fixed sentence (a floor no card opens would say so).
+  expect(shellLine(render({ kind: 'sandbox', realm: 'bubblewrap', open: true, configuration: 'read-only' })))
+    .toMatch(/stay sealed: they are hidden or read-only, and a write to them fails\. Its configuration file is read-only in every call\.$/u);
   expect(open).toContain('- Network: fetch_url is not offered (this installation configures no fetching); shell commands do have network access in this turn'
     + ' (see the shell tool). Do not guess what a web page says.');
   expect(open).not.toContain('Network access: none'); expect(open).not.toContain('do not try to reach the network');
@@ -526,7 +530,8 @@ it('states the shell posture it is given, separately from fetch_url (v6)', () =>
   expect(render({ kind: 'unavailable' })).toContain(noNetwork);
 
   // fetch_url configured: its line is the same whatever the shell posture; only the shell note differs.
-  for (const posture of [{ kind: 'sandbox', realm: 'bubblewrap', open: true }, { kind: 'sandbox', realm: 'bubblewrap', open: false }, { kind: 'host' }] as const) {
+  for (const posture of [{ kind: 'sandbox', realm: 'bubblewrap', open: true, configuration: 'owner-approved' }, { kind: 'sandbox', realm: 'bubblewrap', open: false },
+    { kind: 'host' }] as const) {
     const withFetch = render(posture, true);
     expect(withFetch).toContain(fetchLine); expect(withFetch).not.toContain('Network access: none'); expect(withFetch).not.toContain('fetch_url is not offered');
   }
