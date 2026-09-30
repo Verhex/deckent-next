@@ -5,7 +5,7 @@ import type { CliBaseContext } from '#surfaces/core/cli-kit/index.js';
 import type { ModelActivationAdmissionHandler, ModelActivationInspectionHandler } from './model-activation.js';
 import type { ModelInvocationCancellationHandler, ModelInvocationHandler, ModelInvocationInspectionHandler, ModelInvocationPurgeHandler } from './model-invocation.js';
 import type { ProviderSpendAccountInspectionHandler, ProviderSpendAuditHandler } from './model-spending.js';
-import type { ModelCatalogApplyHandler, ModelCatalogInspectionHandler, PackagedModelCatalogReader } from './model-catalog.js';
+import type { ModelCatalogApplyHandler, ModelCatalogInspectionHandler } from './model-catalog.js';
 
 export type InferenceMetricsReading =
   | { readonly ok: true; readonly url: string; readonly body: string }
@@ -26,5 +26,4 @@ export interface ModelCommandContext extends CliBaseContext {
   admitModelActivation?: ModelActivationAdmissionHandler;
   inspectModelCatalog?: ModelCatalogInspectionHandler;
   applyModelCatalog?: ModelCatalogApplyHandler;
-  readPackagedModelCatalog?: PackagedModelCatalogReader;
 }

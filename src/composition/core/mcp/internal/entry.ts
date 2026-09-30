@@ -29,8 +29,7 @@ export async function main(root = process.cwd()) {
     inspectProviderSpendAccount: (query, delivery) => runtime.inspectProviderSpendAccount(query, delivery),
     auditProviderSpendAccount: (command, delivery) => runtime.auditProviderSpendAccount(command, delivery),
     inspectModelActivation: query => inspectConfiguredModelActivation(root, query),
-    admitModelActivation: command => admitConfiguredModelActivation(root, command),
-    inspectModelCatalog: query => inspectConfiguredModelCatalog(root, query), applyModelCatalog: command => applyConfiguredModelCatalog(root, command),
+    admitModelActivation: command => admitConfiguredModelActivation(root, command), inspectModelCatalog: query => inspectConfiguredModelCatalog(root, query), applyModelCatalog: command => applyConfiguredModelCatalog(root, command),
     inferencePlan: input => describeMcpInference(root, 'plan', input.profileId),
     inferenceBudget: input => describeMcpInference(root, 'budget', input.profileId) }, { maxConcurrentCalls: config.mcp.maxConcurrentCalls, responseMaxBytes: config.mcp.responseMaxBytes }, locale), {
     transport: createBoundedMcpTransport(new StdioServerTransport(process.stdin, process.stdout, { maxBufferSize: config.mcp.inputMaxBytes }),

@@ -39,6 +39,13 @@ export function evaluateProcessExit(parameters: unknown, terminalEvidence: unkno
   return terminal.signal === undefined && terminal.exitCode !== null && acceptedExitCodes.includes(terminal.exitCode) ? 'pass' : 'fail';
 }
 
+/** The installed process-exit evaluator as the Task evaluation owner's terminal evaluator: pinned definitions first, then the pure exit result. */
+export const processExitTerminalEvaluator = Object.freeze({
+  async evaluate(evaluator: EvaluatorDefinition, criterion: CriterionDefinition, terminal: Readonly<{ exitCode: number | null; signal?: string | undefined }>): Promise<'pass' | 'fail'> {
+    validateProcessExitCriterion(evaluator, criterion);
+    return evaluateProcessExit(criterion.parameters, { exitCode: terminal.exitCode, ...(terminal.signal === undefined ? {} : { signal: terminal.signal }) });
+  },
+});
 /** "Not weaker" for process-exit: a criterion accepting only exit codes the required bar accepts never passes a process the bar fails. */
 export function processExitWithin(required: unknown, actual: unknown): boolean {
   const bar = parametersSchema.safeParse(required), criterion = parametersSchema.safeParse(actual);

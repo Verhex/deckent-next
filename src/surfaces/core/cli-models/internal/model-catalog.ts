@@ -1,4 +1,5 @@
 import { resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { ErrorRegistry, emit, loadConfig, resolveLocale, t, type ConfigLoadOptions, type Locale } from '#platform/index.js';
 import { modelCatalogCommandSchema, modelCatalogQuerySchema, type ModelCatalogCommand, type ModelCatalogQuery } from '#domain/index.js';
 import type { ModelCatalogInspection, ModelCatalogResult } from '#engine/index.js';
@@ -7,8 +8,9 @@ import type { ModelCommandContext } from './context.js';
 
 export type ModelCatalogInspectionHandler = (root: string, query: ModelCatalogQuery, options: ConfigLoadOptions) => Promise<ModelCatalogInspection>;
 export type ModelCatalogApplyHandler = (root: string, command: ModelCatalogCommand, options: ConfigLoadOptions) => Promise<ModelCatalogResult>;
-/** Resolves a packaged catalog document by name; null when none exists. */
-export type PackagedModelCatalogReader = (name: string) => Promise<unknown>;
+const INPUT_ERRORS = { limit: 'CLI_CATALOG_INPUT_LIMIT', invalid: 'CLI_CATALOG_INPUT_INVALID', tty: 'CLI_CATALOG_INPUT_TTY', unavailable: 'CLI_CATALOG_INPUT_UNAVAILABLE' } as const;
+/** A packaged catalog document shipped with the product (`assets/model-catalog/<name>.json`); an unknown name cannot be read. */
+const packagedCatalog = (name: string) => fileURLToPath(new URL(`../../../../../assets/model-catalog/${name}.json`, import.meta.url));
 
 type Action = 'list' | 'register' | 'activate' | 'deactivate';
 const FLAGS: Readonly<Record<Action, readonly string[]>> = {
@@ -79,15 +81,9 @@ export async function modelCatalogCommand(argv: readonly string[], context: Mode
   if (!context.applyModelCatalog) throw ErrorRegistry.createError('INVENTORY_UNAVAILABLE');
   let catalog: unknown;
   if (parsed.action === 'register') {
-    if (value('--seed')) {
-      if (!context.readPackagedModelCatalog) throw ErrorRegistry.createError('INVENTORY_UNAVAILABLE');
-      catalog = await context.readPackagedModelCatalog(value('--seed')!);
-      if (catalog === null) throw ErrorRegistry.createError('CLI_USAGE'); // no packaged document of that name
-    } else {
-      const source = value('--file')!, config = await loadConfig(root, options);
-      catalog = await readJsonInput(source === '-' ? source : resolve(root, source), config.cli.invocationInputMaxBytes, { limit: 'CLI_CATALOG_INPUT_LIMIT',
-        invalid: 'CLI_CATALOG_INPUT_INVALID', tty: 'CLI_CATALOG_INPUT_TTY', unavailable: 'CLI_CATALOG_INPUT_UNAVAILABLE' }, context.stdin);
-    }
+    const seed = value('--seed'), source = value('--file'), config = await loadConfig(root, options);
+    if (seed !== undefined && !/^[a-z0-9][a-z0-9-]{0,63}$/.test(seed)) throw ErrorRegistry.createError('CLI_USAGE');
+    catalog = await readJsonInput(seed !== undefined ? packagedCatalog(seed) : source === '-' ? source : resolve(root, source!), config.cli.invocationInputMaxBytes, INPUT_ERRORS, context.stdin);
   }
   const command = modelCatalogCommandSchema.safeParse({ schemaVersion: 1, commandId: value('--command-id'), scopeId: value('--scope'), action: parsed.action,
     ...(parsed.action === 'register' ? { catalog } : { channelId: value('--channel'), modelId: value('--model') ?? null, expectedRevision: Number(value('--expected-revision')) }) });

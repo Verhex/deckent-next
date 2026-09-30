@@ -39,6 +39,15 @@ export async function describeAttemptWorkerModels(run: PinnedRun, identity: Atte
   }
   return projectAttemptWorkerModels(run, identity.taskId, sealed, live);
 }
+/** Model row of an observed attempt from the ledger (the Run's pin; sealed verdict, else live `pending`): null when not a pinned worker task,
+ * undefined when the row could not be read (the observation reports a diagnostic instead). */
+export async function observeAttemptWorkerModels(ledger: SealedLogs & { loadRun(scopeId: string, runId: string): Promise<RunSnapshot | null> },
+  artifacts: WorkerEventArtifacts, identity: AttemptIdentity, live: WorkerEventSummary | null): Promise<WorkerModelView | null | undefined> {
+  try {
+    const run = await ledger.loadRun(identity.scopeId, identity.runId);
+    return run ? await describeAttemptWorkerModels(run, identity, ledger, artifacts, live) : null;
+  } catch { return undefined; }
+}
 /** Model rows of a Run for `run inspect`; an attempt the caller may not read shows only the requested pin (evidence `denied`). */
 export async function describeRunWorkerModels(run: PinnedRun, principal: VerifiedPrincipal, store: SealedLogs, artifacts: WorkerEventArtifacts,
   authorization: DispatchIdentityAuthorization): Promise<readonly TaskWorkerModel[]> {

@@ -43,7 +43,13 @@ export function sameModelCatalogRequest(receipt: ModelCatalogReceipt, command: M
 /** Governed catalog writes: register facts, activate or deactivate a channel or one of its models in a scope. */
 export class ModelCatalogApplication {
   constructor(private readonly verifier: PrincipalVerifier, private readonly authorizer: ModelCatalogAuthorizer,
-    private readonly openStore: () => Promise<ModelCatalogStore>, private readonly now: () => number) {}
+    private readonly openStore: () => Promise<ModelCatalogStore>, private readonly now: () => number,
+    private readonly openReader?: () => Promise<ModelCatalogReader>) {}
+  /** Read-only listing (WORKER-CURRENCY-2); needs the reader port. */
+  async inspect(input: unknown, credential?: unknown): Promise<ModelCatalogInspection> {
+    if (!this.openReader) throw new ModelCatalogError('MODEL_CATALOG_UNAVAILABLE');
+    return new ModelCatalogInspectionApplication(this.verifier, this.authorizer, this.openReader).inspect(input, credential);
+  }
   async apply(input: unknown, credential?: unknown): Promise<ModelCatalogResult> {
     const command = parseModelCatalogCommand(input);
     const principal = await authenticate(this.verifier, credential, command.scopeId);

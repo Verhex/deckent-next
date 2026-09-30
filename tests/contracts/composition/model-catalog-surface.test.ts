@@ -6,7 +6,6 @@ import { Client } from '@modelcontextprotocol/client';
 import { InMemoryTransport } from '@modelcontextprotocol/server';
 import { afterEach, describe, expect, it } from 'vitest';
 import { applyModelCatalog, inspectModelCatalog } from '../../../src/index.js';
-import { readPackagedModelCatalog } from '../../../src/composition/core/model-activation/index.js';
 import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
 import { main } from '../../../src/surfaces/index.js';
 import { createMcpServer, type McpApplications } from '#surfaces/core/mcp/index.js';
@@ -33,7 +32,7 @@ async function fixture(catalogScopes: 'all' | readonly string[] = 'all', inspect
   const cli = async (...argv: string[]) => {
     const out: string[] = [], err: string[] = [];
     const code = await main(['models', 'catalog', ...argv], { root: project, env, initialize() {}, stdout: { write(value: string) { out.push(value); } },
-      stderr: { write(value: string) { err.push(value); } }, applyModelCatalog: applyModelCatalog as never, inspectModelCatalog: inspectModelCatalog as never, readPackagedModelCatalog });
+      stderr: { write(value: string) { err.push(value); } }, applyModelCatalog: applyModelCatalog as never, inspectModelCatalog: inspectModelCatalog as never });
     return { code, stdout: out.join(''), stderr: err.join('') };
   };
   return { project, options, path, tables, cli, policy };
@@ -63,9 +62,9 @@ describe.skipIf(process.platform === 'win32')('model catalog operator surface (W
     expect(again.receipt.changes).toEqual([]);
     const [channels, models, activations, receipts] = f.tables();
     expect([channels, models, activations]).toEqual(facts.slice(0, 3)); expect(receipts).toHaveLength(2);
-    // The packaged document and the one the SDK reads are the same bytes.
-    expect(await readPackagedModelCatalog('claude-cli-subscription')).toEqual(await seedCatalog());
-    for (const name of ['../package', 'missing-seed']) expect((await f.cli('register', '--scope', 's', '--command-id', 'x', '--seed', name)).code).toBe(2);
+    // The packaged seed is the asset the SDK tests read; a name outside the packaged set is a usage error, a missing one a typed read error.
+    expect((await f.cli('register', '--scope', 's', '--command-id', 'x', '--seed', '../package')).code).toBe(2);
+    expect(await f.cli('register', '--scope', 's', '--command-id', 'x', '--seed', 'missing-seed')).toMatchObject({ code: 2, stderr: expect.stringContaining('CLI_CATALOG_INPUT_UNAVAILABLE') });
     // An operator document from a file: invalid JSON and an invalid catalog are typed; a valid edit writes only what changed.
     await writeFile(join(f.project, 'bad.json'), '{'); await writeFile(join(f.project, 'wrong.json'), JSON.stringify({ schemaVersion: 1 }));
     expect((await f.cli('register', '--scope', 's', '--command-id', 'f1', '--file', 'bad.json')).stderr).toContain('CLI_CATALOG_INPUT_INVALID');

@@ -6,7 +6,7 @@ import type { ArtifactStore, EvaluationEvidenceLimits } from '#capabilities/inde
 import { authenticate, type PrincipalVerifier } from '#engine/core/authentication/index.js';
 import type { AttemptStore } from '#engine/core/attempts/index.js';
 import type { RunBoundDispatchStore, DispatchTerminal } from '#engine/core/dispatch/index.js';
-import { assertRunExecution, RunStoreError, type RunStore } from '#engine/core/runs/index.js';
+import { assertRunExecution, projectRunView, RunStoreError, type RunReceipt, type RunStore } from '#engine/core/runs/index.js';
 import { projectAttemptWorkerModels, readSealedWorkerEvents, type WorkerEventLogStore } from '#engine/core/worker-observation/index.js';
 import { taskEvaluationCommitSchema, type TaskEvaluationStore } from './commit.js';
 import { TaskEvidenceError, verifyDispatchEvaluationEvidence } from './evidence.js';
@@ -24,6 +24,11 @@ export interface TaskTerminalEvaluator {
 type Store = TaskEvaluationStore & RunBoundDispatchStore & Pick<AttemptStore, 'load'> & Pick<RunStore, 'loadRun' | 'loadRunReceipt'>
   & Pick<WorkerEventLogStore, 'loadWorkerEventLog'>;
 
+/** Public result of an evaluation receipt: the Run view and, for a pinned worker attempt, the recorded model evidence (WORKER-CURRENCY-2). */
+export function describeTaskEvaluationReceipt(receipt: RunReceipt) {
+  const model = (JSON.parse(receipt.command) as { evaluation?: { model?: TaskEvaluationModel } }).evaluation?.model;
+  return Object.freeze({ schemaVersion: 1 as const, commandId: receipt.commandId, run: projectRunView(receipt.snapshot), ...(model ? { model } : {}) });
+}
 /** Authenticated evaluation ingress. Wire input carries no verdict, evaluator, artifact, actor or paths.
  * Installed evaluator code consumes pinned definitions and verified terminal/output custody.
  */
