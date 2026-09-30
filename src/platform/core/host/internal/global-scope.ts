@@ -1,4 +1,4 @@
-import { posix, win32 } from 'node:path';
+import { posix, win32, type PlatformPath } from 'node:path';
 import { resolveProductLayout, productResourcePath } from './layout/resolve.js';
 import { PRODUCT_LAYOUT_REGISTRY } from '#platform/core/common/index.js';
 import { ErrorRegistry } from '#platform/core/errors/index.js';
@@ -19,7 +19,8 @@ export function normalizeGlobalScopePlatform(platform: string, env: Environment)
   if (platform === 'win32' || platform === 'darwin' || platform === 'wsl') return platform;
   throw ErrorRegistry.createError('UNSUPPORTED_PLATFORM', { params: { platform } });
 }
-export function pathApi(platform: string) { return platform === 'win32' ? win32 : posix; }
+// Explicit return type: an inferred one is emitted as `import("path").PlatformPath`, a bare specifier the published declarations refuse.
+export function pathApi(platform: string): PlatformPath { return platform === 'win32' ? win32 : posix; }
 export function resolveGlobalScopePaths(platform: GlobalScopePlatform, env: Environment): GlobalScopePaths {
   platform = normalizeGlobalScopePlatform(platform, env);
   const drive = envValue(env, 'HOMEDRIVE');
