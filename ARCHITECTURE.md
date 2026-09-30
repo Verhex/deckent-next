@@ -997,7 +997,7 @@ without setuid/setgid, in root-owned directories not writable by group/others up
 (`dist/adapters/core/shell-sandbox-bwrap/bundled/linux-<arch>/bwrap`, resolved from the module URL): its bytes are read once, must hash to
 `BUBBLEWRAP_BUNDLED` (generated from `packaging/bwrap/bwrap.lock.json`), and the same bytes are written to `<global state
 root>/bin/bwrap-<sha256>` (0700 directory, 0500 file, unique temporary + fsync, published with `link` — never replacing — so concurrent
-processes all run one inode; the check waits ≤ 0.5 s while a publisher's temporary name is still linked; only a copy that does not verify
+processes normally run one inode (not when a publisher stalls > 0.5 s: its copy may then be replaced by another verifying copy); the check waits ≤ 0.5 s while a publisher's temporary name is still linked; only a copy that does not verify
 is replaced by `rename`; an existing copy is reused only when ours, single-link and verifying; a replacing `rename` refused 29/120
 concurrent measurements with nlink 0, 2026-09-30) — that copy is what runs, so an npm install under umask 002 (package file 0775) is not a problem and the package tree's
 permissions are not trusted. PATH never consulted. The probe runs the selected launcher once (`--unshare-all --die-with-parent --new-session

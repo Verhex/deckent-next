@@ -400,7 +400,9 @@ STARTUP-COST ile yedinci partide kaldırıldı (varsayılan 30 s); o adayın tam
 
 ## Kanıt ve durum
 
-- **Astra 2188 — 2026-09-30 @ `02601269`: REVISE (13. parti)** → düzeltme **on dördüncü parti** `integrate/2026-09-30-o`.
+- **Astra 2188 — 2026-09-30 @ `02601269`: REVISE (13. parti)** → düzeltme **on dördüncü parti** `integrate/2026-09-30-o` `51b19dc5`:
+  **Astra 2190 PASS** (REVIEW 2191; bağımsız build +144 test 0 skip, launcher 48/48, 1677 dosya birebir), **push `4a2ac04..51b19dc5`** 2026-09-30.
+  N1 (belge): "tek inode" ifadesi 0.5 s askıda yayıncı istisnasıyla yazıldı (sonraki partide). [Astra 2190](../deckent-refactor-work/proof/ASTRA-2190-2026-09-30/review.md).
   **R7 P1:** full-access açık bwrap görünümünde korunan kökün (global durum kökü, proje `.deckent`, maskeli kimlik dosyaları) yazılabilir atası
   taşınıp özgün yola yeni bytes yazılabiliyordu. Düzeltme (Jev 61177582, self_bind_ancestors .99/sufficiency .76): her koruyucu mount hedefinin
   yazılabilir mount altındaki ataları kendi üzerine bağlanır (`ancestorPins`, üst sınır `BUBBLEWRAP_ANCESTOR_PIN_MAX` 1024, aşımda/kanonik olmayan

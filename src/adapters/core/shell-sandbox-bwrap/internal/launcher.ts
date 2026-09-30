@@ -153,7 +153,8 @@ function settledCopy(path: string, expected: string): string | null {
  * `<stateDir>/bin/bwrap-<sha256>` (a 0700 directory, file 0500) and that copy is what runs. The package file's mode is not a rule (umask
  * 002 installs it 0775): only its content is, and the copy is ours alone.
  * Concurrent placement (processes of one installation measuring at once): the copy is written under a unique temporary name, synced, and
- * published with `link` — which never replaces — so an existing copy wins and every process runs the same inode. A replacing `rename`
+ * published with `link` — which never replaces — so an existing copy wins and processes normally run the same inode (a publisher stalled past the
+ * ≤ 0.5 s settle wait may have its copy replaced by another verifying one). A replacing `rename`
  * made a concurrent writer's just-verified inode vanish under its check (`lstat` of a replaced inode reads `nlink` 0: measured 29 of 120
  * processes refused as "did not verify after writing"). Only a target that does not verify (stale, tampered, foreign) is replaced.
  */
