@@ -6,13 +6,36 @@
 // fast-uri inside the MCP SDK) are shipped only when the carrier file that embeds them put bytes into the bundle.
 // Output: a CycloneDX 1.6 JSON SBOM (shipped packages as top-level components, embedded ones nested under their carrier, since OSV-Scanner's
 // CycloneDX extractor walks top-level components recursively) and a THIRD-PARTY-NOTICES.md with each shipped package's own license text.
+// PACK-SMOKE (2026-09-30): a component whose installed copy carries no license text may take it from packaging/licenses/licenses.lock.json —
+// a byte copy of a named upstream artifact for that exact name@version, sha256-checked here; everything else stays a gap.
 import { createHash } from 'node:crypto';
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, isAbsolute, join, normalize } from 'node:path';
 import { scanEmbedded } from './check-embedded-deps.mjs';
 
 const readJson = path => JSON.parse(readFileSync(path, 'utf8'));
 const LICENSE_FILE = /^(?:licen[cs]e|copying|notice)(?:[.-].*)?$/iu;
+export const LICENSE_LOCK = 'packaging/licenses/licenses.lock.json';
+
+/** The locked upstream license texts: `texts` maps name@version → { text, file, sha256, source }; `problems` lists entries that cannot be
+ * used (unsupported lock, file missing or outside the lock directory, sha256 mismatch) — each one a publish blocker, never a silent skip. */
+export function lockedLicenseTexts(root, lockPath = join(root, LICENSE_LOCK)) {
+  const texts = new Map(), problems = [];
+  if (!existsSync(lockPath)) return { texts, problems };
+  const lock = readJson(lockPath);
+  if (lock.schemaVersion !== 1 || !Array.isArray(lock.texts)) return { texts, problems: [`${LICENSE_LOCK}: unsupported lock (schemaVersion 1 with texts[] expected)`] };
+  for (const entry of lock.texts) {
+    const key = `${entry.name}@${entry.version}`, file = typeof entry.file === 'string' ? normalize(entry.file) : '';
+    if (!file || isAbsolute(file) || file.startsWith('..') || !existsSync(join(dirname(lockPath), file))) { problems.push(`${key}: locked license text ${entry.file} missing or outside ${dirname(LICENSE_LOCK)}`); continue; }
+    const bytes = readFileSync(join(dirname(lockPath), file)), digest = createHash('sha256').update(bytes).digest('hex');
+    if (digest !== entry.sha256) { problems.push(`${key}: locked license text sha256 ${digest} does not match the lock (${entry.sha256})`); continue; }
+    if (texts.has(key)) { problems.push(`${key}: locked twice`); continue; }
+    texts.set(key, { text: bytes.toString('utf8'), file, sha256: digest, license: entry.license ?? null, source: entry.source ?? null });
+  }
+  return { texts, problems };
+}
+const provenance = (entry, why = 'The installed package ships no license text') => `(${why}; this is the upstream text from ${entry.source?.url ?? 'an unrecorded source'}` +
+  `${entry.source?.commit ? ` at commit ${entry.source.commit}` : ''}${entry.source?.integrity ? ` (${entry.source.integrity})` : ''}, sha256 ${entry.sha256}.)`;
 
 /** `node_modules/a/node_modules/@s/b/lib/x.js` → `node_modules/a/node_modules/@s/b` (the innermost installed package directory). */
 export function packageDirOf(input) {
@@ -123,13 +146,21 @@ export function cyclonedx({ pkg, identity, tools, shipped, embedded, timestamp, 
 }
 
 /** THIRD-PARTY-NOTICES.md: every shipped package with its own license file text; embedded components with the license their carrier did not
- * ship as text. Returns { text, gaps } — a gap is a shipped component whose license text is not available offline. */
-export function thirdPartyNotices(root, { pkg, shipped, embedded, declarations = [], native = [] }) {
+ * ship as text. Returns { text, gaps, lockedUsed } — a gap is a shipped component whose license text is not available offline; `locked`
+ * (lockedLicenseTexts().texts) supplies the upstream text for a component that has none, and lockedUsed names the entries that did. */
+export function thirdPartyNotices(root, { pkg, shipped, embedded, declarations = [], native = [], locked = new Map() }) {
+  const used = new Set();
+  /** A component without its own text: the locked upstream text for exactly this name@version, else a gap. */
+  const lockedOrGap = (item, gap) => {
+    const entry = locked.get(`${item.name}@${item.version}`), mismatch = entry && entry.license !== item.license;
+    if (!entry || mismatch) { gaps.push(mismatch ? `${gap}; the locked text is ${entry.license}, the package declares ${item.license ?? 'no license'}` : gap); sections.push('(No license file ships with this package.)', ''); return; }
+    used.add(`${item.name}@${item.version}`); sections.push(provenance(entry), '', '```text', entry.text.trimEnd(), '```', '');
+  };
   const gaps = [], sections = [`# Third-party notices for ${pkg.name} ${pkg.version}`, '',
     `This package bundles the third-party code listed below into its own files (no install-time dependencies). The machine-readable list is sbom.cdx.json.`, ''];
   for (const item of shipped) {
     sections.push(`## ${item.name}@${item.version}`, '', `License: ${item.license ?? 'not declared'}`, '');
-    if (!item.licenseFiles.length) { gaps.push(`${item.name}@${item.version}: no license file in the installed package`); sections.push('(No license file ships with this package.)', ''); }
+    if (!item.licenseFiles.length) lockedOrGap(item, `${item.name}@${item.version}: no license file in the installed package`);
     for (const file of item.licenseFiles) sections.push('```text', readFileSync(join(root, item.dir, file), 'utf8').trimEnd(), '```', '');
   }
   const inside = embedded.filter(entry => entry.shipped);
@@ -137,9 +168,14 @@ export function thirdPartyNotices(root, { pkg, shipped, embedded, declarations =
     sections.push('## Components embedded inside bundled packages', '', 'These were bundled by their carrier package before Deckent bundled it; the carrier ships no license text for them.', '');
     for (const entry of inside) {
       sections.push(`- ${entry.name}@${entry.version} (in ${entry.carrier}): ${entry.license ?? 'license not recorded'}`);
-      gaps.push(`${entry.name}@${entry.version} (in ${entry.carrier}): license text not shipped by the carrier${entry.license ? '' : '; SPDX id not recorded in dependencies.json'}`);
+      if (!entry.license || locked.get(`${entry.name}@${entry.version}`)?.license !== entry.license)
+        gaps.push(`${entry.name}@${entry.version} (in ${entry.carrier}): license text not shipped by the carrier${entry.license ? '' : '; SPDX id not recorded in dependencies.json'}`);
     }
     sections.push('');
+    // Locked upstream texts for embedded components, once per name@version whatever the number of carriers.
+    for (const key of [...new Set(inside.filter(entry => entry.license && locked.get(`${entry.name}@${entry.version}`)?.license === entry.license).map(entry => `${entry.name}@${entry.version}`))]) {
+      used.add(key); sections.push(`### ${key}`, '', provenance(locked.get(key), 'Its carriers ship no license text'), '', '```text', locked.get(key).text.trimEnd(), '```', '');
+    }
   }
   // DEPS-TYPES: third-party type declarations copied into dist/vendor/types. A package whose code is also bundled has its license text above;
   // a declarations-only package gets its own section.
@@ -153,7 +189,7 @@ export function thirdPartyNotices(root, { pkg, shipped, embedded, declarations =
     sections.push('');
     for (const item of declarations.filter(entry => !shipped.some(code => code.name === entry.name && code.version === entry.version))) {
       sections.push(`## ${item.name}@${item.version} (type declarations only)`, '', `License: ${item.license ?? 'not declared'}`, '');
-      if (!item.licenseFiles.length) { gaps.push(`${item.name}@${item.version} (declarations): no license file in the installed package`); sections.push('(No license file ships with this package.)', ''); }
+      if (!item.licenseFiles.length) lockedOrGap(item, `${item.name}@${item.version} (declarations): no license file in the installed package`);
       for (const file of item.licenseFiles) sections.push('```text', readFileSync(join(root, item.dir, file), 'utf8').trimEnd(), '```', '');
     }
   }
@@ -161,5 +197,5 @@ export function thirdPartyNotices(root, { pkg, shipped, embedded, declarations =
   // linked components) as the build wrote it; the license texts ship beside them.
   for (const item of native) sections.push(`## ${item.name} ${item.version} (separate executable)`, '', '```text', item.notice.trimEnd(), '```', '',
     `Files: ${item.dir}/ (licenses/, source/).`, '');
-  return { text: sections.join('\n'), gaps };
+  return { text: sections.join('\n'), gaps, lockedUsed: [...used].sort() };
 }

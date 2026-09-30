@@ -1,0 +1,37 @@
+{
+  "$comment": "PACK-SMOKE (2026-09-30): exact upstream license texts for shipped third-party components whose installed npm copy carries none. build-dist (scripts/dist-sbom.mjs) uses an entry only for that exact name@version, only when the installed package/carrier ships no text, and only when the file's sha256 matches; any other case stays a publish blocker. Texts are byte copies of the named upstream artifact, never written by hand. An entry the build no longer uses is reported (summary.licenseTexts.unused) so a version bump re-opens the question.",
+  "schemaVersion": 1,
+  "texts": [
+    {
+      "name": "yoga-layout",
+      "version": "3.2.1",
+      "license": "MIT",
+      "file": "yoga-layout@3.2.1/LICENSE",
+      "sha256": "52412d7bc7ce4157ea628bbaacb8829e0a9cb3c58f57f99176126bc8cf2bfc85",
+      "reason": "The npm tarball (integrity sha512-0LPOt3AxKqMdFBZA3HBAt/t/8vIKq7VaQYbuA8WxCgung+p9TVyKRYdpvCb80HcdTN2NkbIKbhNwKUfm3tQywQ==) ships no license file: the package root is the repository's javascript/ directory and its files[] excludes the repository-root LICENSE.",
+      "source": {
+        "type": "vcs",
+        "url": "https://github.com/facebook/yoga/blob/042f5013152eb81c1552dec945b88f7b95ca350f/LICENSE",
+        "ref": "v3.2.1",
+        "commit": "042f5013152eb81c1552dec945b88f7b95ca350f",
+        "path": "LICENSE"
+      },
+      "retrieved": "2026-09-30"
+    },
+    {
+      "name": "content-type",
+      "version": "1.0.5",
+      "license": "MIT",
+      "file": "content-type@1.0.5/LICENSE",
+      "sha256": "257aed98914108e91a337912727b6a802eef218248507f74b76faffaff517a38",
+      "reason": "Embedded (pre-bundled) in the dist of @modelcontextprotocol/client@2.2.0 and @modelcontextprotocol/server@2.2.0; the carriers ship no text for it and it is not installed on its own.",
+      "source": {
+        "type": "npm-tarball",
+        "url": "https://registry.npmjs.org/content-type/-/content-type-1.0.5.tgz",
+        "integrity": "sha512-nTjqfcBFEipKdXCv4YDQWCfmcLZKm81ldF0pAopTvyrFGVbcR6P/VAAd5G7N+0tTr8QqiU0tFadD6FK4NtJwOA==",
+        "path": "package/LICENSE"
+      },
+      "retrieved": "2026-09-30"
+    }
+  ]
+}

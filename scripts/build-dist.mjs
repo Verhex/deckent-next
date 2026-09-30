@@ -18,7 +18,7 @@ import { createHash } from 'node:crypto';
 import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { build, version as esbuildVersion } from 'esbuild';
-import { bundledNativeComponents, bundledPackages, cyclonedx, embeddedInBundle, thirdPartyNotices } from './dist-sbom.mjs';
+import { bundledNativeComponents, bundledPackages, cyclonedx, embeddedInBundle, lockedLicenseTexts, thirdPartyNotices } from './dist-sbom.mjs';
 import { BUNDLED_DIR, bundleProblems, stageBundle } from './build-bwrap.mjs';
 import { loadRegistry } from './dependencies.mjs';
 import { vendorDeclarations } from './dist-types.mjs';
@@ -154,8 +154,10 @@ export async function buildDist({ root = ROOT, out = join(ROOT, '.pack'), timest
   if (ajvViolations.length) throw new Error(`the package would ship the MCP SDK's ajv/fast-uri (FASTURI-OUT):\n  ${ajvViolations.join('\n  ')}`);
   const bom = cyclonedx({ pkg: manifest, identity, tools: [{ name: 'esbuild', version: esbuildVersion }, { name: 'deckent build-dist', version: '1' }],
     shipped, embedded, native, timestamp: timestamp ?? identity.builtAt });
-  const notices = thirdPartyNotices(root, { pkg: manifest, shipped, embedded, declarations: declarations.vendored, native: bundleGaps.length ? [] : [{ name: bwrapLock.component,
-    version: bwrapLock.version, notice: readFileSync(join(bundledDir, 'NOTICE-bubblewrap.txt'), 'utf8'), dir: relative(stage, bundledDir) }] });
+  const locked = lockedLicenseTexts(root);
+  const notices = thirdPartyNotices(root, { pkg: manifest, shipped, embedded, declarations: declarations.vendored, locked: locked.texts,
+    native: bundleGaps.length ? [] : [{ name: bwrapLock.component, version: bwrapLock.version, notice: readFileSync(join(bundledDir, 'NOTICE-bubblewrap.txt'), 'utf8'),
+      dir: relative(stage, bundledDir) }] });
   writeFileSync(join(stage, 'sbom.cdx.json'), `${JSON.stringify(bom, null, 2)}\n`);
   writeFileSync(join(stage, 'THIRD-PARTY-NOTICES.md'), `${notices.text}\n`);
   writeFileSync(join(stage, 'package.json'), `${JSON.stringify(manifest, null, 2)}\n`);
@@ -163,6 +165,7 @@ export async function buildDist({ root = ROOT, out = join(ROOT, '.pack'), timest
   const typeLeaks = declarationImports(join(stage, 'dist'));
   const blockers = [...(Object.keys(typeLeaks).length ? [`published declarations import packages the zero-dependency package cannot resolve: ${Object.keys(typeLeaks).join(', ')}`] : []),
     ...(existsSync(join(stage, 'LICENSE')) ? [] : ['LICENSE file missing']), ...notices.gaps.map(gap => `notice: ${gap}`),
+    ...locked.problems.map(problem => `license lock: ${problem}`),
     ...bundleGaps.map(gap => `bubblewrap: ${gap}`)];
   const summary = { schemaVersion: 1, stage, esbuild: esbuildVersion, outputs: Object.keys(result.metafile.outputs).length, requireBanner: patched,
     ajvStub: Object.fromEntries([...stubHits].sort(([a], [b]) => a.localeCompare(b))),
@@ -171,6 +174,8 @@ export async function buildDist({ root = ROOT, out = join(ROOT, '.pack'), timest
     declarations: { own: declarations.own, ownDropped: files.filter(file => file.endsWith('.d.ts')).length - declarations.own, ownRewritten: declarations.rewrittenOwn,
       vendored: declarations.vendored.map(item => `${item.name}@${item.version}: ${item.files.length}`) },
     bubblewrap: bundleGaps.length ? { shipped: false, problems: bundleGaps } : { shipped: true, version: bwrapLock.version, arches: bwrapLock.shipArches },
+    // An unused locked text is not a blocker (nothing unlicensed ships) but means a version moved: the lock entry is stale.
+    licenseTexts: { used: notices.lockedUsed, unused: [...locked.texts.keys()].filter(key => !notices.lockedUsed.includes(key)).sort() },
     typeLeaks, publishable: { ok: blockers.length === 0, blockers } };
   writeFileSync(join(out, 'summary.json'), `${JSON.stringify(summary, null, 2)}\n`);
   return summary;
