@@ -3,7 +3,7 @@ import { resolve } from 'node:path';
 import { validateProcessExitCriterion } from '#capabilities/index.js';
 import { ErrorRegistry, prepareProductDirectory, type ConfigLoadOptions } from '#platform/index.js';
 import { assertNativeWorkerBinding, validateDockerTaskProfile, openSqliteInventoryReader, openSqliteAttemptStore, openSqliteModelCatalogReader, GitIntegrationDelivery, GitRunWorkspaceProvider, GitWorkspaceBroker, resolveGitWorkTarget, selectWorkTarget } from '#adapters/index.js';
-import { admitWorkerModels, resolveExecutionRegistry, RunAdmissionApplication, runAdmissionSchema, runDeliveryAdmissionSchema, RunPolicyAuthorization, executionResourceAuthorization,
+import { admitWorkerModels, resolveExecutionRegistry, RunAdmissionApplication, runAdmissionSchema, runDeliveryAdmissionSchema, RunPolicyAuthorization, executionResourceAuthorization, authorizeWorkTargetUse,
   DispatchPolicyAuthorization, pinRunToDelivery, type RunAdmission, type RunCreate, type RunDeliveryAdmission, type RunWorkspaceCustody } from '#engine/index.js';
 import { createLayoutPolicySource } from '#composition/core/policy/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
@@ -64,8 +64,9 @@ export async function createConfiguredDeliveryRun(projectRoot: string, input: Ru
     const command = runAdmissionSchema.parse(fields);
     return await admitConfiguredRun(projectRoot, command, options, async ({ config, layout, principal, path }, replay) => {
       if (!config.execution) throw ErrorRegistry.createError('EXECUTION_NOT_CONFIGURED');
+      const policy = createLayoutPolicySource(layout, userInfo().uid, config.inspection.policyMaxBytes), authorization = new DispatchPolicyAuthorization(policy);
+      await authorizeWorkTargetUse(policy, selectWorkTarget(config.execution)?.id ?? null, command.scopeId, principal); // pinning reads the target
       const git = { ...config.execution.git, ...(await resolveGitWorkTarget(resolve(projectRoot), config.execution, layout)).git, workspaceRoot: await prepareProductDirectory(layout, 'workspaces') };
-      const authorization = new DispatchPolicyAuthorization(createLayoutPolicySource(layout, userInfo().uid, config.inspection.policyMaxBytes));
       const store = await openSqliteAttemptStore(await path(), config.storage.sqlite, 'forbid');
       try {
         return await pinRunToDelivery(store, new GitIntegrationDelivery(git), new GitRunWorkspaceProvider(new GitWorkspaceBroker(git)),

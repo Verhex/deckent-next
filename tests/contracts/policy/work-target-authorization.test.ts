@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { PolicyAuthorizationError, workTargetAttemptAuthorization } from '#engine/index.js';
+import { authorizeWorkTargetUse, PolicyAuthorizationError, workTargetAttemptAuthorization } from '#engine/index.js';
 import type { AttemptIdentity, VerifiedPrincipal } from '#domain/index.js';
 
 // Sol WT-R1: attempt:execute never substitutes for work-target:use on the consumed target; the attempt gate is never bypassed; a
@@ -41,13 +41,22 @@ describe('workTargetAttemptAuthorization (engine)', () => {
     await expect(h.authorization.authorizeIdentity('execute', identity, principal)).rejects.toMatchObject({ code: 'POLICY_DENIED' });
     expect(h.loads()).toBe(0);
   });
-  it('maps adopt and rollback to adopt, leaves other attempt actions to the attempt gate, and is unchanged without a target', async () => {
+  it('maps adopt/rollback to adopt, prepare/deliver integration to use, read/recover-output only for target-reading operations; unchanged without a target', async () => {
     const h = harness(policy('allow', ['adopt']));
     await h.authorization.authorizeIdentity('adopt-integration', identity, principal);
     await h.authorization.authorizeIdentity('rollback-integration', identity, principal);
     await h.authorization.authorizeIdentity('read-output', identity, principal);
     expect(h.loads()).toBe(2);
     await expect(harness(policy('allow')).authorization.authorizeIdentity('adopt-integration', identity, principal)).rejects.toMatchObject({ code: 'POLICY_DENIED' });
+    // Lead WT-R1 extension: prepare/deliver integration always use the target; read/recover-output only where the operation reads it.
+    for (const action of ['prepare-integration', 'deliver-integration'] as const) {
+      await expect(harness(policy('allow', ['adopt'])).authorization.authorizeIdentity(action, identity, principal)).rejects.toMatchObject({ code: 'POLICY_DENIED' });
+    }
+    const reading = workTargetAttemptAuthorization(harness(null).base as never, { async load() { return policy('allow', ['adopt']); } }, 'n1', true);
+    for (const action of ['read-output', 'recover-output'] as const) await expect(reading.authorizeIdentity(action, identity, principal)).rejects.toMatchObject({ code: 'POLICY_DENIED' });
+    await expect(harness(policy(null)).authorization.authorizeIdentity('recover-output', identity, principal)).resolves.toBeUndefined();
+    await expect(authorizeWorkTargetUse({ async load() { return policy('allow', ['adopt']); } }, 'n1', 's', principal)).rejects.toMatchObject({ code: 'POLICY_DENIED' });
+    await expect(authorizeWorkTargetUse({ async load() { throw new Error('never read'); } }, null, 's', principal)).resolves.toBeUndefined();
     const plain = harness(policy(null));
     expect(workTargetAttemptAuthorization(plain.base as never, plain.source, null)).toBe(plain.base);
   });

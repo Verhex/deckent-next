@@ -3,20 +3,20 @@ import { userInfo } from 'node:os';
 import { resolve } from 'node:path';
 import { ErrorRegistry, inspectProductDirectory, type ConfigLoadOptions } from '#platform/index.js';
 import { attemptIdentitySchema, type AttemptIdentity } from '#domain/index.js';
-import { FileArtifactStore, GitWorkspacePatchSource, openSqliteAttemptStore, openSqliteInventoryReader, resolveGitWorkTarget, validateDockerSupervisorProfile } from '#adapters/index.js';
-import { DispatchPolicyAuthorization, WorkspacePatchApplication, type ScopeAccess } from '#engine/index.js';
+import { FileArtifactStore, GitWorkspacePatchSource, openSqliteAttemptStore, openSqliteInventoryReader, resolveGitWorkTarget, selectWorkTarget, validateDockerSupervisorProfile } from '#adapters/index.js';
+import { DispatchPolicyAuthorization, WorkspacePatchApplication, workTargetAttemptAuthorization, type ScopeAccess } from '#engine/index.js';
 import { createLayoutPolicySource } from '#composition/core/policy/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
-export async function workspacePatchContext(root: string, input: unknown, options: ConfigLoadOptions, preparing: boolean, access: ScopeAccess) {
+export async function workspacePatchContext(root: string, input: unknown, options: ConfigLoadOptions, preparing: boolean, access: ScopeAccess, readsTarget = true) {
   const identity = attemptIdentitySchema.parse(input);
   const context = await loadConfiguredScopeContext(root, identity.scopeId, options, access);
   const { config, layout, principal } = context;
-  const policySource = createLayoutPolicySource(layout, userInfo().uid, config.inspection.policyMaxBytes), authorization = new DispatchPolicyAuthorization(policySource);
+  const policy = createLayoutPolicySource(layout, userInfo().uid, config.inspection.policyMaxBytes), authorization = workTargetAttemptAuthorization(new DispatchPolicyAuthorization(policy), policy, selectWorkTarget(config.execution)?.id ?? null, readsTarget);
   await authorization.authorizeIdentity('read-output', identity, principal);
   if (preparing) await authorization.authorizeIdentity('recover-output', identity, principal);
   const artifacts = new FileArtifactStore({ root: await inspectProductDirectory(layout, 'artifacts'), maxBytes: config.artifacts.maxBytes });
-  return { ...context, identity, artifacts, authorization, policySource, verifier: { async verify() { return principal; } } };
+  return { ...context, identity, artifacts, authorization, verifier: { async verify() { return principal; } } };
 }
 export async function prepareConfiguredWorkspacePatch(root: string, input: AttemptIdentity, options: ConfigLoadOptions = {}) {
   try {
@@ -34,7 +34,7 @@ export async function prepareConfiguredWorkspacePatch(root: string, input: Attem
 }
 export async function previewConfiguredWorkspacePatch(root: string, input: AttemptIdentity, options: ConfigLoadOptions = {}) {
   try {
-    const c = await workspacePatchContext(root, input, options, false, 'read');
+    const c = await workspacePatchContext(root, input, options, false, 'read', false);
     const store = await openSqliteInventoryReader(await c.path(), { busyTimeoutMs: c.config.storage.sqlite.busyTimeoutMs });
     try { return await new WorkspacePatchApplication(store, c.artifacts, c.verifier, c.authorization, c.config.artifacts.maxBytes).preview(c.identity); }
     finally { store.close(); }

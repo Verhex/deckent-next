@@ -7,10 +7,11 @@ import { promisify } from 'node:util';
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { adoptConfiguredWorkspaceIntegration, checkConfiguredWorkspaceIntegration, createConfiguredRuntimeClient, deliverConfiguredWorkspaceIntegration,
-  evaluateTask, prepareConfiguredWorkspaceIntegration, prepareConfiguredWorkspacePatch, rollbackConfiguredWorkspaceIntegration,
+  evaluateTask, inspectConfiguredWorkspaceIntegration, prepareConfiguredWorkspaceIntegration, prepareConfiguredWorkspacePatch, previewConfiguredWorkspacePatch,
+  rollbackConfiguredWorkspaceIntegration,
   startConfiguredRuntimeService } from '../../../src/index.js';
 import { executeConfiguredTask } from '../../../src/composition/core/execution/index.js';
-import { createConfiguredRun, reserveConfiguredRunTasks } from '../../../src/composition/core/runs/index.js';
+import { createConfiguredDeliveryRun, createConfiguredRun, reserveConfiguredRunTasks } from '../../../src/composition/core/runs/index.js';
 import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
 import { openConfiguredWorkspaceBroker } from '../../../src/composition/core/workspaces/index.js';
 import { evaluatePolicy, getPolicyVocabulary, type AttemptIdentity } from '#domain/index.js';
@@ -232,7 +233,8 @@ describe.skipIf(process.platform !== 'linux' || !docker)('work target cycle: ref
     expect((await executeConfiguredTask(f.project, identity, f.options)).execution.terminal?.exitCode).toBe(0);
     await prepareConfiguredWorkspacePatch(f.project, identity, f.options);
     const checked = await checkConfiguredWorkspaceIntegration(f.project, identity, f.options);
-    await prepareConfiguredWorkspaceIntegration(f.project, { schemaVersion: 1, commandId: `candidate-${runId}`, identity, proposal: checked.proposal }, f.options);
+    const prepareIntegration = () => prepareConfiguredWorkspaceIntegration(f.project, { schemaVersion: 1, commandId: `candidate-${runId}`, identity, proposal: checked.proposal }, f.options);
+    await prepareIntegration();
     const deliver = () => deliverConfiguredWorkspaceIntegration(f.project, { schemaVersion: 1, commandId: `delivery-${runId}`, identity, integrationCommandId: `candidate-${runId}` }, f.options);
     const evaluate = async () => {
       const opened = await openConfiguredAttemptStore(f.project, f.options);
@@ -240,7 +242,7 @@ describe.skipIf(process.platform !== 'linux' || !docker)('work target cycle: ref
       expect((await evaluateTask(f.project, { schemaVersion: 1, commandId: `evaluation-${runId}`, identity, expectedRevision: revision }, f.options)).evaluation.run.tasks[0]!.phase).toBe('accepted');
     };
     const adopt = (commandId: string) => adoptConfiguredWorkspaceIntegration(f.project, { schemaVersion: 2, commandId, identity, deliveryCommandId: `delivery-${runId}`, targetRef: BASE }, f.options);
-    return { identity, deliver, evaluate, adopt };
+    return { identity, deliver, evaluate, adopt, prepareIntegration };
   }
 
   it('runs a full cycle against the target: live project refs, HEAD, index and config unchanged; adoption advances the base; next Run starts there', async () => {
@@ -249,9 +251,27 @@ describe.skipIf(process.platform !== 'linux' || !docker)('work target cycle: ref
     // Owner WIP in the target checkout is not a precondition (nothing is applied to that checkout).
     await writeFile(join(f.target, 'note.txt'), 'owner-wip-in-target\n');
     const first = await executed(f, 'r1');
+    // Lead 2026-09-30 (WT-R1 extension): every operation that reads or writes the target needs work-target:use; the attempt action
+    // never substitutes for it. Ledger/artifact-only reads (patch preview, integration inspect) do not touch the target.
+    await f.policy(['adopt']);
+    expect(await f.decision('attempt', 'deliver-integration', first.identity.attemptId)).toBe('allow');
+    await expect(first.deliver()).rejects.toMatchObject({ code: 'POLICY_DENIED' });
+    expect(await git(f.target, 'for-each-ref', '--format=%(refname)', 'refs/deckent/')).toBe('');
+    await expect(checkConfiguredWorkspaceIntegration(f.project, first.identity, f.options)).rejects.toMatchObject({ code: 'POLICY_DENIED' });
+    await expect(prepareConfiguredWorkspacePatch(f.project, first.identity, f.options)).rejects.toMatchObject({ code: 'POLICY_DENIED' });
+    await expect(first.prepareIntegration()).rejects.toMatchObject({ code: 'POLICY_DENIED' });
+    expect((await previewConfiguredWorkspacePatch(f.project, first.identity, f.options)).patch.changes.length).toBeGreaterThan(0);
+    expect(await inspectConfiguredWorkspaceIntegration(f.project, { schemaVersion: 1, identity: first.identity, commandId: 'candidate-r1' }, f.options)).toBeDefined();
+    await f.policy(['use', 'adopt']);
     const delivered = await first.deliver();
     expect(delivered).toMatchObject({ status: 'reference-delivered', plan: { baseCommit: f.base } });
     expect(await git(f.target, 'for-each-ref', '--format=%(objectname)', delivered.plan.ref)).toBe(delivered.plan.commit);
+    // A Run pinned to the delivery reads the target to pin its base: use first, before any target Git.
+    const pinned = (commandId: string) => createConfiguredDeliveryRun(f.project, { schemaVersion: 1, commandId, scopeId: 's', runId: 'rv', graph, deliveryCommandId: 'delivery-r1' }, f.options);
+    await f.policy(['adopt']);
+    await expect(pinned('verify-denied')).rejects.toMatchObject({ code: 'POLICY_DENIED' });
+    await f.policy(['use', 'adopt']);
+    expect((await pinned('verify')).admission.run.runId).toBe('rv');
     await first.evaluate();
     // work-target:adopt is checked for adoption and rollback; the attempt grant alone does not move the target's branch.
     await f.policy(['use']);

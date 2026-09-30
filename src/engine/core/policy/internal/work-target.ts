@@ -28,17 +28,28 @@ export function executionResourceAuthorization(source: PolicySource, workTargetI
     await target.authorize('use', workTargetId, scopeId, principal);
   } };
 }
+/** `work-target:use` on a configured target before an operation reads or writes it outside an attempt check (a delivery-pinned Run
+ * reads the target to pin its base). No target id: nothing to check. */
+export async function authorizeWorkTargetUse(source: PolicySource, workTargetId: string | null, scopeId: string, principal: VerifiedPrincipal): Promise<void> {
+  if (workTargetId !== null) await new WorkTargetPolicyAuthorization(source).authorize('use', workTargetId, scopeId, principal);
+}
+/** Target action each attempt action consumes (Sol WT-R1, lead 2026-09-30: no target is consumed without authority, reading it included).
+ * execute clones the target, prepare-integration observes and clones it, deliver-integration observes it and writes its delivery ref:
+ * `use`. Adopt/rollback move its branch: `adopt`. read-output/recover-output consume it only in operations that read the target
+ * (`readsTarget`: patch preparation, integration check/prepare, delivery, adoption); elsewhere they read ledger/artifacts only. */
+const TARGET_ACTIONS: Readonly<Partial<Record<CorePolicyAction<'attempt'>, WorkTargetAction>>> = Object.freeze({ execute: 'use',
+  'prepare-integration': 'use', 'deliver-integration': 'use', 'adopt-integration': 'adopt', 'rollback-integration': 'adopt' });
 /** Attempt authorization when a work target is configured: the attempt action AND the target action it consumes, at every check the
- * attempt authorization already has (the first check and each freshness re-check, e.g. the launch gate of DispatchApplication and the
- * adoption re-check before the effect). `execute` consumes the target (`work-target:use`, Sol WT-R1: attempt:execute never substitutes
- * for it); adopting or rolling back moves the target's branch (`work-target:adopt`). The attempt gate runs first and is never bypassed.
- * The caller passes the id of the target the same operation consumes (one config snapshot). Without a target id: unchanged. */
+ * attempt authorization already has (the first check and each freshness re-check, e.g. the launch gate of DispatchApplication, the
+ * publication re-check of delivery and the adoption re-check before the effect). attempt actions never substitute for the target action;
+ * the attempt gate runs first and is never bypassed. The caller passes the id of the target the same operation consumes (one config
+ * snapshot). Without a target id: unchanged. */
 export function workTargetAttemptAuthorization<A extends DispatchAuthorization & DispatchIdentityAuthorization>(attempts: A, source: PolicySource,
-  workTargetId: string | null): DispatchAuthorization & DispatchIdentityAuthorization {
+  workTargetId: string | null, readsTarget = false): DispatchAuthorization & DispatchIdentityAuthorization {
   if (workTargetId === null) return attempts;
   const target = new WorkTargetPolicyAuthorization(source);
-  const consumed = (action: CorePolicyAction<'attempt'>): WorkTargetAction | null => action === 'execute' ? 'use'
-    : action === 'adopt-integration' || action === 'rollback-integration' ? 'adopt' : null;
+  const consumed = (action: CorePolicyAction<'attempt'>): WorkTargetAction | null => TARGET_ACTIONS[action]
+    ?? (readsTarget && (action === 'read-output' || action === 'recover-output') ? 'use' : null);
   const authorizeIdentity = async (action: CorePolicyAction<'attempt'>, identity: AttemptIdentity, principal: VerifiedPrincipal) => {
     await attempts.authorizeIdentity(action, identity, principal);
     const targetAction = consumed(action);
