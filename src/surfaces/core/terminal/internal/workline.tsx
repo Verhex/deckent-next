@@ -45,7 +45,7 @@ export interface WorklineLabels extends WorklineActionLabels {
   /** Rendered-answer strings (terminal.render.*): narration, footer, code label, status facts. */
   readonly render: AssistantRenderLabels;
   readonly composer: ComposerLabels;
-  /** `/resume`, `/context`, `/new` strings (T-L5c); absent when the surface has no session port. */
+  /** `/resume`, `/context`, `/clear` strings (T-L5c); absent when the surface has no session port. */
   readonly sessions?: ConversationSessionLabels;
   /** `@file` attachment notices (T-L5); without them the notice is language-neutral (path, bytes, refusal code). */
   readonly mentions?: WorklineMentionLabels;
@@ -288,7 +288,7 @@ export function WorklineApp(props: WorklineProps) {
       finally { setBusy(false); }
       return true;
     }
-    if (slash.command === 'resume' || slash.command === 'context' || slash.command === 'new') {
+    if (slash.command === 'resume' || slash.command === 'context' || slash.command === 'clear') {
       setBusy(true);
       try {
         const result = await session.run(slash.command, slash.args, history);

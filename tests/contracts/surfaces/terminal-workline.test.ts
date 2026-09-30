@@ -4,6 +4,7 @@ import { render } from 'ink';
 import { afterEach, describe, expect, it } from 'vitest';
 import { appendLedger, boundAgentHistory, boundChatHistory, compactLedger, EMPTY_LEDGER, WorklineApp, WorklinePaletteProvider, resolveWorklinePalette,
   type WorklineLabels, type WorklineProps, type WorkLedgerEntry } from '#surfaces/core/terminal/index.js';
+import { WORKLINE_SLASH_COMMANDS } from '#surfaces/core/terminal-kit/index.js';
 import type { WorkerObservationReport } from '#engine/index.js';
 
 const labels: WorklineLabels = { banner: 'BANNER', prompt: '> ', statusReady: 'READY', statusBusy: 'BUSY', statusCancelling: 'CANCELLING',
@@ -176,7 +177,7 @@ describe('ledger buffer (Ink Static contract)', () => {
       { role: 'assistant', content: 'old answer', toolCalls: [] }, { role: 'user', content: 'continue' }]);
     await until(() => saved.length === 2, 'saved into the resumed session');
     expect(saved[1]!.sessionId).toBe(earlier.sessionId);
-    view.stdin.write('/new\r'); await until(() => view.stdout.text.includes('NEW-SESSION'), 'new session');
+    view.stdin.write('/clear\r'); await until(() => view.stdout.text.includes('NEW-SESSION'), 'new session');
     view.stdin.write('fresh\r'); await until(() => seen.length === 3, 'third turn');
     expect(seen[2]).toEqual([{ role: 'system', content: 'SYSTEM' }, { role: 'user', content: 'fresh' }]);
     await until(() => saved.length === 3, 'third save');
@@ -299,6 +300,12 @@ describe('workline view rendered by Ink', () => {
   });
 
   // Astra 2054 R3: one serialized drain follows every line kind. Debug output repeats rows, so single execution is proven by port counters.
+  it('registers /clear and no longer registers /new', () => {
+    const names = WORKLINE_SLASH_COMMANDS.map(command => command.name);
+    expect(names).toContain('clear');
+    expect(names).not.toContain('new');
+  });
+
   it('drains the queue past an immediate slash command: text, /status, text all run in order and once', async () => {
     const sent: string[] = []; const gates: Array<() => void> = [];
     const view = mount({ completeTurn: messages => new Promise(resolve => {

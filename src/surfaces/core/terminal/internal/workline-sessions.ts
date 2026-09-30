@@ -50,7 +50,7 @@ function done(entries: readonly WorkLedgerEntry[], resumePicker?: readonly Resum
 const when = (ms: number) => new Date(ms).toISOString().slice(0, 16).replace('T', ' ');
 
 /**
- * The workline's conversation session (T-L5c): a fresh id per view (or per `/new`), the whole history saved after every turn,
+ * The workline's conversation session (T-L5c): a fresh id per view (or per `/clear`), the whole history saved after every turn,
  * `/resume` with no argument opens an arrow-key picker (a typed `/resume <n|id>` still loads one), `/context` for the latest measured prompt. A failed save is shown once
  * and never blocks the conversation.
  */
@@ -70,11 +70,11 @@ export function useConversationSession(port: ConversationSessionPort | undefined
       return [notice('error', labels.saveFailed)];
     }
   }, [labels, port]);
-  const run = useCallback(async (command: 'resume' | 'context' | 'new', args: string,
+  const run = useCallback(async (command: 'resume' | 'context' | 'clear', args: string,
     history: { current: readonly AgentChatMessage[] }): Promise<SessionCommandResult> => {
     if (!labels) return done([]);
     const count = history.current.filter(message => message.role !== 'system').length;
-    if (command === 'new') {
+    if (command === 'clear') {
       history.current = history.current.slice(0, 1); sessionId.current = randomUUID(); context.current = null; compaction.current = null;
       return done([notice('info', labels.started)]);
     }

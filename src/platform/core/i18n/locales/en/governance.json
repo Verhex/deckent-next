@@ -797,7 +797,7 @@
   "error.AUDIT_INTEGRITY": "Audit evidence could not be verified: a record, its row or the sequence of records was altered.",
   "error.AUDIT_CONFLICT": "An audit event with this id already exists with different content; nothing was recorded.",
   "error.AUDIT_UNAVAILABLE": "The audit record could not be written, so the decision was not applied; check the ledger and retry.",
-  "error.RUNTIME_CHAT_TURN_TOO_LARGE": "This conversation is larger than one runtime request ({bytes} > {limit} bytes); nothing was sent. Start a new conversation with /new or write a shorter message.",
+  "error.RUNTIME_CHAT_TURN_TOO_LARGE": "This conversation is larger than one runtime request ({bytes} > {limit} bytes); nothing was sent. Start a new conversation with /clear or write a shorter message.",
   "error.RUNTIME_SERVICE_CORRELATION": "The runtime response does not match the request.",
   "error.RUNTIME_SERVICE_RESPONSE_LIMIT": "The configured runtime response capacity cannot carry this result envelope.",
   "error.RUNTIME_SERVICE_DELIVERY_INVALID": "The runtime result delivery constraint is invalid.",

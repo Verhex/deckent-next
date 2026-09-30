@@ -92,7 +92,7 @@ function statusPayload(tty: ReturnType<typeof ttyState>, config: Record<string, 
 function worklineLabels(locale: Locale, statusLine: string): WorklineLabels {
   return {
     work: workSurfaceLabels(locale),
-    banner: t('terminal.workline.banner', {}, locale), prompt: t('terminal.session.prompt', {}, locale),
+    banner: t('terminal.workline.banner', {}, locale), prompt: '', // workline input has no visible prompt prefix (placeholder instead); line mode keeps terminal.session.prompt
     statusReady: t('terminal.workline.statusReady', {}, locale), statusBusy: t('terminal.workline.statusBusy', {}, locale),
     statusCancelling: t('terminal.workline.statusCancelling', {}, locale), hint: t('terminal.workline.hint', {}, locale),
     roleUser: t('terminal.workline.roleUser', {}, locale), roleAssistant: t('terminal.workline.roleAssistant', {}, locale),

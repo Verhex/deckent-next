@@ -797,7 +797,7 @@
   "error.AUDIT_INTEGRITY": "Denetim kanıtı doğrulanamadı: bir kayıt, satırı ya da kayıt sırası değiştirilmiş.",
   "error.AUDIT_CONFLICT": "Bu kimlikli denetim olayı farklı içerikle zaten var; kayıt yazılmadı.",
   "error.AUDIT_UNAVAILABLE": "Denetim kaydı yazılamadığı için karar uygulanmadı; ledger'ı kontrol edip yeniden deneyin.",
-  "error.RUNTIME_CHAT_TURN_TOO_LARGE": "Bu konuşma tek bir runtime isteğinden büyük ({bytes} > {limit} bayt); hiçbir şey gönderilmedi. /new ile yeni konuşma başlatın ya da daha kısa yazın.",
+  "error.RUNTIME_CHAT_TURN_TOO_LARGE": "Bu konuşma tek bir runtime isteğinden büyük ({bytes} > {limit} bayt); hiçbir şey gönderilmedi. /clear ile yeni konuşma başlatın ya da daha kısa yazın.",
   "error.RUNTIME_SERVICE_CORRELATION": "Runtime yanıtı istekle eşleşmiyor.",
   "error.RUNTIME_SERVICE_RESPONSE_LIMIT": "Yapılandırılmış runtime yanıt kapasitesi sonuç zarfını taşıyamıyor.",
   "error.RUNTIME_SERVICE_DELIVERY_INVALID": "Runtime sonuç teslimi sınırı geçersiz.",
