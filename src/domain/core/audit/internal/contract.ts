@@ -6,6 +6,8 @@ const MCP_REGISTRY_SCOPES = ['managed', 'local', 'project', 'user'] as const;
 /** Versioned audit event contract (general Core audit port, first slice — owner 2026-09-27 q4/q5). */
 export const AUDIT_EVENT_SCHEMA_VERSION = 1;
 export const AUDIT_SHELL_HEAD_MAX_CHARS = 200;
+/** FA-TRACKED-WARN: the most workspace-relative paths one `tracked-files-changed` list names (its count is always the full number). */
+export const AUDIT_TRACKED_PATHS_MAX = 50;
 /** Who the decision was made for: exact issuer and subject; a persona is never part of the record. */
 export const auditPrincipalSchema = z.object({ issuer: identitySchema, subject: identitySchema }).strict().readonly();
 /**
@@ -81,6 +83,15 @@ export const auditSubjectSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('full-access-call'), cell: z.enum(['edit', 'edit-floor', 'shell-read-none', 'shell-read-low', 'shell-narrow-mutating', 'shell-destructive',
     'shell-always-ask', 'shell-other-modify', 'fetch-listed', 'fetch-unlisted', 'mcp-call']), policy: z.enum(['allow', 'require-approval']), raised: z.boolean(),
   company: identitySchema.nullable(), grant: identitySchema, tool: toolRef, call: callRef, summary: auditSummarySchema }).strict(),
+  /**
+   * What a full-access shell call measurably did to the project's git-tracked files (FA-TRACKED-WARN, owner 2026-09-30 option A: warn and
+   * audit, never block): recorded after the effect, next to that call's `full-access-call` event (same call reference), only when it
+   * deleted or overwrote at least one tracked file. Each list keeps its full count and at most `AUDIT_TRACKED_PATHS_MAX` project-relative
+   * paths (edit summaries name paths the same way); the file content is never part of it.
+   */
+  z.object({ kind: z.literal('tracked-files-changed'), tool: toolRef, call: callRef, summary: auditSummarySchema,
+    deleted: z.object({ count: counterSchema, paths: z.array(z.string().min(1).max(4096)).max(AUDIT_TRACKED_PATHS_MAX) }).strict(),
+    overwritten: z.object({ count: counterSchema, paths: z.array(z.string().min(1).max(4096)).max(AUDIT_TRACKED_PATHS_MAX) }).strict() }).strict(),
   /**
    * An applied governed authority change (POLICY-ADMIN P3, `policy.administer@1`): the command and the approval it consumed, who decided
    * it (the delegation bound is that person's authority, I3), the effective revision before and after, the change's size and the digest

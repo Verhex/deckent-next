@@ -104,6 +104,6 @@ function toDelta(event: AgentTurnStreamEvent, targets: ReadonlyMap<string, strin
     case 'tool.output': return { kind: 'output', callId: event.callId, stream: event.stream, text: event.text };
     case 'tool.started': return { kind: 'tool', phase: 'started', callId: event.callId, name: event.name, target: event.target, status: null, ms: null };
     case 'tool.finished': return { kind: 'tool', phase: 'finished', callId: event.callId, name: event.name, target: targets.get(event.callId) ?? null,
-      status: event.status, ms: event.ms, ...(event.cleanup !== undefined ? { cleanup: event.cleanup } : {}) };
+      status: event.status, ms: event.ms, ...(event.cleanup !== undefined ? { cleanup: event.cleanup } : {}), ...(event.trackedChanges !== undefined ? { trackedChanges: event.trackedChanges } : {}) };
   }
 }

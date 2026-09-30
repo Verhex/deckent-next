@@ -21,7 +21,9 @@ type ToolDelta = Extract<TurnDelta, { kind: 'tool' }>;
  * arrives on a host shell call; the row shows a suffix for `group-ended`/`unverified` and nothing for `clean` or absent.
  * `summary` (TL-B D2) is set only for a finished read-class call whose own result text matched a known shape. */
 export type ToolUnit = Readonly<{ kind: 'tool'; name: string; target: string | null; status: NonNullable<ToolDelta['status']>; ms: number;
-  cleanup?: ToolDelta['cleanup']; summary?: ToolResultSummary }>;
+  cleanup?: ToolDelta['cleanup']; summary?: ToolResultSummary;
+  /** FA-TRACKED-WARN: a full-access shell call deleted or overwrote git-tracked files (counts; the result text names them). */
+  trackedChanges?: ToolDelta['trackedChanges'] }>;
 /** The running call; `output` is the sanitized tail of its streamed output (T-L4 slice 3c-ii), shown live and never printed after. */
 export type ActiveTool = Readonly<{ callId: string; name: string; target: string | null; startedAtMs: number; output: string }>;
 /** Characters of a running call's streamed output kept for the live region. */
@@ -205,7 +207,8 @@ export function renderAssistantStream(state: AssistantStreamState, delta: TurnDe
     const summary = state.toolLineSummaries.get(delta.callId) ?? null;
     const unit: ToolUnit = Object.freeze({ kind: 'tool', name: delta.name, target, status: delta.status ?? 'error',
       ms: delta.ms ?? Math.max(0, nowMs - (state.activeTool?.startedAtMs ?? nowMs)),
-      ...(delta.cleanup !== undefined ? { cleanup: delta.cleanup } : {}), ...(summary !== null ? { summary } : {}) });
+      ...(delta.cleanup !== undefined ? { cleanup: delta.cleanup } : {}), ...(summary !== null ? { summary } : {}),
+      ...(delta.trackedChanges !== undefined ? { trackedChanges: delta.trackedChanges } : {}) });
     const targets = new Map(state.toolLineTargets), summaries = new Map(state.toolLineSummaries);
     targets.delete(delta.callId); summaries.delete(delta.callId);
     return step(Object.freeze({ ...base, activeTool: null, toolLineTargets: targets, toolLineSummaries: summaries }), [...pending, ...text, unit]);

@@ -67,6 +67,20 @@ describe('terminal agent turn stream', () => {
       { kind: 'tool', phase: 'finished', callId: 'c1', name: 'run_shell', target: 'sleep 5 & echo', status: 'ok', ms: 12, cleanup: 'group-ended' });
   });
 
+  // FA-TRACKED-WARN (owner 2026-09-30): the same additive pattern for `trackedChanges` — carried when the event has it, absent otherwise.
+  it("carries tool.finished's trackedChanges onto the delta when present, and omits the key when absent", async () => {
+    const p = ports(async (command, onEvent) => {
+      onEvent({ kind: 'tool.started', callId: 'c1', name: 'run_shell', target: 'rm CHANGELOG.md' });
+      onEvent({ kind: 'tool.finished', callId: 'c1', name: 'run_shell', status: 'ok', ms: 7, bytes: 3, trackedChanges: { deleted: 1, overwritten: 0 } });
+      onEvent({ kind: 'tool.started', callId: 'c2', name: 'run_shell', target: 'ls' });
+      onEvent({ kind: 'tool.finished', callId: 'c2', name: 'run_shell', status: 'ok', ms: 2, bytes: 3 });
+      return result({ turnId: command.turnId, answer: null });
+    });
+    const finished = (await collect(streamTerminalAgentTurn(input, p.value))).filter(delta => delta.kind === 'tool' && delta.phase === 'finished');
+    expect(finished).toEqual([{ kind: 'tool', phase: 'finished', callId: 'c1', name: 'run_shell', target: 'rm CHANGELOG.md', status: 'ok', ms: 7, trackedChanges: { deleted: 1, overwritten: 0 } },
+      { kind: 'tool', phase: 'finished', callId: 'c2', name: 'run_shell', target: 'ls', status: 'ok', ms: 2 }]);
+  });
+
   // D2 (TL-B, analysis §2/§4): the engine's `target` (path-first for grep/glob, `call-approvals.ts` displayTarget bug)
   // is what the C12 approval resource must stay bound to; the tool LINE shows the pattern instead, derived by the terminal
   // renderer from the assistant message's own recorded tool-call arguments (a `message` delta before `tool.started`), never

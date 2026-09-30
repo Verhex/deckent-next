@@ -22,6 +22,9 @@ export type AssistantRenderLabels = Readonly<{
   toolSandboxNone?: string;
   toolSandboxDegraded?: string;
   toolCleanup?: Readonly<Record<Exclude<NonNullable<ToolUnit['cleanup']>, 'clean'>, string>>;
+  /** FA-TRACKED-WARN: suffix of a full-access shell call that deleted or overwrote git-tracked files, `{deleted}`/`{overwritten}` placeholders,
+   * shown in the warning tone. Optional until the catalog carries `terminal.render.toolTracked` (see `i18n-delta.json`). */
+  toolTracked?: string;
   /** Result summary words for a finished read-class call (TL-B D2): `{shown}`/`{total}`/`{count}` placeholders. Optional
    * until the catalog carries `terminal.render.toolSummary.*` (see `i18n-delta.json`); the row falls back to short,
    * language-neutral text meanwhile (the same devolution `toolCleanup` used before its catalog keys were wired). */
@@ -56,6 +59,8 @@ const NEUTRAL_COMPACTION_CANCELLED = 'Summarizing was cancelled before it finish
 const NEUTRAL_TOOL_SUMMARY: NonNullable<AssistantRenderLabels['toolSummary']> = { lines: '{shown}/{total} lines', linesMore: '{shown}/{total} lines, more available',
   headings: '{shown}/{total} headings', headingsMore: '{shown}/{total} headings, more available', matches: '{count} matches', matchesMore: '{count}+ matches',
   entries: '{count} entries' };
+// FA-TRACKED-WARN: equals the proposed `en` catalog value.
+const NEUTRAL_TOOL_TRACKED = 'tracked files: {deleted} deleted, {overwritten} overwritten';
 const seconds = (ms: number, digits = 1) => (ms / 1000).toFixed(digits);
 const tokenText = (count: number, approximate: boolean) => `${approximate ? '~' : ''}${count}`;
 /** The tool line's result summary text (TL-B D2), or `null` when the finished call carries none. */
@@ -111,14 +116,17 @@ export function AssistantUnitRow({ unit, labels }: { readonly unit: AssistantUni
     // name fits beside the tail, the tail takes its own wrapped line under the (truncated) command.
     const tone = failed ? palette.error : palette.muted;
     const head = `${glyphs.separator} ${toolText(unit, labels)}`, suffix = ` ${glyphs.separator} ${tail}`;
-    const room = width - cells(suffix);
+    // FA-TRACKED-WARN: the durable, typed mark of tracked files a full-access call deleted or overwrote, after the tail in the warning tone.
+    const trackedText = unit.trackedChanges ? fillTemplate(labels.toolTracked ?? NEUTRAL_TOOL_TRACKED, unit.trackedChanges) : null;
+    const tracked = trackedText ? <Text {...palette.warning}>{` ${glyphs.separator} ${trackedText}`}</Text> : null;
+    const room = width - cells(suffix) - (trackedText ? cells(` ${glyphs.separator} ${trackedText}`) : 0);
     if (room >= cells(`${glyphs.separator} ${unit.name}${glyphs.ellipsis}`)) {
-      return <Box paddingLeft={INDENT}><Text {...tone} wrap="truncate-end">{truncateEnd(head, room, glyphs.ellipsis)}{suffix}</Text></Box>;
+      return <Box paddingLeft={INDENT}><Text {...tone} wrap="truncate-end">{truncateEnd(head, room, glyphs.ellipsis)}{suffix}{tracked}</Text></Box>;
     }
     return (
       <Box flexDirection="column" paddingLeft={INDENT}>
         <Text {...tone} wrap="truncate-end">{head}</Text>
-        <Text {...tone} wrap="wrap">{glyphs.separator} {tail}</Text>
+        <Text {...tone} wrap="wrap">{glyphs.separator} {tail}{tracked}</Text>
       </Box>
     );
   }
