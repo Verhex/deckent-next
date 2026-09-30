@@ -25,7 +25,8 @@ export const runtimeServiceDescriptionInputSchema = z.object({}).strict().readon
 export const runtimeServiceDeliverySchema = z.object({ maxResultBytes: z.number().int().positive().safe() }).strict().readonly();
 const invocationOperation = (operation: RuntimeServiceOperation): boolean => operation === 'invokeModel' || operation === 'invokeModelStream' || operation === 'inspectModelInvocation'
   || operation === 'purgeModelInvocationContent' || operation === 'cancelModelInvocation';
-const boundedResultOperation = (operation: RuntimeServiceOperation): boolean => invocationOperation(operation)
+/** Operations whose request carries a `delivery` result bound (the server requires it; the client always sends one). */
+export const isRuntimeServiceBoundedResultOperation = (operation: RuntimeServiceOperation): boolean => invocationOperation(operation)
   || operation === 'renewApproval' || operation === 'listApprovals' || operation === 'inspectApproval' || operation === 'decideApproval'
   || operation === 'inspectProviderSpendAccount' || operation === 'auditProviderSpendAccount' || operation === 'chatTurn' || operation === 'cancelChatTurn'
   || isRuntimeServiceWorkspaceFileOperation(operation) || isRuntimeServiceEffectOperation(operation) || isRuntimeServicePermissionModeOperation(operation)
@@ -71,7 +72,7 @@ export const runtimeOperationInspectionSchema = z.object({ schemaVersion: z.lite
 export const runtimeServiceRequestSchema = z.object({ schemaVersion: z.literal(RUNTIME_SERVICE_SCHEMA_VERSION), requestId: identitySchema,
   operation: runtimeServiceOperationSchema, input: z.unknown(), delivery: runtimeServiceDeliverySchema.optional(),
 }).strict().refine(value => Object.hasOwn(value, 'input'), { path: ['input'], message: 'RUNTIME_SERVICE_INPUT_REQUIRED' }).superRefine((value, context) => {
-  if (boundedResultOperation(value.operation)) {
+  if (isRuntimeServiceBoundedResultOperation(value.operation)) {
     if (!Object.hasOwn(value, 'delivery') || value.delivery === undefined) {
       context.addIssue({ code: z.ZodIssueCode.custom, path: ['delivery'], message: 'RUNTIME_SERVICE_DELIVERY_REQUIRED' });
     }

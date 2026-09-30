@@ -1,5 +1,4 @@
-import { RUNTIME_SERVICE_LIFECYCLE_VERSIONS, RUNTIME_SERVICE_SCHEMA_VERSION, isRuntimeServiceEffectOperation, isRuntimeServicePermissionModeOperation, isRuntimeServiceScratchOperation,
-  isRuntimeServiceSecretOperation, acceptSecretChangeResult, prepareSecretChange, type RuntimeServiceLifecycleVersion, type RuntimeServiceRequest,
+import { RUNTIME_SERVICE_LIFECYCLE_VERSIONS, RUNTIME_SERVICE_SCHEMA_VERSION, isRuntimeServiceBoundedResultOperation, acceptSecretChangeResult, prepareSecretChange, type RuntimeServiceLifecycleVersion, type RuntimeServiceRequest,
   type SecretChangeResult, type SecretDeleteCommand, type SecretSetCommand } from '#engine/index.js';
 import { socketOptions } from './socket-options.js';
 import { randomUUID } from 'node:crypto';
@@ -186,11 +185,7 @@ export function createConfiguredRuntimeClient(projectRoot: string, options: Conf
         throw error;
       });
       const requestId = randomUUID();
-      const capacity = operation === 'renewApproval' || operation === 'listApprovals' || operation === 'inspectApproval' || operation === 'decideApproval' || operation === 'invokeModel' || operation === 'invokeModelStream' || operation === 'inspectModelInvocation' || operation === 'purgeModelInvocationContent'
-        || operation === 'cancelModelInvocation' || operation === 'inspectProviderSpendAccount' || operation === 'auditProviderSpendAccount'
-        || operation === 'chatTurn' || operation === 'cancelChatTurn' || operation === 'findWorkspaceFiles' || operation === 'attachWorkspaceFile'
-        || isRuntimeServiceEffectOperation(operation) || isRuntimeServicePermissionModeOperation(operation) || isRuntimeServiceScratchOperation(operation)
-        || isRuntimeServiceSecretOperation(operation)
+      const capacity = isRuntimeServiceBoundedResultOperation(operation)
         ? { delivery: { maxResultBytes: runtimeServiceResultCapacity(requestId, config.service.responseMaxBytes, delivery?.maxResultBytes) } } : {};
       const request = { schemaVersion: version, requestId, operation, input, ...capacity } as RuntimeServiceRequest;
       // A conversation too large for one request is refused before anything is sent, by name (Astra 2106 R2), never as a transport fault.
@@ -224,13 +219,10 @@ export function createConfiguredRuntimeClient(projectRoot: string, options: Conf
       throw last;
     }
   };
-  // The closed protocol vocabulary and the precisely typed server operation map describe the same methods.
+  // The closed protocol vocabulary and the precisely typed server operation map describe the same methods: every operation without a typed
+  // method below — the lifecycle pair and the bounded-result ones are typed, except the approval operations.
   const operations = Object.fromEntries(runtimeServiceOperationSchema.options.filter(operation => operation !== 'describeService' && operation !== 'shutdownService'
-    && operation !== 'invokeModel' && operation !== 'invokeModelStream' && operation !== 'inspectModelInvocation' && operation !== 'purgeModelInvocationContent'
-    && operation !== 'cancelModelInvocation' && operation !== 'inspectProviderSpendAccount' && operation !== 'auditProviderSpendAccount'
-    && operation !== 'chatTurn' && operation !== 'cancelChatTurn' && operation !== 'findWorkspaceFiles' && operation !== 'attachWorkspaceFile'
-    && !isRuntimeServiceEffectOperation(operation) && !isRuntimeServicePermissionModeOperation(operation) && !isRuntimeServiceScratchOperation(operation)
-    && !isRuntimeServiceSecretOperation(operation)).map(operation =>
+    && (!isRuntimeServiceBoundedResultOperation(operation) || operation === 'renewApproval' || operation === 'listApprovals' || operation === 'inspectApproval' || operation === 'decideApproval')).map(operation =>
     [operation, (input: unknown, delivery?: RuntimeServiceDelivery) => call(operation, input, delivery)])) as ConfiguredRuntimeOperations;
   return Object.freeze({ ...operations,
     async chatTurn(input: ChatTurnCommand, onEvent: (event: AgentTurnStreamEvent) => void, signal?: AbortSignal) {
