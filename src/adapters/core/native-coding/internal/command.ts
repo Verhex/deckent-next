@@ -13,7 +13,8 @@ const modelArgument = argument.refine(value => value.length <= 256 && !value.sta
  * the CLI may use on its own (declared, never passed as flags). Admission checks all of them against the ledger catalog. */
 const pinnedModelSchema = z.object({ channelId: z.string().min(1).max(256).refine(value => value.trim() === value), modelId: modelArgument,
   auxiliaryModelIds: z.array(modelArgument).max(8).readonly() }).strict().readonly();
-export const nativeCodingInvocationSchema = z.object({
+/** Field shape shared with the K3 template (`template.ts`), which omits the per-task fields. */
+export const nativeCodingInvocationFields = z.object({
   schemaVersion: z.union([z.literal(2), z.literal(3), z.literal(4)]), maxTurns: z.number().int().positive().safe().optional(), provider: z.enum(['codex', 'claude', 'cursor']),
   cliVersion: z.string().trim().min(1).max(128).regex(/^[\w .()+-]+$/),
   discovery: z.object({ schemaVersion: z.literal(1), mode: z.enum(['disabled', 'repository']),
@@ -23,7 +24,8 @@ export const nativeCodingInvocationSchema = z.object({
   model: z.union([modelArgument, pinnedModelSchema]),
   prompt: argument.refine(value => Buffer.byteLength(value, 'utf8') <= 65_536).optional(),
   composition: nativePromptCompositionSchema.optional(),
-}).strict().refine(value => value.schemaVersion >= 3 || value.maxTurns === undefined).refine(value => (value.prompt !== undefined) !== (value.composition !== undefined))
+}).strict();
+export const nativeCodingInvocationSchema = nativeCodingInvocationFields.refine(value => value.schemaVersion >= 3 || value.maxTurns === undefined).refine(value => (value.prompt !== undefined) !== (value.composition !== undefined))
   .refine(value => (value.schemaVersion === 4) === (typeof value.model === 'object')).readonly();
 export type NativeCodingInvocation = z.infer<typeof nativeCodingInvocationSchema>;
 

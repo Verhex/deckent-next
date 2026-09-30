@@ -12,7 +12,7 @@ import type { ModelCatalogReader } from './catalog.js';
  */
 export type WorkerModelAdmissionCode = 'WORKER_MODEL_UNPINNED' | 'WORKER_MODEL_ALIAS_REFUSED' | 'WORKER_CHANNEL_NOT_ACTIVE'
   | 'WORKER_CHANNEL_MISMATCH' | 'WORKER_MODEL_UNKNOWN' | 'WORKER_MODEL_RETIRED' | 'WORKER_MODEL_NOT_CURRENT' | 'WORKER_MODEL_NOT_ACTIVE'
-  | 'WORKER_MODEL_CLI_TOO_OLD';
+  | 'WORKER_MODEL_CLI_TOO_OLD' | 'WORKER_MODEL_BINDING_MISMATCH' | 'WORKER_EFFORT_UNSUPPORTED';
 export interface WorkerModelAdmissionDetail {
   readonly taskId: string; readonly channelId: string | null; readonly modelId: string | null;
   readonly exactModelId?: string; readonly minCliVersion?: string; readonly cliVersion?: string | null;
@@ -27,7 +27,7 @@ const taskSchema = z.object({ taskId: z.string(), profile: z.object({ parameters
 const today = (nowMs: number) => new Date(nowMs).toISOString().slice(0, 10);
 
 async function checkModel(reader: ModelCatalogReader, scopeId: string, taskId: string, provider: string, cliVersion: string | null,
-  channelId: string, modelId: string, nowMs: number): Promise<void> {
+  channelId: string, modelId: string, nowMs: number): Promise<ModelCatalogModelRecord> {
   const refuse = (code: WorkerModelAdmissionCode, extra: Partial<WorkerModelAdmissionDetail> = {}): never => {
     throw new WorkerModelAdmissionError(code, Object.freeze({ taskId, channelId, modelId, ...extra }));
   };
@@ -49,10 +49,17 @@ async function checkModel(reader: ModelCatalogReader, scopeId: string, taskId: s
       refuse('WORKER_MODEL_CLI_TOO_OLD', { minCliVersion: entry.model.minCliVersion, cliVersion: observed });
     }
   }
+  return entry;
 }
+/** K3 work input as recorded in the Run graph: the requested pin and optional effort of a task compiled from a template. */
+export type WorkerTaskRequest = Readonly<{ id: string; workInput?: Readonly<{ model: Readonly<{ channelId: string; modelId: string; auxiliaryModelIds: readonly string[] }>; effort?: string | undefined }> | undefined }>;
 
-/** Throws the first typed refusal in task order; resolves when every worker task may be admitted. Reads only, writes nothing. */
-export async function admitWorkerModels(tasksInput: readonly unknown[], scopeId: string, reader: ModelCatalogReader, nowMs: number): Promise<void> {
+/** Throws the first typed refusal in task order; resolves when every worker task may be admitted. Reads only, writes nothing.
+ * `requests` (the Run graph tasks) add the K3 checks: a compiled pin must equal the requested one exactly, and a requested effort must be
+ * one the catalog declares for the main model. The effort is recorded in the Run graph; no CLI adapter passes it yet. */
+export async function admitWorkerModels(tasksInput: readonly unknown[], scopeId: string, reader: ModelCatalogReader, nowMs: number,
+  requests: readonly WorkerTaskRequest[] = []): Promise<void> {
+  const requested = new Map(requests.map(task => [task.id, task.workInput]));
   for (const input of tasksInput) {
     const task = taskSchema.parse(input);
     const raw = task.profile.parameters.nativeSubscription;
@@ -61,9 +68,15 @@ export async function admitWorkerModels(tasksInput: readonly unknown[], scopeId:
     if (!subscription.success || !subscription.data.model) {
       throw new WorkerModelAdmissionError('WORKER_MODEL_UNPINNED', Object.freeze({ taskId: task.taskId, channelId: null, modelId: null }));
     }
-    const { provider, preflight, model } = subscription.data;
+    const { provider, preflight, model } = subscription.data; const request = requested.get(task.taskId);
+    const detail = Object.freeze({ taskId: task.taskId, channelId: model.channelId, modelId: model.modelId });
+    if (request && JSON.stringify([request.model.channelId, request.model.modelId, request.model.auxiliaryModelIds])
+      !== JSON.stringify([model.channelId, model.modelId, model.auxiliaryModelIds])) throw new WorkerModelAdmissionError('WORKER_MODEL_BINDING_MISMATCH', detail);
     for (const modelId of [model.modelId, ...model.auxiliaryModelIds]) {
-      await checkModel(reader, scopeId, task.taskId, provider, preflight?.cliVersion ?? null, model.channelId, modelId, nowMs);
+      const entry = await checkModel(reader, scopeId, task.taskId, provider, preflight?.cliVersion ?? null, model.channelId, modelId, nowMs);
+      if (modelId === model.modelId && request?.effort !== undefined && !(entry.model.efforts as readonly string[]).includes(request.effort)) {
+        throw new WorkerModelAdmissionError('WORKER_EFFORT_UNSUPPORTED', detail);
+      }
     }
   }
 }

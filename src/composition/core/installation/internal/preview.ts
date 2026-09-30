@@ -1,5 +1,5 @@
 import { resolve } from 'node:path';
-import { registerProviderConfig, readLocalOsIdentity, resolveDockerTaskProfile } from '#adapters/index.js';
+import { registerProviderConfig, readLocalOsIdentity, resolveDockerTaskProfile, isNativeCodingTemplate, nativeCodingTemplateBase } from '#adapters/index.js';
 import { validateInstalledProcessExitEvaluator } from '#capabilities/index.js';
 import { InstallationPreviewApplication, InstallationProfileError, type InstallationPreviewChoices } from '#engine/index.js';
 import { immutableJsonObjectSchema, type JsonObject } from '#domain/index.js';
@@ -32,7 +32,7 @@ export async function prepareSuppliedInstallation(projectRoot: string, supplied:
         bootstrapConfigPath: layout.bootstrapConfigPath }, paths: inspectProductLayout(layout).resources };
     },
     validateProfile(profile) {
-      const resolved = resolveDockerTaskProfile(profile);
+      const resolved = resolveDockerTaskProfile(isNativeCodingTemplate(profile) ? nativeCodingTemplateBase(profile) : profile); // K3 template image
       return { imageId: resolved.options.imageId };
     },
     validateEvaluator: validateInstalledProcessExitEvaluator,
