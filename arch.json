@@ -534,7 +534,8 @@
       "dependencies": [
         "src/domain/core/attempt",
         "src/domain/core/primitives",
-        "src/domain/core/run"
+        "src/domain/core/run",
+        "src/domain/core/worker-event"
       ],
       "plan": "CONTRACT"
     },
@@ -603,7 +604,8 @@
         "src/engine/core/policy",
         "src/engine/core/scheduling",
         "src/platform/core/clock",
-        "src/engine/core/workspaces"
+        "src/engine/core/workspaces",
+        "src/engine/core/worker-observation"
       ],
       "plan": "CONTRACT"
     },
@@ -654,7 +656,9 @@
         "src/engine/core/authentication",
         "src/engine/core/dispatch",
         "src/engine/core/runs",
-        "src/engine/core/supervisor"
+        "src/engine/core/supervisor",
+        "src/domain/core/worker-event",
+        "src/engine/core/worker-observation"
       ],
       "plan": "CONTRACT"
     },
@@ -1385,7 +1389,8 @@
         "src/engine/core/dispatch",
         "src/capabilities/core/artifacts",
         "src/domain/core/worker-event",
-        "src/domain/core/principal"
+        "src/domain/core/principal",
+        "src/domain/core/run"
       ],
       "plan": "EXECUTION"
     },
