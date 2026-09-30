@@ -1537,7 +1537,8 @@
       "dependencies": [
         "src/domain/core/approval",
         "src/engine/core/approval",
-        "src/adapters/core/sqlite-ledger"
+        "src/adapters/core/sqlite-ledger",
+        "src/platform/core/managed-files"
       ],
       "plan": "SECURITY"
     },

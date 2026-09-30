@@ -10,8 +10,7 @@ import { agentAuthorityPaths, agentProductStateDeny, agentShellHardFloor, agentW
   OPENAI_CHAT_ENABLE_THINKING_CAPABILITY, OPENAI_CHAT_TOOL_CALLS_CAPABILITY, openScratchSession, projectEditArea, readTerminalChatConfig, readTerminalScratchConfig,
   readTerminalFetchConfig, FETCH_URL_TOOL_SPEC, SYSTEM_FETCH_TRANSPORT, readTerminalShellConfig, shellSandboxCapabilities, RUN_SHELL_TOOL_SPEC, SCRATCH_TOOL_SPECS, scratchSessionKey, registerProviderConfig, createScratchActivity,
   isWriteApprovalFloored, shippedShellSandboxes, McpClientPool, type HttpFetchTransport, type LocalPeerIdentity,
-  sandboxWriteSetRoot, type RuntimeServiceTurnChannel, type ScratchActivity, type ShellSandboxFactory, type WorkspaceEditArea } from '#adapters/index.js';
-import { dropFullPreview, keepFullPreview } from './preview.js';
+  sandboxWriteSetRoot, dropFullPreview, keepFullPreview, type RuntimeServiceTurnChannel, type ScratchActivity, type ShellSandboxFactory, type WorkspaceEditArea } from '#adapters/index.js';
 import { createAgentShell } from './shell.js';
 import { createAgentFetch } from './fetch.js';
 import { createAgentMcp } from './mcp.js';

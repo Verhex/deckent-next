@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, expect, it } from 'vitest';
-import { sweepFullPreviews } from '#composition/core/agent-turn/index.js';
+import { sweepFullPreviews } from '#adapters/index.js';
 import { APPROVAL_PREVIEW_MAX_BYTES, boundApprovalPreview } from '#engine/index.js';
 import { resolveProductLayout } from '#platform/index.js';
 
