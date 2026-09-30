@@ -51,13 +51,16 @@ export async function listBase(lease: GitWorkspaceLease, options: GitWorkspaceOp
   const entries: BaseListing = new Map();
   for (const entry of decode(listing).split('\0').filter(Boolean)) {
     const tab = entry.indexOf('\t'); const path = entry.slice(tab + 1);
-    const match = /^(\d{6}) (blob|commit) ([a-f0-9]{40}|[a-f0-9]{64}) +(-|\d+)$/u.exec(entry.slice(0, tab));
+    const match = /^(\d{6}) (blob|commit) ([a-f0-9]{40}|[a-f0-9]{64}) +(-|BAD|\d+)$/u.exec(entry.slice(0, tab));
     if (!match) throw new WorkspacePatchError('PATCH_UNSAFE');
     const [, mode, type, oid, sizeText] = match as unknown as [string, string, string, string, string];
     budget.entry();
     if (isPatchExcluded(path)) continue;
     budget.path(path);
     if (type !== 'blob' || !['100644', '100755'].includes(mode)) throw new WorkspacePatchError('PATCH_UNSUPPORTED');
+    // Git ls-tree -l can succeed while a blob is unavailable (for example an unfetched
+    // promisor object with lazy fetching disabled). BAD is its size sentinel, not tree corruption.
+    if (sizeText === 'BAD') throw new WorkspacePatchError('PATCH_UNAVAILABLE');
     const size = Number(sizeText);
     if (!Number.isSafeInteger(size) || size < 0) throw new WorkspacePatchError('PATCH_UNSAFE');
     entries.set(path, Object.freeze({ mode: mode as PatchFile['mode'], oid, size }));

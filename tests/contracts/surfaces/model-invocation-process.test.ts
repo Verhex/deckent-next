@@ -22,13 +22,34 @@ import { createPricedProviderTls, fixtureBudget, pricedProviderDefinition, reply
 const execute = promisify(execFile), roots: string[] = [], servers: Server[] = [], runtimeProcesses: ChildProcess[] = [], clientProcesses: ChildProcess[] = [],
   heldReleases: (() => void)[] = [];
 const sdk = resolve('dist/index.js'), cli = resolve('dist/composition/core/cli/internal/entry.js'), mcp = resolve('dist/composition/core/mcp/internal/entry.js');
+// CI-FIX / STARTUP-COST: opt-in, content-free phase evidence. Per-operation deadlines stay unchanged.
+const phaseClock = performance.now();
+function phaseDone(phase: string, started: number) {
+  if (process.env.DECKENT_TEST_STARTUP_COST === '1') console.error('STARTUP-COST', JSON.stringify({ phase,
+    elapsedMs: Math.round(performance.now() - started), sinceStartMs: Math.round(performance.now() - phaseClock) }));
+}
+async function measured<T>(phase: string, action: () => Promise<T>): Promise<T> {
+  const started = performance.now();
+  try { return await action(); } finally { phaseDone(phase, started); }
+}
+function timedExecute(...args: Parameters<typeof execute>) {
+  return measured(args[1]?.includes(sdk) ? 'sdk-client' : 'cli-client', async () => {
+    const output = await execute(...args);
+    if (process.env.DECKENT_TEST_STARTUP_COST === '1') {
+      for (const line of String(output.stderr).split('\n')) if (line.startsWith('STARTUP-COST ')) console.error(line);
+    }
+    return { stdout: String(output.stdout), stderr: String(output.stderr) };
+  });
+}
 const sqlite = { busyTimeoutMs: 1_000, journalMode: 'delete' as const, durability: 'full' as const };
 afterEach(async () => {
+  const started = performance.now();
   for (const release of heldReleases.splice(0)) release();
   for (const child of clientProcesses.splice(0)) await terminate(child);
   for (const child of runtimeProcesses.splice(0)) await stopRuntime(child);
   clearConfigCache(); await Promise.all(servers.splice(0).map(server => new Promise<void>(done => server.close(() => done()))));
   await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true })));
+  phaseDone('cleanup', started);
 });
 async function bounded<T>(promise: Promise<T>, label: string, milliseconds = 10_000): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -41,12 +62,15 @@ async function terminate(child: ChildProcess): Promise<void> {
   await bounded(new Promise<void>(resolve => child.once('exit', () => resolve())), 'CLIENT_EXIT_TIMEOUT');
 }
 async function stopRuntime(child: ChildProcess): Promise<void> {
+  const started = performance.now();
   if (child.exitCode === null && child.signalCode === null) {
     child.kill('SIGTERM');
     await bounded(new Promise<void>(resolve => child.once('exit', () => resolve())), 'RUNTIME_STOP_TIMEOUT');
   }
+  phaseDone('runtime-stop', started);
 }
 async function startRuntime(project: string, env: Record<string, string>): Promise<ChildProcess> {
+  const started = performance.now();
   const child = spawn(process.execPath, [cli, 'runtime', 'serve', '--json'], { cwd: project, env, stdio: ['ignore', 'pipe', 'pipe'] });
   runtimeProcesses.push(child); let stderr = '', buffer = '';
   child.stderr!.on('data', chunk => { stderr += String(chunk); });
@@ -60,6 +84,7 @@ async function startRuntime(project: string, env: Record<string, string>): Promi
       }
     });
   }), 'RUNTIME_READY_TIMEOUT');
+  phaseDone('runtime-ready', started);
   return child;
 }
 async function waitFor(check: () => boolean, label: string): Promise<void> {
@@ -71,12 +96,14 @@ async function waitFor(check: () => boolean, label: string): Promise<void> {
 }
 const sdkProgram = `
 import { readFile } from 'node:fs/promises'; import { pathToFileURL } from 'node:url';
+const importStarted=performance.now();
 const [entry,operation,project,inputPath]=process.argv.slice(1),api=await import(pathToFileURL(entry).href),input=JSON.parse(await readFile(inputPath,'utf8'));
+if(process.env.DECKENT_TEST_STARTUP_COST==='1')process.stderr.write('STARTUP-COST '+JSON.stringify({phase:'sdk-import',elapsedMs:Math.round(performance.now()-importStarted)})+'\\n');
 try { const value=operation==='audit-spending'?await api.auditProviderSpendAccount(project,input,{env:process.env}):operation==='spending'?await api.inspectProviderSpendAccount(project,input,{env:process.env}):operation==='purge'?await api.purgeModelInvocationContent(project,input,{env:process.env}):operation==='invoke'?await api.invokeModel(project,input,{env:process.env}):await api.inspectModelInvocation(project,input,{env:process.env});
 process.stdout.write(JSON.stringify({ok:true,value})); } catch(error){ process.stdout.write(JSON.stringify({ok:false,code:error?.code??'UNKNOWN'})); }
 `;
 async function callSdk<T>(project: string, env: Record<string, string>, operation: 'invoke' | 'inspect' | 'purge' | 'spending' | 'audit-spending', inputPath: string) {
-  const output = await execute(process.execPath, ['--input-type=module', '-e', sdkProgram, sdk, operation, project, inputPath],
+  const output = await timedExecute(process.execPath, ['--input-type=module', '-e', sdkProgram, sdk, operation, project, inputPath],
     { cwd: project, env, timeout: 10_000, maxBuffer: 1_048_576 });
   return JSON.parse(output.stdout) as { ok: true; value: T } | { ok: false; code: string };
 }
@@ -85,16 +112,16 @@ async function callMcp(project: string, env: Record<string, string>, name: strin
   const diagnostics: Buffer[] = []; transport.stderr?.on('data', chunk => diagnostics.push(Buffer.from(chunk)));
   const client = new Client({ name: 'model-invocation-process', version: '1' });
   try {
-    await bounded(client.connect(transport), 'MCP_CONNECT_TIMEOUT');
+    await measured('mcp-ready', () => bounded(client.connect(transport), 'MCP_CONNECT_TIMEOUT'));
     if (inspectTools) {
     const tool = (await bounded(client.listTools(), 'MCP_LIST_TIMEOUT')).tools.find(value => value.name === name);
     expect(tool?.annotations).toMatchObject(name === 'inspect_model_invocation' || name === 'inspect_provider_spending'
       ? { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false }
       : { readOnlyHint: false, destructiveHint: name !== 'audit_provider_spending', idempotentHint: name !== 'purge_model_invocation_content', openWorldHint: name === 'invoke_model' });
     }
-    return await bounded(client.callTool({ name, arguments: args }), `MCP_CALL_TIMEOUT:${Buffer.concat(diagnostics).toString('utf8').slice(-2048)}`);
+    return await measured('mcp-call', () => bounded(client.callTool({ name, arguments: args }), `MCP_CALL_TIMEOUT:${Buffer.concat(diagnostics).toString('utf8').slice(-2048)}`));
   } finally {
-    await bounded(client.close(), `MCP_CLOSE_TIMEOUT:${Buffer.concat(diagnostics).toString('utf8').slice(-2048)}`);
+    await measured('mcp-close', () => bounded(client.close(), `MCP_CLOSE_TIMEOUT:${Buffer.concat(diagnostics).toString('utf8').slice(-2048)}`));
     await bounded(transport.close(), 'MCP_TRANSPORT_CLOSE_TIMEOUT'); expect(transport.pid).toBeNull();
   }
 }
@@ -140,7 +167,7 @@ async function assertA5RejectedEvidence(input: A5ProofInput): Promise<void> {
   expectNoRawBody((malformedReplay.structuredContent as ModelInvocationResult).receipt, Buffer.from(malformedBody));
 
   input.setResponse('status'); const statusPath = join(input.root, 'status.json'); await writeFile(statusPath, JSON.stringify(input.command('status')), { mode: 0o600 });
-  const status = JSON.parse((await execute(process.execPath, [cli, 'models', 'invoke', '--input', statusPath, '--json'],
+  const status = JSON.parse((await timedExecute(process.execPath, [cli, 'models', 'invoke', '--input', statusPath, '--json'],
     { cwd: input.project, env: input.env, timeout: 10_000, maxBuffer: 1_048_576 })).stdout) as ModelInvocationResult;
   expect(status.receipt.outcome).toMatchObject({ state: 'rejected', evidence: { reason: 'http-status', httpStatus: 429, body: { complete: true } } });
   expectNoRawBody(status.receipt, Buffer.from(statusBody));
@@ -162,7 +189,7 @@ async function assertA5RejectedEvidence(input: A5ProofInput): Promise<void> {
   expect(defaultInspection).toEqual({ ok: true, value: { ...malformedQuery, schemaVersion: 7, historyIntegrity: 'not-recorded', spending: heldOpenRouterSpend(malformedReceipt), invocation: malformedReceipt, control: { schemaVersion: 1, claim: malformedReceipt.claim, reference: input.reference,
     send: { state: 'permitted', ownerId: expect.any(String), permittedAtMs: expect.any(Number) }, cancellation: null }, contentStatus: 'retained', purge: null } });
   if (defaultInspection.ok) { expect(Object.hasOwn(defaultInspection.value, 'responseContent')).toBe(false); expectNoRawBody(defaultInspection.value.invocation!, Buffer.from(malformedBody)); }
-  const defaultText = (await execute(process.execPath, [cli, 'models', 'invocation', '--input', malformedQueryPath, '--no-color'],
+  const defaultText = (await timedExecute(process.execPath, [cli, 'models', 'invocation', '--input', malformedQueryPath, '--no-color'],
     { cwd: input.project, env: input.env, timeout: 10_000, maxBuffer: 1_048_576 })).stdout;
   expect(defaultText).not.toContain(malformedBody); expect(defaultText).not.toContain(Buffer.from(malformedBody).toString('base64'));
   const rawMalformedQueryPath = join(input.root, 'malformed-raw-query.json');
@@ -175,7 +202,7 @@ async function assertA5RejectedEvidence(input: A5ProofInput): Promise<void> {
   expect(Buffer.from(malformedRaw.data, 'base64')).toEqual(Buffer.from(malformedBody));
   const statusQuery = { schemaVersion: 2, scopeId: 'scope', invocationId: status.receipt.claim.invocationId, reference: input.reference };
   const statusQueryPath = join(input.root, 'status-query.json'); await writeFile(statusQueryPath, JSON.stringify({ ...statusQuery, includeResponseContent: true }), { mode: 0o600 });
-  const statusInspection = JSON.parse((await execute(process.execPath, [cli, 'models', 'invocation', '--input', statusQueryPath, '--json'],
+  const statusInspection = JSON.parse((await timedExecute(process.execPath, [cli, 'models', 'invocation', '--input', statusQueryPath, '--json'],
     { cwd: input.project, env: input.env, timeout: 10_000, maxBuffer: 1_048_576 })).stdout) as ModelInvocationInspection;
   expect(statusInspection.invocation).toEqual(status.receipt);
   expect(Buffer.from(statusInspection.responseContent!.data, 'base64')).toEqual(Buffer.from(statusBody));
@@ -203,7 +230,7 @@ async function assertRetainedNativeContent(project: string, root: string, env: R
       source: { field: 'usage.cost', numericSource: '0.0002' } },
   } } });
   if (!ordinary.ok) throw new Error('INSPECTION_FAILED');
-  const cliInspection = JSON.parse((await execute(process.execPath, [cli, 'models', 'invocation', '--input', inputPath, '--json'],
+  const cliInspection = JSON.parse((await timedExecute(process.execPath, [cli, 'models', 'invocation', '--input', inputPath, '--json'],
     { cwd: project, env, timeout: 10_000 })).stdout) as ModelInvocationInspection;
   expect(cliInspection).toEqual(ordinary.value);
   const mcpInspection = await callMcp(project, env, 'inspect_model_invocation', query);
@@ -268,14 +295,14 @@ async function assertAccountSurfaces(project: string, root: string, env: Record<
     reservationCount: 3, account: { reservedMinorUnits: 0, settledExactMinorUnits: '0.06', settledMinorUnits: 1, frozen: false },
   } } });
   if (!result.ok) throw new Error('ACCOUNT_INSPECTION_FAILED');
-  const cliResult = JSON.parse((await execute(process.execPath, [cli, 'models', 'spending', '--input', path, '--json'],
+  const cliResult = JSON.parse((await timedExecute(process.execPath, [cli, 'models', 'spending', '--input', path, '--json'],
     { cwd: project, env, timeout: 10_000 })).stdout);
   expect(cliResult).toEqual(result.value);
   for (const [locale, held, sources] of [
     ['en', 'Hold reasons are not shown', 'may combine local calculations and provider-reported charges'],
     ['tr', 'bekletme nedenlerini göstermez', 'Yerel hesaplamaları ve sağlayıcı tarafından bildirilen tutarları birleştirebilir'],
   ]) {
-    const human = (await execute(process.execPath, [cli, 'models', 'spending', '--input', path, '--lang', locale!],
+    const human = (await timedExecute(process.execPath, [cli, 'models', 'spending', '--input', path, '--lang', locale!],
       { cwd: project, env, timeout: 10_000 })).stdout;
     expect(human).toContain(held); expect(human).toContain(sources);
   }
@@ -308,7 +335,7 @@ async function assertAuditSurfaces(input: { project: string; root: string; env: 
   if (!result.ok) throw new Error(`AUDIT_FAILED:${result.code}`);
   expect(result.value).toMatchObject({ schemaVersion: 1, replayed: false, receipt: { command,
     authorization: { ruleId: 'account-audit' }, examinedCheckpoint: inspected.value.checkpoint } });
-  const cliReplay = JSON.parse((await execute(process.execPath, [cli, 'models', 'audit-spending', '--input', path, '--json'],
+  const cliReplay = JSON.parse((await timedExecute(process.execPath, [cli, 'models', 'audit-spending', '--input', path, '--json'],
     { cwd: project, env, timeout: 10_000 })).stdout);
   expect(cliReplay).toEqual({ ...result.value, replayed: true });
   const mcpReplay = await callMcp(project, env, 'audit_provider_spending', command);
@@ -344,7 +371,7 @@ async function assertPurgedContent(input: { project: string; root: string; env: 
       await input.allow();
     }
     let result: ModelInvocationPurgeResult;
-    if (index === 0) result = JSON.parse((await execute(process.execPath, [cli, 'models', 'purge-content', '--input', commandPath, '--json'],
+    if (index === 0) result = JSON.parse((await timedExecute(process.execPath, [cli, 'models', 'purge-content', '--input', commandPath, '--json'],
       { cwd: project, env, timeout: 10_000 })).stdout);
     else if (index === 1) {
       const response = await callMcp(project, env, 'purge_model_invocation_content', command);
@@ -367,7 +394,7 @@ async function assertPurgedContent(input: { project: string; root: string; env: 
     const replay = await callSdk<ModelInvocationResult>(project, env, 'invoke', join(root, ['first.json', 'malformed.json', 'large.json'][index]!));
     expect(replay).toMatchObject({ ok: true, value: { replayed: true, response: null, contentStatus: 'purged', purge: receipts[index] } });
   }
-  const human = await execute(process.execPath, [cli, 'models', 'invoke', '--input', join(root, 'first.json'), '--lang', 'en'],
+  const human = await timedExecute(process.execPath, [cli, 'models', 'invoke', '--input', join(root, 'first.json'), '--lang', 'en'],
     { cwd: project, env, timeout: 10_000 });
   expect(human.stdout).toMatch(/purged/i); expect(human.stdout).not.toContain('retained-sensitive-usage');
   const db = new DatabaseSync(ledger, { readOnly: true });
@@ -391,7 +418,8 @@ it('shares one bounded invocation ledger across compiled SDK, CLI and stdio MCP 
   const root = await mkdtemp(join(tmpdir(), 'deckent-model-invocation-process-')); roots.push(root);
   const project = join(root, 'project'), data = join(root, 'data'), home = join(root, 'home');
   await Promise.all([mkdir(join(project, '.deckent'), { recursive: true, mode: 0o700 }), mkdir(data, { mode: 0o700 }), mkdir(home, { mode: 0o700 })]);
-  const { env, requests: proxyRequests } = await hostileProxyEnvironment(home), bodies: string[] = [];
+  const { env, requests: proxyRequests } = await measured('fixture-listen', () => hostileProxyEnvironment(home)), bodies: string[] = [];
+  if (process.env.DECKENT_TEST_STARTUP_COST === '1') Object.assign(env, { DECKENT_TEST_STARTUP_COST: '1' });
   const malformedBody = '{"private":"prompt-malformed\\n\\"echo\\""', statusBody = '{"private":"status-body"}';
   let response: 'normal' | 'oversize' | 'malformed' | 'status' = 'normal';
   let holdResponse = false, releaseHeld: (() => void) | undefined, observeHeld: (() => void) | undefined;
@@ -453,11 +481,11 @@ it('shares one bounded invocation ledger across compiled SDK, CLI and stdio MCP 
   const firstClient = spawn(process.execPath, ['--input-type=module', '-e', sdkProgram, sdk, 'invoke', project, firstPath],
     { cwd: project, env, stdio: ['ignore', 'pipe', 'pipe'] });
   clientProcesses.push(firstClient);
-  await bounded(firstObserved, 'FIRST_HTTP_REQUEST_NOT_OBSERVED');
+  await measured('invoke-to-provider', () => bounded(firstObserved, 'FIRST_HTTP_REQUEST_NOT_OBSERVED'));
   await terminate(firstClient);
   clientProcesses.splice(clientProcesses.indexOf(firstClient), 1);
   releaseHeld?.();
-  await waitFor(() => invocationCount('first') === 1, 'DISCONNECTED_CLIENT_RESULT_MISSING');
+  await measured('durable-settlement', () => waitFor(() => invocationCount('first') === 1, 'DISCONNECTED_CLIENT_RESULT_MISSING'));
   expect(bodies).toHaveLength(1);
   await stopRuntime(runtime); runtimeProcesses.splice(runtimeProcesses.indexOf(runtime), 1);
   const restartedRuntime = await startRuntime(project, env);
@@ -466,7 +494,7 @@ it('shares one bounded invocation ledger across compiled SDK, CLI and stdio MCP 
   const recovered = await callSdk<ModelInvocationInspection>(project, env, 'inspect', queryOnePath);
   expect(recovered).toMatchObject({ ok: true, value: { invocation: { outcome: { state: 'responded' } } } });
   const first = (recovered as { ok: true; value: ModelInvocationInspection }).value.invocation!;
-  const cliInspection = JSON.parse((await execute(process.execPath, [cli, 'models', 'invocation', '--input', queryOnePath, '--json'],
+  const cliInspection = JSON.parse((await timedExecute(process.execPath, [cli, 'models', 'invocation', '--input', queryOnePath, '--json'],
     { cwd: project, env, timeout: 10_000, maxBuffer: 1_048_576 })).stdout) as ModelInvocationInspection;
   expect(cliInspection.invocation).toEqual(first);
   const replay = await callMcp(project, env, 'invoke_model', command('first'));
@@ -505,7 +533,7 @@ it('shares one bounded invocation ledger across compiled SDK, CLI and stdio MCP 
   await writeConfig();
 
   const secondPath = join(root, 'second.json'); await writeFile(secondPath, JSON.stringify(command('second')), { mode: 0o600 });
-  const cliSecond = JSON.parse((await execute(process.execPath, [cli, 'models', 'invoke', '--input', secondPath, '--json'],
+  const cliSecond = JSON.parse((await timedExecute(process.execPath, [cli, 'models', 'invoke', '--input', secondPath, '--json'],
     { cwd: project, env, timeout: 10_000, maxBuffer: 1_048_576 })).stdout) as ModelInvocationResult;
   expect(cliSecond.replayed).toBe(false); expect(bodies).toHaveLength(3);
   const inspectSecond = await callMcp(project, env, 'inspect_model_invocation', { schemaVersion: 2, scopeId: 'scope',
@@ -518,10 +546,10 @@ it('shares one bounded invocation ledger across compiled SDK, CLI and stdio MCP 
   await writePolicy(false); const deniedPath = join(root, 'denied.json'); await writeFile(deniedPath, JSON.stringify(command('denied')), { mode: 0o600 });
   expect(await callSdk(project, env, 'invoke', deniedPath)).toEqual({ ok: false, code: 'POLICY_DENIED' }); expect(bodies).toHaveLength(3);
   const wrongPath = join(root, 'wrong.json'); await writeFile(wrongPath, JSON.stringify(command('wrong', 'wrong-scope')), { mode: 0o600 });
-  await expect(execute(process.execPath, [cli, 'models', 'invoke', '--input', wrongPath, '--json'],
+  await expect(timedExecute(process.execPath, [cli, 'models', 'invoke', '--input', wrongPath, '--json'],
     { cwd: project, env, timeout: 10_000 })).rejects.toMatchObject({ code: 1, stderr: expect.stringContaining('POLICY_DENIED') });
   await writePolicy(true); response = 'oversize'; const largePath = join(root, 'large.json'); await writeFile(largePath, JSON.stringify(command('large')), { mode: 0o600 });
-  const large = JSON.parse((await execute(process.execPath, [cli, 'models', 'invoke', '--input', largePath, '--json'],
+  const large = JSON.parse((await timedExecute(process.execPath, [cli, 'models', 'invoke', '--input', largePath, '--json'],
     { cwd: project, env, timeout: 10_000, maxBuffer: 1_048_576 })).stdout) as ModelInvocationResult;
   expect(large.receipt.outcome).toMatchObject({ state: 'unknown', reason: 'transport-error', evidence: { reason: 'response-limit',
     body: { complete: false, byteLength: 512, observedBytes: expect.any(Number) } } });

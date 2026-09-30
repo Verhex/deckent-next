@@ -50,6 +50,19 @@ async function promisorSource(options: { hostileLocalConfig?: boolean } = {}) {
 }
 
 describe.skipIf(process.platform !== 'linux')('local-only Git invocation cannot reach a remote (lane GIT-NET 2026-09-29)', () => {
+  it('reports a locally missing blob size as unavailable and does not recreate the object', async () => {
+    const f = await promisorSource();
+    // A regular source with a missing loose blob reaches ls-tree's successful BAD-size
+    // output even on Git 2.43, independently of the version's promisor-fetch behavior.
+    await rm(join(f.origin, '.git', 'objects', f.blob.slice(0, 2), f.blob.slice(2)));
+    const raw = await exec('/usr/bin/git', localGitArgs(f.origin, ['ls-tree', '-r', '-z', '-l', '--full-tree', f.head]), { env: GIT_LOCAL_ENV });
+    expect(raw.stdout).toBe(`100644 blob ${f.blob}     BAD\tbig.txt\0`);
+    const lease = { baseCommit: f.head, sourceBase: { source: { repositoryRoot: f.origin } } } as unknown as GitWorkspaceLease;
+    const options = { gitExecutable: '/usr/bin/git', outputBytes: 65536 } as GitWorkspaceOptions;
+    await expect(listBase(lease, options, new SnapshotBudget(limits, Date.now() + 10_000))).rejects.toMatchObject({ code: 'PATCH_UNAVAILABLE' });
+    expect(await f.git(f.origin, 'rev-list', '--objects', '--all', '--missing=print', f.head)).toContain(`?${f.blob}`);
+  });
+
   it('refuses a promisor lazy fetch over file:// and leaves the object unfetched', async () => {
     const f = await promisorSource();
     expect(await f.git(f.source, 'rev-list', '--objects', '--all', '--missing=print', f.head)).toContain(`?${f.blob}`);

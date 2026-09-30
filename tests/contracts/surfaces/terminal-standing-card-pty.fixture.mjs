@@ -74,5 +74,8 @@ const view = createElement(WorklinePaletteProvider, {
     },
   }),
 });
-const instance = render(view, { exitOnCtrlC: false, patchConsole: false });
+// This fixture owns a real PTY. Ink 7 defaults to deferred frames under CI even on a TTY;
+// explicitly request the interactive contract whose raw keys and visible decisions we test.
+if (!process.stdin.isTTY || !process.stdout.isTTY) throw new Error('STANDING_CARD_FIXTURE_REQUIRES_PTY');
+const instance = render(view, { exitOnCtrlC: false, patchConsole: false, interactive: true });
 await instance.waitUntilExit();
