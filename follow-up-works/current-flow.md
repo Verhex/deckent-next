@@ -3,12 +3,20 @@
 Bu belge yalnız güncel durumu tutar; önceki sürümü Git geçmişinde, kanıtlar `deckent-refactor-work/proof/`.
 
 ## Durum
+- **Güncel (2026-10-01 akşam, yeni ana oturum):** `origin/main` = `76582f9f`, canlıda (`76582f9f1cd2-08512bc400d1`, instance `1dd5ea76`, ledger 44;
+  `proof/LIVE-SWITCH-BATCH23-2026-10-01/`); C4 `attempt:release` grant'ı canlı policy'de. Hosted run 36884716187: ubuntu/24+26 success, macOS/24+26 failure
+  (danışma, 153 test), Windows asılı görünüyor → **CI-PLATFORM** GPT-6.1 Sol'de (`codex exec`, `lane/ci-sol-2`, kart `cards/lanes/CI-WINDOWS-2026-10-01.md`).
+  Owner kararları: 3. aşama dalga 1 (sıra, A1, A3, A8, C4) + dalga 2 güvenlik (B1/B2/B3/B7/B8/DOGFOOD) — ARCHITECTURE karar günlüğü + PLAN kart satırları
+  (`lane/docs-decisions-2026-10-01`). Analiz oturumu deckent-next-40 dalga 2 hedefli hasada devam ediyor. Sol inceleyici/watcher devri 2229/2230 tüketildi.
+  Ana checkout eski belge WIP'i yedeklendi (`proof/MAIN-WIP-BACKUP-2026-10-01/`) ve `origin/main`'e hizalanır. Açık: EXEC-RELEASE C1–C3 (lead Jev),
+  ER-N1/N2, CI-FULL F1/F2, MODEL-INGRESS-UNICODE (owner), eski MCP oturumlarının yeniden başlatılması (owner).
+  **Sıradaki:** CI-PLATFORM sonucu → bağımsız inceleme; belge commit'i + CI-PLATFORM için parti verify → Sol REQUEST_REVIEW → push; C1–C3 Jev; dalga 1 kartları.
 - **Yirmi üçüncü parti (2026-10-01; `integrate/2026-10-01-x`, worktree `/home/alperen/deckent-next-integrate-x`, taban 22. parti `8ec36126`):** + CI-FULL
   (`lane/ci-sol` `10d5cbde`, Sol uygulayıcı, lead commit'i yamadan 28/28 hash eşit). Bağımsız inceleme: lead'in ayrı bağlamda başlattığı Fable 5.1 alt ajanı **PASS**
   (`proof/CI-FULL-2026-10-01/review-independent.md`; F1 düşük: `runtime-overlay-parents.test.ts:94` gerekçesi adsız win32 skip; F2 açık: yük altında bir kez
   düşen `shell-overlay-write-set.test.ts:111`, tek başına 6/6, kök neden yok — ayrı izlenir). Hosted CI kabulü push sonrası altı hücre + bwrap ile.
   Sol 2226 REVISE (22): ER-R1 mühürlü event akışı doğrulanmıyordu, ER-R2 scope çapında mezar silme → `5dd9bf08` (red 2 fail → green 31/256, mutasyon 7–9 düştü), 23'e birleşti.
-  **Sıradaki:** 23 tam verify → Sol REQUEST_REVIEW (EXEC-RELEASE delta) → PASS'te push → hosted CI → owner'a rapor → yeni ana oturuma devir.
+  **Tamamlandı (2026-10-01):** tam verify 526/3766 → Sol 2228 PASS → push `76582f9f` → hosted CI → canlı 16:37Z → yeni ana oturuma devir (`proof/HANDOFF-MAIN-2026-10-01-B/`).
 - **Yirmi ikinci parti (2026-10-01; `integrate/2026-10-01-w`, worktree `/home/alperen/deckent-next-integrate-w`, taban `d11bdbfa`; ana oturum deckent-next-f6):**
   EXEC-RELEASE (`da102c4a`+`c0abc834`; owner D8; sahip = yama saklama geçişi, lead a′ mühürlü event log koşulu; composition 5500/5500) + SECRET-WRITE-CLOCK
   (`3bdd8111`+`a4616cfb` + lead arch `19a6aa19`; kararsızlığın kök nedeni WSL2 duvar saati geri adımı, `proof/SECRET-WRITE-FLAKE-2026-10-01`) + host-insights (`fc2b69e3`,
