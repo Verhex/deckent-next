@@ -3,7 +3,7 @@ import { promisify } from 'node:util';
 import { mkdtemp, mkdir, writeFile, readdir, rm } from 'node:fs/promises';
 import { tmpdir, hostname, userInfo } from 'node:os';
 import { join, resolve } from 'node:path';
-import { afterEach, expect, it } from 'vitest';
+import { describe, afterEach, expect, it } from 'vitest';
 import { hashInstallationProfilePayload } from '#engine/core/installation/index.js';
 import { installationProfile } from '../support/installation-profile.js';
 
@@ -18,11 +18,12 @@ async function fixture(shutdown = false) {
   for (const grant of profile.policy.grants) grant.principals = [principal];
   profile.profile.digest = hashInstallationProfilePayload({ ...profile, profile: { id: profile.profile.id, version: profile.profile.version } });
   await writeFile(path, JSON.stringify(profile), { mode: 0o600 });
-  const env = { ...process.env, HOME: join(root, 'home'), DECKENT_HOME: join(root, 'wrong-data-root') };
+  const env = { ...process.env, HOME: join(root, 'home'), USERPROFILE: join(root, 'home'), DECKENT_HOME: join(root, 'wrong-data-root') };
   const run = (args: string[]) => execute(process.execPath, [cli, ...args], { cwd: project, env, timeout: 5000, maxBuffer: 1048576 });
   return { root, project, path, profile, run };
 }
 
+describe.skipIf(process.platform === 'win32')('requires POSIX local principal; AUTHENTICATION_REQUIRED on Windows UID -1', () => {
 it('compiled CLI reads the real supplied profile and previews exact paths without creating product state', async () => {
   const f = await fixture();
   const result = JSON.parse((await f.run(['init', 'preview', '--profile', f.path, '--json'])).stdout);
@@ -82,4 +83,6 @@ it('compiled CLI refuses a require-approval overlay shadowing the narrow shutdow
   }
   expect(observed).toBe(true);
   expect(await readdir(f.project)).toEqual([]);
+});
+
 });

@@ -20,7 +20,7 @@ async function ledger() {
 const rows = (path: string, sql: string) => { const db = new DatabaseSync(path, { readOnly: true }); try { return db.prepare(sql).all(); } finally { db.close(); } };
 const version = (path: string) => rows(path, 'PRAGMA user_version')[0]?.user_version;
 
-it('upgrades a real v38 ledger through v39 (scope registry) to the current version: versioned 0600 backup first, every row kept, every present scope pinned to the configured company', async () => {
+it('upgrades a real v38 ledger through v39 (scope registry) to the current version: versioned backup first, every row kept, every present scope pinned to the configured company', async () => {
   const { path, backups } = await ledger();
   expect(CURRENT_LEDGER_VERSION).toBe(44); expect(PREVIOUS_LEDGER_VERSION).toBe(43);
   const db = new DatabaseSync(path);
@@ -37,7 +37,6 @@ it('upgrades a real v38 ledger through v39 (scope registry) to the current versi
   const upgrade = await upgradeExistingProductLedger(path, options, backups, at, undefined, 'acme');
   const backupPath = join(backups, 'ledger-v38-2026-09-27T00-00-00-000Z.db');
   expect(upgrade).toEqual({ from: 38, to: CURRENT_LEDGER_VERSION, backupPath });
-  expect((await stat(backupPath)).mode & 0o777).toBe(0o600);
   expect(version(backupPath)).toBe(38);
   expect(rows(backupPath, 'SELECT * FROM attempts')).toEqual(before.attempts);
   expect(rows(backupPath, "SELECT name FROM sqlite_schema WHERE name IN('scope_registry','companies')")).toEqual([]);
@@ -98,4 +97,13 @@ it('registers insert-only: the company column is written, a pin never moves to a
     { scope_id: 'shared', company_id: 'default', origin: 'start' }]);
   expect(rows(path, 'SELECT company_id FROM companies ORDER BY company_id')).toEqual([{ company_id: 'acme' }, { company_id: 'default' }]);
   expect(() => registerLedgerScopes(path, options, 'Not Valid', ['x'])).toThrow(expect.objectContaining({ code: 'ATTEMPT_STORE_OPTIONS' }));
+});
+
+it.skipIf(process.platform === 'win32')('requires POSIX private file modes: ledger upgrade creates a 0600 backup', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'dn-backup-private-')); roots.push(root);
+  const path = join(root, 'ledger.db'), backups = join(root, 'backups'); await mkdir(backups, { mode: 0o700 });
+  openSqliteLedger(path, options).close();
+  const db = new DatabaseSync(path); db.exec(DOWNGRADE_TO_V38_LEDGER_SQL); db.close();
+  const upgrade = await upgradeExistingProductLedger(path, options, backups, new Date('2026-10-01T00:00:00.000Z'));
+  expect((await stat(upgrade!.backupPath)).mode & 0o777).toBe(0o600);
 });

@@ -22,7 +22,6 @@ it('backs up an older ledger with its version in the name, then migrates it to t
     backupPath: join(backups, `ledger-v${CURRENT_LEDGER_VERSION - 1}-2026-09-24T00-00-00-000Z.db`) });
   expect(version(path)).toBe(CURRENT_LEDGER_VERSION);
   expect(version(upgrade!.backupPath)).toBe(CURRENT_LEDGER_VERSION - 1);
-  expect((await stat(upgrade!.backupPath)).mode & 0o777).toBe(0o600);
   // Current and missing ledgers are left untouched: no second backup, no file created.
   expect(await upgradeExistingProductLedger(path, options, backups, new Date())).toBeNull();
   expect(await upgradeExistingProductLedger(join(root, 'absent.db'), options, backups, new Date())).toBeNull();
@@ -54,4 +53,13 @@ it('keeps every allocation row across the v36 rebuild and then admits an allocat
     after.prepare('INSERT INTO model_invocation_allocations VALUES(?,?,?,?,?,?,?)').run('live', 'unbounded', null, 1, 0, 0, '{}');
     expect(() => after.prepare('INSERT INTO model_invocation_allocations VALUES(?,?,?,?,?,?,?)').run('live', 'zero', 0, 1, 0, 0, '{}')).toThrow(/CHECK/);
   } finally { after.close(); }
+});
+
+it.skipIf(process.platform === 'win32')('requires POSIX private file modes: ledger upgrade creates a 0600 backup', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'dn-backup-private-')); roots.push(root);
+  const path = join(root, 'ledger.db'), backups = join(root, 'backups'); await mkdir(backups, { mode: 0o700 });
+  openSqliteLedger(path, options).close();
+  const db = new DatabaseSync(path); db.exec(DOWNGRADE_TO_PREVIOUS_LEDGER_SQL); db.close();
+  const upgrade = await upgradeExistingProductLedger(path, options, backups, new Date('2026-10-01T00:00:00.000Z'));
+  expect((await stat(upgrade!.backupPath)).mode & 0o777).toBe(0o600);
 });

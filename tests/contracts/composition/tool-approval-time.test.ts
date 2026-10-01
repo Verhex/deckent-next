@@ -40,7 +40,7 @@ async function fixture() {
 }
 
 describe('I40-c B: only the producer determines tool approval expiry', () => {
-  it.each([14999, 15000, 19999])('records a decision at producer wall=%i with the decider 5 seconds ahead', async producerNow => {
+  it.skipIf(process.platform !== 'linux').each([14999, 15000, 19999])('[requires Linux live OS session /proc identity] records a decision at producer wall=%i with the decider 5 seconds ahead', async producerNow => {
     const f = await fixture();
     try {
       const now = producerNow + MAX_WALL_SKEW_MS;
@@ -55,7 +55,7 @@ describe('I40-c B: only the producer determines tool approval expiry', () => {
     } finally { f.journal.close(); }
   });
 
-  it('records a late decision but the producer refuses to consume it, including a receipt replay', async () => {
+  it.skipIf(process.platform !== 'linux')('[requires Linux live OS session /proc identity] records a late decision but the producer refuses to consume it, including a receipt replay', async () => {
     const f = await fixture();
     try {
       const app = await f.application(new SystemTrustedClock(() => 25000));
@@ -69,7 +69,7 @@ describe('I40-c B: only the producer determines tool approval expiry', () => {
     } finally { f.journal.close(); }
   });
 
-  it('refuses a request already expired by the producer even when the deciding clock lags', async () => {
+  it.skipIf(process.platform !== 'linux')('[requires Linux live OS session /proc identity] refuses a request already expired by the producer even when the deciding clock lags', async () => {
     const f = await fixture();
     try {
       const producer: TrustedClock = { sample: () => ({ wallMs: 20000, monotonicMs: 10000 }) };
@@ -80,7 +80,7 @@ describe('I40-c B: only the producer determines tool approval expiry', () => {
     } finally { f.journal.close(); }
   });
 
-  it('does not make an expiry decision after asynchronous policy/session work either', async () => {
+  it.skipIf(process.platform !== 'linux')('[requires Linux live OS session /proc identity] does not make an expiry decision after asynchronous policy/session work either', async () => {
     const f = await fixture(); let now = 14999, checks = 0;
     try {
       const app = await f.application(new SystemTrustedClock(() => now), () => { if (++checks === 2) now = 20000; });
@@ -90,7 +90,7 @@ describe('I40-c B: only the producer determines tool approval expiry', () => {
     } finally { f.journal.close(); }
   });
 
-  it.each([19999, 20000, 20001])('leaves the task-approval exact expiry contract unchanged at %i', async now => {
+  it.skipIf(process.platform !== 'linux').each([19999, 20000, 20001])('[requires Linux live OS session /proc identity] leaves the task-approval exact expiry contract unchanged at %i', async now => {
     const f = await fixture();
     try {
       const task = requestTaskApproval(f.journal.store, integrity, { scopeId: 'scope', requester, runId: 'run', taskId: 'task',
@@ -106,7 +106,7 @@ describe('I40-c B: only the producer determines tool approval expiry', () => {
     } finally { f.journal.close(); }
   });
 
-  it('keeps the record expiry bound for task and operation subjects, and the creation bound for tools', async () => {
+  it.skipIf(process.platform !== 'linux')('[requires Linux live OS session /proc identity] keeps the record expiry bound for task and operation subjects, and the creation bound for tools', async () => {
     const f = await fixture();
     try {
       const app = await f.application(new SystemTrustedClock(() => 19999));
@@ -126,7 +126,7 @@ describe('I40-c B: only the producer determines tool approval expiry', () => {
     } finally { f.journal.close(); }
   });
 
-  it.each([19999, 20000, 20001])('consumes a stored allow at wall=%i only while unexpired', async now => {
+  it.skipIf(process.platform !== 'linux').each([19999, 20000, 20001])('[requires Linux live OS session /proc identity] consumes a stored allow at wall=%i only while unexpired', async now => {
     const f = await fixture();
     try {
       const app = await f.application(new SystemTrustedClock(() => 14000));
@@ -137,7 +137,8 @@ describe('I40-c B: only the producer determines tool approval expiry', () => {
     } finally { f.journal.close(); }
   });
 
-  it.each(['backward', 'forward', 'delayed-start', 'allow-at-deadline'] as const)('bounds waiting from production with a %s clock sequence', async mode => {
+  it.for(['backward', 'forward', 'delayed-start', 'allow-at-deadline'] as const)('bounds waiting from production with a %s clock sequence (allow-at-deadline requires Linux live OS session)', async (mode, context) => {
+    if (mode === 'allow-at-deadline' && process.platform !== 'linux') context.skip('requires Linux live OS session /proc identity');
     const f = await fixture();
     try {
       // Only timer scheduling is virtual. Wall/monotonic values are supplied through the trusted port; Date.now is untouched.
@@ -174,7 +175,7 @@ describe('I40-c B: only the producer determines tool approval expiry', () => {
 
 // This focused harness exercises the actual composition producer and surface emission. Model/turn dispatch are
 // isolated here; runtime-chat-turn.test.ts separately covers the real loop, local transport and tool execution.
-it.each(['preview-expiry', 'policy-expiry', 'timely-allow'] as const)('wires trusted request/turn timestamps through the composition surface: %s', async mode => {
+it.skipIf(process.platform !== 'linux').each(['preview-expiry', 'policy-expiry', 'timely-allow'] as const)('[requires Linux live OS session /proc identity] wires trusted request/turn timestamps through the composition surface: %s', async mode => {
   const f = await fixture();
   let watchdog: ReturnType<typeof setTimeout> | undefined;
   try {

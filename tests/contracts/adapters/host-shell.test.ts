@@ -1,3 +1,4 @@
+import { spawnSync } from 'node:child_process';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -5,6 +6,8 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { describeHostShellResult, HOST_SHELL_CHUNK_MAX_BYTES, hostShellCleanupNote, runHostShell, type HostShellResult } from '#adapters/index.js';
 
+// setsid is an explicit fixture capability; macOS has no system setsid executable. No command may pass vacuously when it is absent.
+const hasSetsid = process.platform !== 'win32' && spawnSync('setsid', ['--version'], { timeout: 2_000, stdio: 'ignore' }).status === 0;
 const roots: string[] = [];
 afterEach(async () => Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))));
 async function workspace() { const root = await mkdtemp(join(tmpdir(), 'dn-host-shell-')); roots.push(root); return root; }
@@ -112,7 +115,7 @@ describe.skipIf(process.platform === 'win32')('host shell execution (T-L4 slice 
   // Astra 2119 (inverted repro): a descendant that left the process group (setsid) and kept the inherited pipes open cannot be seen
   // or ended through the group; the pipes are released a short grace after the group is known empty (or at the timeout), the call
   // ends bounded, and the result says the cleanup is unverified. Documented scope: such a descendant can outlive the call.
-  it('bounds the pipe drain after the shell exit even when a child left the process group, and reports the cleanup as unverified', async () => {
+  it.skipIf(!hasSetsid)('bounds the pipe drain after the shell exit even when a child left the process group, and reports the cleanup as unverified (requires setsid fixture)', async () => {
     const cwd = await workspace(), before = performance.now();
     const result = await runHostShell({ cwd, command: 'setsid sh -c "echo ready; sleep 5" & sleep 0.2; exit 0', timeoutMs: 500 });
     // The timeout (500 ms) releases the pipes, well before the drain grace would (~1.2 s) and long before the child ends (5 s).
@@ -121,14 +124,14 @@ describe.skipIf(process.platform === 'win32')('host shell execution (T-L4 slice 
     expect(result.output).toContain('ready');
   });
 
-  it('ends at once when a child that left the process group redirected its output, and does not claim to have observed it', async () => {
+  it.skipIf(!hasSetsid)('ends at once when a child that left the process group redirected its output, and does not claim to have observed it (requires setsid fixture)', async () => {
     const cwd = await workspace(), before = performance.now();
     const result = await runHostShell({ cwd, command: 'setsid sh -c "sleep 5" > /dev/null 2>&1 & sleep 0.2; exit 0' });
     expect(performance.now() - before).toBeLessThan(1_000);
     expect(result).toMatchObject({ status: 'exited', exitCode: 0, cleanup: 'clean' });
   });
 
-  it('is released by a cancellation while a child outside the group still holds the pipes', async () => {
+  it.skipIf(!hasSetsid)('is released by a cancellation while a child outside the group still holds the pipes (requires setsid fixture)', async () => {
     const cwd = await workspace(), controller = new AbortController(), before = performance.now();
     const result = await runHostShell({ cwd, command: 'setsid sh -c "echo ready; sleep 5" & sleep 1; exit 0', signal: controller.signal,
       onOutput: (_stream, text) => { if (text.includes('ready')) setTimeout(() => controller.abort(), 50); } });
@@ -138,7 +141,7 @@ describe.skipIf(process.platform === 'win32')('host shell execution (T-L4 slice 
 
   // The shell exits at ~200 ms; the abort lands at ~300 ms, inside the drain (its grace would end at ~1.2 s): the pipes are released
   // at once and the exited status is kept.
-  it('is released by a cancellation that arrives during the drain after the shell exited', async () => {
+  it.skipIf(!hasSetsid)('is released by a cancellation that arrives during the drain after the shell exited (requires setsid fixture)', async () => {
     const cwd = await workspace(), controller = new AbortController(), before = performance.now();
     const result = await runHostShell({ cwd, command: 'setsid sh -c "echo ready; sleep 5" & sleep 0.2; exit 0', signal: controller.signal, timeoutMs: 20_000,
       onOutput: (_stream, text) => { if (text.includes('ready')) setTimeout(() => controller.abort(), 300); } });

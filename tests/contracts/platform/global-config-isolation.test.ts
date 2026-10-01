@@ -14,16 +14,16 @@ it('isolates global config without merging legacy fields or redirecting project 
   await writeFile(join(global, 'config.json'), JSON.stringify({ language: 'tr' }));
   const data = join(root, 'project-data');
   await writeFile(join(project, '.deckent/config.json'), JSON.stringify({ layout: { root: data } }));
-  const env = { HOME: home, DECKENT_GLOBAL_HOME: global };
+  const env = { HOME: home, USERPROFILE: home, DECKENT_GLOBAL_HOME: global };
   for (let i = 0; i < 2; i++) expect(await loadConfig(project, { env })).toMatchObject({ language: 'tr', productLayout: { root: data } });
-  await expect(loadConfig(project, { env: { HOME: home } })).rejects.toMatchObject({ code: 'CONFIG_VALIDATION' });
+  await expect(loadConfig(project, { env: { HOME: home, USERPROFILE: home } })).rejects.toMatchObject({ code: 'CONFIG_VALIDATION' });
   expect((await loadConfig(project, { env, globalOnly: true })).productLayout.root).toBe(global);
   expect((await loadConfig(project, { env: { ...env, DECKENT_HOME: join(root, 'explicit-data') } })).productLayout.root).toBe(join(root, 'explicit-data'));
   expect(await readFile(join(home, '.deckent/config.json'), 'utf8')).toBe(legacy);
 });
 it('resolves an explicit global root across platforms without HOME, while rejecting relative roots', () => {
   expect(resolveGlobalScopePaths('linux', { DECKENT_GLOBAL_HOME: '/next/global' })).toMatchObject({ configDir: '/next/global', home: null, source: 'env-override' });
-  expect(resolveGlobalScopePaths('darwin', { HOME: '/Users/u', DECKENT_GLOBAL_HOME: '/next/global', DECKENT_HOME: '/project/data' }).stateDir).toBe('/next/global');
+  expect(resolveGlobalScopePaths('darwin', { HOME: '/Users/u', USERPROFILE: '/Users/u', DECKENT_GLOBAL_HOME: '/next/global', DECKENT_HOME: '/project/data' }).stateDir).toBe('/next/global');
   expect(resolveGlobalConfigPaths({ DECKENT_GLOBAL_HOME: 'D:\\Next\\global' }, 'win32').platformPath).toBe('D:\\Next\\global\\config.json');
-  expect(() => resolveGlobalScopePaths('linux', { HOME: '/h', DECKENT_GLOBAL_HOME: 'relative' })).toThrow('LAYOUT_ROOT_INVALID');
+  expect(() => resolveGlobalScopePaths('linux', { HOME: '/h', USERPROFILE: '/h', DECKENT_GLOBAL_HOME: 'relative' })).toThrow('LAYOUT_ROOT_INVALID');
 });

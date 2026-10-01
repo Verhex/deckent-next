@@ -35,7 +35,7 @@ function event(scopeId: string, n: number, cell: 'edit-non-floor' | 'shell-modif
   };
 }
 
-it('upgrades a real v40 ledger to v41 (audit events): 0600 backup at v40 first, every row kept, then the append-only audit table admits events', async () => {
+it('upgrades a real v40 ledger to v41 (audit events): backup at v40 first, every row kept, then the append-only audit table admits events', async () => {
   const { path, backups } = await ledger();
   expect(CURRENT_LEDGER_VERSION).toBe(44); expect(AUDIT_EVENT_LEDGER_VERSION).toBe(41);
   const db = new DatabaseSync(path); db.exec(DOWNGRADE_TO_V40_LEDGER_SQL);
@@ -53,7 +53,6 @@ it('upgrades a real v40 ledger to v41 (audit events): 0600 backup at v40 first, 
   const upgrade = await upgradeExistingProductLedger(path, options, backups, new Date('2026-09-27T12:00:00.000Z'));
   const backupPath = join(backups, 'ledger-v40-2026-09-27T12-00-00-000Z.db');
   expect(upgrade).toEqual({ from: 40, to: CURRENT_LEDGER_VERSION, backupPath });
-  expect((await stat(backupPath)).mode & 0o777).toBe(0o600);
   expect(version(backupPath)).toBe(40);
   expect(rows(backupPath, 'SELECT * FROM approvals')).toEqual(before.approvals);
   expect(version(path)).toBe(CURRENT_LEDGER_VERSION);
@@ -176,4 +175,13 @@ it('propagates a failed write as a typed error so the caller applies no effect (
   expect(() => relax(2)).toThrow(expect.objectContaining({ code: 'AUDIT_UNAVAILABLE' }));
   expect(applied).toBe(1);
   expect(rows(path, 'SELECT count(*) AS n FROM audit_events').at(0)).toEqual({ n: 1 });
+});
+
+it.skipIf(process.platform === 'win32')('requires POSIX private file modes: ledger upgrade creates a 0600 backup', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'dn-backup-private-')); roots.push(root);
+  const path = join(root, 'ledger.db'), backups = join(root, 'backups'); await mkdir(backups, { mode: 0o700 });
+  openSqliteLedger(path, options).close();
+  const db = new DatabaseSync(path); db.exec(DOWNGRADE_TO_V40_LEDGER_SQL); db.close();
+  const upgrade = await upgradeExistingProductLedger(path, options, backups, new Date('2026-10-01T00:00:00.000Z'));
+  expect((await stat(upgrade!.backupPath)).mode & 0o777).toBe(0o600);
 });

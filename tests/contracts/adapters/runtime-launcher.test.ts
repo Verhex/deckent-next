@@ -13,7 +13,7 @@ async function waitFor(check: () => Promise<boolean>) {
   throw new Error('WAIT_TIMEOUT');
 }
 
-it('starts `<entry> runtime serve` detached in its own session with no stdin and a private append-only log', async () => {
+it.skipIf(process.platform !== 'linux')('starts `<entry> runtime serve` detached in its own session with no stdin and a private append-only log (requires Linux /proc session identity)', async () => {
   const root = await mkdtemp(join(tmpdir(), 'dn-launch-')); roots.push(root);
   const entry = join(root, 'entry.mjs'), logPath = join(root, 'service.log');
   // The fake entry reports what it was started with, then exits; a real service would keep running.

@@ -3,30 +3,29 @@
 Bu belge yalnız güncel durumu tutar; önceki sürümü Git geçmişinde, kanıtlar `deckent-refactor-work/proof/`.
 
 ## Durum
+- **CI-WINDOWS-MACOS (2026-10-01, Sol uygulayıcı):** `lane/ci-sol-2` / exact taban `76582f9f`; run36884716187 Linux 24/26 success,
+  macOS 24/26 51 dosya/153 fail; Windows iki verify job'ı >75 dk, owner yetkisiyle iptal istendi (16:47:06Z), cancelled 16:47:51Z/16:47:43Z.
+  Windows/26 yaklaşık 66 dk, Windows/24 yaklaşık 33 dk çıktısız kaldı; iki asılı dosya `shell-fs-ops`/`shell-sandbox-bwrap`.
+  Kök neden: ata traversal Windows drive root sabit noktada sonsuz döngü; OS deadline red → root-stop green. macOS 48 dosya/209 hedefli test Linux
+  koşusunda geçti (0 skip); darwin/win32 yalnız guard simülasyonu/native kabul açık. USERPROFILE fixture, metadata ayırıcı ve görünür POSIX-mode kapıları düzeltildi.
+  Eksik O_NOFOLLOW/O_NONBLOCK nedeniyle CLI dosya girişi ve terminal history/session erişimi tipli ret ile kapanır; stdin korunur.
+  Final yerel sonuç: typecheck/ESLint144file/arch/memory/build temiz; Node26 son guard+COMMIT crash19/19, win32 guard47file30pass177skip ve scoped25file51pass108skip (Linux simülasyonu).
+  Windows native fail union130file453/424case; final envanterde14dosya kök neden/native kanıtı açık, bütçeler yükseltilmedi.
+  Sıradaki: dış final receipt/şerit commit → lead exact aday full verify/bağımsız inceleme; native platform green ve Windows timing/lock/descendant kök nedenleri açık. Push/re-run/canlı servis yok.
+  Kanıt `../deckent-refactor-work/proof/CI-WINDOWS-2026-10-01/`.
 - **Yirmi üçüncü parti (2026-10-01; `integrate/2026-10-01-x`, worktree `/home/alperen/deckent-next-integrate-x`, taban 22. parti `8ec36126`):** + CI-FULL
   (`lane/ci-sol` `10d5cbde`, Sol uygulayıcı, lead commit'i yamadan 28/28 hash eşit). Bağımsız inceleme: lead'in ayrı bağlamda başlattığı Fable 5.1 alt ajanı **PASS**
   (`proof/CI-FULL-2026-10-01/review-independent.md`; F1 düşük: `runtime-overlay-parents.test.ts:94` gerekçesi adsız win32 skip; F2 açık: yük altında bir kez
   düşen `shell-overlay-write-set.test.ts:111`, tek başına 6/6, kök neden yok — ayrı izlenir). Hosted CI kabulü push sonrası altı hücre + bwrap ile.
   Sol 2226 REVISE (22): ER-R1 mühürlü event akışı doğrulanmıyordu, ER-R2 scope çapında mezar silme → `5dd9bf08` (red 2 fail → green 31/256, mutasyon 7–9 düştü), 23'e birleşti.
-  **Sıradaki:** 23 tam verify → Sol REQUEST_REVIEW (EXEC-RELEASE delta) → PASS'te push → hosted CI → owner'a rapor → yeni ana oturuma devir.
+  **Taze hosted durum:** `origin/main` exact `76582f9f`; run36884716187 Linux24/26 SUCCESS, macOS24/26 FAILURE; Windows24/26
+  cancelled (CI-WINDOWS-MACOS yukarıda). Sıradaki: platform şeridi → lead full verify → ayrı reviewer; yeni push yalnız lead yetkisiyle.
 - **Yirmi ikinci parti (2026-10-01; `integrate/2026-10-01-w`, worktree `/home/alperen/deckent-next-integrate-w`, taban `d11bdbfa`; ana oturum deckent-next-f6):**
   EXEC-RELEASE (`da102c4a`+`c0abc834`; owner D8; sahip = yama saklama geçişi, lead a′ mühürlü event log koşulu; composition 5500/5500) + SECRET-WRITE-CLOCK
   (`3bdd8111`+`a4616cfb` + lead arch `19a6aa19`; kararsızlığın kök nedeni WSL2 duvar saati geri adımı, `proof/SECRET-WRITE-FLAKE-2026-10-01`) + host-insights (`fc2b69e3`,
   auditor erken bulgu tablosu) + lead bütçe katlaması `8d5df641`. Açık: EXEC-RELEASE C1–C4 (PLAN), PROVIDER-SPEND-CLOCK, EXEC-RELEASE-INTEGRATIONS.
   Tam verify `8ec36126` 523/3748 geçti, 0 atlanan (`proof/INTEGRATE-2026-10-01-W-verify-8ec36126.log`); Sol REQUEST_REVIEW 2225. Dalga 1 kart girdileri + Jev J1–J6:
   `deckent-refactor-work/next-graph/deep-harvest/wave1/WAVE1-CARD-INPUTS.md`, `proof/WAVE1-JEV-2026-10-01/README.md` (owner soruları A1/A3/A8).
-- **CI-FULL yerel düzeltme hazırlığı — Sol uygulayıcı (owner 2026-10-01):** `lane/ci-sol`, exact taban
-  `d11bdbfa532db5880a55f3cb954b19db7a85d3ff`; ürün `src/` değişmedi, ana checkout/WIP/canlı durum korunur.
-  Windows compiler `.cmd` spawn kaldırıldı; OS temp fixture canonical, descriptor gerektiren pozitifler açık capability gate'li,
-  portable policy + tipli ret aktif; PTY tuşları taze render kanıtını bekliyor; bwrap bütün paket closure'ını baştan pin'liyor,
-  yalnız beş audit edilmiş host entry güncel, iki binary hash aynı. Dev-release diğer OS'leri kurulum etkisinden önce tipli reddeder.
-  **Taze yerel kanıt:** npm ci/build/lint EXIT0; bounded Docker eski recipe red → iki mimari green + taze x86 repeat byte-identical;
-  hedefli tooling+pack 12/12, Node26 15/15, Linux host-kit 10/10; temp alias red 4 fail → green 52 pass. Capability/PTY lane
-  ayrıntıları ve tüm başarısız ara koşular dış kanıtta; missing-proc simülasyonundaki mevcut native conflict hatası henüz açıklanmadı.
-  **Açık:** exact yeni aday full verify, başka bağımsız reviewer ve gerçek altı hosted hücre. Eski d11bdbfa run36862637511 altı verify
-  işi kırmızı; ayrı bwrap c10411a9 run36852469241 başarısı yeni düzeltmenin CI kabulü değildir. Sol CI-FULL için bağımsız PASS vermez.
-  **Sıradaki:** lead'e kaynak yaması + hash/envanter/negatif kanıt → entegrasyon full verify → ayrı reviewer → yetkili push → hosted
-  platform koşuları ve açık hata takibi. Commit/push/canlı müdahale yok. Kanıt `../deckent-refactor-work/proof/CI-FULL-2026-10-01/`.
 - **20. parti push edildi (2026-10-01):** Sol 2212 PASS exact `c10411a9` (K5-R1 kapandı: tek okuma snapshot'ı) → `origin/main` = `c10411a9`.
   Açık: `runtime-secret-write` kararsızlığı (ilk koşu 1 hata INSTALLATION_JOURNAL_INVALID, aynı SHA ikinci koşu temiz; kök neden yok), v44 canlı geçişi owner onayı bekliyor.
   **Yirmi birinci parti (yalnız belge):** D1–D10 owner kararları + 7 kart + Sol 2212 DOC-N1 (yüzey envanteri: TUI kısmi).

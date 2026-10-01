@@ -30,7 +30,7 @@ async function fixture() {
   return { project, options, policy, args, run: (extra: string[]) => exec(process.execPath, [binary, ...args, ...extra], { cwd: project, env }) };
 }
 describe.skipIf(process.platform === 'win32')('real CLI cancellation-delivery surface', () => {
-  it('matches SDK JSON and records bound Attempt intent without claiming worker termination', async () => {
+  it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket] matches SDK JSON and records bound Attempt intent without claiming worker termination', async () => {
     const f = await fixture(); const cli = await f.run(['--json']); expect(cli.stderr).toBe(''); expect(cli.stdout).not.toContain('\u001b');
     const sdk = await deliverRunCancellation(f.project, { schemaVersion: 1, commandId: 'cancel', action: 'cancel', scopeId: 's', runId: 'r', expectedRevision: 1 }, f.options);
     expect(JSON.parse(cli.stdout)).toEqual(sdk); expect(sdk.delivery.cancellationRequested).toBe(true);
@@ -38,13 +38,13 @@ describe.skipIf(process.platform === 'win32')('real CLI cancellation-delivery su
     const { store } = await openConfiguredAttemptStore(f.project, f.options);
     try { expect((await store.load('s', 'a'))!.cancelRequested).toBe(true); } finally { store.close(); }
   });
-  it('prints truthful EN/TR text on dumb redirected terminals and denies replay after authority removal', async () => {
+  it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket] prints truthful EN/TR text on dumb redirected terminals and denies replay after authority removal', async () => {
     const f = await fixture(); const en = await f.run(['--lang', 'en']); const tr = await f.run(['--lang', 'tr']);
     expect(en.stdout).toContain('cancellation request recorded'); expect(en.stdout).toContain('not dispatched; no worker delivery needed'); expect(en.stdout).toContain('not proof of Task acceptance');
     expect(tr.stdout).toContain('iptal isteği'); expect(tr.stdout).toContain('çalıştırılmamış'); expect(tr.stdout).toContain('görevin kabul edildiği'); expect(tr.stdout).not.toContain('\u001b');
     await f.policy(false); await expect(f.run(['--json'])).rejects.toMatchObject({ code: 1 });
   });
-  it('rejects duplicate and ambiguous revision flags before issuing intent', async () => {
+  it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket] rejects duplicate and ambiguous revision flags before issuing intent', async () => {
     const f = await fixture(); await expect(f.run(['--expected-revision', '2'])).rejects.toMatchObject({ code: 2 });
     const command = [...f.args]; command[command.length - 1] = '1e0';
     await expect(exec(process.execPath, [binary, ...command], { cwd: f.project, env: f.options.env })).rejects.toMatchObject({ code: 2 });

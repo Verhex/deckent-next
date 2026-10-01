@@ -17,7 +17,7 @@ async function fixture(cli: Record<string, unknown> = {}) {
   const result = { schemaVersion: 1 as const, layout: { fixture: true }, admission: { schemaVersion: 1 as const, commandId: 'c',
     run: { runId: 'r', revision: 0, scopeId: 's', layoutRevision: 'layout', cancellationRequested: false, tasks: [], criteria: [] } } };
   return { root, output, calls, result, context: {
-    root, env: { HOME: join(root, 'home') }, stdout: { write(value: string) { output.push(value); } },
+    root, env: { HOME: join(root, 'home'), USERPROFILE: join(root, 'home') }, stdout: { write(value: string) { output.push(value); } },
     async createRun(_root: string, received: unknown) { calls.push(received); return result as never; },
   } };
 }

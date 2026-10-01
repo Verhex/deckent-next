@@ -11,17 +11,22 @@ afterEach(async () => { await Promise.all(roots.splice(0).map(root => rm(root, {
 async function root() { const value = await mkdtemp(join(tmpdir(), 'deckent-graph-input-')); roots.push(value); return value; }
 const code = (error: unknown) => (error as { code?: string }).code;
 
-it('reads identical bounded JSON from a regular file and piped stdin', async () => {
+it.skipIf(process.platform === 'win32')('requires POSIX no-follow file input: reads bounded JSON from a regular file', async () => {
   const path = join(await root(), 'graph.json'); const graph = { schemaVersion: 2, revision: 1, tasks: [] };
   await writeFile(path, JSON.stringify(graph));
   await expect(readGraphInput(path, 1024)).resolves.toEqual(graph);
-  await expect(readGraphInput('-', 1024, Readable.from([JSON.stringify(graph)]))).resolves.toEqual(graph);
+
 });
 
-it('accepts exactly the byte limit and rejects streams or files that exceed it', async () => {
-  const value = '{"ok":true}'; const path = join(await root(), 'exact.json'); await writeFile(path, value);
-  await expect(readGraphInput(path, Buffer.byteLength(value))).resolves.toEqual({ ok: true });
+it('accepts exactly the byte limit from stdin and rejects an oversized stream', async () => {
+  const value = '{"ok":true}';
+  await expect(readGraphInput('-', Buffer.byteLength(value), Readable.from([value]))).resolves.toEqual({ ok: true });
   await expect(readGraphInput('-', Buffer.byteLength(value) - 1, Readable.from([value]))).rejects.toSatisfy(error => code(error) === 'CLI_GRAPH_INPUT_LIMIT');
+});
+
+it.skipIf(process.platform === 'win32')('requires POSIX no-follow file input: accepts exact bytes and refuses oversized files', async () => {
+  const value = '{"ok":true}', path = join(await root(), 'exact.json'); await writeFile(path, value);
+  await expect(readGraphInput(path, Buffer.byteLength(value))).resolves.toEqual({ ok: true });
   await writeFile(path, value + ' ');
   await expect(readGraphInput(path, Buffer.byteLength(value))).rejects.toSatisfy(error => code(error) === 'CLI_GRAPH_INPUT_LIMIT');
 });
@@ -31,7 +36,7 @@ it('rejects invalid UTF-8 and invalid JSON without parsing a partial graph', asy
   await expect(readGraphInput('-', 16, Readable.from(['{"task":'] ))).rejects.toSatisfy(error => code(error) === 'CLI_GRAPH_INPUT_INVALID');
 });
 
-it('rejects symlinks, directories, and missing paths without following or exposing them', async () => {
+it.skipIf(process.platform === 'win32')('requires POSIX no-follow file input: rejects symlinks, directories, and missing paths without following or exposing them', async () => {
   const base = await root(); const target = join(base, 'target.json'); const link = join(base, 'link.json'); const directory = join(base, 'directory');
   await writeFile(target, '{"safe":true}'); await symlink(target, link); await mkdir(directory);
   await expect(readGraphInput(link, 1024)).rejects.toSatisfy(error => code(error) === 'CLI_GRAPH_INPUT_UNAVAILABLE');

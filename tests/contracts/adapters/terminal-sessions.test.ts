@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { mkdtemp, readdir, readFile, rm, stat, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import { openTerminalSessionStore } from '#adapters/index.js';
 
 const roots: string[] = [];
@@ -16,6 +16,7 @@ const history = (question: string) => [{ role: 'system' as const, content: 'SYST
   { role: 'assistant' as const, content: '', toolCalls: [call] }, { role: 'tool' as const, toolCallId: 'c1', name: 'read_file', content: 'export const a = 1;' },
   { role: 'assistant' as const, content: 'It exports a.', toolCalls: [] }];
 
+describe.skipIf(process.platform === 'win32')('requires POSIX private session files and no-follow opening', () => {
 it('saves the whole history as one owner-only snapshot per session and resumes exactly the latest one, never duplicated', async () => {
   const { directory, sessions } = await store(), id = randomUUID();
   await sessions.save({ schemaVersion: 1, sessionId: id, scopeId: 'live', updatedAtMs: 1, messages: history('what does a.ts export?') });
@@ -62,4 +63,6 @@ it('keeps at most the configured number of sessions, oldest removed first', asyn
   expect((await sessions.list('live')).map(summary => summary.sessionId)).toEqual([ids[2], ids[1]]);
   await expect(sessions.save({ schemaVersion: 1, sessionId: randomUUID(), scopeId: 'live', updatedAtMs: 9,
     messages: [{ role: 'user', content: 'x'.repeat(2_000_000) }] })).rejects.toThrow('TERMINAL_SESSION_TOO_LARGE');
+});
+
 });

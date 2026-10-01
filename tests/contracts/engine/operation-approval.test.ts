@@ -39,7 +39,7 @@ async function fixture(admitWithinMs = 30_000) {
   return { journal, time, sessions, principal, broker, decide, record, close: () => journal.close() };
 }
 
-it('opens one pending request per exact command, admits the same command once its stored allow is verified within the window, and pins the consumed record afterwards', async () => {
+it.skipIf(process.platform !== 'linux')('[requires Linux live OS session /proc identity] opens one pending request per exact command, admits the same command once its stored allow is verified within the window, and pins the consumed record afterwards', async () => {
   const f = await fixture();
   try {
     const first = await f.broker.admit(descriptor, 'require-approval', command(), f.principal, context());
@@ -82,7 +82,7 @@ it('opens one pending request per exact command, admits the same command once it
   } finally { f.close(); }
 });
 
-it('never reads or opens an approval for a terminal record or an allowed command, and refuses deny, expiry, an unused allow and a decision from the future', async () => {
+it.skipIf(process.platform !== 'linux')('[requires Linux live OS session /proc identity] never reads or opens an approval for a terminal record or an allowed command, and refuses deny, expiry, an unused allow and a decision from the future', async () => {
   const f = await fixture();
   try {
     const find = vi.spyOn(f.journal.store, 'findOperation'), create = vi.spyOn(f.journal.store, 'create');
@@ -122,7 +122,7 @@ it('never reads or opens an approval for a terminal record or an allowed command
   } finally { f.close(); }
 });
 
-it('waits for a decision without closing the request: timeout and cancel leave it pending, a decision or expiry ends the wait', async () => {
+it.skipIf(process.platform !== 'linux')('[requires Linux live OS session /proc identity] waits for a decision without closing the request: timeout and cancel leave it pending, a decision or expiry ends the wait', async () => {
   const f = await fixture();
   try {
     const opened = await f.broker.admit(descriptor, 'require-approval', command(), f.principal, context());
@@ -148,7 +148,7 @@ it('waits for a decision without closing the request: timeout and cancel leave i
   } finally { f.close(); }
 });
 
-it('re-checks the admission window right before the first intent claim: an allow that expired while the target was observed claims nothing and sends nothing; a consumed intent still recovers (Astra 2128)', async () => {
+it.skipIf(process.platform !== 'linux')('[requires Linux live OS session /proc identity] re-checks the admission window right before the first intent claim: an allow that expired while the target was observed claims nothing and sends nothing; a consumed intent still recovers (Astra 2128)', async () => {
   const f = await fixture(1_000);
   const gated = { ...policy, grants: [{ id: 'effect', effect: 'require-approval', principals: 'all', scopes: ['scope'], actions: 'all', resource: { kind: 'operation', ids: 'all' } }, ...policy.grants] };
   let saved: EffectRecord | null = null, applied = 0, claims = 0, observeAt = 10_000;

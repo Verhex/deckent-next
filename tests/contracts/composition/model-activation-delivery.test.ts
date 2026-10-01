@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, expect, it } from 'vitest';
+import { describe, afterEach, expect, it } from 'vitest';
 import { admitConfiguredModelActivation } from '#composition/core/model-activation/index.js';
 import { encodeModelBindingDefinition } from '#domain/core/provider-catalog/index.js';
 import { openSqliteModelActivationStore, readLocalOsIdentity } from '#adapters/index.js';
@@ -49,12 +49,13 @@ async function fixture(responseMaxBytes: number | null) {
   clearConfigCache();
   const ledger = await prepareProductFile(resolveProductLayout({ projectRoot: project, root: data }), 'ledger', ['-wal', '-shm', '-journal']);
   (await openSqliteModelActivationStore(ledger, sqlite)).close(); // seed/migrate schema once; admit() itself opens 'forbid'
-  const env = { HOME: home, PATH: process.env.PATH ?? '/usr/bin:/bin' };
+  const env = { HOME: home, USERPROFILE: home, PATH: process.env.PATH ?? '/usr/bin:/bin' };
   const activate = { schemaVersion: 1 as const, action: 'activate' as const, commandId: 'activate-a', scopeId: 'scope-a', reference,
     expectedRevision: 0, catalogRevision: catalog.revision, expectedBinding: binding };
   return { project, env, activate };
 }
 
+describe.skipIf(process.platform === 'win32')('requires POSIX local principal; AUTHENTICATION_REQUIRED on Windows UID -1', () => {
 it('refuses activation when the already-declared profile cannot deliver on the runtime-service surface (live default numbers)', async () => {
   // service.responseMaxBytes = profile.limits.responseMaxBytes = 1048576 (the exact live default combination).
   const f = await fixture(1_048_576);
@@ -71,4 +72,6 @@ it('admits activation when no profile is declared yet for this reference (the co
   const f = await fixture(null);
   const result = await admitConfiguredModelActivation(f.project, f.activate, { env: f.env });
   expect(result).toMatchObject({ replayed: false, receipt: { record: { state: 'active', revision: 1 } } });
+});
+
 });

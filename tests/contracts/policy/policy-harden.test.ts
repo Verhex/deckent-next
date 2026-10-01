@@ -72,7 +72,7 @@ const ownerRoot = (me: Actor) => [{ id: 'root', principals: [me], roles: [INSTAL
 const refusals = (events: readonly AuditEvent[]) => events.filter(event => event.subject.kind === 'authority-refusal').map(event => event.subject);
 
 describe.skipIf(process.platform === 'win32')('policy.administer@1 hardening (POLICY-HARDEN P3-R)', () => {
-  it('K3: a general approval surface cannot allow an authority-surface approval (the request stays pending, the refusal is audited); a deny is not an authority', async () => {
+  it.skipIf(process.platform !== 'linux')('[requires Linux live OS session /proc identity] K3: a general approval surface cannot allow an authority-surface approval (the request stays pending, the refusal is audited); a deny is not an authority', async () => {
     const f = await fixture(() => [], ownerRoot);
     const pending = await f.admin.submit(f.command('k1', addRead('share', f.me)));
     if (pending.status !== 'approval-pending') throw new Error('pending expected');
@@ -90,7 +90,7 @@ describe.skipIf(process.platform === 'win32')('policy.administer@1 hardening (PO
     await expect(f.decideOn(f.principal, second.approval.approvalId, 'deny')).resolves.toMatchObject({ status: 'decided', decision: { decision: 'deny' } });
   });
 
-  it('a claimed intent whose grant was withdrawn before the effect is refused terminally: the authority record is not left busy, a later change is admitted, the refusal is audited', async () => {
+  it.skipIf(process.platform !== 'linux')('[requires Linux live OS session /proc identity] a claimed intent whose grant was withdrawn before the effect is refused terminally: the authority record is not left busy, a later change is admitted, the refusal is audited', async () => {
     const f = await fixture(() => [], ownerRoot);
     const revoked = { load: async () => { const now = await f.effects.loadEffect('s', 'lost'); const policy = await f.source.load(); return now ? { ...policy, grants: [], bindings: { ...policy.bindings, entries: [] } } : policy; },
       identity: () => f.source.identity() };
@@ -107,7 +107,7 @@ describe.skipIf(process.platform === 'win32')('policy.administer@1 hardening (PO
     expect(await f.admin.submit(f.command('next', addRead('share', f.me)))).toMatchObject({ status: 'approval-pending' });
   });
 
-  it('audits refusals: an exceeded delegation bound and an invalid change set are recorded with stage, code and command (no grants inside)', async () => {
+  it.skipIf(process.platform !== 'linux')('[requires Linux live OS session /proc identity] audits refusals: an exceeded delegation bound and an invalid change set are recorded with stage, code and command (no grants inside)', async () => {
     const f = await fixture(me => [{ id: 'request', effect: 'allow', actions: ['execute'], scopes: ['s'], principals: [me], resource: { kind: 'operation', ids: ['policy.administer'] } },
       readTool('mine', me), { id: 'decide', effect: 'allow', actions: 'all', scopes: ['s'], principals: 'all', resource: { kind: 'approval', ids: 'all' } }],
     () => [{ id: 'root', principals: [{ issuer: 'placeholder', subject: '1' }], roles: [INSTALLATION_OWNER_ROLE_ID], scopes: 'all' }]);
@@ -125,7 +125,7 @@ describe.skipIf(process.platform === 'win32')('policy.administer@1 hardening (PO
     expect(JSON.stringify(f.events())).not.toContain('edit_file');
   });
 
-  it('the approval card carries a bounded, redacted, human-readable diff instead of a hex digest', async () => {
+  it.skipIf(process.platform !== 'linux')('[requires Linux live OS session /proc identity] the approval card carries a bounded, redacted, human-readable diff instead of a hex digest', async () => {
     const f = await fixture(() => [], ownerRoot);
     const nasty = { schemaVersion: 1, changes: [{ kind: 'grant.add', grant: { ...readTool('share', f.me), resource: { kind: 'agent-tool', ids: ['read_file\u202ex\u009b1m'] } } },
       { kind: 'binding.remove', id: 'root' }] };

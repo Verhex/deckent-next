@@ -19,7 +19,7 @@ async function project() {
   const root = await mkdtemp(join(tmpdir(), 'deckent-mcp-eras-')); roots.push(root);
   const home = join(root, 'home'); await mkdir(home, { mode: 0o700 }); await mkdir(join(root, '.deckent'), { mode: 0o700 });
   await writeFile(join(root, '.deckent/config.json'), JSON.stringify({ mcp: { responseMaxBytes: 65_536, inputMaxBytes: 65_536, maxConcurrentCalls: 2 } }), { mode: 0o600 });
-  return { root, env: { HOME: home, PATH: process.env['PATH'] ?? '/usr/bin:/bin' } };
+  return { root, env: { HOME: home, USERPROFILE: home, PATH: process.env['PATH'] ?? '/usr/bin:/bin' } };
 }
 
 it.each([['legacy', 'legacy', '2025-11-25'], ['auto', 'modern', '2026-07-28'], [{ pin: '2026-07-28' }, 'modern', '2026-07-28']] as const)(

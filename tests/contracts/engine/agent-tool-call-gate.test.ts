@@ -55,7 +55,7 @@ async function fixture() {
   return { journal, time, clock, sessions, principal, requester, request, decide, gate, record, opened: () => opened, close: () => journal.close() };
 }
 
-it('admits an edit or shell effect only from a sealed allow of exactly this call; pending, deny, expired, missing or unverifiable records are typed refusals', async () => {
+it.skipIf(process.platform !== 'linux')('[requires Linux live OS session /proc identity] admits an edit or shell effect only from a sealed allow of exactly this call; pending, deny, expired, missing or unverifiable records are typed refusals', async () => {
   const f = await fixture();
   try {
     // Nobody was asked and the effect allows: no approval is read at all. An effect that asks without an allowed call is refused.
@@ -92,7 +92,7 @@ it('admits an edit or shell effect only from a sealed allow of exactly this call
   } finally { f.close(); }
 });
 
-it('binds the allow to the executed call: other arguments, another call position, a forged digest, another requester or scope never admit', async () => {
+it.skipIf(process.platform !== 'linux')('[requires Linux live OS session /proc identity] binds the allow to the executed call: other arguments, another call position, a forged digest, another requester or scope never admit', async () => {
   const f = await fixture();
   try {
     const allowed = f.request(subjectAt());
@@ -111,7 +111,7 @@ it('binds the allow to the executed call: other arguments, another call position
   } finally { f.close(); }
 });
 
-it('measures the allow at the claim: wall expiry, the producer monotonic budget and a decision from the future refuse it', async () => {
+it.skipIf(process.platform !== 'linux')('[requires Linux live OS session /proc identity] measures the allow at the claim: wall expiry, the producer monotonic budget and a decision from the future refuse it', async () => {
   const f = await fixture();
   try {
     const allowed = f.request(subjectAt());
@@ -133,7 +133,7 @@ it('measures the allow at the claim: wall expiry, the producer monotonic budget 
   } finally { f.close(); }
 });
 
-it('uses an allow once: it admits one command (again at its later passes), pins it in the intent, and never admits a second command', async () => {
+it.skipIf(process.platform !== 'linux')('[requires Linux live OS session /proc identity] uses an allow once: it admits one command (again at its later passes), pins it in the intent, and never admits a second command', async () => {
   const f = await fixture();
   try {
     const allowed = f.request(subjectAt());
@@ -160,7 +160,7 @@ it('uses an allow once: it admits one command (again at its later passes), pins 
   } finally { f.close(); }
 });
 
-it('runs the approved effect once through the C11 application: an allow that lapses while the target is observed claims nothing; a replay applies nothing again', async () => {
+it.skipIf(process.platform !== 'linux')('[requires Linux live OS session /proc identity] runs the approved effect once through the C11 application: an allow that lapses while the target is observed claims nothing; a replay applies nothing again', async () => {
   const f = await fixture();
   const gated = { ...policy, grants: [{ id: 'effect', effect: 'allow', principals: 'all', scopes: ['scope'], actions: 'all', resource: { kind: 'operation', ids: 'all' } }, ...policy.grants] };
   let saved: EffectRecord | null = null, applied = 0, claims = 0, observeAt: number | null = null;

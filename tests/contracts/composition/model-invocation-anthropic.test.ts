@@ -3,7 +3,7 @@ import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
 import { createServer, type Server } from 'node:https';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, expect, it } from 'vitest';
+import { describe, afterEach, expect, it } from 'vitest';
 import { invokeConfiguredModel } from '#composition/core/model-invocation/index.js';
 import { encodeModelBindingDefinition } from '#domain/index.js';
 import { anthropicPublishedTariff, openSqliteModelActivationStore, openSqliteModelInvocationReader, openSqliteProviderSpendIntegrityReader, readLocalOsIdentity } from '#adapters/index.js';
@@ -62,10 +62,11 @@ async function fixture(limitMinorUnits = 1000, allow = true) {
     resource: { kind: 'model-invocation', ids: [modelInvocationTargetId(reference)] } }] : [] }), { mode: 0o600 });
   const command = { schemaVersion: 1 as const, commandId: 'command', scopeId: 'scope', reference, catalogRevision: 'catalog', expectedBinding: binding,
     nativeRequest: { model: MODEL, messages: [{ role: 'user' as const, content: 'private prompt' }], max_completion_tokens: 8 } };
-  const env = { HOME: home, PATH: process.env.PATH ?? '/usr/bin:/bin' };
+  const env = { HOME: home, USERPROFILE: home, PATH: process.env.PATH ?? '/usr/bin:/bin' };
   return { project, ledger, command, env, seen, secretResolver: async (reference: string) => reference === 'ANTHROPIC_API_KEY' ? SECRET : undefined };
 }
 
+describe.skipIf(process.platform === 'win32')('requires POSIX local principal; AUTHENTICATION_REQUIRED on Windows UID -1', () => {
 it('runs the governed invocation with the key resolved by reference only, reserves the tariff bound and keeps the secret out of durable records', async () => {
   const f = await fixture();
   const first = await invokeConfiguredModel(f.project, f.command, { env: f.env, secretResolver: f.secretResolver });
@@ -106,4 +107,6 @@ it('refuses before any request when the budget cannot hold the bound, the policy
   const viaEnv = await fixture();
   const result = await invokeConfiguredModel(viaEnv.project, viaEnv.command, { env: { ...viaEnv.env, ANTHROPIC_API_KEY: SECRET } });
   expect(result.receipt.outcome?.state).toBe('responded');
+});
+
 });

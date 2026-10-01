@@ -48,7 +48,7 @@ async function fixture(options: { worktree?: boolean } = {}) {
   await link(join(main, '.env'), join(main, 'alias.txt')); await symlink(home, join(home, 'tools2', 'lib'));
   await chmod(join(main, 'locked'), 0o000); locked.push(join(main, 'locked'));
   const git = (...args: string[]) => execFileSync('git', args, { cwd: main, env: { ...process.env, HOME: home, GIT_AUTHOR_NAME: 'a', GIT_AUTHOR_EMAIL: 'a@x', GIT_COMMITTER_NAME: 'a',
-    GIT_COMMITTER_EMAIL: 'a@x' }, stdio: 'pipe' });
+    GIT_COMMITTER_EMAIL: 'a@x' }, stdio: 'pipe', timeout: 10_000 });
   git('init', '-q', '-b', 'main'); git('add', 'src'); git('commit', '-q', '-m', 'init');
   if (options.worktree) git('worktree', 'add', '-q', project, '-b', 'lane');
   const scope = await createWorkspaceScope(project);
@@ -100,7 +100,7 @@ describe('bubblewrap argument contract (S9, pure)', () => {
   });
 });
 
-describe('bubblewrap realm selection (S9)', () => {
+describe.skipIf(process.platform === 'win32')('bubblewrap realm selection (S9; requires POSIX filesystem permissions and paths)', () => {
   it('is chosen under prefer/require when bubblewrap and the user namespace are available, never under host', async () => {
     const f = await fixture();
     const usable = f.sandbox.usable(linux());
@@ -122,14 +122,16 @@ describe('bubblewrap realm selection (S9)', () => {
     const restricted = linux({ bubblewrap: { ...bubblewrapObservation('restricted', 'bwrap at /x: setting up uid map: Permission denied; the kernel refuses bubblewrap the user namespace'),
       restriction: { kind: 'user-namespace', hint: 'the kernel refuses bubblewrap the user namespace' } } });
     expect(f.sandbox.usable(restricted)).toMatchObject({ ok: false, restricted: true, reason: expect.stringContaining('user namespace') });
-    expect(resolveShellRealm('prefer-sandbox', restricted, [f.sandbox])).toMatchObject({ ok: true, realm: { kind: 'host' },
+    // Realm admission is Linux-only; a synthetic Linux measurement checks the pure resolver without claiming this host supports it.
+    const selectedHost = { ...restricted, platform: 'linux' as const };
+    expect(resolveShellRealm('prefer-sandbox', selectedHost, [f.sandbox])).toMatchObject({ ok: true, realm: { kind: 'host' },
       notice: expect.stringMatching(/^\[deckent\] sandbox: none; .*bubblewrap: .*user namespace/u) });
-    expect(resolveShellRealm('require-sandbox', none, [f.sandbox])).toEqual({ ok: false, code: 'SHELL_SANDBOX_UNAVAILABLE',
+    expect(resolveShellRealm('require-sandbox', { ...none, platform: 'linux' }, [f.sandbox])).toEqual({ ok: false, code: 'SHELL_SANDBOX_UNAVAILABLE',
       rejected: [{ kind: 'bubblewrap', reason: expect.stringMatching(/^bubblewrap unavailable \(.*below the minimum/u) }] });
     const gone = linux({ bubblewrap: { status: 'available', rejected: [], restriction: null, detail: null,
       launcher: { source: 'system', path: join(f.root, 'no-bwrap'), version: '0.13.0', sha256: null, overlay: true, identity: '0:0:0:0:0' } } });
     expect(f.sandbox.usable(gone)).toMatchObject({ ok: false, reason: expect.stringMatching(/no-bwrap is gone/u) });
-    expect(resolveShellRealm('require-sandbox', gone, [f.sandbox])).toEqual({ ok: false, code: 'SHELL_SANDBOX_UNAVAILABLE',
+    expect(resolveShellRealm('require-sandbox', { ...gone, platform: 'linux' }, [f.sandbox])).toEqual({ ok: false, code: 'SHELL_SANDBOX_UNAVAILABLE',
       rejected: [{ kind: 'bubblewrap', reason: expect.stringMatching(/no-bwrap is gone/u) }] });
   });
   it('lays out the view from the scope: deny floor masks, every .git read-only, symlinks and ignored directories untouched', async () => {
@@ -280,8 +282,8 @@ describe.skipIf(!sandboxReady)('bubblewrap realm with the real bwrap and a real 
   it('keeps a hard-linked local clone usable: verified objects stay readable, an alias among them does not (Astra 2156)', async () => {
     const f = await fixture();
     const clone = join(f.root, 'clone');
-    execFileSync('git', ['clone', '-q', f.main, clone], { env: { ...process.env, HOME: f.home }, stdio: 'pipe' });
-    const objects = execFileSync('find', [join(clone, '.git', 'objects'), '-type', 'f', '-links', '+1'], { encoding: 'utf8' }).trim().split('\n').filter(Boolean);
+    execFileSync('git', ['clone', '-q', f.main, clone], { env: { ...process.env, HOME: f.home }, stdio: 'pipe', timeout: 10_000 });
+    const objects = execFileSync('find', [join(clone, '.git', 'objects'), '-type', 'f', '-links', '+1'], { encoding: 'utf8', timeout: 10_000 }).trim().split('\n').filter(Boolean);
     expect(objects.length).toBeGreaterThan(0);
     await writeFile(join(clone, '.env'), 'SECRET-CLONE\n'); await link(join(clone, '.env'), join(clone, '.git', 'objects', 'aa', 'a'.repeat(38)).replace(/\/aa\/a{38}$/u, '/aa/' + 'a'.repeat(38)))
       .catch(async () => { await mkdir(join(clone, '.git', 'objects', 'aa'), { recursive: true }); await link(join(clone, '.env'), join(clone, '.git', 'objects', 'aa', 'a'.repeat(38))); });

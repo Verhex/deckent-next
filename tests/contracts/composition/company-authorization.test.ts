@@ -86,7 +86,7 @@ describe.skipIf(process.platform === 'win32')('company-aware authorization at ev
       .toEqual([['current', 'available', []], ['external', 'available', ['secret-task']]]);
   });
 
-  it('refuses a scope pinned to another company at the run, approval, model-activation, operation and worker ports (CLI and SDK)', async () => {
+  it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket] refuses a scope pinned to another company at the run, approval, model-activation, operation and worker ports (CLI and SDK)', async () => {
     // `s` is not one of the installation's own scopes at start: the trusted policy declares nothing yet, so the clean start below
     // is unaffected by decision 6 (H34 S3 Q1, owner 2026-09-27 evening: a foreign-pinned OWN scope now refuses the start itself,
     // see the dedicated start-refusal test). `s` is declared and pinned to another company only afterward — the ordinary "grew a
@@ -120,7 +120,7 @@ describe.skipIf(process.platform === 'win32')('company-aware authorization at ev
     expect((await calls()).filter(code => code === 'SCOPE_UNKNOWN' || code === 'POLICY_DENIED')).toEqual([]);
   });
 
-  it('never lets a role binding reach a scope pinned to another company', async () => {
+  it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket] never lets a role binding reach a scope pinned to another company', async () => {
     const policy = { schemaVersion: 2, revision: 'p2', grants: [], restrictions: [], separationOfDuties: [],
       roles: [{ id: 'viewer', permissions: [{ id: 'inspect-scope', effect: 'allow', actions: ['inspect'], resource: { kind: 'scope', ids: 'all' } }] }] };
     const bindings = (principals: typeof actor[]) => JSON.stringify({ schemaVersion: 1, revision: 'b1',
@@ -142,7 +142,7 @@ describe.skipIf(process.platform === 'win32')('company-aware authorization at ev
     } finally { await stopTestRuntimeService(otherService); }
   });
 
-  it('refuses to start when the service identity scope is pinned to another company (H34 S3 Q1, owner 2026-09-27 evening decision 6); the pin never moves and the same company starts normally', async () => {
+  it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket] refuses to start when the service identity scope is pinned to another company (H34 S3 Q1, owner 2026-09-27 evening decision 6); the pin never moves and the same company starts normally', async () => {
     const shutdown = { id: 'shutdown', effect: 'allow', actions: ['shutdown'], scopes: ['svc-scope'], principals: [actor], resource: { kind: 'service', ids: ['svc'] } };
     const f = await project({ service: { identity: { scopeId: 'svc-scope', serviceId: 'svc' } } },
       { schemaVersion: 1, revision: 'p', restrictions: [], grants: [...grants('svc-scope'), shutdown] }, { 'svc-scope': 'rival-company-7' });

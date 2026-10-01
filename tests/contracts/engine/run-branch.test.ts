@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawn } from 'node:child_process';
@@ -105,23 +105,43 @@ it.each(['before', 'after'] as const)('survives SIGKILL %s the atomic decision/R
     graph: resolved.graph, branch: resolved.decision, execution: fixtureExecution(resolved.graph), now: 0,
     policy: { schemaVersion: 2, poolId: 'pool', capacity: { executionSlots: 8, inFlightSlots: 8 }, ordering: ['yes', 'join'] } };
   const moduleUrl = pathToFileURL(join(process.cwd(), 'dist/adapters/index.js')).href;
+  const ready = `${f.path}.${boundary}.ready`;
   const child = spawn(process.execPath, ['--input-type=module', '-e', `
     import { DatabaseSync } from 'node:sqlite';
+    import { writeFileSync } from 'node:fs';
+    const stopAtBoundary = () => { writeFileSync(process.argv[6], process.argv[4]); Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0); };
     const { openSqliteAttemptStore } = await import(process.argv[1]);
     const store = await openSqliteAttemptStore(process.argv[2], JSON.parse(process.argv[3]));
     const original = DatabaseSync.prototype.exec;
     DatabaseSync.prototype.exec = function(sql) {
-      if (sql === 'COMMIT' && process.argv[4] === 'before') process.kill(process.pid, 'SIGKILL');
+      if (sql === 'COMMIT' && process.argv[4] === 'before') stopAtBoundary();
       const result = original.call(this, sql);
-      if (sql === 'COMMIT' && process.argv[4] === 'after') process.kill(process.pid, 'SIGKILL');
+      if (sql === 'COMMIT' && process.argv[4] === 'after') stopAtBoundary();
       return result;
     };
     await store.createRun(JSON.parse(process.argv[5]));
     process.exit(17);
-  `, moduleUrl, f.path, JSON.stringify(options), boundary, JSON.stringify(input)], { stdio: ['ignore', 'pipe', 'pipe'] });
+  `, moduleUrl, f.path, JSON.stringify(options), boundary, JSON.stringify(input), ready], { stdio: ['ignore', 'pipe', 'pipe'] });
   let stderr = ''; child.stderr.on('data', chunk => { stderr += String(chunk); });
-  const [code, signal] = await once(child, 'close');
-  expect({ code, signal }, stderr).toEqual({ code: null, signal: 'SIGKILL' });
+  const closed = once(child, 'close');
+  const drain = async () => {
+    let timer: NodeJS.Timeout | undefined;
+    try { return await Promise.race([closed, new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error('child close deadline')), 1000); })]); }
+    finally { clearTimeout(timer); }
+  };
+  try {
+    let reached = false;
+    for (let step = 0; step < 150; step++) {
+      try { reached = (await readFile(ready, 'utf8')) === boundary; } catch { /* The exact transaction boundary has not been reached. */ }
+      if (reached) break;
+      await new Promise<void>(resolve => setTimeout(resolve, 20));
+    }
+    expect(reached, stderr).toBe(true);
+    // Parent-directed kill is observable on Windows as well as POSIX; the child cannot cross the boundary.
+    expect(child.kill('SIGKILL')).toBe(true);
+    const [code, signal] = await drain();
+    expect({ code, signal }, stderr).toEqual({ code: null, signal: 'SIGKILL' });
+  } finally { child.kill('SIGKILL'); await drain(); }
   const reopened = await f.open();
   if (boundary === 'before') {
     expect(await reopened.loadRun('s', 'r')).toBeNull();

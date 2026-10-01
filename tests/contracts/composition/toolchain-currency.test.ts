@@ -29,7 +29,7 @@ async function fixture(currency: Record<string, unknown>, versions: Record<strin
     const version = versions[name]; if (!version) { response.statusCode = 404; response.end('{}'); return; } response.end(JSON.stringify({ name, version })); });
   servers.push(server); await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
   const endpoint = `http://127.0.0.1:${(server.address() as { port: number }).port}`;
-  const options = { env: { HOME: join(root, 'home') } };
+  const options = { env: { HOME: join(root, 'home'), USERPROFILE: join(root, 'home') } };
   return { project, options, endpoint, requests };
 }
 
@@ -61,7 +61,7 @@ it('stays offline-honest: disabled mode makes no request and an unreachable regi
 it('doctor --toolchains is an explicit opt-in that embeds the report; default doctor and other commands never probe', async () => {
   const f = await fixture({}, { '@openai/codex': '0.155.1', '@anthropic-ai/claude-code': '2.1.278' });
   let calls = 0; const lines: string[] = [];
-  const context = { root: f.project, env: { HOME: join(f.project, '..', 'home') }, stdout: { write: (text: string) => { lines.push(text); return true; } },
+  const context = { root: f.project, env: { HOME: join(f.project, '..', 'home'), USERPROFILE: join(f.project, '..', 'home') }, stdout: { write: (text: string) => { lines.push(text); return true; } },
     inspectToolchainCurrency: async (root: string) => { calls++; return inspectToolchainCurrency(root, f.options, async request => ({ version: '0.155.1', source: `fixture/${request.package}`, observedAt: new Date().toISOString() })); } };
   await runKernelCommand(['doctor', '--json'], context);
   expect(calls).toBe(0); expect(JSON.parse(lines.join(''))).not.toHaveProperty('toolchains');

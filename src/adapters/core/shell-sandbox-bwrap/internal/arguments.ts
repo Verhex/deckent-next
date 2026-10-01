@@ -99,7 +99,8 @@ function placedPins(view: BubblewrapView): { readonly path: string; readonly aft
   const out = new Map<string, number>();
   for (const mount of mounts) {
     if (!mount.protective) continue;
-    for (let path = dirname(mount.target); path !== '/' && path !== '.'; path = dirname(path)) {
+    // Every platform root is a fixed point of dirname (a Windows drive or UNC root too); never loop there synchronously.
+    for (let path = dirname(mount.target); path !== '/' && path !== '.' && path !== dirname(path); path = dirname(path)) {
       if (out.has(path)) break;
       if (targets.has(path)) continue;
       // The mount that shows this directory: the last one (in argument order) whose target holds it; none = the root (the open view's

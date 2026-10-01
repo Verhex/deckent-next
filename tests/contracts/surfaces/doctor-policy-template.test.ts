@@ -12,14 +12,14 @@ async function project() { const root = await mkdtemp(join(tmpdir(), 'deckent-do
 
 it('includes policyTemplate in doctor JSON when a template is recognized', async () => {
   const root = await project(); const lines: string[] = [];
-  const context = { root, env: { HOME: join(root, '..', 'home') }, stdout: { write: (text: string) => { lines.push(text); return true; } },
+  const context = { root, env: { HOME: join(root, '..', 'home'), USERPROFILE: join(root, '..', 'home') }, stdout: { write: (text: string) => { lines.push(text); return true; } },
     inspectPolicyTemplate: async () => ({ id: 'first-run-template', version: 1 }) };
   await runKernelCommand(['doctor', '--json'], context);
   expect(JSON.parse(lines.join(''))).toMatchObject({ policyTemplate: { id: 'first-run-template', version: 1 } });
 });
 it('is null, not a failure, when no handler is wired or no template is recognized', async () => {
   const root = await project(); const lines: string[] = [];
-  const env = { HOME: join(root, '..', 'home') };
+  const env = { HOME: join(root, '..', 'home'), USERPROFILE: join(root, '..', 'home') };
   await runKernelCommand(['doctor', '--json'], { root, env, stdout: { write: (text: string) => { lines.push(text); return true; } } });
   expect(JSON.parse(lines.join(''))).toMatchObject({ policyTemplate: null });
   lines.length = 0;

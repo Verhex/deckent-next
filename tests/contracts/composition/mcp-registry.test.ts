@@ -30,7 +30,7 @@ function workspace() {
   const project = join(base, 'project'), home = join(base, 'home');
   mkdirSync(join(project, '.deckent'), { recursive: true }); mkdirSync(home, { mode: 0o700 });
   writeFileSync(join(project, '.deckent', 'config.json'), '{}\n');
-  const env = { HOME: home, PATH: process.env['PATH'] ?? '/usr/bin:/bin', MY_TOKEN: 's3cr3t-value-xyz' };
+  const env = { HOME: home, USERPROFILE: home, PATH: process.env['PATH'] ?? '/usr/bin:/bin', MY_TOKEN: 's3cr3t-value-xyz' };
   const tools = join(base, 'tools.json');
   writeFileSync(tools, JSON.stringify([{ name: 'echo', description: 'Echo', inputSchema: { type: 'object', properties: {} } }]));
   const server = (label: string) => {
@@ -202,9 +202,9 @@ describe('the agent cannot reach the project MCP registry (read floor, shell, bo
   });
   it('the shell classifies the MCP registry as protected without granting platform custody', async () => {
     const p = await setup();
-    expect(await classifyReadOnlyShellCommand('cat .deckent/mcp.json', createShellPathContext(p.scope))).toMatchObject({ readOnly: false, reasonCode: 'PATH_PROTECTED' });
+    expect(await classifyReadOnlyShellCommand('cat .deckent/mcp.json', createShellPathContext({ ...p.scope, root: '/project' }))).toMatchObject({ readOnly: false, reasonCode: 'PATH_PROTECTED' });
   });
-  it('the bubblewrap view masks it and Landlock gives it no rule', async () => {
+  it.skipIf(process.platform === 'win32')('requires POSIX sandbox rule paths: the bubblewrap view masks it and Landlock gives it no rule', async () => {
     const p = await setup();
     const view = await resolveBubblewrapView({ project: p.scope, scratchDir: null }, { PATH: '/usr/bin:/bin' });
     expect(view.ok).toBe(true); if (!view.ok) return;
@@ -219,7 +219,7 @@ describe('the agent cannot reach the project MCP registry (read floor, shell, bo
     const usable = bubblewrapShellSandbox({ project: p.scope, scratchDir: null }).usable(capabilities);
     expect(usable.ok).toBe(true); if (!usable.ok) return;
     const result = await usable.realm.run({ command: 'cat .deckent/mcp.json; echo \'{"mcpServers":{}}\' > .deckent/mcp.json; cat src/a.ts; true',
-      cwd: p.scope.root, environment: { PATH: '/usr/bin:/bin', HOME: p.home }, fixedEnv: {}, timeoutMs: 20_000 });
+      cwd: p.scope.root, environment: { PATH: '/usr/bin:/bin', HOME: p.home, USERPROFILE: p.home }, fixedEnv: {}, timeoutMs: 20_000 });
     expect(result.output).not.toContain('REGISTRY-SECRET'); expect(result.output).toContain('export const a = 1;');
     expect(readFileSync(join(p.project, '.deckent', 'mcp.json'), 'utf8')).toContain('REGISTRY-SECRET');
   });

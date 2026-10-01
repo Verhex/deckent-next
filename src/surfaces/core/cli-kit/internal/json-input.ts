@@ -23,6 +23,7 @@ export async function readJsonInput(source: string, maxBytes: number, errors: Js
       if (stdin.isTTY) throw ErrorRegistry.createError(errors.tty);
       return await consume(stdin);
     }
+    if (process.platform === 'win32' || !(constants.O_NOFOLLOW > 0) || !(constants.O_NONBLOCK > 0)) throw ErrorRegistry.createError(errors.unavailable);
     const file = await open(source, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
     try {
       const info = await file.stat();

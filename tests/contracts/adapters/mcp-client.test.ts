@@ -143,7 +143,7 @@ describe('MCP client: calls, bounds and failures', () => {
     expect(p.stderr('fx')).not.toContain('abcdef0123456789abcdef');
   }, 30_000);
 
-  it('REALM-NOTICE: a sandbox that wins after a preferred one was passed over names that fallback on the card posture (the shell\'s own line)', async () => {
+  it.skipIf(process.platform === 'win32')('requires POSIX launcher/private credential custody: REALM-NOTICE: a sandbox that wins after a preferred one was passed over names that fallback on the card posture (the shell\'s own line)', async () => {
     const f = fixture('dual'), p = pool();
     const inside = 'bwrap at /work/project/.deckent/host/global/bin/bwrap-917f is inside the project or scratch area, where a sandboxed command could replace it';
     const caps = { schemaVersion: 2 as const, platform: 'linux', bubblewrap: { status: 'available' as const, launcher: null, rejected: [], restriction: null, detail: null },
@@ -364,7 +364,7 @@ describe.skipIf(!sandboxReady)('MCP client: a server in the real bubblewrap real
     const port = (listener.address() as { port: number }).port;
     // Astra 2170 R2: a server view always carries the write floor; a layout without it is refused (fail closed).
     const scope = await createWorkspaceScope(project), sandboxes = [bubblewrapShellSandbox({ project: scope, scratchDir: null, writeFloor: isWriteApprovalFloored })];
-    const environment = { HOME: home, PATH: `${dirname(process.execPath)}:/usr/bin:/bin` };
+    const environment = { HOME: home, USERPROFILE: home, PATH: `${dirname(process.execPath)}:/usr/bin:/bin` };
     const probe = { name: 'probe', description: 'What can I reach', inputSchema: { type: 'object', properties: {} } };
     const run = async (realm: 'require-sandbox' | 'host') => {
       const server = { id: realm === 'host' ? 'raw' : 'caged', command: process.execPath, args: [join(project, 'tools', 'raw-mcp.mjs'), join(home, 'secret.txt'), String(port)],
@@ -398,7 +398,7 @@ describe.skipIf(!sandboxReady)('MCP client: why a sandboxed server did not start
   };
   const open = async (f: ReturnType<typeof setup>, command: string, args: string[], realm: 'require-sandbox' | 'prefer-sandbox' | 'host' = 'require-sandbox') => {
     const scope = await createWorkspaceScope(f.project), sandboxes = [bubblewrapShellSandbox({ project: scope, scratchDir: null, writeFloor: isWriteApprovalFloored })];
-    const environment = { HOME: f.home, PATH: `${f.runners}:${dirname(process.execPath)}:/usr/bin:/bin` };
+    const environment = { HOME: f.home, USERPROFILE: f.home, PATH: `${f.runners}:${dirname(process.execPath)}:/usr/bin:/bin` };
     const server = { id: `hidden-${realm}`, command, args, env: { PATH: environment.PATH }, realm, tools: [] };
     return pool().open(server, settings([server], { connectTimeoutMs: 5_000 }), { cwd: f.project, environment, sandboxes });
   };
@@ -445,7 +445,7 @@ describe.skipIf(!sandboxReady)('MCP client: the project in the server\'s bubblew
     writeFileSync(join(project, 'tools', 'writer-mcp.mjs'), WRITER_SERVER); writeFileSync(join(project, 'package.json'), '{}\n'); writeFileSync(join(project, 'src', 'notes.txt'), '');
     // A turn's MCP launch binds no scratch area (scratchDir: null); one is bound here to show the view keeps it writable when there is one.
     const scope = await createWorkspaceScope(project), sandboxes = [bubblewrapShellSandbox({ project: scope, scratchDir: scratch, writeFloor: isWriteApprovalFloored })];
-    const environment = { HOME: home, PATH: `${dirname(process.execPath)}:/usr/bin:/bin` };
+    const environment = { HOME: home, USERPROFILE: home, PATH: `${dirname(process.execPath)}:/usr/bin:/bin` };
     const tool = { name: 'write', description: 'Append to files', inputSchema: { type: 'object', properties: {} } };
     let launches = 0;
     const run = async (realm: 'require-sandbox' | 'host', floor = join(project, 'package.json'), plain = join(project, 'src', 'notes.txt')) => {
@@ -548,7 +548,7 @@ describe('MCP registry: scopes, precedence, expansion and the trust record', () 
     expect(await expandMcpEntry({ command: '${NOPE}' }, 'local', env, secret)).toEqual({ ok: false, reason: 'variable-unset:NOPE' });
   });
 
-  it('registry files: absent is empty, a personal file must be private, local entries are keyed by the real project path; the trust record is private and atomic', async () => {
+  it.skipIf(process.platform === 'win32')('requires POSIX launcher/private credential custody: registry files: absent is empty, a personal file must be private, local entries are keyed by the real project path; the trust record is private and atomic', async () => {
     const root = mkdtempSync(join(tmpdir(), 'deckent-mcp-registry-')); roots.push(root);
     expect(await readMcpRegistryFile(join(root, 'none.json'), 'project')).toMatchObject({ ok: true, user: {} });
     const personal = join(root, 'mcp.json');
@@ -566,7 +566,7 @@ describe('MCP registry: scopes, precedence, expansion and the trust record', () 
     expect(await readMcpTrust(root)).toEqual({ ok: false, reason: 'trust-store-unsafe' });
   });
 
-  it('concurrent trust writers never lose a record (the config write lock serializes read-change-write)', async () => {
+  it.skipIf(process.platform === 'win32')('requires POSIX private credential custody: concurrent trust writers never lose a record (the config write lock serializes read-change-write)', async () => {
     const root = mkdtempSync(join(tmpdir(), 'deckent-mcp-trust-lock-')); roots.push(root);
     const record = (name: string) => ({ scope: 'project' as const, name, definitionDigest: 'a'.repeat(64), tools: [], decision: 'trusted' as const, reconnect: 0, approvedAtMs: 1,
       principal: { issuer: 'h', subject: '1' } });

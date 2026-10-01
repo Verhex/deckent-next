@@ -42,7 +42,7 @@ async function project() {
   return { root, data, env, ledger };
 }
 
-it('a second start against a live host never backs up or migrates the schema that host is using (Astra 2054 R1)', async () => {
+it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket] a second start against a live host never backs up or migrates the schema that host is using (Astra 2054 R1)', async () => {
   const f = await project();
   const live = await startConfiguredRuntimeService(f.root, observer, { env: f.env }); services.push(live);
   downgrade(f.ledger); // the live host stands in for an older build whose schema is still the previous version
@@ -51,7 +51,7 @@ it('a second start against a live host never backs up or migrates the schema tha
   expect(await backups(f.data)).toEqual([]);
 });
 
-it('two simultaneous starts on an older ledger migrate it once, under the winner\'s custody', async () => {
+it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket] two simultaneous starts on an older ledger migrate it once, under the winner\'s custody', async () => {
   const f = await project();
   downgrade(f.ledger);
   const [a, b] = await Promise.allSettled([startConfiguredRuntimeService(f.root, observer, { env: f.env }),

@@ -23,10 +23,10 @@ async function fixture(terminal: Record<string, unknown> = {}, extra: Record<str
   const project = join(root, 'project'), data = join(root, 'data'), home = join(root, 'home');
   await Promise.all([mkdir(join(project, '.deckent'), { recursive: true, mode: 0o700 }), mkdir(data, { mode: 0o700 }), mkdir(home, { mode: 0o700 })]);
   await writeFile(join(project, '.deckent/config.json'), JSON.stringify({ layout: { root: data }, terminal, ...extra }), { mode: 0o600 });
-  return { project, data, options: { env: { HOME: home, XDG_CONFIG_HOME: join(home, '.config'), DECKENT_GLOBAL_HOME: join(home, 'global') } } };
+  return { project, data, options: { env: { HOME: home, USERPROFILE: home, XDG_CONFIG_HOME: join(home, '.config'), DECKENT_GLOBAL_HOME: join(home, 'global') } } };
 }
 
-it('treats a fresh project without a state directory as no service, launches once and fails typed with the private log path when none becomes ready in time', async () => {
+it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket] treats a fresh project without a state directory as no service, launches once and fails typed with the private log path when none becomes ready in time', async () => {
   const f = await fixture({ serviceStartTimeoutMs: 1_000 });
   const launches: Array<{ entry: string; cwd: string; logPath: string }> = [];
   const started = Date.now();
@@ -39,7 +39,7 @@ it('treats a fresh project without a state directory as no service, launches onc
   expect((await stat(launches[0]!.logPath)).mode & 0o777).toBe(0o600);
 });
 
-it('never starts a service over an endpoint that fails ownership checks', async () => {
+it.skipIf(process.platform === 'win32')('requires POSIX managed storage; MANAGED_FILE_UNSUPPORTED — never starts a service over an endpoint that fails ownership checks', async () => {
   const f = await fixture();
   await mkdir(join(f.data, 'state'), { recursive: true, mode: 0o700 });
   await writeFile(join(f.data, 'state/runtime.sock'), 'not a socket', { mode: 0o600 });
@@ -48,7 +48,7 @@ it('never starts a service over an endpoint that fails ownership checks', async 
   expect(launched).toBe(0);
 });
 
-it('keeps composer history per project unless disabled, and never stores an entry that carried pasted content', async () => {
+it.skipIf(process.platform === 'win32')('requires POSIX managed storage; MANAGED_FILE_UNSUPPORTED — keeps composer history per project unless disabled, and never stores an entry that carried pasted content', async () => {
   const f = await fixture();
   const history = await openConfiguredTerminalHistory(f.project, f.options);
   await history!.append({ text: 'visible line', pastes: [] });
@@ -58,7 +58,7 @@ it('keeps composer history per project unless disabled, and never stores an entr
   expect(await openConfiguredTerminalHistory(off.project, off.options)).toBeNull();
 });
 
-it('treats an accepting but silent endpoint as a present service: bounded by the start deadline, reported, never replaced (Astra 2054 R2)', async () => {
+it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket] treats an accepting but silent endpoint as a present service: bounded by the start deadline, reported, never replaced (Astra 2054 R2)', async () => {
   const f = await fixture({ serviceStartTimeoutMs: 1_000 });
   await mkdir(join(f.data, 'state'), { recursive: true, mode: 0o700 });
   const endpoint = join(f.data, 'state/runtime.sock');
@@ -71,7 +71,7 @@ it('treats an accepting but silent endpoint as a present service: bounded by the
   expect(launched).toBe(0);
 });
 
-it('treats a crashed host\'s stale socket (nothing listening) as no service and launches once', async () => {
+it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket] treats a crashed host\'s stale socket (nothing listening) as no service and launches once', async () => {
   const f = await fixture({ serviceStartTimeoutMs: 1_000 });
   await mkdir(join(f.data, 'state'), { recursive: true, mode: 0o700 });
   const endpoint = join(f.data, 'state/runtime.sock');
@@ -85,7 +85,7 @@ it('treats a crashed host\'s stale socket (nothing listening) as no service and 
   expect(launched).toBe(1);
 });
 
-it('reports a launch as its own only when the answering service runs in the launched process', async () => {
+it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket] reports a launch as its own only when the answering service runs in the launched process', async () => {
   const service = { cancellation: { maxConcurrentDeliveries: 1, recoveryPageSize: 1, maxAttempts: 1, retryDelayMs: 1, claimTtlMs: 10 },
     cancellationRuntime: { scopeIds: ['scope'], pollIntervalMs: 1000, failureBackoffMs: 1000 },
     service: { inputMaxBytes: 4096, responseMaxBytes: 4096, maxConnections: 2, maxConcurrentRequests: 2, maxConcurrentExecutions: 1, headerTimeoutMs: 100, shutdownGraceMs: 100 } };
@@ -123,7 +123,7 @@ async function stubbornPeer(data: string, answerDescribe: boolean) {
   return seen;
 }
 
-it('bounds /service-restart and flagless stop by one budget when describe or the shutdown answer never comes, and launches nothing (Astra 2054 R2)', async () => {
+it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket] bounds /service-restart and flagless stop by one budget when describe or the shutdown answer never comes, and launches nothing (Astra 2054 R2)', async () => {
   for (const answerDescribe of [false, true]) {
     const f = await fixture({ serviceStartTimeoutMs: 1_000 });
     const seen = await stubbornPeer(f.data, answerDescribe);

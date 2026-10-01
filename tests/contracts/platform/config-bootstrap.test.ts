@@ -2,7 +2,7 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { chmod, mkdtemp, mkdir, writeFile, rm, readFile, readdir, lstat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
-import { afterEach, expect, it } from 'vitest';
+import { describe, afterEach, expect, it } from 'vitest';
 import { z } from 'zod';
 import { clearConfigCache, loadConfig, registerConfigSection, resolveProductLayout, productResourcePath, readJsonFile, healCorruptProjectConfig } from '#platform/index.js';
 import { encodeBootstrapJournal, observeBootstrapState, assertBootstrapUsable, assertBootstrapUnchanged } from '#platform/core/bootstrap-state/index.js';
@@ -15,7 +15,7 @@ async function fixture() {
   const root = await mkdtemp(join(tmpdir(), 'deckent-config-bootstrap-')); roots.push(root);
   const project = join(root, 'project'); await mkdir(project);
   const layout = resolveProductLayout({ projectRoot: project });
-  return { root, project, env: { HOME: join(root, 'home') }, journal: productResourcePath(layout, 'installationJournal'), config: productResourcePath(layout, 'config') };
+  return { root, project, env: { HOME: join(root, 'home'), USERPROFILE: join(root, 'home') }, journal: productResourcePath(layout, 'installationJournal'), config: productResourcePath(layout, 'config') };
 }
 function journal(f: Awaited<ReturnType<typeof fixture>>, phase: 'pending' | 'committed') {
   const payload = { schemaVersion: 2 as const, transactionId: 'test-install', planDigest: 'a'.repeat(64), profileDigest: 'b'.repeat(64),
@@ -28,6 +28,7 @@ function publishSync(f: Awaited<ReturnType<typeof fixture>>, phase: 'pending' | 
   writeFileSync(f.journal, journal(f, phase), { mode: 0o600 });
 }
 
+describe.skipIf(process.platform === 'win32')('requires POSIX bootstrap journal observation; BOOTSTRAP_STATE_UNSUPPORTED', () => {
 it('holds fresh and previously cached defaults when an installation journal is pending', async () => {
   const f = await fixture(); await loadConfig(f.project, { env: f.env });
   publishSync(f, 'pending');
@@ -89,4 +90,6 @@ it('checks the captured bootstrap fence under the config writer lock before any 
   } })).rejects.toMatchObject({ code: 'BOOTSTRAP_INSTALLATION_INCOMPLETE' });
   expect(guardedUnderLock).toBe(true); expect(await readFile(f.config, 'utf8')).toBe('{');
   expect((await readdir(dirname(f.config))).filter(name => name.includes('.bak.') || name.includes('.write-lock'))).toEqual([]);
+});
+
 });

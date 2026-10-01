@@ -1,6 +1,7 @@
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { build } from 'esbuild';
 import { afterEach, describe, expect, it } from 'vitest';
 // FASTURI-OUT (owner 2026-09-29): the stub and its guard against the INSTALLED MCP SDK, so an SDK upgrade that moves the ajv provider fails
@@ -34,7 +35,7 @@ describe('MCP SDK ajv stub against the installed SDK', () => {
     const { outdir, violations, hits } = await bundle(true);
     expect(violations).toEqual([]);
     expect(Object.fromEntries(hits)).toMatchObject({ '@modelcontextprotocol/client/_shims': 1, '@modelcontextprotocol/server/_shims': expect.any(Number) });
-    const sdk = await import(join(outdir, 'stdin.js')) as Record<string, new (...args: unknown[]) => unknown>;
+    const sdk = await import(pathToFileURL(join(outdir, 'stdin.js')).href) as Record<string, new (...args: unknown[]) => unknown>;
     expect(() => new sdk.Client!({ name: 't', version: '1' }, { jsonSchemaValidator: new sdk.DeckentJsonSchemaValidator!() })).not.toThrow();
     expect(() => new sdk.Server!({ name: 't', version: '1' }, { capabilities: { tools: {} }, jsonSchemaValidator: new sdk.DeckentJsonSchemaValidator!() })).not.toThrow();
     expect(() => new sdk.Server!({ name: 't', version: '1' }, { capabilities: { tools: {} } }))

@@ -72,7 +72,7 @@ async function fixture(options: { readonly responseMaxBytes?: number } = {}) {
 const decide = (client: ReturnType<typeof createConfiguredRuntimeClient>, approvalId: string, commandId: string, decision: 'allow' | 'deny') =>
   client.decideApproval({ schemaVersion: 1, scopeId: 's', approvalId, commandId, expectedRevision: 0, decision, reason: 'Reviewed' }) as Promise<{ status: string }>;
 
-it('executes a catalog operation through the runtime service: pending without an effect, decided on the live connection, the same command settles once (C12 G4)', async () => {
+it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket] executes a catalog operation through the runtime service: pending without an effect, decided on the live connection, the same command settles once (C12 G4)', async () => {
   const f = await fixture();
   try {
     const pending = await f.client.executeOperation(f.command('gated'));
@@ -104,7 +104,7 @@ it('executes a catalog operation through the runtime service: pending without an
   } finally { await stopTestRuntimeService(f.service); }
 });
 
-it('refuses a denied request, a policy without a grant and another company\'s scope with typed codes and sends nothing (C12 G4)', async () => {
+it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket] refuses a denied request, a policy without a grant and another company\'s scope with typed codes and sends nothing (C12 G4)', async () => {
   const f = await fixture();
   try {
     const pending = await f.client.executeOperation(f.command('denied'));
@@ -133,7 +133,7 @@ it('refuses a denied request, a policy without a grant and another company\'s sc
   } finally { await stopTestRuntimeService(f.service); }
 });
 
-it('refuses a released v15 envelope for the operation before dispatch, and bounds an inspected record by the delivery (protocol v16)', async () => {
+it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket] refuses a released v15 envelope for the operation before dispatch, and bounds an inspected record by the delivery (protocol v16)', async () => {
   const f = await fixture({ responseMaxBytes: 1024 });
   try {
     await f.policy('allow');

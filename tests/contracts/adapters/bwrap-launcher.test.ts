@@ -16,7 +16,7 @@ import { BUBBLEWRAP_BUNDLED, BUBBLEWRAP_MINIMUM_SYSTEM_VERSION, bubblewrapShellS
 // fixture root as the top of the ancestor walk; the defaults are uid 0 and `/`).
 const roots: string[] = [];
 afterEach(async () => { await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
-const uid = process.getuid!();
+const uid = process.getuid?.() ?? -1;
 const sha256 = (bytes: string | Buffer) => createHash('sha256').update(bytes).digest('hex');
 
 /** A launcher script: `--version` prints `version` (or `raw`), anything else appends its own path to the log and exits with `code`. */
@@ -48,7 +48,7 @@ async function sandboxFor(root: string) {
   return bubblewrapShellSandbox({ project: await createWorkspaceScope(project), scratchDir: null, writeFloor: null });
 }
 
-describe('bubblewrap launcher selection (BWRAP-SELECT)', () => {
+describe.skipIf(process.platform === 'win32')('requires POSIX script execution and ownership — bubblewrap launcher selection (BWRAP-SELECT)', () => {
   it('selects a root-owned system bwrap at or above the minimum and runs the probe with that launcher', async () => {
     const f = await fixture();
     await writeFile(join(f.sys, 'bwrap'), launcher(f.log, '0.12.1'), { mode: 0o755 });
@@ -184,7 +184,7 @@ describe('bubblewrap launcher selection (BWRAP-SELECT)', () => {
 // REALM-NOTICE (live 2026-09-29): a preferred provider passed over for any reason — not only a host restriction — is a visible fallback
 // (stream, model result, approval card), and doctor shows the realm chosen and every provider passed over, measured read-only.
 describe('a visible fallback after a preferred provider is passed over (REALM-NOTICE)', () => {
-  it('REALM-NOTICE (live 2026-09-29): a launcher inside the project falls back to Landlock visibly — stream/result notice and card posture name it', async () => {
+  it.skipIf(process.platform === 'win32')('requires POSIX launcher fixture — REALM-NOTICE (live 2026-09-29): a launcher inside the project falls back to Landlock visibly — stream/result notice and card posture name it', async () => {
     const f = await fixture();
     const project = join(f.root, 'project'); await mkdir(project, { recursive: true });
     // The live shape: the state root (and so the realized bundled copy) inside the project; the probe says available, the provider refuses.
@@ -226,7 +226,7 @@ describe('a visible fallback after a preferred provider is passed over (REALM-NO
     expect(resolved.notice.length).toBeLessThan(600);
   });
 
-  it('REALM-NOTICE doctor: the probe says available, the provider refuses — the report shows both, with the realm chosen and why', async () => {
+  it.skipIf(process.platform === 'win32')('requires POSIX launcher fixture — REALM-NOTICE doctor: the probe says available, the provider refuses — the report shows both, with the realm chosen and why', async () => {
     const f = await fixture();
     const project = join(f.root, 'project'); await mkdir(project, { recursive: true });
     const stateDir = join(project, '.deckent', 'host', 'global');
@@ -253,7 +253,7 @@ describe('a visible fallback after a preferred provider is passed over (REALM-NO
       .toMatchObject({ selected: 'bubblewrap', marker: 'sandbox: bubblewrap', notice: null, rejected: [] });
   });
 
-  it('REALM-NOTICE doctor: a read-only measurement (place: false) never creates, writes or re-modes the state root; a placed copy is used', async () => {
+  it.skipIf(process.platform === 'win32')('requires POSIX launcher fixture — REALM-NOTICE doctor: a read-only measurement (place: false) never creates, writes or re-modes the state root; a placed copy is used', async () => {
     const f = await fixture();
     const unplaced = await selectBubblewrapLauncher(f.options({ place: false }));
     expect(unplaced).toMatchObject({ status: 'unavailable', launcher: null,
@@ -276,7 +276,7 @@ describe('a visible fallback after a preferred provider is passed over (REALM-NO
 const stagedBundle = fileURLToPath(new URL(`../../../src/adapters/core/shell-sandbox-bwrap/bundled/linux-${process.arch}/bwrap`, import.meta.url));
 const staged = existsSync(stagedBundle) && sha256(readFileSync(stagedBundle)) === BUBBLEWRAP_BUNDLED.sha256[process.arch as 'x64'];
 describe('the bundled bubblewrap on this host (BWRAP-SELECT)', () => {
-  it.skipIf(!staged)('selects the bundled 0.13.0 over a system bwrap below the minimum and runs the sandbox from the realized copy', async () => {
+  it.skipIf(process.platform !== 'linux' || !staged)('selects the bundled 0.13.0 over a system bwrap below the minimum and runs the sandbox from the realized copy', async () => {
     const root = await mkdtemp(join(tmpdir(), 'deckent-bwrap-real-')); roots.push(root);
     const observed = await selectBubblewrapLauncher({ stateDir: join(root, 'state') });
     const realized = join(root, 'state', 'bin', `bwrap-${BUBBLEWRAP_BUNDLED.sha256[process.arch as 'x64']}`);
@@ -289,7 +289,11 @@ describe('the bundled bubblewrap on this host (BWRAP-SELECT)', () => {
       return;
     }
     expect(observed).toMatchObject({ status: 'available', launcher: { source: 'bundled', version: '0.13.0', overlay: true, path: realized } });
-    if (existsSync('/usr/bin/bwrap')) expect(observed.rejected).toContainEqual({ path: '/usr/bin/bwrap', reason: expect.stringMatching(/below the minimum 0\.12\.0/u) });
+    if (existsSync('/usr/bin/bwrap')) {
+      const systemOwner = (await lstat('/usr/bin/bwrap')).uid;
+      expect(observed.rejected).toContainEqual({ path: '/usr/bin/bwrap', reason: expect.stringMatching(systemOwner === 0
+        ? /below the minimum 0\.12\.0/u : new RegExp(`owned by uid ${systemOwner}, not 0`, 'u')) });
+    }
     const sandbox = await sandboxFor(root);
     const usable = sandbox.usable(linux(observed));
     if (!usable.ok) throw new Error(usable.reason);
@@ -299,4 +303,10 @@ describe('the bundled bubblewrap on this host (BWRAP-SELECT)', () => {
     expect(result.output).toContain(`bwrap-${BUBBLEWRAP_BUNDLED.sha256[process.arch as 'x64']}`);
     expect(result.output).toContain('inside');
   });
+});
+
+it('native Windows reports unsupported instead of selecting a Linux launcher', async () => {
+  const unavailable = async () => { throw new Error('Windows must not launch Linux probes'); };
+  expect(await probeShellCapabilities({ platform: 'win32', bubblewrap: unavailable, kernel: unavailable }))
+    .toMatchObject({ bubblewrap: { status: 'unsupported', launcher: null }, userNamespace: 'unsupported', landlock: { status: 'unsupported' } });
 });

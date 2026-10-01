@@ -2,7 +2,7 @@ import { existsSync } from 'node:fs';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, expect, it, vi } from 'vitest';
+import { describe, afterEach, expect, it, vi } from 'vitest';
 import { applyPolicyTemplateInstallation } from '#composition/core/installation/index.js';
 import * as adapters from '#adapters/index.js';
 import * as platform from '#platform/index.js';
@@ -26,6 +26,7 @@ function clockPerOperation(source: () => number) {
   return { get samples() { return samples; } };
 }
 
+describe.skipIf(process.platform === 'win32')('requires POSIX durable installation journal; INSTALLATION_JOURNAL_UNSUPPORTED', () => {
 it('the flake: Date.now stepping back 1 s right after the pending entry still installs and commits on the first attempt', async () => {
   const root = await project(), base = Date.now(), raw = Date.now.bind(Date);
   // Ordering-independent: the step happens exactly once the pending journal exists on disk (the measured flake window).
@@ -63,4 +64,6 @@ it('reads journal time from the platform trusted clock (I40), not raw Date.now',
   await expect(applyPolicyTemplateInstallation(root, 'installation')).resolves.toMatchObject({ status: 'installed' });
   expect(clock.samples).toBe(4); // pending, two published updates, commit
   expect((await platform.observeBootstrapState(root)).record).toMatchObject({ phase: 'committed', createdAtMs: trusted, updatedAtMs: trusted });
+});
+
 });

@@ -8,7 +8,7 @@ import { createHmacIntegrity } from '#platform/index.js';
 import { RunReservationApplication, ApprovalApplication, TaskApprovalAdmission, assertApprovalPolicyCurrent } from '#engine/index.js';
 import { fixtureExecution } from '../support/execution-registry.js';
 
-it('pending approval occupies no candidate slot; allow requires a fresh reservation and replay cannot expand', async () => {
+it.skipIf(process.platform !== 'linux')('[requires Linux live OS session /proc identity] pending approval occupies no candidate slot; allow requires a fresh reservation and replay cannot expand', async () => {
   const root = await mkdtemp(join(tmpdir(), 'deckent-approval-reserve-')); const path = join(root, 'ledger.db');
   const options = { busyTimeoutMs: 100, journalMode: 'wal', durability: 'full' } as const;
   const store = await openSqliteAttemptStore(path, options); const journal = openSqliteApprovalStore(path, options);

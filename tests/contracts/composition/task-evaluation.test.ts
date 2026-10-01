@@ -19,7 +19,7 @@ async function fixture(exitCode: number, acceptedExitCodes = [0], stdout = 'priv
   const configPath = join(project, '.deckent/config.json'); const registry = fixtureDockerRegistry(['purchase']);
   await writeFile(configPath, JSON.stringify({ layout: { root: data }, artifacts: { maxBytes: 65536 },
     admission: { poolId: 'p', executionSlots: 1, inFlightSlots: 1, ordering: 'input-order', registry } }));
-  const options = { env: { HOME: join(root, 'home') } }; const opened = await openConfiguredAttemptStore(project, options);
+  const options = { env: { HOME: join(root, 'home'), USERPROFILE: join(root, 'home') } }; const opened = await openConfiguredAttemptStore(project, options);
   await opened.store.createExecutionPool({ schemaVersion: 1, poolId: 'p', capacity: { executionSlots: 1, inFlightSlots: 1 } }); opened.store.close();
   const os = userInfo(); const principals = [{ issuer: hostname(), subject: String(os.uid) }];
   const policy = async (evaluate: boolean) => writeFile(join(data, 'policy.json'), JSON.stringify({ schemaVersion: 1, revision: evaluate ? 'allow' : 'deny', restrictions: [], grants: [
@@ -75,7 +75,7 @@ describe.skipIf(process.platform === 'win32')('configured task evaluation', () =
 });
 
 
-it('shows a sealed final report through configured custody while task acceptance still rejects a failed process', async () => {
+it.skipIf(process.platform === 'win32')('requires POSIX managed storage: shows a sealed final report through configured custody while task acceptance still rejects a failed process', async () => {
   const report = { schemaVersion: 1, kind: 'native-worker-report', status: 'reported', report: { schemaVersion: 1,
     summary: 'All done according to the worker', changedFiles: ['note.txt'], checks: [{ command: 'npm test', outcome: 'passed' }], openIssues: [] } };
   const f = await fixture(7, [0], JSON.stringify(report) + '\n');

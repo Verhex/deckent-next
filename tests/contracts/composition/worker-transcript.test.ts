@@ -15,7 +15,7 @@ const identity = { scopeId: 's', runId: 'r', taskId: 't', attemptId: 'a-1', gene
 async function fixture() {
   const root = await mkdtemp(join(tmpdir(), 'dn-transcript-')); roots.push(root);
   const project = join(root, 'project'); await mkdir(join(project, '.deckent'), { recursive: true, mode: 0o700 });
-  const options = { env: { HOME: join(root, 'home') } };
+  const options = { env: { HOME: join(root, 'home'), USERPROFILE: join(root, 'home') } };
   await writeFile(join(project, '.deckent/config.json'), JSON.stringify({ layout: { root: join(root, 'data') } }));
   const opened = await openConfiguredAttemptStore(project, options);
   const principals = [{ issuer: hostname(), subject: String(userInfo().uid) }];
@@ -33,7 +33,7 @@ async function fixture() {
   return { project, options, policy, count: events.length };
 }
 
-it('reads a sealed worker transcript through SDK and CLI with a deterministic summary and a human-readable timeline', async () => {
+it.skipIf(process.platform === 'win32')('requires POSIX managed storage; MANAGED_FILE_UNSUPPORTED — reads a sealed worker transcript through SDK and CLI with a deterministic summary and a human-readable timeline', async () => {
   const f = await fixture();
   const sdk = await inspectConfiguredWorkerTranscript(f.project, identity, f.options);
   expect(sdk).toMatchObject({ sealed: { eventCount: f.count }, summary: { provider: 'claude', outcome: 'success', turns: 4, filesTouched: ['hello.txt'],

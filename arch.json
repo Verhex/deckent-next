@@ -1598,6 +1598,7 @@
     },
     "src/adapters/core/terminal-history": {
       "dependencies": [
+        "src/platform/core/managed-files",
         "src/domain/core/agent-turn",
         "src/adapters/core/native-connection"
       ],

@@ -84,7 +84,7 @@ describe.skipIf(!ready)('full-auto write set: new parent directories (Astra 2182
 });
 
 describe('the edit tools cannot make a floor-named directory either (Astra 2182 R3)', () => {
-  it.skipIf(process.platform === 'win32')('[requires POSIX ledger] write_file under a missing parent fails with the custody diagnosis and makes no directory, card or not', async () => {
+  it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket] write_file under a missing parent fails with the custody diagnosis and makes no directory, card or not', async () => {
     for (const decision of ['deny', 'allow'] as const) {
       const f = await modeRuntime({ grants: [...GRANTS, rule('edit-tool', 'agent-tool', ['write_file'], 'require-approval', true)], mode: 'full-auto' });
       const result = await f.call('write_file', { path: 'src/package.json/payload.txt', content: 'bad\n' }, decision);

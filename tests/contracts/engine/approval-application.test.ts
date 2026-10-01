@@ -31,7 +31,7 @@ async function fixture() {
     close: async () => { journal.close(); await rm(root, { recursive: true, force: true }); } };
 }
 describe('durable verified approval application', () => {
-  it('racing surfaces with one command return one signed decision and one receipt/outbox transition', async () => {
+  it.skipIf(process.platform !== 'linux')('[requires Linux live OS session /proc identity] racing surfaces with one command return one signed decision and one receipt/outbox transition', async () => {
     const f = await fixture();
     try {
       const [cli, mcp] = await Promise.all([f.make('cli').decide(f.command), f.make('mcp').decide(f.command)]);
@@ -47,7 +47,7 @@ describe('durable verified approval application', () => {
       try { expect(reopened.store.load('scope', cli.request.approvalId)).toEqual(cli); } finally { reopened.close(); }
     } finally { await f.close(); }
   });
-  it('records a decision no earlier than the request when the host wall clock has stepped back (measured on WSL2)', async () => {
+  it.skipIf(process.platform !== 'linux')('[requires Linux live OS session /proc identity] records a decision no earlier than the request when the host wall clock has stepped back (measured on WSL2)', async () => {
     const f = await fixture();
     try {
       // The request was created at 1020 by a process whose clock was ahead; this process decides at its own 1000.
@@ -58,7 +58,7 @@ describe('durable verified approval application', () => {
       expect(verifyApproval(decided, f.integrity).status).toBe('decided');
     } finally { await f.close(); }
   });
-  it('a conflicting decision has one winner and leaves no second receipt', async () => {
+  it.skipIf(process.platform !== 'linux')('[requires Linux live OS session /proc identity] a conflicting decision has one winner and leaves no second receipt', async () => {
     const f = await fixture();
     try {
       const results = await Promise.allSettled([f.make('cli').decide(f.command), f.make('mcp').decide({ ...f.command, commandId: 'other', decision: 'deny' })]);
@@ -66,7 +66,7 @@ describe('durable verified approval application', () => {
       expect(results.filter(r => r.status === 'rejected')).toHaveLength(1);
     } finally { await f.close(); }
   });
-  it('expiry before and during reauthentication never grants approval', async () => {
+  it.skipIf(process.platform !== 'linux')('[requires Linux live OS session /proc identity] expiry before and during reauthentication never grants approval', async () => {
     for (const during of [false, true]) {
       const f = await fixture();
       try {
@@ -80,7 +80,7 @@ describe('durable verified approval application', () => {
       } finally { await f.close(); }
     }
   });
-  it('explicit renewal preserves the expired request, starts a new pending request and replays exactly', async () => {
+  it.skipIf(process.platform !== 'linux')('[requires Linux live OS session /proc identity] explicit renewal preserves the expired request, starts a new pending request and replays exactly', async () => {
     const f = await fixture();
     try {
       f.clock.wallMs = 1100;
@@ -97,7 +97,7 @@ describe('durable verified approval application', () => {
       await f.make('cli').decide({ ...f.command, approvalId: next.request.approvalId, commandId: 'allow-renewed' });
     } finally { await f.close(); }
   });
-  it('denies static credentials, revoked sessions, foreign scope, changed bytes and caller channel fields', async () => {
+  it.skipIf(process.platform !== 'linux')('[requires Linux live OS session /proc identity] denies static credentials, revoked sessions, foreign scope, changed bytes and caller channel fields', async () => {
     const f = await fixture();
     try {
       await expect(f.make('cli').decide({ ...f.command, channel: 'trusted' })).rejects.toThrow('APPROVAL_INVALID');

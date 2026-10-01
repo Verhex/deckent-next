@@ -6,7 +6,7 @@ const os = userInfo();
 const peer: LocalPeerIdentity = Object.freeze({ pid: 123, uid: os.uid, gid: os.gid, assurance: 'linux-so-peercred' });
 
 describe('local peer shutdown authentication', () => {
-  it('shares kernel peer identity verification without granting a policy scope', () => {
+  it.skipIf(process.platform === 'win32')('requires POSIX OS principal and native peer evidence — shares kernel peer identity verification without granting a policy scope', () => {
     const identity = verifyLocalPeerIdentity(peer);
     expect(identity).toEqual(readLocalOsIdentity()); expect(identity).not.toHaveProperty('scopeIds');
     expect(() => verifyLocalPeerIdentity(peer, { subject: String(peer.uid) })).toThrow('AUTHENTICATION_REQUIRED');
@@ -14,7 +14,7 @@ describe('local peer shutdown authentication', () => {
     expect(() => verifyLocalPeerIdentity({ ...peer, uid: peer.uid + 1 })).toThrow('AUTHENTICATION_REQUIRED');
     expect(() => verifyLocalPeerIdentity({ ...peer, assurance: 'client-declared' } as never)).toThrow('AUTHENTICATION_REQUIRED');
   });
-  it('binds native peer evidence to the current OS principal and externally supplied scopes', async () => {
+  it.skipIf(process.platform === 'win32')('requires POSIX OS principal and native peer evidence — binds native peer evidence to the current OS principal and externally supplied scopes', async () => {
     const actor = await new LocalPeerShutdownAuthentication(peer, ['service-scope']).verify(undefined);
     expect(actor).toEqual({
       principal: { ...readLocalOsIdentity(), scopeIds: ['service-scope'] },
@@ -24,7 +24,7 @@ describe('local peer shutdown authentication', () => {
     expect(Object.isFrozen(actor.principal)).toBe(true);
   });
 
-  it('rejects client credentials rather than accepting a wire-authored persona', async () => {
+  it.skipIf(process.platform === 'win32')('requires POSIX OS principal and native peer evidence — rejects client credentials rather than accepting a wire-authored persona', async () => {
     const verifier = new LocalPeerShutdownAuthentication(peer, ['service-scope']);
     await expect(verifier.verify({ principal: readLocalOsIdentity() })).rejects.toMatchObject({ code: 'AUTHENTICATION_REQUIRED' });
   });

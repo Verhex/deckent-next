@@ -50,7 +50,7 @@ registerProviderConfig();
 async function project(operations: unknown, open = true) {
   const root = await mkdtemp(join(tmpdir(), 'dn-catalog-')); cleanup.push(() => rm(root, { recursive: true, force: true }));
   const dir = join(root, 'project'); await mkdir(join(dir, '.deckent'), { recursive: true, mode: 0o700 });
-  const options = { env: { HOME: join(root, 'home') } };
+  const options = { env: { HOME: join(root, 'home'), USERPROFILE: join(root, 'home') } };
   await writeFile(join(dir, '.deckent/config.json'), JSON.stringify({ layout: { root: join(root, 'data') }, operations }));
   if (!open) return { dir, root, options };
   const opened = await openConfiguredAttemptStore(dir, options); opened.store.close();
@@ -61,7 +61,7 @@ async function project(operations: unknown, open = true) {
 const command = (commandId: string, operation: { id: string; version: number }, kind = 'memo') => ({ schemaVersion: 1 as const, commandId, scopeId: 's', operation,
   target: { kind, id: 'M-1' }, idempotencyKey: `k-${commandId}`, input: { note: 'hi' }, expectedVersion: null });
 
-it('resolves a module-provided operation from the unified catalog: the same resolver serves the SDK and the product CLI, with an unchanged config shape', async () => {
+it.skipIf(process.platform !== 'linux')('[requires Linux live OS session /proc identity] resolves a module-provided operation from the unified catalog: the same resolver serves the SDK and the product CLI, with an unchanged config shape', async () => {
   // Config declares only the target; the catalog entry comes from the module manifest (today: EFFECT_OPERATION_UNKNOWN).
   const p = await project({ catalog: [], targets: [target] });
   const sdk = await executeConfiguredOperation(p.dir, command('c1', { id: 'test.post', version: 1 }), p.options);
@@ -81,7 +81,7 @@ it('resolves a module-provided operation from the unified catalog: the same reso
   expect(allWrites).toHaveLength(4);
 });
 
-it('refuses the same id@version from two sources (config vs module) with a typed config issue and never lets the config definition win', async () => {
+it.skipIf(process.platform === 'win32')('requires POSIX private policy custody: refuses the same id@version from two sources (config vs module) with a typed config issue and never lets the config definition win', async () => {
   // Today the config schema accepts this and the config descriptor silently shadows the module's.
   expect(issues({ catalog: [descriptor('test.post', 'memo')], targets: [target] })).toEqual(['OPERATION_CATALOG_CONFLICT']);
   // A different version of a module operation is still inside the module's namespace: closed to config too (owner 2026-09-27
@@ -94,7 +94,7 @@ it('refuses the same id@version from two sources (config vs module) with a typed
   expect(allWrites).toHaveLength(before);
 });
 
-it('closes a registered module\'s namespace to new config ids it never declared itself, through the real config validation and execution path (owner 2026-09-27 decision 7)', async () => {
+it.skipIf(process.platform === 'win32')('requires POSIX private policy custody: closes a registered module\'s namespace to new config ids it never declared itself, through the real config validation and execution path (owner 2026-09-27 decision 7)', async () => {
   // `test.other` and `test.sub.y` are new ids under the already-registered `test.memo` module's namespace (`test`); the module never
   // declared either itself, so today (before decision 7) neither the exact-id checks nor the plain conflict check would catch them.
   expect(issues({ catalog: [descriptor('test.other', 'memo')], targets: [target] })).toEqual(['OPERATION_NAMESPACE_RESERVED']);
@@ -109,7 +109,7 @@ it('closes a registered module\'s namespace to new config ids it never declared 
   expect(allWrites).toHaveLength(before);
 });
 
-it('protects Core code operations: config may not redefine a Core id at any version nor claim a Core target kind; Core descriptors resolve as Core', async () => {
+it.skipIf(process.platform !== 'linux')('[requires Linux live OS session /proc identity] protects Core code operations: config may not redefine a Core id at any version nor claim a Core target kind; Core descriptors resolve as Core', async () => {
   const core = (id: string, version: number, targetKind = 'memo') => ({ ...descriptor(id, targetKind), operation: { id, version } });
   // Same version and a new version are both refused: the id belongs to Core, not to the installation's config.
   expect(issues({ catalog: [core('workspace.file.write', 1)], targets: [target] })).toEqual(['OPERATION_CORE_REDEFINED']);

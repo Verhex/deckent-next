@@ -57,17 +57,24 @@ Sıra: C11-1 ve Hat A ilk dogfood denemesi tamamlandı ([COMPLETED-PLAN](COMPLET
 
 ## Açık işler — sıradaki (owner 2026-09-24)
 
-**CI-FULL — owner doğrudan onayı 2026-10-01 (ENTRY2217 sonrası):** Sol bu kartın uygulayıcısıdır; `lane/ci-sol`
-worktree tabanı exact `d11bdbfa532db5880a55f3cb954b19db7a85d3ff`. Bu istisna eski macOS F9 kapsam dışı sınırını yalnız bu kart için kaldırır.
-Yerel düzeltmeler hazırlıkta: shell-free yerel compiler, canonical OS temp fixture, mevcut Linux descriptor capability'sine bağlı
-pozitif testler + etkin tipli ret kanıtı, PTY readiness senkronizasyonu, tam bwrap paket closure pin'i ve beş audit edilmiş host entry
-refresh'i, Linux-only dev-release tipli ret. `src/` güvenlik sınırları, assertion/bütçe limitleri ve iki binary hash gevşetilmez.
-Kalan kabul: lead entegrasyonu + exact aday full verify + başka bağımsız reviewer + ayrı push yetkisiyle altı gerçek hosted OS/Node işi;
-Windows/macOS/Node26 matrisi ve Linux hosted yeniden koşusu henüz kanıtlanmadı. Simüle missing-proc koşusunda mevcut native overlay
-conflict testi bir kez kırıldı; normal Linux koşusunda geçti, kök neden açık (log korunur). Repository paketlerinin gelecekte
-prune edilmesi fail-closed kalır; immutable mirror bu kartta uygulanmadı. CI-FULL'de Sol kendi değişikliğine bağımsız PASS vermez.
-Commit/push/canlı müdahale bu uygulama yetkisine dahil değil. Kanıt `proof/CI-FULL-2026-10-01/` (dış alan); açık borç ve yeni skip
-envanteri lead handoff'ta, bu owner kararı genel macOS/Windows ürün desteği kabulü değildir.
+**CI-WINDOWS-MACOS — owner 2026-10-01, Opus lead → Sol uygulayıcı:** `lane/ci-sol-2`, taban exact
+`76582f9f1cd2bd694a460795e181ce70641f0888`. Önceki CI-FULL `10d5cbde` 23. partiye birleşti; bu tabanın hosted
+run `36884716187` Linux/24 + Linux/26 SUCCESS, macOS/24 + macOS/26 FAILURE (51 dosya / 153 vaka).
+Windows/24 + Windows/26 verify adımı 75 dakikayı aştığı için owner yetkisiyle 16:47:06Z'ye kadar iptal isteği kabul edildi;
+job'lar 16:47:51Z / 16:47:43Z'de cancelled. İnceleme: Linux-only runtime/session/descriptor test varsayımları ve Windows
+asılmasının exact test/child nedenleri; görünür capability kapıları + tipli ret, sonlu job/fixture süreleri. Güvenlik/bütçe
+gevşetme ve macOS/Windows runtime soketi uygulaması yok. Yeni maddi kanıtla aynı güvenlik sınırı düzeltildi: Windows'ta
+O_NOFOLLOW/O_NONBLOCK yok; ortak CLI JSON dosya okuması mevcut tipli *_INPUT_UNAVAILABLE ile, terminal history/session
+factory'leri MANAGED_FILE_UNSUPPORTED ile erişimden önce reddeder; stdin ve POSIX davranışı korunur. Metadata separator,
+USERPROFILE ve görünür POSIX-mode test ayrımı bu şeritte; COMMIT crash proof parent-kill bariyeriyle taşınabilir kalır.
+Final yerel typecheck/ESLint/arch/memory/build ve Node26 guard/crash19/19 temiz; Linux guard simülasyonu native kabul değildir.
+Windows final partial-log envanterinde14dosya timing/lock/descendant/native kök neden kanıtı açık; detay dış proof'ta. Kalan kabul: şerit hedefli yerel kanıt → lead entegrasyon full verify
+→ ayrı bağımsız reviewer → ayrıca yetkili lead push. Yeni hosted koşu/re-run yok; şerit commit yetkili, push yetkili değil.
+Kanıt `proof/CI-WINDOWS-2026-10-01/` (dış alan); Sol kendi işine bağımsız PASS vermez.
+CI-FULL'den taşınan açık sınırlar korunur: simüle missing-proc native overlay conflict bir kez kırıldı (normal Linux green,
+kök neden açık); `shell-overlay-write-set.test.ts:111` yük altında bir kez düştü (izole 6/6, bağımsız inceleme F2);
+future repository prune fail-closed, immutable mirror uygulanmadı. Eski kanıt `proof/CI-FULL-2026-10-01/`; native platform
+kabulü bu yeni şerit veya Linux hosted success ile tamamlanmış sayılmaz.
 
 **Owner 2026-09-24 akşam — iki ayrı iş (birleştirilmez):** (1) **Deckent native terminal = Claude Code sınıfı ajan terminali:**
 Deckent'i geliştirebilecek tam bağlamlı tek model, izin/araç akışı, Deckent takibi, tam otonom iş; 32k bağlamlı yerel model buna

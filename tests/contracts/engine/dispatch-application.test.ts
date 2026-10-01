@@ -8,7 +8,7 @@ import { mkdtemp, mkdir, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { afterEach, expect, it } from 'vitest';
+import { describe, afterEach, expect, it } from 'vitest';
 import { FileArtifactStore, DockerSupervisor, openSqliteAttemptStore, type SqliteAttemptStore } from '#adapters/index.js';
 import { DispatchApplication, type ExecutionSupervisor } from '#engine/index.js';
 import { custodyOrDockerProfiles, custodyProfile, dispatchAdmission, grantTestLaunch } from '../support/custody.js';
@@ -27,6 +27,7 @@ async function fixture() {
   const artifacts = new FileArtifactStore({ root: artifactRoot, maxBytes: 1048576 });
   return { root, workspace, store, request, artifacts };
 }
+describe.skipIf(process.platform === 'win32')('requires POSIX private FileArtifactStore; ARTIFACT_UNSUPPORTED', () => {
 it.skipIf(!imageId)('returns durable terminal after real Docker release without executing twice; replay still requires authorization', async () => {
   const f = await fixture(); let denied = false; let authorizations = 0;
   const policy = { async authorize() { authorizations++; if (denied) throw new Error('DENIED'); } };
@@ -275,4 +276,6 @@ it('keeps malformed supervisor terminal evidence unresolved without retaining ou
   await expect(app.reconcile(f.request)).rejects.toThrow();
   await expect(app.cancel(f.request)).rejects.toThrow();
   expect((await f.store.readDispatch(f.request))?.terminal).toBeNull();
+});
+
 });

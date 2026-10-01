@@ -33,7 +33,7 @@ async function fixture(policy: unknown) {
 }
 
 describe('separation of duties on the approval decision path', () => {
-  it('the requester cannot approve its own request (typed), leaves it pending and writes no receipt; another principal approves', async () => {
+  it.skipIf(process.platform !== 'linux')('[requires Linux live OS session /proc identity] the requester cannot approve its own request (typed), leaves it pending and writes no receipt; another principal approves', async () => {
     const f = await fixture(v2());
     try {
       const own = f.request(f.self, 'a');
@@ -48,7 +48,7 @@ describe('separation of duties on the approval decision path', () => {
       expect(decided).toMatchObject({ status: 'decided', decision: { decision: 'allow', actor: { subject: f.self.subject, issuer: f.self.issuer } } });
     } finally { await f.close(); }
   });
-  it('is data: v1 policy and a rule scoped elsewhere keep self-approval (solo stays one step)', async () => {
+  it.skipIf(process.platform !== 'linux')('[requires Linux live OS session /proc identity] is data: v1 policy and a rule scoped elsewhere keep self-approval (solo stays one step)', async () => {
     for (const policy of [v1, v2(['elsewhere'])]) {
       const f = await fixture(policy);
       try {

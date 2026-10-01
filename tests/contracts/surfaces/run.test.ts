@@ -30,7 +30,7 @@ async function fixture() {
   return { project, data, options, policy };
 }
 describe.skipIf(process.platform === 'win32')('compiled Run CLI and SDK', () => {
-  it('returns the same RunView and honestly labels stored state in Turkish pipe output', async () => {
+  it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket] returns the same RunView and honestly labels stored state in Turkish pipe output', async () => {
     const f = await fixture(); const { store } = await openConfiguredAttemptStore(f.project, f.options);
     try { await admitRunAttempts(store, [{ runId: 'r', scopeId: 's', taskId: 't', attemptId: 'a', layoutRevision: 'l', generation: 1 }]); } finally { store.close(); }
     await f.policy(['r', 'missing']);

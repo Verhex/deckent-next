@@ -24,7 +24,7 @@ async function fixture() {
   return { path, store, identities, sourceRoot, workspaceRoot, git, brokerOptions };
 }
 
-it('pins one base for two Run attempts across restart despite source HEAD advancement', async () => {
+it.skipIf(process.platform === 'win32')('requires POSIX private Git custody: pins one base for two Run attempts across restart despite source HEAD advancement', async () => {
   const f = await fixture(); const firstApp = new RunWorkspaceAcquisitionApplication(f.store, new GitRunWorkspaceProvider(new GitWorkspaceBroker(f.brokerOptions)));
   const first = await firstApp.acquire(f.identities[0]); const custody = await f.store.loadRunWorkspaceCustody('s', 'r');
   expect(custody?.baseRevision).toBe(first.baseCommit);
@@ -37,7 +37,7 @@ it('pins one base for two Run attempts across restart despite source HEAD advanc
   expect(second.baseCommit).toBe(first.baseCommit); expect(await reopened.loadRunWorkspaceCustody('s', 'r')).toEqual(custody);
 });
 
-it('adopts an existing typed lease into missing Run custody without sampling current HEAD', async () => {
+it.skipIf(process.platform === 'win32')('requires POSIX private Git custody: adopts an existing typed lease into missing Run custody without sampling current HEAD', async () => {
   const f = await fixture(); const broker = new GitWorkspaceBroker(f.brokerOptions); const recorded = await broker.captureSourceBase();
   const lease = await broker.allocate({ schemaVersion: 1, identity: f.identities[0]!, baseCommit: recorded.baseCommit });
   expect(await f.store.loadRunWorkspaceCustody('s', 'r')).toBeNull();

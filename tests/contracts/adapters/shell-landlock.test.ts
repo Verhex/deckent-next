@@ -37,7 +37,7 @@ async function project() {
   return { base, root: scope.root, scratch, outside, scope };
 }
 
-describe('Landlock rule set (S11): carve around protected paths, .git read-only', () => {
+describe.skipIf(process.platform === 'win32')('requires POSIX sandbox rule paths: Landlock rule set (S11): carve around protected paths, .git read-only', () => {
   it('grants whole clean trees, lists carved directories only, keeps .git read-only and gives protected paths and links no rule', async () => {
     const p = await project();
     const built = await buildLandlockRules({ project: p.scope, scratchDir: p.scratch });

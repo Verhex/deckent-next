@@ -7,7 +7,7 @@ import { runConfiguredMcpCommand } from '#composition/core/agent-turn/index.js';
 import { me, runtime } from '../support/chat-turn-harness.js';
 const roots: string[] = [];
 afterEach(async () => { await Promise.all(roots.map(root => rm(root, {recursive:true,force:true}))); });
-it('revoking MCP trust while its call awaits approval prevents dispatch from the stale card', async () => {
+it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket] revoking MCP trust while its call awaits approval prevents dispatch from the stale card', async () => {
  const root=mkdtempSync(join(tmpdir(),'astra-mcp-revoke-')); roots.push(root);
  const toolsFile=join(root,'tools.json'), logFile=join(root,'log.jsonl');
  writeFileSync(toolsFile,JSON.stringify([{name:'echo',description:'Echo',inputSchema:{type:'object',properties:{text:{type:'string'}}}}])); appendFileSync(logFile,'');

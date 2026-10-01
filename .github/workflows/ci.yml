@@ -8,6 +8,8 @@ jobs:
   verify:
     name: verify (${{ matrix.os }}, node ${{ matrix.node }})
     runs-on: ${{ matrix.os }}
+    # Run 36884716187: Linux 14m05s/14m20s; allow ~2x headroom while bounding stalled advisory cells.
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:

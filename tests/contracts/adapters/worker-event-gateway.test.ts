@@ -27,6 +27,7 @@ const call = (socketPath: string, method: 'GET' | 'POST', path: string, body?: s
 });
 const event = (sequence: number, extra: Record<string, unknown> = {}) => JSON.stringify({ schemaVersion: 1, sequence, atMs: sequence, kind: 'unmapped', nativeType: 'x', count: 1, ...extra });
 
+describe.skipIf(process.platform === 'win32')('requires POSIX private native gateway ownership; NATIVE_CONNECTION_UNAVAILABLE', () => {
 it('accepts worker events only after the bootstrap, validates each against the current schema and order, and bounds the request', async () => {
   const received: WorkerEvent[][] = []; const connection = await gateway(await fixture(), received); const socket = connection.descriptor.socketPath;
   expect(await call(socket, 'POST', '/events', event(1) + '\n')).toBe(403);
@@ -111,4 +112,6 @@ it('refuses a worker-forged model verdict and derives the host verdict from acce
   expect(received.flat().map(item => item.kind)).toEqual(['session.started', 'session.ended', 'dropped']);
   expect(connection.modelVerification()).toEqual({ status: 'substituted', admitted: 'claude-sonnet-5-5',
     observed: ['claude-fable-5-1', 'claude-haiku-4-5-20251001', 'claude-sonnet-5-5'], unexpected: ['claude-fable-5-1'] });
+});
+
 });

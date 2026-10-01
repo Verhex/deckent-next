@@ -57,7 +57,7 @@ async function ledger() {
 const principal = { issuer: 'local-os', subject: '1000' };
 const allow = (policyRevision = 'rev-1', ruleId = 'secret-rule') => ({ policyRevision, effect: 'allow' as const, ruleId });
 
-it('administration: authorize, then a sealed secret-change audit (name + backend + principal + decision, never the value), then the write', async () => {
+it.skipIf(process.platform === 'win32')('requires POSIX private audit keyring — administration: authorize, then a sealed secret-change audit (name + backend + principal + decision, never the value), then the write', async () => {
   const f = await ledger(), order: string[] = [];
   const admin = new SecretStoreAdministration(f.file, async request => { order.push(`authorize:${request.action}:${request.name}`); return allow(); },
     event => { order.push(`audit:${event.subject.kind}`); f.audit.record(event); }, () => 42);
@@ -81,7 +81,7 @@ it('administration: authorize, then a sealed secret-change audit (name + backend
   expect(auditEventSchema.safeParse({ ...event, subject: undecided }).success).toBe(false);
 });
 
-it('administration: no audit record, no change; an authorization that fails writes and audits nothing', async () => {
+it.skipIf(process.platform === 'win32')('requires POSIX private audit keyring — administration: no audit record, no change; an authorization that fails writes and audits nothing', async () => {
   const f = await ledger(); let audited = 0;
   const failingAudit = new SecretStoreAdministration(f.file, async () => allow('rev'), () => { throw new Error('AUDIT_UNAVAILABLE'); }, () => 1);
   await expect(failingAudit.set({ principal, scopeId: 'installation', name: 'A' }, CANARY)).rejects.toThrow('AUDIT_UNAVAILABLE');
@@ -92,7 +92,7 @@ it('administration: no audit record, no change; an authorization that fails writ
   expect(audited).toBe(0); expect(await f.file.listNames()).toEqual([]);
 });
 
-it('administration: a refusal is audited with its decision and nothing is written; an unrecordable refusal is still a refusal', async () => {
+it.skipIf(process.platform === 'win32')('requires POSIX private audit keyring — administration: a refusal is audited with its decision and nothing is written; an unrecordable refusal is still a refusal', async () => {
   const f = await ledger();
   const deny = new SecretStoreAdministration(f.file, async () => ({ policyRevision: 'rev-2', effect: 'deny', ruleId: null }), event => { f.audit.record(event); }, () => 7);
   const error = await deny.set({ principal, scopeId: 'installation', name: 'OPENAI_API_KEY' }, CANARY).then(() => null, (caught: unknown) => caught);

@@ -1,7 +1,7 @@
 import { mkdtemp, mkdir, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { afterEach, expect, it } from 'vitest';
+import { describe, afterEach, expect, it } from 'vitest';
 import { FileArtifactStore, openSqliteAttemptStore, type SqliteAttemptStore } from '#adapters/index.js';
 import { TaskEvaluationApplication } from '#engine/core/task-evaluation/index.js';
 import { admitRunAttempts } from '../support/admission.js';
@@ -34,6 +34,7 @@ async function fixture(output: 'complete' | 'partial' | 'malformed' = 'complete'
   return { app, store, artifacts, state, authorization, evaluator };
 }
 
+describe.skipIf(process.platform === 'win32')('requires POSIX private FileArtifactStore; ARTIFACT_UNSUPPORTED', () => {
 it('rejects caller verdict, evaluator, actor and path fields before ledger reads', async () => {
   const f = await fixture();
   const guarded = new Proxy(f.store, { get(target, property, receiver) {
@@ -100,4 +101,6 @@ it('rejects a corrupt replay snapshot without reevaluating', async () => {
   const replay = new TaskEvaluationApplication(replayStore, { async verify() { return principal; } }, f.authorization, f.evaluator, f.artifacts, { maxEvidenceItems: 2, maxTotalBytes: 4096 });
   await expect(replay.execute(command)).rejects.toThrow('RUN_STORE_CORRUPT');
   expect(f.state.evaluations).toBe(1);
+});
+
 });

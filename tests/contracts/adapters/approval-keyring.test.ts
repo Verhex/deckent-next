@@ -7,7 +7,7 @@ import { resolveProductLayout, productResourcePath } from '../../../src/platform
 import { constantTimeDigestEqual, createHmacIntegrity } from '../../../src/platform/core/integrity/index.js';
 import { encodeCommandProjection } from '../../../src/domain/core/command/index.js';
 
-it('reopens private signing custody and rejects unsafe files without creating on read', async () => {
+it.skipIf(process.platform === 'win32')('requires POSIX private keyring; INTEGRITY_KEY_UNAVAILABLE — reopens private signing custody and rejects unsafe files without creating on read', async () => {
   const root = await mkdtemp(join(tmpdir(), 'deckent-key-'));
   const layout = resolveProductLayout({ projectRoot: root });
   try {

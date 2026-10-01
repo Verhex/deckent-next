@@ -72,7 +72,7 @@ function ledgerSnapshot(path: string) {
   finally { db.close(); }
 }
 
-it('shows exact per-invocation spending across compiled SDK, CLI and MCP without mutating money state', async () => {
+it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket] shows exact per-invocation spending across compiled SDK, CLI and MCP without mutating money state', async () => {
   const root = await mkdtemp(join(tmpdir(), 'deckent-spending-inspection-')); roots.push(root);
   const project = join(root, 'project'), home = join(root, 'home'), data = join(root, 'data');
   await Promise.all([mkdir(join(project, '.deckent'), { recursive: true }), mkdir(home), mkdir(data)]);

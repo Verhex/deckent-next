@@ -13,7 +13,7 @@ async function fixture() {
   const root = await mkdtemp(join(tmpdir(), 'deckent-grants-cli-')); roots.push(root);
   const home = join(root, 'home'); await mkdir(home); await mkdir(join(root, '.deckent'));
   await writeFile(join(root, '.deckent/config.json'), JSON.stringify({}));
-  return { root, env: { HOME: home, PATH: process.env.PATH ?? '/usr/bin:/bin' } };
+  return { root, env: { HOME: home, USERPROFILE: home, PATH: process.env.PATH ?? '/usr/bin:/bin' } };
 }
 const grant = { id: 'standing-abc', key: 'v1:run_shell:command:npm test', tool: 'run_shell', kind: 'command' as const, text: 'npm test' };
 const sink = () => { const out = { text: '' }; return { out, stdout: { write(value: string) { out.text += value; } } }; };

@@ -8,7 +8,7 @@ const roots: string[] = [];
 afterEach(async () => { await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 async function root() { const value = await mkdtemp(join(tmpdir(), 'dn-history-')); roots.push(value); return value; }
 
-it('persists visible lines privately across sessions, redacts secret shapes and skips oversized entries', async () => {
+it.skipIf(process.platform === 'win32')('requires POSIX private mode and O_NOFOLLOW history contract — persists visible lines privately across sessions, redacts secret shapes and skips oversized entries', async () => {
   const path = join(await root(), 'terminal-history.jsonl');
   const first = openTerminalHistoryFile(path);
   expect(await first.load()).toEqual([]);
@@ -22,7 +22,7 @@ it('persists visible lines privately across sessions, redacts secret shapes and 
   expect(await readFile(path, 'utf8')).not.toContain('sk-live-0123456789abcdef');
 });
 
-it('keeps only the newest entries and compacts the file once it doubles; refuses a symlinked history file', async () => {
+it.skipIf(process.platform === 'win32')('requires POSIX private mode and O_NOFOLLOW history contract — keeps only the newest entries and compacts the file once it doubles; refuses a symlinked history file', async () => {
   const dir = await root(); const path = join(dir, 'terminal-history.jsonl');
   const file = openTerminalHistoryFile(path, { maxEntries: 3, maxEntryBytes: 64 });
   for (let i = 0; i < 6; i++) await file.append({ text: `line ${i}` });

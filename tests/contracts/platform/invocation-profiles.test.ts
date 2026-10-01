@@ -15,7 +15,7 @@ const profile = (overrides: Record<string, unknown> = {}) => ({ schemaVersion: 1
 const collection = (...profiles: unknown[]) => ({ schemaVersion: 1, profiles });
 async function configFixture() {
   const root = await mkdtemp(join(tmpdir(), 'deckent-invocation-profile-config-')); roots.push(root);
-  const project = join(root, 'project'), home = join(root, 'home'), env = { HOME: home, XDG_CONFIG_HOME: join(home, '.config') };
+  const project = join(root, 'project'), home = join(root, 'home'), env = { HOME: home, USERPROFILE: home, XDG_CONFIG_HOME: join(home, '.config') };
   const projectPath = join(project, '.deckent/config.json'), globalPath = resolveGlobalConfigPaths(env).platformPath;
   await Promise.all([mkdir(dirname(projectPath), { recursive: true }), mkdir(dirname(globalPath), { recursive: true })]);
   return { project, env, projectPath, globalPath };

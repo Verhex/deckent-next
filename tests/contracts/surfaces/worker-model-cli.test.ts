@@ -21,7 +21,7 @@ async function project() {
 }
 async function run(argv: string[], handlers: Record<string, unknown>, root: string) {
   const out: string[] = [];
-  const code = await main(argv, { root, env: { HOME: join(root, 'h') }, initialize() {}, stdout: { write(value: string) { out.push(value); } }, stderr: { write() {} }, ...handlers } as never);
+  const code = await main(argv, { root, env: { HOME: join(root, 'h'), USERPROFILE: join(root, 'h') }, initialize() {}, stdout: { write(value: string) { out.push(value); } }, stderr: { write() {} }, ...handlers } as never);
   return { code, text: out.join('') };
 }
 

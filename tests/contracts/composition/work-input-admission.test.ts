@@ -143,7 +143,7 @@ describe.skipIf(process.platform === 'win32')('K3 work input admission through t
     await expect(createRun(f.project, run('new', 'coding', workInput()), f.options)).rejects.toMatchObject({ code: 'WORKER_MODEL_NOT_ACTIVE' });
   });
 
-  it('admits and refuses through the runtime service and the CLI `run create --graph` with the same contract', async () => {
+  it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket] admits and refuses through the runtime service and the CLI `run create --graph` with the same contract', async () => {
     const f = await seeded(); const observer = { async onPage() {}, async onError() {} };
     const service = await startConfiguredRuntimeService(f.project, observer, f.options); const client = createConfiguredRuntimeClient(f.project, f.options);
     try {

@@ -39,7 +39,7 @@ function bounded<T>(work: Promise<T>): Promise<T> {
 }
 function deferred() { let release!: () => void; const promise = new Promise<void>(resolve => { release = resolve; }); return { promise, release }; }
 
-it('describes unconfigured shutdown honestly and rejects its client command', async () => {
+it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket] describes unconfigured shutdown honestly and rejects its client command', async () => {
   const f = await fixture(null); const service = await startConfiguredRuntimeService(f.project, observer, { env: f.env });
   try {
     const client = createConfiguredRuntimeClient(f.project, { env: f.env });
@@ -48,7 +48,7 @@ it('describes unconfigured shutdown honestly and rejects its client command', as
   } finally { await service.stop(); await service.done; }
 });
 
-it('records the actual local-peer shutdown admission and clean outcome, then rejects its old instance after restart', async () => {
+it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket] records the actual local-peer shutdown admission and clean outcome, then rejects its old instance after restart', async () => {
   const f = await fixture(); const first = await startConfiguredRuntimeService(f.project, observer, { env: f.env });
   const firstClient = createConfiguredRuntimeClient(f.project, { env: f.env }); const descriptor = await firstClient.describeService();
   const admitted = await firstClient.shutdownService(command(descriptor.instanceId));
@@ -66,7 +66,7 @@ it('records the actual local-peer shutdown admission and clean outcome, then rej
   finally { await second.stop(); await second.done; }
 });
 
-it('rejects a durable audit insert failure without stopping the live service', async () => {
+it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket] rejects a durable audit insert failure without stopping the live service', async () => {
   const f = await fixture(); const service = await startConfiguredRuntimeService(f.project, observer, { env: f.env });
   try {
     const descriptor = await createConfiguredRuntimeClient(f.project, { env: f.env }).describeService();
@@ -78,7 +78,7 @@ it('rejects a durable audit insert failure without stopping the live service', a
   } finally { await service.stop(); await service.done; }
 });
 
-it('requires the current service grant even when current Run authority still matches the peer', async () => {
+it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket] requires the current service grant even when current Run authority still matches the peer', async () => {
   const f = await fixture(); const service = await startConfiguredRuntimeService(f.project, observer, { env: f.env });
   try {
     const client = createConfiguredRuntimeClient(f.project, { env: f.env }); const descriptor = await client.describeService();
@@ -93,7 +93,7 @@ it('requires the current service grant even when current Run authority still mat
   } finally { await service.stop(); await service.done; }
 });
 
-it('persists an incomplete outcome and rejects host completion when an accepted half-open socket outlives grace', async () => {
+it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket] persists an incomplete outcome and rejects host completion when an accepted half-open socket outlives grace', async () => {
   const f = await fixture();
   const configPath = join(f.project, '.deckent/config.json');
   const config = JSON.parse(await readFile(configPath, 'utf8')) as { service: { shutdownGraceMs: number } };
@@ -113,7 +113,7 @@ it('persists an incomplete outcome and rejects host completion when an accepted 
   } finally { held?.destroy(); await service.stop().catch(() => undefined); await service.done.catch(() => undefined); }
 }, 3000);
 
-it('keeps durable admission but rejects host completion when outcome audit persistence fails', async () => {
+it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket] keeps durable admission but rejects host completion when outcome audit persistence fails', async () => {
   const f = await fixture(); const service = await startConfiguredRuntimeService(f.project, observer, { env: f.env });
   try {
     const client = createConfiguredRuntimeClient(f.project, { env: f.env }); const descriptor = await client.describeService();
@@ -127,7 +127,7 @@ it('keeps durable admission but rejects host completion when outcome audit persi
   } finally { await service.stop().catch(() => undefined); await service.done.catch(() => undefined); }
 });
 
-it('persists outcomes for simultaneous distinct durable shutdown admissions', async () => {
+it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket] persists outcomes for simultaneous distinct durable shutdown admissions', async () => {
   const f = await fixture(); const service = await startConfiguredRuntimeService(f.project, observer, { env: f.env });
   const original = ServiceShutdownApplication.prototype.admit; const gate = deferred(); let admitted = 0; let releaseAdmissions!: () => void;
   const bothAdmitted = new Promise<void>(resolve => { releaseAdmissions = resolve; });
@@ -147,7 +147,7 @@ it('persists outcomes for simultaneous distinct durable shutdown admissions', as
   } finally { gate.release(); spy.mockRestore(); await service.stop().catch(() => undefined); await service.done.catch(() => undefined); }
 });
 
-it('waits for a durable outcome when explicit host stop races after admission before response handoff', async () => {
+it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket] waits for a durable outcome when explicit host stop races after admission before response handoff', async () => {
   const f = await fixture(); const service = await startConfiguredRuntimeService(f.project, observer, { env: f.env });
   const original = ServiceShutdownApplication.prototype.admit; const gate = deferred(); const admitted = deferred();
   const spy = vi.spyOn(ServiceShutdownApplication.prototype, 'admit').mockImplementation(async function (...args) {

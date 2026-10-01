@@ -48,7 +48,7 @@ async function fixture() {
   return { server, project, env, command, client: createConfiguredRuntimeClient(project, { env }) };
 }
 
-it('Astra 2137/2139 R2: compensation hints cover the pinned historical descriptor, even after the original leaves the live catalog', async () => {
+it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket] Astra 2137/2139 R2: compensation hints cover the pinned historical descriptor, even after the original leaves the live catalog', async () => {
   const f = await fixture();
   expect(await f.client.executeOperation(f.command('original'))).toMatchObject({ status: 'settled' });
   // The original operation leaves the catalog; its compensation (a write) stays. A fresh MCP server reads the current catalog.

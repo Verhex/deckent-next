@@ -16,7 +16,7 @@ const graph = { schemaVersion: 2 as const, revision: 1, tasks: [{ id: 't', kind:
 
 async function fixture(allow = true, shutdownGraceMs = 1000, headerTimeoutMs = 1000) {
   const project = await mkdtemp(join(tmpdir(), 'dk-svc-')); roots.push(project); const data = join(project, 'd');
-  await mkdir(join(project, '.deckent'), { recursive: true }); const env = { HOME: join(project, 'h') };
+  await mkdir(join(project, '.deckent'), { recursive: true }); const env = { HOME: join(project, 'h'), USERPROFILE: join(project, 'h') };
   await writeFile(join(project, '.deckent/config.json'), JSON.stringify({ layout: { root: data }, admission: {
     poolId: 'p', executionSlots: 1, inFlightSlots: 1, ordering: 'input-order', registry: fixtureDockerRegistry(['selected']),
   }, cancellation: { maxConcurrentDeliveries: 1, recoveryPageSize: 1, maxAttempts: 1, retryDelayMs: 1, claimTtlMs: 10 },
@@ -39,7 +39,7 @@ async function admit(client: ReturnType<typeof createConfiguredRuntimeClient>) {
   return { command, created, reserved };
 }
 
-it('rejects an invalid spending account query before connecting to an absent runtime', async () => {
+it.skipIf(process.platform === 'win32')('requires POSIX managed storage: rejects an invalid spending account query before connecting to an absent runtime', async () => {
   const f = await fixture(), before = await readFile(f.ledgerPath);
   const client = createConfiguredRuntimeClient(f.project, { env: f.env });
   await expect(client.inspectProviderSpendAccount({ schemaVersion: 1, scopeId: 's', budgetId: 'budget', budgetRevision: 0 }))
@@ -47,7 +47,7 @@ it('rejects an invalid spending account query before connecting to an absent run
   expect(await readFile(f.ledgerPath)).toEqual(before);
 });
 
-it('rejects an invalid spending audit command before connecting to an absent runtime', async () => {
+it.skipIf(process.platform === 'win32')('requires POSIX managed storage: rejects an invalid spending audit command before connecting to an absent runtime', async () => {
   const f = await fixture(), before = await readFile(f.ledgerPath);
   const client = createConfiguredRuntimeClient(f.project, { env: f.env });
   await expect(client.auditProviderSpendAccount({ schemaVersion: 1, commandId: 'audit', scopeId: 's', budgetId: 'budget',
@@ -56,7 +56,7 @@ it('rejects an invalid spending audit command before connecting to an absent run
   expect(await readFile(f.ledgerPath)).toEqual(before);
 });
 
-it('bounds half-open client cleanup by the service grace and releases ownership after disconnect', async () => {
+it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket] bounds half-open client cleanup by the service grace and releases ownership after disconnect', async () => {
   const f = await fixture(true, 25, 10000);
   const observer = { async onPage() {}, async onError() {} };
   const service = await startConfiguredRuntimeService(f.project, observer, { env: f.env });
@@ -74,7 +74,7 @@ it('bounds half-open client cleanup by the service grace and releases ownership 
   }
 }, 3000);
 
-it('serves typed create/inspect/reserve requests, enforces policy, rejects malformed input, and restarts cleanly', async () => {
+it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket] serves typed create/inspect/reserve requests, enforces policy, rejects malformed input, and restarts cleanly', async () => {
   const f = await fixture(); const observer = { async onPage() {}, async onError() {} };
   const service = await startConfiguredRuntimeService(f.project, observer, { env: f.env }); const client = createConfiguredRuntimeClient(f.project, { env: f.env });
   try {

@@ -1,4 +1,4 @@
-import { chmod, link, mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from 'node:fs/promises';
+import { chmod, link, mkdir, mkdtemp, readFile, readdir, rm, stat, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, expect, it } from 'vitest';
@@ -23,7 +23,8 @@ it('measures only declared package bytes and reports absent declarations honestl
   expect(result).toMatchObject({ schemaVersion: 1, packageName: 'deckent-test', packageVersion: '1.2.3',
     declaredMissing: ['LICENSE', 'assets'], dependencyCoverage: 'excluded', origin: 'installed-bytes' });
   expect(result.files.map(file => file.path)).toEqual(['README.md', 'dist/index.js', 'dist/internal/value.js', 'native/addon.node', 'package.json']);
-  expect(result.files.find(file => file.path === 'native/addon.node')).toMatchObject({ mode: 0o500, executable: true });
+  const mode = (await stat(join(root, 'native/addon.node'))).mode & 0o777;
+  expect(result.files.find(file => file.path === 'native/addon.node')).toMatchObject({ mode, executable: (mode & 0o111) !== 0 });
   expect(JSON.stringify(result)).not.toContain('host-secret'); expect((await readdir(root)).sort()).toEqual(before);
 });
 
@@ -75,4 +76,9 @@ it('bounds visited empty directories as well as returned files', async () => {
   const root = await fixture(['tree']);
   for (let index = 0; index < 10; index++) await mkdir(join(root, 'tree', `empty-${index}`), { recursive: true });
   await expect(measureInstalledPackage(root, { ...limits, maxFiles: 6 })).rejects.toMatchObject({ code: 'INSTALLATION_ARTIFACT_LIMIT' });
+});
+
+it.skipIf(process.platform === 'win32')('requires POSIX executable modes: measures a 0500 executable accurately', async () => {
+  const root = await fixture(), result = await measureInstalledPackage(root, limits);
+  expect(result.files.find(file => file.path === 'native/addon.node')).toMatchObject({ mode: 0o500, executable: true });
 });

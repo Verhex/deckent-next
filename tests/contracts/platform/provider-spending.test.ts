@@ -13,7 +13,7 @@ const budget = (scopeId = 'scope', overrides: Record<string, unknown> = {}) => (
 const spending = (...budgets: unknown[]) => ({ schemaVersion: 1, budgets });
 async function fixture() {
   const root = await mkdtemp(join(tmpdir(), 'deckent-provider-spending-')); roots.push(root);
-  const project = join(root, 'project'), home = join(root, 'home'), env = { HOME: home, XDG_CONFIG_HOME: join(home, '.config') };
+  const project = join(root, 'project'), home = join(root, 'home'), env = { HOME: home, USERPROFILE: home, XDG_CONFIG_HOME: join(home, '.config') };
   const projectPath = join(project, '.deckent/config.json'), globalPath = resolveGlobalConfigPaths(env).platformPath;
   await Promise.all([mkdir(dirname(projectPath), { recursive: true }), mkdir(dirname(globalPath), { recursive: true })]);
   return { project, env, projectPath, globalPath };

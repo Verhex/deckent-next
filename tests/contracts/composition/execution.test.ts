@@ -17,7 +17,7 @@ async function fixture() {
   const root = await mkdtemp(join(tmpdir(), 'deckent-composed-execution-')); roots.push(root);
   const project = join(root, 'project'); const source = join(root, 'source'); const data = join(root, 'data');
   await mkdir(join(project, '.deckent'), { recursive: true, mode: 0o700 }); await mkdir(source);
-  const configPath = join(project, '.deckent/config.json'); const env = { HOME: join(root, 'home') };
+  const configPath = join(project, '.deckent/config.json'); const env = { HOME: join(root, 'home'), USERPROFILE: join(root, 'home') };
   return { root, project, source, data, configPath, env };
 }
 it('keeps execution disabled without explicit runtime settings and rejects mutable image tags before data writes', async () => {

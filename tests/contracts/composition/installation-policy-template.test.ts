@@ -1,7 +1,7 @@
 import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, expect, it } from 'vitest';
+import { describe, afterEach, expect, it } from 'vitest';
 import { applyPolicyTemplateInstallation, inspectPolicyTemplate, previewPolicyTemplateInstallation } from '#composition/core/installation/index.js';
 import { readLocalOsIdentity } from '#adapters/index.js';
 
@@ -11,6 +11,7 @@ const roots: string[] = [];
 afterEach(async () => { await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 async function project() { const root = await mkdtemp(join(tmpdir(), 'deckent-policy-template-')); roots.push(root); return root; }
 
+describe.skipIf(process.platform === 'win32')('requires POSIX local principal and private installation journal', () => {
 it('previews without touching disk, then a real apply journals and writes policy.json + bindings.json privately; a repeated apply is a byte-identical replay', async () => {
   const root = await project();
   const preview = await previewPolicyTemplateInstallation(root, 'installation');
@@ -55,4 +56,6 @@ it('two different scopes cannot both occupy the same project\'s one installation
   const root = await project();
   await applyPolicyTemplateInstallation(root, 'installation');
   await expect(applyPolicyTemplateInstallation(root, 'other-scope')).rejects.toMatchObject({ code: 'INSTALLATION_PUBLICATION_CONFLICT' });
+});
+
 });

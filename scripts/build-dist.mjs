@@ -69,7 +69,7 @@ export function ajvStubPlugin(hits = new Map()) {
 /** Violations of the no-ajv/fast-uri/cfworker rule for one build: stub hits per present SDK package, metafile inputs, shipped and embedded
  * components. */
 export function ajvGuard({ metafile, shipped, embedded, hits }) {
-  const out = [], inputs = Object.keys(metafile.inputs);
+  const out = [], inputs = Object.keys(metafile.inputs).map(input => input.replaceAll('\\', '/'));
   for (const name of AJV_PROVIDER_PACKAGES) {
     if (inputs.some(input => input.includes(`node_modules/${name}/`)) && !(hits.get(`${name}/_shims`) > 0)) out.push(`${name}/_shims was bundled without the ajv stub`);
   }
