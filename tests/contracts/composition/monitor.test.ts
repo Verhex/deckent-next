@@ -1,0 +1,136 @@
+import { mkdtemp, mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import { hostname, tmpdir, userInfo } from 'node:os';
+import { join } from 'node:path';
+import { afterEach, describe, expect, it } from 'vitest';
+import { createServer, type Socket } from 'node:net';
+import { chmod } from 'node:fs/promises';
+import { createConfiguredRuntimeClient, inspectConfiguredWorkers, inspectMonitor } from '#composition/index.js';
+import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
+import { openSqliteAttemptStore } from '#adapters/index.js';
+import { CURRENT_LEDGER_VERSION } from '#adapters/core/sqlite-ledger/index.js';
+import { clearConfigCache, productResourcePath } from '#platform/index.js';
+import { fixtureExecution } from '../support/execution-registry.js';
+import { custodyProfiles, dispatchAdmission, grantTestLaunch } from '../support/custody.js';
+
+// MONITOR-DATA: the one composed monitor snapshot over real project ledgers (current + a configured next-project source).
+const roots: string[] = [];
+afterEach(async () => { clearConfigCache(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
+const actor = { id: 'fixture', issuer: 'test', subject: 'service' };
+const graph = { schemaVersion: 2 as const, revision: 1, tasks: [{ id: 't', kind: 'fixture', dependencies: [], acceptanceCriteria: ['verified'] }],
+  criterionDefinitions: [{ id: 'verified', version: 1, description: 'fixture', evaluator: { id: 'test', version: 1 }, parameters: {} }] };
+const capacity = { executionSlots: 4, inFlightSlots: 4 };
+
+async function project(root: string, name: string, scopes: readonly string[], granted: readonly string[]) {
+  const dir = join(root, name); await mkdir(join(dir, '.deckent'), { recursive: true, mode: 0o700 });
+  const config = { layout: { root: join(root, name + '-data') }, inspection: { workers: { sources: [] as { id: string; kind: string; path: string; scopeId: string }[] } } };
+  const configPath = join(dir, '.deckent/config.json'); await writeFile(configPath, JSON.stringify(config));
+  const options = { env: { HOME: join(root, 'home') } };
+  const opened = await openConfiguredAttemptStore(dir, options); opened.store.close();
+  await writeFile(productResourcePath(opened.layout, 'policy'), JSON.stringify({ schemaVersion: 1, revision: 'monitor', restrictions: [], grants: [
+    { id: 'inspect', effect: 'allow', scopes: [...granted], principals: [{ issuer: hostname(), subject: String(userInfo().uid) }], actions: ['inspect'], resource: { kind: 'scope', ids: [...granted] } }] }), { mode: 0o600 });
+  const store = await openSqliteAttemptStore(opened.path, { busyTimeoutMs: 100, journalMode: 'wal', durability: 'full' }, 'allow', custodyProfiles);
+  try {
+    await store.createExecutionPool({ schemaVersion: 1, poolId: 'p', capacity });
+    for (const [index, scopeId] of scopes.entries()) {
+      const runId = `${name}-${scopeId}`;
+      await store.createRun({ commandId: 'create-' + runId, actor, identity: { scopeId, runId, layoutRevision: 'layout' }, graph, execution: fixtureExecution(graph),
+        now: 10_000 + index, policy: { schemaVersion: 2, poolId: 'p', capacity, ordering: ['t'] } });
+      if (index !== 0) continue;
+      // The first scope's Run is reserved and claimed (launch still pending); every other Run is never dispatched.
+      const identity = { scopeId, runId, taskId: 't', attemptId: runId + '-t', layoutRevision: 'layout', generation: 1 };
+      await store.reserveRunTasks({ commandId: 'reserve-' + runId, actor, scopeId, runId, expectedRevision: 0, now: 20_000, identities: [identity] });
+      await store.claimDispatch(dispatchAdmission({ owner: 'worker', request: { protocolVersion: 1, identity, workspace: '/monitor-fixture', argv: ['x'] } }));
+    }
+  } finally { store.close(); }
+  return { dir, config, configPath, options, ledger: opened.path, layout: opened.layout };
+}
+const files = async (path: string) => Promise.all(['', '-wal'].map(async suffix => {
+  try { const info = await stat(path + suffix); return { suffix, mtimeMs: info.mtimeMs, bytes: (await readFile(path + suffix)).toString('base64') }; }
+  catch { return { suffix, missing: true }; }
+}));
+/** Read-only proof: the ledger file is byte- and mtime-identical; its WAL is unchanged, or — when no writer had it open — created empty by
+ * SQLite's WAL reader bookkeeping (no frame, so no content), as for the existing read-only inventory reader. */
+const unchanged = (before: Awaited<ReturnType<typeof files>>, after: Awaited<ReturnType<typeof files>>) => {
+  expect(after[0]).toEqual(before[0]);
+  if (!('missing' in before[1]!) || 'missing' in after[1]!) expect(after[1]).toEqual(before[1]); else expect(after[1]).toMatchObject({ bytes: '' });
+};
+
+describe.skipIf(process.platform === 'win32')('inspectMonitor composition', () => {
+  it('lists never-dispatched Runs of every admitted scope across installs, read-only, without a running service', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'deckent-monitor-')); roots.push(root);
+    const current = await project(root, 'current', ['s', 's2', 'hidden'], ['s', 's2']), other = await project(root, 'other', ['s'], ['s']);
+    const gone = join(root, 'gone');
+    current.config.inspection.workers.sources = [{ id: 'dogfood', kind: 'next-project', path: other.dir, scopeId: 's' },
+      { id: 'legacy', kind: 'legacy-tasks', path: join(root, 'legacy'), scopeId: 's' }, { id: 'gone', kind: 'next-project', path: gone, scopeId: 's' }];
+    await writeFile(current.configPath, JSON.stringify(current.config)); clearConfigCache();
+    const before = [await files(current.ledger), await files(other.ledger)];
+    const snapshot = await inspectMonitor(current.dir, current.options);
+    unchanged(before[0]!, await files(current.ledger)); unchanged(before[1]!, await files(other.ledger));
+    await expect(stat(gone)).rejects.toMatchObject({ code: 'ENOENT' });
+    expect(snapshot).toMatchObject({ schemaVersion: 1, control: 'observe-only' }); expect(snapshot.installs.map(install => install.id)).toEqual(['current', 'dogfood', 'gone']);
+    const [mine, dogfood, missing] = snapshot.installs;
+    expect(mine).toMatchObject({ path: current.dir, status: 'available', scopeIds: ['s', 's2'], ledgerVersion: CURRENT_LEDGER_VERSION, service: { state: 'stopped', build: null } });
+    expect(mine!.diagnostics).toContain('scope-denied:hidden');
+    const runs = Object.fromEntries(mine!.runs.map(run => [run.runId, run]));
+    expect(Object.keys(runs).sort()).toEqual(['current-s', 'current-s2']);
+    expect(runs['current-s2']).toMatchObject({ scopeId: 's2', state: 'progressing', createdAtMs: 10_001, phaseCounts: { pending: 1 },
+      blocker: { code: 'none', taskId: 't', detail: 'reservation-pending' }, tasks: [{ taskId: 't', phase: 'pending', attempts: 0, lastAttempt: null }] });
+    expect(runs['current-s']).toMatchObject({ state: 'progressing', blocker: { code: 'none', detail: 'launch-pending', sinceMs: 20_000 },
+      tasks: [{ phase: 'active', attempts: 1, lastAttempt: { attemptId: 'current-s-t', launch: 'pending', startedAtMs: null } }] });
+    expect(mine!.workers.map(worker => worker.identity?.attemptId)).toEqual(['current-s-t']);
+    expect(mine!.pools).toMatchObject([{ poolId: 'p', capacity: 4, inFlight: 1, held: false, executionCapacity: 4, executing: 1 }]);
+    expect(dogfood).toMatchObject({ path: other.dir, status: 'available', scopeIds: ['s'], service: { state: 'stopped' } });
+    expect(dogfood!.runs.map(run => run.runId)).toEqual(['other-s']);
+    expect(missing).toMatchObject({ status: 'unavailable', runs: [], service: { state: expect.stringMatching(/stopped|unknown/) } });
+    expect(missing!.diagnostics.some(code => code.startsWith('ledger-unavailable:'))).toBe(true);
+  });
+  it('reports a fully denied install as denied instead of failing', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'deckent-monitor-')); roots.push(root);
+    const current = await project(root, 'current', ['s'], ['other-scope']);
+    const snapshot = await inspectMonitor(current.dir, current.options);
+    expect(snapshot.installs[0]).toMatchObject({ status: 'denied', runs: [], approvals: [], pools: [], scopeIds: [] });
+    expect(snapshot.installs[0]!.diagnostics).toContain('scope-denied:s');
+  });
+  it('opt-in open filter: finished dispatches come from the ledger only (no Docker/sidecar/authorization reads); the default listing is unchanged', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'deckent-monitor-')); roots.push(root);
+    const current = await project(root, 'current', ['s'], ['s']);
+    const store = await openSqliteAttemptStore(current.ledger, { busyTimeoutMs: 100, journalMode: 'wal', durability: 'full' }, 'allow', custodyProfiles);
+    try {
+      const identity = { scopeId: 's', runId: 'r-done', taskId: 't', attemptId: 'done-t', layoutRevision: 'layout', generation: 1 };
+      await store.createRun({ commandId: 'create-r-done', actor, identity: { scopeId: 's', runId: 'r-done', layoutRevision: 'layout' }, graph, execution: fixtureExecution(graph),
+        now: 10_500, policy: { schemaVersion: 2, poolId: 'p', capacity, ordering: ['t'] } });
+      await store.reserveRunTasks({ commandId: 'reserve-r-done', actor, scopeId: 's', runId: 'r-done', expectedRevision: 0, now: 20_500, identities: [identity] });
+      const claim = { owner: 'worker', request: { protocolVersion: 1 as const, identity, workspace: '/monitor-fixture-done', argv: ['x'] } };
+      await store.claimDispatch(dispatchAdmission(claim)); await grantTestLaunch(store, claim, 30_000);
+      await store.finishDispatch(claim, { handle: 'h-done', exitCode: 3, interrupted: false });
+    } finally { store.close(); }
+    const query = { schemaVersion: 1 as const, scopeId: 's', source: 'current' };
+    const byId = (list: readonly { identity: { attemptId: string } | null }[]) => Object.fromEntries(list.map(worker => [worker.identity!.attemptId, worker]));
+    const all = byId((await inspectConfiguredWorkers(current.dir, query, current.options)).sources[0]!.workers);
+    const open = byId((await inspectConfiguredWorkers(current.dir, { ...query, open: true }, current.options)).sources[0]!.workers);
+    // Default: every entry goes through the attempt read-output decision (denied here) and Docker/sidecar inspection.
+    expect(all['done-t']).toMatchObject({ terminal: { exitCode: 3 }, diagnostics: ['output-denied'] });
+    expect(open['done-t']).toEqual({ ...all['done-t'], diagnostics: ['ledger-only'] });
+    expect(open['current-s-t']).toEqual(all['current-s-t']);
+    const monitor = (await inspectMonitor(current.dir, current.options)).installs[0]!;
+    expect(monitor.workers.find(worker => worker.identity?.attemptId === 'done-t')).toMatchObject({ terminal: { exitCode: 3 }, diagnostics: ['ledger-only'] });
+    expect(monitor.runs.find(run => run.runId === 'r-done')!.tasks[0]!.lastAttempt).toMatchObject({ exitCode: 3, startedAtMs: 30_000 });
+  });
+  it.skipIf(process.platform !== 'linux')('describes the service with one current-protocol attempt: an unanswering endpoint is unknown + diagnostic, no version fan-out', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'deckent-monitor-')); roots.push(root);
+    const current = await project(root, 'current', ['s'], ['s']); const endpoint = productResourcePath(current.layout, 'runtimeSocket');
+    await mkdir(join(endpoint, '..'), { recursive: true, mode: 0o700 });
+    let connections = 0; const sockets: Socket[] = [];
+    const peer = createServer(socket => { connections++; sockets.push(socket); socket.on('error', () => undefined); socket.destroy(); });
+    await new Promise<void>(done => peer.listen(endpoint, () => done())); await chmod(endpoint, 0o600);
+    try {
+      await expect(createConfiguredRuntimeClient(current.dir, current.options).describeService()).rejects.toMatchObject({ code: 'LOCAL_RUNTIME_TRANSPORT' });
+      const windowed = connections; expect(windowed).toBeGreaterThan(1); connections = 0;
+      await expect(createConfiguredRuntimeClient(current.dir, current.options).describeService(undefined, 'current')).rejects.toMatchObject({ code: 'LOCAL_RUNTIME_TRANSPORT' });
+      expect(connections).toBe(1); connections = 0;
+      const install = (await inspectMonitor(current.dir, current.options)).installs[0]!;
+      expect(install.service).toEqual({ state: 'unknown', instanceId: null, processId: null, build: null });
+      expect(install.diagnostics).toContain('service-unavailable:LOCAL_RUNTIME_TRANSPORT'); expect(connections).toBe(1);
+    } finally { sockets.forEach(socket => socket.destroy()); await new Promise(done => peer.close(done)); }
+  });
+});

@@ -6,13 +6,11 @@ import { loadConfig, prepareProductDirectory, type ConfigLoadOptions } from '#pl
 import { affectedToolchainProfiles, insertHistoryLine, planToolchainUpdate, proposeProfileRevisions, type ProfileRevisionProposal, type ToolchainUpdatePlan } from '#engine/index.js';
 import { prepareWorkerImageBuildContext, readWorkerImageSources, runWorkerImageBuild, type WorkerImageBuildRunner } from '#adapters/index.js';
 import { inspectConfiguredToolchainCurrency, type NpmLatestVersionFetcher } from './currency.js';
-
 const packageRoot = fileURLToPath(new URL('../../../../../', import.meta.url));
 export type ToolchainUpdateResult = Readonly<{ schemaVersion: 1; mode: string; decision: 'disabled' | 'no-change' | 'planned' | 'built';
   plan: ToolchainUpdatePlan | null; planPath: string | null; build: Readonly<{ context: string; receiptPath: string; imageId: string; tag: string | null }> | null;
   proposal: ProfileRevisionProposal | null; proposalPath: string | null }>;
 export interface ToolchainUpdateDependencies { readonly fetcher?: NpmLatestVersionFetcher; readonly runner?: WorkerImageBuildRunner; readonly packageRoot?: string; readonly now?: () => string }
-
 async function writeArtifact(directory: string, name: string, value: unknown) {
   await mkdir(directory, { recursive: true, mode: 0o700 });
   const path = join(directory, name);

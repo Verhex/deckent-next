@@ -7,15 +7,12 @@ import { effectCommandSchema, type EffectCommand, type OperationDescriptor } fro
 import { createLayoutPolicySource } from '#composition/core/policy/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 import { loadConfiguredPeerScopeContext, loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
-
 /** Query ('read') or command ('write') admission of the scope; stated by every entry below (Astra 2126 R1). */
 type ScopeAccess = Parameters<typeof loadConfiguredScopeContext>[3];
-
 /** Optional wait for a pending operation approval (SDK/terminal): the core never blocks; the wait polls the stored request and, on
  * `allow`, resubmits the same command once. A timed-out or cancelled wait returns the pending outcome and closes nothing. */
 export interface OperationSubmitOptions { readonly awaitApproval?: { readonly timeoutMs: number; readonly pollMs?: number; readonly signal?: AbortSignal } }
 type Wait = (scopeId: string, approvalId: string, wait: NonNullable<OperationSubmitOptions['awaitApproval']>) => Promise<'allow' | 'deny' | 'expired' | 'timeout' | 'cancelled'>;
-
 /** The one producer of catalog operations for every surface (SDK/CLI locally, the runtime service for its socket peers — MCP and runtime
  * clients, C12 G4). The principal is the local OS identity, or the kernel-verified socket peer supplied only by the trusted transport
  * (then the session is that live connection's witness, as for approval decisions); never the wire. Scope membership, company, policy,
@@ -76,7 +73,6 @@ export async function inspectConfiguredOperation(root: string, query: { readonly
     return Object.freeze({ schemaVersion: 1 as const, record });
   });
 }
-
 /** Runtime service entries (C12 G4): the socket peer is the principal and the core never blocks — a required approval is the pending
  * outcome, resubmitted with the same command after a decision (no wait over the socket). Input is revalidated here before any I/O. */
 export async function submitPeerOperation(root: string, action: 'execute' | 'compensate', input: unknown, peer: LocalPeerIdentity, options: ConfigLoadOptions = {}) {

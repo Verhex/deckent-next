@@ -39,6 +39,7 @@ export async function inspectConfiguredWorkers(root: string, input: WorkerObserv
             const basic: WorkerObservation = { taskId: entry.identity.taskId, identity: entry.identity, authority: 'next-ledger',
               provider: 'unknown', workspace: null, process: 'unknown', handle: entry.terminal?.handle ?? null,
               terminal: entry.terminal, outputRecorded: entry.outputRecorded, patchRecorded: false, files: null, diagnostics: [] };
+            if (query.open && entry.terminal) { workers.push({ ...basic, diagnostics: ['ledger-only'] }); continue; }
             try {
               await authorization.authorizeIdentity('read-output', entry.identity, target.principal);
               const record = await reader.loadBoundDispatch(entry.identity); if (!record) throw new WorkerObservationError('WORKER_OBSERVATION_UNAVAILABLE');

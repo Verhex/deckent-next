@@ -28,8 +28,8 @@ import type { ConfiguredRuntimeOperations } from './operations.js';
 export type ConfiguredRuntimeClient = ConfiguredRuntimeOperations & Readonly<{
   cancelModelInvocation(command: ModelInvocationCancellationCommand, delivery?: ModelInvocationDelivery): Promise<ModelInvocationCancellationResult>;
   purgeModelInvocationContent(command: ModelInvocationPurgeCommand, delivery?: ModelInvocationDelivery): Promise<ModelInvocationPurgeResult>;
-  /** `signal` bounds the whole exchange, including a peer that accepts and never answers. */
-  describeService(signal?: AbortSignal): Promise<RuntimeServiceDescriptor>;
+  /** `signal` bounds the whole exchange, including a peer that accepts and never answers; `'current'` makes one attempt (no older-version retries). */
+  describeService(signal?: AbortSignal, versions?: 'window' | 'current'): Promise<RuntimeServiceDescriptor>;
   shutdownService(command: ShutdownCommand, signal?: AbortSignal): Promise<ServiceShutdownAdmissionResult>;
   invokeModel(command: ModelInvocationCommand, delivery?: ModelInvocationDelivery, signal?: AbortSignal): Promise<ModelInvocationResult>;
   /** v11 streamed invocation: the same governed result as invokeModel, preceded by presentation-only deltas. */
@@ -206,10 +206,10 @@ export function createConfiguredRuntimeClient(projectRoot: string, options: Conf
   };
   /** Lifecycle operations retry once in each older protocol version of the window when the connection closed unanswered
    * (a service started from an older build drops current-version envelopes). describe is read-only; shutdown is durable. */
-  const lifecycle = async (operation: 'describeService' | 'shutdownService', input: unknown, signal?: AbortSignal): Promise<unknown> => {
+  const lifecycle = async (operation: 'describeService' | 'shutdownService', input: unknown, signal?: AbortSignal, versions: 'window' | 'current' = 'window'): Promise<unknown> => {
     try { return await call(operation, input, undefined, signal); }
     catch (error) {
-      if (!(error instanceof DeckentError) || error.code !== 'LOCAL_RUNTIME_TRANSPORT') throw error;
+      if (versions === 'current' || !(error instanceof DeckentError) || error.code !== 'LOCAL_RUNTIME_TRANSPORT') throw error;
       let last: unknown = error;
       for (const version of RUNTIME_SERVICE_LIFECYCLE_VERSIONS.slice(1)) {
         if (signal?.aborted) break;
@@ -304,8 +304,8 @@ export function createConfiguredRuntimeClient(projectRoot: string, options: Conf
         return parseProviderSpendAuditResultForCommand(command, await call('auditProviderSpendAccount', command, delivery));
       } catch (error) { throw queryFailure(error); }
     },
-    async describeService(signal?: AbortSignal) {
-      const parsed = runtimeServiceDescriptorSchema.safeParse(await lifecycle('describeService', {}, signal));
+    async describeService(signal?: AbortSignal, versions: 'window' | 'current' = 'window') {
+      const parsed = runtimeServiceDescriptorSchema.safeParse(await lifecycle('describeService', {}, signal, versions));
       if (!parsed.success) throw ErrorRegistry.createError('RUNTIME_SERVICE_TRANSPORT');
       return parsed.data;
     },

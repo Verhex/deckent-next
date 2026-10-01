@@ -6,7 +6,6 @@ import { agentWorkspaceDeny, createLocalPeerSession, createWorkspaceReadTools, d
   type McpCallOutcome, type McpClientPool, type McpCommandContext, type McpCommandRequest, type McpLaunchContext, type McpStartNotice } from '#adapters/index.js';
 import type { loadPeerInvocationContext } from '#composition/core/model-invocation/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
-
 /**
  * The owner-facing text of one MCP start notice (MCP-SANDBOX-PATHS follow-up): the single renderer of the adapter's structured notice, from
  * the catalog (`mcp.start.*`), for the turn's note (the service's locale) and `lastStart.text` of `mcp list|get` and `/mcp` (the caller's).
@@ -25,7 +24,6 @@ export function renderMcpStartNotice(notice: McpStartNotice, locale: Locale): st
   const next = failure.phase === 'launch' ? t('mcp.start.next.launch', { name }, locale) : t('mcp.start.next.trusted', { name }, locale);
   return `${why} ${next}`;
 }
-
 /** One turn's MCP tools (wiring): first-use trust cards, pinned tools; a call is a C11 effect of Core `mcp.tool.call` (policy again, intent first), never sent twice. */
 export async function createAgentMcp(input: { readonly pool: McpClientPool; readonly projectRoot: string; readonly options: ConfigLoadOptions; readonly resultMaxBytes: number;
   readonly peer: LocalPeerIdentity; readonly context: Awaited<ReturnType<typeof loadPeerInvocationContext>>; readonly scopeId: string; readonly turnId: string;
@@ -65,7 +63,6 @@ export async function createAgentMcp(input: { readonly pool: McpClientPool; read
     } finally { store.close(); }
   } };
 }
-
 /** `deckent mcp …` and `/mcp`: the scoped registry files, the trust records (audited, over this project's ledger) and, for `list`/trust decisions, the
  * server started in its realm. `ask` shows a trust card and answers the owner's decision; `locale` is the calling surface's (default: this
  * process's environment, then the configured language). */

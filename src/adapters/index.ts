@@ -2,6 +2,7 @@ export { registerProviderConfig, providerSpendingSchema, providerSpendingBudgetF
   openConfiguredSecretStore, readSecretsConfig, registerSecretStoreBackend, secretsConfigSchema, type SecretsConfig } from '#adapters/core/contract/index.js';
 export { openSqliteAttemptStore, openSqliteInventoryReader, inventoryReadsPerCall, upgradeExistingProductLedger, type LedgerUpgrade } from '#adapters/core/attempt-store/index.js';
 export type { SqliteAttemptStore, SqliteInventoryReader, SqliteInventoryOptions } from '#adapters/core/attempt-store/index.js';
+export { readMonitorLedger, type MonitorLedgerOptions } from '#adapters/core/monitor-ledger/index.js';
 export type { SqliteLedgerOptions } from '#adapters/core/sqlite-ledger/index.js';
 export { readScopeCompanies, registerLedgerScopes, type ScopeRegistration } from '#adapters/core/sqlite-ledger/index.js';
 export { DockerSupervisor, recordedDockerSupervisor, validateDockerSupervisorProfile, validateDockerTaskProfile, resolveDockerTaskProfile, DockerTaskProfileError, identifyDockerRequest, runNodeDockerCommand, DockerCommandFailure,

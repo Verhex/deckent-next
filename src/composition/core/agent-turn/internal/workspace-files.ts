@@ -3,9 +3,7 @@ import { AgentTurnStoreError, type ModelInvocationDelivery } from '#engine/index
 import type { ConfigLoadOptions } from '#platform/index.js';
 import { agentWorkspaceDeny, createWorkspaceScope, rankWorkspacePaths, readWorkspaceAttachment, type LocalPeerIdentity, type RuntimeWorkspaceFileHost } from '#adapters/index.js';
 import { loadPeerInvocationContext } from '#composition/core/model-invocation/index.js';
-
 const resultBytes = (value: unknown) => Buffer.byteLength(JSON.stringify(value), 'utf8');
-
 /**
  * Composer `@file` operations inside the runtime service (T-L5, protocol v15). The caller is the connection's verified peer and
  * must be a member of the scope under current policy (read access); files come only from the project workspace through the
@@ -25,7 +23,6 @@ export async function findPeerWorkspaceFiles(projectRoot: string, input: unknown
   while (paths.length > 0 && resultBytes({ schemaVersion: 1, paths, truncated: true, incomplete: true }) > delivery.maxResultBytes) paths.pop();
   return Object.freeze({ schemaVersion: 1, paths, truncated: index.truncated, incomplete: index.incomplete });
 }
-
 export async function attachPeerWorkspaceFile(projectRoot: string, input: unknown, peer: LocalPeerIdentity, options: ConfigLoadOptions,
   delivery: ModelInvocationDelivery, signal?: AbortSignal): Promise<WorkspaceAttachment> {
   const parsed = workspaceAttachmentRequestSchema.safeParse(input);

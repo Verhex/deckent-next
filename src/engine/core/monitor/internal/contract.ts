@@ -44,6 +44,8 @@ export interface MonitorRun {
   readonly blocker: MonitorBlocker | null; readonly cancellationRequested: boolean;
   /** Latest proven activity time of the Run (attempt start/end, evaluation, heartbeat); null when no evidence. */
   readonly lastActivityMs: number | null;
+  /** MONITOR-DATA (optional, additive): admission time from the create-run receipt `now` or `run_execution_intents.admitted_at`. */
+  readonly createdAtMs?: number | null;
 }
 export interface MonitorApproval {
   readonly scopeId: string; readonly approvalId: string; readonly subjectKind: string; readonly summary: string;
@@ -51,6 +53,9 @@ export interface MonitorApproval {
 }
 export interface MonitorPool {
   readonly poolId: string; readonly capacity: number | null; readonly inFlight: number; readonly held: boolean; readonly heldBy: string | null;
+  /** MONITOR-DATA (optional, additive): the pool's second limit. `capacity`/`inFlight` are in-flight slots/occupancy (active, evaluating,
+   * uncertain); these are execution slots/occupancy (active, uncertain). A reservation needs both, so either can cause `waiting-pool-slot`. */
+  readonly executionCapacity?: number | null; readonly executing?: number;
 }
 export interface MonitorInstall {
   /** `current` for the project the command runs in, else the observation source id. */
