@@ -7,7 +7,8 @@ Bu belge yalnız güncel durumu tutar; önceki sürümü Git geçmişinde, kanı
   (`lane/ci-sol` `10d5cbde`, Sol uygulayıcı, lead commit'i yamadan 28/28 hash eşit). Bağımsız inceleme: lead'in ayrı bağlamda başlattığı Fable 5.1 alt ajanı **PASS**
   (`proof/CI-FULL-2026-10-01/review-independent.md`; F1 düşük: `runtime-overlay-parents.test.ts:94` gerekçesi adsız win32 skip; F2 açık: yük altında bir kez
   düşen `shell-overlay-write-set.test.ts:111`, tek başına 6/6, kök neden yok — ayrı izlenir). Hosted CI kabulü push sonrası altı hücre + bwrap ile.
-  **Sıradaki:** 22 için Sol PASS → 23 tam verify → push → hosted CI → owner'a rapor → yeni ana oturuma devir.
+  Sol 2226 REVISE (22): ER-R1 mühürlü event akışı doğrulanmıyordu, ER-R2 scope çapında mezar silme → `5dd9bf08` (red 2 fail → green 31/256, mutasyon 7–9 düştü), 23'e birleşti.
+  **Sıradaki:** 23 tam verify → Sol REQUEST_REVIEW (EXEC-RELEASE delta) → PASS'te push → hosted CI → owner'a rapor → yeni ana oturuma devir.
 - **Yirmi ikinci parti (2026-10-01; `integrate/2026-10-01-w`, worktree `/home/alperen/deckent-next-integrate-w`, taban `d11bdbfa`; ana oturum deckent-next-f6):**
   EXEC-RELEASE (`da102c4a`+`c0abc834`; owner D8; sahip = yama saklama geçişi, lead a′ mühürlü event log koşulu; composition 5500/5500) + SECRET-WRITE-CLOCK
   (`3bdd8111`+`a4616cfb` + lead arch `19a6aa19`; kararsızlığın kök nedeni WSL2 duvar saati geri adımı, `proof/SECRET-WRITE-FLAKE-2026-10-01`) + host-insights (`fc2b69e3`,
