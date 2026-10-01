@@ -1,0 +1,40 @@
+Deckent izleyici · gözlem 2026-10-02 09:30:00Z · yalnız gözlem
+● current · servis kaydı yok · build bilinmiyor · ledger sürüm 44 · /home/owner/projects/fresh
+
+── Özet ────────────────────────────────────────────────────────────────────────────────────────────
+Run'lar: 0 ilerliyor · 0 bekliyor · 0 takılı · 0 kabul · 0 başarısız · 0 iptal
+
+Sizi bekleyen (0)
+  Bekleyen onay yok.
+
+Takılı ya da bekleyen, en eskisi önce (0)
+  Açık Run yok.
+
+Şu an çalışan worker'lar (0)
+  Çalışan worker yok.
+
+── Run'lar ─────────────────────────────────────────────────────────────────────────────────────────
+  Bu görünümde Run yok.
+
+── Worker'lar ──────────────────────────────────────────────────────────────────────────────────────
+  Gözlenen worker yok.
+
+── Onaylar ─────────────────────────────────────────────────────────────────────────────────────────
+  Bekleyen onay yok.
+
+── Havuzlar ────────────────────────────────────────────────────────────────────────────────────────
+  Yapılandırılmış havuz yok.
+
+── Kurulumlar ──────────────────────────────────────────────────────────────────────────────────────
+Kurulum current · erişilebilir
+Yol /home/owner/projects/fresh
+Kapsamlar: —
+servis kaydı yok · örnek —
+build bilinmiyor · kaynak ağacı —
+ledger sürüm 44
+0 Run · 0 worker · 0 onay · 0 havuz
+
+Gözlenen başka kurulum yok. Eklemek için config `inspection.workers.sources`.
+
+Yalnız gözlem: bu görünüm hiçbir şeyi üstlenmez, ayırmaz, iptal etmez, karar vermez. Engel, motorun
+türettiği tek nedendir; görevler için Run'ı açın.

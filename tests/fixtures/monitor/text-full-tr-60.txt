@@ -1,0 +1,113 @@
+Deckent izleyici · gözlem 2026-10-02 09:30:00Z · yalnız göz…
+● current · servis çalışıyor (pid 31337) · build b0e66d92c0…
+● dogfood · servis çalışıyor (pid 2001) · build 76582f9f000…
+○ remote-lab · erişilemiyor · build bilinmiyor · ledger sür…
+
+── Özet ────────────────────────────────────────────────────
+Run'lar: 3 ilerliyor · 5 bekliyor · 7 takılı · 1 kabul · 1
+başarısız · 1 iptal
+⚠ dogfood: okunamayan WORKER_SIDECAR_UNREADABLE
+⚠ remote-lab erişilemiyor: MONITOR_SOURCE_UNREADABLE,
+LEDGER_LOCKED
+
+Sizi bekleyen (2)
+  Konu                          Bekliyor    Süre sonu
+  operation: Push branch lane…  3 sa 12 dk  45 dk sonra dol…
+  effect: Delete stale previe…  4 dk 0 sn   2 dk 0 sn önce …
+
+Takılı ya da bekleyen, en eskisi önce (12)
+  Run kimliği            Neden                   Ne zamandır
+  run-blocked-approval   ~ onay bekliyor (appr…  3 sa 12 dk
+  run-not-admitted       ~ henüz kabul edilmedi  1 sa 33 dk
+  run-cancellation-pen…  ! iptal bekleniyor      1 sa 26 dk
+  run-unresolved-effect  ! etki sonucu belirsiz  1 sa 19 dk
+  run-evaluation-unkno…  ! değerlendirme sonuc…  1 sa 11 dk
+  run-evaluation-not-r…  ! değerlendirme hazır…  1 sa 4 dk
+  run-worker-exited-un…  ! worker bitti, değer…  57 dk
+  run-worker-stale-hea…  ! worker sessiz (hear…  50 dk
+  run-waiting-dependen…  ~ bağımlılığını bekli…  28 dk
+  run-pool-held          ~ havuz bekletiliyor    21 dk
+  run-waiting-pool-slot  ~ havuzda yer bekliyor  14 dk
+  run-unknown            ! neden bilinmiyor      bilinmiyor
+
+Başarısız Run'lar ve ilk hata yeri (1)
+  Run kimliği  İlk hata                Son etkinlik  Kurulum
+  run-broken   ✗ build: başarısız, d…  25 dk önce    current
+
+Şu an çalışan worker'lar (2)
+  Run/Görev                Şu an       Heartbeat…  Süreç
+  run-blocked-approval/b…  düzenliyor  1 sn        çalışıyor
+  run-blocked-approval/l…  çalıştırı…  ⚠ 1 dk 35…  çalışıyor
+
+── Run'lar ─────────────────────────────────────────────────
+  Run kimliği                    Durum
+  run-blocked-approval           ~ bekliyor
+  run-not-admitted               ~ bekliyor
+  run-cancellation-pending       ! takılı
+  run-unresolved-effect          ! takılı
+  run-evaluation-unknown         ! takılı
+  run-evaluation-not-ready       ! takılı
+  run-worker-exited-unevaluated  ! takılı
+  run-worker-stale-heartbeat     ! takılı
+  run-waiting-dependency         ~ bekliyor
+  run-pool-held                  ~ bekliyor
+  run-waiting-pool-slot          ~ bekliyor
+  run-unknown                    ! takılı
+  run-none                       ▶ ilerliyor
+  run-worker-running             ▶ ilerliyor
+  run-dog-1                      ▶ ilerliyor
+  run-broken                     ✗ başarısız
+  run-done                       ✓ kabul edildi
+  run-stopped                    ■ iptal edildi
+
+── Worker'lar ──────────────────────────────────────────────
+  Run/Görev                Şu an       Heartbeat…  Süreç
+  run-blocked-approval/b…  düzenliyor  1 sn        çalışıyor
+  run-blocked-approval/l…  çalıştırı…  ⚠ 1 dk 35…  çalışıyor
+  run-blocked-approval/d…  —           —           çıktı 3
+  run-blocked-approval/p…  —           bırakıldı   kayıp
+
+── Onaylar ─────────────────────────────────────────────────
+  Konu                          Bekliyor    Süre sonu
+  operation: Push branch lane…  3 sa 12 dk  45 dk sonra dol…
+  effect: Delete stale previe…  4 dk 0 sn   2 dk 0 sn önce …
+
+── Havuzlar ────────────────────────────────────────────────
+  Havuz    Doluluk            Bekletme               Kurulum
+  default  4 dolu / 4         yok                    current
+  gpu      0 dolu / 1         ⚠ bekletiyor: owner@…  current
+  ci       2 dolu / sınırsız  yok                    current
+  default  1 dolu / 2         yok                    dogfood
+
+── Kurulumlar ──────────────────────────────────────────────
+Kurulum current · erişilebilir
+Yol /home/owner/projects/deckent-next
+Kapsamlar: scope-a
+servis çalışıyor (pid 31337) · örnek svc-01
+build b0e66d92c0ff (2026-10-02 08:00:00Z derlendi) · kaynak
+ağacı ffffffffffff
+ledger sürüm 44
+17 Run · 4 worker · 2 onay · 3 havuz
+
+Kurulum dogfood · erişilebilir
+Yol /home/owner/deckent-dogfood
+Kapsamlar: scope-dog
+servis çalışıyor (pid 2001) · örnek svc-02
+build 76582f9f0000 (2026-10-01 22:15:00Z derlendi) · kaynak
+ağacı ffffffffffff
+ledger sürüm 43
+1 Run · 0 worker · 0 onay · 1 havuz
+⚠ 1 okuma sorunu: WORKER_SIDECAR_UNREADABLE
+
+Kurulum remote-lab · erişilemiyor
+Yol /mnt/lab/deckent
+Kapsamlar: —
+servis kaydı yok · örnek —
+build bilinmiyor · kaynak ağacı —
+ledger sürümü bilinmiyor
+0 Run · 0 worker · 0 onay · 0 havuz
+⚠ 2 okuma sorunu: MONITOR_SOURCE_UNREADABLE, LEDGER_LOCKED
+
+Yalnız gözlem: bu görünüm hiçbir şeyi üstlenmez, ayırmaz,
+iptal etmez, karar vermez. Engel, motorun türettiği tek
+nedendir; görevler için Run'ı açın.

@@ -93,8 +93,8 @@ export interface WorklineProps {
   readonly fullAccess?: boolean;
   /** The conversation's scratch area through the runtime service (`/scratch`, SCR-A, protocol v16). */
   readonly scratch?: WorklineScratchPort;
-  /** `/mcp` (MCP-CLIENT): the project's MCP servers and their trust — list, approve (ask again), reconnect, remove — as notice lines. */
-  readonly mcp?: (args: string) => Promise<readonly string[]>;
+  /** Notice-line commands: `/mcp` (MCP-CLIENT: servers and trust — list, approve, reconnect, remove); `/monitor` (MONITOR: text snapshot). */
+  readonly mcp?: (args: string) => Promise<readonly string[]>; readonly monitor?: (args: string) => Promise<readonly string[]>;
 }
 
 function chat(role: 'user' | 'assistant', text: string): WorkLedgerEntry {
@@ -281,9 +281,9 @@ export function WorklineApp(props: WorklineProps) {
       try { await (slash.command === 'mode' ? mode.run : scratch)(slash.args); } finally { setBusy(false); }
       return true;
     }
-    if (slash.command === 'mcp') {
-      setBusy(true);
-      try { push((props.mcp ? await props.mcp(slash.args) : ['mcp: not available in this terminal']).map(line => notice('info', line))); }
+    if (slash.command === 'mcp' || slash.command === 'monitor') {
+      const lines = props[slash.command]; setBusy(true);
+      try { push((lines ? await lines(slash.args) : [`${slash.command}: not available in this terminal`]).map(line => notice('info', line))); }
       catch (error) { push([notice('error', errorText(error))]); }
       finally { setBusy(false); }
       return true;
@@ -324,7 +324,7 @@ export function WorklineApp(props: WorklineProps) {
     catch (error) { push([notice('error', errorText(error))]); }
     finally { setBusy(false); }
     return true;
-  }, [errorText, exit, labels, ledger, mode.run, props.mcp, props.restartService, push, reasoning.run, runTurn, scratch, session, setBusy, work.run]);
+  }, [errorText, exit, labels, ledger, mode.run, props.mcp, props.monitor, props.restartService, push, reasoning.run, runTurn, scratch, session, setBusy, work.run]);
 
   // The one FIFO drain: after every line (turn, immediate or awaited slash) the next queued entry runs here, in order, once.
   // Serialized without a flag: a turn or awaited slash holds `busyRef`, so Enter only enqueues; the hop from one line to the

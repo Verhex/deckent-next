@@ -1862,7 +1862,9 @@
         "src/engine/core/dispatch",
         "src/domain/core/attempt",
         "src/domain/core/worker-event",
-        "src/engine/core/worker-observation"
+        "src/engine/core/worker-observation",
+        "src/surfaces/core/terminal-kit",
+        "src/surfaces/core/terminal-render"
       ],
       "plan": "MONITOR"
     }

@@ -1,0 +1,40 @@
+Deckent monitor · observed 2026-10-02 09:30:00Z · observe only
+● current · no service record · build unknown · ledger v44 · /home/owner/projects/fresh
+
+── Summary ─────────────────────────────────────────────────────────────────────────────────────────
+Runs: 0 progressing · 0 waiting · 0 blocked · 0 accepted · 0 failed · 0 cancelled
+
+Waiting for you (0)
+  No approval is waiting.
+
+Stuck or waiting, oldest first (0)
+  No open Run.
+
+Workers running now (0)
+  No worker is running.
+
+── Runs ────────────────────────────────────────────────────────────────────────────────────────────
+  No Run in this view.
+
+── Workers ─────────────────────────────────────────────────────────────────────────────────────────
+  No worker observed.
+
+── Approvals ───────────────────────────────────────────────────────────────────────────────────────
+  No approval is waiting.
+
+── Pools ───────────────────────────────────────────────────────────────────────────────────────────
+  No pool configured.
+
+── Installs ────────────────────────────────────────────────────────────────────────────────────────
+Install current · available
+Path /home/owner/projects/fresh
+Scopes: —
+no service record · instance —
+build unknown · source tree —
+ledger v44
+0 Runs · 0 workers · 0 approvals · 0 pools
+
+No other install observed. Add one under config `inspection.workers.sources`.
+
+Observe only: this view never claims, reserves, cancels or decides anything. A blocker is the
+engine's single derived reason; open the Run for its tasks.

@@ -1,0 +1,114 @@
+Deckent monitor · observed 2026-10-02 09:30:00Z · observe o…
+● current · service running (pid 31337) · build b0e66d92c0f…
+● dogfood · service running (pid 2001) · build 76582f9f0000…
+○ remote-lab · unavailable · build unknown · ledger version…
+
+── Summary ─────────────────────────────────────────────────
+Runs: 3 progressing · 5 waiting · 7 blocked · 1 accepted · 1
+failed · 1 cancelled
+⚠ dogfood: could not read WORKER_SIDECAR_UNREADABLE
+⚠ remote-lab is unavailable: MONITOR_SOURCE_UNREADABLE,
+LEDGER_LOCKED
+
+Waiting for you (2)
+  Subject                       Waiting     Expires
+  operation: Push branch lane…  3 h 12 min  expires in 45 m…
+  effect: Delete stale previe…  4 min 0 s   expired 2 min 0…
+
+Stuck or waiting, oldest first (12)
+  Run                     Why                     Stuck for
+  run-blocked-approval    ~ awaiting approval (…  3 h 12 min
+  run-not-admitted        ~ not admitted yet      1 h 33 min
+  run-cancellation-pend…  ! cancellation pending  1 h 26 min
+  run-unresolved-effect   ! effect outcome unce…  1 h 19 min
+  run-evaluation-unknown  ! evaluation result u…  1 h 11 min
+  run-evaluation-not-re…  ! evaluation not ready  1 h 4 min
+  run-worker-exited-une…  ! worker exited, not …  57 min
+  run-worker-stale-hear…  ! worker silent (stal…  50 min
+  run-waiting-dependency  ~ waiting for a depen…  28 min
+  run-pool-held           ~ pool on hold          21 min
+  run-waiting-pool-slot   ~ waiting for a pool …  14 min
+  run-unknown             ! reason unknown        unknown
+
+Failed Runs and where they first failed (1)
+  Run         First failure           Last activity  Install
+  run-broken  ✗ build: failed, eval…  25 min ago     current
+
+Workers running now (2)
+  Run/Task                    Doing now  Heartbeat   Process
+  run-blocked-approval/build  editing    1 s         running
+  run-blocked-approval/lint   running    ⚠ 1 min 3…  running
+
+── Runs ────────────────────────────────────────────────────
+  Run                            State
+  run-blocked-approval           ~ waiting
+  run-not-admitted               ~ waiting
+  run-cancellation-pending       ! blocked
+  run-unresolved-effect          ! blocked
+  run-evaluation-unknown         ! blocked
+  run-evaluation-not-ready       ! blocked
+  run-worker-exited-unevaluated  ! blocked
+  run-worker-stale-heartbeat     ! blocked
+  run-waiting-dependency         ~ waiting
+  run-pool-held                  ~ waiting
+  run-waiting-pool-slot          ~ waiting
+  run-unknown                    ! blocked
+  run-none                       ▶ progressing
+  run-worker-running             ▶ progressing
+  run-dog-1                      ▶ progressing
+  run-broken                     ✗ failed
+  run-done                       ✓ accepted
+  run-stopped                    ■ cancelled
+
+── Workers ─────────────────────────────────────────────────
+  Run/Task                   Doing now  Heartbeat   Process
+  run-blocked-approval/bui…  editing    1 s         running
+  run-blocked-approval/lint  running    ⚠ 1 min 3…  running
+  run-blocked-approval/docs  —          —           exited 3
+  run-blocked-approval/pack  —          released    missing
+
+── Approvals ───────────────────────────────────────────────
+  Subject                       Waiting     Expires
+  operation: Push branch lane…  3 h 12 min  expires in 45 m…
+  effect: Delete stale previe…  4 min 0 s   expired 2 min 0…
+
+── Pools ───────────────────────────────────────────────────
+  Pool     Usage                 Hold                Install
+  default  4 in use / 4          no                  current
+  gpu      0 in use / 1          ⚠ held by owner@l…  current
+  ci       2 in use / unlimited  no                  current
+  default  1 in use / 2          no                  dogfood
+
+── Installs ────────────────────────────────────────────────
+Install current · available
+Path /home/owner/projects/deckent-next
+Scopes: scope-a
+service running (pid 31337) · instance svc-01
+build b0e66d92c0ff (built 2026-10-02 08:00:00Z) · source
+tree ffffffffffff
+ledger v44
+17 Runs · 4 workers · 2 approvals · 3 pools
+
+Install dogfood · available
+Path /home/owner/deckent-dogfood
+Scopes: scope-dog
+service running (pid 2001) · instance svc-02
+build 76582f9f0000 (built 2026-10-01 22:15:00Z) · source
+tree ffffffffffff
+ledger v43
+1 Runs · 0 workers · 0 approvals · 1 pools
+⚠ 1 read problem(s): WORKER_SIDECAR_UNREADABLE
+
+Install remote-lab · unavailable
+Path /mnt/lab/deckent
+Scopes: —
+no service record · instance —
+build unknown · source tree —
+ledger version unknown
+0 Runs · 0 workers · 0 approvals · 0 pools
+⚠ 2 read problem(s): MONITOR_SOURCE_UNREADABLE,
+LEDGER_LOCKED
+
+Observe only: this view never claims, reserves, cancels or
+decides anything. A blocker is the engine's single derived
+reason; open the Run for its tasks.
