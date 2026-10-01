@@ -7,7 +7,7 @@ import { SqliteIntegrationJournal, readIntegration } from './integration.js';
 import type { IntegrationIntent } from '#engine/index.js';
 import { SqliteRunProgression } from './progression.js';
 import type { ProgressionQuery } from '#engine/index.js';
-import { readRunBoundDispatch } from './run-dispatch-lookup.js';
+import { readRunBoundDispatch, readRunBoundTask } from './run-dispatch-lookup.js';
 import { loadCancellationDispatch } from './run-cancellation.js';
 import { settleAttemptCancellation } from './run-settlement.js';
 import { SqliteCancellationDeliveryJournal } from './cancellation-delivery.js';
@@ -35,6 +35,9 @@ export class SqliteAttemptStore implements AttemptStore, DispatchStore, RunBound
   }
   async loadBoundDispatch(identity: AttemptIdentity) {
     try { return readRunBoundDispatch(this.db, identity).dispatch; } catch (error) { throw sqliteFailure(error); }
+  }
+  async loadBoundTask(identity: AttemptIdentity) {
+    try { return readRunBoundTask(this.db, identity); } catch (error) { throw sqliteFailure(error); }
   }
   /** Settles a cancel-requested attempt from durable intent and recorded terminal evidence; idempotent, never launches or retries. */
   async settleCancelledAttempt(identity: AttemptIdentity) {

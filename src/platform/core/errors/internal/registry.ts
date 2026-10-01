@@ -187,6 +187,9 @@ const definitions: Readonly<Record<string, Definition>> = Object.freeze({
   PATCH_INTEGRATION_PENDING: { category: 'error', render: (p, l) => ({ message: t('error.PATCH_INTEGRATION_PENDING', p, l) }) },
   PATCH_CONFLICT: { category: 'error', render: (p, l) => ({ message: t('error.PATCH_CONFLICT', p, l) }) },
   PATCH_BASE_ADVANCED: { category: 'error', render: (p, l) => ({ message: t('error.PATCH_BASE_ADVANCED', p, l) }) },
+  // K6 (owner 2026-09-30 A): the work target enforces task scope; params count, paths (first 16, repository-relative), omitted.
+  PATCH_SCOPE_VIOLATION: { category: 'error', render: (p, l) => ({ message: t('error.PATCH_SCOPE_VIOLATION', p, l) }) },
+  PATCH_SCOPE_UNDECLARED: { category: 'error', render: (p, l) => ({ message: t('error.PATCH_SCOPE_UNDECLARED', p, l) }) },
   WORK_TARGET_PATH_INVALID: { category: 'config', render: (p, l) => ({ message: t('error.WORK_TARGET_PATH_INVALID', p, l) }) },
   WORK_TARGET_UNSAFE: { category: 'config', render: (p, l) => ({ message: t('error.WORK_TARGET_UNSAFE', p, l) }) },
   WORK_TARGET_IN_DATA_ROOT: { category: 'config', render: (p, l) => ({ message: t('error.WORK_TARGET_IN_DATA_ROOT', p, l) }) },

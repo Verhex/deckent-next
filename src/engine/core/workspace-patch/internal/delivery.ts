@@ -55,6 +55,7 @@ export class WorkspaceDeliveryApplication {
     const inspected = await this.inspection.inspect({ schemaVersion: 1, identity: command.identity, commandId: command.integrationCommandId }, credential);
     if (!inspected.manifest || !inspected.receipt) throw new WorkspacePatchError('PATCH_INTEGRATION_PENDING');
     const preview = await this.patches.preview(command.identity, credential);
+    this.patches.assertScope(preview.scope); // K6 enforce: refused before the delivery intent or any Git reference is written
     await this.candidate.verify(inspected.manifest, preview.patch);
     if (JSON.stringify(inspected.manifest.patch) !== JSON.stringify(preview.receipt)) throw new WorkspacePatchError('PATCH_CORRUPT');
     if ((await this.candidate.observe(preview.patch)).digest !== inspected.manifest.observation) throw new WorkspacePatchError('PATCH_CONFLICT');

@@ -16,7 +16,7 @@ export async function workspacePatchContext(root: string, input: unknown, option
   await authorization.authorizeIdentity('read-output', identity, principal);
   if (preparing) await authorization.authorizeIdentity('recover-output', identity, principal);
   const artifacts = new FileArtifactStore({ root: await inspectProductDirectory(layout, 'artifacts'), maxBytes: config.artifacts.maxBytes });
-  return { ...context, identity, artifacts, authorization, verifier: { async verify() { return principal; } } };
+  return { ...context, identity, artifacts, authorization, verifier: { async verify() { return principal; } }, scopeMode: selectWorkTarget(config.execution)?.scope?.mode ?? 'warn' };
 }
 export async function prepareConfiguredWorkspacePatch(root: string, input: AttemptIdentity, options: ConfigLoadOptions = {}) {
   try {
@@ -27,7 +27,7 @@ export async function prepareConfiguredWorkspacePatch(root: string, input: Attem
       const source = new GitWorkspacePatchSource({ ...c.config.execution.git, ...(await resolveGitWorkTarget(resolve(root), c.config.execution, c.layout)).git,
         workspaceRoot: await inspectProductDirectory(c.layout, 'workspaces') },
       { ...c.config.artifacts.patchPreview, maxBytes: c.config.artifacts.maxBytes }, store);
-      const app = new WorkspacePatchApplication(store, c.artifacts, c.verifier, c.authorization, c.config.artifacts.maxBytes);
+      const app = new WorkspacePatchApplication(store, c.artifacts, c.verifier, c.authorization, c.config.artifacts.maxBytes, c.scopeMode);
       return await app.prepare(c.identity, source, store);
     } finally { store.close(); }
   } catch (error) { throw error instanceof ArtifactError ? ErrorRegistry.createError('PATCH_CORRUPT') : queryFailure(error); }
@@ -36,7 +36,7 @@ export async function previewConfiguredWorkspacePatch(root: string, input: Attem
   try {
     const c = await workspacePatchContext(root, input, options, false, 'read', false);
     const store = await openSqliteInventoryReader(await c.path(), { busyTimeoutMs: c.config.storage.sqlite.busyTimeoutMs });
-    try { return await new WorkspacePatchApplication(store, c.artifacts, c.verifier, c.authorization, c.config.artifacts.maxBytes).preview(c.identity); }
+    try { return await new WorkspacePatchApplication(store, c.artifacts, c.verifier, c.authorization, c.config.artifacts.maxBytes, c.scopeMode).preview(c.identity); }
     finally { store.close(); }
   } catch (error) { throw error instanceof ArtifactError ? ErrorRegistry.createError('PATCH_CORRUPT') : queryFailure(error); }
 }

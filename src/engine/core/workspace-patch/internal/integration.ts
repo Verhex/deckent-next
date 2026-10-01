@@ -41,7 +41,8 @@ export class WorkspaceIntegrationApplication {
   async check(input: unknown, credential?: unknown) {
     const preview = await this.patches.preview(input, credential);
     const observation = await this.target.observe(preview.patch);
-    return Object.freeze({ schemaVersion: 1 as const, identity: preview.patch.identity, patch: preview.receipt, observation,
+    // The scope classification is reported, not hashed into the proposal: the mode is configuration and may change between check and prepare.
+    return Object.freeze({ schemaVersion: 1 as const, identity: preview.patch.identity, patch: preview.receipt, observation, scope: preview.scope,
       proposal: proposalCode({ identity: preview.patch.identity, patch: preview.receipt, observation }), application: 'not-applied' as const });
   }
   async prepare(input: unknown, store: IntegrationStore, credential?: unknown) {
@@ -51,6 +52,7 @@ export class WorkspaceIntegrationApplication {
     await authorize();
     const checked = await this.check(command.identity, credential);
     if (checked.proposal !== command.proposal) throw new WorkspacePatchError('PATCH_CONFLICT');
+    this.patches.assertScope(checked.scope); // K6 enforce: refused before the integration intent or any candidate file is written
     const intent = integrationIntentSchema.parse({ schemaVersion: 1, command, patch: checked.patch, observation: checked.observation.digest,
       actor: { id: principal.id, issuer: principal.issuer, subject: principal.subject } });
     const claim = await store.claimIntegration(intent);

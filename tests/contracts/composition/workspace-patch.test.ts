@@ -39,6 +39,16 @@ describe.skipIf(process.platform !== 'linux' || !process.env.DECKENT_TEST_DOCKER
     await writeFile(artifact.path, 'broken', { mode: 0o600 });
     await expect(f.preview()).rejects.toMatchObject({ code: 'PATCH_CORRUPT' });
   });
+  it('K6: a task without a work input is explicitly unscoped (warn) on SDK, CLI JSON and the human preview in both locales', async () => {
+    const f = await fixture(); await f.run(); const prepared = await f.prepare();
+    expect(prepared.scope).toEqual({ schemaVersion: 1, matcher: 1, mode: 'warn', status: 'unscoped' });
+    expect((await f.cli('patch-preview')).scope).toEqual(prepared.scope);
+    const human = async (lang: string) => (await exec(process.execPath, [resolve('dist/composition/core/cli/internal/entry.js'), 'task', 'patch-preview', '--stat',
+      '--scope', f.identity.scopeId, '--run', f.identity.runId, '--task', f.identity.taskId, '--attempt', f.identity.attemptId, '--generation', String(f.identity.generation),
+      '--layout-revision', f.identity.layoutRevision, '--lang', lang], { cwd: f.project, env: { ...process.env, ...f.options.env } })).stdout;
+    expect(await human('en')).toContain('Scope: unscoped — the task declares no scope (mode warn).');
+    expect(await human('tr')).toContain('Kapsam: kapsamsız — görev kapsam bildirmiyor (kip warn).');
+  });
   it('rejects changed snapshots without replacing the first producer receipt, authorizes every read, and binds exact identity', async () => {
     const f = await fixture(); const workspace = await f.run(); const first = await f.prepare();
     await writeFile(join(workspace, 'added.txt'), 'changed\n');
@@ -65,9 +75,10 @@ describe.skipIf(process.platform !== 'linux' || !process.env.DECKENT_TEST_DOCKER
     const original = (await f.runtime.store.loadBoundDispatch(f.identity))!;
     const { patch: _patch, ...unbound } = original; void _patch;
     let record = unbound as typeof original;
-    const store = { async loadBoundDispatch() { return record; }, async retainDispatchPatch() { throw new Error('simulated-ledger-failure'); } };
+    const store = { async loadBoundDispatch() { return record; }, loadBoundTask: (identity: typeof f.identity) => f.runtime.store.loadBoundTask(identity),
+      async retainDispatchPatch() { throw new Error('simulated-ledger-failure'); } };
     const principal = { id: 'test', issuer: 'test', subject: 'test', assurance: 'os-user' as const, scopeIds: ['s'] };
-    const app = new WorkspacePatchApplication(store, f.runtime.artifacts, { async verify() { return principal; } }, { async authorizeIdentity() {} }, 65536);
+    const app = new WorkspacePatchApplication(store, f.runtime.artifacts, { async verify() { return principal; } }, { async authorizeIdentity() {} }, 65536, 'warn');
     await expect(app.prepare(f.identity, { async capture() { return prepared.patch; } }, store)).rejects.toThrow('simulated-ledger-failure');
     await expect(app.preview(f.identity)).rejects.toThrow('PATCH_UNAVAILABLE');
     const writer = { ...store, async retainDispatchPatch(_claim: unknown, receipt: typeof prepared.receipt) { record = { ...unbound, patch: receipt }; return record; } };
