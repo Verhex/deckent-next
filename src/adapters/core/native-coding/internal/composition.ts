@@ -3,9 +3,10 @@ import { z } from 'zod';
 import core from './worker-core.json' with { type: 'json' };
 
 const text = z.string().min(1).refine(value => value.trim().length > 0 && !value.includes('\0') && Buffer.byteLength(value) <= 16384);
-const part = z.object({ id: z.string().regex(/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$/), version: z.number().int().positive().safe(), text }).strict().readonly();
-export const nativePromptCompositionSchema = z.object({ schemaVersion: z.literal(1), core: part.optional(),
-  persona: part.optional(), skills: z.array(part).max(16).default([]), context: z.array(part).max(8).default([]),
+/** One explicitly selected, versioned prompt part (core, persona, skill or context). */
+export const promptPartSchema = z.object({ id: z.string().regex(/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$/), version: z.number().int().positive().safe(), text }).strict().readonly();
+export const nativePromptCompositionSchema = z.object({ schemaVersion: z.literal(1), core: promptPartSchema.optional(),
+  persona: promptPartSchema.optional(), skills: z.array(promptPartSchema).max(16).default([]), context: z.array(promptPartSchema).max(8).default([]),
   task: text, scope: text, acceptance: text,
 }).strict().superRefine((value, ctx) => {
   const ids = [...(value.persona ? [value.persona.id] : []), ...value.skills.map(p => p.id)];

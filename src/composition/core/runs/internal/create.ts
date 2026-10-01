@@ -2,7 +2,7 @@ import { userInfo } from 'node:os';
 import { resolve } from 'node:path';
 import { validateProcessExitCriterion } from '#capabilities/index.js';
 import { ErrorRegistry, prepareProductDirectory, type ConfigLoadOptions } from '#platform/index.js';
-import { assertNativeWorkerBinding, validateDockerTaskProfile, openSqliteInventoryReader, openSqliteAttemptStore, openSqliteModelCatalogReader, GitIntegrationDelivery, GitRunWorkspaceProvider, GitWorkspaceBroker, resolveGitWorkTarget, selectWorkTarget } from '#adapters/index.js';
+import { assertNativeWorkerBinding, compileNativeCodingWorkInput, isNativeCodingTemplate, nativeCodingRefusalCode, validateDockerTaskProfile, openSqliteInventoryReader, openSqliteAttemptStore, openSqliteModelCatalogReader, GitIntegrationDelivery, GitRunWorkspaceProvider, GitWorkspaceBroker, resolveGitWorkTarget, selectWorkTarget } from '#adapters/index.js';
 import { admitWorkerModels, resolveExecutionRegistry, RunAdmissionApplication, runAdmissionSchema, runDeliveryAdmissionSchema, RunPolicyAuthorization, executionResourceAuthorization, authorizeWorkTargetUse,
   DispatchPolicyAuthorization, pinRunToDelivery, type RunAdmission, type RunCreate, type RunDeliveryAdmission, type RunWorkspaceCustody } from '#engine/index.js';
 import { createLayoutPolicySource } from '#composition/core/policy/index.js';
@@ -39,11 +39,13 @@ async function admitConfiguredRun(projectRoot: string, command: RunAdmission, op
           try { return validateDockerTaskProfile(value); } catch { throw ErrorRegistry.createError('EXECUTION_PROFILE_INVALID'); }
         },
         criterion(evaluator, criterion) { try { return validateProcessExitCriterion(evaluator, criterion); } catch { throw ErrorRegistry.createError('TASK_EVALUATOR_INVALID'); } },
+        isTemplate: isNativeCodingTemplate, // K3: template + typed work input compile once here, before any write
+        compile(template, input) { try { return compileNativeCodingWorkInput(template, input); } catch (error) { throw ErrorRegistry.createError(nativeCodingRefusalCode(error)); } },
       });
       // WORKER-CURRENCY-1: native worker tasks need an exact, current, active catalog model of an active channel (read-only ledger view).
       if (execution.tasks.some(task => task.profile.parameters['nativeSubscription'] !== undefined)) {
         const catalog = await openSqliteModelCatalogReader(await path(), { busyTimeoutMs: config.storage.sqlite.busyTimeoutMs });
-        try { await admitWorkerModels(execution.tasks, admitted.scopeId, catalog, Date.now()); } finally { catalog.close(); }
+        try { await admitWorkerModels(execution.tasks, admitted.scopeId, catalog, Date.now(), admitted.graph.tasks); } finally { catalog.close(); }
       }
       return { execution, layoutRevision: layout.revision, now: Date.now(), policy: { schemaVersion: 2, poolId: profile.poolId,
         capacity: { executionSlots: profile.executionSlots, inFlightSlots: profile.inFlightSlots }, ordering: admitted.graph.tasks.map(task => task.id) } };

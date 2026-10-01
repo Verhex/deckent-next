@@ -1,12 +1,16 @@
 import { createHash } from 'node:crypto';
-import { executionRegistrySchema, runExecutionSnapshotSchema, encodeCriterionDefinition, validateTaskGraph, type ExecutionProfileDefinition, type EvaluatorDefinition, type CriterionDefinition, type RunExecutionSnapshot, type TaskGraph } from '#domain/index.js';
+import { executionProfileDefinitionSchema, executionRegistrySchema, runExecutionSnapshotSchema, encodeCriterionDefinition, validateTaskGraph, type ExecutionProfileDefinition, type EvaluatorDefinition, type CriterionDefinition, type RunExecutionSnapshot, type TaskGraph, type WorkInput } from '#domain/index.js';
 export interface ExecutionRegistryValidation {
   /** Installed adapter/evaluator selection; data cannot introduce executable code or grant policy. */
   profile(profile: ExecutionProfileDefinition): undefined;
   criterion(evaluator: EvaluatorDefinition, criterion: CriterionDefinition): undefined;
+  /** K3: installed template adapters. A template never runs as is; it is compiled with the task's typed work input (pure, no I/O). */
+  isTemplate?(profile: ExecutionProfileDefinition): boolean;
+  compile?(template: ExecutionProfileDefinition, workInput: WorkInput): ExecutionProfileDefinition;
 }
 export class ExecutionRegistryError extends Error {
-  constructor(readonly code: 'TASK_KIND_NOT_REGISTERED' | 'TASK_EVALUATOR_NOT_REGISTERED' | 'EXECUTION_REGISTRY_VALIDATOR_INVALID' | 'RUN_EXECUTION_INTEGRITY') { super(code); this.name = 'ExecutionRegistryError'; }
+  constructor(readonly code: 'TASK_KIND_NOT_REGISTERED' | 'TASK_EVALUATOR_NOT_REGISTERED' | 'EXECUTION_REGISTRY_VALIDATOR_INVALID' | 'RUN_EXECUTION_INTEGRITY'
+    | 'WORK_INPUT_REQUIRED' | 'WORK_INPUT_TEMPLATE_REQUIRED') { super(code); this.name = 'ExecutionRegistryError'; }
 }
 
 /** Stored selections must remain an exact, verifiable record of the Run graph at admission. */
@@ -31,8 +35,14 @@ export function resolveExecutionRegistry(graphInput: unknown, registryInput: unk
   const tasks = graph.tasks.map(task => {
     const kind = registry.kinds.find(entry => entry.kind === task.kind);
     if (!kind) throw new ExecutionRegistryError('TASK_KIND_NOT_REGISTERED');
-    const profile = registry.profiles.find(entry => entry.id === kind.profile.id && entry.version === kind.profile.version)!;
-    if (validation.profile(profile) !== undefined) throw new ExecutionRegistryError('EXECUTION_REGISTRY_VALIDATOR_INVALID');
+    const selected = registry.profiles.find(entry => entry.id === kind.profile.id && entry.version === kind.profile.version)!;
+    // K3 pairing (decided here, before any validator): a template kind needs a work input and a work input needs a template kind.
+    const template = validation.isTemplate?.(selected) === true;
+    if (template !== (task.workInput !== undefined)) throw new ExecutionRegistryError(template ? 'WORK_INPUT_REQUIRED' : 'WORK_INPUT_TEMPLATE_REQUIRED');
+    const profile = template ? executionProfileDefinitionSchema.parse(validation.compile!(selected, task.workInput!)) : selected;
+    // The compiled profile keeps its template's registry identity (provenance) and must itself pass every installed profile check.
+    if (profile.id !== selected.id || profile.version !== selected.version || (template && validation.isTemplate!(profile))
+      || validation.profile(profile) !== undefined) throw new ExecutionRegistryError('EXECUTION_REGISTRY_VALIDATOR_INVALID');
     return Object.freeze({ taskId: task.id, profile });
   });
   const criteria = graph.criterionDefinitions.map(criterion => {

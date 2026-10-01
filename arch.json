@@ -544,7 +544,8 @@
     },
     "src/domain/core/task-graph": {
       "dependencies": [
-        "src/domain/core/primitives"
+        "src/domain/core/primitives",
+        "src/domain/core/provider-catalog"
       ],
       "plan": "CONTRACT"
     },
@@ -938,7 +939,8 @@
         "src/platform/core/config",
         "src/platform/core/config-fields",
         "src/platform/core/host",
-        "src/platform/core/managed-files"
+        "src/platform/core/managed-files",
+        "src/adapters/core/native-coding"
       ],
       "plan": "INSTALLATION"
     },
@@ -1318,7 +1320,9 @@
     "src/adapters/core/native-coding": {
       "dependencies": [
         "src/domain/core/run",
-        "src/adapters/core/docker-supervisor"
+        "src/adapters/core/docker-supervisor",
+        "src/domain/core/primitives",
+        "src/domain/core/task-graph"
       ],
       "plan": "PROVIDERS"
     },

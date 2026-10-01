@@ -1,9 +1,11 @@
 import { z } from 'zod';
 import { identitySchema as identity, counterSchema, type ValidationIssue } from '#domain/core/primitives/index.js';
 import { criterionDefinitionSchema } from './criteria.js';
+import { workInputSchema } from './work-input.js';
 
 // Wire invariants, not configurable scheduling policy. Kind definitions live in registries.
-export const TASK_GRAPH_SCHEMA_VERSION = 2;
+// v3 (K3 = A) adds the optional typed `workInput` per task; v2 graphs stay accepted unchanged, and a v2 graph never carries one.
+export const TASK_GRAPH_SCHEMA_VERSION = 3;
 
 export const taskInputNameSchema = z.string().regex(/^[a-zA-Z0-9_-]{1,64}$/);
 
@@ -13,13 +15,18 @@ export const taskDefinitionSchema = z.object({
   dependencies: z.array(identity).readonly(),
   acceptanceCriteria: z.array(identity).min(1).readonly(),
   inputs: z.array(z.object({ name: taskInputNameSchema, taskId: identity, output: taskInputNameSchema.optional() }).strict().readonly()).readonly().optional(),
+  workInput: workInputSchema.optional(),
 }).strict().readonly();
 export const taskGraphSchema = z.object({
-  schemaVersion: z.literal(TASK_GRAPH_SCHEMA_VERSION),
+  schemaVersion: z.union([z.literal(2), z.literal(TASK_GRAPH_SCHEMA_VERSION)]),
   revision: counterSchema.positive(),
   tasks: z.array(taskDefinitionSchema).min(1).readonly(),
   criterionDefinitions: z.array(criterionDefinitionSchema).readonly(),
-}).strict().readonly();
+}).strict().superRefine((graph, context) => {
+  graph.tasks.forEach((task, index) => {
+    if (graph.schemaVersion === 2 && task.workInput !== undefined) context.addIssue({ code: z.ZodIssueCode.custom, path: ['tasks', index, 'workInput'], message: 'TASK_GRAPH_VERSION' });
+  });
+}).readonly();
 export const taskEligibilitySchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('immediate') }).strict(),
   z.object({ kind: z.literal('not-before'), at: counterSchema }).strict(),
