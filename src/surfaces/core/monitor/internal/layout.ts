@@ -13,11 +13,29 @@ export interface MonitorColumn {
   readonly priority: number; readonly min: number; readonly max: number;
   /** `start` keeps the informative end (paths); `end` keeps the start (words, ids). */
   readonly cut?: 'start' | 'end';
+  /** The sort key this column shows (the fullscreen view marks the active one with ▲/▼). */
+  readonly sortKey?: MonitorSortKey;
 }
-export interface MonitorRow { readonly key: string; readonly cells: readonly MonitorSpan[]; readonly detail: () => readonly MonitorLine[] }
+export type MonitorSortKey = 'age' | 'state' | 'name';
+/** What the `/` filter prefixes match: `s:` state or blocker words, `i:` install, `t:` task kind, `r:` Run id (lower-case text). */
+export interface MonitorFacets { readonly state?: string; readonly install?: string; readonly kind?: string; readonly run?: string;
+  /** The human state word a `g` state grouping heads its group with. */
+  readonly stateLabel?: string }
+export interface MonitorRow {
+  readonly key: string; readonly cells: readonly MonitorSpan[]; readonly detail: () => readonly MonitorLine[];
+  readonly facets?: MonitorFacets;
+  /** Sort values: age = epoch ms (newer is larger), state = rank (worse first), name = text. */
+  readonly sort?: { readonly age?: number | null; readonly state?: number; readonly name?: string };
+  /** What counts as a change for the one-refresh highlight (state, blocker, phase…); absent rows are never marked. */
+  readonly signature?: string;
+  /** Two-cell prefix: `+ ` new, `* ` changed since the previous snapshot (fullscreen only); default blank. */
+  readonly mark?: string;
+}
 export type MonitorBlock =
   | { readonly kind: 'line'; readonly line: MonitorLine }
-  | { readonly kind: 'table'; readonly columns: readonly MonitorColumn[]; readonly rows: readonly MonitorRow[]; readonly empty: string };
+  | { readonly kind: 'table'; readonly columns: readonly MonitorColumn[]; readonly rows: readonly MonitorRow[]; readonly empty: string;
+    /** Group heading of a row; rows arrive ordered by group and a heading line opens each group (columns stay aligned across groups). */
+    readonly group?: (row: MonitorRow) => string };
 /** One flattened screen line; `item` is the global index of the selectable row it shows. */
 export interface MonitorFlatLine { readonly line: MonitorLine; readonly item?: number; readonly row?: MonitorRow }
 
@@ -95,7 +113,13 @@ export function flattenBlocks(blocks: readonly MonitorBlock[], width: number, el
       return clipLine(line, width, ellipsis);
     };
     out.push({ line: render(block.columns.map(column => span(column.header)), true) });
-    for (const row of block.rows) out.push({ line: render(row.cells, false), item: item++, row });
+    let group: string | null = null;
+    for (const row of block.rows) {
+      const label = block.group?.(row) ?? null;
+      if (label !== null && label !== group) { group = label; out.push({ line: clipLine([span(` ${label}`, 'accent')], width, ellipsis) }); }
+      const line = render(row.cells, false);
+      out.push({ line: row.mark ? [span(row.mark, 'accent'), ...line.slice(1)] : line, item: item++, row });
+    }
   }
   return out;
 }

@@ -1,11 +1,13 @@
 Deckent izleyici · gözlem 2026-10-02 09:30:00Z · yalnız gözlem
-● current · servis çalışıyor (pid 31337) · build b0e66d92c0ff (2026-10-02 08:00:00Z derlendi) · ledger sürüm 44 · /home…
-● dogfood · servis çalışıyor (pid 2001) · build 76582f9f0000 (2026-10-01 22:15:00Z derlendi) · ledger sürüm 43 · ⚠ 1 ok…
-○ remote-lab · erişilemiyor · build bilinmiyor · ledger sürümü bilinmiyor · ⚠ 2 okuma sorunu: MONITOR_SOURCE_UNREADABLE…
-[1 Özet]  2 Run'lar   3 Worker'lar   4 Onaylar   5 Havuzlar   6 Kurulumlar
-Run'lar: 3 ilerliyor · 5 bekliyor · 7 takılı · 1 kabul · 1 başarısız · 1 iptal
-⚠ dogfood: okunamayan WORKER_SIDECAR_UNREADABLE
-⚠ remote-lab erişilemiyor: MONITOR_SOURCE_UNREADABLE, LEDGER_LOCKED
+● current · servis çalışıyor (pid 31337) · build b0e66d92c0ff (2026-10-02 08:00:00Z derlendi) · ledger sürüm 44 · ⚠ 1 u…
+● dogfood · servis çalışıyor (pid 2001) · build 76582f9f0000 (2026-10-01 22:15:00Z derlendi) · ledger sürüm 43 · ⚠ 2 uy…
+○ remote-lab · erişilemiyor · build bilinmiyor · ledger sürümü bilinmiyor · ⚠ 2 uyarı · /mnt/lab/deckent
+[1 Özet]  2 Run'lar   3 Worker'lar   4 Onaylar   5 Havuzlar   6 Kurulumlar   7 Harita
+Run'lar: 3 ilerliyor · 5 bekliyor · 7 takılı · 1 kabul · 2 başarısız · 1 iptal
+⚠ current sorunları: scope-x kapsamı okunamadı (LEDGER_LOCKED)
+⚠ dogfood sorunları: ledger sürüm 43, bu derlemeden eski: yeni alanlar boş görünebilir; future-code:abc
+⚠ remote-lab erişilemiyor: ledger okunamadı (LEDGER_LOCKED); servis durumu okunamadı (LOCAL_RUNTIME_DENIED)
+dogfood notu: biten worker'ların yalnız en yenileri gösteriliyor; 5 eskisi gizli
 
 Sizi bekleyen (2)
   Konu                                           Bekliyor    Süre sonu             Kurulum
@@ -27,13 +29,11 @@ Takılı ya da bekleyen, en eskisi önce (12)
   run-waiting-pool-slot          build  ~ havuzda yer bekliyor             14 dk        scope-a  current
   run-unknown                    build  ! neden bilinmiyor                 bilinmiyor   scope-a  current
 
-Başarısız Run'lar ve ilk hata yeri (1)
-  Run kimliği  İlk hata                               Son etkinlik  Kapsam   Kurulum
-  run-broken   ✗ build: başarısız, değerlendirme ret  25 dk önce    scope-a  current
+Başarısız Run'lar ve ilk hata yeri (2)
+  Run kimliği       İlk hata                                                              Son etkinlik  Kapsam   Kurulum
+  run-broken        ✗ build: ✗ [unit-budget] src/surfaces/core/cli — 2001 lines > unit …  25 dk önce    scope-a  current
+  run-broken-quiet  ✗ build: ilk hata satırı kayıtta yok                                  35 dk önce    scope-a  current
 
-Şu an çalışan worker'lar (2)
-  Run/Görev                   Şu an         Heartbeat yaşı       Süreç      Deneme    Sağlayıcı/model       Kurulum
-  run-blocked-approval/build  düzenliyor    1 sn                 çalışıyor  att-buil  claude/model-alpha-2  current
-  run-blocked-approval/lint   çalıştırıyor  ⚠ 1 dk 35 sn (eski)  çalışıyor  att-lint  claude/model-alpha-2  current
+↓ 4 satır daha
 2 sn aralıkla yenilenir · görüntü 2026-10-02 09:30:00Z
-Tab/←→ sekme · ↑↓ seç · Enter ayrıntı · Esc geri · r yenile · p duraklat · ? yardım · q çık
+Tab/←→ sekme · ↑↓ seç · Enter ayrıntı · / süz · s sırala · g grupla · r yenile · p duraklat · ? yardım · q çık

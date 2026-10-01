@@ -4,11 +4,17 @@ Deckent monitor · observed 2026-10-02 09:30:00Z · observe o…
 ○ remote-lab · unavailable · build unknown · ledger version…
 
 ── Summary ─────────────────────────────────────────────────
-Runs: 3 progressing · 5 waiting · 7 blocked · 1 accepted · 1
+Runs: 3 progressing · 5 waiting · 7 blocked · 1 accepted · 2
 failed · 1 cancelled
-⚠ dogfood: could not read WORKER_SIDECAR_UNREADABLE
-⚠ remote-lab is unavailable: MONITOR_SOURCE_UNREADABLE,
-LEDGER_LOCKED
+⚠ current has problems: scope scope-x could not be read
+(LEDGER_LOCKED)
+⚠ dogfood has problems: the ledger is version 43, older than
+this build: newer fields may be empty; future-code:abc
+⚠ remote-lab is unavailable: the ledger could not be read
+(LEDGER_LOCKED); service state could not be read
+(LOCAL_RUNTIME_DENIED)
+dogfood note: only the most recent finished workers are
+shown; 5 older ones are hidden
 
 Waiting for you (2)
   Subject                       Waiting     Expires
@@ -30,9 +36,10 @@ Stuck or waiting, oldest first (12)
   run-waiting-pool-slot   ~ waiting for a pool …  14 min
   run-unknown             ! reason unknown        unknown
 
-Failed Runs and where they first failed (1)
-  Run         First failure           Last activity  Install
-  run-broken  ✗ build: failed, eval…  25 min ago     current
+Failed Runs and where they first failed (2)
+  Run               First failure              Last activity
+  run-broken        ✗ build: ✗ [unit-budget]…  25 min ago
+  run-broken-quiet  ✗ build: first failing l…  35 min ago
 
 Workers running now (2)
   Run/Task                    Doing now  Heartbeat   Process
@@ -41,30 +48,31 @@ Workers running now (2)
 
 ── Runs ────────────────────────────────────────────────────
   Run                            State
-  run-blocked-approval           ~ waiting
+  run-broken                     ✗ failed
+  run-broken-quiet               ✗ failed
+  run-dog-1                      ▶ progressing
   run-not-admitted               ~ waiting
+  run-done                       ✓ accepted
   run-cancellation-pending       ! blocked
   run-unresolved-effect          ! blocked
   run-evaluation-unknown         ! blocked
   run-evaluation-not-ready       ! blocked
   run-worker-exited-unevaluated  ! blocked
   run-worker-stale-heartbeat     ! blocked
+  run-worker-running             ▶ progressing
+  run-blocked-approval           ~ waiting
   run-waiting-dependency         ~ waiting
   run-pool-held                  ~ waiting
   run-waiting-pool-slot          ~ waiting
-  run-unknown                    ! blocked
   run-none                       ▶ progressing
-  run-worker-running             ▶ progressing
-  run-dog-1                      ▶ progressing
-  run-broken                     ✗ failed
-  run-done                       ✓ accepted
   run-stopped                    ■ cancelled
+  run-unknown                    ! blocked
 
 ── Workers ─────────────────────────────────────────────────
   Run/Task                   Doing now  Heartbeat   Process
   run-blocked-approval/bui…  editing    1 s         running
+  run-broken/build           —          —           exited 1
   run-blocked-approval/lint  running    ⚠ 1 min 3…  running
-  run-blocked-approval/docs  —          —           exited 3
   run-blocked-approval/pack  —          released    missing
 
 ── Approvals ───────────────────────────────────────────────
@@ -87,7 +95,8 @@ service running (pid 31337) · instance svc-01
 build b0e66d92c0ff (built 2026-10-02 08:00:00Z) · source
 tree ffffffffffff
 ledger v44
-17 Runs · 4 workers · 2 approvals · 3 pools
+18 Runs · 4 workers · 2 approvals · 3 pools
+⚠ scope scope-x could not be read (LEDGER_LOCKED)
 
 Install dogfood · available
 Path /home/owner/deckent-dogfood
@@ -97,7 +106,11 @@ build 76582f9f0000 (built 2026-10-01 22:15:00Z) · source
 tree ffffffffffff
 ledger v43
 1 Runs · 0 workers · 0 approvals · 1 pools
-⚠ 1 read problem(s): WORKER_SIDECAR_UNREADABLE
+⚠ the ledger is version 43, older than this build: newer
+fields may be empty
+⚠ future-code:abc
+Note: only the most recent finished workers are shown; 5
+older ones are hidden
 
 Install remote-lab · unavailable
 Path /mnt/lab/deckent
@@ -106,8 +119,39 @@ no service record · instance —
 build unknown · source tree —
 ledger version unknown
 0 Runs · 0 workers · 0 approvals · 0 pools
-⚠ 2 read problem(s): MONITOR_SOURCE_UNREADABLE,
-LEDGER_LOCKED
+⚠ the ledger could not be read (LEDGER_LOCKED)
+⚠ service state could not be read (LOCAL_RUNTIME_DENIED)
+
+── Map ─────────────────────────────────────────────────────
+current · /home/owner/projects/deckent-next
+Config layers (each later layer overrides the earlier ones):
+  1. built-in defaults — built in — sets: layout,
+inspection, approvals
+  2. global (user) — /home/owner/.deckent/config.json —
+sets: language
+  3. project —
+/home/owner/projects/deckent-next/.deckent/config.json —
+sets: layout, terminal, inspection
+  4. environment variables — no file — sets: none
+Execution registry: 3 profile(s), 2 task kind(s)
+  task kind coding → profile coding-default@3 (docker)
+  task kind review → profile review (docker)
+  legacy-shell@1 (host) — no task kind uses it
+Model catalog: 3 model(s), 2 active
+  ✓ subscription / model-alpha-2
+  ○ subscription / model-alpha-1 (inactive)
+  ✓ local-vllm / qwen-local-v6
+Policy: 12 grant(s) (operation 5, effect 4, secret 3) · 2
+separation-of-duties rule(s)
+  Permission modes: owner@local: standart, ci@local:
+full-auto
+Memory: none yet — waits for the MEMORY card
+
+dogfood · /home/owner/deckent-dogfood
+  No map was read for this install.
+
+remote-lab · /mnt/lab/deckent
+  No map was read for this install.
 
 Observe only: this view never claims, reserves, cancels or
 decides anything. A blocker is the engine's single derived

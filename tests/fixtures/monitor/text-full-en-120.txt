@@ -1,12 +1,15 @@
 Deckent monitor · observed 2026-10-02 09:30:00Z · observe only
-● current · service running (pid 31337) · build b0e66d92c0ff (built 2026-10-02 08:00:00Z) · ledger v44 · /home/owner/pr…
-● dogfood · service running (pid 2001) · build 76582f9f0000 (built 2026-10-01 22:15:00Z) · ledger v43 · ⚠ 1 read proble…
-○ remote-lab · unavailable · build unknown · ledger version unknown · ⚠ 2 read problem(s): MONITOR_SOURCE_UNREADABLE, L…
+● current · service running (pid 31337) · build b0e66d92c0ff (built 2026-10-02 08:00:00Z) · ledger v44 · ⚠ 1 warning(s)…
+● dogfood · service running (pid 2001) · build 76582f9f0000 (built 2026-10-01 22:15:00Z) · ledger v43 · ⚠ 2 warning(s) …
+○ remote-lab · unavailable · build unknown · ledger version unknown · ⚠ 2 warning(s) · /mnt/lab/deckent
 
 ── Summary ─────────────────────────────────────────────────────────────────────────────────────────────────────────────
-Runs: 3 progressing · 5 waiting · 7 blocked · 1 accepted · 1 failed · 1 cancelled
-⚠ dogfood: could not read WORKER_SIDECAR_UNREADABLE
-⚠ remote-lab is unavailable: MONITOR_SOURCE_UNREADABLE, LEDGER_LOCKED
+Runs: 3 progressing · 5 waiting · 7 blocked · 1 accepted · 2 failed · 1 cancelled
+⚠ current has problems: scope scope-x could not be read (LEDGER_LOCKED)
+⚠ dogfood has problems: the ledger is version 43, older than this build: newer fields may be empty; future-code:abc
+⚠ remote-lab is unavailable: the ledger could not be read (LEDGER_LOCKED); service state could not be read
+(LOCAL_RUNTIME_DENIED)
+dogfood note: only the most recent finished workers are shown; 5 older ones are hidden
 
 Waiting for you (2)
   Subject                                        Waiting     Expires                Install
@@ -28,42 +31,44 @@ Stuck or waiting, oldest first (12)
   run-waiting-pool-slot          build  ~ waiting for a pool slot          14 min      scope-a  current
   run-unknown                    build  ! reason unknown                   unknown     scope-a  current
 
-Failed Runs and where they first failed (1)
-  Run         First failure                         Last activity  Scope    Install
-  run-broken  ✗ build: failed, evaluation rejected  25 min ago     scope-a  current
+Failed Runs and where they first failed (2)
+  Run               First failure                                                        Last activity  Scope    Install
+  run-broken        ✗ build: ✗ [unit-budget] src/surfaces/core/cli — 2001 lines > unit…  25 min ago     scope-a  current
+  run-broken-quiet  ✗ build: first failing line not recorded                             35 min ago     scope-a  current
 
 Workers running now (2)
   Run/Task                    Doing now  Heartbeat             Process  Attempt   Provider/model        Install
-  run-blocked-approval/build  editing    1 s                   running  att-buil  claude/model-alpha-2  current
-  run-blocked-approval/lint   running    ⚠ 1 min 35 s (stale)  running  att-lint  claude/model-alpha-2  current
+  run-blocked-approval/build  editing    1 s                   running  c76f549a  claude/model-alpha-2  current
+  run-blocked-approval/lint   running    ⚠ 1 min 35 s (stale)  running  ed5a5613  claude/model-alpha-2  current
 
 ── Runs ────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-  Run                            State          Blocker                      Stuck for   Tasks         Scope     Install
-  run-blocked-approval           ~ waiting      awaiting approval (appr-00…  3 h 12 min  0/2 accepted  scope-a   current
-  run-not-admitted               ~ waiting      not admitted yet             1 h 33 min  0/2 accepted  scope-a   current
-  run-cancellation-pending       ! blocked      cancellation pending         1 h 26 min  0/2 accepted  scope-a   current
-  run-unresolved-effect          ! blocked      effect outcome uncertain     1 h 19 min  0/2 accepted  scope-a   current
-  run-evaluation-unknown         ! blocked      evaluation result unknown    1 h 11 min  0/2 accepted  scope-a   current
-  run-evaluation-not-ready       ! blocked      evaluation not ready         1 h 4 min   0/2 accepted  scope-a   current
-  run-worker-exited-unevaluated  ! blocked      worker exited, not evaluat…  57 min      0/2 accepted  scope-a   current
-  run-worker-stale-heartbeat     ! blocked      worker silent (stale heart…  50 min      0/2 accepted  scope-a   current
-  run-waiting-dependency         ~ waiting      waiting for a dependency     28 min      0/2 accepted  scope-a   current
-  run-pool-held                  ~ waiting      pool on hold                 21 min      0/2 accepted  scope-a   current
-  run-waiting-pool-slot          ~ waiting      waiting for a pool slot      14 min      0/2 accepted  scope-a   current
-  run-unknown                    ! blocked      reason unknown               unknown     0/2 accepted  scope-a   current
-  run-none                       ▶ progressing  progressing normally         7 min 0 s   0/2 accepted  scope-a   current
-  run-worker-running             ▶ progressing  worker running               43 min      0/2 accepted  scope-a   current
-  run-dog-1                      ▶ progressing  worker running               1 min 30 s  0/2 accepted  scope-d…  dogfood
-  run-broken                     ✗ failed       —                            —           0/2 accepted  scope-a   current
-  run-done                       ✓ accepted     —                            —           2/2 accepted  scope-a   current
-  run-stopped                    ■ cancelled    —                            —           0/2 accepted  scope-a   current
+  Run                            State          Blocker                   Stuck for   Duration    Tasks         Scope
+  run-broken                     ✗ failed       —                         —           15 min      0/2 accepted  scope-a
+  run-broken-quiet               ✗ failed       —                         —           10 min      0/2 accepted  scope-a
+  run-dog-1                      ▶ progressing  worker running            1 min 30 s  running     0/2 accepted  scope-d…
+  run-not-admitted               ~ waiting      not admitted yet          1 h 33 min  running     0/2 accepted  scope-a
+  run-done                       ✓ accepted     —                         —           1 h 10 min  2/2 accepted  scope-a
+  run-cancellation-pending       ! blocked      cancellation pending      1 h 26 min  running     0/2 accepted  scope-a
+  run-unresolved-effect          ! blocked      effect outcome uncertain  1 h 19 min  running     0/2 accepted  scope-a
+  run-evaluation-unknown         ! blocked      evaluation result unkno…  1 h 11 min  running     0/2 accepted  scope-a
+  run-evaluation-not-ready       ! blocked      evaluation not ready      1 h 4 min   running     0/2 accepted  scope-a
+  run-worker-exited-unevaluated  ! blocked      worker exited, not eval…  57 min      running     0/2 accepted  scope-a
+  run-worker-stale-heartbeat     ! blocked      worker silent (stale he…  50 min      running     0/2 accepted  scope-a
+  run-worker-running             ▶ progressing  worker running            43 min      running     0/2 accepted  scope-a
+  run-blocked-approval           ~ waiting      awaiting approval (appr…  3 h 12 min  running     0/2 accepted  scope-a
+  run-waiting-dependency         ~ waiting      waiting for a dependency  28 min      running     0/2 accepted  scope-a
+  run-pool-held                  ~ waiting      pool on hold              21 min      running     0/2 accepted  scope-a
+  run-waiting-pool-slot          ~ waiting      waiting for a pool slot   14 min      running     0/2 accepted  scope-a
+  run-none                       ▶ progressing  progressing normally      7 min 0 s   running     0/2 accepted  scope-a
+  run-stopped                    ■ cancelled    —                         —           4 h 0 min   0/2 accepted  scope-a
+  run-unknown                    ! blocked      reason unknown            unknown     running     0/2 accepted  scope-a
 
 ── Workers ─────────────────────────────────────────────────────────────────────────────────────────────────────────────
   Run/Task                    Doing now  Heartbeat             Process   Attempt   Provider/model        Install
-  run-blocked-approval/build  editing    1 s                   running   att-buil  claude/model-alpha-2  current
-  run-blocked-approval/lint   running    ⚠ 1 min 35 s (stale)  running   att-lint  claude/model-alpha-2  current
-  run-blocked-approval/docs   —          —                     exited 3  att-docs  claude/model-alpha-2  current
-  run-blocked-approval/pack   —          released              missing   att-pack  claude/model-alpha-2  current
+  run-blocked-approval/build  editing    1 s                   running   c76f549a  claude/model-alpha-2  current
+  run-broken/build            —          —                     exited 1  09bb856b  claude/model-alpha-2  current
+  run-blocked-approval/lint   running    ⚠ 1 min 35 s (stale)  running   ed5a5613  claude/model-alpha-2  current
+  run-blocked-approval/pack   —          released              missing   a465c0eb  claude/model-alpha-2  current
 
 ── Approvals ───────────────────────────────────────────────────────────────────────────────────────────────────────────
   Subject                                        Waiting     Expires                Assurance  Scope    Install
@@ -84,7 +89,8 @@ Scopes: scope-a
 service running (pid 31337) · instance svc-01
 build b0e66d92c0ff (built 2026-10-02 08:00:00Z) · source tree ffffffffffff
 ledger v44
-17 Runs · 4 workers · 2 approvals · 3 pools
+18 Runs · 4 workers · 2 approvals · 3 pools
+⚠ scope scope-x could not be read (LEDGER_LOCKED)
 
 Install dogfood · available
 Path /home/owner/deckent-dogfood
@@ -93,7 +99,9 @@ service running (pid 2001) · instance svc-02
 build 76582f9f0000 (built 2026-10-01 22:15:00Z) · source tree ffffffffffff
 ledger v43
 1 Runs · 0 workers · 0 approvals · 1 pools
-⚠ 1 read problem(s): WORKER_SIDECAR_UNREADABLE
+⚠ the ledger is version 43, older than this build: newer fields may be empty
+⚠ future-code:abc
+Note: only the most recent finished workers are shown; 5 older ones are hidden
 
 Install remote-lab · unavailable
 Path /mnt/lab/deckent
@@ -102,7 +110,33 @@ no service record · instance —
 build unknown · source tree —
 ledger version unknown
 0 Runs · 0 workers · 0 approvals · 0 pools
-⚠ 2 read problem(s): MONITOR_SOURCE_UNREADABLE, LEDGER_LOCKED
+⚠ the ledger could not be read (LEDGER_LOCKED)
+⚠ service state could not be read (LOCAL_RUNTIME_DENIED)
+
+── Map ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+current · /home/owner/projects/deckent-next
+Config layers (each later layer overrides the earlier ones):
+  1. built-in defaults — built in — sets: layout, inspection, approvals
+  2. global (user) — /home/owner/.deckent/config.json — sets: language
+  3. project — /home/owner/projects/deckent-next/.deckent/config.json — sets: layout, terminal, inspection
+  4. environment variables — no file — sets: none
+Execution registry: 3 profile(s), 2 task kind(s)
+  task kind coding → profile coding-default@3 (docker)
+  task kind review → profile review (docker)
+  legacy-shell@1 (host) — no task kind uses it
+Model catalog: 3 model(s), 2 active
+  ✓ subscription / model-alpha-2
+  ○ subscription / model-alpha-1 (inactive)
+  ✓ local-vllm / qwen-local-v6
+Policy: 12 grant(s) (operation 5, effect 4, secret 3) · 2 separation-of-duties rule(s)
+  Permission modes: owner@local: standart, ci@local: full-auto
+Memory: none yet — waits for the MEMORY card
+
+dogfood · /home/owner/deckent-dogfood
+  No map was read for this install.
+
+remote-lab · /mnt/lab/deckent
+  No map was read for this install.
 
 Observe only: this view never claims, reserves, cancels or decides anything. A blocker is the engine's single derived
 reason; open the Run for its tasks.

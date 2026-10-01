@@ -4,11 +4,16 @@ Deckent izleyici · gözlem 2026-10-02 09:30:00Z · yalnız göz…
 ○ remote-lab · erişilemiyor · build bilinmiyor · ledger sür…
 
 ── Özet ────────────────────────────────────────────────────
-Run'lar: 3 ilerliyor · 5 bekliyor · 7 takılı · 1 kabul · 1
+Run'lar: 3 ilerliyor · 5 bekliyor · 7 takılı · 1 kabul · 2
 başarısız · 1 iptal
-⚠ dogfood: okunamayan WORKER_SIDECAR_UNREADABLE
-⚠ remote-lab erişilemiyor: MONITOR_SOURCE_UNREADABLE,
-LEDGER_LOCKED
+⚠ current sorunları: scope-x kapsamı okunamadı
+(LEDGER_LOCKED)
+⚠ dogfood sorunları: ledger sürüm 43, bu derlemeden eski:
+yeni alanlar boş görünebilir; future-code:abc
+⚠ remote-lab erişilemiyor: ledger okunamadı (LEDGER_LOCKED);
+servis durumu okunamadı (LOCAL_RUNTIME_DENIED)
+dogfood notu: biten worker'ların yalnız en yenileri
+gösteriliyor; 5 eskisi gizli
 
 Sizi bekleyen (2)
   Konu                          Bekliyor    Süre sonu
@@ -30,9 +35,10 @@ Takılı ya da bekleyen, en eskisi önce (12)
   run-waiting-pool-slot  ~ havuzda yer bekliyor  14 dk
   run-unknown            ! neden bilinmiyor      bilinmiyor
 
-Başarısız Run'lar ve ilk hata yeri (1)
-  Run kimliği  İlk hata                Son etkinlik  Kurulum
-  run-broken   ✗ build: başarısız, d…  25 dk önce    current
+Başarısız Run'lar ve ilk hata yeri (2)
+  Run kimliği       İlk hata                    Son etkinlik
+  run-broken        ✗ build: ✗ [unit-budget] …  25 dk önce
+  run-broken-quiet  ✗ build: ilk hata satırı …  35 dk önce
 
 Şu an çalışan worker'lar (2)
   Run/Görev                Şu an       Heartbeat…  Süreç
@@ -41,30 +47,31 @@ Başarısız Run'lar ve ilk hata yeri (1)
 
 ── Run'lar ─────────────────────────────────────────────────
   Run kimliği                    Durum
-  run-blocked-approval           ~ bekliyor
+  run-broken                     ✗ başarısız
+  run-broken-quiet               ✗ başarısız
+  run-dog-1                      ▶ ilerliyor
   run-not-admitted               ~ bekliyor
+  run-done                       ✓ kabul edildi
   run-cancellation-pending       ! takılı
   run-unresolved-effect          ! takılı
   run-evaluation-unknown         ! takılı
   run-evaluation-not-ready       ! takılı
   run-worker-exited-unevaluated  ! takılı
   run-worker-stale-heartbeat     ! takılı
+  run-worker-running             ▶ ilerliyor
+  run-blocked-approval           ~ bekliyor
   run-waiting-dependency         ~ bekliyor
   run-pool-held                  ~ bekliyor
   run-waiting-pool-slot          ~ bekliyor
-  run-unknown                    ! takılı
   run-none                       ▶ ilerliyor
-  run-worker-running             ▶ ilerliyor
-  run-dog-1                      ▶ ilerliyor
-  run-broken                     ✗ başarısız
-  run-done                       ✓ kabul edildi
   run-stopped                    ■ iptal edildi
+  run-unknown                    ! takılı
 
 ── Worker'lar ──────────────────────────────────────────────
   Run/Görev                Şu an       Heartbeat…  Süreç
   run-blocked-approval/b…  düzenliyor  1 sn        çalışıyor
+  run-broken/build         —           —           çıktı 1
   run-blocked-approval/l…  çalıştırı…  ⚠ 1 dk 35…  çalışıyor
-  run-blocked-approval/d…  —           —           çıktı 3
   run-blocked-approval/p…  —           bırakıldı   kayıp
 
 ── Onaylar ─────────────────────────────────────────────────
@@ -87,7 +94,8 @@ servis çalışıyor (pid 31337) · örnek svc-01
 build b0e66d92c0ff (2026-10-02 08:00:00Z derlendi) · kaynak
 ağacı ffffffffffff
 ledger sürüm 44
-17 Run · 4 worker · 2 onay · 3 havuz
+18 Run · 4 worker · 2 onay · 3 havuz
+⚠ scope-x kapsamı okunamadı (LEDGER_LOCKED)
 
 Kurulum dogfood · erişilebilir
 Yol /home/owner/deckent-dogfood
@@ -97,7 +105,11 @@ build 76582f9f0000 (2026-10-01 22:15:00Z derlendi) · kaynak
 ağacı ffffffffffff
 ledger sürüm 43
 1 Run · 0 worker · 0 onay · 1 havuz
-⚠ 1 okuma sorunu: WORKER_SIDECAR_UNREADABLE
+⚠ ledger sürüm 43, bu derlemeden eski: yeni alanlar boş
+görünebilir
+⚠ future-code:abc
+Not: biten worker'ların yalnız en yenileri gösteriliyor; 5
+eskisi gizli
 
 Kurulum remote-lab · erişilemiyor
 Yol /mnt/lab/deckent
@@ -106,7 +118,39 @@ servis kaydı yok · örnek —
 build bilinmiyor · kaynak ağacı —
 ledger sürümü bilinmiyor
 0 Run · 0 worker · 0 onay · 0 havuz
-⚠ 2 okuma sorunu: MONITOR_SOURCE_UNREADABLE, LEDGER_LOCKED
+⚠ ledger okunamadı (LEDGER_LOCKED)
+⚠ servis durumu okunamadı (LOCAL_RUNTIME_DENIED)
+
+── Harita ──────────────────────────────────────────────────
+current · /home/owner/projects/deckent-next
+Yapılandırma katmanları (sonraki katman öncekileri ezer):
+  1. yerleşik varsayılanlar — yerleşik — belirlediği
+bölümler: layout, inspection, approvals
+  2. genel (kullanıcı) — /home/owner/.deckent/config.json —
+belirlediği bölümler: language
+  3. proje —
+/home/owner/projects/deckent-next/.deckent/config.json —
+belirlediği bölümler: layout, terminal, inspection
+  4. ortam değişkenleri — dosya yok — belirlediği bölümler:
+yok
+Yürütme kaydı: 3 profil, 2 görev türü
+  coding görevi → coding-default@3 profili (docker)
+  review görevi → review profili (docker)
+  legacy-shell@1 (host) — hiçbir görev türü kullanmıyor
+Model kataloğu: 3 model, 2 etkin
+  ✓ subscription / model-alpha-2
+  ○ subscription / model-alpha-1 (etkin değil)
+  ✓ local-vllm / qwen-local-v6
+Politika: 12 izin (operation 5, effect 4, secret 3) · 2
+görev ayrılığı kuralı
+  İzin kipleri: owner@local: standart, ci@local: full-auto
+Bellek: yok — MEMORY kartı bekleniyor
+
+dogfood · /home/owner/deckent-dogfood
+  Bu kurulum için harita okunmadı.
+
+remote-lab · /mnt/lab/deckent
+  Bu kurulum için harita okunmadı.
 
 Yalnız gözlem: bu görünüm hiçbir şeyi üstlenmez, ayırmaz,
 iptal etmez, karar vermez. Engel, motorun türettiği tek

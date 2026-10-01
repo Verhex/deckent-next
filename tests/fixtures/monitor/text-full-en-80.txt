@@ -1,13 +1,18 @@
 Deckent monitor · observed 2026-10-02 09:30:00Z · observe only
 ● current · service running (pid 31337) · build b0e66d92c0ff (built 2026-10-02 …
 ● dogfood · service running (pid 2001) · build 76582f9f0000 (built 2026-10-01 2…
-○ remote-lab · unavailable · build unknown · ledger version unknown · ⚠ 2 read …
+○ remote-lab · unavailable · build unknown · ledger version unknown · ⚠ 2 warni…
 
 ── Summary ─────────────────────────────────────────────────────────────────────
-Runs: 3 progressing · 5 waiting · 7 blocked · 1 accepted · 1 failed · 1
+Runs: 3 progressing · 5 waiting · 7 blocked · 1 accepted · 2 failed · 1
 cancelled
-⚠ dogfood: could not read WORKER_SIDECAR_UNREADABLE
-⚠ remote-lab is unavailable: MONITOR_SOURCE_UNREADABLE, LEDGER_LOCKED
+⚠ current has problems: scope scope-x could not be read (LEDGER_LOCKED)
+⚠ dogfood has problems: the ledger is version 43, older than this build: newer
+fields may be empty; future-code:abc
+⚠ remote-lab is unavailable: the ledger could not be read (LEDGER_LOCKED);
+service state could not be read (LOCAL_RUNTIME_DENIED)
+dogfood note: only the most recent finished workers are shown; 5 older ones are
+hidden
 
 Waiting for you (2)
   Subject                                        Waiting     Expires
@@ -29,9 +34,10 @@ Stuck or waiting, oldest first (12)
   run-waiting-pool-slot          build  ~ waiting for a pool slot     14 min
   run-unknown                    build  ! reason unknown              unknown
 
-Failed Runs and where they first failed (1)
-  Run         First failure                      Last activity  Scope    Install
-  run-broken  ✗ build: failed, evaluation reje…  25 min ago     scope-a  current
+Failed Runs and where they first failed (2)
+  Run               First failure                Last activity  Scope    Install
+  run-broken        ✗ build: ✗ [unit-budget] s…  25 min ago     scope-a  current
+  run-broken-quiet  ✗ build: first failing lin…  35 min ago     scope-a  current
 
 Workers running now (2)
   Run/Task                    Doing now  Heartbeat     Process  Provider/model
@@ -39,31 +45,32 @@ Workers running now (2)
   run-blocked-approval/lint   running    ⚠ 1 min 35 …  running  claude/model-al…
 
 ── Runs ────────────────────────────────────────────────────────────────────────
-  Run                          State          Blocker                 Stuck for
-  run-blocked-approval         ~ waiting      awaiting approval (ap…  3 h 12 min
-  run-not-admitted             ~ waiting      not admitted yet        1 h 33 min
-  run-cancellation-pending     ! blocked      cancellation pending    1 h 26 min
-  run-unresolved-effect        ! blocked      effect outcome uncert…  1 h 19 min
-  run-evaluation-unknown       ! blocked      evaluation result unk…  1 h 11 min
-  run-evaluation-not-ready     ! blocked      evaluation not ready    1 h 4 min
-  run-worker-exited-unevalua…  ! blocked      worker exited, not ev…  57 min
-  run-worker-stale-heartbeat   ! blocked      worker silent (stale …  50 min
-  run-waiting-dependency       ~ waiting      waiting for a depende…  28 min
-  run-pool-held                ~ waiting      pool on hold            21 min
-  run-waiting-pool-slot        ~ waiting      waiting for a pool sl…  14 min
-  run-unknown                  ! blocked      reason unknown          unknown
-  run-none                     ▶ progressing  progressing normally    7 min 0 s
-  run-worker-running           ▶ progressing  worker running          43 min
-  run-dog-1                    ▶ progressing  worker running          1 min 30 s
-  run-broken                   ✗ failed       —                       —
-  run-done                     ✓ accepted     —                       —
-  run-stopped                  ■ cancelled    —                       —
+  Run                          State          Blocker                 Duration
+  run-broken                   ✗ failed       —                       15 min
+  run-broken-quiet             ✗ failed       —                       10 min
+  run-dog-1                    ▶ progressing  worker running          running
+  run-not-admitted             ~ waiting      not admitted yet        running
+  run-done                     ✓ accepted     —                       1 h 10 min
+  run-cancellation-pending     ! blocked      cancellation pending    running
+  run-unresolved-effect        ! blocked      effect outcome uncert…  running
+  run-evaluation-unknown       ! blocked      evaluation result unk…  running
+  run-evaluation-not-ready     ! blocked      evaluation not ready    running
+  run-worker-exited-unevalua…  ! blocked      worker exited, not ev…  running
+  run-worker-stale-heartbeat   ! blocked      worker silent (stale …  running
+  run-worker-running           ▶ progressing  worker running          running
+  run-blocked-approval         ~ waiting      awaiting approval (ap…  running
+  run-waiting-dependency       ~ waiting      waiting for a depende…  running
+  run-pool-held                ~ waiting      pool on hold            running
+  run-waiting-pool-slot        ~ waiting      waiting for a pool sl…  running
+  run-none                     ▶ progressing  progressing normally    running
+  run-stopped                  ■ cancelled    —                       4 h 0 min
+  run-unknown                  ! blocked      reason unknown          running
 
 ── Workers ─────────────────────────────────────────────────────────────────────
   Run/Task                    Doing now  Heartbeat    Process   Provider/model
   run-blocked-approval/build  editing    1 s          running   claude/model-al…
+  run-broken/build            —          —            exited 1  claude/model-al…
   run-blocked-approval/lint   running    ⚠ 1 min 35…  running   claude/model-al…
-  run-blocked-approval/docs   —          —            exited 3  claude/model-al…
   run-blocked-approval/pack   —          released     missing   claude/model-al…
 
 ── Approvals ───────────────────────────────────────────────────────────────────
@@ -85,7 +92,8 @@ Scopes: scope-a
 service running (pid 31337) · instance svc-01
 build b0e66d92c0ff (built 2026-10-02 08:00:00Z) · source tree ffffffffffff
 ledger v44
-17 Runs · 4 workers · 2 approvals · 3 pools
+18 Runs · 4 workers · 2 approvals · 3 pools
+⚠ scope scope-x could not be read (LEDGER_LOCKED)
 
 Install dogfood · available
 Path /home/owner/deckent-dogfood
@@ -94,7 +102,9 @@ service running (pid 2001) · instance svc-02
 build 76582f9f0000 (built 2026-10-01 22:15:00Z) · source tree ffffffffffff
 ledger v43
 1 Runs · 0 workers · 0 approvals · 1 pools
-⚠ 1 read problem(s): WORKER_SIDECAR_UNREADABLE
+⚠ the ledger is version 43, older than this build: newer fields may be empty
+⚠ future-code:abc
+Note: only the most recent finished workers are shown; 5 older ones are hidden
 
 Install remote-lab · unavailable
 Path /mnt/lab/deckent
@@ -103,7 +113,35 @@ no service record · instance —
 build unknown · source tree —
 ledger version unknown
 0 Runs · 0 workers · 0 approvals · 0 pools
-⚠ 2 read problem(s): MONITOR_SOURCE_UNREADABLE, LEDGER_LOCKED
+⚠ the ledger could not be read (LEDGER_LOCKED)
+⚠ service state could not be read (LOCAL_RUNTIME_DENIED)
+
+── Map ─────────────────────────────────────────────────────────────────────────
+current · /home/owner/projects/deckent-next
+Config layers (each later layer overrides the earlier ones):
+  1. built-in defaults — built in — sets: layout, inspection, approvals
+  2. global (user) — /home/owner/.deckent/config.json — sets: language
+  3. project — /home/owner/projects/deckent-next/.deckent/config.json — sets:
+layout, terminal, inspection
+  4. environment variables — no file — sets: none
+Execution registry: 3 profile(s), 2 task kind(s)
+  task kind coding → profile coding-default@3 (docker)
+  task kind review → profile review (docker)
+  legacy-shell@1 (host) — no task kind uses it
+Model catalog: 3 model(s), 2 active
+  ✓ subscription / model-alpha-2
+  ○ subscription / model-alpha-1 (inactive)
+  ✓ local-vllm / qwen-local-v6
+Policy: 12 grant(s) (operation 5, effect 4, secret 3) · 2 separation-of-duties
+rule(s)
+  Permission modes: owner@local: standart, ci@local: full-auto
+Memory: none yet — waits for the MEMORY card
+
+dogfood · /home/owner/deckent-dogfood
+  No map was read for this install.
+
+remote-lab · /mnt/lab/deckent
+  No map was read for this install.
 
 Observe only: this view never claims, reserves, cancels or decides anything. A
 blocker is the engine's single derived reason; open the Run for its tasks.

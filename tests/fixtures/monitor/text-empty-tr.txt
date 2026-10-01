@@ -36,5 +36,9 @@ ledger sürüm 44
 
 Gözlenen başka kurulum yok. Eklemek için config `inspection.workers.sources`.
 
+── Harita ──────────────────────────────────────────────────────────────────────────────────────────
+current · /home/owner/projects/fresh
+  Bu kurulum için harita okunmadı.
+
 Yalnız gözlem: bu görünüm hiçbir şeyi üstlenmez, ayırmaz, iptal etmez, karar vermez. Engel, motorun
 türettiği tek nedendir; görevler için Run'ı açın.
