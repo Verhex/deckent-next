@@ -33,6 +33,8 @@ export interface MonitorAttempt {
    * (e.g. a lint-arch violation or the first failing test), and the last worker-reported events (untrusted, bounded). */
   readonly model?: string | null; readonly firstFailure?: string | null;
   readonly recentEvents?: readonly { readonly atMs: number | null; readonly kind: string; readonly summary: string }[];
+  /** MONITOR-DATA (optional): why recorded content is absent, e.g. `output-denied` (no attempt read-output decision: nothing was read). */
+  readonly diagnostics?: readonly string[];
 }
 export interface MonitorTask {
   readonly taskId: string; readonly kind: string; readonly phase: string;
@@ -50,7 +52,12 @@ export interface MonitorRun {
   readonly lastActivityMs: number | null;
   /** MONITOR-DATA (optional, additive): admission time from the create-run receipt `now` or `run_execution_intents.admitted_at`. */
   readonly createdAtMs?: number | null;
+  /** MONITOR v1.1 (optional): a terminal Run's latest proven attempt end (sealed worker log), null when any end is unproven; and its delivery
+   * from the ledger's integration → delivery → adoption records (the furthest proven step; `commit` is the delivered/adopted commit). */
+  readonly finishedAtMs?: number | null;
+  readonly delivery?: { readonly state: MonitorDeliveryState; readonly commit: string | null } | null;
 }
+export type MonitorDeliveryState = 'integrating' | 'integrated' | 'delivering' | 'delivered' | 'adopting' | 'adopted' | 'rolling-back' | 'rolled-back';
 export interface MonitorApproval {
   readonly scopeId: string; readonly approvalId: string; readonly subjectKind: string; readonly summary: string;
   readonly requiredAssurance: string | null; readonly createdAtMs: number | null; readonly expiresAtMs: number | null;
@@ -67,7 +74,9 @@ export interface MonitorInstall {
   readonly service: MonitorService | null; readonly ledgerVersion: number | null;
   readonly runs: readonly MonitorRun[]; readonly workers: readonly WorkerObservation[];
   readonly approvals: readonly MonitorApproval[]; readonly pools: readonly MonitorPool[];
-  /** Typed codes for what could not be read (never thrown to the surface); rendered as a visible warning. */
+  /** Typed codes for what could not be read (never thrown to the surface); rendered as a visible warning. MONITOR v1.1 convention
+   * (additive): a code starting with `info:` is informational (a bound, a cap, an older ledger, ledger-only facts) and not a problem;
+   * every other code is a problem. Worker observations use the same prefix in their own diagnostics (e.g. `info:ledger-only`). */
   readonly diagnostics: readonly string[];
   /** MONITOR v1.1 map: what feeds what in this install — config layers, execution registry, model catalog, policy, memory. */
   readonly map?: MonitorMap | null;

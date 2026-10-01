@@ -1,12 +1,11 @@
-import { userInfo } from 'node:os';
 import { dirname, resolve } from 'node:path';
 import { SystemTrustedClock, inspectProductDirectory, inspectProductFile, type ConfigLoadOptions } from '#platform/index.js';
 import { openSqliteInventoryReader, DockerSupervisor, FileArtifactStore, readWorkerSidecars, inspectLegacyWorkers } from '#adapters/index.js';
-import { workerObservationQuerySchema, WorkerObservationError, DispatchInventoryPolicyAuthorization, DispatchPolicyAuthorization, assertRequestCompany, observeAttemptWorkerModels,
+import { workerObservationQuerySchema, WorkerObservationError, DispatchInventoryPolicyAuthorization, assertRequestCompany, observeAttemptWorkerModels,
   type WorkerObservation, type WorkerObservationQuery, type WorkerObservationReport, type WorkerObservationSource } from '#engine/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
 import { inspectConfiguredInventory } from '#composition/core/inventory/index.js';
-import { createLayoutPolicySource } from '#composition/core/policy/index.js';
+import { contextDispatchAuthorization } from '#composition/core/policy/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 export async function inspectConfiguredWorkers(root: string, input: WorkerObservationQuery, options: ConfigLoadOptions = {}): Promise<WorkerObservationReport> {
   try {
@@ -31,7 +30,7 @@ export async function inspectConfiguredWorkers(root: string, input: WorkerObserv
         // H34 S3: the target resolved the scope for its own company; this request's company must be that company.
         assertRequestCompany(target.config.company.id, c.config.company.id);
         const page = await inspectConfiguredInventory(source.path, { schemaVersion: 1, scopeId: query.scopeId, limit: Math.min(remaining, target.config.inspection.maxPageSize), after: query.after }, options);
-        const authorization = new DispatchPolicyAuthorization(createLayoutPolicySource(target.layout, userInfo().uid, target.config.inspection.policyMaxBytes));
+        const authorization = contextDispatchAuthorization(target);
         const reader = await openSqliteInventoryReader(await inspectProductFile(target.layout, 'ledger', ['-wal', '-shm', '-journal']), { busyTimeoutMs: target.config.storage.sqlite.busyTimeoutMs });
         const workers: WorkerObservation[] = [];
         try {
@@ -39,7 +38,7 @@ export async function inspectConfiguredWorkers(root: string, input: WorkerObserv
             const basic: WorkerObservation = { taskId: entry.identity.taskId, identity: entry.identity, authority: 'next-ledger',
               provider: 'unknown', workspace: null, process: 'unknown', handle: entry.terminal?.handle ?? null,
               terminal: entry.terminal, outputRecorded: entry.outputRecorded, patchRecorded: false, files: null, diagnostics: [] };
-            if (query.open && entry.terminal) { workers.push({ ...basic, diagnostics: ['ledger-only'] }); continue; }
+            if (query.open && entry.terminal) { workers.push({ ...basic, diagnostics: ['info:ledger-only'] }); continue; }
             try {
               await authorization.authorizeIdentity('read-output', entry.identity, target.principal);
               const record = await reader.loadBoundDispatch(entry.identity); if (!record) throw new WorkerObservationError('WORKER_OBSERVATION_UNAVAILABLE');

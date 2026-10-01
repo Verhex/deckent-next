@@ -317,7 +317,8 @@
       "dependencies": [
         "src/adapters/core/file-policy",
         "src/platform/core/host",
-        "src/platform/core/config"
+        "src/platform/core/config",
+        "src/engine/core/policy"
       ],
       "plan": "SECURITY"
     },
@@ -1850,7 +1851,9 @@
         "src/engine/core/worker-observation",
         "src/engine/core/runtime",
         "src/domain/core/run",
-        "src/domain/core/task-graph"
+        "src/domain/core/task-graph",
+        "src/domain/core/worker-event",
+        "src/platform/core/output"
       ],
       "plan": "MONITOR"
     },
@@ -1864,7 +1867,20 @@
         "src/engine/core/monitor",
         "src/engine/core/runs",
         "src/engine/core/scheduling",
-        "src/engine/core/worker-observation"
+        "src/engine/core/worker-observation",
+        "src/adapters/core/file-artifacts",
+        "src/adapters/core/file-policy",
+        "src/adapters/core/worker-observation",
+        "src/capabilities/core/artifacts",
+        "src/domain/core/attempt",
+        "src/domain/core/worker-event",
+        "src/domain/core/task-evaluation",
+        "src/platform/core/config",
+        "src/platform/core/config-fields",
+        "src/platform/core/host",
+        "src/platform/core/managed-files",
+        "src/platform/core/utils",
+        "src/adapters/core/local-principal"
       ],
       "plan": "MONITOR"
     },
@@ -1879,7 +1895,9 @@
         "src/engine/core/worker-observation",
         "src/platform/core/clock",
         "src/platform/core/config",
-        "src/platform/core/managed-files"
+        "src/composition/core/scoped-request",
+        "src/composition/core/policy",
+        "src/engine/core/approval"
       ],
       "plan": "MONITOR"
     },

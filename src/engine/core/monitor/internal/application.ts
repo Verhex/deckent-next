@@ -38,34 +38,42 @@ export class MonitorApplication {
         approvals: [], pools: [], diagnostics: Object.freeze(diagnostics) });
     }
     diagnostics.push(...reading.diagnostics);
-    const admitted = new Set<string>(); const workers: WorkerObservation[] = []; let denied = false;
+    const admitted = new Set<string>(); const summaries = new Set<string>(); const workers: WorkerObservation[] = []; let denied = false;
     for (const scopeId of reading.scopeIds) {
       try {
         const scope = await this.ports.observeScope(target, scopeId);
         if (scope.access !== 'admitted') { denied ||= scope.access === 'denied'; diagnostics.push(`scope-${scope.access}:${scopeId}`); continue; }
-        admitted.add(scopeId); workers.push(...scope.workers);
+        admitted.add(scopeId); workers.push(...scope.workers); if (scope.approvals === true) summaries.add(scopeId);
+        else if (reading.approvals.some(value => value.scopeId === scopeId)) diagnostics.push('approvals-denied:' + scopeId);
         if (scope.workerStatus !== 'available') diagnostics.push(`workers-${scope.workerStatus}:${scopeId}`);
-        if (scope.truncated) diagnostics.push('workers-truncated:' + scopeId);
+        if (scope.truncated) diagnostics.push('info:workers-truncated:' + scopeId);
       } catch (error) { diagnostics.push(`scope-unavailable:${scopeId}:${code(error)}`); }
     }
     const recency = new Map(reading.runs.flatMap(run => run.attempts.map(value => [`${run.snapshot.identity.scopeId}/${value.attemptId}`,
       Math.max(value.sealedAtMs ?? -1, value.dispatch?.grantedAtMs ?? -1)] as const)));
     const rank = (value: WorkerObservation) => recency.get(`${value.identity?.scopeId}/${value.identity?.attemptId}`) ?? -1;
     const finished = workers.filter(value => value.terminal).sort((a, b) => rank(b) - rank(a)); const kept = new Set(finished.slice(0, MONITOR_FINISHED_WORKERS));
-    if (finished.length > MONITOR_FINISHED_WORKERS) diagnostics.push('workers-finished-capped:' + (finished.length - MONITOR_FINISHED_WORKERS));
+    if (finished.length > MONITOR_FINISHED_WORKERS) diagnostics.push('info:workers-finished-capped:' + (finished.length - MONITOR_FINISHED_WORKERS));
+    // Ledger-only observations carry no sidecar provider/model: fill them from the ledger attempt (evaluation record, pin, profile adapter).
+    const ledger = new Map(reading.runs.flatMap(run => run.attempts.map(value => [`${run.snapshot.identity.scopeId}/${value.attemptId}`, value] as const)));
+    const enrich = (value: WorkerObservation): WorkerObservation => {
+      const known = ledger.get(`${value.identity?.scopeId}/${value.identity?.attemptId}`);
+      return known ? { ...value, provider: value.provider === 'unknown' ? known.provider ?? value.provider : value.provider, ...(value.model ? {} : known.model ? { model: known.model } : {}) } : value;
+    };
     const byAttempt = new Map(workers.filter(value => value.identity).map(value => [`${value.identity!.scopeId}/${value.identity!.attemptId}`, value]));
     const pools = new Map(reading.pools.map(pool => [pool.poolId, pool]));
     const runs = reading.runs.filter(run => admitted.has(run.snapshot.identity.scopeId)).map(run => {
       const scopeId = run.snapshot.identity.scopeId;
       const own = new Map(run.attempts.flatMap(attempt => { const worker = byAttempt.get(`${scopeId}/${attempt.attemptId}`); return worker ? [[attempt.attemptId, worker] as const] : []; }));
       return projectMonitorRun({ run, approvals: reading.approvals, pool: run.poolId ? pools.get(run.poolId) ?? null : null, workers: own, observedAt });
-    });
+    }).sort((a, b) => (b.lastActivityMs ?? -1) - (a.lastActivityMs ?? -1));
     const approvals: MonitorApproval[] = reading.approvals.filter(value => admitted.has(value.scopeId)).map(value => Object.freeze({ scopeId: value.scopeId,
-      approvalId: value.approvalId, subjectKind: value.subjectKind, summary: value.summary, requiredAssurance: null, createdAtMs: value.createdAtMs, expiresAtMs: value.expiresAtMs }));
+      approvalId: value.approvalId, subjectKind: value.subjectKind, summary: summaries.has(value.scopeId) ? value.summary : '', requiredAssurance: null, createdAtMs: value.createdAtMs, expiresAtMs: value.expiresAtMs }));
     const poolViews: MonitorPool[] = !reading.scopeIds.length || admitted.size ? reading.pools.map(pool => Object.freeze({ poolId: pool.poolId, capacity: pool.inFlightSlots, inFlight: pool.inFlight,
       held: pool.hold?.state === 'held', heldBy: pool.hold?.state === 'held' ? pool.hold.changedBy : null, executionCapacity: pool.executionSlots, executing: pool.execution })) : [];
     const status = !reading.scopeIds.length || admitted.size ? 'available' : denied ? 'denied' : 'unavailable';
     return Object.freeze({ id: target.id, path: target.path, status, scopeIds: Object.freeze([...admitted]), service: serviceState, ledgerVersion: reading.ledgerVersion,
-      runs: Object.freeze(runs), workers: Object.freeze(workers.filter(value => !value.terminal || kept.has(value))), approvals: Object.freeze(approvals), pools: Object.freeze(poolViews), diagnostics: Object.freeze(diagnostics) });
+      runs: Object.freeze(runs),
+      workers: Object.freeze(workers.filter(value => !value.terminal || kept.has(value)).sort((a, b) => rank(b) - rank(a)).map(enrich)), map: !reading.scopeIds.length || admitted.size ? reading.map ?? null : null, approvals: Object.freeze(approvals), pools: Object.freeze(poolViews), diagnostics: Object.freeze(diagnostics) });
   }
 }

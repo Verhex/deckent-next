@@ -1,4 +1,4 @@
-import { inspectTaskReadiness, type TaskReadiness } from '#domain/index.js';
+import { inspectTaskReadiness, type TaskReadiness, type WorkerModelView } from '#domain/index.js';
 import type { WorkerObservation } from '#engine/core/worker-observation/index.js';
 import type { MonitorBlocker, MonitorBlockerCode, MonitorRun, MonitorRunState, MonitorTask } from './contract.js';
 import type { MonitorLedgerApproval, MonitorLedgerAttempt, MonitorLedgerPool, MonitorLedgerRun } from './evidence.js';
@@ -91,6 +91,8 @@ export function deriveRunState(e: MonitorRunEvidence, current: MonitorBlocker | 
   if (current.code === 'waiting-dependency' && current.taskId && readiness(e.run, e.observedAt).get(current.taskId)?.disposition === 'blocked') return 'blocked';
   return STATE[current.code];
 }
+/** The model a worker ran: the sealed usage, else its init, else the requested pin (named honestly: a pin is what was asked for). */
+const modelName = (view: WorkerModelView | null | undefined) => view ? view.usage?.[0] ?? view.init ?? view.requested.modelId : null;
 function verdict(phase: string, attempt: MonitorLedgerAttempt | null): MonitorTask['evaluation']['verdict'] {
   if (phase === 'accepted') return 'accepted';
   if (phase === 'failed') return attempt?.evaluationObserved ? 'rejected' : null;
@@ -107,15 +109,20 @@ export function projectMonitorRun(e: MonitorRunEvidence): MonitorRun {
     const worker = attempt ? e.workers.get(attempt.attemptId) : undefined; const profile = snapshot.execution.tasks.find(value => value.taskId === definition.id)?.profile;
     phaseCounts[progress.phase] = (phaseCounts[progress.phase] ?? 0) + 1;
     push(attempt?.reservedAtMs, attempt?.dispatch?.grantedAtMs, attempt?.sealedAtMs, heartbeatAt(worker, e.observedAt), worker?.files?.activity?.receivedAt);
-    const provider = worker && worker.provider !== 'unknown' ? worker.provider : null;
+    const provider = worker && worker.provider !== 'unknown' ? worker.provider : attempt?.provider ?? null;
     return Object.freeze({ taskId: definition.id, kind: definition.kind, phase: progress.phase, profile: profile ? { id: profile.id, version: profile.version } : null,
       attempts: attempt ? 1 : 0, dependencies: definition.dependencies, evaluation: { verdict: verdict(progress.phase, attempt), observedAtMs: null },
       lastAttempt: attempt ? Object.freeze({ attemptId: attempt.attemptId, generation: attempt.generation, launch: attempt.dispatch?.launch ?? null,
         exitCode: attempt.dispatch?.terminal?.exitCode ?? null, startedAtMs: attempt.dispatch?.grantedAtMs ?? null, endedAtMs: attempt.sealedAtMs,
-        workerPhase: worker?.files?.activity?.phase ?? null, heartbeatAgeMs: worker?.files?.heartbeat.ageMs ?? null, provider }) : null });
+        workerPhase: worker?.files?.activity?.phase ?? null, heartbeatAgeMs: worker?.files?.heartbeat.ageMs ?? null, provider,
+        model: modelName(worker?.model ?? attempt.model), firstFailure: attempt.firstFailure ?? null, ...(attempt.recentEvents ? { recentEvents: attempt.recentEvents } : {}),
+        ...(attempt.diagnostics ? { diagnostics: attempt.diagnostics } : {}) }) : null });
   });
   const current = deriveRunBlocker(e);
+  // Proven finish of a terminal Run: every bound attempt has a sealed end; the latest of them.
+  const ends = snapshot.bindings.map(binding => e.run.attempts.find(value => value.attemptId === binding.identity.attemptId)?.sealedAtMs ?? null);
+  const finishedAtMs = !current && ends.length && ends.every(value => value !== null) ? Math.max(...ends as number[]) : null;
   return Object.freeze({ scopeId: snapshot.identity.scopeId, runId: snapshot.identity.runId, revision: snapshot.revision, state: deriveRunState(e, current),
     phaseCounts: Object.freeze(phaseCounts), tasks: Object.freeze(tasks), blocker: current, cancellationRequested: snapshot.cancelRequested,
-    lastActivityMs: times.length ? Math.max(...times) : null, createdAtMs: e.run.createdAtMs });
+    lastActivityMs: times.length ? Math.max(...times) : null, createdAtMs: e.run.createdAtMs, finishedAtMs, delivery: e.run.delivery ?? null });
 }

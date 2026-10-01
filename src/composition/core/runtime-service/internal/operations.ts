@@ -10,7 +10,6 @@ import { inspectConfiguredInventory } from '#composition/core/inventory/index.js
 import { createConfiguredRun, deliverConfiguredRunCancellation, evaluateConfiguredTask, inspectConfiguredRun,
   reconcileConfiguredAttempt, recoverConfiguredCancellations, requestConfiguredRunCancellation,
   reserveConfiguredRunTasks } from '#composition/core/runs/index.js';
-
 /** Closed local composition map. Each operation revalidates untrusted protocol input before any I/O. */
 export function createConfiguredRuntimeOperations(projectRoot: string, options: ConfigLoadOptions = {}) {
   return Object.freeze({
@@ -31,9 +30,7 @@ export function createConfiguredRuntimeOperations(projectRoot: string, options: 
   });
 }
 export type ConfiguredRuntimeOperations = ReturnType<typeof createConfiguredRuntimeOperations>;
-
 type RuntimeOperationHandler = (input: unknown) => Promise<unknown>;
-
 /** Protocol dispatch only: policy, domain decisions, and error serialization remain with their owners. */
 export async function executeConfiguredRuntimeOperation(projectRoot: string, request: RuntimeServiceRequest,
   options: ConfigLoadOptions = {}): Promise<unknown> {
