@@ -18,7 +18,7 @@ import { clearConfigCache, productResourcePath, SystemTrustedClock } from '#plat
 const roots: string[] = [];
 afterEach(async () => { clearConfigCache(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 
-it('MCP/SDK/CLI/terminal approval decision: an authority-surface approval stays pending and the refusal is audited; a deny is accepted', async () => {
+it.skipIf(process.platform !== 'linux')('[requires Linux live OS session /proc identity] MCP/SDK/CLI/terminal approval decision: an authority-surface approval stays pending and the refusal is audited; a deny is accepted', async () => {
   const root = await mkdtemp(join(tmpdir(), 'dn-decide-surface-')); roots.push(root);
   const project = join(root, 'project'), data = join(root, 'data');
   await mkdir(join(project, '.deckent'), { recursive: true, mode: 0o700 });

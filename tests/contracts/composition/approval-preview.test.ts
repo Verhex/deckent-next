@@ -26,7 +26,7 @@ it('bounds an approval preview in UTF-8 bytes under a first-line marker, whole l
   expect(single).not.toContain('�'); expect(single.split('\n')[0]).toMatch(/; not kept\]$/); expect(single.split('\n')[1]).toMatch(/^ş+ …$/);
 });
 
-it('sweeps kept previews at service start and tolerates a missing directory', async () => {
+it.skipIf(process.platform === 'win32')('requires POSIX managed storage: sweeps kept previews at service start and tolerates a missing directory', async () => {
   const root = await mkdtemp(join(tmpdir(), 'dn-previews-')); roots.push(root);
   const layout = resolveProductLayout({ projectRoot: root, root: join(root, 'data') });
   await mkdir(join(root, 'data'), { mode: 0o700 });

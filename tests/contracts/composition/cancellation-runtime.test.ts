@@ -17,7 +17,7 @@ const roots: string[] = [];
 afterEach(async () => { vi.restoreAllMocks(); clearConfigCache(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 async function fixture(policy = true, pollIntervalMs = 1000) {
   const project = await mkdtemp(join(tmpdir(), 'deckent-runtime-host-')); roots.push(project); const data = join(project, 'data');
-  await mkdir(join(project, '.deckent'), { recursive: true }); const env = { HOME: join(project, 'home') };
+  await mkdir(join(project, '.deckent'), { recursive: true }); const env = { HOME: join(project, 'home'), USERPROFILE: join(project, 'home') };
   await writeFile(join(project, '.deckent/config.json'), JSON.stringify({ layout: { root: data }, cancellation: {
     maxConcurrentDeliveries: 1, recoveryPageSize: 1, maxAttempts: 2, retryDelayMs: 1, claimTtlMs: 1,
   }, cancellationRuntime: { scopeIds: ['s'], pollIntervalMs, failureBackoffMs: 1000 },
@@ -29,7 +29,7 @@ async function fixture(policy = true, pollIntervalMs = 1000) {
   return { project, env };
 }
 
-it('hosts only configured trusted scopes and awaits an observed empty recovery page', async () => {
+it.skipIf(process.platform === 'win32')('requires POSIX local principal — hosts only configured trusted scopes and awaits an observed empty recovery page', async () => {
   const f = await fixture(); const controller = new AbortController(); const pages: unknown[] = [];
   await runConfiguredCancellationRuntime(f.project, { signal: controller.signal, observer: {
     async onPage(command, result) { pages.push({ command, result }); controller.abort(); }, async onError() { throw new Error('unexpected-error'); },
@@ -39,7 +39,7 @@ it('hosts only configured trusted scopes and awaits an observed empty recovery p
   } }]);
 });
 
-it('delivers sanitized recovery failures to the observer and stops on abort', async () => {
+it.skipIf(process.platform === 'win32')('requires POSIX local principal — delivers sanitized recovery failures to the observer and stops on abort', async () => {
   const f = await fixture(false); const controller = new AbortController(); const errors: { code?: string; message: string }[] = [];
   await runConfiguredCancellationRuntime(f.project, { signal: controller.signal, observer: {
     async onPage() { throw new Error('unexpected-page'); },
@@ -57,7 +57,7 @@ it('keeps runtime scope and timing defaults and rejects an empty trusted scope l
 });
 
 
-it.each(['cancellation', 'reconciliation', 'model-cancellation'] as const)('uses elapsed time for configured %s failure backoff while the wall floor stalls', async kind => {
+it.skipIf(process.platform === 'win32').each(['cancellation', 'reconciliation', 'model-cancellation'] as const)('requires POSIX local principal — uses elapsed time for configured %s failure backoff while the wall floor stalls', async kind => {
   const f = await fixture(true, 1), controller = new AbortController();
   let wallMs = 10000, failures = 0;
   const elapsed = [0, 0, 500, 1000, 1000];

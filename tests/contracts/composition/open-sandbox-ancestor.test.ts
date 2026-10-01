@@ -17,7 +17,7 @@ const grants = [rule('shell', 'agent-tool', ['run_shell'], 'require-approval', t
   rule('full', 'permission-mode', ['full-access'], 'allow', false, ['set'])];
 const original = '{"mcpServers":{}}\n';
 
-it('full access cannot replace the HOME state registry by renaming HOME (closed view control, then open view)', async () => {
+it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket] full access cannot replace the HOME state registry by renaming HOME (closed view control, then open view)', async () => {
   const f = await modeRuntime({ mode: 'full-auto', dataRoot: '.deckent/data', shell: { schemaVersion: 1, realm: 'require-sandbox' }, grants });
   const home = join(dirname(f.project), 'home'); vi.stubEnv('HOME', home);
   roots.push(`${home}-moved`);
@@ -38,7 +38,7 @@ it('full access cannot replace the HOME state registry by renaming HOME (closed 
   expect(moved).toBeNull();
 }, 60_000);
 
-it('full access cannot replace a nested global state root by renaming its parent (HOME not moved)', async () => {
+it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket] full access cannot replace a nested global state root by renaming its parent (HOME not moved)', async () => {
   const base = await mkdtemp(join(tmpdir(), 'deckent-r7-state-parent-')); roots.push(base);
   const parent = join(base, 'authority'), state = join(parent, 'state'); await mkdir(state, { recursive: true, mode: 0o700 });
   vi.stubEnv('DECKENT_GLOBAL_HOME', state);

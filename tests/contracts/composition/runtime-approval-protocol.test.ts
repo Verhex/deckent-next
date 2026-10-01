@@ -53,7 +53,7 @@ async function fixture() {
 // Protocol v15 (T-L5 lane, owner 2026-09-27 v15 package) activated C12 G4 visibility: OPERATION_SUBJECT_PROTOCOL_VERSION is 15 (a
 // threshold; v16 and v17 keep it), so a current runtime client receives operation-subject approvals. A released v14 client can no longer reach approval operations at all
 // (every non-lifecycle operation is current-version only, socket.test.ts); the v14 view below is kept as the engine contract.
-it('delivers operation-subject approvals to a v15 runtime client in the record shape the terminal parses, as the in-process SDK sees them (C12 G4)', async () => {
+it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket] delivers operation-subject approvals to a v15 runtime client in the record shape the terminal parses, as the in-process SDK sees them (C12 G4)', async () => {
   expect(RUNTIME_SERVICE_SCHEMA_VERSION).toBe(18);
   expect(approvalSubjectsHiddenFromProtocol(14)).toEqual(['operation']);
   expect(approvalSubjectsHiddenFromProtocol(15)).toEqual([]);
@@ -76,7 +76,7 @@ it('delivers operation-subject approvals to a v15 runtime client in the record s
   } finally { await stopTestRuntimeService(service); }
 });
 
-it('pages a hidden-subject view over visible approvals only: a page never comes back empty because of a hidden operation approval (Astra 2128)', async () => {
+it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket] pages a hidden-subject view over visible approvals only: a page never comes back empty because of a hidden operation approval (Astra 2128)', async () => {
   const f = await fixture();
   const service = await startTestRuntimeService(f.project, f.env);
   try {
@@ -103,7 +103,7 @@ it('pages a hidden-subject view over visible approvals only: a page never comes 
 
 // POLICY-HARDEN K3 at the runtime service: the peer behind MCP `decide_approval` (same uid) cannot allow an approval of an authority-surface
 // operation (`policy.administer@1`); the request stays pending. A deny is still accepted. The code is registered, so the client sees it as is.
-it('refuses an allow of a policy.administer approval from a runtime client (the MCP decide_approval path); the record stays pending', async () => {
+it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket] refuses an allow of a policy.administer approval from a runtime client (the MCP decide_approval path); the record stays pending', async () => {
   const f = await fixture();
   const layout = (await openConfiguredAttemptStore(f.project, { env: f.env }).then(opened => { opened.store.close(); return opened; }));
   const integrity = await openLocalIntegrityAuthority(layout.layout, 'authority.key', true);

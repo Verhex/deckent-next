@@ -1,4 +1,5 @@
 import { constants } from 'node:fs';
+import { ManagedFileError } from '#platform/index.js';
 import { open, readdir, rename, unlink } from 'node:fs/promises';
 import { join } from 'node:path';
 import { z } from 'zod';
@@ -33,6 +34,7 @@ const redacted = (message: AgentTurnMessage): AgentTurnMessage => message.role =
  * writing, bounded in count (oldest removed) and size. Snapshots are context for a later turn, never authority.
  */
 export function openTerminalSessionStore(directory: string, limits = TERMINAL_SESSION_LIMITS): TerminalSessionStore {
+  if (process.platform === 'win32' || !constants.O_NOFOLLOW) throw new ManagedFileError('MANAGED_FILE_UNSUPPORTED');
   const pathOf = (sessionId: string) => join(directory, `${sessionIdSchema.parse(sessionId)}.json`);
   const read = async (path: string): Promise<TerminalSessionSnapshot | null> => {
     let handle;

@@ -4,7 +4,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:https';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, expect, it } from 'vitest';
+import { describe, afterEach, expect, it } from 'vitest';
 import { invokeConfiguredModel, invokePeerConfiguredModel, inspectConfiguredModelInvocation } from '#composition/core/model-invocation/index.js';
 import { encodeModelBindingDefinition } from '#domain/index.js';
 import { openSqliteModelActivationStore, readLocalOsIdentity } from '#adapters/index.js';
@@ -75,10 +75,11 @@ async function fixture() {
     catalogRevision: catalog.revision, expectedBinding: binding, nativeRequest: { model: 'vendor/model',
       messages: [{ role: 'user', content: 'hello' }], max_completion_tokens: 4 } });
   return { project, ledger, configPath, profile, command, policy, headers, metadataHeaders, writeConfig, setEcho() { echo = true; },
-    env: { HOME: home, PATH: process.env.PATH ?? '/usr/bin:/bin' },
+    env: { HOME: home, USERPROFILE: home, PATH: process.env.PATH ?? '/usr/bin:/bin' },
     peer: { pid: process.pid, uid: Number(identity.subject), gid: process.getgid!(), assurance: 'linux-so-peercred' as const } };
 }
 
+describe.skipIf(process.platform === 'win32')('requires POSIX local principal and private credential custody', () => {
 it('authenticates a peer send once, persists only its reference, and replays without a credential lookup', async () => {
   const f = await fixture(), lookups: string[] = [];
   const options = { env: f.env, async secretResolver(ref: string) { lookups.push(ref); return secret; } };
@@ -160,4 +161,6 @@ it('SECRET-K1: with the file backend selected, the provider credential comes fro
   expect(JSON.stringify(result)).not.toContain(secret);
   expect((await readFile(f.ledger)).includes(Buffer.from(secret))).toBe(false);
   expect(await readFile(globalPath, 'utf8')).not.toContain(secret);
+});
+
 });

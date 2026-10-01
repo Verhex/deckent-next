@@ -24,7 +24,7 @@ async function fixture(config?: unknown) {
   const project = join(root, 'project'), home = join(root, 'home'); await mkdir(project, { mode: 0o700 }); await mkdir(home, { mode: 0o700 });
   if (config !== undefined) { await mkdir(join(project, '.deckent'), { mode: 0o700 });
     await writeFile(join(project, '.deckent/config.json'), typeof config === 'string' ? config : JSON.stringify(config), { mode: 0o600 }); }
-  return { root, project, home, env: { HOME: home, PATH: process.env.PATH ?? '/usr/bin:/bin' } };
+  return { root, project, home, env: { HOME: home, USERPROFILE: home, PATH: process.env.PATH ?? '/usr/bin:/bin' } };
 }
 async function snapshot(...rootsToRead: string[]) {
   const entries: Record<string, string> = {};

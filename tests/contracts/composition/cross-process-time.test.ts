@@ -1,3 +1,4 @@
+import { existsSync } from 'node:fs';
 import { mkdtemp, mkdir, readFile, rm, utimes, writeFile } from 'node:fs/promises';
 import { hostname, tmpdir, userInfo } from 'node:os';
 import { join } from 'node:path';
@@ -51,10 +52,10 @@ describe('cross-process cancellation leases', () => {
     } finally { reader.close(); writer.close(); }
   });
 
-  it.each(['deliver', 'recover'] as const)('wires the platform floor through configured %s into durable claim and finish times', async mode => {
+  it.skipIf(process.platform === 'win32').each(['deliver', 'recover'] as const)('requires POSIX managed storage — wires the platform floor through configured %s into durable claim and finish times', async mode => {
     const project = await root(), data = join(project, 'data'); await mkdir(join(project, '.deckent'), { mode: 0o700 });
     await writeFile(join(project, '.deckent/config.json'), JSON.stringify({ layout: { root: data }, cancellation: { ...limits, maxConcurrentDeliveries: 1, recoveryPageSize: 10 } }));
-    const options = { env: { HOME: join(project, 'home') } };
+    const options = { env: { HOME: join(project, 'home'), USERPROFILE: join(project, 'home') } };
     const opened = await openConfiguredAttemptStore(project, options);
     await platform.prepareProductDirectory(opened.layout, 'artifacts'); opened.store.close();
     const store = await seed(opened.path); store.close();
@@ -113,10 +114,10 @@ describe('config lock elapsed budget and conservative age', () => {
 });
 
 describe('worker observation clocks', () => {
-  it('stamps the configured observation report with the trusted clock', async () => {
+  it.skipIf(process.platform === 'win32')('requires POSIX managed storage; MANAGED_FILE_UNSUPPORTED — stamps the configured observation report with the trusted clock', async () => {
     const project = await root(), data = join(project, 'data'); await mkdir(join(project, '.deckent'), { mode: 0o700 });
     await writeFile(join(project, '.deckent/config.json'), JSON.stringify({ layout: { root: data } }));
-    const options = { env: { HOME: join(project, 'home') } };
+    const options = { env: { HOME: join(project, 'home'), USERPROFILE: join(project, 'home') } };
     const opened = await openConfiguredAttemptStore(project, options); opened.store.close();
     await writeFile(join(data, 'policy.json'), JSON.stringify({ schemaVersion: 1, revision: 'p', restrictions: [], grants: [
       { id: 'scope', effect: 'allow', actions: ['inspect'], scopes: ['s'], principals: [{ issuer: hostname(), subject: String(userInfo().uid) }], resource: { kind: 'scope', ids: ['s'] } },
@@ -126,7 +127,7 @@ describe('worker observation clocks', () => {
     const report = await inspectConfiguredWorkers(project, { schemaVersion: 1, scopeId: 's' }, options);
     expect(report).toMatchObject({ observedAt: 1000, sources: [{ status: 'available', workers: [] }] });
   });
-  it('never exposes negative heartbeat age, tolerates ahead readers and still identifies stale and far-future records', async () => {
+  it.skipIf(process.platform !== 'linux' || !existsSync('/proc/self/fd'))('[requires Linux /proc/self/fd observation custody] never exposes negative heartbeat age, tolerates ahead readers and still identifies stale and far-future records', async () => {
     const directory = await root(); await writeFile(join(directory, 'worker.hb'), JSON.stringify({ process: 'running' }), { mode: 0o600 });
     await utimes(join(directory, 'worker.hb'), 10, 10);
     const limits = { maxFileBytes: 4096, maxEntries: 10, staleMs: 1000 };
@@ -134,7 +135,7 @@ describe('worker observation clocks', () => {
       expect((await adapters.readWorkerSidecars(directory, 'worker', limits, now)).heartbeat).toMatchObject({ ageMs, freshness });
     }
   });
-  it('floors event receipt times and preserves future evidence while the terminal displays nonnegative age', async () => {
+  it.skipIf(process.platform !== 'linux' || !existsSync('/proc/self/fd'))('[requires Linux /proc/self/fd observation custody] floors event receipt times and preserves future evidence while the terminal displays nonnegative age', async () => {
     const directory = await root(); let raw = 10000;
     const clock = new platform.SystemTrustedClock(() => raw);
     vi.spyOn(platform, 'SystemTrustedClock').mockImplementation(function () { return clock; } as never);

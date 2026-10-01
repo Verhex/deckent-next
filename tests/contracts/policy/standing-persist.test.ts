@@ -56,7 +56,7 @@ const owned = (me: Actor) => [{ id: 't', effect: 'allow', actions: ['invoke'], s
   { id: 'o', effect: 'allow', actions: ['execute'], scopes: ['s'], principals: [me], resource: { kind: 'operation', ids: ['host.shell.run'] } }];
 
 describe.skipIf(process.platform === 'win32')('persistent standing approvals (G6)', () => {
-  it('persists the pattern as the person\'s own grant through policy.administer: one settled change, audited, archived, no second card', async () => {
+  it.skipIf(process.platform !== 'linux')('[requires Linux live OS session /proc identity] persists the pattern as the person\'s own grant through policy.administer: one settled change, audited, archived, no second card', async () => {
     const f = await fixture({ grants: owned });
     const test = shell('npm test');
     expect(await f.standing.offer('s', f.me, test)).toEqual({ available: true });
@@ -84,7 +84,7 @@ describe.skipIf(process.platform === 'win32')('persistent standing approvals (G6
     expect(f.journal.store.list('s', null, 10)).toHaveLength(1);
   });
 
-  it('a person cannot persist what they do not hold (delegation bound): typed refusal, files unchanged, and the card would not offer it', async () => {
+  it.skipIf(process.platform !== 'linux')('[requires Linux live OS session /proc identity] a person cannot persist what they do not hold (delegation bound): typed refusal, files unchanged, and the card would not offer it', async () => {
     // Only the request right and a read tool; no `agent-tool-call` authority and no owner root.
     const f = await fixture({ grants: me => [{ id: 'request', effect: 'allow', actions: ['execute'], scopes: ['s'], principals: [me], resource: { kind: 'operation', ids: ['policy.administer'] } },
       { id: 'approve', effect: 'allow', actions: 'all', scopes: ['s'], principals: [me], resource: { kind: 'approval', ids: 'all' } }], bindings: () => [] });
@@ -104,14 +104,14 @@ describe.skipIf(process.platform === 'win32')('persistent standing approvals (G6
     await expect(g.standing.persist({ scopeId: 's', principal: g.principal, pattern, sourceApprovalId: 'card' })).resolves.toMatchObject({ key: pattern.key });
   });
 
-  it('the company\'s separation of duties applies to the engine\'s decision too: a person who may not approve their own request cannot persist', async () => {
+  it.skipIf(process.platform !== 'linux')('[requires Linux live OS session /proc identity] the company\'s separation of duties applies to the engine\'s decision too: a person who may not approve their own request cannot persist', async () => {
     const f = await fixture({ grants: owned, separation: true });
     const before = await readFile(f.policyPath, 'utf8');
     await expect(f.standing.persist({ scopeId: 's', principal: f.principal, pattern: shell('npm test'), sourceApprovalId: 'card' })).rejects.toMatchObject({ code: 'APPROVAL_DENIED' });
     expect(await readFile(f.policyPath, 'utf8')).toBe(before);
   });
 
-  it('a v1 policy is typed unsupported (never a crash, never offered); the person\'s persisted grants are bounded', async () => {
+  it.skipIf(process.platform !== 'linux')('[requires Linux live OS session /proc identity] a v1 policy is typed unsupported (never a crash, never offered); the person\'s persisted grants are bounded', async () => {
     const v1 = await fixture({ v1: true });
     expect(await v1.standing.offer('s', v1.me, shell('npm test'))).toEqual({ available: false, reason: 'unsupported' });
     await expect(v1.standing.persist({ scopeId: 's', principal: v1.principal, pattern: shell('npm test'), sourceApprovalId: 'card' })).rejects.toBeInstanceOf(StandingApprovalError);
@@ -121,7 +121,7 @@ describe.skipIf(process.platform === 'win32')('persistent standing approvals (G6
     await expect(full.standing.persist({ scopeId: 's', principal: full.principal, pattern: shell('npm test'), sourceApprovalId: 'card' })).rejects.toMatchObject({ code: 'STANDING_LIMIT' });
   });
 
-  it('revoke removes only the person\'s own standing grant by the same operation, audited; the pattern asks again', async () => {
+  it.skipIf(process.platform !== 'linux')('[requires Linux live OS session /proc identity] revoke removes only the person\'s own standing grant by the same operation, audited; the pattern asks again', async () => {
     const f = await fixture({ grants: owned });
     const test = shell('npm test');
     const view = await f.standing.persist({ scopeId: 's', principal: f.principal, pattern: test, sourceApprovalId: 'card' });

@@ -77,7 +77,7 @@ it('upgrades a real v39 ledger through v40 (C12 G1) to the current version: 0600
   } finally { upgraded.close(); }
 });
 
-it('stores an operation approval by its exact action digest: idempotent open, one current row per digest, never renewed, untouched by the tool-call sweep (C12 G1)', async () => {
+it.skipIf(process.platform !== 'linux')('[requires Linux live OS session /proc identity] stores an operation approval by its exact action digest: idempotent open, one current row per digest, never renewed, untouched by the tool-call sweep (C12 G1)', async () => {
   const path = await ledger(), journal = openSqliteApprovalStore(path, options);
   try {
     const first = journal.store.create(operation());
@@ -131,7 +131,7 @@ it('keeps every existing task approval byte for byte across the v38 rebuild, sti
   } finally { upgraded.close(); }
 });
 
-it('stores an agent tool-call approval by its exact action digest, lists it beside tasks, decides it, and never renews it', async () => {
+it.skipIf(process.platform !== 'linux')('[requires Linux live OS session /proc identity] stores an agent tool-call approval by its exact action digest, lists it beside tasks, decides it, and never renews it', async () => {
   const path = await ledger(), journal = openSqliteApprovalStore(path, options);
   try {
     const first = journal.store.create(toolCall(0));

@@ -30,7 +30,7 @@ async function project(serving: Record<string, unknown>) {
   const projectRoot = join(root, 'project');
   await mkdir(join(projectRoot, '.deckent'), { recursive: true });
   await writeFile(join(projectRoot, '.deckent/config.json'), JSON.stringify({ inference_serving: serving }));
-  return { projectRoot, env: { HOME: join(root, 'home'), PATH: process.env.PATH ?? '' } };
+  return { projectRoot, env: { HOME: join(root, 'home'), USERPROFILE: join(root, 'home'), PATH: process.env.PATH ?? '' } };
 }
 
 it('reads loopback metrics with the profile limits and refuses a missing limit or a non-loopback base URL', async () => {

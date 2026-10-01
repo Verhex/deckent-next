@@ -220,7 +220,7 @@ describe.skipIf(process.platform === 'win32')('deckent terminal in a real pseudo
     expect(result.status).toBe(0);
   });
 
-  it('exits 0 after a successful governed chat turn', async () => {
+  it.skipIf(process.platform !== 'linux')('exits 0 after a successful governed chat turn (requires Linux local runtime transport)', async () => {
     const f = await governedChat();
     await startRuntime(f.projectRoot, f.env);
     const result = await inPty(f.projectRoot, f.env, ['terminal', 'workline', '--scope', 'scope'], [
@@ -233,7 +233,7 @@ describe.skipIf(process.platform === 'win32')('deckent terminal in a real pseudo
   });
 
   // Owner report 2026-09-27 at the real boundary: compiled CLI, real runtime service (protocol v15), real pseudo-terminal keys.
-  it('runs the highlighted slash command on Enter and attaches an @file picked from the service in a real terminal', async () => {
+  it.skipIf(process.platform !== 'linux')('runs the highlighted slash command on Enter and attaches an @file picked from the service in a real terminal (requires Linux local runtime transport)', async () => {
     const f = await governedChat();
     await writeFile(join(f.projectRoot, 'README.md'), '# pty readme\n');
     await writeFile(join(f.projectRoot, '.env'), 'SECRET_TOKEN=pty\n');
@@ -253,7 +253,7 @@ describe.skipIf(process.platform === 'win32')('deckent terminal in a real pseudo
     expect(result.output).not.toContain('@.env');
   });
 
-  it('`deckent` alone opens the terminal, starts the runtime service in the background and leaves it running for the next terminal', async () => {
+  it.skipIf(process.platform !== 'linux')('`deckent` alone opens the terminal, starts the runtime service in the background and leaves it running for the next terminal (requires Linux local runtime transport)', async () => {
     const f = await governedChat();
     const configPath = join(f.projectRoot, '.deckent/config.json');
     const config = JSON.parse(await readFile(configPath, 'utf8')) as { terminal: Record<string, unknown>; layout: { root: string } };

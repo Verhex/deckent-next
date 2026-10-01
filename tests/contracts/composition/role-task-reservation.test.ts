@@ -19,7 +19,7 @@ const graph = { schemaVersion: 2 as const, revision: 1, tasks: ['held', 'free'].
   criterionDefinitions: [{ id: 'exit', version: 1, description: 'zero exit', evaluator: { id: 'process-exit', version: 1 }, parameters: { acceptedExitCodes: [0] } }] };
 
 describe.skipIf(process.platform === 'win32')('a role-derived task rule is applied by real Run reservation (H34 S2 follow-up)', () => {
-  it('a require-approval task permission granted only through a bound role excludes the task until decided, and allows it after', async () => {
+  it.skipIf(process.platform !== 'linux')('[requires Linux live OS session /proc identity] a require-approval task permission granted only through a bound role excludes the task until decided, and allows it after', async () => {
     const root = await mkdtemp(join(tmpdir(), 'deckent-role-task-')); roots.push(root);
     const project = join(root, 'project'), data = join(root, 'data'); await mkdir(join(project, '.deckent'), { recursive: true, mode: 0o700 });
     await writeFile(join(project, '.deckent/config.json'), JSON.stringify({ layout: { root: data }, admission: { poolId: 'p', executionSlots: 2,

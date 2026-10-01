@@ -1,7 +1,7 @@
 import { hostname, tmpdir, userInfo } from 'node:os';
 import { access, mkdtemp, rm } from 'node:fs/promises';
 import { join } from 'node:path';
-import { expect, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { hashInstallationProfilePayload } from '#engine/core/installation/index.js';
 import { previewSuppliedInstallation } from '#composition/core/installation/index.js';
 import { installationProfile } from '../support/installation-profile.js';
@@ -18,6 +18,7 @@ function rehash<T extends ReturnType<typeof installationProfile>>(profile: T): T
   return profile;
 }
 
+describe.skipIf(process.platform === 'win32')('requires POSIX local principal; AUTHENTICATION_REQUIRED on Windows UID -1', () => {
 it('previews a supplied profile without creating a missing project or echoing configuration secrets', async () => {
   const root = await mkdtemp(join(tmpdir(), 'deckent-install-preview-')); const project = join(root, 'absent');
   try {
@@ -131,4 +132,6 @@ it('rejects a profile without an execution configuration', async () => {
     await expect(previewSuppliedInstallation(project, rehash(profile), { allowShutdown: false }))
       .rejects.toMatchObject({ code: 'INSTALLATION_PROFILE_CONFIG' });
   } finally { await rm(root, { recursive: true, force: true }); }
+});
+
 });

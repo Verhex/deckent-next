@@ -27,7 +27,7 @@ async function fixture(responseMaxBytes: number) {
   const root = await mkdtemp(join(tmpdir(), 'deckent-mcp-envelope-')); roots.push(root);
   const home = join(root, 'home'); await mkdir(home, { mode: 0o700 }); await mkdir(join(root, '.deckent'), { mode: 0o700 });
   await writeFile(join(root, '.deckent/config.json'), JSON.stringify({ mcp: { responseMaxBytes, inputMaxBytes: 65_536, maxConcurrentCalls: 2 } }), { mode: 0o600 });
-  return { root, env: { HOME: home, PATH: process.env.PATH ?? '/usr/bin:/bin' } };
+  return { root, env: { HOME: home, USERPROFILE: home, PATH: process.env.PATH ?? '/usr/bin:/bin' } };
 }
 
 function launch(root: string, env: Record<string, string>) {

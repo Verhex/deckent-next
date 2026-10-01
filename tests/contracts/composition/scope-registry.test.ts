@@ -42,7 +42,7 @@ async function cliFailure(f: { project: string; env: NodeJS.ProcessEnv }, args: 
 }
 
 describe.skipIf(process.platform === 'win32')('fail-closed scope registry on real surfaces', () => {
-  it('refuses a fabricated scope reached only through a `scopes: all` grant on CLI --scope and the SDK', async () => {
+  it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket] refuses a fabricated scope reached only through a `scopes: all` grant on CLI --scope and the SDK', async () => {
     const f = await fixture();
     expect(await cliFailure(f, ['inventory', '--scope', 'fabricated'])).toEqual({ exit: 1, stdout: '', code: 'SCOPE_UNKNOWN' });
     expect(await cliFailure(f, ['run', 'inspect', '--scope', 'fabricated', '--id', 'r'])).toEqual({ exit: 1, stdout: '', code: 'SCOPE_UNKNOWN' });
@@ -52,14 +52,14 @@ describe.skipIf(process.platform === 'win32')('fail-closed scope registry on rea
     expect(library.stdout.trim()).toBe('SCOPE_UNKNOWN');
   });
 
-  it('refuses a fabricated scope on the runtime socket peer path', async () => {
+  it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket] refuses a fabricated scope on the runtime socket peer path', async () => {
     const f = await fixture();
     const client = createConfiguredRuntimeClient(f.project, { env: f.env });
     await expect(client.inspectProviderSpendAccount({ schemaVersion: 1, scopeId: 'fabricated', budgetId: 'b', budgetRevision: 1 }))
       .rejects.toMatchObject({ code: 'SCOPE_UNKNOWN' });
   });
 
-  it('registers the default company and the installation\'s own scopes at first start, so `all` reaches them and nothing else', async () => {
+  it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket] registers the default company and the installation\'s own scopes at first start, so `all` reaches them and nothing else', async () => {
     const f = await fixture({ service: { identity: { scopeId: 'own', serviceId: 'svc' } } });
     const db = new DatabaseSync(f.ledger, { readOnly: true });
     try {
@@ -75,7 +75,7 @@ describe.skipIf(process.platform === 'win32')('fail-closed scope registry on rea
     expect(await cliFailure(f, ['inventory', '--scope', 'fabricated'])).toEqual({ exit: 1, stdout: '', code: 'SCOPE_UNKNOWN' });
   });
 
-  it('keeps the solo default: a scope named by the trusted policy needs no extra step and gives `all` no reach beyond it', async () => {
+  it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket] keeps the solo default: a scope named by the trusted policy needs no extra step and gives `all` no reach beyond it', async () => {
     const named = { ...inspectAll, id: 'named', scopes: ['s'], resource: { kind: 'scope', ids: ['s'] } };
     const f = await fixture({}, [named, inspectAll]);
     const inventory = await exec(process.execPath, [binary, 'inventory', '--scope', 's', '--json'], { cwd: f.project, env: f.env });
@@ -83,7 +83,7 @@ describe.skipIf(process.platform === 'win32')('fail-closed scope registry on rea
     expect(await cliFailure(f, ['inventory', '--scope', 'other'])).toEqual({ exit: 1, stdout: '', code: 'SCOPE_UNKNOWN' });
   });
 
-  it('refuses to start when the trusted policy names a scope already pinned to another company; grants on it have no effect, and a fresh installation for that company reaches it normally', async () => {
+  it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket] refuses to start when the trusted policy names a scope already pinned to another company; grants on it have no effect, and a fresh installation for that company reaches it normally', async () => {
     const named = { ...inspectAll, id: 'named', scopes: ['s'], resource: { kind: 'scope', ids: ['s'] } };
     // Pinned before the first start (as by an earlier start configured for company `other`). `s` is one of THIS installation's own
     // declared scopes (the trusted policy names it), so decision 6 (H34 S3 Q1, owner 2026-09-27 evening) now refuses the start
@@ -103,7 +103,7 @@ describe.skipIf(process.platform === 'win32')('fail-closed scope registry on rea
     expect(JSON.parse(inventory.stdout).page).toEqual({ entries: [], nextAfter: null });
   });
 
-  it('still answers POLICY_DENIED before touching the ledger when no grant covers the scope', async () => {
+  it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket] still answers POLICY_DENIED before touching the ledger when no grant covers the scope', async () => {
     const f = await fixture({}, []);
     expect(await cliFailure(f, ['inventory', '--scope', 'fabricated'])).toEqual({ exit: 1, stdout: '', code: 'POLICY_DENIED' });
   });
@@ -126,7 +126,7 @@ describe.skipIf(process.platform === 'win32')('fail-closed scope registry on rea
     expect(pins(f.ledger)).toEqual([{ scope_id: 's', company_id: 'default', origin: 'admission' }]);
   });
 
-  it('pins a scope added to the policy after the service started at its first CLI use', async () => {
+  it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket] pins a scope added to the policy after the service started at its first CLI use', async () => {
     const f = await fixture({}, [named('s')]);
     await writeFile(join(f.data, 'policy.json'), JSON.stringify({ schemaVersion: 1, revision: 'p2', restrictions: [], grants: [named('s'), named('late')] }), { mode: 0o600 });
     expect(pins(f.ledger)).toEqual([{ scope_id: 'runtime-test', company_id: 'default', origin: 'start' }, { scope_id: 's', company_id: 'default', origin: 'start' }]);
@@ -138,7 +138,7 @@ describe.skipIf(process.platform === 'win32')('fail-closed scope registry on rea
     expect(pins(f.ledger)).toContainEqual({ scope_id: 'late', company_id: 'default', origin: 'admission' });
   });
 
-  it('refuses to start, never re-homes, when company.id changes to a company foreign to an already-pinned own scope; records written before stay under the original company', async () => {
+  it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket] refuses to start, never re-homes, when company.id changes to a company foreign to an already-pinned own scope; records written before stay under the original company', async () => {
     const f = await fixture({}, [named('s'), runNamed('s')], undefined, false);
     await cancel(f, 's');
     const store = await openSqliteAttemptStore(f.ledger, { busyTimeoutMs: 100, journalMode: 'wal', durability: 'full' }, 'forbid', custodyProfiles);

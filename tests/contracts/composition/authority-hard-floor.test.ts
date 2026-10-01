@@ -44,7 +44,7 @@ describe('authority hard floor under the owner root and full-auto', () => {
     const edits = projectEditArea(scope);
     for (const path of FLOOR) {
       expect(await edits.plan('write_file', { path, content: 'x' }), path).toMatchObject({ ok: false });
-      expect(await classifyReadOnlyShellCommand(`cat ${path}`, createShellPathContext(scope)), path).toMatchObject({ readOnly: false, reasonCode: 'PATH_PROTECTED' });
+      expect(await classifyReadOnlyShellCommand(`cat ${path}`, createShellPathContext({ ...scope, root: '/project' })), path).toMatchObject({ readOnly: false, reasonCode: 'PATH_PROTECTED' });
     }
   });
   custodyIt('[requires Linux /proc/self/fd custody] plans an ordinary source edit', async () => {

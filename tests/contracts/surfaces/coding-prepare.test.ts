@@ -12,7 +12,7 @@ afterEach(() => { for (const root of roots.splice(0)) rmSync(root, { recursive: 
 function fixture() {
   const root = mkdtempSync(join(tmpdir(), 'deckent-coding-')); roots.push(root);
   const project = join(root, 'project'); const home = join(root, 'home'); mkdirSync(project); mkdirSync(home);
-  return { project, env: { HOME: home, PATH: process.env.PATH } };
+  return { project, env: { HOME: home, USERPROFILE: home, PATH: process.env.PATH } };
 }
 const input = (provider = 'codex') => ({ schemaVersion: 1, template: { id: 'coding', version: 1,
   adapter: { id: 'docker', version: 2 }, parameters: { argv: ['unused'], imageId: 'sha256:' + 'a'.repeat(64),

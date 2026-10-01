@@ -1,12 +1,13 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { resolve } from 'node:path';
+import { tmpdir } from 'node:os';
 import { expect, it } from 'vitest';
 import { getPolicyVocabulary } from '../../../src/index.js';
 import { evaluatePolicy } from '#domain/index.js';
 const exec = promisify(execFile);
 it('exposes the same versioned action/resource matrix through compiled CLI and SDK without requiring a project', async () => {
-  const result = await exec(process.execPath, [resolve('dist/composition/core/cli/internal/entry.js'), 'policy', 'vocabulary', '--json'], { cwd: '/tmp' });
+  const result = await exec(process.execPath, [resolve('dist/composition/core/cli/internal/entry.js'), 'policy', 'vocabulary', '--json'], { cwd: tmpdir() });
   expect(JSON.parse(result.stdout)).toEqual(getPolicyVocabulary());
   expect(getPolicyVocabulary().resources.map(r => r.kind)).toEqual(['approval', 'task', 'attempt', 'operation', 'scope', 'pool', 'run', 'service', 'model-activation', 'model-invocation', 'provider-spend-account', 'agent-tool', 'permission-mode', 'agent-tool-call', 'secret', 'work-target']);
   expect(getPolicyVocabulary().resources.find(r => r.kind === 'attempt')!.actions).toContain('recover-output');

@@ -1,7 +1,7 @@
 import { readdir, readFile, mkdir, mkdtemp, rm, writeFile, chmod } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
-import { afterEach, expect, it } from 'vitest';
+import { describe, afterEach, expect, it } from 'vitest';
 import { z } from 'zod';
 import { clearConfigCache, configDisplayView, configuredSecretResolver, loadConfig, registerConfigSection, resolveGlobalConfigPaths } from '#platform/index.js';
 import { createFileSecretStore, registerProviderConfig } from '#adapters/index.js';
@@ -20,7 +20,7 @@ async function fixture() {
   const root = await mkdtemp(join(tmpdir(), 'deckent-secret-wiring-')); roots.push(root);
   const home = join(root, 'home'), project = join(root, 'project');
   await mkdir(join(project, '.deckent'), { recursive: true, mode: 0o700 });
-  const env: Record<string, string> = { HOME: home, PATH: process.env['PATH'] ?? '/usr/bin:/bin' };
+  const env: Record<string, string> = { HOME: home, USERPROFILE: home, PATH: process.env['PATH'] ?? '/usr/bin:/bin' };
   const globalPath = resolveGlobalConfigPaths(env).platformPath, globalRoot = dirname(globalPath);
   await mkdir(globalRoot, { recursive: true, mode: 0o700 }); await chmod(globalRoot, 0o700);
   const projectPath = join(project, '.deckent', 'config.json');
@@ -30,6 +30,7 @@ async function fixture() {
 }
 const capture = () => { const lines: string[] = []; return { lines, sink: { write: (text: string) => { lines.push(text); return true; } } }; };
 
+describe.skipIf(process.platform === 'win32')('requires POSIX private file secret store; SECRET_STORE_UNAVAILABLE', () => {
 it('env stays the default backend: the production resolver reads own environment properties exactly as before', async () => {
   const f = await fixture();
   const config = await loadConfig(f.project, { env: { ...f.env, PROVIDER_TOKEN: CANARY } });
@@ -116,4 +117,6 @@ it('every production credential read goes through the one configured resolver (n
     // A conditional or nullish fallback on the option (`secretResolver ? … : env` / `secretResolver ?? …`); the optional field `secretResolver?:` is allowed.
     expect(text, path).not.toMatch(/secretResolver\s*(?:\?\?|\?(?!:))/);
   }
+});
+
 });

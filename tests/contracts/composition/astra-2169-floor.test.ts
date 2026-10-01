@@ -10,7 +10,7 @@ console.log('CAPABILITIES', capabilities);
 const abi = capabilities.landlock.status === 'available' ? capabilities.landlock.abi ?? 0 : 0;
 const landlock: ShellSandboxFactory = layout => [{ kind: 'landlock', usable: () => landlockShellSandbox(layout).usable(linuxShellHost({ landlock: { status: 'available', abi } })) }];
 for (const realm of ['bubblewrap', 'landlock'] as const) {
-  it(`${realm}: an absent write-floor file must not be created without approval`, async () => {
+  it.skipIf(process.platform !== 'linux')(`[requires Linux local runtime socket] ${realm}: an absent write-floor file must not be created without approval`, async () => {
     const f = await modeRuntime({ grants: [rule('shell-tool', 'agent-tool', ['run_shell'], 'require-approval', true), rule('shell-run', 'operation', ['host.shell.run'], 'allow')], mode: 'full-auto', shell: { schemaVersion: 1, realm: 'require-sandbox' }, ...(realm === 'landlock' ? { sandboxes: landlock } : {}) });
     const manifest = join(f.project, 'src/package.json');
     await expect(access(manifest)).rejects.toMatchObject({ code: 'ENOENT' });

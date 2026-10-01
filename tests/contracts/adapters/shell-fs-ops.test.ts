@@ -27,7 +27,9 @@ describe('file system read selection (fsOpsFor)', () => {
   });
   it('is decided by the real file system of the directory it is asked about', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'dn-fsops-')); roots.push(dir);
-    expect(fsOpsFor(dir).kind).toBe(LOCAL_FILESYSTEM_TYPES.has(statfsSync(dir).type) ? 'sync' : 'async');
+    let expected: 'sync' | 'async' = 'async';
+    try { expected = LOCAL_FILESYSTEM_TYPES.has(statfsSync(dir).type) ? 'sync' : 'async'; } catch { /* An unsupported statfs must choose async. */ }
+    expect(fsOpsFor(dir).kind).toBe(expected);
     expect(fsOpsFor(join(dir, 'missing')).kind).toBe('async');
   });
   it('both flavours read the same: entries, link counts, and an unreadable path is an error / suspect link count', async () => {
@@ -57,7 +59,7 @@ async function fixture() {
   return { root: scope.root, layout: { project: scope, scratchDir: null } };
 }
 
-describe('the scan verdict does not depend on the read flavour', () => {
+describe.skipIf(process.platform === 'win32')('the scan verdict does not depend on the read flavour (requires POSIX filesystem permissions and paths)', () => {
   const environment = { HOME: '/nonexistent-home', PATH: '/usr/bin:/bin' };
   it('bubblewrap: the same view from synchronous, asynchronous and default reads', async () => {
     const f = await fixture();

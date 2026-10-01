@@ -61,7 +61,7 @@ async function library(f: { project: string; env: NodeJS.ProcessEnv }, body: str
 const decide = (approvalId: string, commandId: string) => ({ schemaVersion: 1, scopeId: 'proj', approvalId, commandId, expectedRevision: 0, decision: 'allow', reason: 'four-eyes' });
 
 describe.skipIf(process.platform === 'win32')('policy v2 roles and bindings on shipped surfaces', () => {
-  it('a role reached only through bindings authorizes CLI and SDK; four-eyes refuses self-approval on SDK and CLI', async () => {
+  it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket] a role reached only through bindings authorizes CLI and SDK; four-eyes refuses self-approval on SDK and CLI', async () => {
     const f = await fixture();
     await startTestRuntimeService(f.project, f.env);
     // Authorized operation through the binding (CLI via the runtime socket, SDK in process).
@@ -78,7 +78,7 @@ describe.skipIf(process.platform === 'win32')('policy v2 roles and bindings on s
     const other = await library(f, `return sdk.configuredApproval(process.cwd(), 'decide', ${JSON.stringify(decide(f.colleague, 'sdk-colleague'))});`);
     expect(other).toMatchObject({ status: 'decided', decision: { decision: 'allow', actor: actor } });
   });
-  it('without a binding, with a missing bindings file or an unknown role, the same operations fail closed', async () => {
+  it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket] without a binding, with a missing bindings file or an unknown role, the same operations fail closed', async () => {
     const f = await fixture();
     await startTestRuntimeService(f.project, f.env);
     await writeFile(join(f.data, 'bindings.json'), JSON.stringify(bindings([{ issuer: actor.issuer, subject: 'someone-else' }])), { mode: 0o600 });

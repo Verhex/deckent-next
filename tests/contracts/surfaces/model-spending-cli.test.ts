@@ -13,7 +13,7 @@ async function fixture() {
   const root = await mkdtemp(join(tmpdir(), 'deckent-spending-cli-')); roots.push(root);
   const home = join(root, 'home'); await mkdir(home); await mkdir(join(root, '.deckent'));
   await writeFile(join(root, '.deckent/config.json'), JSON.stringify({ cli: { invocationInputMaxBytes: 1024 } }));
-  return { root, env: { HOME: home, PATH: process.env.PATH ?? '/usr/bin:/bin' } };
+  return { root, env: { HOME: home, USERPROFILE: home, PATH: process.env.PATH ?? '/usr/bin:/bin' } };
 }
 function inspection(): ProviderSpendAccountInspection {
   const account = createProviderSpendAccount({ schemaVersion: 1, scopeId: 'scope', budgetId: 'budget', revision: 1, currency: 'USD', limitMinorUnits: 100 });

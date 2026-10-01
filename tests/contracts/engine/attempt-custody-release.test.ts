@@ -53,6 +53,7 @@ async function fixture(count = 1) {
 }
 const released = { schemaVersion: 1, status: 'released', container: 'removed', workspace: 'removed' };
 
+describe.skipIf(process.platform === 'win32')('requires POSIX private FileArtifactStore; ARTIFACT_UNSUPPORTED', () => {
 describe('attempt custody release (EXEC-RELEASE)', () => {
   it('negative 1: complete retained output without a patch releases nothing and stays recoverable', async () => {
     const f = await fixture(); const outcome = await f.execute(f.identity); expect(outcome.kind).toBe('terminal'); expect(outcome.record.output).toBeDefined();
@@ -156,4 +157,6 @@ describe('attempt custody release (EXEC-RELEASE)', () => {
     expect(isolated.entries.find(entry => entry.identity.attemptId === ready.attemptId)?.outcome).toMatchObject({ reason: 'record-unreadable', code: 'EIO' });
     expect(isolated.entries.filter(entry => entry.outcome.status === 'released').length).toBe(1);
   });
+});
+
 });

@@ -106,7 +106,7 @@ function marks(deltas: readonly TurnDelta[]) {
 }
 
 describe('summarizing is derived on the client exactly when the service compacts (TL-A D1, protocol v15 unchanged)', () => {
-  it('marks token pressure, and only the measurement before the summary; the same history under the mark is not marked', async () => {
+  it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket] marks token pressure, and only the measurement before the summary; the same history under the mark is not marked', async () => {
     // 74 000 prompt tokens pass the 75 000 mark only with the whole reserve (128 completion + 2 048 safety): a drifted mirror is caught.
     const f = await runtime({ windowTokens: 100_000, count: messages => messages.length > 12 ? 74_000 : 900 });
     const compacting = await f.turn(talk(8));
@@ -117,14 +117,14 @@ describe('summarizing is derived on the client exactly when the service compacts
     expect(f.calls.summary).toBe(1);
   }, 30_000);
 
-  it('does not mark a full window when nothing older than the kept tail exists (the service cannot compact it)', async () => {
+  it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket] does not mark a full window when nothing older than the kept tail exists (the service cannot compact it)', async () => {
     const f = await runtime({ windowTokens: 100_000, count: () => 90_000 });
     const deltas = await f.turn(talk(2));
     expect(marks(deltas)).toEqual([{ compacting: false, compacted: false }]);
     expect(f.calls.summary).toBe(0);
   }, 30_000);
 
-  it('marks the service input bound when the window is unknown', async () => {
+  it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket] marks the service input bound when the window is unknown', async () => {
     const f = await runtime();
     const history = talk(20, 10_600);
     expect(Buffer.byteLength(JSON.stringify(history))).toBeGreaterThan(0.75 * 262_144);
@@ -133,7 +133,7 @@ describe('summarizing is derived on the client exactly when the service compacts
     expect(f.calls.summary).toBe(1);
   }, 30_000);
 
-  it("marks the room the next request needs (this round's longest answer and one user message), as the service computes it", async () => {
+  it.skipIf(process.platform !== 'linux')("[requires Linux local runtime socket] marks the room the next request needs (this round's longest answer and one user message), as the service computes it", async () => {
     const f = await runtime({ maxCompletionTokens: 16_384 });
     const history = talk(20, 9_540);
     expect(Buffer.byteLength(JSON.stringify(history))).toBeLessThan(0.75 * 262_144);
@@ -150,14 +150,14 @@ describe('summarizing is derived on the client exactly when the service compacts
 // The parity test above cannot see a drift of that one source (both sides move together), so each side is pinned on its own here:
 // changing that safety reserve turns both of these red, which a client-side copy would not.
 describe('one admission formula for the service and the terminal (engine agentTurnAdmission)', () => {
-  it('service: 74 000 of 100 000 prompt tokens are summarized only because the whole reserve (128 + 2 048) is kept free', async () => {
+  it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket] service: 74 000 of 100 000 prompt tokens are summarized only because the whole reserve (128 + 2 048) is kept free', async () => {
     const f = await runtime({ windowTokens: 100_000, count: messages => messages.length > 12 ? 74_000 : 900 });
     const deltas = await f.turn(talk(8));
     expect(f.calls.summary).toBe(1);
     expect(deltas.some(delta => delta.kind === 'compacted')).toBe(true);
   }, 30_000);
 
-  it('terminal: the admission it derives from the configuration is the same formula, whatever the service does', async () => {
+  it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket] terminal: the admission it derives from the configuration is the same formula, whatever the service does', async () => {
     const f = await runtime({ windowTokens: 100_000, count: () => 900 });
     const admission = await assertTerminalChatReady(f.project, { env: f.env });
     expect(admission).toEqual({ outputReserveTokens: 128, safetyReserveTokens: 2_048, requestMaxBytes: 262_144, requestReserveBytes: 128 * 4 + 32_768,

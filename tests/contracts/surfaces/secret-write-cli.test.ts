@@ -19,7 +19,7 @@ async function project(scopeId?: string) {
   const home = join(root, 'home'), dir = join(root, 'project');
   await mkdir(join(dir, '.deckent'), { recursive: true, mode: 0o700 }); await mkdir(home, { mode: 0o700 });
   if (scopeId) await writeFile(join(dir, '.deckent', 'config.json'), JSON.stringify({ terminal: { scopeId } }), { mode: 0o600 });
-  return { root: dir, env: { HOME: home, PATH: process.env['PATH'] ?? '/usr/bin:/bin', DECKENT_LANGUAGE: 'en' } };
+  return { root: dir, env: { HOME: home, USERPROFILE: home, PATH: process.env['PATH'] ?? '/usr/bin:/bin', DECKENT_LANGUAGE: 'en' } };
 }
 const capture = () => { const lines: string[] = []; return { lines, text: () => lines.join(''), sink: { write: (text: string) => { lines.push(String(text)); return true; } } }; };
 type Call = { readonly scopeId: string; readonly name: string; readonly value?: string };

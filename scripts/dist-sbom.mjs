@@ -39,6 +39,7 @@ const provenance = (entry, why = 'The installed package ships no license text') 
 
 /** `node_modules/a/node_modules/@s/b/lib/x.js` → `node_modules/a/node_modules/@s/b` (the innermost installed package directory). */
 export function packageDirOf(input) {
+  input = input.replaceAll('\\', '/');
   const at = input.lastIndexOf('node_modules/');
   if (at < 0) return null;
   const parts = input.slice(at + 'node_modules/'.length).split('/');
@@ -54,10 +55,13 @@ const licenseOf = manifest => typeof manifest.license === 'string' ? manifest.li
 /** Shipped and tree-shaken third-party packages of one bundle. `root` is the bundler's working directory (metafile paths are relative to it). */
 export function bundledPackages(root, metafile) {
   const bytes = new Map();
-  for (const output of Object.values(metafile.outputs)) for (const [input, entry] of Object.entries(output.inputs ?? {})) bytes.set(input, (bytes.get(input) ?? 0) + entry.bytesInOutput);
+  for (const output of Object.values(metafile.outputs)) for (const [input, entry] of Object.entries(output.inputs ?? {})) {
+    const path = input.replaceAll('\\', '/'); bytes.set(path, (bytes.get(path) ?? 0) + entry.bytesInOutput);
+  }
   const lock = existsSync(join(root, 'package-lock.json')) ? readJson(join(root, 'package-lock.json')).packages ?? {} : {};
   const byDir = new Map();
-  for (const input of Object.keys(metafile.inputs)) {
+  for (const rawInput of Object.keys(metafile.inputs)) {
+    const input = rawInput.replaceAll('\\', '/');
     const dir = packageDirOf(input);
     if (!dir) continue;
     const row = byDir.get(dir) ?? { dir, bytesInOutput: 0, files: 0, shippedFiles: [] };

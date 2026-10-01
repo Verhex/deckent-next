@@ -1,4 +1,5 @@
 import { constants } from 'node:fs';
+import { ManagedFileError } from '#platform/index.js';
 import { open, rename } from 'node:fs/promises';
 import { redactText } from '#adapters/core/native-connection/index.js';
 
@@ -16,6 +17,7 @@ export const TERMINAL_HISTORY_LIMITS = Object.freeze({ maxEntries: 500, maxEntry
  * input; the composer treats history as a convenience.
  */
 export function openTerminalHistoryFile(path: string, limits = TERMINAL_HISTORY_LIMITS): TerminalHistoryFile {
+  if (process.platform === 'win32' || !constants.O_NOFOLLOW) throw new ManagedFileError('MANAGED_FILE_UNSUPPORTED');
   const maxFileBytes = limits.maxEntries * 2 * (limits.maxEntryBytes + 32);
   const parse = (raw: string) => raw.split('\n').flatMap(line => {
     try {

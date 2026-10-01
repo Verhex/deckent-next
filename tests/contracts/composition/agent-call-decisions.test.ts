@@ -72,7 +72,7 @@ const withAccess = (tool: Effect, grant: Effect | null, revision = `p-fa-${tool}
 };
 
 describe('permission decision at the effect (T-L4 slice 4a)', () => {
-  it('writes the audit event before the effect runs and admits the relaxed call on each admission', async () => {
+  it.skipIf(process.platform === 'win32')('requires POSIX private audit keyring — writes the audit event before the effect runs and admits the relaxed call on each admission', async () => {
     const f = await fixture([snapshot('require-approval', 'auto-edit')]);
     expect(await f.decisions.authorize(edit, args)).toBe('allow');
     expect(f.decisions.prepare(edit, args)).toEqual({ ok: true, requireApproval: false });
@@ -80,7 +80,7 @@ describe('permission decision at the effect (T-L4 slice 4a)', () => {
     expect(f.events()).toBe(1);
   });
 
-  it('stops the effect when the policy denies between the audit and an admission; runs nothing when it changed before the effect', async () => {
+  it.skipIf(process.platform === 'win32')('requires POSIX private audit keyring — stops the effect when the policy denies between the audit and an admission; runs nothing when it changed before the effect', async () => {
     const denied = await fixture([snapshot('require-approval', 'auto-edit'), snapshot('require-approval', 'auto-edit'), snapshot('require-approval', 'auto-edit'), snapshot('deny', 'auto-edit')]);
     expect(await denied.decisions.authorize(edit, args)).toBe('allow');
     expect(await denied.execute()).toMatchObject({ outcome: { status: 'error', text: 'POLICY_DENIED' }, admissions: ['admitted', 'POLICY_DENIED'] });
@@ -97,7 +97,7 @@ describe('permission decision at the effect (T-L4 slice 4a)', () => {
     }
   });
 
-  it('admits only the decision the audit event recorded: another mode, revision or a plain allow since stops the effect (Astra 2133)', async () => {
+  it.skipIf(process.platform === 'win32')('requires POSIX private audit keyring — admits only the decision the audit event recorded: another mode, revision or a plain allow since stops the effect (Astra 2133)', async () => {
     // authorize, execute (the audited decision), then the admissions. Astra's case: audited in auto-edit, admitted after a switch to full-auto.
     const audited = snapshot('require-approval', 'auto-edit');
     const sameRevision = 'p-require-approval-auto-edit';
@@ -122,7 +122,7 @@ describe('permission decision at the effect (T-L4 slice 4a)', () => {
     expect(await same.execute()).toMatchObject({ outcome: { status: 'ok', text: 'ran' }, admissions: ['admitted', 'admitted'] });
   });
 
-  it('Astra 2134 R2 repro: changing the relaxed mode after audit must not use the stale audit event', async () => {
+  it.skipIf(process.platform === 'win32')('requires POSIX private audit keyring — Astra 2134 R2 repro: changing the relaxed mode after audit must not use the stale audit event', async () => {
     const f = await fixture([snapshot('require-approval', 'auto-edit'), snapshot('require-approval', 'auto-edit'), snapshot('require-approval', 'full-auto')]);
     expect(await f.decisions.authorize(edit, args)).toBe('allow');
     const result = await f.execute();
@@ -133,7 +133,7 @@ describe('permission decision at the effect (T-L4 slice 4a)', () => {
       .toEqual([['p-require-approval-auto-edit+b', 'standart']]);
   });
 
-  it('answers deny before planning and fails closed on an unreadable policy', async () => {
+  it.skipIf(process.platform === 'win32')('requires POSIX private audit keyring — answers deny before planning and fails closed on an unreadable policy', async () => {
     const f = await fixture([snapshot('deny', 'full-auto')]);
     expect(await f.decisions.authorize(edit, args)).toBe('deny');
     expect(f.plans()).toBe(0);
@@ -152,7 +152,7 @@ describe('permission decision at the effect (T-L4 slice 4a)', () => {
       principals: [me], resource: { kind: 'agent-tool-call', ids: [KEY] } }] }, { schemaVersion: 2, revision: 'b', bindings: [], modes: [{ id: 'me-mode', principal: me, scopes: ['scope'], mode: 'ask' }] });
   };
 
-  it('this session: asks until the card answer is remembered (audited first), then lowers the call, audits its use before the effect, and is gone after a restart', async () => {
+  it.skipIf(process.platform === 'win32')('requires POSIX private audit keyring — this session: asks until the card answer is remembered (audited first), then lowers the call, audits its use before the effect, and is gone after a restart', async () => {
     const memory = new SessionStanding(), session = 'conversation-1';
     const f = await fixture([asks], { standing: { memory, session } });
     expect(await f.decisions.authorize(edit, args)).toBe('require-approval');
@@ -168,7 +168,7 @@ describe('permission decision at the effect (T-L4 slice 4a)', () => {
     expect(await restarted.decisions.authorize(edit, args)).toBe('require-approval');
   });
 
-  it('a call the standing approval does not name, another conversation, or the write floor still asks; nothing is remembered without an audit', async () => {
+  it.skipIf(process.platform === 'win32')('requires POSIX private audit keyring — a call the standing approval does not name, another conversation, or the write floor still asks; nothing is remembered without an audit', async () => {
     const memory = new SessionStanding();
     memory.remember('conversation-1', KEY);
     const other = await fixture([asks], { standing: { memory, session: 'conversation-2' } });
@@ -181,7 +181,7 @@ describe('permission decision at the effect (T-L4 slice 4a)', () => {
     expect(floored.events()).toBe(0);
   });
 
-  it('the persisted grant lowers the call and is audited as a grant; losing the session memory or the grant before an admission stops the effect', async () => {
+  it.skipIf(process.platform === 'win32')('requires POSIX private audit keyring — the persisted grant lowers the call and is audited as a grant; losing the session memory or the grant before an admission stops the effect', async () => {
     const granted = await fixture([withGrant()]);
     expect(await granted.decisions.authorize(edit, args)).toBe('allow');
     expect(await granted.execute()).toMatchObject({ outcome: { status: 'ok' }, eventsAtRun: 1, admissions: ['admitted', 'admitted'] });
@@ -208,7 +208,7 @@ describe('permission decision at the effect (T-L4 slice 4a)', () => {
 
   // MODES-3: a launched full-access turn. Every effect call it allows is one sealed `full-access-call` event before the effect — a plain allow
   // too — and the effect gate admits only that decision again: a revoked grant (or a turn without the flag) is not what was audited.
-  it('full access: a plain allow and a floor path both run, each audited once as a full-access call before the effect', async () => {
+  it.skipIf(process.platform === 'win32')('requires POSIX private audit keyring — full access: a plain allow and a floor path both run, each audited once as a full-access call before the effect', async () => {
     const plain = await fixture([withAccess('allow', 'allow')], { fullAccess: true });
     expect(await plain.decisions.authorize(edit, args)).toBe('allow');
     expect(await plain.execute()).toEqual({ outcome: { status: 'ok', text: 'ran' }, eventsAtRun: 1, admissions: ['admitted', 'admitted'] });
@@ -220,7 +220,7 @@ describe('permission decision at the effect (T-L4 slice 4a)', () => {
     expect(floor.auditRecords()[0]!.event.subject).toMatchObject({ kind: 'full-access-call', cell: 'edit-floor', policy: 'require-approval', raised: false, company: 'edit-tool' });
   });
 
-  it('full access: a grant revoked or denied after the audit stops the effect; without the grant or without the launch flag it is the stored mode', async () => {
+  it.skipIf(process.platform === 'win32')('requires POSIX private audit keyring — full access: a grant revoked or denied after the audit stops the effect; without the grant or without the launch flag it is the stored mode', async () => {
     for (const later of [withAccess('allow', null), withAccess('allow', 'deny'), withAccess('allow', 'allow', 'p-edited')]) {
       const f = await fixture([withAccess('allow', 'allow'), withAccess('allow', 'allow'), later], { fullAccess: true });
       expect(await f.decisions.authorize(edit, args)).toBe('allow');
@@ -239,7 +239,7 @@ describe('permission decision at the effect (T-L4 slice 4a)', () => {
 describe('call authority at the effect (merge Astra 2170 x MODES-3)', () => {
   // Merge Astra 2170 x MODES-3 (owner 2026-09-29): the decision tells the effect who stands behind the call — the sandboxed shell derives its
   // write posture from it (`shellWritePosture`): an audited full-access call is `full-access`, never the unattended read-only posture.
-  it('hands the effect the call authority: owner-approved for a card, full-access for an audited full-access call, unattended otherwise', async () => {
+  it.skipIf(process.platform === 'win32')('requires POSIX private audit keyring — hands the effect the call authority: owner-approved for a card, full-access for an audited full-access call, unattended otherwise', async () => {
     const cases: readonly [string, unknown, boolean, string][] = [['card (ask edits)', snapshot('require-approval', 'ask'), false, 'owner-approved'],
       ['full access', withAccess('allow', 'allow'), true, 'full-access'], ['full access over a floor raise', withAccess('require-approval', 'allow'), true, 'full-access'],
       ['mode relaxation', snapshot('require-approval', 'auto-edit'), false, 'unattended'], ['silent allow', snapshot('allow', null), false, 'unattended'],

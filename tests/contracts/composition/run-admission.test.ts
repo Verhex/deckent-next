@@ -18,7 +18,7 @@ async function fixture() {
   const configPath = join(project, '.deckent/config.json');
   await writeFile(configPath, JSON.stringify({ layout: { root: data }, admission: { poolId: 'p', executionSlots: 1, inFlightSlots: 2,
     ordering: 'input-order', registry: fixtureDockerRegistry(['purchase']) } }));
-  const options = { env: { HOME: join(root, 'home') } };
+  const options = { env: { HOME: join(root, 'home'), USERPROFILE: join(root, 'home') } };
   const { store, path, layout } = await openConfiguredAttemptStore(project, options);
   try { await store.createExecutionPool({ schemaVersion: 1, poolId: 'p', capacity: { executionSlots: 2, inFlightSlots: 2 } }); } finally { store.close(); }
   async function policy(run: boolean, pool: boolean) {
@@ -143,7 +143,7 @@ describe.skipIf(process.platform === 'win32')('configured SDK Run admission', ()
 
 });
 
-it('SDK admits a conditional graph, retains the decision after config removal and reserves only its selected branch', async () => {
+it.skipIf(process.platform === 'win32')('requires POSIX managed storage: SDK admits a conditional graph, retains the decision after config removal and reserves only its selected branch', async () => {
   const f = await fixture(); await f.policy(true, true);
   const graph = { ...command.graph, tasks: ['yes', 'no', 'join'].map(id => ({ ...command.graph.tasks[0]!, id, dependencies: id === 'join' ? ['yes', 'no'] : [] })) };
   const branch = { schemaVersion: 1 as const, input: { id: 'condition', revision: 'fact-1', value: true }, whenTrue: 'yes', whenFalse: 'no', join: 'join' };

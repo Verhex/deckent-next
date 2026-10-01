@@ -1,7 +1,7 @@
 import { chmod, mkdtemp, readdir, readFile, rm, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, expect, it } from 'vitest';
+import { describe, afterEach, expect, it } from 'vitest';
 import { withInstallationJournal, type InstallationJournalSession } from '../../../src/adapters/core/installation-journal/index.js';
 import type { BootstrapJournalPayload, BootstrapObservation } from '../../../src/platform/core/bootstrap-state/index.js';
 
@@ -15,6 +15,7 @@ function payload(root: string, updatedAtMs = 1): BootstrapJournalPayload {
     recovery: { authoredProfile: { schemaVersion: 1 }, normalizedConfig: { schema_version: 3 }, approval: { status: 'recorded' } } };
 }
 
+describe.skipIf(process.platform === 'win32')('requires POSIX durable installation journal; INSTALLATION_JOURNAL_UNSUPPORTED', () => {
 it('atomically creates a complete initial pending journal that survives callback failure', async () => {
   const root = await project(), failure = new Error('simulated-crash'); let observedFailure: unknown;
   try { await withInstallationJournal(root, options, async session => {
@@ -156,4 +157,6 @@ it('writes and reopens group-custodied journal ancestry while keeping journal by
   await chmod(directory, 0o777);
   await expect(withInstallationJournal(root, options, async session => session.observe())).rejects.toMatchObject({ code: 'INSTALLATION_JOURNAL_UNSAFE' });
   expect(await readFile(path)).toEqual(bytes);
+});
+
 });

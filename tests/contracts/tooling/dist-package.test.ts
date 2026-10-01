@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { mkdtemp, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { afterEach, describe, expect, it } from 'vitest';
 // DEPS-DIST: the bundled package's SBOM comes from the bundler's metafile (bytes actually shipped), not from package.json; OSV reads it back.
 // @ts-expect-error JavaScript build tooling has no declaration file.
@@ -48,8 +48,17 @@ outputs: { 'out/dist/index.js': { inputs: { 'dist/index.js': { bytesInOutput: 10
 describe('dist SBOM', () => {
   it('maps metafile inputs to the innermost installed package and encodes scoped purls', () => {
     expect(packageDirOf('node_modules/a/node_modules/@s/b/lib/x.js')).toBe('node_modules/a/node_modules/@s/b');
+    expect(packageDirOf(String.raw`node_modules\a\node_modules\@s\b\lib\x.js`)).toBe('node_modules/a/node_modules/@s/b');
     expect(packageDirOf('dist/index.js')).toBeNull();
     expect(npmPurl('@modelcontextprotocol/client', '2.2.0')).toBe('pkg:npm/%40modelcontextprotocol/client@2.2.0');
+  });
+
+  it('preserves shipped bytes and nested package identity for Windows metafile separators', async () => {
+    const root = await fixture();
+    const windowsKeys = (entries: Record<string, unknown>) => Object.fromEntries(Object.entries(entries).map(([key, value]) => [key.replaceAll('/', '\\'), value]));
+    const windows = { inputs: windowsKeys(metafile.inputs), outputs: Object.fromEntries(Object.entries(metafile.outputs)
+      .map(([key, output]) => [key.replaceAll('/', '\\'), { ...output, inputs: windowsKeys(output.inputs) }])) };
+    expect(bundledPackages(root, windows)).toEqual(bundledPackages(root, metafile));
   });
 
   it('lists shipped packages by bytes in the bundle, keeps nested versions apart and reports tree-shaken ones separately', async () => {
@@ -91,6 +100,12 @@ describe('dist SBOM', () => {
 // FASTURI-OUT (owner 2026-09-29): the published package carries no ajv/fast-uri. The SDK's default-validator modules are loaded with their one
 // ajvProvider import replaced by a throwing stub, and the guard fails the build on any of three independent signals.
 describe('MCP SDK ajv provider stub and guard', () => {
+  it('refuses unstubbed and forbidden providers with Windows metafile separators', () => {
+    const input = { metafile: { inputs: { [String.raw`node_modules\@modelcontextprotocol\client\dist\ajvProvider-x.mjs`]: {},
+      [String.raw`node_modules\fast-uri\index.js`]: {} } }, shipped: [], embedded: [], hits: new Map() };
+    expect(ajvGuard(input)).toEqual(['@modelcontextprotocol/client/_shims was bundled without the ajv stub',
+      'bundle input node_modules/@modelcontextprotocol/client/dist/ajvProvider-x.mjs', 'bundle input node_modules/fast-uri/index.js']);
+  });
   const shims = 'import { n as AjvJsonSchemaValidator } from "./ajvProvider-97rDpkRx.mjs";\nimport process from "node:process";\n\nexport { AjvJsonSchemaValidator as DefaultJsonSchemaValidator, process };\n';
   it('replaces exactly the ajvProvider import, keeps every other line and throws a typed error when the default is built', async () => {
     const code = stubAjvImport(shims, 'server/_shims');
@@ -99,9 +114,9 @@ describe('MCP SDK ajv provider stub and guard', () => {
     expect(code).toContain('export { AjvJsonSchemaValidator as DefaultJsonSchemaValidator, process };');
     const subpath = stubAjvImport('import { n as AjvJsonSchemaValidator, r as addFormats, t as Ajv } from "../ajvProvider-97rDpkRx.mjs";\nexport { Ajv, AjvJsonSchemaValidator, addFormats };', 'client/validators/ajv');
     const root = await tree({ 'shims.mjs': code, 'ajv.mjs': subpath });
-    const { DefaultJsonSchemaValidator } = await import(join(root, 'shims.mjs')) as { DefaultJsonSchemaValidator: new () => unknown };
+    const { DefaultJsonSchemaValidator } = await import(pathToFileURL(join(root, 'shims.mjs')).href) as { DefaultJsonSchemaValidator: new () => unknown };
     expect(() => new DefaultJsonSchemaValidator()).toThrow(expect.objectContaining({ name: 'DeckentRemovedValidatorError', code: 'MCP_DEFAULT_VALIDATOR_REMOVED' }));
-    const ajv = await import(join(root, 'ajv.mjs')) as Record<string, (...args: unknown[]) => unknown>;
+    const ajv = await import(pathToFileURL(join(root, 'ajv.mjs')).href) as Record<string, (...args: unknown[]) => unknown>;
     for (const name of ['Ajv', 'AjvJsonSchemaValidator', 'addFormats']) expect(() => ajv[name]!()).toThrow(`${name} (the MCP SDK default ajv validator) is not part of this package`);
     // A layout the stub does not recognise fails the build instead of silently shipping the real provider.
     expect(() => stubAjvImport('export const CORS_IS_POSSIBLE = false;', 'client/_shims')).toThrow('client/_shims: expected exactly one ajvProvider import');

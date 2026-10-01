@@ -44,7 +44,7 @@ const registration = (namespace: string, adapterId: string, optionsSchema: Stand
   // The factory receives the registry-validated output; it never re-parses with a library of Deckent's choosing.
   factories: { [adapterId]: { optionsSchema, create: (options: unknown) => { const t = new MemoryRecordTarget((options as { kind: string }).kind); targets.set(t.kind, t); return t; } } } });
 
-it('registers a non-zod Standard Schema module through the process registry, validates its options in config and executes through it', async () => {
+it.skipIf(process.platform !== 'linux')('[requires Linux live OS session /proc identity] registers a non-zod Standard Schema module through the process registry, validates its options in config and executes through it', async () => {
   let rejected = 0;
   registerOperationAdapterModule(registration('erp', 'erp.record', kindOnly));
   // An async validator is refused as a typed issue; its rejection is consumed (vitest fails the file on an unhandled rejection).

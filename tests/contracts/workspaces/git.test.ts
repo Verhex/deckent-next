@@ -21,7 +21,7 @@ async function fixture() {
   const request = { schemaVersion: 1 as const, identity: { runId: 'r', taskId: 't', attemptId: 'a', scopeId: 's', generation: 1, layoutRevision: 'layout' }, baseCommit };
   return { root, source, workspaces, broker, request, git, marker };
 }
-describe('private Git workspace allocation', () => {
+describe.skipIf(process.platform === 'win32')('requires POSIX private Git custody: private Git workspace allocation', () => {
   it('pins committed content without carrying owner WIP, runtime files or source hooks', async () => {
     const f = await fixture(); const lease = await f.broker.allocate(f.request);
     expect(await readFile(join(lease.workspace, 'tracked'), 'utf8')).toBe('base');

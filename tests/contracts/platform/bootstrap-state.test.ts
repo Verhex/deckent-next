@@ -19,7 +19,7 @@ async function publish(root: string, input = payload(root)) {
   await writeFile(path, encodeBootstrapJournal(input), { mode: 0o600 }); return path;
 }
 
-it('observes absence and a usable committed journal without creating state', async () => {
+it.skipIf(process.platform === 'win32')('requires POSIX bootstrap journal — observes absence and a usable committed journal without creating state', async () => {
   const root = await project();
   const absent = await observeBootstrapState(root); expect(absent).toEqual({ generation: 'absent', record: null });
   expect(() => assertBootstrapUsable(absent)).not.toThrow();
@@ -28,7 +28,7 @@ it('observes absence and a usable committed journal without creating state', asy
   expect(() => assertBootstrapUsable(committed)).not.toThrow();
 });
 
-it('returns pending state for inspection and makes the load gate reject it', async () => {
+it.skipIf(process.platform === 'win32')('requires POSIX bootstrap journal — returns pending state for inspection and makes the load gate reject it', async () => {
   const root = await project(); await publish(root);
   const observation = await observeBootstrapState(root);
   expect(observation.record?.phase).toBe('pending');
@@ -52,7 +52,7 @@ it.skipIf(process.platform === 'win32')('rejects other-writable ancestry even wh
   await expect(observeBootstrapState(root)).rejects.toMatchObject({ code: 'BOOTSTRAP_STATE_UNSAFE' });
 });
 
-it('rejects malformed contracts, invalid commit invariants and bad checksums', async () => {
+it.skipIf(process.platform === 'win32')('requires POSIX bootstrap journal — rejects malformed contracts, invalid commit invariants and bad checksums', async () => {
   const root = await project(), path = await publish(root);
   await writeFile(path, '{', { mode: 0o600 });
   await expect(observeBootstrapState(root)).rejects.toMatchObject({ code: 'BOOTSTRAP_STATE_INVALID' });
@@ -63,7 +63,7 @@ it('rejects malformed contracts, invalid commit invariants and bad checksums', a
   await expect(observeBootstrapState(root)).rejects.toMatchObject({ code: 'BOOTSTRAP_STATE_INVALID' });
 });
 
-it('rejects unsafe permissions, symlinks and multiply linked journals', async () => {
+it.skipIf(process.platform === 'win32')('requires POSIX bootstrap journal — rejects unsafe permissions, symlinks and multiply linked journals', async () => {
   const root = await project(), path = await publish(root); await chmod(path, 0o644);
   await expect(observeBootstrapState(root)).rejects.toMatchObject({ code: 'BOOTSTRAP_STATE_UNSAFE' });
   await chmod(path, 0o600); const alias = `${path}.alias`; await link(path, alias);
@@ -72,7 +72,7 @@ it('rejects unsafe permissions, symlinks and multiply linked journals', async ()
   await expect(observeBootstrapState(root)).rejects.toMatchObject({ code: 'BOOTSTRAP_STATE_UNSAFE' });
 });
 
-it('does not treat an absent journal reached through a parent symlink as ordinary absence', async () => {
+it.skipIf(process.platform === 'win32')('requires POSIX bootstrap journal — does not treat an absent journal reached through a parent symlink as ordinary absence', async () => {
   const root = await project(), elsewhere = await project(); await mkdir(join(elsewhere, 'installation'));
   await symlink(elsewhere, join(root, '.deckent'));
   await expect(observeBootstrapState(root)).rejects.toMatchObject({ code: 'BOOTSTRAP_STATE_UNSAFE' });
@@ -80,7 +80,7 @@ it('does not treat an absent journal reached through a parent symlink as ordinar
   await expect(observeBootstrapState(root)).rejects.toMatchObject({ code: 'BOOTSTRAP_STATE_UNSAFE' });
 });
 
-it('detects content mutation and inode replacement between observations', async () => {
+it.skipIf(process.platform === 'win32')('requires POSIX bootstrap journal — detects content mutation and inode replacement between observations', async () => {
   const root = await project(), path = await publish(root); const first = await observeBootstrapState(root);
   await writeFile(path, encodeBootstrapJournal({ ...payload(root), updatedAtMs: 12 }), { mode: 0o600 });
   const mutated = await observeBootstrapState(root);
@@ -97,7 +97,7 @@ it('hashes canonical bounded data without invoking accessors', () => {
   expect(() => hashBootstrapJournal(hostile)).toThrow(expect.objectContaining({ code: 'BOOTSTRAP_STATE_INVALID' })); expect(invoked).toBe(false);
 });
 
-it('encodes bounded canonical schema-v2 bytes with immutable recovery and rejects legacy journals', async () => {
+it.skipIf(process.platform === 'win32')('requires POSIX bootstrap journal — encodes bounded canonical schema-v2 bytes with immutable recovery and rejects legacy journals', async () => {
   const root = await project(), input = { ...payload(root), recovery: { steps: [{ state: 'observed' }] } };
   const encoded = encodeBootstrapJournal(input); expect(encoded.endsWith('\n')).toBe(true);
   expect(encoded).toBe(encodeBootstrapJournal({ ...payload(root), recovery: { steps: [{ state: 'observed' }] } }));

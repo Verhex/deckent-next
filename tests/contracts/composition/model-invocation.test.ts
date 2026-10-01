@@ -68,7 +68,7 @@ async function fixture(options: { maxCalls?: number; maxInFlight?: number; respo
       ...(contentAllowed ? [{ id: 'inspect-content', effect: 'allow', actions: ['inspect-content'], scopes: ['scope'],
         principals: [{ issuer: principal.issuer, subject: principal.subject }], resource: { kind: 'model-invocation', ids: [target] } }] : []),
     ] : [] }), { mode: 0o600 }); };
-  await policy(true); const env = { HOME: home, PATH: process.env.PATH ?? '/usr/bin:/bin' };
+  await policy(true); const env = { HOME: home, USERPROFILE: home, PATH: process.env.PATH ?? '/usr/bin:/bin' };
   const command = (commandId: string) => ({ schemaVersion: 1 as const, commandId, scopeId: 'scope', reference,
     catalogRevision: catalog.revision, expectedBinding: binding,
     nativeRequest: { model: 'vendor/model', messages: [{ role: 'user', content: 'prompt-must-not-persist' }], max_completion_tokens: 4 } });
@@ -78,6 +78,7 @@ async function fixture(options: { maxCalls?: number; maxInFlight?: number; respo
     bodies, paths, definition, origin, caPem: tls.caPem };
 }
 
+describe.skipIf(process.platform === 'win32')('requires POSIX local principal; AUTHENTICATION_REQUIRED on Windows UID -1', () => {
 describe('configured native model invocation', () => {
   it('binds peer invocation and inspection to current policy without an ambient-identity fallback', async () => {
     const f = await fixture(), identity = readLocalOsIdentity();
@@ -299,4 +300,6 @@ it('prevents real native HTTP when durable cancellation wins the send permission
       JSON.stringify({ sendFailures, receivedRequests: f.requests })).toBe('responded');
     expect(f.requests).toBe(1);
   } finally { releasePermit(); await observed; }
+});
+
 });

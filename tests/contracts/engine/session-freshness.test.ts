@@ -10,7 +10,7 @@ const clock = () => {
   return { sample, port: { sample: () => ({ ...sample }) } satisfies TrustedClock };
 };
 describe('live local session authority', () => {
-  it('authenticates only exact scope-bound evidence without changing the principal contract', async () => {
+  it.skipIf(process.platform !== 'linux')('[requires Linux live OS session /proc identity] authenticates only exact scope-bound evidence without changing the principal contract', async () => {
     const c = clock(); const a = await LocalOsSessionAuthority.create(['scope-a'], 100, c.port);
     const result = await authenticateSession(a, a, c.port, undefined, 'scope-a');
     expect(Object.keys(result.principal).sort()).toEqual(['assurance', 'id', 'issuer', 'scopeIds', 'subject']);
@@ -20,7 +20,7 @@ describe('live local session authority', () => {
     await a.revoke(result.session.sessionId);
     expect(await a.isSessionActive(result.session)).toBe(false);
   });
-  it.each(['wall-forward', 'wall-backward', 'monotonic-expired', 'monotonic-backward'] as const)('never revives a %s lease', async mode => {
+  it.skipIf(process.platform !== 'linux').each(['wall-forward', 'wall-backward', 'monotonic-expired', 'monotonic-backward'] as const)('[requires Linux live OS session /proc identity] never revives a %s lease', async mode => {
     const c = clock(); const a = await LocalOsSessionAuthority.create(['scope'], 100, c.port);
     const { session } = await a.verifySession(undefined);
     if (mode === 'wall-forward') c.sample.wallMs = 1100;
@@ -31,7 +31,7 @@ describe('live local session authority', () => {
     c.sample.wallMs = 1000; c.sample.monotonicMs = 100;
     expect(await a.isSessionActive(session)).toBe(false);
   });
-  it('rechecks expiry after asynchronous reauthentication and live authority checks', async () => {
+  it.skipIf(process.platform !== 'linux')('[requires Linux live OS session /proc identity] rechecks expiry after asynchronous reauthentication and live authority checks', async () => {
     const c = clock(); const a = await LocalOsSessionAuthority.create(['scope'], 100, c.port);
     const verified = await a.verifySession(undefined);
     const delayed = { verifySession: async () => { c.sample.wallMs = 1100; return verified; } };
@@ -40,7 +40,7 @@ describe('live local session authority', () => {
     const authority = { revoke: async () => undefined, isSessionActive: async () => { c.sample.wallMs = 1100; return true; } };
     await expect(assertSessionActive(verified.session, authority, c.port)).rejects.toThrow('SESSION_EXPIRED');
   });
-  it('rejects mismatched identity and future authentication even with an affirmative authority', async () => {
+  it.skipIf(process.platform !== 'linux')('[requires Linux live OS session /proc identity] rejects mismatched identity and future authentication even with an affirmative authority', async () => {
     const c = clock(); const a = await LocalOsSessionAuthority.create(['scope'], 100, c.port);
     const verified = await a.verifySession(undefined);
     const future = { ...verified, session: { ...verified.session, authenticatedAt: 1001 } };
@@ -48,7 +48,7 @@ describe('live local session authority', () => {
     const forged = { ...verified, session: { ...verified.session, principalRef: { ...verified.session.principalRef, subject: 'other' } } };
     await expect(authenticateSession({ verifySession: async () => forged }, a, c.port, undefined, 'scope')).rejects.toThrow('SESSION_REQUIRED');
   });
-  it('a killed real process cannot retain its decision session', async () => {
+  it.skipIf(process.platform !== 'linux')('[requires Linux live OS session /proc identity] a killed real process cannot retain its decision session', async () => {
     const child = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { stdio: 'ignore' });
     const exited = once(child, 'exit');
     try {
@@ -60,7 +60,7 @@ describe('live local session authority', () => {
       expect(await a.isSessionActive(session)).toBe(false);
     } finally { if (child.exitCode === null && child.signalCode === null) { child.kill(); await exited; } }
   });
-  it('connection revocation invalidates an otherwise live process lease', async () => {
+  it.skipIf(process.platform !== 'linux')('[requires Linux live OS session /proc identity] connection revocation invalidates an otherwise live process lease', async () => {
     const c = clock(); const connection = new AbortController();
     const a = await LocalOsSessionAuthority.create(['scope'], 100, c.port,
       { pid: process.pid, uid: process.getuid!(), connection: connection.signal });

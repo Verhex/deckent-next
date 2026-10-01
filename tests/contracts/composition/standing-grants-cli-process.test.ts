@@ -43,7 +43,7 @@ async function cli(f: { project: string; env: NodeJS.ProcessEnv }, args: readonl
 }
 
 describe.skipIf(process.platform === 'win32')('deckent policy grants / revoke (G6)', () => {
-  it('lists only the caller\'s own standing grants and revokes one through the governed operation: audited, archived, the colleague\'s grant untouched', async () => {
+  it.skipIf(process.platform !== 'linux')('[requires Linux live OS session /proc identity] lists only the caller\'s own standing grants and revokes one through the governed operation: audited, archived, the colleague\'s grant untouched', async () => {
     const f = await fixture();
     const listed = await cli(f, ['policy', 'grants', '--mine', '--scope', 'proj']);
     expect(listed).toEqual({ exit: 0, value: [{ id: 'standing-mine', key: KEY, tool: 'run_shell', kind: 'command', text: 'npm test' }] });

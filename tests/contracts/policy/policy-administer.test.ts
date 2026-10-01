@@ -64,7 +64,7 @@ const addRead = (id: string, to: Actor) => ({ schemaVersion: 1, changes: [{ kind
 const ownerRoot = (me: Actor) => [{ id: 'root', principals: [me], roles: [INSTALLATION_OWNER_ROLE_ID], scopes: 'all' }];
 
 describe.skipIf(process.platform === 'win32')('policy.administer@1 (POLICY-ADMIN P3)', () => {
-  it('never applies silently: even the owner root with an allow grant and a full-auto mode gets a pending card; after the allow the change settles once, audited and archived', async () => {
+  it.skipIf(process.platform !== 'linux')('[requires Linux live OS session /proc identity] never applies silently: even the owner root with an allow grant and a full-auto mode gets a pending card; after the allow the change settles once, audited and archived', async () => {
     const f = await fixture(() => [], ownerRoot, me => [{ id: 'fa', principal: me, scopes: ['s'], mode: 'full-auto' }]);
     const other = { issuer: f.me.issuer, subject: '424242' };
     // An input that is not a typed, bounded change set is refused before any card is opened.
@@ -95,7 +95,7 @@ describe.skipIf(process.platform === 'win32')('policy.administer@1 (POLICY-ADMIN
     expect(f.events().filter(event => event.subject.kind === 'authority-change')).toHaveLength(1);
   });
 
-  it('bounds the change by the decider\'s authority (I3): a member may request, a decider without the authority cannot admit it, the owner can', async () => {
+  it.skipIf(process.platform !== 'linux')('[requires Linux live OS session /proc identity] bounds the change by the decider\'s authority (I3): a member may request, a decider without the authority cannot admit it, the owner can', async () => {
     // The caller holds only the request right (operation policy.administer) and read_file; two other persons may decide approvals.
     const f = await fixture(me => [{ id: 'request', effect: 'allow', actions: ['execute'], scopes: ['s'], principals: [me], resource: { kind: 'operation', ids: ['policy.administer'] } },
       readTool('mine', me), { id: 'decide', effect: 'allow', actions: 'all', scopes: ['s'], principals: 'all', resource: { kind: 'approval', ids: 'all' } }],
@@ -119,7 +119,7 @@ describe.skipIf(process.platform === 'win32')('policy.administer@1 (POLICY-ADMIN
       subject: { decider: { issuer: owner.issuer, subject: owner.subject }, commandId: 'm2' } });
   });
 
-  it('refuses a stale revision at the effect (conditional write): nothing is written and the record is not settled', async () => {
+  it.skipIf(process.platform !== 'linux')('[requires Linux live OS session /proc identity] refuses a stale revision at the effect (conditional write): nothing is written and the record is not settled', async () => {
     const f = await fixture(() => [], ownerRoot);
     const pending = await f.admin.submit(f.command('s1', addRead('share', f.me)));
     if (pending.status !== 'approval-pending') throw new Error('pending expected');
@@ -130,7 +130,7 @@ describe.skipIf(process.platform === 'win32')('policy.administer@1 (POLICY-ADMIN
     expect((await f.files()).policy.grants).toEqual([]);
   });
 
-  it('refuses a change that lands between the observation and the write, inside the write lock: terminal refusal, nothing written', async () => {
+  it.skipIf(process.platform !== 'linux')('[requires Linux live OS session /proc identity] refuses a change that lands between the observation and the write, inside the write lock: terminal refusal, nothing written', async () => {
     const f = await fixture(() => [], ownerRoot);
     const pending = await f.admin.submit(f.command('w1', addRead('share', f.me)));
     if (pending.status !== 'approval-pending') throw new Error('pending expected');
@@ -148,7 +148,7 @@ describe.skipIf(process.platform === 'win32')('policy.administer@1 (POLICY-ADMIN
     expect(await f.effects.loadEffect('s', 'w1')).toMatchObject({ state: 'refused', refusal: 'EFFECT_PRECONDITION_CHANGED' });
   });
 
-  it('is refused by the generic operation producer before any approval, ledger or file access (surface: authority), even with a reachable target', async () => {
+  it.skipIf(process.platform !== 'linux')('[requires Linux live OS session /proc identity] is refused by the generic operation producer before any approval, ledger or file access (surface: authority), even with a reachable target', async () => {
     const f = await fixture(() => [], ownerRoot);
     const target = new AuthorityDocumentTarget(f.source, { bound: () => undefined, audit: () => undefined });
     const generic = new EffectApplication({ async resolve(ref) { return ref.id === 'policy.administer' ? POLICY_ADMINISTER_OPERATION : null; } },
@@ -161,7 +161,7 @@ describe.skipIf(process.platform === 'win32')('policy.administer@1 (POLICY-ADMIN
     expect((await f.files()).policy.revision).toBe('p1');
   });
 
-  it('routes /mode through the same authority writer: the mode write is archived and keeps its own audit event and view', async () => {
+  it.skipIf(process.platform !== 'linux')('[requires Linux live OS session /proc identity] routes /mode through the same authority writer: the mode write is archived and keeps its own audit event and view', async () => {
     const f = await fixture(me => [{ id: 'set-mode', effect: 'allow', actions: ['set'], scopes: ['s'], principals: [me], resource: { kind: 'permission-mode', ids: 'all' } }], ownerRoot);
     const modes = new PermissionModeApplication(f.source, () => undefined, () => 5);
     expect(await modes.set(f.principal, { schemaVersion: 1, scopeId: 's', mode: 'full-auto', expectedRevision: 'p1+b1' })).toMatchObject({ mode: 'full-auto', changed: true });

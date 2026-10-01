@@ -62,7 +62,7 @@ describe('agent workspace deny: the product state of a data root inside the proj
   it('classifies a shell read of product state as protected without granting platform custody', async () => {
     const p = await project();
     for (const path of ['state/terminal-sessions/other-session.json', 'state/ledger.db', 'policy.json']) {
-      const verdict = await classifyReadOnlyShellCommand(`cat ${DATA}/${path}`, createShellPathContext(p.scope));
+      const verdict = await classifyReadOnlyShellCommand(`cat ${DATA}/${path}`, createShellPathContext({ ...p.scope, root: '/project' }));
       expect(verdict, path).toMatchObject({ readOnly: false, reasonCode: 'PATH_PROTECTED' });
     }
   });
@@ -72,7 +72,7 @@ describe('agent workspace deny: the product state of a data root inside the proj
     expect(await classifyReadOnlyShellCommand('cat src/a.ts .deckent/config.json', createShellPathContext(p.scope))).toMatchObject({ readOnly: true });
   });
 
-  it('masks the product state in the bubblewrap view and gives it no Landlock rule', async () => {
+  it.skipIf(process.platform === 'win32')('requires POSIX sandbox rule paths: masks the product state in the bubblewrap view and gives it no Landlock rule', async () => {
     const p = await project();
     const view = await resolveBubblewrapView({ project: p.scope, scratchDir: null }, { PATH: '/usr/bin:/bin' });
     expect(view.ok).toBe(true); if (!view.ok) return;
@@ -99,7 +99,7 @@ describe('agent workspace deny: the product state of a data root inside the proj
     expect(usable.ok).toBe(true); if (!usable.ok) return;
     const result = await usable.realm.run({ command: `cat src/a.ts; cat ${DATA}/state/terminal-sessions/other-session.json ${DATA}/state/ledger.db-wal ${DATA}/policy.json;`
       + ` ls ${DATA}/state/terminal-sessions; python3 -c 'import socket; s = socket.socket(socket.AF_UNIX); s.connect("${DATA}/state/runtime.sock"); print(s.recv(64))'`
-      + ' 2>&1; true', cwd: p.scope.root, environment: { PATH: '/usr/bin:/bin', HOME: p.base }, fixedEnv: {}, timeoutMs: 20_000 });
+      + ' 2>&1; true', cwd: p.scope.root, environment: { PATH: '/usr/bin:/bin', HOME: p.base, USERPROFILE: p.base }, fixedEnv: {}, timeoutMs: 20_000 });
     expect(result.output).toContain('export const a = 1;');
     expect(result.output).not.toContain('PRODUCT-STATE'); expect(result.output).not.toContain('SERVICE-ANSWER');
     // The masked directory lists empty (a tmpfs): no other conversation's name.
@@ -123,7 +123,7 @@ describe.skipIf(!sandboxReady || capabilities.landlock.status !== 'available')('
     const rel = ledger.slice(root.length + 1);
     return { root, scope, scratch, ledger, rel, sandbox: { project: scope, scratchDir: scratch } };
   }
-  const environment = { PATH: '/usr/bin:/bin', HOME: '/nonexistent-home' };
+  const environment = { PATH: '/usr/bin:/bin', HOME: '/nonexistent-home', USERPROFILE: '/nonexistent-home' };
   // Astra 2164: `[` is a plain character in the deny matcher's language; an anchor is cut only at the matcher's own wildcards (`*`, `?`).
   for (const [name, dataRel, gitignore] of [['a .gitignore entry for the data root parent', '.deckent/live-data', '.deckent/\n'], ['a baseline-ignored data root parent', '.cache/deckent', null],
     ['a baseline-ignored parent with brackets in the data root', '.cache/deckent[1]', null], ['a bracketed and braced custom resource ancestor', '.cache/x[a]/y{z}/deckent', null]] as const) {

@@ -1074,6 +1074,22 @@ The test harness canonicalizes only the OS temporary parent before fixture alloc
 explicit test global homes and product roots are unchanged. Successful descriptor-relative workspace read/edit cases run only
 when the existing Linux `/proc/self/fd` capability is available. Portable policy/grammar and typed unsupported-refusal tests
 remain active; this partition does not implement macOS/Windows custody or grant platform acceptance.
+**CI-WINDOWS-MACOS (owner 2026-10-01; verification tooling).** Each CI matrix job has a 30-minute ceiling,
+with ~2.1x headroom over run36884716187's successful Linux jobs (14m05s/14m20s); advisory cells cannot inherit
+the 360-minute GitHub default. Linux-only local runtime socket/live OS-session tests name their capability in
+collected test titles and skip only cases requiring it; portable policy/grammar and existing typed refusals stay
+active. Bubblewrap ancestor traversal stops when dirname reaches its fixed point, including a Windows drive root;
+Linux protection-pin placement and all security bounds remain unchanged. A subprocess regression owns a 2-second
+OS kill deadline because a synchronous loop prevents an in-process test timer from firing. Host-platform guard
+simulations are labelled; they do not establish native Windows/macOS custody or runtime support. Actual hosted
+post-fix evidence and independent review remain lead gates; sources/inventories in external CI-WINDOWS proof.
+Windows fixture homes explicitly carry USERPROFILE with their temporary HOME. Developer SBOM/ajv bundle guards
+normalize metadata separators before package/forbidden-provider checks, and fixture imports use file URLs; no package
+or dependency version changes. Shared CLI JSON file input refuses Windows or absent O_NOFOLLOW/O_NONBLOCK using
+the caller's existing typed *_INPUT_UNAVAILABLE error before opening a path; bounded stdin stays available. Terminal
+history/session file factories similarly refuse Windows or absent O_NOFOLLOW with existing MANAGED_FILE_UNSUPPORTED,
+before reading/writing any state. They retain POSIX permission/link guarantees instead of claiming a Windows private
+store. Terminal-history declares exactly the public platform managed-files error dependency; no contract schema changes.
 **Doctor realm report (REALM-NOTICE).** `doctor` (`--json` field `shellRealm`, schemaVersion 1, additive to doctor schemaVersion 2,
 `null` when unwired; human lines in the product's own sandbox words, no catalog text — the result marker with `[terminal.shell.realm
 <mode>]`, then the notice or the reasons) reports the realm a shell call in this project gets under the configured mode, every provider

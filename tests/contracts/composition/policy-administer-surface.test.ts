@@ -16,7 +16,7 @@ const cleanup: (() => Promise<void>)[] = [];
 afterEach(async () => { for (const close of cleanup.splice(0).reverse()) await close(); clearConfigCache(); });
 registerProviderConfig();
 
-it('refuses policy.administer@1 on the SDK and the product CLI with OPERATION_SURFACE_RESTRICTED; the policy file stays byte-identical', async () => {
+it.skipIf(process.platform !== 'linux')('[requires Linux live OS session /proc identity] refuses policy.administer@1 on the SDK and the product CLI with OPERATION_SURFACE_RESTRICTED; the policy file stays byte-identical', async () => {
   const root = await mkdtemp(join(tmpdir(), 'dn-authority-surface-')); cleanup.push(() => rm(root, { recursive: true, force: true }));
   const dir = join(root, 'project'); await mkdir(join(dir, '.deckent'), { recursive: true, mode: 0o700 });
   const options = { env: { HOME: join(root, 'home') } };

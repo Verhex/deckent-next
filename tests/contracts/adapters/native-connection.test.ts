@@ -38,23 +38,23 @@ it('projects only native short-lived credential fields for all three providers',
   expect(() => projectNativeCredential('claude', { claudeAiOauth: { accessToken: 'synthetic', expiresAt: 0 } })).toThrow('NATIVE_CREDENTIAL_UNAVAILABLE');
   expect(() => projectNativeCredential('codex', { tokens: { access_token: 'invalid' } })).toThrow('NATIVE_CREDENTIAL_UNAVAILABLE');
 });
-it('reads only the owned private native file and rejects symlinks or broad permissions', async () => {
+it.skipIf(process.platform === 'win32')('requires POSIX private native credential ownership — reads only the owned private native file and rejects symlinks or broad permissions', async () => {
   const root = await fixture(); const home = join(root, '.codex'); await mkdir(home);
   const file = join(home, 'auth.json'); await writeFile(file, JSON.stringify(credential()), { mode: 0o600 });
-  expect(JSON.stringify(await readLocalNativeCredential('codex', { HOME: root }))).not.toContain('never-forward');
+  expect(JSON.stringify(await readLocalNativeCredential('codex', { HOME: root, USERPROFILE: root }))).not.toContain('never-forward');
   await rm(file); await writeFile(join(root, 'other'), JSON.stringify(credential()), { mode: 0o600 }); await symlink(join(root, 'other'), file);
-  await expect(readLocalNativeCredential('codex', { HOME: root })).rejects.toThrow('NATIVE_CREDENTIAL_UNAVAILABLE');
+  await expect(readLocalNativeCredential('codex', { HOME: root, USERPROFILE: root })).rejects.toThrow('NATIVE_CREDENTIAL_UNAVAILABLE');
   await rm(file); await writeFile(file, JSON.stringify(credential()), { mode: 0o644 });
-  await expect(readLocalNativeCredential('codex', { HOME: root })).rejects.toThrow('NATIVE_CREDENTIAL_UNAVAILABLE');
+  await expect(readLocalNativeCredential('codex', { HOME: root, USERPROFILE: root })).rejects.toThrow('NATIVE_CREDENTIAL_UNAVAILABLE');
 });
-it('delivers auth once over the private socket and closes capability on revocation', async () => {
+it.skipIf(process.platform === 'win32')('requires POSIX private native gateway ownership — delivers auth once over the private socket and closes capability on revocation', async () => {
   const connection = await gateway(await fixture()); const first = await bootstrap(connection.descriptor.socketPath);
   expect(first.status).toBe(200); expect(first.body).not.toContain('never-forward');
   expect((await bootstrap(connection.descriptor.socketPath)).status).toBe(403);
   expect(JSON.stringify(connection.descriptor)).not.toContain('synthetic');
   await connection.close(); await expect(bootstrap(connection.descriptor.socketPath)).rejects.toThrow();
 });
-it('rejects foreign destinations, arbitrary ports and private or non-IPv4 addresses', async () => {
+it.skipIf(process.platform === 'win32')('requires POSIX private native gateway ownership — rejects foreign destinations, arbitrary ports and private or non-IPv4 addresses', async () => {
   const connection = await gateway(await fixture());
   for (const target of ['api.anthropic.com:443', '127.0.0.1:443', 'chatgpt.com:80', 'chatgpt.com.evil.example:443']) {
     await new Promise<void>((resolve, reject) => {

@@ -21,7 +21,7 @@ async function fixture() {
   return { root, source, workspaceRoot, options, broker, identity, git };
 }
 
-it('captures committed HEAD and reopens its recorded base without source or owner state', async () => {
+it.skipIf(process.platform === 'win32')('requires POSIX private Git custody: captures committed HEAD and reopens its recorded base without source or owner state', async () => {
   const f = await fixture(); const sourceBase = await f.broker.captureSourceBase(); const baseCommit = sourceBase.baseCommit;
   await writeFile(join(f.source, 'tracked'), 'owner-wip');
   const lease = await f.broker.allocate({ schemaVersion: 1, identity: f.identity, baseCommit });
@@ -34,7 +34,7 @@ it('captures committed HEAD and reopens its recorded base without source or owne
   expect(await readFile(join(lease.workspace, 'tracked'), 'utf8')).toBe('base');
 });
 
-it('validates an explicit immutable commit without sampling an advanced HEAD', async () => {
+it.skipIf(process.platform === 'win32')('requires POSIX private Git custody: validates an explicit immutable commit without sampling an advanced HEAD', async () => {
   const f = await fixture(); const first = await f.broker.captureSourceBase();
   await writeFile(join(f.source, 'tracked'), 'advanced'); await f.git('add', 'tracked'); await f.git('commit', '-m', 'advanced');
   expect((await f.broker.captureSourceBase()).baseCommit).not.toBe(first.baseCommit);
@@ -44,14 +44,14 @@ it('validates an explicit immutable commit without sampling an advanced HEAD', a
   await expect(unavailable.captureSourceBase('HEAD')).rejects.toMatchObject({ code: 'WORKSPACE_REQUEST_INVALID' });
 });
 
-it('returns null for an identity without a recorded directory and rejects changed adapter configuration', async () => {
+it.skipIf(process.platform === 'win32')('requires POSIX private Git custody: returns null for an identity without a recorded directory and rejects changed adapter configuration', async () => {
   const f = await fixture(); expect(await f.broker.openRecorded(f.identity)).toBeNull();
   const baseCommit = (await f.broker.captureSourceBase()).baseCommit; await f.broker.allocate({ schemaVersion: 1, identity: f.identity, baseCommit });
   const changed = new GitWorkspaceBroker({ ...f.options, outputBytes: f.options.outputBytes + 1 });
   await expect(changed.openRecorded(f.identity)).rejects.toThrow('WORKSPACE_IDENTITY_CONFLICT');
 });
 
-it.each(['malformed', 'incomplete', 'unsafe', 'symlink'] as const)('fails closed for a %s recorded lease', async kind => {
+it.skipIf(process.platform === 'win32').each(['malformed', 'incomplete', 'unsafe', 'symlink'] as const)('requires POSIX private Git custody: fails closed for a %s recorded lease', async kind => {
   const f = await fixture(); const baseCommit = (await f.broker.captureSourceBase()).baseCommit;
   const lease = await f.broker.allocate({ schemaVersion: 1, identity: f.identity, baseCommit });
   const directory = join(f.workspaceRoot, lease.id); const recordPath = join(directory, 'lease.json');
@@ -62,14 +62,14 @@ it.each(['malformed', 'incomplete', 'unsafe', 'symlink'] as const)('fails closed
   await expect(f.broker.openRecorded(f.identity)).rejects.toThrow('WORKSPACE_ALLOCATION_INCOMPLETE');
 });
 
-it('rejects an old schema-one lease as unconvertible instead of inventing source custody', async () => {
+it.skipIf(process.platform === 'win32')('requires POSIX private Git custody: rejects an old schema-one lease as unconvertible instead of inventing source custody', async () => {
   const f = await fixture(); const lease = await f.broker.allocate({ schemaVersion: 1, identity: f.identity, baseCommit: (await f.broker.captureSourceBase()).baseCommit });
   const recordPath = join(f.workspaceRoot, lease.id, 'lease.json'); const record = JSON.parse(await readFile(recordPath, 'utf8'));
   delete record.sourceBase; record.schemaVersion = 1; await writeFile(recordPath, JSON.stringify(record), { mode: 0o600 });
   await expect(f.broker.openRecorded(f.identity)).rejects.toMatchObject({ code: 'WORKSPACE_CUSTODY_UNCONVERTIBLE' });
 });
 
-it('rejects tampered typed source custody even when its inner source hash is recomputed', async () => {
+it.skipIf(process.platform === 'win32')('requires POSIX private Git custody: rejects tampered typed source custody even when its inner source hash is recomputed', async () => {
   const f = await fixture(); const lease = await f.broker.allocate({ schemaVersion: 1, identity: f.identity, baseCommit: (await f.broker.captureSourceBase()).baseCommit });
   const recordPath = join(f.workspaceRoot, lease.id, 'lease.json'); const record = JSON.parse(await readFile(recordPath, 'utf8'));
   record.sourceBase.source.repositoryRoot = f.workspaceRoot;
@@ -78,7 +78,7 @@ it('rejects tampered typed source custody even when its inner source hash is rec
   await expect(f.broker.openRecorded(f.identity)).rejects.toThrow('WORKSPACE_IDENTITY_CONFLICT');
 });
 
-it.each(['inner-hash', 'base-binding', 'noncanonical-path'] as const)('rejects %s even when the outer allocation fingerprint is recomputed', async kind => {
+it.skipIf(process.platform === 'win32').each(['inner-hash', 'base-binding', 'noncanonical-path'] as const)('requires POSIX private Git custody: rejects %s even when the outer allocation fingerprint is recomputed', async kind => {
   const f = await fixture(); const lease = await f.broker.allocate({ schemaVersion: 1, identity: f.identity, baseCommit: (await f.broker.captureSourceBase()).baseCommit });
   const recordPath = join(f.workspaceRoot, lease.id, 'lease.json'); const record = JSON.parse(await readFile(recordPath, 'utf8'));
   if (kind === 'inner-hash') record.sourceBase.sourceFingerprint = 'b'.repeat(64);

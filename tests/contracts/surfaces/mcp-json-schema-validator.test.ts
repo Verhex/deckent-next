@@ -24,7 +24,7 @@ function scan() {
   for (const file of walk(SRC)) {
     const text = readFileSync(file, 'utf8');
     if (!text.includes('@modelcontextprotocol/')) continue;
-    const source = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true), at = (node: ts.Node) => `${relative(SRC, file)}:${source.getLineAndCharacterOfPosition(node.getStart()).line + 1}`;
+    const source = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true), at = (node: ts.Node) => `${relative(SRC, file).replaceAll('\\', '/')}:${source.getLineAndCharacterOfPosition(node.getStart()).line + 1}`;
     const visit = (node: ts.Node): void => {
       if (ts.isStringLiteralLike(node) && SDK_DEFAULT_VALIDATOR.test(node.text)) violations.push(`${at(node)} names ${node.text}`);
       if (ts.isNewExpression(node) && ts.isIdentifier(node.expression) && SDK_CONSTRUCTED.has(node.expression.text)) {

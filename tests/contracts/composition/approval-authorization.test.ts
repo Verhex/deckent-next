@@ -33,17 +33,17 @@ async function fixture(effect: 'allow' | 'deny' | 'require-approval') {
   return { project, options };
 }
 
-it('returns a typed refusal, not denial, when approval inspection authority is require-approval (C12 Q8: no catalog broker here yet)', async () => {
+it.skipIf(process.platform === 'win32')('requires POSIX private integrity keyring — returns a typed refusal, not denial, when approval inspection authority is require-approval (C12 Q8: no catalog broker here yet)', async () => {
   const f = await fixture('require-approval');
   await expect(configuredApproval(f.project, 'inspect', { schemaVersion: 1, scopeId: 's', approvalId: 'missing' }, f.options))
     .rejects.toMatchObject({ code: 'POLICY_APPROVAL_UNSUPPORTED' });
 });
-it('still denies plainly when there is no approval authority at all', async () => {
+it.skipIf(process.platform === 'win32')('requires POSIX private integrity keyring — still denies plainly when there is no approval authority at all', async () => {
   const f = await fixture('deny');
   await expect(configuredApproval(f.project, 'inspect', { schemaVersion: 1, scopeId: 's', approvalId: 'missing' }, f.options))
     .rejects.toMatchObject({ code: 'APPROVAL_DENIED' });
 });
-it('still allows a granted inspection through to the (empty) store', async () => {
+it.skipIf(process.platform !== 'linux')('[requires Linux live OS session /proc identity] still allows a granted inspection through to the (empty) store', async () => {
   const f = await fixture('allow');
   await expect(configuredApproval(f.project, 'inspect', { schemaVersion: 1, scopeId: 's', approvalId: 'missing' }, f.options))
     .resolves.toBeNull();

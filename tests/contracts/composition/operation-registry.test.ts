@@ -38,7 +38,7 @@ const module = (m: AdapterModuleManifest = manifest(), adapterId = 'test.memory-
 const descriptor = (id: string, targetKind: string, precondition: 'record-version' | 'none' = 'record-version') => ({ schemaVersion: 1, operation: { id, version: 1 }, targetKind,
   effectClass: 'write', approval: 'policy', precondition, compensation: null, inputMaxBytes: 4096 });
 
-it('resolves a registry-registered (non-Core) adapter from an unchanged operations config shape and executes through it; Core http-conditional stays a registry entry', async () => {
+it.skipIf(process.platform !== 'linux')('[requires Linux live OS session /proc identity] resolves a registry-registered (non-Core) adapter from an unchanged operations config shape and executes through it; Core http-conditional stays a registry entry', async () => {
   registerOperationAdapterModule(module());
   registerProviderConfig();
   const root = await mkdtemp(join(tmpdir(), 'dn-registry-')); cleanup.push(() => rm(root, { recursive: true, force: true }));

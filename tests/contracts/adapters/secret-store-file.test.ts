@@ -20,7 +20,7 @@ async function root() {
 const leaks = (error: unknown) => JSON.stringify({ message: (error as Error)?.message, params: (error as { params?: unknown })?.params,
   cause: String((error as { cause?: unknown })?.cause ?? '') }).includes(CANARY);
 
-it('file backend: round trip with a 0600 schemaVersion 1 document in a 0700 directory, atomic and name-validated', async () => {
+it.skipIf(process.platform === 'win32')('requires POSIX private file secret store — file backend: round trip with a 0600 schemaVersion 1 document in a 0700 directory, atomic and name-validated', async () => {
   const f = await root(), store = createFileSecretStore({ root: f.global, platform: 'linux' });
   expect(store.descriptor).toEqual({ id: 'core.secret-store.file@1', writable: true, enumerable: true });
   expect(await store.get('PROVIDER_TOKEN')).toBeUndefined();
@@ -42,7 +42,7 @@ it('file backend: round trip with a 0600 schemaVersion 1 document in a 0700 dire
   expect(await store.inspect()).toEqual({ status: 'ready', code: null });
 });
 
-it('file backend: creates a missing store directory as 0700 on first write only', async () => {
+it.skipIf(process.platform === 'win32')('requires POSIX private file secret store — file backend: creates a missing store directory as 0700 on first write only', async () => {
   const f = await root(), nested = join(f.base, 'fresh-root'), store = createFileSecretStore({ root: nested, platform: 'linux' });
   expect(await store.get('A')).toBeUndefined();
   await expect(lstat(nested)).rejects.toMatchObject({ code: 'ENOENT' });
@@ -50,7 +50,7 @@ it('file backend: creates a missing store directory as 0700 on first write only'
   expect((await stat(nested)).mode & 0o777).toBe(0o700);
 });
 
-it.each([
+it.skipIf(process.platform === 'win32').each([
   ['group-readable file', async (f: Awaited<ReturnType<typeof root>>) => { await chmod(f.path, 0o640); }],
   ['other-readable file', async (f: Awaited<ReturnType<typeof root>>) => { await chmod(f.path, 0o604); }],
   ['group-accessible directory', async (f: Awaited<ReturnType<typeof root>>) => { await chmod(f.global, 0o750); }],
@@ -70,7 +70,7 @@ it.each([
   expect(await store.inspect()).toEqual({ status: 'unsafe', code: 'SECRET_STORE_UNSAFE' });
 });
 
-it('file backend: a symlinked store directory is refused', async () => {
+it.skipIf(process.platform === 'win32')('requires POSIX private file secret store — file backend: a symlinked store directory is refused', async () => {
   const f = await root(), real = join(f.base, 'real'), linked = join(f.base, 'linked');
   await mkdir(real, { mode: 0o700 }); await symlink(real, linked);
   const store = createFileSecretStore({ root: linked, platform: 'linux' });
@@ -78,7 +78,7 @@ it('file backend: a symlinked store directory is refused', async () => {
   await expect(store.set('A', 'synthetic')).rejects.toMatchObject({ code: 'SECRET_STORE_UNSAFE' });
 });
 
-it('file backend: corrupt or foreign-schema content is a typed refusal whose error carries no content', async () => {
+it.skipIf(process.platform === 'win32')('requires POSIX private file secret store — file backend: corrupt or foreign-schema content is a typed refusal whose error carries no content', async () => {
   const f = await root(), store = createFileSecretStore({ root: f.global, platform: 'linux' });
   for (const text of [`{"schemaVersion":1,"secrets":{"A":"${CANARY}"`, JSON.stringify({ schemaVersion: 2, secrets: { A: CANARY } }),
     JSON.stringify({ schemaVersion: 1, secrets: { lower: CANARY } }), `${CANARY} not json`]) {
@@ -90,7 +90,7 @@ it('file backend: corrupt or foreign-schema content is a typed refusal whose err
   }
 });
 
-it('file backend: a held config write lock on the store is contention, not a lost or partial write', async () => {
+it.skipIf(process.platform === 'win32')('requires POSIX private file secret store — file backend: a held config write lock on the store is contention, not a lost or partial write', async () => {
   const f = await root(), store = createFileSecretStore({ root: f.global, platform: 'linux', lockTimeoutMs: 150 });
   await store.set('A', 'synthetic-a');
   let release!: () => void, acquired!: () => void;
@@ -145,7 +145,7 @@ async function filled(f: Awaited<ReturnType<typeof root>>, value: (index: number
 }
 const full = { code: 'SECRET_STORE_FULL', params: { backend: 'core.secret-store.file@1', maxBytes: String(LIMIT) } };
 
-it('file backend: a change is admitted only when its whole document fits the reader bound — exact limit accepted, one byte over refused', async () => {
+it.skipIf(process.platform === 'win32')('requires POSIX private file secret store — file backend: a change is admitted only when its whole document fits the reader bound — exact limit accepted, one byte over refused', async () => {
   const f = await root(), { store, secrets } = await filled(f, () => 'x'.repeat(65_536));
   // `LAST` sorts after every FILL_ name: an empty value is the document with the entry, the room is what its value may add.
   const room = LIMIT - documentBytes({ ...secrets, LAST: '' });
@@ -171,7 +171,7 @@ it('file backend: a change is admitted only when its whole document fits the rea
   expect((await stat(f.path)).size).toBeLessThanOrEqual(LIMIT);
 }, 30_000);
 
-it('file backend: bytes are counted after JSON escaping and in UTF-8 (4-byte characters, control characters, quotes)', async () => {
+it.skipIf(process.platform === 'win32')('requires POSIX private file secret store — file backend: bytes are counted after JSON escaping and in UTF-8 (4-byte characters, control characters, quotes)', async () => {
   const f = await root(), { store, secrets } = await filled(f, () => multibyte(65_536));
   // A 4-byte character is 2 JS units: counting characters instead of bytes would admit this document at twice the bound.
   const room = LIMIT - documentBytes({ ...secrets, LAST: '' });
@@ -194,7 +194,7 @@ it('file backend: bytes are counted after JSON escaping and in UTF-8 (4-byte cha
   expect(await escaped.listNames()).toEqual(['CONTROL_A', 'CONTROL_B', 'QUOTED_A']);
 }, 30_000);
 
-it('file backend: overwriting an existing name is admitted on the net document (growth refused, same or smaller size accepted)', async () => {
+it.skipIf(process.platform === 'win32')('requires POSIX private file secret store — file backend: overwriting an existing name is admitted on the net document (growth refused, same or smaller size accepted)', async () => {
   const f = await root(), { store, secrets } = await filled(f, () => 'x'.repeat(65_536));
   const room = LIMIT - documentBytes({ ...secrets, LAST: '' });
   await store.set('LAST', 'a'.repeat(room));
@@ -210,7 +210,7 @@ it('file backend: overwriting an existing name is admitted on the net document (
   expect((await stat(f.path)).size).toBe(LIMIT - 65_536 + 'synthetic-small'.length);
 }, 30_000);
 
-it('file backend: two writers that each fit but not together — the lock orders them, the second is refused and the store stays readable', async () => {
+it.skipIf(process.platform === 'win32')('requires POSIX private file secret store — file backend: two writers that each fit but not together — the lock orders them, the second is refused and the store stays readable', async () => {
   const f = await root(), { secrets } = await filled(f, () => 'x'.repeat(65_536));
   const room = LIMIT - documentBytes({ ...secrets });
   const value = 'y'.repeat(Math.floor(room * 0.6));

@@ -18,7 +18,7 @@ function config(root: string, scopeIds: string[]) {
     maxConcurrentRequests: 2, maxConcurrentExecutions: 1, headerTimeoutMs: 100, shutdownGraceMs: 100 } };
 }
 
-it('rejects invalid recovery configuration before binding and starts after the configuration is corrected', async () => {
+it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket] rejects invalid recovery configuration before binding and starts after the configuration is corrected', async () => {
   const project = await mkdtemp(join(tmpdir(), 'deckent-service-ready-'));
   roots.push(project);
   const data = join(project, 'data');

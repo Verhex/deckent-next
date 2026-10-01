@@ -143,7 +143,7 @@ describe.skipIf(process.platform === 'win32')('new worker Run admission against 
     expect(receipt.actor).toMatchObject({ issuer: hostname(), subject: String(userInfo().uid) });
     await expect(g.catalog({ action: 'register', catalog: { schemaVersion: 1, revision: 'v1', providers: [] } })).rejects.toMatchObject({ code: 'MODEL_CATALOG_INVALID' });
   });
-  it('refuses through the runtime service with the typed code and admits the exact model through the same service', async () => {
+  it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket] refuses through the runtime service with the typed code and admits the exact model through the same service', async () => {
     const f = await seeded(); const observer = { async onPage() {}, async onError() {} };
     const service = await startConfiguredRuntimeService(f.project, observer, f.options); const client = createConfiguredRuntimeClient(f.project, f.options);
     try {
@@ -230,7 +230,7 @@ describe.skipIf(process.platform === 'win32')('WORKER-CURRENCY-1 review fixes (A
     expect((await createRun(f.project, run('plain', 'bound'), f.options)).admission.run.runId).toBe('plain');
     expect((await createRun(f.project, run('composed', 'bound-composed'), f.options)).admission.run.runId).toBe('composed');
   });
-  it('WC-R2: the runtime service refuses with the same typed code before any write', async () => {
+  it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket] WC-R2: the runtime service refuses with the same typed code before any write', async () => {
     const f = await seeded(tampered); const observer = { async onPage() {}, async onError() {} };
     const service = await startConfiguredRuntimeService(f.project, observer, f.options); const client = createConfiguredRuntimeClient(f.project, f.options);
     try {

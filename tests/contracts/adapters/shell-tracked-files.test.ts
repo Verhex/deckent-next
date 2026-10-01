@@ -10,7 +10,7 @@ import { compareTrackedFiles, describeTrackedFilesChange, describeTrackedFilesUn
 const roots: string[] = [];
 afterEach(async () => { await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 const git = (cwd: string, ...args: string[]) => execFileSync('git', ['-c', 'user.name=fixture', '-c', 'user.email=fixture@example.invalid', '-c', 'init.defaultBranch=main', ...args],
-  { cwd, encoding: 'utf8', env: { PATH: process.env.PATH ?? '/usr/bin:/bin', HOME: tmpdir(), GIT_CONFIG_NOSYSTEM: '1' } });
+  { cwd, encoding: 'utf8', env: { PATH: process.env.PATH ?? '/usr/bin:/bin', HOME: tmpdir(), USERPROFILE: tmpdir(), GIT_CONFIG_NOSYSTEM: '1' } });
 async function repository(files: Record<string, string>): Promise<string> {
   const root = await mkdtemp(join(tmpdir(), 'deckent-tracked-')); roots.push(root);
   for (const [path, content] of Object.entries(files)) { await mkdir(join(root, path, '..'), { recursive: true }); await writeFile(join(root, path), content); }
@@ -19,7 +19,7 @@ async function repository(files: Record<string, string>): Promise<string> {
 }
 const measured = (baseline: TrackedFilesBaseline) => { if (baseline.kind !== 'measured') throw new Error(`not measured: ${baseline.kind}`); return baseline; };
 
-describe('tracked-file measurement of a full-access shell call (FA-TRACKED-WARN)', () => {
+describe.skipIf(process.platform === 'win32')('requires POSIX Git environment: tracked-file measurement of a full-access shell call (FA-TRACKED-WARN)', () => {
   it('lists a deleted and an overwritten tracked file, and nothing for an untracked file or an untouched one', async () => {
     const root = await repository({ 'CHANGELOG.md': 'log\n', 'src/a.ts': 'a\n', 'src/b.ts': 'b\n' });
     await writeFile(join(root, 'untracked.txt'), 'u\n');
@@ -120,4 +120,8 @@ describe('tracked-file measurement of a full-access shell call (FA-TRACKED-WARN)
     git(root, 'ls-files', '-z', '-s');
     await access(marker);
   });
+});
+
+it('formats an unavailable tracked-file measurement visibly without claiming a clean repository', () => {
+  expect(describeTrackedFilesUnchecked({ kind: 'unavailable' })).toContain('not checked');
 });

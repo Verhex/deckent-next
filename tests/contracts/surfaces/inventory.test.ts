@@ -36,7 +36,7 @@ async function fixture() {
   return { project, data, env, ledgerPath: opened.path, layoutRevision: opened.layout.revision };
 }
 describe.skipIf(process.platform === 'win32')('shipped inventory CLI and SDK', () => {
-  it('returns identical versioned JSON through CLI and SDK, defaults to configured page budget and follows cursors', async () => {
+  it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket] returns identical versioned JSON through CLI and SDK, defaults to configured page budget and follows cursors', async () => {
     const f = await fixture(); const options = { cwd: f.project, env: f.env };
     const cli = await exec(process.execPath, [binary, 'inventory', '--scope', 's', '--json'], options);
     const library = await exec(process.execPath, ['--input-type=module', '-e', `import {inspectInventory} from ${JSON.stringify(sdk)}; console.log(JSON.stringify(await inspectInventory(process.cwd(), {schemaVersion:1,scopeId:'s'})));`], options);
@@ -51,7 +51,7 @@ describe.skipIf(process.platform === 'win32')('shipped inventory CLI and SDK', (
     const human = await exec(process.execPath, [binary, 'inventory', '--scope', 's', '--lang', 'tr'], options);
     expect(human.stdout).toContain('Başlatma izni bekliyor'); expect(human.stdout).toContain('canlı durum'); expect(human.stdout).not.toContain('\x1b');
   });
-  it('renders a durably prevented launch through CLI inventory without exposing private custody data', async () => {
+  it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket] renders a durably prevented launch through CLI inventory without exposing private custody data', async () => {
     const f = await fixture(); const identity = { runId: 'r', taskId: 'a', attemptId: 'a', scopeId: 's', generation: 1, layoutRevision: f.layoutRevision };
     const request = { protocolVersion: 1 as const, identity, workspace: '/secret-path', argv: ['private-token'] };
     const claim = { owner: 'worker', request };
@@ -67,7 +67,7 @@ describe.skipIf(process.platform === 'win32')('shipped inventory CLI and SDK', (
     const human = await exec(process.execPath, [binary, 'inventory', '--scope', 's'], options);
     expect(human.stdout).toContain('Launch prevented before permission was granted'); expect(human.stdout).not.toContain('terminal result not recorded');
   });
-  it('returns typed denial and usage errors on stderr without crash artifacts', async () => {
+  it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket] returns typed denial and usage errors on stderr without crash artifacts', async () => {
     const f = await fixture(); const options = { cwd: f.project, env: f.env };
     for (const [args, expectedCode, exit] of [
       [['--scope', 'other'], 'POLICY_DENIED', 1], [['--scope', 's', '--limit', '2'], 'DISPATCH_INVENTORY_LIMIT', 2],

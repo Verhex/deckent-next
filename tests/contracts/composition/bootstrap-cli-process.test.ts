@@ -3,10 +3,11 @@ import { promisify } from 'node:util';
 import { mkdtemp, mkdir, readFile, writeFile, readdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
-import { expect, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { encodeBootstrapJournal, productResourcePath, resolveProductLayout } from '#platform/index.js';
 
 const execute = promisify(execFile), cli = resolve('dist/composition/core/cli/internal/entry.js');
+describe.skipIf(process.platform === 'win32')('requires POSIX bootstrap journal observation; BOOTSTRAP_STATE_UNSUPPORTED', () => {
 it('compiled CLI rejects incomplete installation before autoheal and keeps global inspection independent', async () => {
   const root = await mkdtemp(join(tmpdir(), 'deckent-bootstrap-cli-'));
   try {
@@ -19,7 +20,7 @@ it('compiled CLI rejects incomplete installation before autoheal and keeps globa
       preimageDigest: null, targetDigest: 'c'.repeat(64), state: 'pending' as const }], blockers: ['IMAGE_PROVENANCE_UNVERIFIED'], recovery: {} };
     const bytes = encodeBootstrapJournal(payload);
     await writeFile(journal, bytes, { mode: 0o600 });
-    const env = { ...process.env, HOME: join(root, 'home'), DECKENT_HOME: join(root, 'relocated') };
+    const env = { ...process.env, HOME: join(root, 'home'), USERPROFILE: join(root, 'home'), DECKENT_HOME: join(root, 'relocated') };
     const run = (args: string[]) => execute(process.execPath, [cli, ...args], { cwd: project, env, timeout: 5000, maxBuffer: 1048576 });
     let observed = false;
     try { await run(['config', 'get', '--json']); }
@@ -33,4 +34,6 @@ it('compiled CLI rejects incomplete installation before autoheal and keeps globa
     expect(await readFile(config, 'utf8')).toBe('{'); expect(await readFile(journal, 'utf8')).toBe(bytes);
     expect((await readdir(dirname(config))).sort()).toEqual(['config.json', 'installation']);
   } finally { await rm(root, { recursive: true, force: true }); }
+});
+
 });

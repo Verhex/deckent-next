@@ -21,7 +21,7 @@ async function fixture() {
 }
 const present = (path: string) => stat(path).then(() => true, () => false);
 
-describe('attempt clone release (EXEC-RELEASE)', () => {
+describe.skipIf(process.platform === 'win32')('requires POSIX private Git custody: attempt clone release (EXEC-RELEASE)', () => {
   it('detaches then removes only the exact recorded checkout and tells removal from absence', async () => {
     const f = await fixture();
     expect(await f.broker.holds(f.request.identity)).toBe(true);

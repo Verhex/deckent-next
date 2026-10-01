@@ -22,7 +22,7 @@ afterEach(async () => { clearConfigCache(); await Promise.all(roots.splice(0).ma
 async function fixture(cancellation = true) {
   const project = await mkdtemp(join(tmpdir(), 'deckent-cancellation-recovery-composition-')); roots.push(project);
   const data = join(project, 'data'); await mkdir(join(project, '.deckent'), { recursive: true, mode: 0o700 });
-  const env = { HOME: join(project, 'home') };
+  const env = { HOME: join(project, 'home'), USERPROFILE: join(project, 'home') };
   await writeFile(join(project, '.deckent/config.json'), JSON.stringify({ layout: { root: data }, ...(cancellation ? { cancellation: {
     maxConcurrentDeliveries: 2, maxAttempts: 3, retryDelayMs: 10, claimTtlMs: 100, recoveryPageSize: 2,
   } } : {}) }));
@@ -32,13 +32,13 @@ async function fixture(cancellation = true) {
   return { project, env };
 }
 
-it('manually drains one bounded empty page without installing a runtime loop', async () => {
+it.skipIf(process.platform === 'win32')('requires POSIX managed storage; MANAGED_FILE_UNSUPPORTED — manually drains one bounded empty page without installing a runtime loop', async () => {
   const f = await fixture();
   const result = await recoverConfiguredCancellations(f.project, { schemaVersion: 1, scopeId: 's', afterAttemptId: null }, { env: f.env });
   expect(result.recovery).toEqual({ schemaVersion: 1, scopeId: 's', nextAfterAttemptId: null, outcomes: [] });
 });
 
-it('requires explicit cancellation configuration after current scope authorization', async () => {
+it.skipIf(process.platform === 'win32')('requires POSIX managed storage; MANAGED_FILE_UNSUPPORTED — requires explicit cancellation configuration after current scope authorization', async () => {
   const f = await fixture(false);
   await expect(recoverConfiguredCancellations(f.project, { schemaVersion: 1, scopeId: 's', afterAttemptId: null }, { env: f.env }))
     .rejects.toMatchObject({ code: 'CANCELLATION_NOT_CONFIGURED' });
@@ -47,7 +47,7 @@ it('requires explicit cancellation configuration after current scope authorizati
 it.skipIf(!imageId || process.platform !== 'linux')('recovers durable cancellation after controller restart from recorded Docker custody and fresh policy', async () => {
   const root = await mkdtemp(join(tmpdir(), 'deckent-cancellation-recovery-docker-')); roots.push(root);
   const project = join(root, 'project'), data = join(root, 'data'); await mkdir(join(project, '.deckent'), { recursive: true, mode: 0o700 });
-  const env = { HOME: join(root, 'home') }; const docker = { executable: '/usr/bin/docker', imageId: imageId!, memoryBytes: 268435456,
+  const env = { HOME: join(root, 'home'), USERPROFILE: join(root, 'home') }; const docker = { executable: '/usr/bin/docker', imageId: imageId!, memoryBytes: 268435456,
     pids: 64, cpus: 1, logMaxSizeKiB: 64, logMaxFiles: 2, tmpBytes: 16777216, deadlineMs: 20000, controlTimeoutMs: 10000, outputBytes: 65536 };
   const configPath = join(project, '.deckent/config.json');
   await writeFile(configPath, JSON.stringify({ layout: { root: data }, cancellation: { maxConcurrentDeliveries: 2, maxAttempts: 3,

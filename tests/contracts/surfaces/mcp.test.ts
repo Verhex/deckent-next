@@ -27,7 +27,7 @@ it('advertises real schemas and bounds concurrent calls, response size and error
     expect(JSON.stringify(await client.callTool({ name: 'inspect_run', arguments: { schemaVersion: 1, scopeId: 's', runId: 'r', principal: 'admin' } }))).toContain('MCP_INPUT_INVALID');
   } finally { release(); await client.close(); await server.close(); }
 });
-it.skipIf(process.platform === 'win32')('serves explicit-project inspection and cancellation intent with SDK parity and fresh policy', async () => {
+it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket] serves explicit-project inspection and cancellation intent with SDK parity and fresh policy', async () => {
   const root = await mkdtemp(join(tmpdir(), 'deckent-mcp-')); const project = join(root, 'project'); const data = join(root, 'data');
   await mkdir(join(project, '.deckent'), { recursive: true, mode: 0o700 });
   await writeFile(join(project, '.deckent/config.json'), JSON.stringify({ layout: { root: data } }));

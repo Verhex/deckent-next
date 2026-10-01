@@ -70,7 +70,7 @@ const pins = (f: Fixture) => { const db = new DatabaseSync(f.ledger, { readOnly:
 const outcome = async (work: Promise<unknown>) => { try { await work; return 'ok'; } catch (error) { return (error as { code?: unknown }).code ?? 'error'; } };
 
 describe.skipIf(process.platform === 'win32')('read-only queries never pin a scope', () => {
-  it('leaves scope_registry unchanged for every SDK, CLI and runtime-peer query; the first write admission still pins', async () => {
+  it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket] leaves scope_registry unchanged for every SDK, CLI and runtime-peer query; the first write admission still pins', async () => {
     const f = await fixture();
     const before = pins(f);
     expect(before).toEqual([{ scope_id: 'runtime-test', company_id: 'alpha', origin: 'start' }]);

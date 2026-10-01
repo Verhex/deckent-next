@@ -5,7 +5,7 @@ import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { createServer, type Server } from 'node:https';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, expect, it, vi } from 'vitest';
+import { describe, afterEach, expect, it, vi } from 'vitest';
 import { invokeConfiguredModel, inspectConfiguredModelInvocation } from '#composition/core/model-invocation/index.js';
 import { auditConfiguredProviderSpendAccount, inspectConfiguredProviderSpendAccount } from '#composition/core/provider-spend/index.js';
 import { encodeModelBindingDefinition } from '#domain/index.js';
@@ -82,10 +82,11 @@ async function fixture(withBudget = true, allow = true, completePricing = true) 
     nativeRequest: { model: 'vendor/model', messages: [{ role: 'user' as const, content: 'private prompt' }], max_completion_tokens: 8 } };
   return { project, ledger, config, configPath: join(project, '.deckent/config.json'), policyPath, policy, writePolicy,
     principal, setUsage(value: Record<string, unknown>) { nativeUsage = value; },
-    env: { HOME: home, PATH: process.env.PATH ?? '/usr/bin:/bin' }, command,
+    env: { HOME: home, USERPROFILE: home, PATH: process.env.PATH ?? '/usr/bin:/bin' }, command,
     get metadataGets() { return metadataGets; }, get posts() { return posts; } };
 }
 
+describe.skipIf(process.platform === 'win32')('requires POSIX local principal; AUTHENTICATION_REQUIRED on Windows UID -1', () => {
 it('acquires one native tariff, persists one reservation, and replays without refetch or repost', async () => {
   const f = await fixture(); const first = await invokeConfiguredModel(f.project, f.command, { env: f.env });
   expect(first.receipt.outcome?.state).toBe('responded'); expect([f.metadataGets, f.posts]).toEqual([1, 1]);
@@ -406,4 +407,6 @@ it('I40: expiry reached at send stays a durable unknown with zero POST, never su
   expect(result.receipt.outcome?.state).toBe('unknown'); expect(wall.errors).toEqual(['STALE_TARIFF']);
   expect((await invokeConfiguredModel(f.project, f.command, { env: f.env })).receipt.outcome?.state).toBe('unknown');
   expect([f.metadataGets, f.posts]).toEqual([1, 0]);
+});
+
 });

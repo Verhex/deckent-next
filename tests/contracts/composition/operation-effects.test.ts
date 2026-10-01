@@ -50,7 +50,7 @@ async function fixture() {
   return { server, project, options, policy, command, execute, state, root, target };
 }
 
-it('settles a conditional write once, replays it, refuses stale and raced preconditions, and stops approval-gated operations before any effect', async () => {
+it.skipIf(process.platform !== 'linux')('[requires Linux live OS session /proc identity] settles a conditional write once, replays it, refuses stale and raced preconditions, and stops approval-gated operations before any effect', async () => {
   const f = await fixture();
   const first = await f.execute(f.command('post'));
   expect(first).toMatchObject({ status: 'settled', sequence: 1, version: '"v2"', evidence: 'idempotency-record', compensates: null });
@@ -81,7 +81,7 @@ it('settles a conditional write once, replays it, refuses stale and raced precon
   await expect(f.execute(f.command('post', { input: { amount: 11 } }))).rejects.toMatchObject({ code: 'POLICY_DENIED' });
 });
 
-it('brokers a required operation approval: pending, decided allow, the same command settles once, the approval is consumed and bound to its command and input (C12 G1/G2)', async () => {
+it.skipIf(process.platform !== 'linux')('[requires Linux live OS session /proc identity] brokers a required operation approval: pending, decided allow, the same command settles once, the approval is consumed and bound to its command and input (C12 G1/G2)', async () => {
   const f = await fixture();
   await f.policy('require-approval');
   const decide = (approvalId: string, commandId: string, decision: 'allow' | 'deny') => configuredApproval(f.project, 'decide',
@@ -129,7 +129,7 @@ it('brokers a required operation approval: pending, decided allow, the same comm
   expect(f.state('late')).toBeUndefined(); expect(f.server.operations).toHaveLength(1);
 });
 
-it('runs the approval flow end to end on the product CLI and through the SDK wait wrapper: pending, decided, the same command settles (C12 G2)', async () => {
+it.skipIf(process.platform !== 'linux')('[requires Linux live OS session /proc identity] runs the approval flow end to end on the product CLI and through the SDK wait wrapper: pending, decided, the same command settles (C12 G2)', async () => {
   const f = await fixture();
   await f.policy('require-approval');
   const cli = async (...args: string[]) => JSON.parse((await exec(process.execPath, [resolve('dist/composition/core/cli/internal/entry.js'), ...args, '--json'],
@@ -168,7 +168,7 @@ it('runs the approval flow end to end on the product CLI and through the SDK wai
   expect(f.server.operations).toHaveLength(2); expect(f.state('cli-denied')).toBeUndefined();
 });
 
-it('recovers interrupted effects from target evidence and never retries an unknown outcome blindly', async () => {
+it.skipIf(process.platform !== 'linux')('[requires Linux live OS session /proc identity] recovers interrupted effects from target evidence and never retries an unknown outcome blindly', async () => {
   const f = await fixture();
   // Crash after the intent, before the write: the target is busy until the same command settles it.
   vi.spyOn(HttpConditionalEffectTarget.prototype, 'apply').mockImplementationOnce(async () => { throw new Error('process died before write'); });
@@ -200,7 +200,7 @@ it('recovers interrupted effects from target evidence and never retries an unkno
   expect(f.server.operations.length).toBe(writes); expect(f.state('blind')).toMatchObject({ state: 'unknown' });
 });
 
-it('compensates a settled operation with its catalog compensation as a new operation, through SDK and the product CLI', async () => {
+it.skipIf(process.platform !== 'linux')('[requires Linux live OS session /proc identity] compensates a settled operation with its catalog compensation as a new operation, through SDK and the product CLI', async () => {
   const f = await fixture();
   await f.execute(f.command('post'));
   const compensation = { ...f.command('cancel'), operation: ref('cancel-order'), compensates: 'post', idempotencyKey: 'cancel-post' };
@@ -221,7 +221,7 @@ it('compensates a settled operation with its catalog compensation as a new opera
   expect(inspected.record).toMatchObject({ state: 'settled', intent: { command: { compensates: 'post' } } });
 });
 
-it('namespaces target keys, never resumes against a changed endpoint and lets a losing concurrent replay return the settled outcome (Astra 2041)', async () => {
+it.skipIf(process.platform !== 'linux')('[requires Linux live OS session /proc identity] namespaces target keys, never resumes against a changed endpoint and lets a losing concurrent replay return the settled outcome (Astra 2041)', async () => {
   const f = await fixture();
   // Two scopes reuse one caller key on different records: both writes really happen (a raw key would replay the first).
   f.server.records.set('PO-2', 1);

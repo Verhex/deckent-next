@@ -59,12 +59,12 @@ async function callMcp(project: string, env: Record<string, string>, name: strin
   }
 }
 
-it('shares exact activation state across SDK, compiled CLI and stdio MCP without catalog resurrection', async () => {
+it.skipIf(process.platform === 'win32')('requires POSIX managed storage; MANAGED_FILE_UNSUPPORTED — shares exact activation state across SDK, compiled CLI and stdio MCP without catalog resurrection', async () => {
   await Promise.all([sdk, cli, mcp].map(path => access(path).catch(() => { throw new Error('BUILD_REQUIRED'); })));
   const root = await mkdtemp(join(tmpdir(), 'deckent-model-activation-surface-')); roots.push(root);
   const project = join(root, 'project'), home = join(root, 'home'), data = join(root, 'data');
   await Promise.all([mkdir(join(project, '.deckent'), { recursive: true, mode: 0o700 }), mkdir(home, { mode: 0o700 }), mkdir(data, { mode: 0o700 })]);
-  const env = { HOME: home, PATH: process.env.PATH ?? '/usr/bin:/bin' };
+  const env = { HOME: home, USERPROFILE: home, PATH: process.env.PATH ?? '/usr/bin:/bin' };
   const reference = { providerId: 'provider', providerVersion: 1, modelId: 'model', modelVersion: 1 };
   const catalog = { schemaVersion: 1 as const, revision: 'catalog-1', providers: [{ id: 'provider', version: 1,
     models: [{ id: 'model', version: 1, nativeId: 'vendor/native:model', protocols: [{ family: 'responses', version: '1', capabilities: [] }] }] }] };

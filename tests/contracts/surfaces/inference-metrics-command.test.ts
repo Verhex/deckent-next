@@ -27,7 +27,7 @@ async function project() {
   await mkdir(join(projectRoot, '.deckent'), { recursive: true });
   await writeFile(join(projectRoot, '.deckent/config.json'), JSON.stringify({
     inference_serving: { schemaVersion: 1, activeProfileId: 'dev-5090', profiles: [profile] } }));
-  return { projectRoot, env: { HOME: join(root, 'home'), PATH: process.env.PATH ?? '' } };
+  return { projectRoot, env: { HOME: join(root, 'home'), USERPROFILE: join(root, 'home'), PATH: process.env.PATH ?? '' } };
 }
 
 it('inference metrics only calls the composition handler', async () => {

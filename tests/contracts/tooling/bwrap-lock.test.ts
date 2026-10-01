@@ -65,7 +65,7 @@ describe('bubblewrap bundle lock (BWRAP-BUNDLE)', () => {
   });
 
   it('the runtime identity constant is generated from the lock and ships only the architectures the lock ships (aarch64 withheld)', () => {
-    expect(readFileSync(IDENTITY_MODULE, 'utf8')).toBe(bundledIdentityModule(lock));
+    expect(readFileSync(IDENTITY_MODULE, 'utf8').replaceAll('\r\n', '\n')).toBe(bundledIdentityModule(lock));
     expect(lock.shipArches).toEqual(['x86_64']);
     expect(lock.shipNote).toMatch(/arm64/u);
     expect(lock.mesonOptions).toContain('-Dassume_kernel=5.15.0');
@@ -77,7 +77,6 @@ describe('bubblewrap bundle lock (BWRAP-BUNDLE)', () => {
     const { root, build, copy } = fakeBuild();
     const target = join(root, 'bundled');
     stageBundle(build, target, copy);
-    expect(statSync(join(target, 'linux-x64', 'bwrap')).mode & 0o777).toBe(0o755);
     expect(() => statSync(join(target, 'linux-arm64'))).toThrow();
     expect(readFileSync(join(target, 'NOTICE-bubblewrap.txt'), 'utf8')).toBe(bwrapNotice(copy));
     expect(readFileSync(join(target, 'source', 'build.sh'), 'utf8')).toBe(buildScript);
@@ -94,4 +93,9 @@ describe('bubblewrap bundle lock (BWRAP-BUNDLE)', () => {
     expect(() => stageBundle(build, join(root, 'again'), copy)).toThrow(/is not the locked/u);
     expect(existsSync(join(root, 'again'))).toBe(false); // refused before anything is written
   });
+});
+
+it.skipIf(process.platform === 'win32')('requires POSIX executable modes: stages the locked Linux executable with mode 0755', () => {
+  const { root, build, copy } = fakeBuild(), target = join(root, 'bundled'); stageBundle(build, target, copy);
+  expect(statSync(join(target, 'linux-x64', 'bwrap')).mode & 0o777).toBe(0o755);
 });

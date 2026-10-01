@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { chmod, link, lstat, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
-import { afterEach, expect, it } from 'vitest';
+import { describe, afterEach, expect, it } from 'vitest';
 import { inspectInstallationFile, publishInstallationFile } from '../../../src/adapters/core/installation-files/index.js';
 
 const roots: string[] = [], maxBytes = 4096;
@@ -12,6 +12,7 @@ async function fixture() { const base = await mkdtemp(join(tmpdir(), 'deckent-in
 const request = (f: Awaited<ReturnType<typeof fixture>>, transactionId = 'transaction-1') => ({ ...f, maxBytes, transactionId });
 const sha = (value: string) => createHash('sha256').update(value).digest('hex');
 
+describe.skipIf(process.platform === 'win32')('requires POSIX private installation publication; INSTALLATION_FILE_UNSUPPORTED', () => {
 it('publishes once and replays exact immutable bytes', async () => {
   const f = await fixture(); expect(await inspectInstallationFile({ ...f, maxBytes })).toEqual({ digest: null });
   expect(await publishInstallationFile(request(f), '{"ok":true}\n')).toEqual({ digest: sha('{"ok":true}\n'), status: 'published' });
@@ -72,4 +73,6 @@ it('rejects a symlink ancestor, accepts non-writable 0755 custody, and preserves
 it('rejects oversized content before creating directories', async () => {
   const f = await fixture(); await expect(publishInstallationFile({ ...request(f), maxBytes: 2 }, 'three')).rejects.toMatchObject({ code: 'INSTALLATION_FILE_INVALID' });
   await expect(lstat(join(f.root, 'nested'))).rejects.toMatchObject({ code: 'ENOENT' });
+});
+
 });

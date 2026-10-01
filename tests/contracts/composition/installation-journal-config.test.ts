@@ -3,7 +3,7 @@ import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { afterEach, expect, it } from 'vitest';
+import { describe, afterEach, expect, it } from 'vitest';
 import { withInstallationJournal } from '../../../src/adapters/core/installation-journal/index.js';
 import { clearConfigCache, loadConfig, observeBootstrapState, productResourcePath,
   resolveProductLayout, type BootstrapJournalPayload } from '../../../src/platform/index.js';
@@ -22,7 +22,7 @@ async function fixture() {
   const root = await mkdtemp(join(tmpdir(), 'deckent-journal-config-')); roots.push(root);
   const project = join(root, 'project'); await mkdir(project, { mode: 0o700 });
   const layout = resolveProductLayout({ projectRoot: project });
-  return { root, project, env: { HOME: join(root, 'home') }, config: productResourcePath(layout, 'config') };
+  return { root, project, env: { HOME: join(root, 'home'), USERPROFILE: join(root, 'home') }, config: productResourcePath(layout, 'config') };
 }
 
 function journal(project: string, config: string, phase: 'pending' | 'committed'): BootstrapJournalPayload {
@@ -35,6 +35,7 @@ function journal(project: string, config: string, phase: 'pending' | 'committed'
       approval: { status: 'recorded' }, projectRoot: project } };
 }
 
+describe.skipIf(process.platform === 'win32')('requires POSIX durable installation journal; INSTALLATION_JOURNAL_UNSUPPORTED', () => {
 it('holds cached and fresh config until a real journal producer commits publication', async () => {
   const f = await fixture();
   await expect(loadConfig(f.project, { env: f.env })).resolves.toMatchObject({ projectName: 'deckent-project' });
@@ -94,4 +95,6 @@ it.skipIf(process.platform === 'win32')('preserves pending recovery across SIGKI
   } finally {
     if (child.exitCode === null && child.signalCode === null) { const closing = closed(child); child.kill('SIGKILL'); await closing.catch(() => undefined); }
   }
+});
+
 });

@@ -457,7 +457,7 @@ function fixtureConfig(data: string, catalog: unknown, reference: Record<string,
 // over the 30 s limit on GitHub runners). The steps are split at their natural seams; they stay sequential and stateful
 // by contract: every step observes the same bounded ledger, provider fixture and restarted runtime service. A failed
 // step skips the later steps instead of letting them fail on a partial ledger.
-describe('shares one bounded invocation ledger across compiled SDK, CLI and stdio MCP without exposing prompts in argv', () => {
+describe.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket] shares one bounded invocation ledger across compiled SDK, CLI and stdio MCP without exposing prompts in argv', () => {
   const reference = { providerId: 'openrouter', providerVersion: 1, modelId: 'model', modelVersion: 1 }, model = { id: 'model', version: 1, nativeId: 'vendor/model', protocols: [{ family: 'openrouter-chat-completions', version: 'v1', capabilities: [] }] };
   const catalog = { schemaVersion: 1 as const, revision: 'catalog-1', providers: [{ id: 'openrouter', version: 1, models: [model] }] };
   const definition = { encodingVersion: 1 as const, provider: { id: 'openrouter', version: 1 }, model };

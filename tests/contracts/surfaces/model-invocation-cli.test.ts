@@ -37,7 +37,7 @@ async function fixture() {
   const root = await mkdtemp(join(tmpdir(), 'deckent-invocation-cli-')); roots.push(root);
   const home = join(root, 'home'); await mkdir(home); await mkdir(join(root, '.deckent'));
   await writeFile(join(root, '.deckent/config.json'), JSON.stringify({ cli: { invocationInputMaxBytes: 1024 } }));
-  return { root, env: { HOME: home, PATH: process.env.PATH ?? '/usr/bin:/bin' } };
+  return { root, env: { HOME: home, USERPROFILE: home, PATH: process.env.PATH ?? '/usr/bin:/bin' } };
 }
 it('reads file and stdin queries through one inspection contract and renders EN/TR states', async () => {
   const f = await fixture(), path = join(f.root, 'query.json'); await writeFile(path, JSON.stringify(query));

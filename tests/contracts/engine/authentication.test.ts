@@ -25,7 +25,7 @@ describe('verified execution identity boundary', () => {
     const verified = await authenticate({ async verify() { return principal; } }, undefined, 'scope');
     expect(Object.isFrozen(verified)).toBe(true); expect(Object.isFrozen(verified.scopeIds)).toBe(true);
   });
-  it('derives a local principal from the OS, refusing supplied identity credentials', async () => {
+  it.skipIf(process.platform === 'win32')('requires POSIX local principal; AUTHENTICATION_REQUIRED on Windows UID -1 — derives a local principal from the OS, refusing supplied identity credentials', async () => {
     const verifier = new LocalOsPrincipalVerifier(['scope']);
     const local = await authenticate(verifier, undefined, 'scope');
     expect(local).toMatchObject({ subject: String(userInfo().uid), issuer: hostname(), assurance: 'os-user' });
