@@ -1,10 +1,10 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { chmod, mkdtemp, mkdir, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import { chmod, mkdtemp, mkdir, open, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { randomUUID } from 'node:crypto';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { GitWorkspaceBroker } from '#adapters/index.js';
 const exec = promisify(execFile); const roots: string[] = [];
 afterEach(async () => { await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
@@ -49,6 +49,17 @@ describe('attempt clone release (EXEC-RELEASE)', () => {
     await expect(f.broker.release(f.request)).rejects.toThrow('WORKSPACE_ALLOCATION_INCOMPLETE');
     expect(await present(f.lease.workspace)).toBe(true);
     expect(await f.broker.releaseAttempt(f.request, f.lease.workspace)).toBe('removed');
+  });
+  it('negative 7 (fsync): lease records and the detach are flushed (file data, then the directory entries)', async () => {
+    const probe = await open(tmpdir(), 'r'); const prototype = Object.getPrototypeOf(probe) as { sync(): Promise<void> }; await probe.close();
+    const sync = vi.spyOn(prototype, 'sync');
+    try {
+      const f = await fixture();
+      // allocating lease file + its directory + the root, then the pending ready file + its directory after the rename.
+      expect(sync.mock.calls.length).toBeGreaterThanOrEqual(5);
+      sync.mockClear(); expect(await f.broker.releaseAttempt(f.request, f.lease.workspace)).toBe('removed');
+      expect(sync).toHaveBeenCalledTimes(1);
+    } finally { sync.mockRestore(); }
   });
   it('an interrupted removal stays re-releasable: the start sweep finishes detached directories, bounded and owner-checked', async () => {
     const f = await fixture();
