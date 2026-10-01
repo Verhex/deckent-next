@@ -50,7 +50,7 @@ describe('monitor text snapshot', () => {
     // An `info:` diagnostic is a neutral note: no warning mark, not counted in the header.
     expect(text).toContain('dogfood note: only the most recent finished workers are shown; 5 older ones are hidden');
     expect(text).not.toMatch(/! [^\n]*most recent finished workers/);
-    expect(text).toMatch(/\* dogfood [^\n]*! 2 warning\(s\)/);
+    expect(text).toMatch(/\* dogfood [^\n]*! 3 warning\(s\)/);
     expect(text).toContain('build b0e66d92c0ff (built 2026-10-02 08:00:00Z)'); expect(text).toContain('build 76582f9f0000 (built 2026-10-01 22:15:00Z)');
     expect(text).toContain('expired 2 min 0 s ago'); expect(text).toContain('expires in 45 min');
     expect(text).toContain('! 1 min 35 s (stale)');
@@ -77,7 +77,7 @@ describe('monitor text snapshot', () => {
     expect(one.installs.map(install => install.id)).toEqual(['dogfood']);
     const scoped = surface.filterSnapshot(fullSnapshot, { scope: 'scope-dog' });
     expect(scoped.installs.flatMap(install => install.runs.map(run => run.runId))).toEqual(['run-dog-1']);
-    expect(scoped.installs.flatMap(install => install.approvals)).toEqual([]);
+    expect(scoped.installs.flatMap(install => install.approvals.map(approval => approval.approvalId))).toEqual(['appr-dog']);
     expect(surface.filterSnapshot(fullSnapshot, {})).toBe(fullSnapshot);
   });
 });
@@ -158,9 +158,9 @@ describe('fullscreen monitor', () => {
       // "Where did it first fail": the recorded first failing line, the attempt timeline and the last worker events.
       expect(view.stdout.frame).toContain('Run run-broken · scope scope-a · revision 7');
       expect(view.stdout.frame).toContain('first failure: ✗ [unit-budget] src/surfaces/core/cli — 2001 lines > unit budget 2000');
-      expect(view.stdout.frame).toMatch(/attempt [0-9a-f]{8} gen 1 · launch launched · 09:10:00Z → 09:25:00Z \(15 min\) · exit 1 · claude\/model-alpha-2/);
+      expect(view.stdout.frame).toMatch(/attempt [0-9a-f]{8} gen 1 · launch launched · 08:55:00Z → 09:05:00Z \(≈ 10 min\) · exit 1 · claude\/model-alpha-2/);
       expect(view.stdout.frame).toContain('09:29:30Z · tool.call · shell npm test -- monitor-surface');
-      expect(view.stdout.frame).toContain('Delivery/adoption: not in this snapshot yet.');
+      expect(view.stdout.frame).toContain('Delivery/adoption: no integration, delivery or adoption recorded.');
       expect(view.stdout.frame).toContain('depends on: build');
       await view.press(KEY.esc); await view.press(KEY.down); await view.press(KEY.enter);
       expect(view.stdout.frame).toContain('first failure: the first failing line is not in the record');
@@ -278,10 +278,43 @@ describe('monitor v1.1: first failure, timeline, map, diagnostics, order', () =>
     const order = ['run-broken ', 'run-broken-quiet', 'run-dog-1', 'run-not-admitted', 'run-stopped', 'run-unknown'].map(name => runs.indexOf(name));
     expect(order.every(index => index > 0)).toBe(true);
     expect([...order].sort((a, b) => a - b)).toEqual(order);
-    expect(runs).toMatch(/run-broken\s+✗ failed\s+—\s+—\s+15 min\s/);
+    expect(runs).toMatch(/run-broken\s+✗ failed\s+—\s+—\s+≈ 15 min\s+0\/2 accepted\s+—\s/);
+    // No proven end → unknown, never last-activity arithmetic (owner: the "1 s" for 8-minute Runs on N1).
+    expect(runs).toMatch(/run-broken-quiet\s+✗ failed\s+—\s+—\s+unknown\s/);
+    expect(runs).toMatch(/run-done\s+✓ accepted\s+—\s+—\s+1 h 10 min\s+2\/2 accepted\s+adopted 1a2b3c4\s/);
+    expect(runs).toMatch(/run-stopped\s+■ cancelled\s+—\s+—\s+unknown\s+0\/2 accepted\s+rolled back\s/);
     expect(runs).toMatch(/run-not-admitted\s+~ waiting\s+not admitted yet\s+1 h 33 min\s+running\s/);
     const workers = text.slice(text.indexOf('── Workers'), text.indexOf('── Approvals'));
     expect(workers).toMatch(/run-broken\/build .*exited 1 .*claude\/model-alpha-2/);
+  });
+});
+
+describe('monitor finish/delivery/attempt diagnostics', () => {
+  it('shows delivery in the Run detail, attempt diagnostics as problems and hidden approval summaries honestly (en/tr)', () => {
+    const en = surface.renderMonitorText(fullSnapshot, { locale: 'en', width: 200, ascii: false });
+    expect(en).toContain('operation: you may not see the summary'); expect(en).toContain('approvals of scope scope-dog are hidden: you may not see them');
+    const tr = surface.renderMonitorText(fullSnapshot, { locale: 'tr', width: 200, ascii: false });
+    expect(tr).toContain('operation: özet görme izniniz yok'); expect(tr).toContain('scope-dog kapsamının onayları gizli: görme izniniz yok');
+    expect(surface.describeDiagnostic('output-denied', 'tr').text).toBe('denemenin çıktısı okunmadı: okuma izni yok');
+    expect(surface.describeDiagnostic('attempt-files-unavailable:scope-a/run-x/build:EACCES', 'en').text).toBe('the files of attempt scope-a/run-x/build could not be read (EACCES)');
+    expect(surface.describeDiagnostic('ledger-version-unsupported:99', 'en').text).toBe('the ledger is version 99, which this build cannot read');
+  });
+  it('Run detail: delivery state + commit, "no delivery recorded", unknown end, ≈ evaluated end, output-denied', async () => {
+    const view = mount({ load: async () => fullSnapshot });
+    try {
+      await until(() => view.stdout.frame.includes('Stuck or waiting'), 'summary');
+      await view.press('2'); await view.press(KEY.enter);
+      expect(view.stdout.frame).toContain('Run run-broken'); expect(view.stdout.frame).toContain('duration ≈ 15 min');
+      expect(view.stdout.frame).toContain('Delivery/adoption: no integration, delivery or adoption recorded.');
+      expect(view.stdout.frame).toContain('08:55:00Z → 09:05:00Z (≈ 10 min) · exit 1');
+      await view.press(KEY.esc); await view.press(KEY.down); await view.press(KEY.enter);
+      expect(view.stdout.frame).toContain('Run run-broken-quiet'); expect(view.stdout.frame).toContain('duration unknown');
+      expect(view.stdout.frame).toContain("⚠ the attempt's output was not read: no permission to read it");
+      await view.press(KEY.esc);
+      for (let i = 0; i < 10 && !/› run-done/.test(view.stdout.frame); i++) await view.press(KEY.down);
+      await view.press(KEY.enter);
+      expect(view.stdout.frame).toContain('Delivery/adoption: adopted · commit 1a2b3c4d5e6f708192a3b4c5d6e7f80912a3b4c5');
+    } finally { view.instance.unmount(); }
   });
 });
 

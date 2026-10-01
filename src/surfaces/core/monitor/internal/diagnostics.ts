@@ -29,6 +29,15 @@ export function describeDiagnostic(raw: string, locale: Locale): MonitorDiagnost
     'pool-occupancy-corrupt': () => t('monitor.diagnostic.poolOccupancyCorrupt', { detail }, locale),
     'pool-corrupt': () => t('monitor.diagnostic.poolCorrupt', { detail }, locale),
     'ledger-only': () => t('monitor.diagnostic.ledgerOnly', { detail }, locale),
+    'ledger-version-unsupported': () => t('monitor.diagnostic.ledgerVersionUnsupported', { detail }, locale),
+    'approvals-denied': () => t('monitor.diagnostic.approvalsDenied', { detail }, locale),
+    'map-config-global-unavailable': () => t('monitor.diagnostic.mapConfigGlobalUnavailable', {}, locale),
+    'map-policy-unavailable': () => t('monitor.diagnostic.mapPolicyUnavailable', { detail }, locale),
+    'output-denied': () => t('monitor.diagnostic.outputDenied', {}, locale),
+    'observation-unavailable': () => t('monitor.diagnostic.observationUnavailable', {}, locale),
+    // `attempt-files-unavailable:<attempt key>:<CODE>`: the key may itself hold `/`; the code is the last part.
+    'attempt-files-unavailable': () => t('monitor.diagnostic.attemptFilesUnavailable', { detail: detail.includes(':') ? detail.slice(0, detail.lastIndexOf(':')) : detail,
+      code: detail.includes(':') ? ` (${detail.slice(detail.lastIndexOf(':') + 1)})` : '' }, locale),
   };
   return { code, note, text: Object.hasOwn(words, code) ? words[code]!() : body };
 }

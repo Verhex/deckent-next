@@ -8,15 +8,17 @@ Runs: 3 progressing · 5 waiting · 7 blocked · 1 accepted · 2 failed · 1
 cancelled
 ⚠ current has problems: scope scope-x could not be read (LEDGER_LOCKED)
 ⚠ dogfood has problems: the ledger is version 43, older than this build: newer
-fields may be empty; future-code:abc
+fields may be empty; future-code:abc; approvals of scope scope-dog are hidden:
+you may not see them
 ⚠ remote-lab is unavailable: the ledger could not be read (LEDGER_LOCKED);
 service state could not be read (LOCAL_RUNTIME_DENIED)
 dogfood note: only the most recent finished workers are shown; 5 older ones are
 hidden
 
-Waiting for you (2)
+Waiting for you (3)
   Subject                                        Waiting     Expires
   operation: Push branch lane/monitor to origin  3 h 12 min  expires in 45 min
+  operation: you may not see the summary         10 min      no expiry
   effect: Delete stale preview environment       4 min 0 s   expired 2 min 0 s …
 
 Stuck or waiting, oldest first (12)
@@ -46,8 +48,8 @@ Workers running now (2)
 
 ── Runs ────────────────────────────────────────────────────────────────────────
   Run                          State          Blocker                 Duration
-  run-broken                   ✗ failed       —                       15 min
-  run-broken-quiet             ✗ failed       —                       10 min
+  run-broken                   ✗ failed       —                       ≈ 15 min
+  run-broken-quiet             ✗ failed       —                       unknown
   run-dog-1                    ▶ progressing  worker running          running
   run-not-admitted             ~ waiting      not admitted yet        running
   run-done                     ✓ accepted     —                       1 h 10 min
@@ -63,7 +65,7 @@ Workers running now (2)
   run-pool-held                ~ waiting      pool on hold            running
   run-waiting-pool-slot        ~ waiting      waiting for a pool sl…  running
   run-none                     ▶ progressing  progressing normally    running
-  run-stopped                  ■ cancelled    —                       4 h 0 min
+  run-stopped                  ■ cancelled    —                       unknown
   run-unknown                  ! blocked      reason unknown          running
 
 ── Workers ─────────────────────────────────────────────────────────────────────
@@ -76,6 +78,7 @@ Workers running now (2)
 ── Approvals ───────────────────────────────────────────────────────────────────
   Subject                                Waiting     Expires           Assurance
   operation: Push branch lane/monitor …  3 h 12 min  expires in 45 m…  local-os
+  operation: you may not see the summa…  10 min      no expiry         local-os
   effect: Delete stale preview environ…  4 min 0 s   expired 2 min 0…  —
 
 ── Pools ───────────────────────────────────────────────────────────────────────
@@ -101,9 +104,10 @@ Scopes: scope-dog
 service running (pid 2001) · instance svc-02
 build 76582f9f0000 (built 2026-10-01 22:15:00Z) · source tree ffffffffffff
 ledger v43
-1 Runs · 0 workers · 0 approvals · 1 pools
+1 Runs · 0 workers · 1 approvals · 1 pools
 ⚠ the ledger is version 43, older than this build: newer fields may be empty
 ⚠ future-code:abc
+⚠ approvals of scope scope-dog are hidden: you may not see them
 Note: only the most recent finished workers are shown; 5 older ones are hidden
 
 Install remote-lab · unavailable

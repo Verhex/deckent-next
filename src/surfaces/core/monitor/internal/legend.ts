@@ -18,6 +18,7 @@ export function legendLines(locale: Locale, ascii: boolean): MonitorLine[] {
     ['✗', 'x', 'error', t('monitor.legend.failed', {}, locale)], ['■', '-', 'muted', t('monitor.legend.cancelled', {}, locale)],
     ['●', '*', 'success', t('monitor.legend.installOn', {}, locale)], ['○', 'o', 'error', t('monitor.legend.installOff', {}, locale)],
     ['⚠', '!', 'warning', t('monitor.legend.warning', {}, locale)], ['›', '>', 'accent', t('monitor.legend.selected', {}, locale)],
+    ['≈', '~=', 'muted', t('monitor.legend.approx', {}, locale)],
     [CHANGE_GLYPHS.added, CHANGE_GLYPHS.added, 'accent', t('monitor.legend.added', {}, locale)],
     [CHANGE_GLYPHS.changed, CHANGE_GLYPHS.changed, 'accent', t('monitor.legend.changed', {}, locale)],
   ];

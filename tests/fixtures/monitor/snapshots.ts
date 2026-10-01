@@ -64,15 +64,20 @@ const currentRuns: MonitorRun[] = [
       // Admitted at staggered times (the Runs tab is newest first); the `unknown` Run has no proven admission time.
       createdAtMs: code === 'unknown' ? null : ago(4 * HOUR - index * 10 * MIN),
       ...(code === 'awaiting-approval' ? { blocker: { code, taskId: 'build', sinceMs: ago(3 * HOUR + 12 * MIN), detail: 'appr-0001' } } : {}) })),
-  run('run-done', 'accepted', null, null, { lastActivityMs: ago(50 * MIN), createdAtMs: ago(2 * HOUR) }),
+  run('run-done', 'accepted', null, null, { lastActivityMs: ago(50 * MIN), createdAtMs: ago(2 * HOUR), finishedAtMs: ago(50 * MIN),
+    delivery: { state: 'adopted', commit: '1a2b3c4d5e6f708192a3b4c5d6e7f80912a3b4c5' } }),
   // First failure recorded: the line the owner asks for ("where did it first fail").
-  run('run-broken', 'failed', null, null, { lastActivityMs: ago(25 * MIN), createdAtMs: ago(40 * MIN), tasks: [
-    task('build', 'failed', { lastAttempt: { ...task('build', 'failed').lastAttempt!, exitCode: 1,
+  // Its end comes from the evaluation receipt (no sealed log end): the duration carries ≈. No delivery was recorded.
+  run('run-broken', 'failed', null, null, { lastActivityMs: ago(25 * MIN), createdAtMs: ago(40 * MIN), finishedAtMs: ago(25 * MIN), delivery: null, tasks: [
+    task('build', 'failed', { lastAttempt: { ...task('build', 'failed').lastAttempt!, exitCode: 1, startedAtMs: ago(35 * MIN), endedAtMs: ago(25 * MIN), endedAtSource: 'evaluated',
       firstFailure: '✗ [unit-budget] src/surfaces/core/cli — 2001 lines > unit budget 2000', recentEvents: EVENTS } }),
-    task('verify', 'cancelled', { dependencies: ['build'] })] }),
+    task('verify', 'cancelled', { dependencies: ['build'], lastAttempt: null, attempts: 0 })] }),
   // Failed without a recorded first failing line: the surface says so instead of inventing one.
-  run('run-broken-quiet', 'failed', null, null, { lastActivityMs: ago(35 * MIN), createdAtMs: ago(45 * MIN) }),
-  run('run-stopped', 'cancelled', null, null, { lastActivityMs: ago(26 * HOUR), cancellationRequested: true, createdAtMs: ago(30 * HOUR) }),
+  // No proven end (finishedAtMs absent): the duration is "unknown", never last-activity arithmetic; its output was not readable.
+  run('run-broken-quiet', 'failed', null, null, { lastActivityMs: ago(35 * MIN), createdAtMs: ago(45 * MIN), tasks: [
+    task('build', 'failed', { lastAttempt: { ...task('build', 'failed').lastAttempt!, diagnostics: ['output-denied'] } }), task('verify', 'pending', { dependencies: ['build'] })] }),
+  run('run-stopped', 'cancelled', null, null, { lastActivityMs: ago(26 * HOUR), cancellationRequested: true, createdAtMs: ago(30 * HOUR), finishedAtMs: null,
+    delivery: { state: 'rolled-back', commit: null } }),
 ];
 const MAP: MonitorMap = {
   config: [{ layer: 'default', path: null, sections: ['layout', 'inspection', 'approvals'] }, { layer: 'global', path: '/home/owner/.deckent/config.json', sections: ['language'] },
@@ -99,8 +104,10 @@ export const fullSnapshot: MonitorSnapshot = { schemaVersion: 1, observedAt: OBS
     pools: [pool('default', 4, 4), pool('gpu', 1, 0, 'owner@local'), pool('ci', null, 2)], diagnostics: ['scope-unavailable:scope-x:LEDGER_LOCKED'], map: MAP },
   { id: 'dogfood', path: '/home/owner/deckent-dogfood', status: 'available', scopeIds: ['scope-dog'], service: { ...SERVICE, instanceId: 'svc-02', processId: 2001,
     build: { ...SERVICE.build, sourceCommit: '76582f9f00000000000000000000000000000000', builtAt: '2026-10-01T22:15:00.000Z' } }, ledgerVersion: 43,
-    runs: [run('run-dog-1', 'progressing', 'worker-running', ago(90_000), { scopeId: 'scope-dog' })], workers: [], approvals: [], pools: [pool('default', 2, 1)],
-    diagnostics: ['info:workers-finished-capped:5', 'ledger-version-older:43', 'future-code:abc'], map: null },
+    runs: [run('run-dog-1', 'progressing', 'worker-running', ago(90_000), { scopeId: 'scope-dog' })], workers: [],
+    // The principal may list this approval but not read its summary: the data lane sends '' plus an install diagnostic.
+    approvals: [approval('appr-dog', 10 * MIN, null, { scopeId: 'scope-dog', summary: '' })], pools: [pool('default', 2, 1)],
+    diagnostics: ['info:workers-finished-capped:5', 'ledger-version-older:43', 'future-code:abc', 'approvals-denied:scope-dog'], map: null },
   { id: 'remote-lab', path: '/mnt/lab/deckent', status: 'unavailable', scopeIds: [], service: null, ledgerVersion: null, runs: [], workers: [], approvals: [], pools: [],
     diagnostics: ['ledger-unavailable:LEDGER_LOCKED', 'service-unavailable:LOCAL_RUNTIME_DENIED'] },
 ] };

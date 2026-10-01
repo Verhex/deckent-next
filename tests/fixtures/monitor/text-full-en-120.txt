@@ -1,19 +1,21 @@
 Deckent monitor · observed 2026-10-02 09:30:00Z · observe only
 ● current · service running (pid 31337) · build b0e66d92c0ff (built 2026-10-02 08:00:00Z) · ledger v44 · ⚠ 1 warning(s)…
-● dogfood · service running (pid 2001) · build 76582f9f0000 (built 2026-10-01 22:15:00Z) · ledger v43 · ⚠ 2 warning(s) …
+● dogfood · service running (pid 2001) · build 76582f9f0000 (built 2026-10-01 22:15:00Z) · ledger v43 · ⚠ 3 warning(s) …
 ○ remote-lab · unavailable · build unknown · ledger version unknown · ⚠ 2 warning(s) · /mnt/lab/deckent
 
 ── Summary ─────────────────────────────────────────────────────────────────────────────────────────────────────────────
 Runs: 3 progressing · 5 waiting · 7 blocked · 1 accepted · 2 failed · 1 cancelled
 ⚠ current has problems: scope scope-x could not be read (LEDGER_LOCKED)
-⚠ dogfood has problems: the ledger is version 43, older than this build: newer fields may be empty; future-code:abc
+⚠ dogfood has problems: the ledger is version 43, older than this build: newer fields may be empty; future-code:abc;
+approvals of scope scope-dog are hidden: you may not see them
 ⚠ remote-lab is unavailable: the ledger could not be read (LEDGER_LOCKED); service state could not be read
 (LOCAL_RUNTIME_DENIED)
 dogfood note: only the most recent finished workers are shown; 5 older ones are hidden
 
-Waiting for you (2)
+Waiting for you (3)
   Subject                                        Waiting     Expires                Install
   operation: Push branch lane/monitor to origin  3 h 12 min  expires in 45 min      current
+  operation: you may not see the summary         10 min      no expiry              dogfood
   effect: Delete stale preview environment       4 min 0 s   expired 2 min 0 s ago  current
 
 Stuck or waiting, oldest first (12)
@@ -42,26 +44,26 @@ Workers running now (2)
   run-blocked-approval/lint   running    ⚠ 1 min 35 s (stale)  running  ed5a5613  claude/model-alpha-2  current
 
 ── Runs ────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-  Run                            State          Blocker                   Stuck for   Duration    Tasks         Scope
-  run-broken                     ✗ failed       —                         —           15 min      0/2 accepted  scope-a
-  run-broken-quiet               ✗ failed       —                         —           10 min      0/2 accepted  scope-a
-  run-dog-1                      ▶ progressing  worker running            1 min 30 s  running     0/2 accepted  scope-d…
-  run-not-admitted               ~ waiting      not admitted yet          1 h 33 min  running     0/2 accepted  scope-a
-  run-done                       ✓ accepted     —                         —           1 h 10 min  2/2 accepted  scope-a
-  run-cancellation-pending       ! blocked      cancellation pending      1 h 26 min  running     0/2 accepted  scope-a
-  run-unresolved-effect          ! blocked      effect outcome uncertain  1 h 19 min  running     0/2 accepted  scope-a
-  run-evaluation-unknown         ! blocked      evaluation result unkno…  1 h 11 min  running     0/2 accepted  scope-a
-  run-evaluation-not-ready       ! blocked      evaluation not ready      1 h 4 min   running     0/2 accepted  scope-a
-  run-worker-exited-unevaluated  ! blocked      worker exited, not eval…  57 min      running     0/2 accepted  scope-a
-  run-worker-stale-heartbeat     ! blocked      worker silent (stale he…  50 min      running     0/2 accepted  scope-a
-  run-worker-running             ▶ progressing  worker running            43 min      running     0/2 accepted  scope-a
-  run-blocked-approval           ~ waiting      awaiting approval (appr…  3 h 12 min  running     0/2 accepted  scope-a
-  run-waiting-dependency         ~ waiting      waiting for a dependency  28 min      running     0/2 accepted  scope-a
-  run-pool-held                  ~ waiting      pool on hold              21 min      running     0/2 accepted  scope-a
-  run-waiting-pool-slot          ~ waiting      waiting for a pool slot   14 min      running     0/2 accepted  scope-a
-  run-none                       ▶ progressing  progressing normally      7 min 0 s   running     0/2 accepted  scope-a
-  run-stopped                    ■ cancelled    —                         —           4 h 0 min   0/2 accepted  scope-a
-  run-unknown                    ! blocked      reason unknown            unknown     running     0/2 accepted  scope-a
+  Run                            State          Blocker                          Stuck for   Duration    Delivery
+  run-broken                     ✗ failed       —                                —           ≈ 15 min    —
+  run-broken-quiet               ✗ failed       —                                —           unknown     —
+  run-dog-1                      ▶ progressing  worker running                   1 min 30 s  running     —
+  run-not-admitted               ~ waiting      not admitted yet                 1 h 33 min  running     —
+  run-done                       ✓ accepted     —                                —           1 h 10 min  adopted 1a2b3c4
+  run-cancellation-pending       ! blocked      cancellation pending             1 h 26 min  running     —
+  run-unresolved-effect          ! blocked      effect outcome uncertain         1 h 19 min  running     —
+  run-evaluation-unknown         ! blocked      evaluation result unknown        1 h 11 min  running     —
+  run-evaluation-not-ready       ! blocked      evaluation not ready             1 h 4 min   running     —
+  run-worker-exited-unevaluated  ! blocked      worker exited, not evaluated     57 min      running     —
+  run-worker-stale-heartbeat     ! blocked      worker silent (stale heartbeat)  50 min      running     —
+  run-worker-running             ▶ progressing  worker running                   43 min      running     —
+  run-blocked-approval           ~ waiting      awaiting approval (appr-0001)    3 h 12 min  running     —
+  run-waiting-dependency         ~ waiting      waiting for a dependency         28 min      running     —
+  run-pool-held                  ~ waiting      pool on hold                     21 min      running     —
+  run-waiting-pool-slot          ~ waiting      waiting for a pool slot          14 min      running     —
+  run-none                       ▶ progressing  progressing normally             7 min 0 s   running     —
+  run-stopped                    ■ cancelled    —                                —           unknown     rolled back
+  run-unknown                    ! blocked      reason unknown                   unknown     running     —
 
 ── Workers ─────────────────────────────────────────────────────────────────────────────────────────────────────────────
   Run/Task                    Doing now  Heartbeat             Process   Attempt   Provider/model        Install
@@ -71,9 +73,10 @@ Workers running now (2)
   run-blocked-approval/pack   —          released              missing   a465c0eb  claude/model-alpha-2  current
 
 ── Approvals ───────────────────────────────────────────────────────────────────────────────────────────────────────────
-  Subject                                        Waiting     Expires                Assurance  Scope    Install
-  operation: Push branch lane/monitor to origin  3 h 12 min  expires in 45 min      local-os   scope-a  current
-  effect: Delete stale preview environment       4 min 0 s   expired 2 min 0 s ago  —          scope-a  current
+  Subject                                        Waiting     Expires                Assurance  Scope      Install
+  operation: Push branch lane/monitor to origin  3 h 12 min  expires in 45 min      local-os   scope-a    current
+  operation: you may not see the summary         10 min      no expiry              local-os   scope-dog  dogfood
+  effect: Delete stale preview environment       4 min 0 s   expired 2 min 0 s ago  —          scope-a    current
 
 ── Pools ───────────────────────────────────────────────────────────────────────────────────────────────────────────────
   Pool     Usage                 Hold                   Install
@@ -98,9 +101,10 @@ Scopes: scope-dog
 service running (pid 2001) · instance svc-02
 build 76582f9f0000 (built 2026-10-01 22:15:00Z) · source tree ffffffffffff
 ledger v43
-1 Runs · 0 workers · 0 approvals · 1 pools
+1 Runs · 0 workers · 1 approvals · 1 pools
 ⚠ the ledger is version 43, older than this build: newer fields may be empty
 ⚠ future-code:abc
+⚠ approvals of scope scope-dog are hidden: you may not see them
 Note: only the most recent finished workers are shown; 5 older ones are hidden
 
 Install remote-lab · unavailable

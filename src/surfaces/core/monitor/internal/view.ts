@@ -1,5 +1,5 @@
 import { t, type Locale } from '#platform/index.js';
-import type { MonitorApproval, MonitorAttempt, MonitorBlocker, MonitorInstall, MonitorPool, MonitorRun, MonitorRunState, MonitorSnapshot, MonitorTask,
+import type { MonitorApproval, MonitorAttempt, MonitorBlocker, MonitorDeliveryState, MonitorInstall, MonitorPool, MonitorRun, MonitorRunState, MonitorSnapshot, MonitorTask,
   WorkerObservation } from '#engine/index.js';
 import { span, type MonitorBlock, type MonitorColumn, type MonitorLine, type MonitorRole, type MonitorRow, type MonitorSpan } from './layout.js';
 import { agoText, blockerLabel, clockText, durationText, expiryText, forText, installStatusLabel, MONITOR_TABS, processLabel, runStateLabel,
@@ -15,9 +15,10 @@ import { mapBlocks } from './map.js';
  */
 export interface MonitorFilters { readonly install?: string; readonly scope?: string }
 export interface MonitorView { readonly header: readonly MonitorLine[]; readonly tabs: Readonly<Record<MonitorTab, readonly MonitorBlock[]>> }
-interface Marks { readonly states: Readonly<Record<MonitorRunState, string>>; readonly warn: string; readonly on: string; readonly off: string; readonly sep: string }
-const UNICODE: Marks = { states: { progressing: '▶', waiting: '~', blocked: '!', accepted: '✓', failed: '✗', cancelled: '■' }, warn: '⚠', on: '●', off: '○', sep: '·' };
-const ASCII: Marks = { states: { progressing: '>', waiting: '~', blocked: '!', accepted: '+', failed: 'x', cancelled: '-' }, warn: '!', on: '*', off: 'o', sep: '|' };
+interface Marks { readonly states: Readonly<Record<MonitorRunState, string>>; readonly warn: string; readonly on: string; readonly off: string; readonly sep: string;
+  readonly approx: string }
+const UNICODE: Marks = { states: { progressing: '▶', waiting: '~', blocked: '!', accepted: '✓', failed: '✗', cancelled: '■' }, warn: '⚠', on: '●', off: '○', sep: '·', approx: '≈' };
+const ASCII: Marks = { states: { progressing: '>', waiting: '~', blocked: '!', accepted: '+', failed: 'x', cancelled: '-' }, warn: '!', on: '*', off: 'o', sep: '|', approx: '~=' };
 const STATE_ROLE: Readonly<Record<MonitorRunState, MonitorRole>> = { progressing: 'info', waiting: 'warning', blocked: 'error', accepted: 'success',
   failed: 'error', cancelled: 'muted' };
 const OPEN: readonly MonitorRunState[] = ['progressing', 'waiting', 'blocked'];
@@ -28,6 +29,21 @@ const blockerRole = (blocker: MonitorBlocker): MonitorRole => blocker.code === '
 const short = (value: string | null | undefined, size: number) => value ? value.slice(0, size) : '—';
 /** Worse first: what needs eyes sorts to the top when the state sort is chosen. */
 const STATE_RANK: Readonly<Record<MonitorRunState, number>> = { blocked: 0, waiting: 1, failed: 2, progressing: 3, cancelled: 4, accepted: 5 };
+/** The data lane's `MonitorAttempt.endedAtSource` ('sealed' | 'evaluated', announced by the lead; read defensively until it is in the contract). */
+const endedFromEvaluation = (attempt: MonitorAttempt | null) => (attempt as { readonly endedAtSource?: unknown } | null)?.endedAtSource === 'evaluated';
+const evaluatedEnd = (run: MonitorRun) => {
+  const last = run.tasks.map(task => task.lastAttempt).filter((attempt): attempt is MonitorAttempt => attempt !== null && attempt.endedAtMs !== null)
+    .sort((a, b) => b.endedAtMs! - a.endedAtMs!)[0] ?? null;
+  return endedFromEvaluation(last);
+};
+const DELIVERY_ROLE: Readonly<Record<MonitorDeliveryState, MonitorRole>> = { integrating: 'info', integrated: 'info', delivering: 'info', delivered: 'success',
+  adopting: 'info', adopted: 'success', 'rolling-back': 'warning', 'rolled-back': 'warning' };
+function deliveryLabel(state: MonitorDeliveryState, locale: Locale): string {
+  const labels: Record<MonitorDeliveryState, string> = { integrating: t('monitor.delivery.integrating', {}, locale), integrated: t('monitor.delivery.integrated', {}, locale),
+    delivering: t('monitor.delivery.delivering', {}, locale), delivered: t('monitor.delivery.delivered', {}, locale), adopting: t('monitor.delivery.adopting', {}, locale),
+    adopted: t('monitor.delivery.adopted', {}, locale), 'rolling-back': t('monitor.delivery.rollingBack', {}, locale), 'rolled-back': t('monitor.delivery.rolledBack', {}, locale) };
+  return labels[state];
+}
 const timeText = (ms: number | null | undefined) => ms === null || ms === undefined ? '—' : clockText(ms).slice(11);
 
 /** `--install` keeps one observed install; `--scope` keeps that scope's Runs, workers and approvals (pools are installation-wide). */
@@ -63,12 +79,18 @@ function wordsFor(snapshot: MonitorSnapshot, locale: Locale, ascii: boolean) {
     runName: (run: MonitorRun) => `${run.scopeId}/${run.runId}`,
     progress: (run: MonitorRun) => t('monitor.progress', { accepted: run.phaseCounts['accepted'] ?? run.tasks.filter(task => task.phase === 'accepted').length,
       total: run.tasks.length }, locale),
-    /** Admission → finish: an open Run runs to the observation time ("running"); a finished one to its last proven activity. */
+    /**
+     * Admission → proven finish only (owner: never a computed duration without a proven end). An open Run runs to the observation time;
+     * a finished Run needs `finishedAtMs`; else "unknown". `≈` marks an end taken from the evaluation receipt instead of a sealed log.
+     */
     runDuration: (run: MonitorRun) => {
-      const start = run.createdAtMs ?? null, open = OPEN.includes(run.state), end = open ? now : run.lastActivityMs;
-      if (start === null || end === null) return '—';
-      return open ? t('monitor.duration.running', { duration: durationText(end - start, locale) }, locale) : durationText(end - start, locale);
+      const start = run.createdAtMs ?? null, open = OPEN.includes(run.state);
+      if (open) return start === null ? t('monitor.duration.open', {}, locale) : t('monitor.duration.running', { duration: durationText(now - start, locale) }, locale);
+      const end = run.finishedAtMs ?? null;
+      if (start === null || end === null) return t('monitor.time.unknown', {}, locale);
+      return `${evaluatedEnd(run) ? `${marks.approx} ` : ''}${durationText(end - start, locale)}`;
     },
+    deliveryText: (run: MonitorRun) => run.delivery ? `${deliveryLabel(run.delivery.state, locale)}${run.delivery.commit ? ` ${run.delivery.commit.slice(0, 7)}` : ''}` : '—',
     serviceText: (install: MonitorInstall) => !install.service ? t('monitor.service.none', {}, locale)
       : install.service.state === 'running' ? t('monitor.service.running', { pid: install.service.processId ?? '—' }, locale)
         : install.service.state === 'stopped' ? t('monitor.service.stopped', {}, locale) : t('monitor.service.unknown', {}, locale),
@@ -95,14 +117,18 @@ const modelOf = (w: Words, install: MonitorInstall, worker: WorkerObservation) =
   worker.model?.requested.modelId ?? w.attemptOf(install, worker)?.attempt.model ?? worker.files?.usage?.model ?? null;
 
 /** One attempt as a timeline: start/end/duration/exit/model, the first failing line, then the last worker-reported events. */
-function attemptLines(w: Words, attempt: MonitorAttempt, failed: boolean): MonitorLine[] {
+function attemptLines(w: Words, attempt: MonitorAttempt, failed: boolean, live: boolean): MonitorLine[] {
   const { locale, now } = w;
-  const duration = attempt.startedAtMs === null ? '—' : durationText((attempt.endedAtMs ?? now) - attempt.startedAtMs, locale);
+  // A live attempt runs to the observation time; an ended one needs its proven end, else the duration is unknown (never guessed).
+  const end = attempt.endedAtMs ?? (live ? now : null);
+  const duration = attempt.startedAtMs === null || end === null ? t('monitor.time.unknown', {}, locale)
+    : `${endedFromEvaluation(attempt) ? `${w.marks.approx} ` : ''}${durationText(end - attempt.startedAtMs, locale)}`;
   return [
     [span(`    ${t('monitor.detail.attempt', { attempt: short(attempt.attemptId, 8), generation: attempt.generation, launch: attempt.launch ?? '—',
-      started: timeText(attempt.startedAtMs), ended: attempt.endedAtMs === null ? t('monitor.detail.stillRunning', {}, locale) : timeText(attempt.endedAtMs),
-      duration, exit: attempt.exitCode ?? '—', model: attempt.model ?? '—', provider: attempt.provider ?? '—' }, locale)}`, 'muted')],
-    ...(attempt.endedAtMs === null ? [[span(`    ${t('monitor.detail.live', { phase: workerPhaseLabel(attempt.workerPhase, locale),
+      started: timeText(attempt.startedAtMs), ended: attempt.endedAtMs !== null ? timeText(attempt.endedAtMs) : live ? t('monitor.detail.stillRunning', {}, locale)
+        : t('monitor.time.unknown', {}, locale), duration, exit: attempt.exitCode ?? '—', model: attempt.model ?? '—', provider: attempt.provider ?? '—' }, locale)}`, 'muted')],
+    ...describeDiagnostics(attempt.diagnostics ?? [], locale).map(entry => [span(`    ${entry.note ? entry.text : `${w.marks.warn} ${entry.text}`}`, entry.note ? 'muted' : 'warning')]),
+    ...(attempt.endedAtMs === null && live ? [[span(`    ${t('monitor.detail.live', { phase: workerPhaseLabel(attempt.workerPhase, locale),
       heartbeat: attempt.heartbeatAgeMs === null ? '—' : durationText(attempt.heartbeatAgeMs, locale) }, locale)}`, 'muted')]] : []),
     ...(attempt.firstFailure ? [[span(`    ${t('monitor.detail.firstFailure', { line: attempt.firstFailure }, locale)}`, 'error')]]
       : failed ? [[span(`    ${t('monitor.detail.firstFailureMissing', {}, locale)}`, 'warning')]] : []),
@@ -124,12 +150,13 @@ function runDetail(w: Words, install: MonitorInstall, run: MonitorRun) {
     ...run.tasks.flatMap(task => [
       [span(t('monitor.detail.task', { task: task.taskId, kind: task.kind, phase: taskPhaseLabel(task.phase, locale), attempts: task.attempts,
         profile: task.profile ? `${task.profile.id}@${task.profile.version}` : '—' }, locale), taskFailed(task) ? 'error' : task.phase === 'accepted' ? 'success' : undefined)],
-      ...(task.lastAttempt ? attemptLines(w, task.lastAttempt, taskFailed(task)) : []),
+      ...(task.lastAttempt ? attemptLines(w, task.lastAttempt, taskFailed(task), task.phase === 'active') : []),
       [span(`    ${t('monitor.detail.evaluation', { verdict: verdictLabel(task.evaluation.verdict, locale),
         when: task.evaluation.observedAtMs === null ? '' : agoText(now, task.evaluation.observedAtMs, locale) }, locale).trimEnd()}`, 'muted')],
       ...(task.dependencies.length ? [[span(`    ${t('monitor.detail.dependencies', { list: task.dependencies.join(', ') }, locale)}`, 'muted')]] : []),
     ]),
-    [span(t('monitor.detail.deliveryUnknown', {}, locale), 'muted')],
+    run.delivery === undefined ? [span(t('monitor.detail.deliveryUnknown', {}, locale), 'muted')] : run.delivery === null ? [span(t('monitor.detail.deliveryNone', {}, locale), 'muted')]
+      : [span(t('monitor.detail.delivery', { state: deliveryLabel(run.delivery.state, locale), commit: run.delivery.commit ?? '—' }, locale), DELIVERY_ROLE[run.delivery.state])],
   ];
 }
 
@@ -152,11 +179,13 @@ function runsBlock(w: Words, runs: readonly Entry<MonitorRun>[]): MonitorBlock {
     w.col(t('monitor.col.run', {}, locale), 0, 20, 44, { sortKey: 'name' }), w.col(t('monitor.col.state', {}, locale), 1, 14, 16, { sortKey: 'state' }),
     w.col(t('monitor.col.blocker', {}, locale), 2, 22, 48), w.col(t('monitor.col.since', {}, locale), 4, 12, 16),
     w.col(t('monitor.col.duration', {}, locale), 3, 12, 16, { sortKey: 'age' }), w.col(t('monitor.col.tasks', {}, locale), 5, 12, 16),
+    w.col(t('monitor.col.delivery', {}, locale), 3, 15, 24),
     w.col(t('monitor.col.scope', {}, locale), 6, 8, 24), ...w.installColumn(7), w.col(t('monitor.col.activity', {}, locale), 8, 14, 20)],
   rows: ordered.map(({ install, value: run }) => runRow(w, install, run, [
     span(run.runId), w.stateCell(run.state), run.blocker ? span(w.blockerText(run.blocker), blockerRole(run.blocker)) : span('—', 'muted'),
     span(run.blocker ? w.age(run.blocker.sinceMs) : '—'), span(OPEN.includes(run.state) ? t('monitor.duration.open', {}, locale) : w.runDuration(run),
-      OPEN.includes(run.state) ? 'info' : undefined), span(w.progress(run)), span(run.scopeId, 'muted'), ...w.installCell(install),
+      OPEN.includes(run.state) ? 'info' : undefined), span(w.progress(run)),
+    run.delivery ? span(w.deliveryText(run), DELIVERY_ROLE[run.delivery.state]) : span('—', 'muted'), span(run.scopeId, 'muted'), ...w.installCell(install),
     span(agoText(now, run.lastActivityMs, locale), 'muted')])) };
 }
 
@@ -169,7 +198,7 @@ function workerDetail(w: Words, install: MonitorInstall, worker: WorkerObservati
         provider: worker.provider, install: install.id }, locale), 'strong')],
       [span(t('monitor.detail.now', { phase: workerPhaseLabel(activity?.phase ?? own?.attempt.workerPhase, locale), target: [activity?.target, activity?.detail].filter(Boolean).join(' — ') || '—' }, locale))],
       [span(t('monitor.detail.heartbeat', { heartbeat: w.heartbeat(worker).text, process: w.processText(worker), pid: worker.files?.pid ?? '—', handle: worker.handle ?? '—' }, locale))],
-      ...(own ? attemptLines(w, own.attempt, taskFailed(own.task)) : []),
+      ...(own ? attemptLines(w, own.attempt, taskFailed(own.task), own.task.phase === 'active' && !worker.terminal) : []),
       ...(usage ? [[span(t('monitor.detail.usage', { turns: usage.turns ?? '—', input: usage.tokens.input, output: usage.tokens.output,
         cost: usage.costUsd === null ? '—' : usage.costUsd.toFixed(4), tools: usage.toolErrors }, locale))]] : []),
       ...(worker.model ? [[span(renderWorkerModelLine(worker.model, locale))]] : []),
@@ -205,7 +234,7 @@ function approvalsBlock(w: Words, entries: readonly Entry<MonitorApproval>[], co
   const { locale, now } = w;
   const detail = (install: MonitorInstall, approval: MonitorApproval) => (): readonly MonitorLine[] => [
     [span(t('monitor.detail.approval', { id: approval.approvalId, scope: approval.scopeId, kind: approval.subjectKind, install: install.id }, locale), 'strong')],
-    [span(approval.summary)],
+    [approval.summary ? span(approval.summary) : span(t('monitor.approval.summaryHidden', {}, locale), 'muted')],
     [span(t('monitor.detail.assurance', { assurance: approval.requiredAssurance ?? '—' }, locale))],
     [span(t('monitor.detail.waiting', { since: agoText(now, approval.createdAtMs, locale), expires: expiryText(now, approval.expiresAtMs, locale) }, locale), 'muted')],
     [span(t('monitor.detail.approvalHint', { id: approval.approvalId }, locale), 'muted')],
@@ -217,7 +246,7 @@ function approvalsBlock(w: Words, entries: readonly Entry<MonitorApproval>[], co
   rows: entries.map(({ install, value: approval }): MonitorRow => ({ key: `${install.id}:${approval.approvalId}`, detail: detail(install, approval),
     facets: { state: `awaiting-approval ${approval.subjectKind}`.toLowerCase(), install: install.id.toLowerCase() },
     sort: { age: approval.createdAtMs, name: approval.approvalId }, signature: `${approval.expiresAtMs ?? ''}`, cells: [
-    span(`${approval.subjectKind}: ${approval.summary}`), span(w.age(approval.createdAtMs), 'warning'),
+    span(`${approval.subjectKind}: ${approval.summary || t('monitor.approval.summaryHidden', {}, locale)}`), span(w.age(approval.createdAtMs), 'warning'),
     span(expiryText(now, approval.expiresAtMs, locale), approval.expiresAtMs !== null && approval.expiresAtMs < now ? 'error' : 'muted'),
     ...(compact ? [] : [span(approval.requiredAssurance ?? '—', 'muted'), span(approval.scopeId, 'muted')]), ...w.installCell(install)] })) };
 }
