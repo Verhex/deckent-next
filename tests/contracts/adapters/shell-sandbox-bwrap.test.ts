@@ -3,7 +3,8 @@ import { createHash } from 'node:crypto';
 import { deflateSync } from 'node:zlib';
 import { existsSync } from 'node:fs';
 import { chmod, link, mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from 'node:fs/promises';
-import { createServer, type Server } from 'node:net';
+import type { Server } from 'node:net';
+import { listenTcpFixture } from '../support/tcp-fixture-server.js';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -317,9 +318,8 @@ describe.skipIf(!sandboxReady)('bubblewrap realm with the real bwrap and a real 
   });
   it('has no network: a port the host reaches is unreachable from the sandbox', async () => {
     const f = await fixture();
-    const server = createServer(socket => socket.end('hello')); servers.push(server);
-    await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
-    const port = (server.address() as { port: number }).port;
+    // The host probe exits while the server still has unread/unsent data and resets the connection: that must not be an uncaught exception.
+    const { server, port } = await listenTcpFixture(socket => socket.end('hello')); servers.push(server);
     const host = await hostShellRealm.run({ command: `exec 3<>/dev/tcp/127.0.0.1/${port} && echo host-connected`, cwd: f.project, environment: f.environment });
     expect(host.output).toContain('host-connected');
     const result = await f.run(`exec 3<>/dev/tcp/127.0.0.1/${port} && echo sandbox-connected; echo "net=$?"; cat /proc/net/dev | tail -n +3 | awk '{print $1}'`);

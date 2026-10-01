@@ -137,7 +137,9 @@ export function createOpenAiChatStream(request: OpenAiChatTextRequest, limits: O
       }
       // The first invalid chunk ends the read at once with its own reason: nothing after it is presented or parsed, and the
       // provider stops generating when the connection closes (no draining; usage is not trusted past an invalid chunk).
-      return Object.freeze(invalid ? { deltas: [], limit, rejected: invalid } : { deltas: out, limit });
+      // Deltas of chunks that were valid and precede it in this same read are still presented, exactly as when the transport
+      // delivers them in separate reads: what the observer sees must not depend on TCP segmentation (Node 26 coalesces reads).
+      return Object.freeze({ deltas: out, limit, ...(invalid ? { rejected: invalid } : {}) });
     },
     finish(): NativeJsonHttpParsed {
       if (invalid) return { reason: invalid };

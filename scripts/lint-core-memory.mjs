@@ -15,7 +15,8 @@ import { fileURLToPath } from 'node:url';
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const DIR = join(ROOT, '.deckent/docs/core-memory');
 const MANIFEST = join(ROOT, 'scripts/core-memory.sha256');
-const digest = buffer => createHash('sha256').update(buffer).digest('hex');
+// Text identity, not checkout identity: a Windows checkout converts LF to CRLF, so the hash is taken over LF-normalised text.
+const digest = buffer => createHash('sha256').update(buffer.toString('utf8').replace(/\r\n/gu, '\n')).digest('hex');
 const failures = [];
 const fail = (scope, detail) => failures.push(`core-memory/${scope}: ${detail}`);
 

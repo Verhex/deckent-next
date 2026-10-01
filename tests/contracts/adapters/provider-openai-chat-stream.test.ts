@@ -5,7 +5,7 @@ import { createServer as createHttpsServer, type Server as HttpsServer } from 'n
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, expect, it } from 'vitest';
-import { createOpenAiChatNativePort, OPENAI_CHAT_STREAM_TOKEN_WIRE_BYTES, OPENAI_CHAT_STREAM_WIRE_FACTOR } from '#adapters/core/provider-openai-chat/index.js';
+import { createOpenAiChatNativePort, createOpenAiChatStream, OPENAI_CHAT_STREAM_TOKEN_WIRE_BYTES, OPENAI_CHAT_STREAM_WIRE_FACTOR } from '#adapters/core/provider-openai-chat/index.js';
 import type { ModelInvocationDelta } from '#domain/index.js';
 import { createLocalTls } from '../../fixtures/local-tls.js';
 
@@ -222,6 +222,12 @@ it('closes the provider connection at the first invalid chunk instead of drainin
   expect(deltas).toEqual([{ kind: 'text', text: 'ok' }]);
   await new Promise(resolve => setTimeout(resolve, 50));
   expect(providerClosed).toBe(true); expect(written).toBeLessThan(20);
+});
+
+it('presents the valid text that precedes the first invalid chunk even when both arrive in one read (no dependence on TCP segmentation)', () => {
+  const stream = createOpenAiChatStream(streamed(), limits);
+  const pushed = stream.push(Buffer.from(chunk({ content: 'ok' }) + chunk({ tool_calls: [{ index: 0, id: 't', type: 'function', function: { name: 'x', arguments: '' } }] })));
+  expect(pushed).toMatchObject({ rejected: 'invalid-response', deltas: [{ kind: 'text', text: 'ok' }] });
 });
 
 it('claims a stream\'s rejection cause only with complete evidence: within the cap it is kept, past the cap it is the limit', async () => {
