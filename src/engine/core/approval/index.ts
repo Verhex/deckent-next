@@ -15,4 +15,4 @@ export type { StandingCellName } from './internal/standing.js';
 export { HARD_FLOOR_APPROVAL_CELLS, agentToolApprovalFacts, approvalAssuranceRegistry, createTurnDecisionCapabilities, minimumApprovalAssurance, operationApprovalFacts,
   registerApprovalChannel, registeredApprovalChannels, requiredApprovalAssurance, undeclaredAgentToolApprovalFacts } from './internal/assurance.js';
 export type { ApprovalAssuranceOptions } from './internal/application.js';
-export type { TurnDecisionCapabilities } from './internal/assurance.js';
+export type { AgentToolApprovalFacts, TurnDecisionCapabilities } from './internal/assurance.js';

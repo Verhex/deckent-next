@@ -15,6 +15,7 @@ import { expandMcpEntry, mcpRegistryPaths, mcpServerEntrySchema, MCP_SERVER_NAME
   type McpRegistryProblem, type McpScope, type McpServerEntry } from './registry.js';
 import { findMcpTrust, MCP_TRUST_FILE, readMcpTrust, type McpTrustRecord } from './trust.js';
 import { modelTextPrefix } from '#domain/index.js';
+import type { AgentToolApprovalFacts } from '#engine/index.js';
 
 /** What the registry needs from its host: the project, its layout (trust lives in the data root), the environment and secret resolver of the
  * launch, and the company policy (none in Core yet). */
@@ -266,7 +267,8 @@ export async function openTurnMcp(input: { readonly registry: McpRegistryContext
   readonly principal: { readonly id: string; readonly issuer: string; readonly subject: string }; readonly sqlite: Parameters<typeof mcpTrustAuditWriter>[0]['sqlite'];
   readonly keyFile: string; readonly requestTtlMs: number; readonly inputMaxBytes: number; readonly resultMaxBytes: number; readonly scopeId: string; readonly turnId: string;
   readonly signal: AbortSignal; readonly emit: Parameters<typeof mcpTrustApprovalAsker>[0]['emit']; readonly ledgerPath: () => Promise<string>;
-  readonly policyRevision: () => Promise<string>; readonly now?: () => number;
+  /** One request-time policy snapshot (B1, Sol 2237 R2b): its revision and the trust cards' facts (Core minimum raised by the snapshot's rules). */
+  readonly requestPolicy: () => Promise<{ readonly revision: string; readonly trustFacts: AgentToolApprovalFacts }>; readonly now?: () => number;
   /** Renders a notice in the service's locale (the adapter never renders owner text itself). */
   readonly describeNotice: McpStartNoticeRenderer }): Promise<{ readonly settings: McpClientSettings | null; readonly offered: ReadonlyMap<string, McpOfferedTool>;
   readonly notices: readonly string[] }> {
@@ -284,11 +286,11 @@ export async function openTurnMcp(input: { readonly registry: McpRegistryContext
   pool.retain(trustedIds(view));
   const undecided = view.servers.filter(server => server.status === 'pending-approval' || server.status === 'changed');
   if (undecided.length) {
-    const policyRevision = await input.policyRevision(), layout = registry.layout;
+    const { revision: policyRevision, trustFacts } = await input.requestPolicy(), layout = registry.layout;
     const trust = mcpTrustContext({ ...registry, sandboxes: input.sandboxes, principal, inputMaxBytes: input.inputMaxBytes,
       audit: mcpTrustAuditWriter({ layout, sqlite: input.sqlite, keyFile: input.keyFile, scopeId, principal, policyRevision }) }, input.cwd);
     const ask = mcpTrustApprovalAsker({ ledgerPath: input.ledgerPath, sqlite: input.sqlite, integrity: () => openLocalIntegrityAuthority(layout, input.keyFile, true),
-      clock: new SystemTrustedClock(), scopeId, turnId: input.turnId, requester: { id: principal.id, issuer: principal.issuer, subject: principal.subject }, policyRevision,
+      clock: new SystemTrustedClock(), scopeId, turnId: input.turnId, requester: { id: principal.id, issuer: principal.issuer, subject: principal.subject }, policyRevision, facts: trustFacts,
       ttlMs: input.requestTtlMs, signal: input.signal, emit: input.emit });
     for (const server of undecided) {
       const known = findMcpStartFailure(failures, server);
