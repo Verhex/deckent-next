@@ -3,6 +3,9 @@
 Bu belge yalnız güncel durumu tutar; önceki sürümü Git geçmişinde, kanıtlar `deckent-refactor-work/proof/`.
 
 ## Durum
+- **20. parti push edildi (2026-10-01):** Sol 2212 PASS exact `c10411a9` (K5-R1 kapandı: tek okuma snapshot'ı) → `origin/main` = `c10411a9`.
+  Açık: `runtime-secret-write` kararsızlığı (ilk koşu 1 hata INSTALLATION_JOURNAL_INVALID, aynı SHA ikinci koşu temiz; kök neden yok), v44 canlı geçişi owner onayı bekliyor.
+  **Yirmi birinci parti (yalnız belge):** D1–D10 owner kararları + 7 kart + Sol 2212 DOC-N1 (yüzey envanteri: TUI kısmi).
 - **OWNER-DECISIONS-DOCS (2026-10-01; `lane/owner-decisions-docs`, taban `c10411a9`, yalnız belge):** owner kararları D1–D10 (`proof/OWNER-DECISIONS-2026-10-01/README.md`)
   PLAN/ARCHITECTURE'a tarihli kabul edilmiş karar olarak işlendi (karar günlüğü satırı, K1 değişikliği, W0-9 hedefinin kalkması, K6 O1/O2 kapanışı); yeni kartlar EXEC-RELEASE (yüksek),
   LEGACY-CODES-RETIRE, HOST-RULES-CLEANUP, AUDIT-CHECKPOINT, REASONING-RETENTION, CATALOG-SEED, K6-HINT — hiçbiri uygulanmadı. Konum listesi `docs-applied.md`. **Sıradaki:** lead incelemesi → partiye alma.
