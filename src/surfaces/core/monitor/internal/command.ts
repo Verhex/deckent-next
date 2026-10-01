@@ -13,14 +13,17 @@ import { filterSnapshot, type MonitorFilters } from './view.js';
 export type MonitorHandler = (root: string, options: ConfigLoadOptions) => Promise<MonitorSnapshot>;
 interface Parsed { once: boolean; json: boolean; help: boolean; noColor: boolean; install?: string; scope?: string; language?: string }
 const DEFAULT_TEXT_WIDTH = 120;
+const FLAGS = { '--help': 'help', '--once': 'once', '--json': 'json', '--no-color': 'noColor' } as const;
+const VALUES = { '--install': 'install', '--scope': 'scope', '--lang': 'language' } as const;
 
 function parse(argv: readonly string[], start: number): Parsed {
   const parsed: Parsed = { once: false, json: false, help: false, noColor: false };
   for (let index = start; index < argv.length; index++) {
     const arg = argv[index] === '-h' ? '--help' : argv[index]!;
-    const flag = ({ '--help': 'help', '--once': 'once', '--json': 'json', '--no-color': 'noColor' } as const)[arg as '--help'];
+    // Own keys only: `toString` and friends are not flags.
+    const flag = Object.hasOwn(FLAGS, arg) ? FLAGS[arg as keyof typeof FLAGS] : undefined;
     if (flag) { if (parsed[flag]) throw ErrorRegistry.createError('CLI_USAGE'); parsed[flag] = true; continue; }
-    const field = ({ '--install': 'install', '--scope': 'scope', '--lang': 'language' } as const)[arg as '--install'];
+    const field = Object.hasOwn(VALUES, arg) ? VALUES[arg as keyof typeof VALUES] : undefined;
     const value = argv[++index];
     if (!field || !value || value.startsWith('-') || parsed[field] !== undefined) throw ErrorRegistry.createError('CLI_USAGE');
     parsed[field] = value;

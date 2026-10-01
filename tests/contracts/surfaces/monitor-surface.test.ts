@@ -110,6 +110,8 @@ describe('deckent monitor command', () => {
     expect(turkish.err).toContain('izleme veri kaynağı bağlı değil');
     expect((await cli(['monitor', '--watch'], { async inspectMonitor() { return fullSnapshot; } }, root)).code).toBe(2);
     expect((await cli(['monitor', '--scope'], { async inspectMonitor() { return fullSnapshot; } }, root)).code).toBe(2);
+    expect((await cli(['monitor', 'toString'], { async inspectMonitor() { return fullSnapshot; } }, root)).code).toBe(2);
+    expect((await cli(['monitor', '--help', '--once'], {}, root)).code).toBe(2);
     const help = await cli(['monitor', '--help', '--lang', 'tr'], {}, root);
     expect(help.code).toBe(0); expect(help.out).toContain('--once'); expect(help.out).toContain('Yalnız gözlem');
     expect((await cli(['--help'], {}, root)).out).toContain('monitor [--once|--json]');
