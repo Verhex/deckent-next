@@ -45,8 +45,7 @@ export async function poolCommand(argv: readonly string[], context: CommandConte
     emit(await context.inspectPoolHold(root, { schemaVersion: 1, scopeId, ...(pool ? { poolId: pool } : {}) }, { env }), { ...sinks, render: view => renderView(view, locale) });
     return;
   }
-  if (!context.applyPoolHold) throw ErrorRegistry.createError('INVENTORY_UNAVAILABLE');
-  const reason = values.get('--reason');
+  if (!context.applyPoolHold) throw ErrorRegistry.createError('INVENTORY_UNAVAILABLE'); const reason = values.get('--reason');
   emit(await context.applyPoolHold(root, { schemaVersion: 1, scopeId, commandId: values.get('--command-id') ?? randomUUID(), action,
     ...(pool ? { poolId: pool } : {}), ...(reason ? { reason } : {}) }, { env }), { ...sinks, render: receipt => renderReceipt(receipt, locale) });
 }
