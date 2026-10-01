@@ -32,6 +32,22 @@ function object(bytes: Buffer): Record<string, unknown> | null {
   try { const value: unknown = JSON.parse(bytes.toString('utf8')); return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : null; }
   catch { return null; }
 }
+/** Validated `{ receivedAt, event }` lines of a (tail of a) live `worker.events` projection; a partial first line is skipped by validation. */
+function eventLines(bytes: Buffer) {
+  return bytes.toString('utf8').split('\n').flatMap(line => {
+    const value = object(Buffer.from(line)); const parsed = value ? workerEventSchema.safeParse(value.event) : null;
+    if (!parsed?.success) return [];
+    return [{ receivedAt: typeof value?.receivedAt === 'number' && Number.isSafeInteger(value.receivedAt) ? value.receivedAt : null, event: parsed.data }];
+  });
+}
+/** MONITOR v1.1: the validated tail (`maxBytes`) of one attempt's live `worker.events` under the same directory and file guards; untrusted
+ * worker-reported events with the host's `receivedAt`. */
+export async function readWorkerEventTail(directory: string, stem: string, maxBytes: number) {
+  await observationDirectory(directory);
+  if (!/^[a-zA-Z0-9_.:-]+$/.test(stem) || stem === '.' || stem === '..') throw new WorkerObservationError('WORKER_OBSERVATION_INVALID');
+  const root = await open(directory, constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW);
+  try { return eventLines((await readObservationFile(join(`/proc/self/fd/${root.fd}`, stem + '.events'), maxBytes, true)).bytes); } finally { await root.close(); }
+}
 export async function readWorkerSidecars(directory: string, stem: string, limits: ObservationLimits, now = new SystemTrustedClock().sample().wallMs, identity?: AttemptIdentity): Promise<WorkerSidecars> {
   await observationDirectory(directory);
   if (!/^[a-zA-Z0-9_.:-]+$/.test(stem) || stem === '.' || stem === '..') throw new WorkerObservationError('WORKER_OBSERVATION_INVALID');
@@ -46,12 +62,7 @@ export async function readWorkerSidecars(directory: string, stem: string, limits
   const [hb, log, result, eventFile] = captured;
   // Tail only: a partial first line is skipped by validation; events are re-validated against the current schema.
   let lastReceivedAt: number | null = null;
-  const workerEvents = eventFile.bytes.toString('utf8').split('\n').flatMap((line): WorkerEvent[] => {
-    const value = object(Buffer.from(line)); const parsed = value ? workerEventSchema.safeParse(value.event) : null;
-    if (!parsed?.success) return [];
-    if (typeof value?.receivedAt === 'number' && Number.isSafeInteger(value.receivedAt)) lastReceivedAt = value.receivedAt;
-    return [parsed.data];
-  });
+  const workerEvents = eventLines(eventFile.bytes).map((line): WorkerEvent => { if (line.receivedAt !== null) lastReceivedAt = line.receivedAt; return line.event; });
   let heartbeat = object(hb.bytes); let outcome = object(result.bytes);
   const bound = (value: Record<string, unknown> | null) => {
     const parsed = attemptIdentitySchema.safeParse(value?.identity);

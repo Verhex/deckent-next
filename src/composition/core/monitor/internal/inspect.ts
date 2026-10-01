@@ -1,6 +1,6 @@
 import { resolve } from 'node:path';
-import { loadConfig, inspectProductFile, SystemTrustedClock, type ConfigLoadOptions } from '#platform/index.js';
-import { readMonitorLedger, registerProviderConfig } from '#adapters/index.js';
+import { loadConfig, SystemTrustedClock, type ConfigLoadOptions } from '#platform/index.js';
+import { readMonitorInstall, registerProviderConfig } from '#adapters/index.js';
 import { MonitorApplication, type MonitorSnapshot, type WorkerObservation, type WorkerObservationSource } from '#engine/index.js';
 import { inspectConfiguredWorkers } from '#composition/core/worker-observation/index.js';
 import { createConfiguredRuntimeClient } from '#composition/core/runtime-service/index.js';
@@ -15,11 +15,7 @@ export async function inspectMonitor(root: string, options: ConfigLoadOptions = 
     .map(source => ({ id: source.id, path: resolve(source.path) }))].filter((target, index, all) => all.findIndex(other => other.path === target.path) === index);
   return new MonitorApplication({ now: () => new SystemTrustedClock().sample().wallMs,
     describeService: target => createConfiguredRuntimeClient(target.path, options).describeService(undefined, 'current'),
-    async readLedger(target) {
-      const own = await loadConfig(target.path, { ...options, heal: false });
-      return readMonitorLedger(await inspectProductFile(own.productLayout, 'ledger', ['-wal', '-shm', '-journal']),
-        { busyTimeoutMs: own.storage.sqlite.busyTimeoutMs, maxRuns: own.inspection.maxPageSize });
-    },
+    readLedger: async target => readMonitorInstall(await loadConfig(target.path, { ...options, heal: false }), options.env),
     async observeScope(target, scopeId) {
       const workers: WorkerObservation[] = []; let page: WorkerObservationSource | undefined; let after: string | null = null;
       try {

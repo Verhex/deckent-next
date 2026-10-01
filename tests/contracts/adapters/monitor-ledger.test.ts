@@ -85,7 +85,7 @@ describe.skipIf(process.platform === 'win32')('monitor ledger reader', () => {
     const bounded = await read(f.path, 1);
     expect((await files(f.path))[0]).toEqual(closed[0]); expect((await files(f.path))[1]).toMatchObject({ suffix: '-wal' });
     expect((await stat(f.path + '-wal').then(info => info.size, () => 0))).toBe(0);
-    expect(bounded.runs).toHaveLength(1); expect(bounded.diagnostics).toContain('runs-truncated:3');
+    expect(bounded.runs).toHaveLength(1); expect(bounded.diagnostics).toContain('info:runs-truncated:3');
     expect(bounded.runs[0]!.snapshot.progress.some(task => task.phase !== 'accepted')).toBe(true);
     const all = await read(f.path);
     expect(all.runs.map(run => run.snapshot.identity.runId).sort()).toEqual(['r1', 'r3']); expect(all.diagnostics).toEqual(['run-corrupt:s2/r2', 'pool-occupancy-corrupt:p']);
@@ -94,12 +94,31 @@ describe.skipIf(process.platform === 'win32')('monitor ledger reader', () => {
     const f = await fixture(); f.store.close();
     const writer = new DatabaseSync(f.path); writer.exec(DOWNGRADE_TO_PREVIOUS_LEDGER_SQL); writer.close();
     const older = await read(f.path);
-    expect(older.ledgerVersion).toBe(CURRENT_LEDGER_VERSION - 1); expect(older.diagnostics).toEqual([`ledger-version-older:${CURRENT_LEDGER_VERSION - 1}`]);
+    expect(older.ledgerVersion).toBe(CURRENT_LEDGER_VERSION - 1); expect(older.diagnostics).toEqual([`info:ledger-version-older:${CURRENT_LEDGER_VERSION - 1}`]);
     expect(older.pools[0]!.hold).toBeNull(); expect(older.runs).toHaveLength(3);
     const newer = new DatabaseSync(f.path); newer.exec(`PRAGMA user_version=${CURRENT_LEDGER_VERSION + 1}`); newer.close();
     expect(await read(f.path)).toMatchObject({ ledgerVersion: CURRENT_LEDGER_VERSION + 1, runs: [], diagnostics: [`ledger-version-unsupported:${CURRENT_LEDGER_VERSION + 1}`] });
     const missing = join(f.root, 'absent.db');
     await expect(read(missing)).rejects.toBeTruthy(); await expect(stat(missing)).rejects.toMatchObject({ code: 'ENOENT' });
     await expect(readMonitorLedger(f.path, { busyTimeoutMs: 100, maxRuns: 0 })).rejects.toMatchObject({ code: 'ATTEMPT_STORE_OPTIONS' });
+  });
+  it('v1.1: furthest proven delivery step per Run, evaluation model record and profile provider, model catalog (ledger records only)', async () => {
+    const f = await fixture(); f.store.close();
+    const writer = new DatabaseSync(f.path); const c1 = 'a'.repeat(40), c2 = 'b'.repeat(40);
+    const intent = (runId: string, extra: object) => JSON.stringify({ schemaVersion: 1, command: { identity: { runId } }, ...extra });
+    writer.prepare('INSERT INTO workspace_integrations(scope_id,command_id,intent,manifest) VALUES(?,?,?,?)').run('s', 'i1', intent('r1', {}), '{}');
+    writer.prepare('INSERT INTO workspace_integrations(scope_id,command_id,intent,manifest) VALUES(?,?,?,?)').run('s', 'i3', intent('r3', {}), null);
+    writer.prepare('INSERT INTO workspace_deliveries(scope_id,command_id,intent,delivered) VALUES(?,?,?,?)').run('s', 'd1', intent('r1', { plan: { commit: c1 } }), 1);
+    writer.prepare('INSERT INTO workspace_adoptions(scope_id,command_id,target_ref,sequence,kind,intent,settled) VALUES(?,?,?,?,?,?,?)').run('s', 'a1', 'refs/heads/x', 1, 'adopt', intent('r1', { toCommit: c2 }), 0);
+    writer.prepare('INSERT INTO run_receipts(scope_id,command_id,command,snapshot) VALUES(?,?,?,?)').run('s', 'eval-model', JSON.stringify({ action: 'apply-task-evaluation',
+      evaluation: { identity: { attemptId: 'r3-x' }, model: { provider: 'claude', requested: { channelId: 'ch', modelId: 'm-1', auxiliaryModelIds: [] }, init: 'm-1', usage: ['m-1'],
+        verdict: 'verified', unexpected: [], evidence: 'sealed' } } }), '{}');
+    writer.close();
+    const reading = await read(f.path); const runs = Object.fromEntries(reading.runs.map(run => [run.snapshot.identity.runId, run]));
+    expect(runs.r1!.delivery).toEqual({ state: 'adopting', commit: c2 });
+    expect(runs.r3!.delivery).toEqual({ state: 'integrating', commit: null }); expect(runs.r2!.delivery).toBeNull();
+    expect(runs.r3!.attempts[0]).toMatchObject({ provider: 'claude', model: { usage: ['m-1'], verdict: 'verified', evidence: 'sealed' } });
+    expect(runs.r1!.attempts[0]).toMatchObject({ provider: 'test-supervisor', model: null });
+    expect(reading.map).toMatchObject({ models: [] });
   });
 });

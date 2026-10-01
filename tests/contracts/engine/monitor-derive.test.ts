@@ -163,7 +163,7 @@ describe('monitor run blocker and state derivation (pure)', () => {
 });
 
 describe('monitor application over ports', () => {
-  const reading = (scopeIds: string[]) => ({ ledgerVersion: 44, scopeIds, diagnostics: ['ledger-version-older:43'], approvals: [{ ...approval('a'), scopeId: 's' }, { ...approval('a'), scopeId: 'hidden', approvalId: 'h' }],
+  const reading = (scopeIds: string[]) => ({ ledgerVersion: 44, scopeIds, diagnostics: ['info:ledger-version-older:43'], approvals: [{ ...approval('a'), scopeId: 's' }, { ...approval('a'), scopeId: 'hidden', approvalId: 'h' }],
     pools: [pool({ execution: 1, inFlight: 1, hold: { state: 'held' as const, changedAtMs: 400, changedBy: 'ops' } })],
     runs: [{ snapshot: snapshot([{ id: 'a', phase: 'active' }]), poolId: 'p', admitted: true, createdAtMs: 50, attempts: [attempt('a')] },
       { snapshot: { ...snapshot([{ id: 'a' }]), identity: { runId: 'r', scopeId: 'hidden', layoutRevision: 'l' } } as RunSnapshot, poolId: 'p', admitted: true, createdAtMs: 60, attempts: [] }] });
@@ -186,7 +186,7 @@ describe('monitor application over ports', () => {
     expect(current).toMatchObject({ status: 'available', scopeIds: ['s'], ledgerVersion: 44, service: { state: 'running', instanceId: 'i-1', processId: 42,
       build: { sourceCommit: 'd'.repeat(40), sourceTreeSha256: 'c'.repeat(64), builtAt: null } },
       approvals: [{ scopeId: 's', approvalId: 'ap-a', requiredAssurance: null, createdAtMs: 300 }], pools: [{ poolId: 'p', capacity: 2, inFlight: 1, held: true, heldBy: 'ops', executing: 1 }] });
-    expect(current!.diagnostics).toEqual(['ledger-version-older:43', 'scope-denied:hidden', 'workers-truncated:s']);
+    expect(current!.diagnostics).toEqual(['info:ledger-version-older:43', 'scope-denied:hidden', 'info:workers-truncated:s']);
     expect(current!.runs.map(run => run.scopeId)).toEqual(['s']);
     // The worker joins its own scope's attempt only (an equal attempt id in another scope never leaks in).
     expect(current!.runs[0]!.blocker).toMatchObject({ code: 'worker-running', detail: 'editing' });
@@ -214,6 +214,55 @@ describe('monitor application over ports', () => {
     expect(MONITOR_FINISHED_WORKERS).toBe(20); expect(kept).toHaveLength(21); expect(kept).toContain('t25'); expect(kept).not.toContain('zz');
     // Ranks: even i → 10_000 + i, odd i → 5_000 + i; the 20 most recent finished are all 13 even (t00..t24) and the 7 highest odd (t11..t23).
     expect(kept.filter(id => id !== 't25').sort()).toEqual([...ids.slice(0, 25).filter((_, i) => i % 2 === 0), 't11', 't13', 't15', 't17', 't19', 't21', 't23'].sort());
-    expect(install.diagnostics).toContain('workers-finished-capped:6');
+    expect(install.diagnostics).toContain('info:workers-finished-capped:6');
+  });
+});
+
+describe('monitor v1.1 projection and ordering', () => {
+  const pin = { channelId: 'claude-cli-subscription', modelId: 'claude-sonnet-5-5', auxiliaryModelIds: [] };
+  const view = (usage: string[] | null) => ({ provider: 'claude' as const, requested: pin, init: usage?.[0] ?? null, usage, verdict: usage ? 'verified' as const : 'unverified' as const,
+    unexpected: [], evidence: usage ? 'sealed' as const : 'none' as const });
+  const failedAttempt = (taskId: string, over: Partial<MonitorLedgerAttempt> = {}) => exited(taskId, { evaluationObserved: true, provider: 'docker', model: null,
+    firstFailure: '✗ [unit-budget] src/surfaces/core/cli — 2025 lines > unit budget 2000', recentEvents: [{ atMs: 7, kind: 'tool.call', summary: 'shell Bash npm test' }], ...over });
+  it('projects ledger provider/model, first failure, recent events, finish time and delivery', () => {
+    const run = snapshot([{ id: 'a', phase: 'accepted' }, { id: 'b', phase: 'failed' }]);
+    const projected = projectMonitorRun({ ...evidence(run, [exited('a', { evaluationObserved: true, provider: 'claude', model: view(['claude-sonnet-5-5']), sealedAtMs: 950 }),
+      failedAttempt('b', { sealedAtMs: 990 })]), run: { snapshot: run, poolId: 'p', admitted: true, createdAtMs: 50, attempts: [], delivery: { state: 'adopted', commit: 'c'.repeat(40) } } });
+    expect(projected).toMatchObject({ state: 'failed', finishedAtMs: null, delivery: { state: 'adopted', commit: 'c'.repeat(40) } });
+    const withAttempts = projectMonitorRun(evidence(run, [exited('a', { evaluationObserved: true, provider: 'claude', model: view(['claude-sonnet-5-5']), sealedAtMs: 950 }),
+      failedAttempt('b', { sealedAtMs: 990 })]));
+    expect(withAttempts.finishedAtMs).toBe(990); expect(withAttempts.delivery).toBeNull();
+    const [a, b] = withAttempts.tasks;
+    expect(a!.lastAttempt).toMatchObject({ provider: 'claude', model: 'claude-sonnet-5-5', firstFailure: null });
+    expect(b!.lastAttempt).toMatchObject({ provider: 'docker', model: null, firstFailure: '✗ [unit-budget] src/surfaces/core/cli — 2025 lines > unit budget 2000',
+      recentEvents: [{ atMs: 7, kind: 'tool.call', summary: 'shell Bash npm test' }] });
+    // A requested pin without usage still names the model; an attempt without a sealed end leaves the finish unproven.
+    expect(projectMonitorRun(evidence(run, [exited('a', { model: view(null) }), failedAttempt('b', { sealedAtMs: null })])).tasks[0]!.lastAttempt!.model).toBe('claude-sonnet-5-5');
+    // The model actually used (sealed usage) wins over the requested pin.
+    expect(projectMonitorRun(evidence(run, [exited('a', { model: view(['claude-opus-5-5']) }), failedAttempt('b')])).tasks[0]!.lastAttempt!.model).toBe('claude-opus-5-5');
+    expect(projectMonitorRun(evidence(run, [exited('a'), failedAttempt('b', { sealedAtMs: null })])).finishedAtMs).toBeNull();
+    // A non-terminal Run has no finish time even when its attempts ended.
+    expect(projectMonitorRun(evidence(snapshot([{ id: 'a', phase: 'evaluating' }]), [exited('a')])).finishedAtMs).toBeNull();
+  });
+  it('enriches ledger-only workers with ledger provider/model and orders workers and runs newest first', async () => {
+    const older = { ...snapshot([{ id: 'a', phase: 'accepted' }]), identity: { runId: 'old', scopeId: 's', layoutRevision: 'l' } } as RunSnapshot;
+    const newer = { ...snapshot([{ id: 'a', phase: 'active' }]), identity: { runId: 'new', scopeId: 's', layoutRevision: 'l' } } as RunSnapshot;
+    const oldAttempt = { ...exited('a', { evaluationObserved: true, provider: 'claude', model: view(['claude-sonnet-5-5']), sealedAtMs: 900 }), attemptId: 'a-old' };
+    const newAttempt = { ...attempt('a'), attemptId: 'a-new', dispatch: { launch: 'granted' as const, grantedAtMs: 5_000, terminal: null, outputRecorded: false } };
+    const bind = (run: RunSnapshot, attemptId: string) => ({ ...run, bindings: run.bindings.length ? run.bindings.map(value => ({ ...value, identity: { ...value.identity, runId: run.identity.runId, attemptId } }))
+      : [{ identity: { ...identity('a'), runId: run.identity.runId, attemptId }, observedRevision: 3, observedKind: 'exited' as const }] }) as RunSnapshot;
+    const ledgerOnly = { ...worker('a', 'fresh'), identity: { ...identity('a'), runId: 'old', attemptId: 'a-old' }, provider: 'unknown', process: 'unknown' as const, files: null,
+      terminal: { handle: 'h', exitCode: 0, interrupted: false }, diagnostics: ['info:ledger-only'] };
+    const live = { ...worker('a', 'fresh'), identity: { ...identity('a'), runId: 'new', attemptId: 'a-new' } };
+    const app = new MonitorApplication({ now: () => NOW, describeService: async () => { throw failure('LOCAL_RUNTIME_UNAVAILABLE'); },
+      readLedger: async () => ({ ledgerVersion: 44, scopeIds: ['s'], diagnostics: [], approvals: [], pools: [], runs: [
+        { snapshot: bind(older, 'a-old'), poolId: null, admitted: true, createdAtMs: 1, attempts: [oldAttempt] },
+        { snapshot: bind(newer, 'a-new'), poolId: null, admitted: true, createdAtMs: 2, attempts: [newAttempt] }] }),
+      observeScope: async () => ({ access: 'admitted', workers: [ledgerOnly, live], workerStatus: 'available', truncated: false }) });
+    const install = (await app.inspect([{ id: 'current', path: '/c' }])).installs[0]!;
+    expect(install.runs.map(run => run.runId)).toEqual(['new', 'old']);
+    expect(install.workers.map(value => value.identity?.attemptId)).toEqual(['a-new', 'a-old']);
+    expect(install.workers[1]).toMatchObject({ provider: 'claude', model: { usage: ['claude-sonnet-5-5'] }, diagnostics: ['info:ledger-only'] });
+    expect(install.workers[0]!.provider).toBe('claude');
   });
 });

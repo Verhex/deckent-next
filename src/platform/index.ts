@@ -57,7 +57,7 @@ export { emit, createEmitter } from '#platform/core/output/index.js';
 export type { OutputSink, EmitOptions } from '#platform/core/output/index.js';
 export { LOCALES, MESSAGE_KEYS, MESSAGE_REGISTRY, createMessageRegistry } from '#platform/core/i18n/index.js';
 export type { MessageFamily, MessageRegistry } from '#platform/core/i18n/index.js';
-export { getConfigFieldDefault } from '#platform/core/config-fields/index.js';
+export { getConfigFieldDefault, CONFIG_FIELDS } from '#platform/core/config-fields/index.js';
 export { resolveProductLayout, productResourcePath, LayoutError } from '#platform/core/host/index.js';
 export type { ProductLayout, ProductLayoutInput, ProductResource } from '#platform/core/host/index.js';
 export type { SecretResolver, SecretResolution } from '#platform/core/config/index.js';
