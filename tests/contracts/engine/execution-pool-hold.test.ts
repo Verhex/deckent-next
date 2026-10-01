@@ -10,6 +10,7 @@ import { CURRENT_LEDGER_VERSION, POOL_HOLD_LEDGER_VERSION, openSqliteLedger } fr
 import { AuditApplication, ExecutionPoolHoldApplication, PoolControlPolicyAuthorization, RunProgressionTurn, RunReservationApplication, reservationRefusalOutcome,
   RunStoreError, type RunProgressionOperations } from '#engine/index.js';
 import { createHmacIntegrity } from '#platform/index.js';
+import { getPolicyVocabulary, installationOwnerPermissions, INSTALLATION_OWNER_ROLE_ID, resolvePolicyBindings } from '#domain/index.js';
 import { fixtureExecution } from '../support/execution-registry.js';
 import { custodyProfiles, dispatchAdmission, grantTestLaunch } from '../support/custody.js';
 import { DOWNGRADE_TO_PREVIOUS_LEDGER_SQL, PREVIOUS_LEDGER_VERSION } from '../../fixtures/ledger-previous.js';
@@ -169,6 +170,19 @@ describe('K5 typed execution pool hold', () => {
     expect(await f.control(policy([rule('read', 'allow', ['inspect'], ['s'])])).inspect(status)).toMatchObject({ state: 'open', drained: false });
     await expect(f.control(policy([])).inspect(status)).rejects.toMatchObject({ code: 'POLICY_DENIED' });
     await expect(f.reservation.reserve({ ...query, commandId: 'still-open', expectedRevision: 0 })).resolves.toMatchObject({ identities: [{ taskId: 'a' }, { taskId: 'b' }] });
+  });
+
+  it('honours v2 role authority: the installation owner role bound over all scopes holds; a pool role bound to one scope is refused', async () => {
+    const f = await fixture(), operator = { issuer: 'test', subject: 'operator' };
+    const kinds = getPolicyVocabulary().resources.map(resource => resource.kind);
+    const effective = (binding: { roles: string[]; scopes: 'all' | string[] }) => resolvePolicyBindings({ schemaVersion: 2, revision: 'p2', grants: [], restrictions: [],
+      separationOfDuties: [], roles: [{ id: INSTALLATION_OWNER_ROLE_ID, permissions: installationOwnerPermissions(kinds) },
+        { id: 'pool-operator', permissions: [{ id: 'pool-hold', effect: 'allow', actions: ['hold', 'resume', 'inspect'], resource: { kind: 'pool', ids: ['p'] } }] }] },
+    { schemaVersion: 2, revision: 'b2', modes: [], bindings: [{ id: 'bound', principals: [operator], ...binding }] });
+    await expect(f.control(effective({ roles: ['pool-operator'], scopes: ['s'] })).apply(hold('h-role-scoped'))).rejects.toMatchObject({ code: 'POLICY_DENIED' });
+    expect(f.rows('SELECT count(*) AS n FROM execution_pool_holds')[0]!.n).toBe(0);
+    expect(await f.control(effective({ roles: ['pool-operator'], scopes: 'all' })).apply(hold('h-role-all'))).toMatchObject({ changed: true, state: 'held' });
+    expect(await f.control(effective({ roles: [INSTALLATION_OWNER_ROLE_ID], scopes: 'all' })).apply(resume('r-owner'))).toMatchObject({ changed: true, state: 'open' });
   });
 
   it('refuses an unprovisioned pool, an invalid command and a missing default pool without writing', async () => {
