@@ -98,6 +98,8 @@ historical proof and current gates retain their measured scope. PLAN.md tracks t
   Mission coordinates goal-bounded cycles of run/do/autonomous, sequentially or in parallel.
   These entry/coordination semantics do not authorize separate schedulers, policy engines or state writers.
   Task/coordination identities require a new contract; no legacy identity migration or compatibility aliases.
+  (Current state 2026-10-01: `run` admits a typed task graph, `run create --graph`; no directives file is read —
+  `DIRECTIVES` has no match in `src/`; whether the graph is the directive is an owner question.)
 - Task kind describes the work domain, independently of execution entry, scheduling and permission.
   Owner examples: code, routine, daily and purchase. Exact canonical IDs remain a contract decision.
   Use versioned modular definitions/profiles for personal/team/Enterprise use; future purchase refinements
@@ -187,8 +189,8 @@ not provider acknowledgement, model compliance or acceptance. Persona grants no 
 Gateway shutdown/deadline closes sockets; a lost host gateway cannot be reconstructed from a receipt
 to grant new access. Existing Docker custody still supports observation, cancellation and output
 recovery without credentials; replay never reauthenticates a recorded dispatch. Native raw output
-is suppressed in favor of a bounded exit/error summary; full native event/usage normalization remains
-open. Full-access worker code can read its own access material and use the allowed provider channel;
+is suppressed in favor of a bounded exit/error summary; Claude and Codex events are normalized
+(B09-1/B09-3, "Local worker observation" below; Codex not yet against a recorded live run); Cursor normalization remains open. Full-access worker code can read its own access material and use the allowed provider channel;
 this is not within-worker secret isolation or comprehensive external-effect interception.
 
 Phase 1 integrates supported Codex/Claude/Cursor headless coding executors inside Docker using
@@ -580,8 +582,8 @@ Market notes live outside the repo (`/home/alperen/deckent-refactor-work/proof/T
   `/transcript <n|attempt>` reads the sealed transcript through the `task transcript` producer (`read-output`; denial
   and unsealed attempts are visible). `/approvals` opens an arrow-key picker of pending items (runtime `listApprovals`; Enter opens
   the highlighted item's y/N card, Esc closes) and `/approvals <n|id>` lists them and opens that card; the decision goes through the runtime `decideApproval` (same peer-authenticated live-session path as
-  `approvals decide`). Only a single typed `y` approves; `n`, Enter, Esc and Ctrl+C deny; there is no remember/always key and
-  no auto-approval. Pending approvals are announced on the heartbeat (one bounded page per tick, rotating), on by
+  `approval decide`). Only a single typed `y` approves; `n`, Enter, Esc and Ctrl+C deny; an `/approvals` card has no remember/always key
+  (the standing-scope keys `s`/`a` exist only on in-turn tool-call cards the service marks, PERSISTENT-APPROVALS G6 below) and there is no auto-approval. Pending approvals are announced on the heartbeat (one bounded page per tick, rotating), on by
   default whenever approvals are wired, never more often than every 10 s (lead integration decision; tests may override).
   `/cancel <runId>` inspects the run, asks y/N and calls the `run cancel`
   handler against the inspected revision. Read-only commands never prompt; an open card owns the keys.
@@ -711,7 +713,7 @@ answers only with a result the model can still see: an entry is bound to the res
 rounds; Astra 2106 R1), a compaction drops entries whose message left the prompt, and a successful non-read call clears it. Byte
 pressure also counts headroom (owner 2026-09-26, Astra 2106 R2): the longest answer (`maxCompletionTokens` × 4 bytes) plus one user
 message (an eighth of the bound, at most 32 KiB) must still fit the next request; a request that cannot fit even so is refused by the
-client before anything is sent as `RUNTIME_CHAT_TURN_TOO_LARGE` (start `/new` or write less), never as a transport fault. Open: a `compacted` event must fit one event frame (`service.responseMaxBytes`); a tail of very large tool
+client before anything is sent as `RUNTIME_CHAT_TURN_TOO_LARGE` (start `/clear` or write less), never as a transport fault. Open: a `compacted` event must fit one event frame (`service.responseMaxBytes`); a tail of very large tool
 results, or a summary copying many long user messages (each ≤ 4000 characters), can exceed it and then cancels the turn (fail
 closed, not silent); and a tail that alone stays above the high-water mark is summarized again every round (billed, no progress;
 candidate guard: skip when the last compaction did not shrink the history). The byte check needs no counter port. Evidence: engine repeated-compaction/edit/byte tests, real service byte-bound compaction, workline → service →
@@ -852,7 +854,7 @@ turn as one snapshot per session in the managed `terminalSessions` directory (`o
 atomic temp + rename, known secret shapes redacted, at most 50 sessions and 16 MiB each, oversize refused before redaction). A
 compaction simply rewrites the snapshot, so a resumed conversation can never carry pre-compaction messages twice (legacy defect).
 `/resume` opens an arrow-key picker of this scope's recent sessions (Enter continues the highlighted one, Esc closes; TERM-PICKERS) and `/resume <n|id>` continues one (its messages become the history; later turns save
-into it); `/new` starts a fresh session; `/context` shows the latest measured prompt against the window. Snapshots are client
+into it); `/clear` (named `/new` at T-L5c) starts a fresh session; `/context` shows the latest measured prompt against the window. Snapshots are client
 context, never authority; they follow the composer history switch `terminal.persistHistory`. The shared credential redaction's URL
 pattern now bounds the scheme (`{0,31}`): the unbounded form backtracked quadratically on long letter runs (80k chars: 2.7 s).
 **Composer `@file` over the runtime (T-L5, protocol v15, owner 2026-09-27).** Two bounded control operations, current version only:
@@ -921,7 +923,7 @@ a crash after the rename look the same, and content equality is not causal evide
 retry. After the rename the parent is verified again: a directory moved out of the workspace meanwhile is journaled `escaped` (with
 where it went) and the effect is unknown, never reported as done, and nothing is written again to undo it (Astra 2094 R2: detection,
 not prevention — Node has no openat2/renameat; a same-user process, including the planned unsandboxed host shell, can move directories;
-the confining mechanism is an owner decision, see PLAN). Approval previews are bounded to 16 KiB UTF-8 bytes (whole lines first, never
+owner 2026-09-26 accepted this as a documented limit — no native/Landlock writer for now; COMPLETED-PLAN "Owner kararları 2026-09-26 (akşam)" (1)). Approval previews are bounded to 16 KiB UTF-8 bytes (whole lines first, never
 a split character) under a first-line marker naming what is not shown and the sha256 of the whole text; a cut edit diff is kept whole,
 owner-only (0600, exclusive, not redacted: it must be exactly the change approved), in the managed `approvalPreviews` directory while
 the approval is pending, removed when it settles and swept at service start (Astra 2094 R3). The effect's identity is the turn, the call's position (round,
@@ -960,7 +962,8 @@ already denied `.deckent/host`, `audit-key`, `approvals`). Not covered: intermed
 final real path is what the shell reads), a swap between classification and execution, and — legacy-inherited, verified —
 traversal (`grep -r x .`, `rg x .`, `find . -type f`) and git object reads (`git show HEAD:.env`, `git log -p`, `git cat-file -p`)
 classify read-only with risk `low` although the shell then walks into denied files or prints objects no path check sees; slice 3c
-must not run `low` silently on this verdict alone. No tool uses it yet (slice 3c).
+must not run `low` silently on this verdict alone. Since slice 3c the agent `run_shell` tool uses it
+(`composition/core/agent-turn/internal/shell.ts`).
 `classifyShellContainment` (SHELL-AUTONOMY) is a second pure layer over the lenient risk scanner (command substitutions exposed):
 a command is contained unless a part runs a program-floor program (privilege, interpreter, eval-like wrapper, xargs, package manager,
 network tool, `env <program>`, `find -exec/-execdir/-ok/-okdir`; `tee` is not on it — it writes like a redirection), its program word is not a plain name (`$x`, `$(…)`, a path), it has a
@@ -1001,7 +1004,7 @@ deny) and a bare `@` does not wait for the 60 ms quiet period. `/resume` prints 
 characters, attached file bodies not printed, tool results as one count line, summaries marked); the model context was already whole.
 `/context`: window bar and percentage, the automatic summary threshold (display constant 0.75 = `AGENT_COMPACTION_HIGH_WATER`, held
 equal by a contract test) and the tokens left, a size-estimate split of the visible history (the service's own instructions are not in
-it), the last summary, the three largest items and a `/new` suggestion at ≥ 60 %. Protocol unchanged (v16). Open: `/compact` (protocol
+it), the last summary, the three largest items and a `/clear` suggestion at ≥ 60 %. Protocol unchanged (v16). Open: `/compact` (protocol
 decision), redrawing an open suggestion list when the index refreshes.
 
 **Shell realm (S5, S9, S11; owner 2026-09-28).** Shell calls run through one `ShellRealm` port (host / bubblewrap / landlock).
@@ -1256,7 +1259,8 @@ JSON input schema); a tool never grants authority. T-L1 ships the read class as 
 legacy native tools minus their defects: `read_file` (bounded content view from line 1 for a plain path, `outline` with headings
 and size/longest-line statistics, numbered ranges with long-line elision naming the exact `lineByteOffset` continuation, search),
 `list_dir`, `grep` (long lines are searched and elided, skipped binary/oversized files are reported instead of a bare "no
-matches"), `glob`. Every result is byte-bounded by the tool itself (16 KiB default) and states any cut; fitting results into the
+matches"), `glob`. Every result is byte-bounded by the tool itself (16 KiB default at T-L1; 64 KiB since owner 2026-09-27,
+`terminal.chat.readResultMaxBytes`) and states any cut; fitting results into the
 model context is the loop's job in one token unit. Reads resolve the real path inside the workspace (traversal, absolute paths and
 symlink targets outside are refused), a Core deny floor (`.env*`, keys, credentials, `.git/**`, Deckent host/approval/audit state)
 is registry data, generated directories are skipped. **Boundary under races (Astra 2072):** every open walks the real path's
@@ -1648,6 +1652,8 @@ config sections wait for C1.
 
 - `tests/contracts/<package>/` — public API and invariant tests only; no internal-function tests.
 - `tests/e2e/` — real binary journeys (`doctor`, `run`, `start`, `do`, …) on fixture projects under `tests/fixtures/`.
+  Current state 2026-10-01: `tests/e2e/` holds `cli-version`, `i18n-renderer`, `kernel-config`, `product-paths`; there is no
+  `start` or `do` command yet and no `tests/golden/` directory.
 - `tests/golden/` — normalized outputs of deterministic commands, captured from the legacy binary and
   diffed against the new one during the port.
 - Budget: ≤ 8,000 test cases total, every test file ≤ 1,500 lines (lint; 800 design target). Legacy invariant titles are in
@@ -1673,6 +1679,7 @@ lives in the transient tracker and external refactor archive, not an append-only
 
 | Date | Decision | Why |
 |---|---|---|
+| 2026-10-01 | Correction of 2026-09-16 rows (STALE-CLAIMS; the rows stay as written, as history): (1) packages import downward `composition → adapters/surfaces → engine → capabilities → platform/domain` (domain pure; `arch.json` `packages`, FOUNDATION/B), not `kernel ← providers ← runtime ← orchestration ← surfaces`; (2) there is no `runtime` package and no `SpawnBackend` façade — the execution port is `engine/core/supervisor` (`ExecutionSupervisor`) with the Docker adapter in `adapters/core/docker-supervisor`; (3) `providers/core/registry/` does not exist — the rule now reads "concrete model/provider identifiers are forbidden in `src/**`" (`arch.json` `literals.forbidden`, Package contract); (4) memory: no FTS5 store and no `import-legacy-state` exist in `src/`, and `.brain/memory.db` is not imported verbatim — owner 2026-09-21 (PLAN legacy inventory: no raw copy, projection through the memory cards; legacy data is not migrated) supersedes the row; (5) there is no `runtime/custody/win32` and no Windows custody adapter — native Windows comes last in the platform order (owner 2026-09-29) and an unproven platform reports a typed `UNSUPPORTED`/`DEGRADED` (Package contract); (6) config is `schema_version: 3` (`CONFIG_SCHEMA_VERSION`, H34 S4) and unknown top-level keys are refused (`unrecognized_keys`, `platform/core/config/internal/validate/sections.ts`), not preserved with warnings; (7) there is no platform-global legacy fallback path and no config migration (owner 2026-09-17: no old-config conversion; `validate/version.ts` refuses another version) — the writer lock, private atomic writes and retained backups apply to config writes (`config/internal/lock.ts`, `write.ts`). | Dev↔Next comparison 2026-10-01 (LEAD-BULGULAR §E) found these rows read as current; each item is checked against the code at `01dd71ab`. Open, not decided here: the K1 "81 legacy error codes" row against Enterprise-first layering, and the "no host rule files" row against the Package-contract docs-authority target. |
 | 2026-09-30 | Seventeenth-batch tooling and provider fixes, no new contract: (1) CI-F8 — the package-metadata freshness check compares the generated JSON after CRLF→LF normalization only (a Windows checkout's line endings); any other difference (name, version, engine, content, format) is still stale; real Windows confirmation needs a hosted run. (2) SURROGATE-OPENROUTER — the OpenRouter request parser (`provider-openrouter-pricing` `quote.ts`) runs the domain `wellFormedModelJson` on the parsed request (lone surrogate → U+FFFD), same helper as the OpenAI-chat boundary; the request schema is **not** widened (assistant `tool_calls` and top-level `tools` stay refused `INVALID_REQUEST`), the tariff `bodyDigest` is the sha256 of the sent bytes, `arch.json` edge `provider-openrouter-pricing → agent-tool`. (3) CI-TERMINAL-CLI — the workline passes `interactive: true` to Ink when stdout is a TTY, because Ink 7.1.1 treats `CI` as non-interactive and defers frames (`workline.tsx`); non-TTY output stays on Ink's own detection. | Hosted run 36741640264 (30988c66): only the terminal-cli prefix test failed on Node 24; a user shell with `CI` set would see the same half-drawn terminal. |
 | 2026-09-30 | Fourteenth batch (COMPOSITION-RELIEF) keeps `src/composition` within its 5500-line budget by moving five pure or I/O responsibilities to their owners, behavior-identical: the kept approval previews (`keepFullPreview`, `dropFullPreview`, `sweepFullPreviews`; managed-file I/O) to `adapters/core/approval-store`; the worker event-log sealing (verdict, `event-cap`, `byte-cap` markers) as `sealWorkerEventLog` to `adapters/core/worker-observation`; the scope budget lookup as `providerSpendingBudgetFor` beside `providerSpendingSchema` in `adapters/core/contract`; the `RUN_CAPACITY_OR_ORDER` parameters as `reservationDiagnosticParams` to `engine/core/scheduling`; and the runtime client's two hand-written copies of the bounded-result operation set replaced by the protocol's `isRuntimeServiceBoundedResultOperation` (`engine/core/runtime`). 5520 → 5454 lines. | FA-TRACKED-WARN, WORK-TARGETS, WORKER-CURRENCY-2 and D2 together passed the budget by 20 lines; FOUNDATION: move responsibility, never raise the budget. |
 | 2026-09-30 | Thirteenth batch keeps `src/composition` within its 5500-line budget by moving the agent's workspace/product-state posture derivation to a new adapter unit `adapters/core/agent-workspace-floor`, byte-identical: `AGENT_READABLE_PRODUCT_RESOURCES`, `agentWorkspaceDeny`, `agentAuthorityPaths`, `agentShellHardFloor`, `agentProductStateDeny` (from agent-turn `turn.ts`) and `classifySandboxWritePath` (from `sandbox-writes.ts`); composition keeps the wiring. 5506 → 5423 lines. | OPEN-SANDBOX + LANG-CRASH passed the budget; pure path derivation over workspace-read/-write, host-shell, mcp-client and platform host symbols is not wiring (FOUNDATION: move responsibility, never raise the budget). |
@@ -1734,11 +1741,11 @@ Ledger composition selects configured SQLite options and registry path. Default1
 
 SQLite reader contention is tested by journal mode; ordinary WAL readers do not imply commit BUSY. Forced checkpoint and power-loss tests remain separate acceptance work.
 
-ExecutionSupervisor v1 now has a real Docker adapter. Process exit is evidence, never Task acceptance. Containers remain until explicit release after durable application receipt. Trusted workspace allocation, dispatch fencing after release, durable output and aggregate scheduler quotas remain prerequisites for public execution.
+ExecutionSupervisor v1 now has a real Docker adapter. Process exit is evidence, never Task acceptance. Containers remain until explicit release after durable application receipt. Trusted workspace allocation, dispatch fencing after release, durable output and aggregate scheduler quotas remain prerequisites for public execution. (Current state 2026-10-01: per-attempt Git workspaces, the durable fence kept after release, verified retained output and pool capacity exist — `adapters/core/git-workspace`, `engine/core/dispatch/internal/application.ts` `release`, `attempt-store/internal/pools.ts`; `DispatchApplication.release` and the workspace broker's `release` have no production caller, so containers and attempt clones are not reclaimed.)
 
 Execution ledger identity is scope + local ID: attempts use (scope_id, attempt_id), command receipts use (scope_id, command_id); an ID alone carries no cross-scope authority. Fable1484 confirms the existing contract.
 
-Local runtime service protocol is one current schema (2). Client shutdown binds an exact per-start instance and a separately authorized service resource; admission is durable before response/disconnect handoff, and accepted does not mean stopped. Missing final audit outcome remains unknown. SQLite ledger schema10 stores canonical service admission and final outcome separately.
+Local runtime service protocol is one current schema (2 at this card; 18 on 2026-10-01, `RUNTIME_SERVICE_SCHEMA_VERSION`). Client shutdown binds an exact per-start instance and a separately authorized service resource; admission is durable before response/disconnect handoff, and accepted does not mean stopped. Missing final audit outcome remains unknown. SQLite ledger schema10 stores canonical service admission and final outcome separately.
 Linux native peer credentials identify the connecting OS principal, not separate applications or admin roles sharing that UID. A root client is rejected when the daemon has a different UID; a root daemon accepts same-UID root peers. Path ownership and policy do not provide isolation from a hostile process under the same UID.
 Operational service.identity (null by default), responseTimeoutMs, acceptRetryDelayMs and acceptRetryLimit are validated config. Native accept pressure pauses with the configured bounded retry policy; permanent errors/exhaustion still cause controlled shutdown. Native code/build stay adapter-owned; Linux x64 evidence is not Windows/remote/HA proof.
 
@@ -1993,7 +2000,7 @@ blanket group-writable product state. No ownership repair or host chmod is perfo
 Task admission approval is an additional restriction before scheduling's capacity-limited candidate
 selection, rechecked under the reservation transaction. Composition installs this additional gate when
 the policy has task-resource rules; absent task restriction is not an execution grant. It does not
-replace execution policy or the pure launch reducer. Durable requests/decisions/receipts use the shared ledger (v31), scoped MAC
+replace execution policy or the pure launch reducer. Durable requests/decisions/receipts use the shared ledger (table since v31, rebuilt in v38 and v40), scoped MAC
 custody, explicit expiry renewal and one application across SDK/CLI/MCP. `task-admission:2` binds the
 validated policy content as well as immutable Run/task/execution/requester identity. Pending requests
 consume no reservation slot; approval requires a new reservation command. Old receipts never expand.
@@ -2426,8 +2433,8 @@ terminal exit is projected (`finishDispatch`), never on the kill command alone. 
 are prevented by the launch decision; running, unknown or unresolved-effect attempts stay with delivery and the
 reconciler. `reconcileAttempt` and cancellation delivery apply the same idempotent store settlement and report it
 as `settlement`; accepted/failed tasks are never re-marked; no observation is fabricated and nothing is retried.
-Pool occupancy counts only active/evaluating/uncertain tasks, so `cancelled` releases capacity. Run-level closure
-of still-pending tasks in a cancel-requested run remains a separate transition.
+Pool occupancy counts only active/evaluating/uncertain tasks, so `cancelled` releases capacity. Still-pending tasks
+that were never reserved close as `cancelled` in the same transition (`requestRunCancellation`, `domain/core/run/internal/reduce.ts`).
 
 ### Worker toolchain currency — owner 2026-09-22 (report slice implemented)
 

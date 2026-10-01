@@ -3,6 +3,9 @@
 Bu belge yalnız güncel durumu tutar; önceki sürümü Git geçmişinde, kanıtlar `deckent-refactor-work/proof/`.
 
 ## Durum
+- **STALE-CLAIMS (2026-10-01; `lane/stale-claims`, taban `01dd71ab`, yalnız belge):** Dev↔Next kıyası öncesi bayat PLAN/ARCHITECTURE iddiaları
+  kodla doğrulanıp düzeltildi (ledger v44, protokol v18, Anthropic/OpenAI-chat, B06-2/B09-2, `.deck`, `process`, audit, `/clear`, karar günlüğü
+  2026-09-16 satırları için tek düzeltme satırı). Tablo ve owner düzeyi liste `proof/STALE-CLAIMS-2026-10-01/README.md`. **Sıradaki:** lead incelemesi → partiye alma.
 - **Yirminci parti (2026-10-01; `integrate/2026-10-01-u`, worktree `/home/alperen/deckent-next-integrate-u`, taban `c083ec8e`):**
   CI-HYGIENE (`6d425eaf`; test git ortamında bakım kapalı, test soketleri), K6 kapsam sınıflaması (`1845ecc2`), K5 tipli havuz bekletmesi
   (`68279e85`+`99ac09cf`+`1ed7a508`, ledger v44) + lead düzeltmeleri: CLI birim bütçesi 2000/2000 (tek satır katlandı), Windows build-zamanı
