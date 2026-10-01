@@ -16,7 +16,8 @@ import { SqliteRunWorkspaceCustody } from './run-workspace-custody.js';
 import { SqliteServiceShutdownJournal } from './service-shutdown.js';
 import type { AttemptIdentity } from '#domain/index.js';
 import { SqliteRunJournal } from './runs.js';
-import type { RunStore, RunCancellation, ExecutionPool, RunCreate, RunReservation, RunProjection, ServiceShutdownStore, TaskEvaluationCommit, TaskEvaluationStore } from '#engine/index.js';
+import { SqlitePoolHoldJournal } from './pool-holds.js';
+import type { RunStore, RunCancellation, ExecutionPool, RunCreate, RunReservation, RunProjection, ServiceShutdownStore, TaskEvaluationCommit, TaskEvaluationStore, PoolHoldStore } from '#engine/index.js';
 import type { ArtifactReceipt } from '#capabilities/index.js';
 import { SqliteDispatchJournal } from './dispatch.js';
 import type { CancellationDeliveryClaim, CancellationDeliveryOutcome, CancellationDeliveryStore, DispatchClaim, DispatchAdmission, SupervisorProfileValidator, LaunchRequest, DispatchTerminal, DispatchStore, RunBoundDispatchStore, DispatchInventoryQuery, DispatchInventoryStore } from '#engine/index.js';
@@ -26,7 +27,7 @@ import { attemptSnapshotSchema, sameAttemptIdentity, verifiedPrincipalSchema, ty
 import { AttemptStoreError, dispatchRecordSchema, type AttemptCommit, type AttemptReceipt, type AttemptStore } from '#engine/index.js';
 
 /** Dedicated execution database. Path ownership/permissions are established by composition, not this adapter. */
-export class SqliteAttemptStore implements AttemptStore, DispatchStore, RunBoundDispatchStore, DispatchInventoryStore, RunStore, CancellationDeliveryStore, ServiceShutdownStore, TaskEvaluationStore {
+export class SqliteAttemptStore implements AttemptStore, DispatchStore, RunBoundDispatchStore, DispatchInventoryStore, RunStore, CancellationDeliveryStore, ServiceShutdownStore, TaskEvaluationStore, PoolHoldStore {
   private readonly db: DatabaseSync;
   private admission: import('#engine/index.js').RunAdmissionFilter | undefined;
   setRunAdmissionFilter(admission: import('#engine/index.js').RunAdmissionFilter) { this.admission = admission; }
@@ -68,6 +69,10 @@ export class SqliteAttemptStore implements AttemptStore, DispatchStore, RunBound
   async loadRunReceipt(scopeId: string, commandId: string) { return new SqliteRunJournal(this.db).loadRunReceipt(scopeId, commandId); }
   async cancelRun(input: RunCancellation) { return new SqliteRunJournal(this.db).cancelRun(input); }
   async createExecutionPool(input: ExecutionPool) { return new SqliteRunJournal(this.db).createExecutionPool(input); }
+  // K5 typed pool hold (ledger v44): status read, the one hold/resume writer, and a refusal's audit event.
+  readPoolHold(poolId: string) { return new SqlitePoolHoldJournal(this.db).readPoolHold(poolId); }
+  applyPoolHold(...args: Parameters<PoolHoldStore['applyPoolHold']>) { return new SqlitePoolHoldJournal(this.db).applyPoolHold(...args); }
+  recordPoolHoldRefusal(audit: Parameters<PoolHoldStore['recordPoolHoldRefusal']>[0]) { return new SqlitePoolHoldJournal(this.db).recordPoolHoldRefusal(audit); }
   async projectRunAttempt(input: RunProjection) { return new SqliteRunJournal(this.db).projectRunAttempt(input); }
   async commitTaskEvaluation(input: TaskEvaluationCommit) { return new SqliteRunJournal(this.db).commitTaskEvaluation(input); }
   async loadRun(scopeId: string, runId: string) { return new SqliteRunJournal(this.db).loadRun(scopeId, runId); }

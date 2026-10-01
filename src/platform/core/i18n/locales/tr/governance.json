@@ -738,6 +738,7 @@
   "error.RUN_POOL_REQUIRED": "Geçerli, atanmış bir yürütme havuzu gerekli.",
   "error.RUN_POOL_CONFLICT": "Yürütme havuzunun farklı kapasite ayarları mevcut.",
   "error.RUN_POOL_FULL": "Yürütme havuzunda kullanılabilir kapasite yok.",
+  "error.RUN_POOL_HELD": "Yürütme havuzu bekletiliyor: devam ettirilene kadar yeni görev ayrılmaz; çalışan işler sürer.",
   "error.RUN_CAPACITY_OR_ORDER": "İstenen görevler kullanılabilir kapasiteye veya görev sırasına uymuyor.",
   "error.RUN_CAPACITY_OR_ORDER.detail": "Görev rezervasyonu reddedildi ({site}/{reason}): hazır {readyCount}, gecikmeli {delayedCount}, dolu yürütme kapasitesi {executionOccupied}/{executionSlots}.",
   "error.CANCELLATION_NOT_CONFIGURED": "İptal teslim sınırları yapılandırılmamış. Eksik: {missing}.",

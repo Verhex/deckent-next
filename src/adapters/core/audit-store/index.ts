@@ -7,4 +7,5 @@ export async function openSqliteAuditStore(path: string, options: SqliteLedgerOp
   const implementation = await import('./internal/open.js');
   return implementation.openSqliteAuditStore(path, options, migrationMode);
 }
-export type { SqliteAuditStore } from './internal/store.js';
+// A store on a caller's open ledger connection, so an audit event commits in the caller's transaction (K5 pool hold); no driver load.
+export { SqliteAuditStore } from './internal/store.js';

@@ -37,6 +37,6 @@ export interface RunStore {
   reserveRunTasks(input: RunReservation): Promise<RunReceipt>;
 }
 export class RunStoreError extends Error {
-  constructor(readonly code: 'RUN_STORE_CONFLICT' | 'RUN_COMMAND_CONFLICT' | 'RUN_STORE_CORRUPT' | 'RUN_CAPACITY_OR_ORDER' | 'RUN_POOL_REQUIRED' | 'RUN_POOL_CONFLICT' | 'RUN_POOL_FULL',
+  constructor(readonly code: 'RUN_STORE_CONFLICT' | 'RUN_COMMAND_CONFLICT' | 'RUN_STORE_CORRUPT' | 'RUN_CAPACITY_OR_ORDER' | 'RUN_POOL_REQUIRED' | 'RUN_POOL_CONFLICT' | 'RUN_POOL_FULL' | 'RUN_POOL_HELD',
     readonly diagnostic?: ReservationDiagnostic) { super(code); this.name = 'RunStoreError'; }
 }

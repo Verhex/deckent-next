@@ -24,7 +24,7 @@ const v1Rollback = (commandId: string, adoptionCommandId: string, targetRef: str
   command: { schemaVersion: 1, commandId, identity, adoptionCommandId }, targetRef, fromCommit: delivered, toCommit: base, actor });
 
 it('upgrades a v41 ledger to v42: 0600 backup at v41, v1 adoptions rewritten losslessly to v2, rollbacks and corrupt rows untouched', async () => {
-  expect(CURRENT_LEDGER_VERSION).toBe(43); expect(ADOPTION_VERIFICATION_LEDGER_VERSION).toBe(42);
+  expect(CURRENT_LEDGER_VERSION).toBe(44); expect(ADOPTION_VERIFICATION_LEDGER_VERSION).toBe(42);
   const root = await mkdtemp(join(tmpdir(), 'dn-adoption-v42-')); roots.push(root);
   const path = join(root, 'ledger.db'), backups = join(root, 'backups'); await mkdir(backups, { mode: 0o700 });
   openSqliteLedger(path, options).close();
@@ -45,11 +45,11 @@ it('upgrades a v41 ledger to v42: 0600 backup at v41, v1 adoptions rewritten los
 
   const upgrade = await upgradeExistingProductLedger(path, options, backups, new Date('2026-09-28T12:00:00.000Z'));
   const backupPath = join(backups, 'ledger-v41-2026-09-28T12-00-00-000Z.db');
-  expect(upgrade).toEqual({ from: 41, to: 43, backupPath });
+  expect(upgrade).toEqual({ from: 41, to: CURRENT_LEDGER_VERSION, backupPath });
   expect((await stat(backupPath)).mode & 0o777).toBe(0o600);
   expect(version(backupPath)).toBe(41);
   expect(rows(backupPath, 'SELECT * FROM workspace_adoptions ORDER BY target_ref,sequence')).toEqual(before);
-  expect(version(path)).toBe(43);
+  expect(version(path)).toBe(CURRENT_LEDGER_VERSION);
 
   const after = Object.fromEntries(rows(path, 'SELECT command_id,intent FROM workspace_adoptions').map(row => [String(row.command_id), String(row.intent)]));
   const expected = (commandId: string, targetRef: string) => JSON.stringify(integrationAdoptionIntentSchema.parse({ ...JSON.parse(v1Adopt(commandId, targetRef)),

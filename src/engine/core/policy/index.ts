@@ -1,8 +1,8 @@
 export { DispatchPolicyAuthorization, DispatchInventoryPolicyAuthorization, PolicyAuthorizationError } from './internal/authorize.js';
 export type { PolicySource, PolicyRefusalReason } from './internal/authorize.js';
 export { RunPolicyAuthorization } from './internal/run.js';
-export { PoolPolicyAuthorization } from './internal/pool.js';
-export type { PoolAuthorization } from './internal/pool.js';
+export { PoolPolicyAuthorization, PoolControlPolicyAuthorization, assertPoolControlAllowed } from './internal/pool.js';
+export type { PoolAuthorization, PoolControlAction, PoolControlAuthorization, PoolControlDecision } from './internal/pool.js';
 export { WorkTargetPolicyAuthorization, executionResourceAuthorization, workTargetAttemptAuthorization, authorizeWorkTargetUse } from './internal/work-target.js';
 export type { WorkTargetAction } from './internal/work-target.js';
 export { assertRequestCompany, installationOwnScopes, resolvePolicyScopeMembership, ScopeRegistrationError } from './internal/membership.js';

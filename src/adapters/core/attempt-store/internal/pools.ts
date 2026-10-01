@@ -1,6 +1,6 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { runSnapshotSchema } from '#domain/index.js';
-import { executionPoolSchema, RunStoreError, measureTaskOccupancy, type ExecutionPool } from '#engine/index.js';
+import { executionPoolSchema, poolHoldRecordSchema, RunStoreError, measureTaskOccupancy, type ExecutionPool, type PoolHoldRecord } from '#engine/index.js';
 /** Called within the caller's existing write transaction. Run progress is the sole occupancy truth;
  * no expiring lease or second mutable counter can silently release uncertain work.
  */
@@ -26,7 +26,25 @@ export class SqliteExecutionPools {
     if (requested > this.available(poolId)) throw new RunStoreError('RUN_POOL_FULL');
   }
   available(poolId: string): number {
-    const pool = this.require(poolId); let execution = 0; let inFlight = 0;
+    const pool = this.require(poolId), { execution, inFlight } = this.occupancy(poolId);
+    return Math.min(pool.capacity.executionSlots - execution, pool.capacity.inFlightSlots - inFlight);
+  }
+  /** K5: the pool's typed hold (null = never held). A row that disagrees with its sealed record is corruption, never "open". */
+  hold(poolId: string): PoolHoldRecord | null {
+    const row = this.db.prepare('SELECT pool_id,revision,state,record FROM execution_pool_holds WHERE pool_id=?').get(poolId);
+    if (!row) return null;
+    let record: PoolHoldRecord;
+    try { record = poolHoldRecordSchema.parse(JSON.parse(String(row.record))); } catch { throw new RunStoreError('RUN_STORE_CORRUPT'); }
+    if (record.poolId !== row.pool_id || record.revision !== row.revision || record.state !== row.state) throw new RunStoreError('RUN_STORE_CORRUPT');
+    return record;
+  }
+  /** Reservation-only gate: already reserved attempts still pass dispatch admission (`assertAvailable`) while held. */
+  assertNotHeld(poolId: string): void {
+    if (this.hold(poolId)?.state === 'held') throw new RunStoreError('RUN_POOL_HELD');
+  }
+  /** Run progress is the sole occupancy truth, summed over every scope's Runs of the pool. */
+  occupancy(poolId: string): { execution: number; inFlight: number } {
+    let execution = 0; let inFlight = 0;
     const rows = this.db.prepare("SELECT scope_id,run_id,revision,snapshot,json_extract(policy,'$.poolId') AS assigned_pool FROM runs WHERE json_extract(policy,'$.poolId')=? OR json_extract(policy,'$.poolId') IS NULL").all(poolId);
     for (const row of rows) {
       let run;
@@ -36,6 +54,6 @@ export class SqliteExecutionPools {
       if (row.assigned_pool === null && (occupancy.execution > 0 || occupancy.inFlight > 0)) throw new RunStoreError('RUN_POOL_REQUIRED');
       execution += occupancy.execution; inFlight += occupancy.inFlight;
     }
-    return Math.min(pool.capacity.executionSlots - execution, pool.capacity.inFlightSlots - inFlight);
+    return { execution, inFlight };
   }
 }

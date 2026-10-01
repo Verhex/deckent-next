@@ -8,7 +8,7 @@ import { openSqliteModelCatalogReader, openSqliteModelCatalogStore, upgradeExist
 import { createHash } from 'node:crypto';
 import { encodeModelBindingDefinition, parseModelCatalogCommand, parseProviderCatalog, parseProviderCatalogDocument } from '#domain/index.js';
 import type { ModelCatalogAdmission } from '#engine/index.js';
-import { DOWNGRADE_TO_PREVIOUS_LEDGER_SQL, PREVIOUS_LEDGER_VERSION } from '../../fixtures/ledger-previous.js';
+import { DOWNGRADE_TO_V42_LEDGER_SQL, PREVIOUS_LEDGER_VERSION } from '../../fixtures/ledger-previous.js';
 import { seedCatalog } from '../support/model-catalog.js';
 
 const roots: string[] = [];
@@ -33,9 +33,9 @@ const channel = 'claude-cli-subscription';
 
 describe.skipIf(process.platform === 'win32')('ledger v43 model catalog', () => {
   it('upgrades a v42 ledger losslessly: 0600 backup at v42, every existing table byte-equal, four empty catalog tables', async () => {
-    expect(CURRENT_LEDGER_VERSION).toBe(43); expect(MODEL_CATALOG_LEDGER_VERSION).toBe(43); expect(PREVIOUS_LEDGER_VERSION).toBe(42);
+    expect(CURRENT_LEDGER_VERSION).toBe(44); expect(MODEL_CATALOG_LEDGER_VERSION).toBe(43); expect(PREVIOUS_LEDGER_VERSION).toBe(43);
     const { root, path } = await ledger(); const backups = join(root, 'backups'); await mkdir(backups, { mode: 0o700 });
-    const db = new DatabaseSync(path); db.exec(DOWNGRADE_TO_PREVIOUS_LEDGER_SQL);
+    const db = new DatabaseSync(path); db.exec(DOWNGRADE_TO_V42_LEDGER_SQL);
     // An existing chat activation row and receipt must survive untouched.
     db.prepare('INSERT INTO model_activations(scope_id,provider_id,provider_version,model_id,model_version,revision,record) VALUES(?,?,?,?,?,?,?)')
       .run('s', 'local', 1, 'qwen', 1, 1, '{"kept":true}');
@@ -48,23 +48,23 @@ describe.skipIf(process.platform === 'win32')('ledger v43 model catalog', () => 
     expect(() => openSqliteLedger(path, options, 'forbid')).toThrow(expect.objectContaining({ code: 'ATTEMPT_STORE_VERSION' }));
     const upgrade = await upgradeExistingProductLedger(path, options, backups, new Date('2026-09-30T12:00:00.000Z'));
     const backupPath = join(backups, 'ledger-v42-2026-09-30T12-00-00-000Z.db');
-    expect(upgrade).toEqual({ from: 42, to: 43, backupPath });
-    expect((await stat(backupPath)).mode & 0o777).toBe(0o600); expect(version(backupPath)).toBe(42); expect(version(path)).toBe(43);
+    expect(upgrade).toEqual({ from: 42, to: CURRENT_LEDGER_VERSION, backupPath });
+    expect((await stat(backupPath)).mode & 0o777).toBe(0o600); expect(version(backupPath)).toBe(42); expect(version(path)).toBe(CURRENT_LEDGER_VERSION);
     expect(dump(path, before)).toEqual(beforeRows);
     expect(tables(path).filter(name => name.startsWith('model_catalog'))).toEqual(['model_catalog_activations', 'model_catalog_channels', 'model_catalog_models', 'model_catalog_receipts']);
     for (const name of ['model_catalog_activations', 'model_catalog_channels', 'model_catalog_models', 'model_catalog_receipts']) expect(rows(path, `SELECT count(*) AS n FROM ${name}`)[0]!.n).toBe(0);
   });
   it('refuses a ledger newer than this build on writer and admission-reader opens (the rule a v42 build applies to v43)', async () => {
     const { path } = await ledger();
-    const db = new DatabaseSync(path); db.exec('PRAGMA user_version=44;'); db.close();
+    const db = new DatabaseSync(path); db.exec(`PRAGMA user_version=${CURRENT_LEDGER_VERSION + 1};`); db.close();
     expect(() => openSqliteLedger(path, options, 'forbid')).toThrow(expect.objectContaining({ code: 'ATTEMPT_STORE_VERSION' }));
     await expect(openSqliteModelCatalogReader(path, options)).rejects.toMatchObject({ code: 'ATTEMPT_STORE_VERSION' });
-    const older = await ledger(); const raw = new DatabaseSync(older.path); raw.exec(DOWNGRADE_TO_PREVIOUS_LEDGER_SQL); raw.close();
+    const older = await ledger(); const raw = new DatabaseSync(older.path); raw.exec(DOWNGRADE_TO_V42_LEDGER_SQL); raw.close();
     await expect(openSqliteModelCatalogReader(older.path, options)).rejects.toMatchObject({ code: 'ATTEMPT_STORE_VERSION' });
   });
   it('rolls the v43 step back when a same-name object of another shape exists (ledger stays at v42)', async () => {
     const { path } = await ledger();
-    const db = new DatabaseSync(path); db.exec(`${DOWNGRADE_TO_PREVIOUS_LEDGER_SQL} CREATE TABLE model_catalog_models(id INTEGER PRIMARY KEY, payload TEXT);`); db.close();
+    const db = new DatabaseSync(path); db.exec(`${DOWNGRADE_TO_V42_LEDGER_SQL} CREATE TABLE model_catalog_models(id INTEGER PRIMARY KEY, payload TEXT);`); db.close();
     expect(() => openSqliteLedger(path, options, 'allow')).toThrow(expect.objectContaining({ code: 'ATTEMPT_STORE_VERSION' }));
     expect(version(path)).toBe(42);
     expect(rows(path, "SELECT name FROM sqlite_master WHERE type='table' AND name LIKE 'model_catalog%'").map(row => row.name)).toEqual(['model_catalog_models']);

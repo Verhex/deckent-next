@@ -179,7 +179,9 @@ export class SqliteRunJournal {
       }
       // Validate every candidate before trimming; an invalid suffix must never disappear silently.
       const proposed = reserveRunTasks(current, parsed.expectedRevision, parsed.identities, parsed.now);
-      const available = new SqliteExecutionPools(this.db).available(policy.poolId);
+      // K5: a held pool admits no new reservation (precedence: cancel, wave, candidates, hold, capacity); nothing is written.
+      const pools = new SqliteExecutionPools(this.db); pools.assertNotHeld(policy.poolId);
+      const available = pools.available(policy.poolId);
       if (available <= 0) throw new RunStoreError('RUN_POOL_FULL');
       const admitted = parsed.identities.slice(0, available);
       const snapshot = admitted.length === parsed.identities.length ? proposed
