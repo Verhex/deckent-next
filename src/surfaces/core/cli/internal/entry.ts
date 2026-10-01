@@ -1,8 +1,7 @@
 import { approvalsCommand } from './approvals.js';
-import { workersCommand } from './workers.js';
+import { workersCommand, runInventoryCommand } from '#surfaces/core/monitor/index.js';
 import { runCommand } from './run.js';
 import { codingCommand } from './coding.js';
-import { runInventoryCommand } from './inventory.js';
 import { taskCommand } from './task.js';
 import { runtimeCommand } from './runtime.js';
 import { initCommand } from './init.js';

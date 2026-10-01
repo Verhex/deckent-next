@@ -5,7 +5,7 @@ import { resolve } from 'node:path';
 import { readGraphInput } from './graph-input.js';
 import { validateTaskGraph, TaskGraphError, sanitizeIssues, type AttemptIdentity } from '#domain/index.js';
 import type { CommandContext } from './kernel-commands.js';
-import { renderWorkerModelLine } from './worker-model.js';
+import { renderWorkerModelLine } from '#surfaces/core/monitor/index.js';
 export type RunQueryHandler = (root: string, query: RunQuery, options: ConfigLoadOptions) => Promise<Readonly<{ schemaVersion: 1; layout: ProductLayout; run: RunView | null;
   models?: readonly TaskWorkerModel[] }>>;
 export type RunAdmissionHandler = (root: string, command: RunAdmission, options: ConfigLoadOptions) => Promise<Readonly<{ schemaVersion: 1; layout: ProductLayout; admission: Readonly<{ schemaVersion: 1; commandId: string; run: RunView }> }>>;

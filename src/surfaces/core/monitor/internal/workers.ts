@@ -2,10 +2,10 @@ import { resolve } from 'node:path';
 import { setTimeout as wait } from 'node:timers/promises';
 import { ErrorRegistry, emit, loadConfig, resolveLocale, t, type ConfigLoadOptions } from '#platform/index.js';
 import type { WorkerObservationQuery, WorkerObservationReport } from '#engine/index.js';
-import type { CommandContext } from './kernel-commands.js';
+import type { MonitorCommandContext } from './context.js';
 import { renderWorkerModelLine } from './worker-model.js';
 export type WorkerObservationHandler = (root: string, query: WorkerObservationQuery, options: ConfigLoadOptions) => Promise<WorkerObservationReport>;
-export async function workersCommand(argv: readonly string[], context: CommandContext) {
+export async function workersCommand(argv: readonly string[], context: MonitorCommandContext) {
   const values = new Map<string, string>(); let json = false;
   const help = argv.length === 2 && ['--help', '-h'].includes(argv[1]!);
   if (!help && !['list', 'watch'].includes(argv[1] ?? '')) throw ErrorRegistry.createError('CLI_USAGE');

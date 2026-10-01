@@ -880,12 +880,12 @@
         "src/engine/core/toolchain-currency",
         "src/domain/core/effect",
         "src/engine/core/effect",
-        "src/domain/core/worker-event",
         "src/domain/core/approval",
         "src/surfaces/core/cli-models",
         "src/surfaces/core/cli-kit",
         "src/domain/core/agent-turn",
-        "src/engine/core/model-invocation"
+        "src/engine/core/model-invocation",
+        "src/surfaces/core/monitor"
       ],
       "plan": "SURFACES"
     },
@@ -1852,7 +1852,17 @@
     },
     "src/surfaces/core/monitor": {
       "dependencies": [
-        "src/engine/core/monitor"
+        "src/engine/core/monitor",
+        "src/surfaces/core/cli-kit",
+        "src/platform/core/errors",
+        "src/platform/core/output",
+        "src/platform/core/i18n",
+        "src/platform/core/config",
+        "src/platform/core/host",
+        "src/engine/core/dispatch",
+        "src/domain/core/attempt",
+        "src/domain/core/worker-event",
+        "src/engine/core/worker-observation"
       ],
       "plan": "MONITOR"
     }
