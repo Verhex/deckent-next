@@ -4,6 +4,7 @@ Human-curated. One line per landing, keyed by PLAN.md card id. No product code w
 
 ## Unreleased
 
+- DOCS (OWNER-DECISIONS-DOCS): owner decisions D1–D10 of 2026-10-01 recorded in ARCHITECTURE (decision-log row, K1 amendment, host-rule-file target withdrawn, audit/reasoning/catalog/release/K6 notes) and PLAN (cards EXEC-RELEASE high, LEGACY-CODES-RETIRE, HOST-RULES-CLEANUP, AUDIT-CHECKPOINT, REASONING-RETENTION, CATALOG-SEED, K6-HINT); no behavior change.
 - ADDED (K3): task graph v3 typed `workInput` (task, scope, acceptance, exact model channel+id+auxiliaries, effort, turn limit); a coding profile can be a `native-coding-template` compiled at Run admission and frozen in the Run snapshot; graph v2 still accepted.
 - ADDED (K5): typed execution pool hold — `deckent pool status|hold|resume`, MCP `inspect_pool_hold`/`apply_pool_hold`, SDK `applyPoolHold`/`inspectPoolHold`; reservations are refused with `RUN_POOL_HELD` while held, running work finishes; ledger v44.
 - ADDED (K6): workspace patches are classified against the task's declared scope (`unscoped`, `in-scope` or the out-of-scope paths) in `task patch-prepare`, `patch-preview` and `integration-check`; a work target (`workTargets` schemaVersion 2) can set `scope.mode: enforce`, then integration and delivery refuse out-of-scope (`PATCH_SCOPE_VIOLATION`) or undeclared (`PATCH_SCOPE_UNDECLARED`) work before writing anything.

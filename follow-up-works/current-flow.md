@@ -3,15 +3,18 @@
 Bu belge yalnız güncel durumu tutar; önceki sürümü Git geçmişinde, kanıtlar `deckent-refactor-work/proof/`.
 
 ## Durum
+- **OWNER-DECISIONS-DOCS (2026-10-01; `lane/owner-decisions-docs`, taban `c10411a9`, yalnız belge):** owner kararları D1–D10 (`proof/OWNER-DECISIONS-2026-10-01/README.md`)
+  PLAN/ARCHITECTURE'a tarihli kabul edilmiş karar olarak işlendi (karar günlüğü satırı, K1 değişikliği, W0-9 hedefinin kalkması, K6 O1/O2 kapanışı); yeni kartlar EXEC-RELEASE (yüksek),
+  LEGACY-CODES-RETIRE, HOST-RULES-CLEANUP, AUDIT-CHECKPOINT, REASONING-RETENTION, CATALOG-SEED, K6-HINT — hiçbiri uygulanmadı. Konum listesi `docs-applied.md`. **Sıradaki:** lead incelemesi → partiye alma.
 - **STALE-CLAIMS (2026-10-01; `lane/stale-claims`, taban `01dd71ab`, yalnız belge):** Dev↔Next kıyası öncesi bayat PLAN/ARCHITECTURE iddiaları
   kodla doğrulanıp düzeltildi (ledger v44, protokol v18, Anthropic/OpenAI-chat, B06-2/B09-2, `.deck`, `process`, audit, `/clear`, karar günlüğü
-  2026-09-16 satırları için tek düzeltme satırı). Tablo ve owner düzeyi liste `proof/STALE-CLAIMS-2026-10-01/README.md`. **Sıradaki:** lead incelemesi → partiye alma.
+  2026-09-16 satırları için tek düzeltme satırı). Tablo ve owner düzeyi liste `proof/STALE-CLAIMS-2026-10-01/README.md`. 20. partide (birleşme `c10411a9`); O1–O8 owner 2026-10-01'de D1–D8 olarak karara bağlandı (aşağıda).
 - **Yirminci parti (2026-10-01; `integrate/2026-10-01-u`, worktree `/home/alperen/deckent-next-integrate-u`, taban `c083ec8e`):**
   CI-HYGIENE (`6d425eaf`; test git ortamında bakım kapalı, test soketleri), K6 kapsam sınıflaması (`1845ecc2`), K5 tipli havuz bekletmesi
   (`68279e85`+`99ac09cf`+`1ed7a508`, ledger v44) + lead düzeltmeleri: CLI birim bütçesi 2000/2000 (tek satır katlandı), Windows build-zamanı
   izdüşüm kontrolleri LF metinle karşılaştırılır (C5; barındırılan CI `c083ec8e` koşu 36835569049: Ubuntu 24/26 **yeşil**, Windows yalnız
   `config-vocabulary` CONFIG_VOCABULARY_STALE, macOS F9), Sol 2208 CI-N1 Git 2.55 atfı düzeltildi, **`workTargets` v2** (v1 yayınlı: `scope` yalnız v2'de).
-  Composition 5479/5500. Owner 2026-10-01: benimseme `use`+`adopt` onaylandı; K6 O1 (tam eşleşme) / O2 (kapsamsız işi reddet) owner'a sunulacak.
+  Composition 5479/5500. Owner 2026-10-01: benimseme `use`+`adopt` onaylandı; K6 O1 (tam eşleşme) / O2 (kapsamsız işi reddet) owner 2026-10-01'de kapandı (D9 C + K6-HINT, D10 A).
   **Canlı (2026-10-01 08:21Z):** ilk `dev-release` geçişi — `current` = `versions/c083ec8ee3df-e1493d3b471c`, instance `b3e23208`, ledger 43
   (kanıt `proof/LIVE-SWITCH-BATCH19-2026-10-01/`); bu partiyle ledger v44 gelir (v43'e dönüş `--restore-ledger` ister; ilk v44 geçişi boşaltmasız).
   Sol 2210 REVISE K5-R1 (P2: `pool status` iki ayrı okuma — hiç yaşanmamış held+drained) → tek okuma snapshot'ı + deterministik ikinci bağlantı
