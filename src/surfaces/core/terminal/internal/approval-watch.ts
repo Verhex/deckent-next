@@ -14,6 +14,8 @@ export interface WorklineApproval {
   readonly expiresAt: number;
   /** Set when the decision asked for a standing scope: what the service answered (never assumed by the view). */
   readonly standing?: { readonly scope: StandingScope; readonly saved: boolean; readonly reason?: string };
+  /** B1 single card: risk and undo words (null: not declared), required assurance, and only on the running turn's card the capability its y forwards. */
+  readonly risk?: string | null; readonly undo?: string | null; readonly requiredAssurance?: string; readonly decisionCapability?: string;
 }
 
 /** One page of the scope's approval records (every status; the store orders by id, not by time or state). */

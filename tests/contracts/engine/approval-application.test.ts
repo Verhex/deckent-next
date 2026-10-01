@@ -100,7 +100,9 @@ describe('durable verified approval application', () => {
   it.skipIf(process.platform !== 'linux')('[requires Linux live OS session /proc identity] denies static credentials, revoked sessions, foreign scope, changed bytes and caller channel fields', async () => {
     const f = await fixture();
     try {
-      await expect(f.make('cli').decide({ ...f.command, channel: 'trusted' })).rejects.toThrow('APPROVAL_INVALID');
+      // B1: a client may declare a channel (a record, never authority) but never an assurance; an unregistered channel is refused where the
+      // composition passes its registry (approval-assurance.test.ts).
+      await expect(f.make('cli').decide({ ...f.command, assurance: 'turn-bound' })).rejects.toThrow('APPROVAL_INVALID');
       await expect(f.make('cli').decide(f.command, 'static-bearer')).rejects.toThrow('SESSION_REQUIRED');
       await expect(f.make('cli').inspect({ schemaVersion: 1, scopeId: 'foreign', approvalId: f.record.request.approvalId })).rejects.toThrow('AUTHENTICATION_SCOPE_DENIED');
       const { session } = await f.session.verifySession(undefined); await f.session.revoke(session.sessionId);

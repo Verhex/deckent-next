@@ -18,9 +18,11 @@ const integrity = createHmacIntegrity('key', randomBytes(32));
 const requester = { id: 'owner', issuer: 'host', subject: '1000' };
 const digest = (text: string) => createHash('sha256').update(text).digest('hex');
 async function ledger() { const root = await mkdtemp(join(tmpdir(), 'dn-approval-c12-')); roots.push(root); const path = join(root, 'ledger.db'); openSqliteLedger(path, options).close(); return path; }
-const toolCall = (index = 0, argsDigest = digest('args')) => sealApproval({ request: approvalRequestSchema.parse({ schemaVersion: 2, approvalId: `tool-${index}-${argsDigest.slice(0, 6)}`,
+// Request v3 (B1) as the turn produces it: an ordinary edit cell, so a peer-session decision suffices.
+const toolCall = (index = 0, argsDigest = digest('args')) => sealApproval({ request: approvalRequestSchema.parse({ schemaVersion: 3, approvalId: `tool-${index}-${argsDigest.slice(0, 6)}`,
   scopeId: 'scope', subject: { kind: 'agent-tool-call', turnId: 'turn-1', round: 2, index, tool: 'edit_file', toolVersion: 1, resource: 'src/a.ts', argsDigest },
-  requester, actionDigest: digest(`call:${index}:${argsDigest}`), policyRevision: 'p1', summary: 'edit_file · src/a.ts', createdAt: 1_000, expiresAt: 61_000 }),
+  requester, actionDigest: digest(`call:${index}:${argsDigest}`), policyRevision: 'p1', summary: 'edit_file · src/a.ts', createdAt: 1_000, expiresAt: 61_000,
+  facts: { risk: { source: 'cell', cell: 'edit' }, reversibility: null, onExpiry: 'nothing-runs', requiredAssurance: 'peer-session' } }),
 revision: 0, status: 'pending', decision: null }, integrity);
 const operation = (commandId = 'cmd-1', inputDigest = digest('input')) => sealApproval({ request: approvalRequestSchema.parse({ schemaVersion: 2, approvalId: `op-${commandId}-${inputDigest.slice(0, 6)}`,
   scopeId: 'scope', subject: { kind: 'operation', operation: { id: 'post-order', version: 1 }, target: { kind: 'records', id: 'PO-1' }, commandId, inputDigest,

@@ -1,9 +1,9 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { chatTurnCancellationSchema, chatTurnCommandSchema, modelInvocationProfileSchema, type AgentToolApprovalSettlement, type AgentToolSpec, type AgentTurnMessage,
-  type ChatTurnCancellationResult, type ChatTurnResult, type JsonObject, type ModelInvocationCommand, type ModelInvocationOutcome } from '#domain/index.js';
+  type AgentTurnStreamEvent, type ChatTurnCancellationResult, type ChatTurnResult, type JsonObject, type ModelInvocationCommand, type ModelInvocationOutcome } from '#domain/index.js';
 import { agentCompactionInstruction, AGENT_TURN_ANSWER_MAX_BYTES, APPROVAL_PREVIEW_MAX_BYTES, AgentToolPolicyAuthorization, AgentTurnStoreError, admitFullAccessTurn,
-  agentCompactionTranscript, agentTurnAdmission, awaitAgentToolApproval, boundApprovalPreview, parseAgentCompactionSummary, renderAgentTurnSystemPrompt,
-  requestAgentToolApproval, runDurableAgentTurn, withAgentTurnSystemPrompt, type AgentRoundOutcome, type AgentTurnPorts,
+  agentCompactionTranscript, agentToolApprovalFacts, agentTurnAdmission, awaitAgentToolApproval, boundApprovalPreview, createTurnDecisionCapabilities, parseAgentCompactionSummary,
+  renderAgentTurnSystemPrompt, requestAgentToolApproval, runDurableAgentTurn, withAgentTurnSystemPrompt, type AgentRoundOutcome, type AgentTurnPorts, type TurnDecisionCapabilities,
   type ModelInvocationDelivery } from '#engine/index.js';
 import { globalStateRoot, ErrorRegistry, loadConfig, prepareProductDirectory, resolveLocale, SystemTrustedClock, type ConfigLoadOptions } from '#platform/index.js';
 import { agentAuthorityPaths, agentProductStateDeny, agentShellHardFloor, agentWorkspaceDeny, createWorkspaceReadTools, WORKSPACE_EDIT_TOOL_SPECS, openLocalIntegrityAuthority, openSqliteApprovalStore, openSqliteAgentTurnStore, OPENAI_CHAT_COMPLETIONS_FAMILY, ANTHROPIC_MESSAGES_FAMILY,
@@ -35,11 +35,12 @@ export interface RuntimeChatTurnHost {
   readonly shellSandboxes: ShellSandboxFactory;
   /** MCP-CLIENT: the owner's local MCP servers, started by the turns that need them and closed with the service. */
   readonly mcp: McpClientPool;
+  /** B1: one-time decision capabilities of the running turns' cards (service memory; every decision of this service reads them). */ readonly decisions: TurnDecisionCapabilities;
 }
 export function createRuntimeChatTurnHost(model: RuntimeModelInvocationHost, signal: AbortSignal, scratch = createScratchActivity(),
   fetchTransport: HttpFetchTransport = SYSTEM_FETCH_TRANSPORT, shellSandboxes: ShellSandboxFactory = shippedShellSandboxes): RuntimeChatTurnHost {
   void shellSandboxCapabilities(globalStateRoot()); // Start once with the service; turns await the same bounded observation (BWRAP-SELECT: launcher under the global state root).
-  return Object.freeze({ model, signal, running: new Map(), scratch, fetchTransport, shellSandboxes, mcp: new McpClientPool(signal) });
+  return Object.freeze({ model, signal, running: new Map(), scratch, fetchTransport, shellSandboxes, mcp: new McpClientPool(signal), decisions: createTurnDecisionCapabilities() });
 }
 
 const sha256 = (text: string) => createHash('sha256').update(text).digest('hex');
@@ -53,8 +54,7 @@ const runningKey = (scopeId: string, turnId: string) => `${scopeId}\0${turnId}`;
 /** Compaction command id: the n-th compaction of a turn is one governed invocation, never billed twice on replay. */
 export const chatTurnCompactionCommandId = (scopeId: string, turnId: string, sequence: number) => sha256(`turn-compact:1\0${scopeId}\0${turnId}\0${sequence}`);
 
-/** The result note's bound (`chatTurnResultSchema`). */
-const TURN_NOTE_MAX_CHARS = 4_096;
+const TURN_NOTE_MAX_CHARS = 4_096; // The result note's bound (`chatTurnResultSchema`).
 /** The turn's note with the MCP notices first (MCP-SANDBOX-PATHS): the engine's own note is kept whole; only the MCP part is shortened to fit. */
 export function withMcpNotices(notices: readonly string[], note: string | null): string | null {
   if (!notices.length) return note;
@@ -85,9 +85,7 @@ async function admitFullAccess(context: Awaited<ReturnType<typeof loadPeerInvoca
 }
 
 /** What the owner sees before deciding a call: the tool and its arguments (slice 2 adds the edit diff). Bounded presentation. */
-export function chatTurnApprovalPreview(tool: string, args: Record<string, unknown>): string {
-  return boundApprovalPreview(`${tool} ${JSON.stringify(args, null, 2)}`);
-}
+export function chatTurnApprovalPreview(tool: string, args: Record<string, unknown>): string { return boundApprovalPreview(`${tool} ${JSON.stringify(args, null, 2)}`); }
 /** Round command id (Astra 2074 D3): the same turn and round is the same governed invocation, so a replay never bills twice. */
 export const chatTurnRoundCommandId = (scopeId: string, turnId: string, round: number) => sha256(`turn-round:1\0${scopeId}\0${turnId}\0${round}`);
 
@@ -135,6 +133,9 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
   const key = runningKey(command.scopeId, command.turnId);
   const cancel = new AbortController();
   const signal = AbortSignal.any([channel.signal, cancel.signal, host.signal]);
+  // B1: each card of this turn (tool call, MCP trust) gets a one-time capability for this principal and peer process, sent only on this turn's stream; settled → revoked.
+  const emitApproval = (event: Extract<AgentTurnStreamEvent, { kind: 'approval.requested' | 'approval.settled' }>) => channel.emit(event.kind === 'approval.settled' ? (host.decisions.revoke(command.scopeId,
+    event.approvalId), event) : { ...event, decisionCapability: host.decisions.mint({ scopeId: command.scopeId, approvalId: event.approvalId, principal: context.principal, peerPid: peer.pid, expiresAt: event.expiresAt }, clock.sample().wallMs) });
   let store: Awaited<ReturnType<typeof openSqliteAgentTurnStore>> | null = null, registered = false;
   try {
     // FETCH: egress `none` (the default) builds no fetch at all — no tool, no transport use; the prompt then says fetch_url is not offered (and,
@@ -145,7 +146,7 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
     // MCP-SANDBOX-PATHS: a server that could not be decided or started is named in the turn's note (protocol v17 unchanged: `note` exists).
     let mcpNotices: readonly string[] = [];
     const mcp = workspace ? await createAgentMcp({ onNotices: notices => { mcpNotices = notices; }, pool: host.mcp, projectRoot, options, resultMaxBytes: chat.readResultMaxBytes, peer, context, scopeId: command.scopeId,
-      turnId: command.turnId, signal, emit: event => channel.emit(event), sandboxes: host.shellSandboxes({ project: workspace.scope, scratchDir: null, writeFloor: isWriteApprovalFloored }), cwd: workspace.scope.root }) : null;
+      turnId: command.turnId, signal, emit: emitApproval, sandboxes: host.shellSandboxes({ project: workspace.scope, scratchDir: null, writeFloor: isWriteApprovalFloored }), cwd: workspace.scope.root }) : null;
     const tools: readonly AgentToolSpec[] = workspace ? [...workspace.specs, ...WORKSPACE_EDIT_TOOL_SPECS, RUN_SHELL_TOOL_SPEC, ...SCRATCH_TOOL_SPECS,
       ...(fetcher ? [FETCH_URL_TOOL_SPEC] : []), ...(mcp?.specs ?? [])] : [];
     const editsIn = (area: WorkspaceEditArea | null | undefined, project = false) => area ? createAgentFileEdits({ area, context, peer, scopeId: command.scopeId, turnId: command.turnId,
@@ -240,16 +241,15 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
           const integrity = await openLocalIntegrityAuthority(context.layout, context.config.approvals.keyFile, true);
           const policy = await context.policy.load() as { revision?: unknown };
           const callSubject = approvals.subject({ round, index }, tool, target, argsDigest), resource = callSubject.resource, started = clock.sample(), now = started.wallMs;
-          const { id, issuer, subject } = context.principal;
-          const record = requestAgentToolApproval(journal.store, integrity, { scopeId: command.scopeId, requester: { id, issuer, subject },
-            subject: callSubject,
+          const { id, issuer, subject } = context.principal, facts = agentToolApprovalFacts(policy, command.scopeId, decisions.cell(tool, args));
+          const record = requestAgentToolApproval(journal.store, integrity, { scopeId: command.scopeId, requester: { id, issuer, subject }, subject: callSubject, facts,
             policyRevision: typeof policy.revision === 'string' ? policy.revision : 'unknown',
             summary: `${tool.name} · ${resource} · ${argsDigest.slice(0, 12)}`, createdAt: now, expiresAt: now + context.config.approvals.requestTtlMs });
           // A diff larger than the preview bound is shown cut, with the whole change kept owner-only while the approval is pending.
           const diff = editsOf(tool.name)?.preview(tool.name, args);
           if (diff !== undefined && Buffer.byteLength(diff, 'utf8') > APPROVAL_PREVIEW_MAX_BYTES) kept = await keepFullPreview(context.layout, record.request.approvalId, diff);
-          channel.emit({ kind: 'approval.requested', callId: call.id, approvalId: record.request.approvalId, revision: record.revision,
-            summary: record.request.summary, preview: diff !== undefined ? boundApprovalPreview(diff, kept)
+          emitApproval({ kind: 'approval.requested', callId: call.id, approvalId: record.request.approvalId, revision: record.revision, risk: facts.risk?.source === 'cell' ? facts.risk.cell : null,
+            requiredAssurance: facts.requiredAssurance, summary: record.request.summary, preview: diff !== undefined ? boundApprovalPreview(diff, kept)
               : (tool.toolClass === 'shell' ? shell?.preview(tool.name, args) : fetches(tool) ? fetcher?.preview(args) : mcps(tool) ? boundApprovalPreview(mcp!.preview(tool.name, args)!)
                 : undefined) ?? chatTurnApprovalPreview(tool.name, args),
             expiresAt: record.request.expiresAt });
@@ -269,7 +269,7 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
         } finally {
           journal.close();
           if (kept) await dropFullPreview(kept);
-          if (requested) channel.emit({ kind: 'approval.settled', callId: call.id, approvalId: requested.approvalId, outcome: settlement });
+          if (requested) emitApproval({ kind: 'approval.settled', callId: call.id, approvalId: requested.approvalId, outcome: settlement });
         }
       },
       async summarize({ sequence, messages: older }, summarySignal) {

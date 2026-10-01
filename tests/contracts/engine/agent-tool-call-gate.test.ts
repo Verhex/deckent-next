@@ -6,7 +6,7 @@ import { afterEach, expect, it } from 'vitest';
 import { LocalOsSessionAuthority, openSqliteApprovalStore } from '#adapters/index.js';
 import { openSqliteLedger } from '#adapters/core/sqlite-ledger/index.js';
 import { effectRecordSchema, type ApprovalSubject, type EffectCommand, type EffectRecord, type OperationDescriptor } from '#domain/index.js';
-import { ApprovalApplication, EffectApplication, OperationPolicyAuthorization, agentToolCallActionDigest, agentToolCallApprovalGate, awaitAgentToolApproval, requestAgentToolApproval,
+import { ApprovalApplication, EffectApplication, agentToolApprovalFacts, OperationPolicyAuthorization, agentToolCallActionDigest, agentToolCallApprovalGate, awaitAgentToolApproval, requestAgentToolApproval,
   type AgentToolCallAdmission, type EffectApprovalContext } from '#engine/index.js';
 import { MAX_WALL_SKEW_MS, createHmacIntegrity, type IntegrityAuthority } from '#platform/index.js';
 
@@ -38,7 +38,8 @@ async function fixture() {
   /** Opens the stored request of one call as the turn does, at the current time. */
   const request = (subject: ToolCallSubject, ttlMs = 60_000) => {
     const started = clock.sample();
-    const record = requestAgentToolApproval(journal.store, integrity, { scopeId: 'scope', requester, subject, policyRevision: 'p1', summary: 'Edit',
+    // An ordinary edit cell (B1: peer-session suffices, so the gate is exercised without a turn capability).
+    const record = requestAgentToolApproval(journal.store, integrity, { scopeId: 'scope', requester, subject, policyRevision: 'p1', summary: 'Edit', facts: agentToolApprovalFacts(policy, 'scope', 'edit'),
       createdAt: started.wallMs, expiresAt: started.wallMs + ttlMs });
     return { record, pointer: { approvalId: record.request.approvalId, actionDigest: record.request.actionDigest, started } };
   };

@@ -996,6 +996,8 @@
   "error.EFFECT_TARGET_CHANGED": "The operation's descriptor or target endpoint changed since this effect was recorded (or the record predates pinned targets). Nothing was sent; recover the recorded effect against its original target before retrying.",
   "error.OPERATION_SURFACE_RESTRICTED": "This operation changes who may do what, so general operation paths (deckent operation, SDK, MCP) cannot run it. Nothing was asked, recorded or changed. Use the policy administration surface instead.",
   "error.APPROVAL_SURFACE_RESTRICTED": "This approval changes who may do what. It can only be decided on the policy administration surface, not here.",
+  "error.APPROVAL_ATTENDED_REQUIRED": "MCP can deny an approval but never allow it. Allow it on the Deckent terminal card (/approvals in the terminal of the turn that asked).",
+  "error.APPROVAL_ASSURANCE_INSUFFICIENT": "This approval needs a stronger proof that a person decided it than this surface can give. Allow it on the terminal card of the turn that asked; here it can only be denied. Nothing was decided.",
   "error.MCP_SERVER_UNKNOWN": "No MCP server named {name} is registered for this project.",
   "error.MCP_SERVER_EXISTS": "An MCP server named {name} already exists in the {scope} scope; remove it first.",
   "error.MCP_SERVER_SCOPE_AMBIGUOUS": "{name} is registered in several scopes ({scopes}); pass --scope.",

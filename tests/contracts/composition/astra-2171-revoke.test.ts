@@ -24,7 +24,7 @@ it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket] r
   if(event.kind==='approval.requested') pending.push((async()=>{
    await runConfiguredMcpCommand(f.project,{verb:'reset',name:'fx'},{env:f.env},async()=>null);
    revokedStatus=await runConfiguredMcpCommand(f.project,{verb:'get',name:'fx'},{env:f.env},async()=>null);
-   await client.decideApproval({schemaVersion:1,scopeId:'scope',approvalId:event.approvalId,commandId:`allow-${event.approvalId}`,expectedRevision:event.revision,decision:'allow',reason:'old card'});
+   await client.decideApproval({schemaVersion:1,scopeId:'scope',approvalId:event.approvalId,decisionCapability:event.decisionCapability,commandId:`allow-${event.approvalId}`,expectedRevision:event.revision,decision:'allow',reason:'old card'});
   })());
  });
  await Promise.all(pending);

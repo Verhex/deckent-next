@@ -35,7 +35,7 @@ async function productStateTurn(sandboxes: ShellSandboxFactory | undefined, mark
     const events: AgentTurnStreamEvent[] = [], pending: Promise<unknown>[] = [];
     await client.chatTurn(ask(turnId), event => {
       events.push(event);
-      if (event.kind === 'approval.requested') pending.push(client.decideApproval({ schemaVersion: 1, scopeId: 'scope', approvalId: event.approvalId,
+      if (event.kind === 'approval.requested') pending.push(client.decideApproval({ schemaVersion: 1, scopeId: 'scope', approvalId: event.approvalId, decisionCapability: event.decisionCapability,
         commandId: `${turnId}-allow`, expectedRevision: event.revision, decision: 'allow', reason: 'The sandbox must refuse it' }));
     });
     await Promise.all(pending);

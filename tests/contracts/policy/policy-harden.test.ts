@@ -144,7 +144,9 @@ describe.skipIf(process.platform === 'win32')('policy.administer@1 hardening (PO
     const big = await f.admin.submit(f.command('d2', many));
     if (big.status !== 'approval-pending') throw new Error('pending expected');
     expect(big.approval.summary.length).toBeLessThanOrEqual(2048);
-    expect(big.approval.summary).toMatch(/… \+\d+ more\npolicy\.administer@1 · authority-document\/installation · [0-9a-f]{12}$/);
+    // APPROVAL-SURFACE §B (B1 card): the binding line comes first, so the cut description can never push it off the card.
+    expect(big.approval.summary).toMatch(/^policy\.administer@1 · authority-document\/installation · [0-9a-f]{12}\n/);
+    expect(big.approval.summary).toMatch(/… \+\d+ more$/);
     expect(big.approval.summary).toContain('policy.administer@1 · 32 changes');
   });
 });

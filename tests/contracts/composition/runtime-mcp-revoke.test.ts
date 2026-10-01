@@ -45,7 +45,7 @@ async function turn(f: Harness, turnId: string, meanwhile: () => Promise<unknown
     events.push(event);
     if (event.kind === 'approval.requested') pending.push((async () => {
       await meanwhile();
-      await client.decideApproval({ schemaVersion: 1, scopeId: 'scope', approvalId: event.approvalId, commandId: `allow-${event.approvalId}`,
+      await client.decideApproval({ schemaVersion: 1, scopeId: 'scope', approvalId: event.approvalId, decisionCapability: event.decisionCapability, commandId: `allow-${event.approvalId}`,
         expectedRevision: event.revision, decision, reason: 'stale card' });
     })());
   });

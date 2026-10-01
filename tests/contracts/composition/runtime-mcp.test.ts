@@ -60,7 +60,7 @@ async function answered(f: Harness, turnId: string, decision: 'allow' | 'deny' |
   const client = f.client(), events: AgentTurnStreamEvent[] = [], pending: Promise<unknown>[] = [];
   const result = await client.chatTurn(turn(turnId), event => {
     events.push(event);
-    if (event.kind === 'approval.requested' && decision) pending.push(client.decideApproval({ schemaVersion: 1, scopeId: 'scope', approvalId: event.approvalId,
+    if (event.kind === 'approval.requested' && decision) pending.push(client.decideApproval({ schemaVersion: 1, scopeId: 'scope', approvalId: event.approvalId, decisionCapability: event.decisionCapability,
       commandId: `decide-${event.approvalId}`, expectedRevision: event.revision, decision, reason: 'owner' }));
   });
   await Promise.all(pending);
