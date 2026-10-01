@@ -19,7 +19,7 @@ function scopeLine(scope: PatchScope, locale: ReturnType<typeof resolveLocale>) 
   return scope.mode === 'enforce' && scope.status !== 'in-scope' ? [line, t('cli.task.patch.scope.enforced', {}, locale)].join('\n') : line;
 }
 import type { CommandContext } from './kernel-commands.js';
-import { renderWorkerTranscript } from './transcript.js';
+import { renderWorkerTranscript } from '#surfaces/core/monitor/index.js';
 
 export type TaskExecutionHandler = (root: string, identity: AttemptIdentity, options: ConfigLoadOptions) => Promise<Readonly<{ schemaVersion: 1; layout: ProductLayout;
   execution: Readonly<{ identity: AttemptIdentity; status: 'terminal' | 'prevented' | 'unresolved'; terminal: DispatchTerminal | null; outputRecorded: boolean }> }>>;

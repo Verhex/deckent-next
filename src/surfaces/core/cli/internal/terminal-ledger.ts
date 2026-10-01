@@ -5,10 +5,7 @@ import { approvalRecordSchema, approvalSubject, type ApprovalRecord } from '#dom
 import type { StandingScope } from '#surfaces/core/terminal/index.js';
 import type { RunCancellationDeliveryHandler, RunQueryHandler } from './run.js';
 import { renderRunCancellation } from './run.js';
-import type { WorkerObservationHandler } from './workers.js';
-import type { InventoryQueryHandler } from './inventory.js';
-import type { WorkerTranscriptHandler } from './transcript.js';
-import { renderWorkerTranscript } from './transcript.js';
+import { renderWorkerTranscript, type WorkerObservationHandler, type InventoryQueryHandler, type WorkerTranscriptHandler } from '#surfaces/core/monitor/index.js';
 import type { WorklineApproval, WorklineLedgerPorts } from '#surfaces/core/terminal/index.js';
 
 const approvalPageSchema = z.array(approvalRecordSchema);

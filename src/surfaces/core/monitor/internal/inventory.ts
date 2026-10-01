@@ -1,8 +1,8 @@
 import { ErrorRegistry, emit, resolveLocale, t, type ConfigLoadOptions, type ProductLayout } from '#platform/index.js';
 import type { DispatchInventoryInput, DispatchInventoryPage } from '#engine/index.js';
-import type { CommandContext } from './kernel-commands.js';
+import type { MonitorCommandContext } from './context.js';
 export type InventoryQueryHandler = (root: string, query: DispatchInventoryInput, options: ConfigLoadOptions) => Promise<Readonly<{ schemaVersion: 1; layout: ProductLayout; page: DispatchInventoryPage }>>;
-export async function runInventoryCommand(argv: readonly string[], context: CommandContext): Promise<void> {
+export async function runInventoryCommand(argv: readonly string[], context: MonitorCommandContext): Promise<void> {
   const values = new Map<string, string>(); let json = false;
   for (let i = 1; i < argv.length; i++) {
     const arg = argv[i]!;

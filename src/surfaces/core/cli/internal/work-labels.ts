@@ -1,6 +1,6 @@
 import { t, type Locale } from '#platform/index.js';
 import type { WorkSurfaceLabels } from '#surfaces/core/terminal/index.js';
-import { phaseLabel } from './transcript.js';
+import { phaseLabel } from '#surfaces/core/monitor/index.js';
 
 // Kept apart from `terminal.ts`: that module reaches Ink/React through the terminal barrel and is loaded only when a terminal opens
 // (STARTUP-COST), while these two stay importable from the CLI barrel without it.

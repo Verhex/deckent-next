@@ -1,0 +1,108 @@
+Deckent izleyici · gözlem 2026-10-02 09:30:00Z · yalnız gözlem
+● current · servis çalışıyor (pid 31337) · build b0e66d92c0ff (2026-10-02 08:00…
+● dogfood · servis çalışıyor (pid 2001) · build 76582f9f0000 (2026-10-01 22:15:…
+○ remote-lab · erişilemiyor · build bilinmiyor · ledger sürümü bilinmiyor · ⚠ 2…
+
+── Özet ────────────────────────────────────────────────────────────────────────
+Run'lar: 3 ilerliyor · 5 bekliyor · 7 takılı · 1 kabul · 1 başarısız · 1 iptal
+⚠ dogfood: okunamayan WORKER_SIDECAR_UNREADABLE
+⚠ remote-lab erişilemiyor: MONITOR_SOURCE_UNREADABLE, LEDGER_LOCKED
+
+Sizi bekleyen (2)
+  Konu                                           Bekliyor    Süre sonu
+  operation: Push branch lane/monitor to origin  3 sa 12 dk  45 dk sonra doluyor
+  effect: Delete stale preview environment       4 dk 0 sn   2 dk 0 sn önce dol…
+
+Takılı ya da bekleyen, en eskisi önce (12)
+  Run kimliği                    Görev  Neden                        Ne zamandır
+  run-blocked-approval           build  ~ onay bekliyor (appr-0001)  3 sa 12 dk
+  run-not-admitted               build  ~ henüz kabul edilmedi       1 sa 33 dk
+  run-cancellation-pending       build  ! iptal bekleniyor           1 sa 26 dk
+  run-unresolved-effect          build  ! etki sonucu belirsiz       1 sa 19 dk
+  run-evaluation-unknown         build  ! değerlendirme sonucu bel…  1 sa 11 dk
+  run-evaluation-not-ready       build  ! değerlendirme hazır değil  1 sa 4 dk
+  run-worker-exited-unevaluated  build  ! worker bitti, değerlendi…  57 dk
+  run-worker-stale-heartbeat     build  ! worker sessiz (heartbeat…  50 dk
+  run-waiting-dependency         build  ~ bağımlılığını bekliyor     28 dk
+  run-pool-held                  build  ~ havuz bekletiliyor         21 dk
+  run-waiting-pool-slot          build  ~ havuzda yer bekliyor       14 dk
+  run-unknown                    build  ! neden bilinmiyor           bilinmiyor
+
+Başarısız Run'lar ve ilk hata yeri (1)
+  Run kimliği  İlk hata                           Son etkinlik  Kapsam   Kurulum
+  run-broken   ✗ build: başarısız, değerlendirm…  25 dk önce    scope-a  current
+
+Şu an çalışan worker'lar (2)
+  Run/Görev                   Şu an         Heartbeat yaşı       Süreç
+  run-blocked-approval/build  düzenliyor    1 sn                 çalışıyor
+  run-blocked-approval/lint   çalıştırıyor  ⚠ 1 dk 35 sn (eski)  çalışıyor
+
+── Run'lar ─────────────────────────────────────────────────────────────────────
+  Run kimliği                Durum           Engel                   Ne zamandır
+  run-blocked-approval       ~ bekliyor      onay bekliyor (appr-0…  3 sa 12 dk
+  run-not-admitted           ~ bekliyor      henüz kabul edilmedi    1 sa 33 dk
+  run-cancellation-pending   ! takılı        iptal bekleniyor        1 sa 26 dk
+  run-unresolved-effect      ! takılı        etki sonucu belirsiz    1 sa 19 dk
+  run-evaluation-unknown     ! takılı        değerlendirme sonucu …  1 sa 11 dk
+  run-evaluation-not-ready   ! takılı        değerlendirme hazır d…  1 sa 4 dk
+  run-worker-exited-uneval…  ! takılı        worker bitti, değerle…  57 dk
+  run-worker-stale-heartbe…  ! takılı        worker sessiz (heartb…  50 dk
+  run-waiting-dependency     ~ bekliyor      bağımlılığını bekliyor  28 dk
+  run-pool-held              ~ bekliyor      havuz bekletiliyor      21 dk
+  run-waiting-pool-slot      ~ bekliyor      havuzda yer bekliyor    14 dk
+  run-unknown                ! takılı        neden bilinmiyor        bilinmiyor
+  run-none                   ▶ ilerliyor     normal ilerliyor        7 dk 0 sn
+  run-worker-running         ▶ ilerliyor     worker çalışıyor        43 dk
+  run-dog-1                  ▶ ilerliyor     worker çalışıyor        1 dk 30 sn
+  run-broken                 ✗ başarısız     —                       —
+  run-done                   ✓ kabul edildi  —                       —
+  run-stopped                ■ iptal edildi  —                       —
+
+── Worker'lar ──────────────────────────────────────────────────────────────────
+  Run/Görev                   Şu an         Heartbeat yaşı       Süreç
+  run-blocked-approval/build  düzenliyor    1 sn                 çalışıyor
+  run-blocked-approval/lint   çalıştırıyor  ⚠ 1 dk 35 sn (eski)  çalışıyor
+  run-blocked-approval/docs   —             —                    çıktı 3
+  run-blocked-approval/pack   —             bırakıldı            kayıp
+
+── Onaylar ─────────────────────────────────────────────────────────────────────
+  Konu                                    Bekliyor    Süre sonu         Güvence
+  operation: Push branch lane/monitor t…  3 sa 12 dk  45 dk sonra dol…  local-os
+  effect: Delete stale preview environm…  4 dk 0 sn   2 dk 0 sn önce …  —
+
+── Havuzlar ────────────────────────────────────────────────────────────────────
+  Havuz    Doluluk            Bekletme                   Kurulum
+  default  4 dolu / 4         yok                        current
+  gpu      0 dolu / 1         ⚠ bekletiyor: owner@local  current
+  ci       2 dolu / sınırsız  yok                        current
+  default  1 dolu / 2         yok                        dogfood
+
+── Kurulumlar ──────────────────────────────────────────────────────────────────
+Kurulum current · erişilebilir
+Yol /home/owner/projects/deckent-next
+Kapsamlar: scope-a
+servis çalışıyor (pid 31337) · örnek svc-01
+build b0e66d92c0ff (2026-10-02 08:00:00Z derlendi) · kaynak ağacı ffffffffffff
+ledger sürüm 44
+17 Run · 4 worker · 2 onay · 3 havuz
+
+Kurulum dogfood · erişilebilir
+Yol /home/owner/deckent-dogfood
+Kapsamlar: scope-dog
+servis çalışıyor (pid 2001) · örnek svc-02
+build 76582f9f0000 (2026-10-01 22:15:00Z derlendi) · kaynak ağacı ffffffffffff
+ledger sürüm 43
+1 Run · 0 worker · 0 onay · 1 havuz
+⚠ 1 okuma sorunu: WORKER_SIDECAR_UNREADABLE
+
+Kurulum remote-lab · erişilemiyor
+Yol /mnt/lab/deckent
+Kapsamlar: —
+servis kaydı yok · örnek —
+build bilinmiyor · kaynak ağacı —
+ledger sürümü bilinmiyor
+0 Run · 0 worker · 0 onay · 0 havuz
+⚠ 2 okuma sorunu: MONITOR_SOURCE_UNREADABLE, LEDGER_LOCKED
+
+Yalnız gözlem: bu görünüm hiçbir şeyi üstlenmez, ayırmaz, iptal etmez, karar
+vermez. Engel, motorun türettiği tek nedendir; görevler için Run'ı açın.

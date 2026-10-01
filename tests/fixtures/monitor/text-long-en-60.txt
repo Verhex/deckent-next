@@ -1,0 +1,54 @@
+Deckent monitor · observed 2026-10-02 09:30:00Z · observe o…
+● current · service running (pid 31337) · build b0e66d92c0f…
+
+── Summary ─────────────────────────────────────────────────
+Runs: 0 progressing · 0 waiting · 1 blocked · 0 accepted · 0
+failed · 0 cancelled
+
+Waiting for you (1)
+  Subject                               Waiting    Expires
+  operation: A very long approval sum…  1 min 0 s  no expiry
+
+Stuck or waiting, oldest first (1)
+  Run                      Why                     Stuck for
+  run-2026-10-02-extreme…  ! worker silent (stal…  2 d 3 h
+
+Workers running now (1)
+  Run/Task                    Doing now  Heartbeat   Process
+  run-2026-10-02-extremely-…  editing    ⚠ 1 h 0 m…  running
+
+── Runs ────────────────────────────────────────────────────
+  Run                      State      Blocker
+  run-2026-10-02-extreme…  ! blocked  worker silent (stale …
+
+── Workers ─────────────────────────────────────────────────
+  Run/Task                    Doing now  Heartbeat   Process
+  run-2026-10-02-extremely-…  editing    ⚠ 1 h 0 m…  running
+
+── Approvals ───────────────────────────────────────────────
+  Subject                    Waiting    Expires    Assurance
+  operation: A very long a…  1 min 0 s  no expiry  local-os
+
+── Pools ───────────────────────────────────────────────────
+  Pool                              Usage          Hold
+  pool-with-a-long-identifier-for…  3 in use / 16  no
+
+── Installs ────────────────────────────────────────────────
+Install current · available
+Path
+/home/owner/a/very/deep/directory/structure/that/never/ends/
+projects/deckent-next-with-a-long-name
+Scopes:
+scope-with-a-really-long-name-for-enterprise-unit-alpha
+service running (pid 31337) · instance svc-01
+build b0e66d92c0ff (built 2026-10-02 08:00:00Z) · source
+tree ffffffffffff
+ledger v44
+1 Runs · 1 workers · 1 approvals · 1 pools
+
+No other install observed. Add one under config
+`inspection.workers.sources`.
+
+Observe only: this view never claims, reserves, cancels or
+decides anything. A blocker is the engine's single derived
+reason; open the Run for its tasks.

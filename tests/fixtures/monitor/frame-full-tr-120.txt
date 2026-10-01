@@ -1,0 +1,39 @@
+Deckent izleyici · gözlem 2026-10-02 09:30:00Z · yalnız gözlem
+● current · servis çalışıyor (pid 31337) · build b0e66d92c0ff (2026-10-02 08:00:00Z derlendi) · ledger sürüm 44 · /home…
+● dogfood · servis çalışıyor (pid 2001) · build 76582f9f0000 (2026-10-01 22:15:00Z derlendi) · ledger sürüm 43 · ⚠ 1 ok…
+○ remote-lab · erişilemiyor · build bilinmiyor · ledger sürümü bilinmiyor · ⚠ 2 okuma sorunu: MONITOR_SOURCE_UNREADABLE…
+[1 Özet]  2 Run'lar   3 Worker'lar   4 Onaylar   5 Havuzlar   6 Kurulumlar
+Run'lar: 3 ilerliyor · 5 bekliyor · 7 takılı · 1 kabul · 1 başarısız · 1 iptal
+⚠ dogfood: okunamayan WORKER_SIDECAR_UNREADABLE
+⚠ remote-lab erişilemiyor: MONITOR_SOURCE_UNREADABLE, LEDGER_LOCKED
+
+Sizi bekleyen (2)
+  Konu                                           Bekliyor    Süre sonu             Kurulum
+› operation: Push branch lane/monitor to origin  3 sa 12 dk  45 dk sonra doluyor   current
+  effect: Delete stale preview environment       4 dk 0 sn   2 dk 0 sn önce doldu  current
+
+Takılı ya da bekleyen, en eskisi önce (12)
+  Run kimliği                    Görev  Neden                              Ne zamandır  Kapsam   Kurulum
+  run-blocked-approval           build  ~ onay bekliyor (appr-0001)        3 sa 12 dk   scope-a  current
+  run-not-admitted               build  ~ henüz kabul edilmedi             1 sa 33 dk   scope-a  current
+  run-cancellation-pending       build  ! iptal bekleniyor                 1 sa 26 dk   scope-a  current
+  run-unresolved-effect          build  ! etki sonucu belirsiz             1 sa 19 dk   scope-a  current
+  run-evaluation-unknown         build  ! değerlendirme sonucu belirsiz    1 sa 11 dk   scope-a  current
+  run-evaluation-not-ready       build  ! değerlendirme hazır değil        1 sa 4 dk    scope-a  current
+  run-worker-exited-unevaluated  build  ! worker bitti, değerlendirilmedi  57 dk        scope-a  current
+  run-worker-stale-heartbeat     build  ! worker sessiz (heartbeat eski)   50 dk        scope-a  current
+  run-waiting-dependency         build  ~ bağımlılığını bekliyor           28 dk        scope-a  current
+  run-pool-held                  build  ~ havuz bekletiliyor               21 dk        scope-a  current
+  run-waiting-pool-slot          build  ~ havuzda yer bekliyor             14 dk        scope-a  current
+  run-unknown                    build  ! neden bilinmiyor                 bilinmiyor   scope-a  current
+
+Başarısız Run'lar ve ilk hata yeri (1)
+  Run kimliği  İlk hata                               Son etkinlik  Kapsam   Kurulum
+  run-broken   ✗ build: başarısız, değerlendirme ret  25 dk önce    scope-a  current
+
+Şu an çalışan worker'lar (2)
+  Run/Görev                   Şu an         Heartbeat yaşı       Süreç      Deneme    Sağlayıcı/model       Kurulum
+  run-blocked-approval/build  düzenliyor    1 sn                 çalışıyor  att-buil  claude/model-alpha-2  current
+  run-blocked-approval/lint   çalıştırıyor  ⚠ 1 dk 35 sn (eski)  çalışıyor  att-lint  claude/model-alpha-2  current
+2 sn aralıkla yenilenir · görüntü 2026-10-02 09:30:00Z
+Tab/←→ sekme · ↑↓ seç · Enter ayrıntı · Esc geri · r yenile · p duraklat · ? yardım · q çık

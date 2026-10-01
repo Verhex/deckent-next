@@ -1,10 +1,9 @@
-import type { WorkerObservationHandler } from './workers.js';
+import type { MonitorCommandContext, WorkerTranscriptHandler } from '#surfaces/core/monitor/index.js';
 import type { RunAdmissionHandler, RunDeliveryAdmissionHandler, RunCancellationDeliveryHandler, RunQueryHandler, RunReservationHandler } from './run.js';
 import type { CodingProfilePreparationHandler } from './coding.js';
 import type { Readable } from 'node:stream';
 import type { TaskIntegrationDeliverHandler, TaskIntegrationInspectHandler, TaskIntegrationCheckHandler, TaskIntegrationPrepareHandler, TaskPatchHandler, TaskEvaluationHandler, TaskExecutionHandler } from './task.js';
 import { getPolicyVocabulary } from '#engine/index.js';
-import type { InventoryQueryHandler } from './inventory.js';
 import type { RuntimeServiceDescribeHandler, RuntimeServiceShutdownHandler, RuntimeServiceStartHandler } from './runtime.js';
 import type { InstallationPreviewHandler, InstallationInspectionHandler, InstallationApplyHandler, InstallationResumeHandler,
   PolicyTemplatePreviewHandler, PolicyTemplateApplyHandler } from './init.js';
@@ -33,14 +32,14 @@ export interface RuntimeServiceReadinessView {
 }
 
 /** Every host operation a CLI command may use; the model commands' narrower context is part of it. */
-export interface CommandContext extends ModelCommandContext {
+export interface CommandContext extends ModelCommandContext, MonitorCommandContext {
   renewApproval?: (input: unknown) => Promise<unknown>;
   listApprovals?: (input: unknown) => Promise<unknown>;
   inspectApproval?: (input: unknown) => Promise<unknown>;
   decideApproval?: (input: unknown) => Promise<unknown>;
   deliverWorkspaceIntegration?: TaskIntegrationDeliverHandler;
   executeOperation?: import('./operation.js').OperationEffectHandler;
-  inspectWorkerTranscript?: import('./transcript.js').WorkerTranscriptHandler;
+  inspectWorkerTranscript?: WorkerTranscriptHandler;
   compensateOperation?: import('./operation.js').OperationEffectHandler;
   inspectOperation?: import('./operation.js').OperationInspectHandler;
   adoptWorkspaceIntegration?: import('./task.js').TaskIntegrationAdoptHandler;
@@ -48,7 +47,6 @@ export interface CommandContext extends ModelCommandContext {
   inspectWorkspaceIntegration?: TaskIntegrationInspectHandler;
   checkWorkspaceIntegration?: TaskIntegrationCheckHandler;
   prepareWorkspaceIntegration?: TaskIntegrationPrepareHandler;
-  inspectWorkers?: WorkerObservationHandler;
   inspectToolchainCurrency?: (root: string, options: ConfigLoadOptions) => Promise<ToolchainCurrencyReport>;
   ensureRuntimeService?: (root: string, options: ConfigLoadOptions) => Promise<RuntimeServiceReadinessView>;
   restartRuntimeService?: (root: string, options: ConfigLoadOptions) => Promise<RuntimeServiceReadinessView>;
@@ -101,7 +99,6 @@ export interface CommandContext extends ModelCommandContext {
   reserveRunTasks?: RunReservationHandler;
   executeTask?: TaskExecutionHandler;
   evaluateTask?: TaskEvaluationHandler;
-  inspectInventory?: InventoryQueryHandler;
   startRuntimeService?: RuntimeServiceStartHandler;
   describeRuntimeService?: RuntimeServiceDescribeHandler;
   shutdownRuntimeService?: RuntimeServiceShutdownHandler;

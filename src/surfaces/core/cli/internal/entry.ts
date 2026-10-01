@@ -1,8 +1,7 @@
 import { approvalsCommand } from './approvals.js';
-import { workersCommand } from './workers.js';
+import { workersCommand, runInventoryCommand, monitorCommand } from '#surfaces/core/monitor/index.js';
 import { runCommand } from './run.js';
 import { codingCommand } from './coding.js';
-import { runInventoryCommand } from './inventory.js';
 import { taskCommand } from './task.js';
 import { runtimeCommand } from './runtime.js';
 import { initCommand } from './init.js';
@@ -59,6 +58,7 @@ export async function main(argv: readonly string[] = process.argv.slice(2), cont
     }
     if (argv[0] === 'operation') { await operationCommand(argv, { ...context, onLocale: value => { locale = value; context.onLocale?.(value); } }); return 0; }
     if (argv[0] === 'approval') { await approvalsCommand(argv, { ...context, onLocale: value => { locale = value; context.onLocale?.(value); } }); return 0; }
+    if (argv[0] === 'monitor') { await monitorCommand(argv, { ...context, onLocale: value => { locale = value; context.onLocale?.(value); } }); return 0; }
     if (argv[0] === 'workers') { await workersCommand(argv, { ...context, onLocale: value => { locale = value; context.onLocale?.(value); } }); return 0; }
     if (argv[0] === 'coding') { await codingCommand(argv, { ...context, onLocale: value => { locale = value; context.onLocale?.(value); } }); return 0; }
     if (argv[0] === 'init') { await initCommand(argv, { ...context, onLocale: value => { locale = value; context.onLocale?.(value); } }); return 0; }
