@@ -295,6 +295,7 @@
     },
     "src/composition/core/mcp": {
       "dependencies": [
+        "src/composition/core/runs",
         "src/adapters/core/contract",
         "src/adapters/core/mcp-transport",
         "src/composition/core/model-activation",

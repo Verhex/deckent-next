@@ -11,6 +11,7 @@ import { inspectDeclaredModels, inspectModelBinding } from '#composition/core/pr
 import { inspectConfiguredToolchainCurrency, updateConfiguredToolchains } from '#composition/core/toolchains/index.js';
 import { describeMcpInference } from './inference-query.js';
 import { describeConfiguredOperationTools } from '#composition/core/operations/index.js';
+import { applyConfiguredPoolHold, inspectConfiguredPoolHold } from '#composition/core/runs/index.js';
 /** Stdio peer inherits this local OS user's identity. This entry is not a remote authentication mechanism. */
 export async function main(root = process.cwd()) {
   registerProviderConfig(); const config = await loadConfig(root, { heal: false });
@@ -30,6 +31,7 @@ export async function main(root = process.cwd()) {
     auditProviderSpendAccount: (command, delivery) => runtime.auditProviderSpendAccount(command, delivery),
     inspectModelActivation: query => inspectConfiguredModelActivation(root, query),
     admitModelActivation: command => admitConfiguredModelActivation(root, command), inspectModelCatalog: query => inspectConfiguredModelCatalog(root, query), applyModelCatalog: command => applyConfiguredModelCatalog(root, command),
+    inspectPoolHold: query => inspectConfiguredPoolHold(root, query), applyPoolHold: command => applyConfiguredPoolHold(root, command),
     inferencePlan: input => describeMcpInference(root, 'plan', input.profileId),
     inferenceBudget: input => describeMcpInference(root, 'budget', input.profileId) }, { maxConcurrentCalls: config.mcp.maxConcurrentCalls, responseMaxBytes: config.mcp.responseMaxBytes }, locale), {
     transport: createBoundedMcpTransport(new StdioServerTransport(process.stdin, process.stdout, { maxBufferSize: config.mcp.inputMaxBytes }),
