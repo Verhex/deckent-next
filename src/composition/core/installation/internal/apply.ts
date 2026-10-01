@@ -63,7 +63,7 @@ function lockTimeout(prepared: PreparedInstallation) {
 }
 async function executeInstallation(projectRoot: string, operator: InstallationApplyChoices, timeoutMs: number, supplied?: unknown) {
   return withInstallationJournal(projectRoot, { timeoutMs }, async journal => {
-    const observed = await journal.observe(), recovery = retained(observed);
+    const observed = await journal.observe(), recovery = retained(observed), clock = new SystemTrustedClock(); // I40: journal times are compared (TIME_ORDER)
     if (!supplied && !recovery) throw new InstallationPublicationError('INSTALLATION_PUBLICATION_INVALID');
     const prepared = await prepareSuppliedInstallation(projectRoot, supplied ?? recovery!.material.authoredProfile,
       { allowShutdown: operator.allowShutdown }, recovery?.material.configuration);
@@ -72,7 +72,6 @@ async function executeInstallation(projectRoot: string, operator: InstallationAp
     if (evidence.proposalDigest !== operator.proposalDigest) throw new InstallationPublicationError('INSTALLATION_PUBLICATION_CHANGED');
     const consent: InstallationConsent = recovery?.consent ?? Object.freeze({ schemaVersion: 1, mode: 'operator-custom',
       id: randomUUID(), atMs: Date.now(), proposalDigest: operator.proposalDigest, principal: prepared.preview.principal });
-    const clock = new SystemTrustedClock(); // I40: journal times are compared (TIME_ORDER), so never raw Date.now
     return new InstallationPublicationApplication({ journal, ...installationPublicationPorts(projectRoot, prepared),
       revalidateEvidence: () => inspectPreparedInstallation(prepared, operator.dockerExecutable), now: () => clock.sample().wallMs,
     }).apply(prepared, evidence, consent);

@@ -18,9 +18,8 @@ function prepare(projectRoot: string, scopeId: string) {
 }
 export async function previewPolicyTemplateInstallation(projectRoot: string, scopeId: string) { return prepare(projectRoot, scopeId).prepared.preview; }
 export async function applyPolicyTemplateInstallation(projectRoot: string, scopeId: string) {
-  const { prepared, layout, maxBytes, timeoutMs } = prepare(projectRoot, scopeId);
+  const { prepared, layout, maxBytes, timeoutMs } = prepare(projectRoot, scopeId), clock = new SystemTrustedClock(); // I40: journal times are compared (TIME_ORDER), never raw Date.now
   const file = (target: PolicyTemplatePublishTarget) => ({ root: layout.root, path: target.path, maxBytes });
-  const clock = new SystemTrustedClock(); // I40: journal times are compared (TIME_ORDER), so never raw Date.now
   return withInstallationJournal(projectRoot, { timeoutMs }, journal => new PolicyTemplateInstallationApplication({
     journal,
     async inspectPreimage(target) { return (await inspectInstallationFile(file(target))).digest; },
