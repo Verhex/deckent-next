@@ -142,7 +142,8 @@ export async function buildDist({ root = ROOT, out = join(ROOT, '.pack'), timest
   const alone = await build({ ...common, entryPoints: standalone, splitting: false });
   const result = { metafile: { inputs: { ...split.metafile.inputs, ...alone.metafile.inputs }, outputs: { ...split.metafile.outputs, ...alone.metafile.outputs } } };
   const standaloneProblems = standalone.flatMap(entry => {
-    const label = relative(dist, entry), output = alone.metafile.outputs[relative(root, join(stage, 'dist', label)).replaceAll('\\', '/')];
+    const label = relative(dist, entry), key = relative(root, join(stage, 'dist', label)).replaceAll('\\', '/');
+    const output = Object.entries(alone.metafile.outputs).find(([path]) => path.replaceAll('\\', '/') === key)?.[1];
     return output ? standaloneImportProblems(output, label) : [`${label}: no output at its dist path`];
   });
   const patched = [];
