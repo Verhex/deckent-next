@@ -3,6 +3,15 @@
 Bu belge yalnız güncel durumu tutar; önceki sürümü Git geçmişinde, kanıtlar `deckent-refactor-work/proof/`.
 
 ## Durum
+- **Yirminci parti (2026-10-01; `integrate/2026-10-01-u`, worktree `/home/alperen/deckent-next-integrate-u`, taban `c083ec8e`):**
+  CI-HYGIENE (`6d425eaf`; test git ortamında bakım kapalı, test soketleri), K6 kapsam sınıflaması (`1845ecc2`), K5 tipli havuz bekletmesi
+  (`68279e85`+`99ac09cf`+`1ed7a508`, ledger v44) + lead düzeltmeleri: CLI birim bütçesi 2000/2000 (tek satır katlandı), Windows build-zamanı
+  izdüşüm kontrolleri LF metinle karşılaştırılır (C5; barındırılan CI `c083ec8e` koşu 36835569049: Ubuntu 24/26 **yeşil**, Windows yalnız
+  `config-vocabulary` CONFIG_VOCABULARY_STALE, macOS F9), Sol 2208 CI-N1 Git 2.55 atfı düzeltildi, **`workTargets` v2** (v1 yayınlı: `scope` yalnız v2'de).
+  Composition 5479/5500. Owner 2026-10-01: benimseme `use`+`adopt` onaylandı; K6 O1 (tam eşleşme) / O2 (kapsamsız işi reddet) owner'a sunulacak.
+  **Canlı (2026-10-01 08:21Z):** ilk `dev-release` geçişi — `current` = `versions/c083ec8ee3df-e1493d3b471c`, instance `b3e23208`, ledger 43
+  (kanıt `proof/LIVE-SWITCH-BATCH19-2026-10-01/`); bu partiyle ledger v44 gelir (v43'e dönüş `--restore-ledger` ister; ilk v44 geçişi boşaltmasız).
+  **Sıradaki:** tam verify → Sol → push → owner onayıyla canlı → bu tur kapanır; sonra ortak devralma analizi (analiz oturumu deckent-next-40).
 - **On dokuzuncu parti (2026-10-01; `integrate/2026-10-01-t`, worktree `/home/alperen/deckent-next-integrate-t`, taban `21110d09`):**
   K3 tipli iş girdisi (`lane/k3-work-input` `31198880`+`425d4b65`; graf v3 `workInput`, `native-coding-template`; ARCHITECTURE alt bölümü)
   + CI-FIX-2 (`lane/ci-fix-2` `83f23b6d`). Barındırılan CI `21110d09` ([koşu 36788067766](https://github.com/Verhex/deckent-next/actions/runs/36788067766))

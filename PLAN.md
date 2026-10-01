@@ -75,7 +75,7 @@ Devam planı: dış çalışma alanı `DEVAM-PLANI-2026-09-24.md` (Astra 2055/20
 uygulandı ([COMPLETED-PLAN](COMPLETED-PLAN.md)). Sıra: **A-1** yönetilen araç döngüsü tasarımı
 (owner onayı 2026-09-24; salt okunur araçlar policy izin verirse ek varsayılan onay olmadan, etkili araçlar mevcut onaylı uygulama
 yetkisiyle; `@` dosya adayı scoped okuma portu — uygulandı, protokol v15) ∥ **B09-3** canlı worker satırı + Codex normalizer → **A-2** D15b `do` →
-RunProposal → **G31** atama (aşağıdaki satır). Terminal açıkları: açık karar kartında kuyruk boşaltmanın duraklatılması (Astra 2057),
+RunProposal → **G31** atama (aşağıdaki satır). Terminal açıkları: kuyruk boşaltmanın duraklatılması (Astra 2057) **K5 tipli havuz bekletmesi olarak uygulandı (20. parti, ledger v44)**,
 satır modu akışı, boşta servis durma politikası. Tahminler hipotezdir; effort kayıtlarıyla kalibre edilir.
 
 ### Güncel öncelik — owner 2026-09-22
@@ -466,7 +466,7 @@ STARTUP-COST ile yedinci partide kaldırıldı (varsayılan 30 s); yerelde doğr
   `rollback --restore-ledger` iki adım (Jev `39e921e3` 1.00/.77): kayıp raporu + durdurulmuş ledger'a bağlı token → `--confirm <token>` (kilit altında yeniden hesap, yedekler silinmez).
   U1 host guard: hedef `dist/`'inden süreç koşarken `build`/`verify`/`tsc` reddedilir. Kanıt `proof/DEV-U2-0-2026-09-30/` (host testleri 71/71; gerçek ürün provası geçici dizinlerde: stage 65–67 s,
   switch durdurma ~0,44 s + başlatma ~0,45 s, `readlink` 2971 örnek 0 eksik, canlı parmak izi aynı). **Pack-smoke düzeldiği için `stage --waive-smoke terminal` artık gerekmez** (seçenek acil durum için kalır;
-  `release.json` `smoke.waived`). **Açık sınırlar:** tipli boşaltma yok (K5: grace + yönetişimli kapatma, uçuştaki tur `interrupted`); G5/G6 yalnız işletim kuralı (switch sonrası terminal/MCP
+  `release.json` `smoke.waived`). **Açık sınırlar:** tipli boşaltma K5 ile geldi (ledger v44; `dev-release switch --drain` ayrı dilim DEV-U2-DRAIN); G5/G6 yalnız işletim kuralı (switch sonrası terminal/MCP
   oturumları yeniden açılır, eski terminalden `/service-restart` kullanılmaz; protokol artışında eski süreçler düşer); manifest yalnız `switch` öncesi doğrulanır (her başlatmada değil; kurulum kökü
   U2-1'de mühürlü kümeye girmeli); checkout'a dönüş gerçek ürün provasında koşulmadı (yalnız sahte ürün testi); canlı 9 MB ledger'da geri yükleme süresi ölçülmedi; Linux'a özgü.
   **PACK-SMOKE (`lane/pack-smoke` `44f0240f`..`1cd52ad1`):** `smoke:dist` terminal kontrolü workline sözleşmesine güncellendi (TTY yer tutucu, pipe'ta `TERMINAL_TTY_REQUIRED`, `terminal session` satır modu istemi);
@@ -479,9 +479,12 @@ STARTUP-COST ile yedinci partide kaldırıldı (varsayılan 30 s); yerelde doğr
   K1 **W2**: Core `workTargets` kaydı (ilk dilim tek Git hedefi; ERP ayrı port), checkout HEAD yerine adlandırılmış `baseRef` ve tipli "taban
   ilerledi", kendini hedefleme bariyeri; U1 canlı checkout'ta build/verify yok; U2 yan yana sürüm kurulumu ayrı kart (Jev e05e02e6 .92/.80); **owner U2 seçenek C'yi kabul etti** (DEV-U2-0 şeridi çalışıyor; tasarım `proof/U2-VERSIONED-INSTALL-DESIGN-2026-09-30`, Jev c2956e5d .94/.68;
   **DEV-U2-0 uygulandı (18. parti; şerit `cc730a4b`+`77ad922f`+`5fdee2a4`, kanıt `proof/DEV-U2-0-2026-09-30/`); sonraki: owner onaylı ilk canlı switch, sonra U2-1…U2-6.**
-  K2 A `work-target` policy türü (use/adopt). K3 A Run grafı v3 tipli `workInput` + profil şablonu (RunProposal v1 D15b ile). **K3 uygulandı (19. parti; şerit `31198880`+`425d4b65`, kanıt `proof/K3-WORK-INPUT-2026-10-01/`); kalan: kayıtlı iş girdisiyle `run retry`, RunProposal (D15b), K6 kapsam yolu zorlaması, CLI başına efor eşlemesi (Claude `--effort`, Codex `model_reasoning_effort`).** K4 A öz-hedefte
-  `baseRef` = benimseme hedefi, HEAD ayrık (W2'deki "hedef ≠ baseRef" maddesi kalktı). K5 A tipli havuz bekletme. K6 A yama hazırlığında kapsam
-  sınıflaması: önce uyarı, `enforce` ile tipli ret. K7 A ince köprü (dilim 3+5 gelince silinir). K8 A canlı ledger + ayrı proje scope'u.
+  K2 A `work-target` policy türü (use/adopt); **owner 2026-10-01: benimseme/geri alma `use`+`adopt` ister (K2'den sıkı; WT-R1) — onaylandı.** K3 A Run grafı v3 tipli `workInput` + profil şablonu (RunProposal v1 D15b ile). **K3 uygulandı (19. parti; şerit `31198880`+`425d4b65`, kanıt `proof/K3-WORK-INPUT-2026-10-01/`); kalan: kayıtlı iş girdisiyle `run retry`, RunProposal (D15b), CLI başına efor eşlemesi (Claude `--effort`, Codex `model_reasoning_effort`).** K4 A öz-hedefte
+  `baseRef` = benimseme hedefi, HEAD ayrık (W2'deki "hedef ≠ baseRef" maddesi kalktı). K5 A tipli havuz bekletme **— uygulandı (20. parti; şerit `68279e85`+`99ac09cf`+`1ed7a508`, ledger v44, kanıt `proof/K5-POOL-HOLD-2026-10-01/`); kalan: DEV-U2-DRAIN (`dev-release switch --drain`), canlı/dogfood policy'de `pool hold|resume|inspect` `scopes:"all"` grant'ı (owner eylemi), terminal `/pause` durum satırı.** K6 A yama hazırlığında kapsam
+  sınıflaması: önce uyarı, `enforce` ile tipli ret. **K6 uygulandı (20. parti; şerit `1845ecc2`, kanıt `proof/K6-SCOPE-CLASSIFICATION-2026-10-01/`):**
+  türetilmiş sınıflama (kalıcı şema değişmedi), anahtar çalışma hedefinde (`workTargets` v2 `scope.mode`; v1 yayınlı olduğu için sürüm arttı), enforce'ta
+  entegrasyon/teslim yazımından önce `PATCH_SCOPE_VIOLATION` / `PATCH_SCOPE_UNDECLARED`. Açık (owner'a sunulacak): O1 dizin kapsama (gönderilen: tam eşleşme,
+  dizin = `dir/**`), O2 kapsamsız işin enforce'ta reddi (gönderilen: ret). K7 A ince köprü (dilim 3+5 gelince silinir). K8 A canlı ledger + ayrı proje scope'u.
   K9 A konu dışı: incelenmemiş kod hiçbir yerde servis olarak çalışmaz. Sıra: WORK-TARGETS (K1/K2/K4) ∥ WORKER-CURRENCY-2 ∥ dogfood D2 → K3 → K5/K6 → U2.
 - **Owner kararları 2026-09-30 — dogfood ile terminal, model/imaj güncelliği, izleme.** (1) Terminal kalan/UI-UX/komut kartları Deckent'in
   kendi dogfood döngüsüyle yapılır (izole N1 kurulumu, topoloji a′: canlıya yazılmaz; ilk döngü D1-0..D1-2 benimsendi — `c7b44469` →
@@ -506,8 +509,9 @@ STARTUP-COST ile yedinci partide kaldırıldı (varsayılan 30 s); yerelde doğr
   (`2231ac8f`; ledger v43 model kataloğu sağlayıcı kanalı başına, tam model ID'leri, takma ad reddi, admission ret kodları, `model.verification`).
   Dogfood v3 verify dışlamaları lead kararı (Jev `0b4a74d2` `keep_both` seçim .95 / bağlam yeterliliği .80); `git-network-policy` dışlaması CI-FIX F5
   main'e girince kaldırılacak. Dogfood-UX aday kartları (`README.md` §6): `run inspect` bilinmeyen Run'da çıkış 0 (tipli `RUN_NOT_FOUND` + rc 1 gerekir);
-  attempt kimliği el ile kazınıyor; `task patch-preview` insan çıktısı 8 satırlık farkı 574 KB basıyor (unified diff/`--stat` yok); yama gitignore'lu
-  dosyaları (`node_modules/.vite/...`) içerebiliyor; başarısız Run'ın nedeni `run inspect`'te yok (yalnız "Failed"); her kart = registry değişikliği
+  attempt kimliği el ile kazınıyor; `task patch-preview` insan çıktısı 8 satırlık farkı 574 KB basıyor (unified diff/`--stat` yok); **PATCH-IGNORE** (doğrulandı
+  2026-10-01, `proof/K6-SCOPE-CLASSIFICATION-2026-10-01/README.md` §6): `readWorkspace` yalnız sabit dışlama listesine bakıyor; `.gitignore`'lu dosyalar
+  yamaya giriyor; düzeltme sürümlü dışlama kuralları v2 ister (yama şeması v2 + çift okuyucu), karar: doğruluk kaynağı; başarısız Run'ın nedeni `run inspect`'te yok (yalnız "Failed"); her kart = registry değişikliği
   (terminalden kart başlatma yok); `modelUsage` ürün kaydına girmiyordu — **bu son madde artık WORKER-CURRENCY-1'in `model.verification` olayıyla
   karşılanıyor**. Açık (16. parti anındaki durum; kapanışlar 17. partide): model kataloğu CLI/MCP seed yüzeyi → WORKER-CURRENCY-2 `models catalog` + SDK/MCP; substitution kabul kapısı
   → WORKER-CURRENCY-2 (owner A); Codex/Cursor model kanıtı doğrulanmadı; verify imajında bwrap yok; ağaç dışı `node_modules`

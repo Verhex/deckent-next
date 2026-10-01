@@ -2566,8 +2566,8 @@ onto the ledger catalog; Codex/Cursor output-side model evidence (none documente
   `DEV_RELEASE_OPERATOR_REQUIRED`. `rollback` is pointer-only when the target opens the live ledger version; otherwise
   `rollback --restore-ledger` (Jev 39e921e3) stops the service, prints a loss report plus a token bound to the stopped ledger state, and
   `--confirm <token>` recomputes it under the native ledger lock (stale token refused; replaced ledger files are kept as `rolledback` backups,
-  never deleted). U1 host guard: `build|verify|tsc` is refused while a process runs from the target's `dist/`. Open limits: no typed drain (K5;
-  governed shutdown + grace, the in-flight turn closes `interrupted`); G5/G6 are operating rules (after a switch reopen terminals and MCP host
+  never deleted). U1 host guard: `build|verify|tsc` is refused while a process runs from the target's `dist/`. Open limits: typed drain is available from ledger v44 (K5 `pool hold` + `pool status` `drained`), `dev-release switch` does not
+  use it yet (proposal `proof/K5-POOL-HOLD-2026-10-01/docs-delta.md` §3); G5/G6 are operating rules (after a switch reopen terminals and MCP host
   sessions; never `/service-restart` from an old terminal; old processes fail on a protocol bump); the manifest is checked only before `switch`,
   not at every start; the install root must join the sealed set in U2-1. Evidence `proof/DEV-U2-0-2026-09-30/`.
 
@@ -2603,8 +2603,56 @@ onto the ledger catalog; Codex/Cursor output-side model evidence (none documente
   prompt delivery v1 unchanged. An older build refuses a v3 graph (strict parse, observed as the generic inventory refusal) and
   refuses to execute a template. Error registry +4 codes.
 - **Open.** RunProposal v1 (D15b) and `run retry` not in this slice; no `run create --card` convenience (would change CLI help
-  templates / i18n parity snapshot); scope paths are prompt data only until K6 enforcement; effort has no execution effect; the
+  templates / i18n parity snapshot); scope paths are classified at patch preparation and enforced per work target (K6); effort has no execution effect; the
   snapshot does not name the template/input digest explicitly (a later snapshot v2 if RunProposal/retry need it); toolchain
   update proposals list templates but applying a revision is still manual; template validity (installation preview) is not
   compilability — e.g. a Codex template without explicit `discovery` defaults to `disabled`, which the compiler refuses, so every
   admission refuses it with the generic `EXECUTION_PROFILE_INVALID` before any write (follow-up: dry-compile in template validation).
+
+### Typed execution pool hold (K5 = A; owner 2026-09-30, Jev f01a710f; lane Jev 2e7be700; twentieth batch)
+
+- **Semantics.** A held pool admits no new task reservation: the ledger refuses with `RUN_POOL_HELD` inside the reservation transaction
+  (after replay, revision, cancel, wave and candidate checks; before capacity and before any write). Run admission is not gated; attempts
+  reserved before the hold still pass dispatch admission, run, finish and are evaluated; an immediate stop stays `run cancel`. `resume`
+  re-enables reservation. The runtime progression maps `RUN_POOL_HELD` to a quiet `waiting` through the one engine mapping
+  `reservationRefusalOutcome` (no error, no back-off).
+- **Granularity.** The pool is installation-wide (`execution_pools` has no scope column), so the hold is too. Per-scope holds are a later layer.
+- **Authority.** Vocabulary `pool {use, hold, resume, inspect}` (schema 1, additive). `hold`/`resume` need the scoped decision **and** the
+  delegation bound over `scopes: 'all'` on the same policy snapshot (WC-R1 pattern; a deny/restriction in any scope refuses); `inspect` the
+  scoped decision. The first-run template grants none of these.
+- **State and owner.** Ledger v44: `execution_pool_holds(pool_id → execution_pools, revision, state, record)` (no row = open) and
+  `execution_pool_hold_receipts(scope_id, command_id, record)`. The hold never lives in `execution_pools.policy` (installer replay compares it
+  byte for byte). Engine `decidePoolHold` is the pure transition; `SqlitePoolHoldJournal.applyPoolHold` the only writer (replay, pool
+  requirement, transition, row, receipt and sealed audit in one `BEGIN IMMEDIATE`). Replay of a (scope, command) returns its receipt;
+  a different body is `RUN_COMMAND_CONFLICT`; hold-while-held / resume-while-open are recorded no-ops (`changed: false`).
+- **Audit.** Subject `pool-hold` (audit schema 1, additive): action, pool, command, decision `{effect, ruleId}`, `state {previous, next}`
+  (null for a refusal). Every decision is sealed, refusals too; the operator's reason stays in the hold record, not the audit event.
+- **Status.** `{ state, hold, occupancy {execution, inFlight}, drained }`; `drained` = held and no reserved, running, uncertain or
+  evaluating task on the pool. One application (`ExecutionPoolHoldApplication`) behind CLI `pool status|hold|resume`, MCP
+  `inspect_pool_hold` / `apply_pool_hold`, SDK `inspectPoolHold` / `applyPoolHold`; a local composition operation (model-catalog precedent),
+  not a runtime-service operation: the service reads the hold from the ledger at every reservation.
+- **Versions.** Ledger 43 → 44 (additive, shape-checked; v43 build refuses v44; service-start upgrade backs up v43); policy vocabulary 1,
+  audit 1 (additive); runtime protocol 18, config 3, Run snapshot 1, graph 3 unchanged; error registry +1 (`RUN_POOL_HELD`).
+- **Open.** First v44 switch cannot drain (the v43 build has no hold); `drained` never becomes true while a pinned Claude attempt waits for
+  an operator evaluation (use `occupancy.execution === 0` to see "nothing running"); no per-scope hold; no terminal `/pause`, no
+  `run inspect` waiting reason, global `cli.help` line not added (only `cli.help.pool`); dev-release drain integration not implemented.
+
+### Patch scope classification (K6 = A; owner 2026-09-30, Jev ddbcaacd; lane Jev c93ceea4 / 4c772497 / bc205c7c)
+
+- **Classification.** Engine `classifyPatchScope` matches every changed path of the host-produced patch (both sides of a rename, deletions,
+  mode-only changes) against `workInput.scope.paths` of the Run-bound task: `{ schemaVersion 1, matcher 1, mode, status: unscoped | in-scope |
+  out-of-scope, declared, outOfScope }`. No work input (v2 graph, prepared profile) = `unscoped`, never in scope. Derived from the immutable patch
+  artifact and the Run snapshot frozen at admission (port `RunBoundTaskStore.loadBoundTask`, exact binding); nothing persisted.
+- **Matching (`matcher: 1`).** The platform deny grammar on the full path (`*`/`?` within a segment, `**` across segments, `**/` zero or more
+  directories, brackets/braces literal); a literal is one file, a directory is `dir/**`. `createGlobMatcher` lives in `platform/core/common`
+  (moved unchanged from `workspace-read`, which re-exports it): one grammar, one matcher for the deny language, sandbox anchors and K6.
+  Any change of match semantics bumps `matcher`.
+- **Switch.** `execution.workTargets` schemaVersion 2 `targets[].scope.mode` `warn | enforce` (optional; absent, v1 or no target = warn),
+  re-read per operation. v1 is released (pushed `21110d09`, run live) and stays unchanged: a v1 target with `scope` is refused.
+- **Gates.** Patch prepare/preview and integration check always succeed and show the classification. In enforce, integration prepare refuses
+  before the intent claim and delivery before the delivery claim: `PATCH_SCOPE_VIOLATION` (count, first 16 paths, omitted) or
+  `PATCH_SCOPE_UNDECLARED`. No bypass flag; override = a new Run whose work input declares the paths. Published deliveries still settle.
+- **Versions.** Patch artifact v1, ledger 43, protocol 18, Run snapshot, task graph 3 unchanged; SDK/CLI results gain an additive `scope`;
+  `execution.workTargets` schemaVersion 1 → 2 (v2 = v1 + optional `scope`; an older build refuses v2); error registry +2.
+- **Open.** Pathspec-style directory containment (O1, shipped exact); unscoped in enforce (O2, shipped refuse); delivery/inspect/report surfaces do not repeat the
+  classification; real template-worker path unproven in tests (stored-graph stand-in); gitignored files still enter patches (PATCH-IGNORE card).
