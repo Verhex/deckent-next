@@ -3,7 +3,9 @@ import { artifactReceiptSchema } from '#capabilities/index.js';
 import { identitySchema, attemptIdentitySchema, type AttemptIdentity, type WorkerActivityPhase, type WorkerEventSummary, type WorkerModelView } from '#domain/index.js';
 import type { DispatchTerminal } from '#engine/core/dispatch/index.js';
 export const workerObservationQuerySchema = z.object({ schemaVersion: z.literal(1), scopeId: identitySchema,
-  source: identitySchema.optional(), after: identitySchema.nullable().default(null), limit: z.number().int().positive().optional() }).strict();
+  source: identitySchema.optional(), after: identitySchema.nullable().default(null), limit: z.number().int().positive().optional(),
+  /** MONITOR-DATA opt-in: only attempts without a ledger terminal get Docker/sidecar inspection; finished ones carry ledger facts only. */
+  open: z.boolean().optional() }).strict();
 export type WorkerObservationQuery = z.input<typeof workerObservationQuerySchema>;
 export interface ObservationLimits { readonly maxFileBytes: number; readonly maxEntries: number; readonly staleMs: number }
 export type WorkerProcessState = 'running' | 'paused' | 'created' | 'exited' | 'missing' | 'unknown' | 'present-unverified' | 'absent-unverified' | 'denied';

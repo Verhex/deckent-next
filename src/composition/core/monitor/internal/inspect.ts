@@ -14,7 +14,7 @@ export async function inspectMonitor(root: string, options: ConfigLoadOptions = 
   const targets = [{ id: 'current', path: resolve(root) }, ...config.inspection.workers.sources.filter(source => source.kind === 'next-project')
     .map(source => ({ id: source.id, path: resolve(source.path) }))].filter((target, index, all) => all.findIndex(other => other.path === target.path) === index);
   return new MonitorApplication({ now: () => new SystemTrustedClock().sample().wallMs,
-    describeService: target => createConfiguredRuntimeClient(target.path, options).describeService(),
+    describeService: target => createConfiguredRuntimeClient(target.path, options).describeService(undefined, 'current'),
     async readLedger(target) {
       const own = await loadConfig(target.path, { ...options, heal: false });
       return readMonitorLedger(await inspectProductFile(own.productLayout, 'ledger', ['-wal', '-shm', '-journal']),
@@ -23,7 +23,7 @@ export async function inspectMonitor(root: string, options: ConfigLoadOptions = 
     async observeScope(target, scopeId) {
       const workers: WorkerObservation[] = []; let page: WorkerObservationSource | undefined; let after: string | null = null;
       try {
-        do { page = (await inspectConfiguredWorkers(target.path, { schemaVersion: 1, scopeId, source: 'current', after }, options)).sources[0]!; workers.push(...page.workers); after = page.nextAfter; }
+        do { page = (await inspectConfiguredWorkers(target.path, { schemaVersion: 1, scopeId, source: 'current', after, open: true }, options)).sources[0]!; workers.push(...page.workers); after = page.nextAfter; }
         while (after && workers.length < config.inspection.workers.maxEntries);
       } catch (error) { if (DENIED.has(queryFailure(error).code)) return { access: 'denied', workers: [], workerStatus: 'denied', truncated: false }; throw error; }
       return { access: 'admitted', workers, workerStatus: page.status, truncated: after !== null };

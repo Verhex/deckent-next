@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createRun, type RunSnapshot, type TaskProgress } from '#domain/index.js';
-import { deriveRunBlocker, deriveRunState, MonitorApplication, projectMonitorRun, type MonitorLedgerApproval, type MonitorLedgerAttempt, type MonitorLedgerPool,
+import { deriveRunBlocker, deriveRunState, MONITOR_FINISHED_WORKERS, MonitorApplication, projectMonitorRun, type MonitorLedgerApproval, type MonitorLedgerAttempt, type MonitorLedgerPool,
   type MonitorRunEvidence, type WorkerObservation } from '#engine/index.js';
 import { fixtureExecution } from '../support/execution-registry.js';
 
@@ -197,5 +197,23 @@ describe('monitor application over ports', () => {
     expect(flaky!.diagnostics).toContain('scope-unavailable:s:POLICY_UNAVAILABLE');
     // A ledger with no scope yet (fresh install) still shows its installation-wide pools.
     expect(empty).toMatchObject({ status: 'available', scopeIds: [], runs: [], pools: [{ poolId: 'p', held: true }] });
+  });
+  it('keeps every open worker and only the most recent finished ones (by sealed log, else launch grant)', async () => {
+    const ids = Array.from({ length: 26 }, (_, i) => 't' + String(i).padStart(2, '0'));
+    const run = snapshot(ids.map(id => ({ id, phase: 'active' as const })));
+    // Recency: t00..t24 finished, ranked by sealedAt (even) or grantedAt (odd); t25 is open (no ledger terminal).
+    const attempts = ids.map((id, i) => attempt(id, { sealedAtMs: i % 2 ? null : 10_000 + i, dispatch: { launch: 'granted', grantedAtMs: 5_000 + i, outputRecorded: true,
+      terminal: i === 25 ? null : { exitCode: 0, signal: null, interrupted: false } } }));
+    const observed = ids.map((id, i) => ({ ...worker(id, 'fresh'), terminal: i === 25 ? null : { handle: 'h', exitCode: 0, interrupted: false } }));
+    const stranger = { ...worker('zz', 'stale'), terminal: { handle: 'h', exitCode: 1, interrupted: false } };
+    const app = new MonitorApplication({ now: () => NOW, describeService: async () => { throw failure('LOCAL_RUNTIME_UNAVAILABLE'); },
+      readLedger: async () => ({ ledgerVersion: 44, scopeIds: ['s'], diagnostics: [], approvals: [], pools: [], runs: [{ snapshot: run, poolId: null, admitted: true, createdAtMs: 1, attempts }] }),
+      observeScope: async () => ({ access: 'admitted', workers: [stranger, ...observed], workerStatus: 'available', truncated: false }) });
+    const install = (await app.inspect([{ id: 'current', path: '/c' }])).installs[0]!;
+    const kept = install.workers.map(value => value.taskId);
+    expect(MONITOR_FINISHED_WORKERS).toBe(20); expect(kept).toHaveLength(21); expect(kept).toContain('t25'); expect(kept).not.toContain('zz');
+    // Ranks: even i → 10_000 + i, odd i → 5_000 + i; the 20 most recent finished are all 13 even (t00..t24) and the 7 highest odd (t11..t23).
+    expect(kept.filter(id => id !== 't25').sort()).toEqual([...ids.slice(0, 25).filter((_, i) => i % 2 === 0), 't11', 't13', 't15', 't17', 't19', 't21', 't23'].sort());
+    expect(install.diagnostics).toContain('workers-finished-capped:6');
   });
 });

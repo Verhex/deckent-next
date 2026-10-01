@@ -3,6 +3,8 @@ import type { MonitorApproval, MonitorInstall, MonitorPool, MonitorService, Moni
 import type { MonitorLedgerReading, MonitorPorts, MonitorTarget } from './evidence.js';
 import { projectMonitorRun } from './derive.js';
 
+/** Finished workers (ledger terminal) shown per install, most recent first by sealed log, else launch grant; open ones are never capped. */
+export const MONITOR_FINISHED_WORKERS = 20;
 const code = (error: unknown) => error && typeof error === 'object' && 'code' in error && typeof error.code === 'string' ? error.code : 'UNKNOWN';
 /** Service state from the runtime describe answer: a missing endpoint is `stopped`, any other failure `unknown` with a diagnostic. */
 async function service(ports: MonitorPorts, target: MonitorTarget, diagnostics: string[]): Promise<MonitorService> {
@@ -46,6 +48,11 @@ export class MonitorApplication {
         if (scope.truncated) diagnostics.push('workers-truncated:' + scopeId);
       } catch (error) { diagnostics.push(`scope-unavailable:${scopeId}:${code(error)}`); }
     }
+    const recency = new Map(reading.runs.flatMap(run => run.attempts.map(value => [`${run.snapshot.identity.scopeId}/${value.attemptId}`,
+      Math.max(value.sealedAtMs ?? -1, value.dispatch?.grantedAtMs ?? -1)] as const)));
+    const rank = (value: WorkerObservation) => recency.get(`${value.identity?.scopeId}/${value.identity?.attemptId}`) ?? -1;
+    const finished = workers.filter(value => value.terminal).sort((a, b) => rank(b) - rank(a)); const kept = new Set(finished.slice(0, MONITOR_FINISHED_WORKERS));
+    if (finished.length > MONITOR_FINISHED_WORKERS) diagnostics.push('workers-finished-capped:' + (finished.length - MONITOR_FINISHED_WORKERS));
     const byAttempt = new Map(workers.filter(value => value.identity).map(value => [`${value.identity!.scopeId}/${value.identity!.attemptId}`, value]));
     const pools = new Map(reading.pools.map(pool => [pool.poolId, pool]));
     const runs = reading.runs.filter(run => admitted.has(run.snapshot.identity.scopeId)).map(run => {
@@ -59,6 +66,6 @@ export class MonitorApplication {
       held: pool.hold?.state === 'held', heldBy: pool.hold?.state === 'held' ? pool.hold.changedBy : null, executionCapacity: pool.executionSlots, executing: pool.execution })) : [];
     const status = !reading.scopeIds.length || admitted.size ? 'available' : denied ? 'denied' : 'unavailable';
     return Object.freeze({ id: target.id, path: target.path, status, scopeIds: Object.freeze([...admitted]), service: serviceState, ledgerVersion: reading.ledgerVersion,
-      runs: Object.freeze(runs), workers: Object.freeze(workers), approvals: Object.freeze(approvals), pools: Object.freeze(poolViews), diagnostics: Object.freeze(diagnostics) });
+      runs: Object.freeze(runs), workers: Object.freeze(workers.filter(value => !value.terminal || kept.has(value))), approvals: Object.freeze(approvals), pools: Object.freeze(poolViews), diagnostics: Object.freeze(diagnostics) });
   }
 }
