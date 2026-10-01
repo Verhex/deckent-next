@@ -43,11 +43,12 @@ export async function inspectConfiguredWorkers(root: string, input: WorkerObserv
               await authorization.authorizeIdentity('read-output', entry.identity, target.principal);
               const record = await reader.loadBoundDispatch(entry.identity); if (!record) throw new WorkerObservationError('WORKER_OBSERVATION_UNAVAILABLE');
               const activity = await DockerSupervisor.restoreProfile(record.profile).then(supervisor => supervisor.inspectActivity(record.request)).catch(() => ({ state: 'unknown' as const, handle: null }));
-              const files = await readWorkerSidecars(dirname(record.request.workspace), 'worker', c.config.inspection.workers, clock.sample().wallMs, entry.identity).catch(() => null);
+              let absent = false; const files = await readWorkerSidecars(dirname(record.request.workspace), 'worker', c.config.inspection.workers, clock.sample().wallMs, entry.identity)
+                .catch((error: { code?: unknown }) => { absent = error?.code === 'ENOENT'; return null; }), released = absent && !!record.patch && activity.state === 'missing';
               const model = await observeAttemptWorkerModels(reader, FileArtifactStore.reader(() => inspectProductDirectory(target.layout, 'artifacts'), target.config.artifacts.maxBytes), entry.identity, files?.usage ?? null);
               workers.push({ ...basic, ...(model ? { model } : {}), provider: files?.provider ?? 'unknown', workspace: record.request.workspace, process: activity.state, handle: activity.handle,
-                patchRecorded: !!record.patch, files, diagnostics: [...(activity.state === 'unknown' ? ['process-unavailable'] : []), ...(model === undefined ? ['model-unavailable'] : []),
-                  ...(files ? files.log.diagnostics : ['activity-unavailable'])] });
+                patchRecorded: !!record.patch, files, ...(released ? { custody: 'released' as const } : {}), diagnostics: [...(activity.state === 'unknown' ? ['process-unavailable'] : []),
+                  ...(model === undefined ? ['model-unavailable'] : []), ...(files ? files.log.diagnostics : [released ? 'custody-released' : 'activity-unavailable'])] });
             } catch (error) { workers.push({ ...basic, diagnostics: [['POLICY_DENIED', 'POLICY_APPROVAL_UNSUPPORTED', 'SCOPE_UNKNOWN'].includes(queryFailure(error).code) ? 'output-denied' : 'observation-unavailable'] }); }
           }
         } finally { reader.close(); }

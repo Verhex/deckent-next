@@ -8,7 +8,7 @@ import { identifyDockerRequest } from './identity.js';
 import { runNodeDockerCommand, type DockerCommandRunner } from './command.js';
 import { dockerConnectionMounts } from './connection.js';
 import { assertReadOnlyMountSource } from './mounts.js';
-type Inspection = { Config: { Labels: Record<string, string> }; State: { Status: string; ExitCode: number } };
+type Inspection = { Id: string; Config: { Labels: Record<string, string> }; State: { Status: string; ExitCode: number } };
 /** Containers remain as reconciliation evidence until the application explicitly releases them.
  * Only an application with durable dispatch ownership may call execute; this adapter does not grant policy.
  */
@@ -166,11 +166,16 @@ export class DockerSupervisor implements ExecutionSupervisor {
     }
     return this.result(handle, await this.inspect(handle, digest), stdout, stderr, interrupted, true);
   }
-  async release(input: SandboxRequest): Promise<void> {
+  /** EXEC-RELEASE: only the labelled, exited container of this exact request, removed by its immutable id (no name reuse between
+   * inspect and rm), never forced; success requires Docker to echo that id and a later inspect to report it absent. */
+  async release(input: SandboxRequest): Promise<'removed' | 'absent'> {
     const { digest, handle } = this.identity(input); const existing = await this.inspect(handle, digest);
-    if (!existing) return;
+    if (!existing) return 'absent';
     if (existing.State.Status !== 'exited') throw new SupervisorError('SUPERVISOR_NOT_TERMINAL');
-    try { await this.command(['rm', handle], this.options.controlTimeoutMs); }
-    catch { throw new SupervisorError('SUPERVISOR_CONTROL_FAILED'); }
+    if (!/^[a-f0-9]{64}$/.test(existing.Id)) throw new SupervisorError('SUPERVISOR_CONTROL_FAILED');
+    let removed = '';
+    try { removed = (await this.command(['rm', '--volumes', existing.Id], this.options.controlTimeoutMs)).stdout.trim(); } catch { /* absence decides */ }
+    if (removed !== existing.Id || await this.inspect(existing.Id, digest) !== null) throw new SupervisorError('SUPERVISOR_RELEASE_UNCONFIRMED');
+    return 'removed';
   }
 }

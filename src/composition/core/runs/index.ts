@@ -9,3 +9,4 @@ export { recoverConfiguredCancellations } from './internal/recover-cancellation.
 export { applyConfiguredPoolHold, inspectConfiguredPoolHold } from './internal/pool-hold.js';
 export { recoverConfiguredAttemptOutput } from './internal/recover-output.js';
 export { recoverConfiguredReconciliation } from './internal/recover-reconciliation.js';
+export { sweepConfiguredAttemptCustody } from './internal/custody-sweep.js';

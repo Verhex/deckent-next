@@ -46,4 +46,9 @@ export class GitWorkspacePatchSource implements WorkspacePatchSource {
       throw new WorkspacePatchError('PATCH_UNSAFE');
     }
   }
+  /** EXEC-RELEASE: the clone directory or the labelled container is gone; daemon or lease errors are not proof of release. */
+  async released(record: DispatchRecord) {
+    if (!(await new GitWorkspaceBroker(this.options).holds(record.request.identity))) return true;
+    return (await (await DockerSupervisor.restoreProfile(record.profile)).inspectActivity(record.request)).state === 'missing';
+  }
 }

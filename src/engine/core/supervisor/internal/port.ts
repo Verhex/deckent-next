@@ -29,13 +29,15 @@ export interface ExecutionSupervisor {
   /** Read-only daemon evidence; never creates, starts, kills or releases a process. */
   observe(request: SandboxRequest): Promise<Pick<SandboxResult, 'handle' | 'result'>>;
   execute(request: SandboxRequest, signal?: AbortSignal): Promise<SandboxResult>;
-  /** Release only after the application durably records terminal evidence. */
-  release(request: SandboxRequest): Promise<void>;
+  /** Release only after the application durably records terminal evidence. Absent = already released; a removal whose absence is not
+   * observed afterwards is `SUPERVISOR_RELEASE_UNCONFIRMED` (retryable), never success. `removed`/`absent` tell an executed removal from
+   * an already absent container; an adapter that cannot tell returns nothing. */
+  release(request: SandboxRequest): Promise<'removed' | 'absent' | void>;
 }
 export class SupervisorError extends Error {
   constructor(readonly code: 'SUPERVISOR_REQUEST_INVALID' | 'SUPERVISOR_WORKSPACE_INVALID' | 'SUPERVISOR_IDENTITY_CONFLICT'
     | 'SUPERVISOR_PROFILE_INVALID' | 'SUPERVISOR_PROFILE_ORIGIN_MISMATCH'
-    | 'SUPERVISOR_OPTIONS_INVALID' | 'SUPERVISOR_CANCELLED' | 'SUPERVISOR_CONTROL_FAILED' | 'SUPERVISOR_NOT_TERMINAL') {
+    | 'SUPERVISOR_OPTIONS_INVALID' | 'SUPERVISOR_CANCELLED' | 'SUPERVISOR_CONTROL_FAILED' | 'SUPERVISOR_NOT_TERMINAL' | 'SUPERVISOR_RELEASE_UNCONFIRMED') {
     super(code); this.name = 'SupervisorError';
   }
 }

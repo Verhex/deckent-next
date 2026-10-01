@@ -47,7 +47,7 @@ it.skipIf(!process.env.DECKENT_TEST_DOCKER_IMAGE)('executes, observes and releas
   const f = await fixture('');
   const options = { executable: '/usr/bin/docker', workspaceRoot: f.root, imageId: process.env.DECKENT_TEST_DOCKER_IMAGE!, uid: process.getuid!(), gid: process.getgid!(), logMaxSizeKiB: 64, logMaxFiles: 2, memoryBytes: 268435456, pids: 64, cpus: 1, tmpBytes: 16777216, deadlineMs: 10000, controlTimeoutMs: 10000, outputBytes: 65536 };
   await writeFile(f.child, `import {DockerSupervisor} from ${JSON.stringify(pathToFileURL(resolve('dist/adapters/index.js')).href)};` + readCommand +
-    `const supervisor=new DockerSupervisor(${JSON.stringify(options)});const method=c.operation==='recover-output'?'recoverOutput':c.operation;const value=await supervisor[method](c.request);process.stdout.write(JSON.stringify({protocolVersion:1,requestId:c.requestId,operation:c.operation,identity:c.request.identity,value:value??null}));`);
+    `const supervisor=new DockerSupervisor(${JSON.stringify(options)});const method=c.operation==='recover-output'?'recoverOutput':c.operation;const value=await supervisor[method](c.request);process.stdout.write(JSON.stringify({protocolVersion:1,requestId:c.requestId,operation:c.operation,identity:c.request.identity,value:c.operation==='release'?null:value??null}));`);
   const supervisor = new ProcessSupervisor({ ...f.options, timeoutMs: 15000, maxOutputBytes: 131072 });
   try {
     const result = await supervisor.execute(f.request); expect(result.result).toEqual({ kind: 'exited', exitCode: 0 }); expect(result.stdout).toBe('done');

@@ -12,7 +12,7 @@ export interface WorkspaceLease {
 export interface WorkspaceBroker {
   allocate(request: WorkspaceRequest): Promise<WorkspaceLease>;
   /** Caller must have stopped the worker and durably retained its artifacts before release. */
-  release(request: WorkspaceRequest): Promise<void>;
+  release(request: WorkspaceRequest): Promise<'removed' | 'absent' | void>;
 }
 export class WorkspaceError extends Error {
   constructor(readonly code: 'WORKSPACE_REQUEST_INVALID' | 'WORKSPACE_OPTIONS_INVALID' | 'WORKSPACE_UNSAFE'
