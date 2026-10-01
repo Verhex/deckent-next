@@ -3,6 +3,14 @@
 Bu belge yalnız güncel durumu tutar; önceki sürümü Git geçmişinde, kanıtlar `deckent-refactor-work/proof/`.
 
 ## Durum
+- **Güncel (2026-10-01 akşam, yeni ana oturum):** `origin/main` = `76582f9f`, canlıda (`76582f9f1cd2-08512bc400d1`, instance `1dd5ea76`, ledger 44;
+  `proof/LIVE-SWITCH-BATCH23-2026-10-01/`); C4 `attempt:release` grant'ı canlı policy'de. Hosted run 36884716187: ubuntu/24+26 success, macOS/24+26 failure
+  (danışma, 153 test), Windows iptal edildi → **CI-PLATFORM** Sol `codex exec` ile tamamladı (aşağıda), şerit commit `a5fea81c`, Fable bağımsız incelemesi sürüyor.
+  Owner kararları: 3. aşama dalga 1 (sıra, A1, A3, A8, C4) + dalga 2 güvenlik (B1/B2/B3/B7/B8/DOGFOOD) — ARCHITECTURE karar günlüğü + PLAN kart satırları
+  (`lane/docs-decisions-2026-10-01`). Dalga 2b (PTY ham terminal yok; DESKTOP/UNSIGNED/MARKET ertelendi) ve MODEL-INGRESS-UNICODE (`note_audit_quarantine`, full-access'te durmaz) owner kararları Jev sonrası verildi. Analiz oturumu (yeniden başlatıldı, deckent-next-93) Dalga 3'te. Sol inceleyici/watcher devri 2229/2230 tüketildi.
+  Ana checkout eski belge WIP'i yedeklendi (`proof/MAIN-WIP-BACKUP-2026-10-01/`) ve `origin/main`'e hizalanır. Açık: EXEC-RELEASE C1–C3 (lead Jev),
+  ER-N1/N2, CI-FULL F1/F2, eski MCP oturumlarının yeniden başlatılması (owner).
+  **Sıradaki:** parti `integrate/2026-10-01-y` (CI-PLATFORM + belge kararları) tam verify → Fable PASS (CI-PLATFORM) + Sol REQUEST_REVIEW (belge) → push; C1–C3 Jev; dalga 1 kartları.
 - **CI-WINDOWS-MACOS (2026-10-01, Sol uygulayıcı):** `lane/ci-sol-2` / exact taban `76582f9f`; run36884716187 Linux 24/26 success,
   macOS 24/26 51 dosya/153 fail; Windows iki verify job'ı >75 dk, owner yetkisiyle iptal istendi (16:47:06Z), cancelled 16:47:51Z/16:47:43Z.
   Windows/26 yaklaşık 66 dk, Windows/24 yaklaşık 33 dk çıktısız kaldı; iki asılı dosya `shell-fs-ops`/`shell-sandbox-bwrap`.
@@ -18,8 +26,7 @@ Bu belge yalnız güncel durumu tutar; önceki sürümü Git geçmişinde, kanı
   (`proof/CI-FULL-2026-10-01/review-independent.md`; F1 düşük: `runtime-overlay-parents.test.ts:94` gerekçesi adsız win32 skip; F2 açık: yük altında bir kez
   düşen `shell-overlay-write-set.test.ts:111`, tek başına 6/6, kök neden yok — ayrı izlenir). Hosted CI kabulü push sonrası altı hücre + bwrap ile.
   Sol 2226 REVISE (22): ER-R1 mühürlü event akışı doğrulanmıyordu, ER-R2 scope çapında mezar silme → `5dd9bf08` (red 2 fail → green 31/256, mutasyon 7–9 düştü), 23'e birleşti.
-  **Taze hosted durum:** `origin/main` exact `76582f9f`; run36884716187 Linux24/26 SUCCESS, macOS24/26 FAILURE; Windows24/26
-  cancelled (CI-WINDOWS-MACOS yukarıda). Sıradaki: platform şeridi → lead full verify → ayrı reviewer; yeni push yalnız lead yetkisiyle.
+  **Tamamlandı (2026-10-01):** tam verify 526/3766 → Sol 2228 PASS → push `76582f9f` → hosted CI → canlı 16:37Z → yeni ana oturuma devir (`proof/HANDOFF-MAIN-2026-10-01-B/`). Hosted run 36884716187: Linux 24/26 SUCCESS, macOS 24/26 FAILURE, Windows 24/26 cancelled (CI-WINDOWS-MACOS yukarıda).
 - **Yirmi ikinci parti (2026-10-01; `integrate/2026-10-01-w`, worktree `/home/alperen/deckent-next-integrate-w`, taban `d11bdbfa`; ana oturum deckent-next-f6):**
   EXEC-RELEASE (`da102c4a`+`c0abc834`; owner D8; sahip = yama saklama geçişi, lead a′ mühürlü event log koşulu; composition 5500/5500) + SECRET-WRITE-CLOCK
   (`3bdd8111`+`a4616cfb` + lead arch `19a6aa19`; kararsızlığın kök nedeni WSL2 duvar saati geri adımı, `proof/SECRET-WRITE-FLAKE-2026-10-01`) + host-insights (`fc2b69e3`,
