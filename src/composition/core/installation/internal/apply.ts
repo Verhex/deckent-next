@@ -5,7 +5,7 @@ import { withInstallationJournal } from '#adapters/index.js';
 import { immutableJsonObjectSchema } from '#domain/index.js';
 import { InstallationPublicationApplication, InstallationPublicationError, validateInstallationRecovery,
   type InstallationConsent, type InstallationRecovery, type PreparedInstallation } from '#engine/index.js';
-import { getConfigFieldDefault, observeBootstrapState, validateConfig, versionedConfig, type BootstrapObservation } from '#platform/index.js';
+import { getConfigFieldDefault, observeBootstrapState, SystemTrustedClock, validateConfig, versionedConfig, type BootstrapObservation } from '#platform/index.js';
 import { prepareSuppliedInstallation } from './preview.js';
 import { inspectPreparedInstallation } from './evidence.js';
 import { installationPublicationPorts } from './publication.js';
@@ -72,8 +72,9 @@ async function executeInstallation(projectRoot: string, operator: InstallationAp
     if (evidence.proposalDigest !== operator.proposalDigest) throw new InstallationPublicationError('INSTALLATION_PUBLICATION_CHANGED');
     const consent: InstallationConsent = recovery?.consent ?? Object.freeze({ schemaVersion: 1, mode: 'operator-custom',
       id: randomUUID(), atMs: Date.now(), proposalDigest: operator.proposalDigest, principal: prepared.preview.principal });
+    const clock = new SystemTrustedClock(); // I40: journal times are compared (TIME_ORDER), so never raw Date.now
     return new InstallationPublicationApplication({ journal, ...installationPublicationPorts(projectRoot, prepared),
-      revalidateEvidence: () => inspectPreparedInstallation(prepared, operator.dockerExecutable), now: Date.now,
+      revalidateEvidence: () => inspectPreparedInstallation(prepared, operator.dockerExecutable), now: () => clock.sample().wallMs,
     }).apply(prepared, evidence, consent);
   });
 }

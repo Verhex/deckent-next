@@ -26,7 +26,7 @@ function memoryPorts(source: PreparedInstallation, observed: InstallationEvidenc
   let serial = 0; let state: BootstrapObservation = Object.freeze({ generation: 'absent', record: null });
   const effects = new Map<string, { digest: string; transactionId: string }>(), writes: BootstrapJournalPayload[] = [];
   let publishes = 0, verifies = 0, crashAfterEffect = false, evidenceChecks = 0, changeAfterEvidenceChecks: number | null = null,
-    mutateOnVerify: number | null = null;
+    mutateOnVerify: number | null = null, clock: () => number = () => 2;
   const journal = {
     async observe() { return state; },
     async write(expected: BootstrapObservation, next: BootstrapJournalPayload) {
@@ -53,9 +53,9 @@ function memoryPorts(source: PreparedInstallation, observed: InstallationEvidenc
       return changeAfterEvidenceChecks !== null && evidenceChecks > changeAfterEvidenceChecks
         ? evidence(source, 'd'.repeat(64)) : observed;
     },
-    now() { return 2; },
+    now() { return clock(); },
   };
-  return { ports, effects, writes, get state() { return state; }, get publishes() { return publishes; }, get verifies() { return verifies; },
+  return { ports, effects, writes, setClock(next: () => number) { clock = next; }, get state() { return state; }, get publishes() { return publishes; }, get verifies() { return verifies; },
     crash() { crashAfterEffect = true; }, changeEvidence(afterChecks = 0) { changeAfterEvidenceChecks = afterChecks; },
     mutateDuringFinalVerify(atVerify: number) { mutateOnVerify = atVerify; }, resetCalls() { publishes = 0; verifies = 0; },
     replace(payload: BootstrapJournalPayload) { const record = JSON.parse(encodeBootstrapJournal(payload)); state = Object.freeze({ generation: `journal-${++serial}`, record }); } };
@@ -129,4 +129,39 @@ it('rejects changed proposal, consent, and stored resource target recovery confl
   const { checksum: ignored, ...payload } = memory.state.record!; void ignored;
   memory.replace({ ...payload, resources: payload.resources.map(resource => resource.resource === 'policy' ? { ...resource, path: '/other/policy.json' } : resource) });
   await expect(application.apply(source, observed, agreed)).rejects.toMatchObject({ code: 'INSTALLATION_PUBLICATION_CONFLICT' });
+});
+
+// SECRET-WRITE-CLOCK (proof/SECRET-WRITE-FLAKE-2026-10-01): same writer-side ordering as the policy-template path; TIME_ORDER stays exact.
+const sequence = (...values: number[]) => () => values.length > 1 ? values.shift()! : values[0]!;
+const T = 1_790_000_000_000;
+
+it('a wall clock stepping back after the pending entry still installs; every journal write keeps updatedAtMs >= createdAtMs', async () => {
+  const source = await prepared(), observed = evidence(source), agreed = consent(source, observed), memory = memoryPorts(source, observed);
+  memory.setClock(sequence(T, T - 1)); // pending at T, then three published updates and the commit read T - 1
+  await expect(new InstallationPublicationApplication(memory.ports).apply(source, observed, agreed)).resolves.toMatchObject({ status: 'installed' });
+  expect(memory.writes).toHaveLength(5);
+  expect(memory.writes.every(write => write.createdAtMs === T && write.updatedAtMs >= write.createdAtMs)).toBe(true);
+  expect(memory.state.record).toMatchObject({ phase: 'committed', createdAtMs: T, updatedAtMs: T, blockers: [] });
+});
+
+it('a recovery in another process whose clock is behind the persisted createdAtMs completes the pending installation', async () => {
+  const source = await prepared(), observed = evidence(source), agreed = consent(source, observed), memory = memoryPorts(source, observed);
+  memory.setClock(() => T); memory.crash();
+  await expect(new InstallationPublicationApplication(memory.ports).apply(source, observed, agreed)).rejects.toThrow('CRASH_AFTER_EFFECT');
+  expect(memory.state.record).toMatchObject({ phase: 'pending', createdAtMs: T, updatedAtMs: T });
+  memory.setClock(() => T - 1000);
+  await expect(new InstallationPublicationApplication(memory.ports).apply(source, observed, agreed)).resolves.toMatchObject({ status: 'installed' });
+  expect(memory.state.record).toMatchObject({ phase: 'committed', createdAtMs: T, updatedAtMs: T });
+});
+
+it('control: a forward-moving clock is recorded as observed, and an invalid clock sample is still refused', async () => {
+  const source = await prepared(), observed = evidence(source), agreed = consent(source, observed), memory = memoryPorts(source, observed);
+  memory.setClock(sequence(T, T + 10, T + 20, T + 30, T + 40));
+  await new InstallationPublicationApplication(memory.ports).apply(source, observed, agreed);
+  expect(memory.writes.map(write => write.updatedAtMs)).toEqual([T, T + 10, T + 20, T + 30, T + 40]);
+
+  const invalid = memoryPorts(source, observed);
+  invalid.setClock(sequence(T, Number.NaN));
+  await expect(new InstallationPublicationApplication(invalid.ports).apply(source, observed, agreed)).rejects.toMatchObject({ code: 'INSTALLATION_PUBLICATION_INVALID' });
+  expect(invalid.state.record).toMatchObject({ phase: 'pending', updatedAtMs: T });
 });

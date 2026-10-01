@@ -50,7 +50,9 @@ export function installationPublishTargets(prepared: PreparedInstallation, evide
 
 /** Fresh installation and exact recovery share this sequence. This application never
  * overwrites a pre-existing unrelated resource, treats progress as proof of current bytes,
- * or converts custom local consent into publisher authenticity.
+ * or converts custom local consent into publisher authenticity. Journal updates are record-local
+ * monotonic (I40): never an earlier `updatedAtMs` than the record holds, so a backward wall-clock
+ * step or a recovery process behind the persisted `createdAtMs` keeps the exact TIME_ORDER rule.
  */
 export class InstallationPublicationApplication {
   constructor(private readonly ports: InstallationPublicationPorts) {}
@@ -98,13 +100,13 @@ export class InstallationPublicationApplication {
       await this.ports.publish(target, consent.id);
       await this.ports.verify(target, consent.id);
       const { checksum: ignored, ...current } = observed.record!; void ignored;
-      observed = await this.ports.journal.write(observed, { ...current, updatedAtMs: timestamp(this.ports.now()),
+      observed = await this.ports.journal.write(observed, { ...current, updatedAtMs: Math.max(current.updatedAtMs, timestamp(this.ports.now())),
         resources: current.resources.map(resource => resource.resource === target.resource ? { ...resource, state: 'published' as const } : resource) });
     }
     for (const target of targets) await this.ports.verify(target, consent.id);
     await this.assertEvidence(evidence);
     const { checksum: ignored, ...current } = observed.record!; void ignored;
-    await this.ports.journal.write(observed, { ...current, phase: 'committed', blockers: [], updatedAtMs: timestamp(this.ports.now()) });
+    await this.ports.journal.write(observed, { ...current, phase: 'committed', blockers: [], updatedAtMs: Math.max(current.updatedAtMs, timestamp(this.ports.now())) });
     return this.result(prepared, evidence, consent.id, 'installed');
   }
   private async assertEvidence(expected: InstallationEvidencePreview) {

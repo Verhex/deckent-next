@@ -86,6 +86,9 @@ export function preparePolicyTemplateInstallation(input: PreparePolicyTemplateIn
  * same `INSTALLATION_PUBLICATION_*` vocabulary, deliberately not the same class — that one is tied to Docker/pool
  * evidence this flow never has). An existing `policy.json`/`bindings.json` whose bytes differ from the template is
  * never overwritten: refused before the journal's pending entry is even written.
+ * Journal time is record-local monotonic (I40): an update never carries an earlier `updatedAtMs` than the record already holds,
+ * because the host wall clock steps backwards (WSL2, NTP, VM resume) and a retry may run in a process whose clock is behind the
+ * persisted `createdAtMs`. The journal's TIME_ORDER rule stays exact; this orders the record only and extends nothing.
  */
 export class PolicyTemplateInstallationApplication {
   constructor(private readonly ports: PolicyTemplateInstallationPorts) {}
@@ -121,7 +124,7 @@ export class PolicyTemplateInstallationApplication {
       await this.ports.publish(target, preview.transactionId);
       await this.ports.verify(target, preview.transactionId);
       const { checksum: ignored, ...current } = observed.record!; void ignored;
-      observed = await this.ports.journal.write(observed, { ...current, updatedAtMs: this.ports.now(),
+      observed = await this.ports.journal.write(observed, { ...current, updatedAtMs: Math.max(current.updatedAtMs, this.ports.now()),
         resources: current.resources.map(resource => resource.resource === target.resource ? { ...resource, state: 'published' as const } : resource) });
     }
     // A second, whole-set re-verify right before commit (same as the heavy install's publication path): the
@@ -129,7 +132,7 @@ export class PolicyTemplateInstallationApplication {
     // still correct once every target has finished.
     for (const target of targets) await this.ports.verify(target, preview.transactionId);
     const { checksum: ignored, ...current } = observed.record!; void ignored;
-    await this.ports.journal.write(observed, { ...current, phase: 'committed', blockers: [], updatedAtMs: this.ports.now() });
+    await this.ports.journal.write(observed, { ...current, phase: 'committed', blockers: [], updatedAtMs: Math.max(current.updatedAtMs, this.ports.now()) });
     return this.result(preview, 'installed');
   }
   private result(preview: PolicyTemplatePreview, status: 'installed' | 'replayed') {

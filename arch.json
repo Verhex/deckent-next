@@ -942,6 +942,7 @@
         "src/domain/core/primitives",
         "src/engine/core/installation",
         "src/platform/core/bootstrap-state",
+        "src/platform/core/clock",
         "src/platform/core/common",
         "src/platform/core/config",
         "src/platform/core/config-fields",
