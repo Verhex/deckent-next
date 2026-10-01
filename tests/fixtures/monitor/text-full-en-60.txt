@@ -132,7 +132,7 @@ sets: language
   3. project —
 /home/owner/projects/deckent-next/.deckent/config.json —
 sets: layout, terminal, inspection
-  4. environment variables — — — sets: none
+  4. environment variables — no file — sets: none
 Execution registry: 3 profile(s), 2 task kind(s)
   task kind coding → profile coding-default@3 (docker)
   task kind review → profile review (docker)

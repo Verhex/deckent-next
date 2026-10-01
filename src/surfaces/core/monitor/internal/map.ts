@@ -20,7 +20,7 @@ export function mapBlocks(installs: readonly MonitorInstall[], locale: Locale, m
     const policy = map.policy;
     return [...head,
       line(t('monitor.map.config', {}, locale), 'accent'),
-      ...map.config.map((entry, at) => line(`  ${t('monitor.map.configLayer', { n: at + 1, layer: layer(entry.layer), path: entry.path ?? (entry.layer === 'default' ? t('monitor.map.builtIn', {}, locale) : '—'),
+      ...map.config.map((entry, at) => line(`  ${t('monitor.map.configLayer', { n: at + 1, layer: layer(entry.layer), path: entry.path ?? (entry.layer === 'default' ? t('monitor.map.builtIn', {}, locale) : t('monitor.map.noFile', {}, locale)),
         sections: entry.sections.join(', ') || none }, locale)}`)),
       line(t('monitor.map.registry', { profiles: map.registry.profiles.length, kinds: map.registry.kinds.length }, locale), 'accent'),
       ...map.registry.kinds.map(entry => line(`  ${t('monitor.map.kind', { kind: entry.kind, profile: entry.profile, adapter: profileOf(entry.profile)?.adapter ?? '—' }, locale)}`)),

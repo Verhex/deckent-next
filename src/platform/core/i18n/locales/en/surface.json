@@ -542,5 +542,6 @@
   "monitor.legend.selected": "selected row",
   "monitor.legend.added": "row new since the last refresh",
   "monitor.legend.changed": "row changed since the last refresh (state, blocker, phase)",
-  "monitor.duration.open": "running"
+  "monitor.duration.open": "running",
+  "monitor.map.noFile": "no file"
 }

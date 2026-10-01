@@ -131,7 +131,8 @@ belirlediği bölümler: language
   3. proje —
 /home/owner/projects/deckent-next/.deckent/config.json —
 belirlediği bölümler: layout, terminal, inspection
-  4. ortam değişkenleri — — — belirlediği bölümler: yok
+  4. ortam değişkenleri — dosya yok — belirlediği bölümler:
+yok
 Yürütme kaydı: 3 profil, 2 görev türü
   coding görevi → coding-default@3 profili (docker)
   review görevi → review profili (docker)

@@ -542,5 +542,6 @@
   "monitor.legend.selected": "seçili satır",
   "monitor.legend.added": "son yenilemeden beri yeni satır",
   "monitor.legend.changed": "son yenilemeden beri değişen satır (durum, engel, faz)",
-  "monitor.duration.open": "sürüyor"
+  "monitor.duration.open": "sürüyor",
+  "monitor.map.noFile": "dosya yok"
 }
