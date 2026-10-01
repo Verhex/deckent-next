@@ -66,6 +66,9 @@ export { admitConfiguredModelActivation as admitModelActivation, inspectConfigur
 export type { ModelCatalogCommand, ModelCatalogQuery, ModelCatalogReceipt, WorkerModelView, TaskEvaluationModel } from '#domain/index.js';
 export type { ModelCatalogInspection, ModelCatalogChannelView, ModelCatalogResult, TaskWorkerModel } from '#engine/index.js';
 export type { ModelActivationCommand, ModelActivationQuery, ModelActivationRecord, ModelActivationReceipt } from '#domain/index.js';
+// K5 typed execution pool hold: the same application as CLI `pool hold|resume|status` and MCP `apply_pool_hold` / `inspect_pool_hold`.
+export { applyConfiguredPoolHold as applyPoolHold, inspectConfiguredPoolHold as inspectPoolHold } from '#composition/index.js';
+export type { PoolHoldCommand, PoolHoldQuery, PoolHoldReceipt, PoolHoldRecord, PoolHoldView, PoolOccupancy } from '#engine/index.js';
 export type { ModelActivationResult, ModelActivationInspection } from '#engine/index.js';
 export { invokeRuntimeModel as invokeModel, inspectRuntimeModelInvocation as inspectModelInvocation, purgeRuntimeModelInvocationContent as purgeModelInvocationContent,
   cancelRuntimeModelInvocation as cancelModelInvocation } from '#composition/index.js';

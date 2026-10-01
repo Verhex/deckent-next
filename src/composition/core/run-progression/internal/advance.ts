@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { userInfo } from 'node:os';
 import type { ConfigLoadOptions } from '#platform/index.js';
 import { openSqliteAttemptStore } from '#adapters/index.js';
-import { authenticate, RunPolicyAuthorization, RunProgressionTurn, runQuerySchema, RunStoreError, type RunQuery } from '#engine/index.js';
+import { authenticate, reservationRefusalOutcome, RunPolicyAuthorization, RunProgressionTurn, runQuerySchema, RunStoreError, type RunQuery } from '#engine/index.js';
 import { executeConfiguredTask } from '#composition/core/execution/index.js';
 import { evaluateConfiguredTask, reserveConfiguredRunTasks } from '#composition/core/runs/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
@@ -32,12 +32,7 @@ export async function advanceConfiguredRun(projectRoot: string, input: RunQuery,
       },
       async reserve(command) {
         try { await reserveConfiguredRunTasks(projectRoot, command, options); return 'reserved'; }
-        catch (error) {
-          const failure = queryFailure(error);
-          if (failure.code === 'RUN_STORE_CONFLICT') return 'changed';
-          if (failure.code === 'RUN_CAPACITY_OR_ORDER' || failure.code === 'RUN_POOL_FULL') return 'waiting';
-          throw error;
-        }
+        catch (error) { const outcome = reservationRefusalOutcome(queryFailure(error).code); if (outcome) return outcome; throw error; }
       },
       async execute(identity) { await admitExecution(async () => { await executeConfiguredTask(projectRoot, identity, options); }); },
       async evaluate(command) {

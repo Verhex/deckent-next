@@ -119,6 +119,15 @@ export const auditSubjectSchema = z.discriminatedUnion('kind', [
     cell: z.enum(['edit', 'shell-read-low', 'shell-narrow-mutating']), keyDigest: digest, approvalId: identitySchema.nullable(),
     tool: toolRef, call: callRef,
     summary: auditSummarySchema }).strict(),
+  /**
+   * A typed execution pool hold change (K5, owner 2026-09-30 option A): `hold` stops new task reservations of the installation-wide pool,
+   * `resume` restarts them; running work is never touched. Every decision on the `pool`/`hold|resume` cell is recorded — a refusal too
+   * (`state` null, nothing written); an allowed change commits in the same ledger transaction as the hold row (no record, no change).
+   * `state.previous === state.next` is an idempotent no-op (already held / already open). The operator's reason stays in the hold record.
+   */
+  z.object({ kind: z.literal('pool-hold'), action: z.enum(['hold', 'resume']), poolId: identitySchema, commandId: identitySchema,
+    decision: z.object({ effect: z.enum(['allow', 'deny', 'require-approval']), ruleId: identitySchema.nullable() }).strict(),
+    state: z.object({ previous: z.enum(['open', 'held']), next: z.enum(['open', 'held']) }).strict().nullable() }).strict(),
 ]);
 export const auditEventSchema = z.object({ schemaVersion: z.literal(AUDIT_EVENT_SCHEMA_VERSION), eventId: identitySchema, scopeId: identitySchema,
   principal: auditPrincipalSchema, policyRevision: identitySchema, atMs: counterSchema, subject: auditSubjectSchema }).strict().readonly();

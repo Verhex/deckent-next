@@ -24,6 +24,8 @@ it('exposes the same versioned action/resource matrix through compiled CLI and S
   expect(getPolicyVocabulary().resources.find(r => r.kind === 'secret')!.actions).toEqual(['set', 'delete']);
   // WORK-TARGETS (owner 2026-09-30 K2 = A): one configured work target; use at admission/reservation, adopt when its branch moves.
   expect(getPolicyVocabulary().resources.find(r => r.kind === 'work-target')!.actions).toEqual(['use', 'adopt']);
+  // K5 typed pool hold (owner 2026-09-30 option A): hold/resume are installation-level, inspect reads the status.
+  expect(getPolicyVocabulary().resources.find(r => r.kind === 'pool')!.actions).toEqual(['use', 'hold', 'resume', 'inspect']);
 });
 it('catalog metadata cannot be mutated and never grants authority', () => {
   const catalog = getPolicyVocabulary(); expect(Object.isFrozen(catalog.resources)).toBe(true);

@@ -90,6 +90,9 @@ export interface CommandContext extends ModelCommandContext {
   // SECRET-WRITE: `secret set|delete` through the runtime service (the socket peer is the principal; the `secret` policy cell decides).
   setSecret?: import('./secret.js').SecretSetHandler;
   deleteSecret?: import('./secret.js').SecretDeleteHandler;
+  // K5 typed pool hold: `pool hold|resume|status` (local application, no runtime service needed).
+  applyPoolHold?: import('./pool.js').PoolHoldApplyHandler;
+  inspectPoolHold?: import('./pool.js').PoolHoldInspectHandler;
   createRun?: RunAdmissionHandler;
   createDeliveryRun?: RunDeliveryAdmissionHandler;
   stdin?: Readable & { isTTY?: boolean };

@@ -9,7 +9,7 @@ export type { DispatchLaunchState, DispatchLaunchTransition } from '#engine/core
 export { DispatchApplication } from '#engine/core/dispatch/index.js';
 export type { DispatchAuthorization, DispatchIdentityAuthorization, DispatchOutcome } from '#engine/core/dispatch/index.js';
 export { projectDispatchTerminal, projectDispatchCancellation, mergeDispatchTerminal } from '#engine/core/dispatch/index.js';
-export { PoolPolicyAuthorization, RunPolicyAuthorization, DispatchPolicyAuthorization, DispatchInventoryPolicyAuthorization, PolicyAuthorizationError, assertRequestCompany, installationOwnScopes, resolvePolicyScopeMembership, ScopeRegistrationError } from '#engine/core/policy/index.js';
+export { PoolPolicyAuthorization, PoolControlPolicyAuthorization, assertPoolControlAllowed, RunPolicyAuthorization, DispatchPolicyAuthorization, DispatchInventoryPolicyAuthorization, PolicyAuthorizationError, assertRequestCompany, installationOwnScopes, resolvePolicyScopeMembership, ScopeRegistrationError } from '#engine/core/policy/index.js';
 export type { PoolAuthorization, PolicyRefusalReason, PolicySource, ScopeAccess, ScopeRegistry } from '#engine/core/policy/index.js';
 export { ServicePolicyAuthorization, admitFullAccessTurn, agentCallAuditEvent, decideAgentToolCall, isAuditedDecision, standingWouldLower, trackedFilesAuditEvent, type TrackedFilesAuditList, PermissionModeApplication, PermissionModeError, inspectPermissionMode } from '#engine/core/policy/index.js';
 export type { PermissionModeAudit, PermissionModeBindingsStore, PermissionModeSnapshot } from '#engine/core/policy/index.js';
@@ -47,7 +47,7 @@ export * from '#engine/core/provider-spend/index.js';
 export * from '#engine/core/model-allocation/index.js';
 export * from '#engine/core/inference-serving/index.js';
 
-export { RunProgressionTurn } from '#engine/core/run-progression/index.js';
+export { RunProgressionTurn, reservationRefusalOutcome } from '#engine/core/run-progression/index.js';
 export type { RunProgressionOperations, RunProgressionRuntime } from '#engine/core/run-progression/index.js';
 export { progressionQuerySchema, progressionCursorSchema } from '#engine/core/run-progression/index.js';
 export type { ProgressionQuery, ProgressionCursor, RunProgressionJournal } from '#engine/core/run-progression/index.js';

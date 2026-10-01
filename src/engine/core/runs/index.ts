@@ -22,3 +22,5 @@ export { cancellationRecoveryQuerySchema, cancellationRecoveryPageSchema, cancel
 export type { CancellationRecoveryQuery, CancellationRecoveryPage, CancellationRecoveryQueryStore } from './internal/recovery-query.js';
 export { CancellationRecoveryApplication, cancellationRecoveryCommandSchema } from './internal/recovery.js';
 export type { CancellationRecoveryCommand, CancellationRecoveryOutcome } from './internal/recovery.js';
+export { ExecutionPoolHoldApplication, decidePoolHold, poolHoldView, poolHoldCommandSchema, poolHoldQuerySchema, poolHoldRecordSchema, poolHoldReceiptSchema, poolOccupancySchema } from './internal/pool-hold.js';
+export type { PoolHoldAuditRecorder, PoolHoldCommand, PoolHoldQuery, PoolHoldRecord, PoolHoldReceipt, PoolHoldStore, PoolHoldTransition, PoolHoldView, PoolHoldWrite, PoolOccupancy } from './internal/pool-hold.js';

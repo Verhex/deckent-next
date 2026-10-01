@@ -77,6 +77,8 @@
   "units": {
     "src/adapters/core/attempt-store": {
       "dependencies": [
+        "src/adapters/core/audit-store",
+        "src/engine/core/audit",
         "src/adapters/core/sqlite-ledger",
         "src/capabilities/core/artifacts",
         "src/domain/core/attempt",
@@ -293,6 +295,7 @@
     },
     "src/composition/core/mcp": {
       "dependencies": [
+        "src/composition/core/runs",
         "src/adapters/core/contract",
         "src/adapters/core/mcp-transport",
         "src/composition/core/model-activation",
@@ -319,6 +322,7 @@
     },
     "src/composition/core/query-errors": {
       "dependencies": [
+        "src/domain/core/audit",
         "src/engine/core/agent-turn",
         "src/adapters/core/attempt-store",
         "src/adapters/core/docker-supervisor",
@@ -377,6 +381,7 @@
     },
     "src/composition/core/runs": {
       "dependencies": [
+        "src/engine/core/audit",
         "src/adapters/core/native-coding",
         "src/adapters/core/sqlite-model-activation",
         "src/engine/core/model-activation",
@@ -597,6 +602,8 @@
     },
     "src/engine/core/runs": {
       "dependencies": [
+        "src/domain/core/audit",
+        "src/engine/core/audit",
         "src/domain/core/attempt",
         "src/domain/core/policy",
         "src/domain/core/primitives",

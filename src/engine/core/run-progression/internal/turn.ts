@@ -12,6 +12,12 @@ export interface RunProgressionOperations {
   evaluationRecorded(identity: AttemptIdentity, revision: number): Promise<boolean>;
 }
 export interface RunProgressionRuntime { commandId(): string }
+/** The one mapping of a refused reservation's stable code to a quiet turn outcome (any other code is a real failure the host reports):
+ * a moved revision is `changed`; no schedulable task, a full pool or a held pool (K5) is `waiting` — no reservation, no error noise. */
+export function reservationRefusalOutcome(code: string): 'changed' | 'waiting' | null {
+  if (code === 'RUN_STORE_CONFLICT') return 'changed';
+  return code === 'RUN_CAPACITY_OR_ORDER' || code === 'RUN_POOL_FULL' || code === 'RUN_POOL_HELD' ? 'waiting' : null;
+}
 const concurrencySchema = z.number().int().positive().safe();
 
 /** One finite, completion-driven advancement turn. Scheduler, launch and acceptance remain with existing owners.

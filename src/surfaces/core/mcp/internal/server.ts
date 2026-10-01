@@ -14,6 +14,7 @@ import { runCommandSchema, runQuerySchema, dispatchInventoryInputSchema, getPoli
   type RunCommand, type RunQuery, type DispatchInventoryInput, type RuntimeServiceDescriptor, type ServiceShutdownAdmissionResult,
   type ShutdownCommand, type TaskEvaluationCommand, type RunAdmission, type RunReservationCommand } from '#engine/index.js';
 import type { DeclaredModelsInspection, ModelBindingInspection, ToolchainCurrencyReport } from '#engine/index.js';
+import { poolHoldCommandSchema, poolHoldQuerySchema, type PoolHoldCommand, type PoolHoldQuery, type PoolHoldReceipt, type PoolHoldView } from '#engine/index.js';
 export interface McpApplications {
   renewApproval?(input: unknown, delivery?: RuntimeServiceDelivery): Promise<unknown>;
   listApprovals?(input: unknown, delivery?: RuntimeServiceDelivery): Promise<unknown>;
@@ -23,6 +24,8 @@ export interface McpApplications {
   admitModelActivation?(command: ModelActivationCommand): Promise<ModelActivationResult>;
   inspectModelCatalog?(query: ModelCatalogQuery): Promise<ModelCatalogInspection>;
   applyModelCatalog?(command: ModelCatalogCommand): Promise<ModelCatalogResult>;
+  inspectPoolHold?(query: PoolHoldQuery): Promise<PoolHoldView>;
+  applyPoolHold?(command: PoolHoldCommand): Promise<PoolHoldReceipt>;
   inspectModelInvocation?(query: ModelInvocationQuery, delivery?: ModelInvocationDelivery): Promise<ModelInvocationInspection>;
   invokeModel?(command: ModelInvocationCommand, delivery?: ModelInvocationDelivery): Promise<ModelInvocationResult>;
   purgeModelInvocationContent?(command: ModelInvocationPurgeCommand, delivery?: ModelInvocationDelivery): Promise<ModelInvocationPurgeResult>;
@@ -155,6 +158,12 @@ export function createMcpServer(applications: McpApplications, limits: McpLimits
   if (applyCatalog) definitions.push({ readOnly: false, destructive: true, idempotent: true, name: 'apply_model_catalog',
     description: t('mcp.tool.applyModelCatalog', {}, locale), schema: modelCatalogCommandSchema,
     invoke: input => applyCatalog.call(applications, modelCatalogCommandSchema.parse(input)) });
+  const inspectPoolHold = applications.inspectPoolHold, applyPoolHold = applications.applyPoolHold; // K5: same application as CLI `pool` and SDK
+  if (inspectPoolHold) definitions.push({ readOnly: true, destructive: false, idempotent: true, name: 'inspect_pool_hold', description: t('mcp.tool.inspectPoolHold', {}, locale),
+    schema: poolHoldQuerySchema, invoke: input => inspectPoolHold.call(applications, poolHoldQuerySchema.parse(input)) });
+  // Destructive but idempotent: adapters/core/attempt-store/internal/pool-holds.ts applyPoolHold returns the (scope, commandId) receipt before any row is written again.
+  if (applyPoolHold) definitions.push({ readOnly: false, destructive: true, idempotent: true, name: 'apply_pool_hold', description: t('mcp.tool.applyPoolHold', {}, locale),
+    schema: poolHoldCommandSchema, invoke: input => applyPoolHold.call(applications, poolHoldCommandSchema.parse(input)) });
   const inspectInvocation = applications.inspectModelInvocation;
   if (inspectInvocation) definitions.push({ readOnly: true, destructive: false, idempotent: true, name: 'inspect_model_invocation',
     description: t('mcp.tool.inspectModelInvocation', {}, locale), schema: modelInvocationQuerySchema, modelDelivery: true,
