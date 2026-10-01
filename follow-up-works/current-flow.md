@@ -3,6 +3,15 @@
 Bu belge yalnız güncel durumu tutar; önceki sürümü Git geçmişinde, kanıtlar `deckent-refactor-work/proof/`.
 
 ## Durum
+- **On dokuzuncu parti (2026-10-01; `integrate/2026-10-01-t`, worktree `/home/alperen/deckent-next-integrate-t`, taban `21110d09`):**
+  K3 tipli iş girdisi (`lane/k3-work-input` `31198880`+`425d4b65`; graf v3 `workInput`, `native-coding-template`; ARCHITECTURE alt bölümü)
+  + CI-FIX-2 (`lane/ci-fix-2` `83f23b6d`). Barındırılan CI `21110d09` ([koşu 36788067766](https://github.com/Verhex/deckent-next/actions/runs/36788067766))
+  6/6 kırmızıydı, yerel verify'dan ayrı: Linux/24 3657/3657 geçti ama bwrap testi soketinden yakalanmamış ECONNRESET (C1, test hijyeni);
+  Linux/26 git fixture'ında Git 2.55 arka plan bakım yarışı (C3, test) + F7 (C4, **ürün hatası**: geçersiz parçadan önce aynı okumada gelen
+  geçerli delta'lar düşüyordu; Node 26 okumaları birleştiriyor; openai-chat + anthropic-messages); Windows core-memory/config-vocabulary
+  ham bayt özeti CRLF'de kırılıyor (C2, LF-normalize özet). macOS F9 kapsam dışı. Kanıt `proof/CI-FIX-2-2026-10-01/README.md`.
+  Açık: diğer ~20 fixture deposunda aynı git bakım sınıfı (henüz kırılmadı), diğer `createServer` test soketleri taranmadı, Windows'ta sonraki adımlar doğrulanmadı.
+  **Sıradaki:** tam verify → Sol REQUEST_REVIEW → PASS'te push → barındırılan CI → owner onayıyla ilk `dev-release` canlı geçişi.
 - **Sol 2202 REVISE (WT-R1) → düzeltildi:** yürütme, tükettiği hedef için aynı config anlık görüntüsünden `work-target:use` ister; hedefi okuyan/yazan her attempt
   işlemi (yürütme, yama hazırlama, entegrasyon denetim/hazırlama, teslim, teslime sabit Run) `use`, benimseme/geri alma `use`+`adopt` (owner K2'den daha sıkı; okuma tüketimdir).
   Aday artık 17+18 birleşik: `integrate/2026-09-30-s`. Kanıt `proof/WORK-TARGETS-2026-09-30/README.md` §8–8.1, Sol metni `proof/SOL-2201-2026-09-30/review.txt`.
