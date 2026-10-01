@@ -87,7 +87,7 @@ describe('agent workspace deny: the product state of a data root inside the proj
   // At the real boundary: the installed bubblewrap and bash; the runtime socket is live, as it is while the service runs.
   it.skipIf(!sandboxReady)('keeps the product state and the runtime socket out of a real bubblewrap shell, and the project readable', async () => {
     const p = await project();
-    const socket = join(p.data, 'state', 'runtime.sock'), server = createServer(connection => connection.end('SERVICE-ANSWER\n'));
+    const socket = join(p.data, 'state', 'runtime.sock'), server = createServer(connection => { connection.on('error', () => undefined); connection.end('SERVICE-ANSWER\n'); });
     servers.push(server); await new Promise<void>(done => server.listen(socket, done));
     const usable = bubblewrapShellSandbox({ project: p.scope, scratchDir: null }).usable(capabilities);
     expect(usable.ok).toBe(true); if (!usable.ok) return;

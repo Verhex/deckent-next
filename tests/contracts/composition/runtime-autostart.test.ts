@@ -62,7 +62,7 @@ it('treats an accepting but silent endpoint as a present service: bounded by the
   const f = await fixture({ serviceStartTimeoutMs: 1_000 });
   await mkdir(join(f.data, 'state'), { recursive: true, mode: 0o700 });
   const endpoint = join(f.data, 'state/runtime.sock');
-  const peer = createServer(socket => { sockets.push(socket); }); peers.push(peer);
+  const peer = createServer(socket => { socket.on('error', () => undefined); sockets.push(socket); }); peers.push(peer);
   await new Promise<void>(resolve => peer.listen(endpoint, () => resolve())); await chmod(endpoint, 0o600);
   let launched = 0; const started = performance.now();
   await expect(ensureConfiguredRuntimeService(f.project, f.options, async () => { launched++; return { pid: 1 }; }))
@@ -107,6 +107,7 @@ async function stubbornPeer(data: string, answerDescribe: boolean) {
   const seen: string[] = [];
   // A request is one frame followed by half-close; the answer (if any) is one frame, like the real host.
   const peer = createServer({ allowHalfOpen: true }, socket => {
+    socket.on('error', () => undefined); // the client may give up (deadline) before the answer is written: EPIPE/ECONNRESET is not a test failure
     sockets.push(socket);
     const decoder = new ServiceFrameDecoder(65_536);
     socket.on('data', chunk => decoder.push(chunk));

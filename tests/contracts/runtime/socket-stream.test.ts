@@ -23,7 +23,7 @@ const streamRequest = (requestId = 'request-1') => ({ schemaVersion: 18 as const
   input: command, delivery: { maxResultBytes: 2048 } });
 const tick = () => new Promise<void>(resolve => setImmediate(resolve));
 async function rawServer(endpoint: string, onRequest: (socket: Socket) => void) {
-  const raw = createServer({ allowHalfOpen: true }, socket => { socket.resume(); socket.once('end', () => onRequest(socket)); });
+  const raw = createServer({ allowHalfOpen: true }, socket => { socket.on('error', () => undefined); socket.resume(); socket.once('end', () => onRequest(socket)); });
   await new Promise<void>((resolve, reject) => { raw.once('error', reject); raw.listen(endpoint, () => { raw.off('error', reject); resolve(); }); });
   await chmod(endpoint, 0o600);
   return raw;
