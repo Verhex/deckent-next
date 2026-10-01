@@ -50,7 +50,7 @@ export class MonitorApplication {
       } catch (error) { diagnostics.push(`scope-unavailable:${scopeId}:${code(error)}`); }
     }
     const recency = new Map(reading.runs.flatMap(run => run.attempts.map(value => [`${run.snapshot.identity.scopeId}/${value.attemptId}`,
-      Math.max(value.sealedAtMs ?? -1, value.dispatch?.grantedAtMs ?? -1)] as const)));
+      Math.max(value.sealedAtMs ?? value.observedEndAtMs ?? -1, value.dispatch?.grantedAtMs ?? -1)] as const)));
     const rank = (value: WorkerObservation) => recency.get(`${value.identity?.scopeId}/${value.identity?.attemptId}`) ?? -1;
     const finished = workers.filter(value => value.terminal).sort((a, b) => rank(b) - rank(a)); const kept = new Set(finished.slice(0, MONITOR_FINISHED_WORKERS));
     if (finished.length > MONITOR_FINISHED_WORKERS) diagnostics.push('info:workers-finished-capped:' + (finished.length - MONITOR_FINISHED_WORKERS));

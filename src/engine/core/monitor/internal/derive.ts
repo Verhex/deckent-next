@@ -29,6 +29,8 @@ const attemptOf = (run: MonitorLedgerRun, taskId: string) => {
   return binding ? run.attempts.find(value => value.attemptId === binding.identity.attemptId) ?? null : null;
 };
 /** Last heartbeat time proven by the sidecar: the sampling time minus its measured age; null without an age. */
+/** The proven end of an attempt: its sealed worker log, else the host-observed exit; never the launch grant. */
+const endOf = (attempt: MonitorLedgerAttempt | null | undefined) => attempt?.sealedAtMs ?? attempt?.observedEndAtMs ?? null;
 const heartbeatAt = (worker: WorkerObservation | undefined, observedAt: number) => {
   const age = worker?.files?.heartbeat.ageMs; return typeof age === 'number' ? observedAt - age : null;
 };
@@ -38,15 +40,15 @@ function boundBlocker(taskId: string, phase: string, attempt: MonitorLedgerAttem
   if (phase === 'evaluating') {
     if (attempt?.evaluationObserved) return blocker('evaluation-unknown', taskId);
     if (!terminal) return blocker('evaluation-not-ready', taskId, null, 'terminal-missing');
-    if (terminal.interrupted === true) return blocker('evaluation-not-ready', taskId, attempt?.sealedAtMs ?? null, 'interrupted');
-    if (!dispatch?.outputRecorded) return blocker('evaluation-not-ready', taskId, attempt?.sealedAtMs ?? null, 'output-missing');
-    return blocker('worker-exited-unevaluated', taskId, attempt?.sealedAtMs ?? null);
+    if (terminal.interrupted === true) return blocker('evaluation-not-ready', taskId, endOf(attempt), 'interrupted');
+    if (!dispatch?.outputRecorded) return blocker('evaluation-not-ready', taskId, endOf(attempt), 'output-missing');
+    return blocker('worker-exited-unevaluated', taskId, endOf(attempt));
   }
   if (!attempt) return blocker('unknown', taskId, null, 'attempt-missing');
   if (!dispatch) return e.run.admitted === false ? blocker('not-admitted', taskId, e.run.createdAtMs) : blocker('none', taskId, attempt.reservedAtMs, 'dispatch-pending');
   if (dispatch.launch === 'pending') return blocker('none', taskId, attempt.reservedAtMs, 'launch-pending');
   if (dispatch.launch === 'prevented-before-launch') return blocker('cancellation-pending', taskId);
-  if (terminal) return blocker('worker-exited-unevaluated', taskId, attempt.sealedAtMs, 'projection-pending');
+  if (terminal) return blocker('worker-exited-unevaluated', taskId, endOf(attempt), 'projection-pending');
   if (!worker) return blocker('unknown', taskId, null, 'worker-unobserved');
   // Observed without sidecars (output denied by policy, observation unavailable): no heartbeat was read, so neither running nor stale.
   if (!worker.files) return blocker('unknown', taskId, null, worker.diagnostics[0] ?? 'sidecars-missing');
@@ -108,19 +110,20 @@ export function projectMonitorRun(e: MonitorRunEvidence): MonitorRun {
     const progress = snapshot.progress.find(value => value.taskId === definition.id)!; const attempt = attemptOf(e.run, definition.id);
     const worker = attempt ? e.workers.get(attempt.attemptId) : undefined; const profile = snapshot.execution.tasks.find(value => value.taskId === definition.id)?.profile;
     phaseCounts[progress.phase] = (phaseCounts[progress.phase] ?? 0) + 1;
-    push(attempt?.reservedAtMs, attempt?.dispatch?.grantedAtMs, attempt?.sealedAtMs, heartbeatAt(worker, e.observedAt), worker?.files?.activity?.receivedAt);
+    push(attempt?.reservedAtMs, attempt?.dispatch?.grantedAtMs, endOf(attempt), heartbeatAt(worker, e.observedAt), worker?.files?.activity?.receivedAt);
     const provider = worker && worker.provider !== 'unknown' ? worker.provider : attempt?.provider ?? null;
     return Object.freeze({ taskId: definition.id, kind: definition.kind, phase: progress.phase, profile: profile ? { id: profile.id, version: profile.version } : null,
       attempts: attempt ? 1 : 0, dependencies: definition.dependencies, evaluation: { verdict: verdict(progress.phase, attempt), observedAtMs: null },
       lastAttempt: attempt ? Object.freeze({ attemptId: attempt.attemptId, generation: attempt.generation, launch: attempt.dispatch?.launch ?? null,
-        exitCode: attempt.dispatch?.terminal?.exitCode ?? null, startedAtMs: attempt.dispatch?.grantedAtMs ?? null, endedAtMs: attempt.sealedAtMs,
+        exitCode: attempt.dispatch?.terminal?.exitCode ?? null, startedAtMs: attempt.dispatch?.grantedAtMs ?? null, endedAtMs: endOf(attempt),
+        endedAtSource: attempt.sealedAtMs !== null ? 'sealed' as const : endOf(attempt) !== null ? 'observed' as const : null,
         workerPhase: worker?.files?.activity?.phase ?? null, heartbeatAgeMs: worker?.files?.heartbeat.ageMs ?? null, provider,
         model: modelName(worker?.model ?? attempt.model), firstFailure: attempt.firstFailure ?? null, ...(attempt.recentEvents ? { recentEvents: attempt.recentEvents } : {}),
         ...(attempt.diagnostics ? { diagnostics: attempt.diagnostics } : {}) }) : null });
   });
   const current = deriveRunBlocker(e);
-  // Proven finish of a terminal Run: every bound attempt has a sealed end; the latest of them.
-  const ends = snapshot.bindings.map(binding => e.run.attempts.find(value => value.attemptId === binding.identity.attemptId)?.sealedAtMs ?? null);
+  // Proven finish of a terminal Run: every bound attempt has a proven end (sealed or host-observed); the latest of them.
+  const ends = snapshot.bindings.map(binding => endOf(e.run.attempts.find(value => value.attemptId === binding.identity.attemptId)));
   const finishedAtMs = !current && ends.length && ends.every(value => value !== null) ? Math.max(...ends as number[]) : null;
   return Object.freeze({ scopeId: snapshot.identity.scopeId, runId: snapshot.identity.runId, revision: snapshot.revision, state: deriveRunState(e, current),
     phaseCounts: Object.freeze(phaseCounts), tasks: Object.freeze(tasks), blocker: current, cancellationRequested: snapshot.cancelRequested,

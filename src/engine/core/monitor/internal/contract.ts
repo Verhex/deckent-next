@@ -27,6 +27,9 @@ export interface MonitorBlocker {
 export interface MonitorAttempt {
   readonly attemptId: string; readonly generation: number; readonly launch: string | null; readonly exitCode: number | null;
   readonly startedAtMs: number | null; readonly endedAtMs: number | null;
+  /** MONITOR-DATA (optional): what proves `endedAtMs` — `sealed` (the host sealed the worker event log) or `observed` (the host's own exit
+   * observation in the attempt's `worker.log` sidecar); null when no end is proven. The ledger records no evaluation time. */
+  readonly endedAtSource?: 'sealed' | 'observed' | null;
   /** Live worker phase from the worker-event contract (starting/thinking/reading/editing/running/…), null without events. */
   readonly workerPhase: string | null; readonly heartbeatAgeMs: number | null; readonly provider: string | null;
   /** MONITOR v1.1: exact model the worker ran (sealed model view or pin), first failing line of a failed attempt's recorded output
