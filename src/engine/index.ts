@@ -62,6 +62,7 @@ export * from '#engine/core/effect/index.js';
 export * from '#engine/core/adapter-registry/index.js';
 
 export * from '#engine/core/worker-observation/index.js';
+export * from '#engine/core/monitor/index.js';
 export * from '#engine/core/toolchain-currency/index.js';
 export * from '#engine/core/approval/index.js';
 export * from '#engine/core/audit/index.js';

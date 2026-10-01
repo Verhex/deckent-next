@@ -1843,6 +1843,18 @@
         "src/platform/core/identity"
       ],
       "plan": "SECURITY"
+    },
+    "src/engine/core/monitor": {
+      "dependencies": [
+        "src/engine/core/worker-observation"
+      ],
+      "plan": "MONITOR"
+    },
+    "src/surfaces/core/monitor": {
+      "dependencies": [
+        "src/engine/core/monitor"
+      ],
+      "plan": "MONITOR"
     }
   },
   "composition": {
