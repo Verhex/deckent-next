@@ -18,7 +18,7 @@ async function service(ports: MonitorPorts, target: MonitorTarget, diagnostics: 
 /**
  * MONITOR (owner 2026-10-02): builds the one observe-only `MonitorSnapshot`. Per target it reads the ledger (read-only), asks the target's
  * own scope policy for every scope the ledger names, and keeps only admitted scopes' Runs, approvals and workers; pools are
- * installation-wide and shown once any scope is admitted. Every failure becomes a typed diagnostic; nothing here writes or decides.
+ * installation-wide and shown unless every scope the ledger names was refused. Every failure becomes a typed diagnostic; nothing here writes or decides.
  */
 export class MonitorApplication {
   constructor(private readonly ports: MonitorPorts) {}
@@ -55,7 +55,7 @@ export class MonitorApplication {
     });
     const approvals: MonitorApproval[] = reading.approvals.filter(value => admitted.has(value.scopeId)).map(value => Object.freeze({ scopeId: value.scopeId,
       approvalId: value.approvalId, subjectKind: value.subjectKind, summary: value.summary, requiredAssurance: null, createdAtMs: value.createdAtMs, expiresAtMs: value.expiresAtMs }));
-    const poolViews: MonitorPool[] = admitted.size ? reading.pools.map(pool => Object.freeze({ poolId: pool.poolId, capacity: pool.inFlightSlots, inFlight: pool.inFlight,
+    const poolViews: MonitorPool[] = !reading.scopeIds.length || admitted.size ? reading.pools.map(pool => Object.freeze({ poolId: pool.poolId, capacity: pool.inFlightSlots, inFlight: pool.inFlight,
       held: pool.hold?.state === 'held', heldBy: pool.hold?.state === 'held' ? pool.hold.changedBy : null, executionCapacity: pool.executionSlots, executing: pool.execution })) : [];
     const status = !reading.scopeIds.length || admitted.size ? 'available' : denied ? 'denied' : 'unavailable';
     return Object.freeze({ id: target.id, path: target.path, status, scopeIds: Object.freeze([...admitted]), service: serviceState, ledgerVersion: reading.ledgerVersion,

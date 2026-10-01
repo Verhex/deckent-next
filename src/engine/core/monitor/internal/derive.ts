@@ -48,8 +48,10 @@ function boundBlocker(taskId: string, phase: string, attempt: MonitorLedgerAttem
   if (dispatch.launch === 'prevented-before-launch') return blocker('cancellation-pending', taskId);
   if (terminal) return blocker('worker-exited-unevaluated', taskId, attempt.sealedAtMs, 'projection-pending');
   if (!worker) return blocker('unknown', taskId, null, 'worker-unobserved');
-  const freshness = worker.files?.heartbeat.freshness ?? 'missing';
-  if (freshness === 'fresh' && !['exited', 'missing'].includes(worker.process)) return blocker('worker-running', taskId, dispatch.grantedAtMs, worker.files?.activity?.phase ?? null);
+  // Observed without sidecars (output denied by policy, observation unavailable): no heartbeat was read, so neither running nor stale.
+  if (!worker.files) return blocker('unknown', taskId, null, worker.diagnostics[0] ?? 'sidecars-missing');
+  const freshness = worker.files.heartbeat.freshness;
+  if (freshness === 'fresh' && !['exited', 'missing'].includes(worker.process)) return blocker('worker-running', taskId, dispatch.grantedAtMs, worker.files.activity?.phase ?? null);
   return blocker('worker-stale-heartbeat', taskId, heartbeatAt(worker, e.observedAt), freshness === 'fresh' ? 'process-' + worker.process : freshness);
 }
 function pendingBlocker(task: TaskReadiness, e: MonitorRunEvidence): MonitorBlocker {
@@ -110,7 +112,7 @@ export function projectMonitorRun(e: MonitorRunEvidence): MonitorRun {
       attempts: attempt ? 1 : 0, dependencies: definition.dependencies, evaluation: { verdict: verdict(progress.phase, attempt), observedAtMs: null },
       lastAttempt: attempt ? Object.freeze({ attemptId: attempt.attemptId, generation: attempt.generation, launch: attempt.dispatch?.launch ?? null,
         exitCode: attempt.dispatch?.terminal?.exitCode ?? null, startedAtMs: attempt.dispatch?.grantedAtMs ?? null, endedAtMs: attempt.sealedAtMs,
-        workerPhase: worker?.files?.activity?.phase ?? worker?.files?.heartbeat.phase ?? null, heartbeatAgeMs: worker?.files?.heartbeat.ageMs ?? null, provider }) : null });
+        workerPhase: worker?.files?.activity?.phase ?? null, heartbeatAgeMs: worker?.files?.heartbeat.ageMs ?? null, provider }) : null });
   });
   const current = deriveRunBlocker(e);
   return Object.freeze({ scopeId: snapshot.identity.scopeId, runId: snapshot.identity.runId, revision: snapshot.revision, state: deriveRunState(e, current),

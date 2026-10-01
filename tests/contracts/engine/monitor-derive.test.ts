@@ -77,6 +77,9 @@ describe('monitor run blocker and state derivation (pure)', () => {
   it('worker-running only with a fresh heartbeat; since = launch grant; detail = live worker phase', () => {
     const value = evidence(snapshot([{ id: 'a', phase: 'active' }]), [attempt('a')], { workers: workers(worker('a', 'fresh')) });
     expect(blocker(value)).toEqual({ code: 'worker-running', taskId: 'a', sinceMs: 200, detail: 'editing' }); expect(state(value)).toBe('progressing');
+    // Without worker events the phase is unknown (null), never the heartbeat's process state.
+    const quiet = worker('a', 'fresh'); const silent = evidence(snapshot([{ id: 'a', phase: 'active' }]), [attempt('a')], { workers: workers({ ...quiet, files: { ...quiet.files!, activity: null } }) });
+    expect(blocker(silent)?.detail).toBeNull(); expect(projectMonitorRun(silent).tasks[0]!.lastAttempt?.workerPhase).toBeNull();
   });
   it('worker-stale-heartbeat for stale/unknown heartbeats or a gone process; since = last heartbeat (observedAt - age)', () => {
     const value = evidence(snapshot([{ id: 'a', phase: 'active' }]), [attempt('a')], { workers: workers(worker('a', 'stale', 30_000)) });
@@ -88,6 +91,10 @@ describe('monitor run blocker and state derivation (pure)', () => {
   it('unknown when a launched worker has no observation at all (never guessed as running)', () => {
     const value = evidence(snapshot([{ id: 'a', phase: 'active' }]), [attempt('a')]);
     expect(blocker(value)).toEqual({ code: 'unknown', taskId: 'a', sinceMs: null, detail: 'worker-unobserved' }); expect(state(value)).toBe('blocked');
+    // Observed without sidecars (e.g. attempt read-output denied): no heartbeat was read, so it is neither running nor stale.
+    const denied = evidence(snapshot([{ id: 'a', phase: 'active' }]), [attempt('a')], { workers: workers({ ...worker('a', 'fresh'), process: 'unknown', files: null, diagnostics: ['output-denied'] }) });
+    expect(blocker(denied)).toEqual({ code: 'unknown', taskId: 'a', sinceMs: null, detail: 'output-denied' }); expect(state(denied)).toBe('blocked');
+    expect(projectMonitorRun(denied).tasks[0]!.lastAttempt).toMatchObject({ workerPhase: null, heartbeatAgeMs: null });
   });
   it('awaiting-approval for a ready task with a pending task approval of this Run; since = approval creation', () => {
     const value = evidence(snapshot([{ id: 'a' }]), [], { approvals: [approval('a'), { ...approval('a'), approvalId: 'other-run', runId: 'x' }] });
@@ -167,14 +174,14 @@ describe('monitor application over ports', () => {
         if (target.id === 'current') return { schemaVersion: 1, instanceId: 'i-1', shutdownAvailable: false, identity: null, processId: 42, build: { sourceTreeSha256: 'c'.repeat(64), sourceCommit: 'd'.repeat(40) } };
         throw failure(target.id === 'stopped' ? 'LOCAL_RUNTIME_UNAVAILABLE' : 'RUNTIME_SERVICE_TRANSPORT');
       },
-      async readLedger(target) { if (target.id === 'broken') throw failure('MANAGED_FILE_MISSING'); return reading(['hidden', 's']); },
+      async readLedger(target) { if (target.id === 'broken') throw failure('MANAGED_FILE_MISSING'); return target.id === 'empty' ? { ...reading([]), runs: [], approvals: [] } : reading(['hidden', 's']); },
       async observeScope(target, scopeId) {
         if (scopeId === 'hidden') return { access: 'denied', workers: [], workerStatus: 'denied', truncated: false };
         if (target.id === 'flaky') throw failure('POLICY_UNAVAILABLE');
         return { access: 'admitted', workers: [worker('a', 'fresh'), { ...worker('a', 'stale'), identity: { ...identity('a'), scopeId: 'other' } }], workerStatus: 'available', truncated: true };
       } });
-    const snapshotValue = await app.inspect([{ id: 'current', path: '/c' }, { id: 'stopped', path: '/s' }, { id: 'broken', path: '/b' }, { id: 'flaky', path: '/f' }]);
-    const [current, stopped, broken, flaky] = snapshotValue.installs;
+    const snapshotValue = await app.inspect([{ id: 'current', path: '/c' }, { id: 'stopped', path: '/s' }, { id: 'broken', path: '/b' }, { id: 'flaky', path: '/f' }, { id: 'empty', path: '/e' }]);
+    const [current, stopped, broken, flaky, empty] = snapshotValue.installs;
     expect(snapshotValue).toMatchObject({ schemaVersion: 1, observedAt: NOW, control: 'observe-only' });
     expect(current).toMatchObject({ status: 'available', scopeIds: ['s'], ledgerVersion: 44, service: { state: 'running', instanceId: 'i-1', processId: 42,
       build: { sourceCommit: 'd'.repeat(40), sourceTreeSha256: 'c'.repeat(64), builtAt: null } },
@@ -188,5 +195,7 @@ describe('monitor application over ports', () => {
     expect(broken!.diagnostics).toEqual(['service-unavailable:RUNTIME_SERVICE_TRANSPORT', 'ledger-unavailable:MANAGED_FILE_MISSING']);
     expect(flaky).toMatchObject({ status: 'denied', runs: [], pools: [], approvals: [] });
     expect(flaky!.diagnostics).toContain('scope-unavailable:s:POLICY_UNAVAILABLE');
+    // A ledger with no scope yet (fresh install) still shows its installation-wide pools.
+    expect(empty).toMatchObject({ status: 'available', scopeIds: [], runs: [], pools: [{ poolId: 'p', held: true }] });
   });
 });
