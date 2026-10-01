@@ -107,6 +107,7 @@ export function MonitorApp(props: MonitorAppProps) {
   const move = (delta: number) => setSelection(values => values.map((value, index) => index === tab ? Math.max(0, Math.min(items.length - 1, selected + delta)) : value));
   const switchTab = (next: number) => { setTab((next + MONITOR_TABS.length) % MONITOR_TABS.length); setDetail(null); };
   const cycle = <T,>(values: readonly T[], value: T) => values[(values.indexOf(value) + 1) % values.length]!;
+  const pointer = ascii ? '>' : '›';
 
   useInput((input, key) => {
     if (editing) {
@@ -149,8 +150,9 @@ export function MonitorApp(props: MonitorAppProps) {
     const offset = Math.min(max, at < bodyHeight - 1 ? 0 : at - bodyHeight + 2);
     const windowed = flat.slice(offset, offset + bodyHeight);
     const below = flat.length - offset - windowed.length;
-    const marker = ascii ? '> ' : '› ';
-    body = windowed.map(line => line.item === selected && items.length ? [span(marker, 'accent'), ...line.line.map((part, index) => index === 0 ? span(part.text.slice(2), part.role) : part)] : line.line);
+    // The two-cell row prefix becomes pointer + change mark (`›+`, `›*`, `› `): selection never hides a new/changed mark.
+    body = windowed.map(line => line.item === selected && items.length
+      ? [span(`${pointer}${line.line[0]?.text.trim()[0] ?? ' '}`, 'accent'), ...line.line.slice(1)] : line.line);
     if (below > 0) body[body.length - 1] = [span(t('monitor.live.more', { count: below + 1 }, locale), 'muted')];
   }
   const shown = body.slice(0, bodyHeight).map(line => clipLine(line, width, ellipsis));
@@ -164,7 +166,7 @@ export function MonitorApp(props: MonitorAppProps) {
     return [span(index ? ' ' : ''), span(active ? `[${text}]` : ` ${text} `, active ? 'accent' : 'muted')];
   });
   const lines: { line: MonitorLine; selected?: boolean }[] = [...shownHeader.map(line => ({ line })), { line: clipLine(tabLine, width, ellipsis) },
-    ...shown.map(line => ({ line, selected: colored && detail === null && !help && line[0]?.text === (ascii ? '> ' : '› ') })),
+    ...shown.map(line => ({ line, selected: colored && detail === null && !help && (line[0]?.text.startsWith(pointer) ?? false) })),
     { line: clipLine(status, width, ellipsis) },
     // While reads fail the key hint gives way to the typed reason (one line, the layout height never changes).
     { line: clipLine(failure && !editing ? [span(failure.text, 'error')] : [span(t('monitor.live.hint', {}, locale), 'muted')], width, ellipsis) }];

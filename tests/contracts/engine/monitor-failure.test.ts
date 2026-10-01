@@ -49,4 +49,18 @@ describe('worker event summaries (untrusted, bounded)', () => {
     for (const [event, kind, summary] of cases) expect(summarizeMonitorEvent(event)).toEqual({ kind, summary });
     expect(summarizeMonitorEvent({ ...base, kind: 'message', role: 'assistant', textBytes: 3, thinking: false, excerpt: 'y'.repeat(240) }).summary).toHaveLength(120);
   });
+  it('removes every terminal control from untrusted output and events: OSC 52/8 (BEL and ST), BEL, ESC c, CSI, C1, DEL, NUL (Fable REVISE #1)', () => {
+    const nasty = 'A\u001b]52;c;aGVsbG8=\u0007B\u001b]8;;http://evil\u001b\\link\u001b]8;;\u001b\\C\u0007D\u001bcE\u009b31mF\u007fG\u0085H\u0000I\u001b[31mJ';
+    // Matching control characters is the point of this check.
+    // eslint-disable-next-line no-control-regex
+    const bad = /[\u0000-\u0008\u000b-\u001f\u007f-\u009f]/u;
+    const failure = extractFirstFailure(`✗ [unit-budget] ${nasty}`, '')!;
+    expect(failure).toBe('✗ [unit-budget] ABlinkCDE31mFGHIJ'); expect(failure).not.toMatch(bad);
+    const fallback = extractFirstFailure('', `tail ${nasty}`)!;
+    expect(fallback).toBe('tail ABlinkCDE31mFGHIJ');
+    const event = summarizeMonitorEvent({ ...base, kind: 'message', role: 'assistant', textBytes: 3, thinking: false, excerpt: nasty });
+    expect(event.summary).toBe('ABlinkCDE31mFGHIJ'); expect(event.summary).not.toMatch(bad);
+    const call = summarizeMonitorEvent({ ...base, kind: 'tool.call', toolId: 't1', name: 'Edit', toolClass: 'edit', target: nasty, detail: null } as WorkerEvent);
+    expect(call.summary).not.toMatch(bad);
+  });
 });

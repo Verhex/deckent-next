@@ -1,3 +1,4 @@
+import { terminalSafeText } from '#platform/index.js';
 import { cells, truncateEnd, truncateStart } from '#surfaces/core/terminal-render/index.js';
 
 /**
@@ -40,7 +41,15 @@ export type MonitorBlock =
 export interface MonitorFlatLine { readonly line: MonitorLine; readonly item?: number; readonly row?: MonitorRow }
 
 const GAP = 2;
-export const span = (text: string, role?: MonitorRole): MonitorSpan => role ? { text, role } : { text };
+/**
+ * THE guard (Fable REVISE #1): every span — and so every text line, Ink frame and `/monitor` notice — is built here, and its text is made
+ * terminal-safe (no escape sequence, no control character; newline/tab become spaces). Worker output, events, activity, approval summaries,
+ * diagnostics and other installs' ids and paths are untrusted.
+ */
+export const span = (text: string, role?: MonitorRole): MonitorSpan => {
+  const safe = terminalSafeText(text).replace(/[\n\t]/g, ' ');
+  return role ? { text: safe, role } : { text: safe };
+};
 export const lineText = (line: MonitorLine) => line.map(part => part.text).join('');
 
 /** Cuts a line to `width` display cells (the last guard against overflow), keeping roles. */

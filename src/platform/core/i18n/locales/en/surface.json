@@ -563,5 +563,6 @@
   "monitor.delivery.rolledBack": "rolled back",
   "monitor.detail.delivery": "Delivery/adoption: {state} · commit {commit}",
   "monitor.detail.deliveryNone": "Delivery/adoption: no integration, delivery or adoption recorded.",
-  "monitor.legend.approx": "duration ends at the host-observed worker exit (no sealed log end)"
+  "monitor.legend.approx": "duration ends at the host-observed worker exit (no sealed log end)",
+  "monitor.map.layer.globalObserver": "global (the observer's own layer, not necessarily this install's)"
 }
