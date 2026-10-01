@@ -91,6 +91,39 @@ describe.skipIf(process.platform !== 'linux')('MCP tools through the runtime ser
     expect(system).toContain('mcp:fx/echo'); expect(system).toContain('untrusted');
   }, 60_000);
 
+  // Sol 2234 B1-R2: the real first-use producer (adapter trust asker) → turn stream → card carries the card facts: risk not declared, required
+  // turn-bound, and the turn's capability; an allow without it is refused and the card stays pending; the card's own answer allows it; the
+  // capability is never written to the ledger (approvals, receipts, audit).
+  it('B1 (Sol 2234 R2): a first-use trust card carries its required assurance and the turn capability through the stream; only the card\'s answer allows it', async () => {
+    const m = mcpFixture();
+    const f = await runtime({ extraGrants: mcpGrants() }); await f.start();
+    registry(f.project, { fx: m.entry() });
+    f.state.script = [{ content: 'Approved.' }];
+    const client = f.client(), events: AgentTurnStreamEvent[] = [], pending: Promise<void>[] = [], refused: Record<string, unknown> = {};
+    await client.chatTurn(turn('turn-trust-facts'), event => {
+      events.push(event);
+      if (event.kind !== 'approval.requested') return;
+      const base = { schemaVersion: 1, scopeId: 'scope', approvalId: event.approvalId, expectedRevision: event.revision, reason: 'owner' };
+      pending.push((async () => {
+        refused[event.approvalId] = await client.decideApproval({ ...base, commandId: `sdk-${event.approvalId}`, decision: 'allow' }).then(() => 'decided', (error: { code?: string }) => error.code);
+        refused[`${event.approvalId}:status`] = (await client.inspectApproval({ schemaVersion: 1, scopeId: 'scope', approvalId: event.approvalId }) as { status: string }).status;
+        await client.decideApproval({ ...base, commandId: `card-${event.approvalId}`, decision: 'allow', channel: 'local-terminal-card', decisionCapability: event.decisionCapability });
+      })());
+    });
+    await Promise.all(pending);
+    const cards = requested(events) as Extract<AgentTurnStreamEvent, { kind: 'approval.requested' }>[];
+    expect(cards.map(card => card.summary)).toEqual(['mcp_trust · mcp:fx · launch', 'mcp_trust · mcp:fx · tools']);
+    for (const card of cards) {
+      expect(card).toMatchObject({ risk: null, requiredAssurance: 'turn-bound', decisionCapability: expect.stringMatching(/^[A-Za-z0-9_-]{43}$/u) });
+      expect(refused[card.approvalId]).toBe('APPROVAL_ASSURANCE_INSUFFICIENT'); expect(refused[`${card.approvalId}:status`]).toBe('pending');
+    }
+    expect(((await runConfiguredMcpCommand(f.project, { verb: 'get', name: 'fx' }, { env: f.env }, async () => null)) as { server: { status: string } }).server.status).toBe('trusted');
+    const stored = JSON.stringify([f.rows('SELECT snapshot FROM approvals'), f.rows('SELECT * FROM approval_receipts'), f.rows('SELECT * FROM audit_events')]);
+    for (const card of cards) expect(stored).not.toContain(card.decisionCapability!);
+    expect(f.rows('SELECT snapshot FROM approvals').map(row => JSON.parse(String((row as { snapshot: string }).snapshot)).decision))
+      .toEqual([expect.objectContaining({ decision: 'allow', channel: 'local-terminal-card', assurance: 'turn-bound' }), expect.objectContaining({ assurance: 'turn-bound' })]);
+  }, 60_000);
+
   it('a project server nobody decided on asks on its first use: no to the launch card starts nothing; yes to both cards pins and offers it; a change asks again', async () => {
     const m = mcpFixture();
     const f = await runtime({ extraGrants: mcpGrants() }); await f.start();

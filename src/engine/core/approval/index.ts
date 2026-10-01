@@ -13,6 +13,6 @@ export { isAuditedStanding, PersistentStanding, SessionStanding, StandingApprova
 export type { PersistentStandingDependencies, StandingGrantView, StandingOffer } from './internal/standing.js';
 export type { StandingCellName } from './internal/standing.js';
 export { HARD_FLOOR_APPROVAL_CELLS, agentToolApprovalFacts, approvalAssuranceRegistry, createTurnDecisionCapabilities, minimumApprovalAssurance, operationApprovalFacts,
-  registerApprovalChannel, registeredApprovalChannels, requiredApprovalAssurance } from './internal/assurance.js';
+  registerApprovalChannel, registeredApprovalChannels, requiredApprovalAssurance, undeclaredAgentToolApprovalFacts } from './internal/assurance.js';
 export type { ApprovalAssuranceOptions } from './internal/application.js';
 export type { TurnDecisionCapabilities } from './internal/assurance.js';

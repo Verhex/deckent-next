@@ -2,7 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { chatTurnCancellationSchema, chatTurnCommandSchema, modelInvocationProfileSchema, type AgentToolApprovalSettlement, type AgentToolSpec, type AgentTurnMessage,
   type AgentTurnStreamEvent, type ChatTurnCancellationResult, type ChatTurnResult, type JsonObject, type ModelInvocationCommand, type ModelInvocationOutcome } from '#domain/index.js';
 import { agentCompactionInstruction, AGENT_TURN_ANSWER_MAX_BYTES, APPROVAL_PREVIEW_MAX_BYTES, AgentToolPolicyAuthorization, AgentTurnStoreError, admitFullAccessTurn,
-  agentCompactionTranscript, agentToolApprovalFacts, agentTurnAdmission, awaitAgentToolApproval, boundApprovalPreview, createTurnDecisionCapabilities, parseAgentCompactionSummary,
+  agentCompactionTranscript, agentToolApprovalFacts, undeclaredAgentToolApprovalFacts, agentTurnAdmission, awaitAgentToolApproval, boundApprovalPreview, createTurnDecisionCapabilities, parseAgentCompactionSummary,
   renderAgentTurnSystemPrompt, requestAgentToolApproval, runDurableAgentTurn, withAgentTurnSystemPrompt, type AgentRoundOutcome, type AgentTurnPorts, type TurnDecisionCapabilities,
   type ModelInvocationDelivery } from '#engine/index.js';
 import { globalStateRoot, ErrorRegistry, loadConfig, prepareProductDirectory, resolveLocale, SystemTrustedClock, type ConfigLoadOptions } from '#platform/index.js';
@@ -146,7 +146,7 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
     // MCP-SANDBOX-PATHS: a server that could not be decided or started is named in the turn's note (protocol v17 unchanged: `note` exists).
     let mcpNotices: readonly string[] = [];
     const mcp = workspace ? await createAgentMcp({ onNotices: notices => { mcpNotices = notices; }, pool: host.mcp, projectRoot, options, resultMaxBytes: chat.readResultMaxBytes, peer, context, scopeId: command.scopeId,
-      turnId: command.turnId, signal, emit: emitApproval, sandboxes: host.shellSandboxes({ project: workspace.scope, scratchDir: null, writeFloor: isWriteApprovalFloored }), cwd: workspace.scope.root }) : null;
+      turnId: command.turnId, signal, emit: event => emitApproval(event.kind === 'approval.requested' ? { risk: null, requiredAssurance: undeclaredAgentToolApprovalFacts(command.scopeId).requiredAssurance, ...event } : event), sandboxes: host.shellSandboxes({ project: workspace.scope, scratchDir: null, writeFloor: isWriteApprovalFloored }), cwd: workspace.scope.root }) : null;
     const tools: readonly AgentToolSpec[] = workspace ? [...workspace.specs, ...WORKSPACE_EDIT_TOOL_SPECS, RUN_SHELL_TOOL_SPEC, ...SCRATCH_TOOL_SPECS,
       ...(fetcher ? [FETCH_URL_TOOL_SPEC] : []), ...(mcp?.specs ?? [])] : [];
     const editsIn = (area: WorkspaceEditArea | null | undefined, project = false) => area ? createAgentFileEdits({ area, context, peer, scopeId: command.scopeId, turnId: command.turnId,

@@ -150,6 +150,20 @@ describe('B1 attested assurance on the one approval decision path', () => {
         policyRevision: 'policy', summary: 'task', createdAt: 1000, expiresAt: 900_000 });
       await expect(g.app().decide(g.command(task, 'idp', 'allow'))).rejects.toMatchObject({ code: 'APPROVAL_ASSURANCE_INSUFFICIENT' });
     } finally { await g.close(); }
+    // Sol 2234 B1-R1: a v3 tool card whose policy minimum is a level no producer here attests carries that real id in its facts (the card shows
+    // it, never "peer-session"); allow stays refused even with the turn's own capability, the card stays pending, no receipt is written.
+    const stepUp = policyWith([{ id: 'idp-cards', scopes: ['scope'], subject: 'agent-tool-call', cells: ['shell-read-low'], minimum: 'step-up-idp' }]);
+    const h = await fixture(stepUp);
+    try {
+      const shell = h.toolCall('shell-read-low', 'run_shell');
+      expect(approvalFacts(shell.request)?.requiredAssurance).toBe('step-up-idp');
+      for (const [commandId, extra] of [['idp-sdk', {}], ['idp-card', { decisionCapability: h.mint(shell) }]] as const) {
+        await expect(h.app().decide(h.command(shell, commandId, 'allow', extra))).rejects.toMatchObject({ code: 'APPROVAL_ASSURANCE_INSUFFICIENT' });
+        expect(h.journal.store.receipt('scope', commandId)).toBeNull();
+      }
+      expect(h.status(shell)).toBe('pending');
+      expect((await h.app().decide(h.command(shell, 'idp-deny', 'deny'))).decision?.decision).toBe('deny');
+    } finally { await h.close(); }
   });
 
   it.skipIf(linux)('[requires Linux live OS session /proc identity] a tool-call request without facts (an MCP trust card, a released v2 record) needs turn-bound: unknown risk fails closed', async () => {

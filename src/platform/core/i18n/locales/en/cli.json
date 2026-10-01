@@ -903,6 +903,7 @@
   "terminal.approval.card.assuranceTurnHere": "Required assurance: turn-bound — only this terminal, which started the turn, can allow this card.",
   "terminal.approval.card.assuranceTurnElsewhere": "Required assurance: turn-bound — only the terminal of the turn that asked can allow this card; here you can only deny it.",
   "terminal.approval.card.assurancePeer": "Required assurance: peer-session — a live session of your user.",
+  "terminal.approval.card.assuranceOther": "Required assurance: {level} — only a surface that proves {level} can allow this card; where no such proof is available it can only be denied.",
   "terminal.approval.prompt": "y approve · n deny · Enter/Esc deny (default). Each item is decided on its own; nothing is remembered.",
   "terminal.approval.pending": "Recording the decision…",
   "terminal.approval.allowed": "Approval {id} approved; the runtime recorded the decision.",

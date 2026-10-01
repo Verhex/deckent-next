@@ -161,3 +161,119 @@ describe('the single approval card', () => {
     view.stdin.write('\u001b');
   });
 });
+
+// Sol 2234 REVISE (B1-R1..R3): the card names the real required level, the MCP trust card keeps its facts line, and a typed assurance refusal
+// leaves the pending card open (the owner can still deny it); a late answer only touches its own card.
+describe('the single approval card after Sol 2234', () => {
+  const mounted: Array<{ unmount(): void }> = [];
+  afterEach(() => { for (const instance of mounted.splice(0)) instance.unmount(); });
+  const baseLedger = { scopeId: 'scope', async listWorkers() { return { schemaVersion: 1, scopeId: 'scope', sources: [] } as never; }, async inspectRun() { return null; } };
+  const typed = (code: string) => Object.assign(new Error(code), { code });
+  const card = (id: string, patch: Partial<WorklineApproval> = {}) => ({ approvalId: id, runId: '-', taskId: '-', summary: `run_shell · ls · ${'c'.repeat(12)}`, requester: 'svc',
+    revision: 0, status: 'pending', decision: null, expiresAt: Date.now() + 600_000, risk: 'shell-read-low', undo: null, ...patch }) as WorklineApproval;
+  const open = async (view: ReturnType<typeof mountWorkline>, id: string) => {
+    for (const char of `/approvals ${id}\r`) { view.stdin.write(char); await settle(2); }
+    await until(() => view.stdout.frame.includes('A-PROMPT'), `card ${id}`); await settle(40);
+  };
+
+  it('R1: names a required level other than peer-session or turn-bound by its id and never says peer-session suffices', async () => {
+    const items = [card('idp-1', { requiredAssurance: 'step-up-idp' }), card('peer-1', { requiredAssurance: 'peer-session' })];
+    const view = mountWorkline({ pollMs: 10_000, ledger: { ...baseLedger, async listApprovalPage() { return { items, nextAfter: null }; },
+      async decideApproval() { throw new Error('unused'); } } as never }, 220);
+    mounted.push(view.instance);
+    await open(view, 'idp-1');
+    expect(view.stdout.frame).toContain('R-OTHER step-up-idp');
+    expect(view.stdout.frame).not.toContain('R-PEER');
+    view.stdin.write('\u001b'); await until(() => !view.stdout.frame.includes('A-SUBJECT idp-1'), 'closed');
+    await open(view, 'peer-1');
+    expect(view.stdout.frame).toContain('R-PEER'); expect(view.stdout.frame).not.toContain('R-OTHER');
+    view.stdin.write('\u001b');
+  });
+
+  it('R2: an MCP trust card with undeclared risk shows "not declared", its turn-bound line, and never renders the capability', async () => {
+    let release!: () => void; const answered = new Promise<void>(resolve => { release = resolve; });
+    const decided: Record<string, unknown>[] = [];
+    const streamTurn = async function* () {
+      yield { kind: 'approval' as const, phase: 'requested' as const, callId: 'mcp-trust-fx-launch', approvalId: 'trust-1', revision: 0, summary: 'mcp_trust · mcp:fx · launch',
+        preview: 'MCP server fx (project scope)', expiresAt: Date.now() + 600_000, decisionCapability: CAPABILITY, risk: null, requiredAssurance: 'turn-bound' };
+      await answered;
+      yield { kind: 'approval' as const, phase: 'settled' as const, callId: 'mcp-trust-fx-launch', approvalId: 'trust-1', outcome: 'allow' as const };
+      yield { kind: 'text' as const, text: 'Trusted.' }; yield { kind: 'done' as const, finish: 'stop' as const };
+    };
+    const ledger = { ...baseLedger, async decideApproval(approval: Record<string, unknown>, decision: string) {
+      decided.push({ ...approval, decision }); release();
+      return { approvalId: 'trust-1', runId: '-', taskId: '-', summary: '', requester: '-', revision: 1, status: 'decided' as const, decision, expiresAt: 0 };
+    } };
+    const view = mountWorkline({ streamTurn: streamTurn as never, ledger: ledger as never }, 220);
+    mounted.push(view.instance);
+    await settle(20); for (const char of 'go\r') { view.stdin.write(char); await settle(2); }
+    await until(() => view.stdout.frame.includes('A-PROMPT'), 'trust card'); await settle(40);
+    expect(view.stdout.frame).toContain('R-RISK R-UNDECLARED R-UNDECLARED');
+    expect(view.stdout.frame).toContain('R-TURN-HERE');
+    view.stdin.write('y');
+    await until(() => view.stdout.frame.includes('Trusted.'), 'turn continues');
+    expect(decided).toEqual([expect.objectContaining({ approvalId: 'trust-1', decisionCapability: CAPABILITY, decision: 'allow' })]);
+    expect(view.stdout.text).not.toContain(CAPABILITY);
+  });
+
+  it('R3: a typed assurance refusal keeps the same pending card open so the owner can still deny it; a transport failure is never shown as decided', async () => {
+    const calls: { id: string; decision: string }[] = [];
+    const items = [card('floor-1', { requiredAssurance: 'turn-bound' }), card('floor-2', { requiredAssurance: 'turn-bound' })];
+    const view = mountWorkline({ pollMs: 10_000, ledger: { ...baseLedger, async listApprovalPage() { return { items, nextAfter: null }; },
+      async decideApproval(approval: { approvalId: string }, decision: 'allow' | 'deny') {
+        calls.push({ id: approval.approvalId, decision });
+        if (approval.approvalId === 'floor-2') throw typed('LOCAL_RUNTIME_TRANSPORT');
+        if (decision === 'allow') throw typed('APPROVAL_ASSURANCE_INSUFFICIENT');
+        return { ...items[0]!, status: 'decided' as const, revision: 1, decision };
+      } } as never }, 220);
+    mounted.push(view.instance);
+    await open(view, 'floor-1');
+    view.stdin.write('y');
+    await until(() => view.stdout.text.includes('ERR:APPROVAL_ASSURANCE_INSUFFICIENT'), 'typed refusal shown');
+    await settle(60);
+    expect(view.stdout.frame).toContain('A-PROMPT'); expect(view.stdout.frame).toContain('A-SUBJECT floor-1');
+    expect(view.stdout.text).not.toContain('A-ALLOWED floor-1');
+    view.stdin.write('n');
+    await until(() => view.stdout.text.includes('A-DENIED floor-1') && !view.stdout.frame.includes('A-PROMPT'), 'denied after refusal');
+    expect(calls).toEqual([{ id: 'floor-1', decision: 'allow' }, { id: 'floor-1', decision: 'deny' }]);
+    await open(view, 'floor-2');
+    view.stdin.write('y');
+    await until(() => view.stdout.text.includes('ERR:LOCAL_RUNTIME_TRANSPORT') && !view.stdout.frame.includes('A-PROMPT'), 'uncertain result closes, not decided');
+    expect(view.stdout.text).not.toContain('A-ALLOWED floor-2');
+  });
+
+  it('R3: an old card\'s late assurance refusal never touches the next card of the turn', async () => {
+    let refuseA!: () => void; const aAnswered = new Promise<void>(resolve => { refuseA = resolve; });
+    const decided: string[] = [];
+    let release!: () => void; const bAnswered = new Promise<void>(resolve => { release = resolve; });
+    const streamTurn = async function* () {
+      yield { kind: 'approval' as const, phase: 'requested' as const, callId: 'a', approvalId: 'card-a', revision: 0, summary: 'write_file · package.json · aaaaaaaaaaaa',
+        preview: 'A', expiresAt: Date.now() + 600_000, decisionCapability: CAPABILITY, risk: 'edit-floor', requiredAssurance: 'turn-bound' };
+      await settle(150);
+      yield { kind: 'approval' as const, phase: 'settled' as const, callId: 'a', approvalId: 'card-a', outcome: 'expired' as const };
+      yield { kind: 'approval' as const, phase: 'requested' as const, callId: 'b', approvalId: 'card-b', revision: 0, summary: 'write_file · Makefile · bbbbbbbbbbbb',
+        preview: 'B', expiresAt: Date.now() + 600_000, decisionCapability: 'R'.repeat(43), risk: 'edit-floor', requiredAssurance: 'turn-bound' };
+      refuseA();
+      await bAnswered;
+      yield { kind: 'approval' as const, phase: 'settled' as const, callId: 'b', approvalId: 'card-b', outcome: 'deny' as const };
+      yield { kind: 'text' as const, text: 'Done.' }; yield { kind: 'done' as const, finish: 'stop' as const };
+    };
+    const ledger = { ...baseLedger, async decideApproval(approval: { approvalId: string }, decision: string) {
+      decided.push(`${approval.approvalId}:${decision}`);
+      if (approval.approvalId === 'card-a') { await aAnswered; await settle(40); throw typed('APPROVAL_ASSURANCE_INSUFFICIENT'); }
+      release(); return { approvalId: 'card-b', runId: '-', taskId: '-', summary: '', requester: '-', revision: 1, status: 'decided' as const, decision, expiresAt: 0 };
+    } };
+    const view = mountWorkline({ streamTurn: streamTurn as never, ledger: ledger as never }, 220);
+    mounted.push(view.instance);
+    await settle(20); for (const char of 'go\r') { view.stdin.write(char); await settle(2); }
+    await until(() => view.stdout.frame.includes('package.json'), 'card A'); await settle(40);
+    view.stdin.write('y');
+    await until(() => view.stdout.frame.includes('Makefile') && view.stdout.frame.includes('A-PROMPT'), 'card B open');
+    await until(() => view.stdout.text.includes('ERR:APPROVAL_ASSURANCE_INSUFFICIENT'), 'late refusal of A');
+    await settle(60);
+    expect(view.stdout.frame).toContain('Makefile'); expect(view.stdout.frame).toContain('A-PROMPT'); expect(view.stdout.frame).not.toContain('package.json');
+    view.stdin.write('n');
+    await until(() => view.stdout.frame.includes('Done.'), 'turn continues');
+    expect(decided).toEqual(['card-a:allow', 'card-b:deny']);
+  });
+});

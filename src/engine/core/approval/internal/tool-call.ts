@@ -6,7 +6,7 @@ import { MAX_WALL_SKEW_MS, sha256, type ClockSample, type TrustedClock, type Int
 import type { EffectApprovalGate } from '#engine/core/effect/index.js';
 import type { ApprovalStore } from './store.js';
 import { approvalRequestDigest, expireApproval, sealApproval, verifyApproval } from './integrity.js';
-import { agentToolApprovalFacts } from './assurance.js';
+import { undeclaredAgentToolApprovalFacts } from './assurance.js';
 
 type ToolCallSubject = Extract<ApprovalSubject, { kind: 'agent-tool-call' }>;
 /** The action an agent tool-call approval authorizes: exactly this call of this turn, tool version, resource and arguments (C12). */
@@ -27,7 +27,7 @@ export function requestAgentToolApproval(store: ApprovalStore, integrity: Integr
   if (existing) return verifyApproval(existing, integrity);
   const request = approvalRequestSchema.parse({ schemaVersion: 3, approvalId: randomUUID(), scopeId: input.scopeId, subject: input.subject,
     requester: input.requester, actionDigest, policyRevision: input.policyRevision, summary: input.summary.slice(0, 2048),
-    createdAt: input.createdAt, expiresAt: input.expiresAt, facts: input.facts ?? agentToolApprovalFacts(null, input.scopeId, null) });
+    createdAt: input.createdAt, expiresAt: input.expiresAt, facts: input.facts ?? undeclaredAgentToolApprovalFacts(input.scopeId) });
   return verifyApproval(store.create(sealApproval({ request, revision: 0, status: 'pending', decision: null }, integrity)), integrity);
 }
 

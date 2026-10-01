@@ -42,7 +42,7 @@ const labels = {
     approvalPreviewMore: 'MORE', approvalExpires: 'A-EXPIRES', approvalPrompt: 'A-PROMPT', approvalPending: 'A-PENDING',
     approvalAllowed: 'A-ALLOWED {id}', approvalDenied: 'A-DENIED {id}', approvalUnsettled: 'A-UNSETTLED',
     approvalMore: 'A-MORE', approvalNotify: 'A-NOTIFY {count}', approvalPollFailed: 'A-POLLFAIL', approvalCard: { risk: 'R-RISK {risk} {undo}', notDeclared: 'R-UNDECLARED', onExpiry: 'R-NOTHING-RUNS', assuranceTurnHere: 'R-TURN-HERE',
-    assuranceTurnElsewhere: 'R-TURN-ELSEWHERE', assurancePeer: 'R-PEER' },
+    assuranceTurnElsewhere: 'R-TURN-ELSEWHERE', assurancePeer: 'R-PEER', assuranceOther: 'R-OTHER {level}' },
     cancelUsage: 'C', cancelTitle: 'C', cancelDetail: 'C', cancelAlreadyRequested: 'C', cancelPrompt: 'C',
     cancelPending: 'C', cancelKept: 'C',
   },

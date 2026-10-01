@@ -11,7 +11,7 @@ const work: WorkSurfaceLabels = { workerLine: WORKER_LINE_EN, panel: { title: 'L
   approvalPrompt: 'A-PROMPT', approvalPending: 'A-PENDING', approvalAllowed: 'A-ALLOWED {id}', approvalDenied: 'A-DENIED {id}', approvalUnsettled: 'A-UNSETTLED {id}',
   approvalMore: 'A-MORE {count}', approvalNotify: 'A-NOTIFY {count}', approvalPollFailed: 'A-POLLFAIL',
   approvalCard: { risk: 'R-RISK {risk} {undo}', notDeclared: 'R-UNDECLARED', onExpiry: 'R-NOTHING-RUNS', assuranceTurnHere: 'R-TURN-HERE', assuranceTurnElsewhere: 'R-TURN-ELSEWHERE',
-    assurancePeer: 'R-PEER' }, cancelUsage: 'C-USAGE', cancelTitle: 'C-TITLE {run}',
+    assurancePeer: 'R-PEER', assuranceOther: 'R-OTHER {level}' }, cancelUsage: 'C-USAGE', cancelTitle: 'C-TITLE {run}',
   cancelDetail: 'C-DETAIL {revision} {phases}', cancelAlreadyRequested: 'C-ALREADY', cancelPrompt: 'C-PROMPT', cancelPending: 'C-PENDING', cancelKept: 'C-KEPT {run}' };
 
 /** Placeholder labels: tests assert on these tokens, never on catalog text. */

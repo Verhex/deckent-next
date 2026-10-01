@@ -50,8 +50,8 @@ export interface WorkSurfaceLabels {
   readonly approvalMore: string;
   readonly approvalNotify: string;
   readonly approvalPollFailed: string;
-  /** Single card lines (B1): `risk` with `{risk}`/`{undo}`; nothing runs on expiry; assurance turn-bound here / elsewhere (deny only) / peer-session. */
-  readonly approvalCard: { readonly risk: string; readonly notDeclared: string; readonly onExpiry: string; readonly assuranceTurnHere: string; readonly assuranceTurnElsewhere: string; readonly assurancePeer: string };
+  /** Single card lines (B1): `risk` with `{risk}`/`{undo}`; nothing runs on expiry; assurance turn-bound here / elsewhere / peer-session / other `{level}`. */
+  readonly approvalCard: { readonly risk: string; readonly notDeclared: string; readonly onExpiry: string; readonly assuranceTurnHere: string; readonly assuranceTurnElsewhere: string; readonly assurancePeer: string; readonly assuranceOther: string };
   /** Standing scopes on an approval card (PERSISTENT-APPROVALS G6); absent = the plain y/N card only. */
   readonly approvalStanding?: {
     /** `{pattern}`: exactly what a standing answer covers (the command, or the directory pattern). */

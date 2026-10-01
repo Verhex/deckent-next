@@ -48,6 +48,8 @@ export function agentToolApprovalFacts(policy: unknown, scopeId: string, cell: s
   const risk: Risk = cell === null ? null : { source: 'cell', cell };
   return Object.freeze({ risk, reversibility: null, onExpiry: 'nothing-runs' as const, requiredAssurance: minimumApprovalAssurance(policy, scopeId, 'agent-tool-call', risk) });
 }
+/** Facts of a tool-call card whose producer cannot name the cell (an MCP trust card): the one source of both its record and its stream event. */
+export const undeclaredAgentToolApprovalFacts = (scopeId: string) => agentToolApprovalFacts(null, scopeId, null);
 /** Facts of one catalog operation card, from its descriptor: effect class and authority surface, compensation or none/irreversible. */
 export function operationApprovalFacts(policy: unknown, scopeId: string, descriptor: OperationDescriptor): ApprovalFacts {
   const risk: Risk = { source: 'effect-class', effectClass: descriptor.effectClass, authority: descriptor.surface === 'authority' };
