@@ -1082,5 +1082,7 @@
   "error.WORK_TARGET_SHARES_PROJECT_REPOSITORY": "The configured work target shares its Git repository with the running project (it is one of its worktrees); Deckent never targets its running source. Use an independent clone.",
   "error.WORK_TARGET_ALTERNATES": "The configured work target borrows objects from another repository (objects/info/alternates). Use an independent clone made without --shared or --reference.",
   "error.WORK_TARGET_BASE_MISSING": "The configured work target's base branch does not name a commit. Create the branch or fix baseRef.",
-  "error.PATCH_BASE_ADVANCED": "The work target's base branch has advanced past this delivery's base. Start a new Run on the current base; no rebase or merge is attempted."
+  "error.PATCH_BASE_ADVANCED": "The work target's base branch has advanced past this delivery's base. Start a new Run on the current base; no rebase or merge is attempted.",
+  "error.PATCH_SCOPE_VIOLATION": "The work target enforces task scope: {count} changed path(s) are outside the task's declared scope ({paths}; {omitted} more not shown). This step wrote nothing. Start a new Run whose work input declares the needed paths.",
+  "error.PATCH_SCOPE_UNDECLARED": "The work target enforces task scope, but this task declares no scope (no work input). This step wrote nothing. Start a new Run with a work input that declares its paths."
 }

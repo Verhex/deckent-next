@@ -28,5 +28,8 @@ export const ADOPTION_TARGET_SETTINGS = z.object({ targets: z.array(z.string().r
  * target checkout's HEAD. Unknown keys stay refused (strict), so an older build fails closed instead of targeting the project root. */
 export const WORK_TARGET_SETTINGS = z.object({ schemaVersion: z.literal(1),
   targets: z.array(z.object({ id: configIdentity, kind: z.literal('git'), path: z.string().min(1).max(4096),
-    baseRef: z.string().regex(/^refs\/heads\/[A-Za-z0-9._/-]{1,200}$/) }).strict()).min(1).max(1) }).strict();
+    baseRef: z.string().regex(/^refs\/heads\/[A-Za-z0-9._/-]{1,200}$/),
+    /** K6 (owner 2026-09-30 A): scope classification of patches landing here; absent = warn (classified, never refused); enforce = typed
+     * refusal before the integration/delivery write for out-of-scope or undeclared scope. Optional; strict, so an older build refuses it. */
+    scope: z.object({ mode: z.enum(['warn', 'enforce']) }).strict().optional() }).strict()).min(1).max(1) }).strict();
 export const ARTIFACT_STORAGE_LIMITS = z.object({ maxBytes: z.number().int().positive().safe() }).strict();

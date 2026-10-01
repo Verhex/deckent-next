@@ -333,3 +333,76 @@ describe.skipIf(process.platform !== 'linux' || !docker)('work target cycle: ref
     expect(await repositoryDigest(f.project)).toBe(liveBefore);
   }, 120_000);
 });
+
+// K6 = A (owner 2026-09-30): patches are classified against the task scope; the work target switches warn -> enforce (lane Jev c93ceea4).
+describe.skipIf(process.platform !== 'linux' || !docker)('work target scope mode: warn classifies, enforce refuses before any integration or delivery write', () => {
+  const target = (path: string, mode?: 'warn' | 'enforce') => [{ id: 'n1', kind: 'git', path, baseRef: BASE, ...(mode ? { scope: { mode } } : {}) }];
+  async function attempt(f: Awaited<ReturnType<typeof fixture>>, runId: string, scopePaths: readonly string[] | null) {
+    await createConfiguredRun(f.project, { schemaVersion: 1, scopeId: 's', runId, commandId: `create-${runId}`, graph }, f.options);
+    const identity = (await reserveConfiguredRunTasks(f.project, { schemaVersion: 1, scopeId: 's', runId, commandId: `reserve-${runId}`, expectedRevision: 0 }, f.options)).reservation.identities[0]!;
+    cleanup.push(async () => {
+      const opened = await openConfiguredAttemptStore(f.project, f.options);
+      try { const record = await opened.store.loadBoundDispatch(identity);
+        if (record) { const supervisor = await DockerSupervisor.restoreProfile(record.profile); await supervisor.cancel(record.request); await supervisor.release(record.request); } }
+      finally { opened.store.close(); }
+    });
+    if (scopePaths) {
+      // Test-only stand-in for a template Run (its native CLI does not run in the test image): the stored Run graph becomes v3 with a work input,
+      // exactly the shape admission freezes for a template task. Execution, patch, integration and delivery read it through the real ledger.
+      const { path, store } = await openConfiguredAttemptStore(f.project, f.options); store.close();
+      const db = new DatabaseSync(path);
+      try {
+        const row = db.prepare('SELECT snapshot FROM runs WHERE scope_id=? AND run_id=?').get('s', runId) as { snapshot: string };
+        const snapshot = JSON.parse(row.snapshot);
+        snapshot.graph.schemaVersion = 3; snapshot.graph.tasks[0].workInput = { schemaVersion: 1, task: 'Append to note.txt and remove removed.txt.',
+          scope: { paths: scopePaths }, acceptance: 'Zero exit.', model: { channelId: 'c', modelId: 'claude-sonnet-5-5', auxiliaryModelIds: [] } };
+        db.prepare('UPDATE runs SET snapshot=? WHERE scope_id=? AND run_id=?').run(JSON.stringify(snapshot), 's', runId);
+      } finally { db.close(); }
+    }
+    expect((await executeConfiguredTask(f.project, identity, f.options)).execution.terminal?.exitCode).toBe(0);
+    const prepareIntegration = (proposal: string) => prepareConfiguredWorkspaceIntegration(f.project, { schemaVersion: 1, commandId: `candidate-${runId}`, identity, proposal }, f.options);
+    const inspect = () => inspectConfiguredWorkspaceIntegration(f.project, { schemaVersion: 1, identity, commandId: `candidate-${runId}` }, f.options);
+    const deliver = () => deliverConfiguredWorkspaceIntegration(f.project, { schemaVersion: 1, commandId: `delivery-${runId}`, identity, integrationCommandId: `candidate-${runId}` }, f.options);
+    return { identity, prepareIntegration, inspect, deliver };
+  }
+  const deliveries = (f: Awaited<ReturnType<typeof fixture>>) => git(f.target, 'for-each-ref', '--format=%(refname)', 'refs/deckent/deliveries/');
+  /** Delivery intents in the ledger: a refusal before the claim leaves none. */
+  const deliveryIntents = async (f: Awaited<ReturnType<typeof fixture>>) => { const { path, store } = await openConfiguredAttemptStore(f.project, f.options); store.close();
+    const db = new DatabaseSync(path, { readOnly: true }); try { return (db.prepare('SELECT count(*) AS n FROM workspace_deliveries').get() as { n: number }).n; } finally { db.close(); } };
+
+  it('enforce: out-of-scope paths stay prepared and visible, integration and delivery refuse with the bounded paths; warn delivers the same work', async () => {
+    const f = await fixture(); await f.config(target(f.target, 'enforce')); clearConfigCache();
+    const run = await attempt(f, 'r1', ['note.txt', 'removed.txt']);
+    const prepared = await prepareConfiguredWorkspacePatch(f.project, run.identity, f.options);
+    expect(prepared.patch.changes.map(change => change.path)).toEqual(['added.txt', 'note.txt', 'removed.txt']);
+    expect(prepared.scope).toEqual({ schemaVersion: 1, matcher: 1, mode: 'enforce', status: 'out-of-scope', declared: ['note.txt', 'removed.txt'], outOfScope: ['added.txt'] });
+    expect((await previewConfiguredWorkspacePatch(f.project, run.identity, f.options)).scope).toEqual(prepared.scope);
+    const checked = await checkConfiguredWorkspaceIntegration(f.project, run.identity, f.options);
+    expect(checked.scope).toEqual(prepared.scope);
+    await expect(run.prepareIntegration(checked.proposal)).rejects.toMatchObject({ code: 'PATCH_SCOPE_VIOLATION', params: { count: 1, paths: 'added.txt', omitted: 0 } });
+    expect((await run.inspect()).status).toBe('absent'); // no intent, no candidate
+    // Warn: the same prepared patch integrates; switching back to enforce refuses the delivery before its intent or any Git reference.
+    await f.config(target(f.target, 'warn')); clearConfigCache();
+    await run.prepareIntegration(checked.proposal);
+    await f.config(target(f.target, 'enforce')); clearConfigCache();
+    await expect(run.deliver()).rejects.toMatchObject({ code: 'PATCH_SCOPE_VIOLATION' });
+    expect(await deliveries(f)).toBe(''); expect(await deliveryIntents(f)).toBe(0);
+    await f.config(target(f.target)); clearConfigCache(); // absent setting = warn
+    const delivered = await run.deliver();
+    expect(await deliveries(f)).toBe(delivered.plan.ref);
+  }, 120_000);
+
+  it('enforce: a task without a declared scope is unscoped and refused; in-scope work delivers', async () => {
+    const f = await fixture(); await f.config(target(f.target, 'enforce')); clearConfigCache();
+    const unscoped = await attempt(f, 'r1', null);
+    const prepared = await prepareConfiguredWorkspacePatch(f.project, unscoped.identity, f.options);
+    expect(prepared.scope).toEqual({ schemaVersion: 1, matcher: 1, mode: 'enforce', status: 'unscoped' });
+    const checked = await checkConfiguredWorkspaceIntegration(f.project, unscoped.identity, f.options);
+    await expect(unscoped.prepareIntegration(checked.proposal)).rejects.toMatchObject({ code: 'PATCH_SCOPE_UNDECLARED' });
+    expect((await unscoped.inspect()).status).toBe('absent');
+    const scoped = await attempt(f, 'r2', ['*.txt']);
+    expect((await prepareConfiguredWorkspacePatch(f.project, scoped.identity, f.options)).scope).toMatchObject({ mode: 'enforce', status: 'in-scope' });
+    await scoped.prepareIntegration((await checkConfiguredWorkspaceIntegration(f.project, scoped.identity, f.options)).proposal);
+    expect((await scoped.deliver()).status).toBe('reference-delivered');
+  }, 120_000);
+});

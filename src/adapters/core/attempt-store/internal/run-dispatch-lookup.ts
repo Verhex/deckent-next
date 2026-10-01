@@ -18,3 +18,10 @@ export function readRunBoundDispatch(db: DatabaseSync, identityInput: unknown) {
   if (!sameAttemptIdentity(record.request.identity, identity)) throw new RunStoreError('RUN_STORE_CORRUPT');
   return Object.freeze({ run, dispatch: record });
 }
+/** The bound task's definition from the same exact Run binding (K6: its declared work input scope); no authority is granted. */
+export function readRunBoundTask(db: DatabaseSync, identityInput: unknown) {
+  const { run } = readRunBoundDispatch(db, identityInput);
+  const task = run.graph.tasks.find(entry => entry.id === attemptIdentitySchema.parse(identityInput).taskId);
+  if (!task) throw new RunStoreError('RUN_STORE_CORRUPT');
+  return task;
+}

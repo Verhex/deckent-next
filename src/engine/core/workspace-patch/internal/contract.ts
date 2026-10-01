@@ -7,8 +7,10 @@ import rules from './rules.json' with { type: 'json' };
 export type WorkspacePatchLimitDetail = 'git-output' | 'git-timeout' | 'time' | 'bytes' | 'entries' | 'depth' | 'path';
 export class WorkspacePatchError extends Error {
   constructor(readonly code: 'PATCH_INTEGRATION_PENDING' | 'PATCH_UNAVAILABLE' | 'PATCH_UNSAFE' | 'PATCH_LIMIT' | 'PATCH_UNSUPPORTED' | 'PATCH_CONFLICT' | 'PATCH_CORRUPT'
-    | 'PATCH_BASE_ADVANCED',
-    readonly detail?: WorkspacePatchLimitDetail) {
+    | 'PATCH_BASE_ADVANCED' | 'PATCH_SCOPE_VIOLATION' | 'PATCH_SCOPE_UNDECLARED',
+    readonly detail?: WorkspacePatchLimitDetail,
+    /** Bounded, repository-relative facts for the error text (K6 scope refusal: count, shown paths, omitted); never host paths or content. */
+    readonly params?: Readonly<Record<string, string | number>>) {
     super(code); this.name = 'WorkspacePatchError';
   }
 }

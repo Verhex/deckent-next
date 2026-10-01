@@ -2,7 +2,7 @@ import { cliUsage } from './usage.js';
 import { ErrorRegistry, emit, loadConfig, resolveLocale, t, type ConfigLoadOptions, type ProductLayout } from '#platform/index.js';
 import { attemptIdentitySchema, type AttemptIdentity } from '#domain/index.js';
 import { taskEvaluationCommandSchema, type DispatchTerminal, type RunView, type TaskEvaluationCommand } from '#engine/index.js';
-import type { WorkspaceAdoptionApplication, IntegrationAdoptionCommand, IntegrationRollbackCommand, WorkspaceDeliveryApplication, IntegrationDeliveryCommand, WorkspaceIntegrationInspection, IntegrationQuery, WorkspaceIntegrationApplication, IntegrationCommand, WorkspacePatch } from '#engine/index.js';
+import type { WorkspaceAdoptionApplication, IntegrationAdoptionCommand, IntegrationRollbackCommand, WorkspaceDeliveryApplication, IntegrationDeliveryCommand, WorkspaceIntegrationInspection, IntegrationQuery, WorkspaceIntegrationApplication, IntegrationCommand, WorkspacePatch, PatchScope } from '#engine/index.js';
 import type { ArtifactReceipt } from '#capabilities/index.js';
 export type TaskIntegrationDeliverHandler = (root: string, command: IntegrationDeliveryCommand, options: ConfigLoadOptions) => ReturnType<WorkspaceDeliveryApplication['deliver']>;
 export type TaskIntegrationAdoptHandler = (root: string, command: IntegrationAdoptionCommand, options: ConfigLoadOptions) => ReturnType<WorkspaceAdoptionApplication['adopt']>;
@@ -10,7 +10,14 @@ export type TaskIntegrationRollbackHandler = (root: string, command: Integration
 export type TaskIntegrationInspectHandler = (root: string, query: IntegrationQuery, options: ConfigLoadOptions) => ReturnType<WorkspaceIntegrationInspection['inspect']>;
 export type TaskIntegrationCheckHandler = (root: string, identity: AttemptIdentity, options: ConfigLoadOptions) => ReturnType<WorkspaceIntegrationApplication['check']>;
 export type TaskIntegrationPrepareHandler = (root: string, command: IntegrationCommand, options: ConfigLoadOptions) => ReturnType<WorkspaceIntegrationApplication['prepare']>;
-export type TaskPatchHandler = (root: string, identity: AttemptIdentity, options: ConfigLoadOptions) => Promise<Readonly<{ schemaVersion: 1; receipt: ArtifactReceipt; patch: WorkspacePatch; application: 'not-applied' }>>;
+export type TaskPatchHandler = (root: string, identity: AttemptIdentity, options: ConfigLoadOptions) => Promise<Readonly<{ schemaVersion: 1; receipt: ArtifactReceipt; patch: WorkspacePatch; scope: PatchScope; application: 'not-applied' }>>;
+/** K6: one human line for the derived scope classification (prepare, preview, integration check); JSON carries the typed object. */
+function scopeLine(scope: PatchScope, locale: ReturnType<typeof resolveLocale>) {
+  const line = scope.status === 'unscoped' ? t('cli.task.patch.scope.unscoped', { mode: scope.mode }, locale)
+    : scope.status === 'in-scope' ? t('cli.task.patch.scope.inScope', { mode: scope.mode }, locale)
+      : t('cli.task.patch.scope.outOfScope', { mode: scope.mode, count: scope.outOfScope.length, paths: scope.outOfScope.join(', ') }, locale);
+  return scope.mode === 'enforce' && scope.status !== 'in-scope' ? [line, t('cli.task.patch.scope.enforced', {}, locale)].join('\n') : line;
+}
 import type { CommandContext } from './kernel-commands.js';
 import { renderWorkerTranscript } from './transcript.js';
 
@@ -118,7 +125,7 @@ export async function taskCommand(argv: readonly string[], context: CommandConte
     if (!context.checkWorkspaceIntegration) throw ErrorRegistry.createError('INVENTORY_UNAVAILABLE');
     const result = await context.checkWorkspaceIntegration(context.root ?? process.cwd(), identity, options);
     emit(result, { json, ...(context.stdout ? { stdout: context.stdout } : {}), render: data =>
-      t('cli.task.integration.check', { source: data.observation.source, proposal: data.proposal }, locale) }); return;
+      [t('cli.task.integration.check', { source: data.observation.source, proposal: data.proposal }, locale), scopeLine(data.scope, locale)].join('\n') }); return;
   }
   if (action === 'integration-prepare') {
     const commandId = values.get('--command-id'), proposal = values.get('--proposal');
@@ -136,7 +143,7 @@ export async function taskCommand(argv: readonly string[], context: CommandConte
     const notice = t('cli.task.patch.notice', {}, locale);
     if (action === 'patch-prepare' || json) {
       emit(result, { json, ...(context.stdout ? { stdout: context.stdout } : {}), render: data => [
-        heading(data), ...data.patch.changes.map(change => JSON.stringify(change)), notice,
+        heading(data), scopeLine(data.scope, locale), ...data.patch.changes.map(change => JSON.stringify(change)), notice,
       ].join('\n') }); return;
     }
     if (!context.renderUnifiedDiff) throw ErrorRegistry.createError('INVENTORY_UNAVAILABLE');
@@ -153,7 +160,7 @@ export async function taskCommand(argv: readonly string[], context: CommandConte
         const mode = modeChanged ? `mode ${change.before!.mode} -> ${change.after!.mode} ${change.path}` : '';
         return { path: change.path, body, mode };
       });
-      if (!stat) return [heading(data), ...sections.flatMap(section => [section.body, section.mode].filter(Boolean)), notice].join('\n');
+      if (!stat) return [heading(data), scopeLine(data.scope, locale), ...sections.flatMap(section => [section.body, section.mode].filter(Boolean)), notice].join('\n');
       let totalAdded = 0, totalRemoved = 0;
       const lines = sections.map(section => {
         const body = section.body.split('\n').slice(2).filter(line => !line.startsWith('@@'));
@@ -161,7 +168,7 @@ export async function taskCommand(argv: readonly string[], context: CommandConte
         totalAdded += added; totalRemoved += removed;
         return `${section.path} | +${added} -${removed}`;
       });
-      return [heading(data), ...lines, t('cli.task.patch.stat.summary', { count: sections.length, added: totalAdded, removed: totalRemoved }, locale), notice].join('\n');
+      return [heading(data), scopeLine(data.scope, locale), ...lines, t('cli.task.patch.stat.summary', { count: sections.length, added: totalAdded, removed: totalRemoved }, locale), notice].join('\n');
     } }); return;
   }
   if (action === 'execute') {
