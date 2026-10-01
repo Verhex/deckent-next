@@ -67,7 +67,7 @@ describe.skipIf(process.platform !== 'linux' || !process.env.DECKENT_TEST_DOCKER
     const f = await workspacePatchFixture({ roots, cleanup }); await policy(f, RELEASE);
     const worker = await f.run(); const handle = (await f.runtime.store.loadBoundDispatch(f.identity))!.terminal!.handle;
     const sweep = async () => (await sweepConfiguredAttemptCustody(f.project, ['s'], f.options))[0]!;
-    expect(await sweep()).toEqual({ schemaVersion: 1, scopeId: 's', released: 0, detached: 0, entries: [], error: null });
+    expect(await sweep()).toEqual({ schemaVersion: 1, scopeId: 's', released: 0, detachedKept: 0, entries: [], error: null });
     expect(await container(handle)).toBe(true); expect(await present(worker)).toBe(true);
     await policy(f, ['execute', 'read-output', 'recover-output']);
     const prepared = await f.prepare();
@@ -101,8 +101,18 @@ describe.skipIf(process.platform !== 'linux' || !process.env.DECKENT_TEST_DOCKER
     expect((await sweep()).entries).toEqual([{ identity: f.identity, outcome: { schemaVersion: 1, status: 'held', reason: 'workspace-release-failed', code: 'EACCES' } }]);
     expect(await present(directory)).toBe(false);
     const detached = (await readdir(workspaces)).filter(name => name.startsWith('.released-')); expect(detached).toHaveLength(1);
+    expect(detached[0]).toMatch(/^\.released-[a-f0-9]{64}-/);
     await chmod(join(workspaces, detached[0]!, 'tree', '.git', 'pinned'), 0o700);
-    expect(await sweep()).toEqual({ schemaVersion: 1, scopeId: 's', released: 0, detached: 1, entries: [], error: null });
+    // Sol ER-R2: the detached removal is finished only by this attempt's own authorized release — denied release keeps it.
+    await policy(f, ['execute', 'read-output', 'recover-output']);
+    expect(await sweep()).toEqual({ schemaVersion: 1, scopeId: 's', released: 0, detachedKept: 1, error: null,
+      entries: [{ identity: f.identity, outcome: { schemaVersion: 1, status: 'held', reason: 'release-denied', code: 'POLICY_DENIED' } }] });
+    expect((await readdir(workspaces)).filter(name => name.startsWith('.released-'))).toEqual(detached);
+    // Another scope's sweep in the same root never touches it.
+    expect((await sweepConfiguredAttemptCustody(f.project, ['other'], f.options))[0]).toMatchObject({ scopeId: 'other', released: 0, entries: [] });
+    expect((await readdir(workspaces)).filter(name => name.startsWith('.released-'))).toEqual(detached);
+    await policy(f, RELEASE);
+    expect(await sweep()).toEqual({ schemaVersion: 1, scopeId: 's', released: 1, detachedKept: 0, error: null, entries: [{ identity: f.identity, outcome: released('absent', 'removed') }] });
     expect((await readdir(workspaces)).filter(name => name.startsWith('.released-'))).toEqual([]);
     expect(await f.preview()).toMatchObject({ patch: { changes: [{ path: 'added.txt' }, { path: 'note.txt' }, { path: 'removed.txt' }] } });
   });
@@ -121,10 +131,10 @@ describe.skipIf(process.platform !== 'linux' || !process.env.DECKENT_TEST_DOCKER
       await service.stop(); await service.done; return swept;
     };
     await configure({ schemaVersion: 1, release: 'keep' });
-    expect(await start()).toEqual([[{ schemaVersion: 1, scopeId: 's', released: 0, detached: 0, entries: [], error: null }]]);
+    expect(await start()).toEqual([[{ schemaVersion: 1, scopeId: 's', released: 0, detachedKept: 0, entries: [], error: null }]]);
     expect(await container(handle)).toBe(true); expect(await present(worker)).toBe(true);
     await configure();
-    expect(await start()).toEqual([[{ schemaVersion: 1, scopeId: 's', released: 1, detached: 0, entries: [{ identity: f.identity, outcome: released('removed', 'removed') }], error: null }]]);
+    expect(await start()).toEqual([[{ schemaVersion: 1, scopeId: 's', released: 1, detachedKept: 0, entries: [{ identity: f.identity, outcome: released('removed', 'removed') }], error: null }]]);
     expect(await container(handle)).toBe(false); expect(await present(dirname(worker))).toBe(false);
   });
 });

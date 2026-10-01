@@ -7,7 +7,7 @@ import { randomUUID } from 'node:crypto';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { GitWorkspaceBroker } from '#adapters/index.js';
 const exec = promisify(execFile); const roots: string[] = [];
-afterEach(async () => { await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
+afterEach(async () => { for (const root of roots.splice(0)) { await exec('/usr/bin/chmod', ['-R', 'u+rwx', root]).catch(() => undefined); await rm(root, { recursive: true, force: true }); } });
 async function fixture() {
   const root = await mkdtemp(join(tmpdir(), 'deckent-attempt-release-')); roots.push(root);
   const source = join(root, 'source'); const workspaces = join(root, 'workspaces'); await mkdir(source); await mkdir(workspaces, { mode: 0o700 });
@@ -61,14 +61,29 @@ describe('attempt clone release (EXEC-RELEASE)', () => {
       expect(sync).toHaveBeenCalledTimes(1);
     } finally { sync.mockRestore(); }
   });
-  it('an interrupted removal stays re-releasable: the start sweep finishes detached directories, bounded and owner-checked', async () => {
-    const f = await fixture();
-    for (let index = 0; index < 3; index++) { const detached = join(f.workspaces, `.released-${randomUUID()}`); await mkdir(join(detached, 'tree'), { recursive: true, mode: 0o700 }); await writeFile(join(detached, 'tree', 'x'), 'x'); }
-    expect(await f.broker.sweepDetached(2)).toBe(2);
-    expect((await readdir(f.workspaces)).filter(name => name.startsWith('.released-'))).toHaveLength(1);
-    expect(await f.broker.sweepDetached(16)).toBe(1);
-    const unsafe = join(f.workspaces, `.released-${randomUUID()}`); await mkdir(unsafe, { mode: 0o700 }); await chmod(unsafe, 0o777);
-    await expect(f.broker.sweepDetached(16)).rejects.toThrow('WORKSPACE_UNSAFE'); expect(await present(unsafe)).toBe(true);
-    expect(await present(f.lease.workspace)).toBe(true);
+  it('Sol ER-R2: an interrupted detach is completed only for its exact attempt; other scopes and unverifiable tombstones are kept', async () => {
+    const f = await fixture(); const requestB = { ...f.request, identity: { ...f.request.identity, scopeId: 'b', attemptId: 'b' } };
+    const leaseB = await f.broker.allocate(requestB); const tombstones = async () => (await readdir(f.workspaces)).filter(name => name.startsWith('.released-')).sort();
+    // B's removal is interrupted after the atomic detach: an unremovable directory inside its checkout.
+    const pinned = join(leaseB.workspace, '.git', 'pinned'); await mkdir(pinned); await writeFile(join(pinned, 'x'), 'x'); await chmod(pinned, 0o500);
+    await expect(f.broker.releaseAttempt(requestB, leaseB.workspace)).rejects.toMatchObject({ code: 'EACCES' });
+    const [detachedB] = await tombstones(); expect(detachedB).toMatch(/^\.released-[a-f0-9]{64}-[0-9a-f-]{36}$/);
+    expect(await present(dirname(leaseB.workspace))).toBe(false); expect(await f.broker.holds(requestB.identity)).toBe(true);
+    // A's release in the same root never touches B's tombstone, a foreign prefixed directory or a leaseless tombstone named for B.
+    const foreign = join(f.workspaces, '.released-foreign'); await mkdir(foreign, { mode: 0o700 }); await writeFile(join(foreign, 'x'), 'x');
+    const leaseless = join(f.workspaces, detachedB!.replace(/-[0-9a-f-]{36}$/, '-' + randomUUID())); await mkdir(leaseless, { mode: 0o700 });
+    expect(await f.broker.releaseAttempt(f.request, f.lease.workspace)).toBe('removed');
+    expect(await tombstones()).toHaveLength(3); expect(await f.broker.countDetached()).toBe(3);
+    // B itself: an unverifiable tombstone of B is kept and typed, a tampered lease is refused, the verified one completes once fixed.
+    const detachedPath = join(f.workspaces, detachedB!); await chmod(join(detachedPath, 'tree', '.git', 'pinned'), 0o700);
+    const leasePath = join(detachedPath, 'lease.json'), original = await readFile(leasePath, 'utf8');
+    await writeFile(leasePath, original.replace(/"fingerprint":"[a-f0-9]{64}"/, `"fingerprint":"${'0'.repeat(64)}"`));
+    await expect(f.broker.releaseAttempt(requestB, leaseB.workspace)).rejects.toThrow('WORKSPACE_IDENTITY_CONFLICT');
+    expect(await present(detachedPath)).toBe(true);
+    await writeFile(leasePath, original);
+    await expect(f.broker.releaseAttempt(requestB, leaseB.workspace)).rejects.toThrow('WORKSPACE_IDENTITY_CONFLICT');
+    expect(await present(detachedPath)).toBe(false); expect(await present(leaseless)).toBe(true); expect(await present(foreign)).toBe(true);
+    await rm(leaseless, { recursive: true }); expect(await f.broker.releaseAttempt(requestB, leaseB.workspace)).toBe('absent');
+    expect(await f.broker.holds(requestB.identity)).toBe(false); expect(await tombstones()).toEqual(['.released-foreign']);
   });
 });

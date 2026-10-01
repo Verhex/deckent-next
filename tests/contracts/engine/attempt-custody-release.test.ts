@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { afterEach, describe, expect, it } from 'vitest';
-import { FileArtifactStore, openSqliteAttemptStore, type SqliteAttemptStore } from '#adapters/index.js';
+import { FileArtifactStore, openSqliteAttemptStore, sealWorkerEventLog, type SqliteAttemptStore } from '#adapters/index.js';
 import { AttemptCustodyReleaseApplication, DispatchApplication, SupervisorError, WorkspacePatchApplication, patchExclusions, type AttemptWorkspaceCustody,
   type ExecutionSupervisor, type SandboxRequest } from '#engine/index.js';
 import type { AttemptIdentity } from '#domain/index.js';
@@ -36,7 +36,7 @@ async function fixture(count = 1) {
   };
   const workspaces: AttemptWorkspaceCustody = {
     async releaseAttempt(request) { if (workspaceFailure) throw workspaceFailure; calls.workspace.push(request.identity.attemptId); return 'removed'; },
-    async holds() { return true; }, async sweepDetached() { return 0; },
+    async holds() { return true; }, async countDetached() { return 0; },
   };
   const request = (identity: AttemptIdentity) => ({ protocolVersion: 1 as const, identity, workspace: join(root, 'w', identity.attemptId, 'tree'), argv: ['node'] });
   const execute = (identity: AttemptIdentity) => new DispatchApplication(store, supervisor, verifier, allow, 'owner', artifacts).execute(request(identity));
@@ -112,13 +112,32 @@ describe('attempt custody release (EXEC-RELEASE)', () => {
     expect(await f.app().release(f.identities[1]!)).toMatchObject({ reason: 'not-terminal' });
     expect(f.calls).toEqual({ container: [], workspace: [] });
   });
-  it('lead (a′): an observed worker needs its sealed event log; an unreadable profile counts as observed', async () => {
-    const f = await fixture(); await f.execute(f.identity); await f.retain(f.identity);
-    expect(await f.app({ observed: () => true }).release(f.identity)).toMatchObject({ reason: 'events-unsealed' });
-    expect(await f.app({ observed: () => { throw new Error('profile'); } }).release(f.identity)).toMatchObject({ reason: 'events-unsealed' });
+  it('lead (a′) / Sol ER-R1: an observed worker needs a verified sealed event stream of its exact attempt before anything is removed', async () => {
+    const f = await fixture(8); for (const identity of f.identities) { await f.execute(identity); await f.retain(identity); }
+    const [none, missing, corrupt, malformed, foreign, healthy, empty, unobserved] = f.identities as AttemptIdentity[] as [AttemptIdentity, AttemptIdentity, AttemptIdentity, AttemptIdentity, AttemptIdentity, AttemptIdentity, AttemptIdentity, AttemptIdentity];
+    const streamOf = (excerpt: string) => Buffer.from(sealWorkerEventLog([{ schemaVersion: 1, sequence: 1, atMs: 0, kind: 'message', role: 'assistant', textBytes: 1, thinking: false, excerpt }], null, 0, 65536).join(''));
+    const stream = streamOf('healthy');
+    const seal = async (identity: AttemptIdentity, bytes: Buffer, eventCount: number, bound: AttemptIdentity = identity) => {
+      const events = await f.artifacts.put('s', bytes);
+      await f.store.saveWorkerEventLog({ schemaVersion: 1, identity: bound, events, eventCount, sealedAt: 1, projection: 'partial' }); return events;
+    };
+    const observed = f.app({ observed: () => true });
+    expect(await observed.release(none)).toEqual({ schemaVersion: 1, status: 'held', reason: 'events-unsealed', code: null });
+    expect(await f.app({ observed: () => { throw new Error('profile'); } }).release(none)).toMatchObject({ reason: 'events-unsealed' });
+    // Valid metadata whose blob is gone, corrupted in place (same size), not an event stream, or bound to another generation of the attempt.
+    await rm((await f.artifacts.prepareReadOnlyFile('s', await seal(missing, streamOf('missing'), 1))).path);
+    const corrupted = await seal(corrupt, streamOf('corrupt'), 1);
+    await writeFile((await f.artifacts.prepareReadOnlyFile('s', corrupted)).path, Buffer.alloc(corrupted.byteLength, 32), { mode: 0o600 });
+    await seal(malformed, Buffer.from('{}\n'), 1);
+    await seal(foreign, stream, 1, { ...foreign, generation: foreign.generation + 1 });
+    for (const identity of [missing, corrupt, malformed, foreign])
+      expect(await observed.release(identity), identity.taskId).toEqual({ schemaVersion: 1, status: 'held', reason: 'events-unsealed', code: 'WORKER_OBSERVATION_INVALID' });
     expect(f.calls).toEqual({ container: [], workspace: [] });
-    await f.store.saveWorkerEventLog({ schemaVersion: 1, identity: f.identity, events: await f.artifacts.put('s', Buffer.from('{}\n')), eventCount: 1, sealedAt: 1, projection: 'complete' });
-    expect(await f.app({ observed: () => true }).release(f.identity)).toEqual(released);
+    // Controls: a healthy sealed stream (partial live projection is not corruption), a valid zero-event log, and an unobserved profile.
+    await seal(healthy, stream, 1); await seal(empty, Buffer.alloc(0), 0);
+    expect(await observed.release(healthy)).toEqual(released); expect(await observed.release(empty)).toEqual(released);
+    expect(await f.app({ observed: () => false }).release(unobserved)).toEqual(released);
+    expect(f.calls.workspace).toEqual([healthy.attemptId, empty.attemptId, unobserved.attemptId]);
   });
   it('negative 6: the start sweep releases only terminal records with a verified retained patch, bounded and isolated per record', async () => {
     const f = await fixture(5);
