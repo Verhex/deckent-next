@@ -42,9 +42,15 @@ describe('monitor text snapshot', () => {
     expect(summary.indexOf('run-cancellation-pending')).toBeLessThan(summary.indexOf('run-unknown'));
     expect(summary).not.toContain('run-none'); expect(summary).not.toContain('run-worker-running');
     expect(summary).toContain('3 h 12 min'); expect(summary).toContain('(appr-0001)');
-    expect(text).toContain('run-broken'); expect(text).toContain('build: failed, evaluation rejected');
-    expect(text).toContain('! remote-lab is unavailable: MONITOR_SOURCE_UNREADABLE, LEDGER_LOCKED');
-    expect(text).toContain('! dogfood: could not read WORKER_SIDECAR_UNREADABLE');
+    expect(text).toContain('x build: ✗ [unit-budget] src/surfaces/core/cli — 2001 lines > unit budget 2000');
+    expect(text).toContain('x build: first failing line not recorded');
+    expect(text).toContain('! remote-lab is unavailable: the ledger could not be read (LEDGER_LOCKED); service state could not be read (LOCAL_RUNTIME_DENIED)');
+    expect(text).toContain('! current has problems: scope scope-x could not be read (LEDGER_LOCKED)');
+    expect(text).toContain('! dogfood has problems: the ledger is version 43, older than this build: newer fields may be empty; future-code:abc');
+    // An `info:` diagnostic is a neutral note: no warning mark, not counted in the header.
+    expect(text).toContain('dogfood note: only the most recent finished workers are shown; 5 older ones are hidden');
+    expect(text).not.toMatch(/! [^\n]*most recent finished workers/);
+    expect(text).toMatch(/\* dogfood [^\n]*! 2 warning\(s\)/);
     expect(text).toContain('build b0e66d92c0ff (built 2026-10-02 08:00:00Z)'); expect(text).toContain('build 76582f9f0000 (built 2026-10-01 22:15:00Z)');
     expect(text).toContain('expired 2 min 0 s ago'); expect(text).toContain('expires in 45 min');
     expect(text).toContain('! 1 min 35 s (stale)');
@@ -125,11 +131,11 @@ class Screen extends Writable {
 }
 const settle = (ms = 30) => new Promise(resolve => setTimeout(resolve, ms));
 async function until(check: () => boolean, label: string) { for (let i = 0; i < 300; i++) { if (check()) return; await settle(10); } throw new Error(`timed out: ${label}`); }
-function mount(props: { load: () => Promise<typeof fullSnapshot>; intervalMs?: number; columns?: number; rows?: number; locale?: 'en' | 'tr' }) {
+function mount(props: { load: () => Promise<typeof fullSnapshot>; intervalMs?: number; columns?: number; rows?: number; locale?: 'en' | 'tr'; now?: () => number }) {
   const stdout = new Screen(props.columns ?? 120, props.rows ?? 40);
   const stdin = Object.assign(new PassThrough(), { isTTY: true, setRawMode() { return stdin; }, ref() { return stdin; }, unref() { return stdin; } });
   const instance = render(createElement(surface.MonitorApp, { load: props.load, intervalMs: props.intervalMs ?? 60_000, locale: props.locale ?? 'en', ascii: false,
-    palette: resolveWorklinePalette('none'), errorText: (error: unknown) => surface.monitorFailureText(error, props.locale ?? 'en') }),
+    palette: resolveWorklinePalette('none'), errorText: (error: unknown) => surface.monitorFailureText(error, props.locale ?? 'en'), ...(props.now ? { now: props.now } : {}) }),
   { stdout: stdout as unknown as NodeJS.WriteStream, stdin: stdin as unknown as NodeJS.ReadStream, debug: true, exitOnCtrlC: false, patchConsole: false });
   const press = async (key: string) => { stdin.write(key); await settle(); };
   return { stdout, stdin, instance, press };
@@ -144,29 +150,46 @@ describe('fullscreen monitor', () => {
       expect(view.stdout.frame).toContain('[1 Summary]'); expect(view.stdout.frame).toContain('Tab/←→ tabs');
       await view.press(KEY.tab);
       expect(view.stdout.frame).toContain('[2 Runs]');
-      // The first Runs row is the oldest stuck Run and carries the selection marker (NO_COLOR palette: the marker, not inverse, shows it).
-      expect(view.stdout.frame).toMatch(/› run-blocked-approval/);
+      // Runs are newest first; the selection marker (not colour) shows the selected row under the NO_COLOR palette.
+      expect(view.stdout.frame).toMatch(/› run-broken\s/);
       await view.press(KEY.down);
-      expect(view.stdout.frame).toMatch(/› run-not-admitted/);
+      expect(view.stdout.frame).toMatch(/› run-broken-quiet/);
       await view.press(KEY.up); await view.press(KEY.enter);
-      expect(view.stdout.frame).toContain('Run run-blocked-approval · scope scope-a · revision 7');
-      expect(view.stdout.frame).toContain('Blocker: awaiting approval (appr-0001) · task build · for 3 h 12 min');
+      // "Where did it first fail": the recorded first failing line, the attempt timeline and the last worker events.
+      expect(view.stdout.frame).toContain('Run run-broken · scope scope-a · revision 7');
+      expect(view.stdout.frame).toContain('first failure: ✗ [unit-budget] src/surfaces/core/cli — 2001 lines > unit budget 2000');
+      expect(view.stdout.frame).toMatch(/attempt [0-9a-f]{8} gen 1 · launch launched · 09:10:00Z → 09:25:00Z \(15 min\) · exit 1 · claude\/model-alpha-2/);
+      expect(view.stdout.frame).toContain('09:29:30Z · tool.call · shell npm test -- monitor-surface');
+      expect(view.stdout.frame).toContain('Delivery/adoption: not in this snapshot yet.');
       expect(view.stdout.frame).toContain('depends on: build');
+      await view.press(KEY.esc); await view.press(KEY.down); await view.press(KEY.enter);
+      expect(view.stdout.frame).toContain('first failure: the first failing line is not in the record');
       await view.press(KEY.esc);
-      expect(view.stdout.frame).toMatch(/› run-blocked-approval/);
+      expect(view.stdout.frame).toMatch(/› run-broken-quiet/);
       await view.press('3');
       expect(view.stdout.frame).toContain('[3 Workers]');
       await view.press(KEY.enter);
       expect(view.stdout.frame).toContain('Doing now: editing · src/app.ts — apply patch');
       expect(view.stdout.frame).toContain('requested model-alpha-2');
+      await view.press(KEY.esc); await view.press(KEY.down); await view.press(KEY.enter);
+      // A finished ledger-only worker: model and first failure come from its Run attempt.
+      expect(view.stdout.frame).toContain('Worker run-broken/build');
+      expect(view.stdout.frame).toContain('first failure: ✗ [unit-budget]');
+      expect(view.stdout.frame).toContain('ledger record only (the worker\'s files are gone)');
       await view.press(KEY.esc); await view.press(KEY.left);
       expect(view.stdout.frame).toContain('[2 Runs]');
       await view.press('?');
       expect(view.stdout.frame).toContain('pause or resume automatic refresh');
+      expect(view.stdout.frame).toContain('Legend: mark · colour · meaning');
+      expect(view.stdout.frame).toContain('row changed since the last refresh');
       await view.press(KEY.esc);
       expect(view.stdout.frame).not.toContain('pause or resume automatic refresh');
       await view.press('6');
       expect(view.stdout.frame).toContain('remote-lab');
+      await view.press('7');
+      expect(view.stdout.frame).toContain('[7 Map]');
+      expect(view.stdout.frame).toContain('task kind coding → profile coding-default@3 (docker)');
+      expect(view.stdout.frame).toContain('Memory: none yet — waits for the MEMORY card');
       await view.press('q');
       await view.instance.waitUntilExit();
     } finally { view.instance.unmount(); }
@@ -190,12 +213,12 @@ describe('fullscreen monitor', () => {
       const paused = calls; await settle(150);
       expect(calls).toBe(paused);
       fail = true; await view.press('r');
-      await until(() => view.stdout.frame.includes('Refresh failed'), 'failure warning');
+      await until(() => view.stdout.frame.includes('refresh failed'), 'failure warning');
       expect(view.stdout.frame).toContain(t('error.INVENTORY_UNAVAILABLE', {}, 'en'));
       expect(view.stdout.frame).not.toContain('/secret/x');
       expect(view.stdout.frame).toContain('Stuck or waiting');
       fail = false; await view.press('p');
-      await until(() => !view.stdout.frame.includes('Refresh failed'), 'recovered');
+      await until(() => !view.stdout.frame.includes('refresh failed'), 'recovered');
     } finally { view.instance.unmount(); }
   });
   it('never overflows a narrow terminal and keeps a stable height', async () => {
@@ -203,7 +226,7 @@ describe('fullscreen monitor', () => {
       const view = mount({ load: async () => longIdSnapshot, columns, rows: 20 });
       try {
         await until(() => view.stdout.frame.includes('Stuck'), 'summary');
-        for (const key of ['', KEY.tab, KEY.tab, KEY.tab, KEY.tab, KEY.tab]) {
+        for (const key of ['', KEY.tab, KEY.tab, KEY.tab, KEY.tab, KEY.tab, KEY.tab, '?']) {
           if (key) await view.press(key);
           const lines = view.stdout.frame.replace(/\n$/, '').split('\n');
           expect(widest(view.stdout.frame), `${columns} ${JSON.stringify(key)}`).toBeLessThanOrEqual(columns);
@@ -218,6 +241,121 @@ describe('fullscreen monitor', () => {
       palette: resolveWorklinePalette('none'), errorText: () => 'x', size: { columns: 120, rows: 40 } }), { columns: 120 });
     expect(widest(frame)).toBeLessThanOrEqual(120);
     await expect(`${frame}\n`).toMatchFileSnapshot('../../fixtures/monitor/frame-full-tr-120.txt');
+  });
+});
+
+describe('monitor v1.1: first failure, timeline, map, diagnostics, order', () => {
+  it('words every data-lane diagnostic, keeps unknown codes visible and treats info: as a note', () => {
+    const codes = ['service-unavailable:LOCAL_RUNTIME_DENIED', 'ledger-unavailable:LEDGER_LOCKED', 'ledger-version-older:43', 'scope-denied:s1', 'scope-unavailable:s1',
+      'scope-unavailable:s1:LEDGER_LOCKED', 'workers-unavailable:s1', 'workers-denied:s1', 'workers-not-sampled:s1', 'workers-truncated:s1', 'workers-finished-capped:5',
+      'runs-truncated:900', 'run-corrupt:s1/r1', 'approvals-truncated', 'approval-corrupt:s1/a1', 'pool-occupancy-corrupt:p1', 'pool-corrupt:p1', 'ledger-only'];
+    for (const locale of ['en', 'tr'] as const) for (const code of codes) {
+      const described = surface.describeDiagnostic(code, locale);
+      expect(described.note, code).toBe(false); expect(described.text, code).not.toBe(code); expect(described.text, code).not.toContain('{');
+    }
+    expect(surface.describeDiagnostic('scope-unavailable:s1:LEDGER_LOCKED', 'tr').text).toBe('s1 kapsamı okunamadı (LEDGER_LOCKED)');
+    expect(surface.describeDiagnostic('scope-unavailable:s1', 'en').text).toBe('scope s1 could not be read');
+    expect(surface.describeDiagnostic('info:workers-finished-capped:5', 'tr')).toEqual({ code: 'workers-finished-capped', note: true,
+      text: "biten worker'ların yalnız en yenileri gösteriliyor; 5 eskisi gizli" });
+    expect(surface.describeDiagnostic('brand-new-code:x', 'en')).toEqual({ code: 'brand-new-code', note: false, text: 'brand-new-code:x' });
+  });
+  it('shows the Map tab in sentences (layers, registry, models, policy, honest memory) and says when no map was read', () => {
+    const tr = surface.renderMonitorText(fullSnapshot, { locale: 'tr', width: 160, ascii: false });
+    expect(tr).toContain('Yapılandırma katmanları (sonraki katman öncekileri ezer):');
+    expect(tr).toContain('3. proje — /home/owner/projects/deckent-next/.deckent/config.json — belirlediği bölümler: layout, terminal, inspection');
+    expect(tr).toContain('coding görevi → coding-default@3 profili (docker)');
+    expect(tr).toContain('legacy-shell@1 (host) — hiçbir görev türü kullanmıyor');
+    expect(tr).toContain('✓ subscription / model-alpha-2'); expect(tr).toContain('○ subscription / model-alpha-1 (etkin değil)');
+    expect(tr).toContain('Politika: 12 izin (operation 5, effect 4, secret 3) · 2 görev ayrılığı kuralı');
+    expect(tr).toContain('İzin kipleri: owner@local: standart, ci@local: full-auto');
+    expect(tr).toContain('Bellek: yok — MEMORY kartı bekleniyor');
+    expect(tr).toContain('Bu kurulum için harita okunmadı.');
+    expect(tr).not.toMatch(/[{}]"/);
+  });
+  it('lists Runs newest first with a duration column, unknown admission last; workers newest first with the attempt model', () => {
+    const text = surface.renderMonitorText(fullSnapshot, { locale: 'en', width: 200, ascii: false });
+    const runs = text.slice(text.indexOf('── Runs'), text.indexOf('── Workers'));
+    const order = ['run-broken ', 'run-broken-quiet', 'run-dog-1', 'run-not-admitted', 'run-stopped', 'run-unknown'].map(name => runs.indexOf(name));
+    expect(order.every(index => index > 0)).toBe(true);
+    expect([...order].sort((a, b) => a - b)).toEqual(order);
+    expect(runs).toMatch(/run-broken\s+✗ failed\s+—\s+—\s+15 min\s/);
+    expect(runs).toMatch(/run-not-admitted\s+~ waiting\s+not admitted yet\s+1 h 33 min\s+running\s/);
+    const workers = text.slice(text.indexOf('── Workers'), text.indexOf('── Approvals'));
+    expect(workers).toMatch(/run-broken\/build .*exited 1 .*claude\/model-alpha-2/);
+  });
+});
+
+describe('fullscreen controls: filter, sort, group, change marks, snapshot age', () => {
+  it('filters with text, prefixes and !, shows the filter in the header and clears it with Esc', async () => {
+    const run = (name: string, state: string) => ({ key: name, cells: [{ text: name }], detail: () => [], facets: { state, install: 'current', kind: 'coding', run: name } });
+    expect(surface.rowMatches(run('run-a', 'failed'), 's:failed')).toBe(true);
+    expect(surface.rowMatches(run('run-a', 'failed'), '!s:failed')).toBe(false);
+    expect(surface.rowMatches(run('run-a', 'failed'), 'i:dog')).toBe(false);
+    expect(surface.rowMatches(run('run-a', 'failed'), 'run-a t:coding')).toBe(true);
+    const view = mount({ load: async () => fullSnapshot });
+    try {
+      await until(() => view.stdout.frame.includes('Stuck or waiting'), 'summary');
+      await view.press(KEY.tab); await view.press('/'); await view.press('s:failed');
+      expect(view.stdout.frame).toContain('/s:failed');
+      await view.press(KEY.enter);
+      expect(view.stdout.frame).toContain('filter: s:failed');
+      expect(view.stdout.frame).toContain('run-broken-quiet'); expect(view.stdout.frame).not.toContain('run-none');
+      await view.press('/'); await view.press('\u007f'.repeat(8)); await view.press('!i:current'); await view.press(KEY.enter);
+      expect(view.stdout.frame).toContain('run-dog-1'); expect(view.stdout.frame).not.toContain('run-none');
+      await view.press('/'); await view.press('\u007f'.repeat(10)); await view.press('zzz'); await view.press(KEY.enter);
+      expect(view.stdout.frame).toContain('No row matches the filter.');
+      await view.press(KEY.esc);
+      expect(view.stdout.frame).not.toContain('filter: '); expect(view.stdout.frame).toContain('run-none');
+    } finally { view.instance.unmount(); }
+  });
+  it('sorts with s (age, state, name) and S (reverse), marks the column, and groups with g', async () => {
+    const view = mount({ load: async () => fullSnapshot });
+    try {
+      await until(() => view.stdout.frame.includes('Stuck or waiting'), 'summary');
+      await view.press(KEY.tab); await view.press('s');
+      expect(view.stdout.frame).toContain('Duration ▼'); expect(view.stdout.frame).toContain('sorted by age (newest first)');
+      await view.press('s');
+      expect(view.stdout.frame).toContain('State ▼'); expect(view.stdout.frame).toMatch(/› run-[a-z-]+\s+! blocked/);
+      await view.press('s');
+      expect(view.stdout.frame).toContain('Run ▼'); expect(view.stdout.frame).toMatch(/› run-blocked-approval/);
+      await view.press('S');
+      expect(view.stdout.frame).toContain('Run ▲'); expect(view.stdout.frame).toMatch(/› run-worker-stale-heartbeat/);
+      await view.press('s');
+      expect(view.stdout.frame).not.toMatch(/[▲▼]/);
+      await view.press('g');
+      expect(view.stdout.frame).toContain('grouped by install'); expect(view.stdout.frame).toMatch(/\n {1}current\n/); expect(view.stdout.frame).toMatch(/\n {1}dogfood\n/);
+      await view.press('g');
+      expect(view.stdout.frame).toContain('grouped by state'); expect(view.stdout.frame).toMatch(/\n {1}✗ failed\n/);
+      await view.press('g');
+      expect(view.stdout.frame).not.toContain('grouped by');
+    } finally { view.instance.unmount(); }
+  });
+  it('marks new (+) and changed (*) rows for exactly one refresh, never on the first snapshot', async () => {
+    const changed = { ...fullSnapshot, installs: fullSnapshot.installs.map(install => install.id !== 'current' ? install : { ...install, runs: [
+      ...install.runs.map(run => run.runId !== 'run-none' ? run : { ...run, state: 'blocked' as const, blocker: { code: 'unknown' as const, taskId: 'build', sinceMs: null, detail: null } }),
+      { ...install.runs.find(run => run.runId === 'run-stopped')!, runId: 'run-new', createdAtMs: OBSERVED_AT - 20 * 3_600_000 }] }) };
+    let calls = 0;
+    const view = mount({ intervalMs: 60, load: async () => (++calls === 1 ? fullSnapshot : changed) });
+    try {
+      await until(() => view.stdout.frame.includes('Stuck or waiting'), 'summary');
+      await view.press(KEY.tab);
+      expect(view.stdout.frame).not.toMatch(/^[+*] run-/m);
+      await until(() => calls >= 2 && /^\+ run-new/m.test(view.stdout.frame), 'new row mark');
+      expect(view.stdout.frame).toMatch(/^\* run-none/m);
+      await until(() => calls >= 3 && !/^[+*] run-/m.test(view.stdout.frame), 'marks gone after one refresh');
+    } finally { view.instance.unmount(); }
+  });
+  it('shows the snapshot age: neutral when fresh, ⚠ after two intervals, ✗ after five; a failed read names the last read time', async () => {
+    let clock = OBSERVED_AT, calls = 0;
+    const view = mount({ intervalMs: 40, now: () => clock, load: async () => { if (++calls > 1) throw Object.assign(new Error('x'), { code: 'INVENTORY_UNAVAILABLE' }); return fullSnapshot; } });
+    try {
+      await until(() => view.stdout.frame.includes('Stuck or waiting'), 'summary');
+      expect(view.stdout.frame).not.toMatch(/snapshot \S+ s old/);
+      clock += 100; await until(() => view.stdout.frame.includes('⚠ snapshot 0 s old'), 'yellow age');
+      await until(() => view.stdout.frame.includes('refresh failed,'), 'failed read');
+      expect(view.stdout.frame).toContain('Stale snapshot (last read 09:30:00Z)');
+      clock += 200; await until(() => view.stdout.frame.includes('✗ snapshot 0 s old'), 'red age');
+    } finally { view.instance.unmount(); }
   });
 });
 

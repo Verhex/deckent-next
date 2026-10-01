@@ -4,9 +4,13 @@ Deckent izleyici · gözlem 2026-10-02 09:30:00Z · yalnız gözlem
 ○ remote-lab · erişilemiyor · build bilinmiyor · ledger sürümü bilinmiyor · ⚠ 2…
 
 ── Özet ────────────────────────────────────────────────────────────────────────
-Run'lar: 3 ilerliyor · 5 bekliyor · 7 takılı · 1 kabul · 1 başarısız · 1 iptal
-⚠ dogfood: okunamayan WORKER_SIDECAR_UNREADABLE
-⚠ remote-lab erişilemiyor: MONITOR_SOURCE_UNREADABLE, LEDGER_LOCKED
+Run'lar: 3 ilerliyor · 5 bekliyor · 7 takılı · 1 kabul · 2 başarısız · 1 iptal
+⚠ current sorunları: scope-x kapsamı okunamadı (LEDGER_LOCKED)
+⚠ dogfood sorunları: ledger sürüm 43, bu derlemeden eski: yeni alanlar boş
+görünebilir; future-code:abc
+⚠ remote-lab erişilemiyor: ledger okunamadı (LEDGER_LOCKED); servis durumu
+okunamadı (LOCAL_RUNTIME_DENIED)
+dogfood notu: biten worker'ların yalnız en yenileri gösteriliyor; 5 eskisi gizli
 
 Sizi bekleyen (2)
   Konu                                           Bekliyor    Süre sonu
@@ -28,9 +32,10 @@ Takılı ya da bekleyen, en eskisi önce (12)
   run-waiting-pool-slot          build  ~ havuzda yer bekliyor       14 dk
   run-unknown                    build  ! neden bilinmiyor           bilinmiyor
 
-Başarısız Run'lar ve ilk hata yeri (1)
-  Run kimliği  İlk hata                           Son etkinlik  Kapsam   Kurulum
-  run-broken   ✗ build: başarısız, değerlendirm…  25 dk önce    scope-a  current
+Başarısız Run'lar ve ilk hata yeri (2)
+  Run kimliği       İlk hata                      Son etkinlik  Kapsam   Kurulum
+  run-broken        ✗ build: ✗ [unit-budget] sr…  25 dk önce    scope-a  current
+  run-broken-quiet  ✗ build: ilk hata satırı ka…  35 dk önce    scope-a  current
 
 Şu an çalışan worker'lar (2)
   Run/Görev                   Şu an         Heartbeat yaşı       Süreç
@@ -38,31 +43,32 @@ Başarısız Run'lar ve ilk hata yeri (1)
   run-blocked-approval/lint   çalıştırıyor  ⚠ 1 dk 35 sn (eski)  çalışıyor
 
 ── Run'lar ─────────────────────────────────────────────────────────────────────
-  Run kimliği                Durum           Engel                   Ne zamandır
-  run-blocked-approval       ~ bekliyor      onay bekliyor (appr-0…  3 sa 12 dk
-  run-not-admitted           ~ bekliyor      henüz kabul edilmedi    1 sa 33 dk
-  run-cancellation-pending   ! takılı        iptal bekleniyor        1 sa 26 dk
-  run-unresolved-effect      ! takılı        etki sonucu belirsiz    1 sa 19 dk
-  run-evaluation-unknown     ! takılı        değerlendirme sonucu …  1 sa 11 dk
-  run-evaluation-not-ready   ! takılı        değerlendirme hazır d…  1 sa 4 dk
-  run-worker-exited-uneval…  ! takılı        worker bitti, değerle…  57 dk
-  run-worker-stale-heartbe…  ! takılı        worker sessiz (heartb…  50 dk
-  run-waiting-dependency     ~ bekliyor      bağımlılığını bekliyor  28 dk
-  run-pool-held              ~ bekliyor      havuz bekletiliyor      21 dk
-  run-waiting-pool-slot      ~ bekliyor      havuzda yer bekliyor    14 dk
-  run-unknown                ! takılı        neden bilinmiyor        bilinmiyor
-  run-none                   ▶ ilerliyor     normal ilerliyor        7 dk 0 sn
-  run-worker-running         ▶ ilerliyor     worker çalışıyor        43 dk
-  run-dog-1                  ▶ ilerliyor     worker çalışıyor        1 dk 30 sn
-  run-broken                 ✗ başarısız     —                       —
-  run-done                   ✓ kabul edildi  —                       —
-  run-stopped                ■ iptal edildi  —                       —
+  Run kimliği                 Durum           Engel                   Süre
+  run-broken                  ✗ başarısız     —                       15 dk
+  run-broken-quiet            ✗ başarısız     —                       10 dk
+  run-dog-1                   ▶ ilerliyor     worker çalışıyor        sürüyor
+  run-not-admitted            ~ bekliyor      henüz kabul edilmedi    sürüyor
+  run-done                    ✓ kabul edildi  —                       1 sa 10 dk
+  run-cancellation-pending    ! takılı        iptal bekleniyor        sürüyor
+  run-unresolved-effect       ! takılı        etki sonucu belirsiz    sürüyor
+  run-evaluation-unknown      ! takılı        değerlendirme sonucu …  sürüyor
+  run-evaluation-not-ready    ! takılı        değerlendirme hazır d…  sürüyor
+  run-worker-exited-unevalu…  ! takılı        worker bitti, değerle…  sürüyor
+  run-worker-stale-heartbeat  ! takılı        worker sessiz (heartb…  sürüyor
+  run-worker-running          ▶ ilerliyor     worker çalışıyor        sürüyor
+  run-blocked-approval        ~ bekliyor      onay bekliyor (appr-0…  sürüyor
+  run-waiting-dependency      ~ bekliyor      bağımlılığını bekliyor  sürüyor
+  run-pool-held               ~ bekliyor      havuz bekletiliyor      sürüyor
+  run-waiting-pool-slot       ~ bekliyor      havuzda yer bekliyor    sürüyor
+  run-none                    ▶ ilerliyor     normal ilerliyor        sürüyor
+  run-stopped                 ■ iptal edildi  —                       4 sa 0 dk
+  run-unknown                 ! takılı        neden bilinmiyor        sürüyor
 
 ── Worker'lar ──────────────────────────────────────────────────────────────────
   Run/Görev                   Şu an         Heartbeat yaşı       Süreç
   run-blocked-approval/build  düzenliyor    1 sn                 çalışıyor
+  run-broken/build            —             —                    çıktı 1
   run-blocked-approval/lint   çalıştırıyor  ⚠ 1 dk 35 sn (eski)  çalışıyor
-  run-blocked-approval/docs   —             —                    çıktı 3
   run-blocked-approval/pack   —             bırakıldı            kayıp
 
 ── Onaylar ─────────────────────────────────────────────────────────────────────
@@ -84,7 +90,8 @@ Kapsamlar: scope-a
 servis çalışıyor (pid 31337) · örnek svc-01
 build b0e66d92c0ff (2026-10-02 08:00:00Z derlendi) · kaynak ağacı ffffffffffff
 ledger sürüm 44
-17 Run · 4 worker · 2 onay · 3 havuz
+18 Run · 4 worker · 2 onay · 3 havuz
+⚠ scope-x kapsamı okunamadı (LEDGER_LOCKED)
 
 Kurulum dogfood · erişilebilir
 Yol /home/owner/deckent-dogfood
@@ -93,7 +100,9 @@ servis çalışıyor (pid 2001) · örnek svc-02
 build 76582f9f0000 (2026-10-01 22:15:00Z derlendi) · kaynak ağacı ffffffffffff
 ledger sürüm 43
 1 Run · 0 worker · 0 onay · 1 havuz
-⚠ 1 okuma sorunu: WORKER_SIDECAR_UNREADABLE
+⚠ ledger sürüm 43, bu derlemeden eski: yeni alanlar boş görünebilir
+⚠ future-code:abc
+Not: biten worker'ların yalnız en yenileri gösteriliyor; 5 eskisi gizli
 
 Kurulum remote-lab · erişilemiyor
 Yol /mnt/lab/deckent
@@ -102,7 +111,36 @@ servis kaydı yok · örnek —
 build bilinmiyor · kaynak ağacı —
 ledger sürümü bilinmiyor
 0 Run · 0 worker · 0 onay · 0 havuz
-⚠ 2 okuma sorunu: MONITOR_SOURCE_UNREADABLE, LEDGER_LOCKED
+⚠ ledger okunamadı (LEDGER_LOCKED)
+⚠ servis durumu okunamadı (LOCAL_RUNTIME_DENIED)
+
+── Harita ──────────────────────────────────────────────────────────────────────
+current · /home/owner/projects/deckent-next
+Yapılandırma katmanları (sonraki katman öncekileri ezer):
+  1. yerleşik varsayılanlar — yerleşik — belirlediği bölümler: layout,
+inspection, approvals
+  2. genel (kullanıcı) — /home/owner/.deckent/config.json — belirlediği
+bölümler: language
+  3. proje — /home/owner/projects/deckent-next/.deckent/config.json —
+belirlediği bölümler: layout, terminal, inspection
+  4. ortam değişkenleri — — — belirlediği bölümler: yok
+Yürütme kaydı: 3 profil, 2 görev türü
+  coding görevi → coding-default@3 profili (docker)
+  review görevi → review profili (docker)
+  legacy-shell@1 (host) — hiçbir görev türü kullanmıyor
+Model kataloğu: 3 model, 2 etkin
+  ✓ subscription / model-alpha-2
+  ○ subscription / model-alpha-1 (etkin değil)
+  ✓ local-vllm / qwen-local-v6
+Politika: 12 izin (operation 5, effect 4, secret 3) · 2 görev ayrılığı kuralı
+  İzin kipleri: owner@local: standart, ci@local: full-auto
+Bellek: yok — MEMORY kartı bekleniyor
+
+dogfood · /home/owner/deckent-dogfood
+  Bu kurulum için harita okunmadı.
+
+remote-lab · /mnt/lab/deckent
+  Bu kurulum için harita okunmadı.
 
 Yalnız gözlem: bu görünüm hiçbir şeyi üstlenmez, ayırmaz, iptal etmez, karar
 vermez. Engel, motorun türettiği tek nedendir; görevler için Run'ı açın.

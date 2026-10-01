@@ -73,11 +73,11 @@ export function verdictLabel(verdict: 'accepted' | 'rejected' | 'unknown' | 'pen
     unknown: t('monitor.verdict.unknown', {}, locale), pending: t('monitor.verdict.pending', {}, locale) };
   return labels[verdict];
 }
-export type MonitorTab = 'summary' | 'runs' | 'workers' | 'approvals' | 'pools' | 'installs';
-export const MONITOR_TABS: readonly MonitorTab[] = ['summary', 'runs', 'workers', 'approvals', 'pools', 'installs'];
+export type MonitorTab = 'summary' | 'runs' | 'workers' | 'approvals' | 'pools' | 'installs' | 'map';
+export const MONITOR_TABS: readonly MonitorTab[] = ['summary', 'runs', 'workers', 'approvals', 'pools', 'installs', 'map'];
 export function tabLabel(tab: MonitorTab, locale: Locale): string {
   const labels: Record<MonitorTab, string> = { summary: t('monitor.tab.summary', {}, locale), runs: t('monitor.tab.runs', {}, locale),
     workers: t('monitor.tab.workers', {}, locale), approvals: t('monitor.tab.approvals', {}, locale), pools: t('monitor.tab.pools', {}, locale),
-    installs: t('monitor.tab.installs', {}, locale) };
+    installs: t('monitor.tab.installs', {}, locale), map: t('monitor.tab.map', {}, locale) };
   return labels[tab];
 }

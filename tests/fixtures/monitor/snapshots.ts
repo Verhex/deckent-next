@@ -1,15 +1,24 @@
-import type { MonitorApproval, MonitorBlockerCode, MonitorInstall, MonitorPool, MonitorRun, MonitorRunState, MonitorSnapshot, MonitorTask,
+import type { MonitorApproval, MonitorBlockerCode, MonitorInstall, MonitorMap, MonitorPool, MonitorRun, MonitorRunState, MonitorSnapshot, MonitorTask,
   WorkerObservation } from '../../../src/engine/index.js';
 
 /** MONITOR-SURFACE fixtures: deterministic MonitorSnapshot values (no ledger, no clock). Times are offsets from OBSERVED_AT. */
 export const OBSERVED_AT = Date.UTC(2026, 9, 2, 9, 30, 0);
 const ago = (ms: number) => OBSERVED_AT - ms;
 const MIN = 60_000, HOUR = 60 * MIN;
+/** Deterministic attempt id per Run task (FNV-1a), so workers and Run tasks cross-reference by identity like real ledger ids. */
+export function attemptIdFor(runId: string, taskId: string): string {
+  let hash = 0x811c9dc5;
+  for (const char of `${runId}/${taskId}`) hash = Math.imul(hash ^ char.charCodeAt(0), 0x01000193) >>> 0;
+  return `${hash.toString(16).padStart(8, '0')}-attempt`;
+}
+const EVENTS = [{ atMs: ago(90_000), kind: 'tool.call', summary: 'edit src/surfaces/core/monitor/internal/view.ts' },
+  { atMs: ago(30_000), kind: 'tool.call', summary: 'shell npm test -- monitor-surface' }, { atMs: ago(5_000), kind: 'message', summary: 'Applying the review fixes to the monitor view' }];
 
 function task(taskId: string, phase: string, overrides: Partial<MonitorTask> = {}): MonitorTask {
   return { taskId, kind: 'coding', phase, profile: { id: 'coding-default', version: 3 }, attempts: phase === 'pending' ? 0 : 1, lastAttempt: phase === 'pending' ? null : {
     attemptId: `att-${taskId}-0001-aaaa`, generation: 1, launch: 'launched', exitCode: phase === 'active' ? null : 0, startedAtMs: ago(20 * MIN),
-    endedAtMs: phase === 'active' ? null : ago(5 * MIN), workerPhase: phase === 'active' ? 'editing' : 'finished', heartbeatAgeMs: phase === 'active' ? 1_500 : null, provider: 'claude' },
+    endedAtMs: phase === 'active' ? null : ago(5 * MIN), workerPhase: phase === 'active' ? 'editing' : 'finished', heartbeatAgeMs: phase === 'active' ? 1_500 : null, provider: 'claude',
+    model: 'model-alpha-2', firstFailure: null, ...(phase === 'active' ? { recentEvents: EVENTS } : {}) },
   evaluation: { verdict: phase === 'accepted' ? 'accepted' : phase === 'failed' ? 'rejected' : null, observedAtMs: phase === 'accepted' || phase === 'failed' ? ago(4 * MIN) : null },
   dependencies: [], ...overrides };
 }
@@ -17,12 +26,13 @@ function run(runId: string, state: MonitorRunState, code: MonitorBlockerCode | n
   const tasks = overrides.tasks ?? [task('build', state === 'accepted' ? 'accepted' : state === 'failed' ? 'failed' : 'active'), task('verify', state === 'accepted' ? 'accepted' : 'pending', { dependencies: ['build'] })];
   const phaseCounts: Record<string, number> = {};
   for (const item of tasks) phaseCounts[item.phase] = (phaseCounts[item.phase] ?? 0) + 1;
-  return { scopeId: 'scope-a', runId, revision: 7, state, phaseCounts, tasks, cancellationRequested: false, lastActivityMs: ago(2 * MIN),
-    blocker: code === null ? null : { code, taskId: 'build', sinceMs, detail: null }, ...overrides };
+  const own = tasks.map(item => item.lastAttempt ? { ...item, lastAttempt: { ...item.lastAttempt, attemptId: attemptIdFor(runId, item.taskId) } } : item);
+  return { scopeId: 'scope-a', runId, revision: 7, state, phaseCounts, cancellationRequested: false, lastActivityMs: ago(2 * MIN), createdAtMs: ago(HOUR),
+    blocker: code === null ? null : { code, taskId: 'build', sinceMs, detail: null }, ...overrides, tasks: own };
 }
 function worker(taskId: string, overrides: Partial<WorkerObservation> = {}, heartbeat: { ageMs: number | null; freshness: 'fresh' | 'stale' | 'unknown' } = { ageMs: 1_200, freshness: 'fresh' },
   phase: string | null = 'editing'): WorkerObservation {
-  return { taskId, identity: { scopeId: 'scope-a', runId: 'run-blocked-approval', taskId, attemptId: `att-${taskId}-0001-aaaa`, layoutRevision: 'layout-1', generation: 1 },
+  return { taskId, identity: { scopeId: 'scope-a', runId: 'run-blocked-approval', taskId, attemptId: attemptIdFor('run-blocked-approval', taskId), layoutRevision: 'layout-1', generation: 1 },
     authority: 'next-ledger', provider: 'claude', workspace: `/srv/deckent/workspaces/${taskId}`, process: 'running', handle: `ctr-${taskId}`, terminal: null,
     outputRecorded: false, patchRecorded: false, diagnostics: [],
     files: { provider: 'claude', heartbeat: { state: 'present', ageMs: heartbeat.ageMs, freshness: heartbeat.freshness, phase: 'work' },
@@ -50,26 +60,49 @@ const stateOf = (code: MonitorBlockerCode): MonitorRunState => code === 'none' |
   : ['waiting-pool-slot', 'pool-held', 'waiting-dependency', 'awaiting-approval', 'not-admitted'].includes(code) ? 'waiting' : 'blocked';
 const currentRuns: MonitorRun[] = [
   ...BLOCKER_CODES.map((code, index) => run(code === 'awaiting-approval' ? 'run-blocked-approval' : `run-${code}`, stateOf(code), code,
-    code === 'unknown' ? null : ago((index + 1) * 7 * MIN + index * 13_000), code === 'awaiting-approval' ? { blocker: { code, taskId: 'build', sinceMs: ago(3 * HOUR + 12 * MIN), detail: 'appr-0001' } } : {})),
-  run('run-done', 'accepted', null, null, { lastActivityMs: ago(50 * MIN) }),
-  run('run-broken', 'failed', null, null, { lastActivityMs: ago(25 * MIN) }),
-  run('run-stopped', 'cancelled', null, null, { lastActivityMs: ago(26 * HOUR), cancellationRequested: true }),
+    code === 'unknown' ? null : ago((index + 1) * 7 * MIN + index * 13_000), {
+      // Admitted at staggered times (the Runs tab is newest first); the `unknown` Run has no proven admission time.
+      createdAtMs: code === 'unknown' ? null : ago(4 * HOUR - index * 10 * MIN),
+      ...(code === 'awaiting-approval' ? { blocker: { code, taskId: 'build', sinceMs: ago(3 * HOUR + 12 * MIN), detail: 'appr-0001' } } : {}) })),
+  run('run-done', 'accepted', null, null, { lastActivityMs: ago(50 * MIN), createdAtMs: ago(2 * HOUR) }),
+  // First failure recorded: the line the owner asks for ("where did it first fail").
+  run('run-broken', 'failed', null, null, { lastActivityMs: ago(25 * MIN), createdAtMs: ago(40 * MIN), tasks: [
+    task('build', 'failed', { lastAttempt: { ...task('build', 'failed').lastAttempt!, exitCode: 1,
+      firstFailure: '✗ [unit-budget] src/surfaces/core/cli — 2001 lines > unit budget 2000', recentEvents: EVENTS } }),
+    task('verify', 'cancelled', { dependencies: ['build'] })] }),
+  // Failed without a recorded first failing line: the surface says so instead of inventing one.
+  run('run-broken-quiet', 'failed', null, null, { lastActivityMs: ago(35 * MIN), createdAtMs: ago(45 * MIN) }),
+  run('run-stopped', 'cancelled', null, null, { lastActivityMs: ago(26 * HOUR), cancellationRequested: true, createdAtMs: ago(30 * HOUR) }),
 ];
+const MAP: MonitorMap = {
+  config: [{ layer: 'default', path: null, sections: ['layout', 'inspection', 'approvals'] }, { layer: 'global', path: '/home/owner/.deckent/config.json', sections: ['language'] },
+    { layer: 'project', path: '/home/owner/projects/deckent-next/.deckent/config.json', sections: ['layout', 'terminal', 'inspection'] },
+    { layer: 'environment', path: null, sections: [] }],
+  registry: { profiles: [{ id: 'coding-default', version: 3, adapter: 'docker' }, { id: 'review', version: 1, adapter: 'docker' }, { id: 'legacy-shell', version: 1, adapter: 'host' }],
+    kinds: [{ kind: 'coding', profile: 'coding-default@3' }, { kind: 'review', profile: 'review' }] },
+  models: [{ channelId: 'subscription', modelId: 'model-alpha-2', active: true }, { channelId: 'subscription', modelId: 'model-alpha-1', active: false },
+    { channelId: 'local-vllm', modelId: 'qwen-local-v6', active: true }],
+  policy: { grants: 12, byResourceKind: { operation: 5, effect: 4, secret: 3 }, separationOfDuties: 2,
+    permissionModes: [{ principal: 'owner@local', mode: 'standart' }, { principal: 'ci@local', mode: 'full-auto' }] },
+  memory: { available: false },
+};
 
 export const fullSnapshot: MonitorSnapshot = { schemaVersion: 1, observedAt: OBSERVED_AT, control: 'observe-only', installs: [
   { id: 'current', path: '/home/owner/projects/deckent-next', status: 'available', scopeIds: ['scope-a'], service: SERVICE, ledgerVersion: 44,
     runs: currentRuns,
     workers: [worker('build'), worker('lint', {}, { ageMs: 95_000, freshness: 'stale' }, 'running'),
-      worker('docs', { process: 'exited', terminal: { handle: 'ctr-docs', exitCode: 3, interrupted: false } }, { ageMs: null, freshness: 'unknown' }, null),
+      // A finished, ledger-only worker: no sidecar files; model and first failure come from its Run attempt.
+      worker('build', { process: 'exited', terminal: { handle: 'ctr-docs', exitCode: 1, interrupted: false }, files: null, model: null, diagnostics: ['ledger-only'],
+        identity: { scopeId: 'scope-a', runId: 'run-broken', taskId: 'build', attemptId: attemptIdFor('run-broken', 'build'), layoutRevision: 'layout-1', generation: 1 } }),
       worker('pack', { custody: 'released', process: 'missing' }, { ageMs: null, freshness: 'unknown' }, null)],
     approvals: [approval('appr-0001', 3 * HOUR + 12 * MIN, 45 * MIN), approval('appr-0002', 4 * MIN, -2 * MIN, { subjectKind: 'effect', summary: 'Delete stale preview environment', requiredAssurance: null })],
-    pools: [pool('default', 4, 4), pool('gpu', 1, 0, 'owner@local'), pool('ci', null, 2)], diagnostics: [] },
+    pools: [pool('default', 4, 4), pool('gpu', 1, 0, 'owner@local'), pool('ci', null, 2)], diagnostics: ['scope-unavailable:scope-x:LEDGER_LOCKED'], map: MAP },
   { id: 'dogfood', path: '/home/owner/deckent-dogfood', status: 'available', scopeIds: ['scope-dog'], service: { ...SERVICE, instanceId: 'svc-02', processId: 2001,
     build: { ...SERVICE.build, sourceCommit: '76582f9f00000000000000000000000000000000', builtAt: '2026-10-01T22:15:00.000Z' } }, ledgerVersion: 43,
     runs: [run('run-dog-1', 'progressing', 'worker-running', ago(90_000), { scopeId: 'scope-dog' })], workers: [], approvals: [], pools: [pool('default', 2, 1)],
-    diagnostics: ['WORKER_SIDECAR_UNREADABLE'] },
+    diagnostics: ['info:workers-finished-capped:5', 'ledger-version-older:43', 'future-code:abc'], map: null },
   { id: 'remote-lab', path: '/mnt/lab/deckent', status: 'unavailable', scopeIds: [], service: null, ledgerVersion: null, runs: [], workers: [], approvals: [], pools: [],
-    diagnostics: ['MONITOR_SOURCE_UNREADABLE', 'LEDGER_LOCKED'] },
+    diagnostics: ['ledger-unavailable:LEDGER_LOCKED', 'service-unavailable:LOCAL_RUNTIME_DENIED'] },
 ] };
 
 export const emptySnapshot: MonitorSnapshot = { schemaVersion: 1, observedAt: OBSERVED_AT, control: 'observe-only', installs: [

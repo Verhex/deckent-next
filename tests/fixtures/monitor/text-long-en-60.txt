@@ -49,6 +49,12 @@ ledger v44
 No other install observed. Add one under config
 `inspection.workers.sources`.
 
+── Map ─────────────────────────────────────────────────────
+current ·
+/home/owner/a/very/deep/directory/structure/that/never/ends/
+projects/deckent-next-with-a-long-name
+  No map was read for this install.
+
 Observe only: this view never claims, reserves, cancels or
 decides anything. A blocker is the engine's single derived
 reason; open the Run for its tasks.
