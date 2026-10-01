@@ -479,7 +479,7 @@ STARTUP-COST ile yedinci partide kaldırıldı (varsayılan 30 s); yerelde doğr
   K1 **W2**: Core `workTargets` kaydı (ilk dilim tek Git hedefi; ERP ayrı port), checkout HEAD yerine adlandırılmış `baseRef` ve tipli "taban
   ilerledi", kendini hedefleme bariyeri; U1 canlı checkout'ta build/verify yok; U2 yan yana sürüm kurulumu ayrı kart (Jev e05e02e6 .92/.80); **owner U2 seçenek C'yi kabul etti** (DEV-U2-0 şeridi çalışıyor; tasarım `proof/U2-VERSIONED-INSTALL-DESIGN-2026-09-30`, Jev c2956e5d .94/.68;
   **DEV-U2-0 uygulandı (18. parti; şerit `cc730a4b`+`77ad922f`+`5fdee2a4`, kanıt `proof/DEV-U2-0-2026-09-30/`); sonraki: owner onaylı ilk canlı switch, sonra U2-1…U2-6.**
-  K2 A `work-target` policy türü (use/adopt). K3 A Run grafı v3 tipli `workInput` + profil şablonu (RunProposal v1 D15b ile). K4 A öz-hedefte
+  K2 A `work-target` policy türü (use/adopt). K3 A Run grafı v3 tipli `workInput` + profil şablonu (RunProposal v1 D15b ile). **K3 uygulandı (19. parti; şerit `31198880`+`425d4b65`, kanıt `proof/K3-WORK-INPUT-2026-10-01/`); kalan: kayıtlı iş girdisiyle `run retry`, RunProposal (D15b), K6 kapsam yolu zorlaması, CLI başına efor eşlemesi (Claude `--effort`, Codex `model_reasoning_effort`).** K4 A öz-hedefte
   `baseRef` = benimseme hedefi, HEAD ayrık (W2'deki "hedef ≠ baseRef" maddesi kalktı). K5 A tipli havuz bekletme. K6 A yama hazırlığında kapsam
   sınıflaması: önce uyarı, `enforce` ile tipli ret. K7 A ince köprü (dilim 3+5 gelince silinir). K8 A canlı ledger + ayrı proje scope'u.
   K9 A konu dışı: incelenmemiş kod hiçbir yerde servis olarak çalışmaz. Sıra: WORK-TARGETS (K1/K2/K4) ∥ WORKER-CURRENCY-2 ∥ dogfood D2 → K3 → K5/K6 → U2.

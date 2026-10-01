@@ -2570,3 +2570,41 @@ onto the ledger catalog; Codex/Cursor output-side model evidence (none documente
   governed shutdown + grace, the in-flight turn closes `interrupted`); G5/G6 are operating rules (after a switch reopen terminals and MCP host
   sessions; never `/service-restart` from an old terminal; old processes fail on a protocol bump); the manifest is checked only before `switch`,
   not at every start; the install root must join the sealed set in U2-1. Evidence `proof/DEV-U2-0-2026-09-30/`.
+
+### Typed work input and coding templates (K3 = A; owner 2026-09-30, Jev 97e59d70; lane Jev 22ea0d2c; nineteenth batch)
+
+- **Graph v3.** `TASK_GRAPH_SCHEMA_VERSION = 3`; the graph schema accepts 2 and 3 side by side. v3 adds optional
+  `tasks[].workInput` `{ schemaVersion: 1, task, scope: { paths[1..64] }, acceptance, model: { channelId, modelId,
+  auxiliaryModelIds[<=8] }, effort?, maxTurns? }` (domain `workInputSchema`; texts <=16 KiB; paths repository-relative POSIX/glob,
+  no absolute/`..`/`.`/empty/control segment, unique; model ids use the catalog `exactModelIdSchema`; effort enum = catalog
+  `REASONING_EFFORTS`). A v2 graph never carries a work input (`TASK_GRAPH_INVALID`). Every surface takes it through the one
+  `runAdmissionSchema` (CLI `run create --graph`, SDK `createRun`, MCP `create_run`, runtime-service `createRun`).
+- **Template.** A reusable coding template is an ordinary v1 registry profile with adapter `native-coding-template` v1:
+  `parameters { schemaVersion: 1, docker: <docker v2 task params, no argv/nativeSubscription>, invocation: <native invocation
+  without schemaVersion/model/prompt/composition task text; optional maxTurns and prompt parts core/persona/skills/context> }`.
+  The Docker resolver refuses this adapter identity, so a template never runs by itself. Task text never enters the registry.
+- **Admission (one owner).** Engine `resolveExecutionRegistry` decides the pairing before any validator: template kind without
+  work input → `WORK_INPUT_REQUIRED`; work input on a non-template kind → `WORK_INPUT_TEMPLATE_REQUIRED`. The adapter
+  (`compileNativeCodingWorkInput`) builds invocation v4 (exact pin, work input `maxTurns` else the template's, template parts +
+  task/scope/acceptance with scope = one path per line) and reuses `compileNativeCodingDockerProfile`; the compiled profile keeps
+  the template id/version and must pass the installed validators (WC-R2 `assertNativeWorkerBinding`, Docker) and
+  `admitWorkerModels` (existing typed codes; plus the compiled pin must equal the requested one → `WORKER_MODEL_BINDING_MISMATCH`,
+  and a requested effort must be declared by the catalog for the main model → `WORKER_EFFORT_UNSUPPORTED`). CLI aliases →
+  `WORKER_MODEL_ALIAS_REFUSED`; a turn limit for a CLI without one → `WORK_INPUT_TURN_LIMIT_UNSUPPORTED`. All before any write.
+- **Frozen.** The compiled profile is stored in the Run execution snapshot (v1, unchanged); admission replay returns before
+  resolve, so replay/inspect/reserve use the frozen profile even after catalog changes. Provenance is derived: template = profile
+  id/version; input = the stored Run graph + prompt-delivery segment hashes.
+- **Effort.** Validated and recorded in the Run graph only; no CLI adapter passes it (Claude Code documents `--effort
+  low|medium|high|xhigh|max`, Codex `-c model_reasoning_effort=…`; a mapping changes argv, the WC-R2 binding and preflight
+  flags — separate slice).
+- **Also.** Installation preview validates a template through its Docker base (image id); toolchain currency lists template CLI
+  pins (`parameters.invocation`) next to prepared profiles.
+- **Versions.** Task graph 2 → 3 (side by side); registry v1, Run execution snapshot v1, ledger 43, runtime protocol 18, config 3,
+  prompt delivery v1 unchanged. An older build refuses a v3 graph (strict parse, observed as the generic inventory refusal) and
+  refuses to execute a template. Error registry +4 codes.
+- **Open.** RunProposal v1 (D15b) and `run retry` not in this slice; no `run create --card` convenience (would change CLI help
+  templates / i18n parity snapshot); scope paths are prompt data only until K6 enforcement; effort has no execution effect; the
+  snapshot does not name the template/input digest explicitly (a later snapshot v2 if RunProposal/retry need it); toolchain
+  update proposals list templates but applying a revision is still manual; template validity (installation preview) is not
+  compilability — e.g. a Codex template without explicit `discovery` defaults to `disabled`, which the compiler refuses, so every
+  admission refuses it with the generic `EXECUTION_PROFILE_INVALID` before any write (follow-up: dry-compile in template validation).
