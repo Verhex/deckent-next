@@ -12,7 +12,7 @@ const alias = Object.fromEntries(pkgs.map(p => [`#${p}`, fileURLToPath(new URL(`
 // A test that needs its own root still sets DECKENT_GLOBAL_HOME for its child process or passes an explicit environment.
 const globalHome = process.env['DECKENT_TEST_GLOBAL_HOME'] ??= mkdtempSync(join(tmpdir(), 'deckent-test-global-'));
 
-// Fixture repositories run `git commit`; Git (2.55 on CI, geometric default) then starts detached background maintenance that writes into .git while the
+// Fixture repositories run `git commit`; Git may then start (observed with Git 2.55 on CI) detached background maintenance that writes into .git while the
 // test's afterEach removes the directory (ENOTEMPTY). Every test process gets gc/maintenance off through Git's own environment config (GIT_CONFIG_COUNT,
 // Git >= 2.31; appended after any config the developer already exports). Product git children never see it: they use plumbing only and build an explicit
 // environment (tracked-files, local-git) or drop every GIT_* variable (git-workspace broker); the tests that assert those child environments are unchanged.
