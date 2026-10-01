@@ -29,6 +29,8 @@ export interface MonitorLedgerAttempt {
    * the evaluation record or the pin; first failing line of a failed attempt's recorded output; last worker-reported events (untrusted). */
   readonly provider?: string | null; readonly model?: WorkerModelView | null; readonly firstFailure?: string | null;
   readonly recentEvents?: readonly MonitorEvent[]; readonly diagnostics?: readonly string[];
+  /** Host-observed process exit (`worker.log` `exited` event, host clock) of an attempt without a sealed log. */
+  readonly observedEndAtMs?: number | null;
 }
 export interface MonitorEvent { readonly atMs: number | null; readonly kind: string; readonly summary: string }
 export interface MonitorLedgerRun {

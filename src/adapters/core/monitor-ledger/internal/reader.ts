@@ -12,7 +12,7 @@ const INTENT_LEDGER_VERSION = 25, APPROVAL_LEDGER_VERSION = 31, INTEGRATION_VERS
 /** MONITOR v1.1: where an attempt's recorded files live (output envelope, sealed event log, workspace sidecars) and whether it failed or still runs. */
 export interface MonitorAttemptFiles {
   readonly identity: AttemptIdentity; readonly output: ArtifactReceipt | null; readonly events: ArtifactReceipt | null; readonly workspace: string | null;
-  readonly failed: boolean; readonly open: boolean;
+  readonly failed: boolean; readonly open: boolean; readonly finished: boolean; readonly sealed: boolean;
 }
 const OPEN_PHASES = "('pending','active','evaluating','reconciling')";
 const optionsSchema = z.object({ busyTimeoutMs: z.number().int().nonnegative().max(2_147_483_647), maxRuns: z.number().int().positive().max(100_000) }).strict();
@@ -135,7 +135,7 @@ function attempt(db: DatabaseSync, version: number, binding: MonitorLedgerRun['s
   const terminal = record?.terminal ?? null, pin = readWorkerModelPin(parameters);
   const failed = !!terminal && (terminal.exitCode !== 0 || terminal.signal !== undefined || terminal.interrupted === true);
   files.push(Object.freeze({ identity: binding.identity, output: record?.output ?? null, events: sealed?.identity.attemptId === attemptId ? sealed.events : null,
-    workspace: record?.request.workspace ?? null, failed, open: record?.launch === 'granted' && !terminal }));
+    workspace: record?.request.workspace ?? null, failed, open: record?.launch === 'granted' && !terminal, finished: !!terminal, sealed: !!sealed }));
   const model = evaluated ?? (pin ? Object.freeze({ provider: pin.provider, requested: pin.pin, init: null, usage: null, verdict: 'pending' as const, unexpected: [], evidence: 'none' as const }) : null);
   return Object.freeze({ attemptId, generation, observedKind: binding.observedKind, observedRevision: binding.observedRevision, evaluationObserved, reservedAtMs,
     provider: evaluated?.provider ?? pin?.provider ?? record?.profile.adapterId ?? null, model,

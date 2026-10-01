@@ -217,4 +217,29 @@ describe.skipIf(process.platform === 'win32')('inspectMonitor content authorizat
     const shown = await project(root, 'shown', ['s'], ['s'], ['approvals']); await insert(shown.ledger);
     expect((await inspectMonitor(shown.dir, shown.options)).installs[0]!.approvals).toMatchObject([{ approvalId: 'ap-1', summary: 'confidential approval text' }]);
   });
+  it('a finished attempt without a sealed log ends at its host-observed exit (sidecar), read only under read-output', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'deckent-monitor-')); roots.push(root);
+    const run = async (name: string, extra: readonly ('output' | 'approvals')[], resultAttempt = 'verify-t') => {
+      const current = await project(root, name, ['s'], ['s'], extra);
+      const attemptDir = join(root, name + '-attempt'); await mkdir(attemptDir, { mode: 0o700 }); await chmod(attemptDir, 0o700);
+      const identity = { scopeId: 's', runId: 'r-verify', taskId: 't', attemptId: 'verify-t', layoutRevision: 'layout', generation: 1 };
+      await writeFile(join(attemptDir, 'worker.log'), [JSON.stringify({ schemaVersion: 1, sequence: 1, observedAt: 30_900, process: 'running', terminal: null, outputRecorded: false }),
+        JSON.stringify({ schemaVersion: 1, sequence: 2, observedAt: 498_000, process: 'exited', terminal: { handle: 'h', exitCode: 0, interrupted: false }, outputRecorded: true })].join('\n') + '\n', { mode: 0o600 });
+      await writeFile(join(attemptDir, 'worker.result'), JSON.stringify({ schemaVersion: 1, identity: { ...identity, attemptId: resultAttempt }, backend: 'docker', provider: 'docker', terminal: { handle: 'h', exitCode: 0, interrupted: false } }), { mode: 0o600 });
+      const store = await openSqliteAttemptStore(current.ledger, { busyTimeoutMs: 100, journalMode: 'wal', durability: 'full' }, 'allow', custodyProfiles);
+      try {
+        await store.createRun({ commandId: 'create-r-verify', actor, identity: { scopeId: 's', runId: 'r-verify', layoutRevision: 'layout' }, graph, execution: fixtureExecution(graph),
+          now: 10_800, policy: { schemaVersion: 2, poolId: 'p', capacity, ordering: ['t'] } });
+        await store.reserveRunTasks({ commandId: 'reserve-r-verify', actor, scopeId: 's', runId: 'r-verify', expectedRevision: 0, now: 20_800, identities: [identity] });
+        const claim = { owner: 'worker', request: { protocolVersion: 1 as const, identity, workspace: join(attemptDir, 'tree'), argv: ['x'] } };
+        await store.claimDispatch(dispatchAdmission(claim)); await grantTestLaunch(store, claim, 30_800);
+        await store.finishDispatch(claim, { handle: 'h', exitCode: 0, interrupted: false });
+      } finally { store.close(); }
+      return (await inspectMonitor(current.dir, current.options)).installs[0]!.runs.find(value => value.runId === 'r-verify')!.tasks[0]!.lastAttempt!;
+    };
+    expect(await run('granted', ['output'])).toMatchObject({ startedAtMs: 30_800, endedAtMs: 498_000, endedAtSource: 'observed' });
+    expect(await run('denied', [])).toMatchObject({ endedAtMs: null, endedAtSource: null, diagnostics: ['output-denied'] });
+    // Sidecars bound to another attempt prove nothing about this one.
+    expect(await run('mismatch', ['output'], 'other-attempt')).toMatchObject({ endedAtMs: null, endedAtSource: null });
+  });
 });

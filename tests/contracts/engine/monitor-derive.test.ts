@@ -269,3 +269,17 @@ describe('monitor v1.1 projection and ordering', () => {
     expect(install.workers[0]!.provider).toBe('claude');
   });
 });
+
+describe('monitor attempt end evidence', () => {
+  it('ends an attempt at its sealed log, else at the host-observed exit, never at the grant; the Run finishes at the latest proven end', () => {
+    const run = snapshot([{ id: 'a', phase: 'accepted' }, { id: 'b', phase: 'accepted' }]);
+    const observed = projectMonitorRun(evidence(run, [exited('a', { sealedAtMs: 900, observedEndAtMs: 950 }), exited('b', { sealedAtMs: null, observedEndAtMs: 470_000 })]));
+    expect(observed.tasks[0]!.lastAttempt).toMatchObject({ endedAtMs: 900, endedAtSource: 'sealed' });
+    expect(observed.tasks[1]!.lastAttempt).toMatchObject({ startedAtMs: 200, endedAtMs: 470_000, endedAtSource: 'observed' });
+    expect(observed.finishedAtMs).toBe(470_000); expect(observed.lastActivityMs).toBe(470_000);
+    const unproven = projectMonitorRun(evidence(run, [exited('a', { sealedAtMs: 900 }), exited('b', { sealedAtMs: null })]));
+    expect(unproven.tasks[1]!.lastAttempt).toMatchObject({ endedAtMs: null, endedAtSource: null }); expect(unproven.finishedAtMs).toBeNull();
+    // No evaluation time exists in the ledger: the verdict carries none.
+    expect(observed.tasks[1]!.evaluation.observedAtMs).toBeNull();
+  });
+});
