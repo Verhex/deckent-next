@@ -29,12 +29,12 @@ const blockerRole = (blocker: MonitorBlocker): MonitorRole => blocker.code === '
 const short = (value: string | null | undefined, size: number) => value ? value.slice(0, size) : '—';
 /** Worse first: what needs eyes sorts to the top when the state sort is chosen. */
 const STATE_RANK: Readonly<Record<MonitorRunState, number>> = { blocked: 0, waiting: 1, failed: 2, progressing: 3, cancelled: 4, accepted: 5 };
-/** The data lane's `MonitorAttempt.endedAtSource` ('sealed' | 'evaluated', announced by the lead; read defensively until it is in the contract). */
-const endedFromEvaluation = (attempt: MonitorAttempt | null) => (attempt as { readonly endedAtSource?: unknown } | null)?.endedAtSource === 'evaluated';
-const evaluatedEnd = (run: MonitorRun) => {
+/** `MonitorAttempt.endedAtSource`: 'observed' = the end is the host's own recorded worker exit in the attempt sidecar, not a sealed log end. */
+const endedObserved = (attempt: MonitorAttempt | null) => attempt?.endedAtSource === 'observed';
+const observedEnd = (run: MonitorRun) => {
   const last = run.tasks.map(task => task.lastAttempt).filter((attempt): attempt is MonitorAttempt => attempt !== null && attempt.endedAtMs !== null)
     .sort((a, b) => b.endedAtMs! - a.endedAtMs!)[0] ?? null;
-  return endedFromEvaluation(last);
+  return endedObserved(last);
 };
 const DELIVERY_ROLE: Readonly<Record<MonitorDeliveryState, MonitorRole>> = { integrating: 'info', integrated: 'info', delivering: 'info', delivered: 'success',
   adopting: 'info', adopted: 'success', 'rolling-back': 'warning', 'rolled-back': 'warning' };
@@ -81,14 +81,14 @@ function wordsFor(snapshot: MonitorSnapshot, locale: Locale, ascii: boolean) {
       total: run.tasks.length }, locale),
     /**
      * Admission → proven finish only (owner: never a computed duration without a proven end). An open Run runs to the observation time;
-     * a finished Run needs `finishedAtMs`; else "unknown". `≈` marks an end taken from the evaluation receipt instead of a sealed log.
+     * a finished Run needs `finishedAtMs`; else "unknown". `≈` marks an end taken from the host-observed worker exit instead of a sealed log.
      */
     runDuration: (run: MonitorRun) => {
       const start = run.createdAtMs ?? null, open = OPEN.includes(run.state);
       if (open) return start === null ? t('monitor.duration.open', {}, locale) : t('monitor.duration.running', { duration: durationText(now - start, locale) }, locale);
       const end = run.finishedAtMs ?? null;
       if (start === null || end === null) return t('monitor.time.unknown', {}, locale);
-      return `${evaluatedEnd(run) ? `${marks.approx} ` : ''}${durationText(end - start, locale)}`;
+      return `${observedEnd(run) ? `${marks.approx} ` : ''}${durationText(end - start, locale)}`;
     },
     deliveryText: (run: MonitorRun) => run.delivery ? `${deliveryLabel(run.delivery.state, locale)}${run.delivery.commit ? ` ${run.delivery.commit.slice(0, 7)}` : ''}` : '—',
     serviceText: (install: MonitorInstall) => !install.service ? t('monitor.service.none', {}, locale)
@@ -122,7 +122,7 @@ function attemptLines(w: Words, attempt: MonitorAttempt, failed: boolean, live: 
   // A live attempt runs to the observation time; an ended one needs its proven end, else the duration is unknown (never guessed).
   const end = attempt.endedAtMs ?? (live ? now : null);
   const duration = attempt.startedAtMs === null || end === null ? t('monitor.time.unknown', {}, locale)
-    : `${endedFromEvaluation(attempt) ? `${w.marks.approx} ` : ''}${durationText(end - attempt.startedAtMs, locale)}`;
+    : `${endedObserved(attempt) ? `${w.marks.approx} ` : ''}${durationText(end - attempt.startedAtMs, locale)}`;
   return [
     [span(`    ${t('monitor.detail.attempt', { attempt: short(attempt.attemptId, 8), generation: attempt.generation, launch: attempt.launch ?? '—',
       started: timeText(attempt.startedAtMs), ended: attempt.endedAtMs !== null ? timeText(attempt.endedAtMs) : live ? t('monitor.detail.stillRunning', {}, locale)

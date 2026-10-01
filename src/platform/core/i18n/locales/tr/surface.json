@@ -563,5 +563,5 @@
   "monitor.delivery.rolledBack": "geri alındı",
   "monitor.detail.delivery": "Teslim/benimseme: {state} · commit {commit}",
   "monitor.detail.deliveryNone": "Teslim/benimseme: birleştirme, teslim ya da benimseme kaydı yok.",
-  "monitor.legend.approx": "süre değerlendirme makbuzunda biter (mühürlü log bitişi yok)"
+  "monitor.legend.approx": "süre host'un gözlediği worker çıkışında biter (mühürlü log bitişi yok)"
 }

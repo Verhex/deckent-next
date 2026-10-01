@@ -299,7 +299,7 @@ describe('monitor finish/delivery/attempt diagnostics', () => {
     expect(surface.describeDiagnostic('attempt-files-unavailable:scope-a/run-x/build:EACCES', 'en').text).toBe('the files of attempt scope-a/run-x/build could not be read (EACCES)');
     expect(surface.describeDiagnostic('ledger-version-unsupported:99', 'en').text).toBe('the ledger is version 99, which this build cannot read');
   });
-  it('Run detail: delivery state + commit, "no delivery recorded", unknown end, ≈ evaluated end, output-denied', async () => {
+  it('Run detail: delivery state + commit, "no delivery recorded", unknown end, ≈ host-observed end, output-denied', async () => {
     const view = mount({ load: async () => fullSnapshot });
     try {
       await until(() => view.stdout.frame.includes('Stuck or waiting'), 'summary');

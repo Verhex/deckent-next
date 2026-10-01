@@ -67,9 +67,9 @@ const currentRuns: MonitorRun[] = [
   run('run-done', 'accepted', null, null, { lastActivityMs: ago(50 * MIN), createdAtMs: ago(2 * HOUR), finishedAtMs: ago(50 * MIN),
     delivery: { state: 'adopted', commit: '1a2b3c4d5e6f708192a3b4c5d6e7f80912a3b4c5' } }),
   // First failure recorded: the line the owner asks for ("where did it first fail").
-  // Its end comes from the evaluation receipt (no sealed log end): the duration carries ≈. No delivery was recorded.
+  // Its end is the host-observed worker exit (no sealed log end): the duration carries ≈. No delivery was recorded.
   run('run-broken', 'failed', null, null, { lastActivityMs: ago(25 * MIN), createdAtMs: ago(40 * MIN), finishedAtMs: ago(25 * MIN), delivery: null, tasks: [
-    task('build', 'failed', { lastAttempt: { ...task('build', 'failed').lastAttempt!, exitCode: 1, startedAtMs: ago(35 * MIN), endedAtMs: ago(25 * MIN), endedAtSource: 'evaluated',
+    task('build', 'failed', { lastAttempt: { ...task('build', 'failed').lastAttempt!, exitCode: 1, startedAtMs: ago(35 * MIN), endedAtMs: ago(25 * MIN), endedAtSource: 'observed',
       firstFailure: '✗ [unit-budget] src/surfaces/core/cli — 2001 lines > unit budget 2000', recentEvents: EVENTS } }),
     task('verify', 'cancelled', { dependencies: ['build'], lastAttempt: null, attempts: 0 })] }),
   // Failed without a recorded first failing line: the surface says so instead of inventing one.
