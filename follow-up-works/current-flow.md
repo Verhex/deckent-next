@@ -3,6 +3,7 @@
 Bu belge yalnız güncel durumu tutar; önceki sürümü Git geçmişinde, kanıtlar `deckent-refactor-work/proof/`.
 
 ## Durum
+- **MONITOR (owner 2026-10-02 tek görev):** `deckent monitor` (tam ekran, `--once`, `--json`) + terminal `/monitor`; `integrate/monitor` (taban a2971850). Diğer işler owner talimatıyla bekliyor: B1 şeridi `ed52f4d0` (Sol 2240/2241 okunmadı), PACKAGED-WORKER-BOOTSTRAP (Sol 2238 sınırlı PASS), belge dilimi `lane/docs-batch25` 7283c9d4, dogfood D3 (N1 `a02b67a9`). Kanıt `proof/MONITOR-2026-10-02/`. **Sıradaki:** tam verify + Fable yeniden inceleme → push → stage → owner switch → canlı config'e N1 gözlenen kurulum.
 - **Güncel (2026-10-01 akşam, yeni ana oturum):** `origin/main` = `76582f9f`, canlıda (`76582f9f1cd2-08512bc400d1`, instance `1dd5ea76`, ledger 44;
   `proof/LIVE-SWITCH-BATCH23-2026-10-01/`); C4 `attempt:release` grant'ı canlı policy'de. Hosted run 36884716187: ubuntu/24+26 success, macOS/24+26 failure
   (danışma, 153 test), Windows iptal edildi → **CI-PLATFORM** Sol `codex exec` ile tamamladı (aşağıda), şerit commit `a5fea81c`, Fable bağımsız incelemesi sürüyor.
