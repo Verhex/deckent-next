@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, writeFile, cp, rm } from 'node:fs/promises';
+import { mkdtemp, mkdir, writeFile, readFile, readdir, cp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -33,5 +33,12 @@ describe('source-derived config vocabulary gate', () => {
     expect(check(root, file)).toHaveLength(4);
     await writeFile(file, "const mode = getConfigFieldDefault('mode'); if (mode === 'performance') consume(); type X = 'json';");
     expect(check(root, file)).toEqual([]);
+  });
+  it('is identical for a CRLF checkout of the same sources (Windows autocrlf)', async () => {
+    const root = await fixture(), stored = await readFile(join(root, projectionPath), 'utf8');
+    const names = (await readdir(join(root, 'src'), { recursive: true })).filter(name => name.endsWith('.ts')), converted = [];
+    for (const name of names) { const file = join(root, 'src', name); await writeFile(file, (await readFile(file, 'utf8')).replace(/\r?\n/gu, '\r\n')); converted.push(name); }
+    expect(converted.length).toBeGreaterThan(10);
+    expect(JSON.stringify(projectVocabulary(root))).toBe(stored);
   });
 });

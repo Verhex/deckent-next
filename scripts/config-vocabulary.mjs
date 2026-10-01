@@ -53,7 +53,7 @@ export function projectVocabulary(root) {
   }
   visit(source);
   if (!Object.keys(fields).length) throw new Error('CONFIG_REGISTRY_EMPTY');
-  return { schemaVersion: 1, sources: Object.fromEntries([...dependencies].sort().map(([path, text]) => [path, createHash('sha256').update(text).digest('hex')])), fields };
+  return { schemaVersion: 1, sources: Object.fromEntries([...dependencies].sort().map(([path, text]) => [path, createHash('sha256').update(text.replace(/\r\n/gu, '\n')).digest('hex')])), fields };
 }
 export function lintConfigVocabulary(root, files, fail) {
   // Tiny architecture fixtures without config do not have a config vocabulary contract.

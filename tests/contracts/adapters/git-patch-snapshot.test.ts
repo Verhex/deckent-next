@@ -21,7 +21,9 @@ async function repository() {
     const dir = join(root, `dir${i % 40}`); await mkdir(dir, { recursive: true });
     await writeFile(join(dir, `file${i}.txt`), `content ${i}\n`);
   }
-  await git('add', '-A'); await git('-c', 'core.hooksPath=/dev/null', 'commit', '-q', '-m', 'base');
+  await git('add', '-A'); // Git commit may start auto gc/maintenance as a detached background process (Git 2.55 defaults maintenance to geometric); it would write
+  // into .git while afterEach removes the fixture (ENOTEMPTY). The fixture is a leaf test repository, so no background work is wanted.
+  await git('-c', 'core.hooksPath=/dev/null', '-c', 'gc.auto=0', '-c', 'gc.autoDetach=false', '-c', 'maintenance.auto=false', 'commit', '-q', '-m', 'base');
   const head = await git('rev-parse', 'HEAD');
   const lease = { baseCommit: head, workspace: root, sourceBase: { source: { repositoryRoot: root } } } as unknown as GitWorkspaceLease;
   const options = (outputBytes: number) => ({ gitExecutable: '/usr/bin/git', timeoutMs: 30_000, outputBytes, sourceRoot: root, workspaceRoot: root }) as unknown as GitWorkspaceOptions;

@@ -180,6 +180,13 @@ it('rejects protocol defects without trusting usage: mid-stream error, missing s
   }
 });
 
+it('presents the valid text that precedes the first invalid event even when both arrive in one read (no dependence on TCP segmentation)', async () => {
+  const wire = startEvent() + blockStart(0, { type: 'text', text: '' }) + blockDelta(0, { type: 'text_delta', text: 'ok' }) + sse('mystery');
+  const { result, deltas } = await run(await fixture(okSse(wire)));
+  expect(result).toMatchObject({ kind: 'rejected', evidence: { reason: 'invalid-response' } });
+  expect(deltas).toEqual([{ kind: 'text', text: 'ok' }]);
+});
+
 it('maps HTTP failures to a bodiless rejection, and a credential echo, timeout and cancellation to typed errors', async () => {
   const denied = await fixture((_req, res) => { res.writeHead(429, { 'content-type': 'application/json' }); res.end(JSON.stringify({ type: 'error', error: { type: 'rate_limit_error', message: 'slow down' }, request_id: 'req_1' })); });
   const rejected = (await run(denied)).result;

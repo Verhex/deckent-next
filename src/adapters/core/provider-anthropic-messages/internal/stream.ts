@@ -151,7 +151,8 @@ export function createAnthropicMessagesStream(request: OpenAiChatTextRequest, li
         limit = lineBytes > limits.responseMaxBytes;
       }
       // Nothing after the first invalid event is presented or parsed; closing the connection stops generation (no draining).
-      return Object.freeze(invalid ? { deltas: [], limit, rejected: invalid } : { deltas: out, limit });
+      // Deltas of events that were valid and precede it in this same read are still presented: the observer must not depend on TCP segmentation.
+      return Object.freeze({ deltas: out, limit, ...(invalid ? { rejected: invalid } : {}) });
     },
     finish(): NativeJsonHttpParsed {
       if (invalid) return { reason: invalid };
