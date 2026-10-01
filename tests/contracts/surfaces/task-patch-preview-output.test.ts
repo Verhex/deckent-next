@@ -5,7 +5,7 @@ import { unifiedDiff } from '../../../src/adapters/core/workspace-write/index.js
 const out: string[] = [];
 afterEach(() => { out.length = 0; });
 const file = (text: string, mode = '100644') => ({ mode, text, digest: 'a'.repeat(64) });
-const result = { schemaVersion: 1, receipt: {}, application: 'not-applied', patch: { changes: [
+const result = { schemaVersion: 1, receipt: {}, application: 'not-applied', scope: { schemaVersion: 1, matcher: 1, mode: 'warn', status: 'unscoped' }, patch: { changes: [
   { path: 'added.txt', before: null, after: file('one\ntwo\n') },
   { path: 'deleted.txt', before: file('gone\nlines\n'), after: null },
   { path: 'modified.txt', before: file('a\nb\nc\n'), after: file('a\nB\nc\nd\n') },
@@ -26,6 +26,7 @@ it('prints a unified diff by default and with --diff, without JSON', async () =>
     expect(text).toMatch(/@@ -\d+,\d+ \+\d+,\d+ @@/);
     expect(text).toContain('mode 100644 -> 100755 run.sh');
     expect(text).not.toContain('"digest"');
+    expect(text).toContain('Scope: unscoped');
   }
 });
 it('prints per-file counts and a summary with --stat', async () => {

@@ -15,7 +15,7 @@ const ctx = () => ({ env: { HOME: '/tmp/deckent-resolve-test', NO_COLOR: '1' }, 
     const page = query.after === null ? pages[0]! : pages[1]!;
     return { schemaVersion: 1, layout: {}, page: { entries: page.entries.map(entry), nextAfter: page.nextAfter } };
   },
-  previewWorkspacePatch: async (_r: string, identity: unknown) => { seen.push(identity); return { schemaVersion: 1, receipt: {}, application: 'not-applied', patch: { changes: [] } }; },
+  previewWorkspacePatch: async (_r: string, identity: unknown) => { seen.push(identity); return { schemaVersion: 1, receipt: {}, application: 'not-applied', scope: { schemaVersion: 1, matcher: 1, mode: 'warn', status: 'unscoped' }, patch: { changes: [] } }; },
   inspectWorkerTranscript: async (_r: string, identity: unknown) => { seen.push(identity); return { schemaVersion: 1, transcript: 'x' }; },
   inspectWorkspaceIntegration: async (_r: string, query: { identity: unknown }) => { seen.push(query.identity); return { schemaVersion: 1, status: 'absent' }; },
   renderUnifiedDiff: () => '',
