@@ -44,7 +44,7 @@ async function terminate(child: ChildProcess): Promise<void> {
 describe.skipIf(process.platform !== 'linux')('local runtime socket request admission', () => {
   it('rejects an oversized complete request before it connects to the owned endpoint', async () => {
     const { options } = await fixture(); let connections = 0;
-    const raw = createServer(() => { connections++; });
+    const raw = createServer(socket => { socket.on('error', () => undefined); connections++; });
     await new Promise<void>((resolve, reject) => {
       raw.once('error', reject); raw.listen(options.endpoint, () => { raw.off('error', reject); resolve(); });
     });
