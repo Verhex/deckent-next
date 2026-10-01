@@ -2,7 +2,8 @@ import { GIT_EXECUTION_SETTINGS } from '#platform/index.js';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { createHash, randomUUID } from 'node:crypto';
-import { lstat, mkdir, readFile, realpath, rename, rm, writeFile } from 'node:fs/promises';
+import { constants } from 'node:fs';
+import { lstat, mkdir, open, readdir, readFile, realpath, rename, rm, writeFile } from 'node:fs/promises';
 import { isAbsolute, join, resolve } from 'node:path';
 import { z } from 'zod';
 import { attemptIdentitySchema, type AttemptIdentity } from '#domain/index.js';
@@ -19,6 +20,15 @@ const recordSchema = z.object({ schemaVersion: z.literal(2), fingerprint: z.stri
   request: workspaceRequestSchema, sourceBase: gitSourceBaseSchema, status: z.enum(['allocating', 'ready']) }).strict();
 export interface GitWorkspaceLease extends WorkspaceLease { readonly sourceBase: GitSourceBase }
 function code(error: unknown): unknown { return error && typeof error === 'object' && 'code' in error ? error.code : null; }
+/** Lease records are custody evidence: file data and the directory entry are flushed before the step that relies on them. */
+async function syncPath(path: string, directory = false) {
+  const handle = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW | (directory ? constants.O_DIRECTORY : 0));
+  try { await handle.sync(); } finally { await handle.close(); }
+}
+async function writeDurable(path: string, data: string) {
+  const handle = await open(path, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, 0o600);
+  try { await handle.writeFile(data); await handle.sync(); } finally { await handle.close(); }
+}
 
 /** Independent Git checkout: private metadata and copied objects, no shared writable .git or hardlinks.
  * Trusted host allocation only; worker access is separately confined by the execution sandbox.
@@ -70,7 +80,7 @@ export class GitWorkspaceBroker implements WorkspaceBroker {
           signal: AbortSignal.timeout(this.options.timeoutMs), maxBuffer: this.options.outputBytes, encoding: 'utf8' })).stdout.trim();
     } catch { throw new WorkspaceError('WORKSPACE_GIT_FAILED'); }
   }
-  private async readRecord(lease: string) {
+  private async readRecord(lease: string, allocating = false) {
     let parsed; let value: unknown;
     try {
       const stat = await lstat(lease);
@@ -83,11 +93,11 @@ export class GitWorkspaceBroker implements WorkspaceBroker {
       if (error instanceof WorkspaceError) throw error;
       throw new WorkspaceError('WORKSPACE_ALLOCATION_INCOMPLETE');
     }
-    if (parsed.status !== 'ready') throw new WorkspaceError('WORKSPACE_ALLOCATION_INCOMPLETE');
+    if (parsed.status !== 'ready' && !allocating) throw new WorkspaceError('WORKSPACE_ALLOCATION_INCOMPLETE');
     return parsed;
   }
-  private async record(lease: string, request: WorkspaceRequest) {
-    const parsed = await this.readRecord(lease);
+  private async record(lease: string, request: WorkspaceRequest, allocating = false) {
+    const parsed = await this.readRecord(lease, allocating);
     if (JSON.stringify(parsed.request) !== JSON.stringify(request) || parsed.fingerprint !== this.fingerprint(parsed.request, parsed.sourceBase)
       || !this.validSourceBase(parsed.sourceBase, parsed.request)) throw new WorkspaceError('WORKSPACE_IDENTITY_CONFLICT');
     return parsed;
@@ -148,7 +158,7 @@ export class GitWorkspaceBroker implements WorkspaceBroker {
     } else {
       sourceBase = await this.captureSourceBase(target.request.baseCommit);
       const record = { schemaVersion: format.schemaVersion, fingerprint: this.fingerprint(target.request, sourceBase), request: target.request, sourceBase, status: 'allocating' };
-      await writeFile(target.lease, JSON.stringify(record), { flag: 'wx', mode: 0o600 });
+      await writeDurable(target.lease, JSON.stringify(record)); await syncPath(target.directory, true); await syncPath(o.workspaceRoot, true);
       await writeFile(join(target.directory, format.emptyConfig), '', { flag: 'wx', mode: 0o600 });
       await mkdir(join(target.directory, format.hooks), { mode: 0o700 });
       const commit = await this.git(target.directory, ['-C', o.sourceRoot, 'rev-parse', '--verify', `${target.request.baseCommit}^{commit}`], true);
@@ -159,19 +169,44 @@ export class GitWorkspaceBroker implements WorkspaceBroker {
       const checked = await this.git(target.directory, ['-C', target.workspace, 'rev-parse', 'HEAD']);
       if (checked !== target.request.baseCommit) throw new WorkspaceError('WORKSPACE_GIT_FAILED');
       const pending = target.lease + '.pending';
-      await writeFile(pending, JSON.stringify({ ...record, status: 'ready' }), { flag: 'wx', mode: 0o600 });
-      await rename(pending, target.lease);
+      await writeDurable(pending, JSON.stringify({ ...record, status: 'ready' }));
+      await rename(pending, target.lease); await syncPath(target.directory, true);
     }
     const recorded = await this.record(target.lease, target.request);
     if (JSON.stringify(recorded.sourceBase) !== JSON.stringify(sourceBase)) throw new WorkspaceError('WORKSPACE_IDENTITY_CONFLICT');
     return Object.freeze({ schemaVersion: 1, id: target.id, workspace: target.workspace, baseCommit: target.request.baseCommit,
       identity: target.request.identity, sourceBase: recorded.sourceBase });
   }
-  async release(input: WorkspaceRequest): Promise<void> {
+  async release(input: WorkspaceRequest, allocating = false): Promise<'removed' | 'absent'> {
     const target = this.identify(input);
-    try { await lstat(target.directory); } catch (error) { if (code(error) === 'ENOENT') return; throw error; }
+    try { await lstat(target.directory); } catch (error) { if (code(error) === 'ENOENT') return 'absent'; throw error; }
     await this.checkedDirectory(this.options.workspaceRoot); await this.checkedDirectory(target.directory);
-    await this.record(target.lease, target.request);
-    await rm(target.directory, { recursive: true });
+    await this.record(target.lease, target.request, allocating);
+    // Detach first (rename(2) in the same root is atomic): readers see the clone absent at once, and an interrupted removal leaves only
+    // a detached directory that `sweepDetached` finishes, never a half-deleted clone under the attempt's own path.
+    const detached = join(this.options.workspaceRoot, format.detached + randomUUID());
+    await rename(target.directory, detached); await syncPath(this.options.workspaceRoot, true);
+    await rm(detached, { recursive: true });
+    return 'removed';
+  }
+  /** EXEC-RELEASE: called only with ledger proof (terminal attempt, verified retained patch). `workspace` must be this identity's own
+   * checkout; the same exact request's 'allocating' record (a 'ready' rename an older build lost in a crash) is then removable too. */
+  async releaseAttempt(request: WorkspaceRequest, workspace: string): Promise<'removed' | 'absent'> {
+    if (this.identify(request).workspace !== workspace) throw new WorkspaceError('WORKSPACE_IDENTITY_CONFLICT');
+    return this.release(request, true);
+  }
+  /** Whether the attempt directory still exists; a work filter only, never release eligibility (that comes from the ledger). */
+  async holds(identity: AttemptIdentity): Promise<boolean> {
+    try { await lstat(this.identityTarget(identity).directory); return true; } catch (error) { if (code(error) === 'ENOENT') return false; throw error; }
+  }
+  /** Finishes at most `limit` removals interrupted after the detach; each must be a private directory of this owner. */
+  async sweepDetached(limit: number): Promise<number> {
+    await this.checkedDirectory(this.options.workspaceRoot); let removed = 0;
+    for (const name of await readdir(this.options.workspaceRoot)) {
+      if (removed >= limit || !name.startsWith(format.detached)) continue;
+      const path = join(this.options.workspaceRoot, name); await this.checkedDirectory(path);
+      await rm(path, { recursive: true }); removed++;
+    }
+    return removed;
   }
 }

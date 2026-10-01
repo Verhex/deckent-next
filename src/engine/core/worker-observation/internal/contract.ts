@@ -27,6 +27,8 @@ export interface WorkerObservation {
   readonly provider: string; readonly workspace: string | null; readonly process: WorkerProcessState;
   readonly handle: string | null; readonly terminal: DispatchTerminal | null;
   readonly outputRecorded: boolean; readonly patchRecorded: boolean; readonly files: WorkerSidecars | null;
+  /** EXEC-RELEASE: observed after a retained patch: the container and the attempt directory (with its live sidecars) are gone. */
+  readonly custody?: 'released';
   readonly diagnostics: readonly string[];
   /** Pinned worker tasks (WORKER-CURRENCY-2): requested → init → usage → verdict; `pending` until the host seals the log. */
   readonly model?: WorkerModelView | null;

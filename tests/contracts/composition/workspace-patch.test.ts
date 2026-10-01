@@ -16,6 +16,8 @@ afterEach(async () => {
   clearConfigCache(); for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true });
 });
 const fixture = (restartable = false) => workspacePatchFixture({ roots, cleanup }, { restartable });
+/** EXEC-RELEASE: preparation also reports the custody outcome (here held: the fixture policy grants no `release`); preview has none. */
+const view = <T extends { custody?: unknown }>(prepared: T) => { const { custody: _custody, ...rest } = prepared; void _custody; return rest; };
 it('rejects path traversal, control characters and protected metadata in patch documents', () => {
   for (const path of ['../escape', '/absolute', 'a//b', 'a/./b', 'a\\b', 'a\nb', '.codex/auth.json', 'x/.env.local', '.git/config']) expect(patchPathSchema.safeParse(path).success).toBe(false);
 });
@@ -31,10 +33,11 @@ describe.skipIf(process.platform !== 'linux' || !process.env.DECKENT_TEST_DOCKER
     expect(await readFile(join(f.project, 'note.txt'), 'utf8')).toBe('owner-wip\n');
     await expect(readFile(join(workspace, 'hook-fired'))).rejects.toMatchObject({ code: 'ENOENT' });
     expect(await Promise.all([f.prepare(), f.prepare()])).toEqual([prepared, prepared]);
-    expect(await f.preview()).toEqual(prepared); expect(await f.cli('patch-preview')).toEqual(prepared);
+    expect(prepared.custody).toEqual({ schemaVersion: 1, status: 'held', reason: 'release-denied', code: 'POLICY_DENIED' });
+    expect(await f.preview()).toEqual(view(prepared)); expect(await f.cli('patch-preview')).toEqual(view(prepared));
     const record = (await f.runtime.store.loadBoundDispatch(f.identity))!;
     await (await DockerSupervisor.restoreProfile(record.profile)).release(record.request);
-    expect(await f.preview()).toEqual(prepared);
+    expect(await f.preview()).toEqual(view(prepared));
     const artifact = await f.runtime.artifacts.prepareReadOnlyFile('s', prepared.receipt);
     await writeFile(artifact.path, 'broken', { mode: 0o600 });
     await expect(f.preview()).rejects.toMatchObject({ code: 'PATCH_CORRUPT' });
@@ -52,8 +55,8 @@ describe.skipIf(process.platform !== 'linux' || !process.env.DECKENT_TEST_DOCKER
   it('rejects changed snapshots without replacing the first producer receipt, authorizes every read, and binds exact identity', async () => {
     const f = await fixture(); const workspace = await f.run(); const first = await f.prepare();
     await writeFile(join(workspace, 'added.txt'), 'changed\n');
-    await expect(f.prepare()).rejects.toMatchObject({ code: 'PATCH_CONFLICT' }); expect(await f.preview()).toEqual(first);
-    await f.policy(['read-output']); await expect(f.prepare()).rejects.toMatchObject({ code: 'POLICY_DENIED' }); expect(await f.preview()).toEqual(first);
+    await expect(f.prepare()).rejects.toMatchObject({ code: 'PATCH_CONFLICT' }); expect(await f.preview()).toEqual(view(first));
+    await f.policy(['read-output']); await expect(f.prepare()).rejects.toMatchObject({ code: 'POLICY_DENIED' }); expect(await f.preview()).toEqual(view(first));
     await f.policy(['execute']); await expect(f.preview()).rejects.toMatchObject({ code: 'POLICY_DENIED' });
     await f.policy(); await expect(previewConfiguredWorkspacePatch(f.project, { ...f.identity, taskId: 'other' }, f.options)).rejects.toMatchObject({ code: 'RUN_STORE_CONFLICT' });
     await expect(previewConfiguredWorkspacePatch(f.project, { ...f.identity, scopeId: 'other' }, f.options)).rejects.toMatchObject({ code: 'POLICY_DENIED' });
@@ -82,8 +85,8 @@ describe.skipIf(process.platform !== 'linux' || !process.env.DECKENT_TEST_DOCKER
     await expect(app.prepare(f.identity, { async capture() { return prepared.patch; } }, store)).rejects.toThrow('simulated-ledger-failure');
     await expect(app.preview(f.identity)).rejects.toThrow('PATCH_UNAVAILABLE');
     const writer = { ...store, async retainDispatchPatch(_claim: unknown, receipt: typeof prepared.receipt) { record = { ...unbound, patch: receipt }; return record; } };
-    expect(await app.prepare(f.identity, { async capture() { return prepared.patch; } }, writer)).toEqual(prepared);
-    expect(await app.preview(f.identity)).toEqual(prepared);
+    expect(await app.prepare(f.identity, { async capture() { return prepared.patch; } }, writer)).toEqual(view(prepared));
+    expect(await app.preview(f.identity)).toEqual(view(prepared));
   });
   it('rejects a running container even when an older terminal receipt exists', async () => {
     const f = await fixture(true); await f.run(); const record = (await f.runtime.store.loadBoundDispatch(f.identity))!;

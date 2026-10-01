@@ -16,6 +16,7 @@ import { prepareConfiguredModelCancellationRuntime, type ConfiguredModelCancella
 import { queryFailure } from '#composition/core/query-errors/index.js';
 import { releaseSettledModelSlots } from '#composition/core/model-invocation/index.js';
 import { registerConfiguredScopesAtStart } from '#composition/core/scoped-request/index.js';
+import { sweepConfiguredAttemptCustody } from '#composition/core/runs/index.js';
 import { executeConfiguredRuntimeOperation } from './operations.js';
 import { executeConfiguredRuntimeModelOperation } from './model-invocation.js';
 import { executeConfiguredRuntimeProviderSpendOperation } from './provider-spend.js';
@@ -44,6 +45,7 @@ export interface ConfiguredRuntimeServiceObserver extends ConfiguredCancellation
   onModelAllocationSlotsReleased?(result: Awaited<ReturnType<typeof releaseSettledModelSlots>>): void | Promise<void>;
   /** Scratch areas unused past retention removed at start and by the running service's periodic sweep (SCR-A S4). */
   onScratchSwept?(result: ScratchSweepResult): void | Promise<void>;
+  /** EXEC-RELEASE: attempts with a verified retained patch, released or held (typed) under the same custody at start. */ onAttemptCustodySwept?(result: Awaited<ReturnType<typeof sweepConfiguredAttemptCustody>>): void | Promise<void>;
 }
 
 /** An existing older ledger is backed up and migrated once, under ledger and endpoint custody and before the service accepts
@@ -106,8 +108,9 @@ async function startUnderCustody(projectRoot: string, observer: ConfiguredRuntim
   config: Awaited<ReturnType<typeof loadConfig>>, guard: LocalRuntimeSocketGuard, ports: RuntimeServicePorts) {
   await upgradeLedgerAtStart(config, observer);
   // H34 S1: the configured company and the installation's own scopes are registered under the same custody (first start).
-  await registerConfiguredScopesAtStart(config);
+  const scopes = await registerConfiguredScopesAtStart(config);
   await interruptAgentTurnsAtStart(config, observer, guard.custodyId);
+  const custody = await sweepConfiguredAttemptCustody(projectRoot, [...scopes?.pins.keys() ?? []], options); if (custody.length) await observer.onAttemptCustodySwept?.(custody);
   // SCR-A S4: under the same custody, scratch areas unused past retention (a restart leaves no turn running, so none is held). The one
   // scratch custody of this service: start sweep, periodic sweep and turns claim and hold areas through it (Astra 2149).
   const scratchRoot = await scratchResource(config.productLayout), scratchLimits = readTerminalScratchConfig(config as unknown as Record<string, unknown>);

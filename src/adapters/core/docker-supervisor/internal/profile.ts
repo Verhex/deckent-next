@@ -28,3 +28,5 @@ export function readDockerProfile(input: unknown) {
 
 /** Pure adapter shape/origin validation for trusted persistence composition. */
 export function validateDockerSupervisorProfile(input: SupervisorProfile): undefined { readDockerProfile(input); return undefined; }
+/** EXEC-RELEASE: the recorded profile ran with a worker connection (native subscription), so its event log must be sealed before release. */
+export function dockerProfileObservesWorker(input: SupervisorProfile): boolean { return readDockerProfile(input).options.connection !== undefined; }

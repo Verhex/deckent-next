@@ -3,5 +3,6 @@
   "checkout": "tree",
   "lease": "lease.json",
   "emptyConfig": "gitconfig",
-  "hooks": "hooks"
+  "hooks": "hooks",
+  "detached": ".released-"
 }

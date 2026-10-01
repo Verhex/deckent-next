@@ -133,7 +133,8 @@ it.skipIf(!imageId)('allows real execute and reconcile to race on the same compl
 it('refuses cleanup if retained output is unreadable or partial despite terminal execution', async () => {
   const f = await fixture(); let releases = 0; let corrupt = false;
   const supervisor: ExecutionSupervisor & { captureProfile(): Promise<typeof custodyProfile> } = { async captureProfile() { return custodyProfile; }, async execute() { return { handle: 'test', result: { kind: 'exited', exitCode: 0 }, stdout: 'kept', stderr: '', interrupted: false, outputCompleteness: 'complete' }; },
-    async cancel() { throw new Error('not cancelled'); }, async recoverOutput() { throw new Error('not recovered'); }, async observe() { throw new Error('not observed'); }, async release() { releases++; } };
+    // EXEC-RELEASE: release first checks that an exited container is the ledger's exact terminal one.
+    async cancel() { throw new Error('not cancelled'); }, async recoverOutput() { throw new Error('not recovered'); }, async observe() { return { handle: 'test', result: { kind: 'exited' as const, exitCode: 0 } }; }, async release() { releases++; } };
   const artifacts = { put: f.artifacts.put.bind(f.artifacts), async read(scope: string, receipt: Parameters<typeof f.artifacts.read>[1]) {
     if (corrupt) throw new Error('ARTIFACT_CORRUPT'); return f.artifacts.read(scope, receipt);
   } };

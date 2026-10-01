@@ -1,4 +1,5 @@
 export { GitWorkspacePatchSource } from './internal/source.js';
+export { gitDockerAttemptCustody } from './internal/custody.js';
 export { GitIntegrationTarget } from './internal/integration-target.js';
 export { GitIntegrationDelivery } from './internal/delivery.js';
 export { GitIntegrationAdoption } from './internal/adoption.js';

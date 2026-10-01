@@ -86,12 +86,15 @@ export class DispatchApplication {
     const receipt = await retainRecoveredOutput(this.artifacts, request, { stdout: output.stdout, stderr: output.stderr }, await this.supervisor.collectOutputFiles?.(request) ?? []);
     return this.store.retainDispatchOutput({ request, owner: current.owner }, receipt);
   }
-  async release(input: unknown, credential?: unknown): Promise<void> {
+  async release(input: unknown, credential?: unknown): Promise<'removed' | 'absent' | void> {
     const { request } = await this.admit('release', input, credential);
     const record = await this.store.readDispatch(request);
     if (!record?.terminal) throw new DispatchError('DISPATCH_NOT_ADMITTED');
     await verifyRetainedOutput(this.artifacts, record);
+    // EXEC-RELEASE: an exited container must be the ledger's exact terminal one (handle, exit code); otherwise nothing is removed.
+    const observed = sandboxObservationSchema.parse(await this.supervisor.observe(request));
+    if (observed.result.kind === 'exited' && (observed.handle !== record.terminal.handle || observed.result.exitCode !== record.terminal.exitCode)) throw new SupervisorError('SUPERVISOR_IDENTITY_CONFLICT');
     // Artifact verification is mandatory; releasing the container never deletes the durable fence.
-    await this.supervisor.release(request);
+    return this.supervisor.release(request);
   }
 }

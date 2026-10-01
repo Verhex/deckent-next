@@ -35,4 +35,10 @@ export const WORK_TARGET_SETTINGS = z.discriminatedUnion('schemaVersion', [
   z.object({ schemaVersion: z.literal(1), targets: z.array(z.object({ ...WORK_TARGET, scope: z.undefined().optional() }).strict()).min(1).max(1) }).strict(),
   z.object({ schemaVersion: z.literal(2), targets: z.array(z.object({ ...WORK_TARGET,
     scope: z.object({ mode: z.enum(['warn', 'enforce']) }).strict().optional() }).strict()).min(1).max(1) }).strict()]);
+/** EXEC-RELEASE (owner 2026-10-01 D8 A): when Deckent reclaims an attempt's stopped container and Git clone. `after-retained-patch`
+ * releases only once the attempt's verified patch is retained (patch preparation, then the bounded service-start sweep); `keep` never
+ * releases. `sweepLimit` bounds release attempts per scope at each service start. Versioned; unknown keys stay refused. */
+export const EXECUTION_RETENTION_SETTINGS = z.object({ schemaVersion: z.literal(1),
+  release: z.enum(['after-retained-patch', 'keep']).default('after-retained-patch'),
+  sweepLimit: z.number().int().positive().max(10_000).default(16) }).strict();
 export const ARTIFACT_STORAGE_LIMITS = z.object({ maxBytes: z.number().int().positive().safe() }).strict();
