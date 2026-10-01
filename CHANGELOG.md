@@ -4,6 +4,8 @@ Human-curated. One line per landing, keyed by PLAN.md card id. No product code w
 
 ## Unreleased
 
+- ADDED (EXEC-RELEASE): after `task patch-prepare` retains a verified patch, Deckent removes that attempt's stopped container and Git clone (sealed worker event log required when a worker connection existed); a start-up sweep finishes eligible ones; `workers inspect` shows `custody: released`; config `execution.retention`. Needs the `attempt:release` grant; without it attempts stay held, visibly.
+- FIX (SECRET-WRITE-CLOCK): `deckent init policy --apply` and the Docker-gated installation no longer fail with `INSTALLATION_JOURNAL_INVALID` (leaving the installation pending) when the host wall clock steps backwards during the apply or a retry runs with a clock behind the first attempt.
 - DOCS (OWNER-DECISIONS-DOCS): owner decisions D1–D10 of 2026-10-01 recorded in ARCHITECTURE (decision-log row, K1 amendment, host-rule-file target withdrawn, audit/reasoning/catalog/release/K6 notes) and PLAN (cards EXEC-RELEASE high, LEGACY-CODES-RETIRE, HOST-RULES-CLEANUP, AUDIT-CHECKPOINT, REASONING-RETENTION, CATALOG-SEED, K6-HINT); no behavior change.
 - ADDED (K3): task graph v3 typed `workInput` (task, scope, acceptance, exact model channel+id+auxiliaries, effort, turn limit); a coding profile can be a `native-coding-template` compiled at Run admission and frozen in the Run snapshot; graph v2 still accepted.
 - ADDED (K5): typed execution pool hold — `deckent pool status|hold|resume`, MCP `inspect_pool_hold`/`apply_pool_hold`, SDK `applyPoolHold`/`inspectPoolHold`; reservations are refused with `RUN_POOL_HELD` while held, running work finishes; ledger v44.

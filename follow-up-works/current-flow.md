@@ -3,6 +3,13 @@
 Bu belge yalnız güncel durumu tutar; önceki sürümü Git geçmişinde, kanıtlar `deckent-refactor-work/proof/`.
 
 ## Durum
+- **Yirmi ikinci parti (2026-10-01; `integrate/2026-10-01-w`, worktree `/home/alperen/deckent-next-integrate-w`, taban `d11bdbfa`; ana oturum deckent-next-f6):**
+  EXEC-RELEASE (`da102c4a`+`c0abc834`; owner D8; sahip = yama saklama geçişi, lead a′ mühürlü event log koşulu; composition 5500/5500) + SECRET-WRITE-CLOCK
+  (`3bdd8111`+`a4616cfb` + lead arch `19a6aa19`; kararsızlığın kök nedeni WSL2 duvar saati geri adımı, `proof/SECRET-WRITE-FLAKE-2026-10-01`) + host-insights (`fc2b69e3`,
+  auditor erken bulgu tablosu) + lead bütçe katlaması `8d5df641`. Açık: EXEC-RELEASE C1–C4 (PLAN), PROVIDER-SPEND-CLOCK, EXEC-RELEASE-INTEGRATIONS.
+  Uçuşta: CI-FULL (Sol uygulayıcı, owner doğrudan onay 2026-10-01, `lane/ci-sol`; bağımsız incelemesi Sol olamaz). Dalga 1 kart girdileri + Jev J1–J6:
+  `deckent-refactor-work/next-graph/deep-harvest/wave1/WAVE1-CARD-INPUTS.md`, `proof/WAVE1-JEV-2026-10-01/README.md` (owner soruları A1/A3/A8).
+  **Sıradaki:** tam verify → Sol REQUEST_REVIEW → PASS'te push → owner'a rapor → yeni ana oturuma devir.
 - **20. parti push edildi (2026-10-01):** Sol 2212 PASS exact `c10411a9` (K5-R1 kapandı: tek okuma snapshot'ı) → `origin/main` = `c10411a9`.
   Açık: `runtime-secret-write` kararsızlığı (ilk koşu 1 hata INSTALLATION_JOURNAL_INVALID, aynı SHA ikinci koşu temiz; kök neden yok), v44 canlı geçişi owner onayı bekliyor.
   **Yirmi birinci parti (yalnız belge):** D1–D10 owner kararları + 7 kart + Sol 2212 DOC-N1 (yüzey envanteri: TUI kısmi).
