@@ -29,6 +29,10 @@ export interface MonitorAttempt {
   readonly startedAtMs: number | null; readonly endedAtMs: number | null;
   /** Live worker phase from the worker-event contract (starting/thinking/reading/editing/running/…), null without events. */
   readonly workerPhase: string | null; readonly heartbeatAgeMs: number | null; readonly provider: string | null;
+  /** MONITOR v1.1: exact model the worker ran (sealed model view or pin), first failing line of a failed attempt's recorded output
+   * (e.g. a lint-arch violation or the first failing test), and the last worker-reported events (untrusted, bounded). */
+  readonly model?: string | null; readonly firstFailure?: string | null;
+  readonly recentEvents?: readonly { readonly atMs: number | null; readonly kind: string; readonly summary: string }[];
 }
 export interface MonitorTask {
   readonly taskId: string; readonly kind: string; readonly phase: string;
@@ -65,6 +69,19 @@ export interface MonitorInstall {
   readonly approvals: readonly MonitorApproval[]; readonly pools: readonly MonitorPool[];
   /** Typed codes for what could not be read (never thrown to the surface); rendered as a visible warning. */
   readonly diagnostics: readonly string[];
+  /** MONITOR v1.1 map: what feeds what in this install — config layers, execution registry, model catalog, policy, memory. */
+  readonly map?: MonitorMap | null;
+}
+export interface MonitorMap {
+  /** Config layers in precedence order with the top-level sections each one actually sets (no values: secrets never appear). */
+  readonly config: readonly { readonly layer: 'default' | 'global' | 'project' | 'environment'; readonly path: string | null; readonly sections: readonly string[] }[];
+  readonly registry: { readonly profiles: readonly { readonly id: string; readonly version: number; readonly adapter: string }[];
+    readonly kinds: readonly { readonly kind: string; readonly profile: string }[] };
+  readonly models: readonly { readonly channelId: string; readonly modelId: string; readonly active: boolean }[];
+  readonly policy: { readonly grants: number; readonly byResourceKind: Readonly<Record<string, number>>; readonly separationOfDuties: number;
+    readonly permissionModes: readonly { readonly principal: string; readonly mode: string }[] } | null;
+  /** Next has no memory subsystem yet: always `{ available: false }` until the MEMORY card lands — shown honestly, never invented. */
+  readonly memory: { readonly available: boolean };
 }
 export interface MonitorSnapshot {
   readonly schemaVersion: 1; readonly observedAt: number; readonly installs: readonly MonitorInstall[]; readonly control: 'observe-only';

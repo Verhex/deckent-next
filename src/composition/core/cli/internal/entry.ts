@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { inspectConfiguredWorkers } from '#composition/core/worker-observation/index.js';
+import { inspectMonitor } from '#composition/core/monitor/index.js';
 import { inspectConfiguredToolchainCurrency, updateConfiguredToolchains } from '#composition/core/toolchains/index.js';
 import { inspectConfiguredShellRealm, runConfiguredMcpCommand } from '#composition/core/agent-turn/index.js';
 import { inspectConfiguredWorkerTranscript } from '#composition/core/worker-observation/index.js';
@@ -41,7 +42,7 @@ export async function main(argv: readonly string[] = process.argv.slice(2)) {
     inspectWorkspaceIntegration: inspectConfiguredWorkspaceIntegration,
     checkWorkspaceIntegration: checkConfiguredWorkspaceIntegration, prepareWorkspaceIntegration: prepareConfiguredWorkspaceIntegration,
     prepareWorkspacePatch: prepareConfiguredWorkspacePatch, previewWorkspacePatch: previewConfiguredWorkspacePatch, renderUnifiedDiff: unifiedDiff,
-    inspectWorkers: inspectConfiguredWorkers, inspectToolchainCurrency: (projectRoot, options) => inspectConfiguredToolchainCurrency(projectRoot, options),
+    inspectWorkers: inspectConfiguredWorkers, inspectMonitor, inspectToolchainCurrency: (projectRoot, options) => inspectConfiguredToolchainCurrency(projectRoot, options),
     ensureRuntimeService: (projectRoot, options) => ensureConfiguredRuntimeService(projectRoot, options),
     restartRuntimeService: (projectRoot, options) => restartConfiguredRuntimeService(projectRoot, options),
     openTerminalHistory: (projectRoot, options) => openConfiguredTerminalHistory(projectRoot, options),

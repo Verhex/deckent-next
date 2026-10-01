@@ -1,5 +1,5 @@
 export type { MonitorSnapshot, MonitorInstall, MonitorInstallStatus, MonitorRun, MonitorRunState, MonitorTask, MonitorAttempt, MonitorBlocker, MonitorBlockerCode,
-  MonitorApproval, MonitorPool, MonitorService, MonitorBuild } from './internal/contract.js';
+  MonitorApproval, MonitorPool, MonitorService, MonitorBuild, MonitorMap } from './internal/contract.js';
 export type { MonitorLedgerReading, MonitorLedgerRun, MonitorLedgerAttempt, MonitorLedgerDispatch, MonitorLedgerApproval, MonitorLedgerPool, MonitorTarget,
   MonitorScopeObservation, MonitorPorts } from './internal/evidence.js';
 export { deriveRunBlocker, deriveRunState, projectMonitorRun, MONITOR_BLOCKER_PRECEDENCE } from './internal/derive.js';

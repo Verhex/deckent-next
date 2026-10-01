@@ -249,7 +249,8 @@
         "src/composition/core/model-invocation",
         "src/composition/core/agent-turn",
         "src/composition/core/approvals",
-        "src/composition/core/secrets"
+        "src/composition/core/secrets",
+        "src/composition/core/monitor"
       ],
       "plan": "SURFACES"
     },
