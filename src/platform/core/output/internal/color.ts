@@ -17,3 +17,21 @@ export function stripAnsi(value: string): string {
   // eslint-disable-next-line no-control-regex
   return value.replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, '');
 }
+/**
+ * Untrusted text (command output, worker reports, files of another install) is shown only through this: before it reaches the owner's terminal every escape sequence (CSI, OSC, other ESC forms) and every
+ * control character except newline and tab is removed, and carriage returns become line breaks — nothing a command prints can move
+ * the cursor, retitle the window, write the clipboard or hide text.
+ */
+// Matching control characters is the point of these patterns (untrusted command output).
+// eslint-disable-next-line no-control-regex
+const OSC = /\u001b\][^\u0007\u001b]*(?:\u0007|\u001b\\)?/gu;
+// eslint-disable-next-line no-control-regex
+const CSI = /\u001b\[[0-?]*[ -/]*[@-~]/gu;
+/** Any other escape: ESC, optional intermediate bytes, one final byte (ECMA-48), e.g. ESC 7, ESC ( B, ESC c. */
+// eslint-disable-next-line no-control-regex
+const OTHER_ESCAPE = /\u001b[ -/]*[0-~]?/gu;
+// eslint-disable-next-line no-control-regex
+const CONTROL = /[\u0000-\u0008\u000b-\u001f\u007f-\u009f]/gu;
+export function terminalSafeText(text: string): string {
+  return text.replace(OSC, '').replace(CSI, '').replace(OTHER_ESCAPE, '').replace(/\r\n?/gu, '\n').replace(CONTROL, '');
+}

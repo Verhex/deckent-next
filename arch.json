@@ -795,7 +795,8 @@
     "src/surfaces/core/terminal-render": {
       "dependencies": [
         "src/surfaces/core/terminal-kit",
-        "src/domain/core/policy"
+        "src/domain/core/policy",
+        "src/platform/core/output"
       ],
       "plan": "SURFACES"
     },
@@ -815,7 +816,8 @@
         "src/engine/core/inference-serving",
         "src/engine/core/runs",
         "src/engine/core/worker-observation",
-        "src/domain/core/policy"
+        "src/domain/core/policy",
+        "src/platform/core/output"
       ],
       "plan": "SURFACES"
     },

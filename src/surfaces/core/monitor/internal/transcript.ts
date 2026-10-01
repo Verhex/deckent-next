@@ -1,4 +1,4 @@
-import { t, type ConfigLoadOptions, type Locale } from '#platform/index.js';
+import { t, terminalSafeText, type ConfigLoadOptions, type Locale } from '#platform/index.js';
 import type { AttemptIdentity, WorkerEvent, WorkerEventSummary, WorkerPhase, WorkerFinalReportResult, WorkerModelView } from '#domain/index.js';
 import { renderWorkerModelLine } from './worker-model.js';
 export type WorkerTranscriptHandler = (root: string, identity: AttemptIdentity, options: ConfigLoadOptions) => Promise<Readonly<{
@@ -18,8 +18,9 @@ const TOOL_PHASE: Record<string, WorkerPhase> = { read: 'reading', edit: 'editin
 export function renderWorkerTranscript(data: Awaited<ReturnType<WorkerTranscriptHandler>>, locale: Locale): string {
   // WORKER-CURRENCY-2 report view: the pinned model row first, with the evidence limit stated.
   const model = data.model ? [renderWorkerModelLine(data.model, locale), t('cli.worker.model.notice', {}, locale)] : [];
-  if (!data.sealed || !data.summary) return [...model, t('cli.task.transcript.none', {}, locale),
-    ...(data.finalReport ? [t('cli.task.transcript.notice', {}, locale), JSON.stringify(data.finalReport, null, 2)] : [])].join('\n');
+  // Event excerpts, targets, models and the report are worker-written (untrusted): the whole view leaves through the terminal sanitizer.
+  if (!data.sealed || !data.summary) return terminalSafeText([...model, t('cli.task.transcript.none', {}, locale),
+    ...(data.finalReport ? [t('cli.task.transcript.notice', {}, locale), JSON.stringify(data.finalReport, null, 2)] : [])].join('\n'));
   const s = data.summary;
   const lines = [...model,
     t('cli.task.transcript.header', { provider: s.provider ?? '—', model: s.model ?? '—', turns: s.turns ?? '—', seconds: seconds(s.durationMs),
@@ -42,5 +43,5 @@ export function renderWorkerTranscript(data: Awaited<ReturnType<WorkerTranscript
   if (data.sealed?.projection === 'partial') lines.push(t('cli.task.transcript.projectionPartial', {}, locale));
   lines.push(t('cli.task.transcript.notice', {}, locale));
   if (data.finalReport) lines.push(JSON.stringify(data.finalReport, null, 2));
-  return lines.join('\n');
+  return terminalSafeText(lines.join('\n'));
 }

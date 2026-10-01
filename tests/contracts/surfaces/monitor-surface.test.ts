@@ -392,6 +392,56 @@ describe('fullscreen controls: filter, sort, group, change marks, snapshot age',
   });
 });
 
+describe('untrusted text never reaches the terminal with control sequences (Fable REVISE #1)', () => {
+  const NASTY = 'A\u001b]52;c;aGVsbG8=\u0007B\u001b]8;;http://evil\u001b\\link\u001b]8;;\u001b\\C\u0007D\u001bcE\u009b31mF\u007fG\u0085H\u0000I';
+  const CLEAN = 'ABlinkCDE31mFGHI';
+  // Matching control characters is the point of this check.
+  // eslint-disable-next-line no-control-regex
+  const BAD = /[\u0000-\u0008\u000b-\u001f\u007f-\u009f]/u;
+  // Every untrusted field at once: first failure, events, activity, approval summary, diagnostics detail, another install's path, workspace.
+  const hostile: typeof fullSnapshot = { ...fullSnapshot, installs: fullSnapshot.installs.map(install => install.id === 'dogfood'
+    ? { ...install, path: `/srv/${NASTY}`, diagnostics: [...install.diagnostics, `scope-unavailable:${NASTY}:CODE`] }
+    : install.id !== 'current' ? install : { ...install,
+      runs: install.runs.map(run => run.runId !== 'run-broken' ? run : { ...run, tasks: run.tasks.map(task => !task.lastAttempt ? task : { ...task,
+        lastAttempt: { ...task.lastAttempt, firstFailure: `✗ ${NASTY}`, recentEvents: [{ atMs: OBSERVED_AT - 1000, kind: 'message', summary: NASTY }] } }) }),
+      workers: install.workers.map((worker, index) => index !== 0 || !worker.files ? worker : { ...worker, workspace: `/w/${NASTY}`,
+        files: { ...worker.files, activity: { ...worker.files.activity!, target: NASTY, detail: NASTY } } }),
+      approvals: install.approvals.map((approval, index) => index ? approval : { ...approval, summary: NASTY }) }) };
+  it('text snapshot (--once and /monitor) carries the visible text without any control', async () => {
+    for (const locale of ['en', 'tr'] as const) {
+      const text = surface.renderMonitorText(hostile, { locale, width: 240, ascii: false });
+      expect(text).not.toMatch(BAD); expect(text).not.toContain('\u001b'); expect(text).not.toContain('\u0007');
+      expect(text).toContain(`✗ build: ✗ ${CLEAN}`); expect(text).toContain(`operation: ${CLEAN}`); expect(text).toContain(`/srv/${CLEAN}`);
+    }
+    const { monitorSlash } = await import('#surfaces/core/monitor/index.js');
+    const lines = await monitorSlash('/root', '', { async inspectMonitor() { return hostile; } } as never, { env: {} }, 'en', 200);
+    for (const line of lines) expect(line).not.toMatch(BAD);
+    expect(lines.join('\n')).toContain(CLEAN);
+  });
+  it('fullscreen frames (Run detail with first failure and events, worker detail with activity) carry no control', async () => {
+    const view = mount({ load: async () => hostile });
+    try {
+      await until(() => view.stdout.frame.includes('Stuck or waiting'), 'summary');
+      expect(view.stdout.frame).not.toMatch(BAD);
+      await view.press('2'); await view.press(KEY.enter);
+      expect(view.stdout.frame).toContain(`first failure: ✗ ${CLEAN}`); expect(view.stdout.frame).not.toMatch(BAD);
+      await view.press(KEY.esc); await view.press('3'); await view.press(KEY.enter);
+      expect(view.stdout.frame).toContain(`Doing now: editing · ${CLEAN} — ${CLEAN}`); expect(view.stdout.frame).not.toMatch(BAD);
+      await view.press(KEY.esc); await view.press('6');
+      expect(view.stdout.frame).not.toMatch(BAD);
+    } finally { view.instance.unmount(); }
+  });
+  it('the task transcript view leaves through the same sanitizer', async () => {
+    const { renderWorkerTranscript } = await import('#surfaces/core/monitor/index.js');
+    const summary = fullSnapshot.installs[0]!.workers[0]!.files!.usage!;
+    const text = renderWorkerTranscript({ schemaVersion: 1, identity: { scopeId: 's', runId: 'r', taskId: 't', attemptId: 'a', layoutRevision: 'l', generation: 1 },
+      sealed: { eventCount: 2, sealedAt: 1 }, summary, events: [
+        { kind: 'message', atMs: 1000, role: 'assistant', thinking: false, excerpt: NASTY, textBytes: 9 },
+        { kind: 'tool.call', atMs: 2000, toolClass: 'edit', target: NASTY, detail: NASTY, toolId: 'x', name: 'Edit' }] as never }, 'en');
+    expect(text).not.toMatch(BAD); expect(text).toContain(CLEAN);
+  });
+});
+
 describe('terminal /monitor', () => {
   it('prints the text snapshot as notice lines in the interactive terminal and is listed in the slash palette', async () => {
     expect(WORKLINE_SLASH_COMMANDS.some(command => command.name === 'monitor' && command.descriptionKey === 'terminal.slash.monitor')).toBe(true);
