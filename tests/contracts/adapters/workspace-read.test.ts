@@ -5,9 +5,11 @@ import { join } from 'node:path';
 import { afterEach, expect, it } from 'vitest';
 import { createGlobMatcher, createWorkspaceReadTools, createWorkspaceScope, DEFAULT_WORKSPACE_READ_LIMITS, MAX_WALK_DEPTH, openWalkedFile, walkWorkspaceFiles,
   WORKSPACE_READ_TOOL_SPECS } from '#adapters/index.js';
+import { WORKSPACE_DESCRIPTOR_CUSTODY_AVAILABLE } from '../../fixtures/workspace-descriptor-custody.js';
 import { agentToolSpecSchema } from '#domain/index.js';
 import { summarizeAgentToolResult } from '#surfaces/core/terminal-kit/index.js';
 
+const custodyIt = it.skipIf(!WORKSPACE_DESCRIPTOR_CUSTODY_AVAILABLE);
 const roots: string[] = [];
 afterEach(async () => { await Promise.all(roots.splice(0).map(async root => { execFileSync('chmod', ['-R', 'u+rwx', root]); await rm(root, { recursive: true, force: true }); })); });
 
@@ -22,9 +24,10 @@ const meta = (text: string) => text.split('\n')[0]!;
 it('declares valid read-class tool specs', () => {
   expect(WORKSPACE_READ_TOOL_SPECS.map(spec => agentToolSpecSchema.parse(spec).name)).toEqual(['read_file', 'list_dir', 'grep', 'glob']);
   expect(WORKSPACE_READ_TOOL_SPECS.every(spec => spec.toolClass === 'read')).toBe(true);
+  expect(DEFAULT_WORKSPACE_READ_LIMITS.maxResultBytes).toBe(65_536);
 });
 
-it('reads the owner-case file (1.25 MB markdown, 10 KB lines) through bounded views with exact continuations, never whole', async () => {
+custodyIt('[requires Linux /proc/self/fd custody] reads the owner-case file (1.25 MB markdown, 10 KB lines) through bounded views with exact continuations, never whole', async () => {
   // Legacy owner case: the model reached for shell sed/awk (25 approvals) because read_file could not handle such lines.
   const longLine = `| ${'x'.repeat(10_240)} |`;
   const doc = Array.from({ length: 125 }, (_, i) => `## Section ${i + 1}\n\n${longLine}\n${'text line\n'.repeat(3)}`).join('\n');
@@ -47,7 +50,7 @@ it('reads the owner-case file (1.25 MB markdown, 10 KB lines) through bounded vi
   expect(meta(search.text)).toContain('mode=search'); expect(search.text).toContain('## Section 7');
 });
 
-it('keeps every read inside the workspace: traversal, absolute paths, symlink escapes and protected paths are refused', async () => {
+custodyIt('[requires Linux /proc/self/fd custody] keeps every read inside the workspace: traversal, absolute paths, symlink escapes and protected paths are refused', async () => {
   const { base, root } = await workspace({ 'src/a.ts': 'export const a = 1;\n', '.env': 'TOKEN=secret\n', 'keys/server.pem': 'PEM\n', '.git/config': '[core]\n' });
   await writeFile(join(base, 'outside.txt'), 'outside secret\n');
   await symlink(join(base, 'outside.txt'), join(root, 'link.txt'));
@@ -66,7 +69,7 @@ it('keeps every read inside the workspace: traversal, absolute paths, symlink es
   expect(grep.text).not.toContain('TOKEN'); expect(grep.text).toContain('no matches');
 });
 
-it('finds hits on long lines, reports skipped files instead of a bare "no matches", and bounds every result', async () => {
+custodyIt('[requires Linux /proc/self/fd custody] finds hits on long lines, reports skipped files instead of a bare "no matches", and bounds every result', async () => {
   const { root } = await workspace({ 'wide.md': `${'a'.repeat(20_000)}needle${'b'.repeat(20_000)}\n`, 'bin.dat': Buffer.from([1, 0, 2, 3]),
     'node_modules/pkg/index.js': 'needle\n', 'src/one.ts': 'const needle = 1;\n', 'many.txt': Array.from({ length: 400 }, (_, i) => `needle ${i}`).join('\n') });
   const tools = await createWorkspaceReadTools(root, { limits: { maxResultBytes: 4096 } });
@@ -82,7 +85,7 @@ it('finds hits on long lines, reports skipped files instead of a bare "no matche
   expect(await tools.execute('write_file', { path: 'x' })).toMatchObject({ status: 'error', text: '[deckent] write_file: error=unknown-tool' });
 });
 
-it('keeps the boundary under races: a swapped parent or root and a hard-linked protected file never yield their content (Astra 2072 R1)', async () => {
+custodyIt('[requires Linux /proc/self/fd custody] keeps the boundary under races: a swapped parent or root and a hard-linked protected file never yield their content (Astra 2072 R1)', async () => {
   const { base, root } = await workspace({ 'dir/a.txt': 'inside\n', '.env': 'DENIED-SENTINEL\n' });
   await mkdir(join(base, 'out')); await writeFile(join(base, 'out/a.txt'), 'OUTSIDE-SENTINEL\n');
   const scope = await createWorkspaceScope(root);
@@ -104,7 +107,7 @@ it('keeps the boundary under races: a swapped parent or root and a hard-linked p
   expect(swapped.status).toBe('error'); expect(swapped.text).not.toContain('SENTINEL');
 });
 
-it('stops a catastrophic regular expression on cancel without stalling the service, and never blocks on a FIFO (Astra 2072 R2)', async () => {
+custodyIt('[requires Linux /proc/self/fd custody] stops a catastrophic regular expression on cancel without stalling the service, and never blocks on a FIFO (Astra 2072 R2)', async () => {
   const { root } = await workspace({ 'evil.txt': Array.from({ length: 4 }, () => `${'a'.repeat(32)}!`).join('\n') + '\n' });
   execFileSync('mkfifo', [join(root, 'pipe')]);
   const tools = await createWorkspaceReadTools(root);
@@ -128,23 +131,27 @@ it('stops a catastrophic regular expression on cancel without stalling the servi
   expect(await tools.execute('read_file', { path: 'evil.txt' }, aborted.signal)).toEqual({ status: 'error', text: '[deckent] read_file: error=cancelled' });
 });
 
-it('bounds every result branch, validates argument sizes and limits, and keeps multibyte text valid (Astra 2072 R3)', async () => {
+it('validates argument sizes and configured limits before any descriptor read (Astra 2072 R3)', async () => {
+  await expect(createWorkspaceReadTools('/never-opened', { limits: { maxResultBytes: 10 } })).rejects.toThrow('WORKSPACE_READ_LIMITS_INVALID');
+  const tools = await createWorkspaceReadTools(process.cwd(), { limits: { maxResultBytes: 1024 } });
+  expect((await tools.execute('read_file', { path: 'z'.repeat(5000) })).text).toContain('argument-too-long name=path');
+});
+
+custodyIt('[requires Linux /proc/self/fd custody] bounds every result branch and keeps multibyte text valid (Astra 2072 R3)', async () => {
   const { root } = await workspace({ 'ğ.txt': 'çok baytlı satır\n'.repeat(400) });
   const tools = await createWorkspaceReadTools(root, { limits: { maxResultBytes: 1024 } });
   const results = [await tools.execute('read_file', { path: 'ğ.txt', pattern: 'x'.repeat(2000) }), await tools.execute('read_file', { path: 'y'.repeat(3000) }),
     await tools.execute('read_file', { path: 'ğ.txt' }), await tools.execute('grep', { pattern: 'ç' }), await tools.execute('list_dir', {}), await tools.execute('glob', { pattern: '*' })];
   for (const result of results) { expect(Buffer.byteLength(result.text)).toBeLessThanOrEqual(1024); expect(Buffer.from(result.text).toString('utf8')).toBe(result.text); }
-  expect((await tools.execute('read_file', { path: 'z'.repeat(5000) })).text).toContain('argument-too-long name=path');
   // Many skipped files with long names make the grep trailer alone larger than the cap: the final cut must still hold.
   const noisy: Record<string, Buffer> = Object.fromEntries(Array.from({ length: 40 }, (_, i) => [`${'n'.repeat(180)}${i}.bin`, Buffer.from([0, 1])]));
   const { root: noisyRoot } = await workspace(noisy);
   const noisyTools = await createWorkspaceReadTools(noisyRoot, { limits: { maxResultBytes: 1024 } });
   const trailer = await noisyTools.execute('grep', { pattern: 'x' });
   expect(Buffer.byteLength(trailer.text)).toBeLessThanOrEqual(1024); expect(trailer.text).toContain('result cut at the 1024-byte cap');
-  await expect(createWorkspaceReadTools(root, { limits: { maxResultBytes: 10 } })).rejects.toThrow('WORKSPACE_READ_LIMITS_INVALID');
 });
 
-it('reports directories it could not scan instead of claiming no matches (Astra 2072 R4)', async () => {
+custodyIt('[requires Linux /proc/self/fd custody] reports directories it could not scan instead of claiming no matches (Astra 2072 R4)', async () => {
   const deep = Array.from({ length: MAX_WALK_DEPTH + 3 }, (_, i) => `d${i}`).join('/');
   const { root } = await workspace({ [`${deep}/deep.txt`]: 'DEEP-MATCH\n', 'locked/inner.txt': 'LOCKED-MATCH\n', 'top.txt': 'nothing\n' });
   await chmod(join(root, 'locked'), 0o000);
@@ -156,7 +163,7 @@ it('reports directories it could not scan instead of claiming no matches (Astra 
   expect(glob.text).toContain('no matches in the scanned part'); expect(glob.text).toContain('beyond depth 32');
 });
 
-it('refuses a walked file whose parent moved out of the workspace during the walk (Astra 2078 R1)', async () => {
+custodyIt('[requires Linux /proc/self/fd custody] refuses a walked file whose parent moved out of the workspace during the walk (Astra 2078 R1)', async () => {
   const { base, root } = await workspace({ 'dir/a.txt': 'inside\n', 'dir/b.txt': 'inside-b\n', 'later/c.txt': 'c\n' });
   const scope = await createWorkspaceScope(root);
   const outcomes: Record<string, string> = {};
@@ -177,10 +184,14 @@ it('refuses a walked file whose parent moved out of the workspace during the wal
   expect(incomplete.changed).toBeGreaterThanOrEqual(1);
 });
 
-it('matches globs without backtracking, so a hostile pattern cannot stall the service (Astra 2078 R2)', async () => {
+it('matches the shared glob grammar without requiring descriptor custody', () => {
   const match = (pattern: string, path: string) => createGlobMatcher(pattern)(path);
   expect([match('**/*.ts', 'a.ts'), match('**/*.ts', 'x/y/a.ts'), match('*.ts', 'x/a.ts'), match('src/**', 'src/a/b'), match('src/*/b', 'src/a/b'),
     match('a?c', 'abc'), match('a?c', 'a/c'), match('**/.env', '.env'), match('.env.*', '.env.local'), match('x.ts', 'x_ts')]).toEqual([true, true, false, true, true, true, false, true, true, false]);
+  expect(createGlobMatcher(`${'*a'.repeat(22)}b`)('a'.repeat(45))).toBe(false);
+});
+
+custodyIt('[requires Linux /proc/self/fd custody] matches globs without backtracking, so a hostile pattern cannot stall the service (Astra 2078 R2)', async () => {
   const { root } = await workspace({ [`${'a'.repeat(45)}`]: 'x\n', 'one.txt': 'y\n' });
   const tools = await createWorkspaceReadTools(root);
   let ticks = 0; const ticker = setInterval(() => { ticks++; }, 5);
@@ -196,7 +207,7 @@ it('matches globs without backtracking, so a hostile pattern cannot stall the se
 
 // D3 (TL-B, analysis §5/§8 D3, owner): 16 KiB forced typical 15-20 KB source files into a second round every time; the
 // default rises to 64 KiB, and `terminal.chat.readResultMaxBytes` (composition, not tested here) can still narrow it.
-it('reads an 18-60 KB file whole in one call under the new 64 KiB default (owner: fewer rounds)', async () => {
+custodyIt('[requires Linux /proc/self/fd custody] reads an 18-60 KB file whole in one call under the new 64 KiB default (owner: fewer rounds)', async () => {
   expect(DEFAULT_WORKSPACE_READ_LIMITS.maxResultBytes).toBe(65_536);
   const body = Array.from({ length: 900 }, (_, i) => `line ${i} of a typical source file with some real content here`).join('\n') + '\n';
   expect(Buffer.byteLength(body)).toBeGreaterThan(18_000); expect(Buffer.byteLength(body)).toBeLessThan(60_000);
@@ -213,7 +224,7 @@ it('reads an 18-60 KB file whole in one call under the new 64 KiB default (owner
 
 // D3: grep's `context` (0-5) and `maxHits` mirror read_file's `context`/`maxMatches` naming so the model does not have
 // to guess which read tool accepts which field (analysis §5: "grep · invalid arguments" from this exact asymmetry).
-it('accepts grep context (bounded to 5) and maxHits (bounded to the 200 hit cap), unchanged at context=0 (default)', async () => {
+custodyIt('[requires Linux /proc/self/fd custody] accepts grep context (bounded to 5) and maxHits (bounded to the 200 hit cap), unchanged at context=0 (default)', async () => {
   const { root } = await workspace({ 'many.txt': Array.from({ length: 10 }, (_, i) => `needle ${i}`).join('\n') + '\n' });
   const tools = await createWorkspaceReadTools(root);
   const plain = await tools.execute('grep', { pattern: 'needle' });
@@ -240,7 +251,7 @@ it('accepts grep context (bounded to 5) and maxHits (bounded to the 200 hit cap)
 // or overlap must both keep their ':' hit marker. The old code marked a block's lines against only the match that
 // produced that block (`j === index`), so a second match already covered by the first match's trailing context lost
 // its ':' forever and was shown as plain context (`-`) instead.
-it('marks every real hit with \':\' even when context windows are adjacent or overlapping (Astra 2143 R2)', async () => {
+custodyIt('[requires Linux /proc/self/fd custody] marks every real hit with \':\' even when context windows are adjacent or overlapping (Astra 2143 R2)', async () => {
   const { root } = await workspace({ 'a.txt': 'before\nMATCH one\nMATCH two\nafter\n' });
   const tools = await createWorkspaceReadTools(root);
   const adjacent = await tools.execute('grep', { pattern: 'MATCH', context: 1 });
@@ -260,7 +271,7 @@ it('marks every real hit with \':\' even when context windows are adjacent or ov
 // Astra 2145 R2 (ported from astra-2144-grep.test.ts.txt): the terminal's match count comes from the producer's exact count, never from
 // reading the free text. A workspace file may have ':' in its name, so `path:line:text` cannot be split reliably; the producer states
 // `[deckent] grep: matches=N` (N = the ':'-marked hit lines it actually returned, `+` when it returned less than it found) as its last line.
-it('counts grep hits from the producer\'s own last meta line, also for paths with \':\' in them (Astra 2145 R2)', async () => {
+custodyIt('[requires Linux /proc/self/fd custody] counts grep hits from the producer\'s own last meta line, also for paths with \':\' in them (Astra 2145 R2)', async () => {
   const { root } = await workspace({ 'report:2026.txt': 'MATCH\n' });
   const tools = await createWorkspaceReadTools(root);
   const single = await tools.execute('grep', { path: 'report:2026.txt', pattern: 'MATCH', context: 0 });
@@ -276,7 +287,7 @@ it('counts grep hits from the producer\'s own last meta line, also for paths wit
 
 // `maxHits` caps the hits that open a context window (seed hits). Further hits inside an opened window are shown, marked ':' and counted;
 // reaching the cap is stated (`+`). With context 0 every window is one line, so `maxHits` is the number of hits shown.
-it('documents maxHits as the seed-hit cap: hits inside an opened window are shown, counted and the cap is stated (Astra 2145 R2)', async () => {
+custodyIt('[requires Linux /proc/self/fd custody] documents maxHits as the seed-hit cap: hits inside an opened window are shown, counted and the cap is stated (Astra 2145 R2)', async () => {
   const { root } = await workspace({ 'a.txt': 'MATCH\n'.repeat(10) });
   const tools = await createWorkspaceReadTools(root);
   const seeded = await tools.execute('grep', { path: 'a.txt', pattern: 'MATCH', context: 5, maxHits: 1 });
@@ -288,7 +299,7 @@ it('documents maxHits as the seed-hit cap: hits inside an opened window are show
 });
 
 // The count is of the hits actually returned: when the result byte cap drops rows, N shrinks with them and the result says `+`.
-it('counts only the grep hits left after the result byte cap cut rows (Astra 2145 R2)', async () => {
+custodyIt('[requires Linux /proc/self/fd custody] counts only the grep hits left after the result byte cap cut rows (Astra 2145 R2)', async () => {
   const { root } = await workspace({ 'many.txt': Array.from({ length: 400 }, (_, i) => i % 3 === 1 ? `needle ${i} ${'x'.repeat(80)}` : `line ${i} ${'y'.repeat(80)}`).join('\n') });
   const text = (await (await createWorkspaceReadTools(root, { limits: { maxResultBytes: 4096 } })).execute('grep', { pattern: 'needle', context: 1, maxHits: 50 })).text;
   expect(Buffer.byteLength(text)).toBeLessThanOrEqual(4096);

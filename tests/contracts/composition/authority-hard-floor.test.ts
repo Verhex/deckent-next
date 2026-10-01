@@ -6,11 +6,13 @@ import { agentWorkspaceDeny, createShellPathContext, createWorkspaceReadTools, c
 import { classifyReadOnlyShellCommand, decideAgentToolCall } from '#engine/index.js';
 import { getPolicyVocabulary, installationOwnerPermissions, INSTALLATION_OWNER_ROLE_ID, resolvePolicyBindings } from '#domain/index.js';
 import { resolveProductLayout } from '#platform/index.js';
+import { WORKSPACE_DESCRIPTOR_CUSTODY_AVAILABLE } from '../../fixtures/workspace-descriptor-custody.js';
 
 // POLICY-ADMIN (owner F2): the hard floor — policy, bindings, approval records and key, ledger, credentials, `.git` internals — is never
 // opened to the agent tools by any grant or mode. Here the person holds the owner root (every vocabulary kind, 'all') and full-auto: the
 // floor is path-level code that consults no policy, so the maximal policy changes nothing.
 const roots: string[] = [];
+const custodyIt = it.skipIf(!WORKSPACE_DESCRIPTOR_CUSTODY_AVAILABLE);
 afterEach(async () => { await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 const DATA = '.deckent/live-data';
 const FLOOR = [`${DATA}/policy.json`, `${DATA}/bindings.json`, `${DATA}/approvals/authority.key`, `${DATA}/state/ledger.db`, `${DATA}/state/ledger.db-wal`,
@@ -22,21 +24,34 @@ const maximal = resolvePolicyBindings({ schemaVersion: 2, revision: 'p1', grants
 { schemaVersion: 2, revision: 'b1', bindings: [{ id: 'root', principals: [{ issuer: 'host', subject: '1000' }], roles: [INSTALLATION_OWNER_ROLE_ID], scopes: 'all' }],
   modes: [{ id: 'fa', principal: { issuer: 'host', subject: '1000' }, scopes: ['s'], mode: 'full-auto' }] });
 
+async function project() {
+  const base = await mkdtemp(join(tmpdir(), 'dn-hard-floor-')); roots.push(base);
+  const root = join(base, 'project');
+  for (const path of [...FLOOR, 'src/a.ts']) { await mkdir(join(root, path, '..'), { recursive: true }); await writeFile(join(root, path), `FLOOR ${path}\n`); }
+  const layout = resolveProductLayout({ projectRoot: root, root: join(root, ...DATA.split('/')) });
+  const scope = await createWorkspaceScope(root, agentWorkspaceDeny(root, layout));
+  return { root, layout, scope };
+}
+
 describe('authority hard floor under the owner root and full-auto', () => {
-  it('refuses every hard-floor path to read, write planning and shell classification; the write floor still asks in full-auto', async () => {
-    const base = await mkdtemp(join(tmpdir(), 'dn-hard-floor-')); roots.push(base);
-    const root = join(base, 'project');
-    for (const path of [...FLOOR, 'src/a.ts']) { await mkdir(join(root, path, '..'), { recursive: true }); await writeFile(join(root, path), `FLOOR ${path}\n`); }
-    const layout = resolveProductLayout({ projectRoot: root, root: join(root, ...DATA.split('/')) });
-    const scope = await createWorkspaceScope(root, agentWorkspaceDeny(root, layout));
+  custodyIt('[requires Linux /proc/self/fd custody] refuses every hard-floor path to read', async () => {
+    const { root, layout } = await project();
     const tools = await createWorkspaceReadTools(root, { deny: agentWorkspaceDeny(root, layout) });
+    for (const path of FLOOR) expect((await tools.execute('read_file', { path })).text, path).toContain('error=path-denied');
+  });
+  it('refuses hard-floor edit planning and shell classification without granting platform custody', async () => {
+    const { scope } = await project();
     const edits = projectEditArea(scope);
     for (const path of FLOOR) {
-      expect((await tools.execute('read_file', { path })).text, path).toContain('error=path-denied');
       expect(await edits.plan('write_file', { path, content: 'x' }), path).toMatchObject({ ok: false });
       expect(await classifyReadOnlyShellCommand(`cat ${path}`, createShellPathContext(scope)), path).toMatchObject({ readOnly: false, reasonCode: 'PATH_PROTECTED' });
     }
-    expect(await edits.plan('write_file', { path: 'src/a.ts', content: 'x' })).toMatchObject({ ok: true });
+  });
+  custodyIt('[requires Linux /proc/self/fd custody] plans an ordinary source edit', async () => {
+    const { scope } = await project();
+    expect(await projectEditArea(scope).plan('write_file', { path: 'src/a.ts', content: 'x' })).toMatchObject({ ok: true });
+  });
+  it('keeps edit-floor approval under the maximal owner policy in full-auto', () => {
     // The maximal policy lowers an ordinary edit in full-auto, but never the write floor (`.deckent/config.json`, CI, manifests).
     const decide = (cell: 'edit' | 'edit-floor') => decideAgentToolCall(maximal, { principal, scopeId: 's', tool: { name: 'write_file' }, operation: { id: 'workspace.file.write' }, cell });
     expect(decide('edit')).toMatchObject({ decision: 'allow', relaxation: { mode: 'full-auto' } });

@@ -13,6 +13,7 @@ import { runConfiguredMcpCommand } from '#composition/core/agent-turn/index.js';
 import { clearConfigCache, ErrorRegistry, resolveProductLayout } from '#platform/index.js';
 import { mcpCommand } from '#surfaces/core/cli/index.js';
 import { measureTestShellHost } from '../../fixtures/shell-host.js';
+import { WORKSPACE_DESCRIPTOR_CUSTODY_AVAILABLE } from '../../fixtures/workspace-descriptor-custody.js';
 
 // MCP-CLIENT registry (owner 2026-09-28): servers live in scoped files outside configuration — project `.deckent/mcp.json`, personal
 // `<global root>/mcp.json` (user at the top, local under `projects.<real path>`) — trust and tool pins in product state. Real SDK server
@@ -20,6 +21,7 @@ import { measureTestShellHost } from '../../fixtures/shell-host.js';
 const FIXTURE = resolve('tests/fixtures/mcp-stdio-server.mjs');
 const capabilities = await measureTestShellHost();
 const sandboxReady = capabilities.bubblewrap.status === 'available';
+const custodyIt = it.skipIf(!WORKSPACE_DESCRIPTOR_CUSTODY_AVAILABLE);
 const roots: string[] = [];
 afterEach(async () => { clearConfigCache(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 
@@ -190,13 +192,16 @@ describe('the agent cannot reach the project MCP registry (read floor, shell, bo
     const deny = agentWorkspaceDeny(w.project, resolveProductLayout({ projectRoot: w.project, root: join(w.base, 'data') }));
     return { ...w, deny, scope: await createWorkspaceScope(w.project, deny) };
   };
-  it('read tools refuse it, list and grep do not show it, the shell classifies it protected; the configuration stays readable', async () => {
+  custodyIt('[requires Linux /proc/self/fd custody] read tools refuse it, list and grep do not show it; the configuration stays readable', async () => {
     const p = await setup(), tools = await createWorkspaceReadTools(p.project, { deny: p.deny });
     expect((await tools.execute('read_file', { path: '.deckent/mcp.json' })).text).toContain('error=path-denied');
     expect((await tools.execute('read_file', { path: '.deckent/.mcp.json.4242.abcd.tmp' })).text).toContain('error=path-denied');
     expect((await tools.execute('list_dir', { path: '.deckent' })).text).not.toContain('mcp.json');
     expect((await tools.execute('grep', { pattern: 'REGISTRY-SECRET', path: '.deckent' })).text).not.toContain('REGISTRY-SECRET"');
     expect((await tools.execute('read_file', { path: '.deckent/config.json' })).text).toContain('{}');
+  });
+  it('the shell classifies the MCP registry as protected without granting platform custody', async () => {
+    const p = await setup();
     expect(await classifyReadOnlyShellCommand('cat .deckent/mcp.json', createShellPathContext(p.scope))).toMatchObject({ readOnly: false, reasonCode: 'PATH_PROTECTED' });
   });
   it('the bubblewrap view masks it and Landlock gives it no rule', async () => {

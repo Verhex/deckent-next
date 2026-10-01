@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 // BWRAP-BUNDLE: the shipped bubblewrap is identified by one lock (source, build image, every package, outputs); the build refuses a lock
 // that does not pin all of them, and the notice shipped next to the binary names its license, exact source and linked components.
 // @ts-expect-error JavaScript build tooling has no declaration file.
-import { BWRAP_ARCHES, bundledIdentityModule, bundleProblems, bwrapNotice, IDENTITY_MODULE, lockProblems, stageBundle } from '../../../scripts/build-bwrap.mjs';
+import { BWRAP_ARCHES, bundledIdentityModule, bundleProblems, bwrapNotice, IDENTITY_MODULE, lockProblems, resolvedPackagePins, stageBundle } from '../../../scripts/build-bwrap.mjs';
 
 const lock = JSON.parse(readFileSync(new URL('../../../packaging/bwrap/bwrap.lock.json', import.meta.url), 'utf8'));
 const buildScript = readFileSync(new URL('../../../packaging/bwrap/build.sh', import.meta.url), 'utf8');
@@ -34,6 +34,22 @@ describe('bubblewrap bundle lock (BWRAP-BUNDLE)', () => {
     expect(mutated(copy => { delete copy.outputs.aarch64; })).toEqual(['outputs.aarch64.sha256 is not a sha256: undefined']);
     expect(mutated(copy => { copy.source.url = copy.source.url.replace('0.13.0', '0.12.0'); })).toEqual(['source.url does not name version 0.13.0']);
     expect(mutated(copy => { delete copy.resolvedPackages['sysroot-x86_64']; })).toEqual(['resolvedPackages.sysroot-x86_64 is missing']);
+    expect(mutated(copy => { copy.resolvedPackages.host[0] = 'python3'; })).toEqual(['resolvedPackages.host[0] is not name-version: python3']);
+  });
+
+  it('constrains transitive packages as well as direct requests; malformed inventory fails rather than yielding an unpinned request', () => {
+    const hostPins = resolvedPackagePins(lock.resolvedPackages.host) as string[];
+    expect(hostPins).toContain('python3-pycache-pyc0=3.14.8-r0');
+    expect(hostPins).toContain('nghttp2-libs=1.70.0-r0');
+    for (const pin of lock.hostPackages) expect(hostPins).toContain(pin);
+    for (const arch of BWRAP_ARCHES) {
+      const sysrootPins = resolvedPackagePins(lock.resolvedPackages[`sysroot-${arch}`]) as string[];
+      for (const pin of lock.sysrootPackages) expect(sysrootPins).toContain(pin);
+    }
+    expect(resolvedPackagePins(['ncurses-terminfo-base-6.6_p20260516-r0'])).toEqual(['ncurses-terminfo-base=6.6_p20260516-r0']);
+    expect(() => resolvedPackagePins(['python3'])).toThrow('resolved package is not name-version: python3');
+    expect(() => resolvedPackagePins(['python3=latest'])).toThrow('resolved package is not name-version: python3=latest');
+    expect(() => resolvedPackagePins(['python3-3.14.8-r0 extra'])).toThrow('resolved package is not name-version:');
   });
 
   it('builds without setuid or SELinux and with the options the lock records', () => {

@@ -3,6 +3,18 @@
 Bu belge yalnız güncel durumu tutar; önceki sürümü Git geçmişinde, kanıtlar `deckent-refactor-work/proof/`.
 
 ## Durum
+- **CI-FULL yerel düzeltme hazırlığı — Sol uygulayıcı (owner 2026-10-01):** `lane/ci-sol`, exact taban
+  `d11bdbfa532db5880a55f3cb954b19db7a85d3ff`; ürün `src/` değişmedi, ana checkout/WIP/canlı durum korunur.
+  Windows compiler `.cmd` spawn kaldırıldı; OS temp fixture canonical, descriptor gerektiren pozitifler açık capability gate'li,
+  portable policy + tipli ret aktif; PTY tuşları taze render kanıtını bekliyor; bwrap bütün paket closure'ını baştan pin'liyor,
+  yalnız beş audit edilmiş host entry güncel, iki binary hash aynı. Dev-release diğer OS'leri kurulum etkisinden önce tipli reddeder.
+  **Taze yerel kanıt:** npm ci/build/lint EXIT0; bounded Docker eski recipe red → iki mimari green + taze x86 repeat byte-identical;
+  hedefli tooling+pack 12/12, Node26 15/15, Linux host-kit 10/10; temp alias red 4 fail → green 52 pass. Capability/PTY lane
+  ayrıntıları ve tüm başarısız ara koşular dış kanıtta; missing-proc simülasyonundaki mevcut native conflict hatası henüz açıklanmadı.
+  **Açık:** exact yeni aday full verify, başka bağımsız reviewer ve gerçek altı hosted hücre. Eski d11bdbfa run36862637511 altı verify
+  işi kırmızı; ayrı bwrap c10411a9 run36852469241 başarısı yeni düzeltmenin CI kabulü değildir. Sol CI-FULL için bağımsız PASS vermez.
+  **Sıradaki:** lead'e kaynak yaması + hash/envanter/negatif kanıt → entegrasyon full verify → ayrı reviewer → yetkili push → hosted
+  platform koşuları ve açık hata takibi. Commit/push/canlı müdahale yok. Kanıt `../deckent-refactor-work/proof/CI-FULL-2026-10-01/`.
 - **20. parti push edildi (2026-10-01):** Sol 2212 PASS exact `c10411a9` (K5-R1 kapandı: tek okuma snapshot'ı) → `origin/main` = `c10411a9`.
   Açık: `runtime-secret-write` kararsızlığı (ilk koşu 1 hata INSTALLATION_JOURNAL_INVALID, aynı SHA ikinci koşu temiz; kök neden yok), v44 canlı geçişi owner onayı bekliyor.
   **Yirmi birinci parti (yalnız belge):** D1–D10 owner kararları + 7 kart + Sol 2212 DOC-N1 (yüzey envanteri: TUI kısmi).

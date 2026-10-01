@@ -51,7 +51,7 @@ async function startFromLauncher(f) {
   throw new Error('fake service did not start');
 }
 
-test('stage builds the exact pushed commit outside the source repository and refuses unknown, dirty, unpushed, unsmoked and sandbox-less input', async t => {
+test('stage builds the exact pushed commit outside the source repository and refuses unknown, dirty, unpushed, unsmoked and sandbox-less input', { skip: process.platform !== 'linux' && 'requires Linux /proc process custody and util-linux flock' }, async t => {
   const f = fixture(); t.after(f.cleanup);
   const good = f.fake.commit('good');
   const refsBefore = refsHash(f.repo);
@@ -104,7 +104,7 @@ test('stage builds the exact pushed commit outside the source repository and ref
   assert.equal(f.tool('switch', allowed.json.id).json.code, 'DEV_RELEASE_UNREVIEWED');
 });
 
-test('switch stops the running service through its own CLI, moves the pointer atomically and starts the new version; a failed start rolls the pointer back', async t => {
+test('switch stops the running service through its own CLI, moves the pointer atomically and starts the new version; a failed start rolls the pointer back', { skip: process.platform !== 'linux' && 'requires Linux /proc process custody and util-linux flock' }, async t => {
   const f = fixture(); t.after(f.cleanup);
   const a = f.fake.commit('a'); execFileSync(process.execPath, ['scripts/build.mjs'], { cwd: f.repo }); // today's layout: the service runs from the checkout dist
   const b = f.fake.commit('b'), broken = f.fake.commit('broken', { behavior: { serveExit: true } }), liar = f.fake.commit('liar', { behavior: { wrongBuild: true } });
@@ -155,7 +155,7 @@ test('switch stops the running service through its own CLI, moves the pointer at
   assert.ok(status.json.versionUsers.some(entry => entry.id === ids.b));
 });
 
-test('a process started before a switch keeps loading its own version directory (real path, lazy import after the switch)', async t => {
+test('a process started before a switch keeps loading its own version directory (real path, lazy import after the switch)', { skip: process.platform !== 'linux' && 'requires Linux /proc process custody and util-linux flock' }, async t => {
   const f = fixture(); t.after(f.cleanup);
   const ids = ['one', 'two'].map(label => f.tool('stage', f.fake.commit(label)).json.id);
   assert.equal(f.tool('switch', ids[0]).status, 0);
@@ -177,7 +177,7 @@ test('a process started before a switch keeps loading its own version directory 
   client.kill();
 });
 
-test('rollback: pointer only when the ledger still fits; a migrated ledger needs --restore-ledger, a bound token and the existing ledger lock', async t => {
+test('rollback: pointer only when the ledger still fits; a migrated ledger needs --restore-ledger, a bound token and the existing ledger lock', { skip: process.platform !== 'linux' && 'requires Linux /proc process custody and util-linux flock' }, async t => {
   const f = fixture(); t.after(f.cleanup);
   const old = f.tool('stage', f.fake.commit('v43')).json.id, next = f.tool('stage', f.fake.commit('v44', { ledger: 44 })).json.id;
   assert.equal(f.tool('switch', old).status, 0);
@@ -226,7 +226,7 @@ test('rollback: pointer only when the ledger still fits; a migrated ledger needs
   assert.equal(f.tool('switch', next).json.ledgerAfter, 44);
 });
 
-test('prune lists only versions beyond the last three that no process uses; the tool refuses an install root inside the project', async t => {
+test('prune lists only versions beyond the last three that no process uses; the tool refuses an install root inside the project', { skip: process.platform !== 'linux' && 'requires Linux /proc process custody and util-linux flock' }, async t => {
   const f = fixture(); t.after(f.cleanup);
   const ids = ['p1', 'p2', 'p3', 'p4', 'p5'].map(label => f.tool('stage', f.fake.commit(label)).json.id);
   assert.equal(f.tool('switch', ids[0]).status, 0);
@@ -239,7 +239,7 @@ test('prune lists only versions beyond the last three that no process uses; the 
 
 // Sol U2-R1: a launcher that cannot be created (spawn ENOENT/EACCES/EAGAIN, reported asynchronously as an 'error' event) must become a typed,
 // recorded failure that goes through the same discard / ledger-compatibility / pointer-rollback path as a service that exits.
-test('launcher creation failure (ENOENT, EACCES, EAGAIN) is a typed, recorded failure: switch restores the pointer and old service, start and rollback refuse', async t => {
+test('launcher creation failure (ENOENT, EACCES, EAGAIN) is a typed, recorded failure: switch restores the pointer and old service, start and rollback refuse', { skip: process.platform !== 'linux' && 'requires Linux /proc process custody and util-linux flock' }, async t => {
   const f = fixture(); t.after(f.cleanup);
   const ids = Object.fromEntries(['a', 'b'].map(label => [label, f.tool('stage', f.fake.commit(label)).json.id]));
   assert.equal(f.tool('switch', ids.a).status, 0);
@@ -288,7 +288,7 @@ test('launcher creation failure (ENOENT, EACCES, EAGAIN) is a typed, recorded fa
   assert.equal(f.tool('start').json.service.build.sourceCommit, serviceA.build.sourceCommit);
 });
 
-test('a new version that migrates the ledger and then fails keeps the old code closed (operator required), unchanged by U2-R1', async t => {
+test('a new version that migrates the ledger and then fails keeps the old code closed (operator required), unchanged by U2-R1', { skip: process.platform !== 'linux' && 'requires Linux /proc process custody and util-linux flock' }, async t => {
   const f = fixture(); t.after(f.cleanup);
   const old = f.tool('stage', f.fake.commit('v43')).json.id, bad = f.tool('stage', f.fake.commit('v44-exits', { ledger: 44, behavior: { serveExit: true } })).json.id;
   assert.equal(f.tool('switch', old).status, 0);

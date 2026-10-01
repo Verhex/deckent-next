@@ -525,6 +525,8 @@ export function prune(L) {
 }
 
 export async function main(argv, env = process.env) {
+  // /proc process custody and util-linux flock are prerequisites of this developer-only kit.
+  if (process.platform !== 'linux') fail('DEV_RELEASE_PLATFORM_UNSUPPORTED', { platform: process.platform, supportedPlatforms: ['linux'] });
   const args = [...argv], flags = {};
   const take = name => { const at = args.indexOf(name); if (at < 0) return undefined; const value = args[at + 1]; if (!value || value.startsWith('--')) fail('DEV_RELEASE_USAGE', { option: name }, 2); args.splice(at, 2); return value; };
   const flag = name => { const at = args.indexOf(name); if (at >= 0) args.splice(at, 1); return at >= 0; };

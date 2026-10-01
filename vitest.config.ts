@@ -2,11 +2,16 @@ import { mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { defineConfig } from 'vitest/config';
+import { canonicalTemporaryEnvironment } from './tests/fixtures/canonical-temp.js';
 
 import { fileURLToPath } from 'node:url';
 
 const pkgs = Object.keys(JSON.parse(readFileSync(new URL('./arch.json', import.meta.url), 'utf8')).packages);
 const alias = Object.fromEntries(pkgs.map(p => [`#${p}`, fileURLToPath(new URL(`./src/${p}`, import.meta.url))]));
+// Give the config, fixture workers and their children the same canonical temporary parent.
+// Keep strict product symlink/realpath checks; do not resolve user-supplied product roots.
+const temporaryEnv = canonicalTemporaryEnvironment();
+Object.assign(process.env, temporaryEnv);
 // Tests never write into the owner's global state root (~/.deckent: the bundled bubblewrap's verified copy under bin/, secret-store files,
 // the personal MCP registry, global config; BWRAP-SELECT): every worker gets one temporary root for this run, removed by the teardown.
 // A test that needs its own root still sets DECKENT_GLOBAL_HOME for its child process or passes an explicit environment.
@@ -31,7 +36,7 @@ export default defineConfig({
     // Full suite: 4 workers (owner 2026-09-27; measured 10.9 GB peak, 297 s verify). Lanes' targeted runs set VITEST_MAX_FORKS=2.
     maxWorkers: Number(process.env.VITEST_MAX_FORKS ?? 4),
     testTimeout: 30_000,
-    env: { DECKENT_GLOBAL_HOME: globalHome, ...gitConfigEnv },
+    env: { DECKENT_GLOBAL_HOME: globalHome, ...gitConfigEnv, ...temporaryEnv },
     globalSetup: ['./tests/fixtures/global-home-teardown.ts'],
   },
 });

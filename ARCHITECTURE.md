@@ -1063,6 +1063,17 @@ the owner's `~/.deckent/bin` (the development entry `.agents/refactor/next-entry
 `selectBubblewrapLauncher({ place: false })` is the read-only measurement (doctor): an already placed, verifying copy is used; nothing is
 created, written or re-moded, and a copy the service has not placed yet is reported as "not placed … yet". The shipped provider list is
 one function, `shippedShellSandboxes(layout)` (bubblewrap, then Landlock): the service's default port, MCP `inspect` starts and doctor.
+**CI-FULL build inputs (owner 2026-10-01; developer tooling only).** The bubblewrap driver constrains every
+resolved host and per-architecture sysroot package to its locked version before installing, in addition to the direct requests;
+the complete installed inventories and source/image/license/binary hashes are still checked afterwards. Missing repository
+versions refuse the build; a deliberate audited lock refresh is required, never a silent refresh. The CI-FULL refresh changes
+five host dependency entries only; both existing binary hashes remain unchanged. Source/artifact mirrors and a real arm64 realm
+remain separate unproven work. The TypeScript build runs the checkout's installed `typescript/bin/tsc` using `process.execPath`,
+without `npx`, a command shell or a Windows `.cmd` launcher; an absent compiler or compiler error fails the build.
+The test harness canonicalizes only the OS temporary parent before fixture allocation and propagates it to descendants;
+explicit test global homes and product roots are unchanged. Successful descriptor-relative workspace read/edit cases run only
+when the existing Linux `/proc/self/fd` capability is available. Portable policy/grammar and typed unsupported-refusal tests
+remain active; this partition does not implement macOS/Windows custody or grant platform acceptance.
 **Doctor realm report (REALM-NOTICE).** `doctor` (`--json` field `shellRealm`, schemaVersion 1, additive to doctor schemaVersion 2,
 `null` when unwired; human lines in the product's own sandbox words, no catalog text — the result marker with `[terminal.shell.realm
 <mode>]`, then the notice or the reasons) reports the realm a shell call in this project gets under the configured mode, every provider
@@ -2575,6 +2586,8 @@ onto the ledger catalog; Codex/Cursor output-side model evidence (none documente
   owner-approved restart). A rule, not a hook (a hook would also block the governed switch build). U2 (versioned side-by-side
   installation; owner option C, design `proof/U2-VERSIONED-INSTALL-DESIGN-2026-09-30`) replaces the rule by construction.
 - **DEV-U2-0 versioned dev releases (2026-09-30; host tooling only, no `src/` change).** `.agents/refactor/dev-release.mjs`
+  requires Linux `/proc` process custody and util-linux `flock`; its command entry refuses other platforms with
+  `DEV_RELEASE_PLATFORM_UNSUPPORTED` before installation reads or writes (CI-FULL, 2026-10-01). Portable layout checks remain exercised.
   (`stage|switch|rollback|start|status|prune`) keeps `versions/<commit12>-<tree12>/` (unpacked build-dist package + `release.json` +
   per-file sha256 `manifest.json`), an atomic relative `current` symlink, `previous`, and `switches.jsonl` under
   `$DECKENT_NEXT_INSTALL_ROOT` (default `~/.local/share/deckent-next-dev`; inside the project it is refused). `next-entry.mjs` runs

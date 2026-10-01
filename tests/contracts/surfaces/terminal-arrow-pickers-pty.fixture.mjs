@@ -8,6 +8,7 @@ import { WorklineApp, WorklinePaletteProvider, resolveWorklinePalette } from '#s
 
 const FIRST = 'aaaaaaaa-1111-4111-8111-111111111111';
 const SECOND = 'bbbbbbbb-2222-4222-8222-222222222222';
+let sessionListCalls = 0;
 const sessions = [
   { sessionId: FIRST, updatedAtMs: 1_700_000_000_000, messages: 1, preview: 'PREVIEW-TOKEN-FIRST' },
   { sessionId: SECOND, updatedAtMs: 1_700_000_100_000, messages: 3, preview: 'PREVIEW-TOKEN-SECOND' },
@@ -55,7 +56,11 @@ const view = createElement(WorklinePaletteProvider, {
     pollMs: 60_000, approvalPollMs: 60_000,
     sessions: {
       async save() {},
-      async list() { return sessions; },
+      async list() {
+        // A real port can resolve after the test driver's former 500ms guess. The second open must wait for its own frame.
+        if (++sessionListCalls === 2) await new Promise(resolve => setTimeout(resolve, 1_500));
+        return sessions;
+      },
       async load(id) {
         if (id === SECOND) return [{ role: 'user', content: 'from-second' }, { role: 'assistant', content: 'a2', toolCalls: [] },
           { role: 'assistant', content: 'a3', toolCalls: [] }];

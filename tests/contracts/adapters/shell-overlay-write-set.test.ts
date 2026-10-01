@@ -7,6 +7,7 @@ import { applySandboxWriteSet, createWorkspaceScope, ensureWorkspaceParents, fil
   type ShellSandboxLayout } from '#adapters/index.js';
 import { bubblewrapArguments, bubblewrapShellSandbox, resolveBubblewrapView } from '#adapters/core/shell-sandbox-bwrap/index.js';
 import { linuxShellHost, measureTestShellHost } from '../../fixtures/shell-host.js';
+import { WORKSPACE_DESCRIPTOR_CUSTODY_AVAILABLE } from '../../fixtures/workspace-descriptor-custody.js';
 
 // SHELL-OVERLAY at the real boundary: the launcher the host measurement selects (BWRAP-SELECT: a system bwrap ≥ 0.12 or the bundled,
 // lock-verified 0.13 realized under this test process's state root), a real overlay in a user namespace, the native lister reading the
@@ -16,6 +17,7 @@ const capabilities = await measureTestShellHost();
 const launcher = capabilities.bubblewrap.launcher;
 const ready = process.platform === 'linux' && capabilities.userNamespace === 'available' && capabilities.bubblewrap.status === 'available' && launcher?.overlay === true;
 const roots: string[] = [];
+const custodyIt = it.skipIf(!WORKSPACE_DESCRIPTOR_CUSTODY_AVAILABLE);
 afterEach(async () => {
   for (const root of roots.splice(0)) {
     await chmod(join(root, 'state', 'work', 'work'), 0o700).catch(() => undefined);
@@ -122,7 +124,7 @@ describe.skipIf(!ready)('sandbox write set: overlay mount and upper scan (SHELL-
 });
 
 describe('write-set entries at the file target (SHELL-OVERLAY)', () => {
-  it('only a write-set target accepts the form; a digest mismatch refuses; a removal that reached prepared is unknown', async () => {
+  async function targetFixture() {
     const root = await mkdtemp(join(tmpdir(), 'deckent-overlay-target-')); roots.push(root);
     const project = join(root, 'project'), upper = join(root, 'upper'), journal = join(root, 'journal');
     await mkdir(join(project, 'src'), { recursive: true }); await mkdir(join(upper, 'src'), { recursive: true });
@@ -131,7 +133,16 @@ describe('write-set entries at the file target (SHELL-OVERLAY)', () => {
     const request = (input: unknown, expectedVersion: string, key = 'a'.repeat(64)) => ({ operation: { id: 'workspace.file.write', version: 1 }, target: { kind: 'workspace-file', id: 'src/a.ts' },
       idempotencyKey: key, input, expectedVersion }) as never;
     const entry = { writeSet: { change: 'write', digest: fileContentVersion(Buffer.from('b\n')), mode: 0o640 } };
+    return { project, upper, journal, scope, request, entry };
+  }
+  it('a target without a write set refuses its input form before descriptor access', async () => {
+    const { scope, journal, request, entry, project } = await targetFixture();
     await expect(new WorkspaceFileTarget(scope, journal).apply(request(entry, fileContentVersion(Buffer.from('a\n'))))).rejects.toMatchObject({ code: 'EFFECT_TARGET_REJECTED' });
+    expect(await readFile(join(project, 'src', 'a.ts'), 'utf8')).toBe('a\n');
+    expect(existsSync(journal)).toBe(false);
+  });
+  custodyIt('[requires Linux /proc/self/fd custody] checks the digest, applies exact bytes and modes, and retains uncertain removal evidence', async () => {
+    const { scope, journal, upper, request, entry, project } = await targetFixture();
     const target = new WorkspaceFileTarget(scope, journal, { writeSet: { upper } });
     await expect(target.apply(request({ writeSet: { ...entry.writeSet, digest: '0'.repeat(64) } }, fileContentVersion(Buffer.from('a\n'))))).rejects.toMatchObject({ code: 'EFFECT_TARGET_REJECTED' });
     await target.apply(request(entry, fileContentVersion(Buffer.from('a\n'))));
@@ -249,10 +260,13 @@ describe('ensureWorkspaceParents makes only decided, non-floor directories — a
     expect(await ensureWorkspaceParents(scope, '.github/workflows/x.yml', () => 0o755, () => true)).toBe(false);
     expect(existsSync(join(root, '.github'))).toBe(false);
   });
-  it('refuses a directory the caller did not decide (none made); makes decided ordinary ones with their mode', async () => {
+  it('keeps an undecided directory uncreated, including on unsupported descriptor hosts', async () => {
     const { root, scope } = await project();
     expect(await ensureWorkspaceParents(scope, 'n1/n2/f', () => 0o755, directory => directory === 'n1')).toBe(false);
     expect(existsSync(join(root, 'n1'))).toBe(false);
+  });
+  custodyIt('[requires Linux /proc/self/fd custody] makes decided ordinary directories with their mode and does not decide existing ones', async () => {
+    const { root, scope } = await project();
     expect(await ensureWorkspaceParents(scope, 'n1/n2/f', () => 0o750, () => true)).toBe(true);
     expect((await lstat(join(root, 'n1', 'n2'))).mode & 0o777).toBe(0o750);
     // Existing directories are no decision: nothing new is needed, `admit` is never asked.
