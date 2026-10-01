@@ -10,6 +10,8 @@
 // own JSON Schema validator (src/platform/core/validate), so the SDK's @cfworker/json-schema provider must not reach the bundle either.
 // Reads the existing `dist` (run `npm run build` first; `--build` does it), writes `<out>/package/` (+ `<out>/meta.json`), and with `--pack`
 // the tarball. Usage: node scripts/build-dist.mjs [--out .pack] [--build] [--pack] [--bwrap <build-bwrap output>]
+// PACKAGED-WORKER-BOOTSTRAP (dogfood D3-1, 2026-10-01): STANDALONE_ENTRIES are mounted alone into worker containers, so they are built as their
+// own unsplit bundle (code splitting gave every entry a side-effect import of the shared esbuild-runtime chunk) and may import node: builtins only.
 // BWRAP-SELECT: the bundled bubblewrap (owner S4/S5) comes from a build-bwrap output (CI check-mode build) and must be exactly the locked
 // build for the shipped architectures with its notice, licenses and corresponding source; otherwise the package is not publishable.
 import { execFileSync } from 'node:child_process';
@@ -30,6 +32,13 @@ export const OPTIONAL_EXTERNALS = ['react-devtools-core', 'bufferutil', 'utf-8-v
  * ws, …); a module-scope `require` from createRequire makes the shim use Node's real require. Added only to outputs that define the shim. */
 const REQUIRE_SHIM = 'Dynamic require of "';
 const REQUIRE_BANNER = "import { createRequire as __deckentCreateRequire } from 'node:module'; const require = __deckentCreateRequire(import.meta.url);";
+/** dist-relative files the docker supervisor bind-mounts by themselves (native-connection gateway → /run/deckent-bootstrap.mjs): nothing next to
+ * them exists in the container, so each must be one file importing only node: builtins. */
+export const STANDALONE_ENTRIES = Object.freeze(['adapters/core/native-connection/internal/worker.js']);
+/** Imports of a standalone output (from the esbuild metafile) that the container cannot resolve: anything but an external node: builtin. */
+export function standaloneImportProblems(output, label) {
+  return (output?.imports ?? []).filter(item => !(item.external && item.path.startsWith('node:'))).map(item => `${label} imports ${item.path} (${item.kind})`);
+}
 const PUBLISHED_FIELDS = ['name', 'version', 'description', 'license', 'type', 'engines', 'bin', 'exports', 'imports', 'main'];
 
 /** FASTURI-OUT (owner 2026-09-29): the MCP SDK packages carry their own bundled ajv 8 + fast-uri 3.1.0 (8 HIGH advisories) behind the
@@ -123,9 +132,19 @@ export async function buildDist({ root = ROOT, out = join(ROOT, '.pack'), timest
     // Deckent's own modules stay separate files: a relative or #import from a dist file is external (import attributes are preserved).
     builder.onResolve({ filter: /^[.#]/ /* Go RE2 syntax: no flags */ }, args => args.kind !== 'entry-point' && args.importer.startsWith(dist + '/') ? { path: args.path, external: true } : undefined);
   } };
-  const result = await build({ absWorkingDir: root, entryPoints: files.filter(file => file.endsWith('.js')), outbase: dist, outdir: join(stage, 'dist'),
-    bundle: true, splitting: true, format: 'esm', platform: 'node', target: 'node24', chunkNames: 'vendor/[name]-[hash]', legalComments: 'eof',
-    external: OPTIONAL_EXTERNALS, metafile: true, logLevel: 'warning', plugins: [own, ajvStubPlugin(stubHits)] });
+  const standalone = STANDALONE_ENTRIES.map(entry => join(dist, entry));
+  for (const entry of standalone) if (!files.includes(entry)) throw new Error(`standalone entry ${relative(dist, entry)} missing from dist`);
+  const common = { absWorkingDir: root, outbase: dist, outdir: join(stage, 'dist'), bundle: true, format: 'esm', platform: 'node', target: 'node24',
+    legalComments: 'eof', external: OPTIONAL_EXTERNALS, metafile: true, logLevel: 'warning', plugins: [own, ajvStubPlugin(stubHits)] };
+  const split = await build({ ...common, entryPoints: files.filter(file => file.endsWith('.js') && !standalone.includes(file)), splitting: true,
+    chunkNames: 'vendor/[name]-[hash]' });
+  // Unsplit: one output file per entry, nothing shared with the split build. Same plugins, so a relative import stays external and is refused below.
+  const alone = await build({ ...common, entryPoints: standalone, splitting: false });
+  const result = { metafile: { inputs: { ...split.metafile.inputs, ...alone.metafile.inputs }, outputs: { ...split.metafile.outputs, ...alone.metafile.outputs } } };
+  const standaloneProblems = standalone.flatMap(entry => {
+    const label = relative(dist, entry), output = alone.metafile.outputs[relative(root, join(stage, 'dist', label)).replaceAll('\\', '/')];
+    return output ? standaloneImportProblems(output, label) : [`${label}: no output at its dist path`];
+  });
   const patched = [];
   for (const output of Object.keys(result.metafile.outputs)) {
     const path = join(root, output), code = readFileSync(path, 'utf8');
@@ -166,7 +185,7 @@ export async function buildDist({ root = ROOT, out = join(ROOT, '.pack'), timest
   const blockers = [...(Object.keys(typeLeaks).length ? [`published declarations import packages the zero-dependency package cannot resolve: ${Object.keys(typeLeaks).join(', ')}`] : []),
     ...(existsSync(join(stage, 'LICENSE')) ? [] : ['LICENSE file missing']), ...notices.gaps.map(gap => `notice: ${gap}`),
     ...locked.problems.map(problem => `license lock: ${problem}`),
-    ...bundleGaps.map(gap => `bubblewrap: ${gap}`)];
+    ...standaloneProblems.map(problem => `standalone: ${problem}`), ...bundleGaps.map(gap => `bubblewrap: ${gap}`)];
   const summary = { schemaVersion: 1, stage, esbuild: esbuildVersion, outputs: Object.keys(result.metafile.outputs).length, requireBanner: patched,
     ajvStub: Object.fromEntries([...stubHits].sort(([a], [b]) => a.localeCompare(b))),
     shipped: shipped.map(item => `${item.name}@${item.version}`), treeShaken: treeShaken.map(item => `${item.name}@${item.version}`),

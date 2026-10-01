@@ -9,18 +9,20 @@
 //   native   every shipped .node addon loads in this Node (Node-API: one binary serves Node 24 and 26)
 //   lazy     the static import closure of `deckent` reaches no ink/react/yoga/MCP code, of `deckent-mcp` only the MCP server
 //   imports  every shipped .js file names only node: builtins, relative files or the package's own #imports (nothing left to resolve)
+//   bootstrap the native worker bootstrap, which Deckent mounts ALONE into worker containers as /run/deckent-bootstrap.mjs, imports only node:
+//            builtins and loads when copied by itself into an empty directory (PACKAGED-WORKER-BOOTSTRAP: a shared vendor chunk killed every worker)
 //   types    (release gate, only with --types <typescript dir>[,<dir>…]) a consumer project using the SDK type-checks with skipLibCheck off,
 //            NodeNext and Bundler resolution, per given TypeScript, with nothing but the installed package and @types/node on its path
 // Usage: node scripts/pack-smoke.mjs <tarball> [--node /abs/node] [--root <installed package root>] [--types <ts dir>[,<ts dir>]]
 //        [--types-root <dir holding @types/node>] [--keep] [--only a,b]
 // Prints a JSON report; exit 1 when any check fails. The tarball path (install, runtime, client, --types) runs per supported Node before a
-// release; the fast --root subset (version,mcp,native,lazy,imports,terminal) runs in every verify via tests/contracts/tooling/pack-smoke-dist.test.ts.
+// release; the fast --root subset (version,mcp,native,lazy,imports,bootstrap,terminal) runs in every verify via tests/contracts/tooling/pack-smoke-dist.test.ts.
 import { spawn, spawnSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync, existsSync, realpathSync } from 'node:fs';
+import { copyFileSync, mkdtempSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync, existsSync, realpathSync } from 'node:fs';
 import { builtinModules } from 'node:module';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 /** Typical SDK use by a zero-dependency consumer: values, derived zod types (must be real types, not `any`), a hand-written Standard Schema,
  * the i18n key union, errors — and the zod schema values removed from the entry (DEPS-SCHEMA C2-b) must stay absent. */
@@ -233,6 +235,25 @@ if (want('imports') && report.checks.install?.ok !== false) {
   const unexpected = [...bare.keys()].filter(spec => !optional.has(spec));
   record('imports', unexpected.length === 0, { unexpected: Object.fromEntries(unexpected.map(spec => [spec, bare.get(spec).slice(0, 3)])),
     optionalExternal: [...bare.keys()].filter(spec => optional.has(spec)) });
+}
+
+if (want('bootstrap') && report.checks.install?.ok !== false) {
+  // The docker supervisor bind-mounts this one file (src/adapters/core/docker-supervisor/internal/connection.ts) and the container runs
+  // `node /run/deckent-bootstrap.mjs`: nothing next to it exists there. Static: every import specifier is a node: builtin. Isolated: the file is
+  // copied alone into an empty directory as `.mjs` (no package.json there, so the extension makes it ESM as in the container) and imported —
+  // module linking fails with ERR_MODULE_NOT_FOUND on any relative import; the bootstrap's own argv guard keeps a plain import side-effect free.
+  const shipped = join(root, 'dist/adapters/core/native-connection/internal/worker.js');
+  if (!existsSync(shipped)) record('bootstrap', false, { missing: shipped.slice(root.length + 1) });
+  else {
+    const code = readFileSync(shipped, 'utf8'), specs = [];
+    for (const match of code.matchAll(/(?:^|[\n;])\s*(?:import|export)\b[^'";]*?\bfrom\s*["']([^"']+)["']|(?:^|[\n;])\s*import\s*["']([^"']+)["']|\bimport\(\s*["']([^"']+)["']\s*\)/g)) specs.push(match[1] ?? match[2] ?? match[3]);
+    const foreign = specs.filter(spec => !spec.startsWith('node:'));
+    const isolated = join(base, 'bootstrap-isolated'); mkdirSync(isolated);
+    const copy = join(isolated, 'deckent-bootstrap.mjs'); copyFileSync(shipped, copy);
+    const loaded = run([node, '--input-type=module', '-e', `await import(${JSON.stringify(pathToFileURL(copy).href)});`], { cwd: isolated, timeout: 20_000 });
+    record('bootstrap', specs.length > 0 && foreign.length === 0 && loaded.status === 0, { imports: specs.length, foreign,
+      isolatedLoad: { status: loaded.status, ...(loaded.status === 0 ? {} : { error: /^\w*Error.*$/mu.exec(loaded.stderr)?.[0] ?? null, stderr: loaded.stderr.trim().slice(-300) }) } });
+  }
 }
 
 if (typescript && report.checks.install?.ok !== false) {
