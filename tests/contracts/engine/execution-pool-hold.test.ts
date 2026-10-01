@@ -79,6 +79,25 @@ async function fixture() {
   return { path, store, reservation, control, operations, hooks, rows, audit, turn: new RunProgressionTurn(operations, 2, { commandId: id }) };
 }
 
+// Sol 2210 K5-R1: a second connection commits between the status read of the hold row and the occupancy read. The interleaving is
+// interposed on node:sqlite's own statement API (the product code is unchanged): right after the hold row is read, `sql` commits.
+async function interleaved<T>(path: string, sql: readonly (readonly [string, ...unknown[]])[], read: () => Promise<T>): Promise<T> {
+  const prepare = DatabaseSync.prototype.prepare; let done = false;
+  const commit = () => {
+    const other = new DatabaseSync(path, { timeout: 1_000 });
+    try { other.exec('BEGIN IMMEDIATE'); for (const [text, ...params] of sql) prepare.call(other, text).run(...(params as never[])); other.exec('COMMIT'); } finally { other.close(); }
+  };
+  DatabaseSync.prototype.prepare = function (this: DatabaseSync, text: string) {
+    const statement = prepare.call(this, text);
+    if (done || !text.startsWith('SELECT pool_id,revision,state,record FROM execution_pool_holds')) return statement;
+    return new Proxy(statement, { get: (target, key) => key === 'get'
+      ? (...args: never[]) => { const row = target.get(...args); done = true; commit(); return row; }
+      : (value => typeof value === 'function' ? value.bind(target) : value)(Reflect.get(target, key)) });
+  } as typeof prepare;
+  try { const value = await read(); expect(done).toBe(true); return value; } finally { DatabaseSync.prototype.prepare = prepare; }
+}
+const runRow = (f: { rows: (sql: string) => unknown[] }) => f.rows("SELECT snapshot,revision FROM runs WHERE scope_id='s' AND run_id='r'")[0] as { snapshot: string; revision: number };
+
 describe('K5 typed execution pool hold', () => {
   it('refuses a reservation while held with no partial write, keeps admission open, and resume re-enables reservation', async () => {
     const f = await fixture();
@@ -244,5 +263,39 @@ describe.skipIf(process.platform === 'win32')('ledger v44 pool hold tables', () 
     const db = new DatabaseSync(path); db.prepare("INSERT INTO execution_pool_holds(pool_id,revision,state,record) VALUES('p',1,'open',?)")
       .run(JSON.stringify({ schemaVersion: 1, poolId: 'p', state: 'held', revision: 1, changedBy: { issuer: 'a', subject: 'b' }, changedAtMs: 1, scopeId: 's', commandId: 'c', reason: null })); db.close();
     await expect(store.readPoolHold('p')).rejects.toMatchObject({ code: 'RUN_STORE_CORRUPT' });
+  });
+  it('Sol 2210 K5-R1: status is one ledger snapshot — a resume and the last evaluation committed between its reads never yield held+drained', async () => {
+    const f = await fixture(), empty = runRow(f);
+    await f.reservation.reserve({ ...query, commandId: 'reserve', expectedRevision: 0 });
+    await f.control().apply(hold('h1'));
+    // Another connection resumes and the Run's last in-flight work ends (occupancy 0), both after the hold row was read.
+    const view = await interleaved(f.path, [['DELETE FROM execution_pool_holds WHERE pool_id=?', 'p'],
+      ["UPDATE runs SET snapshot=?, revision=? WHERE scope_id='s' AND run_id='r'", empty.snapshot, empty.revision]], () => f.control().inspect(status));
+    expect(view).toMatchObject({ state: 'held', occupancy: { execution: 2, inFlight: 2 }, drained: false }); // the real earlier moment
+    expect(await f.control().inspect(status)).toMatchObject({ state: 'open', occupancy: { execution: 0, inFlight: 0 }, drained: false }); // the later one
+  });
+
+  it('Sol 2210 K5-R1: a resume followed by a new reservation between its reads never yields a held pool with occupancy', async () => {
+    const f = await fixture(), empty = runRow(f);
+    await f.reservation.reserve({ ...query, commandId: 'reserve', expectedRevision: 0 });
+    const reserved = runRow(f);
+    const db = new DatabaseSync(f.path); try { db.prepare("UPDATE runs SET snapshot=?, revision=? WHERE scope_id='s' AND run_id='r'").run(empty.snapshot, empty.revision); } finally { db.close(); }
+    await f.control().apply(hold('h1'));
+    expect(await f.control().inspect(status)).toMatchObject({ state: 'held', occupancy: { execution: 0, inFlight: 0 }, drained: true });
+    const view = await interleaved(f.path, [['DELETE FROM execution_pool_holds WHERE pool_id=?', 'p'],
+      ["UPDATE runs SET snapshot=?, revision=? WHERE scope_id='s' AND run_id='r'", reserved.snapshot, reserved.revision]], () => f.control().inspect(status));
+    expect(view).toMatchObject({ state: 'held', occupancy: { execution: 0, inFlight: 0 }, drained: true });
+  });
+
+  it('Sol 2210 K5-R1: a failed status read ends its read transaction; the next status and hold/resume on the same connection work', async () => {
+    const f = await fixture();
+    await f.control().apply(hold('h1'));
+    const record = (f.rows("SELECT record FROM execution_pool_holds WHERE pool_id='p'")[0] as { record: string }).record;
+    const write = (text: string, ...params: never[]) => { const db = new DatabaseSync(f.path); try { db.prepare(text).run(...params); } finally { db.close(); } };
+    write("UPDATE execution_pool_holds SET record='{}' WHERE pool_id='p'");
+    await expect(f.control().inspect(status)).rejects.toMatchObject({ code: 'RUN_STORE_CORRUPT' });
+    write("UPDATE execution_pool_holds SET record=? WHERE pool_id='p'", record as never);
+    expect(await f.control().inspect(status)).toMatchObject({ state: 'held', drained: true });
+    expect(await f.control().apply(resume('r1'))).toMatchObject({ changed: true, state: 'open' });
   });
 });

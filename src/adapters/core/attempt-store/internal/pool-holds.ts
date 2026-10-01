@@ -25,11 +25,19 @@ export class SqlitePoolHoldJournal {
       throw sqliteFailure(error);
     }
   }
+  /** Sol 2210 K5-R1: the hold and the occupancy come from one read snapshot (a deferred transaction keeps the snapshot of its first
+   * read, so another connection's commit between the two reads is invisible): `drained` never combines two ledger moments. */
   async readPoolHold(poolId: string) {
+    let active = false;
     try {
+      this.db.exec('BEGIN'); active = true;
       const pools = new SqliteExecutionPools(this.db); pools.require(poolId);
-      return Object.freeze({ hold: pools.hold(poolId), occupancy: Object.freeze(pools.occupancy(poolId)) });
-    } catch (error) { throw sqliteFailure(error); }
+      const view = Object.freeze({ hold: pools.hold(poolId), occupancy: Object.freeze(pools.occupancy(poolId)) });
+      this.db.exec('COMMIT'); active = false; return view;
+    } catch (error) {
+      if (active) { try { this.db.exec('ROLLBACK'); } catch { throw new AttemptStoreError('ATTEMPT_STORE_OUTCOME_UNKNOWN'); } }
+      throw sqliteFailure(error);
+    }
   }
   async applyPoolHold(write: PoolHoldWrite, audit: (store: AuditStore, transition: PoolHoldTransition) => void): Promise<PoolHoldReceipt> {
     const { scopeId, commandId, poolId } = write.command, expected = fingerprint(write);
