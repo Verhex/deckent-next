@@ -24,5 +24,6 @@ export * from '#composition/core/workspace-patch/index.js';
 // Public SDK: the local operation entries only; the peer entries belong to the runtime service composition (C12 G4).
 export { executeConfiguredOperation, compensateConfiguredOperation, inspectConfiguredOperation } from '#composition/core/operations/index.js';
 export * from '#composition/core/worker-observation/index.js';
+export { inspectMonitor } from '#composition/core/monitor/index.js';
 export * from '#composition/core/toolchains/index.js';
 export { configuredApproval } from '#composition/core/approvals/index.js';

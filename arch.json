@@ -1846,7 +1846,39 @@
     },
     "src/engine/core/monitor": {
       "dependencies": [
+        "src/engine/core/worker-observation",
+        "src/engine/core/runtime",
+        "src/domain/core/run",
+        "src/domain/core/task-graph"
+      ],
+      "plan": "MONITOR"
+    },
+    "src/adapters/core/monitor-ledger": {
+      "dependencies": [
+        "src/adapters/core/sqlite-ledger",
+        "src/domain/core/approval",
+        "src/domain/core/run",
+        "src/engine/core/dispatch",
+        "src/engine/core/attempts",
+        "src/engine/core/monitor",
+        "src/engine/core/runs",
+        "src/engine/core/scheduling",
         "src/engine/core/worker-observation"
+      ],
+      "plan": "MONITOR"
+    },
+    "src/composition/core/monitor": {
+      "dependencies": [
+        "src/adapters/core/contract",
+        "src/adapters/core/monitor-ledger",
+        "src/composition/core/query-errors",
+        "src/composition/core/runtime-service",
+        "src/composition/core/worker-observation",
+        "src/engine/core/monitor",
+        "src/engine/core/worker-observation",
+        "src/platform/core/clock",
+        "src/platform/core/config",
+        "src/platform/core/managed-files"
       ],
       "plan": "MONITOR"
     },
