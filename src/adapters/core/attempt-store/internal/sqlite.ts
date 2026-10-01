@@ -24,7 +24,7 @@ import type { CancellationDeliveryClaim, CancellationDeliveryOutcome, Cancellati
 import { openSqliteLedger, sqliteFailure, type SqliteLedgerOptions } from '#adapters/core/sqlite-ledger/index.js';
 import type { DatabaseSync } from 'node:sqlite';
 import { attemptSnapshotSchema, sameAttemptIdentity, verifiedPrincipalSchema, type VerifiedPrincipal } from '#domain/index.js';
-import { AttemptStoreError, dispatchRecordSchema, type AttemptCommit, type AttemptReceipt, type AttemptStore } from '#engine/index.js';
+import { AttemptStoreError, dispatchRecordSchema, readSealedWorkerEvents, type AttemptCommit, type AttemptReceipt, type AttemptStore } from '#engine/index.js';
 
 /** Dedicated execution database. Path ownership/permissions are established by composition, not this adapter. */
 export class SqliteAttemptStore implements AttemptStore, DispatchStore, RunBoundDispatchStore, DispatchInventoryStore, RunStore, CancellationDeliveryStore, ServiceShutdownStore, TaskEvaluationStore, PoolHoldStore {
@@ -102,6 +102,9 @@ export class SqliteAttemptStore implements AttemptStore, DispatchStore, RunBound
   async finishAdoption(intent: IntegrationAdoptionIntent) { return new SqliteAdoptionJournal(this.db).finishAdoption(intent); }
   async saveWorkerEventLog(record: import('#engine/index.js').WorkerEventLog) { return new SqliteWorkerEventLogs(this.db).saveWorkerEventLog(record); }
   async loadWorkerEventLog(scopeId: string, attemptId: string) { return new SqliteWorkerEventLogs(this.db).loadWorkerEventLog(scopeId, attemptId); }
+  /** EXEC-RELEASE (Sol ER-R1): the sealed stream itself, verified like every reader does: full attempt identity, artifact read by receipt
+   * (size + digest) and event schema; null without a sealed log, `WORKER_OBSERVATION_INVALID` for anything else. */
+  async loadSealedWorkerEvents(identity: AttemptIdentity, artifacts: Pick<import('#capabilities/index.js').ArtifactStore, 'read'>) { return readSealedWorkerEvents(this, artifacts, identity); }
   async loadEffect(scopeId: string, commandId: string) { return new SqliteEffectJournal(this.db).loadEffect(scopeId, commandId); }
   async claimEffect(intent: import('#domain/index.js').EffectIntent) { return new SqliteEffectJournal(this.db).claimEffect(intent); }
   async saveEffect(previous: import('#domain/index.js').EffectRecord, next: import('#domain/index.js').EffectRecord) { return new SqliteEffectJournal(this.db).saveEffect(previous, next); }

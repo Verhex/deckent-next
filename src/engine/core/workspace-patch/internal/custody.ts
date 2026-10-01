@@ -16,17 +16,22 @@ export type AttemptCustodyOutcome = Readonly<{ schemaVersion: 1; status: 'releas
   | { schemaVersion: 1; status: 'held'; reason: AttemptCustodyHoldReason; code: string | null }>;
 export type AttemptCustodyRetention = Readonly<{ release: 'after-retained-patch' | 'keep'; sweepLimit: number }>;
 export type AttemptCustodySweepEntry = Readonly<{ identity: AttemptIdentity; outcome: AttemptCustodyOutcome }>;
-export type AttemptCustodySweep = Readonly<{ schemaVersion: 1; scopeId: string; released: number; detached: number; entries: readonly AttemptCustodySweepEntry[];
+/** `detachedKept`: detached (interrupted) removals left in the shared root, counted only; each is completed solely by its own attempt's
+ * authorized release, never by a scope-wide sweep (Sol ER-R2). */
+export type AttemptCustodySweep = Readonly<{ schemaVersion: 1; scopeId: string; released: number; detachedKept: number; entries: readonly AttemptCustodySweepEntry[];
   error: string | null }>;
-/** Trusted adapter for the recorded clone: exact request + path checks; `holds` is a work filter only, never release eligibility. */
+/** Trusted adapter for the recorded clone: exact request + path checks. `releaseAttempt` also completes this attempt's own interrupted
+ * detach (verified lease inside it). `holds` (directory or own detached removal present) is a work filter only, never eligibility. */
 export interface AttemptWorkspaceCustody {
   releaseAttempt(request: WorkspaceRequest, workspace: string): Promise<'removed' | 'absent'>;
   holds(identity: AttemptIdentity): Promise<boolean>;
-  sweepDetached(limit: number): Promise<number>;
+  countDetached(): Promise<number>;
 }
 export interface AttemptCustodyPorts {
-  /** `loadWorkerEventLog`: the sealed worker event log of an attempt (ledger), null when none was sealed. */
-  readonly store: DispatchStore & RunBoundDispatchStore & DispatchInventoryStore & { loadWorkerEventLog(scopeId: string, attemptId: string): Promise<unknown> };
+  /** `loadSealedWorkerEvents`: the attempt's sealed worker event stream verified against its exact identity, receipt digest and event
+   * schema; null when none was sealed, a thrown typed error when it does not verify. */
+  readonly store: DispatchStore & RunBoundDispatchStore & DispatchInventoryStore
+    & { loadSealedWorkerEvents(identity: AttemptIdentity, artifacts: Pick<ArtifactStore, 'read'>): Promise<readonly unknown[] | null> };
   readonly artifacts: ArtifactStore; readonly verifier: PrincipalVerifier;
   readonly authorization: DispatchAuthorization & DispatchIdentityAuthorization; readonly owner: string;
   /** Supervisor restored from the record's own persisted profile, never from current execution config. */
@@ -55,10 +60,11 @@ export class AttemptCustodyReleaseApplication {
       return patch.data;
     } catch (error) { return held('patch-corrupt', codeOf(error)); }
   }
-  /** Lead (a′): the live event sidecar inside the attempt directory is the only copy until sealed; an unreadable profile counts as observed. */
+  /** Lead (a′) / Sol ER-R1: the live event sidecar inside the attempt directory is the only copy until sealed, so an observed worker needs
+   * its sealed stream read back and verified (a valid zero-event stream counts); an unreadable profile counts as observed. */
   private async unsealed(identity: AttemptIdentity, record: DispatchRecord) {
     let required = true; try { required = this.ports.observed(record.profile); } catch { /* uncertainty keeps custody */ }
-    return required && !(await this.ports.store.loadWorkerEventLog(identity.scopeId, identity.attemptId));
+    return required && (await this.ports.store.loadSealedWorkerEvents(identity, this.ports.artifacts)) === null;
   }
   /** `expected` is the receipt the caller just retained (preparation); the start sweep passes none and relies on the ledger receipt. */
   async release(input: unknown, expected?: ArtifactReceipt, credential?: unknown): Promise<AttemptCustodyOutcome> {
@@ -80,11 +86,11 @@ export class AttemptCustodyReleaseApplication {
       return Object.freeze({ schemaVersion: 1, status: 'released', container, workspace });
     } catch (error) { return held('workspace-release-failed', codeOf(error)); }
   }
-  /** Bounded start sweep of one scope: ledger-terminal records with a retained patch whose attempt directory still exists (once it is gone
-   * nothing is left: the container goes first). At most `sweepLimit` release attempts and detached removals; one bad record never stops it. */
+  /** Bounded start sweep of one scope: ledger-terminal records with a retained patch whose attempt directory (or own interrupted detach)
+   * still exists; each goes through the same authorized `release`. At most `sweepLimit` release attempts; one bad record never stops it. */
   async sweep(scopeId: string, pageSize: number, credential?: unknown): Promise<AttemptCustodySweep> {
     const p = this.ports; const limit = p.retention.release === 'keep' ? 0 : p.retention.sweepLimit;
-    const entries: AttemptCustodySweepEntry[] = []; let after: string | null = null, error: string | null = null, detached = 0;
+    const entries: AttemptCustodySweepEntry[] = []; let after: string | null = null, error: string | null = null, detachedKept = 0;
     try {
       while (entries.length < limit) {
         const page = await p.store.listDispatches({ schemaVersion: 1, scopeId, after, limit: pageSize });
@@ -98,9 +104,9 @@ export class AttemptCustodyReleaseApplication {
         }
         if ((after = page.nextAfter) === null) break;
       }
-      if (limit) detached = await p.workspaces.sweepDetached(limit);
+      detachedKept = await p.workspaces.countDetached();
     } catch (failure) { error = codeOf(failure) ?? 'ATTEMPT_CUSTODY_SWEEP_FAILED'; }
-    return Object.freeze({ schemaVersion: 1, scopeId, released: entries.filter(entry => entry.outcome.status === 'released').length, detached,
+    return Object.freeze({ schemaVersion: 1, scopeId, released: entries.filter(entry => entry.outcome.status === 'released').length, detachedKept,
       entries: Object.freeze(entries), error });
   }
 }
@@ -110,7 +116,7 @@ export async function sweepAttemptCustodyScopes(scopeIds: readonly string[], swe
   const results: AttemptCustodySweep[] = [];
   for (const scopeId of scopeIds) {
     try { const result = await sweep(scopeId); if (result) results.push(result); }
-    catch (error) { results.push(Object.freeze({ schemaVersion: 1, scopeId, released: 0, detached: 0, entries: [], error: failure(error) })); }
+    catch (error) { results.push(Object.freeze({ schemaVersion: 1, scopeId, released: 0, detachedKept: 0, entries: [], error: failure(error) })); }
   }
   return Object.freeze(results);
 }

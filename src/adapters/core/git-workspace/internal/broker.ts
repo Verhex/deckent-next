@@ -182,31 +182,46 @@ export class GitWorkspaceBroker implements WorkspaceBroker {
     try { await lstat(target.directory); } catch (error) { if (code(error) === 'ENOENT') return 'absent'; throw error; }
     await this.checkedDirectory(this.options.workspaceRoot); await this.checkedDirectory(target.directory);
     await this.record(target.lease, target.request, allocating);
-    // Detach first (rename(2) in the same root is atomic): readers see the clone absent at once, and an interrupted removal leaves only
-    // a detached directory that `sweepDetached` finishes, never a half-deleted clone under the attempt's own path.
-    const detached = join(this.options.workspaceRoot, format.detached + randomUUID());
+    // Detach first (rename(2) in the same root is atomic): readers see the clone absent at once. The detached name carries this attempt's
+    // directory id and keeps its lease, so only this exact attempt's later authorized release can verify and finish an interrupted removal.
+    const detached = join(this.options.workspaceRoot, `${format.detached}${target.id}-${randomUUID()}`);
     await rename(target.directory, detached); await syncPath(this.options.workspaceRoot, true);
-    await rm(detached, { recursive: true });
+    await this.removeDetached(detached);
     return 'removed';
   }
-  /** EXEC-RELEASE: called only with ledger proof (terminal attempt, verified retained patch). `workspace` must be this identity's own
-   * checkout; the same exact request's 'allocating' record (a 'ready' rename an older build lost in a crash) is then removable too. */
+  /** Checkout and sidecars first, the lease last: an interruption at any point leaves a detached directory that still proves its attempt. */
+  private async removeDetached(path: string) {
+    for (const name of await readdir(path)) if (name !== format.lease) await rm(join(path, name), { recursive: true });
+    await rm(join(path, format.lease)); await rm(path, { recursive: true });
+  }
+  private async detachedOf(id: string) {
+    return (await readdir(this.options.workspaceRoot)).filter(name => name.startsWith(`${format.detached}${id}-`)).slice(0, 8);
+  }
+  /** EXEC-RELEASE: called only with ledger proof (terminal attempt, verified retained patch) and `attempt:release` authority for this exact
+   * record. `workspace` must be this identity's own checkout; the same exact request's 'allocating' record (a 'ready' rename an older build
+   * lost in a crash) is then removable too. It also finishes this attempt's own interrupted detach (Sol ER-R2): each detached directory must
+   * be private, owned and hold this exact request's lease; anything unverifiable is kept and refused as `WORKSPACE_IDENTITY_CONFLICT`. */
   async releaseAttempt(request: WorkspaceRequest, workspace: string): Promise<'removed' | 'absent'> {
-    if (this.identify(request).workspace !== workspace) throw new WorkspaceError('WORKSPACE_IDENTITY_CONFLICT');
-    return this.release(request, true);
-  }
-  /** Whether the attempt directory still exists; a work filter only, never release eligibility (that comes from the ledger). */
-  async holds(identity: AttemptIdentity): Promise<boolean> {
-    try { await lstat(this.identityTarget(identity).directory); return true; } catch (error) { if (code(error) === 'ENOENT') return false; throw error; }
-  }
-  /** Finishes at most `limit` removals interrupted after the detach; each must be a private directory of this owner. */
-  async sweepDetached(limit: number): Promise<number> {
-    await this.checkedDirectory(this.options.workspaceRoot); let removed = 0;
-    for (const name of await readdir(this.options.workspaceRoot)) {
-      if (removed >= limit || !name.startsWith(format.detached)) continue;
-      const path = join(this.options.workspaceRoot, name); await this.checkedDirectory(path);
-      await rm(path, { recursive: true }); removed++;
+    const target = this.identify(request);
+    if (target.workspace !== workspace) throw new WorkspaceError('WORKSPACE_IDENTITY_CONFLICT');
+    let result = await this.release(request, true), unverified = 0;
+    for (const name of await this.detachedOf(target.id)) {
+      const path = join(this.options.workspaceRoot, name);
+      try { await this.checkedDirectory(path); await this.record(join(path, format.lease), target.request, true); }
+      catch { unverified++; continue; }
+      await this.removeDetached(path); result = 'removed';
     }
-    return removed;
+    if (unverified) throw new WorkspaceError('WORKSPACE_IDENTITY_CONFLICT');
+    return result;
+  }
+  /** Whether the attempt directory or its own detached removal still exists; a work filter only, never release eligibility (the ledger). */
+  async holds(identity: AttemptIdentity): Promise<boolean> {
+    const target = this.identityTarget(identity);
+    try { await lstat(target.directory); return true; } catch (error) { if (code(error) !== 'ENOENT') throw error; }
+    return (await this.detachedOf(target.id)).length > 0;
+  }
+  /** Detached removals left in the shared root (any attempt, any scope); counted for visibility, never removed here. */
+  async countDetached(): Promise<number> {
+    return (await readdir(this.options.workspaceRoot)).filter(name => name.startsWith(format.detached)).length;
   }
 }
