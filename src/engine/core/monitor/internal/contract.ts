@@ -33,6 +33,8 @@ export interface MonitorAttempt {
    * (e.g. a lint-arch violation or the first failing test), and the last worker-reported events (untrusted, bounded). */
   readonly model?: string | null; readonly firstFailure?: string | null;
   readonly recentEvents?: readonly { readonly atMs: number | null; readonly kind: string; readonly summary: string }[];
+  /** MONITOR-DATA (optional): why recorded content is absent, e.g. `output-denied` (no attempt read-output decision: nothing was read). */
+  readonly diagnostics?: readonly string[];
 }
 export interface MonitorTask {
   readonly taskId: string; readonly kind: string; readonly phase: string;

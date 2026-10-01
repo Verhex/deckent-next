@@ -3,6 +3,8 @@ import { hostname, tmpdir, userInfo } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { createServer, type Socket } from 'node:net';
+import { createHash } from 'node:crypto';
+import { DatabaseSync } from 'node:sqlite';
 import { chmod } from 'node:fs/promises';
 import { createConfiguredRuntimeClient, inspectConfiguredWorkers, inspectMonitor } from '#composition/index.js';
 import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
@@ -21,14 +23,17 @@ const graph = { schemaVersion: 2 as const, revision: 1, tasks: [{ id: 't', kind:
   criterionDefinitions: [{ id: 'verified', version: 1, description: 'fixture', evaluator: { id: 'test', version: 1 }, parameters: {} }] };
 const capacity = { executionSlots: 4, inFlightSlots: 4 };
 
-async function project(root: string, name: string, scopes: readonly string[], granted: readonly string[]) {
+async function project(root: string, name: string, scopes: readonly string[], granted: readonly string[], extra: readonly ('output' | 'approvals')[] = []) {
   const dir = join(root, name); await mkdir(join(dir, '.deckent'), { recursive: true, mode: 0o700 });
   const config = { layout: { root: join(root, name + '-data') }, inspection: { workers: { sources: [] as { id: string; kind: string; path: string; scopeId: string }[] } } };
   const configPath = join(dir, '.deckent/config.json'); await writeFile(configPath, JSON.stringify(config));
   const options = { env: { HOME: join(root, 'home') } };
   const opened = await openConfiguredAttemptStore(dir, options); opened.store.close();
   await writeFile(productResourcePath(opened.layout, 'policy'), JSON.stringify({ schemaVersion: 1, revision: 'monitor', restrictions: [], grants: [
-    { id: 'inspect', effect: 'allow', scopes: [...granted], principals: [{ issuer: hostname(), subject: String(userInfo().uid) }], actions: ['inspect'], resource: { kind: 'scope', ids: [...granted] } }] }), { mode: 0o600 });
+    { id: 'inspect', effect: 'allow', scopes: [...granted], principals: [{ issuer: hostname(), subject: String(userInfo().uid) }], actions: ['inspect'], resource: { kind: 'scope', ids: [...granted] } },
+    ...(extra.includes('output') ? [{ id: 'output', effect: 'allow', scopes: [...granted], principals: [{ issuer: hostname(), subject: String(userInfo().uid) }], actions: ['read-output'], resource: { kind: 'attempt', ids: 'all' } }] : []),
+    ...(extra.includes('approvals') ? [{ id: 'approvals', effect: 'allow', scopes: [...granted], principals: [{ issuer: hostname(), subject: String(userInfo().uid) }], actions: ['inspect'], resource: { kind: 'approval', ids: [...granted] } }] : []),
+  ] }), { mode: 0o600 });
   const store = await openSqliteAttemptStore(opened.path, { busyTimeoutMs: 100, journalMode: 'wal', durability: 'full' }, 'allow', custodyProfiles);
   try {
     await store.createExecutionPool({ schemaVersion: 1, poolId: 'p', capacity });
@@ -136,7 +141,7 @@ describe.skipIf(process.platform === 'win32')('inspectMonitor composition', () =
   });
   it('v1.1: a failed attempt shows the first failing line of its recorded output, and the install map names layers, policy and memory', async () => {
     const root = await mkdtemp(join(tmpdir(), 'deckent-monitor-')); roots.push(root);
-    const current = await project(root, 'current', ['s'], ['s']);
+    const current = await project(root, 'current', ['s'], ['s'], ['output']);
     const artifacts = new FileArtifactStore({ root: await prepareProductDirectory(current.layout, 'artifacts'), maxBytes: 1_048_576 });
     const store = await openSqliteAttemptStore(current.ledger, { busyTimeoutMs: 100, journalMode: 'wal', durability: 'full' }, 'allow', custodyProfiles);
     const identity = { scopeId: 's', runId: 'r-fail', taskId: 't', attemptId: 'fail-t', layoutRevision: 'layout', generation: 1 };
@@ -158,9 +163,58 @@ describe.skipIf(process.platform === 'win32')('inspectMonitor composition', () =
     expect(failed.tasks[0]!.lastAttempt).toMatchObject({ endedAtMs: 40_000, recentEvents: [{ atMs: 5, kind: 'tool.call', summary: 'shell Bash npm test' }] });
     expect(install.runs[0]!.runId).toBe('r-fail');
     expect(install.map).toMatchObject({ memory: { available: false }, models: [], registry: { profiles: [], kinds: [] },
-      policy: { grants: 1, byResourceKind: { scope: 1 }, separationOfDuties: 0, permissionModes: [] } });
+      policy: { grants: 2, byResourceKind: { scope: 1, attempt: 1 }, separationOfDuties: 0, permissionModes: [] } });
     expect(install.map!.config.map(layer => layer.layer)).toEqual(['default', 'global', 'project', 'environment']);
     expect(install.map!.config[2]).toMatchObject({ path: current.configPath, sections: ['inspection', 'layout'] });
     expect(JSON.stringify(install.map)).not.toContain(join(root, 'current-data'));
+  });
+});
+describe.skipIf(process.platform === 'win32')('inspectMonitor content authorization (security)', () => {
+  async function failedAttempt(current: Awaited<ReturnType<typeof project>>) {
+    const artifacts = new FileArtifactStore({ root: await prepareProductDirectory(current.layout, 'artifacts'), maxBytes: 1_048_576 });
+    const store = await openSqliteAttemptStore(current.ledger, { busyTimeoutMs: 100, journalMode: 'wal', durability: 'full' }, 'allow', custodyProfiles);
+    const identity = { scopeId: 's', runId: 'r-fail', taskId: 't', attemptId: 'fail-t', layoutRevision: 'layout', generation: 1 };
+    try {
+      await store.createRun({ commandId: 'create-r-fail', actor, identity: { scopeId: 's', runId: 'r-fail', layoutRevision: 'layout' }, graph, execution: fixtureExecution(graph),
+        now: 10_700, policy: { schemaVersion: 2, poolId: 'p', capacity, ordering: ['t'] } });
+      await store.reserveRunTasks({ commandId: 'reserve-r-fail', actor, scopeId: 's', runId: 'r-fail', expectedRevision: 0, now: 20_700, identities: [identity] });
+      const claim = { owner: 'worker', request: { protocolVersion: 1 as const, identity, workspace: '/monitor-fixture-fail', argv: ['x'] } };
+      await store.claimDispatch(dispatchAdmission(claim)); await grantTestLaunch(store, claim, 30_700);
+      const output = await artifacts.put('s', new TextEncoder().encode(JSON.stringify({ schemaVersion: 1, identity, completeness: 'complete', stdout: '✗ [secret-rule] confidential detail', stderr: '' })));
+      await store.retainDispatchOutput(claim, output); await store.finishDispatch(claim, { handle: 'h-fail', exitCode: 1, interrupted: false });
+      const events = await artifacts.put('s', new TextEncoder().encode(JSON.stringify({ schemaVersion: 1, sequence: 1, atMs: 5, kind: 'tool.call', toolId: 't1', name: 'Bash',
+        toolClass: 'shell', target: 'confidential', detail: null }) + '\n'));
+      await store.saveWorkerEventLog({ schemaVersion: 1, identity, events, eventCount: 1, sealedAt: 40_000 });
+      return { output, events };
+    } finally { store.close(); }
+  }
+  it('security: without attempt read-output no recorded output or worker event is read; the attempt says output-denied', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'deckent-monitor-')); roots.push(root);
+    const current = await project(root, 'current', ['s'], ['s']); const { output, events } = await failedAttempt(current);
+    // Remove the stored bytes: any read attempt would surface as attempt-files-unavailable instead of a clean denial.
+    const directory = join(await prepareProductDirectory(current.layout, 'artifacts'), createHash('sha256').update('s').digest('hex'));
+    await rm(join(directory, output.digest)); await rm(join(directory, events.digest));
+    const install = (await inspectMonitor(current.dir, current.options)).installs[0]!;
+    const attempt = install.runs.find(run => run.runId === 'r-fail')!.tasks[0]!.lastAttempt!;
+    expect(attempt).toMatchObject({ exitCode: 1, firstFailure: null, diagnostics: ['output-denied'] }); expect(attempt.recentEvents).toBeUndefined();
+    expect(install.diagnostics.filter(code => code.startsWith('attempt-files-unavailable'))).toEqual([]);
+    expect(JSON.stringify(install)).not.toContain('confidential');
+  });
+  it('security: approval summaries need the approval list decision; without it the summary text is withheld', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'deckent-monitor-')); roots.push(root);
+    const insert = async (ledger: string) => {
+      const record = { request: { schemaVersion: 1, approvalId: 'ap-1', scopeId: 's', runId: 'current-s', taskId: 't', requester: { id: 'r', issuer: 'test', subject: 'r' },
+        actionDigest: 'a'.repeat(64), policyRevision: 'p1', summary: 'confidential approval text', createdAt: 1, expiresAt: 9_000_000_000_000 }, revision: 0, status: 'pending', decision: null,
+        keyId: 'k1', mac: 'b'.repeat(64) };
+      const writer = new DatabaseSync(ledger);
+      writer.prepare('INSERT INTO approvals(scope_id,approval_id,subject_kind,run_id,task_id,action_digest,revision,snapshot,current) VALUES(?,?,?,?,?,?,?,?,1)')
+        .run('s', 'ap-1', 'task', 'current-s', 't', 'a'.repeat(64), 0, JSON.stringify(record)); writer.close();
+    };
+    const hidden = await project(root, 'hidden', ['s'], ['s']); await insert(hidden.ledger);
+    const withheld = (await inspectMonitor(hidden.dir, hidden.options)).installs[0]!;
+    expect(withheld.approvals).toMatchObject([{ approvalId: 'ap-1', summary: '' }]); expect(withheld.diagnostics).toContain('approvals-denied:s');
+    expect(JSON.stringify(withheld)).not.toContain('confidential');
+    const shown = await project(root, 'shown', ['s'], ['s'], ['approvals']); await insert(shown.ledger);
+    expect((await inspectMonitor(shown.dir, shown.options)).installs[0]!.approvals).toMatchObject([{ approvalId: 'ap-1', summary: 'confidential approval text' }]);
   });
 });

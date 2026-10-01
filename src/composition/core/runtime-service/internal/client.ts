@@ -24,7 +24,6 @@ import type { EffectOutcome } from '#engine/index.js';
 import { AgentTurnStoreError, parseProviderSpendAccountInspectionForQuery, parseProviderSpendAuditResultForCommand, ProviderSpendError,
   type ProviderSpendAccountInspection, type ProviderSpendAuditResult } from '#engine/index.js';
 import type { ConfiguredRuntimeOperations } from './operations.js';
-
 export type ConfiguredRuntimeClient = ConfiguredRuntimeOperations & Readonly<{
   cancelModelInvocation(command: ModelInvocationCancellationCommand, delivery?: ModelInvocationDelivery): Promise<ModelInvocationCancellationResult>;
   purgeModelInvocationContent(command: ModelInvocationPurgeCommand, delivery?: ModelInvocationDelivery): Promise<ModelInvocationPurgeResult>;
@@ -61,7 +60,6 @@ export type ConfiguredRuntimeClient = ConfiguredRuntimeOperations & Readonly<{
   setSecret(command: SecretSetCommand, signal?: AbortSignal): Promise<SecretChangeResult>;
   deleteSecret(command: SecretDeleteCommand, signal?: AbortSignal): Promise<SecretChangeResult>;
 }>;
-
 type RuntimeCall = (operation: RuntimeServiceOperation, input: unknown, delivery?: RuntimeServiceDelivery, signal?: AbortSignal) => Promise<unknown>;
 /** v15 composer `@file` methods: both ends validate; a service that answers more than was asked is not trusted with the turn's context. */
 function workspaceFileMethods(call: RuntimeCall) {
@@ -87,7 +85,6 @@ function workspaceFileMethods(call: RuntimeCall) {
     },
   };
 }
-
 /** v15 catalog operation methods: both ends validate; an answer for another command, scope or operation is not trusted. */
 function effectOperationMethods(call: RuntimeCall) {
   const submit = async (operation: 'executeOperation' | 'compensateOperation', input: EffectCommand, delivery?: RuntimeServiceDelivery) => {
@@ -117,7 +114,6 @@ function effectOperationMethods(call: RuntimeCall) {
     },
   };
 }
-
 /** v15 permission-mode methods: both ends validate; an answer for another scope, or a set answer for another mode, is not trusted. */
 function permissionModeMethods(call: RuntimeCall) {
   return {
@@ -141,7 +137,6 @@ function permissionModeMethods(call: RuntimeCall) {
     },
   };
 }
-
 /** v16 `/scratch` methods: both ends validate the shapes. */
 function scratchMethods(call: RuntimeCall) {
   const scratch = async <T>(operation: 'inspectScratch' | 'clearScratch', schema: { safeParse(value: unknown): { success: true; data: T } | { success: false } },
@@ -157,7 +152,6 @@ function scratchMethods(call: RuntimeCall) {
   return { inspectScratch: (input: ScratchQuery, signal?: AbortSignal) => scratch<ScratchView>('inspectScratch', scratchViewSchema, input, signal),
     clearScratch: (input: ScratchQuery, signal?: AbortSignal) => scratch<ScratchClearance>('clearScratch', scratchClearanceSchema, input, signal) };
 }
-
 /** v18 secret methods: name and value are checked before anything is sent (typed, never echoed); an answer for another change is not trusted. */
 function secretMethods(call: RuntimeCall) {
   const change = async (operation: 'setSecret' | 'deleteSecret', input: SecretSetCommand | SecretDeleteCommand, signal?: AbortSignal) => {
@@ -170,7 +164,6 @@ function secretMethods(call: RuntimeCall) {
   return { setSecret: (input: SecretSetCommand, signal?: AbortSignal) => change('setSecret', input, signal),
     deleteSecret: (input: SecretDeleteCommand, signal?: AbortSignal) => change('deleteSecret', input, signal) };
 }
-
 /** No direct-execution fallback: a missing service is an explicit transport failure. */
 export function createConfiguredRuntimeClient(projectRoot: string, options: ConfigLoadOptions = {}): ConfiguredRuntimeClient {
   const call = async (operation: RuntimeServiceOperation, input: unknown, delivery?: RuntimeServiceDelivery, signal?: AbortSignal,

@@ -5,7 +5,8 @@ export async function readMonitorLedger(path: string, options: import('./interna
   return read(path, options);
 }
 /** MONITOR v1.1: the ledger view plus recorded-output first failures, recent worker events and the install map, read-only, from a resolved config. */
-export async function readMonitorInstall(config: import('#platform/index.js').ResolvedConfig, env?: import('#platform/index.js').Environment) {
+export async function readMonitorInstall(config: import('#platform/index.js').ResolvedConfig, env: import('#platform/index.js').Environment | undefined,
+  readOutput: (identity: import('#domain/index.js').AttemptIdentity) => Promise<boolean>) {
   const { readMonitorInstall: read } = await import('./internal/install.js');
-  return read(config, env);
+  return read(config, env, readOutput);
 }

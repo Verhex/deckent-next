@@ -28,7 +28,7 @@ export interface MonitorLedgerAttempt {
   /** MONITOR v1.1 (optional): provider from the evaluation's model record, the frozen profile pin or the dispatch profile adapter; model view from
    * the evaluation record or the pin; first failing line of a failed attempt's recorded output; last worker-reported events (untrusted). */
   readonly provider?: string | null; readonly model?: WorkerModelView | null; readonly firstFailure?: string | null;
-  readonly recentEvents?: readonly MonitorEvent[];
+  readonly recentEvents?: readonly MonitorEvent[]; readonly diagnostics?: readonly string[];
 }
 export interface MonitorEvent { readonly atMs: number | null; readonly kind: string; readonly summary: string }
 export interface MonitorLedgerRun {
@@ -63,9 +63,12 @@ export interface MonitorScopeObservation {
   /** The scope `inspect` decision of the target's own policy; only admitted scopes contribute Runs, approvals and workers. */
   readonly access: 'admitted' | 'denied' | 'unavailable';
   readonly workers: readonly WorkerObservation[]; readonly workerStatus: string; readonly truncated: boolean;
+  /** The approval list decision (`approval inspect` over the scope); absent or false withholds approval summary text. */
+  readonly approvals?: boolean;
 }
 /** Ports the composition binds to adapters. Every method may reject; the application turns rejections into diagnostics. */
 export interface MonitorPorts {
+  /** Recorded output and worker events are read only for attempts the adapter's read-output gate admits. */
   readLedger(target: MonitorTarget): Promise<MonitorLedgerReading>;
   /** Rejects with a coded error; `LOCAL_RUNTIME_UNAVAILABLE` means no service is listening. */
   describeService(target: MonitorTarget): Promise<RuntimeServiceDescriptor>;

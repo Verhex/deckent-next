@@ -115,7 +115,8 @@ export function projectMonitorRun(e: MonitorRunEvidence): MonitorRun {
       lastAttempt: attempt ? Object.freeze({ attemptId: attempt.attemptId, generation: attempt.generation, launch: attempt.dispatch?.launch ?? null,
         exitCode: attempt.dispatch?.terminal?.exitCode ?? null, startedAtMs: attempt.dispatch?.grantedAtMs ?? null, endedAtMs: attempt.sealedAtMs,
         workerPhase: worker?.files?.activity?.phase ?? null, heartbeatAgeMs: worker?.files?.heartbeat.ageMs ?? null, provider,
-        model: modelName(worker?.model ?? attempt.model), firstFailure: attempt.firstFailure ?? null, ...(attempt.recentEvents ? { recentEvents: attempt.recentEvents } : {}) }) : null });
+        model: modelName(worker?.model ?? attempt.model), firstFailure: attempt.firstFailure ?? null, ...(attempt.recentEvents ? { recentEvents: attempt.recentEvents } : {}),
+        ...(attempt.diagnostics ? { diagnostics: attempt.diagnostics } : {}) }) : null });
   });
   const current = deriveRunBlocker(e);
   // Proven finish of a terminal Run: every bound attempt has a sealed end; the latest of them.

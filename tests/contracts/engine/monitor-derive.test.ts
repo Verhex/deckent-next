@@ -178,14 +178,15 @@ describe('monitor application over ports', () => {
       async observeScope(target, scopeId) {
         if (scopeId === 'hidden') return { access: 'denied', workers: [], workerStatus: 'denied', truncated: false };
         if (target.id === 'flaky') throw failure('POLICY_UNAVAILABLE');
-        return { access: 'admitted', workers: [worker('a', 'fresh'), { ...worker('a', 'stale'), identity: { ...identity('a'), scopeId: 'other' } }], workerStatus: 'available', truncated: true };
+        return { access: 'admitted', workers: [worker('a', 'fresh'), { ...worker('a', 'stale'), identity: { ...identity('a'), scopeId: 'other' } }], workerStatus: 'available', truncated: true,
+          approvals: target.id !== 'quiet' };
       } });
-    const snapshotValue = await app.inspect([{ id: 'current', path: '/c' }, { id: 'stopped', path: '/s' }, { id: 'broken', path: '/b' }, { id: 'flaky', path: '/f' }, { id: 'empty', path: '/e' }]);
-    const [current, stopped, broken, flaky, empty] = snapshotValue.installs;
+    const snapshotValue = await app.inspect([{ id: 'current', path: '/c' }, { id: 'stopped', path: '/s' }, { id: 'broken', path: '/b' }, { id: 'flaky', path: '/f' }, { id: 'empty', path: '/e' }, { id: 'quiet', path: '/q' }]);
+    const [current, stopped, broken, flaky, empty, quiet] = snapshotValue.installs;
     expect(snapshotValue).toMatchObject({ schemaVersion: 1, observedAt: NOW, control: 'observe-only' });
     expect(current).toMatchObject({ status: 'available', scopeIds: ['s'], ledgerVersion: 44, service: { state: 'running', instanceId: 'i-1', processId: 42,
       build: { sourceCommit: 'd'.repeat(40), sourceTreeSha256: 'c'.repeat(64), builtAt: null } },
-      approvals: [{ scopeId: 's', approvalId: 'ap-a', requiredAssurance: null, createdAtMs: 300 }], pools: [{ poolId: 'p', capacity: 2, inFlight: 1, held: true, heldBy: 'ops', executing: 1 }] });
+      approvals: [{ scopeId: 's', approvalId: 'ap-a', summary: 'x', requiredAssurance: null, createdAtMs: 300 }], pools: [{ poolId: 'p', capacity: 2, inFlight: 1, held: true, heldBy: 'ops', executing: 1 }] });
     expect(current!.diagnostics).toEqual(['info:ledger-version-older:43', 'scope-denied:hidden', 'info:workers-truncated:s']);
     expect(current!.runs.map(run => run.scopeId)).toEqual(['s']);
     // The worker joins its own scope's attempt only (an equal attempt id in another scope never leaks in).
@@ -195,6 +196,8 @@ describe('monitor application over ports', () => {
     expect(broken!.diagnostics).toEqual(['service-unavailable:RUNTIME_SERVICE_TRANSPORT', 'ledger-unavailable:MANAGED_FILE_MISSING']);
     expect(flaky).toMatchObject({ status: 'denied', runs: [], pools: [], approvals: [] });
     expect(flaky!.diagnostics).toContain('scope-unavailable:s:POLICY_UNAVAILABLE');
+    // Without the approval list decision the approval stays visible (it blocks a Run) but its summary text is withheld.
+    expect(quiet!.approvals).toMatchObject([{ approvalId: 'ap-a', summary: '' }]); expect(quiet!.diagnostics).toContain('approvals-denied:s');
     // A ledger with no scope yet (fresh install) still shows its installation-wide pools.
     expect(empty).toMatchObject({ status: 'available', scopeIds: [], runs: [], pools: [{ poolId: 'p', held: true }] });
   });

@@ -2,7 +2,8 @@ import { userInfo } from 'node:os';
 import { dirname } from 'node:path';
 import { CONFIG_FIELDS, createDefaultConfig, envValue, inspectProductDirectory, inspectProductFile, loadGlobalConfig, productResourcePath, readJsonFile, resolveGlobalConfigReadPath,
   resolveProductLayout, type Environment, type ResolvedConfig } from '#platform/index.js';
-import { executionRegistrySchema, workerEventSchema, type WorkerEvent } from '#domain/index.js';
+import { executionRegistrySchema, workerEventSchema, type AttemptIdentity, type WorkerEvent } from '#domain/index.js';
+import { readLocalOsIdentity } from '#adapters/core/local-principal/index.js';
 import { extractFirstFailure, parseRetainedOutputEnvelope, summarizeMonitorEvent, type MonitorEvent, type MonitorLedgerReading, type MonitorMap } from '#engine/index.js';
 import { FileArtifactStore } from '#adapters/core/file-artifacts/index.js';
 import { FilePolicySource } from '#adapters/core/file-policy/index.js';
@@ -23,16 +24,18 @@ const recent = (events: readonly { readonly atMs: number | null; readonly event:
  * running (live tail) attempts, and the install map (config layers, registry, model catalog, policy summary, memory). Every secondary read
  * failure is a typed diagnostic; nothing is created or written.
  */
-export async function readMonitorInstall(config: ResolvedConfig, env: Environment = process.env): Promise<MonitorLedgerReading> {
+export async function readMonitorInstall(config: ResolvedConfig, env: Environment | undefined, readOutput: (identity: AttemptIdentity) => Promise<boolean>): Promise<MonitorLedgerReading> {
   const layout = config.productLayout;
   const scan = scanMonitorLedger(await inspectProductFile(layout, 'ledger', ['-wal', '-shm', '-journal']),
     { busyTimeoutMs: config.storage.sqlite.busyTimeoutMs, maxRuns: config.inspection.maxPageSize });
   const diagnostics = [...scan.reading.diagnostics];
   const artifacts = FileArtifactStore.reader(() => inspectProductDirectory(layout, 'artifacts'), config.artifacts.maxBytes);
-  const extra = new Map<string, { firstFailure?: string | null; recentEvents?: readonly MonitorEvent[] }>();
+  const extra = new Map<string, { firstFailure?: string | null; recentEvents?: readonly MonitorEvent[]; diagnostics?: readonly string[] }>();
   for (const files of scan.files) {
     const key = `${files.identity.scopeId}/${files.identity.attemptId}`;
     try {
+      // Security: recorded output and worker events are content of the attempt — read only after its read-output decision (workers list/transcript).
+      if ((files.failed || (files.open && files.workspace)) && !(await readOutput(files.identity))) { extra.set(key, { firstFailure: null, diagnostics: ['output-denied'] }); continue; }
       if (files.failed) extra.set(key, { firstFailure: await firstFailure(artifacts, files), ...(files.events ? { recentEvents: await sealedEvents(artifacts, files) } : {}) });
       else if (files.open && files.workspace) extra.set(key, { recentEvents: recent((await readWorkerEventTail(dirname(files.workspace), 'worker', MONITOR_EVENT_TAIL_BYTES))
         .map(line => ({ atMs: line.receivedAt, event: line.event }))) });
@@ -41,7 +44,7 @@ export async function readMonitorInstall(config: ResolvedConfig, env: Environmen
   const runs = scan.reading.runs.map(run => Object.freeze({ ...run, attempts: Object.freeze(run.attempts.map(value => {
     const found = extra.get(`${run.snapshot.identity.scopeId}/${value.attemptId}`); return found ? Object.freeze({ ...value, ...found }) : value;
   })) }));
-  const map = await installMap(config, env, scan.reading.map ?? null, diagnostics);
+  const map = await installMap(config, env ?? process.env, scan.reading.map ?? null, diagnostics);
   return Object.freeze({ ...scan.reading, runs: Object.freeze(runs), map, diagnostics: Object.freeze(diagnostics) });
 }
 
@@ -75,7 +78,9 @@ async function installMap(config: ResolvedConfig, env: Environment, ledger: Moni
       ownerUid: userInfo().uid, maxBytes: config.inspection.policyMaxBytes }).load();
     const byResourceKind: Record<string, number> = {};
     for (const grant of document.grants) byResourceKind[grant.resource.kind] = (byResourceKind[grant.resource.kind] ?? 0) + 1;
-    const modes = document.schemaVersion === 2 ? document.bindings.modes ?? [] : [];
+    // Like `inspectPermissionMode`, only the caller's own modes are shown; other persons' modes stay in the authority document.
+    const self = readLocalOsIdentity();
+    const modes = (document.schemaVersion === 2 ? document.bindings.modes ?? [] : []).filter(entry => entry.principal.issuer === self.issuer && entry.principal.subject === self.subject);
     policy = Object.freeze({ grants: document.grants.length, byResourceKind: Object.freeze(byResourceKind), separationOfDuties: document.schemaVersion === 2 ? document.separationOfDuties.length : 0,
       permissionModes: Object.freeze(modes.map(entry => Object.freeze({ principal: `${entry.principal.issuer}/${entry.principal.subject}`, mode: entry.mode }))) });
   } catch (error) { diagnostics.push('map-policy-unavailable:' + code(error)); }

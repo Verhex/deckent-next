@@ -38,12 +38,13 @@ export class MonitorApplication {
         approvals: [], pools: [], diagnostics: Object.freeze(diagnostics) });
     }
     diagnostics.push(...reading.diagnostics);
-    const admitted = new Set<string>(); const workers: WorkerObservation[] = []; let denied = false;
+    const admitted = new Set<string>(); const summaries = new Set<string>(); const workers: WorkerObservation[] = []; let denied = false;
     for (const scopeId of reading.scopeIds) {
       try {
         const scope = await this.ports.observeScope(target, scopeId);
         if (scope.access !== 'admitted') { denied ||= scope.access === 'denied'; diagnostics.push(`scope-${scope.access}:${scopeId}`); continue; }
-        admitted.add(scopeId); workers.push(...scope.workers);
+        admitted.add(scopeId); workers.push(...scope.workers); if (scope.approvals === true) summaries.add(scopeId);
+        else if (reading.approvals.some(value => value.scopeId === scopeId)) diagnostics.push('approvals-denied:' + scopeId);
         if (scope.workerStatus !== 'available') diagnostics.push(`workers-${scope.workerStatus}:${scopeId}`);
         if (scope.truncated) diagnostics.push('info:workers-truncated:' + scopeId);
       } catch (error) { diagnostics.push(`scope-unavailable:${scopeId}:${code(error)}`); }
@@ -67,7 +68,7 @@ export class MonitorApplication {
       return projectMonitorRun({ run, approvals: reading.approvals, pool: run.poolId ? pools.get(run.poolId) ?? null : null, workers: own, observedAt });
     }).sort((a, b) => (b.lastActivityMs ?? -1) - (a.lastActivityMs ?? -1));
     const approvals: MonitorApproval[] = reading.approvals.filter(value => admitted.has(value.scopeId)).map(value => Object.freeze({ scopeId: value.scopeId,
-      approvalId: value.approvalId, subjectKind: value.subjectKind, summary: value.summary, requiredAssurance: null, createdAtMs: value.createdAtMs, expiresAtMs: value.expiresAtMs }));
+      approvalId: value.approvalId, subjectKind: value.subjectKind, summary: summaries.has(value.scopeId) ? value.summary : '', requiredAssurance: null, createdAtMs: value.createdAtMs, expiresAtMs: value.expiresAtMs }));
     const poolViews: MonitorPool[] = !reading.scopeIds.length || admitted.size ? reading.pools.map(pool => Object.freeze({ poolId: pool.poolId, capacity: pool.inFlightSlots, inFlight: pool.inFlight,
       held: pool.hold?.state === 'held', heldBy: pool.hold?.state === 'held' ? pool.hold.changedBy : null, executionCapacity: pool.executionSlots, executing: pool.execution })) : [];
     const status = !reading.scopeIds.length || admitted.size ? 'available' : denied ? 'denied' : 'unavailable';
