@@ -11,6 +11,8 @@ Bu belge yalnız güncel durumu tutar; önceki sürümü Git geçmişinde, kanı
   Composition 5479/5500. Owner 2026-10-01: benimseme `use`+`adopt` onaylandı; K6 O1 (tam eşleşme) / O2 (kapsamsız işi reddet) owner'a sunulacak.
   **Canlı (2026-10-01 08:21Z):** ilk `dev-release` geçişi — `current` = `versions/c083ec8ee3df-e1493d3b471c`, instance `b3e23208`, ledger 43
   (kanıt `proof/LIVE-SWITCH-BATCH19-2026-10-01/`); bu partiyle ledger v44 gelir (v43'e dönüş `--restore-ledger` ister; ilk v44 geçişi boşaltmasız).
+  Sol 2210 REVISE K5-R1 (P2: `pool status` iki ayrı okuma — hiç yaşanmamış held+drained) → tek okuma snapshot'ı + deterministik ikinci bağlantı
+  yarış testleri (eski kodda kırmızı: `proof/K5-POOL-HOLD-2026-10-01/sol-2210-red.txt`, yeşil `sol-2210-green.txt`).
   **Sıradaki:** tam verify → Sol → push → owner onayıyla canlı → bu tur kapanır; sonra ortak devralma analizi (analiz oturumu deckent-next-40).
 - **On dokuzuncu parti (2026-10-01; `integrate/2026-10-01-t`, worktree `/home/alperen/deckent-next-integrate-t`, taban `21110d09`):**
   K3 tipli iş girdisi (`lane/k3-work-input` `31198880`+`425d4b65`; graf v3 `workInput`, `native-coding-template`; ARCHITECTURE alt bölümü)
