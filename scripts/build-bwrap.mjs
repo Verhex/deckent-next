@@ -39,6 +39,15 @@ async function verifiedFile(url, expected, path) {
 }
 
 const SHA256 = /^[0-9a-f]{64}$/u;
+const RESOLVED_PACKAGE = /^([a-z0-9][\w.+-]*)-([0-9][\w.+-]*-r[0-9]+)$/u;
+/** apk info's name-version inventory becomes exact solver constraints, including transitive dependencies. */
+export function resolvedPackagePins(packages) {
+  return packages.map(entry => {
+    const match = typeof entry === 'string' && RESOLVED_PACKAGE.exec(entry);
+    if (!match) throw new Error(`resolved package is not name-version: ${entry}`);
+    return `${match[1]}=${match[2]}`;
+  });
+}
 /** What the lock fails to pin (empty when complete): the build refuses to run on any of these. */
 export function lockProblems(lock) {
   const problems = [];
@@ -50,6 +59,9 @@ export function lockProblems(lock) {
   }
   for (const key of ['host', ...BWRAP_ARCHES.map(arch => `sysroot-${arch}`)]) {
     if (!Array.isArray(lock.resolvedPackages?.[key]) || !lock.resolvedPackages[key].length) problems.push(`resolvedPackages.${key} is missing`);
+    else lock.resolvedPackages[key].forEach((entry, index) => {
+      if (typeof entry !== 'string' || !RESOLVED_PACKAGE.test(entry)) problems.push(`resolvedPackages.${key}[${index}] is not name-version: ${entry}`);
+    });
   }
   for (const arch of BWRAP_ARCHES) {
     if (!SHA256.test(lock.outputs?.[arch]?.sha256 ?? '')) problems.push(`outputs.${arch}.sha256 is not a sha256: ${lock.outputs?.[arch]?.sha256}`);
@@ -156,7 +168,9 @@ async function main() {
 
   const uid = process.getuid?.() ?? 0, gid = process.getgid?.() ?? 0;
   const env = { BWRAP_VERSION: lock.version, SOURCE_DATE_EPOCH: lock.sourceDateEpoch, HOST_PACKAGES: lock.hostPackages.join(' '),
-    SYSROOT_PACKAGES: lock.sysrootPackages.join(' '), ARCHES: arches.join(' '), OUT_OWNER: `${uid}:${gid}` };
+    SYSROOT_PACKAGES: lock.sysrootPackages.join(' '), ARCHES: arches.join(' '), OUT_OWNER: `${uid}:${gid}`,
+    HOST_RESOLVED_PACKAGES: resolvedPackagePins(lock.resolvedPackages?.host ?? []).join(' ') };
+  for (const name of arches) env[`SYSROOT_${name.toUpperCase()}_RESOLVED_PACKAGES`] = resolvedPackagePins(lock.resolvedPackages?.[`sysroot-${name}`] ?? []).join(' ');
   const log = execFileSync('docker', ['run', '--rm', ...Object.entries(env).flatMap(([key, value]) => ['-e', `${key}=${value}`]),
     '-v', `${join(out, 'in')}:/in:ro`, '-v', `${join(out, 'out')}:/out`, lock.buildImage.reference, 'sh', '/in/build.sh'],
   { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], maxBuffer: 64 * 1024 * 1024 });

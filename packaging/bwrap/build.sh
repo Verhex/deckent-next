@@ -6,13 +6,14 @@
 # Every package comes from Alpine's signed repositories at the
 # exact version the lock names (a removed version fails the build; the lock is then updated deliberately, never silently).
 set -eu
-# The driver passes the lock's values: BWRAP_VERSION, SOURCE_DATE_EPOCH, HOST_PACKAGES, SYSROOT_PACKAGES (pkg=version, space separated).
+# The driver passes direct pins and the complete resolved closures as pkg=version constraints. Empty closures are allowed only
+# for the driver's initial --record; normal check mode validates all closures before running this recipe.
 version=${BWRAP_VERSION:?} epoch=${SOURCE_DATE_EPOCH:?} host_pkgs=${HOST_PACKAGES:?} sysroot_pkgs=${SYSROOT_PACKAGES:?}
 arches=${ARCHES:-x86_64 aarch64}
 export SOURCE_DATE_EPOCH="$epoch" TZ=UTC LC_ALL=C
 
 # shellcheck disable=SC2086
-apk add --no-cache -q $host_pkgs
+apk add --no-cache -q $host_pkgs ${HOST_RESOLVED_PACKAGES:-}
 LLVM=/usr/lib/llvm22/bin
 mkdir -p /build && cd /build
 tar -xJf "/in/bubblewrap-$version.tar.xz"
@@ -23,8 +24,13 @@ for arch in $arches; do
   mkdir -p "$root/etc/apk/keys"
   cp /usr/share/apk/keys/"$arch"/* "$root/etc/apk/keys/"
   cp /etc/apk/repositories "$root/etc/apk/"
+  case "$arch" in
+    x86_64) resolved_pkgs=${SYSROOT_X86_64_RESOLVED_PACKAGES:-} ;;
+    aarch64) resolved_pkgs=${SYSROOT_AARCH64_RESOLVED_PACKAGES:-} ;;
+    *) echo "unsupported architecture: $arch" >&2; exit 1 ;;
+  esac
   # shellcheck disable=SC2086
-  apk add -q --root "$root" --arch "$arch" --initdb --no-cache --no-scripts $sysroot_pkgs
+  apk add -q --root "$root" --arch "$arch" --initdb --no-cache --no-scripts $sysroot_pkgs $resolved_pkgs
   target=$arch-alpine-linux-musl
   cat > "/build/cross-$arch.ini" <<EOF
 [binaries]

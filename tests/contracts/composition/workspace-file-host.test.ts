@@ -4,6 +4,8 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { createRuntimeWorkspaceFileHost } from '#adapters/index.js';
 
+import { WORKSPACE_DESCRIPTOR_CUSTODY_AVAILABLE } from '../../fixtures/workspace-descriptor-custody.js';
+
 const roots: string[] = [];
 afterEach(async () => { await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 async function project() {
@@ -14,7 +16,7 @@ async function project() {
 const until = async (check: () => Promise<boolean>) => { for (let attempt = 0; attempt < 200; attempt++) { if (await check()) return; await new Promise(done => setTimeout(done, 10)); } throw new Error('TIMEOUT'); };
 
 // TERM-UX-1 a: past its quiet time the list still answers at once; a background walk refreshes it; only a very old list is awaited.
-describe('runtime workspace file host (stale while revalidate)', () => {
+describe.skipIf(!WORKSPACE_DESCRIPTOR_CUSTODY_AVAILABLE)('runtime workspace file host (stale while revalidate; requires Linux /proc/self/fd custody)', () => {
   it('serves the older list immediately once it is past the ttl and refreshes it in the background', async () => {
     const root = await project();
     let clock = 0;

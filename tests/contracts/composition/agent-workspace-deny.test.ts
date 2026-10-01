@@ -8,9 +8,11 @@ import { bubblewrapShellSandbox, resolveBubblewrapView } from '#adapters/core/sh
 import { classifyReadOnlyShellCommand } from '#engine/index.js';
 import { prepareProductFile, productResourcePath, resolveProductLayout } from '#platform/index.js';
 import { measureTestShellHost } from '../../fixtures/shell-host.js';
+import { WORKSPACE_DESCRIPTOR_CUSTODY_AVAILABLE } from '../../fixtures/workspace-descriptor-custody.js';
 
 const capabilities = await measureTestShellHost();
 const sandboxReady = capabilities.bubblewrap.status === 'available';
+const custodyIt = it.skipIf(!WORKSPACE_DESCRIPTOR_CUSTODY_AVAILABLE);
 const roots: string[] = [], servers: Server[] = [];
 afterEach(async () => {
   for (const server of servers.splice(0)) await new Promise<void>(done => server.close(() => done()));
@@ -39,7 +41,7 @@ async function project() {
 // Every product resource of the layout except its configuration is refused to the agent tools, and the same scope feeds the shell's
 // path classification and both sandboxes (one source).
 describe('agent workspace deny: the product state of a data root inside the project', () => {
-  it('refuses every state resource to read_file, hides them from list_dir and grep, and still reads the configuration and project files', async () => {
+  custodyIt('[requires Linux /proc/self/fd custody] refuses every state resource to read_file, hides them from list_dir and grep, and still reads the configuration and project files', async () => {
     const p = await project();
     const tools = await createWorkspaceReadTools(p.root, { deny: p.deny });
     for (const path of STATE_FILES) {
@@ -57,12 +59,16 @@ describe('agent workspace deny: the product state of a data root inside the proj
     expect((await tools.execute('read_file', { path: 'src/a.ts' })).text).toContain('export const a = 1;');
   });
 
-  it('classifies a shell read of product state as protected, and a project read as read-only', async () => {
+  it('classifies a shell read of product state as protected without granting platform custody', async () => {
     const p = await project();
     for (const path of ['state/terminal-sessions/other-session.json', 'state/ledger.db', 'policy.json']) {
       const verdict = await classifyReadOnlyShellCommand(`cat ${DATA}/${path}`, createShellPathContext(p.scope));
       expect(verdict, path).toMatchObject({ readOnly: false, reasonCode: 'PATH_PROTECTED' });
     }
+  });
+
+  custodyIt('[requires Linux /proc/self/fd custody] classifies a project read as read-only', async () => {
+    const p = await project();
     expect(await classifyReadOnlyShellCommand('cat src/a.ts .deckent/config.json', createShellPathContext(p.scope))).toMatchObject({ readOnly: true });
   });
 
@@ -163,12 +169,6 @@ describe.skipIf(!sandboxReady || capabilities.landlock.status !== 'available')('
       }
     }
   });
-  it('derives anchors with the deny matcher\'s own wildcard language: brackets are literal, `*`/`?` cut (Astra 2164)', async () => {
-    const scope = await createWorkspaceScope((await layoutAt('.cache/deckent[1]', null)).root, ['.cache/deckent[1]/state/ledger.db*', '.cache/deckent[1]/state/ledger.db/**',
-      '.cache/deckent[1]/state/.ledger.db*', '**/.env', '.env', 'a/b?c/d*', 'plain/dir/']);
-    expect([...scope.protectedAnchors].sort()).toEqual(['.cache/deckent[1]/state/.ledger.db', '.cache/deckent[1]/state/ledger.db', 'a/b', 'plain/dir']);
-    expect(scope.protectedAnchors.has('.cache/deckent')).toBe(false);
-  });
   it('refuses the call when the product state lies behind a symbolic link on its ancestor chain', async () => {
     const base = await mkdtemp(join(tmpdir(), 'dn-ignored-link-')); roots.push(base);
     const root = join(base, 'project'), real = join(base, 'elsewhere'); await mkdir(join(real, 'deckent'), { recursive: true }); await mkdir(join(root, '.cache'), { recursive: true });
@@ -186,4 +186,13 @@ describe.skipIf(!sandboxReady || capabilities.landlock.status !== 'available')('
       expect(ran, provider.kind).toMatchObject({ status: 'spawn-failed' }); expect(ran.output, provider.kind).not.toContain('SYNTHETIC');
     }
   });
+});
+
+// Anchor derivation is pure deny grammar; it requires neither descriptor custody nor native sandboxes.
+it('derives anchors with the deny matcher\'s own wildcard language: brackets are literal, `*`/`?` cut (Astra 2164)', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'dn-deny-anchors-')); roots.push(root);
+  const scope = await createWorkspaceScope(root, ['.cache/deckent[1]/state/ledger.db*', '.cache/deckent[1]/state/ledger.db/**',
+      '.cache/deckent[1]/state/.ledger.db*', '**/.env', '.env', 'a/b?c/d*', 'plain/dir/']);
+  expect([...scope.protectedAnchors].sort()).toEqual(['.cache/deckent[1]/state/.ledger.db', '.cache/deckent[1]/state/ledger.db', 'a/b', 'plain/dir']);
+  expect(scope.protectedAnchors.has('.cache/deckent')).toBe(false);
 });

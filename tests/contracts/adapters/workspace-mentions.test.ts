@@ -5,6 +5,9 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { createWorkspaceScope, indexWorkspaceFiles, rankWorkspacePaths, readWorkspaceAttachment } from '#adapters/index.js';
 import { attachTerminalMentions, TERMINAL_MENTION_MAX_FILES } from '#composition/core/terminal-chat/index.js';
 
+import { WORKSPACE_DESCRIPTOR_CUSTODY_AVAILABLE } from '../../fixtures/workspace-descriptor-custody.js';
+
+const custodyIt = it.skipIf(!WORKSPACE_DESCRIPTOR_CUSTODY_AVAILABLE);
 const roots: string[] = [];
 afterEach(async () => { await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 async function project(files: Record<string, string | Buffer>) {
@@ -24,14 +27,14 @@ describe('workspace @file index, ranking and bounded attachment (T-L5)', () => {
     expect(rankWorkspacePaths(paths, '', 2)).toEqual(['src/compose.ts', 'composer/index.ts']);
   });
 
-  it('indexes regular files only, skipping the deny floor and ignored directories, and stops at its bound', async () => {
+  custodyIt('[requires Linux /proc/self/fd custody] indexes regular files only, skipping the deny floor and ignored directories, and stops at its bound', async () => {
     const root = await project({ 'a.ts': 'a', '.env': 'S=1', 'node_modules/p/i.js': 'x', '.git/HEAD': 'ref', 'dir/b.ts': 'b', 'dir/c.ts': 'c' });
     const scope = await createWorkspaceScope(root);
     expect([...(await indexWorkspaceFiles(scope)).paths].sort()).toEqual(['a.ts', 'dir/b.ts', 'dir/c.ts']);
     expect(await indexWorkspaceFiles(scope, 2)).toMatchObject({ truncated: true, paths: ['a.ts', 'dir/b.ts'] });
   });
 
-  it('attaches a bounded UTF-8 prefix and says so; refuses denied, binary, hard-linked and outside paths with a typed reason', async () => {
+  custodyIt('[requires Linux /proc/self/fd custody] attaches a bounded UTF-8 prefix and says so; refuses denied, binary, hard-linked and outside paths with a typed reason', async () => {
     const root = await project({ 'tr.txt': 'ğ'.repeat(10), 'bin.dat': Buffer.from([1, 0, 2]), '.env': 'S=1', 'small.ts': 'ok\n' });
     await link(join(root, 'small.ts'), join(root, 'alias.ts'));
     const scope = await createWorkspaceScope(root);

@@ -7,6 +7,7 @@ import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { readFileSync } from 'node:fs';
 import { BUNDLED_DIR, bundleProblems, stageBundle } from './build-bwrap.mjs';
+import { buildTypeScript } from './build-typescript.mjs';
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const SRC = join(ROOT, 'src');
@@ -120,7 +121,7 @@ function stageBubblewrap() {
 
 const started = performance.now();
 rmSync(DIST, { recursive: true, force: true });
-run(process.platform === 'win32' ? 'npx.cmd' : 'npx', ['tsc', '-p', 'tsconfig.json']);
+buildTypeScript(ROOT);
 const assets = copyAssets();
 for (const bin of BINS) {
   const path = join(ROOT, bin);

@@ -29,10 +29,13 @@ def read_for(seconds):
             if not chunk: return False
             out += chunk
     return True
-def wait(token, seconds=20):
+def wait(token, seconds=20, after=0):
     deadline = time.time() + seconds
-    while token.encode() not in out:
+    while token.encode() not in out[after:]:
         if time.time() > deadline or not read_for(0.1):
+            try: os.kill(pid, 9)
+            except ProcessLookupError: pass
+            os.waitpid(pid, 0)
             sys.stdout.write(json.dumps({'timeout': token, 'output': out.decode('utf8', 'replace')}))
             sys.exit(3)
     read_for(0.15)
@@ -46,22 +49,28 @@ def typed(text):
 wait('READY')
 typed('/resume\r')
 wait('PREVIEW-TOKEN-SECOND')
+mark = len(out)
 put(b'\x1b')
-time.sleep(0.35)
+wait('> |', after=mark)
 typed('qq')
 wait('qq')
+mark = len(out)
 put(b'\x15')
-time.sleep(0.15)
+wait('> |', after=mark)
+mark = len(out)
 typed('/resume\r')
-time.sleep(0.5)
+wait('> SESSION 1', after=mark)
+mark = len(out)
 put(b'\x1b[B')
-time.sleep(0.2)
+wait('> SESSION 2', after=mark)
 put(b'\r')
 wait('RESUMED 3')
+mark = len(out)
 typed('/approvals\r')
-time.sleep(0.5)
+wait('> A-ITEM 1', after=mark)
+mark = len(out)
 put(b'\x1b[B')
-time.sleep(0.2)
+wait('> A-ITEM 2', after=mark)
 put(b'\r')
 wait('A-SUBJECT ap-2')
 put(b'\x1b')
@@ -100,10 +109,13 @@ def read_for(seconds):
             if not chunk: return False
             out += chunk
     return True
-def wait(token, seconds=20):
+def wait(token, seconds=20, after=0):
     deadline = time.time() + seconds
-    while token.encode() not in out:
+    while token.encode() not in out[after:]:
         if time.time() > deadline or not read_for(0.1):
+            try: os.kill(pid, 9)
+            except ProcessLookupError: pass
+            os.waitpid(pid, 0)
             sys.stdout.write(json.dumps({'timeout': token, 'output': out.decode('utf8', 'replace')}))
             sys.exit(3)
     read_for(0.15)
@@ -117,9 +129,9 @@ def typed(text):
 wait('READY')
 typed('/resume\r')
 wait('SESSION')
-time.sleep(0.3)
+mark = len(out)
 put(b'\x1b[B')
-time.sleep(0.2)
+wait('> SESSION 2', after=mark)
 put(b'\r')
 wait('RESUMED 3')
 put(b'\x03'); time.sleep(0.2); put(b'\x03')

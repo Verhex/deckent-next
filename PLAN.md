@@ -57,6 +57,18 @@ Sıra: C11-1 ve Hat A ilk dogfood denemesi tamamlandı ([COMPLETED-PLAN](COMPLET
 
 ## Açık işler — sıradaki (owner 2026-09-24)
 
+**CI-FULL — owner doğrudan onayı 2026-10-01 (ENTRY2217 sonrası):** Sol bu kartın uygulayıcısıdır; `lane/ci-sol`
+worktree tabanı exact `d11bdbfa532db5880a55f3cb954b19db7a85d3ff`. Bu istisna eski macOS F9 kapsam dışı sınırını yalnız bu kart için kaldırır.
+Yerel düzeltmeler hazırlıkta: shell-free yerel compiler, canonical OS temp fixture, mevcut Linux descriptor capability'sine bağlı
+pozitif testler + etkin tipli ret kanıtı, PTY readiness senkronizasyonu, tam bwrap paket closure pin'i ve beş audit edilmiş host entry
+refresh'i, Linux-only dev-release tipli ret. `src/` güvenlik sınırları, assertion/bütçe limitleri ve iki binary hash gevşetilmez.
+Kalan kabul: lead entegrasyonu + exact aday full verify + başka bağımsız reviewer + ayrı push yetkisiyle altı gerçek hosted OS/Node işi;
+Windows/macOS/Node26 matrisi ve Linux hosted yeniden koşusu henüz kanıtlanmadı. Simüle missing-proc koşusunda mevcut native overlay
+conflict testi bir kez kırıldı; normal Linux koşusunda geçti, kök neden açık (log korunur). Repository paketlerinin gelecekte
+prune edilmesi fail-closed kalır; immutable mirror bu kartta uygulanmadı. CI-FULL'de Sol kendi değişikliğine bağımsız PASS vermez.
+Commit/push/canlı müdahale bu uygulama yetkisine dahil değil. Kanıt `proof/CI-FULL-2026-10-01/` (dış alan); açık borç ve yeni skip
+envanteri lead handoff'ta, bu owner kararı genel macOS/Windows ürün desteği kabulü değildir.
+
 **Owner 2026-09-24 akşam — iki ayrı iş (birleştirilmez):** (1) **Deckent native terminal = Claude Code sınıfı ajan terminali:**
 Deckent'i geliştirebilecek tam bağlamlı tek model, izin/araç akışı, Deckent takibi, tam otonom iş; 32k bağlamlı yerel model buna
 yetmez. Enterprise-grade terminal önceliklendirildi; önce deckent-dev terminalinin kapsamlı analizi. (2) **vLLM yerel paralel worker
