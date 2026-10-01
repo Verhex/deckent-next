@@ -7,14 +7,16 @@ Deckent izleyici · gözlem 2026-10-02 09:30:00Z · yalnız gözlem
 Run'lar: 3 ilerliyor · 5 bekliyor · 7 takılı · 1 kabul · 2 başarısız · 1 iptal
 ⚠ current sorunları: scope-x kapsamı okunamadı (LEDGER_LOCKED)
 ⚠ dogfood sorunları: ledger sürüm 43, bu derlemeden eski: yeni alanlar boş
-görünebilir; future-code:abc
+görünebilir; future-code:abc; scope-dog kapsamının onayları gizli: görme izniniz
+yok
 ⚠ remote-lab erişilemiyor: ledger okunamadı (LEDGER_LOCKED); servis durumu
 okunamadı (LOCAL_RUNTIME_DENIED)
 dogfood notu: biten worker'ların yalnız en yenileri gösteriliyor; 5 eskisi gizli
 
-Sizi bekleyen (2)
+Sizi bekleyen (3)
   Konu                                           Bekliyor    Süre sonu
   operation: Push branch lane/monitor to origin  3 sa 12 dk  45 dk sonra doluyor
+  operation: özet görme izniniz yok              10 dk       süresiz
   effect: Delete stale preview environment       4 dk 0 sn   2 dk 0 sn önce dol…
 
 Takılı ya da bekleyen, en eskisi önce (12)
@@ -44,8 +46,8 @@ Başarısız Run'lar ve ilk hata yeri (2)
 
 ── Run'lar ─────────────────────────────────────────────────────────────────────
   Run kimliği                 Durum           Engel                   Süre
-  run-broken                  ✗ başarısız     —                       15 dk
-  run-broken-quiet            ✗ başarısız     —                       10 dk
+  run-broken                  ✗ başarısız     —                       ≈ 15 dk
+  run-broken-quiet            ✗ başarısız     —                       bilinmiyor
   run-dog-1                   ▶ ilerliyor     worker çalışıyor        sürüyor
   run-not-admitted            ~ bekliyor      henüz kabul edilmedi    sürüyor
   run-done                    ✓ kabul edildi  —                       1 sa 10 dk
@@ -61,7 +63,7 @@ Başarısız Run'lar ve ilk hata yeri (2)
   run-pool-held               ~ bekliyor      havuz bekletiliyor      sürüyor
   run-waiting-pool-slot       ~ bekliyor      havuzda yer bekliyor    sürüyor
   run-none                    ▶ ilerliyor     normal ilerliyor        sürüyor
-  run-stopped                 ■ iptal edildi  —                       4 sa 0 dk
+  run-stopped                 ■ iptal edildi  —                       bilinmiyor
   run-unknown                 ! takılı        neden bilinmiyor        sürüyor
 
 ── Worker'lar ──────────────────────────────────────────────────────────────────
@@ -74,6 +76,7 @@ Başarısız Run'lar ve ilk hata yeri (2)
 ── Onaylar ─────────────────────────────────────────────────────────────────────
   Konu                                    Bekliyor    Süre sonu         Güvence
   operation: Push branch lane/monitor t…  3 sa 12 dk  45 dk sonra dol…  local-os
+  operation: özet görme izniniz yok       10 dk       süresiz           local-os
   effect: Delete stale preview environm…  4 dk 0 sn   2 dk 0 sn önce …  —
 
 ── Havuzlar ────────────────────────────────────────────────────────────────────
@@ -99,9 +102,10 @@ Kapsamlar: scope-dog
 servis çalışıyor (pid 2001) · örnek svc-02
 build 76582f9f0000 (2026-10-01 22:15:00Z derlendi) · kaynak ağacı ffffffffffff
 ledger sürüm 43
-1 Run · 0 worker · 0 onay · 1 havuz
+1 Run · 0 worker · 1 onay · 1 havuz
 ⚠ ledger sürüm 43, bu derlemeden eski: yeni alanlar boş görünebilir
 ⚠ future-code:abc
+⚠ scope-dog kapsamının onayları gizli: görme izniniz yok
 Not: biten worker'ların yalnız en yenileri gösteriliyor; 5 eskisi gizli
 
 Kurulum remote-lab · erişilemiyor

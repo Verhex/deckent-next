@@ -1,18 +1,20 @@
 Deckent izleyici · gözlem 2026-10-02 09:30:00Z · yalnız gözlem
 ● current · servis çalışıyor (pid 31337) · build b0e66d92c0ff (2026-10-02 08:00:00Z derlendi) · ledger sürüm 44 · ⚠ 1 u…
-● dogfood · servis çalışıyor (pid 2001) · build 76582f9f0000 (2026-10-01 22:15:00Z derlendi) · ledger sürüm 43 · ⚠ 2 uy…
+● dogfood · servis çalışıyor (pid 2001) · build 76582f9f0000 (2026-10-01 22:15:00Z derlendi) · ledger sürüm 43 · ⚠ 3 uy…
 ○ remote-lab · erişilemiyor · build bilinmiyor · ledger sürümü bilinmiyor · ⚠ 2 uyarı · /mnt/lab/deckent
 
 ── Özet ────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 Run'lar: 3 ilerliyor · 5 bekliyor · 7 takılı · 1 kabul · 2 başarısız · 1 iptal
 ⚠ current sorunları: scope-x kapsamı okunamadı (LEDGER_LOCKED)
-⚠ dogfood sorunları: ledger sürüm 43, bu derlemeden eski: yeni alanlar boş görünebilir; future-code:abc
+⚠ dogfood sorunları: ledger sürüm 43, bu derlemeden eski: yeni alanlar boş görünebilir; future-code:abc; scope-dog
+kapsamının onayları gizli: görme izniniz yok
 ⚠ remote-lab erişilemiyor: ledger okunamadı (LEDGER_LOCKED); servis durumu okunamadı (LOCAL_RUNTIME_DENIED)
 dogfood notu: biten worker'ların yalnız en yenileri gösteriliyor; 5 eskisi gizli
 
-Sizi bekleyen (2)
+Sizi bekleyen (3)
   Konu                                           Bekliyor    Süre sonu             Kurulum
   operation: Push branch lane/monitor to origin  3 sa 12 dk  45 dk sonra doluyor   current
+  operation: özet görme izniniz yok              10 dk       süresiz               dogfood
   effect: Delete stale preview environment       4 dk 0 sn   2 dk 0 sn önce doldu  current
 
 Takılı ya da bekleyen, en eskisi önce (12)
@@ -41,26 +43,26 @@ Başarısız Run'lar ve ilk hata yeri (2)
   run-blocked-approval/lint   çalıştırıyor  ⚠ 1 dk 35 sn (eski)  çalışıyor  ed5a5613  claude/model-alpha-2  current
 
 ── Run'lar ─────────────────────────────────────────────────────────────────────────────────────────────────────────────
-  Run kimliği                    Durum           Engel                      Ne zamandır  Süre        Görevler   Kapsam
-  run-broken                     ✗ başarısız     —                          —            15 dk       0/2 kabul  scope-a
-  run-broken-quiet               ✗ başarısız     —                          —            10 dk       0/2 kabul  scope-a
-  run-dog-1                      ▶ ilerliyor     worker çalışıyor           1 dk 30 sn   sürüyor     0/2 kabul  scope-d…
-  run-not-admitted               ~ bekliyor      henüz kabul edilmedi       1 sa 33 dk   sürüyor     0/2 kabul  scope-a
-  run-done                       ✓ kabul edildi  —                          —            1 sa 10 dk  2/2 kabul  scope-a
-  run-cancellation-pending       ! takılı        iptal bekleniyor           1 sa 26 dk   sürüyor     0/2 kabul  scope-a
-  run-unresolved-effect          ! takılı        etki sonucu belirsiz       1 sa 19 dk   sürüyor     0/2 kabul  scope-a
-  run-evaluation-unknown         ! takılı        değerlendirme sonucu bel…  1 sa 11 dk   sürüyor     0/2 kabul  scope-a
-  run-evaluation-not-ready       ! takılı        değerlendirme hazır değil  1 sa 4 dk    sürüyor     0/2 kabul  scope-a
-  run-worker-exited-unevaluated  ! takılı        worker bitti, değerlendi…  57 dk        sürüyor     0/2 kabul  scope-a
-  run-worker-stale-heartbeat     ! takılı        worker sessiz (heartbeat…  50 dk        sürüyor     0/2 kabul  scope-a
-  run-worker-running             ▶ ilerliyor     worker çalışıyor           43 dk        sürüyor     0/2 kabul  scope-a
-  run-blocked-approval           ~ bekliyor      onay bekliyor (appr-0001)  3 sa 12 dk   sürüyor     0/2 kabul  scope-a
-  run-waiting-dependency         ~ bekliyor      bağımlılığını bekliyor     28 dk        sürüyor     0/2 kabul  scope-a
-  run-pool-held                  ~ bekliyor      havuz bekletiliyor         21 dk        sürüyor     0/2 kabul  scope-a
-  run-waiting-pool-slot          ~ bekliyor      havuzda yer bekliyor       14 dk        sürüyor     0/2 kabul  scope-a
-  run-none                       ▶ ilerliyor     normal ilerliyor           7 dk 0 sn    sürüyor     0/2 kabul  scope-a
-  run-stopped                    ■ iptal edildi  —                          —            4 sa 0 dk   0/2 kabul  scope-a
-  run-unknown                    ! takılı        neden bilinmiyor           bilinmiyor   sürüyor     0/2 kabul  scope-a
+  Run kimliği                    Durum           Engel                          Ne zamandır  Süre        Teslim
+  run-broken                     ✗ başarısız     —                              —            ≈ 15 dk     —
+  run-broken-quiet               ✗ başarısız     —                              —            bilinmiyor  —
+  run-dog-1                      ▶ ilerliyor     worker çalışıyor               1 dk 30 sn   sürüyor     —
+  run-not-admitted               ~ bekliyor      henüz kabul edilmedi           1 sa 33 dk   sürüyor     —
+  run-done                       ✓ kabul edildi  —                              —            1 sa 10 dk  benimsendi 1a2…
+  run-cancellation-pending       ! takılı        iptal bekleniyor               1 sa 26 dk   sürüyor     —
+  run-unresolved-effect          ! takılı        etki sonucu belirsiz           1 sa 19 dk   sürüyor     —
+  run-evaluation-unknown         ! takılı        değerlendirme sonucu belirsiz  1 sa 11 dk   sürüyor     —
+  run-evaluation-not-ready       ! takılı        değerlendirme hazır değil      1 sa 4 dk    sürüyor     —
+  run-worker-exited-unevaluated  ! takılı        worker bitti, değerlendirilm…  57 dk        sürüyor     —
+  run-worker-stale-heartbeat     ! takılı        worker sessiz (heartbeat esk…  50 dk        sürüyor     —
+  run-worker-running             ▶ ilerliyor     worker çalışıyor               43 dk        sürüyor     —
+  run-blocked-approval           ~ bekliyor      onay bekliyor (appr-0001)      3 sa 12 dk   sürüyor     —
+  run-waiting-dependency         ~ bekliyor      bağımlılığını bekliyor         28 dk        sürüyor     —
+  run-pool-held                  ~ bekliyor      havuz bekletiliyor             21 dk        sürüyor     —
+  run-waiting-pool-slot          ~ bekliyor      havuzda yer bekliyor           14 dk        sürüyor     —
+  run-none                       ▶ ilerliyor     normal ilerliyor               7 dk 0 sn    sürüyor     —
+  run-stopped                    ■ iptal edildi  —                              —            bilinmiyor  geri alındı
+  run-unknown                    ! takılı        neden bilinmiyor               bilinmiyor   sürüyor     —
 
 ── Worker'lar ──────────────────────────────────────────────────────────────────────────────────────────────────────────
   Run/Görev                   Şu an         Heartbeat yaşı       Süreç      Deneme    Sağlayıcı/model       Kurulum
@@ -70,9 +72,10 @@ Başarısız Run'lar ve ilk hata yeri (2)
   run-blocked-approval/pack   —             bırakıldı            kayıp      a465c0eb  claude/model-alpha-2  current
 
 ── Onaylar ─────────────────────────────────────────────────────────────────────────────────────────────────────────────
-  Konu                                           Bekliyor    Süre sonu             Güvence   Kapsam   Kurulum
-  operation: Push branch lane/monitor to origin  3 sa 12 dk  45 dk sonra doluyor   local-os  scope-a  current
-  effect: Delete stale preview environment       4 dk 0 sn   2 dk 0 sn önce doldu  —         scope-a  current
+  Konu                                           Bekliyor    Süre sonu             Güvence   Kapsam     Kurulum
+  operation: Push branch lane/monitor to origin  3 sa 12 dk  45 dk sonra doluyor   local-os  scope-a    current
+  operation: özet görme izniniz yok              10 dk       süresiz               local-os  scope-dog  dogfood
+  effect: Delete stale preview environment       4 dk 0 sn   2 dk 0 sn önce doldu  —         scope-a    current
 
 ── Havuzlar ────────────────────────────────────────────────────────────────────────────────────────────────────────────
   Havuz    Doluluk            Bekletme                   Kurulum
@@ -97,9 +100,10 @@ Kapsamlar: scope-dog
 servis çalışıyor (pid 2001) · örnek svc-02
 build 76582f9f0000 (2026-10-01 22:15:00Z derlendi) · kaynak ağacı ffffffffffff
 ledger sürüm 43
-1 Run · 0 worker · 0 onay · 1 havuz
+1 Run · 0 worker · 1 onay · 1 havuz
 ⚠ ledger sürüm 43, bu derlemeden eski: yeni alanlar boş görünebilir
 ⚠ future-code:abc
+⚠ scope-dog kapsamının onayları gizli: görme izniniz yok
 Not: biten worker'ların yalnız en yenileri gösteriliyor; 5 eskisi gizli
 
 Kurulum remote-lab · erişilemiyor

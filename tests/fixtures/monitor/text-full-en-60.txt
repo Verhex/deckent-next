@@ -9,16 +9,19 @@ failed · 1 cancelled
 ⚠ current has problems: scope scope-x could not be read
 (LEDGER_LOCKED)
 ⚠ dogfood has problems: the ledger is version 43, older than
-this build: newer fields may be empty; future-code:abc
+this build: newer fields may be empty; future-code:abc;
+approvals of scope scope-dog are hidden: you may not see
+them
 ⚠ remote-lab is unavailable: the ledger could not be read
 (LEDGER_LOCKED); service state could not be read
 (LOCAL_RUNTIME_DENIED)
 dogfood note: only the most recent finished workers are
 shown; 5 older ones are hidden
 
-Waiting for you (2)
+Waiting for you (3)
   Subject                       Waiting     Expires
   operation: Push branch lane…  3 h 12 min  expires in 45 m…
+  operation: you may not see …  10 min      no expiry
   effect: Delete stale previe…  4 min 0 s   expired 2 min 0…
 
 Stuck or waiting, oldest first (12)
@@ -78,6 +81,7 @@ Workers running now (2)
 ── Approvals ───────────────────────────────────────────────
   Subject                       Waiting     Expires
   operation: Push branch lane…  3 h 12 min  expires in 45 m…
+  operation: you may not see …  10 min      no expiry
   effect: Delete stale previe…  4 min 0 s   expired 2 min 0…
 
 ── Pools ───────────────────────────────────────────────────
@@ -105,10 +109,12 @@ service running (pid 2001) · instance svc-02
 build 76582f9f0000 (built 2026-10-01 22:15:00Z) · source
 tree ffffffffffff
 ledger v43
-1 Runs · 0 workers · 0 approvals · 1 pools
+1 Runs · 0 workers · 1 approvals · 1 pools
 ⚠ the ledger is version 43, older than this build: newer
 fields may be empty
 ⚠ future-code:abc
+⚠ approvals of scope scope-dog are hidden: you may not see
+them
 Note: only the most recent finished workers are shown; 5
 older ones are hidden
 
