@@ -1,6 +1,5 @@
 import { WORKSPACE_ATTACHMENT_MAX_BYTES, type WorkspaceAttachment, type WorkspaceAttachmentRequest, type WorkspaceFileMatches, type WorkspaceFileQuery } from '#domain/index.js';
 import type { ConfigLoadOptions } from '#platform/index.js';
-
 /** Runtime v15 composer `@file` operations; the shipped executable wires the local runtime client. */
 export interface TerminalMentionPorts {
   find(projectRoot: string, query: WorkspaceFileQuery, options: ConfigLoadOptions, signal?: AbortSignal): Promise<WorkspaceFileMatches>;
@@ -11,11 +10,9 @@ export const TERMINAL_MENTION_MAX_FILES = 8;
 /** All attached content of one message together (each file also at most `WORKSPACE_ATTACHMENT_MAX_BYTES`). */
 export const TERMINAL_MENTION_TOTAL_BYTES = 131_072;
 export const TERMINAL_MENTION_CANDIDATES = 20;
-
 export type TerminalMentionNote =
   | { readonly path: string; readonly status: 'attached'; readonly bytes: number; readonly totalBytes: number; readonly truncated: boolean }
   | { readonly path: string; readonly status: 'refused'; readonly reason: string };
-
 /** Composer candidates for `@query` from the service's scoped read port. */
 export async function findTerminalMentions(input: { readonly projectRoot: string; readonly scopeId: string; readonly query: string; readonly options: ConfigLoadOptions;
   readonly signal?: AbortSignal }, ports: TerminalMentionPorts): Promise<readonly string[]> {
@@ -23,7 +20,6 @@ export async function findTerminalMentions(input: { readonly projectRoot: string
     input.options, input.signal);
   return found.paths;
 }
-
 /**
  * The user message of a line with `@path` mentions: the typed text, then one labelled block per attached file. Content comes from
  * the service (bounded per file and per message); a cut says how much was sent of how much. The block labels are model-facing

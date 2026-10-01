@@ -4,12 +4,10 @@ import { readScopeCompanies, registerLedgerScopes } from '#adapters/index.js';
 import { policySchema } from '#domain/index.js';
 import { installationOwnScopes, resolvePolicyScopeMembership, ScopeRegistrationError, type ScopeAccess, type ScopeRegistry } from '#engine/index.js';
 import { createLayoutPolicySource } from '#composition/core/policy/index.js';
-
 async function existingLedger(config: ResolvedConfig): Promise<string | null> {
   try { return await inspectProductFile(config.productLayout, 'ledger', ['-wal', '-shm', '-journal']); }
   catch (error) { if (error instanceof ManagedFileError && error.code === 'MANAGED_FILE_MISSING') return null; throw error; }
 }
-
 /** Ledger-backed registry. Lookups are read-only; only a declared scope's first write admission writes (one insert-only
  * transaction). A missing ledger has no pins and nothing is created: writers need an existing current ledger anyway. */
 function configuredScopeRegistry(config: ResolvedConfig): ScopeRegistry {
@@ -24,14 +22,12 @@ function configuredScopeRegistry(config: ResolvedConfig): ScopeRegistry {
     },
   };
 }
-
 /** The one fail-closed membership decision for every scoped entry point (CLI/SDK/MCP, runtime socket peer, inventory, service
  * shutdown): trusted grants, then a durable pin to the configured company, written at a declared scope's first admission (H34 S1). */
 export async function resolveConfiguredScopeMembership(config: ResolvedConfig, document: unknown,
   identity: { readonly issuer: string; readonly subject: string }, scopeIds: readonly string[], access: ScopeAccess): Promise<readonly string[]> {
   return resolvePolicyScopeMembership(document, identity, scopeIds, config.company.id, configuredScopeRegistry(config), access);
 }
-
 /**
  * First-start registration (solo: no user step). Under the caller's endpoint custody, after the ledger upgrade: pins the configured
  * company and the installation's own scopes — the service identity scope, the runtime loop scopes and every scope the trusted policy

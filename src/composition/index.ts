@@ -10,9 +10,7 @@ export { reserveConfiguredRunTasks, applyConfiguredPoolHold, inspectConfiguredPo
 export { recoverConfiguredCancellations } from '#composition/core/runs/index.js';
 export { runConfiguredCancellationRuntime } from '#composition/core/runtime/index.js';
 export type { ConfiguredCancellationRuntimeInput, ConfiguredCancellationRuntimeObserver } from '#composition/core/runtime/index.js';
-
 export { createConfiguredRuntimeClient, startConfiguredRuntimeService } from '#composition/core/runtime-service/index.js';
-
 export { previewSuppliedInstallation, inspectSuppliedInstallation, applySuppliedInstallation, resumeInstallation } from '#composition/core/installation/index.js';
 export type { InstallationApplyChoices } from '#composition/core/installation/index.js';
 export { inspectDeclaredModels } from '#composition/core/provider-catalog/index.js';
@@ -22,11 +20,9 @@ export * from '#composition/core/model-invocation/index.js';
 export { invokeRuntimeModel, inspectRuntimeModelInvocation, purgeRuntimeModelInvocationContent, cancelRuntimeModelInvocation } from '#composition/core/runtime-service/index.js';
 export { auditRuntimeProviderSpendAccount, inspectRuntimeProviderSpendAccount } from '#composition/core/runtime-service/index.js';
 export { prepareNativeCodingProfile } from '#composition/core/native-coding/index.js';
-
 export * from '#composition/core/workspace-patch/index.js';
 // Public SDK: the local operation entries only; the peer entries belong to the runtime service composition (C12 G4).
 export { executeConfiguredOperation, compensateConfiguredOperation, inspectConfiguredOperation } from '#composition/core/operations/index.js';
-
 export * from '#composition/core/worker-observation/index.js';
 export * from '#composition/core/toolchains/index.js';
 export { configuredApproval } from '#composition/core/approvals/index.js';

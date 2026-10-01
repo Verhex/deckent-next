@@ -1,13 +1,10 @@
 import { loadConfig, type ConfigLoadOptions } from '#platform/index.js';
 import { InferenceServingError, loopbackMetricsUrl, selectInferenceProfile } from '#engine/index.js';
 import { readInferenceMetrics, InferenceMetricsError, type InferenceMetricsBody, type InferenceMetricsReadInput } from '#adapters/index.js';
-
 export type InferenceMetricsReading =
   | { readonly ok: true; readonly url: string; readonly body: string }
   | { readonly ok: false; readonly code: string; readonly url: string | null };
-
 export type InferenceMetricsReader = (input: InferenceMetricsReadInput) => Promise<InferenceMetricsBody>;
-
 /** Reads configured loopback metrics. The surface supplies no socket; limits are the profile's metrics object. */
 export async function readConfiguredInferenceMetrics(projectRoot: string, input: { readonly profileId?: string } = {},
   options: ConfigLoadOptions = {}, reader: InferenceMetricsReader = readInferenceMetrics): Promise<InferenceMetricsReading> {

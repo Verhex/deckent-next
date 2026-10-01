@@ -7,9 +7,7 @@ import { SystemTrustedClock, type ConfigLoadOptions } from '#platform/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 import { loadInvocationContext, loadPeerInvocationContext } from './context.js';
 import { createConfiguredModelInvocationNative } from './native.js';
-
 export interface RuntimeModelInvocationHost { readonly ownerId: string; readonly controllers: ModelInvocationControllers }
-
 /** A direct local invocation. A claimed operation is never sent again by receipt replay. */
 export async function invokeConfiguredModel(projectRoot: string, input: ModelInvocationCommand,
   options: ConfigLoadOptions = {}, signal?: AbortSignal, delivery?: ModelInvocationDelivery) {
@@ -32,7 +30,6 @@ async function invoke(input: ModelInvocationCommand,
     return await application(context, options, host).invoke(command, undefined, signal, delivery, onDelta);
   } catch (error) { throw queryFailure(error); }
 }
-
 /**
  * Context measurement of a command (T-L5, runtime-internal): the provider's count of exactly what `invoke` would send, under the
  * same peer principal, policy, binding, activation and profile checks; null when the model or server has no counter.
@@ -47,7 +44,6 @@ export async function measurePeerConfiguredModel(projectRoot: string, input: Mod
     return await application(context, options).measure(command, undefined, signal);
   } catch (error) { throw queryFailure(error); }
 }
-
 function application(context: Awaited<ReturnType<typeof loadInvocationContext>>, options: ConfigLoadOptions, host?: RuntimeModelInvocationHost) {
   // One trusted clock for pricing and durable invocation records (I40).
   const clock = new SystemTrustedClock(), configuredNative = createConfiguredModelInvocationNative(context, options, clock);
