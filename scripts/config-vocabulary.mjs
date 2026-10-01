@@ -90,10 +90,12 @@ export function lintConfigVocabulary(root, files, fail) {
     visit(source);
   }
 }
+export const projectionText = root => JSON.stringify(projectVocabulary(root), null, 2) + '\n';
+// The stored projection is compared as LF text: a Windows checkout converts it to CRLF without changing its content.
+export const projectionStale = (root, value = projectionText(root)) => readFileSync(join(root, projectionPath), 'utf8').replace(/\r\n/gu, '\n') !== value;
 const invoked = process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1];
 if (invoked) {
-  const root = dirname(dirname(fileURLToPath(import.meta.url)));
-  const value = JSON.stringify(projectVocabulary(root), null, 2) + '\n';
+  const root = dirname(dirname(fileURLToPath(import.meta.url))), value = projectionText(root);
   if (process.argv.includes('--write')) writeFileSync(join(root, projectionPath), value);
-  else if (readFileSync(join(root, projectionPath), 'utf8') !== value) { process.stderr.write('CONFIG_VOCABULARY_STALE\n'); process.exitCode = 1; }
+  else if (projectionStale(root, value)) { process.stderr.write('CONFIG_VOCABULARY_STALE\n'); process.exitCode = 1; }
 }

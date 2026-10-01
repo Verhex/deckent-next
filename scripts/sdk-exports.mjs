@@ -32,5 +32,5 @@ export const inventoryDocument = exports => ({ schemaVersion: 1, entry: 'src/ind
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const text = `${JSON.stringify(inventoryDocument(sdkExports()), null, 2)}\n`;
   if (process.argv.includes('--write')) writeFileSync(join(ROOT, INVENTORY), text); else process.stdout.write(text);
-  if (process.argv.includes('--check') && readFileSync(join(ROOT, INVENTORY), 'utf8') !== text) process.exitCode = 1;
+  if (process.argv.includes('--check') && readFileSync(join(ROOT, INVENTORY), 'utf8').replace(/\r\n/gu, '\n') !== text) process.exitCode = 1;
 }

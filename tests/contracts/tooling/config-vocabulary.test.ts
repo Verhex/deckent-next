@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 // Tooling intentionally runs against source, with no dist dependency.
 // @ts-expect-error JavaScript build tooling has no declaration file.
-import { projectVocabulary, lintConfigVocabulary, registryPath, projectionPath } from '../../../scripts/config-vocabulary.mjs';
+import { projectVocabulary, lintConfigVocabulary, registryPath, projectionPath, projectionText, projectionStale } from '../../../scripts/config-vocabulary.mjs';
 const roots: string[] = [];
 afterEach(async () => { await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 async function fixture() {
@@ -40,5 +40,12 @@ describe('source-derived config vocabulary gate', () => {
     for (const name of names) { const file = join(root, 'src', name); await writeFile(file, (await readFile(file, 'utf8')).replace(/\r?\n/gu, '\r\n')); converted.push(name); }
     expect(converted.length).toBeGreaterThan(10);
     expect(JSON.stringify(projectVocabulary(root))).toBe(stored);
+  });
+  it('build check reads a CRLF projection as the same text and still rejects a changed one', async () => {
+    const root = await fixture(), file = join(root, projectionPath), text = projectionText(root) as string;
+    await writeFile(file, text.replace(/\n/gu, '\r\n'));
+    expect(projectionStale(root)).toBe(false);
+    await writeFile(file, text.replace(/\n/gu, '\r\n').replace('"schemaVersion": 1', '"schemaVersion": 2'));
+    expect(projectionStale(root)).toBe(true);
   });
 });
