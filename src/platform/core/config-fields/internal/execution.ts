@@ -26,10 +26,13 @@ export const ADOPTION_TARGET_SETTINGS = z.object({ targets: z.array(z.string().r
  * versioned `schemaVersion` keep the contract ready for more. Non-Git business systems are not work targets (C11 effect port).
  * `baseRef` names the base branch: Runs start from its tip and delivery/integration preconditions compare against it, never the
  * target checkout's HEAD. Unknown keys stay refused (strict), so an older build fails closed instead of targeting the project root. */
-export const WORK_TARGET_SETTINGS = z.object({ schemaVersion: z.literal(1),
-  targets: z.array(z.object({ id: configIdentity, kind: z.literal('git'), path: z.string().min(1).max(4096),
-    baseRef: z.string().regex(/^refs\/heads\/[A-Za-z0-9._/-]{1,200}$/),
-    /** K6 (owner 2026-09-30 A): scope classification of patches landing here; absent = warn (classified, never refused); enforce = typed
-     * refusal before the integration/delivery write for out-of-scope or undeclared scope. Optional; strict, so an older build refuses it. */
-    scope: z.object({ mode: z.enum(['warn', 'enforce']) }).strict().optional() }).strict()).min(1).max(1) }).strict();
+const WORK_TARGET = { id: configIdentity, kind: z.literal('git'), path: z.string().min(1).max(4096),
+  baseRef: z.string().regex(/^refs\/heads\/[A-Za-z0-9._/-]{1,200}$/) };
+/** v1 is released (pushed 21110d09, run live) and stays exactly as it was; v2 adds K6 (owner 2026-09-30 A) `scope`: classification of
+ * patches landing here; absent = warn (classified, never refused); enforce = typed refusal before the integration/delivery write for
+ * out-of-scope or undeclared scope. An older build refuses v2 (fails closed). */
+export const WORK_TARGET_SETTINGS = z.discriminatedUnion('schemaVersion', [
+  z.object({ schemaVersion: z.literal(1), targets: z.array(z.object({ ...WORK_TARGET, scope: z.undefined().optional() }).strict()).min(1).max(1) }).strict(),
+  z.object({ schemaVersion: z.literal(2), targets: z.array(z.object({ ...WORK_TARGET,
+    scope: z.object({ mode: z.enum(['warn', 'enforce']) }).strict().optional() }).strict()).min(1).max(1) }).strict()]);
 export const ARTIFACT_STORAGE_LIMITS = z.object({ maxBytes: z.number().int().positive().safe() }).strict();

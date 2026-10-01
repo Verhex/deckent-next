@@ -13,9 +13,11 @@ const classify = (declared: readonly string[] | null, paths: readonly string[], 
 
 describe('patch scope classification (one deny grammar, exact full-path match)', () => {
   it('switch lives on the work target: optional warn|enforce, anything else refused (strict)', () => {
-    const settings = (scope?: unknown) => WORK_TARGET_SETTINGS.safeParse({ schemaVersion: 1, targets: [{ id: 'n1', kind: 'git', path: '/t', baseRef: 'refs/heads/main', ...(scope === undefined ? {} : { scope }) }] }).success;
+    const settings = (scope?: unknown, schemaVersion = 2) => WORK_TARGET_SETTINGS.safeParse({ schemaVersion, targets: [{ id: 'n1', kind: 'git', path: '/t', baseRef: 'refs/heads/main', ...(scope === undefined ? {} : { scope }) }] }).success;
     expect([settings(), settings({ mode: 'warn' }), settings({ mode: 'enforce' })]).toEqual([true, true, true]);
     expect([settings({ mode: 'block' }), settings({}), settings({ mode: 'enforce', bypass: true }), settings('enforce')]).toEqual([false, false, false, false]);
+    // v1 is released (pushed, run live): it stays exactly as it was, so `scope` needs v2 and v1 with a scope is refused.
+    expect([settings(undefined, 1), settings({ mode: 'warn' }, 1), settings({ mode: 'enforce' }, 1)]).toEqual([true, false, false]);
   });
   it('uses the platform matcher the workspace deny language uses (moved, not copied)', () => {
     expect(adapterMatcher).toBe(createGlobMatcher);

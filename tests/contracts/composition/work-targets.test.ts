@@ -67,7 +67,7 @@ async function fixture({ workTarget = 'clone' as 'clone' | 'none' | ((r: { root:
   const config = (targets: unknown) => writeFile(join(project, '.deckent/config.json'), JSON.stringify({ layout: { root: data }, artifacts: { maxBytes: 65536 },
     admission: { poolId: 'p', executionSlots: 2, inFlightSlots: 2, ordering: 'input-order', registry },
     execution: { docker: { executable: '/usr/bin/docker', ...bounds }, git: { gitExecutable: '/usr/bin/git', timeoutMs: 10000, outputBytes: 65536 },
-      adoption: { targets: [BASE] }, ...(targets === null ? {} : { workTargets: { schemaVersion: 1, targets } }) },
+      adoption: { targets: [BASE] }, ...(targets === null ? {} : { workTargets: { schemaVersion: JSON.stringify(targets).includes('"scope"') ? 2 : 1, targets } }) },
     cancellation: { maxConcurrentDeliveries: 1, recoveryPageSize: 1, maxAttempts: 1, retryDelayMs: 1, claimTtlMs: 10 },
     cancellationRuntime: { scopeIds: ['s'], pollIntervalMs: 1000, failureBackoffMs: 1000 },
     service: { inputMaxBytes: 65536, responseMaxBytes: 65536, maxConnections: 4, maxConcurrentRequests: 2, maxConcurrentExecutions: 1, headerTimeoutMs: 1000, shutdownGraceMs: 1000 } }));
