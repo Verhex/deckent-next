@@ -14,7 +14,7 @@ const command = { schemaVersion: 1, commandId: 'create', scopeId: 's', runId: 'r
 async function fixture() {
   const root = await mkdtemp(join(tmpdir(), 'deckent-run-admission-')); roots.push(root);
   const path = join(root, 'ledger.db');
-  const store = await openSqliteAttemptStore(path, { busyTimeoutMs: 20, journalMode: 'wal', durability: 'full' }); stores.push(store);
+  const store = await openSqliteAttemptStore(path, { busyTimeoutMs: 20, journalMode: 'wal', durability: 'full' }, { now: Date.now, timeoutMs: 86400000 }); stores.push(store);
   await store.createExecutionPool({ schemaVersion: 1, poolId: 'p', capacity: { executionSlots: 2, inFlightSlots: 2 } });
   const state = { allow: true, poolAllow: true, subject: '1', contexts: 0, now: 10, poolChecks: 0 };
   const verifier = { async verify() { return { id: 'user', issuer: 'host', subject: state.subject, assurance: 'os-user', scopeIds: ['s'] }; } };

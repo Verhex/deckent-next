@@ -9,14 +9,15 @@ import { runCancellationSchema, type RunCancellation, runCreateSchema, runReserv
   type RunCreate, type RunReservation, type RunProjection, type RunReceipt } from '#engine/index.js';
 import { readRunBoundDispatch } from './run-dispatch-lookup.js';
 import { SqliteRunWorkspaceCustody } from './run-workspace-custody.js';
+import { assertEvaluationDigests, readEvaluationDigests } from './evaluation-evidence.js';
 import type { RunWorkspaceCustody } from '#engine/index.js';
 import { sqliteFailure } from '#adapters/core/sqlite-ledger/index.js';
 import { SqliteAuditStore } from '#adapters/core/audit-store/index.js';
-import { DEFAULT_RUN_PARK_TIMEOUT_MS, closeParkedRun, resumeParkedRun, expireParkedRun, parkTaskAwaitingDecision, resolveTaskDecision } from '#domain/index.js';
+import { closeParkedRun, resumeParkedRun, expireParkedRun, parkTaskAwaitingDecision, resolveTaskDecision } from '#domain/index.js';
 import { runLifecycleWriteSchema, RunLifecycleError, type RunLifecycleWrite, type AuditStore } from '#engine/index.js';
 export class SqliteRunJournal {
-  constructor(private readonly db: DatabaseSync, private readonly admission?: Pick<RunAdmissionFilter, 'excluded'>,
-    private readonly timing: { now: () => number; timeoutMs: number } = { now: Date.now, timeoutMs: DEFAULT_RUN_PARK_TIMEOUT_MS }) {}
+  constructor(private readonly db: DatabaseSync, private readonly admission: Pick<RunAdmissionFilter, 'excluded'> | undefined,
+    private readonly timing: { now: () => number; timeoutMs: number } | undefined) {}
   private transaction<T>(work: () => T): T {
     let active = false;
     try { this.db.exec('BEGIN IMMEDIATE'); active = true; const value = work(); this.db.exec('COMMIT'); return value; }
@@ -105,6 +106,7 @@ export class SqliteRunJournal {
       const { run, dispatch } = readRunBoundDispatch(this.db, parsed.evaluation.identity);
       if (!dispatch) throw new RunStoreError('RUN_STORE_CONFLICT');
       assertTaskEvaluationCustody(parsed.dispatch, dispatch);
+      assertEvaluationDigests(this.db, parsed.evaluation);
       const row = this.db.prepare('SELECT revision,snapshot FROM attempts WHERE scope_id=? AND attempt_id=?').get(scopeId, attemptId);
       if (!row) throw new RunStoreError('RUN_STORE_CONFLICT');
       let attempt;
@@ -113,8 +115,9 @@ export class SqliteRunJournal {
       if (attempt.revision !== row.revision || attempt.identity.scopeId !== scopeId || attempt.identity.attemptId !== attemptId) {
         throw new RunStoreError('RUN_STORE_CORRUPT');
       }
-      const proposed = proposeTaskEvaluationCommit(run, attempt, dispatch, parsed.expectedRevision, parsed.evaluation,
-        { now: parsed.now ?? this.timing.now(), timeoutMs: parsed.timeoutMs ?? this.timing.timeoutMs, ...(parsed.unknownDisposition ? { unknownDisposition: parsed.unknownDisposition } : {}) });
+      const evaluation = { ...parsed.evaluation, evidenceDigests: parsed.evaluation.evidenceDigests ?? Object.values(readEvaluationDigests(this.db, parsed.evaluation.identity)).filter((value): value is string => value !== undefined) };
+      const proposed = proposeTaskEvaluationCommit(run, attempt, dispatch, parsed.expectedRevision, evaluation,
+        { now: parsed.now ?? this.timing!.now(), timeoutMs: parsed.timeoutMs ?? this.timing!.timeoutMs, ...(parsed.unknownDisposition ? { unknownDisposition: parsed.unknownDisposition } : {}) });
       const updated = this.db.prepare('UPDATE runs SET revision=?,snapshot=? WHERE scope_id=? AND run_id=? AND revision=?')
         .run(proposed.snapshot.revision, JSON.stringify(proposed.snapshot), scopeId, runId, parsed.expectedRevision);
       if (updated.changes !== 1) throw new RunStoreError('RUN_STORE_CONFLICT');
@@ -137,6 +140,14 @@ export class SqliteRunJournal {
     if (['accept', 'reject'].includes(parsed.action) && (parsed.actor.assurance !== 'os-user' || !audit)) {
       throw new RunLifecycleError('TASK_DECISION_HUMAN_REQUIRED');
     }
+    if (parsed.action === 'expire') {
+      const replay = this.receipt(scopeId, runId, commandId, command, prior => fingerprint(prior) === fingerprint(command));
+      if (replay) return replay;
+      const current = await this.loadRun(scopeId, runId);
+      if (!current || current.revision !== expectedRevision) throw new RunStoreError('RUN_STORE_CONFLICT');
+      const due = (current.state.kind === 'parked' && current.state.deadline <= now) || current.progress.some(task => task.decision && task.decision.deadline <= now);
+      if (!due) return Object.freeze({ commandId, command, snapshot: current });
+    }
     return this.transaction(() => {
       const replay = this.receipt(scopeId, runId, commandId, command, prior => {
         try { return fingerprint(prior) === fingerprint(command); } catch { throw new RunStoreError('RUN_STORE_CORRUPT'); }
@@ -145,10 +156,12 @@ export class SqliteRunJournal {
       if (!row || row.revision !== expectedRevision) throw new RunStoreError('RUN_STORE_CONFLICT');
       const current = this.decode(row.snapshot, scopeId, runId);
       if (current.revision !== row.revision) throw new RunStoreError('RUN_STORE_CORRUPT');
-      const snapshot = parsed.action === 'close' ? closeParkedRun(current, expectedRevision, now)
+      const binding = current.bindings.find(value => value.identity.taskId === parsed.taskId);
+      const evidence = parsed.action === 'park-task' && binding ? Object.values(readEvaluationDigests(this.db, binding.identity)).filter((value): value is string => value !== undefined) : undefined;
+      const snapshot = parsed.action === 'close' ? closeParkedRun(current, expectedRevision, now, timeoutMs)
         : parsed.action === 'resume' ? resumeParkedRun(current, expectedRevision, now, timeoutMs)
           : parsed.action === 'expire' ? expireParkedRun(current, expectedRevision, now, timeoutMs)
-            : parsed.action === 'park-task' ? parkTaskAwaitingDecision(current, expectedRevision, parsed.taskId!, parsed.reason!, now, timeoutMs)
+            : parsed.action === 'park-task' ? parkTaskAwaitingDecision(current, expectedRevision, parsed.taskId!, parsed.reason!, now, timeoutMs, undefined, evidence)
               : resolveTaskDecision(current, expectedRevision, parsed.taskId!, parsed.action, now, timeoutMs);
       // Runtime checks that found no transition write neither a revision nor a replay receipt on every poll.
       if (parsed.action === 'expire' && snapshot.revision === current.revision) return Object.freeze({ commandId, command, snapshot });
@@ -170,7 +183,7 @@ export class SqliteRunJournal {
       if (current.revision !== row.revision) throw new RunStoreError('RUN_STORE_CORRUPT');
       propagateRunCancellation(this.db, current, parsed.actor);
       // Unlaunched attempts are prevented and already-exited unevaluated ones settled in the same transaction; running ones await delivery.
-      const timing = { now: this.timing.now(), timeoutMs: this.timing.timeoutMs };
+      const timing = { now: this.timing!.now(), timeoutMs: this.timing!.timeoutMs };
       const snapshot = settleRunCancellation(this.db, requestRunCancellation(current, parsed.expectedRevision, timing), timing);
       const updated = this.db.prepare('UPDATE runs SET revision=?,snapshot=? WHERE scope_id=? AND run_id=? AND revision=?')
         .run(snapshot.revision, JSON.stringify(snapshot), scopeId, runId, parsed.expectedRevision);

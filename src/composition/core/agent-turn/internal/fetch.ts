@@ -33,7 +33,7 @@ export function createAgentFetch(input: { readonly settings: TerminalFetchConfig
       const target = new NetworkFetchTarget({ settings, transport: input.transport, signal, deposit: (rel, data, wait) => input.scratch.deposit(rel, data, wait),
         redirectAllowed: host => host === planned.host || settings.allowedHosts.includes(host), onResult: value => { ran = value; } });
       const sessions = await createLocalPeerSession(input.peer, context.principal.scopeIds, context.config.approvals.sessionTtlMs, clock);
-      const store = await openSqliteAttemptStore(await context.path(), context.config.storage.sqlite, 'forbid');
+      const store = await openSqliteAttemptStore(await context.path(), context.config.storage.sqlite, { now: Date.now, timeoutMs: context.config.runRuntime.parking.timeoutMs }, 'forbid');
       try {
         await new EffectApplication({ async resolve(ref) { return ref.id === NETWORK_FETCH_OPERATION.operation.id && ref.version === 1 ? NETWORK_FETCH_OPERATION : null; } },
           { resolve: kind => kind === NETWORK_FETCH_TARGET_KIND ? target : null }, store, gate, sessions, new OperationPolicyAuthorization(context.policy), clock).execute(command);

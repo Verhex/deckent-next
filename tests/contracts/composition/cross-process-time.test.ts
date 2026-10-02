@@ -22,7 +22,7 @@ const identity = { scopeId: 's', runId: 'r', taskId: 't', attemptId: 'a', genera
 afterEach(async () => { vi.restoreAllMocks(); platform.clearConfigCache(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 async function root() { const path = await mkdtemp(join(tmpdir(), 'deckent-cross-time-')); roots.push(path); return path; }
 async function seed(path: string) {
-  const store = await adapters.openSqliteAttemptStore(path, dbOptions, 'allow', custodyProfiles);
+  const store = await adapters.openSqliteAttemptStore(path, dbOptions, { now: Date.now, timeoutMs: 86400000 }, 'allow', custodyProfiles);
   await admitRunAttempts(store, [identity]);
   await store.claimDispatch(dispatchAdmission({ owner: 'worker', request: { protocolVersion: 1, identity, workspace: '/w', argv: ['tool'] } }));
   await store.cancelRun({ commandId: 'cancel', actor: { id: 'operator', issuer: 'test', subject: 'fixture' }, scopeId: 's', runId: 'r', expectedRevision: 1 });
@@ -32,7 +32,7 @@ async function seed(path: string) {
 describe('cross-process cancellation leases', () => {
   it.each(['claimed', 'queued'] as const)('does not discover or acquire %s early from an ahead process, then recovers at the exact safe boundary', async state => {
     const path = join(await root(), 'ledger.db'), writer = await seed(path);
-    const reader = await adapters.openSqliteAttemptStore(path, dbOptions, 'allow', custodyProfiles);
+    const reader = await adapters.openSqliteAttemptStore(path, dbOptions, { now: Date.now, timeoutMs: 86400000 }, 'allow', custodyProfiles);
     try {
       const writerClock = new platform.SystemTrustedClock(() => 1000);
       const first = await writer.claimCancellationDelivery({ identity, token: 'writer', now: writerClock.sample().wallMs, limits });

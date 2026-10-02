@@ -25,7 +25,7 @@ it.skipIf(!imageId || process.platform !== 'linux')('continues to a later invent
     execution: { docker, git: { gitExecutable: '/usr/bin/git', timeoutMs: 10000, outputBytes: 65536 } } }));
   const options = { env: { HOME: join(root, 'home') } };
   const opened = await openConfiguredAttemptStore(project, options); opened.store.close();
-  const store = await openSqliteAttemptStore(opened.path, { busyTimeoutMs: 20, journalMode: 'wal', durability: 'full' },
+  const store = await openSqliteAttemptStore(opened.path, { busyTimeoutMs: 20, journalMode: 'wal', durability: 'full' }, { now: Date.now, timeoutMs: 86400000 },
     'allow', { validate: validateDockerSupervisorProfile });
   const workspaceRoot = await prepareProductDirectory(opened.layout, 'workspaces');
   await prepareProductDirectory(opened.layout, 'artifacts');

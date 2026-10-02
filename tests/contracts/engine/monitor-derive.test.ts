@@ -288,12 +288,14 @@ it('projects parked and awaiting decision truth with incomplete and accepted-unv
   const base = snapshot([{ id: 'a', phase: 'evaluating' }]);
   const parked = parkTaskAwaitingDecision(base, 0, 'a', 'evaluation-unknown', 100, 1000);
   const value = evidence(parked, [exited('a', { evaluationObserved: true })]);
-  expect(blocker(value)).toEqual({ code: 'parked', taskId: null, sinceMs: 100, detail: 'awaiting-decision' });
+  expect(blocker(value)).toEqual({ code: 'parked', taskId: null, sinceMs: 100, detail: 'awaiting-decision', deadlineMs: 1100 });
   expect(state(value)).toBe('parked'); expect(projectMonitorRun(value).tasks[0].evaluation.verdict).toBe('unknown');
   const accepted = resolveTaskDecision(parked, 1, 'a', 'accept', 200, 1000);
   expect(projectMonitorRun(evidence(accepted)).tasks[0].evaluation.verdict).toBe('accepted-unverified');
   const mixed = snapshot([{ id: 'a', phase: 'evaluating' }, { id: 'b', phase: 'accepted' }]);
   const waiting = parkTaskAwaitingDecision(mixed, 0, 'a', 'evaluation-not-ready', 100, 1000);
+  expect(projectMonitorRun(evidence(waiting)).tasks[0]!.evaluation.verdict).toBe('pending');
+  expect(projectMonitorRun(evidence(waiting)).tasks[0]!.decision).toEqual({ reason: 'evaluation-not-ready', sinceMs: 100, deadlineMs: 1100 });
   const closed = expireParkedRun(waiting, 1, 1100, 1000);
   expect(state(evidence(closed))).toBe('incomplete'); expect(blocker(evidence(closed))).toBeNull();
   const parallel = parkTaskAwaitingDecision(snapshot([{ id: 'a', phase: 'evaluating' }, { id: 'b', phase: 'active' }]), 0, 'a', 'evaluation-unknown', 100, 1000);

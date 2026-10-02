@@ -21,7 +21,7 @@ const UNICODE: Marks = { states: { parked: '⏸', incomplete: '!', progressing: 
 const ASCII: Marks = { states: { parked: '=', incomplete: '!', progressing: '>', waiting: '~', blocked: '!', accepted: '+', failed: 'x', cancelled: '-' }, warn: '!', on: '*', off: 'o', sep: '|', approx: '~=' };
 const STATE_ROLE: Readonly<Record<MonitorRunState, MonitorRole>> = { parked: 'warning', incomplete: 'error', progressing: 'info', waiting: 'warning', blocked: 'error', accepted: 'success',
   failed: 'error', cancelled: 'muted' };
-const OPEN: readonly MonitorRunState[] = ['progressing', 'waiting', 'blocked'];
+const OPEN: readonly MonitorRunState[] = ['progressing', 'waiting', 'blocked', 'parked'];
 /** Not a stall: the Run moves (or its worker runs) on its own. */
 const MOVING = new Set(['none', 'worker-running']);
 const blockerRole = (blocker: MonitorBlocker): MonitorRole => blocker.code === 'awaiting-approval' ? 'warning' : MOVING.has(blocker.code) ? 'muted'
@@ -146,10 +146,12 @@ function runDetail(w: Words, install: MonitorInstall, run: MonitorRun) {
       span(sep), span(t('monitor.detail.activity', { when: agoText(now, run.lastActivityMs, locale) }, locale), 'muted')],
     ...(run.blocker ? [[span(t('monitor.detail.blocker', { reason: w.blockerText(run.blocker), task: run.blocker.taskId ?? '—', since: forText(now, run.blocker.sinceMs, locale) }, locale),
       blockerRole(run.blocker))]] : []),
+    ...(run.blocker?.deadlineMs !== undefined ? [[span(expiryText(now, run.blocker.deadlineMs, locale), 'warning')]] : []),
     ...(run.cancellationRequested ? [[span(t('monitor.detail.cancelRequested', {}, locale), 'warning')]] : []),
     ...run.tasks.flatMap(task => [
       [span(t('monitor.detail.task', { task: task.taskId, kind: task.kind, phase: taskPhaseLabel(task.phase, locale), attempts: task.attempts,
         profile: task.profile ? `${task.profile.id}@${task.profile.version}` : '—' }, locale), taskFailed(task) ? 'error' : task.phase === 'accepted' ? 'success' : undefined)],
+      ...(task.decision ? [[span(`    ${blockerLabel(task.decision.reason, locale)} ${sep} ${expiryText(now, task.decision.deadlineMs, locale)}`, 'warning')]] : []),
       ...(task.lastAttempt ? attemptLines(w, task.lastAttempt, taskFailed(task), task.phase === 'active') : []),
       [span(`    ${t('monitor.detail.evaluation', { verdict: verdictLabel(task.evaluation.verdict, locale),
         when: task.evaluation.observedAtMs === null ? '' : agoText(now, task.evaluation.observedAtMs, locale) }, locale).trimEnd()}`, 'muted')],
@@ -327,6 +329,7 @@ function summaryBlocks(w: Words, installs: readonly MonitorInstall[], runs: read
       rows: stuck.map(({ install, value: run }) => runRow(w, install, run, [
         span(run.runId), span(run.blocker!.taskId ?? '—', 'muted'), span(`${marks.states[run.state]} ${w.blockerText(run.blocker!)}`, blockerRole(run.blocker!)),
         span(w.age(run.blocker!.sinceMs)), span(run.scopeId, 'muted'), ...w.installCell(install)])) },
+    ...stuck.flatMap(({ value: run }) => run.blocker!.deadlineMs === undefined ? [] : [{ kind: 'line' as const, line: [span(`${run.runId} ${w.sep} ${run.tasks.filter(task => task.decision).map(task => blockerLabel(task.decision!.reason, locale)).join(', ')} ${w.sep} ${expiryText(w.now, run.blocker!.deadlineMs, locale)}`, 'warning')] }]),
     ...(failed.length ? [blank, heading(t('monitor.summary.failed', { count: failed.length }, locale)), { kind: 'table' as const, empty: '',
       columns: [w.col(t('monitor.col.run', {}, locale), 0, 20, 44), w.col(t('monitor.col.firstFailure', {}, locale), 1, 24, 90),
         w.col(t('monitor.col.activity', {}, locale), 2, 14, 20), w.col(t('monitor.col.scope', {}, locale), 4, 8, 24), ...w.installColumn(3)],

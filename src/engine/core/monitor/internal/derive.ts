@@ -73,7 +73,7 @@ function pendingBlocker(task: TaskReadiness, e: MonitorRunEvidence): MonitorBloc
 export function deriveRunBlocker(e: MonitorRunEvidence): MonitorBlocker | null {
   const snapshot = e.run.snapshot;
   if (snapshot.state.kind === 'terminal') return null;
-  if (snapshot.state.kind === 'parked') return blocker('parked', null, snapshot.state.since, snapshot.state.reason);
+  if (snapshot.state.kind === 'parked') return { ...blocker('parked', null, snapshot.state.since, snapshot.state.reason), deadlineMs: snapshot.state.deadline };
   if (!snapshot.progress.some(task => OPEN.has(task.phase))) return null;
   if (snapshot.cancelRequested) return blocker('cancellation-pending', null);
   const ready = readiness(e.run, e.observedAt); const candidates: MonitorBlocker[] = [];
@@ -82,7 +82,7 @@ export function deriveRunBlocker(e: MonitorRunEvidence): MonitorBlocker | null {
     const attempt = attemptOf(e.run, task.taskId);
     if (task.unresolvedEffects || task.phase === 'reconciling') candidates.push(blocker('unresolved-effect', task.taskId, null, attempt?.observedKind ?? null));
     else if (task.phase === 'active' || task.phase === 'evaluating') candidates.push(boundBlocker(task.taskId, task.phase, attempt, attempt ? e.workers.get(attempt.attemptId) : undefined, e));
-    else if (task.phase === 'awaiting-decision') candidates.push(blocker('awaiting-decision', task.taskId, task.decision!.since, task.decision!.reason));
+    else if (task.phase === 'awaiting-decision') candidates.push({ ...blocker('awaiting-decision', task.taskId, task.decision!.since, task.decision!.reason), deadlineMs: task.decision!.deadline });
     else if (task.phase === 'pending') candidates.push(pendingBlocker(ready.get(task.taskId)!, e));
   }
   const rank = (value: MonitorBlocker) => MONITOR_BLOCKER_PRECEDENCE.indexOf(value.code);
@@ -101,10 +101,10 @@ export function deriveRunState(e: MonitorRunEvidence, current: MonitorBlocker | 
 }
 /** The model a worker ran: the sealed usage, else its init, else the requested pin (named honestly: a pin is what was asked for). */
 const modelName = (view: WorkerModelView | null | undefined) => view ? view.usage?.[0] ?? view.init ?? view.requested.modelId : null;
-function verdict(phase: string, attempt: MonitorLedgerAttempt | null): MonitorTask['evaluation']['verdict'] {
+function verdict(phase: string, attempt: MonitorLedgerAttempt | null, reason?: string): MonitorTask['evaluation']['verdict'] {
   if (phase === 'accepted') return 'accepted';
   if (phase === 'failed') return attempt?.evaluationObserved ? 'rejected' : null;
-  if (phase === 'awaiting-decision') return 'unknown';
+  if (phase === 'awaiting-decision') return reason === 'evaluation-not-ready' ? 'pending' : 'unknown';
   if (phase === 'evaluating') return attempt?.evaluationObserved ? 'unknown' : 'pending';
   return null;
 }
@@ -120,7 +120,8 @@ export function projectMonitorRun(e: MonitorRunEvidence): MonitorRun {
     push(attempt?.reservedAtMs, attempt?.dispatch?.grantedAtMs, endOf(attempt), heartbeatAt(worker, e.observedAt), worker?.files?.activity?.receivedAt);
     const provider = worker && worker.provider !== 'unknown' ? worker.provider : attempt?.provider ?? null;
     return Object.freeze({ taskId: definition.id, kind: definition.kind, phase: progress.phase, profile: profile ? { id: profile.id, version: profile.version } : null,
-      attempts: attempt ? 1 : 0, dependencies: definition.dependencies, evaluation: { verdict: progress.acceptedEvidence === 'model-unverified' ? 'accepted-unverified' : verdict(progress.phase, attempt), observedAtMs: null },
+      ...(progress.decision ? { decision: { reason: progress.decision.reason, sinceMs: progress.decision.since, deadlineMs: progress.decision.deadline } } : {}),
+      attempts: attempt ? 1 : 0, dependencies: definition.dependencies, evaluation: { verdict: progress.acceptedEvidence === 'model-unverified' ? 'accepted-unverified' : verdict(progress.phase, attempt, progress.decision?.reason), observedAtMs: null },
       lastAttempt: attempt ? Object.freeze({ attemptId: attempt.attemptId, generation: attempt.generation, launch: attempt.dispatch?.launch ?? null,
         exitCode: attempt.dispatch?.terminal?.exitCode ?? null, startedAtMs: attempt.dispatch?.grantedAtMs ?? null, endedAtMs: endOf(attempt),
         endedAtSource: attempt.sealedAtMs !== null ? 'sealed' as const : endOf(attempt) !== null ? 'observed' as const : null,

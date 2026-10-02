@@ -17,7 +17,7 @@ const graph = { schemaVersion: 2, revision: 1, tasks: [{ id: 'task', kind: 'fixt
   criterionDefinitions: [{ id: 'verified', version: 1, description: 'fixture', evaluator: { id: 'test', version: 1 }, parameters: {} }] };
 async function fixture() {
   const root = await mkdtemp(join(tmpdir(), 'dn-run-lifecycle-')); roots.push(root); const path = join(root, 'ledger.db');
-  const store = await openSqliteAttemptStore(path, { busyTimeoutMs: 1000, journalMode: 'wal', durability: 'full' }); stores.push(store);
+  const store = await openSqliteAttemptStore(path, { busyTimeoutMs: 1000, journalMode: 'wal', durability: 'full' }, { now: Date.now, timeoutMs: 86400000 }); stores.push(store);
   await store.createExecutionPool({ schemaVersion: 1, poolId: 'pool', capacity });
   await store.createRun({ commandId: 'create', actor: { id: actor.id, issuer: actor.issuer, subject: actor.subject },
     identity: { scopeId: 's', runId: 'r', layoutRevision: 'layout' }, graph, execution: fixtureExecution(graph), now: 1,
@@ -101,4 +101,15 @@ it('refuses agent/workload decisions and unaudited acceptance at the durable bou
     .rejects.toMatchObject({ code: 'TASK_DECISION_HUMAN_REQUIRED' });
   await expect(f.store.commitRunLifecycle(write)).rejects.toMatchObject({ code: 'TASK_DECISION_HUMAN_REQUIRED' });
   expect((await f.store.loadRun('s', 'r'))!.progress[0].phase).toBe('awaiting-decision');
+});
+
+
+it('reads empty deadline polls without requesting a SQLite write lock', async () => {
+  const f = await fixture(); const parked = await f.park();
+  const writer = new DatabaseSync(f.path); writer.exec('BEGIN IMMEDIATE');
+  try {
+    const early = f.write('expire', { expectedRevision: 1, now: 109 });
+    expect((await f.store.commitRunLifecycle(early)).snapshot).toEqual(parked.snapshot);
+    expect(await f.store.loadRunReceipt('s', 'expire')).toBeNull();
+  } finally { writer.exec('ROLLBACK'); writer.close(); }
 });

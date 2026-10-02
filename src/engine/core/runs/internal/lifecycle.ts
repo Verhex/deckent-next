@@ -40,9 +40,11 @@ export class RunLifecycleApplication {
     private readonly recorder: RunLifecycleAuditRecorder, private readonly now: () => number, private readonly timeoutMs: number, private readonly policyRevision: string) {}
   async advance(input: unknown, credential?: unknown) {
     const query: RunQuery = runQuerySchema.parse(input), principal = await authenticate(this.verifier, credential, query.scopeId);
-    await this.runAuthorization.authorize('inspect', query, principal);
+    // Maintenance can close the Run at its deadline, so it needs the same write grant as close.
+    await this.runAuthorization.authorize('cancel', query, principal);
     let run = await this.store.loadRun(query.scopeId, query.runId);
     if (!run) return null;
+    let receipt: RunReceipt | null = null;
     const actor = { id: principal.id, issuer: principal.issuer, subject: principal.subject, assurance: principal.assurance };
     // Ledger45 preserves history. Previously recorded unknowns are parked on the first authorized maintenance turn, without re-evaluation.
     for (const binding of run.bindings) {
@@ -50,11 +52,14 @@ export class RunLifecycleApplication {
       const task: TaskProgress | undefined = run.progress.find(value => value.taskId === binding.identity.taskId);
       if (task?.phase !== 'evaluating' || task.unresolvedEffects || !await this.store.hasTaskEvaluation(binding.identity, binding.observedRevision)) continue;
       await this.taskAuthorization.authorize(binding.identity, principal);
-      run = (await this.store.commitRunLifecycle({ ...query, commandId: randomUUID(), expectedRevision: run.revision,
-        action: 'park-task', taskId: task.taskId, reason: 'evaluation-unknown', actor, now: this.now(), timeoutMs: this.timeoutMs })).snapshot;
+      receipt = await this.store.commitRunLifecycle({ ...query, commandId: randomUUID(), expectedRevision: run.revision,
+        action: 'park-task', taskId: task.taskId, reason: 'evaluation-unknown', actor, now: this.now(), timeoutMs: this.timeoutMs });
+      run = receipt.snapshot;
     }
+    const now = this.now();
+    if (!(run.state.kind === 'parked' && run.state.deadline <= now) && !run.progress.some(task => task.decision && task.decision.deadline <= now)) return receipt;
     return this.store.commitRunLifecycle({ ...query, commandId: randomUUID(), expectedRevision: run.revision, action: 'expire', actor,
-      now: this.now(), timeoutMs: this.timeoutMs });
+      now, timeoutMs: this.timeoutMs });
   }
   async execute(input: unknown, credential?: unknown) {
     const command = runLifecycleCommandSchema.parse(input);

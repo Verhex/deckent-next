@@ -8,6 +8,6 @@ export async function openConfiguredAttemptStore(projectRoot: string, options: C
   const config = await loadConfig(projectRoot, { ...options, heal: false });
   const layout = config.productLayout;
   const path = await prepareProductFile(layout, 'ledger', ['-wal', '-shm', '-journal']);
-  const store = await openSqliteAttemptStore(path, config.storage.sqlite, 'allow', { validate: validateDockerSupervisorProfile });
+  const store = await openSqliteAttemptStore(path, config.storage.sqlite, { now: Date.now, timeoutMs: config.runRuntime.parking.timeoutMs }, 'allow', { validate: validateDockerSupervisorProfile });
   return Object.freeze({ store, layout, path });
 }

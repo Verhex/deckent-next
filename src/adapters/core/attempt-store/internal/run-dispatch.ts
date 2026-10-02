@@ -1,5 +1,5 @@
 import type { DatabaseSync } from 'node:sqlite';
-import { runSnapshotSchema, observeRunAttempt, sameAttemptIdentity, type AttemptIdentity, type AttemptSnapshot } from '#domain/index.js';
+import { runSnapshotSchema, observeRunAttempt, sameAttemptIdentity, type AttemptIdentity, type AttemptSnapshot, type RunLifecycleTiming } from '#domain/index.js';
 import { DispatchError, runExecutionPolicySchema } from '#engine/index.js';
 import { SqliteExecutionPools } from './pools.js';
 import { settleBoundAttempt } from './run-settlement.js';
@@ -24,7 +24,7 @@ export class SqliteRunDispatch {
       new SqliteExecutionPools(this.db).assertAvailable(parsed.poolId, 0);
     } catch { throw new DispatchError('DISPATCH_NOT_ADMITTED'); }
   }
-  project(attempt: AttemptSnapshot): void {
+  project(attempt: AttemptSnapshot, timing: RunLifecycleTiming): void {
     const { run, binding } = this.read(attempt.identity);
     if (binding.observedRevision === attempt.revision) {
       if (binding.observedKind !== attempt.lastObservation?.result.kind) throw new DispatchError('DISPATCH_CORRUPT');
@@ -33,7 +33,7 @@ export class SqliteRunDispatch {
     const observed = observeRunAttempt(run, run.revision, attempt);
     // finishDispatch is the terminal write: a cancel-requested worker that has now exited settles to `cancelled` in the same transaction.
     const snapshot = (run.cancelRequested || attempt.cancelRequested) && attempt.lastObservation?.result.kind === 'exited'
-      ? settleBoundAttempt(observed, attempt, { dispatched: true, terminal: true }).run : observed;
+      ? settleBoundAttempt(observed, attempt, { dispatched: true, terminal: true }, timing).run : observed;
     const written = this.db.prepare('UPDATE runs SET revision=?,snapshot=? WHERE scope_id=? AND run_id=? AND revision=?')
       .run(snapshot.revision, JSON.stringify(snapshot), run.identity.scopeId, run.identity.runId, run.revision);
     if (written.changes !== 1) throw new DispatchError('DISPATCH_CONFLICT');

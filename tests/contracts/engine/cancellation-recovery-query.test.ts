@@ -14,7 +14,7 @@ const limits = { maxAttempts: 2, retryDelayMs: 5, claimTtlMs: 10 };
 afterEach(async () => { for (const store of stores.splice(0)) store.close(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 async function fixture(terminalAttemptId?: string) {
   const root = await mkdtemp(join(tmpdir(), 'deckent-cancel-recovery-')); roots.push(root); const path = join(root, 'ledger.db');
-  const store = await openSqliteAttemptStore(path, options, 'allow', custodyProfiles); stores.push(store);
+  const store = await openSqliteAttemptStore(path, options, { now: Date.now, timeoutMs: 86400000 }, 'allow', custodyProfiles); stores.push(store);
   const identities = ['a', 'b', 'c'].map(attemptId => ({ scopeId: 's', runId: 'r', taskId: attemptId, attemptId, generation: 1, layoutRevision: 'l' }));
   await admitRunAttempts(store, identities);
   for (const identity of identities) await store.claimDispatch(dispatchAdmission({ owner: 'worker', request: { protocolVersion: 1, identity, workspace: '/w', argv: ['tool'] } }));
@@ -31,7 +31,7 @@ const query = (afterAttemptId: string | null, limit: number, now = 1) => ({ scop
 
 it('discovers durable cancellations after restart and advances by the last scanned row', async () => {
   const f = await fixture(); f.store.close(); stores.splice(stores.indexOf(f.store), 1);
-  const reopened = await openSqliteAttemptStore(f.path, options, 'allow', custodyProfiles); stores.push(reopened);
+  const reopened = await openSqliteAttemptStore(f.path, options, { now: Date.now, timeoutMs: 86400000 }, 'allow', custodyProfiles); stores.push(reopened);
   const first = await reopened.discoverCancellationRecovery(query(null, 2));
   expect(first).toEqual({ identities: f.identities.slice(0, 2), nextAfterAttemptId: 'b' });
   expect(await reopened.discoverCancellationRecovery(query(first.nextAfterAttemptId, 2))).toEqual({ identities: [f.identities[2]], nextAfterAttemptId: 'c' });

@@ -8,6 +8,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { AttemptStoreError, type DispatchInventoryQuery, type DispatchInventoryStore } from '#engine/index.js';
 import { SqliteDispatchJournal } from './dispatch.js';
 import { SqliteWorkerEventLogs } from './worker-events.js';
+import { SqliteRunProgression } from './progression.js';
 
 export type SqliteInventoryOptions = Pick<SqliteLedgerOptions, 'busyTimeoutMs'>;
 /** Existing ledger only: no creation, migrations, journal-mode changes or write methods.
@@ -44,15 +45,19 @@ export class SqliteInventoryReader implements DispatchInventoryStore {
   async loadRunReceipt(scopeId: string, commandId: string) {
     try {
       requireLedgerVersion(this.db, RUN_LEDGER_VERSION);
-      return await new SqliteRunJournal(this.db).loadRunReceipt(scopeId, commandId);
+      return await new SqliteRunJournal(this.db, undefined, undefined).loadRunReceipt(scopeId, commandId);
     } catch (error) { throw readFailure(error); }
   }
   async loadRun(scopeId: string, runId: string) {
     const scope = identitySchema.parse(scopeId); const run = identitySchema.parse(runId);
     try {
       requireLedgerVersion(this.db, RUN_LEDGER_VERSION);
-      return await new SqliteRunJournal(this.db).loadRun(scope, run);
+      return await new SqliteRunJournal(this.db, undefined, undefined).loadRun(scope, run);
     } catch (error) { throw readFailure(error); }
+  }
+  async hasTaskEvaluation(identity: unknown, revision: number) {
+    requireLedgerVersion(this.db, RUN_LEDGER_VERSION);
+    return new SqliteRunProgression(this.db).hasTaskEvaluation(identity, revision);
   }
   /** Sealed worker event log record of one attempt (read-only; WORKER-CURRENCY-2 model rows on workers and run inspect). */
   async loadWorkerEventLog(scopeId: string, attemptId: string) {

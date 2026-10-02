@@ -1,9 +1,9 @@
 import type { SqliteLedgerOptions } from '#adapters/core/sqlite-ledger/index.js';
 export type { SqliteAttemptStore } from './internal/sqlite.js';
 /** Load the native driver only when this storage adapter is selected by composition. */
-export async function openSqliteAttemptStore(path: string, options: SqliteLedgerOptions, migration: 'allow' | 'forbid' = 'allow', profiles?: import('#engine/index.js').SupervisorProfileValidator) {
+export async function openSqliteAttemptStore(path: string, options: SqliteLedgerOptions, timing: { now: () => number; timeoutMs: number }, migration: 'allow' | 'forbid' = 'allow', profiles?: import('#engine/index.js').SupervisorProfileValidator) {
   const { SqliteAttemptStore } = await import('./internal/sqlite.js');
-  return new SqliteAttemptStore(path, options, migration, profiles);
+  return new SqliteAttemptStore(path, options, timing, migration, profiles);
 }
 export { InstallationLedgerError } from './internal/installation.js';
 export type { InstallationLedgerErrorCode, InstallationLedgerOwnership } from './internal/installation.js';

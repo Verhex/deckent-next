@@ -20,7 +20,7 @@ it('parks unknown task with its own deadline and prevents evidence-less reevalua
   expect(run.progress[0]).toMatchObject({ phase: 'awaiting-decision', decision: { reason: 'evaluation-unknown', since: 10, deadline: 110, evaluationId: 'e' } });
   expect(run.state.kind).toBe('parked');
   const f = { schemaVersion: 1, evaluationId: 'another', identity, graphRevision: 1, attemptRevision: 1, criteria: [{ criterionId: 'verified', verdict: 'pass', evidenceIds: ['proof'] }] };
-  expect(() => domain.applyTaskEvaluation(run, run.revision, f)).toThrow('TASK_EVALUATION_NOT_READY');
+  expect(() => domain.applyTaskEvaluation(run, run.revision, f, { now: 100, timeoutMs: 1000 })).toThrow('TASK_EVALUATION_NOT_READY');
 });
 it('expires at deadline, keeps unexpired identity stable, and never defaults an incomplete outcome to success', () => {
   const run = evaluated('fail');
@@ -28,7 +28,7 @@ it('expires at deadline, keeps unexpired identity stable, and never defaults an 
   const expired = domain.expireParkedRun(run, run.revision, 110, 100);
   expect(expired.state).toEqual({ kind: 'terminal', outcome: 'failed', reason: 'park-timeout' });
   const partial = { ...run, progress: run.progress.map(t => t.taskId === 'a' ? { ...t, phase: 'accepted' } : t) };
-  expect(domain.closeParkedRun(partial, partial.revision, 20).state).toMatchObject({ outcome: 'incomplete' });
+  expect(domain.closeParkedRun(partial, partial.revision, 20, 1000).state).toMatchObject({ outcome: 'incomplete' });
 });
 it('resume rechecks dependencies and cannot cause empty reservations or reset a parked deadline', () => {
   const run = evaluated('fail'); const resumed = domain.resumeParkedRun(run, run.revision, 30, 100);
@@ -86,7 +86,7 @@ it('waiting decision does not prevent independent work and task timeout cannot f
   expect(expired.state.kind).toBe('running');
 });
 it('unknown cancellation removes decision barriers without claiming success or unresolved effects settlement', () => {
-  const run = evaluated('unknown'); const cancelled = domain.requestRunCancellation(run, run.revision);
+  const run = evaluated('unknown'); const cancelled = domain.requestRunCancellation(run, run.revision, { now: 100, timeoutMs: 1000 });
   expect(cancelled.progress[0]!.phase).toBe('cancelled');
   expect(cancelled.progress[0]!.decision).toBeUndefined();
   expect(cancelled.state).toMatchObject({ kind: 'terminal', outcome: 'cancelled' });

@@ -16,18 +16,18 @@ const cancellation = { id: 'canceller', issuer: 'test', subject: 'operator' };
 const input = { claim, principal: custodyPrincipal, now: 42 };
 
 it('grants exact generation, principal and injected time without projecting Run state', () => {
-  const transition = decideDispatchLaunch(input, { run: active, attempt: createAttempt(identity), dispatch: pending });
+  const transition = decideDispatchLaunch(input, { run: active, attempt: createAttempt(identity), dispatch: pending }, { now: 100, timeoutMs: 1000 });
   expect(transition.projectedRun).toBeNull();
   expect(transition.decision).toMatchObject({ kind: 'granted', record: { launch: 'granted',
     grant: { generation: 1, grantedAt: 42, principal: { id: custodyPrincipal.id, issuer: custodyPrincipal.issuer, subject: custodyPrincipal.subject } } } });
 });
 
 it.each([
-  ['Run', requestRunCancellation(active, active.revision), requestAttemptCancellation(createAttempt(identity), 0)],
+  ['Run', requestRunCancellation(active, active.revision, { now: 100, timeoutMs: 1000 }), requestAttemptCancellation(createAttempt(identity), 0)],
   ['Attempt', active, requestAttemptCancellation(createAttempt(identity), 0)],
   ['dispatch', active, requestAttemptCancellation(createAttempt(identity), 0)],
 ] as const)('prevents launch from %s cancellation and projects the active Task to cancelled', (_source, run, attempt) => {
-  const transition = decideDispatchLaunch(input, { run, attempt, dispatch: { ...pending, cancellation } });
+  const transition = decideDispatchLaunch(input, { run, attempt, dispatch: { ...pending, cancellation } }, { now: 100, timeoutMs: 1000 });
   expect(transition.decision).toMatchObject({ kind: 'prevented', record: { launch: 'prevented-before-launch',
     cancellation, prevention: { reason: 'cancel-requested' } } });
   expect(transition.projectedRun?.progress[0]!.phase).toBe('cancelled');
@@ -36,17 +36,17 @@ it.each([
 
 it('fails closed when cancellation state lacks durable actor attribution', () => {
   const attempt = requestAttemptCancellation(createAttempt(identity), 0);
-  expect(() => decideDispatchLaunch(input, { run: active, attempt, dispatch: pending })).toThrow('DISPATCH_CORRUPT');
+  expect(() => decideDispatchLaunch(input, { run: active, attempt, dispatch: pending }, { now: 100, timeoutMs: 1000 })).toThrow('DISPATCH_CORRUPT');
 });
 
 it('requires Attempt cancellation for Run or dispatch cancellation to prevent launch', () => {
   for (const state of [
-    { run: requestRunCancellation(active, active.revision), dispatch: { ...pending, cancellation } },
+    { run: requestRunCancellation(active, active.revision, { now: 100, timeoutMs: 1000 }), dispatch: { ...pending, cancellation } },
     { run: active, dispatch: { ...pending, cancellation } },
-  ]) expect(() => decideDispatchLaunch(input, { ...state, attempt: createAttempt(identity) })).toThrow('DISPATCH_CORRUPT');
+  ]) expect(() => decideDispatchLaunch(input, { ...state, attempt: createAttempt(identity) }, { now: 100, timeoutMs: 1000 })).toThrow('DISPATCH_CORRUPT');
 });
 
 it('rejects a foreign Run binding even when the Attempt and dispatch match', () => {
   const foreign = { ...active, identity: { ...active.identity, runId: 'foreign' } };
-  expect(() => decideDispatchLaunch(input, { run: foreign, attempt: createAttempt(identity), dispatch: pending })).toThrow('DISPATCH_CONFLICT');
+  expect(() => decideDispatchLaunch(input, { run: foreign, attempt: createAttempt(identity), dispatch: pending }, { now: 100, timeoutMs: 1000 })).toThrow('DISPATCH_CONFLICT');
 });

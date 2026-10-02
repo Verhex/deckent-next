@@ -1,4 +1,4 @@
-import { reconcileRunLifecycle, DEFAULT_RUN_PARK_TIMEOUT_MS, type RunLifecycleTiming } from './lifecycle.js';
+import { reconcileRunLifecycle, type RunLifecycleTiming } from './lifecycle.js';
 import { z } from 'zod';
 import { counterSchema } from '#domain/core/primitives/index.js';
 import { attemptIdentitySchema, attemptSnapshotSchema, sameAttemptIdentity } from '#domain/core/attempt/index.js';
@@ -51,7 +51,7 @@ export function observeRunAttempt(input: unknown, expectedRevision: number, atte
 /** Cancellation intent. Tasks that were never reserved have no attempt or effect, so they close as cancelled in the same
  * transition; bound attempts are settled separately from their evidence. Re-requesting closes pending tasks left by older revisions.
  */
-export function requestRunCancellation(input: unknown, expectedRevision: number, timing: RunLifecycleTiming = { now: 0, timeoutMs: DEFAULT_RUN_PARK_TIMEOUT_MS }) {
+export function requestRunCancellation(input: unknown, expectedRevision: number, timing: RunLifecycleTiming) {
   const run = checkedRun(input, expectedRevision);
   const bound = new Set(run.bindings.map(binding => binding.identity.taskId));
   const unreserved = run.progress.some(task => (task.phase === 'pending' && !bound.has(task.taskId)) || task.phase === 'awaiting-decision');

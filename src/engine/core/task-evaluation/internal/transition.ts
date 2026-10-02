@@ -7,7 +7,7 @@ function stale(): never { throw new TaskEvaluationError('TASK_EVALUATION_STALE')
 function notReady(): never { throw new TaskEvaluationError('TASK_EVALUATION_NOT_READY'); }
 
 /** Pure ledger decision. It verifies stored custody but grants no evaluator or artifact authority. */
-export function proposeTaskEvaluationCommit(runInput: unknown, attemptInput: unknown, dispatchInput: unknown, expectedRunRevision: number, evaluationInput: unknown, timing?: { now: number; timeoutMs: number; unknownDisposition?: 'fail' }) {
+export function proposeTaskEvaluationCommit(runInput: unknown, attemptInput: unknown, dispatchInput: unknown, expectedRunRevision: number, evaluationInput: unknown, timing: { now: number; timeoutMs: number; unknownDisposition?: 'fail' }) {
   let run; let attempt; let dispatch; let evaluation;
   try {
     run = runSnapshotSchema.parse(runInput); attempt = attemptSnapshotSchema.parse(attemptInput);

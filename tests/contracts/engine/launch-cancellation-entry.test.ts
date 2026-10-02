@@ -22,7 +22,7 @@ afterEach(async () => {
 async function fixture() {
   const root = await mkdtemp(join(tmpdir(), 'deckent-launch-cancel-entry-')); roots.push(root);
   const store = await openSqliteAttemptStore(join(root, 'ledger.db'),
-    { busyTimeoutMs: 20, journalMode: 'wal', durability: 'full' }, 'allow', custodyProfiles);
+    { busyTimeoutMs: 20, journalMode: 'wal', durability: 'full' }, { now: Date.now, timeoutMs: 86400000 }, 'allow', custodyProfiles);
   stores.push(store); await admitRunAttempts(store, [identity]); await store.claimDispatch(dispatchAdmission(claim));
   return store;
 }

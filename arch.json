@@ -77,6 +77,7 @@
   "units": {
     "src/adapters/core/attempt-store": {
       "dependencies": [
+        "src/domain/core/task-evaluation",
         "src/adapters/core/audit-store",
         "src/engine/core/audit",
         "src/adapters/core/sqlite-ledger",

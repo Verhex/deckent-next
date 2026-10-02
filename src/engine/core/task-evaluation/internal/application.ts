@@ -11,6 +11,7 @@ import { projectAttemptWorkerModels, readSealedWorkerEvents, type WorkerEventLog
 import { taskEvaluationCommitSchema, type TaskEvaluationStore } from './commit.js';
 import { TaskEvidenceError, verifyDispatchEvaluationEvidence } from './evidence.js';
 import { proposeTaskEvaluationCommit } from './transition.js';
+import { evaluationRecovery } from './recovery.js';
 
 export const taskEvaluationCommandSchema = z.object({ schemaVersion: z.literal(1), commandId: identitySchema,
   identity: attemptIdentitySchema, expectedRevision: counterSchema }).strict();
@@ -39,7 +40,7 @@ export class TaskEvaluationApplication {
   constructor(private readonly store: Store, private readonly verifier: PrincipalVerifier,
     private readonly authorization: TaskEvaluationAuthorization, private readonly evaluator: TaskTerminalEvaluator,
     private readonly artifacts: Pick<ArtifactStore, 'read'>, private readonly limits: EvaluationEvidenceLimits,
-    private readonly lifecycle?: { now: () => number; timeoutMs: number }, private readonly unknownPolicy?: UnknownEvaluationPolicy) {}
+    private readonly lifecycle: { now: () => number; timeoutMs: number }, private readonly unknownPolicy?: UnknownEvaluationPolicy) {}
   async execute(input: unknown, credential?: unknown) {
     const command = taskEvaluationCommandSchema.parse(input), principal = await authenticate(this.verifier, credential, command.identity.scopeId);
     await this.authorization.authorize(command.identity, principal);
@@ -59,7 +60,7 @@ export class TaskEvaluationApplication {
     }
     try { return await this.evaluate(command, credential); }
     catch (error) {
-      if (!(error instanceof TaskEvaluationError) || error.code !== 'TASK_EVALUATION_NOT_READY' || !this.lifecycle || !this.store.commitRunLifecycle) throw error;
+      if (!(error instanceof TaskEvaluationError) || error.code !== 'TASK_EVALUATION_NOT_READY' || !this.store.commitRunLifecycle) throw error;
       const run = runSnapshotSchema.parse(await this.store.loadRun(command.identity.scopeId, command.identity.runId));
       const binding = run.bindings.find(value => sameAttemptIdentity(value.identity, command.identity));
       const dispatch = await this.store.loadBoundDispatch(command.identity);
@@ -101,7 +102,6 @@ export class TaskEvaluationApplication {
     }
     const run = runSnapshotSchema.parse(await this.store.loadRun(identity.scopeId, identity.runId));
     assertRunExecution(run.graph, run.execution);
-    if (run.progress.find(value => value.taskId === identity.taskId)?.phase === 'awaiting-decision') throw new TaskEvaluationError('TASK_EVALUATION_NOT_READY');
     const attempt = await this.store.load(identity.scopeId, identity.attemptId);
     const dispatch = await this.store.loadBoundDispatch(identity);
     if (!attempt || !dispatch?.terminal || !dispatch.output) throw new TaskEvaluationError('TASK_EVALUATION_NOT_READY');
@@ -109,12 +109,13 @@ export class TaskEvaluationApplication {
     if (!task) throw new TaskEvaluationError('TASK_EVALUATION_STALE');
     const evidenceId = 'dispatch-output';
     const model = await this.workerModel(run, identity);
+    const recovery = await evaluationRecovery(this.store, run, identity, dispatch, model);
     const proposed = taskEvaluationSchema.parse({ schemaVersion: 1, evaluationId: command.commandId, identity,
       graphRevision: run.graph.revision, attemptRevision: attempt.revision,
       criteria: task.acceptanceCriteria.map(criterionId => ({ criterionId, verdict: 'unknown', evidenceIds: [evidenceId] })),
-      ...(model ? { model } : {}),
+      ...(model ? { model } : {}), ...recovery,
     });
-    proposeTaskEvaluationCommit(run, attempt, dispatch, command.expectedRevision, proposed);
+    proposeTaskEvaluationCommit(run, attempt, dispatch, command.expectedRevision, proposed, { now: this.lifecycle.now(), timeoutMs: this.lifecycle.timeoutMs });
     await verifyDispatchEvaluationEvidence(proposed, dispatch.request, [{ evidenceId, receipt: dispatch.output }],
       { async readDispatch() { return dispatch; } }, this.artifacts, this.limits);
     const criteria = [];
@@ -130,7 +131,7 @@ export class TaskEvaluationApplication {
     return this.store.commitTaskEvaluation({ commandId: command.commandId, actor,
       expectedRevision: command.expectedRevision, evaluation, dispatch,
       ...(restriction === 'fail' ? { unknownDisposition: 'fail' as const } : {}),
-      ...(this.lifecycle ? { now: this.lifecycle.now(), timeoutMs: this.lifecycle.timeoutMs } : {}) });
+      now: this.lifecycle.now(), timeoutMs: this.lifecycle.timeoutMs });
   }
   /**
    * Worker model evidence of a pinned attempt (WORKER-CURRENCY-2, owner rule A; Jev 933e43f2, 58ffe1c9): the host-sealed verdict from the

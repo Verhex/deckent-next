@@ -60,7 +60,7 @@ it('upgrades a v41 ledger to v42: backup at v41, v1 adoptions rewritten lossless
   expect(after.corrupt).toBe('{"schemaVersion":1,"kind":"adopt"}');
   expect(after.mismatched).toBe(v1Adopt('mismatched', 'refs/heads/other'));
 
-  const store = await openSqliteAttemptStore(path, options, 'forbid');
+  const store = await openSqliteAttemptStore(path, options, { now: Date.now, timeoutMs: 86400000 }, 'forbid');
   try {
     // A pre-upgrade adoption replays with the command today's SDK sends (v2, no verification fields): byte-equal command.
     const settled = (await store.loadAdoption('s', 'settled'))!;

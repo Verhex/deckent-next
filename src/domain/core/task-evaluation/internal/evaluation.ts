@@ -23,6 +23,8 @@ export type TaskEvaluationModel = z.infer<typeof taskEvaluationModelSchema>;
 export const taskEvaluationSchema = z.object({ schemaVersion: z.literal(1), evaluationId: identitySchema,
   identity: attemptIdentitySchema, graphRevision: counterSchema.positive(), attemptRevision: counterSchema.positive(),
   criteria: z.array(criterion).min(1).readonly(), model: taskEvaluationModelSchema.optional(),
+  evidenceDigests: z.array(z.string().regex(/^[a-f0-9]{64}$/)).max(2).readonly().optional(),
+  returnEvidence: z.object({ kind: z.enum(['output', 'model-seal']), digest: z.string().regex(/^[a-f0-9]{64}$/) }).strict().readonly().optional(),
 }).strict().readonly();
 /** Acceptance consequence of the model evidence: an undeclared model fails the attempt; a Claude attempt (the provider that reports
  * per-model usage) without a sealed 'verified' verdict is held; Codex/Cursor stay accepted by their criteria, visibly unverified. */
@@ -48,7 +50,12 @@ export function inspectTaskEvaluation(runInput: unknown, input: unknown) {
     || evaluation.attemptRevision !== binding.observedRevision) throw new TaskEvaluationError('TASK_EVALUATION_STALE');
   const task = run.data.graph.tasks.find(value => value.id === evaluation.identity.taskId)!;
   const progress = run.data.progress.find(value => value.taskId === task.id)!;
-  if (run.data.cancelRequested || progress.phase !== 'evaluating' || progress.unresolvedEffects || binding.observedKind !== 'exited') throw new TaskEvaluationError('TASK_EVALUATION_NOT_READY');
+  const returned = progress.phase === 'awaiting-decision' && evaluation.returnEvidence;
+  if (returned && (!progress.decision!.evidenceDigests || !evaluation.evidenceDigests?.includes(returned.digest) || progress.decision!.evidenceDigests.includes(returned.digest)
+    || (returned.kind === 'model-seal' && (evaluation.model?.verdict !== 'verified' || evaluation.model.evidence !== 'sealed')))) throw new TaskEvaluationError('TASK_EVALUATION_NOT_READY');
+  if (run.data.cancelRequested || (progress.phase !== 'evaluating' && !returned) || progress.unresolvedEffects || binding.observedKind !== 'exited'
+    || run.data.state.kind === 'terminal') throw new TaskEvaluationError('TASK_EVALUATION_NOT_READY');
+  if (evaluation.returnEvidence && progress.phase !== 'awaiting-decision') throw new TaskEvaluationError('TASK_EVALUATION_NOT_READY');
   const byId = new Map(evaluation.criteria.map(value => [value.criterionId, value]));
   if (byId.size !== evaluation.criteria.length || byId.size !== task.acceptanceCriteria.length
     || task.acceptanceCriteria.some(id => !byId.has(id))) throw new TaskEvaluationError('TASK_EVALUATION_CRITERIA');

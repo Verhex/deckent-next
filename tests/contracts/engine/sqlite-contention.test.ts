@@ -16,7 +16,7 @@ afterEach(async () => {
 async function setup(journalMode: 'wal' | 'delete' = 'wal', lock: 'write' | 'read' = 'write') {
   const root = await mkdtemp(join(tmpdir(), 'deckent-contention-')); roots.push(root); const path = join(root, 'state.db');
   const options = { busyTimeoutMs: 40, journalMode, durability: 'full' } as const;
-  const store = await openSqliteAttemptStore(path, options); stores.push(store);
+  const store = await openSqliteAttemptStore(path, options, { now: Date.now, timeoutMs: 86400000 }); stores.push(store);
   const child = spawn(process.execPath, ['--input-type=module', '-e', `
     import {DatabaseSync} from 'node:sqlite';
     const db=new DatabaseSync(process.argv[1]);
@@ -39,14 +39,14 @@ describe('separate-process SQLite lock contention', () => {
     await expect(f.store.commit(input)).rejects.toMatchObject({ code: 'ATTEMPT_STORE_BUSY' });
     expect(performance.now() - started).toBeLessThan(2000);
     expect(await f.store.load('s', 'a')).toBeNull(); expect(await f.store.receipt('s', 'create')).toBeNull();
-    await expect(openSqliteAttemptStore(f.path, f.options)).rejects.toMatchObject({ code: 'ATTEMPT_STORE_BUSY' });
+    await expect(openSqliteAttemptStore(f.path, f.options, { now: Date.now, timeoutMs: 86400000 })).rejects.toMatchObject({ code: 'ATTEMPT_STORE_BUSY' });
     const closed = once(f.child, 'close'); f.child.stdin.write('release'); await closed;
     const receipt = await f.store.commit(input); expect(receipt.snapshot.revision).toBe(0);
     expect(await f.store.commit(input)).toEqual(receipt);
   });
   it('rejects invalid budgets before opening a database', async () => {
     for (const busyTimeoutMs of [-1, Infinity, 2.5, 2_147_483_648]) {
-      await expect(openSqliteAttemptStore(':memory:', { busyTimeoutMs, journalMode: 'wal', durability: 'full' })).rejects.toMatchObject({ code: 'ATTEMPT_STORE_OPTIONS' });
+      await expect(openSqliteAttemptStore(':memory:', { busyTimeoutMs, journalMode: 'wal', durability: 'full' }, { now: Date.now, timeoutMs: 86400000 })).rejects.toMatchObject({ code: 'ATTEMPT_STORE_OPTIONS' });
     }
   });
   it.each(['delete', 'wal'] as const)('handles a reader during %s commit without inventing lost writes', async journalMode => {

@@ -23,6 +23,8 @@ export interface MonitorBlocker {
   readonly sinceMs: number | null;
   /** Short typed detail (e.g. an error code, pool id, approval id); human wording lives in the i18n catalogs. */
   readonly detail: string | null;
+  /** Durable park/decision deadline, when this blocker is bounded by one. */
+  readonly deadlineMs?: number;
 }
 export interface MonitorAttempt {
   readonly attemptId: string; readonly generation: number; readonly launch: string | null; readonly exitCode: number | null;
@@ -40,6 +42,7 @@ export interface MonitorAttempt {
   readonly diagnostics?: readonly string[];
 }
 export interface MonitorTask {
+  readonly decision?: { readonly reason: 'evaluation-unknown' | 'evaluation-not-ready'; readonly sinceMs: number; readonly deadlineMs: number };
   readonly taskId: string; readonly kind: string; readonly phase: string;
   readonly profile: { readonly id: string; readonly version: number } | null;
   readonly attempts: number; readonly lastAttempt: MonitorAttempt | null;

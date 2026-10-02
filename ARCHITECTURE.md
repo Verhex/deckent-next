@@ -93,7 +93,7 @@ historical proof and current gates retain their measured scope. PLAN.md tracks t
   start command. The running common runtime discovers actor-matched intents, rechecks current
   operation policy and resumes eligible work. Migration never silently activates old admissions.
   Ledger25 records evaluation observation in the same transaction as its receipt, distinguishing
-  never-evaluated output from an evaluated unknown. Unknown is not automatically re-evaluated.
+  never-evaluated output from an evaluated unknown. Unknown is not automatically re-evaluated without new exact-attempt evidence.
   Owner 2026-10-01 A1/A3, implemented source candidate 2026-10-02 in `lane/run-park-timeout`:
   Run snapshot v4 has `running`, `parked {reason, since, deadline}` and explicit terminal outcome;
   RunView v3 carries outcome/reason and task decision evidence. One pure lifecycle owner closes dependency
@@ -102,6 +102,12 @@ historical proof and current gates retain their measured scope. PLAN.md tracks t
   them as `incomplete` when any task was accepted, otherwise `failed`. Live work and uncertain effects retain custody.
   `runRuntime.parking` v1 defaults to 24 hours: conservative, unmeasured and lead-adjustable. Resume rechecks
   dependencies and preserves the deadline; close never reports incomplete work as success.
+  Fable REVISE 2026-10-02, owner/lead typed return decision (Jev a8e582fe): the same evaluation owner may
+  return an awaiting task only on a new exact-attempt retained output digest or verified host model seal.
+  Park captures the immutable output/seal digest baseline; application verifies artifacts and ledger commit rechecks custody.
+  Each new digest is consumed once and recorded in the evaluation receipt. Unknown parks again with the original since/deadline;
+  evidence-less, duplicate or expired returns remain TASK_EVALUATION_NOT_READY. A verified seal permits ordinary criterion acceptance,
+  with model verdict verified; human acceptance of the original unknown remains visibly model-unverified.
   An unverified Claude-worker evaluation parks the task as `awaiting-decision`, releasing its pool slot even
   when independent work continues. The shared CLI / MCP-free SDK application accepts or rejects only a freshly
   verified `os-user` principal with existing `attempt:evaluate` policy authority, recording principal and decision
@@ -110,11 +116,16 @@ historical proof and current gates retain their measured scope. PLAN.md tracks t
   preserving its original unknown evidence; it cannot auto-accept. Rule A substitution and Codex/Cursor evidence stay unchanged.
   Host-proven exited execution without ready output (including exit 137) parks visibly as `evaluation-not-ready`,
   cannot be accepted without evidence, and fails at the deadline. Historical evaluated unknowns park on the first
-  authorized maintenance turn without re-evaluation. Ledger v45 explicitly migrates snapshot/receipt v3 to v4,
+  authorized maintenance turn without evidence-less re-evaluation. Maintenance requires Run cancel (the existing close authority),
+  never inspect alone. Deadline polls read first and enter the lifecycle write transaction only for a due deadline.
+  Store open requires the configured clock/parking timeout; pure transitions and terminal-dispatch cancellation settlement require explicit timing.
+  Monitor treats parked Runs as open/stuck, projects decision reason/deadline and shows not-ready evaluation as pending.
+  Its legacy v3 snapshot compatibility is a read-only projection; ledger45 owns durable conversion. Ledger v45 explicitly migrates snapshot/receipt v3 to v4,
   preserving revisions/history; existing service-start private v44 backup remains required for rollback.
   J5 retains host verification/loss metadata before an event prefix, counts scrubbed NDJSON bytes and rejects a
   production artifact ceiling below the current gateway event limit plus 32768 bytes of conservative seal reserve.
-  No runtime protocol bump: local operators use the same application contract. Independent review, full batch verify,
+  J5 remains in provider-catalog effective validation: platform-only config ingress may still admit a smaller artifact ceiling;
+  ingress ownership is an open limit, not changed by this REVISE. No runtime protocol bump: local operators use the same application contract. Independent review, full batch verify,
   packaged/current-platform/live acceptance remain open; this source candidate does not admit DOGFOOD S1.
   Current local driver refills same-Run capacity after verified acceptance within a configured automatic-turn
   reservation budget. At the budget boundary it drains existing custody and rotates paged Run intents.

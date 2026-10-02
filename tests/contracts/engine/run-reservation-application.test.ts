@@ -18,7 +18,7 @@ const command = { schemaVersion: 1 as const, commandId: 'reserve-wave', scopeId:
 
 async function fixture(admittedAt = 0) {
   const root = await mkdtemp(join(tmpdir(), 'deckent-reservation-app-')); roots.push(root); const path = join(root, 'ledger.db');
-  const store = await openSqliteAttemptStore(path, options); stores.push(store);
+  const store = await openSqliteAttemptStore(path, options, { now: Date.now, timeoutMs: 86400000 }); stores.push(store);
   await store.createExecutionPool({ schemaVersion: 1, poolId: 'pool', capacity: { executionSlots: 1, inFlightSlots: 1 } });
   await store.createRun({ commandId: 'create', actor, identity: { scopeId: 's', runId: 'r', layoutRevision: 'layout' }, graph, execution: fixtureExecution(graph), now: admittedAt,
     policy: { schemaVersion: 2, poolId: 'pool', capacity: { executionSlots: 1, inFlightSlots: 1 }, ordering: ['b', 'a'] } });
@@ -88,7 +88,7 @@ it('requires current pool authority only for a fresh capacity mutation', async (
 });
 
 it('returns the winning generated identity to concurrent identical commands', async () => {
-  const f = await fixture(); const second = await openSqliteAttemptStore(f.path, options); stores.push(second);
+  const f = await fixture(); const second = await openSqliteAttemptStore(f.path, options, { now: Date.now, timeoutMs: 86400000 }); stores.push(second);
   let generated = 0;
   const app = new RunReservationApplication(second, f.verifier, f.authorization, f.poolAuthorization, { now: () => 0, attemptId: () => `other-attempt-${++generated}` });
   const results = await Promise.all([f.app.reserve(command), app.reserve(command)]);

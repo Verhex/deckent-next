@@ -7,7 +7,7 @@ export async function sweepConfiguredAttemptCustody(root: string, scopeIds: read
   return sweepAttemptCustodyScopes(scopeIds, async scopeId => {
     const c = await loadConfiguredScopeContext(root, scopeId, options, 'read'), execution = c.config.execution, layout = c.layout; if (!execution) return null;
     const git = { ...execution.git, ...(await resolveGitWorkTarget(resolve(root), execution, layout)).git, workspaceRoot: await inspectProductDirectory(layout, 'workspaces') };
-    const store = await openSqliteAttemptStore(await c.path(), c.config.storage.sqlite, 'forbid', { validate: validateDockerSupervisorProfile });
+    const store = await openSqliteAttemptStore(await c.path(), c.config.storage.sqlite, { now: Date.now, timeoutMs: c.config.runRuntime.parking.timeoutMs }, 'forbid', { validate: validateDockerSupervisorProfile });
     try { return await new AttemptCustodyReleaseApplication({ store, artifacts: new FileArtifactStore({ root: await inspectProductDirectory(layout, 'artifacts'), maxBytes: c.config.artifacts.maxBytes }),
       verifier: { async verify() { return c.principal; } }, authorization: new DispatchPolicyAuthorization(createLayoutPolicySource(layout, userInfo().uid, c.config.inspection.policyMaxBytes)),
       owner: c.principal.id, retention: execution.retention, ...gitDockerAttemptCustody(git) }).sweep(scopeId, c.config.inspection.maxPageSize); } finally { store.close(); }

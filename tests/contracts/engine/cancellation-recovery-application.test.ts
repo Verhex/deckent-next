@@ -89,7 +89,7 @@ it.each(['wrong-scope', 'duplicate', 'oversized'] as const)('fails closed for a 
 
 it('persists terminal recovery once in SQLite, so a retry drain finds no work and creates no cancellation command', async () => {
   const root = await mkdtemp(join(tmpdir(), 'deckent-cancellation-recovery-app-')); roots.push(root); const path = join(root, 'ledger.db');
-  const store = await openSqliteAttemptStore(path, { busyTimeoutMs: 100, journalMode: 'wal', durability: 'full' }, 'allow', custodyProfiles); stores.push(store);
+  const store = await openSqliteAttemptStore(path, { busyTimeoutMs: 100, journalMode: 'wal', durability: 'full' }, { now: Date.now, timeoutMs: 86400000 }, 'allow', custodyProfiles); stores.push(store);
   const attempt = identity('a'); await admitRunAttempts(store, [attempt]);
   await store.claimDispatch(dispatchAdmission({ owner: 'worker', request: { protocolVersion: 1, identity: attempt, workspace: '/recorded', argv: ['recorded'] } }));
   await store.cancelRun({ commandId: 'intent', actor: { id: 'operator', issuer: 'test', subject: 'u' }, scopeId: 's', runId: 'r', expectedRevision: 1 });

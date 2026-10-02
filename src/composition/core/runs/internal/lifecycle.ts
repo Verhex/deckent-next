@@ -1,5 +1,5 @@
 import { type ConfigLoadOptions } from '#platform/index.js';
-import { openLocalIntegrityAuthority, openSqliteAttemptStore } from '#adapters/index.js';
+import { openLocalIntegrityAuthority, openSqliteAttemptStore, openSqliteInventoryReader } from '#adapters/index.js';
 import { AuditApplication, DispatchPolicyAuthorization, RunLifecycleApplication, runLifecycleCommandSchema, RunPolicyAuthorization, projectRunView, runQuerySchema, type RunQuery } from '#engine/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
@@ -11,12 +11,16 @@ async function applyLifecycle(projectRoot: string, input: unknown, options: Conf
     const command = maintain ? runQuerySchema.parse(input) : runLifecycleCommandSchema.parse(input);
     const { config, layout, document, principal, path } = await loadConfiguredScopeContext(projectRoot, command.scopeId, options, 'write');
     const verifier = { async verify() { return principal; } }, authorization = new RunPolicyAuthorization({ async load() { return document; } });
-    const store = await openSqliteAttemptStore(await path(), config.storage.sqlite, 'forbid');
-    store.setRunLifecycleTiming({ now: Date.now, timeoutMs: config.runRuntime.parking.timeoutMs });
+    const store = await openSqliteInventoryReader(await path(), { busyTimeoutMs: config.storage.sqlite.busyTimeoutMs });
+
     try {
       const integrity = maintain ? null : await openLocalIntegrityAuthority(layout, config.approvals.keyFile, true);
       const policy = new DispatchPolicyAuthorization({ async load() { return document; } });
-      const app = new RunLifecycleApplication(store, verifier, authorization,
+      const app = new RunLifecycleApplication({ loadRun: (scope, run) => store.loadRun(scope, run), hasTaskEvaluation: (identity, revision) => store.hasTaskEvaluation(identity, revision),
+        async commitRunLifecycle(write, audit) {
+          const writer = await openSqliteAttemptStore(await path(), config.storage.sqlite, { now: Date.now, timeoutMs: config.runRuntime.parking.timeoutMs }, 'forbid');
+          try { return await writer.commitRunLifecycle(write, audit); } finally { writer.close(); }
+        } }, verifier, authorization,
         { authorize: (identity, actor) => policy.authorizeIdentity('evaluate', identity, actor) }, audit => new AuditApplication(audit, integrity!),
         Date.now, config.runRuntime.parking.timeoutMs, document.revision);
       const receipt = maintain ? await app.advance(command) : await app.execute(command);

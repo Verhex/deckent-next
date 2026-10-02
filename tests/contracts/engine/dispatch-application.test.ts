@@ -19,7 +19,7 @@ afterEach(async () => { for (const store of stores.splice(0)) store.close(); awa
 async function fixture() {
   const root = await mkdtemp(join(tmpdir(), 'deckent-dispatch-app-')); roots.push(root);
   const workspace = join(root, 'workspace'); await mkdir(workspace);
-  const store = await openSqliteAttemptStore(join(root, 'ledger.db'), { busyTimeoutMs: 20, journalMode: 'wal', durability: 'full' }, 'allow', custodyOrDockerProfiles); stores.push(store);
+  const store = await openSqliteAttemptStore(join(root, 'ledger.db'), { busyTimeoutMs: 20, journalMode: 'wal', durability: 'full' }, { now: Date.now, timeoutMs: 86400000 }, 'allow', custodyOrDockerProfiles); stores.push(store);
   const identity = { runId: 'r', taskId: 't', attemptId: randomUUID(), scopeId: 's', generation: 1, layoutRevision: 'l' };
   const request = { protocolVersion: 1 as const, identity, workspace, argv: ['node', '-e', "require('node:fs').appendFileSync('/workspace/result','once')"] };
   await admitRunAttempts(store, [identity]);
@@ -185,7 +185,7 @@ it.skipIf(!imageId)('persists authorized cancellation before another controller 
   const options = { executable: '/usr/bin/docker', workspaceRoot: f.root, imageId: imageId!, uid: process.getuid!(), gid: process.getgid!(),
     logMaxSizeKiB: 64, logMaxFiles: 2, memoryBytes: 268435456, pids: 64, cpus: 1, tmpBytes: 16777216, deadlineMs: 10000, controlTimeoutMs: 10000, outputBytes: 65536 };
   const original = new DockerSupervisor(options); const separate = new DockerSupervisor(options);
-  const otherStore = await openSqliteAttemptStore(join(f.root, 'ledger.db'), { busyTimeoutMs: 20, journalMode: 'wal', durability: 'full' }, 'allow', custodyOrDockerProfiles); stores.push(otherStore);
+  const otherStore = await openSqliteAttemptStore(join(f.root, 'ledger.db'), { busyTimeoutMs: 20, journalMode: 'wal', durability: 'full' }, { now: Date.now, timeoutMs: 86400000 }, 'allow', custodyOrDockerProfiles); stores.push(otherStore);
   const running = new DispatchApplication(f.store, original, verifier, { async authorize() {} }, 'runner', f.artifacts);
   const cancellation = new DispatchApplication(otherStore, separate, verifier, { async authorize(action) { if (action === 'cancel' && deny) throw new Error('DENIED'); } }, 'operator', f.artifacts);
   const execution = running.execute(request);
@@ -231,7 +231,7 @@ it.skipIf(!imageId)('delivers a durable Run cancellation through a separate cont
   const options = { executable: '/usr/bin/docker', workspaceRoot: f.root, imageId: imageId!, uid: process.getuid!(), gid: process.getgid!(),
     logMaxSizeKiB: 64, logMaxFiles: 2, memoryBytes: 268435456, pids: 64, cpus: 1, tmpBytes: 16777216, deadlineMs: 10000, controlTimeoutMs: 10000, outputBytes: 65536 };
   const original = new DockerSupervisor(options); const separate = new DockerSupervisor(options);
-  const otherStore = await openSqliteAttemptStore(join(f.root, 'ledger.db'), { busyTimeoutMs: 20, journalMode: 'wal', durability: 'full' }, 'allow', custodyOrDockerProfiles); stores.push(otherStore);
+  const otherStore = await openSqliteAttemptStore(join(f.root, 'ledger.db'), { busyTimeoutMs: 20, journalMode: 'wal', durability: 'full' }, { now: Date.now, timeoutMs: 86400000 }, 'allow', custodyOrDockerProfiles); stores.push(otherStore);
   const running = new DispatchApplication(f.store, original, verifier, { async authorize() {} }, 'runner', f.artifacts);
   const cancellation = new DispatchApplication(otherStore, separate, verifier, { async authorize(action) { if (action === 'cancel' && deny) throw new PolicyAuthorizationError('POLICY_DENIED'); } }, 'operator', f.artifacts);
   const runApp = new RunApplication(otherStore, verifier, { async authorize() {} });

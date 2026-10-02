@@ -24,7 +24,7 @@ const graph = { schemaVersion: 2 as const, revision: 1, tasks: Array.from({ leng
 async function fixture() {
   const root = await mkdtemp(join(tmpdir(), 'deckent-parallel-dag-')); roots.push(root);
   const path = join(root, 'ledger.db');
-  const open = async () => { const store = await openSqliteAttemptStore(path, options, 'allow', custodyProfiles); stores.push(store); return store; };
+  const open = async () => { const store = await openSqliteAttemptStore(path, options, { now: Date.now, timeoutMs: 86400000 }, 'allow', custodyProfiles); stores.push(store); return store; };
   const store = await open(); await store.createExecutionPool({ schemaVersion: 1, poolId: 'pool', capacity });
   let sequence = 0;
   const app = (connection: SqliteAttemptStore) => new RunReservationApplication(connection,
@@ -143,7 +143,7 @@ it('upgrades the reservation semantics gate without rewriting prior full-wave re
   const before = await f.store.loadRunReceipt('s', 'full-wave');
   f.store.close(); stores.splice(stores.indexOf(f.store), 1);
   const db = new DatabaseSync(f.path); db.exec('DROP TABLE run_execution_intents; DROP TABLE task_evaluation_observations; DROP TABLE IF EXISTS workspace_integrations; DROP TABLE IF EXISTS workspace_deliveries; DROP TABLE IF EXISTS workspace_adoptions; DROP TABLE IF EXISTS effect_intents; DROP TABLE IF EXISTS agent_turn_tool_calls; DROP TABLE IF EXISTS agent_turns; DROP TABLE IF EXISTS worker_event_logs; DROP TABLE IF EXISTS approval_outbox; DROP TABLE IF EXISTS approval_receipts; DROP TABLE IF EXISTS approvals; PRAGMA user_version=23'); db.close();
-  await expect(openSqliteAttemptStore(f.path, options, 'forbid', custodyProfiles)).rejects.toMatchObject({ code: 'ATTEMPT_STORE_VERSION' });
+  await expect(openSqliteAttemptStore(f.path, options, { now: Date.now, timeoutMs: 86400000 }, 'forbid', custodyProfiles)).rejects.toMatchObject({ code: 'ATTEMPT_STORE_VERSION' });
   const reopened = await f.open(); expect(await reopened.loadRunReceipt('s', 'full-wave')).toEqual(before);
   const check = new DatabaseSync(f.path); try { expect(check.prepare('PRAGMA user_version').get()?.user_version).toBe(CURRENT_LEDGER_VERSION); } finally { check.close(); }
 });
@@ -153,7 +153,7 @@ function reservationProcess(path: string, runId: string, commandId: string) {
   const child = spawn(process.execPath, ['--input-type=module', '-e', `
     const { openSqliteAttemptStore } = await import(process.argv[1]);
     const { RunReservationApplication } = await import(process.argv[2]);
-    const store = await openSqliteAttemptStore(process.argv[3], JSON.parse(process.argv[4]));
+    const store = await openSqliteAttemptStore(process.argv[3], JSON.parse(process.argv[4]), { now: Date.now, timeoutMs: 86400000 });
     let generated = 0;
     const app = new RunReservationApplication(store,
       { async verify() { return { id: 'scheduler-proof', issuer: 'test', subject: 'operator', assurance: 'os-user', scopeIds: ['s'] }; } },

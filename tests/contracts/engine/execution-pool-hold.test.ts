@@ -35,7 +35,7 @@ const status = { schemaVersion: 1, scopeId: 's' };
 async function fixture() {
   const root = await mkdtemp(join(tmpdir(), 'deckent-pool-hold-')); roots.push(root);
   const path = join(root, 'ledger.db');
-  const store = await openSqliteAttemptStore(path, options, 'allow', custodyProfiles); stores.push(store);
+  const store = await openSqliteAttemptStore(path, options, { now: Date.now, timeoutMs: 86400000 }, 'allow', custodyProfiles); stores.push(store);
   const graph = { schemaVersion: 2 as const, revision: 1, tasks: ['a', 'b', 'c'].map(id => ({ id, kind: 'fixture', dependencies: id === 'c' ? ['a', 'b'] : [], acceptanceCriteria: ['verified'] })),
     criterionDefinitions: [{ id: 'verified', version: 1, description: 'fixture', evaluator: { id: 'test', version: 1 }, parameters: {} }] };
   const capacity = { executionSlots: 2, inFlightSlots: 2 };
@@ -258,7 +258,7 @@ describe.skipIf(process.platform === 'win32')('ledger v44 pool hold tables', () 
   });
   it('treats a hold row that disagrees with its record as corruption, never as open', async () => {
     const { path } = await ledger();
-    const store = await openSqliteAttemptStore(path, options); stores.push(store);
+    const store = await openSqliteAttemptStore(path, options, { now: Date.now, timeoutMs: 86400000 }); stores.push(store);
     await store.createExecutionPool({ schemaVersion: 1, poolId: 'p', capacity: { executionSlots: 1, inFlightSlots: 1 } });
     const db = new DatabaseSync(path); db.prepare("INSERT INTO execution_pool_holds(pool_id,revision,state,record) VALUES('p',1,'open',?)")
       .run(JSON.stringify({ schemaVersion: 1, poolId: 'p', state: 'held', revision: 1, changedBy: { issuer: 'a', subject: 'b' }, changedAtMs: 1, scopeId: 's', commandId: 'c', reason: null })); db.close();

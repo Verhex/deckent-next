@@ -53,7 +53,7 @@ export function createAgentFileEdits(input: { readonly area: WorkspaceEditArea; 
       const clock = new SystemTrustedClock();
       const sessions = await createLocalPeerSession(input.peer, context.principal.scopeIds, context.config.approvals.sessionTtlMs, clock);
       const target = area.target(await prepareProductDirectory(context.layout, 'fileEffects'));
-      const store = await openSqliteAttemptStore(await context.path(), context.config.storage.sqlite, 'forbid');
+      const store = await openSqliteAttemptStore(await context.path(), context.config.storage.sqlite, { now: Date.now, timeoutMs: context.config.runRuntime.parking.timeoutMs }, 'forbid');
       try {
         const effects = new EffectApplication({ async resolve(ref) {
           return ref.id === descriptor.operation.id && ref.version === descriptor.operation.version ? descriptor : null;

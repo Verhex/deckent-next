@@ -141,7 +141,7 @@ describe.skipIf(process.platform === 'win32')('fail-closed scope registry on rea
   it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket] refuses to start, never re-homes, when company.id changes to a company foreign to an already-pinned own scope; records written before stay under the original company', async () => {
     const f = await fixture({}, [named('s'), runNamed('s')], undefined, false);
     await cancel(f, 's');
-    const store = await openSqliteAttemptStore(f.ledger, { busyTimeoutMs: 100, journalMode: 'wal', durability: 'full' }, 'forbid', custodyProfiles);
+    const store = await openSqliteAttemptStore(f.ledger, { busyTimeoutMs: 100, journalMode: 'wal', durability: 'full' }, { now: Date.now, timeoutMs: 86400000 }, 'forbid', custodyProfiles);
     try { await admitRunAttempts(store, [{ runId: 'r', taskId: 'a', attemptId: 'a', scopeId: 's', generation: 1, layoutRevision: 'layout' }]); }
     finally { store.close(); }
     const path = join(f.project, '.deckent/config.json');

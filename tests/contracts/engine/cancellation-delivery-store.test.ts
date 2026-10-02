@@ -18,15 +18,15 @@ afterEach(async () => { await Promise.all(roots.splice(0).map(root => rm(root, {
 async function fixture() {
   const root = await mkdtemp(join(tmpdir(), 'deckent-cancellation-delivery-store-')); roots.push(root);
   const path = join(root, 'ledger.db');
-  const seed = await openSqliteAttemptStore(path, options, 'allow', custodyProfiles);
+  const seed = await openSqliteAttemptStore(path, options, { now: Date.now, timeoutMs: 86400000 }, 'allow', custodyProfiles);
   try {
     await admitRunAttempts(seed, [identity]);
     const claim = { owner: 'fixture', request: { protocolVersion: 1 as const, identity, workspace: '/recorded/workspace', argv: ['recorded-tool'] } };
     await seed.claimDispatch(dispatchAdmission(claim));
     await seed.cancelRun({ commandId: 'cancel', actor: { id: 'canceller', issuer: 'test', subject: 'fixture' }, scopeId: 's', runId: 'r', expectedRevision: 1 });
   } finally { seed.close(); }
-  const one = await openSqliteAttemptStore(path, options, 'allow', custodyProfiles);
-  const two = await openSqliteAttemptStore(path, options, 'allow', custodyProfiles);
+  const one = await openSqliteAttemptStore(path, options, { now: Date.now, timeoutMs: 86400000 }, 'allow', custodyProfiles);
+  const two = await openSqliteAttemptStore(path, options, { now: Date.now, timeoutMs: 86400000 }, 'allow', custodyProfiles);
   return { path, one, two };
 }
 

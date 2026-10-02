@@ -14,7 +14,7 @@ async function workspace(work: (path: string) => Promise<void>) {
   try { await work(join(root, 'ledger.db')); } finally { await rm(root, { recursive: true, force: true }); }
 }
 async function seedVersionTwelve(path: string) {
-  const store = await openSqliteAttemptStore(path, options);
+  const store = await openSqliteAttemptStore(path, options, { now: Date.now, timeoutMs: 86400000 });
   try {
     await admitRunAttempts(store, [{ scopeId: 'scope-a', runId: 'run-a', taskId: 'task-a', attemptId: 'attempt-a', layoutRevision: 'layout-a', generation: 1 }]);
   } finally { store.close(); }

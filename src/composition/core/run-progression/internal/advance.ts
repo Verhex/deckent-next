@@ -21,7 +21,7 @@ export async function advanceConfiguredRun(projectRoot: string, input: RunQuery,
       const { config, layout, principal, path } = await loadConfiguredScopeContext(projectRoot, request.scopeId, options, 'write');
       await new RunPolicyAuthorization(createLayoutPolicySource(layout, userInfo().uid, config.inspection.policyMaxBytes))
         .authorize('inspect', request, await authenticate({ async verify() { return principal; } }, undefined, request.scopeId));
-      const store = await openSqliteAttemptStore(await path(), config.storage.sqlite, 'forbid');
+      const store = await openSqliteAttemptStore(await path(), config.storage.sqlite, { now: Date.now, timeoutMs: config.runRuntime.parking.timeoutMs }, 'forbid');
       try { return await work(store); } finally { store.close(); }
     }
     const turn = new RunProgressionTurn({

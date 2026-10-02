@@ -1,5 +1,5 @@
 import type { DatabaseSync } from 'node:sqlite';
-import { DEFAULT_RUN_PARK_TIMEOUT_MS, attemptSnapshotSchema, preventRunAttempt, sameAttemptIdentity, settleCancelledRunAttempt, type RunLifecycleTiming, type AttemptIdentity, type AttemptSnapshot, type RunSnapshot } from '#domain/index.js';
+import { attemptSnapshotSchema, preventRunAttempt, sameAttemptIdentity, settleCancelledRunAttempt, type RunLifecycleTiming, type AttemptIdentity, type AttemptSnapshot, type RunSnapshot } from '#domain/index.js';
 import { dispatchRecordSchema, RunStoreError, type DispatchRecord, type RunCancellationSettlement } from '#engine/index.js';
 import { readRunBoundDispatch } from './run-dispatch-lookup.js';
 
@@ -24,7 +24,7 @@ function readDispatch(db: DatabaseSync, identity: AttemptIdentity): DispatchReco
 }
 /** `evidence.dispatched`: a dispatch record exists (claimed, granted or prevented); `evidence.terminal`: terminal exit is recorded for it. */
 export function settleBoundAttempt(run: RunSnapshot, attempt: AttemptSnapshot, evidence: Readonly<{ dispatched: boolean; terminal: boolean }>,
-  timing: RunLifecycleTiming = { now: Date.now(), timeoutMs: DEFAULT_RUN_PARK_TIMEOUT_MS }): Readonly<{ status: RunCancellationSettlement['status']; run: RunSnapshot }> {
+  timing: RunLifecycleTiming): Readonly<{ status: RunCancellationSettlement['status']; run: RunSnapshot }> {
   const identity = attempt.identity;
   const binding = run.bindings.find(value => sameAttemptIdentity(value.identity, identity));
   const task = run.progress.find(value => value.taskId === identity.taskId);
@@ -41,7 +41,7 @@ export function settleBoundAttempt(run: RunSnapshot, attempt: AttemptSnapshot, e
   return Object.freeze({ status: 'not-settleable', run });
 }
 /** Applies prevention/settlement to every binding of a cancel-requested Run snapshot. */
-export function settleRunCancellation(db: DatabaseSync, run: RunSnapshot, timing?: RunLifecycleTiming): RunSnapshot {
+export function settleRunCancellation(db: DatabaseSync, run: RunSnapshot, timing: RunLifecycleTiming): RunSnapshot {
   let current = run;
   for (const binding of run.bindings) {
     const identity = binding.identity;
@@ -51,7 +51,7 @@ export function settleRunCancellation(db: DatabaseSync, run: RunSnapshot, timing
   return current;
 }
 /** Settles one attempt and persists the Run when it changed. */
-export function settleAttemptCancellation(db: DatabaseSync, identityInput: unknown, timing?: RunLifecycleTiming): RunCancellationSettlement {
+export function settleAttemptCancellation(db: DatabaseSync, identityInput: unknown, timing: RunLifecycleTiming): RunCancellationSettlement {
   const { run, dispatch } = readRunBoundDispatch(db, identityInput);
   const identity = run.bindings.find(value => value.identity.attemptId === (identityInput as AttemptIdentity).attemptId)!.identity;
   const attempt = readAttempt(db, identity);

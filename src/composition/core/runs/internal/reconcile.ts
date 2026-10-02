@@ -17,8 +17,8 @@ export async function reconcileConfiguredAttempt(projectRoot: string, input: Att
     const authorization: DispatchAuthorization & DispatchIdentityAuthorization = new DispatchPolicyAuthorization(createLayoutPolicySource(layout, os.uid, config.inspection.policyMaxBytes));
     const actor = await authenticate(verifier, undefined, identity.scopeId);
     await authorization.authorizeIdentity('reconcile', identity, actor);
-    const store = await openSqliteAttemptStore(await path(), config.storage.sqlite, 'forbid');
-    store.setRunLifecycleTiming({ now: Date.now, timeoutMs: config.runRuntime.parking.timeoutMs });
+    const store = await openSqliteAttemptStore(await path(), config.storage.sqlite, { now: Date.now, timeoutMs: config.runRuntime.parking.timeoutMs }, 'forbid');
+
     try {
       const dispatchStore: DispatchStore & RunBoundDispatchStore = store;
       const recorded = await dispatchStore.loadBoundDispatch(identity);

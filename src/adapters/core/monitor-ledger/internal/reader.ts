@@ -14,7 +14,7 @@ export interface MonitorAttemptFiles {
   readonly identity: AttemptIdentity; readonly output: ArtifactReceipt | null; readonly events: ArtifactReceipt | null; readonly workspace: string | null;
   readonly failed: boolean; readonly open: boolean; readonly finished: boolean; readonly sealed: boolean;
 }
-const OPEN_PHASES = "('pending','active','evaluating','reconciling')";
+const OPEN_PHASES = "('pending','active','evaluating','reconciling','awaiting-decision')";
 const optionsSchema = z.object({ busyTimeoutMs: z.number().int().nonnegative().max(2_147_483_647), maxRuns: z.number().int().positive().max(100_000) }).strict();
 export type MonitorLedgerOptions = z.infer<typeof optionsSchema>;
 const num = (value: unknown) => typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? value : null;
@@ -76,7 +76,10 @@ function read(db: DatabaseSync, version: number, maxRuns: number, files: Monitor
   for (const row of rows) {
     const key = `${row.scope_id}/${row.run_id}`;
     try {
-      const snapshot = runSnapshotSchema.parse(json(row.snapshot));
+      const raw = json(row.snapshot) as Record<string, unknown>;
+      // Read-only compatibility projection; ledger45 alone owns the durable migration.
+      const snapshot = runSnapshotSchema.parse(version < 45 && raw?.schemaVersion === 3 && !Object.hasOwn(raw, 'state')
+        ? { ...raw, schemaVersion: 4, state: { kind: 'running' } } : raw);
       if (snapshot.identity.scopeId !== row.scope_id || snapshot.identity.runId !== row.run_id || snapshot.revision !== row.revision) throw new Error();
       const intent = version >= INTENT_LEDGER_VERSION ? db.prepare('SELECT admitted_at FROM run_execution_intents WHERE scope_id=? AND run_id=?').get(row.scope_id, row.run_id) : undefined;
       const found: MonitorAttemptFiles[] = [];

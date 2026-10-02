@@ -20,11 +20,11 @@ async function admitConfiguredRun(projectRoot: string, command: RunAdmission, op
       try { return await reader.loadRunReceipt(scopeId, commandId); } finally { reader.close(); }
     },
     async loadRunWorkspaceCustody(scopeId: string, runId: string) {
-      const writer = await openSqliteAttemptStore(await path(), config.storage.sqlite, 'forbid');
+      const writer = await openSqliteAttemptStore(await path(), config.storage.sqlite, { now: Date.now, timeoutMs: config.runRuntime.parking.timeoutMs }, 'forbid');
       try { return await writer.loadRunWorkspaceCustody(scopeId, runId); } finally { writer.close(); }
     },
     async createRun(request: RunCreate, workspace?: RunWorkspaceCustody) {
-      const writer = await openSqliteAttemptStore(await path(), config.storage.sqlite, 'forbid');
+      const writer = await openSqliteAttemptStore(await path(), config.storage.sqlite, { now: Date.now, timeoutMs: config.runRuntime.parking.timeoutMs }, 'forbid');
       try { return await writer.createRun(request, workspace); } finally { writer.close(); }
     },
   };
@@ -69,7 +69,7 @@ export async function createConfiguredDeliveryRun(projectRoot: string, input: Ru
       const policy = createLayoutPolicySource(layout, userInfo().uid, config.inspection.policyMaxBytes), authorization = new DispatchPolicyAuthorization(policy);
       await authorizeWorkTargetUse(policy, selectWorkTarget(config.execution)?.id ?? null, command.scopeId, principal); // pinning reads the target
       const git = { ...config.execution.git, ...(await resolveGitWorkTarget(resolve(projectRoot), config.execution, layout)).git, workspaceRoot: await prepareProductDirectory(layout, 'workspaces') };
-      const store = await openSqliteAttemptStore(await path(), config.storage.sqlite, 'forbid');
+      const store = await openSqliteAttemptStore(await path(), config.storage.sqlite, { now: Date.now, timeoutMs: config.runRuntime.parking.timeoutMs }, 'forbid');
       try {
         return await pinRunToDelivery(store, new GitIntegrationDelivery(git), new GitRunWorkspaceProvider(new GitWorkspaceBroker(git)),
           identity => authorization.authorizeIdentity('read-output', identity, principal),

@@ -1,21 +1,21 @@
 import type { DatabaseSync } from 'node:sqlite';
-import { attemptSnapshotSchema } from '#domain/index.js';
+import { attemptSnapshotSchema, type RunLifecycleTiming } from '#domain/index.js';
 import { decideDispatchLaunch, validateLaunchRequest, DispatchError, type LaunchRequest, type LaunchDecision } from '#engine/index.js';
 import { readRunBoundDispatch } from './run-dispatch-lookup.js';
 
 /** Caller owns BEGIN IMMEDIATE. The persisted decision is the launch linearization point,
  * not evidence that a process started. No expiry, retry or replay issues a second grant. */
-export function grantDispatchLaunch(db: DatabaseSync, input: LaunchRequest): LaunchDecision {
+export function grantDispatchLaunch(db: DatabaseSync, input: LaunchRequest, timing: RunLifecycleTiming): LaunchDecision {
   const request = validateLaunchRequest(input); const identity = request.claim.request.identity;
   const { run, dispatch } = readRunBoundDispatch(db, identity);
   if (!dispatch) throw new DispatchError('DISPATCH_CONFLICT');
-  if (dispatch.launch === 'prevented-before-launch') return decideDispatchLaunch(request, { run, attempt: null, dispatch }).decision;
+  if (dispatch.launch === 'prevented-before-launch') return decideDispatchLaunch(request, { run, attempt: null, dispatch }, timing).decision;
   const row = db.prepare('SELECT revision,snapshot FROM attempts WHERE scope_id=? AND attempt_id=?').get(identity.scopeId, identity.attemptId);
   if (!row) throw new DispatchError('DISPATCH_CORRUPT');
   let attempt;
   try { attempt = attemptSnapshotSchema.parse(JSON.parse(String(row.snapshot))); } catch { throw new DispatchError('DISPATCH_CORRUPT'); }
   if (attempt.revision !== row.revision) throw new DispatchError('DISPATCH_CONFLICT');
-  const transition = decideDispatchLaunch(request, { run, attempt, dispatch });
+  const transition = decideDispatchLaunch(request, { run, attempt, dispatch }, timing);
   if (transition.projectedRun) {
     const projected = transition.projectedRun;
     const changed = db.prepare('UPDATE runs SET revision=?,snapshot=? WHERE scope_id=? AND run_id=? AND revision=?')

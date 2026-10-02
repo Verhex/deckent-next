@@ -20,7 +20,7 @@ const exited = (handle = 'h1', exitCode = 0) => ({ handle, result: { kind: 'exit
 /** Real ledger + artifact store; fake supervisor and clone custody record every release call. */
 async function fixture(count = 1) {
   const root = await mkdtemp(join(tmpdir(), 'deckent-custody-')); roots.push(root);
-  const store = await openSqliteAttemptStore(join(root, 'ledger.db'), { busyTimeoutMs: 20, journalMode: 'wal', durability: 'full' }, 'allow', custodyOrDockerProfiles); stores.push(store);
+  const store = await openSqliteAttemptStore(join(root, 'ledger.db'), { busyTimeoutMs: 20, journalMode: 'wal', durability: 'full' }, { now: Date.now, timeoutMs: 86400000 }, 'allow', custodyOrDockerProfiles); stores.push(store);
   const runId = 'r-' + randomUUID();
   const identities: AttemptIdentity[] = Array.from({ length: count }, (_, index) => ({ runId, taskId: 't' + index, attemptId: randomUUID(), scopeId: 's', generation: 1, layoutRevision: 'l' }));
   await admitRunAttempts(store, identities);

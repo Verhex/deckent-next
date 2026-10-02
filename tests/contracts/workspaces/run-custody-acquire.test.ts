@@ -17,7 +17,7 @@ async function fixture() {
   const git = async (...args: string[]) => (await exec('/usr/bin/git', ['-C', sourceRoot, ...args])).stdout.trim();
   await git('init'); await git('config', 'user.email', 'test@example.invalid'); await git('config', 'user.name', 'Test');
   await writeFile(join(sourceRoot, 'tracked'), 'first'); await git('add', 'tracked'); await git('commit', '-m', 'first');
-  const path = join(root, 'ledger.db'); const store = await openSqliteAttemptStore(path, options); stores.push(store);
+  const path = join(root, 'ledger.db'); const store = await openSqliteAttemptStore(path, options, { now: Date.now, timeoutMs: 86400000 }); stores.push(store);
   const identities = ['a', 'b'].map((attemptId, index) => ({ scopeId: 's', runId: 'r', taskId: `t${index}`, attemptId, generation: 1, layoutRevision: 'l' }));
   await admitRunAttempts(store, identities);
   const brokerOptions = { sourceRoot, workspaceRoot, gitExecutable: '/usr/bin/git', timeoutMs: 10000, outputBytes: 65536 };
@@ -31,7 +31,7 @@ it.skipIf(process.platform === 'win32')('requires POSIX private Git custody: pin
   f.store.close(); stores.splice(stores.indexOf(f.store), 1);
   await writeFile(join(f.sourceRoot, 'tracked'), 'second'); await f.git('add', 'tracked'); await f.git('commit', '-m', 'second');
   expect(await f.git('rev-parse', 'HEAD')).not.toBe(first.baseCommit);
-  const reopened = await openSqliteAttemptStore(f.path, options, 'forbid'); stores.push(reopened);
+  const reopened = await openSqliteAttemptStore(f.path, options, { now: Date.now, timeoutMs: 86400000 }, 'forbid'); stores.push(reopened);
   const second = await new RunWorkspaceAcquisitionApplication(reopened,
     new GitRunWorkspaceProvider(new GitWorkspaceBroker(f.brokerOptions))).acquire(f.identities[1]);
   expect(second.baseCommit).toBe(first.baseCommit); expect(await reopened.loadRunWorkspaceCustody('s', 'r')).toEqual(custody);

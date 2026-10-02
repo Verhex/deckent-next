@@ -18,7 +18,7 @@ afterEach(async () => { for (const store of stores.splice(0)) store.close(); awa
 async function fixture() {
   const root = await mkdtemp(join(tmpdir(), 'deckent-dispatch-')); roots.push(root);
   const path = join(root, 'ledger.db');
-  const open = async () => { const store = await openSqliteAttemptStore(path, options, 'allow', custodyProfiles); stores.push(store); return store; };
+  const open = async () => { const store = await openSqliteAttemptStore(path, options, { now: Date.now, timeoutMs: 86400000 }, 'allow', custodyProfiles); stores.push(store); return store; };
   return { path, open };
 }
 async function admit(store: SqliteAttemptStore) { await admitRunAttempts(store, [identity]); }
@@ -40,7 +40,7 @@ it('linearizes launch across two writer processes, denies replay, and prevents l
     import { openSqliteAttemptStore } from './dist/adapters/index.js';
     const [path, claimText, profileText, principalText] = process.argv.slice(1);
     const profile = JSON.parse(profileText); const claim = JSON.parse(claimText); const principal = JSON.parse(principalText);
-    const store = await openSqliteAttemptStore(path, { busyTimeoutMs: 1000, journalMode: 'wal', durability: 'full' }, 'allow', {
+    const store = await openSqliteAttemptStore(path, { busyTimeoutMs: 1000, journalMode: 'wal', durability: 'full' }, { now: Date.now, timeoutMs: 86400000 }, 'allow', {
       validate(value) { if (JSON.stringify(value) !== JSON.stringify(profile)) throw new Error('TEST_SUPERVISOR_PROFILE_INVALID'); return undefined; }
     });
     process.stdout.write('READY\\n');
@@ -91,7 +91,7 @@ it('linearizes launch across two writer processes, denies replay, and prevents l
 });
 it('requires a trusted profile validator and leaves no row for rejected profiles', async () => {
   const f = await fixture();
-  const absent = await openSqliteAttemptStore(f.path, options); stores.push(absent); await admit(absent);
+  const absent = await openSqliteAttemptStore(f.path, options, { now: Date.now, timeoutMs: 86400000 }); stores.push(absent); await admit(absent);
   await expect(absent.claimDispatch(dispatchAdmission(claim))).rejects.toThrow('DISPATCH_PROFILE_VALIDATION_REQUIRED');
   const strict = await f.open();
   for (const profile of [{ ...dispatchAdmission(claim).profile, adapterId: 'unknown-adapter' },
@@ -191,7 +191,7 @@ it.each(['cancelled-run', 'missing-pool'])('refuses fresh dispatch with %s despi
   try {
     if (reason === 'missing-pool') db.exec('DELETE FROM execution_pools');
     else {
-      const run = (await store.loadRun('s', 'r'))!; const cancelled = requestRunCancellation(run, run.revision);
+      const run = (await store.loadRun('s', 'r'))!; const cancelled = requestRunCancellation(run, run.revision, { now: 100, timeoutMs: 1000 });
       db.prepare('UPDATE runs SET revision=?,snapshot=? WHERE scope_id=? AND run_id=?').run(cancelled.revision, JSON.stringify(cancelled), 's', 'r');
     }
   } finally { db.close(); }

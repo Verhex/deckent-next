@@ -13,7 +13,7 @@ async function poolHold<T>(projectRoot: string, input: unknown, options: ConfigL
     const parsed = (write ? poolHoldCommandSchema : poolHoldQuerySchema).parse(input);
     const { config, layout, document, principal, path } = await loadConfiguredScopeContext(projectRoot, parsed.scopeId, options, write ? 'write' : 'read');
     const integrity = write ? await openLocalIntegrityAuthority(layout, config.approvals.keyFile, true) : null, clock = new SystemTrustedClock();
-    const store = await openSqliteAttemptStore(await path(), config.storage.sqlite, 'forbid');
+    const store = await openSqliteAttemptStore(await path(), config.storage.sqlite, { now: Date.now, timeoutMs: config.runRuntime.parking.timeoutMs }, 'forbid');
     try {
       return await use(new ExecutionPoolHoldApplication({ async verify() { return principal; } }, new PoolControlPolicyAuthorization({ async load() { return document; } }),
         store, audit => new AuditApplication(audit, integrity!), () => clock.sample().wallMs, config.admission?.poolId ?? null), parsed);

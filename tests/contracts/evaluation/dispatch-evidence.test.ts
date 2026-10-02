@@ -17,7 +17,7 @@ const envelope = (changes: Record<string, unknown> = {}) => Buffer.from(JSON.str
 async function fixture(bytes = envelope()) {
   const root = await mkdtemp(join(tmpdir(), 'deckent-task-evidence-')); roots.push(root);
   const db = join(root, 'ledger.db'); const options = { busyTimeoutMs: 20, journalMode: 'wal' as const, durability: 'full' as const };
-  const store = await openSqliteAttemptStore(db, options, 'allow', custodyProfiles); stores.push(store); await admitRunAttempts(store, [identity]);
+  const store = await openSqliteAttemptStore(db, options, { now: Date.now, timeoutMs: 86400000 }, 'allow', custodyProfiles); stores.push(store); await admitRunAttempts(store, [identity]);
   await mkdir(join(root, 'artifacts'), { mode: 0o700 });
   const artifacts = new FileArtifactStore({ root: join(root, 'artifacts'), maxBytes: 1024 });
   const receipt = await artifacts.put('s', bytes); const claim = { request, owner: 'supervisor' };
@@ -26,7 +26,7 @@ async function fixture(bytes = envelope()) {
 }
 it.skipIf(process.platform === 'win32')('binds real reopened ledger output and artifact bytes without mutating Run or Attempt', async () => {
   const f = await fixture(); await f.store.finishDispatch(f.claim, { handle: 'h', exitCode: 7, interrupted: false });
-  const reopened = await openSqliteAttemptStore(f.db, f.options, 'allow', custodyProfiles); stores.push(reopened);
+  const reopened = await openSqliteAttemptStore(f.db, f.options, { now: Date.now, timeoutMs: 86400000 }, 'allow', custodyProfiles); stores.push(reopened);
   const runBefore = await reopened.loadRun('s', 'r'); const attemptBefore = await reopened.load('s', 'a');
   const before = await reopened.readDispatch(request); const manifest = [{ evidenceId: 'proof', receipt: f.receipt }];
   expect(await verifyDispatchEvaluationEvidence(evaluation, request, manifest, reopened, f.artifacts, limits)).toEqual(manifest);

@@ -46,7 +46,7 @@ it('migrates strict projection and evaluation receipt evidence', () => {
   const evaluation = { schemaVersion: 1 as const, evaluationId: 'evaluation', identity: attemptIdentity, graphRevision: 1,
     attemptRevision: 1, criteria: [{ criterionId: 'verified', verdict: 'unknown' as const, evidenceIds: [] }] };
   // Genuine historical unknown: evaluating, without a v45 decision/deadline (never inferred on migration).
-  const applied = applyTaskEvaluation(observed, 2, evaluation).snapshot;
+  const applied = applyTaskEvaluation(observed, 2, evaluation, { now: 100, timeoutMs: 1000 }).snapshot;
   const evaluated = { ...applied, state: { kind: 'running' as const }, progress: applied.progress.map(task => {
     const { decision: _decision, ...rest } = task; void _decision; return { ...rest, phase: 'evaluating' as const };
   }) };
@@ -57,7 +57,7 @@ it('migrates strict projection and evaluation receipt evidence', () => {
 });
 
 it('accepts cancellation no-op and rejects a false cancellation postcondition', () => {
-  const create = creation(), cancelled = requestRunCancellation(create.snapshot, 0);
+  const create = creation(), cancelled = requestRunCancellation(create.snapshot, 0, { now: 100, timeoutMs: 1000 });
   const noOp = { id: 'cancel-again', snapshot: cancelled, command: command('cancel-run',
     { commandId: 'cancel-again', actor, scopeId: 'scope', runId: 'run', expectedRevision: 1 }) };
   const db = database(cancelled, [create, noOp]); migrate(db); db.close();

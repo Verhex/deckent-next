@@ -63,7 +63,7 @@ describe.skipIf(process.platform === 'win32')('company-aware authorization at ev
   it('refuses a worker source whose installation holds the scope for another company (CLI and SDK); the same company is unchanged', async () => {
     const target = await project({ company: { id: 'other' } }, v1('s'), { s: 'other' });
     // One admitted attempt of the other company's scope: the record a foreign request must never observe.
-    const store = await openSqliteAttemptStore(target.ledger, { busyTimeoutMs: 100, journalMode: 'wal', durability: 'full' }, 'allow', custodyProfiles);
+    const store = await openSqliteAttemptStore(target.ledger, { busyTimeoutMs: 100, journalMode: 'wal', durability: 'full' }, { now: Date.now, timeoutMs: 86400000 }, 'allow', custodyProfiles);
     const identity = { runId: 'r', taskId: 'secret-task', attemptId: 'a', scopeId: 's', generation: 1, layoutRevision: 'layout' };
     try {
       await admitRunAttempts(store, [identity]);

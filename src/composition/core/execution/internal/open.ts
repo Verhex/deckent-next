@@ -14,7 +14,7 @@ export async function openConfiguredExecution(projectRoot: string, sourceRoot: s
   const supervisor = new DockerSupervisor({ ...config.execution.docker, workspaceRoot, uid: os.uid, gid: os.gid });
   const workspaces = new GitWorkspaceBroker({ ...config.execution.git, sourceRoot, workspaceRoot });
   const artifacts = new FileArtifactStore({ root: artifactRoot, maxBytes: config.artifacts.maxBytes });
-  const store = await openSqliteAttemptStore(ledger, config.storage.sqlite, 'allow', { validate: validateDockerSupervisorProfile });
-    store.setRunLifecycleTiming({ now: Date.now, timeoutMs: config.runRuntime.parking.timeoutMs });
+  const store = await openSqliteAttemptStore(ledger, config.storage.sqlite, { now: Date.now, timeoutMs: config.runRuntime.parking.timeoutMs }, 'allow', { validate: validateDockerSupervisorProfile });
+
   return Object.freeze({ layout, supervisor, workspaces, artifacts, store });
 }

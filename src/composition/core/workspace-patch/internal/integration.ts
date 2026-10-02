@@ -25,7 +25,7 @@ export async function prepareConfiguredWorkspaceIntegration(root: string, input:
     const command = integrationCommandSchema.parse(input);
     const c = await workspacePatchContext(root, command.identity, options, false, 'write');
     await c.authorization.authorizeIdentity('prepare-integration', command.identity, c.principal);
-    const store = await openSqliteAttemptStore(await c.path(), c.config.storage.sqlite, 'forbid', { validate: validateDockerSupervisorProfile });
+    const store = await openSqliteAttemptStore(await c.path(), c.config.storage.sqlite, { now: Date.now, timeoutMs: c.config.runRuntime.parking.timeoutMs }, 'forbid', { validate: validateDockerSupervisorProfile });
     try { return await (await application(root, c, store)).prepare(command, store); } finally { store.close(); }
   } catch (error) { throw error instanceof ArtifactError ? ErrorRegistry.createError('PATCH_CORRUPT') : queryFailure(error); }
 }

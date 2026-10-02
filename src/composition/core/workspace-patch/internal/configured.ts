@@ -22,7 +22,7 @@ export async function prepareConfiguredWorkspacePatch(root: string, input: Attem
   try {
     const c = await workspacePatchContext(root, input, options, true, 'write'), execution = c.config.execution;
     if (!execution) throw ErrorRegistry.createError('EXECUTION_NOT_CONFIGURED');
-    const store = await openSqliteAttemptStore(await c.path(), c.config.storage.sqlite, 'forbid', { validate: validateDockerSupervisorProfile });
+    const store = await openSqliteAttemptStore(await c.path(), c.config.storage.sqlite, { now: Date.now, timeoutMs: c.config.runRuntime.parking.timeoutMs }, 'forbid', { validate: validateDockerSupervisorProfile });
     try {
       const git = { ...execution.git, ...(await resolveGitWorkTarget(resolve(root), execution, c.layout)).git, workspaceRoot: await inspectProductDirectory(c.layout, 'workspaces') };
       const source = new GitWorkspacePatchSource(git, { ...c.config.artifacts.patchPreview, maxBytes: c.config.artifacts.maxBytes }, store);

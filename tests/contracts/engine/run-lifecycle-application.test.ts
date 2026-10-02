@@ -2,10 +2,10 @@ import { expect, it, vi } from 'vitest';
 import { RunLifecycleApplication } from '#engine/index.js';
 const principal = { id: 'human', issuer: 'host', subject: '1000', assurance: 'os-user' as const, scopeIds: ['s'] };
 const command = { schemaVersion: 1, commandId: 'decision', scopeId: 's', runId: 'r', expectedRevision: 2, action: 'accept', taskId: 't' };
-function fixture(assurance: string) {
+function fixture(assurance: string, now = 100) {
   const store = { loadRun: vi.fn(), commitRunLifecycle: vi.fn() }, run = { authorize: vi.fn() }, task = { authorize: vi.fn() };
   const app = new RunLifecycleApplication(store as never, { async verify() { return { ...principal, assurance }; } } as never,
-    run, task, () => ({ record: vi.fn() }), () => 100, 1000, 'policy');
+    run, task, () => ({ record: vi.fn() }), () => now, 1000, 'policy');
   return { app, store, run, task };
 }
 it.each(['workload-verified', 'token-verified'])('refuses %s decision before reading or writing durable state', async assurance => {
@@ -51,6 +51,24 @@ it('a denied attempt decision never writes or records an acceptance', async () =
   const f = fixture('os-user'); f.store.loadRun.mockResolvedValue(waiting());
   f.task.authorize.mockRejectedValue(new Error('POLICY_DENIED'));
   await expect(f.app.execute(command)).rejects.toThrow('POLICY_DENIED'); expect(f.store.commitRunLifecycle).not.toHaveBeenCalled();
+});
+it('inspect alone cannot authorize maintenance expiry or read state for a denied cancellation', async () => {
+  const f = fixture('workload-verified');
+  f.store.loadRun.mockResolvedValue(waiting());
+  f.run.authorize.mockImplementation(async action => { if (action !== 'inspect') throw new Error('POLICY_DENIED'); });
+  await expect(f.app.advance({ schemaVersion: 1, scopeId: 's', runId: 'r' })).rejects.toThrow('POLICY_DENIED');
+  expect(f.run.authorize).toHaveBeenCalledWith('cancel', { schemaVersion: 1, scopeId: 's', runId: 'r' }, expect.objectContaining({ assurance: 'workload-verified' }));
+  expect(f.store.loadRun).not.toHaveBeenCalled();
+  expect(f.store.commitRunLifecycle).not.toHaveBeenCalled();
+});
+it('authorizes maintenance expiry using the same cancellation grant as operator close', async () => {
+  const f = fixture('workload-verified', 1100), run = waiting();
+  f.store.loadRun.mockResolvedValue(run);
+  f.store.commitRunLifecycle.mockResolvedValue({ snapshot: run });
+  await f.app.advance({ schemaVersion: 1, scopeId: 's', runId: 'r' });
+  expect(f.run.authorize).toHaveBeenCalledWith('cancel', { schemaVersion: 1, scopeId: 's', runId: 'r' }, expect.objectContaining({ assurance: 'workload-verified' }));
+  expect(f.store.commitRunLifecycle).toHaveBeenCalledWith(expect.objectContaining({ action: 'expire', expectedRevision: run.revision,
+    actor: expect.objectContaining({ assurance: 'workload-verified' }) }));
 });
 it('deadline pages advance their own cursor and one refused Run does not prevent another expiry or ready Run', async () => {
   const controller = new AbortController(), seen: unknown[] = [], expired: string[] = [], advanced: string[] = [];

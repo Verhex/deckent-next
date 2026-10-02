@@ -20,7 +20,7 @@ const create = (scopeId: string) => ({ commandId: 'create', actor, identity: { s
 const claim = (scopeId: string) => ({ commandId: 'claim', actor, scopeId, runId: 'run', now: 0, expectedRevision: 0, identities: [id(scopeId)] });
 async function fixture() {
   const root = await mkdtemp(join(tmpdir(), 'deckent-pool-')); roots.push(root); const path = join(root, 'ledger.db');
-  const store = await openSqliteAttemptStore(path, options); stores.push(store); return { path, store };
+  const store = await openSqliteAttemptStore(path, options, { now: Date.now, timeoutMs: 86400000 }); stores.push(store); return { path, store };
 }
 async function project(store: SqliteAttemptStore, scopeId: string, unknown = false) {
   const identity = id(scopeId); const current = (await store.load(scopeId, identity.attemptId))!;
@@ -38,7 +38,7 @@ it('requires explicit immutable pool provisioning and leaves no Run on missing p
 it('bounds different Runs/scopes across connections and retains evaluation pressure without a second counter', async () => {
   const { store, path } = await fixture(); await store.createExecutionPool(pool);
   for (const scope of ['one', 'two', 'three']) await store.createRun(create(scope));
-  const second = await openSqliteAttemptStore(path, options); stores.push(second);
+  const second = await openSqliteAttemptStore(path, options, { now: Date.now, timeoutMs: 86400000 }); stores.push(second);
   const claims = await Promise.allSettled([store.reserveRunTasks(claim('one')), second.reserveRunTasks(claim('two'))]);
   expect(claims[0].status).toBe('fulfilled'); expect(claims[1]).toMatchObject({ status: 'rejected', reason: { code: 'RUN_POOL_FULL' } });
   expect(await second.load('two', id('two').attemptId)).toBeNull(); expect((await second.loadRun('two', 'run'))!.revision).toBe(0);
@@ -50,7 +50,7 @@ it('bounds different Runs/scopes across connections and retains evaluation press
 it('does not free uncertain capacity because time passes or a connection reopens', async () => {
   const { store, path } = await fixture(); await store.createExecutionPool(pool);
   await store.createRun(create('one')); await store.createRun(create('two')); await store.reserveRunTasks(claim('one')); await project(store, 'one', true);
-  const reopened = await openSqliteAttemptStore(path, options); stores.push(reopened);
+  const reopened = await openSqliteAttemptStore(path, options, { now: Date.now, timeoutMs: 86400000 }); stores.push(reopened);
   await expect(reopened.reserveRunTasks({ ...claim('two'), now: 1_000_000_000 })).rejects.toThrow('RUN_POOL_FULL');
 });
 it('rejects schema-3 policy without pool evidence and preserves the complete old ledger', async () => {
@@ -59,7 +59,7 @@ it('rejects schema-3 policy without pool evidence and preserves the complete old
   const db = new DatabaseSync(path); downgradeRunEligibilityFixtures(db); db.prepare('UPDATE runs SET policy=?').run(JSON.stringify({ schemaVersion: 1, capacity: pool.capacity, ordering: ['a'] }));
   db.exec('DROP TABLE model_invocation_spend_reservations; DROP TABLE provider_spend_accounts; DROP TABLE model_activation_receipts; DROP TABLE model_activations; DROP TABLE installation_ownership; DROP TABLE service_shutdown_commands; DROP TABLE service_shutdown_outcomes; DROP TABLE run_workspace_custody; DROP TABLE cancellation_deliveries; DROP TABLE execution_pools; DROP TABLE IF EXISTS workspace_integrations; DROP TABLE IF EXISTS workspace_deliveries; DROP TABLE IF EXISTS workspace_adoptions; DROP TABLE IF EXISTS effect_intents; DROP TABLE IF EXISTS agent_turn_tool_calls; DROP TABLE IF EXISTS agent_turns; DROP TABLE IF EXISTS worker_event_logs; DROP TABLE IF EXISTS approval_outbox; DROP TABLE IF EXISTS approval_receipts; DROP TABLE IF EXISTS approvals; PRAGMA user_version=3;'); db.close();
   const before = await readFile(path);
-  await expect(openSqliteAttemptStore(path, options)).rejects.toMatchObject({ code: 'LEDGER_MIGRATION_EVIDENCE_REQUIRED' });
+  await expect(openSqliteAttemptStore(path, options, { now: Date.now, timeoutMs: 86400000 })).rejects.toMatchObject({ code: 'LEDGER_MIGRATION_EVIDENCE_REQUIRED' });
   expect(await readFile(path)).toEqual(before);
   const check = new DatabaseSync(path, { readOnly: true });
   try {

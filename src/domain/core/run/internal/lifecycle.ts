@@ -58,14 +58,14 @@ export function advanceRunLifecycle(input: unknown, expectedRevision: number, no
   return incrementIfChanged(run, next);
 }
 export const expireParkedRun = advanceRunLifecycle;
-export function closeParkedRun(input: unknown, expectedRevision: number, now: number): RunSnapshot {
+export function closeParkedRun(input: unknown, expectedRevision: number, now: number, timeoutMs: number): RunSnapshot {
   const run = checkedRun(input, expectedRevision); counterSchema.parse(now);
   if (run.state.kind !== 'parked') throw new RunError('RUN_NOT_PARKED');
   const progress = run.progress.map(task => {
     if (task.phase !== 'awaiting-decision') return task;
     return { ...task, decision: undefined, phase: 'failed' as const };
   });
-  const next = reconcileRunLifecycle({ ...run, progress }, now, DEFAULT_RUN_PARK_TIMEOUT_MS);
+  const next = reconcileRunLifecycle({ ...run, progress }, now, timeoutMs);
   return runSnapshotSchema.parse({ ...next, revision: run.revision + 1, state: { kind: 'terminal', outcome: next.progress.some(task => task.phase === 'accepted') ? 'incomplete' : 'failed', reason: 'operator-close' } });
 }
 export function resumeParkedRun(input: unknown, expectedRevision: number, now: number, timeoutMs: number): RunSnapshot {
@@ -74,10 +74,10 @@ export function resumeParkedRun(input: unknown, expectedRevision: number, now: n
   // Dependency/decision barriers survive resume; neither reset deadlines nor revive never-run work.
   return advanceRunLifecycle(run, expectedRevision, now, timeoutMs);
 }
-export function parkTaskAwaitingDecision(input: unknown, expectedRevision: number, taskId: string, reason: TaskDecisionReason, now: number, timeoutMs: number, evaluationId?: string): RunSnapshot {
+export function parkTaskAwaitingDecision(input: unknown, expectedRevision: number, taskId: string, reason: TaskDecisionReason, now: number, timeoutMs: number, evaluationId?: string, evidenceDigests?: readonly string[]): RunSnapshot {
   const run = checkedRun(input, expectedRevision); const task = run.progress.find(value => value.taskId === taskId);
   if (!task || task.phase !== 'evaluating' || task.unresolvedEffects || run.cancelRequested || run.state.kind === 'terminal') throw new RunError('RUN_DECISION_NOT_READY');
-  const decision = { reason, since: now, deadline: deadlineAt(now, timeoutMs), ...(evaluationId === undefined ? {} : { evaluationId }) };
+  const decision = { reason, since: now, deadline: deadlineAt(now, timeoutMs), ...(evaluationId === undefined ? {} : { evaluationId }), ...(evidenceDigests ? { evidenceDigests } : {}) };
   return reconcileRunLifecycle({ ...run, revision: run.revision + 1, progress: run.progress.map(value => value === task ? { ...value, phase: 'awaiting-decision', decision } : value) }, now, timeoutMs);
 }
 /** Application must authorize a HUMAN principal and persist its immutable decision audit in the same transaction. */

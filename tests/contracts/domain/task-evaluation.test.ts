@@ -39,7 +39,7 @@ it('refuses caller verdict/actor injection, duplicate evidence and cancelled or 
   const run = fixture();
   for (const extra of [{ decision: 'accept' }, { actor: 'admin' }]) expect(() => inspectTaskEvaluation(run, { ...evaluation, ...extra })).toThrow('TASK_EVALUATION_INVALID');
   expect(() => inspectTaskEvaluation(run, { ...evaluation, criteria: evaluation.criteria.map(value => ({ ...value, evidenceIds: ['same', 'same'] })) })).toThrow('TASK_EVALUATION_INVALID');
-  expect(() => inspectTaskEvaluation(requestRunCancellation(run, run.revision), evaluation)).toThrow('TASK_EVALUATION_NOT_READY');
+  expect(() => inspectTaskEvaluation(requestRunCancellation(run, run.revision, { now: 100, timeoutMs: 1000 }), evaluation)).toThrow('TASK_EVALUATION_NOT_READY');
   expect(() => inspectTaskEvaluation({ ...run, progress: run.progress.map(value => value.taskId === 'a' ? { ...value, phase: 'reconciling', unresolvedEffects: true } : value) }, evaluation)).toThrow('TASK_EVALUATION_NOT_READY');
 });
 it('preserves Rule A substitution failure and accepts Codex/Cursor criteria while keeping model evidence visibly unverified', () => {

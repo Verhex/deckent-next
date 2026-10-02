@@ -34,7 +34,7 @@ async function project(root: string, name: string, scopes: readonly string[], gr
     ...(extra.includes('output') ? [{ id: 'output', effect: 'allow', scopes: [...granted], principals: [{ issuer: hostname(), subject: String(userInfo().uid) }], actions: ['read-output'], resource: { kind: 'attempt', ids: 'all' } }] : []),
     ...(extra.includes('approvals') ? [{ id: 'approvals', effect: 'allow', scopes: [...granted], principals: [{ issuer: hostname(), subject: String(userInfo().uid) }], actions: ['inspect'], resource: { kind: 'approval', ids: [...granted] } }] : []),
   ] }), { mode: 0o600 });
-  const store = await openSqliteAttemptStore(opened.path, { busyTimeoutMs: 100, journalMode: 'wal', durability: 'full' }, 'allow', custodyProfiles);
+  const store = await openSqliteAttemptStore(opened.path, { busyTimeoutMs: 100, journalMode: 'wal', durability: 'full' }, { now: Date.now, timeoutMs: 86400000 }, 'allow', custodyProfiles);
   try {
     await store.createExecutionPool({ schemaVersion: 1, poolId: 'p', capacity });
     for (const [index, scopeId] of scopes.entries()) {
@@ -100,7 +100,7 @@ describe.skipIf(process.platform === 'win32')('inspectMonitor composition', () =
   it('opt-in open filter: finished dispatches come from the ledger only (no Docker/sidecar/authorization reads); the default listing is unchanged', async () => {
     const root = await mkdtemp(join(tmpdir(), 'deckent-monitor-')); roots.push(root);
     const current = await project(root, 'current', ['s'], ['s']);
-    const store = await openSqliteAttemptStore(current.ledger, { busyTimeoutMs: 100, journalMode: 'wal', durability: 'full' }, 'allow', custodyProfiles);
+    const store = await openSqliteAttemptStore(current.ledger, { busyTimeoutMs: 100, journalMode: 'wal', durability: 'full' }, { now: Date.now, timeoutMs: 86400000 }, 'allow', custodyProfiles);
     try {
       const identity = { scopeId: 's', runId: 'r-done', taskId: 't', attemptId: 'done-t', layoutRevision: 'layout', generation: 1 };
       await store.createRun({ commandId: 'create-r-done', actor, identity: { scopeId: 's', runId: 'r-done', layoutRevision: 'layout' }, graph, execution: fixtureExecution(graph),
@@ -143,7 +143,7 @@ describe.skipIf(process.platform === 'win32')('inspectMonitor composition', () =
     const root = await mkdtemp(join(tmpdir(), 'deckent-monitor-')); roots.push(root);
     const current = await project(root, 'current', ['s'], ['s'], ['output']);
     const artifacts = new FileArtifactStore({ root: await prepareProductDirectory(current.layout, 'artifacts'), maxBytes: 1_048_576 });
-    const store = await openSqliteAttemptStore(current.ledger, { busyTimeoutMs: 100, journalMode: 'wal', durability: 'full' }, 'allow', custodyProfiles);
+    const store = await openSqliteAttemptStore(current.ledger, { busyTimeoutMs: 100, journalMode: 'wal', durability: 'full' }, { now: Date.now, timeoutMs: 86400000 }, 'allow', custodyProfiles);
     const identity = { scopeId: 's', runId: 'r-fail', taskId: 't', attemptId: 'fail-t', layoutRevision: 'layout', generation: 1 };
     try {
       await store.createRun({ commandId: 'create-r-fail', actor, identity: { scopeId: 's', runId: 'r-fail', layoutRevision: 'layout' }, graph, execution: fixtureExecution(graph),
@@ -172,7 +172,7 @@ describe.skipIf(process.platform === 'win32')('inspectMonitor composition', () =
 describe.skipIf(process.platform === 'win32')('inspectMonitor content authorization (security)', () => {
   async function failedAttempt(current: Awaited<ReturnType<typeof project>>) {
     const artifacts = new FileArtifactStore({ root: await prepareProductDirectory(current.layout, 'artifacts'), maxBytes: 1_048_576 });
-    const store = await openSqliteAttemptStore(current.ledger, { busyTimeoutMs: 100, journalMode: 'wal', durability: 'full' }, 'allow', custodyProfiles);
+    const store = await openSqliteAttemptStore(current.ledger, { busyTimeoutMs: 100, journalMode: 'wal', durability: 'full' }, { now: Date.now, timeoutMs: 86400000 }, 'allow', custodyProfiles);
     const identity = { scopeId: 's', runId: 'r-fail', taskId: 't', attemptId: 'fail-t', layoutRevision: 'layout', generation: 1 };
     try {
       await store.createRun({ commandId: 'create-r-fail', actor, identity: { scopeId: 's', runId: 'r-fail', layoutRevision: 'layout' }, graph, execution: fixtureExecution(graph),
@@ -226,7 +226,7 @@ describe.skipIf(process.platform === 'win32')('inspectMonitor content authorizat
       await writeFile(join(attemptDir, 'worker.log'), [JSON.stringify({ schemaVersion: 1, sequence: 1, observedAt: 30_900, process: 'running', terminal: null, outputRecorded: false }),
         JSON.stringify({ schemaVersion: 1, sequence: 2, observedAt: 498_000, process: 'exited', terminal: { handle: 'h', exitCode: 0, interrupted: false }, outputRecorded: true })].join('\n') + '\n', { mode: 0o600 });
       await writeFile(join(attemptDir, 'worker.result'), JSON.stringify({ schemaVersion: 1, identity: { ...identity, attemptId: resultAttempt }, backend: 'docker', provider: 'docker', terminal: { handle: 'h', exitCode: 0, interrupted: false } }), { mode: 0o600 });
-      const store = await openSqliteAttemptStore(current.ledger, { busyTimeoutMs: 100, journalMode: 'wal', durability: 'full' }, 'allow', custodyProfiles);
+      const store = await openSqliteAttemptStore(current.ledger, { busyTimeoutMs: 100, journalMode: 'wal', durability: 'full' }, { now: Date.now, timeoutMs: 86400000 }, 'allow', custodyProfiles);
       try {
         await store.createRun({ commandId: 'create-r-verify', actor, identity: { scopeId: 's', runId: 'r-verify', layoutRevision: 'layout' }, graph, execution: fixtureExecution(graph),
           now: 10_800, policy: { schemaVersion: 2, poolId: 'p', capacity, ordering: ['t'] } });

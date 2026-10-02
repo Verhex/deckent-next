@@ -70,7 +70,7 @@ describe.skipIf(process.platform !== 'linux')('task approval decided by another 
   async function fixture(decidedAtWall: number) {
     const root = await mkdtemp(join(tmpdir(), 'deckent-wall-skew-')); roots.push(root);
     const path = join(root, 'ledger.db'), options = { busyTimeoutMs: 1000, journalMode: 'wal', durability: 'full' } as const;
-    const store = await openSqliteAttemptStore(path, options), journal = openSqliteApprovalStore(path, options);
+    const store = await openSqliteAttemptStore(path, options, { now: Date.now, timeoutMs: 86400000 }), journal = openSqliteApprovalStore(path, options);
     // The deciding process clock; the reserving process below receives its own explicit wall sample.
     const clock = { sample: () => ({ wallMs: decidedAtWall, monotonicMs: 100 }) };
     const sessions = await LocalOsSessionAuthority.create(['scope'], 10_000, clock);

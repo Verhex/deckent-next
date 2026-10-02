@@ -16,7 +16,7 @@ export async function prepareConfiguredRunRuntime(projectRoot: string, observer:
   return new RunLifecycleRuntimeLoop({
     async discover(after, dueAfter, now) {
       const current = await loadConfig(projectRoot, { ...options, heal: false });
-      const store = await openSqliteAttemptStore(await inspectProductFile(current.productLayout, 'ledger', ['-wal', '-shm', '-journal']), current.storage.sqlite, 'forbid');
+      const store = await openSqliteAttemptStore(await inspectProductFile(current.productLayout, 'ledger', ['-wal', '-shm', '-journal']), current.storage.sqlite, { now: Date.now, timeoutMs: current.runRuntime.parking.timeoutMs }, 'forbid');
       try { return { due: await store.listRunLifecycleDue({ actor, after: dueAfter, limit: settings.pageSize, now }),
         page: await store.listRunProgression({ actor, after, limit: settings.pageSize }) }; } finally { store.close(); }
     },
