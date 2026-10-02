@@ -1,90 +1,56 @@
 ---
 name: design-tokens-pipeline
-description: Use when changing Deckent color, typography, spacing, radius, motion, density, or component tokens, or when validating generated Dashboard, Desktop, and Terminal token outputs. Do not use for visual ideation that does not change token contracts.
+description: Maintain Deckent semantic token sources and actual Next Terminal palette generation; inspect current consumers before claiming cross-surface outputs or drift checks.
 ---
 
-## Next refactor scope — 2026-09-17
+# Deckent Next Design Tokens Pipeline
 
-For current Deckent Next work, first apply `deckent-next-refactor` from the host skill directory.
-Product writes target `/home/alperen/deckent-next`; legacy `/home/alperen/deckent-dev` is a read-only
-reference except the owner-authorized host tooling/channel setup. Next ARCHITECTURE.md and PLAN.md
-carry accepted refactor decisions. Relative legacy `docs/`, `.deckent/workspace/`, `src/` and
-`scripts/` references below resolve in the legacy repository for reading only; inspect target
-implementation separately. Do not run legacy generation, recovery, MCP or dogfood commands for Next.
+## Actual repository contract
 
+Load `deckent-design-dna` and relevant `deckent-design-system` contracts. Inspect current paths
+and consumers before changing sources; accepted cross-surface semantics do not imply a generator
+for an absent surface. At the 2026-10-02 inventory:
 
-# Deckent Design Tokens Pipeline
+- Terminal role map: `design/tokens/terminal.map.json`.
+- Builder: `scripts/build-terminal-palette.mjs`; primitive values also live in its `PRIMITIVES`.
+- Generated output: `src/surfaces/core/terminal-kit/internal/generated/palette.ts`.
+- The current token directory contains the Terminal map; broader primitive/semantic documents
+  and cross-surface outputs must be verified before claiming they exist or are consumed.
+- Former Dashboard/Desktop generators and `scripts/build-design-tokens.mjs` are absent in Next.
 
-## Current repository contract
+The builder always writes and has no `--check` mode. Do not run a write command during a read-only
+audit or call it a safe drift check. Generation requires owned source/output paths and authorized
+edits. Read-only inspection compares existing source, builder and consumers without generating.
 
-The repository implementation is the authority:
+## Semantic layering
 
-- Source: design/tokens/*.tokens.json plus watch-map.json and terminal.map.json
-- Builder: scripts/build-design-tokens.mjs
-- Dashboard output: src/dashboard/src/generated/theme.css
-- Desktop output: src/desktop/src/shared/generated/theme-tokens.gen.ts
-- Terminal output: src/cli/helpers/generated/palette.ts
+Use primitive → semantic → justified component roles as the target architecture. Reuse current
+roles and their actual source; current primitive-in-builder structure is evidence, not a reason
+to introduce a second token store. Components consume semantic/component roles, preserving state
+meaning across themes and Terminal color tiers. Identify existing raw-value escapes as findings.
+DTCG 2025.10 is a community specification, not a W3C Recommendation. Verify the current official
+format before interoperability changes; `$type`/`$value`/aliases must match actual supported code.
+Do not claim DTCG conformance from filenames or replace working infrastructure to match a draft.
 
-The source follows the DTCG value/type and alias model where the current implementation supports
-it. Do not rewrite working token infrastructure merely to resemble a newer draft.
+## Authorized change procedure
 
-## Layering
+1. Name the semantic problem, states, current source and every real consumer.
+2. Reuse a fitting role; add one only when existing meaning is inadequate.
+3. Pin source, builder, output ownership and the generated contract before editing.
+4. Change the actual source, including builder primitives only when that is the current source.
+5. Generate in the owned change with `node scripts/build-terminal-palette.mjs`.
+6. Inspect the generated diff and relevant contract checks. If checking determinism, regenerate
+   in an isolated disposable copy and compare bytes; do not add a fake `--check` argument.
+7. Check color-independent carriers, contrast/forced colors where applicable, reduced motion,
+   terminal truecolor/256/16/no-color degradation and inherited light/dark backgrounds.
+8. Capture real consumer evidence for claimed behavior; use the assigned design review role.
 
-Use three layers:
+Do not hand-edit generated output or create competing per-surface semantics. If needed output
+is outside lane ownership or a consumer is absent, report the dependency and coordinate.
 
-1. Primitive tokens hold raw values.
-2. Semantic tokens describe product meaning such as surface, text, focus, approval, warning and
-   failure.
-3. Component tokens encode a justified local contract.
+## Evidence and compatibility
 
-Components consume semantic or component roles. A primitive value must not leak into product CSS
-or rendering code.
-
-The same semantic state must survive all outputs, but surface rendering may differ. Terminal color
-tiers, CSS variables and Desktop runtime themes are adapters, not competing token authorities.
-
-## Change procedure
-
-1. Load deckent-design-dna and deckent-design-system.
-2. Identify the semantic problem and every consumer before proposing a value.
-3. Search current sources and generated consumers; extend existing roles when they fit.
-4. Add a new role only when an existing role would misrepresent meaning.
-5. Update the canonical source first.
-6. Generate all affected outputs in the same authorized change.
-7. Run the check mode and affected tests.
-8. Verify contrast, forced colors, reduced motion and terminal degradation as applicable.
-9. Capture real-surface evidence and run deckent-design-critic.
-
-## Commands
-
-Safe drift check:
-
-    node scripts/build-design-tokens.mjs --check
-
-Write mode updates all configured outputs:
-
-    node scripts/build-design-tokens.mjs
-
-Before write mode, inspect current file ownership. If an output is outside the active lane,
-especially src/cli, stop and coordinate instead of crossing the boundary.
-
-## Token acceptance evidence
-
-For each change report:
-
-- semantic intent and affected states;
-- source tokens and aliases;
-- every generated consumer;
-- contrast or motion measurements;
-- migration and preference compatibility;
-- check/test results;
-- screenshots or terminal captures from real surfaces.
-
-Reject a change when it:
-
-- uses a visual value without semantic need;
-- creates a surface-specific competing source;
-- changes a generated file by hand;
-- breaks saved preference migration;
-- relies on color alone;
-- leaves one surface or degradation tier silently stale.
+Report intent, source/aliases, builder version/revision, generated consumers and diff, checks,
+measurements, preference/migration impact and actual captures. Distinguish present Terminal
+generation from proposed Desktop/Dashboard integration. Unavailable surface proof remains open.
+Reject color-only meaning, unjustified roles, silent tier drift or discarded user preferences.

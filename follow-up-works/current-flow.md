@@ -2,6 +2,32 @@
 
 Bu belge yalnız güncel durumu tutar; önceki sürümü Git geçmişinde, kanıtlar `deckent-refactor-work/proof/`.
 
+## Bu oturum — skill/rule düzenlemesi (owner 2026-10-02)
+
+- İlk dört karar owner ile tek tek: ortak `deckent-next-refactor`, read-only bootstrap/audit güncellendi;
+  ayrı outcome-ordering kaldırılıp sıralama ilkeleri ortak rehbere taşındı. Jev ayrıntıları `jev-workflow.md` içinde.
+- Owner kalan 19 skill'in Jev analizini, kararını ve uygulamasını devretti. Her dosyada koruma/güncelleme/
+  birleştirme/kaldırma ve alternatifin kazanım/kaybı değerlendirildi: **17 güncelleme, 1 birleştirme, 1 kaldırma**.
+  Versioned-handoff'un devir ilkeleri ortak rehberde; genel design-system paketi aktif katalog dışında arşivde.
+- Sonuç: başlangıçtaki 23 → **20 aktif skill**. Next'te olmayan legacy giriş/kapılar, token `--check` ve
+  Desktop/Dashboard çıktıları temizlendi; gerçek palette kaynağı/üreticisi/yolu yazıldı. Kabul edilmiş tasarım
+  yönü korunur; hedef/çalışan yüzey, Jev/self-review/bağımsız review ve rapor/product state ayrımı açık.
+- Jev: 19 kayıtlı yanıt (`jev-1.13.0`), 19 karar ve 19 statik-kapsam outcome journal'da. Seçimlerin tümü 0,90 altında; bağlam yeterliliği
+  18/19 çağrıda 0,75 altında (tamamı ilk çağrı hedefi 0,85 altında). Eşiği geçti veya independent PASS denmedi.
+  İki çekimser seçenek her çağrıda ayrı sunuldu, seçilme sayıları ayrı ayrı 0; olasılıklar dosya raporunda.
+  İlk ağ-kısıtlı çağrı unavailable/usage unknown; açık ağ izni sonrası kayıtlı danışma yapıldı, gizli retry yok.
+- Kanıt/karar/asıllar: `../deckent-refactor-work/proof/SKILL-CLEANUP-2026-10-02/remaining-130706Z/`;
+  önceki ordering arşivi `outcome-ordering-121638Z/`. Kurulum öncesi/sonrası ve arşiv hash'leri doğrulandı.
+  Root AGENTS/CLAUDE eşit 55 satır ve byte olarak korundu; tarihsel migration ve diğer katkıcı WIP'i korunur.
+- Doğrulama: etkin 20 skill biçimi, YAML/yerel linkler, üç-host eşitlik ve kurulum/arşiv/koruma kontrolü geçti
+  (321 statik kontrol). lint-arch 0 ihlal/0 uyarı; memory 12 dosya/0 ihlal, manifest yenilendi; diff temiz. Ürün kodu/runtime ve DesignSync değişmedi; bağımsız PASS yok. İlk teslimde ürün tam verify koşulmadı.
+- Owner son yönlendirmesi: skill çalışmasının commit'i ve commit sonrası ayrıntılı Opus kanal kaydı yetkili.
+  Commit öncesi exact aday ayrı doğrulama kopyasında npm run verify ile kontrol edilir; push/canlı işlem yetkisi yok.
+  İlk teslimde kaldırılan 31 dosya indekslenmişti (mimari kapı git ls-files kullanır); diğer WIP commit dışındadır.
+  Commit kimliği, gerçek verify sonucu ve kanal receipt'i dış proof/Opus entry ile kaydedilir.
+- Sıradaki: kalan rule analizi daha sonra owner ile tek tek; skill düzenlemeleri tamamlandı.
+  Üç taze host oturumunda gerçek otomatik etkinleşme ve tarihsel kullanım sıklığı ölçülmedi.
+
 ## Durum
 - **MONITOR (owner 2026-10-02 tek görev):** `deckent monitor` (tam ekran, `--once`, `--json`) + terminal `/monitor`; `integrate/monitor` (taban a2971850). Diğer işler owner talimatıyla bekliyor: B1 şeridi `ed52f4d0` (Sol 2240/2241 okunmadı), PACKAGED-WORKER-BOOTSTRAP (Sol 2238 sınırlı PASS), belge dilimi `lane/docs-batch25` 7283c9d4, dogfood D3 (N1 `a02b67a9`). Kanıt `proof/MONITOR-2026-10-02/`. **Sıradaki:** tam verify + Fable yeniden inceleme → push → stage → owner switch → canlı config'e N1 gözlenen kurulum.
 - **Güncel (2026-10-01 akşam, yeni ana oturum):** `origin/main` = `76582f9f`, canlıda (`76582f9f1cd2-08512bc400d1`, instance `1dd5ea76`, ledger 44;

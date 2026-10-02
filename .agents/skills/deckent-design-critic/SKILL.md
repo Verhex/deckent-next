@@ -1,24 +1,19 @@
 ---
 name: deckent-design-critic
-description: Use for an independent evidence-backed review of Deckent product, interaction, visual, component, Desktop, Terminal, Dashboard, accessibility, enterprise, or cross-surface design. Returns PASS, REVISE, or NO-GO; do not use as a style generator.
+description: Use for assigned evidence-backed Deckent design review across product, interaction, visual, component, accessibility and enterprise surfaces. Independent verdicts require a separate reviewer; implementer self-review reports findings.
 ---
-
-## Next refactor scope — 2026-09-17
-
-For current Deckent Next work, first apply `deckent-next-refactor` from the host skill directory.
-Product writes target `/home/alperen/deckent-next`; legacy `/home/alperen/deckent-dev` is a read-only
-reference except the owner-authorized host tooling/channel setup. Next ARCHITECTURE.md and PLAN.md
-carry accepted refactor decisions. Relative legacy `docs/`, `.deckent/workspace/`, `src/` and
-`scripts/` references below resolve in the legacy repository for reading only; inspect target
-implementation separately. Do not run legacy generation, recovery, MCP or dogfood commands for Next.
 
 
 # Deckent Design Critic
 
 ## Role
 
-Act as an independent verifier. Review the artifact and its evidence in a separate pass from the
-implementation reasoning. Do not rewrite the design unless the user asks for remediation.
+Follow the actual assigned review role. An independent verdict requires a reviewer other than
+the implementing session, an exact candidate revision/diff and fresh scoped evidence. A second
+pass by the implementer is self-review and cannot be labeled independent PASS. This skill does
+not authorize spawning agents. Review-only scope does not authorize fixes or document mutation.
+Name whether the artifact is a specification, prototype or implemented surface; verdict coverage
+must match that artifact and cannot promote prototype approval to production completion.
 
 Load deckent-design-dna, then only the domain skills relevant to the review.
 
@@ -40,11 +35,11 @@ If real evidence is required but absent, do not guess PASS.
 1. Product truth: no invented capability, state, metric or authority.
 2. Agentic semantics: causality, ownership, lifecycle, freshness, evidence and recovery are clear.
 3. Information hierarchy: the primary decision and next safe action are obvious.
-4. Visual language: Precision Instrument quality without generic AI/template defaults.
+4. Visual language: accepted Graphite/Desktop and inherited Terminal rules, with restrained tone.
 5. Interaction: keyboard, focus, streaming, interruption and destructive actions are coherent.
 6. Accessibility: WCAG 2.2 criteria and applicable ARIA patterns, zoom, reduced motion, forced
    colors and non-color carriers.
-7. Enterprise: scope, permissions, policy, audit, cost and multi-tenant isolation where relevant.
+7. Enterprise: scope, permissions, policy, audit, cost and company/resource isolation where relevant.
 8. Cross-surface parity: shared semantics with surface-appropriate adaptation.
 9. i18n and platforms: real strings, expansion, macOS/Linux/Windows/WSL behavior.
 10. Implementation feasibility: existing architecture, performance, migration and wiring closure.
@@ -91,7 +86,9 @@ NO-GO:
 
 Return:
 
-    VERDICT: PASS | REVISE | NO-GO
+    ROLE: assigned independent reviewer | implementer self-review
+    CANDIDATE: exact revision/diff and artifact kind
+    VERDICT: PASS | REVISE | NO-GO (self-review uses findings, without independent PASS)
     SCOPE: reviewed surfaces, states and evidence
     FINDINGS: ordered by severity
     EVIDENCE GAPS: explicit missing proof

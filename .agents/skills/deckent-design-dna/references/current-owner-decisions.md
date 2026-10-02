@@ -2,6 +2,12 @@
 
 Authority: Alperen live design direction, 2026-08-25.
 
+Next applicability checked 2026-10-02: preserve these accepted directions, subject to live owner
+instructions and current Next ARCHITECTURE/PLAN. They are product/design targets; acceptance here
+does not prove a shipped Next Desktop, Terminal behavior or current runtime health. Verify actual
+wiring and platform evidence for implementation claims. The scope target and Core/Enterprise
+boundaries come from current Next authority, not a historical design hierarchy.
+
 Read this file before proposing or revising Deckent product, Desktop workspace or visual-language
 direction. These are active decision constraints, not inspiration. Do not repackage a rejected
 direction under a new name.

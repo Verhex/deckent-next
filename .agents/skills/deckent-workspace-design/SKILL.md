@@ -3,15 +3,6 @@ name: deckent-workspace-design
 description: Use for Deckent Desktop workspace architecture, docking, tabs, split panes, resizing, sidebars, inspectors, command palette, focus restoration, saved layouts, multi-window, multi-monitor, or scale-factor behavior. Do not use for backend runtime architecture alone.
 ---
 
-## Next refactor scope — 2026-09-17
-
-For current Deckent Next work, first apply `deckent-next-refactor` from the host skill directory.
-Product writes target `/home/alperen/deckent-next`; legacy `/home/alperen/deckent-dev` is a read-only
-reference except the owner-authorized host tooling/channel setup. Next ARCHITECTURE.md and PLAN.md
-carry accepted refactor decisions. Relative legacy `docs/`, `.deckent/workspace/`, `src/` and
-`scripts/` references below resolve in the legacy repository for reading only; inspect target
-implementation separately. Do not run legacy generation, recovery, MCP or dogfood commands for Next.
-
 
 # Deckent Workspace Design
 
@@ -23,9 +14,12 @@ agentic skills.
 
 ## Runtime truth
 
-The current direction keeps Electron while decoupling runtime authority. Do not propose a Tauri
-migration without the required comparative evidence. Do not perpetuate Classic and NOVA as two
-independent product shells; one information architecture and component authority is required.
+The accepted Desktop direction retains Electron while decoupling runtime authority. Current
+Next does not contain the former `src/desktop` consumer: this is a target, not shipped-runtime
+proof. Inspect PLAN and actual wiring before claiming availability. A platform migration requires
+new comparative evidence and owner direction. Keep one shell and one authority rather than
+separate Classic/NOVA products. Verify current Electron security guidance before implementation;
+renderer integration cannot become a second execution or secret authority.
 
 ## Workspace model
 
@@ -78,7 +72,7 @@ and meaning.
 ## Saved layouts
 
 Treat a layout as versioned user data. Specify schema evolution, invalid pane recovery, missing
-provider/capability behavior, safe defaults, tenant/project scoping and reset semantics. Never
+provider/capability behavior, safe defaults, company/project scoping and reset semantics. Never
 silently discard a user's layout.
 
 ## Required evidence

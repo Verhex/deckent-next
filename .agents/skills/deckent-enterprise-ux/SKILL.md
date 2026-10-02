@@ -1,16 +1,7 @@
 ---
 name: deckent-enterprise-ux
-description: Use for Deckent tenant and organization scope, principals, RBAC, policies, approvals, audit, secrets, cost controls, environments, compliance, or large-scale administration. Do not use to add enterprise-looking tables without real governance semantics.
+description: Use for Deckent installation/company/resource scope, principals, RBAC, policies, approvals, audit, secrets, cost controls, compliance or large-scale administration. Do not use to add enterprise-looking tables without real governance semantics.
 ---
-
-## Next refactor scope — 2026-09-17
-
-For current Deckent Next work, first apply `deckent-next-refactor` from the host skill directory.
-Product writes target `/home/alperen/deckent-next`; legacy `/home/alperen/deckent-dev` is a read-only
-reference except the owner-authorized host tooling/channel setup. Next ARCHITECTURE.md and PLAN.md
-carry accepted refactor decisions. Relative legacy `docs/`, `.deckent/workspace/`, `src/` and
-`scripts/` references below resolve in the legacy repository for reading only; inspect target
-implementation separately. Do not run legacy generation, recovery, MCP or dogfood commands for Next.
 
 
 # Deckent Enterprise UX
@@ -25,15 +16,21 @@ actions are involved.
 
 Before designing a control, resolve:
 
-- tenant, organization, workspace, project and environment hierarchy;
+- installation > company > optional site/unit > project > session target scope,
+  distinguishing implemented scope from planned levels;
 - human, service, agent and worker principals;
 - inherited versus explicit roles and policies;
 - resource, action, time and environment scope;
 - source of authority and policy evaluation;
 - audit and evidence retention;
-- cross-tenant isolation guarantees.
+- actual company/resource isolation guarantees and adapter boundaries.
 
-Never let visual nesting stand in for actual authorization.
+Never let visual nesting stand in for actual authorization. Company policy belongs in standalone
+Core; customer IdP/SIEM and proprietary Enterprise/ERP adapters extend registries and ports without
+editing Core or creating another effect flow. Keep proprietary artifacts outside public output.
+Persona, organization labels and installation topology grant no authority. Approval follows
+current effective permission and any explicit separation-of-duties policy; do not require a
+second person merely because a customer is an enterprise.
 
 ## Governance interaction rules
 
@@ -46,7 +43,7 @@ Never let visual nesting stand in for actual authorization.
 - Environment differences are visible before deployment or execution.
 - Audit records are immutable in presentation, filterable and deep-linkable to related evidence.
 - Impersonation or delegated administration is unmistakable, bounded and logged.
-- Export respects redaction, authorization and tenant boundaries.
+- Export respects redaction, authorization and company/resource boundaries.
 
 ## Enterprise state matrix
 
@@ -78,4 +75,4 @@ currencies and time zones.
 
 Provide the scope/principal model, effective-permission explanation, approval and policy flows,
 audit/evidence model, secrets and cost handling, adverse-state matrix, scale behavior and
-cross-tenant proof requirements. A generic admin dashboard without these semantics is NO-GO.
+company/resource isolation proof requirements. A generic admin dashboard without these semantics is NO-GO.

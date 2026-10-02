@@ -1,56 +1,54 @@
 ---
 name: deckent-recovery
-description: Perform one explicitly authorized, typed ADR-D-007 recovery package when Deckent dogfood health is degraded. Never use it as a normal feature or refactor path.
+description: Plan or perform one explicitly authorized Deckent Next recovery through existing typed ports, with exact affected identities, bounded effects and reconciliation proof.
 ---
 
-## Next refactor scope — 2026-09-17
+# Deckent Next Recovery
 
-For current Deckent Next work, first apply `deckent-next-refactor` from the host skill directory.
-Product writes target `/home/alperen/deckent-next`; legacy `/home/alperen/deckent-dev` is a read-only
-reference except the owner-authorized host tooling/channel setup. Next ARCHITECTURE.md and PLAN.md
-carry accepted refactor decisions. Relative legacy `docs/`, `.deckent/workspace/`, `src/` and
-`scripts/` references below resolve in the legacy repository for reading only; inspect target
-implementation separately. Do not run legacy generation, recovery, MCP or dogfood commands for Next.
+## Authority and evidence
 
-For refactor planning/execution/review, use the per-card loop and proof requirements in
-`deckent-next-refactor`, then stop here. The historical runtime protocol below applies only
-when the user explicitly requests that legacy runtime operation; it is not a Next admission gate.
+Apply `deckent-next-refactor` and relevant `deckent-authority-bootstrap` facts. Require an exact
+authorized recovery target/action, observed failure, scope and safety boundary before mutation.
+Reading this skill, an unavailable observation or a legacy receipt grants no recovery authority.
+Current owner dogfood/live limits remain in force; recovery does not enable DOGFOOD or legacy runtime.
+Read-only diagnosis uses `deckent-readonly-audit` or `deckent-observe`.
 
-## Historical legacy runtime procedure
+## Select the existing recovery seam
 
+Inspect the current command/query contract and composition for the affected operation.
+Next Run cancellation recovery is exported through `src/engine/core/runs/index.ts`; output,
+reconciliation and cancellation recovery wiring live under `src/composition/core/runs/internal/`.
+Verify the exact available handler and admission policy for this target; these paths do not imply
+that every failure has the same recovery command. Historical ADR-D-007 packages are reference
+evidence, not a verified Next package schema or a mandatory legacy environment gate.
+Do not invent a second workflow engine, manipulate raw ledgers or synthesize accepted receipts.
 
-# Deckent Recovery
+## Bound one package
 
-## Recovery gate
+- Record executable/revision/data roots, target Run/Task/Attempt/operation/effect/receipt identities,
+  failure cause and contrary evidence, read/write/negative scope and sole writer.
+- Preserve existing inputs, partial effects, logs and uncertainty before acting. An ambiguous
+  write or failed durable transition remains unknown; neither success nor cancellation is inferred.
+- Choose the existing typed action with its principal/company/resource/policy and current state
+  prerequisites. Carry already-granted permission; missing destructive/auth/live authority blocks
+  only the dependent action. Never treat emergency wording as host/ERP/secret permission.
+- Define finite time/cost/attempt bounds, changed-evidence fingerprint, protected state, rollback
+  or reconciliation limits and the safe return boundary.
+- Separate an implementation fix from an operator action. A code fix still needs owned diff,
+  negative proof and normal verification; it is not permission to restart a live service.
 
-Proceed only when live policy keeps `DOGFOOD_MODE=ON`, evidence declares
-`DOGFOOD_HEALTH=DEGRADED`, normal execution cannot safely progress, and the owner has authorized an
-exact typed ADR-D-007 package. Run `$deckent-authority-bootstrap` first. Recovery selection itself
-does not satisfy these conditions.
+## Execute and reconcile
 
-## Bound the package
-
-- Name the blocked outcome, engine defect, exact root-cause evidence, recovery identity, read/write
-  and negative scopes, protected paths, budget, finite attempts, proof manifest, and return-to-
-  dogfood boundary.
-- Keep one package and one writer per hot file. Do not absorb normal feature work, unrelated
-  findings, broad cleanup, or a second workflow engine.
-- Preserve canonical ABORTED, HOLD, receipt, archive, task, and memory truth. Never manually mutate
-  `.brain/memory.db` or delete `.tasks`.
-- Require exact task/attempt/result/effect/receipt attribution. Fail closed on stale, sibling,
-  replayed, unrun, partial, missing, or tampered evidence.
-- Stop when the budget is exhausted or the failure fingerprint is unchanged; do not create an
-  unlimited FIX/retry chain.
-
-## Separate owner gates
-
-Kill/cleanup, destructive actions, build or host-adapter restart during runtime, auth changes,
-XVerify, authenticated closure/MASTER mutation, commit, and push each require their current exact
-authority. Do not infer one permission from another.
+Perform only the authorized typed action, preserving idempotency and effect attribution.
+Use fresh scoped observation to compare the before/after transition, durable receipt/settlement
+and actual consumer behavior. A lost response is not a safe automatic retry; reconcile first.
+Stop on exhausted budget, unchanged failure, identity drift or unsafe/ambiguous custody.
+Keep unrelated features, broad cleanup, manual database changes and legacy commands out of scope.
 
 ## Exit
 
-Verify the repaired production wiring and the engine path needed to resume dogfood. Tests may help
-diagnose but cannot close recovery. Return to the official Goal/Mission/Flow/Run/Do path at the
-earliest safe boundary, then invoke `$deckent-closure`. If that return cannot be proven, report
-DEGRADED/HOLD rather than declaring completion.
+Report the exact recovery action and evidence, resolved versus unknown effects, actual health,
+remaining failure paths and next authorized step. Prove the restored production path when recovery
+completion is claimed; tests alone are diagnostic support. Use `deckent-closure` for the required
+completion assessment. If the return boundary cannot be proven, report recovery incomplete/HOLD
+without overwriting canonical product truth or silently enabling normal execution.

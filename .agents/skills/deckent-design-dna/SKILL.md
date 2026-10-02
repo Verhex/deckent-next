@@ -3,15 +3,6 @@ name: deckent-design-dna
 description: Use first for Deckent product, Desktop, Terminal, Dashboard observability, interaction, visual-language, or design-system work. Routes the task to the smallest Deckent design skill set and enforces current product authority; do not use for unrelated generic marketing design.
 ---
 
-## Next refactor scope — 2026-09-17
-
-For current Deckent Next work, first apply `deckent-next-refactor` from the host skill directory.
-Product writes target `/home/alperen/deckent-next`; legacy `/home/alperen/deckent-dev` is a read-only
-reference except the owner-authorized host tooling/channel setup. Next ARCHITECTURE.md and PLAN.md
-carry accepted refactor decisions. Relative legacy `docs/`, `.deckent/workspace/`, `src/` and
-`scripts/` references below resolve in the legacy repository for reading only; inspect target
-implementation separately. Do not run legacy generation, recovery, MCP or dogfood commands for Next.
-
 
 # Deckent Design DNA
 
@@ -24,13 +15,18 @@ false interface from becoming product authority.
 
 Before making a durable recommendation or editing a surface, read only the relevant sections of:
 
-1. .deckent/workspace/IDENTITY.md
-2. docs/design/DECKENT-DESKTOP-TERMINAL-NORTH-STAR.md
-3. docs/design/DECKENT-DESKTOP-TERMINAL-RECONCILIATION.md
-4. The real implementation, protocol and user-visible states in scope
+1. `deckent-next-refactor`, current ARCHITECTURE and PLAN; reuse unchanged session reads.
+2. `.deckent/docs/core-memory/project_product_north_star.md` and relevant local core-memory.
+3. The real Next application contract, implementation, i18n and user-visible states in scope.
+4. The accepted owner decisions below, with their original dates and current authority limits.
 
-The reconciliation document supersedes stale visual direction. Repository truth supersedes a
-mockup. A live owner decision supersedes all persisted design guidance.
+Live owner direction takes precedence, followed by current ARCHITECTURE/PLAN. Source evidence
+determines implemented behavior; an accepted target or historical proof does not establish a
+shipped Next surface. Missing foundation/consumer wiring is a named dependency, not a mock capability.
+Legacy design artifacts may be read as historical references; never run legacy tooling.
+Before applying vendor or accessibility standards, verify current official sources and record
+date, established practice, current state and unavailable context7/registry evidence. Checking
+documentation does not certify product compliance.
 
 For Deckent product, Desktop workspace or visual-language work, also read
 [references/current-owner-decisions.md](references/current-owner-decisions.md). Treat its accepted
@@ -50,8 +46,8 @@ Use the smallest sufficient set:
 | Token source, generation or drift | design-tokens-pipeline |
 | Desktop shell, panes, docking, focus, layouts | deckent-workspace-design |
 | CLI/TUI, streams, keyboard, ANSI degradation | deckent-terminal-design |
-| Tenants, RBAC, policy, audit, secrets, cost | deckent-enterprise-ux |
-| Independent review or release verdict | deckent-design-critic |
+| Installation/company scope, RBAC, policy, audit, secrets, cost | deckent-enterprise-ux |
+| Assigned design review, evidence and remediation criteria | deckent-design-critic |
 
 Do not load every skill by default.
 
@@ -72,8 +68,10 @@ Do not load every skill by default.
 
 ## Default design direction
 
-Precision Instrument is the current default: calm, formal, precise, long-session readable and
-dense when the operator task requires it. Hierarchy comes from execution semantics. Color and
+The accepted Desktop direction is Graphite Operations with Bricolage Grotesque and Geist Mono.
+Terminal inherits the user's font/theme and keeps Causal Workline with contextual Work Ledger.
+These are design targets, not proof of shipped Next surfaces. Precision Instrument describes
+the restrained tone: calm, formal, precise, long-session readable and dense when needed. Hierarchy comes from execution semantics. Color and
 motion communicate status or causality.
 
 Reject as defaults:
@@ -98,7 +96,8 @@ visualization preset.
 5. Derive repeated patterns, then components, then tokens.
 6. Implement inside current ownership boundaries.
 7. Capture real rendered and interaction evidence.
-8. Run deckent-design-critic as a separate pass.
+8. Review with deckent-design-critic. Request an assigned independent reviewer when required;
+   a separate pass by the implementer remains self-review. Do not auto-spawn a reviewer.
 
 Do not create approval theater for a small implementation detail already covered by an accepted
 contract.
@@ -112,4 +111,4 @@ Report:
 - states and platform modes covered;
 - decisions still requiring owner selection;
 - implementation and real-surface proof;
-- critic verdict and unresolved findings.
+- reviewer identity/role, scoped verdict or self-review status and unresolved findings.

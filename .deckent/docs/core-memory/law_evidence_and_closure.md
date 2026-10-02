@@ -7,6 +7,8 @@ Kapanış gerçek kullanıcı/AI yüzeyi, çalışan binary ve kalıcı sonuç k
 - Her iddiayı görülebilir davranış veya kaynakla eşle; nokta-iddiaya eşlik eden target gösterilir. Makinece denetlenebilir genellemeler gate ile doğrulanır. Büyük kanıt eksiksiz küçük kapsamların birleşimidir. Landing öncesi diff ve gerçek sonuçlar saklanır.
 - Durable settlement, doğrulanmış custody, append-only audit ve gerçek effect kanıtı esastır. Foundation, ürün wiring ve kabul ayrı aşamalardır; projection gerçek durum authority'si değildir.
 
+Owner 2026-10-02: `deckent-readonly-audit` belirli Next sorusunu salt okunur kanıtla inceler. Kaynak bağlantısı, revision/ortam/zaman taşıyan önceki koşum sonucu ve güncel gözlem ayrı raporlanır; yalnız kaynak bağlantısı "çalışıyor" kanıtı değildir. İnceleme test/build/servis, kod/belge düzeltmesi veya yeni ajan başlatmaz. Bulgular iş kabulü ya da bağımsız PASS değildir; `BLOCKS_CURRENT_DONE` yalnız gerçek owner-admitted teslimin kabul ölçütüne göre kullanılır, teslim yoksa soru/kullanıcı etkisine göre raporlanır. HOLD rapor etiketi ürün durumunu değiştirmez; kapsam, atlanan kaynaklar ve kanıt boşlukları açık kalır.
+
 Legacy dersler:
 - Status "writing" gösterirken worker yaklaşık dokuz dakika ölüydü → projection canlılık kanıtı değildir.
 - 2026-08-17/18 UNCLEAR nedenleri: görüşü doğrulanabilir iddia sanmak, diff olmadan kod iddiası, excerpt'ten evrensel sonuç, birleşik kanıtın kesilmesi. Legacy xverify bayrakları Next çalışma emri değildir.

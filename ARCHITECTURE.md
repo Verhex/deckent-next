@@ -1717,10 +1717,35 @@ config sections wait for C1.
 The Markdown gate admits five documents: `README.md`, `ARCHITECTURE.md`, `PLAN.md`, `COMPLETED-PLAN.md`, `CHANGELOG.md`;
 ≤70-line permanent product-development contracts `CLAUDE.md`, `AGENTS.md`;
 ≤5-line pointer `.codex/AGENTS.md`; `.deckent/docs/core-memory/*.md`;
-and the explicit refactor host-kit globs in `arch.json`: the remaining 23 `.agents/skills/<skill>`
+and the explicit refactor host-kit globs in `arch.json`: the remaining 20 `.agents/skills/<skill>`
 directories/references plus `.claude/agents`, `.claude/rules`, `.codex/rules`.
 The host kit is excluded from product distribution (`package.json files`: dist/native/assets/README/LICENSE).
 Product code still writes no Markdown; owner-maintained host instructions are a development-only exception.
+Owner 2026-10-02: `deckent-next-refactor` retains its name as the shared entry guide for owner-admitted
+Next development, fixes, refactoring, reviews and handoffs. Codex, Claude and Cursor resolve this skill
+to the same `.agents/skills/deckent-next-refactor` source; specialist skills supply task-specific methods.
+Jev details live in the skill's `jev-workflow.md`, read before case preparation or consultation.
+Shared content does not prove identical host activation or grant work/runtime authority.
+Owner 2026-10-02: `deckent-authority-bootstrap` remains a separate read-only Next authority/context
+snapshot, refreshed on relevant changes. It checks scope and work ownership; runtime inspection is
+task-dependent. A reported HOLD neither mutates product state nor blocks unrelated admitted work.
+Owner 2026-10-02: `deckent-readonly-audit` remains a separate bounded Next investigation. It follows
+actual wiring and distinguishes source evidence, retained execution proof and current observations.
+Audit findings admit no work; tests, fixes and document/state changes are separate authorized actions.
+Owner 2026-10-02: the standalone `deckent-outcome-ordering` skill is retired; owner-requested ordering
+principles live in `deckent-next-refactor`. Accepted order and execution admission remain separate.
+The original files are retained outside skill discovery; `.agents/refactor/migration.json` remains
+historical migration evidence, not the current active skill catalog.
+Owner-delegated 2026-10-02: the remaining 19 skills were individually compared with logged Jev;
+17 specialist entries retain distinct responsibilities with corrected Next instructions. Session
+handoff principles move into the common guide; the unsupported standalone versioned-handoff
+protocol and out-of-scope generic design-system package leave active discovery, with originals
+retained outside Git/npm. Planning, authorized parallel coordination, observation, recovery and
+completion assessment remain separate roles over actual Next contracts. Design guidance preserves
+accepted Desktop/Terminal direction and distinguishes target surfaces from implemented consumers;
+critic self-review cannot claim independent PASS. Token guidance describes the actual Terminal map,
+writing palette builder and output, without a nonexistent check mode or cross-surface generator.
+These are host instruction decisions within delegated scope, not product authority or implementation.
 Design reasoning goes into the decision log below, not arbitrary new documents.
 Owner 2026-09-21: `follow-up-works/current-flow.md` is an optional, replaceable development tracker;
 its exact path is admitted by the Markdown gate, excluded from product distribution, and may be deleted.

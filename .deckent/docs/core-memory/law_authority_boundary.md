@@ -9,3 +9,5 @@ Değişiklik öncesi ilgili Next mimarisi (`ARCHITECTURE.md`) ve legacy ADR kan�
 - Legacy runtime/recall komutu çalıştırılmaz; kaynaklar salt okunur incelenir. Legacy package A/B, makine isimleri ve eski branch kuralları Next yetkisi değildir.
 
 Legacy ders: PREPARED → VERIFIED → COMMITTED devir zinciri ve owner recovery ayrımı tasarım dersidir; Next'te varmış gibi ilan edilmez.
+
+Owner 2026-10-02: `deckent-authority-bootstrap` Next'te salt okunur yetki/bağlam kontrolü olarak ayrı kalır; ortak çalışma yöntemi `deckent-next-refactor` içindedir. İlgili yetki, kapsam, revision, sahiplik veya runtime/config değiştiğinde etkilenen kanıt yenilenir; değişmeyen okumalar tekrar edilmez. Runtime yalnız görev gerektiriyorsa incelenir. Rapor HOLD'u yalnız bağımlı işlemin çözülemeyen yetki/kanıt sorusunu gösterir; ürün durumu değiştirmez, ilgisiz yetkili işi durdurmaz ve yeni yürütme yetkisi vermez.

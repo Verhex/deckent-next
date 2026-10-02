@@ -1,57 +1,53 @@
 ---
 name: deckent-observe
-description: Observe active Deckent Goals, Flows, Runs, workers, effects, and settlements through non-mutating evidence. Do not use it to decide recovery, retry, or terminal truth.
+description: Inspect active or recently finished Deckent Next Runs, Tasks, Attempts, workers, effects and settlements through non-mutating lifecycle and freshness evidence.
 ---
 
-## Next refactor scope — 2026-09-17
+# Deckent Next Observe
 
-For current Deckent Next work, first apply `deckent-next-refactor` from the host skill directory.
-Product writes target `/home/alperen/deckent-next`; legacy `/home/alperen/deckent-dev` is a read-only
-reference except the owner-authorized host tooling/channel setup. Next ARCHITECTURE.md and PLAN.md
-carry accepted refactor decisions. Relative legacy `docs/`, `.deckent/workspace/`, `src/` and
-`scripts/` references below resolve in the legacy repository for reading only; inspect target
-implementation separately. Do not run legacy generation, recovery, MCP or dogfood commands for Next.
+## Responsibility
 
-For refactor planning/execution/review, use the per-card loop and proof requirements in
-`deckent-next-refactor`, then stop here. The historical runtime protocol below applies only
-when the user explicitly requests that legacy runtime operation; it is not a Next admission gate.
+Apply `deckent-next-refactor` and reuse relevant bootstrap facts. Provide a bounded operational
+view of an admitted Next lifecycle. Bootstrap establishes context/authority; readonly-audit
+investigates a diagnostic question; this skill reports what changed and how fresh its evidence is.
+It does not admit runtime work, choose recovery or decide terminal truth.
 
-## Historical legacy runtime procedure
+## Establish the observation
 
+Record the question/target, time, source revision or installed binary identity, effective
+execution/data roots and accessible read-only projections. Checkout HEAD alone does not identify
+the live executable. Name the observation window and proof limits; historical receipts are not
+current health. Inspect actual query implementations before trusting a command named `status`.
+Use the authorized Next entry surface only for commands verified non-mutating; never run legacy
+entrypoints or read credentials/raw state databases to produce a status view.
 
-# Deckent Observe
+## Trace only actual objects
 
-## Outcome
+Follow the relevant Run → Task → Attempt, operations, workers, effects and receipts as implemented.
+Mission or other objects are included only when the observed work actually uses them; `do` does
+not require a Mission. Preserve exact identity rather than matching a display label.
+For each relevant object inspect principal/company/project/resource scope, state and age,
+responsible executor, last event/heartbeat, policy authority, inputs/results, budget/usage,
+effect/receipt attribution, intervention availability and durable settlement evidence.
+Use existing typed queries, retained events/receipts and safe scoped process observations.
+Avoid unrelated customer data and global process/log dumps.
 
-Provide a current, read-only view of an active or recently terminal lifecycle without changing it.
-Start from `$deckent-authority-bootstrap`; when observation reveals a decision, report it to the
-appropriate execution, recovery, or closure authority rather than acting.
+## Report independent axes
 
-## Follow the lifecycle
+- Lifecycle: the canonical transition state, not a conclusion from a spinner or heartbeat.
+- Freshness: observed time, age and gaps; live, delayed, stale and disconnected differ.
+- Authority: allowed, denied, approval-required, expired or unavailable from policy evidence.
+- Evidence: source-only, retained execution, current observation, partial or contradictory.
+- Outcome: only what durable attribution/settlement supports; an uncertain effect stays unknown.
 
-Trace Goal → Mission → Flow → Run → WorkItem → Attempt → Operation → Effect → Receipt. For each
-object record initiator/principal, scope, operation/invocation/causation identity, responsible
-worker/provider, state and state age, heartbeat/freshness, budget/usage when available, evidence,
-side effects, intervention authority, and settlement/archive state.
+Missing heartbeat does not prove death; terminal-looking output does not prove settlement.
+Conflicting event heads/receipts are contradictions requiring an authorized decision, not cleanup.
 
-Inspect safe process/container listings, execution locks, task and heartbeat files, durable
-receipts, append-only events, provider observations, disk diff, accepted result identity,
-brain evaluation, finalizer, and settlement. Use only commands or projections proven read-only;
-do not assume `status` is safe because of its name.
+## Boundaries and output
 
-## State semantics
-
-Keep lifecycle, freshness, authority, evidence, and outcome separate. Never collapse `stale`,
-`unknown`, `unavailable`, `blocked`, `failed`, `aborted`, and `terminal` into one state. A terminal
-archive receipt that conflicts with a live event head is a contradiction/HOLD, not a cleanup cue.
-
-## Hard boundaries
-
-Observation cannot retry, FIX, pause, resume, cancel, recover, force-finalize, settle, archive,
-cleanup, restart, build, mutate auth, sign, or edit MASTER. Never read credentials or raw
-`.brain/memory.db`, and never delete `.tasks` content.
-
-## Output
-
-Report timestamp, freshness, lifecycle map, exact identities, disk/runtime evidence, contradictions,
-and the next authority that must decide. Use typed HOLD when evidence is incomplete or unsafe.
+Observation does not retry, pause/resume/cancel, recover, settle, archive, delete data, build,
+restart, change auth, commit or publish. Do not infer monitoring continuity without a durable
+authorized scheduler. Report one measured observation/window and the next checkpoint.
+Return timestamp, exact objects/executable identity, evidence freshness, changes, contradictions,
+unavailable facts and the next responsible authority. A report HOLD is not a product transition
+and blocks only a conclusion/action that depends on the missing evidence.

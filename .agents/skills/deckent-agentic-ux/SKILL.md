@@ -3,15 +3,6 @@ name: deckent-agentic-ux
 description: Use for Deckent runs, agents, workers, tool or MCP calls, approvals, verification, autonomy, checkpoints, pause/resume/cancel, failure, recovery, or human intervention. Do not use for generic chat layout or static visual styling.
 ---
 
-## Next refactor scope — 2026-09-17
-
-For current Deckent Next work, first apply `deckent-next-refactor` from the host skill directory.
-Product writes target `/home/alperen/deckent-next`; legacy `/home/alperen/deckent-dev` is a read-only
-reference except the owner-authorized host tooling/channel setup. Next ARCHITECTURE.md and PLAN.md
-carry accepted refactor decisions. Relative legacy `docs/`, `.deckent/workspace/`, `src/` and
-`scripts/` references below resolve in the legacy repository for reading only; inspect target
-implementation separately. Do not run legacy generation, recovery, MCP or dogfood commands for Next.
-
 
 # Deckent Agentic UX
 
@@ -22,10 +13,10 @@ certainty. Load deckent-design-dna and, for journey structure, deckent-product-d
 
 ## Start from runtime semantics
 
-Inspect the actual product hierarchy and lifecycle before designing. Use the current repository
-names and states; do not freeze this illustrative hierarchy when code differs:
-
-    Goal → Mission → Flow → Run → WorkItem → Attempt → Operation
+Inspect the actual typed application hierarchy and lifecycle before designing. Follow the
+Run/Task/Attempt, operation/effect and settlement relationships relevant to the task; include
+Mission only when used. `do` can propose/admit Runs independently. Each transition has one owner.
+Label future or unsupported controls as design dependencies rather than working actions.
 
 For every displayed object, determine:
 
@@ -49,7 +40,7 @@ Create a state matrix before a component:
 | Freshness | live, delayed, stale, disconnected, unknown |
 | Authority | allowed, approval required, denied, expired, unavailable |
 | Evidence | pending, partial, verified, contradicted, unavailable |
-| Outcome | success, failure, cancelled, superseded, partial |
+| Outcome | success, failure, cancelled, superseded, partial, unknown effect |
 
 Never collapse unknown, stale, unavailable and failed into one warning state.
 
@@ -83,7 +74,8 @@ Intervention must preserve attribution and audit evidence.
 
 For each critical action include timeout, lost connection, provider unavailability, insufficient
 authority, budget/limit exhaustion, partial side effect, verification failure and conflicting
-concurrent action. State what is safe to retry and what needs reconciliation.
+concurrent action. State what is safe to retry and what needs reconciliation. Unknown side effects stay unknown
+until durable attribution is reconciled; an optimistic display cannot settle them.
 
 ## Required output
 

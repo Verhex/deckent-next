@@ -57,6 +57,12 @@ Sıra: C11-1 ve Hat A ilk dogfood denemesi tamamlandı ([COMPLETED-PLAN](COMPLET
 
 ## Açık işler — sıradaki (owner 2026-09-24)
 
+**Geliştirme rule incelemesi — owner 2026-10-02:** skill içerik incelemesi ve yetkili düzenlemeler
+bu oturumda tamamlandı; kalıcı rol haritası ARCHITECTURE, dosya bazlı karar/kanıt dış alanda
+`proof/SKILL-CLEANUP-2026-10-02/remaining-130706Z/`. Kalan rule dosyaları owner ile tek tek değerlendirilir;
+sonraki skill delegasyonu bu rule kararlarını otomatik kapsamaz. Üç yeni host oturumunda gerçek
+skill etkinleşme/plugin eval kanıtı açık; ortak kaynak ve dosya eşitliği etkinleşme kanıtı değildir.
+
 **CI-WINDOWS-MACOS — owner 2026-10-01, Opus lead → Sol uygulayıcı:** `lane/ci-sol-2`, taban exact
 `76582f9f1cd2bd694a460795e181ce70641f0888`. Önceki CI-FULL `10d5cbde` 23. partiye birleşti; bu tabanın hosted
 run `36884716187` Linux/24 + Linux/26 SUCCESS, macOS/24 + macOS/26 FAILURE (51 dosya / 153 vaka).
@@ -284,7 +290,7 @@ Kaynak: repo envanteri + resmi Claude Code/Platform dokümanı (headless, permis
 | Orta | `usage_limits`/`cost_limits` için tipli kaynak: API hesaplarında Admin/usage-cost API; abonelik penceresi için tipli uç doğrulanmadı ("bilinmiyor" verdict'i kalır). Enterprise'da WIF statik API anahtarını kaldırır. | PLAN cost/usage satırı, Admin API, WIF | API tarafı tipli sorgu adapter'ı; abonelik tarafı düz metin ayrıştırılmaz; WIF kurumsal kurulum seçeneği. | PROVIDERS / SECURITY |
 | Orta | `claude --print` akışı tipli izin kanalı vermez; Agent SDK `canUseTool`/hook'ları verir, ancak ayrı paket ve harness bağımlılığıdır. | agent-sdk docs, PLAN worker izin modu | Dogfood gözleminden sonra ölçümle değerlendirilir; tool/approval köprüsü kararıyla birlikte. | EXECUTION / ISOLATION |
 | Düşük | Managed Agents (beta; customer-installed ilkesiyle çelişir), API tarafı MCP connector (policy Deckent'te kalmalı), Skills/Files API (katalog provider-nötr). | platform docs | Opsiyonel cloud executor/ileri aşama; şimdi iş açılmaz. | PROVIDERS |
-| Host | Geliştirici guardrail'leri yerel: `.claude/settings.local.json` (gitignored) hook/izin kuralları; mantık `.agents/refactor/host-guard.mjs` (izli, `test:host`). Repoya hook konmadı; Codex/Cursor bağlanması ve 23 skill için plugin eval açık. | Jev 2be86b6c karar kaydı; canlı red kanıtı | Worker'a etki yok; yanlış engelleme test kapsamında; ürün yetkisi taşımaz. | ASSURANCE |
+| Host | Geliştirici guardrail'leri yerel: `.claude/settings.local.json` (gitignored) hook/izin kuralları; mantık `.agents/refactor/host-guard.mjs` (izli, `test:host`). Repoya hook konmadı; Codex/Cursor bağlanması ve etkin 20 skill için plugin eval açık. | Jev 2be86b6c karar kaydı; canlı red kanıtı | Worker'a etki yok; yanlış engelleme test kapsamında; ürün yetkisi taşımaz. | ASSURANCE |
 
 Uygulanan Acil satırı (ambient keşif kapalı, sürümlü profil istisnası) ve ölçülen uyumluluk/prompt kompozisyonu kayıtları [COMPLETED-PLAN](COMPLETED-PLAN.md)'dedir.
 

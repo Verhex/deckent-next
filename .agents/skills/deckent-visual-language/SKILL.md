@@ -3,15 +3,6 @@ name: deckent-visual-language
 description: Use for Deckent art direction, typography, color roles, density, spacing rhythm, hierarchy, motion, iconography, branding, or visual state language. Do not use to choose a random style before product states and interaction needs are known.
 ---
 
-## Next refactor scope — 2026-09-17
-
-For current Deckent Next work, first apply `deckent-next-refactor` from the host skill directory.
-Product writes target `/home/alperen/deckent-next`; legacy `/home/alperen/deckent-dev` is a read-only
-reference except the owner-authorized host tooling/channel setup. Next ARCHITECTURE.md and PLAN.md
-carry accepted refactor decisions. Relative legacy `docs/`, `.deckent/workspace/`, `src/` and
-`scripts/` references below resolve in the legacy repository for reading only; inspect target
-implementation separately. Do not run legacy generation, recovery, MCP or dogfood commands for Next.
-
 
 # Deckent Visual Language
 
@@ -26,7 +17,9 @@ Apply the current owner decision ratchet loaded by deckent-design-dna before pre
 tone or composition candidate. A rejected family or visual grammar is not a fresh direction when
 only its name, accent or spacing changes.
 
-Precision Instrument is the default:
+The accepted Desktop baseline is Graphite Operations, Bricolage Grotesque and Geist Mono.
+Terminal inherits the user's font/background/capabilities and shares semantic roles, not pixels.
+Precision Instrument describes the following tone, without reopening the accepted direction:
 
 - calm and formal rather than theatrical;
 - precise, inspectable and long-session readable;
@@ -43,11 +36,13 @@ operator visualization preset.
 When the task changes durable identity or a major interaction grammar:
 
 1. Hold the workflow, information and critical states constant.
-2. Produce at least three materially different directions.
+2. Compare meaningful materially different alternatives only for the admitted decision. Do not
+   reopen settled identity or invent a fixed number of candidates for a routine refinement.
 3. For each, specify spatial grammar, typography roles, density, semantic color behavior,
    iconography, motion, accessibility risks and long-session failure modes.
 4. Show representative success, failure, approval, stale and high-density states.
-5. Present a recommendation with reasons, then wait for owner selection.
+5. Present gains/losses and a recommendation. New durable direction requires owner selection;
+   already accepted craft refinements proceed within existing authorization.
 
 Changing only accent color, radius or background does not create a distinct direction.
 

@@ -3,15 +3,6 @@ name: deckent-design-system
 description: Use for Deckent component contracts, primitives, variants, design tokens, accessibility behavior, component governance, or Desktop/Terminal/Dashboard semantic parity. Do not use for a one-off mockup with no reusable system decision.
 ---
 
-## Next refactor scope — 2026-09-17
-
-For current Deckent Next work, first apply `deckent-next-refactor` from the host skill directory.
-Product writes target `/home/alperen/deckent-next`; legacy `/home/alperen/deckent-dev` is a read-only
-reference except the owner-authorized host tooling/channel setup. Next ARCHITECTURE.md and PLAN.md
-carry accepted refactor decisions. Relative legacy `docs/`, `.deckent/workspace/`, `src/` and
-`scripts/` references below resolve in the legacy repository for reading only; inspect target
-implementation separately. Do not run legacy generation, recovery, MCP or dogfood commands for Next.
-
 
 # Deckent Design System
 
@@ -45,9 +36,9 @@ Every shared component specifies:
 
 1. Purpose and authoritative data source
 2. Anatomy and content hierarchy
-3. Variants and density modes
+3. Variants and disclosure: Desktop Basic/Advanced; one stable Terminal surface
 4. Lifecycle, freshness, permission and evidence states
-5. Keyboard and pointer behavior
+5. Keyboard behavior and optional pointer behavior where the surface supports it
 6. Focus management and accessible name/description
 7. Live-region behavior where updates occur
 8. Loading, empty, stale, partial, error and recovery behavior
@@ -74,7 +65,7 @@ output changes.
 
 Share semantics and causal structure, not pixels:
 
-- Desktop may use panes, direct manipulation and richer spatial context.
+- Desktop targets panes, direct manipulation and richer spatial context; name unimplemented wiring.
 - Terminal uses text hierarchy, keyboard flow and honest capability degradation.
 - Dashboard presents read-only observability and links to control surfaces.
 
@@ -92,6 +83,8 @@ alternative exists.
 
 ## Acceptance
 
-Require contract tests, accessibility checks, token drift checks, representative rendered states,
-real-surface proof and deckent-design-critic. A Storybook-like gallery or static specimen alone is
-not production wiring evidence.
+Choose meaningful checks for the changed contract: behavior/negative paths, accessibility,
+token generation consistency and representative rendered states. Do not add tests that merely
+mirror low-impact styling. Distinguish prototype review from actual producer-to-surface proof.
+Use deckent-design-critic with the assigned role; implementer self-review is not independent PASS.
+A gallery or static specimen alone is not production wiring evidence.

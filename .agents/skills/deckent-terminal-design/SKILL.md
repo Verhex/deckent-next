@@ -3,15 +3,6 @@ name: deckent-terminal-design
 description: Use for Deckent CLI/TUI ergonomics, information hierarchy, keyboard interaction, command palette, logs, worker trees, run inspection, ANSI color tiers, TTY behavior, piping, or Terminal/Desktop semantic parity. Do not use for generic CLI backend implementation.
 ---
 
-## Next refactor scope — 2026-09-17
-
-For current Deckent Next work, first apply `deckent-next-refactor` from the host skill directory.
-Product writes target `/home/alperen/deckent-next`; legacy `/home/alperen/deckent-dev` is a read-only
-reference except the owner-authorized host tooling/channel setup. Next ARCHITECTURE.md and PLAN.md
-carry accepted refactor decisions. Relative legacy `docs/`, `.deckent/workspace/`, `src/` and
-`scripts/` references below resolve in the legacy repository for reading only; inspect target
-implementation separately. Do not run legacy generation, recovery, MCP or dogfood commands for Next.
-
 
 # Deckent Terminal Design
 
@@ -55,8 +46,10 @@ dependency. A browser mockup is evidence of hierarchy only.
 - Model platform signals explicitly: POSIX SIGINT/SIGTERM and Windows SIGINT/SIGBREAK are different
   adapters. Escape closes focus; it never promises process cancellation without a real abort seam.
 
-Respect current workspace ownership. If implementation output such as src/cli is outside the
-active lane, produce the exact design/interaction contract and coordinate before editing it.
+Inspect actual Next wiring under `src/surfaces/core/terminal-*`, including terminal-kit,
+terminal-render and the relevant Workline/composer consumer; these are paths, not capability proof.
+Respect lane ownership. If a needed consumer is outside scope, deliver the interaction contract
+and coordinate before editing. Verify current official Ink/API guidance before implementation.
 
 ## Environment modes
 
@@ -124,4 +117,6 @@ observability only.
 Capture representative real-binary sessions on macOS, Linux, Windows native and WSL for supported
 color tiers, light/dark user themes, Unicode/ASCII markers, pipe output, resize, keyboard paths,
 failure/recovery, localization and Workline → Ledger → selected Workline focus preservation. Token
-changes use design-tokens-pipeline. Finish with deckent-design-critic.
+changes use design-tokens-pipeline. Record unsupported and untested cases instead of claiming
+the whole platform matrix from one PTY. Review with deckent-design-critic under the assigned role;
+self-review cannot provide independent PASS.

@@ -1,6 +1,6 @@
 interface:
   display_name: "Deckent Visual Language"
-  short_description: "Define precise Deckent visual direction"
-  default_prompt: "Use $deckent-visual-language to explore and evaluate visual directions for this surface."
+  short_description: "Refine accepted visual roles and hierarchy"
+  default_prompt: "Use $deckent-visual-language to refine accepted Desktop or inherited Terminal visual roles without reopening settled direction."
 policy:
   allow_implicit_invocation: true

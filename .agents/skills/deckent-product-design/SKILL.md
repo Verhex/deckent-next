@@ -3,15 +3,6 @@ name: deckent-product-design
 description: Use for Deckent product philosophy, personas, jobs, journeys, capability model, information architecture, progressive disclosure, or solo-to-enterprise complexity. Do not use for visual styling without a product-model question.
 ---
 
-## Next refactor scope — 2026-09-17
-
-For current Deckent Next work, first apply `deckent-next-refactor` from the host skill directory.
-Product writes target `/home/alperen/deckent-next`; legacy `/home/alperen/deckent-dev` is a read-only
-reference except the owner-authorized host tooling/channel setup. Next ARCHITECTURE.md and PLAN.md
-carry accepted refactor decisions. Relative legacy `docs/`, `.deckent/workspace/`, `src/` and
-`scripts/` references below resolve in the legacy repository for reading only; inspect target
-implementation separately. Do not run legacy generation, recovery, MCP or dogfood commands for Next.
-
 
 # Deckent Product Design
 
@@ -30,9 +21,9 @@ semantics; do not restart direction exploration with rejected shells, modes or s
 
 - Current identity and primary-surface authority
 - The exact application service, protocol and state model in scope
-- Existing Desktop and Terminal paths for the same user job
+- Implemented consumer paths and accepted Desktop/Terminal targets for the same job, separately
 - Current terminology and i18n keys
-- Relevant M0–M2 foundation dependencies in the reconciliation
+- Relevant admitted workstream dependencies in PLAN and actual missing Next consumers
 
 Do not infer a capability from a mockup, stale roadmap prose or an attractive component.
 
@@ -44,7 +35,7 @@ Cover the relevant combinations:
 |---|---|
 | Agency | guided, assisted, autonomous, supervised |
 | Experience | first-run, occasional, expert operator |
-| Organization | solo, team, regulated enterprise |
+| Organization | solo, team, regulated enterprise under the same company-scoped policy |
 | Scale | one project/run, many projects, very large run history |
 | Environment | local, remote, degraded, offline or reconnecting |
 | Platform | macOS, Linux, Windows native, WSL |
@@ -56,7 +47,8 @@ cost, risk or irreversible consequences.
 ## Product modeling workflow
 
 1. Define the user job and the decision the interface must support.
-2. Identify the authoritative objects and their relationships.
+2. Identify the actual authoritative objects and their relationships. `do` may admit a Run
+   independently of Mission; do not turn an illustrative object tree into a required hierarchy.
 3. Map entry, success, failure, interruption, recovery and return paths.
 4. Model the Golden Workflow first: conversation or command through run creation, execution,
    inspection, evidence and settlement.

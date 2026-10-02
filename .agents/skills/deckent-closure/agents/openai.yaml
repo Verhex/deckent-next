@@ -1,6 +1,6 @@
 interface:
   display_name: "Deckent Closure"
-  short_description: "Close outcomes only with real production proof"
-  default_prompt: "Use $deckent-closure to verify this outcome against its production and custody proof contract."
+  short_description: "Assess exact Next outcome completion evidence"
+  default_prompt: "Use $deckent-closure to assess this exact Next completion claim against its applicable wiring, surface and settlement evidence."
 policy:
   allow_implicit_invocation: true

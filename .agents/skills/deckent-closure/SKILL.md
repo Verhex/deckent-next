@@ -1,59 +1,47 @@
 ---
 name: deckent-closure
-description: Decide Deckent outcome closure from production wiring, exact execution custody, real surfaces, and durable settlement evidence. Do not use mock-only or test-green results as completion.
+description: Assess completion of one admitted Deckent Next outcome against its exact proof contract, production wiring, real surfaces and durable effect settlement.
 ---
 
-## Next refactor scope — 2026-09-17
+# Deckent Next Closure
 
-For current Deckent Next work, first apply `deckent-next-refactor` from the host skill directory.
-Product writes target `/home/alperen/deckent-next`; legacy `/home/alperen/deckent-dev` is a read-only
-reference except the owner-authorized host tooling/channel setup. Next ARCHITECTURE.md and PLAN.md
-carry accepted refactor decisions. Relative legacy `docs/`, `.deckent/workspace/`, `src/` and
-`scripts/` references below resolve in the legacy repository for reading only; inspect target
-implementation separately. Do not run legacy generation, recovery, MCP or dogfood commands for Next.
+## Admission and role
 
-For refactor planning/execution/review, use the per-card loop and proof requirements in
-`deckent-next-refactor`, then stop here. The historical runtime protocol below applies only
-when the user explicitly requests that legacy runtime operation; it is not a Next admission gate.
+Apply `deckent-next-refactor`. Require the exact outcome/candidate revision or owned diff,
+accepted proof contract, intended user result and relevant current bootstrap facts.
+This is a completion assessment; it grants no product transition, live intervention, signing,
+commit or push authority. Follow the assigned role, not a self-declared reviewer identity.
 
-## Historical legacy runtime procedure
+## Verify applicable proof links
 
+1. Trace canonical producer → application contract → adapter → entrypoint/consumer, including
+   effective policy/config enablement. Source reachability is distinct from execution proof.
+2. Pin actual binary/revision, immutable inputs and Run/Task/Attempt/operation/invocation/effect
+   identity where execution is claimed. Checkout HEAD is not automatically the installed build.
+3. Inspect attributable result/partial-result, timeout/log evidence, acceptance and durable
+   settlement. Include archive, restart/adoption and recovery only when the outcome claims them.
+4. Attribute the owned disk diff, durable side effects and receipts to the exact accepted attempt.
+   Ambiguous recovery/receipt evidence remains unknown until reconciled.
+5. Observe the actual CLI/Terminal/API/MCP/worker or other real surface named by the proof contract.
+   An absent or planned Desktop/Dashboard cannot be claimed as shipped from a prototype.
+6. Check relevant denial, company/scope isolation, secret boundary, cancellation, idempotency/replay,
+   partial-effect and recovery cases. Platform/accessibility/performance/HA claims require their
+   own bounded measurements and environments; do not manufacture a universal proof checklist.
+7. Identify independent review by actual reviewer, exact revision/scope and fresh evidence.
+   Implementer checks, a second self-review and Jev are not independent PASS.
 
-# Deckent Closure
+Tests, typechecks, lint and CI support these claims within their measured scope. Test green cannot
+replace a missing producer, real consumer or settlement link. Full verify is required before
+landing; hosted CI and live proof remain separately identified. Unavailable evidence is blocking
+when the accepted proof contract requires it, rather than by an invented legacy ritual.
 
-## Preconditions
+## Assessment and delivery
 
-Require the exact active outcome, accepted proof manifest, fresh `$deckent-authority-bootstrap`
-snapshot, implementation settlement candidate, and production diff. Closure review grants no
-signing, MASTER, ledger, commit, push, cleanup, or XVerify authority.
-
-## Mandatory evidence chain
-
-Verify all applicable links:
-
-1. canonical producer → consumer → entrypoint/ingress → effective policy/config enablement;
-2. exact outcome/task/operation/invocation/causation/attempt identities and immutable input;
-3. attempt-private result, partial-result, timeout, log, IPC, acceptance, brain evaluation,
-   finalizer, settlement, archive, restart/adoption, and recovery custody;
-4. disk diff and durable effects/receipts attributed to the accepted attempt;
-5. real compiled binary and actual CLI, TUI, Desktop, Dashboard, API, MCP, Autonomous, connector,
-   extension, process, or worker boundary named by the manifest;
-6. relevant Linux, macOS, Windows-native, WSL, accessibility, tenant isolation, security,
-   idempotency/replay, cancellation, scale, performance, cost, HA, backup, and disaster-recovery
-   claims, with honest unsupported/HOLD states;
-7. one independent verification pass using fresh disk evidence.
-
-Tests, typechecks, linters, mocks, fixtures, and CI are supporting evidence only. Name their scope
-and result, but never replace a missing production link or real-surface observation with green
-tests. Remote CI unavailability is advisory unless the exact proof manifest made it essential.
-
-## Decision
-
-Return only an evidence-backed `GO`, `HOLD`, `NO_GO`, or `ABORTED`, with contradictions and missing
-links explicit. Worker or model self-report, optional coverage scoring, generated projection, and
-force-finalize cannot override canonical custody or produce false success/death.
-
-Use XVerify only when current policy and owner authority require it, always through a genuinely
-different provider resolved by effective config. Unavailable cross-provider authority is HOLD, not
-self-verification. Terminal disposition, signing, ledger/MASTER mutation, commit, and push remain
-separate gates after GO.
+Report `GO` when the exact claimed result and all required evidence links are satisfied;
+`HOLD` when required evidence/authority is missing or contradictory; `NO_GO` for a disproven or
+unsafe claim. Report an actual aborted outcome only from its canonical evidence.
+These are review dispositions, not new product state values or commands.
+State implemented behavior, checked versus unproven links, exact commands/results, contradictions,
+independent review status, open limits, reconciled documents and next authorized step.
+Worker/model self-report or force-finalize cannot establish success or death.
+Keep owner acceptance, canonical state mutation, commit, release and push separate from GO.

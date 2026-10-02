@@ -1,55 +1,55 @@
 ---
 name: deckent-outcome-plan
-description: Plan one exact owner-admitted Deckent outcome as a bounded dependency DAG and proof contract. Do not use for vague mega-outcomes or to start execution.
+description: Plan one owner-admitted Deckent Next outcome as a bounded dependency DAG, ownership map and proof contract before implementation or execution.
 ---
 
-## Next refactor scope — 2026-09-17
+# Deckent Next Outcome Plan
 
-For current Deckent Next work, first apply `deckent-next-refactor` from the host skill directory.
-Product writes target `/home/alperen/deckent-next`; legacy `/home/alperen/deckent-dev` is a read-only
-reference except the owner-authorized host tooling/channel setup. Next ARCHITECTURE.md and PLAN.md
-carry accepted refactor decisions. Relative legacy `docs/`, `.deckent/workspace/`, `src/` and
-`scripts/` references below resolve in the legacy repository for reading only; inspect target
-implementation separately. Do not run legacy generation, recovery, MCP or dogfood commands for Next.
+## Scope and authority
 
-For refactor planning/execution/review, use the per-card loop and proof requirements in
-`deckent-next-refactor`, then stop here. The historical runtime protocol below applies only
-when the user explicitly requests that legacy runtime operation; it is not a Next admission gate.
+Use `deckent-next-refactor` for the common development contract. Plan one exact owner-admitted
+result using current ARCHITECTURE, PLAN, relevant core-memory and a current authority snapshot.
+Reuse unchanged `deckent-authority-bootstrap` evidence; refresh only affected facts.
+An accepted priority, audit, transcript or historical receipt cannot admit execution by itself.
+This skill creates a plan, not a product Run, worker, state transition or new authority gate.
 
-## Historical legacy runtime procedure
+## Bound the result
 
+- State the observable user/product result, current defect or gap, and acceptance boundary.
+- Distinguish existing mechanisms from accepted future targets. Do not require dogfood or every
+  product surface when the exact outcome does not claim them.
+- Record exact read/write and negative scopes, concurrent ownership, protected paths, durable
+  state, entrypoints, policy/config inputs, contract versions and migration dependencies.
+- Map the actual application objects and transition owners. Inspect the Run/Task/Attempt and
+  operation/effect chain in scope; do not impose an illustrative legacy hierarchy.
+- Preserve installation/company/resource/principal boundaries and the standalone Core contract;
+  Enterprise/ERP adapters extend registries and ports rather than introducing a second flow.
 
-# Deckent Outcome Plan
+## Dependency and ownership DAG
 
-## Admission gate
+For each node record its responsibility, prerequisites, exact inputs/outputs, sole writer,
+write conflicts, verification and stop condition. A join accepts evidence from its own nodes.
+Identify the critical path and genuinely independent lanes; do not create parallel agents
+without authorization or when coordination costs outweigh the task.
+Name shared hot files and assign one writer. Include affected document reconciliation.
+Resolve runtime provider/model/capacity from current typed config and policy only when runtime
+execution is admitted; a host plan must not invent a worker or resource limit.
 
-Require a final owner-approved order, a fresh `$deckent-authority-bootstrap` snapshot, and one exact
-outcome identity admitted against canonical MASTER authority. A retained `DIRECTIVES.md`, capsule,
-old sprint, generated plan, or transcript cannot satisfy this gate.
+## Proof and bounded execution
 
-## Plan the full closure path
+Define producer → application → adapter → actual consumer proof, exact revision/input custody,
+and relevant negative paths: denial, cancellation, replay, partial effect, timeout and recovery.
+Separate source checks, author tests, retained execution, current surface evidence and independent
+review. Mark unavailable platforms or consumers explicitly; tests alone cannot prove live behavior.
+Set finite time/cost/retry bounds from the actual task and current policy, changed-evidence
+requirements, rollback or reconciliation path, stop conditions and escalation points.
+For uncertain effects preserve `unknown` until reconciliation rather than promising a safe retry.
 
-- Define the user/product result and the dogfood/orchestration result together.
-- Map the dependency DAG, exact read/write/negative scopes, one-writer collision boundaries, hot
-  files, durable state, entrypoints, effective config, platform/tenant matrix, and rollback or
-  reconciliation path.
-- Define Goal → Mission → Flow → Run/Autonomous/Do relationships without forcing provider, model,
-  worker count, or concurrency. Those resolve from effective config and live capacity.
-- Preserve exact operation, invocation, causation, attempt, result, effect, receipt, evaluation,
-  finalizer, settlement, archive, restart, and recovery identities relevant to the outcome.
-- Set finite retry/FIX ceilings, changed-evidence fingerprints, time/cost bounds, stop conditions,
-  and escalation points. An unchanged failure cannot create an unbounded FIX chain.
-- Write a verification manifest that names real production surfaces and consumers. Tests are only
-  supporting checks; they are never the closure claim.
+## Actions and output
 
-## Required gates
-
-Identify owner-only approval separately for kill/cleanup, build or adapter restart during runtime,
-auth mutation, destructive action, XVerify, authenticated closure/MASTER mutation, commit, and
-push. Keep out-of-scope findings classified but unimplemented.
-
-## Output
-
-Return an execution-ready capsule: exact outcome, DAG, scopes, authority sources, config-resolved
-admission inputs, proof manifest, budgets, stop/HOLD rules, and next command surface. Planning alone
-does not create or start a Goal, Flow, Run, task, or settlement.
+Carry existing authorization forward. Identify only genuinely missing authority for destructive,
+auth, live-intervention, commit or publish actions; planning does not grant it.
+Use logged Jev for material tradeoffs, with realistic gains/losses and both abstention choices.
+Return the outcome, DAG, ownership/scopes, contract/config dependencies, proof manifest,
+budgets and stop rules, unresolved decisions and first admitted next step.
+Do not start implementation or runtime merely because the plan is ready.
