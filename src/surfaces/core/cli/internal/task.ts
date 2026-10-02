@@ -1,3 +1,4 @@
+import { hasCliAction } from '#surfaces/core/cli-kit/index.js';
 import { cliUsage } from './usage.js';
 import { ErrorRegistry, emit, loadConfig, resolveLocale, t, type ConfigLoadOptions, type ProductLayout } from '#platform/index.js';
 import { attemptIdentitySchema, type AttemptIdentity } from '#domain/index.js';
@@ -77,7 +78,7 @@ export async function taskCommand(argv: readonly string[], context: CommandConte
   const earlyLocale = resolveLocale(requestedLanguage?.startsWith('-') ? undefined : requestedLanguage, context.env);
   context.onLocale?.(earlyLocale);
   const usage = (flag?: string) => cliUsage('task', action, earlyLocale, flag);
-  if (!['execute', 'evaluate', 'accept', 'reject', 'patch-prepare', 'patch-preview', 'integration-check', 'integration-prepare', 'integration-inspect', 'integration-deliver', 'integration-adopt', 'integration-rollback', 'transcript'].includes(action ?? '')) throw usage();
+  if (!hasCliAction('task', action)) throw usage();
   const flags = action === 'patch-preview' ? ['--stat', '--diff'] : [];
   const allowed = ['evaluate', 'accept', 'reject'].includes(action ?? '') ? [...identityFlags, '--command-id', '--expected-revision'] : action === 'integration-prepare' ? [...identityFlags, '--command-id', '--proposal', '--replaces-command-id'] : action === 'integration-deliver' ? [...identityFlags, '--command-id', '--candidate-command-id'] : action === 'integration-adopt' ? [...identityFlags, '--command-id', '--delivery-command-id', '--target', '--verification-run'] : action === 'integration-rollback' ? [...identityFlags, '--command-id', '--adoption-command-id'] : action === 'integration-inspect' ? [...identityFlags, '--command-id'] : identityFlags;
   const values = new Map<string, string>(); let json = false, stat = false, diff = false;

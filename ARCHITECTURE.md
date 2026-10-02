@@ -549,6 +549,25 @@ Native runtime transport, a freshly built executable, live restart and independe
 verified evidence. Fixed architecture budgets are retained; filesystem/authority adapters and pure admission helpers
 keep composition as wiring, and previous comment-only wiring notes move to the external proof packet.
 
+### CLI help catalog (CLI-HELP, owner 2026-10-02)
+
+`surfaces/core/cli-kit` owns the typed dispatch catalog and plain-text help renderer. Each registration
+has a purpose group, an i18n summary key and a detail key; nested registrations inherit their family's
+existing execution handler. `cli` binds the handlers once, uses the catalog for dispatch, and recognizes
+help before initialization. Run/Task action admission reads this same catalog. Argument parsers, runtime
+operations, authority, JSON envelopes and exit codes remain owned by the existing handlers.
+Top-level help lists command families by purpose; developer families require `--help --all`. Details
+and registered children are exposed by `deckent <command> --help [--lang en|tr]`; common flags appear once.
+Canonical help outputs have bilingual goldens and an 80-display-column gate, and every registration's
+group, summary and detail must exist in both locales. New actions register metadata and localized details
+in this catalog (A1/A3 `run close|resume` and `task accept|reject` are registered since batch 27);
+no top-level help string is hand-edited. The `config` family keeps its lazy handler edge (terminal-render/Ink).
+Help paragraphs are authored without soft line breaks; intentional blank lines and command lists remain separate.
+Wrapping keeps bracket/angle tokens, flag-placeholder pairs and inline commands whole, and balances short prose tails.
+Sub-help renders an optional `<detail-key>.examples` message (shared by the family); absent examples are omitted.
+This is presentation discovery, not an authorization registry. Source-surface evidence does not establish
+packaged-binary or cross-platform acceptance; the lane excluded build and full verify by owner direction (batch-27 integration runs full verify).
+
 ### Operator terminal contract v1 (accepted target, partial implementation)
 
 The operator terminal is a presentation of the same typed operator actions as CLI, MCP and (later) Desktop,
@@ -2712,7 +2731,8 @@ the `task transcript` report view, SDK/MCP through the same composition. Catalog
 (read-only) / `apply_model_catalog` (destructive, idempotent by the (scope, commandId) receipt), SDK `applyModelCatalog` /
 `inspectModelCatalog`; listing needs the scoped `model-activation` `inspect` decision per channel (else `denied`); `register --seed
 <name>` reads the packaged `assets/model-catalog/<name>.json`, `--file PATH|-` an operator document. Authority unchanged from WC-R1.
-CATALOG-V3 adds `catalog` and both packaged seed names to en/tr help (i18n fixture reconciled).
+CATALOG-V3 adds `catalog` and both packaged seed names to en/tr help; CLI-HELP keeps them as a separate `models catalog --help`
+line with both locale snapshots (i18n fixture reconciled in batch 27).
 Open: terminal `/models` read-only view and the `/workers` verdict word; chat path
 onto the ledger catalog; Codex/Cursor output-side model evidence (none documented); a real Claude run showing `verified` with a helper.
 
@@ -2835,7 +2855,7 @@ onto the ledger catalog; Codex/Cursor output-side model evidence (none documente
   audit 1 (additive); runtime protocol 18, config 3, Run snapshot 1, graph 3 unchanged; error registry +1 (`RUN_POOL_HELD`).
 - **Open.** First v44 switch cannot drain (the v43 build has no hold); `drained` never becomes true while a pinned Claude attempt waits for
   an operator evaluation (use `occupancy.execution === 0` to see "nothing running"); no per-scope hold; no terminal `/pause`, no
-  `run inspect` waiting reason, global `cli.help` line not added (only `cli.help.pool`); dev-release drain integration not implemented.
+  `run inspect` waiting reason; dev-release drain integration not implemented. CLI-HELP exposes `pool` in the top-level work group.
 
 ### Patch scope classification (K6 = A; owner 2026-09-30, Jev ddbcaacd; lane Jev c93ceea4 / 4c772497 / bc205c7c)
 

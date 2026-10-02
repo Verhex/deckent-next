@@ -1,0 +1,33 @@
+Usage: deckent <command> [options]
+Getting started:
+  terminal    Open the interactive terminal
+  init        Set up an installation
+Observe:
+  monitor     Watch installations and work
+  workers     List or watch workers
+Execute work:
+  run         Create and manage Runs
+  task        Execute, evaluate and deliver Tasks
+  pool        Inspect, hold or resume a pool
+Models:
+  models      Inspect and manage models
+Approvals:
+  approval    Inspect and decide approval requests
+  policy      Inspect policy and standing grants
+Setup / Maintenance:
+  config      Inspect and change configuration
+  mcp         Manage MCP servers
+  secret      Manage stored secrets
+  toolchains  Check or update worker toolchains
+  doctor      Check installation health
+Developer:
+  inventory   Inspect recorded attempts
+  paths       Inspect installation paths
+  runtime     Manage the local runtime service
+  coding      Prepare native coding profiles
+  inference   Inspect local inference capacity
+  operation   Execute or inspect typed operations
+Global options: --json  --lang en|tr  --no-color
+Examples: deckent doctor; deckent config get
+Details: deckent <command> --help; developer commands: deckent --help --all
+No arguments on a terminal opens the interactive session. --version: version.
