@@ -282,13 +282,18 @@ izlemek yerine bağın kendisini sayıyor. Aktif kartlar, son üç günün kanı
 
 ## CLI-HELP şerit — 2026-10-02
 
-`lane/cli-help`, taban `19a6bb42` (CONFIG-SURFACE dahil): uygulandı. Katalogdan türeyen gruplu en/tr üst yardım 26 satır, en 77/tr 71 sütun;
-98 kayıtlı komut yolunda alt yardım ve golden; ortak bayraklar tek yerde, geliştirici komutları `--help --all`. Renderer/katalog `cli-kit`,
-CLI yönlendirmesi aynı handler'lara bağlı; bütçe artırılmadı. Golden kırmızı → yeşil ve grup eksik/80 sütun aşımı/tr anahtar eksik üç mutasyon dış proof'ta.
-31 dosyada 201/201 hedefli kaynak testi, typecheck, değişen TS dosyalarında ESLint ve arch kontrolü geçti; eski taskCommand uzunluk uyarısı sürüyor.
-Taban i18n-registry hataları bağımsız tekrar üretildi: 11 aile/10 beklentisi, tr CONFIG_SECRET_SECTION_REFUSED redaksiyonu. Dist yok ve native transport
-kullanılamıyor; ilgili süreç testleri başarılı sayılmadı. Build, tam verify, push ve canlı erişim yok. Sıradaki: lead exact commit/patch incelemesi,
-A1/A3 eylemlerini kayıt + en/tr ayrıntılarıyla birleştirme, ardından entegrasyon doğrulaması. Kanıt `proof/CLI-HELP-2026-10-02/review.md`.
-Teslim commit yerine dış proof içinde `changes.patch`: Git add index.lock için salt-okunur dosya sistemi hatası verdi; commit aşamasında staged dosya yoktu.
-Patch geçici taban dosyalarına uygulandı ve 25 dosyanın SHA-256 eşitliği doğrulandı.
-Bağımsız inceleme yok; PASS değildir.
+`lane/cli-help`: Fable'ın `61e88cef` için küçük **REVISE** bulguları owner kapsamıyla uygulandı.
+terminal/inference/operation/pool kaynak metinlerinde yumuşak kırımlar kaldırıldı; boş satırlar ve komut listeleri korunur.
+Sarımı `[...]`, `<...>`, bayrak-yer tutucu çiftleri ve satır içi komutlar bölünmeden yapar; kısa paragraf kuyrukları dengelenir.
+tr modelsCatalog/modelsBinding yer tutucuları en ile eş sözdiziminde; alt yardımda `<detail-key>.examples` varsa görünür,
+yoksa örnek yoktur. Terminal ailesinin gerçek örnekleri eklendi; dört kullanılmayan başlık anahtarı silindi.
+98 yol × 2 dilin yenilenen golden farklarının tamamı uygulayıcı tarafından okundu; üst yardım golden'ları değişmedi.
+TDD ilk koşu 7 kırmızı/16 yeşil; örnek var/yok negatifi ayrıca kaydedildi. Son hedefli koşu 6 dosya **48/48**, atlanan yok;
+typecheck, değişen TS ESLint, arch **0 ihlal/0 uyarı**, memory manifest ve diff kontrolü temiz. i18n metin fixture'ı uzlaştırıldı.
+Kanıt: `proof/CLI-HELP-2026-10-02/review.md` **Revise**; terminal/pool/models catalog için en+tr önce/sonra çıktıları içerir.
+Sınırlar: paylaşılan action özetleri ve bazı alt yolların aile synopsis'i sürer; taban i18n-registry'nin iki bilinen açığı
+bu düzeltmede tekrar koşulmadı. Build/tam verify, paketli binary, Docker yürütme, diğer worktree ve canlı erişim yok.
+Sıradaki: exact revise commit/patch için bağımsız delta incelemesi; lead A1/A3 birleşmesi ve entegrasyon doğrulaması.
+Teslim `proof/CLI-HELP-2026-10-02/revise.patch` + `revise-diff-stat.txt`: Git add worktree index.lock için
+`Read-only file system` verdi; commit/staging oluşmadı.
+Bu düzeltme için **Bağımsız inceleme yok; PASS değildir**. `61e88cef` Fable REVISE kararı tarihsel kanıt olarak korunur.

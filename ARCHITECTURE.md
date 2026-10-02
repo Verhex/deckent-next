@@ -526,6 +526,9 @@ and registered children are exposed by `deckent <command> --help [--lang en|tr]`
 Canonical help outputs have bilingual goldens and an 80-display-column gate, and every registration's
 group, summary and detail must exist in both locales. New actions (including the separate A1/A3 lane)
 register metadata and localized details in this catalog; no top-level help string is hand-edited.
+Help paragraphs are authored without soft line breaks; intentional blank lines and command lists remain separate.
+Wrapping keeps bracket/angle tokens, flag-placeholder pairs and inline commands whole, and balances short prose tails.
+Sub-help renders an optional `<detail-key>.examples` message (shared by the family); absent examples are omitted.
 This is presentation discovery, not an authorization registry. Source-surface evidence does not establish
 packaged-binary or cross-platform acceptance; this lane excludes build and full verify by owner direction.
 

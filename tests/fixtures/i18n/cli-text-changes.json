@@ -222,7 +222,7 @@
     },
     "cli.help.inference": {
       "before": "deckent inference plan [--profile <id>] [--json] [--lang en|tr]\n  inference budget [--profile <id>] [--reserve-id <id> --reserve-role brain|worker|auditor\n    --reserve-tokens <n>] [--json]\nDerives vLLM launch arguments and a capacity estimate from configured inference_serving\n    profiles. Deckent does not start or probe the server; launch it with your own supervisor.",
-      "after": "deckent inference plan [--profile <id>] [--json] [--lang en|tr]\n  inference budget [--profile <id>] [--reserve-id <id> --reserve-role brain|worker|auditor\n    --reserve-tokens <n>] [--json]\n  inference metrics [--profile <id>] [--json] [--lang en|tr]\nDerives vLLM launch arguments and a capacity estimate from configured inference_serving\n    profiles. metrics reads a loopback /metrics URL using that profile's metrics limits and\n    does not start the server."
+      "after": "deckent inference plan [--profile <id>] [--json] [--lang en|tr]\n  inference budget [--profile <id>] [--reserve-id <id> --reserve-role brain|worker|auditor --reserve-tokens <n>] [--json]\n  inference metrics [--profile <id>] [--json] [--lang en|tr]\nDerives vLLM launch arguments and a capacity estimate from configured inference_serving profiles. metrics reads a loopback /metrics URL using that profile's metrics limits and does not start the server."
     },
     "cli.help.task": {
       "before": "Usage: deckent task <action>\n  execute --scope <id> --run <id> --task <id> --attempt <id> --generation <n>\n    --layout-revision <id> [--json] [--lang en|tr] [--no-color]\n  evaluate --scope <id> --run <id> --task <id> --attempt <id> --generation <n>\n    --layout-revision <id> --command-id <id> --expected-revision <n> [--json]\n    [--lang en|tr] [--no-color]\nExecution records terminal process evidence; evaluation decides Task acceptance\n    from recorded evidence. A terminal result alone is not acceptance.\n  task patch-prepare|patch-preview --scope <id> --run <id> --task <id>\n    --attempt <id> --generation <n> --layout-revision <id> [--json]\n  task integration-check|integration-prepare --scope <id> --run <id>\n    --task <id> --attempt <id> --generation <n> --layout-revision <id>\n    [--json] [--lang en|tr]\n  integration-prepare: --command-id <id> --proposal <code>\n  task integration-inspect --scope <id> --run <id> --task <id>\n    --attempt <id> --generation <n> --layout-revision <id>\n    --command-id <id> [--json]",
@@ -230,7 +230,7 @@
     },
     "cli.help.terminal": {
       "before": "deckent terminal status [--json] [--lang en|tr]\n  terminal chat-plan [--lang en|tr]\n  terminal snapshot [--lang en|tr]\n  terminal session --scope <id> [--lang en|tr]\n  terminal workline --scope <id> [--lang en|tr] [--no-color]\nChat turns are governed model invocations through the local runtime service (`deckent runtime\n    serve`) for the model named in `terminal.chat`. session is line mode and also reads piped\n    input; workline needs an interactive terminal on stdin and stdout.",
-      "after": "deckent [terminal] [--scope <id>] [--full-access]   interactive terminal (same as `terminal workline`)\n  terminal status [--json] [--lang en|tr]\n  terminal chat-plan [--lang en|tr]\n  terminal snapshot [--lang en|tr]\n  terminal session [--scope <id>] [--lang en|tr]\n  terminal workline [--scope <id>] [--lang en|tr] [--no-color] [--full-access]\nChat turns are governed model invocations through the local runtime service (`deckent runtime\n    serve`) for the model named in `terminal.chat`. session is line mode and also reads piped\n    input; workline needs an interactive terminal on stdin and stdout.\n    The scope defaults to `terminal.scopeId`. When no runtime service is running, the terminal\n    starts one in the background; it keeps running after exit (`deckent runtime shutdown`).\n    --full-access opens the session in full access (tool calls run without asking; Deckent's own\n    state, policy and credentials stay closed); it needs a company grant and cannot be switched\n    into from inside a session."
+      "after": "deckent [terminal] [--scope <id>] [--full-access]   interactive terminal (same as `terminal workline`)\n  terminal status [--json] [--lang en|tr]\n  terminal chat-plan [--lang en|tr]\n  terminal snapshot [--lang en|tr]\n  terminal session [--scope <id>] [--lang en|tr]\n  terminal workline [--scope <id>] [--lang en|tr] [--no-color] [--full-access]\nChat turns are governed model invocations through the local runtime service (`deckent runtime serve`) for the model named in `terminal.chat`. session is line mode and also reads piped input; workline needs an interactive terminal on stdin and stdout.\n\nThe scope defaults to `terminal.scopeId`. When no runtime service is running, the terminal starts one in the background; it keeps running after exit (`deckent runtime shutdown`).\n\n--full-access opens the session in full access (tool calls run without asking; Deckent's own state, policy and credentials stay closed); it needs a company grant and cannot be switched into from inside a session."
     },
     "terminal.status.hint": {
       "before": "Line mode: `deckent terminal session --scope <id>`. Rich view: `deckent terminal workline --scope <id>`.",
@@ -255,6 +255,30 @@
     "cli.monitor.help": {
       "before": "monitor [--once|--json] [--install <id>] [--scope <id>] [--lang en|tr] [--no-color]\nWatch every observed install in one place: Runs and why they are stuck, workers, approvals waiting for you, pools and builds.\nOn a terminal it opens a fullscreen view refreshed every inspection.workers.heartbeatMs (q quits, ? shows keys).\n--once prints one plain-text snapshot (also when piped); --json prints the snapshot as JSON. Observe only.",
       "after": "monitor [--once|--json] [--install <id>] [--scope <id>] [--lang en|tr] [--no-color]\nWatch every observed install in one place: Runs and why they are stuck, workers, approvals waiting for you, pools and builds.\nOn a terminal it opens a fullscreen view refreshed every inspection.workers.heartbeatMs (q quits, ? shows keys).\n--once prints one plain-text snapshot (also when piped); --json prints the snapshot as JSON. Observe only.\nConfig: tab 8 reads the current project configuration; --config [--once|--json] prints it without worker reads."
+    },
+    "cli.help.pool": {
+      "before": "Usage: deckent pool <action>\n  status [--scope <id>] [--pool <id>] [--json] [--lang en|tr]\n  hold|resume [--scope <id>] [--pool <id>] [--command-id <id>] [--reason <text>]\n    [--json] [--lang en|tr]\nWhile a pool is held no new task is reserved; running work finishes and is\n    evaluated; Run admission stays open; stop running work with run cancel.\n    hold/resume need installation-level authority (pool hold|resume over all\n    scopes). --pool defaults to the admission pool, --scope to terminal.scopeId.",
+      "after": "Usage: deckent pool <action>\n  status [--scope <id>] [--pool <id>] [--json] [--lang en|tr]\n  hold|resume [--scope <id>] [--pool <id>] [--command-id <id>] [--reason <text>] [--json] [--lang en|tr]\nWhile a pool is held no new task is reserved; running work finishes and is evaluated; Run admission stays open; stop running work with run cancel. hold/resume need installation-level authority (pool hold|resume over all scopes). --pool defaults to the admission pool, --scope to terminal.scopeId."
+    },
+    "cli.help.heading.arguments": {
+      "before": "Arguments:",
+      "after": null
+    },
+    "cli.help.heading.global_options": {
+      "before": "Global Options:",
+      "after": null
+    },
+    "cli.help.heading.options": {
+      "before": "Options:",
+      "after": null
+    },
+    "cli.help.heading.usage": {
+      "before": "Usage:",
+      "after": null
+    },
+    "cli.operation.help": {
+      "before": "Usage: deckent operation execute|compensate --input <file|-> [--wait <ms>] [--json] [--lang en|tr]\n  operation inspect --scope <id> --command-id <id> [--json]\nRuns a catalog operation (operations config) against its declared target: conditional write on the\n    expected record version, idempotency key, intent recorded before the effect. Unknown outcomes are not\n    retried; compensation is a new operation. An operation that requires approval reports the open approval\n    request (status approval-pending) and sends nothing; decide it with `deckent approval decide`, then resubmit\n    the same command. --wait polls the decision up to the given milliseconds and resubmits once after an allow.",
+      "after": "Usage: deckent operation execute|compensate --input <file|-> [--wait <ms>] [--json] [--lang en|tr]\n  operation inspect --scope <id> --command-id <id> [--json]\nRuns a catalog operation (operations config) against its declared target: conditional write on the expected record version, idempotency key, intent recorded before the effect. Unknown outcomes are not retried; compensation is a new operation. An operation that requires approval reports the open approval request (status approval-pending) and sends nothing; decide it with `deckent approval decide`, then resubmit the same command. --wait polls the decision up to the given milliseconds and resubmits once after an allow."
     }
   },
   "tr": {
@@ -588,7 +612,7 @@
     },
     "cli.help.inference": {
       "before": "deckent inference plan [--profile <id>] [--json] [--lang en|tr]\n  inference budget [--profile <id>] [--reserve-id <id> --reserve-role brain|worker|auditor\n    --reserve-tokens <n>] [--json]\nYapılandırılmış inference_serving profillerinden vLLM başlatma argümanlarını ve kapasite\n    tahminini türetir. Deckent sunucuyu başlatmaz veya yoklamaz; kendi süpervizörünüzle başlatın.",
-      "after": "deckent inference plan [--profile <id>] [--json] [--lang en|tr]\n  inference budget [--profile <id>] [--reserve-id <id> --reserve-role brain|worker|auditor\n    --reserve-tokens <n>] [--json]\n  inference metrics [--profile <id>] [--json] [--lang en|tr]\nYapılandırılmış inference_serving profillerinden vLLM başlatma argümanlarını ve kapasite\n    tahminini türetir. metrics, profildeki metrics sınırlarıyla yalnız loopback /metrics okur;\n    sunucuyu başlatmaz."
+      "after": "deckent inference plan [--profile <id>] [--json] [--lang en|tr]\n  inference budget [--profile <id>] [--reserve-id <id> --reserve-role brain|worker|auditor --reserve-tokens <n>] [--json]\n  inference metrics [--profile <id>] [--json] [--lang en|tr]\nYapılandırılmış inference_serving profillerinden vLLM başlatma argümanlarını ve kapasite tahminini türetir. metrics, profildeki metrics sınırlarıyla yalnız loopback /metrics okur; sunucuyu başlatmaz."
     },
     "cli.help.task": {
       "before": "Kullanım: deckent task <eylem>\n  execute --scope <id> --run <id> --task <id> --attempt <id> --generation <n>\n    --layout-revision <id> [--json] [--lang en|tr] [--no-color]\n  evaluate --scope <id> --run <id> --task <id> --attempt <id> --generation <n>\n    --layout-revision <id> --command-id <id> --expected-revision <n> [--json]\n    [--lang en|tr] [--no-color]\nYürütme terminal süreç kanıtını kaydeder; değerlendirme kaydedilen kanıta göre\n    görevin kabulüne karar verir. Terminal sonucu tek başına kabul değildir.\n  task patch-prepare|patch-preview --scope <id> --run <id> --task <id>\n    --attempt <id> --generation <n> --layout-revision <id> [--json]\n  task integration-check|integration-prepare --scope <id> --run <id>\n    --task <id> --attempt <id> --generation <n> --layout-revision <id>\n    [--json] [--lang en|tr]\n  integration-prepare: --command-id <id> --proposal <code>\n  task integration-inspect --scope <id> --run <id> --task <id>\n    --attempt <id> --generation <n> --layout-revision <id>\n    --command-id <id> [--json]",
@@ -596,7 +620,7 @@
     },
     "cli.help.terminal": {
       "before": "deckent terminal status [--json] [--lang en|tr]\n  terminal chat-plan [--lang en|tr]\n  terminal snapshot [--lang en|tr]\n  terminal session --scope <id> [--lang en|tr]\n  terminal workline --scope <id> [--lang en|tr] [--no-color]\nSohbet turları, `terminal.chat` içinde adı verilen model için yerel runtime servisi (`deckent\n    runtime serve`) üzerinden yönetilen model çağrılarıdır. session satır modudur ve pipe\n    girdisini de okur; workline stdin ve stdout için etkileşimli terminal ister.",
-      "after": "deckent [terminal] [--scope <id>] [--full-access]   etkileşimli terminal (`terminal workline` ile aynı)\n  terminal status [--json] [--lang en|tr]\n  terminal chat-plan [--lang en|tr]\n  terminal snapshot [--lang en|tr]\n  terminal session [--scope <id>] [--lang en|tr]\n  terminal workline [--scope <id>] [--lang en|tr] [--no-color] [--full-access]\nSohbet turları, `terminal.chat` içinde adı verilen model için yerel runtime servisi (`deckent\n    runtime serve`) üzerinden yönetilen model çağrılarıdır. session satır modudur ve pipe\n    girdisini de okur; workline stdin ve stdout için etkileşimli terminal ister.\n    Scope varsayılanı `terminal.scopeId`. Çalışan runtime servisi yoksa terminal onu arka planda\n    başlatır; çıkıştan sonra da çalışır (`deckent runtime shutdown`).\n    --full-access oturumu tam erişimle açar (araç çağrıları sormadan çalışır; Deckent'in kendi\n    durumu, policy ve kimlik bilgileri kapalı kalır); şirket grant'ı ister ve oturum içinden\n    geçilemez."
+      "after": "deckent [terminal] [--scope <id>] [--full-access]   etkileşimli terminal (`terminal workline` ile aynı)\n  terminal status [--json] [--lang en|tr]\n  terminal chat-plan [--lang en|tr]\n  terminal snapshot [--lang en|tr]\n  terminal session [--scope <id>] [--lang en|tr]\n  terminal workline [--scope <id>] [--lang en|tr] [--no-color] [--full-access]\nSohbet turları, `terminal.chat` içinde adı verilen model için yerel runtime servisi (`deckent runtime serve`) üzerinden yönetilen model çağrılarıdır. session satır modudur ve pipe girdisini de okur; workline stdin ve stdout için etkileşimli terminal ister.\n\nScope varsayılanı `terminal.scopeId`. Çalışan runtime servisi yoksa terminal onu arka planda başlatır; çıkıştan sonra da çalışır (`deckent runtime shutdown`).\n\n--full-access oturumu tam erişimle açar (araç çağrıları sormadan çalışır; Deckent'in kendi durumu, policy ve kimlik bilgileri kapalı kalır); şirket grant'ı ister ve oturum içinden geçilemez."
     },
     "terminal.status.hint": {
       "before": "Satır modu: `deckent terminal session --scope <id>`. Zengin görünüm: `deckent terminal workline --scope <id>`.",
@@ -621,6 +645,38 @@
     "cli.monitor.help": {
       "before": "monitor [--once|--json] [--install <id>] [--scope <id>] [--lang en|tr] [--no-color]\nGözlenen tüm kurulumları tek yerden izleyin: Run'lar ve neden takıldıkları, worker'lar, sizi bekleyen onaylar, havuzlar ve build'ler.\nTerminalde inspection.workers.heartbeatMs aralıkla yenilenen tam ekran görünüm açar (q çıkar, ? tuşları gösterir).\n--once tek bir düz metin görüntü basar (pipe'ta da); --json görüntüyü JSON olarak basar. Yalnız gözlem.",
       "after": "monitor [--once|--json] [--install <id>] [--scope <id>] [--lang en|tr] [--no-color]\nGözlenen tüm kurulumları tek yerden izleyin: Run'lar ve neden takıldıkları, worker'lar, sizi bekleyen onaylar, havuzlar ve build'ler.\nTerminalde inspection.workers.heartbeatMs aralıkla yenilenen tam ekran görünüm açar (q çıkar, ? tuşları gösterir).\n--once tek bir düz metin görüntü basar (pipe'ta da); --json görüntüyü JSON olarak basar. Yalnız gözlem.\nConfig: 8. sekme geçerli projenin yapılandırmasını okur; --config [--once|--json] worker okumadan basar."
+    },
+    "cli.help.pool": {
+      "before": "Kullanım: deckent pool <eylem>\n  status [--scope <id>] [--pool <id>] [--json] [--lang en|tr]\n  hold|resume [--scope <id>] [--pool <id>] [--command-id <id>] [--reason <metin>]\n    [--json] [--lang en|tr]\nHavuz bekletilirken yeni görev ayrılmaz; çalışan işler biter ve\n    değerlendirilir; Run kabulü açık kalır; çalışan işi run cancel durdurur.\n    hold/resume kurulum düzeyi yetki ister (tüm kapsamlarda pool hold|resume).\n    --pool varsayılanı kabul havuzu, --scope varsayılanı terminal.scopeId.",
+      "after": "Kullanım: deckent pool <eylem>\n  status [--scope <id>] [--pool <id>] [--json] [--lang en|tr]\n  hold|resume [--scope <id>] [--pool <id>] [--command-id <id>] [--reason <metin>] [--json] [--lang en|tr]\nHavuz bekletilirken yeni görev ayrılmaz; çalışan işler biter ve değerlendirilir; Run kabulü açık kalır; çalışan işi run cancel durdurur. hold/resume kurulum düzeyi yetki ister (tüm kapsamlarda pool hold|resume). --pool varsayılanı kabul havuzu, --scope varsayılanı terminal.scopeId."
+    },
+    "cli.help.heading.arguments": {
+      "before": "Argümanlar:",
+      "after": null
+    },
+    "cli.help.heading.global_options": {
+      "before": "Genel Seçenekler:",
+      "after": null
+    },
+    "cli.help.heading.options": {
+      "before": "Seçenekler:",
+      "after": null
+    },
+    "cli.help.heading.usage": {
+      "before": "Kullanım:",
+      "after": null
+    },
+    "cli.help.modelsBinding": {
+      "before": "Kullanım: deckent models binding --provider <id> --provider-version SÜRÜM --model <id> --model-version SÜRÜM [--json] [--lang DİL] [--no-color]\nTam native model tanımını ve SHA-256 içerik bağını incele. Modeli etkinleştirmez veya yürütme yetkisi vermez.",
+      "after": "Kullanım: deckent models binding --provider <id> --provider-version <sürüm> --model <id> --model-version <sürüm> [--json] [--lang <locale>] [--no-color]\nTam native model tanımını ve SHA-256 içerik bağını incele. Modeli etkinleştirmez veya yürütme yetkisi vermez."
+    },
+    "cli.help.modelsCatalog": {
+      "before": "Kullanım: deckent models catalog list --scope KİMLİK [--channel KİMLİK] [--json] [--lang DİL]\n          deckent models catalog register --scope KİMLİK --command-id KİMLİK (--seed AD | --file YOL|-) [--json]\n          deckent models catalog activate|deactivate --scope KİMLİK --channel KİMLİK [--model TAM_KİMLİK] --command-id KİMLİK --expected-revision <n> [--json]\nWorker Run'ları için ledger model kataloğu: kanallar ve tam model kimlikleri; yaşam döngüsü, CLI asgarisi ve kapsam başına etkinleştirme. register kurulum geneli kayıtları yazar ve tüm kapsamları kapsayan bir model-activation yetkisi ister; activate/deactivate tek kapsamı değiştirir. --seed paketle gelen bir belgeyi okur (claude-cli-subscription). Aynı komut kimliği tekrarlanınca makbuzu döner.",
+      "after": "Kullanım: deckent models catalog list --scope <id> [--channel <id>] [--json] [--lang <locale>]\n       deckent models catalog register --scope <id> --command-id <id> (--seed <ad> | --file <dosya|->) [--json]\n       deckent models catalog activate|deactivate --scope <id> --channel <id> [--model <tam_id>] --command-id <id> --expected-revision <n> [--json]\nWorker Run'ları için ledger model kataloğu: kanallar ve tam model kimlikleri; yaşam döngüsü, CLI asgarisi ve kapsam başına etkinleştirme. register kurulum geneli kayıtları yazar ve tüm kapsamları kapsayan bir model-activation yetkisi ister; activate/deactivate tek kapsamı değiştirir. --seed paketle gelen bir belgeyi okur (claude-cli-subscription). Aynı komut kimliği tekrarlanınca makbuzu döner."
+    },
+    "cli.operation.help": {
+      "before": "Kullanım: deckent operation execute|compensate --input <dosya|-> [--wait <ms>] [--json] [--lang en|tr]\n  operation inspect --scope <id> --command-id <id> [--json]\nKatalog operasyonunu (operations yapılandırması) beyan edilen hedefine karşı çalıştırır: beklenen kayıt\n    sürümünde koşullu yazım, idempotency anahtarı, etkiden önce kaydedilen niyet. Belirsiz sonuçlar yeniden\n    denenmez; telafi yeni bir operasyondur. Onay gerektiren operasyon açık onay isteğini bildirir (durum\n    approval-pending) ve hiçbir şey göndermez; `deckent approval decide` ile karar verin, sonra aynı komutu\n    yeniden gönderin. --wait kararı verilen milisaniye kadar yoklar ve izin sonrası bir kez yeniden gönderir.",
+      "after": "Kullanım: deckent operation execute|compensate --input <dosya|-> [--wait <ms>] [--json] [--lang en|tr]\n  operation inspect --scope <id> --command-id <id> [--json]\nKatalog operasyonunu (operations yapılandırması) beyan edilen hedefine karşı çalıştırır: beklenen kayıt sürümünde koşullu yazım, idempotency anahtarı, etkiden önce kaydedilen niyet. Belirsiz sonuçlar yeniden denenmez; telafi yeni bir operasyondur. Onay gerektiren operasyon açık onay isteğini bildirir (durum approval-pending) ve hiçbir şey göndermez; `deckent approval decide` ile karar verin, sonra aynı komutu yeniden gönderin. --wait kararı verilen milisaniye kadar yoklar ve izin sonrası bir kez yeniden gönderir."
     }
   }
 }

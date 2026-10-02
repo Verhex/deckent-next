@@ -1,5 +1,6 @@
 # Changelog
 
+- FIX (CLI-HELP REVISE): sub-help reflows terminal/inference/operation/pool paragraphs, preserves whole syntax groups and avoids short prose tails; Turkish model catalog/binding placeholders match English syntax. Only family-specific examples appear; unused heading keys removed.
 - CLI-HELP: grouped English/Turkish top-level help (26 lines), common flags once, examples and `--help --all` for developer commands. Dispatch catalog supplies summaries and sub-help for all 98 registered paths; model catalog and pool are discoverable. Execution handlers and JSON contracts are unchanged; targeted source checks only, independent review pending.
 
 - MCP-NO-DECIDE (owner 2026-10-02): removed the MCP approval decision tool for both allow and deny; approval inspection remains, and CLI/SDK/terminal decision paths keep their existing authorization.

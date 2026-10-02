@@ -14,17 +14,24 @@ export function registerCliCommands<C>(handlers: Readonly<Record<CliCommandName,
   return CLI_CATALOG.flatMap(spec => visit(spec, [], handlers[spec.name]));
 }
 
-/** Help is plain text; en/tr have no double-width glyphs. Wrap without dropping words. */
+/** Catalog newlines are intentional boundaries; author flowing prose as one source line.
+ * Keep syntax groups and inline commands whole; en/tr have no double-width glyphs. */
 export function wrapHelp(text: string, width = 80): string {
   return text.split('\n').flatMap(line => {
     if ([...line].length <= width) return [line.trimEnd()];
-    const result: string[] = []; let current = '';
     const indent = line.match(/^\s*/)?.[0] ?? '';
-    for (const word of line.trim().split(/\s+/)) {
-      if (current && [...current, ' ', ...word].length > width) { result.push(current); current = indent + word; }
-      else current += (current ? ' ' : indent) + word;
+    const rows: string[][] = [[]];
+    const length = (words: readonly string[]) => [...indent, ...words.join(' ')].length;
+    const wordCount = (words: readonly string[]) => words.join(' ').trim().split(/[\s|]+/).length;
+    for (const token of line.trim().match(/(?:\[[^\]]*\]|--[\w-]+ +<[^>]*>|<[^>]*>|`[^`]*`|\S)+/g) ?? []) {
+      const current = rows.at(-1)!;
+      if (current.length && length([...current, token]) > width) rows.push([token]);
+      else current.push(token);
     }
-    result.push(current); return result;
+    const last = rows.at(-1)!, previous = rows.at(-2);
+    while (previous && wordCount(last) <= 3 && wordCount(previous.slice(0, -1)) > 3
+      && length([previous.at(-1)!, ...last]) <= width) last.unshift(previous.pop()!);
+    return rows.map(words => indent + words.join(' '));
   }).join('\n');
 }
 
@@ -40,9 +47,10 @@ export function renderTopHelp(locale: Locale = resolveLocale(), all = false, cat
 }
 
 export function renderCommandHelp(command: CliCommandSpec, locale: Locale): string {
+  const examples = MESSAGE_REGISTRY.catalogs[locale][`${command.detail}.examples`];
   return wrapHelp([message(command.detail, locale).replace(/ ?\[--(?:json|no-color|lang (?:en\|tr|<locale>))\]/g, '').replace(/\n +(?=\n)/g, ''), '', message(command.summary, locale),
     ...(command.children?.length ? [t('cli.help.heading.commands', {}, locale), ...command.children.map(child => `  ${child.name.padEnd(22)}${message(child.summary, locale)}`)] : []),
-    '', t('cli.help.common', {}, locale), t('cli.help.output', {}, locale), t('cli.help.examples', {}, locale)].join('\n'));
+    '', t('cli.help.common', {}, locale), t('cli.help.output', {}, locale), ...(examples ? [examples] : [])].join('\n'));
 }
 
 /** Recognize only a help request. Extra execution flags still reach the unchanged parser. */

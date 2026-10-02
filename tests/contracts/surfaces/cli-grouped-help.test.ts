@@ -15,7 +15,7 @@ it.each(['en', 'tr'] as const)('renders the approved compact %s golden through m
 });
 
 import { CLI_COMMANDS } from '#surfaces/core/cli/index.js';
-import { CLI_CATALOG, HELP_GROUPS, renderTopHelp, registerCliCommands } from '#surfaces/core/cli-kit/index.js';
+import { CLI_CATALOG, HELP_GROUPS, renderTopHelp, renderCommandHelp, registerCliCommands, wrapHelp } from '#surfaces/core/cli-kit/index.js';
 import { MESSAGE_REGISTRY } from '#platform/index.js';
 import { displayWidth } from '#surfaces/core/terminal-composer/index.js';
 
@@ -105,4 +105,54 @@ it('keeps the same command inventory in both localized golden sets', () => {
   const load = (locale: string) => JSON.parse(readFileSync(new URL(`../../fixtures/cli-help/commands-${locale}.json`, import.meta.url), 'utf8')) as Record<string, string>;
   expect(Object.keys(load('en'))).toEqual(Object.keys(load('tr')));
   expect(Object.keys(load('en'))).toEqual(CLI_COMMANDS.map(command => command.path.join(' ')));
+});
+
+it.each(['en', 'tr'] as const)('keeps %s syntax whole and creates no short wrapping orphans', language => {
+  const catalog = MESSAGE_REGISTRY.catalogs[language];
+  for (const command of CLI_COMMANDS) {
+    // Original short headings, summaries and complete command lines are intentional.
+    const sourceLines = new Set([
+      ...catalog[command.detail]!.split('\n').map(line => line.replace(/ ?\[--(?:json|no-color|lang [^\]]+)\]/g, '').trim()),
+      catalog[command.summary], catalog['cli.help.heading.commands'],
+      ...(command.children ?? []).map(child => `${child.name} ${catalog[child.summary]}`),
+    ]);
+    for (const line of renderCommandHelp(command, language).split('\n')) {
+      const label = `${language} ${command.path.join(' ')}: ${line}`;
+      expect(line, label).not.toMatch(/\[[^\]]*$|<[^>]*$/);
+      // Complete syntax-only continuations (e.g. [--reason <text>]) are not prose orphans.
+      const syntaxOnly = /^(?:\[[^\]]+\]|--[\w-]+|<[^>]+>)(?:\s+(?:\[[^\]]+\]|--[\w-]+|<[^>]+>))*$/.test(line.trim());
+      if (!syntaxOnly && line.trim() && line.trim().split(/[\s|]+/).length <= 3) expect(sourceLines.has(line.trim().replace(/\s+/g, ' ')), label).toBe(true);
+    }
+  }
+});
+
+it('preserves intentional blank lines and list items while keeping tokens and prose readable', () => {
+  expect(wrapHelp('First paragraph.\n\n  - First item\n  - Second item')).toBe('First paragraph.\n\n  - First item\n  - Second item');
+  const output = wrapHelp('Use the pool with [--reason <some text>] to explain why it should pause.', 45);
+  expect(output).toContain('[--reason <some text>]');
+  expect(output.split('\n').every(line => line.trim().split(/\s+/).length > 3)).toBe(true);
+  expect(output.split(/\s+/).join(' ')).toBe('Use the pool with [--reason <some text>] to explain why it should pause.');
+});
+
+it.each(['cli.help.modelsCatalog', 'cli.help.modelsBinding'] as const)('keeps en/tr synopsis syntax in parity for %s', key => {
+  const syntax = (text: string) => text.split('\n').filter(line => line.includes('deckent '))
+    .map(line => line.replace(/^[^:]+: /, '').trim().replace(/<[^>]+>/g, '<value>'));
+  expect(syntax(MESSAGE_REGISTRY.catalogs.tr[key]!)).toEqual(syntax(MESSAGE_REGISTRY.catalogs.en[key]!));
+});
+
+it.each(['en', 'tr'] as const)('uses only command-specific examples in %s sub-help', language => {
+  for (const command of CLI_COMMANDS) expect(renderCommandHelp(command, language)).not.toContain(MESSAGE_REGISTRY.catalogs[language]['cli.help.examples']);
+});
+
+it.each(['en', 'tr'] as const)('shows the terminal-specific example in %s and omits absent examples', language => {
+  const terminal = CLI_COMMANDS.find(command => command.path.join(' ') === 'terminal')!;
+  expect(renderCommandHelp(terminal, language)).toContain('deckent terminal status');
+  const pool = CLI_COMMANDS.find(command => command.path.join(' ') === 'pool')!;
+  expect(renderCommandHelp(pool, language)).not.toMatch(/Examples:|Örnekler:/);
+});
+
+it('removes unused help headings in both locales', () => {
+  for (const language of ['en', 'tr'] as const) for (const heading of ['arguments', 'global_options', 'options', 'usage']) {
+    expect(MESSAGE_REGISTRY.catalogs[language]).not.toHaveProperty(`cli.help.heading.${heading}`);
+  }
 });
