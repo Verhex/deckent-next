@@ -66,7 +66,7 @@ describe.skipIf(process.platform !== 'linux')('agent scratch area through the ru
     const client = f.client(), events: AgentTurnStreamEvent[] = [], pending: Promise<unknown>[] = [];
     await client.chatTurn(turn('turn-ask', 'session-3'), event => {
       events.push(event);
-      if (event.kind === 'approval.requested') pending.push(client.decideApproval({ schemaVersion: 1, scopeId: 'scope', approvalId: event.approvalId,
+      if (event.kind === 'approval.requested') pending.push(client.decideApproval({ schemaVersion: 1, scopeId: 'scope', approvalId: event.approvalId, decisionCapability: event.decisionCapability,
         commandId: 'allow-scratch', expectedRevision: event.revision, decision: 'allow', reason: 'Fine' }));
     });
     await Promise.all(pending);
@@ -168,7 +168,7 @@ describe.skipIf(process.platform !== 'linux')('agent scratch area: shell, retent
         asked.push(event.summary);
         // A low-risk read (the environment) asks in every mode (allowed once); a path in another area asks (denied).
         const allow = !event.summary.includes('theirs');
-        pending.push(client.decideApproval({ schemaVersion: 1, scopeId: 'scope', approvalId: event.approvalId, commandId: `decide-${asked.length}`,
+        pending.push(client.decideApproval({ schemaVersion: 1, scopeId: 'scope', approvalId: event.approvalId, decisionCapability: event.decisionCapability, commandId: `decide-${asked.length}`,
           expectedRevision: event.revision, decision: allow ? 'allow' : 'deny', reason: allow ? 'Fine' : 'No' }));
       });
       await Promise.all(pending);

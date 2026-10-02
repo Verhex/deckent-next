@@ -1,4 +1,4 @@
-import { approvalListSchema, approvalQuerySchema, approvalRenewalSchema, approvalCommandSchema } from '#engine/index.js';
+import { approvalListSchema, approvalQuerySchema, approvalRenewalSchema } from '#engine/index.js';
 import { boundedToolDelivery, completeToolResult, jsonToolResult, modelToolDelivery, toolResultFits } from './delivery.js';
 import { operationToolDefinitions } from './operation-tools.js';
 import { modelActivationQuerySchema, modelActivationCommandSchema, modelCatalogCommandSchema, modelCatalogQuerySchema, modelInvocationCancellationCommandSchema, modelInvocationCommandSchema, modelInvocationPurgeCommandSchema, modelInvocationQuerySchema, providerSpendAccountQuerySchema, providerSpendAuditCommandInputSchema, providerSpendAuditCommandSchema,
@@ -19,7 +19,6 @@ export interface McpApplications {
   renewApproval?(input: unknown, delivery?: RuntimeServiceDelivery): Promise<unknown>;
   listApprovals?(input: unknown, delivery?: RuntimeServiceDelivery): Promise<unknown>;
   inspectApproval?(input: unknown, delivery?: RuntimeServiceDelivery): Promise<unknown>;
-  decideApproval?(input: unknown, delivery?: RuntimeServiceDelivery): Promise<unknown>;
   inspectModelActivation?(query: ModelActivationQuery): Promise<ModelActivationInspection>;
   admitModelActivation?(command: ModelActivationCommand): Promise<ModelActivationResult>;
   inspectModelCatalog?(query: ModelCatalogQuery): Promise<ModelCatalogInspection>;
@@ -84,10 +83,6 @@ export function createMcpServer(applications: McpApplications, limits: McpLimits
   if (inspectApproval) definitions.push({ readOnly: true, destructive: false, idempotent: true, openWorld: false, name: 'inspect_approval',
     description: t('mcp.tool.inspectApproval', {}, locale), schema: approvalQuerySchema, boundedDelivery: true,
     invoke: (input, delivery) => inspectApproval.call(applications, approvalQuerySchema.parse(input), delivery) });
-  const decideApproval = applications.decideApproval;
-  if (decideApproval) definitions.push({ readOnly: false, destructive: false, idempotent: true, openWorld: false, name: 'decide_approval',
-    description: t('mcp.tool.decideApproval', {}, locale), schema: approvalCommandSchema, boundedDelivery: true,
-    invoke: (input, delivery) => decideApproval.call(applications, approvalCommandSchema.parse(input), delivery) });
   const inspectDeclaredModels = applications.inspectDeclaredModels;
   if (inspectDeclaredModels) definitions.push({ readOnly: true, destructive: false, idempotent: true, name: 'list_declared_models',
     description: t('mcp.tool.listDeclaredModels', {}, locale), schema: z.object({}).strict(),

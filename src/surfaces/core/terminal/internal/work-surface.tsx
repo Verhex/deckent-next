@@ -29,19 +29,18 @@ export interface WorkSurfaceInput {
 /** A tool call of the running turn waiting for the owner (T-L4): its preview is shown; the decision goes through `decideApproval`. */
 export type TurnApprovalRequest = Readonly<{ approvalId: string; revision: number; summary: string; preview: string; expiresAt: number;
   /** The scopes the service offers beyond "this once" and exactly what they cover (absent: the plain y/N card). */
-  standing?: Readonly<{ scopes: readonly StandingScope[]; pattern: string }> }>;
+  standing?: Readonly<{ scopes: readonly StandingScope[]; pattern: string }>; decisionCapability?: string; risk?: string | null; requiredAssurance?: string }>; // v19 (B1)
 type Modal =
-  | Readonly<{ kind: 'approval'; approval: WorklineApproval; remaining: number; preview?: string; standing?: TurnApprovalRequest['standing'] }>
+  | Readonly<{ kind: 'approval'; approval: WorklineApproval; remaining: number; preview?: string; standing?: TurnApprovalRequest['standing']; retry?: number }>
   | Readonly<{ kind: 'cancel'; run: RunView }>
   | null;
 
 const SUMMARY_MAX = 160;
-/** The covers line is never clipped or flattened: the card shows everything a standing answer would allow (the pattern is one line of at most 200 characters). */
+/** Only a picker row is clipped (it selects; the card never clips or flattens: summary lines, binding line first, the whole covers line). */
 const clip = (text: string) => { const flat = terminalSafeText(text).replace(/\s+/g, ' ').trim(); return flat.length > SUMMARY_MAX ? `${flat.slice(0, SUMMARY_MAX - 1)}…` : flat; };
 
 function phaseCounts(run: RunView): string {
-  const counts = new Map<string, number>();
-  for (const task of run.tasks) counts.set(task.phase, (counts.get(task.phase) ?? 0) + 1);
+  const counts = new Map<string, number>(); for (const task of run.tasks) counts.set(task.phase, (counts.get(task.phase) ?? 0) + 1);
   return [...counts.entries()].map(([phase, count]) => `${phase}:${count}`).join(' ') || '—';
 }
 
@@ -59,21 +58,10 @@ export function useWorkSurface({ ledger, labels, push, errorText, pollMs, watchi
   const approvalWatch = useRef(EMPTY_APPROVAL_WATCH);
   const mounted = useRef(true);
   const approvalGate = useRef<((choice: { readonly index: number } | null) => void) | null>(null);
-  useEffect(() => () => {
-    mounted.current = false;
-    const resolve = approvalGate.current;
-    approvalGate.current = null;
-    resolve?.(null);
-  }, []);
-  const finishPicker = (choice: { readonly index: number } | null) => {
-    const resolve = approvalGate.current;
-    approvalGate.current = null;
-    resolve?.(choice);
-  };
+  useEffect(() => () => { mounted.current = false; const resolve = approvalGate.current; approvalGate.current = null; resolve?.(null); }, []);
+  const finishPicker = (choice: { readonly index: number } | null) => { const resolve = approvalGate.current; approvalGate.current = null; resolve?.(choice); };
   useEffect(() => { if (!watchingWorkers) setWorkers([]); }, [watchingWorkers]);
-  const observeWorkers = useCallback((entries: readonly WorkLedgerEntry[]) => {
-    setWorkers(entries.filter((entry): entry is WorkLedgerWorkerEntry => entry.kind === 'worker'));
-  }, []);
+  const observeWorkers = useCallback((entries: readonly WorkLedgerEntry[]) => { setWorkers(entries.filter((entry): entry is WorkLedgerWorkerEntry => entry.kind === 'worker')); }, []);
 
   // Default on whenever approvals are wired (legacy kept approvals behind an off-by-default flag): one bounded page per tick,
   // never more often than APPROVAL_NOTIFY_MIN_MS so an idle terminal adds negligible runtime load (lead integration decision).
@@ -121,7 +109,7 @@ export function useWorkSurface({ ledger, labels, push, errorText, pollMs, watchi
   }, [labels.runNotFound, ledger, push, work]);
 
   const decideApproval = useCallback(async (approval: WorklineApproval, remaining: number, yes: boolean, standing?: StandingScope) => {
-    try {
+    let refused = false; try {
       const record = await ledger!.decideApproval!(approval, yes ? 'allow' : 'deny', standing);
       const decision = record.decision ?? (yes ? 'allow' : 'deny');
       push([notice('info', fillTemplate(decision === 'allow' ? work!.approvalAllowed : work!.approvalDenied, { id: record.approvalId }))]);
@@ -134,9 +122,9 @@ export function useWorkSurface({ ledger, labels, push, errorText, pollMs, watchi
           { id: record.approvalId, reason: answer?.reason ?? 'unconfirmed' }))]);
       }
       if (remaining > 0) push([notice('info', fillTemplate(work!.approvalMore, { count: remaining }))]);
-    } catch (error) { push([notice('error', errorText(error))]); }
-    // A late answer closes only its own card: a newer card (the turn's next call) may already be open (Astra 2092 R1).
-    finally { setModal(current => current?.kind === 'approval' && current.approval.approvalId === approval.approvalId ? null : current); }
+    } catch (error) { push([notice('error', errorText(error))]); refused = ['APPROVAL_ASSURANCE_INSUFFICIENT', 'APPROVAL_SURFACE_RESTRICTED'].includes(String((error as { code?: unknown }).code)); }
+    // A late answer touches only its own card (Astra 2092 R1); a typed refusal that leaves the request pending (B1/K3, Sol 2234 R3) keeps it open for a new answer (a deny); any other failure closes it, never as decided.
+    finally { setModal(current => current?.kind === 'approval' && current.approval.approvalId === approval.approvalId ? (refused ? { ...current, retry: (current.retry ?? 0) + 1 } : null) : current); }
   }, [errorText, ledger, push, work]);
 
   const cancelRun = useCallback(async (view: RunView, yes: boolean) => {
@@ -150,7 +138,8 @@ export function useWorkSurface({ ledger, labels, push, errorText, pollMs, watchi
   /** Opens the card for a call of the running turn; the turn waits in the service until the decision (or expiry) lands. */
   const askTurnApproval = useCallback((request: TurnApprovalRequest) => {
     setModal({ kind: 'approval', remaining: 0, preview: request.preview, ...(request.standing ? { standing: request.standing } : {}), approval: { approvalId: request.approvalId, runId: '-', taskId: '-',
-      summary: request.summary, requester: '-', revision: request.revision, status: 'pending', decision: null, expiresAt: request.expiresAt } });
+      summary: request.summary, requester: '-', revision: request.revision, status: 'pending', decision: null, expiresAt: request.expiresAt, ...(request.decisionCapability
+        ? { decisionCapability: request.decisionCapability } : {}), ...(request.risk !== undefined ? { risk: request.risk } : {}), ...(request.requiredAssurance ? { requiredAssurance: request.requiredAssurance } : {}) } });
   }, []);
   /** The call's approval settled elsewhere (expiry, cancel): its card closes without a decision. `unsettled`: the service could not
    * confirm closing the request; the owner is told it permits nothing and closes at its expiry or the next service start. */
@@ -165,12 +154,8 @@ export function useWorkSurface({ ledger, labels, push, errorText, pollMs, watchi
     // The scopes are offered only when the service named them AND the labels exist: a card never shows a key it cannot explain.
     const scoped = modal.standing && work.approvalStanding && modal.standing.scopes.length > 0 ? { labels: work.approvalStanding, ...modal.standing } : null;
     const scopedPrompt = !scoped ? work.approvalPrompt : scoped.scopes.length === 2 ? scoped.labels.promptBoth : scoped.scopes[0] === 'session' ? scoped.labels.promptSession : scoped.labels.promptAlways;
-    const subject = preview === undefined
-      ? [fillTemplate(work.approvalSubject, { id: approval.approvalId, run: approval.runId, task: approval.taskId, requester: approval.requester })] : [];
-    card = <DecisionCard key={`approval:${approval.approvalId}`} title={work.approvalTitle} prompt={scopedPrompt} pendingText={work.approvalPending} scopes={scoped?.scopes ?? []}
-      lines={[...subject, clip(approval.summary), ...(preview === undefined ? [] : previewLines(preview, work.approvalPreviewMore)),
-        ...(scoped ? [fillTemplate(scoped.labels.covers, { pattern: terminalSafeText(scoped.pattern) })] : []),
-        fillTemplate(work.approvalExpires, { duration: formatDuration(approval.expiresAt - Date.now(), work.workerLine) })]}
+    card = <DecisionCard key={`approval:${approval.approvalId}:${modal.retry ?? 0}`} title={work.approvalTitle} prompt={scopedPrompt} pendingText={work.approvalPending} scopes={scoped?.scopes ?? []}
+      lines={approvalCardLines(approval, work, preview, scoped ? fillTemplate(scoped.labels.covers, { pattern: terminalSafeText(scoped.pattern) }) : null)}
       onDecide={(yes, standing) => void decideApproval(approval, remaining, yes, standing)} />;
   } else if (work && modal?.kind === 'cancel') {
     const view = modal.run;
@@ -193,6 +178,17 @@ export function useWorkSurface({ ledger, labels, push, errorText, pollMs, watchi
 function approvalLine(item: WorklineApproval, index: number, now: number, work: WorkSurfaceLabels): string {
   return fillTemplate(work.approvalItem, { n: index + 1, id: item.approvalId, run: item.runId, task: item.taskId,
     summary: clip(item.summary), duration: formatDuration(item.expiresAt - now, work.workerLine) });
+}
+
+/** The single approval card (APPROVAL-SURFACE §B, B1): ledger id line, the summary whole (binding line first), the typed risk line before the preview
+ * (no preview bound can push it off), the preview, what a standing answer covers, expiry + nothing runs, and the required assurance when declared. */
+export function approvalCardLines(approval: WorklineApproval, work: WorkSurfaceLabels, preview: string | undefined, covers: string | null): string[] {
+  const card = work.approvalCard, word = (value: string | null | undefined) => value ? terminalSafeText(value) : card.notDeclared, required = approval.requiredAssurance;
+  const assurance = required === undefined ? [] : [required === 'peer-session' ? card.assurancePeer : required !== 'turn-bound' ? fillTemplate(card.assuranceOther, { level: terminalSafeText(required) }) : approval.decisionCapability ? card.assuranceTurnHere : card.assuranceTurnElsewhere]; // Sol 2234 R1: another level is named, never peer-session
+  return [...(preview === undefined ? [fillTemplate(work.approvalSubject, { id: approval.approvalId, run: approval.runId, task: approval.taskId, requester: approval.requester })] : []),
+    ...terminalSafeText(approval.summary).split('\n'), fillTemplate(card.risk, { risk: word(approval.risk), undo: word(approval.undo) }),
+    ...(preview === undefined ? [] : previewLines(preview, work.approvalPreviewMore)), ...(covers === null ? [] : [covers]),
+    `${fillTemplate(work.approvalExpires, { duration: formatDuration(approval.expiresAt - Date.now(), work.workerLine) })} ${card.onExpiry}`, ...assurance];
 }
 
 /** A call preview is shown up to 24 lines; the rest is counted, never silently dropped. */

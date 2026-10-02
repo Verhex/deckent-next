@@ -25,8 +25,8 @@ describe('firstRunPolicyTemplate (domain, pure)', () => {
     expect(template.id).toBe(FIRST_RUN_POLICY_TEMPLATE_ID); expect(template.version).toBe(FIRST_RUN_POLICY_TEMPLATE_VERSION);
     expect(policyFileSchema.safeParse(template.policy).success).toBe(true);
     expect(bindingsFileSchema.safeParse(template.bindings).success).toBe(true);
-    expect(template.policy).toMatchObject({ schemaVersion: 2, revision: 'first-run-template-v2' });
-    expect(template.bindings).toMatchObject({ schemaVersion: 1, revision: 'first-run-template-v2-bindings', bindings: [] });
+    expect(template.policy).toMatchObject({ schemaVersion: 2, revision: 'first-run-template-v3' });
+    expect(template.bindings).toMatchObject({ schemaVersion: 1, revision: 'first-run-template-v3-bindings', bindings: [] });
   });
   it('grants read tools and the given scratch tool names silently, asks for edit/shell tools, and grants no pool/service authority', () => {
     const policy = resolvePolicyBindings(firstRunPolicyTemplate(input).policy, firstRunPolicyTemplate(input).bindings);
@@ -65,7 +65,7 @@ describe('firstRunPolicyTemplate (domain, pure)', () => {
   });
   it('v2 (SECRET-WRITE, owner 2026-09-29 option A): the installing owner may set and delete every secret of their installation in its scope, nobody else', () => {
     const template = firstRunPolicyTemplate(input), policy = resolvePolicyBindings(template.policy, template.bindings);
-    expect(FIRST_RUN_POLICY_TEMPLATE_VERSION).toBe(2);
+    expect(FIRST_RUN_POLICY_TEMPLATE_VERSION).toBe(3);
     expect(template.policy.grants.find(grant => grant.id === 'first-run-secret-store')).toEqual({ id: 'first-run-secret-store', effect: 'allow',
       actions: ['set', 'delete'], scopes: ['installation'], principals: [me], resource: { kind: 'secret', ids: 'all' } });
     const ask = (who: typeof principal, action: string, scopeId = 'installation') => evaluatePolicy(policy, { principal: who, scopeId, action, resource: { kind: 'secret', id: 'PROVIDER_TOKEN' } });
@@ -88,13 +88,15 @@ describe('firstRunPolicyTemplate (domain, pure)', () => {
 describe('matchFirstRunPolicyTemplate (doctor recognition, never authority)', () => {
   it('recognizes exactly the template\'s own revision and version', () => {
     expect(matchFirstRunPolicyTemplate('first-run-template-v2')).toEqual({ id: 'first-run-template', version: 2 });
+    // v3 (B1) is recognized; a v2 installation keeps its name (it lacks the visible hard-floor approvalAssurance rule; Core enforces it anyway).
+    expect(matchFirstRunPolicyTemplate('first-run-template-v3')).toEqual({ id: 'first-run-template', version: 3 });
     // An installation made from v1 is still named (recognition only): it lacks the v2 secret grant.
     expect(matchFirstRunPolicyTemplate('first-run-template-v1')).toEqual({ id: 'first-run-template', version: 1 });
   });
   it('does not recognize a custom, hand-edited, or differently-versioned revision', () => {
     expect(matchFirstRunPolicyTemplate('custom-revision')).toBeNull();
     expect(matchFirstRunPolicyTemplate('first-run-template-v1+edit-shell')).toBeNull();
-    expect(matchFirstRunPolicyTemplate('first-run-template-v3')).toBeNull();
+    expect(matchFirstRunPolicyTemplate('first-run-template-v4')).toBeNull();
     expect(matchFirstRunPolicyTemplate('first-run-template-v0')).toBeNull();
     expect(matchFirstRunPolicyTemplate('')).toBeNull();
   });

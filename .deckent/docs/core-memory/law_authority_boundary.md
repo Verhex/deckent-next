@@ -11,3 +11,5 @@ Değişiklik öncesi ilgili Next mimarisi (`ARCHITECTURE.md`) ve legacy ADR kan�
 Legacy ders: PREPARED → VERIFIED → COMMITTED devir zinciri ve owner recovery ayrımı tasarım dersidir; Next'te varmış gibi ilan edilmez.
 
 Owner 2026-10-02: `deckent-authority-bootstrap` Next'te salt okunur yetki/bağlam kontrolü olarak ayrı kalır; ortak çalışma yöntemi `deckent-next-refactor` içindedir. İlgili yetki, kapsam, revision, sahiplik veya runtime/config değiştiğinde etkilenen kanıt yenilenir; değişmeyen okumalar tekrar edilmez. Runtime yalnız görev gerektiriyorsa incelenir. Rapor HOLD'u yalnız bağımlı işlemin çözülemeyen yetki/kanıt sorusunu gösterir; ürün durumu değiştirmez, ilgisiz yetkili işi durdurmaz ve yeni yürütme yetkisi vermez.
+
+Owner amendment 2026-10-02 — MCP-NO-DECIDE: MCP onay kararını ne `allow` ne `deny` olarak verebilir; `decide_approval` sunulmaz. Listeleme/inceleme gözlemdir. CLI `approval decide`, SDK ve terminal kartının mevcut karar yetkisi korunur; B1'in MCP `deny` istisnası kaldırılmıştır. Ortak runtime/protokol/ledger karar sözleşmesi bu yüzey daraltmasıyla değişmez.

@@ -503,7 +503,7 @@ describe.skipIf(process.platform !== 'linux')('agent chat turn through the runti
     const client = f.client();
     const decide = (decision: 'allow' | 'deny') => async (event: AgentTurnStreamEvent) => {
       if (event.kind !== 'approval.requested') return;
-      await client.decideApproval({ schemaVersion: 1, scopeId: 'scope', approvalId: event.approvalId, commandId: `${decision}-${event.approvalId}`,
+      await client.decideApproval({ schemaVersion: 1, scopeId: 'scope', approvalId: event.approvalId, decisionCapability: event.decisionCapability, commandId: `${decision}-${event.approvalId}`,
         expectedRevision: event.revision, decision, reason: 'Reviewed' });
     };
     const run = async (turnId: string, onApproval: (event: AgentTurnStreamEvent) => Promise<void>) => {
@@ -521,7 +521,7 @@ describe.skipIf(process.platform !== 'linux')('agent chat turn through the runti
     expect(allowed.events.find(event => event.kind === 'tool.finished')).toMatchObject({ status: 'ok' });
     expect(allowed.result).toMatchObject({ finish: 'stop', toolCalls: 1 });
     const record = JSON.parse((f.rows(`SELECT snapshot FROM approvals WHERE approval_id='${requested.approvalId}'`)[0] as { snapshot: string }).snapshot);
-    expect(record).toMatchObject({ status: 'decided', request: { schemaVersion: 2, subject: { kind: 'agent-tool-call', turnId: 'turn-allow', round: 1, index: 0,
+    expect(record).toMatchObject({ status: 'decided', request: { schemaVersion: 3, subject: { kind: 'agent-tool-call', turnId: 'turn-allow', round: 1, index: 0,
       tool: 'read_file', toolVersion: 1, resource: 'src/a.ts' } } });
 
     const denied = await run('turn-deny', decide('deny'));
@@ -546,7 +546,7 @@ describe.skipIf(process.platform !== 'linux')('agent chat turn through the runti
     const events: AgentTurnStreamEvent[] = [], pending: Promise<unknown>[] = [];
     await client.chatTurn(ask('turn-grep-approval'), event => {
       events.push(event);
-      if (event.kind === 'approval.requested') pending.push(client.decideApproval({ schemaVersion: 1, scopeId: 'scope', approvalId: event.approvalId,
+      if (event.kind === 'approval.requested') pending.push(client.decideApproval({ schemaVersion: 1, scopeId: 'scope', approvalId: event.approvalId, decisionCapability: event.decisionCapability,
         commandId: `allow-${event.approvalId}`, expectedRevision: event.revision, decision: 'allow', reason: 'Reviewed' }));
     });
     await Promise.all(pending);
@@ -589,7 +589,7 @@ describe.skipIf(process.platform !== 'linux')('agent chat turn through the runti
       pending.push((async () => {
         // The tool grant is withdrawn while the call waits; approvals stay decidable.
         await f.writePolicy(f.grants.filter(grant => grant.id !== 'read-needs-approval'));
-        await client.decideApproval({ schemaVersion: 1, scopeId: 'scope', approvalId: event.approvalId, commandId: 'allow-revoked',
+        await client.decideApproval({ schemaVersion: 1, scopeId: 'scope', approvalId: event.approvalId, decisionCapability: event.decisionCapability, commandId: 'allow-revoked',
           expectedRevision: event.revision, decision: 'allow', reason: 'Reviewed' });
       })());
     });
@@ -720,7 +720,7 @@ describe.skipIf(process.platform !== 'linux')('agent chat turn through the runti
     await client.chatTurn(ask('turn-realm-require'), event => {
       events.push(event);
       // If the realm gate regresses, approve this harmless fixture write so assertions observe the forbidden process/effect.
-      if (event.kind === 'approval.requested') pending.push(client.decideApproval({ schemaVersion: 1, scopeId: 'scope', approvalId: event.approvalId,
+      if (event.kind === 'approval.requested') pending.push(client.decideApproval({ schemaVersion: 1, scopeId: 'scope', approvalId: event.approvalId, decisionCapability: event.decisionCapability,
         commandId: 'unexpected-realm-approval', expectedRevision: event.revision, decision: 'allow', reason: 'Mutation sentinel only' }));
     });
     await Promise.all(pending);
@@ -745,7 +745,7 @@ describe.skipIf(process.platform !== 'linux')('agent chat turn through the runti
     const client = f.client();
     await client.chatTurn(ask('turn-realm-bwrap'), event => {
       events.push(event);
-      if (event.kind === 'approval.requested') pending.push(client.decideApproval({ schemaVersion: 1, scopeId: 'scope', approvalId: event.approvalId,
+      if (event.kind === 'approval.requested') pending.push(client.decideApproval({ schemaVersion: 1, scopeId: 'scope', approvalId: event.approvalId, decisionCapability: event.decisionCapability,
         commandId: 'allow-bwrap', expectedRevision: event.revision, decision: 'allow', reason: 'Reviewed' }));
     });
     await Promise.all(pending);
@@ -782,7 +782,7 @@ describe.skipIf(process.platform !== 'linux')('agent chat turn through the runti
       const events: AgentTurnStreamEvent[] = [], pending: Promise<unknown>[] = [];
       await client.chatTurn(ask(turnId), event => {
         events.push(event);
-        if (event.kind === 'approval.requested') pending.push(client.decideApproval({ schemaVersion: 1, scopeId: 'scope', approvalId: event.approvalId,
+        if (event.kind === 'approval.requested') pending.push(client.decideApproval({ schemaVersion: 1, scopeId: 'scope', approvalId: event.approvalId, decisionCapability: event.decisionCapability,
           commandId: `${decision}-${turnId}`, expectedRevision: event.revision, decision, reason: 'Reviewed' }));
       });
       await Promise.all(pending);
@@ -807,7 +807,7 @@ describe.skipIf(process.platform !== 'linux')('agent chat turn through the runti
     const askingClient = asking.client(), askingEvents: AgentTurnStreamEvent[] = [];
     await askingClient.chatTurn(ask('turn-policy-asks'), event => {
       askingEvents.push(event);
-      if (event.kind === 'approval.requested') void askingClient.decideApproval({ schemaVersion: 1, scopeId: 'scope', approvalId: event.approvalId,
+      if (event.kind === 'approval.requested') void askingClient.decideApproval({ schemaVersion: 1, scopeId: 'scope', approvalId: event.approvalId, decisionCapability: event.decisionCapability,
         commandId: 'deny-policy-asks', expectedRevision: event.revision, decision: 'deny', reason: 'Reviewed' });
     });
     expect(askingEvents.find(event => event.kind === 'approval.requested')).toMatchObject({ preview: expect.stringContaining('risk: safe-read') });
@@ -827,7 +827,7 @@ describe.skipIf(process.platform !== 'linux')('agent chat turn through the runti
     const client = f.client(), linked: AgentTurnStreamEvent[] = [];
     await client.chatTurn(ask('turn-shell-dotdot'), event => {
       linked.push(event);
-      if (event.kind === 'approval.requested') void client.decideApproval({ schemaVersion: 1, scopeId: 'scope', approvalId: event.approvalId,
+      if (event.kind === 'approval.requested') void client.decideApproval({ schemaVersion: 1, scopeId: 'scope', approvalId: event.approvalId, decisionCapability: event.decisionCapability,
         commandId: 'deny-dotdot', expectedRevision: event.revision, decision: 'deny', reason: 'Reviewed' });
     });
     expect(linked.find(event => event.kind === 'approval.requested')).toMatchObject({ preview: expect.stringContaining('$ cat linked/../public.txt') });
@@ -863,7 +863,7 @@ describe.skipIf(process.platform !== 'linux')('agent chat turn through the runti
       const started = performance.now();
       await client.chatTurn(ask(turnId), event => {
         events.push(event);
-        if (event.kind === 'approval.requested') pending.push(client.decideApproval({ schemaVersion: 1, scopeId: 'scope', approvalId: event.approvalId,
+        if (event.kind === 'approval.requested') pending.push(client.decideApproval({ schemaVersion: 1, scopeId: 'scope', approvalId: event.approvalId, decisionCapability: event.decisionCapability,
           commandId: `allow-${turnId}`, expectedRevision: event.revision, decision: 'allow', reason: 'Reviewed' }));
       });
       await Promise.all(pending);
@@ -967,7 +967,7 @@ describe.skipIf(process.platform !== 'linux')('agent chat turn through the runti
     f.state.script = [{ toolCall: { name: 'run_shell', arguments: '{"command":"sleep 20; touch late.txt"}' } }];
     const client = f.client();
     const running = client.chatTurn(ask('turn-cancel-shell'), event => {
-      if (event.kind === 'approval.requested') void client.decideApproval({ schemaVersion: 1, scopeId: 'scope', approvalId: event.approvalId,
+      if (event.kind === 'approval.requested') void client.decideApproval({ schemaVersion: 1, scopeId: 'scope', approvalId: event.approvalId, decisionCapability: event.decisionCapability,
         commandId: 'allow-sleep', expectedRevision: event.revision, decision: 'allow', reason: 'Reviewed' });
       if (event.kind === 'approval.settled') setTimeout(() => void client.cancelChatTurn({ schemaVersion: 1, scopeId: 'scope', turnId: 'turn-cancel-shell' }), 300);
     });
@@ -998,7 +998,7 @@ describe.skipIf(process.platform !== 'linux')('agent chat turn through the runti
     const client = f.client(), events: AgentTurnStreamEvent[] = [], pending: Promise<unknown>[] = [];
     await client.chatTurn(ask('turn-edit', 'set a to 2'), event => {
       events.push(event);
-      if (event.kind === 'approval.requested') pending.push(client.decideApproval({ schemaVersion: 1, scopeId: 'scope', approvalId: event.approvalId,
+      if (event.kind === 'approval.requested') pending.push(client.decideApproval({ schemaVersion: 1, scopeId: 'scope', approvalId: event.approvalId, decisionCapability: event.decisionCapability,
         commandId: 'allow-edit', expectedRevision: event.revision, decision: 'allow', reason: 'Reviewed' }));
     });
     await Promise.all(pending);
@@ -1050,7 +1050,7 @@ describe.skipIf(process.platform !== 'linux')('agent chat turn through the runti
         const events: AgentTurnStreamEvent[] = [], pending: Promise<unknown>[] = [];
         await client.chatTurn(ask(turnId), event => {
           events.push(event);
-          if (event.kind === 'approval.requested') pending.push(client.decideApproval({ schemaVersion: 1, scopeId: 'scope', approvalId: event.approvalId,
+          if (event.kind === 'approval.requested') pending.push(client.decideApproval({ schemaVersion: 1, scopeId: 'scope', approvalId: event.approvalId, decisionCapability: event.decisionCapability,
             commandId: `allow-${turnId}`, expectedRevision: event.revision, decision: 'allow', reason: 'Reviewed' }));
         });
         await Promise.all(pending); return events;
@@ -1078,7 +1078,7 @@ describe.skipIf(process.platform !== 'linux')('agent chat turn through the runti
       const events: AgentTurnStreamEvent[] = [], pending: Promise<unknown>[] = [];
       const result = await client.chatTurn(ask(turnId), event => {
         events.push(event);
-        if (event.kind === 'approval.requested') pending.push(client.decideApproval({ schemaVersion: 1, scopeId: 'scope', approvalId: event.approvalId,
+        if (event.kind === 'approval.requested') pending.push(client.decideApproval({ schemaVersion: 1, scopeId: 'scope', approvalId: event.approvalId, decisionCapability: event.decisionCapability,
           commandId: `allow-${turnId}`, expectedRevision: event.revision, decision: 'allow', reason: 'Reviewed' }));
       });
       await Promise.all(pending); return { events, result };
@@ -1110,7 +1110,7 @@ describe.skipIf(process.platform !== 'linux')('agent chat turn through the runti
       events.push(event);
       if (event.kind === 'approval.requested') pending.push((async () => {
         await writeFile(join(f.project, 'src', 'a.ts'), 'export const a = 7;\n');
-        await client.decideApproval({ schemaVersion: 1, scopeId: 'scope', approvalId: event.approvalId, commandId: 'allow-stale',
+        await client.decideApproval({ schemaVersion: 1, scopeId: 'scope', approvalId: event.approvalId, decisionCapability: event.decisionCapability, commandId: 'allow-stale',
           expectedRevision: event.revision, decision: 'allow', reason: 'Reviewed' });
       })());
     });
@@ -1128,7 +1128,7 @@ describe.skipIf(process.platform !== 'linux')('agent chat turn through the runti
     const client = f.client(), floored: AgentTurnStreamEvent[] = [], pending: Promise<unknown>[] = [];
     await client.chatTurn(ask('turn-floor', 'write package.json'), event => {
       floored.push(event);
-      if (event.kind === 'approval.requested') pending.push(client.decideApproval({ schemaVersion: 1, scopeId: 'scope', approvalId: event.approvalId,
+      if (event.kind === 'approval.requested') pending.push(client.decideApproval({ schemaVersion: 1, scopeId: 'scope', approvalId: event.approvalId, decisionCapability: event.decisionCapability,
         commandId: 'deny-floor', expectedRevision: event.revision, decision: 'deny', reason: 'No' }));
     });
     await Promise.all(pending);
@@ -1149,7 +1149,7 @@ describe.skipIf(process.platform !== 'linux')('agent chat turn through the runti
     const client = f.client(), events: AgentTurnStreamEvent[] = [], pending: Promise<unknown>[] = [];
     await client.chatTurn(ask('turn-op-approval', 'set a to 2'), event => {
       events.push(event);
-      if (event.kind === 'approval.requested') pending.push(client.decideApproval({ schemaVersion: 1, scopeId: 'scope', approvalId: event.approvalId,
+      if (event.kind === 'approval.requested') pending.push(client.decideApproval({ schemaVersion: 1, scopeId: 'scope', approvalId: event.approvalId, decisionCapability: event.decisionCapability,
         commandId: 'allow-op', expectedRevision: event.revision, decision: 'allow', reason: 'Reviewed' }));
     });
     await Promise.all(pending);
@@ -1484,7 +1484,7 @@ describe.skipIf(process.platform !== 'linux')('agent shell in the Landlock realm
       const events: AgentTurnStreamEvent[] = [], client = f.client(), pending: Promise<unknown>[] = [];
       await client.chatTurn(ask('turn-realm-landlock'), event => {
         events.push(event);
-        if (event.kind === 'approval.requested') pending.push(client.decideApproval({ schemaVersion: 1, scopeId: 'scope', approvalId: event.approvalId,
+        if (event.kind === 'approval.requested') pending.push(client.decideApproval({ schemaVersion: 1, scopeId: 'scope', approvalId: event.approvalId, decisionCapability: event.decisionCapability,
           commandId: 'landlock-outside', expectedRevision: event.revision, decision: 'allow', reason: 'The sandbox must refuse it' }));
       });
       await Promise.all(pending);

@@ -34,7 +34,7 @@ async function fixture(input: { readonly backend?: 'file' | 'env' } = {}) {
   const project = join(root, 'project'), home = join(root, 'home');
   await mkdir(project, { recursive: true }); await mkdir(home, { mode: 0o700 });
   const env: Record<string, string> = { HOME: home, PATH: process.env['PATH'] ?? '/usr/bin:/bin' };
-  // A fresh installation: `deckent init policy` (first-run template v2) is the only authority document.
+  // A fresh installation: `deckent init policy` (first-run template v3) is the only authority document.
   await applyPolicyTemplateInstallation(project, 'installation');
   // The service's own bounded limits (as every service fixture); the layout stays the default one under the project.
   await writeFile(join(project, '.deckent', 'config.json'), JSON.stringify({
@@ -101,7 +101,7 @@ describe.skipIf(process.platform !== 'linux')('secret set/delete through the run
     expect(await f.client.setSecret({ schemaVersion: 1, scopeId: 'installation', name: 'PROVIDER_TOKEN', value: CANARY })).toMatchObject({ action: 'set' });
   });
 
-  it('fresh install (template v2): the owner sets and deletes a secret over the socket; audited before each write; the value is only in the store', async () => {
+  it('fresh install (template v3): the owner sets and deletes a secret over the socket; audited before each write; the value is only in the store', async () => {
     const f = await fixture();
     const set = await f.client.setSecret({ schemaVersion: 1, scopeId: 'installation', name: 'PROVIDER_TOKEN', value: CANARY });
     expect(set).toEqual({ schemaVersion: 1, scopeId: 'installation', name: 'PROVIDER_TOKEN', action: 'set', backend: 'core.secret-store.file@1', removed: null });
@@ -115,7 +115,7 @@ describe.skipIf(process.platform !== 'linux')('secret set/delete through the run
     expect(changes(events)).toEqual(['set', 'delete', 'delete'].map(action => ({ kind: 'secret-change', action, name: 'PROVIDER_TOKEN',
       backend: 'core.secret-store.file@1', decision: { effect: 'allow', ruleId: 'first-run-secret-store' } })));
     // The principal is the socket peer (never a request field); the policy revision is the template's.
-    expect(events[0]).toMatchObject({ scopeId: 'installation', principal: me, policyRevision: expect.stringContaining('first-run-template-v2') });
+    expect(events[0]).toMatchObject({ scopeId: 'installation', principal: me, policyRevision: expect.stringContaining('first-run-template-v3') });
     expect(await f.scanForCanary()).toEqual([]);
   }, 60_000);
 
@@ -182,7 +182,7 @@ describe.skipIf(process.platform !== 'linux')('secret set/delete through the run
     await new Promise<void>((resolve, reject) => { socket.once('connect', resolve); socket.once('error', reject); });
     const chunks: Buffer[] = []; socket.on('data', chunk => { chunks.push(chunk as Buffer); });
     const closed = new Promise<void>(resolve => socket.once('close', () => resolve()));
-    socket.end(encodeServiceFrame({ schemaVersion: 18, requestId: `budget-${maxResultBytes}`, operation, delivery: { maxResultBytes },
+    socket.end(encodeServiceFrame({ schemaVersion: 19, requestId: `budget-${maxResultBytes}`, operation, delivery: { maxResultBytes },
       input: { schemaVersion: 1, scopeId: 'installation', ...input } }, 262144));
     await closed;
     return JSON.parse(Buffer.concat(chunks).subarray(4).toString('utf8')) as { ok: boolean; result?: unknown; error?: { code: string } };

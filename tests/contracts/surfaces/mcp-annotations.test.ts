@@ -20,7 +20,6 @@ const EXPECTED: Readonly<Record<string, Annotations>> = Object.freeze({
   renew_approval: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
   list_approvals: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
   inspect_approval: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
-  decide_approval: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
   list_declared_models: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
   inspect_model_binding: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
   inspect_toolchain_currency: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
@@ -64,7 +63,7 @@ const noop = async () => ({});
 // Every optional application handler is supplied so the real server advertises all tools; only
 // tools/list is exercised here, so stub bodies never execute a real effect.
 const applications: McpApplications = {
-  renewApproval: noop, listApprovals: noop, inspectApproval: noop, decideApproval: noop,
+  renewApproval: noop, listApprovals: noop, inspectApproval: noop,
   inspectModelActivation: noop, admitModelActivation: noop, inspectModelCatalog: noop, applyModelCatalog: noop, inspectPoolHold: noop, applyPoolHold: noop, inspectModelInvocation: noop, invokeModel: noop,
   purgeModelInvocationContent: noop, cancelModelInvocation: noop, inspectProviderSpendAccount: noop,
   auditProviderSpendAccount: noop, inspectDeclaredModels: noop, inspectModelBinding: noop, inspectToolchainCurrency: noop,
@@ -83,7 +82,7 @@ async function listAnnotatedTools(overrides: Partial<McpApplications> = {}) {
   try { return (await client.listTools()).tools; }
   finally { await client.close(); await server.close(); }
 }
-it('advertises exactly the 35 contracted tools, no more and no fewer', async () => {
+it('advertises exactly the contracted tools, no more and no fewer', async () => {
   const tools = await listAnnotatedTools();
   expect(new Set(tools.map(tool => tool.name))).toEqual(new Set(Object.keys(EXPECTED)));
 });

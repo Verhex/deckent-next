@@ -4,7 +4,7 @@ import { agentTurnStreamEventSchema, effectCommandSchema, effectRecordSchema, ef
   parseWorkspaceAttachmentRequest, parseWorkspaceFileQuery } from '#domain/index.js';
 import { secretDeleteCommandSchema, secretSetCommandSchema } from '#engine/core/secret-store/index.js';
 
-export const RUNTIME_SERVICE_SCHEMA_VERSION = 18 as const;
+export const RUNTIME_SERVICE_SCHEMA_VERSION = 19 as const;
 export const RUNTIME_SERVICE_ERROR_PARAMS = 8;
 export const RUNTIME_SERVICE_ERROR_PARAM_CHARS = 512;
 /** Bounded, serializable message parameters for a typed error response (strings truncated, other values dropped). */
@@ -51,6 +51,9 @@ export function isRuntimeServicePermissionModeOperation(operation: RuntimeServic
 export function isRuntimeServiceScratchOperation(operation: RuntimeServiceOperation): operation is 'inspectScratch' | 'clearScratch' {
   return operation === 'inspectScratch' || operation === 'clearScratch';
 }
+/** v19 (B1 APPROVAL-ASSURANCE; v18 was pushed): `decideApproval` takes the declared `channel` and the turn's one-time `decisionCapability`, and a
+ * turn's `approval.requested` carries that capability (only on the stream of the connection that started the turn) with the card's risk and
+ * required assurance. A v18 client is outside the window: its decision is closed unanswered, never silently recorded as peer-session. */
 /** v18 (SECRET-WRITE; v17 was already pushed, so the operations start a new version): a change of one stored secret of the installation's store. No actor field: the
  * socket peer is the principal; the `secret`/`set|delete` policy cell decides; single bounded answers; current version only. */
 export function isRuntimeServiceSecretOperation(operation: RuntimeServiceOperation): operation is 'setSecret' | 'deleteSecret' {
@@ -147,11 +150,11 @@ export class RuntimeServiceProtocolError extends Error {
  * bumps so an upgraded terminal can see (build skew) and stop (governed shutdown) a service started from an older build.
  * The server accepts them in these versions and answers in the request's version; every other operation is current-only.
  * A mismatched non-lifecycle envelope is closed unanswered (the client's typed `LOCAL_RUNTIME_TRANSPORT`); a v18 client's describe of a v17
- * service retries at v17 and the terminal shows the build skew. v18 (SECRET-WRITE) keeps [18, 17]: a v16 service is outside the window.
+ * service retries at v17 and the terminal shows the build skew. v18 (SECRET-WRITE) kept [18, 17]; v19 (B1) keeps [19, 18]: a v17 service is outside.
  */
-export const RUNTIME_SERVICE_LIFECYCLE_VERSIONS = Object.freeze([RUNTIME_SERVICE_SCHEMA_VERSION, 17] as const);
+export const RUNTIME_SERVICE_LIFECYCLE_VERSIONS = Object.freeze([RUNTIME_SERVICE_SCHEMA_VERSION, 18] as const);
 export type RuntimeServiceLifecycleVersion = typeof RUNTIME_SERVICE_LIFECYCLE_VERSIONS[number];
-const lifecycleVersionSchema = z.union([z.literal(RUNTIME_SERVICE_SCHEMA_VERSION), z.literal(17)]);
+const lifecycleVersionSchema = z.union([z.literal(RUNTIME_SERVICE_SCHEMA_VERSION), z.literal(18)]);
 export const runtimeServiceLifecycleRequestSchema = z.object({ schemaVersion: lifecycleVersionSchema, requestId: identitySchema,
   operation: z.enum(['describeService', 'shutdownService']), input: z.unknown() }).strict()
   .refine(value => Object.hasOwn(value, 'input'), { path: ['input'], message: 'RUNTIME_SERVICE_INPUT_REQUIRED' }).readonly();

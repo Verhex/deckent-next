@@ -21,8 +21,12 @@ import { bindingsFileSchema, policyFileSchema, type PolicyFile } from './schema.
  */
 export const FIRST_RUN_POLICY_TEMPLATE_ID = 'first-run-template';
 /** v2 (SECRET-WRITE, owner 2026-09-29 option A): the installing owner may set and delete every secret of the installation's store in the
- * installed scope (`secret`/`set|delete`, all names). v1 had no secret grant. */
-export const FIRST_RUN_POLICY_TEMPLATE_VERSION = 2;
+ * installed scope (`secret`/`set|delete`, all names). v1 had no secret grant. v3 (B1, owner 2026-10-01): Core's own minimum assurance
+ * for hard-floor tool-call cards is written out as visible `approvalAssurance` data (the owner may raise it; Core never goes below it). */
+export const FIRST_RUN_POLICY_TEMPLATE_VERSION = 3;
+/** The hard-floor tool-call cells (write floor and configuration file, destructive and always-ask shell, every fetch, every MCP call): only the
+ * terminal of the turn that asked may allow them. The same set is Core's default in the approval engine (a test keeps the two equal). */
+export const HARD_FLOOR_CARD_CELLS = Object.freeze(['edit-floor', 'edit-authority', 'shell-destructive', 'shell-always-ask', 'fetch-listed', 'fetch-unlisted', 'mcp-call', 'mcp-floor'] as const);
 const REVISION_PATTERN = /^first-run-template-v(\d+)$/;
 
 export interface FirstRunPolicyTemplateInput {
@@ -54,6 +58,7 @@ export function firstRunPolicyTemplate(input: FirstRunPolicyTemplateInput): Firs
       resource: { kind, ids: ids === 'all' ? ids : [...ids] }, ...(modeEligible === undefined ? {} : { modeEligible }) });
   const policy = policyFileSchema.parse({
     schemaVersion: 2, revision, roles: [], separationOfDuties: [], restrictions: [],
+    approvalAssurance: [{ id: 'first-run-hard-floor-cards', scopes: [scopeId], subject: 'agent-tool-call', cells: [...HARD_FLOOR_CARD_CELLS], minimum: 'turn-bound' }],
     grants: [
       grant('first-run-read-tools', 'allow', 'agent-tool', input.readToolNames),
       grant('first-run-scratch-tools', 'allow', 'agent-tool', input.scratchToolNames),

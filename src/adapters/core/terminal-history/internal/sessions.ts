@@ -63,7 +63,8 @@ export function openTerminalSessionStore(directory: string, limits = TERMINAL_SE
       const handle = await open(temporary, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, 0o600);
       try { await handle.writeFile(body); await handle.sync(); } finally { await handle.close(); }
       await rename(temporary, target);
-      const kept = await all();
+      // The cap is per scope: only this scope's readable snapshots are ever pruned.
+      const kept = (await all()).filter(other => other.scopeId === snapshot.scopeId);
       await Promise.all(kept.slice(limits.maxSessions).map(old => unlink(pathOf(old.sessionId)).catch(() => undefined)));
     },
     async list(scopeId) {

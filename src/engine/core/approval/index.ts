@@ -12,3 +12,7 @@ export type { AuthorityTargetHooks, PolicyAdministrationDependencies } from './i
 export { isAuditedStanding, PersistentStanding, SessionStanding, StandingApprovalError, standingApprovalAuditEvent, standingCallKey } from './internal/standing.js';
 export type { PersistentStandingDependencies, StandingGrantView, StandingOffer } from './internal/standing.js';
 export type { StandingCellName } from './internal/standing.js';
+export { HARD_FLOOR_APPROVAL_CELLS, agentToolApprovalFacts, approvalAssuranceRegistry, createTurnDecisionCapabilities, minimumApprovalAssurance, operationApprovalFacts,
+  registerApprovalChannel, registeredApprovalChannels, requiredApprovalAssurance, undeclaredAgentToolApprovalFacts } from './internal/assurance.js';
+export type { ApprovalAssuranceOptions } from './internal/application.js';
+export type { AgentToolApprovalFacts, TurnDecisionCapabilities } from './internal/assurance.js';

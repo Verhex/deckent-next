@@ -22,6 +22,7 @@ export async function approvalsCommand(argv: readonly string[], context: Command
   const root = context.root ?? process.cwd(); const config = await loadConfig(root, { env: context.env ?? process.env });
   const input = await readJsonInput(source === '-' ? source : resolve(root, source), config.cli.invocationInputMaxBytes,
     { limit: 'CLI_INVOCATION_INPUT_LIMIT', invalid: 'CLI_INVOCATION_INPUT_INVALID', tty: 'CLI_INVOCATION_INPUT_TTY', unavailable: 'CLI_INVOCATION_INPUT_UNAVAILABLE' }, context.stdin);
-  const result = await handler(input);
+  // B1: the CLI declares its channel (a record, never authority); a channel the input already names is kept as declared.
+  const result = await handler(action === 'decide' && input !== null && typeof input === 'object' && !Array.isArray(input) && !('channel' in input) ? { ...input, channel: 'local-cli' } : input);
   emit(result, { ...sinks, json, render: value => JSON.stringify(value, null, 2) });
 }

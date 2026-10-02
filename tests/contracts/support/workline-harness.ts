@@ -9,7 +9,9 @@ const work: WorkSurfaceLabels = { workerLine: WORKER_LINE_EN, panel: { title: 'L
   approvalsNone: 'A-NONE', approvalItem: 'A-ITEM {n} {id} {summary}', approvalsTruncated: 'A-TRUNC {pages}', approvalNotFound: 'A-NOTFOUND {ref}',
   approvalTitle: 'A-TITLE', approvalSubject: 'A-SUBJECT {id} {run} {task} {requester}', approvalPreviewMore: 'A-PREVIEW-MORE {count}', approvalExpires: 'A-EXPIRES {duration}',
   approvalPrompt: 'A-PROMPT', approvalPending: 'A-PENDING', approvalAllowed: 'A-ALLOWED {id}', approvalDenied: 'A-DENIED {id}', approvalUnsettled: 'A-UNSETTLED {id}',
-  approvalMore: 'A-MORE {count}', approvalNotify: 'A-NOTIFY {count}', approvalPollFailed: 'A-POLLFAIL', cancelUsage: 'C-USAGE', cancelTitle: 'C-TITLE {run}',
+  approvalMore: 'A-MORE {count}', approvalNotify: 'A-NOTIFY {count}', approvalPollFailed: 'A-POLLFAIL',
+  approvalCard: { risk: 'R-RISK {risk} {undo}', notDeclared: 'R-UNDECLARED', onExpiry: 'R-NOTHING-RUNS', assuranceTurnHere: 'R-TURN-HERE', assuranceTurnElsewhere: 'R-TURN-ELSEWHERE',
+    assurancePeer: 'R-PEER', assuranceOther: 'R-OTHER {level}' }, cancelUsage: 'C-USAGE', cancelTitle: 'C-TITLE {run}',
   cancelDetail: 'C-DETAIL {revision} {phases}', cancelAlreadyRequested: 'C-ALREADY', cancelPrompt: 'C-PROMPT', cancelPending: 'C-PENDING', cancelKept: 'C-KEPT {run}' };
 
 /** Placeholder labels: tests assert on these tokens, never on catalog text. */
