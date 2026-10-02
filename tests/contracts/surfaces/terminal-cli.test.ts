@@ -53,7 +53,7 @@ describe('deckent terminal CLI', () => {
     const piped = sink();
     expect(await main([], { root: f.project, env: { ...f.env, DECKENT_LANGUAGE: 'en' }, stdout: piped.output, stderr: piped.output, initialize() {},
       stdin: Object.assign(Readable.from([]), { isTTY: false }) })).toBe(0);
-    expect(piped.text()).toContain('opens the interactive Deckent terminal');
+    expect(piped.text()).toContain('opens the interactive session');
     const dumb = sink();
     expect(await main([], { ...tty('dumb'), stdout: Object.assign(dumb.output, { isTTY: true }), stderr: dumb.output })).toBe(0);
     expect(dumb.text()).toContain('Usage:');

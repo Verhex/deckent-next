@@ -1,3 +1,4 @@
+import { registerCliCommands, renderTopHelp, cliHelpRequest } from '#surfaces/core/cli-kit/index.js';
 import { configCommand } from '#surfaces/core/config/index.js';
 import { approvalsCommand } from './approvals.js';
 import { workersCommand, runInventoryCommand, monitorCommand } from '#surfaces/core/monitor/index.js';
@@ -17,11 +18,22 @@ import { PACKAGE_NAME, PACKAGE_VERSION, readBuildIdentity, t, emit, assertErrorR
 import { runKernelCommand, type CommandContext } from './kernel-commands.js';
 export type { ExitCode } from '#platform/index.js';
 
+/** Catalog registration binds every family and leaf to its existing argument parser. */
+export const CLI_COMMANDS = registerCliCommands<CommandContext>({
+  terminal: async (argv, context) => (await import('./terminal.js')).terminalCommand(argv, context),
+  init: initCommand, monitor: monitorCommand, workers: workersCommand, run: runCommand, task: taskCommand,
+  pool: poolCommand, models: modelsCommand, approval: approvalsCommand, config: configCommand,
+  mcp: mcpCommand, secret: secretCommand, toolchains: toolchainsCommand, doctor: runKernelCommand,
+  inventory: runInventoryCommand, paths: runKernelCommand, runtime: runtimeCommand, coding: codingCommand,
+  inference: inferenceCommand, operation: operationCommand,
+  policy: (argv, context) => (argv[1] === 'grants' || argv[1] === 'revoke' ? policyGrantsCommand : runKernelCommand)(argv, context),
+});
+
 /** Pure CLI dispatcher: returns the text to print and the exit code; no process side effects (testable). */
 export function dispatch(argv: readonly string[]): { readonly output: string; readonly code: ExitCode } {
   const [command] = argv;
   const common = { name: PACKAGE_NAME, version: PACKAGE_VERSION, node: process.version, platform: `${process.platform}-${process.arch}` };
-  if (command === undefined || command === '--help' || command === '-h') return { output: t('cli.help', common), code: 0 };
+  if (command === undefined || command === '--help' || command === '-h') return { output: renderTopHelp(resolveLocale(argv.includes('--lang') ? argv[argv.indexOf('--lang') + 1] : undefined), argv.includes('--all')), code: 0 };
   if (command === '--version' || command === '-v') {
     const build = readBuildIdentity();
     const line = build ? '\n' + t('cli.version.build', { tree: build.sourceTreeSha256.slice(0, 12), commit: build.sourceCommit?.slice(0, 12) ?? '-',
@@ -42,12 +54,10 @@ export async function main(argv: readonly string[] = process.argv.slice(2), cont
   let locale = resolveLocale(undefined, context.env);
   try {
     assertErrorRegistry();
-    const scoped = argv[0] === 'run' || argv[0] === 'task';
-    const helpAt = scoped ? ((argv[1] === '--help' || argv[1] === '-h') ? 1 : (argv[2] === '--help' || argv[2] === '-h') ? 2 : -1) : -1;
-    if (scoped && helpAt >= 0 && (argv.length === helpAt + 1 || (argv.length === helpAt + 3 && argv[helpAt + 1] === '--lang' && !!argv[helpAt + 2] && !argv[helpAt + 2]!.startsWith('-')))) {
-      locale = resolveLocale(argv[helpAt + 2], context.env); context.onLocale?.(locale);
-      emit(argv[0] === 'run' ? t('cli.help.run', {}, locale) : t('cli.help.task', {}, locale),
-        { ...(context.stdout ? { stdout: context.stdout } : {}), ...(context.stderr ? { stderr: context.stderr } : {}) });
+    const help = cliHelpRequest(argv, CLI_COMMANDS, context.env);
+    if (help) {
+      locale = help.locale; context.onLocale?.(locale);
+      emit(help.output, { ...(context.stdout ? { stdout: context.stdout } : {}), ...(context.stderr ? { stderr: context.stderr } : {}) });
       return 0;
     }
     context.initialize?.();
@@ -57,36 +67,9 @@ export async function main(argv: readonly string[] = process.argv.slice(2), cont
       await (await import('./terminal.js')).terminalCommand(['terminal', ...argv], { ...context, onLocale: value => { locale = value; context.onLocale?.(value); } });
       return 0;
     }
-    if (argv[0] === 'operation') { await operationCommand(argv, { ...context, onLocale: value => { locale = value; context.onLocale?.(value); } }); return 0; }
-    if (argv[0] === 'approval') { await approvalsCommand(argv, { ...context, onLocale: value => { locale = value; context.onLocale?.(value); } }); return 0; }
-    if (argv[0] === 'monitor') { await monitorCommand(argv, { ...context, onLocale: value => { locale = value; context.onLocale?.(value); } }); return 0; }
-    if (argv[0] === 'workers') { await workersCommand(argv, { ...context, onLocale: value => { locale = value; context.onLocale?.(value); } }); return 0; }
-    if (argv[0] === 'coding') { await codingCommand(argv, { ...context, onLocale: value => { locale = value; context.onLocale?.(value); } }); return 0; }
-    if (argv[0] === 'init') { await initCommand(argv, { ...context, onLocale: value => { locale = value; context.onLocale?.(value); } }); return 0; }
-    if (argv[0] === 'toolchains') { await toolchainsCommand(argv, { ...context, onLocale: value => { locale = value; context.onLocale?.(value); } }); return 0; }
-    if (argv[0] === 'secret') { await secretCommand(argv, { ...context, onLocale: value => { locale = value; context.onLocale?.(value); } }); return 0; }
-    if (argv[0] === 'pool') { await poolCommand(argv, { ...context, onLocale: value => { locale = value; context.onLocale?.(value); } }); return 0; }
-    if (argv[0] === 'mcp') { await mcpCommand(argv, { ...context, onLocale: value => { locale = value; context.onLocale?.(value); } }); return 0; }
-    if (argv[0] === 'run') {
-      await runCommand(argv, { ...context, onLocale: value => { locale = value; context.onLocale?.(value); } });
-      return 0;
-    }
-    if (argv[0] === 'inventory') {
-      await runInventoryCommand(argv, { ...context, onLocale: value => { locale = value; context.onLocale?.(value); } });
-      return 0;
-    }
-    if (argv[0] === 'task') { await taskCommand(argv, { ...context, onLocale: value => { locale = value; context.onLocale?.(value); } }); return 0; }
-    if (argv[0] === 'runtime') { await runtimeCommand(argv, { ...context, onLocale: value => { locale = value; context.onLocale?.(value); } }); return 0; }
-    if (argv[0] === 'models') { await modelsCommand(argv, { ...context, onLocale: value => { locale = value; context.onLocale?.(value); } }); return 0; }
-    if (argv[0] === 'inference') { await inferenceCommand(argv, { ...context, onLocale: value => { locale = value; context.onLocale?.(value); } }); return 0; }
-    if (argv[0] === 'terminal') { await (await import('./terminal.js')).terminalCommand(argv, { ...context, onLocale: value => { locale = value; context.onLocale?.(value); } }); return 0; }
-    if (argv[0] === 'policy' && (argv[1] === 'grants' || argv[1] === 'revoke')) { await policyGrantsCommand(argv, { ...context, onLocale: value => { locale = value; context.onLocale?.(value); } }); return 0; }
-    if (argv[0] === 'config') { await configCommand(argv, { ...context, onLocale: value => { locale = value; context.onLocale?.(value); } }); return 0; }
-    if (argv[0] === 'policy' || argv[0] === 'doctor' || argv[0] === 'paths') {
-      await runKernelCommand(argv, { ...context, onLocale: value => { locale = value; context.onLocale?.(value); } });
-      return 0;
-    }
-    const result = dispatch(argv);
+    const command = CLI_COMMANDS.find(item => item.path.length === 1 && item.name === argv[0]);
+    if (command) { await command.run(argv, { ...context, onLocale: value => { locale = value; context.onLocale?.(value); } }); return 0; }
+    const result = argv.length === 0 ? { output: renderTopHelp(locale), code: 0 as const } : dispatch(argv);
     emit(result.output, { level: result.code === 0 ? 'info' : 'error', ...(context.stdout ? { stdout: context.stdout } : {}), ...(context.stderr ? { stderr: context.stderr } : {}) });
     return result.code;
   } catch (error) {

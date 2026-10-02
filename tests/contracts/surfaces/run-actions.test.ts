@@ -30,7 +30,7 @@ it('quotes shell-sensitive generated identity values in human output without exe
 it.each([
   [...args, '--task', 't'], [...args, '--attempt', 'caller'], [...args, '--expected-revision', '1'],
   ['run', 'reserve', '--scope', 's', '--id', 'r', '--command-id', 'reserve', '--expected-revision', '-1'],
-])('rejects caller selection, duplicate and invalid reservation arguments: %j', async invalid => {
+].map(invalid => ({ invalid })))('rejects caller selection, duplicate and invalid reservation arguments: %j', async ({ invalid }) => {
   let calls = 0; const stderr = { write() {} };
   expect(await main(invalid, { stderr, async reserveRunTasks() { calls++; return response; } })).toBe(2); expect(calls).toBe(0);
 });

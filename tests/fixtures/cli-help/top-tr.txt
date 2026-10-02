@@ -1,0 +1,26 @@
+Kullanım: deckent <komut> [seçenekler]
+Başlarken:
+  terminal    Etkileşimli terminali aç
+  init        Kurulumu hazırla
+İzleme:
+  monitor     Kurulumları ve işleri izle
+  workers     İşçileri listele veya izle
+İş yürütme:
+  run         Run oluştur ve yönet
+  task        Görevleri yürüt, değerlendir ve teslim et
+  pool        Havuzu incele, beklet veya sürdür
+Modeller:
+  models      Modelleri incele ve yönet
+Onaylar:
+  approval    Onay isteklerini incele ve karara bağla
+  policy      Politikayı ve kalıcı izinleri incele
+Kurulum/Bakım:
+  config      Yapılandırmayı incele ve değiştir
+  mcp         MCP sunucularını yönet
+  secret      Saklanan gizli değerleri yönet
+  toolchains  İşçi araçlarını kontrol et veya güncelle
+  doctor      Kurulum sağlığını kontrol et
+Genel seçenekler: --json  --lang en|tr  --no-color
+Örnekler: deckent doctor; deckent config get
+Ayrıntı: deckent <komut> --help; geliştirici: deckent --help --all
+Terminalde argümansız çağrı etkileşimli oturumu açar. --version: sürüm.

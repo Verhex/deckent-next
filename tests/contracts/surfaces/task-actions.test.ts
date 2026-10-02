@@ -55,7 +55,7 @@ it.each([
   ['task', 'execute', ...identityArgs, '--generation', '2'],
   ['task', 'evaluate', ...identityArgs, '--command-id', 'evaluate', '--expected-revision', '0', '--verdict', 'pass'],
   ['task', 'evaluate', ...identityArgs, '--command-id', 'evaluate', '--expected-revision', '-1'],
-])('rejects private execution fields, duplicates, caller verdicts and invalid counters: %j', async args => {
+].map(invalid => ({ invalid })))('rejects private execution fields, duplicates, caller verdicts and invalid counters: %j', async ({ invalid: args }) => {
   let calls = 0; const stderr = { write() {} };
   expect(await main(args, { stderr, async executeTask() { calls++; throw new Error(); }, async evaluateTask() { calls++; throw new Error(); } })).toBe(2);
   expect(calls).toBe(0);

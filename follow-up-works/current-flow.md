@@ -94,7 +94,7 @@ Bu belge yalnız güncel durumu tutar; önceki sürümü Git geçmişinde, kanı
   (owner onaylı yeniden başlatma; U1: canlı checkout yalnız o geçişte derlenir) → DEV-U2-0 şeridi (owner U2 seçenek C; Jev c2956e5d .94/.68) inince ilk DEV-U2-0 geçişi.
   Canlı config zaten değişti (owner onaylı, Jev 10d392b3 .94): `terminal.chat.maxCompletionTokens` 16384, `local-qwen` v7 `maxOutputTokens` 16384, `limits.timeoutMs` 600000
   (`service.responseTimeoutMs` yalnız son çerçeve yazımını sınırlar; model çağrısını profil `timeoutMs` sınırlar; kanıt `proof/MAX-COMPLETION-2026-09-30/`).
-  Açık: `deckent models --help` `catalog` satırı (i18n-parity ile); ayrı `truncated` araç durumu (Jev 0,84, karar); D2 lead inceleme notları (PLAN); K3/K5/K6.
+  `deckent models --help` katalog satırı CLI-HELP şeridinde uzlaştırıldı. Açık: ayrı `truncated` araç durumu (Jev 0,84, karar); D2 lead inceleme notları (PLAN); K3/K5/K6.
 - **2026-09-30 akşam:** `origin/main` = `30988c66` canlıda (16. parti; instance `0c8a0709`, ledger v43). Owner K1–K9 kararları PLAN'da (ikame seçenek A **kararlaştırıldı**,
   17. partide uygulandı). Kanıt `proof/DOGFOOD-K-DECISIONS-2026-09-30`.
 - **Canlı (2026-09-30, 15. parti):** `origin/main` = `47a76adf` (Astra 2194 PASS); instance `85d99b8d`, Node 24.21; tam erişimde model curl → HTTP/2 200
@@ -257,7 +257,7 @@ izlemek yerine bağın kendisini sayıyor. Aktif kartlar, son üç günün kanı
 
 ## Sıradaki
 1. On yedinci parti (`integrate/2026-09-30-r`, yukarıda): tam verify → Sol REQUEST_REVIEW → PASS'te push → canlı geçiş; ardından DEV-U2-0 ilk geçişi. Sonra WORKER-CURRENCY-2
-   artıkları (`models --help` satırı, terminal `/models`, sohbet yolunun ledger kataloğuna taşınması), K3 → K5/K6 → U2.
+   artıkları (terminal `/models`, sohbet yolunun ledger kataloğuna taşınması), K3 → K5/K6 → U2.
 2. REALM-NOTICE açığı: MCP ön-başlatma launch kartı gerçek realm'i önceden adlandırmıyor — (a) `usable()` ön-seçimi / (b) olduğu gibi; lead/owner.
 3. Owner kararları: SHELL-OVERLAY O1/O3/O5/O6/O7; `format` denetleyicisi, şema korpusu ölçümü, AppArmor kurulum belgesi, CI `bwrap-bundle.yml` ilk koşu;
    DEPS-SCHEMA C1 kanıtı; sabah listesi `proof/MORNING-REPORT-2026-09-29.md` (P1 tasarımları: OTel / uzak MCP, anahtar zinciri K2; zod 4 hata kodları;
@@ -279,3 +279,16 @@ izlemek yerine bağın kendisini sayıyor. Aktif kartlar, son üç günün kanı
 ## CONFIG-SURFACE şerit — 2026-10-02
 
 `lane/config-surface`, taban `e137b6e3`: S1–S5 uygulandı; ortak registry config application + adapter policy/audit/atomic backup, şema 4 ve binding ratchet, havuz/Docker tavanları, CLI/terminal/monitor okuma yüzeyleri. Temp ürün komut zinciri provider/profile/activation temizliği ve eski history okumasını doğruladı. Kırmızı testler ve sekiz zorunlu mutasyon dış proof'ta. 24 dosyada 231 benzersiz hedefli test doğrulandı (son birleşik koşudaki tek metin assertion düzeltmesinin ardından 4 yüzey dosyası 48/48); typecheck, ESLint (0 hata; mevcut bir uyarı), mimari 0 ihlal/bütçe artışı yok, i18n ve core-memory gate'leri geçti. Sonraki adım exact commit/patch'in lead üzerinden bağımsız incelemesi. Native transport regresyonu desteklenmeyen yerel transport nedeniyle doğrulanamadı; terminal config yazımı yok; config require-approval tipli ret; audit intent filesystem settlement değildir. Canlı kurulum/servisler çalıştırılmadı. Bağımsız inceleme yok; PASS değildir.
+
+## CLI-HELP şerit — 2026-10-02
+
+`lane/cli-help`, taban `19a6bb42` (CONFIG-SURFACE dahil): uygulandı. Katalogdan türeyen gruplu en/tr üst yardım 26 satır, en 77/tr 71 sütun;
+98 kayıtlı komut yolunda alt yardım ve golden; ortak bayraklar tek yerde, geliştirici komutları `--help --all`. Renderer/katalog `cli-kit`,
+CLI yönlendirmesi aynı handler'lara bağlı; bütçe artırılmadı. Golden kırmızı → yeşil ve grup eksik/80 sütun aşımı/tr anahtar eksik üç mutasyon dış proof'ta.
+31 dosyada 201/201 hedefli kaynak testi, typecheck, değişen TS dosyalarında ESLint ve arch kontrolü geçti; eski taskCommand uzunluk uyarısı sürüyor.
+Taban i18n-registry hataları bağımsız tekrar üretildi: 11 aile/10 beklentisi, tr CONFIG_SECRET_SECTION_REFUSED redaksiyonu. Dist yok ve native transport
+kullanılamıyor; ilgili süreç testleri başarılı sayılmadı. Build, tam verify, push ve canlı erişim yok. Sıradaki: lead exact commit/patch incelemesi,
+A1/A3 eylemlerini kayıt + en/tr ayrıntılarıyla birleştirme, ardından entegrasyon doğrulaması. Kanıt `proof/CLI-HELP-2026-10-02/review.md`.
+Teslim commit yerine dış proof içinde `changes.patch`: Git add index.lock için salt-okunur dosya sistemi hatası verdi; commit aşamasında staged dosya yoktu.
+Patch geçici taban dosyalarına uygulandı ve 25 dosyanın SHA-256 eşitliği doğrulandı.
+Bağımsız inceleme yok; PASS değildir.

@@ -120,7 +120,7 @@ describe('deckent monitor command', () => {
     expect((await cli(['monitor', '--help', '--once'], {}, root)).code).toBe(2);
     const help = await cli(['monitor', '--help', '--lang', 'tr'], {}, root);
     expect(help.code).toBe(0); expect(help.out).toContain('--once'); expect(help.out).toContain('Yalnız gözlem');
-    expect((await cli(['--help'], {}, root)).out).toContain('monitor [--once|--json]');
+    expect((await cli(['--help'], {}, root)).out).toContain('monitor     Watch installations and work');
   });
 });
 

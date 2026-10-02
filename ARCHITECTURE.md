@@ -514,6 +514,21 @@ Native runtime transport, a freshly built executable, live restart and independe
 verified evidence. Fixed architecture budgets are retained; filesystem/authority adapters and pure admission helpers
 keep composition as wiring, and previous comment-only wiring notes move to the external proof packet.
 
+### CLI help catalog (CLI-HELP, owner 2026-10-02)
+
+`surfaces/core/cli-kit` owns the typed dispatch catalog and plain-text help renderer. Each registration
+has a purpose group, an i18n summary key and a detail key; nested registrations inherit their family's
+existing execution handler. `cli` binds the handlers once, uses the catalog for dispatch, and recognizes
+help before initialization. Run/Task action admission reads this same catalog. Argument parsers, runtime
+operations, authority, JSON envelopes and exit codes remain owned by the existing handlers.
+Top-level help lists command families by purpose; developer families require `--help --all`. Details
+and registered children are exposed by `deckent <command> --help [--lang en|tr]`; common flags appear once.
+Canonical help outputs have bilingual goldens and an 80-display-column gate, and every registration's
+group, summary and detail must exist in both locales. New actions (including the separate A1/A3 lane)
+register metadata and localized details in this catalog; no top-level help string is hand-edited.
+This is presentation discovery, not an authorization registry. Source-surface evidence does not establish
+packaged-binary or cross-platform acceptance; this lane excludes build and full verify by owner direction.
+
 ### Operator terminal contract v1 (accepted target, partial implementation)
 
 The operator terminal is a presentation of the same typed operator actions as CLI, MCP and (later) Desktop,
@@ -2646,8 +2661,8 @@ the `task transcript` report view, SDK/MCP through the same composition. Catalog
 (read-only) / `apply_model_catalog` (destructive, idempotent by the (scope, commandId) receipt), SDK `applyModelCatalog` /
 `inspectModelCatalog`; listing needs the scoped `model-activation` `inspect` decision per channel (else `denied`); `register --seed
 <name>` reads the packaged `assets/model-catalog/<name>.json`, `--file PATH|-` an operator document. Authority unchanged from WC-R1.
-Open: the `deckent models --help` text (`cli.help.models`) does not yet list `catalog` (changing it breaks the i18n-parity snapshot of
-unaffected templates; en/tr together with the snapshot); terminal `/models` read-only view and the `/workers` verdict word; chat path
+CLI-HELP reconciles `models --help` catalog discovery with both locale snapshots.
+Open: terminal `/models` read-only view and the `/workers` verdict word; chat path
 onto the ledger catalog; Codex/Cursor output-side model evidence (none documented); a real Claude run showing `verified` with a helper.
 
 ### Work targets, slice 1 (WORK-TARGETS; owner 2026-09-30 K1 = W2, K2 = A, K4 = A; Jev a2053c1c; seventeenth batch)
@@ -2769,7 +2784,7 @@ onto the ledger catalog; Codex/Cursor output-side model evidence (none documente
   audit 1 (additive); runtime protocol 18, config 3, Run snapshot 1, graph 3 unchanged; error registry +1 (`RUN_POOL_HELD`).
 - **Open.** First v44 switch cannot drain (the v43 build has no hold); `drained` never becomes true while a pinned Claude attempt waits for
   an operator evaluation (use `occupancy.execution === 0` to see "nothing running"); no per-scope hold; no terminal `/pause`, no
-  `run inspect` waiting reason, global `cli.help` line not added (only `cli.help.pool`); dev-release drain integration not implemented.
+  `run inspect` waiting reason; dev-release drain integration not implemented. CLI-HELP exposes `pool` in the top-level work group.
 
 ### Patch scope classification (K6 = A; owner 2026-09-30, Jev ddbcaacd; lane Jev c93ceea4 / 4c772497 / bc205c7c)
 
