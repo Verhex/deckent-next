@@ -11,36 +11,47 @@ import { createWorklineLedgerPorts, main } from '#surfaces/core/cli/index.js';
 import type { WorklineApproval } from '#surfaces/core/terminal/index.js';
 import { mountWorkline, settle, until } from '../support/workline-harness.js';
 
-// B1 APPROVAL-ASSURANCE on the surfaces: MCP never allows (typed refusal at the surface, deny still works); every surface declares its
+// B1 APPROVAL-ASSURANCE on the surfaces: MCP offers no approval decision tool; every surface declares its
 // channel (a record, never authority); the terminal card forwards the turn's one-time capability with zero extra keys and is the single card
 // (binding line first and never clipped, a typed risk line always visible above the preview, nothing-runs on expiry, the required assurance).
 const hex = (char: string) => char.repeat(64);
 const command = { schemaVersion: 1, scopeId: 's', approvalId: 'a1', commandId: 'c1', expectedRevision: 0, reason: 'Reviewed' };
 const CAPABILITY = 'Q'.repeat(43);
 
-describe('MCP decide_approval never allows', () => {
-  it('refuses allow with APPROVAL_ATTENDED_REQUIRED before reaching the runtime, sends deny with channel mcp, and advertises no capability or channel field', async () => {
+describe('MCP approval decisions are unavailable', () => {
+  async function connect() {
     const seen: unknown[] = [];
-    const server = createMcpServer({ async inspectRun() { return null; }, async inspectInventory() { return null; },
-      async decideApproval(input: unknown) { seen.push(input); return { status: 'decided' }; } }, { maxConcurrentCalls: 2, responseMaxBytes: 65_536 }, 'en');
-    const [ct, st] = InMemoryTransport.createLinkedPair(); await server.connect(st); const client = new Client({ name: 'test', version: '1' }); await client.connect(ct);
+    const applications = { async inspectRun() { return null; }, async inspectInventory() { return null; },
+      async listApprovals() { return [{ approvalId: 'a1', status: 'pending' }]; },
+      async inspectApproval() { return { approvalId: 'a1', status: 'pending' }; },
+      // Even an application object retaining the SDK method must not expose it as an MCP tool.
+      async decideApproval(input: unknown) { seen.push(input); return { status: 'decided' }; } };
+    const server = createMcpServer(applications, { maxConcurrentCalls: 2, responseMaxBytes: 65_536 }, 'en');
+    const [ct, st] = InMemoryTransport.createLinkedPair(); await server.connect(st);
+    const client = new Client({ name: 'test', version: '1' }); await client.connect(ct);
+    return { client, server, seen };
+  }
+  it('does not offer decide_approval and retains list/inspect observation', async () => {
+    const { client, server } = await connect();
     try {
-      const tool = (await client.listTools()).tools.find(entry => entry.name === 'decide_approval')!;
-      expect(Object.keys((tool.inputSchema as { properties: Record<string, unknown> }).properties)).not.toEqual(expect.arrayContaining(['decisionCapability']));
-      expect(Object.keys((tool.inputSchema as { properties: Record<string, unknown> }).properties)).not.toContain('channel');
-      const allow = await client.callTool({ name: 'decide_approval', arguments: { ...command, decision: 'allow' } });
-      expect(allow.isError).toBe(true);
-      expect(JSON.stringify(allow)).toContain('APPROVAL_ATTENDED_REQUIRED');
-      expect(seen).toEqual([]);
-      // An MCP client cannot smuggle a capability or a channel either.
-      expect(JSON.stringify(await client.callTool({ name: 'decide_approval', arguments: { ...command, decision: 'allow', decisionCapability: CAPABILITY } }))).toContain('MCP_INPUT_INVALID');
-      expect(JSON.stringify(await client.callTool({ name: 'decide_approval', arguments: { ...command, decision: 'deny', channel: 'local-terminal-card' } }))).toContain('MCP_INPUT_INVALID');
-      expect(seen).toEqual([]);
-      const deny = await client.callTool({ name: 'decide_approval', arguments: { ...command, decision: 'deny' } });
-      expect(deny.isError).not.toBe(true);
-      expect(seen).toEqual([{ ...command, decision: 'deny', channel: 'mcp' }]);
-      expect(tool.annotations?.destructiveHint).toBe(false);
-    } finally { await client.close(); }
+      const names = (await client.listTools()).tools.map(entry => entry.name);
+      expect(names).not.toContain('decide_approval');
+      expect(names).toEqual(expect.arrayContaining(['list_approvals', 'inspect_approval']));
+      expect((await client.callTool({ name: 'list_approvals', arguments: { schemaVersion: 1, scopeId: 's', afterId: null, limit: 10 } })).isError).not.toBe(true);
+      expect((await client.callTool({ name: 'inspect_approval', arguments: { schemaVersion: 1, scopeId: 's', approvalId: 'a1' } })).isError).not.toBe(true);
+    } finally { await client.close(); await server.close(); }
+  });
+  it.each(['allow', 'deny'])('returns the ordinary unknown-tool result for %s without invoking a decision', async decision => {
+    const { client, server, seen } = await connect();
+    try {
+      const unknown = await client.callTool({ name: 'nonexistent_tool', arguments: {} });
+      expect(unknown.isError).toBe(true);
+      expect(JSON.stringify(unknown)).toContain('MCP_TOOL_UNKNOWN');
+      for (const extra of [{}, { decisionCapability: CAPABILITY }, { channel: 'local-terminal-card' }]) {
+        expect(await client.callTool({ name: 'decide_approval', arguments: { ...command, decision, ...extra } })).toEqual(unknown);
+        expect(seen).toEqual([]);
+      }
+    } finally { await client.close(); await server.close(); }
   });
 });
 

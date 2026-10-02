@@ -1,5 +1,7 @@
 # Changelog
 
+- MCP-NO-DECIDE (owner 2026-10-02): removed the MCP approval decision tool for both allow and deny; approval inspection remains, and CLI/SDK/terminal decision paths keep their existing authorization.
+
 Human-curated. One line per landing, keyed by PLAN.md card id. No product code writes this file.
 
 ## Unreleased

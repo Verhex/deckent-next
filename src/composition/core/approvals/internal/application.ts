@@ -27,7 +27,7 @@ export async function configuredApproval(projectRoot: string, action: 'list' | '
     const journal = openSqliteApprovalStore(await context.path(), config.storage.sqlite);
     try {
       const check = (result: unknown) => { if (Buffer.byteLength(JSON.stringify(result)) > (capacity ?? config.service.responseMaxBytes)) throw new RuntimeServiceProtocolError('RUNTIME_SERVICE_RESPONSE_LIMIT'); };
-      // Every approval surface here (SDK, CLI, MCP `decide_approval`, terminal card) is a general one: authority-surface approvals
+      // Every approval surface here (SDK, CLI, terminal card) is a general one: authority-surface approvals
       // (`policy.administer@1`) are not decidable through it (POLICY-HARDEN K3); the refusal is recorded in the audit ledger.
       registerProviderConfig();
       const restriction = action !== 'decide' ? undefined : { catalog: resolveOperationCatalog(readOperationsConfig(config as unknown as Record<string, unknown>)),

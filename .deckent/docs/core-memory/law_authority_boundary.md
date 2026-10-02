@@ -9,3 +9,5 @@ Değişiklik öncesi ilgili Next mimarisi (`ARCHITECTURE.md`) ve legacy ADR kan�
 - Legacy runtime/recall komutu çalıştırılmaz; kaynaklar salt okunur incelenir. Legacy package A/B, makine isimleri ve eski branch kuralları Next yetkisi değildir.
 
 Legacy ders: PREPARED → VERIFIED → COMMITTED devir zinciri ve owner recovery ayrımı tasarım dersidir; Next'te varmış gibi ilan edilmez.
+
+Owner amendment 2026-10-02 — MCP-NO-DECIDE: MCP onay kararını ne `allow` ne `deny` olarak verebilir; `decide_approval` sunulmaz. Listeleme/inceleme gözlemdir. CLI `approval decide`, SDK ve terminal kartının mevcut karar yetkisi korunur; B1'in MCP `deny` istisnası kaldırılmıştır. Ortak runtime/protokol/ledger karar sözleşmesi bu yüzey daraltmasıyla değişmez.

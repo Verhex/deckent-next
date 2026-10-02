@@ -634,8 +634,6 @@
   "config.field.approvals": "Onay ve canlı oturum ayarları",
   "mcp.tool.listApprovals": "Kapsamdaki onay isteklerini listele.",
   "mcp.tool.inspectApproval": "Bir onayı ve kanıtını incele.",
-  "mcp.tool.decideApproval": "Doğrulanmış canlı oturumdan onay kararı ver.",
-  "mcp.tool.denyApproval": "Doğrulanmış canlı oturumdan bir onayı reddet. MCP hiçbir zaman izin vermez: izin isteği reddedilir (APPROVAL_ATTENDED_REQUIRED); izni Deckent terminal kartında verin.",
   "mcp.tool.renewApproval": "Kapanmış onay isteğini açıkça yenile.",
   "mcp.tool.executeOperation": "Katalog operasyonunu çalışma zamanı servisi üzerinden tanımlı hedefinde yürüt. Onay gerekiyorsa approval-pending döner ve hiçbir şey gönderilmez; karardan sonra aynı komutu yeniden gönder.",
   "mcp.tool.compensateOperation": "Sonuçlanmış bir katalog operasyonunu katalogdaki telafisiyle yeni bir operasyon olarak telafi et (aynı onay kuralları).",

@@ -13,7 +13,7 @@ import { openConfiguredAttemptStore } from '../../../src/composition/core/storag
 import { conditionalRecordServer } from '../support/conditional-record-server.js';
 
 // C12 G4 acceptance on the shipped processes: compiled `runtime serve` + compiled MCP stdio. execute_operation (loopback HTTP target)
-// answers approval-pending without an effect; decide_approval decides it over the MCP process's live runtime connection; the same
+// answers approval-pending without an effect; the CLI decides it over its live runtime connection; the same
 // command settles once; the ledger holds exactly one intent (settled) and one approval record.
 type Child = ChildProcess & { stdout: NonNullable<ChildProcess['stdout']>; stderr: NonNullable<ChildProcess['stderr']> };
 const children = new Set<Child>(), cleanup: (() => Promise<void>)[] = [];
@@ -92,10 +92,10 @@ it.skipIf(process.platform !== 'linux')('compiled MCP execute_operation: pending
     const listed = await call('list_approvals', { schemaVersion: 1, scopeId: 's', afterId: null, limit: 10 });
     expect(listed).toEqual([expect.objectContaining({ status: 'pending', request: expect.objectContaining({ approvalId: pending.approval!.approvalId,
       subject: expect.objectContaining({ kind: 'operation', commandId: 'mcp-gated' }) }) })]);
-    // B1 (owner 2026-10-01): MCP never allows; the request stays pending. The owner allows it from the CLI (peer-session; an operation
+    // B1 (owner 2026-10-01): MCP offers no decision tool; the request stays pending. The owner allows it from the CLI (peer-session; an operation
     // approval needs no turn capability) over the same live runtime service.
     const decision = { schemaVersion: 1, scopeId: 's', approvalId: pending.approval!.approvalId, commandId: 'cli-allow', expectedRevision: 0, decision: 'allow', reason: 'Reviewed' };
-    await expect(call('decide_approval', { ...decision, commandId: 'mcp-allow' })).rejects.toThrow(/APPROVAL_ATTENDED_REQUIRED/u);
+    await expect(call('decide_approval', { ...decision, commandId: 'mcp-allow' })).rejects.toThrow(/MCP_TOOL_UNKNOWN/u);
     const commandPath = join(root, 'decision.json'); await writeFile(commandPath, JSON.stringify(decision));
     const decided = JSON.parse((await bounded(execFileAsync(process.execPath, [cli, 'approval', 'decide', '--input', commandPath, '--json'], { cwd: project, env }), 'CLI_DECIDE_TIMEOUT')).stdout);
     expect(decided).toMatchObject({ status: 'decided', decision: { decision: 'allow', channel: 'local-cli', assurance: 'peer-session' } });

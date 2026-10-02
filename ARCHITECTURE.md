@@ -1,5 +1,7 @@
 # Architecture
 
+**Owner amendment 2026-10-02 — MCP-NO-DECIDE:** MCP exposes no approval decision tool: neither `allow` nor `deny`; `list_approvals` and `inspect_approval` remain observation. CLI `approval decide`, SDK and terminal decisions retain their existing authority checks. This supersedes B1's MCP-deny exception; protocol and ledger contracts stay unchanged. Implementation and evidence: `follow-up-works/current-flow.md`.
+
 Ortak ürün/geliştirme ölçütü: [.deckent/docs/core-memory/project_product_north_star.md](.deckent/docs/core-memory/project_product_north_star.md).
 Owner 2026-09-21: dar dilimler ürün hedefini küçültmez; mevcut kararlar yeni kanıt olmadan yeniden açılmaz.
 
@@ -1606,7 +1608,7 @@ bound is that person's authority. Every use and every "this session" answer is a
 default standart an eligible ordinary edit is lowered by the mode first; a standing approval on an edit matters for a person who asks
 for edits too (`askEdits`) or where the mode does not lower. CLI:
 `deckent policy grants --mine` / `deckent policy revoke`. No version changed (policy v2, bindings v1/v2, ledger v42, protocol v16, layout 4);
-the vocabulary gains `agent-tool-call`. Not yet: the card scopes + decision field on protocol v17 (introduced by MODES-3; MCP `decide_approval` keeps them out), the
+the vocabulary gains `agent-tool-call`. Not yet: the card scopes + decision field on protocol v17 (introduced by MODES-3; MCP has no approval decision tool), the
 service wiring from the turn's `requestApproval` to `offer`/`remember`/`persist`, the installation root (P4; a v1 live policy cannot offer
 "always"), `/policy`, listing this session's memory.
 
@@ -2180,13 +2182,12 @@ rename, `committed` after the last, full documents before/after; keyed by the C1
 applied, files at `before` → absent, anything else → unknown), and a cross-process lock injected by composition (the platform directory
 lock `policy.json.write-lock`, 5 s bounded wait, typed `CONFIG_WRITE_LOCKED`). Measured (2–4 OS processes, 400–600 writes): without the
 lock 39–70 lost updates, with it 0. The `POLICY_*` refusal codes have en/tr texts but no surface maps them yet. Not yet: any surface
-(`/policy`, `deckent policy`, protocol v17), refusal audit events, last-owner guard, external-change detection, a sealed archive, MCP
-`decide_approval` refusal for authority subjects.
+(`/policy`, `deckent policy`, protocol v17), refusal audit events, last-owner guard, external-change detection, a sealed archive. MCP approval decisions were removed by owner amendment 2026-10-02.
 
 **Authority hardening (POLICY-HARDEN P3-R, seventh batch).** `ApprovalApplication` takes a `restriction { catalog, surface?, refused? }`:
 an approval of an operation whose descriptor is `surface: 'authority'` is allowed only by the application built with `surface: 'authority'`;
-every general surface (SDK, CLI, MCP `decide_approval` through the runtime service, the terminal) gets `APPROVAL_SURFACE_RESTRICTED` (registered,
-so the runtime client sees the code); a deny stays open everywhere (open decision). A claimed intent whose authority is gone at settle is
+every general surface (SDK, CLI through the runtime service, the terminal) gets `APPROVAL_SURFACE_RESTRICTED` (registered,
+so the runtime client sees the code); a deny stays open on these decision surfaces. MCP exposes no approval decision tool (owner 2026-10-02). A claimed intent whose authority is gone at settle is
 refused terminally (`POLICY_DENIED` → `refused/EFFECT_REJECTED`; no new refusal value). Audit event v1 gains `authority-refusal` (`stage
 decide|submit|settle`, code, command/approval ids; no change content). The approval summary of an authority operation is a redacted,
 human-readable diff (`describePolicyChange`, ≤ 2048 characters, cut by code point) through `OperationApprovalBroker`'s `describe`; no

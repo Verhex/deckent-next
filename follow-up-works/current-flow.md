@@ -1,5 +1,8 @@
 # Anlık iş akışı — devir, sıradaki adım, kanıt (2026-09-29, Opus 5.5 lead)
 
+## MCP-NO-DECIDE — owner 2026-10-02, lane/mcp-no-decide
+Taban `a56a3f26`; B1 bu tabanda birleşmiş. MCP approval karar aracının tamamen kaldırılması yetkili kapsamdır; CLI/SDK/terminal ve protokol/ledger korunur. Uygulandı: araç/katalog kaldırıldı; list/inspect korunuyor; allow/deny bilinmeyen araç yanıtı verir ve bekleyen kayıt aynı kalır. TDD kırmızı 3 test; son hedefli koşu 12 dosya 93/93; iki mutasyon öldü. Typecheck/eslint 0 hata (1 mevcut uzunluk uyarısı), arch 0 ihlal, memory manifest yenilendi. Docker kurulu-runtime suite sonuçsuz beklediği için kesildi (130), kabul kanıtı değil. Tam verify/push/canlı geçiş bu şeritte yok. Sıradaki: lead bağımsız inceleme ve Docker senaryosunun tamamlanması; bağımsız PASS yok. Kanıt: `proof/MCP-NO-DECIDE-2026-10-02/review.md`.
+
 Bu belge yalnız güncel durumu tutar; önceki sürümü Git geçmişinde, kanıtlar `deckent-refactor-work/proof/`.
 
 ## Durum
