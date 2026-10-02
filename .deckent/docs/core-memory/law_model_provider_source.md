@@ -2,6 +2,8 @@
 
 Model adı, fiyat, kapasite ve değişebilir iş politikası registry/config üzerinden çözülür; kod yolunda literal yasaktır (ADR-G-036 + ratchet). Kaynak, güncellik ve offline sınırlama görünür olmalıdır; eksik veri sıfır veya güncel başarı sayılmaz. Air-gap için kontrollü snapshot desteklenir. Sabit güvenlik/protokol kuralı sürümlü kodda kalabilir; her literal için abstraction kurulmaz.
 
+Ratchet kimliği (2026-10-03, parti 27 entegrasyonu; bağımsız yeniden inceleme bekliyor): borç kimliği dosyadan bağımsız (fingerprint, kural) sayısıdır. Taşınan kayıt `file`'ı günceller ve kabul dosyasını `origin` ile adlandırır; frozen üyelik bir kez talep edilir, sayı hiçbir first-parent liste sürümünü aşamaz; kopya reddedilir. Allowlist yeni borcu gizlemek için büyümez.
+
 - HARDCODE-RATCHET: `scripts/lint-arch.mjs` G1–G4 kapıları ve `arch.json` gerekçeli muafiyetleri; ilk kabul `19a6bb42` dedektör envanteriyle tam eşit 514 kimlik (G1 97; lead Jev `5e061ec1`, HR-R2 ile görülen iki eski shorthand adı gerekçeli); geçmişte liste yoksa ilk giriş, tek sürüm varsa o kabul sınırdır; kabulden sonra sabit parmak izli allowlist yalnız küçülür, yeni hardcode yasak; Sol 2250 düzeltmesi tüm first-parent liste sürümlerine göre eski silmeleri korur (merge dahil); Git/shallow geçmiş eksikse tipli uyarı ve tarihsel küçülme kanıtı yok; sezgisel kapsam boşlukları ayrıca belgelenir.
 
 - Provider-scoped explicit-active: `default_model` tercihtir, sert sınır owner active-set'idir. Katalogda yeni model belirmesi otomatik activation değildir. İnaktif/erişilemez modelde sessiz ikame veya yeniden etkinleştirme yoktur; açık sonuç ve yetkili seçim gerekir. Legacy ModelActivationStore/models.db Next uygulama iddiası değildir.

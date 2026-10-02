@@ -1757,8 +1757,15 @@ service wiring from the turn's `requestApproval` to `offer`/`remember`/`persist`
   Existing debt is frozen in `scripts/hardcode-allowlist.json`: file + SHA-256 of class, enclosing symbols,
   normalized literal, parent kind, config field (G4), and duplicate occurrence ordinal; never a line number.
   Frozen membership hashes reject additions and equal-count swaps. Every list-changing version on HEAD's full
-  first-parent history (including merge changes and list deletions) constrains the working list: current identities
-  must occur in every prior admitted version. Later cleanups/no-op commits cannot erase an earlier removal.
+  first-parent history (including merge changes and list deletions) constrains the working list: per
+  (fingerprint, rule) the current entry count may not exceed its count in any prior admitted version.
+  Later cleanups/no-op commits cannot erase an earlier removal. Relocation (batch-27 integration, 2026-10-03;
+  pending independent re-review): the fingerprint is file-independent, so the file is only the debt's location.
+  A moved entry updates `file` and names its admission file in `origin`; frozen membership is checked against
+  that admission identity, each frozen identity claimable once, and `origin` must differ from `file`. A move
+  keeps the count; a copy grows it (unlisted finding, duplicate claim or history count failure). Lineage is
+  claimed in the list itself, so moves also verify in exports/shallow CI checkouts against frozen membership.
+  Limit: a fix in one file plus an identical symbol/literal/ordinal in another is indistinguishable from a move.
   Missing source occurrences fail as stale allowances; deletion prints the admission delta. Source exports,
   shallow repositories and unreadable history emit `[hardcode-history-unavailable]` warnings in both CLI modes:
   frozen membership remains enforced, but historical shrink is not proven (warning alone does not change exit status).

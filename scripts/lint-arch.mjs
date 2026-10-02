@@ -610,19 +610,29 @@ function hardcodeInventory(sources, sourceChecker, policy) {
 function lintHardcode(findings, policy) {
   const identity = row => JSON.stringify({ file: row.file, fingerprint: row.fingerprint, rule: row.rule });
   const hash = row => createHash('sha256').update(identity(row)).digest('hex');
+  // The fingerprint is file-independent, so debt identity is the (fingerprint, rule) multiset and
+  // the file is only its current location. A relocated entry names its admission file in `origin`;
+  // frozen membership is claimed by that admission identity, at most once.
+  const lineage = row => JSON.stringify({ fingerprint: row.fingerprint, rule: row.rule });
+  const counts = rows => rows.reduce((map, row) => map.set(lineage(row), (map.get(lineage(row)) ?? 0) + 1), new Map());
   let allowed;
   try { allowed = JSON.parse(readFileSync(join(ROOT, policy.allowlist), 'utf8')); }
   catch (error) { fail('hardcode-allowlist', policy.allowlist, error.message); return; }
-  const frozen = new Set(policy.frozen ?? []), ids = new Set();
+  const frozen = new Set(policy.frozen ?? []), ids = new Set(), claims = new Set();
   for (const row of allowed) {
-    const id = identity(row);
-    if (!frozen.has(hash(row))) fail('hardcode-allowlist-growth', policy.allowlist, `entry outside frozen membership: ${id}`);
+    const id = identity(row), relocated = Object.hasOwn(row, 'origin');
+    if (relocated && (typeof row.origin !== 'string' || row.origin === row.file)) fail('hardcode-allowlist-growth', policy.allowlist, `origin must name a different admission file: ${id}`);
+    const admitted = relocated ? { ...row, file: row.origin } : row, claim = identity(admitted);
+    if (!frozen.has(hash(admitted))) fail('hardcode-allowlist-growth', policy.allowlist, `entry outside frozen membership: ${claim}`);
+    if (claims.has(claim)) fail('hardcode-allowlist-growth', policy.allowlist, `duplicate admission claim: ${claim}`);
     if (ids.has(id)) fail('hardcode-allowlist-growth', policy.allowlist, `duplicate entry: ${id}`);
-    ids.add(id);
+    ids.add(id); claims.add(claim);
   }
-  // A current identity must survive EVERY list version on the first-parent chain.
-  // Including merge changes keeps older removals authoritative after restoration,
-  // later cleanups and no-op commits. No second mutable retired-set authority.
+  // Per (fingerprint, rule) the current count may never exceed ANY list version on the first-parent
+  // chain. Including merge changes keeps older removals authoritative after restoration, later
+  // cleanups and no-op commits; a file move keeps the count, a copy grows it and fails.
+  // No second mutable retired-set authority.
+  const current = counts(allowed);
   const git = args => execFileSync('git', args, { cwd: ROOT, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
   try {
     if (git(['rev-parse', '--is-shallow-repository']) === 'true') {
@@ -635,19 +645,22 @@ function lintHardcode(findings, policy) {
     for (const revision of revisions) {
       // A deletion is an empty version, not initial admission or missing history.
       const present = git(['ls-tree', '--name-only', revision, '--', policy.allowlist]);
-      const previous = present ? JSON.parse(git(['show', `${revision}:${policy.allowlist}`])) : [];
-      const prior = new Set(previous.map(identity));
-      for (const id of ids) if (!prior.has(id) && !rejected.has(id)) {
-        fail('hardcode-allowlist-growth', policy.allowlist, `entry absent in first-parent list version ${revision}: ${id}`);
-        rejected.add(id);
+      const prior = counts(present ? JSON.parse(git(['show', `${revision}:${policy.allowlist}`])) : []);
+      for (const [key, count] of current) if (count > (prior.get(key) ?? 0) && !rejected.has(key)) {
+        fail('hardcode-allowlist-growth', policy.allowlist, `entry absent in first-parent list version ${revision}: ${key} (count ${count} > ${prior.get(key) ?? 0})`);
+        rejected.add(key);
       }
     }
   } catch {
     warn('hardcode-history-unavailable', policy.allowlist, 'Git list history unavailable: frozen membership enforced, historical shrink is not proven');
   }
   const observed = new Set(findings.map(identity));
-  for (const row of findings) if (!ids.has(identity(row))) fail(`hardcode-${row.rule}`, `${row.file}:${row.line}`, `${JSON.stringify(row.literal)} in ${row.symbol}; ${row.fingerprint}`);
-  for (const row of allowed) if (!observed.has(identity(row))) fail('hardcode-allowlist-stale', row.file, `remove resolved allowance ${row.fingerprint}`);
+  const unlisted = findings.filter(row => !ids.has(identity(row)));
+  for (const row of unlisted) fail(`hardcode-${row.rule}`, `${row.file}:${row.line}`, `${JSON.stringify(row.literal)} in ${row.symbol}; ${row.fingerprint}`);
+  for (const row of allowed) if (!observed.has(identity(row))) {
+    const moved = unlisted.find(other => lineage(other) === lineage(row));
+    fail('hardcode-allowlist-stale', row.file, `remove resolved allowance ${row.fingerprint}${moved ? ` (or relocate it to ${moved.file} with origin)` : ''}`);
+  }
   const delta = frozen.size - ids.size;
   if (delta > 0) process.stdout.write(`hardcode allowlist delta: -${delta} from frozen admission (${ids.size} remaining)\n`);
 }

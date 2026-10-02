@@ -225,3 +225,49 @@ describe('hardcode ratchet', () => {
     expect(findings.some((row: { literal: number }) => row.literal === 8766)).toBe(true);
   });
 });
+
+describe('file moves keep the (fingerprint, rule) count', () => {
+  const moved = 'src/engine/core/example/moved.ts', source = "function pick() { if (provider === 'claude') act(); }";
+  const gitIn = (root: string) => (...args: string[]) => execFileSync('git', ['-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid', ...args], { cwd: root, stdio: 'pipe' });
+  const relocate = (entries: { file: string; fingerprint: string; rule: string }[]) => entries.map(entry => ({ ...entry, file: moved, origin: entry.file }));
+  it('allows a move with an origin claim, with and without Git history', () => {
+    const root = fixture(source); const entries = freeze(root);
+    put(root, file, 'export {};'); put(root, moved, source);
+    // Without the origin claim the moved row is a new identity, and the old row is stale.
+    expect(run(root)).toMatchObject({ code: 1, out: expect.stringContaining('with origin') });
+    put(root, 'baseline.json', JSON.stringify(relocate(entries)));
+    expect(run(root)).toMatchObject({ code: 0, out: expect.stringContaining('[hardcode-history-unavailable]') });
+    const git = gitIn(root);
+    git('init', '-b', 'main'); put(root, file, source); put(root, moved, 'export {};'); put(root, 'baseline.json', JSON.stringify(entries));
+    git('add', '.'); git('commit', '-m', 'admission');
+    put(root, file, 'export {};'); put(root, moved, source); put(root, 'baseline.json', JSON.stringify(relocate(entries)));
+    expect(run(root)).toEqual({ code: 0, out: '\n' });
+    git('add', '.'); git('commit', '-m', 'move');
+    expect(run(root)).toEqual({ code: 0, out: '\n' });
+  });
+  it('refuses a move plus copy whether or not the copy is listed', () => {
+    const root = fixture(source); const entries = freeze(root); const git = gitIn(root);
+    git('init', '-b', 'main'); git('add', '.'); git('commit', '-m', 'admission');
+    put(root, moved, source);
+    expect(run(root)).toMatchObject({ code: 1, out: expect.stringContaining('[hardcode-G1] src/engine/core/example/moved.ts') });
+    put(root, 'baseline.json', JSON.stringify([...entries, ...relocate(entries)]));
+    const result = run(root);
+    expect(result).toMatchObject({ code: 1, out: expect.stringContaining('duplicate admission claim') });
+    expect(result.out).toContain('(count 2 > 1)');
+    put(root, 'baseline.json', JSON.stringify([...entries, ...entries.map(entry => ({ ...entry, file: moved }))]));
+    expect(run(root)).toMatchObject({ code: 1, out: expect.stringContaining('entry outside frozen membership') });
+  });
+  it('refuses relocating an identity removed in history and malformed origins', () => {
+    const root = fixture(source); const entries = freeze(root); const git = gitIn(root);
+    git('init', '-b', 'main'); git('add', '.'); git('commit', '-m', 'I');
+    put(root, file, 'export {};'); put(root, 'baseline.json', '[]'); git('add', '.'); git('commit', '-m', 'S removes');
+    put(root, moved, source); put(root, 'baseline.json', JSON.stringify(relocate(entries)));
+    expect(run(root)).toMatchObject({ code: 1, out: expect.stringContaining('entry absent in first-parent list version') });
+    const self = fixture(source); const admitted = freeze(self);
+    put(self, 'baseline.json', JSON.stringify(admitted.map(entry => ({ ...entry, origin: entry.file }))));
+    expect(run(self)).toMatchObject({ code: 1, out: expect.stringContaining('origin must name a different admission file') });
+    put(self, file, 'export {};'); put(self, moved, source);
+    put(self, 'baseline.json', JSON.stringify(admitted.map(entry => ({ ...entry, file: moved, origin: 'src/engine/core/example/other.ts' }))));
+    expect(run(self)).toMatchObject({ code: 1, out: expect.stringContaining('entry outside frozen membership') });
+  });
+});
