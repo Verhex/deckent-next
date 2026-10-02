@@ -12,7 +12,7 @@ import { PolicyAdministrationApplication } from '#engine/index.js';
 import { clearConfigCache, productResourcePath, SystemTrustedClock } from '#platform/index.js';
 
 // POLICY-HARDEN K3 at the composition surface: `configuredApproval` is the function the SDK, the CLI, the runtime service behind MCP
-// `decide_approval` and the terminal card all call to decide approvals. A pending `policy.administer@1` approval (opened by the real
+// the terminal card all call to decide approvals. A pending `policy.administer@1` approval (opened by the real
 // authority producer over the real ledger) cannot be allowed through it; the request stays pending; the refusal is in the audit ledger.
 // A deny is still accepted (it only withdraws the request).
 const roots: string[] = [];

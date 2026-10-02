@@ -235,10 +235,10 @@ export async function installedScenario(mode: string, observed: { root?: string;
       const command = { schemaVersion: 1, scopeId: 'scope-1', approvalId: pending[0]!.request.approvalId,
         commandId: 'allow-held', expectedRevision: 0, decision: 'allow', reason: 'Approve exact held task' };
       const commandPath = join(root, 'approval.json'); await writeFile(commandPath, JSON.stringify(command));
-      // B1 (owner 2026-10-01): MCP never allows (typed refusal, the request stays pending); the CLI allows the task approval (peer-session),
+      // B1 (owner 2026-10-01): MCP has no decision tool (unknown tool, the request stays pending); the CLI allows the task approval (peer-session),
       // and a replay of the same command through the runtime SDK returns the CLI's exact receipt.
       const mcpDecision = await client.callTool({ name: 'decide_approval', arguments: command });
-      expect(mcpDecision.isError).toBe(true); expect(JSON.stringify(mcpDecision.content)).toContain('APPROVAL_ATTENDED_REQUIRED');
+      expect(mcpDecision.isError).toBe(true); expect(JSON.stringify(mcpDecision.content)).toContain('MCP_TOOL_UNKNOWN');
       const cliDecision = await exec(process.execPath, [cli, 'approval', 'decide', '--input', commandPath, '--json'], { cwd: project, env });
       expect(JSON.parse(cliDecision.stdout)).toMatchObject({ status: 'decided', decision: { decision: 'allow', channel: 'local-cli', assurance: 'peer-session' } });
       expect(await runtimeClient.decideApproval({ ...command, channel: 'local-cli' })).toEqual(JSON.parse(cliDecision.stdout));

@@ -35,7 +35,7 @@ function commandFingerprint(tag: string, command: z.infer<typeof approvalRenewal
 /**
  * Which approvals this decision surface may allow (POLICY-HARDEN K3). Approvals of an operation whose descriptor is `surface: 'authority'`
  * (`policy.administer@1`) are decided only where the composition names the authority surface (`/policy`, later); every other approval
- * surface — SDK, CLI, MCP `decide_approval`, the terminal's y/N card — is refused with `APPROVAL_SURFACE_RESTRICTED` and the request stays
+ * surface — SDK, CLI, the terminal's y/N card — is refused with `APPROVAL_SURFACE_RESTRICTED` and the request stays
  * pending (a deny only withdraws a request and stays open). `refused` records that refusal (audit is best-effort here: it never turns
  * the refusal into something else).
  */

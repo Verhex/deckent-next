@@ -29,10 +29,24 @@ async function cli(f: Runtime, input: Record<string, unknown>): Promise<unknown>
 }
 async function mcp(f: Runtime, input: Record<string, unknown>): Promise<string> {
   const server = createMcpServer({ async inspectRun() { return null; }, async inspectInventory() { return null; },
-    decideApproval: (value, delivery) => f.client.decideApproval(value, delivery) }, { maxConcurrentCalls: 2, responseMaxBytes: 65_536 }, 'en');
+    listApprovals: (value, delivery) => f.client.listApprovals(value, delivery),
+    inspectApproval: (value, delivery) => f.client.inspectApproval(value, delivery) }, { maxConcurrentCalls: 2, responseMaxBytes: 65_536 }, 'en');
   const [ct, st] = InMemoryTransport.createLinkedPair(); await server.connect(st); const client = new Client({ name: 'agent', version: '1' }); await client.connect(ct);
-  try { return JSON.stringify(await client.callTool({ name: 'decide_approval', arguments: input })); } finally { await client.close(); }
+  try {
+    const names = (await client.listTools()).tools.map(tool => tool.name);
+    expect(names).not.toContain('decide_approval');
+    expect(names).toEqual(expect.arrayContaining(['list_approvals', 'inspect_approval']));
+    const query = { schemaVersion: 1, scopeId: input['scopeId'], approvalId: input['approvalId'] };
+    const before = await client.callTool({ name: 'inspect_approval', arguments: query });
+    expect(before.isError).not.toBe(true);
+    expect(before.structuredContent).toMatchObject({ status: 'pending' });
+    const result = await client.callTool({ name: 'decide_approval', arguments: input });
+    expect(result.isError).toBe(true);
+    expect(await client.callTool({ name: 'inspect_approval', arguments: query })).toEqual(before);
+    return JSON.stringify(result);
+  } finally { await client.close(); await server.close(); }
 }
+
 const code = (promise: Promise<unknown>) => promise.then(value => value, (error: { code?: string }) => error.code ?? String(error));
 
 /** One turn with one `write_file` call; `answer` decides its card from the test's surfaces while the turn waits. */
@@ -65,7 +79,7 @@ describe.skipIf(process.platform !== 'linux')('B1 attested assurance through the
     expect(seen['cli']).toBe('APPROVAL_ASSURANCE_INSUFFICIENT');
     expect(seen['lying']).toBe('APPROVAL_ASSURANCE_INSUFFICIENT');
     expect(seen['forged']).toBe('APPROVAL_ASSURANCE_INSUFFICIENT');
-    expect(seen['mcp']).toContain('APPROVAL_ATTENDED_REQUIRED');
+    expect(seen['mcp']).toContain('MCP_TOOL_UNKNOWN');
     expect(seen['pending']).toBe('pending');
     expect(seen['card']).toMatchObject({ status: 'decided', decision: { decision: 'allow', channel: 'local-terminal-card', assurance: 'turn-bound' } });
     expect(events.find(event => event.kind === 'tool.finished')).toMatchObject({ status: 'ok' });
@@ -81,7 +95,7 @@ describe.skipIf(process.platform !== 'linux')('B1 attested assurance through the
       decision: { schemaVersion: 2, decision: 'allow', assurance: 'turn-bound', channel: 'local-sdk' } });
   }, 60_000);
 
-  it('keeps the solo owner\'s ordinary card one CLI step (peer-session), and denies the same way on SDK, CLI and MCP (parity)', async () => {
+  it('keeps the solo owner\'s ordinary card one CLI step (peer-session), keeps SDK/CLI deny while MCP cannot change the pending record', async () => {
     const f = await modeRuntime({ ...HOST, grants: edit('require-approval', 'allow'), mode: null });
     const decided: Record<string, unknown> = {};
     await turn(f, 'turn-cli', 'src/b.ts', async (_event, base) => { decided['cli'] = await cli(f, { ...base, commandId: 'cli-allow', decision: 'allow' }); });
@@ -94,10 +108,14 @@ describe.skipIf(process.platform !== 'linux')('B1 attested assurance through the
     await turn(f, 'turn-deny-mcp', 'package.json', async (event, base) => {
       denied['mcp'] = await mcp(f, { ...base, commandId: 'mcp-deny', decision: 'deny' });
       denied['mcp-record'] = await f.client.inspectApproval({ schemaVersion: 1, scopeId: 'scope', approvalId: event.approvalId });
+      // Settle through the authorized SDK so the waiting turn completes after the negative proof.
+      await f.client.decideApproval({ ...base, commandId: 'sdk-after-mcp', decision: 'deny' });
     });
-    for (const [surface, channel] of [['sdk', 'local-sdk'], ['cli', 'local-cli'], ['mcp-record', 'mcp']] as const) {
+    for (const [surface, channel] of [['sdk', 'local-sdk'], ['cli', 'local-cli']] as const) {
       expect(denied[surface]).toMatchObject({ status: 'decided', decision: { decision: 'deny', channel, assurance: 'peer-session' } });
     }
+    expect(denied['mcp']).toContain('MCP_TOOL_UNKNOWN');
+    expect(denied['mcp-record']).toMatchObject({ status: 'pending' });
     await expect(readFile(join(f.project, 'package.json'), 'utf8')).rejects.toMatchObject({ code: 'ENOENT' });
   }, 60_000);
 });

@@ -1,4 +1,4 @@
-import { approvalListSchema, approvalQuerySchema, approvalRenewalSchema, approvalCommandSchema } from '#engine/index.js';
+import { approvalListSchema, approvalQuerySchema, approvalRenewalSchema } from '#engine/index.js';
 import { boundedToolDelivery, completeToolResult, jsonToolResult, modelToolDelivery, toolResultFits } from './delivery.js';
 import { operationToolDefinitions } from './operation-tools.js';
 import { modelActivationQuerySchema, modelActivationCommandSchema, modelCatalogCommandSchema, modelCatalogQuerySchema, modelInvocationCancellationCommandSchema, modelInvocationCommandSchema, modelInvocationPurgeCommandSchema, modelInvocationQuerySchema, providerSpendAccountQuerySchema, providerSpendAuditCommandInputSchema, providerSpendAuditCommandSchema,
@@ -8,7 +8,7 @@ import { attemptIdentitySchema, modelReferenceSchema, type AttemptIdentity, type
 import { Server, type Tool, type CallToolResult } from '@modelcontextprotocol/server';
 import { z } from 'zod';
 import { zodToJsonSchema } from 'zod-to-json-schema';
-import { PACKAGE_NAME, PACKAGE_VERSION, DeckentError, DeckentJsonSchemaValidator, ErrorRegistry, t, type Locale } from '#platform/index.js';
+import { PACKAGE_NAME, PACKAGE_VERSION, DeckentError, DeckentJsonSchemaValidator, t, type Locale } from '#platform/index.js';
 import { runCommandSchema, runQuerySchema, dispatchInventoryInputSchema, getPolicyVocabulary, taskEvaluationCommandSchema,
   runAdmissionSchema, runReservationCommandSchema, runtimeServiceDescriptorSchema, shutdownCommandSchema, type RuntimeOperationQuery,
   type RunCommand, type RunQuery, type DispatchInventoryInput, type RuntimeServiceDescriptor, type ServiceShutdownAdmissionResult,
@@ -19,7 +19,6 @@ export interface McpApplications {
   renewApproval?(input: unknown, delivery?: RuntimeServiceDelivery): Promise<unknown>;
   listApprovals?(input: unknown, delivery?: RuntimeServiceDelivery): Promise<unknown>;
   inspectApproval?(input: unknown, delivery?: RuntimeServiceDelivery): Promise<unknown>;
-  decideApproval?(input: unknown, delivery?: RuntimeServiceDelivery): Promise<unknown>;
   inspectModelActivation?(query: ModelActivationQuery): Promise<ModelActivationInspection>;
   admitModelActivation?(command: ModelActivationCommand): Promise<ModelActivationResult>;
   inspectModelCatalog?(query: ModelCatalogQuery): Promise<ModelCatalogInspection>;
@@ -84,17 +83,6 @@ export function createMcpServer(applications: McpApplications, limits: McpLimits
   if (inspectApproval) definitions.push({ readOnly: true, destructive: false, idempotent: true, openWorld: false, name: 'inspect_approval',
     description: t('mcp.tool.inspectApproval', {}, locale), schema: approvalQuerySchema, boundedDelivery: true,
     invoke: (input, delivery) => inspectApproval.call(applications, approvalQuerySchema.parse(input), delivery) });
-  const decideApproval = applications.decideApproval;
-  // B1 (owner 2026-10-01): MCP never allows. The surface refuses an allow before the runtime is reached; a deny (it only withdraws a request)
-  // goes through with the declared channel `mcp`. No capability or channel field is offered: an MCP client cannot claim the terminal card.
-  const mcpDecisionSchema = approvalCommandSchema.omit({ channel: true, decisionCapability: true }).strict();
-  if (decideApproval) definitions.push({ readOnly: false, destructive: false, idempotent: true, openWorld: false, name: 'decide_approval',
-    description: t('mcp.tool.denyApproval', {}, locale), schema: mcpDecisionSchema, boundedDelivery: true,
-    invoke: async (input, delivery) => {
-      const command = mcpDecisionSchema.parse(input);
-      if (command.decision === 'allow') throw ErrorRegistry.createError('APPROVAL_ATTENDED_REQUIRED');
-      return decideApproval.call(applications, { ...command, channel: 'mcp' }, delivery);
-    } });
   const inspectDeclaredModels = applications.inspectDeclaredModels;
   if (inspectDeclaredModels) definitions.push({ readOnly: true, destructive: false, idempotent: true, name: 'list_declared_models',
     description: t('mcp.tool.listDeclaredModels', {}, locale), schema: z.object({}).strict(),
