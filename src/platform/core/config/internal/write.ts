@@ -3,6 +3,7 @@ import { dirname, basename, join, resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { withConfigWriteLock, type ConfigLockOptions } from './lock.js';
 export { withConfigWriteLock } from './lock.js';
+import { getConfigFieldDefault } from '#platform/core/config-fields/index.js';
 import { ErrorRegistry } from '#platform/core/errors/index.js';
 import { readJsonFile, writeJsonAtomic, type JsonRecord } from '#platform/core/utils/index.js';
 import { createDefaultConfig } from './defaults.js';
@@ -24,7 +25,7 @@ export async function backupConfig(path: string, text: string): Promise<string> 
   try { await handle.writeFile(text); await handle.sync(); } finally { await handle.close(); }
   return target;
 }
-export async function pruneConfigBackups(path: string, keep = 3, protectedBackup?: string): Promise<void> {
+export async function pruneConfigBackups(path: string, keep = getConfigFieldDefault('configFile').backupKeep, protectedBackup?: string): Promise<void> {
   if (!Number.isSafeInteger(keep) || keep < 1) throw ErrorRegistry.createError('CLI_USAGE');
   const prefix = `${basename(path)}.bak.`;
   const names = (await readdir(dirname(path))).filter(name => name.startsWith(prefix) && /^\d{4}-\d{2}-\d{2}T[\dT.Z-]+\.[a-f0-9-]{36}$/.test(name.slice(prefix.length))).sort().reverse();
@@ -40,14 +41,14 @@ export async function pruneConfigBackups(path: string, keep = 3, protectedBackup
   for (const name of prior.slice(keep - (protectedName === undefined ? 0 : 1))) await unlink(join(dirname(path), name));
 }
 export async function writeConfig(path: string, config: JsonRecord, expectedDigest?: string | null, options: ConfigLockOptions = {}): Promise<void> {
-  validateConfig(deepMerge(createDefaultConfig(), versionedConfig(config)));
+  const validated = validateConfig(deepMerge(createDefaultConfig(), versionedConfig(config))).config;
   await withConfigWriteLock(path, async () => {
     const before = await readJsonFile(path);
     if (before.kind === 'io') throw ErrorRegistry.createError('CONFIG_READ_IO_HOLD', { cause: before.error });
     const expected = expectedDigest === undefined ? before.kind === 'absent' ? null : before.digest : expectedDigest;
     await assertConfigPreimage(path, expected);
     await writeJsonAtomic(path, versionedConfig(config));
-  }, 2_000, options);
+  }, validated.configFile.writeLockTimeoutMs, options);
 }
 export async function saveGlobalConfig(config: JsonRecord, options: PathContext & ConfigLockOptions = {}): Promise<void> {
   const { platformPath } = resolveGlobalConfigPaths(options.env, options.platform);

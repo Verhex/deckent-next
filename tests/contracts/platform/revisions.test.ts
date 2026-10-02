@@ -29,18 +29,18 @@ describe('K1 review regression contracts', () => {
   it('keeps secrets available to runtime but masks nested, array, escaped and projected display paths', async () => {
     const f = await fixture(), secret = 'private value with spaces " quotes';
     f.env = { ...f.env, API_TOKEN: secret } as typeof f.env;
-    registerConfigSection('redaction_probe', z.object({ extra: z.array(z.object({ value: z.string() }).strict()), credentials: z.object({ api_key: z.string() }).strict(), note: z.string() }).strict(), { optional: true });
-    await writeFile(f.path, JSON.stringify({ providers: { brain: '$DECK:API_TOKEN', overrides: { 'a/b~c': '$DECK:API_TOKEN' } },
-      redaction_probe: { extra: [{ value: '$DECK:API_TOKEN' }], credentials: { api_key: 'another plaintext value' }, note: 'Bearer token-example' } }));
+    registerConfigSection('redaction_probe', z.object({ extra: z.array(z.object({ value: z.string() }).strict()), escaped: z.record(z.string()), credentials: z.object({ api_key: z.string() }).strict(), note: z.string() }).strict(), { metadata: { descriptionKey: 'config.section', tier: 'core', since: '1.0.0-alpha.1', binding: { state: 'bound', consumers: ['src/platform/core/config'] }, apply: 'live' }, optional: true });
+    await writeFile(f.path, JSON.stringify({ projectName: '$DECK:API_TOKEN',
+      redaction_probe: { escaped: { 'a/b~c': '$DECK:API_TOKEN' }, extra: [{ value: '$DECK:API_TOKEN' }], credentials: { api_key: 'another plaintext value' }, note: 'Bearer token-example' } }));
     const config = await loadConfig(f.root, { env: f.env });
-    expect(config.providers.brain).toBe(secret);
-    expect(config.secretPaths).toEqual(expect.arrayContaining(['/providers/brain', '/providers/overrides/a~1b~0c', '/redaction_probe/extra/0/value']));
+    expect(config.projectName).toBe(secret);
+    expect(config.secretPaths).toEqual(expect.arrayContaining(['/projectName', '/redaction_probe/escaped/a~1b~0c', '/redaction_probe/extra/0/value']));
     const view = configDisplayView(config);
-    expect(view).toMatchObject({ providers: { brain: '[REDACTED]', overrides: { 'a/b~c': '[REDACTED]' } },
-      redaction_probe: { extra: [{ value: '[REDACTED]' }], credentials: { api_key: '[REDACTED]' } } });
+    expect(view).toMatchObject({ projectName: '[REDACTED]',
+      redaction_probe: { escaped: { 'a/b~c': '[REDACTED]' }, extra: [{ value: '[REDACTED]' }], credentials: { api_key: '[REDACTED]' } } });
     for (const value of [secret, 'another plaintext value', 'token-example']) expect(JSON.stringify(view)).not.toContain(value);
     expect(view).not.toHaveProperty('secretPaths');
-    expect(config.providers.brain).toBe(secret);
+    expect(config.projectName).toBe(secret);
     expect(configDisplayView(await loadConfig(f.root, { env: f.env }))).toEqual(view);
   });
   it('reclaims a dead legacy owner once and serializes concurrent recovery callers', async () => {
@@ -80,7 +80,7 @@ describe('K1 review regression contracts', () => {
   });
   it('excludes unrelated environment values from cache identity and reruns effective validators on cache hits', async () => {
     const f = await fixture(); let layers = 0, effective = 0, admitted = true;
-    registerConfigSection('review_cache_probe', z.object({}).strict(), { optional: true,
+    registerConfigSection('review_cache_probe', z.object({}).strict(), { metadata: { descriptionKey: 'config.section', tier: 'core', since: '1.0.0-alpha.1', binding: { state: 'bound', consumers: ['src/platform/core/config'] }, apply: 'live' }, optional: true,
       validateLayers: () => { layers++; }, validateEffective: () => {
         effective++;
         if (!admitted) throw new ConfigValidationError([{ path: 'review_cache_probe', reason: 'REQUIRED' }]);

@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import type { Environment } from '#platform/core/host/index.js';
 import { ErrorRegistry } from '#platform/core/errors/index.js';
-import { CORE_SCHEMA } from '#platform/core/config-fields/index.js';
+import { CORE_SCHEMA, type ConfigFieldMetadata } from '#platform/core/config-fields/index.js';
 export { CORE_SCHEMA } from '#platform/core/config-fields/index.js';
 
 export type CoreConfig = z.infer<typeof CORE_SCHEMA>;
@@ -13,9 +13,16 @@ export interface ConfigSectionOptions {
   readonly secretReferences?: 'allow' | 'forbid';
   /** Pure section semantics, also enforced by config writers before any publication. */
   readonly validateValue?: (value: unknown) => void;
-  readonly metadata?: { readonly descriptionKey: string; readonly tier: string; readonly since: string };
+  readonly metadata?: ConfigFieldMetadata;
   readonly validateEffective?: (config: DeckentConfig, env: Environment) => void;
   readonly validateLayers?: (global: unknown, project: unknown) => void;
+}
+function validMetadata(metadata: ConfigFieldMetadata): boolean {
+  if (!metadata || !metadata.descriptionKey || !metadata.tier || !metadata.since || !['live', 'restart'].includes(metadata.apply) || !metadata.binding) return false;
+  const binding = metadata.binding;
+  return binding.state === 'bound' ? Array.isArray(binding.consumers) && binding.consumers.length > 0
+    && binding.consumers.every(unit => typeof unit === 'string' && unit.length > 0)
+    : false;
 }
 type Section = { schema: z.AnyZodObject; options: ConfigSectionOptions };
 const sections = new Map<string, Section>();
@@ -28,10 +35,14 @@ export function registerConfigSection(name: string, schema: z.AnyZodObject, opti
   }
   if (!(schema instanceof z.ZodObject) || schema._def.unknownKeys !== 'strict'
     || (options.secretReferences !== undefined && !['allow', 'forbid'].includes(options.secretReferences))
+    || !options.metadata || !validMetadata(options.metadata)
     || (options.validateValue !== undefined && typeof options.validateValue !== 'function')) {
     throw ErrorRegistry.createError('CONFIG_SECTION_INVALID', { params: { section: name } });
   }
-  sections.set(name, { schema, options: Object.freeze({ ...options }) });
+  const metadata = options.metadata && Object.freeze({ ...options.metadata, binding: options.metadata.binding.state === 'bound'
+    ? Object.freeze({ ...options.metadata.binding, consumers: Object.freeze([...options.metadata.binding.consumers]) })
+    : Object.freeze({ ...options.metadata.binding }) });
+  sections.set(name, { schema, options: Object.freeze({ ...options, ...(metadata ? { metadata } : {}) }) });
   generation++;
 }
 /** Snapshot avoids exposing mutation authority through registry iteration. */

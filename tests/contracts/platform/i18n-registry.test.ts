@@ -8,9 +8,9 @@ import { MESSAGE_REGISTRY, MESSAGE_KEYS, createMessageRegistry, redactSensitive,
 const unit = new URL('../../../src/platform/core/i18n/', import.meta.url);
 const params = (text: string) => [...new Set([...text.matchAll(/\{(\w+)\}/g)].map(m => m[1]))].sort();
 describe('K2 catalog registry contract', () => {
-  it('has ten bilingual families with matching key/placeholder sets, no empty values and no ANSI', async () => {
+  it('has eleven bilingual families with matching key/placeholder sets, no empty values and no ANSI', async () => {
     const names = (await readdir(new URL('locales/en/', unit))).sort();
-    expect(names).toHaveLength(10); expect((await readdir(new URL('locales/tr/', unit))).sort()).toEqual(names);
+    expect(names).toHaveLength(11); expect((await readdir(new URL('locales/tr/', unit))).sort()).toEqual(names);
     const keys: string[] = [];
     for (const name of names) {
       const en = JSON.parse(await readFile(new URL(`locales/en/${name}`, unit), 'utf8')) as Record<string, string>;

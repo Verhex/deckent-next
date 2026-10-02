@@ -8,10 +8,10 @@ describe('H34 company version boundaries', () => {
     expect(() => versionedConfig(authored)).toThrow(expect.objectContaining({ code: 'CONFIG_VERSION_UNSUPPORTED' }));
     expect(authored).toEqual({ schema_version: 2, company: { id: 'acme' } });
   });
-  it('emits config v3 for defaults and unversioned layers', () => {
-    expect(createDefaultConfig().schema_version).toBe(3);
-    expect(versionedConfig({ company: { id: 'acme' } })).toEqual({ schema_version: 3, company: { id: 'acme' } });
-    expect(versionedConfig({ schema_version: 3 })).toEqual({ schema_version: 3 });
+  it('emits config v4 for defaults and unversioned layers', () => {
+    expect(createDefaultConfig().schema_version).toBe(4);
+    expect(versionedConfig({ company: { id: 'acme' } })).toEqual({ schema_version: 4, company: { id: 'acme' } });
+    expect(versionedConfig({ schema_version: 4 })).toEqual({ schema_version: 4 });
   });
   it('rejects an old layout snapshot before resource path use or inspection', () => {
     const layout = resolveProductLayout({ projectRoot: '/project' });

@@ -4,25 +4,33 @@ import { z } from 'zod';
 import { PRODUCT_LAYOUT_REGISTRY, LAYOUT_CONTRACT_SINCE, CONFIG_SCHEMA_VERSION, CONFIG_CONTRACT_SINCE, OUTPUT_MODES } from '#platform/core/common/index.js';
 import { SUPPORTED_LANGUAGES } from '#platform/core/i18n/index.js';
 
-type EnvironmentBinding = { readonly names: readonly string[]; readonly path?: readonly string[]; readonly encoding?: 'boolean' };
-function field<T extends z.ZodTypeAny>(descriptionKey: string, schema: T, environment: readonly EnvironmentBinding[] = [], since = CONFIG_CONTRACT_SINCE) {
-  return Object.freeze({ schema, environment, metadata: Object.freeze({ descriptionKey, tier: 'core' as const, since }) });
+export type ConfigBinding = { readonly state: 'bound'; readonly consumers: readonly string[] } | { readonly state: 'declared-only'; readonly reason: string };
+export type ConfigApplyMode = 'live' | 'restart';
+export interface ConfigFieldMetadata {
+  readonly descriptionKey: string; readonly tier: string; readonly since: string;
+  readonly binding: ConfigBinding; readonly apply: ConfigApplyMode;
 }
-const providerId = z.string().trim().min(1).nullable().default(null);
+type EnvironmentBinding = { readonly names: readonly string[]; readonly path?: readonly string[]; readonly encoding?: 'boolean' };
+function field<T extends z.ZodTypeAny>(descriptionKey: string, binding: ConfigBinding, apply: ConfigApplyMode, schema: T, environment: readonly EnvironmentBinding[] = [], since = CONFIG_CONTRACT_SINCE) {
+  return Object.freeze({ schema, environment, metadata: Object.freeze({ descriptionKey, tier: 'core' as const, since, binding: binding.state === 'bound' ? Object.freeze({ ...binding, consumers: Object.freeze([...binding.consumers]) }) : Object.freeze({ ...binding }), apply }) });
+}
 /** Single declaration of mutable config policy. Consumers derive, never duplicate, these values. */
 export const CONFIG_FIELDS = Object.freeze({
-  schema_version: field('config.field.schema_version', z.literal(CONFIG_SCHEMA_VERSION).default(CONFIG_SCHEMA_VERSION)),
-  language: field('config.field.language', z.enum(SUPPORTED_LANGUAGES as ['en', 'tr']).default('en'), [{ names: ['DECKENT_LANGUAGE', 'DECKENT_LANG'] }]),
-  mode: field('config.field.mode', z.enum(['performance', 'balanced', 'economic', 'api']).default('performance'), [{ names: ['DECKENT_MODE'] }]),
-  output_mode: field('config.field.output_mode', z.enum(OUTPUT_MODES).default('standard')),
-  layout: field('config.field.layout', z.object({ root: z.string().min(1).nullable().default(null), resources: z.record(z.string().min(1)).default({}) }).strict().default({}),
+  schema_version: field('config.field.schema_version', { state: 'bound', consumers: ['src/platform/core/config'] }, 'live', z.literal(CONFIG_SCHEMA_VERSION).default(CONFIG_SCHEMA_VERSION)),
+  language: field('config.field.language', { state: 'bound', consumers: ['src/surfaces/core/cli'] }, 'live', z.enum(SUPPORTED_LANGUAGES as ['en', 'tr']).default('en'), [{ names: ['DECKENT_LANGUAGE', 'DECKENT_LANG'] }]),
+  output_mode: field('config.field.output_mode', { state: 'bound', consumers: ['src/platform/core/output'] }, 'live', z.enum(OUTPUT_MODES).default('standard')),
+  layout: field('config.field.layout', { state: 'bound', consumers: ['src/platform/core/config'] }, 'restart', z.object({ root: z.string().min(1).nullable().default(null), resources: z.record(z.string().min(1)).default({}) }).strict().default({}),
     [{ names: [PRODUCT_LAYOUT_REGISTRY.rootEnvironmentKey], path: ['root'] }], LAYOUT_CONTRACT_SINCE),
-  storage: field('config.field.storage', z.object({ driver: z.literal('sqlite').default('sqlite'),
+  storage: field('config.field.storage', { state: 'bound', consumers: ['src/composition/core/storage'] }, 'restart', z.object({ driver: z.literal('sqlite').default('sqlite'),
     sqlite: SQLITE_STORAGE_OPTIONS.default({ busyTimeoutMs: 100, journalMode: 'wal', durability: 'full' }) }).strict().default({}), [], LAYOUT_CONTRACT_SINCE),
-  artifacts: field('config.field.artifacts', ARTIFACT_STORAGE_LIMITS.extend({ maxInputs: z.number().int().positive().safe().default(64), patchPreview: z.object({ maxEntries: z.number().int().positive().safe().default(10000), maxDepth: z.number().int().positive().max(128).default(32), maxPathBytes: z.number().int().positive().safe().default(1024) }).strict().default({ maxEntries: 10000, maxDepth: 32, maxPathBytes: 1024 }) }).default({ maxBytes: 16777216 }), [], LAYOUT_CONTRACT_SINCE),
-  execution: field('config.field.execution', z.object({ docker: DOCKER_EXECUTION_SETTINGS, git: GIT_EXECUTION_SETTINGS, adoption: ADOPTION_TARGET_SETTINGS.default({ targets: [] }),
+  artifacts: field('config.field.artifacts', { state: 'bound', consumers: ['src/composition/core/artifacts'] }, 'restart', ARTIFACT_STORAGE_LIMITS.extend({ maxInputs: z.number().int().positive().safe().default(64), patchPreview: z.object({ maxEntries: z.number().int().positive().safe().default(10000), maxDepth: z.number().int().positive().max(128).default(32), maxPathBytes: z.number().int().positive().safe().default(1024) }).strict().default({ maxEntries: 10000, maxDepth: 32, maxPathBytes: 1024 }) }).default({ maxBytes: 16777216 }), [], LAYOUT_CONTRACT_SINCE),
+  execution: field('config.field.execution', { state: 'bound', consumers: ['src/composition/core/execution', 'src/composition/core/runs'] }, 'restart', z.object({ docker: DOCKER_EXECUTION_SETTINGS, git: GIT_EXECUTION_SETTINGS, adoption: ADOPTION_TARGET_SETTINGS.default({ targets: [] }),
     workTargets: WORK_TARGET_SETTINGS.optional(), retention: EXECUTION_RETENTION_SETTINGS.default({ schemaVersion: 1 }) }).strict().nullable().default(null), [], LAYOUT_CONTRACT_SINCE),
-  installation: field('config.field.installation', z.object({
+  configFile: field('config.field.configFile', { state: 'bound', consumers: ['src/platform/core/config', 'src/adapters/core/config-file'] }, 'live', z.object({
+    backupKeep: z.number().int().positive().safe().default(3),
+    writeLockTimeoutMs: z.number().int().positive().max(2147483647).default(2000),
+  }).strict().default({})),
+  installation: field('config.field.installation', { state: 'bound', consumers: ['src/composition/core/installation'] }, 'live', z.object({
     profileMaxBytes: z.number().int().positive().safe().default(1048576),
     writeLockTimeoutMs: z.number().int().positive().max(2147483647).default(2000),
     imageProbe: z.object({ timeoutMs: z.number().int().positive().max(2147483647).default(5000),
@@ -34,19 +42,19 @@ export const CONFIG_FIELDS = Object.freeze({
       maxDepth: z.number().int().positive().safe().default(32),
     }).strict().default({}),
   }).strict().default({}), [], LAYOUT_CONTRACT_SINCE),
-  approvals: field('config.field.approvals', z.object({
+  approvals: field('config.field.approvals', { state: 'bound', consumers: ['src/composition/core/approvals'] }, 'restart', z.object({
     requestTtlMs: z.number().int().positive().safe().default(600000),
     sessionTtlMs: z.number().int().positive().safe().default(60000),
     pageSize: z.number().int().positive().safe().default(100),
     keyFile: z.string().regex(/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$/).default('authority.key'),
   }).strict().default({}), [], LAYOUT_CONTRACT_SINCE),
-  cli: field('config.field.cli', z.object({ graphInputMaxBytes: z.number().int().positive().safe().default(1048576), invocationInputMaxBytes: z.number().int().positive().safe().default(1048576) }).strict().default({}), [], LAYOUT_CONTRACT_SINCE),
-  mcp: field('config.field.mcp', z.object({
+  cli: field('config.field.cli', { state: 'bound', consumers: ['src/surfaces/core/cli'] }, 'live', z.object({ graphInputMaxBytes: z.number().int().positive().safe().default(1048576), invocationInputMaxBytes: z.number().int().positive().safe().default(1048576) }).strict().default({}), [], LAYOUT_CONTRACT_SINCE),
+  mcp: field('config.field.mcp', { state: 'bound', consumers: ['src/composition/core/agent-turn'] }, 'restart', z.object({
     inputMaxBytes: z.number().int().positive().safe().default(1048576),
     responseMaxBytes: z.number().int().positive().safe().default(1048576),
     maxConcurrentCalls: z.number().int().positive().safe().default(8),
   }).strict().default({}), [], LAYOUT_CONTRACT_SINCE),
-  service: field('config.field.service', z.object({
+  service: field('config.field.service', { state: 'bound', consumers: ['src/composition/core/runtime-service'] }, 'restart', z.object({
     identity: z.object({ scopeId: z.string().min(1), serviceId: z.string().min(1) }).strict().nullable().default(null),
     inputMaxBytes: z.number().int().positive().max(4294967295).default(1048576),
     responseMaxBytes: z.number().int().positive().max(4294967295).default(1048576),
@@ -59,32 +67,32 @@ export const CONFIG_FIELDS = Object.freeze({
     acceptRetryLimit: z.number().int().positive().max(2147483647).default(3),
     shutdownGraceMs: z.number().int().positive().max(2147483647).default(30000),
   }).strict().superRefine((value, context) => { if (value.maxConcurrentExecutions >= value.maxConcurrentRequests) context.addIssue({ code: z.ZodIssueCode.custom, path: ['maxConcurrentExecutions'], message: 'SERVICE_EXECUTIONS_CAPACITY' }); }).default({}), [], LAYOUT_CONTRACT_SINCE),
-  cancellation: field('config.field.cancellation', z.object({ maxConcurrentDeliveries: z.number().int().positive().safe(),
+  cancellation: field('config.field.cancellation', { state: 'bound', consumers: ['src/composition/core/runtime'] }, 'restart', z.object({ maxConcurrentDeliveries: z.number().int().positive().safe(),
     recoveryPageSize: z.number().int().positive().safe().default(64),
     maxAttempts: z.number().int().positive().safe().default(3), retryDelayMs: z.number().int().positive().safe().default(1000),
     claimTtlMs: z.number().int().positive().safe().default(30000),
   }).strict().nullable().default(null), [], LAYOUT_CONTRACT_SINCE),
-  runRuntime: field('config.field.runRuntime', z.object({
+  runRuntime: field('config.field.runRuntime', { state: 'bound', consumers: ['src/composition/core/run-progression'] }, 'restart', z.object({
     maxReservationsPerTurn: z.number().int().positive().safe().default(4),
     pollIntervalMs: z.number().int().positive().max(2147483647).default(1000),
     failureBackoffMs: z.number().int().positive().max(2147483647).default(5000),
     pageSize: z.number().int().positive().max(2147483646).default(64),
   }).strict().default({}), [], LAYOUT_CONTRACT_SINCE),
-  cancellationRuntime: field('config.field.cancellationRuntime', z.object({ scopeIds: z.array(z.string().min(1)).min(1),
+  cancellationRuntime: field('config.field.cancellationRuntime', { state: 'bound', consumers: ['src/composition/core/runtime'] }, 'restart', z.object({ scopeIds: z.array(z.string().min(1)).min(1),
     pollIntervalMs: z.number().int().positive().safe().default(1000), failureBackoffMs: z.number().int().positive().safe().default(5000),
   }).strict().nullable().default(null), [], LAYOUT_CONTRACT_SINCE),
-  reconciliationRuntime: field('config.field.reconciliationRuntime', z.object({
+  reconciliationRuntime: field('config.field.reconciliationRuntime', { state: 'bound', consumers: ['src/composition/core/runtime'] }, 'restart', z.object({
     scopeIds: z.array(z.string().min(1)).min(1),
     pollIntervalMs: z.number().int().positive().max(2147483647).default(1000),
     failureBackoffMs: z.number().int().positive().max(2147483647).default(5000),
     pageSize: z.number().int().positive().max(2147483646).default(64),
     maxConcurrentReconciliations: z.number().int().positive().safe().default(4),
   }).strict().nullable().default(null), [], LAYOUT_CONTRACT_SINCE),
-  admission: field('config.field.admission', z.object({ registry: z.record(z.unknown()), poolId: z.string().min(1),
+  admission: field('config.field.admission', { state: 'bound', consumers: ['src/composition/core/runs'] }, 'restart', z.object({ registry: z.record(z.unknown()), poolId: z.string().min(1),
     executionSlots: z.number().int().positive().safe(), inFlightSlots: z.number().int().positive().safe(),
     ordering: z.literal('input-order'),
   }).strict().nullable().default(null), [], LAYOUT_CONTRACT_SINCE),
-  inspection: field('config.field.inspection', z.object({
+  inspection: field('config.field.inspection', { state: 'bound', consumers: ['src/composition/core/worker-observation'] }, 'restart', z.object({
     maxPageSize: z.number().int().positive().max(2_147_483_646).default(64),
     policyMaxBytes: z.number().int().positive().safe().default(1048576),
     workers: z.object({ heartbeatMs: z.number().int().min(100).max(60000).default(2000),
@@ -94,7 +102,7 @@ export const CONFIG_FIELDS = Object.freeze({
         kind: z.enum(['next-project', 'legacy-tasks']), path: z.string().min(1), scopeId: z.string().min(1) }).strict()).max(16).default([]),
     }).strict().refine(value => new Set(value.sources.map(source => source.id)).size === value.sources.length).default({}),
   }).strict().default({}), [], LAYOUT_CONTRACT_SINCE),
-  toolchains: field('config.field.toolchains', z.object({ currency: z.object({
+  toolchains: field('config.field.toolchains', { state: 'bound', consumers: ['src/composition/core/toolchains'] }, 'restart', z.object({ currency: z.object({
     mode: z.enum(['off', 'report']).default('report'),
     registryEndpoint: z.string().url().default('https://registry.npmjs.org'),
     timeoutMs: z.number().int().positive().max(2_147_483_647).default(5000),
@@ -105,19 +113,10 @@ export const CONFIG_FIELDS = Object.freeze({
     outputBytes: z.number().int().positive().safe().default(1_048_576),
     atStartup: z.boolean().default(false),
   }).strict().default({}) }).strict().default({}), [], LAYOUT_CONTRACT_SINCE),
-  projectName: field('config.field.projectName', z.string().min(1).default('deckent-project')),
-  max_workers: field('config.field.max_workers', z.union([z.number().int().positive().safe(), z.literal('auto')]).default('auto')),
-  company: field('config.field.company', z.object({ id: z.string().regex(/^[a-z0-9][a-z0-9-]{0,62}$/).default('default') }).strict().default({})),
-  enforce_principal_assurance: field('config.field.enforce_principal_assurance', z.boolean().default(false)),
-  auth_mode: field('config.field.auth_mode', z.enum(['subscription', 'api', 'hybrid', 'local']).default('subscription')),
-  spawn_backend: field('config.field.spawn_backend', z.enum(['auto', 'docker', 'subprocess', 'tmux']).default('auto')),
-  live_trace: field('config.field.live_trace', z.object({ enabled: z.boolean().default(false) }).strict().default({}),
-    [{ names: ['DECKENT_LIVE_TRACE'], path: ['enabled'], encoding: 'boolean' }]),
-  providers: field('config.field.providers', z.object({ brain: providerId, worker: providerId, fallback: providerId,
-    overrides: z.record(z.string()).default({}) }).strict().default({}), [
-    { names: ['DECKENT_BRAIN_PROVIDER'], path: ['brain'] },
-    { names: ['DECKENT_WORKER_PROVIDER'], path: ['worker'] },
-  ]),
+  projectName: field('config.field.projectName', { state: 'bound', consumers: ['src/surfaces/core/config'] }, 'live', z.string().min(1).default('deckent-project')),
+  max_workers: field('config.field.max_workers', { state: 'bound', consumers: ['src/composition/core/runs', 'src/composition/core/monitor'] }, 'restart', z.union([z.number().int().positive().safe(), z.literal('auto')]).default('auto')),
+  company: field('config.field.company', { state: 'bound', consumers: ['src/composition/core/scoped-request'] }, 'restart', z.object({ id: z.string().regex(/^[a-z0-9][a-z0-9-]{0,62}$/).default('default') }).strict().default({})),
+  enforce_principal_assurance: field('config.field.enforce_principal_assurance', { state: 'bound', consumers: ['src/surfaces/core/cli'] }, 'live', z.boolean().default(false)),
 });
 type FieldShape = { [K in keyof typeof CONFIG_FIELDS]: typeof CONFIG_FIELDS[K]['schema'] };
 export const CORE_SCHEMA = z.object(Object.fromEntries(

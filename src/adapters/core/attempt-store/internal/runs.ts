@@ -12,7 +12,7 @@ import { SqliteRunWorkspaceCustody } from './run-workspace-custody.js';
 import type { RunWorkspaceCustody } from '#engine/index.js';
 import { sqliteFailure } from '#adapters/core/sqlite-ledger/index.js';
 export class SqliteRunJournal {
-  constructor(private readonly db: DatabaseSync, private readonly admission?: Pick<RunAdmissionFilter, 'excluded'>) {}
+  constructor(private readonly db: DatabaseSync, private readonly admission?: Pick<RunAdmissionFilter, 'excluded'>, private readonly poolCeiling?: number) {}
   private transaction<T>(work: () => T): T {
     let active = false;
     try { this.db.exec('BEGIN IMMEDIATE'); active = true; const value = work(); this.db.exec('COMMIT'); return value; }
@@ -181,7 +181,7 @@ export class SqliteRunJournal {
       const proposed = reserveRunTasks(current, parsed.expectedRevision, parsed.identities, parsed.now);
       // K5: a held pool admits no new reservation (precedence: cancel, wave, candidates, hold, capacity); nothing is written.
       const pools = new SqliteExecutionPools(this.db); pools.assertNotHeld(policy.poolId);
-      const available = pools.available(policy.poolId);
+      const available = pools.available(policy.poolId, this.poolCeiling);
       if (available <= 0) throw new RunStoreError('RUN_POOL_FULL');
       const admitted = parsed.identities.slice(0, available);
       const snapshot = admitted.length === parsed.identities.length ? proposed

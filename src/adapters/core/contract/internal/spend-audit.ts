@@ -18,6 +18,6 @@ export function validateProviderSpendAuditLayers(global: unknown, project: unkno
 export function registerProviderSpendAuditConfig(): void {
   registerConfigSection('provider_spend_audit', providerSpendAuditConfigSchema, {
     optional: true, secretReferences: 'forbid', validateLayers: validateProviderSpendAuditLayers,
-    metadata: { descriptionKey: 'config.field.provider_spend_audit', tier: 'core', since: CONFIG_CONTRACT_SINCE },
+    metadata: { descriptionKey: 'config.field.provider_spend_audit', tier: 'core', since: CONFIG_CONTRACT_SINCE, binding: { state: 'bound', consumers: ['src/composition/core/provider-spend'] }, apply: 'restart' },
   });
 }

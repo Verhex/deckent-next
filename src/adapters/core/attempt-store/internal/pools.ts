@@ -25,9 +25,9 @@ export class SqliteExecutionPools {
   assertAvailable(poolId: string, requested: number): void {
     if (requested > this.available(poolId)) throw new RunStoreError('RUN_POOL_FULL');
   }
-  available(poolId: string): number {
+  available(poolId: string, ceiling = Infinity): number {
     const pool = this.require(poolId), { execution, inFlight } = this.occupancy(poolId);
-    return Math.min(pool.capacity.executionSlots - execution, pool.capacity.inFlightSlots - inFlight);
+    return Math.min(Math.min(pool.capacity.executionSlots, ceiling) - execution, Math.min(pool.capacity.inFlightSlots, ceiling) - inFlight);
   }
   /** K5: the pool's typed hold (null = never held). A row that disagrees with its sealed record is corruption, never "open". */
   hold(poolId: string): PoolHoldRecord | null {

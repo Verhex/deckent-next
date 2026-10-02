@@ -9,7 +9,7 @@ import { inspectConfiguredSecretStore, listConfiguredSecretNames } from '#compos
 import { main, runKernelCommand } from '#surfaces/core/cli/index.js';
 
 registerProviderConfig();
-registerConfigSection('k1_secret_probe', z.object({ token: z.string() }).strict(), { optional: true });
+registerConfigSection('k1_secret_probe', z.object({ token: z.string() }).strict(), { metadata: { descriptionKey: 'config.section', tier: 'core', since: '1.0.0-alpha.1', binding: { state: 'bound', consumers: ['src/platform/core/config'] }, apply: 'live' }, optional: true });
 
 // Synthetic canary only: never a real credential.
 const CANARY = 'synthetic-canary-71be0d-not-a-real-key';

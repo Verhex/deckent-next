@@ -17,10 +17,10 @@ async function fixture(kind: 'empty' | 'global-only' | 'project-override') {
   const env: NodeJS.ProcessEnv = { PATH: process.env['PATH'], HOME: home, USERPROFILE: home, XDG_CONFIG_HOME: xdg, APPDATA: xdg, LOCALAPPDATA: xdg, NO_COLOR: '1' };
   const globalPath = resolveGlobalConfigPaths(env).platformPath;
   await mkdir(project); await mkdir(dirname(globalPath), { recursive: true });
-  if (kind !== 'empty') await writeFile(globalPath, '{"mode":"balanced","language":"tr"}');
+  if (kind !== 'empty') await writeFile(globalPath, '{"projectName":"global-project","language":"tr"}');
   if (kind === 'project-override') {
     await mkdir(join(project, '.deckent'));
-    await writeFile(join(project, '.deckent/config.json'), '{"mode":"economic","language":"en"}');
+    await writeFile(join(project, '.deckent/config.json'), '{"projectName":"project-override","language":"en"}');
   }
   const run = (args: string[], extra: NodeJS.ProcessEnv = {}) => exec(process.execPath, [binary, ...args], { cwd: project, env: { ...env, ...extra }, timeout: 15_000, maxBuffer: 1024 * 1024 });
   return { project, run, env, root };
@@ -29,12 +29,12 @@ afterEach(async () => { await Promise.all(roots.splice(0).map(root => rm(root, {
 
 describe('K1 real binary journeys', () => {
   it('reads effective config in three fixture projects, in human and JSON formats', async () => {
-    for (const [kind, expected] of [['empty', 'performance'], ['global-only', 'balanced'], ['project-override', 'economic']] as const) {
+    for (const [kind, expected] of [['empty', 'deckent-project'], ['global-only', 'global-project'], ['project-override', 'project-override']] as const) {
       const f = await fixture(kind);
-      expect((await f.run(['config', 'get', 'mode'])).stdout.trim()).toBe(expected);
-      expect(JSON.parse((await f.run(['config', 'get', 'mode', '--json'])).stdout)).toBe(expected);
-      expect(JSON.parse((await f.run(['config', 'get', '--json'])).stdout)).toMatchObject({ schema_version: 3, mode: expected });
-      expect(JSON.parse((await f.run(['config', 'get', 'mode', '--json'], { DECKENT_MODE: 'balanced' })).stdout)).toBe('balanced');
+      expect((await f.run(['config', 'get', 'projectName'])).stdout.trim()).toBe(expected);
+      expect(JSON.parse((await f.run(['config', 'get', 'projectName', '--json'])).stdout)).toBe(expected);
+      expect(JSON.parse((await f.run(['config', 'get', '--json'])).stdout)).toMatchObject({ schema_version: 4, projectName: expected });
+      expect(JSON.parse((await f.run(['config', 'get', 'language', '--json'], { DECKENT_LANGUAGE: 'tr' })).stdout)).toBe('tr');
     }
   });
   it('rejects legacy migration and aliases without altering config bytes', async () => {
@@ -145,9 +145,9 @@ describe('K1 blocking review reproductions', () => {
       child.kill('SIGKILL'); await closed;
       await writeFile(path, '{broken');
       const result = await f.run(['config', 'get', '--json']);
-      expect(JSON.parse(result.stdout)).toMatchObject({ schema_version: 3 });
+      expect(JSON.parse(result.stdout)).toMatchObject({ schema_version: 4 });
       expect(result.stderr.trim().split('\n').map(line => JSON.parse(line))).toContainEqual(expect.objectContaining({ code: 'CONFIG_LOCK_STALE_RECLAIMED' }));
-      expect(JSON.parse(await readFile(path, 'utf8')).schema_version).toBe(3);
+      expect(JSON.parse(await readFile(path, 'utf8')).schema_version).toBe(4);
     } finally { if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL'); await closed; }
   });
   it('returns actionable structured diagnostics for an old live lock without stealing it', async () => {

@@ -41,7 +41,7 @@ export function validateInvocationProfileLayers(global: unknown, project: unknow
 export function registerInvocationProfileConfig(): void {
   registerConfigSection('provider_invocation_profiles', invocationProfilesSchema, {
     optional: true, secretReferences: 'forbid',
-    metadata: { descriptionKey: 'config.field.provider_invocation_profiles', tier: 'core', since: CONFIG_CONTRACT_SINCE },
+    metadata: { descriptionKey: 'config.field.provider_invocation_profiles', tier: 'core', since: CONFIG_CONTRACT_SINCE, binding: { state: 'bound', consumers: ['src/composition/core/model-invocation'] }, apply: 'restart' },
     validateLayers: validateInvocationProfileLayers,
     validateValue: value => { if (value !== undefined) validate(value); },
   });

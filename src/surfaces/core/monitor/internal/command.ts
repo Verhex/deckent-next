@@ -1,3 +1,4 @@
+import { configCommand } from '#surfaces/core/config/index.js';
 import { createElement } from 'react';
 import { render } from 'ink';
 import { ErrorRegistry, colorTier, emit, loadConfig, resolveLocale, t, type ConfigLoadOptions, type Locale } from '#platform/index.js';
@@ -60,6 +61,11 @@ function textWidth(context: MonitorCommandContext): number {
  * unchanged unless `--install`/`--scope` narrow it). Observe-only: nothing here claims, cancels or decides.
  */
 export async function runMonitorCommand(argv: readonly string[], context: MonitorCommandContext): Promise<void> {
+  if (argv.includes('--config')) {
+    const flags = argv.filter((arg, i) => i > 0 && arg !== '--config' && arg !== '--once');
+    if (flags.some(flag => !['--json', '--lang', 'en', 'tr', '--no-color', '--help', '-h'].includes(flag))) throw ErrorRegistry.createError('CLI_USAGE');
+    await configCommand(['config', ...flags], context); return;
+  }
   const parsed = parse(argv, 1), env = context.env ?? process.env;
   let locale = resolveLocale(parsed.language, env); context.onLocale?.(locale);
   const sinks = { ...(context.stdout ? { stdout: context.stdout } : {}), ...(context.stderr ? { stderr: context.stderr } : {}) };
@@ -76,6 +82,7 @@ export async function runMonitorCommand(argv: readonly string[], context: Monito
   }
   const palette = resolveWorklinePalette(colorTier({ env, isTTY: true, noColor: parsed.noColor }));
   const instance = render(createElement(MonitorApp, { load: () => inspect(root, options), intervalMs: config.inspection.workers.heartbeatMs, locale, ascii, palette, filters,
+    ...(context.configApplication ? { loadConfigView: () => context.configApplication!(root, options).inspect() } : {}),
     errorText: (error: unknown) => monitorFailureText(error, locale) }), { alternateScreen: true, patchConsole: false,
     ...(context.stdout ? { stdout: context.stdout as unknown as NodeJS.WriteStream } : {}), ...(context.stdin ? { stdin: context.stdin as unknown as NodeJS.ReadStream } : {}) });
   const stop = () => instance.unmount();

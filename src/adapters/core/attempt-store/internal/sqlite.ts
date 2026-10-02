@@ -30,6 +30,12 @@ import { AttemptStoreError, dispatchRecordSchema, readSealedWorkerEvents, type A
 export class SqliteAttemptStore implements AttemptStore, DispatchStore, RunBoundDispatchStore, DispatchInventoryStore, RunStore, CancellationDeliveryStore, ServiceShutdownStore, TaskEvaluationStore, PoolHoldStore {
   private readonly db: DatabaseSync;
   private admission: import('#engine/index.js').RunAdmissionFilter | undefined;
+  private poolCeiling: number | undefined;
+  /** Trusted composition only; the current installation ceiling is checked with shared occupancy in the reservation transaction. */
+  setExecutionPoolCeiling(value: number | 'auto') {
+    if (value !== 'auto' && (!Number.isSafeInteger(value) || value <= 0)) throw new AttemptStoreError('ATTEMPT_STORE_OPTIONS');
+    this.poolCeiling = value === 'auto' ? undefined : value;
+  }
   setRunAdmissionFilter(admission: import('#engine/index.js').RunAdmissionFilter) { this.admission = admission; }
   constructor(path: string, options: SqliteLedgerOptions, migration: 'allow' | 'forbid' = 'allow', private readonly profiles?: SupervisorProfileValidator) {
     this.db = openSqliteLedger(path, options, migration, this.profiles);
@@ -81,7 +87,7 @@ export class SqliteAttemptStore implements AttemptStore, DispatchStore, RunBound
   async loadRun(scopeId: string, runId: string) { return new SqliteRunJournal(this.db).loadRun(scopeId, runId); }
   async loadRunExecutionPolicy(scopeId: string, runId: string) { return new SqliteRunJournal(this.db).loadRunExecutionPolicy(scopeId, runId); }
   async createRun(input: RunCreate, workspace?: import('#engine/index.js').RunWorkspaceCustody) { return new SqliteRunJournal(this.db).createRun(input, workspace); }
-  async reserveRunTasks(input: RunReservation) { return new SqliteRunJournal(this.db, this.admission).reserveRunTasks(input); }
+  async reserveRunTasks(input: RunReservation) { return new SqliteRunJournal(this.db, this.admission, this.poolCeiling).reserveRunTasks(input); }
   async listDispatches(query: DispatchInventoryQuery) { return new SqliteDispatchJournal(this.db).listDispatches(query); }
   async requestDispatchCancellation(request: DispatchClaim['request'], principal: VerifiedPrincipal) { return new SqliteDispatchJournal(this.db).requestDispatchCancellation(request, principal); }
   async retainDispatchPatch(claim: DispatchClaim, receipt: ArtifactReceipt) { return new SqliteDispatchJournal(this.db).retainDispatchPatch(claim, receipt); }

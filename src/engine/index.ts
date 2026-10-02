@@ -69,3 +69,5 @@ export * from '#engine/core/audit/index.js';
 export * from '#engine/core/agent-turn/index.js';
 export * from '#engine/core/shell-classification/index.js';
 export * from '#engine/core/secret-store/index.js';
+
+export * from '#engine/core/config/index.js';

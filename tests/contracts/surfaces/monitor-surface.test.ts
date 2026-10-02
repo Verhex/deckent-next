@@ -131,11 +131,11 @@ class Screen extends Writable {
 }
 const settle = (ms = 30) => new Promise(resolve => setTimeout(resolve, ms));
 async function until(check: () => boolean, label: string) { for (let i = 0; i < 300; i++) { if (check()) return; await settle(10); } throw new Error(`timed out: ${label}`); }
-function mount(props: { load: () => Promise<typeof fullSnapshot>; intervalMs?: number; columns?: number; rows?: number; locale?: 'en' | 'tr'; now?: () => number }) {
+function mount(props: { load: () => Promise<typeof fullSnapshot>; intervalMs?: number; columns?: number; rows?: number; locale?: 'en' | 'tr'; now?: () => number; loadConfigView?: () => Promise<Awaited<ReturnType<import('#engine/index.js').ConfigApplication['inspect']>>> }) {
   const stdout = new Screen(props.columns ?? 120, props.rows ?? 40);
   const stdin = Object.assign(new PassThrough(), { isTTY: true, setRawMode() { return stdin; }, ref() { return stdin; }, unref() { return stdin; } });
   const instance = render(createElement(surface.MonitorApp, { load: props.load, intervalMs: props.intervalMs ?? 60_000, locale: props.locale ?? 'en', ascii: false,
-    palette: resolveWorklinePalette('none'), errorText: (error: unknown) => surface.monitorFailureText(error, props.locale ?? 'en'), ...(props.now ? { now: props.now } : {}) }),
+    ...(props.loadConfigView ? { loadConfigView: props.loadConfigView } : {}), palette: resolveWorklinePalette('none'), errorText: (error: unknown) => surface.monitorFailureText(error, props.locale ?? 'en'), ...(props.now ? { now: props.now } : {}) }),
   { stdout: stdout as unknown as NodeJS.WriteStream, stdin: stdin as unknown as NodeJS.ReadStream, debug: true, exitOnCtrlC: false, patchConsole: false });
   const press = async (key: string) => { stdin.write(key); await settle(); };
   return { stdout, stdin, instance, press };
@@ -466,4 +466,58 @@ describe('terminal /monitor', () => {
     expect(await monitorSlash('/root', '--json', { async inspectMonitor() { return fullSnapshot; } } as never, { env: {} }, 'en', 90)).toEqual([t('monitor.slash.usage', {}, 'en')]);
     await expect(monitorSlash('/root', '', {} as never, { env: {} }, 'en', 90)).rejects.toMatchObject({ code: 'MONITOR_UNAVAILABLE' });
   });
+});
+
+it('fullscreen Config tab reads the shared inspect, exposes source/binding/apply and opens details', async () => {
+  let reads = 0;
+  const config = { schemaVersion: 1 as const, layer: 'project' as const, digest: null, fields: [{ key: 'max_workers', value: 2,
+    defaultValue: 'auto', source: 'global' as const, descriptionKey: 'config.field.max_workers', description: 'Worker ceiling', schema: { type: 'integer', minimum: 1 },
+    binding: { state: 'bound' as const, consumers: ['src/composition/core/runs'] }, apply: 'restart' as const, redacted: false }] };
+  const view = mount({ load: async () => fullSnapshot, loadConfigView: async () => { reads++; return config; }, columns: 80 });
+  try {
+    await until(() => reads > 0 && view.stdout.frame.includes('Stuck or waiting'), 'config inspected');
+    await view.press('8'); expect(view.stdout.frame).toContain('[8 Config]'); expect(view.stdout.frame).toContain('max_workers');
+    expect(view.stdout.frame).toContain('global'); expect(view.stdout.frame).toContain('bound'); expect(view.stdout.frame).toContain('restart');
+    await view.press(KEY.enter); expect(view.stdout.frame).toContain('Key: max_workers'); expect(view.stdout.frame).toContain('Installation ceiling');
+    expect(widest(view.stdout.frame)).toBeLessThanOrEqual(80);
+  } finally { view.instance.unmount(); }
+});
+
+for (const locale of ['en', 'tr'] as const) it(`config inspection failure leaves other monitor panels fresh and recovers (${locale})`, async () => {
+  let failed = true, observedAt = fullSnapshot.observedAt;
+  const config = { schemaVersion: 1 as const, layer: 'project' as const, digest: null, fields: [{ key: 'max_workers', value: 2,
+    defaultValue: 'auto', source: 'global' as const, descriptionKey: 'config.field.max_workers', description: 'Worker ceiling', schema: {},
+    binding: { state: 'bound' as const, consumers: ['src/composition/core/runs'] }, apply: 'restart' as const, redacted: false }] };
+  const view = mount({ locale, load: async () => ({ ...fullSnapshot, observedAt }), loadConfigView: () => {
+    if (failed) {
+      const error = Object.assign(new Error('Bearer private-transport-token'), { code: 'CONFIG_METADATA_MISSING' });
+      if (locale === 'tr') throw error;
+      return Promise.reject(error);
+    }
+    return Promise.resolve(config);
+  } });
+  try {
+    await settle(100);
+    expect(view.stdout.frame).toContain(t('monitor.observed', { time: new Date(observedAt).toISOString().slice(0, 19).replace('T', ' ') + 'Z' }, locale));
+    expect(view.stdout.frame).not.toContain('Refresh failed');
+    await view.press('8');
+    expect(view.stdout.frame).toContain('[CONFIG_METADATA_MISSING]');
+    expect(view.stdout.frame).toContain(t('config.surface.unavailable', {}, locale));
+    expect(view.stdout.frame).not.toContain('private-transport-token');
+    failed = false; observedAt += 1000; await view.press('r');
+    expect(view.stdout.frame).toContain('max_workers');
+    expect(view.stdout.frame).not.toContain('CONFIG_METADATA_MISSING');
+    failed = true; observedAt += 1000; await view.press('r');
+    expect(view.stdout.frame).toContain('[CONFIG_METADATA_MISSING]');
+    expect(view.stdout.frame).not.toContain('max_workers');
+    await view.press('1');
+    expect(view.stdout.frame).toContain(t('monitor.observed', { time: new Date(observedAt).toISOString().slice(0, 19).replace('T', ' ') + 'Z' }, locale));
+  } finally { view.instance.unmount(); }
+});
+
+for (const locale of ['en', 'tr'] as const) it(`config help derives its number from the active tabs (${locale})`, () => {
+  const customTabs = ['summary', 'config', 'runs'] as const;
+  const lines = surface.legendLines(locale, false, customTabs);
+  const configHint = lines.map(line => line.map(span => span.text).join('')).find(text => text.includes('Config:'));
+  expect(configHint).toMatch(/^2\s+Config:/);
 });

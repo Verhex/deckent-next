@@ -29,9 +29,9 @@ describe('source-derived config vocabulary gate', () => {
   });
   it('detects duplicated defaults, field assignments and enum schemas but allows semantics and registry access', async () => {
     const root = await fixture(), file = join(root, 'src/probe.ts');
-    await writeFile(file, "const mode = 'performance'; const opts = {output_mode: 'standard'}; const x = z.enum(['balanced']); const y = settings.mode ?? 'economic';");
+    await writeFile(file, "const output_mode = 'json'; const opts = {output_mode: 'standard'}; const x = z.enum(['explanatory']); const y = settings.output_mode ?? 'verbose';");
     expect(check(root, file)).toHaveLength(4);
-    await writeFile(file, "const mode = getConfigFieldDefault('mode'); if (mode === 'performance') consume(); type X = 'json';");
+    await writeFile(file, "const output_mode = getConfigFieldDefault('output_mode'); if (output_mode === 'standard') consume(); type X = 'json';");
     expect(check(root, file)).toEqual([]);
   });
   it('is identical for a CRLF checkout of the same sources (Windows autocrlf)', async () => {
@@ -47,5 +47,30 @@ describe('source-derived config vocabulary gate', () => {
     expect(projectionStale(root)).toBe(false);
     await writeFile(file, text.replace(/\n/gu, '\r\n').replace('"schemaVersion": 1', '"schemaVersion": 2'));
     expect(projectionStale(root)).toBe(true);
+  });
+});
+
+describe('config binding ratchet', () => {
+  it('rejects a declared consumer whose unit never references its field', async () => {
+    const root = await fixture();
+    // @ts-expect-error JavaScript tooling contract has no declarations.
+    const { lintConfigBindings } = await import('../../../scripts/config-vocabulary.mjs');
+    const errors: string[] = [];
+    // Consumer exists but reads a different config field.
+    const file = join(root, 'src/platform/core/config-fields/internal/fields.ts');
+    const before = await readFile(file, 'utf8');
+    await writeFile(file, before.replace("consumers: ['src/composition/core/storage']", "consumers: ['src/platform/core/output']"));
+    lintConfigBindings(root, (rule: string) => errors.push(rule));
+    expect(errors).toContain('config-binding-consumer');
+  });
+  it('rejects new declared-only knobs against the frozen empty baseline', async () => {
+    const root = await fixture();
+    // @ts-expect-error JavaScript tooling contract has no declarations.
+    const { lintConfigBindings } = await import('../../../scripts/config-vocabulary.mjs');
+    const file = join(root, registryPath), before = await readFile(file, 'utf8');
+    await writeFile(file, before.replace("{ state: 'bound', consumers: ['src/platform/core/config'] }", "{ state: 'declared-only', reason: 'test fixture' }"));
+    const errors: string[] = [];
+    lintConfigBindings(root, (rule: string) => errors.push(rule));
+    expect(errors).toContain('config-binding-declared-only');
   });
 });

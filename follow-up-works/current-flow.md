@@ -50,7 +50,7 @@ Bu bölüm güncel durumdur; önceki parti anlatıları Git geçmişinde (bu dos
 - **Şeritler (Codex uygulayıcı, lead commit, bağımsız inceleme Fable/Sol):**
   - A1/A3 `lane/run-park-timeout`: `ca753477` + `6d06bb41` + `6a8c3298` (Fable REVISE R1–R3 düzeltmesi); Fable yeniden inceleme REVISE tek P1 (bakım turu her
     ilerlemede `run:cancel` istiyordu) → REVISE 2 Codex'te. Lead kararı A3 dönüşü: Jev a8e582fe `typed_return_on_new_evidence`.
-  - CONFIG-SURFACE `lane/config-surface` `19a6bb42`: Fable REVISE (string maskeleme tüm yüzeylerde, yedek budama, kilit süresi config'ten + P3) → Codex'te.
+  - CONFIG-SURFACE `lane/config-surface` `19a6bb42` → Fable REVISE düzeltmesi `c86d9d33` → i18n `5cbce321`; Fable **PASS** exact `5cbce321`; 26. partiye birleştirildi.
   - CLI-HELP `lane/cli-help`, HARDCODE-RATCHET `lane/hardcode-ratchet` (ikisi de taban `19a6bb42`), AOF-DECISION-PORT `lane/aof-decision-port` (taban `662812fc`): Codex'te.
 - **Analizler (salt okunur):** HARDCODE-AUDIT (~173 ihlal grubu, P1 19; `proof/HARDCODE-AUDIT-2026-10-02/`), AGENT-OS-FOUNDATIONS
   (`proof/AGENT-OS-FOUNDATIONS-2026-10-02/analysis.md`). Owner sırası Jev e2b81339 (ARCHITECTURE karar günlüğü 2026-10-02).
@@ -59,7 +59,7 @@ Bu bölüm güncel durumdur; önceki parti anlatıları Git geçmişinde (bu dos
 
 ## Sıradaki
 1. A1/A3 REVISE 2 → Fable yeniden inceleme → 26. partiye birleşme (CONFIG-SURFACE ile çakışma çözümü lead).
-2. CONFIG-SURFACE REVISE → Fable yeniden inceleme → 26. parti; sonra HARDCODE-P1 kartı; owner vLLM/Qwen adımları (`proof/CONFIG-SURFACE-2026-10-02/owner-vllm-steps.md`).
+2. CONFIG-SURFACE 26. partide; sıradaki HARDCODE-P1 kartı; owner vLLM/Qwen adımları (`proof/CONFIG-SURFACE-2026-10-02/owner-vllm-steps.md`).
 3. CLI-HELP, HARDCODE-RATCHET, AOF-DECISION-PORT teslimleri → bağımsız inceleme → 26./27. parti; A1/A3 girince AOF-HANDOFF.
 4. 26. parti tam verify → Sol → push → owner/RC talimatıyla canlı geçiş.
 5. Owner canlı adımları: katalog seed kaydı/aktivasyonu (`proof/MODEL-CATALOG-2026-10-02/owner-commands.sh`), CONFIG-SURFACE sonrası vLLM yeniden adlandırma.

@@ -62,6 +62,15 @@ const unchanged = (before: Awaited<ReturnType<typeof files>>, after: Awaited<Ret
 };
 
 describe.skipIf(process.platform === 'win32')('inspectMonitor composition', () => {
+  it('shows the installation ceiling as effective pool capacities while retaining actual occupancy', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'deckent-monitor-ceiling-')); roots.push(root);
+    const current = await project(root, 'current', ['s'], ['s']);
+    await writeFile(current.configPath, JSON.stringify({ ...current.config, max_workers: 1 })); clearConfigCache();
+    const snapshot = await inspectMonitor(current.dir, current.options);
+    expect(snapshot.installs[0]!.pools).toMatchObject([{ poolId: 'p', capacity: 1, inFlight: 1, executionCapacity: 1, executing: 1 }]);
+    await writeFile(current.configPath, JSON.stringify({ ...current.config, max_workers: 'auto' })); clearConfigCache();
+    expect((await inspectMonitor(current.dir, current.options)).installs[0]!.pools).toMatchObject([{ poolId: 'p', capacity: 4, executionCapacity: 4 }]);
+  });
   it('lists never-dispatched Runs of every admitted scope across installs, read-only, without a running service', async () => {
     const root = await mkdtemp(join(tmpdir(), 'deckent-monitor-')); roots.push(root);
     const current = await project(root, 'current', ['s', 's2', 'hidden'], ['s', 's2']), other = await project(root, 'other', ['s'], ['s']);

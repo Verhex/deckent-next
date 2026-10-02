@@ -64,7 +64,7 @@ historical proof and current gates retain their measured scope. PLAN.md tracks t
   not a separate filesystem root. Default is one company. Enterprise maps customer identity,
   RBAC/RLS and governance into these contracts. Company-aware Core policy precedes M2; IdP/SIEM
   adapters belong to M4. The retired tenant fields and file-isolation helpers are gone (H34 S4): company is a data scope,
-  config schema 3, layout registry 4 (SCR-A, owner 2026-09-28: `scratch` resource), doctor JSON 2; older versions are refused with a
+  config schema 4 (CONFIG-SURFACE; explicit Next v3 read migration), layout registry 4 (SCR-A, owner 2026-09-28: `scratch` resource), doctor JSON 2; older versions are refused with a
   typed error, never converted.
 - Development is in deckent-next. Public deckent receives only the completed Core distribution. Proprietary
   Enterprise sources/packages remain separately controlled from their first implementation, consume public Core
@@ -461,6 +461,58 @@ staged trees against the lock, places the launcher through the service path and 
 bubblewrap (only the ephemeral runner enables user namespaces via its AppArmor sysctl; not a product installation step; `realm-arm64` stays
 disabled). Workflow expressions are checked locally with actionlint v1.7.7 (`go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.7`,
 then `actionlint -shellcheck= -pyflakes= .github/workflows/*.yml`; no npm dependency).
+
+### Registry-driven configuration contract (CONFIG-SURFACE, owner 2026-10-02)
+
+`engine/core/config` owns one typed `ConfigApplication`: inspect (all registered schema paths or one key), explain,
+validate, set and unset. Fields, descriptions, JSON Schema type/enum/range/default, binding and apply mode derive from
+`CONFIG_FIELDS` and `registerConfigSection`; there is no surface-owned key/schema list. The file adapter observes
+project/global documents and effective default → global → project → env values. Secret provenance and credential keys
+are masked before subtree selection; every string also passes through the existing shared redactSensitive matcher (tokens, Bearer credentials, URL passwords, key/value secrets and JWTs). Schema value annotations are masked too. Token resource counts stay visible. Raw JSON Schema conversion is cached per configRegistryGeneration with schema-derived paths (dynamic array indexes/record names share nodes); values, provenance and annotation masking remain fresh per observation.
+
+Writes carry VerifiedPrincipal, scope, command id, explicit project/default or global target, and optional inspect
+preimage digest (`--expect`; CLI `--expect absent` asserts no target document yet). Existing policy vocabulary adds `config/write`; first-run template v4 grants it to the
+verified local owner. Global writes also require installation-wide delegation. Deny and require-approval fail closed;
+config has no broker-supported approval subject yet (`POLICY_APPROVAL_UNSUPPORTED`). Terminal `/config` is read only.
+Reads require no config-write grant. Composition supplies verified scope context; the engine plans, adapters own IO.
+
+Authored object overlays validate supplied members against the original registry nodes (including union branches);
+arrays replace whole values. Full merged semantics still validate through CORE_SCHEMA and registered sections. JSON-only
+inputs reject undefined, nonfinite, cyclic or accessor values before publication. Union leaf explanations include all branches.
+
+The existing writer lock serializes publication: validate each authored layer, full CORE_SCHEMA + registered section
+validators and resulting effective document; check preimage; seal a value-free audit intent through the existing audit
+port; retain the existing file as a versioned adjacent product backup; fsync temporary file, rename and fsync directory. Governed writes prune adjacent backups under that same lock using configFile.backupKeep (registry default 3), protecting the newly created backup. A CONFIG_BACKUP_PRUNE_FAILED failure occurs after publication and does not roll back saved bytes; inspect reconciles actual document state. Config writer waiting uses configFile.writeLockTimeoutMs (registry default 2000ms); compatibility writeConfig and healing reuse the registry source, while installation publication keeps its separate installation setting. A malformed project document heals with registry defaults because it cannot supply valid config policy.
+Audit carries principal/scope/key/command/layer and before/after document digests. Audit and filesystem publication are
+separate stores: the audit intent is not an effect-settlement receipt; after an IO failure inspect reconciles actual
+bytes. Audit failure prevents config publication. Without an initialized ledger/policy/key custody, writes refuse.
+Secrets section set/unset is refused and remains owned by `deckent secret`.
+
+Config schema 4 removes `mode`, `spawn_backend`, `auth_mode`, `providers` and `live_trace` (no consumers). Explicit v3
+Next documents normalize on read with values-free warnings; reads preserve bytes, the next governed write publishes v4.
+Current/unversioned documents carrying retired keys receive typed CONFIG_FIELD_RETIRED issues; other old schemas remain
+unsupported. This is Next version evolution, not legacy conversion. Every field/registered section declares binding
+and apply metadata; registration refuses missing metadata/declared-only sections. Source AST lint checks declared
+consumer references and rejects new declared-only fields; the frozen historical allowlist is empty and may only shrink.
+The lint proves references, not end-to-end causality. Nested fields inherit their section's declared consumers/apply mode.
+
+`max_workers` narrows admission execution/in-flight capacity and the SQLite reservation transaction's shared pool
+occupancy; `auto` adds no ceiling. Monitor reports effective capacity while retaining actual occupancy. Existing Run
+snapshots remain immutable. Every Docker profile admitted through the registry (including compiled templates) must be
+within configured `execution.docker.memoryBytes/cpus/pids`; excess is EXECUTION_RESOURCE_CEILING, never silent clamping.
+Existing admitted Docker profiles are not rewritten; the existing first-scope pin can precede refusal, but no Run,
+receipt, progression intent or attempt is created on a resource-ceiling rejection.
+
+CLI config has a dedicated `surfaces/core/config` unit: an 80-column grouped human view, compatible `get [key] --json`,
+explain/validate/set/unset with safe numeric array paths and splice removal. Terminal `/config [key]` and monitor's
+read-only Config tab/`monitor --config` use the same inspect operation. Monitor config concerns its current project;
+other installation snapshots do not grant config authority. A failing Config read shows a typed unavailable state without discarding successful Run/worker refreshes; recovery replaces it with fresh config. Tab help derives its index from the active tab registry. CLI explain uses the project/effective view and refuses --global with CLI_USAGE. No runtime protocol/ledger version change is required.
+The owner-only provider cleanup sequence and temp-project command evidence are outside Git in
+`proof/CONFIG-SURFACE-2026-10-02/owner-vllm-steps.md`. Historical invocation inspection keeps its immutable old reference
+and profile after provider removal; the test uses a seeded valid durable claim/unknown settlement, not a model request.
+Native runtime transport, a freshly built executable, live restart and independent acceptance remain outside this lane's
+verified evidence. Fixed architecture budgets are retained; filesystem/authority adapters and pure admission helpers
+keep composition as wiring, and previous comment-only wiring notes move to the external proof packet.
 
 ### Operator terminal contract v1 (accepted target, partial implementation)
 

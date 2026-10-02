@@ -22,8 +22,9 @@ import { bindingsFileSchema, policyFileSchema, type PolicyFile } from './schema.
 export const FIRST_RUN_POLICY_TEMPLATE_ID = 'first-run-template';
 /** v2 (SECRET-WRITE, owner 2026-09-29 option A): the installing owner may set and delete every secret of the installation's store in the
  * installed scope (`secret`/`set|delete`, all names). v1 had no secret grant. v3 (B1, owner 2026-10-01): Core's own minimum assurance
- * for hard-floor tool-call cards is written out as visible `approvalAssurance` data (the owner may raise it; Core never goes below it). */
-export const FIRST_RUN_POLICY_TEMPLATE_VERSION = 3;
+ * for hard-floor tool-call cards is written out as visible `approvalAssurance` data (the owner may raise it; Core never goes below it).
+ * v4 (CONFIG-SURFACE): the explicitly named installing owner may write configuration; the installation grant covers global writes. */
+export const FIRST_RUN_POLICY_TEMPLATE_VERSION = 4;
 /** The hard-floor tool-call cells (write floor and configuration file, destructive and always-ask shell, every fetch, every MCP call): only the
  * terminal of the turn that asked may allow them. The same set is Core's default in the approval engine (a test keeps the two equal). */
 export const HARD_FLOOR_CARD_CELLS = Object.freeze(['edit-floor', 'edit-authority', 'shell-destructive', 'shell-always-ask', 'fetch-listed', 'fetch-unlisted', 'mcp-call', 'mcp-floor'] as const);
@@ -52,7 +53,7 @@ export function firstRunPolicyTemplate(input: FirstRunPolicyTemplateInput): Firs
   const scopeId = identitySchema.parse(input.scopeId);
   const principal = { issuer: identitySchema.parse(input.principal.issuer), subject: identitySchema.parse(input.principal.subject) };
   const revision = `${FIRST_RUN_POLICY_TEMPLATE_ID}-v${FIRST_RUN_POLICY_TEMPLATE_VERSION}`;
-  const actionsOf = { 'agent-tool': ['invoke'], operation: ['execute'], secret: ['set', 'delete'] } as const;
+  const actionsOf = { 'agent-tool': ['invoke'], operation: ['execute'], secret: ['set', 'delete'], config: ['write'] } as const;
   const grant = (id: string, effect: 'allow' | 'require-approval', kind: keyof typeof actionsOf, ids: readonly string[] | 'all', modeEligible?: boolean) =>
     Object.freeze({ id, effect, actions: [...actionsOf[kind]], scopes: [scopeId], principals: [principal],
       resource: { kind, ids: ids === 'all' ? ids : [...ids] }, ...(modeEligible === undefined ? {} : { modeEligible }) });
@@ -68,6 +69,7 @@ export function firstRunPolicyTemplate(input: FirstRunPolicyTemplateInput): Firs
       grant('first-run-scratch-write-operation', 'allow', 'operation', [input.scratchWriteOperationId]),
       // v2: the owner manages their own installation's secrets (every name; still decided per call and audited as `secret-change`).
       grant('first-run-secret-store', 'allow', 'secret', 'all'),
+      { ...grant('first-run-config', 'allow', 'config', 'all'), scopes: 'all' },
     ],
   });
   const bindings = bindingsFileSchema.parse({ schemaVersion: 1, revision: `${revision}-bindings`, bindings: [] });

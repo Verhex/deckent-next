@@ -37,7 +37,7 @@ export function validateProviderSpendingLayers(global: unknown, project: unknown
 export function registerProviderSpendingConfig(): void {
   registerConfigSection('provider_spending', providerSpendingSchema, {
     optional: true, secretReferences: 'forbid',
-    metadata: { descriptionKey: 'config.field.provider_spending', tier: 'core', since: CONFIG_CONTRACT_SINCE },
+    metadata: { descriptionKey: 'config.field.provider_spending', tier: 'core', since: CONFIG_CONTRACT_SINCE, binding: { state: 'bound', consumers: ['src/adapters/core/contract'] }, apply: 'restart' },
     validateLayers: validateProviderSpendingLayers,
     validateValue: value => { if (value !== undefined) validate(value); },
   });

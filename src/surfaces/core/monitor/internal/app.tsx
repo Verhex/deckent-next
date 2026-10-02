@@ -1,3 +1,4 @@
+import { configMonitorBlocks, type ConfigMonitorInspection } from './config-view.js';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Box, Text, useApp, useInput, useWindowSize } from 'ink';
 import { t, type Locale } from '#platform/index.js';
@@ -13,6 +14,7 @@ import { CHANGE_GLYPHS, legendLines } from './legend.js';
 export interface MonitorAppProps {
   /** One observe-only read of the whole snapshot (the CLI's `inspectMonitor`); never called while a previous call is still running. */
   readonly load: () => Promise<MonitorSnapshot>;
+  readonly loadConfigView?: () => Promise<ConfigMonitorInspection>;
   /** `inspection.workers.heartbeatMs`: the next read starts this long after the previous one settled. */
   readonly intervalMs: number;
   readonly locale: Locale; readonly ascii: boolean; readonly palette: WorklineInkPalette;
@@ -32,11 +34,14 @@ interface Received { readonly snapshot: MonitorSnapshot; readonly at: number; re
 /**
  * The fullscreen monitor (MONITOR-SURFACE, htop/k9s class): a fixed header (installs, builds, snapshot age, filter), a tab bar, one scrollable
  * body and a key hint, refreshed in place every heartbeat. A failed refresh keeps the last good snapshot with a visible warning.
- * Keys: Tab/←→ or 1–7 tabs, ↑↓/PgUp/PgDn select, Enter details, Esc back, / filter, s/S sort, g group, r refresh, p pause, ? help, q quit.
+ * Keys: Tab/←→ or tab numbers, ↑↓/PgUp/PgDn select, Enter details, Esc back, / filter, s/S sort, g group, r refresh, p pause, ? help, q quit.
  */
 export function MonitorApp(props: MonitorAppProps) {
   const { load, intervalMs, locale, ascii, palette, filters, errorText } = props;
   const now = props.now ?? Date.now;
+  const tabs = props.loadConfigView ? [...MONITOR_TABS, 'config' as const] : MONITOR_TABS;
+  const [configView, setConfigView] = useState<ConfigMonitorInspection | null>(null);
+  const [configFailure, setConfigFailure] = useState<string | null>(null);
   const { exit } = useApp();
   const window = useWindowSize(), { columns, rows } = props.size ?? window;
   const width = Math.max(20, columns || 80), height = Math.max(10, rows || 24), ellipsis = ascii ? '...' : '…';
@@ -47,7 +52,7 @@ export function MonitorApp(props: MonitorAppProps) {
   const [generation, setGeneration] = useState(0);
   const [paused, setPaused] = useState(false);
   const [tab, setTab] = useState(0);
-  const [selection, setSelection] = useState<readonly number[]>(MONITOR_TABS.map(() => 0));
+  const [selection, setSelection] = useState<readonly number[]>(tabs.map(() => 0));
   const [detail, setDetail] = useState<string | null>(null);
   const [help, setHelp] = useState(false);
   const [controls, setControls] = useState<MonitorControls>(NO_CONTROLS);
@@ -59,15 +64,19 @@ export function MonitorApp(props: MonitorAppProps) {
     if (inFlight.current) return;
     inFlight.current = true;
     try {
-      const next = await load();
+      const [observed, inspectedConfig] = await Promise.allSettled([Promise.resolve().then(load), Promise.resolve().then(() => props.loadConfigView?.())]);
       if (alive.current) {
-        const current = signatures(buildMonitorView(filterSnapshot(next, filters ?? {}), locale, ascii).tabs);
-        setReceived(previous => ({ snapshot: next, at: now(), signatures: current, marks: changeMarks(previous?.signatures ?? null, current, CHANGE_GLYPHS) }));
-        setFailure(null);
+        if (inspectedConfig.status === 'fulfilled') { setConfigView(inspectedConfig.value ?? null); setConfigFailure(null); }
+        else { setConfigView(null); setConfigFailure(errorText(inspectedConfig.reason)); }
+        if (observed.status === 'fulfilled') {
+          const next = observed.value, current = signatures(buildMonitorView(filterSnapshot(next, filters ?? {}), locale, ascii).tabs);
+          setReceived(previous => ({ snapshot: next, at: now(), signatures: current, marks: changeMarks(previous?.signatures ?? null, current, CHANGE_GLYPHS) }));
+          setFailure(null);
+        } else setFailure({ text: errorText(observed.reason), at: now() });
       }
     } catch (error) { if (alive.current) setFailure({ text: errorText(error), at: now() }); }
     finally { inFlight.current = false; if (alive.current) { setGeneration(value => value + 1); setClock(now()); } }
-  }, [ascii, errorText, filters, load, locale, now]);
+  }, [ascii, errorText, filters, load, locale, now, props.loadConfigView]);
   useEffect(() => { alive.current = true; if (!props.initial) void refresh(); return () => { alive.current = false; }; }, []);
   // One read timer at a time: re-armed only after a read settled (generation) and never while paused.
   useEffect(() => {
@@ -79,9 +88,11 @@ export function MonitorApp(props: MonitorAppProps) {
   useEffect(() => { const handle = setInterval(() => setClock(now()), intervalMs); return () => clearInterval(handle); }, [intervalMs, now]);
 
   const view = useMemo(() => snapshot ? buildMonitorView(filterSnapshot(snapshot, filters ?? {}), locale, ascii) : null, [ascii, filters, locale, snapshot]);
-  const current = MONITOR_TABS[tab]!;
-  const blocks = useMemo(() => view ? applyControls(view.tabs[current], controls, current === 'runs' || current === 'workers', received?.marks ?? new Map(),
-    { noMatch: t('monitor.filter.noMatch', {}, locale), arrows: { down: ascii ? 'v' : '▼', up: ascii ? '^' : '▲' } }) : [], [ascii, controls, current, locale, received, view]);
+  const current = tabs[tab]!;
+  const blocks = useMemo(() => view ? applyControls(current === 'config' ? configView ? configMonitorBlocks(configView, locale) : configFailure
+    ? [{ kind: 'line' as const, line: [span(t('config.surface.unavailable', {}, locale), 'warning')] }, { kind: 'line' as const, line: [span(configFailure, 'error')] }]
+    : [{ kind: 'line' as const, line: [span(t('monitor.live.loading', {}, locale))] }] : view.tabs[current], controls, current === 'runs' || current === 'workers', received?.marks ?? new Map(),
+    { noMatch: t('monitor.filter.noMatch', {}, locale), arrows: { down: ascii ? 'v' : '▼', up: ascii ? '^' : '▲' } }) : [], [ascii, configFailure, configView, controls, current, locale, received, view]);
   const flat: MonitorFlatLine[] = useMemo(() => flattenBlocks(blocks, width, ellipsis), [blocks, ellipsis, width]);
   const items = flat.filter(line => line.item !== undefined);
   const selected = Math.min(selection[tab] ?? 0, Math.max(0, items.length - 1));
@@ -105,7 +116,7 @@ export function MonitorApp(props: MonitorAppProps) {
           ...(controls.group ? [span(`  ${controls.group === 'install' ? t('monitor.group.install', {}, locale) : t('monitor.group.state', {}, locale)}`, 'muted')] : [])];
   const bodyHeight = Math.max(1, height - shownHeader.length - 4);
   const move = (delta: number) => setSelection(values => values.map((value, index) => index === tab ? Math.max(0, Math.min(items.length - 1, selected + delta)) : value));
-  const switchTab = (next: number) => { setTab((next + MONITOR_TABS.length) % MONITOR_TABS.length); setDetail(null); };
+  const switchTab = (next: number) => { setTab((next + tabs.length) % tabs.length); setDetail(null); };
   const cycle = <T,>(values: readonly T[], value: T) => values[(values.indexOf(value) + 1) % values.length]!;
   const pointer = ascii ? '>' : '›';
 
@@ -116,7 +127,7 @@ export function MonitorApp(props: MonitorAppProps) {
       else if (key.escape) { setEditing(false); setControls(value => ({ ...value, filter: '' })); }
       else if (key.backspace || key.delete) setControls(value => ({ ...value, filter: value.filter.slice(0, -1) }));
       else if (input && !key.ctrl && !key.meta && !key.tab) setControls(value => ({ ...value, filter: value.filter + input }));
-      setSelection(MONITOR_TABS.map(() => 0));
+      setSelection(tabs.map(() => 0));
       return;
     }
     if (input === 'q') { exit(); return; }
@@ -131,7 +142,7 @@ export function MonitorApp(props: MonitorAppProps) {
     if (input === 'g') { setControls(value => ({ ...value, group: cycle(GROUP_CYCLE, value.group) })); return; }
     if ((key.tab && key.shift) || key.leftArrow) { switchTab(tab - 1); return; }
     if (key.tab || key.rightArrow) { switchTab(tab + 1); return; }
-    if (/^[1-9]$/.test(input) && Number(input) <= MONITOR_TABS.length) { switchTab(Number(input) - 1); return; }
+    if (/^[1-9]$/.test(input) && Number(input) <= tabs.length) { switchTab(Number(input) - 1); return; }
     if (detail !== null) return;
     if (key.upArrow) move(-1); else if (key.downArrow) move(1);
     else if (key.pageUp) move(-bodyHeight); else if (key.pageDown) move(bodyHeight);
@@ -140,7 +151,7 @@ export function MonitorApp(props: MonitorAppProps) {
   });
 
   let body: MonitorLine[];
-  if (help) body = legendLines(locale, ascii);
+  if (help) body = legendLines(locale, ascii, tabs);
   else if (!view) body = [[span(failure ? '' : t('monitor.live.loading', {}, locale), 'muted')]];
   else if (detail !== null) {
     body = [[span(t('monitor.live.detailBack', {}, locale), 'muted')], ...(detailRow ? wrapDetail(detailRow.detail(), width) : [[span(t('monitor.live.detailGone', {}, locale), 'warning')]])];
@@ -159,9 +170,9 @@ export function MonitorApp(props: MonitorAppProps) {
   while (shown.length < bodyHeight) shown.push([span('')]);
 
   const colored = Object.keys(palette.accent).length > 0;
-  const tabParts = MONITOR_TABS.map((name, index) => `${index + 1} ${tabLabel(name, locale)}`);
+  const tabParts = tabs.map((name, index) => `${index + 1} ${name === 'config' ? t('config.surface.monitorTab', {}, locale) : tabLabel(name, locale)}`);
   const full = tabParts.join('  ').length + 2 <= width;
-  const tabLine: MonitorLine = MONITOR_TABS.flatMap((_, index) => {
+  const tabLine: MonitorLine = tabs.flatMap((_, index) => {
     const active = index === tab, text = full || active ? tabParts[index]! : String(index + 1);
     return [span(index ? ' ' : ''), span(active ? `[${text}]` : ` ${text} `, active ? 'accent' : 'muted')];
   });

@@ -9,7 +9,7 @@ import { encodeBootstrapJournal, observeBootstrapState, assertBootstrapUsable, a
 
 const roots: string[] = [];
 let onValidate: (() => void) | undefined;
-registerConfigSection('bootstrap_gate_test', z.object({}).strict(), { optional: true, validateEffective: () => { onValidate?.(); } });
+registerConfigSection('bootstrap_gate_test', z.object({}).strict(), { metadata: { descriptionKey: 'config.section', tier: 'core', since: '1.0.0-alpha.1', binding: { state: 'bound', consumers: ['src/platform/core/config'] }, apply: 'live' }, optional: true, validateEffective: () => { onValidate?.(); } });
 afterEach(async () => { onValidate = undefined; clearConfigCache(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 async function fixture() {
   const root = await mkdtemp(join(tmpdir(), 'deckent-config-bootstrap-')); roots.push(root);

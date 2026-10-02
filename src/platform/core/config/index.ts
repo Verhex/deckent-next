@@ -14,3 +14,4 @@ export * from './internal/validate/issues.js';
 export * from './internal/validate/sections.js';
 export * from './internal/write.js';
 export { inspectProductPaths } from './internal/paths.js';
+export { assertConfigSecretPolicies } from './internal/validate/secret-policy.js';

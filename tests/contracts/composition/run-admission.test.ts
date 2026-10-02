@@ -32,6 +32,49 @@ async function fixture() {
   return { project, data, path, layout, configPath, options, policy };
 }
 describe.skipIf(process.platform === 'win32')('configured SDK Run admission', () => {
+  it.each([1, 2, 'auto'] as const)('max_workers=%s limits both admitted capacities without enlarging the pool profile', async maxWorkers => {
+    const f = await fixture(); await f.policy(true, true);
+    const config = JSON.parse(await readFile(f.configPath, 'utf8')); config.max_workers = maxWorkers;
+    await writeFile(f.configPath, JSON.stringify(config)); clearConfigCache();
+    await createRun(f.project, command, f.options);
+    const { store } = await openConfiguredAttemptStore(f.project, f.options);
+    try { expect((await store.loadRunExecutionPolicy('s', 'r')).capacity).toEqual({ executionSlots: 1, inFlightSlots: maxWorkers === 1 ? 1 : 2 }); }
+    finally { store.close(); }
+  });
+  it('enforces the current installation ceiling across Runs and rejects fresh reservations when already occupied', async () => {
+    const f = await fixture(); await f.policy(true, true);
+    await createRun(f.project, command, f.options);
+    await createRun(f.project, { ...command, commandId: 'create-r2', runId: 'r2' }, f.options);
+    // Lower after admission: a historical Run policy must not bypass the installation ceiling.
+    const config = JSON.parse(await readFile(f.configPath, 'utf8')); config.max_workers = 1;
+    await writeFile(f.configPath, JSON.stringify(config)); clearConfigCache();
+    const reserve = { schemaVersion: 1 as const, commandId: 'reserve-r', scopeId: 's', runId: 'r', expectedRevision: 0 };
+    await reserveRunTasks(f.project, reserve, f.options);
+    const before = await readFile(f.path);
+    await expect(reserveRunTasks(f.project, { ...reserve, commandId: 'reserve-r2', runId: 'r2' }, f.options)).rejects.toMatchObject({ code: 'RUN_POOL_FULL' });
+    expect(await readFile(f.path)).toEqual(before);
+    expect((await inspectRun(f.project, { schemaVersion: 1, scopeId: 's', runId: 'r2' }, f.options)).run!.tasks[0]!.phase).toBe('pending');
+    expect(await reserveRunTasks(f.project, reserve, f.options)).toMatchObject({ reservation: { identities: [{ runId: 'r' }] } });
+  });
+  it.each(['memoryBytes', 'cpus', 'pids'] as const)('refuses %s above the installation ceiling before writing Run evidence and never clamps', async resource => {
+    const f = await fixture(); await f.policy(true, true);
+    const config = JSON.parse(await readFile(f.configPath, 'utf8'));
+    const parameters = config.admission.registry.profiles[0].parameters;
+    config.execution = { docker: { ...parameters, executable: '/usr/bin/docker' }, git: { gitExecutable: '/usr/bin/git', timeoutMs: 10000 } };
+    delete config.execution.docker.argv;
+    const ceiling = parameters[resource]; parameters[resource] = ceiling * 2;
+    await writeFile(f.configPath, JSON.stringify(config)); clearConfigCache();
+    await expect(createRun(f.project, command, f.options)).rejects.toMatchObject({ code: 'EXECUTION_RESOURCE_CEILING', params: { resource, requested: ceiling * 2, ceiling } });
+    const db = new DatabaseSync(f.path, { readOnly: true });
+    try { for (const table of ['runs', 'run_receipts', 'run_execution_intents', 'attempts']) expect(db.prepare(`SELECT count(*) AS n FROM ${table}`).get()!.n).toBe(0); }
+    finally { db.close(); }
+    parameters[resource] = ceiling;
+    await writeFile(f.configPath, JSON.stringify(config)); clearConfigCache();
+    await createRun(f.project, command, f.options);
+    const { store } = await openConfiguredAttemptStore(f.project, f.options);
+    try { expect((await store.loadRun('s', 'r'))!.execution.tasks[0]!.profile.parameters[resource]).toBe(ceiling); }
+    finally { store.close(); }
+  });
   it('persists a pending Run with configured limits and real layout, and makes it visible through shared inspection', async () => {
     const f = await fixture(); await f.policy(true, true);
     const result = await createRun(f.project, command, f.options);

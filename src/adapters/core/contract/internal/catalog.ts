@@ -10,7 +10,7 @@ function validate(value: unknown): void {
 export function registerProviderCatalogConfig(): void {
   registerConfigSection('provider_catalog', providerCatalogObjectSchema, {
     optional: true, secretReferences: 'forbid',
-    metadata: { descriptionKey: 'config.field.provider_catalog', tier: 'core', since: CONFIG_CONTRACT_SINCE },
+    metadata: { descriptionKey: 'config.field.provider_catalog', tier: 'core', since: CONFIG_CONTRACT_SINCE, binding: { state: 'bound', consumers: ['src/composition/core/provider-catalog'] }, apply: 'restart' },
     validateLayers: (global, project) => { validate(global); validate(project); },
     validateValue: validate,
   });

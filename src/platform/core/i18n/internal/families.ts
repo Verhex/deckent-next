@@ -1,3 +1,5 @@
+import configen from '../locales/en/config.json' with { type: 'json' };
+import configtr from '../locales/tr/config.json' with { type: 'json' };
 import clien from '../locales/en/cli.json' with { type: 'json' };
 import tuien from '../locales/en/tui.json' with { type: 'json' };
 import runen from '../locales/en/run.json' with { type: 'json' };
@@ -20,6 +22,7 @@ import desktoptr from '../locales/tr/desktop.json' with { type: 'json' };
 import misctr from '../locales/tr/misc.json' with { type: 'json' };
 
 export const families = [
+  { en: configen, tr: configtr },
   { en: clien, tr: clitr },
   { en: tuien, tr: tuitr },
   { en: runen, tr: runtr },

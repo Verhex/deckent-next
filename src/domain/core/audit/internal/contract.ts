@@ -37,6 +37,9 @@ const toolRef = z.object({ name: z.string().regex(/^[a-z][a-z0-9_]{1,63}$/), ver
  * further Core decisions gain an audit record; a SIEM adapter reads them all through the same port.
  */
 export const auditSubjectSchema = z.discriminatedUnion('kind', [
+  /** Config document write intent, recorded before atomic publication; digests only, no authored values. */
+  z.object({ kind: z.literal('config-change'), action: z.enum(['set', 'unset']), layer: z.enum(['project', 'global']),
+    keyPath: identitySchema, commandId: identitySchema, beforeDigest: digest.nullable(), afterDigest: digest }).strict(),
   /** `person` null (MODES-3): the default `standart`, which no bindings entry names. */
   z.object({ kind: z.literal('permission-mode'), mode: z.enum(['auto-edit', 'full-auto', 'standart']), cell: z.enum(['edit-non-floor', 'shell-modify', 'mcp-call']),
     tool: toolRef, call: callRef, grants: z.object({ company: identitySchema, person: identitySchema.nullable() }).strict(),
