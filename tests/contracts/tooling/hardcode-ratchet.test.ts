@@ -282,6 +282,66 @@ describe('file moves keep the (fingerprint, rule) count', () => {
   });
 });
 
+describe('colliding admission history', () => {
+  const other = 'src/engine/core/example/other.ts', moved = 'src/engine/core/example/moved.ts';
+  const extra = 'src/engine/core/example/extra.ts', source = 'const timeoutMs = 2147483647;';
+  type Entry = { file: string; fingerprint: string; rule: string; origin?: string };
+  function collision(laterShrink = false) {
+    const root = fixture(source);
+    put(root, other, source);
+    if (laterShrink) put(root, extra, 'const maxItems = 73;');
+    const entries: Entry[] = freeze(root);
+    const a = entries.find(row => row.file === file)!, b = entries.find(row => row.file === other)!;
+    expect(a.rule).toBe('G2');
+    expect(b).toEqual({ ...a, file: other }); // Real scanner collision, separate frozen claims.
+    expect(entries).toHaveLength(laterShrink ? 3 : 2);
+    const spare = entries.filter(row => row.file === extra);
+    const git = (...args: string[]) => execFileSync('git', ['-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid', ...args], { cwd: root, encoding: 'utf8', stdio: 'pipe' }).trim();
+    const commit = (message: string) => { git('add', '.'); git('commit', '--allow-empty', '-m', message); };
+    const list = (rows: Entry[]) => put(root, 'baseline.json', JSON.stringify(rows));
+    git('init', '-b', 'main'); commit('I admits A and B');
+    expect(git('rev-parse', '--is-shallow-repository')).toBe('false');
+    return { root, a, b, spare, git, commit, list };
+  }
+  describe.each(['original', 'relocated'])('%s retired claim', location => {
+    it.each(['final T', 'no-op', 'later shrink', 'merge'])('rejects same-count restoration at %s without an intermediate gate', stage => {
+      const { root, a, b, spare, git, commit, list } = collision(stage === 'later shrink');
+      put(root, file, 'export {};'); list([b, ...spare]); commit('S removes A');
+      const removedAt = git('rev-parse', 'HEAD');
+      if (stage === 'merge') git('switch', '-c', 'restoration');
+      put(root, other, 'export {};');
+      const restored = location === 'relocated' ? { ...a, file: moved, origin: a.file } : a;
+      put(root, restored.file, source); list([restored, ...spare]); commit('T restores A and removes B');
+      if (stage === 'no-op') commit('no-op after T');
+      if (stage === 'later shrink') {
+        put(root, extra, 'export {};'); list([restored]); commit('later shrink keeps restored A');
+      }
+      if (stage === 'merge') {
+        git('switch', 'main'); commit('main no-op'); git('merge', '--no-ff', 'restoration', '-m', 'merge restoration');
+        expect(git('rev-list', '--parents', '-n', '1', 'HEAD').split(' ')).toHaveLength(3);
+      }
+      // No gate ran at S or T. Source/list agree; only A's historical removal makes this red.
+      const result = run(root);
+      expect(result.code, result.out).toBe(1);
+      expect(result.out).toContain('[hardcode-allowlist-growth]');
+      expect(result.out).toContain(`admission claim absent in first-parent list version ${removedAt}: ${JSON.stringify(a)}`);
+      expect(result.out).not.toMatch(/hardcode-history-unavailable|hardcode-allowlist-stale|\[hardcode-G2\]|count \d+ >|duplicate|outside frozen/);
+    });
+  });
+  it('allows the living B claim to move after A retires, including later moves across normalized history', () => {
+    const { root, a, b, commit, list } = collision();
+    expect(run(root)).toEqual({ code: 0, out: '\n' }); // Legitimate multi-occurrence admission.
+    put(root, file, 'export {};'); list([b]); commit('S removes A');
+    put(root, other, 'export {};'); put(root, moved, source);
+    list([{ ...b, file: moved, origin: b.file }]); commit('move living B to C');
+    expect(run(root)).toEqual({ code: 0, out: 'hardcode allowlist delta: -1 from frozen admission (1 remaining)\n\n' });
+    // Reuse A's old location with B's live identity; every historical origin must normalize too.
+    put(root, moved, 'export {};'); put(root, a.file, source);
+    list([{ ...b, file: a.file, origin: b.file }]); commit('move living B again');
+    expect(run(root)).toEqual({ code: 0, out: 'hardcode allowlist delta: -1 from frozen admission (1 remaining)\n\n' });
+  });
+});
+
 describe('G4 protocol version fields', () => {
   it('does not treat schemaVersion/encodingVersion values as config-default copies, but still flags other fields', () => {
     const root = fixture([

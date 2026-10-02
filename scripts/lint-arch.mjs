@@ -616,9 +616,9 @@ function hardcodeInventory(sources, sourceChecker, policy) {
 function lintHardcode(findings, policy) {
   const identity = row => JSON.stringify({ file: row.file, fingerprint: row.fingerprint, rule: row.rule });
   const hash = row => createHash('sha256').update(identity(row)).digest('hex');
-  // The fingerprint is file-independent, so debt identity is the (fingerprint, rule) multiset and
-  // the file is only its current location. A relocated entry names its admission file in `origin`;
-  // frozen membership is claimed by that admission identity, at most once.
+  // Fingerprints are file-independent; admission identity is not. A relocated entry names its
+  // admission file in `origin`; frozen membership and history preserve that claim, at most once.
+  const admission = row => ({ ...row, file: row.origin ?? row.file });
   const lineage = row => JSON.stringify({ fingerprint: row.fingerprint, rule: row.rule });
   const counts = rows => rows.reduce((map, row) => map.set(lineage(row), (map.get(lineage(row)) ?? 0) + 1), new Map());
   let allowed;
@@ -628,7 +628,7 @@ function lintHardcode(findings, policy) {
   for (const row of allowed) {
     const id = identity(row), relocated = Object.hasOwn(row, 'origin');
     if (relocated && (typeof row.origin !== 'string' || row.origin === row.file)) fail('hardcode-allowlist-growth', policy.allowlist, `origin must name a different admission file: ${id}`);
-    const admitted = relocated ? { ...row, file: row.origin } : row, claim = identity(admitted);
+    const admitted = admission(row), claim = identity(admitted);
     if (!frozen.has(hash(admitted))) fail('hardcode-allowlist-growth', policy.allowlist, `entry outside frozen membership: ${claim}`);
     if (claims.has(claim)) fail('hardcode-allowlist-growth', policy.allowlist, `duplicate admission claim: ${claim}`);
     if (ids.has(id)) fail('hardcode-allowlist-growth', policy.allowlist, `duplicate entry: ${id}`);
@@ -636,7 +636,8 @@ function lintHardcode(findings, policy) {
   }
   // Per (fingerprint, rule) the current count may never exceed ANY list version on the first-parent
   // chain. Including merge changes keeps older removals authoritative after restoration, later
-  // cleanups and no-op commits; a file move keeps the count, a copy grows it and fails.
+  // cleanups and no-op commits. Every admission claim must also survive every version: equal
+  // counts cannot hide a retired claim behind another claim's removal. Moves keep the origin.
   // No second mutable retired-set authority.
   const current = counts(allowed);
   const git = args => execFileSync('git', args, { cwd: ROOT, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
@@ -651,7 +652,12 @@ function lintHardcode(findings, policy) {
     for (const revision of revisions) {
       // A deletion is an empty version, not initial admission or missing history.
       const present = git(['ls-tree', '--name-only', revision, '--', policy.allowlist]);
-      const prior = counts(present ? JSON.parse(git(['show', `${revision}:${policy.allowlist}`])) : []);
+      const priorRows = present ? JSON.parse(git(['show', `${revision}:${policy.allowlist}`])) : [];
+      const prior = counts(priorRows), priorClaims = new Set(priorRows.map(row => identity(admission(row))));
+      for (const claim of claims) if (!priorClaims.has(claim) && !rejected.has(claim)) {
+        fail('hardcode-allowlist-growth', policy.allowlist, `admission claim absent in first-parent list version ${revision}: ${claim}`);
+        rejected.add(claim);
+      }
       for (const [key, count] of current) if (count > (prior.get(key) ?? 0) && !rejected.has(key)) {
         fail('hardcode-allowlist-growth', policy.allowlist, `entry absent in first-parent list version ${revision}: ${key} (count ${count} > ${prior.get(key) ?? 0})`);
         rejected.add(key);

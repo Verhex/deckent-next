@@ -2,6 +2,16 @@
 
 Bu belge yalnız güncel durumu tutar; önceki sürümü Git geçmişinde, kanıtlar `deckent-refactor-work/proof/`.
 
+## AB-R1 — Sol REVIEW 2256 düzeltmesi (owner 2026-10-03)
+
+- Taban `a82a89cb5afe364d94e6135673b90868602bee44`, `integrate/2026-10-02-ab`; yalnız dosya değişikliği, lead commit eder.
+- Doğrulanan P2: aynı fingerprint/kuralı paylaşan A/B için I{A,B} → S{B} → T{A} sayı sınırını aşmaz; A'nın silinmiş kabulü geri gelir. Taşınmış origin=A çeşidi aynı kusurdur.
+- Dar çözüm: mevcut `lintHardcode` geçmiş döngüsünde normalize kabul kimliği bütün first-parent liste sürümlerinde bulunmalı; yaşayan origin taşınabilir, silinen kabul açılamaz. Mevcut sayı/frozen/duplicate/new-source/stale kontrolleri korunur; ikinci ledger yok.
+- Sonuç: TDD 8 negatifte beklenen kırmızı → tooling 11 dosya/120 test yeşil (hardcode 37/37, ilk 514 kabul dahil); mutation yalnız kimlik-geçmiş kontrolünü kaldırınca aynı 8 negatif kırmızı, yaşayan B art arda taşımaları yeşil. Her negatif son durumdaki gerçek CLI EXIT1 ve S kimliğini denetler; ara kapı çalışmaz.
+- Typecheck, değişen dosyalarda eslint ve core-memory 0 ihlal; manifest yenilendi. Gerçek ağaç lint-arch 0 ihlal/0 uyarı; 497 satırlık allowlist değişmedi. Jev yalnız offline hazırlık, model görüşü/PASS değil.
+- Sıradaki: lead diff incelemesi, yetkili commit ve exact SHA için Sol yeniden incelemesi; lead landing doğrulaması ayrıca. Build gerektiren pack-smoke kapsam dışında; build/tam verify/canlı/dogfood/Playwright/commit/push yok.
+- Kanıt: dış `proof/INTEGRATE-2026-10-02-AB/ab-r1.md`. **Bağımsız inceleme yok; PASS değildir.**
+
 ## CLI-HELP locale — owner 2026-10-03
 
 - Taban `d193bf22`, `integrate/2026-10-02-ab`; Codex uygulaması, yalnız dosya değişiklikleri.
@@ -58,7 +68,7 @@ Bu bölüm güncel durumdur; önceki parti anlatıları Git geçmişinde (bu dos
   (v46 göçü IF NOT EXISTS + birebir CREATE metni denetimi; yayımlanan decision `.d.ts` JSON asset'e bağımlıydı — ürün hatası, giderildi);
   **tam verify exact `78231da9` 568/4151 EXIT 0**. Kanıt: `proof/INTEGRATE-2026-10-02-AB/README.md`. Sıradaki: Sol parti incelemesi (26. partiden sonra).
   HARDCODE-RATCHET birleştirmesi (`0bd79848`, Sol 2254 sınırlı PASS) sonra gelen koddan 31 bulgu verdi; allowlist büyümeden çözüldü:
-  `a6ad28e8` taşıma kuralı (borç kimliği (fingerprint, kural) sayısı, `origin`), `9b5efd9f` politika/invariant, `a086daab` G4 sürüm-alanı
+  `a6ad28e8` taşıma kuralı (tarihsel count-only uygulama; AB-R1 dosya deltasında düzeltildi, `origin`), `9b5efd9f` politika/invariant, `a086daab` G4 sürüm-alanı
   heuristic'i + invariant'lar; lint-arch 0, allowlist 514→497; **tam verify exact `a086daab` 569/4179 EXIT 0**. Ratchet semantiği değişikliği
   ve prepare.ts sapması bağımsız yeniden inceleme/lead kararı bekliyor (README "Ratchet findings resolution").
 - **Şeritler (Codex uygulayıcı, lead commit, bağımsız inceleme Fable/Sol):**
