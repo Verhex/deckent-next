@@ -1,0 +1,2 @@
+declare const known: Set<string>;
+known.has(('bedrock'));

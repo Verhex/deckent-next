@@ -26,25 +26,30 @@ function referencesField(source, key) {
   }
   visit(source); return found;
 }
-/** Checks declared consumer references, not runtime causality; behavioral proofs remain required for each binding. */
-export function lintConfigBindings(root, fail) {
-  if (!existsSync(join(root, fieldRegistry))) return;
-  const declarations = [], references = new Map();
-  const parse = file => ts.createSourceFile(file, readFileSync(file, 'utf8'), ts.ScriptTarget.Latest, true);
-  for (const file of sourceFiles(join(root, 'src'))) {
-    const source = parse(file), path = relative(root, file).replaceAll('\\', '/');
+/** Shared source metadata for binding validation and lint-arch duplicate-default detection. */
+export function collectConfigBindings(sources) {
+  const declarations = [];
+  for (const { source, path } of sources) {
     function visit(node) {
       if (path === fieldRegistry && ts.isPropertyAssignment(node) && ts.isCallExpression(node.initializer) && node.initializer.expression.getText(source) === 'field') {
-        declarations.push({ key: nameOf(node.name), path, binding: node.initializer.arguments[1], apply: node.initializer.arguments[2] });
+        declarations.push({ key: nameOf(node.name), path, binding: node.initializer.arguments[1], apply: node.initializer.arguments[2], schema: node.initializer.arguments[3] });
       }
       if (ts.isCallExpression(node) && node.expression.getText(source) === 'registerConfigSection') {
         const key = literal(node.arguments[0]), metadata = node.arguments[2] && property(node.arguments[2], 'metadata');
-        declarations.push({ key, path, binding: metadata && property(metadata, 'binding'), apply: metadata && property(metadata, 'apply') });
+        declarations.push({ key, path, binding: metadata && property(metadata, 'binding'), apply: metadata && property(metadata, 'apply'), schema: node.arguments[1] });
       }
       ts.forEachChild(node, visit);
     }
     visit(source);
   }
+  return declarations;
+}
+/** Checks declared consumer references, not runtime causality; behavioral proofs remain required for each binding. */
+export function lintConfigBindings(root, fail) {
+  if (!existsSync(join(root, fieldRegistry))) return;
+  const references = new Map();
+  const parse = file => ts.createSourceFile(file, readFileSync(file, 'utf8'), ts.ScriptTarget.Latest, true);
+  const declarations = collectConfigBindings(sourceFiles(join(root, 'src')).map(file => ({ source: parse(file), path: relative(root, file).replaceAll('\\', '/') })));
   for (const row of declarations) {
     if (!row.key || !row.binding || !['live', 'restart'].includes(literal(row.apply))) { fail('config-binding-metadata', row.path, `${row.key ?? '<dynamic>'}: explicit binding and apply metadata required`); continue; }
     const state = literal(property(row.binding, 'state'));

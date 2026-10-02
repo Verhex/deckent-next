@@ -1,4 +1,4 @@
-// lint-arch: the single architecture gate for deckent (fail-closed, no baselines).
+// lint-arch: the single architecture gate for deckent (fail-closed; only hardcode debt has a shrink-only baseline).
 // Rules come from arch.json. Checks:
 //  1. package import direction + public-API-only cross-package imports (index.ts), internal/ isolation
 //  2. observability is never imported; apps import only surfaces
@@ -10,6 +10,8 @@
 //  7. tracked markdown set is exactly the allowlist (+ pointer files within their line cap)
 //  8. external dependencies: dependencies.json registry, owned bare imports, embedded components (scripts/dependencies.mjs)
 import ts from 'typescript';
+import { createHash } from 'node:crypto';
+import { collectConfigBindings } from './config-bindings.mjs';
 import { lintConfigVocabulary } from './config-vocabulary.mjs';
 import { lintDependencies, loadRegistry, ownsImport, packageName } from './dependencies.mjs';
 import { execFileSync } from 'node:child_process';
@@ -38,6 +40,19 @@ function walk(dir, predicate, out = []) {
 
 const isTs = (p) => /\.(ts|tsx|mts)$/.test(p) && !p.endsWith('.d.ts');
 const srcFiles = walk(join(ROOT, 'src'), isTs);
+// Fast entry points execute the very same scanner/enforcer as the complete gate.
+if (process.argv.includes('--hardcode-only') || process.argv.includes('--hardcode-inventory')) {
+  const options = { target: ts.ScriptTarget.Latest, jsx: ts.JsxEmit.Preserve, baseUrl: ROOT,
+    paths: Object.fromEntries(Object.keys(arch.packages).map(pkg => [`#${pkg}/*`, [`src/${pkg}/*`]])) };
+  const sourceProgram = ts.createProgram(srcFiles, options);
+  const findings = hardcodeInventory(hardcodeSources(srcFiles, sourceProgram), sourceProgram.getTypeChecker(), arch.hardcodeRatchet);
+  if (process.argv.includes('--hardcode-inventory')) process.stdout.write(JSON.stringify(findings, null, 2) + '\n');
+  else {
+    lintHardcode(findings, arch.hardcodeRatchet);
+    process.stdout.write([...violations, ...warnings].map(v => `[${v.rule}] ${v.file} — ${v.message}`).join('\n') + '\n');
+  }
+  process.exit(violations.length ? 1 : 0);
+}
 const appFiles = walk(join(ROOT, 'apps'), isTs);
 const tsConfig = ts.parseJsonConfigFileContent(JSON.parse(readFileSync(join(ROOT, 'tsconfig.json'), 'utf8')), ts.sys, ROOT);
 const program = ts.createProgram(tsConfig.fileNames, tsConfig.options);
@@ -445,6 +460,196 @@ for (const file of srcFiles) {
   if (literalAllow.has(rel(file))) continue;
   const src = readFileSync(file, 'utf8');
   for (const re of literalRes) for (const m of src.matchAll(re)) fail('literal', `${rel(file)}:${src.slice(0, m.index).split('\n').length}`, `hardcoded model/provider literal "${m[0]}" (only ${arch.literals.allow.join(', ')})`);
+}
+
+if (arch.hardcodeRatchet) lintHardcode(hardcodeInventory(hardcodeSources(srcFiles, program), checker, arch.hardcodeRatchet), arch.hardcodeRatchet);
+
+// ---- 4b: frozen hardcode debt. This is part of lint-arch, not a separate linter.
+function hardcodeSources(files, sourceProgram) {
+  return files.map(file => ({ path: rel(file), source: sourceProgram.getSourceFile(file)
+    ?? ts.createSourceFile(file, readFileSync(file, 'utf8'), ts.ScriptTarget.Latest, true) }));
+}
+function hardcodeInventory(sources, sourceChecker, policy) {
+  const findings = [], schemas = new Set(), defaults = new Map();
+  const name = node => node && (ts.isIdentifier(node) || ts.isStringLiteralLike(node)) ? node.text : node && ts.isPropertyAccessExpression(node) ? node.name.text : '';
+  const property = (node, key) => node && ts.isObjectLiteralExpression(node) ? node.properties.find(p => ts.isPropertyAssignment(p) && name(p.name) === key)?.initializer : undefined;
+  const resolveValue = node => {
+    if (!node || !ts.isIdentifier(node)) return node;
+    let symbol = sourceChecker.getSymbolAtLocation(node);
+    if (symbol?.flags & ts.SymbolFlags.Alias) symbol = sourceChecker.getAliasedSymbol(symbol);
+    const declaration = symbol?.valueDeclaration;
+    return declaration && ts.isVariableDeclaration(declaration) ? declaration.initializer : node;
+  };
+  const scalar = (node, seen = new Set()) => {
+    if (!node || seen.has(node)) return undefined;
+    seen.add(node);
+    if (ts.isStringLiteralLike(node)) return node.text;
+    if (ts.isNumericLiteral(node)) return Number(node.text);
+    if (ts.isPrefixUnaryExpression(node) && node.operator === ts.SyntaxKind.MinusToken) return -scalar(node.operand, seen);
+    if (ts.isParenthesizedExpression(node) || ts.isAsExpression(node)) return scalar(node.expression, seen);
+    const resolved = resolveValue(node);
+    return resolved !== node ? scalar(resolved, seen) : undefined;
+  };
+  for (const row of collectConfigBindings(sources)) {
+    const consumers = property(row.binding, 'consumers');
+    if (!consumers || !ts.isArrayLiteralExpression(consumers)) continue;
+    const values = new Set(), seen = new Set();
+    function defaultLeaves(node) {
+      const value = scalar(node);
+      if (typeof value === 'string' || Number.isFinite(value)) values.add(JSON.stringify(value));
+      else if (node && ts.isObjectLiteralExpression(node)) for (const p of node.properties) if (ts.isPropertyAssignment(p)) defaultLeaves(p.initializer);
+    }
+    function schema(node) {
+      if (!node || seen.has(node)) return;
+      seen.add(node); schemas.add(node);
+      if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression) && node.expression.name.text === 'default') defaultLeaves(node.arguments[0]);
+      const resolved = resolveValue(node);
+      if (resolved !== node) schema(resolved);
+      ts.forEachChild(node, schema);
+    }
+    schema(row.schema);
+    for (const consumer of consumers.elements) {
+      const unit = scalar(consumer);
+      if (typeof unit !== 'string') continue;
+      if (!defaults.has(unit)) defaults.set(unit, new Map());
+      for (const value of values) {
+        const fields = defaults.get(unit).get(value) ?? new Set(); fields.add(row.key);
+        defaults.get(unit).set(value, fields);
+      }
+    }
+  }
+  const slugs = new Set(policy.slugs);
+  const operational = /(?:Ms$|Timeout|Interval|Retry|Retries|Max|Limit|Bytes|Threshold|Ttl|TTL|TIMEOUT|INTERVAL|RETRY|RETRIES|MAX|LIMIT|BYTES|THRESHOLD|^(?:timeout|interval|retry|retries|max|limit|bytes|threshold|ttl))/;
+  const ancestors = node => { const out = []; for (let p = node.parent; p && !ts.isSourceFile(p); p = p.parent) out.push(p); return out; };
+  const symbolOf = node => ancestors(node).filter(p => (ts.isFunctionLike(p) || ts.isVariableDeclaration(p) || ts.isPropertyAssignment(p) || ts.isClassDeclaration(p)) && p.name)
+    .reverse().map(p => name(p.name) || p.name.getText()).join('/') || '<module>';
+  for (const { path, source } of sources) {
+    if (policy.registryFiles.some(entry => entry.file === path && entry.reason)) continue;
+    const unit = path.split('/').slice(0, 4).join('/'), occurrences = new Map();
+    function add(rule, node, literal, detail = '') {
+      const symbol = symbolOf(node);
+      if (policy.invariants.some(entry => entry.file === path && entry.symbol === symbol && entry.values.includes(literal) && entry.reason)) return;
+      const key = JSON.stringify([rule, symbol, literal, node.parent.kind, detail]);
+      const occurrence = (occurrences.get(key) ?? 0) + 1; occurrences.set(key, occurrence);
+      const fingerprint = createHash('sha256').update(`${key}:${occurrence}`).digest('hex');
+      findings.push({ file: path, rule, fingerprint, line: source.getLineAndCharacterOfPosition(node.getStart(source)).line + 1, symbol, literal, detail });
+    }
+    function visit(node) {
+      const parents = ancestors(node), parent = node.parent;
+      const string = ts.isStringLiteralLike(node), numeric = ts.isNumericLiteral(node);
+      const value = string || numeric ? scalar(numeric && ts.isPrefixUnaryExpression(parent) ? parent : node) : undefined;
+      if (string || ts.isIdentifier(node)) {
+        const slug = node.text;
+        // Only climb the expression side: type references and registry property reads
+        // are not slug literals. Keep the original node for existing fingerprints.
+        let expression = node, contextParent = parent;
+        while ((ts.isParenthesizedExpression(contextParent) || ts.isAsExpression(contextParent)
+          || ts.isTypeAssertionExpression(contextParent) || ts.isSatisfiesExpression(contextParent)
+          || ts.isNonNullExpression(contextParent)) && contextParent.expression === expression) {
+          expression = contextParent; contextParent = expression.parent;
+        }
+        const context = ts.isBinaryExpression(contextParent) && [ts.SyntaxKind.EqualsEqualsToken, ts.SyntaxKind.EqualsEqualsEqualsToken, ts.SyntaxKind.ExclamationEqualsToken, ts.SyntaxKind.ExclamationEqualsEqualsToken].includes(contextParent.operatorToken.kind)
+          || ts.isCaseClause(contextParent) || ts.isArrayLiteralExpression(contextParent)
+          || ts.isComputedPropertyName(contextParent) && ts.isPropertyAssignment(contextParent.parent)
+          || (ts.isPropertyAssignment(contextParent) || ts.isShorthandPropertyAssignment(contextParent) || ts.isMethodDeclaration(contextParent)) && contextParent.name === expression
+          || ts.isElementAccessExpression(contextParent) && contextParent.argumentExpression === expression
+          || ts.isCallExpression(contextParent) && ts.isPropertyAccessExpression(contextParent.expression) && ['has', 'includes', 'indexOf'].includes(contextParent.expression.name.text);
+        if (slugs.has(slug) && context && !policy.vendorUnits.some(entry => entry.unit === unit && entry.reason && entry.slugs.includes(slug))) add('G1', node, slug);
+      }
+      const declaration = path.startsWith('src/platform/core/config-fields/') || schemas.has(node);
+      if (numeric && !declaration && ![-1, 0, 1, 2].includes(value) && !(ts.isElementAccessExpression(parent) && parent.argumentExpression === node)) {
+        let applies = false;
+        for (const p of parents) {
+          if (ts.isFunctionLike(p) || ts.isStatement(p)) break;
+          if ((ts.isVariableDeclaration(p) || ts.isPropertyAssignment(p) || ts.isParameter(p) || ts.isPropertyDeclaration(p)) && operational.test(name(p.name))) applies = true;
+          if (ts.isBinaryExpression(p)) {
+            const identifiers = [];
+            const names = n => { if (ts.isIdentifier(n)) identifiers.push(n.text); ts.forEachChild(n, names); };
+            names(p.left); if (p.right !== node) names(p.right);
+            if (identifiers.some(id => operational.test(id))) applies = true;
+          }
+          if (ts.isCallExpression(p)) {
+            const callee = p.expression.getText(source);
+            const argument = callee === 'AbortSignal.timeout' ? p.arguments[0] : /^(?:(?:globalThis|global)\.)?set(?:Timeout|Interval)$/.test(callee) ? p.arguments[1] : undefined;
+            if (argument && (argument === node || parents.includes(argument))) applies = true;
+          }
+        }
+        if (applies) add('G2', node, value);
+      }
+      if ((string || ts.isTemplateExpression(node) || ts.isJsxText(node)) && !declaration) {
+        const text = ts.isTemplateExpression(node) ? [node.head.text, ...node.templateSpans.map(span => span.literal.text)].join(' ') : node.text;
+        const human = /\p{L}/u.test(text) && (ts.isJsxText(node) || /\s/u.test(text));
+        let shown = ts.isJsxText(node), translated = false, returned = false;
+        for (const p of parents) {
+          if (ts.isCallExpression(p) || ts.isNewExpression(p)) {
+            const callee = p.expression.getText(source).split('.').at(-1);
+            if (callee === arch.i18n.callee) { translated = true; break; }
+            if (/^(?:emit|render|print|notify|show|display|write|log|warn|error|info)/i.test(callee) || /Error$/.test(callee)) shown = true;
+          }
+          if (ts.isReturnStatement(p)) returned = true;
+          if (ts.isFunctionLike(p)) {
+            const functionName = name(p.name) || (ts.isVariableDeclaration(p.parent) ? name(p.parent.name) : ts.isPropertyAssignment(p.parent) ? name(p.parent.name) : '');
+            if ((returned || ts.isArrowFunction(p) && !ts.isBlock(p.body)) && /render|label|format/i.test(functionName)) shown = true;
+            break;
+          }
+        }
+        if (human && shown && !translated) add('G3', node, text.replace(/\s+/gu, ' ').trim());
+      }
+      if ((string || numeric) && !declaration && defaults.get(unit)?.has(JSON.stringify(value))) {
+        // Data uses only: do not count field names, imports, type literals or translation keys.
+        const key = (ts.isPropertyAssignment(parent) || ts.isPropertySignature(parent)) && parent.name === node;
+        if (!key && !ts.isLiteralTypeNode(parent) && !ts.isImportDeclaration(parent) && !ts.isExportDeclaration(parent)
+          && !(ts.isCallExpression(parent) && name(parent.expression) === arch.i18n.callee)) add('G4', node, value, [...defaults.get(unit).get(JSON.stringify(value))].sort().join(','));
+      }
+      ts.forEachChild(node, visit);
+    }
+    visit(source);
+  }
+  return findings.sort((a, b) => a.file.localeCompare(b.file) || a.fingerprint.localeCompare(b.fingerprint));
+}
+function lintHardcode(findings, policy) {
+  const identity = row => JSON.stringify({ file: row.file, fingerprint: row.fingerprint, rule: row.rule });
+  const hash = row => createHash('sha256').update(identity(row)).digest('hex');
+  let allowed;
+  try { allowed = JSON.parse(readFileSync(join(ROOT, policy.allowlist), 'utf8')); }
+  catch (error) { fail('hardcode-allowlist', policy.allowlist, error.message); return; }
+  const frozen = new Set(policy.frozen ?? []), ids = new Set();
+  for (const row of allowed) {
+    const id = identity(row);
+    if (!frozen.has(hash(row))) fail('hardcode-allowlist-growth', policy.allowlist, `entry outside frozen membership: ${id}`);
+    if (ids.has(id)) fail('hardcode-allowlist-growth', policy.allowlist, `duplicate entry: ${id}`);
+    ids.add(id);
+  }
+  // A current identity must survive EVERY list version on the first-parent chain.
+  // Including merge changes keeps older removals authoritative after restoration,
+  // later cleanups and no-op commits. No second mutable retired-set authority.
+  const git = args => execFileSync('git', args, { cwd: ROOT, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
+  try {
+    if (git(['rev-parse', '--is-shallow-repository']) === 'true') {
+      warn('hardcode-history-unavailable', policy.allowlist, 'shallow Git history: only available first-parent versions checked; historical shrink is not proven');
+    }
+    const revisions = git(['log', '--first-parent', '--full-history', '--format=%H', 'HEAD', '--', policy.allowlist]).split('\n').filter(Boolean);
+    // No versions means first introduction into an existing tree: frozen/current
+    // inventory checks still apply. One version is admission and constrains growth.
+    const rejected = new Set();
+    for (const revision of revisions) {
+      // A deletion is an empty version, not initial admission or missing history.
+      const present = git(['ls-tree', '--name-only', revision, '--', policy.allowlist]);
+      const previous = present ? JSON.parse(git(['show', `${revision}:${policy.allowlist}`])) : [];
+      const prior = new Set(previous.map(identity));
+      for (const id of ids) if (!prior.has(id) && !rejected.has(id)) {
+        fail('hardcode-allowlist-growth', policy.allowlist, `entry absent in first-parent list version ${revision}: ${id}`);
+        rejected.add(id);
+      }
+    }
+  } catch {
+    warn('hardcode-history-unavailable', policy.allowlist, 'Git list history unavailable: frozen membership enforced, historical shrink is not proven');
+  }
+  const observed = new Set(findings.map(identity));
+  for (const row of findings) if (!ids.has(identity(row))) fail(`hardcode-${row.rule}`, `${row.file}:${row.line}`, `${JSON.stringify(row.literal)} in ${row.symbol}; ${row.fingerprint}`);
+  for (const row of allowed) if (!observed.has(identity(row))) fail('hardcode-allowlist-stale', row.file, `remove resolved allowance ${row.fingerprint}`);
+  const delta = frozen.size - ids.size;
+  if (delta > 0) process.stdout.write(`hardcode allowlist delta: -${delta} from frozen admission (${ids.size} remaining)\n`);
 }
 
 // ---- 5: .md write gate

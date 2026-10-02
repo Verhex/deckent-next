@@ -1747,6 +1747,36 @@ service wiring from the turn's `requestApproval` to `offer`/`remember`/`persist`
   the ledger v43 DB model catalog, which adapters read; the literal lint also scans `src/**/*.json` with the seed files
   allow-listed and closes the `claude-[0-9]` regex gap (today it walks `.ts` only; PLAN CATALOG-SEED, not yet implemented).
   `NATIVE_CLI_CHANNELS` (`claude`/`codex`/`cursor`) names native CLI protocol kinds, not model identities, and stays a code constant.
+- HARDCODE-RATCHET (owner 2026-10-02): `scripts/lint-arch.mjs` owns G1 vendor/CLI slug comparisons,
+  switch/array/Set membership and object keys; G2 operational numeric names and timer arguments;
+  G3 direct emit/render/error text, render/label/format returns and JSX text; G4 numeric/string config
+  defaults in the consumer units declared by the shared `collectConfigBindings` metadata projection.
+  `arch.json.hardcodeRatchet` owns slug vocabulary, exact vendor-unit/reason exemptions, exact registry files
+  and symbol/value/reason invariants. JSON assets are data; config-field and resolved registered schemas
+  are declarations. Small arithmetic constants and array indexes are ignored. No runtime initialization is run.
+  Existing debt is frozen in `scripts/hardcode-allowlist.json`: file + SHA-256 of class, enclosing symbols,
+  normalized literal, parent kind, config field (G4), and duplicate occurrence ordinal; never a line number.
+  Frozen membership hashes reject additions and equal-count swaps. Every list-changing version on HEAD's full
+  first-parent history (including merge changes and list deletions) constrains the working list: current identities
+  must occur in every prior admitted version. Later cleanups/no-op commits cannot erase an earlier removal.
+  Missing source occurrences fail as stale allowances; deletion prints the admission delta. Source exports,
+  shallow repositories and unreadable history emit `[hardcode-history-unavailable]` warnings in both CLI modes:
+  frozen membership remains enforced, but historical shrink is not proven (warning alone does not change exit status).
+  Initial admission is exactly the detector inventory of base `19a6bb42`: 514 identities (G1 97 / G2 362 / G3 29 / G4 26).
+  Lead Jev `5e061ec1` admits the two pre-existing shorthand names (`docker` profile, text `cursor`) exposed by HR-R2,
+  with per-entry reasons; identity hashes exclude that reason metadata. This corrects the first list before the single
+  introduction commit, not post-admission growth. With valid HEAD and no list versions, frozen/inventory checks apply
+  without a prior membership constraint; one committed list version is admission and already constrains growth.
+  The regression compares the FIRST list version (working list before introduction) to the archived base inventory,
+  not a later cleanup list; that historical assertion explicitly skips source exports/shallow checkouts (no proof).
+  Unmerged/non-first-parent branch removals, rewritten history
+  and renamed policy paths are outside this history proof. Changes to policy/frozen membership require review,
+  not regeneration to hide debt. G1 climbs parenthesized/as/type-assertion/satisfies/non-null expression wrappers
+  and recognizes shorthand object keys; typed registry property reads and type references remain outside slug use.
+  `--hardcode-inventory` reports candidates without writing allowances; `--hardcode-only` runs the same scanner/gate
+  for fixtures. Syntax heuristics are not full dataflow: transitive consumers, indirect rendered text, unnamed policy
+  arithmetic and native C are documented gaps. Audit mapping and measured scope live in external
+  `proof/HARDCODE-RATCHET-2026-10-02/`; cleanup remains HARDCODE-P1 and later work, not acceptance of debt.
 - Markdown (owner 2026-10-01, D3 A, Jev b415a37c; confirms the 2026-09-16 decision): the product writes no host rule files —
   no `DECKENT.md` and no section in `CLAUDE.md`/`AGENTS.md`; product guidance reaches users through stdout and MCP, worker
   instructions through each CLI's native channel. The earlier target (one docs-authority writer `arch.json`
@@ -1918,7 +1948,7 @@ lives in the transient tracker and external refactor archive, not an append-only
 | 2026-09-16 | File size is a mechanical gate (800 lines) in addition to cohesion-based boundaries. | Cohesion alone did not hold: one file tripled in two weeks. Supersedes legacy ADR-D-006 §2 wording. |
 | 2026-09-16 | Layer direction `kernel ← providers ← runtime ← orchestration ← surfaces`, observability read-only, public-API-only imports. | Carries the legacy ADR-D-004 invariant (lower layers never import upward) into named packages; the legacy graph had only 138 violations out of ~3,400 edges, half of them caused by the i18n catalog living in cli. |
 | 2026-09-16 | Spawn backends, exact-docker custody, effects and locks are `runtime`, not orchestration. | They were consumed only by orchestration but lived in core/orchestra with a 24.8k-line monolith; a runtime package with a `SpawnBackend` façade of 17 methods is the contract (legacy ADR-G-014). |
-| 2026-09-16 | Zero hardcoded model/provider/flow identifiers outside `providers/core/registry/`. | Legacy ADR-G-036; enforced by lint instead of a ratchet. |
+| 2026-09-16 | Zero hardcoded model/provider/flow identifiers outside `providers/core/registry/`. | Legacy ADR-G-036; original regex lint remains. Amended 2026-10-02: HARDCODE-RATCHET adds G1–G4 and frozen existing debt. |
 | 2026-09-16 | Memory is DB-first (`.brain/memory.db`, FTS5) and the only legacy state imported verbatim; all other `.deckent` state is v2 with a one-shot `import-legacy-state`. | 80 schema constants and 7 SQLite files could not be kept byte-compatible through a rewrite (legacy ADR-G-035 kept; rest re-declared). |
 | 2026-09-16 | The product no longer writes README/CHANGELOG/vision/release/sprint-log or host rule files. | Document sprawl was partly product-generated; the owner removed the feature. |
 | 2026-09-16 | Windows native custody is ported and wired (`runtime/custody/win32`), reported `DEGRADED` until CI proof. | Legacy had an unreferenced 1.8k-line win32 adapter: support that only appeared to exist. |
