@@ -598,7 +598,13 @@ function hardcodeInventory(sources, sourceChecker, policy) {
       if ((string || numeric) && !declaration && defaults.get(unit)?.has(JSON.stringify(value))) {
         // Data uses only: do not count field names, imports, type literals or translation keys.
         const key = (ts.isPropertyAssignment(parent) || ts.isPropertySignature(parent)) && parent.name === node;
-        if (!key && !ts.isLiteralTypeNode(parent) && !ts.isImportDeclaration(parent) && !ts.isExportDeclaration(parent)
+        // A protocol version field (`schemaVersion: 1`, `encodingVersion: 1 as const`) states a versioned
+        // wire contract, not a copy of an equal config default.
+        let owner = node;
+        while ((ts.isParenthesizedExpression(owner.parent) || ts.isAsExpression(owner.parent) || ts.isSatisfiesExpression(owner.parent)
+          || ts.isTypeAssertionExpression(owner.parent)) && owner.parent.expression === owner) owner = owner.parent;
+        const version = ts.isPropertyAssignment(owner.parent) && owner.parent.initializer === owner && /^(?:schemaVersion|encodingVersion)$/.test(name(owner.parent.name));
+        if (!key && !version && !ts.isLiteralTypeNode(parent) && !ts.isImportDeclaration(parent) && !ts.isExportDeclaration(parent)
           && !(ts.isCallExpression(parent) && name(parent.expression) === arch.i18n.callee)) add('G4', node, value, [...defaults.get(unit).get(JSON.stringify(value))].sort().join(','));
       }
       ts.forEachChild(node, visit);

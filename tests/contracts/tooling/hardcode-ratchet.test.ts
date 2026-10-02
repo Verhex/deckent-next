@@ -55,13 +55,23 @@ describe('hardcode ratchet admission', () => {
     execFileSync('tar', ['-x', '-C', root], { input: archive });
     put(root, 'arch.json', admittedFile('arch.json'));
     symlinkSync(resolve('node_modules'), join(root, 'node_modules'), 'dir');
+    // Admission equality is a claim about the detector AT admission: run that commit's scanner.
+    // Later narrowing (e.g. the batch-27 G4 protocol-version exemption) may only retire identities.
+    const detector = mkdtempSync(join(tmpdir(), 'hardcode-detector-')); roots.push(detector);
+    if (first) execFileSync('tar', ['-x', '-C', detector], { input: execFileSync('git', ['archive', first, 'scripts'], { maxBuffer: 32 * 1024 * 1024 }) });
+    else execFileSync('cp', ['-r', 'scripts', detector]);
+    symlinkSync(resolve('node_modules'), join(detector, 'node_modules'), 'dir');
+    const admitted = spawnSync(process.execPath, [join(detector, 'scripts/lint-arch.mjs'), '--root', root, '--hardcode-inventory'], { encoding: 'utf8', timeout: 20000, maxBuffer: 32 * 1024 * 1024 });
+    expect(admitted.status).toBe(0);
     const result = run(root, true);
     expect(result.code).toBe(0);
     const identity = ({ file: path, fingerprint, rule }: { file: string; fingerprint: string; rule: string }) => JSON.stringify({ file: path, fingerprint, rule });
-    const inventory = JSON.parse(result.out).map(identity).sort();
+    const inventory = JSON.parse(admitted.stdout).map(identity).sort();
     const admission = JSON.parse(admittedFile(list)).map(identity).sort();
     // Array equality detects missing, phantom and duplicate members, in both directions.
     expect(admission).toEqual(inventory);
+    const current: string[] = JSON.parse(result.out).map(identity);
+    expect(current.filter(id => !admission.includes(id))).toEqual([]);
     expect(admission).toHaveLength(514);
     const frozen = JSON.parse(admittedFile('arch.json')).hardcodeRatchet.frozen;
     expect(frozen.slice().sort()).toEqual(admission.map((id: string) => createHash('sha256').update(id).digest('hex')).sort());
@@ -269,5 +279,18 @@ describe('file moves keep the (fingerprint, rule) count', () => {
     put(self, file, 'export {};'); put(self, moved, source);
     put(self, 'baseline.json', JSON.stringify(admitted.map(entry => ({ ...entry, file: moved, origin: 'src/engine/core/example/other.ts' }))));
     expect(run(self)).toMatchObject({ code: 1, out: expect.stringContaining('entry outside frozen membership') });
+  });
+});
+
+describe('G4 protocol version fields', () => {
+  it('does not treat schemaVersion/encodingVersion values as config-default copies, but still flags other fields', () => {
+    const root = fixture([
+      'const a = { schemaVersion: 73 };', 'const b = { encodingVersion: (73 as const) };', 'const c = { schemaVersion: 73 satisfies number };',
+      'const d = { pageSize: 73 };', 'const e = { version: 73 };', 'const f = { nested: { schemaVersion: 74 } }; const g = [73];',
+    ].join('\n'), { frozen: [] });
+    put(root, 'src/platform/core/config-fields/internal/fields.ts', "const fields = { pageSize: field('config.pageSize', { state: 'bound', consumers: ['src/engine/core/example'] }, 'live', z.number().default(73)) };");
+    const findings = JSON.parse(run(root, true).out).filter((row: { rule: string }) => row.rule === 'G4');
+    expect(findings.map((row: { symbol: string }) => row.symbol).sort()).toEqual(['d/pageSize', 'e/version', 'g']);
+    expect(run(root)).toMatchObject({ code: 1, out: expect.stringContaining('[hardcode-G4]') });
   });
 });

@@ -2290,6 +2290,33 @@
           1e-9
         ],
         "reason": "Floating-point tolerance for the decision HTTP wire v1 rule that choice probabilities sum to 1; numeric wire-format invariant, not policy (2026-10-03, batch-27 integration). Domain decisionAdviceSchema applies its own 1e-6 tolerance to the same rule (reported for lead decision)."
+      },
+      {
+        "file": "src/platform/core/config/internal/validate/version.ts",
+        "symbol": "versionedConfig",
+        "values": [
+          3
+        ],
+        "reason": "Retired config schema version 3, still accepted on read and normalized to the current CONFIG_SCHEMA_VERSION; versioned protocol invariant, equal to the backupKeep default only by coincidence (2026-10-03, batch-27 integration)."
+      },
+      {
+        "file": "src/domain/core/decision/internal/observed-time.ts",
+        "symbol": "decisionObservationIsFuture/wholeMs",
+        "values": [
+          24,
+          60,
+          60000,
+          1000
+        ],
+        "reason": "Gregorian/RFC 3339 civil-time unit arithmetic (24 h per day, 60 min per hour, 60000 ms per minute, 1000 ms per second); no shared time-unit helper exists; invariant, not policy (2026-10-03, batch-27 integration)."
+      },
+      {
+        "file": "src/domain/core/decision/internal/observed-time.ts",
+        "symbol": "decisionObservationIsFuture",
+        "values": [
+          3
+        ],
+        "reason": "RFC 3339 fractional seconds: the first 3 digits are milliseconds, later digits are sub-millisecond evidence; format invariant (2026-10-03, batch-27 integration)."
       }
     ],
     "allowlist": "scripts/hardcode-allowlist.json",

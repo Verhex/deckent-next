@@ -1750,7 +1750,9 @@ service wiring from the turn's `requestApproval` to `offer`/`remember`/`persist`
 - HARDCODE-RATCHET (owner 2026-10-02): `scripts/lint-arch.mjs` owns G1 vendor/CLI slug comparisons,
   switch/array/Set membership and object keys; G2 operational numeric names and timer arguments;
   G3 direct emit/render/error text, render/label/format returns and JSX text; G4 numeric/string config
-  defaults in the consumer units declared by the shared `collectConfigBindings` metadata projection.
+  defaults in the consumer units declared by the shared `collectConfigBindings` metadata projection; values of
+  protocol version properties (`schemaVersion`, `encodingVersion`, through as/satisfies/parentheses) are versioned
+  wire contracts, not default copies (batch-27 integration 2026-10-03; 15 such admitted G4 rows retired as stale).
   `arch.json.hardcodeRatchet` owns slug vocabulary, exact vendor-unit/reason exemptions, exact registry files
   and symbol/value/reason invariants. JSON assets are data; config-field and resolved registered schemas
   are declarations. Small arithmetic constants and array indexes are ignored. No runtime initialization is run.
@@ -1774,8 +1776,10 @@ service wiring from the turn's `requestApproval` to `offer`/`remember`/`persist`
   with per-entry reasons; identity hashes exclude that reason metadata. This corrects the first list before the single
   introduction commit, not post-admission growth. With valid HEAD and no list versions, frozen/inventory checks apply
   without a prior membership constraint; one committed list version is admission and already constrains growth.
-  The regression compares the FIRST list version (working list before introduction) to the archived base inventory,
-  not a later cleanup list; that historical assertion explicitly skips source exports/shallow checkouts (no proof).
+  The regression compares the FIRST list version (working list before introduction) to the archived base inventory
+  produced by the admission commit's own detector, and requires the current detector's base inventory to be a subset
+  (later narrowing only retires identities), not a later cleanup list; that historical assertion explicitly skips
+  source exports/shallow checkouts (no proof).
   Unmerged/non-first-parent branch removals, rewritten history
   and renamed policy paths are outside this history proof. Changes to policy/frozen membership require review,
   not regeneration to hide debt. G1 climbs parenthesized/as/type-assertion/satisfies/non-null expression wrappers
