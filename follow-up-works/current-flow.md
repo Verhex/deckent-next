@@ -45,7 +45,9 @@ Bu bölüm güncel durumdur; önceki parti anlatıları Git geçmişinde (bu dos
   CLI-HELP `46bc5c77` (Fable PASS) + AOF-DECISION-PORT `2b8bdc31` (Fable PASS). Entegrasyon: A1/A3 `run close|resume`/`task accept|reject` ve `decide`
   komut kataloğuna kayıtlı (yardım 108 yol, üst yardım 27 satır, golden'lar okundu); karar ledger'ı **v45→v46** numaralandı (A1/A3 v45 aynen),
   v44→v45→v46 / v45→v46 yedekli ileri göç testli, batch-26 kodu v46 ledger'ı reddediyor (bayt değişmeden); composition bütçesi korunarak
-  query-errors importları birleştirildi; decision config alanına binding/apply eklendi. Tam verify ve kanıt: `proof/INTEGRATE-2026-10-02-AB/README.md`.
+  query-errors importları birleştirildi; decision config alanına binding/apply eklendi. İlk tam verify `2cb7335c` 42 fail → düzeltme `78231da9`
+  (v46 göçü IF NOT EXISTS + birebir CREATE metni denetimi; yayımlanan decision `.d.ts` JSON asset'e bağımlıydı — ürün hatası, giderildi);
+  **tam verify exact `78231da9` 568/4151 EXIT 0**. Kanıt: `proof/INTEGRATE-2026-10-02-AB/README.md`. Sıradaki: Sol parti incelemesi (26. partiden sonra).
 - **Şeritler (Codex uygulayıcı, lead commit, bağımsız inceleme Fable/Sol):**
   - A1/A3 `lane/run-park-timeout`: `ca753477` + `6d06bb41` + `6a8c3298` + `18d39682` (iki Fable REVISE düzeltmesi); Fable üçüncü inceleme **PASS** exact `18d39682`;
     lead native/dist 7 dosya 82/82; 26. partiye birleştirildi. Lead kararı A3 dönüşü: Jev a8e582fe `typed_return_on_new_evidence`.
