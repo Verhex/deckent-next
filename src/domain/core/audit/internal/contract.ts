@@ -43,6 +43,8 @@ export const auditSubjectSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('run-lifecycle'), action: z.enum(['close', 'resume', 'accept', 'reject']),
     runId: identitySchema, commandId: identitySchema, taskId: identitySchema.nullable(), revision: counterSchema,
     evidence: z.literal('model-unverified').nullable() }).strict(),
+  z.object({kind:z.literal('decision-port'),action:z.enum(['ask','record','outcome']),phase:z.enum(['admitted','observed']),
+    decisionId:identitySchema,caseDigest:digest,adviceDigest:digest.nullable(),selectedOption:identitySchema.nullable()}).strict(),
   /** `person` null (MODES-3): the default `standart`, which no bindings entry names. */
   z.object({ kind: z.literal('permission-mode'), mode: z.enum(['auto-edit', 'full-auto', 'standart']), cell: z.enum(['edit-non-floor', 'shell-modify', 'mcp-call']),
     tool: toolRef, call: callRef, grants: z.object({ company: identitySchema, person: identitySchema.nullable() }).strict(),

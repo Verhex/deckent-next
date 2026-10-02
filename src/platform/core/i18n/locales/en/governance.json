@@ -1096,5 +1096,18 @@
   "error.RUN_DECISION_NOT_READY": "This task is not awaiting an admissible decision. Missing execution evidence cannot be accepted.",
   "error.RUN_DECISION_EXPIRED": "The decision deadline has passed; this task cannot be accepted or rejected after expiry.",
   "error.RUN_PARKED": "This Run is parked. Inspect its reason and deadline before resuming or closing it.",
-  "error.RUN_TERMINAL": "This Run has a terminal outcome and cannot reserve more tasks."
+  "error.RUN_TERMINAL": "This Run has a terminal outcome and cannot reserve more tasks.",
+  "error.DECISION_INVALID": "The decision input is invalid.",
+  "error.DECISION_UNAVAILABLE": "The decision application, policy or durable store is unavailable.",
+  "error.DECISION_COMMAND_CONFLICT": "The decision command identity conflicts with an existing record or transition.",
+  "error.DECISION_CORRUPT": "The decision record failed its integrity checks.",
+  "error.DECISION_RECORD_REQUIRED": "A valid recorded decision or advice is required for this transition.",
+  "error.DECISION_OUTCOME_UNKNOWN": "The decision write outcome is unknown. Inspect the existing command record before retrying.",
+  "error.DECISION_ADVICE_INVALID": "The advice distribution or decision response is invalid.",
+  "error.DECISION_POLICY_INVALID": "The decision policy configuration is invalid.",
+  "error.DECISION_CASE_INVALID": "The decision case is invalid.",
+  "error.DECISION_EVIDENCE_FUTURE": "Decision evidence cannot have a future observation time.",
+  "error.DECISION_EVIDENCE_REFERENCE_INVALID": "A decision option or check references evidence that does not exist.",
+  "error.DECISION_LIMIT_EXCEEDED": "The decision case exceeds its configured byte or count limits.",
+  "error.DECISION_RECORD_INVALID": "The actor decision or outcome record is invalid."
 }

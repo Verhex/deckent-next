@@ -1,6 +1,8 @@
 /**
- * Previous-schema fixtures. v44 -> v45 changes only Run snapshots; previous fixture is exact for ledgers without Run rows.
- * `DOWNGRADE_TO_V43_LEDGER_SQL` also drops the two execution pool hold tables. v43 -> v44 only
+ * Previous-schema fixtures. `DOWNGRADE_TO_PREVIOUS_LEDGER_SQL` turns a current ledger into the exact previous schema (v45: v46
+ * (AOF-DECISION-PORT) only added two decision tables, so dropping them is exact). `DOWNGRADE_TO_V44_LEDGER_SQL` also reverts
+ * the v45 (A1/A3) Run snapshot v4 -> v3 change (exact for ledgers whose Runs were never parked/closed).
+ * `DOWNGRADE_TO_V43_LEDGER_SQL` also drops the two execution pool hold tables (v43 -> v44 only
  * added the two execution pool hold tables, so dropping them is exact); `DOWNGRADE_TO_V42_LEDGER_SQL` also drops the four v43 model
  * catalog tables (exact for the same reason); `DOWNGRADE_TO_V41_LEDGER_SQL` also goes back to v41 (v42 changed
  * only the adoption record contract, so the version alone goes back — exact for a ledger without v2 adoption records, which a test
@@ -12,10 +14,11 @@
  * `DOWNGRADE_TO_V35_LEDGER_SQL` goes one step further and reverses the v36 allocation rebuild (max_calls NOT NULL again, the
  * checkpoint child rebuilt against it).
  */
-export const PREVIOUS_LEDGER_VERSION = 44;
-export const DOWNGRADE_TO_PREVIOUS_LEDGER_SQL = `UPDATE runs SET snapshot=json_remove(json_set(snapshot,'$.schemaVersion',3),'$.state');
+export const PREVIOUS_LEDGER_VERSION = 45;
+export const DOWNGRADE_TO_PREVIOUS_LEDGER_SQL = `DROP TABLE decision_command_receipts; DROP TABLE decision_cases; PRAGMA user_version=45;`;
+export const DOWNGRADE_TO_V44_LEDGER_SQL = `${DOWNGRADE_TO_PREVIOUS_LEDGER_SQL} UPDATE runs SET snapshot=json_remove(json_set(snapshot,'$.schemaVersion',3),'$.state');
   UPDATE run_receipts SET snapshot=json_remove(json_set(snapshot,'$.schemaVersion',3),'$.state'); PRAGMA user_version=44;`;
-export const DOWNGRADE_TO_V43_LEDGER_SQL = `${DOWNGRADE_TO_PREVIOUS_LEDGER_SQL} DROP TABLE execution_pool_hold_receipts; DROP TABLE execution_pool_holds; PRAGMA user_version=43;`;
+export const DOWNGRADE_TO_V43_LEDGER_SQL = `${DOWNGRADE_TO_V44_LEDGER_SQL} DROP TABLE execution_pool_hold_receipts; DROP TABLE execution_pool_holds; PRAGMA user_version=43;`;
 export const DOWNGRADE_TO_V42_LEDGER_SQL = `${DOWNGRADE_TO_V43_LEDGER_SQL} DROP TABLE model_catalog_receipts; DROP TABLE model_catalog_activations;
   DROP TABLE model_catalog_models; DROP TABLE model_catalog_channels; PRAGMA user_version=42;`;
 export const DOWNGRADE_TO_V41_LEDGER_SQL = `${DOWNGRADE_TO_V42_LEDGER_SQL} PRAGMA user_version=41;`;

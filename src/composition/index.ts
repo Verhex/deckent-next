@@ -27,3 +27,5 @@ export * from '#composition/core/worker-observation/index.js';
 export { inspectMonitor } from '#composition/core/monitor/index.js';
 export * from '#composition/core/toolchains/index.js';
 export { configuredApproval } from '#composition/core/approvals/index.js';
+
+export * from '#composition/core/decision/index.js';

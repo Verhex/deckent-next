@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "id": "typesafe-decide",
+  "version": 1,
+  "protocol": { "family": "typesafe-system-one", "version": "v1" },
+  "meterId": "decision-http-operator-reservation",
+  "selectionInstructions": "Select the best supported action using objective, constraints, evidence, checks and process. Return an abstention when appropriate. This advice grants no authority.",
+  "sufficiencyInstructions": "Is the supplied context sufficient to make a responsible decision? Consider unknowns and evidence freshness.",
+  "abstentions": {
+    "none_of_the_above": "None of the proposed options responsibly satisfies the objective and constraints.",
+    "insufficient_information": "Evidence and context are insufficient to select an option responsibly."
+  }
+}

@@ -56,6 +56,13 @@ export const CLI_CATALOG = [
     action('hold', 'work', 'cli.help.action.hold', 'cli.help.pool'),
     action('resume', 'work', 'cli.help.action.resume', 'cli.help.pool'),
   ] },
+  { name: 'decide', group: 'work', summary: 'cli.help.summary.decide', detail: 'cli.help.decide', children: [
+    action('prepare', 'work', 'cli.help.action.prepare-case', 'cli.help.decide'),
+    action('ask', 'work', 'cli.help.action.ask', 'cli.help.decide'),
+    action('record', 'work', 'cli.help.action.record', 'cli.help.decide'),
+    action('outcome', 'work', 'cli.help.action.outcome', 'cli.help.decide'),
+    action('inspect', 'work', 'cli.help.action.inspect', 'cli.help.decide'),
+  ] },
   { name: 'models', group: 'models', summary: 'cli.help.summary.models', detail: 'cli.help.models', children: [
     action('binding', 'models', 'cli.help.action.binding', 'cli.help.modelsBinding'),
     action('activation', 'models', 'cli.help.action.activation', 'cli.help.modelsActivation'),

@@ -95,3 +95,8 @@ export { configuredApproval } from '#composition/index.js';
 export { deliverConfiguredWorkspaceIntegration, adoptConfiguredWorkspaceIntegration, rollbackConfiguredWorkspaceIntegration } from '#composition/index.js';
 export { executeConfiguredOperation, compensateConfiguredOperation, inspectConfiguredOperation } from '#composition/index.js';
 export { inspectConfiguredWorkerTranscript } from '#composition/index.js';
+export { prepareConfiguredDecision as prepareDecision, askConfiguredDecision as askDecision, recordConfiguredDecision as recordDecision,
+  outcomeConfiguredDecision as outcomeDecision, inspectConfiguredDecision as inspectDecision } from '#composition/index.js';
+export type { DecisionCase, DecisionAdvice, DecisionRecord, DecisionPolicy } from '#domain/index.js';
+export type { DecisionPrepareInput, DecisionPrepareResult, DecisionAskCommand, DecisionAskResult, DecisionQuery, DecisionInspection,
+  DecisionRecordCommand, DecisionRecordResult, DecisionOutcomeCommand, DecisionOutcomeResult } from '#engine/index.js';

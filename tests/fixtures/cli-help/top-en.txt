@@ -9,6 +9,7 @@ Execute work:
   run         Create and manage Runs
   task        Execute, evaluate and deliver Tasks
   pool        Inspect, hold or resume a pool
+  decide      Prepare, ask and record advisory decisions
 Models:
   models      Inspect and manage models
 Approvals:

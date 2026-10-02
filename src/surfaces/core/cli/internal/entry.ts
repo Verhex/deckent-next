@@ -13,6 +13,7 @@ import { policyGrantsCommand } from './policy-grants.js';
 import { secretCommand } from './secret.js';
 import { poolCommand } from './pool.js';
 import { inferenceCommand, modelsCommand } from '#surfaces/core/cli-models/index.js';
+import { decisionCommand } from '#surfaces/core/cli-decision/index.js';
 import { PACKAGE_NAME, PACKAGE_VERSION, readBuildIdentity, t, emit, assertErrorRegistry, reportFatal, resolveLocale, type ExitCode } from '#platform/index.js';
 import { runKernelCommand, type CommandContext } from './kernel-commands.js';
 export type { ExitCode } from '#platform/index.js';
@@ -26,7 +27,7 @@ export const CLI_COMMANDS = registerCliCommands<CommandContext>({
   config: async (argv, context) => (await import('#surfaces/core/config/index.js')).configCommand(argv, context),
   mcp: mcpCommand, secret: secretCommand, toolchains: toolchainsCommand, doctor: runKernelCommand,
   inventory: runInventoryCommand, paths: runKernelCommand, runtime: runtimeCommand, coding: codingCommand,
-  inference: inferenceCommand, operation: operationCommand,
+  inference: inferenceCommand, operation: operationCommand, decide: decisionCommand,
   policy: (argv, context) => (argv[1] === 'grants' || argv[1] === 'revoke' ? policyGrantsCommand : runKernelCommand)(argv, context),
 });
 

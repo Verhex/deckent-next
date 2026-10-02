@@ -71,3 +71,4 @@ export * from '#engine/core/shell-classification/index.js';
 export * from '#engine/core/secret-store/index.js';
 
 export * from '#engine/core/config/index.js';
+export * from '#engine/core/decision/index.js';

@@ -1,3 +1,4 @@
+import { registerDecisionConfig } from './decision.js';
 import { registerProviderCatalogConfig } from './catalog.js';
 import { registerInvocationProfileConfig } from './invocation.js';
 import { registerProviderSpendingConfig } from './spending.js';
@@ -18,6 +19,7 @@ export function registerProviderConfig(): void {
   registerTerminalConfig();
   registerOperationsConfig();
   registerSecretStoreConfig();
+  registerDecisionConfig();
   registered = true;
 }
 export { providerSpendingBudgetFor, providerSpendingSchema, registerProviderSpendingConfig, validateProviderSpendingLayers } from './spending.js';
@@ -26,3 +28,4 @@ export { openConfiguredSecretStore, readSecretsConfig, registerSecretStoreBacken
 export { readOperationsConfig, operationsConfigSchema, registerOperationAdapterModule, resolveOperationCatalog, resolveOperationTargets, type OperationsConfig } from './operations.js';
 export { readTerminalChatConfig, readTerminalConfig, readTerminalFetchConfig, readTerminalScratchConfig, readTerminalShellConfig, terminalConfigSchema,
   type TerminalChatConfig, type TerminalFetchConfig, type TerminalScratchConfig, type TerminalShellConfig } from './terminal.js';
+export { readDecisionPolicy, registerDecisionConfig, validateDecisionPolicyLayers } from './decision.js';

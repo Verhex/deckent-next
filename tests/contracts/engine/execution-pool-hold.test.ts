@@ -229,7 +229,7 @@ describe.skipIf(process.platform === 'win32')('ledger v44 pool hold tables', () 
   }
   const read = (path: string, sql: string) => { const db = new DatabaseSync(path, { readOnly: true }); try { return db.prepare(sql).all(); } finally { db.close(); } };
   it('upgrades a v43 ledger losslessly: 0600 backup at v43, every existing table unchanged, two empty hold tables; a v43 open refuses v44', async () => {
-    expect(CURRENT_LEDGER_VERSION).toBe(45); expect(POOL_HOLD_LEDGER_VERSION).toBe(44); expect(PREVIOUS_LEDGER_VERSION).toBe(44);
+    expect(CURRENT_LEDGER_VERSION).toBe(46); expect(POOL_HOLD_LEDGER_VERSION).toBe(44); expect(PREVIOUS_LEDGER_VERSION).toBe(45);
     const { path, backups } = await ledger();
     const db = new DatabaseSync(path); db.exec(DOWNGRADE_TO_V43_LEDGER_SQL);
     db.prepare('INSERT INTO execution_pools(pool_id,policy) VALUES(?,?)').run('p', '{"kept":true}');
@@ -240,9 +240,9 @@ describe.skipIf(process.platform === 'win32')('ledger v44 pool hold tables', () 
     expect(() => openSqliteLedger(path, options, 'forbid')).toThrow(expect.objectContaining({ code: 'ATTEMPT_STORE_VERSION' }));
     const upgrade = await upgradeExistingProductLedger(path, options, backups, new Date('2026-10-01T08:00:00.000Z'));
     const backupPath = join(backups, 'ledger-v43-2026-10-01T08-00-00-000Z.db');
-    expect(upgrade).toEqual({ from: 43, to: 45, backupPath });
+    expect(upgrade).toEqual({ from: 43, to: 46, backupPath });
     expect((await stat(backupPath)).mode & 0o777).toBe(0o600);
-    expect(read(backupPath, 'PRAGMA user_version')[0]!.user_version).toBe(43); expect(read(path, 'PRAGMA user_version')[0]!.user_version).toBe(45);
+    expect(read(backupPath, 'PRAGMA user_version')[0]!.user_version).toBe(43); expect(read(path, 'PRAGMA user_version')[0]!.user_version).toBe(46);
     expect(Object.fromEntries(before.map(name => [name, read(path, `SELECT * FROM "${name}"`)]))).toEqual(rows);
     expect(tables().filter(name => name.startsWith('execution_pool_hold'))).toEqual(['execution_pool_hold_receipts', 'execution_pool_holds']);
     // The rule a v43 build applies: a newer ledger is refused, never opened.

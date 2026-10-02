@@ -1096,5 +1096,18 @@
   "error.RUN_DECISION_NOT_READY": "Bu görev kabul edilebilir bir karar beklemiyor. Eksik yürütme kanıtı kabul edilemez.",
   "error.RUN_DECISION_EXPIRED": "Karar süresi doldu; bu görev süre dolumundan sonra kabul veya ret edilemez.",
   "error.RUN_PARKED": "Bu Run park edilmiş. Sürdürmeden veya kapatmadan önce nedenini ve son tarihini inceleyin.",
-  "error.RUN_TERMINAL": "Bu Run terminal sonuca ulaştı; yeni görev rezervasyonu yapamaz."
+  "error.RUN_TERMINAL": "Bu Run terminal sonuca ulaştı; yeni görev rezervasyonu yapamaz.",
+  "error.DECISION_INVALID": "Karar girdisi geçersiz.",
+  "error.DECISION_UNAVAILABLE": "Karar uygulamasına, politikasına veya kalıcı kayıt alanına erişilemiyor.",
+  "error.DECISION_COMMAND_CONFLICT": "Karar komutunun kimliği mevcut kayıt veya geçişle çakışıyor.",
+  "error.DECISION_CORRUPT": "Karar kaydı bütünlük denetiminden geçemedi.",
+  "error.DECISION_RECORD_REQUIRED": "Bu geçiş için geçerli bir karar veya tavsiye kaydı gerekli.",
+  "error.DECISION_OUTCOME_UNKNOWN": "Karar yazımının sonucu bilinmiyor. Tekrarlamadan önce mevcut komut kaydını inceleyin.",
+  "error.DECISION_ADVICE_INVALID": "Tavsiye dağılımı veya karar yanıtı geçersiz.",
+  "error.DECISION_POLICY_INVALID": "Karar politikası yapılandırması geçersiz.",
+  "error.DECISION_CASE_INVALID": "Karar vakası geçersiz.",
+  "error.DECISION_EVIDENCE_FUTURE": "Karar kanıtının gözlem zamanı gelecekte olamaz.",
+  "error.DECISION_EVIDENCE_REFERENCE_INVALID": "Karar seçeneği veya denetimi, var olmayan bir kanıta referans veriyor.",
+  "error.DECISION_LIMIT_EXCEEDED": "Karar vakası yapılandırılmış bayt veya adet sınırlarını aşıyor.",
+  "error.DECISION_RECORD_INVALID": "Aktör kararı veya sonuç kaydı geçersiz."
 }

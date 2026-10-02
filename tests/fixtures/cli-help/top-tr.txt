@@ -9,6 +9,7 @@ Başlarken:
   run         Run oluştur ve yönet
   task        Görevleri yürüt, değerlendir ve teslim et
   pool        Havuzu incele, beklet veya sürdür
+  decide      Danışman kararlarını hazırla, sor ve kaydet
 Modeller:
   models      Modelleri incele ve yönet
 Onaylar:

@@ -279,6 +279,10 @@
     "cli.operation.help": {
       "before": "Usage: deckent operation execute|compensate --input <file|-> [--wait <ms>] [--json] [--lang en|tr]\n  operation inspect --scope <id> --command-id <id> [--json]\nRuns a catalog operation (operations config) against its declared target: conditional write on the\n    expected record version, idempotency key, intent recorded before the effect. Unknown outcomes are not\n    retried; compensation is a new operation. An operation that requires approval reports the open approval\n    request (status approval-pending) and sends nothing; decide it with `deckent approval decide`, then resubmit\n    the same command. --wait polls the decision up to the given milliseconds and resubmits once after an allow.",
       "after": "Usage: deckent operation execute|compensate --input <file|-> [--wait <ms>] [--json] [--lang en|tr]\n  operation inspect --scope <id> --command-id <id> [--json]\nRuns a catalog operation (operations config) against its declared target: conditional write on the expected record version, idempotency key, intent recorded before the effect. Unknown outcomes are not retried; compensation is a new operation. An operation that requires approval reports the open approval request (status approval-pending) and sends nothing; decide it with `deckent approval decide`, then resubmit the same command. --wait polls the decision up to the given milliseconds and resubmits once after an allow."
+    },
+    "decision.choice": {
+      "before": "Choice: {choice}; confidence {confidence}; choice threshold {threshold}.",
+      "after": "Choice: {choice} · choice probability {probability} (threshold {threshold}) · confidence {confidence}"
     }
   },
   "tr": {
@@ -677,6 +681,10 @@
     "cli.operation.help": {
       "before": "Kullanım: deckent operation execute|compensate --input <dosya|-> [--wait <ms>] [--json] [--lang en|tr]\n  operation inspect --scope <id> --command-id <id> [--json]\nKatalog operasyonunu (operations yapılandırması) beyan edilen hedefine karşı çalıştırır: beklenen kayıt\n    sürümünde koşullu yazım, idempotency anahtarı, etkiden önce kaydedilen niyet. Belirsiz sonuçlar yeniden\n    denenmez; telafi yeni bir operasyondur. Onay gerektiren operasyon açık onay isteğini bildirir (durum\n    approval-pending) ve hiçbir şey göndermez; `deckent approval decide` ile karar verin, sonra aynı komutu\n    yeniden gönderin. --wait kararı verilen milisaniye kadar yoklar ve izin sonrası bir kez yeniden gönderir.",
       "after": "Kullanım: deckent operation execute|compensate --input <dosya|-> [--wait <ms>] [--json] [--lang en|tr]\n  operation inspect --scope <id> --command-id <id> [--json]\nKatalog operasyonunu (operations yapılandırması) beyan edilen hedefine karşı çalıştırır: beklenen kayıt sürümünde koşullu yazım, idempotency anahtarı, etkiden önce kaydedilen niyet. Belirsiz sonuçlar yeniden denenmez; telafi yeni bir operasyondur. Onay gerektiren operasyon açık onay isteğini bildirir (durum approval-pending) ve hiçbir şey göndermez; `deckent approval decide` ile karar verin, sonra aynı komutu yeniden gönderin. --wait kararı verilen milisaniye kadar yoklar ve izin sonrası bir kez yeniden gönderir."
+    },
+    "decision.choice": {
+      "before": "Seçim: {choice}; güven {confidence}; seçim eşiği {threshold}.",
+      "after": "Seçim: {choice} · seçim olasılığı {probability} (eşik {threshold}) · güven {confidence}"
     }
   }
 }

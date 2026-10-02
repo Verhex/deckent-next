@@ -1,10 +1,5 @@
-import { ApprovalError, AuditError } from '#domain/index.js';
-import { SessionAuthenticationError } from '#engine/index.js';
-import { WorkerObservationError } from '#engine/index.js';
-import { WorkspacePatchError, WorkspaceAdoptionError } from '#engine/index.js';
-import { EffectError } from '#domain/index.js';
-import { ModelActivationError, ModelCatalogError } from '#domain/index.js';
-import { ModelInvocationError } from '#domain/index.js';
+import { DecisionApplicationError, SessionAuthenticationError, WorkerObservationError, WorkspacePatchError, WorkspaceAdoptionError } from '#engine/index.js';
+import { DecisionError, ApprovalError, AuditError, EffectError, ModelActivationError, ModelCatalogError, ModelInvocationError } from '#domain/index.js';
 import { ProviderSpendError, ModelInvocationStoreError } from '#engine/index.js';
 import { OpenAiChatHttpError, OpenRouterChatError, OpenRouterPricingError, NativeConnectionError } from '#adapters/index.js';
 import { ModelActivationStoreError, AgentTurnStoreError, WorkerModelAdmissionError } from '#engine/index.js';
@@ -19,9 +14,8 @@ import { DeckentError, ErrorRegistry, ManagedFileError, BootstrapStateError } fr
 import { RunLifecycleError, reservationDiagnosticParams, ServiceShutdownError, ReconciliationRecoveryError, ReconciliationRuntimeLoopError, CancellationRuntimeLoopError, RuntimeServiceProtocolError, RuntimeServiceLifecycleError, RunWorkspaceCustodyError, WorkspaceError, CancellationDeliveryError, TaskEvidenceError, ExecutionRegistryError, AuthenticationError, AttemptStoreError, DispatchError, DispatchInventoryError, PolicyAuthorizationError, RunStoreError, ScopeRegistrationError, WorkTargetError } from '#engine/index.js';
 /** Preserve stable failure identities without exposing paths, database messages or query contents. */
 export function queryFailure(error: unknown): DeckentError {
-  if (error instanceof ApprovalError || error instanceof SessionAuthenticationError || error instanceof AuditError) return ErrorRegistry.createError(error.code);
-  if (error instanceof WorkerObservationError) return ErrorRegistry.createError(error.code);
-  if (error instanceof WorkspaceAdoptionError || error instanceof EffectError) return ErrorRegistry.createError(error.code);
+  if (error instanceof DecisionError || error instanceof DecisionApplicationError || error instanceof ApprovalError || error instanceof SessionAuthenticationError
+    || error instanceof AuditError || error instanceof WorkerObservationError || error instanceof WorkspaceAdoptionError || error instanceof EffectError) return ErrorRegistry.createError(error.code);
   if (error instanceof WorkspacePatchError) return ErrorRegistry.createError(error.code, error.detail ? { params: { detail: error.detail } } : error.params ? { params: error.params } : {});
   if (error instanceof DeckentError) return error;
   if (error instanceof NativeConnectionError) return ErrorRegistry.createError(error.code);

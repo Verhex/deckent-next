@@ -21,6 +21,7 @@ import type { TerminalChatPlanHandler, TerminalChatStreamHandler, TerminalChatTu
   TerminalPermissionModeInspectHandler, TerminalPermissionModeSetHandler, TerminalScratchClearHandler, TerminalScratchInspectHandler } from './terminal-chat.js';
 
 import type { ModelCommandContext } from '#surfaces/core/cli-models/index.js';
+import type { DecisionCommandContext } from '#surfaces/core/cli-decision/index.js';
 export type { InferenceMetricsReading } from '#surfaces/core/cli-models/index.js';
 
 import type { ShutdownCommand, ServiceShutdownAdmissionResult } from '#engine/index.js';
@@ -34,7 +35,7 @@ export interface RuntimeServiceReadinessView {
 
 /** Every host operation a CLI command may use; the model commands' narrower context is part of it. */
 export type RunLifecycleHandler = (root: string, input: import('#engine/index.js').RunLifecycleCommand, options: ConfigLoadOptions) => Promise<{ readonly schemaVersion: 1; readonly layout: import('#platform/index.js').ProductLayout; readonly lifecycle: { readonly schemaVersion: 1; readonly commandId: string; readonly run: import('#engine/index.js').RunView } } | null>;
-export interface CommandContext extends ModelCommandContext, MonitorCommandContext, ConfigCommandContext {
+export interface CommandContext extends ModelCommandContext, MonitorCommandContext, ConfigCommandContext, DecisionCommandContext {
   applyRunLifecycle?: RunLifecycleHandler;
   renewApproval?: (input: unknown) => Promise<unknown>;
   listApprovals?: (input: unknown) => Promise<unknown>;

@@ -17,6 +17,7 @@ import { migrateAdoptionVerification } from './migration-v42.js';
 import { migrateModelCatalog } from './migration-v43.js';
 import { migrateExecutionPoolHolds } from './migration-v44.js';
 import { migrateRunParking } from './migration-v45.js';
+import { migrateDecisionPort } from './migration-v46.js';
 import { getConfigFieldDefault } from '#platform/index.js';
 // Persisted Next schema history. Versions are protocol invariants, not customer configuration.
 export const DISPATCH_LEDGER_VERSION = 8;
@@ -31,7 +32,7 @@ export const MODEL_ALLOCATION_LEDGER_VERSION = 19;
 export const PROVIDER_SPEND_LEDGER_VERSION = 21;
 export const PROVIDER_SPEND_AUDIT_LEDGER_VERSION = 22;
 // Current durable contract; older writers must not reopen newer records.
-export const CURRENT_LEDGER_VERSION = 45;
+export const CURRENT_LEDGER_VERSION = 46;
 export const SCOPE_REGISTRY_LEDGER_VERSION = 39;
 export const OPERATION_APPROVAL_LEDGER_VERSION = 40;
 export const AUDIT_EVENT_LEDGER_VERSION = 41;
@@ -42,6 +43,8 @@ export const MODEL_CATALOG_LEDGER_VERSION = 43;
 // K5: typed execution pool hold (one row per pool + per-scope command receipts); additive.
 export const POOL_HOLD_LEDGER_VERSION = 44;
 export const RUN_PARKING_LEDGER_VERSION = 45;
+// AOF-DECISION-PORT: sealed decision cases and command receipts; additive (lane v45, renumbered at batch-27 integration).
+export const DECISION_PORT_LEDGER_VERSION = 46;
 export const INTEGRATION_LEDGER_VERSION = 30;
 // Sealed worker event logs (table since v35); read-only readers require it before reading a log.
 export const WORKER_EVENT_LOG_LEDGER_VERSION = 35;
@@ -276,6 +279,11 @@ export function migrateLedger(db: DatabaseSync, mode: 'allow' | 'forbid', profil
     if (next === RUN_PARKING_LEDGER_VERSION) {
       migrateRunParking(db);
       db.exec(`PRAGMA user_version=${RUN_PARKING_LEDGER_VERSION};`);
+      continue;
+    }
+    if (next === DECISION_PORT_LEDGER_VERSION) {
+      migrateDecisionPort(db);
+      db.exec(`PRAGMA user_version=${DECISION_PORT_LEDGER_VERSION};`);
       continue;
     }
     const sql = migrations[next];

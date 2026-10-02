@@ -41,11 +41,16 @@ Bu bölüm güncel durumdur; önceki parti anlatıları Git geçmişinde (bu dos
 - **26. parti tam verify:** ilk koşu `63abbd04` 28 fail (21 dosya) → entegrasyon düzeltmeleri `c007f933` (config CLI lazy yükleme: Ink/React her CLI/MCP açılışından çıktı), `3525c20a` (A1/A3 yardım 80 sütun + redactor'a takılan hata metni), `9bb43c52` (kabul edilmiş sözleşmelere fixture/golden uyumu) → `9bb43c52` 558 modül/4058 test EXIT0 (`proof/INTEGRATE-2026-10-02-AA-FIX/README.md`). Lead çakışma çözümünde hata bulunmadı. Not: ana checkout'taki bwrap paketi eski kilitte; yeni worktree'lerde verify öncesi bwrap staging gerekir.
 - **26. parti** `integrate/2026-10-02-aa` (worktree `/home/alperen/deckent-next-integrate-aa`, taban `dcaf7683`): CATALOG-V3 `b50b8a6e` (Sol 2247 sınırlı PASS),
   PLAN kartları `662812fc`, bu belge dilimi. Tam verify/Sol parti incelemesi şeritler girince.
+- **27. parti adayı** `integrate/2026-10-02-ab` (worktree `/home/alperen/deckent-next-integrate-ab`, taban 26. parti adayı `848c8050`, Sol 2251 incelemesinde):
+  CLI-HELP `46bc5c77` (Fable PASS) + AOF-DECISION-PORT `2b8bdc31` (Fable PASS). Entegrasyon: A1/A3 `run close|resume`/`task accept|reject` ve `decide`
+  komut kataloğuna kayıtlı (yardım 108 yol, üst yardım 27 satır, golden'lar okundu); karar ledger'ı **v45→v46** numaralandı (A1/A3 v45 aynen),
+  v44→v45→v46 / v45→v46 yedekli ileri göç testli, batch-26 kodu v46 ledger'ı reddediyor (bayt değişmeden); composition bütçesi korunarak
+  query-errors importları birleştirildi; decision config alanına binding/apply eklendi. Tam verify ve kanıt: `proof/INTEGRATE-2026-10-02-AB/README.md`.
 - **Şeritler (Codex uygulayıcı, lead commit, bağımsız inceleme Fable/Sol):**
   - A1/A3 `lane/run-park-timeout`: `ca753477` + `6d06bb41` + `6a8c3298` + `18d39682` (iki Fable REVISE düzeltmesi); Fable üçüncü inceleme **PASS** exact `18d39682`;
     lead native/dist 7 dosya 82/82; 26. partiye birleştirildi. Lead kararı A3 dönüşü: Jev a8e582fe `typed_return_on_new_evidence`.
   - CONFIG-SURFACE `lane/config-surface` `19a6bb42` → Fable REVISE düzeltmesi `c86d9d33` → i18n `5cbce321`; Fable **PASS** exact `5cbce321`; 26. partiye birleştirildi.
-  - CLI-HELP `lane/cli-help`, HARDCODE-RATCHET `lane/hardcode-ratchet` (ikisi de taban `19a6bb42`), AOF-DECISION-PORT `lane/aof-decision-port` (taban `662812fc`): Codex'te.
+  - CLI-HELP `46bc5c77` ve AOF-DECISION-PORT `2b8bdc31`: Fable PASS, 27. parti adayına birleştirildi. HARDCODE-RATCHET `lane/hardcode-ratchet` (taban `19a6bb42`): Codex'te.
 - **Analizler (salt okunur):** HARDCODE-AUDIT (~173 ihlal grubu, P1 19; `proof/HARDCODE-AUDIT-2026-10-02/`), AGENT-OS-FOUNDATIONS
   (`proof/AGENT-OS-FOUNDATIONS-2026-10-02/analysis.md`). Owner sırası Jev e2b81339 (ARCHITECTURE karar günlüğü 2026-10-02).
 - **Analiz oturumu (deckent-next-c7, dalga 6):** 1.768/1.768 satır sonuçlandı; MONITOR girdileri `next-graph/deep-harvest/wave6/MONITOR-INPUT.md`
@@ -54,7 +59,7 @@ Bu bölüm güncel durumdur; önceki parti anlatıları Git geçmişinde (bu dos
 ## Sıradaki
 1. 26. parti (CATALOG-V3 + CONFIG-SURFACE + A1/A3) tam verify → Sol parti incelemesi → push → owner/RC talimatıyla canlı geçiş; ardından AOF-HANDOFF.
 2. CONFIG-SURFACE 26. partide; sıradaki HARDCODE-P1 kartı; owner vLLM/Qwen adımları (`proof/CONFIG-SURFACE-2026-10-02/owner-vllm-steps.md`).
-3. CLI-HELP, HARDCODE-RATCHET, AOF-DECISION-PORT teslimleri → bağımsız inceleme → 26./27. parti; A1/A3 girince AOF-HANDOFF.
+3. 27. parti (CLI-HELP + AOF-DECISION-PORT) tam verify sonucu → Sol parti incelemesi (26. partiden sonra); HARDCODE-RATCHET teslimi → bağımsız inceleme; A1/A3 girince AOF-HANDOFF, sonra AOF-WORKER-DECIDE.
 4. 26. parti tam verify → Sol → push → owner/RC talimatıyla canlı geçiş.
 5. Owner canlı adımları: katalog seed kaydı/aktivasyonu (`proof/MODEL-CATALOG-2026-10-02/owner-commands.sh`), CONFIG-SURFACE sonrası vLLM yeniden adlandırma.
 6. **Node 26 geçişi (owner, gözden kaçmasın):** Node 26 LTS 2026-10-28 → tam verify → nvm varsayılanı, CI zorunlu geçidi ve canlı servis Node 26.

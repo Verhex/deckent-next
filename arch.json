@@ -127,7 +127,8 @@
         "src/engine/core/secret-store",
         "src/adapters/core/secret-store",
         "src/adapters/core/native-connection",
-        "src/adapters/core/worker-observation"
+        "src/adapters/core/worker-observation",
+        "src/domain/core/decision"
       ],
       "plan": "PROVIDERS"
     },
@@ -254,7 +255,8 @@
         "src/composition/core/approvals",
         "src/composition/core/secrets",
         "src/composition/core/monitor",
-        "src/composition/core/config"
+        "src/composition/core/config",
+        "src/composition/core/decision"
       ],
       "plan": "SURFACES"
     },
@@ -313,7 +315,8 @@
         "src/composition/core/toolchains",
         "src/engine/core/inference-serving",
         "src/platform/core/errors",
-        "src/composition/core/operations"
+        "src/composition/core/operations",
+        "src/composition/core/decision"
       ],
       "plan": "SURFACES"
     },
@@ -365,7 +368,9 @@
         "src/platform/core/managed-files",
         "src/domain/core/effect",
         "src/engine/core/scheduling",
-        "src/domain/core/run"
+        "src/domain/core/run",
+        "src/engine/core/decision",
+        "src/domain/core/decision"
       ],
       "plan": "FOUNDATION"
     },
@@ -896,7 +901,8 @@
         "src/domain/core/agent-turn",
         "src/engine/core/model-invocation",
         "src/surfaces/core/monitor",
-        "src/surfaces/core/config"
+        "src/surfaces/core/config",
+        "src/surfaces/core/cli-decision"
       ],
       "plan": "SURFACES"
     },
@@ -922,7 +928,8 @@
         "src/platform/core/errors",
         "src/platform/core/i18n",
         "src/engine/core/toolchain-currency",
-        "src/domain/core/effect"
+        "src/domain/core/effect",
+        "src/engine/core/decision"
       ],
       "plan": "SURFACES"
     },
@@ -1216,7 +1223,8 @@
         "src/platform/core/config",
         "src/engine/core/runtime",
         "src/adapters/core/mcp-transport",
-        "src/adapters/core/provider-anthropic-messages"
+        "src/adapters/core/provider-anthropic-messages",
+        "src/adapters/core/provider-decision-http"
       ],
       "plan": "PROVIDERS"
     },
@@ -1983,6 +1991,82 @@
         "src/adapters/core/local-keyring"
       ],
       "plan": "CONFIG-SURFACE"
+    },
+    "src/domain/core/decision": {
+      "dependencies": [
+        "src/domain/core/primitives"
+      ],
+      "plan": "AOF-DECISION-PORT"
+    },
+    "src/engine/core/decision": {
+      "dependencies": [
+        "src/domain/core/audit",
+        "src/domain/core/command",
+        "src/domain/core/decision",
+        "src/domain/core/model-activation",
+        "src/domain/core/model-invocation",
+        "src/domain/core/policy",
+        "src/domain/core/primitives",
+        "src/domain/core/principal",
+        "src/domain/core/provider-catalog",
+        "src/engine/core/authentication",
+        "src/engine/core/model-invocation",
+        "src/engine/core/policy",
+        "src/platform/core/integrity"
+      ],
+      "plan": "AOF-DECISION-PORT"
+    },
+    "src/adapters/core/decision-store": {
+      "dependencies": [
+        "src/adapters/core/audit-store",
+        "src/adapters/core/sqlite-ledger",
+        "src/domain/core/audit",
+        "src/domain/core/command",
+        "src/domain/core/decision",
+        "src/engine/core/audit",
+        "src/engine/core/decision",
+        "src/platform/core/integrity"
+      ],
+      "plan": "AOF-DECISION-PORT"
+    },
+    "src/adapters/core/provider-decision-http": {
+      "dependencies": [
+        "src/adapters/core/provider-http-json",
+        "src/domain/core/decision",
+        "src/domain/core/model-invocation",
+        "src/domain/core/primitives",
+        "src/domain/core/provider-catalog",
+        "src/domain/core/provider-spend",
+        "src/engine/core/model-invocation",
+        "src/engine/core/provider-spend"
+      ],
+      "plan": "AOF-DECISION-PORT"
+    },
+    "src/composition/core/decision": {
+      "dependencies": [
+        "src/adapters/core/contract",
+        "src/adapters/core/decision-store",
+        "src/adapters/core/local-keyring",
+        "src/composition/core/model-invocation",
+        "src/composition/core/policy",
+        "src/composition/core/query-errors",
+        "src/composition/core/scoped-request",
+        "src/engine/core/decision",
+        "src/platform/core/clock",
+        "src/platform/core/config"
+      ],
+      "plan": "AOF-DECISION-PORT"
+    },
+    "src/surfaces/core/cli-decision": {
+      "dependencies": [
+        "src/engine/core/decision",
+        "src/platform/core/config",
+        "src/platform/core/errors",
+        "src/platform/core/i18n",
+        "src/platform/core/output",
+        "src/surfaces/core/cli-kit"
+      ],
+      "plan": "AOF-DECISION-PORT"
     }
   },
   "composition": {
