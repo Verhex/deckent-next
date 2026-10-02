@@ -10,7 +10,7 @@ afterEach(async () => { clearConfigCache(); await Promise.all(roots.splice(0).ma
 const id = (taskId: string, attemptId: string) => ({ scopeId: 's', runId: 'run1', taskId, attemptId, generation: 3, layoutRevision: 'l' });
 const model = { provider: 'codex', requested: { channelId: 'codex-cli', modelId: 'gpt-exact-1', auxiliaryModelIds: [] }, init: null, usage: null, verdict: 'unverified', unexpected: [], evidence: 'sealed' };
 const base = { authority: 'next-ledger', workspace: null, handle: null, outputRecorded: true, patchRecorded: false, files: null, diagnostics: [] };
-const files = (freshness: string) => ({ heartbeat: { state: 'present', ageMs: 1, freshness, phase: 'x' } });
+const files = (freshness: string) => ({ heartbeat: { state: 'available', ageMs: 1, freshness, phase: 'x' } });
 const report = { schemaVersion: 1, observedAt: 0, scopeId: 's', control: 'observe-only', sources: [
   { id: 'a', path: '/p/a', kind: 'next-project', status: 'available', nextAfter: 'cursor9', truncated: true, workers: [
     { ...base, taskId: 't1', identity: id('t1', 'abcdefghijkl'), provider: 'claude', process: 'exited', terminal: { handle: 'h', exitCode: 0, interrupted: false }, files: files('fresh'), model },
@@ -21,8 +21,8 @@ const report = { schemaVersion: 1, observedAt: 0, scopeId: 's', control: 'observ
 it('workers list human output is readable lines, JSON is unchanged', async () => {
   const root = await mkdtemp(join(tmpdir(), 'dn-workers-human-')); roots.push(root);
   await mkdir(join(root, '.deckent'), { recursive: true }); await writeFile(join(root, '.deckent/config.json'), JSON.stringify({ layout: { root: join(root, 'd') } }));
-  const run = async (extra: string[]) => { const out: string[] = [];
-    const code = await main(['workers', 'list', '--scope', 's', '--lang', 'en', ...extra], { root, env: { HOME: join(root, 'h'), USERPROFILE: join(root, 'h') }, initialize() {},
+  const run = async (extra: string[], command = 'list') => { const out: string[] = [];
+    const code = await main(['workers', command, '--scope', 's', '--lang', 'en', ...extra], { root, env: { HOME: join(root, 'h'), USERPROFILE: join(root, 'h') }, initialize() {},
       stdout: { write(v: string) { out.push(v); } }, stderr: { write() {} }, async inspectWorkers() { return report; } } as never); return { code, text: out.join('') }; };
   const human = await run([]); expect(human.code).toBe(0);
   const lines = human.text.split('\n').filter(Boolean);
@@ -34,7 +34,9 @@ it('workers list human output is readable lines, JSON is unchanged', async () =>
   expect(lines[at('t1') + 1]).toContain('Task t1: Model on codex-cli');
   expect(lines[at('t2')]).toBe('  run1/t2 · attempt 12345678 · gen 3 · running · heartbeat stale · codex');
   expect(lines[at('t3')]).toBe('  run1/t3 · attempt qrstuvwx · gen 3 · exited 1 · heartbeat missing · docker');
-  expect(lines).toContain('  -/t4 · attempt - · gen - · unknown · heartbeat missing · -');
+  expect(lines).toContain('  -/t4 · attempt - · gen - · unknown · heartbeat unavailable (unknown) · -');
   expect(lines[lines.indexOf('Source b (/p/b): available') + 1]).toBe('  No workers.');
-  expect((await run(['--json'])).text.trim()).toBe(JSON.stringify(report));
+  expect((await run(['--json'])).text).toBe(JSON.stringify(report) + '\n');
+  expect(await run(['--samples', '1'], 'watch')).toEqual(human);
+  expect((await run(['--samples', '1', '--json'], 'watch')).text).toBe(JSON.stringify(report) + '\n');
 });
