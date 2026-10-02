@@ -1968,8 +1968,9 @@ file/tail bytes and heartbeat intervals. Each source reports its own unavailable
 Legacy `.hb/.log/.result` shapes remain observations. Host PID existence is identity-unverified; file
 freshness is separate from process liveness. Result self-assessment is separate from Next terminal custody
 and Task acceptance. Log analysis emits bounded diagnostic categories and whitelisted structured events,
-not arbitrary legacy strings. Missing, malformed, stale, future and identity-mismatched evidence remain
-visible. Stopping watch stops only the view. CLI snapshots/JSON-lines and SDK are implemented; Desktop/MCP
+not arbitrary legacy strings. Human heartbeat rows must show freshness only for available evidence;
+missing, malformed and identity-mismatched states must remain distinct. Null files mean unavailable
+observation (or diagnostic denied/released/ledger-only), never confirmed missing. Stopping watch stops only the view. CLI snapshots/JSON-lines and SDK are implemented; Desktop/MCP
 and cross-host monitoring remain future consumers of the same semantics. Linux local files/Docker are
 verified; no non-Linux or legacy runtime activation is claimed.
 
