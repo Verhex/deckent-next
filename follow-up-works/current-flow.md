@@ -38,6 +38,7 @@ Bu bölüm güncel durumdur; önceki parti anlatıları Git geçmişinde (bu dos
 - **Dogfood:** resmî OFF. N1 servisi ve K7 köprüsü canlı paketli build'de (`current`); paketli native worker açılışı gözlendi (`probe-packaged-aa58`:
   sonnet-5-5, exit 0, model verified/sealed). N1 havuzu 8 slot, kart profilleri 2 GB, verify 3 GB (yedekli config). S1 kapısı: B1 ✓; A1/A3 şeritte;
   canlı `execution`/`admission` + grant'lar yok; dilim 3, SELF-SOURCE-FLOOR açık (PLAN DOGFOOD-STAGES).
+- **26. parti tam verify:** ilk koşu `63abbd04` 28 fail (21 dosya) → entegrasyon düzeltmeleri `c007f933` (config CLI lazy yükleme: Ink/React her CLI/MCP açılışından çıktı), `3525c20a` (A1/A3 yardım 80 sütun + redactor'a takılan hata metni), `9bb43c52` (kabul edilmiş sözleşmelere fixture/golden uyumu) → `9bb43c52` 558 modül/4058 test EXIT0 (`proof/INTEGRATE-2026-10-02-AA-FIX/README.md`). Lead çakışma çözümünde hata bulunmadı. Not: ana checkout'taki bwrap paketi eski kilitte; yeni worktree'lerde verify öncesi bwrap staging gerekir.
 - **26. parti** `integrate/2026-10-02-aa` (worktree `/home/alperen/deckent-next-integrate-aa`, taban `dcaf7683`): CATALOG-V3 `b50b8a6e` (Sol 2247 sınırlı PASS),
   PLAN kartları `662812fc`, bu belge dilimi. Tam verify/Sol parti incelemesi şeritler girince.
 - **Şeritler (Codex uygulayıcı, lead commit, bağımsız inceleme Fable/Sol):**

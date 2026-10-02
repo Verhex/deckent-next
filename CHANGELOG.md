@@ -1,6 +1,6 @@
 # Changelog
 
-- CATALOG-V3 (2026-10-02, lane; independent review pending): catalog documents accept v3 channel/vendor/canonical/billing/provenance, limits, reasoning and pricing metadata while retaining v2 and old receipts. Claude/Codex subscription seeds carry recommendations without activation effects; CLI en/tr and Monitor expose vendor versus channel. No SQL migration; unknown fields remain explicit.
+- CATALOG-V3 (2026-10-02; Sol 2247 bounded PASS, batch 26): catalog documents accept v3 channel/vendor/canonical/billing/provenance, limits, reasoning and pricing metadata while retaining v2 and old receipts. Claude/Codex subscription seeds carry recommendations without activation effects; CLI en/tr and Monitor expose vendor versus channel. No SQL migration; unknown fields remain explicit.
 
 - MCP-NO-DECIDE (owner 2026-10-02): removed the MCP approval decision tool for both allow and deny; approval inspection remains, and CLI/SDK/terminal decision paths keep their existing authorization.
 
@@ -8,6 +8,7 @@ Human-curated. One line per landing, keyed by PLAN.md card id. No product code w
 
 ## Unreleased
 
+- FIXED (batch 26 integration): the config CLI loads lazily so ordinary CLI commands and the stdio MCP entry stay off Ink/React (CONFIG-SURFACE had put ~167 ms on every start); A1/A3 `run close|resume` / `task accept|reject` help lines inside the 80-column action list; the human-decision error text no longer trips the token redactor.
 - ADDED (CONFIG-SURFACE): registry-derived config inspect/explain/validate/set/unset with scoped policy, digest checks, atomic backups and value-free audit; shared CLI/terminal/monitor reads, binding lint, schema 4 removal of five unused settings, shared max_workers and admission Docker ceilings; owner catalog cleanup command proof in a temp project. Config require-approval remains a typed refusal; terminal is read only.
 - FIXED (CONFIG-SURFACE revise): shared token/URL redaction across config views; registry-controlled backup retention and writer lock timeout; isolated monitor Config errors and cached schema conversion; dynamic Config help index, absent-document CLI fence and explicit global-explain refusal.
 - ADDED (A1/A3, source candidate): bounded Run parking, explicit terminal outcome and transitive skipped dependency tasks; shared human CLI/SDK close/resume and audited accept/reject, visible unverified acceptance, task-slot release and deadline failure. Run snapshot v4 / RunView v3 / ledger v45; parking config v1 defaults to an unmeasured, adjustable 24 hours. MCP has no decisions; independent review/integration/live acceptance pending.
