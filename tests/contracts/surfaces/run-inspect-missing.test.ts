@@ -2,7 +2,7 @@ import { expect, it } from 'vitest';
 import { main } from '#surfaces/index.js';
 import { resolveProductPaths } from '#platform/index.js';
 const layout = resolveProductPaths('/fixture/project', { env: { HOME: '/fixture/home' } });
-const run = { runId: 'r', revision: 1, cancellationRequested: false, tasks: [], criteria: [] };
+const run = { runId: 'r', revision: 1, cancellationRequested: false, state: { kind: 'running' }, tasks: [], criteria: [] }; // RunView v3 (A1) always carries the Run state
 function harness(value: unknown) {
   const out: string[] = []; const err: string[] = [];
   const context = { env: { NO_COLOR: '1', TERM: 'dumb' }, stdout: { write(v: string) { out.push(v); } }, stderr: { write(v: string) { err.push(v); } },

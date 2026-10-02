@@ -66,7 +66,7 @@ describe('cross-process cancellation leases', () => {
     ] }), { mode: 0o600 });
     // Real persistence and delivery worker; only the external supervisor boundary is replaced.
     const open = adapters.openSqliteAttemptStore;
-    vi.spyOn(adapters, 'openSqliteAttemptStore').mockImplementation((path, settings, policy) => open(path, settings, policy, custodyProfiles));
+    vi.spyOn(adapters, 'openSqliteAttemptStore').mockImplementation((path, settings, timing, migration) => open(path, settings, timing, migration, custodyProfiles));
     let raw = 1000;
     const clock = new platform.SystemTrustedClock(() => raw);
     vi.spyOn(platform, 'SystemTrustedClock').mockImplementation(function () { return clock; } as never);
@@ -77,7 +77,7 @@ describe('cross-process cancellation leases', () => {
       ? deliverConfiguredRunCancellation(project, { schemaVersion: 1, action: 'cancel', commandId: 'repeat', scopeId: 's', runId: 'r', expectedRevision: 2 }, options)
       : recoverConfiguredCancellations(project, { schemaVersion: 1, scopeId: 's', afterAttemptId: null }, options);
     await act(); expect(cancel).toHaveBeenCalledTimes(1);
-    const proof = await open(opened.path, dbOptions, 'allow', custodyProfiles);
+    const proof = await open(opened.path, dbOptions, { now: Date.now, timeoutMs: 86400000 }, 'allow', custodyProfiles);
     try {
       const held = await proof.claimCancellationDelivery({ identity, token: 'inspect', now: 1000, limits });
       expect(held).toMatchObject({ acquired: false, record: { claimUntil: 2000, nextEligibleAt: 1100, attempts: 1, state: 'queued' } });

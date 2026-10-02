@@ -82,7 +82,7 @@ async function installation(maxInFlight: number) {
     protocol: { family: 'openrouter-chat-completions', version: 'v1' }, adapter: { id: 'openrouter-chat-http', version: 1,
       definition: pricedProviderDefinition(`https://127.0.0.1:${address.port}`, tls.caPem) }, allocation: { id: 'allocation', maxCalls: 8, maxInFlight },
     limits: { requestMaxBytes: 4096, responseMaxBytes: 2048, timeoutMs: 20_000 } };
-  await writeFile(join(project, '.deckent/config.json'), JSON.stringify({ mode: 'api', layout: { root: data }, storage: { driver: 'sqlite', sqlite },
+  await writeFile(join(project, '.deckent/config.json'), JSON.stringify({ layout: { root: data }, storage: { driver: 'sqlite', sqlite },
     provider_catalog: catalog, provider_invocation_profiles: { schemaVersion: 1, profiles: [profile] }, provider_spending: fixtureBudget('scope'),
     cancellation: { maxConcurrentDeliveries: 1, recoveryPageSize: 1, maxAttempts: 1, retryDelayMs: 10, claimTtlMs: 100 },
     cancellationRuntime: { scopeIds: ['scope'], pollIntervalMs: 1000, failureBackoffMs: 1000 },

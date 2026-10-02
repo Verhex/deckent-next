@@ -87,7 +87,7 @@ it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket] s
     protocol: { family: 'openai-chat-completions', version: 'v1' }, adapter: { id: 'openai-chat-http', version: 2,
       definition: { endpoint: 'http://127.0.0.1:1/chat', maxOutputTokens: 8 } },
     allocation: { id: 'allocation', maxCalls: 4, maxInFlight: 4 }, limits: { requestMaxBytes: 4096, responseMaxBytes: 4096, timeoutMs: 1000 } };
-  await writeFile(join(project, '.deckent/config.json'), JSON.stringify({ mode: 'api', layout: { root: data }, storage: { driver: 'sqlite', sqlite },
+  await writeFile(join(project, '.deckent/config.json'), JSON.stringify({ layout: { root: data }, storage: { driver: 'sqlite', sqlite },
     provider_catalog: catalog, provider_invocation_profiles: { schemaVersion: 1, profiles: [profile] },
     cancellation: { maxConcurrentDeliveries: 1, recoveryPageSize: 1, maxAttempts: 1, retryDelayMs: 10, claimTtlMs: 100 },
     cancellationRuntime: { scopeIds: ['scope'], pollIntervalMs: 1000, failureBackoffMs: 1000 },

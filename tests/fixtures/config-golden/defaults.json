@@ -24,6 +24,10 @@
   "company": {
     "id": "default"
   },
+  "configFile": {
+    "backupKeep": 3,
+    "writeLockTimeoutMs": 2000
+  },
   "enforce_principal_assurance": false,
   "execution": null,
   "inspection": {

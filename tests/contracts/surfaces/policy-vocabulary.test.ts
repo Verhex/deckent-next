@@ -9,7 +9,7 @@ const exec = promisify(execFile);
 it('exposes the same versioned action/resource matrix through compiled CLI and SDK without requiring a project', async () => {
   const result = await exec(process.execPath, [resolve('dist/composition/core/cli/internal/entry.js'), 'policy', 'vocabulary', '--json'], { cwd: tmpdir() });
   expect(JSON.parse(result.stdout)).toEqual(getPolicyVocabulary());
-  expect(getPolicyVocabulary().resources.map(r => r.kind)).toEqual(['approval', 'task', 'attempt', 'operation', 'scope', 'pool', 'run', 'service', 'model-activation', 'model-invocation', 'provider-spend-account', 'agent-tool', 'permission-mode', 'agent-tool-call', 'secret', 'work-target']);
+  expect(getPolicyVocabulary().resources.map(r => r.kind)).toEqual(['config', 'approval', 'task', 'attempt', 'operation', 'scope', 'pool', 'run', 'service', 'model-activation', 'model-invocation', 'provider-spend-account', 'agent-tool', 'permission-mode', 'agent-tool-call', 'secret', 'work-target']);
   expect(getPolicyVocabulary().resources.find(r => r.kind === 'attempt')!.actions).toContain('recover-output');
   expect(getPolicyVocabulary().resources.find(r => r.kind === 'service')!.actions).toEqual(['shutdown']);
   expect(getPolicyVocabulary().resources.find(r => r.kind === 'operation')!.actions).toEqual(['execute', 'compensate', 'inspect']);
@@ -23,6 +23,8 @@ it('exposes the same versioned action/resource matrix through compiled CLI and S
   expect(getPolicyVocabulary().resources.find(r => r.kind === 'agent-tool-call')!.actions).toEqual(['invoke']);
   // SECRET-WRITE (owner 2026-09-29 option A): a change of one stored secret; the resource id is the secret's name.
   expect(getPolicyVocabulary().resources.find(r => r.kind === 'secret')!.actions).toEqual(['set', 'delete']);
+  // CONFIG-SURFACE: governed configuration writes are one policy cell (the first-run template grants it to the installing owner).
+  expect(getPolicyVocabulary().resources.find(r => r.kind === 'config')!.actions).toEqual(['write']);
   // WORK-TARGETS (owner 2026-09-30 K2 = A): one configured work target; use at admission/reservation, adopt when its branch moves.
   expect(getPolicyVocabulary().resources.find(r => r.kind === 'work-target')!.actions).toEqual(['use', 'adopt']);
   // K5 typed pool hold (owner 2026-09-30 option A): hold/resume are installation-level, inspect reads the status.

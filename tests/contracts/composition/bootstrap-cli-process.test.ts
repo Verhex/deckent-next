@@ -30,7 +30,7 @@ it('compiled CLI rejects incomplete installation before autoheal and keeps globa
       expect(JSON.parse(failure.stderr)).toMatchObject({ code: 'BOOTSTRAP_INSTALLATION_INCOMPLETE' }); observed = true;
     }
     expect(observed).toBe(true);
-    const global = await run(['config', 'get', 'schema_version', '--global', '--json']); expect(JSON.parse(global.stdout)).toBe(3);
+    const global = await run(['config', 'get', 'schema_version', '--global', '--json']); expect(JSON.parse(global.stdout)).toBe(4);
     expect(await readFile(config, 'utf8')).toBe('{'); expect(await readFile(journal, 'utf8')).toBe(bytes);
     expect((await readdir(dirname(config))).sort()).toEqual(['config.json', 'installation']);
   } finally { await rm(root, { recursive: true, force: true }); }

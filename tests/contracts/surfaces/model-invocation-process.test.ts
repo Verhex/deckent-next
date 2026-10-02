@@ -444,7 +444,7 @@ function fixtureConfig(data: string, catalog: unknown, reference: Record<string,
     protocol: { family: 'openrouter-chat-completions', version: 'v1' }, adapter: { id: 'openrouter-chat-http', version: 1,
       definition: pricedProviderDefinition(provider.url, provider.caPem) }, allocation: { id: 'allocation', maxCalls: 8, maxInFlight: 2 },
     limits: { requestMaxBytes: 4096, responseMaxBytes: 512, timeoutMs: 2_000 } };
-  return { mode: 'api', layout: { root: data },
+  return { layout: { root: data },
     storage: { driver: 'sqlite', sqlite }, provider_catalog: catalog, provider_invocation_profiles: { schemaVersion: 1, profiles: [profile] }, provider_spending: fixtureBudget('scope'),
     provider_spend_audit: { schemaVersion: 1, pageSize: 2, maxReservations: 100, timeoutMs: 2000 },
     cancellation: { maxConcurrentDeliveries: 1, recoveryPageSize: 1, maxAttempts: 1, retryDelayMs: 10, claimTtlMs: 100 },

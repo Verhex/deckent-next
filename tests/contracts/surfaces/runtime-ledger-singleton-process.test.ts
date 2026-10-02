@@ -92,7 +92,7 @@ async function installation() {
       definition: pricedProviderDefinition(`https://127.0.0.1:${address.port}`, tls.caPem) }, allocation: { id: 'allocation', maxCalls: 8, maxInFlight: 1 },
     limits: { requestMaxBytes: 4096, responseMaxBytes: 2048, timeoutMs: 20_000 } };
   const configPath = join(project, '.deckent/config.json');
-  const config = { mode: 'api', layout: { root: data } as { root: string; resources?: Record<string, string> }, storage: { driver: 'sqlite', sqlite },
+  const config = { layout: { root: data } as { root: string; resources?: Record<string, string> }, storage: { driver: 'sqlite', sqlite },
     provider_catalog: catalog, provider_invocation_profiles: { schemaVersion: 1, profiles: [profile] }, provider_spending: fixtureBudget('scope'),
     cancellation: { maxConcurrentDeliveries: 1, recoveryPageSize: 1, maxAttempts: 1, retryDelayMs: 10, claimTtlMs: 100 },
     cancellationRuntime: { scopeIds: ['scope'], pollIntervalMs: 1000, failureBackoffMs: 1000 },

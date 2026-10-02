@@ -123,8 +123,10 @@ describe('K1 blocking review reproductions', () => {
   it('never exposes a resolved secret value in full, subtree or projected human/JSON config output', async () => {
     const f = await fixture('project-override'), secret = 'supersecret-value-42';
     Object.assign(f.env, { API_TOKEN: secret });
-    await writeFile(join(f.project, '.deckent/config.json'), JSON.stringify({ providers: { brain: '$DECK:API_TOKEN', overrides: { sample: '$DECK:API_TOKEN' } } }));
-    for (const key of [undefined, 'providers', 'providers.brain', 'providers.overrides.sample']) {
+    // Config schema 4 retired `providers` (CONFIG-SURFACE); a kernel leaf and the free-form `admission.registry` subtree carry the references now.
+    await writeFile(join(f.project, '.deckent/config.json'), JSON.stringify({ projectName: '$DECK:API_TOKEN', admission: { registry: { brain: '$DECK:API_TOKEN',
+      overrides: { sample: '$DECK:API_TOKEN' } }, poolId: 'pool', executionSlots: 1, inFlightSlots: 1, ordering: 'input-order' } }));
+    for (const key of [undefined, 'projectName', 'admission', 'admission.registry', 'admission.registry.brain', 'admission.registry.overrides.sample']) {
       for (const format of [[], ['--json']]) {
         const result = await f.run(['config', 'get', ...(key ? [key] : []), ...format]);
         expect(result.stdout + result.stderr).not.toContain(secret);
