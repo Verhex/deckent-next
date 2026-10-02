@@ -1091,7 +1091,7 @@
   "error.PATCH_SCOPE_UNDECLARED": "Çalışma hedefi görev kapsamını zorluyor, ancak bu görev kapsam bildirmiyor (iş girdisi yok). Bu adım hiçbir şey yazmadı. Yollarını bildiren bir iş girdisiyle yeni bir Run başlatın.",
   "error.MONITOR_UNAVAILABLE": "İzleyici burada Deckent durumunu okuyamıyor: bu sürümde izleme veri kaynağı bağlı değil.",
   "error.EXECUTION_RESOURCE_CEILING": "Yürütme profili {resource} için {requested} istiyor; kurulum tavanı {ceiling} aşılıyor.",
-  "error.TASK_DECISION_HUMAN_REQUIRED": "Görev kararı doğrulanmış insan OS principal gerektirir; ajan, workload ve yalnız token kimliği karar veremez.",
+  "error.TASK_DECISION_HUMAN_REQUIRED": "Görev kararı doğrulanmış insan OS principal gerektirir; ajan, workload ve token-tabanlı kimlik tek başına karar veremez.",
   "error.RUN_NOT_PARKED": "Bu Run park durumunda değil. Kapat veya sürdür öncesinde güncel revizyonunu ve durumunu inceleyin.",
   "error.RUN_DECISION_NOT_READY": "Bu görev kabul edilebilir bir karar beklemiyor. Eksik yürütme kanıtı kabul edilemez.",
   "error.RUN_DECISION_EXPIRED": "Karar süresi doldu; bu görev süre dolumundan sonra kabul veya ret edilemez.",
