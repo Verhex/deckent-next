@@ -115,8 +115,9 @@ export async function modeRuntime(input: { grants: Record<string, unknown>[]; mo
     const events: AgentTurnStreamEvent[] = [], pending: Promise<unknown>[] = [], turnId = `turn-${++turns}`;
     await client.chatTurn({ schemaVersion: 1, scopeId: 'scope', turnId, messages: [{ role: 'user', content: 'go' }], ...(options.fullAccess ? { fullAccess: true as const } : {}) }, event => {
       events.push(event);
+      // The harness answers as the terminal card of the turn it started: it forwards the turn's one-time capability (B1).
       if (event.kind === 'approval.requested') pending.push(client.decideApproval({ schemaVersion: 1, scopeId: 'scope', approvalId: event.approvalId,
-        commandId: `${decision}-${turnId}`, expectedRevision: event.revision, decision, reason: 'Reviewed' }));
+        commandId: `${decision}-${turnId}`, expectedRevision: event.revision, decision, reason: 'Reviewed', ...(event.decisionCapability ? { decisionCapability: event.decisionCapability } : {}) }));
     });
     await Promise.all(pending);
     const finished = events.find(event => event.kind === 'tool.finished');
@@ -126,5 +127,7 @@ export async function modeRuntime(input: { grants: Record<string, unknown>[]; mo
   const audit = () => rows('SELECT record FROM audit_events ORDER BY sequence').map(row => JSON.parse(String((row as { record: string }).record)) as
     { event: { eventId: string; policyRevision: string; principal: unknown; subject: Record<string, unknown> & { call: Record<string, unknown> } } });
   const counters = () => Object.fromEntries(rows('SELECT counter, count FROM audit_counters').map(row => [(row as { counter: string }).counter, (row as { count: number }).count]));
-  return { project, data, ledger, rows, exec, call, audit, counters, writeAuthority, sent: state.sent };
+  return { project, data, ledger, rows, exec, call, audit, counters, writeAuthority, sent: state.sent, client, env,
+    /** Queues the next turn's one tool call (for a test that drives `client.chatTurn` itself). */
+    script: (name: string, args: Record<string, unknown>) => { state.script.push({ name, arguments: JSON.stringify(args) }); } };
 }

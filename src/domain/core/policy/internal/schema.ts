@@ -50,8 +50,16 @@ const binding = z.object({ id: localId, principals: z.array(principalRef).min(1)
 /** A role binding as `policy.administer` changes carry it (same schema as in bindings.json). */
 export const policyBindingSchema = binding;
 export type PolicyBinding = z.infer<typeof binding>;
+/**
+ * B1 (owner 2026-10-01): a minimum decision assurance for the approvals it matches — subject kind, and optionally the permission cells of a tool
+ * call, the effect classes of an operation or the authority surface. Evaluation takes the maximum with Core's own minimum, so a rule can only
+ * raise it; a level nobody can attest is unsatisfiable (allow refused). The level vocabulary is versioned code (and its registry), not this data.
+ */
+const assuranceRule = z.object({ id: identitySchema, scopes: selection, subject: z.enum(['task', 'agent-tool-call', 'operation']), cells: z.array(localId).min(1).readonly().optional(),
+  effectClasses: z.array(z.enum(['read', 'write', 'irreversible'])).min(1).readonly().optional(), authority: z.literal(true).optional(), minimum: localId }).strict().readonly();
+export type ApprovalAssuranceRule = z.infer<typeof assuranceRule>;
 const v2Shape = { roles: z.array(role).readonly(), grants: z.array(markedGrant).readonly(), restrictions: z.array(restriction).readonly(),
-  separationOfDuties: z.array(duty).readonly() };
+  separationOfDuties: z.array(duty).readonly(), approvalAssurance: z.array(assuranceRule).readonly().optional() };
 /**
  * A person's terminal permission mode (MODES-3, owner 2026-09-29): `standart` (the default — the absence of an entry), `full-auto` and
  * `full-access`. A mode creates no authority: it only lets a mode-eligible company `require-approval` (and, in a launched full-access turn,
@@ -68,9 +76,9 @@ const modeEntry = z.object({ ...entryShape, mode: z.enum(PERMISSION_MODES), askE
 const legacyModeEntry = z.object({ ...entryShape, mode: z.enum(LEGACY_V2_MODES) }).strict().readonly();
 export type PermissionModeEntry = z.infer<typeof modeEntry>;
 type V2Body = { readonly roles: readonly z.infer<typeof role>[]; readonly grants: readonly z.infer<typeof markedGrant>[]; readonly restrictions: readonly PolicyRule[];
-  readonly separationOfDuties: readonly z.infer<typeof duty>[] };
+  readonly separationOfDuties: readonly z.infer<typeof duty>[]; readonly approvalAssurance?: readonly ApprovalAssuranceRule[] | undefined };
 function checkV2(policy: V2Body, context: z.RefinementCtx) {
-  unique(context, [...policy.grants, ...policy.restrictions, ...policy.separationOfDuties].map(rule => rule.id), 'POLICY_DUPLICATE_RULE');
+  unique(context, [...policy.grants, ...policy.restrictions, ...policy.separationOfDuties, ...policy.approvalAssurance ?? []].map(rule => rule.id), 'POLICY_DUPLICATE_RULE');
   unique(context, policy.roles.map(value => value.id), 'POLICY_DUPLICATE_ROLE');
   for (const value of policy.roles) unique(context, value.permissions.map(item => item.id), 'POLICY_DUPLICATE_RULE');
 }

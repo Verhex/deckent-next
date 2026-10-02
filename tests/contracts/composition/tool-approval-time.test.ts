@@ -11,7 +11,7 @@ import * as providerCatalog from '#composition/core/provider-catalog/index.js';
 import { runPeerConfiguredChatTurn, createRuntimeChatTurnHost } from '#composition/core/agent-turn/index.js';
 import { approvalRecordSchema, type AgentTurnStreamEvent } from '#domain/index.js';
 import { LocalOsSessionAuthority, openSqliteApprovalStore } from '#adapters/index.js';
-import { ApprovalApplication, awaitAgentToolApproval, requestAgentToolApproval, requestTaskApproval } from '#engine/index.js';
+import { ApprovalApplication, agentToolApprovalFacts, awaitAgentToolApproval, requestAgentToolApproval, requestTaskApproval, type ApprovalAssuranceOptions } from '#engine/index.js';
 import { createHmacIntegrity, MAX_WALL_SKEW_MS, SystemTrustedClock, type TrustedClock } from '#platform/index.js';
 
 const roots: string[] = [];
@@ -25,16 +25,16 @@ async function fixture() {
   const journal = openSqliteApprovalStore(join(root, 'ledger.db'), { busyTimeoutMs: 2000, journalMode: 'wal', durability: 'full' }, 'allow');
   const record = requestAgentToolApproval(journal.store, integrity, { scopeId: 'scope', requester, policyRevision: 'policy', summary: 'Read file',
     subject: { kind: 'agent-tool-call', turnId: 'turn', round: 1, index: 0, tool: 'read_file', toolVersion: 1,
-      resource: 'src/a.ts', argsDigest: 'a'.repeat(64) }, createdAt: 10000, expiresAt: 20000 });
+      resource: 'src/a.ts', argsDigest: 'a'.repeat(64) }, createdAt: 10000, expiresAt: 20000, facts: agentToolApprovalFacts(null, 'scope', 'read') });
   const command = { schemaVersion: 1, scopeId: 'scope', approvalId: record.request.approvalId,
     commandId: 'decision', expectedRevision: 0, decision: 'allow', reason: 'Reviewed' };
-  const application = async (clock: TrustedClock, onPolicy = () => undefined) => {
+  const application = async (clock: TrustedClock, onPolicy = () => undefined, assurance?: ApprovalAssuranceOptions) => {
     const sessions = await LocalOsSessionAuthority.create(['scope'], 60000, clock);
     const { principal } = await sessions.verifySession(undefined);
     const policy = { schemaVersion: 1, revision: 'policy', restrictions: [], grants: [
       { id: 'approval', effect: 'allow', principals: 'all', scopes: ['scope'], actions: 'all', resource: { kind: 'approval', ids: 'all' } }] };
     return new ApprovalApplication(journal.store, { verify: async () => principal }, sessions,
-      { load: async () => { onPolicy(); return policy; } }, integrity, clock, 'cli', 20);
+      { load: async () => { onPolicy(); return policy; } }, integrity, clock, 'cli', 20, undefined, undefined, assurance);
   };
   return { journal, record, command, application };
 }
@@ -117,7 +117,7 @@ describe('I40-c B: only the producer determines tool approval expiry', () => {
           commandId: 'operation', inputDigest: 'b'.repeat(64), targetBinding: 'c'.repeat(64), expectedVersion: null, compensates: null },
       ];
       for (const subject of subjects) {
-        const request = { ...decided.request, schemaVersion: 2, subject };
+        const request = { ...decided.request, schemaVersion: 3, subject };
         for (const decidedAt of [19999, 20000, 20001]) {
           expect(approvalRecordSchema.safeParse({ ...decided, request, decision: { ...decided.decision, decidedAt } }).success).toBe(decidedAt < 20000);
         }
@@ -195,7 +195,6 @@ it.skipIf(process.platform !== 'linux').each(['preview-expiry', 'policy-expiry',
     let rawWall = 10000, monotonicMs = 100;
     const source = new SystemTrustedClock(() => rawWall), sample = source.sample.bind(source);
     vi.spyOn(SystemTrustedClock.prototype, 'sample').mockImplementation(() => ({ wallMs: sample().wallMs, monotonicMs }));
-    const app = await f.application(new SystemTrustedClock(() => 10000));
     vi.spyOn(engine.AgentToolPolicyAuthorization.prototype, 'decide').mockImplementation(async () => {
       if (mode === 'policy-expiry') monotonicMs = 10100;
       return 'allow';
@@ -217,8 +216,11 @@ it.skipIf(process.platform !== 'linux').each(['preview-expiry', 'policy-expiry',
     // Bound regressions too: raw timestamps or a lost production anchor must fail, never strand a wait.
     watchdog = setTimeout(() => controller.abort(), 5000);
     const host = createRuntimeChatTurnHost({} as Parameters<typeof createRuntimeChatTurnHost>[0], controller.signal);
+    // B1: the producer's card has no planned cell here (the loop is mocked), so it needs turn-bound; assurance is not this test's subject (the
+    // turn principal is a fixture, not the OS session), so a stub producer attests it and the timing contract alone is exercised.
+    const app = await f.application(new SystemTrustedClock(() => 10000), undefined, { producers: [{ level: 'turn-bound', rank: 1, attests: () => true }], peerPid: process.pid });
     await runPeerConfiguredChatTurn('/unused', { schemaVersion: 1, scopeId: 'scope', turnId: 'producer-turn',
-      messages: [{ role: 'user', content: 'Read' }] }, {} as Parameters<typeof runPeerConfiguredChatTurn>[2], {},
+      messages: [{ role: 'user', content: 'Read' }] }, { pid: process.pid } as Parameters<typeof runPeerConfiguredChatTurn>[2], {},
     { maxResultBytes: 4096 } as Parameters<typeof runPeerConfiguredChatTurn>[4], host, {
       signal: controller.signal, drained: async () => undefined, emit: event => {
         events.push(event);
@@ -226,7 +228,7 @@ it.skipIf(process.platform !== 'linux').each(['preview-expiry', 'policy-expiry',
         if (event.kind === 'approval.requested') {
           if (mode === 'preview-expiry') monotonicMs = 10100;
           else {
-            const decision = app.decide({ ...f.command, approvalId: event.approvalId });
+            const decision = app.decide({ ...f.command, approvalId: event.approvalId, decisionCapability: event.decisionCapability });
             void decision.catch(() => undefined); decisions.push(decision);
           }
         }

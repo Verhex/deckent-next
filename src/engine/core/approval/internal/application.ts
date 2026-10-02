@@ -3,17 +3,22 @@ import { randomUUID } from 'node:crypto';
 import { identitySchema, counterSchema, approvalRequestSchema, approvalSubject, ApprovalError, commandEnvelopeSchema, encodeCommandProjection, evaluatePolicy, policySchema,
   separationOfDutiesViolation, type ApprovalRequest, type ApprovalRecord, type AuditEvent, type VerifiedPrincipal } from '#domain/index.js';
 import { sha256, type TrustedClock, type IntegrityAuthority } from '#platform/index.js';
-import { authenticate, authenticateSession, assertSessionActive, type PrincipalVerifier, type SessionVerifier, type SessionAuthority } from '#engine/core/authentication/index.js';
+import { authenticate, authenticateSession, assertSessionActive, DECISION_CAPABILITY_PATTERN, type ApprovalAssuranceProducer, type PrincipalVerifier, type SessionVerifier,
+  type SessionAuthority } from '#engine/core/authentication/index.js';
 import { PolicyAuthorizationError, authorityRefusalAuditEvent, type PolicySource } from '#engine/core/policy/index.js';
 import type { OperationCatalog } from '#engine/core/effect/index.js';
 import type { ApprovalStore, ApprovalSubjectKind } from './store.js';
 import { approvalRequestDigest, expireApproval, verifyApproval, sealApproval } from './integrity.js';
+import { approvalAssuranceRegistry, requiredApprovalAssurance } from './assurance.js';
 
 export const approvalQuerySchema = z.object({ schemaVersion: z.literal(1), scopeId: identitySchema, approvalId: identitySchema }).strict();
 export const approvalListSchema = approvalQuerySchema.omit({ approvalId: true }).extend({ afterId: identitySchema.nullable(), limit: counterSchema.positive() });
+/** v19 (B1): `channel` is the surface the client declares (recorded, never authority); `decisionCapability` is the one-time capability an agent
+ * turn sent on its own stream. There is no assurance field: a client cannot claim one (strict schema → `APPROVAL_INVALID`). */
 export const approvalCommandSchema = approvalQuerySchema.extend({ commandId: identitySchema, expectedRevision: counterSchema,
-  decision: z.enum(['allow', 'deny']), reason: z.string().min(1).max(2048).refine(v => v.trim() === v) }).strict();
-export const approvalRenewalSchema = approvalCommandSchema.omit({ decision: true });
+  decision: z.enum(['allow', 'deny']), reason: z.string().min(1).max(2048).refine(v => v.trim() === v), channel: identitySchema.optional(),
+  decisionCapability: z.string().regex(DECISION_CAPABILITY_PATTERN).optional() }).strict();
+export const approvalRenewalSchema = approvalCommandSchema.omit({ decision: true, channel: true, decisionCapability: true });
 export type ApprovalCommand = z.infer<typeof approvalCommandSchema>;
 export function authorizeApproval(policy: unknown, action: 'inspect' | 'decide' | 'renew', scopeId: string, id: string, principal: VerifiedPrincipal) {
   const decision = evaluatePolicy(policy, { principal, scopeId, action, resource: { kind: 'approval', id } }).decision;
@@ -35,12 +40,19 @@ function commandFingerprint(tag: string, command: z.infer<typeof approvalRenewal
  * the refusal into something else).
  */
 export interface ApprovalDecisionRestriction { readonly catalog: OperationCatalog; readonly surface?: 'authority'; readonly refused?: (event: AuditEvent) => void | Promise<void> }
+/**
+ * B1 evidence of this decision path: the assurance producers the service holds (its turn capability ring; Enterprise's own), the registered
+ * channel ids a client may declare (absent: any id), and the socket peer's process (null: an in-process SDK call, never turn-bound).
+ */
+export interface ApprovalAssuranceOptions { readonly producers?: readonly ApprovalAssuranceProducer[]; readonly channels?: ReadonlySet<string>; readonly peerPid?: number | null }
 export class ApprovalApplication {
   constructor(private readonly store: ApprovalStore, private readonly verifier: PrincipalVerifier,
     private readonly sessions: SessionVerifier & SessionAuthority, private readonly policy: PolicySource,
     private readonly integrity: IntegrityAuthority, private readonly clock: TrustedClock,
     private readonly channel: string, private readonly pageLimit: number, private readonly beforeCommit: (record: ApprovalRecord) => void = () => undefined,
-    private readonly restriction?: ApprovalDecisionRestriction) { identitySchema.parse(channel); counterSchema.positive().parse(pageLimit); }
+    private readonly restriction?: ApprovalDecisionRestriction, private readonly assurance: ApprovalAssuranceOptions = {}) {
+    identitySchema.parse(channel); counterSchema.positive().parse(pageLimit);
+  }
   private async authorize(action: 'inspect' | 'decide' | 'renew', scopeId: string, id: string, principal: VerifiedPrincipal) {
     const policy = policySchema.parse(await this.policy.load());
     authorizeApproval(policy, action, scopeId, id, principal);
@@ -103,7 +115,8 @@ export class ApprovalApplication {
   }
   async decide(input: unknown, credential?: unknown) {
     const parsed = approvalCommandSchema.safeParse(input); if (!parsed.success) throw new ApprovalError('APPROVAL_INVALID');
-    const command = parsed.data;
+    const command = parsed.data, { channels } = this.assurance;
+    if (command.channel !== undefined && channels && !channels.has(command.channel)) throw new ApprovalError('APPROVAL_INVALID');
     const principal = await authenticate(this.verifier, credential, command.scopeId);
     await this.authorize('decide', command.scopeId, command.approvalId, principal);
     const loaded = this.store.load(command.scopeId, command.approvalId); if (!loaded) throw new ApprovalError('APPROVAL_MISSING');
@@ -132,14 +145,22 @@ export class ApprovalApplication {
     const now = this.clock.sample().wallMs;
     record = this.expired(record, now);
     if (record.status === 'expired') throw new ApprovalError('APPROVAL_EXPIRED');
-    const decision = { commandId: command.commandId, decision: command.decision, actor, sessionId: verified.session.sessionId,
+    // B1: the service derives the assurance from evidence it holds; an allow below the minimum (Core's, raised by policy) is refused and the
+    // request stays pending. A deny needs no minimum (withdrawing grants nothing). A single-use capability is spent only after the commit.
+    const registry = approvalAssuranceRegistry(this.assurance.producers);
+    const attested = registry.derive({ scopeId: command.scopeId, approvalId: command.approvalId, decider: verified.session.principalRef, peerPid: this.assurance.peerPid ?? null,
+      capability: command.decisionCapability ?? null, nowMs: now });
+    if (command.decision === 'allow' && attested.rank < registry.rank(requiredApprovalAssurance(policy, record.request, registry))) throw new ApprovalError('APPROVAL_ASSURANCE_INSUFFICIENT');
+    const decision = { schemaVersion: 2 as const, commandId: command.commandId, decision: command.decision, actor, sessionId: verified.session.sessionId,
       // Another process may have created the request at a later wall time than this host's (stepped-back) clock reports;
       // the decision certainly happened after creation, so it is never recorded earlier than it.
-      channel: this.channel, reason: command.reason, decidedAt: Math.max(now, record.request.createdAt), requestDigest: approvalRequestDigest(record.request),
-      commandDigest: fingerprint, idempotencyKeyHash: sha256(command.commandId) };
+      channel: command.channel ?? this.channel, reason: command.reason, decidedAt: Math.max(now, record.request.createdAt), requestDigest: approvalRequestDigest(record.request),
+      commandDigest: fingerprint, idempotencyKeyHash: sha256(command.commandId), assurance: attested.level };
     const next = sealApproval({ request: record.request, revision: 1, status: 'decided', decision }, this.integrity);
     this.beforeCommit(next);
-    return this.store.transition(record, next, { scopeId: command.scopeId, commandId: command.commandId, fingerprint, record: next });
+    const committed = this.store.transition(record, next, { scopeId: command.scopeId, commandId: command.commandId, fingerprint, record: next });
+    attested.settle();
+    return committed;
   }
 }
 /** Producer-only trusted port. No surface accepts caller-authored action bindings or request timestamps. */

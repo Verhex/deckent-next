@@ -18,7 +18,7 @@ export interface WorklineLedgerPorts {
   /** One page of the scope's approval records through the runtime approval application. */
   readonly listApprovalPage?: ListApprovalPage;
   /** Records one explicit operator decision through the runtime (same live-session path as `approvals decide`). */
-  readonly decideApproval?: (approval: Pick<WorklineApproval, 'approvalId' | 'revision'>, decision: 'allow' | 'deny', standing?: StandingScope) => Promise<WorklineApproval>;
+  readonly decideApproval?: (approval: Pick<WorklineApproval, 'approvalId' | 'revision' | 'decisionCapability'>, decision: 'allow' | 'deny', standing?: StandingScope) => Promise<WorklineApproval>;
   /** Governed run cancellation (`run cancel`) against the inspected revision; returns the rendered typed outcome. */
   readonly cancelRun?: (runId: string, expectedRevision: number) => Promise<string>;
 }

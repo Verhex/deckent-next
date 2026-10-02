@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { AUDIT_EVENT_SCHEMA_VERSION, modelTextPrefix } from '#domain/index.js';
-import { AuditApplication, awaitAgentToolApproval, boundApprovalPreview, requestAgentToolApproval, type AgentToolApprovalOutcome } from '#engine/index.js';
+import { AuditApplication, awaitAgentToolApproval, boundApprovalPreview, requestAgentToolApproval, type AgentToolApprovalFacts, type AgentToolApprovalOutcome } from '#engine/index.js';
 import { ErrorRegistry, prepareProductFile, type ProductLayout, type TrustedClock } from '#platform/index.js';
 import { openSqliteAuditStore } from '#adapters/core/audit-store/index.js';
 import { openLocalIntegrityAuthority } from '#adapters/core/local-keyring/index.js';
@@ -151,8 +151,11 @@ export const MCP_TRUST_CARD_TOOL = 'mcp_trust';
 export function mcpTrustApprovalAsker(input: { readonly ledgerPath: () => Promise<string>; readonly sqlite: Parameters<typeof openSqliteApprovalStore>[1];
   readonly integrity: () => ReturnType<typeof openLocalIntegrityAuthority>; readonly clock: TrustedClock; readonly scopeId: string; readonly turnId: string;
   readonly requester: { readonly id: string; readonly issuer: string; readonly subject: string }; readonly policyRevision: string; readonly ttlMs: number;
+  /** B1 (Sol 2237 R2b): the card facts from the same request-time policy snapshot as `policyRevision`; sealed in the record, the event repeats them. */
+  readonly facts: AgentToolApprovalFacts;
   readonly signal: AbortSignal; readonly emit: (event: { readonly kind: 'approval.requested'; readonly callId: string; readonly approvalId: string; readonly revision: number;
-    readonly summary: string; readonly preview: string; readonly expiresAt: number } | { readonly kind: 'approval.settled'; readonly callId: string; readonly approvalId: string;
+    readonly summary: string; readonly preview: string; readonly expiresAt: number; readonly risk?: string | null; readonly requiredAssurance?: string }
+    | { readonly kind: 'approval.settled'; readonly callId: string; readonly approvalId: string;
     readonly outcome: AgentToolApprovalOutcome | 'unsettled' }) => void }): McpTrustAsk {
   let asked = 0;
   return async (card: McpTrustCard): Promise<boolean | null> => {
@@ -163,10 +166,13 @@ export function mcpTrustApprovalAsker(input: { readonly ledgerPath: () => Promis
       const integrity = await input.integrity(), started = input.clock.sample();
       const record = requestAgentToolApproval(journal.store, integrity, { scopeId: input.scopeId, requester: input.requester, policyRevision: input.policyRevision,
         subject: { kind: 'agent-tool-call', turnId: input.turnId, round: 1, index: 1_000_000 + asked++, tool: MCP_TRUST_CARD_TOOL, toolVersion: 1, resource: `mcp:${card.name}`, argsDigest },
-        summary: `${MCP_TRUST_CARD_TOOL} · mcp:${card.name} · ${card.phase}`, createdAt: started.wallMs, expiresAt: started.wallMs + input.ttlMs });
+        summary: `${MCP_TRUST_CARD_TOOL} · mcp:${card.name} · ${card.phase}`, createdAt: started.wallMs, expiresAt: started.wallMs + input.ttlMs, facts: input.facts });
       requested = record.request.approvalId;
+      // The event's facts come from the sealed record itself (an existing record keeps its own), so the card and the record never disagree.
+      const sealed = record.request.schemaVersion === 3 ? record.request.facts : null;
       input.emit({ kind: 'approval.requested', callId, approvalId: requested, revision: record.revision, summary: record.request.summary,
-        preview: boundApprovalPreview(text), expiresAt: record.request.expiresAt });
+        preview: boundApprovalPreview(text), expiresAt: record.request.expiresAt, ...(sealed ? { risk: sealed.risk?.source === 'cell' ? sealed.risk.cell : null,
+          requiredAssurance: sealed.requiredAssurance } : {}) });
       outcome = await awaitAgentToolApproval(journal.store, integrity, record, input.clock, input.signal, 250, started);
       return outcome === 'allow' ? true : outcome === 'deny' ? false : null;
     } finally {

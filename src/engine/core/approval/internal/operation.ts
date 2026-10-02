@@ -6,6 +6,7 @@ import type { PolicySource } from '#engine/core/policy/index.js';
 import type { EffectAdmission, EffectApprovalContext, EffectApprovalGate } from '#engine/core/effect/index.js';
 import type { ApprovalStore, ApprovalSubjectKind } from './store.js';
 import { approvalRequestDigest, expireApproval, sealApproval, verifyApproval } from './integrity.js';
+import { operationApprovalFacts } from './assurance.js';
 
 type OperationSubject = Extract<ApprovalSubject, { kind: 'operation' }>;
 /** The action an operation approval authorizes (C12 G1): this scope, this requester and exactly this command — operation id@version, target
@@ -49,7 +50,7 @@ export class OperationApprovalBroker implements EffectApprovalGate {
     const actionDigest = operationApprovalActionDigest(command.scopeId, subject, requester);
     const now = this.clock.sample().wallMs;
     const found = this.store.findOperation(command.scopeId, actionDigest);
-    if (!found) return { pending: this.pending(await this.open(command, command.scopeId, subject, requester, actionDigest, now)) };
+    if (!found) return { pending: this.pending(await this.open(descriptor, command, subject, requester, actionDigest, now)) };
     let current = verifyApproval(found, this.integrity);
     if (current.status === 'pending' && now >= current.request.expiresAt) current = expireApproval(this.store, this.integrity, current);
     if (current.status === 'pending') return { pending: this.pending(current) };
@@ -75,15 +76,17 @@ export class OperationApprovalBroker implements EffectApprovalGate {
     return reference;
   }
 
-  private async open(command: EffectCommand, scopeId: string, subject: OperationSubject, requester: ApprovalActor, actionDigest: string, now: number): Promise<ApprovalRecord> {
-    let revision: string;
-    try { revision = policySchema.parse(await this.policy.load()).revision; } catch { throw new ApprovalError('APPROVAL_INVALID'); }
-    const fallback = `${subject.operation.id}@${subject.operation.version} · ${subject.target.kind}/${subject.target.id} · ${subject.inputDigest.slice(0, 12)}`.slice(0, 2048);
+  private async open(descriptor: OperationDescriptor, command: EffectCommand, subject: OperationSubject, requester: ApprovalActor, actionDigest: string, now: number): Promise<ApprovalRecord> {
+    let policy: ReturnType<typeof policySchema.parse>;
+    try { policy = policySchema.parse(await this.policy.load()); } catch { throw new ApprovalError('APPROVAL_INVALID'); }
+    const scopeId = command.scopeId;
+    const binding = `${subject.operation.id}@${subject.operation.version} · ${subject.target.kind}/${subject.target.id} · ${subject.inputDigest.slice(0, 12)}`.slice(0, 2048);
     let described: string | null = null;
-    try { described = await this.options.describe?.(command, 2048 - fallback.length - 1) ?? null; } catch { /* the card falls back to the digest line */ }
-    const summary = described !== null && described.length > 0 ? `${described}\n${fallback}`.slice(0, 2048) : fallback;
-    const request = approvalRequestSchema.parse({ schemaVersion: 2, approvalId: randomUUID(), scopeId, subject, requester, actionDigest,
-      policyRevision: revision, summary, createdAt: now, expiresAt: now + this.options.requestTtlMs });
+    try { described = await this.options.describe?.(command, 2048 - binding.length - 1) ?? null; } catch { /* the card shows the binding line only */ }
+    // APPROVAL-SURFACE §B: the binding line (operation · target · digest) comes first, so no description can push it off a card.
+    const summary = described !== null && described.length > 0 ? `${binding}\n${described}`.slice(0, 2048) : binding;
+    const request = approvalRequestSchema.parse({ schemaVersion: 3, approvalId: randomUUID(), scopeId, subject, requester, actionDigest,
+      policyRevision: policy.revision, summary, createdAt: now, expiresAt: now + this.options.requestTtlMs, facts: operationApprovalFacts(policy, scopeId, descriptor) });
     // `create` is idempotent on the digest: a concurrent open of the same command returns the one stored request.
     return verifyApproval(this.store.create(sealApproval({ request, revision: 0, status: 'pending', decision: null }, this.integrity)), this.integrity);
   }

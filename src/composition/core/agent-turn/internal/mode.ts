@@ -18,8 +18,7 @@ type Context = Awaited<ReturnType<typeof loadPeerInvocationContext>>;
 const sha256 = (text: string) => createHash('sha256').update(text).digest('hex');
 const SHELL_CELLS: Readonly<Record<ShellPermissionTier, AgentToolCallCell>> = { 'read-none': 'shell-read-none', 'read-low': 'shell-read-low',
   'narrow-mutating': 'shell-narrow-mutating', destructive: 'shell-destructive', 'always-ask': 'shell-always-ask', 'other-modify': 'shell-other-modify' };
-/** Summary counters of decisions that were silent without any mode (owner q5): counted, not recorded. */
-export const SILENT_DECISION_COUNTERS = Object.freeze({ edit: 'agent-tool.silent.edit', shell: 'agent-tool.silent.shell' });
+export const SILENT_DECISION_COUNTERS = Object.freeze({ edit: 'agent-tool.silent.edit', shell: 'agent-tool.silent.shell' }); // Silent without any mode (owner q5): counted, not recorded.
 /** Audit event identity of a mode relaxation (or, tag `full-access-call`, a full-access call): one per call position of a turn (the effect
  * gate may be asked several times). */
 export const permissionModeEventId = (scopeId: string, turnId: string, execution: Execution, argsDigest: string, tag = 'permission-mode') =>
@@ -150,6 +149,7 @@ export function createAgentCallDecisions(input: { readonly context: Context; rea
       stored.set(key, { cell, shell: shellInput, decision });
       return decision.decision;
     },
+    /** B1 card facts: the permission cell this call was planned as (null: not planned, e.g. a plan error). */ cell(tool: AgentToolSpec, args: Record<string, unknown>): AgentToolCallCell | null { const kept = stored.get(keyOf(tool, args)); return kept && 'cell' in kept ? kept.cell : null; },
     /** The loop's prepare: the plan's error, or the kept decision (a call without a kept decision asks). */
     prepare(tool: AgentToolSpec, args: Record<string, unknown>): { readonly ok: true; readonly requireApproval: boolean } | { readonly ok: false; readonly text: string } {
       const kept = stored.get(keyOf(tool, args));

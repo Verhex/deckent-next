@@ -635,6 +635,7 @@
   "mcp.tool.listApprovals": "List scoped approval requests.",
   "mcp.tool.inspectApproval": "Inspect one approval and its evidence.",
   "mcp.tool.decideApproval": "Decide an approval from a verified live session.",
+  "mcp.tool.denyApproval": "Deny an approval from a verified live session. MCP never allows: an allow is refused (APPROVAL_ATTENDED_REQUIRED); allow it on the Deckent terminal card.",
   "mcp.tool.renewApproval": "Explicitly renew a closed approval request.",
   "mcp.tool.executeOperation": "Execute a catalog operation on its declared target through the runtime service. A required approval returns approval-pending and sends nothing; resubmit the same command after the decision.",
   "mcp.tool.compensateOperation": "Compensate a settled catalog operation with its catalog compensation as a new operation (same approval rules).",

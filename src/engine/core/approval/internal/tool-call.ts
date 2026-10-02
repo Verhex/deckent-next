@@ -1,11 +1,12 @@
 import { randomUUID } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
-import { approvalRequestSchema, approvalSubject, encodeCommandProjection, ApprovalError, EffectError, type ApprovalActor, type ApprovalRecord, type ApprovalSubject,
+import { approvalRequestSchema, approvalSubject, encodeCommandProjection, ApprovalError, EffectError, type ApprovalActor, type ApprovalFacts, type ApprovalRecord, type ApprovalSubject,
   type EffectCommand, type EffectIntentApproval, type VerifiedPrincipal } from '#domain/index.js';
 import { MAX_WALL_SKEW_MS, sha256, type ClockSample, type TrustedClock, type IntegrityAuthority } from '#platform/index.js';
 import type { EffectApprovalGate } from '#engine/core/effect/index.js';
 import type { ApprovalStore } from './store.js';
 import { approvalRequestDigest, expireApproval, sealApproval, verifyApproval } from './integrity.js';
+import { undeclaredAgentToolApprovalFacts } from './assurance.js';
 
 type ToolCallSubject = Extract<ApprovalSubject, { kind: 'agent-tool-call' }>;
 /** The action an agent tool-call approval authorizes: exactly this call of this turn, tool version, resource and arguments (C12). */
@@ -15,16 +16,18 @@ export const agentToolCallActionDigest = (scopeId: string, subject: ToolCallSubj
 /**
  * Opens (or returns the existing) pending approval of one agent tool call. Producer-only: the subject, digest and times come from the
  * engine's own turn state, never from a caller. Idempotent on the action digest, so a retried open never creates a second request.
+ * Request v3 (B1): `facts` from the turn's permission cell; a producer that cannot name the cell (an MCP trust card) declares no risk,
+ * and such a card needs the turn's own capability (unknown risk fails closed).
  */
 export function requestAgentToolApproval(store: ApprovalStore, integrity: IntegrityAuthority, input: { readonly scopeId: string;
   readonly subject: ToolCallSubject; readonly requester: ApprovalActor; readonly policyRevision: string; readonly summary: string;
-  readonly createdAt: number; readonly expiresAt: number }): ApprovalRecord {
+  readonly createdAt: number; readonly expiresAt: number; readonly facts?: ApprovalFacts }): ApprovalRecord {
   const actionDigest = agentToolCallActionDigest(input.scopeId, input.subject);
   const existing = store.findToolCall(input.scopeId, actionDigest);
   if (existing) return verifyApproval(existing, integrity);
-  const request = approvalRequestSchema.parse({ schemaVersion: 2, approvalId: randomUUID(), scopeId: input.scopeId, subject: input.subject,
+  const request = approvalRequestSchema.parse({ schemaVersion: 3, approvalId: randomUUID(), scopeId: input.scopeId, subject: input.subject,
     requester: input.requester, actionDigest, policyRevision: input.policyRevision, summary: input.summary.slice(0, 2048),
-    createdAt: input.createdAt, expiresAt: input.expiresAt });
+    createdAt: input.createdAt, expiresAt: input.expiresAt, facts: input.facts ?? undeclaredAgentToolApprovalFacts(input.scopeId) });
   return verifyApproval(store.create(sealApproval({ request, revision: 0, status: 'pending', decision: null }, integrity)), integrity);
 }
 

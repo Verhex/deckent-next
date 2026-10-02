@@ -1,4 +1,5 @@
-import { spawn, type ChildProcess } from 'node:child_process';
+import { execFile, spawn, type ChildProcess } from 'node:child_process';
+import { promisify } from 'node:util';
 import { Client } from '@modelcontextprotocol/client';
 import { StdioClientTransport } from '@modelcontextprotocol/client/stdio';
 import { DatabaseSync } from 'node:sqlite';
@@ -17,6 +18,7 @@ import { conditionalRecordServer } from '../support/conditional-record-server.js
 type Child = ChildProcess & { stdout: NonNullable<ChildProcess['stdout']>; stderr: NonNullable<ChildProcess['stderr']> };
 const children = new Set<Child>(), cleanup: (() => Promise<void>)[] = [];
 const cli = resolve('dist/composition/core/cli/internal/entry.js');
+const execFileAsync = promisify(execFile);
 const mcp = resolve('dist/composition/core/mcp/internal/entry.js');
 afterEach(async () => {
   for (const child of children) if (child.exitCode === null) child.kill('SIGKILL');
@@ -90,8 +92,13 @@ it.skipIf(process.platform !== 'linux')('compiled MCP execute_operation: pending
     const listed = await call('list_approvals', { schemaVersion: 1, scopeId: 's', afterId: null, limit: 10 });
     expect(listed).toEqual([expect.objectContaining({ status: 'pending', request: expect.objectContaining({ approvalId: pending.approval!.approvalId,
       subject: expect.objectContaining({ kind: 'operation', commandId: 'mcp-gated' }) }) })]);
-    expect(await call('decide_approval', { schemaVersion: 1, scopeId: 's', approvalId: pending.approval!.approvalId, commandId: 'mcp-allow',
-      expectedRevision: 0, decision: 'allow', reason: 'Reviewed over MCP' })).toMatchObject({ status: 'decided', decision: { decision: 'allow' } });
+    // B1 (owner 2026-10-01): MCP never allows; the request stays pending. The owner allows it from the CLI (peer-session; an operation
+    // approval needs no turn capability) over the same live runtime service.
+    const decision = { schemaVersion: 1, scopeId: 's', approvalId: pending.approval!.approvalId, commandId: 'cli-allow', expectedRevision: 0, decision: 'allow', reason: 'Reviewed' };
+    await expect(call('decide_approval', { ...decision, commandId: 'mcp-allow' })).rejects.toThrow(/APPROVAL_ATTENDED_REQUIRED/u);
+    const commandPath = join(root, 'decision.json'); await writeFile(commandPath, JSON.stringify(decision));
+    const decided = JSON.parse((await bounded(execFileAsync(process.execPath, [cli, 'approval', 'decide', '--input', commandPath, '--json'], { cwd: project, env }), 'CLI_DECIDE_TIMEOUT')).stdout);
+    expect(decided).toMatchObject({ status: 'decided', decision: { decision: 'allow', channel: 'local-cli', assurance: 'peer-session' } });
     const settled = await call('execute_operation', command);
     expect(settled).toMatchObject({ schemaVersion: 1, status: 'settled', commandId: 'mcp-gated', sequence: 1, version: '"v2"' });
     expect(await call('execute_operation', command)).toEqual(settled);
