@@ -26,7 +26,7 @@
   "config.surface.object": "{count} alan",
   "config.surface.schemaMinimum": "en az {value}",
   "config.surface.schemaMaximum": "en çok {value}",
-  "error.CONFIG_SECRET_SECTION_REFUSED": "Sırlar deckent secret ile değiştirilir. secrets bölümüne config yazımı reddedildi.",
+  "error.CONFIG_SECRET_SECTION_REFUSED": "Sırlar şu komutla değiştirilir: deckent secret. secrets bölümüne config yazımı reddedildi.",
   "error.CONFIG_LAYER_INVALID": "Yapılandırma yazım katmanı olarak project veya global seçin.",
   "error.CONFIG_DIGEST_INVALID": "Beklenen belge özeti 64 karakterlik onaltılık SHA-256 özeti olmalıdır.",
   "error.CONFIG_ARRAY_INDEX_INVALID": "Yapılandırma dizi indeksi standart biçimde, aralık içinde ve dizinin kendi elemanı olmalıdır.",
