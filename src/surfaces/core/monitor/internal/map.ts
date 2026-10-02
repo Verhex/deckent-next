@@ -30,7 +30,7 @@ export function mapBlocks(installs: readonly MonitorInstall[], locale: Locale, m
         .map(profile => line(`  ${t('monitor.map.unusedProfile', { profile: `${profile.id}@${profile.version}`, adapter: profile.adapter }, locale)}`, 'muted')),
       line(t('monitor.map.models', { count: map.models.length, active: map.models.filter(model => model.active).length }, locale), 'accent'),
       ...map.models.map(model => ({ kind: 'line' as const, line: [span(`  ${model.active ? marks.active : marks.off} `, model.active ? 'success' : 'muted'),
-        span(`${model.channelId} / ${model.modelId}`), span(model.active ? '' : ` (${t('monitor.map.inactive', {}, locale)})`, 'muted')] satisfies MonitorLine })),
+        span(`${model.channelId} / ${model.modelId}${model.vendorId || model.billing ? ` · ${model.vendorId ?? '—'} · ${model.billing ?? '—'}` : ''}`), span(model.active ? '' : ` (${t('monitor.map.inactive', {}, locale)})`, 'muted')] satisfies MonitorLine })),
       ...(map.models.length ? [] : [line(`  ${none}`, 'muted')]),
       line(policy ? t('monitor.map.policy', { grants: policy.grants, kinds: Object.entries(policy.byResourceKind).map(([kind, count]) => `${kind} ${count}`).join(', ') || none,
         sod: policy.separationOfDuties }, locale) : t('monitor.map.policyNone', {}, locale), 'accent'),

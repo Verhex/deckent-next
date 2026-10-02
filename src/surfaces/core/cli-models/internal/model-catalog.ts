@@ -50,7 +50,10 @@ function renderList(value: ModelCatalogInspection, locale: Locale): string {
       catalog: channel.catalogRevision, state: activation(channel.activation, locale) }, locale));
     for (const entry of channel.models) {
       const { lifecycle } = entry.model;
+      const metadata = 'vendorId' in entry.model ? entry.model : null;
       lines.push(t('models.catalog.model', { model: entry.modelId, lifecycle: lifecycle.state, retire: lifecycle.retiredOn ?? lifecycle.retireNotBefore ?? '—',
+        vendor: metadata?.vendorId ?? '—', canonical: metadata?.canonicalModelId ?? '—',
+        billing: 'billing' in channel.channel ? channel.channel.billing : '—', context: metadata?.contextWindow ?? '—',
         cli: entry.model.minCliVersion ?? '—', efforts: entry.model.efforts.join(',') || '—', aliases: entry.model.aliases.join(',') || '—',
         state: activation(entry.activation, locale) }, locale));
     }
