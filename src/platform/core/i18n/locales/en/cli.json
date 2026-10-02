@@ -997,7 +997,7 @@
   "terminal.slash.monitor": "Monitor snapshot: stuck Runs, workers, approvals, pools, installs",
   "cli.help.decide": "deckent decide prepare|ask|record|outcome|inspect --input <file|-> [--json] [--lang en|tr] [--no-color]\nprepare validates and digests a versioned case; ask requests recorded advice using the configured invocation profile; record stores the actor selection and rationale; outcome records a later observation; inspect reads a decision. Both abstentions and policy thresholds remain visible. Selection grants no authority; the next operation requires its normal policy and approval checks.",
   "decision.result": "Decision {id}: {status}.",
-  "decision.choice": "Choice: {choice}; confidence {confidence}; choice threshold {threshold}.",
+  "decision.choice": "Choice: {choice} · choice probability {probability} (threshold {threshold}) · confidence {confidence}",
   "decision.probability": "{option}: {probability}",
   "decision.sufficiency": "Sufficiency: {score}; threshold {threshold}.",
   "decision.noAdvice": "No advice is available for this state.",

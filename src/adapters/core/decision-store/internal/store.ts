@@ -14,7 +14,12 @@ class SqliteDecisionStore implements DecisionStore {
  private decode(input:unknown):unknown {try{const sealed=JSON.parse(String(input)) as {value:unknown;mac:string;keyId:string};
   if(!this.integrity.verify(encodeCommandProjection('decision-store:1',sealed.value),sealed.mac,sealed.keyId))throw Error();return sealed.value;
  }catch{throw new DecisionApplicationError('DECISION_CORRUPT');}}
- private transaction<T>(work:()=>T):T {this.db.exec('BEGIN IMMEDIATE');try{const result=work();this.db.exec('COMMIT');return result;}catch(error){try{this.db.exec('ROLLBACK');}catch{/* uncertain commit remains unknown */}throw error;}}
+ private transaction<T>(work:()=>T):T {
+  this.db.exec('BEGIN IMMEDIATE');try{const result=work();
+   try{this.db.exec('COMMIT');}catch{throw new DecisionApplicationError('DECISION_OUTCOME_UNKNOWN');}
+   return result;
+  }catch(error){try{this.db.exec('ROLLBACK');}catch{/* A lost commit result is resolved by the same command receipt on retry. */}throw error;}
+ }
  private read(scopeId:string,decisionId:string){const row=this.db.prepare('SELECT snapshot FROM decision_cases WHERE scope_id=? AND decision_id=?').get(scopeId,decisionId);
   if(!row)return null;const value=validateDecisionSnapshot(this.decode(row.snapshot));if(value.scopeId!==scopeId||value.decisionId!==decisionId)throw new DecisionApplicationError('DECISION_CORRUPT');return value;}
  async load(scopeId:string,decisionId:string){return this.read(scopeId,decisionId);}

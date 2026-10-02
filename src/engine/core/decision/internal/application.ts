@@ -15,9 +15,10 @@ function publicResult(value:DecisionSnapshot,replayed:boolean):DecisionAskResult
 export class DecisionApplication {
  constructor(private readonly deps:DecisionDependencies){}
  private async policy(){const value=await this.deps.policy();if(!value)throw new DecisionApplicationError('DECISION_UNAVAILABLE');return value;}
- private async admission(action:DecisionAction,scopeId:string,id:string,credential?:unknown){
+ // Decision policy ids denote scopes for every action, including preparation before an intent exists.
+ private async admission(action:DecisionAction,scopeId:string,credential?:unknown){
   const principal=await authenticate(this.deps.verifier,credential,scopeId);
-  const authorization=await this.deps.authorize(action,scopeId,id,principal);return {principal,authorization};
+  const authorization=await this.deps.authorize(action,scopeId,scopeId,principal);return {principal,authorization};
  }
  private event(value:DecisionSnapshot,principal:VerifiedPrincipal,revision:string,action:'ask'|'record'|'outcome',phase:'admitted'|'observed'):AuditEvent {
   return {schemaVersion:1,eventId:this.deps.eventId(),scopeId:value.scopeId,principal:{issuer:principal.issuer,subject:principal.subject},
@@ -25,12 +26,12 @@ export class DecisionApplication {
     adviceDigest:value.adviceDigest,selectedOption:value.record?.actor.selectedOption??null}};
  }
  async prepare(input:unknown,credential?:unknown):Promise<DecisionPrepareResult>{
-  const command=decisionPrepareInputSchema.parse(input);await this.admission('prepare',command.case.scope,command.case.scope,credential);
+  const command=decisionPrepareInputSchema.parse(input);await this.admission('prepare',command.case.scope,credential);
   const policy=await this.policy(),prepared=prepareDecisionCase(command.case,policy,this.deps.now());
   return Object.freeze({schemaVersion:1,case:prepared.case,caseDigest:sha256(prepared.canonicalCase),thresholds:policy.thresholds});
  }
  async ask(input:unknown,credential?:unknown,signal?:AbortSignal):Promise<DecisionAskResult>{
-  const command=decisionAskCommandSchema.parse(input),{principal,authorization}=await this.admission('ask',command.scopeId,command.commandId,credential);
+  const command=decisionAskCommandSchema.parse(input),{principal,authorization}=await this.admission('ask',command.scopeId,credential);
   if(command.case.scope!==command.scopeId)throw new DecisionApplicationError('DECISION_INVALID');
   const policy=await this.policy(),at=this.deps.now(),prepared=prepareDecisionCase(command.case,policy,at);
   const snapshot:DecisionSnapshot={schemaVersion:1,scopeId:command.scopeId,decisionId:command.commandId,command,requestDigest:sha256(encodeCommandProjection('decision-ask:1',command)),
@@ -67,18 +68,18 @@ export class DecisionApplication {
   }finally{store.close();}
  }
  async inspect(input:unknown,credential?:unknown):Promise<DecisionInspection>{
-  const query=decisionQuerySchema.parse(input);await this.admission('inspect',query.scopeId,query.decisionId,credential);
+  const query=decisionQuerySchema.parse(input);await this.admission('inspect',query.scopeId,credential);
   const store=await this.deps.openStore('read');try{const row=await store.load(query.scopeId,query.decisionId);
    if(!row)return {schemaVersion:1,status:'not-found',decisionId:query.decisionId};
    const value=validateDecisionSnapshot(row);if(value.scopeId!==query.scopeId||value.decisionId!==query.decisionId)throw new DecisionApplicationError('DECISION_CORRUPT');
-   return {...publicResult(value,true),case:value.command.case};
+   return {...publicResult(value,false),case:value.command.case};
   }finally{store.close();}
  }
  async decide(input:unknown,credential?:unknown):Promise<DecisionRecordResult>{return this.mutate('record',input,credential);}
  async outcome(input:unknown,credential?:unknown):Promise<DecisionRecordResult>{return this.mutate('outcome',input,credential);}
  private async mutate(action:'record'|'outcome',input:unknown,credential?:unknown):Promise<DecisionRecordResult>{
   const command=action==='record'?decisionRecordCommandSchema.parse(input):decisionOutcomeCommandSchema.parse(input);
-  const {principal,authorization}=await this.admission(action,command.scopeId,command.decisionId,credential);
+  const {principal,authorization}=await this.admission(action,command.scopeId,credential);
   const fingerprint=sha256(encodeCommandProjection(`decision-${action}:1`,{command,principal}));
   const store=await this.deps.openStore('write');
   try {

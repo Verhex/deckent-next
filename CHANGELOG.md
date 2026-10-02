@@ -1,6 +1,6 @@
 # Changelog
 
-- ADDED (AOF-DECISION-PORT, lane): vendor-neutral decision preparation, advice/actor/outcome records, config thresholds, existing invocation receipt custody, sealed ledger v45 with service-owned backup, SDK/CLI and read-only MCP inspect. No automatic selected action or authority; initial adapter accepts declared zero tariffs only. Independent review/integration pending.
+- ADDED (AOF-DECISION-PORT, lane): vendor-neutral decision preparation, advice/actor/outcome records, config thresholds, existing invocation receipt custody, sealed ledger v45 with service-owned backup, SDK/CLI and read-only MCP inspect. No automatic selected action or authority; initial adapter accepts declared zero tariffs only. Fable bounded review covered 178b564e; revise fixes choice-probability output, inspect replay semantics, typed uncertain COMMIT and scope-id decision policy. Fresh revise review/integration pending.
 - CATALOG-V3 (2026-10-02, lane; independent review pending): catalog documents accept v3 channel/vendor/canonical/billing/provenance, limits, reasoning and pricing metadata while retaining v2 and old receipts. Claude/Codex subscription seeds carry recommendations without activation effects; CLI en/tr and Monitor expose vendor versus channel. No SQL migration; unknown fields remain explicit.
 
 - MCP-NO-DECIDE (owner 2026-10-02): removed the MCP approval decision tool for both allow and deny; approval inspection remains, and CLI/SDK/terminal decision paths keep their existing authorization.

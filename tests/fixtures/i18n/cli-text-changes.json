@@ -243,6 +243,10 @@
     "terminal.workline.banner": {
       "before": "Deckent workline. Esc cancels a running turn; /exit or Ctrl+C when idle quits.",
       "after": "Deckent workline. Esc cancels a running turn; /exit, Ctrl+D or Ctrl+C twice when idle quits."
+    },
+    "decision.choice": {
+      "before": "Choice: {choice}; confidence {confidence}; choice threshold {threshold}.",
+      "after": "Choice: {choice} · choice probability {probability} (threshold {threshold}) · confidence {confidence}"
     }
   },
   "tr": {
@@ -597,6 +601,10 @@
     "terminal.workline.banner": {
       "before": "Deckent workline. Esc çalışan turu iptal eder; boştayken /exit veya Ctrl+C çıkar.",
       "after": "Deckent workline. Esc çalışan turu iptal eder; boştayken /exit, Ctrl+D veya iki kez Ctrl+C çıkar."
+    },
+    "decision.choice": {
+      "before": "Seçim: {choice}; güven {confidence}; seçim eşiği {threshold}.",
+      "after": "Seçim: {choice} · seçim olasılığı {probability} (eşik {threshold}) · güven {confidence}"
     }
   }
 }

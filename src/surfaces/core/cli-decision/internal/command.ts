@@ -38,7 +38,7 @@ function renderAdvice(result: DecisionAskResult | DecisionInspection, locale: Lo
   const lines = [t('decision.result', { id: result.decisionId, status: statuses[result.status] }, locale)];
   if (result.advice) {
     const advice = result.advice;
-    lines.push(t('decision.choice', { choice: advice.choice, confidence: advice.confidence, threshold: result.thresholds.choice }, locale));
+    lines.push(t('decision.choice', { choice: advice.choice, probability: advice.probabilities[advice.choice]!, confidence: advice.confidence, threshold: result.thresholds.choice }, locale));
     for (const [option, probability] of Object.entries(advice.probabilities)) lines.push(t('decision.probability', { option, probability }, locale));
     lines.push(t('decision.sufficiency', { score: advice.sufficiency, threshold: result.thresholds.sufficiency }, locale));
   } else lines.push(t('decision.noAdvice', {}, locale));

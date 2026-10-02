@@ -28,7 +28,7 @@ function harness() {
 describe('decision application owns advisory records only',()=>{
  it('asks through one existing invocation and replays without another paid call',async()=>{const h=harness();const first=await h.app.ask(command);expect(first.status).toBe('advised');expect(first.advice?.probabilities.insufficient_information).toBe(0.05);expect((await h.app.ask(command)).replayed).toBe(true);expect(h.invoke).toHaveBeenCalledTimes(1);expect(h.events).toHaveLength(2);});
  it('lost result recording leaves unknown and never automatically pays twice',async()=>{const h=harness();h.fail();expect((await h.app.ask(command)).status).toBe('unknown');expect((await h.app.ask(command)).status).toBe('unknown');expect(h.invoke).toHaveBeenCalledTimes(1);});
- it('actor selection records data and never invokes or admits the selected operation',async()=>{const h=harness();await h.app.ask(command);const result=await h.app.decide({schemaVersion:1,commandId:'record1',scopeId:'scope',decisionId:'ask1',selectedOption:'a',rationale:'Bounded'});expect(result.record.actor.selectedOption).toBe('a');expect(result.record).not.toHaveProperty('authority');expect(h.invoke).toHaveBeenCalledTimes(1);expect(h.authorize).toHaveBeenLastCalledWith('record','scope','ask1',principal);});
+ it('actor selection records data and never invokes or admits the selected operation',async()=>{const h=harness();await h.app.ask(command);const result=await h.app.decide({schemaVersion:1,commandId:'record1',scopeId:'scope',decisionId:'ask1',selectedOption:'a',rationale:'Bounded'});expect(result.record.actor.selectedOption).toBe('a');expect(result.record).not.toHaveProperty('authority');expect(h.invoke).toHaveBeenCalledTimes(1);expect(h.authorize).toHaveBeenLastCalledWith('record','scope','scope',principal);});
  it('refuses mismatching scopes before invocation',async()=>{const h=harness();await expect(h.app.ask({...command,case:{...caseInput,scope:'other'}})).rejects.toThrow();expect(h.invoke).not.toHaveBeenCalled();});
  it('cancelled before call is typed without fake advice or transport',async()=>{const h=harness();const controller=new AbortController();controller.abort();const result=await h.app.ask(command,undefined,controller.signal);expect(result.status).toBe('cancelled');expect(result.advice).toBeNull();expect(h.invoke).not.toHaveBeenCalled();});
  it('does not expose a cross-scope record to inspection',async()=>{const h=harness();await h.app.ask(command);await expect(h.app.inspect({schemaVersion:1,scopeId:'other',decisionId:'ask1'})).rejects.toThrow();});
@@ -37,4 +37,12 @@ describe('decision application owns advisory records only',()=>{
 it('outcome observedAt never accepts a future fraction beyond the trusted clock',async()=>{
  const h=harness();await h.app.ask(command);await h.app.decide({schemaVersion:1,commandId:'record-future',scopeId:'scope',decisionId:'ask1',selectedOption:'a',rationale:'Bounded'});
  await expect(h.app.outcome({schemaVersion:1,commandId:'future-outcome',scopeId:'scope',decisionId:'ask1',outcome:{observedAt:'2026-10-02T12:00:00.000001Z',observation:'Not observed yet'}})).rejects.toThrow('DECISION_INVALID');
+});
+
+it('inspection reports stored status without claiming a command receipt replay',async()=>{
+ const h=harness();h.fail();await h.app.ask(command);
+ const query={schemaVersion:1,scopeId:'scope',decisionId:'ask1'};
+ expect(await h.app.inspect(query)).toMatchObject({status:'unknown',replayed:false});
+ expect((await h.app.ask(command)).replayed).toBe(true);
+ expect(h.invoke).toHaveBeenCalledTimes(1);
 });

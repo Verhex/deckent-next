@@ -997,7 +997,7 @@
   "terminal.slash.monitor": "İzleyici görüntüsü: takılı Run'lar, worker'lar, onaylar, havuzlar, kurulumlar",
   "cli.help.decide": "deckent decide prepare|ask|record|outcome|inspect --input <file|-> [--json] [--lang en|tr] [--no-color]\nprepare sürümlü vakayı doğrular ve özetler; ask yapılandırılmış çağrı profiliyle kayıtlı tavsiye ister; record aktör seçimini ve gerekçesini kaydeder; outcome sonraki gözlemi kaydeder; inspect kararı okur. İki çekimser seçenek ve politika eşikleri görünürdür. Seçim yetki vermez; sonraki işlem olağan politika ve onay denetimlerinden geçer.",
   "decision.result": "Karar {id}: {status}.",
-  "decision.choice": "Seçim: {choice}; güven {confidence}; seçim eşiği {threshold}.",
+  "decision.choice": "Seçim: {choice} · seçim olasılığı {probability} (eşik {threshold}) · güven {confidence}",
   "decision.probability": "{option} olasılığı: {probability}",
   "decision.sufficiency": "Yeterlilik: {score}; eşik {threshold}.",
   "decision.noAdvice": "Bu durumda tavsiye yok.",

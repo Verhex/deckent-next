@@ -10,7 +10,7 @@ const roots: string[] = [];
 afterEach(async () => { clearConfigCache(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 const query = { schemaVersion: 1, scopeId: 'scope', decisionId: 'decision' };
 const advice = { schemaVersion: 1, choice: 'option-a', probabilities: { 'option-a': 0.6, none_of_the_above: 0.25, insufficient_information: 0.15 },
-  confidence: 0.6, sufficiency: 0.4, checks: {}, model: 'fixture', usage: { inputTokens: 1, outputTokens: 1 }, latencyMs: 1 };
+  confidence: 0.9, sufficiency: 0.4, checks: {}, model: 'fixture', usage: { inputTokens: 1, outputTokens: 1 }, latencyMs: 1 };
 const result = { schemaVersion: 1, status: 'below-threshold', decisionId: 'decision', caseDigest: 'a'.repeat(64), adviceDigest: 'b'.repeat(64),
   advice, thresholds: { choice: 0.8, sufficiency: 0.75 }, invocationId: 'invocation', record: null, replayed: false };
 const decisionCase = { schemaVersion: 1, objective: 'Choose a reversible action', scope: 'scope', revision: 'r1', constraints: [], unknowns: [],
@@ -34,6 +34,9 @@ it('routes strict file/stdin inspection and renders both abstentions and suffici
     expect(code).toBe(0); expect(calls).toBe(1); expect(output).toContain('none_of_the_above'); expect(output).toContain('insufficient_information');
     expect(output).toContain('0.25'); expect(output).toContain('0.15'); expect(output).toContain('0.4'); expect(output).toContain('0.75');
     expect(output).toContain(language === 'en' ? 'Below threshold' : 'Eşik altında');
+    expect(output.split('\n')).toContain(language === 'en'
+      ? 'Choice: option-a · choice probability 0.6 (threshold 0.8) · confidence 0.9'
+      : 'Seçim: option-a · seçim olasılığı 0.6 (eşik 0.8) · güven 0.9');
     expect(output).toContain(language === 'en' ? 'Selection grants no authority' : 'Seçim yetki vermez');
   }
 });

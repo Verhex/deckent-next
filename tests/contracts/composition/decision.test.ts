@@ -7,7 +7,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
-import { afterEach, expect, it } from 'vitest';
+import { afterEach, expect, it, vi } from 'vitest';
 import { prepareConfiguredDecision, askConfiguredDecision, recordConfiguredDecision, outcomeConfiguredDecision, inspectConfiguredDecision } from '#composition/index.js';
 import { encodeModelBindingDefinition } from '#domain/index.js';
 import { openSqliteModelActivationStore, readLocalOsIdentity, decisionHttpAdapter } from '#adapters/index.js';
@@ -17,16 +17,16 @@ import { decisionCommand } from '#surfaces/core/cli-decision/index.js';
 import { createMcpServer } from '#surfaces/core/mcp/index.js';
 import { fixtureBudget } from '../../fixtures/priced-provider.js';
 const roots:string[]=[],servers:Server[]=[];
-afterEach(async()=>{clearConfigCache();await Promise.all(servers.splice(0).map(async server=>{server.closeAllConnections();await new Promise<void>(r=>server.close(()=>r()));}));await Promise.all(roots.splice(0).map(root=>rm(root,{recursive:true,force:true})));});
+afterEach(async()=>{vi.restoreAllMocks();clearConfigCache();await Promise.all(servers.splice(0).map(async server=>{server.closeAllConnections();await new Promise<void>(r=>server.close(()=>r()));}));await Promise.all(roots.splice(0).map(root=>rm(root,{recursive:true,force:true})));});
 const sqlite={busyTimeoutMs:1000,journalMode:'delete' as const,durability:'full' as const};
 const reference={providerId:'provider',providerVersion:1,modelId:'model',modelVersion:1};
 const catalog={schemaVersion:1,revision:'catalog',providers:[{id:'provider',version:1,models:[{id:'model',version:1,nativeId:'configured-model',protocols:[{...decisionHttpAdapter.protocol,capabilities:[]}]}]}]};
 const policy={schemaVersion:1,limits:{maxCaseBytes:16384,maxEvidence:8,maxOptions:8,maxChecks:8,maxTextBytes:1024},thresholds:{choice:.8,sufficiency:.7}};
 const inputCase={schemaVersion:1,objective:'Choose safe action',scope:'scope',revision:'r1',constraints:['No authority from advice'],unknowns:['Outcome not observed'],evidence:[{id:'e',source:'fixture',observedAt:'2026-10-01T00:00:00Z',observation:'Source inspected'}],options:[{id:'a',action:'Record advice',tradeoffs:['Gain provenance; loss overhead'],evidenceIds:['e']}],checks:[{id:'c',instructions:'Evidence adequate?',evidenceIds:['e']}],process:{stage:'implementation',currentState:'prepared',acceptedDecisions:['Port only'],nextStep:'Review',reopenReason:null}};
-async function fixture(){
+async function fixture(selection={type:'choice',choice:'a',probabilities:{a:.9,none_of_the_above:.05,insufficient_information:.05},confidence:.85}){
  const root=await mkdtemp(join(tmpdir(),'deckent-decision-composition-'));roots.push(root);const project=join(root,'project'),data=join(root,'data'),home=join(root,'home');
  await Promise.all([mkdir(join(project,'.deckent'),{recursive:true,mode:0o700}),mkdir(data,{mode:0o700}),mkdir(home,{mode:0o700})]);
- let requests=0;const server=createServer((request,res)=>{requests++;request.resume();request.on('end',()=>res.end(JSON.stringify({model:'resolved-model',answers:{selection:{type:'choice',choice:'a',probabilities:{a:.9,none_of_the_above:.05,insufficient_information:.05},confidence:.85},sufficiency:{type:'noul',noul:.9},check_0:{type:'noul',noul:.8}},usage:{input_tokens:30,output_tokens:15}})));});servers.push(server);
+ let requests=0;const server=createServer((request,res)=>{requests++;request.resume();request.on('end',()=>res.end(JSON.stringify({model:'resolved-model',answers:{selection,sufficiency:{type:'noul',noul:.9},check_0:{type:'noul',noul:.8}},usage:{input_tokens:30,output_tokens:15}})));});servers.push(server);
  await new Promise<void>(r=>server.listen(0,'127.0.0.1',r));const address=server.address();if(!address||typeof address==='string')throw Error('fixture');
  const definition={encodingVersion:1 as const,provider:{id:'provider',version:1},model:catalog.providers[0]!.models[0]!};
  const binding={encodingVersion:1 as const,algorithm:'sha256' as const,digest:createHash('sha256').update(encodeModelBindingDefinition(definition)).digest('hex')};
@@ -35,7 +35,7 @@ async function fixture(){
  const ledger=await prepareProductFile(resolveProductLayout({projectRoot:project,root:data}),'ledger',['-wal','-shm','-journal']);
  const principal={...readLocalOsIdentity(),scopeIds:['scope']};const actor={id:principal.id,issuer:principal.issuer,subject:principal.subject,assurance:principal.assurance};const store=await openSqliteModelActivationStore(ledger,sqlite);
  await store.admit({command:{schemaVersion:1,action:'activate',commandId:'activate',scopeId:'scope',reference,expectedRevision:0,catalogRevision:'catalog',expectedBinding:binding},actor,authorization:{revision:'seed',ruleId:'seed'},admittedAtMs:1,definition});store.close();
- const setPolicy=async(invocationAllowed=true,decisionActions=['prepare','ask','record','outcome','inspect'])=>{await writeFile(join(data,'policy.json'),JSON.stringify({schemaVersion:1,revision:invocationAllowed?'allow':'deny-invoke',restrictions:[],grants:[{id:'decisions',effect:'allow',actions:decisionActions,scopes:['scope'],principals:[{issuer:principal.issuer,subject:principal.subject}],resource:{kind:'decision',ids:'all'}},...(invocationAllowed?[{id:'invoke',effect:'allow',actions:['invoke','inspect'],scopes:['scope'],principals:[{issuer:principal.issuer,subject:principal.subject}],resource:{kind:'model-invocation',ids:[modelInvocationTargetId(reference)]}}]:[])]}),{mode:0o600});};
+ const setPolicy=async(invocationAllowed=true,decisionActions=['prepare','ask','record','outcome','inspect'],decisionIds:'all'|string[]='all')=>{await writeFile(join(data,'policy.json'),JSON.stringify({schemaVersion:1,revision:invocationAllowed?'allow':'deny-invoke',restrictions:[],grants:[{id:'decisions',effect:'allow',actions:decisionActions,scopes:['scope'],principals:[{issuer:principal.issuer,subject:principal.subject}],resource:{kind:'decision',ids:decisionIds}},...(invocationAllowed?[{id:'invoke',effect:'allow',actions:['invoke','inspect'],scopes:['scope'],principals:[{issuer:principal.issuer,subject:principal.subject}],resource:{kind:'model-invocation',ids:[modelInvocationTargetId(reference)]}}]:[])]}),{mode:0o600});};
  await setPolicy();const env={HOME:home,USERPROFILE:home,PATH:process.env.PATH??'/usr/bin:/bin'};const command={schemaVersion:1,commandId:'ask',scopeId:'scope',case:inputCase,invocation:{reference,catalogRevision:'catalog',expectedBinding:binding}};
  return {project,ledger,env,command,setPolicy,requests:()=>requests};
 }
@@ -67,4 +67,58 @@ it('requires current record policy and refuses tampered stored advice',async()=>
  await expect(recordConfiguredDecision(f.project,{schemaVersion:1,commandId:'record',scopeId:'scope',decisionId:'ask',selectedOption:'a',rationale:'No grant'},{env:f.env})).rejects.toMatchObject({code:'POLICY_DENIED'});
  const db=new DatabaseSync(f.ledger);const raw=JSON.parse(String(db.prepare('SELECT snapshot FROM decision_cases').get()?.snapshot));raw.value.advice.choice='none_of_the_above';db.prepare('UPDATE decision_cases SET snapshot=?').run(JSON.stringify(raw));db.close();
  await expect(inspectConfiguredDecision(f.project,{schemaVersion:1,scopeId:'scope',decisionId:'ask'},{env:f.env})).rejects.toMatchObject({code:'DECISION_CORRUPT'});
+});
+
+it('one id-restricted scope policy authorizes prepare, ask, record, outcome and inspect',async()=>{
+ const f=await fixture(),options={env:f.env};await f.setPolicy(true,undefined,['scope']);
+ await prepareConfiguredDecision(f.project,{schemaVersion:1,case:inputCase},options);
+ await askConfiguredDecision(f.project,f.command,options);
+ await recordConfiguredDecision(f.project,{schemaVersion:1,commandId:'record',scopeId:'scope',decisionId:'ask',selectedOption:'a',rationale:'Scoped grant'},options);
+ await outcomeConfiguredDecision(f.project,{schemaVersion:1,commandId:'outcome',scopeId:'scope',decisionId:'ask',outcome:{observedAt:'2026-10-02T00:00:00Z',observation:'Scoped outcome'}},options);
+ expect(await inspectConfiguredDecision(f.project,{schemaVersion:1,scopeId:'scope',decisionId:'ask'},options)).toMatchObject({status:'advised',replayed:false});
+ await f.setPolicy(true,undefined,['ask']);
+ await expect(prepareConfiguredDecision(f.project,{schemaVersion:1,case:inputCase},options)).rejects.toMatchObject({code:'POLICY_DENIED'});
+ await expect(askConfiguredDecision(f.project,f.command,options)).rejects.toMatchObject({code:'POLICY_DENIED'});
+ await expect(recordConfiguredDecision(f.project,{schemaVersion:1,commandId:'denied-record',scopeId:'scope',decisionId:'ask',selectedOption:'a',rationale:'Denied'},options)).rejects.toMatchObject({code:'POLICY_DENIED'});
+ await expect(outcomeConfiguredDecision(f.project,{schemaVersion:1,commandId:'denied-outcome',scopeId:'scope',decisionId:'ask',outcome:{observedAt:'2026-10-02T00:00:00Z',observation:'Denied'}},options)).rejects.toMatchObject({code:'POLICY_DENIED'});
+ await expect(inspectConfiguredDecision(f.project,{schemaVersion:1,scopeId:'scope',decisionId:'ask'},options)).rejects.toMatchObject({code:'POLICY_DENIED'});
+ expect(f.requests()).toBe(1);
+});
+it.each(['record','outcome'] as const)('%s COMMIT failure stays typed and same-command retry is receipt-safe',async action=>{
+ for(const committed of [false,true]){
+  const f=await fixture(),options={env:f.env};await askConfiguredDecision(f.project,f.command,options);
+  const record={schemaVersion:1,commandId:'record',scopeId:'scope',decisionId:'ask',selectedOption:'a',rationale:'Bounded'};
+  const outcome={schemaVersion:1,commandId:'outcome',scopeId:'scope',decisionId:'ask',outcome:{observedAt:'2026-10-02T00:00:00Z',observation:'Observed'}};
+  if(action==='outcome')await recordConfiguredDecision(f.project,record,options);
+  const mutate=()=>action==='record'?recordConfiguredDecision(f.project,record,options):outcomeConfiguredDecision(f.project,outcome,options);
+  const exec=DatabaseSync.prototype.exec;let injected=false,decisionWrite=false;
+  const fault=vi.spyOn(DatabaseSync.prototype,'exec').mockImplementation(function(this:DatabaseSync,sql:string){
+   if(sql==='COMMIT'&&!injected&&this.prepare('PRAGMA database_list').all().some(row=>row.file===f.ledger)){
+    decisionWrite=Boolean(this.prepare('SELECT 1 FROM decision_command_receipts WHERE command_id=?').get(action));
+   }
+   if(sql==='COMMIT'&&decisionWrite&&!injected){injected=true;if(committed)exec.call(this,sql);throw Error('COMMIT_RESULT_LOST');}
+   return exec.call(this,sql);
+  });
+  const failure=await mutate().catch(error=>error);fault.mockRestore();expect(injected).toBe(true);
+  expect(failure).toMatchObject({code:'DECISION_OUTCOME_UNKNOWN'});
+  expect((await mutate()).replayed).toBe(committed);expect((await mutate()).replayed).toBe(true);
+  const db=new DatabaseSync(f.ledger,{readOnly:true});try{
+   expect(db.prepare('SELECT count(*) AS n FROM decision_command_receipts WHERE command_id=?').get(action)?.n).toBe(1);
+   expect(db.prepare("SELECT count(*) AS n FROM audit_events WHERE kind='decision-port'").get()?.n).toBe(action==='record'?3:4);
+  }finally{db.close();}
+  expect(f.requests()).toBe(1);
+ }
+});
+
+it('real below-threshold advice renders choice probability versus threshold separately from confidence in EN/TR',async()=>{
+ const f=await fixture({type:'choice',choice:'a',probabilities:{a:.6,none_of_the_above:.25,insufficient_information:.15},confidence:.9});
+ const result=await askConfiguredDecision(f.project,f.command,{env:f.env});expect(result.status).toBe('below-threshold');
+ for(const language of ['en','tr']){
+  let stdout='';await decisionCommand(['decide','inspect','--input','-','--lang',language],{root:f.project,env:f.env,
+   stdin:Readable.from([JSON.stringify({schemaVersion:1,scopeId:'scope',decisionId:'ask'})]),stdout:{write(text){stdout+=text;}},inspectDecision:inspectConfiguredDecision});
+  expect(stdout.split('\n')).toContain(language==='en'?'Choice: a · choice probability 0.6 (threshold 0.8) · confidence 0.9':'Seçim: a · seçim olasılığı 0.6 (eşik 0.8) · güven 0.9');
+  expect(stdout).toContain(language==='en'?'Below threshold':'Eşik altında');
+  expect(stdout).not.toContain(language==='en'?'no automatic paid retry':'otomatik ücretli');
+ }
+ expect(f.requests()).toBe(1);
 });
