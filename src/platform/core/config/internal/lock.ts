@@ -7,6 +7,7 @@ import { ErrorRegistry } from '#platform/core/errors/index.js';
 import { emit } from '#platform/core/output/index.js';
 import { t, resolveLocale, type Locale } from '#platform/core/i18n/index.js';
 import { SystemTrustedClock, MAX_WALL_SKEW_MS, type ClockSample, type TrustedClock } from '#platform/core/clock/index.js';
+import { getConfigFieldDefault } from '#platform/core/config-fields/index.js';
 import type { ConfigWarning } from './validate/issues.js';
 
 const STALE_MS = 10 * 60_000;
@@ -84,8 +85,9 @@ async function reclaim(lock: string, observed: NonNullable<Awaited<ReturnType<ty
   else emit(warning, { level: 'warning', render: value => value.message });
   return true;
 }
-/** Exclusive directory ownership, private metadata, bounded waiting, and inode-safe release. */
-export async function withConfigWriteLock<T>(path: string, fn: () => Promise<T>, timeoutMs = 2_000, options: ConfigLockOptions = {}): Promise<T> {
+/** Exclusive directory ownership, private metadata, bounded waiting, and inode-safe release.
+ * Without a caller timeout the wait is the registered `configFile.writeLockTimeoutMs` default (single source). */
+export async function withConfigWriteLock<T>(path: string, fn: () => Promise<T>, timeoutMs = getConfigFieldDefault('configFile').writeLockTimeoutMs, options: ConfigLockOptions = {}): Promise<T> {
   await mkdir(dirname(path), { recursive: true });
   const clock = new SystemTrustedClock(), started = clock.sample();
   const lock = `${path}.write-lock`, deadline = started.monotonicMs + timeoutMs;

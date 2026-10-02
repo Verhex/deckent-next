@@ -1,7 +1,6 @@
 import { counterSchema } from '#domain/core/primitives/index.js';
 import { inspectTaskReadiness, type TaskProgress } from '#domain/core/task-graph/index.js';
 import { checkedRun, runSnapshotSchema, RunError, type RunSnapshot } from './contract.js';
-export const DEFAULT_RUN_PARK_TIMEOUT_MS = 86_400_000;
 export type RunLifecycleTiming = Readonly<{ now: number; timeoutMs: number }>;
 export type TaskDecisionReason = 'evaluation-unknown' | 'evaluation-not-ready';
 function deadlineAt(now: number, timeoutMs: number) {

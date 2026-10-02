@@ -1994,7 +1994,8 @@
     },
     "src/domain/core/decision": {
       "dependencies": [
-        "src/domain/core/primitives"
+        "src/domain/core/primitives",
+        "src/domain/core/model-invocation"
       ],
       "plan": "AOF-DECISION-PORT"
     },
@@ -2273,6 +2274,22 @@
           5000
         ],
         "reason": "Versioned wall-clock expiry skew invariant; audited INVARIANT-OK (2026-10-02)."
+      },
+      {
+        "file": "src/adapters/core/worker-observation/internal/events.ts",
+        "symbol": "WORKER_EVENT_SEAL_RESERVE_BYTES",
+        "values": [
+          32768
+        ],
+        "reason": "Format-derived bound of worker event schema v1 (WORKER_EVENT_SCHEMA_VERSION 1): the largest host model.verification verdict (admitted text(256), observed/unexpected 2x(MAX_MODELS+1) text(128), 6-byte JSON escapes) plus byte-cap/event-cap markers fits 32768 bytes (worker-event-log-seal.test.ts schema-maximal case). Changes only with that schema version; not an operator policy (2026-10-03, batch-27 integration)."
+      },
+      {
+        "file": "src/adapters/core/provider-decision-http/internal/advice.ts",
+        "symbol": "decisionAdviceFromWire",
+        "values": [
+          1e-9
+        ],
+        "reason": "Floating-point tolerance for the decision HTTP wire v1 rule that choice probabilities sum to 1; numeric wire-format invariant, not policy (2026-10-03, batch-27 integration). Domain decisionAdviceSchema applies its own 1e-6 tolerance to the same rule (reported for lead decision)."
       }
     ],
     "allowlist": "scripts/hardcode-allowlist.json",

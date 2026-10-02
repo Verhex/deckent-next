@@ -7,5 +7,5 @@ export { executionRegistrySchema, executionProfileDefinitionSchema, evaluatorDef
 export type { ExecutionRegistry, ExecutionProfileDefinition, EvaluatorDefinition } from './internal/registry.js';
 export { runExecutionSnapshotSchema } from './internal/registry.js';
 export type { RunExecutionSnapshot } from './internal/registry.js';
-export { DEFAULT_RUN_PARK_TIMEOUT_MS, reconcileRunLifecycle, advanceRunLifecycle, expireParkedRun, closeParkedRun, resumeParkedRun, parkTaskAwaitingDecision, resolveTaskDecision } from './internal/lifecycle.js';
+export { reconcileRunLifecycle, advanceRunLifecycle, expireParkedRun, closeParkedRun, resumeParkedRun, parkTaskAwaitingDecision, resolveTaskDecision } from './internal/lifecycle.js';
 export type { RunLifecycleTiming, TaskDecisionReason } from './internal/lifecycle.js';

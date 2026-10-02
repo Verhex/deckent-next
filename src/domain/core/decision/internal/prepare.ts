@@ -1,12 +1,15 @@
 import { decisionObservationIsFuture } from './observed-time.js';
 import { z } from 'zod';
 import { createImmutableJsonObjectSchema } from '#domain/core/primitives/index.js';
+import { MODEL_INVOCATION_NATIVE_JSON_LIMITS } from '#domain/core/model-invocation/index.js';
 import { DECISION_ABSTENTIONS, DECISION_ADVICE_PREFIX, DECISION_CASE_PREFIX, DecisionError,
   decisionAdviceSchema, decisionCaseSchema, decisionPolicySchema, decisionRecordSchema,
   type DecisionAdvice, type DecisionCase, type DecisionErrorCode, type DecisionPolicy, type DecisionRecord } from './contract.js';
 
-// These are descriptor-safe wire invariants, not customer policy or admission thresholds.
-const wire = createImmutableJsonObjectSchema({ maxDepth: 16, maxNodes: 262_144, maxCodeUnits: 8 * 1024 * 1024 });
+// Descriptor-safe outer ingress bound, applied before any policy is known (it also gates the policy
+// document itself). Decision documents travel in the model-invocation native JSON envelope, so they share
+// its single bound; configured `decision.limits` narrow cases after parsing.
+const wire = createImmutableJsonObjectSchema(MODEL_INVOCATION_NATIVE_JSON_LIMITS);
 function parse<T>(schema: z.ZodType<T>, input: unknown, code: DecisionErrorCode): T {
   const copied = wire.safeParse(input), parsed = copied.success ? schema.safeParse(copied.data) : undefined;
   if (!parsed?.success) throw new DecisionError(code);

@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest';
-import { sealWorkerEventLog } from '#adapters/index.js';
+import { sealWorkerEventLog, WORKER_EVENT_SEAL_RESERVE_BYTES } from '#adapters/index.js';
 import { summarizeWorkerEvents, workerEventSchema, type WorkerEvent } from '#domain/index.js';
 
 // COMPOSITION-RELIEF: the retained worker event log of an ended attempt, sealed by the worker-observation adapter (moved verbatim from the
@@ -38,8 +38,9 @@ it('counts encoded bytes and retains a complete verdict with escaped unicode mod
   const model = '\u0000'.repeat(128);
   const longVerdict = { status: 'substituted' as const, admitted: model.repeat(2),
     observed: Array.from({ length: 17 }, () => model), unexpected: Array.from({ length: 17 }, () => model) };
-  const lines = sealWorkerEventLog(Array.from({ length: 100 }, (_, index) => event(index + 1)), longVerdict, 7, 32768);
-  expect(Buffer.byteLength(lines.join(''))).toBeLessThanOrEqual(32768);
+  // Schema-v1-maximal verdict: this case is the proof behind the declared WORKER_EVENT_SEAL_RESERVE_BYTES invariant.
+  const lines = sealWorkerEventLog(Array.from({ length: 100 }, (_, index) => event(index + 1)), longVerdict, 7, WORKER_EVENT_SEAL_RESERVE_BYTES);
+  expect(Buffer.byteLength(lines.join(''))).toBeLessThanOrEqual(WORKER_EVENT_SEAL_RESERVE_BYTES);
   expect(parse(lines).find(line => line['kind'] === 'model.verification')).toMatchObject(longVerdict);
 });
 
