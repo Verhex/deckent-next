@@ -1,0 +1,684 @@
+{
+  "schemaVersion": 3,
+  "revision": "codex-cli-subscription-2026-10-02",
+  "providers": [
+    {
+      "id": "codex-cli-subscription",
+      "version": 1,
+      "channel": {
+        "kind": "native-cli",
+        "cli": "codex",
+        "aliases": [
+          "default"
+        ],
+        "client": "codex",
+        "billing": "subscription",
+        "protocolFamily": "codex-jsonl",
+        "aliasesRefused": [
+          "default"
+        ],
+        "provenance": {
+          "localPath": "~/.codex/models_cache.json",
+          "fetchedOn": "2026-10-02T09:55:06.402418791Z",
+          "etag": "W/\"68d0325e0ba896149560f296a9aac9fe\"",
+          "clientVersion": "0.159.2"
+        }
+      },
+      "models": [
+        {
+          "id": "gpt-6.1-sol",
+          "version": 1,
+          "nativeId": "gpt-6.1-sol",
+          "protocols": [
+            {
+              "family": "codex-jsonl",
+              "version": "v1",
+              "capabilities": []
+            }
+          ],
+          "lifecycle": {
+            "state": "active",
+            "deprecatedOn": null,
+            "retireNotBefore": null,
+            "retiredOn": null,
+            "source": null
+          },
+          "minCliVersion": "0.159.2",
+          "efforts": [
+            "low",
+            "medium",
+            "high",
+            "xhigh",
+            "max",
+            "ultra"
+          ],
+          "aliases": [],
+          "channelModelId": "gpt-6.1-sol",
+          "vendorId": "openai",
+          "canonicalModelId": "gpt-6.1-sol",
+          "displayName": "GPT-6.1-Sol",
+          "description": "Latest workhorse model for coding and everyday work.",
+          "modalities": {
+            "input": [
+              "text",
+              "image"
+            ],
+            "output": []
+          },
+          "contextWindow": 272000,
+          "maxOutputTokens": null,
+          "reasoning": {
+            "supportedEfforts": [
+              "low",
+              "medium",
+              "high",
+              "xhigh",
+              "max",
+              "ultra"
+            ],
+            "defaultEffort": "low"
+          },
+          "capabilities": {
+            "tools": "unknown",
+            "vision": "supported",
+            "pdf": "unknown",
+            "structuredOutput": "unknown",
+            "promptCaching": "unknown",
+            "streaming": "unknown"
+          },
+          "pricing": {
+            "kind": "subscription",
+            "source": {
+              "localPath": "~/.codex/models_cache.json",
+              "fetchedOn": "2026-10-02T09:55:06.402418791Z",
+              "etag": "W/\"68d0325e0ba896149560f296a9aac9fe\"",
+              "clientVersion": "0.159.2"
+            },
+            "asOf": "2026-10-02"
+          },
+          "minClientVersion": "0.159.2",
+          "visibility": "list",
+          "priority": 1,
+          "provenance": {
+            "localPath": "~/.codex/models_cache.json",
+            "fetchedOn": "2026-10-02T09:55:06.402418791Z",
+            "etag": "W/\"68d0325e0ba896149560f296a9aac9fe\"",
+            "clientVersion": "0.159.2"
+          }
+        },
+        {
+          "id": "gpt-6-astra",
+          "version": 1,
+          "nativeId": "gpt-6-astra",
+          "protocols": [
+            {
+              "family": "codex-jsonl",
+              "version": "v1",
+              "capabilities": []
+            }
+          ],
+          "lifecycle": {
+            "state": "active",
+            "deprecatedOn": null,
+            "retireNotBefore": null,
+            "retiredOn": null,
+            "source": null
+          },
+          "minCliVersion": "0.159.2",
+          "efforts": [
+            "low",
+            "medium",
+            "high",
+            "xhigh",
+            "max",
+            "ultra"
+          ],
+          "aliases": [],
+          "channelModelId": "gpt-6-astra",
+          "vendorId": "openai",
+          "canonicalModelId": "gpt-6-astra",
+          "displayName": "GPT-6-Astra",
+          "description": "Frontier intelligence for the most demanding work.",
+          "modalities": {
+            "input": [
+              "text",
+              "image"
+            ],
+            "output": []
+          },
+          "contextWindow": 272000,
+          "maxOutputTokens": null,
+          "reasoning": {
+            "supportedEfforts": [
+              "low",
+              "medium",
+              "high",
+              "xhigh",
+              "max",
+              "ultra"
+            ],
+            "defaultEffort": "medium"
+          },
+          "capabilities": {
+            "tools": "unknown",
+            "vision": "supported",
+            "pdf": "unknown",
+            "structuredOutput": "unknown",
+            "promptCaching": "unknown",
+            "streaming": "unknown"
+          },
+          "pricing": {
+            "kind": "subscription",
+            "source": {
+              "localPath": "~/.codex/models_cache.json",
+              "fetchedOn": "2026-10-02T09:55:06.402418791Z",
+              "etag": "W/\"68d0325e0ba896149560f296a9aac9fe\"",
+              "clientVersion": "0.159.2"
+            },
+            "asOf": "2026-10-02"
+          },
+          "minClientVersion": "0.159.2",
+          "visibility": "list",
+          "priority": 2,
+          "provenance": {
+            "localPath": "~/.codex/models_cache.json",
+            "fetchedOn": "2026-10-02T09:55:06.402418791Z",
+            "etag": "W/\"68d0325e0ba896149560f296a9aac9fe\"",
+            "clientVersion": "0.159.2"
+          }
+        },
+        {
+          "id": "gpt-6-sol",
+          "version": 1,
+          "nativeId": "gpt-6-sol",
+          "protocols": [
+            {
+              "family": "codex-jsonl",
+              "version": "v1",
+              "capabilities": []
+            }
+          ],
+          "lifecycle": {
+            "state": "active",
+            "deprecatedOn": null,
+            "retireNotBefore": null,
+            "retiredOn": null,
+            "source": null
+          },
+          "minCliVersion": "0.159.2",
+          "efforts": [
+            "low",
+            "medium",
+            "high",
+            "xhigh",
+            "max",
+            "ultra"
+          ],
+          "aliases": [],
+          "channelModelId": "gpt-6-sol",
+          "vendorId": "openai",
+          "canonicalModelId": "gpt-6-sol",
+          "displayName": "GPT-6-Sol",
+          "description": "Previous generation workhorse model.",
+          "modalities": {
+            "input": [
+              "text",
+              "image"
+            ],
+            "output": []
+          },
+          "contextWindow": 272000,
+          "maxOutputTokens": null,
+          "reasoning": {
+            "supportedEfforts": [
+              "low",
+              "medium",
+              "high",
+              "xhigh",
+              "max",
+              "ultra"
+            ],
+            "defaultEffort": "medium"
+          },
+          "capabilities": {
+            "tools": "unknown",
+            "vision": "supported",
+            "pdf": "unknown",
+            "structuredOutput": "unknown",
+            "promptCaching": "unknown",
+            "streaming": "unknown"
+          },
+          "pricing": {
+            "kind": "subscription",
+            "source": {
+              "localPath": "~/.codex/models_cache.json",
+              "fetchedOn": "2026-10-02T09:55:06.402418791Z",
+              "etag": "W/\"68d0325e0ba896149560f296a9aac9fe\"",
+              "clientVersion": "0.159.2"
+            },
+            "asOf": "2026-10-02"
+          },
+          "minClientVersion": "0.159.2",
+          "visibility": "list",
+          "priority": 3,
+          "provenance": {
+            "localPath": "~/.codex/models_cache.json",
+            "fetchedOn": "2026-10-02T09:55:06.402418791Z",
+            "etag": "W/\"68d0325e0ba896149560f296a9aac9fe\"",
+            "clientVersion": "0.159.2"
+          }
+        },
+        {
+          "id": "gpt-6-luna",
+          "version": 1,
+          "nativeId": "gpt-6-luna",
+          "protocols": [
+            {
+              "family": "codex-jsonl",
+              "version": "v1",
+              "capabilities": []
+            }
+          ],
+          "lifecycle": {
+            "state": "active",
+            "deprecatedOn": null,
+            "retireNotBefore": null,
+            "retiredOn": null,
+            "source": null
+          },
+          "minCliVersion": "0.159.2",
+          "efforts": [
+            "low",
+            "medium",
+            "high",
+            "xhigh",
+            "max"
+          ],
+          "aliases": [],
+          "channelModelId": "gpt-6-luna",
+          "vendorId": "openai",
+          "canonicalModelId": "gpt-6-luna",
+          "displayName": "GPT-6-Luna",
+          "description": "Fast and affordable model for easier tasks.",
+          "modalities": {
+            "input": [
+              "text",
+              "image"
+            ],
+            "output": []
+          },
+          "contextWindow": 272000,
+          "maxOutputTokens": null,
+          "reasoning": {
+            "supportedEfforts": [
+              "low",
+              "medium",
+              "high",
+              "xhigh",
+              "max"
+            ],
+            "defaultEffort": "medium"
+          },
+          "capabilities": {
+            "tools": "unknown",
+            "vision": "supported",
+            "pdf": "unknown",
+            "structuredOutput": "unknown",
+            "promptCaching": "unknown",
+            "streaming": "unknown"
+          },
+          "pricing": {
+            "kind": "subscription",
+            "source": {
+              "localPath": "~/.codex/models_cache.json",
+              "fetchedOn": "2026-10-02T09:55:06.402418791Z",
+              "etag": "W/\"68d0325e0ba896149560f296a9aac9fe\"",
+              "clientVersion": "0.159.2"
+            },
+            "asOf": "2026-10-02"
+          },
+          "minClientVersion": "0.159.2",
+          "visibility": "list",
+          "priority": 4,
+          "provenance": {
+            "localPath": "~/.codex/models_cache.json",
+            "fetchedOn": "2026-10-02T09:55:06.402418791Z",
+            "etag": "W/\"68d0325e0ba896149560f296a9aac9fe\"",
+            "clientVersion": "0.159.2"
+          }
+        },
+        {
+          "id": "gpt-5.6-sol",
+          "version": 1,
+          "nativeId": "gpt-5.6-sol",
+          "protocols": [
+            {
+              "family": "codex-jsonl",
+              "version": "v1",
+              "capabilities": []
+            }
+          ],
+          "lifecycle": {
+            "state": "active",
+            "deprecatedOn": null,
+            "retireNotBefore": null,
+            "retiredOn": null,
+            "source": null
+          },
+          "minCliVersion": "0.159.2",
+          "efforts": [
+            "low",
+            "medium",
+            "high",
+            "xhigh",
+            "max",
+            "ultra"
+          ],
+          "aliases": [],
+          "channelModelId": "gpt-5.6-sol",
+          "vendorId": "openai",
+          "canonicalModelId": "gpt-5.6-sol",
+          "displayName": "GPT-5.6-Sol",
+          "description": "Older generation workhorse model.",
+          "modalities": {
+            "input": [
+              "text",
+              "image"
+            ],
+            "output": []
+          },
+          "contextWindow": 272000,
+          "maxOutputTokens": null,
+          "reasoning": {
+            "supportedEfforts": [
+              "low",
+              "medium",
+              "high",
+              "xhigh",
+              "max",
+              "ultra"
+            ],
+            "defaultEffort": "low"
+          },
+          "capabilities": {
+            "tools": "unknown",
+            "vision": "supported",
+            "pdf": "unknown",
+            "structuredOutput": "unknown",
+            "promptCaching": "unknown",
+            "streaming": "unknown"
+          },
+          "pricing": {
+            "kind": "subscription",
+            "source": {
+              "localPath": "~/.codex/models_cache.json",
+              "fetchedOn": "2026-10-02T09:55:06.402418791Z",
+              "etag": "W/\"68d0325e0ba896149560f296a9aac9fe\"",
+              "clientVersion": "0.159.2"
+            },
+            "asOf": "2026-10-02"
+          },
+          "minClientVersion": "0.159.2",
+          "visibility": "list",
+          "priority": 5,
+          "provenance": {
+            "localPath": "~/.codex/models_cache.json",
+            "fetchedOn": "2026-10-02T09:55:06.402418791Z",
+            "etag": "W/\"68d0325e0ba896149560f296a9aac9fe\"",
+            "clientVersion": "0.159.2"
+          }
+        },
+        {
+          "id": "gpt-5.6-terra",
+          "version": 1,
+          "nativeId": "gpt-5.6-terra",
+          "protocols": [
+            {
+              "family": "codex-jsonl",
+              "version": "v1",
+              "capabilities": []
+            }
+          ],
+          "lifecycle": {
+            "state": "active",
+            "deprecatedOn": null,
+            "retireNotBefore": null,
+            "retiredOn": null,
+            "source": null
+          },
+          "minCliVersion": "0.159.2",
+          "efforts": [
+            "low",
+            "medium",
+            "high",
+            "xhigh",
+            "max",
+            "ultra"
+          ],
+          "aliases": [],
+          "channelModelId": "gpt-5.6-terra",
+          "vendorId": "openai",
+          "canonicalModelId": "gpt-5.6-terra",
+          "displayName": "GPT-5.6-Terra",
+          "description": "Older balanced model for straightforward work.",
+          "modalities": {
+            "input": [
+              "text",
+              "image"
+            ],
+            "output": []
+          },
+          "contextWindow": 272000,
+          "maxOutputTokens": null,
+          "reasoning": {
+            "supportedEfforts": [
+              "low",
+              "medium",
+              "high",
+              "xhigh",
+              "max",
+              "ultra"
+            ],
+            "defaultEffort": "medium"
+          },
+          "capabilities": {
+            "tools": "unknown",
+            "vision": "supported",
+            "pdf": "unknown",
+            "structuredOutput": "unknown",
+            "promptCaching": "unknown",
+            "streaming": "unknown"
+          },
+          "pricing": {
+            "kind": "subscription",
+            "source": {
+              "localPath": "~/.codex/models_cache.json",
+              "fetchedOn": "2026-10-02T09:55:06.402418791Z",
+              "etag": "W/\"68d0325e0ba896149560f296a9aac9fe\"",
+              "clientVersion": "0.159.2"
+            },
+            "asOf": "2026-10-02"
+          },
+          "minClientVersion": "0.159.2",
+          "visibility": "list",
+          "priority": 8,
+          "provenance": {
+            "localPath": "~/.codex/models_cache.json",
+            "fetchedOn": "2026-10-02T09:55:06.402418791Z",
+            "etag": "W/\"68d0325e0ba896149560f296a9aac9fe\"",
+            "clientVersion": "0.159.2"
+          }
+        },
+        {
+          "id": "gpt-5.6-luna",
+          "version": 1,
+          "nativeId": "gpt-5.6-luna",
+          "protocols": [
+            {
+              "family": "codex-jsonl",
+              "version": "v1",
+              "capabilities": []
+            }
+          ],
+          "lifecycle": {
+            "state": "active",
+            "deprecatedOn": null,
+            "retireNotBefore": null,
+            "retiredOn": null,
+            "source": null
+          },
+          "minCliVersion": "0.159.2",
+          "efforts": [
+            "low",
+            "medium",
+            "high",
+            "xhigh",
+            "max"
+          ],
+          "aliases": [],
+          "channelModelId": "gpt-5.6-luna",
+          "vendorId": "openai",
+          "canonicalModelId": "gpt-5.6-luna",
+          "displayName": "GPT-5.6-Luna",
+          "description": "Older fast and efficient model.",
+          "modalities": {
+            "input": [
+              "text",
+              "image"
+            ],
+            "output": []
+          },
+          "contextWindow": 272000,
+          "maxOutputTokens": null,
+          "reasoning": {
+            "supportedEfforts": [
+              "low",
+              "medium",
+              "high",
+              "xhigh",
+              "max"
+            ],
+            "defaultEffort": "medium"
+          },
+          "capabilities": {
+            "tools": "unknown",
+            "vision": "supported",
+            "pdf": "unknown",
+            "structuredOutput": "unknown",
+            "promptCaching": "unknown",
+            "streaming": "unknown"
+          },
+          "pricing": {
+            "kind": "subscription",
+            "source": {
+              "localPath": "~/.codex/models_cache.json",
+              "fetchedOn": "2026-10-02T09:55:06.402418791Z",
+              "etag": "W/\"68d0325e0ba896149560f296a9aac9fe\"",
+              "clientVersion": "0.159.2"
+            },
+            "asOf": "2026-10-02"
+          },
+          "minClientVersion": "0.159.2",
+          "visibility": "list",
+          "priority": 9,
+          "provenance": {
+            "localPath": "~/.codex/models_cache.json",
+            "fetchedOn": "2026-10-02T09:55:06.402418791Z",
+            "etag": "W/\"68d0325e0ba896149560f296a9aac9fe\"",
+            "clientVersion": "0.159.2"
+          }
+        },
+        {
+          "id": "gpt-5.5",
+          "version": 1,
+          "nativeId": "gpt-5.5",
+          "protocols": [
+            {
+              "family": "codex-jsonl",
+              "version": "v1",
+              "capabilities": []
+            }
+          ],
+          "lifecycle": {
+            "state": "deprecated",
+            "deprecatedOn": null,
+            "retireNotBefore": null,
+            "retiredOn": "2026-10-14",
+            "source": null,
+            "replacementModelId": "gpt-6.1-sol"
+          },
+          "minCliVersion": "0.159.2",
+          "efforts": [
+            "low",
+            "medium",
+            "high",
+            "xhigh"
+          ],
+          "aliases": [],
+          "channelModelId": "gpt-5.5",
+          "vendorId": "openai",
+          "canonicalModelId": "gpt-5.5",
+          "displayName": "GPT-5.5",
+          "description": "Legacy coding model.",
+          "modalities": {
+            "input": [
+              "text",
+              "image"
+            ],
+            "output": []
+          },
+          "contextWindow": 272000,
+          "maxOutputTokens": null,
+          "reasoning": {
+            "supportedEfforts": [
+              "low",
+              "medium",
+              "high",
+              "xhigh"
+            ],
+            "defaultEffort": "medium"
+          },
+          "capabilities": {
+            "tools": "unknown",
+            "vision": "supported",
+            "pdf": "unknown",
+            "structuredOutput": "unknown",
+            "promptCaching": "unknown",
+            "streaming": "unknown"
+          },
+          "pricing": {
+            "kind": "subscription",
+            "source": {
+              "localPath": "~/.codex/models_cache.json",
+              "fetchedOn": "2026-10-02T09:55:06.402418791Z",
+              "etag": "W/\"68d0325e0ba896149560f296a9aac9fe\"",
+              "clientVersion": "0.159.2"
+            },
+            "asOf": "2026-10-02"
+          },
+          "minClientVersion": "0.159.2",
+          "visibility": "list",
+          "priority": 13,
+          "provenance": {
+            "localPath": "~/.codex/models_cache.json",
+            "fetchedOn": "2026-10-02T09:55:06.402418791Z",
+            "etag": "W/\"68d0325e0ba896149560f296a9aac9fe\"",
+            "clientVersion": "0.159.2"
+          }
+        }
+      ]
+    }
+  ],
+  "recommendedActivations": [
+    {
+      "channelId": "codex-cli-subscription",
+      "modelIds": [
+        "gpt-6.1-sol",
+        "gpt-6-astra",
+        "gpt-6-sol",
+        "gpt-6-luna",
+        "gpt-5.6-sol"
+      ]
+    }
+  ]
+}

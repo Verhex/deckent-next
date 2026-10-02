@@ -1,7 +1,7 @@
 import { createRequire } from 'node:module';
 import type { DatabaseSync } from 'node:sqlite';
 import { z } from 'zod';
-import { approvalRecordSchema, approvalSubject, readWorkerModelPin, runSnapshotSchema, taskEvaluationModelSchema, type AttemptIdentity, type WorkerModelView } from '#domain/index.js';
+import { approvalRecordSchema, approvalSubject, parseModelCatalogModelRecord, parseModelCatalogChannelRecord, readWorkerModelPin, runSnapshotSchema, taskEvaluationModelSchema, type AttemptIdentity, type WorkerModelView } from '#domain/index.js';
 import type { ArtifactReceipt } from '#capabilities/index.js';
 import { AttemptStoreError, dispatchRecordSchema, executionPoolSchema, measureTaskOccupancy, poolHoldRecordSchema, workerEventLogSchema,
   type MonitorDeliveryState, type MonitorLedgerApproval, type MonitorLedgerAttempt, type MonitorLedgerPool, type MonitorLedgerReading, type MonitorLedgerRun, type MonitorMap } from '#engine/index.js';
@@ -113,13 +113,21 @@ function deliveryStates(db: DatabaseSync, version: number) {
   }
   return states;
 }
-/** The ledger model catalog part of the install map (v43+): every channel model, active when any scope activates it or its whole channel. */
+/** Installation map: a model is active only when both channel and model are active in the same scope. v2 metadata stays unknown. */
 function catalog(db: DatabaseSync, version: number): MonitorMap | null {
   if (version < CATALOG_VERSION) return null;
-  const models = db.prepare(`SELECT m.channel_id,m.model_id,EXISTS(SELECT 1 FROM model_catalog_activations a WHERE a.channel_id=m.channel_id AND a.state='active'
-    AND (a.model_id=m.model_id OR a.model_id='')) AS active FROM model_catalog_models m ORDER BY m.channel_id,m.model_id`).all();
+  const models = db.prepare(`SELECT m.channel_id,m.model_id,m.record,c.record AS channel_record,
+    EXISTS(SELECT 1 FROM model_catalog_activations a JOIN model_catalog_activations ca
+      ON ca.scope_id=a.scope_id AND ca.channel_id=a.channel_id AND ca.model_id='' AND ca.state='active'
+      WHERE a.channel_id=m.channel_id AND a.model_id=m.model_id AND a.state='active') AS active
+    FROM model_catalog_models m JOIN model_catalog_channels c ON c.channel_id=m.channel_id ORDER BY m.channel_id,m.model_id`).all();
   return Object.freeze({ config: [], registry: { profiles: [], kinds: [] }, policy: null, memory: { available: false },
-    models: Object.freeze(models.map(row => Object.freeze({ channelId: String(row.channel_id), modelId: String(row.model_id), active: row.active === 1 }))) });
+    models: Object.freeze(models.map(row => {
+      const { model } = parseModelCatalogModelRecord(JSON.parse(String(row.record)));
+      const { channel } = parseModelCatalogChannelRecord(JSON.parse(String(row.channel_record)));
+      return Object.freeze({ channelId: String(row.channel_id), modelId: String(row.model_id), active: row.active === 1,
+        vendorId: 'vendorId' in model ? model.vendorId : null, billing: 'billing' in channel ? channel.billing : null });
+    })) });
 }
 
 function attempt(db: DatabaseSync, version: number, binding: MonitorLedgerRun['snapshot']['bindings'][number], reservedAtMs: number | null,

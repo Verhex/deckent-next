@@ -1882,7 +1882,8 @@
         "src/platform/core/host",
         "src/platform/core/managed-files",
         "src/platform/core/utils",
-        "src/adapters/core/local-principal"
+        "src/adapters/core/local-principal",
+        "src/domain/core/model-activation"
       ],
       "plan": "MONITOR"
     },

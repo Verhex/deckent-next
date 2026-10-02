@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, rm, stat } from 'node:fs/promises';
+import { mkdtemp, mkdir, rm, stat, readFile } from 'node:fs/promises';
 import { DatabaseSync } from 'node:sqlite';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -112,7 +112,8 @@ describe.skipIf(process.platform === 'win32')('ledger v43 model catalog', () => 
     try { await expect(again.models(channel)).rejects.toMatchObject({ code: 'MODEL_CATALOG_CORRUPT' }); } finally { again.close(); }
   });
   it('rejects catalog documents that break channel invariants (duplicate exact id, alias shadowing an exact id, CLI data on an API channel)', async () => {
-    const catalog = await seedCatalog(); expect(() => parseProviderCatalogDocument(catalog)).not.toThrow();
+    const catalog = JSON.parse(await readFile(new URL('../../fixtures/catalog/claude-v2.json', import.meta.url), 'utf8'));
+    expect(() => parseProviderCatalogDocument(catalog)).not.toThrow();
     const bad = (mutate: (doc: typeof catalog) => void) => { const doc = structuredClone(catalog); mutate(doc); return () => parseProviderCatalogDocument(doc); };
     expect(bad(doc => { doc.providers[0].models.push({ ...doc.providers[0].models[0], id: 'copy' }); })).toThrow(expect.objectContaining({ code: 'PROVIDER_CATALOG_DUPLICATE' }));
     expect(bad(doc => { doc.providers[0].channel.aliases.push('claude-sonnet-5-5'); })).toThrow(expect.objectContaining({ code: 'PROVIDER_CATALOG_DUPLICATE' }));

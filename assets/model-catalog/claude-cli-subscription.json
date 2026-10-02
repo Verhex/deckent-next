@@ -1,6 +1,6 @@
 {
-  "schemaVersion": 2,
-  "revision": "claude-cli-subscription-2026-09-30",
+  "schemaVersion": 3,
+  "revision": "claude-cli-subscription-2026-10-02",
   "providers": [
     {
       "id": "claude-cli-subscription",
@@ -18,7 +18,25 @@
           "sonnet[1m]",
           "opus[1m]",
           "opusplan"
-        ]
+        ],
+        "client": "claude",
+        "billing": "subscription",
+        "protocolFamily": "claude-code-stream-json",
+        "aliasesRefused": [
+          "default",
+          "best",
+          "fable",
+          "sonnet",
+          "opus",
+          "haiku",
+          "sonnet[1m]",
+          "opus[1m]",
+          "opusplan"
+        ],
+        "provenance": {
+          "sourceUrl": "https://code.claude.com/docs/en/model-config",
+          "fetchedOn": "2026-10-02"
+        }
       },
       "models": [
         {
@@ -50,7 +68,48 @@
             "xhigh",
             "max"
           ],
-          "aliases": []
+          "aliases": [],
+          "channelModelId": "claude-fable-5-1",
+          "vendorId": "anthropic",
+          "canonicalModelId": "claude-fable-5-1",
+          "displayName": "Claude Fable 5.1",
+          "modalities": {
+            "input": [],
+            "output": []
+          },
+          "contextWindow": null,
+          "maxOutputTokens": null,
+          "reasoning": {
+            "supportedEfforts": [
+              "low",
+              "medium",
+              "high",
+              "xhigh",
+              "max"
+            ],
+            "defaultEffort": null
+          },
+          "capabilities": {
+            "tools": "unknown",
+            "vision": "unknown",
+            "pdf": "unknown",
+            "structuredOutput": "unknown",
+            "promptCaching": "unknown",
+            "streaming": "unknown"
+          },
+          "pricing": {
+            "kind": "subscription",
+            "source": {
+              "sourceUrl": "https://code.claude.com/docs/en/model-config",
+              "fetchedOn": "2026-10-02"
+            },
+            "asOf": "2026-10-02"
+          },
+          "minClientVersion": "2.1.257",
+          "provenance": {
+            "sourceUrl": "https://code.claude.com/docs/en/model-config",
+            "fetchedOn": "2026-10-02"
+          }
         },
         {
           "id": "opus-5-5",
@@ -81,7 +140,48 @@
             "xhigh",
             "max"
           ],
-          "aliases": []
+          "aliases": [],
+          "channelModelId": "claude-opus-5-5",
+          "vendorId": "anthropic",
+          "canonicalModelId": "claude-opus-5-5",
+          "displayName": "Claude Opus 5.5",
+          "modalities": {
+            "input": [],
+            "output": []
+          },
+          "contextWindow": null,
+          "maxOutputTokens": null,
+          "reasoning": {
+            "supportedEfforts": [
+              "low",
+              "medium",
+              "high",
+              "xhigh",
+              "max"
+            ],
+            "defaultEffort": null
+          },
+          "capabilities": {
+            "tools": "unknown",
+            "vision": "unknown",
+            "pdf": "unknown",
+            "structuredOutput": "unknown",
+            "promptCaching": "unknown",
+            "streaming": "unknown"
+          },
+          "pricing": {
+            "kind": "subscription",
+            "source": {
+              "sourceUrl": "https://code.claude.com/docs/en/model-config",
+              "fetchedOn": "2026-10-02"
+            },
+            "asOf": "2026-10-02"
+          },
+          "minClientVersion": "2.1.280",
+          "provenance": {
+            "sourceUrl": "https://code.claude.com/docs/en/model-config",
+            "fetchedOn": "2026-10-02"
+          }
         },
         {
           "id": "sonnet-5-5",
@@ -112,7 +212,48 @@
             "xhigh",
             "max"
           ],
-          "aliases": []
+          "aliases": [],
+          "channelModelId": "claude-sonnet-5-5",
+          "vendorId": "anthropic",
+          "canonicalModelId": "claude-sonnet-5-5",
+          "displayName": "Claude Sonnet 5.5",
+          "modalities": {
+            "input": [],
+            "output": []
+          },
+          "contextWindow": null,
+          "maxOutputTokens": null,
+          "reasoning": {
+            "supportedEfforts": [
+              "low",
+              "medium",
+              "high",
+              "xhigh",
+              "max"
+            ],
+            "defaultEffort": null
+          },
+          "capabilities": {
+            "tools": "unknown",
+            "vision": "unknown",
+            "pdf": "unknown",
+            "structuredOutput": "unknown",
+            "promptCaching": "unknown",
+            "streaming": "unknown"
+          },
+          "pricing": {
+            "kind": "subscription",
+            "source": {
+              "sourceUrl": "https://code.claude.com/docs/en/model-config",
+              "fetchedOn": "2026-10-02"
+            },
+            "asOf": "2026-10-02"
+          },
+          "minClientVersion": "2.1.284",
+          "provenance": {
+            "sourceUrl": "https://code.claude.com/docs/en/model-config",
+            "fetchedOn": "2026-10-02"
+          }
         },
         {
           "id": "haiku-4-5",
@@ -129,7 +270,7 @@
             "state": "active",
             "deprecatedOn": null,
             "retireNotBefore": "2026-10-15",
-            "retiredOn": null,
+            "retiredOn": "2026-10-15",
             "source": {
               "url": "https://platform.claude.com/docs/en/about-claude/model-deprecations",
               "observedOn": "2026-09-30"
@@ -139,8 +280,53 @@
           "efforts": [],
           "aliases": [
             "claude-haiku-4-5"
-          ]
+          ],
+          "channelModelId": "claude-haiku-4-5-20251001",
+          "vendorId": "anthropic",
+          "canonicalModelId": "claude-haiku-4-5-20251001",
+          "displayName": "Claude Haiku 4.5",
+          "modalities": {
+            "input": [],
+            "output": []
+          },
+          "contextWindow": null,
+          "maxOutputTokens": null,
+          "reasoning": {
+            "supportedEfforts": [],
+            "defaultEffort": null
+          },
+          "capabilities": {
+            "tools": "unknown",
+            "vision": "unknown",
+            "pdf": "unknown",
+            "structuredOutput": "unknown",
+            "promptCaching": "unknown",
+            "streaming": "unknown"
+          },
+          "pricing": {
+            "kind": "subscription",
+            "source": {
+              "sourceUrl": "https://code.claude.com/docs/en/model-config",
+              "fetchedOn": "2026-10-02"
+            },
+            "asOf": "2026-10-02"
+          },
+          "minClientVersion": null,
+          "provenance": {
+            "sourceUrl": "https://code.claude.com/docs/en/model-config",
+            "fetchedOn": "2026-10-02"
+          }
         }
+      ]
+    }
+  ],
+  "recommendedActivations": [
+    {
+      "channelId": "claude-cli-subscription",
+      "modelIds": [
+        "claude-opus-5-5",
+        "claude-sonnet-5-5",
+        "claude-fable-5-1"
       ]
     }
   ]

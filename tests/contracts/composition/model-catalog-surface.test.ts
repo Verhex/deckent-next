@@ -46,6 +46,21 @@ async function mcp(applications: Partial<McpApplications>) {
 }
 
 describe.skipIf(process.platform === 'win32')('model catalog operator surface (WORKER-CURRENCY-2)', () => {
+  it('registers the Codex seed through CLI and renders v3 facts in both human languages with help discovery', async () => {
+    const f = await fixture();
+    expect((await f.cli('register', '--scope', 's', '--command-id', 'codex-seed', '--seed', 'codex-cli-subscription')).code).toBe(0);
+    expect(f.tables()[2]).toEqual([]); // Recommendations never activate anything.
+    for (const lang of ['en', 'tr']) {
+      const listed = await f.cli('list', '--scope', 's', '--lang', lang);
+      expect(listed.code).toBe(0);
+      for (const text of ['openai', 'gpt-6.1-sol', 'subscription', '272000', 'ultra', '0.159.2', '2026-10-14']) expect(listed.stdout).toContain(text);
+      expect(listed.stdout).toContain(lang === 'en' ? 'canonical gpt-6.1-sol' : 'kanonik kimlik gpt-6.1-sol');
+      expect(listed.stdout).toContain(lang === 'en' ? 'not active' : 'etkin değil');
+      expect(listed.stdout).not.toContain('"schemaVersion"');
+      const help = await f.cli('--help', '--lang', lang);
+      expect(help.stdout).toContain('--seed'); expect(help.stdout).toContain('codex-cli-subscription');
+    }
+  });
   it('seeds the packaged document idempotently: same command id replays, a new command id changes nothing', async () => {
     const f = await fixture();
     const first = await f.cli('register', '--scope', 's', '--command-id', 'seed-1', '--seed', 'claude-cli-subscription', '--json');

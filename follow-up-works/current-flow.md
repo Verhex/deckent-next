@@ -1,3 +1,10 @@
+# CATALOG-V3 — lane/catalog-v3 (2026-10-02)
+
+Base 95c72a81; CATALOG-V3 uygulandı: additive v3 record, v2/makbuz uyumluluğu, Claude + Codex abonelik tohumları ve öneri listeleri, en/tr CLI, Monitor üretici/faturalama. SQL migrasyonu yok, v13 değişmedi. Öneriler kayıtta activation yaratmaz.
+Doğrulama: 12 dosya 106/106; bounded admission 11 geçti/3 runtime-socket dışlandı (ilk koşuda 2 taşıma katmanı hatası). 6/6 gerçek mutasyon yakalandı, kod geri yüklendi. Typecheck/eslint 0; arch 0 ihlal/0 uyarı; core-memory 0 ihlal. Kanıt: dış `proof/MODEL-CATALOG-2026-10-02/review.md`.
+Teslim: `0a2afdd2` record commit’i; ikinci commit index.lock EROFS nedeniyle yazılamadı. Kalan ağaç dış kanıtta `0002-codex-seed.patch` ve `git-diff-stat.txt`; lead commit edecek.
+Sınırlar: canlı sağlayıcı/servis veya Docker çalıştırılmadı; full verify/build/push yok. Claude bilinmeyen alanlar null/unknown; Codex cache sabit kanıt görüntüsünden. Sonraki adım: lead bağımsız incelemesi ve entegrasyon; owner canlı komut dosyası ayrıca hazır, çalıştırılmadı. Bağımsız inceleme yok; PASS değildir.
+
 # Anlık iş akışı — devir, sıradaki adım, kanıt (2026-09-29, Opus 5.5 lead)
 
 Bu belge yalnız güncel durumu tutar; önceki sürümü Git geçmişinde, kanıtlar `deckent-refactor-work/proof/`.
