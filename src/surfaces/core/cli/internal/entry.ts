@@ -14,7 +14,7 @@ import { secretCommand } from './secret.js';
 import { poolCommand } from './pool.js';
 import { inferenceCommand, modelsCommand } from '#surfaces/core/cli-models/index.js';
 import { decisionCommand } from '#surfaces/core/cli-decision/index.js';
-import { PACKAGE_NAME, PACKAGE_VERSION, readBuildIdentity, t, emit, assertErrorRegistry, reportFatal, resolveLocale, type ExitCode } from '#platform/index.js';
+import { PACKAGE_NAME, PACKAGE_VERSION, readBuildIdentity, t, emit, assertErrorRegistry, reportFatal, resolveLocale, loadConfigLanguage, type ExitCode } from '#platform/index.js';
 import { runKernelCommand, type CommandContext } from './kernel-commands.js';
 export type { ExitCode } from '#platform/index.js';
 
@@ -56,7 +56,7 @@ export async function main(argv: readonly string[] = process.argv.slice(2), cont
   let locale = resolveLocale(undefined, context.env);
   try {
     assertErrorRegistry();
-    const help = cliHelpRequest(argv, CLI_COMMANDS, context.env);
+    const help = await cliHelpRequest(argv, CLI_COMMANDS, context.env, () => loadConfigLanguage(context.root, { ...(context.env ? { env: context.env } : {}) }));
     if (help) {
       locale = help.locale; context.onLocale?.(locale);
       emit(help.output, { ...(context.stdout ? { stdout: context.stdout } : {}), ...(context.stderr ? { stderr: context.stderr } : {}) });

@@ -9,7 +9,7 @@ import { getSystemProfile } from '#platform/core/host/index.js';
 import { digestText, deepMerge, isRecord, readJsonFile, type JsonRecord } from '#platform/core/utils/index.js';
 import { createDefaultConfig } from './defaults.js';
 import { CONFIG_ENVIRONMENT_KEYS } from '#platform/core/config-fields/index.js';
-import { configSections, configRegistryGeneration, type DeckentConfig } from './schema.js';
+import { CORE_SCHEMA, configSections, configRegistryGeneration, type DeckentConfig } from './schema.js';
 import { versionedConfig } from './validate/version.js';
 import { applyConfigEnvironment } from './validate/environment.js';
 import { resolveConfigSecrets, type SecretResolver } from './validate/interpolate.js';
@@ -57,6 +57,18 @@ export async function loadGlobalConfig(options: Pick<ConfigLoadOptions, 'env' | 
     return null;
   }
   return versionedConfig(result.value, options.onWarning, resolveLocale(undefined, options.env));
+}
+/** Presentation-only projection through the same layer readers. No provider registration, secrets, healing or locks.
+ * Absent language stays absent so the caller can use the system locale; this is not execution config validation. */
+export async function loadConfigLanguage(projectRoot = process.cwd(), options: Pick<ConfigLoadOptions, 'env' | 'platform'> = {}): Promise<Locale | undefined> {
+  const platform = options.platform ?? process.platform;
+  const layout = resolveProductLayout({ projectRoot: resolve(projectRoot), platform: platform === 'win32' ? 'win32' : 'posix' });
+  const global = await loadGlobalConfig(options);
+  const project = await readProjectConfig(productResourcePath(layout, 'config'), { heal: false });
+  if (!isRecord(project)) throw new ConfigValidationError([{ path: 'language', reason: 'OBJECT_REQUIRED' }]);
+  const normalized = versionedConfig(project);
+  const language = Object.hasOwn(normalized, 'language') ? normalized['language'] : global?.['language'];
+  return language === undefined ? undefined : CORE_SCHEMA.shape.language.parse(language);
 }
 export async function loadConfig(projectRoot = process.cwd(), options: ConfigLoadOptions = {}): Promise<ResolvedConfig> {
   const root = resolve(projectRoot), env = { ...(options.env ?? process.env) };

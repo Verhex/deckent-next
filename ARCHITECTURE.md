@@ -574,6 +574,7 @@ Canonical help outputs have bilingual goldens and an 80-display-column gate, and
 group, summary and detail must exist in both locales. New actions register metadata and localized details
 in this catalog (A1/A3 `run close|resume` and `task accept|reject` are registered since batch 27);
 no top-level help string is hand-edited. The `config` family keeps its lazy handler edge (terminal-render/Ink).
+Help locale (owner 2026-10-03): explicit `--lang`, then `DECKENT_LANGUAGE` / `DECKENT_LANG`, then project/global `language`, then system locale/default. CLI ingress supplies the read-only `loadConfigLanguage` projection to the help recognizer. It reuses the config layer readers and version/language schema, preserves absent language, and does not initialize provider sections, resolve secrets, heal, write or lock. Invalid/unreadable language configuration silently falls back; unrelated execution sections are not validated by help. Explicit/environment locale skips the config read.
 Help paragraphs are authored without soft line breaks; intentional blank lines and command lists remain separate.
 Wrapping keeps bracket/angle tokens, flag-placeholder pairs and inline commands whole, and balances short prose tails.
 Sub-help renders an optional `<detail-key>.examples` message (shared by the family); absent examples are omitted.

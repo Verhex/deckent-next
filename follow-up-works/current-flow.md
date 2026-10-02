@@ -2,6 +2,15 @@
 
 Bu belge yalnız güncel durumu tutar; önceki sürümü Git geçmişinde, kanıtlar `deckent-refactor-work/proof/`.
 
+## CLI-HELP locale — owner 2026-10-03
+
+- Taban `d193bf22`, `integrate/2026-10-02-ab`; Codex uygulaması, yalnız dosya değişiklikleri.
+- Doğrulanan kusur: erken help yolu config dilini okumuyordu; ilk TDD 5/15 kırmızı. Tam loader provider kaydı öncesinde kurulum bölümlerini reddedebiliyor; genişletilmiş TDD 2/17 kırmızı.
+- Yetkili düzeltme: mevcut salt okunur katman okuyucularından yalnız dil projeksiyonu; `--lang` → `DECKENT_LANGUAGE`/`DECKENT_LANG` → proje/global dili → sistem dili. Heal/yazım/lock, provider initialize, secret çözümleme ve runtime yok.
+- Doğrulama: 6 dosya/62 test (17 yeni locale testi), mevcut en/tr golden ve startup zinciri yeşil; typecheck/eslint EXIT0, lint-arch hardcode ratchet dahil 0 ihlal/0 uyarı, memory manifest yenilendi. Kaynak composition CLI `-h` ve `run --help` Türkçe golden ile birebir; ağır importlar engellenerek çalıştı, config değişmedi/ek dosya oluşmadı.
+- `--help` medyanı 784.3 → 791.2 ms (+6.9 ms, %0.9); Linux / Node v24.21.0, 3 ısınma + 15 yeni süreç. Kaynak TypeScript yükleyicisi dahil; paketli binary ölçümü değildir. Bozuk JSON için mevcut okuyucunun 150 ms tekrar okuma beklemesi korunur.
+- Build/tam verify/canlı müdahale/commit yok. **Bağımsız inceleme yok; PASS değildir.** Kanıt: dış `proof/CLI-HELP-2026-10-02/locale-fix.md`; sıradaki lead incelemesi/commit ve kendi landing doğrulaması.
+
 ## Bu oturum — skill/rule düzenlemesi (owner 2026-10-02)
 
 - İlk dört karar owner ile tek tek: ortak `deckent-next-refactor`, read-only bootstrap/audit güncellendi;

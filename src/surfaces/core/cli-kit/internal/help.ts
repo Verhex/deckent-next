@@ -1,4 +1,4 @@
-import { t, resolveLocale, MESSAGE_REGISTRY, type Locale, type MessageKey } from '#platform/index.js';
+import { t, resolveLocale, LOCALES, MESSAGE_REGISTRY, type Locale, type MessageKey } from '#platform/index.js';
 import { CLI_CATALOG, HELP_GROUPS, type CliCommandName, type CliCommandSpec } from './command-catalog.js';
 
 export interface RegisteredCliCommand<C> extends CliCommandSpec {
@@ -54,7 +54,7 @@ export function renderCommandHelp(command: CliCommandSpec, locale: Locale): stri
 }
 
 /** Recognize only a help request. Extra execution flags still reach the unchanged parser. */
-export function cliHelpRequest<C>(argv: readonly string[], commands: readonly RegisteredCliCommand<C>[], env?: NodeJS.ProcessEnv): { output: string; locale: Locale } | null {
+export async function cliHelpRequest<C>(argv: readonly string[], commands: readonly RegisteredCliCommand<C>[], env: NodeJS.ProcessEnv = process.env, readLanguage?: () => Promise<Locale | undefined>): Promise<{ output: string; locale: Locale } | null> {
   const helpAt = argv.findIndex(value => value === '--help' || value === '-h');
   if (helpAt < 0) return null;
   const path = argv.slice(0, helpAt), tail = argv.slice(helpAt + 1);
@@ -64,10 +64,14 @@ export function cliHelpRequest<C>(argv: readonly string[], commands: readonly Re
     else if (tail[index] === '--lang' && language === undefined && tail[index + 1] && !tail[index + 1]!.startsWith('-')) language = tail[++index];
     else return null;
   }
-  const locale = resolveLocale(language, env);
-  if (!path.length) return { output: renderTopHelp(locale, all), locale };
   const command = commands.find(item => item.path.join('\0') === path.join('\0'))
     // Preserve the existing run/task help-only fallback, including unknown action names.
     ?? (path.length === 2 && (path[0] === 'run' || path[0] === 'task') ? commands.find(item => item.path.length === 1 && item.name === path[0]) : undefined);
-  return command ? { output: renderCommandHelp(command, locale), locale } : null;
+  if (path.length && !command) return null;
+  // Explicit/environment choices need no disk read. Config failures must never hide help or heal an installation.
+  const overridden = [language, env['DECKENT_LANGUAGE'], env['DECKENT_LANG']]
+    .some(value => LOCALES.some(locale => locale === value?.slice(0, 2).toLowerCase()));
+  const configLanguage = overridden ? undefined : await readLanguage?.().catch(() => undefined);
+  const locale = resolveLocale(language, env, configLanguage);
+  return { output: command ? renderCommandHelp(command, locale) : renderTopHelp(locale, all), locale };
 }
