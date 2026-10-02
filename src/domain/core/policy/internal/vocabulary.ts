@@ -2,6 +2,7 @@
  * Extensions may use other identifiers in generic policy documents; this catalog advertises only implemented core operations.
  */
 export const policyResources = Object.freeze({
+  config: Object.freeze({ kind: 'config' as const, actions: Object.freeze(['write'] as const) }),
   approval: Object.freeze({ kind: 'approval' as const, actions: Object.freeze(['inspect', 'decide', 'renew'] as const) }),
   task: Object.freeze({ kind: 'task' as const, actions: Object.freeze(['execute'] as const) }),
   attempt: Object.freeze({ kind: 'attempt' as const, actions: Object.freeze(['execute', 'release', 'reconcile', 'recover-output', 'cancel', 'evaluate', 'read-output', 'prepare-integration', 'deliver-integration', 'adopt-integration', 'rollback-integration'] as const) }),

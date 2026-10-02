@@ -115,7 +115,7 @@ describe.skipIf(process.platform !== 'linux')('secret set/delete through the run
     expect(changes(events)).toEqual(['set', 'delete', 'delete'].map(action => ({ kind: 'secret-change', action, name: 'PROVIDER_TOKEN',
       backend: 'core.secret-store.file@1', decision: { effect: 'allow', ruleId: 'first-run-secret-store' } })));
     // The principal is the socket peer (never a request field); the policy revision is the template's.
-    expect(events[0]).toMatchObject({ scopeId: 'installation', principal: me, policyRevision: expect.stringContaining('first-run-template-v3') });
+    expect(events[0]).toMatchObject({ scopeId: 'installation', principal: me, policyRevision: expect.stringContaining('first-run-template-v4') });
     expect(await f.scanForCanary()).toEqual([]);
   }, 60_000);
 

@@ -30,6 +30,7 @@ export const WORKLINE_SLASH_COMMANDS: readonly SlashCommand[] = Object.freeze([
   // MCP-CLIENT: the project's MCP servers (`/mcp approve|reconnect|remove <name>` typed); runs at once from the palette.
   { name: 'mcp', descriptionKey: 'terminal.slash.mcp' },
   // MONITOR: the monitor's text snapshot (Runs, blockers, workers, approvals, pools, installs); `deckent monitor` is the fullscreen view.
+  { name: 'config', descriptionKey: 'config.surface.slashDescription' },
   { name: 'monitor', descriptionKey: 'terminal.slash.monitor' },
   { name: 'exit', descriptionKey: 'terminal.slash.exit' },
   { name: 'quit', descriptionKey: 'terminal.slash.exit' },

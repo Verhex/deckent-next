@@ -2,91 +2,269 @@
   "$comment": "External dependency registry (DEPS-GOV, owner 2026-09-29). Single source of truth for which arch unit (src/<pkg>/<tier>/<unit>) or package (src/<pkg>) may import each npm package; lint-arch enforces owners, package.json parity, embedded components and review intervals offline and warns when nextReview has passed; scripts/deps-watch.mjs refreshes versions, OSV, provenance and licenses over the network. Seeded from proof/DEPENDENCY-AUDIT-2026-09-29 (A/B/C) with npm registry data read 2026-09-29.",
   "schemaVersion": 2,
   "policy": {
-    "reviewIntervalDays": { "P0": 30, "P1": 60, "P2": 90 },
-    "licenses": {
-      "runtime": ["MIT", "ISC", "Apache-2.0", "BSD-2-Clause", "BSD-3-Clause", "0BSD", "BlueOak-1.0.0", "CC0-1.0"],
-      "dev": ["MIT", "ISC", "Apache-2.0", "BSD-2-Clause", "BSD-3-Clause", "0BSD", "BlueOak-1.0.0", "CC0-1.0", "MPL-2.0"]
+    "reviewIntervalDays": {
+      "P0": 30,
+      "P1": 60,
+      "P2": 90
     },
-    "failSeverities": ["HIGH", "CRITICAL"]
+    "licenses": {
+      "runtime": [
+        "MIT",
+        "ISC",
+        "Apache-2.0",
+        "BSD-2-Clause",
+        "BSD-3-Clause",
+        "0BSD",
+        "BlueOak-1.0.0",
+        "CC0-1.0"
+      ],
+      "dev": [
+        "MIT",
+        "ISC",
+        "Apache-2.0",
+        "BSD-2-Clause",
+        "BSD-3-Clause",
+        "0BSD",
+        "BlueOak-1.0.0",
+        "CC0-1.0",
+        "MPL-2.0"
+      ]
+    },
+    "failSeverities": [
+      "HIGH",
+      "CRITICAL"
+    ]
   },
   "dependencies": {
     "@modelcontextprotocol/client": {
       "kind": "runtime",
       "reviewedVersion": "2.2.0",
-      "owners": ["src/adapters/core/mcp-client"],
+      "owners": [
+        "src/adapters/core/mcp-client"
+      ],
       "purpose": "MCP client for the runtime service's external MCP tool servers (stdio launch, list/pin, call).",
-      "features": ["Client (connect, listTools cacheMode bypass + timeout + signal, callTool, getProtocolEra, getNegotiatedProtocolVersion, getServerVersion, close)", "StdioClientTransport (stderr pipe, maxBufferSize) via @modelcontextprotocol/client/stdio", "ClientOptions.jsonSchemaValidator (the jsonSchemaValidator provider interface) given Deckent's own validator, #platform/core/validate (MCP-SCHEMA-VALIDATOR)", "ProtocolError, CallToolResult, VersionNegotiationMode", "lazy import() so CLI start does not load the SDK"],
+      "features": [
+        "Client (connect, listTools cacheMode bypass + timeout + signal, callTool, getProtocolEra, getNegotiatedProtocolVersion, getServerVersion, close)",
+        "StdioClientTransport (stderr pipe, maxBufferSize) via @modelcontextprotocol/client/stdio",
+        "ClientOptions.jsonSchemaValidator (the jsonSchemaValidator provider interface) given Deckent's own validator, #platform/core/validate (MCP-SCHEMA-VALIDATOR)",
+        "ProtocolError, CallToolResult, VersionNegotiationMode",
+        "lazy import() so CLI start does not load the SDK"
+      ],
       "embedded": [
-        { "name": "@cfworker/json-schema", "version": "4.1.1", "license": "MIT" },
-        { "name": "ajv", "version": "8.18.0", "license": "MIT" },
-        { "name": "ajv-formats", "version": "3.0.1", "license": "MIT" },
-        { "name": "content-type", "version": "1.0.5", "license": "MIT" },
-        { "name": "fast-deep-equal", "version": "3.1.3", "license": "MIT" },
-        { "name": "fast-uri", "version": "3.1.0", "license": "BSD-3-Clause" },
-        { "name": "jose", "version": "6.2.2", "license": "MIT" },
-        { "name": "json-schema-traverse", "version": "1.0.0", "license": "MIT" },
-        { "name": "json-schema-typed", "version": "8.0.2", "license": "BSD-2-Clause" }
+        {
+          "name": "@cfworker/json-schema",
+          "version": "4.1.1",
+          "license": "MIT"
+        },
+        {
+          "name": "ajv",
+          "version": "8.18.0",
+          "license": "MIT"
+        },
+        {
+          "name": "ajv-formats",
+          "version": "3.0.1",
+          "license": "MIT"
+        },
+        {
+          "name": "content-type",
+          "version": "1.0.5",
+          "license": "MIT"
+        },
+        {
+          "name": "fast-deep-equal",
+          "version": "3.1.3",
+          "license": "MIT"
+        },
+        {
+          "name": "fast-uri",
+          "version": "3.1.0",
+          "license": "BSD-3-Clause"
+        },
+        {
+          "name": "jose",
+          "version": "6.2.2",
+          "license": "MIT"
+        },
+        {
+          "name": "json-schema-traverse",
+          "version": "1.0.0",
+          "license": "MIT"
+        },
+        {
+          "name": "json-schema-typed",
+          "version": "8.0.2",
+          "license": "BSD-2-Clause"
+        }
       ],
       "criticality": "P0",
       "alternatives": [
-        { "name": "fastmcp", "package": "fastmcp", "version": "4.22.0", "date": "2026-09-26", "note": "Server framework layered on the official SDK; not an independent client implementation." }
+        {
+          "name": "fastmcp",
+          "package": "fastmcp",
+          "version": "4.22.0",
+          "date": "2026-09-26",
+          "note": "Server framework layered on the official SDK; not an independent client implementation."
+        }
       ],
       "ownSolution": "Own stdio JSON-RPC client behind the mcp-client port is feasible (one unit) but would move spec tracking (2026-07-28 stateless era, OAuth, MRTR) to us; audit A judged it a bad trade today. Own JSON Schema validator: built (MCP-SCHEMA-VALIDATOR, owner 2026-09-29) behind the SDK's jsonSchemaValidator interface — 2020-12 + draft-07 subset, linear-time pattern engine, bounded compile/validation, unsupported features refused; replaces @cfworker/json-schema (proof/MCP-SCHEMA-VALIDATOR-2026-09-29).",
-      "watch": ["FASTURI-OUT (owner 2026-09-29): the published package does not contain the embedded ajv/ajv-formats/fast-uri/json-schema-traverse; scripts/build-dist.mjs loads _shims and validators/ajv with their ajvProvider import replaced by a stub that throws DeckentRemovedValidatorError (MCP_DEFAULT_VALIDATOR_REMOVED), and fails the build if the metafile, shipped packages or sourcemap-embedded components name them. They remain in the installed dev/test tree (embedded[] below mirrors the installed sourcemaps).", "Embedded fast-uri@3.1.0 carries 8 HIGH OSV advisories (fixed 3.1.7/4.1.4); a remote outputSchema is compiled only by Deckent's own validator (MCP-SCHEMA-VALIDATOR); upstream rebuild tracked in typescript-sdk#2042/#2036.", "MCP-SCHEMA-VALIDATOR (owner 2026-09-29): the SDK's embedded @cfworker/json-schema@4.1.1 (last release 2025-01-31; cfworker#335/#337 fail-closed, #150 $dynamicRef fail-open; ReDoS through pattern) is no longer used or shipped; build-dist refuses cfWorkerProvider/@cfworker/json-schema like ajv. It remains in the installed dev/test tree (embedded[] mirrors the installed sourcemaps).", "MCP-PIN-DEF: pass the pinned toolDefinition to callTool; -32020 resend is a checkpoint."],
+      "watch": [
+        "FASTURI-OUT (owner 2026-09-29): the published package does not contain the embedded ajv/ajv-formats/fast-uri/json-schema-traverse; scripts/build-dist.mjs loads _shims and validators/ajv with their ajvProvider import replaced by a stub that throws DeckentRemovedValidatorError (MCP_DEFAULT_VALIDATOR_REMOVED), and fails the build if the metafile, shipped packages or sourcemap-embedded components name them. They remain in the installed dev/test tree (embedded[] below mirrors the installed sourcemaps).",
+        "Embedded fast-uri@3.1.0 carries 8 HIGH OSV advisories (fixed 3.1.7/4.1.4); a remote outputSchema is compiled only by Deckent's own validator (MCP-SCHEMA-VALIDATOR); upstream rebuild tracked in typescript-sdk#2042/#2036.",
+        "MCP-SCHEMA-VALIDATOR (owner 2026-09-29): the SDK's embedded @cfworker/json-schema@4.1.1 (last release 2025-01-31; cfworker#335/#337 fail-closed, #150 $dynamicRef fail-open; ReDoS through pattern) is no longer used or shipped; build-dist refuses cfWorkerProvider/@cfworker/json-schema like ajv. It remains in the installed dev/test tree (embedded[] mirrors the installed sourcemaps).",
+        "MCP-PIN-DEF: pass the pinned toolDefinition to callTool; -32020 resend is a checkpoint."
+      ],
       "lastReview": "2026-09-29",
       "nextReview": "2026-10-29"
     },
     "@modelcontextprotocol/server": {
       "kind": "runtime",
       "reviewedVersion": "2.2.0",
-      "owners": ["src/adapters/core/mcp-transport", "src/surfaces/core/mcp", "src/composition/core/mcp"],
+      "owners": [
+        "src/adapters/core/mcp-transport",
+        "src/surfaces/core/mcp",
+        "src/composition/core/mcp"
+      ],
       "purpose": "deckent-mcp server: the protocol surface external agents use to drive Deckent over stdio.",
-      "features": ["low-level Server with setRequestHandler tools/list + tools/call, capabilities.tools and jsonSchemaValidator", "ServerOptions.jsonSchemaValidator given Deckent's own validator, #platform/core/validate (MCP-SCHEMA-VALIDATOR; FASTURI-OUT: the SDK default is stubbed in the published package)", "Transport, TransportSendOptions, JSONRPCMessage, MessageExtraInfo, RequestId, Tool, CallToolResult types (bounded own transport in mcp-transport)", "serveStdio + StdioServerTransport (maxBufferSize) via @modelcontextprotocol/server/stdio"],
+      "features": [
+        "low-level Server with setRequestHandler tools/list + tools/call, capabilities.tools and jsonSchemaValidator",
+        "ServerOptions.jsonSchemaValidator given Deckent's own validator, #platform/core/validate (MCP-SCHEMA-VALIDATOR; FASTURI-OUT: the SDK default is stubbed in the published package)",
+        "Transport, TransportSendOptions, JSONRPCMessage, MessageExtraInfo, RequestId, Tool, CallToolResult types (bounded own transport in mcp-transport)",
+        "serveStdio + StdioServerTransport (maxBufferSize) via @modelcontextprotocol/server/stdio"
+      ],
       "embedded": [
-        { "name": "@cfworker/json-schema", "version": "4.1.1", "license": "MIT" },
-        { "name": "ajv", "version": "8.18.0", "license": "MIT" },
-        { "name": "ajv-formats", "version": "3.0.1", "license": "MIT" },
-        { "name": "content-type", "version": "1.0.5", "license": "MIT" },
-        { "name": "fast-deep-equal", "version": "3.1.3", "license": "MIT" },
-        { "name": "fast-uri", "version": "3.1.0", "license": "BSD-3-Clause" },
-        { "name": "json-schema-traverse", "version": "1.0.0", "license": "MIT" },
-        { "name": "json-schema-typed", "version": "8.0.2", "license": "BSD-2-Clause" }
+        {
+          "name": "@cfworker/json-schema",
+          "version": "4.1.1",
+          "license": "MIT"
+        },
+        {
+          "name": "ajv",
+          "version": "8.18.0",
+          "license": "MIT"
+        },
+        {
+          "name": "ajv-formats",
+          "version": "3.0.1",
+          "license": "MIT"
+        },
+        {
+          "name": "content-type",
+          "version": "1.0.5",
+          "license": "MIT"
+        },
+        {
+          "name": "fast-deep-equal",
+          "version": "3.1.3",
+          "license": "MIT"
+        },
+        {
+          "name": "fast-uri",
+          "version": "3.1.0",
+          "license": "BSD-3-Clause"
+        },
+        {
+          "name": "json-schema-traverse",
+          "version": "1.0.0",
+          "license": "MIT"
+        },
+        {
+          "name": "json-schema-typed",
+          "version": "8.0.2",
+          "license": "BSD-2-Clause"
+        }
       ],
       "criticality": "P0",
       "alternatives": [
-        { "name": "fastmcp", "package": "fastmcp", "version": "4.22.0", "date": "2026-09-26", "note": "Higher-level server framework on top of the official SDK; would not remove the SDK or its embedded ajv." }
+        {
+          "name": "fastmcp",
+          "package": "fastmcp",
+          "version": "4.22.0",
+          "date": "2026-09-26",
+          "note": "Higher-level server framework on top of the official SDK; would not remove the SDK or its embedded ajv."
+        }
       ],
       "ownSolution": "We parse tool input with our own zod schemas and use only the low-level Server; an own stdio JSON-RPC server would drop ajv/zod4/eventsource/jose from the tree but take on spec tracking. The ajv default validator is out of the published package (build-dist stub, FASTURI-OUT) and the Server gets Deckent's own validator through the SDK's jsonSchemaValidator interface (MCP-SCHEMA-VALIDATOR).",
-      "watch": ["Server dist loads the embedded ajvProvider unconditionally (shimsNode) in the installed dev/test tree; the published package loads a stub instead (FASTURI-OUT) and the Server gets Deckent's own validator explicitly (MCP-SCHEMA-VALIDATOR; the SDK's cf-worker provider is neither used nor shipped).", "Three nested zod@4.6.5 copies under the SDK packages until our zod 4 migration dedupes them."],
+      "watch": [
+        "Server dist loads the embedded ajvProvider unconditionally (shimsNode) in the installed dev/test tree; the published package loads a stub instead (FASTURI-OUT) and the Server gets Deckent's own validator explicitly (MCP-SCHEMA-VALIDATOR; the SDK's cf-worker provider is neither used nor shipped).",
+        "Three nested zod@4.6.5 copies under the SDK packages until our zod 4 migration dedupes them."
+      ],
       "lastReview": "2026-09-29",
       "nextReview": "2026-10-29"
     },
     "ink": {
       "kind": "runtime",
       "reviewedVersion": "7.1.1",
-      "owners": ["src/surfaces/core/terminal", "src/surfaces/core/terminal-composer", "src/surfaces/core/terminal-render", "src/surfaces/core/monitor"],
+      "owners": [
+        "src/surfaces/core/terminal",
+        "src/surfaces/core/terminal-composer",
+        "src/surfaces/core/terminal-render",
+        "src/surfaces/core/monitor"
+      ],
       "purpose": "Interactive terminal (TUI) renderer: layout, input and paste handling for the Deckent terminal.",
-      "features": ["render (exitOnCtrlC false, patchConsole false), Instance", "Box, Text, Static", "useApp, useInput, usePaste, useWindowSize, useAnimation, Key", "render alternateScreen + waitUntilExit (MONITOR fullscreen view)"],
+      "features": [
+        "render (exitOnCtrlC false, patchConsole false), Instance",
+        "Box, Text, Static",
+        "useApp, useInput, usePaste, useWindowSize, useAnimation, Key",
+        "render alternateScreen + waitUntilExit (MONITOR fullscreen view)"
+      ],
       "criticality": "P1",
       "alternatives": [
-        { "name": "OpenTUI", "package": "@opentui/core", "version": "0.5.12", "date": "2026-09-22", "note": "Native-core TUI with React/Solid bindings (@opentui/react 0.5.12); pre-1.0." },
-        { "name": "terminal-kit", "package": "terminal-kit", "version": "3.1.4", "date": "2026-07-19", "note": "Imperative terminal toolkit, no React; would need a rewrite of the four terminal units." }
+        {
+          "name": "OpenTUI",
+          "package": "@opentui/core",
+          "version": "0.5.12",
+          "date": "2026-09-22",
+          "note": "Native-core TUI with React/Solid bindings (@opentui/react 0.5.12); pre-1.0."
+        },
+        {
+          "name": "terminal-kit",
+          "package": "terminal-kit",
+          "version": "3.1.4",
+          "date": "2026-07-19",
+          "note": "Imperative terminal toolkit, no React; would need a rewrite of the four terminal units."
+        }
       ],
       "ownSolution": "Thin own renderer (ANSI line diff + input parser, no Yoga) would drop ~30 unprovenanced packages and ~140 ms TUI import but must re-solve paste, wide characters, resize, Windows console and Static scrollback.",
-      "watch": ["No npm provenance on ink or most of its subtree.", "ink 7.1 suspendTerminal() for editor/shell hand-off is unused.", "Unpin react when an ink release moves to react-reconciler 0.34."],
+      "watch": [
+        "No npm provenance on ink or most of its subtree.",
+        "ink 7.1 suspendTerminal() for editor/shell hand-off is unused.",
+        "Unpin react when an ink release moves to react-reconciler 0.34."
+      ],
       "lastReview": "2026-09-29",
       "nextReview": "2026-11-28"
     },
     "react": {
       "kind": "runtime",
       "reviewedVersion": "19.2.8",
-      "owners": ["src/surfaces/core/terminal", "src/surfaces/core/terminal-composer", "src/surfaces/core/terminal-kit", "src/surfaces/core/terminal-render", "src/surfaces/core/monitor"],
+      "owners": [
+        "src/surfaces/core/terminal",
+        "src/surfaces/core/terminal-composer",
+        "src/surfaces/core/terminal-kit",
+        "src/surfaces/core/terminal-render",
+        "src/surfaces/core/monitor"
+      ],
       "purpose": "Component model for the ink TUI.",
-      "features": ["useState, useEffect, useLayoutEffect, useRef, useCallback, createContext, useContext, createElement", "ReactElement, ReactNode types"],
+      "features": [
+        "useState, useEffect, useLayoutEffect, useRef, useCallback, createContext, useContext, createElement",
+        "ReactElement, ReactNode types"
+      ],
       "criticality": "P1",
       "alternatives": [
-        { "name": "react 19.3.x (latest)", "package": "react", "version": "19.3.0", "date": "2026-09-09", "note": "Not taken: react-reconciler@0.33.0 (ink 7.1.1's pinned ^0.33.0) ships internal reconcilerVersion \"19.2.0\" and peers on ^19.2.0; 19.3.0 satisfies the semver range but is not the release-train match React ships. DEPS-P0 (owner 2026-09-29) pins react to 19.2.8 instead; verified via `npm ls react react-reconciler` (deduped, no mismatch). Revisit when ink moves to react-reconciler 0.34 (peers ^19.3.0)." },
-        { "name": "preact", "package": "preact", "version": "10.29.8", "date": "2026-08-01", "note": "Not supported by ink; only relevant with an own renderer." }
+        {
+          "name": "react 19.3.x (latest)",
+          "package": "react",
+          "version": "19.3.0",
+          "date": "2026-09-09",
+          "note": "Not taken: react-reconciler@0.33.0 (ink 7.1.1's pinned ^0.33.0) ships internal reconcilerVersion \"19.2.0\" and peers on ^19.2.0; 19.3.0 satisfies the semver range but is not the release-train match React ships. DEPS-P0 (owner 2026-09-29) pins react to 19.2.8 instead; verified via `npm ls react react-reconciler` (deduped, no mismatch). Revisit when ink moves to react-reconciler 0.34 (peers ^19.3.0)."
+        },
+        {
+          "name": "preact",
+          "package": "preact",
+          "version": "10.29.8",
+          "date": "2026-08-01",
+          "note": "Not supported by ink; only relevant with an own renderer."
+        }
       ],
       "ownSolution": "None while ink is the renderer; react goes with ink.",
       "lastReview": "2026-09-29",
@@ -95,98 +273,250 @@
     "zod": {
       "kind": "runtime",
       "reviewedVersion": "3.25.76",
-      "owners": ["src/platform", "src/domain", "src/capabilities", "src/engine", "src/adapters", "src/composition", "src/surfaces/core/cli", "src/surfaces/core/mcp"],
+      "owners": [
+        "src/platform",
+        "src/domain",
+        "src/capabilities",
+        "src/engine",
+        "src/adapters",
+        "src/composition",
+        "src/surfaces/core/cli",
+        "src/surfaces/core/mcp"
+      ],
       "purpose": "Contract language: runtime schemas for domain records, config, ledger rows, provider wire shapes and MCP tool input.",
-      "features": ["z (object/strict/passthrough, discriminatedUnion, default, superRefine, safe/int, uuid, url, record)", "ZodError", "~standard (Standard Schema v1) exposed by 3.25"],
+      "features": [
+        "z (object/strict/passthrough, discriminatedUnion, default, superRefine, safe/int, uuid, url, record)",
+        "ZodError",
+        "~standard (Standard Schema v1) exposed by 3.25"
+      ],
       "criticality": "P0",
       "alternatives": [
-        { "name": "zod 4", "package": "zod", "version": "4.6.5", "date": "2026-09-13", "note": "Planned migration (owner 2026-09-29): config equivalence tests first (17 .default({}) -> .prefault), +27 ms CLI cold start, dedupes the SDK's zod 4 copies." },
-        { "name": "valibot", "package": "valibot", "version": "1.5.0", "date": "2026-09-09", "note": "Modular, tree-shakable; Standard Schema compliant." },
-        { "name": "ArkType", "package": "arktype", "version": "2.2.5", "date": "2026-09-24", "note": "Type-syntax schemas; Standard Schema compliant." },
-        { "name": "TypeBox", "package": "typebox", "version": "1.3.34", "date": "2026-09-18", "note": "JSON Schema native (successor of @sinclair/typebox 0.34.52)." }
+        {
+          "name": "zod 4",
+          "package": "zod",
+          "version": "4.6.5",
+          "date": "2026-09-13",
+          "note": "Planned migration (owner 2026-09-29): config equivalence tests first (17 .default({}) -> .prefault), +27 ms CLI cold start, dedupes the SDK's zod 4 copies."
+        },
+        {
+          "name": "valibot",
+          "package": "valibot",
+          "version": "1.5.0",
+          "date": "2026-09-09",
+          "note": "Modular, tree-shakable; Standard Schema compliant."
+        },
+        {
+          "name": "ArkType",
+          "package": "arktype",
+          "version": "2.2.5",
+          "date": "2026-09-24",
+          "note": "Type-syntax schemas; Standard Schema compliant."
+        },
+        {
+          "name": "TypeBox",
+          "package": "typebox",
+          "version": "1.3.34",
+          "date": "2026-09-18",
+          "note": "JSON Schema native (successor of @sinclair/typebox 0.34.52)."
+        }
       ],
       "ownSolution": "Public contracts move to the Standard Schema interface (vendored types, DEPS-SCHEMA) so Enterprise/ERP adapters do not bind to a zod major; internals keep zod.",
-      "watch": ["3.x line receives no releases; 131 published .d.ts import zod until DEPS-SCHEMA.", "Owners are package-wide for the contract layers; narrow after the zod 4 migration."],
+      "watch": [
+        "3.x line receives no releases; 131 published .d.ts import zod until DEPS-SCHEMA.",
+        "Owners are package-wide for the contract layers; narrow after the zod 4 migration."
+      ],
       "lastReview": "2026-09-29",
       "nextReview": "2026-10-29"
     },
     "zod-to-json-schema": {
       "kind": "runtime",
       "reviewedVersion": "3.25.0",
-      "owners": ["src/surfaces/core/mcp"],
+      "owners": [
+        "src/surfaces/core/mcp",
+        "src/engine/core/config"
+      ],
       "purpose": "Converts MCP tool input zod schemas to JSON Schema (draft-07) for tools/list.",
-      "features": ["zodToJsonSchema(schema, { $refStrategy: 'none' })"],
+      "features": [
+        "zodToJsonSchema(schema, { $refStrategy: 'none' })"
+      ],
       "criticality": "P1",
       "alternatives": [
-        { "name": "zod 4 z.toJSONSchema", "package": "zod", "version": "4.6.5", "date": "2026-09-13", "note": "Built in; emits JSON Schema 2020-12 (MCP 2026-07-28 RECOMMENDED dialect); arrives with the zod 4 migration." }
+        {
+          "name": "zod 4 z.toJSONSchema",
+          "package": "zod",
+          "version": "4.6.5",
+          "date": "2026-09-13",
+          "note": "Built in; emits JSON Schema 2020-12 (MCP 2026-07-28 RECOMMENDED dialect); arrives with the zod 4 migration."
+        }
       ],
       "ownSolution": "Removed by the zod 4 migration; nothing to own.",
-      "watch": ["Unmaintained since November 2025 (README); single maintainer, no provenance; latest 3.25.2 (2026-03-27)."],
+      "watch": [
+        "Unmaintained since November 2025 (README); single maintainer, no provenance; latest 3.25.2 (2026-03-27)."
+      ],
       "lastReview": "2026-09-29",
       "nextReview": "2026-11-28"
     },
     "typescript": {
       "kind": "dev",
       "reviewedVersion": "5.9.3",
-      "owners": ["tsconfig.json", "scripts/lint-arch.mjs", "scripts/dependencies.mjs"],
+      "owners": [
+        "tsconfig.json",
+        "scripts/lint-arch.mjs",
+        "scripts/dependencies.mjs"
+      ],
       "purpose": "Compiler for dist and strict typecheck; its AST/checker API drives lint-arch.",
-      "features": ["tsc --noEmit (typecheck) and tsc -p (build) with NodeNext, strict, isolatedModules, declaration", "compiler API: createProgram, getTypeChecker, createSourceFile, parseJsonText in lint-arch/dependencies"],
+      "features": [
+        "tsc --noEmit (typecheck) and tsc -p (build) with NodeNext, strict, isolatedModules, declaration",
+        "compiler API: createProgram, getTypeChecker, createSourceFile, parseJsonText in lint-arch/dependencies"
+      ],
       "criticality": "P1",
       "alternatives": [
-        { "name": "TypeScript 6.0", "package": "typescript", "version": "6.0.3", "date": "2026-04-16", "note": "DEPS-TS target: drop deprecated baseUrl; inside the typescript-eslint peer range (< 6.1.0)." },
-        { "name": "TypeScript 7", "package": "typescript", "version": "7.0.2", "date": "2026-07-08", "note": "npm latest tag; Go compiler, ~10x faster; parallel non-blocking shadow typecheck first (DEPS-TS)." },
-        { "name": "TypeScript 7 native preview", "package": "@typescript/native-preview", "version": "7.0.0-dev.20260707.2", "date": "2026-07-07", "note": "Go compiler; no stable programmatic API until 7.1, so lint-arch and typescript-eslint stay on the JS API." }
+        {
+          "name": "TypeScript 6.0",
+          "package": "typescript",
+          "version": "6.0.3",
+          "date": "2026-04-16",
+          "note": "DEPS-TS target: drop deprecated baseUrl; inside the typescript-eslint peer range (< 6.1.0)."
+        },
+        {
+          "name": "TypeScript 7",
+          "package": "typescript",
+          "version": "7.0.2",
+          "date": "2026-07-08",
+          "note": "npm latest tag; Go compiler, ~10x faster; parallel non-blocking shadow typecheck first (DEPS-TS)."
+        },
+        {
+          "name": "TypeScript 7 native preview",
+          "package": "@typescript/native-preview",
+          "version": "7.0.0-dev.20260707.2",
+          "date": "2026-07-07",
+          "note": "Go compiler; no stable programmatic API until 7.1, so lint-arch and typescript-eslint stay on the JS API."
+        }
       ],
       "ownSolution": "None; the compiler is not a candidate for replacement.",
-      "watch": ["TS 7 shadow typecheck in verify (DEPS-TS) once added; switch main typecheck when typescript-eslint supports TS 7."],
+      "watch": [
+        "TS 7 shadow typecheck in verify (DEPS-TS) once added; switch main typecheck when typescript-eslint supports TS 7."
+      ],
       "lastReview": "2026-09-29",
       "nextReview": "2026-11-28"
     },
     "vitest": {
       "kind": "dev",
       "reviewedVersion": "5.0.1",
-      "owners": ["vitest.config.ts", "tests"],
+      "owners": [
+        "vitest.config.ts",
+        "tests"
+      ],
       "purpose": "Test runner for tests/**/*.test.ts (forks pool, custom verification reporter).",
-      "features": ["describe/it/expect/vi", "pool forks + maxWorkers from VITEST_MAX_FORKS", "custom reporter scripts/verification-reporter.mjs"],
+      "features": [
+        "describe/it/expect/vi",
+        "pool forks + maxWorkers from VITEST_MAX_FORKS",
+        "custom reporter scripts/verification-reporter.mjs"
+      ],
       "criticality": "P1",
       "alternatives": [
-        { "name": "node:test", "note": "Built in; already used for .agents/refactor host tests; would need mocks/reporters rewritten." },
-        { "name": "Jest", "package": "jest", "version": "30.5.2", "date": "2026-09-18", "note": "Mature but slower ESM story; no gain over vitest here." }
+        {
+          "name": "node:test",
+          "note": "Built in; already used for .agents/refactor host tests; would need mocks/reporters rewritten."
+        },
+        {
+          "name": "Jest",
+          "package": "jest",
+          "version": "30.5.2",
+          "date": "2026-09-18",
+          "note": "Mature but slower ESM story; no gain over vitest here."
+        }
       ],
       "ownSolution": "None planned (audit C: cost exceeds gain).",
-      "watch": ["5.0.2 (2026-09-25) available; vitest 5 excludes Node 25 (engines ^22.12 || ^24 || >=26)."],
+      "watch": [
+        "5.0.2 (2026-09-25) available; vitest 5 excludes Node 25 (engines ^22.12 || ^24 || >=26)."
+      ],
       "lastReview": "2026-09-29",
       "nextReview": "2026-11-28"
     },
     "esbuild": {
       "kind": "dev",
       "reviewedVersion": "0.28.2",
-      "owners": ["scripts/build-dist.mjs"],
+      "owners": [
+        "scripts/build-dist.mjs"
+      ],
       "purpose": "Bundles the runtime dependencies into the published package (DEPS-DIST, owner 2026-09-29): zero install-time dependencies, one tarball for air-gapped installs; its metafile is the SBOM source.",
-      "features": ["build API: bundle + splitting (format esm, platform node, target node24), chunkNames, external, legalComments eof", "metafile inputs/outputs with bytesInOutput (SBOM shipped vs tree-shaken)", "plugin onResolve keeping Deckent's own modules external (tsc layout preserved)", "plugin onResolve + build.resolve + onLoad replacing the MCP SDK's ajvProvider import in _shims/validators/ajv with a throwing stub (FASTURI-OUT)", "package.json imports (#…) resolution inside dependencies"],
+      "features": [
+        "build API: bundle + splitting (format esm, platform node, target node24), chunkNames, external, legalComments eof",
+        "metafile inputs/outputs with bytesInOutput (SBOM shipped vs tree-shaken)",
+        "plugin onResolve keeping Deckent's own modules external (tsc layout preserved)",
+        "plugin onResolve + build.resolve + onLoad replacing the MCP SDK's ajvProvider import in _shims/validators/ajv with a throwing stub (FASTURI-OUT)",
+        "package.json imports (#…) resolution inside dependencies"
+      ],
       "criticality": "P1",
       "alternatives": [
-        { "name": "Rolldown", "package": "rolldown", "version": "1.2.11", "date": "2026-09-24", "note": "1.0 GA 2026-05-07; injects createRequire for ESM itself, but legal comments cannot be extracted to a file and output is not yet deterministic (rolldown#10909, open 2026-09-17) — matters for build identity and provenance." },
-        { "name": "tsdown", "package": "tsdown", "version": "0.23.0", "date": "2026-09-03", "note": "Rolldown-based library bundler with d.ts bundling (rolldown-plugin-dts); candidate if public declarations are bundled later; pre-1.0." },
-        { "name": "Rollup", "package": "rollup", "version": "4.63.5", "date": "2026-09-24", "note": "Needs node-resolve + commonjs plugins for this dependency tree; slower." },
-        { "name": "@vercel/ncc", "package": "@vercel/ncc", "version": "0.45.0", "date": "2026-08-13", "note": "webpack-based single-file compiler with --license output; no per-file layout preservation." },
-        { "name": "npm bundleDependencies", "note": "Ships node_modules inside the tarball; Yarn Berry ignores it and re-resolves from the registry (yarnpkg.com/migration/guide), so installs would diverge." }
+        {
+          "name": "Rolldown",
+          "package": "rolldown",
+          "version": "1.2.11",
+          "date": "2026-09-24",
+          "note": "1.0 GA 2026-05-07; injects createRequire for ESM itself, but legal comments cannot be extracted to a file and output is not yet deterministic (rolldown#10909, open 2026-09-17) — matters for build identity and provenance."
+        },
+        {
+          "name": "tsdown",
+          "package": "tsdown",
+          "version": "0.23.0",
+          "date": "2026-09-03",
+          "note": "Rolldown-based library bundler with d.ts bundling (rolldown-plugin-dts); candidate if public declarations are bundled later; pre-1.0."
+        },
+        {
+          "name": "Rollup",
+          "package": "rollup",
+          "version": "4.63.5",
+          "date": "2026-09-24",
+          "note": "Needs node-resolve + commonjs plugins for this dependency tree; slower."
+        },
+        {
+          "name": "@vercel/ncc",
+          "package": "@vercel/ncc",
+          "version": "0.45.0",
+          "date": "2026-08-13",
+          "note": "webpack-based single-file compiler with --license output; no per-file layout preservation."
+        },
+        {
+          "name": "npm bundleDependencies",
+          "note": "Ships node_modules inside the tarball; Yarn Berry ignores it and re-resolves from the registry (yarnpkg.com/migration/guide), so installs would diverge."
+        }
       ],
       "ownSolution": "None: a bundler is not a Deckent capability; esbuild is a single native binary with no dependencies of its own besides its platform package.",
-      "watch": ["ESM output wraps bundled CommonJS require() of builtins in a throwing __require shim (esbuild#1921 open); build-dist adds a createRequire banner to outputs that define the shim and pack-smoke exercises the paths (MCP client cross-spawn, ws).", "0.27.0 raised the floor to Linux kernel >= 3.2 / macOS 12 for the build host."],
+      "watch": [
+        "ESM output wraps bundled CommonJS require() of builtins in a throwing __require shim (esbuild#1921 open); build-dist adds a createRequire banner to outputs that define the shim and pack-smoke exercises the paths (MCP client cross-spawn, ws).",
+        "0.27.0 raised the floor to Linux kernel >= 3.2 / macOS 12 for the build host."
+      ],
       "lastReview": "2026-09-29",
       "nextReview": "2026-11-28"
     },
     "eslint": {
       "kind": "dev",
       "reviewedVersion": "10.10.0",
-      "owners": ["eslint.config.js"],
+      "owners": [
+        "eslint.config.js"
+      ],
       "purpose": "Lint (flat config) with file/function size rules from arch.json budgets.",
-      "features": ["flat config, max-lines, max-lines-per-function, no-restricted-imports (internal/)"],
+      "features": [
+        "flat config, max-lines, max-lines-per-function, no-restricted-imports (internal/)"
+      ],
       "criticality": "P2",
       "alternatives": [
-        { "name": "Oxlint", "package": "oxlint", "version": "1.86.0", "date": "2026-09-28", "note": "Rust linter; would need the size/internal rules re-expressed." },
-        { "name": "Biome", "package": "@biomejs/biome", "version": "2.5.14", "date": "2026-09-16", "note": "Formatter + linter in one binary." }
+        {
+          "name": "Oxlint",
+          "package": "oxlint",
+          "version": "1.86.0",
+          "date": "2026-09-28",
+          "note": "Rust linter; would need the size/internal rules re-expressed."
+        },
+        {
+          "name": "Biome",
+          "package": "@biomejs/biome",
+          "version": "2.5.14",
+          "date": "2026-09-16",
+          "note": "Formatter + linter in one binary."
+        }
       ],
       "ownSolution": "Architecture rules already live in lint-arch; eslint keeps only generic JS/TS rules.",
       "lastReview": "2026-09-29",
@@ -195,9 +525,13 @@
     "@eslint/js": {
       "kind": "dev",
       "reviewedVersion": "10.0.1",
-      "owners": ["eslint.config.js"],
+      "owners": [
+        "eslint.config.js"
+      ],
       "purpose": "ESLint recommended rule set.",
-      "features": ["js.configs.recommended"],
+      "features": [
+        "js.configs.recommended"
+      ],
       "criticality": "P2",
       "alternatives": [],
       "ownSolution": "Goes with eslint.",
@@ -207,24 +541,40 @@
     "typescript-eslint": {
       "kind": "dev",
       "reviewedVersion": "8.70.0",
-      "owners": ["eslint.config.js"],
+      "owners": [
+        "eslint.config.js"
+      ],
       "purpose": "TypeScript parser and recommended (non type-aware) rules for eslint.",
-      "features": ["tseslint.config, tseslint.configs.recommended"],
+      "features": [
+        "tseslint.config, tseslint.configs.recommended"
+      ],
       "criticality": "P2",
       "alternatives": [
-        { "name": "Oxlint", "package": "oxlint", "version": "1.86.0", "date": "2026-09-28", "note": "Covers the recommended TS rules natively." }
+        {
+          "name": "Oxlint",
+          "package": "oxlint",
+          "version": "1.86.0",
+          "date": "2026-09-28",
+          "note": "Covers the recommended TS rules natively."
+        }
       ],
       "ownSolution": "None.",
-      "watch": ["peer typescript >=4.8.4 <6.1.0 (8.71.0 too) blocks TS 7 as the main compiler."],
+      "watch": [
+        "peer typescript >=4.8.4 <6.1.0 (8.71.0 too) blocks TS 7 as the main compiler."
+      ],
       "lastReview": "2026-09-29",
       "nextReview": "2026-12-28"
     },
     "globals": {
       "kind": "dev",
       "reviewedVersion": "17.12.0",
-      "owners": ["eslint.config.js"],
+      "owners": [
+        "eslint.config.js"
+      ],
       "purpose": "Node global names for the eslint language options.",
-      "features": ["globals.node"],
+      "features": [
+        "globals.node"
+      ],
       "criticality": "P2",
       "alternatives": [],
       "ownSolution": "A static list in eslint.config.js would do; not worth the churn.",
@@ -234,12 +584,22 @@
     "@types/node": {
       "kind": "dev",
       "reviewedVersion": "24.19.0",
-      "owners": ["tsconfig.json"],
+      "owners": [
+        "tsconfig.json"
+      ],
       "purpose": "Node API types (tsconfig types: [node]).",
-      "features": ["node:* module declarations for src, scripts and tests"],
+      "features": [
+        "node:* module declarations for src, scripts and tests"
+      ],
       "criticality": "P1",
       "alternatives": [
-        { "name": "@types/node 25.x/26.x", "package": "@types/node", "version": "26.6.3", "date": "2026-09-29", "note": "Not taken: major must match the engines floor (DEPS-P0: engines.node >=24.15.0); 25.x is an EOL Node line's types. Typecheck stayed green after the 25.9.7 -> 24.19.0 downgrade; no API typechecked only under @types/node 25 was found in src/scripts/tests. Move to the 26.x line's types when Node 26 becomes the primary target (LTS 2026-10-28, owner 2026-09-29 decision)." }
+        {
+          "name": "@types/node 25.x/26.x",
+          "package": "@types/node",
+          "version": "26.6.3",
+          "date": "2026-09-29",
+          "note": "Not taken: major must match the engines floor (DEPS-P0: engines.node >=24.15.0); 25.x is an EOL Node line's types. Typecheck stayed green after the 25.9.7 -> 24.19.0 downgrade; no API typechecked only under @types/node 25 was found in src/scripts/tests. Move to the 26.x line's types when Node 26 becomes the primary target (LTS 2026-10-28, owner 2026-09-29 decision)."
+        }
       ],
       "ownSolution": "None.",
       "lastReview": "2026-09-29",
@@ -248,12 +608,22 @@
     "@types/react": {
       "kind": "dev",
       "reviewedVersion": "19.2.18",
-      "owners": ["tsconfig.json"],
+      "owners": [
+        "tsconfig.json"
+      ],
       "purpose": "React types for the terminal units (jsx react-jsx).",
-      "features": ["ReactElement, ReactNode and hook types"],
+      "features": [
+        "ReactElement, ReactNode and hook types"
+      ],
       "criticality": "P2",
       "alternatives": [
-        { "name": "@types/react 19.3.x (latest)", "package": "@types/react", "version": "19.3.0", "date": "2026-09-29", "note": "Not taken: kept on the 19.2.x line to match the react 19.2.8 pin (DEPS-P0); `npm ls react react-reconciler` shows @types/react deduped against runtime react with no mismatch." }
+        {
+          "name": "@types/react 19.3.x (latest)",
+          "package": "@types/react",
+          "version": "19.3.0",
+          "date": "2026-09-29",
+          "note": "Not taken: kept on the 19.2.x line to match the react 19.2.8 pin (DEPS-P0); `npm ls react react-reconciler` shows @types/react deduped against runtime react with no mismatch."
+        }
       ],
       "ownSolution": "Goes with react; aligned to 19.2.x with the react pin (DEPS-P0 applied 2026-09-29).",
       "lastReview": "2026-09-29",
@@ -263,24 +633,47 @@
   "platform": {
     "node": {
       "requirement": "engines >=24.15.0 (SQLite 3.51.3 WAL-reset fix; DEPS-P0 applied 2026-09-29) with 24 and 26 supported, 26 primary after its LTS on 2026-10-28",
-      "owners": ["src/platform", "src/adapters", "src/composition"],
+      "owners": [
+        "src/platform",
+        "src/adapters",
+        "src/composition"
+      ],
       "purpose": "JavaScript runtime and the built-in modules every package uses (node: prefix enforced by lint-arch).",
       "criticality": "P0",
       "alternatives": [
-        { "name": "Node 26 SEA single binary", "note": "P2: one executable with --allow-net permission model; needs bundling of the runtime deps first." }
+        {
+          "name": "Node 26 SEA single binary",
+          "note": "P2: one executable with --allow-net permission model; needs bundling of the runtime deps first."
+        }
       ],
       "ownSolution": "None; Node is the platform.",
-      "watch": ["Node 24 enters maintenance 2026-10-20 (EOL 2028-04-30); Node 26 LTS 2026-10-28 (EOL 2029-04-30)."],
+      "watch": [
+        "Node 24 enters maintenance 2026-10-20 (EOL 2028-04-30); Node 26 LTS 2026-10-28 (EOL 2029-04-30)."
+      ],
       "lastReview": "2026-09-29",
       "nextReview": "2026-10-29"
     },
     "sqlite": {
       "requirement": "node:sqlite with process.versions.sqlite >= 3.51.3 (assertSqliteEngineSupported before every node:sqlite open: 10 sites: the ledger connection, seven read-only readers, the scope-registry reader and the VACUUM INTO backup; ATTEMPT_STORE_SQLITE_UNSUPPORTED; DEPS-P0 applied 2026-09-29)",
-      "owners": ["src/adapters/core/sqlite-ledger", "src/adapters/core/sqlite-agent-turn", "src/adapters/core/sqlite-model-activation", "src/adapters/core/sqlite-model-invocation", "src/adapters/core/attempt-store", "src/adapters/core/approval-store", "src/adapters/core/audit-store"],
+      "owners": [
+        "src/adapters/core/sqlite-ledger",
+        "src/adapters/core/sqlite-agent-turn",
+        "src/adapters/core/sqlite-model-activation",
+        "src/adapters/core/sqlite-model-invocation",
+        "src/adapters/core/attempt-store",
+        "src/adapters/core/approval-store",
+        "src/adapters/core/audit-store"
+      ],
       "purpose": "Ledger and stores via synchronous DatabaseSync (WAL, synchronous FULL/EXTRA, user_version migrations).",
       "criticality": "P0",
       "alternatives": [
-        { "name": "better-sqlite3", "package": "better-sqlite3", "version": "13.0.3", "date": "2026-08-05", "note": "Native addon; adds an install script and per-platform binaries that node:sqlite avoids." }
+        {
+          "name": "better-sqlite3",
+          "package": "better-sqlite3",
+          "version": "13.0.3",
+          "date": "2026-08-05",
+          "note": "Native addon; adds an install script and per-platform binaries that node:sqlite avoids."
+        }
       ],
       "ownSolution": "None; node:sqlite keeps the product free of native database addons.",
       "lastReview": "2026-09-29",
@@ -288,29 +681,60 @@
     },
     "bubblewrap": {
       "requirement": "system bwrap >= 0.12.0 at /usr/bin, /usr/local/bin or /bin (root-owned file and directories; PATH never read), else the bundled, sha256-verified build run from a 0700 copy under the global state root (owner S1/S2 2026-09-29)",
-      "bundled": { "version": "0.13.0", "lock": "packaging/bwrap/bwrap.lock.json", "license": "LGPL-2.1-or-later", "minimumSystemVersion": "0.12.0", "shipArches": ["x86_64"],
-        "advisories": { "source": "github-security-advisories", "repository": "containers/bubblewrap" } },
-      "owners": ["src/adapters/core/shell-sandbox-bwrap", "src/adapters/core/host-shell"],
+      "bundled": {
+        "version": "0.13.0",
+        "lock": "packaging/bwrap/bwrap.lock.json",
+        "license": "LGPL-2.1-or-later",
+        "minimumSystemVersion": "0.12.0",
+        "shipArches": [
+          "x86_64"
+        ],
+        "advisories": {
+          "source": "github-security-advisories",
+          "repository": "containers/bubblewrap"
+        }
+      },
+      "owners": [
+        "src/adapters/core/shell-sandbox-bwrap",
+        "src/adapters/core/host-shell"
+      ],
       "purpose": "Primary shell sandbox realm (namespaces, read-only system binds, deny masks).",
       "criticality": "P0",
       "alternatives": [
-        { "name": "Landlock + seccomp", "note": "Already the second realm (host-shell native helper); ABI >= 6 required for full sandbox." },
-        { "name": "Seatbelt (macOS)", "note": "macOS realm after Linux/WSL2 (owner OS order)." }
+        {
+          "name": "Landlock + seccomp",
+          "note": "Already the second realm (host-shell native helper); ABI >= 6 required for full sandbox."
+        },
+        {
+          "name": "Seatbelt (macOS)",
+          "note": "macOS realm after Linux/WSL2 (owner OS order)."
+        }
       ],
       "ownSolution": "Own namespace launcher is possible but duplicates a reviewed tool; ship pinned upstream bwrap instead.",
-      "watch": ["Upstream 0.12.0 fixed symlink escape (GHSA-pxhw-h44j-8pfx / CVE-2026-87766, high, < 0.12.0); deps-watch reads the repository's GitHub security advisories against the bundled version and the minimum system version.",
+      "watch": [
+        "Upstream 0.12.0 fixed symlink escape (GHSA-pxhw-h44j-8pfx / CVE-2026-87766, high, < 0.12.0); deps-watch reads the repository's GitHub security advisories against the bundled version and the minimum system version.",
         "Ubuntu 24.04 ships 0.9.0 (below the minimum: not used); on AppArmor-restricted hosts the bundled copy needs a root-installed profile (typed restricted fallback to Landlock).",
-        "aarch64 builds reproducibly but ships only after a real arm64 realm test (lock shipNote)."],
+        "aarch64 builds reproducibly but ships only after a real arm64 realm test (lock shipNote)."
+      ],
       "lastReview": "2026-09-29",
       "nextReview": "2026-10-29"
     },
     "git": {
       "requirement": "git CLI; no version gate yet (proposal: >= 2.45 for --no-lazy-fetch; protocol.allow=never on every path)",
-      "owners": ["src/adapters/core/git-patch", "src/adapters/core/git-workspace"],
+      "owners": [
+        "src/adapters/core/git-patch",
+        "src/adapters/core/git-workspace"
+      ],
       "purpose": "Workspace worktrees, patch snapshot/apply and integration observation through a hardened git subprocess.",
       "criticality": "P1",
       "alternatives": [
-        { "name": "isomorphic-git", "package": "isomorphic-git", "version": "1.42.3", "date": "2026-09-27", "note": "Pure JS; no worktree parity and weaker SHA-256 support." }
+        {
+          "name": "isomorphic-git",
+          "package": "isomorphic-git",
+          "version": "1.42.3",
+          "date": "2026-09-27",
+          "note": "Pure JS; no worktree parity and weaker SHA-256 support."
+        }
       ],
       "ownSolution": "None; keep the CLI behind the adapter with a minimum-version check.",
       "lastReview": "2026-09-29",
@@ -318,15 +742,25 @@
     },
     "docker": {
       "requirement": "docker CLI with a unix:/// endpoint; worker image node:24-trixie-slim (tag, not digest)",
-      "owners": ["src/adapters/core/docker-supervisor"],
+      "owners": [
+        "src/adapters/core/docker-supervisor"
+      ],
       "purpose": "Isolated worker execution (network none, read-only root, dropped capabilities, resource limits).",
       "criticality": "P1",
       "alternatives": [
-        { "name": "Podman", "note": "P2: --log-driver local and blocking log-opt are Docker-only today, so Podman fails at create." },
-        { "name": "process-supervisor + sandbox realm", "note": "Docker-less worker profile (bwrap + worktree) for hosts that forbid the Docker socket." }
+        {
+          "name": "Podman",
+          "note": "P2: --log-driver local and blocking log-opt are Docker-only today, so Podman fails at create."
+        },
+        {
+          "name": "process-supervisor + sandbox realm",
+          "note": "Docker-less worker profile (bwrap + worktree) for hosts that forbid the Docker socket."
+        }
       ],
       "ownSolution": "None; container runtimes stay adapters.",
-      "watch": ["Pin the worker image by digest and the provider CLI versions (P1)."],
+      "watch": [
+        "Pin the worker image by digest and the provider CLI versions (P1)."
+      ],
       "lastReview": "2026-09-29",
       "nextReview": "2026-11-28"
     }
@@ -336,12 +770,33 @@
       "id": "fast-uri-3.1.0-in-mcp-sdk-2.2.0",
       "package": "fast-uri",
       "version": "3.1.0",
-      "carriers": ["@modelcontextprotocol/client@2.2.0", "@modelcontextprotocol/server@2.2.0"],
+      "carriers": [
+        "@modelcontextprotocol/client@2.2.0",
+        "@modelcontextprotocol/server@2.2.0"
+      ],
       "shipped": false,
-      "advisories": ["GHSA-4c8g-83qw-93j6", "GHSA-7p8r-x3mc-p8w7", "GHSA-f65p-4m7j-42xc", "GHSA-jqff-g426-hqxp", "GHSA-q3j6-qgpj-74h6", "GHSA-qw65-cvwx-89v3", "GHSA-v2hh-gcrm-f6hx", "GHSA-v39h-62p7-jpjc"],
+      "advisories": [
+        "GHSA-4c8g-83qw-93j6",
+        "GHSA-7p8r-x3mc-p8w7",
+        "GHSA-f65p-4m7j-42xc",
+        "GHSA-jqff-g426-hqxp",
+        "GHSA-q3j6-qgpj-74h6",
+        "GHSA-qw65-cvwx-89v3",
+        "GHSA-v2hh-gcrm-f6hx",
+        "GHSA-v39h-62p7-jpjc"
+      ],
       "severity": "HIGH",
       "mitigation": "Not shipped (FASTURI-OUT, owner 2026-09-29): the published package's build replaces the SDK's ajvProvider with a throwing stub and fails if ajv/fast-uri reach the bundle; its SBOM names neither, and deps-watch --sbom stops accepting this entry if it ever does (shipped: false). Accepted only for the installed dev/test tree, where the SDK still carries the code: Deckent passes its own validator to every SDK Client and Server (static + runtime contract test; MCP-SCHEMA-VALIDATOR), the client compiles a server's outputSchema only on it (MCP-VALIDATOR) and every tools/call carries the pinned tool definition (MCP-PIN-DEF). Remove when the SDK ships a rebuilt bundle (typescript-sdk#2042/#2036).",
-      "evidence": ["proof/FASTURI-OUT-2026-09-29/review.md (tarball grep, SBOM, pack-smoke Node 24.21/26.10, guard mutation)", "tests/contracts/surfaces/mcp-json-schema-validator.test.ts", "proof/MCP-VALIDATOR-2026-09-29/review.md (server side section; ajv-vs-cfworker.log; mutation-remove-validator.log)", "lane/mcp-pin-def c30a651 + proof/MCP-PIN-DEF-2026-09-29/review.md", "merged f6bd9d3 (lane/mcp-validator 35700a2)", "proof/MCP-SCHEMA-VALIDATOR-2026-09-29/review.md", "proof/MCP-SCHEMA-VALIDATOR-2026-09-29/astra-2180-adaptation.md (Astra 2180 R2: $dynamicRef refused before send; red on 0a69a70, green on the merge)", "merged 5330cb7e (lane/mcp-schema-validator f00b6f77) + tests/contracts/platform/json-schema-validator.test.ts"],
+      "evidence": [
+        "proof/FASTURI-OUT-2026-09-29/review.md (tarball grep, SBOM, pack-smoke Node 24.21/26.10, guard mutation)",
+        "tests/contracts/surfaces/mcp-json-schema-validator.test.ts",
+        "proof/MCP-VALIDATOR-2026-09-29/review.md (server side section; ajv-vs-cfworker.log; mutation-remove-validator.log)",
+        "lane/mcp-pin-def c30a651 + proof/MCP-PIN-DEF-2026-09-29/review.md",
+        "merged f6bd9d3 (lane/mcp-validator 35700a2)",
+        "proof/MCP-SCHEMA-VALIDATOR-2026-09-29/review.md",
+        "proof/MCP-SCHEMA-VALIDATOR-2026-09-29/astra-2180-adaptation.md (Astra 2180 R2: $dynamicRef refused before send; red on 0a69a70, green on the merge)",
+        "merged 5330cb7e (lane/mcp-schema-validator f00b6f77) + tests/contracts/platform/json-schema-validator.test.ts"
+      ],
       "decidedBy": "lead (re-signed after MCP-SCHEMA-VALIDATOR, eleventh batch integration, 2026-09-29)",
       "decided": "2026-09-29",
       "expires": "2026-10-29"

@@ -4,7 +4,7 @@ export const PRODUCT_LAYOUT_REGISTRY = Object.freeze({ ...layoutResources, resou
 export const DECKENT_DIR = PRODUCT_LAYOUT_REGISTRY.rootName;
 export const CONFIG_FILE = PRODUCT_LAYOUT_REGISTRY.resources.config;
 export const PROJECT_CONFIG_PATH = `${DECKENT_DIR}/${CONFIG_FILE}`;
-export const CONFIG_SCHEMA_VERSION = 3;
+export const CONFIG_SCHEMA_VERSION = 4;
 export const OUTPUT_MODES = ['standard', 'explanatory', 'verbose', 'json'] as const;
 export type OutputMode = typeof OUTPUT_MODES[number];
 

@@ -8,9 +8,9 @@ import { clearConfigCache, ConfigValidationError, loadConfig, registerConfigSect
 const roots: string[] = [];
 
 const nestedValues = z.array(z.object({ value: z.string() }).strict()).default([]);
-registerConfigSection('secret_policy_allowed_probe', z.object({ token: z.string() }).strict(), { optional: true });
+registerConfigSection('secret_policy_allowed_probe', z.object({ token: z.string() }).strict(), { metadata: { descriptionKey: 'config.section', tier: 'core', since: '1.0.0-alpha.1', binding: { state: 'bound', consumers: ['src/platform/core/config'] }, apply: 'live' }, optional: true });
 registerConfigSection('secret_policy_forbid_probe', z.object({ token: z.string().default('clean'), nested: nestedValues }).strict(),
-  { optional: true, secretReferences: 'forbid' });
+  { metadata: { descriptionKey: 'config.section', tier: 'core', since: '1.0.0-alpha.1', binding: { state: 'bound', consumers: ['src/platform/core/config'] }, apply: 'live' }, optional: true, secretReferences: 'forbid' });
 
 async function fixture() {
   const root = await mkdtemp(join(tmpdir(), 'deckent-secret-policy-')); roots.push(root);
@@ -74,7 +74,7 @@ describe('registered config secret-reference policy', () => {
   it('rejects default and transform-produced effective references before resolver access', async () => {
     registerConfigSection('secret_policy_effective_probe', z.object({
       source: z.string().default('source').transform(() => '$DECK:TRANSFORMED_REFERENCE'),
-    }).strict(), { secretReferences: 'forbid' });
+    }).strict(), { metadata: { descriptionKey: 'config.section', tier: 'core', since: '1.0.0-alpha.1', binding: { state: 'bound', consumers: ['src/platform/core/config'] }, apply: 'live' }, secretReferences: 'forbid' });
     for (const authored of [undefined, { secret_policy_effective_probe: { source: 'authored-clean' } }]) {
       const f = await fixture(); let resolverCalls = 0;
       if (authored !== undefined) await writeFile(f.projectPath, JSON.stringify(authored));

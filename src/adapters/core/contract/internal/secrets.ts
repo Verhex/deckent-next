@@ -47,7 +47,7 @@ export function registerSecretStoreConfig(): void {
       const store = readSecretsConfig(config).store;
       if (!registry.has(store)) throw ErrorRegistry.createError('SECRET_STORE_UNKNOWN', { params: { backend: store } });
     },
-    metadata: { descriptionKey: 'config.field.secrets', tier: 'core', since: CONFIG_CONTRACT_SINCE },
+    metadata: { descriptionKey: 'config.field.secrets', tier: 'core', since: CONFIG_CONTRACT_SINCE, binding: { state: 'bound', consumers: ['src/adapters/core/contract'] }, apply: 'restart' },
   });
   // The one production resolver: each call opens the selected backend and reads per reference (no value cache).
   installSecretResolverFactory(context => {

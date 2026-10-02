@@ -42,7 +42,7 @@ export { validateConfig, versionedConfig } from '#platform/core/config/index.js'
 export { resolveConfigSecrets } from '#platform/core/config/index.js';
 export { configuredSecretResolver, environmentSecretResolver, installSecretResolverFactory } from '#platform/core/config/index.js';
 export type { SecretResolverContext, SecretResolverFactory } from '#platform/core/config/index.js';
-export { configDisplayView } from '#platform/core/config/index.js';
+export { configDisplayView, isSensitiveConfigKey } from '#platform/core/config/index.js';
 export { loadConfig, loadGlobalConfig, clearConfigCache } from '#platform/core/config/index.js';
 export type { ResolvedConfig, ConfigLoadOptions } from '#platform/core/config/index.js';
 export { saveGlobalConfig, writeConfig, withConfigWriteLock, pruneConfigBackups } from '#platform/core/config/index.js';
@@ -73,3 +73,7 @@ export type { TrustedClock, ClockSample } from '#platform/core/clock/index.js';
 export { sha256, constantTimeDigestEqual, createHmacIntegrity } from '#platform/core/integrity/index.js';
 export type { IntegrityAuthority } from '#platform/core/integrity/index.js';
 export { GLOB_WILDCARD, globLiteralHead, hasGlobWildcard, createGlobMatcher } from '#platform/core/common/index.js';
+
+export { isRecord, assertSafeKeys, digestText } from '#platform/core/utils/index.js';
+export { configSections, applyConfigEnvironment, assertConfigPreimage, backupConfig } from '#platform/core/config/index.js';
+export { assertConfigSecretPolicies } from '#platform/core/config/index.js';

@@ -13,7 +13,7 @@ export function registerInferenceServingConfig(): void {
   registerConfigSection('inference_serving', inferenceServingConfigSchema, {
     optional: true,
     secretReferences: 'forbid',
-    metadata: { descriptionKey: 'config.field.inference_serving', tier: 'core', since: CONFIG_CONTRACT_SINCE },
+    metadata: { descriptionKey: 'config.field.inference_serving', tier: 'core', since: CONFIG_CONTRACT_SINCE, binding: { state: 'bound', consumers: ['src/engine/core/inference-serving'] }, apply: 'restart' },
     validateValue: value => { if (value !== undefined) validate(value); },
   });
 }

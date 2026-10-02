@@ -100,6 +100,6 @@ export function registerTerminalConfig(): void {
   registerConfigSection('terminal', terminalConfigSchema, {
     optional: true,
     secretReferences: 'forbid',
-    metadata: { descriptionKey: 'config.field.terminal', tier: 'core', since: CONFIG_CONTRACT_SINCE },
+    metadata: { descriptionKey: 'config.field.terminal', tier: 'core', since: CONFIG_CONTRACT_SINCE, binding: { state: 'bound', consumers: ['src/adapters/core/contract'] }, apply: 'restart' },
   });
 }

@@ -2,14 +2,13 @@ import { userInfo } from 'node:os';
 import { resolve } from 'node:path';
 import { validateProcessExitCriterion } from '#capabilities/index.js';
 import { ErrorRegistry, prepareProductDirectory, type ConfigLoadOptions } from '#platform/index.js';
-import { assertNativeWorkerBinding, compileNativeCodingWorkInput, isNativeCodingTemplate, nativeCodingRefusalCode, validateDockerTaskProfile, openSqliteInventoryReader, openSqliteAttemptStore, openSqliteModelCatalogReader, GitIntegrationDelivery, GitRunWorkspaceProvider, GitWorkspaceBroker, resolveGitWorkTarget, selectWorkTarget } from '#adapters/index.js';
+import { assertNativeWorkerBinding, compileNativeCodingWorkInput, isNativeCodingTemplate, nativeCodingRefusalCode, validateDockerTaskProfile, resolveDockerTaskProfile, openSqliteInventoryReader, openSqliteAttemptStore, openSqliteModelCatalogReader, GitIntegrationDelivery, GitRunWorkspaceProvider, GitWorkspaceBroker, resolveGitWorkTarget, selectWorkTarget } from '#adapters/index.js';
 import { admitWorkerModels, resolveExecutionRegistry, RunAdmissionApplication, runAdmissionSchema, runDeliveryAdmissionSchema, RunPolicyAuthorization, executionResourceAuthorization, authorizeWorkTargetUse,
-  DispatchPolicyAuthorization, pinRunToDelivery, type RunAdmission, type RunCreate, type RunDeliveryAdmission, type RunWorkspaceCustody } from '#engine/index.js';
+  assertDockerResourceCeiling, DispatchPolicyAuthorization, pinRunToDelivery, type RunAdmission, type RunCreate, type RunDeliveryAdmission, type RunWorkspaceCustody } from '#engine/index.js';
 import { createLayoutPolicySource } from '#composition/core/policy/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 type ScopeContext = Awaited<ReturnType<typeof loadConfiguredScopeContext>>;
-
 async function admitConfiguredRun(projectRoot: string, command: RunAdmission, options: ConfigLoadOptions,
   pin?: (context: ScopeContext, replay: boolean) => Promise<RunWorkspaceCustody>) {
   const context = await loadConfiguredScopeContext(projectRoot, command.scopeId, options, 'write');
@@ -34,32 +33,29 @@ async function admitConfiguredRun(projectRoot: string, command: RunAdmission, op
       if (!profile) throw ErrorRegistry.createError('RUN_ADMISSION_NOT_CONFIGURED');
       const execution = resolveExecutionRegistry(admitted.graph, profile.registry, {
         profile(value) {
-          // Astra 2197 WC-R2: the executed argv of a pinned native profile must carry exactly its pinned model (adapter-owned CLI shape).
           try { assertNativeWorkerBinding(value); } catch { throw ErrorRegistry.createError('WORKER_MODEL_BINDING_MISMATCH'); }
-          try { return validateDockerTaskProfile(value); } catch { throw ErrorRegistry.createError('EXECUTION_PROFILE_INVALID'); }
+          try { validateDockerTaskProfile(value); } catch { throw ErrorRegistry.createError('EXECUTION_PROFILE_INVALID'); }
+          if (config.execution?.docker) assertDockerResourceCeiling(resolveDockerTaskProfile(value).options, config.execution.docker);
+          return undefined;
         },
         criterion(evaluator, criterion) { try { return validateProcessExitCriterion(evaluator, criterion); } catch { throw ErrorRegistry.createError('TASK_EVALUATOR_INVALID'); } },
         isTemplate: isNativeCodingTemplate, // K3: template + typed work input compile once here, before any write
         compile(template, input) { try { return compileNativeCodingWorkInput(template, input); } catch (error) { throw ErrorRegistry.createError(nativeCodingRefusalCode(error)); } },
       });
-      // WORKER-CURRENCY-1: native worker tasks need an exact, current, active catalog model of an active channel (read-only ledger view).
       if (execution.tasks.some(task => task.profile.parameters['nativeSubscription'] !== undefined)) {
         const catalog = await openSqliteModelCatalogReader(await path(), { busyTimeoutMs: config.storage.sqlite.busyTimeoutMs });
         try { await admitWorkerModels(execution.tasks, admitted.scopeId, catalog, Date.now(), admitted.graph.tasks); } finally { catalog.close(); }
       }
       return { execution, layoutRevision: layout.revision, now: Date.now(), policy: { schemaVersion: 2, poolId: profile.poolId,
-        capacity: { executionSlots: profile.executionSlots, inFlightSlots: profile.inFlightSlots }, ordering: admitted.graph.tasks.map(task => task.id) } };
+        capacity: { executionSlots: Math.min(profile.executionSlots, config.max_workers === 'auto' ? Infinity : config.max_workers),
+          inFlightSlots: Math.min(profile.inFlightSlots, config.max_workers === 'auto' ? Infinity : config.max_workers) }, ordering: admitted.graph.tasks.map(task => task.id) } };
     } });
   return Object.freeze({ schemaVersion: 1 as const, layout, admission: await app.create(command, undefined, pin ? replay => pin(context, replay) : undefined) });
 }
-/** Local OS ingress. Existing pool provisioning is required; no implicit pool creation or config-derived grants. */
 export async function createConfiguredRun(projectRoot: string, input: RunAdmission, options: ConfigLoadOptions = {}) {
   try { return await admitConfiguredRun(projectRoot, runAdmissionSchema.parse(input), options); }
   catch (error) { throw queryFailure(error); }
 }
-/** Local SDK ingress (not a runtime-service operation): the same admission, with the Run's workspace custody pinned to the commit of a
- * completed delivery in the same scope, written in the admission transaction. The caller names the delivery command, never a commit;
- * the trusted project root is the Git source, and reading the delivered attempt's output must be allowed. */
 export async function createConfiguredDeliveryRun(projectRoot: string, input: RunDeliveryAdmission, options: ConfigLoadOptions = {}) {
   try {
     const { deliveryCommandId, ...fields } = runDeliveryAdmissionSchema.parse(input);

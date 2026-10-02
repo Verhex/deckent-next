@@ -95,8 +95,8 @@ describe('unknown-key policy: strict, passthrough', () => {
   });
 
   it('config sections must be strict objects: strip and passthrough objects are refused at registration', () => {
-    expect(() => registerConfigSection('zod4_prep_strip', z.object({ a: z.number() }))).toThrow(expect.objectContaining({ code: 'CONFIG_SECTION_INVALID' }));
-    expect(() => registerConfigSection('zod4_prep_loose', z.object({ a: z.number() }).passthrough())).toThrow(expect.objectContaining({ code: 'CONFIG_SECTION_INVALID' }));
+    expect(() => registerConfigSection('zod4_prep_strip', z.object({ a: z.number() }), { metadata: { descriptionKey: 'config.section', tier: 'core', since: '1.0.0-alpha.1', binding: { state: 'bound', consumers: ['src/platform/core/config'] }, apply: 'live' } })).toThrow(expect.objectContaining({ code: 'CONFIG_SECTION_INVALID' }));
+    expect(() => registerConfigSection('zod4_prep_loose', z.object({ a: z.number() }).passthrough(), { metadata: { descriptionKey: 'config.section', tier: 'core', since: '1.0.0-alpha.1', binding: { state: 'bound', consumers: ['src/platform/core/config'] }, apply: 'live' } })).toThrow(expect.objectContaining({ code: 'CONFIG_SECTION_INVALID' }));
     expect(Object.hasOwn(CORE_SCHEMA.shape, 'zod4_prep_strip')).toBe(false);
   });
 });

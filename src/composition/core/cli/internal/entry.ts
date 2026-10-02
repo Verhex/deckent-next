@@ -1,4 +1,6 @@
 #!/usr/bin/env node
+import { unifiedDiff, readInstallationProfileFile, registerProviderConfig } from '#adapters/index.js';
+import { createConfiguredConfigApplication, resolveConfiguredConfigPrincipal } from '#composition/core/config/index.js';
 import { inspectConfiguredWorkers } from '#composition/core/worker-observation/index.js';
 import { inspectMonitor } from '#composition/core/monitor/index.js';
 import { inspectConfiguredToolchainCurrency, updateConfiguredToolchains } from '#composition/core/toolchains/index.js';
@@ -7,7 +9,6 @@ import { inspectConfiguredWorkerTranscript } from '#composition/core/worker-obse
 import { executeConfiguredOperation, compensateConfiguredOperation, inspectConfiguredOperation } from '#composition/core/operations/index.js';
 import { listConfiguredStandingGrants, revokeConfiguredStandingGrant } from '#composition/core/approvals/index.js';
 import { readConfiguredInferenceMetrics } from '#composition/core/inference-metrics/index.js';
-import { unifiedDiff } from '#adapters/index.js';
 import { adoptConfiguredWorkspaceIntegration, rollbackConfiguredWorkspaceIntegration, deliverConfiguredWorkspaceIntegration, inspectConfiguredWorkspaceIntegration, checkConfiguredWorkspaceIntegration, prepareConfiguredWorkspaceIntegration, prepareConfiguredWorkspacePatch, previewConfiguredWorkspacePatch } from '#composition/core/workspace-patch/index.js';
 import { admitConfiguredModelActivation, applyConfiguredModelCatalog, inspectConfiguredModelActivation, inspectConfiguredModelCatalog } from '#composition/core/model-activation/index.js';
 import { createConfiguredRuntimeClient, invokeRuntimeModel, runRuntimeChatTurn, cancelRuntimeChatTurn, findRuntimeWorkspaceFiles, attachRuntimeWorkspaceFile, inspectRuntimeModelInvocation, purgeRuntimeModelInvocationContent, cancelRuntimeModelInvocation, inspectRuntimeProviderSpendAccount, auditRuntimeProviderSpendAccount } from '#composition/core/runtime-service/index.js';
@@ -19,15 +20,11 @@ import { previewSuppliedInstallation, inspectSuppliedInstallation, applySupplied
   applyPolicyTemplateInstallation, inspectPolicyTemplate, previewPolicyTemplateInstallation } from '#composition/core/installation/index.js';
 import { getConfigFieldDefault, isMainModule } from '#platform/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
-import { readInstallationProfileFile } from '#adapters/index.js';
-import { registerProviderConfig } from '#adapters/index.js';
 import { inspectDeclaredModels, inspectModelBinding } from '#composition/core/provider-catalog/index.js';
 import { prepareNativeCodingProfile } from '#composition/core/native-coding/index.js';
 import { assertTerminalChatReady, attachTerminalMentions, completeTerminalChatTurn, describeTerminalChat, findTerminalMentions, streamTerminalAgentTurn } from '#composition/core/terminal-chat/index.js';
 import { assessConfiguredModelInvocationDelivery } from '#composition/core/model-invocation/index.js';
 import { inspectConfiguredSecretStore, listConfiguredSecretNames } from '#composition/core/secrets/index.js';
-
-/** Only the composition root chooses adapters for the shipped executable. */
 export async function main(argv: readonly string[] = process.argv.slice(2)) {
   const root = process.cwd(), runtime = createConfiguredRuntimeClient(root);
   const isRuntimeServe = argv[0] === 'runtime' && argv[1] === 'serve';
@@ -42,6 +39,7 @@ export async function main(argv: readonly string[] = process.argv.slice(2)) {
     inspectWorkspaceIntegration: inspectConfiguredWorkspaceIntegration,
     checkWorkspaceIntegration: checkConfiguredWorkspaceIntegration, prepareWorkspaceIntegration: prepareConfiguredWorkspaceIntegration,
     prepareWorkspacePatch: prepareConfiguredWorkspacePatch, previewWorkspacePatch: previewConfiguredWorkspacePatch, renderUnifiedDiff: unifiedDiff,
+    configApplication: createConfiguredConfigApplication, resolveConfigPrincipal: resolveConfiguredConfigPrincipal,
     inspectWorkers: inspectConfiguredWorkers, inspectMonitor, inspectToolchainCurrency: (projectRoot, options) => inspectConfiguredToolchainCurrency(projectRoot, options),
     ensureRuntimeService: (projectRoot, options) => ensureConfiguredRuntimeService(projectRoot, options),
     restartRuntimeService: (projectRoot, options) => restartConfiguredRuntimeService(projectRoot, options),
@@ -51,7 +49,6 @@ export async function main(argv: readonly string[] = process.argv.slice(2)) {
     readInferenceMetrics: (projectRoot, input, options) => readConfiguredInferenceMetrics(projectRoot, input, options),
     updateToolchains: (projectRoot, input, options) => updateConfiguredToolchains(projectRoot, input, options),
     runMcpCommand: runConfiguredMcpCommand,
-    // SECRET-K1: doctor's secret store line and `secret list` (names only).
     inspectSecretStore: inspectConfiguredSecretStore, listSecretNames: listConfiguredSecretNames,
     inspectShellRealm: inspectConfiguredShellRealm, // REALM-NOTICE: doctor's selected shell realm and every provider passed over.
     setSecret: (projectRoot, input, options) => createConfiguredRuntimeClient(projectRoot, options).setSecret(input),
@@ -62,18 +59,14 @@ export async function main(argv: readonly string[] = process.argv.slice(2)) {
     describeTerminalChatPlan: describeTerminalChat,
     completeTerminalChat: (projectRoot, input, options, signal) => completeTerminalChatTurn({ projectRoot, ...input, options, ...(signal ? { signal } : {}) },
       { invoke: invokeRuntimeModel, cancel: cancelRuntimeModelInvocation }),
-    // T-L3: the interactive terminal's turns are agent turns in the runtime service (tools when the model declares them).
     streamTerminalChat: (projectRoot, input, options, signal) => streamTerminalAgentTurn({ projectRoot, ...input, options, ...(signal ? { signal } : {}) },
       { chatTurn: runRuntimeChatTurn, cancelChatTurn: cancelRuntimeChatTurn, preflight: assertTerminalChatReady }),
-    // T-L5 `@file` over runtime protocol v15: the service lists and reads workspace files; the terminal never does.
     findTerminalMentions: (projectRoot, input, options, signal) => findTerminalMentions({ projectRoot, ...input, options, ...(signal ? { signal } : {}) },
       { find: findRuntimeWorkspaceFiles, attach: attachRuntimeWorkspaceFile }),
     attachTerminalMentions: (projectRoot, input, options, signal) => attachTerminalMentions({ projectRoot, ...input, options, ...(signal ? { signal } : {}) },
       { find: findRuntimeWorkspaceFiles, attach: attachRuntimeWorkspaceFile }),
-    // T-L4 slice 4c: `/mode` and the status row read and set the caller's own permission mode through the runtime service (v15).
     inspectPermissionMode: (projectRoot, input, options, signal) => createConfiguredRuntimeClient(projectRoot, options).inspectPermissionMode(input, signal),
     setPermissionMode: (projectRoot, input, options) => createConfiguredRuntimeClient(projectRoot, options).setPermissionMode(input),
-    // SCR-A `/scratch`: the caller's own scratch area through the runtime service (v16); the terminal reads and deletes no file.
     inspectScratch: (projectRoot, input, options, signal) => createConfiguredRuntimeClient(projectRoot, options).inspectScratch(input, signal),
     clearScratch: (projectRoot, input, options) => createConfiguredRuntimeClient(projectRoot, options).clearScratch(input),
     inspectModelInvocation: inspectRuntimeModelInvocation, purgeModelInvocationContent: purgeRuntimeModelInvocationContent,

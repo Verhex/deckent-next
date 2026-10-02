@@ -1,5 +1,7 @@
 // Source-only projection: never import dist or execute application initialization during lint.
 import ts from 'typescript';
+import { lintConfigBindings } from './config-bindings.mjs';
+export { lintConfigBindings } from './config-bindings.mjs';
 import { createHash } from 'node:crypto';
 import { readFileSync, existsSync, writeFileSync } from 'node:fs';
 import { join, relative, dirname } from 'node:path';
@@ -46,7 +48,7 @@ export function projectVocabulary(root) {
         }
         ts.forEachChild(n, schema);
       }
-      schema(node.initializer.arguments[1]);
+      schema(node.initializer.arguments[3]);
       fields[key] = [...values].sort();
     }
     ts.forEachChild(node, visit);
@@ -64,6 +66,7 @@ export function lintConfigVocabulary(root, files, fail) {
     const stored = JSON.parse(readFileSync(join(root, projectionPath), 'utf8'));
     if (JSON.stringify(stored) !== JSON.stringify(current)) { fail('config-vocabulary-stale', projectionPath, 'regenerate from current source before lint/build'); return; }
   } catch (error) { fail('config-vocabulary', projectionPath, error.message); return; }
+  lintConfigBindings(root, fail);
   const fieldNames = new Set(Object.keys(current.fields));
   const values = new Set(Object.values(current.fields).flat());
   const nameOf = node => ts.isIdentifier(node) || ts.isStringLiteralLike(node) ? node.text : ts.isPropertyAccessExpression(node) ? node.name.text : ts.isElementAccessExpression(node) && node.argumentExpression ? nameOf(node.argumentExpression) : undefined;

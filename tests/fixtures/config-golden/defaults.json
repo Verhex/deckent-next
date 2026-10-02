@@ -15,7 +15,6 @@
       "maxPathBytes": 1024
     }
   },
-  "auth_mode": "subscription",
   "cancellation": null,
   "cancellationRuntime": null,
   "cli": {
@@ -57,28 +56,18 @@
     "resources": {},
     "root": null
   },
-  "live_trace": {
-    "enabled": false
-  },
   "max_workers": "auto",
   "mcp": {
     "inputMaxBytes": 1048576,
     "maxConcurrentCalls": 8,
     "responseMaxBytes": 1048576
   },
-  "mode": "performance",
   "operations": {
     "catalog": [],
     "targets": []
   },
   "output_mode": "standard",
   "projectName": "deckent-project",
-  "providers": {
-    "brain": null,
-    "fallback": null,
-    "overrides": {},
-    "worker": null
-  },
   "reconciliationRuntime": null,
   "runRuntime": {
     "failureBackoffMs": 5000,
@@ -86,7 +75,7 @@
     "pageSize": 64,
     "pollIntervalMs": 1000
   },
-  "schema_version": 3,
+  "schema_version": 4,
   "service": {
     "acceptRetryDelayMs": 25,
     "acceptRetryLimit": 3,
@@ -100,7 +89,6 @@
     "responseTimeoutMs": 10000,
     "shutdownGraceMs": 30000
   },
-  "spawn_backend": "auto",
   "storage": {
     "driver": "sqlite",
     "sqlite": {

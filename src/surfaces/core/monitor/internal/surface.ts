@@ -5,3 +5,5 @@ export { flattenBlocks, lineText, type MonitorLine, type MonitorSpan, type Monit
 export { monitorFailureText } from './command.js';
 export { describeDiagnostic, describeDiagnostics, type MonitorDiagnostic } from './diagnostics.js';
 export { rowMatches, applyControls, changeMarks, signatures, type MonitorControls } from './controls.js';
+
+export { configMonitorBlocks } from './config-view.js';

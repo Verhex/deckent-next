@@ -7,22 +7,24 @@ import { createConfiguredRuntimeClient } from '#composition/core/runtime-service
 import { queryFailure } from '#composition/core/query-errors/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
 import { contextDispatchAuthorization } from '#composition/core/policy/index.js';
-
 const DENIED = new Set(['POLICY_DENIED', 'POLICY_APPROVAL_UNSUPPORTED', 'SCOPE_UNKNOWN', 'APPROVAL_DENIED']);
 const granted = (check: () => Promise<unknown>) => check().then(() => true, (error: unknown) => { if (DENIED.has(queryFailure(error).code)) return false; throw error; });
-/** MONITOR (owner 2026-10-02): the current project plus each configured `next-project` source (deduplicated by path), each through its own
- * config, layout, ledger (read-only), runtime describe and scope policy (its `inspect` decision admits the scope's Runs and workers). */
 export async function inspectMonitor(root: string, options: ConfigLoadOptions = {}): Promise<MonitorSnapshot> {
   registerProviderConfig(); const config = await loadConfig(root, { ...options, heal: false }).catch(error => { throw queryFailure(error); });
   const targets = [{ id: 'current', path: resolve(root) }, ...config.inspection.workers.sources.filter(source => source.kind === 'next-project')
     .map(source => ({ id: source.id, path: resolve(source.path) }))].filter((target, index, all) => all.findIndex(other => other.path === target.path) === index);
-  // Content checks reuse the existing decisions over one scope context per (install, scope): attempt read-output (workers list/transcript) and approval list.
   const contexts = new Map<string, ReturnType<typeof loadConfiguredScopeContext>>(), scope = (path: string, scopeId: string) => contexts.get(`${path}\0${scopeId}`)
     ?? contexts.set(`${path}\0${scopeId}`, loadConfiguredScopeContext(path, scopeId, options, 'read')).get(`${path}\0${scopeId}`)!;
   return new MonitorApplication({ now: () => new SystemTrustedClock().sample().wallMs,
     describeService: target => createConfiguredRuntimeClient(target.path, options).describeService(undefined, 'current'),
-    readLedger: async target => readMonitorInstall(await loadConfig(target.path, { ...options, heal: false }), options.env, identity => granted(async () => {
-      const c = await scope(target.path, identity.scopeId); await contextDispatchAuthorization(c).authorizeIdentity('read-output', identity, c.principal); })),
+    readLedger: async target => {
+      const installed = await loadConfig(target.path, { ...options, heal: false });
+      const reading = await readMonitorInstall(installed, options.env, identity => granted(async () => {
+        const c = await scope(target.path, identity.scopeId); await contextDispatchAuthorization(c).authorizeIdentity('read-output', identity, c.principal); }));
+      const ceiling = installed.max_workers === 'auto' ? Infinity : installed.max_workers;
+      return { ...reading, pools: reading.pools.map(pool => ({ ...pool,
+        executionSlots: Math.min(pool.executionSlots, ceiling), inFlightSlots: Math.min(pool.inFlightSlots, ceiling) })) };
+    },
     async observeScope(target, scopeId) {
       const workers: WorkerObservation[] = []; let page: WorkerObservationSource | undefined; let after: string | null = null;
       try {

@@ -131,11 +131,11 @@ class Screen extends Writable {
 }
 const settle = (ms = 30) => new Promise(resolve => setTimeout(resolve, ms));
 async function until(check: () => boolean, label: string) { for (let i = 0; i < 300; i++) { if (check()) return; await settle(10); } throw new Error(`timed out: ${label}`); }
-function mount(props: { load: () => Promise<typeof fullSnapshot>; intervalMs?: number; columns?: number; rows?: number; locale?: 'en' | 'tr'; now?: () => number }) {
+function mount(props: { load: () => Promise<typeof fullSnapshot>; intervalMs?: number; columns?: number; rows?: number; locale?: 'en' | 'tr'; now?: () => number; loadConfigView?: () => Promise<Awaited<ReturnType<import('#engine/index.js').ConfigApplication['inspect']>>> }) {
   const stdout = new Screen(props.columns ?? 120, props.rows ?? 40);
   const stdin = Object.assign(new PassThrough(), { isTTY: true, setRawMode() { return stdin; }, ref() { return stdin; }, unref() { return stdin; } });
   const instance = render(createElement(surface.MonitorApp, { load: props.load, intervalMs: props.intervalMs ?? 60_000, locale: props.locale ?? 'en', ascii: false,
-    palette: resolveWorklinePalette('none'), errorText: (error: unknown) => surface.monitorFailureText(error, props.locale ?? 'en'), ...(props.now ? { now: props.now } : {}) }),
+    ...(props.loadConfigView ? { loadConfigView: props.loadConfigView } : {}), palette: resolveWorklinePalette('none'), errorText: (error: unknown) => surface.monitorFailureText(error, props.locale ?? 'en'), ...(props.now ? { now: props.now } : {}) }),
   { stdout: stdout as unknown as NodeJS.WriteStream, stdin: stdin as unknown as NodeJS.ReadStream, debug: true, exitOnCtrlC: false, patchConsole: false });
   const press = async (key: string) => { stdin.write(key); await settle(); };
   return { stdout, stdin, instance, press };
@@ -466,4 +466,19 @@ describe('terminal /monitor', () => {
     expect(await monitorSlash('/root', '--json', { async inspectMonitor() { return fullSnapshot; } } as never, { env: {} }, 'en', 90)).toEqual([t('monitor.slash.usage', {}, 'en')]);
     await expect(monitorSlash('/root', '', {} as never, { env: {} }, 'en', 90)).rejects.toMatchObject({ code: 'MONITOR_UNAVAILABLE' });
   });
+});
+
+it('fullscreen Config tab reads the shared inspect, exposes source/binding/apply and opens details', async () => {
+  let reads = 0;
+  const config = { schemaVersion: 1 as const, layer: 'project' as const, digest: null, fields: [{ key: 'max_workers', value: 2,
+    defaultValue: 'auto', source: 'global' as const, descriptionKey: 'config.field.max_workers', description: 'Worker ceiling', schema: { type: 'integer', minimum: 1 },
+    binding: { state: 'bound' as const, consumers: ['src/composition/core/runs'] }, apply: 'restart' as const, redacted: false }] };
+  const view = mount({ load: async () => fullSnapshot, loadConfigView: async () => { reads++; return config; }, columns: 80 });
+  try {
+    await until(() => reads > 0 && view.stdout.frame.includes('Stuck or waiting'), 'config inspected');
+    await view.press('8'); expect(view.stdout.frame).toContain('[8 Config]'); expect(view.stdout.frame).toContain('max_workers');
+    expect(view.stdout.frame).toContain('global'); expect(view.stdout.frame).toContain('bound'); expect(view.stdout.frame).toContain('restart');
+    await view.press(KEY.enter); expect(view.stdout.frame).toContain('Key: max_workers'); expect(view.stdout.frame).toContain('Installation ceiling');
+    expect(widest(view.stdout.frame)).toBeLessThanOrEqual(80);
+  } finally { view.instance.unmount(); }
 });

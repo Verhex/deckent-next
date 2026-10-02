@@ -250,7 +250,8 @@
         "src/composition/core/agent-turn",
         "src/composition/core/approvals",
         "src/composition/core/secrets",
-        "src/composition/core/monitor"
+        "src/composition/core/monitor",
+        "src/composition/core/config"
       ],
       "plan": "SURFACES"
     },
@@ -618,7 +619,8 @@
         "src/engine/core/scheduling",
         "src/platform/core/clock",
         "src/engine/core/workspaces",
-        "src/engine/core/worker-observation"
+        "src/engine/core/worker-observation",
+        "src/platform/core/errors"
       ],
       "plan": "CONTRACT"
     },
@@ -889,7 +891,8 @@
         "src/surfaces/core/cli-kit",
         "src/domain/core/agent-turn",
         "src/engine/core/model-invocation",
-        "src/surfaces/core/monitor"
+        "src/surfaces/core/monitor",
+        "src/surfaces/core/config"
       ],
       "plan": "SURFACES"
     },
@@ -1917,9 +1920,63 @@
         "src/domain/core/worker-event",
         "src/engine/core/worker-observation",
         "src/surfaces/core/terminal-kit",
-        "src/surfaces/core/terminal-render"
+        "src/surfaces/core/terminal-render",
+        "src/surfaces/core/config",
+        "src/engine/core/config"
       ],
       "plan": "MONITOR"
+    },
+    "src/surfaces/core/config": {
+      "dependencies": [
+        "src/engine/core/config",
+        "src/platform/core/config",
+        "src/platform/core/errors",
+        "src/platform/core/output",
+        "src/platform/core/i18n",
+        "src/domain/core/principal",
+        "src/surfaces/core/cli-kit",
+        "src/surfaces/core/terminal-render"
+      ],
+      "plan": "CONFIG-SURFACE"
+    },
+    "src/engine/core/config": {
+      "dependencies": [
+        "src/platform/core/config",
+        "src/platform/core/config-fields",
+        "src/platform/core/utils",
+        "src/platform/core/i18n",
+        "src/platform/core/host",
+        "src/domain/core/audit",
+        "src/domain/core/principal",
+        "src/domain/core/primitives",
+        "src/domain/core/policy",
+        "src/platform/core/errors"
+      ],
+      "plan": "CONFIG-SURFACE"
+    },
+    "src/composition/core/config": {
+      "dependencies": [
+        "src/engine/core/config",
+        "src/domain/core/principal",
+        "src/adapters/core/contract",
+        "src/adapters/core/config-file",
+        "src/platform/core/config",
+        "src/composition/core/scoped-request"
+      ],
+      "plan": "CONFIG-SURFACE"
+    },
+    "src/adapters/core/config-file": {
+      "dependencies": [
+        "src/engine/core/config",
+        "src/platform/core/config",
+        "src/platform/core/host",
+        "src/platform/core/utils",
+        "src/engine/core/audit",
+        "src/domain/core/principal",
+        "src/adapters/core/audit-store",
+        "src/adapters/core/local-keyring"
+      ],
+      "plan": "CONFIG-SURFACE"
     }
   },
   "composition": {
@@ -2010,7 +2067,8 @@
       "remote",
       "native",
       "desktop",
-      "misc"
+      "misc",
+      "config"
     ]
   },
   "literals": {

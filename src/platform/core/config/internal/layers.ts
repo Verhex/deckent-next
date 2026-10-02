@@ -56,7 +56,7 @@ export async function loadGlobalConfig(options: Pick<ConfigLoadOptions, 'env' | 
     options.onWarning?.({ code: 'CONFIG_GLOBAL_CORRUPT', path, message: t('config.globalCorrupt', {}, resolveLocale(undefined, options.env)) });
     return null;
   }
-  return versionedConfig(result.value);
+  return versionedConfig(result.value, options.onWarning, resolveLocale(undefined, options.env));
 }
 export async function loadConfig(projectRoot = process.cwd(), options: ConfigLoadOptions = {}): Promise<ResolvedConfig> {
   const root = resolve(projectRoot), env = { ...(options.env ?? process.env) };
@@ -85,7 +85,7 @@ export async function loadConfig(projectRoot = process.cwd(), options: ConfigLoa
     onHeal: path => warnings.push({ code: 'CONFIG_HEALED', path, message: t('config.corrupt', { path }, resolveLocale(undefined, env)) }),
   });
   if (!isRecord(project)) throw new ConfigValidationError([{ path: projectPath, reason: 'OBJECT_REQUIRED' }]);
-  const normalizedProject = versionedConfig(project);
+  const normalizedProject = versionedConfig(project, warning => warnings.push(warning), resolveLocale(undefined, env));
   // Check each authored layer even if a clean later layer would hide its forbidden reference.
   assertConfigSecretPolicies(global, resolveLocale(undefined, env));
   assertConfigSecretPolicies(normalizedProject, resolveLocale(undefined, env));

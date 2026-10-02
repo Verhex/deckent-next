@@ -28,23 +28,22 @@ afterEach(async () => { clearConfigCache(); await Promise.all(roots.splice(0).ma
 
 describe('config public contract', () => {
   it('returns independent defaults and merges arrays/false/undefined without mutating either input', () => {
-    const a = createDefaultConfig(), b = createDefaultConfig(); a.providers.overrides['x'] = 'changed';
-    expect(b.providers.overrides).toEqual({}); expect(b.enforce_principal_assurance).toBe(false);
+    const a = createDefaultConfig(), b = createDefaultConfig(); a.layout.resources['ledger'] = 'changed';
+    expect(b.layout.resources).toEqual({}); expect(b.enforce_principal_assurance).toBe(false);
     const base = { nested: { enabled: true, rows: [1, 2] }, keep: 4 };
     expect(deepMerge(base, { nested: { enabled: false, rows: [3] }, keep: undefined })).toEqual({ nested: { enabled: false, rows: [3] }, keep: 4 });
     expect(base.nested.rows).toEqual([1, 2]);
     expect(() => deepMerge({}, JSON.parse('{"__proto__":{"polluted":true}}'))).toThrow();
     expect(({} as Record<string, unknown>)['polluted']).toBeUndefined();
   });
-  it('applies defaults → global → project → env with provider projection before env', async () => {
+  it('applies defaults → global → project → env using the remaining bound fields', async () => {
     const f = await fixture();
-    await writeFile(f.globalPath, JSON.stringify({ mode: 'balanced', language: 'tr', enforce_principal_assurance: true, providers: { brain: 'global-provider' } }));
-    await writeFile(f.projectPath, JSON.stringify({ mode: 'economic', enforce_principal_assurance: false, providers: { brain: 'project-provider' } }));
+    await writeFile(f.globalPath, JSON.stringify({ language: 'tr', max_workers: 4, enforce_principal_assurance: true }));
+    await writeFile(f.projectPath, JSON.stringify({ max_workers: 2, enforce_principal_assurance: false }));
     const first = await loadConfig(f.project, { env: f.env });
-    expect(first).toMatchObject({ mode: 'economic', language: 'tr', enforce_principal_assurance: false, providers: { brain: 'project-provider' }, schema_version: 3 });
-    const second = await loadConfig(f.project, { env: { ...f.env, DECKENT_MODE: 'performance', DECKENT_BRAIN_PROVIDER: 'env-provider' } });
-    expect(second).toMatchObject({ mode: 'performance', providers: { brain: 'env-provider' } });
-    expect(second.providers.brain).toBe('env-provider');
+    expect(first).toMatchObject({ max_workers: 2, language: 'tr', enforce_principal_assurance: false, schema_version: 4 });
+    const second = await loadConfig(f.project, { env: { ...f.env, DECKENT_LANGUAGE: 'en' } });
+    expect(second.language).toBe('en');
   });
   it('uses the canonical global root without importing scattered platform configuration', async () => {
     const f = await fixture();
@@ -55,25 +54,25 @@ describe('config public contract', () => {
     await saveGlobalConfig({ language: 'en' }, { env: f.env });
     expect((await loadConfig(f.project, { env: f.env })).language).toBe('en');
     expect(JSON.parse(await readFile(legacy, 'utf8'))).toEqual({ language: 'tr' });
-    expect(JSON.parse(await readFile(f.globalPath, 'utf8'))).toEqual({ schema_version: 3, language: 'en' });
+    expect(JSON.parse(await readFile(f.globalPath, 'utf8'))).toEqual({ schema_version: 4, language: 'en' });
   });
   it('resolves cache against call-time env and file revisions and never returns a shared mutable object', async () => {
     const f = await fixture();
-    const one = await loadConfig(f.project, { env: f.env }); one.providers.brain = 'mutated';
-    expect((await loadConfig(f.project, { env: f.env })).providers.brain).toBeNull();
+    const one = await loadConfig(f.project, { env: f.env }); one.language = 'tr';
+    expect((await loadConfig(f.project, { env: f.env })).language).toBe('en');
     await writeFile(f.projectPath, '{"language":"tr"}');
     expect((await loadConfig(f.project, { env: f.env })).language).toBe('tr');
     expect((await loadConfig(f.project, { env: { ...f.env, DECKENT_LANGUAGE: '', DECKENT_LANG: 'en', DECKENT_CONFIG_RELOAD: '1' } })).language).toBe('en');
   });
-  it('loads API mode without a provider credential and preserves that result on a cache hit', async () => {
-    const f = await fixture(), env = { ...f.env, DECKENT_MODE: 'api' };
+  it('retired environment aliases cannot silently reintroduce removed knobs', async () => {
+    const f = await fixture(), env = { ...f.env, DECKENT_MODE: 'api', DECKENT_LIVE_TRACE: 'true', DECKENT_BRAIN_PROVIDER: 'ignored' };
     const first = await loadConfig(f.project, { env });
     const cached = await loadConfig(f.project, { env });
-    expect(first.mode).toBe('api'); expect(cached.mode).toBe('api');
+    for (const config of [first, cached]) for (const key of ['mode', 'live_trace', 'providers']) expect(config).not.toHaveProperty(key);
   });
   it('aggregates schema issues, rejects unregistered fields and permits resource-defined worker capacity', () => {
     const config = createDefaultConfig();
-    try { validateConfig({ ...config, language: 'xx', max_workers: 0, mode: 'wrong' }); expect.fail('must reject'); }
+    try { validateConfig({ ...config, language: 'xx', max_workers: 0, output_mode: 'wrong' }); expect.fail('must reject'); }
     catch (error) { expect(error).toBeInstanceOf(ConfigValidationError); expect((error as ConfigValidationError).issues).toHaveLength(3); }
     for (const count of [1.5, Number.MAX_SAFE_INTEGER + 1, Infinity]) expect(() => validateConfig({ ...config, max_workers: count })).toThrow();
     expect(() => validateConfig({ ...config, future: false })).toThrow();
@@ -81,10 +80,10 @@ describe('config public contract', () => {
   });
   it('registers strict package schemas and validates authored layers before merge', async () => {
     const seen: unknown[] = [];
-    registerConfigSection('contract_package', z.object({ enabled: z.boolean().default(false) }).strict(), { validateLayers: (a, b) => { seen.push([a, b]); } });
-    expect(() => registerConfigSection('contract_package', z.object({}).strict())).toThrow();
-    expect(() => registerConfigSection('unstrict', z.object({}))).toThrow();
-    expect(() => registerConfigSection('language', z.object({}).strict())).toThrow();
+    registerConfigSection('contract_package', z.object({ enabled: z.boolean().default(false) }).strict(), { metadata: { descriptionKey: 'config.section', tier: 'core', since: '1.0.0-alpha.1', binding: { state: 'bound', consumers: ['src/platform/core/config'] }, apply: 'live' }, validateLayers: (a, b) => { seen.push([a, b]); } });
+    expect(() => registerConfigSection('contract_package', z.object({}).strict(), { metadata: { descriptionKey: 'config.section', tier: 'core', since: '1.0.0-alpha.1', binding: { state: 'bound', consumers: ['src/platform/core/config'] }, apply: 'live' } })).toThrow();
+    expect(() => registerConfigSection('unstrict', z.object({}), { metadata: { descriptionKey: 'config.section', tier: 'core', since: '1.0.0-alpha.1', binding: { state: 'bound', consumers: ['src/platform/core/config'] }, apply: 'live' } })).toThrow();
+    expect(() => registerConfigSection('language', z.object({}).strict(), { metadata: { descriptionKey: 'config.section', tier: 'core', since: '1.0.0-alpha.1', binding: { state: 'bound', consumers: ['src/platform/core/config'] }, apply: 'live' } })).toThrow();
     expect(() => validateConfig({ ...createDefaultConfig(), contract_package: { unexpected: true } })).toThrow();
     const f = await fixture();
     await writeFile(f.globalPath, '{"contract_package":{"enabled":true}}');
@@ -96,7 +95,7 @@ describe('config public contract', () => {
   });
   it('interpolates only exact $DECK references after layering and leaves missing references visible', async () => {
     const f = await fixture();
-    registerConfigSection('custom_secrets', z.object({ token: z.string(), other: z.string() }).strict(), { optional: true });
+    registerConfigSection('custom_secrets', z.object({ token: z.string(), other: z.string() }).strict(), { metadata: { descriptionKey: 'config.section', tier: 'core', since: '1.0.0-alpha.1', binding: { state: 'bound', consumers: ['src/platform/core/config'] }, apply: 'live' }, optional: true });
     await writeFile(f.projectPath, '{"custom_secrets":{"token":"$DECK:TOKEN","other":"prefix $DECK:TOKEN"}}');
     f.env = { ...f.env, TOKEN: 'private-value' } as typeof f.env;
     const config = await loadConfig(f.project, { env: f.env });
@@ -109,12 +108,12 @@ describe('config public contract', () => {
     const f = await fixture(); await writeFile(f.globalPath, '{bad'); await writeFile(f.projectPath, '{broken');
     const codes: string[] = [];
     const config = await loadConfig(f.project, { env: f.env, onWarning: w => codes.push(w.code) });
-    expect(config.schema_version).toBe(3); expect(codes).toContain('CONFIG_GLOBAL_CORRUPT'); expect(codes).toContain('CONFIG_HEALED');
+    expect(config.schema_version).toBe(4); expect(codes).toContain('CONFIG_GLOBAL_CORRUPT'); expect(codes).toContain('CONFIG_HEALED');
     expect(await readFile(f.globalPath, 'utf8')).toBe('{bad');
     const names = await readdir(join(f.project, '.deckent'));
     const backup = names.find(n => n.startsWith('config.json.bak.'))!;
     expect(await readFile(join(f.project, '.deckent', backup), 'utf8')).toBe('{broken');
-    expect(JSON.parse(await readFile(f.projectPath, 'utf8')).schema_version).toBe(3);
+    expect(JSON.parse(await readFile(f.projectPath, 'utf8')).schema_version).toBe(4);
   });
   it('rereads after 150ms and never quarantines a transient partial write', async () => {
     const f = await fixture(); await writeFile(f.projectPath, '{partial');
@@ -149,7 +148,7 @@ describe('new config contract and write authority', () => {
       await expect(writeConfig(f.projectPath, input)).rejects.toThrow();
     }
     await writeFile(f.projectPath, '{}');
-    await expect(loadConfig(f.project, { env: { ...f.env, DECKENT_MODE: 'max_plan' } })).rejects.toThrow();
+    expect(await loadConfig(f.project, { env: { ...f.env, DECKENT_MODE: 'max_plan' } })).not.toHaveProperty('mode');
   });
   it('retains the newest three corruption backups without leaving locks or temporary files', async () => {
     const f = await fixture();
@@ -164,15 +163,13 @@ describe('new config contract and write authority', () => {
     expect(names.filter(name => name.includes('.bak.'))).toHaveLength(3);
     expect(names.some(name => name.endsWith('.tmp') || name.endsWith('.write-lock'))).toBe(false);
   });
-  it('resolves registry environment bindings with validated booleans and no shared default mutation', async () => {
+  it('resolves remaining registry environment bindings without shared default mutation', async () => {
     const f = await fixture();
-    const yes = await loadConfig(f.project, { env: { ...f.env, DECKENT_LIVE_TRACE: 'true', DECKENT_WORKER_PROVIDER: 'provider-a' } });
-    expect(yes.live_trace.enabled).toBe(true);
-    expect(yes.providers.worker).toBe('provider-a');
-    const no = await loadConfig(f.project, { env: { ...f.env, DECKENT_LIVE_TRACE: '0' } });
-    expect(no.live_trace.enabled).toBe(false);
-    expect(no.providers.worker).toBeNull();
-    await expect(loadConfig(f.project, { env: { ...f.env, DECKENT_LIVE_TRACE: 'maybe' } })).rejects.toThrow();
+    const yes = await loadConfig(f.project, { env: { ...f.env, DECKENT_LANGUAGE: 'tr' } });
+    expect(yes.language).toBe('tr');
+    const no = await loadConfig(f.project, { env: { ...f.env, DECKENT_LANGUAGE: 'en' } });
+    expect(no.language).toBe('en');
+    await expect(loadConfig(f.project, { env: { ...f.env, DECKENT_LANGUAGE: 'xx' } })).rejects.toThrow();
     await writeFile(f.projectPath, '{"schema_version":null}');
     await expect(loadConfig(f.project, { env: f.env })).rejects.toMatchObject({ code: 'CONFIG_VERSION_UNSUPPORTED' });
     expect(getConfigMetadata().find(row => row.key === 'max_workers')?.defaultValue).toBe('auto');
@@ -208,7 +205,7 @@ describe('new config contract and write authority', () => {
     expect(getConfigMetadata().some(field => field.key === 'provider_limits')).toBe(false);
   });
   it('looks up only own keys and never follows object prototypes', () => {
-    expect(getConfigValue(createDefaultConfig(), 'providers.brain')).toBeNull();
+    expect(getConfigValue(createDefaultConfig(), 'layout.root')).toBeNull();
     expect(() => getConfigValue({}, '__proto__.polluted')).toThrow();
     expect(() => getConfigValue({}, 'missing')).toThrow();
   });

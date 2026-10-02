@@ -1,3 +1,4 @@
+import { assertNoRetiredConfigFields } from './version.js';
 import { CORE_SCHEMA, configSections, type DeckentConfig } from '../schema.js';
 import { ConfigValidationError, type ConfigIssue, type ConfigWarning } from './issues.js';
 import { isRecord, assertSafeKeys } from '#platform/core/utils/index.js';
@@ -8,6 +9,7 @@ export function validateConfig(input: unknown, locale: Locale = 'en'): { config:
   if (!isRecord(input)) throw new ConfigValidationError([{ path: '$', reason: 'OBJECT_REQUIRED' }], locale);
   assertConfigSecretPolicies(input, locale);
   assertSafeKeys(input);
+  assertNoRetiredConfigFields(input, locale);
   const issues: ConfigIssue[] = [], warnings: ConfigWarning[] = [];
   const core = Object.fromEntries(Object.entries(input).filter(([key]) => Object.hasOwn(CORE_SCHEMA.shape, key)));
   const result = CORE_SCHEMA.safeParse(core);

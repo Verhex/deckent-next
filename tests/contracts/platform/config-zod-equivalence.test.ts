@@ -77,8 +77,7 @@ describe('config defaults (zod 4 .default/.prefault guard)', () => {
     expect(d.toolchains).toEqual({ currency: { mode: 'report', registryEndpoint: 'https://registry.npmjs.org', timeoutMs: 5000, responseMaxBytes: 65_536 },
       update: { mode: 'propose', buildTimeoutMs: 1_800_000, outputBytes: 1_048_576, atStartup: false } });
     expect(d.company).toEqual({ id: 'default' });
-    expect(d.live_trace).toEqual({ enabled: false });
-    expect(d.providers).toEqual({ brain: null, worker: null, fallback: null, overrides: {} });
+    for (const retired of ['live_trace', 'providers', 'mode', 'auth_mode', 'spawn_backend']) expect(d).not.toHaveProperty(retired);
     for (const key of ['execution', 'cancellation', 'cancellationRuntime', 'reconciliationRuntime', 'admission'] as const) expect(d[key], key).toBeNull();
   });
 
@@ -92,7 +91,7 @@ describe('config defaults (zod 4 .default/.prefault guard)', () => {
     ['approvals', { approvals: {} }], ['cli', { cli: {} }], ['mcp', { mcp: {} }], ['service', { service: {} }], ['runRuntime', { runRuntime: {} }],
     ['inspection', { inspection: {} }], ['inspection', { inspection: { workers: {} } }],
     ['toolchains', { toolchains: {} }], ['toolchains', { toolchains: { currency: {} } }], ['toolchains', { toolchains: { update: {} } }],
-    ['company', { company: {} }], ['live_trace', { live_trace: {} }], ['providers', { providers: {} }],
+    ['company', { company: {} }],
   ];
   it.each(partials)('partial %s %j defaults to the committed golden subtree', (key, input) => {
     expect(sorted((CORE_SCHEMA.parse(input) as Record<string, unknown>)[key])).toEqual(committed[key]);

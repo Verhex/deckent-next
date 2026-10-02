@@ -24,3 +24,4 @@ export { CancellationRecoveryApplication, cancellationRecoveryCommandSchema } fr
 export type { CancellationRecoveryCommand, CancellationRecoveryOutcome } from './internal/recovery.js';
 export { ExecutionPoolHoldApplication, decidePoolHold, poolHoldView, poolHoldCommandSchema, poolHoldQuerySchema, poolHoldRecordSchema, poolHoldReceiptSchema, poolOccupancySchema } from './internal/pool-hold.js';
 export type { PoolHoldAuditRecorder, PoolHoldCommand, PoolHoldQuery, PoolHoldRecord, PoolHoldReceipt, PoolHoldStore, PoolHoldTransition, PoolHoldView, PoolHoldWrite, PoolOccupancy } from './internal/pool-hold.js';
+export { assertDockerResourceCeiling } from './internal/resource-ceilings.js';

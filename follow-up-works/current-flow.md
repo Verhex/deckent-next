@@ -275,3 +275,7 @@ izlemek yerine bağın kendisini sayıyor. Aktif kartlar, son üç günün kanı
 - LEDGER-SINGLETON: model sahip kimliğindeki `custodyId`'yi ledger custody'sinden türetmek; ret kodunda uç nokta/ledger ayrımı.
 - Dogfood hattı: canlı execution/adoption profili ve doğrulama config'i; Deckent verify'ının sandbox'ta ölçümü; tek komut döngü; operatör aktivasyonu.
 - Temizlik komut listesi (owner çalıştırır): `proof/INTEGRATE-2026-09-27/cleanup-commands.md` + biten şeritler, stash'ler.
+
+## CONFIG-SURFACE şerit — 2026-10-02
+
+`lane/config-surface`, taban `e137b6e3`: S1–S5 uygulandı; ortak registry config application + adapter policy/audit/atomic backup, şema 4 ve binding ratchet, havuz/Docker tavanları, CLI/terminal/monitor okuma yüzeyleri. Temp ürün komut zinciri provider/profile/activation temizliği ve eski history okumasını doğruladı. Kırmızı testler ve sekiz zorunlu mutasyon dış proof'ta. 24 dosyada 231 benzersiz hedefli test doğrulandı (son birleşik koşudaki tek metin assertion düzeltmesinin ardından 4 yüzey dosyası 48/48); typecheck, ESLint (0 hata; mevcut bir uyarı), mimari 0 ihlal/bütçe artışı yok, i18n ve core-memory gate'leri geçti. Sonraki adım exact commit/patch'in lead üzerinden bağımsız incelemesi. Native transport regresyonu desteklenmeyen yerel transport nedeniyle doğrulanamadı; terminal config yazımı yok; config require-approval tipli ret; audit intent filesystem settlement değildir. Canlı kurulum/servisler çalıştırılmadı. Bağımsız inceleme yok; PASS değildir.

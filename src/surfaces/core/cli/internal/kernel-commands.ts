@@ -1,3 +1,4 @@
+import type { ConfigCommandContext } from '#surfaces/core/config/index.js';
 import type { MonitorCommandContext, WorkerTranscriptHandler } from '#surfaces/core/monitor/index.js';
 import type { RunAdmissionHandler, RunDeliveryAdmissionHandler, RunCancellationDeliveryHandler, RunQueryHandler, RunReservationHandler } from './run.js';
 import type { CodingProfilePreparationHandler } from './coding.js';
@@ -9,7 +10,7 @@ import type { InstallationPreviewHandler, InstallationInspectionHandler, Install
   PolicyTemplatePreviewHandler, PolicyTemplateApplyHandler } from './init.js';
 import type { ToolchainCurrencyReport, ModelInvocationDeliveryFinding } from '#engine/index.js';
 import {
-  configDisplayView, inspectProductPaths, getConfigFieldDefault, ErrorRegistry, loadConfig, getConfigValue,
+  inspectProductPaths, getConfigFieldDefault, ErrorRegistry, loadConfig,
   resolveGlobalScopePaths, normalizeGlobalScopePlatform, getSystemProfile,
   detectHostMemory, detectEnvironment, resolveLocalOsPrincipal,
   assertActorAssurance, principalToActor, resolveLocale, t, formatValue, emit,
@@ -32,7 +33,7 @@ export interface RuntimeServiceReadinessView {
 }
 
 /** Every host operation a CLI command may use; the model commands' narrower context is part of it. */
-export interface CommandContext extends ModelCommandContext, MonitorCommandContext {
+export interface CommandContext extends ModelCommandContext, MonitorCommandContext, ConfigCommandContext {
   renewApproval?: (input: unknown) => Promise<unknown>;
   listApprovals?: (input: unknown) => Promise<unknown>;
   inspectApproval?: (input: unknown) => Promise<unknown>;
@@ -138,7 +139,7 @@ function parse(argv: readonly string[]): Parsed {
 }
 export async function runKernelCommand(argv: readonly string[], context: CommandContext = {}): Promise<void> {
   const args = parse(argv), root = context.root ?? process.cwd(), env = context.env ?? process.env;
-  const [command, action, key] = args.positionals;
+  const [command, action] = args.positionals;
   if (args.toolchains && command !== 'doctor') throw ErrorRegistry.createError('CLI_USAGE');
   let locale = resolveLocale(args.language, env);
   context.onLocale?.(locale);
@@ -157,19 +158,6 @@ export async function runKernelCommand(argv: readonly string[], context: Command
     if (args.dryRun || args.positionals.length !== 1) throw ErrorRegistry.createError('CLI_USAGE');
     output(await inspectProductPaths(root, { ...options, globalOnly: args.global }), data => formatValue(data));
     return;
-  }
-  if (command === 'config') {
-    if (action === 'get') {
-      if (args.dryRun || args.positionals.length > 3) throw ErrorRegistry.createError('CLI_USAGE');
-      const config = await loadConfig(root, options);
-      locale = resolveLocale(args.language, env, config.language); mode = config.output_mode;
-      context.onLocale?.(locale);
-      const display = configDisplayView(config);
-      const value = key === undefined ? display : getConfigValue(display, key);
-      output(value, data => formatValue(data));
-      return;
-    }
-    throw ErrorRegistry.createError('CLI_USAGE');
   }
   if (command !== 'doctor' || args.positionals.length !== 1 || args.global || args.dryRun) throw ErrorRegistry.createError('CLI_USAGE');
   const config = await loadConfig(root, options);
