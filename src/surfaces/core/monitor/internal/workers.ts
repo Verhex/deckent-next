@@ -1,10 +1,12 @@
 import { resolve } from 'node:path';
 import { setTimeout as wait } from 'node:timers/promises';
-import { ErrorRegistry, emit, loadConfig, resolveLocale, t, type ConfigLoadOptions } from '#platform/index.js';
-import type { WorkerObservationQuery, WorkerObservationReport } from '#engine/index.js';
+import { ErrorRegistry, emit, loadConfig, resolveLocale, t, type ConfigLoadOptions, type Locale } from '#platform/index.js';
+import type { WorkerObservation, WorkerObservationQuery, WorkerObservationReport, WorkerObservationSource } from '#engine/index.js';
 import type { MonitorCommandContext } from './context.js';
 import { renderWorkerModelLine } from './worker-model.js';
 export type WorkerObservationHandler = (root: string, query: WorkerObservationQuery, options: ConfigLoadOptions) => Promise<WorkerObservationReport>;
+export const renderWorkerRow = (w: WorkerObservation, locale: Locale) => { const x = w.terminal, h = w.files?.heartbeat, id = w.identity; return t('cli.workers.row', { ref: `${id?.runId ?? '-'}/${w.taskId}`, attempt: id?.attemptId.slice(0, 8) ?? '-', generation: id?.generation ?? '-', process: x ? `${w.process} ${x.exitCode ?? x.signal ?? '-'}` : w.process, heartbeat: h?.state === 'missing' ? 'missing' : h?.freshness ?? 'missing', provider: w.provider || '-' }, locale); };
+export const renderWorkerSource = (s: WorkerObservationSource, locale: Locale): string[] => [t('cli.workers.source', { source: s.id, path: s.path, status: s.status }, locale) + (s.truncated ? t('cli.workers.sourceMore', { nextAfter: s.nextAfter ?? '-' }, locale) : ''), ...(s.workers.length ? s.workers.flatMap(w => [renderWorkerRow(w, locale), ...(w.model ? [t('cli.workers.model', { task: w.taskId, line: renderWorkerModelLine(w.model, locale) }, locale)] : [])]) : [t('cli.workers.empty', {}, locale)])];
 export async function workersCommand(argv: readonly string[], context: MonitorCommandContext) {
   const values = new Map<string, string>(); let json = false;
   const help = argv.length === 2 && ['--help', '-h'].includes(argv[1]!);
@@ -32,9 +34,7 @@ export async function workersCommand(argv: readonly string[], context: MonitorCo
     if (context.signal?.aborted) return;
     const result = await context.inspectWorkers(root, query, options);
     emit(result, { ...sinks, json, render: report => [t('cli.workers.heading', { time: new Date(report.observedAt).toISOString() }, locale),
-      ...report.sources.flatMap(source => [JSON.stringify({ source: source.id, path: source.path, status: source.status, truncated: source.truncated, nextAfter: source.nextAfter }),
-        ...source.workers.flatMap(worker => [JSON.stringify(worker), ...(worker.model ? [t('cli.workers.model', { task: worker.taskId, line: renderWorkerModelLine(worker.model, locale) }, locale)] : [])])]),
-      t('cli.workers.notice', {}, locale)].join('\n') });
+      ...report.sources.flatMap(source => renderWorkerSource(source, locale)), t('cli.workers.notice', {}, locale)].join('\n') });
     if (argv[1] !== 'watch' || (samples !== undefined && ++count >= samples)) return;
     try { await wait(config.inspection.workers.heartbeatMs, undefined, { signal: context.signal }); } catch { if (context.signal?.aborted) return; throw ErrorRegistry.createError('WORKER_OBSERVATION_UNAVAILABLE'); }
   } while (!context.signal?.aborted);
