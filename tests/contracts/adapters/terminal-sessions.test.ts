@@ -65,4 +65,17 @@ it('keeps at most the configured number of sessions, oldest removed first', asyn
     messages: [{ role: 'user', content: 'x'.repeat(2_000_000) }] })).rejects.toThrow('TERMINAL_SESSION_TOO_LARGE');
 });
 
+it('applies the session cap per scope and never unlinks another scope or an unreadable file', async () => {
+  const { directory, sessions } = await store({ maxSessions: 2, maxFileBytes: 1_000_000, previewChars: 20 });
+  const save = (scopeId: string, id: string, updatedAtMs: number) => sessions.save({ schemaVersion: 1, sessionId: id, scopeId, updatedAtMs, messages: history('q') });
+  const b = [randomUUID(), randomUUID()], a = [randomUUID(), randomUUID(), randomUUID()], corrupt = `${randomUUID()}.json`;
+  await writeFile(join(directory, corrupt), '{not json');
+  for (const [index, id] of b.entries()) await save('B', id, index + 1);
+  for (const [index, id] of a.entries()) await save('A', id, index + 10);
+  expect((await sessions.list('B')).map(summary => summary.sessionId)).toEqual([b[1], b[0]]);
+  expect((await sessions.list('A')).map(summary => summary.sessionId)).toEqual([a[2], a[1]]);
+  expect(await readdir(directory)).toContain(corrupt);
+  expect(await readdir(directory)).not.toContain(`${a[0]}.json`);
+});
+
 });
