@@ -3,7 +3,7 @@ import { mkdtemp, readFile, rm, writeFile, readdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { DatabaseSync } from 'node:sqlite';
-import { createConfiguredConfigApplication, resolveConfiguredConfigPrincipal } from '../src/composition/core/config/index.js';
+import { createConfiguredConfigApplication, resolveConfiguredConfigPrincipal } from '../../../src/composition/core/config/index.js';
 import { applyPolicyTemplateInstallation } from '#composition/core/installation/index.js';
 import { openSqliteLedger } from '#adapters/core/sqlite-ledger/index.js';
 import { getConfigFieldDefault, loadConfig, productResourcePath, resolveProductLayout, prepareProductFile } from '#platform/index.js';
@@ -82,4 +82,24 @@ it('validates sparse discriminated-union overlays against the selected original 
   for (const [keyPath, value] of [['execution.workTargets.schemaVersion', 999], ['execution.workTargets', null], ['storage.sqlite', null]] as const) {
     await expect(f.app.set({ ...f.command, keyPath, value })).rejects.toThrow(); expect(await readFile(f.path, 'utf8')).toBe(before);
   }
+});
+
+
+it('CLI absent fence creates a missing global document and refuses a second publication without audit or backup changes', async () => {
+  const { configCommand } = await import('#surfaces/core/config/index.js');
+  const f = await setup(), output: string[] = [];
+  const ctx = { root: f.root, env: f.options.env, configApplication: createConfiguredConfigApplication,
+    resolveConfigPrincipal: resolveConfiguredConfigPrincipal, stdout: { write: (value: string) => { output.push(value); } } };
+  const args = ['config', 'set', 'max_workers', '2', '--global', '--expect', 'absent', '--scope', 'installation', '--command-id', 'absent-create'];
+  await configCommand(args, ctx);
+  const globalPath = join(f.root, 'global/config.json'), bytes = await readFile(globalPath, 'utf8');
+  expect(JSON.parse(bytes).max_workers).toBe(2);
+  const db = new DatabaseSync(productResourcePath(resolveProductLayout({ projectRoot: f.root }), 'ledger'), { readOnly: true });
+  try {
+    const before = db.prepare('SELECT count(*) as count FROM audit_events').get();
+    await expect(configCommand(args, ctx)).rejects.toMatchObject({ code: 'CONFIG_CONCURRENT_REVISION_HOLD' });
+    expect(db.prepare('SELECT count(*) as count FROM audit_events').get()).toEqual(before);
+  } finally { db.close(); }
+  expect(await readFile(globalPath, 'utf8')).toBe(bytes);
+  expect((await readdir(join(f.root, 'global'))).filter(name => name.includes('.bak.'))).toHaveLength(0);
 });

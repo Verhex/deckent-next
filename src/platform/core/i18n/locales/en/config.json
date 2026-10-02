@@ -1,4 +1,5 @@
 {
+  "config.field.configFile": "Configuration backup retention and write-lock waiting",
   "config.surface.title": "Configuration · {project}",
   "config.surface.digest": "Write layer: {layer} · document digest: {digest}",
   "config.surface.columns": "Key|Value|Source|Binding|Apply",
@@ -17,7 +18,7 @@
   "config.surface.explain": "Key: {key}\n{description}\nValue: {value}\nDefault: {defaultValue}\nSource: {source}\nBinding: {binding}\nApply: {apply}\nSchema: {schema}",
   "config.surface.unavailable": "Configuration application is unavailable.",
   "config.surface.slashUsage": "/config [key] · read only. Change settings with deckent config set/unset.",
-  "config.surface.help": "deckent config [--json] [--global] [--lang en|tr]\n\nInspect\n  get [key] [--json]       compatible value output\n  explain <key> [--json]   description, schema, source and binding\n  validate                validate the full effective configuration\n\nChange (policy authorization required)\n  set <key> <json> [--global] [--expect <digest>] [--scope <id>]\n  unset <key> [--global] [--expect <digest>] [--scope <id>]\n  --command-id <id>       audit command identity\nProject is the default write layer. Secrets use deckent secret.\nUse explain to see environment overrides and restart requirements.",
+  "config.surface.help": "deckent config [--json] [--global] [--lang en|tr]\n\nInspect\n  get [key] [--json]       compatible value output\n  explain <key> [--json]   description, schema, source and binding\n  validate                validate the full effective configuration\n\nChange (policy authorization required)\n  set <key> <json> [--global] [--expect <digest|absent>] [--scope <id>]\n  unset <key> [--global] [--expect <digest|absent>] [--scope <id>]\n  --command-id <id>       audit command identity\nUse --expect absent to require a missing document. Explain uses the project view; --global is refused. Project is the default write layer. Secrets use deckent secret.\nUse explain to see environment overrides and restart requirements.",
   "config.surface.monitorTab": "Config",
   "config.surface.slashDescription": "Inspect configuration, sources and bindings",
   "config.surface.fieldRetired": "Removed unused setting {key}; document schema 3 is read as schema 4.",
@@ -31,5 +32,5 @@
   "error.CONFIG_ARRAY_INDEX_INVALID": "Configuration array index must be canonical, within range, and owned by the array.",
   "error.CONFIG_KEY_NOT_OBJECT": "The configuration path traverses a scalar; set its parent document instead.",
   "error.CONFIG_METADATA_MISSING": "Configuration section metadata is incomplete; binding and apply information are required.",
-  "config.surface.monitorHelp": "8                Config: read configuration, source, binding and apply mode"
+  "config.surface.monitorHelp": "{index}                Config: read configuration, source, binding and apply mode"
 }

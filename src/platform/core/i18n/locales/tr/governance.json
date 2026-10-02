@@ -111,6 +111,7 @@
   "error.CONFIG_ALIAS_CONFLICT": "{key} için alias değerleri çelişiyor.",
   "error.CONFIG_CONCURRENT_REVISION_HOLD": "Config eşzamanlı değişti; yazıcı tamamlandıktan sonra yeniden deneyin.",
   "error.CONFIG_KEY_UNKNOWN": "Bilinmeyen config anahtarı: {key}.",
+  "error.CONFIG_BACKUP_PRUNE_FAILED": "Config kaydedildi, ancak yedek temizliği başarısız oldu. Yeniden denemeden önce kayıtlı belgeyi inceleyin.",
   "error.CONFIG_READ_IO_HOLD": "Config okunamadı; dosya korundu.",
   "error.CONFIG_SECTION_DUPLICATE": "Config bölümü zaten kayıtlı veya ayrılmış: {section}.",
   "error.CONFIG_SECTION_INVALID": "Config bölümleri strict object şeması gerektirir: {section}.",

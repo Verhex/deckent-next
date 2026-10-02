@@ -482,3 +482,42 @@ it('fullscreen Config tab reads the shared inspect, exposes source/binding/apply
     expect(widest(view.stdout.frame)).toBeLessThanOrEqual(80);
   } finally { view.instance.unmount(); }
 });
+
+for (const locale of ['en', 'tr'] as const) it(`config inspection failure leaves other monitor panels fresh and recovers (${locale})`, async () => {
+  let failed = true, observedAt = fullSnapshot.observedAt;
+  const config = { schemaVersion: 1 as const, layer: 'project' as const, digest: null, fields: [{ key: 'max_workers', value: 2,
+    defaultValue: 'auto', source: 'global' as const, descriptionKey: 'config.field.max_workers', description: 'Worker ceiling', schema: {},
+    binding: { state: 'bound' as const, consumers: ['src/composition/core/runs'] }, apply: 'restart' as const, redacted: false }] };
+  const view = mount({ locale, load: async () => ({ ...fullSnapshot, observedAt }), loadConfigView: () => {
+    if (failed) {
+      const error = Object.assign(new Error('Bearer private-transport-token'), { code: 'CONFIG_METADATA_MISSING' });
+      if (locale === 'tr') throw error;
+      return Promise.reject(error);
+    }
+    return Promise.resolve(config);
+  } });
+  try {
+    await settle(100);
+    expect(view.stdout.frame).toContain(t('monitor.observed', { time: new Date(observedAt).toISOString().slice(0, 19).replace('T', ' ') + 'Z' }, locale));
+    expect(view.stdout.frame).not.toContain('Refresh failed');
+    await view.press('8');
+    expect(view.stdout.frame).toContain('[CONFIG_METADATA_MISSING]');
+    expect(view.stdout.frame).toContain(t('config.surface.unavailable', {}, locale));
+    expect(view.stdout.frame).not.toContain('private-transport-token');
+    failed = false; observedAt += 1000; await view.press('r');
+    expect(view.stdout.frame).toContain('max_workers');
+    expect(view.stdout.frame).not.toContain('CONFIG_METADATA_MISSING');
+    failed = true; observedAt += 1000; await view.press('r');
+    expect(view.stdout.frame).toContain('[CONFIG_METADATA_MISSING]');
+    expect(view.stdout.frame).not.toContain('max_workers');
+    await view.press('1');
+    expect(view.stdout.frame).toContain(t('monitor.observed', { time: new Date(observedAt).toISOString().slice(0, 19).replace('T', ' ') + 'Z' }, locale));
+  } finally { view.instance.unmount(); }
+});
+
+for (const locale of ['en', 'tr'] as const) it(`config help derives its number from the active tabs (${locale})`, () => {
+  const customTabs = ['summary', 'config', 'runs'] as const;
+  const lines = surface.legendLines(locale, false, customTabs);
+  const configHint = lines.map(line => line.map(span => span.text).join('')).find(text => text.includes('Config:'));
+  expect(configHint).toMatch(/^2\s+Config:/);
+});

@@ -1969,6 +1969,7 @@
       "dependencies": [
         "src/engine/core/config",
         "src/platform/core/config",
+        "src/platform/core/errors",
         "src/platform/core/host",
         "src/platform/core/utils",
         "src/engine/core/audit",

@@ -7,6 +7,7 @@ Human-curated. One line per landing, keyed by PLAN.md card id. No product code w
 ## Unreleased
 
 - ADDED (CONFIG-SURFACE): registry-derived config inspect/explain/validate/set/unset with scoped policy, digest checks, atomic backups and value-free audit; shared CLI/terminal/monitor reads, binding lint, schema 4 removal of five unused settings, shared max_workers and admission Docker ceilings; owner catalog cleanup command proof in a temp project. Config require-approval remains a typed refusal; terminal is read only.
+- FIXED (CONFIG-SURFACE revise): shared token/URL redaction across config views; registry-controlled backup retention and writer lock timeout; isolated monitor Config errors and cached schema conversion; dynamic Config help index, absent-document CLI fence and explicit global-explain refusal.
 
 - ADDED (EXEC-RELEASE): after `task patch-prepare` retains a verified patch, Deckent removes that attempt's stopped container and Git clone (sealed worker event log required when a worker connection existed); a start-up sweep finishes eligible ones; `workers inspect` shows `custody: released`; config `execution.retention`. Needs the `attempt:release` grant; without it attempts stay held, visibly.
 - FIX (SECRET-WRITE-CLOCK): `deckent init policy --apply` and the Docker-gated installation no longer fail with `INSTALLATION_JOURNAL_INVALID` (leaving the installation pending) when the host wall clock steps backwards during the apply or a retry runs with a clock behind the first attempt.

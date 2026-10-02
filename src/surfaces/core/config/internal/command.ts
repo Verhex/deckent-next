@@ -52,6 +52,7 @@ export async function configCommand(argv: readonly string[], context: ConfigComm
     locale = resolveLocale(parsed.language, env, view.fields.find(field => field.key === 'language')?.value as string | undefined); context.onLocale?.(locale);
     emit(view, { ...sinks, render: value => renderConfigInspection(value, locale) }); return;
   }
+  if (action === 'explain' && parsed.global) throw ErrorRegistry.createError('CLI_USAGE');
   if (action === 'explain' && keyPath && parsed.args.length === 2) {
     emit(await app.explain({ keyPath }), { ...sinks, render: value => renderConfigExplanation(value, locale) }); return;
   }
@@ -63,7 +64,7 @@ export async function configCommand(argv: readonly string[], context: ConfigComm
   if (!scopeId) throw ErrorRegistry.createError('TERMINAL_SCOPE_REQUIRED');
   if (!context.resolveConfigPrincipal) throw ErrorRegistry.createError('CLI_USAGE');
   const principal = await context.resolveConfigPrincipal(root, scopeId, options), input = { keyPath, layer, principal, scopeId,
-    commandId: parsed.commandId ?? randomUUID(), ...(parsed.expect === undefined ? {} : { expect: parsed.expect }) };
+    commandId: parsed.commandId ?? randomUUID(), ...(parsed.expect === undefined ? {} : { expect: parsed.expect === 'absent' ? null : parsed.expect }) };
   const field = await app.explain({ keyPath });
   const result = action === 'set' ? await app.set({ ...input, value }) : await app.unset(input);
   emit(result, { ...sinks, render: () => [t('config.surface.changed', { key: keyPath, layer: sourceWord(layer, locale), apply: applyWord(field.apply, locale), backup: result.backupPath ?? '-' }, locale),

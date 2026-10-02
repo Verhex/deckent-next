@@ -75,3 +75,15 @@ it('compatible config get --json keeps structured migration warnings on stderr a
     expect(await readFile(path, 'utf8')).toBe(bytes);
   } finally { await rm(root, { recursive: true, force: true }); }
 });
+
+
+it('CLI absent fence reaches set/unset as null and global explain refuses before reading', async () => {
+  const f = fixture();
+  for (const action of ['set', 'unset']) {
+    await configCommand(['config', action, 'max_workers', ...(action === 'set' ? ['2'] : []), '--expect', 'absent', '--global', '--scope', 'scope-a'], f.ctx);
+    expect(f.set.mock.calls.at(-1)?.[0]).toMatchObject({ expect: null, layer: 'global' });
+  }
+  f.explain.mockClear();
+  await expect(configCommand(['config', 'explain', 'max_workers', '--global'], f.ctx)).rejects.toMatchObject({ code: 'CLI_USAGE' });
+  expect(f.explain).not.toHaveBeenCalled();
+});

@@ -41,6 +41,7 @@ export function MonitorApp(props: MonitorAppProps) {
   const now = props.now ?? Date.now;
   const tabs = props.loadConfigView ? [...MONITOR_TABS, 'config' as const] : MONITOR_TABS;
   const [configView, setConfigView] = useState<ConfigMonitorInspection | null>(null);
+  const [configFailure, setConfigFailure] = useState<string | null>(null);
   const { exit } = useApp();
   const window = useWindowSize(), { columns, rows } = props.size ?? window;
   const width = Math.max(20, columns || 80), height = Math.max(10, rows || 24), ellipsis = ascii ? '...' : '…';
@@ -63,12 +64,15 @@ export function MonitorApp(props: MonitorAppProps) {
     if (inFlight.current) return;
     inFlight.current = true;
     try {
-      const [next, inspectedConfig] = await Promise.all([load(), props.loadConfigView?.()]);
-      if (alive.current && inspectedConfig) setConfigView(inspectedConfig);
+      const [observed, inspectedConfig] = await Promise.allSettled([Promise.resolve().then(load), Promise.resolve().then(() => props.loadConfigView?.())]);
       if (alive.current) {
-        const current = signatures(buildMonitorView(filterSnapshot(next, filters ?? {}), locale, ascii).tabs);
-        setReceived(previous => ({ snapshot: next, at: now(), signatures: current, marks: changeMarks(previous?.signatures ?? null, current, CHANGE_GLYPHS) }));
-        setFailure(null);
+        if (inspectedConfig.status === 'fulfilled') { setConfigView(inspectedConfig.value ?? null); setConfigFailure(null); }
+        else { setConfigView(null); setConfigFailure(errorText(inspectedConfig.reason)); }
+        if (observed.status === 'fulfilled') {
+          const next = observed.value, current = signatures(buildMonitorView(filterSnapshot(next, filters ?? {}), locale, ascii).tabs);
+          setReceived(previous => ({ snapshot: next, at: now(), signatures: current, marks: changeMarks(previous?.signatures ?? null, current, CHANGE_GLYPHS) }));
+          setFailure(null);
+        } else setFailure({ text: errorText(observed.reason), at: now() });
       }
     } catch (error) { if (alive.current) setFailure({ text: errorText(error), at: now() }); }
     finally { inFlight.current = false; if (alive.current) { setGeneration(value => value + 1); setClock(now()); } }
@@ -85,8 +89,10 @@ export function MonitorApp(props: MonitorAppProps) {
 
   const view = useMemo(() => snapshot ? buildMonitorView(filterSnapshot(snapshot, filters ?? {}), locale, ascii) : null, [ascii, filters, locale, snapshot]);
   const current = tabs[tab]!;
-  const blocks = useMemo(() => view ? applyControls(current === 'config' ? configView ? configMonitorBlocks(configView, locale) : [{ kind: 'line' as const, line: [span(t('monitor.live.loading', {}, locale))] }] : view.tabs[current], controls, current === 'runs' || current === 'workers', received?.marks ?? new Map(),
-    { noMatch: t('monitor.filter.noMatch', {}, locale), arrows: { down: ascii ? 'v' : '▼', up: ascii ? '^' : '▲' } }) : [], [ascii, configView, controls, current, locale, received, view]);
+  const blocks = useMemo(() => view ? applyControls(current === 'config' ? configView ? configMonitorBlocks(configView, locale) : configFailure
+    ? [{ kind: 'line' as const, line: [span(t('config.surface.unavailable', {}, locale), 'warning')] }, { kind: 'line' as const, line: [span(configFailure, 'error')] }]
+    : [{ kind: 'line' as const, line: [span(t('monitor.live.loading', {}, locale))] }] : view.tabs[current], controls, current === 'runs' || current === 'workers', received?.marks ?? new Map(),
+    { noMatch: t('monitor.filter.noMatch', {}, locale), arrows: { down: ascii ? 'v' : '▼', up: ascii ? '^' : '▲' } }) : [], [ascii, configFailure, configView, controls, current, locale, received, view]);
   const flat: MonitorFlatLine[] = useMemo(() => flattenBlocks(blocks, width, ellipsis), [blocks, ellipsis, width]);
   const items = flat.filter(line => line.item !== undefined);
   const selected = Math.min(selection[tab] ?? 0, Math.max(0, items.length - 1));
@@ -145,7 +151,7 @@ export function MonitorApp(props: MonitorAppProps) {
   });
 
   let body: MonitorLine[];
-  if (help) body = legendLines(locale, ascii, Boolean(props.loadConfigView));
+  if (help) body = legendLines(locale, ascii, tabs);
   else if (!view) body = [[span(failure ? '' : t('monitor.live.loading', {}, locale), 'muted')]];
   else if (detail !== null) {
     body = [[span(t('monitor.live.detailBack', {}, locale), 'muted')], ...(detailRow ? wrapDetail(detailRow.detail(), width) : [[span(t('monitor.live.detailGone', {}, locale), 'warning')]])];

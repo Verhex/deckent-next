@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "sources": {
     "src/platform/core/common/internal/constants.ts": "417d8d387de97e330e4c24362cb276df10421f96391fce5de44f3b9660d18e6a",
-    "src/platform/core/config-fields/internal/fields.ts": "844900e062229bbaddd845b5a0b375191d117eec994a406c5266f52e28147092",
+    "src/platform/core/config-fields/internal/fields.ts": "f787def0b0a849baa0a45bed82bf49fd628d4bbf654a5c9f9dc3ad93c8031310",
     "src/platform/core/i18n/internal/types.ts": "d01f84fb14c660c1af38f89c906b162d85c7f94ef837a25ec5f04daaad0ebbe9"
   },
   "fields": {
@@ -23,6 +23,7 @@
     ],
     "artifacts": [],
     "execution": [],
+    "configFile": [],
     "installation": [],
     "approvals": [
       "authority.key"

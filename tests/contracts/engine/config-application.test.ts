@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { ConfigApplication, ConfigApplicationError, planConfigChange, authorizeConfigWrite } from '../src/engine/core/config/index.js';
-import { createDefaultConfig, validateConfig } from '../src/platform/core/config/index.js';
-import { digestText } from '../src/platform/core/utils/index.js';
+import { ConfigApplication, ConfigApplicationError, planConfigChange, authorizeConfigWrite } from '../../../src/engine/core/config/index.js';
+import { createDefaultConfig, validateConfig } from '../../../src/platform/core/config/index.js';
+import { digestText } from '../../../src/platform/core/utils/index.js';
 
 const principal = { id: 'test', issuer: 'local-os', subject: 'test', assurance: 'os-user', scopeIds: ['test'] } as const;
 const command = { keyPath: 'max_workers', value: 2, principal, scopeId: 'test', commandId: 'config-test' };
@@ -80,14 +80,14 @@ it('global config writes require installation authority and require-approval rem
 });
 
 it('compatibility lookup walks only canonical existing array indexes', async () => {
-  const { getConfigValue } = await import('../src/platform/core/config/index.js');
+  const { getConfigValue } = await import('../../../src/platform/core/config/index.js');
   const document = { entries: [{ id: 'Qwen3.8-27B-INT4-W4A16' }] };
   expect(getConfigValue(document, 'entries.0.id')).toBe('Qwen3.8-27B-INT4-W4A16');
   for (const path of ['entries.01.id', 'entries.-1.id', 'entries.1.id', 'entries.length', 'entries.0.__proto__']) expect(() => getConfigValue(document, path)).toThrow();
 });
 
 it('numeric token capacity stays visible while credential token keys stay masked', async () => {
-  const { configDisplayView, isSensitiveConfigKey } = await import('../src/platform/core/config/index.js');
+  const { configDisplayView, isSensitiveConfigKey } = await import('../../../src/platform/core/config/index.js');
   expect(isSensitiveConfigKey('maxOutputTokens')).toBe(false); expect(isSensitiveConfigKey('contextWindowTokens')).toBe(false);
   for (const key of ['token', 'accessToken', 'auth_token', 'foo_token', 'sessionToken', 'refreshToken', 'apiKey', 'privateKey']) expect(isSensitiveConfigKey(key)).toBe(true);
   const effective = createDefaultConfig();

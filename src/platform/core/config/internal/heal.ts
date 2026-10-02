@@ -7,6 +7,7 @@ import { withConfigWriteLock, assertConfigPreimage, backupConfig, pruneConfigBac
 
 interface ConfigHealingOptions extends ConfigLockOptions { beforeHeal?: () => Promise<void> }
 export async function healCorruptProjectConfig(path: string, corrupt: Extract<JsonRead, { kind: 'corrupt' }>, options: ConfigHealingOptions = {}): Promise<{ config: unknown; backupPath: string }> {
+  const defaults = createDefaultConfig();
   return withConfigWriteLock(path, async () => {
     // The installer takes this same writer lock before publishing its bootstrap anchor.
     // Observe the admission fence under the lock before backup or automatic repair writes.
@@ -14,11 +15,11 @@ export async function healCorruptProjectConfig(path: string, corrupt: Extract<Js
     await assertConfigPreimage(path, corrupt.digest);
     const backupPath = await backupConfig(path, corrupt.text);
     await assertConfigPreimage(path, corrupt.digest);
-    const config = createDefaultConfig();
+    const config = defaults;
     await writeJsonAtomic(path, config);
-    await pruneConfigBackups(path, 3, backupPath);
+    await pruneConfigBackups(path, defaults.configFile.backupKeep, backupPath);
     return { config, backupPath };
-  }, 2_000, options);
+  }, defaults.configFile.writeLockTimeoutMs, options);
 }
 /** A transient read failure is never evidence that a document is corrupt. */
 export async function readProjectConfig(path: string, options: ConfigHealingOptions & { heal?: boolean; onHeal?: (path: string) => void } = {}): Promise<unknown> {

@@ -7,3 +7,4 @@ export { describeDiagnostic, describeDiagnostics, type MonitorDiagnostic } from 
 export { rowMatches, applyControls, changeMarks, signatures, type MonitorControls } from './controls.js';
 
 export { configMonitorBlocks } from './config-view.js';
+export { legendLines } from './legend.js';

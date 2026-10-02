@@ -468,10 +468,10 @@ then `actionlint -shellcheck= -pyflakes= .github/workflows/*.yml`; no npm depend
 validate, set and unset. Fields, descriptions, JSON Schema type/enum/range/default, binding and apply mode derive from
 `CONFIG_FIELDS` and `registerConfigSection`; there is no surface-owned key/schema list. The file adapter observes
 project/global documents and effective default → global → project → env values. Secret provenance and credential keys
-are masked before subtree selection; schema value annotations are masked too. Token resource counts stay visible.
+are masked before subtree selection; every string also passes through the existing shared redactSensitive matcher (tokens, Bearer credentials, URL passwords, key/value secrets and JWTs). Schema value annotations are masked too. Token resource counts stay visible. Raw JSON Schema conversion is cached per configRegistryGeneration with schema-derived paths (dynamic array indexes/record names share nodes); values, provenance and annotation masking remain fresh per observation.
 
 Writes carry VerifiedPrincipal, scope, command id, explicit project/default or global target, and optional inspect
-preimage digest (`--expect`). Existing policy vocabulary adds `config/write`; first-run template v4 grants it to the
+preimage digest (`--expect`; CLI `--expect absent` asserts no target document yet). Existing policy vocabulary adds `config/write`; first-run template v4 grants it to the
 verified local owner. Global writes also require installation-wide delegation. Deny and require-approval fail closed;
 config has no broker-supported approval subject yet (`POLICY_APPROVAL_UNSUPPORTED`). Terminal `/config` is read only.
 Reads require no config-write grant. Composition supplies verified scope context; the engine plans, adapters own IO.
@@ -482,7 +482,7 @@ inputs reject undefined, nonfinite, cyclic or accessor values before publication
 
 The existing writer lock serializes publication: validate each authored layer, full CORE_SCHEMA + registered section
 validators and resulting effective document; check preimage; seal a value-free audit intent through the existing audit
-port; retain the existing file as a versioned adjacent product backup; fsync temporary file, rename and fsync directory.
+port; retain the existing file as a versioned adjacent product backup; fsync temporary file, rename and fsync directory. Governed writes prune adjacent backups under that same lock using configFile.backupKeep (registry default 3), protecting the newly created backup. A CONFIG_BACKUP_PRUNE_FAILED failure occurs after publication and does not roll back saved bytes; inspect reconciles actual document state. Config writer waiting uses configFile.writeLockTimeoutMs (registry default 2000ms); compatibility writeConfig and healing reuse the registry source, while installation publication keeps its separate installation setting. A malformed project document heals with registry defaults because it cannot supply valid config policy.
 Audit carries principal/scope/key/command/layer and before/after document digests. Audit and filesystem publication are
 separate stores: the audit intent is not an effect-settlement receipt; after an IO failure inspect reconciles actual
 bytes. Audit failure prevents config publication. Without an initialized ledger/policy/key custody, writes refuse.
@@ -506,7 +506,7 @@ receipt, progression intent or attempt is created on a resource-ceiling rejectio
 CLI config has a dedicated `surfaces/core/config` unit: an 80-column grouped human view, compatible `get [key] --json`,
 explain/validate/set/unset with safe numeric array paths and splice removal. Terminal `/config [key]` and monitor's
 read-only Config tab/`monitor --config` use the same inspect operation. Monitor config concerns its current project;
-other installation snapshots do not grant config authority. No runtime protocol/ledger version change is required.
+other installation snapshots do not grant config authority. A failing Config read shows a typed unavailable state without discarding successful Run/worker refreshes; recovery replaces it with fresh config. Tab help derives its index from the active tab registry. CLI explain uses the project/effective view and refuses --global with CLI_USAGE. No runtime protocol/ledger version change is required.
 The owner-only provider cleanup sequence and temp-project command evidence are outside Git in
 `proof/CONFIG-SURFACE-2026-10-02/owner-vllm-steps.md`. Historical invocation inspection keeps its immutable old reference
 and profile after provider removal; the test uses a seeded valid durable claim/unknown settlement, not a model request.

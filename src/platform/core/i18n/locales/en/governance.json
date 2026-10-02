@@ -111,6 +111,7 @@
   "error.CONFIG_ALIAS_CONFLICT": "Conflicting aliases for {key}.",
   "error.CONFIG_CONCURRENT_REVISION_HOLD": "Configuration changed concurrently; retry after the writer finishes.",
   "error.CONFIG_KEY_UNKNOWN": "Unknown configuration key: {key}.",
+  "error.CONFIG_BACKUP_PRUNE_FAILED": "Configuration was saved, but backup cleanup failed. Inspect the saved document before retrying.",
   "error.CONFIG_READ_IO_HOLD": "Configuration could not be read; the file was preserved.",
   "error.CONFIG_SECTION_DUPLICATE": "Config section is already registered or reserved: {section}.",
   "error.CONFIG_SECTION_INVALID": "Config sections require strict object schemas: {section}.",

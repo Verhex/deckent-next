@@ -431,6 +431,7 @@ const definitions: Readonly<Record<string, Definition>> = Object.freeze({
   INVALID_PHASE: { category: 'usage', render: (p, l) => ({ message: t('error.INVALID_PHASE', p, l) }) },
   ACTOR_UNVERIFIED: { category: 'usage', render: (p, l) => ({ message: t('error.ACTOR_UNVERIFIED', p, l) }) },
   CONFIG_UNSAFE_KEY: { category: 'config', render: (p, l) => ({ message: t('error.CONFIG_UNSAFE_KEY', p, l) }) },
+  CONFIG_BACKUP_PRUNE_FAILED: { category: 'config', render: (p, l) => ({ message: t('error.CONFIG_BACKUP_PRUNE_FAILED', p, l) }) },
   CONFIG_READ_IO_HOLD: { category: 'config', render: (p, l) => ({ message: t('error.CONFIG_READ_IO_HOLD', p, l) }) },
   CONFIG_CONCURRENT_REVISION_HOLD: { category: 'config', render: (p, l) => ({ message: t('error.CONFIG_CONCURRENT_REVISION_HOLD', p, l) }) },
   CONFIG_WRITE_LOCKED: { category: 'config', render: (p, l) => ({ message: t('error.CONFIG_WRITE_LOCKED', p, l) }) },

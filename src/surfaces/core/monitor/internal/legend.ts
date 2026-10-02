@@ -1,5 +1,6 @@
 import { t, type Locale } from '#platform/index.js';
 import { span, type MonitorLine, type MonitorRole } from './layout.js';
+import { MONITOR_TABS, type MonitorTab } from './labels.js';
 
 /** Row change marks of the fullscreen view (`+` new, `*` changed since the previous snapshot); the same in Unicode and ASCII. */
 export const CHANGE_GLYPHS = { added: '+', changed: '*' } as const;
@@ -8,7 +9,8 @@ export const CHANGE_GLYPHS = { added: '+', changed: '*' } as const;
  * The `?` page: keys, then every glyph → colour role → meaning. The glyph and the words carry the meaning, so it reads the same under NO_COLOR
  * and ASCII (the colour column names the role a colour terminal shows).
  */
-export function legendLines(locale: Locale, ascii: boolean, config = false): MonitorLine[] {
+export function legendLines(locale: Locale, ascii: boolean, tabs: readonly (MonitorTab | 'config')[] = MONITOR_TABS): MonitorLine[] {
+  const configIndex = tabs.indexOf('config');
   const colour = (role: MonitorRole) => ({ info: t('monitor.legend.colour.info', {}, locale), warning: t('monitor.legend.colour.warning', {}, locale),
     error: t('monitor.legend.colour.error', {}, locale), success: t('monitor.legend.colour.success', {}, locale), muted: t('monitor.legend.colour.muted', {}, locale),
     accent: t('monitor.legend.colour.accent', {}, locale), strong: t('monitor.legend.colour.accent', {}, locale) })[role];
@@ -25,7 +27,7 @@ export function legendLines(locale: Locale, ascii: boolean, config = false): Mon
   const width = Math.max(...rows.map(row => colour(row[2]).length));
   return [
     ...t('monitor.live.help', {}, locale).split('\n').map(text => [span(text)]),
-    ...(config ? [[span(t('config.surface.monitorHelp', {}, locale))]] : []),
+    ...(configIndex >= 0 ? [[span(t('config.surface.monitorHelp', { index: configIndex + 1 }, locale))]] : []),
     [span('')], [span(t('monitor.legend.title', {}, locale), 'accent')],
     ...rows.map(([unicode, plain, role, meaning]): MonitorLine => [span(`  ${ascii ? plain : unicode}  `, role), span(colour(role).padEnd(width + 2), 'muted'), span(meaning)]),
   ];

@@ -1,8 +1,8 @@
 import { z } from 'zod';
 import { zodToJsonSchema } from 'zod-to-json-schema';
 import { CONFIG_FIELDS } from '#platform/index.js';
-import { configSections, createDefaultConfig } from '#platform/index.js';
-import { isRecord, isSensitiveConfigKey } from '#platform/index.js';
+import { configSections, configRegistryGeneration, createDefaultConfig } from '#platform/index.js';
+import { isRecord, isSensitiveConfigKey, redactSensitive } from '#platform/index.js';
 import { resolveLocale, MESSAGE_REGISTRY } from '#platform/index.js';
 import { ConfigApplicationError, type ConfigDefinition, type ConfigFieldView, type ConfigSnapshot } from './contract.js';
 
@@ -42,17 +42,38 @@ function childSchema(schema: z.ZodTypeAny, part: string): z.ZodTypeAny | undefin
   }
   return undefined;
 }
+let schemaGeneration = -1;
+const schemaViews = new Map<string, unknown>();
+function schemaCachePart(schema: z.ZodTypeAny, part: string): string {
+  const inner = unwrap(schema);
+  if (inner instanceof z.ZodArray || inner instanceof z.ZodRecord) return '*';
+  if (inner instanceof z.ZodUnion || inner instanceof z.ZodDiscriminatedUnion) return JSON.stringify([...inner.options]
+    .map(option => childSchema(option, part) ? schemaCachePart(option, part) : null));
+  return part;
+}
 export function definitionFor(keyPath: string) {
   const path = configPath(keyPath), definition = configDefinitions().get(path[0]!);
   if (!definition) throw new ConfigApplicationError('CONFIG_KEY_UNKNOWN');
   let schema = definition.schema;
-  for (const part of path.slice(1)) { const child = childSchema(schema, part); if (!child) throw new ConfigApplicationError('CONFIG_KEY_UNKNOWN'); schema = child; }
-  return { path, definition, schema };
+  // Dynamic array indexes and record names share their registry node; cache growth follows schemas, not document values.
+  const schemaPath = [path[0]!];
+  for (const part of path.slice(1)) {
+    schemaPath.push(schemaCachePart(schema, part));
+    const child = childSchema(schema, part); if (!child) throw new ConfigApplicationError('CONFIG_KEY_UNKNOWN'); schema = child;
+  }
+  return { path, definition, schema, schemaKey: JSON.stringify(schemaPath) };
+}
+function jsonSchemaView(schema: z.ZodTypeAny, schemaKey: string): unknown {
+  const generation = configRegistryGeneration();
+  if (schemaGeneration !== generation) { schemaViews.clear(); schemaGeneration = generation; }
+  if (!schemaViews.has(schemaKey)) schemaViews.set(schemaKey, zodToJsonSchema(schema, { $refStrategy: 'none' }));
+  return schemaViews.get(schemaKey);
 }
 function redact(value: unknown, path: readonly string[], secrets: ReadonlySet<string> = new Set()): unknown {
   const pointer = '/' + path.map(part => part.replace(/~/g, '~0').replace(/\//g, '~1')).join('/');
   if (secrets.has(pointer)) return '[REDACTED]';
   if (path.some(isSensitiveConfigKey) || typeof value === 'string' && /^\$DECK:|^\$ENV:/.test(value)) return '[REDACTED]';
+  if (typeof value === 'string') return redactSensitive(value);
   if (Array.isArray(value)) return value.map((item, i) => redact(item, [...path, String(i)], secrets));
   if (isRecord(value)) return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, redact(item, [...path, key], secrets)]));
   return value;
@@ -68,7 +89,7 @@ function schemaDisplayView(value: unknown, path: readonly string[], secrets: Rea
   }));
 }
 export function configFieldView(snapshot: ConfigSnapshot, keyPath: string): ConfigFieldView {
-  const { path, definition, schema } = definitionFor(keyPath), defaults = createDefaultConfig();
+  const { path, definition, schema, schemaKey } = definitionFor(keyPath), defaults = createDefaultConfig();
   const field = Object.entries(CONFIG_FIELDS).find(([key]) => key === path[0])?.[1];
   const env = field?.environment.some(binding => binding.names.some(name => snapshot.env[name] !== undefined && snapshot.env[name] !== '') &&
     (() => { const bound = [path[0]!, ...(binding.path ?? [])]; return path.slice(0, bound.length).join('.') === bound.join('.'); })());
@@ -78,7 +99,7 @@ export function configFieldView(snapshot: ConfigSnapshot, keyPath: string): Conf
   const declaredDefault = schema.safeParse(undefined);
   const value = redact(atConfigPath(snapshot.effective, path), path, secretPaths), defaultValue = redact(atConfigPath(defaults, path) ?? (declaredDefault.success ? declaredDefault.data : undefined), path);
   return { key: keyPath, value, defaultValue, source, descriptionKey: definition.descriptionKey,
-    description: (MESSAGE_REGISTRY.catalogs[resolveLocale(undefined, snapshot.env, snapshot.effective.language)] as Readonly<Record<string, string>>)[definition.descriptionKey] ?? definition.descriptionKey, schema: schemaDisplayView(zodToJsonSchema(schema, { $refStrategy: 'none' }), path, secretPaths),
+    description: (MESSAGE_REGISTRY.catalogs[resolveLocale(undefined, snapshot.env, snapshot.effective.language)] as Readonly<Record<string, string>>)[definition.descriptionKey] ?? definition.descriptionKey, schema: schemaDisplayView(jsonSchemaView(schema, schemaKey), path, secretPaths),
     binding: definition.binding, apply: definition.apply, redacted: value === '[REDACTED]' };
 }
 export function allConfigKeys(snapshot: ConfigSnapshot): string[] {
