@@ -2,7 +2,11 @@ import { z } from 'zod';
 import { createImmutableJsonObjectSchema, MODEL_INVOCATION_NATIVE_JSON_LIMITS } from '#domain/index.js';
 import { decisionCaseSchema } from '#domain/index.js';
 import { NativeJsonHttpError, parseNativeJsonHttpDefinition, parseNativeJsonHttpLimits, type NativeJsonHttpDefinition, type NativeJsonHttpLimits } from '#adapters/core/provider-http-json/index.js';
-import protocol from '../assets/protocol.json' with { type: 'json' };
+import protocolJson from '../assets/protocol.json' with { type: 'json' };
+/** Explicit shape so published declarations never reference the JSON asset module (self-contained .d.ts). */
+export type DecisionHttpProtocolData = Readonly<{ schemaVersion: number; id: string; version: number; protocol: Readonly<{ family: string; version: string }>;
+  meterId: string; selectionInstructions: string; sufficiencyInstructions: string; abstentions: Readonly<Record<string, string>> }>;
+const protocol: DecisionHttpProtocolData = protocolJson;
 
 export const decisionHttpAdapter = Object.freeze({ id: protocol.id, version: protocol.version, protocol: Object.freeze(protocol.protocol) });
 export const decisionHttpWireObjectSchema = createImmutableJsonObjectSchema(MODEL_INVOCATION_NATIVE_JSON_LIMITS);

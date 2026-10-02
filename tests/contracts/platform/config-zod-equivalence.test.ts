@@ -48,12 +48,13 @@ describe('config defaults (zod 4 .default/.prefault guard)', () => {
   it('registered sections: which default from {} and which stay absent is fixed', () => {
     const outcome = Object.fromEntries([...configSections()].map(([name, { schema }]) => [name, schema.safeParse({}).success]));
     expect(outcome).toEqual({ provider_catalog: false, provider_invocation_profiles: false, provider_spending: false, provider_spend_audit: false,
-      inference_serving: false, terminal: true, operations: true, secrets: false });
+      inference_serving: false, terminal: true, operations: true, secrets: false, decision: false });
     const defaults = createDefaultConfig();
     expect(defaults['terminal']).toEqual({ persistHistory: true, autostartService: true, serviceStartTimeoutMs: 20_000 });
     expect(defaults['operations']).toEqual({ catalog: [], targets: [] });
     // SECRET-K1: `secrets` stays absent from the defaults, so a healed or default-filled project file never carries a backend selection.
-    for (const name of ['provider_catalog', 'provider_invocation_profiles', 'provider_spending', 'provider_spend_audit', 'inference_serving', 'secrets']) {
+    // AOF-DECISION-PORT: no universal decision threshold is synthesized; a missing `decision` section means unavailable.
+    for (const name of ['provider_catalog', 'provider_invocation_profiles', 'provider_spending', 'provider_spend_audit', 'inference_serving', 'secrets', 'decision']) {
       expect(Object.hasOwn(defaults, name), name).toBe(false);
     }
   });

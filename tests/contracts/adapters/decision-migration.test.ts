@@ -35,3 +35,11 @@ it('an upgraded v46 ledger is never reopened by a reader whose current version i
  expect(()=>openSqliteLedger(f.path,options,'forbid')).toThrow(expect.objectContaining({code:'ATTEMPT_STORE_VERSION'}));
  expect(()=>openSqliteLedger(f.path,options,'allow')).toThrow(expect.objectContaining({code:'ATTEMPT_STORE_VERSION'}));
 });
+it('lets the exact tables this migration created stand when a ledger is re-marked v45 (v39-v44 convention), and still records v46',async()=>{
+ const f=await fixture();f.db.exec(`CREATE TABLE decision_cases(scope_id TEXT NOT NULL,decision_id TEXT NOT NULL,snapshot TEXT NOT NULL,
+  PRIMARY KEY(scope_id,decision_id));`);f.db.close();
+ // decision_cases pre-exists byte-identical to the migration's own CREATE text; decision_command_receipts is created by the upgrade.
+ const upgrade=await upgradeExistingProductLedger(f.path,options,f.backups,new Date('2026-10-02T12:00:00Z'));expect(upgrade).toMatchObject({from:45,to:46});
+ const check=new DatabaseSync(f.path,{readOnly:true});try{expect(check.prepare('PRAGMA user_version').get()?.user_version).toBe(46);
+  expect(check.prepare("SELECT name FROM sqlite_master WHERE name LIKE 'decision_%' ORDER BY name").all().map(row=>row.name)).toEqual(['decision_cases','decision_command_receipts']);}finally{check.close();}
+});
