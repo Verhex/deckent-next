@@ -1,0 +1,6 @@
+emit('hello world');
+function renderStatus() { return `waiting for ${id}`; }
+const labelTask = () => 'Task is ready';
+const view = <Text>Pending approval</Text>;
+throw new Error('Please try again');
+render(`Welcome ${name}`);

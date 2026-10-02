@@ -1,0 +1,3 @@
+declare const provider: string;
+declare function act(): void;
+if (provider === ('codex' as const)) act();

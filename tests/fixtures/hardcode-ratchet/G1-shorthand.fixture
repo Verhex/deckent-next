@@ -1,0 +1,2 @@
+const claude = true;
+export const routes = { claude };

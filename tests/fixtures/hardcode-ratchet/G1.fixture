@@ -1,0 +1,7 @@
+if (provider === 'claude') act();
+switch (client) { case 'codex': act(); }
+const vendors = new Set(['cursor']);
+const map = { openai: true };
+['gemini'].includes(provider);
+known.has('bedrock');
+const computed = { ['qwen']: true };
