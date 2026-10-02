@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -15,7 +15,11 @@ import { buildDist } from '../../../scripts/build-dist.mjs';
 // type-check) stays in `npm run smoke:dist <tarball>` before a release. Linux only: the terminal checks drive a pseudo-TTY through util-linux
 // `script`; bubblewrap staging depends on the host (build-bwrap output), so only its gaps are tolerated here.
 const ROOT = fileURLToPath(new URL('../../..', import.meta.url));
-const FAST_CHECKS = ['version', 'mcp', 'native', 'lazy', 'imports', 'terminal'];
+const FAST_CHECKS = ['version', 'mcp', 'native', 'lazy', 'imports', 'bootstrap', 'terminal'];
+// PACKAGED-WORKER-BOOTSTRAP (dogfood D3-1, 2026-10-01): the docker supervisor mounts this one file alone as /run/deckent-bootstrap.mjs; the
+// split bundle gave it `import "../../../../vendor/chunk-*.js"` and every native worker died with ERR_MODULE_NOT_FOUND.
+const BOOTSTRAP = 'dist/adapters/core/native-connection/internal/worker.js';
+const SPECIFIERS = /(?:^|[\n;])\s*(?:import|export)\b[^'";]*?\bfrom\s*["']([^"']+)["']|(?:^|[\n;])\s*import\s*["']([^"']+)["']|\bimport\(\s*["']([^"']+)["']\s*\)/g;
 const outs: string[] = [];
 afterAll(async () => { await Promise.all(outs.map(out => rm(out, { recursive: true, force: true }))); });
 
@@ -26,6 +30,9 @@ describe.skipIf(process.platform !== 'linux' || !existsSync('/usr/bin/script'))(
     const summary = await buildDist({ root: ROOT, out }) as { stage: string; publishable: { blockers: string[] }; licenseTexts: { unused: string[] } };
     expect(summary.publishable.blockers.filter(blocker => !blocker.startsWith('bubblewrap: '))).toEqual([]);
     expect(summary.licenseTexts.unused).toEqual([]);
+    const specifiers = [...readFileSync(join(summary.stage, BOOTSTRAP), 'utf8').matchAll(SPECIFIERS)].map(match => match[1] ?? match[2] ?? match[3]);
+    expect(specifiers.length).toBeGreaterThan(0);
+    expect(specifiers.filter(spec => !spec.startsWith('node:')), 'the mounted bootstrap must stay standalone').toEqual([]);
 
     const smoke = spawnSync(process.execPath, [join(ROOT, 'scripts/pack-smoke.mjs'), '--root', summary.stage, '--only', FAST_CHECKS.join(',')],
       { cwd: ROOT, encoding: 'utf8', timeout: 150_000 });

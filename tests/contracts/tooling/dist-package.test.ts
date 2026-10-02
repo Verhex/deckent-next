@@ -9,7 +9,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 // @ts-expect-error JavaScript build tooling has no declaration file.
 import { bundledNativeComponents, bundledPackages, cyclonedx, embeddedInBundle, lockedLicenseTexts, npmPurl, packageDirOf, thirdPartyNotices } from '../../../scripts/dist-sbom.mjs';
 // @ts-expect-error JavaScript build tooling has no declaration file.
-import { ajvGuard, declarationImports, publishedManifest, stubAjvImport } from '../../../scripts/build-dist.mjs';
+import { ajvGuard, declarationImports, publishedManifest, STANDALONE_ENTRIES, standaloneImportProblems, stubAjvImport } from '../../../scripts/build-dist.mjs';
 // @ts-expect-error JavaScript build tooling has no declaration file.
 import { sbomComponents } from '../../../scripts/deps-watch.mjs';
 // @ts-expect-error JavaScript build tooling has no declaration file.
@@ -167,6 +167,23 @@ describe('bundled native executables in the SBOM and notices (BWRAP-SELECT)', ()
     expect(notices.text).toContain('## bubblewrap 0.13.0 (separate executable)');
     expect(notices.text).toContain('bubblewrap 0.13.0 (LGPL-2.1-or-later) notice');
     expect(notices.gaps).toEqual([]);
+  });
+});
+
+describe('standalone mounted entries (PACKAGED-WORKER-BOOTSTRAP)', () => {
+  it('names the native worker bootstrap the docker supervisor mounts alone', () => {
+    expect(STANDALONE_ENTRIES).toEqual(['adapters/core/native-connection/internal/worker.js']);
+  });
+
+  it('accepts only external node: builtins and refuses a shared chunk, a kept relative import and a bare package', () => {
+    expect(standaloneImportProblems({ imports: [{ path: 'node:http', kind: 'import-statement', external: true }] }, 'w.js')).toEqual([]);
+    expect(standaloneImportProblems({ imports: [
+      { path: '.pack/package/dist/vendor/chunk-OXXOQBJJ.js', kind: 'import-statement' },
+      { path: './credential.js', kind: 'import-statement', external: true },
+      { path: 'react-devtools-core', kind: 'dynamic-import', external: true },
+      { path: 'node:net', kind: 'import-statement', external: true }] }, 'w.js')).toEqual([
+      'w.js imports .pack/package/dist/vendor/chunk-OXXOQBJJ.js (import-statement)', 'w.js imports ./credential.js (import-statement)',
+      'w.js imports react-devtools-core (dynamic-import)']);
   });
 });
 
