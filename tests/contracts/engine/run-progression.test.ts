@@ -4,7 +4,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { join } from 'node:path';
 import { afterEach, expect, it, vi } from 'vitest';
 import { openSqliteAttemptStore, type SqliteAttemptStore } from '#adapters/index.js';
-import { RunLifecycleRuntimeLoop, RunProgressionTurn, RunReservationApplication, RunStoreError, type RunProgressionOperations } from '#engine/index.js';
+import { RunLifecycleApplication, RunPolicyAuthorization, RunLifecycleRuntimeLoop, RunProgressionTurn, RunReservationApplication, RunStoreError, type RunProgressionOperations } from '#engine/index.js';
 import { fixtureExecution } from '../support/execution-registry.js';
 import { custodyProfiles, dispatchAdmission, grantTestLaunch } from '../support/custody.js';
 
@@ -193,4 +193,54 @@ it('lost completion publication leaves the accepted Run COMPLETED on the next ma
   await loop.run(controller.signal);
   expect((await f.store.loadRun('s', 'r'))!.state).toEqual({ kind: 'terminal', outcome: 'completed', reason: 'completed' });
   expect((await f.turn.advance(query, new AbortController().signal)).run.state).toEqual({ kind: 'terminal', outcome: 'completed', reason: 'completed' });
+});
+
+it('reserves and executes without cancel authority, then keeps no-due maintenance quiet', async () => {
+  const f = await fixture(), principal = { ...actor, assurance: 'os-user' as const, scopeIds: ['s'] };
+  const authorization = new RunPolicyAuthorization({ async load() { return { schemaVersion: 1, revision: 'no-cancel', restrictions: [], grants: [
+    { id: 'run', effect: 'allow', actions: ['create', 'inspect', 'reserve'], scopes: ['s'], principals: [{ issuer: actor.issuer, subject: actor.subject }],
+      resource: { kind: 'run', ids: 'all' } },
+  ] }; } });
+  const app = new RunLifecycleApplication(f.store, { async verify() { return principal; } }, authorization,
+    { async authorize() {} }, () => ({ record() {} }), () => 0, 1000, 'no-cancel');
+  f.operations.advanceLifecycle = async request => { await app.advance(request); };
+  const commits = vi.spyOn(f.store, 'commitRunLifecycle');
+  const result = await f.turn.advance(query, new AbortController().signal);
+  expect(result.attempted).toBe(3); expect(result.run.tasks.every(task => task.phase === 'accepted')).toBe(true);
+  const revision = result.run.revision;
+  expect((await f.turn.advance(query, new AbortController().signal)).attempted).toBe(0);
+  expect((await f.store.loadRun('s', 'r'))?.revision).toBe(revision);
+  expect(commits).not.toHaveBeenCalled();
+});
+
+it('reports a due expiry denial for one Run while another Run reserves and executes in the same ledger', async () => {
+  const f = await fixture('unknown'), controller = new AbortController(), errors: unknown[] = [];
+  await f.turn.advance(query, controller.signal);
+  const due = (await f.store.loadRun('s', 'r'))!;
+  if (due.state.kind !== 'parked') throw new Error('FIXTURE_NOT_PARKED');
+  const deadline = due.state.deadline;
+  await f.store.createRun({ commandId: 'create-ready', actor, identity: { ...due.identity, runId: 'ready' }, graph: due.graph,
+    execution: due.execution, now: 0, policy: { schemaVersion: 2, poolId: 'p', capacity: { executionSlots: 2, inFlightSlots: 2 }, ordering: ['a', 'b', 'c'] } });
+  const principal = { ...actor, assurance: 'os-user' as const, scopeIds: ['s'] };
+  const authorization = new RunPolicyAuthorization({ async load() { return { schemaVersion: 1, revision: 'no-cancel', restrictions: [], grants: [
+    { id: 'run', effect: 'allow', actions: ['create', 'inspect', 'reserve'], scopes: ['s'], principals: [{ issuer: actor.issuer, subject: actor.subject }],
+      resource: { kind: 'run', ids: 'all' } },
+  ] }; } });
+  const app = new RunLifecycleApplication(f.store, { async verify() { return principal; } }, authorization,
+    { async authorize() {} }, () => ({ record() {} }), () => deadline, 1000, 'no-cancel');
+  f.operations.read = async request => (await f.store.loadRun(request.scopeId, request.runId))!;
+  f.operations.advanceLifecycle = async request => { await app.advance(request); };
+  const loop = new RunLifecycleRuntimeLoop({
+    async discover() { return { due: { items: [{ scopeId: 's', runId: 'r' }], next: null },
+      page: { items: [{ scopeId: 's', runId: 'ready' }], next: null } }; },
+    async expire(request) { await app.advance({ schemaVersion: 1, ...request }); },
+    advance: (request, signal) => f.turn.advance({ schemaVersion: 1, ...request }, signal),
+  }, {
+    onError(request, error) { errors.push({ request, error }); },
+    onRun(request, result) { expect(request.runId).toBe('ready'); expect(result.attempted).toBe(2); controller.abort(); },
+  }, { pollIntervalMs: 1, failureBackoffMs: 1 }, () => deadline);
+  await loop.run(controller.signal);
+  expect(errors).toEqual([{ request: { scopeId: 's', runId: 'r' }, error: expect.objectContaining({ code: 'POLICY_DENIED' }) }]);
+  expect(await f.store.loadRun('s', 'r')).toEqual(due);
+  expect((await f.store.loadRun('s', 'ready'))?.bindings).toHaveLength(2);
 });

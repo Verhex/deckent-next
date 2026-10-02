@@ -40,8 +40,8 @@ export class RunLifecycleApplication {
     private readonly recorder: RunLifecycleAuditRecorder, private readonly now: () => number, private readonly timeoutMs: number, private readonly policyRevision: string) {}
   async advance(input: unknown, credential?: unknown) {
     const query: RunQuery = runQuerySchema.parse(input), principal = await authenticate(this.verifier, credential, query.scopeId);
-    // Maintenance can close the Run at its deadline, so it needs the same write grant as close.
-    await this.runAuthorization.authorize('cancel', query, principal);
+    // Due discovery is a read; ordinary progression must not require terminal write authority.
+    await this.runAuthorization.authorize('inspect', query, principal);
     let run = await this.store.loadRun(query.scopeId, query.runId);
     if (!run) return null;
     let receipt: RunReceipt | null = null;
@@ -58,6 +58,8 @@ export class RunLifecycleApplication {
     }
     const now = this.now();
     if (!(run.state.kind === 'parked' && run.state.deadline <= now) && !run.progress.some(task => task.decision && task.decision.deadline <= now)) return receipt;
+    // Only due Run/task expiry uses the same terminal write authority as operator close.
+    await this.runAuthorization.authorize('cancel', query, principal);
     return this.store.commitRunLifecycle({ ...query, commandId: randomUUID(), expectedRevision: run.revision, action: 'expire', actor,
       now, timeoutMs: this.timeoutMs });
   }

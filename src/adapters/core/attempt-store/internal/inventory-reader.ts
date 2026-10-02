@@ -2,7 +2,7 @@ import { readIntegration } from './integration.js';
 import { readRunBoundDispatch, readRunBoundTask } from './run-dispatch-lookup.js';
 import { requireLedgerVersion, INTEGRATION_LEDGER_VERSION, DISPATCH_LEDGER_VERSION, RUN_LEDGER_VERSION, WORKER_EVENT_LOG_LEDGER_VERSION, sqliteFailure, sqliteLedgerOptionsSchema,
   assertSqliteEngineSupported, type SqliteLedgerOptions } from '#adapters/core/sqlite-ledger/index.js';
-import { SqliteRunJournal } from './runs.js';
+import { readRunReceipt, readRunSnapshot } from './runs.js';
 import { identitySchema } from '#domain/index.js';
 import { DatabaseSync } from 'node:sqlite';
 import { AttemptStoreError, type DispatchInventoryQuery, type DispatchInventoryStore } from '#engine/index.js';
@@ -45,19 +45,21 @@ export class SqliteInventoryReader implements DispatchInventoryStore {
   async loadRunReceipt(scopeId: string, commandId: string) {
     try {
       requireLedgerVersion(this.db, RUN_LEDGER_VERSION);
-      return await new SqliteRunJournal(this.db, undefined, undefined).loadRunReceipt(scopeId, commandId);
+      return await readRunReceipt(this.db, scopeId, commandId);
     } catch (error) { throw readFailure(error); }
   }
   async loadRun(scopeId: string, runId: string) {
     const scope = identitySchema.parse(scopeId); const run = identitySchema.parse(runId);
     try {
       requireLedgerVersion(this.db, RUN_LEDGER_VERSION);
-      return await new SqliteRunJournal(this.db, undefined, undefined).loadRun(scope, run);
+      return await readRunSnapshot(this.db, scope, run);
     } catch (error) { throw readFailure(error); }
   }
   async hasTaskEvaluation(identity: unknown, revision: number) {
-    requireLedgerVersion(this.db, RUN_LEDGER_VERSION);
-    return new SqliteRunProgression(this.db).hasTaskEvaluation(identity, revision);
+    try {
+      requireLedgerVersion(this.db, RUN_LEDGER_VERSION);
+      return await new SqliteRunProgression(this.db).hasTaskEvaluation(identity, revision);
+    } catch (error) { throw readFailure(error); }
   }
   /** Sealed worker event log record of one attempt (read-only; WORKER-CURRENCY-2 model rows on workers and run inspect). */
   async loadWorkerEventLog(scopeId: string, attemptId: string) {

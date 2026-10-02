@@ -104,6 +104,8 @@ historical proof and current gates retain their measured scope. PLAN.md tracks t
   dependencies and preserves the deadline; close never reports incomplete work as success.
   Fable REVISE 2026-10-02, owner/lead typed return decision (Jev a8e582fe): the same evaluation owner may
   return an awaiting task only on a new exact-attempt retained output digest or verified host model seal.
+  Return is explicitly triggered by `deckent task evaluate` or SDK `evaluateTask`; progression turns have no automatic
+  producer to re-evaluate awaiting-decision tasks.
   Park captures the immutable output/seal digest baseline; application verifies artifacts and ledger commit rechecks custody.
   Each new digest is consumed once and recorded in the evaluation receipt. Unknown parks again with the original since/deadline;
   evidence-less, duplicate or expired returns remain TASK_EVALUATION_NOT_READY. A verified seal permits ordinary criterion acceptance,
@@ -116,8 +118,11 @@ historical proof and current gates retain their measured scope. PLAN.md tracks t
   preserving its original unknown evidence; it cannot auto-accept. Rule A substitution and Codex/Cursor evidence stay unchanged.
   Host-proven exited execution without ready output (including exit 137) parks visibly as `evaluation-not-ready`,
   cannot be accepted without evidence, and fails at the deadline. Historical evaluated unknowns park on the first
-  authorized maintenance turn without evidence-less re-evaluation. Maintenance requires Run cancel (the existing close authority),
-  never inspect alone. Deadline polls read first and enter the lifecycle write transaction only for a due deadline.
+  authorized maintenance turn without evidence-less re-evaluation. Maintenance reads and computes deadlines with Run inspect;
+  only immediately before committing due Run/task expiry does it require Run cancel (the existing close authority).
+  Legacy task parking requires attempt:evaluate. A typed expiry refusal is reported for that Run; other Runs still progress.
+  No-due progression needs no cancel grant and opens no lifecycle writer. Deadline polls enter the write transaction
+  only for a due deadline.
   Store open requires the configured clock/parking timeout; pure transitions and terminal-dispatch cancellation settlement require explicit timing.
   Monitor treats parked Runs as open/stuck, projects decision reason/deadline and shows not-ready evaluation as pending.
   Its legacy v3 snapshot compatibility is a read-only projection; ledger45 owns durable conversion. Ledger v45 explicitly migrates snapshot/receipt v3 to v4,

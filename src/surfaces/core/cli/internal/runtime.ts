@@ -87,9 +87,9 @@ export async function runtimeCommand(argv: readonly string[], context: CommandCo
           () => t('cli.runtime.runProgression', { runId: query.runId, count: result.attempted }, locale));
       }
     },
-    onRunProgressionError: async (_query, error) => {
-      output({ schemaVersion: 1, event: 'run-progression-failed', code: error.code },
-        () => t('cli.runtime.runProgressionFailed', { code: error.code }, locale), 'error');
+    onRunProgressionError: async (query, error) => {
+      output({ schemaVersion: 1, event: 'run-progression-failed', query, code: error.code },
+        () => `${query ? `${query.scopeId}/${query.runId}: ` : ''}${t('cli.runtime.runProgressionFailed', { code: error.code }, locale)}`, 'error');
     },
     onReconciliationPage: async (command, result) => {
       const changed = result.outcomes.filter(outcome => outcome.status !== 'skipped');

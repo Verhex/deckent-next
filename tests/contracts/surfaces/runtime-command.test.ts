@@ -1,6 +1,6 @@
 import { expect, it } from 'vitest';
 import { main } from '#surfaces/index.js';
-import { resolveProductPaths } from '#platform/index.js';
+import { resolveProductPaths, ErrorRegistry } from '#platform/index.js';
 
 function host(state: 'clean' | 'incomplete' = 'clean') {
   let stops = 0;
@@ -30,4 +30,20 @@ it('stops an already-started host when ready output fails and surfaces an unexpe
   const doneFailure = await main(['runtime', 'serve'], { root: '/fixture/project', env: { HOME: '/fixture/home' }, signal: new AbortController().signal,
     stderr: { write() {} }, async startRuntimeService() { return { ...completed.value, done: Promise.reject(new Error('host-failed')) }; } });
   expect(doneFailure).not.toBe(0); expect(completed.stops()).toBe(0);
+});
+
+it.each([[true, 'en'], [false, 'en'], [false, 'tr']] as const)('logs a typed lifecycle refusal for its exact Run (json=%s, locale=%s)', async (json, locale) => {
+  const controller = new AbortController(); controller.abort(); const service = host(), errors: string[] = [];
+  const query = { scopeId: 's', runId: 'due-without-cancel' };
+  const code = await main(['runtime', 'serve', ...(json ? ['--json'] : []), '--lang', locale], {
+    root: '/fixture/project', env: { HOME: '/fixture/home' }, signal: controller.signal,
+    stdout: { write() {} }, stderr: { write(value: string) { errors.push(value); } },
+    async startRuntimeService(_root, observer) {
+      await observer.onRunProgressionError?.(query, ErrorRegistry.createError('POLICY_DENIED'));
+      return service.value;
+    },
+  });
+  expect(code).toBe(0); expect(service.stops()).toBe(1);
+  if (json) expect(JSON.parse(errors.join(''))).toMatchObject({ event: 'run-progression-failed', query, code: 'POLICY_DENIED' });
+  else { expect(errors.join('')).toContain(query.runId); expect(errors.join('')).toContain('POLICY_DENIED'); }
 });

@@ -24,7 +24,7 @@ async function fixture(exitCode: number, acceptedExitCodes = [0], stdout = 'priv
   await opened.store.createExecutionPool({ schemaVersion: 1, poolId: 'p', capacity: { executionSlots: 1, inFlightSlots: 1 } }); opened.store.close();
   const os = userInfo(); const principals = [{ issuer: hostname(), subject: String(os.uid) }];
   const policy = async (evaluate: boolean) => writeFile(join(data, 'policy.json'), JSON.stringify({ schemaVersion: 1, revision: evaluate ? 'allow' : 'deny', restrictions: [], grants: [
-    { id: 'run', effect: 'allow', actions: ['create', 'cancel'], scopes: ['s'], principals, resource: { kind: 'run', ids: ['r'] } },
+    { id: 'run', effect: 'allow', actions: ['create', 'inspect'], scopes: ['s'], principals, resource: { kind: 'run', ids: ['r'] } },
     { id: 'pool', effect: 'allow', actions: ['use'], scopes: ['s'], principals, resource: { kind: 'pool', ids: ['p'] } },
     ...(evaluate ? [{ id: 'evaluation', effect: 'allow', actions: ['evaluate', 'read-output'], scopes: ['s'], principals, resource: { kind: 'attempt', ids: ['a'] } }] : []),
   ] }), { mode: 0o600 });
