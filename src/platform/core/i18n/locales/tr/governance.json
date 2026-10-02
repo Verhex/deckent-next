@@ -1088,5 +1088,18 @@
   "error.PATCH_BASE_ADVANCED": "Çalışma hedefinin taban dalı bu teslimin tabanından ileri gitti. Güncel taban üzerinde yeni bir Run başlatın; rebase veya merge denenmez.",
   "error.PATCH_SCOPE_VIOLATION": "Çalışma hedefi görev kapsamını zorluyor: {count} değişen yol görevin bildirdiği kapsamın dışında ({paths}; gösterilmeyen {omitted} yol daha). Bu adım hiçbir şey yazmadı. Gerekli yolları bildiren bir iş girdisiyle yeni bir Run başlatın.",
   "error.PATCH_SCOPE_UNDECLARED": "Çalışma hedefi görev kapsamını zorluyor, ancak bu görev kapsam bildirmiyor (iş girdisi yok). Bu adım hiçbir şey yazmadı. Yollarını bildiren bir iş girdisiyle yeni bir Run başlatın.",
-  "error.MONITOR_UNAVAILABLE": "İzleyici burada Deckent durumunu okuyamıyor: bu sürümde izleme veri kaynağı bağlı değil."
+  "error.MONITOR_UNAVAILABLE": "İzleyici burada Deckent durumunu okuyamıyor: bu sürümde izleme veri kaynağı bağlı değil.",
+  "error.DECISION_INVALID": "Karar girdisi geçersiz.",
+  "error.DECISION_UNAVAILABLE": "Karar uygulamasına, politikasına veya kalıcı kayıt alanına erişilemiyor.",
+  "error.DECISION_COMMAND_CONFLICT": "Karar komutunun kimliği mevcut kayıt veya geçişle çakışıyor.",
+  "error.DECISION_CORRUPT": "Karar kaydı bütünlük denetiminden geçemedi.",
+  "error.DECISION_RECORD_REQUIRED": "Bu geçiş için geçerli bir karar veya tavsiye kaydı gerekli.",
+  "error.DECISION_OUTCOME_UNKNOWN": "Karar yazımının sonucu bilinmiyor. Tekrarlamadan önce mevcut komut kaydını inceleyin.",
+  "error.DECISION_ADVICE_INVALID": "Tavsiye dağılımı veya karar yanıtı geçersiz.",
+  "error.DECISION_POLICY_INVALID": "Karar politikası yapılandırması geçersiz.",
+  "error.DECISION_CASE_INVALID": "Karar vakası geçersiz.",
+  "error.DECISION_EVIDENCE_FUTURE": "Karar kanıtının gözlem zamanı gelecekte olamaz.",
+  "error.DECISION_EVIDENCE_REFERENCE_INVALID": "Karar seçeneği veya denetimi, var olmayan bir kanıta referans veriyor.",
+  "error.DECISION_LIMIT_EXCEEDED": "Karar vakası yapılandırılmış bayt veya adet sınırlarını aşıyor.",
+  "error.DECISION_RECORD_INVALID": "Aktör kararı veya sonuç kaydı geçersiz."
 }

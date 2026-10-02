@@ -12,6 +12,7 @@ import { policyGrantsCommand } from './policy-grants.js';
 import { secretCommand } from './secret.js';
 import { poolCommand } from './pool.js';
 import { inferenceCommand, modelsCommand } from '#surfaces/core/cli-models/index.js';
+import { decisionCommand } from '#surfaces/core/cli-decision/index.js';
 import { PACKAGE_NAME, PACKAGE_VERSION, readBuildIdentity, t, emit, assertErrorRegistry, reportFatal, resolveLocale, type ExitCode } from '#platform/index.js';
 import { runKernelCommand, type CommandContext } from './kernel-commands.js';
 export type { ExitCode } from '#platform/index.js';
@@ -57,6 +58,7 @@ export async function main(argv: readonly string[] = process.argv.slice(2), cont
       return 0;
     }
     if (argv[0] === 'operation') { await operationCommand(argv, { ...context, onLocale: value => { locale = value; context.onLocale?.(value); } }); return 0; }
+    if (argv[0] === 'decide') { await decisionCommand(argv, { ...context, onLocale: value => { locale = value; context.onLocale?.(value); } }); return 0; }
     if (argv[0] === 'approval') { await approvalsCommand(argv, { ...context, onLocale: value => { locale = value; context.onLocale?.(value); } }); return 0; }
     if (argv[0] === 'monitor') { await monitorCommand(argv, { ...context, onLocale: value => { locale = value; context.onLocale?.(value); } }); return 0; }
     if (argv[0] === 'workers') { await workersCommand(argv, { ...context, onLocale: value => { locale = value; context.onLocale?.(value); } }); return 0; }

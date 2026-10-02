@@ -1,4 +1,5 @@
-import { ApprovalError, AuditError } from '#domain/index.js';
+import { DecisionApplicationError } from '#engine/index.js';
+import { DecisionError, ApprovalError, AuditError } from '#domain/index.js';
 import { SessionAuthenticationError } from '#engine/index.js';
 import { WorkerObservationError } from '#engine/index.js';
 import { WorkspacePatchError, WorkspaceAdoptionError } from '#engine/index.js';
@@ -19,6 +20,7 @@ import { DeckentError, ErrorRegistry, ManagedFileError, BootstrapStateError } fr
 import { reservationDiagnosticParams, ServiceShutdownError, ReconciliationRecoveryError, ReconciliationRuntimeLoopError, CancellationRuntimeLoopError, RuntimeServiceProtocolError, RuntimeServiceLifecycleError, RunWorkspaceCustodyError, WorkspaceError, CancellationDeliveryError, TaskEvidenceError, ExecutionRegistryError, AuthenticationError, AttemptStoreError, DispatchError, DispatchInventoryError, PolicyAuthorizationError, RunStoreError, ScopeRegistrationError, WorkTargetError } from '#engine/index.js';
 /** Preserve stable failure identities without exposing paths, database messages or query contents. */
 export function queryFailure(error: unknown): DeckentError {
+  if(error instanceof DecisionError || error instanceof DecisionApplicationError)return ErrorRegistry.createError(error.code);
   if (error instanceof ApprovalError || error instanceof SessionAuthenticationError || error instanceof AuditError) return ErrorRegistry.createError(error.code);
   if (error instanceof WorkerObservationError) return ErrorRegistry.createError(error.code);
   if (error instanceof WorkspaceAdoptionError || error instanceof EffectError) return ErrorRegistry.createError(error.code);

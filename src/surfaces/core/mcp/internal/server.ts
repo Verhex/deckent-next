@@ -15,7 +15,9 @@ import { runCommandSchema, runQuerySchema, dispatchInventoryInputSchema, getPoli
   type ShutdownCommand, type TaskEvaluationCommand, type RunAdmission, type RunReservationCommand } from '#engine/index.js';
 import type { DeclaredModelsInspection, ModelBindingInspection, ToolchainCurrencyReport } from '#engine/index.js';
 import { poolHoldCommandSchema, poolHoldQuerySchema, type PoolHoldCommand, type PoolHoldQuery, type PoolHoldReceipt, type PoolHoldView } from '#engine/index.js';
+import { decisionQuerySchema, type DecisionQuery, type DecisionInspection } from '#engine/index.js';
 export interface McpApplications {
+  inspectDecision?(query: DecisionQuery): Promise<DecisionInspection>;
   renewApproval?(input: unknown, delivery?: RuntimeServiceDelivery): Promise<unknown>;
   listApprovals?(input: unknown, delivery?: RuntimeServiceDelivery): Promise<unknown>;
   inspectApproval?(input: unknown, delivery?: RuntimeServiceDelivery): Promise<unknown>;
@@ -72,6 +74,10 @@ export function createMcpServer(applications: McpApplications, limits: McpLimits
       invoke: async (input: unknown) => { z.object({}).strict().parse(input); return getPolicyVocabulary(); } },
   ];
   const renewApproval = applications.renewApproval;
+  const inspectDecision = applications.inspectDecision;
+  if (inspectDecision) definitions.push({ readOnly: true, destructive: false, idempotent: true, openWorld: false, name: 'inspect_decision',
+    description: t('mcp.tool.inspectDecision', {}, locale), schema: decisionQuerySchema,
+    invoke: input => inspectDecision.call(applications, decisionQuerySchema.parse(input)) });
   if (renewApproval) definitions.push({ readOnly: false, destructive: false, idempotent: true, openWorld: false, name: 'renew_approval',
     description: t('mcp.tool.renewApproval', {}, locale), schema: approvalRenewalSchema, boundedDelivery: true,
     invoke: (input, delivery) => renewApproval.call(applications, approvalRenewalSchema.parse(input), delivery) });

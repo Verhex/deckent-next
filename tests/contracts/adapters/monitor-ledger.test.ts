@@ -11,7 +11,7 @@ import { createHmacIntegrity } from '#platform/index.js';
 import type { AttemptIdentity } from '#domain/index.js';
 import { fixtureExecution } from '../support/execution-registry.js';
 import { custodyProfiles, dispatchAdmission, grantTestLaunch } from '../support/custody.js';
-import { DOWNGRADE_TO_PREVIOUS_LEDGER_SQL } from '../../fixtures/ledger-previous.js';
+import { DOWNGRADE_TO_V43_LEDGER_SQL as DOWNGRADE_TO_PREVIOUS_LEDGER_SQL } from '../../fixtures/ledger-previous.js';
 
 // MONITOR-DATA: the monitor's ledger reader on real ledgers written by the product store (no synthetic Run snapshots).
 const roots: string[] = [], stores: SqliteAttemptStore[] = [];
@@ -94,7 +94,7 @@ describe.skipIf(process.platform === 'win32')('monitor ledger reader', () => {
     const f = await fixture(); f.store.close();
     const writer = new DatabaseSync(f.path); writer.exec(DOWNGRADE_TO_PREVIOUS_LEDGER_SQL); writer.close();
     const older = await read(f.path);
-    expect(older.ledgerVersion).toBe(CURRENT_LEDGER_VERSION - 1); expect(older.diagnostics).toEqual([`info:ledger-version-older:${CURRENT_LEDGER_VERSION - 1}`]);
+    expect(older.ledgerVersion).toBe(43); expect(older.diagnostics).toEqual(['info:ledger-version-older:43']);
     expect(older.pools[0]!.hold).toBeNull(); expect(older.runs).toHaveLength(3);
     const newer = new DatabaseSync(f.path); newer.exec(`PRAGMA user_version=${CURRENT_LEDGER_VERSION + 1}`); newer.close();
     expect(await read(f.path)).toMatchObject({ ledgerVersion: CURRENT_LEDGER_VERSION + 1, runs: [], diagnostics: [`ledger-version-unsupported:${CURRENT_LEDGER_VERSION + 1}`] });

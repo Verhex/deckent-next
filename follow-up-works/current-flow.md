@@ -1,3 +1,8 @@
+# AOF-DECISION-PORT — lane/aof-decision-port (2026-10-02)
+
+Base `662812fc`, implementer Codex. Owner onaylı PORT sınırında domain/application/HTTP adapter/ledger v45/SDK/CLI ve salt-okunur MCP inspect bağlandı; worker aracı ve kipleri AOF-WORKER-DECIDE'da kalır. Selection veri; sonraki işlem yeniden mevcut yetki kapılarına girer. Eşikler config, iki çekimser seçenek tam dağılımda; lost record/pending replay unknown ve otomatik tekrar çağrı yok.
+TDD red/green ve teslim kanıtı dış `proof/AOF-DECISION-PORT-2026-10-02/review.md` içinde: 19 dosyada 120/120 hedefli test, 3/3 kaynak policy vocabulary testi, 6/6 assertion ile yakalanan mutasyon ve kaynak geri yükleme; typecheck, arch (0 ihlal, bütçeler değişmedi), core-memory (12 dosya) geçti. Eslint 0 hata/1 mevcut MCP fonksiyon-boyu uyarısı. Derlenmiş CLI vocabulary testi build yasağı nedeniyle çalıştırılmadı; canonical memory karşılaştırması env verilmediği için atlandı. Canlı servis, diğer worktree'ler, dogfood, push/build/Playwright/full verify çalıştırılmadı. Sıfırdan farklı ücret tarifesi API'de doğrulanmış tavan eksikliği nedeniyle unavailable; ücretli ürün etkinleşmesi kanıtlanmadı. Pending-intent uzlaştırma/retention uygulanmadı. Sonraki: exact commit veya patch teslimi → lead bağımsız inceleme/entegrasyon, derlenmiş CLI kontrolü ve landing full verify → AOF-WORKER-DECIDE. **Bağımsız inceleme yok; PASS değildir.**
+
 # CATALOG-V3 — lane/catalog-v3 (2026-10-02)
 
 Base 95c72a81; CATALOG-V3 uygulandı: additive v3 record, v2/makbuz uyumluluğu, Claude + Codex abonelik tohumları ve öneri listeleri, en/tr CLI, Monitor üretici/faturalama. SQL migrasyonu yok, v13 değişmedi. Öneriler kayıtta activation yaratmaz.

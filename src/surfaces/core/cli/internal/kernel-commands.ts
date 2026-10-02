@@ -20,6 +20,7 @@ import type { TerminalChatPlanHandler, TerminalChatStreamHandler, TerminalChatTu
   TerminalPermissionModeInspectHandler, TerminalPermissionModeSetHandler, TerminalScratchClearHandler, TerminalScratchInspectHandler } from './terminal-chat.js';
 
 import type { ModelCommandContext } from '#surfaces/core/cli-models/index.js';
+import type { DecisionCommandContext } from '#surfaces/core/cli-decision/index.js';
 export type { InferenceMetricsReading } from '#surfaces/core/cli-models/index.js';
 
 import type { ShutdownCommand, ServiceShutdownAdmissionResult } from '#engine/index.js';
@@ -32,7 +33,7 @@ export interface RuntimeServiceReadinessView {
 }
 
 /** Every host operation a CLI command may use; the model commands' narrower context is part of it. */
-export interface CommandContext extends ModelCommandContext, MonitorCommandContext {
+export interface CommandContext extends ModelCommandContext, MonitorCommandContext, DecisionCommandContext {
   renewApproval?: (input: unknown) => Promise<unknown>;
   listApprovals?: (input: unknown) => Promise<unknown>;
   inspectApproval?: (input: unknown) => Promise<unknown>;
