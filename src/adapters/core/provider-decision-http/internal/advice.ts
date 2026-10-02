@@ -19,8 +19,8 @@ export function decisionAdviceFromWire(input: unknown, caseValue: DecisionCase, 
   const selection = parsed.data.answers['selection'], sufficiency = parsed.data.answers['sufficiency'];
   if (!selection || selection.type !== 'choice' || !sufficiency || sufficiency.type !== 'noul') return null;
   const options = [...caseValue.options.map(option => option.id), ...Object.keys(decisionHttpProtocolData.abstentions)];
+  // The probability-sum rule has one owner: decisionAdviceSchema below (Jev 6b8b4a9e, lead 2026-10-03).
   if (!sameKeys(Object.keys(selection.probabilities), options) || !options.includes(selection.choice)
-    || Math.abs(Object.values(selection.probabilities).reduce((sum, value) => sum + value, 0) - 1) > 1e-9
     || selection.probabilities[selection.choice]! < Math.max(...Object.values(selection.probabilities))) return null;
   const checks: Record<string, number> = Object.create(null);
   for (const [index, check] of caseValue.checks.entries()) {
