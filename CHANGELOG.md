@@ -1,5 +1,7 @@
 # Changelog
 
+- CATALOG-V3 (2026-10-02, lane; independent review pending): catalog documents accept v3 channel/vendor/canonical/billing/provenance, limits, reasoning and pricing metadata while retaining v2 and old receipts. Claude/Codex subscription seeds carry recommendations without activation effects; CLI en/tr and Monitor expose vendor versus channel. No SQL migration; unknown fields remain explicit.
+
 - MCP-NO-DECIDE (owner 2026-10-02): removed the MCP approval decision tool for both allow and deny; approval inspection remains, and CLI/SDK/terminal decision paths keep their existing authorization.
 
 Human-curated. One line per landing, keyed by PLAN.md card id. No product code writes this file.

@@ -72,7 +72,7 @@
           "channelModelId": "claude-fable-5-1",
           "vendorId": "anthropic",
           "canonicalModelId": "claude-fable-5-1",
-          "displayName": "Claude Fable 5 1",
+          "displayName": "Claude Fable 5.1",
           "modalities": {
             "input": [],
             "output": []
@@ -144,7 +144,7 @@
           "channelModelId": "claude-opus-5-5",
           "vendorId": "anthropic",
           "canonicalModelId": "claude-opus-5-5",
-          "displayName": "Claude Opus 5 5",
+          "displayName": "Claude Opus 5.5",
           "modalities": {
             "input": [],
             "output": []
@@ -216,7 +216,7 @@
           "channelModelId": "claude-sonnet-5-5",
           "vendorId": "anthropic",
           "canonicalModelId": "claude-sonnet-5-5",
-          "displayName": "Claude Sonnet 5 5",
+          "displayName": "Claude Sonnet 5.5",
           "modalities": {
             "input": [],
             "output": []
@@ -284,7 +284,7 @@
           "channelModelId": "claude-haiku-4-5-20251001",
           "vendorId": "anthropic",
           "canonicalModelId": "claude-haiku-4-5-20251001",
-          "displayName": "Claude Haiku 4 5",
+          "displayName": "Claude Haiku 4.5",
           "modalities": {
             "input": [],
             "output": []

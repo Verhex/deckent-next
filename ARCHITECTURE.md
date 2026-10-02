@@ -2593,8 +2593,8 @@ the `task transcript` report view, SDK/MCP through the same composition. Catalog
 (read-only) / `apply_model_catalog` (destructive, idempotent by the (scope, commandId) receipt), SDK `applyModelCatalog` /
 `inspectModelCatalog`; listing needs the scoped `model-activation` `inspect` decision per channel (else `denied`); `register --seed
 <name>` reads the packaged `assets/model-catalog/<name>.json`, `--file PATH|-` an operator document. Authority unchanged from WC-R1.
-Open: the `deckent models --help` text (`cli.help.models`) does not yet list `catalog` (changing it breaks the i18n-parity snapshot of
-unaffected templates; en/tr together with the snapshot); terminal `/models` read-only view and the `/workers` verdict word; chat path
+CATALOG-V3 adds `catalog` and both packaged seed names to en/tr help (i18n fixture reconciled).
+Open: terminal `/models` read-only view and the `/workers` verdict word; chat path
 onto the ledger catalog; Codex/Cursor output-side model evidence (none documented); a real Claude run showing `verified` with a helper.
 
 ### Work targets, slice 1 (WORK-TARGETS; owner 2026-09-30 K1 = W2, K2 = A, K4 = A; Jev a2053c1c; seventeenth batch)
@@ -2740,3 +2740,11 @@ onto the ledger catalog; Codex/Cursor output-side model evidence (none documente
   implemented). O2 (D10 A, Jev f01a3d7d): unscoped work is refused in enforce (`PATCH_SCOPE_UNDECLARED`), as shipped.
 - **Open.** Delivery/inspect/report surfaces do not repeat the
   classification; real template-worker path unproven in tests (stored-graph stand-in); gitignored files still enter patches (PATCH-IGNORE card).
+
+### CATALOG-V3 (owner 2026-10-02; implemented in lane/catalog-v3, independent review pending)
+
+Channel identity is client × billing/access path. Row key stays (channelId, exact channel model id); aliases are refused, never resolved. Document v3 adds vendorId/canonicalModelId, channel billing/protocol/provenance, limits, reasoning, capabilities and pricing in record; v2 remains readable. Canonical identity links models across channels without resolving an invocation to another channel. No SQL migration is needed for this slice: there is no canonical lookup operation; readers already load records. v13 model_activations remains the chat/profile authority, v43 model_catalog_activations the scoped worker authority. Recommended activation sets are documentation data, never registration effects. Unknown limits remain null and capabilities unknown.
+
+V3 retains the v2 admission names (`nativeId`, `minCliVersion`, `efforts`, channel `cli`/`aliases`) and strictly requires equality with `channelModelId`, `minClientVersion`, `reasoning.supportedEfforts`, `client`/`aliasesRefused`; divergent records are refused. The envelope record version stays 1 because it accepts either validated shape; document version is 3. Reasoning vocabulary includes `ultra`. Decimal USD-per-million prices are strings; subscription seeds contain no per-token estimates. Monitor includes vendor/billing (null for v2) and marks a model active only if both channel and model activations exist in the same scope. Its boolean summarizes activation, not lifecycle/client eligibility or live provider availability. CLI human list renders vendor/canonical/billing/context/efforts/lifecycle and scoped activation in en/tr.
+
+Validation: 12 targeted files 106/106; additional bounded composition admission 11 passed, 3 runtime-socket tests excluded after two transport-unavailable failures in the initial run. Six real mutations killed and restored; typecheck/eslint/lint-arch/core-memory passed. No full verify/build/live action. External evidence: `proof/MODEL-CATALOG-2026-10-02/review.md`. Broader CATALOG-SEED adapter tariff migration, refresh/lint changes and activation unification remain separate work.

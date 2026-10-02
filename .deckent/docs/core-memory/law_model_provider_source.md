@@ -7,3 +7,5 @@ Model adı, fiyat, kapasite ve değişebilir iş politikası registry/config üz
 - Provider ortamı: tarihsel login veya model listesi güncel erişim kanıtı değildir. Codex/Claude/Cursor aynı adapter/izolasyon sınırında güncel sürüm, profil, auth ve gerçek denemeyle doğrulanır. Host HOME, Docker socket veya alakasız credential açılmaz; token config/proof/çıktıya yazılmaz.
 
 Legacy dersler: Sprint-206 eski bundled model adını güncelmiş gibi gösterdi (fetch/cache/fallback kaynağı görünmüyordu); Sprint-554 kritik runtime işini zayıf modele, test işini güçlü modele verince risk/kapasite eşlemesi bozuldu; 2026-08-19 Cursor CLI login kaydı yalnız tarihsel ortam kanıtıdır.
+
+- Owner 2026-10-02 CATALOG-V3: kanal = istemci × faturalama/erişim yolu; satır kimliği kanal + tam model kimliği. `vendorId`/`canonicalModelId` yalnız bağlantı verisidir, alias çözmez. V3 metadata mevcut record içinde; v2 okunur. Önerilen seed aktivasyonları yetki/etkinleştirme değildir; v13 chat ve v43 worker aktivasyonları ayrı sahiplikte kalır.
