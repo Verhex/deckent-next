@@ -48,6 +48,10 @@ Bu bölüm güncel durumdur; önceki parti anlatıları Git geçmişinde (bu dos
   query-errors importları birleştirildi; decision config alanına binding/apply eklendi. İlk tam verify `2cb7335c` 42 fail → düzeltme `78231da9`
   (v46 göçü IF NOT EXISTS + birebir CREATE metni denetimi; yayımlanan decision `.d.ts` JSON asset'e bağımlıydı — ürün hatası, giderildi);
   **tam verify exact `78231da9` 568/4151 EXIT 0**. Kanıt: `proof/INTEGRATE-2026-10-02-AB/README.md`. Sıradaki: Sol parti incelemesi (26. partiden sonra).
+  HARDCODE-RATCHET birleştirmesi (`0bd79848`, Sol 2254 sınırlı PASS) sonra gelen koddan 31 bulgu verdi; allowlist büyümeden çözüldü:
+  `a6ad28e8` taşıma kuralı (borç kimliği (fingerprint, kural) sayısı, `origin`), `9b5efd9f` politika/invariant, `a086daab` G4 sürüm-alanı
+  heuristic'i + invariant'lar; lint-arch 0, allowlist 514→497; **tam verify exact `a086daab` 569/4179 EXIT 0**. Ratchet semantiği değişikliği
+  ve prepare.ts sapması bağımsız yeniden inceleme/lead kararı bekliyor (README "Ratchet findings resolution").
 - **Şeritler (Codex uygulayıcı, lead commit, bağımsız inceleme Fable/Sol):**
   - A1/A3 `lane/run-park-timeout`: `ca753477` + `6d06bb41` + `6a8c3298` + `18d39682` (iki Fable REVISE düzeltmesi); Fable üçüncü inceleme **PASS** exact `18d39682`;
     lead native/dist 7 dosya 82/82; 26. partiye birleştirildi. Lead kararı A3 dönüşü: Jev a8e582fe `typed_return_on_new_evidence`.
