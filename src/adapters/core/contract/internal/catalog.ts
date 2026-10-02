@@ -1,6 +1,9 @@
 import { parseProviderCatalog, providerCatalogObjectSchema } from '#domain/index.js';
 import { ConfigValidationError, registerConfigSection, CONFIG_CONTRACT_SINCE } from '#platform/index.js';
 
+import { nativeWorkerEventRetentionBytes } from '#adapters/core/native-connection/index.js';
+import { WORKER_EVENT_SEAL_RESERVE_BYTES } from '#adapters/core/worker-observation/index.js';
+
 function validate(value: unknown): void {
   if (value === undefined) return;
   try { parseProviderCatalog(value); }
@@ -13,5 +16,11 @@ export function registerProviderCatalogConfig(): void {
     metadata: { descriptionKey: 'config.field.provider_catalog', tier: 'core', since: CONFIG_CONTRACT_SINCE },
     validateLayers: (global, project) => { validate(global); validate(project); },
     validateValue: validate,
+    // Effective validation also runs when the optional catalog is absent and on cache hits.
+    validateEffective: config => {
+      if (config.artifacts.maxBytes < nativeWorkerEventRetentionBytes() + WORKER_EVENT_SEAL_RESERVE_BYTES) {
+        throw new ConfigValidationError([{ path: 'artifacts.maxBytes', reason: 'ARTIFACT_WORKER_EVENT_BUDGET' }], config.language);
+      }
+    },
   });
 }

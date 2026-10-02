@@ -4,6 +4,9 @@ Human-curated. One line per landing, keyed by PLAN.md card id. No product code w
 
 ## Unreleased
 
+- ADDED (A1/A3, source candidate): bounded Run parking, explicit terminal outcome and transitive skipped dependency tasks; shared human CLI/SDK close/resume and audited accept/reject, visible unverified acceptance, task-slot release and deadline failure. Run snapshot v4 / RunView v3 / ledger v45; parking config v1 defaults to an unmeasured, adjustable 24 hours. MCP has no decisions; independent review/integration/live acceptance pending.
+- FIX (A3 J5): host-sealed verification and loss markers survive event truncation; retained-byte accounting includes scrubbed NDJSON framing; production config refuses an artifact ceiling below the gateway budget plus seal reserve.
+
 - ADDED (EXEC-RELEASE): after `task patch-prepare` retains a verified patch, Deckent removes that attempt's stopped container and Git clone (sealed worker event log required when a worker connection existed); a start-up sweep finishes eligible ones; `workers inspect` shows `custody: released`; config `execution.retention`. Needs the `attempt:release` grant; without it attempts stay held, visibly.
 - FIX (SECRET-WRITE-CLOCK): `deckent init policy --apply` and the Docker-gated installation no longer fail with `INSTALLATION_JOURNAL_INVALID` (leaving the installation pending) when the host wall clock steps backwards during the apply or a retry runs with a clock behind the first attempt.
 - DOCS (OWNER-DECISIONS-DOCS): owner decisions D1–D10 of 2026-10-01 recorded in ARCHITECTURE (decision-log row, K1 amendment, host-rule-file target withdrawn, audit/reasoning/catalog/release/K6 notes) and PLAN (cards EXEC-RELEASE high, LEGACY-CODES-RETIRE, HOST-RULES-CLEANUP, AUDIT-CHECKPOINT, REASONING-RETENTION, CATALOG-SEED, K6-HINT); no behavior change.

@@ -14,6 +14,9 @@ import { secretValues } from './worker.js';
 import { readNativeClientHello } from './tls-hello.js';
 import { verifyWorkerModels, workerEventSchema, type WorkerEvent } from '#domain/index.js';
 
+/** One source for the gateway's NDJSON retention budget and the config-load artifact check. */
+export function nativeWorkerEventRetentionBytes(): number { return catalog.limits.maxEventBytes; }
+
 const denied = new BlockList();
 for (const [address, prefix] of [['0.0.0.0', 8], ['10.0.0.0', 8], ['100.64.0.0', 10], ['127.0.0.0', 8],
   ['169.254.0.0', 16], ['172.16.0.0', 12], ['192.0.0.0', 24], ['192.0.2.0', 24], ['192.168.0.0', 16],
@@ -68,10 +71,11 @@ export async function openNativeConnection(input: { binding: NativeSubscription;
       for (const line of body.split('\n')) {
         if (!line) continue;
         let parsed; try { parsed = workerEventSchema.safeParse(JSON.parse(line)); } catch { parsed = null; }
-        const bytes = Buffer.byteLength(line);
+        const event = parsed?.success ? scrubWorkerEvent(parsed.data, secrets) : null;
+        const bytes = event ? Buffer.byteLength(JSON.stringify(event) + '\n') : 0;
         // A worker can never claim the host's model verdict; such a line is invalid like any other forged host event.
         if (!parsed?.success || parsed.data.kind === 'model.verification' || parsed.data.sequence <= lastSequence || statistics.events >= limits.maxEvents - 1 || statistics.eventBytes + bytes > limits.maxEventBytes - 256) { dropped++; continue; }
-        lastSequence = parsed.data.sequence; statistics.events++; statistics.eventBytes += bytes; accepted.push(scrubWorkerEvent(parsed.data, secrets));
+        lastSequence = parsed.data.sequence; statistics.events++; statistics.eventBytes += bytes; accepted.push(event!);
         if (parsed.data.kind === 'session.started') reported.started = parsed.data.model;
         else if (parsed.data.kind === 'session.ended') { reported.ended = true; reported.used = parsed.data.models ?? null; }
       }
@@ -79,7 +83,7 @@ export async function openNativeConnection(input: { binding: NativeSubscription;
       if (dropped) {
         // Loss markers are charged to the same budget; past it they are counted and sealed as one marker at the end.
         const marker: WorkerEvent = { schemaVersion: 1, sequence: lastSequence + 1, atMs: accepted.at(-1)?.atMs ?? 0, kind: 'dropped', reason: 'invalid', count: dropped };
-        const markerBytes = Buffer.byteLength(JSON.stringify(marker));
+        const markerBytes = Buffer.byteLength(JSON.stringify(marker) + '\n');
         if (statistics.events < limits.maxEvents - 1 && statistics.eventBytes + markerBytes <= limits.maxEventBytes - 256) {
           lastSequence = marker.sequence; statistics.events++; statistics.eventBytes += markerBytes; accepted.push(marker);
         } else statistics.eventsUnreported += dropped;

@@ -45,19 +45,33 @@ async function writeAll(handle: EventFile, bytes: Buffer) {
   return offset === bytes.length;
 }
 
-/**
- * The retained event log of an ended attempt, as JSON lines: the received events, then the host's model verdict when there is one and one
- * `event-cap` marker for batches refused after the gateway's budget was spent (never silent); then as many lines as fit the artifact limit
- * (less 256 bytes), the rest as one `byte-cap` marker. No lines when there is nothing to seal.
- */
+/** Covers the schema's largest host verdict (34 model entries, admitted model, JSON escaping) and two loss markers.
+ * The config check adds this reserve to the gateway's registry event budget; it is an invariant, not mutable policy. */
+export const WORKER_EVENT_SEAL_RESERVE_BYTES = 32768;
+
+/** Retain a prefix of received events only after reserving the host verdict and all loss markers. Host evidence is never truncated.
+ * The byte-cap marker precedes the host verdict when a received suffix was dropped; sequences remain strictly increasing. */
 export function sealWorkerEventLog(events: readonly WorkerEvent[], verification: WorkerModelVerification | null, unreported: number, maxBytes: number): string[] {
-  const received = verification ? [...events, { schemaVersion: 1 as const, sequence: (events.at(-1)?.sequence ?? 0) + 1,
-    atMs: events.at(-1)?.atMs ?? 0, kind: 'model.verification' as const, ...verification }] : events;
-  const sealed = unreported > 0 ? [...received, { schemaVersion: 1 as const, sequence: (received.at(-1)?.sequence ?? 0) + 1, atMs: received.at(-1)?.atMs ?? 0,
-    kind: 'dropped' as const, reason: 'event-cap' as const, count: unreported }] : received;
-  const lines: string[] = []; let bytes = 0, kept = 0;
-  for (const event of sealed) { const line = JSON.stringify(event) + '\n'; if (bytes + Buffer.byteLength(line) > maxBytes - 256) break; lines.push(line); bytes += Buffer.byteLength(line); kept++; }
-  if (kept < sealed.length) lines.push(JSON.stringify({ schemaVersion: 1, sequence: (sealed[kept - 1]?.sequence ?? 0) + 1, atMs: sealed[kept - 1]?.atMs ?? 0,
-    kind: 'dropped', reason: 'byte-cap', count: sealed.length - kept }) + '\n');
-  return lines;
+  const serialize = (event: unknown) => JSON.stringify(event) + '\n';
+  const suffix = (sequence: number, atMs: number, dropped: number): string[] => {
+    const lines: string[] = [];
+    if (dropped > 0) lines.push(serialize({ schemaVersion: 1, sequence: ++sequence, atMs, kind: 'dropped', reason: 'byte-cap', count: dropped }));
+    if (verification) lines.push(serialize({ schemaVersion: 1, sequence: ++sequence, atMs, kind: 'model.verification', ...verification }));
+    if (unreported > 0) lines.push(serialize({ schemaVersion: 1, sequence: sequence + 1, atMs, kind: 'dropped', reason: 'event-cap', count: unreported }));
+    return lines;
+  };
+  const received = events.map(serialize), last = events.at(-1);
+  const complete = [...received, ...suffix(last?.sequence ?? 0, last?.atMs ?? 0, 0)];
+  if (Buffer.byteLength(complete.join('')) <= maxBytes) return complete;
+  // The original last sequence/time bound every retained prefix; dropped count is bounded by the entire received list.
+  const reserve = Buffer.byteLength(suffix(last?.sequence ?? 0, last?.atMs ?? 0, events.length).join(''));
+  if (!Number.isSafeInteger(maxBytes) || maxBytes < reserve) throw new RangeError('WORKER_EVENT_SEAL_BUDGET');
+  const lines: string[] = []; let bytes = 0;
+  for (const line of received) {
+    const size = Buffer.byteLength(line);
+    if (bytes + size > maxBytes - reserve) break;
+    lines.push(line); bytes += size;
+  }
+  const tail = events[lines.length - 1];
+  return [...lines, ...suffix(tail?.sequence ?? 0, last?.atMs ?? 0, events.length - lines.length)];
 }

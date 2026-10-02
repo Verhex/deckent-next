@@ -67,7 +67,7 @@ describe.skipIf(process.platform !== 'linux' || !process.env.DECKENT_TEST_DOCKER
     if (kind === 'hardlink') await link(join(workspace, 'note.txt'), path);
     if (kind === 'fifo') await exec('/usr/bin/mkfifo', [path]);
     if (kind === 'binary') await writeFile(path, Buffer.from([0, 255]));
-    if (kind === 'size') await writeFile(path, 'x'.repeat(70000));
+    if (kind === 'size') await writeFile(path, 'x'.repeat(4_227_073));
     if (kind === 'depth') { const directory = join(workspace, ...Array.from({ length: 33 }, () => 'd')); await mkdir(directory, { recursive: true }); }
     await expect(f.prepare()).rejects.toMatchObject({ code: kind === 'binary' ? 'PATCH_UNSUPPORTED' : ['depth', 'size'].includes(kind) ? 'PATCH_LIMIT' : 'PATCH_UNSAFE' });
     expect((await f.runtime.store.loadBoundDispatch(f.identity))!.patch).toBeUndefined();

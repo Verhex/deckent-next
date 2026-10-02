@@ -64,7 +64,7 @@ async function fixture({ workTarget = 'clone' as 'clone' | 'none' | ((r: { root:
   registry.profiles[0]!.parameters.imageId = process.env.DECKENT_TEST_DOCKER_IMAGE ?? 'sha256:' + 'a'.repeat(64);
   const { argv: _argv, ...bounds } = registry.profiles[0]!.parameters; void _argv;
   const options = { env: { HOME: join(root, 'home') } };
-  const config = (targets: unknown) => writeFile(join(project, '.deckent/config.json'), JSON.stringify({ layout: { root: data }, artifacts: { maxBytes: 65536 },
+  const config = (targets: unknown) => writeFile(join(project, '.deckent/config.json'), JSON.stringify({ layout: { root: data }, artifacts: { maxBytes: 16_777_216 },
     admission: { poolId: 'p', executionSlots: 2, inFlightSlots: 2, ordering: 'input-order', registry },
     execution: { docker: { executable: '/usr/bin/docker', ...bounds }, git: { gitExecutable: '/usr/bin/git', timeoutMs: 10000, outputBytes: 65536 },
       adoption: { targets: [BASE] }, ...(targets === null ? {} : { workTargets: { schemaVersion: JSON.stringify(targets).includes('"scope"') ? 2 : 1, targets } }) },

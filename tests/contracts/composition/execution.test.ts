@@ -34,7 +34,7 @@ it.skipIf(!imageId)('uses one configured snapshot for separate source repo, Git 
   await git('init'); await git('config', 'user.email', 'test@example.invalid'); await git('config', 'user.name', 'Test');
   await writeFile(join(f.source, 'input'), 'base'); await git('add', 'input'); await git('commit', '-m', 'fixture');
   const baseCommit = await git('rev-parse', 'HEAD'); await writeFile(join(f.source, 'input'), 'owner-wip');
-  await writeFile(f.configPath, JSON.stringify({ layout: { root: f.data }, artifacts: { maxBytes: 1048576 }, execution: {
+  await writeFile(f.configPath, JSON.stringify({ layout: { root: f.data }, artifacts: { maxBytes: 16_777_216 }, execution: {
     docker: { executable: '/usr/bin/docker', imageId, logMaxSizeKiB: 64, logMaxFiles: 2, memoryBytes: 268435456, pids: 64,
       cpus: 1, tmpBytes: 16777216, deadlineMs: 10000, controlTimeoutMs: 10000, outputBytes: 65536 },
     git: { gitExecutable: '/usr/bin/git', timeoutMs: 10000, outputBytes: 65536 },

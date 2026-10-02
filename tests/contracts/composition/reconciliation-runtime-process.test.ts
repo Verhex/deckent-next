@@ -67,7 +67,7 @@ it.skipIf(!imageId || process.platform !== 'linux')('automatically reconciles an
   const docker = { executable: '/usr/bin/docker', imageId: imageId!, memoryBytes: 268435456, pids: 64, cpus: 1,
     logMaxSizeKiB: 64, logMaxFiles: 2, tmpBytes: 16777216, deadlineMs: 20000, controlTimeoutMs: 10000,
     outputBytes: 65536 };
-  const configuration = { layout: { root: data }, artifacts: { maxBytes: 65536 }, inspection: { maxPageSize: 2,
+  const configuration = { layout: { root: data }, artifacts: { maxBytes: 16_777_216 }, inspection: { maxPageSize: 2,
     policyMaxBytes: 65536 }, admission: { poolId: 'p', executionSlots: 1, inFlightSlots: 1, ordering: 'input-order', registry },
   cancellation: { maxConcurrentDeliveries: 1, recoveryPageSize: 2, maxAttempts: 2, retryDelayMs: 50, claimTtlMs: 100 },
   cancellationRuntime: { scopeIds: ['ungranted'], pollIntervalMs: 1000, failureBackoffMs: 1000 },

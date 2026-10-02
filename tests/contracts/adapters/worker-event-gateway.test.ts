@@ -39,7 +39,8 @@ it('accepts worker events only after the bootstrap, validates each against the c
   expect(flat.map(item => [item.sequence, item.kind])).toEqual([[1, 'unmapped'], [2, 'unmapped'], [4, 'unmapped'], [5, 'dropped']]);
   expect(flat.at(-1)).toMatchObject({ kind: 'dropped', reason: 'invalid', count: 3 });
   // The loss marker is charged to the same event budget as worker events (3 events + 1 marker).
-  expect(connection.statistics()).toMatchObject({ events: 4, eventsDropped: 3, eventsUnreported: 0 });
+  expect(connection.statistics()).toMatchObject({ events: 4, eventsDropped: 3, eventsUnreported: 0,
+    eventBytes: Buffer.byteLength(flat.map(value => JSON.stringify(value) + '\n').join('')) });
 });
 
 it('scrubs credential values and secret shapes from schema-valid events a worker posts directly (host-side guard)', async () => {
@@ -50,6 +51,8 @@ it('scrubs credential values and secret shapes from schema-valid events a worker
   expect(await call(socket, 'POST', '/events', hostile + '\n')).toBe(204);
   const serialized = JSON.stringify(received.flat());
   expect(serialized).not.toContain(access); expect(serialized).not.toContain('abc.def.ghi'); expect(serialized).toContain('[REDACTED]');
+  // Retention charges exactly the scrubbed NDJSON, including its newline, rather than the untrusted input bytes.
+  expect(connection.statistics().eventBytes).toBe(Buffer.byteLength(received.flat().map(value => JSON.stringify(value) + '\n').join('')));
 });
 
 it('charges loss markers to the event budget and refuses further batches once it is spent, without growing the sink', async () => {

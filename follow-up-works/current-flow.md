@@ -1,3 +1,11 @@
+## RUN-PARK-TIMEOUT — A1/A3, 2026-10-02 kaynak adayı teslimi
+
+Owner-admitted implementer: Codex, `lane/run-park-timeout`, base `a56a3f26`; yalnız bu worktree + dış proof. A1/A3 ortak saf lifecycle, skipped kapanışı, park/timeout ve insan CLI/MCP-free SDK kararı uygulandı. Run snapshot v4 / RunView v3 / ledger v45; config parking v1, 24 saat ölçülmemiş ve lead ayarlayabilir. J5 metadata rezervi/byte hesabı/config reddi tamam. MCP karar sunmaz; DOGFOOD OFF.
+
+Kanıt: `proof/RUN-PARK-TIMEOUT-2026-10-02/review.md`; red-first logları, 14/14 öldürülen mutasyon, 37 dosya/249 hedefli test (0 skip); J5 ayrı 4 dosya/19 test gerçek Docker bridge ile. Typecheck, değişen kod ESLint, mimari (0 ihlal; bütçe yükseltilmedi), yerel core-memory kontrolü. SDK kararı gerçek yerel principal, mevcut policy ve tek sealed audit kaydıyla sınandı. Başarısız ara koşular saklandı: küçük eski config fixture'ları düzeltildi; `dist`/native runtime isteyen testler bu şeritte açılamadı.
+
+Kalan: bağımsız exact aday incelemesi → lead paketli/native runtime testleri + parti tam verify → lead commit/entegrasyon (index.lock EROFS; commit yok, tam patch + diff stat + iki commit tarifi dış proof'ta). Tam verify/build/push/canlı servis yok; v44 restore işletim kanıtı ve canlı kabul açık. Bağımsız inceleme yok; PASS değildir.
+
 # Anlık iş akışı — devir, sıradaki adım, kanıt (2026-09-29, Opus 5.5 lead)
 
 Bu belge yalnız güncel durumu tutar; önceki sürümü Git geçmişinde, kanıtlar `deckent-refactor-work/proof/`.

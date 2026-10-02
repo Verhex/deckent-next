@@ -1,6 +1,6 @@
 import { expect, it } from 'vitest';
 import { sealWorkerEventLog } from '#adapters/index.js';
-import type { WorkerEvent } from '#domain/index.js';
+import { summarizeWorkerEvents, workerEventSchema, type WorkerEvent } from '#domain/index.js';
 
 // COMPOSITION-RELIEF: the retained worker event log of an ended attempt, sealed by the worker-observation adapter (moved verbatim from the
 // execution composition). The markers keep every loss visible: the host verdict, batches refused after the gateway's budget, the byte cap.
@@ -21,11 +21,35 @@ it('appends the host verdict and one event-cap marker after the received events,
   expect(parse(sealWorkerEventLog([], null, 2, 1_000_000))).toEqual([{ schemaVersion: 1, sequence: 1, atMs: 0, kind: 'dropped', reason: 'event-cap', count: 2 }]);
 });
 
-it('keeps the lines that fit the limit less 256 bytes and reports the rest as one byte-cap marker', () => {
-  const line = Buffer.byteLength(JSON.stringify(event(1)) + '\n');
-  const sealed = parse(sealWorkerEventLog([event(1), event(2), event(3)], null, 0, 256 + line * 2));
-  expect(sealed.map(value => value['sequence'])).toEqual([1, 2, 3]);
-  expect(sealed[2]).toEqual({ schemaVersion: 1, sequence: 3, atMs: 20, kind: 'dropped', reason: 'byte-cap', count: 1 });
-  // Nothing fits: the marker alone says how many were lost.
-  expect(parse(sealWorkerEventLog([event(1)], verdict, 1, 256))).toEqual([{ schemaVersion: 1, sequence: 1, atMs: 0, kind: 'dropped', reason: 'byte-cap', count: 3 }]);
+it('reserves the host verdict and both loss markers before retaining the event prefix', () => {
+  const events = Array.from({ length: 30 }, (_, index) => event(index + 1));
+  const lines = sealWorkerEventLog(events, verdict, 7, 700), sealed = parse(lines);
+  expect(Buffer.byteLength(lines.join(''))).toBeLessThanOrEqual(700);
+  expect(sealed.find(line => line['kind'] === 'model.verification')).toMatchObject(verdict);
+  expect(sealed.find(line => line['reason'] === 'event-cap')).toMatchObject({ count: 7 });
+  const retained = sealed.filter(line => line['kind'] === 'unmapped').length;
+  expect(sealed.find(line => line['reason'] === 'byte-cap')).toMatchObject({ count: events.length - retained });
+  expect(sealed.map(line => line['sequence'])).toEqual(sealed.map((_, index) => index + 1));
+  const validated = sealed.map(line => workerEventSchema.parse(line));
+  expect(summarizeWorkerEvents(validated).modelVerification).toEqual({ status: 'substituted', unexpected: ['model-b'] });
+});
+
+it('counts encoded bytes and retains a complete verdict with escaped unicode model identifiers', () => {
+  const model = '\u0000'.repeat(128);
+  const longVerdict = { status: 'substituted' as const, admitted: model.repeat(2),
+    observed: Array.from({ length: 17 }, () => model), unexpected: Array.from({ length: 17 }, () => model) };
+  const lines = sealWorkerEventLog(Array.from({ length: 100 }, (_, index) => event(index + 1)), longVerdict, 7, 32768);
+  expect(Buffer.byteLength(lines.join(''))).toBeLessThanOrEqual(32768);
+  expect(parse(lines).find(line => line['kind'] === 'model.verification')).toMatchObject(longVerdict);
+});
+
+it('refuses a seal smaller than the host markers rather than silently discarding their evidence', () => {
+  expect(() => sealWorkerEventLog([event(1)], verdict, 1, 1)).toThrow();
+});
+
+it('keeps a byte-cap loss marker when there is no model verdict', () => {
+  const lines = sealWorkerEventLog(Array.from({ length: 20 }, (_, index) => event(index + 1)), null, 0, 256);
+  expect(Buffer.byteLength(lines.join(''))).toBeLessThanOrEqual(256);
+  const sealed = parse(lines), retained = sealed.filter(line => line['kind'] === 'unmapped').length;
+  expect(sealed.at(-1)).toMatchObject({ kind: 'dropped', reason: 'byte-cap', count: 20 - retained });
 });
