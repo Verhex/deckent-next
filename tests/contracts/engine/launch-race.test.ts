@@ -23,7 +23,7 @@ async function reachedWithin(reached: Promise<void>) {
 async function setup(barrier: 'create' | 'start' | null) {
   const root = await mkdtemp(join(tmpdir(), 'deckent-launch-race-')); roots.push(root);
   const workspace = join(root, 'workspace'); const artifactsRoot = join(root, 'artifacts'); await mkdir(workspace); await mkdir(artifactsRoot);
-  const store = await openSqliteAttemptStore(join(root, 'ledger.db'), { busyTimeoutMs: 1000, journalMode: 'wal', durability: 'full' }, 'allow',
+  const store = await openSqliteAttemptStore(join(root, 'ledger.db'), { busyTimeoutMs: 1000, journalMode: 'wal', durability: 'full' }, { now: Date.now, timeoutMs: 86400000 }, 'allow',
     { validate: validateDockerSupervisorProfile }); stores.push(store);
   const identity = { runId: 'r', taskId: 't', attemptId: randomUUID(), scopeId: 's', generation: 1, layoutRevision: 'layout' };
   await admitRunAttempts(store, [identity]);

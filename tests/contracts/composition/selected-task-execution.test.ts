@@ -45,7 +45,7 @@ async function fixture(execute = true, twoTasks = false, withInputs = false, rea
   if (fileMode && withInputs) registry.profiles[1]!.parameters.argv = ['node', '-e',
     "const fs=require('node:fs');const p='/deckent/inputs/report';let denied=false;try{fs.writeFileSync(p,'overwrite')}catch(e){denied=e.code==='EROFS'}if(!denied)process.exit(71);process.stdout.write(fs.readFileSync(p).toString('hex'))"];
   const configPath = join(project, '.deckent/config.json'); const options = { env: { HOME: join(root, 'home') } };
-  await writeFile(configPath, JSON.stringify({ layout: { root: data }, artifacts: { maxBytes: 65536 }, admission: { poolId: 'p', executionSlots: 1, inFlightSlots: 1, ordering: 'input-order', registry },
+  await writeFile(configPath, JSON.stringify({ layout: { root: data }, artifacts: { maxBytes: 16_777_216 }, admission: { poolId: 'p', executionSlots: 1, inFlightSlots: 1, ordering: 'input-order', registry },
     execution: { docker: { executable: '/usr/bin/docker', imageId, memoryBytes: 268435456, pids: 64, cpus: 1, logMaxSizeKiB: 64, logMaxFiles: 2, tmpBytes: 16777216, deadlineMs: 20000, controlTimeoutMs: 10000, outputBytes: 65536 },
       git: { gitExecutable: '/usr/bin/git', timeoutMs: 10000, outputBytes: 65536 } } }));
   const opened = await openConfiguredAttemptStore(project, options); await opened.store.createExecutionPool({ schemaVersion: 1, poolId: 'p', capacity: { executionSlots: 1, inFlightSlots: 1 } }); opened.store.close();

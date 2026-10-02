@@ -16,7 +16,7 @@ export async function reserveConfiguredRunTasks(projectRoot: string, input: RunR
     const authorization = new RunPolicyAuthorization(pinnedSource);
     const poolAuthorization = executionResourceAuthorization(pinnedSource, selectWorkTarget(config.execution)?.id ?? null);
     await authorization.authorize('reserve', command, await authenticate(verifier, undefined, command.scopeId));
-    const store = await openSqliteAttemptStore(await path(), config.storage.sqlite, 'forbid');
+    const store = await openSqliteAttemptStore(await path(), config.storage.sqlite, { now: Date.now, timeoutMs: config.runRuntime.parking.timeoutMs }, 'forbid');
     store.setExecutionPoolCeiling(config.max_workers);
     let approvalJournal: ReturnType<typeof openSqliteApprovalStore> | undefined;
     try {

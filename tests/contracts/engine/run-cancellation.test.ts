@@ -15,7 +15,7 @@ const actor = { id: 'user', issuer: 'host', subject: '1' };
 const cancel = { commandId: 'cancel', actor, scopeId: 's', runId: 'r', expectedRevision: 1 };
 async function fixture() {
   const root = await mkdtemp(join(tmpdir(), 'deckent-run-cancel-')); roots.push(root); const path = join(root, 'ledger.db');
-  const store = await openSqliteAttemptStore(path, { busyTimeoutMs: 20, journalMode: 'wal', durability: 'full' }, 'allow', custodyProfiles); stores.push(store);
+  const store = await openSqliteAttemptStore(path, { busyTimeoutMs: 20, journalMode: 'wal', durability: 'full' }, { now: Date.now, timeoutMs: 86400000 }, 'allow', custodyProfiles); stores.push(store);
   await admitRunAttempts(store, ['a', 'b'].map(identity)); return { store, path };
 }
 it('atomically propagates intent, prevents the undispatched attempt, keeps the dispatched one active and replays exactly', async () => {

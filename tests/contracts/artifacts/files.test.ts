@@ -49,7 +49,7 @@ describe.skipIf(process.platform === 'win32')('scoped persistent artifacts', () 
   });
   it('uses configured relocated artifact path while the project locator remains fixed', async () => {
     const f = await fixture(); const project = join(f.root, 'project'); await mkdir(join(project, '.deckent'), { recursive: true });
-    const data = join(f.root, 'data'); await writeFile(join(project, '.deckent/config.json'), JSON.stringify({ layout: { root: data, resources: { artifacts: 'retained/bytes' } }, artifacts: { maxBytes: 1024 } }));
+    const data = join(f.root, 'data'); await writeFile(join(project, '.deckent/config.json'), JSON.stringify({ layout: { root: data, resources: { artifacts: 'retained/bytes' } }, artifacts: { maxBytes: 16_777_216 } }));
     const opened = await openConfiguredArtifactStore(project, { env: { HOME: join(f.root, 'home') } });
     expect(opened.path).toBe(join(data, 'retained/bytes'));
     const receipt = await opened.store.put('s', Buffer.from('persisted'));

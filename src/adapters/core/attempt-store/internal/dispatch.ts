@@ -117,8 +117,8 @@ export class SqliteDispatchJournal {
       return Object.freeze({ acquired: true, record });
     });
   }
-  async grantLaunch(input: LaunchRequest) { return this.transaction(() => grantDispatchLaunch(this.db, input)); }
-  async finishDispatch(input: DispatchClaim, value: DispatchTerminal) {
+  async grantLaunch(input: LaunchRequest, timing: import('#domain/index.js').RunLifecycleTiming) { return this.transaction(() => grantDispatchLaunch(this.db, input, timing)); }
+  async finishDispatch(input: DispatchClaim, value: DispatchTerminal, timing: import('#domain/index.js').RunLifecycleTiming) {
     const claim = dispatchClaimSchema.parse(input); const terminal = dispatchTerminalSchema.parse(value);
     return this.transaction(() => {
       const existing = this.read(claim.request);
@@ -140,7 +140,7 @@ export class SqliteDispatchJournal {
       const written = this.db.prepare('UPDATE attempts SET revision=?,snapshot=? WHERE scope_id=? AND attempt_id=? AND revision=?')
         .run(projected.revision, JSON.stringify(projected), identity.scopeId, identity.attemptId, current.revision);
       if (written.changes !== 1) throw new DispatchError('DISPATCH_CONFLICT');
-      new SqliteRunDispatch(this.db).project(projected);
+      new SqliteRunDispatch(this.db).project(projected, timing);
       const record = dispatchRecordSchema.parse({ ...existing, terminal });
       this.db.prepare('UPDATE dispatches SET record=? WHERE scope_id=? AND attempt_id=?').run(JSON.stringify(record), claim.request.identity.scopeId, claim.request.identity.attemptId);
       return record;

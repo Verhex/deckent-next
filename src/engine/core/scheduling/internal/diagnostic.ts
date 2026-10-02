@@ -38,7 +38,7 @@ interface DiagnosticWave {
 export function diagnoseReservationWave(wave: DiagnosticWave, site: ReservationDiagnosticSite,
   requestedCount: number, capacity: Readonly<{ executionSlots: number; inFlightSlots: number }>): ReservationDiagnostic {
   const counts = { ready: 0, waiting: 0, blocked: 0, delayed: 0, occupied: 0, terminal: 0, reconciliation: 0 };
-  for (const task of wave.readiness) counts[task.disposition]++;
+  for (const task of wave.readiness) counts[task.disposition === 'awaiting-decision' ? 'waiting' : task.disposition]++;
   const reason: ReservationDiagnosticReason = site === 'transaction-wave-mismatch' ? 'store-wave-mismatch'
     : counts.ready === 0 && counts.delayed > 0 ? 'delayed'
       : counts.ready > 0 && wave.selectedTaskIds.length === 0 && wave.deferredTaskIds.length > 0 ? 'capacity-exhausted' : 'no-ready-task';

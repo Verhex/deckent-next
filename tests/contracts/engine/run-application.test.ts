@@ -13,7 +13,7 @@ const identity = { runId: 'r', scopeId: 's', taskId: 't', attemptId: 'a', layout
 const command = { schemaVersion: 1, action: 'cancel', commandId: 'cancel', scopeId: 's', runId: 'r', expectedRevision: 1 };
 async function fixture() {
   const root = await mkdtemp(join(tmpdir(), 'deckent-run-app-')); roots.push(root); const path = join(root, 'ledger.db');
-  const store = await openSqliteAttemptStore(path, { busyTimeoutMs: 20, journalMode: 'wal', durability: 'full' }, 'allow', custodyProfiles); stores.push(store);
+  const store = await openSqliteAttemptStore(path, { busyTimeoutMs: 20, journalMode: 'wal', durability: 'full' }, { now: Date.now, timeoutMs: 86400000 }, 'allow', custodyProfiles); stores.push(store);
   await admitRunAttempts(store, [identity]);
   const state = { allow: true, authenticated: true, subject: '1000', accesses: 0 };
   const verifier = { async verify() { if (!state.authenticated) throw new Error('no session'); return { id: 'user', issuer: 'host', subject: state.subject, assurance: 'os-user', scopeIds: ['s'] }; } };
@@ -32,7 +32,7 @@ it('persists cancellation intent, blocks fresh dispatch and reservations without
   await expect(store.claimDispatch(dispatchAdmission({ owner: 'w', request: { protocolVersion: 1, identity, workspace: '/workspace', argv: ['true'] } }))).rejects.toThrow('DISPATCH_NOT_ADMITTED');
   await expect(store.reserveRunTasks({ commandId: 'late', actor: { id: 'user', issuer: 'host', subject: '1000' }, scopeId: 's', runId: 'r', now: 0, expectedRevision: 3, identities: [{ ...identity, attemptId: 'b' }] })).rejects.toThrow();
   expect(await app.execute(command)).toEqual(receipt);
-  const reopened = await openSqliteAttemptStore(path, { busyTimeoutMs: 20, journalMode: 'wal', durability: 'full' }, 'allow', custodyProfiles); stores.push(reopened);
+  const reopened = await openSqliteAttemptStore(path, { busyTimeoutMs: 20, journalMode: 'wal', durability: 'full' }, { now: Date.now, timeoutMs: 86400000 }, 'allow', custodyProfiles); stores.push(reopened);
   expect((await reopened.loadRun('s', 'r'))!.cancelRequested).toBe(true);
   expect((await app.inspect({ schemaVersion: 1, scopeId: 's', runId: 'r' }))!).toMatchObject({ revision: 3, tasks: [{ phase: 'cancelled', cancellation: { reason: 'prevented-before-launch' } }] });
 });

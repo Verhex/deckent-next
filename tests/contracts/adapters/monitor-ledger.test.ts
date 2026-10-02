@@ -11,7 +11,7 @@ import { createHmacIntegrity } from '#platform/index.js';
 import type { AttemptIdentity } from '#domain/index.js';
 import { fixtureExecution } from '../support/execution-registry.js';
 import { custodyProfiles, dispatchAdmission, grantTestLaunch } from '../support/custody.js';
-import { DOWNGRADE_TO_PREVIOUS_LEDGER_SQL } from '../../fixtures/ledger-previous.js';
+import { DOWNGRADE_TO_V43_LEDGER_SQL } from '../../fixtures/ledger-previous.js';
 
 // MONITOR-DATA: the monitor's ledger reader on real ledgers written by the product store (no synthetic Run snapshots).
 const roots: string[] = [], stores: SqliteAttemptStore[] = [];
@@ -26,7 +26,7 @@ const claimOf = (id: AttemptIdentity) => ({ request: { protocolVersion: 1 as con
 
 async function fixture() {
   const root = await mkdtemp(join(tmpdir(), 'deckent-monitor-ledger-')); roots.push(root); const path = join(root, 'ledger.db');
-  const store = await openSqliteAttemptStore(path, options, 'allow', custodyProfiles); stores.push(store);
+  const store = await openSqliteAttemptStore(path, options, { now: Date.now, timeoutMs: 86400000 }, 'allow', custodyProfiles); stores.push(store);
   const capacity = { executionSlots: 2, inFlightSlots: 3 };
   await store.createExecutionPool({ schemaVersion: 1, poolId: 'p', capacity });
   const create = (scopeId: string, runId: string, ids: readonly string[], now: number, deps: Record<string, string[]> = {}) => store.createRun({ commandId: `create-${runId}`, actor,
@@ -72,8 +72,8 @@ describe.skipIf(process.platform === 'win32')('monitor ledger reader', () => {
       dispatch: { launch: 'granted', grantedAtMs: 3000, terminal: null, outputRecorded: false } }] });
     expect(runs.r3).toMatchObject({ createdAtMs: 1500, attempts: [{ attemptId: 'r3-x', observedKind: 'exited', evaluationObserved: true, reservedAtMs: 2500, sealedAtMs: 6000,
       dispatch: { launch: 'granted', grantedAtMs: 3500, outputRecorded: true, terminal: { exitCode: 0, signal: null, interrupted: false } } }] });
-    expect(runs.r3!.snapshot.progress[0]!.phase).toBe('evaluating');
-    expect(reading.pools).toEqual([{ poolId: 'p', executionSlots: 2, inFlightSlots: 3, execution: 1, inFlight: 2, hold: { state: 'held', changedAtMs: 5000, changedBy: 'operator' } }]);
+    expect(runs.r3!.snapshot.progress[0]!.phase).toBe('awaiting-decision');
+    expect(reading.pools).toEqual([{ poolId: 'p', executionSlots: 2, inFlightSlots: 3, execution: 1, inFlight: 1, hold: { state: 'held', changedAtMs: 5000, changedBy: 'operator' } }]);
     expect(reading.approvals).toEqual([]);
   });
   it('orders open Runs first, bounds the set with a typed diagnostic and reports corrupt records without failing the read', async () => {
@@ -92,9 +92,9 @@ describe.skipIf(process.platform === 'win32')('monitor ledger reader', () => {
   });
   it('is version-aware: an older ledger reads without newer tables, an unknown version is a diagnostic, a missing file is never created', async () => {
     const f = await fixture(); f.store.close();
-    const writer = new DatabaseSync(f.path); writer.exec(DOWNGRADE_TO_PREVIOUS_LEDGER_SQL); writer.close();
+    const writer = new DatabaseSync(f.path); writer.exec(DOWNGRADE_TO_V43_LEDGER_SQL); writer.close();
     const older = await read(f.path);
-    expect(older.ledgerVersion).toBe(CURRENT_LEDGER_VERSION - 1); expect(older.diagnostics).toEqual([`info:ledger-version-older:${CURRENT_LEDGER_VERSION - 1}`]);
+    expect(older.ledgerVersion).toBe(43); expect(older.diagnostics).toEqual([`info:ledger-version-older:${43}`]);
     expect(older.pools[0]!.hold).toBeNull(); expect(older.runs).toHaveLength(3);
     const newer = new DatabaseSync(f.path); newer.exec(`PRAGMA user_version=${CURRENT_LEDGER_VERSION + 1}`); newer.close();
     expect(await read(f.path)).toMatchObject({ ledgerVersion: CURRENT_LEDGER_VERSION + 1, runs: [], diagnostics: [`ledger-version-unsupported:${CURRENT_LEDGER_VERSION + 1}`] });

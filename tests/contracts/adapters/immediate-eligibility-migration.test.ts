@@ -12,7 +12,7 @@ import { custodyProfiles, dispatchAdmission } from '../support/custody.js';
 const options = { busyTimeoutMs: 20, journalMode: 'wal' as const, durability: 'full' as const };
 const actor = { id: 'fixture', issuer: 'test', subject: 'service' };
 async function seed(path: string, version = 11) {
-  const store = await openSqliteAttemptStore(path, options, 'allow', custodyProfiles);
+  const store = await openSqliteAttemptStore(path, options, { now: Date.now, timeoutMs: 86400000 }, 'allow', custodyProfiles);
   const identity = { scopeId: 's', runId: 'r', taskId: 't', attemptId: 'a', layoutRevision: 'l', generation: 1 };
   await admitRunAttempts(store, [identity]);
   // Schema-11 history could only record cancellation intent (+1 revision); a claimed dispatch keeps the seeded cancel in that historical shape.
@@ -47,13 +47,13 @@ async function workspace(work: (path: string) => Promise<void>) {
   try { await work(join(root, 'ledger.db')); } finally { await rm(root, { recursive: true, force: true }); }
 }
 it('creates an empty current ledger directly from version zero', async () => workspace(async path => {
-  const store = await openSqliteAttemptStore(path, options); store.close();
+  const store = await openSqliteAttemptStore(path, options, { now: Date.now, timeoutMs: 86400000 }); store.close();
   expect(dump(path).version).toMatchObject({ user_version: CURRENT_LEDGER_VERSION });
 }));
 it.each([3, 4, 5, 6, 7, 8, 9, 10, 11])('converts evidenced history from version %i and preserves commands, attempts and revisions', async version => workspace(async path => {
   const expected = await seed(path, version), before = dump(path);
   // Pre-v6 dispatch migrations validate recorded profiles; the seeded custody profile must be recognizable.
-  const store = await openSqliteAttemptStore(path, options, 'allow', custodyProfiles);
+  const store = await openSqliteAttemptStore(path, options, { now: Date.now, timeoutMs: 86400000 }, 'allow', custodyProfiles);
   try {
     expect(await store.loadRun('s', 'r')).toEqual(expected);
     const replay = await store.cancelRun({ commandId: 'cancel-again', actor, scopeId: 's', runId: 'r', expectedRevision: 2 });
@@ -66,7 +66,7 @@ it.each([3, 4, 5, 6, 7, 8, 9, 10, 11])('converts evidenced history from version 
   expect(after.tables.run_receipts!.map(row => row.command)).toEqual(before.tables.run_receipts!.map(row => row.command));
   for (const row of after.tables.run_receipts!) {
     const snapshot = JSON.parse(String(row.snapshot));
-    expect(snapshot.schemaVersion).toBe(3);
+    expect(snapshot.schemaVersion).toBe(4);
     expect(snapshot.progress).toEqual(expect.arrayContaining([expect.objectContaining({ eligibility: { kind: 'immediate' } })]));
     expect(snapshot.progress[0]).not.toHaveProperty('eligibleAt');
   }
@@ -93,13 +93,13 @@ const mutations: ReadonlyArray<readonly [string, (db: DatabaseSync) => void]> = 
 ];
 it.each(mutations)('rejects %s with typed error and every table unchanged', async (_name, mutate) => workspace(async path => {
   await seed(path); const db = new DatabaseSync(path); mutate(db); db.close(); const before = dump(path);
-  await expect(openSqliteAttemptStore(path, options)).rejects.toMatchObject({ code: 'LEDGER_MIGRATION_EVIDENCE_REQUIRED' });
+  await expect(openSqliteAttemptStore(path, options, { now: Date.now, timeoutMs: 86400000 })).rejects.toMatchObject({ code: 'LEDGER_MIGRATION_EVIDENCE_REQUIRED' });
   expect(dump(path)).toEqual(before);
 }));
 it('does not relabel a SQLite update failure as missing evidence and rolls all previous writes back', async () => workspace(async path => {
   await seed(path); const db = new DatabaseSync(path);
   db.exec("CREATE TRIGGER refuse_conversion BEFORE UPDATE ON runs BEGIN SELECT RAISE(ABORT,'fixture-update-failure'); END"); db.close();
   const before = dump(path);
-  await expect(openSqliteAttemptStore(path, options)).rejects.toThrow('fixture-update-failure');
+  await expect(openSqliteAttemptStore(path, options, { now: Date.now, timeoutMs: 86400000 })).rejects.toThrow('fixture-update-failure');
   expect(dump(path)).toEqual(before);
 }));

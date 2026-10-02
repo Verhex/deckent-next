@@ -37,7 +37,7 @@ export class SqliteAttemptStore implements AttemptStore, DispatchStore, RunBound
     this.poolCeiling = value === 'auto' ? undefined : value;
   }
   setRunAdmissionFilter(admission: import('#engine/index.js').RunAdmissionFilter) { this.admission = admission; }
-  constructor(path: string, options: SqliteLedgerOptions, migration: 'allow' | 'forbid' = 'allow', private readonly profiles?: SupervisorProfileValidator) {
+  constructor(path: string, options: SqliteLedgerOptions, private readonly lifecycleTiming: { now: () => number; timeoutMs: number }, migration: 'allow' | 'forbid' = 'allow', private readonly profiles?: SupervisorProfileValidator) {
     this.db = openSqliteLedger(path, options, migration, this.profiles);
   }
   async loadBoundDispatch(identity: AttemptIdentity) {
@@ -51,7 +51,7 @@ export class SqliteAttemptStore implements AttemptStore, DispatchStore, RunBound
     let active = false;
     try {
       this.db.exec('BEGIN IMMEDIATE'); active = true;
-      const result = settleAttemptCancellation(this.db, identity);
+      const result = settleAttemptCancellation(this.db, identity, { now: this.lifecycleTiming.now(), timeoutMs: this.lifecycleTiming.timeoutMs });
       this.db.exec('COMMIT'); return result;
     } catch (error) {
       if (active) { try { this.db.exec('ROLLBACK'); } catch { throw new AttemptStoreError('ATTEMPT_STORE_OUTCOME_UNKNOWN'); } }
@@ -74,28 +74,33 @@ export class SqliteAttemptStore implements AttemptStore, DispatchStore, RunBound
   async retainServiceShutdownOutcome(outcome: import('#engine/index.js').ShutdownOutcome) { return new SqliteServiceShutdownJournal(this.db).retainServiceShutdownOutcome(outcome); }
   async resolveRunWorkspaceCustody(input: import('#engine/index.js').RunWorkspaceCustody) { return new SqliteRunWorkspaceCustody(this.db).resolveRunWorkspaceCustody(input); }
   async listRunProgression(query: ProgressionQuery) { return new SqliteRunProgression(this.db).listRunProgression(query); }
+  async listRunLifecycleDue(query: ProgressionQuery & { readonly now: number }) { return new SqliteRunProgression(this.db).listRunLifecycleDue(query); }
   async hasTaskEvaluation(identity: unknown, revision: number) { return new SqliteRunProgression(this.db).hasTaskEvaluation(identity, revision); }
-  async loadRunReceipt(scopeId: string, commandId: string) { return new SqliteRunJournal(this.db).loadRunReceipt(scopeId, commandId); }
-  async cancelRun(input: RunCancellation) { return new SqliteRunJournal(this.db).cancelRun(input); }
-  async createExecutionPool(input: ExecutionPool) { return new SqliteRunJournal(this.db).createExecutionPool(input); }
+  async loadRunReceipt(scopeId: string, commandId: string) { return new SqliteRunJournal(this.db, undefined, this.lifecycleTiming).loadRunReceipt(scopeId, commandId); }
+  async cancelRun(input: RunCancellation) { return new SqliteRunJournal(this.db, undefined, this.lifecycleTiming).cancelRun(input); }
+  async commitRunLifecycle(input: import('#engine/index.js').RunLifecycleWrite,
+    audit?: (store: import('#engine/index.js').AuditStore, snapshot: import('#domain/index.js').RunSnapshot) => void) {
+    return new SqliteRunJournal(this.db, undefined, this.lifecycleTiming).commitRunLifecycle(input, audit);
+  }
+  async createExecutionPool(input: ExecutionPool) { return new SqliteRunJournal(this.db, undefined, this.lifecycleTiming).createExecutionPool(input); }
   // K5 typed pool hold (ledger v44): status read, the one hold/resume writer, and a refusal's audit event.
   readPoolHold(poolId: string) { return new SqlitePoolHoldJournal(this.db).readPoolHold(poolId); }
   applyPoolHold(...args: Parameters<PoolHoldStore['applyPoolHold']>) { return new SqlitePoolHoldJournal(this.db).applyPoolHold(...args); }
   recordPoolHoldRefusal(audit: Parameters<PoolHoldStore['recordPoolHoldRefusal']>[0]) { return new SqlitePoolHoldJournal(this.db).recordPoolHoldRefusal(audit); }
-  async projectRunAttempt(input: RunProjection) { return new SqliteRunJournal(this.db).projectRunAttempt(input); }
-  async commitTaskEvaluation(input: TaskEvaluationCommit) { return new SqliteRunJournal(this.db).commitTaskEvaluation(input); }
-  async loadRun(scopeId: string, runId: string) { return new SqliteRunJournal(this.db).loadRun(scopeId, runId); }
-  async loadRunExecutionPolicy(scopeId: string, runId: string) { return new SqliteRunJournal(this.db).loadRunExecutionPolicy(scopeId, runId); }
-  async createRun(input: RunCreate, workspace?: import('#engine/index.js').RunWorkspaceCustody) { return new SqliteRunJournal(this.db).createRun(input, workspace); }
-  async reserveRunTasks(input: RunReservation) { return new SqliteRunJournal(this.db, this.admission, this.poolCeiling).reserveRunTasks(input); }
+  async projectRunAttempt(input: RunProjection) { return new SqliteRunJournal(this.db, undefined, this.lifecycleTiming).projectRunAttempt(input); }
+  async commitTaskEvaluation(input: TaskEvaluationCommit) { return new SqliteRunJournal(this.db, undefined, this.lifecycleTiming).commitTaskEvaluation(input); }
+  async loadRun(scopeId: string, runId: string) { return new SqliteRunJournal(this.db, undefined, this.lifecycleTiming).loadRun(scopeId, runId); }
+  async loadRunExecutionPolicy(scopeId: string, runId: string) { return new SqliteRunJournal(this.db, undefined, this.lifecycleTiming).loadRunExecutionPolicy(scopeId, runId); }
+  async createRun(input: RunCreate, workspace?: import('#engine/index.js').RunWorkspaceCustody) { return new SqliteRunJournal(this.db, undefined, this.lifecycleTiming).createRun(input, workspace); }
+  async reserveRunTasks(input: RunReservation) { return new SqliteRunJournal(this.db, this.admission, this.lifecycleTiming, this.poolCeiling).reserveRunTasks(input); }
   async listDispatches(query: DispatchInventoryQuery) { return new SqliteDispatchJournal(this.db).listDispatches(query); }
   async requestDispatchCancellation(request: DispatchClaim['request'], principal: VerifiedPrincipal) { return new SqliteDispatchJournal(this.db).requestDispatchCancellation(request, principal); }
   async retainDispatchPatch(claim: DispatchClaim, receipt: ArtifactReceipt) { return new SqliteDispatchJournal(this.db).retainDispatchPatch(claim, receipt); }
   async retainDispatchOutput(claim: DispatchClaim, receipt: ArtifactReceipt) { return new SqliteDispatchJournal(this.db).retainDispatchOutput(claim, receipt); }
   async readDispatch(request: DispatchClaim['request']) { return new SqliteDispatchJournal(this.db).readDispatch(request); }
   async claimDispatch(claim: DispatchAdmission) { return new SqliteDispatchJournal(this.db, this.profiles).claimDispatch(claim); }
-  async grantLaunch(input: LaunchRequest) { return new SqliteDispatchJournal(this.db).grantLaunch(input); }
-  async finishDispatch(claim: DispatchClaim, terminal: DispatchTerminal) { return new SqliteDispatchJournal(this.db).finishDispatch(claim, terminal); }
+  async grantLaunch(input: LaunchRequest) { return new SqliteDispatchJournal(this.db).grantLaunch(input, { now: this.lifecycleTiming.now(), timeoutMs: this.lifecycleTiming.timeoutMs }); }
+  async finishDispatch(claim: DispatchClaim, terminal: DispatchTerminal) { return new SqliteDispatchJournal(this.db).finishDispatch(claim, terminal, { now: this.lifecycleTiming.now(), timeoutMs: this.lifecycleTiming.timeoutMs }); }
   async claimIntegration(intent: IntegrationIntent) { return new SqliteIntegrationJournal(this.db).claimIntegration(intent); }
   async finishIntegration(intent: IntegrationIntent, receipt: ArtifactReceipt) { return new SqliteIntegrationJournal(this.db).finishIntegration(intent, receipt); }
   async loadIntegration(query: IntegrationQuery) { return readIntegration(this.db, query); }

@@ -21,11 +21,11 @@ const attempt = (taskId: string) => ({ ...identity, taskId, attemptId: 'attempt-
 const reservation = (ids: string[], commandId = 'claim') => ({ commandId, actor, scopeId: 's', runId: 'r', expectedRevision: 0, now: 0, identities: ids.map(attempt) });
 async function fixture() {
   const root = await mkdtemp(join(tmpdir(), 'deckent-run-store-')); roots.push(root); const path = join(root, 'ledger.db');
-  const store = await openSqliteAttemptStore(path, options); stores.push(store); await store.createExecutionPool({ schemaVersion: 1, poolId: 'shared', capacity: { executionSlots: 2, inFlightSlots: 2 } }); return { path, store };
+  const store = await openSqliteAttemptStore(path, options, { now: Date.now, timeoutMs: 86400000 }); stores.push(store); await store.createExecutionPool({ schemaVersion: 1, poolId: 'shared', capacity: { executionSlots: 2, inFlightSlots: 2 } }); return { path, store };
 }
 it('atomically persists Run progress and attempts, with exact replay across independent connections and reopen', async () => {
   const f = await fixture(); await f.store.createRun(create);
-  const second = await openSqliteAttemptStore(f.path, options); stores.push(second);
+  const second = await openSqliteAttemptStore(f.path, options, { now: Date.now, timeoutMs: 86400000 }); stores.push(second);
   const results = await Promise.allSettled([f.store.reserveRunTasks(reservation(['a', 'b'])), second.reserveRunTasks(reservation(['a', 'b'], 'other-command'))]);
   expect(results.filter(r => r.status === 'fulfilled')).toHaveLength(1);
   expect(results.filter(r => r.status === 'rejected')).toHaveLength(1);
@@ -34,7 +34,7 @@ it('atomically persists Run progress and attempts, with exact replay across inde
   await expect(second.reserveRunTasks({ ...reservation(['a']), actor: { ...actor, subject: 'foreign' } })).rejects.toThrow('RUN_COMMAND_CONFLICT');
   await expect(second.loadRun('other', 'r')).resolves.toBeNull();
   second.close(); stores.splice(stores.indexOf(second), 1);
-  const reopened = await openSqliteAttemptStore(f.path, options); stores.push(reopened);
+  const reopened = await openSqliteAttemptStore(f.path, options, { now: Date.now, timeoutMs: 86400000 }); stores.push(reopened);
   expect((await reopened.loadRun('s', 'r'))!.progress.filter(p => p.phase === 'active')).toHaveLength(2);
   await expect(reopened.reserveRunTasks({ ...reservation(['c'], 'full'), expectedRevision: 1 })).rejects.toThrow('RUN_CAPACITY_OR_ORDER');
 });
@@ -61,7 +61,7 @@ it('rejects opening a schema-2 reader, then migrates prior attempt data for a cu
   const before = await readFile(path);
   await expect(openSqliteInventoryReader(path, { busyTimeoutMs: 20 })).rejects.toMatchObject({ code: 'ATTEMPT_STORE_VERSION' });
   expect(await readFile(path)).toEqual(before);
-  const store = await openSqliteAttemptStore(path, options); stores.push(store);
+  const store = await openSqliteAttemptStore(path, options, { now: Date.now, timeoutMs: 86400000 }); stores.push(store);
   expect(await store.load('s', 'attempt-old')).toEqual(snapshot); await store.createExecutionPool({ schemaVersion: 1, poolId: 'shared', capacity: { executionSlots: 2, inFlightSlots: 2 } }); await store.createRun(create);
   const reader = await openSqliteInventoryReader(path, { busyTimeoutMs: 20 });
   try { expect((await reader.listDispatches({ schemaVersion: 1, scopeId: 's', after: null, limit: 1 })).entries).toEqual([]); } finally { reader.close(); }

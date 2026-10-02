@@ -65,7 +65,7 @@ it.skipIf(process.platform !== 'linux')('recovers installed offline completion a
     argv: ['node', '-e', "const f=require('node:fs');f.appendFileSync('/workspace/starts','1');f.writeFileSync('/workspace/ready','yes');const t=setInterval(()=>{if(f.existsSync('/workspace/release')){clearInterval(t);process.stdout.write('offline-output');process.stderr.write('offline-error');process.exit(7)}},10)"] };
   profiles[1]!.parameters = { ...profiles[1]!.parameters, ...taskDocker,
     argv: ['node', '-e', "const f=require('node:fs');f.writeFileSync('/workspace/ready','yes');setInterval(()=>{},1000)"] };
-  config.artifacts = { maxBytes: 65536 }; config.inspection = { maxPageSize: 4, policyMaxBytes: 65536 };
+  config.artifacts = { maxBytes: 16_777_216 }; config.inspection = { maxPageSize: 4, policyMaxBytes: 65536 };
   config.cancellation = { maxConcurrentDeliveries: 1, recoveryPageSize: 4, maxAttempts: 3, retryDelayMs: 10, claimTtlMs: 100 };
   config.cancellationRuntime = { scopeIds: ['scope-1'], pollIntervalMs: 20, failureBackoffMs: 20 };
   config.reconciliationRuntime = { scopeIds: ['scope-1'], pageSize: 4, maxConcurrentReconciliations: 1, pollIntervalMs: 20, failureBackoffMs: 20 };

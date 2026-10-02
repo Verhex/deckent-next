@@ -26,7 +26,7 @@ describe.skipIf(!imageId || process.platform !== 'linux')('configured output rec
     const docker = { executable: '/usr/bin/docker', imageId: imageId!, memoryBytes: 268435456, pids: 64, cpus: 1,
       logMaxSizeKiB: 64, logMaxFiles: 2, tmpBytes: 16777216, deadlineMs: 20000, controlTimeoutMs: 10000,
       outputBytes: 65536, workspaceRoot: resolve(data, 'workspaces'), uid: userInfo().uid, gid: userInfo().gid };
-    const configuration = { layout: { root: data }, artifacts: { maxBytes: 65536 }, admission: { poolId: 'p',
+    const configuration = { layout: { root: data }, artifacts: { maxBytes: 16_777_216 }, admission: { poolId: 'p',
       executionSlots: 1, inFlightSlots: 1, ordering: 'input-order', registry }, execution: { docker: {
         executable: docker.executable, imageId: docker.imageId, memoryBytes: docker.memoryBytes, pids: docker.pids,
         cpus: docker.cpus, logMaxSizeKiB: docker.logMaxSizeKiB, logMaxFiles: docker.logMaxFiles, tmpBytes: docker.tmpBytes,

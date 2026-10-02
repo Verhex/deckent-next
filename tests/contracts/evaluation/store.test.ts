@@ -14,9 +14,9 @@ const request = { protocolVersion: 1 as const, identity, workspace: '/workspace'
 const claim = { request, owner: 'worker' }; const actor = { id: 'evaluator', issuer: 'test', subject: 'service' };
 afterEach(async () => { for (const store of stores.splice(0)) store.close(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 
-async function fixture() {
+async function fixture(timing = { now: Date.now, timeoutMs: 86400000 }) {
   const root = await mkdtemp(join(tmpdir(), 'deckent-evaluation-store-')); roots.push(root); const path = join(root, 'ledger.db');
-  const open = async () => { const store = await openSqliteAttemptStore(path, options, 'allow', custodyProfiles); stores.push(store); return store; };
+  const open = async () => { const store = await openSqliteAttemptStore(path, options, timing, 'allow', custodyProfiles); stores.push(store); return store; };
   const store = await open(); await admitRunAttempts(store, [identity]); await store.claimDispatch(dispatchAdmission(claim)); await grantTestLaunch(store, claim);
   await store.retainDispatchOutput(claim, { schemaVersion: 1, scopeId: 's', digest: 'a'.repeat(64), byteLength: 10 });
   await store.finishDispatch(claim, { handle: 'h', exitCode: 0, interrupted: false });
@@ -83,4 +83,31 @@ it('allows only one of two independent evaluation commands at the same Run revis
   expect(outcomes.filter(value => value.status === 'fulfilled')).toHaveLength(1);
   expect(outcomes.filter(value => value.status === 'rejected')).toHaveLength(1);
   expect((await f.store.loadRun('s', 'r'))!.revision).toBe(3);
+});
+
+
+it('uses the clock and parking timeout supplied when the store opens', async () => {
+  const f = await fixture({ now: () => 700, timeoutMs: 1234 });
+  const input = await commit(f.store);
+  const receipt = await f.store.commitTaskEvaluation({ ...input, evaluation: { ...input.evaluation,
+    criteria: [{ criterionId: 'verified', verdict: 'unknown', evidenceIds: ['proof'] }] } });
+  expect(receipt.snapshot.progress[0]?.decision).toMatchObject({ since: 700, deadline: 1934 });
+  expect(receipt.snapshot.state).toEqual({ kind: 'parked', reason: 'awaiting-decision', since: 700, deadline: 1934 });
+});
+
+it('rechecks returned output/seal digests against exact ledger custody and the consumed park baseline', async () => {
+  const f = await fixture({ now: () => 100, timeoutMs: 1000 }); const input = await commit(f.store);
+  const parked = await f.store.commitTaskEvaluation({ ...input, evaluation: { ...input.evaluation,
+    criteria: input.evaluation.criteria.map(item => ({ ...item, verdict: 'unknown' as const })) } });
+  expect(parked.snapshot.progress[0]!.decision!.evidenceDigests).toEqual(['a'.repeat(64)]);
+  for (const [commandId, kind, digest, code] of [
+    ['forged-output', 'output', 'b'.repeat(64), 'TASK_EVALUATION_STALE'],
+    ['fake-seal', 'model-seal', 'a'.repeat(64), 'TASK_EVALUATION_NOT_READY'],
+    ['same-output', 'output', 'a'.repeat(64), 'TASK_EVALUATION_NOT_READY'],
+  ] as const) {
+    await expect(f.store.commitTaskEvaluation({ ...input, commandId, expectedRevision: 3,
+      evaluation: { ...input.evaluation, evaluationId: commandId, evidenceDigests: [digest], returnEvidence: { kind, digest } } })).rejects.toThrow(code);
+    expect(await f.store.loadRunReceipt('s', commandId)).toBeNull();
+  }
+  expect(await f.store.loadRun('s', 'r')).toEqual(parked.snapshot);
 });

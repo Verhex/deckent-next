@@ -66,7 +66,7 @@ it.skipIf(!imageId || process.platform !== 'linux')('keeps execution across clie
   const docker = { executable: '/usr/bin/docker', imageId: imageId!, memoryBytes: 268435456, pids: 64, cpus: 1,
     logMaxSizeKiB: 64, logMaxFiles: 2, tmpBytes: 16777216, deadlineMs: 20000, controlTimeoutMs: 10000,
     outputBytes: 65536 };
-  const baseConfig = { layout: { root: data }, artifacts: { maxBytes: 65536 }, admission: { poolId: 'p', executionSlots: 1,
+  const baseConfig = { layout: { root: data }, artifacts: { maxBytes: 16_777_216 }, admission: { poolId: 'p', executionSlots: 1,
     inFlightSlots: 1, ordering: 'input-order', registry }, cancellation: { maxConcurrentDeliveries: 1, maxAttempts: 3,
     retryDelayMs: 10, claimTtlMs: 100, recoveryPageSize: 2 }, cancellationRuntime: { scopeIds: ['s'], pollIntervalMs: 50,
     failureBackoffMs: 50 }, service: { inputMaxBytes: 65536, responseMaxBytes: 65536, maxConnections: 4,

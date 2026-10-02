@@ -27,13 +27,13 @@ export const expiryText = (now: number, at: number | null, locale: Locale) => at
 export const clockText = (ms: number) => `${new Date(ms).toISOString().slice(0, 19).replace('T', ' ')}Z`;
 
 export function runStateLabel(state: MonitorRunState, locale: Locale): string {
-  const labels: Record<MonitorRunState, string> = { progressing: t('monitor.state.progressing', {}, locale), waiting: t('monitor.state.waiting', {}, locale),
+  const labels: Record<MonitorRunState, string> = { parked: t('monitor.state.parked', {}, locale), incomplete: t('monitor.state.incomplete', {}, locale), progressing: t('monitor.state.progressing', {}, locale), waiting: t('monitor.state.waiting', {}, locale),
     blocked: t('monitor.state.blocked', {}, locale), accepted: t('monitor.state.accepted', {}, locale), failed: t('monitor.state.failed', {}, locale),
     cancelled: t('monitor.state.cancelled', {}, locale) };
   return labels[state];
 }
 export function blockerLabel(code: MonitorBlockerCode, locale: Locale): string {
-  const labels: Record<MonitorBlockerCode, string> = {
+  const labels: Record<MonitorBlockerCode, string> = { parked: t('monitor.blocker.parked', {}, locale), 'awaiting-decision': t('monitor.blocker.awaitingDecision', {}, locale),
     none: t('monitor.blocker.none', {}, locale), 'waiting-pool-slot': t('monitor.blocker.waitingPoolSlot', {}, locale),
     'pool-held': t('monitor.blocker.poolHeld', {}, locale), 'waiting-dependency': t('monitor.blocker.waitingDependency', {}, locale),
     'awaiting-approval': t('monitor.blocker.awaitingApproval', {}, locale), 'worker-running': t('monitor.blocker.workerRunning', {}, locale),
@@ -44,10 +44,10 @@ export function blockerLabel(code: MonitorBlockerCode, locale: Locale): string {
     'not-admitted': t('monitor.blocker.notAdmitted', {}, locale), unknown: t('monitor.blocker.unknown', {}, locale) };
   return labels[code];
 }
-const TASK_PHASES = ['pending', 'active', 'evaluating', 'accepted', 'failed', 'cancelled', 'reconciling'] as const;
+const TASK_PHASES = ['pending', 'active', 'evaluating', 'accepted', 'failed', 'cancelled', 'reconciling', 'skipped', 'awaiting-decision'] as const;
 /** Task phases of the task-graph contract in words; an unknown phase stays visible as its typed name. */
 export function taskPhaseLabel(phase: string, locale: Locale): string {
-  const labels: Record<(typeof TASK_PHASES)[number], string> = { pending: t('monitor.phase.pending', {}, locale), active: t('monitor.phase.active', {}, locale),
+  const labels: Record<(typeof TASK_PHASES)[number], string> = { skipped: t('monitor.phase.skipped', {}, locale), 'awaiting-decision': t('monitor.phase.awaitingDecision', {}, locale), pending: t('monitor.phase.pending', {}, locale), active: t('monitor.phase.active', {}, locale),
     evaluating: t('monitor.phase.evaluating', {}, locale), accepted: t('monitor.phase.accepted', {}, locale), failed: t('monitor.phase.failed', {}, locale),
     cancelled: t('monitor.phase.cancelled', {}, locale), reconciling: t('monitor.phase.reconciling', {}, locale) };
   return (TASK_PHASES as readonly string[]).includes(phase) ? labels[phase as (typeof TASK_PHASES)[number]] : phase;
@@ -67,9 +67,9 @@ export function installStatusLabel(status: MonitorInstallStatus, locale: Locale)
     unavailable: t('monitor.install.unavailable', {}, locale), denied: t('monitor.install.denied', {}, locale) };
   return labels[status];
 }
-export function verdictLabel(verdict: 'accepted' | 'rejected' | 'unknown' | 'pending' | null, locale: Locale): string {
+export function verdictLabel(verdict: 'accepted' | 'accepted-unverified' | 'rejected' | 'unknown' | 'pending' | null, locale: Locale): string {
   if (verdict === null) return t('monitor.verdict.none', {}, locale);
-  const labels = { accepted: t('monitor.verdict.accepted', {}, locale), rejected: t('monitor.verdict.rejected', {}, locale),
+  const labels = { 'accepted-unverified': t('monitor.verdict.acceptedUnverified', {}, locale), accepted: t('monitor.verdict.accepted', {}, locale), rejected: t('monitor.verdict.rejected', {}, locale),
     unknown: t('monitor.verdict.unknown', {}, locale), pending: t('monitor.verdict.pending', {}, locale) };
   return labels[verdict];
 }

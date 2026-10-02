@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "sources": {
     "src/platform/core/common/internal/constants.ts": "417d8d387de97e330e4c24362cb276df10421f96391fce5de44f3b9660d18e6a",
-    "src/platform/core/config-fields/internal/fields.ts": "f787def0b0a849baa0a45bed82bf49fd628d4bbf654a5c9f9dc3ad93c8031310",
+    "src/platform/core/config-fields/internal/fields.ts": "7372b261b2bed393053ef54265139ab51d5cd850772b6cb7a8138d4806e2c1b7",
     "src/platform/core/i18n/internal/types.ts": "d01f84fb14c660c1af38f89c906b162d85c7f94ef837a25ec5f04daaad0ebbe9"
   },
   "fields": {

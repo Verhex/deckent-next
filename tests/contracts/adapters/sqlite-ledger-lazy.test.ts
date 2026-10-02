@@ -17,7 +17,7 @@ it('imports the compiled SDK without loading native SQLite, then loads it only o
     const { openSqliteAttemptStore } = await import(process.argv[2]);
     if (selected !== 0) throw new Error('EAGER_ADAPTER_LOAD');
     let blocked = false;
-    try { await openSqliteAttemptStore(':memory:', { busyTimeoutMs: 100, journalMode: 'delete', durability: 'full' }); }
+    try { await openSqliteAttemptStore(':memory:', { busyTimeoutMs: 100, journalMode: 'delete', durability: 'full' }, { now: Date.now, timeoutMs: 86400000 }); }
     catch (error) { if (error.message !== 'SQLITE_SELECTION_PROBE') throw error; blocked = true; }
     if (!blocked || selected !== 1) throw new Error('NATIVE_SELECTION_NOT_OBSERVED');
     process.stdout.write(JSON.stringify({ importedWithoutSqlite: true, selected }));

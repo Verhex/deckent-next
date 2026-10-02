@@ -56,6 +56,29 @@ describe('monitor text snapshot', () => {
     expect(text).toContain('! 1 min 35 s (stale)');
     expect(text).not.toContain('\u001b[');
   });
+  for (const locale of ['en', 'tr'] as const) it(`keeps parked Runs and awaiting decisions open with reason and deadline (${locale})`, () => {
+    const run = { ...fullSnapshot.installs[0]!.runs[0]!, runId: 'run-human-wait', createdAtMs: OBSERVED_AT - 3_600_000, state: 'parked' as const,
+      blocker: { code: 'parked' as const, taskId: null, sinceMs: OBSERVED_AT - 60_000, detail: 'awaiting-decision', deadlineMs: OBSERVED_AT + 600_000 },
+      tasks: [{ ...fullSnapshot.installs[0]!.runs[0]!.tasks[0]!, phase: 'awaiting-decision',
+        decision: { reason: 'evaluation-not-ready', sinceMs: OBSERVED_AT - 60_000, deadlineMs: OBSERVED_AT + 600_000 } }] };
+    const snapshot = { ...emptySnapshot, installs: [{ ...emptySnapshot.installs[0]!, runs: [run] }] };
+    const view = surface.buildMonitorView(snapshot, locale, true);
+    const summary = view.tabs.summary.filter(block => block.kind === 'table').flatMap(block => block.rows);
+    expect(summary.map(row => row.cells[0]!.text)).toContain('run-human-wait');
+    const text = surface.renderMonitorText(snapshot, { locale, width: 200, ascii: true });
+    expect(text).not.toContain(t('monitor.summary.noOpenRuns', {}, locale));
+    expect(text).toContain(t('monitor.blocker.evaluationNotReady', {}, locale));
+    const runs = view.tabs.runs[0]!; if (runs.kind !== 'table') throw new Error('expected Run table');
+    expect(runs.rows[0]!.cells.some(cell => cell.text === t('monitor.duration.open', {}, locale))).toBe(true);
+    const detail = runs.rows[0]!.detail().flat().map(cell => cell.text).join(' ');
+    expect(detail).toContain(t('monitor.blocker.evaluationNotReady', {}, locale));
+    expect(detail).toContain(t('monitor.time.expiresIn', { duration: t('monitor.duration.minutesOnly', { m: 10 }, locale) }, locale));
+    expect(detail).toContain(t('monitor.duration.running', { duration: t('monitor.duration.hours', { h: 1, m: 0 }, locale) }, locale));
+    const parallel = { ...run, state: 'waiting' as const, blocker: { ...run.blocker, code: 'awaiting-decision' as const, taskId: 'build', detail: 'evaluation-not-ready' } };
+    const parallelText = surface.renderMonitorText({ ...snapshot, installs: [{ ...snapshot.installs[0]!, runs: [parallel] }] }, { locale, width: 200, ascii: true });
+    expect(parallelText).toContain('run-human-wait'); expect(parallelText).toContain(t('monitor.blocker.awaitingDecision', {}, locale));
+    expect(parallelText).toContain(t('monitor.time.expiresIn', { duration: t('monitor.duration.minutesOnly', { m: 10 }, locale) }, locale));
+  });
   it('states every empty view in a sentence and points at the observation sources config', async () => {
     for (const locale of ['en', 'tr'] as const) {
       const text = surface.renderMonitorText(emptySnapshot, { locale, width: 100, ascii: false });

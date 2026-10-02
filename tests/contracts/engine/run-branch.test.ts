@@ -22,7 +22,7 @@ const options = { busyTimeoutMs: 1000, journalMode: 'wal' as const, durability: 
 const actor = { id: 'u', issuer: 'test', subject: 'u' };
 async function fixture() {
   const root = await mkdtemp(join(tmpdir(), 'deckent-branch-')); roots.push(root); const path = join(root, 'ledger.db');
-  const open = async () => { const s = await openSqliteAttemptStore(path, options, 'allow', custodyProfiles); stores.push(s); return s; };
+  const open = async () => { const s = await openSqliteAttemptStore(path, options, { now: Date.now, timeoutMs: 86400000 }, 'allow', custodyProfiles); stores.push(s); return s; };
   const store = await open(); await store.createExecutionPool({ schemaVersion: 1, poolId: 'pool', capacity: { executionSlots: 8, inFlightSlots: 8 } });
   const state = { contexts: 0, allowed: true };
   const app = (s: SqliteAttemptStore) => new RunAdmissionApplication(s,
@@ -111,7 +111,7 @@ it.each(['before', 'after'] as const)('survives SIGKILL %s the atomic decision/R
     import { writeFileSync } from 'node:fs';
     const stopAtBoundary = () => { writeFileSync(process.argv[6], process.argv[4]); Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0); };
     const { openSqliteAttemptStore } = await import(process.argv[1]);
-    const store = await openSqliteAttemptStore(process.argv[2], JSON.parse(process.argv[3]));
+    const store = await openSqliteAttemptStore(process.argv[2], JSON.parse(process.argv[3]), { now: Date.now, timeoutMs: 86400000 });
     const original = DatabaseSync.prototype.exec;
     DatabaseSync.prototype.exec = function(sql) {
       if (sql === 'COMMIT' && process.argv[4] === 'before') stopAtBoundary();
@@ -159,7 +159,7 @@ it('upgrades ledger22 without fabricating decisions for ordinary Runs or rewriti
   const before = await f.store.loadRunReceipt('s', 'create');
   f.store.close(); stores.splice(stores.indexOf(f.store), 1);
   const db = new DatabaseSync(f.path); db.exec('DROP TABLE IF EXISTS run_execution_intents; DROP TABLE IF EXISTS task_evaluation_observations; DROP TABLE IF EXISTS workspace_integrations; DROP TABLE IF EXISTS workspace_deliveries; DROP TABLE IF EXISTS workspace_adoptions; DROP TABLE IF EXISTS effect_intents; DROP TABLE IF EXISTS agent_turn_tool_calls; DROP TABLE IF EXISTS agent_turns; DROP TABLE IF EXISTS worker_event_logs; DROP TABLE IF EXISTS approval_outbox; DROP TABLE IF EXISTS approval_receipts; DROP TABLE IF EXISTS approvals; PRAGMA user_version=22'); db.close();
-  await expect(openSqliteAttemptStore(f.path, options, 'forbid')).rejects.toMatchObject({ code: 'ATTEMPT_STORE_VERSION' });
+  await expect(openSqliteAttemptStore(f.path, options, { now: Date.now, timeoutMs: 86400000 }, 'forbid')).rejects.toMatchObject({ code: 'ATTEMPT_STORE_VERSION' });
   const reopened = await f.open();
   expect(await reopened.loadRunReceipt('s', 'create')).toEqual(before);
   expect((await reopened.loadRun('s', 'r'))!.branch).toBeUndefined();
@@ -170,7 +170,7 @@ it('repairs a persisted legacy cancel-requested Run only through a new command a
   const current = (await f.store.cancelRun(cancel)).snapshot;
   expect(current.progress.map(task => task.phase)).toEqual(['cancelled', 'cancelled']);
   // Pre-change shape: flag set, never-reserved tasks still pending, in both the Run row and the immutable old receipt.
-  const legacy = runSnapshotSchema.parse({ ...current, progress: current.progress.map(task => ({ ...task, phase: 'pending' })) });
+  const legacy = runSnapshotSchema.parse({ ...current, state: { kind: 'running' }, progress: current.progress.map(task => ({ ...task, phase: 'pending' })) });
   const db = new DatabaseSync(f.path);
   try {
     db.prepare('UPDATE runs SET snapshot=? WHERE scope_id=? AND run_id=?').run(JSON.stringify(legacy), 's', 'r');

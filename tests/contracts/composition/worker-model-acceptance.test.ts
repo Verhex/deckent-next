@@ -1,8 +1,9 @@
 import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
 import { hostname, tmpdir, userInfo } from 'node:os';
 import { join } from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
 import { afterEach, describe, expect, it } from 'vitest';
-import { applyModelCatalog, createRun, inspectConfiguredWorkerTranscript, inspectConfiguredWorkers, inspectRun } from '../../../src/index.js';
+import { applyModelCatalog, applyRunLifecycle, createRun, inspectConfiguredWorkerTranscript, inspectConfiguredWorkers, inspectRun } from '../../../src/index.js';
 import { evaluateConfiguredTask } from '../../../src/composition/core/runs/index.js';
 import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
 import { FileArtifactStore, compileNativeCodingDockerProfile, openSqliteAttemptStore } from '#adapters/index.js';
@@ -13,7 +14,7 @@ import { seedCatalog, SEED_CHANNEL } from '../support/model-catalog.js';
 /**
  * WORKER-CURRENCY-2 acceptance (owner rule A 2026-09-30; Jev 933e43f2 + 58ffe1c9): the existing Task evaluation owner reads the host-sealed
  * model verdict of a pinned worker attempt. Undeclared model => not accepted (failed, typed, recorded); declared auxiliary => accepted and
- * visible; a pinned Claude attempt without a sealed 'verified' verdict is held (evaluating); Codex stays visibly unverified and is accepted.
+ * visible; a pinned Claude attempt without a sealed 'verified' verdict is parked (awaiting-decision); Codex stays visibly unverified and is accepted.
  */
 const roots: string[] = [];
 afterEach(async () => { clearConfigCache(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
@@ -41,10 +42,10 @@ const ended = (models?: string[]): Event => ({ kind: 'session.ended', outcome: '
 const verdict = (status: string, observed: string[], unexpected: string[] = [], admitted: string | null = SONNET): Event =>
   ({ kind: 'model.verification', status, admitted, observed, unexpected });
 
-async function fixture(kind: 'claude' | 'codex' = 'claude') {
+async function fixture(kind: 'claude' | 'codex' = 'claude', retainOutput = true) {
   const project = await mkdtemp(join(tmpdir(), 'dn-model-accept-')); roots.push(project); const data = join(project, 'd');
   await mkdir(join(project, '.deckent'), { recursive: true }); const options = { env: { HOME: join(project, 'h') } };
-  await writeFile(join(project, '.deckent/config.json'), JSON.stringify({ layout: { root: data }, artifacts: { maxBytes: 65536 },
+  await writeFile(join(project, '.deckent/config.json'), JSON.stringify({ layout: { root: data }, artifacts: { maxBytes: 16_777_216 },
     admission: { poolId: 'p', executionSlots: 1, inFlightSlots: 1, ordering: 'input-order', registry } }));
   const opened = await openConfiguredAttemptStore(project, options);
   try { await opened.store.createExecutionPool({ schemaVersion: 1, poolId: 'p', capacity: { executionSlots: 1, inFlightSlots: 1 } }); } finally { opened.store.close(); }
@@ -66,26 +67,32 @@ async function fixture(kind: 'claude' | 'codex' = 'claude') {
     criterionDefinitions: [{ id: 'exit', version: 1, description: 'Accept zero exit', evaluator: { id: 'process-exit', version: 1 }, parameters: { acceptedExitCodes: [0] } }] };
   await createRun(project, { schemaVersion: 1, commandId: 'create', scopeId: 's', runId: 'r', graph }, options);
   const identity = { scopeId: 's', runId: 'r', taskId: 't', attemptId: 'a', generation: 1, layoutRevision: opened.layout.revision };
-  const store = await openSqliteAttemptStore(opened.path, { busyTimeoutMs: 20, journalMode: 'wal', durability: 'full' }, 'forbid', custodyProfiles);
+  const store = await openSqliteAttemptStore(opened.path, { busyTimeoutMs: 20, journalMode: 'wal', durability: 'full' }, { now: Date.now, timeoutMs: 86400000 }, 'forbid', custodyProfiles);
   const artifacts = new FileArtifactStore({ root: await prepareProductDirectory(opened.layout, 'artifacts'), maxBytes: 65536 });
   try {
     await store.reserveRunTasks({ commandId: 'reserve', actor: { id: 'fixture', issuer: 'test', subject: 'service' }, scopeId: 's', runId: 'r', expectedRevision: 0, now: 0, identities: [identity] });
     const request = { protocolVersion: 1 as const, identity, workspace: '/private/workspace', argv: ['private-task-command'] }; const claim = { owner: 'fixture-worker', request };
     await store.claimDispatch(dispatchAdmission(claim)); await grantTestLaunch(store, claim);
     const envelope = { schemaVersion: 1, identity, completeness: 'complete', stdout: 'done', stderr: '' };
-    await store.retainDispatchOutput(claim, await artifacts.put('s', Buffer.from(JSON.stringify(envelope))));
+    if (retainOutput) await store.retainDispatchOutput(claim, await artifacts.put('s', Buffer.from(JSON.stringify(envelope))));
     await store.finishDispatch(claim, { handle: 'fixture-handle', exitCode: 0, interrupted: false });
   } finally { store.close(); }
   /** Seal a worker event log the way execution does after the gateway closed (host verdict last). */
   const seal = async (events: readonly Event[] | string) => {
     const lines = typeof events === 'string' ? events : events.map((event, index) => JSON.stringify({ schemaVersion: 1, sequence: index + 1, atMs: index, ...event }) + '\n').join('');
-    const writer = await openSqliteAttemptStore(opened.path, { busyTimeoutMs: 20, journalMode: 'wal', durability: 'full' }, 'forbid', custodyProfiles);
+    const writer = await openSqliteAttemptStore(opened.path, { busyTimeoutMs: 20, journalMode: 'wal', durability: 'full' }, { now: Date.now, timeoutMs: 86400000 }, 'forbid', custodyProfiles);
     try { await writer.saveWorkerEventLog({ schemaVersion: 1, identity, events: await artifacts.put('s', Buffer.from(lines)), eventCount: events.length, sealedAt: 1, projection: 'complete' }); }
     finally { writer.close(); }
   };
   const evaluate = (commandId = 'evaluation', expectedRevision = 2) => evaluateConfiguredTask(project, { schemaVersion: 1, commandId, identity, expectedRevision }, options);
-  const open = () => openSqliteAttemptStore(opened.path, { busyTimeoutMs: 20, journalMode: 'wal', durability: 'full' }, 'forbid', custodyProfiles);
-  return { project, options, identity, seal, evaluate, path: opened.path, open };
+  const open = () => openSqliteAttemptStore(opened.path, { busyTimeoutMs: 20, journalMode: 'wal', durability: 'full' }, { now: Date.now, timeoutMs: 86400000 }, 'forbid', custodyProfiles);
+  const recover = async () => {
+    const writer = await open();
+    try { await writer.retainDispatchOutput({ owner: 'fixture-worker', request: { protocolVersion: 1, identity, workspace: '/private/workspace', argv: ['private-task-command'] } },
+      await artifacts.put('s', Buffer.from(JSON.stringify({ schemaVersion: 1, identity, completeness: 'complete', stdout: 'done', stderr: '' })))); }
+    finally { writer.close(); }
+  };
+  return { project, options, identity, seal, evaluate, recover, path: opened.path, open };
 }
 
 describe.skipIf(process.platform === 'win32')('worker model acceptance through the Task evaluation owner (WORKER-CURRENCY-2)', () => {
@@ -118,19 +125,60 @@ describe.skipIf(process.platform === 'win32')('worker model acceptance through t
     ['no sealed log', null],
     ['a sealed log without a host verdict (no session end)', [started(SONNET)]],
     ['a sealed unverified verdict (usage without the pinned model)', [started(SONNET), ended(), verdict('unverified', [SONNET])]],
-  ] as const)('holds a pinned Claude attempt with %s: evaluating, never accepted without a verified verdict', async (_label, events) => {
+  ] as const)('parks a pinned Claude attempt with %s for a human decision, never plain verified acceptance', async (_label, events) => {
     const f = await fixture();
     if (events) await f.seal(events);
     const result = await f.evaluate();
-    expect(result.evaluation.run.tasks[0]!.phase).toBe('evaluating');
+    expect(result.evaluation.run.tasks[0]!.phase).toBe('awaiting-decision');
     expect(result.evaluation.model).toMatchObject({ verdict: events ? 'unverified' : 'unverified', evidence: events ? 'sealed' : 'absent' });
+  });
+  it('refuses real evidence-less reevaluation and records a human SDK decision with visible unverified acceptance', async () => {
+    const f = await fixture();
+    expect((await f.evaluate('early', 2)).evaluation.run.tasks[0]!.phase).toBe('awaiting-decision');
+    await expect(f.evaluate('later', 3)).rejects.toMatchObject({ code: 'TASK_EVALUATION_NOT_READY' });
+    const command = { schemaVersion: 1 as const, commandId: 'human-accept', scopeId: 's', runId: 'r', taskId: 't', action: 'accept' as const, expectedRevision: 3 };
+    const accepted = await applyRunLifecycle(f.project, command, f.options);
+    expect(accepted!.lifecycle.run.tasks[0]).toMatchObject({ phase: 'accepted', acceptedEvidence: 'model-unverified' });
+    expect(accepted!.lifecycle.run.state).toMatchObject({ kind: 'terminal', outcome: 'completed' });
+    expect(await applyRunLifecycle(f.project, command, f.options)).toEqual(accepted);
+    const db = new DatabaseSync(f.path, { readOnly: true });
+    try {
+      const events = db.prepare('SELECT record FROM audit_events').all().map(row => JSON.parse(String(row.record)).event);
+      const decision = events.filter(event => event.subject.kind === 'run-lifecycle');
+      expect(decision).toHaveLength(1);
+      expect(decision[0]).toMatchObject({ principal: { issuer: hostname(), subject: String(userInfo().uid) },
+        subject: { action: 'accept', evidence: 'model-unverified', commandId: 'human-accept' } });
+    } finally { db.close(); }
+
+    expect((await inspectRun(f.project, { schemaVersion: 1, scopeId: 's', runId: 'r' }, f.options)).run!.tasks[0])
+      .toMatchObject({ phase: 'accepted', acceptedEvidence: 'model-unverified' });
   });
   it('a held attempt is accepted by a later evaluation once the host sealed a verified verdict (HOLD is recoverable)', async () => {
     const f = await fixture();
-    expect((await f.evaluate('early', 2)).evaluation.run.tasks[0]!.phase).toBe('evaluating');
+    const parked = await f.evaluate('early', 2);
+    expect(parked.evaluation.run.tasks[0]!.phase).toBe('awaiting-decision');
     await f.seal([started(SONNET), ended([SONNET]), verdict('verified', [SONNET])]);
-    const later = await f.evaluate('later', 3);
-    expect(later.evaluation.run.tasks[0]!.phase).toBe('accepted'); expect(later.evaluation.model).toMatchObject({ verdict: 'verified', evidence: 'sealed' });
+    const accepted = await f.evaluate('later', 3);
+    expect(accepted.evaluation.run.tasks[0]).toMatchObject({ phase: 'accepted' });
+    expect(accepted.evaluation.run.tasks[0]!.acceptedEvidence).toBeUndefined();
+    expect(accepted.evaluation.model).toMatchObject({ verdict: 'verified', evidence: 'sealed' });
+    const store = await f.open();
+    try {
+      const receipt = JSON.parse((await store.loadRunReceipt('s', 'later'))!.command);
+      const seal = await store.loadWorkerEventLog('s', 'a');
+      expect(receipt.evaluation.returnEvidence).toEqual({ kind: 'model-seal', digest: seal!.events.digest });
+    } finally { store.close(); }
+    expect(await f.evaluate('later', 3)).toEqual(accepted);
+  });
+  it('new recovered output never bypasses rule A substitution after park', async () => {
+    const f = await fixture('claude', false);
+    const parked = await f.evaluate('no-output', 2);
+    expect(parked.evaluation.run.tasks[0]).toMatchObject({ phase: 'awaiting-decision', decision: { reason: 'evaluation-not-ready' } });
+    await f.seal([started(SONNET), ended([SONNET, 'claude-opus-5-5']), verdict('substituted', [SONNET, 'claude-opus-5-5'], ['claude-opus-5-5'])]);
+    await f.recover();
+    const failed = await f.evaluate('recovered-substitution', 3);
+    expect(failed.evaluation.run.tasks[0]!.phase).toBe('failed');
+    expect(failed.evaluation.model).toMatchObject({ verdict: 'substituted' });
   });
   it('keeps Codex visibly unverified and accepted by its criteria', async () => {
     const f = await fixture('codex');

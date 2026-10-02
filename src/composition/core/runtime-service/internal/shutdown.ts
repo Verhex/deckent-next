@@ -11,7 +11,7 @@ import { resolveConfiguredScopeMembership } from '#composition/core/scoped-reque
 export function configuredServiceShutdown(config: ResolvedConfig, instance: ServiceInstance) {
   const source = createLayoutPolicySource(config.productLayout, userInfo().uid, config.inspection.policyMaxBytes);
   const openStore = async () => openSqliteAttemptStore(
-    await inspectProductFile(config.productLayout, 'ledger', ['-wal', '-shm', '-journal']), config.storage.sqlite, 'forbid');
+    await inspectProductFile(config.productLayout, 'ledger', ['-wal', '-shm', '-journal']), config.storage.sqlite, { now: Date.now, timeoutMs: config.runRuntime.parking.timeoutMs }, 'forbid');
   return Object.freeze({
     async admit(input: unknown, peer: LocalPeerIdentity) {
       let document;

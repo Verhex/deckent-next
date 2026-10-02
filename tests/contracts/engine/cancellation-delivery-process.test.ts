@@ -18,7 +18,7 @@ afterEach(async () => { await Promise.all(roots.splice(0).map(root => rm(root, {
 
 async function fixture() {
   const root = await mkdtemp(join(tmpdir(), 'deckent-cancellation-delivery-process-')); roots.push(root);
-  const path = join(root, 'ledger.db'); const seed = await openSqliteAttemptStore(path, options, 'allow', custodyProfiles);
+  const path = join(root, 'ledger.db'); const seed = await openSqliteAttemptStore(path, options, { now: Date.now, timeoutMs: 86400000 }, 'allow', custodyProfiles);
   try {
     await admitRunAttempts(seed, [identity]);
     const dispatch = { owner: 'fixture', request: { protocolVersion: 1 as const, identity, workspace: '/recorded/workspace', argv: ['recorded-tool'] } };
@@ -32,7 +32,7 @@ const childProgram = `
   import { openSqliteAttemptStore } from './dist/adapters/index.js';
   const [path, profileText, inputText] = process.argv.slice(1);
   const profile = JSON.parse(profileText); const input = JSON.parse(inputText);
-  const store = await openSqliteAttemptStore(path, { busyTimeoutMs: 1000, journalMode: 'wal', durability: 'full' }, 'allow', {
+  const store = await openSqliteAttemptStore(path, { busyTimeoutMs: 1000, journalMode: 'wal', durability: 'full' }, { now: Date.now, timeoutMs: 86400000 }, 'allow', {
     validate(value) { if (JSON.stringify(value) !== JSON.stringify(profile)) throw new Error('TEST_SUPERVISOR_PROFILE_INVALID'); return undefined; }
   });
   process.stdout.write('READY\\n');
@@ -80,7 +80,7 @@ it('linearizes cancellation delivery across two OS writers, then retries a crash
     expect(outcomes.filter(value => value.ok && value.result?.acquired)).toHaveLength(1);
     expect(outcomes.filter(value => value.ok && !value.result?.acquired)).toHaveLength(1);
 
-    const reopened = await openSqliteAttemptStore(path, options, 'allow', custodyProfiles);
+    const reopened = await openSqliteAttemptStore(path, options, { now: Date.now, timeoutMs: 86400000 }, 'allow', custodyProfiles);
     try {
       const retry = await reopened.claimCancellationDelivery({ identity, token: 'retry', now: 5011, limits });
       expect(retry).toMatchObject({ acquired: true, record: { token: 'retry', attempts: 2 } });

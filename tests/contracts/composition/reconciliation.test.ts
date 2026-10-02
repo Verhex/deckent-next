@@ -22,7 +22,7 @@ it.skipIf(!imageId || process.platform !== 'linux').each(['sdk', 'mcp'])('reconc
   await writeFile(join(project, '.deckent/config.json'), JSON.stringify({ layout: { root: data }, execution: { docker,
     git: { gitExecutable: '/usr/bin/git', timeoutMs: 10000, outputBytes: 65536 } } }));
   const options = { env: { HOME: join(root, 'home') } }; const opened = await openConfiguredAttemptStore(project, options); opened.store.close();
-  const { layout } = opened; const store = await openSqliteAttemptStore(opened.path, { busyTimeoutMs: 20, journalMode: 'wal', durability: 'full' }, 'allow', { validate: validateDockerSupervisorProfile });
+  const { layout } = opened; const store = await openSqliteAttemptStore(opened.path, { busyTimeoutMs: 20, journalMode: 'wal', durability: 'full' }, { now: Date.now, timeoutMs: 86400000 }, 'allow', { validate: validateDockerSupervisorProfile });
   const identity = { scopeId: 's', runId: 'r', taskId: 't', attemptId: randomUUID(), generation: 1, layoutRevision: layout.revision };
   const workspaceRoot = await prepareProductDirectory(layout, 'workspaces'); await prepareProductDirectory(layout, 'artifacts');
   const workspace = join(workspaceRoot, 'worker'); await mkdir(workspace, { mode: 0o700 }); const os = userInfo();
@@ -91,7 +91,7 @@ it.skipIf(!imageId || process.platform !== 'linux').each(['sdk', 'mcp'])('reject
   await writeFile(join(project, '.deckent/config.json'), JSON.stringify({ layout: { root: data }, execution: { docker,
     git: { gitExecutable: '/usr/bin/git', timeoutMs: 10000, outputBytes: 65536 } } }));
   const options = { env: { HOME: join(root, 'home') } }; const opened = await openConfiguredAttemptStore(project, options); opened.store.close();
-  const store = await openSqliteAttemptStore(opened.path, { busyTimeoutMs: 20, journalMode: 'wal', durability: 'full' }, 'allow', { validate: validateDockerSupervisorProfile });
+  const store = await openSqliteAttemptStore(opened.path, { busyTimeoutMs: 20, journalMode: 'wal', durability: 'full' }, { now: Date.now, timeoutMs: 86400000 }, 'allow', { validate: validateDockerSupervisorProfile });
   const identity = { scopeId: 's', runId: 'r', taskId: 't', attemptId: randomUUID(), generation: 1, layoutRevision: opened.layout.revision };
   const workspaceRoot = await prepareProductDirectory(opened.layout, 'workspaces'); await prepareProductDirectory(opened.layout, 'artifacts');
   const workspace = join(workspaceRoot, 'worker'); await mkdir(workspace, { mode: 0o700 }); const effect = join(workspace, 'effect'); const os = userInfo();

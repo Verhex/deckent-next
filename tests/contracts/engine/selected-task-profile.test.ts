@@ -29,7 +29,7 @@ it.each([
   ['observed Attempt', () => identity],
 ] as const)('rejects %s before selecting a profile', (_name, identityInput) => {
   const f = fixture(); let run = f.run; let attempt = f.attempt; const candidate = identityInput();
-  if (_name === 'cancelled Run') run = requestRunCancellation(run, run.revision);
+  if (_name === 'cancelled Run') run = requestRunCancellation(run, run.revision, { now: 100, timeoutMs: 1000 });
   if (_name === 'cancelled Attempt') attempt = requestAttemptCancellation(attempt, 0);
   if (_name === 'observed Attempt') attempt = applyAttemptObservation(attempt, { protocolVersion: 1, identity, sequence: 1, eventId: 'started', result: { kind: 'started' } }, 0);
   expect(() => selectReservedTaskProfile(run, attempt, candidate)).toThrow('RUN_STORE_CONFLICT');

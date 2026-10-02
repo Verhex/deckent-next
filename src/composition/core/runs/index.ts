@@ -10,3 +10,5 @@ export { applyConfiguredPoolHold, inspectConfiguredPoolHold } from './internal/p
 export { recoverConfiguredAttemptOutput } from './internal/recover-output.js';
 export { recoverConfiguredReconciliation } from './internal/recover-reconciliation.js';
 export { sweepConfiguredAttemptCustody } from './internal/custody-sweep.js';
+
+export { applyConfiguredRunLifecycle, advanceConfiguredRunLifecycle } from './internal/lifecycle.js';

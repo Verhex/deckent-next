@@ -25,7 +25,7 @@ function evaluation(verdict: 'pass' | 'fail') {
 
 it.each([['pass', 'pass', 'accepted'], ['fail', 'fail', 'failed']] as const)('derives immutable %s acceptance from exact persisted custody', (_name, verdict, phase) => {
   const f = fixture(); const before = JSON.stringify(f);
-  const result = proposeTaskEvaluationCommit(f.run, f.attempt, f.dispatch, f.run.revision, evaluation(verdict));
+  const result = proposeTaskEvaluationCommit(f.run, f.attempt, f.dispatch, f.run.revision, evaluation(verdict), { now: 100, timeoutMs: 1000 });
   expect(result).toMatchObject({ conclusion: verdict, output: f.dispatch.output, snapshot: { revision: f.run.revision + 1 } });
   expect(result.snapshot.progress[0]!.phase).toBe(phase); expect(result.evaluation.criteria[0]!.evidenceIds).toEqual(['proof']);
   expect(JSON.stringify(f)).toBe(before);
@@ -33,20 +33,20 @@ it.each([['pass', 'pass', 'accepted'], ['fail', 'fail', 'failed']] as const)('de
 
 it.each(['runId', 'taskId', 'attemptId', 'scopeId', 'layoutRevision', 'generation'] as const)('rejects %s identity substitution', axis => {
   const f = fixture(); const changed = { ...identity, [axis]: axis === 'generation' ? 2 : 'other' };
-  expect(() => proposeTaskEvaluationCommit(f.run, f.attempt, f.dispatch, f.run.revision, { ...evaluation('pass'), identity: changed })).toThrow('TASK_EVALUATION_STALE');
+  expect(() => proposeTaskEvaluationCommit(f.run, f.attempt, f.dispatch, f.run.revision, { ...evaluation('pass'), identity: changed }, { now: 100, timeoutMs: 1000 })).toThrow('TASK_EVALUATION_STALE');
 });
 
 it('rejects stale attempt evidence, cancellation, nonterminal custody, and interrupted execution', () => {
   const f = fixture();
-  expect(() => proposeTaskEvaluationCommit(f.run, { ...f.attempt, revision: 2 }, f.dispatch, f.run.revision, evaluation('pass'))).toThrow('TASK_EVALUATION_STALE');
-  expect(() => proposeTaskEvaluationCommit(f.run, { ...f.attempt, cancelRequested: true }, f.dispatch, f.run.revision, evaluation('pass'))).toThrow('TASK_EVALUATION_NOT_READY');
-  expect(() => proposeTaskEvaluationCommit(f.run, f.attempt, { ...f.dispatch, output: undefined }, f.run.revision, evaluation('pass'))).toThrow('TASK_EVALUATION_NOT_READY');
-  expect(() => proposeTaskEvaluationCommit(f.run, f.attempt, { ...f.dispatch, terminal: { ...f.dispatch.terminal, interrupted: true } }, f.run.revision, evaluation('pass'))).toThrow('TASK_EVALUATION_NOT_READY');
+  expect(() => proposeTaskEvaluationCommit(f.run, { ...f.attempt, revision: 2 }, f.dispatch, f.run.revision, evaluation('pass'), { now: 100, timeoutMs: 1000 })).toThrow('TASK_EVALUATION_STALE');
+  expect(() => proposeTaskEvaluationCommit(f.run, { ...f.attempt, cancelRequested: true }, f.dispatch, f.run.revision, evaluation('pass'), { now: 100, timeoutMs: 1000 })).toThrow('TASK_EVALUATION_NOT_READY');
+  expect(() => proposeTaskEvaluationCommit(f.run, f.attempt, { ...f.dispatch, output: undefined }, f.run.revision, evaluation('pass'), { now: 100, timeoutMs: 1000 })).toThrow('TASK_EVALUATION_NOT_READY');
+  expect(() => proposeTaskEvaluationCommit(f.run, f.attempt, { ...f.dispatch, terminal: { ...f.dispatch.terminal, interrupted: true } }, f.run.revision, evaluation('pass'), { now: 100, timeoutMs: 1000 })).toThrow('TASK_EVALUATION_NOT_READY');
 });
 
 it('rejects terminal disagreement and invalid stored execution fingerprints', () => {
   const f = fixture();
-  expect(() => proposeTaskEvaluationCommit(f.run, f.attempt, { ...f.dispatch, terminal: { ...f.dispatch.terminal, exitCode: 1 } }, f.run.revision, evaluation('pass'))).toThrow('TASK_EVALUATION_STALE');
+  expect(() => proposeTaskEvaluationCommit(f.run, f.attempt, { ...f.dispatch, terminal: { ...f.dispatch.terminal, exitCode: 1 } }, f.run.revision, evaluation('pass'), { now: 100, timeoutMs: 1000 })).toThrow('TASK_EVALUATION_STALE');
   const run = { ...f.run, execution: { ...f.run.execution, criteria: f.run.execution.criteria.map(value => ({ ...value, fingerprint: 'f'.repeat(64) })) } };
-  expect(() => proposeTaskEvaluationCommit(run, f.attempt, f.dispatch, f.run.revision, evaluation('pass'))).toThrow('TASK_EVALUATION_INVALID');
+  expect(() => proposeTaskEvaluationCommit(run, f.attempt, f.dispatch, f.run.revision, evaluation('pass'), { now: 100, timeoutMs: 1000 })).toThrow('TASK_EVALUATION_INVALID');
 });

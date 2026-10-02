@@ -14,10 +14,30 @@ export class SqliteRunProgression {
         WHERE i.actor_id=? AND i.issuer=? AND i.subject=?
           AND (? IS NULL OR (i.scope_id,i.run_id)>(?,?))
           AND json_extract(r.snapshot,'$.cancelRequested')=0
+          AND json_extract(r.snapshot,'$.state.kind')='running'
           AND EXISTS (SELECT 1 FROM json_each(r.snapshot,'$.progress') p
             WHERE json_extract(p.value,'$.phase') IN ('pending','active','evaluating','reconciling'))
         ORDER BY i.scope_id,i.run_id LIMIT ?`).all(query.actor.id, query.actor.issuer, query.actor.subject,
         query.after?.scopeId ?? null, query.after?.scopeId ?? null, query.after?.runId ?? null, query.limit + 1);
+      const items = rows.slice(0, query.limit).map(row => progressionCursorSchema.parse({ scopeId: row.scope_id, runId: row.run_id }));
+      return Object.freeze({ items: Object.freeze(items), next: rows.length > query.limit ? items.at(-1)! : null as ProgressionCursor | null });
+    } catch (error) { throw sqliteFailure(error); }
+  }
+  /** Deadlines are a separate bounded scan: parked Runs never re-enter worker reservation discovery. */
+  async listRunLifecycleDue(input: ProgressionQuery & { readonly now: number }) {
+    const { now, ...queryInput } = input;
+    const query = progressionQuerySchema.parse(queryInput), time = counterSchema.parse(now);
+    try {
+      const rows = this.db.prepare(`SELECT i.scope_id,i.run_id FROM run_execution_intents i
+        JOIN runs r ON r.scope_id=i.scope_id AND r.run_id=i.run_id
+        WHERE i.actor_id=? AND i.issuer=? AND i.subject=?
+          AND (? IS NULL OR (i.scope_id,i.run_id)>(?,?))
+          AND json_extract(r.snapshot,'$.state.kind')!='terminal'
+          AND ((json_extract(r.snapshot,'$.state.kind')='parked' AND json_extract(r.snapshot,'$.state.deadline')<=?)
+            OR EXISTS (SELECT 1 FROM json_each(r.snapshot,'$.progress') p
+              WHERE json_extract(p.value,'$.phase')='awaiting-decision' AND json_extract(p.value,'$.decision.deadline')<=?))
+        ORDER BY i.scope_id,i.run_id LIMIT ?`).all(query.actor.id, query.actor.issuer, query.actor.subject,
+        query.after?.scopeId ?? null, query.after?.scopeId ?? null, query.after?.runId ?? null, time, time, query.limit + 1);
       const items = rows.slice(0, query.limit).map(row => progressionCursorSchema.parse({ scopeId: row.scope_id, runId: row.run_id }));
       return Object.freeze({ items: Object.freeze(items), next: rows.length > query.limit ? items.at(-1)! : null as ProgressionCursor | null });
     } catch (error) { throw sqliteFailure(error); }

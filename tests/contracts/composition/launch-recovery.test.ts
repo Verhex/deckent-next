@@ -32,7 +32,7 @@ it.skipIf(!imageId || process.platform !== 'linux').each(['sdk', 'mcp'])('keeps 
   const request = { protocolVersion: 1 as const, identity, workspace,
     argv: ['node', '-e', "require('node:fs').writeFileSync('/workspace/effect','must-not-run')"] };
   const claim = { request, owner: 'crashed-controller' };
-  const seed = await openSqliteAttemptStore(configured.path, { busyTimeoutMs: 1000, journalMode: 'wal', durability: 'full' }, 'allow',
+  const seed = await openSqliteAttemptStore(configured.path, { busyTimeoutMs: 1000, journalMode: 'wal', durability: 'full' }, { now: Date.now, timeoutMs: 86400000 }, 'allow',
     { validate: validateDockerSupervisorProfile });
   await admitRunAttempts(seed, [identity]); seed.close();
   const policy = { schemaVersion: 1, revision: 'p', restrictions: [], grants: [
@@ -44,7 +44,7 @@ it.skipIf(!imageId || process.platform !== 'linux').each(['sdk', 'mcp'])('keeps 
   const program = `
     import { openSqliteAttemptStore, validateDockerSupervisorProfile } from './dist/adapters/index.js';
     const [path, claimText, profileText, principalText] = process.argv.slice(1);
-    const store = await openSqliteAttemptStore(path, { busyTimeoutMs: 1000, journalMode: 'wal', durability: 'full' }, 'allow', { validate: validateDockerSupervisorProfile });
+    const store = await openSqliteAttemptStore(path, { busyTimeoutMs: 1000, journalMode: 'wal', durability: 'full' }, { now: Date.now, timeoutMs: 86400000 }, 'allow', { validate: validateDockerSupervisorProfile });
     const claim = JSON.parse(claimText); const profile = JSON.parse(profileText); const principal = JSON.parse(principalText);
     await store.claimDispatch({ ...claim, profile }); const decision = await store.grantLaunch({ claim, principal, now: 1 });
     process.stdout.write(JSON.stringify({ launch: decision.record.launch, terminal: decision.record.terminal }), () => process.exit(23));
@@ -63,7 +63,7 @@ it.skipIf(!imageId || process.platform !== 'linux').each(['sdk', 'mcp'])('keeps 
     })]);
     if (timeout) clearTimeout(timeout);
     expect({ exitCode, stderr }).toEqual({ exitCode: 23, stderr: '' }); expect(JSON.parse(stdout)).toEqual({ launch: 'granted', terminal: null });
-    store = await openSqliteAttemptStore(configured.path, { busyTimeoutMs: 1000, journalMode: 'wal', durability: 'full' }, 'forbid');
+    store = await openSqliteAttemptStore(configured.path, { busyTimeoutMs: 1000, journalMode: 'wal', durability: 'full' }, { now: Date.now, timeoutMs: 86400000 }, 'forbid');
     const before = (await store.readDispatch(request))!; expect(before).toMatchObject({ launch: 'granted', terminal: null, grant: { generation: 1 } });
     const { handle } = identifyDockerRequest(request, supervisorOptions);
     const endpoint = (profile.parameters as { endpoint: string }).endpoint;

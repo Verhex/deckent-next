@@ -17,7 +17,7 @@ const dispatch = { schemaVersion: 2 as const, request: { protocolVersion: 1 as c
   owner: 'supervisor', profile, launch: 'granted' as const, grant: { generation: 1, grantedAt: 1, principal: actor },
   terminal: { handle: 'process', exitCode: 0, interrupted: false } };
 const command = (action: string, payload: object) => JSON.stringify({ action, ...payload });
-function legacy(snapshot: RunSnapshot) { return { ...snapshot, schemaVersion: 2, progress: snapshot.progress.map(item => ({
+function legacy(snapshot: RunSnapshot) { const { state: _state, ...rest } = snapshot; void _state; return { ...rest, schemaVersion: 2, progress: snapshot.progress.map(item => ({
   taskId: item.taskId, phase: item.phase, unresolvedEffects: item.unresolvedEffects, eligibleAt: 1_000,
 })) }; }
 function creation() { const snapshot = createRun(runIdentity, graph, 1_000, execution); return { id: 'create', snapshot,
@@ -45,15 +45,19 @@ it('migrates strict projection and evaluation receipt evidence', () => {
     { commandId: 'project', actor, scopeId: 'scope', runId: 'run', expectedRevision: 1, attemptId: 'attempt' }) };
   const evaluation = { schemaVersion: 1 as const, evaluationId: 'evaluation', identity: attemptIdentity, graphRevision: 1,
     attemptRevision: 1, criteria: [{ criterionId: 'verified', verdict: 'unknown' as const, evidenceIds: [] }] };
-  const evaluated = applyTaskEvaluation(observed, 2, evaluation).snapshot;
+  // Genuine historical unknown: evaluating, without a v45 decision/deadline (never inferred on migration).
+  const applied = applyTaskEvaluation(observed, 2, evaluation, { now: 100, timeoutMs: 1000 }).snapshot;
+  const evaluated = { ...applied, state: { kind: 'running' as const }, progress: applied.progress.map(task => {
+    const { decision: _decision, ...rest } = task; void _decision; return { ...rest, phase: 'evaluating' as const };
+  }) };
   const evaluate = { id: 'evaluation', snapshot: evaluated, command: command('apply-task-evaluation',
     { commandId: 'evaluation', actor, expectedRevision: 2, evaluation, dispatch }) };
   const db = database(evaluated, [create, project, evaluate]); migrate(db);
-  expect(db.prepare('SELECT snapshot FROM run_receipts').all().every(row => JSON.parse(String(row.snapshot)).schemaVersion === 3)).toBe(true); db.close();
+  expect(db.prepare('SELECT snapshot FROM run_receipts').all().every(row => JSON.parse(String(row.snapshot)).schemaVersion === 4)).toBe(true); db.close();
 });
 
 it('accepts cancellation no-op and rejects a false cancellation postcondition', () => {
-  const create = creation(), cancelled = requestRunCancellation(create.snapshot, 0);
+  const create = creation(), cancelled = requestRunCancellation(create.snapshot, 0, { now: 100, timeoutMs: 1000 });
   const noOp = { id: 'cancel-again', snapshot: cancelled, command: command('cancel-run',
     { commandId: 'cancel-again', actor, scopeId: 'scope', runId: 'run', expectedRevision: 1 }) };
   const db = database(cancelled, [create, noOp]); migrate(db); db.close();

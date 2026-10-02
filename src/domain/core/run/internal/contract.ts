@@ -7,8 +7,13 @@ export const runIdentitySchema = z.object({ runId: identitySchema, scopeId: iden
 export const runBindingSchema = z.object({ identity: attemptIdentitySchema, observedRevision: counterSchema.positive().nullable(),
   observedKind: z.enum(['started', 'exited', 'cancelled', 'unknown']).nullable(),
 }).strict().readonly();
-export const runSnapshotSchema = z.object({ schemaVersion: z.literal(3), identity: runIdentitySchema, revision: counterSchema,
-  branch: branchDecisionSchema.optional(), graph: taskGraphSchema, execution: runExecutionSnapshotSchema, progress: z.array(taskProgressSchema).readonly(), bindings: z.array(runBindingSchema).readonly(), cancelRequested: z.boolean(),
+export const runStateSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('running') }).strict(),
+  z.object({ kind: z.literal('parked'), reason: z.enum(['dependency-failed', 'dependency-cancelled', 'awaiting-decision', 'evaluation-not-ready']), since: counterSchema, deadline: counterSchema }).strict(),
+  z.object({ kind: z.literal('terminal'), outcome: z.enum(['completed', 'incomplete', 'failed', 'cancelled']), reason: z.enum(['completed', 'cancelled', 'operator-close', 'park-timeout']) }).strict(),
+]).readonly();
+export const runSnapshotSchema = z.object({ schemaVersion: z.literal(4), identity: runIdentitySchema, revision: counterSchema,
+  state: runStateSchema, branch: branchDecisionSchema.optional(), graph: taskGraphSchema, execution: runExecutionSnapshotSchema, progress: z.array(taskProgressSchema).readonly(), bindings: z.array(runBindingSchema).readonly(), cancelRequested: z.boolean(),
 }).strict().superRefine((run, context) => {
   const invalid = () => context.addIssue({ code: z.ZodIssueCode.custom, message: 'RUN_SNAPSHOT_INCONSISTENT' });
   try { inspectTaskReadiness(run.graph, { graphRevision: run.graph.revision, now: 0, progress: run.progress }); } catch { invalid(); return; }
@@ -22,6 +27,8 @@ export const runSnapshotSchema = z.object({ schemaVersion: z.literal(3), identit
     const selected = run.execution.criteria.find(entry => entry.criterionId === criterion.id);
     if (!selected || selected.evaluator.id !== criterion.evaluator.id || selected.evaluator.version !== criterion.evaluator.version) invalid();
   }
+  if (run.state.kind === 'parked' && (run.state.deadline <= run.state.since || run.progress.some(task => task.unresolvedEffects || ['active', 'evaluating', 'reconciling'].includes(task.phase)))) invalid();
+  if (run.state.kind === 'terminal' && (run.progress.some(task => task.unresolvedEffects || ['pending', 'active', 'evaluating', 'reconciling', 'awaiting-decision'].includes(task.phase)) || (run.state.outcome === 'completed' && run.progress.some(task => task.phase !== 'accepted')) || (run.state.outcome === 'incomplete' && (!run.progress.some(task => task.phase === 'accepted') || run.progress.every(task => task.phase === 'accepted'))) || (['failed', 'cancelled'].includes(run.state.outcome) && run.progress.some(task => task.phase === 'accepted')))) invalid();
   const tasks = new Set(run.graph.tasks.map(task => task.id)); const bound = new Set<string>(); const attempts = new Set<string>();
   for (const binding of run.bindings) {
     const id = binding.identity;
@@ -29,12 +36,15 @@ export const runSnapshotSchema = z.object({ schemaVersion: z.literal(3), identit
       (binding.observedRevision === null) !== (binding.observedKind === null)) invalid();
     bound.add(id.taskId); attempts.add(id.attemptId);
   }
-  for (const task of run.progress) if (['active', 'evaluating', 'reconciling'].includes(task.phase) && !bound.has(task.taskId)) invalid();
+  for (const task of run.progress) {
+    if (['active', 'evaluating', 'reconciling', 'awaiting-decision'].includes(task.phase) && !bound.has(task.taskId)) invalid();
+    if (task.phase === 'awaiting-decision' && run.bindings.find(binding => binding.identity.taskId === task.taskId)?.observedKind !== 'exited') invalid();
+  }
 }).readonly();
 export type RunIdentity = z.infer<typeof runIdentitySchema>;
 export type RunSnapshot = z.infer<typeof runSnapshotSchema>;
 export class RunError extends Error {
-  constructor(readonly code: 'RUN_INVALID' | 'RUN_REVISION_CONFLICT' | 'RUN_CANCEL_REQUESTED' | 'RUN_TASK_NOT_READY' | 'RUN_ATTEMPT_CONFLICT' | 'RUN_OBSERVATION_STALE') { super(code); this.name = 'RunError'; }
+  constructor(readonly code: 'RUN_INVALID' | 'RUN_REVISION_CONFLICT' | 'RUN_CANCEL_REQUESTED' | 'RUN_TASK_NOT_READY' | 'RUN_ATTEMPT_CONFLICT' | 'RUN_OBSERVATION_STALE' | 'RUN_PARKED' | 'RUN_TERMINAL' | 'RUN_NOT_PARKED' | 'RUN_DECISION_NOT_READY' | 'RUN_DECISION_EXPIRED') { super(code); this.name = 'RunError'; }
 }
 export function checkedRun(input: unknown, expectedRevision: number): RunSnapshot {
   const parsed = runSnapshotSchema.safeParse(input); if (!parsed.success) throw new RunError('RUN_INVALID');

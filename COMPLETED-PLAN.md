@@ -5,6 +5,23 @@ PLAN yalnız devam eden işleri taşır). Bu dosya aktif iş izni veya kabul kan
 Bir iş tamamlandığında ayrıntısı PLAN'dan buraya taşınır (en yeni bölüm üstte); PLAN'da yalnız kalan kapsam bırakılır.
 Metinler taşındıkları andaki hâliyle korunur; güncel durum için PLAN, ARCHITECTURE ve current-flow esastır.
 
+## 2026-10-02 A1/A3 — izole kaynak uygulaması, kabul kapıları açık
+
+`lane/run-park-timeout`, taban `a56a3f26`; owner A1 RUN-TERMINAL-OUTCOME + A3 EVAL-UNKNOWN-RESOLUTION.
+Tek saf lifecycle sahibi: geçişli `skipped` ve tipli bağımlılık nedeni, Run park/close/resume/deadline,
+kabul varsa `incomplete`, yoksa `failed`; all-accepted yalnız `completed`. Run snapshot v4, RunView v3,
+ledger v45 forward migration (run + receipt tarih/revizyonları korunur), parking config v1/24 saat (ölçülmedi).
+Park edilmiş Run rezervasyon keşfine girmez; ayrı sınırlı deadline sayfası kapanışı ilerletir. Bekleyen görev
+slot bırakır. CLI ve MCP-free SDK aynı insan kararı uygulamasını kullanır; MCP karar sunmaz. Mevcut
+`attempt:evaluate` + doğrulanmış yerel `os-user`, principal'lı sealed audit ve receipt tek transaction'da;
+kabul etiketi model kanıtının doğrulanamadığını taşır. Ret ve timeout başarısızlık, bağımlılıklar skipped;
+kanıtsız exited137 yalnız görünür bekleme/ret/timeout, sahte evaluation veya acceptance yok. Policy portu
+yalnız daraltır. J5 mühür metadata rezervi + gerçek NDJSON byte hesabı + config'te yetersiz kotanın reddi.
+
+Kanıt ve sınırlar: `proof/RUN-PARK-TIMEOUT-2026-10-02/review.md`; red-first logları ve 14 mutasyon.
+Tam verify/build/push/canlı servis çalıştırılmadı. Bağımsız inceleme yok; PASS değildir.
+İnceleme, lead parti verify, paketli/runtime/canlı kabul ve restore işletim kanıtı PLAN'da açık kalır.
+
 ## 2026-09-29 beşinci ve altıncı parti — main'e alındı ve canlıda (`dd63fd9`, Astra 2152 PASS; `0e0ca63`, Astra 2167 PASS; taşındı 2026-09-29)
 
 Aşağıdaki kayıtlar PLAN'dan taşındıkları andaki hâliyle korunur; altıncı parti canlıda (instance `f810508e…`, `proof/LIVE-SWITCH-BATCH5-2026-09-28/BATCH6-README.md`). Güncel açıklar PLAN'dadır.

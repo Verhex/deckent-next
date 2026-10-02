@@ -29,7 +29,7 @@ export async function settleSandboxWriteSet(input: { readonly directory: Sandbox
     let opened: Promise<{ sessions: Awaited<ReturnType<typeof createLocalPeerSession>>; store: Store }> | null = null;
     const lazy = () => opened ??= (async () => {
       const sessions = await createLocalPeerSession(input.peer, context.principal.scopeIds, context.config.approvals.sessionTtlMs, clock);
-      const attempts = await openSqliteAttemptStore(await context.path(), context.config.storage.sqlite, 'forbid');
+      const attempts = await openSqliteAttemptStore(await context.path(), context.config.storage.sqlite, { now: Date.now, timeoutMs: context.config.runRuntime.parking.timeoutMs }, 'forbid');
       store = attempts;
       return { sessions, store: attempts };
     })();

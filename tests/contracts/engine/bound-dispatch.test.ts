@@ -11,7 +11,7 @@ afterEach(async () => { for (const store of stores.splice(0)) store.close(); awa
 const identity = { runId: 'r', scopeId: 's', taskId: 't', attemptId: 'a', layoutRevision: 'l', generation: 1 };
 async function fixture() {
   const root = await mkdtemp(join(tmpdir(), 'deckent-bound-dispatch-')); roots.push(root); const path = join(root, 'ledger.db');
-  const store = await openSqliteAttemptStore(path, { busyTimeoutMs: 20, journalMode: 'wal', durability: 'full' }, 'allow', custodyProfiles); stores.push(store);
+  const store = await openSqliteAttemptStore(path, { busyTimeoutMs: 20, journalMode: 'wal', durability: 'full' }, { now: Date.now, timeoutMs: 86400000 }, 'allow', custodyProfiles); stores.push(store);
   await admitRunAttempts(store, [identity]);
   const claim = { owner: 'fixture', request: { protocolVersion: 1 as const, identity, workspace: '/recorded/workspace', argv: ['recorded-tool'] } };
   return { store, path, claim };

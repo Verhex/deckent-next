@@ -42,3 +42,7 @@ export const EXECUTION_RETENTION_SETTINGS = z.object({ schemaVersion: z.literal(
   release: z.enum(['after-retained-patch', 'keep']).default('after-retained-patch'),
   sweepLimit: z.number().int().positive().max(10_000).default(16) }).strict();
 export const ARTIFACT_STORAGE_LIMITS = z.object({ maxBytes: z.number().int().positive().safe() }).strict();
+/** A1/A3: shared parked Run/task deadline policy. 24 hours is a conservative, lead-adjustable default,
+ * not a measured optimum. Explicit version and strict keys make unsupported policy fail closed. */
+export const RUN_PARKING_SETTINGS = z.object({ schemaVersion: z.literal(1),
+  timeoutMs: z.number().int().positive().safe().default(86_400_000) }).strict();

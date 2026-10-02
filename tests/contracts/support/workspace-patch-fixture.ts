@@ -34,7 +34,7 @@ export async function workspacePatchFixture(track: FixtureTracker, { restartable
   registry.profiles[0]!.parameters.imageId = process.env.DECKENT_TEST_DOCKER_IMAGE!;
   const { argv: _argv, ...bounds } = registry.profiles[0]!.parameters; void _argv;
   const configPath = join(project, '.deckent/config.json'); const options = { env: { HOME: join(root, 'home') } };
-  await writeFile(configPath, JSON.stringify({ layout: { root: join(root, 'data') }, artifacts: { maxBytes: 65536 },
+  await writeFile(configPath, JSON.stringify({ layout: { root: join(root, 'data') }, artifacts: { maxBytes: 4_227_072 },
     admission: { poolId: 'p', executionSlots: 1, inFlightSlots: 1, ordering: 'input-order', registry },
     execution: { docker: { executable: '/usr/bin/docker', ...bounds }, git: { gitExecutable: '/usr/bin/git', timeoutMs: 10000, outputBytes: 65536 },
       ...(adoptionTargets ? { adoption: { targets: adoptionTargets } } : {}) } }));

@@ -14,7 +14,7 @@ export interface MonitorService {
   readonly build: MonitorBuild | null;
 }
 /** Why a non-terminal Run is not progressing; `none` only when it is progressing normally. */
-export type MonitorBlockerCode = 'none' | 'waiting-pool-slot' | 'pool-held' | 'waiting-dependency' | 'awaiting-approval'
+export type MonitorBlockerCode = 'parked' | 'awaiting-decision' | 'none' | 'waiting-pool-slot' | 'pool-held' | 'waiting-dependency' | 'awaiting-approval'
   | 'worker-running' | 'worker-stale-heartbeat' | 'worker-exited-unevaluated' | 'evaluation-not-ready' | 'evaluation-unknown'
   | 'unresolved-effect' | 'cancellation-pending' | 'not-admitted' | 'unknown';
 export interface MonitorBlocker {
@@ -23,6 +23,8 @@ export interface MonitorBlocker {
   readonly sinceMs: number | null;
   /** Short typed detail (e.g. an error code, pool id, approval id); human wording lives in the i18n catalogs. */
   readonly detail: string | null;
+  /** Durable park/decision deadline, when this blocker is bounded by one. */
+  readonly deadlineMs?: number;
 }
 export interface MonitorAttempt {
   readonly attemptId: string; readonly generation: number; readonly launch: string | null; readonly exitCode: number | null;
@@ -40,13 +42,14 @@ export interface MonitorAttempt {
   readonly diagnostics?: readonly string[];
 }
 export interface MonitorTask {
+  readonly decision?: { readonly reason: 'evaluation-unknown' | 'evaluation-not-ready'; readonly sinceMs: number; readonly deadlineMs: number };
   readonly taskId: string; readonly kind: string; readonly phase: string;
   readonly profile: { readonly id: string; readonly version: number } | null;
   readonly attempts: number; readonly lastAttempt: MonitorAttempt | null;
-  readonly evaluation: { readonly verdict: 'accepted' | 'rejected' | 'unknown' | 'pending' | null; readonly observedAtMs: number | null };
+  readonly evaluation: { readonly verdict: 'accepted' | 'accepted-unverified' | 'rejected' | 'unknown' | 'pending' | null; readonly observedAtMs: number | null };
   readonly dependencies: readonly string[];
 }
-export type MonitorRunState = 'progressing' | 'waiting' | 'blocked' | 'accepted' | 'failed' | 'cancelled';
+export type MonitorRunState = 'progressing' | 'waiting' | 'blocked' | 'accepted' | 'failed' | 'cancelled' | 'parked' | 'incomplete';
 export interface MonitorRun {
   readonly scopeId: string; readonly runId: string; readonly revision: number; readonly state: MonitorRunState;
   readonly phaseCounts: Readonly<Record<string, number>>; readonly tasks: readonly MonitorTask[];

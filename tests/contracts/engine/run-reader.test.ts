@@ -11,7 +11,7 @@ const roots: string[] = [];
 afterEach(async () => { await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 async function fixture() {
   const root = await mkdtemp(join(tmpdir(), 'deckent-run-reader-')); roots.push(root); const path = join(root, 'ledger.db');
-  const store = await openSqliteAttemptStore(path, { busyTimeoutMs: 20, journalMode: 'delete', durability: 'full' });
+  const store = await openSqliteAttemptStore(path, { busyTimeoutMs: 20, journalMode: 'delete', durability: 'full' }, { now: Date.now, timeoutMs: 86400000 });
   try { await admitRunAttempts(store, [{ runId: 'r', scopeId: 's', taskId: 't', attemptId: 'a', layoutRevision: 'l', generation: 1 }]); }
   finally { store.close(); } return path;
 }
@@ -26,7 +26,7 @@ it('reads an existing Run without mutating the ledger and never crosses scope', 
 it('rejects column/snapshot revision divergence in both read-only and writable readers', async () => {
   const path = await fixture(); const db = new DatabaseSync(path); db.exec('UPDATE runs SET revision=99'); db.close();
   const reader = await openSqliteInventoryReader(path, { busyTimeoutMs: 20 });
-  const writer = await openSqliteAttemptStore(path, { busyTimeoutMs: 20, journalMode: 'delete', durability: 'full' });
+  const writer = await openSqliteAttemptStore(path, { busyTimeoutMs: 20, journalMode: 'delete', durability: 'full' }, { now: Date.now, timeoutMs: 86400000 });
   try {
     await expect(reader.loadRun('s', 'r')).rejects.toMatchObject({ code: 'RUN_STORE_CORRUPT' });
     await expect(writer.loadRun('s', 'r')).rejects.toMatchObject({ code: 'RUN_STORE_CORRUPT' });
@@ -37,7 +37,7 @@ it('refuses opening a schema2 reader, then reads only after the writer migrates 
   const before = await readFile(path);
   await expect(openSqliteInventoryReader(path, { busyTimeoutMs: 20 })).rejects.toMatchObject({ code: 'ATTEMPT_STORE_VERSION' });
   expect(await readFile(path)).toEqual(before);
-  const store = await openSqliteAttemptStore(path, { busyTimeoutMs: 20, journalMode: 'delete', durability: 'full' });
+  const store = await openSqliteAttemptStore(path, { busyTimeoutMs: 20, journalMode: 'delete', durability: 'full' }, { now: Date.now, timeoutMs: 86400000 });
   try { expect((await store.load('s', 'a'))!.identity.attemptId).toBe('a'); } finally { store.close(); }
   const reader = await openSqliteInventoryReader(path, { busyTimeoutMs: 20 });
   try { expect(await reader.loadRun('s', 'r')).toBeNull(); } finally { reader.close(); }
@@ -55,8 +55,8 @@ it('requires migration before reading schema-eleven Run snapshots and leaves ins
     expect((await reader.listDispatches({ schemaVersion: 1, scopeId: 's', after: null, limit: 1 })).entries).toEqual([]);
   } finally { reader.close(); }
   expect(await readFile(path)).toEqual(before);
-  const writer = await openSqliteAttemptStore(path, { busyTimeoutMs: 20, journalMode: 'delete', durability: 'full' }); writer.close();
+  const writer = await openSqliteAttemptStore(path, { busyTimeoutMs: 20, journalMode: 'delete', durability: 'full' }, { now: Date.now, timeoutMs: 86400000 }); writer.close();
   const migrated = await openSqliteInventoryReader(path, { busyTimeoutMs: 20 });
-  try { expect((await migrated.loadRun('s', 'r'))?.schemaVersion).toBe(3); }
+  try { expect((await migrated.loadRun('s', 'r'))?.schemaVersion).toBe(4); }
   finally { migrated.close(); }
 });

@@ -12,7 +12,7 @@ const roots: string[] = []; const stores: SqliteAttemptStore[] = [];
 afterEach(async () => { for (const store of stores.splice(0)) store.close(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 it('bounds concurrent deliveries and reports each failure without skipping siblings or exposing private errors', async () => {
   const root = await mkdtemp(join(tmpdir(), 'deckent-cancel-coordinator-')); roots.push(root);
-  const store = await openSqliteAttemptStore(join(root, 'ledger.db'), { busyTimeoutMs: 20, journalMode: 'wal', durability: 'full' }, 'allow', custodyProfiles); stores.push(store);
+  const store = await openSqliteAttemptStore(join(root, 'ledger.db'), { busyTimeoutMs: 20, journalMode: 'wal', durability: 'full' }, { now: Date.now, timeoutMs: 86400000 }, 'allow', custodyProfiles); stores.push(store);
   const identities = ['a', 'b', 'c', 'd', 'e'].map(id => ({ runId: 'r', scopeId: 's', taskId: id, attemptId: id, layoutRevision: 'l', generation: 1 }));
   await admitRunAttempts(store, identities);
   for (const identity of identities.slice(0, 4)) await store.claimDispatch(dispatchAdmission({ owner: 'w', request: { protocolVersion: 1, identity, workspace: '/private', argv: ['secret'] } }));

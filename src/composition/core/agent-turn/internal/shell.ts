@@ -171,7 +171,7 @@ export function createAgentShell(input: { readonly scope: WorkspaceScope; readon
         await channel.drained();
         return { text: `\n${line}`, ...(change ? { counts: { deleted: change.deleted.count, overwritten: change.overwritten.count } } : {}) };
       };
-      const store = await openSqliteAttemptStore(await context.path(), context.config.storage.sqlite, 'forbid');
+      const store = await openSqliteAttemptStore(await context.path(), context.config.storage.sqlite, { now: Date.now, timeoutMs: context.config.runRuntime.parking.timeoutMs }, 'forbid');
       try {
         await new EffectApplication({ async resolve(ref) {
           return ref.id === HOST_SHELL_RUN_OPERATION.operation.id && ref.version === HOST_SHELL_RUN_OPERATION.operation.version ? HOST_SHELL_RUN_OPERATION : null;

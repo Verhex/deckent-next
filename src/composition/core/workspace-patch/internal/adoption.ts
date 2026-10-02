@@ -19,7 +19,7 @@ async function withAdoption<T>(root: string, identity: AttemptIdentity, options:
     const git = { ...c.config.execution.git, ...target.git, workspaceRoot: await inspectProductDirectory(c.layout, 'workspaces') };
     const clock = new SystemTrustedClock();
     const sessions = await LocalOsSessionAuthority.create(c.principal.scopeIds, c.config.approvals.sessionTtlMs, clock);
-    const store = await openSqliteAttemptStore(await c.path(), c.config.storage.sqlite, 'forbid', { validate: validateDockerSupervisorProfile });
+    const store = await openSqliteAttemptStore(await c.path(), c.config.storage.sqlite, { now: Date.now, timeoutMs: c.config.runRuntime.parking.timeoutMs }, 'forbid', { validate: validateDockerSupervisorProfile });
     try {
       const runs = new RunPolicyAuthorization({ async load() { return c.document; } });
       return await use(new WorkspaceAdoptionApplication(store, new GitIntegrationDelivery(git), new GitIntegrationAdoption(git),

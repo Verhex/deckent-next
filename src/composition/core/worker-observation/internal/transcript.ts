@@ -11,7 +11,7 @@ export async function inspectConfiguredWorkerTranscript(root: string, input: Att
   try {
     const identity = attemptIdentitySchema.parse(input);
     const c = await loadConfiguredScopeContext(root, identity.scopeId, options, 'read');
-    const store = await openSqliteAttemptStore(await c.path(), c.config.storage.sqlite, 'forbid');
+    const store = await openSqliteAttemptStore(await c.path(), c.config.storage.sqlite, { now: Date.now, timeoutMs: c.config.runRuntime.parking.timeoutMs }, 'forbid');
     try {
       const artifacts = new FileArtifactStore({ root: await inspectProductDirectory(c.layout, 'artifacts'), maxBytes: c.config.artifacts.maxBytes });
       return await new WorkerTranscriptApplication(store, artifacts,

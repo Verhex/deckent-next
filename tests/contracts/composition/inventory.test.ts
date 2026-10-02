@@ -47,7 +47,7 @@ describe.skipIf(process.platform === 'win32')('configured local inventory query'
   });
   it('reads the configured ledger and reflects subsequent policy revocation without stale authorization', async () => {
     const f = await fixture(); const opened = await openConfiguredAttemptStore(f.project, f.options); opened.store.close();
-    const { path } = opened; const store = await openSqliteAttemptStore(path, { busyTimeoutMs: 20, journalMode: 'wal', durability: 'full' }, 'allow', custodyProfiles);
+    const { path } = opened; const store = await openSqliteAttemptStore(path, { busyTimeoutMs: 20, journalMode: 'wal', durability: 'full' }, { now: Date.now, timeoutMs: 86400000 }, 'allow', custodyProfiles);
     const identity = { runId: 'r', taskId: 't', attemptId: 'a', scopeId: 's', layoutRevision: 'l', generation: 1 };
     try {
       await admitRunAttempts(store, [identity]);

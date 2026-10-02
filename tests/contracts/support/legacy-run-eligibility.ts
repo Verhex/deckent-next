@@ -9,7 +9,8 @@ export function legacyRunEligibility(snapshotInput: unknown, creationInput: unkn
     || JSON.stringify(snapshot.graph) !== JSON.stringify(creation.graph)
     || JSON.stringify(snapshot.execution) !== JSON.stringify(creation.execution)
     || snapshot.progress.some(progress => progress.eligibility.kind !== 'immediate')) throw new Error('INVALID_LEGACY_RUN_FIXTURE');
-  return { ...snapshot, schemaVersion: 2 as const, progress: snapshot.progress.map(progress => ({
+  const { state: _state, ...historical } = snapshot; void _state;
+  return { ...historical, schemaVersion: 2 as const, progress: snapshot.progress.map(progress => ({
     taskId: progress.taskId, phase: progress.phase, unresolvedEffects: progress.unresolvedEffects, eligibleAt: creation.now,
   })) };
 }

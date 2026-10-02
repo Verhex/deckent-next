@@ -28,7 +28,7 @@ function createApplication(path: string, current: () => unknown, peer: () => num
         scopeIds: ['service-scope'] }, evidence: { method: 'os-peer' as const, pid, uid: 1000, gid: 1000 } };
     },
   }, new ServicePolicyAuthorization({ async load() { return current(); } }),
-  () => openSqliteAttemptStore(path, options), () => 10);
+  () => openSqliteAttemptStore(path, options, { now: Date.now, timeoutMs: 86400000 }), () => 10);
 }
 async function count(path: string) {
   const db = new DatabaseSync(path, { readOnly: true });
@@ -55,7 +55,7 @@ it('blocks a revoked grant and foreign instance without modifying the durable re
   await expect(app.admit(command, undefined)).rejects.toMatchObject({ code: 'POLICY_DENIED' });
   await expect(app.admit({ ...command, instanceId: 'foreign-instance' }, undefined))
     .rejects.toMatchObject({ code: 'SERVICE_SHUTDOWN_INSTANCE' });
-  const store = await openSqliteAttemptStore(path, options);
+  const store = await openSqliteAttemptStore(path, options, { now: Date.now, timeoutMs: 86400000 });
   try { expect(await store.readServiceShutdown({ scopeId: instance.scopeId, serviceId: instance.serviceId, commandId: command.commandId })).toEqual({ admission: recorded.admission, outcome: null }); }
   finally { store.close(); }
   expect(await count(path)).toBe(1);
@@ -63,7 +63,7 @@ it('blocks a revoked grant and foreign instance without modifying the durable re
 
 it('rejects a SQLite audit-write failure and leaves no shutdown row', async () => {
   const { path } = await fixture();
-  const setup = await openSqliteAttemptStore(path, options); setup.close();
+  const setup = await openSqliteAttemptStore(path, options, { now: Date.now, timeoutMs: 86400000 }); setup.close();
   const db = new DatabaseSync(path);
   db.exec("CREATE TRIGGER reject_shutdown_audit BEFORE INSERT ON service_shutdown_commands BEGIN SELECT RAISE(ABORT, 'fixture'); END;"); db.close();
   const app = createApplication(path, () => policy, () => 41);

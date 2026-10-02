@@ -67,7 +67,7 @@ describe.skipIf(process.platform !== 'linux' || !process.env.DECKENT_TEST_DOCKER
     if (kind === 'hardlink') await link(join(workspace, 'note.txt'), path);
     if (kind === 'fifo') await exec('/usr/bin/mkfifo', [path]);
     if (kind === 'binary') await writeFile(path, Buffer.from([0, 255]));
-    if (kind === 'size') await writeFile(path, 'x'.repeat(70000));
+    if (kind === 'size') await writeFile(path, 'x'.repeat(4_227_073));
     if (kind === 'depth') { const directory = join(workspace, ...Array.from({ length: 33 }, () => 'd')); await mkdir(directory, { recursive: true }); }
     await expect(f.prepare()).rejects.toMatchObject({ code: kind === 'binary' ? 'PATCH_UNSUPPORTED' : ['depth', 'size'].includes(kind) ? 'PATCH_LIMIT' : 'PATCH_UNSAFE' });
     expect((await f.runtime.store.loadBoundDispatch(f.identity))!.patch).toBeUndefined();
@@ -100,9 +100,9 @@ describe.skipIf(process.platform !== 'linux' || !process.env.DECKENT_TEST_DOCKER
     const db = new DatabaseSync(path); db.exec('DROP TABLE IF EXISTS workspace_integrations; DROP TABLE IF EXISTS workspace_deliveries; DROP TABLE IF EXISTS workspace_adoptions; DROP TABLE IF EXISTS effect_intents; DROP TABLE IF EXISTS agent_turn_tool_calls; DROP TABLE IF EXISTS agent_turns; DROP TABLE IF EXISTS worker_event_logs; DROP TABLE IF EXISTS approval_outbox; DROP TABLE IF EXISTS approval_receipts; DROP TABLE IF EXISTS approvals; PRAGMA user_version=28;'); db.close();
     // Resolve actual configured storage settings rather than assume adapter defaults.
     const { loadConfig } = await import('#platform/index.js'); const config = await loadConfig(f.project, f.options);
-    await expect(openSqliteAttemptStore(path, config.storage.sqlite, 'forbid', { validate: validateDockerSupervisorProfile })).rejects.toThrow('ATTEMPT_STORE_VERSION');
+    await expect(openSqliteAttemptStore(path, config.storage.sqlite, { now: Date.now, timeoutMs: 86400000 }, 'forbid', { validate: validateDockerSupervisorProfile })).rejects.toThrow('ATTEMPT_STORE_VERSION');
     const untouched = new DatabaseSync(path, { readOnly: true }); expect(untouched.prepare('PRAGMA user_version').get()?.user_version).toBe(28); untouched.close();
-    const migrated = await openSqliteAttemptStore(path, config.storage.sqlite, 'allow', { validate: validateDockerSupervisorProfile });
+    const migrated = await openSqliteAttemptStore(path, config.storage.sqlite, { now: Date.now, timeoutMs: 86400000 }, 'allow', { validate: validateDockerSupervisorProfile });
     expect(await migrated.loadBoundDispatch(f.identity)).toEqual(before); migrated.close();
     expect((await f.prepare()).patch.baseCommit).toBe(f.base);
     const value = JSON.parse(await readFile(f.configPath, 'utf8')); value.artifacts.patchPreview = { maxEntries: 1 };

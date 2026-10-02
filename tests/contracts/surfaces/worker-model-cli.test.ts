@@ -52,7 +52,7 @@ it('workers list prints one model row per pinned worker in en and tr, and JSON c
 
 it('run inspect and the transcript report view show the same row; the transcript states the evidence limit', async () => {
   const root = await project();
-  const view = { schemaVersion: 2, runId: 'r', scopeId: 's', layoutRevision: 'l', registryRevision: 'reg', criteria: [], revision: 3, cancellationRequested: false,
+  const view = { schemaVersion: 3, state: { kind: 'running' }, runId: 'r', scopeId: 's', layoutRevision: 'l', registryRevision: 'reg', criteria: [], revision: 3, cancellationRequested: false,
     tasks: [{ id: 't', kind: 'claude', dependencies: [], acceptanceCriteria: ['exit'], profile: { id: 'claude', version: 1 }, phase: 'failed', unresolvedEffects: false }] };
   const inspectRun = async () => ({ schemaVersion: 1, layout: {}, run: view, models: [{ ...substituted, taskId: 't', attemptId: 'a' }] });
   const english = await run(['run', 'inspect', '--scope', 's', '--id', 'r', '--lang', 'en'], { inspectRun }, root);

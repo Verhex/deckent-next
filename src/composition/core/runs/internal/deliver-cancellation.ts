@@ -18,7 +18,8 @@ export async function deliverConfiguredRunCancellation(projectRoot: string, inpu
     if (!config.cancellation) throw ErrorRegistry.createError('CANCELLATION_NOT_CONFIGURED', {
       params: { missing: 'cancellation' },
     });
-    const store = await openSqliteAttemptStore(await path(), config.storage.sqlite, 'forbid');
+    const store = await openSqliteAttemptStore(await path(), config.storage.sqlite, { now: Date.now, timeoutMs: config.runRuntime.parking.timeoutMs }, 'forbid');
+
     try {
       const runs = new RunApplication(store, verifier, authorization);
       // No runtime dependency is touched for an attempt that has never been dispatched.

@@ -19,13 +19,13 @@ it.skipIf(!imageId || process.platform !== 'linux')('continues to a later invent
   const docker = { executable: '/usr/bin/docker', imageId: imageId!, memoryBytes: 268435456, pids: 64, cpus: 1,
     logMaxSizeKiB: 64, logMaxFiles: 2, tmpBytes: 16777216, deadlineMs: 20000, controlTimeoutMs: 10000,
     outputBytes: 65536 };
-  await writeFile(join(project, '.deckent/config.json'), JSON.stringify({ layout: { root: data }, artifacts: { maxBytes: 65536 },
+  await writeFile(join(project, '.deckent/config.json'), JSON.stringify({ layout: { root: data }, artifacts: { maxBytes: 16_777_216 },
     inspection: { maxPageSize: 1, policyMaxBytes: 65536 },
     reconciliationRuntime: { scopeIds: ['s'], pageSize: 1, maxConcurrentReconciliations: 1, pollIntervalMs: 10, failureBackoffMs: 20 },
     execution: { docker, git: { gitExecutable: '/usr/bin/git', timeoutMs: 10000, outputBytes: 65536 } } }));
   const options = { env: { HOME: join(root, 'home') } };
   const opened = await openConfiguredAttemptStore(project, options); opened.store.close();
-  const store = await openSqliteAttemptStore(opened.path, { busyTimeoutMs: 20, journalMode: 'wal', durability: 'full' },
+  const store = await openSqliteAttemptStore(opened.path, { busyTimeoutMs: 20, journalMode: 'wal', durability: 'full' }, { now: Date.now, timeoutMs: 86400000 },
     'allow', { validate: validateDockerSupervisorProfile });
   const workspaceRoot = await prepareProductDirectory(opened.layout, 'workspaces');
   await prepareProductDirectory(opened.layout, 'artifacts');

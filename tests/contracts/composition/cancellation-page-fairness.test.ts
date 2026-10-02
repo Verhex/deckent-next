@@ -31,7 +31,7 @@ it.skipIf(!imageId || process.platform !== 'linux')('continues to a later cancel
   const docker = { executable: '/usr/bin/docker', imageId: imageId!, memoryBytes: 268435456, pids: 64, cpus: 1,
     logMaxSizeKiB: 64, logMaxFiles: 2, tmpBytes: 16777216, deadlineMs: 20000, controlTimeoutMs: 1000,
     outputBytes: 65536 };
-  await writeFile(join(project, '.deckent/config.json'), JSON.stringify({ layout: { root: data }, artifacts: { maxBytes: 65536 },
+  await writeFile(join(project, '.deckent/config.json'), JSON.stringify({ layout: { root: data }, artifacts: { maxBytes: 16_777_216 },
     inspection: { maxPageSize: 1, policyMaxBytes: 65536 }, cancellation: {
       maxConcurrentDeliveries: 1, maxAttempts: 2, retryDelayMs: 60000, claimTtlMs: 100, recoveryPageSize: 1,
     }, cancellationRuntime: { scopeIds: ['s'], pollIntervalMs: 10, failureBackoffMs: 20 }, execution: { docker,

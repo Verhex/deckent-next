@@ -1,6 +1,6 @@
 import { cliUsage, shellIdentity } from './usage.js';
 import { ErrorRegistry, emit, loadConfig, resolveLocale, t, type ConfigLoadOptions, type Locale, type ProductLayout } from '#platform/index.js';
-import { runAdmissionSchema, runDeliveryAdmissionSchema, runReservationCommandSchema, type RunAdmission, type RunDeliveryAdmission, type RunCommand, type RunQuery, type RunView, type RunCancellationOutcome, type RunReservationCommand, type TaskWorkerModel } from '#engine/index.js';
+import { runLifecycleCommandSchema, runAdmissionSchema, runDeliveryAdmissionSchema, runReservationCommandSchema, type RunAdmission, type RunDeliveryAdmission, type RunCommand, type RunQuery, type RunView, type RunCancellationOutcome, type RunReservationCommand, type TaskWorkerModel } from '#engine/index.js';
 import { resolve } from 'node:path';
 import { readGraphInput } from './graph-input.js';
 import { validateTaskGraph, TaskGraphError, sanitizeIssues, type AttemptIdentity } from '#domain/index.js';
@@ -39,7 +39,7 @@ export async function runCommand(argv: readonly string[], context: CommandContex
   const earlyLocale = resolveLocale(requestedLanguage?.startsWith('-') ? undefined : requestedLanguage, context.env);
   context.onLocale?.(earlyLocale);
   const usage = (flag?: string) => cliUsage('run', action, earlyLocale, flag);
-  if (action !== 'inspect' && action !== 'cancel' && action !== 'reserve' && action !== 'create') throw usage();
+  if (action !== 'inspect' && action !== 'cancel' && action !== 'reserve' && action !== 'create' && action !== 'close' && action !== 'resume') throw usage();
   const allowed = action === 'inspect' ? ['--scope', '--id', '--lang'] : action === 'create'
     ? ['--scope', '--id', '--lang', '--command-id', '--graph', '--branch', '--delivery-command-id'] : ['--scope', '--id', '--lang', '--command-id', '--expected-revision'];
   const values = new Map<string, string>(); let json = false;
@@ -95,6 +95,15 @@ export async function runCommand(argv: readonly string[], context: CommandContex
     ].join('\n') });
     return;
   }
+  if (action === 'close' || action === 'resume') {
+    const commandId = values.get('--command-id'), revision = values.get('--expected-revision');
+    if (!commandId || !revision || !/^(0|[1-9][0-9]*)$/.test(revision) || !Number.isSafeInteger(Number(revision))) throw usage('--expected-revision');
+    if (!context.applyRunLifecycle) throw ErrorRegistry.createError('INVENTORY_UNAVAILABLE');
+    const result = await context.applyRunLifecycle(context.root ?? process.cwd(), runLifecycleCommandSchema.parse({ schemaVersion: 1, commandId, scopeId, runId,
+      action, expectedRevision: Number(revision) }), { env: context.env ?? process.env });
+    emit(result, { json, ...(context.stdout ? { stdout: context.stdout } : {}), render: data => data ? t('cli.run.lifecycle.result', { run: runId, revision: data.lifecycle.run.revision,
+      state: data.lifecycle.run.state.kind, reason: 'reason' in data.lifecycle.run.state ? data.lifecycle.run.state.reason : '—' }, locale) : '' }); return;
+  }
   if (action === 'cancel') {
     const commandId = values.get('--command-id'); const revision = values.get('--expected-revision');
     if (!commandId || !revision || !/^(0|[1-9][0-9]*)$/.test(revision) || !Number.isSafeInteger(Number(revision))) throw usage(!commandId ? '--command-id' : !revision ? '--expected-revision' : undefined);
@@ -108,6 +117,7 @@ export async function runCommand(argv: readonly string[], context: CommandContex
   if (!result.run) throw ErrorRegistry.createError('RUN_NOT_FOUND', { params: { run: runId } });
   emit(result, { json, ...(context.stdout ? { stdout: context.stdout } : {}), render: data => {
     const phases = {
+      skipped: t('cli.run.inspect.states.skipped', {}, locale), 'awaiting-decision': t('cli.run.inspect.states.awaitingDecision', {}, locale),
       pending: t('cli.run.inspect.states.pending', {}, locale), active: t('cli.run.inspect.states.active', {}, locale),
       evaluating: t('cli.run.inspect.states.evaluating', {}, locale), accepted: t('cli.run.inspect.states.accepted', {}, locale),
       failed: t('cli.run.inspect.states.failed', {}, locale), cancelled: t('cli.run.inspect.states.cancelled', {}, locale),
@@ -116,9 +126,14 @@ export async function runCommand(argv: readonly string[], context: CommandContex
     const run = data.run;
     if (!run) return '';
     return [t('cli.run.inspect.heading', { run: run.runId, revision: run.revision }, locale),
+      t('cli.run.lifecycle.result', { run: run.runId, revision: run.revision, state: run.state.kind, reason: 'reason' in run.state ? run.state.reason : '—' }, locale),
+      ...(run.state.kind === 'terminal' ? [t('cli.run.lifecycle.outcome', { outcome: run.state.outcome }, locale)] : []),
+      ...(run.state.kind === 'parked' ? [t('cli.run.lifecycle.deadline', { since: run.state.since, deadline: run.state.deadline }, locale)] : []),
       run.cancellationRequested ? t('cli.run.inspect.cancelRequested', {}, locale) : t('cli.run.inspect.cancelAbsent', {}, locale),
       ...run.tasks.flatMap(task => [t('cli.run.inspect.task', { task: task.id, kind: task.kind }, locale),
-        t('cli.run.inspect.stateLabel', { phase: phases[task.phase] }, locale),
+        t('cli.run.inspect.stateLabel', { phase: task.acceptedEvidence === 'model-unverified' ? t('cli.task.decision.acceptedUnverified', {}, locale) : phases[task.phase] }, locale),
+        ...(task.skippedReason ? [t('cli.run.lifecycle.reason', { reason: task.skippedReason }, locale)] : []),
+        ...(task.decision ? [t('cli.run.lifecycle.deadline', { since: task.decision.since, deadline: task.decision.deadline }, locale), t('cli.run.lifecycle.reason', { reason: task.decision.reason }, locale)] : []),
         t('cli.run.inspect.profile', { profile: task.profile.id, version: task.profile.version, criteria: task.acceptanceCriteria.join(', ') }, locale),
         ...(data.models ?? []).filter(model => model.taskId === task.id).map(model => t('cli.run.inspect.model', { attempt: model.attemptId ?? '—', line: renderWorkerModelLine(model, locale) }, locale)),
         ...(task.unresolvedEffects ? [t('cli.run.inspect.unresolved', {}, locale)] : [])]),

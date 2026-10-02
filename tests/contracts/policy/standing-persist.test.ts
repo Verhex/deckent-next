@@ -33,7 +33,7 @@ async function fixture(options: { grants?: (me: Actor) => unknown[]; bindings?: 
   await writeFile(bindingsPath, JSON.stringify({ schemaVersion: 2, revision: 'b1', bindings: options.bindings?.(me) ?? [{ id: 'root', principals: [me], roles: [INSTALLATION_OWNER_ROLE_ID], scopes: 'all' }], modes: [] }), { mode: 0o600 });
   const source = new FilePolicySource({ path: policyPath, bindingsPath, archivePath: archive, ownerUid: process.getuid!(), maxBytes: 65_536 });
   const integrity = createHmacIntegrity('key', randomBytes(32));
-  const effects = await openSqliteAttemptStore(ledger, sqlite, 'forbid'); closers.push(() => effects.close());
+  const effects = await openSqliteAttemptStore(ledger, sqlite, { now: Date.now, timeoutMs: 86400000 }, 'forbid'); closers.push(() => effects.close());
   const journal = openSqliteApprovalStore(ledger, sqlite); closers.push(() => journal.close());
   const auditStore = await openSqliteAuditStore(ledger, sqlite, 'forbid'); closers.push(() => auditStore.close());
   const audit = new AuditApplication(auditStore, integrity);

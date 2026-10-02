@@ -32,7 +32,7 @@ async function fixture(maxFileBytes = 65_536) {
   await writeFile(configPath, JSON.stringify({ layout: { root: join(root, 'data') }, inspection: { workers: { maxFileBytes } } }));
   const options = { env: { HOME: join(root, 'home') } };
   const opened = await openConfiguredAttemptStore(project, options); opened.store.close();
-  const store = await openSqliteAttemptStore(opened.path, { busyTimeoutMs: 20, journalMode: 'wal', durability: 'full' }, 'allow', custodyProfiles);
+  const store = await openSqliteAttemptStore(opened.path, { busyTimeoutMs: 20, journalMode: 'wal', durability: 'full' }, { now: Date.now, timeoutMs: 86400000 }, 'allow', custodyProfiles);
   try {
     await admitRunAttempts(store, [identity]);
     await store.claimDispatch(dispatchAdmission({ owner: 'worker', request: { protocolVersion: 1, identity, workspace: join(attempt, 'workspace'), argv: ['worker'] } }));

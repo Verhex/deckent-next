@@ -33,7 +33,9 @@ export interface RuntimeServiceReadinessView {
 }
 
 /** Every host operation a CLI command may use; the model commands' narrower context is part of it. */
+export type RunLifecycleHandler = (root: string, input: import('#engine/index.js').RunLifecycleCommand, options: ConfigLoadOptions) => Promise<{ readonly schemaVersion: 1; readonly layout: import('#platform/index.js').ProductLayout; readonly lifecycle: { readonly schemaVersion: 1; readonly commandId: string; readonly run: import('#engine/index.js').RunView } } | null>;
 export interface CommandContext extends ModelCommandContext, MonitorCommandContext, ConfigCommandContext {
+  applyRunLifecycle?: RunLifecycleHandler;
   renewApproval?: (input: unknown) => Promise<unknown>;
   listApprovals?: (input: unknown) => Promise<unknown>;
   inspectApproval?: (input: unknown) => Promise<unknown>;

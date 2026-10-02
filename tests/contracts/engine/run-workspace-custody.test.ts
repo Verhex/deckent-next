@@ -17,7 +17,7 @@ const candidate = (baseRevision = '1'.repeat(40), override = {}) => ({ schemaVer
 afterEach(async () => { for (const store of stores.splice(0)) store.close(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 async function fixture() {
   const root = await mkdtemp(join(tmpdir(), 'deckent-run-workspace-custody-')); roots.push(root); const path = join(root, 'ledger.db');
-  const store = await openSqliteAttemptStore(path, options); stores.push(store);
+  const store = await openSqliteAttemptStore(path, options, { now: Date.now, timeoutMs: 86400000 }); stores.push(store);
   await admitRunAttempts(store, [{ scopeId: 's', runId: 'r', taskId: 't', attemptId: 'a', layoutRevision: 'l', generation: 1 }]);
   return { path, store };
 }
@@ -29,14 +29,14 @@ it('records one immutable custody value, returns it after reopen and never mutat
   expect(await f.store.resolveRunWorkspaceCustody(candidate('2'.repeat(40)))).toEqual(candidate());
   expect(await f.store.loadRun('s', 'r')).toEqual(before);
   f.store.close(); stores.splice(stores.indexOf(f.store), 1);
-  const reopened = await openSqliteAttemptStore(f.path, options, 'forbid'); stores.push(reopened);
+  const reopened = await openSqliteAttemptStore(f.path, options, { now: Date.now, timeoutMs: 86400000 }, 'forbid'); stores.push(reopened);
   expect(await reopened.loadRunWorkspaceCustody('s', 'r')).toEqual(candidate());
 });
 
 it('converges two connections and different base candidates on one same-source first writer', async () => {
   const f = await fixture(); const program = `
     import { openSqliteAttemptStore } from './dist/adapters/index.js';
-    const [path,candidateText]=process.argv.slice(1); const store=await openSqliteAttemptStore(path,{busyTimeoutMs:1000,journalMode:'wal',durability:'full'},'forbid');
+    const [path,candidateText]=process.argv.slice(1); const store=await openSqliteAttemptStore(path,{busyTimeoutMs:1000,journalMode:'wal',durability:'full'}, { now: Date.now, timeoutMs: 86400000 },'forbid');
     process.stdout.write('READY\\n'); await new Promise(resolveInput=>process.stdin.once('data',resolveInput));
     const value=await store.resolveRunWorkspaceCustody(JSON.parse(candidateText)); store.close(); process.stdout.write(JSON.stringify(value));`;
   const children = [candidate('1'.repeat(40)), candidate('2'.repeat(40))].map(value => spawn(process.execPath,
@@ -90,7 +90,7 @@ it('migrates schema eight by adding an empty custody table without inventing rec
   const f = await fixture(); f.store.close(); stores.splice(stores.indexOf(f.store), 1); const db = new DatabaseSync(f.path);
   downgradeRunEligibilityFixtures(db);
   db.exec('DROP TABLE provider_spend_audits; DROP TABLE model_invocation_spend_reservations; DROP TABLE provider_spend_accounts; DROP TABLE model_invocation_allocation_checkpoints; DROP INDEX model_invocations_allocation_identity; DROP TABLE model_invocation_cancellations; DROP TABLE model_invocation_controls; DROP INDEX model_invocations_allocation_state; DROP TABLE model_invocation_contents; DROP TABLE model_invocation_content_purges; DROP TABLE model_invocations; DROP TABLE model_invocation_allocations; DROP TABLE model_activation_receipts; DROP TABLE model_activations; DROP TABLE installation_ownership; DROP TABLE service_shutdown_commands; DROP TABLE service_shutdown_outcomes; DROP TABLE run_workspace_custody; DROP TABLE IF EXISTS run_execution_intents; DROP TABLE IF EXISTS task_evaluation_observations; DROP TABLE IF EXISTS workspace_integrations; DROP TABLE IF EXISTS workspace_deliveries; DROP TABLE IF EXISTS workspace_adoptions; DROP TABLE IF EXISTS effect_intents; DROP TABLE IF EXISTS agent_turn_tool_calls; DROP TABLE IF EXISTS agent_turns; DROP TABLE IF EXISTS worker_event_logs; DROP TABLE IF EXISTS approval_outbox; DROP TABLE IF EXISTS approval_receipts; DROP TABLE IF EXISTS approvals; PRAGMA user_version=8'); db.close();
-  const migrated = await openSqliteAttemptStore(f.path, options); stores.push(migrated);
+  const migrated = await openSqliteAttemptStore(f.path, options, { now: Date.now, timeoutMs: 86400000 }); stores.push(migrated);
   expect(await migrated.loadRunWorkspaceCustody('s', 'r')).toBeNull();
   const check = new DatabaseSync(f.path, { readOnly: true });
   try { expect(check.prepare('PRAGMA user_version').get()!.user_version).toBe(CURRENT_LEDGER_VERSION); expect(check.prepare('SELECT count(*) AS count FROM run_workspace_custody').get()!.count).toBe(0); }
@@ -100,7 +100,7 @@ it('migrates schema eight by adding an empty custody table without inventing rec
 it('rejects a new adapter version after reopening without replacing the pinned Run source', async () => {
   const f = await fixture(); await f.store.resolveRunWorkspaceCustody(candidate());
   f.store.close(); stores.splice(stores.indexOf(f.store), 1);
-  const reopened = await openSqliteAttemptStore(f.path, options, 'forbid'); stores.push(reopened);
+  const reopened = await openSqliteAttemptStore(f.path, options, { now: Date.now, timeoutMs: 86400000 }, 'forbid'); stores.push(reopened);
   const changed = candidate('1'.repeat(40), { source: { ...source, adapter: { id: 'git', version: 2 } } });
   await expect(reopened.resolveRunWorkspaceCustody(changed)).rejects.toMatchObject({
     code: 'RUN_WORKSPACE_CUSTODY_CONFLICT', reason: 'adapter-version-mismatch',

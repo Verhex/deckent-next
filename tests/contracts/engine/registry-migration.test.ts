@@ -25,7 +25,7 @@ const graph = Object.freeze({ schemaVersion: 2 as const, revision: 1, tasks: Obj
   criterionDefinitions: Object.freeze([{ id: 'verified', version: 1, description: 'Verify fixture task', evaluator: { id: 'test-evaluator', version: 1 }, parameters: {} }]) });
 
 function currentSnapshot() {
-  return Object.freeze({ schemaVersion: 3 as const, identity, revision: 0, graph, execution: fixtureExecution(graph),
+  return Object.freeze({ schemaVersion: 4 as const, state: { kind: 'running' as const }, identity, revision: 0, graph, execution: fixtureExecution(graph),
     progress: Object.freeze([{ taskId: 't', phase: 'pending' as const, unresolvedEffects: false,
       eligibility: Object.freeze({ kind: 'immediate' as const }) }]), bindings: Object.freeze([]), cancelRequested: false });
 }
@@ -38,7 +38,7 @@ it('advances an empty version-seven ledger to current version fourteen', async (
   const root = await mkdtemp(join(tmpdir(), 'deckent-registry-migration-')); const path = join(root, 'ledger.db');
   try {
     const db = new DatabaseSync(path); createSchemaSeven(db); db.close();
-    const store = await openSqliteAttemptStore(path, options); store.close();
+    const store = await openSqliteAttemptStore(path, options, { now: Date.now, timeoutMs: 86400000 }); store.close();
     const check = new DatabaseSync(path, { readOnly: true });
     try { expect(check.prepare('PRAGMA user_version').get()!.user_version).toBe(CURRENT_LEDGER_VERSION); } finally { check.close(); }
   } finally { await rm(root, { recursive: true, force: true }); }
@@ -51,7 +51,7 @@ it('rejects an old Run schema without fabricating execution evidence or changing
     const db = new DatabaseSync(path); createSchemaSeven(db);
     db.prepare('INSERT INTO runs(scope_id,run_id,revision,snapshot,policy) VALUES(?,?,?,?,?)').run('s', 'r', 0, JSON.stringify(legacy), '{}'); db.close();
     const before = await readFile(path);
-    await expect(openSqliteAttemptStore(path, options)).rejects.toMatchObject({ code: 'LEDGER_MIGRATION_EVIDENCE_REQUIRED' });
+    await expect(openSqliteAttemptStore(path, options, { now: Date.now, timeoutMs: 86400000 })).rejects.toMatchObject({ code: 'LEDGER_MIGRATION_EVIDENCE_REQUIRED' });
     expect(await readFile(path)).toEqual(before);
     const check = new DatabaseSync(path, { readOnly: true });
     try { expect(check.prepare('PRAGMA user_version').get()!.user_version).toBe(7); } finally { check.close(); }
@@ -68,7 +68,7 @@ it('accepts a complete current Run and create receipt with selected registry evi
     db.prepare('INSERT INTO run_receipts(scope_id,command_id,command,snapshot) VALUES(?,?,?,?)')
       .run('s', 'create', command, JSON.stringify(historical));
     db.close();
-    const store = await openSqliteAttemptStore(path, options); expect(await store.loadRun('s', 'r')).toEqual(snapshot); store.close();
+    const store = await openSqliteAttemptStore(path, options, { now: Date.now, timeoutMs: 86400000 }); expect(await store.loadRun('s', 'r')).toEqual(snapshot); store.close();
     const check = new DatabaseSync(path, { readOnly: true });
     try {
       expect(check.prepare('PRAGMA user_version').get()!.user_version).toBe(CURRENT_LEDGER_VERSION);
@@ -85,7 +85,7 @@ it('rejects a current-shaped Run whose stored fingerprint does not match its cri
     const db = new DatabaseSync(path); createSchemaSeven(db);
     db.prepare('INSERT INTO runs(scope_id,run_id,revision,snapshot,policy) VALUES(?,?,?,?,?)').run('s', 'r', 0, JSON.stringify(tampered), '{}'); db.close();
     const before = await readFile(path);
-    await expect(openSqliteAttemptStore(path, options)).rejects.toMatchObject({ code: 'LEDGER_MIGRATION_EVIDENCE_REQUIRED' });
+    await expect(openSqliteAttemptStore(path, options, { now: Date.now, timeoutMs: 86400000 })).rejects.toMatchObject({ code: 'LEDGER_MIGRATION_EVIDENCE_REQUIRED' });
     expect(await readFile(path)).toEqual(before);
     const check = new DatabaseSync(path, { readOnly: true });
     try { expect(check.prepare('PRAGMA user_version').get()!.user_version).toBe(7); } finally { check.close(); }

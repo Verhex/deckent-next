@@ -13,7 +13,7 @@ import { createHmacIntegrity } from '#platform/index.js';
 import { getPolicyVocabulary, installationOwnerPermissions, INSTALLATION_OWNER_ROLE_ID, resolvePolicyBindings } from '#domain/index.js';
 import { fixtureExecution } from '../support/execution-registry.js';
 import { custodyProfiles, dispatchAdmission, grantTestLaunch } from '../support/custody.js';
-import { DOWNGRADE_TO_PREVIOUS_LEDGER_SQL, PREVIOUS_LEDGER_VERSION } from '../../fixtures/ledger-previous.js';
+import { DOWNGRADE_TO_V43_LEDGER_SQL, PREVIOUS_LEDGER_VERSION } from '../../fixtures/ledger-previous.js';
 
 // K5 typed execution pool hold (owner 2026-09-30 option A; lane Jev 2e7be700): no new reservation while held, already reserved work runs,
 // finishes and is evaluated, resume re-enables; installation-level authority; every decision sealed in the audit; replay is exact.
@@ -35,7 +35,7 @@ const status = { schemaVersion: 1, scopeId: 's' };
 async function fixture() {
   const root = await mkdtemp(join(tmpdir(), 'deckent-pool-hold-')); roots.push(root);
   const path = join(root, 'ledger.db');
-  const store = await openSqliteAttemptStore(path, options, 'allow', custodyProfiles); stores.push(store);
+  const store = await openSqliteAttemptStore(path, options, { now: Date.now, timeoutMs: 86400000 }, 'allow', custodyProfiles); stores.push(store);
   const graph = { schemaVersion: 2 as const, revision: 1, tasks: ['a', 'b', 'c'].map(id => ({ id, kind: 'fixture', dependencies: id === 'c' ? ['a', 'b'] : [], acceptanceCriteria: ['verified'] })),
     criterionDefinitions: [{ id: 'verified', version: 1, description: 'fixture', evaluator: { id: 'test', version: 1 }, parameters: {} }] };
   const capacity = { executionSlots: 2, inFlightSlots: 2 };
@@ -229,9 +229,9 @@ describe.skipIf(process.platform === 'win32')('ledger v44 pool hold tables', () 
   }
   const read = (path: string, sql: string) => { const db = new DatabaseSync(path, { readOnly: true }); try { return db.prepare(sql).all(); } finally { db.close(); } };
   it('upgrades a v43 ledger losslessly: 0600 backup at v43, every existing table unchanged, two empty hold tables; a v43 open refuses v44', async () => {
-    expect(CURRENT_LEDGER_VERSION).toBe(44); expect(POOL_HOLD_LEDGER_VERSION).toBe(44); expect(PREVIOUS_LEDGER_VERSION).toBe(43);
+    expect(CURRENT_LEDGER_VERSION).toBe(45); expect(POOL_HOLD_LEDGER_VERSION).toBe(44); expect(PREVIOUS_LEDGER_VERSION).toBe(44);
     const { path, backups } = await ledger();
-    const db = new DatabaseSync(path); db.exec(DOWNGRADE_TO_PREVIOUS_LEDGER_SQL);
+    const db = new DatabaseSync(path); db.exec(DOWNGRADE_TO_V43_LEDGER_SQL);
     db.prepare('INSERT INTO execution_pools(pool_id,policy) VALUES(?,?)').run('p', '{"kept":true}');
     db.close();
     const tables = () => read(path, "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name").map(row => String(row.name));
@@ -240,9 +240,9 @@ describe.skipIf(process.platform === 'win32')('ledger v44 pool hold tables', () 
     expect(() => openSqliteLedger(path, options, 'forbid')).toThrow(expect.objectContaining({ code: 'ATTEMPT_STORE_VERSION' }));
     const upgrade = await upgradeExistingProductLedger(path, options, backups, new Date('2026-10-01T08:00:00.000Z'));
     const backupPath = join(backups, 'ledger-v43-2026-10-01T08-00-00-000Z.db');
-    expect(upgrade).toEqual({ from: 43, to: 44, backupPath });
+    expect(upgrade).toEqual({ from: 43, to: 45, backupPath });
     expect((await stat(backupPath)).mode & 0o777).toBe(0o600);
-    expect(read(backupPath, 'PRAGMA user_version')[0]!.user_version).toBe(43); expect(read(path, 'PRAGMA user_version')[0]!.user_version).toBe(44);
+    expect(read(backupPath, 'PRAGMA user_version')[0]!.user_version).toBe(43); expect(read(path, 'PRAGMA user_version')[0]!.user_version).toBe(45);
     expect(Object.fromEntries(before.map(name => [name, read(path, `SELECT * FROM "${name}"`)]))).toEqual(rows);
     expect(tables().filter(name => name.startsWith('execution_pool_hold'))).toEqual(['execution_pool_hold_receipts', 'execution_pool_holds']);
     // The rule a v43 build applies: a newer ledger is refused, never opened.
@@ -251,14 +251,14 @@ describe.skipIf(process.platform === 'win32')('ledger v44 pool hold tables', () 
   });
   it('rolls the v44 step back when a same-name object of another shape exists (ledger stays at v43)', async () => {
     const { path } = await ledger();
-    const db = new DatabaseSync(path); db.exec(`${DOWNGRADE_TO_PREVIOUS_LEDGER_SQL} CREATE TABLE execution_pool_holds(id INTEGER PRIMARY KEY, payload TEXT);`); db.close();
+    const db = new DatabaseSync(path); db.exec(`${DOWNGRADE_TO_V43_LEDGER_SQL} CREATE TABLE execution_pool_holds(id INTEGER PRIMARY KEY, payload TEXT);`); db.close();
     expect(() => openSqliteLedger(path, options, 'allow')).toThrow(expect.objectContaining({ code: 'ATTEMPT_STORE_VERSION' }));
     expect(read(path, 'PRAGMA user_version')[0]!.user_version).toBe(43);
     expect(read(path, "SELECT name FROM sqlite_master WHERE type='table' AND name LIKE 'execution_pool_hold%'").map(row => row.name)).toEqual(['execution_pool_holds']);
   });
   it('treats a hold row that disagrees with its record as corruption, never as open', async () => {
     const { path } = await ledger();
-    const store = await openSqliteAttemptStore(path, options); stores.push(store);
+    const store = await openSqliteAttemptStore(path, options, { now: Date.now, timeoutMs: 86400000 }); stores.push(store);
     await store.createExecutionPool({ schemaVersion: 1, poolId: 'p', capacity: { executionSlots: 1, inFlightSlots: 1 } });
     const db = new DatabaseSync(path); db.prepare("INSERT INTO execution_pool_holds(pool_id,revision,state,record) VALUES('p',1,'open',?)")
       .run(JSON.stringify({ schemaVersion: 1, poolId: 'p', state: 'held', revision: 1, changedBy: { issuer: 'a', subject: 'b' }, changedAtMs: 1, scopeId: 's', commandId: 'c', reason: null })); db.close();

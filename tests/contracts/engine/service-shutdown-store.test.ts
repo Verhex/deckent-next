@@ -23,7 +23,7 @@ async function fixture() {
   return join(root, 'execution.db');
 }
 async function open(path: string, migration: 'allow' | 'forbid' = 'allow') {
-  const store = await openSqliteAttemptStore(path, options, migration); stores.push(store); return store;
+  const store = await openSqliteAttemptStore(path, options, { now: Date.now, timeoutMs: 86400000 }, migration); stores.push(store); return store;
 }
 function admission(overrides: Partial<ShutdownAdmission> = {}): ShutdownAdmission {
   return {
@@ -57,7 +57,7 @@ function concurrentAdmission(path: string, input: ShutdownAdmission) {
     const { parentPort, workerData } = require('node:worker_threads');
     (async () => {
       const { openSqliteAttemptStore } = await import(workerData.module);
-      const store = await openSqliteAttemptStore(workerData.path, workerData.options);
+      const store = await openSqliteAttemptStore(workerData.path, workerData.options, { now: Date.now, timeoutMs: 86400000 });
       parentPort.postMessage({ ready: true }); Atomics.wait(new Int32Array(workerData.gate), 0, 0);
       try { parentPort.postMessage({ result: await store.admitServiceShutdown(workerData.input) }); }
       catch (error) { parentPort.postMessage({ error: error && error.code || String(error) }); }
@@ -155,7 +155,7 @@ describe('SQLite service shutdown journal', () => {
     const old = new DatabaseSync(path);
     old.prepare('INSERT INTO execution_pools(pool_id,policy) VALUES(?,?)').run('preserved', '{"marker":true}');
     old.exec('DROP TABLE provider_spend_audits; DROP TABLE model_invocation_spend_reservations; DROP TABLE provider_spend_accounts; DROP TABLE model_invocation_allocation_checkpoints; DROP INDEX model_invocations_allocation_identity; DROP TABLE model_invocation_cancellations; DROP TABLE model_invocation_controls; DROP INDEX model_invocations_allocation_state; DROP TABLE model_invocation_contents; DROP TABLE model_invocation_content_purges; DROP TABLE model_invocations; DROP TABLE model_invocation_allocations; DROP TABLE model_activation_receipts; DROP TABLE model_activations; DROP TABLE installation_ownership; DROP TABLE service_shutdown_commands; DROP TABLE service_shutdown_outcomes; DROP TABLE IF EXISTS run_execution_intents; DROP TABLE IF EXISTS task_evaluation_observations; DROP TABLE IF EXISTS workspace_integrations; DROP TABLE IF EXISTS workspace_deliveries; DROP TABLE IF EXISTS workspace_adoptions; DROP TABLE IF EXISTS effect_intents; DROP TABLE IF EXISTS agent_turn_tool_calls; DROP TABLE IF EXISTS agent_turns; DROP TABLE IF EXISTS worker_event_logs; DROP TABLE IF EXISTS approval_outbox; DROP TABLE IF EXISTS approval_receipts; DROP TABLE IF EXISTS approvals; PRAGMA user_version=9'); old.close();
-    await expect(openSqliteAttemptStore(path, options, 'forbid')).rejects.toThrow('ATTEMPT_STORE_VERSION');
+    await expect(openSqliteAttemptStore(path, options, { now: Date.now, timeoutMs: 86400000 }, 'forbid')).rejects.toThrow('ATTEMPT_STORE_VERSION');
     const migrated = await open(path);
     expect(await migrated.readServiceShutdown({ scopeId: 'scope-a', serviceId: 'service-a', commandId: 'command-a' })).toBeNull();
     const check = new DatabaseSync(path, { readOnly: true });
@@ -163,6 +163,6 @@ describe('SQLite service shutdown journal', () => {
     expect(check.prepare('SELECT policy FROM execution_pools WHERE pool_id=?').get('preserved')?.policy).toBe('{"marker":true}'); check.close();
     migrated.close(); stores.splice(stores.indexOf(migrated), 1);
     const future = new DatabaseSync(path); future.exec(`PRAGMA user_version=${CURRENT_LEDGER_VERSION + 1}`); future.close();
-    await expect(openSqliteAttemptStore(path, options)).rejects.toThrow('ATTEMPT_STORE_VERSION');
+    await expect(openSqliteAttemptStore(path, options, { now: Date.now, timeoutMs: 86400000 })).rejects.toThrow('ATTEMPT_STORE_VERSION');
   });
 });

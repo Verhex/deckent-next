@@ -21,7 +21,7 @@ async function fixture() {
   const env: NodeJS.ProcessEnv = cliChildEnv({ HOME: join(project, 'home'), DECKENT_LANGUAGE: 'en', NO_COLOR: '1' }); delete env.DECKENT_HOME;
   await writeFile(join(project, '.deckent/config.json'), JSON.stringify({ layout: { root: data }, inspection: { maxPageSize: 1, policyMaxBytes: 65536 } }));
   const opened = await openConfiguredAttemptStore(project, { env }); opened.store.close();
-  const store = await openSqliteAttemptStore(opened.path, { busyTimeoutMs: 20, journalMode: 'wal', durability: 'full' }, 'allow', custodyProfiles);
+  const store = await openSqliteAttemptStore(opened.path, { busyTimeoutMs: 20, journalMode: 'wal', durability: 'full' }, { now: Date.now, timeoutMs: 86400000 }, 'allow', custodyProfiles);
   try {
     const identities = ['a', 'b'].map(attemptId => ({ runId: 'r', taskId: attemptId, attemptId, scopeId: 's', generation: 1, layoutRevision: opened.layout.revision }));
     await admitRunAttempts(store, identities);
@@ -55,7 +55,7 @@ describe.skipIf(process.platform === 'win32')('shipped inventory CLI and SDK', (
     const f = await fixture(); const identity = { runId: 'r', taskId: 'a', attemptId: 'a', scopeId: 's', generation: 1, layoutRevision: f.layoutRevision };
     const request = { protocolVersion: 1 as const, identity, workspace: '/secret-path', argv: ['private-token'] };
     const claim = { owner: 'worker', request };
-    const store = await openSqliteAttemptStore(f.ledgerPath, { busyTimeoutMs: 20, journalMode: 'wal', durability: 'full' }, 'allow', custodyProfiles);
+    const store = await openSqliteAttemptStore(f.ledgerPath, { busyTimeoutMs: 20, journalMode: 'wal', durability: 'full' }, { now: Date.now, timeoutMs: 86400000 }, 'allow', custodyProfiles);
     try {
       await store.requestDispatchCancellation(request, custodyPrincipal);
       expect(await grantTestLaunch(store, claim)).toMatchObject({ kind: 'prevented', record: { launch: 'prevented-before-launch' } });

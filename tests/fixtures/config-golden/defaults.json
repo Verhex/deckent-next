@@ -73,6 +73,10 @@
     "failureBackoffMs": 5000,
     "maxReservationsPerTurn": 4,
     "pageSize": 64,
+    "parking": {
+      "schemaVersion": 1,
+      "timeoutMs": 86400000
+    },
     "pollIntervalMs": 1000
   },
   "schema_version": 4,

@@ -24,7 +24,7 @@ const v1Rollback = (commandId: string, adoptionCommandId: string, targetRef: str
   command: { schemaVersion: 1, commandId, identity, adoptionCommandId }, targetRef, fromCommit: delivered, toCommit: base, actor });
 
 it('upgrades a v41 ledger to v42: backup at v41, v1 adoptions rewritten losslessly to v2, rollbacks and corrupt rows untouched', async () => {
-  expect(CURRENT_LEDGER_VERSION).toBe(44); expect(ADOPTION_VERIFICATION_LEDGER_VERSION).toBe(42);
+  expect(CURRENT_LEDGER_VERSION).toBe(45); expect(ADOPTION_VERIFICATION_LEDGER_VERSION).toBe(42);
   const root = await mkdtemp(join(tmpdir(), 'dn-adoption-v42-')); roots.push(root);
   const path = join(root, 'ledger.db'), backups = join(root, 'backups'); await mkdir(backups, { mode: 0o700 });
   openSqliteLedger(path, options).close();
@@ -60,7 +60,7 @@ it('upgrades a v41 ledger to v42: backup at v41, v1 adoptions rewritten lossless
   expect(after.corrupt).toBe('{"schemaVersion":1,"kind":"adopt"}');
   expect(after.mismatched).toBe(v1Adopt('mismatched', 'refs/heads/other'));
 
-  const store = await openSqliteAttemptStore(path, options, 'forbid');
+  const store = await openSqliteAttemptStore(path, options, { now: Date.now, timeoutMs: 86400000 }, 'forbid');
   try {
     // A pre-upgrade adoption replays with the command today's SDK sends (v2, no verification fields): byte-equal command.
     const settled = (await store.loadAdoption('s', 'settled'))!;

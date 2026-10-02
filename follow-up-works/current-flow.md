@@ -1,10 +1,3 @@
-# CATALOG-V3 — lane/catalog-v3 (2026-10-02)
-
-Base 95c72a81; CATALOG-V3 uygulandı: additive v3 record, v2/makbuz uyumluluğu, Claude + Codex abonelik tohumları ve öneri listeleri, en/tr CLI, Monitor üretici/faturalama. SQL migrasyonu yok, v13 değişmedi. Öneriler kayıtta activation yaratmaz.
-Doğrulama: 12 dosya 106/106; bounded admission 11 geçti/3 runtime-socket dışlandı (ilk koşuda 2 taşıma katmanı hatası). 6/6 gerçek mutasyon yakalandı, kod geri yüklendi. Typecheck/eslint 0; arch 0 ihlal/0 uyarı; core-memory 0 ihlal. Kanıt: dış `proof/MODEL-CATALOG-2026-10-02/review.md`.
-Teslim: `0a2afdd2` record commit’i; ikinci commit index.lock EROFS nedeniyle yazılamadı. Kalan ağaç dış kanıtta `0002-codex-seed.patch` ve `git-diff-stat.txt`; lead commit edecek.
-Sınırlar: canlı sağlayıcı/servis veya Docker çalıştırılmadı; full verify/build/push yok. Claude bilinmeyen alanlar null/unknown; Codex cache sabit kanıt görüntüsünden. Sonraki adım: lead bağımsız incelemesi ve entegrasyon; owner canlı komut dosyası ayrıca hazır, çalıştırılmadı. Bağımsız inceleme yok; PASS değildir.
-
 # Anlık iş akışı — devir, sıradaki adım, kanıt (2026-09-29, Opus 5.5 lead)
 
 Bu belge yalnız güncel durumu tutar; önceki sürümü Git geçmişinde, kanıtlar `deckent-refactor-work/proof/`.
@@ -48,8 +41,8 @@ Bu bölüm güncel durumdur; önceki parti anlatıları Git geçmişinde (bu dos
 - **26. parti** `integrate/2026-10-02-aa` (worktree `/home/alperen/deckent-next-integrate-aa`, taban `dcaf7683`): CATALOG-V3 `b50b8a6e` (Sol 2247 sınırlı PASS),
   PLAN kartları `662812fc`, bu belge dilimi. Tam verify/Sol parti incelemesi şeritler girince.
 - **Şeritler (Codex uygulayıcı, lead commit, bağımsız inceleme Fable/Sol):**
-  - A1/A3 `lane/run-park-timeout`: `ca753477` + `6d06bb41` + `6a8c3298` (Fable REVISE R1–R3 düzeltmesi); Fable yeniden inceleme REVISE tek P1 (bakım turu her
-    ilerlemede `run:cancel` istiyordu) → REVISE 2 Codex'te. Lead kararı A3 dönüşü: Jev a8e582fe `typed_return_on_new_evidence`.
+  - A1/A3 `lane/run-park-timeout`: `ca753477` + `6d06bb41` + `6a8c3298` + `18d39682` (iki Fable REVISE düzeltmesi); Fable üçüncü inceleme **PASS** exact `18d39682`;
+    lead native/dist 7 dosya 82/82; 26. partiye birleştirildi. Lead kararı A3 dönüşü: Jev a8e582fe `typed_return_on_new_evidence`.
   - CONFIG-SURFACE `lane/config-surface` `19a6bb42` → Fable REVISE düzeltmesi `c86d9d33` → i18n `5cbce321`; Fable **PASS** exact `5cbce321`; 26. partiye birleştirildi.
   - CLI-HELP `lane/cli-help`, HARDCODE-RATCHET `lane/hardcode-ratchet` (ikisi de taban `19a6bb42`), AOF-DECISION-PORT `lane/aof-decision-port` (taban `662812fc`): Codex'te.
 - **Analizler (salt okunur):** HARDCODE-AUDIT (~173 ihlal grubu, P1 19; `proof/HARDCODE-AUDIT-2026-10-02/`), AGENT-OS-FOUNDATIONS
@@ -58,7 +51,7 @@ Bu bölüm güncel durumdur; önceki parti anlatıları Git geçmişinde (bu dos
   (A-01 geçişli waiting, A-02/A-03 push yok, A-07 doctor sabit ready); kalan F4/QUESTIONS/Jev/rapor owner kararıyla gece.
 
 ## Sıradaki
-1. A1/A3 REVISE 2 → Fable yeniden inceleme → 26. partiye birleşme (CONFIG-SURFACE ile çakışma çözümü lead).
+1. 26. parti (CATALOG-V3 + CONFIG-SURFACE + A1/A3) tam verify → Sol parti incelemesi → push → owner/RC talimatıyla canlı geçiş; ardından AOF-HANDOFF.
 2. CONFIG-SURFACE 26. partide; sıradaki HARDCODE-P1 kartı; owner vLLM/Qwen adımları (`proof/CONFIG-SURFACE-2026-10-02/owner-vllm-steps.md`).
 3. CLI-HELP, HARDCODE-RATCHET, AOF-DECISION-PORT teslimleri → bağımsız inceleme → 26./27. parti; A1/A3 girince AOF-HANDOFF.
 4. 26. parti tam verify → Sol → push → owner/RC talimatıyla canlı geçiş.

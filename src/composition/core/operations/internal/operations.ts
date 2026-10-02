@@ -36,7 +36,7 @@ async function withEffects<T>(root: string, scopeId: string, options: ConfigLoad
     // A producer of approvals, like Run reservation and the agent turn: the integrity key is created on first use (decisions only read it).
     const integrity = await openLocalIntegrityAuthority(layout, config.approvals.keyFile, true);
     const ledger = await path();
-    const store = await openSqliteAttemptStore(ledger, config.storage.sqlite, 'forbid');
+    const store = await openSqliteAttemptStore(ledger, config.storage.sqlite, { now: Date.now, timeoutMs: config.runRuntime.parking.timeoutMs }, 'forbid');
     const journal = openSqliteApprovalStore(ledger, config.storage.sqlite);
     try {
       const broker = new OperationApprovalBroker(journal.store, integrity, source, clock,

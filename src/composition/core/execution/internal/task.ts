@@ -21,7 +21,8 @@ export async function executeConfiguredTask(projectRoot: string, input: AttemptI
     const os = userInfo(); const verifier = { async verify() { return principal; } };
     const policy = createLayoutPolicySource(layout, os.uid, config.inspection.policyMaxBytes), authorization = workTargetAttemptAuthorization(new DispatchPolicyAuthorization(policy), policy, selectWorkTarget(config.execution)?.id ?? null);
     await authorization.authorizeIdentity('execute', identity, await authenticate(verifier, undefined, identity.scopeId));
-    const store = await openSqliteAttemptStore(await path(), config.storage.sqlite, 'forbid', { validate: validateDockerSupervisorProfile });
+    const store = await openSqliteAttemptStore(await path(), config.storage.sqlite, { now: Date.now, timeoutMs: config.runRuntime.parking.timeoutMs }, 'forbid', { validate: validateDockerSupervisorProfile });
+
     try {
       const existing = await store.loadBoundDispatch(identity);
       if (existing) return Object.freeze({ schemaVersion: 1 as const, layout, execution: Object.freeze({ identity,

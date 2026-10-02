@@ -1,7 +1,7 @@
 import { cliUsage } from './usage.js';
 import { ErrorRegistry, emit, loadConfig, resolveLocale, t, type ConfigLoadOptions, type ProductLayout } from '#platform/index.js';
 import { attemptIdentitySchema, type AttemptIdentity } from '#domain/index.js';
-import { taskEvaluationCommandSchema, type DispatchTerminal, type RunView, type TaskEvaluationCommand } from '#engine/index.js';
+import { runLifecycleCommandSchema, taskEvaluationCommandSchema, type DispatchTerminal, type RunView, type TaskEvaluationCommand } from '#engine/index.js';
 import type { WorkspaceAdoptionApplication, IntegrationAdoptionCommand, IntegrationRollbackCommand, WorkspaceDeliveryApplication, IntegrationDeliveryCommand, WorkspaceIntegrationInspection, IntegrationQuery, WorkspaceIntegrationApplication, IntegrationCommand, WorkspacePatch, PatchScope } from '#engine/index.js';
 import type { ArtifactReceipt } from '#capabilities/index.js';
 export type TaskIntegrationDeliverHandler = (root: string, command: IntegrationDeliveryCommand, options: ConfigLoadOptions) => ReturnType<WorkspaceDeliveryApplication['deliver']>;
@@ -35,6 +35,40 @@ async function resolveLatestAttempt(context: CommandContext, scopeId: string, ru
   if (!best) throw ErrorRegistry.createError('ATTEMPT_NOT_FOUND', { params: { run: runId, task: taskId } });
   return best;
 }
+async function decideTask(action: 'accept' | 'reject', values: ReadonlyMap<string, string>, context: CommandContext, json: boolean, usage: (flag?: string) => Error) {
+  const scopeId = values.get('--scope'), runId = values.get('--run'), taskId = values.get('--task');
+  const commandId = values.get('--command-id'), revision = values.get('--expected-revision');
+  if (!scopeId || !runId || !taskId || !commandId || !revision || !/^(0|[1-9][0-9]*)$/.test(revision) || !Number.isSafeInteger(Number(revision))) throw usage('--expected-revision');
+  if (values.has('--attempt') || values.has('--layout-revision') || values.has('--generation')) throw usage('--attempt');
+  if (!context.applyRunLifecycle) throw ErrorRegistry.createError('INVENTORY_UNAVAILABLE');
+  const locale = resolveLocale(values.get('--lang'), context.env);
+  const result = await context.applyRunLifecycle(context.root ?? process.cwd(), runLifecycleCommandSchema.parse({ schemaVersion: 1, commandId, scopeId, runId, taskId,
+    action, expectedRevision: Number(revision) }), { env: context.env ?? process.env });
+  emit(result, { json, ...(context.stdout ? { stdout: context.stdout } : {}), render: data => {
+    const task = data?.lifecycle.run.tasks.find(value => value.id === taskId);
+    return task?.acceptedEvidence === 'model-unverified' ? t('cli.task.decision.acceptedUnverified', {}, locale) : task?.phase ?? '';
+  } }); return;
+}
+
+async function evaluateTask(values: ReadonlyMap<string, string>, context: CommandContext, identity: AttemptIdentity, json: boolean, usage: (flag?: string) => Error) {
+  const taskId = identity.taskId, locale = resolveLocale(values.get('--lang'), context.env);
+  const options = { env: context.env ?? process.env };
+  const commandId = values.get('--command-id'), revision = values.get('--expected-revision');
+  if (!commandId || !revision || !/^(0|[1-9][0-9]*)$/.test(revision) || !Number.isSafeInteger(Number(revision))) throw usage(!commandId ? '--command-id' : !revision ? '--expected-revision' : undefined);
+  if (!context.evaluateTask) throw ErrorRegistry.createError('INVENTORY_UNAVAILABLE');
+  const command = taskEvaluationCommandSchema.parse({ schemaVersion: 1, commandId, identity, expectedRevision: Number(revision) });
+  const result = await context.evaluateTask(context.root ?? process.cwd(), command, options);
+  emit(result, { json, ...(context.stdout ? { stdout: context.stdout } : {}), render: data => {
+    const task = data.evaluation.run.tasks.find(value => value.id === taskId); if (!task) throw ErrorRegistry.createError('RUN_STORE_CORRUPT');
+    const phases = { pending: t('cli.run.inspect.states.pending', {}, locale), active: t('cli.run.inspect.states.active', {}, locale),
+      evaluating: t('cli.run.inspect.states.evaluating', {}, locale), accepted: t('cli.run.inspect.states.accepted', {}, locale),
+      failed: t('cli.run.inspect.states.failed', {}, locale), cancelled: t('cli.run.inspect.states.cancelled', {}, locale),
+      reconciling: t('cli.run.inspect.states.reconciling', {}, locale), skipped: t('cli.run.inspect.states.skipped', {}, locale),
+      'awaiting-decision': t('cli.run.inspect.states.awaitingDecision', {}, locale) };
+    return t('cli.task.evaluate.result', { task: taskId, command: commandId, phase: phases[task.phase], revision: data.evaluation.run.revision }, locale);
+  } });
+}
+
 const identityFlags = ['--scope', '--run', '--task', '--attempt', '--generation', '--layout-revision', '--lang'];
 export async function taskCommand(argv: readonly string[], context: CommandContext): Promise<void> {
   const action = argv[1];
@@ -43,9 +77,9 @@ export async function taskCommand(argv: readonly string[], context: CommandConte
   const earlyLocale = resolveLocale(requestedLanguage?.startsWith('-') ? undefined : requestedLanguage, context.env);
   context.onLocale?.(earlyLocale);
   const usage = (flag?: string) => cliUsage('task', action, earlyLocale, flag);
-  if (!['execute', 'evaluate', 'patch-prepare', 'patch-preview', 'integration-check', 'integration-prepare', 'integration-inspect', 'integration-deliver', 'integration-adopt', 'integration-rollback', 'transcript'].includes(action ?? '')) throw usage();
+  if (!['execute', 'evaluate', 'accept', 'reject', 'patch-prepare', 'patch-preview', 'integration-check', 'integration-prepare', 'integration-inspect', 'integration-deliver', 'integration-adopt', 'integration-rollback', 'transcript'].includes(action ?? '')) throw usage();
   const flags = action === 'patch-preview' ? ['--stat', '--diff'] : [];
-  const allowed = action === 'evaluate' ? [...identityFlags, '--command-id', '--expected-revision'] : action === 'integration-prepare' ? [...identityFlags, '--command-id', '--proposal', '--replaces-command-id'] : action === 'integration-deliver' ? [...identityFlags, '--command-id', '--candidate-command-id'] : action === 'integration-adopt' ? [...identityFlags, '--command-id', '--delivery-command-id', '--target', '--verification-run'] : action === 'integration-rollback' ? [...identityFlags, '--command-id', '--adoption-command-id'] : action === 'integration-inspect' ? [...identityFlags, '--command-id'] : identityFlags;
+  const allowed = ['evaluate', 'accept', 'reject'].includes(action ?? '') ? [...identityFlags, '--command-id', '--expected-revision'] : action === 'integration-prepare' ? [...identityFlags, '--command-id', '--proposal', '--replaces-command-id'] : action === 'integration-deliver' ? [...identityFlags, '--command-id', '--candidate-command-id'] : action === 'integration-adopt' ? [...identityFlags, '--command-id', '--delivery-command-id', '--target', '--verification-run'] : action === 'integration-rollback' ? [...identityFlags, '--command-id', '--adoption-command-id'] : action === 'integration-inspect' ? [...identityFlags, '--command-id'] : identityFlags;
   const values = new Map<string, string>(); let json = false, stat = false, diff = false;
   for (let i = 2; i < argv.length; i++) {
     const arg = argv[i]!;
@@ -59,6 +93,7 @@ export async function taskCommand(argv: readonly string[], context: CommandConte
   if ((stat && diff) || (json && (stat || diff))) throw usage(stat ? '--stat' : '--diff');
   const scopeId = values.get('--scope'), runId = values.get('--run'), taskId = values.get('--task'), attemptId = values.get('--attempt');
   const layoutRevision = values.get('--layout-revision'), generation = values.get('--generation');
+  if (action === 'accept' || action === 'reject') { await decideTask(action, values, context, json, usage); return; }
   const resolveLatest = ['patch-preview', 'transcript', 'integration-inspect'].includes(action ?? '') && !attemptId && !layoutRevision && !generation;
   let identity: AttemptIdentity;
   let resolvedNotice: Readonly<{ attempt: string; generation: number; layout: string; run: string; task: string }> | undefined;
@@ -182,17 +217,5 @@ export async function taskCommand(argv: readonly string[], context: CommandConte
       t('cli.task.execute.notice', {}, locale),
     ].join('\n') }); return;
   }
-  const commandId = values.get('--command-id'), revision = values.get('--expected-revision');
-  if (!commandId || !revision || !/^(0|[1-9][0-9]*)$/.test(revision) || !Number.isSafeInteger(Number(revision))) throw usage(!commandId ? '--command-id' : !revision ? '--expected-revision' : undefined);
-  if (!context.evaluateTask) throw ErrorRegistry.createError('INVENTORY_UNAVAILABLE');
-  const command = taskEvaluationCommandSchema.parse({ schemaVersion: 1, commandId, identity, expectedRevision: Number(revision) });
-  const result = await context.evaluateTask(context.root ?? process.cwd(), command, options);
-  emit(result, { json, ...(context.stdout ? { stdout: context.stdout } : {}), render: data => {
-    const task = data.evaluation.run.tasks.find(value => value.id === taskId); if (!task) throw ErrorRegistry.createError('RUN_STORE_CORRUPT');
-    const phases = { pending: t('cli.run.inspect.states.pending', {}, locale), active: t('cli.run.inspect.states.active', {}, locale),
-      evaluating: t('cli.run.inspect.states.evaluating', {}, locale), accepted: t('cli.run.inspect.states.accepted', {}, locale),
-      failed: t('cli.run.inspect.states.failed', {}, locale), cancelled: t('cli.run.inspect.states.cancelled', {}, locale),
-      reconciling: t('cli.run.inspect.states.reconciling', {}, locale) };
-    return t('cli.task.evaluate.result', { task: taskId, command: commandId, phase: phases[task.phase], revision: data.evaluation.run.revision }, locale);
-  } });
+  await evaluateTask(values, context, identity, json, usage);
 }

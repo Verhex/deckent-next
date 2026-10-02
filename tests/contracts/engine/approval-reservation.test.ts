@@ -11,7 +11,7 @@ import { fixtureExecution } from '../support/execution-registry.js';
 it.skipIf(process.platform !== 'linux')('[requires Linux live OS session /proc identity] pending approval occupies no candidate slot; allow requires a fresh reservation and replay cannot expand', async () => {
   const root = await mkdtemp(join(tmpdir(), 'deckent-approval-reserve-')); const path = join(root, 'ledger.db');
   const options = { busyTimeoutMs: 100, journalMode: 'wal', durability: 'full' } as const;
-  const store = await openSqliteAttemptStore(path, options); const journal = openSqliteApprovalStore(path, options);
+  const store = await openSqliteAttemptStore(path, options, { now: Date.now, timeoutMs: 86400000 }); const journal = openSqliteApprovalStore(path, options);
   try {
     const clock = { sample: () => ({ wallMs: 1000, monotonicMs: 100 }) };
     const sessions = await LocalOsSessionAuthority.create(['scope'], 10000, clock); const { principal, session } = await sessions.verifySession(undefined);

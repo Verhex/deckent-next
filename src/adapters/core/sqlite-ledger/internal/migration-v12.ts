@@ -27,7 +27,7 @@ function convert(source: unknown, creation: RunCreate): RunSnapshot {
     const rest = { ...value }; delete rest.eligibleAt;
     return { ...rest, eligibility: { kind: 'immediate' } };
   });
-  const current = evidence(() => runSnapshotSchema.parse({ ...old, schemaVersion: 3, progress }));
+  const current = evidence(() => runSnapshotSchema.parse({ ...old, schemaVersion: 4, state: { kind: 'running' }, progress }));
   evidence(() => assertRunExecution(current.graph, current.execution));
   if (!same(current.identity, creation.identity) || !same(current.graph, creation.graph) || !same(current.execution, creation.execution)) return invalid();
   return current;
@@ -37,6 +37,7 @@ function convert(source: unknown, creation: RunCreate): RunSnapshot {
  * Validate orphan receipts first; retain original command bytes and convert one Run at a time.
  */
 export function migrateImmediateEligibility(db: DatabaseSync): void {
+  const encodedV3 = (snapshot: RunSnapshot) => { const { state: _state, ...rest } = snapshot; void _state; return JSON.stringify({ ...rest, schemaVersion: 3 }); };
   for (const row of db.prepare('SELECT scope_id,command_id,command,snapshot FROM run_receipts').iterate()) {
       const snapshot = decoded(row.snapshot), identity = object(snapshot.identity), command = decoded(row.command);
       if (identity.scopeId !== row.scope_id || command.commandId !== row.command_id || typeof identity.runId !== 'string') invalid();
@@ -73,9 +74,9 @@ export function migrateImmediateEligibility(db: DatabaseSync): void {
         if (converted.revision > current.revision) invalid();
         requireMigrationReceipt(historical.command, key.command_id, converted);
         db.prepare('UPDATE run_receipts SET snapshot=? WHERE scope_id=? AND command_id=?')
-          .run(JSON.stringify(converted), String(row.scope_id), String(key.command_id));
+          .run(encodedV3(converted), String(row.scope_id), String(key.command_id));
       }
       db.prepare('UPDATE runs SET snapshot=? WHERE scope_id=? AND run_id=?')
-        .run(JSON.stringify(current), String(row.scope_id), String(row.run_id));
+        .run(encodedV3(current), String(row.scope_id), String(row.run_id));
     }
 }

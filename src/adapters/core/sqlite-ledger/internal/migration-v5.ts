@@ -23,7 +23,9 @@ function requireDispatchRecord(value: unknown) {
 }
 
 function requireRunSnapshot(value: unknown) {
-  const snapshot = runSnapshotSchema.parse(JSON.parse(String(value)));
+  const source = JSON.parse(String(value));
+  const snapshot = runSnapshotSchema.parse(source?.schemaVersion === 3 && !Object.hasOwn(source, 'state')
+    ? { ...source, schemaVersion: 4, state: { kind: 'running' } } : source);
   assertRunExecution(snapshot.graph, snapshot.execution);
   return snapshot;
 }

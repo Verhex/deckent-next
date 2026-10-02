@@ -1,5 +1,5 @@
 import { counterSchema, preventRunAttempt, sameAttemptIdentity, verifiedPrincipalSchema,
-  type AttemptSnapshot, type RunSnapshot } from '#domain/index.js';
+  type AttemptSnapshot, type RunSnapshot, type RunLifecycleTiming } from '#domain/index.js';
 import { sameSandboxRequest } from '#engine/core/supervisor/index.js';
 import { dispatchClaimSchema, dispatchRecordSchema, DispatchError,
   type DispatchRecord, type LaunchDecision, type LaunchRequest } from './port.js';
@@ -18,7 +18,7 @@ export function validateLaunchRequest(input: LaunchRequest): LaunchRequest {
 
 /** Pure launch authority. Persistence supplies one transactionally consistent state snapshot and
  * atomically writes the returned transition; adapters do not decide whether cancellation wins. */
-export function decideDispatchLaunch(input: LaunchRequest, state: DispatchLaunchState): DispatchLaunchTransition {
+export function decideDispatchLaunch(input: LaunchRequest, state: DispatchLaunchState, timing: RunLifecycleTiming): DispatchLaunchTransition {
   const { claim, principal, now } = validateLaunchRequest(input);
   const identity = claim.request.identity; const { run, attempt, dispatch } = state;
   if (!principal.scopeIds.includes(identity.scopeId)) throw new DispatchError('DISPATCH_NOT_ADMITTED');
@@ -39,5 +39,5 @@ export function decideDispatchLaunch(input: LaunchRequest, state: DispatchLaunch
     : { ...dispatch, launch: 'granted', grant: { generation: identity.generation, grantedAt: now,
       principal: { id: principal.id, issuer: principal.issuer, subject: principal.subject } } });
   const decision = Object.freeze({ kind: cancelled ? 'prevented' as const : 'granted' as const, record });
-  return Object.freeze({ decision, projectedRun: cancelled ? preventRunAttempt(run, run.revision, attempt) : null });
+  return Object.freeze({ decision, projectedRun: cancelled ? preventRunAttempt(run, run.revision, attempt, timing) : null });
 }

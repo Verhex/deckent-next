@@ -1,5 +1,5 @@
 import type { DatabaseSync } from 'node:sqlite';
-import { attemptSnapshotSchema, preventRunAttempt, sameAttemptIdentity, settleCancelledRunAttempt, type AttemptIdentity, type AttemptSnapshot, type RunSnapshot } from '#domain/index.js';
+import { attemptSnapshotSchema, preventRunAttempt, sameAttemptIdentity, settleCancelledRunAttempt, type RunLifecycleTiming, type AttemptIdentity, type AttemptSnapshot, type RunSnapshot } from '#domain/index.js';
 import { dispatchRecordSchema, RunStoreError, type DispatchRecord, type RunCancellationSettlement } from '#engine/index.js';
 import { readRunBoundDispatch } from './run-dispatch-lookup.js';
 
@@ -23,7 +23,8 @@ function readDispatch(db: DatabaseSync, identity: AttemptIdentity): DispatchReco
   return record;
 }
 /** `evidence.dispatched`: a dispatch record exists (claimed, granted or prevented); `evidence.terminal`: terminal exit is recorded for it. */
-export function settleBoundAttempt(run: RunSnapshot, attempt: AttemptSnapshot, evidence: Readonly<{ dispatched: boolean; terminal: boolean }>): Readonly<{ status: RunCancellationSettlement['status']; run: RunSnapshot }> {
+export function settleBoundAttempt(run: RunSnapshot, attempt: AttemptSnapshot, evidence: Readonly<{ dispatched: boolean; terminal: boolean }>,
+  timing: RunLifecycleTiming): Readonly<{ status: RunCancellationSettlement['status']; run: RunSnapshot }> {
   const identity = attempt.identity;
   const binding = run.bindings.find(value => sameAttemptIdentity(value.identity, identity));
   const task = run.progress.find(value => value.taskId === identity.taskId);
@@ -31,30 +32,30 @@ export function settleBoundAttempt(run: RunSnapshot, attempt: AttemptSnapshot, e
   if (task.phase === 'cancelled') return Object.freeze({ status: 'already-cancelled', run });
   if (task.unresolvedEffects || !['active', 'evaluating'].includes(task.phase)) return Object.freeze({ status: 'not-settleable', run });
   if (!evidence.dispatched && attempt.cancelRequested && attempt.lastObservation === null && binding.observedRevision === null && task.phase === 'active') {
-    return Object.freeze({ status: 'prevented', run: preventRunAttempt(run, run.revision, attempt) });
+    return Object.freeze({ status: 'prevented', run: preventRunAttempt(run, run.revision, attempt, timing) });
   }
   if (evidence.terminal && (run.cancelRequested || attempt.cancelRequested) && task.phase === 'evaluating' && binding.observedKind === 'exited'
     && binding.observedRevision === attempt.revision && attempt.lastObservation?.result.kind === 'exited') {
-    return Object.freeze({ status: 'settled', run: settleCancelledRunAttempt(run, run.revision, attempt) });
+    return Object.freeze({ status: 'settled', run: settleCancelledRunAttempt(run, run.revision, attempt, timing) });
   }
   return Object.freeze({ status: 'not-settleable', run });
 }
 /** Applies prevention/settlement to every binding of a cancel-requested Run snapshot. */
-export function settleRunCancellation(db: DatabaseSync, run: RunSnapshot): RunSnapshot {
+export function settleRunCancellation(db: DatabaseSync, run: RunSnapshot, timing: RunLifecycleTiming): RunSnapshot {
   let current = run;
   for (const binding of run.bindings) {
     const identity = binding.identity;
     const dispatch = readDispatch(db, identity);
-    current = settleBoundAttempt(current, readAttempt(db, identity), { dispatched: !!dispatch, terminal: !!dispatch?.terminal }).run;
+    current = settleBoundAttempt(current, readAttempt(db, identity), { dispatched: !!dispatch, terminal: !!dispatch?.terminal }, timing).run;
   }
   return current;
 }
 /** Settles one attempt and persists the Run when it changed. */
-export function settleAttemptCancellation(db: DatabaseSync, identityInput: unknown): RunCancellationSettlement {
+export function settleAttemptCancellation(db: DatabaseSync, identityInput: unknown, timing: RunLifecycleTiming): RunCancellationSettlement {
   const { run, dispatch } = readRunBoundDispatch(db, identityInput);
   const identity = run.bindings.find(value => value.identity.attemptId === (identityInput as AttemptIdentity).attemptId)!.identity;
   const attempt = readAttempt(db, identity);
-  const result = settleBoundAttempt(run, attempt, { dispatched: !!dispatch, terminal: !!dispatch?.terminal });
+  const result = settleBoundAttempt(run, attempt, { dispatched: !!dispatch, terminal: !!dispatch?.terminal }, timing);
   if (result.run !== run) {
     const written = db.prepare('UPDATE runs SET revision=?,snapshot=? WHERE scope_id=? AND run_id=? AND revision=?')
       .run(result.run.revision, JSON.stringify(result.run), run.identity.scopeId, run.identity.runId, run.revision);

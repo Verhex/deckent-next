@@ -77,6 +77,7 @@
   "units": {
     "src/adapters/core/attempt-store": {
       "dependencies": [
+        "src/domain/core/task-evaluation",
         "src/adapters/core/audit-store",
         "src/engine/core/audit",
         "src/adapters/core/sqlite-ledger",
@@ -124,7 +125,9 @@
         "src/platform/core/errors",
         "src/platform/core/host",
         "src/engine/core/secret-store",
-        "src/adapters/core/secret-store"
+        "src/adapters/core/secret-store",
+        "src/adapters/core/native-connection",
+        "src/adapters/core/worker-observation"
       ],
       "plan": "PROVIDERS"
     },
@@ -361,7 +364,8 @@
         "src/platform/core/errors",
         "src/platform/core/managed-files",
         "src/domain/core/effect",
-        "src/engine/core/scheduling"
+        "src/engine/core/scheduling",
+        "src/domain/core/run"
       ],
       "plan": "FOUNDATION"
     },

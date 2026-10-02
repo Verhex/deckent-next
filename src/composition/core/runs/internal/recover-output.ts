@@ -21,7 +21,7 @@ export async function recoverConfiguredAttemptOutput(projectRoot: string, input:
       createLayoutPolicySource(layout, userInfo().uid, config.inspection.policyMaxBytes));
     const actor = await authenticate(verifier, undefined, identity.scopeId);
     await authorization.authorizeIdentity('recover-output', identity, actor);
-    const store = await openSqliteAttemptStore(await path(), config.storage.sqlite, 'forbid');
+    const store = await openSqliteAttemptStore(await path(), config.storage.sqlite, { now: Date.now, timeoutMs: config.runRuntime.parking.timeoutMs }, 'forbid');
     try {
       const dispatchStore: DispatchStore & RunBoundDispatchStore = store;
       const recorded = await dispatchStore.loadBoundDispatch(identity);

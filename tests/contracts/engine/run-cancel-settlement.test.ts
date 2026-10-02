@@ -15,9 +15,9 @@ const graph = { schemaVersion: 2 as const, revision: 1, tasks: [{ id: 't', kind:
   criterionDefinitions: [{ id: 'verified', version: 1, description: 'Verify fixture task', evaluator: { id: 'test-evaluator', version: 1 }, parameters: {} }] };
 const identityOf = (runId: string) => ({ runId, scopeId: 's', taskId: 't', attemptId: `attempt-${runId}`, layoutRevision: 'l', generation: 1 });
 
-async function fixture() {
+async function fixture(timing = { now: Date.now, timeoutMs: 86400000 }) {
   const root = await mkdtemp(join(tmpdir(), 'deckent-cancel-settlement-')); roots.push(root);
-  const store = await openSqliteAttemptStore(join(root, 'ledger.db'), options, 'allow', custodyProfiles); stores.push(store);
+  const store = await openSqliteAttemptStore(join(root, 'ledger.db'), options, timing, 'allow', custodyProfiles); stores.push(store);
   // A tight shared pool makes capacity release observable: the second Run can only reserve after the first frees its slot.
   await store.createExecutionPool({ schemaVersion: 1, poolId: 'tight', capacity: { executionSlots: 1, inFlightSlots: 1 } });
   const admit = async (runId: string) => {
@@ -71,4 +71,14 @@ it('settles an attempt that exited before cancellation instead of leaving it eva
   expect((await f.cancel('r1', revision)).snapshot.progress[0]!.phase).toBe('cancelled');
   expect(await f.store.settleCancelledAttempt(identityOf('r1'))).toEqual({ status: 'already-cancelled', phase: 'cancelled' });
   await f.admit('r2'); expect((await f.reserve('r2')).snapshot.progress[0]!.phase).toBe('active');
+});
+
+it('uses the configured park clock and timeout when terminal dispatch settles an attempt-only cancellation', async () => {
+  const f = await fixture({ now: () => 700, timeoutMs: 1234 }); await f.admit('r1'); await f.reserve('r1');
+  const claim = f.claim('r1'); await f.store.claimDispatch(dispatchAdmission(claim)); await grantTestLaunch(f.store, claim);
+  await f.store.requestDispatchCancellation(claim.request, { id: 'operator', issuer: 'test', subject: 'human', assurance: 'os-user', scopeIds: ['s'] });
+  await f.store.finishDispatch(claim, { handle: 'worker-1', exitCode: 137, interrupted: false });
+  const run = (await f.store.loadRun('s', 'r1'))!;
+  expect(run.cancelRequested).toBe(false); expect(run.progress[0]!.phase).toBe('cancelled');
+  expect(run.state).toEqual({ kind: 'parked', reason: 'dependency-cancelled', since: 700, deadline: 1934 });
 });

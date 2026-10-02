@@ -2,9 +2,9 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { DatabaseSync } from 'node:sqlite';
 import { join } from 'node:path';
-import { afterEach, expect, it } from 'vitest';
+import { afterEach, expect, it, vi } from 'vitest';
 import { openSqliteAttemptStore, type SqliteAttemptStore } from '#adapters/index.js';
-import { RunProgressionTurn, RunReservationApplication, RunStoreError, type RunProgressionOperations } from '#engine/index.js';
+import { RunLifecycleApplication, RunPolicyAuthorization, RunLifecycleRuntimeLoop, RunProgressionTurn, RunReservationApplication, RunStoreError, type RunProgressionOperations } from '#engine/index.js';
 import { fixtureExecution } from '../support/execution-registry.js';
 import { custodyProfiles, dispatchAdmission, grantTestLaunch } from '../support/custody.js';
 
@@ -15,7 +15,7 @@ const query = { schemaVersion: 1 as const, scopeId: 's', runId: 'r' };
 async function fixture(verdict: 'pass' | 'unknown' = 'pass', dependencies = ['a', 'b']) {
   const root = await mkdtemp(join(tmpdir(), 'deckent-progression-')); roots.push(root);
   const path = join(root, 'ledger.db');
-  const store = await openSqliteAttemptStore(path, { busyTimeoutMs: 100, journalMode: 'wal', durability: 'full' }, 'allow', custodyProfiles); stores.push(store);
+  const store = await openSqliteAttemptStore(path, { busyTimeoutMs: 100, journalMode: 'wal', durability: 'full' }, { now: Date.now, timeoutMs: 86400000 }, 'allow', custodyProfiles); stores.push(store);
   const graph = { schemaVersion: 2 as const, revision: 1, tasks: ['a', 'b', 'c'].map(id => ({ id, kind: 'fixture', dependencies: id === 'c' ? dependencies : [], acceptanceCriteria: ['verified'] })),
     criterionDefinitions: [{ id: 'verified', version: 1, description: 'fixture', evaluator: { id: 'test', version: 1 }, parameters: {} }] };
   const capacity = { executionSlots: 2, inFlightSlots: 2 };
@@ -55,7 +55,7 @@ it('executes in parallel, serializes acceptance against fresh revisions and adva
   const f = await fixture(); const signal = new AbortController().signal;
   const first = await f.turn.advance(query, signal);
   expect(first.run.tasks.map(t => t.phase)).toEqual(['accepted', 'accepted', 'accepted']); expect(f.stats().maximum).toBe(2);
-  expect(first.attempted).toBe(3);
+  expect(first.attempted).toBe(3); expect(first.run.state).toEqual({ kind: 'terminal', outcome: 'completed', reason: 'completed' });
   const second = await f.turn.advance(query, signal); expect(second.attempted).toBe(0);
   expect(second.run.tasks.every(t => t.phase === 'accepted')).toBe(true);
   expect((await f.turn.advance(query, signal)).attempted).toBe(0);
@@ -63,9 +63,11 @@ it('executes in parallel, serializes acceptance against fresh revisions and adva
 it('does not repeat unknown evaluations or unlock their dependency on another turn', async () => {
   const f = await fixture('unknown'); const signal = new AbortController().signal;
   await f.turn.advance(query, signal);
+  const reserve = vi.spyOn(f.operations, 'reserve');
   const again = await f.turn.advance(query, signal);
+  expect(reserve).not.toHaveBeenCalled();
   expect(again.attempted).toBe(0); expect(f.stats().evaluations).toBe(2);
-  expect(again.run.tasks.map(t => t.phase)).toEqual(['evaluating', 'evaluating', 'pending']);
+  expect(again.run.tasks.map(t => t.phase)).toEqual(['awaiting-decision', 'awaiting-decision', 'pending']);
 });
 it('leaves recorded work untouched when stopped or cancelled and propagates policy denial', async () => {
   const f = await fixture(); const controller = new AbortController(); controller.abort();
@@ -117,7 +119,7 @@ it('migrates prior evaluation evidence without retrospectively opting old Runs i
   f.store.close(); stores.splice(stores.indexOf(f.store), 1);
   const db = new DatabaseSync(f.path);
   db.exec('DROP TABLE run_execution_intents; DROP TABLE task_evaluation_observations; DROP TABLE IF EXISTS workspace_integrations; DROP TABLE IF EXISTS workspace_deliveries; DROP TABLE IF EXISTS workspace_adoptions; DROP TABLE IF EXISTS effect_intents; DROP TABLE IF EXISTS agent_turn_tool_calls; DROP TABLE IF EXISTS agent_turns; DROP TABLE IF EXISTS worker_event_logs; DROP TABLE IF EXISTS approval_outbox; DROP TABLE IF EXISTS approval_receipts; DROP TABLE IF EXISTS approvals; PRAGMA user_version=24'); db.close();
-  const reopened = await openSqliteAttemptStore(f.path, { busyTimeoutMs: 100, journalMode: 'wal', durability: 'full' }); stores.push(reopened);
+  const reopened = await openSqliteAttemptStore(f.path, { busyTimeoutMs: 100, journalMode: 'wal', durability: 'full' }, { now: Date.now, timeoutMs: 86400000 }); stores.push(reopened);
   expect((await reopened.listRunProgression({ actor, after: null, limit: 8 })).items).toEqual([]);
   for (const binding of run.bindings) expect(await reopened.hasTaskEvaluation(binding.identity, binding.observedRevision!)).toBe(true);
 });
@@ -179,4 +181,66 @@ it('yields after a reservation budget, drains/evaluates existing work and resume
   const second = await turn.advance(query, new AbortController().signal);
   expect(second.attempted).toBe(1); expect(second.run.tasks.every(task => task.phase === 'accepted')).toBe(true);
   expect((await f.store.loadRun('s', 'r'))!.bindings.slice(0, 2).map(binding => binding.identity.attemptId)).toEqual(identities);
+});
+
+it('lost completion publication leaves the accepted Run COMPLETED on the next maintenance turn', async () => {
+  const f = await fixture(), controller = new AbortController();
+  const loop = new RunLifecycleRuntimeLoop({
+    async discover() { return { page: { items: [{ scopeId: 's', runId: 'r' }], next: null }, due: { items: [], next: null } }; },
+    async expire() {}, advance: () => f.turn.advance(query, controller.signal),
+  }, { onRun() { throw new Error('COMPLETION_PUBLISH_LOST'); }, onError(_query, error) { expect(String(error)).toContain('COMPLETION_PUBLISH_LOST'); controller.abort(); } },
+  { pollIntervalMs: 1, failureBackoffMs: 1 });
+  await loop.run(controller.signal);
+  expect((await f.store.loadRun('s', 'r'))!.state).toEqual({ kind: 'terminal', outcome: 'completed', reason: 'completed' });
+  expect((await f.turn.advance(query, new AbortController().signal)).run.state).toEqual({ kind: 'terminal', outcome: 'completed', reason: 'completed' });
+});
+
+it('reserves and executes without cancel authority, then keeps no-due maintenance quiet', async () => {
+  const f = await fixture(), principal = { ...actor, assurance: 'os-user' as const, scopeIds: ['s'] };
+  const authorization = new RunPolicyAuthorization({ async load() { return { schemaVersion: 1, revision: 'no-cancel', restrictions: [], grants: [
+    { id: 'run', effect: 'allow', actions: ['create', 'inspect', 'reserve'], scopes: ['s'], principals: [{ issuer: actor.issuer, subject: actor.subject }],
+      resource: { kind: 'run', ids: 'all' } },
+  ] }; } });
+  const app = new RunLifecycleApplication(f.store, { async verify() { return principal; } }, authorization,
+    { async authorize() {} }, () => ({ record() {} }), () => 0, 1000, 'no-cancel');
+  f.operations.advanceLifecycle = async request => { await app.advance(request); };
+  const commits = vi.spyOn(f.store, 'commitRunLifecycle');
+  const result = await f.turn.advance(query, new AbortController().signal);
+  expect(result.attempted).toBe(3); expect(result.run.tasks.every(task => task.phase === 'accepted')).toBe(true);
+  const revision = result.run.revision;
+  expect((await f.turn.advance(query, new AbortController().signal)).attempted).toBe(0);
+  expect((await f.store.loadRun('s', 'r'))?.revision).toBe(revision);
+  expect(commits).not.toHaveBeenCalled();
+});
+
+it('reports a due expiry denial for one Run while another Run reserves and executes in the same ledger', async () => {
+  const f = await fixture('unknown'), controller = new AbortController(), errors: unknown[] = [];
+  await f.turn.advance(query, controller.signal);
+  const due = (await f.store.loadRun('s', 'r'))!;
+  if (due.state.kind !== 'parked') throw new Error('FIXTURE_NOT_PARKED');
+  const deadline = due.state.deadline;
+  await f.store.createRun({ commandId: 'create-ready', actor, identity: { ...due.identity, runId: 'ready' }, graph: due.graph,
+    execution: due.execution, now: 0, policy: { schemaVersion: 2, poolId: 'p', capacity: { executionSlots: 2, inFlightSlots: 2 }, ordering: ['a', 'b', 'c'] } });
+  const principal = { ...actor, assurance: 'os-user' as const, scopeIds: ['s'] };
+  const authorization = new RunPolicyAuthorization({ async load() { return { schemaVersion: 1, revision: 'no-cancel', restrictions: [], grants: [
+    { id: 'run', effect: 'allow', actions: ['create', 'inspect', 'reserve'], scopes: ['s'], principals: [{ issuer: actor.issuer, subject: actor.subject }],
+      resource: { kind: 'run', ids: 'all' } },
+  ] }; } });
+  const app = new RunLifecycleApplication(f.store, { async verify() { return principal; } }, authorization,
+    { async authorize() {} }, () => ({ record() {} }), () => deadline, 1000, 'no-cancel');
+  f.operations.read = async request => (await f.store.loadRun(request.scopeId, request.runId))!;
+  f.operations.advanceLifecycle = async request => { await app.advance(request); };
+  const loop = new RunLifecycleRuntimeLoop({
+    async discover() { return { due: { items: [{ scopeId: 's', runId: 'r' }], next: null },
+      page: { items: [{ scopeId: 's', runId: 'ready' }], next: null } }; },
+    async expire(request) { await app.advance({ schemaVersion: 1, ...request }); },
+    advance: (request, signal) => f.turn.advance({ schemaVersion: 1, ...request }, signal),
+  }, {
+    onError(request, error) { errors.push({ request, error }); },
+    onRun(request, result) { expect(request.runId).toBe('ready'); expect(result.attempted).toBe(2); controller.abort(); },
+  }, { pollIntervalMs: 1, failureBackoffMs: 1 }, () => deadline);
+  await loop.run(controller.signal);
+  expect(errors).toEqual([{ request: { scopeId: 's', runId: 'r' }, error: expect.objectContaining({ code: 'POLICY_DENIED' }) }]);
+  expect(await f.store.loadRun('s', 'r')).toEqual(due);
+  expect((await f.store.loadRun('s', 'ready'))?.bindings).toHaveLength(2);
 });

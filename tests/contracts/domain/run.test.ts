@@ -21,7 +21,7 @@ it('binds ready tasks to exact attempts without opening dependencies on process 
 });
 it('keeps immediate admission ready across wall rollback and delays only explicit not-before work', () => {
   const created = createRun(identity, graph, 1_000, fixtureExecution(graph));
-  expect(created).toMatchObject({ schemaVersion: 3, progress: [
+  expect(created).toMatchObject({ schemaVersion: 4, progress: [
     { taskId: 'a', eligibility: { kind: 'immediate' } }, { taskId: 'b', eligibility: { kind: 'immediate' } },
   ] });
   expect(Object.isFrozen(created.progress[0]!.eligibility)).toBe(true);
@@ -58,13 +58,13 @@ it('rejects stale revisions, duplicated attempts and foreign evidence', () => {
 });
 it('records cancellation intent without inventing stopped workers or terminal task outcomes', () => {
   const reserved = reserveRunTasks(createRun(identity, graph, 0, fixtureExecution(graph)), 0, [attemptIdentity], 0);
-  const cancelled = requestRunCancellation(reserved, 1);
+  const cancelled = requestRunCancellation(reserved, 1, { now: 100, timeoutMs: 1000 });
   expect(cancelled.cancelRequested).toBe(true); expect(cancelled.progress[0]!.phase).toBe('active');
   // Never-reserved tasks have no attempt or effect and close in the same transition; the bound one waits for evidence.
   expect(cancelled.progress.filter(task => task.taskId !== attemptIdentity.taskId).every(task => task.phase === 'cancelled')).toBe(true);
-  expect(requestRunCancellation(cancelled, 2)).toEqual(cancelled);
+  expect(requestRunCancellation(cancelled, 2, { now: 100, timeoutMs: 1000 })).toEqual(cancelled);
   const legacy = runSnapshotSchema.parse({ ...cancelled, progress: cancelled.progress.map(task => task.phase === 'cancelled' ? { ...task, phase: 'pending' } : task) });
-  const closed = requestRunCancellation(legacy, 2);
+  const closed = requestRunCancellation(legacy, 2, { now: 100, timeoutMs: 1000 });
   expect(closed.revision).toBe(3); expect(closed.progress.map(task => task.phase)).toEqual(cancelled.progress.map(task => task.phase));
   expect(() => reserveRunTasks(cancelled, 2, [{ ...attemptIdentity, taskId: 'b', attemptId: 'b' }], 0)).toThrow('RUN_CANCEL_REQUESTED');
   const stopped = applyAttemptObservation(createAttempt(attemptIdentity), { protocolVersion: 1, identity: attemptIdentity, sequence: 1, eventId: 'stopped', result: { kind: 'cancelled' } }, 0);
@@ -72,7 +72,7 @@ it('records cancellation intent without inventing stopped workers or terminal ta
   expect(reconciling.progress[0]).toMatchObject({ phase: 'reconciling', unresolvedEffects: true });
   // Legacy repair closes only never-reserved tasks; a bound attempt with unresolved effects stays with the reconciler.
   const legacyReconciling = runSnapshotSchema.parse({ ...reconciling, progress: reconciling.progress.map(task => task.phase === 'cancelled' ? { ...task, phase: 'pending' } : task) });
-  const repaired = requestRunCancellation(legacyReconciling, reconciling.revision);
+  const repaired = requestRunCancellation(legacyReconciling, reconciling.revision, { now: 100, timeoutMs: 1000 });
   expect(repaired.progress[0]).toMatchObject({ phase: 'reconciling', unresolvedEffects: true });
   expect(repaired.progress.slice(1).every(task => task.phase === 'cancelled')).toBe(true);
 });

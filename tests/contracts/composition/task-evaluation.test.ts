@@ -1,9 +1,10 @@
+import { DatabaseSync } from 'node:sqlite';
 import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir, hostname, userInfo } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { createRun, inspectConfiguredWorkerTranscript } from '../../../src/index.js';
-import { evaluateConfiguredTask } from '../../../src/composition/core/runs/index.js';
+import { advanceConfiguredRunLifecycle, evaluateConfiguredTask } from '../../../src/composition/core/runs/index.js';
 import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
 import { FileArtifactStore, openSqliteAttemptStore } from '#adapters/index.js';
 import { clearConfigCache, prepareProductDirectory } from '#platform/index.js';
@@ -17,13 +18,13 @@ async function fixture(exitCode: number, acceptedExitCodes = [0], stdout = 'priv
   const root = await mkdtemp(join(tmpdir(), 'deckent-configured-evaluation-')); roots.push(root);
   const project = join(root, 'project'); const data = join(root, 'data'); await mkdir(join(project, '.deckent'), { recursive: true, mode: 0o700 });
   const configPath = join(project, '.deckent/config.json'); const registry = fixtureDockerRegistry(['purchase']);
-  await writeFile(configPath, JSON.stringify({ layout: { root: data }, artifacts: { maxBytes: 65536 },
+  await writeFile(configPath, JSON.stringify({ layout: { root: data }, artifacts: { maxBytes: 16_777_216 },
     admission: { poolId: 'p', executionSlots: 1, inFlightSlots: 1, ordering: 'input-order', registry } }));
   const options = { env: { HOME: join(root, 'home'), USERPROFILE: join(root, 'home') } }; const opened = await openConfiguredAttemptStore(project, options);
   await opened.store.createExecutionPool({ schemaVersion: 1, poolId: 'p', capacity: { executionSlots: 1, inFlightSlots: 1 } }); opened.store.close();
   const os = userInfo(); const principals = [{ issuer: hostname(), subject: String(os.uid) }];
   const policy = async (evaluate: boolean) => writeFile(join(data, 'policy.json'), JSON.stringify({ schemaVersion: 1, revision: evaluate ? 'allow' : 'deny', restrictions: [], grants: [
-    { id: 'run', effect: 'allow', actions: ['create'], scopes: ['s'], principals, resource: { kind: 'run', ids: ['r'] } },
+    { id: 'run', effect: 'allow', actions: ['create', 'inspect'], scopes: ['s'], principals, resource: { kind: 'run', ids: ['r'] } },
     { id: 'pool', effect: 'allow', actions: ['use'], scopes: ['s'], principals, resource: { kind: 'pool', ids: ['p'] } },
     ...(evaluate ? [{ id: 'evaluation', effect: 'allow', actions: ['evaluate', 'read-output'], scopes: ['s'], principals, resource: { kind: 'attempt', ids: ['a'] } }] : []),
   ] }), { mode: 0o600 });
@@ -32,7 +33,7 @@ async function fixture(exitCode: number, acceptedExitCodes = [0], stdout = 'priv
     criterionDefinitions: [{ id: 'exit', version: 1, description: 'Accept configured process exits', evaluator: { id: 'process-exit', version: 1 }, parameters: { acceptedExitCodes } }] };
   await createRun(project, { schemaVersion: 1, commandId: 'create', scopeId: 's', runId: 'r', graph }, options);
   const identity = { scopeId: 's', runId: 'r', taskId: 't', attemptId: 'a', generation: 1, layoutRevision: opened.layout.revision };
-  const store = await openSqliteAttemptStore(opened.path, { busyTimeoutMs: 20, journalMode: 'wal', durability: 'full' }, 'forbid', custodyProfiles);
+  const store = await openSqliteAttemptStore(opened.path, { busyTimeoutMs: 20, journalMode: 'wal', durability: 'full' }, { now: Date.now, timeoutMs: 86400000 }, 'forbid', custodyProfiles);
   const actor = { id: 'fixture', issuer: 'test', subject: 'service' };
   expect((await store.loadRun('s', 'r'))!.progress[0]!.eligibility).toEqual({ kind: 'immediate' });
   await store.reserveRunTasks({ commandId: 'reserve', actor, scopeId: 's', runId: 'r', expectedRevision: 0, now: 0, identities: [identity] });
@@ -60,10 +61,10 @@ describe.skipIf(process.platform === 'win32')('configured task evaluation', () =
 
   it('checks current evaluate policy before mutation and replay while ignoring changed admission registry', async () => {
     const f = await fixture(0); const beforeStore = await openSqliteAttemptStore(f.path,
-      { busyTimeoutMs: 20, journalMode: 'wal', durability: 'full' }, 'forbid', custodyProfiles);
+      { busyTimeoutMs: 20, journalMode: 'wal', durability: 'full' }, { now: Date.now, timeoutMs: 86400000 }, 'forbid', custodyProfiles);
     const before = await beforeStore.loadRun('s', 'r'); beforeStore.close();
     await f.policy(false); await expect(evaluateConfiguredTask(f.project, f.command, f.options)).rejects.toMatchObject({ code: 'POLICY_DENIED' });
-    const deniedStore = await openSqliteAttemptStore(f.path, { busyTimeoutMs: 20, journalMode: 'wal', durability: 'full' }, 'forbid', custodyProfiles);
+    const deniedStore = await openSqliteAttemptStore(f.path, { busyTimeoutMs: 20, journalMode: 'wal', durability: 'full' }, { now: Date.now, timeoutMs: 86400000 }, 'forbid', custodyProfiles);
     expect(await deniedStore.loadRun('s', 'r')).toEqual(before); deniedStore.close();
     await f.policy(true); const config = JSON.parse(await readFile(f.configPath, 'utf8'));
     config.admission.registry.revision = 'current-registry-changed'; config.admission.registry.evaluators[0].implementation.version = 99;
@@ -85,4 +86,12 @@ it.skipIf(process.platform === 'win32')('requires POSIX managed storage: shows a
   expect(result.evaluation.run.tasks[0]!.phase).toBe('failed');
   await f.policy(false);
   await expect(inspectConfiguredWorkerTranscript(f.project, f.command.identity, f.options)).rejects.toMatchObject({ code: 'POLICY_DENIED' });
+});
+
+it.skipIf(process.platform === 'win32')('maintenance with no due deadline never opens a writer under another ledger write lock', async () => {
+  const f = await fixture(0);
+  await evaluateConfiguredTask(f.project, f.command, f.options);
+  const writer = new DatabaseSync(f.path); writer.exec('BEGIN IMMEDIATE');
+  try { expect(await advanceConfiguredRunLifecycle(f.project, { schemaVersion: 1, scopeId: 's', runId: 'r' }, f.options)).toBeNull(); }
+  finally { writer.exec('ROLLBACK'); writer.close(); }
 });
