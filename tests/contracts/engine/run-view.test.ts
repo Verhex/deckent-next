@@ -9,7 +9,7 @@ const graph = { schemaVersion: 2, revision: 1,
 const run = createRun({ runId: 'r', scopeId: 's', layoutRevision: 'l' }, graph, 0, fixtureExecution(graph));
 it('projects explicit public registry bindings without storage bindings or private profile parameters', () => {
   const view = projectRunView(run);
-  expect(view).toEqual({ schemaVersion: 2, runId: 'r', scopeId: 's', layoutRevision: 'l', revision: 0, cancellationRequested: false,
+  expect(view).toEqual({ schemaVersion: 3, state: { kind: 'running' }, runId: 'r', scopeId: 's', layoutRevision: 'l', revision: 0, cancellationRequested: false,
     registryRevision: 'fixture-registry', criteria: [{ id: 'private-criterion', version: 1, description: 'Private verification details',
       evaluator: { id: 'test-evaluator', version: 1 }, fingerprint: expect.stringMatching(/^[a-f0-9]{64}$/) }],
     tasks: [{ id: 't', kind: 'custom', dependencies: [], acceptanceCriteria: ['private-criterion'],

@@ -21,7 +21,7 @@ it('binds ready tasks to exact attempts without opening dependencies on process 
 });
 it('keeps immediate admission ready across wall rollback and delays only explicit not-before work', () => {
   const created = createRun(identity, graph, 1_000, fixtureExecution(graph));
-  expect(created).toMatchObject({ schemaVersion: 3, progress: [
+  expect(created).toMatchObject({ schemaVersion: 4, progress: [
     { taskId: 'a', eligibility: { kind: 'immediate' } }, { taskId: 'b', eligibility: { kind: 'immediate' } },
   ] });
   expect(Object.isFrozen(created.progress[0]!.eligibility)).toBe(true);

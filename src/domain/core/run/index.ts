@@ -1,4 +1,4 @@
-export { runIdentitySchema, runSnapshotSchema, RunError } from './internal/contract.js';
+export { runIdentitySchema, runSnapshotSchema, runStateSchema, RunError } from './internal/contract.js';
 export type { RunIdentity, RunSnapshot } from './internal/contract.js';
 export { createRun, reserveRunTasks, observeRunAttempt, requestRunCancellation } from './internal/reduce.js';
 export { preventRunAttempt } from './internal/prevent.js';
@@ -7,3 +7,5 @@ export { executionRegistrySchema, executionProfileDefinitionSchema, evaluatorDef
 export type { ExecutionRegistry, ExecutionProfileDefinition, EvaluatorDefinition } from './internal/registry.js';
 export { runExecutionSnapshotSchema } from './internal/registry.js';
 export type { RunExecutionSnapshot } from './internal/registry.js';
+export { DEFAULT_RUN_PARK_TIMEOUT_MS, reconcileRunLifecycle, advanceRunLifecycle, expireParkedRun, closeParkedRun, resumeParkedRun, parkTaskAwaitingDecision, resolveTaskDecision } from './internal/lifecycle.js';
+export type { RunLifecycleTiming, TaskDecisionReason } from './internal/lifecycle.js';

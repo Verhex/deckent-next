@@ -17,6 +17,7 @@ export async function requestConfiguredRunCancellation(projectRoot: string, inpu
       },
       async cancelRun(request: RunCancellation) {
         const writer = await openSqliteAttemptStore(await path(), config.storage.sqlite, 'forbid');
+        writer.setRunLifecycleTiming({ now: Date.now, timeoutMs: config.runRuntime.parking.timeoutMs });
         try { return await writer.cancelRun(request); } finally { writer.close(); }
       },
     };

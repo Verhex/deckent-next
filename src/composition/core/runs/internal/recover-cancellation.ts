@@ -22,6 +22,7 @@ export async function recoverConfiguredCancellations(projectRoot: string, input:
     await scope.authorize(command.scopeId, actor);
     if (!config.cancellation) throw ErrorRegistry.createError('CANCELLATION_NOT_CONFIGURED', { params: { missing: 'cancellation' } });
     const store = await openSqliteAttemptStore(await path(), config.storage.sqlite, 'forbid');
+    store.setRunLifecycleTiming({ now: Date.now, timeoutMs: config.runRuntime.parking.timeoutMs });
     try {
       const clock = new SystemTrustedClock();
       const delivery = createRecordedCancellationDelivery(store, config, layout, principal, verifier);

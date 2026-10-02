@@ -56,7 +56,7 @@ it('advances a populated current Run ledger after its version is marked four', a
     const downgrade = new DatabaseSync(path); downgradeRunEligibilityFixtures(downgrade);
     downgrade.exec('DROP TABLE provider_spend_audits; DROP TABLE model_invocation_spend_reservations; DROP TABLE provider_spend_accounts; DROP TABLE model_invocation_allocation_checkpoints; DROP INDEX model_invocations_allocation_identity; DROP TABLE model_invocation_cancellations; DROP TABLE model_invocation_controls; DROP INDEX model_invocations_allocation_state; DROP TABLE model_invocation_contents; DROP TABLE model_invocation_content_purges; DROP TABLE model_invocations; DROP TABLE model_invocation_allocations; DROP TABLE model_activation_receipts; DROP TABLE model_activations; DROP TABLE installation_ownership; DROP TABLE service_shutdown_commands; DROP TABLE service_shutdown_outcomes; DROP TABLE cancellation_deliveries; DROP TABLE run_workspace_custody; DROP TABLE IF EXISTS run_execution_intents; DROP TABLE IF EXISTS task_evaluation_observations; DROP TABLE IF EXISTS workspace_integrations; DROP TABLE IF EXISTS workspace_deliveries; DROP TABLE IF EXISTS workspace_adoptions; DROP TABLE IF EXISTS effect_intents; DROP TABLE IF EXISTS agent_turn_tool_calls; DROP TABLE IF EXISTS agent_turns; DROP TABLE IF EXISTS worker_event_logs; DROP TABLE IF EXISTS approval_outbox; DROP TABLE IF EXISTS approval_receipts; DROP TABLE IF EXISTS approvals; PRAGMA user_version=4'); downgrade.close();
     const migrated = await openSqliteAttemptStore(path, options); const loaded = (await migrated.loadRun('s', 'r'))!;
-    expect(loaded.revision).toBe(1); expect(loaded.schemaVersion).toBe(3);
+    expect(loaded.revision).toBe(1); expect(loaded.schemaVersion).toBe(4);
     expect(loaded.progress.every(value => value.eligibility.kind === 'immediate')).toBe(true); migrated.close();
     const db = new DatabaseSync(path, { readOnly: true });
     try { expect(db.prepare('PRAGMA user_version').get()!.user_version).toBe(CURRENT_LEDGER_VERSION); } finally { db.close(); }
@@ -148,7 +148,7 @@ it('requires an installed synchronous profile validator before migrating dispatc
     }
     const before = new DatabaseSync(path, { readOnly: true }); try { expect(before.prepare('PRAGMA user_version').get()!.user_version).toBe(5); } finally { before.close(); }
     const migrated = await openSqliteAttemptStore(path, options, 'allow', compatibleProfiles);
-    const loaded = (await migrated.loadRun('s', 'r'))!; expect(loaded.schemaVersion).toBe(3);
+    const loaded = (await migrated.loadRun('s', 'r'))!; expect(loaded.schemaVersion).toBe(4);
     expect(loaded.progress.every(value => value.eligibility.kind === 'immediate')).toBe(true); migrated.close();
     const after = new DatabaseSync(path, { readOnly: true }); try { expect(after.prepare('PRAGMA user_version').get()!.user_version).toBe(CURRENT_LEDGER_VERSION); } finally { after.close(); }
   } finally { await rm(root, { recursive: true, force: true }); }

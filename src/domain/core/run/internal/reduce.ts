@@ -1,3 +1,4 @@
+import { reconcileRunLifecycle, DEFAULT_RUN_PARK_TIMEOUT_MS, type RunLifecycleTiming } from './lifecycle.js';
 import { z } from 'zod';
 import { counterSchema } from '#domain/core/primitives/index.js';
 import { attemptIdentitySchema, attemptSnapshotSchema, sameAttemptIdentity } from '#domain/core/attempt/index.js';
@@ -5,7 +6,7 @@ import { validateTaskGraph, inspectTaskReadiness, type TaskProgress } from '#dom
 import { checkedRun, runIdentitySchema, runSnapshotSchema, RunError } from './contract.js';
 export function createRun(identityInput: unknown, graphInput: unknown, nowInput: unknown, execution: unknown, branch?: unknown) {
   const identity = runIdentitySchema.parse(identityInput); const graph = validateTaskGraph(graphInput); counterSchema.parse(nowInput);
-  return runSnapshotSchema.parse({ schemaVersion: 3, identity, revision: 0, graph, execution, ...(branch === undefined ? {} : { branch }), cancelRequested: false, bindings: [],
+  return runSnapshotSchema.parse({ schemaVersion: 4, state: { kind: 'running' }, identity, revision: 0, graph, execution, ...(branch === undefined ? {} : { branch }), cancelRequested: false, bindings: [],
     progress: graph.tasks.map(task => ({ taskId: task.id, phase: 'pending', unresolvedEffects: false, eligibility: { kind: 'immediate' } })) });
 }
 /** Admission transition only. Application/store must atomically reserve capacity and create these
@@ -13,6 +14,8 @@ export function createRun(identityInput: unknown, graphInput: unknown, nowInput:
  */
 export function reserveRunTasks(input: unknown, expectedRevision: number, identitiesInput: unknown, nowInput: unknown) {
   const run = checkedRun(input, expectedRevision); if (run.cancelRequested) throw new RunError('RUN_CANCEL_REQUESTED');
+  if (run.state.kind === 'parked') throw new RunError('RUN_PARKED');
+  if (run.state.kind === 'terminal') throw new RunError('RUN_TERMINAL');
   const identities = z.array(attemptIdentitySchema).min(1).parse(identitiesInput); const now = counterSchema.parse(nowInput);
   const ready = new Set(inspectTaskReadiness(run.graph, { graphRevision: run.graph.revision, progress: run.progress, now }).filter(task => task.disposition === 'ready').map(task => task.taskId));
   const selected = new Set<string>(); const attempts = new Set(run.bindings.map(binding => binding.identity.attemptId));
@@ -48,11 +51,14 @@ export function observeRunAttempt(input: unknown, expectedRevision: number, atte
 /** Cancellation intent. Tasks that were never reserved have no attempt or effect, so they close as cancelled in the same
  * transition; bound attempts are settled separately from their evidence. Re-requesting closes pending tasks left by older revisions.
  */
-export function requestRunCancellation(input: unknown, expectedRevision: number) {
+export function requestRunCancellation(input: unknown, expectedRevision: number, timing: RunLifecycleTiming = { now: 0, timeoutMs: DEFAULT_RUN_PARK_TIMEOUT_MS }) {
   const run = checkedRun(input, expectedRevision);
   const bound = new Set(run.bindings.map(binding => binding.identity.taskId));
-  const unreserved = run.progress.some(task => task.phase === 'pending' && !bound.has(task.taskId));
+  const unreserved = run.progress.some(task => (task.phase === 'pending' && !bound.has(task.taskId)) || task.phase === 'awaiting-decision');
   if (run.cancelRequested && !unreserved) return run;
-  return runSnapshotSchema.parse({ ...run, revision: run.revision + 1, cancelRequested: true,
-    progress: run.progress.map(task => task.phase === 'pending' && !bound.has(task.taskId) ? { ...task, phase: 'cancelled' } : task) });
+  return reconcileRunLifecycle({ ...run, revision: run.revision + 1, cancelRequested: true,
+    progress: run.progress.map(task => {
+      if (task.phase !== 'awaiting-decision' && !(task.phase === 'pending' && !bound.has(task.taskId))) return task;
+      return { ...task, decision: undefined, phase: 'cancelled' };
+    }) }, timing.now, timing.timeoutMs);
 }

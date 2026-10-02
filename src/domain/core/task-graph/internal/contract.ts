@@ -33,11 +33,15 @@ export const taskEligibilitySchema = z.discriminatedUnion('kind', [
 ]).readonly();
 export const taskProgressSchema = z.object({
   taskId: identity,
-  phase: z.enum(['pending', 'active', 'evaluating', 'accepted', 'failed', 'cancelled', 'reconciling']),
+  phase: z.enum(['pending', 'active', 'evaluating', 'accepted', 'failed', 'cancelled', 'reconciling', 'skipped', 'awaiting-decision']),
+  skippedReason: z.enum(['dependency-failed', 'dependency-cancelled']).optional(),
+  decision: z.object({ reason: z.enum(['evaluation-unknown', 'evaluation-not-ready']), since: counterSchema, deadline: counterSchema, evaluationId: identity.optional() }).strict().readonly().optional(),
+  acceptedEvidence: z.literal('model-unverified').optional(),
   unresolvedEffects: z.boolean(),
   eligibility: taskEligibilitySchema,
 }).strict().superRefine((state, context) => {
-  if (state.phase === 'accepted' && state.unresolvedEffects) {
+  if ((state.phase === 'skipped') !== (state.skippedReason !== undefined) || (state.phase === 'awaiting-decision') !== (state.decision !== undefined) || (state.acceptedEvidence !== undefined && state.phase !== 'accepted') || (state.decision && state.decision.deadline <= state.decision.since)) context.addIssue({ code: z.ZodIssueCode.custom, message: 'TASK_PROGRESS_STATE_INCONSISTENT' });
+  if (['accepted', 'skipped', 'awaiting-decision'].includes(state.phase) && state.unresolvedEffects) {
     context.addIssue({ code: z.ZodIssueCode.custom, message: 'TASK_ACCEPTED_WITH_UNRESOLVED_EFFECT' });
   }
 }).readonly();

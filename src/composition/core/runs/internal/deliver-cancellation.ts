@@ -19,6 +19,7 @@ export async function deliverConfiguredRunCancellation(projectRoot: string, inpu
       params: { missing: 'cancellation' },
     });
     const store = await openSqliteAttemptStore(await path(), config.storage.sqlite, 'forbid');
+    store.setRunLifecycleTiming({ now: Date.now, timeoutMs: config.runRuntime.parking.timeoutMs });
     try {
       const runs = new RunApplication(store, verifier, authorization);
       // No runtime dependency is touched for an attempt that has never been dispatched.

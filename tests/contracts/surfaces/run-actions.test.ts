@@ -34,3 +34,14 @@ it.each([
   let calls = 0; const stderr = { write() {} };
   expect(await main(invalid, { stderr, async reserveRunTasks() { calls++; return response; } })).toBe(2); expect(calls).toBe(0);
 });
+
+it.each(['close', 'resume'] as const)('forwards the same typed %s command and preserves Run outcome and reason in JSON', async action => {
+  let received: unknown, text = '';
+  const run = { state: { kind: 'terminal', outcome: 'incomplete', reason: 'operator-close' }, revision: 4 };
+  const context = { env: { NO_COLOR: '1' }, stdout: { write(value: string) { text += value; } },
+    async applyRunLifecycle(_root: string, command: unknown) { received = command; return { schemaVersion: 1 as const, layout: response.layout,
+      lifecycle: { schemaVersion: 1 as const, commandId: 'decision', run: run as never } }; } };
+  expect(await main(['run', action, '--scope', 's', '--id', 'r', '--command-id', 'decision', '--expected-revision', '3', '--json'], context)).toBe(0);
+  expect(received).toEqual({ schemaVersion: 1, commandId: 'decision', scopeId: 's', runId: 'r', action, expectedRevision: 3 });
+  expect(JSON.parse(text).lifecycle.run.state).toEqual(run.state);
+});

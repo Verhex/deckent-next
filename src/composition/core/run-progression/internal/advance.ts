@@ -4,7 +4,7 @@ import type { ConfigLoadOptions } from '#platform/index.js';
 import { openSqliteAttemptStore } from '#adapters/index.js';
 import { authenticate, reservationRefusalOutcome, RunPolicyAuthorization, RunProgressionTurn, runQuerySchema, RunStoreError, type RunQuery } from '#engine/index.js';
 import { executeConfiguredTask } from '#composition/core/execution/index.js';
-import { evaluateConfiguredTask, reserveConfiguredRunTasks } from '#composition/core/runs/index.js';
+import { advanceConfiguredRunLifecycle, evaluateConfiguredTask, reserveConfiguredRunTasks } from '#composition/core/runs/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
 import { createLayoutPolicySource } from '#composition/core/policy/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
@@ -17,19 +17,16 @@ export async function advanceConfiguredRun(projectRoot: string, input: RunQuery,
   try {
     const query = runQuerySchema.parse(input);
     const initial = await loadConfiguredScopeContext(projectRoot, query.scopeId, options, 'write');
+    async function withRunStore<T>(request: RunQuery, work: (store: Awaited<ReturnType<typeof openSqliteAttemptStore>>) => Promise<T>) {
+      const { config, layout, principal, path } = await loadConfiguredScopeContext(projectRoot, request.scopeId, options, 'write');
+      await new RunPolicyAuthorization(createLayoutPolicySource(layout, userInfo().uid, config.inspection.policyMaxBytes))
+        .authorize('inspect', request, await authenticate({ async verify() { return principal; } }, undefined, request.scopeId));
+      const store = await openSqliteAttemptStore(await path(), config.storage.sqlite, 'forbid');
+      try { return await work(store); } finally { store.close(); }
+    }
     const turn = new RunProgressionTurn({
-      async read(request) {
-        const { config, layout, principal, path } = await loadConfiguredScopeContext(projectRoot, request.scopeId, options, 'write');
-        const verifier = { async verify() { return principal; } };
-        const authorization = new RunPolicyAuthorization(createLayoutPolicySource(layout, userInfo().uid, config.inspection.policyMaxBytes));
-        await authorization.authorize('inspect', request, await authenticate(verifier, undefined, request.scopeId));
-        const store = await openSqliteAttemptStore(await path(), config.storage.sqlite, 'forbid');
-        try {
-          const run = await store.loadRun(request.scopeId, request.runId);
-          if (!run) throw new RunStoreError('RUN_STORE_CONFLICT');
-          return run;
-        } finally { store.close(); }
-      },
+      async advanceLifecycle(request) { await advanceConfiguredRunLifecycle(projectRoot, request, options); },
+      read: request => withRunStore(request, store => store.loadRun(request.scopeId, request.runId).then(run => { if (!run) throw new RunStoreError('RUN_STORE_CONFLICT'); return run; })),
       async reserve(command) {
         try { await reserveConfiguredRunTasks(projectRoot, command, options); return 'reserved'; }
         catch (error) { const outcome = reservationRefusalOutcome(queryFailure(error).code); if (outcome) return outcome; throw error; }
@@ -44,13 +41,7 @@ export async function advanceConfiguredRun(projectRoot: string, input: RunQuery,
           throw error;
         }
       },
-      async evaluationRecorded(identity, revision) {
-        const { config, principal, layout, path } = await loadConfiguredScopeContext(projectRoot, identity.scopeId, options, 'write');
-        const authorization = new RunPolicyAuthorization(createLayoutPolicySource(layout, userInfo().uid, config.inspection.policyMaxBytes));
-        await authorization.authorize('inspect', query, await authenticate({ async verify() { return principal; } }, undefined, identity.scopeId));
-        const store = await openSqliteAttemptStore(await path(), config.storage.sqlite, 'forbid');
-        try { return await store.hasTaskEvaluation(identity, revision); } finally { store.close(); }
-      },
+      evaluationRecorded: (identity, revision) => withRunStore(query, store => store.hasTaskEvaluation(identity, revision)),
     }, initial.config.service.maxConcurrentExecutions, { commandId: randomUUID }, maxReservations);
     return await turn.advance(query, signal);
   } catch (error) { throw queryFailure(error); }

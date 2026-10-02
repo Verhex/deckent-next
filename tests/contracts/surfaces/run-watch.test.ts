@@ -3,7 +3,7 @@ import { newRunLedgerEntries, runWatchFingerprint } from '#surfaces/core/termina
 import type { RunView } from '#engine/index.js';
 
 const baseRun = (revision: number, phase: RunView['tasks'][number]['phase']): RunView => ({
-  schemaVersion: 2,
+  schemaVersion: 3, state: { kind: 'running' },
   runId: 'run-1',
   scopeId: 'scope-1',
   layoutRevision: 'lay',

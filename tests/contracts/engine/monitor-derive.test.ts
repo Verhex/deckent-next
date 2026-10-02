@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createRun, type RunSnapshot, type TaskProgress } from '#domain/index.js';
+import { createRun, parkTaskAwaitingDecision, resolveTaskDecision, expireParkedRun, type RunSnapshot, type TaskProgress } from '#domain/index.js';
 import { deriveRunBlocker, deriveRunState, MONITOR_FINISHED_WORKERS, MonitorApplication, projectMonitorRun, type MonitorLedgerApproval, type MonitorLedgerAttempt, type MonitorLedgerPool,
   type MonitorRunEvidence, type WorkerObservation } from '#engine/index.js';
 import { fixtureExecution } from '../support/execution-registry.js';
@@ -11,7 +11,7 @@ const graph = (tasks: readonly { id: string; deps?: string[] }[]) => ({ schemaVe
   criterionDefinitions: [{ id: 'ok', version: 1, description: 'ok', evaluator: { id: 'process-exit', version: 1 }, parameters: {} }] });
 function snapshot(tasks: readonly { id: string; deps?: string[]; phase?: Phase; unresolved?: boolean; notBefore?: number }[], cancelRequested = false): RunSnapshot {
   const g = graph(tasks); const base = createRun({ runId: 'r', scopeId: 's', layoutRevision: 'l' }, g, 0, fixtureExecution(g));
-  const bindings = tasks.filter(task => task.phase && task.phase !== 'pending').map(task => ({ identity: identity(task.id), observedRevision: null, observedKind: null }));
+  const bindings = tasks.filter(task => task.phase && task.phase !== 'pending').map(task => ({ identity: identity(task.id), observedRevision: task.phase === 'evaluating' ? 1 : null, observedKind: task.phase === 'evaluating' ? 'exited' as const : null }));
   return { ...base, cancelRequested, bindings, progress: tasks.map(task => ({ taskId: task.id, phase: task.phase ?? 'pending', unresolvedEffects: task.unresolved ?? false,
     eligibility: task.notBefore ? { kind: 'not-before' as const, at: task.notBefore } : { kind: 'immediate' as const } })) } as RunSnapshot;
 }
@@ -282,4 +282,20 @@ describe('monitor attempt end evidence', () => {
     // No evaluation time exists in the ledger: the verdict carries none.
     expect(observed.tasks[1]!.evaluation.observedAtMs).toBeNull();
   });
+});
+
+it('projects parked and awaiting decision truth with incomplete and accepted-unverified outcomes', () => {
+  const base = snapshot([{ id: 'a', phase: 'evaluating' }]);
+  const parked = parkTaskAwaitingDecision(base, 0, 'a', 'evaluation-unknown', 100, 1000);
+  const value = evidence(parked, [exited('a', { evaluationObserved: true })]);
+  expect(blocker(value)).toEqual({ code: 'parked', taskId: null, sinceMs: 100, detail: 'awaiting-decision' });
+  expect(state(value)).toBe('parked'); expect(projectMonitorRun(value).tasks[0].evaluation.verdict).toBe('unknown');
+  const accepted = resolveTaskDecision(parked, 1, 'a', 'accept', 200, 1000);
+  expect(projectMonitorRun(evidence(accepted)).tasks[0].evaluation.verdict).toBe('accepted-unverified');
+  const mixed = snapshot([{ id: 'a', phase: 'evaluating' }, { id: 'b', phase: 'accepted' }]);
+  const waiting = parkTaskAwaitingDecision(mixed, 0, 'a', 'evaluation-not-ready', 100, 1000);
+  const closed = expireParkedRun(waiting, 1, 1100, 1000);
+  expect(state(evidence(closed))).toBe('incomplete'); expect(blocker(evidence(closed))).toBeNull();
+  const parallel = parkTaskAwaitingDecision(snapshot([{ id: 'a', phase: 'evaluating' }, { id: 'b', phase: 'active' }]), 0, 'a', 'evaluation-unknown', 100, 1000);
+  expect(blocker(evidence(parallel))?.code).toBe('awaiting-decision');
 });

@@ -90,8 +90,8 @@ describe('task schema diagnostics', () => {
       catch (error) { expect(error).toMatchObject({ code, issues: paths.map(path => expect.objectContaining({ path })) }); }
     }
   });
-  it('documents direct blockers without silently cascading terminal state to descendants', () => {
+  it('reports transitive blockers without mutating the task progress snapshot', () => {
     const tasks = graph([task('a'), task('b', ['a']), task('c', ['b'])]);
-    expect(inspect([progress('a', 'failed'), progress('b'), progress('c')], tasks).map(x => x.disposition)).toEqual(['terminal', 'blocked', 'waiting']);
+    expect(inspect([progress('a', 'failed'), progress('b'), progress('c')], tasks).map(x => x.disposition)).toEqual(['terminal', 'blocked', 'blocked']);
   });
 });

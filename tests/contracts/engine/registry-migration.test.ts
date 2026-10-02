@@ -25,7 +25,7 @@ const graph = Object.freeze({ schemaVersion: 2 as const, revision: 1, tasks: Obj
   criterionDefinitions: Object.freeze([{ id: 'verified', version: 1, description: 'Verify fixture task', evaluator: { id: 'test-evaluator', version: 1 }, parameters: {} }]) });
 
 function currentSnapshot() {
-  return Object.freeze({ schemaVersion: 3 as const, identity, revision: 0, graph, execution: fixtureExecution(graph),
+  return Object.freeze({ schemaVersion: 4 as const, state: { kind: 'running' as const }, identity, revision: 0, graph, execution: fixtureExecution(graph),
     progress: Object.freeze([{ taskId: 't', phase: 'pending' as const, unresolvedEffects: false,
       eligibility: Object.freeze({ kind: 'immediate' as const }) }]), bindings: Object.freeze([]), cancelRequested: false });
 }

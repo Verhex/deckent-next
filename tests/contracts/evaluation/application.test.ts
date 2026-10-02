@@ -1,10 +1,13 @@
 import { mkdtemp, mkdir, rm } from 'node:fs/promises';
 import { join } from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
 import { tmpdir } from 'node:os';
 import { describe, afterEach, expect, it } from 'vitest';
 import { FileArtifactStore, openSqliteAttemptStore, type SqliteAttemptStore } from '#adapters/index.js';
-import { TaskEvaluationApplication } from '#engine/core/task-evaluation/index.js';
+import { TaskEvaluationApplication, RunLifecycleApplication, projectRunView, AuditApplication } from '#engine/index.js';
 import { admitRunAttempts } from '../support/admission.js';
+import { createHmacIntegrity, resolveProductPaths } from '#platform/index.js';
+import { main } from '#surfaces/index.js';
 import { custodyProfiles, dispatchAdmission, grantTestLaunch } from '../support/custody.js';
 
 const roots: string[] = []; const stores: SqliteAttemptStore[] = [];
@@ -14,7 +17,7 @@ const request = { protocolVersion: 1 as const, identity, workspace: '/private/wo
 const command = { schemaVersion: 1 as const, commandId: 'evaluate-1', identity, expectedRevision: 2 };
 const principal = { id: 'evaluator-user', issuer: 'test', subject: 'subject', assurance: 'os-user' as const, scopeIds: ['s'] };
 
-async function fixture(output: 'complete' | 'partial' | 'malformed' = 'complete') {
+async function fixture(output: 'complete' | 'partial' | 'malformed' = 'complete', killed = false) {
   const root = await mkdtemp(join(tmpdir(), 'deckent-evaluation-app-')); roots.push(root);
   const options = { busyTimeoutMs: 20, journalMode: 'wal' as const, durability: 'full' as const };
   const store = await openSqliteAttemptStore(join(root, 'ledger.db'), options, 'allow', custodyProfiles); stores.push(store);
@@ -23,7 +26,7 @@ async function fixture(output: 'complete' | 'partial' | 'malformed' = 'complete'
   const bytes = output === 'malformed' ? Buffer.from('{not-json') : Buffer.from(JSON.stringify({ schemaVersion: 1, identity, completeness: output, stdout: 'ok', stderr: '' }));
   const receipt = await artifacts.put('s', bytes); const claim = { request, owner: 'supervisor' };
   await store.claimDispatch(dispatchAdmission(claim)); await grantTestLaunch(store, claim);
-  await store.retainDispatchOutput(claim, receipt); await store.finishDispatch(claim, { handle: 'h', exitCode: 0, interrupted: false });
+  await store.retainDispatchOutput(claim, receipt); await store.finishDispatch(claim, { handle: 'h', exitCode: killed ? 137 : 0, interrupted: killed });
   const state = { allow: true, reads: 0, evaluations: 0, lastEvaluation: null as { evaluator: unknown; criterion: unknown; terminal: unknown } | null };
   const verifier = { async verify() { return principal; } };
   const authorization = { async authorize() { if (!state.allow) throw new Error('POLICY_DENIED'); } };
@@ -31,7 +34,7 @@ async function fixture(output: 'complete' | 'partial' | 'malformed' = 'complete'
     state.evaluations++; state.lastEvaluation = { evaluator, criterion, terminal }; return 'pass' as const;
   } };
   const app = new TaskEvaluationApplication(store, verifier, authorization, evaluator, artifacts, { maxEvidenceItems: 2, maxTotalBytes: 4096 });
-  return { app, store, artifacts, state, authorization, evaluator };
+  return { app, store, artifacts, state, authorization, evaluator, path: join(root, 'ledger.db') };
 }
 
 describe.skipIf(process.platform === 'win32')('requires POSIX private FileArtifactStore; ARTIFACT_UNSUPPORTED', () => {
@@ -101,6 +104,87 @@ it('rejects a corrupt replay snapshot without reevaluating', async () => {
   const replay = new TaskEvaluationApplication(replayStore, { async verify() { return principal; } }, f.authorization, f.evaluator, f.artifacts, { maxEvidenceItems: 2, maxTotalBytes: 4096 });
   await expect(replay.execute(command)).rejects.toThrow('RUN_STORE_CORRUPT');
   expect(f.state.evaluations).toBe(1);
+});
+
+it('parks a host-proven killed exit137 without evaluation and closes at the persisted deadline', async () => {
+  const f = await fixture('complete', true);
+  const app = new TaskEvaluationApplication(f.store, { async verify() { return principal; } }, f.authorization, f.evaluator, f.artifacts,
+    { maxEvidenceItems: 2, maxTotalBytes: 4096 }, { now: () => 100, timeoutMs: 1000 });
+  const parked = await app.execute(command);
+  expect(parked.snapshot.state).toEqual({ kind: 'parked', reason: 'evaluation-not-ready', since: 100, deadline: 1100 });
+  expect(parked.snapshot.progress[0]).toMatchObject({ phase: 'awaiting-decision', decision: { reason: 'evaluation-not-ready', deadline: 1100 } });
+  expect(f.state.evaluations).toBe(0); expect(await f.store.hasTaskEvaluation(identity, 2)).toBe(false);
+  expect(await app.execute(command)).toEqual(parked);
+  const closed = await f.store.commitRunLifecycle({ schemaVersion: 1, scopeId: 's', runId: 'r', commandId: 'expire', action: 'expire',
+    expectedRevision: parked.snapshot.revision, now: 1100, timeoutMs: 1000, actor: { id: principal.id, issuer: principal.issuer, subject: principal.subject, assurance: principal.assurance } });
+  expect(closed.snapshot.state).toEqual({ kind: 'terminal', outcome: 'failed', reason: 'park-timeout' });
+});
+it('refuses a forged attempt identity or corrupt snapshot when replaying a parked evaluation', async () => {
+  const f = await fixture('complete', true);
+  const make = (store = f.store) => new TaskEvaluationApplication(store, { async verify() { return principal; } }, f.authorization, f.evaluator, f.artifacts,
+    { maxEvidenceItems: 2, maxTotalBytes: 4096 }, { now: () => 100, timeoutMs: 1000 });
+  await make().execute(command);
+  await expect(make().execute({ ...command, identity: { ...identity, generation: 2 } })).rejects.toThrow('RUN_COMMAND_CONFLICT');
+  const receipt = (await f.store.loadRunReceipt('s', command.commandId))!;
+  const corrupt = new Proxy(f.store, { get(target, property, receiver) {
+    if (property === 'loadRunReceipt') return async () => ({ ...receipt, snapshot: { ...receipt.snapshot, revision: 99 } });
+    return Reflect.get(target, property, receiver);
+  } });
+  await expect(make(corrupt).execute(command)).rejects.toThrow('RUN_STORE_CORRUPT');
+});
+
+it('carries unknown through real ledger to the shared human SDK and CLI decision, preserving audit and unverified labels', async () => {
+  const f = await fixture();
+  const evaluator = new TaskEvaluationApplication(f.store, { async verify() { return principal; } }, f.authorization,
+    { async evaluate() { return 'unknown' as const; } }, f.artifacts, { maxEvidenceItems: 2, maxTotalBytes: 4096 }, { now: () => 100, timeoutMs: 1000 });
+  const waiting = await evaluator.execute(command);
+  const integrity = createHmacIntegrity('audit', new Uint8Array(32).fill(1));
+  const human = new RunLifecycleApplication(f.store, { async verify() { return principal; } }, { async authorize() {} }, f.authorization,
+    audit => new AuditApplication(audit, integrity), () => 200, 1000, 'policy');
+  let text = '', received: unknown;
+  const layout = resolveProductPaths('/fixture/project', { env: { HOME: '/fixture/home' } });
+  const context = { env: { NO_COLOR: '1' }, stdout: { write(value: string) { text += value; } },
+    async applyRunLifecycle(_root: string, input: import('#engine/index.js').RunLifecycleCommand) {
+      received = input; const receipt = await human.execute(input);
+      return { schemaVersion: 1 as const, layout, lifecycle: { schemaVersion: 1 as const, commandId: receipt.commandId, run: projectRunView(receipt.snapshot) } };
+    } };
+  const decision = { schemaVersion: 1 as const, action: 'accept' as const, scopeId: 's', runId: 'r', taskId: 't', commandId: 'human-accept', expectedRevision: waiting.snapshot.revision };
+  const args = ['task', 'accept', '--scope', 's', '--run', 'r', '--task', 't', '--command-id', 'human-accept', '--expected-revision', String(waiting.snapshot.revision)];
+  expect(await main([...args, '--lang', 'en'], context)).toBe(0); expect(received).toEqual(decision);
+  expect(text).toContain('Accepted — model evidence unverified');
+  const sdk = await human.execute(decision); expect(sdk.snapshot.progress[0].acceptedEvidence).toBe('model-unverified');
+  text = ''; expect(await main([...args, '--lang', 'tr'], context)).toBe(0); expect(text).toContain('Kabul — model kanıtı doğrulanamadı');
+  text = ''; expect(await main([...args, '--json'], context)).toBe(0);
+  expect(JSON.parse(text).lifecycle.run).toEqual(projectRunView(sdk.snapshot));
+  const original = JSON.parse((await f.store.loadRunReceipt('s', command.commandId))!.command);
+  expect(original.evaluation.criteria[0].verdict).toBe('unknown');
+});
+it('a policy can only narrow unknown to failed and never create acceptance', async () => {
+  const f = await fixture();
+  const make = (restriction: string) => new TaskEvaluationApplication(f.store, { async verify() { return principal; } }, f.authorization,
+    { async evaluate() { return 'unknown' as const; } }, f.artifacts, { maxEvidenceItems: 2, maxTotalBytes: 4096 },
+    { now: () => 100, timeoutMs: 1000 }, { async decide() { return restriction as 'fail'; } });
+  await expect(make('accept').execute(command)).rejects.toThrow('TASK_EVALUATION_INVALID');
+  expect(await f.store.loadRunReceipt('s', command.commandId)).toBeNull();
+  const failed = await make('fail').execute(command);
+  expect(failed.snapshot.progress[0].phase).toBe('failed');
+  const record = JSON.parse(failed.command);
+  expect(record.unknownDisposition).toBe('fail'); expect(record.evaluation.criteria[0].verdict).toBe('unknown');
+});
+
+it('parks a migrated historical unknown without spending another evaluation revision', async () => {
+  const f = await fixture();
+  const evaluator = new TaskEvaluationApplication(f.store, { async verify() { return principal; } }, f.authorization,
+    { async evaluate() { return 'unknown' as const; } }, f.artifacts, { maxEvidenceItems: 2, maxTotalBytes: 4096 });
+  const original = await evaluator.execute(command);
+  const oldProgress = original.snapshot.progress.map(task => { return { ...task, decision: undefined, phase: 'evaluating' }; });
+  const db = new DatabaseSync(f.path); db.prepare('UPDATE runs SET snapshot=?').run(JSON.stringify({ ...original.snapshot, state: { kind: 'running' }, progress: oldProgress })); db.close();
+  const app = new RunLifecycleApplication(f.store, { async verify() { return principal; } }, { async authorize() {} }, f.authorization,
+    () => { throw new Error('unexpected decision audit'); }, () => 100, 1000, 'policy');
+  const parked = await app.advance({ schemaVersion: 1, scopeId: 's', runId: 'r' });
+  expect(parked!.snapshot.progress[0].phase).toBe('awaiting-decision');
+  expect(parked!.snapshot.state).toMatchObject({ kind: 'parked', deadline: 1100 });
+  expect(JSON.parse((await f.store.loadRunReceipt('s', command.commandId))!.command).evaluation).toEqual(JSON.parse(original.command).evaluation);
 });
 
 });

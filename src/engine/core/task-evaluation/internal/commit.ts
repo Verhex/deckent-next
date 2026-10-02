@@ -13,6 +13,8 @@ export const taskEvaluationCommitSchema = z.object({
   expectedRevision: counterSchema,
   evaluation: taskEvaluationSchema,
   dispatch: dispatchRecordSchema,
+  unknownDisposition: z.literal('fail').optional(),
+  now: counterSchema.optional(), timeoutMs: counterSchema.positive().optional(),
 }).strict().refine(value => value.commandId === value.evaluation.evaluationId, 'TASK_EVALUATION_INVALID')
   .transform(value => ({ ...value, evaluation: taskEvaluationSchema.parse({ ...value.evaluation,
     criteria: [...value.evaluation.criteria].sort((a, b) => a.criterionId < b.criterionId ? -1 : a.criterionId > b.criterionId ? 1 : 0)

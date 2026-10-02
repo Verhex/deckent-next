@@ -11,8 +11,12 @@ import { readRunBoundDispatch } from './run-dispatch-lookup.js';
 import { SqliteRunWorkspaceCustody } from './run-workspace-custody.js';
 import type { RunWorkspaceCustody } from '#engine/index.js';
 import { sqliteFailure } from '#adapters/core/sqlite-ledger/index.js';
+import { SqliteAuditStore } from '#adapters/core/audit-store/index.js';
+import { DEFAULT_RUN_PARK_TIMEOUT_MS, closeParkedRun, resumeParkedRun, expireParkedRun, parkTaskAwaitingDecision, resolveTaskDecision } from '#domain/index.js';
+import { runLifecycleWriteSchema, RunLifecycleError, type RunLifecycleWrite, type AuditStore } from '#engine/index.js';
 export class SqliteRunJournal {
-  constructor(private readonly db: DatabaseSync, private readonly admission?: Pick<RunAdmissionFilter, 'excluded'>) {}
+  constructor(private readonly db: DatabaseSync, private readonly admission?: Pick<RunAdmissionFilter, 'excluded'>,
+    private readonly timing: { now: () => number; timeoutMs: number } = { now: Date.now, timeoutMs: DEFAULT_RUN_PARK_TIMEOUT_MS }) {}
   private transaction<T>(work: () => T): T {
     let active = false;
     try { this.db.exec('BEGIN IMMEDIATE'); active = true; const value = work(); this.db.exec('COMMIT'); return value; }
@@ -28,11 +32,11 @@ export class SqliteRunJournal {
       return value;
     } catch { throw new RunStoreError('RUN_STORE_CORRUPT'); }
   }
-  private receipt(scopeId: string, runId: string, commandId: string, command: string): RunReceipt | null {
+  private receipt(scopeId: string, runId: string, commandId: string, command: string, matches: (prior: string) => boolean = prior => prior === command): RunReceipt | null {
     const row = this.db.prepare('SELECT command,snapshot FROM run_receipts WHERE scope_id=? AND command_id=?').get(scopeId, commandId);
     if (!row) return null;
-    if (row.command !== command) throw new RunStoreError('RUN_COMMAND_CONFLICT');
-    return Object.freeze({ commandId, command, snapshot: this.decode(row.snapshot, scopeId, runId) });
+    if (typeof row.command !== 'string' || !matches(row.command)) throw new RunStoreError('RUN_COMMAND_CONFLICT');
+    return Object.freeze({ commandId, command: row.command, snapshot: this.decode(row.snapshot, scopeId, runId) });
   }
   private record(receipt: RunReceipt): RunReceipt {
     this.db.prepare('INSERT INTO run_receipts(scope_id,command_id,command,snapshot) VALUES(?,?,?,?)')
@@ -109,13 +113,50 @@ export class SqliteRunJournal {
       if (attempt.revision !== row.revision || attempt.identity.scopeId !== scopeId || attempt.identity.attemptId !== attemptId) {
         throw new RunStoreError('RUN_STORE_CORRUPT');
       }
-      const proposed = proposeTaskEvaluationCommit(run, attempt, dispatch, parsed.expectedRevision, parsed.evaluation);
+      const proposed = proposeTaskEvaluationCommit(run, attempt, dispatch, parsed.expectedRevision, parsed.evaluation,
+        { now: parsed.now ?? this.timing.now(), timeoutMs: parsed.timeoutMs ?? this.timing.timeoutMs, ...(parsed.unknownDisposition ? { unknownDisposition: parsed.unknownDisposition } : {}) });
       const updated = this.db.prepare('UPDATE runs SET revision=?,snapshot=? WHERE scope_id=? AND run_id=? AND revision=?')
         .run(proposed.snapshot.revision, JSON.stringify(proposed.snapshot), scopeId, runId, parsed.expectedRevision);
       if (updated.changes !== 1) throw new RunStoreError('RUN_STORE_CONFLICT');
       this.db.prepare('INSERT OR IGNORE INTO task_evaluation_observations(scope_id,run_id,attempt_id,attempt_revision) VALUES(?,?,?,?)')
         .run(scopeId, runId, attemptId, parsed.evaluation.attemptRevision);
       return this.record({ commandId: parsed.commandId, command, snapshot: proposed.snapshot });
+    });
+  }
+  /** Decision, CAS snapshot, replay receipt and the sealed audit event share one transaction. */
+  async commitRunLifecycle(input: RunLifecycleWrite, audit?: (store: AuditStore, snapshot: import('#domain/index.js').RunSnapshot) => void): Promise<RunReceipt> {
+    const parsed = runLifecycleWriteSchema.parse(input), command = JSON.stringify({ operation: 'run-lifecycle', ...parsed });
+    const { scopeId, runId, commandId, expectedRevision, now, timeoutMs } = parsed;
+    const fingerprint = (encoded: string) => {
+      const source = JSON.parse(encoded) as Record<string, unknown>;
+      if (source.operation !== 'run-lifecycle') throw new RunStoreError('RUN_COMMAND_CONFLICT');
+      delete source.operation;
+      const data = { ...runLifecycleWriteSchema.parse(source) }; delete (data as Partial<RunLifecycleWrite>).now;
+      delete (data as Partial<RunLifecycleWrite>).timeoutMs; return JSON.stringify(data);
+    };
+    if (['accept', 'reject'].includes(parsed.action) && (parsed.actor.assurance !== 'os-user' || !audit)) {
+      throw new RunLifecycleError('TASK_DECISION_HUMAN_REQUIRED');
+    }
+    return this.transaction(() => {
+      const replay = this.receipt(scopeId, runId, commandId, command, prior => {
+        try { return fingerprint(prior) === fingerprint(command); } catch { throw new RunStoreError('RUN_STORE_CORRUPT'); }
+      }); if (replay) return replay;
+      const row = this.db.prepare('SELECT revision,snapshot FROM runs WHERE scope_id=? AND run_id=?').get(scopeId, runId);
+      if (!row || row.revision !== expectedRevision) throw new RunStoreError('RUN_STORE_CONFLICT');
+      const current = this.decode(row.snapshot, scopeId, runId);
+      if (current.revision !== row.revision) throw new RunStoreError('RUN_STORE_CORRUPT');
+      const snapshot = parsed.action === 'close' ? closeParkedRun(current, expectedRevision, now)
+        : parsed.action === 'resume' ? resumeParkedRun(current, expectedRevision, now, timeoutMs)
+          : parsed.action === 'expire' ? expireParkedRun(current, expectedRevision, now, timeoutMs)
+            : parsed.action === 'park-task' ? parkTaskAwaitingDecision(current, expectedRevision, parsed.taskId!, parsed.reason!, now, timeoutMs)
+              : resolveTaskDecision(current, expectedRevision, parsed.taskId!, parsed.action, now, timeoutMs);
+      // Runtime checks that found no transition write neither a revision nor a replay receipt on every poll.
+      if (parsed.action === 'expire' && snapshot.revision === current.revision) return Object.freeze({ commandId, command, snapshot });
+      const updated = this.db.prepare('UPDATE runs SET revision=?,snapshot=? WHERE scope_id=? AND run_id=? AND revision=?')
+        .run(snapshot.revision, JSON.stringify(snapshot), scopeId, runId, expectedRevision);
+      if (updated.changes !== 1) throw new RunStoreError('RUN_STORE_CONFLICT');
+      audit?.(new SqliteAuditStore(this.db), snapshot);
+      return this.record({ commandId, command, snapshot });
     });
   }
   async cancelRun(input: RunCancellation): Promise<RunReceipt> {
@@ -129,7 +170,8 @@ export class SqliteRunJournal {
       if (current.revision !== row.revision) throw new RunStoreError('RUN_STORE_CORRUPT');
       propagateRunCancellation(this.db, current, parsed.actor);
       // Unlaunched attempts are prevented and already-exited unevaluated ones settled in the same transaction; running ones await delivery.
-      const snapshot = settleRunCancellation(this.db, requestRunCancellation(current, parsed.expectedRevision));
+      const timing = { now: this.timing.now(), timeoutMs: this.timing.timeoutMs };
+      const snapshot = settleRunCancellation(this.db, requestRunCancellation(current, parsed.expectedRevision, timing), timing);
       const updated = this.db.prepare('UPDATE runs SET revision=?,snapshot=? WHERE scope_id=? AND run_id=? AND revision=?')
         .run(snapshot.revision, JSON.stringify(snapshot), scopeId, runId, parsed.expectedRevision);
       if (updated.changes !== 1) throw new RunStoreError('RUN_STORE_CONFLICT');
@@ -169,6 +211,7 @@ export class SqliteRunJournal {
       if (current.revision !== row.revision) throw new RunStoreError('RUN_STORE_CORRUPT');
       // Cancellation closes never-reserved tasks, so report the cause before any capacity/order diagnosis.
       if (current.cancelRequested) throw new RunError('RUN_CANCEL_REQUESTED');
+      if (current.state.kind !== 'running') throw new RunError('RUN_TASK_NOT_READY');
       let policy;
       try { policy = runExecutionPolicySchema.parse(JSON.parse(String(row.policy))); } catch { throw new RunStoreError('RUN_POOL_REQUIRED'); }
       let wave;

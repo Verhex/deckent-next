@@ -1,4 +1,4 @@
-import { DOCKER_EXECUTION_SETTINGS, GIT_EXECUTION_SETTINGS, ARTIFACT_STORAGE_LIMITS, ADOPTION_TARGET_SETTINGS, WORK_TARGET_SETTINGS, EXECUTION_RETENTION_SETTINGS } from './execution.js';
+import { DOCKER_EXECUTION_SETTINGS, GIT_EXECUTION_SETTINGS, ARTIFACT_STORAGE_LIMITS, ADOPTION_TARGET_SETTINGS, WORK_TARGET_SETTINGS, EXECUTION_RETENTION_SETTINGS, RUN_PARKING_SETTINGS } from './execution.js';
 import { SQLITE_STORAGE_OPTIONS } from './storage.js';
 import { z } from 'zod';
 import { PRODUCT_LAYOUT_REGISTRY, LAYOUT_CONTRACT_SINCE, CONFIG_SCHEMA_VERSION, CONFIG_CONTRACT_SINCE, OUTPUT_MODES } from '#platform/core/common/index.js';
@@ -65,6 +65,7 @@ export const CONFIG_FIELDS = Object.freeze({
     claimTtlMs: z.number().int().positive().safe().default(30000),
   }).strict().nullable().default(null), [], LAYOUT_CONTRACT_SINCE),
   runRuntime: field('config.field.runRuntime', z.object({
+    parking: RUN_PARKING_SETTINGS.default({ schemaVersion: 1 }),
     maxReservationsPerTurn: z.number().int().positive().safe().default(4),
     pollIntervalMs: z.number().int().positive().max(2147483647).default(1000),
     failureBackoffMs: z.number().int().positive().max(2147483647).default(5000),

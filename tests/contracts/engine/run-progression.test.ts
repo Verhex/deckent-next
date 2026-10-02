@@ -2,9 +2,9 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { DatabaseSync } from 'node:sqlite';
 import { join } from 'node:path';
-import { afterEach, expect, it } from 'vitest';
+import { afterEach, expect, it, vi } from 'vitest';
 import { openSqliteAttemptStore, type SqliteAttemptStore } from '#adapters/index.js';
-import { RunProgressionTurn, RunReservationApplication, RunStoreError, type RunProgressionOperations } from '#engine/index.js';
+import { RunLifecycleRuntimeLoop, RunProgressionTurn, RunReservationApplication, RunStoreError, type RunProgressionOperations } from '#engine/index.js';
 import { fixtureExecution } from '../support/execution-registry.js';
 import { custodyProfiles, dispatchAdmission, grantTestLaunch } from '../support/custody.js';
 
@@ -55,7 +55,7 @@ it('executes in parallel, serializes acceptance against fresh revisions and adva
   const f = await fixture(); const signal = new AbortController().signal;
   const first = await f.turn.advance(query, signal);
   expect(first.run.tasks.map(t => t.phase)).toEqual(['accepted', 'accepted', 'accepted']); expect(f.stats().maximum).toBe(2);
-  expect(first.attempted).toBe(3);
+  expect(first.attempted).toBe(3); expect(first.run.state).toEqual({ kind: 'terminal', outcome: 'completed', reason: 'completed' });
   const second = await f.turn.advance(query, signal); expect(second.attempted).toBe(0);
   expect(second.run.tasks.every(t => t.phase === 'accepted')).toBe(true);
   expect((await f.turn.advance(query, signal)).attempted).toBe(0);
@@ -63,9 +63,11 @@ it('executes in parallel, serializes acceptance against fresh revisions and adva
 it('does not repeat unknown evaluations or unlock their dependency on another turn', async () => {
   const f = await fixture('unknown'); const signal = new AbortController().signal;
   await f.turn.advance(query, signal);
+  const reserve = vi.spyOn(f.operations, 'reserve');
   const again = await f.turn.advance(query, signal);
+  expect(reserve).not.toHaveBeenCalled();
   expect(again.attempted).toBe(0); expect(f.stats().evaluations).toBe(2);
-  expect(again.run.tasks.map(t => t.phase)).toEqual(['evaluating', 'evaluating', 'pending']);
+  expect(again.run.tasks.map(t => t.phase)).toEqual(['awaiting-decision', 'awaiting-decision', 'pending']);
 });
 it('leaves recorded work untouched when stopped or cancelled and propagates policy denial', async () => {
   const f = await fixture(); const controller = new AbortController(); controller.abort();
@@ -179,4 +181,16 @@ it('yields after a reservation budget, drains/evaluates existing work and resume
   const second = await turn.advance(query, new AbortController().signal);
   expect(second.attempted).toBe(1); expect(second.run.tasks.every(task => task.phase === 'accepted')).toBe(true);
   expect((await f.store.loadRun('s', 'r'))!.bindings.slice(0, 2).map(binding => binding.identity.attemptId)).toEqual(identities);
+});
+
+it('lost completion publication leaves the accepted Run COMPLETED on the next maintenance turn', async () => {
+  const f = await fixture(), controller = new AbortController();
+  const loop = new RunLifecycleRuntimeLoop({
+    async discover() { return { page: { items: [{ scopeId: 's', runId: 'r' }], next: null }, due: { items: [], next: null } }; },
+    async expire() {}, advance: () => f.turn.advance(query, controller.signal),
+  }, { onRun() { throw new Error('COMPLETION_PUBLISH_LOST'); }, onError(_query, error) { expect(String(error)).toContain('COMPLETION_PUBLISH_LOST'); controller.abort(); } },
+  { pollIntervalMs: 1, failureBackoffMs: 1 });
+  await loop.run(controller.signal);
+  expect((await f.store.loadRun('s', 'r'))!.state).toEqual({ kind: 'terminal', outcome: 'completed', reason: 'completed' });
+  expect((await f.turn.advance(query, new AbortController().signal)).run.state).toEqual({ kind: 'terminal', outcome: 'completed', reason: 'completed' });
 });

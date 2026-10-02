@@ -6,6 +6,8 @@ import { afterEach, expect, it } from 'vitest';
 import { CURRENT_LEDGER_VERSION, openSqliteLedger, readScopeCompanies, registerLedgerScopes } from '#adapters/core/sqlite-ledger/index.js';
 import { upgradeExistingProductLedger } from '#adapters/index.js';
 import { DOWNGRADE_TO_V38_LEDGER_SQL, PREVIOUS_LEDGER_VERSION } from '../../fixtures/ledger-previous.js';
+import { createRun } from '#domain/index.js';
+import { fixtureExecution } from '../support/execution-registry.js';
 
 const roots: string[] = [];
 afterEach(async () => { await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
@@ -22,11 +24,15 @@ const version = (path: string) => rows(path, 'PRAGMA user_version')[0]?.user_ver
 
 it('upgrades a real v38 ledger through v39 (scope registry) to the current version: versioned backup first, every row kept, every present scope pinned to the configured company', async () => {
   const { path, backups } = await ledger();
-  expect(CURRENT_LEDGER_VERSION).toBe(44); expect(PREVIOUS_LEDGER_VERSION).toBe(43);
+  expect(CURRENT_LEDGER_VERSION).toBe(45); expect(PREVIOUS_LEDGER_VERSION).toBe(44);
   const db = new DatabaseSync(path);
   db.exec(DOWNGRADE_TO_V38_LEDGER_SQL);
   db.prepare('INSERT INTO attempts VALUES(?,?,?,?)').run('alpha', 'a1', 1, '{"attempt":1}');
-  db.prepare('INSERT INTO runs VALUES(?,?,?,?,?)').run('beta', 'r1', 0, '{"run":1}', '{}');
+  const graph = { schemaVersion: 2, revision: 1, tasks: [{ id: 'task', kind: 'fixture', dependencies: [], acceptanceCriteria: ['verified'] }],
+    criterionDefinitions: [{ id: 'verified', version: 1, description: 'fixture', evaluator: { id: 'test', version: 1 }, parameters: {} }] };
+  const current = createRun({ scopeId: 'beta', runId: 'r1', layoutRevision: 'layout' }, graph, 0, fixtureExecution(graph));
+  const { state: _state, ...historical } = current; void _state;
+  db.prepare('INSERT INTO runs VALUES(?,?,?,?,?)').run('beta', 'r1', 0, JSON.stringify({ ...historical, schemaVersion: 3 }), '{}');
   db.prepare("INSERT INTO agent_turns VALUES(?,?,?,?,'finished',?)").run('gamma', 't1', 'p', 'd', '{"turn":1}');
   db.prepare('INSERT INTO worker_event_logs VALUES(?,?,?)').run('alpha', 'a1', '{"log":1}');
   const before = { attempts: db.prepare('SELECT * FROM attempts').all(), runs: db.prepare('SELECT * FROM runs').all() };
@@ -42,7 +48,9 @@ it('upgrades a real v38 ledger through v39 (scope registry) to the current versi
   expect(rows(backupPath, "SELECT name FROM sqlite_schema WHERE name IN('scope_registry','companies')")).toEqual([]);
 
   expect(version(path)).toBe(CURRENT_LEDGER_VERSION);
-  expect(rows(path, 'SELECT * FROM attempts')).toEqual(before.attempts); expect(rows(path, 'SELECT * FROM runs')).toEqual(before.runs);
+  expect(rows(path, 'SELECT * FROM attempts')).toEqual(before.attempts);
+  expect(rows(path, 'SELECT * FROM runs').map(row => ({ ...row, snapshot: JSON.parse(String(row.snapshot)) })))
+    .toEqual(before.runs.map(row => ({ ...row, snapshot: { ...JSON.parse(String(row.snapshot)), schemaVersion: 4, state: { kind: 'running' } } })));
   expect(rows(path, 'SELECT company_id FROM companies')).toEqual([{ company_id: 'acme' }]);
   expect(rows(path, 'SELECT scope_id,company_id,origin FROM scope_registry ORDER BY scope_id')).toEqual([
     { scope_id: 'alpha', company_id: 'acme', origin: 'migration' }, { scope_id: 'beta', company_id: 'acme', origin: 'migration' },

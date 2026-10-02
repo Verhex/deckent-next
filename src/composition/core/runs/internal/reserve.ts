@@ -19,6 +19,7 @@ export async function reserveConfiguredRunTasks(projectRoot: string, input: RunR
     const poolAuthorization = executionResourceAuthorization(pinnedSource, selectWorkTarget(config.execution)?.id ?? null);
     await authorization.authorize('reserve', command, await authenticate(verifier, undefined, command.scopeId));
     const store = await openSqliteAttemptStore(await path(), config.storage.sqlite, 'forbid');
+    store.setRunLifecycleTiming({ now: Date.now, timeoutMs: config.runRuntime.parking.timeoutMs });
     let approvalJournal: ReturnType<typeof openSqliteApprovalStore> | undefined;
     try {
       let admission: TaskApprovalAdmission | undefined;

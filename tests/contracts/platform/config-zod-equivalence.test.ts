@@ -71,7 +71,7 @@ describe('config defaults (zod 4 .default/.prefault guard)', () => {
     expect(d.mcp).toEqual({ inputMaxBytes: 1_048_576, responseMaxBytes: 1_048_576, maxConcurrentCalls: 8 });
     expect(d.service).toEqual({ identity: null, inputMaxBytes: 1_048_576, responseMaxBytes: 1_048_576, maxConnections: 32, maxConcurrentRequests: 16,
       maxConcurrentExecutions: 8, headerTimeoutMs: 10_000, responseTimeoutMs: 10_000, acceptRetryDelayMs: 25, acceptRetryLimit: 3, shutdownGraceMs: 30_000 });
-    expect(d.runRuntime).toEqual({ maxReservationsPerTurn: 4, pollIntervalMs: 1000, failureBackoffMs: 5000, pageSize: 64 });
+    expect(d.runRuntime).toEqual({ parking: { schemaVersion: 1, timeoutMs: 86400000 }, maxReservationsPerTurn: 4, pollIntervalMs: 1000, failureBackoffMs: 5000, pageSize: 64 });
     expect(d.inspection).toEqual({ maxPageSize: 64, policyMaxBytes: 1_048_576,
       workers: { heartbeatMs: 2000, staleMs: 10_000, maxFileBytes: 65_536, maxEntries: 4096, sources: [] } });
     expect(d.toolchains).toEqual({ currency: { mode: 'report', registryEndpoint: 'https://registry.npmjs.org', timeoutMs: 5000, responseMaxBytes: 65_536 },

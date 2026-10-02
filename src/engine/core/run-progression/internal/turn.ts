@@ -5,6 +5,7 @@ import type { TaskEvaluationCommand } from '#engine/core/task-evaluation/index.j
 
 /** Trusted, freshly authorized application operations. This port grants no execution permission. */
 export interface RunProgressionOperations {
+  advanceLifecycle?(query: RunQuery): Promise<void>;
   read(query: RunQuery): Promise<RunSnapshot>;
   reserve(command: RunReservationCommand): Promise<'reserved' | 'waiting' | 'changed'>;
   execute(identity: AttemptIdentity): Promise<void>;
@@ -52,6 +53,7 @@ export class RunProgressionTurn {
   }
   async advance(input: unknown, signal: AbortSignal) {
     const query = runQuerySchema.parse(input);
+    await this.operations.advanceLifecycle?.(query);
     const started = new Set<string>();
     type Completion = { attemptId: string; ok: true } | { attemptId: string; ok: false; error: unknown };
     const running = new Map<string, Promise<Completion>>();
@@ -81,13 +83,13 @@ export class RunProgressionTurn {
         throwIfFailed();
         let run = await this.read(query);
         throwIfFailed();
-        if (run.cancelRequested) break;
+        if (run.cancelRequested || run.state.kind !== 'running') break;
         // One serial acceptance pass per completion; concurrently finishing workers may change revision.
         // A typed changed outcome is deferred, never retried in a tight loop.
         await this.evaluateReady(query, signal);
         run = await this.read(query);
         throwIfFailed();
-        if (signal.aborted || run.cancelRequested) break;
+        if (signal.aborted || run.cancelRequested || run.state.kind !== 'running') break;
         startReserved(run);
         // Cooperative yield: stop taking new reservations, but drain existing custody before returning.
         if ((this.maxReservations === undefined || reservations < this.maxReservations)

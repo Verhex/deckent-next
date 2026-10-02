@@ -14,7 +14,7 @@ export interface MonitorService {
   readonly build: MonitorBuild | null;
 }
 /** Why a non-terminal Run is not progressing; `none` only when it is progressing normally. */
-export type MonitorBlockerCode = 'none' | 'waiting-pool-slot' | 'pool-held' | 'waiting-dependency' | 'awaiting-approval'
+export type MonitorBlockerCode = 'parked' | 'awaiting-decision' | 'none' | 'waiting-pool-slot' | 'pool-held' | 'waiting-dependency' | 'awaiting-approval'
   | 'worker-running' | 'worker-stale-heartbeat' | 'worker-exited-unevaluated' | 'evaluation-not-ready' | 'evaluation-unknown'
   | 'unresolved-effect' | 'cancellation-pending' | 'not-admitted' | 'unknown';
 export interface MonitorBlocker {
@@ -43,10 +43,10 @@ export interface MonitorTask {
   readonly taskId: string; readonly kind: string; readonly phase: string;
   readonly profile: { readonly id: string; readonly version: number } | null;
   readonly attempts: number; readonly lastAttempt: MonitorAttempt | null;
-  readonly evaluation: { readonly verdict: 'accepted' | 'rejected' | 'unknown' | 'pending' | null; readonly observedAtMs: number | null };
+  readonly evaluation: { readonly verdict: 'accepted' | 'accepted-unverified' | 'rejected' | 'unknown' | 'pending' | null; readonly observedAtMs: number | null };
   readonly dependencies: readonly string[];
 }
-export type MonitorRunState = 'progressing' | 'waiting' | 'blocked' | 'accepted' | 'failed' | 'cancelled';
+export type MonitorRunState = 'progressing' | 'waiting' | 'blocked' | 'accepted' | 'failed' | 'cancelled' | 'parked' | 'incomplete';
 export interface MonitorRun {
   readonly scopeId: string; readonly runId: string; readonly revision: number; readonly state: MonitorRunState;
   readonly phaseCounts: Readonly<Record<string, number>>; readonly tasks: readonly MonitorTask[];

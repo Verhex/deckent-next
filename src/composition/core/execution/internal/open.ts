@@ -15,5 +15,6 @@ export async function openConfiguredExecution(projectRoot: string, sourceRoot: s
   const workspaces = new GitWorkspaceBroker({ ...config.execution.git, sourceRoot, workspaceRoot });
   const artifacts = new FileArtifactStore({ root: artifactRoot, maxBytes: config.artifacts.maxBytes });
   const store = await openSqliteAttemptStore(ledger, config.storage.sqlite, 'allow', { validate: validateDockerSupervisorProfile });
+    store.setRunLifecycleTiming({ now: Date.now, timeoutMs: config.runRuntime.parking.timeoutMs });
   return Object.freeze({ layout, supervisor, workspaces, artifacts, store });
 }

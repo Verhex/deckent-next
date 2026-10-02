@@ -12,14 +12,14 @@ export interface MonitorRunEvidence {
  * The one blocker precedence (MONITOR-DATA): repair/human conditions outrank progress; equal codes keep graph order. `unknown` (no
  * evidence) sits above the progressing codes so missing evidence is never shown as healthy progress.
  */
-export const MONITOR_BLOCKER_PRECEDENCE: readonly MonitorBlockerCode[] = Object.freeze(['cancellation-pending', 'unresolved-effect', 'evaluation-unknown',
+export const MONITOR_BLOCKER_PRECEDENCE: readonly MonitorBlockerCode[] = Object.freeze(['parked', 'awaiting-decision', 'cancellation-pending', 'unresolved-effect', 'evaluation-unknown',
   'evaluation-not-ready', 'worker-stale-heartbeat', 'worker-exited-unevaluated', 'awaiting-approval', 'not-admitted', 'pool-held', 'waiting-pool-slot',
   'unknown', 'worker-running', 'none', 'waiting-dependency']);
-const STATE: Readonly<Record<MonitorBlockerCode, MonitorRunState>> = Object.freeze({ 'none': 'progressing', 'worker-running': 'progressing',
+const STATE: Readonly<Record<MonitorBlockerCode, MonitorRunState>> = Object.freeze({ parked: 'parked', 'awaiting-decision': 'waiting', 'none': 'progressing', 'worker-running': 'progressing',
   'waiting-pool-slot': 'waiting', 'pool-held': 'waiting', 'awaiting-approval': 'waiting', 'cancellation-pending': 'waiting', 'worker-exited-unevaluated': 'waiting',
   'waiting-dependency': 'waiting', 'worker-stale-heartbeat': 'blocked', 'evaluation-not-ready': 'blocked', 'evaluation-unknown': 'blocked',
   'unresolved-effect': 'blocked', 'not-admitted': 'blocked', 'unknown': 'blocked' });
-const OPEN = new Set(['pending', 'active', 'evaluating', 'reconciling']);
+const OPEN = new Set(['pending', 'active', 'evaluating', 'reconciling', 'awaiting-decision']);
 const blocker = (code: MonitorBlockerCode, taskId: string | null, sinceMs: number | null = null, detail: string | null = null): MonitorBlocker =>
   Object.freeze({ code, taskId, sinceMs, detail });
 const readiness = (run: MonitorLedgerRun, now: number) => new Map(inspectTaskReadiness(run.snapshot.graph,
@@ -72,6 +72,8 @@ function pendingBlocker(task: TaskReadiness, e: MonitorRunEvidence): MonitorBloc
 /** One blocker per non-terminal Run (null when every task is terminal), chosen by `MONITOR_BLOCKER_PRECEDENCE`. */
 export function deriveRunBlocker(e: MonitorRunEvidence): MonitorBlocker | null {
   const snapshot = e.run.snapshot;
+  if (snapshot.state.kind === 'terminal') return null;
+  if (snapshot.state.kind === 'parked') return blocker('parked', null, snapshot.state.since, snapshot.state.reason);
   if (!snapshot.progress.some(task => OPEN.has(task.phase))) return null;
   if (snapshot.cancelRequested) return blocker('cancellation-pending', null);
   const ready = readiness(e.run, e.observedAt); const candidates: MonitorBlocker[] = [];
@@ -80,6 +82,7 @@ export function deriveRunBlocker(e: MonitorRunEvidence): MonitorBlocker | null {
     const attempt = attemptOf(e.run, task.taskId);
     if (task.unresolvedEffects || task.phase === 'reconciling') candidates.push(blocker('unresolved-effect', task.taskId, null, attempt?.observedKind ?? null));
     else if (task.phase === 'active' || task.phase === 'evaluating') candidates.push(boundBlocker(task.taskId, task.phase, attempt, attempt ? e.workers.get(attempt.attemptId) : undefined, e));
+    else if (task.phase === 'awaiting-decision') candidates.push(blocker('awaiting-decision', task.taskId, task.decision!.since, task.decision!.reason));
     else if (task.phase === 'pending') candidates.push(pendingBlocker(ready.get(task.taskId)!, e));
   }
   const rank = (value: MonitorBlocker) => MONITOR_BLOCKER_PRECEDENCE.indexOf(value.code);
@@ -88,6 +91,9 @@ export function deriveRunBlocker(e: MonitorRunEvidence): MonitorBlocker | null {
 /** Terminal Runs by their task outcomes (failed › cancelled › accepted); otherwise the blocker's state, where a dependency that can no
  * longer be accepted (failed/cancelled) blocks instead of waits. */
 export function deriveRunState(e: MonitorRunEvidence, current: MonitorBlocker | null): MonitorRunState {
+  const state = e.run.snapshot.state;
+  if (state.kind === 'parked') return 'parked';
+  if (state.kind === 'terminal') return state.outcome === 'completed' ? 'accepted' : state.outcome;
   const phases = e.run.snapshot.progress.map(task => task.phase);
   if (!current) return phases.includes('failed') ? 'failed' : phases.includes('cancelled') ? 'cancelled' : 'accepted';
   if (current.code === 'waiting-dependency' && current.taskId && readiness(e.run, e.observedAt).get(current.taskId)?.disposition === 'blocked') return 'blocked';
@@ -98,6 +104,7 @@ const modelName = (view: WorkerModelView | null | undefined) => view ? view.usag
 function verdict(phase: string, attempt: MonitorLedgerAttempt | null): MonitorTask['evaluation']['verdict'] {
   if (phase === 'accepted') return 'accepted';
   if (phase === 'failed') return attempt?.evaluationObserved ? 'rejected' : null;
+  if (phase === 'awaiting-decision') return 'unknown';
   if (phase === 'evaluating') return attempt?.evaluationObserved ? 'unknown' : 'pending';
   return null;
 }
@@ -113,7 +120,7 @@ export function projectMonitorRun(e: MonitorRunEvidence): MonitorRun {
     push(attempt?.reservedAtMs, attempt?.dispatch?.grantedAtMs, endOf(attempt), heartbeatAt(worker, e.observedAt), worker?.files?.activity?.receivedAt);
     const provider = worker && worker.provider !== 'unknown' ? worker.provider : attempt?.provider ?? null;
     return Object.freeze({ taskId: definition.id, kind: definition.kind, phase: progress.phase, profile: profile ? { id: profile.id, version: profile.version } : null,
-      attempts: attempt ? 1 : 0, dependencies: definition.dependencies, evaluation: { verdict: verdict(progress.phase, attempt), observedAtMs: null },
+      attempts: attempt ? 1 : 0, dependencies: definition.dependencies, evaluation: { verdict: progress.acceptedEvidence === 'model-unverified' ? 'accepted-unverified' : verdict(progress.phase, attempt), observedAtMs: null },
       lastAttempt: attempt ? Object.freeze({ attemptId: attempt.attemptId, generation: attempt.generation, launch: attempt.dispatch?.launch ?? null,
         exitCode: attempt.dispatch?.terminal?.exitCode ?? null, startedAtMs: attempt.dispatch?.grantedAtMs ?? null, endedAtMs: endOf(attempt),
         endedAtSource: attempt.sealedAtMs !== null ? 'sealed' as const : endOf(attempt) !== null ? 'observed' as const : null,

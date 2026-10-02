@@ -42,3 +42,13 @@ it('refuses caller verdict/actor injection, duplicate evidence and cancelled or 
   expect(() => inspectTaskEvaluation(requestRunCancellation(run, run.revision), evaluation)).toThrow('TASK_EVALUATION_NOT_READY');
   expect(() => inspectTaskEvaluation({ ...run, progress: run.progress.map(value => value.taskId === 'a' ? { ...value, phase: 'reconciling', unresolvedEffects: true } : value) }, evaluation)).toThrow('TASK_EVALUATION_NOT_READY');
 });
+it('preserves Rule A substitution failure and accepts Codex/Cursor criteria while keeping model evidence visibly unverified', () => {
+  const requested = { channelId: 'native', modelId: 'requested-model', auxiliaryModelIds: [] };
+  const model = { provider: 'claude', requested, init: 'other-model', usage: ['other-model'], verdict: 'substituted', unexpected: ['other-model'], evidence: 'sealed' };
+  expect(inspectTaskEvaluation(fixture(), { ...evaluation, model }).conclusion).toBe('fail');
+  for (const provider of ['codex', 'cursor']) {
+    const result = inspectTaskEvaluation(fixture(), { ...evaluation, model: { ...model, provider, verdict: 'unverified', init: null, usage: null, unexpected: [], evidence: 'absent' } });
+    expect(result.conclusion).toBe('pass');
+    expect(result.evaluation.model).toMatchObject({ provider, verdict: 'unverified', evidence: 'absent' });
+  }
+});

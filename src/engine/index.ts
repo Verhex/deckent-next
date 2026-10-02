@@ -30,7 +30,7 @@ export type { SupervisorProfile, SupervisorProfileSource } from '#engine/core/su
 export { proposeTaskEvaluationCommit, taskEvaluationCommitSchema, assertTaskEvaluationCustody } from '#engine/core/task-evaluation/index.js';
 export type { TaskEvaluationCommit, TaskEvaluationStore } from '#engine/core/task-evaluation/index.js';
 export { TaskEvaluationApplication, taskEvaluationCommandSchema, describeTaskEvaluationReceipt } from '#engine/core/task-evaluation/index.js';
-export type { TaskEvaluationCommand, TaskEvaluationAuthorization, TaskTerminalEvaluator } from '#engine/core/task-evaluation/index.js';
+export type { TaskEvaluationCommand, TaskEvaluationAuthorization, TaskTerminalEvaluator, UnknownEvaluationPolicy } from '#engine/core/task-evaluation/index.js';
 
 export { parseRetainedOutputEnvelope } from '#engine/core/dispatch/index.js';
 
@@ -47,7 +47,7 @@ export * from '#engine/core/provider-spend/index.js';
 export * from '#engine/core/model-allocation/index.js';
 export * from '#engine/core/inference-serving/index.js';
 
-export { RunProgressionTurn, reservationRefusalOutcome } from '#engine/core/run-progression/index.js';
+export { RunLifecycleRuntimeLoop, RunProgressionTurn, reservationRefusalOutcome } from '#engine/core/run-progression/index.js';
 export type { RunProgressionOperations, RunProgressionRuntime } from '#engine/core/run-progression/index.js';
 export { progressionQuerySchema, progressionCursorSchema } from '#engine/core/run-progression/index.js';
 export type { ProgressionQuery, ProgressionCursor, RunProgressionJournal } from '#engine/core/run-progression/index.js';

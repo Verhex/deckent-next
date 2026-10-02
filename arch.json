@@ -124,7 +124,9 @@
         "src/platform/core/errors",
         "src/platform/core/host",
         "src/engine/core/secret-store",
-        "src/adapters/core/secret-store"
+        "src/adapters/core/secret-store",
+        "src/adapters/core/native-connection",
+        "src/adapters/core/worker-observation"
       ],
       "plan": "PROVIDERS"
     },
@@ -360,7 +362,8 @@
         "src/platform/core/errors",
         "src/platform/core/managed-files",
         "src/domain/core/effect",
-        "src/engine/core/scheduling"
+        "src/engine/core/scheduling",
+        "src/domain/core/run"
       ],
       "plan": "FOUNDATION"
     },
