@@ -6,8 +6,10 @@ that is not a sandbox), the MCP server and the SDK (`import … from 'deckent'`)
 service. There is no HTTP API yet; Dashboard and Desktop are planned observer/operator apps on the same services
 (only a versioned terminal–desktop bridge contract exists).
 
-Status: **1.0.0-alpha, clean-room port in progress.** Completed capabilities are recorded in
-[COMPLETED-PLAN.md](COMPLETED-PLAN.md); remaining work is in [PLAN.md](PLAN.md). Everything else is being ported from the legacy codebase
+Status: **1.0.0-alpha.3 (live 2026-10-03), clean-room port in progress.** Completed capabilities are recorded in
+[COMPLETED-PLAN.md](COMPLETED-PLAN.md); remaining work is in [PLAN.md](PLAN.md); who holds what and what comes next is on the host
+process board (`node .agents/refactor/board.mjs show`). Live observation: `deckent monitor` (one read-only snapshot of every installation).
+Development dogfood (Deckent workers writing Deckent cards in an isolated installation) runs as bounded trials; DOGFOOD is officially off. Everything else is being ported from the legacy codebase
 one capability at a time, each landing with contract tests and a real-binary proof.
 
 ## Requirements
