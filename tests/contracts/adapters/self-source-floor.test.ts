@@ -54,6 +54,25 @@ describe('derived self-source floor', () => {
     expect(classifySandboxWritePath(scope, authority, 'dist/new.js', 'write', false)).toBe('edit');
     expect(classifySandboxWritePath(scope, authority, 'package.json', 'write', false)).toBe('edit-floor');
   });
+  it('keeps the static hard floor distinct in self-source repositories, including overlapping paths and directories', async () => {
+    const scope = await createWorkspaceScope(await repository()), authority = (rel: string) => rel === '.deckent/config.json';
+    for (const path of ['package.json', '.deckent/config.json', '.agents/refactor/x.mjs', '.github/w.yml', 'AGENTS.md', 'src/package.json']) {
+      expect(classifySandboxWritePath(scope, () => false, path, 'write', true), path).toBe('edit-floor');
+    }
+    for (const path of ['package.json', '.deckent/config.json', '.agents/refactor/x.mjs', '.github/w.yml', 'AGENTS.md']) {
+      expect(isSelfSourceWriteFloored(path), path).toBe(false);
+      expect(agentTurnWriteFloor(() => false, false, true)(path), path).toBe(true);
+    }
+    expect(classifySandboxWritePath(scope, authority, '.deckent/config.json', 'write', true)).toBe('edit-authority');
+    for (const path of ['src/a.ts', 'dist/x.js', 'scripts/b.mjs', 'assets/c.json']) {
+      expect(classifySandboxWritePath(scope, authority, path, 'write', true), path).toBe('edit-self-source');
+    }
+    for (const kind of ['mkdir', 'rmdir'] as const) {
+      expect(classifySandboxWritePath(scope, authority, 'src', kind, true)).toBe('edit-self-source');
+      expect(classifySandboxWritePath(scope, authority, 'src/package.json', kind, true)).toBe('edit-floor');
+      expect(classifySandboxWritePath(scope, authority, '.github', kind, true)).toBe('edit-floor');
+    }
+  });
   it('does not classify self-source shell targets as narrow unattended mutations, scratch stays ordinary', async () => {
     const root = await repository(); await mkdir(join(root, 'dist')); await writeFile(join(root, 'dist/a.js'), 'before');
     const scope = await createWorkspaceScope(root), scratch = await createWorkspaceScope(await repository());

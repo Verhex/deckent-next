@@ -44,7 +44,7 @@ export function createAgentShell(input: { readonly scope: WorkspaceScope; readon
   /** SHELL-OVERLAY: where this turn's write-set directories live (outside the project), or null when nowhere can (no write sets). */
   readonly writeSetRoot?: () => Promise<string | null> }) {
   const { scope, context, scopeId, turnId, channel } = input, roots = input.scratch ? [input.scratch.scope] : [];
-  const productState = input.productState.map(createGlobMatcher), protectedNames = createShellProtectedNames(scope.root, productState, input.writeFloor);
+  const productState = input.productState.map(createGlobMatcher), protectedNames = createShellProtectedNames(scope.root, productState);
   const namesProductState = (detail: string | undefined) => detail !== undefined
     && productState.some(match => match(relative(scope.root, resolve(scope.root, detail)).split(sep).join('/')));
   const plans = new Map<string, ShellPlan>();

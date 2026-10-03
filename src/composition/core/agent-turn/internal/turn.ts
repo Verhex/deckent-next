@@ -244,8 +244,8 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
           const { id, issuer, subject } = context.principal, facts = agentToolApprovalFacts(policy, command.scopeId, decisions.cell(tool, args));
           const record = requestAgentToolApproval(journal.store, integrity, { scopeId: command.scopeId, requester: { id, issuer, subject }, subject: callSubject, facts,
             policyRevision: typeof policy.revision === 'string' ? policy.revision : 'unknown',
-            summary: agentToolApprovalSummary({ tool: tool.name, resource, argsDigest, cell: decisions.cell(tool, args), selfSourceReason: t('terminal.approval.selfSource',
-              { path: resource, mode: fullAccess ? 'full-access' : agentCallPermissionMode(policy, context.principal, command.scopeId) }, language) }), createdAt: now, expiresAt: now + context.config.approvals.requestTtlMs });
+            summary: agentToolApprovalSummary({ tool: tool.name, resource, argsDigest, cell: decisions.cell(tool, args), selfSourceReason: decisions.cell(tool, args) === 'edit-self-source' ? t('terminal.approval.selfSource',
+              { path: resource, mode: fullAccess ? 'full-access' : agentCallPermissionMode(policy, context.principal, command.scopeId) }, language) : '' }), createdAt: now, expiresAt: now + context.config.approvals.requestTtlMs });
           // A diff larger than the preview bound is shown cut, with the whole change kept owner-only while the approval is pending.
           const diff = editsOf(tool.name)?.preview(tool.name, args);
           if (diff !== undefined && Buffer.byteLength(diff, 'utf8') > APPROVAL_PREVIEW_MAX_BYTES) kept = await keepFullPreview(context.layout, record.request.approvalId, diff);

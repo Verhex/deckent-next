@@ -4,7 +4,7 @@ import { resolve } from 'node:path';
 import { promisify } from 'node:util';
 import { readBuildIdentity } from '#platform/index.js';
 import { GIT_LISTING_MAX_BYTES, GIT_LISTING_TIMEOUT_MS } from '#adapters/core/host-shell/index.js';
-import { isSelfSourceWriteFloored, isWriteApprovalFloored } from '#adapters/core/workspace-write/index.js';
+import { isAnyWriteFloored, isWriteApprovalFloored } from '#adapters/core/workspace-write/index.js';
 
 /** Pure equality of canonical repository identities. An absent/old build identity never opts a customer in. */
 export const isSelfSourceIdentity = (projectCommonDir: string | null, sourceCommonDir?: string | null): boolean =>
@@ -27,4 +27,4 @@ export async function isSelfSourceProject(projectRoot: string, identity: { reado
 }
 /** Full access retains the very same authority-only callback; customer projects retain the static floor callback. */
 export const agentTurnWriteFloor = (authority: (rel: string) => boolean, fullAccess: boolean, selfSource: boolean): (rel: string) => boolean =>
-  fullAccess ? authority : selfSource ? isSelfSourceWriteFloored : isWriteApprovalFloored;
+  fullAccess ? authority : selfSource ? isAnyWriteFloored : isWriteApprovalFloored;

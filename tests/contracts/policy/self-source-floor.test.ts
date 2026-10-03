@@ -25,6 +25,14 @@ describe('SELF-SOURCE-FLOOR session and policy boundary', () => {
     expect(standingCallKey(CALL)).toEqual({ key: KEY, cell: CALL.cell, session: false });
   });
 
+  it('never offers a session or standing key for any static hard-floor target', () => {
+    for (const path of ['package.json', '.deckent/config.json', '.agents/refactor/x.mjs', '.github/w.yml', 'AGENTS.md', 'src/package.json']) {
+      const call = { ...CALL, path, cell: 'edit-floor' };
+      expect(sessionPattern(call), path).toEqual({ ok: false, reason: 'cell-not-standing' });
+      expect(standingPattern(call), path).toEqual({ ok: false, reason: 'cell-not-standing' });
+      expect(standingCallKey(call), path).toBeNull();
+    }
+  });
   it('validates a self-source session target as narrowly as an ordinary edit target', () => {
     for (const path of ['../src/a', '/src/a', 'src//a', 'src/./a', 'src/*', 'src/../a', 'src/a\n']) {
       expect(sessionPattern({ ...CALL, path })).toEqual({ ok: false, reason: 'unsafe-target' });

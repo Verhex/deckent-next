@@ -3,7 +3,6 @@ import { EffectApplication, OperationPolicyAuthorization, agentToolArgumentsDige
 import { SystemTrustedClock, prepareProductDirectory } from '#platform/index.js';
 import { agentFileEffectCommandId, createLocalPeerSession, openSqliteAttemptStore, type LocalPeerIdentity, type WorkspaceEditArea, type WorkspaceEditPlan } from '#adapters/index.js';
 import type { loadPeerInvocationContext } from '#composition/core/model-invocation/index.js';
-
 /**
  * Agent file edits of one turn in one area (T-L4 slice 2; SCR-A: the project, or the conversation's scratch area): the plan (version +
  * diff) is computed before authority is asked and reused for the write, so the owner approves exactly the diff that is written; the

@@ -15,4 +15,6 @@ export const isDirectoryWriteApprovalFloored = (rel: string) => isWriteApprovalF
 /** A2 policy data: only the running build's source repository gets this additional floor. */
 export const SELF_SOURCE_WRITE_APPROVAL_FLOOR: readonly string[] = Object.freeze(['src/**', 'dist/**', 'scripts/**', 'assets/**']);
 const selfSourceMatchers = SELF_SOURCE_WRITE_APPROVAL_FLOOR.map(createGlobMatcher);
-export const isSelfSourceWriteFloored = (rel: string) => isWriteApprovalFloored(rel) || selfSourceMatchers.some(match => match(rel));
+export const isSelfSourceWriteFloored = (rel: string) => selfSourceMatchers.some(match => match(rel));
+/** Boolean protection for sandbox/write checks; cell classification must keep the two floors distinct. */
+export const isAnyWriteFloored = (rel: string) => isWriteApprovalFloored(rel) || isSelfSourceWriteFloored(rel);

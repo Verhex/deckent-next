@@ -75,12 +75,12 @@ export function agentProductStateDeny(projectRoot: string, layout: ProductLayout
 
 /**
  * The edit path rules for one write-set path: a denied path (`writablePath`), the configuration file (`edit-authority`), the write floor
- * (`edit-floor`), else `edit`. A directory — one removed, or a new parent one (Astra 2182 R3: `src/package.json/` is the floor name,
+ * (`edit-floor`), the additional self-source floor (`edit-self-source`), else `edit`. A directory — one removed, or a new parent one (Astra 2182 R3: `src/package.json/` is the floor name,
  * whatever it holds) — is classified by its own name and as a tree (`dir/` denied, `dir/-` on the write floor): the rules for what it holds.
  */
 export function classifySandboxWritePath(scope: WorkspaceScope, authority: (rel: string) => boolean, rel: string,
   kind: 'write' | 'delete' | 'rmdir' | 'mkdir', selfSource = false): SandboxWriteCell | 'denied' {
   const directory = kind === 'rmdir' || kind === 'mkdir', lexical = writablePath(scope, rel);
   if (!lexical.ok || lexical.rel !== rel || (directory && scope.denied(`${rel}/`))) return 'denied';
-  return authority(rel) ? 'edit-authority' : selfSource && (isSelfSourceWriteFloored(rel) || directory && isSelfSourceWriteFloored(`${rel}/-`)) ? 'edit-self-source' : (directory ? isDirectoryWriteApprovalFloored(rel) : isWriteApprovalFloored(rel)) ? 'edit-floor' : 'edit';
+  return authority(rel) ? 'edit-authority' : (directory ? isDirectoryWriteApprovalFloored(rel) : isWriteApprovalFloored(rel)) ? 'edit-floor' : selfSource && (isSelfSourceWriteFloored(rel) || directory && isSelfSourceWriteFloored(`${rel}/-`)) ? 'edit-self-source' : 'edit';
 }

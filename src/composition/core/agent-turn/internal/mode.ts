@@ -62,7 +62,7 @@ export function createAgentCallDecisions(input: { readonly context: Context; rea
     : mcps(tool) ? MCP_TOOL_CALL_OPERATION.operation : null;
   // Standing approvals (G6) cover only the edit and shell cells a standing pattern names; any other cell (fetch, MCP) has none.
   const standingOf = (tool: AgentToolSpec, cell: AgentToolCallCell, args: Record<string, unknown> | undefined) => !args ? null : standingCallKey({ tool: tool.name, cell,
-    path: cell === 'edit-self-source' && typeof args['path'] === 'string' ? args['path'] : tool.toolClass === 'edit' ? edits(tool.name)?.target(tool.name, args) ?? null : null, command: typeof args['command'] === 'string' ? args['command'] : null },
+    path: tool.toolClass === 'edit' ? edits(tool.name)?.target(tool.name, args) ?? null : cell === 'edit-self-source' && typeof args['path'] === 'string' ? args['path'] : null, command: typeof args['command'] === 'string' ? args['command'] : null },
   input.standing && { sessions: input.standing.memory, session: input.standing.session });
   const load = async (): Promise<unknown> => { try { return await context.policy.load(); } catch { return null; } };
   /** Pure decision on one snapshot (a fresh one unless given); an unreadable or invalid policy is null, i.e. `deny` (fail closed). */
@@ -76,7 +76,7 @@ export function createAgentCallDecisions(input: { readonly context: Context; rea
   const cellOf = (tool: AgentToolSpec, args: Record<string, unknown>): AgentToolCallCell | null => {
     if (tool.toolClass === 'edit') {
       const area = edits(tool.name);
-      return !area || area.target(tool.name, args) === null ? null : area.authority(tool.name, args) ? 'edit-authority' : !input.fullAccess && area.selfSource(tool.name, args) ? 'edit-self-source' : area.floored(tool.name, args) ? 'edit-floor' : 'edit';
+      return !area || area.target(tool.name, args) === null ? null : area.authority(tool.name, args) ? 'edit-authority' : area.floored(tool.name, args) ? 'edit-floor' : !input.fullAccess && area.selfSource(tool.name, args) ? 'edit-self-source' : 'edit';
     }
     if (tool.toolClass === 'shell') { const tier = shell?.tier(tool.name, args) ?? null; return tier === null ? null : SHELL_CELLS[tier]; }
     if (fetches(tool)) return fetch?.cell(args) ?? null;

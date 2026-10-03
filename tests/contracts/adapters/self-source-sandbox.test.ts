@@ -11,9 +11,10 @@ const roots: string[] = [];
 afterEach(async () => { await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 async function fixture(selfSource = true) {
   const root = await mkdtemp(join(tmpdir(), 'self-source-sandbox-')); roots.push(root);
-  for (const dir of ['src', 'dist', 'scripts', 'assets', 'docs']) {
+  for (const dir of ['src', 'dist', 'scripts', 'assets', 'docs', '.github']) {
     await mkdir(join(root, dir)); await writeFile(join(root, dir, 'a'), 'before\n');
   }
+  await writeFile(join(root, 'package.json'), '{}');
   const project = await createWorkspaceScope(root);
   return { root, project, scratchDir: null, writeFloor: agentTurnWriteFloor(() => false, false, selfSource) };
 }
@@ -31,6 +32,10 @@ describe('derived self-source floor in both shipped shell providers', () => {
         expect(view.view.readOnlyPaths.includes(join(f.root, dir))).toBe(selfSource);
         const grants = rules.rules.filter(([, path]) => path === '.' || path === dir || path.startsWith(`${dir}/`));
         expect(grants.some(([access]) => access === 'w')).toBe(!selfSource);
+      }
+      for (const path of ['package.json', '.github']) {
+        expect(view.view.readOnlyPaths.includes(join(f.root, path)), path).toBe(true);
+        expect(rules.rules.some(([access, grant]) => access === 'w' && (grant === path || grant.startsWith(`${path}/`))), path).toBe(false);
       }
       expect(rules.rules.some(([access, path]) => access === 'w' && (path === 'docs' || path === '.'))).toBe(true);
     }
