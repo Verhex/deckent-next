@@ -536,12 +536,14 @@ describe.skipIf(!dockerEnabled)('automatic Run rotation', () => {
     const runtime = await openConfiguredExecution(f.project, f.project, f.options);
     let host: Awaited<ReturnType<typeof startConfiguredRuntimeService>> | undefined;
     const turns: Array<{ id: string; phases: string[] }> = [], errors: string[] = [];
+    const accepted = new Set<string>();
     let finish!: () => void; const done = new Promise<void>(resolve => { finish = resolve; });
     try {
       host = await startConfiguredRuntimeService(f.project, { onPage() {}, onError() {},
         onRunProgression(query, result) {
           turns.push({ id: query.runId, phases: result.run.tasks.map(task => task.phase) });
-          if (query.runId === 'r' && result.run.tasks.every(task => task.phase === 'accepted')) finish();
+          // Sol 2277: resolve only after BOTH Runs were observed fully accepted (z may still be settling when r completes).
+          if (result.run.tasks.every(task => task.phase === 'accepted')) { accepted.add(query.runId); if (accepted.has('r') && accepted.has('z')) finish(); }
         },
         onRunProgressionError(_query, error) { errors.push(error.code); },
       }, f.options);
