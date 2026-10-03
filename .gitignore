@@ -41,3 +41,6 @@ src/adapters/core/shell-sandbox-bwrap/bundled/
 
 # Owner-local refactor documents, evidence, experiments and toolchains.
 /refactor-work/
+
+# owner morning reports (owner 2026-10-03): generated HTML, never committed
+ozet-rapor/
