@@ -59,17 +59,21 @@ export function readBoard(file) {
   let parsed; try { parsed = JSON.parse(safeRead(file)); } catch (error) { if (error.code === 'BOARD_FILE' || error.code === 'ENOENT') throw error; throw fail('BOARD_SCHEMA', 'invalid JSON'); }
   return validate(parsed);
 }
-function write(file, board, { create = false } = {}) {
-  const data = JSON.stringify(board, null, 1) + '\n';
-  if (Buffer.byteLength(data) > MAX) throw fail('BOARD_FULL');
-  if (!create && (fs.lstatSync(file).isSymbolicLink() || !fs.lstatSync(file).isFile())) throw fail('BOARD_FILE', 'board is not a regular file');
+/** Writes `data` beside `file` and publishes it atomically; whatever fails after the temporary exists, that temporary is removed (PB-N1). */
+export function writeAtomic(file, data, { create = false, mode = 0o600 } = {}) {
+  if (!create && (fs.lstatSync(file).isSymbolicLink() || !fs.lstatSync(file).isFile())) throw fail('BOARD_FILE', `${path.basename(file)} is not a regular file`);
   const temp = `${file}.${crypto.randomUUID()}.tmp`;
-  const fd = fs.openSync(temp, fs.constants.O_CREAT | fs.constants.O_EXCL | fs.constants.O_WRONLY, 0o600);
-  try { fs.writeFileSync(fd, data); fs.fsyncSync(fd); } finally { fs.closeSync(fd); }
+  const fd = fs.openSync(temp, fs.constants.O_CREAT | fs.constants.O_EXCL | fs.constants.O_WRONLY, mode);
   try {
+    try { fs.writeFileSync(fd, data); fs.fsyncSync(fd); } finally { fs.closeSync(fd); }
     if (create) { fs.linkSync(temp, file); fs.unlinkSync(temp); } // link fails with EEXIST instead of replacing another writer's board
     else fs.renameSync(temp, file);
   } catch (error) { fs.rmSync(temp, { force: true }); throw error.code === 'EEXIST' ? fail('BOARD_EXISTS') : error; }
+}
+function write(file, board, { create = false } = {}) {
+  const data = JSON.stringify(board, null, 1) + '\n';
+  if (Buffer.byteLength(data) > MAX) throw fail('BOARD_FULL');
+  writeAtomic(file, data, { create });
 }
 function locked(file, work) {
   const lock = `${file}.lock`;
@@ -169,7 +173,8 @@ export function renderText(board, { now = new Date() } = {}) {
     `Dogfood: ${board.dogfood.mode} (kaynak: ${board.dogfood.source})`];
   for (const row of board.sessions) {
     lines.push(`- ${row.role} [${row.slot}] · ${STATUS_TR[row.status]} · ${row.name ?? 'kimlik yok'}${row.channel ? ` · kanal ${row.channel}` : ''} · ${age(row.updatedAt, now)}`);
-    if (row.status !== 'unassigned') lines.push(`    odak: ${show(row.focus)} · iş: ${show(row.workRef)} · bekliyor: ${show(row.waitingOn)} · sıradaki: ${show(row.next)}`);
+    if (row.status !== 'unassigned') lines.push(`    kimlik: ${show(row.sessionId)} · cwd: ${show(row.cwd)}`,
+      `    odak: ${show(row.focus)} · iş: ${show(row.workRef)} · bekliyor: ${show(row.waitingOn)} · sıradaki: ${show(row.next)}`);
     for (const worker of row.workers ?? []) lines.push(`    · işçi ${worker.id} (${worker.kind}, ${worker.model}) · ${worker.card} · ${worker.status} · ${age(worker.since, now)} · ${worker.worktree}`);
   }
   return lines.join('\n') + '\n';
@@ -179,7 +184,7 @@ export function renderHtml(board, { now = new Date() } = {}) {
   const rows = board.sessions.map(row => {
     const workers = (row.workers ?? []).map(w => `<li>${escapeHtml(w.id)} · ${escapeHtml(w.kind)} · ${escapeHtml(w.model)} · ${escapeHtml(w.card)} · ${escapeHtml(w.status)} · ${escapeHtml(age(w.since, now))} · <code>${escapeHtml(w.worktree)}</code></li>`).join('');
     return `<tr><td><strong>${escapeHtml(row.role)}</strong><br><small>${escapeHtml(row.slot)}${row.channel ? ` · kanal ${escapeHtml(row.channel)}` : ''}</small></td>` +
-      `<td>${escapeHtml(row.name ?? 'kimlik yok')}<br><small>${escapeHtml(row.cwd ?? '')}</small></td>${cell(row.focus)}${cell(row.workRef)}` +
+      `<td>${escapeHtml(row.name ?? 'kimlik yok')}<br><small>kimlik ${escapeHtml(show(row.sessionId))}</small><br><small>${escapeHtml(row.cwd ?? '')}</small></td>${cell(row.focus)}${cell(row.workRef)}` +
       `<td><span class="s ${escapeHtml(row.status)}">${STATUS_TR[row.status]}</span><br><small>${escapeHtml(age(row.updatedAt, now))}</small></td>${cell(row.waitingOn)}${cell(row.next)}</tr>` +
       (workers ? `<tr class="w"><td colspan="7"><ul>${workers}</ul></td></tr>` : '');
   }).join('');
@@ -225,7 +230,7 @@ async function main() {
     case 'get': { const board = readBoard(cfg.file); return print(opts.positional[0] ? board.sessions.find(s => s.slot === opts.positional[0]) ?? (() => { throw fail('BOARD_SLOT', opts.positional[0]); })() : board); }
     case 'show': return process.stdout.write(renderText(readBoard(cfg.file)));
     case 'render': { const out = opts.out ? path.resolve(opts.out) : cfg.html; const html = renderHtml(readBoard(cfg.file));
-      const temp = `${out}.${crypto.randomUUID()}.tmp`; fs.writeFileSync(temp, html, { mode: 0o600, flag: 'wx' }); fs.renameSync(temp, out); return print({ written: out, bytes: Buffer.byteLength(html) }); }
+      writeAtomic(out, html, { create: !fs.existsSync(out) }); return print({ written: out, bytes: Buffer.byteLength(html) }); }
     case 'set-own-row': { const [slot, source] = opts.positional; if (!slot || !source) throw fail('BOARD_USAGE', USAGE);
       return print(setOwnRow(cfg.file, slot, await body(source), opts)); }
     case 'set-map': { const [source] = opts.positional; if (!source) throw fail('BOARD_USAGE', USAGE); return print(setMap(cfg.file, await body(source), opts)); }

@@ -1,7 +1,7 @@
 # Memory — 10 KALICI KANUN (Alperen-seçimi; genişletme/daraltma yalnız Alperen-onayıyla)
 
 > Bu dosya ve aynı dizindeki referanslar bu repo için canonical ürün/geliştirme core-memory authority'sidir.
-> Provider/host HOME kopyaları yalnız projection'dır. İş-takibi burada değil → `PLAN.md`; geçici ilerleme `follow-up-works/current-flow.md`.
+> Provider/host HOME kopyaları yalnız projection'dır. İş-takibi burada değil → `PLAN.md`; kimde-ne-var/sıradaki adım host süreç panosunda (`node .agents/refactor/board.mjs show`), koşum kanıtı dış proof'ta; `follow-up-works/current-flow.md` yalnız yönlendirmedir (owner 2026-10-03).
 > Her satır tek hook'tur; operatif ayrıntı dosyanın kendisindedir.
 > Kapsam: ürün ilkesi / Next geliştirme uygulaması. Owner normalizasyonu 2026-09-21; owner birleştirmesi 2026-09-23 (25 → 9 dosya, Jev f2551a1d); bugün 12 dosya (10 kanun + north star + bu indeks; manifest).
 > Tarihsel kaynak her dosya için birleştirme öncesi Git geçmişidir; eski komut ve durumlar güncel yetki değildir.

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { initBoard, readBoard, setOwnRow, setMap, clearRow, renderHtml, renderText, DEFAULT_SLOTS } from './board.mjs';
+import { initBoard, readBoard, setOwnRow, setMap, clearRow, renderHtml, renderText, writeAtomic, DEFAULT_SLOTS } from './board.mjs';
 
 function fixture(t) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'deckent-board-'));
@@ -121,4 +121,53 @@ test('readBoard rejects a foreign schema, a non-object file and oversize content
   assert.equal(code(() => readBoard(file)), 'BOARD_SCHEMA');
   fs.writeFileSync(file, '[]'); assert.equal(code(() => readBoard(file)), 'BOARD_SCHEMA');
   fs.writeFileSync(file, 'x'.repeat(300_000)); assert.notEqual(code(() => readBoard(file)), null);
+});
+
+test('views show the real session identity of an assigned row (PB-R1): text and HTML carry sessionId and cwd, escaped', t => {
+  const { file } = fixture(t); initBoard(file);
+  setOwnRow(file, 'review', { name: 'Sol', cwd: '/home/x/<repo>', status: 'active' }, { session: '01a0ff56-c993-7de0-b3a3-d05c1bddd63b', revision: 0 });
+  const board = readBoard(file);
+  assert.ok(renderText(board).includes('01a0ff56-c993-7de0-b3a3-d05c1bddd63b'));
+  const html = renderHtml(board);
+  assert.ok(html.includes('01a0ff56-c993-7de0-b3a3-d05c1bddd63b')); assert.ok(html.includes('/home/x/&lt;repo&gt;')); assert.equal(html.includes('<repo>'), false);
+});
+
+test('a failed write after the temporary exists leaves no temporary, keeps the previous board bytes and releases the lock (PB-N1)', t => {
+  const { dir, file } = fixture(t); initBoard(file);
+  setOwnRow(file, 'main', { status: 'active' }, { session: 'm', revision: 0 });
+  const before = fs.readFileSync(file, 'utf8');
+  const origWrite = fs.writeFileSync; let armed = false;
+  fs.writeFileSync = (...args) => { if (armed && typeof args[0] === 'number') { const e = new Error('EIO injected'); e.code = 'EIO'; throw e; } return origWrite(...args); };
+  t.after(() => { fs.writeFileSync = origWrite; });
+  armed = true;
+  assert.throws(() => setOwnRow(file, 'main', { focus: 'x' }, { session: 'm', revision: 1 }), /EIO/);
+  armed = false;
+  assert.equal(fs.readFileSync(file, 'utf8'), before);
+  assert.deepEqual(fs.readdirSync(dir).filter(name => name.includes('.tmp') || name.endsWith('.lock')), []);
+  assert.equal(setOwnRow(file, 'main', { focus: 'after' }, { session: 'm', revision: 1 }).revision, 2);
+});
+
+test('the HTML view is written atomically and a failed publish leaves no temporary (PB-N1)', t => {
+  const { dir, file } = fixture(t); initBoard(file);
+  const out = path.join(dir, 'board.html');
+  writeAtomic(out, '<p>a</p>', { create: true }); writeAtomic(out, '<p>b</p>');
+  assert.equal(fs.readFileSync(out, 'utf8'), '<p>b</p>');
+  const origRename = fs.renameSync;
+  fs.renameSync = () => { const e = new Error('EXDEV injected'); e.code = 'EXDEV'; throw e; };
+  t.after(() => { fs.renameSync = origRename; });
+  assert.throws(() => writeAtomic(out, '<p>c</p>'), /EXDEV/);
+  assert.equal(fs.readFileSync(out, 'utf8'), '<p>b</p>');
+  assert.deepEqual(fs.readdirSync(dir).filter(name => name.includes('.tmp')), []);
+});
+
+test('a failed rename after the temporary was written removes that temporary and keeps the board (PB-N1)', t => {
+  const { dir, file } = fixture(t); initBoard(file);
+  const before = fs.readFileSync(file, 'utf8');
+  const origRename = fs.renameSync; let armed = true;
+  fs.renameSync = (...args) => { if (armed && String(args[0]).includes('.tmp')) { const e = new Error('EXDEV injected'); e.code = 'EXDEV'; throw e; } return origRename(...args); };
+  t.after(() => { fs.renameSync = origRename; });
+  assert.throws(() => setOwnRow(file, 'main', { status: 'active' }, { session: 'm', revision: 0 }), /EXDEV/);
+  armed = false;
+  assert.equal(fs.readFileSync(file, 'utf8'), before);
+  assert.deepEqual(fs.readdirSync(dir).filter(name => name.includes('.tmp') || name.endsWith('.lock')), []);
 });
