@@ -209,8 +209,9 @@ node .agents/refactor/next-entry.mjs mcp
 node .agents/refactor/next-entry.mjs node /absolute/path/to/script.mjs
 ```
 
-Host girişi cwd'yi bu checkout'a, `DECKENT_GLOBAL_HOME` değerini `.deckent/host/global` konumuna
-sabitler. Proje runtime verisinin başka yere yönlenmesini önlemek için miras alınan `DECKENT_HOME`
+Host girişi cwd'yi bu checkout'a, `DECKENT_GLOBAL_HOME` değerini checkout dışındaki
+`~/.local/state/deckent-next-dev` konumuna sabitler (runtime paketli bubblewrap'i oraya kopyalar; proje
+içindeki bir başlatıcı reddedilir). Proje runtime verisinin başka yere yönlenmesini önlemek için miras alınan `DECKENT_HOME`
 değerini kaldırır. Her projenin `.deckent/config.json` dosyası kendi `layout.root` değerini seçmeye
 devam eder. `DECKENT_GLOBAL_HOME`, CLI/MCP/SDK'nın ortak config girdisidir; global config/state dizinini
 proje verisinden bağımsız seçer. Verilmezse kurulu ürünün varsayılanları değişmez. Sağlayıcı kimlik

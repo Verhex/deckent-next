@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import vm from 'node:vm';
 import os from 'node:os';
 import path from 'node:path';
 import { initBoard, readBoard, setOwnRow, setMap, clearRow, renderHtml, renderText, renderOwnerReport, writeAtomic, DEFAULT_SLOTS } from './board.mjs';
@@ -198,4 +199,31 @@ test('owner report renders the interactive owner panel (four sections, board-der
   assert.throws(() => renderOwnerReport({ ...body, extra: 1 }, board), /BOARD_REPORT/);
   assert.throws(() => renderOwnerReport({ ...body, commands: [{ label: 'x' }] }, board), /BOARD_REPORT/);
   assert.throws(() => renderOwnerReport({ ...body, places: [{ label: 'x', path: 'javascript:alert(1)', what: 'y' }] }, board), /BOARD_REPORT/);
+});
+
+test('owner panel copy reports success only when a copy really happened; a refused or throwing fallback shows a manual-copy failure and cleans up (Sol 2290 R1)', async t => {
+  const { file } = fixture(t); initBoard(file);
+  const body = { title: 'T', headline: 'H', impact: 'I', flow: [{ label: 'a', text: 'b', who: 'c' }, { label: 'd', text: 'e', who: 'f' }],
+    limits: [], decisions: [], next: { who: 'M', text: 'n' }, details: [], commands: [{ label: 'x', command: 'node run.mjs' }] };
+  const source = renderOwnerReport(body, readBoard(file)).match(/<script>([\s\S]*?)<\/script>/)[1];
+  async function click({ clipboard, exec }) {
+    const toast = { hidden: true, textContent: '', className: '' }, areas = [];
+    let handler; const document = {
+      getElementById: id => (id === 'toast' ? toast : { textContent: '', className: '' }),
+      addEventListener: (_type, fn) => { handler = fn; },
+      createElement: () => { const area = { removed: false, select() {}, remove() { area.removed = true; } }; areas.push(area); return area; },
+      execCommand: () => exec(), body: { dataset: { generated: new Date().toISOString() }, append() {} } };
+    vm.runInNewContext(source, { document, navigator: { clipboard }, setTimeout: () => 0, clearTimeout() {}, setInterval() {}, Date });
+    await handler({ target: { closest: () => ({ getAttribute: () => 'node run.mjs' }) } });
+    return { toast, areas };
+  }
+  const native = await click({ clipboard: { writeText: async () => {} }, exec: () => assert.fail('no fallback') });
+  assert.match(native.toast.textContent, /^Kopyalandı/); assert.equal(native.areas.length, 0);
+  const fallback = await click({ clipboard: undefined, exec: () => true });
+  assert.match(fallback.toast.textContent, /^Kopyalandı/); assert.ok(fallback.areas.every(area => area.removed));
+  for (const exec of [() => false, () => { throw new Error('denied'); }]) {
+    const failed = await click({ clipboard: { writeText: async () => { throw new Error('blocked'); } }, exec });
+    assert.match(failed.toast.textContent, /^Kopyalanamadı/); assert.equal(failed.toast.className, 'bad');
+    assert.equal(failed.areas.length, 1); assert.equal(failed.areas[0].removed, true);
+  }
 });

@@ -200,7 +200,8 @@ node .agents/refactor/next-entry.mjs node /absolute/path/to/script.mjs
 ```
 
 The host entry pins cwd to this checkout and `DECKENT_GLOBAL_HOME` to
-`.deckent/host/global`. It drops an inherited `DECKENT_HOME` to avoid redirecting project
+`~/.local/state/deckent-next-dev`, outside the checkout (the runtime copies the bundled bubblewrap there,
+and a launcher inside the project is refused). It drops an inherited `DECKENT_HOME` to avoid redirecting project
 runtime data. Each project's `.deckent/config.json` still chooses its own `layout.root`.
 `DECKENT_GLOBAL_HOME` is a shared CLI/MCP/SDK configuration input; it selects the global
 configuration/state directory independently of project data. Without it, installed product

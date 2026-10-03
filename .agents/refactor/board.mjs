@@ -229,10 +229,12 @@ function validateReport(body) {
   if (body.places?.some(place => SCHEME.test(place.path) && !LINK.test(place.path))) bad('place link must be https or http://127.0.0.1');
   return body;
 }
-const PANEL_SCRIPT = `(()=>{const d=document,t=d.getElementById('toast');
-d.addEventListener('click',async e=>{const b=e.target.closest('[data-copy]');if(!b)return;const v=b.getAttribute('data-copy');
-try{await navigator.clipboard.writeText(v)}catch{const a=d.createElement('textarea');a.value=v;d.body.append(a);a.select();d.execCommand('copy');a.remove()}
-t.textContent='Kopyalandı: '+(v.length>60?v.slice(0,57)+'…':v);t.hidden=false;clearTimeout(t._h);t._h=setTimeout(()=>{t.hidden=true},1800)});
+const PANEL_SCRIPT = `(()=>{const d=document,t=d.getElementById('toast'),cut=v=>v.length>60?v.slice(0,57)+'…':v;
+const show=(m,bad)=>{t.textContent=m;t.className=bad?'bad':'';t.hidden=false;clearTimeout(t._h);t._h=setTimeout(()=>{t.hidden=true},bad?8000:1800)};
+const fallback=v=>{const a=d.createElement('textarea');a.value=v;d.body.append(a);try{a.select();return d.execCommand('copy')===true}catch{return false}finally{a.remove()}};
+d.addEventListener('click',async e=>{const b=e.target.closest('[data-copy]');if(!b)return;const v=b.getAttribute('data-copy');let ok;
+try{await navigator.clipboard.writeText(v);ok=true}catch{ok=fallback(v)}
+show(ok?'Kopyalandı: '+cut(v):'Kopyalanamadı — metni sayfadan elle seç ve kopyala: '+cut(v),!ok)});
 const g=Date.parse(d.body.dataset.generated),u=d.getElementById('age'),f=()=>{const m=Math.floor((Date.now()-g)/6e4);
 u.textContent=m<1?'az önce':m<60?m+' dk önce':Math.floor(m/60)+' sa '+(m%60)+' dk önce';u.className=m>=30?'stale':''};f();setInterval(f,3e4)})();`;
 const PANEL_HASH = crypto.createHash('sha256').update(PANEL_SCRIPT).digest('base64');
@@ -295,7 +297,7 @@ button.copy{font:inherit;font-size:.78rem;padding:3px 10px;border-radius:8px;bor
 .step .t{font-weight:700}.step .who{margin-top:6px;font-size:.82rem;color:var(--mute)}.arrow{align-self:center;color:var(--mute)}
 table.where{width:100%;border-collapse:collapse;background:var(--card);border:1px solid var(--line);border-radius:12px;overflow:hidden}
 .where th,.where td{text-align:left;vertical-align:top;padding:8px 10px;border-bottom:1px solid var(--line)}.where th{font-size:.78rem;color:var(--mute)}a{color:var(--accent)}
-#toast{position:fixed;bottom:16px;left:50%;transform:translateX(-50%);background:var(--fg);color:var(--bg);padding:8px 14px;border-radius:10px;font-size:.85rem;max-width:calc(100% - 32px)}
+#toast.bad{background:var(--fail)}#toast{position:fixed;bottom:16px;left:50%;transform:translateX(-50%);background:var(--fg);color:var(--bg);padding:8px 14px;border-radius:10px;font-size:.85rem;max-width:calc(100% - 32px)}
 @media (max-width:640px){.arrow{display:none}.grid{grid-template-columns:1fr}.where thead{display:none}.where tr,.where td{display:block}.where td{border:0;padding:2px 10px}.where tr{border-bottom:1px solid var(--line);padding:6px 0}}
 </style></head><body data-generated="${escapeHtml(now.toISOString())}">
 <header><h1>${escapeHtml(body.title)}</h1><p class="m">Oluşturuldu ${escapeHtml(now.toISOString().slice(0, 16).replace('T', ' '))}Z · <span id="age">az önce</span> · sayfayı yenile = son sürüm · pano rev ${board.revision} · Dogfood ${escapeHtml(board.dogfood.mode)}</p>
