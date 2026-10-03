@@ -18,7 +18,7 @@ export interface RunModelEvidence {
 /** Shared authenticated ingress. Cancellation records intent; it never fabricates worker termination. */
 export class RunInspectionApplication {
   constructor(private readonly readStore: Pick<RunStore, 'loadRun'> & { loadRunPoolEvidence?(scopeId: string, runId: string): Promise<RunPoolEvidence> }, protected readonly verifier: PrincipalVerifier,
-    protected readonly authorization: RunAuthorization, private readonly models?: RunModelEvidence, private readonly poolConfig?: { readonly admission?: { readonly executionSlots: number; readonly inFlightSlots: number }; readonly ceiling: number }) {}
+    protected readonly authorization: RunAuthorization, private readonly models?: RunModelEvidence, private readonly poolConfig?: { readonly admission?: { readonly poolId: string; readonly executionSlots: number; readonly inFlightSlots: number }; readonly ceiling: number }) {}
   async inspect(input: unknown, credential?: unknown) { return (await this.load(input, credential)).run; }
   /** The Run view with requested → init → usage → verdict of each pinned worker task (empty without the evidence ports). */
   async inspectWithModels(input: unknown, credential?: unknown) {

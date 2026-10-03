@@ -26,10 +26,10 @@ export function hasRunReservationRoom(snapshot: RunSnapshot, limit: { readonly e
   const own = measureTaskOccupancy(snapshot.progress);
   return own.execution < limit.executionSlots && own.inFlight < limit.inFlightSlots;
 }
-export function observeRunPool(e: RunPoolEvidence, now: number, admission?: z.infer<typeof capacity>, ceiling = Infinity) {
+export function observeRunPool(e: RunPoolEvidence, now: number, admission?: z.infer<typeof capacity> & { readonly poolId: string }, ceiling = Infinity) {
   const { snapshot, pool } = e; if (!snapshot || !pool) return undefined;
   const effectiveCapacity = { executionSlots: Math.min(pool.capacity.executionSlots, ceiling), inFlightSlots: Math.min(pool.capacity.inFlightSlots, ceiling) };
-  const drift = [poolCapacityDrift(pool.poolId, pool.runCapacity, pool.capacity, 'run'), ...(admission ? [poolCapacityDrift(pool.poolId, admission, pool.capacity, 'admission')] : [])].filter((value): value is PoolDrift => !!value);
+  const drift = [poolCapacityDrift(pool.poolId, pool.runCapacity, pool.capacity, 'run'), ...(admission?.poolId === pool.poolId ? [poolCapacityDrift(pool.poolId, admission, pool.capacity, 'admission')] : [])].filter((value): value is PoolDrift => !!value);
   const reason = derivePoolWait(pool.poolId, pool.capacity, effectiveCapacity, pool.occupancy, pool.hold);
   const eligible = snapshot.state.kind === 'running' && !snapshot.cancelRequested && pool.admitted
     && hasRunReservationRoom(snapshot, pool.runCapacity);

@@ -3097,7 +3097,8 @@ onto the ledger catalog; Codex/Cursor output-side model evidence (none documente
   The existing service upgrade creates its versioned 0600 backup; clients never migrate. Migration checks exact CREATE shapes and rolls
   back a same-name incompatible table. Reservation, dispatch admission and monitor capacity readers use the effective override.
 - **Read-only observation.** Additive optional `RunView v3.pool` carries raw/effective capacity (the `max_workers` ceiling stays explicit),
-  occupancy, `POOL_ADMISSION_CAPACITY_DRIFT` for persisted per-Run/config admission limits above the raw pool capacity and every dependency-ready,
+  occupancy, `POOL_ADMISSION_CAPACITY_DRIFT` for persisted per-Run limits above the raw pool capacity; current config admission limits contribute
+  only when their `poolId` matches the observed Run pool (BATCH30-R / REVIEW2294 R3). It also carries every dependency-ready,
   automatically admitted pending task's `waiting-pool-slot` / `pool-held` reason. Run snapshot/state is unchanged. Run, policy, pool, hold and
   occupancy share a deferred read snapshot. Cancelled, parked, terminal, delayed, dependency-waiting and not-admitted work is not called a pool wait.
   Full-pool `sinceMs` is unknown/null; hold uses its recorded change time. These are current conditions, not historical refusal receipts.
@@ -3106,7 +3107,8 @@ onto the ledger catalog; Codex/Cursor output-side model evidence (none documente
   diagnostic, never an implicit clamp or configuration rewrite. No per-poll wait writes, retry/budget change or new blocking progression step.
 - **Versions and limits.** Runtime protocol 19 unchanged: capacity controls remain local composition operations like hold/resume; RunView and
   monitor changes are additive observation fields. Config and Run storage versions unchanged. Author checks and temporary binary proof live in
-  external `proof/POOL-CAPACITY-2026-10-03/review.md`. Independent review, lead landing, hosted/live acceptance and ≥8 native-worker throughput remain open.
+  external `proof/POOL-CAPACITY-2026-10-03/review.md`; R1 Windows fixture/refusal and R3 identity correction evidence is in `batch30-r.md` in the same folder.
+  Independent review of the corrected candidate, lead landing, hosted/live acceptance and ≥8 native-worker throughput remain open.
 
 ### Patch scope classification (K6 = A; owner 2026-09-30, Jev ddbcaacd; lane Jev c93ceea4 / 4c772497 / bc205c7c)
 

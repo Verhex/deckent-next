@@ -14,11 +14,11 @@ async function fixture() {
   await mkdir(backups, { mode: 0o700 }); openSqliteLedger(path, options).close(); const db = new DatabaseSync(path); db.exec(DOWNGRADE_TO_PREVIOUS_LEDGER_SQL);
   db.prepare('INSERT INTO execution_pools(pool_id,policy) VALUES(?,?)').run('p', 'original-policy'); return { path, backups, db };
 }
-it('upgrades v46 to v47 with 0600 backup, preserving all original pool bytes; readers never migrate and newer schemas refuse', async () => {
+it('upgrades v46 to v47 with a backup, preserving all original pool bytes; readers never migrate and newer schemas refuse', async () => {
   expect(PREVIOUS_LEDGER_VERSION).toBe(46); expect(CURRENT_LEDGER_VERSION).toBe(47); expect(POOL_CAPACITY_LEDGER_VERSION).toBe(47);
   const f = await fixture(); f.db.close(); expect(() => openSqliteLedger(f.path, options, 'forbid')).toThrow(expect.objectContaining({ code: 'ATTEMPT_STORE_VERSION' }));
   const upgraded = await upgradeExistingProductLedger(f.path, options, f.backups, new Date('2026-10-03T09:00:00Z')); expect(upgraded).toMatchObject({ from: 46, to: 47 });
-  expect((await stat(upgraded!.backupPath)).mode & 0o777).toBe(0o600);
+  expect((await stat(upgraded!.backupPath)).isFile()).toBe(true);
   const current = new DatabaseSync(f.path), backup = new DatabaseSync(upgraded!.backupPath, { readOnly: true });
   try {
     expect(current.prepare('SELECT * FROM execution_pools').all()).toEqual(backup.prepare('SELECT * FROM execution_pools').all());
@@ -28,6 +28,13 @@ it('upgrades v46 to v47 with 0600 backup, preserving all original pool bytes; re
     current.exec('PRAGMA user_version=48');
   } finally { current.close(); backup.close(); }
   for (const mode of ['forbid', 'allow'] as const) expect(() => openSqliteLedger(f.path, options, mode)).toThrow(expect.objectContaining({ code: 'ATTEMPT_STORE_VERSION' }));
+});
+it('upgrade backup and directory have private POSIX 0600/0700 permissions', async context => {
+  if (process.platform === 'win32') context.skip('POSIX_MODE_UNAVAILABLE: Windows chmod modes do not prove a private ACL');
+  const f = await fixture(); f.db.close();
+  const upgraded = await upgradeExistingProductLedger(f.path, options, f.backups, new Date('2026-10-03T09:00:00Z'));
+  expect((await stat(upgraded!.backupPath)).mode & 0o777).toBe(0o600);
+  expect((await stat(f.backups)).mode & 0o777).toBe(0o700);
 });
 it.each(['execution_pool_capacities', 'execution_pool_capacity_receipts'])('rejects same-name wrong-shape %s even with matching columns, without partial migration', async table => {
   const f = await fixture(); f.db.exec(table === 'execution_pool_capacities' ? `CREATE TABLE ${table}(pool_id TEXT,record TEXT)` : `CREATE TABLE ${table}(scope_id TEXT,command_id TEXT,record TEXT)`); f.db.close();

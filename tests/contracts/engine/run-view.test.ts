@@ -1,6 +1,6 @@
 import { expect, it } from 'vitest';
 import { createRun } from '#domain/index.js';
-import { projectRunView, RunInspectionApplication } from '#engine/index.js';
+import { projectRunView, RunInspectionApplication, type RunPoolEvidence } from '#engine/index.js';
 import { fixtureExecution } from '../support/execution-registry.js';
 const graph = { schemaVersion: 2, revision: 1,
   tasks: [{ id: 't', kind: 'custom', dependencies: [], acceptanceCriteria: ['private-criterion'] }],
@@ -24,4 +24,27 @@ it('rejects malformed storage and refuses a reader that returns another scope or
     { async verify() { return { id: 'u', issuer: 'host', subject: '1', assurance: 'os-user', scopeIds: ['s', 'other'] }; } }, { async authorize() {} });
   await expect(app.inspect({ schemaVersion: 1, scopeId: 'other', runId: 'r' })).rejects.toThrow('RUN_STORE_CORRUPT');
   await expect(app.inspect({ schemaVersion: 1, scopeId: 's', runId: 'other' })).rejects.toThrow('RUN_STORE_CORRUPT');
+});
+it.each([
+  { admissionPool: 'q', pinnedSlots: 2, sources: [] },
+  { admissionPool: 'p', pinnedSlots: 2, sources: ['admission'] },
+  { admissionPool: 'q', pinnedSlots: 8, sources: ['run'] },
+  { admissionPool: 'p', pinnedSlots: 8, sources: ['run', 'admission'] },
+])('binds admission drift to $admissionPool with pinned slots=$pinnedSlots, retaining real pool waits without mutations', async ({ admissionPool, pinnedSlots, sources }) => {
+  const capacity = { executionSlots: 2, inFlightSlots: 2 };
+  const evidence: RunPoolEvidence = { snapshot: run, pool: { poolId: 'p', capacity,
+    runCapacity: { executionSlots: pinnedSlots, inFlightSlots: pinnedSlots }, occupancy: { execution: 2, inFlight: 2 }, hold: null, admitted: true } };
+  const before = JSON.stringify(evidence);
+  const app = new RunInspectionApplication({ async loadRun() { throw new Error('must use pool evidence snapshot'); }, async loadRunPoolEvidence() { return evidence; } },
+    { async verify() { return { id: 'u', issuer: 'host', subject: '1', assurance: 'os-user', scopeIds: ['s'] }; } }, { async authorize() {} }, undefined,
+    { admission: { poolId: admissionPool, executionSlots: 8, inFlightSlots: 8 }, ceiling: Infinity });
+  for (let i = 0; i < 3; i++) {
+    const pool = (await app.inspect({ schemaVersion: 1, scopeId: 's', runId: 'r' }))!.pool!;
+    expect(pool.drift.map(value => value.source)).toEqual(sources);
+    for (const drift of pool.drift) expect(drift).toEqual({ code: 'POOL_ADMISSION_CAPACITY_DRIFT', poolId: 'p', source: drift.source,
+      requested: { executionSlots: 8, inFlightSlots: 8 }, capacity });
+    expect(pool.waiting).toEqual([{ taskId: 't', reason: { code: 'waiting-pool-slot', poolId: 'p', capacity, effectiveCapacity: capacity,
+      occupancy: { execution: 2, inFlight: 2 }, sinceMs: null } }]);
+  }
+  expect(JSON.stringify(evidence)).toBe(before);
 });
