@@ -3,7 +3,7 @@
 [PLAN.md](PLAN.md)'den taşınan tamamlanmış işler, kapanan bulgular ve tarihsel kanıt kayıtları (owner 2026-09-24:
 PLAN yalnız devam eden işleri taşır). Bu dosya aktif iş izni veya kabul kanıtı değildir; açık kalan kısımlar PLAN'dadır.
 Bir iş tamamlandığında ayrıntısı PLAN'dan buraya taşınır (en yeni bölüm üstte); PLAN'da yalnız kalan kapsam bırakılır.
-Metinler taşındıkları andaki hâliyle korunur; güncel durum için PLAN, ARCHITECTURE ve current-flow esastır.
+Metinler taşındıkları andaki hâliyle korunur; güncel durum için PLAN, ARCHITECTURE ve host süreç panosu esastır.
 
 ## 2026-10-02 A1/A3 — izole kaynak uygulaması, kabul kapıları açık
 

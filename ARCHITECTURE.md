@@ -1,11 +1,11 @@
 # Architecture
 
-**Owner amendment 2026-10-02 — MCP-NO-DECIDE:** MCP exposes no approval decision tool: neither `allow` nor `deny`; `list_approvals` and `inspect_approval` remain observation. CLI `approval decide`, SDK and terminal decisions retain their existing authority checks. This supersedes B1's MCP-deny exception; protocol and ledger contracts stay unchanged. Implementation and evidence: `follow-up-works/current-flow.md`.
+**Owner amendment 2026-10-02 — MCP-NO-DECIDE:** MCP exposes no approval decision tool: neither `allow` nor `deny`; `list_approvals` and `inspect_approval` remain observation. CLI `approval decide`, SDK and terminal decisions retain their existing authority checks. This supersedes B1's MCP-deny exception; protocol and ledger contracts stay unchanged. Implementation `57c49ac6` (batch 25; on main and live since `aa58f559`); evidence `proof/LIVE-SWITCH-BATCH25-2026-10-02/`.
 
 Ortak ürün/geliştirme ölçütü: [.deckent/docs/core-memory/project_product_north_star.md](.deckent/docs/core-memory/project_product_north_star.md).
 Owner 2026-09-21: dar dilimler ürün hedefini küçültmez; mevcut kararlar yeni kanıt olmadan yeniden açılmaz.
 
-## Decision port — AOF-DECISION-PORT (2026-10-02; Fable PASS `2b8bdc31`; batch-27 candidate, not on main)
+## Decision port — AOF-DECISION-PORT (2026-10-02; Fable PASS `2b8bdc31`; batch 27, on main and live since `dfb1b68f`)
 
 Vendor-neutral v1 `DecisionCase`, `DecisionAdvice`, `DecisionRecord` and `DecisionPolicy` use descriptor-safe versioned Zod ingress. Pure preparation rejects future observations, dangling evidence references, duplicate/reserved ids and configured UTF-8/count limits, then produces canonical case data for an engine SHA-256 digest. Advice retains all option probabilities, separate `none_of_the_above` / `insufficient_information`, choice confidence, context sufficiency, per-check scores, actual model/usage and observed latency. Missing answers or uncertain transport never produce fabricated advice.
 
@@ -1762,7 +1762,7 @@ service wiring from the turn's `requestApproval` to `offer`/`remember`/`persist`
   Frozen membership hashes reject additions and equal-count swaps. Every list-changing version on HEAD's full
   first-parent history (including merge changes and list deletions) constrains the working list: per
   (fingerprint, rule) the current entry count may not exceed its count in any prior admitted version.
-  AB-R1 (owner 2026-10-03; independent review pending): count-only history at `a82a89cb` loses removed
+  AB-R1 (owner 2026-10-03; Sol 2259 bounded PASS on the delta; live in `dfb1b68f`): count-only history at `a82a89cb` loses removed
   claims when another admitted file shares the fingerprint/rule. History now also preserves
   each normalized admission identity `(origin ?? file, fingerprint, rule)` in EVERY prior list version;
   removal is final even if another claim in that group remains. Relocation keeps that identity.
@@ -2945,7 +2945,7 @@ onto the ledger catalog; Codex/Cursor output-side model evidence (none documente
 - **Open.** Delivery/inspect/report surfaces do not repeat the
   classification; real template-worker path unproven in tests (stored-graph stand-in); gitignored files still enter patches (PATCH-IGNORE card).
 
-### CATALOG-V3 (owner 2026-10-02; Sol 2247 bounded PASS on a8a7c9d7; batch 26 candidate, not yet on main)
+### CATALOG-V3 (owner 2026-10-02; Sol 2247 bounded PASS on a8a7c9d7; batch 26, on main and live since `dfb1b68f`)
 
 Channel identity is client × billing/access path. Row key stays (channelId, exact channel model id); aliases are refused, never resolved. Document v3 adds vendorId/canonicalModelId, channel billing/protocol/provenance, limits, reasoning, capabilities and pricing in record; v2 remains readable. Canonical identity links models across channels without resolving an invocation to another channel. No SQL migration is needed for this slice: there is no canonical lookup operation; readers already load records. v13 model_activations remains the chat/profile authority, v43 model_catalog_activations the scoped worker authority. Recommended activation sets are documentation data, never registration effects. Unknown limits remain null and capabilities unknown.
 
