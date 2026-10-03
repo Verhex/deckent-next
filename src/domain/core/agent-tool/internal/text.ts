@@ -12,7 +12,7 @@ const LONE_SURROGATES = new RegExp(LONE_SURROGATE_PROBE.source, 'g');
 
 /** `index` moved back by one when it falls inside a surrogate pair, so neither side of a cut there holds half a pair. */
 export function modelTextBoundary(text: string, index: number): number {
-  const at = Math.max(0, Math.min(Math.floor(index), text.length));
+  const at = Number.isNaN(index) ? 0 : Math.max(0, Math.min(Math.floor(index), text.length));
   return at > 0 && at < text.length && isHigh(text.charCodeAt(at - 1)) && isLow(text.charCodeAt(at)) ? at - 1 : at;
 }
 
