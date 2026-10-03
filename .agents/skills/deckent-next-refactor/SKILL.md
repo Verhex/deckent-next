@@ -96,8 +96,9 @@ historical proof and current verification.
    Exercise relevant failure, cancellation, replay, scope and recovery paths. Use targeted checks during
    implementation; host-tool success proves host tooling only. Follow `law_local_verification.md`:
    local tests stay within 16 GB, targeted/lane Vitest runs use `VITEST_MAX_FORKS=2`, full verify uses
-   its default four workers, and no build runs during an active suite. Run `npm run verify` before landing;
-   completed targeted checks are not full verification or independent acceptance.
+   its default four workers, and no build runs during an active suite. Slices and ordinary batches land on targeted checks
+   (typecheck, eslint on changed files, lint-arch, the touched test files); full `npm run verify` runs only for batches that add
+   broad features and only when the owner asks (owner 2026-10-03). Targeted checks are not independent acceptance.
 6. **Reconcile documents.** At task start correct verified stale claims in affected documents; update
    them when accepted scope/decisions change and before delivery/handoff. Put contracts in ARCHITECTURE,
    durable remaining work in PLAN, completed work in COMPLETED-PLAN when needed, lasting decisions/lessons

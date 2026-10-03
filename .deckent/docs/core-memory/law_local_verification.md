@@ -16,3 +16,5 @@ zaman aşımıyla sınırlanır. JS test timer'ı senkron döngüyü kesemez; ho
 Aynı kartın Windows dosya dersi: `node:fs` O_NOFOLLOW/O_NONBLOCK Windows'ta bulunmaz; bitwise OR'da eksik bayrak
 sıfıra dönüşür ve güvenlik garantisini sessizce düşürür. Dosya portu mevcut tipli ret ile erişimden önce kapanır;
 stdin veya POSIX pozitif kanıt ayrı aktif kalır. JS timeout ya da koşullu assertion güvenlik yeteneği yerine geçmez.
+
+Owner 2026-10-03: tam `npm run verify` her dilimde/partide koşulmaz; dilimler hedefli kontrollerle (typecheck, değişen dosyalarda eslint, lint-arch, dokunulan test dosyaları, gerekirse pano/host testleri) kapanır; tam verify yalnız geniş özellik ekleyen partilerde ve owner istediğinde koşulur (gece 2026-10-03: erken ve yanlış etiketli koşumlar zaman, token ve makine kaybı). Kaynak → neden → düzeltme → kanıt: tekrar eden tam koşumlar (≈10 dk, 4 worker, 16 GB) → kapı değeri düşük, maliyet yüksek → hedefli kapı + owner kararıyla tam verify → `proof/BATCH28-2026-10-03/README.md`.
