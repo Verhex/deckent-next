@@ -11,9 +11,10 @@ import { assertSqliteEngineSupported, CURRENT_LEDGER_VERSION, POOL_CAPACITY_LEDG
 const INTENT_LEDGER_VERSION = 25, APPROVAL_LEDGER_VERSION = 31, INTEGRATION_VERSION = 30, DELIVERY_VERSION = 32, ADOPTION_VERSION = 33, CATALOG_VERSION = 43;
 /** MONITOR v1.1: where an attempt's recorded files live (output envelope, sealed event log, workspace sidecars) and whether it failed or still runs. */
 export interface MonitorAttemptFiles {
-  readonly identity: AttemptIdentity; readonly output: ArtifactReceipt | null; readonly events: ArtifactReceipt | null; readonly workspace: string | null;
+  readonly identity: AttemptIdentity; readonly patch?: ArtifactReceipt | null; readonly output: ArtifactReceipt | null; readonly events: ArtifactReceipt | null; readonly workspace: string | null;
   readonly failed: boolean; readonly open: boolean; readonly finished: boolean; readonly sealed: boolean;
 }
+
 const OPEN_PHASES = "('pending','active','evaluating','reconciling','awaiting-decision')";
 const optionsSchema = z.object({ busyTimeoutMs: z.number().int().nonnegative().max(2_147_483_647), maxRuns: z.number().int().positive().max(100_000) }).strict();
 export type MonitorLedgerOptions = z.infer<typeof optionsSchema>;
@@ -139,7 +140,7 @@ function attempt(db: DatabaseSync, version: number, binding: MonitorLedgerRun['s
   const { scopeId, runId, attemptId, generation } = binding.identity;
   const row = db.prepare('SELECT record FROM dispatches WHERE scope_id=? AND attempt_id=?').get(scopeId, attemptId);
   const record = row ? dispatchRecordSchema.parse(json(row.record)) : null;
-  if (record && (record.request.identity.attemptId !== attemptId || record.request.identity.runId !== runId)) throw new Error();
+  if (record && !sameAttemptIdentity(record.request.identity, binding.identity)) throw new Error();
   const evaluationObserved = version >= INTENT_LEDGER_VERSION && binding.observedRevision !== null && !!db.prepare(`SELECT 1 FROM task_evaluation_observations
     WHERE scope_id=? AND run_id=? AND attempt_id=? AND attempt_revision=?`).get(scopeId, runId, attemptId, binding.observedRevision);
   const log = version >= WORKER_EVENT_LOG_LEDGER_VERSION ? db.prepare('SELECT record FROM worker_event_logs WHERE scope_id=? AND attempt_id=?').get(scopeId, attemptId) : undefined;
@@ -147,9 +148,10 @@ function attempt(db: DatabaseSync, version: number, binding: MonitorLedgerRun['s
   const receipt = db.prepare('SELECT command,snapshot FROM attempt_receipts WHERE scope_id=? AND command_id=?').get(scopeId, handoffEventCommandId(binding.identity));
   const handoffStart = receipt ? handoffStartRecordSchema.parse(json(receipt.command)) : null;
   if (handoffStart && (!sameAttemptIdentity(handoffStart.identity, binding.identity) || !sameAttemptIdentity((json(receipt!.snapshot) as { identity: AttemptIdentity }).identity, binding.identity))) throw new Error();
+  if (sealed && !sameAttemptIdentity(sealed.identity, binding.identity)) throw new Error();
   const terminal = record?.terminal ?? null, pin = readWorkerModelPin(parameters);
   const failed = !!terminal && (terminal.exitCode !== 0 || terminal.signal !== undefined || terminal.interrupted === true);
-  files.push(Object.freeze({ identity: binding.identity, output: record?.output ?? null, events: sealed?.identity.attemptId === attemptId ? sealed.events : null,
+  files.push(Object.freeze({ identity: binding.identity, patch: record?.patch ?? null, output: record?.output ?? null, events: sealed?.identity.attemptId === attemptId ? sealed.events : null,
     workspace: record?.request.workspace ?? null, failed, open: record?.launch === 'granted' && !terminal, finished: !!terminal, sealed: !!sealed }));
   const model = evaluated ?? (pin ? Object.freeze({ provider: pin.provider, evidenceCapability: pin.evidenceCapability, requested: pin.pin, init: null, usage: null, verdict: 'pending' as const, unexpected: [], evidence: 'none' as const }) : null);
   return Object.freeze({ attemptId, generation, ...(handoffStart ? { handoffStart } : {}), observedKind: binding.observedKind, observedRevision: binding.observedRevision, evaluationObserved, reservedAtMs,

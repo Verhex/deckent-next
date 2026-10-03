@@ -1,11 +1,12 @@
 import { t, type Locale } from '#platform/index.js';
 import type { MonitorApproval, MonitorAttempt, MonitorBlocker, MonitorDeliveryState, MonitorInstall, MonitorPool, MonitorRun, MonitorRunState, MonitorSnapshot, MonitorTask,
-  WorkerObservation } from '#engine/index.js';
+  MonitorWorker } from '#engine/index.js';
 import { span, type MonitorBlock, type MonitorColumn, type MonitorLine, type MonitorRole, type MonitorRow, type MonitorSpan } from './layout.js';
 import { agoText, blockerLabel, clockText, durationText, expiryText, forText, installStatusLabel, MONITOR_TABS, processLabel, runStateLabel,
   taskPhaseLabel, verdictLabel, workerPhaseLabel, type MonitorTab } from './labels.js';
 import { renderWorkerModelLine } from './worker-model.js';
 import { describeDiagnostics } from './diagnostics.js';
+import { humanWorkerLines } from './human-worker.js';
 import { mapBlocks } from './map.js';
 
 /**
@@ -90,30 +91,30 @@ function wordsFor(snapshot: MonitorSnapshot, locale: Locale, ascii: boolean) {
       if (start === null || end === null) return t('monitor.time.unknown', {}, locale);
       return `${observedEnd(run) ? `${marks.approx} ` : ''}${durationText(end - start, locale)}`;
     },
-    deliveryText: (run: MonitorRun) => run.delivery ? `${deliveryLabel(run.delivery.state, locale)}${run.delivery.commit ? ` ${run.delivery.commit.slice(0, 7)}` : ''}` : '—',
+    deliveryText: (run: MonitorRun) => run.delivery ? deliveryLabel(run.delivery.state, locale) : '—',
     serviceText: (install: MonitorInstall) => !install.service ? t('monitor.service.none', {}, locale)
       : install.service.state === 'running' ? t('monitor.service.running', { pid: install.service.processId ?? '—' }, locale)
         : install.service.state === 'stopped' ? t('monitor.service.stopped', {}, locale) : t('monitor.service.unknown', {}, locale),
-    buildText: (install: MonitorInstall) => install.service?.build
-      ? t('monitor.build', { commit: short(install.service.build.sourceCommit, 12), builtAt: builtAt(install.service.build.builtAt) }, locale)
+    buildText: (install: MonitorInstall, detail = false) => install.service?.build
+      ? detail ? t('monitor.build', { commit: short(install.service.build.sourceCommit, 12), builtAt: builtAt(install.service.build.builtAt) }, locale) : t('monitor.build.summary', { builtAt: builtAt(install.service.build.builtAt) }, locale)
       : t('monitor.build.unknown', {}, locale),
     ledgerText: (install: MonitorInstall) => install.ledgerVersion === null ? t('monitor.ledger.unknown', {}, locale) : t('monitor.ledger', { version: install.ledgerVersion }, locale),
     warnings: (install: MonitorInstall) => describeDiagnostics(install.diagnostics, locale).filter(entry => !entry.note),
     notes: (install: MonitorInstall) => describeDiagnostics(install.diagnostics, locale).filter(entry => entry.note),
     /** A bare age for table cells whose header already says since/for (`3 h 12 min`); details keep the full sentence. */
     age: (since: number | null) => since === null ? t('monitor.time.unknown', {}, locale) : durationText(now - since, locale),
-    attemptOf: (install: MonitorInstall, worker: WorkerObservation) => worker.identity ? attempts.get(`${install.id}|${worker.identity.scopeId}/${worker.identity.attemptId}`) ?? null : null,
-    workerName: (worker: WorkerObservation) => `${worker.identity?.runId ?? '—'}/${worker.taskId}`,
-    heartbeat: (worker: WorkerObservation): MonitorSpan => worker.custody === 'released' ? span(t('monitor.heartbeat.released', {}, locale), 'muted')
+    attemptOf: (install: MonitorInstall, worker: MonitorWorker) => worker.identity ? attempts.get(`${install.id}|${worker.identity.scopeId}/${worker.identity.attemptId}`) ?? null : null,
+    workerName: (worker: MonitorWorker) => `${worker.identity?.runId ?? '—'}/${worker.taskId}`,
+    heartbeat: (worker: MonitorWorker): MonitorSpan => worker.custody === 'released' ? span(t('monitor.heartbeat.released', {}, locale), 'muted')
       : !worker.files || worker.files.heartbeat.ageMs === null ? span('—', 'muted')
         : worker.files.heartbeat.freshness === 'stale' ? span(`${marks.warn} ${t('monitor.heartbeat.stale', { age: durationText(worker.files.heartbeat.ageMs, locale) }, locale)}`, 'error')
           : span(durationText(worker.files.heartbeat.ageMs, locale), worker.files.heartbeat.freshness === 'fresh' ? 'success' : 'muted'),
-    processText: (worker: WorkerObservation) => `${processLabel(worker.process, locale)}${worker.terminal ? ` ${worker.terminal.exitCode ?? worker.terminal.signal ?? '—'}` : ''}`,
+    processText: (worker: MonitorWorker) => `${processLabel(worker.process, locale)}${worker.terminal ? ` ${worker.terminal.exitCode ?? worker.terminal.signal ?? '—'}` : ''}`,
   };
   return words;
 }
 type Words = ReturnType<typeof wordsFor>;
-const modelOf = (w: Words, install: MonitorInstall, worker: WorkerObservation) =>
+const modelOf = (w: Words, install: MonitorInstall, worker: MonitorWorker) =>
   worker.model?.requested.modelId ?? w.attemptOf(install, worker)?.attempt.model ?? worker.files?.usage?.model ?? null;
 
 /** One attempt as a timeline: start/end/duration/exit/model, the first failing line, then the last worker-reported events. */
@@ -193,10 +194,11 @@ function runsBlock(w: Words, runs: readonly Entry<MonitorRun>[]): MonitorBlock {
     span(agoText(now, run.lastActivityMs, locale), 'muted')])) };
 }
 
-function workerDetail(w: Words, install: MonitorInstall, worker: WorkerObservation) {
+function workerDetail(w: Words, install: MonitorInstall, worker: MonitorWorker) {
   const { locale } = w;
   return (): readonly MonitorLine[] => {
     const activity = worker.files?.activity ?? null, usage = worker.files?.usage ?? null, own = w.attemptOf(install, worker);
+    if (worker.human) return humanWorkerLines(worker, locale);
     return [
       [span(t('monitor.detail.worker', { task: w.workerName(worker), attempt: worker.identity?.attemptId ?? '—', generation: worker.identity?.generation ?? '—',
         provider: worker.provider, install: install.id }, locale), 'strong')],
@@ -213,9 +215,9 @@ function workerDetail(w: Words, install: MonitorInstall, worker: WorkerObservati
   };
 }
 
-function workersBlock(w: Words, entries: readonly Entry<WorkerObservation>[], empty: string): MonitorBlock {
+function workersBlock(w: Words, entries: readonly Entry<MonitorWorker>[], empty: string): MonitorBlock {
   const { locale } = w;
-  const started = (entry: Entry<WorkerObservation>) => w.attemptOf(entry.install, entry.value)?.attempt.startedAtMs ?? null;
+  const started = (entry: Entry<MonitorWorker>) => w.attemptOf(entry.install, entry.value)?.attempt.startedAtMs ?? null;
   // Newest first by the matched attempt's start (workers carry no time of their own); unmatched last, in observation order.
   const ordered = entries.map((entry, index) => ({ entry, index, at: started(entry) })).sort((a, b) => (b.at ?? -Infinity) - (a.at ?? -Infinity) || a.index - b.index);
   return { kind: 'table', empty, columns: [w.col(t('monitor.col.task', {}, locale), 0, 20, 48, { sortKey: 'name' }), w.col(t('monitor.col.phase', {}, locale), 1, 10, 18),
@@ -223,7 +225,7 @@ function workersBlock(w: Words, entries: readonly Entry<WorkerObservation>[], em
     w.col(t('monitor.col.attempt', {}, locale), 6, 8, 8), w.col(t('monitor.col.model', {}, locale), 4, 16, 32), ...w.installColumn(5)],
   rows: ordered.map(({ entry: { install, value: worker }, at }): MonitorRow => {
     const own = w.attemptOf(install, worker), phase = worker.files?.activity?.phase ?? (worker.terminal ? null : own?.attempt.workerPhase ?? null);
-    return { key: `${install.id}:${worker.identity?.attemptId ?? worker.taskId}`, detail: workerDetail(w, install, worker), cells: [span(w.workerName(worker)),
+    return { key: `${install.id}:${worker.identity?.attemptId ?? worker.taskId}`, detail: workerDetail(w, install, worker), detailInText: !!worker.human, cells: [span(worker.human?.title ?? (worker.human ? t('monitor.human.noTitle', {}, locale) : w.workerName(worker))),
       span(workerPhaseLabel(phase, locale), 'info'), w.heartbeat(worker), span(w.processText(worker), worker.process === 'running' ? undefined : 'muted'),
       span(short(worker.identity?.attemptId, 8), 'muted'), span(`${worker.provider}/${modelOf(w, install, worker) ?? '—'}`, 'muted'), ...w.installCell(install)],
     facets: { state: `${worker.process} ${processLabel(worker.process, locale)} ${phase ?? ''}`.toLowerCase(), install: install.id.toLowerCase(),
@@ -277,7 +279,7 @@ function installsBlocks(w: Words, installs: readonly MonitorInstall[]): MonitorB
     [span(t('monitor.detail.path', { path: install.path }, locale))],
     [span(t('monitor.detail.scopes', { scopes: install.scopeIds.join(', ') || '—' }, locale))],
     [span(`${w.serviceText(install)}${sep}${t('monitor.detail.instance', { instance: install.service?.instanceId ?? '—' }, locale)}`)],
-    [span(`${w.buildText(install)}${sep}${t('monitor.detail.tree', { tree: short(install.service?.build?.sourceTreeSha256, 12) }, locale)}`)],
+    [span(`${w.buildText(install, true)}${sep}${t('monitor.detail.tree', { tree: short(install.service?.build?.sourceTreeSha256, 12) }, locale)}`)],
     [span(w.ledgerText(install))],
     [span(t('monitor.detail.counts', { runs: install.runs.length, workers: install.workers.length, approvals: install.approvals.length, pools: install.pools.length }, locale), 'muted')],
     ...w.warnings(install).map(entry => [span(`${marks.warn} ${entry.text}`, 'warning')]),
@@ -299,7 +301,7 @@ function installsBlocks(w: Words, installs: readonly MonitorInstall[]): MonitorB
 
 /** What needs a human first: counts, install problems, approvals, stuck Runs (oldest blocker first), failed Runs, live workers. */
 function summaryBlocks(w: Words, installs: readonly MonitorInstall[], runs: readonly Entry<MonitorRun>[], stuck: readonly Entry<MonitorRun>[],
-  approvals: readonly Entry<MonitorApproval>[], workers: readonly Entry<WorkerObservation>[]): MonitorBlock[] {
+  approvals: readonly Entry<MonitorApproval>[], workers: readonly Entry<MonitorWorker>[]): MonitorBlock[] {
   const { locale, now, marks } = w;
   const count = (state: MonitorRunState) => runs.filter(entry => entry.value.state === state).length;
   const heading = (text: string): MonitorBlock => ({ kind: 'line', line: [span(text, 'accent')] });

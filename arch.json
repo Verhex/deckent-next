@@ -1895,7 +1895,8 @@
         "src/domain/core/worker-event",
         "src/platform/core/output",
         "src/engine/core/runs",
-        "src/engine/core/handoff-observation"
+        "src/engine/core/handoff-observation",
+        "src/platform/core/errors"
       ],
       "plan": "MONITOR"
     },
@@ -1924,7 +1925,10 @@
         "src/platform/core/utils",
         "src/adapters/core/local-principal",
         "src/domain/core/model-activation",
-        "src/engine/core/handoff-observation"
+        "src/engine/core/handoff-observation",
+        "src/platform/core/errors",
+        "src/platform/core/output",
+        "src/engine/core/workspace-patch"
       ],
       "plan": "MONITOR"
     },

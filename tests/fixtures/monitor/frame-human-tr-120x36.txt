@@ -1,0 +1,35 @@
+Deckent izleyici · gözlem 2026-10-02 09:30:00Z · yalnız gözlem
+● current · servis çalışıyor (pid 31337) · build kaydı var (2026-10-02 08:00:00Z) · ledger sürüm 44 · ⚠ 1 uyarı · /home…
+ 1 Özet   2 Run'lar  [3 Worker'lar]  4 Onaylar   5 Havuzlar   6 Kurulumlar   7 Harita
+Esc: geri · ↑/↓, PgUp/PgDn: ayrıntıyı kaydır
+İş: Test sonucunu açıkla (görev metni)
+Değerlendirme: ret
+Boş yama: dosya değişikliği yok
+Kullanım (mühürlü worker bildirimi): 7 tur · token 12000/3400 · $0.4321
+Başlangıç: zaman kaydı yok
+Bitiş: zaman kaydı yok
+İddia — son rapor (kabul kanıtı değildir): tests passed
+İddia — kontrol: npm test → geçti
+Ne yaptı — mühürlü, redakte kesit (worker anlatımı):
+message: Dosyayı okudu; testleri çalıştırdı.
+Ayrıntı: build · deneme c76f549a-attempt · nesil 1 · taban SHA aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+1 dk 0 sn aralıkla yenilenir · görüntü 2026-10-02 09:30:00Z
+Tab/←→ sekme · ↑↓ seç · Enter ayrıntı · / süz · s sırala · g grupla · r yenile · p duraklat · ? yardım · q çık

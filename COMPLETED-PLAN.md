@@ -1,5 +1,18 @@
 # Deckent Next — tamamlanan plan
 
+
+## 2026-10-03 — MONITOR-H1 yerel source adayı (main/canlı kapanışı değildir)
+
+H0: D5 birleşik unified diff `0388c2cf` tabanına hunk bazında uzlaştırıldı; already-present hunk yok.
+Mühürlü kullanım custody release sonrası korunur; `DECKENT_DEBUG` allowlist temizliği ve insan kullanım satırı taşındı,
+worker outcome EN/TR'de bildirim olarak çevrildi. H1: isteğe bağlı kısa başlık + görev/kabul fallback; kesin kimlik bağlı
+worker ayrıntısı; policy izinli mühürlü/redakte/sınırlı transcript, dosya sayısı/boş yama, değerlendirme, son rapor/kontrol
+iddiası, sealed/live tur/token/maliyet, kanıt etiketli zamanlar. Token bildirimi yoksa accumulator sıfırı unknown kalır.
+Enter/Esc salt görünüm; uzun ayrıntı kaydırılabilir. Aynı snapshot Ink / once / JSON / terminal monitor'a gider.
+D4 durum eşlemesi, history/search, M2/M3, service/live/push kapsam dışıdır.
+Kanıt: `proof/MONITOR-H1-2026-10-03/review.md`, RED logları ve hedefli kontroller. İki socket testi sandboxta çalışmadı;
+bağımsız inceleme/lead commit/landing/owner N1 küçük örnek PLAN MONITOR-HUMAN'da kalan kapsamdır.
+
 [PLAN.md](PLAN.md)'den taşınan tamamlanmış işler, kapanan bulgular ve tarihsel kanıt kayıtları (owner 2026-09-24:
 PLAN yalnız devam eden işleri taşır). Bu dosya aktif iş izni veya kabul kanıtı değildir; açık kalan kısımlar PLAN'dadır.
 Bir iş tamamlandığında ayrıntısı PLAN'dan buraya taşınır (en yeni bölüm üstte); PLAN'da yalnız kalan kapsam bırakılır.

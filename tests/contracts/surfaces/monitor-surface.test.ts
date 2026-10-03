@@ -7,7 +7,7 @@ import { render, renderToString } from 'ink';
 import { afterEach, describe, expect, it } from 'vitest';
 import { main } from '../../../src/surfaces/index.js';
 import { clearConfigCache, t } from '#platform/index.js';
-import { loadMonitorSurface } from '#surfaces/core/monitor/index.js';
+import { loadMonitorSurface, monitorSlash } from '#surfaces/core/monitor/index.js';
 import { resolveWorklinePalette } from '#surfaces/core/terminal-kit/index.js';
 import { cells } from '#surfaces/core/terminal-render/index.js';
 import { WORKLINE_SLASH_COMMANDS } from '#surfaces/core/terminal-kit/index.js';
@@ -318,7 +318,7 @@ describe('monitor v1.1: first failure, timeline, map, diagnostics, order', () =>
     expect(runs).toMatch(/run-broken\s+✗ failed\s+—\s+—\s+≈ 15 min\s+0\/2 accepted\s+—\s/);
     // No proven end → unknown, never last-activity arithmetic (owner: the "1 s" for 8-minute Runs on N1).
     expect(runs).toMatch(/run-broken-quiet\s+✗ failed\s+—\s+—\s+unknown\s/);
-    expect(runs).toMatch(/run-done\s+✓ accepted\s+—\s+—\s+1 h 10 min\s+2\/2 accepted\s+adopted 1a2b3c4\s/);
+    expect(runs).toMatch(/run-done\s+✓ accepted\s+—\s+—\s+1 h 10 min\s+2\/2 accepted\s+adopted\s/);
     expect(runs).toMatch(/run-stopped\s+■ cancelled\s+—\s+—\s+unknown\s+0\/2 accepted\s+rolled back\s/);
     expect(runs).toMatch(/run-not-admitted\s+~ waiting\s+not admitted yet\s+1 h 33 min\s+running\s/);
     const workers = text.slice(text.indexOf('── Workers'), text.indexOf('── Approvals'));
@@ -557,4 +557,76 @@ for (const locale of ['en', 'tr'] as const) it(`config help derives its number f
   const lines = surface.legendLines(locale, false, customTabs);
   const configHint = lines.map(line => line.map(span => span.text).join('')).find(text => text.includes('Config:'));
   expect(configHint).toMatch(/^2\s+Config:/);
+});
+
+function humanWorkerSnapshot() {
+  const install = fullSnapshot.installs[0]!, base = install.workers[0]!;
+  return { ...fullSnapshot, installs: [{ ...install, workers: [{ ...base, usageEvidence: 'sealed' as const, usage: { ...base.files!.usage!, turns: 7 },
+    human: { title: 'Test sonucunu açıkla', titleEvidence: 'task' as const, evaluation: 'rejected' as const,
+      transcript: { state: 'sealed' as const, excerpt: [{ kind: 'message', summary: 'Dosyayı okudu; testleri çalıştırdı.' }], truncated: false },
+      patch: { state: 'recorded' as const, fileCount: 0, files: [], truncated: false, baseCommit: 'a'.repeat(40) },
+      finalReport: { schemaVersion: 1 as const, kind: 'native-worker-report' as const, status: 'reported' as const, report: { schemaVersion: 1 as const,
+        summary: 'tests passed', changedFiles: ['claimed-only.ts'], checks: [{ command: 'npm test', outcome: 'passed' as const }], openIssues: [] } },
+      startedAtMs: null, endedAtMs: null, endedAtSource: null } }] }] };
+}
+it.each(['en', 'tr'] as const)('H1: one human detail in text/JSON/Enter: rejection cannot be replaced by tests-passed claim (%s)', async locale => {
+  const snapshot = humanWorkerSnapshot();
+  const detail = surface.buildMonitorView(snapshot, locale, true).tabs.workers.flatMap(b => b.kind === 'table' ? b.rows : [])[0]!.detail().flat().map(x => x.text).join('\n');
+  expect(detail).toContain('Test sonucunu açıkla');
+  expect(detail).toContain(locale === 'tr' ? 'Boş yama' : 'Empty patch');
+  expect(detail).toContain(locale === 'tr' ? 'İddia' : 'Claim');
+  expect(detail).toContain('tests passed');
+  expect(detail).toContain(t('monitor.verdict.rejected', {}, locale));
+  expect(detail).toContain(locale === 'tr' ? 'zaman kaydı yok' : 'no time record');
+  expect(detail).toContain(locale === 'tr' ? 'mühürlü' : 'sealed');
+  expect(surface.renderMonitorText(snapshot, { locale, width: 80, ascii: true })).toContain('tests passed');
+  const view = mount({ load: async () => snapshot, locale, columns: 80, rows: 24 });
+  try {
+    await until(() => view.stdout.frame.includes(t('monitor.title', {}, locale)), 'monitor loaded');
+    await view.press('3'); await until(() => view.stdout.frame.includes('Test sonucunu'), 'worker title in list'); await view.press(KEY.enter);
+    expect(view.stdout.frame).toContain('tests passed');
+    expect(view.stdout.frame).toContain(locale === 'tr' ? 'Boş yama' : 'Empty patch');
+    await view.press(KEY.esc); expect(view.stdout.frame).not.toContain('tests passed');
+    expect(JSON.stringify(snapshot)).toEqual(JSON.stringify(humanWorkerSnapshot()));
+  } finally { view.instance.unmount(); }
+});
+
+it.each([{ columns: 80, rows: 24 }, { columns: 120, rows: 36 }])('H1 no-color real Ink detail frame $columns × $rows, scroll and Esc preserve the snapshot', async ({ columns, rows }) => {
+  const snapshot = humanWorkerSnapshot(), before = JSON.stringify(snapshot);
+  const view = mount({ load: async () => snapshot, locale: 'tr', columns, rows, now: () => OBSERVED_AT });
+  try {
+    await until(() => view.stdout.frame.includes(t('monitor.title', {}, 'tr')), 'loaded frame');
+    await view.press('3'); await view.press(KEY.enter);
+    expect(widest(view.stdout.frame)).toBeLessThanOrEqual(columns); expect(view.stdout.frame).not.toContain('\u001b[');
+    await expect(view.stdout.frame).toMatchFileSnapshot(`../../fixtures/monitor/frame-human-tr-${columns}x${rows}.txt`);
+    await view.press('\u001b[F'); await view.press('\u001b[6~');
+    expect(view.stdout.frame).toContain('taban SHA');
+    await view.press(KEY.esc); expect(view.stdout.frame).not.toContain('tests passed');
+    expect(JSON.stringify(snapshot)).toBe(before);
+  } finally { view.instance.unmount(); }
+});
+it('H1 missing transcript/title and denied content say what is missing, live usage is labelled; slash/once/json share it', async () => {
+  const sample = humanWorkerSnapshot(), base = sample.installs[0]!;
+  const worker = { ...base.workers[0]!, usageEvidence: 'live' as const, human: { ...base.workers[0]!.human!, title: null, titleEvidence: 'missing' as const,
+    transcript: { state: 'missing' as const, excerpt: [], truncated: false }, finalReport: null } };
+  const snapshot = { ...sample, installs: [{ ...base, workers: [worker] }] };
+  const text = surface.renderMonitorText(snapshot, { locale: 'tr', width: 80, ascii: true });
+  expect(text).toContain('başlık yok'); expect(text).toContain('Transcript kaydı yok'); expect(text).toContain('canlı worker bildirimi');
+  const root = await project(); const handlers = { async inspectMonitor() { return snapshot; } };
+  expect((await cli(['monitor', '--once', '--lang', 'tr'], handlers, root)).out).toContain('canlı worker bildirimi');
+  expect(JSON.parse((await cli(['monitor', '--json'], handlers, root)).out)).toEqual(snapshot);
+  expect((await monitorSlash(root, '', { root, ...handlers }, { env: { HOME: join(root, 'h') } }, 'tr', 80)).join('\n')).toContain('başlık yok');
+  const denied = { ...snapshot, installs: [{ ...base, workers: [{ ...worker, human: { ...worker.human, transcript: { state: 'denied' as const, excerpt: [], truncated: false }, patch: { ...worker.human.patch, state: 'denied' as const, files: [], fileCount: null } } }] }] };
+  const deniedText = surface.renderMonitorText(denied, { locale: 'tr', width: 80, ascii: true });
+  expect(deniedText).toContain('policy izin vermedi'); expect(deniedText).not.toContain('canlı worker bildirimi');
+  expect(deniedText).not.toContain('tests passed');
+});
+
+it('H1 token absence stays unknown; an explicit sealed zero remains zero', () => {
+  const sample = humanWorkerSnapshot(), install = sample.installs[0]!, base = install.workers[0]!;
+  for (const recorded of [false, true]) {
+    const worker = { ...base, usage: { ...base.usage!, tokens: { ...base.usage!.tokens, input: 0, output: 0 } }, human: { ...base.human!, tokenUsageRecorded: recorded } };
+    const text = surface.renderMonitorText({ ...sample, installs: [{ ...install, workers: [worker] }] }, { locale: 'tr', width: 120, ascii: true });
+    expect(text).toContain(recorded ? 'token 0/0' : 'token —/—');
+  }
 });

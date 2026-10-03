@@ -5,6 +5,38 @@
 Ortak ürün/geliştirme ölçütü: [.deckent/docs/core-memory/project_product_north_star.md](.deckent/docs/core-memory/project_product_north_star.md).
 Owner 2026-09-21: dar dilimler ürün hedefini küçültmez; mevcut kararlar yeni kanıt olmadan yeniden açılmaz.
 
+## MONITOR-H1 — human worker evidence (2026-10-03; source candidate on lane/monitor-h1)
+
+BATCH32-MONITOR integration candidate (2026-10-03): H0/H1 `301f5f9b` is resolved onto main
+`97590485`, retaining AOF-HANDOFF exact-identity `handoffStart` receipts and task handoff projection
+alongside human worker evidence. The source reviews reported by the task remain bounded to their
+original candidates; this combined diff has no independent verdict. Lead applies H1 R1/R2 `58fa3f74`
+next, then verifies the final candidate. Current resolution/checks and sandbox limits are recorded in
+external `proof/BATCH32-2026-10-03/monitor-resolve.md`; this step does not claim landing or live acceptance.
+
+The read-only `MonitorSnapshot` v1 gains additive optional `MonitorWorker.human` evidence, joined only on the full
+scope/Run/task/attempt/generation/layout identity. Title precedence is optional `workInput.title` → task text → acceptance
+text → missing; work-input v1 / graph v3 accept the optional bounded short title without replacing the task instruction.
+The current scope inspection admits task metadata; attempt `read-output` remains mandatory before any transcript,
+retained patch or report read. No new state transition, authority, ledger migration or D4 status mapping is added.
+
+H0 reconciles the D5 unified candidate against `0388c2cf`: sealed usage survives released sidecars through the existing
+worker observation path; sealed evidence wins over live and invalid sealed evidence never silently falls back. H1 also
+reads successful finished attempts through the existing read-only monitor ledger path, without Docker/sidecar sampling.
+It projects a redacted last-ten-event excerpt, retained patch file count/list (empty distinguished from missing), the
+existing task evaluation, labelled final-report/check claims, turns/token/cost with sealed/live provenance and time evidence.
+Absent token reports stay unknown even when the summary accumulator is zero; explicit reported zero remains zero.
+Start is labelled as a launch grant (not process start); end is labelled log seal or host exit observation; absent times
+are explicitly missing. Artifact input and display bounds are registry data. Patch/report corruption is unavailable,
+policy denial is denied, and neither is empty/success. Reports cannot override the ledger evaluation.
+
+Ink Enter/Esc and detail scrolling change view state only; `--once`, `--json` and terminal `/monitor` share the same
+application evidence. New visible strings use EN/TR catalogs; hashes appear in detail lines. Local author proof lives in
+external `proof/MONITOR-H1-2026-10-03/`: real retained-artifact composition → text, controlled Ink 80×24 / 120×36 no-color
+frames and targeted checks. This candidate is not independent acceptance, main landing or live evidence. Next: lead runs
+the two sandbox-denied socket tests, independent exact-patch review, then the separately admitted N1 small-sample card.
+D4 remains PARALLEL S2; complete history/search, M2 worker measurements and M3 measured load remain later slices.
+
 ## Decision port — AOF-DECISION-PORT (2026-10-02; Fable PASS `2b8bdc31`; batch 27, on main and live since `dfb1b68f`)
 
 Vendor-neutral v1 `DecisionCase`, `DecisionAdvice`, `DecisionRecord` and `DecisionPolicy` use descriptor-safe versioned Zod ingress. Pure preparation rejects future observations, dangling evidence references, duplicate/reserved ids and configured UTF-8/count limits, then produces canonical case data for an engine SHA-256 digest. Advice retains all option probabilities, separate `none_of_the_above` / `insufficient_information`, choice confidence, context sufficiency, per-check scores, actual model/usage and observed latency. Missing answers or uncertain transport never produce fabricated advice.

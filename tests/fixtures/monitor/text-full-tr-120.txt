@@ -1,6 +1,6 @@
 Deckent izleyici · gözlem 2026-10-02 09:30:00Z · yalnız gözlem
-● current · servis çalışıyor (pid 31337) · build b0e66d92c0ff (2026-10-02 08:00:00Z derlendi) · ledger sürüm 44 · ⚠ 1 u…
-● dogfood · servis çalışıyor (pid 2001) · build 76582f9f0000 (2026-10-01 22:15:00Z derlendi) · ledger sürüm 43 · ⚠ 3 uy…
+● current · servis çalışıyor (pid 31337) · build kaydı var (2026-10-02 08:00:00Z) · ledger sürüm 44 · ⚠ 1 uyarı · /home…
+● dogfood · servis çalışıyor (pid 2001) · build kaydı var (2026-10-01 22:15:00Z) · ledger sürüm 43 · ⚠ 3 uyarı · /home/…
 ○ remote-lab · erişilemiyor · build bilinmiyor · ledger sürümü bilinmiyor · ⚠ 2 uyarı · /mnt/lab/deckent
 
 ── Özet ────────────────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -43,26 +43,26 @@ Başarısız Run'lar ve ilk hata yeri (2)
   run-blocked-approval/lint   çalıştırıyor  ⚠ 1 dk 35 sn (eski)  çalışıyor  ed5a5613  claude/model-alpha-2  current
 
 ── Run'lar ─────────────────────────────────────────────────────────────────────────────────────────────────────────────
-  Run kimliği                    Durum           Engel                          Ne zamandır  Süre        Teslim
-  run-broken                     ✗ başarısız     —                              —            ≈ 15 dk     —
-  run-broken-quiet               ✗ başarısız     —                              —            bilinmiyor  —
-  run-dog-1                      ▶ ilerliyor     worker çalışıyor               1 dk 30 sn   sürüyor     —
-  run-not-admitted               ~ bekliyor      henüz kabul edilmedi           1 sa 33 dk   sürüyor     —
-  run-done                       ✓ kabul edildi  —                              —            1 sa 10 dk  benimsendi 1a2…
-  run-cancellation-pending       ! takılı        iptal bekleniyor               1 sa 26 dk   sürüyor     —
-  run-unresolved-effect          ! takılı        etki sonucu belirsiz           1 sa 19 dk   sürüyor     —
-  run-evaluation-unknown         ! takılı        değerlendirme sonucu belirsiz  1 sa 11 dk   sürüyor     —
-  run-evaluation-not-ready       ! takılı        değerlendirme hazır değil      1 sa 4 dk    sürüyor     —
-  run-worker-exited-unevaluated  ! takılı        worker bitti, değerlendirilm…  57 dk        sürüyor     —
-  run-worker-stale-heartbeat     ! takılı        worker sessiz (heartbeat esk…  50 dk        sürüyor     —
-  run-worker-running             ▶ ilerliyor     worker çalışıyor               43 dk        sürüyor     —
-  run-blocked-approval           ~ bekliyor      onay bekliyor (appr-0001)      3 sa 12 dk   sürüyor     —
-  run-waiting-dependency         ~ bekliyor      bağımlılığını bekliyor         28 dk        sürüyor     —
-  run-pool-held                  ~ bekliyor      havuz bekletiliyor             21 dk        sürüyor     —
-  run-waiting-pool-slot          ~ bekliyor      havuzda yer bekliyor           14 dk        sürüyor     —
-  run-none                       ▶ ilerliyor     normal ilerliyor               7 dk 0 sn    sürüyor     —
-  run-stopped                    ■ iptal edildi  —                              —            bilinmiyor  geri alındı
-  run-unknown                    ! takılı        neden bilinmiyor               bilinmiyor   sürüyor     —
+  Run kimliği                    Durum           Engel                   Ne zamandır  Süre        Görevler   Teslim
+  run-broken                     ✗ başarısız     —                       —            ≈ 15 dk     0/2 kabul  —
+  run-broken-quiet               ✗ başarısız     —                       —            bilinmiyor  0/2 kabul  —
+  run-dog-1                      ▶ ilerliyor     worker çalışıyor        1 dk 30 sn   sürüyor     0/2 kabul  —
+  run-not-admitted               ~ bekliyor      henüz kabul edilmedi    1 sa 33 dk   sürüyor     0/2 kabul  —
+  run-done                       ✓ kabul edildi  —                       —            1 sa 10 dk  2/2 kabul  benimsendi
+  run-cancellation-pending       ! takılı        iptal bekleniyor        1 sa 26 dk   sürüyor     0/2 kabul  —
+  run-unresolved-effect          ! takılı        etki sonucu belirsiz    1 sa 19 dk   sürüyor     0/2 kabul  —
+  run-evaluation-unknown         ! takılı        değerlendirme sonucu …  1 sa 11 dk   sürüyor     0/2 kabul  —
+  run-evaluation-not-ready       ! takılı        değerlendirme hazır d…  1 sa 4 dk    sürüyor     0/2 kabul  —
+  run-worker-exited-unevaluated  ! takılı        worker bitti, değerle…  57 dk        sürüyor     0/2 kabul  —
+  run-worker-stale-heartbeat     ! takılı        worker sessiz (heartb…  50 dk        sürüyor     0/2 kabul  —
+  run-worker-running             ▶ ilerliyor     worker çalışıyor        43 dk        sürüyor     0/2 kabul  —
+  run-blocked-approval           ~ bekliyor      onay bekliyor (appr-0…  3 sa 12 dk   sürüyor     0/2 kabul  —
+  run-waiting-dependency         ~ bekliyor      bağımlılığını bekliyor  28 dk        sürüyor     0/2 kabul  —
+  run-pool-held                  ~ bekliyor      havuz bekletiliyor      21 dk        sürüyor     0/2 kabul  —
+  run-waiting-pool-slot          ~ bekliyor      havuzda yer bekliyor    14 dk        sürüyor     0/2 kabul  —
+  run-none                       ▶ ilerliyor     normal ilerliyor        7 dk 0 sn    sürüyor     0/2 kabul  —
+  run-stopped                    ■ iptal edildi  —                       —            bilinmiyor  0/2 kabul  geri alındı
+  run-unknown                    ! takılı        neden bilinmiyor        bilinmiyor   sürüyor     0/2 kabul  —
 
 ── Worker'lar ──────────────────────────────────────────────────────────────────────────────────────────────────────────
   Run/Görev                   Şu an         Heartbeat yaşı       Süreç      Deneme    Sağlayıcı/model       Kurulum

@@ -1,4 +1,5 @@
 import type { HandoffReceiptView } from '#engine/core/handoff-observation/index.js';
+import type { WorkerEventSummary, WorkerFinalReportResult } from '#domain/index.js';
 import type { WorkerObservation } from '#engine/core/worker-observation/index.js';
 
 /**
@@ -77,11 +78,28 @@ export interface MonitorPool {
    * uncertain); these are execution slots/occupancy (active, uncertain). A reservation needs both, so either can cause `waiting-pool-slot`. */
   readonly executionCapacity?: number | null; readonly executing?: number;
 }
+/** H1: bounded read-output evidence of this exact worker, never a claim of acceptance. */
+export interface MonitorWorkerHuman {
+  readonly title: string | null; readonly titleEvidence: 'title' | 'task' | 'acceptance' | 'missing';
+  readonly evaluation: MonitorTask['evaluation']['verdict'];
+  readonly transcript: { readonly state: 'sealed' | 'missing' | 'denied' | 'unavailable'; readonly excerpt: readonly MonitorEventExcerpt[]; readonly truncated: boolean };
+  readonly patch: { readonly state: 'recorded' | 'missing' | 'denied' | 'unavailable'; readonly files: readonly string[]; readonly fileCount: number | null; readonly truncated: boolean; readonly baseCommit: string | null };
+  /** A missing token event is unknown, even if the summary's running accumulator is zero. */
+  readonly tokenUsageRecorded?: boolean;
+  readonly finalReport: WorkerFinalReportResult | null;
+  readonly startedAtMs: number | null; readonly endedAtMs: number | null;
+  readonly endedAtSource: 'sealed' | 'observed' | null;
+}
+export interface MonitorEventExcerpt { readonly kind: string; readonly summary: string }
+export interface MonitorWorker extends WorkerObservation { readonly human?: MonitorWorkerHuman }
+export type MonitorWorkerContent = Pick<MonitorWorkerHuman, 'transcript' | 'patch' | 'finalReport' | 'tokenUsageRecorded'> & {
+  readonly usage?: WorkerEventSummary; readonly usageEvidence?: 'sealed';
+};
 export interface MonitorInstall {
   /** `current` for the project the command runs in, else the observation source id. */
   readonly id: string; readonly path: string; readonly status: MonitorInstallStatus; readonly scopeIds: readonly string[];
   readonly service: MonitorService | null; readonly ledgerVersion: number | null;
-  readonly runs: readonly MonitorRun[]; readonly workers: readonly WorkerObservation[];
+  readonly runs: readonly MonitorRun[]; readonly workers: readonly MonitorWorker[];
   readonly approvals: readonly MonitorApproval[]; readonly pools: readonly MonitorPool[];
   /** Typed codes for what could not be read (never thrown to the surface); rendered as a visible warning. MONITOR v1.1 convention
    * (additive): a code starting with `info:` is informational (a bound, a cap, an older ledger, ledger-only facts) and not a problem;

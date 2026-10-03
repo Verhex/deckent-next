@@ -39,13 +39,24 @@ export async function describeAttemptWorkerModels(run: PinnedRun, identity: Atte
   }
   return projectAttemptWorkerModels(run, identity.taskId, sealed, live);
 }
-/** Model row of an observed attempt from the ledger (the Run's pin; sealed verdict, else live `pending`): null when not a pinned worker task,
- * undefined when the row could not be read (the observation reports a diagnostic instead). */
+/** Model row and usage summary of an observed attempt, from one read of the sealed log. */
+export type AttemptWorkerEvidence = Readonly<{ model: WorkerModelView | null; usage: WorkerEventSummary | null; usageEvidence: 'sealed' | 'live' | null }>;
+/** Model row of an observed attempt from the ledger (the Run's pin; sealed verdict, else live `pending`) plus its usage (sealed summary, else live): model null when not a
+ * pinned worker task; undefined when the evidence could not be read (the observation reports a diagnostic instead). An invalid sealed log gives model evidence 'invalid', no usage. */
 export async function observeAttemptWorkerModels(ledger: SealedLogs & { loadRun(scopeId: string, runId: string): Promise<RunSnapshot | null> },
-  artifacts: WorkerEventArtifacts, identity: AttemptIdentity, live: WorkerEventSummary | null): Promise<WorkerModelView | null | undefined> {
+  artifacts: WorkerEventArtifacts, identity: AttemptIdentity, live: WorkerEventSummary | null): Promise<AttemptWorkerEvidence | undefined> {
   try {
     const run = await ledger.loadRun(identity.scopeId, identity.runId);
-    return run ? await describeAttemptWorkerModels(run, identity, ledger, artifacts, live) : null;
+    if (!run) return Object.freeze({ model: null, usage: live, usageEvidence: live ? 'live' as const : null });
+    const pinned = readWorkerModelPin(run.execution.tasks.find(task => task.taskId === identity.taskId)?.profile.parameters);
+    let sealed: readonly WorkerEvent[] | null;
+    try { sealed = await readSealedWorkerEvents(ledger, artifacts, identity); }
+    catch (error) {
+      if (!(error instanceof WorkerObservationError)) throw error;
+      return Object.freeze({ model: pinned ? viewWorkerModels({ ...pinned, summary: null, evidence: 'invalid' }) : null, usage: null, usageEvidence: null });
+    }
+    const usage = sealed ? summarizeWorkerEvents(sealed) : live;
+    return Object.freeze({ model: pinned ? projectAttemptWorkerModels(run, identity.taskId, sealed, live) : null, usage, usageEvidence: sealed ? 'sealed' as const : live ? 'live' as const : null });
   } catch { return undefined; }
 }
 /** Model rows of a Run for `run inspect`; an attempt the caller may not read shows only the requested pin (evidence `denied`). */

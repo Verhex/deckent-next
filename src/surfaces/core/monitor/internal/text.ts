@@ -30,8 +30,10 @@ export function renderMonitorText(snapshot: MonitorSnapshot, options: MonitorTex
     lines.push([span('')], rule(tabLabel(tab, options.locale)));
     // Installs answer "which install runs which build": the text snapshot prints each install's full details instead of a cut table row.
     const blocks = tab === 'installs' ? view.tabs[tab].flatMap((block): MonitorBlock[] => block.kind === 'table' && block.rows.length
-      ? block.rows.flatMap((row, index) => [...(index ? [{ kind: 'line' as const, line: [span('')] }] : []), ...row.detail().map((line): MonitorBlock => ({ kind: 'line', line }))])
-      : [block]) : view.tabs[tab];
+      ? block.rows.flatMap((row, index) => [...(index ? [{ kind: 'line' as const, line: [span('')] }] : []), ...wrapDetail(row.detail(), width).map((line): MonitorBlock => ({ kind: 'line', line }))])
+      : [block]) : tab === 'workers' ? view.tabs[tab].flatMap((block): MonitorBlock[] => block.kind === 'table' && block.rows.length
+      ? [block, ...block.rows.filter(row => row.detailInText)
+        .flatMap(row => [{ kind: 'line' as const, line: [span('')] }, ...wrapDetail(row.detail(), width).map((line): MonitorBlock => ({ kind: 'line', line }))])] : [block]) : view.tabs[tab];
     lines.push(...flattenBlocks(blocks, width, ellipsis).map(entry => entry.line));
   }
   lines.push([span('')], [span(t('monitor.notice', {}, options.locale))]);
