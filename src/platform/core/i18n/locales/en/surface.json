@@ -323,6 +323,7 @@
   "monitor.state.cancelled": "cancelled",
   "monitor.blocker.none": "progressing normally",
   "monitor.blocker.waitingPoolSlot": "waiting for a pool slot",
+  "monitor.blocker.waitingExecutionSlot": "waiting for an execution slot",
   "monitor.blocker.poolHeld": "pool on hold",
   "monitor.blocker.waitingDependency": "waiting for a dependency",
   "monitor.blocker.awaitingApproval": "awaiting approval",

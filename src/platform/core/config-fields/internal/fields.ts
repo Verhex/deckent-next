@@ -11,6 +11,7 @@ export interface ConfigFieldMetadata {
   readonly binding: ConfigBinding; readonly apply: ConfigApplyMode;
 }
 type EnvironmentBinding = { readonly names: readonly string[]; readonly path?: readonly string[]; readonly encoding?: 'boolean' };
+const SERVICE_EXECUTION_CAPACITY_DEFAULT = 8;
 function field<T extends z.ZodTypeAny>(descriptionKey: string, binding: ConfigBinding, apply: ConfigApplyMode, schema: T, environment: readonly EnvironmentBinding[] = [], since = CONFIG_CONTRACT_SINCE) {
   return Object.freeze({ schema, environment, metadata: Object.freeze({ descriptionKey, tier: 'core' as const, since, binding: binding.state === 'bound' ? Object.freeze({ ...binding, consumers: Object.freeze([...binding.consumers]) }) : Object.freeze({ ...binding }), apply }) });
 }
@@ -60,7 +61,7 @@ export const CONFIG_FIELDS = Object.freeze({
     responseMaxBytes: z.number().int().positive().max(4294967295).default(1048576),
     maxConnections: z.number().int().positive().safe().default(32),
     maxConcurrentRequests: z.number().int().positive().safe().default(16),
-    maxConcurrentExecutions: z.number().int().positive().safe().default(8),
+    maxConcurrentExecutions: z.number().int().positive().safe().default(SERVICE_EXECUTION_CAPACITY_DEFAULT),
     headerTimeoutMs: z.number().int().positive().max(2147483647).default(10000),
     responseTimeoutMs: z.number().int().positive().max(2147483647).default(10000),
     acceptRetryDelayMs: z.number().int().positive().max(2147483647).default(25),
@@ -74,6 +75,7 @@ export const CONFIG_FIELDS = Object.freeze({
   }).strict().nullable().default(null), [], LAYOUT_CONTRACT_SINCE),
   runRuntime: field('config.field.runRuntime', { state: 'bound', consumers: ['src/composition/core/run-progression'] }, 'restart', z.object({
     parking: RUN_PARKING_SETTINGS.default({ schemaVersion: 1 }),
+    maxConcurrentRuns: z.number().int().positive().safe().default(SERVICE_EXECUTION_CAPACITY_DEFAULT),
     maxReservationsPerTurn: z.number().int().positive().safe().default(4),
     pollIntervalMs: z.number().int().positive().max(2147483647).default(1000),
     failureBackoffMs: z.number().int().positive().max(2147483647).default(5000),

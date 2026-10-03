@@ -1,5 +1,5 @@
-import { createDefaultConfig, validateConfig, applyConfigEnvironment, configSections } from '#platform/index.js';
-import { deepMerge, isRecord, assertSafeKeys } from '#platform/index.js';
+import { mergeConfigLayers, validateConfig, applyConfigEnvironment, configSections } from '#platform/index.js';
+import { isRecord, assertSafeKeys } from '#platform/index.js';
 import { ConfigApplicationError, type ConfigSnapshot } from './contract.js';
 import { definitionFor, configPath } from './registry.js';
 import { validateAuthoredConfigOverlay, assertConfigJsonValue } from './overlay.js';
@@ -31,7 +31,7 @@ export function validateConfigLayers(snapshot: ConfigSnapshot, document = snapsh
   const global = snapshot.layer === 'global' ? document : snapshot.global, project = snapshot.layer === 'project' ? document : snapshot.project;
   for (const [key, section] of configSections()) section.options.validateLayers?.(global[key], project[key]);
   validateAuthoredConfigOverlay(global); validateAuthoredConfigOverlay(project);
-  const checked = validateConfig(applyConfigEnvironment(deepMerge(deepMerge(createDefaultConfig(), global), project), snapshot.env));
+  const checked = validateConfig(applyConfigEnvironment(mergeConfigLayers(global, project), snapshot.env));
   for (const section of configSections().values()) section.options.validateEffective?.(checked.config, snapshot.env);
   return checked;
 }

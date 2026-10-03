@@ -17,6 +17,31 @@ Additive ledger v46 (lane v45; renumbered at batch-27 integration because A1/A3 
 
 SDK exposes `prepareDecision`, `askDecision`, `recordDecision`, `outcomeDecision`, `inspectDecision`; CLI `deckent decide prepare|ask|record|outcome|inspect --input <file|->` offers en/tr and `--json`, help and bounded input; `decide` and its five actions are registered in the CLI help catalog (work group, batch 27). The human choice line compares `probabilities[choice]` to its choice threshold and displays confidence separately. MCP exposes only read-only `inspect_decision`; no decision mutations. The adapter currently accepts only an operator-declared zero tariff (same existing reservation/local-zero settlement path); the current official API provides no verified maximum billing bound. Nonzero paid pricing, explicit pending-intent reconciliation/retention policy and worker modes/native bridge are not claimed implemented. AOF-WORKER-DECIDE remains next. Evidence and sources: external `proof/AOF-DECISION-PORT-2026-10-02/`; targeted results, independent review and integration are separate status.
 
+## RUN-PROGRESSION-CONCURRENT — owner 2026-10-03, implemented source candidate
+
+N1 measured independent Runs advancing serially while the pool had free capacity. The owner reopens wave-6 C18-L2;
+lead Jev `5fdc0127` selected `concurrent_run_turns_bounded` (0.98/0.77). Each Run turn remains its single owner and drains
+admitted executions before returning. Accepted change: bounded concurrent Run turns across polls, keyed by scope/Run;
+`runRuntime.maxConcurrentRuns` defaults to the effective `service.maxConcurrentExecutions`. The execution-time service
+cap is separate from pool reservation capacity. A reserved attempt waits for a service slot; shutdown retains custody
+of active and waiting work. Only discovery failure or total advance failure triggers whole-driver backoff.
+No ledger migration, runtime protocol bump, retry or scheduler/wave change. The driver keeps an in-flight scope/Run map across polls, refills free capacity without a page barrier,
+retains an overflow cursor instead of starving the remainder and drains every admitted turn on abort. Expiry and observer
+failures remain per Run; observer errors cannot terminate another Run. `RunProgressionTurn` itself is unchanged.
+`RuntimeServiceLifecycle.admitExecution` is the internal bounded Run-producer FIFO; it shares the execution counter with
+transport `admit`, preserving direct transport BUSY/request-cap behavior. Waiters remain drain-tracked and cannot be
+bypassed by fresh execution admissions. The internal queue is bounded by configured concurrent Runs × per-turn executions;
+`maxConcurrentRequests` retains its transport request meaning. At shutdown, executing work drains and queued composition
+work rechecks the stop signal before invoking execution. No reservation is silently released or reported completed.
+The additive observer `waitedForSlotMs` sums monotonic service-slot waits for that turn; absent when nothing queued, preserving
+existing single-Run result bytes. Monitor's additive `waiting-execution-slot` is derived from an automatically admitted active
+reservation without dispatch, with reservation time and `dispatch-pending` detail; it is not live gate telemetry. Pool blockers
+remain reservation-time evidence. Config schema v4 adds the strict positive integer without migration; effective global/project
+loading and config set/unset derive absent Run bounds from service capacity, explicit Run overrides remain independent.
+Targeted ledger/driver/gate/config/monitor and six mutation checks are retained as author evidence. Eight single-task Runs filled
+all eight configured pool slots in a controlled ledger test; this is not native worker or N1 throughput acceptance. Native socket
+closure tests are retained but require the missing built `peer_credentials.node`; no build was admitted. External proof: `proof/RUN-PROGRESSION-CONCURRENT-2026-10-03/`. Independent/live acceptance remains open.
+
 ## Northstar — owner 2026-09-17
 
 Deckent, kullanıcının niyetini güvenli, paralel ve doğrulanmış işe dönüştüren müşteri-kurulumlu Agent OS ürünüdür.

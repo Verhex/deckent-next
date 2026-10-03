@@ -26,7 +26,6 @@ import { executeConfiguredRuntimeWorkspaceFileOperation } from './workspace-file
 import { executeConfiguredRuntimeEffectOperation } from './effect-operations.js';
 import { executeConfiguredRuntimePermissionModeOperation } from './permission-mode.js';
 import { executeConfiguredRuntimeSecretOperation } from './secret.js';
-
 export interface ConfiguredRuntimeServiceObserver extends ConfiguredCancellationRuntimeObserver {
   onRunProgression?: RunProgressionObserver['onRun'];
   onRunProgressionError?: RunProgressionObserver['onError'];
@@ -153,7 +152,7 @@ async function startUnderCustody(projectRoot: string, observer: ConfiguredRuntim
   const preparedRunRuntime = await prepareConfiguredRunRuntime(projectRoot, {
     ...(observer.onRunProgression ? { onRun: observer.onRunProgression } : {}),
     ...(observer.onRunProgressionError ? { onError: observer.onRunProgressionError } : {}),
-  }, work => lifecycle.admit(work, 'execution'), options);
+  }, (work, onSlotWait) => lifecycle.admitExecution(work, onSlotWait), options);
   const server = await guard.start(async (request, peer, stream, turn) => {
     try {
       if (request.operation === 'describeService') {

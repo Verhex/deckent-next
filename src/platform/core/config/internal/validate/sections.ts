@@ -13,6 +13,10 @@ export function validateConfig(input: unknown, locale: Locale = 'en'): { config:
   const issues: ConfigIssue[] = [], warnings: ConfigWarning[] = [];
   const core = Object.fromEntries(Object.entries(input).filter(([key]) => Object.hasOwn(CORE_SCHEMA.shape, key)));
   const result = CORE_SCHEMA.safeParse(core);
+  // A missing Run bound follows the effective service capacity; an authored bound stays independent.
+  if (result.success && (!isRecord(input['runRuntime']) || input['runRuntime']['maxConcurrentRuns'] === undefined)) {
+    result.data.runRuntime.maxConcurrentRuns = result.data.service.maxConcurrentExecutions;
+  }
   if (!result.success) issues.push(...result.error.issues.map(i => ({ path: i.path.join('.'), reason: i.code })));
   const config = structuredClone(input);
   if (result.success) Object.assign(config, result.data);

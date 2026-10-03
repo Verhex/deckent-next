@@ -8,14 +8,15 @@ import { advanceConfiguredRunLifecycle, evaluateConfiguredTask, reserveConfigure
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
 import { createLayoutPolicySource } from '#composition/core/policy/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
+type ConfiguredRunProgressionResult = Awaited<ReturnType<RunProgressionTurn['advance']>> & Readonly<{ waitedForSlotMs?: number }>;
+export type RunExecutionAdmission = (work: () => Promise<void>, onSlotWait?: (waitedForSlotMs: number) => void) => Promise<void>;
 /** Shared runtime composition for automatic progression; not a separate public command.
  * Every operation reloads local scope/policy; a previous turn or reservation is not a new permission.
  */
 export async function advanceConfiguredRun(projectRoot: string, input: RunQuery, signal: AbortSignal,
-  options: ConfigLoadOptions = {}, admitExecution: (work: () => Promise<void>) => Promise<void> = work => work(), maxReservations?: number) {
+  options: ConfigLoadOptions = {}, admitExecution: RunExecutionAdmission = work => work(), maxReservations?: number): Promise<ConfiguredRunProgressionResult> {
   try {
-    const query = runQuerySchema.parse(input);
-    const initial = await loadConfiguredScopeContext(projectRoot, query.scopeId, options, 'write');
+    const query = runQuerySchema.parse(input), initial = await loadConfiguredScopeContext(projectRoot, query.scopeId, options, 'write'); let waitedForSlotMs = 0;
     async function withRunStore<T>(request: RunQuery, work: (store: Awaited<ReturnType<typeof openSqliteAttemptStore>>) => Promise<T>) {
       const { config, layout, principal, path } = await loadConfiguredScopeContext(projectRoot, request.scopeId, options, 'write');
       await new RunPolicyAuthorization(createLayoutPolicySource(layout, userInfo().uid, config.inspection.policyMaxBytes))
@@ -30,7 +31,7 @@ export async function advanceConfiguredRun(projectRoot: string, input: RunQuery,
         try { await reserveConfiguredRunTasks(projectRoot, command, options); return 'reserved'; }
         catch (error) { const outcome = reservationRefusalOutcome(queryFailure(error).code); if (outcome) return outcome; throw error; }
       },
-      async execute(identity) { await admitExecution(async () => { await executeConfiguredTask(projectRoot, identity, options); }); },
+      async execute(identity) { await admitExecution(async () => { if (!signal.aborted) await executeConfiguredTask(projectRoot, identity, options); }, waited => { waitedForSlotMs += waited; }); },
       async evaluate(command) {
         try { await evaluateConfiguredTask(projectRoot, command, options); return 'recorded'; }
         catch (error) {
@@ -42,6 +43,6 @@ export async function advanceConfiguredRun(projectRoot: string, input: RunQuery,
       },
       evaluationRecorded: (identity, revision) => withRunStore(query, store => store.hasTaskEvaluation(identity, revision)),
     }, initial.config.service.maxConcurrentExecutions, { commandId: randomUUID }, maxReservations);
-    return await turn.advance(query, signal);
+    const result = await turn.advance(query, signal); return waitedForSlotMs > 0 ? Object.freeze({ ...result, waitedForSlotMs }) : result;
   } catch (error) { throw queryFailure(error); }
 }

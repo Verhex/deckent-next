@@ -13,10 +13,10 @@ export interface MonitorRunEvidence {
  * evidence) sits above the progressing codes so missing evidence is never shown as healthy progress.
  */
 export const MONITOR_BLOCKER_PRECEDENCE: readonly MonitorBlockerCode[] = Object.freeze(['parked', 'awaiting-decision', 'cancellation-pending', 'unresolved-effect', 'evaluation-unknown',
-  'evaluation-not-ready', 'worker-stale-heartbeat', 'worker-exited-unevaluated', 'awaiting-approval', 'not-admitted', 'pool-held', 'waiting-pool-slot',
+  'evaluation-not-ready', 'worker-stale-heartbeat', 'worker-exited-unevaluated', 'awaiting-approval', 'not-admitted', 'pool-held', 'waiting-pool-slot', 'waiting-execution-slot',
   'unknown', 'worker-running', 'none', 'waiting-dependency']);
 const STATE: Readonly<Record<MonitorBlockerCode, MonitorRunState>> = Object.freeze({ parked: 'parked', 'awaiting-decision': 'waiting', 'none': 'progressing', 'worker-running': 'progressing',
-  'waiting-pool-slot': 'waiting', 'pool-held': 'waiting', 'awaiting-approval': 'waiting', 'cancellation-pending': 'waiting', 'worker-exited-unevaluated': 'waiting',
+  'waiting-pool-slot': 'waiting', 'waiting-execution-slot': 'waiting', 'pool-held': 'waiting', 'awaiting-approval': 'waiting', 'cancellation-pending': 'waiting', 'worker-exited-unevaluated': 'waiting',
   'waiting-dependency': 'waiting', 'worker-stale-heartbeat': 'blocked', 'evaluation-not-ready': 'blocked', 'evaluation-unknown': 'blocked',
   'unresolved-effect': 'blocked', 'not-admitted': 'blocked', 'unknown': 'blocked' });
 const OPEN = new Set(['pending', 'active', 'evaluating', 'reconciling', 'awaiting-decision']);
@@ -45,7 +45,9 @@ function boundBlocker(taskId: string, phase: string, attempt: MonitorLedgerAttem
     return blocker('worker-exited-unevaluated', taskId, endOf(attempt));
   }
   if (!attempt) return blocker('unknown', taskId, null, 'attempt-missing');
-  if (!dispatch) return e.run.admitted === false ? blocker('not-admitted', taskId, e.run.createdAtMs) : blocker('none', taskId, attempt.reservedAtMs, 'dispatch-pending');
+  // Reserved automatic work without dispatch awaits execution; this is derived ledger evidence, not a measured service-gate wait.
+  if (!dispatch) return e.run.admitted === false ? blocker('not-admitted', taskId, e.run.createdAtMs)
+    : blocker(e.run.admitted === true ? 'waiting-execution-slot' : 'none', taskId, attempt.reservedAtMs, 'dispatch-pending');
   if (dispatch.launch === 'pending') return blocker('none', taskId, attempt.reservedAtMs, 'launch-pending');
   if (dispatch.launch === 'prevented-before-launch') return blocker('cancellation-pending', taskId);
   if (terminal) return blocker('worker-exited-unevaluated', taskId, endOf(attempt), 'projection-pending');
