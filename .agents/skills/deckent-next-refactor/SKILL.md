@@ -44,7 +44,7 @@ historical proof and current verification.
 - Owner output: natural Turkish, result/impact → required evidence/open limit → decision if any → who holds it /
   next step; no empty-field ritual, details on demand, a material blocker is visible in the summary. After a material
   change main writes `.deckent/host/owner-report.json` and runs `node .agents/refactor/board.mjs report .deckent/host/owner-report.json` (flow: before → now →
-  remaining with who holds each step; one HTML overwritten at `ozet-rapor/index.html`, served on 127.0.0.1:8765 and sent to the
+  remaining with who holds each step; one HTML overwritten at `ozet-rapor/index.html`, served on 127.0.0.1:8765 (user systemd `deckent-owner-panel`) and sent to the
   owner; an interactive panel — owner asks/commands with copy buttons, who does what from the board, flow + `version`, and
   `places` (where to see what); fill `commands`/`places`/`version` too); the chat reply stays a few lines pointing to it (owner 2026-10-03 morning).
 - Notification (decision 5): main pushes to the owner only when the owner must act — a decision is needed (with
