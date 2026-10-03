@@ -144,7 +144,7 @@ export class TaskEvaluationApplication {
     try { sealed = await readSealedWorkerEvents(this.store, this.artifacts, identity); }
     catch { throw new TaskEvidenceError('TASK_EVIDENCE_INVALID'); }
     const view = projectAttemptWorkerModels(run, identity.taskId, sealed)!;
-    return { provider: view.provider, requested: view.requested, init: view.init, usage: view.usage,
+    return { provider: view.provider, evidenceCapability: view.evidenceCapability, requested: view.requested, init: view.init, usage: view.usage,
       verdict: view.verdict === 'pending' ? 'unverified' : view.verdict, unexpected: view.unexpected, evidence: sealed ? 'sealed' : 'absent' };
   }
 }

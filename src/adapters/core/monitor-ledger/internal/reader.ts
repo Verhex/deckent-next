@@ -147,7 +147,7 @@ function attempt(db: DatabaseSync, version: number, binding: MonitorLedgerRun['s
   const failed = !!terminal && (terminal.exitCode !== 0 || terminal.signal !== undefined || terminal.interrupted === true);
   files.push(Object.freeze({ identity: binding.identity, output: record?.output ?? null, events: sealed?.identity.attemptId === attemptId ? sealed.events : null,
     workspace: record?.request.workspace ?? null, failed, open: record?.launch === 'granted' && !terminal, finished: !!terminal, sealed: !!sealed }));
-  const model = evaluated ?? (pin ? Object.freeze({ provider: pin.provider, requested: pin.pin, init: null, usage: null, verdict: 'pending' as const, unexpected: [], evidence: 'none' as const }) : null);
+  const model = evaluated ?? (pin ? Object.freeze({ provider: pin.provider, evidenceCapability: pin.evidenceCapability, requested: pin.pin, init: null, usage: null, verdict: 'pending' as const, unexpected: [], evidence: 'none' as const }) : null);
   return Object.freeze({ attemptId, generation, observedKind: binding.observedKind, observedRevision: binding.observedRevision, evaluationObserved, reservedAtMs,
     provider: evaluated?.provider ?? pin?.provider ?? record?.profile.adapterId ?? null, model,
     sealedAtMs: sealed && sealed.identity.attemptId === attemptId ? sealed.sealedAt : null,

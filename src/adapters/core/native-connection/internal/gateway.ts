@@ -11,6 +11,7 @@ import catalog from './providers.json' with { type: 'json' };
 import { nativeSubscriptionSchema, NativeConnectionError, projectNativeCredential, type NativeSubscription } from './credential.js';
 import { scrubWorkerEvent } from './event-guard.js';
 import { secretValues } from './worker.js';
+import { nativeCliCommand } from '#adapters/core/native-cli-registry/index.js';
 import { readNativeClientHello } from './tls-hello.js';
 import { verifyWorkerModels, workerEventSchema, type WorkerEvent } from '#domain/index.js';
 
@@ -37,6 +38,7 @@ export type WorkerEventSink = (events: readonly WorkerEvent[]) => void;
 export async function openNativeConnection(input: { binding: NativeSubscription; directory: string; credential: Record<string, unknown>; deadlineMs: number;
   onEvents?: WorkerEventSink }) {
   const binding = nativeSubscriptionSchema.parse(input.binding); const spec = catalog.providers[binding.provider];
+  const capabilities = nativeCliCommand(binding.provider).capabilities;
   const projected = projectNativeCredential(binding.provider, input.credential);
   const limits = catalog.limits;
   const root = await realpath(input.directory); const stat = await lstat(root);
@@ -99,7 +101,7 @@ export async function openNativeConnection(input: { binding: NativeSubscription;
     }
     statistics.bootstrapReads++;
     response.setHeader('Cache-Control', 'no-store');
-    response.end(JSON.stringify({ schemaVersion: 1, provider: binding.provider, home: spec.home, file: spec.file,
+    response.end(JSON.stringify({ schemaVersion: 1, provider: binding.provider, capabilities, home: spec.home, file: spec.file,
       credential, preflight: binding.preflight, promptDelivery: binding.promptDelivery, finalReport: binding.finalReport,
       ...('credentialEnvironment' in spec ? { credentialEnvironment: spec.credentialEnvironment } : {}), environment: spec.environment, limits }));
     credential = undefined;
@@ -149,7 +151,7 @@ export async function openNativeConnection(input: { binding: NativeSubscription;
     return Object.freeze({ descriptor: Object.freeze({ schemaVersion: 1 as const, socketPath, bootstrapPath, bootstrapSha256 }),
       statistics: () => Object.freeze({ ...statistics, closed }), close,
       /** Host verdict over the accepted worker events against the admitted model (null until the session ended). */
-      modelVerification: () => reported.ended ? verifyWorkerModels({ provider: binding.provider, admitted: binding.model ?? null,
-        startedModel: reported.started, usedModels: reported.used }) : null });
+      modelVerification: () => reported.ended ? Object.freeze({ ...verifyWorkerModels({ evidenceCapability: capabilities.modelUsageEvidence, admitted: binding.model ?? null,
+        startedModel: reported.started, usedModels: reported.used }), evidenceCapability: capabilities.modelUsageEvidence }) : null });
   } catch { await close(); throw new NativeConnectionError('NATIVE_CONNECTION_UNAVAILABLE'); }
 }

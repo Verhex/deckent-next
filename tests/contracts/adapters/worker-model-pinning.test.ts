@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { assertNativeWorkerBinding, compileNativeCodingDockerProfile, createNormalizerState, normalizeClaudeLine, resolveDockerTaskProfile } from '#adapters/index.js';
-import { summarizeWorkerEvents, verifyWorkerModels, workerEventSchema } from '#domain/index.js';
+import { summarizeWorkerEvents, verifyWorkerModels, workerEventSchema, readLegacyModelUsageEvidence } from '#domain/index.js';
 import { prepareNativeCodingProfile } from '../../../src/index.js';
 
 const template = () => ({ id: 'coding', version: 1, adapter: { id: 'docker', version: 2 }, parameters: {
@@ -80,7 +80,7 @@ const events = (model: string, usage: Record<string, object>) => {
 const admitted = { modelId: 'claude-sonnet-5-5', auxiliaryModelIds: ['claude-haiku-4-5-20251001'] };
 const verdict = (list: ReturnType<typeof events>, admittedModel: typeof admitted | null = admitted, provider: 'claude' | 'codex' | 'cursor' = 'claude') => {
   const started = list.find(event => event.kind === 'session.started'), ended = list.find(event => event.kind === 'session.ended');
-  return verifyWorkerModels({ provider, admitted: admittedModel, startedModel: started?.kind === 'session.started' ? started.model : null,
+  return verifyWorkerModels({ provider, evidenceCapability: readLegacyModelUsageEvidence(provider), admitted: admittedModel, startedModel: started?.kind === 'session.started' ? started.model : null,
     usedModels: ended?.kind === 'session.ended' ? ended.models ?? null : null });
 };
 
@@ -108,7 +108,7 @@ describe('post-run model verification (Claude result.modelUsage keys)', () => {
     expect(verdict(list, admitted, 'codex')).toMatchObject({ status: 'unverified', unexpected: [] });
     expect(verdict(list, admitted, 'cursor')).toMatchObject({ status: 'unverified' });
     expect(verdict(list, null)).toMatchObject({ status: 'unverified', admitted: null });
-    expect(verifyWorkerModels({ provider: 'claude', admitted, startedModel: 'claude-sonnet-5-5', usedModels: null })).toMatchObject({ status: 'unverified' });
+    expect(verifyWorkerModels({ provider: 'claude', evidenceCapability: 'session-events', admitted, startedModel: 'claude-sonnet-5-5', usedModels: null })).toMatchObject({ status: 'unverified' });
   });
   it('summarizes the reported models and the sealed host verdict', () => {
     const list = events('claude-sonnet-5-5', { 'claude-sonnet-5-5': {}, 'claude-fable-5-1': {} });
