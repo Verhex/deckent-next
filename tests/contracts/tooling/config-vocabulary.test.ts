@@ -1,7 +1,8 @@
-import { mkdtemp, mkdir, writeFile, readFile, readdir, cp, rm } from 'node:fs/promises';
+import { mkdtemp, mkdir, writeFile, readFile, cp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
+import { join, relative, isAbsolute } from 'node:path';
+import ts from 'typescript';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 // Tooling intentionally runs against source, with no dist dependency.
 // @ts-expect-error JavaScript build tooling has no declaration file.
 import { projectVocabulary, lintConfigVocabulary, registryPath, projectionPath, projectionText, projectionStale } from '../../../scripts/config-vocabulary.mjs';
@@ -34,17 +35,22 @@ describe('source-derived config vocabulary gate', () => {
     await writeFile(file, "const output_mode = getConfigFieldDefault('output_mode'); if (output_mode === 'standard') consume(); type X = 'json';");
     expect(check(root, file)).toEqual([]);
   });
-  it('is identical for a CRLF checkout of the same sources (Windows autocrlf)', async () => {
+  it('is identical for a CRLF read view of every consumed source (Windows autocrlf)', async () => {
     const root = await fixture(), stored = await readFile(join(root, projectionPath), 'utf8');
-    const names = (await readdir(join(root, 'src'), { recursive: true })).filter(name => name.endsWith('.ts')), converted = [];
-    // Bound concurrent I/O instead of doing two serial Windows filesystem round trips for every source file.
-    for (let offset = 0; offset < names.length; offset += 16) {
-      await Promise.all(names.slice(offset, offset + 16).map(async name => {
-        const file = join(root, 'src', name); await writeFile(file, (await readFile(file, 'utf8')).replace(/\r?\n/gu, '\r\n')); converted.push(name);
-      }));
-    }
-    expect(converted.length).toBeGreaterThan(10);
-    expect(JSON.stringify(projectVocabulary(root))).toBe(stored);
+    const read = ts.sys.readFile, converted = new Set<string>();
+    // Apply autocrlf at the compiler's byte-read boundary, including every imported .ts source.
+    // Avoid ~960 additional file reads AND writes; keep the 30s ceiling and exact projection equality.
+    const view = vi.spyOn(ts.sys, 'readFile').mockImplementation((path, encoding) => {
+      const text = read(path, encoding), name = relative(join(root, 'src'), path);
+      if (text === undefined || isAbsolute(name) || name === '..' || name.startsWith('..') || !name.endsWith('.ts')) return text;
+      converted.add(relative(root, path).replaceAll('\\', '/'));
+      return text.replace(/\r?\n/gu, '\r\n');
+    });
+    let projected;
+    try { projected = projectVocabulary(root); } finally { view.mockRestore(); }
+    expect(converted.size).toBeGreaterThan(10);
+    for (const source of Object.keys(projected.sources)) expect(converted.has(source), source).toBe(true);
+    expect(JSON.stringify(projected)).toBe(stored);
   });
   it('build check reads a CRLF projection as the same text and still rejects a changed one', async () => {
     const root = await fixture(), file = join(root, projectionPath), text = projectionText(root) as string;

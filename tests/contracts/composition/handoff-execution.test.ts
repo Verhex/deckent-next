@@ -8,18 +8,21 @@ import { createConfiguredRun, reserveConfiguredRunTasks, evaluateConfiguredTask,
 import { executeConfiguredTask, openConfiguredExecution } from '../../../src/composition/core/execution/index.js';
 import { prepareConfiguredWorkspacePatch } from '../../../src/composition/core/workspace-patch/index.js';
 import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
-import { FileArtifactStore, DockerSupervisor, GitRunWorkspaceProvider } from '#adapters/index.js';
+import { FileArtifactStore, DockerSupervisor, GitRunWorkspaceProvider, readWorkspace, SnapshotBudget } from '#adapters/index.js';
 import { RunWorkspaceAcquisitionApplication, type WorkspacePatchError } from '#engine/index.js';
 import { clearConfigCache, productResourcePath, inspectProductDirectory } from '#platform/index.js';
 import { fixtureDockerRegistry } from '../support/execution-registry.js';
 const exec = promisify(execFile), roots: string[] = [], cleanup: (() => Promise<void>)[] = [];
 afterEach(async () => { for (const fn of cleanup.splice(0).reverse()) await fn(); clearConfigCache(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 describe('configured handoff producer to dependent (source only)', () => {
-  it.each([false, true, 'unapplicable'] as const)('read-only note/shared mounts, receipt and fixed base with startFrom=%s', async (startFrom, context) => {
+  it.for([false, true, 'unapplicable'] as const)('read-only note/shared mounts, receipt and fixed base with startFrom=%s', async (startFrom, context) => {
     const capability: { code: WorkspacePatchError['code']; reason: string } | null = process.platform === 'linux' ? null
       : { code: 'PATCH_UNSAFE', reason: 'configured Docker producer/patch fixture requires Linux descriptor-relative snapshot custody' };
-    if (capability) context.skip(`${capability.code}: ${capability.reason}; portable default/empty rules remain in handoff-graph and handoff-patch-start`);
-    if (!process.env.DECKENT_TEST_DOCKER_IMAGE) context.skip('DECKENT_TEST_DOCKER_IMAGE is not configured: configured Docker producer verify-not-run');
+    if (capability) {
+      await expect(readWorkspace(join(tmpdir(), 'aof-never-created'), new SnapshotBudget({ maxBytes: 65536, maxEntries: 100, maxDepth: 10, maxPathBytes: 256 }, Date.now() + 10000))).rejects.toMatchObject({ code: capability.code });
+      context.skip(`${capability.code}: ${capability.reason}; real refusal before path access verified; portable default/empty rules remain in handoff-graph and handoff-patch-start`);
+    }
+    if (!process.env.DECKENT_TEST_DOCKER_IMAGE) context.skip('SUPERVISOR_OPTIONS_INVALID: DECKENT_TEST_DOCKER_IMAGE is not configured; configured Docker producer verify-not-run');
     const root = await mkdtemp(join(tmpdir(), 'aof-execution-')); roots.push(root);
     const project = join(root, 'project'); await mkdir(join(project, '.deckent'), { recursive: true, mode: 0o700 });
     const git = async (...args: string[]) => (await exec('/usr/bin/git', ['-C', project, ...args])).stdout.trim();

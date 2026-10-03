@@ -1,4 +1,5 @@
-import { mkdtemp, mkdir, rm } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
+import { mkdtemp, mkdir, rm, readFile, readdir, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -8,12 +9,31 @@ import { TaskEvaluationApplication, TaskHandoffApplication, TaskPatchStartApplic
 import { fixtureExecution } from '../support/execution-registry.js';
 import { custodyProfiles, dispatchAdmission, grantTestLaunch } from '../support/custody.js';
 import type { SqliteAttemptStore } from '#adapters/index.js';
+import { ArtifactError, type ArtifactStore } from '#capabilities/index.js';
 const roots: string[] = [], stores: SqliteAttemptStore[] = [];
 afterEach(async () => { for (const store of stores.splice(0)) store.close(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 const source = { runId: 'r', taskId: 'a', attemptId: 'a1', scopeId: 's', layoutRevision: 'l', generation: 1 };
 const target = { ...source, taskId: 'b', attemptId: 'b1' };
 const principal = { id: 'evaluator', issuer: 'test', subject: 'subject', assurance: 'os-user' as const, scopeIds: ['s'] };
 const verifier = { async verify() { return principal; } }, authorization = { async authorizeIdentity() {} };
+// The engine consumes the typed artifact port, not POSIX ownership. Keep the real POSIX adapter
+// coverage and exercise the same engine contracts on Windows with exact content-addressed bytes.
+function portableArtifacts(): ArtifactStore {
+  const bytes = new Map<string, Uint8Array>();
+  return {
+    async put(scopeId, input) {
+      const digest = createHash('sha256').update(input).digest('hex');
+      bytes.set(`${scopeId}:${digest}`, Uint8Array.from(input));
+      return { schemaVersion: 1, scopeId, digest, byteLength: input.byteLength };
+    },
+    async read(scopeId, receipt) {
+      if (scopeId !== receipt.scopeId) throw new ArtifactError('ARTIFACT_SCOPE_DENIED');
+      const value = bytes.get(`${scopeId}:${receipt.digest}`);
+      if (!value || value.byteLength !== receipt.byteLength) throw new ArtifactError('ARTIFACT_CORRUPT');
+      return Uint8Array.from(value);
+    },
+  };
+}
 async function fixture(mode: 'valid' | 'invalid' | 'absent' = 'valid', verdict: 'pass' | 'fail' | 'unknown' = 'pass', sourceTaskId = 'a') {
   const source = { runId: 'r', taskId: sourceTaskId, attemptId: 'a1', scopeId: 's', layoutRevision: 'l', generation: 1 };
   const root = await mkdtemp(join(tmpdir(), 'handoff-delivery-')); roots.push(root);
@@ -24,17 +44,17 @@ async function fixture(mode: 'valid' | 'invalid' | 'absent' = 'valid', verdict: 
   await store.createRun({ commandId: 'create', actor, identity: { runId: 'r', scopeId: 's', layoutRevision: 'l' }, now: 0, graph, execution: fixtureExecution(graph), policy: { schemaVersion: 2, poolId: 'p', capacity: { executionSlots: 2, inFlightSlots: 2 }, ordering: [source.taskId, 'b', 'c'] } });
   await store.reserveRunTasks({ commandId: 'reserve-a', actor, scopeId: 's', runId: 'r', expectedRevision: 0, now: 0, identities: [source] });
   await mkdir(join(root, 'artifacts'), { mode: 0o700 });
-  const artifacts = new FileArtifactStore({ root: join(root, 'artifacts'), maxBytes: 65536 });
+  const artifacts = process.platform === 'win32' ? portableArtifacts() : new FileArtifactStore({ root: join(root, 'artifacts'), maxBytes: 65536 });
   const file = await artifacts.put('s', Buffer.from('code'));
   const note = { toTask: 'b', summary: 'Use result', artifacts: [{ name: 'code', digest: mode === 'invalid' ? 'b'.repeat(64) : file.digest }], openQuestions: ['review the API'] };
   const report = { schemaVersion: 1, kind: 'native-worker-report', status: 'reported', report: { schemaVersion: 1, summary: 'done', changedFiles: [], checks: [], openIssues: [], handoff: note, sharedNotes: ['shared for this Run'] } };
   const output = await artifacts.put('s', Buffer.from(JSON.stringify({ schemaVersion: 1, identity: source, completeness: 'complete', stdout: mode === 'absent' ? 'worker plain output' : JSON.stringify(report), stderr: '', files: [{ name: 'code', status: 'collected', receipt: file }] })));
-  const claim = { owner: 'worker', request: { protocolVersion: 1 as const, identity: source, workspace: '/private/workspace', argv: ['fixture'] } };
+  const claim = { owner: 'worker', request: { protocolVersion: 1 as const, identity: source, workspace: join(root, 'workspace'), argv: ['fixture'] } };
   await store.claimDispatch(dispatchAdmission(claim)); await grantTestLaunch(store, claim);
   await store.retainDispatchOutput(claim, output); await store.finishDispatch(claim, { handle: 'fixture', exitCode: verdict === 'fail' ? 1 : 0, interrupted: false });
   const evaluation = await new TaskEvaluationApplication(store, verifier, { async authorize() {} }, { async evaluate() { return verdict; } }, artifacts, { maxEvidenceItems: 1, maxTotalBytes: 65536 }, { now: () => 100, timeoutMs: 1000 }).execute({ schemaVersion: 1, commandId: 'evaluate', identity: source, expectedRevision: 2 });
   if (verdict === 'pass') await store.reserveRunTasks({ commandId: 'reserve-b', actor, scopeId: 's', runId: 'r', expectedRevision: evaluation.snapshot.revision, now: 100, identities: [target] });
-  return { store, artifacts, evaluation, note, graph };
+  return { root, store, artifacts, evaluation, note, graph };
 }
 const limits = { maxBytes: 65536, maxSharedNotes: 10, promptBytes: 8192 };
 describe('sealed report to accepted dependent', () => {
@@ -108,10 +128,24 @@ it.each([
   expect(start.files[0]!.target).toBe('/deckent/inputs/_handoff/' + filename);
   expect(start.events[0]!.source.taskId).toBe(sourceTaskId);
   expect(Buffer.byteLength(filename)).toBeLessThanOrEqual(255);
+  // These percent-encoded ASCII components are legal on NTFS as well as POSIX.
+  // Exercise the host filesystem too, including the exact 255-byte boundary.
+  const bytes = await f.artifacts.read('s', start.files[0]!.receipt);
+  await writeFile(join(f.root, filename), bytes);
+  expect(await readFile(join(f.root, filename))).toEqual(Buffer.from(bytes));
 });
 it('refuses a 256-byte encoded component before writing either note or shared artifact', async () => {
   const f = await fixture('valid', 'pass', 'é'.repeat(41) + 'abcde'), put = vi.fn(f.artifacts.put.bind(f.artifacts));
   expect(Buffer.byteLength(encodeURIComponent('é'.repeat(41) + 'abcde') + '.json')).toBe(256);
   await expect(new TaskHandoffApplication(f.store, verifier, authorization, { read: f.artifacts.read.bind(f.artifacts), put }, limits).resolve(target)).rejects.toMatchObject({ code: 'HANDOFF_INVALID' });
   expect(put).not.toHaveBeenCalled();
+});
+
+it.for(['win32'] as const)('real artifact adapter refuses %s before creating a storage root (native Windows; platform-property simulation on POSIX)', async platform => {
+  const root = await mkdtemp(join(tmpdir(), 'handoff-artifact-refusal-')); roots.push(root);
+  const original = Object.getOwnPropertyDescriptor(process, 'platform')!;
+  Object.defineProperty(process, 'platform', { ...original, value: platform });
+  try { expect(() => new FileArtifactStore({ root: join(root, 'never-created'), maxBytes: 65536 })).toThrow(new ArtifactError('ARTIFACT_UNSUPPORTED')); }
+  finally { Object.defineProperty(process, 'platform', original); }
+  expect(await readdir(root)).toEqual([]);
 });

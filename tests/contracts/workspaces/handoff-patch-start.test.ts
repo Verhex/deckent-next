@@ -129,7 +129,7 @@ it('unsupported native platform refuses the real snapshot before workspace/artif
   expect(await readFile(join(f.lease.workspace, 'tracked'), 'utf8')).toBe('base\n');
 });
 
-it.each(['darwin', 'win32'] as const)('full real retained Git lease refuses %s patch start (Linux capability simulation)', async (platform, context) => {
+it.for(['darwin', 'win32'] as const)('full real retained Git lease refuses %s patch start (Linux capability simulation)', async (platform, context) => {
   const f = await fixture(context), original = Object.getOwnPropertyDescriptor(process, 'platform')!;
   const before = await readdir(dirname(f.lease.workspace));
   Object.defineProperty(process, 'platform', { ...original, value: platform });

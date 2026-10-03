@@ -55,7 +55,8 @@ describe('hardcode ratchet admission', () => {
     // Windows spawnSync pipe transport returned EOF for this binary archive. Files preserve the exact bytes.
     const archive = join(root, 'source.tar');
     execFileSync('git', ['archive', '--output', archive, base, 'src', 'package.json', 'tsconfig.json']);
-    execFileSync('tar', ['-xf', archive, '-C', root]);
+    // A drive-letter archive is remote syntax to GNU tar; cwd + relative names work with GNU and BSD tar.
+    execFileSync('tar', ['-xf', 'source.tar'], { cwd: root });
     rmSync(archive);
     put(root, 'arch.json', admittedFile('arch.json'));
     symlinkSync(resolve('node_modules'), join(root, 'node_modules'), 'dir');
@@ -65,7 +66,7 @@ describe('hardcode ratchet admission', () => {
     if (first) {
       const archive = join(detector, 'scripts.tar');
       execFileSync('git', ['archive', '--output', archive, first, 'scripts']);
-      execFileSync('tar', ['-xf', archive, '-C', detector]);
+      execFileSync('tar', ['-xf', 'scripts.tar'], { cwd: detector });
       rmSync(archive);
     }
     else cpSync('scripts', join(detector, 'scripts'), { recursive: true });

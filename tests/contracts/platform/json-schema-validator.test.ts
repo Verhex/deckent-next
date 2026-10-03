@@ -14,7 +14,13 @@ const timed = <T>(run: () => T): { value: T; ms: number } => { const start = per
 // CI-FIX-R3: the previous 50/500ms guards were one-machine wall-clock measurements, not portable CPU limits.
 // Independent 5m xorshift iterations take 5.6–6.9ms on the lane host (Node24, 2026-10-03); preserve 6ms as
 // the reference and the old guards as floors. Three samples expose runner slowdown without timing the validator itself.
+// CI-FIX-R4: use their median so one scheduler pause is not mistaken for sustained CPU slowdown.
 // The factor is capped at 10: excessive calibration load fails visibly, never grants an unbounded timing allowance.
+function calibrationFactor(samplesMs: readonly number[]): number {
+  const factor = Math.max(1, [...samplesMs].sort((a, b) => a - b)[1]! / 6);
+  expect(factor, 'JSON_SCHEMA_TIMING_CALIBRATION_OVERLOADED: independent CPU control exceeds the bounded 10x range').toBeLessThanOrEqual(10);
+  return factor;
+}
 function timingBudget(baseMs: number): number {
   const control = () => {
     let value = 0x5eed;
@@ -24,13 +30,20 @@ function timingBudget(baseMs: number): number {
   expect(control()).toBe(-242512527); // warm the independent control, and make its work observable
   const samples = Array.from({ length: 3 }, () => timed(control));
   for (const sample of samples) expect(sample.value).toBe(-242512527);
-  const calibrationMs = Math.max(...samples.map(sample => sample.ms)), factor = Math.max(1, calibrationMs / 6);
+  const samplesMs = samples.map(sample => sample.ms), calibrationMs = [...samplesMs].sort((a, b) => a - b)[1]!;
+  const rawFactor = Math.max(1, calibrationMs / 6);
   console.info('JSON_SCHEMA_TIMING_CALIBRATION', JSON.stringify({ platform: process.platform, node: process.version,
-    control: 'xorshift32-5000000', samplesMs: samples.map(sample => sample.ms), referenceMs: 6, baseMs, factor, budgetMs: baseMs * factor }));
-  expect(factor, 'JSON_SCHEMA_TIMING_CALIBRATION_OVERLOADED: independent CPU control exceeds the bounded 10x range').toBeLessThanOrEqual(10);
-  return baseMs * factor;
+    control: 'xorshift32-5000000', estimator: 'median-of-3', samplesMs, calibrationMs, referenceMs: 6, baseMs, factor: rawFactor, budgetMs: baseMs * rawFactor }));
+  return baseMs * calibrationFactor(samplesMs);
 }
 
+it('calibrates the hosted macOS outliers without raising the 6ms reference or 10x ceiling', () => {
+  expect(calibrationFactor([27.19625, 25.541417, 74.303709])).toBe(27.19625 / 6);
+  expect(calibrationFactor([64.319208, 37.442375, 54.885583])).toBe(54.885583 / 6);
+  expect(calibrationFactor([60, 60, 60])).toBe(10);
+  expect(calibrationFactor([1, 2, 3])).toBe(1);
+  expect(() => calibrationFactor([60.001, 60.002, 60.003])).toThrow('JSON_SCHEMA_TIMING_CALIBRATION_OVERLOADED');
+});
 
 // JSON-Schema-Test-Suite @ 5b0ee16 (2026-09-21; the last tag 23.1.0 is from 2023), vendored with its MIT LICENSE and upstream sha256s in
 // MANIFEST.json: every required draft2020-12 and draft7 file plus optional ecmascript-regex, non-bmp-regex and float-overflow. Each group either

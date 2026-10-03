@@ -19,13 +19,13 @@ const note = { toTask: 'next', summary: `Continue ${secret}`, artifacts: [{ name
 const nativeReport = { schemaVersion: 1, summary: 'Done', changedFiles: [], checks: [], openIssues: [], handoff: note, sharedNotes: [secret] };
 
 describe('current standalone producer and retained handoff custody', () => {
-  it.each([['claude', 'valid'], ['codex', 'missing'], ['codex', 'no-handoff'], ['codex', 'codex-handoff'], ['cursor', 'unsupported'], ['cursor', 'no-report'], ['claude', 'wrong-context'], ['claude', 'oversized-context']])(
-    '%s %s uses fresh source without a repository build', async (provider, mode, context) => {
+  it.for([['claude', 'valid'], ['codex', 'missing'], ['codex', 'no-handoff'], ['codex', 'codex-handoff'], ['cursor', 'unsupported'], ['cursor', 'no-report'], ['claude', 'wrong-context'], ['claude', 'oversized-context']])(
+    '%s %s uses fresh source without a repository build', async ([provider, mode], context) => {
       // This fixture binds a host POSIX socket into a Linux Docker worker; report rules stay portable in worker-handoff-report.
       const capability: { code: SupervisorError['code']; reason: string } | null = process.platform === 'linux' ? null
         : { code: 'SUPERVISOR_OPTIONS_INVALID', reason: 'standalone fixture requires Linux Docker UID/GID and private Unix socket mounts' };
       if (capability) context.skip(`${capability.code}: ${capability.reason}`);
-      if (!imageId) context.skip('DECKENT_TEST_DOCKER_IMAGE is not configured: standalone Docker producer verify-not-run');
+      if (!imageId) context.skip('SUPERVISOR_OPTIONS_INVALID: DECKENT_TEST_DOCKER_IMAGE is not configured; standalone Docker producer verify-not-run');
       const root = await mkdtemp(join(tmpdir(), 'dn-handoff-native-')); cleanup.push(() => rm(root, { recursive: true, force: true }));
       const workspace = join(root, 'workspace'); await mkdir(workspace);
       // Erase TypeScript only into this private fixture. Production source is unchanged and dist/ is never built or read.

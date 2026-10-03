@@ -34,3 +34,18 @@ kalibrasyonu ve deterministik NFA adım hesabı birlikte kullanılır; üretimin
 Windows delete-pending kilit dizini EPERM/EACCES'i sahipliğin bittiğini kanıtlamaz; metadata açma reddi gibi
 sınırlı beklemedir. RED hata enjeksiyonu ve korunmuş sahiplik kanıtı native Windows kabulünden ayrıdır.
 Exact patch, yerel sandbox açıkları ve lead'in kalan komutları dış `proof/CI-FIX-R3-2026-10-03/review.md`'dedir.
+
+CI-FIX-R4 dersi (owner 2026-10-03; hosted `37136713751`, taban `97590485`):
+Vitest `it.each` yalnız veri argümanlarını verir; tipli `context.skip` kullanan parametrik testler `it.for`
+ile gerçek TestContext alır. Windows handoff hatası NTFS kodlamasından önce POSIX FileArtifactStore'un
+`ARTIFACT_UNSUPPORTED` reddidir; motor testi tipli bellek portuyla aktif, POSIX adaptör kanıtı korunur.
+Kodlanmış ASCII adları gerçek fixture dosyalarında da yazılır; 255-byte ve UTF-16 temsil sınırları değişmez.
+macOS bağımsız CPU kontrolünde tek uç örnek kalibrasyonu kırmıştı: üç örneğin medyanı, bütün ham örnekler,
+aynı 6ms referans/10× tavan ve deterministik iş kanıtı birlikte kalır; sürekli aşırı yük yine reddedilir.
+Fixture Git init'in 5s macOS zaman aşımı yalnız `GIT_LIST_TIMEOUT` verify-not-run'dır; iç sebebi kanıtlanmadı,
+ürün ölçümü veya Xcode arızası sayılmaz. GNU tar arşiv adındaki Windows sürücü `:` işaretini uzak adres
+sayar; göreli arşiv + cwd GNU/BSD üzerinde aynı exact byte kanıtını korur. Yerel property simülasyonu
+native OS kabulü değildir. Windows Node24 CRLF vocabulary testi bütün kaynakları tekrar okuyup yazarak
+30s sınırını aşmıştı; tüm tüketilen `.ts` kaynakları compiler read sınırında CRLF görünümüne dönüşür,
+projection kaynaklarının tamamının dönüştüğü ve exact eşitlik ayrıca doğrulanır; timeout artırılmaz.
+Kanıt/açık sınırlar dış `proof/CI-FIX-R4-2026-10-03/review.md`.
