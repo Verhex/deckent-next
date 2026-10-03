@@ -8,7 +8,7 @@ import { identifyDockerRequest } from './identity.js';
 import { runNodeDockerCommand, type DockerCommandRunner } from './command.js';
 import { dockerConnectionMounts } from './connection.js';
 import { assertReadOnlyMountSource } from './mounts.js';
-type Inspection = { Id: string; Image: string; Config: { Labels: Record<string, string> }; State: { Status: string; ExitCode: number; StartedAt: string; FinishedAt: string } };
+type Inspection = { Id: string; Image: string; Config: { Labels: Record<string, string> }; State: { Status: string; ExitCode: number; StartedAt?: unknown; FinishedAt?: unknown } };
 /** Containers remain as reconciliation evidence until the application explicitly releases them.
  * Only an application with durable dispatch ownership may call execute; this adapter does not grant policy.
  */
@@ -65,12 +65,18 @@ export class DockerSupervisor implements ExecutionSupervisor {
     const result = inspection?.State?.Status === 'exited' && Number.isSafeInteger(inspection.State.ExitCode)
       ? { kind: 'exited' as const, exitCode: inspection.State.ExitCode }
       : { kind: 'unknown' as const, reasonCode: 'SUPERVISOR_OUTCOME_UNRESOLVED' };
-    const container = inspection && result.kind === 'exited' ? containerEvidenceSchema.parse({ schemaVersion: 1,
-      containerId: inspection.Id, imageId: inspection.Image,
-      startedAt: inspection.State.StartedAt?.startsWith('0001-') ? null : inspection.State.StartedAt,
-      finishedAt: inspection.State.FinishedAt?.startsWith('0001-') ? null : inspection.State.FinishedAt,
-      resources: { cpus: this.options.cpus, memoryBytes: this.options.memoryBytes, pids: this.options.pids, tmpBytes: this.options.tmpBytes },
-    }) : undefined;
+    let container: SandboxResult['container'];
+    if (inspection && result.kind === 'exited') {
+      const time = (value: unknown) => typeof value === 'string' && value.startsWith('0001-') ? null : value ?? null;
+      const candidate = { schemaVersion: 1, containerId: inspection.Id, imageId: inspection.Image,
+        startedAt: time(inspection.State.StartedAt), finishedAt: time(inspection.State.FinishedAt),
+        resources: { cpus: this.options.cpus, memoryBytes: this.options.memoryBytes, pids: this.options.pids, tmpBytes: this.options.tmpBytes } };
+      const complete = containerEvidenceSchema.safeParse(candidate);
+      // Daemon wall times can be malformed or go backwards. Unknown times preserve valid custody evidence;
+      // invalid identity/profile omits optional evidence, never invalidates an independently observed exit.
+      const bounded = complete.success ? complete : containerEvidenceSchema.safeParse({ ...candidate, startedAt: null, finishedAt: null });
+      if (bounded.success) container = bounded.data;
+    }
     return Object.freeze({ handle, result: Object.freeze(result), ...(container ? { container } : {}), stdout, stderr, interrupted, outputCompleteness: captured ? (interrupted ? 'partial' : 'complete') : 'unavailable' });
   }
   async cancel(input: SandboxRequest): Promise<Pick<SandboxResult, 'handle' | 'result' | 'container'>> {

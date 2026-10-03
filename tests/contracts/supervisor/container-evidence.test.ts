@@ -87,7 +87,56 @@ it('terminal container evidence cannot be overwritten or carry secrets; missing 
   expect(() => mergeDispatchTerminal(terminal, { ...terminal, container: { ...container, containerId: 'd'.repeat(64) } })).toThrow('DISPATCH_CONFLICT');
   expect(containerEvidenceSchema.safeParse({ ...container, env: ['SECRET=private'] }).success).toBe(false);
   expect(containerEvidenceSchema.safeParse({ ...container, containerId: 'short' }).success).toBe(false);
+  expect(containerEvidenceSchema.safeParse({ ...container, startedAt: '2026-10-03T11:49:16.000000001Z' }).success).toBe(false);
+  expect(() => mergeDispatchTerminal({ ...terminal, container: { ...container, startedAt: null, finishedAt: null } }, terminal)).toThrow('DISPATCH_CONFLICT');
   expect(mergeDispatchTerminal({ handle: 'h', exitCode: 0, interrupted: null }, terminal)).toEqual(terminal);
+});
+
+// Reconstructed inspect variants: the retained host failure contains no raw inspect payload.
+// Its root-level custom issue identifies the schema's finish-before-start refinement.
+it.for([
+  { name: 'backwards daemon clock', fields: { StartedAt: '2026-10-03T11:49:16.000000001Z', FinishedAt: container.finishedAt }, evidence: 'partial' },
+  { name: 'Docker zero times', fields: { StartedAt: '0001-01-01T00:00:00Z', FinishedAt: '0001-01-01T00:00:00Z' }, evidence: 'partial' },
+  { name: 'missing times', fields: { StartedAt: undefined, FinishedAt: undefined }, evidence: 'partial' },
+  { name: 'malformed times', fields: { StartedAt: 42, FinishedAt: 'not-a-time' }, evidence: 'partial' },
+  { name: 'nanosecond times', fields: {}, evidence: 'complete' },
+  { name: 'invalid container id', fields: {}, id: 'short', evidence: 'absent' },
+  { name: 'missing image id', fields: {}, image: null, evidence: 'absent' },
+  { name: 'missing exit code', fields: { ExitCode: undefined }, evidence: 'unknown' },
+])('Docker cancel preserves exit truth with $name inspection evidence', async variant => {
+  const root = await mkdtemp(join(tmpdir(), 'container-cancel-')); roots.push(root);
+  const workspace = join(root, 'workspace'); await mkdir(workspace);
+  const request = { protocolVersion: 1 as const, identity: { scopeId: 's', runId: 'r', taskId: 't', attemptId: 'a', generation: 1, layoutRevision: 'l' }, workspace, argv: ['node', 'test'] };
+  let label = '', state = 'missing', kills = 0;
+  const runner = async ({ args }: { args: readonly string[] }) => {
+    const at = args[0] === '--host' ? 2 : 0, verb = args[at];
+    if (verb === 'context') return { stdout: JSON.stringify({ Host: 'unix:///var/run/docker.sock' }), stderr: '' };
+    if (verb === 'inspect') {
+      if (state === 'missing') throw { stderr: 'No such object: ' + args[at + 1] };
+      return { stdout: JSON.stringify([{ Id: variant.id ?? container.containerId, Image: variant.image === null ? undefined : container.imageId,
+        Config: { Labels: { 'deckent.request': label }, Env: ['SECRET=never-retain'] }, Args: ['secret-argv'], Mounts: [{ Source: '/secret' }],
+        HostConfig: { Memory: 0, NanoCpus: 0, PidsLimit: null },
+        State: { Status: state, ExitCode: 137, StartedAt: container.startedAt, FinishedAt: container.finishedAt, ...variant.fields } }]), stderr: '' };
+    }
+    if (verb === 'create') { label = args[args.indexOf('--label') + 1]!.slice('deckent.request='.length); state = 'created'; return { stdout: container.containerId, stderr: '' }; }
+    if (verb === 'start') { state = 'running'; return { stdout: '', stderr: '' }; }
+    if (verb === 'kill') { kills++; state = 'exited'; return { stdout: '', stderr: '' }; }
+    throw new Error('unexpected Docker command');
+  };
+  const supervisor = new DockerSupervisor({ executable: '/usr/bin/docker', workspaceRoot: root, imageId: container.imageId, uid: 1000, gid: 1000,
+    ...container.resources, logMaxSizeKiB: 64, logMaxFiles: 2, deadlineMs: 10000, controlTimeoutMs: 10000, outputBytes: 65536 }, runner);
+  expect((await supervisor.execute(request)).result.kind).toBe('unknown');
+  const cancelled = await supervisor.cancel(request); expect(kills).toBe(1);
+  expect(cancelled.result).toEqual(variant.evidence === 'unknown' ? { kind: 'unknown', reasonCode: 'SUPERVISOR_OUTCOME_UNRESOLVED' } : { kind: 'exited', exitCode: 137 });
+  if (variant.evidence === 'partial' || variant.evidence === 'complete') {
+    expect(cancelled.container).toEqual({ ...container, ...(variant.evidence === 'partial' ? { startedAt: null, finishedAt: null } : {}) });
+    expect(containerEvidenceSchema.safeParse(cancelled.container).success).toBe(true);
+    const terminal = { handle: cancelled.handle, exitCode: 137, interrupted: null, container: cancelled.container };
+    expect(mergeDispatchTerminal(terminal, { handle: cancelled.handle, exitCode: 137, interrupted: null })).toEqual(terminal);
+  } else expect(cancelled).not.toHaveProperty('container');
+  expect(await supervisor.observe(request)).toEqual(cancelled);
+  const replay = await supervisor.execute(request); expect(replay.result).toEqual(cancelled.result); expect(replay.container).toEqual(cancelled.container);
+  for (const hidden of ['SECRET', 'secret-argv', '/secret', 'HostConfig']) expect(JSON.stringify(cancelled)).not.toContain(hidden);
 });
 
 it('real Docker dispatch retains immutable container evidence after governed release', async context => {

@@ -3184,6 +3184,15 @@ Author evidence and open checks: external `proof/ACCEPT-EVIDENCE-2026-10-03/revi
 hosted OS coverage and real Docker producer/custody checks remain distinct from deterministic adapter tests. No N1 command
 or live service mutation is admitted by this source change.
 
+BATCH32-ACCEPT-R (2026-10-03; dirty candidate on `54849915`): the retained lead cancel failure has a root-level
+container-schema chronology rejection. Optional evidence validation must not throw through a known terminal observation.
+Docker projection validates only the whitelist; invalid or reversed daemon times fall back to both timestamps unknown
+(`null`), retaining valid immutable ids and the frozen resource profile. Invalid ids/profile omit the optional descriptor;
+exit/unknown truth remains independently observed. The strict shared schema and whole-descriptor monotonic merge stay
+unchanged; no timestamp clamping, invented duration or later descriptor overwrite. Exact failing host time strings are
+not present in the retained log; sandbox Docker socket EPERM prevents capture. Regression/check evidence and remaining
+lead real-Docker rerun are tracked in `proof/BATCH32-2026-10-03/accept-r.md`; independent acceptance remains open.
+
 ### Typed work input and coding templates (K3 = A; owner 2026-09-30, Jev 97e59d70; lane Jev 22ea0d2c; nineteenth batch)
 
 - **Graph v4 (AOF-HANDOFF).** `TASK_GRAPH_SCHEMA_VERSION = 4`; the graph schema accepts 2, 3 and 4 side by side. v4 adds explicit accepted-patch dependency edges (see AOF-HANDOFF above). v3 adds optional
