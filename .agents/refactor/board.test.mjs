@@ -172,18 +172,30 @@ test('a failed rename after the temporary was written removes that temporary and
   assert.deepEqual(fs.readdirSync(dir).filter(name => name.includes('.tmp') || name.endsWith('.lock')), []);
 });
 
-test('owner report renders the agreed flow format from a report body and the board, escaped, and refuses an incomplete body', t => {
+test('owner report renders the interactive owner panel (four sections, board-derived workers, copyable commands/places), escaped, with one fixed data-free script', t => {
   const { file } = fixture(t); initBoard(file);
-  setOwnRow(file, 'main', { name: 'main', status: 'waiting', waitingOn: 'owner', next: 'alpha.4' }, { session: 'm', revision: 0 });
+  setOwnRow(file, 'main', { name: 'main', status: 'waiting', waitingOn: 'owner', next: 'alpha.4',
+    workers: [{ id: 'codex-ci', kind: 'codex-exec', model: 'gpt-6.1-sol', worktree: '/w/ci', card: 'CI-FIX', status: 'review', since: new Date().toISOString() }] }, { session: 'm', revision: 0 });
   const body = { title: 'Owner raporu', headline: 'Parti push edildi <b>', impact: 'Run paralel.',
     flow: [{ label: 'Dün', text: 'Tasarım', who: 'owner' }, { label: 'Şimdi', text: 'Push', who: 'main' }],
-    limits: ['CI kırmızı'], decisions: ['alpha.4 canlıya alınsın mı?'], next: { who: 'Main', text: 'alpha.4 hazırla' }, details: ['proof/X'] };
-  const html = renderOwnerReport(body, readBoard(file), { now: new Date() });
-  for (const part of ['Owner raporu', 'Akış', 'Sana etkisi', 'Açık sınır', 'Senden karar', 'Sıradaki adım · Main', 'Kanıt ve ayrıntı', 'Süreç panosu'])
+    limits: ['CI kırmızı'], decisions: ['alpha.4 canlıya alınsın mı?'], next: { who: 'Main', text: 'alpha.4 hazırla' }, details: ['proof/X'],
+    version: { live: 'alpha.4', n1: 'alpha.4', ci: 'kırmızı' }, commands: [{ label: 'Canlıya al', command: 'node x.mjs switch "a"' }],
+    places: [{ label: 'Kanıt', path: '/proof/X', what: 'günlükler' }, { label: 'CI', path: 'https://github.com/o/r/actions', what: 'koşular' }] };
+  const board = readBoard(file), html = renderOwnerReport(body, board, { now: new Date() });
+  for (const part of ['Owner raporu', 'Senden beklenenler', 'Kim ne yapıyor', 'Akış ve sürüm', 'Nerede ne var', 'Açık sınır', 'Sıradaki adım · Main', 'Kanıt ve ayrıntı', 'Süreç panosu', 'codex-ci', 'İncelemede', 'gpt-6.1-sol'])
     assert.ok(html.includes(part), part);
-  assert.ok(html.includes('&lt;b&gt;')); assert.equal(html.includes('<b>'), false); assert.equal((html.match(/<script/g) ?? []).length, 0);
+  assert.ok(html.includes('&lt;b&gt;')); assert.equal(html.includes('<b>'), false);
+  assert.ok(html.includes('data-copy="node x.mjs switch &quot;a&quot;"')); assert.ok(html.includes('data-copy="/proof/X"'));
+  assert.ok(html.includes('href="https://github.com/o/r/actions"')); assert.equal(html.includes('href="/proof/X"'), false);
+  const script = page => { const found = page.match(/<script>[\s\S]*?<\/script>/g) ?? []; assert.equal(found.length, 1); return found[0]; };
+  const other = renderOwnerReport({ ...body, headline: 'başka', commands: [{ label: 'x', command: 'y' }] }, board, { now: new Date() });
+  assert.equal(script(html), script(other)); assert.equal(script(html).includes('Parti'), false);
+  assert.match(html, /Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'sha256-/);
   assert.ok(html.indexOf('Dün') < html.indexOf('Şimdi'));
-  assert.throws(() => renderOwnerReport({ ...body, headline: '' }, readBoard(file)), /BOARD_REPORT/);
-  assert.throws(() => renderOwnerReport({ ...body, flow: [] }, readBoard(file)), /BOARD_REPORT/);
-  assert.throws(() => renderOwnerReport({ ...body, extra: 1 }, readBoard(file)), /BOARD_REPORT/);
+  assert.ok(renderOwnerReport({ ...body, version: undefined, commands: undefined, places: undefined }, board).includes('Senden beklenenler'));
+  assert.throws(() => renderOwnerReport({ ...body, headline: '' }, board), /BOARD_REPORT/);
+  assert.throws(() => renderOwnerReport({ ...body, flow: [] }, board), /BOARD_REPORT/);
+  assert.throws(() => renderOwnerReport({ ...body, extra: 1 }, board), /BOARD_REPORT/);
+  assert.throws(() => renderOwnerReport({ ...body, commands: [{ label: 'x' }] }, board), /BOARD_REPORT/);
+  assert.throws(() => renderOwnerReport({ ...body, places: [{ label: 'x', path: 'javascript:alert(1)', what: 'y' }] }, board), /BOARD_REPORT/);
 });
