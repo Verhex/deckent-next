@@ -44,7 +44,8 @@ it('runs compiled CLI through a Unicode spaced symlink', async () => {
     'CLI_SYMLINK_TIMEOUT');
   expect(output.stderr).toBe('');
   // The compiled binary also names the exact source tree (and commit when built from a checkout) it was built from.
-  expect(output.stdout.trim()).toMatch(/^deckent v\d+\.\d+\.\d+(?:[-+][\w.-]+)? \| Node .+\nbuild [0-9a-f]{12} · commit (?:[0-9a-f]{12}|-)(?: \(uncommitted source changes\))?$/);
+  // SELF-SOURCE-FLOOR: a checkout build may also name its source repository's git common dir (absolute path), never a relative one.
+  expect(output.stdout.trim()).toMatch(/^deckent v\d+\.\d+\.\d+(?:[-+][\w.-]+)? \| Node .+\nbuild [0-9a-f]{12} · commit (?:[0-9a-f]{12}|-)(?: \(uncommitted source changes\))?(?: · sourceCommonDir \/[^\n]+)?$/);
 });
 
 it('starts compiled MCP through a Unicode spaced symlink and serves initialization/tool discovery', async () => {

@@ -549,9 +549,12 @@ describe.skipIf(!dockerEnabled)('automatic Run rotation', () => {
       try { await Promise.race([done, new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error(JSON.stringify({ errors, turns }))), 20000); })]); }
       finally { clearTimeout(timer); }
       expect(errors).toEqual([]);
-      expect(turns.slice(0, 3)).toEqual([
-        { id: 'r', phases: ['accepted', 'pending'] }, { id: 'z', phases: ['accepted'] }, { id: 'r', phases: ['accepted', 'accepted'] },
-      ]);
+      // RUN-PROGRESSION-CONCURRENT: Runs of consecutive pages progress concurrently, so the next paged Run (z) is visited before the first
+      // Run (r) is refilled to completion; the exact serial phase sequence of the old one-Run-per-poll driver is no longer the contract.
+      const firstZ = turns.findIndex(turn => turn.id === 'z'), lastR = turns.findLastIndex(turn => turn.id === 'r');
+      expect(firstZ).toBeGreaterThanOrEqual(0); expect(firstZ).toBeLessThan(lastR);
+      expect(turns[lastR]!.phases).toEqual(['accepted', 'accepted']);
+      expect((await runtime.store.loadRun('s', 'z'))!.progress.map(task => task.phase)).toEqual(['accepted']);
       expect((await runtime.store.loadRun('s', 'r'))!.bindings).toHaveLength(2);
       expect((await runtime.store.loadRun('s', 'z'))!.bindings).toHaveLength(1);
     } finally {
