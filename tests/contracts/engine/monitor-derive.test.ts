@@ -110,14 +110,14 @@ describe('monitor run blocker and state derivation (pure)', () => {
   });
   it('pool-held (since = hold time, detail = pool) outranks waiting-pool-slot', () => {
     const held = evidence(snapshot([{ id: 'a' }]), [], { pool: pool({ execution: 2, hold: { state: 'held', changedAtMs: 400, changedBy: 'ops' } }) });
-    expect(blocker(held)).toEqual({ code: 'pool-held', taskId: 'a', sinceMs: 400, detail: 'p' }); expect(state(held)).toBe('waiting');
+    expect(blocker(held)).toEqual({ code: 'pool-held', taskId: 'a', sinceMs: 400, detail: 'p', pool: { code: 'pool-held', poolId: 'p', sinceMs: 400, capacity: { executionSlots: 2, inFlightSlots: 2 }, effectiveCapacity: { executionSlots: 2, inFlightSlots: 2 }, occupancy: { execution: 2, inFlight: 0 } } }); expect(state(held)).toBe('waiting');
     const reopened = evidence(snapshot([{ id: 'a' }]), [], { pool: pool({ hold: { state: 'open', changedAtMs: 400, changedBy: 'ops' } }) });
     expect(blocker(reopened)?.code).toBe('none');
   });
   it('waiting-pool-slot when either pool limit is exhausted', () => {
     for (const full of [{ execution: 2 }, { inFlight: 2 }]) {
       const value = evidence(snapshot([{ id: 'a' }]), [], { pool: pool(full) });
-      expect(blocker(value)).toEqual({ code: 'waiting-pool-slot', taskId: 'a', sinceMs: null, detail: 'p' }); expect(state(value)).toBe('waiting');
+      expect(blocker(value)).toEqual({ code: 'waiting-pool-slot', taskId: 'a', sinceMs: null, detail: 'p', pool: { code: 'waiting-pool-slot', poolId: 'p', sinceMs: null, capacity: { executionSlots: 2, inFlightSlots: 2 }, effectiveCapacity: { executionSlots: 2, inFlightSlots: 2 }, occupancy: { execution: ('execution' in full ? full.execution : 0), inFlight: ('inFlight' in full ? full.inFlight : 0) } } }); expect(state(value)).toBe('waiting');
     }
   });
   it('waiting-dependency names the first unaccepted dependency; a failed dependency makes the Run blocked', () => {
@@ -310,4 +310,12 @@ it('projects parked and awaiting decision truth with incomplete and accepted-unv
   expect(state(evidence(closed))).toBe('incomplete'); expect(blocker(evidence(closed))).toBeNull();
   const parallel = parkTaskAwaitingDecision(snapshot([{ id: 'a', phase: 'evaluating' }, { id: 'b', phase: 'active' }]), 0, 'a', 'evaluation-unknown', 100, 1000);
   expect(blocker(evidence(parallel))?.code).toBe('awaiting-decision');
+});
+
+it('does not label pending work as a pool wait when its own Run wave has no room', () => {
+  const s = snapshot([{ id: 'a', phase: 'active' }, { id: 'b' }]);
+  const e = evidence(s, [attempt('a')], { pool: pool({ execution: 2 }), workers: workers(worker('a', 'fresh')) });
+  const constrained = { ...e, run: { ...e.run, capacity: { executionSlots: 1, inFlightSlots: 1 } } };
+  expect(projectMonitorRun(constrained).tasks.find(task => task.taskId === 'b')?.waiting).toBeUndefined();
+  expect(blocker(constrained)?.code).toBe('worker-running');
 });

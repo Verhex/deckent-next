@@ -16,3 +16,10 @@ sınır taşır: `runRuntime.maxConcurrentRuns` etkin servis yürütme tavanınd
 havuzun rezervasyon sınırından ayrıdır. Aynı scope/Run turu yoklamalar arasında tek sahipte kalır; kapanış bekleyen ve çalışan
 işi drain eder. Kısmi hata başka Run'ı backoff'a sokmaz. Kontrollü sekiz-slot testi native worker/N1 kabulünün yerine geçmez;
 kanıt ve açık yerel native sınırı dış `proof/RUN-PROGRESSION-CONCURRENT-2026-10-03/review.md` dosyasındadır.
+
+POOL-CAPACITY (owner 2026-10-03; kaynak adayı): config `admission` slotları per-Run politikadır, kurulum-geneli ledger havuzunu
+kendiliğinden yükseltmez. Kaynak → neden → düzeltme → kanıt: N1 ledger 2/2, config 8/8 → kurulum bypass ve değişmeyen durable pool →
+aynı hold/resume yetki sınırında makbuzlu etkin kapasite override, doluluk altına küçültme reddi, açık drift ve salt-okunur bekleme →
+dış `proof/POOL-CAPACITY-2026-10-03/review.md`. İlk pool kaydı installer replay için korunur; override, occupancy kontrolü, eski→yeni
+makbuzu ve audit tek transaction'dır. Saniyelik poll'a bekleme yazımı eklenmez; türetilmiş güncel koşul tarihsel ret zamanı değildir.
+Kontrollü sekiz rezervasyon, sekiz native worker'ın ölçülmüş paralelliği ya da N1 kabulü değildir; canlıya müdahale ayrı yetkidir.

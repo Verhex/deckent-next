@@ -1,3 +1,4 @@
+import { derivePoolWait, hasRunReservationRoom } from '#engine/core/runs/index.js';
 import { inspectTaskReadiness, type TaskReadiness, type WorkerModelView } from '#domain/index.js';
 import type { WorkerObservation } from '#engine/core/worker-observation/index.js';
 import type { MonitorBlocker, MonitorBlockerCode, MonitorRun, MonitorRunState, MonitorTask } from './contract.js';
@@ -66,9 +67,11 @@ function pendingBlocker(task: TaskReadiness, e: MonitorRunEvidence): MonitorBloc
     && value.scopeId === e.run.snapshot.identity.scopeId);
   if (approval) return blocker('awaiting-approval', id, approval.createdAtMs, approval.approvalId);
   if (e.run.admitted === false) return blocker('not-admitted', id, e.run.createdAtMs);
+  if (e.run.capacity && !hasRunReservationRoom(e.run.snapshot, e.run.capacity)) return blocker('none', id, null, 'run-capacity');
   const pool = e.pool;
-  if (pool?.hold?.state === 'held') return blocker('pool-held', id, pool.hold.changedAtMs, pool.poolId);
-  if (pool && (pool.execution >= pool.executionSlots || pool.inFlight >= pool.inFlightSlots)) return blocker('waiting-pool-slot', id, null, pool.poolId);
+  const effective = pool ? { executionSlots: pool.executionSlots, inFlightSlots: pool.inFlightSlots } : null;
+  const wait = pool && effective ? derivePoolWait(pool.poolId, pool.capacity ?? effective, effective, { execution: pool.execution, inFlight: pool.inFlight }, pool.hold) : null;
+  if (wait) return { ...blocker(wait.code, id, wait.sinceMs, pool!.poolId), pool: wait };
   return blocker('none', id, null, 'reservation-pending');
 }
 /** One blocker per non-terminal Run (null when every task is terminal), chosen by `MONITOR_BLOCKER_PRECEDENCE`. */
@@ -115,13 +118,15 @@ export function projectMonitorRun(e: MonitorRunEvidence): MonitorRun {
   const snapshot = e.run.snapshot; const phaseCounts: Record<string, number> = {}; const times: number[] = [];
   const push = (...values: (number | null | undefined)[]) => { for (const value of values) if (typeof value === 'number') times.push(value); };
   push(e.run.createdAtMs);
+  const ready = readiness(e.run, e.observedAt);
   const tasks = snapshot.graph.tasks.map((definition): MonitorTask => {
     const progress = snapshot.progress.find(value => value.taskId === definition.id)!; const attempt = attemptOf(e.run, definition.id);
     const worker = attempt ? e.workers.get(attempt.attemptId) : undefined; const profile = snapshot.execution.tasks.find(value => value.taskId === definition.id)?.profile;
     phaseCounts[progress.phase] = (phaseCounts[progress.phase] ?? 0) + 1;
     push(attempt?.reservedAtMs, attempt?.dispatch?.grantedAtMs, endOf(attempt), heartbeatAt(worker, e.observedAt), worker?.files?.activity?.receivedAt);
+    const wait = progress.phase === 'pending' ? pendingBlocker(ready.get(definition.id)!, e).pool : undefined;
     const provider = worker && worker.provider !== 'unknown' ? worker.provider : attempt?.provider ?? null;
-    return Object.freeze({ taskId: definition.id, kind: definition.kind, phase: progress.phase, profile: profile ? { id: profile.id, version: profile.version } : null,
+    return Object.freeze({ taskId: definition.id, kind: definition.kind, phase: progress.phase, ...(wait ? { waiting: wait } : {}), profile: profile ? { id: profile.id, version: profile.version } : null,
       ...(progress.decision ? { decision: { reason: progress.decision.reason, sinceMs: progress.decision.since, deadlineMs: progress.decision.deadline } } : {}),
       attempts: attempt ? 1 : 0, dependencies: definition.dependencies, evaluation: { verdict: progress.acceptedEvidence === 'model-unverified' ? 'accepted-unverified' : verdict(progress.phase, attempt, progress.decision?.reason), observedAtMs: null },
       lastAttempt: attempt ? Object.freeze({ attemptId: attempt.attemptId, generation: attempt.generation, launch: attempt.dispatch?.launch ?? null,

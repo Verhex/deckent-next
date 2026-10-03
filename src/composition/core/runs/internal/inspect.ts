@@ -12,7 +12,7 @@ export async function inspectConfiguredRun(projectRoot: string, input: RunQuery,
     const { config, layout, document, principal, path } = await loadConfiguredScopeContext(projectRoot, query.scopeId, options, 'read');
     const store = inventoryReadsPerCall(path, { busyTimeoutMs: config.storage.sqlite.busyTimeoutMs });
     const app = new RunInspectionApplication(store, { async verify() { return principal; } }, new RunPolicyAuthorization({ async load() { return document; } }), { store,
-      artifacts: FileArtifactStore.reader(() => inspectProductDirectory(layout, 'artifacts'), config.artifacts.maxBytes), authorization: new DispatchPolicyAuthorization(createLayoutPolicySource(layout, userInfo().uid, config.inspection.policyMaxBytes)) });
+      artifacts: FileArtifactStore.reader(() => inspectProductDirectory(layout, 'artifacts'), config.artifacts.maxBytes), authorization: new DispatchPolicyAuthorization(createLayoutPolicySource(layout, userInfo().uid, config.inspection.policyMaxBytes)) }, { ...(config.admission ? { admission: config.admission } : {}), ceiling: typeof config.max_workers === 'number' ? config.max_workers : Infinity });
     return Object.freeze({ schemaVersion: 1 as const, layout, ...await app.inspectWithModels(query) });
   } catch (error) { throw queryFailure(error); }
 }

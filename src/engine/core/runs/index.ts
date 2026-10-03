@@ -24,7 +24,12 @@ export { CancellationRecoveryApplication, cancellationRecoveryCommandSchema } fr
 export type { CancellationRecoveryCommand, CancellationRecoveryOutcome } from './internal/recovery.js';
 export { ExecutionPoolHoldApplication, decidePoolHold, poolHoldView, poolHoldCommandSchema, poolHoldQuerySchema, poolHoldRecordSchema, poolHoldReceiptSchema, poolOccupancySchema } from './internal/pool-hold.js';
 export type { PoolHoldAuditRecorder, PoolHoldCommand, PoolHoldQuery, PoolHoldRecord, PoolHoldReceipt, PoolHoldStore, PoolHoldTransition, PoolHoldView, PoolHoldWrite, PoolOccupancy } from './internal/pool-hold.js';
+export { ExecutionPoolCapacityApplication, decidePoolCapacity, poolCapacitySchema, poolCapacityCommandSchema, poolCapacityReceiptSchema } from './internal/pool-capacity.js';
+export type { PoolCapacity, PoolCapacityCommand, PoolCapacityReceipt, PoolCapacityView, PoolCapacityStore, PoolCapacityWrite } from './internal/pool-capacity.js';
 export { assertDockerResourceCeiling } from './internal/resource-ceilings.js';
 
 export { RunLifecycleApplication, RunLifecycleError, runLifecycleCommandSchema, runLifecycleWriteSchema } from './internal/lifecycle.js';
 export type { RunLifecycleCommand, RunLifecycleWrite, RunLifecycleStore, RunLifecycleAuditRecorder } from './internal/lifecycle.js';
+
+export { poolWaitSchema, poolDriftSchema, runPoolObservationSchema, observeRunPool, hasRunReservationRoom, derivePoolWait, poolCapacityDrift } from './internal/pool-observation.js';
+export type { PoolWait, PoolDrift, RunPoolEvidence } from './internal/pool-observation.js';

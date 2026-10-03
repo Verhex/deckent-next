@@ -151,6 +151,7 @@ function runDetail(w: Words, install: MonitorInstall, run: MonitorRun) {
     ...run.tasks.flatMap(task => [
       [span(t('monitor.detail.task', { task: task.taskId, kind: task.kind, phase: taskPhaseLabel(task.phase, locale), attempts: task.attempts,
         profile: task.profile ? `${task.profile.id}@${task.profile.version}` : '—' }, locale), taskFailed(task) ? 'error' : task.phase === 'accepted' ? 'success' : undefined)],
+      ...(task.waiting ? [[span(t('monitor.detail.poolWait', { reason: blockerLabel(task.waiting.code, locale), pool: task.waiting.poolId, execution: task.waiting.occupancy.execution, inFlight: task.waiting.occupancy.inFlight, executionSlots: task.waiting.effectiveCapacity.executionSlots, inFlightSlots: task.waiting.effectiveCapacity.inFlightSlots }, locale), 'warning')]] : []),
       ...(task.decision ? [[span(`    ${blockerLabel(task.decision.reason, locale)} ${sep} ${expiryText(now, task.decision.deadlineMs, locale)}`, 'warning')]] : []),
       ...(task.lastAttempt ? attemptLines(w, task.lastAttempt, taskFailed(task), task.phase === 'active') : []),
       [span(`    ${t('monitor.detail.evaluation', { verdict: verdictLabel(task.evaluation.verdict, locale),

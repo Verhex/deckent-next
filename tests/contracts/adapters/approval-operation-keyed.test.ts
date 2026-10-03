@@ -32,7 +32,7 @@ revision: 0, status: 'pending', decision: null }, integrity);
 
 it('upgrades a real v39 ledger through v40 (C12 G1) to the current version: backup at v39 first, task and tool-call approvals byte for byte with verifying seals, then operation approvals are admitted', async () => {
   const path = await ledger(), backups = join(path, '..', 'backups'); await mkdir(backups, { mode: 0o700 });
-  expect(CURRENT_LEDGER_VERSION).toBe(46); expect(PREVIOUS_LEDGER_VERSION).toBe(45);
+  expect(CURRENT_LEDGER_VERSION).toBe(47); expect(PREVIOUS_LEDGER_VERSION).toBe(46);
   const seeded = openSqliteApprovalStore(path, options);
   const task = requestTaskApproval(seeded.store, integrity, { scopeId: 'scope', runId: 'run', taskId: 'a', requester, actionDigest: digest('task-a'),
     policyRevision: 'p1', summary: 'a', createdAt: 1_000, expiresAt: 61_000 });

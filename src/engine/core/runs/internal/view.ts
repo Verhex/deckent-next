@@ -1,10 +1,11 @@
 import { z } from 'zod';
 import { taskDefinitionSchema, taskProgressSchema, runStateSchema, branchDecisionSchema, identitySchema, counterSchema, runSnapshotSchema } from '#domain/index.js';
+import { runPoolObservationSchema } from './pool-observation.js';
 import { RunStoreError } from './store.js';
 /** Public query contract. Storage schema changes must be mapped here, never spread into the API. */
 export const runViewSchema = z.object({
   schemaVersion: z.literal(3), runId: identitySchema, scopeId: identitySchema, layoutRevision: identitySchema,
-  registryRevision: identitySchema,
+  registryRevision: identitySchema, pool: runPoolObservationSchema.optional(),
   branch: branchDecisionSchema.unwrap().omit({ sourceGraph: true }).optional(),
   criteria: z.array(z.object({ id: identitySchema, version: counterSchema.positive(), description: z.string(), evaluator: z.object({ id: identitySchema, version: counterSchema.positive() }).strict().readonly(), fingerprint: z.string().regex(/^[a-f0-9]{64}$/) }).strict().readonly()).readonly(),
   revision: counterSchema, cancellationRequested: z.boolean(), state: runStateSchema,

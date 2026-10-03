@@ -1,3 +1,4 @@
+import { readRunPoolEvidence } from './run-pool-observation.js';
 import { readIntegration } from './integration.js';
 import { readRunBoundDispatch, readRunBoundTask } from './run-dispatch-lookup.js';
 import { requireLedgerVersion, INTEGRATION_LEDGER_VERSION, DISPATCH_LEDGER_VERSION, RUN_LEDGER_VERSION, WORKER_EVENT_LOG_LEDGER_VERSION, sqliteFailure, sqliteLedgerOptionsSchema,
@@ -48,6 +49,7 @@ export class SqliteInventoryReader implements DispatchInventoryStore {
       return await readRunReceipt(this.db, scopeId, commandId);
     } catch (error) { throw readFailure(error); }
   }
+  loadRunPoolEvidence(scopeId: string, runId: string) { return readRunPoolEvidence(this.db, scopeId, runId); }
   async loadRun(scopeId: string, runId: string) {
     const scope = identitySchema.parse(scopeId); const run = identitySchema.parse(runId);
     try {

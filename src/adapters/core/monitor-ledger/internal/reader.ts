@@ -3,9 +3,9 @@ import type { DatabaseSync } from 'node:sqlite';
 import { z } from 'zod';
 import { approvalRecordSchema, approvalSubject, parseModelCatalogModelRecord, parseModelCatalogChannelRecord, readWorkerModelPin, runSnapshotSchema, taskEvaluationModelSchema, type AttemptIdentity, type WorkerModelView } from '#domain/index.js';
 import type { ArtifactReceipt } from '#capabilities/index.js';
-import { AttemptStoreError, dispatchRecordSchema, executionPoolSchema, measureTaskOccupancy, poolHoldRecordSchema, workerEventLogSchema,
+import { poolCapacityReceiptSchema, runExecutionPolicySchema, AttemptStoreError, dispatchRecordSchema, executionPoolSchema, measureTaskOccupancy, poolHoldRecordSchema, workerEventLogSchema,
   type MonitorDeliveryState, type MonitorLedgerApproval, type MonitorLedgerAttempt, type MonitorLedgerPool, type MonitorLedgerReading, type MonitorLedgerRun, type MonitorMap } from '#engine/index.js';
-import { assertSqliteEngineSupported, CURRENT_LEDGER_VERSION, POOL_HOLD_LEDGER_VERSION, RUN_LEDGER_VERSION, sqliteFailure, WORKER_EVENT_LOG_LEDGER_VERSION } from '#adapters/core/sqlite-ledger/index.js';
+import { assertSqliteEngineSupported, CURRENT_LEDGER_VERSION, POOL_CAPACITY_LEDGER_VERSION, POOL_HOLD_LEDGER_VERSION, RUN_LEDGER_VERSION, sqliteFailure, WORKER_EVENT_LOG_LEDGER_VERSION } from '#adapters/core/sqlite-ledger/index.js';
 
 // First ledger versions of the optional evidence tables (schema.ts history): intents + evaluation observations, task approvals.
 const INTENT_LEDGER_VERSION = 25, APPROVAL_LEDGER_VERSION = 31, INTEGRATION_VERSION = 30, DELIVERY_VERSION = 32, ADOPTION_VERSION = 33, CATALOG_VERSION = 43;
@@ -69,7 +69,7 @@ function read(db: DatabaseSync, version: number, maxRuns: number, files: Monitor
   }
   const total = Number(db.prepare('SELECT count(*) AS n FROM runs').get()?.n);
   if (total > maxRuns) diagnostics.push('info:runs-truncated:' + total);
-  const rows = db.prepare(`SELECT scope_id,run_id,revision,snapshot,CASE WHEN json_valid(policy) THEN json_extract(policy,'$.poolId') END AS pool_id,
+  const rows = db.prepare(`SELECT scope_id,run_id,revision,snapshot,policy,CASE WHEN json_valid(policy) THEN json_extract(policy,'$.poolId') END AS pool_id,
     CASE WHEN json_valid(snapshot) THEN EXISTS(SELECT 1 FROM json_each(snapshot,'$.progress') p WHERE json_extract(p.value,'$.phase') IN ${OPEN_PHASES}) ELSE 1 END AS open
     FROM runs ORDER BY open DESC,rowid DESC LIMIT ?`).all(maxRuns);
   const runs: MonitorLedgerRun[] = []; const deliveries = deliveryStates(db, version);
@@ -85,7 +85,8 @@ function read(db: DatabaseSync, version: number, maxRuns: number, files: Monitor
       const found: MonitorAttemptFiles[] = [];
       const attempts = snapshot.bindings.map(binding => attempt(db, version, binding, reserved.get(`${row.scope_id}/${binding.identity.attemptId}`) ?? null,
         models.get(`${row.scope_id}/${binding.identity.attemptId}`) ?? null, snapshot.execution.tasks.find(task => task.taskId === binding.identity.taskId)?.profile.parameters, found));
-      runs.push(Object.freeze({ snapshot, poolId: typeof row.pool_id === 'string' ? row.pool_id : null, admitted: version >= INTENT_LEDGER_VERSION ? !!intent : null,
+      const policy = row.policy ? runExecutionPolicySchema.safeParse(json(row.policy)) : null;
+      runs.push(Object.freeze({ snapshot, ...(policy?.success ? { capacity: policy.data.capacity } : {}), poolId: typeof row.pool_id === 'string' ? row.pool_id : null, admitted: version >= INTENT_LEDGER_VERSION ? !!intent : null,
         createdAtMs: created.get(key) ?? num(intent?.admitted_at), attempts: Object.freeze(attempts), delivery: deliveries.get(key) ?? null }));
       files.push(...found);
     } catch (error) { recordOnly(error); diagnostics.push('run-corrupt:' + key); }
@@ -184,11 +185,15 @@ function pools(db: DatabaseSync, version: number, diagnostics: string[]): Monito
   return db.prepare('SELECT pool_id,policy FROM execution_pools ORDER BY pool_id').all().flatMap(row => {
     try {
       const pool = executionPoolSchema.parse(json(row.policy)); if (pool.poolId !== row.pool_id) throw new Error();
+      const changed = version >= POOL_CAPACITY_LEDGER_VERSION ? db.prepare('SELECT record FROM execution_pool_capacities WHERE pool_id=?').get(pool.poolId) : null;
+      const receipt = changed ? poolCapacityReceiptSchema.parse(json(changed.record)) : null;
+      if (receipt && (receipt.poolId !== pool.poolId || !receipt.changed)) throw new Error();
+      const capacity = receipt?.next ?? pool.capacity;
       const held = version >= POOL_HOLD_LEDGER_VERSION ? db.prepare('SELECT state,record FROM execution_pool_holds WHERE pool_id=?').get(pool.poolId) : undefined;
       const hold = held ? poolHoldRecordSchema.parse(json(held.record)) : null;
       if (hold && (hold.poolId !== pool.poolId || hold.state !== held!.state)) throw new Error();
       const used = occupancy.get(pool.poolId) ?? { execution: 0, inFlight: 0 };
-      return [Object.freeze({ poolId: pool.poolId, executionSlots: pool.capacity.executionSlots, inFlightSlots: pool.capacity.inFlightSlots, ...used,
+      return [Object.freeze({ poolId: pool.poolId, executionSlots: capacity.executionSlots, inFlightSlots: capacity.inFlightSlots, ...used,
         hold: hold ? Object.freeze({ state: hold.state, changedAtMs: hold.changedAtMs, changedBy: hold.changedBy.subject }) : null })];
     } catch (error) { recordOnly(error); diagnostics.push('pool-corrupt:' + row.pool_id); return []; }
   });

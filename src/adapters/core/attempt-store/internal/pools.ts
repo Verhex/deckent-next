@@ -1,6 +1,7 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { runSnapshotSchema } from '#domain/index.js';
-import { executionPoolSchema, poolHoldRecordSchema, RunStoreError, measureTaskOccupancy, type ExecutionPool, type PoolHoldRecord } from '#engine/index.js';
+import { requireLedgerVersion, POOL_CAPACITY_LEDGER_VERSION } from '#adapters/core/sqlite-ledger/index.js';
+import { poolCapacityReceiptSchema, type PoolCapacityReceipt, executionPoolSchema, poolHoldRecordSchema, RunStoreError, measureTaskOccupancy, type ExecutionPool, type PoolHoldRecord } from '#engine/index.js';
 /** Called within the caller's existing write transaction. Run progress is the sole occupancy truth;
  * no expiring lease or second mutable counter can silently release uncertain work.
  */
@@ -19,7 +20,18 @@ export class SqliteExecutionPools {
     try {
       const pool = executionPoolSchema.parse(JSON.parse(String(row.policy)));
       if (pool.poolId !== poolId) throw new RunStoreError('RUN_STORE_CORRUPT');
-      return pool;
+      const receipt = this.capacityReceipt(poolId);
+      return receipt ? { ...pool, capacity: receipt.next } : pool;
+    } catch { throw new RunStoreError('RUN_STORE_CORRUPT'); }
+  }
+  capacityReceipt(poolId: string): PoolCapacityReceipt | null {
+    if (requireLedgerVersion(this.db, 0) < POOL_CAPACITY_LEDGER_VERSION) return null;
+    const row = this.db.prepare('SELECT record FROM execution_pool_capacities WHERE pool_id=?').get(poolId);
+    if (!row) return null;
+    try {
+      const receipt = poolCapacityReceiptSchema.parse(JSON.parse(String(row.record)));
+      if (receipt.poolId !== poolId || !receipt.changed) throw new Error();
+      return receipt;
     } catch { throw new RunStoreError('RUN_STORE_CORRUPT'); }
   }
   assertAvailable(poolId: string, requested: number): void {

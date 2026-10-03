@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, expect, it } from 'vitest';
 import { openSqliteLedger, CURRENT_LEDGER_VERSION, DECISION_PORT_LEDGER_VERSION, RUN_PARKING_LEDGER_VERSION } from '#adapters/core/sqlite-ledger/index.js';
-import { DOWNGRADE_TO_PREVIOUS_LEDGER_SQL } from '../../fixtures/ledger-previous.js';
+import { DOWNGRADE_TO_V45_LEDGER_SQL } from '../../fixtures/ledger-previous.js';
 import { upgradeExistingProductLedger } from '#adapters/index.js';
 import { createRun } from '#domain/index.js';
 import { fixtureExecution } from '../support/execution-registry.js';
@@ -25,21 +25,21 @@ async function fixture() {
   db.prepare('INSERT INTO runs VALUES(?,?,?,?,?)').run('s', 'r', run.revision, snapshot, '{}');
   db.prepare('INSERT INTO run_receipts VALUES(?,?,?,?)').run('s', 'create', '{"create":true}', snapshot);
   // A real v44 shape: no v46 decision tables (batch 27 renumbered AOF-DECISION-PORT to v46), Run snapshots v3.
-  db.exec(`${DOWNGRADE_TO_PREVIOUS_LEDGER_SQL} PRAGMA user_version=44;`); db.close();
+  db.exec(`${DOWNGRADE_TO_V45_LEDGER_SQL} PRAGMA user_version=44;`); db.close();
   return { root, path, backups, snapshot, run };
 }
 
 const decisionTables = (db: DatabaseSync) => db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name LIKE 'decision_%' ORDER BY name").all().map(row => row.name);
 it('backs up v44 before explicitly migrating all Run snapshots and historical receipts to v4, then adds v46 decision custody', async () => {
-  const f = await fixture(); expect(RUN_PARKING_LEDGER_VERSION).toBe(45); expect(DECISION_PORT_LEDGER_VERSION).toBe(46); expect(CURRENT_LEDGER_VERSION).toBe(46);
+  const f = await fixture(); expect(RUN_PARKING_LEDGER_VERSION).toBe(45); expect(DECISION_PORT_LEDGER_VERSION).toBe(46); expect(CURRENT_LEDGER_VERSION).toBe(47);
   expect(() => openSqliteLedger(f.path, options, 'forbid')).toThrow(expect.objectContaining({ code: 'ATTEMPT_STORE_VERSION' }));
   const upgrade = await upgradeExistingProductLedger(f.path, options, f.backups, new Date('2026-10-02T00:00:00Z'));
-  expect(upgrade?.from).toBe(44); expect(upgrade?.to).toBe(46);
+  expect(upgrade?.from).toBe(44); expect(upgrade?.to).toBe(CURRENT_LEDGER_VERSION);
   const backup = new DatabaseSync(upgrade!.backupPath, { readOnly: true });
   expect(backup.prepare('PRAGMA user_version').get()?.user_version).toBe(44);
   expect(backup.prepare('SELECT snapshot FROM runs').get()?.snapshot).toBe(f.snapshot); expect(decisionTables(backup)).toEqual([]); backup.close();
   const db = new DatabaseSync(f.path);
-  expect(db.prepare('PRAGMA user_version').get()?.user_version).toBe(46);
+  expect(db.prepare('PRAGMA user_version').get()?.user_version).toBe(CURRENT_LEDGER_VERSION);
   expect(decisionTables(db)).toEqual(['decision_cases', 'decision_command_receipts']);
   const migrated = JSON.parse(String(db.prepare('SELECT snapshot FROM runs').get()?.snapshot));
   expect(migrated).toEqual({ ...JSON.parse(f.snapshot), schemaVersion: 4, state: { kind: 'running' } });

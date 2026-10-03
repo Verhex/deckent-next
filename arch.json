@@ -1878,7 +1878,8 @@
         "src/domain/core/run",
         "src/domain/core/task-graph",
         "src/domain/core/worker-event",
-        "src/platform/core/output"
+        "src/platform/core/output",
+        "src/engine/core/runs"
       ],
       "plan": "MONITOR"
     },

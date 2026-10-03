@@ -1,3 +1,4 @@
+import { observeRunPool, type RunPoolEvidence } from './pool-observation.js';
 import { projectRunView } from './view.js';
 import { z } from 'zod';
 import { identitySchema, counterSchema, runSnapshotSchema, type CorePolicyAction, type VerifiedPrincipal } from '#domain/index.js';
@@ -16,8 +17,8 @@ export interface RunModelEvidence {
 }
 /** Shared authenticated ingress. Cancellation records intent; it never fabricates worker termination. */
 export class RunInspectionApplication {
-  constructor(private readonly readStore: Pick<RunStore, 'loadRun'>, protected readonly verifier: PrincipalVerifier,
-    protected readonly authorization: RunAuthorization, private readonly models?: RunModelEvidence) {}
+  constructor(private readonly readStore: Pick<RunStore, 'loadRun'> & { loadRunPoolEvidence?(scopeId: string, runId: string): Promise<RunPoolEvidence> }, protected readonly verifier: PrincipalVerifier,
+    protected readonly authorization: RunAuthorization, private readonly models?: RunModelEvidence, private readonly poolConfig?: { readonly admission?: { readonly executionSlots: number; readonly inFlightSlots: number }; readonly ceiling: number }) {}
   async inspect(input: unknown, credential?: unknown) { return (await this.load(input, credential)).run; }
   /** The Run view with requested → init → usage → verdict of each pinned worker task (empty without the evidence ports). */
   async inspectWithModels(input: unknown, credential?: unknown) {
@@ -30,9 +31,11 @@ export class RunInspectionApplication {
     const query = runQuerySchema.parse(input);
     const principal = await authenticate(this.verifier, credential, query.scopeId);
     await this.authorization.authorize('inspect', query, principal);
-    const snapshot = await this.readStore.loadRun(query.scopeId, query.runId);
+    const evidence = this.readStore.loadRunPoolEvidence ? await this.readStore.loadRunPoolEvidence(query.scopeId, query.runId) : null;
+    const snapshot = evidence ? evidence.snapshot : await this.readStore.loadRun(query.scopeId, query.runId);
     if (!snapshot) return { run: null, snapshot, principal };
-    const view = projectRunView(snapshot);
+    const pool = evidence ? observeRunPool(evidence, Date.now(), this.poolConfig?.admission, this.poolConfig?.ceiling) : undefined;
+    const view = { ...projectRunView(snapshot), ...(pool ? { pool } : {}) };
     if (view.scopeId !== query.scopeId || view.runId !== query.runId) throw new RunStoreError('RUN_STORE_CORRUPT');
     return { run: view, snapshot, principal };
   }
