@@ -1,7 +1,7 @@
-import { mkdtemp, mkdir, rm } from 'node:fs/promises';
+import { mkdtemp, mkdir, rm, readdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, expect, it } from 'vitest';
+import { afterEach, expect, it, type TestContext } from 'vitest';
 import { DockerSupervisor, FileArtifactStore, readMonitorLedger, openSqliteAttemptStore, openSqliteInventoryReader } from '#adapters/index.js';
 import { DispatchApplication, projectMonitorRun, containerEvidenceSchema, mergeDispatchTerminal } from '#engine/index.js';
 import { admitRunAttempts } from '../support/admission.js';
@@ -11,8 +11,27 @@ afterEach(async () => { await Promise.all(roots.splice(0).map(root => rm(root, {
 const container = { schemaVersion: 1, containerId: 'c'.repeat(64), imageId: 'sha256:' + 'a'.repeat(64),
   startedAt: '2026-10-03T11:46:50.000000001Z', finishedAt: '2026-10-03T11:49:15.000000002Z',
   resources: { cpus: 1, memoryBytes: 268435456, pids: 64, tmpBytes: 16777216 } };
-it.each(['complete', 'cancel', 'recovery'] as const)('Docker %s preserves exact bounded evidence after release and reopen', async mode => {
+async function assertUnsupported(root: string) {
+  expect(() => new FileArtifactStore({ root: join(root, 'artifacts'), maxBytes: 65536 })).toThrow(expect.objectContaining({ code: 'ARTIFACT_UNSUPPORTED' }));
+  expect(await readdir(root)).toEqual([]);
+}
+async function artifactStore(root: string, context: TestContext) {
+  if (process.platform === 'win32') {
+    await assertUnsupported(root);
+    context.skip('ARTIFACT_UNSUPPORTED: container evidence requires POSIX private artifacts; refusal before artifact/ledger/Docker effects verified');
+  }
+  return new FileArtifactStore({ root: join(root, 'artifacts'), maxBytes: 65536 });
+}
+it('refuses Windows artifact storage before artifact/ledger/Docker effects (native Windows or platform-property simulation)', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'container-unsupported-')); roots.push(root);
+  const original = Object.getOwnPropertyDescriptor(process, 'platform')!;
+  Object.defineProperty(process, 'platform', { ...original, value: 'win32' });
+  try { await assertUnsupported(root); }
+  finally { Object.defineProperty(process, 'platform', original); }
+});
+it.for(['complete', 'cancel', 'recovery'] as const)('Docker %s preserves exact bounded evidence after release and reopen', async (mode, context) => {
   const root = await mkdtemp(join(tmpdir(), 'container-evidence-')); roots.push(root);
+  const artifacts = await artifactStore(root, context);
   const workspace = join(root, 'workspace'); await mkdir(workspace); await mkdir(join(root, 'artifacts'), { mode: 0o700 });
   const identity = { scopeId: 's', runId: 'r', taskId: 't', attemptId: 'a', generation: 1, layoutRevision: 'l' };
   const request = { protocolVersion: 1 as const, identity, workspace, argv: ['node', 'test'] };
@@ -38,7 +57,6 @@ it.each(['complete', 'cancel', 'recovery'] as const)('Docker %s preserves exact 
   const store = await openSqliteAttemptStore(path, options, { now: Date.now, timeoutMs: 86400000 }, 'allow', custodyOrDockerProfiles);
   try {
     await admitRunAttempts(store, [identity]);
-    const artifacts = new FileArtifactStore({ root: join(root, 'artifacts'), maxBytes: 65536 });
     const verifier = { async verify() { return { id: 'test', issuer: 'test', subject: 'fixture', assurance: 'os-user' as const, scopeIds: ['s'] }; } };
     let fail = mode !== 'complete';
     const crashStore = new Proxy(store, { get(target, property) { if (property === 'finishDispatch') return async (...args: Parameters<typeof store.finishDispatch>) => {
@@ -72,8 +90,10 @@ it('terminal container evidence cannot be overwritten or carry secrets; missing 
   expect(mergeDispatchTerminal({ handle: 'h', exitCode: 0, interrupted: null }, terminal)).toEqual(terminal);
 });
 
-it.skipIf(!process.env.DECKENT_TEST_DOCKER_IMAGE)('real Docker dispatch retains immutable container evidence after governed release', async () => {
+it('real Docker dispatch retains immutable container evidence after governed release', async context => {
   const root = await mkdtemp(join(tmpdir(), 'container-real-')); roots.push(root);
+  const artifacts = await artifactStore(root, context);
+  if (!process.env.DECKENT_TEST_DOCKER_IMAGE) context.skip('DOCKER_IMAGE_NOT_CONFIGURED: pinned local Docker image is required for real container evidence');
   const workspace = join(root, 'workspace'); await mkdir(workspace); await mkdir(join(root, 'artifacts'), { mode: 0o700 });
   const identity = { scopeId: 's', runId: 'r', taskId: 't', attemptId: 'a', generation: 1, layoutRevision: 'l' };
   const request = { protocolVersion: 1 as const, identity, workspace, argv: ['node', '-e', "process.stdout.write('done')"] };
@@ -84,7 +104,7 @@ it.skipIf(!process.env.DECKENT_TEST_DOCKER_IMAGE)('real Docker dispatch retains 
   try {
     await admitRunAttempts(store, [identity]);
     const app = new DispatchApplication(store, supervisor, { async verify() { return { id: 'test', issuer: 'test', subject: 'fixture', assurance: 'os-user' as const, scopeIds: ['s'] }; } },
-      { async authorize() {} }, 'worker', new FileArtifactStore({ root: join(root, 'artifacts'), maxBytes: 65536 }));
+      { async authorize() {} }, 'worker', artifacts);
     const result = await app.execute(request);
     expect(result.kind).toBe('terminal'); expect(result.record.terminal!.container).toMatchObject({ imageId: process.env.DECKENT_TEST_DOCKER_IMAGE, resources: container.resources });
     expect(result.record.terminal!.container!.containerId).toMatch(/^[a-f0-9]{64}$/);
