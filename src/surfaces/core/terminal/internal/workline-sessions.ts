@@ -1,34 +1,18 @@
 import { randomUUID } from 'node:crypto';
 import { useCallback, useRef } from 'react';
-import type { AgentChatMessage, TurnDelta } from '#surfaces/core/terminal-kit/index.js';
+import { resolveSessionReference, type SessionRefusal, type ConversationSessionPort, type ConversationSessionSummary, type AgentChatMessage, type TurnDelta } from '#surfaces/core/terminal-kit/index.js';
 import { contextViewLines, fillTemplate, type ContextCompaction, type ContextViewLabels } from '#surfaces/core/terminal-render/index.js';
 import { notice } from './workline-actions.js';
 import type { WorkLedgerEntry } from './work-ledger.js';
 import { resumedHistoryEntries, type ResumedHistoryLabels } from './workline-history.js';
 
-export interface ConversationSessionSummary { readonly sessionId: string; readonly updatedAtMs: number; readonly messages: number; readonly preview: string }
-/** Conversation snapshots of this scope (T-L5c); the caller binds the scope. Snapshots are context, never authority. */
-export interface ConversationSessionPort {
-  save(input: { readonly sessionId: string; readonly messages: readonly AgentChatMessage[] }): Promise<void>;
-  list(): Promise<readonly ConversationSessionSummary[]>;
-  load(sessionId: string): Promise<readonly AgentChatMessage[] | null>;
-}
-/** The executable's scope-explicit session store; `bindSessionScope` makes the workline port of one scope. */
-export interface TerminalSessionStoreView {
-  save(snapshot: { readonly schemaVersion: 1; readonly sessionId: string; readonly scopeId: string; readonly updatedAtMs: number;
-    readonly messages: readonly AgentChatMessage[] }): Promise<void>;
-  list(scopeId: string): Promise<readonly ConversationSessionSummary[]>;
-  load(scopeId: string, sessionId: string): Promise<readonly AgentChatMessage[] | null>;
-}
-export function bindSessionScope(store: TerminalSessionStoreView, scopeId: string, now: () => number = Date.now): ConversationSessionPort {
-  return Object.freeze({ save: (input: { readonly sessionId: string; readonly messages: readonly AgentChatMessage[] }) =>
-    store.save({ schemaVersion: 1, sessionId: input.sessionId, scopeId, updatedAtMs: now(), messages: input.messages }),
-  list: () => store.list(scopeId), load: (sessionId: string) => store.load(scopeId, sessionId) });
-}
+export { bindSessionScope } from '#surfaces/core/terminal-kit/index.js';
+export type { ConversationSessionSummary, ConversationSessionPort, TerminalSessionStoreView, SessionRefusal } from '#surfaces/core/terminal-kit/index.js';
 export interface ConversationSessionLabels {
   /** `{index}. {session} · {when} · {count} messages · {preview}` */
   readonly entry: string;
   readonly none: string; readonly notFound: string; readonly unavailable: string; readonly saveFailed: string;
+  readonly exactRequired?: string; readonly listStale?: string;
   /** `{count}` messages resumed from `{session}`. */
   readonly resumed: string;
   readonly started: string;
@@ -41,7 +25,7 @@ export interface ConversationSessionLabels {
 }
 /** One row of the arg-less `/resume` picker. Enter loads `sessionId` through the same path as `/resume <id>`. */
 export interface ResumePickerItem { readonly sessionId: string; readonly label: string }
-export type SessionCommandResult = Readonly<{ entries: readonly WorkLedgerEntry[]; resumePicker?: readonly ResumePickerItem[] }>;
+export type SessionCommandResult = Readonly<{ entries: readonly WorkLedgerEntry[]; resumePicker?: readonly ResumePickerItem[]; refusal?: SessionRefusal }>;
 type ContextView = Omit<Extract<TurnDelta, { kind: 'context' }>, 'kind'>;
 const LISTED = 10;
 function done(entries: readonly WorkLedgerEntry[], resumePicker?: readonly ResumePickerItem[]): SessionCommandResult {
@@ -63,7 +47,7 @@ export function useConversationSession(port: ConversationSessionPort | undefined
   }, []);
   const save = useCallback(async (history: readonly AgentChatMessage[]): Promise<WorkLedgerEntry[]> => {
     if (!port || !labels) return [];
-    try { await port.save({ sessionId: sessionId.current, messages: history.filter(message => message.role !== 'system') }); return []; }
+    try { await port.save({ sessionId: sessionId.current, messages: history.filter(message => message.role !== 'system') }); listed.current = []; return []; }
     catch {
       if (saveFailed.current) return [];
       saveFailed.current = true;
@@ -75,7 +59,7 @@ export function useConversationSession(port: ConversationSessionPort | undefined
     if (!labels) return done([]);
     const count = history.current.filter(message => message.role !== 'system').length;
     if (command === 'clear') {
-      history.current = history.current.slice(0, 1); sessionId.current = randomUUID(); context.current = null; compaction.current = null;
+      history.current = history.current.slice(0, 1); sessionId.current = randomUUID(); context.current = null; compaction.current = null; listed.current = [];
       return done([notice('info', labels.started)]);
     }
     if (command === 'context') {
@@ -87,20 +71,25 @@ export function useConversationSession(port: ConversationSessionPort | undefined
       return done([notice('info', head), ...view.map(line => notice('info', line))]);
     }
     if (!port) return done([notice('error', labels.unavailable)]);
+    const freshList = async () => (await port.list()).filter(summary => summary.sessionId !== sessionId.current).slice(0, LISTED);
+    const refuse = (refusal: SessionRefusal, text: string): SessionCommandResult => ({ refusal, entries: [notice('error', text)] });
     if (!args) {
-      listed.current = (await port.list()).filter(summary => summary.sessionId !== sessionId.current).slice(0, LISTED);
+      listed.current = (await freshList()).map(summary => ({ ...summary }));
       if (!listed.current.length) return done([notice('info', labels.none)]);
       // The index stays filled so a later typed `/resume 2` still resolves. The rows are the picker, not ledger lines.
       return done([], listed.current.map((summary, index) => ({ sessionId: summary.sessionId, label: fillTemplate(labels.entry, {
         index: index + 1, session: summary.sessionId.slice(0, 8), when: when(summary.updatedAtMs), count: summary.messages, preview: summary.preview }) })));
     }
-    const byIndex = /^\d+$/.test(args) ? listed.current[Number(args) - 1] : undefined;
-    const target = byIndex?.sessionId ?? (args.length >= 8 ? (listed.current.length ? listed.current : await port.list())
-      .find(summary => summary.sessionId.startsWith(args.toLowerCase()))?.sessionId : undefined);
-    const messages = target ? await port.load(target) : null;
-    if (!target || !messages) return done([notice('error', labels.notFound)]);
+    const reference = resolveSessionReference(args, listed.current, /^\d+$/.test(args) && listed.current.length ? await freshList() : []);
+    if ('refusal' in reference) {
+      if (reference.refusal === 'SESSION_LIST_STALE') listed.current = [];
+      return refuse(reference.refusal, (reference.refusal === 'SESSION_LIST_STALE' ? labels.listStale : labels.exactRequired) ?? reference.refusal);
+    }
+    const target = reference.target;
+    const messages = await port.load(target);
+    if (!messages) return refuse('SESSION_NOT_FOUND', labels.notFound);
     history.current = [history.current[0]!, ...messages.filter(message => message.role !== 'system')];
-    sessionId.current = target; context.current = null; compaction.current = null;
+    sessionId.current = target; context.current = null; compaction.current = null; listed.current = [];
     return done([notice('info', fillTemplate(labels.resumed, { count: messages.length, session: target.slice(0, 8) })), ...resumedHistoryEntries(messages, labels.history)]);
   }, [labels, port]);
   const id = useCallback(() => sessionId.current, []);

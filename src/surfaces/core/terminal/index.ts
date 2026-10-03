@@ -3,7 +3,7 @@ export { resumedHistoryEntries, RESUME_SHOWN_MESSAGES, RESUME_USER_TEXT_CHARS, t
 export type { WorklineReasoningLabels } from './internal/workline-reasoning.js';
 export { mentionNotices, type WorklineAttachMentions, type WorklineMentionAttachment, type WorklineMentionLabels, type WorklineMentionNote } from './internal/workline-mentions.js';
 export { runModeCommand, type WorklineModeLabels, type WorklinePermissionModePort } from './internal/workline-mode.js';
-export { bindSessionScope, useConversationSession, type TerminalSessionStoreView, type ConversationSessionLabels, type ConversationSessionPort, type ConversationSessionSummary } from './internal/workline-sessions.js';
+export { bindSessionScope, useConversationSession, type TerminalSessionStoreView, type ConversationSessionLabels, type ConversationSessionPort, type ConversationSessionSummary, type SessionCommandResult, type SessionRefusal } from './internal/workline-sessions.js';
 export { appendLedger, boundAgentHistory, boundChatHistory, compactLedger, EMPTY_LEDGER, LEDGER_COMPACT_AT, LEDGER_TAIL_LIMIT, plainChatHistory, type AgentChatMessage,
   type ChatTurnMessage, type LedgerBuffer } from './internal/ledger-buffer.js';
 export { WorklinePaletteProvider } from '#surfaces/core/terminal-kit/index.js';

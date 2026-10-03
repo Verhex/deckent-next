@@ -1039,12 +1039,30 @@ ignored silently. The terminal's one `/reasoning` state drives both the preview 
 message holds for it); the terminal never sends `on`. `reasoning_effort` stays open (TL-C review §3b).
 **Conversation sessions (T-L5c, Jev 9ae569b1).** The workline saves the whole current history (system prompt excluded) after every
 turn as one snapshot per session in the managed `terminalSessions` directory (`openTerminalSessionStore`: owner-only 0600, no-follow,
-atomic temp + rename, known secret shapes redacted, at most 50 sessions and 16 MiB each, oversize refused before redaction). A
+atomic temp + rename, known secret shapes redacted, at most 50 sessions per scope and 16 MiB each, oversize refused before redaction). A
 compaction simply rewrites the snapshot, so a resumed conversation can never carry pre-compaction messages twice (legacy defect).
 `/resume` opens an arrow-key picker of this scope's recent sessions (Enter continues the highlighted one, Esc closes; TERM-PICKERS) and `/resume <n|id>` continues one (its messages become the history; later turns save
-into it); `/clear` (named `/new` at T-L5c) starts a fresh session; `/context` shows the latest measured prompt against the window. Snapshots are client
+into it). TC-0 RESUME-REF source candidate (TERMINAL-S00-S01, 2026-10-03): ids are exact canonical lowercase ids, never prefixes.
+Indices (including picker Enter) resolve only against the last shown list after a fresh scope-bound query compares ordered ids,
+update times, message counts and previews. Missing/changed lists load nothing (`SESSION_LIST_STALE`); invalid references return
+`SESSION_REFERENCE_EXACT_REQUIRED`; a missing exact snapshot returns `SESSION_NOT_FOUND`, all with visible EN/TR notices.
+Successful save/resume and `/clear` invalidate shown indices. The session hook remains the context transition owner; terminal-kit
+holds the pure reference/port contract. Fresh list comparison and snapshot load are separate reads, not an atomic versioned read;
+same-id concurrent updates between them are not fenced. No service/wire/ledger migration or approval authority is added.
+`/clear` (named `/new` at T-L5c) starts a fresh session; `/context` shows the latest measured prompt against the window. Snapshots are client
 context, never authority; they follow the composer history switch `terminal.persistHistory`. The shared credential redaction's URL
 pattern now bounds the scheme (`{0,31}`): the unbounded form backtracked quadratically on long letter runs (80k chars: 2.7 s).
+**TC-M host measurement harness (TERMINAL-S00-S01 source candidate, 2026-10-03).** The existing fake Workline TTY harness
+observes frame bytes at the in-memory stdout writer with same-process monotonic clocks. One host collector retains raw samples,
+nearest-rank p50/p95, invalid/missing counts; unresolved/invalid/backward/equal clock readings remain `unmeasured` with null
+percentiles, never zero. Version/source/harness/lock digests, installed dependency versions, host environment and fixed workload
+are pinned in external proof. Warm mount→first READY frame, submit→BUSY, text event→frame, approval event→card and
+Esc→cancelled footer+READY are control intervals; fake model generation and compaction wall intervals are separate.
+No product behavior or runtime telemetry producer is added. K-LATENCY-METRICS has no producer in base `0388c2cf` (source,
+test, script and host-tool search); that wider runtime work remains open and should reuse this collector rather than duplicate it.
+Process boot/import/service connection, physical terminal paint/flush, real model/GPU/provider/approval polling, long sessions and
+loaded-host acceptance are unmeasured. Event→human surface 500 ms p95 remains a target. Proof: external
+`proof/TERMINAL-S00-S01-2026-10-03/S00/`; author verification, independent review and landing are separate.
 **Composer `@file` over the runtime (T-L5, protocol v15, owner 2026-09-27).** Two bounded control operations, current version only:
 `findWorkspaceFiles {scopeId, query ≤ 256, limit 1..50}` → `{paths, truncated, incomplete}` and `attachWorkspaceFile {scopeId, path,
 maxBytes ≤ 32768}` → `{path, status: 'attached', content, bytes, totalBytes, truncated}` | `{path, status: 'refused', reason}` (reason: the

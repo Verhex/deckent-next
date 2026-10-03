@@ -859,6 +859,8 @@
   "terminal.session.entry": "{index}. {session} · {when} · {count} mesaj · {preview}",
   "terminal.session.none": "Bu scope'ta kayıtlı önceki konuşma yok.",
   "terminal.session.notFound": "Eşleşen kayıtlı konuşma yok; seçmek için /resume yazın.",
+  "terminal.session.exactRequired": "Tam oturum kimliğini veya az önce gösterilen listedeki sıra numarasını girin; kimlik önekiyle konuşma yüklenmez.",
+  "terminal.session.listStale": "Oturum listesi yok veya değişmiş; sıra numarası seçmeden önce /resume ile yeniden gösterin. Hiçbir konuşma yüklenmedi.",
   "terminal.session.unavailable": "Konuşmalar kaydedilmiyor (terminal.persistHistory kapalı).",
   "terminal.session.saveFailed": "Bu konuşma kaydedilemedi; /resume onu bulamayacak. Konuşmanın kendisi sürüyor.",
   "terminal.session.resumed": "{session} konuşmasının {count} mesajıyla devam ediliyor.",

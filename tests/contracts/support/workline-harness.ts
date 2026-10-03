@@ -34,12 +34,12 @@ class Screen extends Writable {
   /** Ink debug mode writes the whole view each time; this is the latest frame, not the scrollback. */
   frame = '';
   readonly isTTY = true; readonly rows = 60;
-  constructor(readonly columns = 200) { super(); }
+  constructor(readonly columns = 200, private readonly onFrame?: (text: string) => void) { super(); }
   override _write(chunk: Buffer, _encoding: string, done: () => void) {
     const text = chunk.toString('utf8');
     this.text += text;
     // Paste toggles and waitUntilRenderFlush's empty write are not visible frames.
-    if (text.length > 0 && !isPasteToggle(text)) this.frame = text;
+    if (text.length > 0 && !isPasteToggle(text)) { this.frame = text; this.onFrame?.(text); }
     done();
   }
 }
@@ -58,12 +58,13 @@ export async function until(check: () => boolean, label: string, attempts = 500)
   throw new Error(`timed out waiting for ${label}`);
 }
 /** Mounts the real interactive workline on an in-memory TTY; the caller unmounts it. */
-export function mountWorkline(props: Partial<WorklineProps>, columns = 200) {
-  const stdout = new Screen(columns);
+export function mountWorkline(props: Partial<WorklineProps>, columns = 200, observation: { onFrame?: (text: string) => void; debug?: boolean } = {}) {
+  const stdout = new Screen(columns, observation.onFrame);
   const stdin = Object.assign(new PassThrough(), { isTTY: true, setRawMode() { return stdin; }, ref() { return stdin; }, unref() { return stdin; } });
   const instance = render(createElement(WorklinePaletteProvider, { palette: resolveWorklinePalette('none'), children: createElement(WorklineApp, {
     labels: WORKLINE_TEST_LABELS, target: 'scope · model', systemPrompt: 'SYSTEM', historyMessages: 40, errorText: (error: unknown) => `ERR:${(error as Error).message}`,
     completeTurn: async () => 'unused', ...props,
-  }) }), { stdout: stdout as unknown as NodeJS.WriteStream, stdin: stdin as unknown as NodeJS.ReadStream, debug: true, exitOnCtrlC: false, patchConsole: false });
+  }) }), { stdout: stdout as unknown as NodeJS.WriteStream, stdin: stdin as unknown as NodeJS.ReadStream, debug: observation.debug ?? true,
+    interactive: true, exitOnCtrlC: false, patchConsole: false });
   return { stdout, stdin, instance };
 }
