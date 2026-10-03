@@ -67,7 +67,7 @@ bu oturumda tamamlandı; kalıcı rol haritası ARCHITECTURE, dosya bazlı karar
 sonraki skill delegasyonu bu rule kararlarını otomatik kapsamaz. Üç yeni host oturumunda gerçek
 skill etkinleşme/plugin eval kanıtı açık; ortak kaynak ve dosya eşitliği etkinleşme kanıtı değildir.
 
-**CI-FIX — owner 2026-10-03, Codex uygulayıcı, `lane/ci-fix`, taban `09c3f930`:**
+**CI-FIX — owner 2026-10-03, Codex uygulayıcı, `lane/ci-fix` (`35bbe428` + `c0a3f77e`, main `c0af941c` üstünde; Fable PASS `c0a3f77e`, main'e alındı; owner kararı: altı hücre zorunlu + main kuralı):**
 Altı hosted hücre (ubuntu/macOS/Windows × Node24/26) hatası artık workflow sonucunda görünür olmalıdır;
 advisory hücrelerin hata maskelemesi kaldırılır. Fixture/capability doğruluğu, runner path/checkout bytes,
 sonlu 30dk job/20dk verify, host180s/native30s node:test + native invocation180s, ref concurrency ve JSON/log artifact adayı bu şeritte hazır.
@@ -77,7 +77,7 @@ shared runner wall-clock validator eşikleri ve geçmiş BUSY/PTY flakes. Bunlar
 Güvenlik reddi, platform desteği ve testin çalışmaması ayrı kanıttır; yerel hedefli sonuç hosted green değildir.
 Sonrun `37078519240`: Linux26 success; Linux24 MANAGED_FILE_UNSAFE; macOS her iki node monitor2;
 Windows24 80, Windows26 78 test failure. `848c8050` workflow success altı yeşil anlamına gelmez.
-Kalan kapı: hedefli kontroller → bağımsız review → lead'in owner-yetkili tek hosted dryrun'u → exact adayda 6/6 sonuç.
+Kalan kapı: Sol → push → exact SHA'da hosted koşu (6/6 sonuç + artifact) → owner `main` kuralını ekler. Fable takip notu (bloklamaz): `monitor.test.ts:254-256` Linux dışı sidecar dalı tipli skip/verify-not-run kaydı taşımıyor; Windows 8.3 kısa ad için `realpathSync.native` hosted sonuca göre.
 Push lane'den yok; süreç panosu bu worktree'de yok (ENOENT), lead kendi ana satırının worker alt-listesini uzlaştırır.
 Kanıt/uyumsuzluk raporu: dış `proof/CI-FIX-2026-10-03/`. Socket yayın yarışına ait kaynak düzeltmesi scope checkpoint'idir;
 eski log reddedilen inode'u açıklamadığından batch27 SHA'sına neden atfedilmez.
