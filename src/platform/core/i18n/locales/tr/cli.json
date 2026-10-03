@@ -1161,5 +1161,6 @@
   "cli.worker.effort.source.cli-default": "CLI varsayılanı",
   "cli.worker.effort.status.unsupported": "desteklenmiyor",
   "cli.worker.effort.status.cli-default": "CLI varsayılanı",
-  "cli.worker.effort.status.selected": "seçildi"
+  "cli.worker.effort.status.selected": "seçildi",
+  "cli.worker.effort.status.ultra-opt-in-required": "Ultra için açık efor isteği veya Ultra registry hedefi gerekir"
 }

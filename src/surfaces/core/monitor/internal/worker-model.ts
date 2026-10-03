@@ -10,7 +10,8 @@ const evidence = (locale: Locale): Readonly<Record<WorkerModelEvidence, string>>
 const effortSources = (locale: Locale) => ({ explicit: t('cli.worker.effort.source.explicit', {}, locale),
   'policy-default': t('cli.worker.effort.source.policy-default', {}, locale), 'cli-default': t('cli.worker.effort.source.cli-default', {}, locale) });
 const effortStatuses = (locale: Locale) => ({ selected: t('cli.worker.effort.status.selected', {}, locale),
-  unsupported: t('cli.worker.effort.status.unsupported', {}, locale), 'cli-default': t('cli.worker.effort.status.cli-default', {}, locale) });
+  unsupported: t('cli.worker.effort.status.unsupported', {}, locale), 'cli-default': t('cli.worker.effort.status.cli-default', {}, locale),
+  'ultra-opt-in-required': t('cli.worker.effort.status.ultra-opt-in-required', {}, locale) });
 /** One line for every CLI view (workers list/watch, run inspect, task transcript): requested → init → usage → verdict (WORKER-CURRENCY-2). */
 export function renderWorkerModelLine(view: WorkerModelView, locale: Locale): string {
   const none = t('cli.worker.model.none', {}, locale);

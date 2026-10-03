@@ -14,7 +14,8 @@ export const CORE_WORK_CLASSES: WorkClassRegistry = workClassRegistrySchema.pars
 export class WorkerEffortError extends Error {
   constructor(readonly code: 'WORKER_EFFORT_UNSUPPORTED' | 'WORK_CLASS_NOT_REGISTERED' = 'WORKER_EFFORT_UNSUPPORTED') { super(code); this.name = 'WorkerEffortError'; }
 }
-/** Pure deterministic selection, clamped down to the closest declared level, or the lowest when all exceed the target.
+/** Pure deterministic selection, clamped down to the closest declared level, or the lowest non-Ultra level when all exceed the target.
+ * Ultra requires an explicit request or an Ultra registry target; otherwise leave the CLI setting absent with a visible status.
  * No text inference, model switching or provider id branch; capability is supplied by the command registry. */
 export function selectWorkerEffort(input: Readonly<{ model: CatalogModel; capability: Readonly<{ mode: 'arguments' | 'model-id'; levels: readonly string[] }> | null;
   explicit?: ReasoningEffort | undefined; kind: string; workClass?: string | undefined; policy?: WorkClassRegistry | undefined }>): WorkerEffort {
@@ -31,6 +32,9 @@ export function selectWorkerEffort(input: Readonly<{ model: CatalogModel; capabi
     source: 'cli-default', status: capability?.mode === 'model-id' ? 'selected' : 'cli-default' });
   const target = workClass.defaultEffort;
   const lower = supported.filter(level => REASONING_EFFORTS.indexOf(level) <= REASONING_EFFORTS.indexOf(target));
-  return workerEffortSchema.parse({ schemaVersion: 1, level: lower.at(-1) ?? supported[0]!, source: 'policy-default', status: 'selected',
+  const level = lower.at(-1) ?? supported[0]!;
+  if (level === 'ultra' && target !== 'ultra') return workerEffortSchema.parse({ schemaVersion: 1, level: null, source: 'cli-default',
+    status: 'ultra-opt-in-required', workClass: workClass.id, policyRevision: policy.revision, target });
+  return workerEffortSchema.parse({ schemaVersion: 1, level, source: 'policy-default', status: 'selected',
     workClass: workClass.id, policyRevision: policy.revision, target });
 }

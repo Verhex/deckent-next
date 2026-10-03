@@ -13,6 +13,19 @@ it('clamps missing levels down by canonical rank regardless of catalog order; no
   expect(selectWorkerEffort({ model: model(['ultra', 'high', 'low']), capability, kind: 'design' })).toMatchObject({ level: 'high', target: 'max' });
   expect(selectWorkerEffort({ model: model(['max']), capability, kind: 'small' })).toMatchObject({ level: 'max', target: 'high' });
 });
+it.each(['small', 'design'])('only-Ultra never escalates the %s policy target', kind => {
+  expect(selectWorkerEffort({ model: model(['ultra']), capability, kind })).toMatchObject({ level: null, source: 'cli-default',
+    status: 'ultra-opt-in-required', workClass: kind, target: kind === 'small' ? 'high' : 'max' });
+  expect(selectWorkerEffort({ model: model(['ultra']), capability, kind, explicit: 'ultra' })).toMatchObject({ level: 'ultra', source: 'explicit', status: 'selected' });
+});
+it('Ultra remains available via a deliberate registry target, including an exact fixed-model binding', () => {
+  const policy = workClassRegistrySchema.parse({ schemaVersion: 1, revision: 'opt-in', classes: [{ id: 'deep', defaultEffort: 'ultra' }], bindings: [{ kind: 'design', classId: 'deep' }] });
+  const fixed = model(['ultra'], { effortBinding: { mode: 'fixed-model', level: 'ultra' } });
+  for (const mode of ['arguments', 'model-id'] as const) {
+    expect(selectWorkerEffort({ model: fixed, capability: { ...capability, mode }, kind: 'design' })).toMatchObject({ level: null, source: 'cli-default', status: 'ultra-opt-in-required' });
+    expect(selectWorkerEffort({ model: fixed, capability: { ...capability, mode }, kind: 'design', policy })).toMatchObject({ level: 'ultra', source: 'policy-default', target: 'ultra' });
+  }
+});
 it('never clamps explicit effort; unsupported model/CLI refuses, while absent effort records unsupported', () => {
   for (const request of [{ model: model([]), capability }, { model: model(['high']), capability: null }]) {
     expect(() => selectWorkerEffort({ ...request, kind: 'feature', explicit: 'high' })).toThrow('WORKER_EFFORT_UNSUPPORTED');

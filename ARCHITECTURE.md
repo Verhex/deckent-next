@@ -44,7 +44,7 @@ closure tests are retained but require the missing built `peer_credentials.node`
 
 ## WORKER-EFFORT — owner 2026-10-03, admitted lane
 
-WORKER-EFFORT commit `118f6fef` is being rebased in `deckent-next-lane-worker-effort` onto main `97590485` (batch 31); file-only conflict resolution preserves pool observation and AOF handoff. The Git rebase is pending lead continuation; this candidate is not landed or independently accepted.
+WORKER-EFFORT is rebased as `1cccd17c` onto main `97590485` (batch 31) in `deckent-next-lane-worker-effort`; this candidate is not landed or independently accepted. Sol REVIEW 2322 R1 identified an only-Ultra fallback that contradicted the no-automatic-Ultra boundary; owner-admitted WORKER-EFFORT-R corrects it in the dirty diff with RED/GREEN admission-to-frozen-argv evidence.
 Native command registry v3 declares nullable `reasoningEffort` capability: argument templates/accepted levels/preflight flags,
 or exact-model binding. Claude uses `--effort`, Codex `-c model_reasoning_effort=…`; no provider-to-effort-flag branch in code.
 Cursor has no generated suffix/bracket mapping: the catalog must declare singleton `efforts` + `effortBinding: {mode: fixed-model, level}`
@@ -54,8 +54,12 @@ Separate versioned `assets/native-coding/work-classes.json` owns class defaults 
 `admission.registry.workClasses` replaces it as validated installation/Enterprise data. `task.kind` still chooses the template;
 optional `workInput.workClass` chooses a declared class. Core targets: small/test high; feature (including coding) xhigh;
 design/architecture/security-critical max. Explicit task effort wins and is never clamped. Defaults use the highest mutually declared
-model/CLI level at or below the target, or the lowest supported level if all exceed it. No automatic model switch, text-based load inference,
-or Ultra default. Unmapped kind keeps visible `cli-default`; no usable knob records `unsupported`. An explicit unsupported request
+model/CLI level at or below the target, or the lowest supported non-Ultra level if all exceed it. When a below-Ultra target
+meets only-Ultra support, selection is `level:null`, `source:cli-default`, `status:ultra-opt-in-required`, with class/revision/target retained;
+no effort argument is sent and EN/TR inspect/monitor shows why. Supported explicit `effort:ultra` and a deliberate validated
+registry class with `defaultEffort:ultra` remain opt-ins (the latter records `policy-default` and `target:ultra`). No automatic
+model switch, text-based load inference or Ultra escalation. CLI default is not a guarantee of provider-effective depth.
+Unmapped kind keeps visible `cli-default`; no usable knob records `unsupported`. An explicit unsupported request
 refuses with `WORKER_EFFORT_UNSUPPORTED` before Run/receipt writes. Deadline, turn limit and resource budget remain separate.
 
 The application admission owner resolves once through the existing execution registry and compiler; prepared pinned profiles use
@@ -65,8 +69,10 @@ when policy/catalog changes. Execution refuses a Run/Attempt selection mismatch 
 metadata remain readable. Run task view and shared worker-model projection show effort/source in EN/TR inspect and monitor detail.
 The setting proves what Deckent requested from the CLI, not the provider's effective reasoning or account entitlement (vendor caps apply).
 Registry v3 is strict; Run execution v1, Attempt v1, catalog v2/v3, ledger/protocol versions stay unchanged through optional metadata.
-Author RED/GREEN, command/source evidence and open check limits are in external `proof/WORKER-EFFORT-2026-10-03/`.
-Independent review, lead integration, hosted/live/provider-request acceptance remain open.
+Author RED/GREEN, command/source evidence and open check limits are in external `proof/WORKER-EFFORT-2026-10-03/`;
+R1 delivery is `effort-r.md`/`effort-r.patch` against `1cccd17c`. Author targeted run: 38 passed, one local runtime socket test failed;
+typecheck/eslint and lint-arch (0 violations) passed. The new status is additive to the current schema, with the same older-strict-reader
+limitation as existing effort metadata. Independent review, lead integration, hosted/live/provider-request acceptance remain open.
 
 ## Northstar — owner 2026-09-17
 
