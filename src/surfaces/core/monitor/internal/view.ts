@@ -1,6 +1,6 @@
 import { t, type Locale } from '#platform/index.js';
-import type { MonitorApproval, MonitorAttempt, MonitorBlocker, MonitorDeliveryState, MonitorInstall, MonitorPool, MonitorRun, MonitorRunState, MonitorSnapshot, MonitorTask,
-  MonitorWorker } from '#engine/index.js';
+import { resolveWorkerUsage, type MonitorApproval, type MonitorAttempt, type MonitorBlocker, type MonitorDeliveryState, type MonitorInstall, type MonitorPool, type MonitorRun, type MonitorRunState, type MonitorSnapshot, type MonitorTask,
+  type MonitorWorker } from '#engine/index.js';
 import { span, type MonitorBlock, type MonitorColumn, type MonitorLine, type MonitorRole, type MonitorRow, type MonitorSpan } from './layout.js';
 import { agoText, blockerLabel, clockText, durationText, expiryText, forText, installStatusLabel, MONITOR_TABS, processLabel, runStateLabel,
   taskPhaseLabel, verdictLabel, workerPhaseLabel, type MonitorTab } from './labels.js';
@@ -197,7 +197,7 @@ function runsBlock(w: Words, runs: readonly Entry<MonitorRun>[]): MonitorBlock {
 function workerDetail(w: Words, install: MonitorInstall, worker: MonitorWorker) {
   const { locale } = w;
   return (): readonly MonitorLine[] => {
-    const activity = worker.files?.activity ?? null, usage = worker.files?.usage ?? null, own = w.attemptOf(install, worker);
+    const activity = worker.files?.activity ?? null, usage = resolveWorkerUsage(worker), own = w.attemptOf(install, worker);
     if (worker.human) return humanWorkerLines(worker, locale);
     return [
       [span(t('monitor.detail.worker', { task: w.workerName(worker), attempt: worker.identity?.attemptId ?? '—', generation: worker.identity?.generation ?? '—',
@@ -205,8 +205,9 @@ function workerDetail(w: Words, install: MonitorInstall, worker: MonitorWorker) 
       [span(t('monitor.detail.now', { phase: workerPhaseLabel(activity?.phase ?? own?.attempt.workerPhase, locale), target: [activity?.target, activity?.detail].filter(Boolean).join(' — ') || '—' }, locale))],
       [span(t('monitor.detail.heartbeat', { heartbeat: w.heartbeat(worker).text, process: w.processText(worker), pid: worker.files?.pid ?? '—', handle: worker.handle ?? '—' }, locale))],
       ...(own ? attemptLines(w, own.attempt, taskFailed(own.task), own.task.phase === 'active' && !worker.terminal) : []),
-      ...(usage ? [[span(t('monitor.detail.usage', { turns: usage.turns ?? '—', input: usage.tokens.input, output: usage.tokens.output,
-        cost: usage.costUsd === null ? '—' : usage.costUsd.toFixed(4), tools: usage.toolErrors }, locale))]] : []),
+      ...(usage ? [[span(t('monitor.detail.usage', { turns: usage.turns ?? '—', input: usage.tokenUsageRecorded === true ? usage.tokens.input : '—', output: usage.tokenUsageRecorded === true ? usage.tokens.output : '—',
+        cost: usage.costUsd === null ? '—' : usage.costUsd.toFixed(4), tools: usage.toolErrors }, locale))]]
+        : worker.usageEvidence === 'invalid' || worker.usageEvidence === 'unavailable' ? [[span(t('cli.workers.usageRejected', { reason: worker.usageEvidence === 'invalid' ? t('cli.workers.usageEvidence.invalid', {}, locale) : t('cli.workers.usageEvidence.unavailable', {}, locale) }, locale), 'warning')]] : []),
       ...(worker.model ? [[span(renderWorkerModelLine(worker.model, locale))]] : []),
       ...(worker.workspace ? [[span(t('monitor.detail.workspace', { path: worker.workspace }, locale), 'muted')]] : []),
       ...(worker.custody === 'released' ? [[span(t('monitor.detail.released', {}, locale), 'muted')]] : []),

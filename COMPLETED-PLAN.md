@@ -10,6 +10,13 @@ worker ayrıntısı; policy izinli mühürlü/redakte/sınırlı transcript, dos
 iddiası, sealed/live tur/token/maliyet, kanıt etiketli zamanlar. Token bildirimi yoksa accumulator sıfırı unknown kalır.
 Enter/Esc salt görünüm; uzun ayrıntı kaydırılabilir. Aynı snapshot Ink / once / JSON / terminal monitor'a gider.
 D4 durum eşlemesi, history/search, M2/M3, service/live/push kapsam dışıdır.
+REVIEW 2304 exact `301f5f9b` bu ilk adayda iki boşluğu buldu: invalid sealed + canlı sidecar kullanım fallback'i ve
+canlı explicit sıfır/raporsuz accumulator ayrımı. MONITOR-H1-R bunları mevcut özet→observation→yüzey hattında düzeltti:
+ret durumu korunur, heartbeat/phase kalır; token olayının varlığı tek summary boolean'ıdır. Gerçek composition üzerinden
+unpinned invalid/mismatched/unreadable + farklı canlı token/maliyet, EN/TR list/watch ve monitor JSON/Ink/text; canlı/açık
+mühürlü/finished ledger-only için unknown/0/pozitif ve sealed önceliği sınandı. Yeni yazar kanıtı: 7 dosya / 121 test geçti,
+1 EPERM socket testi dışarıda; typecheck/değişen dosya ESLint/lint-arch 0; `proof/MONITOR-H1-2026-10-03/monitor-h1-r.md`.
+Düzeltme HEAD `301f5f9b` üzerinde changed tree + patch'tir, yeni commit ve bağımsız PASS yok.
 Kanıt: `proof/MONITOR-H1-2026-10-03/review.md`, RED logları ve hedefli kontroller. İki socket testi sandboxta çalışmadı;
 bağımsız inceleme/lead commit/landing/owner N1 küçük örnek PLAN MONITOR-HUMAN'da kalan kapsamdır.
 

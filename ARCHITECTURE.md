@@ -20,12 +20,23 @@ text → missing; work-input v1 / graph v3 accept the optional bounded short tit
 The current scope inspection admits task metadata; attempt `read-output` remains mandatory before any transcript,
 retained patch or report read. No new state transition, authority, ledger migration or D4 status mapping is added.
 
+REVIEW 2304 on exact `301f5f9b` found two gaps in the following target: rejected sealed evidence loses its status in
+composition and workers list/watch can fill it from live usage; live explicit zero is mistaken for absent tokens, while
+event-less summaries can display accumulated zero as measured. MONITOR-H1-R corrects these producer-to-surface paths;
+author targeted verification is recorded in `proof/MONITOR-H1-2026-10-03/monitor-h1-r.md`; independent re-review remains pending.
+
 H0 reconciles the D5 unified candidate against `0388c2cf`: sealed usage survives released sidecars through the existing
 worker observation path; sealed evidence wins over live and invalid sealed evidence never silently falls back. H1 also
 reads successful finished attempts through the existing read-only monitor ledger path, without Docker/sidecar sampling.
 It projects a redacted last-ten-event excerpt, retained patch file count/list (empty distinguished from missing), the
 existing task evaluation, labelled final-report/check claims, turns/token/cost with sealed/live provenance and time evidence.
-Absent token reports stay unknown even when the summary accumulator is zero; explicit reported zero remains zero.
+`WorkerObservation.usageEvidence` preserves `sealed` / `live` / `none` / `invalid` / `unavailable`, even without a
+usage summary. Only a missing sealed log allows the live summary; invalid or unreadable evidence does not discard
+sidecar heartbeat/activity. `resolveWorkerUsage` supplies the shared monitor/workers selection. The existing pure
+`WorkerEventSummary` gains additive optional `tokenUsageRecorded`, produced from a `usage` event or a
+`session.ended` with non-null tokens. Monitor human JSON projects this same boolean; Ink/text and workers list/watch
+use it with the selected provenance. Absent token reports stay unknown even when the accumulator is zero;
+explicit reported zero remains zero. Older projections without this presence field are unknown, not measured zero.
 Start is labelled as a launch grant (not process start); end is labelled log seal or host exit observation; absent times
 are explicitly missing. Artifact input and display bounds are registry data. Patch/report corruption is unavailable,
 policy denial is denied, and neither is empty/success. Reports cannot override the ledger evaluation.

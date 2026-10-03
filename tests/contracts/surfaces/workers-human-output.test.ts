@@ -13,12 +13,12 @@ const base = { authority: 'next-ledger', workspace: null, handle: null, outputRe
 const files = (freshness: string) => ({ heartbeat: { state: 'available', ageMs: 1, freshness, phase: 'x' } });
 const report = { schemaVersion: 1, observedAt: 0, scopeId: 's', control: 'observe-only', sources: [
   { id: 'a', path: '/p/a', kind: 'next-project', status: 'available', nextAfter: 'cursor9', truncated: true, workers: [
-    { ...base, taskId: 't1', identity: id('t1', 'abcdefghijkl'), provider: 'claude', process: 'exited', terminal: { handle: 'h', exitCode: 0, interrupted: false }, files: { ...files('fresh'), usage: { turns: 6, durationMs: 24664, tokens: { input: 8, output: 1066 }, costUsd: 0.107503, outcome: 'success' } }, model },
+    { ...base, taskId: 't1', identity: id('t1', 'abcdefghijkl'), provider: 'claude', process: 'exited', terminal: { handle: 'h', exitCode: 0, interrupted: false }, files: { ...files('fresh'), usage: { turns: 6, durationMs: 24664, tokenUsageRecorded: true, tokens: { input: 8, output: 1066 }, costUsd: 0.107503, outcome: 'success' } }, model },
     { ...base, taskId: 't2', identity: id('t2', '12345678zzzz'), provider: 'codex', process: 'running', terminal: null, files: files('stale') },
     { ...base, taskId: 't3', identity: id('t3', 'qrstuvwxyz'), provider: 'docker', process: 'exited', terminal: { handle: 'h', exitCode: 1, interrupted: false }, files: { heartbeat: { state: 'missing', ageMs: null, freshness: 'unknown', phase: 'x' } } },
     { ...base, taskId: 't4', identity: null, provider: '', process: 'unknown', terminal: null },
     { ...base, taskId: 't5', identity: id('t5', 'releasedxxxx'), provider: 'unknown', process: 'missing', terminal: { handle: 'h', exitCode: 0, interrupted: false }, custody: 'released', diagnostics: ['custody-released'],
-      usage: { turns: 11, durationMs: 48029, tokens: { input: 18, output: 4786 }, costUsd: 0.2039428, outcome: 'success' }, usageEvidence: 'sealed' }] },
+      usage: { turns: 11, durationMs: 48029, tokenUsageRecorded: true, tokens: { input: 18, output: 4786 }, costUsd: 0.2039428, outcome: 'success' }, usageEvidence: 'sealed' }] },
   { id: 'b', path: '/p/b', kind: 'next-project', status: 'available', nextAfter: null, truncated: false, workers: [] }] };
 it('workers list human output is readable lines, JSON is unchanged', async () => {
   const root = await mkdtemp(join(tmpdir(), 'dn-workers-human-')); roots.push(root);

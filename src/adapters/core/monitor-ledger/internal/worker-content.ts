@@ -25,8 +25,8 @@ export async function readMonitorWorkerContent(artifacts: ReturnType<typeof File
       result.usage = { ...usage, filesTouched: usage.filesTouched.map(scrub), model: usage.model === null ? null : scrub(usage.model),
         models: usage.models?.map(scrub) ?? null, costBasis: usage.costBasis === null ? null : scrub(usage.costBasis),
         quota: usage.quota.map(value => ({ ...value, window: scrub(value.window) })), modelVerification: usage.modelVerification ? { ...usage.modelVerification, unexpected: usage.modelVerification.unexpected.map(scrub) } : null }; result.usageEvidence = 'sealed';
-      result.tokenUsageRecorded = events.some(event => event.kind === 'usage' || (event.kind === 'session.ended' && event.tokens !== null));
-    } catch { result.transcript = { state: 'unavailable', excerpt: [], truncated: false }; }
+      result.tokenUsageRecorded = usage.tokenUsageRecorded === true;
+    } catch { result.transcript = { state: 'unavailable', excerpt: [], truncated: false }; result.usageEvidence = 'unavailable'; result.tokenUsageRecorded = false; }
   }
   if (files.patch) {
     try {

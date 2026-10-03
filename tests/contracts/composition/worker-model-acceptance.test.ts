@@ -130,7 +130,7 @@ describe.skipIf(process.platform === 'win32')('worker model acceptance through t
     const bare = await fixture();
     const none = (await inspectConfiguredWorkers(bare.project, { schemaVersion: 1, scopeId: 's' }, bare.options)).sources[0]!.workers[0]!;
     expect(none).not.toHaveProperty('usage');
-    expect(none).not.toHaveProperty('usageEvidence');
+    expect(none.usageEvidence).toBe('none');
   });
   it.each([
     ['no sealed log', null],

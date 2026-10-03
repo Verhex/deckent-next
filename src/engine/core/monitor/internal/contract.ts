@@ -93,7 +93,7 @@ export interface MonitorWorkerHuman {
 export interface MonitorEventExcerpt { readonly kind: string; readonly summary: string }
 export interface MonitorWorker extends WorkerObservation { readonly human?: MonitorWorkerHuman }
 export type MonitorWorkerContent = Pick<MonitorWorkerHuman, 'transcript' | 'patch' | 'finalReport' | 'tokenUsageRecorded'> & {
-  readonly usage?: WorkerEventSummary; readonly usageEvidence?: 'sealed';
+  readonly usage?: WorkerEventSummary; readonly usageEvidence?: 'sealed' | 'unavailable';
 };
 export interface MonitorInstall {
   /** `current` for the project the command runs in, else the observation source id. */

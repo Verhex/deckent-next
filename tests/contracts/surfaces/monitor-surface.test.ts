@@ -6,6 +6,7 @@ import { createElement } from 'react';
 import { render, renderToString } from 'ink';
 import { afterEach, describe, expect, it } from 'vitest';
 import { main } from '../../../src/surfaces/index.js';
+import { summarizeWorkerEvents, type WorkerEvent } from '#domain/index.js';
 import { clearConfigCache, t } from '#platform/index.js';
 import { loadMonitorSurface, monitorSlash } from '#surfaces/core/monitor/index.js';
 import { resolveWorklinePalette } from '#surfaces/core/terminal-kit/index.js';
@@ -625,7 +626,8 @@ it('H1 missing transcript/title and denied content say what is missing, live usa
 it('H1 token absence stays unknown; an explicit sealed zero remains zero', () => {
   const sample = humanWorkerSnapshot(), install = sample.installs[0]!, base = install.workers[0]!;
   for (const recorded of [false, true]) {
-    const worker = { ...base, usage: { ...base.usage!, tokens: { ...base.usage!.tokens, input: 0, output: 0 } }, human: { ...base.human!, tokenUsageRecorded: recorded } };
+    const events: WorkerEvent[] = recorded ? [{ schemaVersion: 1, sequence: 1, atMs: 1, kind: 'usage', tokens: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, thinking: null } }] : [];
+    const worker = { ...base, usage: summarizeWorkerEvents(events) };
     const text = surface.renderMonitorText({ ...sample, installs: [{ ...install, workers: [worker] }] }, { locale: 'tr', width: 120, ascii: true });
     expect(text).toContain(recorded ? 'token 0/0' : 'token —/—');
   }

@@ -24,6 +24,7 @@ export interface WorkerSidecars {
   /** From worker-reported events (untrusted): what the worker is doing now and its usage so far; null without events. */
   readonly activity: (WorkerActivityPhase & { readonly receivedAt: number | null }) | null; readonly usage: WorkerEventSummary | null; readonly eventsTruncated: boolean;
 }
+export type WorkerUsageEvidence = 'sealed' | 'live' | 'none' | 'invalid' | 'unavailable';
 export interface WorkerObservation {
   readonly taskId: string; readonly identity: AttemptIdentity | null; readonly authority: 'next-ledger' | 'legacy-activity';
   readonly provider: string; readonly workspace: string | null; readonly process: WorkerProcessState;
@@ -34,8 +35,14 @@ export interface WorkerObservation {
   readonly diagnostics: readonly string[];
   /** Pinned worker tasks (WORKER-CURRENCY-2): requested → init → usage → verdict; `pending` until the host seals the log. */
   readonly model?: WorkerModelView | null;
-  /** MONITOR-HUMAN: usage summary that survives custody release: the sealed event summary, else the live sidecar summary; absent without either. */
-  readonly usage?: WorkerEventSummary; readonly usageEvidence?: 'sealed' | 'live';
+  /** Sealed wins; live is allowed only without a sealed log. Rejected/unreadable evidence keeps its status even without usage. */
+  readonly usage?: WorkerEventSummary; readonly usageEvidence?: WorkerUsageEvidence;
+}
+/** Shared selection for monitor and workers: rejected sealed evidence never admits the sidecar usage fallback. */
+export function resolveWorkerUsage(worker: Pick<WorkerObservation, 'usage' | 'usageEvidence' | 'files'>): WorkerEventSummary | null {
+  if (worker.usageEvidence === 'invalid' || worker.usageEvidence === 'unavailable') return null;
+  if (worker.usageEvidence === 'sealed') return worker.usage ?? null;
+  return worker.usage ?? worker.files?.usage ?? null;
 }
 export interface WorkerObservationSource {
   readonly id: string; readonly path: string; readonly kind: string; readonly status: 'available' | 'unavailable' | 'denied' | 'not-sampled';

@@ -38,7 +38,7 @@ function worker(taskId: string, overrides: Partial<WorkerObservation> = {}, hear
     files: { provider: 'claude', heartbeat: { state: 'present', ageMs: heartbeat.ageMs, freshness: heartbeat.freshness, phase: 'work' },
       log: { state: 'present', byteLength: 1024, truncated: false, sampledLines: 3, diagnostics: [], events: [] }, result: { state: 'absent', exitCode: null, reportedAssessment: null },
       pid: 4242, activity: phase ? { phase: phase as 'editing', detail: 'apply patch', target: 'src/app.ts', atMs: 1_000, receivedAt: ago(2_000) } : null,
-      usage: { provider: 'claude', model: 'model-alpha-2', outcome: 'running', turns: 12, durationMs: 60_000, apiDurationMs: 40_000,
+      usage: { tokenUsageRecorded: true, provider: 'claude', model: 'model-alpha-2', outcome: 'running', turns: 12, durationMs: 60_000, apiDurationMs: 40_000,
         tokens: { input: 12_000, output: 3_400, cacheRead: 9_000, cacheWrite: 1_000, thinking: null }, cacheReadRatio: 0.75, costUsd: 0.4321, costBasis: 'reported',
         toolCalls: { read: 4, edit: 3, write: 0, shell: 2, search: 1, network: 0, agent: 0, other: 0 }, toolErrors: 1, filesTouched: ['src/app.ts'], messages: 8,
         quota: [], unmapped: 0, dropped: 0, events: 30 }, eventsTruncated: false },
