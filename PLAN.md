@@ -3,7 +3,9 @@
 **MCP-NO-DECIDE (owner 2026-10-02):** MCP'de onay kararı yok (ne `allow` ne `deny`); B1'in MCP-yalnız-deny istisnası kaldırıldı. 25. partide main'de ve canlıda (`aa58f559`, Sol 2242/2246 kapsamında incelendi). Protokol/ledger değişmedi.
 
 Bu dosya kalıcı ürün kararları, ana iş alanları ve önemli açık bulgular içindir. Küçük iş, iptal,
-deneme ve koşum günlükleri buraya eklenmez. Anlık takip: [current-flow](follow-up-works/current-flow.md).
+deneme ve koşum günlükleri buraya eklenmez. Kimde-ne-var ve sıradaki adım host panosundadır (`node .agents/refactor/board.mjs show`; owner 2026-10-03); [current-flow](follow-up-works/current-flow.md) yalnız yönlendirmedir.
+
+**SÜREÇ-DÜZENİ (owner 2026-10-03; pano aracı main'de, ölçüm açık):** tek host panosu `.deckent/host/process-board.json` + `.agents/refactor/board.mjs` (init/get/show/render/set-own-row/set-map/clear-row; revision + kilit + atomik yazma; kendi satırı, main uzlaştırır, işçiler main alt listesi). Owner kararları 1–7 ARCHITECTURE karar günlüğünde (2026-10-03). Kalan: (a) **ölçüm** — taban 2026-09-30→10-03: current-flow'a dokunan 51 commit (30'u yalnız belge), partilerde 6 çakışma; sonrası bir parti pano ile yürüyünce ölçülür, kazanım iddiası yok; (b) **DEV-RELEASE-SAME-VERSION kartı:** `dev-release stage` canlıdaki paket sürümüyle aynı sürümü reddetsin (sürüm atlama kuralı mekanik kapı olur; henüz uygulanmadı); (c) Codex exec işçilerinin panoyu yazamaması varsayımı (EROFS) doğrulanmadı — main onlar adına yazar.
 Bu geçici dosya her işte yeniden yazılabilir/silinebilir; geçmiş biriktirmez ve ürün sözleşmesi değildir.
 Kalıcı mimari ayrıntılar [ARCHITECTURE.md](ARCHITECTURE.md), tarihsel kanıtlar refaktör çalışma alanındadır.
 Kodun bağlı davranışı, önceki koşum kanıtı ve kabul edilmiş hedef ayrı kaydedilir; arşiv canlı ürün durumu değildir.

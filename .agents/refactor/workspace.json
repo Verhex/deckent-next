@@ -1,6 +1,8 @@
 {
   "version": 1,
   "channel": "../../.deckent/host/channel/communication.md",
+  "board": "../../.deckent/host/process-board.json",
+  "boardHtml": "../../.deckent/host/process-board.html",
   "historicalThrough": 2000,
   "productRoot": "../..",
   "legacyRoot": "../../../deckent-dev",

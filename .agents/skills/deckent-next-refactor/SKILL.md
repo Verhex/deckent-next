@@ -11,17 +11,41 @@ This is the shared development entry point for Codex, Claude and Cursor. Its ret
 preserves existing callers. It guides the assigned work; loading it grants no execution,
 delegation, commit, publication or runtime authority.
 
-At task start read the repository `AGENTS.md` / `CLAUDE.md`, `ARCHITECTURE.md`, `PLAN.md`,
-`follow-up-works/current-flow.md`, `.deckent/docs/core-memory/MEMORY.md` and the relevant laws.
+At task start read the repository `AGENTS.md` / `CLAUDE.md`, `ARCHITECTURE.md`, `PLAN.md`, your own
+process-board row (`node .agents/refactor/board.mjs show`), `.deckent/docs/core-memory/MEMORY.md` and the relevant laws.
 Read `.deckent/docs/core-memory/project_product_north_star.md` for the common quality bar.
 Reuse unchanged session reads; refresh affected sources when authority, scope or evidence changes.
 Live Alperen instructions take precedence. Preserve accepted decisions; bring a material new
 conflict or a proposed architecture, contract or authority amendment to the owner before changing it.
 
 `ARCHITECTURE.md` owns contracts, `PLAN.md` owns durable workstreams and remaining scope,
-core-memory owns lasting principles and lessons, and current-flow owns replaceable progress.
-Consult `COMPLETED-PLAN.md` only when completed-work evidence is needed. These sources distinguish
-accepted targets, implemented mechanisms, historical proof and current verification.
+core-memory owns lasting principles and lessons, the host process board owns who holds what and what
+comes next, and external proof holds acceptance/incident evidence. `follow-up-works/current-flow.md`
+is only a pointer to these sources (owner 2026-10-03). Consult `COMPLETED-PLAN.md` only when
+completed-work evidence is needed. These sources distinguish accepted targets, implemented mechanisms,
+historical proof and current verification.
+
+## Process board and owner output (owner 2026-10-03)
+
+- One board: `.deckent/host/process-board.json` (host area, outside Git/npm), written only through
+  `node .agents/refactor/board.mjs`: `init`, `get [SLOT]`, `show` (text), `render [--out PATH]` (one HTML file,
+  overwritten), `set-own-row SLOT BODY_FILE|- --session ID --revision N`, main-only `set-map BODY_FILE|-` and
+  `clear-row SLOT`. Bodies are JSON files or stdin, never long flag lists (Remote Control truncates lines).
+- Each session writes only its own row (slot + its session id; an unassigned row is claimed by the first writer,
+  a different id is refused and the session leaves handoff information for main). Main reconciles the role map,
+  mirrors the owner's dogfood decision with its source and lists short-lived Codex/Fable/Cursor workers as a
+  sub-list of its own row (the same rule applies inside Deckent dogfood). Writes happen only on a change or a
+  handoff; no heartbeat. A stale `--revision` is refused with the current revision; the lock is never stolen.
+- The board grants no authority, PASS or liveness: a timestamp is an age, not proof that a session is alive.
+  Work lives in PLAN, decisions in ARCHITECTURE/core-memory, acceptance and incident evidence in external proof,
+  which is kept until the batch lands on main and its review closes, then pruned (owner decision 3).
+- Review packages name the board and PLAN as the status source; current-flow carries no status (decision 4).
+- HTML views are delivered over localhost or as a Claude Artifact only when the owner asks (decision 1).
+- Owner output: natural Turkish, result/impact → required evidence/open limit → decision if any → who holds it /
+  next step; no empty-field ritual, details on demand, a material blocker is visible in the summary.
+- Notification (decision 5): main pushes to the owner only when the owner must act — a decision is needed (with
+  Jev scores), a command only the owner can run, a landing/live switch finished, a blocker or incident — in at
+  most two lines. No interim status or worker notifications.
 
 ## Workspace and product boundaries
 
@@ -77,7 +101,8 @@ accepted targets, implemented mechanisms, historical proof and current verificat
 6. **Reconcile documents.** At task start correct verified stale claims in affected documents; update
    them when accepted scope/decisions change and before delivery/handoff. Put contracts in ARCHITECTURE,
    durable remaining work in PLAN, completed work in COMPLETED-PLAN when needed, lasting decisions/lessons
-   in core-memory and current proof/open limits/next step in current-flow. Update CHANGELOG when release
+   in core-memory, who-holds-what/next step on the process board and proof/open limits in the external proof
+   folder; current-flow stays a pointer. Update CHANGELOG when release
    behavior warrants it. Leave unaffected documents and other contributors' progress intact.
    After authorized core-memory edits run `node scripts/lint-core-memory.mjs --write`.
 7. **Deliver a bounded result.** Report changed paths and exact revision/diff identity, commands/results,
@@ -121,7 +146,7 @@ Channel commands from Next:
     node .agents/refactor/channel.mjs consume ACTOR SEQ
 
 At an admitted slice delivery, send `REQUEST_REVIEW` with exact candidate commit/diff scope,
-verification evidence and open decisions. Answer a handled request with evidence-backed `REVIEW`
+verification evidence and open decisions; its status source is the process board and PLAN. Answer a handled request with evidence-backed `REVIEW`
 (PASS/REVISE with scope and findings) or `ANALYSIS`. Apply blocking REVISE findings before landing
 unless the owner explicitly decides otherwise. Recipient-only consume follows handling; an unrelated
 or unreviewed request stays pending. A failed consume is not a completed receipt. No ACK chains.
