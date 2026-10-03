@@ -90,6 +90,20 @@ bu oturumda tamamlandı; kalıcı rol haritası ARCHITECTURE, dosya bazlı karar
 sonraki skill delegasyonu bu rule kararlarını otomatik kapsamaz. Üç yeni host oturumunda gerçek
 skill etkinleşme/plugin eval kanıtı açık; ortak kaynak ve dosya eşitliği etkinleşme kanıtı değildir.
 
+**CI-FIX-R4 — owner 2026-10-03, Codex uygulayıcı, `lane/ci-fix-r4`, taban `97590485`:**
+Hosted `37136713751` (batch 31): Linux 2/2 yeşil; macOS ve Windows 2/2 kırmızı.
+Kökler: parametrik test context'i, Windows'ta POSIX artifact fixture, macOS CPU kontrolünün tek uç örneği,
+macOS fixture Git init zaman aşımı, Windows GNU tar sürücü-harfi yorumu ve Node24 CRLF fixture I/O maliyeti.
+Tipli yetenek kayıtları ve taşınabilir handoff motor/255-byte kodlama kanıtı düzeltildi; kalibrasyon
+6ms/10× sınırında medyan kullanır, CRLF bütün tüketilen kaynakların compiler read sınırında doğrulanır.
+Yazar typecheck/eslint/lint-arch 0; hedefli 7 dosyada 80 geçti / 56 açık hata / 1 tipli skip,
+CRLF dosyası 6/6. darwin/win32 dalları Linux property simülasyonunda ayrı ayrı 24 geçti / 16 tipli skip;
+native OS kabulü değildir. Socket/sync Git EPERM, scanner boş çıktısı ve iç nedeni doğrulanmamış
+inventory reddi lead kontrolü olarak açık; hepsi tek bir ortam nedenine bağlanmadı.
+Pano bu lane'de yok (ENOENT); lead kendi worker alt-listesini uzlaştırır. Kanıt
+`proof/CI-FIX-R4-2026-10-03/review.md`; exact diff bağımsız incelemesi, lead ortam kontrolleri ve
+native altı hosted hücre yeniden koşumu açık. Bu lane commit/push/canlı yapmaz.
+
 **CI-FIX-R3 — owner 2026-10-03, Codex uygulayıcı, `lane/ci-fix-r3`, taban `9740baae`:**
 Hosted `37129289264`, batch 30 `56b2d43e`, altı zorunlu hücrede kırmızı. R2 + SOCKET-PUBLICATION +
 POOL-CAPACITY contract drift uzlaştırıldı; kilit dizini EPERM/EACCES'i RED → typed bounded contention ile düzeltildi.

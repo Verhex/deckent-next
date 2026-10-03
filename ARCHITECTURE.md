@@ -2453,6 +2453,15 @@ no replacement/normalization or identity/storage migration occurs. Valid Unicode
 255-byte encoded component limit remain. Existing refusal custody owns failed Task, dependent skip/park and immutable
 replay/reopen receipts. Source-based author checks passed; three host socket/Docker test files remain environment-blocked.
 Correction proof/limits: `proof/AOF-HANDOFF-2026-10-03/aof-r.md`; exact patch acceptance and hosted CI remain open.
+CI-FIX-R4 (`97590485` base, hosted `37136713751`, 2026-10-03) reconciles author test coverage:
+parameterized capability tests use Vitest `it.for` for a real TestContext; full retained-lease simulations
+require a native Linux fixture and record `PATCH_UNSAFE` elsewhere before attempting the simulation.
+Handoff engine contracts stay active on Windows through an exact-byte test artifact port; POSIX runs keep
+the real FileArtifactStore. Windows still refuses that adapter with `ARTIFACT_UNSUPPORTED` before root access.
+The percent-encoded ASCII components are valid on NTFS; native fixture write/read checks retain Unicode
+source identity and the exact 255-byte ceiling. This is engine/filename coverage, not Windows ownership support
+or native-worker acceptance. Current author checks and remaining host/hosted limits are in
+`proof/CI-FIX-R4-2026-10-03/review.md`; product contracts and isolation floors are unchanged.
 
 **Worker Event Contract (B09-1, 2026-09-23, ledger v35).** One current schema (`domain/core/worker-event`,
 `schemaVersion` 1; there is no user-selectable variant — a new version replaces the contract with a migration):
