@@ -42,7 +42,19 @@ test('idle-stop counts only a successful empty inventory after workers were seen
   s = idleStep(s, { workers: 0 }, 0, 60_000); assert.equal(s.stop, false); assert.equal(s.seen, false);
   s = idleStep(s, { workers: 3 }, 1_000, 60_000); assert.equal(s.seen, true);
   s = idleStep(s, { workers: null }, 100_000, 60_000); assert.equal(s.stop, false); assert.equal(s.idleSince, null);
-  s = idleStep(s, { workers: 0 }, 200_000, 60_000); assert.equal(s.stop, false);
-  s = idleStep(s, { workers: null }, 300_000, 60_000); assert.equal(s.stop, false);
-  s = idleStep(s, { workers: 0 }, 260_001, 60_000); assert.equal(s.stop, true);
+  s = idleStep(s, { workers: 0 }, 200_000, 60_000); assert.equal(s.stop, false); assert.equal(s.idleSince, 200_000);
+  s = idleStep(s, { workers: 0 }, 260_000, 60_000); assert.equal(s.stop, true, 'a verified empty window of 60 s stops');
+});
+
+test('an unavailable inventory interval is never counted as idle time (Sol 2295 R2)', () => {
+  let s = { seen: false, idleSince: null, stop: false };
+  s = idleStep(s, { workers: 2 }, 0, 60_000);
+  s = idleStep(s, { workers: 0 }, 1_000, 60_000); assert.equal(s.idleSince, 1_000);
+  for (let t = 2_000; t <= 100_000; t += 5_000) { s = idleStep(s, { workers: null }, t, 60_000); assert.equal(s.stop, false); assert.equal(s.idleSince, null); }
+  s = idleStep(s, { workers: 0 }, 100_001, 60_000); assert.equal(s.stop, false, 'first empty sample after an outage restarts the idle window'); assert.equal(s.idleSince, 100_001);
+  s = idleStep(s, { workers: 0 }, 130_000, 60_000); assert.equal(s.stop, false);
+  s = idleStep(s, { workers: 0 }, 160_001, 60_000); assert.equal(s.stop, true, 'a full verified empty window after recovery stops');
+  assert.equal(s.seen, true);
+  s = idleStep({ seen: true, idleSince: null, stop: false }, { workers: null }, 0, 60_000);
+  s = idleStep(s, { workers: 1 }, 10_000, 60_000); assert.deepEqual(s, { seen: true, idleSince: null, stop: false }, 'unknown then active resets');
 });

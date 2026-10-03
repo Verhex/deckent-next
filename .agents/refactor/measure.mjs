@@ -50,9 +50,10 @@ export function sample(previous, run = exec) {
     host: { cpus: os.cpus().length, cpuBusyPct, load1: os.loadavg()[0], memUsedMiB: Math.round((os.totalmem() - os.freemem()) / 1048576) },
     other: otherLoad(run), perWorker } };
 }
-/** Idle-stop counts only a successful, empty inventory after workers were seen; an unavailable observation never ends a run. */
+/** Idle-stop counts only successful, empty inventories after workers were seen; an unavailable observation never ends a run
+ * and restarts the idle window, because whether workers ran during the outage is unknown (Sol 2295 R2). */
 export function idleStep(state, record, now, idleStopMs) {
-  if (record.workers === null) return { ...state, stop: false };
+  if (record.workers === null) return { ...state, idleSince: null, stop: false };
   if (record.workers > 0) return { seen: true, idleSince: null, stop: false };
   if (!state.seen) return { ...state, stop: false };
   const idleSince = state.idleSince ?? now; return { seen: true, idleSince, stop: now - idleSince >= idleStopMs };
