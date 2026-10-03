@@ -1,7 +1,7 @@
 import { resolve } from 'node:path';
 import { setTimeout as wait } from 'node:timers/promises';
 import { ErrorRegistry, emit, loadConfig, resolveLocale, t, type ConfigLoadOptions, type Locale } from '#platform/index.js';
-import type { WorkerObservation, WorkerObservationQuery, WorkerObservationReport, WorkerObservationSource } from '#engine/index.js';
+import { resolveWorkerUsage, type WorkerObservation, type WorkerObservationQuery, type WorkerObservationReport, type WorkerObservationSource } from '#engine/index.js';
 import type { MonitorCommandContext } from './context.js';
 import { renderWorkerModelLine } from './worker-model.js';
 import { seconds } from './transcript.js';
@@ -30,8 +30,13 @@ function renderHeartbeat(w: WorkerObservation, locale: Locale): string {
 export const renderWorkerRow = (w: WorkerObservation, locale: Locale) => { const x = w.terminal, id = w.identity; return t('cli.workers.row', { ref: `${id?.runId ?? '-'}/${w.taskId}`, attempt: id?.attemptId.slice(0, 8) ?? '-', generation: id?.generation ?? '-', process: x ? `${w.process} ${x.exitCode ?? x.signal ?? '-'}` : w.process, heartbeat: renderHeartbeat(w, locale), provider: w.provider || '-' }, locale); };
 export const renderWorkerUsage = (u: NonNullable<WorkerObservation['usage']>, locale: Locale) => {
   const outcomes = { success: t('monitor.human.usageOutcomeSuccess', {}, locale), error: t('monitor.human.usageOutcomeError', {}, locale), limit: t('monitor.human.usageOutcomeLimit', {}, locale), running: t('monitor.human.usageOutcomeRunning', {}, locale) };
-  const d = (v: number | null | undefined) => v === null || v === undefined ? '-' : String(v); return t('cli.workers.usage', { turns: d(u.turns), duration: u.durationMs === null || u.durationMs === undefined ? '-' : seconds(u.durationMs), input: d(u.tokens?.input), output: d(u.tokens?.output), cost: u.costUsd === null || u.costUsd === undefined ? '-' : u.costUsd.toFixed(4), outcome: u.outcome ? outcomes[u.outcome] : '-' }, locale); };
-export const renderWorkerSource = (s: WorkerObservationSource, locale: Locale): string[] => [t('cli.workers.source', { source: s.id, path: s.path, status: s.status }, locale) + (s.truncated ? t('cli.workers.sourceMore', { nextAfter: s.nextAfter ?? '-' }, locale) : ''), ...(s.workers.length ? s.workers.flatMap(w => [renderWorkerRow(w, locale), ...(w.model ? [t('cli.workers.model', { task: w.taskId, line: renderWorkerModelLine(w.model, locale) }, locale)] : []), ...((w.usage ?? w.files?.usage) ? [renderWorkerUsage((w.usage ?? w.files?.usage)!, locale)] : [])]) : [t('cli.workers.empty', {}, locale)])];
+  const d = (v: number | null | undefined) => v === null || v === undefined ? '-' : String(v); return t('cli.workers.usage', { turns: d(u.turns), duration: u.durationMs === null || u.durationMs === undefined ? '-' : seconds(u.durationMs), input: u.tokenUsageRecorded === true ? d(u.tokens?.input) : '-', output: u.tokenUsageRecorded === true ? d(u.tokens?.output) : '-', cost: u.costUsd === null || u.costUsd === undefined ? '-' : u.costUsd.toFixed(4), outcome: u.outcome ? outcomes[u.outcome] : '-' }, locale); };
+const renderUsage = (worker: WorkerObservation, locale: Locale): string[] => {
+  const usage = resolveWorkerUsage(worker);
+  if (worker.usageEvidence === 'invalid' || worker.usageEvidence === 'unavailable') return [t('cli.workers.usageRejected', { reason: worker.usageEvidence === 'invalid' ? t('cli.workers.usageEvidence.invalid', {}, locale) : t('cli.workers.usageEvidence.unavailable', {}, locale) }, locale)];
+  return usage ? [renderWorkerUsage(usage, locale)] : [];
+};
+export const renderWorkerSource = (s: WorkerObservationSource, locale: Locale): string[] => [t('cli.workers.source', { source: s.id, path: s.path, status: s.status }, locale) + (s.truncated ? t('cli.workers.sourceMore', { nextAfter: s.nextAfter ?? '-' }, locale) : ''), ...(s.workers.length ? s.workers.flatMap(w => [renderWorkerRow(w, locale), ...(w.model ? [t('cli.workers.model', { task: w.taskId, line: renderWorkerModelLine(w.model, locale) }, locale)] : []), ...renderUsage(w, locale)]) : [t('cli.workers.empty', {}, locale)])];
 export async function workersCommand(argv: readonly string[], context: MonitorCommandContext) {
   const values = new Map<string, string>(); let json = false;
   const help = argv.length === 2 && ['--help', '-h'].includes(argv[1]!);

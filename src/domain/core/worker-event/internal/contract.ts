@@ -60,6 +60,8 @@ export function workerActivityPhase(events: readonly WorkerEvent[]): WorkerActiv
 export interface WorkerEventSummary {
   readonly provider: string | null; readonly model: string | null; readonly outcome: 'success' | 'error' | 'limit' | 'running';
   readonly turns: number | null; readonly durationMs: number | null; readonly apiDurationMs: number | null;
+  /** True only when an event reported tokens, including explicit zero; absent on older projections. */
+  readonly tokenUsageRecorded?: boolean;
   readonly tokens: WorkerTokens; readonly cacheReadRatio: number | null; readonly costUsd: number | null; readonly costBasis: string | null;
   readonly toolCalls: Readonly<Record<WorkerToolClass, number>>; readonly toolErrors: number; readonly filesTouched: readonly string[];
   readonly messages: number; readonly quota: readonly { readonly window: string; readonly utilization: number }[];
@@ -75,7 +77,7 @@ export function summarizeWorkerEvents(events: readonly WorkerEvent[]): WorkerEve
   const running = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, thinking: null as number | null };
   const files = new Set<string>(), quota = new Map<string, number>();
   let provider: string | null = null, model: string | null = null, ended: Extract<WorkerEvent, { kind: 'session.ended' }> | null = null;
-  let toolErrors = 0, messages = 0, unmapped = 0, dropped = 0;
+  let toolErrors = 0, messages = 0, unmapped = 0, dropped = 0, tokenUsageRecorded = false;
   let verification: WorkerEventSummary['modelVerification'] = null;
   for (const event of events) {
     if (event.kind === 'session.started') { provider = event.provider; model = event.model; }
@@ -83,20 +85,21 @@ export function summarizeWorkerEvents(events: readonly WorkerEvent[]): WorkerEve
     else if (event.kind === 'tool.result' && event.status === 'error') toolErrors++;
     else if (event.kind === 'message') messages++;
     else if (event.kind === 'usage') {
+      tokenUsageRecorded = true;
       running.input += event.tokens.input; running.output += event.tokens.output; running.cacheRead += event.tokens.cacheRead; running.cacheWrite += event.tokens.cacheWrite;
       if (event.tokens.thinking !== null) running.thinking = (running.thinking ?? 0) + event.tokens.thinking;
     }
     else if (event.kind === 'quota') quota.set(event.window, event.utilization);
     else if (event.kind === 'unmapped') unmapped += event.count;
     else if (event.kind === 'dropped') dropped += event.count;
-    else if (event.kind === 'session.ended') ended = event;
+    else if (event.kind === 'session.ended') { ended = event; tokenUsageRecorded ||= event.tokens !== null; }
     else if (event.kind === 'model.verification') verification = Object.freeze({ status: event.status, unexpected: event.unexpected });
   }
   // The provider's final totals are authoritative over the running sum of per-message usage.
   const total = ended?.tokens ?? running;
   const prompt = total.input + total.cacheRead + total.cacheWrite;
   return Object.freeze({ provider, model, outcome: ended?.outcome ?? 'running', turns: ended?.turns ?? null, durationMs: ended?.durationMs ?? null,
-    apiDurationMs: ended?.apiDurationMs ?? null, tokens: Object.freeze({ ...total }), cacheReadRatio: prompt > 0 ? total.cacheRead / prompt : null,
+    apiDurationMs: ended?.apiDurationMs ?? null, tokenUsageRecorded, tokens: Object.freeze({ ...total }), cacheReadRatio: prompt > 0 ? total.cacheRead / prompt : null,
     costUsd: ended?.costUsd ?? null, costBasis: ended?.costBasis ?? null, toolCalls: Object.freeze(toolCalls), toolErrors,
     filesTouched: Object.freeze([...files].sort()), messages, quota: Object.freeze([...quota].map(([window, utilization]) => Object.freeze({ window, utilization }))),
     unmapped, dropped, events: events.length, models: ended?.models ?? null, modelVerification: verification });

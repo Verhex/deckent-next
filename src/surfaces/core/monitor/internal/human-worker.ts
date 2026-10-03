@@ -1,5 +1,5 @@
 import { redactSensitive, t, terminalSafeText, type Locale } from '#platform/index.js';
-import type { MonitorWorker } from '#engine/index.js';
+import { resolveWorkerUsage, type MonitorWorker } from '#engine/index.js';
 import { span, type MonitorLine } from './layout.js';
 import { clockText, verdictLabel } from './labels.js';
 const safe = (text: string) => redactSensitive(terminalSafeText(text));
@@ -9,7 +9,7 @@ export function humanWorkerLines(worker: MonitorWorker, locale: Locale): Monitor
   const line = (text: string, role?: 'strong' | 'warning' | 'muted'): MonitorLine => [span(text, role)];
   const sources = { title: t('monitor.human.titleShort', {}, locale), task: t('monitor.human.titleTask', {}, locale),
     acceptance: t('monitor.human.titleAcceptance', {}, locale), missing: t('monitor.human.titleMissing', {}, locale) };
-  const usage = ['denied', 'unavailable'].includes(h.transcript.state) ? null : worker.usage ?? worker.files?.usage;
+  const usage = ['denied', 'unavailable'].includes(h.transcript.state) ? null : resolveWorkerUsage(worker);
   const report = h.finalReport?.status === 'reported' ? h.finalReport.report : null;
   const checks = { passed: t('monitor.human.passed', {}, locale), failed: t('monitor.human.failed', {}, locale),
     'not-run': t('monitor.human.notRun', {}, locale), unknown: t('monitor.human.unknown', {}, locale) };
@@ -24,8 +24,10 @@ export function humanWorkerLines(worker: MonitorWorker, locale: Locale): Monitor
       : line(t('monitor.human.patch', { count: h.patch.fileCount ?? '—', files: h.patch.files.map(safe).join(', ') }, locale)) : line(patchMissing, 'muted'),
     ...(h.patch.truncated ? [line(t('monitor.human.bounded', {}, locale), 'muted')] : []),
     usage ? line(t('monitor.human.usage', { source: worker.usageEvidence === 'sealed' ? t('monitor.human.sealed', {}, locale) : t('monitor.human.live', {}, locale),
-      turns: usage.turns ?? '—', input: h.tokenUsageRecorded === false ? '—' : usage.tokens.input, output: h.tokenUsageRecorded === false ? '—' : usage.tokens.output, cost: usage.costUsd === null ? '—' : usage.costUsd.toFixed(4) }, locale))
-      : line(t('monitor.human.usageMissing', {}, locale), 'muted'),
+      turns: usage.turns ?? '—', input: usage.tokenUsageRecorded === true ? usage.tokens.input : '—', output: usage.tokenUsageRecorded === true ? usage.tokens.output : '—', cost: usage.costUsd === null ? '—' : usage.costUsd.toFixed(4) }, locale))
+      : worker.usageEvidence === 'invalid' || worker.usageEvidence === 'unavailable'
+        ? line(t('cli.workers.usageRejected', { reason: worker.usageEvidence === 'invalid' ? t('cli.workers.usageEvidence.invalid', {}, locale) : t('cli.workers.usageEvidence.unavailable', {}, locale) }, locale), 'warning')
+        : line(t('monitor.human.usageMissing', {}, locale), 'muted'),
     h.startedAtMs === null ? line(t('monitor.human.startMissing', {}, locale), 'muted') : line(t('monitor.human.start', { time: clockText(h.startedAtMs) }, locale), 'muted'),
     h.endedAtMs === null ? line(t('monitor.human.endMissing', {}, locale), 'muted') : line(h.endedAtSource === 'sealed'
       ? t('monitor.human.endSealed', { time: clockText(h.endedAtMs) }, locale) : t('monitor.human.endObserved', { time: clockText(h.endedAtMs) }, locale), 'muted'),

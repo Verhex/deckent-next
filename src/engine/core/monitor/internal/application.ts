@@ -1,4 +1,4 @@
-import type { WorkerObservation } from '#engine/core/worker-observation/index.js';
+import { resolveWorkerUsage, type WorkerObservation } from '#engine/core/worker-observation/index.js';
 import type { MonitorApproval, MonitorInstall, MonitorPool, MonitorService, MonitorSnapshot, MonitorWorker } from './contract.js';
 import type { MonitorLedgerReading, MonitorPorts, MonitorTarget } from './evidence.js';
 import { redactSensitive, terminalSafeText } from '#platform/index.js';
@@ -76,10 +76,13 @@ export class MonitorApplication {
       const title = text ? redactSensitive(terminalSafeText(text)).replace(/\s+/g, ' ').trim() || null : null;
       const projected = runs.find(run => run.scopeId === id?.scopeId && run.runId === id?.runId)?.tasks.find(task => task.taskId === id?.taskId);
       const content = known?.content;
-      return { ...value, provider: value.provider === 'unknown' ? known?.provider ?? value.provider : value.provider,
+      const usageEvidence = value.usageEvidence === 'invalid' || value.usageEvidence === 'unavailable' ? value.usageEvidence : content?.usageEvidence ?? value.usageEvidence;
+      const usage = usageEvidence === 'invalid' || usageEvidence === 'unavailable' ? null : content?.usage ?? resolveWorkerUsage(value);
+      const { usage: previousUsage, usageEvidence: previousEvidence, ...baseValue } = value; void previousUsage; void previousEvidence;
+      return { ...baseValue, provider: value.provider === 'unknown' ? known?.provider ?? value.provider : value.provider,
         ...(value.model ? {} : known?.model ? { model: known.model } : {}),
-        ...(content?.usage && content.usageEvidence ? { usage: content.usage, usageEvidence: content.usageEvidence } : {}),
-        human: { title, tokenUsageRecorded: content?.tokenUsageRecorded ?? !!(value.files?.usage && Object.values(value.files.usage.tokens).some(token => token !== null && token > 0)), titleEvidence: !title ? 'missing' : input?.title ? 'title' : input?.task ? 'task' : 'acceptance',
+        ...(usage ? { usage } : {}), ...(usageEvidence ? { usageEvidence } : {}),
+        human: { title, tokenUsageRecorded: usage?.tokenUsageRecorded === true, titleEvidence: !title ? 'missing' : input?.title ? 'title' : input?.task ? 'task' : 'acceptance',
           evaluation: known ? projected?.evaluation.verdict ?? null : null,
           transcript: content?.transcript ?? { state: 'missing', excerpt: [], truncated: false },
           patch: content?.patch ?? { state: 'missing', files: [], fileCount: null, truncated: false, baseCommit: null }, finalReport: content?.finalReport ?? null,

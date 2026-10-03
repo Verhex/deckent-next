@@ -6,6 +6,12 @@ import { createServer, type Socket } from 'node:net';
 import { createHash } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 import { chmod } from 'node:fs/promises';
+import { main } from '../../../src/surfaces/index.js';
+import { type WorkerEvent } from '#domain/index.js';
+import { PassThrough, Writable } from 'node:stream';
+import { createElement } from 'react';
+import { render } from 'ink';
+import { resolveWorklinePalette } from '#surfaces/core/terminal-kit/index.js';
 import { createConfiguredRuntimeClient, inspectConfiguredWorkers, inspectMonitor } from '#composition/index.js';
 import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
 import { openSqliteAttemptStore } from '#adapters/index.js';
@@ -28,7 +34,7 @@ const graph = { schemaVersion: 2 as const, revision: 1, tasks: [{ id: 't', kind:
   criterionDefinitions: [{ id: 'verified', version: 1, description: 'fixture', evaluator: { id: 'test', version: 1 }, parameters: {} }] };
 const capacity = { executionSlots: 4, inFlightSlots: 4 };
 
-async function project(root: string, name: string, scopes: readonly string[], granted: readonly string[], extra: readonly ('output' | 'approvals')[] = []) {
+async function project(root: string, name: string, scopes: readonly string[], granted: readonly string[], extra: readonly ('output' | 'approvals')[] = [], workspace = '/monitor-fixture') {
   const dir = join(root, name); await mkdir(join(dir, '.deckent'), { recursive: true, mode: 0o700 });
   const config = { layout: { root: join(root, name + '-data') }, inspection: { workers: { sources: [] as { id: string; kind: string; path: string; scopeId: string }[] } } };
   const configPath = join(dir, '.deckent/config.json'); await writeFile(configPath, JSON.stringify(config));
@@ -50,7 +56,7 @@ async function project(root: string, name: string, scopes: readonly string[], gr
       // The first scope's Run is reserved and claimed (launch still pending); every other Run is never dispatched.
       const identity = { scopeId, runId, taskId: 't', attemptId: runId + '-t', layoutRevision: 'layout', generation: 1 };
       await store.reserveRunTasks({ commandId: 'reserve-' + runId, actor, scopeId, runId, expectedRevision: 0, now: 20_000, identities: [identity] });
-      await store.claimDispatch(dispatchAdmission({ owner: 'worker', request: { protocolVersion: 1, identity, workspace: '/monitor-fixture', argv: ['x'] } }));
+      await store.claimDispatch(dispatchAdmission({ owner: 'worker', request: { protocolVersion: 1, identity, workspace, argv: ['x'] } }));
     }
   } finally { store.close(); }
   return { dir, config, configPath, options, ledger: opened.path, layout: opened.layout };
@@ -310,5 +316,115 @@ describe('monitor human worker evidence', () => {
     }
     unchanged(before, await files(current.ledger)); expect(await readFile(current.configPath)).toEqual(configBefore);
     await expect(stat(join(root, 'gone'))).rejects.toMatchObject({ code: 'ENOENT' });
+  });
+});
+
+// REVIEW 2304: real ledger/artifact + live sidecar producers, composed through the production observation and monitor paths.
+describe('MONITOR-H1-R usage evidence', () => {
+  const start: WorkerEvent = { schemaVersion: 1, sequence: 1, atMs: 1, kind: 'session.started', provider: 'codex', model: null, cliVersion: null };
+  const tokenEvent = (amount: number | null, ended = false): WorkerEvent[] => amount === null && !ended ? [start] : [start, ended
+    ? { schemaVersion: 1, sequence: 2, atMs: 2, kind: 'session.ended', outcome: 'success', turns: 2, durationMs: 1000, apiDurationMs: null,
+      costUsd: amount === null ? null : amount === 0 ? 0 : amount === 987 ? 0.1234 : 0.0017, costBasis: null, tokens: amount === null ? null : { input: amount, output: amount, cacheRead: 0, cacheWrite: 0, thinking: null }, permissionDenials: 0 }
+    : { schemaVersion: 1, sequence: 2, atMs: 2, kind: 'usage', tokens: { input: amount!, output: amount!, cacheRead: 0, cacheWrite: 0, thinking: null } }];
+  async function evidence(sealed: readonly WorkerEvent[] | 'invalid' | 'mismatch' | 'unreadable' | 'unavailable' | null, live: readonly WorkerEvent[], finished = false) {
+    const root = await mkdtemp(join(tmpdir(), 'deckent-monitor-h1-r-')); roots.push(root);
+    const directory = join(root, 'attempt'); await mkdir(directory, { mode: 0o700 });
+    const current = await project(root, 'current', ['s'], ['s'], ['output'], join(directory, 'workspace'));
+    const identity = { scopeId: 's', runId: 'current-s', taskId: 't', attemptId: 'current-s-t', layoutRevision: 'layout', generation: 1 };
+    await writeFile(join(directory, 'worker.events'), live.map(event => JSON.stringify({ receivedAt: Date.now(), event })).join('\n') + '\n', { mode: 0o600 });
+    await writeFile(join(directory, 'worker.hb'), JSON.stringify({ identity, provider: 'codex', process: 'running' }), { mode: 0o600 });
+    const store = await openSqliteAttemptStore(current.ledger, { busyTimeoutMs: 100, journalMode: 'wal', durability: 'full' }, { now: Date.now, timeoutMs: 86400000 }, 'allow', custodyProfiles);
+    const artifactRoot = await prepareProductDirectory(current.layout, 'artifacts');
+    const artifacts = new FileArtifactStore({ root: artifactRoot, maxBytes: 1_048_576 });
+    try {
+      if (sealed !== null) {
+        const events = await artifacts.put('s', Buffer.from(typeof sealed === 'string' ? 'broken log' : sealed.map(event => JSON.stringify(event)).join('\n') + '\n'));
+        const record = await store.saveWorkerEventLog({ schemaVersion: 1, identity, events, eventCount: typeof sealed === 'string' ? 1 : sealed.length, sealedAt: 40_000 });
+        if (sealed === 'unreadable') await rm(join(artifactRoot, createHash('sha256').update('s').digest('hex'), events.digest));
+        if (sealed === 'unavailable') {
+          const db = new DatabaseSync(current.ledger);
+          try { db.exec('ALTER TABLE worker_event_logs RENAME TO unavailable_event_logs'); } finally { db.close(); }
+        }
+        if (sealed === 'mismatch') {
+          const db = new DatabaseSync(current.ledger);
+          try { db.prepare('UPDATE worker_event_logs SET record=? WHERE scope_id=? AND attempt_id=?').run(JSON.stringify({ ...record, identity: { ...identity, generation: 2 } }), 's', identity.attemptId); }
+          finally { db.close(); }
+        }
+      }
+      if (finished) {
+        const claim = { owner: 'worker', request: { protocolVersion: 1 as const, identity, workspace: join(directory, 'workspace'), argv: ['x'] } };
+        await grantTestLaunch(store, claim, 30_000); await store.finishDispatch(claim, { handle: 'usage-handle', exitCode: 0, interrupted: false });
+      }
+    } finally { store.close(); }
+    return current;
+  }
+  async function workers(current: Awaited<ReturnType<typeof project>>, command: 'list' | 'watch', locale: 'en' | 'tr') {
+    const out: string[] = [];
+    const code = await main(['workers', command, '--scope', 's', '--lang', locale, ...(command === 'watch' ? ['--samples', '1'] : [])], {
+      root: current.dir, env: current.options.env, initialize() {}, stdout: { write(value: string) { out.push(value); } }, stderr: { write() {} },
+      inspectWorkers: inspectConfiguredWorkers,
+    });
+    expect(code).toBe(0); return out.join('');
+  }
+  it.each(['invalid', 'mismatch', 'unreadable', 'unavailable'] as const)('R1: %s sealed + differing live tokens/cost cannot fill usage (unpinned worker, EN/TR list/watch)', async sealed => {
+    const current = await evidence(sealed, tokenEvent(987, true));
+    const reason = sealed === 'unavailable' ? { en: 'sealed evidence unavailable', tr: 'mühürlü kanıt alınamıyor' } : { en: 'sealed log invalid', tr: 'mühürlü günlük geçersiz' };
+    for (const command of ['list', 'watch'] as const) for (const locale of ['en', 'tr'] as const) {
+      const text = await workers(current, command, locale);
+      expect(text).toContain(reason[locale]);
+      expect(text).not.toMatch(/(?:tokens? 987|987 (?:in|giriş))/); expect(text).not.toContain('$0.1234');
+    }
+    const value = (await inspectConfiguredWorkers(current.dir, { schemaVersion: 1, scopeId: 's' }, current.options)).sources[0]!.workers[0]!;
+    expect(value).toMatchObject({ usageEvidence: sealed === 'unavailable' ? 'unavailable' : 'invalid', files: { heartbeat: { state: 'available' }, activity: { phase: 'finished' }, usage: { tokens: { input: 987 } } } });
+    expect(value).not.toHaveProperty('usage');
+    const snapshot = await inspectMonitor(current.dir, current.options), surface = await loadMonitorSurface();
+    for (const locale of ['en', 'tr'] as const) {
+      const text = surface.renderMonitorText(snapshot, { locale, width: 120, ascii: true });
+      if (sealed === 'unavailable') expect(snapshot.installs[0]).toMatchObject({ status: 'unavailable', workers: [] });
+      else {
+        expect(text).toContain(reason[locale]); expect(await inkDetail(snapshot, locale)).toContain(reason[locale]);
+        const legacyView = { ...snapshot, installs: snapshot.installs.map(install => ({ ...install, workers: install.workers.map(worker => { const { human, ...observation } = worker; void human; return observation; }) })) };
+        const detail = surface.buildMonitorView(legacyView, locale, true).tabs.workers.flatMap(block => block.kind === 'table' ? block.rows : [])[0]!.detail().flat().map(span => span.text).join('\n');
+        expect(detail).toContain(reason[locale]); expect(detail).not.toMatch(/(?:tokens? 987|987 (?:in|giriş))/);
+      }
+      expect(text).not.toMatch(/(?:tokens? 987|987 (?:in|giriş))/); expect(text).not.toContain('0.1234');
+    }
+  });
+  async function inkDetail(snapshot: Awaited<ReturnType<typeof inspectMonitor>>, locale: 'en' | 'tr') {
+    const surface = await loadMonitorSurface(); let frame = '';
+    const stdout = Object.assign(new Writable({ write(chunk, _encoding, done) { if (String(chunk).trim()) frame = String(chunk); done(); } }), { isTTY: true, columns: 120, rows: 36 });
+    const stdin = Object.assign(new PassThrough(), { isTTY: true, setRawMode() { return stdin; }, ref() { return stdin; }, unref() { return stdin; } });
+    const instance = render(createElement(surface.MonitorApp, { initial: snapshot, load: async () => snapshot, intervalMs: 60_000, locale, ascii: true,
+      palette: resolveWorklinePalette('none'), errorText: () => 'unexpected monitor failure', size: { columns: 120, rows: 36 } }),
+    { stdout: stdout as NodeJS.WriteStream, stdin: stdin as NodeJS.ReadStream, debug: true, exitOnCtrlC: false, patchConsole: false });
+    const settle = () => new Promise(resolve => setTimeout(resolve, 30));
+    try { await settle(); stdin.write('3'); await settle(); stdin.write('\r'); await settle(); return frame; }
+    finally { instance.unmount(); stdin.destroy(); stdout.destroy(); }
+  }
+  const cases = (['live', 'sealed', 'finished-sealed'] as const).flatMap(source => [null, 0, 17].flatMap(amount => [false, true].map(ended => ({ source, amount, ended }))));
+  it.each(cases)('R2: $source tokens=$amount ended=$ended through production inference → shared JSON/text/Ink detail and list/watch', async ({ source, amount, ended }) => {
+    const current = await evidence(source === 'live' ? null : tokenEvent(amount, ended), source === 'live' ? tokenEvent(amount, ended) : tokenEvent(987, true), source === 'finished-sealed');
+    const snapshot = await inspectMonitor(current.dir, current.options), worker = snapshot.installs[0]!.workers[0]!, surface = await loadMonitorSurface();
+    const expected = amount === null ? '—/—' : `${amount}/${amount}`;
+    for (const locale of ['en', 'tr'] as const) {
+      expect(surface.renderMonitorText(snapshot, { locale, width: 120, ascii: true })).toContain(`token${locale === 'en' ? 's' : ''} ${expected}`);
+      expect(await inkDetail(snapshot, locale)).toContain(`token${locale === 'en' ? 's' : ''} ${expected}`);
+      // The Ink detail renderer reads this same production snapshot; no hand-set usage flag.
+      const detail = surface.buildMonitorView(snapshot, locale, true).tabs.workers.flatMap(block => block.kind === 'table' ? block.rows : [])[0]!.detail().flat().map(span => span.text).join('\n');
+      expect(detail).toContain(`token${locale === 'en' ? 's' : ''} ${expected}`);
+      const legacyView = { ...snapshot, installs: snapshot.installs.map(install => ({ ...install, workers: install.workers.map(worker => { const { human, ...observation } = worker; void human; return observation; }) })) };
+      const legacyDetail = surface.buildMonitorView(legacyView, locale, true).tabs.workers.flatMap(block => block.kind === 'table' ? block.rows : [])[0]!.detail().flat().map(span => span.text).join('\n');
+      const count = amount === null ? '—' : String(amount);
+      expect(legacyDetail).toContain(locale === 'en' ? `${count} in / ${count} out tokens` : `${count} giriş / ${count} çıkış token`);
+      expect(legacyDetail).not.toMatch(/(?:tokens? 987|987 (?:in|giriş))/);
+      for (const command of ['list', 'watch'] as const) {
+        const text = await workers(current, command, locale), count = amount === null ? '-' : String(amount);
+        expect(text).toContain(locale === 'en' ? `tokens ${count} in / ${count} out` : `token ${count} giriş / ${count} çıkış`);
+        expect(text).not.toMatch(/(?:tokens? 987|987 (?:in|giriş))/);
+        if (source !== 'live' && ended && amount !== null) { expect(text).toContain(amount === 0 ? '$0.0000' : '$0.0017'); expect(text).not.toContain('$0.1234'); }
+      }
+    }
+    expect(JSON.parse(JSON.stringify(worker))).toMatchObject({ usageEvidence: source === 'live' ? 'live' : 'sealed',
+      usage: { tokenUsageRecorded: amount !== null }, human: { tokenUsageRecorded: amount !== null } });
   });
 });
