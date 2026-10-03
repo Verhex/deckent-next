@@ -17,6 +17,8 @@ export const workInputSchema = z.object({
   task: workText,
   scope: z.object({ paths: z.array(scopePath).min(1).max(64).readonly() }).strict().readonly(),
   acceptance: workText,
+  /** Coding acceptance policy frozen with the task; only an explicit true permits an empty verified patch. */
+  noChangeAllowed: z.boolean().optional(),
   /** Exact API model ids of a catalog channel; aliases are refused at admission, never resolved. */
   model: z.object({ channelId: identitySchema, modelId: exactModelIdSchema, auxiliaryModelIds: z.array(exactModelIdSchema).max(8).readonly() }).strict().readonly(),
   /** Validated against the catalog model's declared efforts at admission; recorded in the Run, not yet passed to any CLI. */

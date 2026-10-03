@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { containerEvidenceSchema } from './container.js';
 import type { CollectedOutputFile } from './output-files.js';
 import { attemptIdentitySchema, sameAttemptIdentity, identitySchema, processExitCauseShape, isValidExitCause } from '#domain/index.js';
 
@@ -15,19 +16,19 @@ const supervisorResultSchema = z.discriminatedUnion('kind', [
     context.addIssue({ code: z.ZodIssueCode.custom, message: 'ATTEMPT_EXIT_CAUSE_INVALID' });
   }
 });
-export const sandboxObservationSchema = z.object({ handle: identitySchema, result: supervisorResultSchema }).strict().readonly();
+export const sandboxObservationSchema = z.object({ handle: identitySchema, result: supervisorResultSchema, container: containerEvidenceSchema.optional() }).strict().readonly();
 export const sandboxOutputSchema = z.object({ stdout: z.string(), stderr: z.string(), completeness: z.literal('partial') }).strict().readonly();
-export const sandboxResultSchema = z.object({ handle: identitySchema, result: supervisorResultSchema,
+export const sandboxResultSchema = z.object({ handle: identitySchema, result: supervisorResultSchema, container: containerEvidenceSchema.optional(),
   outputCompleteness: z.enum(['complete', 'partial', 'unavailable']), stdout: z.string(), stderr: z.string(), interrupted: z.boolean(),
 }).strict().readonly();
 export type SandboxResult = z.infer<typeof sandboxResultSchema>;
 export interface ExecutionSupervisor {
   /** Optional local data port; only stopped workers, never a launch or acceptance operation. */
   collectOutputFiles?(request: SandboxRequest): Promise<readonly CollectedOutputFile[]>;
-  cancel(request: SandboxRequest): Promise<Pick<SandboxResult, 'handle' | 'result'>>;
+  cancel(request: SandboxRequest): Promise<Pick<SandboxResult, 'handle' | 'result' | 'container'>>;
   recoverOutput(request: SandboxRequest): Promise<Readonly<{ stdout: string; stderr: string; completeness: 'partial' }>>;
   /** Read-only daemon evidence; never creates, starts, kills or releases a process. */
-  observe(request: SandboxRequest): Promise<Pick<SandboxResult, 'handle' | 'result'>>;
+  observe(request: SandboxRequest): Promise<Pick<SandboxResult, 'handle' | 'result' | 'container'>>;
   execute(request: SandboxRequest, signal?: AbortSignal): Promise<SandboxResult>;
   /** Release only after the application durably records terminal evidence. Absent = already released; a removal whose absence is not
    * observed afterwards is `SUPERVISOR_RELEASE_UNCONFIRMED` (retryable), never success. `removed`/`absent` tell an executed removal from

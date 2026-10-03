@@ -1,3 +1,4 @@
+import type { ContainerEvidence } from '#engine/core/supervisor/index.js';
 import type { WorkerObservation } from '#engine/core/worker-observation/index.js';
 
 /**
@@ -28,6 +29,7 @@ export interface MonitorBlocker {
   readonly deadlineMs?: number;
 }
 export interface MonitorAttempt {
+  readonly container?: ContainerEvidence;
   readonly attemptId: string; readonly generation: number; readonly launch: string | null; readonly exitCode: number | null;
   readonly startedAtMs: number | null; readonly endedAtMs: number | null;
   /** MONITOR-DATA (optional): what proves `endedAtMs` — `sealed` (the host sealed the worker event log) or `observed` (the host's own exit
@@ -48,7 +50,7 @@ export interface MonitorTask {
   readonly taskId: string; readonly kind: string; readonly phase: string;
   readonly profile: { readonly id: string; readonly version: number } | null;
   readonly attempts: number; readonly lastAttempt: MonitorAttempt | null;
-  readonly evaluation: { readonly verdict: 'accepted' | 'accepted-unverified' | 'rejected' | 'unknown' | 'pending' | null; readonly observedAtMs: number | null };
+  readonly evaluation: { readonly verdict: 'accepted' | 'accepted-unverified' | 'rejected' | 'unknown' | 'pending' | null; readonly observedAtMs: number | null; readonly reason?: 'no-change-produced' };
   readonly dependencies: readonly string[];
 }
 export type MonitorRunState = 'progressing' | 'waiting' | 'blocked' | 'accepted' | 'failed' | 'cancelled' | 'parked' | 'incomplete';

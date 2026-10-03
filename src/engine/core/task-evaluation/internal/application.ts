@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { readWorkspaceChange } from './workspace-change.js';
 import { attemptIdentitySchema, counterSchema, identitySchema, readWorkerModelPin, runSnapshotSchema, sameAttemptIdentity,
   taskEvaluationSchema, TaskEvaluationError, type AttemptIdentity, type CriterionDefinition,
   type EvaluatorDefinition, type RunSnapshot, type TaskEvaluationModel, type TaskEvaluation, type VerifiedPrincipal } from '#domain/index.js';
@@ -40,7 +41,8 @@ export class TaskEvaluationApplication {
   constructor(private readonly store: Store, private readonly verifier: PrincipalVerifier,
     private readonly authorization: TaskEvaluationAuthorization, private readonly evaluator: TaskTerminalEvaluator,
     private readonly artifacts: Pick<ArtifactStore, 'read'>, private readonly limits: EvaluationEvidenceLimits,
-    private readonly lifecycle: { now: () => number; timeoutMs: number }, private readonly unknownPolicy?: UnknownEvaluationPolicy) {}
+    private readonly lifecycle: { now: () => number; timeoutMs: number }, private readonly unknownPolicy?: UnknownEvaluationPolicy,
+    private readonly preparePatch?: (identity: AttemptIdentity) => Promise<void>) {}
   async execute(input: unknown, credential?: unknown) {
     const command = taskEvaluationCommandSchema.parse(input), principal = await authenticate(this.verifier, credential, command.identity.scopeId);
     await this.authorization.authorize(command.identity, principal);
@@ -103,10 +105,20 @@ export class TaskEvaluationApplication {
     const run = runSnapshotSchema.parse(await this.store.loadRun(identity.scopeId, identity.runId));
     assertRunExecution(run.graph, run.execution);
     const attempt = await this.store.load(identity.scopeId, identity.attemptId);
-    const dispatch = await this.store.loadBoundDispatch(identity);
+    let dispatch = await this.store.loadBoundDispatch(identity);
     if (!attempt || !dispatch?.terminal || !dispatch.output) throw new TaskEvaluationError('TASK_EVALUATION_NOT_READY');
     const task = run.graph.tasks.find(value => value.id === identity.taskId);
     if (!task) throw new TaskEvaluationError('TASK_EVALUATION_STALE');
+    if (task.workInput && !dispatch.patch && this.preparePatch && run.revision === command.expectedRevision && !run.cancelRequested
+      && !attempt.cancelRequested && dispatch.terminal.interrupted !== true) {
+      try { await this.preparePatch(identity); }
+      catch (error) {
+        if (error && typeof error === 'object' && 'code' in error && ['PATCH_UNAVAILABLE', 'EXECUTION_NOT_CONFIGURED'].includes(String(error.code))) throw new TaskEvaluationError('TASK_EVALUATION_NOT_READY');
+        throw error;
+      }
+      dispatch = await this.store.loadBoundDispatch(identity);
+      if (!dispatch?.terminal || !dispatch.output) throw new TaskEvaluationError('TASK_EVALUATION_NOT_READY');
+    }
     const evidenceId = 'dispatch-output';
     const model = await this.workerModel(run, identity);
     const recovery = await evaluationRecovery(this.store, run, identity, dispatch, model);
@@ -124,7 +136,8 @@ export class TaskEvaluationApplication {
       const selected = run.execution.criteria.find(value => value.criterionId === item.criterionId)!;
       criteria.push({ ...item, verdict: await this.evaluator.evaluate(selected.evaluator, criterion, dispatch.terminal) });
     }
-    const evaluation = taskEvaluationSchema.parse({ ...proposed, criteria });
+    const workspaceChange = await readWorkspaceChange(task.workInput, identity, dispatch, this.artifacts, this.limits.maxTotalBytes);
+    const evaluation = taskEvaluationSchema.parse({ ...proposed, criteria, ...(workspaceChange ? { workspaceChange } : {}) });
     const restriction = await this.unknownPolicy?.decide(evaluation, principal);
     if (restriction !== undefined && restriction !== 'wait' && restriction !== 'fail') throw new TaskEvaluationError('TASK_EVALUATION_INVALID');
     await this.authorization.authorize(identity, principal);

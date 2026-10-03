@@ -3014,6 +3014,34 @@ onto the ledger catalog; Codex/Cursor output-side model evidence (none documente
   sessions; never `/service-restart` from an old terminal; old processes fail on a protocol bump); the manifest is checked only before `switch`,
   not at every start; the install root must join the sealed set in U2-1. Evidence `proof/DEV-U2-0-2026-09-30/`.
 
+### ACCEPT-EVIDENCE source candidate (2026-10-03; lane/accept-evidence, base 9740baae)
+
+Coding `workInput` adds optional `noChangeAllowed`; only explicit `true` allows an empty verified workspace patch.
+This is task policy frozen in the existing graph contract; registry-selected process-exit criteria remain pure and unchanged.
+The TaskEvaluation owner composes those criteria with `workspaceChange` v1 (`patchDigest`, `changedFiles`), read from the
+same bounded, exact-identity retained patch used for delivery, never from a worker report. Empty patch without the exception
+means task `failed` with `notAcceptedReason: no-change-produced`; absent evidence parks as evaluation-not-ready; corrupt
+or foreign evidence refuses evaluation. The existing patch owner prepares missing evidence with read-output/recover-output
+and work-target policy, without custody release; replay returns the receipt without recapture. Patch digest is a third bounded
+recovery token alongside output/model seal, enabling one return after patch preparation. Inspect and monitor render EN/TR.
+Graph v2 and tasks without workInput keep their existing criteria; analysis-type policy and migration of fixed native profiles
+are not inferred. Legacy evaluation receipts replay unchanged. New fields are additive to current strict schemas; older builds
+refuse records carrying these fields, so downgrades across new evidence require the existing governed backup/restore path.
+
+Docker terminal observations add `container` v1 to the existing dispatch terminal: immutable container Id, image digest,
+nullable daemon start/end timestamps (nanoseconds preserved), and the frozen CPU/memory/pids/tmp resource profile.
+The labelled exact-request observation is carried by execute/cancel/reconcile into the same attempt-bound dispatch record.
+A conflicting later descriptor is refused; missing historical evidence is not fabricated. Container/workspace release never
+removes that dispatch record. Inspect workers/inventory and monitor lastAttempt expose it after release/reopen. The record
+contains no argv, mounts, environment, endpoint or secrets; one bounded descriptor per dispatch, no new history table or
+sampling loop. Existing ledger storage has no attempt-row age/count prune; existing custody sweep/page/monitor limits stay
+unchanged. This adds constant bytes to already retained rows, not a claim of globally bounded ledger growth. It enables
+joining externally sampled metrics, but does not itself measure CPU/memory or prove engine attribution.
+
+Author evidence and open checks: external `proof/ACCEPT-EVIDENCE-2026-10-03/review.md`. Independent review, lead landing,
+hosted OS coverage and real Docker producer/custody checks remain distinct from deterministic adapter tests. No N1 command
+or live service mutation is admitted by this source change.
+
 ### Typed work input and coding templates (K3 = A; owner 2026-09-30, Jev 97e59d70; lane Jev 22ea0d2c; nineteenth batch)
 
 - **Graph v3.** `TASK_GRAPH_SCHEMA_VERSION = 3`; the graph schema accepts 2 and 3 side by side. v3 adds optional

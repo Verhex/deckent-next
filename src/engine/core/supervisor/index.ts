@@ -6,3 +6,6 @@ export { supervisorProfileSchema } from './internal/profile.js';
 export type { SupervisorProfile, SupervisorProfileSource } from './internal/profile.js';
 export { outputFileNameSchema, outputFileFailureSchema, collectedOutputFileSchema } from './internal/output-files.js';
 export type { CollectedOutputFile } from './internal/output-files.js';
+
+export { containerEvidenceSchema } from './internal/container.js';
+export type { ContainerEvidence } from './internal/container.js';

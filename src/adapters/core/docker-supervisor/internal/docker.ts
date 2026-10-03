@@ -2,13 +2,13 @@ import { collectDockerOutputFiles } from './output-files.js';
 import { captureDockerProfile, readDockerProfile, dockerEndpointSchema } from './profile.js';
 import { lstat, realpath, stat } from 'node:fs/promises';
 import { isAbsolute, relative, resolve, sep } from 'node:path';
-import { SupervisorError, type SandboxRequest, type SandboxResult, type ExecutionSupervisor } from '#engine/index.js';
+import { containerEvidenceSchema, SupervisorError, type SandboxRequest, type SandboxResult, type ExecutionSupervisor } from '#engine/index.js';
 import { dockerSupervisorOptionsSchema, type DockerSupervisorOptions } from './options.js';
 import { identifyDockerRequest } from './identity.js';
 import { runNodeDockerCommand, type DockerCommandRunner } from './command.js';
 import { dockerConnectionMounts } from './connection.js';
 import { assertReadOnlyMountSource } from './mounts.js';
-type Inspection = { Id: string; Config: { Labels: Record<string, string> }; State: { Status: string; ExitCode: number } };
+type Inspection = { Id: string; Image: string; Config: { Labels: Record<string, string> }; State: { Status: string; ExitCode: number; StartedAt: string; FinishedAt: string } };
 /** Containers remain as reconciliation evidence until the application explicitly releases them.
  * Only an application with durable dispatch ownership may call execute; this adapter does not grant policy.
  */
@@ -65,16 +65,22 @@ export class DockerSupervisor implements ExecutionSupervisor {
     const result = inspection?.State?.Status === 'exited' && Number.isSafeInteger(inspection.State.ExitCode)
       ? { kind: 'exited' as const, exitCode: inspection.State.ExitCode }
       : { kind: 'unknown' as const, reasonCode: 'SUPERVISOR_OUTCOME_UNRESOLVED' };
-    return Object.freeze({ handle, result: Object.freeze(result), stdout, stderr, interrupted, outputCompleteness: captured ? (interrupted ? 'partial' : 'complete') : 'unavailable' });
+    const container = inspection && result.kind === 'exited' ? containerEvidenceSchema.parse({ schemaVersion: 1,
+      containerId: inspection.Id, imageId: inspection.Image,
+      startedAt: inspection.State.StartedAt?.startsWith('0001-') ? null : inspection.State.StartedAt,
+      finishedAt: inspection.State.FinishedAt?.startsWith('0001-') ? null : inspection.State.FinishedAt,
+      resources: { cpus: this.options.cpus, memoryBytes: this.options.memoryBytes, pids: this.options.pids, tmpBytes: this.options.tmpBytes },
+    }) : undefined;
+    return Object.freeze({ handle, result: Object.freeze(result), ...(container ? { container } : {}), stdout, stderr, interrupted, outputCompleteness: captured ? (interrupted ? 'partial' : 'complete') : 'unavailable' });
   }
-  async cancel(input: SandboxRequest): Promise<Pick<SandboxResult, 'handle' | 'result'>> {
+  async cancel(input: SandboxRequest): Promise<Pick<SandboxResult, 'handle' | 'result' | 'container'>> {
     const { digest, handle } = this.identity(input); const existing = await this.inspect(handle, digest);
     if (existing && ['running', 'paused'].includes(existing.State.Status)) {
       try { await this.command(['kill', handle], this.options.controlTimeoutMs); } catch { /* Only subsequent observation proves termination. */ }
     }
     // Created/missing is unresolved: do not launch or delete evidence to manufacture a terminal state.
     const observed = this.result(handle, await this.inspect(handle, digest));
-    return Object.freeze({ handle: observed.handle, result: observed.result });
+    return Object.freeze({ handle: observed.handle, result: observed.result, ...(observed.container ? { container: observed.container } : {}) });
   }
   async collectOutputFiles(input: SandboxRequest) {
     if (!this.options.outputFiles) return [];
@@ -101,10 +107,10 @@ export class DockerSupervisor implements ExecutionSupervisor {
     const state = !existing ? 'missing' as const : status === 'running' || status === 'paused' || status === 'created' || status === 'exited' ? status : 'unknown' as const;
     return Object.freeze({ handle, state });
   }
-  async observe(input: SandboxRequest): Promise<Pick<SandboxResult, 'handle' | 'result'>> {
+  async observe(input: SandboxRequest): Promise<Pick<SandboxResult, 'handle' | 'result' | 'container'>> {
     const { digest, handle } = this.identity(input);
     const observed = this.result(handle, await this.inspect(handle, digest));
-    return Object.freeze({ handle: observed.handle, result: observed.result });
+    return Object.freeze({ handle: observed.handle, result: observed.result, ...(observed.container ? { container: observed.container } : {}) });
   }
   async execute(input: SandboxRequest, signal?: AbortSignal): Promise<SandboxResult> {
     const { request, digest, handle } = this.identity(input);

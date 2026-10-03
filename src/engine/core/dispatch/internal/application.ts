@@ -43,7 +43,7 @@ export class DispatchApplication {
     if (result.result.kind !== 'exited') return Object.freeze({ kind: 'unresolved', record: grant.record });
     const output = await retainOutput(this.artifacts, request, result, await this.supervisor.collectOutputFiles?.(request) ?? []);
     await this.store.retainDispatchOutput(claim, output);
-    const record = await this.store.finishDispatch(claim, { handle: result.handle, exitCode: result.result.exitCode, ...(result.result.signal === undefined ? {} : { signal: result.result.signal }), interrupted: result.interrupted });
+    const record = await this.store.finishDispatch(claim, { handle: result.handle, ...(result.container ? { container: result.container } : {}), exitCode: result.result.exitCode, ...(result.result.signal === undefined ? {} : { signal: result.result.signal }), interrupted: result.interrupted });
     return Object.freeze({ kind: 'terminal', record });
   }
   async reconcile(input: unknown, credential?: unknown): Promise<DispatchOutcome> {
@@ -58,7 +58,7 @@ export class DispatchApplication {
     // Terminal evidence is settled under existing custody, not a new launch grant. Daemon inspection
     // cannot reconstruct whether an earlier CLI was interrupted, so retain that fact as unknown.
     const record = await this.store.finishDispatch({ request, owner: current.owner },
-      { handle: observed.handle, exitCode: observed.result.exitCode, ...(observed.result.signal === undefined ? {} : { signal: observed.result.signal }), interrupted: null });
+      { handle: observed.handle, ...(observed.container ? { container: observed.container } : {}), exitCode: observed.result.exitCode, ...(observed.result.signal === undefined ? {} : { signal: observed.result.signal }), interrupted: null });
     return Object.freeze({ kind: 'terminal', record });
   }
   async authorizeCancellation(input: unknown, credential?: unknown): Promise<void> { await this.admit('cancel', input, credential); }
@@ -74,7 +74,7 @@ export class DispatchApplication {
     const observed = sandboxObservationSchema.parse(await this.supervisor.cancel(request));
     if (observed.result.kind !== 'exited') return Object.freeze({ kind: 'unresolved', record: current });
     const record = await this.store.finishDispatch({ request, owner: current.owner },
-      { handle: observed.handle, exitCode: observed.result.exitCode, ...(observed.result.signal === undefined ? {} : { signal: observed.result.signal }), interrupted: null });
+      { handle: observed.handle, ...(observed.container ? { container: observed.container } : {}), exitCode: observed.result.exitCode, ...(observed.result.signal === undefined ? {} : { signal: observed.result.signal }), interrupted: null });
     return Object.freeze({ kind: 'terminal', record });
   }
   async recoverOutput(input: unknown, credential?: unknown): Promise<DispatchRecord> {

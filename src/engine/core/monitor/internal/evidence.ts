@@ -1,3 +1,4 @@
+import type { ContainerEvidence } from '#engine/core/supervisor/index.js';
 import type { RunSnapshot, WorkerModelView } from '#domain/index.js';
 import type { MonitorDeliveryState, MonitorMap } from './contract.js';
 import type { RuntimeServiceDescriptor } from '#engine/core/runtime/index.js';
@@ -11,7 +12,7 @@ export interface MonitorLedgerDispatch {
   readonly launch: 'pending' | 'granted' | 'prevented-before-launch';
   /** `dispatches.record.grant.grantedAt`: the launch grant (linearization point), not proof that the process started. */
   readonly grantedAtMs: number | null;
-  readonly terminal: { readonly exitCode: number | null; readonly signal: string | null; readonly interrupted: boolean | null } | null;
+  readonly terminal: { readonly container?: ContainerEvidence; readonly exitCode: number | null; readonly signal: string | null; readonly interrupted: boolean | null } | null;
   readonly outputRecorded: boolean;
 }
 export interface MonitorLedgerAttempt {
