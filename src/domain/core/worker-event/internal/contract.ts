@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { nativeCliIdSchema, modelUsageEvidenceSchema, type ModelUsageEvidence } from '#domain/core/provider-catalog/index.js';
 
 /** Worker Event Contract. One current version; provider normalizers map native streams onto it. Events are reported by the
  * worker container (untrusted evidence): they never grant authority, acceptance or terminal truth. */
@@ -8,11 +9,11 @@ const text = (max: number) => z.string().max(max);
 const MAX_MODELS = 16;
 export const workerToolClassSchema = z.enum(['read', 'edit', 'write', 'shell', 'search', 'network', 'agent', 'other']);
 export type WorkerToolClass = z.infer<typeof workerToolClassSchema>;
-export const workerProviderSchema = z.enum(['claude', 'codex', 'cursor']);
+export const workerProviderSchema = nativeCliIdSchema;
 const tokens = z.object({ input: count, output: count, cacheRead: count, cacheWrite: count, thinking: count.nullable() }).strict().readonly();
 export type WorkerTokens = z.infer<typeof tokens>;
 const base = { schemaVersion: z.literal(WORKER_EVENT_SCHEMA_VERSION), sequence: z.number().int().positive().safe(), atMs: count };
-export const workerEventSchema = z.discriminatedUnion('kind', [
+const recordedWorkerEventSchema = z.discriminatedUnion('kind', [
   z.object({ ...base, kind: z.literal('session.started'), provider: workerProviderSchema, model: text(128).nullable(), cliVersion: text(64).nullable() }).strict(),
   z.object({ ...base, kind: z.literal('message'), role: z.enum(['assistant']), textBytes: count, thinking: z.boolean(), excerpt: text(240) }).strict(),
   z.object({ ...base, kind: z.literal('tool.call'), toolId: text(96), name: text(64), toolClass: workerToolClassSchema,
@@ -32,6 +33,12 @@ export const workerEventSchema = z.discriminatedUnion('kind', [
   /** Host-generated when caps drop events; never produced by a worker. */
   z.object({ ...base, kind: z.literal('dropped'), reason: z.enum(['event-cap', 'byte-cap', 'invalid', 'order']), count: z.number().int().positive().safe() }).strict(),
 ]);
+/** Only the host model-verification evidence advances; worker-reported protocol events remain v1. Recorded v1 verdicts stay readable. */
+export const WORKER_MODEL_VERIFICATION_SCHEMA_VERSION = 2;
+export const workerEventSchema = z.union([recordedWorkerEventSchema, z.object({ ...base, schemaVersion: z.literal(WORKER_MODEL_VERIFICATION_SCHEMA_VERSION),
+  kind: z.literal('model.verification'), evidenceCapability: modelUsageEvidenceSchema, status: z.enum(['verified', 'substituted', 'unverified']),
+  admitted: text(256).nullable(), observed: z.array(text(128)).max(MAX_MODELS + 1).readonly(), unexpected: z.array(text(128)).max(MAX_MODELS + 1).readonly(),
+}).strict()]);
 export type WorkerEvent = z.infer<typeof workerEventSchema>;
 
 /** Deterministic, human-readable phase of a worker from its latest meaningful event (no model call, no scoring). */
@@ -57,7 +64,7 @@ export interface WorkerEventSummary {
   readonly toolCalls: Readonly<Record<WorkerToolClass, number>>; readonly toolErrors: number; readonly filesTouched: readonly string[];
   readonly messages: number; readonly quota: readonly { readonly window: string; readonly utilization: number }[];
   readonly unmapped: number; readonly dropped: number; readonly events: number;
-  /** Models the provider reported for the session (Claude `result.modelUsage` keys) and the host verdict, when present. */
+  /** Models the provider reported for the session (session model-usage keys) and the host verdict, when present. */
   readonly models: readonly string[] | null;
   readonly modelVerification: Readonly<{ status: 'verified' | 'substituted' | 'unverified'; unexpected: readonly string[] }> | null;
 }
@@ -98,15 +105,16 @@ export function summarizeWorkerEvents(events: readonly WorkerEvent[]): WorkerEve
 export type WorkerModelVerification = Readonly<{ status: 'verified' | 'substituted' | 'unverified'; admitted: string | null;
   observed: readonly string[]; unexpected: readonly string[] }>;
 /**
- * Pure host verdict (WORKER-CURRENCY-1, Jev f49cb4f6): a Claude session is `verified` only when it started on the admitted exact model,
+ * Pure host verdict (WORKER-CURRENCY-1, Jev f49cb4f6): a session with per-model evidence is `verified` only when it started on the admitted exact model,
  * reported usage for it, and every other reported model is one the profile declared as auxiliary. Anything else the worker used is
  * `substituted` (listed). Providers without per-model evidence, profiles without an admitted model, or a session without usage are `unverified`.
  */
-export function verifyWorkerModels(input: Readonly<{ provider: 'claude' | 'codex' | 'cursor';
+export type SealedWorkerModelVerification = WorkerModelVerification & Readonly<{ evidenceCapability: ModelUsageEvidence }>;
+export function verifyWorkerModels(input: Readonly<{ provider?: z.infer<typeof workerProviderSchema>; evidenceCapability: ModelUsageEvidence;
   admitted: Readonly<{ modelId: string; auxiliaryModelIds: readonly string[] }> | null; startedModel: string | null; usedModels: readonly string[] | null }>): WorkerModelVerification {
   const observed = Object.freeze([...new Set([...(input.startedModel === null ? [] : [input.startedModel]), ...(input.usedModels ?? [])])].sort());
   const admitted = input.admitted?.modelId ?? null;
-  if (input.provider !== 'claude' || input.admitted === null) return Object.freeze({ status: 'unverified', admitted, observed, unexpected: Object.freeze([]) });
+  if (input.evidenceCapability !== 'session-events' || input.admitted === null) return Object.freeze({ status: 'unverified', admitted, observed, unexpected: Object.freeze([]) });
   const allowed = new Set([input.admitted.modelId, ...input.admitted.auxiliaryModelIds]);
   const unexpected = new Set(observed.filter(model => !allowed.has(model)));
   if (input.startedModel !== null && input.startedModel !== input.admitted.modelId) unexpected.add(input.startedModel);

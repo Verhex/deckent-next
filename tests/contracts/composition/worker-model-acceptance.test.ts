@@ -101,7 +101,7 @@ describe.skipIf(process.platform === 'win32')('worker model acceptance through t
     await f.seal([started(SONNET), ended([SONNET, 'claude-opus-5-5']), verdict('substituted', ['claude-opus-5-5', SONNET], ['claude-opus-5-5'])]);
     const result = await f.evaluate();
     expect(result.evaluation.run.tasks[0]!.phase).toBe('failed');
-    expect(result.evaluation.model).toEqual({ provider: 'claude', requested: { channelId: SEED_CHANNEL, modelId: SONNET, auxiliaryModelIds: [HAIKU] },
+    expect(result.evaluation.model).toEqual({ provider: 'claude', evidenceCapability: 'session-events', requested: { channelId: SEED_CHANNEL, modelId: SONNET, auxiliaryModelIds: [HAIKU] },
       init: SONNET, usage: [SONNET, 'claude-opus-5-5'], verdict: 'substituted', unexpected: ['claude-opus-5-5'], evidence: 'sealed' });
     expect(await f.evaluate()).toEqual(result);
     const inspected = await inspectRun(f.project, { schemaVersion: 1, scopeId: 's', runId: 'r' }, f.options);
@@ -114,7 +114,7 @@ describe.skipIf(process.platform === 'win32')('worker model acceptance through t
     const result = await f.evaluate();
     expect(result.evaluation.run.tasks[0]!.phase).toBe('accepted');
     expect(result.evaluation.model).toMatchObject({ verdict: 'verified', init: SONNET, usage: [SONNET, HAIKU], unexpected: [] });
-    const row = { taskId: 't', attemptId: 'a', provider: 'claude', requested: { channelId: SEED_CHANNEL, modelId: SONNET, auxiliaryModelIds: [HAIKU] },
+    const row = { taskId: 't', attemptId: 'a', provider: 'claude', evidenceCapability: 'session-events', requested: { channelId: SEED_CHANNEL, modelId: SONNET, auxiliaryModelIds: [HAIKU] },
       init: SONNET, usage: [SONNET, HAIKU], verdict: 'verified', unexpected: [], evidence: 'sealed' };
     expect((await inspectRun(f.project, { schemaVersion: 1, scopeId: 's', runId: 'r' }, f.options)).models).toEqual([row]);
     const workers = await inspectConfiguredWorkers(f.project, { schemaVersion: 1, scopeId: 's' }, f.options);

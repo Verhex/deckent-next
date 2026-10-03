@@ -8,3 +8,7 @@ export { PROVIDER_CATALOG_DOCUMENT_SCHEMA_VERSION, CATALOG_CHANNEL_KINDS, NATIVE
   exactModelIdSchema, modelLifecycleSchema, catalogChannelSchema, catalogModelSchema, providerCatalogDocumentSchema,
   parseProviderCatalogDocument } from './internal/catalog-document.js';
 export type { ProviderCatalogDocument, CatalogChannel, CatalogModel, ModelLifecycle } from './internal/catalog-document.js';
+
+export { providerIdSchema, nativeCliIds, nativeCliIdSchema, modelUsageEvidenceSchema, readLegacyModelUsageEvidence } from './internal/native-cli.js';
+export type { NativeCliId, ModelUsageEvidence } from './internal/native-cli.js';
+export { NativeCliRegistryError, nativeCliVocabulary } from './internal/native-cli.js';

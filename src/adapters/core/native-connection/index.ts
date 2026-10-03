@@ -4,3 +4,5 @@ export { openNativeConnection, isPublicNativeAddress, nativeWorkerEventRetention
 export { inspectNativeClientHello } from './internal/tls-hello.js';
 export { validateFinalReport, normalizeClaudeLine, normalizeCodexLine, createCodexState, createNativeLineObserver, createNormalizerState, flushUnmapped, redactText, secretValues } from './internal/worker.js';
 export type { NormalizerState } from './internal/worker.js';
+export { nativePromptArguments, nativePreflightCapabilities, nativeReportArguments } from './internal/worker.js';
+export type { NativeWorkerCapabilities } from './internal/worker.js';

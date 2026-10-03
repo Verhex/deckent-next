@@ -1,9 +1,10 @@
 import { z } from 'zod';
 import { NATIVE_MODEL_ID_MAX_LENGTH } from './catalog.js';
+import { nativeCliIds } from './native-cli.js';
 
 /** How a channel reaches its models: a subscription CLI inside the worker image, an HTTP API with a key, or a local server. */
 export const CATALOG_CHANNEL_KINDS = Object.freeze(['native-cli', 'http-api', 'local-server'] as const);
-export const NATIVE_CLI_CHANNELS = Object.freeze(['claude', 'codex', 'cursor'] as const);
+export const NATIVE_CLI_CHANNELS = nativeCliIds;
 export const CATALOG_BILLING_KINDS = Object.freeze(['subscription', 'per-token', 'self-hosted'] as const);
 export const CATALOG_PRICING_KINDS = Object.freeze(['per-token', 'subscription', 'unknown'] as const);
 export const MODEL_LIFECYCLE_STATES = Object.freeze(['active', 'legacy', 'deprecated', 'retired'] as const);

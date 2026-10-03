@@ -54,3 +54,11 @@ it('keeps a byte-cap loss marker when there is no model verdict', () => {
   const sealed = parse(lines), retained = sealed.filter(line => line['kind'] === 'unmapped').length;
   expect(sealed.at(-1)).toMatchObject({ kind: 'dropped', reason: 'byte-cap', count: 20 - retained });
 });
+
+
+it('seals stamped production host verdicts as v2 while preserving v1 recorded verdicts', () => {
+  const sealed = parse(sealWorkerEventLog([event(1)], { ...verdict, evidenceCapability: 'session-events' }, 0, 1_000_000));
+  expect(sealed[1]).toEqual({ schemaVersion: 2, sequence: 2, atMs: 10, kind: 'model.verification', ...verdict, evidenceCapability: 'session-events' });
+  expect(workerEventSchema.parse(sealed[1])).toEqual(sealed[1]);
+  expect(summarizeWorkerEvents(sealed.map(line => workerEventSchema.parse(line))).modelVerification).toEqual({ status: 'substituted', unexpected: ['model-b'] });
+});

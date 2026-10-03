@@ -17,7 +17,7 @@ export function proposeTaskEvaluationCommit(runInput: unknown, attemptInput: unk
   // WORKER-CURRENCY-2: a Run whose frozen profile pins a worker model is evaluated only with that attempt's model evidence (and never
   // with evidence for another pin); a task without a pin never carries it. The ledger commit re-runs this check.
   const pinned = readWorkerModelPin(run.execution.tasks.find(entry => entry.taskId === evaluation.identity.taskId)?.profile.parameters);
-  if (!pinned !== !evaluation.model || (pinned && (pinned.provider !== evaluation.model!.provider
+  if (!pinned !== !evaluation.model || (pinned && (pinned.provider !== evaluation.model!.provider || pinned.evidenceCapability !== evaluation.model!.evidenceCapability
     || JSON.stringify(pinned.pin) !== JSON.stringify(evaluation.model!.requested)))) invalid();
   if (!Number.isSafeInteger(expectedRunRevision) || expectedRunRevision < 0 || run.revision !== expectedRunRevision) stale();
   const binding = run.bindings.find(value => sameAttemptIdentity(value.identity, evaluation.identity));

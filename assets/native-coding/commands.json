@@ -1,0 +1,120 @@
+{
+  "schemaVersion": 2,
+  "adapters": {
+    "codex": {
+      "executable": "codex",
+      "args": [
+        "exec",
+        "--json",
+        "--color",
+        "never",
+        "--ignore-user-config",
+        "-c",
+        "check_for_update_on_startup=false",
+        "--dangerously-bypass-approvals-and-sandbox"
+      ],
+      "modelFlag": "--model",
+      "helpArgs": [
+        "exec",
+        "--help"
+      ],
+      "disabledArgs": null,
+      "coreArgs": [
+        "-c",
+        "model_instructions_file=\"/tmp/deckent-prompt/core.txt\"",
+        "-c",
+        "project_doc_max_bytes=0"
+      ],
+      "modelAliases": [],
+      "capabilities": {
+        "maxTurns": null,
+        "settings": null,
+        "promptChannel": "codex-instructions-file",
+        "structuredReport": {
+          "flag": "--output-schema",
+          "channel": "schema-file"
+        },
+        "modelUsageEvidence": "none"
+      }
+    },
+    "claude": {
+      "executable": "claude",
+      "args": [
+        "--print",
+        "--verbose",
+        "--output-format",
+        "stream-json",
+        "--dangerously-skip-permissions"
+      ],
+      "modelFlag": "--model",
+      "helpArgs": [
+        "--help"
+      ],
+      "disabledArgs": [
+        "--safe-mode"
+      ],
+      "coreArgs": [
+        "--system-prompt",
+        "__DECKENT_CORE_PROMPT__"
+      ],
+      "modelAliases": [
+        "default",
+        "best",
+        "fable",
+        "sonnet",
+        "opus",
+        "haiku",
+        "sonnet[1m]",
+        "opus[1m]",
+        "opusplan"
+      ],
+      "capabilities": {
+        "maxTurns": {
+          "flag": "--max-turns",
+          "hiddenHelpProbe": {
+            "args": [
+              "--max-turns",
+              "invalid",
+              "--print",
+              "probe"
+            ],
+            "refusal": "option '--max-turns <turns>' argument 'invalid' is invalid. must be a number"
+          }
+        },
+        "settings": {
+          "flag": "--settings"
+        },
+        "promptChannel": "claude-system-prompt",
+        "structuredReport": {
+          "flag": "--json-schema",
+          "channel": "inline-json"
+        },
+        "modelUsageEvidence": "session-events"
+      }
+    },
+    "cursor": {
+      "executable": "cursor-agent",
+      "args": [
+        "--print",
+        "--output-format",
+        "stream-json",
+        "--force",
+        "--trust"
+      ],
+      "modelFlag": "--model",
+      "helpArgs": [
+        "--help"
+      ],
+      "disabledArgs": null,
+      "coreArgs": [],
+      "modelAliases": [],
+      "capabilities": {
+        "maxTurns": null,
+        "settings": null,
+        "promptChannel": "inline",
+        "structuredReport": null,
+        "modelUsageEvidence": "none"
+      }
+    }
+  }
+}

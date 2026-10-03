@@ -2,7 +2,7 @@ import { SystemTrustedClock } from '#platform/index.js';
 import { constants } from 'node:fs';
 import { open } from 'node:fs/promises';
 import { join } from 'node:path';
-import type { WorkerEvent, WorkerModelVerification } from '#domain/index.js';
+import type { WorkerEvent, WorkerModelVerification, SealedWorkerModelVerification } from '#domain/index.js';
 import { observationDirectory } from './files.js';
 
 /** Live, append-only projection of validated worker events next to the attempt's other sidecars (`worker.events`, NDJSON, 0600).
@@ -51,12 +51,12 @@ export const WORKER_EVENT_SEAL_RESERVE_BYTES = 32768;
 
 /** Retain a prefix of received events only after reserving the host verdict and all loss markers. Host evidence is never truncated.
  * The byte-cap marker precedes the host verdict when a received suffix was dropped; sequences remain strictly increasing. */
-export function sealWorkerEventLog(events: readonly WorkerEvent[], verification: WorkerModelVerification | null, unreported: number, maxBytes: number): string[] {
+export function sealWorkerEventLog(events: readonly WorkerEvent[], verification: WorkerModelVerification | SealedWorkerModelVerification | null, unreported: number, maxBytes: number): string[] {
   const serialize = (event: unknown) => JSON.stringify(event) + '\n';
   const suffix = (sequence: number, atMs: number, dropped: number): string[] => {
     const lines: string[] = [];
     if (dropped > 0) lines.push(serialize({ schemaVersion: 1, sequence: ++sequence, atMs, kind: 'dropped', reason: 'byte-cap', count: dropped }));
-    if (verification) lines.push(serialize({ schemaVersion: 1, sequence: ++sequence, atMs, kind: 'model.verification', ...verification }));
+    if (verification) lines.push(serialize({ schemaVersion: 'evidenceCapability' in verification ? 2 : 1, sequence: ++sequence, atMs, kind: 'model.verification', ...verification }));
     if (unreported > 0) lines.push(serialize({ schemaVersion: 1, sequence: sequence + 1, atMs, kind: 'dropped', reason: 'event-cap', count: unreported }));
     return lines;
   };

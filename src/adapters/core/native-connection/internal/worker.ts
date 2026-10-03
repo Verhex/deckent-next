@@ -323,6 +323,48 @@ function eventChannel(socketPath: string, maxQueued = 4000, batch = 64) {
   };
 }
 
+/** Mirrored registry capability payload: the mounted bootstrap cannot import host packages. */
+export interface NativeWorkerCapabilities {
+  readonly maxTurns: { readonly flag: string; readonly hiddenHelpProbe: { readonly args: readonly string[]; readonly refusal: string } | null } | null;
+  readonly settings: { readonly flag: string } | null;
+  readonly promptChannel: 'claude-system-prompt' | 'codex-instructions-file' | 'inline';
+  readonly structuredReport: { readonly flag: string; readonly channel: 'inline-json' | 'schema-file' } | null;
+  readonly modelUsageEvidence: 'session-events' | 'none';
+}
+/** Validates native prompt custody and returns the argv delivered to the CLI, selected only by capability. */
+export function nativePromptArguments(input: readonly string[], core: string, task: string, capabilities: NativeWorkerCapabilities): string[] {
+  const argv = [...input], channel = capabilities.promptChannel;
+  if (argv.at(-2) !== '--' || argv.at(-1) !== '__DECKENT_TASK_PROMPT__') throw new Error();
+  argv[argv.length - 1] = channel === 'inline' ? core + '\n\n' + task : task;
+  if (channel === 'claude-system-prompt') {
+    const index = argv.indexOf('--system-prompt');
+    if (index < 0 || argv[index + 1] !== '__DECKENT_CORE_PROMPT__') throw new Error();
+    argv[index + 1] = core;
+  }
+  if (channel === 'codex-instructions-file' && (!argv.includes('model_instructions_file="/tmp/deckent-prompt/core.txt"')
+    || !argv.includes('project_doc_max_bytes=0'))) throw new Error();
+  return argv;
+}
+/** Required flags and hidden-parser probes are registry data; the parser refusal must match exactly. */
+export function nativePreflightCapabilities(capabilities: NativeWorkerCapabilities,
+  preflight: { schemaVersion: number; cliVersion: string; helpArgs: readonly string[]; requiredFlags: readonly string[] }, run: (args: readonly string[]) => string): boolean {
+  const version = run(['--version']).trim(), help = run(preflight.helpArgs).split(/[\s,=]+/);
+  if (preflight.schemaVersion !== 1 || version !== preflight.cliVersion || preflight.requiredFlags.some(flag => {
+    if (help.includes(flag)) return false;
+    const probe = capabilities.maxTurns?.hiddenHelpProbe;
+    if (flag === capabilities.maxTurns?.flag && probe) {
+      try { run(probe.args); }
+      catch (error) { return !String((error as { stderr?: unknown }).stderr ?? '').includes(probe.refusal); }
+    }
+    return true;
+  })) throw new Error();
+  return capabilities.structuredReport !== null && help.includes(capabilities.structuredReport.flag);
+}
+export function nativeReportArguments(capabilities: NativeWorkerCapabilities, schema: string): string[] {
+  const report = capabilities.structuredReport;
+  return report ? [report.flag, report.channel === 'inline-json' ? schema : '/tmp/deckent-report-schema.json'] : [];
+}
+
 async function main() {
   const socketPath = '/run/deckent-connection.sock';
   const payload = await new Promise<string>((resolve, reject) => {
@@ -334,7 +376,7 @@ async function main() {
     });
     request.on('error', reject); request.on('timeout', () => request.destroy(new Error()));
   });
-  const setup = JSON.parse(payload) as { schemaVersion: number; provider: string; home: string; file: string;
+  const setup = JSON.parse(payload) as { schemaVersion: number; provider: string; capabilities: NativeWorkerCapabilities; home: string; file: string;
     credential: Record<string, unknown>; credentialEnvironment?: string; environment: Record<string, string>; limits: { connections: number; idleMs: number };
     finalReport?: { schemaVersion: 1 };
     preflight?: { schemaVersion: number; cliVersion: string; helpArgs: string[]; requiredFlags: string[] };
@@ -348,42 +390,23 @@ async function main() {
   if (delivery) {
     // Validate custody before writing credentials or executing any native tools.
     const { sha256, argvSha256, ...body } = delivery;
-    const channel = { claude: 'claude-system-prompt', codex: 'codex-instructions-file', cursor: 'inline' }[setup.provider];
+    const channel = setup.capabilities.promptChannel;
     if (delivery.schemaVersion !== 1 || delivery.channel !== channel || !setup.preflight
       || hash(JSON.stringify(body)) !== sha256 || hash(JSON.stringify([executable, ...argv])) !== argvSha256
       || argv.at(-2) !== '--' || argv.at(-1) !== '__DECKENT_TASK_PROMPT__') throw new Error();
     const root = '/tmp/deckent-prompt'; await mkdir(root, { mode: 0o700 });
     await writeFile(join(root, 'core.txt'), delivery.core, { mode: 0o600, flag: 'wx' });
-    argv[argv.length - 1] = channel === 'inline' ? delivery.core + '\n\n' + delivery.task : delivery.task;
-    if (channel === 'claude-system-prompt') {
-      const index = argv.indexOf('--system-prompt');
-      if (index < 0 || argv[index + 1] !== '__DECKENT_CORE_PROMPT__') throw new Error();
-      argv[index + 1] = delivery.core;
-    }
-    if (channel === 'codex-instructions-file' && (!argv.includes('model_instructions_file="/tmp/deckent-prompt/core.txt"')
-      || !argv.includes('project_doc_max_bytes=0'))) throw new Error();
+    argv.splice(0, argv.length, ...nativePromptArguments(argv, delivery.core, delivery.task, setup.capabilities));
   }
   let reportSupported = false;
   if (setup.preflight) {
     // Probe in a clean directory before credentials are written or task tools can run.
     const probe = '/tmp/deckent-preflight'; await mkdir(probe, { mode: 0o700 });
     try {
-      const run = (args: string[]) => execFileSync(executable, args, { cwd: probe, timeout: 10000,
+      const run = (args: readonly string[]) => execFileSync(executable, args, { cwd: probe, timeout: 10000,
         maxBuffer: 1048576, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'],
         env: { PATH: process.env.PATH, HOME: probe, LANG: 'C.UTF-8', DISABLE_AUTOUPDATER: '1' } });
-      const version = run(['--version']).trim(); const help = run(setup.preflight.helpArgs).split(/[\s,=]+/);
-      const reportFlag = { claude: '--json-schema', codex: '--output-schema' }[setup.provider];
-      reportSupported = !!reportFlag && help.includes(reportFlag);
-      if (setup.preflight.schemaVersion !== 1 || version !== setup.preflight.cliVersion
-        || setup.preflight.requiredFlags.some(flag => {
-          if (help.includes(flag)) return false;
-          // Claude 2.1.278 hides max-turns in help; its parser still validates it before login.
-          if (setup.provider === 'claude' && flag === '--max-turns') {
-            try { run(['--max-turns', 'invalid', '--print', 'probe']); }
-            catch (error) { return !String((error as { stderr?: unknown }).stderr ?? '').includes("option '--max-turns <turns>' argument 'invalid' is invalid. must be a number"); }
-          }
-          return true;
-        })) throw new Error();
+      reportSupported = nativePreflightCapabilities(setup.capabilities, setup.preflight, run);
     } catch {
       process.stdout.write(JSON.stringify({ schemaVersion: 1, kind: 'native-coding-exit', code: 78,
         signal: null, outputBytes: 0, failure: 'preflight' }) + '\n');
@@ -392,8 +415,8 @@ async function main() {
   }
   if (setup.finalReport && reportSupported) {
     const schema = JSON.stringify(finalReportJsonSchema);
-    const extra = setup.provider === 'claude' ? ['--json-schema', schema] : ['--output-schema', '/tmp/deckent-report-schema.json'];
-    if (setup.provider === 'codex') await writeFile('/tmp/deckent-report-schema.json', schema, { mode: 0o600, flag: 'wx' });
+    const extra = nativeReportArguments(setup.capabilities, schema);
+    if (setup.capabilities.structuredReport?.channel === 'schema-file') await writeFile('/tmp/deckent-report-schema.json', schema, { mode: 0o600, flag: 'wx' });
     const end = argv.lastIndexOf('--'); argv.splice(end < 0 ? argv.length : end, 0, ...extra);
   }
   const authRoot = join(home, setup.home); await mkdir(authRoot, { recursive: true, mode: 0o700 });
@@ -430,7 +453,7 @@ async function main() {
   const state = createNormalizerState([...secretValues(setup.credential), proxy]);
   const channel = eventChannel(socketPath);
   const codex = createCodexState();
-  if (setup.provider !== 'claude') channel.push([{ schemaVersion: 1, sequence: ++state.sequence, atMs: 0, kind: 'session.started', provider: setup.provider, model: null, cliVersion: null }]);
+  if (setup.capabilities.modelUsageEvidence === 'none') channel.push([{ schemaVersion: 1, sequence: ++state.sequence, atMs: 0, kind: 'session.started', provider: setup.provider, model: null, cliVersion: null }]);
   const capture = (part: Buffer) => { bytes += part.length; tail = (tail + part.toString('utf8')).slice(-65536); };
   const report = setup.finalReport && reportSupported ? finalReportCollector(setup.provider, state.secrets) : undefined;
   const lineObserver = createNativeLineObserver(setup.provider, state, codex, events => channel.push(events), report);

@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { executionProfileDefinitionSchema, type ExecutionProfileDefinition } from '#domain/index.js';
 import { validateDockerTaskProfile } from '#adapters/core/docker-supervisor/index.js';
-import commands from './commands.json' with { type: 'json' };
+import { nativeCliCommand, nativeCliIdSchema } from '#adapters/core/native-cli-registry/index.js';
 import { nativePromptCompositionSchema, composeNativePrompt, promptHash } from './composition.js';
 import { assertNativeWorkerBinding } from './binding.js';
 
@@ -15,7 +15,7 @@ const pinnedModelSchema = z.object({ channelId: z.string().min(1).max(256).refin
   auxiliaryModelIds: z.array(modelArgument).max(8).readonly() }).strict().readonly();
 /** Field shape shared with the K3 template (`template.ts`), which omits the per-task fields. */
 export const nativeCodingInvocationFields = z.object({
-  schemaVersion: z.union([z.literal(2), z.literal(3), z.literal(4)]), maxTurns: z.number().int().positive().safe().optional(), provider: z.enum(['codex', 'claude', 'cursor']),
+  schemaVersion: z.union([z.literal(2), z.literal(3), z.literal(4)]), maxTurns: z.number().int().positive().safe().optional(), provider: nativeCliIdSchema,
   cliVersion: z.string().trim().min(1).max(128).regex(/^[\w .()+-]+$/),
   discovery: z.object({ schemaVersion: z.literal(1), mode: z.enum(['disabled', 'repository']),
     settings: z.object({ disableAllHooks: z.boolean() }).strict().readonly().optional(),
@@ -46,8 +46,8 @@ export function compileNativeCodingDockerProfile(template: ExecutionProfileDefin
   try { validateDockerTaskProfile(template); }
   catch { throw new NativeCodingProfileError('NATIVE_CODING_TEMPLATE_INVALID'); }
   const invocation = parsed.data;
-  const command = commands[invocation.provider];
-  if (invocation.maxTurns !== undefined && invocation.provider !== 'claude') throw new NativeCodingProfileError('NATIVE_CODING_TURN_LIMIT_UNSUPPORTED');
+  const command = nativeCliCommand(invocation.provider);
+  if (invocation.maxTurns !== undefined && !command.capabilities.maxTurns) throw new NativeCodingProfileError('NATIVE_CODING_TURN_LIMIT_UNSUPPORTED');
   if (invocation.schemaVersion >= 3 && Number(template.parameters.outputBytes) < 65536) throw new NativeCodingProfileError('NATIVE_CODING_TEMPLATE_INVALID');
   // Owner 2026-09-30: models are pinned by exact id; a CLI alias (data, per CLI) or a moving `-latest` name is refused, never resolved.
   const pinned = typeof invocation.model === 'object' ? invocation.model : null;
@@ -55,27 +55,27 @@ export function compileNativeCodingDockerProfile(template: ExecutionProfileDefin
   if ([modelId, ...(pinned?.auxiliaryModelIds ?? [])].some(id => (command.modelAliases as readonly string[]).includes(id) || id.endsWith('-latest'))) {
     throw new NativeCodingProfileError('WORKER_MODEL_ALIAS_REFUSED');
   }
-  const turnArgs = invocation.maxTurns === undefined ? [] : ['--max-turns', String(invocation.maxTurns)];
+  const turnArgs = invocation.maxTurns === undefined ? [] : [command.capabilities.maxTurns!.flag, String(invocation.maxTurns)];
   const { mode, settings } = invocation.discovery;
   if ((mode === 'disabled' && !command.disabledArgs)
-    || (settings && (invocation.provider !== 'claude' || mode !== 'repository'))) {
+    || (settings && (!command.capabilities.settings || mode !== 'repository'))) {
     throw new NativeCodingProfileError('NATIVE_CODING_DISCOVERY_UNSUPPORTED');
   }
   const discoveryArgs = mode === 'disabled' ? command.disabledArgs! : [];
-  const settingsArgs = settings ? ['--settings', JSON.stringify(settings)] : [];
-  const delivery = invocation.composition ? composeNativePrompt(invocation.composition, command.coreChannel) : undefined;
+  const settingsArgs = settings ? [command.capabilities.settings!.flag, JSON.stringify(settings)] : [];
+  const delivery = invocation.composition ? composeNativePrompt(invocation.composition, command.capabilities.promptChannel) : undefined;
   const coreArgs = delivery ? command.coreArgs : [];
   // No shell interpolation. End-of-options keeps even a dash-prefixed prompt as task data.
   const argv = [command.executable, ...command.args, ...turnArgs, ...discoveryArgs, ...settingsArgs, ...coreArgs,
     command.modelFlag, modelId, '--', delivery ? '__DECKENT_TASK_PROMPT__' : invocation.prompt!];
   const profile = executionProfileDefinitionSchema.parse({ ...template, parameters: { ...template.parameters, argv,
-    nativeSubscription: { schemaVersion: pinned ? 2 : 1, provider: invocation.provider,
+    nativeSubscription: { schemaVersion: pinned ? 2 : 1, provider: invocation.provider, modelUsageEvidence: command.capabilities.modelUsageEvidence,
       ...(pinned ? { model: { channelId: pinned.channelId, modelId: pinned.modelId, auxiliaryModelIds: [...pinned.auxiliaryModelIds] } } : {}),
       ...(invocation.schemaVersion >= 3 ? { finalReport: { schemaVersion: 1 } } : {}),
       ...(delivery ? { promptDelivery: { ...delivery, argvSha256: promptHash(JSON.stringify(argv)) } } : {}), preflight: {
       schemaVersion: 1, cliVersion: invocation.cliVersion, discovery: mode, helpArgs: command.helpArgs,
       requiredFlags: [...command.args.filter(arg => arg.startsWith('--')), ...turnArgs.filter(arg => arg.startsWith('--')), ...discoveryArgs,
-        ...(settings ? ['--settings'] : []), ...coreArgs.filter(arg => arg.startsWith('--')), command.modelFlag],
+        ...(settings ? [command.capabilities.settings!.flag] : []), ...coreArgs.filter(arg => arg.startsWith('--')), command.modelFlag],
     } } } });
   validateDockerTaskProfile(profile);
   assertNativeWorkerBinding(profile); // the compiler's own output always satisfies the admission binding check

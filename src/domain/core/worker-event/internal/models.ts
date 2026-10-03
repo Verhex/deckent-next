@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { modelUsageEvidenceSchema, readLegacyModelUsageEvidence, type ModelUsageEvidence } from '#domain/core/provider-catalog/index.js';
 import { workerProviderSchema, type WorkerEventSummary } from './contract.js';
 
 /**
@@ -12,13 +13,14 @@ export const workerModelPinSchema = z.object({ channelId: modelText, modelId: mo
   auxiliaryModelIds: z.array(modelText).max(16).readonly() }).strict().readonly();
 export type WorkerModelPin = z.infer<typeof workerModelPinSchema>;
 export type WorkerProvider = z.infer<typeof workerProviderSchema>;
-const pinnedSubscriptionSchema = z.object({ provider: workerProviderSchema, model: workerModelPinSchema }).passthrough();
+const pinnedSubscriptionSchema = z.object({ provider: workerProviderSchema, model: workerModelPinSchema, modelUsageEvidence: modelUsageEvidenceSchema.optional() }).passthrough();
 const parametersSchema = z.object({ nativeSubscription: pinnedSubscriptionSchema }).passthrough();
 
 /** The exact-model pin a native worker profile carries (nativeSubscription v2 `model`), or null: not a pinned worker profile. */
-export function readWorkerModelPin(profileParameters: unknown): Readonly<{ provider: WorkerProvider; pin: WorkerModelPin }> | null {
+export function readWorkerModelPin(profileParameters: unknown): Readonly<{ provider: WorkerProvider; pin: WorkerModelPin; evidenceCapability: ModelUsageEvidence }> | null {
   const parsed = parametersSchema.safeParse(profileParameters);
-  return parsed.success ? Object.freeze({ provider: parsed.data.nativeSubscription.provider, pin: parsed.data.nativeSubscription.model }) : null;
+  return parsed.success ? Object.freeze({ provider: parsed.data.nativeSubscription.provider, pin: parsed.data.nativeSubscription.model,
+    evidenceCapability: parsed.data.nativeSubscription.modelUsageEvidence ?? readLegacyModelUsageEvidence(parsed.data.nativeSubscription.provider) }) : null;
 }
 
 /** `sealed`: the host-sealed event log; `invalid`: a sealed log that is not a valid event stream; `live`: the running worker's projected
@@ -26,16 +28,16 @@ export function readWorkerModelPin(profileParameters: unknown): Readonly<{ provi
 export type WorkerModelEvidence = 'sealed' | 'invalid' | 'live' | 'none' | 'denied';
 export type WorkerModelVerdict = 'verified' | 'substituted' | 'unverified' | 'pending';
 export interface WorkerModelView {
-  readonly provider: WorkerProvider; readonly requested: WorkerModelPin; readonly init: string | null; readonly usage: readonly string[] | null;
+  readonly provider: WorkerProvider; readonly evidenceCapability: ModelUsageEvidence; readonly requested: WorkerModelPin; readonly init: string | null; readonly usage: readonly string[] | null;
   readonly verdict: WorkerModelVerdict; readonly unexpected: readonly string[]; readonly evidence: WorkerModelEvidence;
 }
 /** Pure projection. A sealed log without a host verdict (no session end, provider without usage) or an invalid one is `unverified`;
  * unsealed evidence is `pending`. */
-export function viewWorkerModels(input: Readonly<{ provider: WorkerProvider; pin: WorkerModelPin; summary: WorkerEventSummary | null;
+export function viewWorkerModels(input: Readonly<{ provider: WorkerProvider; pin: WorkerModelPin; evidenceCapability: ModelUsageEvidence; summary: WorkerEventSummary | null;
   evidence: WorkerModelEvidence }>): WorkerModelView {
   const sealed = input.evidence === 'sealed', verification = sealed ? input.summary?.modelVerification ?? null : null;
   const visible = input.evidence === 'denied' || input.evidence === 'invalid' ? null : input.summary;
-  return Object.freeze({ provider: input.provider, requested: input.pin, init: visible?.model ?? null, usage: visible?.models ?? null,
+  return Object.freeze({ provider: input.provider, evidenceCapability: input.evidenceCapability, requested: input.pin, init: visible?.model ?? null, usage: visible?.models ?? null,
     verdict: sealed ? verification?.status ?? 'unverified' : input.evidence === 'invalid' ? 'unverified' : 'pending',
     unexpected: verification?.unexpected ?? Object.freeze([]), evidence: input.evidence });
 }

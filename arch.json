@@ -555,7 +555,8 @@
         "src/domain/core/attempt",
         "src/domain/core/primitives",
         "src/domain/core/run",
-        "src/domain/core/worker-event"
+        "src/domain/core/worker-event",
+        "src/domain/core/provider-catalog"
       ],
       "plan": "CONTRACT"
     },
@@ -1350,7 +1351,9 @@
         "src/domain/core/run",
         "src/adapters/core/docker-supervisor",
         "src/domain/core/primitives",
-        "src/domain/core/task-graph"
+        "src/domain/core/task-graph",
+        "src/adapters/core/native-cli-registry",
+        "src/domain/core/provider-catalog"
       ],
       "plan": "PROVIDERS"
     },
@@ -1364,7 +1367,9 @@
     },
     "src/adapters/core/native-connection": {
       "dependencies": [
-        "src/domain/core/worker-event"
+        "src/domain/core/worker-event",
+        "src/domain/core/provider-catalog",
+        "src/adapters/core/native-cli-registry"
       ],
       "plan": "PROVIDERS"
     },
@@ -1722,7 +1727,9 @@
       "plan": "CONTRACT"
     },
     "src/domain/core/worker-event": {
-      "dependencies": [],
+      "dependencies": [
+        "src/domain/core/provider-catalog"
+      ],
       "plan": "CONTRACT"
     },
     "src/domain/core/adapter-registry": {
@@ -2068,6 +2075,12 @@
         "src/surfaces/core/cli-kit"
       ],
       "plan": "AOF-DECISION-PORT"
+    },
+    "src/adapters/core/native-cli-registry": {
+      "dependencies": [
+        "src/domain/core/provider-catalog"
+      ],
+      "plan": "HARDCODE-P1"
     }
   },
   "composition": {

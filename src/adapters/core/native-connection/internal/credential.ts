@@ -3,6 +3,7 @@ import { open, realpath } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { z } from 'zod';
+import { nativeCliIdSchema, modelUsageEvidenceSchema } from '#domain/index.js';
 import catalog from './providers.json' with { type: 'json' };
 import { nativePromptDeliverySchema } from './prompt.js';
 
@@ -10,7 +11,7 @@ const exactModelId = z.string().min(1).max(256).refine(value => value.trim() ===
   && ![...value].some(char => char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127));
 /** v2 (WORKER-CURRENCY-1): the admitted catalog reference — channel and exact model id, plus declared helper model ids. The host compares the
  * models the worker reports against it (model.verification); v1 profiles carry none and are refused for new Runs at admission. */
-export const nativeSubscriptionSchema = z.object({ schemaVersion: z.union([z.literal(1), z.literal(2)]), provider: z.enum(['codex', 'claude', 'cursor']),
+export const nativeSubscriptionSchema = z.object({ schemaVersion: z.union([z.literal(1), z.literal(2)]), provider: nativeCliIdSchema, modelUsageEvidence: modelUsageEvidenceSchema.optional(),
   model: z.object({ channelId: z.string().min(1).max(256), modelId: exactModelId, auxiliaryModelIds: z.array(exactModelId).max(8).readonly() }).strict().readonly().optional(),
   promptDelivery: nativePromptDeliverySchema.optional(),
   finalReport: z.object({ schemaVersion: z.literal(1) }).strict().readonly().optional(),

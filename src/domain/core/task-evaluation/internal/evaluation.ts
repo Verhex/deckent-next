@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { modelUsageEvidenceSchema, readLegacyModelUsageEvidence } from '#domain/core/provider-catalog/index.js';
 import { identitySchema, counterSchema } from '#domain/core/primitives/index.js';
 import { attemptIdentitySchema, sameAttemptIdentity } from '#domain/core/attempt/index.js';
 import { runSnapshotSchema } from '#domain/core/run/index.js';
@@ -16,9 +17,12 @@ const modelText = z.string().min(1).max(256);
  * evaluation; present exactly when the Run's frozen profile pins a model. The verdict is the host-sealed comparison of worker-reported usage
  * with the pin (not provider attestation); `absent` evidence means no sealed log. Tasks without a pin carry no field (bytes unchanged).
  */
-export const taskEvaluationModelSchema = z.object({ provider: workerProviderSchema, requested: workerModelPinSchema,
+const legacyTaskEvaluationModelSchema = z.object({ provider: workerProviderSchema, requested: workerModelPinSchema,
   init: modelText.nullable(), usage: z.array(modelText).max(16).readonly().nullable(), verdict: z.enum(['verified', 'substituted', 'unverified']),
-  unexpected: z.array(modelText).max(17).readonly(), evidence: z.enum(['sealed', 'absent']) }).strict().readonly();
+  unexpected: z.array(modelText).max(17).readonly(), evidence: z.enum(['sealed', 'absent']) }).strict();
+/** Additive evidence contract. Missing capability is migrated only while reading pre-stamping records. */
+export const taskEvaluationModelSchema = legacyTaskEvaluationModelSchema.extend({ evidenceCapability: modelUsageEvidenceSchema.optional() }).transform(model =>
+  Object.freeze({ ...model, evidenceCapability: model.evidenceCapability ?? readLegacyModelUsageEvidence(model.provider) }));
 export type TaskEvaluationModel = z.infer<typeof taskEvaluationModelSchema>;
 export const taskEvaluationSchema = z.object({ schemaVersion: z.literal(1), evaluationId: identitySchema,
   identity: attemptIdentitySchema, graphRevision: counterSchema.positive(), attemptRevision: counterSchema.positive(),
@@ -26,12 +30,12 @@ export const taskEvaluationSchema = z.object({ schemaVersion: z.literal(1), eval
   evidenceDigests: z.array(z.string().regex(/^[a-f0-9]{64}$/)).max(2).readonly().optional(),
   returnEvidence: z.object({ kind: z.enum(['output', 'model-seal']), digest: z.string().regex(/^[a-f0-9]{64}$/) }).strict().readonly().optional(),
 }).strict().readonly();
-/** Acceptance consequence of the model evidence: an undeclared model fails the attempt; a Claude attempt (the provider that reports
- * per-model usage) without a sealed 'verified' verdict is held; Codex/Cursor stay accepted by their criteria, visibly unverified. */
+/** Acceptance consequence: an undeclared model fails the attempt; an attempt with session-event model usage without a sealed
+ * 'verified' verdict is held; attempts without per-model evidence stay accepted by their criteria, visibly unverified. */
 export function taskModelConclusion(model: TaskEvaluationModel | undefined): 'fail' | 'unknown' | null {
   if (!model) return null;
   if (model.verdict === 'substituted') return 'fail';
-  return model.provider === 'claude' && model.verdict !== 'verified' ? 'unknown' : null;
+  return model.evidenceCapability === 'session-events' && model.verdict !== 'verified' ? 'unknown' : null;
 }
 export type TaskEvaluation = z.infer<typeof taskEvaluationSchema>;
 export class TaskEvaluationError extends Error {

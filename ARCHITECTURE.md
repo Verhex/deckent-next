@@ -224,6 +224,26 @@ Mismatch is a sanitized preflight failure. Old authoring v1 is rejected; already
 profiles without preflight retain exact replay, without an implicit upgrade or retroactive claim.
 Adapter flags and the pinned image remain the execution mechanism; no new state owner or ledger.
 
+HARDCODE-P1-A (owner order Jev e2b81339 2026-10-02, built in the D4 night 2026-10-03; implementation `a7f2a78b` + envelope/documentation `6ba197fb`; Fable 5.1 bounded PASS 2026-10-03, landing conditions: full verify with built dist and native addon, remaining vendor lists `worker-admission.ts:24` / `worker-observation/files.ts:86` in PLAN):
+`assets/native-coding/commands.json` schema 2 is the single native CLI registry asset. The strict loader
+is the neutral `adapters/core/native-cli-registry` unit, re-exported by native-coding; this avoids the
+native-coding → docker-supervisor → native-connection dependency cycle. Old/missing capability assets
+fail with `NATIVE_CLI_REGISTRY_INVALID`. Required capabilities declare maxTurns flag/parser probe,
+settings flag, prompt channel, structured-report flag/channel and model-usage evidence kind. The pure
+provider vocabulary derives the accepted ids once from this versioned data asset; domain imports no
+adapter. Authoring/binding/bootstrap select these capabilities, never a vendor identity table.
+The compiler stamps `nativeSubscription.modelUsageEvidence`; explicit capability substitution fails
+binding with the existing `WORKER_MODEL_BINDING_MISMATCH`. The gateway independently takes its bootstrap
+and host-verification capability from the bound registry. Domain model verification consumes required
+`evidenceCapability`; its verdict bytes stay unchanged. Host-only `model.verification` schema 2 carries
+that field; recorded schema 1 events stay readable and worker protocol stays 1. Profile/Task-model reads
+migrate an absent legacy capability from the shipped registry snapshot; explicit invalid fields are
+refused. Model projection, evaluation producer and transition carry/bind it. Task evaluation's optional
+model evidence gains the additive field without a ledger or outer protocol migration. Future registry
+changes must retain those historical read semantics. The shipped session-events adapter holds missing
+verified evidence; the two none-evidence adapters remain visibly unverified and criteria-driven (rule A).
+Author targeted proof and remaining limits: external `proof/HARDCODE-P1-A-2026-10-03/review.md`.
+
 Worker image versioning (owner 2026-09-22) is an explicit operator build operation shipped in `assets/worker-image`:
 recipe schema 2 names `repository`, `imageVersion`, `previousVersion` and the base image; the Dockerfile's
 newest-first `# version <id> | <date> | base <image> | supersedes <id|none> | <reason>` comment lines are the
@@ -2795,8 +2815,8 @@ makes the attempt not accepted, and model calls stay visible. The consequence li
 `TaskEvaluationApplication` reads the host-sealed worker event log of an attempt whose frozen Run profile pins a model
 (`nativeSubscription.model`) and records typed model evidence with the evaluation (`TaskEvaluation.model`: provider, requested pin, init =
 `session.started.model`, usage = `session.ended.models`, verdict `verified|substituted|unverified`, unexpected ids, evidence
-`sealed|absent`; additive optional field, tasks without a pin keep identical bytes). Domain conclusion (`taskModelConclusion`):
-`substituted` → Task **failed**; a pinned **Claude** attempt without a sealed `verified` verdict (no log, log without verdict, sealed
+`sealed|absent`, evidence capability; additive optional field, tasks without a pin keep identical bytes). Domain conclusion (`taskModelConclusion`):
+`substituted` → Task **failed**; a pinned **session-events capability** attempt (shipped Claude) without a sealed `verified` verdict (no log, log without verdict, sealed
 `unverified`) → **held** (`evaluating`, re-evaluable after sealing; Jev 933e43f2, 58ffe1c9); Codex/Cursor → accepted by their
 criteria, visibly `unverified`. A present but invalid sealed log refuses evaluation (`TASK_EVIDENCE_INVALID`, nothing written). The
 engine transition, re-run by the ledger commit, requires model evidence exactly for pinned tasks and for the Run's own pin. The verdict
