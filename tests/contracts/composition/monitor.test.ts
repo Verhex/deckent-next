@@ -1,7 +1,7 @@
 import { mkdtemp, mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { hostname, tmpdir, userInfo } from 'node:os';
 import { join } from 'node:path';
-import { beforeEach, afterEach, describe, expect, it } from 'vitest';
+import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 import { createServer, type Socket } from 'node:net';
 import { createHash } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
@@ -12,12 +12,12 @@ import { PassThrough, Writable } from 'node:stream';
 import { createElement } from 'react';
 import { render } from 'ink';
 import { resolveWorklinePalette } from '#surfaces/core/terminal-kit/index.js';
-import { createConfiguredRuntimeClient, inspectConfiguredWorkers, inspectMonitor } from '#composition/index.js';
+import { createConfiguredRuntimeClient, inspectConfiguredWorkers, inspectConfiguredRun, inspectMonitor } from '#composition/index.js';
 import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
 import { openSqliteAttemptStore } from '#adapters/index.js';
 import { CURRENT_LEDGER_VERSION } from '#adapters/core/sqlite-ledger/index.js';
-import { clearConfigCache, prepareProductDirectory, productResourcePath } from '#platform/index.js';
-import { FileArtifactStore } from '#adapters/index.js';
+import { loadConfig, clearConfigCache, prepareProductDirectory, productResourcePath } from '#platform/index.js';
+import { readMonitorRunResults, FileArtifactStore } from '#adapters/index.js';
 import { loadMonitorSurface } from '#surfaces/core/monitor/index.js';
 import { patchExclusions, patchFile } from '#engine/index.js';
 import { fixtureExecution } from '../support/execution-registry.js';
@@ -34,7 +34,7 @@ const graph = { schemaVersion: 2 as const, revision: 1, tasks: [{ id: 't', kind:
   criterionDefinitions: [{ id: 'verified', version: 1, description: 'fixture', evaluator: { id: 'test', version: 1 }, parameters: {} }] };
 const capacity = { executionSlots: 4, inFlightSlots: 4 };
 
-async function project(root: string, name: string, scopes: readonly string[], granted: readonly string[], extra: readonly ('output' | 'approvals')[] = [], workspace = '/monitor-fixture') {
+async function project(root: string, name: string, scopes: readonly string[], granted: readonly string[], extra: readonly ('output' | 'approvals' | 'runs')[] = [], workspace = '/monitor-fixture') {
   const dir = join(root, name); await mkdir(join(dir, '.deckent'), { recursive: true, mode: 0o700 });
   const config = { layout: { root: join(root, name + '-data') }, inspection: { workers: { sources: [] as { id: string; kind: string; path: string; scopeId: string }[] } } };
   const configPath = join(dir, '.deckent/config.json'); await writeFile(configPath, JSON.stringify(config));
@@ -42,6 +42,7 @@ async function project(root: string, name: string, scopes: readonly string[], gr
   const opened = await openConfiguredAttemptStore(dir, options); opened.store.close();
   await writeFile(productResourcePath(opened.layout, 'policy'), JSON.stringify({ schemaVersion: 1, revision: 'monitor', restrictions: [], grants: [
     { id: 'inspect', effect: 'allow', scopes: [...granted], principals: [{ issuer: hostname(), subject: String(userInfo().uid) }], actions: ['inspect'], resource: { kind: 'scope', ids: [...granted] } },
+    ...(extra.includes('runs') ? [{ id: 'runs', effect: 'allow', scopes: [...granted], principals: [{ issuer: hostname(), subject: String(userInfo().uid) }], actions: ['inspect'], resource: { kind: 'run', ids: 'all' } }] : []),
     ...(extra.includes('output') ? [{ id: 'output', effect: 'allow', scopes: [...granted], principals: [{ issuer: hostname(), subject: String(userInfo().uid) }], actions: ['read-output'], resource: { kind: 'attempt', ids: 'all' } }] : []),
     ...(extra.includes('approvals') ? [{ id: 'approvals', effect: 'allow', scopes: [...granted], principals: [{ issuer: hostname(), subject: String(userInfo().uid) }], actions: ['inspect'], resource: { kind: 'approval', ids: [...granted] } }] : []),
   ] }), { mode: 0o600 });
@@ -241,7 +242,7 @@ describe('inspectMonitor content authorization (security)', () => {
   });
   it('a finished attempt without a sealed log ends at its host-observed exit (sidecar), read only under read-output', async () => {
     const root = await mkdtemp(join(tmpdir(), 'deckent-monitor-')); roots.push(root);
-    const run = async (name: string, extra: readonly ('output' | 'approvals')[], resultAttempt = 'verify-t') => {
+    const run = async (name: string, extra: readonly ('output' | 'approvals' | 'runs')[], resultAttempt = 'verify-t') => {
       const current = await project(root, name, ['s'], ['s'], extra);
       const attemptDir = join(root, name + '-attempt'); await mkdir(attemptDir, { mode: 0o700 }); await chmod(attemptDir, 0o700);
       const identity = { scopeId: 's', runId: 'r-verify', taskId: 't', attemptId: 'verify-t', layoutRevision: 'layout', generation: 1 };
@@ -270,14 +271,17 @@ describe('inspectMonitor content authorization (security)', () => {
 
 // MONITOR-H1: retained artifacts survive finished-worker sidecar release on the real composed read path.
 describe('monitor human worker evidence', () => {
-  it.each([{ allowed: true, count: 0, transcript: 'sealed' }, { allowed: true, count: 1, transcript: 'missing' }, { allowed: true, count: 1, transcript: 'invalid' }, { allowed: false, count: 0, transcript: 'sealed' }])('reads retained results/claims with $allowed / $count files / $transcript transcript', async ({ allowed, count, transcript }) => {
+  it.each([{ allowed: true, count: 0, transcript: 'sealed', noChange: false }, { allowed: true, count: 1, transcript: 'missing', noChange: false }, { allowed: true, count: 1, transcript: 'invalid', noChange: false }, { allowed: false, count: 0, transcript: 'sealed', noChange: false }, { allowed: true, count: 0, transcript: 'sealed', noChange: true }])('reads retained results/claims with $allowed / $count files / $transcript transcript', async ({ allowed, count, transcript, noChange }) => {
     const root = await mkdtemp(join(tmpdir(), 'deckent-monitor-h1-')); roots.push(root);
-    const current = await project(root, 'current', ['s'], ['s'], allowed ? ['output'] : []);
+    const current = await project(root, 'current', ['s'], ['s'], allowed ? ['output', 'runs'] : ['runs']);
+    const input = { schemaVersion: 1 as const, task: 'Fix the worker result', scope: { paths: ['src/**'] }, acceptance: 'No missing results',
+      model: { channelId: 'fixture', modelId: 'fixture-model-1', auxiliaryModelIds: [] }, effort: 'high' as const, noChangeAllowed: !noChange };
+    const humanGraph = { ...graph, schemaVersion: 3 as const, tasks: graph.tasks.map(task => ({ ...task, workInput: input })) };
     const identity = { scopeId: 's', runId: 'r-human', taskId: 't', attemptId: 'human-t', layoutRevision: 'layout', generation: 1 };
     const store = await openSqliteAttemptStore(current.ledger, { busyTimeoutMs: 100, journalMode: 'wal', durability: 'full' }, { now: Date.now, timeoutMs: 86400000 }, 'allow', custodyProfiles);
     const artifacts = new FileArtifactStore({ root: await prepareProductDirectory(current.layout, 'artifacts'), maxBytes: 1_048_576 });
     try {
-      await store.createRun({ commandId: 'create-human', actor, identity: { scopeId: 's', runId: 'r-human', layoutRevision: 'layout' }, graph, execution: fixtureExecution(graph), now: 10_000,
+      await store.createRun({ commandId: 'create-human', actor, identity: { scopeId: 's', runId: 'r-human', layoutRevision: 'layout' }, graph: humanGraph, execution: fixtureExecution(graph), now: 10_000,
         policy: { schemaVersion: 2, poolId: 'p', capacity, ordering: ['t'] } });
       await store.reserveRunTasks({ commandId: 'reserve-human', actor, scopeId: 's', runId: 'r-human', expectedRevision: 0, now: 20_000, identities: [identity] });
       const claim = { owner: 'worker', request: { protocolVersion: 1 as const, identity, workspace: join(root, 'gone', 'workspace'), argv: ['x'] } };
@@ -288,24 +292,37 @@ describe('monitor human worker evidence', () => {
         { schemaVersion: 1, sequence: 2, atMs: 7, kind: 'session.ended', outcome: 'success', turns: 3, durationMs: 2000, apiDurationMs: null, costUsd: null, costBasis: null, tokens: null, permissionDenials: 0 }];
       if (transcript !== 'missing') await store.saveWorkerEventLog({ schemaVersion: 1, identity, events: await artifacts.put('s', Buffer.from(transcript === 'invalid' ? 'broken log' : events.map(e => JSON.stringify(e)).join('\n') + '\n')), eventCount: 2, sealedAt: 40_000 });
       await store.finishDispatch(claim, { handle: 'human-handle', exitCode: 0, interrupted: false });
-      await store.retainDispatchPatch(claim, await artifacts.put('s', Buffer.from(JSON.stringify({ schemaVersion: 1, kind: 'workspace-patch', identity,
+      const patchReceipt = await artifacts.put('s', Buffer.from(JSON.stringify({ schemaVersion: 1, kind: 'workspace-patch', identity,
         source: { schemaVersion: 1, adapter: { id: 'fixture', version: 1 }, sourceFingerprint: 'a'.repeat(64) }, baseCommit: 'b'.repeat(40), snapshotDigest: 'c'.repeat(64), exclusions: patchExclusions,
-        changes: count ? [{ path: 'note.txt', before: null, after: patchFile(Buffer.from('written'), '100644') }] : [] }))));
+        changes: count ? [{ path: 'note.txt', before: null, after: patchFile(Buffer.from('written'), '100644') }] : [] })));
+      await store.retainDispatchPatch(claim, patchReceipt);
       const dispatch = (await store.readDispatch(claim.request))!, run = (await store.loadRun('s', 'r-human'))!;
       await store.commitTaskEvaluation({ commandId: 'evaluate-human', actor, expectedRevision: run.revision, dispatch,
-        evaluation: { schemaVersion: 1, evaluationId: 'evaluate-human', identity, graphRevision: 1, attemptRevision: 1, criteria: [{ criterionId: 'verified', verdict: 'fail', evidenceIds: ['fixture-failure'] }] } });
+        evaluation: { schemaVersion: 1, evaluationId: 'evaluate-human', identity, graphRevision: 1, attemptRevision: 1, criteria: [{ criterionId: 'verified', verdict: noChange ? 'pass' : 'fail', evidenceIds: ['fixture-failure'] }], ...(noChange ? { workspaceChange: { schemaVersion: 1, patchDigest: patchReceipt.digest, changedFiles: 0 } } : {}) } });
     } finally { store.close(); }
     const before = await files(current.ledger), configBefore = await readFile(current.configPath);
     const snapshot = await inspectMonitor(current.dir, current.options), install = snapshot.installs[0]!;
+    const inspected = await inspectConfiguredRun(current.dir, { schemaVersion: 1, scopeId: 's', runId: 'r-human' }, current.options);
+    expect(inspected.run!.tasks[0]!.taskBrief).toMatchObject({ schemaVersion: 1, task: input.task, scopePaths: ['src/**'], acceptance: input.acceptance, effort: 'high', contextRefs: [] });
+    expect(inspected.run!.tasks[0]!.resultBrief).toMatchObject({ schemaVersion: 1, claimLabel: 'CLAIM', evaluation: { verdict: 'rejected' }, openIssues: allowed ? [] : null });
+    expect(install.workers.find(worker => worker.identity?.attemptId === identity.attemptId)!.human!.taskBrief).toEqual(inspected.run!.tasks[0]!.taskBrief);
+    const config = await loadConfig(current.dir, { ...current.options, heal: false });
+    for (const expected of [{ revision: inspected.run!.revision + 1, layoutRevision: inspected.run!.layoutRevision }, { revision: inspected.run!.revision, layoutRevision: 'foreign-layout' }]) {
+      let outputDecisions = 0;
+      const refused = await readMonitorRunResults(config, current.options.env, { scopeId: 's', runId: 'r-human' }, expected, async () => { outputDecisions++; return true; });
+      expect(refused.size).toBe(0); expect(outputDecisions).toBe(0);
+    }
+
     const humanText = (await loadMonitorSurface()).renderMonitorText(snapshot, { locale: 'tr', width: 80, ascii: true });
     const worker = install.workers.find(w => w.identity?.attemptId === identity.attemptId)!;
     if (allowed) {
-      expect(worker).toMatchObject({ human: { transcript: { state: transcript === 'invalid' ? 'unavailable' : transcript }, patch: { state: 'recorded', fileCount: count, files: count ? ['note.txt'] : [] }, finalReport: { status: 'reported' }, evaluation: 'rejected', title: null, titleEvidence: 'missing' } });
+      expect(worker).toMatchObject({ human: { transcript: { state: transcript === 'invalid' ? 'unavailable' : transcript }, patch: { state: 'recorded', fileCount: count, files: count ? ['note.txt'] : [] }, finalReport: { status: 'reported' }, evaluation: 'rejected', title: input.task, titleEvidence: 'task' } });
       if (transcript === 'sealed') expect(worker).toMatchObject({ usageEvidence: 'sealed', usage: { turns: 3 } });
       else expect(worker).not.toHaveProperty('usage');
       expect(JSON.stringify(worker)).toContain('tests passed');
-      expect(humanText).toContain('İddia'); expect(humanText).toContain('tests passed'); expect(humanText).toContain('Değerlendirme: ret');
-      expect(humanText).toContain(count ? 'note.txt' : 'Boş yama');
+      expect(humanText).toContain('İDDİA'); expect(humanText).toContain('tests passed'); expect(humanText).toContain('Değerlendirme: ret');
+      if (noChange) expect(worker.human!.resultBrief!.evaluation.reason).toBe('no-change-produced');
+      else expect(humanText).toContain(count ? 'note.txt' : 'Boş yama');
       expect(humanText).not.toContain('private-value');
       expect(JSON.stringify(worker)).not.toContain('private-value');
     } else {
@@ -313,6 +330,13 @@ describe('monitor human worker evidence', () => {
       expect(worker).toMatchObject({ human: { transcript: { state: 'denied' }, finalReport: null } });
       expect(JSON.stringify(worker)).not.toContain('tests passed');
       expect(humanText).toContain('policy izin vermedi'); expect(humanText).not.toContain('tests passed');
+    }
+    for (const lang of ['en', 'tr']) {
+      let output = ''; const stdout = new Writable({ write(chunk, _encoding, done) { output += chunk.toString(); done(); } });
+      expect(await main(['run', 'inspect', '--scope', 's', '--id', 'r-human', '--lang', lang, '--no-color'], { root: current.dir, env: current.options.env, stdout, inspectRun: inspectConfiguredRun })).toBe(0);
+      expect(output).toContain(input.task); expect(output).toContain('src/**');
+      if (allowed) expect(output).toContain(lang === 'en' ? 'CLAIM' : 'İDDİA');
+      expect(output).not.toContain('private-value'); expect(output).not.toContain('\u001b');
     }
     unchanged(before, await files(current.ledger)); expect(await readFile(current.configPath)).toEqual(configBefore);
     await expect(stat(join(root, 'gone'))).rejects.toMatchObject({ code: 'ENOENT' });
@@ -427,4 +451,40 @@ describe('MONITOR-H1-R usage evidence', () => {
     expect(JSON.parse(JSON.stringify(worker))).toMatchObject({ usageEvidence: source === 'live' ? 'live' : 'sealed',
       usage: { tokenUsageRecorded: amount !== null }, human: { tokenUsageRecorded: amount !== null } });
   });
+});
+
+// MONITOR-H1B RED: history artifacts must follow the finished-worker viewport, never precede it.
+it('reads artifacts only for shown workers when finished history exceeds the limit', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'deckent-monitor-h1b-')); roots.push(root);
+  const current = await project(root, 'current', ['s'], ['s'], ['output']);
+  const artifacts = new FileArtifactStore({ root: await prepareProductDirectory(current.layout, 'artifacts'), maxBytes: 1_048_576 });
+  const store = await openSqliteAttemptStore(current.ledger, { busyTimeoutMs: 100, journalMode: 'wal', durability: 'full' }, { now: Date.now, timeoutMs: 86400000 }, 'allow', custodyProfiles);
+  try {
+    await store.createExecutionPool({ schemaVersion: 1, poolId: 'history', capacity: { executionSlots: 64, inFlightSlots: 64 } });
+    for (let n = 0; n < 31; n++) {
+      const runId = 'history-' + n, identity = { scopeId: 's', runId, taskId: 't', attemptId: runId + '-t', layoutRevision: 'layout', generation: 1 };
+      await store.createRun({ commandId: 'create-' + runId, actor, identity: { scopeId: 's', runId, layoutRevision: 'layout' }, graph, execution: fixtureExecution(graph), now: n,
+        policy: { schemaVersion: 2, poolId: 'history', capacity: { executionSlots: 64, inFlightSlots: 64 }, ordering: ['t'] } });
+      await store.reserveRunTasks({ commandId: 'reserve-' + runId, actor, scopeId: 's', runId, expectedRevision: 0, now: n, identities: [identity] });
+      const claim = { owner: 'worker', request: { protocolVersion: 1 as const, identity, workspace: join(root, runId, 'workspace'), argv: ['x'] } };
+      await store.claimDispatch(dispatchAdmission(claim)); await grantTestLaunch(store, claim, n);
+      await store.retainDispatchOutput(claim, await artifacts.put('s', Buffer.from(JSON.stringify({ schemaVersion: 1, identity, completeness: 'complete', stdout: '', stderr: '' }))));
+      await store.saveWorkerEventLog({ schemaVersion: 1, identity, events: await artifacts.put('s', Buffer.from('')), eventCount: 0, sealedAt: n });
+      await store.finishDispatch(claim, { handle: runId, exitCode: 0, interrupted: false });
+      await store.retainDispatchPatch(claim, await artifacts.put('s', Buffer.from(JSON.stringify({ schemaVersion: 1, kind: 'workspace-patch', identity,
+        source: { schemaVersion: 1, adapter: { id: 'fixture', version: 1 }, sourceFingerprint: 'a'.repeat(64) }, baseCommit: 'b'.repeat(40), snapshotDigest: 'c'.repeat(64), exclusions: patchExclusions, changes: [] }))));
+    }
+  } finally { store.close(); }
+  const reads: string[] = [], original = FileArtifactStore.reader;
+  const spy = vi.spyOn(FileArtifactStore, 'reader').mockImplementation((...args) => {
+    const reader = original(...args);
+    return { read: async (scopeId, receipt) => { reads.push(receipt.digest); return reader.read(scopeId, receipt); } };
+  });
+  try {
+    const install = (await inspectMonitor(current.dir, current.options)).installs[0]!;
+    expect(install.workers.filter(worker => worker.terminal)).toHaveLength(20);
+    expect(install.workers.find(worker => worker.identity?.attemptId === 'history-30-t')).toBeDefined();
+    expect(reads).toHaveLength(20 * 3);
+    expect(install.diagnostics).toContain('info:workers-finished-capped:11');
+  } finally { spy.mockRestore(); }
 });

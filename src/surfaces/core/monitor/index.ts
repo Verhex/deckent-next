@@ -6,3 +6,5 @@ export { renderWorkerRow, workersCommand, type WorkerObservationHandler } from '
 export { runInventoryCommand, type InventoryQueryHandler } from './internal/inventory.js';
 export { renderWorkerModelLine } from './internal/worker-model.js';
 export { phaseLabel, renderWorkerTranscript, type WorkerTranscriptHandler } from './internal/transcript.js';
+
+export { renderBriefLines } from './internal/brief.js';

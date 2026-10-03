@@ -35,3 +35,6 @@ export { poolWaitSchema, poolDriftSchema, runPoolObservationSchema, observeRunPo
 export type { PoolWait, PoolDrift, RunPoolEvidence } from './internal/pool-observation.js';
 export { projectTaskHandoffs, handoffReceiptViewSchema } from '#engine/core/handoff-observation/index.js';
 export type { HandoffReceiptView } from '#engine/core/handoff-observation/index.js';
+
+export { taskBriefSchema, resultBriefSchema, projectTaskBrief, projectResultBrief } from './internal/brief.js';
+export type { TaskBrief, ResultBrief } from './internal/brief.js';

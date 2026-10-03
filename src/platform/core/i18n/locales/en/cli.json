@@ -1198,5 +1198,22 @@
   "monitor.human.usageOutcomeError": "reported error",
   "monitor.human.usageOutcomeLimit": "limit reached",
   "monitor.human.usageOutcomeRunning": "in progress",
-  "monitor.build.summary": "build recorded (built {builtAt})"
+  "monitor.build.summary": "build recorded (built {builtAt})",
+  "monitor.brief.missing": "not recorded",
+  "monitor.brief.task": "Task text: {value}",
+  "monitor.brief.scope": "Requested scope: {value}",
+  "monitor.brief.acceptance": "Acceptance expectation: {value}",
+  "monitor.brief.profile": "Pinned profile: {value}",
+  "monitor.brief.model": "Requested model: {value}",
+  "monitor.brief.effort": "Requested reasoning effort (application not proven): {value}",
+  "monitor.brief.context": "Context references: {value}",
+  "monitor.brief.criterion": "Criterion {id}: {value} · evaluator {evaluator}",
+  "monitor.brief.claim": "CLAIM: {value}",
+  "monitor.brief.claimFiles": "CLAIM · changed files: {value}",
+  "monitor.brief.claimCheck": "CLAIM · check {command}: {outcome}",
+  "monitor.brief.openIssues": "CLAIM · open issues: {value}",
+  "monitor.brief.noneReported": "none reported",
+  "monitor.brief.runReceipt": "Run receipt · {state} · command {command} · target {target} · commit {commit}",
+  "monitor.brief.attribution": "Run receipt; this worker patch landing is not proven by this receipt alone.",
+  "monitor.brief.deliveryMissing": "Delivery/landing receipt: not recorded"
 }

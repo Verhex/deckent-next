@@ -632,3 +632,26 @@ it('H1 token absence stays unknown; an explicit sealed zero remains zero', () =>
     expect(text).toContain(recorded ? 'token 0/0' : 'token —/—');
   }
 });
+
+it.each([{ locale: 'en' as const, columns: 80, rows: 24 }, { locale: 'tr' as const, columns: 120, rows: 36 }])('H1B Brief meanings survive Enter, detail scrolling and no-color ($locale $columns × $rows)', async ({ locale, columns, rows }) => {
+  const sample = humanWorkerSnapshot(), install = sample.installs[0]!, worker = install.workers[0]!;
+  const human = { ...worker.human!, taskBrief: { schemaVersion: 1 as const, task: 'Preserve result evidence', scopePaths: ['src/**'], acceptance: 'Checks retain source attribution', criteria: [],
+    profile: { id: 'frozen-profile', version: 1 }, model: null, effort: 'high', contextRefs: [] },
+    resultBrief: { schemaVersion: 1 as const, attemptId: worker.identity!.attemptId, claimLabel: 'CLAIM' as const, report: { ...worker.human!.finalReport!, report: { ...worker.human!.finalReport!.report, openIssues: ['still pending'] } }, evaluation: { verdict: 'rejected' as const, reason: 'no-change-produced' as const },
+      openIssues: ['still pending'], runDelivery: { state: 'adopting' as const, commit: 'b'.repeat(40), targetRef: 'refs/heads/main', commandId: 'landing' } } };
+  const snapshot = { ...sample, installs: [{ ...install, workers: [{ ...worker, human }] }] }, before = JSON.stringify(snapshot);
+  const detail = surface.buildMonitorView(snapshot, locale, true).tabs.workers.flatMap(b => b.kind === 'table' ? b.rows : [])[0]!.detail().flat().map(span => span.text).join('\n');
+  for (const value of ['src/**', 'Checks retain source attribution', 'still pending', 'refs/heads/main', 'frozen-profile', 'high']) expect(detail).toContain(value);
+  expect(detail).toContain(locale === 'en' ? 'CLAIM' : 'İDDİA'); expect(detail).toContain(t('task.acceptance.noChangeProduced', {}, locale));
+  const view = mount({ load: async () => snapshot, locale, columns, rows });
+  try {
+    await until(() => view.stdout.frame.includes(t('monitor.title', {}, locale)), 'loaded Brief frame');
+    await view.press('3'); await view.press(KEY.enter);
+    expect(view.stdout.frame).toContain('Preserve result evidence'); expect(view.stdout.frame).toContain('src/**');
+    let frames = view.stdout.frame;
+    for (let n = 0; n < 8; n++) { await view.press('\u001b[6~'); frames += '\n' + view.stdout.frame; }
+    expect(frames).toContain(locale === 'en' ? 'CLAIM' : 'İDDİA'); expect(frames).toContain('still pending');
+    expect(widest(view.stdout.frame)).toBeLessThanOrEqual(columns); expect(frames).not.toContain('\u001b[');
+    await view.press(KEY.esc); expect(JSON.stringify(snapshot)).toBe(before);
+  } finally { view.instance.unmount(); }
+});

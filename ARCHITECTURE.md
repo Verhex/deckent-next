@@ -5,6 +5,31 @@
 Ortak ürün/geliştirme ölçütü: [.deckent/docs/core-memory/project_product_north_star.md](.deckent/docs/core-memory/project_product_north_star.md).
 Owner 2026-09-21: dar dilimler ürün hedefini küçültmez; mevcut kararlar yeni kanıt olmadan yeniden açılmaz.
 
+## MONITOR-H1B — TaskBrief / ResultBrief and selected artifact reads (2026-10-03; uncommitted lane candidate)
+
+Owner-admitted `lane/monitor-h1b`, base `bf9f2dc5`: `TaskBrief` v1 and `ResultBrief` v1 are read-only projections,
+shared by monitor worker detail and Run inspect. Task text, requested scope/acceptance, pinned profile/model,
+recorded reasoning effort (not proof of CLI application), and explicit frozen context id/version/digest references
+come from the existing Run graph/execution snapshot. Missing legacy fields remain null; no purpose/why is inferred.
+Worker summary, changed-files/checks and open issues remain `CLAIM` / `İDDİA`; host evaluation, including
+ACCEPT-EVIDENCE `no-change-produced`, stays separate. Existing integration/delivery/adoption/rollback receipts
+are labelled Run evidence; an intent is not settlement and a Run receipt alone does not attribute an individual
+worker patch's landing. No new state owner, report requirement or model call is added.
+
+Monitor capture now reads ledger metadata first, admits scopes, selects all observed open workers plus the newest
+20 finished workers, and only then reads their exact-identity transcript/patch/report artifacts under `read-output`.
+First failure/events/host exit sidecars follow the same selection. Off-window attempts retain ledger facts but their
+artifact content/observed exit is not fetched. Run inspect uses an exact Run query and its current bindings;
+revision/layout drift leaves base Brief claims missing. Monitor content preserves denied/missing/unavailable distinctions;
+Run Brief claims remain null when their content cannot be admitted or read.
+The ledger still scans global receipt/delivery metadata; H3/H8b cursor/incremental/push work remains open.
+Author evidence: 31-finished-worker RED read 93 artifacts; selected-read GREEN reads 60. The 8/16-observation,
+1k/10k-history pilot (nine refresh samples per cell/arm) keeps 60 reads but 10k/1k p95 ratios remain 5.72/5.05,
+above the proposed 1.25 threshold. Full statistical/load, Enter and event-to-frame acceptance are unperformed;
+the required targeted suites pass 116 tests with one socket-EPERM case left for the lead.
+Proof and measurement limits: `proof/MONITOR-H1B-2026-10-03/review.md` in the external workspace;
+local author checks, independent review, hosted/live acceptance and event-to-frame latency are separate.
+
 ## MONITOR-H1 — human worker evidence (2026-10-03; source candidate on lane/monitor-h1)
 
 BATCH32-ACCEPT integration candidate (2026-10-03): ACCEPT-EVIDENCE `0b2bd6b7` (Sol review 2319

@@ -1,3 +1,4 @@
+import { projectTaskBrief, projectResultBrief, taskBriefSchema, resultBriefSchema } from './brief.js';
 import { handoffReceiptViewSchema, projectTaskHandoffs } from '#engine/core/handoff-observation/index.js';
 import type { HandoffStartRecord } from '#engine/core/handoff-observation/index.js';
 import { z } from 'zod';
@@ -12,6 +13,7 @@ export const runViewSchema = z.object({
   criteria: z.array(z.object({ id: identitySchema, version: counterSchema.positive(), description: z.string(), evaluator: z.object({ id: identitySchema, version: counterSchema.positive() }).strict().readonly(), fingerprint: z.string().regex(/^[a-f0-9]{64}$/) }).strict().readonly()).readonly(),
   revision: counterSchema, cancellationRequested: z.boolean(), state: runStateSchema,
   tasks: z.array(z.object({
+    taskBrief: taskBriefSchema.optional(), resultBrief: resultBriefSchema.optional(),
     id: identitySchema, kind: identitySchema, dependencies: z.array(identitySchema).readonly(),
     acceptanceCriteria: z.array(identitySchema).readonly(), handoffs: z.array(handoffReceiptViewSchema).readonly().optional(),
     inputs: taskDefinitionSchema.unwrap().shape.inputs,
@@ -32,7 +34,9 @@ export function projectRunView(input: unknown, receipts: readonly HandoffStartRe
     layoutRevision: run.identity.layoutRevision, ...(run.branch ? { branch: { schemaVersion: run.branch.schemaVersion, request: run.branch.request, selectedTaskId: run.branch.selectedTaskId, notSelectedTaskId: run.branch.notSelectedTaskId } } : {}), registryRevision: run.execution.registryRevision,
     criteria: run.graph.criterionDefinitions.map(criterion => ({ id: criterion.id, version: criterion.version, description: criterion.description, evaluator: criterion.evaluator, fingerprint: run.execution.criteria.find(entry => entry.criterionId === criterion.id)!.fingerprint })),
     revision: run.revision, cancellationRequested: run.cancelRequested, state: run.state,
-    tasks: run.graph.tasks.map(task => ({ id: task.id, kind: task.kind, dependencies: taskDependencyIds(task), acceptanceCriteria: [...task.acceptanceCriteria], ...(task.inputs ? { inputs: task.inputs } : {}),
+    tasks: run.graph.tasks.map(task => ({ taskBrief: projectTaskBrief(run, task.id), resultBrief: projectResultBrief(run.bindings.find(binding => binding.identity.taskId === task.id)?.identity.attemptId ?? null,
+      { verdict: progress.get(task.id)!.phase === 'accepted' ? progress.get(task.id)!.acceptedEvidence === 'model-unverified' ? 'accepted-unverified' : 'accepted' : null,
+        ...(progress.get(task.id)!.notAcceptedReason ? { reason: progress.get(task.id)!.notAcceptedReason } : {}) }), id: task.id, kind: task.kind, dependencies: taskDependencyIds(task), acceptanceCriteria: [...task.acceptanceCriteria], ...(task.inputs ? { inputs: task.inputs } : {}),
       profile: { id: run.execution.tasks.find(entry => entry.taskId === task.id)!.profile.id, version: run.execution.tasks.find(entry => entry.taskId === task.id)!.profile.version },
       phase: progress.get(task.id)!.phase,
       ...(projectTaskHandoffs(run, task.id, receipts).length ? { handoffs: projectTaskHandoffs(run, task.id, receipts) } : {}),

@@ -2,7 +2,7 @@ import { t, type Locale } from '#platform/index.js';
 import { resolveWorkerUsage, type MonitorApproval, type MonitorAttempt, type MonitorBlocker, type MonitorDeliveryState, type MonitorInstall, type MonitorPool, type MonitorRun, type MonitorRunState, type MonitorSnapshot, type MonitorTask,
   type MonitorWorker } from '#engine/index.js';
 import { span, type MonitorBlock, type MonitorColumn, type MonitorLine, type MonitorRole, type MonitorRow, type MonitorSpan } from './layout.js';
-import { agoText, blockerLabel, clockText, durationText, expiryText, forText, installStatusLabel, MONITOR_TABS, processLabel, runStateLabel,
+import { deliveryLabel, agoText, blockerLabel, clockText, durationText, expiryText, forText, installStatusLabel, MONITOR_TABS, processLabel, runStateLabel,
   taskPhaseLabel, verdictLabel, workerPhaseLabel, type MonitorTab } from './labels.js';
 import { renderWorkerModelLine } from './worker-model.js';
 import { describeDiagnostics } from './diagnostics.js';
@@ -39,12 +39,7 @@ const observedEnd = (run: MonitorRun) => {
 };
 const DELIVERY_ROLE: Readonly<Record<MonitorDeliveryState, MonitorRole>> = { integrating: 'info', integrated: 'info', delivering: 'info', delivered: 'success',
   adopting: 'info', adopted: 'success', 'rolling-back': 'warning', 'rolled-back': 'warning' };
-function deliveryLabel(state: MonitorDeliveryState, locale: Locale): string {
-  const labels: Record<MonitorDeliveryState, string> = { integrating: t('monitor.delivery.integrating', {}, locale), integrated: t('monitor.delivery.integrated', {}, locale),
-    delivering: t('monitor.delivery.delivering', {}, locale), delivered: t('monitor.delivery.delivered', {}, locale), adopting: t('monitor.delivery.adopting', {}, locale),
-    adopted: t('monitor.delivery.adopted', {}, locale), 'rolling-back': t('monitor.delivery.rollingBack', {}, locale), 'rolled-back': t('monitor.delivery.rolledBack', {}, locale) };
-  return labels[state];
-}
+
 const timeText = (ms: number | null | undefined) => ms === null || ms === undefined ? '—' : clockText(ms).slice(11);
 
 /** `--install` keeps one observed install; `--scope` keeps that scope's Runs, workers and approvals (pools are installation-wide). */

@@ -1,7 +1,7 @@
 import { t, type Locale } from '#platform/index.js';
 import type { WorkerPhase } from '#domain/index.js';
 import type { WorkerProcessState } from '#engine/index.js';
-import type { MonitorBlockerCode, MonitorInstallStatus, MonitorRunState } from '#engine/index.js';
+import type { MonitorDeliveryState, MonitorBlockerCode, MonitorInstallStatus, MonitorRunState } from '#engine/index.js';
 import { phaseLabel } from './transcript.js';
 
 /** Every monitor word comes from the catalogs; the maps keep each key a literal (lint-arch i18n rule). */
@@ -81,4 +81,11 @@ export function tabLabel(tab: MonitorTab, locale: Locale): string {
     workers: t('monitor.tab.workers', {}, locale), approvals: t('monitor.tab.approvals', {}, locale), pools: t('monitor.tab.pools', {}, locale),
     installs: t('monitor.tab.installs', {}, locale), map: t('monitor.tab.map', {}, locale) };
   return labels[tab];
+}
+
+export function deliveryLabel(state: MonitorDeliveryState, locale: Locale): string {
+  const labels: Record<MonitorDeliveryState, string> = { integrating: t('monitor.delivery.integrating', {}, locale), integrated: t('monitor.delivery.integrated', {}, locale),
+    delivering: t('monitor.delivery.delivering', {}, locale), delivered: t('monitor.delivery.delivered', {}, locale), adopting: t('monitor.delivery.adopting', {}, locale),
+    adopted: t('monitor.delivery.adopted', {}, locale), 'rolling-back': t('monitor.delivery.rollingBack', {}, locale), 'rolled-back': t('monitor.delivery.rolledBack', {}, locale) };
+  return labels[state];
 }
