@@ -1448,7 +1448,7 @@ describe.skipIf(process.platform !== 'linux')('composer @file and slash keys thr
       await until(() => view.stdout.text.includes('> /resume'), 'palette');
       await typeInto(view, '\r');
       await until(() => view.stdout.text.includes('> /resume |'), 'completed and waiting');
-      await typeInto(view, '11111111\r');
+      await typeInto(view, '11111111-2222-4333-8444-555555555555\r');
       await until(() => view.stdout.text.includes('RESUMED 2 11111111'), 'resumed with the argument');
       // A fully typed name runs as typed: /resume alone lists the sessions.
       await typeInto(view, '/clear\r');
