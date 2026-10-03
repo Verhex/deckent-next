@@ -1,7 +1,7 @@
 import { mkdtemp, mkdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { FileArtifactStore, openSqliteAttemptStore } from '#adapters/index.js';
 import { TaskEvaluationApplication, TaskHandoffApplication, TaskPatchStartApplication, recordAttemptHandoffStart, readAttemptHandoffEvents,
   HandoffError, recordHandoffRefusal, RunInspectionApplication } from '#engine/index.js';
@@ -14,13 +14,14 @@ const source = { runId: 'r', taskId: 'a', attemptId: 'a1', scopeId: 's', layoutR
 const target = { ...source, taskId: 'b', attemptId: 'b1' };
 const principal = { id: 'evaluator', issuer: 'test', subject: 'subject', assurance: 'os-user' as const, scopeIds: ['s'] };
 const verifier = { async verify() { return principal; } }, authorization = { async authorizeIdentity() {} };
-async function fixture(mode: 'valid' | 'invalid' | 'absent' = 'valid', verdict: 'pass' | 'fail' | 'unknown' = 'pass') {
+async function fixture(mode: 'valid' | 'invalid' | 'absent' = 'valid', verdict: 'pass' | 'fail' | 'unknown' = 'pass', sourceTaskId = 'a') {
+  const source = { runId: 'r', taskId: sourceTaskId, attemptId: 'a1', scopeId: 's', layoutRevision: 'l', generation: 1 };
   const root = await mkdtemp(join(tmpdir(), 'handoff-delivery-')); roots.push(root);
   const store = await openSqliteAttemptStore(join(root, 'ledger.db'), { busyTimeoutMs: 100, journalMode: 'wal', durability: 'full' }, { now: () => 100, timeoutMs: 1000 }, 'allow', custodyProfiles); stores.push(store);
   const actor = { id: principal.id, issuer: principal.issuer, subject: principal.subject };
-  const graph = { schemaVersion: 4 as const, revision: 1, tasks: [{ id: 'a', kind: 'fixture', dependencies: [], acceptanceCriteria: ['verified'] }, { id: 'b', kind: 'fixture', dependencies: ['a'], acceptanceCriteria: ['verified'] }, { id: 'c', kind: 'fixture', dependencies: ['b'], acceptanceCriteria: ['verified'] }], criterionDefinitions: [{ id: 'verified', version: 1, description: 'fixture', evaluator: { id: 'test-evaluator', version: 1 }, parameters: {} }] };
+  const graph = { schemaVersion: 4 as const, revision: 1, tasks: [{ id: source.taskId, kind: 'fixture', dependencies: [], acceptanceCriteria: ['verified'] }, { id: 'b', kind: 'fixture', dependencies: [source.taskId], acceptanceCriteria: ['verified'] }, { id: 'c', kind: 'fixture', dependencies: ['b'], acceptanceCriteria: ['verified'] }], criterionDefinitions: [{ id: 'verified', version: 1, description: 'fixture', evaluator: { id: 'test-evaluator', version: 1 }, parameters: {} }] };
   await store.createExecutionPool({ schemaVersion: 1, poolId: 'p', capacity: { executionSlots: 2, inFlightSlots: 2 } });
-  await store.createRun({ commandId: 'create', actor, identity: { runId: 'r', scopeId: 's', layoutRevision: 'l' }, now: 0, graph, execution: fixtureExecution(graph), policy: { schemaVersion: 2, poolId: 'p', capacity: { executionSlots: 2, inFlightSlots: 2 }, ordering: ['a', 'b', 'c'] } });
+  await store.createRun({ commandId: 'create', actor, identity: { runId: 'r', scopeId: 's', layoutRevision: 'l' }, now: 0, graph, execution: fixtureExecution(graph), policy: { schemaVersion: 2, poolId: 'p', capacity: { executionSlots: 2, inFlightSlots: 2 }, ordering: [source.taskId, 'b', 'c'] } });
   await store.reserveRunTasks({ commandId: 'reserve-a', actor, scopeId: 's', runId: 'r', expectedRevision: 0, now: 0, identities: [source] });
   await mkdir(join(root, 'artifacts'), { mode: 0o700 });
   const artifacts = new FileArtifactStore({ root: join(root, 'artifacts'), maxBytes: 65536 });
@@ -86,4 +87,31 @@ describe('sealed report to accepted dependent', () => {
     expect((await f.store.load('s', 'b1'))!.lastObservation!.result).toEqual({ kind: 'handoff-refused', code: 'HANDOFF_PATCH_UNAPPLICABLE' });
     expect(await readAttemptHandoffEvents(f.store, target)).toBeNull();
   });
+});
+
+it.each(['src\ud800', 'src\udc00'])('refuses an accepted unpaired UTF-16 source %j before artifact writes', async sourceTaskId => {
+  const f = await fixture('valid', 'pass', sourceTaskId), put = vi.fn(f.artifacts.put.bind(f.artifacts));
+  expect(f.evaluation.snapshot.progress[0]).toMatchObject({ taskId: sourceTaskId, phase: 'accepted' });
+  const app = new TaskHandoffApplication(f.store, verifier, authorization, { read: f.artifacts.read.bind(f.artifacts), put }, limits);
+  await expect(app.resolve(target)).rejects.toBeInstanceOf(HandoffError);
+  await expect(app.resolve(target)).rejects.toMatchObject({ code: 'HANDOFF_INVALID' });
+  expect(put).not.toHaveBeenCalled();
+  expect(await f.store.loadBoundDispatch(target)).toBeNull();
+  expect(await readAttemptHandoffEvents(f.store, target)).toBeNull();
+});
+it.each([
+  ['src\ud83d\ude80', 'src%F0%9F%9A%80.json'], ['Türkçe漢', 'T%C3%BCrk%C3%A7e%E6%BC%A2.json'],
+  ["percent%/slash!'()*", 'percent%25%2Fslash%21%27%28%29%2A.json'], ['é'.repeat(41) + 'abcd', '%C3%A9'.repeat(41) + 'abcd.json'],
+])('preserves exact representable source %j and encoded component bytes', async (sourceTaskId, filename) => {
+  const f = await fixture('valid', 'pass', sourceTaskId);
+  const start = await new TaskHandoffApplication(f.store, verifier, authorization, f.artifacts, limits).resolve(target);
+  expect(start.files[0]!.target).toBe('/deckent/inputs/_handoff/' + filename);
+  expect(start.events[0]!.source.taskId).toBe(sourceTaskId);
+  expect(Buffer.byteLength(filename)).toBeLessThanOrEqual(255);
+});
+it('refuses a 256-byte encoded component before writing either note or shared artifact', async () => {
+  const f = await fixture('valid', 'pass', 'é'.repeat(41) + 'abcde'), put = vi.fn(f.artifacts.put.bind(f.artifacts));
+  expect(Buffer.byteLength(encodeURIComponent('é'.repeat(41) + 'abcde') + '.json')).toBe(256);
+  await expect(new TaskHandoffApplication(f.store, verifier, authorization, { read: f.artifacts.read.bind(f.artifacts), put }, limits).resolve(target)).rejects.toMatchObject({ code: 'HANDOFF_INVALID' });
+  expect(put).not.toHaveBeenCalled();
 });

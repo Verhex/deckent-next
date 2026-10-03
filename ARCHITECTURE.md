@@ -2387,6 +2387,16 @@ uses the pool snapshot for both pool capacity/waits/drift and exact accepted han
 the per-call read-only inventory exposes both evidence ports. Monitor retains pool waiting semantics alongside
 handoff receipts. Joint inspection and targeted author proof: `proof/AOF-HANDOFF-2026-10-03/rebase2.md`;
 independent review, socket/Docker host checks, hosted CI and live acceptance remain separate.
+REVIEW 2300 (exact `362e391f`, base `9740baae`) is REVISE. The uncommitted R correction keeps the Linux
+`PATCH_UNSAFE` descriptor-relative floor: portable empty/default, before-digest and source/receipt guards remain
+active, while Linux apply/replay and host Docker variants report typed capability reasons through `verify-not-run`.
+The real snapshot and full retained-lease port refusals are tested with explicit Linux platform-property simulation;
+this proves the capability branch, not native macOS/Windows acceptance. At filename conversion, an unpaired UTF-16
+source task ID throws `HandoffError(HANDOFF_INVALID)` before delivery artifact writes, checkout allocation or dispatch;
+no replacement/normalization or identity/storage migration occurs. Valid Unicode, percent/slash encoding and the
+255-byte encoded component limit remain. Existing refusal custody owns failed Task, dependent skip/park and immutable
+replay/reopen receipts. Source-based author checks passed; three host socket/Docker test files remain environment-blocked.
+Correction proof/limits: `proof/AOF-HANDOFF-2026-10-03/aof-r.md`; exact patch acceptance and hosted CI remain open.
 
 **Worker Event Contract (B09-1, 2026-09-23, ledger v35).** One current schema (`domain/core/worker-event`,
 `schemaVersion` 1; there is no user-selectable variant — a new version replaces the contract with a migration):

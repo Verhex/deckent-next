@@ -60,7 +60,12 @@ export class TaskHandoffApplication {
       notes.push({ source: binding.identity, digest: createHash('sha256').update(bytes).digest('hex'), bytes });
     }
     const prepared = notes.map(note => {
-      const filename = encodeURIComponent(note.source.taskId).replace(/['!()*]/g, char => '%' + char.charCodeAt(0).toString(16).toUpperCase()) + '.json';
+      let filename: string;
+      try { filename = encodeURIComponent(note.source.taskId).replace(/['!()*]/g, char => '%' + char.charCodeAt(0).toString(16).toUpperCase()) + '.json'; }
+      catch (error) {
+        if (error instanceof URIError) throw new HandoffError('HANDOFF_INVALID');
+        throw error;
+      }
       // Linux filesystem component invariant; impossible names refuse before a worker or artifact write.
       if (Buffer.byteLength(filename) > 255) throw new HandoffError('HANDOFF_INVALID');
       return { target: `/deckent/inputs/_handoff/${filename}`, bytes: note.bytes };
