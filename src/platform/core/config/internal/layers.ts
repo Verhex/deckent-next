@@ -6,8 +6,8 @@ import { ENVIRONMENT_KEYS, envValue, type Environment } from '#platform/core/hos
 import { resolveGlobalConfigReadPath } from '#platform/core/host/index.js';
 import { resolveProductLayout, productResourcePath, type ProductLayout, LayoutError } from '#platform/core/host/index.js';
 import { getSystemProfile } from '#platform/core/host/index.js';
-import { digestText, deepMerge, isRecord, readJsonFile, type JsonRecord } from '#platform/core/utils/index.js';
-import { createDefaultConfig } from './defaults.js';
+import { digestText, isRecord, readJsonFile, type JsonRecord } from '#platform/core/utils/index.js';
+import { mergeConfigLayers } from './defaults.js';
 import { CONFIG_ENVIRONMENT_KEYS } from '#platform/core/config-fields/index.js';
 import { CORE_SCHEMA, configSections, configRegistryGeneration, type DeckentConfig } from './schema.js';
 import { versionedConfig } from './validate/version.js';
@@ -102,7 +102,7 @@ export async function loadConfig(projectRoot = process.cwd(), options: ConfigLoa
   assertConfigSecretPolicies(global, resolveLocale(undefined, env));
   assertConfigSecretPolicies(normalizedProject, resolveLocale(undefined, env));
   for (const [name, section] of configSections()) section.options.validateLayers?.(global[name], normalizedProject[name]);
-  const layered = deepMerge(deepMerge(createDefaultConfig(), global), normalizedProject);
+  const layered = mergeConfigLayers(global, normalizedProject);
   const effective = applyConfigEnvironment(layered, env);
   const locale: Locale = resolveLocale(undefined, env, effective.language);
   const checked = validateConfig(effective, locale);

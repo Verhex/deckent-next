@@ -13,7 +13,9 @@ export class RuntimeServiceLifecycleError extends Error {
 export class RuntimeServiceLifecycle {
   private readonly maxConcurrentRequests: number;
   private readonly maxConcurrentExecutions: number;
+  private requests = 0;
   private executions = 0;
+  private readonly executionWaiters: (() => void)[] = [];
   private readonly active = new Set<Promise<void>>();
   private accepting = true;
   private stopping: Promise<RuntimeServiceDrainResult> | null = null;
@@ -28,10 +30,33 @@ export class RuntimeServiceLifecycle {
   }
   admit<T>(operation: () => Promise<T> | T, workClass: RuntimeServiceWorkClass = 'control'): Promise<T> {
     if (!this.accepting) throw new RuntimeServiceLifecycleError('RUNTIME_SERVICE_STOPPING');
-    if (this.active.size >= this.maxConcurrentRequests || (workClass === 'execution' && this.executions >= this.maxConcurrentExecutions)) throw new RuntimeServiceLifecycleError('RUNTIME_SERVICE_BUSY');
+    if (this.requests >= this.maxConcurrentRequests || (workClass === 'execution' && this.executions >= this.maxConcurrentExecutions)) throw new RuntimeServiceLifecycleError('RUNTIME_SERVICE_BUSY');
+    this.requests++;
     if (workClass === 'execution') this.executions++;
     const result = Promise.resolve().then(operation);
-    const tracked = result.then(() => undefined, () => undefined).finally(() => { this.active.delete(tracked); if (workClass === 'execution') this.executions--; });
+    return this.track(result, true, workClass === 'execution');
+  }
+  /** Internal Run turns are bounded by the runtime's Run/attempt concurrency. Reserved attempts wait for
+   * a shared execution slot; transport requests retain their independent refusal/capacity contract. */
+  admitExecution<T>(operation: () => Promise<T> | T, onSlotWait?: (waitedForSlotMs: number) => void): Promise<T> {
+    if (!this.accepting) throw new RuntimeServiceLifecycleError('RUNTIME_SERVICE_STOPPING');
+    let slot: Promise<void> | undefined;
+    if (this.executions < this.maxConcurrentExecutions) this.executions++;
+    else slot = new Promise<void>(resolve => { this.executionWaiters.push(resolve); });
+    const waitingSince = slot ? performance.now() : undefined;
+    const result = slot ? slot.then(() => { onSlotWait?.(performance.now() - waitingSince!); return operation(); }) : Promise.resolve().then(operation);
+    return this.track(result, false, true);
+  }
+  private track<T>(result: Promise<T>, request: boolean, execution: boolean): Promise<T> {
+    const tracked = result.then(() => undefined, () => undefined).finally(() => {
+      this.active.delete(tracked);
+      if (request) this.requests--;
+      if (execution) {
+        const next = this.executionWaiters.shift();
+        // Transfer the occupied slot directly: a new admission cannot bypass an existing waiter.
+        if (next) next(); else this.executions--;
+      }
+    });
     this.active.add(tracked);
     return result;
   }

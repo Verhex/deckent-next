@@ -12,16 +12,16 @@ const roots: string[] = [], stores: SqliteAttemptStore[] = [];
 afterEach(async () => { stores.splice(0).forEach(store => store.close()); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 const actor = { id: 'operator', issuer: 'test', subject: 'operator' };
 const query = { schemaVersion: 1 as const, scopeId: 's', runId: 'r' };
-async function fixture(verdict: 'pass' | 'unknown' = 'pass', dependencies = ['a', 'b']) {
+async function fixture(verdict: 'pass' | 'unknown' = 'pass', dependencies = ['a', 'b'], tasks = ['a', 'b', 'c'], capacitySlots = 2) {
   const root = await mkdtemp(join(tmpdir(), 'deckent-progression-')); roots.push(root);
   const path = join(root, 'ledger.db');
   const store = await openSqliteAttemptStore(path, { busyTimeoutMs: 100, journalMode: 'wal', durability: 'full' }, { now: Date.now, timeoutMs: 86400000 }, 'allow', custodyProfiles); stores.push(store);
-  const graph = { schemaVersion: 2 as const, revision: 1, tasks: ['a', 'b', 'c'].map(id => ({ id, kind: 'fixture', dependencies: id === 'c' ? dependencies : [], acceptanceCriteria: ['verified'] })),
+  const graph = { schemaVersion: 2 as const, revision: 1, tasks: tasks.map(id => ({ id, kind: 'fixture', dependencies: id === 'c' ? dependencies : [], acceptanceCriteria: ['verified'] })),
     criterionDefinitions: [{ id: 'verified', version: 1, description: 'fixture', evaluator: { id: 'test', version: 1 }, parameters: {} }] };
-  const capacity = { executionSlots: 2, inFlightSlots: 2 };
+  const capacity = { executionSlots: capacitySlots, inFlightSlots: capacitySlots };
   await store.createExecutionPool({ schemaVersion: 1, poolId: 'p', capacity });
   await store.createRun({ commandId: 'create', actor, identity: { scopeId: 's', runId: 'r', layoutRevision: 'layout' },
-    graph, execution: fixtureExecution(graph), now: 0, policy: { schemaVersion: 2, poolId: 'p', capacity, ordering: ['a', 'b', 'c'] } });
+    graph, execution: fixtureExecution(graph), now: 0, policy: { schemaVersion: 2, poolId: 'p', capacity, ordering: tasks } });
   let sequence = 0, active = 0, maximum = 0, evaluations = 0;
   const id = () => `id-${++sequence}`;
   const reservation = new RunReservationApplication(store, { async verify() { return { ...actor, assurance: 'os-user', scopeIds: ['s'] }; } },
@@ -77,7 +77,10 @@ it('leaves recorded work untouched when stopped or cancelled and propagates poli
   f.operations.reserve = async () => { throw new Error('POLICY_DENIED'); };
   await expect(f.turn.advance(query, new AbortController().signal)).rejects.toThrow('POLICY_DENIED'); f.operations.reserve = original;
   await f.store.cancelRun({ scopeId: 's', runId: 'r', commandId: 'cancel', actor, expectedRevision: 0 });
-  expect((await f.turn.advance(query, new AbortController().signal)).stopped).toBe(true);
+  const execute = vi.spyOn(f.operations, 'execute'), reserve = vi.spyOn(f.operations, 'reserve');
+  const cancelled = await f.turn.advance(query, new AbortController().signal);
+  expect(cancelled.stopped).toBe(true); expect(cancelled.attempted).toBe(0);
+  expect(execute).not.toHaveBeenCalled(); expect(reserve).not.toHaveBeenCalled();
 });
 
 it('honors cancellation recorded during execution without evaluating or undoing observed work', async () => {
@@ -243,4 +246,67 @@ it('reports a due expiry denial for one Run while another Run reserves and execu
   expect(errors).toEqual([{ request: { scopeId: 's', runId: 'r' }, error: expect.objectContaining({ code: 'POLICY_DENIED' }) }]);
   expect(await f.store.loadRun('s', 'r')).toEqual(due);
   expect((await f.store.loadRun('s', 'ready'))?.bindings).toHaveLength(2);
+});
+
+
+it.each([1, 2])('overlaps two real single-task Run executions only up to maxConcurrentRuns=%s', async bound => {
+  vi.useFakeTimers();
+  const f = await fixture('pass', [], ['a']), controller = new AbortController();
+  const initial = (await f.store.loadRun('s', 'r'))!;
+  await f.store.createRun({ commandId: 'create-concurrent', actor, identity: { ...initial.identity, runId: 'second' },
+    graph: initial.graph, execution: initial.execution, now: 0, policy: { schemaVersion: 2, poolId: 'p', capacity: { executionSlots: 2, inFlightSlots: 2 }, ordering: ['a'] } });
+  f.operations.read = async request => (await f.store.loadRun(request.scopeId, request.runId))!;
+  const execute = f.operations.execute, releases = new Map<string, () => void>(), starts: string[] = [], completions: string[] = [];
+  let active = 0, maximum = 0;
+  f.operations.execute = async identity => {
+    starts.push(identity.runId); active++; maximum = Math.max(maximum, active);
+    await new Promise<void>(resolve => releases.set(identity.runId, resolve));
+    await execute(identity); active--;
+  };
+  const loop = new RunLifecycleRuntimeLoop({
+    async discover(after) { return { page: await f.store.listRunProgression({ actor, after, limit: 8 }), due: { items: [], next: null } }; },
+    async expire() {}, advance: (request, signal) => f.turn.advance({ schemaVersion: 1, ...request }, signal),
+  }, { onRun(request) { completions.push(request.runId); if (completions.length === 2) controller.abort(); } },
+  { pollIntervalMs: 10, failureBackoffMs: 100, maxConcurrentRuns: bound });
+  const work = loop.run(controller.signal);
+  try {
+    await vi.advanceTimersByTimeAsync(10);
+    expect(starts).toEqual(bound === 2 ? ['r', 'second'] : ['r']);
+    expect(maximum).toBe(bound);
+    releases.get('r')!();
+    await vi.advanceTimersByTimeAsync(10);
+    expect(starts).toEqual(['r', 'second']);
+    releases.get('second')!();
+    await vi.advanceTimersByTimeAsync(10);
+    await work;
+    expect(completions).toEqual(['r', 'second']);
+    expect((await f.store.loadRun('s', 'r'))!.progress[0]!.phase).toBe('accepted');
+    expect((await f.store.loadRun('s', 'second'))!.progress[0]!.phase).toBe('accepted');
+  } finally { controller.abort(); releases.forEach(release => release()); await work; vi.useRealTimers(); }
+});
+
+
+it('fills all eight free pool slots with eight independent single-task Run executions', async () => {
+  vi.useFakeTimers(); const f = await fixture('pass', [], ['a'], 8), controller = new AbortController();
+  const initial = (await f.store.loadRun('s', 'r'))!, ids = ['r', ...Array.from({ length: 7 }, (_, index) => `r-${index}`)];
+  for (const runId of ids.slice(1)) await f.store.createRun({ commandId: `create-${runId}`, actor, identity: { ...initial.identity, runId },
+    graph: initial.graph, execution: initial.execution, now: 0,
+    policy: { schemaVersion: 2, poolId: 'p', capacity: { executionSlots: 8, inFlightSlots: 8 }, ordering: ['a'] } });
+  f.operations.read = async request => (await f.store.loadRun(request.scopeId, request.runId))!;
+  let release!: () => void; const gate = new Promise<void>(resolve => { release = resolve; }), execute = f.operations.execute;
+  const started: string[] = [], observed: string[] = [];
+  f.operations.execute = async identity => { started.push(identity.runId); await gate; await execute(identity); };
+  const loop = new RunLifecycleRuntimeLoop({
+    async discover(after) { return { page: await f.store.listRunProgression({ actor, after, limit: 8 }), due: { items: [], next: null } }; },
+    async expire() {}, advance: (request, signal) => f.turn.advance({ schemaVersion: 1, ...request }, signal),
+  }, { onRun(request) { observed.push(request.runId); if (observed.length === 8) controller.abort(); } },
+  { pollIntervalMs: 10, failureBackoffMs: 100, maxConcurrentRuns: 8 });
+  const work = loop.run(controller.signal);
+  try {
+    await vi.advanceTimersByTimeAsync(10); expect([...started].sort()).toEqual([...ids].sort());
+    expect((await f.store.readPoolHold('p')).occupancy).toEqual({ execution: 8, inFlight: 8 });
+    release(); await vi.advanceTimersByTimeAsync(10); await work;
+    expect([...observed].sort()).toEqual([...ids].sort());
+    for (const runId of ids) expect((await f.store.loadRun('s', runId))!.progress[0]!.phase).toBe('accepted');
+  } finally { controller.abort(); release(); await work; vi.useRealTimers(); }
 });

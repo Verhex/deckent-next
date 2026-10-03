@@ -75,6 +75,7 @@
   "reconciliationRuntime": null,
   "runRuntime": {
     "failureBackoffMs": 5000,
+    "maxConcurrentRuns": 8,
     "maxReservationsPerTurn": 4,
     "pageSize": 64,
     "parking": {

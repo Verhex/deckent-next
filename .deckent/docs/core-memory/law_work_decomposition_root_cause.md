@@ -8,3 +8,11 @@ Arızanın nedeni, başarısız varsayım ve tekrarı önleyen mekanizma belirle
 Owner 2026-10-02 — **hız ve güvenlik ihlal edilemez:** kontrol yolu milisaniyelerde ilerler; insan ya da ajan hiçbir zaman kopuk, sahipsiz ya da süresiz beklemeye girmez — her beklemenin sahibi, görünür durumu, zaman aşımı ve sonraki eylemi vardır. Hız için güvenlik tabanı gevşetilmez; güvenlik için de asenkron ya da önceden hesaplanabilecek bir adım bloklayıcı yapılmaz. Kontrol yolunda yoklama yerine olay/push tercih edilir. Hedefler ölçülene kadar "hedef, ölçülmedi" etiketi taşır (olay → insan yüzeyi 500 ms p95, owner 2026-10-03); ölçülmüş eski davranış negatif test olur. Kaynak → neden → düzeltme → kanıt: legacy deterministik ama yavaştı (dakika ölçeğinde bekleme, 10 sn onay duyurusu, 2 sn tam tarama) → bekleme sahipsizliği ve yoklama → tipli, sahipli, süreli beklemeler ve push → ARCHITECTURE karar günlüğü 2026-10-02, Dalga 6 C18 (`proof/WAVE6-2026-10-03/`).
 
 Legacy dersler: tekrar eden sprint-fix döngüleri semptom yamalarının ve eksik kabul kanıtının sonucuydu; ağır task paketleri ve sabit 3–5 task planlayıcı throughput'u düşürdü.
+
+
+RUN-PROGRESSION-CONCURRENT (owner 2026-10-03; kaynak adayı, canlı kabulü değil): Run içi paralellik bağımsız Run ilerlemesini
+kanıtlamaz. N1'de boş havuz slotları varken Run turunu await eden sayfa döngüsü seri çalışmayı korumuştu. Düzeltme iki ayrı
+sınır taşır: `runRuntime.maxConcurrentRuns` etkin servis yürütme tavanından varsayılanını alır; servis FIFO yürütme kapısı
+havuzun rezervasyon sınırından ayrıdır. Aynı scope/Run turu yoklamalar arasında tek sahipte kalır; kapanış bekleyen ve çalışan
+işi drain eder. Kısmi hata başka Run'ı backoff'a sokmaz. Kontrollü sekiz-slot testi native worker/N1 kabulünün yerine geçmez;
+kanıt ve açık yerel native sınırı dış `proof/RUN-PROGRESSION-CONCURRENT-2026-10-03/review.md` dosyasındadır.

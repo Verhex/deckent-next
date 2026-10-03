@@ -1,4 +1,4 @@
-import { expect, it } from 'vitest';
+import { expect, it, vi } from 'vitest';
 import { RuntimeServiceLifecycle, RuntimeServiceLifecycleError } from '#engine/core/runtime/index.js';
 
 function deferred<T>() { let resolve!: (value: T) => void; const promise = new Promise<T>(value => { resolve = value; }); return { promise, resolve }; }
@@ -103,4 +103,111 @@ it('reserves a bounded execution lane while admitting control until the total ca
   expect(() => lifecycle.admit(() => undefined, 'control')).toThrow('RUNTIME_SERVICE_BUSY');
   execution.resolve(); control.resolve(); await Promise.all([running, cancellation]);
   await expect(lifecycle.admit(() => { throw new Error('released'); }, 'execution')).rejects.toThrow('released');
+});
+
+it('executes independent admitted work up to the execution bound and grants waiting slots in order', async () => {
+  const gates = Array.from({ length: 5 }, () => deferred<void>()); const started: number[] = [];
+  let active = 0; let peak = 0;
+  const lifecycle = new RuntimeServiceLifecycle({ maxConcurrentRequests: 3, maxConcurrentExecutions: 2 }, () => {}, deadline().value);
+  const operations = gates.map((gate, index) => lifecycle.admitExecution(async () => {
+    started.push(index); active++; peak = Math.max(peak, active); await gate.promise; active--;
+  }));
+  await new Promise<void>(resolve => setImmediate(resolve));
+  expect(started).toEqual([0, 1]); expect(peak).toBe(2);
+  gates[1]!.resolve(); await operations[1];
+  await new Promise<void>(resolve => setImmediate(resolve)); expect(started).toEqual([0, 1, 2]);
+  gates[0]!.resolve(); await operations[0];
+  await new Promise<void>(resolve => setImmediate(resolve)); expect(started).toEqual([0, 1, 2, 3]);
+  gates[2]!.resolve(); await operations[2];
+  await new Promise<void>(resolve => setImmediate(resolve)); expect(started).toEqual([0, 1, 2, 3, 4]);
+  gates[3]!.resolve(); gates[4]!.resolve(); await Promise.all(operations); expect(peak).toBe(2);
+});
+
+it('drains active and slot-waiting executions during shutdown before finalizing', async () => {
+  const first = deferred<void>(); const second = deferred<void>(); const entered = deferred<void>(); let finalized = 0;
+  const lifecycle = new RuntimeServiceLifecycle({ maxConcurrentRequests: 2, maxConcurrentExecutions: 1 }, () => {}, deadline().value);
+  const running = lifecycle.admit(() => first.promise, 'execution');
+  const queued = lifecycle.admitExecution(() => { entered.resolve(); return second.promise; });
+  const stopping = lifecycle.stop(25, () => { finalized++; });
+  await new Promise<void>(resolve => setImmediate(resolve)); expect(finalized).toBe(0);
+  first.resolve(); await running; await entered.promise; expect(finalized).toBe(0);
+  let settled = false; void lifecycle.whenSettled().then(() => { settled = true; });
+  await new Promise<void>(resolve => setImmediate(resolve)); expect(settled).toBe(false);
+  expect(() => lifecycle.admit(() => undefined, 'execution')).toThrow('RUNTIME_SERVICE_STOPPING');
+  expect(() => lifecycle.admitExecution(() => undefined)).toThrow('RUNTIME_SERVICE_STOPPING');
+  second.resolve(); await queued;
+  await expect(stopping).resolves.toEqual({ state: 'clean', remainingRequests: 0, recoveryPending: false }); expect(finalized).toBe(1);
+});
+
+it('reports all queued executions when grace expires and later settles without discarding them', async () => {
+  const timer = deadline(); const first = deferred<void>(); const second = deferred<void>(); let started = 0;
+  const lifecycle = new RuntimeServiceLifecycle({ maxConcurrentRequests: 2, maxConcurrentExecutions: 1 }, () => {}, timer.value);
+  const operations = [lifecycle.admit(() => { started++; return first.promise; }, 'execution'),
+    lifecycle.admitExecution(() => { started++; return second.promise; })];
+  const stopping = lifecycle.stop(25); await new Promise<void>(resolve => setImmediate(resolve)); timer.waits[0]!.release();
+  await expect(stopping).resolves.toEqual({ state: 'incomplete', remainingRequests: 2, recoveryPending: false }); expect(started).toBe(1);
+  first.resolve(); await operations[0]; await new Promise<void>(resolve => setImmediate(resolve)); expect(started).toBe(2);
+  second.resolve(); await Promise.all(operations); await lifecycle.whenSettled();
+});
+
+it('releases an execution slot after a throwing operation so a queued operation still runs', async () => {
+  const gate = deferred<void>(); const started: number[] = [];
+  const lifecycle = new RuntimeServiceLifecycle({ maxConcurrentRequests: 2, maxConcurrentExecutions: 1 }, () => {}, deadline().value);
+  const failure = lifecycle.admit(async () => { started.push(1); await gate.promise; throw new Error('execution-failed'); }, 'execution');
+  const observedFailure = expect(failure).rejects.toThrow('execution-failed');
+  const queued = lifecycle.admitExecution(() => { started.push(2); });
+  await new Promise<void>(resolve => setImmediate(resolve)); expect(started).toEqual([1]);
+  gate.resolve(); await observedFailure; await queued; expect(started).toEqual([1, 2]);
+  await expect(lifecycle.stop(25)).resolves.toMatchObject({ state: 'clean' });
+});
+
+it('keeps the transport request budget and control access independent of internal execution waiters', async () => {
+  const execution = deferred<void>(); const control = deferred<void>();
+  const lifecycle = new RuntimeServiceLifecycle({ maxConcurrentRequests: 2, maxConcurrentExecutions: 1 }, () => {}, deadline().value);
+  const internal = Array.from({ length: 4 }, () => lifecycle.admitExecution(() => execution.promise));
+  expect(() => lifecycle.admit(() => undefined, 'execution')).toThrow('RUNTIME_SERVICE_BUSY');
+  const controls = [lifecycle.admit(() => control.promise), lifecycle.admit(() => control.promise)];
+  expect(() => lifecycle.admit(() => undefined)).toThrow('RUNTIME_SERVICE_BUSY');
+  control.resolve(); execution.resolve(); await Promise.all([...controls, ...internal]);
+  await expect(lifecycle.stop(25)).resolves.toMatchObject({ state: 'clean' });
+});
+
+it('reports monotonic slot wait only for an execution that actually queued', async () => {
+  const gate = deferred<void>(); const immediate = vi.fn(); const waited = vi.fn();
+  const clock = vi.spyOn(performance, 'now').mockReturnValue(10);
+  try {
+    const lifecycle = new RuntimeServiceLifecycle({ maxConcurrentRequests: 2, maxConcurrentExecutions: 1 }, () => {}, deadline().value);
+    const running = lifecycle.admitExecution(() => gate.promise, immediate);
+    const queued = lifecycle.admitExecution(() => undefined, waited);
+    await new Promise<void>(resolve => setImmediate(resolve)); expect(immediate).not.toHaveBeenCalled(); expect(waited).not.toHaveBeenCalled();
+    clock.mockReturnValue(35); gate.resolve(); await running; await queued;
+    expect(immediate).not.toHaveBeenCalled(); expect(waited).toHaveBeenCalledExactlyOnceWith(25);
+  } finally { clock.mockRestore(); }
+});
+
+it('releases a granted slot when its wait observer throws and drains the next waiter', async () => {
+  const gate = deferred<void>(); let executed = 0;
+  const lifecycle = new RuntimeServiceLifecycle({ maxConcurrentRequests: 2, maxConcurrentExecutions: 1 }, () => {}, deadline().value);
+  const running = lifecycle.admitExecution(() => gate.promise);
+  const failure = lifecycle.admitExecution(() => { executed++; }, () => { throw new Error('wait-observer-failed'); });
+  const observedFailure = expect(failure).rejects.toThrow('wait-observer-failed');
+  const queued = lifecycle.admitExecution(() => { executed++; });
+  gate.resolve(); await running; await observedFailure; await queued; expect(executed).toBe(1);
+  await expect(lifecycle.stop(25)).resolves.toMatchObject({ state: 'clean' });
+});
+
+
+it.each([1, 2, 8])('uses every configured execution slot without exceeding cap=%s', async cap => {
+  const gates = Array.from({ length: cap + 1 }, () => deferred<void>()), starts: number[] = [];
+  let active = 0, peak = 0;
+  const lifecycle = new RuntimeServiceLifecycle({ maxConcurrentRequests: cap + 1, maxConcurrentExecutions: cap }, () => {}, deadline().value);
+  const operations = gates.map((gate, index) => lifecycle.admitExecution(async () => {
+    starts.push(index); active++; peak = Math.max(peak, active); await gate.promise; active--;
+  }));
+  await new Promise<void>(resolve => setImmediate(resolve));
+  expect(starts).toEqual(Array.from({ length: cap }, (_, index) => index)); expect(peak).toBe(cap);
+  gates[0]!.resolve(); await operations[0]; await new Promise<void>(resolve => setImmediate(resolve));
+  expect(starts).toHaveLength(cap + 1); expect(peak).toBe(cap);
+  gates.forEach(gate => gate.resolve()); await Promise.all(operations);
+  await expect(lifecycle.stop(25)).resolves.toMatchObject({ state: 'clean' });
 });

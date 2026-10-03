@@ -14,7 +14,7 @@ export interface MonitorService {
   readonly build: MonitorBuild | null;
 }
 /** Why a non-terminal Run is not progressing; `none` only when it is progressing normally. */
-export type MonitorBlockerCode = 'parked' | 'awaiting-decision' | 'none' | 'waiting-pool-slot' | 'pool-held' | 'waiting-dependency' | 'awaiting-approval'
+export type MonitorBlockerCode = 'parked' | 'awaiting-decision' | 'none' | 'waiting-pool-slot' | 'waiting-execution-slot' | 'pool-held' | 'waiting-dependency' | 'awaiting-approval'
   | 'worker-running' | 'worker-stale-heartbeat' | 'worker-exited-unevaluated' | 'evaluation-not-ready' | 'evaluation-unknown'
   | 'unresolved-effect' | 'cancellation-pending' | 'not-admitted' | 'unknown';
 export interface MonitorBlocker {

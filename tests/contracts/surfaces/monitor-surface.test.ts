@@ -21,6 +21,20 @@ afterEach(async () => { clearConfigCache(); await Promise.all(roots.splice(0).ma
 const widest = (text: string) => Math.max(...text.split('\n').map(line => cells(line)));
 
 describe('monitor text snapshot', () => {
+  for (const [locale, label] of [['en', 'waiting for an execution slot'], ['tr', 'yürütme için yer bekliyor']] as const) {
+    it(`renders reserved work awaiting execution in text and fullscreen (${locale})`, () => {
+      const run = { ...fullSnapshot.installs[0]!.runs[0]!, runId: 'run-execution-wait', state: 'waiting' as const,
+        blocker: { code: 'waiting-execution-slot' as const, taskId: 'build', sinceMs: OBSERVED_AT - 60_000, detail: 'dispatch-pending' },
+        tasks: [{ ...fullSnapshot.installs[0]!.runs[0]!.tasks[0]!, phase: 'active',
+          lastAttempt: { ...fullSnapshot.installs[0]!.runs[0]!.tasks[0]!.lastAttempt!, launch: null, startedAtMs: null } }] };
+      const snapshot = { ...emptySnapshot, installs: [{ ...emptySnapshot.installs[0]!, runs: [run] }] };
+      expect(surface.renderMonitorText(snapshot, { locale, width: 200, ascii: true })).toContain(label);
+      const view = surface.buildMonitorView(snapshot, locale, true);
+      const summary = view.tabs.summary.filter(block => block.kind === 'table').flatMap(block => block.rows);
+      expect(summary.flatMap(row => row.cells.map(cell => cell.text)).join(' ')).toContain(label);
+      expect(summary.map(row => row.cells[0]!.text)).toContain('run-execution-wait');
+    });
+  }
   for (const locale of ['en', 'tr'] as const) for (const width of [120, 80, 60]) {
     it(`renders every section of the full fixture (${locale}, ${width} columns) without overflow`, async () => {
       const text = surface.renderMonitorText(fullSnapshot, { locale, width, ascii: false });

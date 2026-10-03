@@ -35,6 +35,7 @@ export function runStateLabel(state: MonitorRunState, locale: Locale): string {
 export function blockerLabel(code: MonitorBlockerCode, locale: Locale): string {
   const labels: Record<MonitorBlockerCode, string> = { parked: t('monitor.blocker.parked', {}, locale), 'awaiting-decision': t('monitor.blocker.awaitingDecision', {}, locale),
     none: t('monitor.blocker.none', {}, locale), 'waiting-pool-slot': t('monitor.blocker.waitingPoolSlot', {}, locale),
+    'waiting-execution-slot': t('monitor.blocker.waitingExecutionSlot', {}, locale),
     'pool-held': t('monitor.blocker.poolHeld', {}, locale), 'waiting-dependency': t('monitor.blocker.waitingDependency', {}, locale),
     'awaiting-approval': t('monitor.blocker.awaitingApproval', {}, locale), 'worker-running': t('monitor.blocker.workerRunning', {}, locale),
     'worker-stale-heartbeat': t('monitor.blocker.workerStaleHeartbeat', {}, locale),

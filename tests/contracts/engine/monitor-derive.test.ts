@@ -128,13 +128,23 @@ describe('monitor run blocker and state derivation (pure)', () => {
     const failed = evidence(snapshot([{ id: 'a', phase: 'failed' }, { id: 'b', deps: ['a'] }]));
     expect(blocker(failed)).toEqual({ code: 'waiting-dependency', taskId: 'b', sinceMs: null, detail: 'a' }); expect(state(failed)).toBe('blocked');
   });
-  it('none while work progresses normally: reservation, dispatch and launch pending (since = reservation)', () => {
+  it('waiting-execution-slot derives reserved work awaiting dispatch, without claiming an observed gate wait', () => {
+    const value = evidence(snapshot([{ id: 'a', phase: 'active' }]), [attempt('a', { dispatch: null })]);
+    expect(blocker(value)).toEqual({ code: 'waiting-execution-slot', taskId: 'a', sinceMs: 100, detail: 'dispatch-pending' });
+    expect(state(value)).toBe('waiting');
+    expect(projectMonitorRun(value).tasks[0]!.lastAttempt).toMatchObject({ launch: null, startedAtMs: null });
+    expect(blocker({ ...value, run: { ...value.run, admitted: false } }))
+      .toEqual({ code: 'not-admitted', taskId: 'a', sinceMs: 50, detail: null });
+    expect(blocker({ ...value, run: { ...value.run, admitted: null } }))
+      .toEqual({ code: 'none', taskId: 'a', sinceMs: 100, detail: 'dispatch-pending' });
+    expect(blocker({ ...value, run: { ...value.run, snapshot: { ...value.run.snapshot, cancelRequested: true } } })?.code).toBe('cancellation-pending');
+    expect(blocker(evidence(snapshot([{ id: 'a', phase: 'active' }]), [attempt('a', { dispatch: null, reservedAtMs: null })]))?.sinceMs).toBeNull();
+  });
+  it('none while work progresses normally: reservation and launch pending (since = reservation)', () => {
     const ready = evidence(snapshot([{ id: 'a' }]));
     expect(blocker(ready)).toEqual({ code: 'none', taskId: 'a', sinceMs: null, detail: 'reservation-pending' }); expect(state(ready)).toBe('progressing');
-    expect(blocker(evidence(snapshot([{ id: 'a', phase: 'active' }]), [attempt('a', { dispatch: null })])))
-      .toEqual({ code: 'none', taskId: 'a', sinceMs: 100, detail: 'dispatch-pending' });
-    expect(blocker(evidence(snapshot([{ id: 'a', phase: 'active' }]), [attempt('a', { dispatch: { launch: 'pending', grantedAtMs: null, terminal: null, outputRecorded: false } })]))?.detail)
-      .toBe('launch-pending');
+    expect(blocker(evidence(snapshot([{ id: 'a', phase: 'active' }]), [attempt('a', { dispatch: { launch: 'pending', grantedAtMs: null, terminal: null, outputRecorded: false } })])))
+      .toEqual({ code: 'none', taskId: 'a', sinceMs: 100, detail: 'launch-pending' });
     expect(blocker(evidence(snapshot([{ id: 'a', notBefore: NOW + 10 }])))).toEqual({ code: 'none', taskId: 'a', sinceMs: null, detail: 'not-before' });
   });
   it('precedence: human/repair blockers outrank progress; ties keep graph order', () => {

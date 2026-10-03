@@ -628,7 +628,7 @@
   "config.field.cancellationRuntime": "Otomatik iptal kurtarma kapsamları, tarama aralığı ve hata sonrası bekleme süresi",
   "config.field.reconciliationRuntime": "Otomatik uzlaştırma kapsamları, sayfa boyutu, eşzamanlılık, tarama ve hata sonrası bekleme",
   "config.field.installation": "Kurulum girdi sınırları",
-  "config.field.runRuntime": "Kabul edilen Run otomatik ilerleme taraması, sayfa boyutu, tur başına rezervasyon bütçesi, hata sonrası bekleme ve sürümlü Run/görev park zaman aşımı",
+  "config.field.runRuntime": "Kabul edilen Run otomatik ilerleme taraması, sayfa boyutu, azami eşzamanlı Run sayısı (varsayılanı etkin servis yürütme tavanı), tur başına rezervasyon bütçesi, hata sonrası bekleme ve sürümlü Run/görev park zaman aşımı",
   "cli.runtime.runProgression": "Run {runId}: {count} deneme ilerletildi",
   "cli.runtime.runProgressionFailed": "Run ilerlemesi sürdürülemedi: {code}",
   "config.field.approvals": "Onay ve canlı oturum ayarları",

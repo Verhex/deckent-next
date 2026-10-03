@@ -323,6 +323,7 @@
   "monitor.state.cancelled": "iptal edildi",
   "monitor.blocker.none": "normal ilerliyor",
   "monitor.blocker.waitingPoolSlot": "havuzda yer bekliyor",
+  "monitor.blocker.waitingExecutionSlot": "yürütme için yer bekliyor",
   "monitor.blocker.poolHeld": "havuz bekletiliyor",
   "monitor.blocker.waitingDependency": "bağımlılığını bekliyor",
   "monitor.blocker.awaitingApproval": "onay bekliyor",
