@@ -1468,6 +1468,20 @@ model announcement (no refresh mechanism yet). Not yet: SSE byte/token metering 
 the owner's first billed smoke call (Opus 5.5 `effort`, Sonnet 5.5 `between_tools`), tariff rows for legacy models, a neutral
 `reasoning: {mode, effort}` (P2).
 
+HARDCODE-P1-B (source candidate, owner D4 2026-10-03): `models.json` schema 2 owns the top-level effort vocabulary
+in declared ascending order and Anthropic `metering.promptOverheadTokens` / `thinkingBudgetMinTokens`.
+The adapter derives its runtime enum/rank from this vocabulary; model levels must be a strictly ascending subset,
+with a declared default and any off ceiling in the vocabulary. Runtime admission still checks the pinned row;
+TypeScript effort strings no longer encode a second closed vocabulary. Missing parameters and old asset versions
+throw typed `ZodError` at module load; no silent defaults. Positive safe integers and schema/order constraints remain code.
+The shipped vocabulary, 2048 local prompt reservation allowance and 1024 manual-thinking minimum are preserved.
+The minimum/effort sources were verified 2026-10-03; model rows retain their 2026-09-29 snapshot as the asset note states.
+OpenAI-chat owns `internal/metering.json` schema 1: request/message/tool estimate overheads 64/16/32,
+validated once at load and read by its existing UTF-8-byte estimate. These overheads are local estimate policy,
+not vendor-count guarantees; the provider counter remains the separate counting path when available. No config, ledger,
+provider protocol or public surface is added. Proof: `proof/HARDCODE-P1-B-2026-10-03/`; independent review and landing remain open.
+
+
 **Sandbox scan speed (SANDBOX-SPEED G2, seventh batch).** Both realms' scans pick their reads per directory by `statfs`: synchronous on
 a local file system, asynchronous elsewhere (`fs-ops`); the verdict is re-read on every call and does not depend on the read flavour
 (Astra 2158 holds). The deny matcher answers the shapes the deny list is made of — `**/<segment glob>`, a literal, a literal head with one

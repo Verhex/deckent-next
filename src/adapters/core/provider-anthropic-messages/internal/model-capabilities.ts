@@ -1,29 +1,43 @@
 import { z } from 'zod';
 import models from './models.json' with { type: 'json' };
 
-/** `output_config.effort` levels in ascending order (GA, no beta header; 2026-09-29). */
-export const ANTHROPIC_EFFORT_LEVELS = ['low', 'medium', 'high', 'xhigh', 'max'] as const;
-export type AnthropicEffort = (typeof ANTHROPIC_EFFORT_LEVELS)[number];
-const effort = z.enum(ANTHROPIC_EFFORT_LEVELS);
 const https = z.string().url().startsWith('https://');
-
+const level = z.string().min(1);
 const capabilitySchema = z.object({ modelId: z.string().min(1).max(256),
-  thinking: z.object({ adaptive: z.boolean(), enabled: z.boolean(), off: z.enum(['disabled', 'between_tools']).nullable(), offMaxEffort: effort.optional() }).strict(),
-  effort: z.object({ levels: z.array(effort).min(1), default: effort }).strict().nullable(),
+  thinking: z.object({ adaptive: z.boolean(), enabled: z.boolean(), off: z.enum(['disabled', 'between_tools']).nullable(), offMaxEffort: level.optional() }).strict(),
+  effort: z.object({ levels: z.array(level).min(1), default: level }).strict().nullable(),
   maxOutputTokens: z.number().int().positive().safe(), source: https }).strict()
   .refine(row => row.effort === null || row.effort.levels.includes(row.effort.default))
   .refine(row => row.thinking.offMaxEffort === undefined || (row.thinking.off !== null && row.effort !== null));
-export type AnthropicModelCapability = Readonly<z.infer<typeof capabilitySchema>>;
-const registrySchema = z.object({ schemaVersion: z.literal(1), retrievedAt: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-  sources: z.record(z.string(), https), note: z.string(), models: z.array(capabilitySchema).min(1) }).strict()
-  .refine(registry => new Set(registry.models.map(row => row.modelId)).size === registry.models.length);
+type Capability = z.infer<typeof capabilitySchema>;
+export type AnthropicModelCapability = Readonly<Omit<Capability, 'effort'> & {
+  effort: Readonly<{ levels: readonly string[]; default: string }> | null }>;
+const positiveInteger = z.number().int().positive().safe();
+const registrySchema = z.object({ schemaVersion: z.literal(2), retrievedAt: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  sources: z.record(z.string(), https), note: z.string(),
+  effort: z.object({ levels: z.array(level).nonempty(), order: z.literal('ascending') }).strict(),
+  metering: z.object({ promptOverheadTokens: positiveInteger, thinkingBudgetMinTokens: positiveInteger }).strict(),
+  models: z.array(capabilitySchema).min(1) }).strict()
+  .refine(registry => new Set(registry.models.map(row => row.modelId)).size === registry.models.length)
+  .refine(registry => new Set(registry.effort.levels).size === registry.effort.levels.length)
+  .refine(registry => registry.models.every(row => {
+    const levels = registry.effort.levels;
+    // The vocabulary declares ascending rank. Each model must be a strictly ascending subset of it.
+    return (row.effort === null || row.effort.levels.every((value, index, subset) =>
+      levels.includes(value) && (index === 0 || levels.indexOf(subset[index - 1]!) < levels.indexOf(value))))
+      && (row.thinking.offMaxEffort === undefined || levels.includes(row.thinking.offMaxEffort));
+  }));
 
-/**
- * Adapter-owned, dated and sourced data (`models.json`): what the Messages API accepts per model. A profile is checked against its row at
- * load, so a configuration the API would refuse with a 400 never reaches a call. New models are a data row, never a model-name rule in code.
- */
-export const ANTHROPIC_MODEL_CAPABILITIES: readonly AnthropicModelCapability[] = Object.freeze(registrySchema.parse(models).models
-  .map(row => Object.freeze(row)));
+/** Old/missing parameter shapes fail with ZodError at load; registry policy never has silent code defaults. */
+const registry = registrySchema.parse(models);
+/** `output_config.effort` vocabulary and ascending rank are adapter-owned versioned data. */
+export const ANTHROPIC_EFFORT_LEVELS = Object.freeze(registry.effort.levels);
+export type AnthropicEffort = (typeof ANTHROPIC_EFFORT_LEVELS)[number];
+export const ANTHROPIC_METERING = Object.freeze(registry.metering);
+/** New models are data rows, never model-name rules in code. */
+export const ANTHROPIC_MODEL_CAPABILITIES: readonly AnthropicModelCapability[] = Object.freeze(registry.models.map(row =>
+  Object.freeze({ ...row, thinking: Object.freeze(row.thinking), effort: row.effort === null ? null
+    : Object.freeze({ ...row.effort, levels: Object.freeze(row.effort.levels) }) })));
 export function anthropicModelCapability(modelId: string): AnthropicModelCapability | undefined {
   return ANTHROPIC_MODEL_CAPABILITIES.find(row => row.modelId === modelId);
 }
