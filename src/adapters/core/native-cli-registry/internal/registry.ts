@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import asset from '../../../../../assets/native-coding/commands.json' with { type: 'json' };
-import { nativeCliIds, nativeCliIdSchema, modelUsageEvidenceSchema } from '#domain/index.js';
+import { nativeCliIds, nativeCliIdSchema, modelUsageEvidenceSchema, NativeCliRegistryError } from '#domain/index.js';
 
 const argument = z.string().min(1).refine(value => !value.includes('\0'));
 const flag = z.string().regex(/^--[a-z][a-z-]*$/);
@@ -18,10 +18,7 @@ const commandSchema = z.object({ executable: argument, args: argumentsSchema, mo
   capabilities: nativeCliCapabilitiesSchema }).strict().readonly();
 const registrySchema = z.object({ schemaVersion: z.literal(2), adapters: z.record(z.string().regex(/^[a-z][a-z0-9-]*$/), commandSchema)
   .refine(value => Object.keys(value).length > 0).readonly() }).strict().readonly();
-export class NativeCliRegistryError extends Error {
-  readonly code = 'NATIVE_CLI_REGISTRY_INVALID';
-  constructor() { super('NATIVE_CLI_REGISTRY_INVALID'); this.name = 'NativeCliRegistryError'; }
-}
+export { NativeCliRegistryError };
 /** Strict versioned asset loading. Missing capabilities and old assets are errors, never inferred defaults. */
 export function parseNativeCliRegistry(input: unknown) {
   const parsed = registrySchema.safeParse(input);

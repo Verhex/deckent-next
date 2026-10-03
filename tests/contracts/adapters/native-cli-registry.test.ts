@@ -1,6 +1,7 @@
 import { expect, it, vi, afterEach } from 'vitest';
 import { nativeCliCommand, parseNativeCliRegistry, NativeCliRegistryError, nativeCliIds } from '#adapters/core/native-coding/index.js';
 import { nativeCliIdSchema, workerProviderSchema, NATIVE_CLI_CHANNELS, catalogChannelSchema } from '#domain/index.js';
+import * as domain from '#domain/index.js';
 import registry from '../../../assets/native-coding/commands.json' with { type: 'json' };
 import { compileNativeCodingDockerProfile, assertNativeWorkerBinding } from '#adapters/core/native-coding/index.js';
 
@@ -71,4 +72,11 @@ it('refuses evidence capability substitution at native model admission binding',
   const compiled = compileNativeCodingDockerProfile(template, invocation('claude'));
   const subscription = compiled.parameters.nativeSubscription as Record<string, unknown>;
   expect(() => assertNativeWorkerBinding({ ...compiled, parameters: { ...compiled.parameters, nativeSubscription: { ...subscription, modelUsageEvidence: 'none' } } })).toThrow('WORKER_MODEL_BINDING_MISMATCH');
+});
+
+it('refuses a stale registry envelope before the pure vocabulary is initialized with the typed asset error', () => {
+  for (const input of [registry.adapters, { ...registry, schemaVersion: 1 }, { schemaVersion: 2, adapters: {} }]) {
+    expect(() => domain.nativeCliVocabulary(input)).toThrow(NativeCliRegistryError);
+    expect(() => domain.nativeCliVocabulary(input)).toThrow('NATIVE_CLI_REGISTRY_INVALID');
+  }
 });
