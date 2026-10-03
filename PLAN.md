@@ -103,15 +103,21 @@ Altı hosted hücre (ubuntu/macOS/Windows × Node24/26) hatası artık workflow 
 advisory hücrelerin hata maskelemesi kaldırılır. Fixture/capability doğruluğu, runner path/checkout bytes,
 sonlu 30dk job/20dk verify, host180s/native30s node:test + native invocation180s, ref concurrency ve JSON/log artifact adayı bu şeritte hazır.
 Hedefli yazar kontrolleri ve sonuçları dış review.md içindedir; canonical OS temp parent host-kit de kapsar.
-Açık kaynak bulguları: socket bind→asyncchmod görünürlük yarışı; Windows legacy lock çift reclaim uyarısı (exact yarış nedeni doğrulanmadı);
+Kaynak bulguları: socket bind→asyncchmod yarışı aşağıdaki SOCKET-PUBLICATION kaynak adayında giderildi (hosted/bağımsız kabul açık);
+Windows legacy lock çift reclaim uyarısı (exact yarış nedeni doğrulanmadı);
 shared runner wall-clock validator eşikleri ve geçmiş BUSY/PTY flakes. Bunlar green retry ile kapanmaz.
 Güvenlik reddi, platform desteği ve testin çalışmaması ayrı kanıttır; yerel hedefli sonuç hosted green değildir.
 Sonrun `37078519240`: Linux26 success; Linux24 MANAGED_FILE_UNSAFE; macOS her iki node monitor2;
 Windows24 80, Windows26 78 test failure. `848c8050` workflow success altı yeşil anlamına gelmez.
 Kalan kapı: Sol → push → exact SHA'da hosted koşu (6/6 sonuç + artifact) → owner `main` kuralını ekler. Fable takip notu (bloklamaz): `monitor.test.ts:254-256` Linux dışı sidecar dalı tipli skip/verify-not-run kaydı taşımıyor; Windows 8.3 kısa ad için `realpathSync.native` hosted sonuca göre.
 Push lane'den yok; süreç panosu bu worktree'de yok (ENOENT), lead kendi ana satırının worker alt-listesini uzlaştırır.
-Kanıt/uyumsuzluk raporu: dış `proof/CI-FIX-2026-10-03/`. Socket yayın yarışına ait kaynak düzeltmesi scope checkpoint'idir;
-eski log reddedilen inode'u açıklamadığından batch27 SHA'sına neden atfedilmez.
+Kanıt/uyumsuzluk raporu: dış `proof/CI-FIX-2026-10-03/`. **SOCKET-PUBLICATION owner 2026-10-03:**
+`lane/socket-publication`, taban `97851bce`, Codex uygulayıcı; private staging → pin → chmod/fstat600 → listen →
+NOREPLACE atomik final yayın uygulandı. Yazar kanıtı: tabanda watcher022/077 kırmızı → adayda128'er yayım güvenli;
+44 native + 37 Vitest test,0 skip, typecheck/eslint/lint-arch0. Bağımsız inceleme ve hosted Linux/Node24 kabulü açık;
+sonraki adım exact aday incelemesi → lead entegrasyonu → ayrı yetkiyle hosted koşu; şeritte pano yok (ENOENT), main worker alt-listesini uzlaştırır.
+Bu şeritte fixture/CI-FIX-R2, push, dogfood ve canlı yok; proof `proof/SOCKET-PUBLICATION-2026-10-03/`.
+Eski log reddedilen inode'u açıklamadığından batch27 SHA'sına neden atfedilmez.
 
 **CI-WINDOWS-MACOS — owner 2026-10-01, Opus lead → Sol uygulayıcı:** `lane/ci-sol-2`, taban exact
 `76582f9f1cd2bd694a460795e181ce70641f0888`. Önceki CI-FULL `10d5cbde` 23. partiye birleşti; bu tabanın hosted

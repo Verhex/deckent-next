@@ -17,6 +17,13 @@ export type LocalRuntimeSocketOptions = Readonly<{ endpoint: string; maxConnecti
 export type ResolvedLocalRuntimeSocketOptions = LocalRuntimeSocketOptions & Readonly<{ custodyId: string; guardEndpoint: string }>;
 
 function positive(value: number): boolean { return Number.isSafeInteger(value) && value > 0; }
+export function assertSocketPublicationBudget(endpoint: string): void {
+  const parent = dirname(endpoint);
+  // Native same-parent staging uses '/.sXXXXXX/s'; include the trailing NUL in sun_path's 108 bytes.
+  if (Buffer.byteLength(parent === '/' ? '' : parent, 'utf8') + 11 >= 108) {
+    throw new LocalRuntimeSocketError('LOCAL_RUNTIME_OPTIONS');
+  }
+}
 export async function resolveSocketOptions(options: LocalRuntimeSocketOptions): Promise<ResolvedLocalRuntimeSocketOptions> {
   if (process.platform !== 'linux' || !process.getuid) throw new LocalRuntimeSocketError('LOCAL_RUNTIME_UNSUPPORTED');
   if (!options || !isAbsolute(options.endpoint) || normalize(options.endpoint) !== options.endpoint

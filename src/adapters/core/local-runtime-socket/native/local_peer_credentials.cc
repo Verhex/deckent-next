@@ -15,19 +15,12 @@
 #include <cstring>
 #include <cmath>
 #include <climits>
+#include "socket_publication.h"
 
 namespace {
 #ifdef DECKENT_LOCAL_PEER_TEST_FAULTS
 thread_local int next_start_fault = 0;
 #endif
-struct OwnedPath { std::string path; struct stat identity{}; int identity_fd = -1; };
-int remove_owned(const OwnedPath& owned) {
-  struct stat current{};
-  if (lstat(owned.path.c_str(), &current) != 0) return errno == ENOENT ? 0 : -1;
-  if (!S_ISSOCK(current.st_mode) || current.st_uid != owned.identity.st_uid
-      || current.st_dev != owned.identity.st_dev || current.st_ino != owned.identity.st_ino) return -1;
-  return unlink(owned.path.c_str());
-}
 
 napi_value fail(napi_env env, const char* code) {
   napi_throw_error(env, code, code);
@@ -222,7 +215,7 @@ napi_value transient_attempts(napi_env env, napi_callback_info info) {
 napi_value fail_next_start(napi_env env, napi_callback_info info) {
   size_t count = 1; napi_value arg; int32_t mode = 0;
   napi_get_cb_info(env, info, &count, &arg, nullptr, nullptr);
-  if (count != 1 || napi_get_value_int32(env, arg, &mode) != napi_ok || mode < 1 || mode > 4)
+  if (count != 1 || napi_get_value_int32(env, arg, &mode) != napi_ok || mode < 1 || mode > 13)
     return fail(env, "LOCAL_PEER_TEST_OPTIONS");
   next_start_fault = mode; napi_value result; napi_get_undefined(env, &result); return result;
 }
@@ -248,24 +241,17 @@ napi_value create_listener(napi_env env, napi_callback_info info) {
   if (napi_get_uv_event_loop(env, &loop) != napi_ok) return fail(env, "LOCAL_PEER_LOOP");
   const int fd = socket(AF_UNIX, SOCK_STREAM | SOCK_NONBLOCK | SOCK_CLOEXEC, 0);
   if (fd < 0) return fail(env, "LOCAL_PEER_SOCKET");
-  // Capture pathname identity after our successful bind, not fstat(socket_fd)'s sockfs inode.
-  // The owning TS adapter has already validated/guarded the private parent directory.
-  if (bind(fd, reinterpret_cast<sockaddr*>(&address), offsetof(sockaddr_un, sun_path) + length + 1) != 0) {
-    ::close(fd); return fail(env, "LOCAL_PEER_LISTEN");
-  }
-  OwnedPath owned{address.sun_path};
-  // Pin the filesystem inode until custody ends; dev+ino alone can be reused after unlink.
-  owned.identity_fd = open(address.sun_path, O_PATH | O_NOFOLLOW | O_CLOEXEC);
-  if (owned.identity_fd < 0 || fstat(owned.identity_fd, &owned.identity) != 0
-      || !S_ISSOCK(owned.identity.st_mode) || owned.identity.st_uid != getuid()) {
-    if (owned.identity_fd >= 0) ::close(owned.identity_fd);
-    ::close(fd); return fail(env, "LOCAL_PEER_CUSTODY");
-  }
-  if (listen(fd, static_cast<int>(backlog)) != 0) {
-    remove_owned(owned); ::close(owned.identity_fd); ::close(fd); return fail(env, "LOCAL_PEER_LISTEN");
-  }
 #ifdef DECKENT_LOCAL_PEER_TEST_FAULTS
   const int start_fault = next_start_fault; next_start_fault = 0;
+#else
+  constexpr int start_fault = 0;
+#endif
+  // The TS adapter validates the private parent. Keep the final name absent until 0600 and listening.
+  OwnedPath owned;
+  if (const char* error = publish_private_socket(fd, address.sun_path, static_cast<int>(backlog), owned, start_fault)) {
+    ::close(fd); return fail(env, error);
+  }
+#ifdef DECKENT_LOCAL_PEER_TEST_FAULTS
   if (start_fault == 3) {
     unlink(address.sun_path);
     const int replacement = open(address.sun_path, O_CREAT | O_EXCL | O_WRONLY | O_CLOEXEC, 0600);
@@ -275,8 +261,6 @@ napi_value create_listener(napi_env env, napi_callback_info info) {
       if (written != sizeof(bytes) - 1) { ::close(owned.identity_fd); ::close(fd); return fail(env, "LOCAL_PEER_TEST_SETUP"); }
     }
   }
-#else
-  constexpr int start_fault = 0;
 #endif
   auto* listener = new Listener{env, owned}; listener->fd = fd;
   listener->transient_retry_delay_ms = static_cast<uint64_t>(retry_delay);

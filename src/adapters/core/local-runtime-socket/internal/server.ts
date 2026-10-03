@@ -1,5 +1,4 @@
 import { RUNTIME_SERVICE_SCHEMA_VERSION } from '#engine/index.js';
-import { chmod } from 'node:fs/promises';
 import { createServer, type Server, type Socket } from 'node:net';
 import { isRuntimeServiceStreamingOperation, isRuntimeServiceTurnOperation, runtimeServiceLifecycleRequestSchema, runtimeServiceRequestSchema, runtimeServiceResponseSchema, type RuntimeServiceRequest,
   type RuntimeServiceResponse } from '#engine/index.js';
@@ -7,7 +6,7 @@ import { createServerStreamChannel, type RuntimeServiceStreamChannel } from './s
 import { createServerTurnChannel, type RuntimeServiceTurnChannel } from './event-channel.js';
 import { listenWithPeerIdentity, type LocalPeerIdentity, type PeerClosure } from './peer.js';
 import { encodeServiceFrame, ServiceFrameDecoder, ServiceFrameError } from './framing.js';
-import { LocalRuntimeSocketError, removeOwnedSocket, resolveSocketOptions,
+import { assertSocketPublicationBudget, LocalRuntimeSocketError, removeOwnedSocket, resolveSocketOptions,
   type LocalRuntimeSocketOptions, type ResolvedLocalRuntimeSocketOptions } from './endpoint.js';
 import { acquireLedgerLock, type LedgerLock } from './ledger-lock.js';
 
@@ -143,6 +142,7 @@ export interface LocalRuntimeSocketGuard {
 
 export async function acquireLocalRuntimeSocketGuard(options: LocalRuntimeSocketOptions, ledgerLock?: string): Promise<LocalRuntimeSocketGuard> {
   const resolved = await resolveSocketOptions(options);
+  assertSocketPublicationBudget(resolved.endpoint);
   const ledger = ledgerLock === undefined ? null : acquireLedgerLock(ledgerLock);
   const guard = createServer({ allowHalfOpen: true }, socket => socket.destroy());
   try { await listen(guard, resolved.guardEndpoint); }
@@ -179,13 +179,15 @@ async function listenUnderGuard(resolved: ResolvedLocalRuntimeSocketOptions, gua
     await removeOwnedSocket(resolved.endpoint, true);
     endpoint = listenWithPeerIdentity(resolved.endpoint, resolved.maxConnections,
       (socket, peer) => accept(socket, resolved, handler, peer), resolved.acceptRetryDelayMs, resolved.acceptRetryLimit);
-    await chmod(resolved.endpoint, 0o600);
   } catch (error) {
     endpoint?.stopAccepting(); endpoint?.disconnectClients();
     try {
       if (endpoint) { await Promise.all([endpoint.drained, endpoint.settled]); endpoint.removeEndpoint(); }
     } finally { await close(guard).catch(() => undefined); ledger?.release(); }
     if (error instanceof LocalRuntimeSocketError) throw error;
+    if ((error as NodeJS.ErrnoException).code === 'LOCAL_PEER_PUBLICATION_UNSUPPORTED') {
+      throw new LocalRuntimeSocketError('LOCAL_RUNTIME_UNSUPPORTED', { cause: error });
+    }
     throw new LocalRuntimeSocketError('LOCAL_RUNTIME_TRANSPORT', { cause: error });
   }
   let stopping: Promise<void> | null = null;

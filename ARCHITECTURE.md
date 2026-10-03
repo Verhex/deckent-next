@@ -1278,6 +1278,18 @@ Windows rendering fixtures exercise bounded stdin with visible file-variant excl
 Packaging evidence normalizes metadata separators and canonicalizes only declaration build roots.
 No new native macOS/Windows custody is claimed; typed refusal tests and portable behavior stay separate.
 Sources/versions dated 2026-10-03 and fresh proof limits live in external `proof/CI-FIX-2026-10-03/`.
+**SOCKET-PUBLICATION (owner 2026-10-03; source candidate).** The Linux native runtime listener binds inside a pinned
+0700 staging directory in the final parent, pins the socket inode, chmods that inode through `/proc/self/fd` and fstats
+0600, listens, then publishes with descriptor-relative `renameat2(RENAME_NOREPLACE)`. The final name is absent until
+a private listening socket is ready; existing files/symlinks/sockets are never overwritten. No process-wide umask
+change or post-publication JS chmod; `MANAGED_FILE_UNSAFE` remains strict. Unsupported NOREPLACE is a typed
+`LOCAL_PEER_PUBLICATION_UNSUPPORTED` / `LOCAL_RUNTIME_UNSUPPORTED` refusal without fallback. Both final and
+staging paths must fit Linux's 108-byte `sun_path` including NUL (`LOCAL_PEER_OPTIONS` / `LOCAL_RUNTIME_OPTIONS`);
+staging uses parent + `/.sXXXXXX/s` (11 bytes). Failure cleanup removes only the pinned socket identity and empty
+pinned staging directory, preserving replacements. Crash orphan pruning and hostile same-UID isolation are not
+claimed. Official [rename(2)](https://man7.org/linux/man-pages/man2/rename.2.html) and
+[unix(7)](https://man7.org/linux/man-pages/man7/unix.7.html) verified 2026-10-03; author/hosted/review evidence is
+separate in external `proof/SOCKET-PUBLICATION-2026-10-03/`.
 
 **CI-WINDOWS-MACOS (owner 2026-10-01; verification tooling).** Each CI matrix job has a 30-minute ceiling,
 with ~2.1x headroom over run36884716187's successful Linux jobs (14m05s/14m20s); cells cannot inherit
