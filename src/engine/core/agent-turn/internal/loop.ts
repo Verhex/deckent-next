@@ -68,6 +68,8 @@ export const AGENT_TURN_NO_PROGRESS_NOTE = '[deckent] The last two rounds made n
  */
 export const AGENT_TURN_MECHANICAL_COMPACTION_NOTE = '[deckent] Earlier messages were compacted without a model summary (its summary could'
   + ' not be read): they are kept as a shortened excerpt, and details from them may be missing. Repeat what still matters, or start a new conversation.';
+/** Final line of the partial assistant text kept in the history when a round is cancelled after text had streamed. */
+const AGENT_TURN_CANCELLED_MID_ANSWER = '[deckent] cancelled mid-answer';
 const NO_PROGRESS_STATUSES: ReadonlySet<AgentToolCallStatus> = new Set(['duplicate', 'invalid-arguments', 'error']);
 /**
  * What the model is told about a call of a round that reached its output limit (TRUNCATED-TOOLCALL, live 2026-09-30: large write_file / run_shell
@@ -236,10 +238,15 @@ export async function runAgentTurn(input: AgentTurnInput, ports: AgentTurnPorts)
         + ` this round. ${summary()}. Start a new conversation or ask a shorter question.`);
     }
     let outcome: AgentRoundOutcome;
-    try { outcome = await ports.invokeRound({ round: rounds, messages, tools: input.tools }, delta => emit(delta), signal); }
+    let streamed = '';
+    try { outcome = await ports.invokeRound({ round: rounds, messages, tools: input.tools }, delta => { if (delta.kind === 'text') streamed += delta.text; emit(delta); }, signal); }
     catch { outcome = { status: 'failed', state: signal.aborted ? 'cancelled' : 'unavailable' }; }
     if (outcome.status === 'failed') {
-      if (signal.aborted || outcome.state === 'cancelled') return finish('cancelled', `Cancelled. ${summary()}.`);
+      if (signal.aborted || outcome.state === 'cancelled') {
+        // The user already saw the streamed text: keep it in the history so the next turn sees it too.
+        if (streamed) push({ role: 'assistant', content: `${streamed}\n${AGENT_TURN_CANCELLED_MID_ANSWER}`, toolCalls: [] });
+        return finish('cancelled', `Cancelled. ${summary()}.`);
+      }
       return finish('error', `The model round ended without an answer (${outcome.state}); it is recorded and not retried. ${summary()}.`);
     }
     if (outcome.usage) emit({ kind: 'usage', round: rounds, ...outcome.usage });
@@ -302,8 +309,8 @@ export async function runAgentTurn(input: AgentTurnInput, ports: AgentTurnPorts)
       toolCalls++;
       let outcomeText: AgentToolOutcome;
       try { outcomeText = await ports.execute(tool, checked.args, signal, call.id, { round: rounds, index }); } catch { outcomeText = { status: 'error', text: `[deckent] ${call.name}: error=failed` }; }
-      // A successful write may change what any earlier read saw: those reads run again.
-      if (tool.toolClass !== 'read' && outcomeText.status === 'ok') seenReads.clear();
+      // An executed non-read call may have changed files even when it ended in error (e.g. a non-zero exit after `sed -i`): earlier reads run again.
+      if (tool.toolClass !== 'read') seenReads.clear();
       const resultMessage = await result(signal.aborted ? 'cancelled' : outcomeText.status, outcomeText.text, tool.toolClass === 'shell' ? outcomeText.cleanup : undefined);
       if (tool.toolClass === 'read' && outcomeText.status === 'ok' && !signal.aborted) seenReads.set(digest, { callId: call.id, message: resultMessage });
     }

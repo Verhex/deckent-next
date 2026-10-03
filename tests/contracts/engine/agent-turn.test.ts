@@ -266,6 +266,28 @@ it('re-runs a read after a successful edit in the same turn, and keeps same-epoc
     .toEqual(['r1:ok', 'r2:duplicate', 'w1:ok', 'r3:ok']);
 });
 
+const shellTool: AgentToolSpec = { name: 'run_shell', version: 1, toolClass: 'shell', description: 'Shell.', inputSchema: { type: 'object', required: ['command'], properties: { command: { type: 'string' } } } };
+async function readsAroundShell(decision: 'allow' | 'deny') {
+  const events: AgentTurnEvent[] = [];
+  await runAgentTurn({ messages: user, tools: [readFile, shellTool], signal: new AbortController().signal, emit: event => events.push(event) }, {
+    async invokeRound({ round }) {
+      return [answer('', [call('r1', 'read_file', { path: 'a' }), call('r2', 'read_file', { path: 'a' })]), answer('', [call('s1', 'run_shell', { command: 'sed -i x a && false' })]),
+        answer('', [call('r3', 'read_file', { path: 'a' })]), answer('done')][round - 1]!;
+    },
+    async authorize(tool) { return tool.toolClass === 'shell' ? decision : 'allow'; }, describe: () => null, now: () => 0,
+    async execute(tool) { return tool.toolClass === 'shell' ? { status: 'error', text: 'exit 1' } : { status: 'ok', text: `${tool.name} ok` }; },
+  });
+  return events.filter(event => event.kind === 'tool.finished').map(event => event.kind === 'tool.finished' && `${event.callId}:${event.status}`);
+}
+
+it('re-runs a read after a non-read call that executed but ended in error', async () => {
+  expect(await readsAroundShell('allow')).toEqual(['r1:ok', 'r2:duplicate', 's1:error', 'r3:ok']);
+});
+
+it('keeps read dedupe after a non-read call refused before execution', async () => {
+  expect(await readsAroundShell('deny')).toEqual(['r1:ok', 'r2:duplicate', 's1:denied', 'r3:duplicate']);
+});
+
 // Astra 2091 R1: the history's byte size is compaction pressure too, so a conversation keeps fitting the service's request bound
 // even when the model's window is unknown (no provider count, no configured window).
 it('compacts on the request byte bound when the window is unknown, and not without that bound (T-L5, Astra 2091 R1)', async () => {
@@ -615,4 +637,31 @@ it('tells the model its per-answer output limit and how to write large content i
   expect(rule(render([['write_file', 'edit']], 16384))).toMatch(/at most 16384 output tokens; .*current last lines\)\.$/);
   expect(rule(render([['write_file', 'edit']]))).toMatch(/at most a limited number of output tokens;/);
   expect(rule(render([['read_file', 'read']], 8192))).toBeUndefined();
+});
+
+it('keeps the text streamed before a cancellation in the history, ending with the cancelled-mid-answer line', async () => {
+  const controller = new AbortController();
+  const p = ports([]);
+  p.value.invokeRound = async (_input, onDelta, signal) => {
+    onDelta({ kind: 'text', text: 'Hel' }); onDelta({ kind: 'text', text: 'lo' });
+    controller.abort();
+    return signal.aborted ? { status: 'failed', state: 'cancelled' } : answer('x');
+  };
+  const { result, events } = await run(p, controller.signal);
+  expect(result).toMatchObject({ finish: 'cancelled', appendedCount: 1 });
+  const appended = events.flatMap(event => event.kind === 'message' ? [event.message] : []);
+  expect(appended).toHaveLength(1);
+  expect(appended[0]).toMatchObject({ role: 'assistant', toolCalls: [] });
+  const content = appended[0]!.content;
+  expect(content.startsWith('Hello')).toBe(true);
+  expect(content.split('\n').at(-1)).toBe('[deckent] cancelled mid-answer');
+});
+
+it('appends no assistant message for a round cancelled before any text streamed', async () => {
+  const controller = new AbortController();
+  const p = ports([]);
+  p.value.invokeRound = async () => { controller.abort(); return { status: 'failed', state: 'cancelled' }; };
+  const { result, events } = await run(p, controller.signal);
+  expect(result).toMatchObject({ finish: 'cancelled', appendedCount: 0 });
+  expect(events.some(event => event.kind === 'message')).toBe(false);
 });
