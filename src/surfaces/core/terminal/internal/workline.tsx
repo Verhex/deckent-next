@@ -301,7 +301,7 @@ export function WorklineApp(props: WorklineProps) {
           resumeGate.current = null;
           if (!closed.current) setResumePicker(null);
           const item = choice === null ? undefined : result.resumePicker[choice];
-          if (item && !closed.current) push((await session.run('resume', item.sessionId, history)).entries);
+          if (item && !closed.current) push((await session.run('resume', String(choice! + 1), history)).entries);
         } else push(result.entries);
       }
       catch (error) { push([notice('error', errorText(error))]); }

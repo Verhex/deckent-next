@@ -186,7 +186,7 @@ describe('ledger buffer (Ink Static contract)', () => {
     expect(seen[2]).toEqual([{ role: 'system', content: 'SYSTEM' }, { role: 'user', content: 'fresh' }]);
     await until(() => saved.length === 3, 'third save');
     expect(saved[2]!.sessionId).not.toBe(earlier.sessionId); expect(saved[2]!.sessionId).not.toBe(saved[0]!.sessionId);
-    view.stdin.write('/resume 9\r'); await until(() => view.stdout.text.includes('SESSION-NOT-FOUND'), 'unknown session');
+    view.stdin.write('/resume 9\r'); await until(() => view.stdout.text.includes('SESSION_LIST_STALE'), 'stale session list');
   });
 
   it('bounds agent history at a user message so a tool result never loses the call that asked for it', () => {

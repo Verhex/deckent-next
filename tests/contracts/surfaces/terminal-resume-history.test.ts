@@ -48,7 +48,7 @@ describe('/resume through the real workline (TERM-UX-1 b)', () => {
       sessions: { async save() {}, async list() { return [earlier]; }, async load() { return [user('old question'), assistant('OLD-ANSWER-TEXT')]; } } });
     views.push(view);
     await until(() => view.stdout.text.includes('READY'), 'ready');
-    view.stdin.write('/resume 11111111\r'); await until(() => view.stdout.text.includes('RESUMED 2 11111111'), 'resumed');
+    view.stdin.write(`/resume ${earlier.sessionId}\r`); await until(() => view.stdout.text.includes('RESUMED 2 11111111'), 'resumed');
     await until(() => view.stdout.text.includes('OLD-ANSWER-TEXT'), 'earlier answer printed');
     await settle(20);
     view.stdin.write('next\r'); await until(() => sent.length === 1, 'turn sent');

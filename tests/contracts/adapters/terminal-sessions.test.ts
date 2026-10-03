@@ -78,4 +78,16 @@ it('applies the session cap per scope and never unlinks another scope or an unre
   expect(await readdir(directory)).not.toContain(`${a[0]}.json`);
 });
 
+it('preserves another scope with older timestamps during interleaved cap pruning (TC-0 regression)', async () => {
+  const { directory, sessions } = await store({ maxSessions: 1, maxFileBytes: 1_000_000, previewChars: 20 });
+  const a = [randomUUID(), randomUUID()], b = randomUUID();
+  await sessions.save({ schemaVersion: 1, sessionId: b, scopeId: 'B', updatedAtMs: 1, messages: history('keep B') });
+  const bBytes = await readFile(join(directory, `${b}.json`), 'utf8');
+  for (const [index, id] of a.entries()) await sessions.save({ schemaVersion: 1, sessionId: id, scopeId: 'A', updatedAtMs: 10 + index, messages: history('A') });
+  expect(await readFile(join(directory, `${b}.json`), 'utf8')).toBe(bBytes);
+  expect(await sessions.load('B', b)).toEqual(history('keep B').slice(1));
+  expect(await sessions.load('A', a[0]!)).toBeNull(); expect(await sessions.load('A', a[1]!)).not.toBeNull();
+  expect(await sessions.load('A', b)).toBeNull(); expect((await readdir(directory)).sort()).toEqual([`${a[1]}.json`, `${b}.json`].sort());
+});
+
 });
