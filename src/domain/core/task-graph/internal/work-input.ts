@@ -19,8 +19,10 @@ export const workInputSchema = z.object({
   acceptance: workText,
   /** Exact API model ids of a catalog channel; aliases are refused at admission, never resolved. */
   model: z.object({ channelId: identitySchema, modelId: exactModelIdSchema, auxiliaryModelIds: z.array(exactModelIdSchema).max(8).readonly() }).strict().readonly(),
-  /** Validated against the catalog model's declared efforts at admission; recorded in the Run, not yet passed to any CLI. */
+  /** Catalog-validated explicit reasoning depth; admission compiles it into the frozen native command. */
   effort: z.enum(REASONING_EFFORTS).optional(),
+  /** Optional class/load override from the versioned registry; independent of deadline and budget. */
+  workClass: identitySchema.optional(),
   /** Overrides the template's turn limit when present; only CLIs with a turn-limit flag accept one. */
   maxTurns: z.number().int().positive().safe().optional(),
 }).strict().superRefine((value, context) => {

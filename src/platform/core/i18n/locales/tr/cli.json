@@ -1154,5 +1154,12 @@
   "doctor.poolReadiness.status.drift": "kapasite uyumsuzluğu",
   "doctor.poolReadiness.status.unavailable": "erişilemiyor",
   "doctor.poolReadiness.status.unconfigured": "yapılandırılmamış",
-  "monitor.detail.poolWait": "    {reason}: havuz {pool}, doluluk {execution}/{inFlight}, etkin kapasite {executionSlots}/{inFlightSlots}"
+  "monitor.detail.poolWait": "    {reason}: havuz {pool}, doluluk {execution}/{inFlight}, etkin kapasite {executionSlots}/{inFlightSlots}",
+  "cli.worker.effort.line": " · Muhakeme eforu: {level} ({source}; sınıf {workClass})",
+  "cli.worker.effort.source.explicit": "açık istek",
+  "cli.worker.effort.source.policy-default": "politika varsayılanı",
+  "cli.worker.effort.source.cli-default": "CLI varsayılanı",
+  "cli.worker.effort.status.unsupported": "desteklenmiyor",
+  "cli.worker.effort.status.cli-default": "CLI varsayılanı",
+  "cli.worker.effort.status.selected": "seçildi"
 }

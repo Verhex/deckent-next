@@ -130,6 +130,7 @@ describe.skipIf(process.platform === 'win32')('new worker Run admission against 
     expect(await createRun(f.project, run('running', 'sonnet'), f.options)).toEqual(created);
     const { pool, ...inspected } = (await inspectRun(f.project, { schemaVersion: 1, scopeId: 's', runId: 'running' }, f.options)).run;
     expect(inspected).toEqual(created.admission.run);
+    expect(inspected.tasks[0]!.reasoningEffort).toEqual({ schemaVersion: 1, level: null, source: 'cli-default', status: 'cli-default' });
     expect(pool).toEqual({ poolId: 'p', capacity: { executionSlots: 1, inFlightSlots: 1 },
       effectiveCapacity: { executionSlots: 1, inFlightSlots: 1 }, occupancy: { execution: 0, inFlight: 0 }, drift: [], waiting: [] });
     expect((await reserveRunTasks(f.project, { schemaVersion: 1, commandId: 'reserve', scopeId: 's', runId: 'running', expectedRevision: 0 }, f.options))

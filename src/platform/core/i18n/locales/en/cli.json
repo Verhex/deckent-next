@@ -1154,5 +1154,12 @@
   "doctor.poolReadiness.status.drift": "capacity drift",
   "doctor.poolReadiness.status.unavailable": "unavailable",
   "doctor.poolReadiness.status.unconfigured": "not configured",
-  "monitor.detail.poolWait": "    {reason}: pool {pool}, occupancy {execution}/{inFlight}, effective capacity {executionSlots}/{inFlightSlots}"
+  "monitor.detail.poolWait": "    {reason}: pool {pool}, occupancy {execution}/{inFlight}, effective capacity {executionSlots}/{inFlightSlots}",
+  "cli.worker.effort.line": " · Reasoning effort: {level} ({source}; class {workClass})",
+  "cli.worker.effort.source.explicit": "explicit",
+  "cli.worker.effort.source.policy-default": "policy default",
+  "cli.worker.effort.source.cli-default": "CLI default",
+  "cli.worker.effort.status.unsupported": "unsupported",
+  "cli.worker.effort.status.cli-default": "CLI default",
+  "cli.worker.effort.status.selected": "selected"
 }

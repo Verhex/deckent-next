@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { workerEffortSchema } from '#domain/core/provider-catalog/index.js';
 import { identitySchema as identity, counterSchema as counter } from '#domain/core/primitives/index.js';
 
 export const processExitCauseShape = { exitCode: z.number().int().safe().nullable(), signal: identity.optional() };
@@ -34,6 +35,7 @@ export const attemptSnapshotSchema = z.object({
   schemaVersion: z.literal(ATTEMPT_PROTOCOL_VERSION),
   identity: attemptIdentitySchema,
   revision: counter,
+  reasoningEffort: workerEffortSchema.optional(),
   cancelRequested: z.boolean(),
   lastObservation: attemptObservationSchema.nullable(),
 }).strict().superRefine((state, context) => {

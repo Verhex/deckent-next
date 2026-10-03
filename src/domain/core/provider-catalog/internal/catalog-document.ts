@@ -23,7 +23,9 @@ const channelV2 = z.object({ kind: z.enum(CATALOG_CHANNEL_KINDS), cli: z.enum(NA
 const modelV2 = z.object({ id: identitySchema, version: counterSchema.positive(), nativeId: exactModelIdSchema,
   protocols: z.array(providerProtocolSchema).min(1).readonly(), lifecycle: modelLifecycleSchema,
   minCliVersion: cliVersionSchema.nullable(), efforts: z.array(z.enum(REASONING_EFFORTS)).max(REASONING_EFFORTS.length).readonly(),
-  aliases: aliasesSchema }).strict();
+  aliases: aliasesSchema,
+  effortBinding: z.object({ mode: z.literal('fixed-model'), level: z.enum(REASONING_EFFORTS) }).strict().readonly().optional(),
+}).strict();
 // Additive record metadata: old admission fields are retained and must agree, never a second source of authority.
 const channelV3 = channelV2.extend(channelMetadataSchema.shape).refine(c => c.client === c.cli
   && JSON.stringify(c.aliasesRefused) === JSON.stringify(c.aliases));
@@ -61,6 +63,7 @@ function channelIssues(catalog: ProviderCatalogDocument): ValidationIssue[] {
       if (exact.has(model.nativeId)) issue('providers', p, 'models', m, 'nativeId'); exact.add(model.nativeId);
       if (models.has(`${model.id}\0${model.version}`)) issue('providers', p, 'models', m, 'id'); models.add(`${model.id}\0${model.version}`);
       if (model.minCliVersion !== null && provider.channel.kind !== 'native-cli') issue('providers', p, 'models', m, 'minCliVersion');
+      if (model.effortBinding && (provider.channel.kind !== 'native-cli' || model.efforts.length !== 1 || model.efforts[0] !== model.effortBinding.level)) issue('providers', p, 'models', m, 'effortBinding');
       if (new Set(model.efforts).size !== model.efforts.length) issue('providers', p, 'models', m, 'efforts');
       // A retired entry names its day; any other state may carry an announced retirement day, after which admission treats it as retired.
       if (model.lifecycle.state === 'retired' && model.lifecycle.retiredOn === null) issue('providers', p, 'models', m, 'lifecycle');

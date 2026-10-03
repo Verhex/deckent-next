@@ -1,7 +1,7 @@
 import { handoffReceiptViewSchema, projectTaskHandoffs } from '#engine/core/handoff-observation/index.js';
 import type { HandoffStartRecord } from '#engine/core/handoff-observation/index.js';
 import { z } from 'zod';
-import { taskDependencyIds, taskDefinitionSchema, taskProgressSchema, runStateSchema, branchDecisionSchema, identitySchema, counterSchema, runSnapshotSchema } from '#domain/index.js';
+import { taskDependencyIds, taskDefinitionSchema, taskProgressSchema, runStateSchema, branchDecisionSchema, identitySchema, counterSchema, runSnapshotSchema, workerEffortSchema } from '#domain/index.js';
 import { runPoolObservationSchema } from './pool-observation.js';
 import { RunStoreError } from './store.js';
 /** Public query contract. Storage schema changes must be mapped here, never spread into the API. */
@@ -18,6 +18,7 @@ export const runViewSchema = z.object({
     profile: z.object({ id: identitySchema, version: counterSchema.positive() }).strict().readonly(),
     phase: taskProgressSchema.unwrap().innerType().shape.phase,
     skippedReason: taskProgressSchema.unwrap().innerType().shape.skippedReason, decision: taskProgressSchema.unwrap().innerType().shape.decision, acceptedEvidence: taskProgressSchema.unwrap().innerType().shape.acceptedEvidence,
+    reasoningEffort: workerEffortSchema.optional(),
     unresolvedEffects: z.boolean(),
     cancellation: z.object({ reason: z.enum(['prevented-before-launch', 'exited-under-cancellation']) }).strict().readonly().optional(),
   }).strict().readonly()).readonly(),
@@ -33,6 +34,11 @@ export function projectRunView(input: unknown, receipts: readonly HandoffStartRe
     revision: run.revision, cancellationRequested: run.cancelRequested, state: run.state,
     tasks: run.graph.tasks.map(task => ({ id: task.id, kind: task.kind, dependencies: taskDependencyIds(task), acceptanceCriteria: [...task.acceptanceCriteria], ...(task.inputs ? { inputs: task.inputs } : {}),
       profile: { id: run.execution.tasks.find(entry => entry.taskId === task.id)!.profile.id, version: run.execution.tasks.find(entry => entry.taskId === task.id)!.profile.version },
+      ...(() => {
+        const subscription = run.execution.tasks.find(entry => entry.taskId === task.id)!.profile.parameters['nativeSubscription'];
+        const parsed = workerEffortSchema.safeParse(subscription && typeof subscription === 'object' && !Array.isArray(subscription) ? (subscription as Record<string, unknown>)['reasoningEffort'] : undefined);
+        return parsed.success ? { reasoningEffort: parsed.data } : {};
+      })(),
       phase: progress.get(task.id)!.phase,
       ...(projectTaskHandoffs(run, task.id, receipts).length ? { handoffs: projectTaskHandoffs(run, task.id, receipts) } : {}),
       ...(progress.get(task.id)!.skippedReason ? { skippedReason: progress.get(task.id)!.skippedReason } : {}),
