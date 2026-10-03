@@ -1667,6 +1667,7 @@
     },
     "src/adapters/core/worker-image": {
       "dependencies": [
+        "src/platform/core/errors",
         "src/adapters/core/process-runner"
       ],
       "plan": "PROVIDERS"

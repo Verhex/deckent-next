@@ -1,8 +1,8 @@
-import { mkdtemp, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { prepareWorkerImageBuildContext, readWorkerImageSources, runWorkerImageBuild, type WorkerImageBuildRunner } from '#adapters/index.js';
+import { assertWorkerImageVersionAvailable, prepareWorkerImageBuildContext, readWorkerImageSources, runWorkerImageBuild, type WorkerImageBuildRunner } from '#adapters/index.js';
 import { parseVersionHistory, validateRecipe } from '../../../assets/worker-image/history.mjs';
 
 const roots: string[] = [];
@@ -10,6 +10,53 @@ afterEach(async () => { await Promise.all(roots.splice(0).map(root => rm(root, {
 const packageRoot = process.cwd();
 
 describe.skipIf(process.platform !== 'linux')('worker image build context and bounded build run', () => {
+  it('uses the installed builder shared guard before any effect, comparing numeric counters and ignoring unrelated tags', async () => {
+    const parent = await mkdtemp(join(tmpdir(), 'deckent-worker-version-check-')); roots.push(parent);
+    const bin = join(parent, 'bin'); await mkdir(bin);
+    const log = join(parent, 'docker-calls.jsonl');
+    const shellQuote = (value: string) => "'" + value.replaceAll("'", "'\"'\"'") + "'";
+    const fakeDocker = (tags: string, fail = false) => writeFile(join(bin, 'docker'), `#!/bin/sh
+printf '%s\\n' "$*" >> ${shellQuote(log)}
+case "$*" in
+  'context inspect --format {{json .Endpoints.docker.Host}}') printf '%s\\n' '"unix:///fixture-daemon"' ;;
+  '--host unix:///fixture-daemon image ls deckent/worker --format {{.Tag}}')
+    ${fail ? 'exit 1' : "printf '%s\\n' " + shellQuote(tags)} ;;
+  *) exit 99 ;;
+esac
+`, { mode: 0o700 });
+    const input = { packageRoot, imageVersion: 'r5-20261003', timeoutMs: 5000, outputBytes: 4096,
+      env: { PATH: bin, HOME: parent, SECRET_TOKEN: 'never-forward' } };
+    await fakeDocker('r3-20260922\nr4-20260930\nlatest\nr4-malformed');
+    await expect(assertWorkerImageVersionAvailable(input)).resolves.toBeUndefined();
+    let calls = (await readFile(log, 'utf8')).trim().split('\n');
+    expect(calls).toEqual(['context inspect --format {{json .Endpoints.docker.Host}}',
+      '--host unix:///fixture-daemon image ls deckent/worker --format {{.Tag}}']);
+    await expect(assertWorkerImageVersionAvailable({ ...input, imageVersion: 'r4-20261003' })).rejects.toMatchObject({ code: 'WORKER_VERSION_COUNTER_TAKEN', detail: expect.stringContaining('r4-20260930') });
+    await fakeDocker('r9-20260101\nr10-20251231\nr4-20260930');
+    await expect(assertWorkerImageVersionAvailable(input)).rejects.toMatchObject({ code: 'WORKER_VERSION_COUNTER_TAKEN', detail: expect.stringContaining('r10-20251231') });
+    await fakeDocker('');
+    await expect(assertWorkerImageVersionAvailable(input)).resolves.toBeUndefined();
+    await fakeDocker('', true);
+    await expect(assertWorkerImageVersionAvailable(input)).rejects.toMatchObject({ code: 'WORKER_IMAGE_COMMAND_FAILED' });
+    calls = (await readFile(log, 'utf8')).trim().split('\n');
+    expect(calls).toHaveLength(10);
+    expect(calls.every(args => args.startsWith('context inspect ') || args.startsWith('--host unix:///fixture-daemon image ls '))).toBe(true);
+    expect((await readdir(parent)).sort()).toEqual(['bin', 'docker-calls.jsonl']);
+  });
+  it('retains timeout precedence and refuses arbitrary builder codes, with bounded sanitized diagnostics', async () => {
+    const input = { packageRoot, imageVersion: 'r5-20261003', timeoutMs: 1_200_000, outputBytes: 4096, env: { PATH: '/usr/bin', SECRET_TOKEN: 'never' } };
+    const seen: Record<string, unknown>[] = [];
+    const runner: WorkerImageBuildRunner = async command => {
+      seen.push(command as unknown as Record<string, unknown>);
+      return { schemaVersion: 1, requestId: command.requestId, started: true, reason: 'timeout', exitCode: null, signal: 'SIGKILL',
+        stdoutBase64: '', stderrBase64: Buffer.from('Error: WORKER_VERSION_COUNTER_TAKEN: old evidence').toString('base64'), stdoutTruncated: false, stderrTruncated: false, durationMs: 1 };
+    };
+    await expect(assertWorkerImageVersionAvailable(input, runner)).rejects.toMatchObject({ code: 'WORKER_IMAGE_VERSION_CHECK_TIMEOUT' });
+    expect(seen[0]).toMatchObject({ timeoutMs: input.timeoutMs, env: { PATH: '/usr/bin' } });
+    const unknown: WorkerImageBuildRunner = async command => ({ schemaVersion: 1, requestId: command.requestId, started: true, reason: 'exit', exitCode: 1, signal: null,
+      stdoutBase64: '', stderrBase64: Buffer.from('Error: WORKER_NOT_A_REAL_CODE: token=fixture-secret\n    at private-stack').toString('base64'), stdoutTruncated: false, stderrTruncated: false, durationMs: 1 });
+    await expect(assertWorkerImageVersionAvailable(input, unknown)).rejects.toMatchObject({ code: 'WORKER_IMAGE_VERSION_CHECK_FAILED', detail: expect.stringContaining('[REDACTED]') });
+  });
   it('copies the shipped builder into a private exclusive context with the edited Dockerfile and recipe, leaving package bytes untouched', async () => {
     const sources = await readWorkerImageSources(packageRoot);
     const before = await readFile(join(packageRoot, 'assets/worker-image/Dockerfile'), 'utf8');

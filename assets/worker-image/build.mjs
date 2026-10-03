@@ -11,15 +11,19 @@ import { validateRecipe, parseVersionHistory, assertVersionAdvances } from './hi
 // Old images, tags and receipts are retained for active Runs and rollback; nothing here deletes them.
 const root = dirname(fileURLToPath(import.meta.url));
 const [receipt, option, existingImage, ...extra] = process.argv.slice(2);
-if (!receipt || extra.length || !isAbsolute(receipt) || existsSync(receipt)
-  || (option !== undefined && (option !== '--image-id' || !/^sha256:[a-f0-9]{64}$/.test(existingImage ?? '')))) {
-  throw new Error('WORKER_RECEIPT_INVALID: provide an absolute path to a new JSON file inside an existing writable directory.');
-}
-try {
-  if (!statSync(dirname(receipt)).isDirectory()) throw new Error('not-directory');
-  accessSync(dirname(receipt), constants.W_OK | constants.X_OK);
-} catch {
-  throw new Error(`WORKER_RECEIPT_DIRECTORY_UNAVAILABLE: ${dirname(receipt)}. Choose an existing writable directory before building.`);
+const versionCheck = receipt === '--check-version';
+if (versionCheck && (!option || existingImage !== undefined || extra.length)) throw new Error('WORKER_RECIPE_VERSION');
+if (!versionCheck) {
+  if (!receipt || extra.length || !isAbsolute(receipt) || existsSync(receipt)
+    || (option !== undefined && (option !== '--image-id' || !/^sha256:[a-f0-9]{64}$/.test(existingImage ?? '')))) {
+    throw new Error('WORKER_RECEIPT_INVALID: provide an absolute path to a new JSON file inside an existing writable directory.');
+  }
+  try {
+    if (!statSync(dirname(receipt)).isDirectory()) throw new Error('not-directory');
+    accessSync(dirname(receipt), constants.W_OK | constants.X_OK);
+  } catch {
+    throw new Error(`WORKER_RECEIPT_DIRECTORY_UNAVAILABLE: ${dirname(receipt)}. Choose an existing writable directory before building.`);
+  }
 }
 const sha256 = name => createHash('sha256').update(readFileSync(join(root, name))).digest('hex');
 const recipe = validateRecipe(JSON.parse(readFileSync(join(root, 'recipe.json'), 'utf8')));
@@ -33,6 +37,14 @@ const run = (args, timeout, inherit = false) => {
   if (result.error || result.status !== 0) throw new Error(`WORKER_IMAGE_COMMAND_FAILED:${args[0]}`);
   return result.stdout?.trim();
 };
+// Read-only admission preflight: run from installed assets before any plan artifact/build context exists.
+// The same history owner also guards the eventual build, covering changes after this observation.
+if (versionCheck) {
+  const endpoint = JSON.parse(run(['context', 'inspect', '--format', '{{json .Endpoints.docker.Host}}'], 20_000));
+  const tags = run(['--host', endpoint, 'image', 'ls', recipe.repository, '--format', '{{.Tag}}'], 20_000).split('\n');
+  assertVersionAdvances(option, tags);
+  process.exit(0);
+}
 const sourceRevision = (() => {
   try {
     const git = args => spawnSync('git', ['-C', root, ...args], { env, timeout: 5_000, encoding: 'utf8' });
