@@ -43,7 +43,7 @@ historical proof and current verification.
 - HTML views are delivered over localhost or as a Claude Artifact only when the owner asks (decision 1).
 - Owner output: natural Turkish, result/impact → required evidence/open limit → decision if any → who holds it /
   next step; no empty-field ritual, details on demand, a material blocker is visible in the summary. After a material
-  change main writes `.deckent/host/owner-report.json` and runs `node .agents/refactor/board.mjs report` (flow: before → now →
+  change main writes `.deckent/host/owner-report.json` and runs `node .agents/refactor/board.mjs report .deckent/host/owner-report.json` (flow: before → now →
   remaining with who holds each step; one HTML overwritten at `ozet-rapor/index.html`, served on 127.0.0.1:8765 and sent to the
   owner); the chat reply stays a few lines pointing to it (owner 2026-10-03 morning).
 - Notification (decision 5): main pushes to the owner only when the owner must act — a decision is needed (with
