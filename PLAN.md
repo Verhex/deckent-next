@@ -19,7 +19,7 @@ Terminal ve yerel sunum hattı 2026-09-23'ten beri Opus'tadır (Cursor paketleri
 Bu rol düzeni yeni ürün kapsamı, DOGFOOD aktivasyonu veya push izni vermez; eski kanal arşivdir.
 
 **Owner kararı 2026-09-23 — iki hat ve Enterprise katmanı (Jev 124d141b two_lanes_contract_gate 0,99; core-memory kanun 10):**
-Ticari hedef Deckent-Enterprise; Core MIT/açık kaynak ve bağımsız. Her Core sözleşmesi Enterprise ve ERP adapter'larının
+Ticari hedef Deckent-Enterprise; Core Apache-2.0/açık kaynak ve bağımsız (owner 2026-09-29 lisans kararı önceki MIT ifadesini aşar; `LICENSE`). Her Core sözleşmesi Enterprise ve ERP adapter'larının
 (IFS, SAP, Oracle, Microsoft, Uyumsoft, Logo) Core'u değiştirmeden registry üzerinden giydirilebileceği biçimde kurulur;
 müşteri ERP sürümüne göre iç paketlerin yazımı/dağıtımı Enterprise sorumluluğudur. **Sözleşme kapısı:** modüle özel yeni
 etki akışı yazılmaz; B06-2 ve IFS genel etki portu üzerine kurulur. **Hat A (dogfood, zaman kutulu):** mevcut B05/B06-1
@@ -60,6 +60,37 @@ Sıra: C11-1 ve Hat A ilk dogfood denemesi tamamlandı ([COMPLETED-PLAN](COMPLET
 - Fable devri yalnız owner açıkça “devret” dediğinde başlar. İş ve kanıt yürütücüden bağımsızdır; inceleme kanalı Opus↔Astra (owner 2026-09-23), uzun goal kapalı.
 
 ## Açık işler — sıradaki (owner 2026-09-24)
+
+### REPO-STANDARDS — GitHub topluluk dosyaları (owner 2026-10-03)
+
+`lane/repo-standards` dokümantasyon adayı: mevcut doğru README kapsamı korunarak EN/TR yapı,
+gerçek CI/lisans/Node/package sürüm rozetleri, katkı/güvenlik/davranış kuralları, PR/issue şablonları
+ve varsayılan CODEOWNERS. Yeni yedi Markdown dosyası `arch.json` içinde owner kabulüyle listelenir;
+ürün yazarı eklenmez. npm yayını yok (2026-10-03 E404), npm rozetleri ilk yayıma kadar yorumdadır.
+Tam verify'nin her landing'de zorunlu olduğu eski README/core-memory hook'u güncel owner kadansına
+uzlaştırılır. Kalan: adayın bağımsız incelemesi ve lead landing'i; owner özel güvenlik/davranış
+iletişim alanlarını doldurur, GitHub private reporting/CODEOWNERS erişimi ve koruma ayarlarını doğrular.
+Kaynaklar, kontroller ve devir dış `proof/REPO-STANDARDS-2026-10-03/review.md` içindedir; bu kayıt PASS değildir.
+
+### WORKER-GIT-PR — host branch ve PR akışı
+
+**Owner 2026-10-03 sabah; tasarım kabulü, uygulama açık.** İşçinin teslim ettiği patch ve son rapor
+lead'in host aracıyla `lane/<card>-<runId>` branch'ine dönüşür. Git kimlik bilgileri worker container'ına
+girmez; branch push ve PR açma yalnız ayrıca yetkilendirilmiş lead host tooling'indedir. PR şablonu
+rapordaki kart/run, base/adayı, kapsam, gerçek komut/sonuç, inceleme ve risk/sınır bilgisiyle doldurulur;
+eksik kanıt pending/unknown kalır. Mevcut `.github/workflows/ci.yml` `pull_request` ile çalışır.
+Landing lead'in kapısıdır: exact adayda bağımsız inceleme + hedefli kontroller ve owner yetkisi.
+
+Önerilen host-kit: `node .agents/refactor/pr.mjs open <patch-dir> --card <id>`; **betik henüz yoktur**.
+Sonraki uygulama dilimi patch-dir/son rapor sözleşmesini, kart/run/base ve sahiplik doğrulamasını,
+çakışmada ret ve WIP korumasını, host credential sınırını, tekrar çağrıda branch/PR çiftlenmesini
+önleyen makbuzu ve push/PR belirsizliğinde yeniden gözlem/uzlaştırmayı kanıtlayacak. Başarısız CI,
+bağımsız REVISE, eski base, bozuk patch, eksik rapor, yetkisiz push ve ağ sonrası belirsiz sonuç
+negatif kontrollerdir. Ürünün mevcut patch/delivery muhafazası yeni effect akışıyla değiştirilmez.
+Owner **2026-10-04** test etmek istiyor; önce lead betiği ayrı kabul edilmiş host diliminde hazırlar,
+owner yalnız o gün yetkilendirdiği branch/PR üzerinde dener. REPO-STANDARDS yalnız tasarım/dokümanı
+verir; script, credential plumbing, push, PR açma, main landing, dogfood veya canlı işlem içermez.
+Ayrıntılı insan/worker akışı [CONTRIBUTING.md](CONTRIBUTING.md) içindedir.
 
 **Geliştirme rule incelemesi — owner 2026-10-02:** skill içerik incelemesi ve yetkili düzenlemeler
 bu oturumda tamamlandı; kalıcı rol haritası ARCHITECTURE, dosya bazlı karar/kanıt dış alanda

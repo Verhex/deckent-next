@@ -2190,6 +2190,13 @@
   "markdown": {
     "trackedAllow": [
       "README.md",
+      "README.tr.md",
+      "CONTRIBUTING.md",
+      "CODE_OF_CONDUCT.md",
+      "SECURITY.md",
+      ".github/PULL_REQUEST_TEMPLATE.md",
+      ".github/ISSUE_TEMPLATE/bug_report.md",
+      ".github/ISSUE_TEMPLATE/feature_request.md",
       "ARCHITECTURE.md",
       "PLAN.md",
       "COMPLETED-PLAN.md",

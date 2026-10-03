@@ -1,64 +1,63 @@
-# deckent
+# Deckent
 
-Provider-neutral, local-first AI agent orchestration runtime. One core and one typed application contract,
+Türkçe: [README.tr.md](README.tr.md)
+
+[![CI](https://img.shields.io/github/actions/workflow/status/Verhex/deckent-next/ci.yml?branch=main&label=CI)](https://github.com/Verhex/deckent-next/actions/workflows/ci.yml)
+[![License](https://img.shields.io/github/license/Verhex/deckent-next)](LICENSE)
+[![Node engines](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2FVerhex%2Fdeckent-next%2Fmain%2Fpackage.json&query=%24.engines.node&label=Node&color=43853d)](package.json)
+[![Pre-release](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2FVerhex%2Fdeckent-next%2Fmain%2Fpackage.json&query=%24.version&label=pre-release&color=orange)](CHANGELOG.md)
+
+<!-- Node and pre-release badges read public main package.json, not this local branch.
+Keep package.json version and CHANGELOG.md release line together at each release.
+npm badges: enable only after first publish of deckent to npm; verify package identity first.
+[![npm version](https://img.shields.io/npm/v/deckent)](https://www.npmjs.com/package/deckent)
+[![npm downloads](https://img.shields.io/npm/dm/deckent)](https://www.npmjs.com/package/deckent)
+-->
+
+Deckent is a customer-installed Agent OS for authorized, coordinated and verifiable human, AI and
+tool-driven work, from solo use to enterprise. Core is open source under Apache-2.0 and stands alone;
+proprietary Enterprise is separately distributed. Provider-neutral, local-first AI agent orchestration runtime.
+One core and one typed application contract,
 used today by the CLI, the interactive terminal (streamed agent turns with approvals, file edits and a host shell
-that is not a sandbox), the MCP server and the SDK (`import … from 'deckent'`) through the installed runtime
-service. There is no HTTP API yet; Dashboard and Desktop are planned observer/operator apps on the same services
+that is not a sandbox), the MCP server and the SDK (`import … from 'deckent'`). Runtime-backed operations
+use the installed runtime service; installation, observation and some SDK/patch operations call composition
+directly. There is no HTTP API yet; Dashboard and Desktop are planned observer/operator apps on the same services
 (only a versioned terminal–desktop bridge contract exists).
 
-Status: **1.0.0-alpha.3 (live 2026-10-03), clean-room port in progress.** Completed capabilities are recorded in
+## Status
+
+**1.0.0-alpha.3 (live 2026-10-03), clean-room port in progress.** Completed capabilities are recorded in
 [COMPLETED-PLAN.md](COMPLETED-PLAN.md); remaining work is in [PLAN.md](PLAN.md); who holds what and what comes next is on the host
 process board (`node .agents/refactor/board.mjs show`). Live observation: `deckent monitor` (one read-only snapshot of every installation).
 Development dogfood (Deckent workers writing Deckent cards in an isolated installation) runs as bounded trials; DOGFOOD is officially off. Everything else is being ported from the legacy codebase
 one capability at a time, each landing with contract tests and a real-binary proof.
 
-## Requirements
+The `deckent` package is not published on npm (registry E404 verified 2026-10-03); use the source
+checkout below. The live alpha.3 status is the recorded release state, not a fresh runtime check
+from this documentation lane. CI's Linux/Node 24 cell is required; other OS/Node 26 cells are advisory.
 
-- Node.js ≥ 24.15.0 (bundles SQLite ≥ 3.51.3; Node 24 and 26 are supported) on Linux or Windows WSL2
-- Docker (exact-docker worker execution; worker image recipe in `assets/worker-image/`)
+## Features that exist today
 
-## Install and run
+The current scope below comes from the [capability map](PLAN.md#bugün-ne-var-ne-eksik) and
+[alpha.3 release record](CHANGELOG.md). Availability is bounded by each installed profile and policy.
 
-```sh
-npm ci
-npm run build
-node dist/composition/core/cli/internal/entry.js --version
-```
+- Run/Task/Attempt admission, dependency scheduling, reservations and a durable SQLite ledger;
+  governed local runtime service, cancellation and recovery.
+- Git-backed attempt checkouts and Docker workers, including native Claude/Codex profiles and
+  packaged bootstrap; retained patches, isolated integration candidates, delivery, adoption and release.
+- Local OS identity, company-scoped policy, audit and a shared approval broker; attested human
+  assurance, parked Runs with timeouts and human acceptance/rejection of unverified evidence.
+  MCP offers approval observation, with no approval decisions.
+- Model catalog v3 with client × billing channels, exact activation, provider invocation,
+  spending/allocation audit and local vLLM chat. Catalog membership does not prove native support.
+- Interactive terminal with streamed turns, tools, permission modes, MCP client and compaction;
+  read-only installation monitor, registry-derived configuration and bilingual CLI help.
+- Advisory `deckent decide` port; advice grants no execution authority. Architecture budgets,
+  dependency/i18n gates and a shrink-only hardcode ratchet protect the development contract.
 
-Installation accepts owned group-writable project and bootstrap journal directories (for example,
-`0775`), but rejects directories writable by other users. Group members can alter directory entries;
-this shares custody of the journal namespace with that group. Journal files still require the current
-owner, a single hard link and private `0400`/`0600` permissions. New directories default to `0700`.
-Config publication, policy, artifacts and worker resources retain their separate stricter checks;
-a group-writable project does not imply support for a shared writable product-data root.
-
-## Next development host
-
-This checkout is the execution workspace. `deckent-dev` is a read-only refactor reference;
-its runtime and workers must not be launched. Local development entry points are:
-
-```sh
-node .agents/refactor/next-entry.mjs cli --version
-node .agents/refactor/next-entry.mjs cli workers watch --scope pilot
-node .agents/refactor/next-entry.mjs mcp
-# For local SDK scripts, use the same environment and cwd:
-node .agents/refactor/next-entry.mjs node /absolute/path/to/script.mjs
-```
-
-The host entry pins cwd to this checkout and `DECKENT_GLOBAL_HOME` to
-`.deckent/host/global`. It drops an inherited `DECKENT_HOME` to avoid redirecting project
-runtime data. Each project's `.deckent/config.json` still chooses its own `layout.root`.
-`DECKENT_GLOBAL_HOME` is a shared CLI/MCP/SDK configuration input; it selects the global
-configuration/state directory independently of project data. Without it, installed product
-defaults remain unchanged. It contains no provider credentials and does not migrate legacy state.
-
-The local observer reads only explicitly configured `inspection.workers.sources` and preserves
-source policy checks. Docker workers see their attempt checkout at `/workspace`; host storage
-is `<layout.root>/workspaces/<attempt-hash>/tree`. `worker.hb`, `worker.log` and `worker.result`
-are host-owned observations beside `tree`, outside the worker mount. Log summaries expose
-safe state/diagnostic fields, not arbitrary provider output. `Ctrl+C` stops the view only.
-The `pilot` scope and local source catalog are development fixtures, not an installed default.
-DOGFOOD remains off. Changing MCP configuration requires reconnecting already-open clients.
+Mission/`do`/autonomous business-process coordination, complete Brain/Auditor/Nervous loops,
+Enterprise SSO/fleet/HA, remote HTTP API, Desktop and Dashboard remain open work. A shared-kernel
+Docker worker is not a VM guarantee; the interactive terminal's host shell is not a sandbox.
 
 ### Worker toolchain currency
 
@@ -77,24 +76,7 @@ the MCP tool `inspect_toolchain_currency` and the SDK function `inspectToolchain
 apply the proposal as a new installation profile revision. Running work keeps its image; old versions stay for
 rollback. `toolchains.update.atStartup` makes `runtime serve` emit the currency report (report only).
 
-### Development duration measurement (A02/W0-3)
-
-`node .agents/refactor/effort.mjs` records how long development slices actually take. It is
-host tooling for M1–M5 forecast updates, not a product feature or a second work ledger.
-
-```sh
-node .agents/refactor/effort.mjs start A02-my-slice --milestone M1 --title "…" --actor "…" --kind active
-node .agents/refactor/effort.mjs phase A02-my-slice blocked --reason owner-decision   # active|blocked|verification|rework
-node .agents/refactor/effort.mjs pause A02-my-slice        # time until the next event is unknown, never active
-node .agents/refactor/effort.mjs end A02-my-slice done     # done|canceled|handed-off
-node .agents/refactor/effort.mjs report --format table     # observed hours per kind and milestone
-```
-
-Events are immutable private files under `.deckent/host/effort/<slice>/` (Git-ignored). Time is
-counted only between explicit events; unobserved time is reported as unknown and never estimated.
-`--at <ISO>` records an operator-supplied timestamp and is counted separately in reports.
-
-## Worker image versions
+### Worker image versions
 
 `npm run worker:image -- /abs/path/worker-images/<version>.json` builds the three-provider
 `deckent/worker` image from `assets/worker-image`. `recipe.json` (schema 2) names `imageVersion`
@@ -106,7 +88,7 @@ whose tag already names another image is refused. To update: add a new history l
 profile revision. Keep old images, tags and archived receipts (`worker-images/archive/`) for active
 Runs and rollback; the product binds by `imageId` only and never pulls, tags or deletes images.
 
-## Native coding profiles
+### Native coding profiles
 
 `coding prepare --input <file|-> --json` and SDK `prepareNativeCodingProfile` author a profile;
 preparation does not activate it or grant execution permission. The outer request remains
@@ -151,18 +133,7 @@ Old invocation-v1 authoring requests are rejected, rather than silently changing
 Already persisted execution profiles keep their exact behavior and replay; migration means
 preparing and admitting a new profile revision explicitly.
 
-## Develop
-
-```sh
-npm run verify   # typecheck + eslint + lint-arch + build + tests + smoke — the landing gate
-```
-
-Read [ARCHITECTURE.md](ARCHITECTURE.md) before changing anything: package direction, size limits,
-i18n, and the markdown policy are enforced by `scripts/lint-arch.mjs` and fail the build.
-
-## License
-
-Apache-2.0 (see [LICENSE](LICENSE); DEPS-P0, owner 2026-09-29).
+### Patch custody and integration
 
 Patch capture compares the workspace with the base tree by Git object id and reads only changed base blobs;
 exhausted Git output/time or scan budgets fail as `PATCH_LIMIT` with a `detail` param (`git-output`,
@@ -186,3 +157,106 @@ read-only check and ordinary preparation never silently migrate them.
 and requires only `read-output`. It reports `absent`, `pending`, or `manifest-recorded`
 from the existing ledger and immutable manifest. It works without execution configuration
 and does not migrate storage, repair candidates, or recheck their current files.
+
+## Requirements
+
+- Node.js ≥ 24.15.0 (bundles SQLite ≥ 3.51.3; Node 24 and 26 are supported) on Linux or Windows WSL2
+- Docker (exact-docker worker execution; worker image recipe in `assets/worker-image/`)
+
+## Install and run
+
+From a source checkout:
+
+```sh
+git clone https://github.com/Verhex/deckent-next.git
+cd deckent-next
+```
+
+```sh
+npm ci
+npm run build
+node dist/composition/core/cli/internal/entry.js --version
+```
+
+Installation accepts owned group-writable project and bootstrap journal directories (for example,
+`0775`), but rejects directories writable by other users. Group members can alter directory entries;
+this shares custody of the journal namespace with that group. Journal files still require the current
+owner, a single hard link and private `0400`/`0600` permissions. New directories default to `0700`.
+Config publication, policy, artifacts and worker resources retain their separate stricter checks;
+a group-writable project does not imply support for a shared writable product-data root.
+
+## Development host
+
+This checkout is the execution workspace. `deckent-dev` is a read-only refactor reference;
+its runtime and workers must not be launched. Local development entry points are:
+
+```sh
+node .agents/refactor/next-entry.mjs cli --version
+node .agents/refactor/next-entry.mjs cli workers watch --scope pilot
+node .agents/refactor/next-entry.mjs mcp
+# For local SDK scripts, use the same environment and cwd:
+node .agents/refactor/next-entry.mjs node /absolute/path/to/script.mjs
+```
+
+The host entry pins cwd to this checkout and `DECKENT_GLOBAL_HOME` to
+`.deckent/host/global`. It drops an inherited `DECKENT_HOME` to avoid redirecting project
+runtime data. Each project's `.deckent/config.json` still chooses its own `layout.root`.
+`DECKENT_GLOBAL_HOME` is a shared CLI/MCP/SDK configuration input; it selects the global
+configuration/state directory independently of project data. Without it, installed product
+defaults remain unchanged. It contains no provider credentials and does not migrate legacy state.
+
+The local observer reads only explicitly configured `inspection.workers.sources` and preserves
+source policy checks. Docker workers see their attempt checkout at `/workspace`; host storage
+is `<layout.root>/workspaces/<attempt-hash>/tree`. `worker.hb`, `worker.log` and `worker.result`
+are host-owned observations beside `tree`, outside the worker mount. Log summaries expose
+safe state/diagnostic fields, not arbitrary provider output. `Ctrl+C` stops the view only.
+The `pilot` scope and local source catalog are development fixtures, not an installed default.
+DOGFOOD remains off. Changing MCP configuration requires reconnecting already-open clients.
+
+The process board (`node .agents/refactor/board.mjs show`) owns who holds what and the next step;
+[PLAN.md](PLAN.md) owns admitted work. The board is host coordination data outside Git/npm,
+not authority or liveness proof. `deckent monitor` observes installations without admitting work.
+If a lane lacks the shared host board, leave the lead a handoff instead of creating a competing board.
+
+### Development duration measurement (A02/W0-3)
+
+`node .agents/refactor/effort.mjs` records how long development slices actually take. It is
+host tooling for M1–M5 forecast updates, not a product feature or a second work ledger.
+
+```sh
+node .agents/refactor/effort.mjs start A02-my-slice --milestone M1 --title "…" --actor "…" --kind active
+node .agents/refactor/effort.mjs phase A02-my-slice blocked --reason owner-decision   # active|blocked|verification|rework
+node .agents/refactor/effort.mjs pause A02-my-slice        # time until the next event is unknown, never active
+node .agents/refactor/effort.mjs end A02-my-slice done     # done|canceled|handed-off
+node .agents/refactor/effort.mjs report --format table     # observed hours per kind and milestone
+```
+
+Events are immutable private files under `.deckent/host/effort/<slice>/` (Git-ignored). Time is
+counted only between explicit events; unobserved time is reported as unknown and never estimated.
+`--at <ISO>` records an operator-supplied timestamp and is counted separately in reports.
+
+### Checks before landing
+
+Read [ARCHITECTURE.md](ARCHITECTURE.md) before changing anything: package direction, size limits,
+i18n, and the markdown policy are enforced by `scripts/lint-arch.mjs` and fail the build.
+
+Use targeted checks per slice: typecheck, ESLint on changed source files, `lint-arch`, core-memory
+validation and touched test files where relevant (see [CONTRIBUTING.md](CONTRIBUTING.md)).
+Full `npm run verify` runs only for batches that add broad features and only on owner request
+(owner 2026-10-03); it is not a repeated per-slice gate. `npm run lint` is the aggregate lint command.
+Targeted/lane Vitest runs use `VITEST_MAX_FORKS=2`; full verify uses four workers by default and
+local tests stay within 16 GB. Do not build during an active test suite. Author checks are separate
+from independent review and the lead's landing gate.
+
+## Contributing
+
+Read [CONTRIBUTING.md](CONTRIBUTING.md) for owner-admitted cards, human and worker branch/PR
+workflows, checks and independent review. Follow the [Code of Conduct](CODE_OF_CONDUCT.md).
+
+## Security
+
+Report Core vulnerabilities privately using [SECURITY.md](SECURITY.md).
+
+## License
+
+Apache-2.0 (see [LICENSE](LICENSE); DEPS-P0, owner 2026-09-29).
