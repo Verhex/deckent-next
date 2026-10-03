@@ -122,7 +122,9 @@ export function fakeRepository(root, origin) {
   put(root, 'src/engine/core/runtime/internal/service-protocol.ts', 'export const RUNTIME_SERVICE_SCHEMA_VERSION = 18 as const;\n');
   git(root, 'remote', 'add', 'origin', origin);
   /** Commit a variant: ledger version + behaviour flags; `push` updates origin/main. Returns the full sha. */
-  const commit = (label, { ledger = 43, behavior = {}, push = true } = {}) => {
+  let count = 0; // each commit bumps the package version (owner rule 2026-10-03) unless `version` is given; `version: null` omits the version field (npm ci needs a package.json to build)
+  const commit = (label, { ledger = 43, behavior = {}, push = true, version = `1.0.0-alpha.${++count}` } = {}) => {
+    put(root, 'package.json', JSON.stringify({ name: 'deckent', ...(version === null ? {} : { version }), private: true, type: 'module' }));
     put(root, 'src/adapters/core/sqlite-ledger/internal/schema.ts', `export const CURRENT_LEDGER_VERSION = ${ledger};\n`);
     put(root, 'src/behavior.json', JSON.stringify({ label, ...behavior }));
     git(root, 'add', '-A'); git(root, 'commit', '--quiet', '-m', label);

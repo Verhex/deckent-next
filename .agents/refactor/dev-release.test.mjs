@@ -299,3 +299,22 @@ test('a new version that migrates the ledger and then fails keeps the old code c
   const last = readFileSync(join(f.installRoot, 'switches.jsonl'), 'utf8').trim().split('\n').map(line => JSON.parse(line)).at(-1);
   assert.deepEqual([last.to, last.ok, last.state], [bad, false, 'operator-required']);
 });
+
+test('package version: a second stage with the live version is refused, waivable, bumped passes, missing version is recorded as null', { skip: process.platform !== 'linux' && 'requires Linux /proc process custody and util-linux flock' }, async t => {
+  const f = fixture(); t.after(f.cleanup);
+  const versions = () => readdirSync(join(f.installRoot, 'versions')).sort();
+  const releaseOf = r => JSON.parse(readFileSync(join(f.installRoot, 'versions', r.json.id, 'release.json'), 'utf8'));
+  const live = f.tool('stage', f.fake.commit('live', { version: '1.0.0-alpha.7' })); assert.equal(live.status, 0, live.stdout + live.stderr);
+  assert.equal(f.tool('switch', live.json.id).status, 0);
+  const same = f.fake.commit('same', { version: '1.0.0-alpha.7' }), before = versions();
+  const refused = f.tool('stage', same);
+  assert.equal(refused.status, 1); assert.equal(refused.json.code, 'DEV_RELEASE_SAME_VERSION');
+  assert.equal(refused.json.version, '1.0.0-alpha.7'); assert.equal(refused.json.currentId, live.json.id);
+  assert.deepEqual(versions(), before);
+  const waived = f.tool('stage', same, '--allow-same-version'); assert.equal(waived.status, 0, waived.stdout + waived.stderr);
+  assert.equal(releaseOf(waived).sameVersionWaived, true); assert.equal(releaseOf(waived).packageVersion, '1.0.0-alpha.7');
+  const bumped = f.tool('stage', f.fake.commit('bumped', { version: '1.0.0-alpha.8' })); assert.equal(bumped.status, 0, bumped.stdout + bumped.stderr);
+  assert.equal(releaseOf(bumped).sameVersionWaived, false); assert.equal(releaseOf(bumped).packageVersion, '1.0.0-alpha.8');
+  const bare = f.tool('stage', f.fake.commit('bare', { version: null })); assert.equal(bare.status, 0, bare.stdout + bare.stderr);
+  assert.equal(releaseOf(bare).packageVersion, null); assert.equal(releaseOf(bare).sameVersionWaived, false);
+});

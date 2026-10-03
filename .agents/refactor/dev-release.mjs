@@ -8,10 +8,13 @@
 //   switches.jsonl                 one record per switch/rollback;  switches/<ts>/ state-file snapshots;  logs/ service logs
 // Commands (JSON on stdout; exit 0 ok, 1 refused/failed, 2 usage, 3 confirmation required):
 //   stage <commit> [--allow-local] [--preview] [--bwrap <dir>] [--remote-ref origin/main] [--source <repo>] [--waive-smoke <check,…>] [--keep-build]
+//         [--allow-same-version]
 //       clone --local --no-hardlinks (nothing is written into the live .git; Jev 2b6f9f73) → npm ci → build → build-dist --pack --bwrap →
 //       smoke:dist on the tarball and on the unpacked tree → versions/<id>. Refuses unknown commits, a dirty symbolic ref, unpushed commits
 //       (unless --allow-local/--preview), a dirty build and a package without the bundled bubblewrap (other publication blockers are
-//       recorded, not refused); a failed smoke installs nothing.
+//       recorded, not refused); a failed smoke installs nothing. Owner rule 2026-10-03: every live release bumps the package version, so a
+//       commit whose package.json version equals the current version's is refused (DEV_RELEASE_SAME_VERSION) unless --allow-same-version
+//       (recorded as sameVersionWaived; packageVersion is null when package.json or its version is missing: no check).
 //   switch <id> [--allow-local]    governed shutdown through the running service's own CLI (describe → shutdown --command-id), atomic pointer,
 //       start through next-entry, describe must report the release's build; otherwise the pointer goes back (only while the ledger still fits
 //       the old code; a migrated ledger stops with DEV_RELEASE_OPERATOR_REQUIRED instead of starting code that cannot open it).
@@ -315,6 +318,9 @@ function changedState(snapshot) {
 }
 
 // --- commands ---------------------------------------------------------------------------------------------------------------------
+function packageVersion(source, sha) {
+  try { const v = JSON.parse(run('git', ['--no-optional-locks', '-C', source, 'show', `${sha}:package.json`]).stdout).version; return typeof v === 'string' && v ? v : null; } catch { return null; }
+}
 export async function stage(L, ref, opts) {
   const source = opts.source ? resolve(opts.source) : L.project;
   let sha; try { sha = git(source, ['rev-parse', '--verify', '--quiet', `${ref}^{commit}`], 'DEV_RELEASE_UNKNOWN_COMMIT'); } catch { fail('DEV_RELEASE_UNKNOWN_COMMIT', { ref }); }
@@ -326,6 +332,9 @@ export async function stage(L, ref, opts) {
   if (!bwrap || !existsSync(bwrap)) fail('DEV_RELEASE_BWRAP_MISSING', { hint: 'pass --bwrap <build-bwrap output>' });
   const staged = existsSync(L.versions) ? readdirSync(L.versions).find(name => ID.test(name) && name.startsWith(`${sha.slice(0, 12)}-`)) : undefined;
   if (staged) return { ok: true, alreadyStaged: true, id: staged, dir: join(L.versions, staged) };
+  const packageVer = packageVersion(source, sha), live = currentId(L);
+  const liveVer = live ? packageVersion(source, readRelease(L, live).sourceCommit) : null, same = packageVer !== null && packageVer === liveVer;
+  if (same && !opts.allowSameVersion) fail('DEV_RELEASE_SAME_VERSION', { sha, version: packageVer, currentId: live, hint: 'bump package.json (owner rule 2026-10-03) or pass --allow-same-version' });
   const unlock = installLock(L.installRoot), build = join(L.installRoot, 'build', `${sha.slice(0, 12)}-${process.pid}`), timings = {};
   const step = (name, fn) => { const at = Date.now(); try { return fn(); } finally { timings[name] = Date.now() - at; } };
   try {
@@ -363,7 +372,7 @@ export async function stage(L, ref, opts) {
       writeFileSync(join(partial, 'manifest.json'), manifest, { mode: 0o600 });
       let protocol = null;
       try { protocol = /RUNTIME_SERVICE_SCHEMA_VERSION = (\d+)/u.exec(readFileSync(join(partial, 'dist/engine/core/runtime/internal/service-protocol.js'), 'utf8'))?.[1] ?? null; } catch { /* recorded as null */ }
-      const release = { schemaVersion: 1, versionId: id, sequence: (stagedOrder(L)[0]?.sequence ?? 0) + 1, sourceCommit: sha, sourceTreeSha256: identity.sourceTreeSha256, identity, version,
+      const release = { schemaVersion: 1, versionId: id, sequence: (stagedOrder(L)[0]?.sequence ?? 0) + 1, sourceCommit: sha, sourceTreeSha256: identity.sourceTreeSha256, identity, version, packageVersion: packageVer, sameVersionWaived: same,
         publishable: { ok: Boolean(packed.publishable?.ok), blockers: packed.publishable?.blockers ?? [] }, pushed, remoteRef: opts.remoteRef, local: !pushed && !opts.preview, preview: Boolean(opts.preview), node: spawnSync(opts.node, ['--version'], { encoding: 'utf8' }).stdout.trim(),
         ledgerVersion: codeLedgerVersion(partial), protocolVersion: protocol === null ? null : Number(protocol),
         tarball: { name: basename(packed.packed.tarball), sha256: packed.packed.sha256, size: packed.packed.size },
@@ -534,7 +543,7 @@ export async function main(argv, env = process.env) {
   flags.waiveSmoke = (take('--waive-smoke') ?? '').split(',').filter(Boolean);
   flags.to = take('--to'); flags.confirm = take('--confirm'); flags.source = take('--source'); const launcher = take('--launcher');
   flags.stopTimeoutMs = Number(take('--stop-timeout-ms') ?? 90_000); flags.startTimeoutMs = Number(take('--start-timeout-ms') ?? 60_000);
-  for (const name of ['allow-local', 'preview', 'keep-build', 'restore-ledger', 'restore-state']) flags[name.replace(/-(\w)/gu, (_, c) => c.toUpperCase())] = flag(`--${name}`);
+  for (const name of ['allow-local', 'preview', 'keep-build', 'allow-same-version', 'restore-ledger', 'restore-state']) flags[name.replace(/-(\w)/gu, (_, c) => c.toUpperCase())] = flag(`--${name}`);
   const [command, value, ...rest] = args;
   if (rest.length || args.some(arg => arg.startsWith('--'))) fail('DEV_RELEASE_USAGE', { args }, 2);
   const L = layout({ env, launcher: launcher ? resolve(launcher) : undefined });
