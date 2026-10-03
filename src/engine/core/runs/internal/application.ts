@@ -1,4 +1,6 @@
 import { observeRunPool, type RunPoolEvidence } from './pool-observation.js';
+import { readAttemptHandoffEvents, type HandoffStartRecord } from '#engine/core/handoff-observation/index.js';
+import type { AttemptStore } from '#engine/core/attempts/index.js';
 import { projectRunView } from './view.js';
 import { z } from 'zod';
 import { identitySchema, counterSchema, runSnapshotSchema, type CorePolicyAction, type VerifiedPrincipal } from '#domain/index.js';
@@ -17,7 +19,7 @@ export interface RunModelEvidence {
 }
 /** Shared authenticated ingress. Cancellation records intent; it never fabricates worker termination. */
 export class RunInspectionApplication {
-  constructor(private readonly readStore: Pick<RunStore, 'loadRun'> & { loadRunPoolEvidence?(scopeId: string, runId: string): Promise<RunPoolEvidence> }, protected readonly verifier: PrincipalVerifier,
+  constructor(private readonly readStore: Pick<RunStore, 'loadRun'> & Partial<Pick<AttemptStore, 'receipt'>> & { loadRunPoolEvidence?(scopeId: string, runId: string): Promise<RunPoolEvidence> }, protected readonly verifier: PrincipalVerifier,
     protected readonly authorization: RunAuthorization, private readonly models?: RunModelEvidence, private readonly poolConfig?: { readonly admission?: { readonly poolId: string; readonly executionSlots: number; readonly inFlightSlots: number }; readonly ceiling: number }) {}
   async inspect(input: unknown, credential?: unknown) { return (await this.load(input, credential)).run; }
   /** The Run view with requested → init → usage → verdict of each pinned worker task (empty without the evidence ports). */
@@ -34,8 +36,17 @@ export class RunInspectionApplication {
     const evidence = this.readStore.loadRunPoolEvidence ? await this.readStore.loadRunPoolEvidence(query.scopeId, query.runId) : null;
     const snapshot = evidence ? evidence.snapshot : await this.readStore.loadRun(query.scopeId, query.runId);
     if (!snapshot) return { run: null, snapshot, principal };
+    const decoded = runSnapshotSchema.safeParse(snapshot);
+    if (!decoded.success) throw new RunStoreError('RUN_STORE_CORRUPT');
+    const parsed = decoded.data;
+    if (parsed.identity.scopeId !== query.scopeId || parsed.identity.runId !== query.runId) throw new RunStoreError('RUN_STORE_CORRUPT');
+    const receipts: HandoffStartRecord[] = [];
+    if (this.readStore.receipt) for (const binding of parsed.bindings) {
+      const receipt = await readAttemptHandoffEvents({ receipt: this.readStore.receipt.bind(this.readStore) }, binding.identity);
+      if (receipt) receipts.push(receipt);
+    }
     const pool = evidence ? observeRunPool(evidence, Date.now(), this.poolConfig?.admission, this.poolConfig?.ceiling) : undefined;
-    const view = { ...projectRunView(snapshot), ...(pool ? { pool } : {}) };
+    const view = { ...projectRunView(parsed, receipts), ...(pool ? { pool } : {}) };
     if (view.scopeId !== query.scopeId || view.runId !== query.runId) throw new RunStoreError('RUN_STORE_CORRUPT');
     return { run: view, snapshot, principal };
   }

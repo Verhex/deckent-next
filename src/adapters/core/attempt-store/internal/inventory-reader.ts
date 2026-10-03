@@ -4,7 +4,7 @@ import { readRunBoundDispatch, readRunBoundTask } from './run-dispatch-lookup.js
 import { requireLedgerVersion, INTEGRATION_LEDGER_VERSION, DISPATCH_LEDGER_VERSION, RUN_LEDGER_VERSION, WORKER_EVENT_LOG_LEDGER_VERSION, sqliteFailure, sqliteLedgerOptionsSchema,
   assertSqliteEngineSupported, type SqliteLedgerOptions } from '#adapters/core/sqlite-ledger/index.js';
 import { readRunReceipt, readRunSnapshot } from './runs.js';
-import { identitySchema } from '#domain/index.js';
+import { attemptSnapshotSchema, identitySchema } from '#domain/index.js';
 import { DatabaseSync } from 'node:sqlite';
 import { AttemptStoreError, type DispatchInventoryQuery, type DispatchInventoryStore } from '#engine/index.js';
 import { SqliteDispatchJournal } from './dispatch.js';
@@ -42,6 +42,17 @@ export class SqliteInventoryReader implements DispatchInventoryStore {
   async listDispatches(query: DispatchInventoryQuery) {
     try { return await new SqliteDispatchJournal(this.db).listDispatches(query); }
     catch (error) { throw readFailure(error); }
+  }
+  async receipt(scopeId: string, commandId: string) {
+    try {
+      const row = this.db.prepare('SELECT command,snapshot FROM attempt_receipts WHERE scope_id=? AND command_id=?').get(identitySchema.parse(scopeId), identitySchema.parse(commandId));
+      if (!row) return null;
+      let snapshot;
+      try { snapshot = attemptSnapshotSchema.parse(JSON.parse(String(row.snapshot))); }
+      catch { throw new AttemptStoreError('ATTEMPT_STORE_CORRUPT'); }
+      if (snapshot.identity.scopeId !== scopeId || typeof row.command !== 'string') throw new AttemptStoreError('ATTEMPT_STORE_CORRUPT');
+      return Object.freeze({ commandId, command: row.command, snapshot });
+    } catch (error) { throw readFailure(error); }
   }
   async loadRunReceipt(scopeId: string, commandId: string) {
     try {

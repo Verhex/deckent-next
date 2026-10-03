@@ -17,7 +17,7 @@ export function attemptPhase(state: AttemptSnapshot): AttemptPhase {
     case undefined: return 'reserved';
     case 'started': return 'running';
     case 'unknown': return 'unknown';
-    case 'exited': case 'cancelled': return 'finished';
+    case 'exited': case 'cancelled': case 'handoff-refused': return 'finished';
   }
 }
 function checkRevision(state: AttemptSnapshot, expectedRevision: number): void {
@@ -47,7 +47,7 @@ export function applyAttemptObservation(input: unknown, observationInput: unknow
   if (observation.sequence !== (previous?.sequence ?? 0) + 1) throw new AttemptError('ATTEMPT_SEQUENCE_GAP');
   if (previous?.eventId === observation.eventId) throw new AttemptError('ATTEMPT_OBSERVATION_CONFLICT');
   const phase = attemptPhase(state);
-  if (phase === 'finished' || (observation.result.kind === 'started' && phase !== 'reserved')) {
+  if (phase === 'finished' || (['started', 'handoff-refused'].includes(observation.result.kind) && phase !== 'reserved')) {
     throw new AttemptError('ATTEMPT_TRANSITION_INVALID');
   }
   // Exit/cancellation may be the first durable observation after process-start acknowledgement was lost.

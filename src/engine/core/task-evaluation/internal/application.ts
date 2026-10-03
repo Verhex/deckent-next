@@ -1,5 +1,6 @@
 import { z } from 'zod';
-import { attemptIdentitySchema, counterSchema, identitySchema, readWorkerModelPin, runSnapshotSchema, sameAttemptIdentity,
+import { createHash } from 'node:crypto';
+import { attemptIdentitySchema, counterSchema, identitySchema, readWorkerModelPin, runSnapshotSchema, sameAttemptIdentity, readWorkerFinalReport,
   taskEvaluationSchema, TaskEvaluationError, type AttemptIdentity, type CriterionDefinition,
   type EvaluatorDefinition, type RunSnapshot, type TaskEvaluationModel, type TaskEvaluation, type VerifiedPrincipal } from '#domain/index.js';
 import type { ArtifactStore, EvaluationEvidenceLimits } from '#capabilities/index.js';
@@ -11,6 +12,8 @@ import { projectAttemptWorkerModels, readSealedWorkerEvents, type WorkerEventLog
 import { taskEvaluationCommitSchema, type TaskEvaluationStore } from './commit.js';
 import { TaskEvidenceError, verifyDispatchEvaluationEvidence } from './evidence.js';
 import { proposeTaskEvaluationCommit } from './transition.js';
+import { evaluateHandoff } from '#engine/core/handoff-observation/index.js';
+import { verifyRetainedOutputEnvelope } from '#engine/core/dispatch/index.js';
 import { evaluationRecovery } from './recovery.js';
 
 export const taskEvaluationCommandSchema = z.object({ schemaVersion: z.literal(1), commandId: identitySchema,
@@ -30,8 +33,9 @@ type Store = TaskEvaluationStore & RunBoundDispatchStore & Pick<AttemptStore, 'l
 
 /** Public result of an evaluation receipt: the Run view and, for a pinned worker attempt, the recorded model evidence (WORKER-CURRENCY-2). */
 export function describeTaskEvaluationReceipt(receipt: RunReceipt) {
-  const model = (JSON.parse(receipt.command) as { evaluation?: { model?: TaskEvaluationModel } }).evaluation?.model;
-  return Object.freeze({ schemaVersion: 1 as const, commandId: receipt.commandId, run: projectRunView(receipt.snapshot), ...(model ? { model } : {}) });
+  const evidence = (JSON.parse(receipt.command) as { evaluation?: TaskEvaluation }).evaluation;
+  const model = evidence?.model;
+  return Object.freeze({ schemaVersion: 1 as const, commandId: receipt.commandId, run: projectRunView(receipt.snapshot), ...(model ? { model } : {}), ...(evidence?.handoff ? { handoff: evidence.handoff } : {}) });
 }
 /** Authenticated evaluation ingress. Wire input carries no verdict, evaluator, artifact, actor or paths.
  * Installed evaluator code consumes pinned definitions and verified terminal/output custody.
@@ -124,7 +128,12 @@ export class TaskEvaluationApplication {
       const selected = run.execution.criteria.find(value => value.criterionId === item.criterionId)!;
       criteria.push({ ...item, verdict: await this.evaluator.evaluate(selected.evaluator, criterion, dispatch.terminal) });
     }
-    const evaluation = taskEvaluationSchema.parse({ ...proposed, criteria });
+    const output = verifyRetainedOutputEnvelope(await this.artifacts.read(identity.scopeId, dispatch.output), identity);
+    const handoff = evaluateHandoff(output);
+    const report = readWorkerFinalReport(output.stdout);
+    const notes = report.status === 'reported' ? report.report.sharedNotes : undefined;
+    const sharedNotes = notes?.length ? { count: notes.length, digest: createHash('sha256').update(JSON.stringify(notes)).digest('hex') } : undefined;
+    const evaluation = taskEvaluationSchema.parse({ ...proposed, criteria, ...(handoff ? { handoff } : {}), ...(sharedNotes ? { sharedNotes } : {}) });
     const restriction = await this.unknownPolicy?.decide(evaluation, principal);
     if (restriction !== undefined && restriction !== 'wait' && restriction !== 'fail') throw new TaskEvaluationError('TASK_EVALUATION_INVALID');
     await this.authorization.authorize(identity, principal);

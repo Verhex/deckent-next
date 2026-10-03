@@ -1,3 +1,4 @@
+import { readTaskHandoffEvaluation } from './handoff-evaluation.js';
 import { SqliteDeliveryJournal } from './delivery.js';
 import { SqliteAdoptionJournal } from './adoption.js';
 import { SqliteEffectJournal } from './effect.js';
@@ -42,6 +43,7 @@ export class SqliteAttemptStore implements AttemptStore, DispatchStore, RunBound
   constructor(path: string, options: SqliteLedgerOptions, private readonly lifecycleTiming: { now: () => number; timeoutMs: number }, migration: 'allow' | 'forbid' = 'allow', private readonly profiles?: SupervisorProfileValidator) {
     this.db = openSqliteLedger(path, options, migration, this.profiles);
   }
+  async loadTaskHandoffEvaluation(identity: AttemptIdentity) { return readTaskHandoffEvaluation(this.db, identity); }
   async loadBoundDispatch(identity: AttemptIdentity) {
     try { return readRunBoundDispatch(this.db, identity).dispatch; } catch (error) { throw sqliteFailure(error); }
   }

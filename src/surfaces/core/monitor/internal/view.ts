@@ -156,6 +156,7 @@ function runDetail(w: Words, install: MonitorInstall, run: MonitorRun) {
       ...(task.lastAttempt ? attemptLines(w, task.lastAttempt, taskFailed(task), task.phase === 'active') : []),
       [span(`    ${t('monitor.detail.evaluation', { verdict: verdictLabel(task.evaluation.verdict, locale),
         when: task.evaluation.observedAtMs === null ? '' : agoText(now, task.evaluation.observedAtMs, locale) }, locale).trimEnd()}`, 'muted')],
+      ...(task.handoffs ?? []).map(receipt => [span(`    ${t('monitor.detail.handoffReceived', { source: receipt.source.taskId, attempt: receipt.source.attemptId, digest: receipt.digest }, locale)}`, 'success')]),
       ...(task.dependencies.length ? [[span(`    ${t('monitor.detail.dependencies', { list: task.dependencies.join(', ') }, locale)}`, 'muted')]] : []),
     ]),
     run.delivery === undefined ? [span(t('monitor.detail.deliveryUnknown', {}, locale), 'muted')] : run.delivery === null ? [span(t('monitor.detail.deliveryNone', {}, locale), 'muted')]

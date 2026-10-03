@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "limits": {
+    "reportBytes": 32768,
+    "recordChars": 65536,
+    "summaryChars": 4000,
+    "changedFiles": 100,
+    "changedFileChars": 256,
+    "checks": 50,
+    "checkCommandChars": 512,
+    "openIssues": 50,
+    "openIssueChars": 1000,
+    "handoffTaskIdChars": 128,
+    "handoffSummaryChars": 4000,
+    "handoffArtifacts": 100,
+    "handoffArtifactNameChars": 128,
+    "handoffOpenQuestions": 50,
+    "handoffOpenQuestionChars": 1000,
+    "sharedNotes": 50,
+    "sharedNoteChars": 1000,
+    "runSharedNotes": 500,
+    "deliveredInputBytes": 1048576,
+    "promptBytes": 8192
+  }
+}

@@ -2358,6 +2358,36 @@ observation (or diagnostic denied/released/ledger-only), never confirmed missing
 and cross-host monitoring remain future consumers of the same semantics. Linux local files/Docker are
 verified; no non-Linux or legacy runtime activation is claimed.
 
+**AOF-HANDOFF (owner-admitted D4 candidate, 2026-10-03).** Worker final report schema 1 adds optional
+`handoff: { toTask?, summary, artifacts: [{ name, digest }], openQuestions }` and `sharedNotes: string[]`.
+Report and delivery budgets come from the versioned `worker-event/internal/report-limits.json` registry,
+injected into native bootstrap; the existing redactor and retained dispatch output seal the bytes.
+Evaluation records a separate `handoff` validity/digest or typed invalid refusal and shared-note count/digest
+in the existing evaluation evidence. Neither note validity nor artifact existence changes the evaluator's verdict.
+Delivery selects accepted, exact Run-bound attempts with recorded evaluation evidence, checks immutable output/artifact
+receipts and read-output authority, and withholds failed/skipped/awaiting-decision sources. A valid direct predecessor
+note is mounted read-only at `/deckent/inputs/_handoff/<encoded taskId>.json`; accepted Run-scoped notes use
+`/deckent/inputs/_shared.json`. The bounded redacted prompt section is an untrusted context attachment on the existing
+native prompt channel; its digest and the actual delivered task hash are recorded separately from the frozen profile.
+Old profiles without that channel receive the mounts only; missing/unsupported structured reports add no handoff.
+
+One engine owner records `handoff-received` and `workspace-started-from-patch` with full source Attempt identity/digest
+in existing `attempt_receipts`, without changing supervisor observation sequence or acceptance. Run/Task inspect and
+monitor reuse the engine's exact accepted-edge projection and en/tr catalogs. Graph v4 accepts string edges or
+`{ taskId, startFrom?: 'accepted-patch' }`; v2/v3 read unchanged with fixed-base semantics. Only explicit accepted-patch
+edges read retained predecessor patch custody and apply clean, exact-before changes to a fresh fixed-base clone before
+any worker opens. The Run base and checkout HEAD stay fixed; the applied patch digest is separate Attempt evidence.
+An applying/ready sidecar fences partial writes and verifies replay tree bytes; conflicts/partial starts refuse with
+`HANDOFF_PATCH_UNAPPLICABLE`. Pre-start `handoff-refused` is a typed Attempt observation, projected to failed Task and
+A1 skipped dependents/park by the existing lifecycle owner, without fabricating a process exit. No ledger migration,
+new operator operation or service protocol bump is required. Overlapping predecessor patch paths are refused;
+Enterprise access/retention overlay and real-provider/live acceptance remain outside this candidate.
+Rebase2 onto batch-30 `1a5b3c4f` retains ledger v47 and service protocol 19. Authenticated Run inspection
+uses the pool snapshot for both pool capacity/waits/drift and exact accepted handoff receipt projection;
+the per-call read-only inventory exposes both evidence ports. Monitor retains pool waiting semantics alongside
+handoff receipts. Joint inspection and targeted author proof: `proof/AOF-HANDOFF-2026-10-03/rebase2.md`;
+independent review, socket/Docker host checks, hosted CI and live acceptance remain separate.
+
 **Worker Event Contract (B09-1, 2026-09-23, ledger v35).** One current schema (`domain/core/worker-event`,
 `schemaVersion` 1; there is no user-selectable variant — a new version replaces the contract with a migration):
 `session.started`, `message` (size + ≤240-char redacted excerpt; thinking content never kept), `tool.call`
@@ -3043,7 +3073,7 @@ onto the ledger catalog; Codex/Cursor output-side model evidence (none documente
 
 ### Typed work input and coding templates (K3 = A; owner 2026-09-30, Jev 97e59d70; lane Jev 22ea0d2c; nineteenth batch)
 
-- **Graph v3.** `TASK_GRAPH_SCHEMA_VERSION = 3`; the graph schema accepts 2 and 3 side by side. v3 adds optional
+- **Graph v4 (AOF-HANDOFF).** `TASK_GRAPH_SCHEMA_VERSION = 4`; the graph schema accepts 2, 3 and 4 side by side. v4 adds explicit accepted-patch dependency edges (see AOF-HANDOFF above). v3 adds optional
   `tasks[].workInput` `{ schemaVersion: 1, task, scope: { paths[1..64] }, acceptance, model: { channelId, modelId,
   auxiliaryModelIds[<=8] }, effort?, maxTurns? }` (domain `workInputSchema`; texts <=16 KiB; paths repository-relative POSIX/glob,
   no absolute/`..`/`.`/empty/control segment, unique; model ids use the catalog `exactModelIdSchema`; effort enum = catalog

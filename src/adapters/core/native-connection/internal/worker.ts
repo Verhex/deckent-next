@@ -30,44 +30,75 @@ export function secretValues(value: unknown, into: string[] = []): string[] {
   return into;
 }
 /** B09-2: bounded claims, never acceptance. Mirrored by the pure domain report schema; no host imports in this mounted file. */
-const REPORT_MAX_BYTES = 32768;
+interface ReportLimits { reportBytes: number; summaryChars: number; changedFiles: number; changedFileChars: number; checks: number;
+  checkCommandChars: number; openIssues: number; openIssueChars: number; handoffTaskIdChars: number; handoffSummaryChars: number;
+  handoffArtifacts: number; handoffArtifactNameChars: number; handoffOpenQuestions: number; handoffOpenQuestionChars: number; sharedNotes: number; sharedNoteChars: number; promptBytes: number }
 const reportText = (maxLength: number) => ({ type: 'string', maxLength });
-const reportObject = (properties: Record<string, unknown>) => ({ type: 'object', additionalProperties: false, required: Object.keys(properties), properties });
-export const finalReportJsonSchema = reportObject({ schemaVersion: { type: 'integer', const: 1 }, summary: reportText(4000),
-  changedFiles: { type: 'array', maxItems: 100, items: reportText(256) },
-  checks: { type: 'array', maxItems: 50, items: reportObject({ command: reportText(512), outcome: { type: 'string', enum: ['passed', 'failed', 'not-run', 'unknown'] } }) },
-  openIssues: { type: 'array', maxItems: 50, items: reportText(1000) } });
-interface FinalReport { schemaVersion: 1; summary: string; changedFiles: string[]; checks: { command: string; outcome: 'passed' | 'failed' | 'not-run' | 'unknown' }[]; openIssues: string[] }
+const reportObject = (properties: Record<string, unknown>, required = Object.keys(properties)) => ({ type: 'object', additionalProperties: false, required, properties });
+export function createFinalReportJsonSchema(l: ReportLimits, strictSchema: boolean) {
+  const texts = (maxItems: number, chars: number) => ({ type: 'array', maxItems, items: reportText(chars) });
+  const schema = reportObject({ schemaVersion: { type: 'integer', const: 1 }, summary: reportText(l.summaryChars), changedFiles: texts(l.changedFiles, l.changedFileChars),
+    checks: { type: 'array', maxItems: l.checks, items: reportObject({ command: reportText(l.checkCommandChars), outcome: { type: 'string', enum: ['passed', 'failed', 'not-run', 'unknown'] } }) },
+    openIssues: texts(l.openIssues, l.openIssueChars), handoff: reportObject({ toTask: reportText(l.handoffTaskIdChars), summary: reportText(l.handoffSummaryChars),
+      artifacts: { type: 'array', maxItems: l.handoffArtifacts, items: reportObject({ name: reportText(l.handoffArtifactNameChars), digest: { type: 'string', pattern: '^[a-f0-9]{64}$' } }) },
+      openQuestions: texts(l.handoffOpenQuestions, l.handoffOpenQuestionChars) }, ['summary', 'artifacts', 'openQuestions']), sharedNotes: texts(l.sharedNotes, l.sharedNoteChars),
+  }, ['schemaVersion', 'summary', 'changedFiles', 'checks', 'openIssues']);
+  if (strictSchema) {
+    // OpenAI strict schemas require all properties. Null is transport-only and becomes absence before sealing.
+    const handoff = schema.properties.handoff as ReturnType<typeof reportObject>;
+    handoff.required = Object.keys(handoff.properties); handoff.properties.toTask = { type: ['string', 'null'], maxLength: l.handoffTaskIdChars };
+    schema.properties.handoff = { anyOf: [handoff, { type: 'null' }] }; schema.required = Object.keys(schema.properties);
+  }
+  return schema;
+}
+interface HandoffNote { toTask?: string; summary: string; artifacts: { name: string; digest: string }[]; openQuestions: string[] }
+interface FinalReport { schemaVersion: 1; summary: string; changedFiles: string[]; checks: { command: string; outcome: 'passed' | 'failed' | 'not-run' | 'unknown' }[]; openIssues: string[];
+  handoff?: HandoffNote; sharedNotes?: string[] }
 type FinalReportResult = { status: 'reported'; report: FinalReport } | { status: 'unavailable'; reason: 'invalid' | 'oversized' | 'missing' | 'unsupported' };
-export function validateFinalReport(value: unknown, secrets: readonly string[]): FinalReportResult {
-  if (Buffer.byteLength(JSON.stringify(value) ?? '') > REPORT_MAX_BYTES) return { status: 'unavailable', reason: 'oversized' };
-  const object = (v: unknown, keys: string[]): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v)
-    && Object.keys(v).length === keys.length && keys.every(k => Object.hasOwn(v, k));
+export function validateFinalReport(value: unknown, secrets: readonly string[], l: ReportLimits): FinalReportResult {
+  if (Buffer.byteLength(JSON.stringify(value) ?? '') > l.reportBytes) return { status: 'unavailable', reason: 'oversized' };
+  const object = (v: unknown, keys: string[], optional: string[] = []): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v)
+    && Object.keys(v).every(k => keys.includes(k) || optional.includes(k)) && keys.every(k => Object.hasOwn(v, k));
   const text = (v: unknown, max: number): v is string => typeof v === 'string' && v.length <= max;
   const texts = (v: unknown, count: number, max: number): v is string[] => Array.isArray(v) && v.length <= count && v.every(x => text(x, max));
-  if (!object(value, ['schemaVersion', 'summary', 'changedFiles', 'checks', 'openIssues']) || value.schemaVersion !== 1
-    || !text(value.summary, 4000) || !texts(value.changedFiles, 100, 256) || !texts(value.openIssues, 50, 1000)
-    || !Array.isArray(value.checks) || value.checks.length > 50 || !value.checks.every(c => object(c, ['command', 'outcome'])
-      && text(c.command, 512) && typeof c.outcome === 'string' && ['passed', 'failed', 'not-run', 'unknown'].includes(c.outcome))) return { status: 'unavailable', reason: 'invalid' };
-  const input = value as unknown as FinalReport;
-  const report: FinalReport = { schemaVersion: 1, summary: redactText(input.summary, secrets, 4000),
-    changedFiles: input.changedFiles.map(x => redactText(x, secrets, 256)),
-    checks: input.checks.map(x => ({ command: redactText(x.command, secrets, 512), outcome: x.outcome })),
-    openIssues: input.openIssues.map(x => redactText(x, secrets, 1000)) };
-  return Buffer.byteLength(JSON.stringify(report)) > REPORT_MAX_BYTES ? { status: 'unavailable', reason: 'oversized' } : { status: 'reported', report };
+  const handoff = (v: unknown) => object(v, ['summary', 'artifacts', 'openQuestions'], ['toTask'])
+    && (!Object.hasOwn(v, 'toTask') || (text(v.toTask, l.handoffTaskIdChars) && v.toTask.length > 0)) && text(v.summary, l.handoffSummaryChars)
+    && texts(v.openQuestions, l.handoffOpenQuestions, l.handoffOpenQuestionChars) && Array.isArray(v.artifacts) && v.artifacts.length <= l.handoffArtifacts
+    && v.artifacts.every(a => object(a, ['name', 'digest']) && text(a.name, l.handoffArtifactNameChars) && a.name.length > 0 && typeof a.digest === 'string' && /^[a-f0-9]{64}$/.test(a.digest));
+  if (!object(value, ['schemaVersion', 'summary', 'changedFiles', 'checks', 'openIssues'], ['handoff', 'sharedNotes']) || value.schemaVersion !== 1
+    || !text(value.summary, l.summaryChars) || !texts(value.changedFiles, l.changedFiles, l.changedFileChars) || !texts(value.openIssues, l.openIssues, l.openIssueChars)
+    || (Object.hasOwn(value, 'handoff') && !handoff(value.handoff)) || (Object.hasOwn(value, 'sharedNotes') && !texts(value.sharedNotes, l.sharedNotes, l.sharedNoteChars))
+    || !Array.isArray(value.checks) || value.checks.length > l.checks || !value.checks.every(c => object(c, ['command', 'outcome'])
+      && text(c.command, l.checkCommandChars) && typeof c.outcome === 'string' && ['passed', 'failed', 'not-run', 'unknown'].includes(c.outcome))) return { status: 'unavailable', reason: 'invalid' };
+  const input = value as unknown as FinalReport, red = (text: string, max: number) => redactText(text, secrets, max);
+  const report: FinalReport = { schemaVersion: 1, summary: red(input.summary, l.summaryChars), changedFiles: input.changedFiles.map(x => red(x, l.changedFileChars)),
+    checks: input.checks.map(x => ({ command: red(x.command, l.checkCommandChars), outcome: x.outcome })), openIssues: input.openIssues.map(x => red(x, l.openIssueChars)),
+    ...(input.handoff ? { handoff: { ...(input.handoff.toTask === undefined ? {} : { toTask: red(input.handoff.toTask, l.handoffTaskIdChars) }),
+      summary: red(input.handoff.summary, l.handoffSummaryChars), artifacts: input.handoff.artifacts.map(a => ({ name: red(a.name, l.handoffArtifactNameChars), digest: red(a.digest, a.digest.length) })),
+      openQuestions: input.handoff.openQuestions.map(x => red(x, l.handoffOpenQuestionChars)) } } : {}),
+    ...(input.sharedNotes ? { sharedNotes: input.sharedNotes.map(x => red(x, l.sharedNoteChars)) } : {}) };
+  if (report.handoff && !handoff(report.handoff)) return { status: 'unavailable', reason: 'invalid' };
+  return Buffer.byteLength(JSON.stringify(report)) > l.reportBytes ? { status: 'unavailable', reason: 'oversized' } : { status: 'reported', report };
 }
-function finalReportCollector(provider: string, secrets: readonly string[]) {
+function finalReportCollector(provider: string, secrets: readonly string[], limits: ReportLimits) {
   let result: FinalReportResult = { status: 'unavailable', reason: 'missing' };
   return {
     observe(line: string) {
       let data; try { data = JSON.parse(line) as Record<string, unknown>; } catch { return; }
       if (!data || typeof data !== 'object') return;
       if (provider === 'claude' && data.type === 'result') result = data.structured_output === undefined
-        ? { status: 'unavailable', reason: 'missing' } : validateFinalReport(data.structured_output, secrets);
+        ? { status: 'unavailable', reason: 'missing' } : validateFinalReport(data.structured_output, secrets, limits);
       if (provider === 'codex' && data.type === 'item.completed') {
         const item = data.item as Record<string, unknown> | undefined;
         if (item?.type !== 'agent_message') return;
-        try { result = validateFinalReport(JSON.parse(String(item.text)), secrets); }
+        try {
+          const value = JSON.parse(String(item.text)) as Record<string, unknown>;
+          if (value && typeof value === 'object' && !Array.isArray(value)) {
+            if (value.handoff === null) delete value.handoff;
+            else if (value.handoff && typeof value.handoff === 'object' && !Array.isArray(value.handoff) && (value.handoff as Record<string, unknown>).toTask === null) delete (value.handoff as Record<string, unknown>).toTask;
+          }
+          result = validateFinalReport(value, secrets, limits);
+        }
         catch { result = { status: 'unavailable', reason: 'invalid' }; }
       }
     },
@@ -378,7 +409,8 @@ async function main() {
   });
   const setup = JSON.parse(payload) as { schemaVersion: number; provider: string; capabilities: NativeWorkerCapabilities; home: string; file: string;
     credential: Record<string, unknown>; credentialEnvironment?: string; environment: Record<string, string>; limits: { connections: number; idleMs: number };
-    finalReport?: { schemaVersion: 1 };
+    finalReport?: { schemaVersion: 1; limits: ReportLimits };
+    dependencyContext?: { text: string; sha256: string; maxBytes: number };
     preflight?: { schemaVersion: number; cliVersion: string; helpArgs: string[]; requiredFlags: string[] };
     promptDelivery?: { schemaVersion: number; channel: string; core: string; task: string;
       segments: { kind: string; id: string; version: number; sha256: string }[]; sha256: string; argvSha256: string } };
@@ -386,7 +418,10 @@ async function main() {
   if (setup.schemaVersion !== 1 || setup.home.includes('..') || setup.home.startsWith('/') || setup.file.includes('/')) throw new Error();
   const [executable, ...argv] = process.argv.slice(2); if (!executable) throw new Error();
   const hash = (text: string) => createHash('sha256').update(text).digest('hex');
-  const delivery = setup.promptDelivery;
+  const delivery = setup.promptDelivery, context = setup.dependencyContext;
+  if (context && (!delivery || !Number.isSafeInteger(context.maxBytes) || context.maxBytes <= 0 || Buffer.byteLength(context.text) > context.maxBytes
+    || hash(context.text) !== context.sha256)) throw new Error();
+  const deliveredTask = delivery ? delivery.task + (context ? '\n\n' + context.text : '') : null;
   if (delivery) {
     // Validate custody before writing credentials or executing any native tools.
     const { sha256, argvSha256, ...body } = delivery;
@@ -396,7 +431,7 @@ async function main() {
       || argv.at(-2) !== '--' || argv.at(-1) !== '__DECKENT_TASK_PROMPT__') throw new Error();
     const root = '/tmp/deckent-prompt'; await mkdir(root, { mode: 0o700 });
     await writeFile(join(root, 'core.txt'), delivery.core, { mode: 0o600, flag: 'wx' });
-    argv.splice(0, argv.length, ...nativePromptArguments(argv, delivery.core, delivery.task, setup.capabilities));
+    argv.splice(0, argv.length, ...nativePromptArguments(argv, delivery.core, deliveredTask!, setup.capabilities));
   }
   let reportSupported = false;
   if (setup.preflight) {
@@ -414,7 +449,7 @@ async function main() {
     }
   }
   if (setup.finalReport && reportSupported) {
-    const schema = JSON.stringify(finalReportJsonSchema);
+    const schema = JSON.stringify(createFinalReportJsonSchema(setup.finalReport.limits, setup.capabilities.structuredReport?.channel === 'schema-file'));
     const extra = nativeReportArguments(setup.capabilities, schema);
     if (setup.capabilities.structuredReport?.channel === 'schema-file') await writeFile('/tmp/deckent-report-schema.json', schema, { mode: 0o600, flag: 'wx' });
     const end = argv.lastIndexOf('--'); argv.splice(end < 0 ? argv.length : end, 0, ...extra);
@@ -446,7 +481,7 @@ async function main() {
     NO_PROXY: '', no_proxy: '' } });
   if (delivery) child.once('spawn', () => process.stdout.write(JSON.stringify({ schemaVersion: 1,
     kind: 'native-prompt-delivery', phase: 'spawned', channel: delivery.channel, sha256: delivery.sha256,
-    argvSha256: hash(JSON.stringify([executable, ...argv])), coreSha256: hash(delivery.core), taskSha256: hash(delivery.task),
+    argvSha256: hash(JSON.stringify([executable, ...argv])), coreSha256: hash(delivery.core), taskSha256: hash(deliveredTask!), ...(context ? { dependencyContextSha256: context.sha256 } : {}),
     segments: delivery.segments }) + '\n'));
   // Native events can contain tool output and request headers. Never forward raw events: only redacted contract events leave.
   let tail = ''; let bytes = 0;
@@ -455,7 +490,7 @@ async function main() {
   const codex = createCodexState();
   if (setup.capabilities.modelUsageEvidence === 'none') channel.push([{ schemaVersion: 1, sequence: ++state.sequence, atMs: 0, kind: 'session.started', provider: setup.provider, model: null, cliVersion: null }]);
   const capture = (part: Buffer) => { bytes += part.length; tail = (tail + part.toString('utf8')).slice(-65536); };
-  const report = setup.finalReport && reportSupported ? finalReportCollector(setup.provider, state.secrets) : undefined;
+  const report = setup.finalReport && reportSupported ? finalReportCollector(setup.provider, state.secrets, setup.finalReport.limits) : undefined;
   const lineObserver = createNativeLineObserver(setup.provider, state, codex, events => channel.push(events), report);
   const observe = (part: Buffer) => { capture(part); lineObserver.observe(part); };
   child.stdout.on('data', observe); child.stderr.on('data', capture);

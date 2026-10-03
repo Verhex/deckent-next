@@ -20,6 +20,7 @@ export const attemptObservationSchema = z.object({
   eventId: identity,
   result: z.discriminatedUnion('kind', [
     z.object({ kind: z.literal('started') }).strict(),
+    z.object({ kind: z.literal('handoff-refused'), code: z.enum(['HANDOFF_PATCH_UNAPPLICABLE', 'HANDOFF_ARTIFACT_MISMATCH', 'HANDOFF_SOURCE_NOT_ACCEPTED', 'HANDOFF_LIMIT_EXCEEDED', 'HANDOFF_INVALID']) }).strict(),
     z.object({ kind: z.literal('exited'), ...processExitCauseShape }).strict(),
     z.object({ kind: z.literal('cancelled') }).strict(),
     z.object({ kind: z.literal('unknown'), reasonCode: identity }).strict(),

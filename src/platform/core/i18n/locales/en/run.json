@@ -340,5 +340,10 @@
   "task.settle.requested_pre_dispatch_reason_line": "Requested typed pre-dispatch reason (not yet settled): {reasonCode}",
   "task.settlement.evidence_line": "Settlement: raw={rawStatus} · effective={effectiveStatus} · receipt={receiptId} · reason={reasonCode} · evidence={evidenceRefs}",
   "task.settlement.no_receipt_line": "Settlement: raw={rawStatus} · effective={effectiveStatus} · receipt=none · reason={reasonCode} · evidence={evidenceRefs}",
-  "task.settlement.none": "none"
+  "task.settlement.none": "none",
+  "error.HANDOFF_SOURCE_NOT_ACCEPTED": "Handoff source is not the accepted predecessor attempt.",
+  "error.HANDOFF_ARTIFACT_MISMATCH": "Handoff artifact does not match the recorded output.",
+  "error.HANDOFF_PATCH_UNAPPLICABLE": "The accepted predecessor patch cannot be applied to the Run base; the worker did not start.",
+  "error.HANDOFF_INVALID": "The structured handoff note is invalid.",
+  "error.HANDOFF_LIMIT_EXCEEDED": "Handoff notes exceed the configured limits."
 }

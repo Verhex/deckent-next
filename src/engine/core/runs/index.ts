@@ -33,3 +33,5 @@ export type { RunLifecycleCommand, RunLifecycleWrite, RunLifecycleStore, RunLife
 
 export { poolWaitSchema, poolDriftSchema, runPoolObservationSchema, observeRunPool, hasRunReservationRoom, derivePoolWait, poolCapacityDrift } from './internal/pool-observation.js';
 export type { PoolWait, PoolDrift, RunPoolEvidence } from './internal/pool-observation.js';
+export { projectTaskHandoffs, handoffReceiptViewSchema } from '#engine/core/handoff-observation/index.js';
+export type { HandoffReceiptView } from '#engine/core/handoff-observation/index.js';

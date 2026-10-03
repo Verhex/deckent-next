@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { taskInputNameSchema, runSnapshotSchema, attemptIdentitySchema, identitySchema, sameAttemptIdentity, type AttemptIdentity } from '#domain/index.js';
+import { taskInputNameSchema, runSnapshotSchema, attemptIdentitySchema, identitySchema, sameAttemptIdentity, taskDependencyIds, type AttemptIdentity } from '#domain/index.js';
 import { artifactReceiptSchema } from '#capabilities/index.js';
 import { authenticate, type PrincipalVerifier } from '#engine/core/authentication/index.js';
 import { DispatchError, verifyRetainedOutputEnvelope, type RunBoundDispatchStore, type DispatchIdentityAuthorization } from '#engine/core/dispatch/index.js';
@@ -22,7 +22,7 @@ export class TaskInputApplication {
     const result = [];
     for (const input of task.inputs ?? []) {
       const source = run.bindings.find(binding => binding.identity.taskId === input.taskId);
-      if (!task.dependencies.includes(input.taskId) || !source || run.progress.find(value => value.taskId === input.taskId)?.phase !== 'accepted') {
+      if (!taskDependencyIds(task).includes(input.taskId) || !source || run.progress.find(value => value.taskId === input.taskId)?.phase !== 'accepted') {
         throw new DispatchError('DISPATCH_ARTIFACT_REQUIRED');
       }
       await this.authorization.authorizeIdentity('read-output', source.identity, principal);

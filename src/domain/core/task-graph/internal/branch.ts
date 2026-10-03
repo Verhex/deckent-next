@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { identitySchema } from '#domain/core/primitives/index.js';
-import { taskGraphSchema, TaskGraphError } from './contract.js';
+import { taskGraphSchema, taskDependencyIds, dependencyTaskId, TaskGraphError } from './contract.js';
 import { validateTaskGraph } from './graph.js';
 
 /** Admission-time choice only. The authenticated caller supplies a versioned boolean fact;
@@ -25,16 +25,16 @@ export function resolveAdmissionBranch(graphInput: unknown, input: unknown) {
   const tasks = new Map(sourceGraph.tasks.map(task => [task.id, task]));
   const yes = tasks.get(whenTrue), no = tasks.get(whenFalse), merge = tasks.get(join);
   if (!yes || !no || !merge) return invalid();
-  if (!merge.dependencies.includes(whenTrue) || !merge.dependencies.includes(whenFalse)) invalid();
+  if (!taskDependencyIds(merge).includes(whenTrue) || !taskDependencyIds(merge).includes(whenFalse)) invalid();
   // First contract is a single diamond: both alternatives share prerequisites.
-  if (JSON.stringify([...yes.dependencies].sort()) !== JSON.stringify([...no.dependencies].sort())) invalid();
+  if (JSON.stringify([...taskDependencyIds(yes)].sort()) !== JSON.stringify([...taskDependencyIds(no)].sort())) invalid();
   for (const task of sourceGraph.tasks) {
-    if (task.id !== join && task.dependencies.some(id => id === whenTrue || id === whenFalse)) invalid();
+    if (task.id !== join && taskDependencyIds(task).some(id => id === whenTrue || id === whenFalse)) invalid();
   }
   const selectedTaskId = request.input.value ? whenTrue : whenFalse;
   const notSelectedTaskId = request.input.value ? whenFalse : whenTrue;
   const active = sourceGraph.tasks.filter(task => task.id !== notSelectedTaskId)
-    .map(task => ({ ...task, dependencies: task.dependencies.filter(id => id !== notSelectedTaskId) }));
+    .map(task => ({ ...task, dependencies: task.dependencies.filter(edge => dependencyTaskId(edge) !== notSelectedTaskId) }));
   const criteria = new Set(active.flatMap(task => task.acceptanceCriteria));
   const graph = validateTaskGraph({ ...sourceGraph, tasks: active,
     criterionDefinitions: sourceGraph.criterionDefinitions.filter(item => criteria.has(item.id)) });

@@ -37,6 +37,7 @@ export const CLI_CATALOG = [
     action('resume', 'work', 'cli.help.action.resume', 'cli.help.run'),
   ] },
   { name: 'task', group: 'work', summary: 'cli.help.summary.task', detail: 'cli.help.task', children: [
+    action('inspect', 'observe', 'cli.help.action.inspect', 'cli.help.task'),
     action('execute', 'work', 'cli.help.action.execute', 'cli.help.task'),
     action('evaluate', 'work', 'cli.help.action.evaluate', 'cli.help.task'),
     action('accept', 'work', 'cli.help.action.accept', 'cli.help.task'),

@@ -417,6 +417,7 @@
   "monitor.detail.task": "  {task} ({kind}, {profile}) · {phase} · attempts {attempts}",
   "monitor.detail.attempt": "attempt {attempt} gen {generation} · launch {launch} · {started} → {ended} ({duration}) · exit {exit} · {provider}/{model}",
   "monitor.detail.evaluation": "evaluation: {verdict} {when}",
+  "monitor.detail.handoffReceived": "handoff received from {source} (attempt {attempt}, digest {digest})",
   "monitor.detail.dependencies": "depends on: {list}",
   "monitor.detail.worker": "Worker {task} · attempt {attempt} · gen {generation} · {provider} · install {install}",
   "monitor.detail.now": "Doing now: {phase} · {target}",

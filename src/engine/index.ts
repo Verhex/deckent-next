@@ -51,7 +51,7 @@ export { RunLifecycleRuntimeLoop, RunProgressionTurn, reservationRefusalOutcome 
 export type { RunProgressionOperations, RunProgressionRuntime } from '#engine/core/run-progression/index.js';
 export { progressionQuerySchema, progressionCursorSchema } from '#engine/core/run-progression/index.js';
 export type { ProgressionQuery, ProgressionCursor, RunProgressionJournal } from '#engine/core/run-progression/index.js';
-export { TaskInputApplication, taskInputBindingSchema, selectTaskInputArtifact } from '#engine/core/task-inputs/index.js';
+export * from '#engine/core/task-inputs/index.js';
 export type { TaskInputBinding } from '#engine/core/task-inputs/index.js';
 
 export { outputFileNameSchema, outputFileFailureSchema, collectedOutputFileSchema } from '#engine/core/supervisor/index.js';

@@ -1,9 +1,9 @@
-import { constants } from 'node:fs';
-import { mkdir, lstat, realpath, open, unlink } from 'node:fs/promises';
+import { mkdir, lstat, realpath } from 'node:fs/promises';
 import { join } from 'node:path';
 import { GitWorkspaceBroker, type GitWorkspaceOptions } from '#adapters/core/git-workspace/index.js';
 import { patchDigest, WorkspacePatchError, type IntegrationIntent, type IntegrationManifest, type IntegrationTarget, type WorkspacePatch, type PatchLimits } from '#engine/index.js';
 import { diffAgainstBase, gitBlobOid, hashAlgorithmOf, listBase, readWorkspace, snapshotDigest, SnapshotBudget, type BaseListing, type Snapshot } from './snapshot.js';
+import { applyWorkspacePatchChanges } from './patch-apply.js';
 import { observeIntegration } from './integration-observe.js';
 /** Only the winning durable command creates a candidate. Interrupted allocation is held, never adopted. */
 export class GitIntegrationTarget implements IntegrationTarget {
@@ -56,29 +56,7 @@ export class GitIntegrationTarget implements IntegrationTarget {
     // Expected content is the fresh base checkout plus the patch; the manifest digest never depends on Git blob reads.
     const snapshot: Snapshot = new Map(initial);
     for (const change of patch.changes) { if (change.after) snapshot.set(change.path, change.after); else snapshot.delete(change.path); }
-    const root = await open(lease.workspace, constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW);
-    try {
-      for (const change of patch.changes) {
-        const parts = change.path.split('/'); let parentHandle = root; const handles = [];
-        try {
-          for (const part of parts.slice(0, -1)) {
-            const path = `/proc/self/fd/${parentHandle.fd}/${part}`;
-            try { await mkdir(path, { mode: 0o700 }); } catch (error) {
-              if (!error || typeof error !== 'object' || !('code' in error) || error.code !== 'EEXIST') throw error;
-            }
-            parentHandle = await open(path, constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW); handles.push(parentHandle);
-          }
-          const path = `/proc/self/fd/${parentHandle.fd}/${parts.at(-1)}`;
-          if (change.before) await unlink(path);
-          if (change.after) {
-            const file = await open(path, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, 0o600);
-            try { await file.writeFile(change.after.text); await file.chmod(change.after.mode === '100755' ? 0o755 : 0o644); await file.sync(); }
-            finally { await file.close(); }
-          }
-          await parentHandle.sync();
-        } finally { for (const handle of handles.reverse()) await handle.close(); }
-      }
-    } finally { await root.close(); }
+    await applyWorkspacePatchChanges(lease.workspace, patch.changes);
     return { schemaVersion: 1, kind: 'integration-candidate', command: intent.command, patch: intent.patch,
       observation: intent.observation, workspace: lease.workspace, snapshotDigest: snapshotDigest(snapshot), application: 'candidate-only' };
   }

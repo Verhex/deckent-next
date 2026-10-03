@@ -13,7 +13,7 @@ import { scrubWorkerEvent } from './event-guard.js';
 import { secretValues } from './worker.js';
 import { nativeCliCommand } from '#adapters/core/native-cli-registry/index.js';
 import { readNativeClientHello } from './tls-hello.js';
-import { verifyWorkerModels, workerEventSchema, type WorkerEvent } from '#domain/index.js';
+import { workerReportLimits, verifyWorkerModels, workerEventSchema, type WorkerEvent } from '#domain/index.js';
 
 /** One source for the gateway's NDJSON retention budget and the config-load artifact check. */
 export function nativeWorkerEventRetentionBytes(): number { return catalog.limits.maxEventBytes; }
@@ -36,8 +36,12 @@ export function isPublicNativeAddress(address: string) {
 /** Receives validated worker events (untrusted, worker-reported evidence) for live observation and retention. */
 export type WorkerEventSink = (events: readonly WorkerEvent[]) => void;
 export async function openNativeConnection(input: { binding: NativeSubscription; directory: string; credential: Record<string, unknown>; deadlineMs: number;
-  onEvents?: WorkerEventSink }) {
-  const binding = nativeSubscriptionSchema.parse(input.binding); const spec = nativeProviderSpec(binding.provider);
+  onEvents?: WorkerEventSink; dependencyContext?: Readonly<{ text: string; sha256: string }> }) {
+  if (input.dependencyContext && (Buffer.byteLength(input.dependencyContext.text) > workerReportLimits.promptBytes
+    || createHash('sha256').update(input.dependencyContext.text).digest('hex') !== input.dependencyContext.sha256)) throw new NativeConnectionError('NATIVE_CONNECTION_UNAVAILABLE');
+  const binding = nativeSubscriptionSchema.parse(input.binding);
+  if (input.dependencyContext && !binding.promptDelivery) throw new NativeConnectionError('NATIVE_CONNECTION_UNAVAILABLE');
+  const spec = nativeProviderSpec(binding.provider);
   const capabilities = nativeCliCommand(binding.provider).capabilities;
   const projected = projectNativeCredential(binding.provider, input.credential);
   const limits = catalog.limits;
@@ -102,7 +106,7 @@ export async function openNativeConnection(input: { binding: NativeSubscription;
     statistics.bootstrapReads++;
     response.setHeader('Cache-Control', 'no-store');
     response.end(JSON.stringify({ schemaVersion: 1, provider: binding.provider, capabilities, home: spec.home, file: spec.file,
-      credential, preflight: binding.preflight, promptDelivery: binding.promptDelivery, finalReport: binding.finalReport,
+      credential, preflight: binding.preflight, promptDelivery: binding.promptDelivery, dependencyContext: input.dependencyContext ? { ...input.dependencyContext, maxBytes: workerReportLimits.promptBytes } : undefined, finalReport: binding.finalReport ? { ...binding.finalReport, limits: workerReportLimits } : undefined,
       ...('credentialEnvironment' in spec ? { credentialEnvironment: spec.credentialEnvironment } : {}), environment: spec.environment, limits }));
     credential = undefined;
   });
