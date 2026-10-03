@@ -340,5 +340,10 @@
   "task.settle.requested_pre_dispatch_reason_line": "İstenen tipli pre-dispatch nedeni (henüz kalıcı değil): {reasonCode}",
   "task.settlement.evidence_line": "Settlement: ham={rawStatus} · etkin={effectiveStatus} · receipt={receiptId} · neden={reasonCode} · kanıt={evidenceRefs}",
   "task.settlement.no_receipt_line": "Settlement: ham={rawStatus} · etkin={effectiveStatus} · receipt=yok · neden={reasonCode} · kanıt={evidenceRefs}",
-  "task.settlement.none": "yok"
+  "task.settlement.none": "yok",
+  "error.HANDOFF_SOURCE_NOT_ACCEPTED": "Devir kaynağı kabul edilmiş öncül denemesi değil.",
+  "error.HANDOFF_ARTIFACT_MISMATCH": "Devirdeki dosya kaydedilmiş çıktı ile eşleşmiyor.",
+  "error.HANDOFF_PATCH_UNAPPLICABLE": "Kabul edilmiş öncül yaması Run tabanına uygulanamıyor; işçi başlamadı.",
+  "error.HANDOFF_INVALID": "Yapılandırılmış devir notu geçersiz.",
+  "error.HANDOFF_LIMIT_EXCEEDED": "Devir notları yapılandırılmış sınırları aşıyor."
 }

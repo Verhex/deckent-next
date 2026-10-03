@@ -1,3 +1,4 @@
+import type { HandoffReceiptView } from '#engine/core/handoff-observation/index.js';
 import type { WorkerObservation } from '#engine/core/worker-observation/index.js';
 
 /**
@@ -49,7 +50,7 @@ export interface MonitorTask {
   readonly profile: { readonly id: string; readonly version: number } | null;
   readonly attempts: number; readonly lastAttempt: MonitorAttempt | null;
   readonly evaluation: { readonly verdict: 'accepted' | 'accepted-unverified' | 'rejected' | 'unknown' | 'pending' | null; readonly observedAtMs: number | null };
-  readonly dependencies: readonly string[];
+  readonly dependencies: readonly string[]; readonly handoffs?: readonly HandoffReceiptView[];
 }
 export type MonitorRunState = 'progressing' | 'waiting' | 'blocked' | 'accepted' | 'failed' | 'cancelled' | 'parked' | 'incomplete';
 export interface MonitorRun {

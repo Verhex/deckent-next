@@ -3,7 +3,7 @@ import { settleRunCancellation } from './run-settlement.js';
 import { SqliteExecutionPools } from './pools.js';
 import type { RunAdmissionFilter } from '#engine/index.js';
 import type { DatabaseSync } from 'node:sqlite';
-import { identitySchema, requestRunCancellation, createRun, reserveRunTasks, runSnapshotSchema, createAttempt, attemptSnapshotSchema, observeRunAttempt, RunError } from '#domain/index.js';
+import { identitySchema, requestRunCancellation, createRun, reserveRunTasks, runSnapshotSchema, createAttempt, attemptSnapshotSchema, reconcileRunLifecycle, observeRunAttempt, RunError } from '#domain/index.js';
 import { runCancellationSchema, type RunCancellation, runCreateSchema, runReservationSchema, runProjectionSchema, RunStoreError, AttemptStoreError, planSchedulingWave,
   assertRunExecution, assertTaskEvaluationCustody, diagnoseReservationWave, proposeTaskEvaluationCommit, taskEvaluationCommitSchema, type TaskEvaluationCommit, type ExecutionPool, runExecutionPolicySchema,
   type RunCreate, type RunReservation, type RunProjection, type RunReceipt } from '#engine/index.js';
@@ -93,7 +93,8 @@ export class SqliteRunJournal {
       let attempt;
       try { attempt = attemptSnapshotSchema.parse(JSON.parse(String(evidence.snapshot))); } catch { throw new RunStoreError('RUN_STORE_CORRUPT'); }
       if (attempt.revision !== evidence.revision || attempt.identity.scopeId !== scopeId || attempt.identity.attemptId !== parsed.attemptId) throw new RunStoreError('RUN_STORE_CORRUPT');
-      const snapshot = observeRunAttempt(current, parsed.expectedRevision, attempt);
+      const projected = observeRunAttempt(current, parsed.expectedRevision, attempt);
+      const snapshot = attempt.lastObservation?.result.kind === 'handoff-refused' ? reconcileRunLifecycle(projected, this.timing.now(), this.timing.timeoutMs) : projected;
       const updated = this.db.prepare('UPDATE runs SET revision=?,snapshot=? WHERE scope_id=? AND run_id=? AND revision=?')
         .run(snapshot.revision, JSON.stringify(snapshot), scopeId, runId, parsed.expectedRevision);
       if (updated.changes !== 1) throw new RunStoreError('RUN_STORE_CONFLICT');

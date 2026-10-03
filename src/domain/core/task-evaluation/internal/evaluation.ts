@@ -26,6 +26,8 @@ export const taskEvaluationModelSchema = legacyTaskEvaluationModelSchema.extend(
 export type TaskEvaluationModel = z.infer<typeof taskEvaluationModelSchema>;
 export const taskEvaluationSchema = z.object({ schemaVersion: z.literal(1), evaluationId: identitySchema,
   identity: attemptIdentitySchema, graphRevision: counterSchema.positive(), attemptRevision: counterSchema.positive(),
+  sharedNotes: z.object({ digest: z.string().regex(/^[a-f0-9]{64}$/), count: counterSchema.positive() }).strict().optional(),
+  handoff: z.discriminatedUnion('status', [z.object({ status: z.literal('valid'), digest: z.string().regex(/^[a-f0-9]{64}$/) }).strict(), z.object({ status: z.literal('invalid'), code: z.enum(['HANDOFF_ARTIFACT_MISMATCH', 'HANDOFF_INVALID']) }).strict()]).optional(),
   criteria: z.array(criterion).min(1).readonly(), model: taskEvaluationModelSchema.optional(),
   evidenceDigests: z.array(z.string().regex(/^[a-f0-9]{64}$/)).max(2).readonly().optional(),
   returnEvidence: z.object({ kind: z.enum(['output', 'model-seal']), digest: z.string().regex(/^[a-f0-9]{64}$/) }).strict().readonly().optional(),

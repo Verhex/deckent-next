@@ -139,6 +139,7 @@ export async function runCommand(argv: readonly string[], context: CommandContex
         ...(task.decision ? [t('cli.run.lifecycle.deadline', { since: task.decision.since, deadline: task.decision.deadline }, locale), t('cli.run.lifecycle.reason', { reason: task.decision.reason }, locale)] : []),
         t('cli.run.inspect.profile', { profile: task.profile.id, version: task.profile.version, criteria: task.acceptanceCriteria.join(', ') }, locale),
         ...(data.models ?? []).filter(model => model.taskId === task.id).map(model => t('cli.run.inspect.model', { attempt: model.attemptId ?? '—', line: renderWorkerModelLine(model, locale) }, locale)),
+        ...(task.handoffs ?? []).map(receipt => t('cli.run.inspect.handoffReceived', { source: receipt.source.taskId, attempt: receipt.source.attemptId, digest: receipt.digest }, locale)),
         ...(task.unresolvedEffects ? [t('cli.run.inspect.unresolved', {}, locale)] : [])]),
       ...run.criteria.map(criterion => t('cli.run.inspect.criterion', { criterion: criterion.id, description: criterion.description, evaluator: criterion.evaluator.id, version: criterion.evaluator.version }, locale)),
     ].join('\n');

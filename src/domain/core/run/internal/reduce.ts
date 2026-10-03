@@ -37,12 +37,13 @@ export function observeRunAttempt(input: unknown, expectedRevision: number, atte
   if (!binding || !sameAttemptIdentity(binding.identity, attempt.identity)) throw new RunError('RUN_ATTEMPT_CONFLICT');
   const observation = attempt.lastObservation;
   if (!observation || (binding.observedRevision !== null && attempt.revision <= binding.observedRevision)) throw new RunError('RUN_OBSERVATION_STALE');
-  if ((binding.observedKind === 'exited' || binding.observedKind === 'cancelled') && observation.result.kind !== binding.observedKind) throw new RunError('RUN_ATTEMPT_CONFLICT');
+  if ((binding.observedKind === 'exited' || binding.observedKind === 'cancelled' || binding.observedKind === 'handoff-refused') && observation.result.kind !== binding.observedKind) throw new RunError('RUN_ATTEMPT_CONFLICT');
   const progress = run.progress.map(task => {
     if (task.taskId !== attempt.identity.taskId) return task;
     if (!['active', 'evaluating', 'reconciling'].includes(task.phase)) throw new RunError('RUN_ATTEMPT_CONFLICT');
+    if (observation.result.kind === 'handoff-refused' && (task.phase !== 'active' || task.unresolvedEffects || binding.observedKind !== null)) throw new RunError('RUN_ATTEMPT_CONFLICT');
     const uncertain = task.unresolvedEffects || observation.result.kind === 'unknown' || observation.result.kind === 'cancelled';
-    const phase: TaskProgress['phase'] = uncertain ? 'reconciling' : observation.result.kind === 'exited' ? 'evaluating' : 'active';
+    const phase: TaskProgress['phase'] = observation.result.kind === 'handoff-refused' ? 'failed' : uncertain ? 'reconciling' : observation.result.kind === 'exited' ? 'evaluating' : 'active';
     return { ...task, phase, unresolvedEffects: uncertain };
   });
   return runSnapshotSchema.parse({ ...run, revision: run.revision + 1, progress,

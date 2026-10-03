@@ -1,3 +1,4 @@
+import type { HandoffStartRecord } from '#engine/core/handoff-observation/index.js';
 import type { RunSnapshot, WorkerModelView } from '#domain/index.js';
 import type { MonitorDeliveryState, MonitorMap } from './contract.js';
 import type { RuntimeServiceDescriptor } from '#engine/core/runtime/index.js';
@@ -15,9 +16,9 @@ export interface MonitorLedgerDispatch {
   readonly outputRecorded: boolean;
 }
 export interface MonitorLedgerAttempt {
-  readonly attemptId: string; readonly generation: number;
+  readonly attemptId: string; readonly generation: number; readonly handoffStart?: HandoffStartRecord | null;
   /** The Run binding's last projected observation. */
-  readonly observedKind: 'started' | 'exited' | 'cancelled' | 'unknown' | null; readonly observedRevision: number | null;
+  readonly observedKind: 'started' | 'exited' | 'cancelled' | 'unknown' | 'handoff-refused' | null; readonly observedRevision: number | null;
   readonly dispatch: MonitorLedgerDispatch | null;
   /** A `task_evaluation_observations` row exists for (attempt, observed revision): an evaluation was committed (HOLD keeps `evaluating`). */
   readonly evaluationObserved: boolean;

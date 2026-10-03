@@ -1,5 +1,5 @@
 import { counterSchema } from '#domain/core/primitives/index.js';
-import { inspectTaskReadiness, type TaskProgress } from '#domain/core/task-graph/index.js';
+import { inspectTaskReadiness, taskDependencyIds, type TaskProgress } from '#domain/core/task-graph/index.js';
 import { checkedRun, runSnapshotSchema, RunError, type RunSnapshot } from './contract.js';
 export type RunLifecycleTiming = Readonly<{ now: number; timeoutMs: number }>;
 export type TaskDecisionReason = 'evaluation-unknown' | 'evaluation-not-ready';
@@ -18,7 +18,7 @@ export function reconcileRunLifecycle(input: unknown, now: number, timeoutMs: nu
     for (const task of run.graph.tasks) {
       const state = progress.get(task.id)!;
       if (state.phase !== 'pending') continue;
-      const unavailable = task.dependencies.map(id => progress.get(id)!).find(parent => ['failed', 'cancelled', 'skipped'].includes(parent.phase));
+      const unavailable = taskDependencyIds(task).map(id => progress.get(id)!).find(parent => ['failed', 'cancelled', 'skipped'].includes(parent.phase));
       if (!unavailable) continue;
       const skippedReason = unavailable.phase === 'skipped' ? unavailable.skippedReason! : unavailable.phase === 'cancelled' ? 'dependency-cancelled' : 'dependency-failed';
       progress.set(task.id, { ...state, phase: 'skipped', skippedReason }); changed = true;

@@ -4,26 +4,31 @@ import { criterionDefinitionSchema } from './criteria.js';
 import { workInputSchema } from './work-input.js';
 
 // Wire invariants, not configurable scheduling policy. Kind definitions live in registries.
-// v3 (K3 = A) adds the optional typed `workInput` per task; v2 graphs stay accepted unchanged, and a v2 graph never carries one.
-export const TASK_GRAPH_SCHEMA_VERSION = 3;
+// v4 adds explicit accepted-patch dependency edges. Read migration accepts v2/v3 unchanged: their string edges keep fixed-base semantics.
+export const TASK_GRAPH_SCHEMA_VERSION = 4;
+export const taskDependencySchema = z.union([identity, z.object({ taskId: identity, startFrom: z.literal('accepted-patch').optional() }).strict().readonly()]);
+export type TaskDependency = z.infer<typeof taskDependencySchema>;
+export function dependencyTaskId(edge: TaskDependency): string { return typeof edge === 'string' ? edge : edge.taskId; }
+export function taskDependencyIds(task: { readonly dependencies: readonly TaskDependency[] }): readonly string[] { return task.dependencies.map(dependencyTaskId); }
 
 export const taskInputNameSchema = z.string().regex(/^[a-zA-Z0-9_-]{1,64}$/);
 
 export const taskDefinitionSchema = z.object({
   id: identity,
   kind: identity,
-  dependencies: z.array(identity).readonly(),
+  dependencies: z.array(taskDependencySchema).readonly(),
   acceptanceCriteria: z.array(identity).min(1).readonly(),
   inputs: z.array(z.object({ name: taskInputNameSchema, taskId: identity, output: taskInputNameSchema.optional() }).strict().readonly()).readonly().optional(),
   workInput: workInputSchema.optional(),
 }).strict().readonly();
 export const taskGraphSchema = z.object({
-  schemaVersion: z.union([z.literal(2), z.literal(TASK_GRAPH_SCHEMA_VERSION)]),
+  schemaVersion: z.union([z.literal(2), z.literal(3), z.literal(TASK_GRAPH_SCHEMA_VERSION)]),
   revision: counterSchema.positive(),
   tasks: z.array(taskDefinitionSchema).min(1).readonly(),
   criterionDefinitions: z.array(criterionDefinitionSchema).readonly(),
 }).strict().superRefine((graph, context) => {
   graph.tasks.forEach((task, index) => {
+    if (graph.schemaVersion !== TASK_GRAPH_SCHEMA_VERSION && task.dependencies.some(edge => typeof edge !== 'string')) context.addIssue({ code: z.ZodIssueCode.custom, path: ['tasks', index, 'dependencies'], message: 'TASK_GRAPH_VERSION' });
     if (graph.schemaVersion === 2 && task.workInput !== undefined) context.addIssue({ code: z.ZodIssueCode.custom, path: ['tasks', index, 'workInput'], message: 'TASK_GRAPH_VERSION' });
   });
 }).readonly();

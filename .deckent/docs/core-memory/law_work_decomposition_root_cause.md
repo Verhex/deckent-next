@@ -23,3 +23,5 @@ aynı hold/resume yetki sınırında makbuzlu etkin kapasite override, doluluk a
 dış `proof/POOL-CAPACITY-2026-10-03/review.md`. İlk pool kaydı installer replay için korunur; override, occupancy kontrolü, eski→yeni
 makbuzu ve audit tek transaction'dır. Saniyelik poll'a bekleme yazımı eklenmez; türetilmiş güncel koşul tarihsel ret zamanı değildir.
 Kontrollü sekiz rezervasyon, sekiz native worker'ın ölçülmüş paralelliği ya da N1 kabulü değildir; canlıya müdahale ayrı yetkidir.
+
+Owner-admitted AOF-HANDOFF dersi (2026-10-03): legacy `HandoffProtocol.ready` artifact varlığını kabul sanıyordu. Düzeltme sınırı doğrudan bağımlının kanonik accepted Task ve tam Attempt kimliği, mühürlü çıktı/artifact digest bağıdır; devir notunun geçerliliği görev kabulü değildir. Output teslimi ile predecessor kodundan başlangıç ayrı kanıtlardır: ikincisi açık graph kenarı, retained patch custody, sabit Run tabanı ve temiz uygulanma gerektirir. Başlangıç reddi worker çıkışı uydurmadan tipli gözlemle mevcut failed/skipped/park sahibine bağlanır. Negatif proof: `proof/AOF-HANDOFF-2026-10-03/review.md`.

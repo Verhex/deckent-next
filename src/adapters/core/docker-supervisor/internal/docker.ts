@@ -128,6 +128,15 @@ export class DockerSupervisor implements ExecutionSupervisor {
       names.add(input.name);
       inputMounts.push('--mount', `type=bind,src=${input.path},dst=/deckent/inputs/${input.name},readonly`);
     }
+    for (const input of o.handoffInputs ?? []) {
+      const local = relative(root, input.path);
+      if (input.receipt.scopeId !== request.identity.scopeId || names.has(input.target) || !isAbsolute(input.path)
+        || input.path.includes(',') || input.path.includes(String.fromCharCode(0))
+        || (local !== '..' && !local.startsWith('..' + sep)) || await realpath(input.path) !== input.path
+        || !(await lstat(input.path)).isFile()) throw new SupervisorError('SUPERVISOR_REQUEST_INVALID');
+      names.add(input.target);
+      inputMounts.push('--mount', `type=bind,src=${input.path},dst=${input.target},readonly`);
+    }
     // Dependency binds (B06-2c) are re-checked at launch (real directory, outside the workspaces) and always read-only.
     const readOnlyMounts: string[] = [];
     for (const mount of o.readOnlyMounts ?? []) {

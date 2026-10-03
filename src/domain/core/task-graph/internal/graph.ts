@@ -1,5 +1,5 @@
 import { sanitizeIssues } from '#domain/core/primitives/index.js';
-import { taskGraphSchema, TaskGraphError, type TaskGraph } from './contract.js';
+import { taskGraphSchema, taskDependencyIds, TaskGraphError, type TaskGraph } from './contract.js';
 
 /** Validate once at admission. Iterative Kahn traversal avoids stack limits on deep plans. */
 export function validateTaskGraph(input: unknown): TaskGraph {
@@ -17,12 +17,13 @@ export function validateTaskGraphStructure(graph: Pick<TaskGraph, 'tasks'>): voi
   const ready: string[] = [];
   for (const task of graph.tasks) {
     if (new Set(task.acceptanceCriteria).size !== task.acceptanceCriteria.length) throw new TaskGraphError('TASK_ACCEPTANCE_DUPLICATE');
-    if (new Set(task.dependencies).size !== task.dependencies.length) throw new TaskGraphError('TASK_DEPENDENCY_DUPLICATE');
+    const dependencies = taskDependencyIds(task);
+    if (new Set(dependencies).size !== dependencies.length) throw new TaskGraphError('TASK_DEPENDENCY_DUPLICATE');
     if (new Set((task.inputs ?? []).map(input => input.name)).size !== (task.inputs?.length ?? 0)
-      || task.inputs?.some(input => !task.dependencies.includes(input.taskId))) throw new TaskGraphError('TASK_GRAPH_INVALID');
+      || task.inputs?.some(input => !dependencies.includes(input.taskId))) throw new TaskGraphError('TASK_GRAPH_INVALID');
     remaining.set(task.id, task.dependencies.length);
     if (!task.dependencies.length) ready.push(task.id);
-    for (const dependency of task.dependencies) {
+    for (const dependency of dependencies) {
       if (!tasks.has(dependency)) throw new TaskGraphError('TASK_DEPENDENCY_MISSING');
       const children = dependents.get(dependency) ?? [];
       children.push(task.id);

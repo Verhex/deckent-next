@@ -417,6 +417,7 @@
   "monitor.detail.task": "  {task} ({kind}, {profile}) · {phase} · deneme {attempts}",
   "monitor.detail.attempt": "deneme {attempt} nesil {generation} · başlatma {launch} · {started} → {ended} ({duration}) · çıkış {exit} · {provider}/{model}",
   "monitor.detail.evaluation": "değerlendirme: {verdict} {when}",
+  "monitor.detail.handoffReceived": "{source} görevinden devir alındı (deneme {attempt}, özet {digest})",
   "monitor.detail.dependencies": "bağlı olduğu: {list}",
   "monitor.detail.worker": "Worker {task} · deneme {attempt} · nesil {generation} · {provider} · kurulum {install}",
   "monitor.detail.now": "Şu an: {phase} · {target}",

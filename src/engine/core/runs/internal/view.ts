@@ -1,5 +1,7 @@
+import { handoffReceiptViewSchema, projectTaskHandoffs } from '#engine/core/handoff-observation/index.js';
+import type { HandoffStartRecord } from '#engine/core/handoff-observation/index.js';
 import { z } from 'zod';
-import { taskDefinitionSchema, taskProgressSchema, runStateSchema, branchDecisionSchema, identitySchema, counterSchema, runSnapshotSchema } from '#domain/index.js';
+import { taskDependencyIds, taskDefinitionSchema, taskProgressSchema, runStateSchema, branchDecisionSchema, identitySchema, counterSchema, runSnapshotSchema } from '#domain/index.js';
 import { runPoolObservationSchema } from './pool-observation.js';
 import { RunStoreError } from './store.js';
 /** Public query contract. Storage schema changes must be mapped here, never spread into the API. */
@@ -11,7 +13,7 @@ export const runViewSchema = z.object({
   revision: counterSchema, cancellationRequested: z.boolean(), state: runStateSchema,
   tasks: z.array(z.object({
     id: identitySchema, kind: identitySchema, dependencies: z.array(identitySchema).readonly(),
-    acceptanceCriteria: z.array(identitySchema).readonly(),
+    acceptanceCriteria: z.array(identitySchema).readonly(), handoffs: z.array(handoffReceiptViewSchema).readonly().optional(),
     inputs: taskDefinitionSchema.unwrap().shape.inputs,
     profile: z.object({ id: identitySchema, version: counterSchema.positive() }).strict().readonly(),
     phase: taskProgressSchema.unwrap().innerType().shape.phase,
@@ -21,7 +23,7 @@ export const runViewSchema = z.object({
   }).strict().readonly()).readonly(),
 }).strict().readonly();
 export type RunView = z.infer<typeof runViewSchema>;
-export function projectRunView(input: unknown): RunView {
+export function projectRunView(input: unknown, receipts: readonly HandoffStartRecord[] = []): RunView {
   const parsed = runSnapshotSchema.safeParse(input);
   if (!parsed.success) throw new RunStoreError('RUN_STORE_CORRUPT');
   const run = parsed.data; const progress = new Map(run.progress.map(task => [task.taskId, task]));
@@ -29,9 +31,10 @@ export function projectRunView(input: unknown): RunView {
     layoutRevision: run.identity.layoutRevision, ...(run.branch ? { branch: { schemaVersion: run.branch.schemaVersion, request: run.branch.request, selectedTaskId: run.branch.selectedTaskId, notSelectedTaskId: run.branch.notSelectedTaskId } } : {}), registryRevision: run.execution.registryRevision,
     criteria: run.graph.criterionDefinitions.map(criterion => ({ id: criterion.id, version: criterion.version, description: criterion.description, evaluator: criterion.evaluator, fingerprint: run.execution.criteria.find(entry => entry.criterionId === criterion.id)!.fingerprint })),
     revision: run.revision, cancellationRequested: run.cancelRequested, state: run.state,
-    tasks: run.graph.tasks.map(task => ({ id: task.id, kind: task.kind, dependencies: [...task.dependencies], acceptanceCriteria: [...task.acceptanceCriteria], ...(task.inputs ? { inputs: task.inputs } : {}),
+    tasks: run.graph.tasks.map(task => ({ id: task.id, kind: task.kind, dependencies: taskDependencyIds(task), acceptanceCriteria: [...task.acceptanceCriteria], ...(task.inputs ? { inputs: task.inputs } : {}),
       profile: { id: run.execution.tasks.find(entry => entry.taskId === task.id)!.profile.id, version: run.execution.tasks.find(entry => entry.taskId === task.id)!.profile.version },
       phase: progress.get(task.id)!.phase,
+      ...(projectTaskHandoffs(run, task.id, receipts).length ? { handoffs: projectTaskHandoffs(run, task.id, receipts) } : {}),
       ...(progress.get(task.id)!.skippedReason ? { skippedReason: progress.get(task.id)!.skippedReason } : {}),
       ...(progress.get(task.id)!.decision ? { decision: progress.get(task.id)!.decision } : {}),
       ...(progress.get(task.id)!.acceptedEvidence ? { acceptedEvidence: progress.get(task.id)!.acceptedEvidence } : {}), unresolvedEffects: progress.get(task.id)!.unresolvedEffects,

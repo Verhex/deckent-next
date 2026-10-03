@@ -4,9 +4,9 @@ import { prepareProductDirectory, ErrorRegistry, type ConfigLoadOptions } from '
 import { attemptIdentitySchema, type AttemptIdentity } from '#domain/index.js';
 import { DockerSupervisor, GitWorkspaceBroker, GitRunWorkspaceProvider, FileArtifactStore, openSqliteAttemptStore, resolveGitWorkTarget,
   validateDockerSupervisorProfile, resolveDockerTaskProfile, resolveDockerReadOnlyMounts, readLocalNativeCredential, openNativeConnection,
-  startWorkerObservation, openWorkerEventSink, sealWorkerEventLog, selectWorkTarget } from '#adapters/index.js';
+  applyAcceptedPredecessorPatches, startWorkerObservation, openWorkerEventSink, sealWorkerEventLog, selectWorkTarget } from '#adapters/index.js';
 import { authenticate, DispatchApplication, DispatchPolicyAuthorization, RunWorkspaceAcquisitionApplication, selectReservedTaskProfile,
-  RunStoreError, DispatchError, TaskInputApplication, selectTaskInputArtifact, workTargetAttemptAuthorization } from '#engine/index.js';
+  RunStoreError, DispatchError, HandoffError, recordHandoffRefusal, prepareTaskStart, recordAttemptHandoffStart, workTargetAttemptAuthorization } from '#engine/index.js';
 import { createLayoutPolicySource } from '#composition/core/policy/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
@@ -39,42 +39,23 @@ export async function executeConfiguredTask(projectRoot: string, input: AttemptI
       const readOnlyMounts = profile.readOnlyMounts?.length ? await resolveDockerReadOnlyMounts(projectRoot, profile.readOnlyMounts, [layout.root,
         ...Object.values(layout.resources)]).catch(() => { throw ErrorRegistry.createError('EXECUTION_PROFILE_INVALID'); }) : undefined;
       const artifacts = new FileArtifactStore({ root: await prepareProductDirectory(layout, 'artifacts'), maxBytes: config.artifacts.maxBytes });
-      const inputs = [];
-      const count = run?.graph.tasks.find(task => task.id === identity.taskId)?.inputs?.length ?? 0;
-      if (count > config.artifacts.maxInputs) throw new DispatchError('DISPATCH_ARTIFACT_REQUIRED');
-      const declarations = count ? await new TaskInputApplication(store, verifier, authorization).resolve(identity) : [];
-      let remaining = config.artifacts.maxBytes;
-      for (const { binding } of declarations) {
-        if (binding.receipt.byteLength > remaining) throw new DispatchError('DISPATCH_ARTIFACT_REQUIRED');
-        remaining -= binding.receipt.byteLength;
-      }
-      const selections = [];
-      for (const { source, binding } of declarations) {
-        const prepared = await artifacts.prepareReadOnlyFile(identity.scopeId, binding.receipt);
-        const selectedInput = selectTaskInputArtifact(source, binding, prepared.bytes);
-        if (binding.output) {
-          if (selectedInput.receipt.byteLength > remaining) throw new DispatchError('DISPATCH_ARTIFACT_REQUIRED');
-          remaining -= selectedInput.receipt.byteLength;
-        }
-        selections.push({ binding: selectedInput, envelopePath: prepared.path });
-      }
-      for (const { binding, envelopePath } of selections) {
-        const path = binding.output ? (await artifacts.prepareReadOnlyFile(identity.scopeId, binding.receipt)).path : envelopePath;
-        inputs.push({ ...binding, path });
-      }
-      const broker = new GitWorkspaceBroker({ ...config.execution.git, ...(await resolveGitWorkTarget(resolve(projectRoot), config.execution, layout)).git, workspaceRoot });
+      const start = await prepareTaskStart(identity, store, artifacts, verifier, authorization, config);
+      const git = { ...config.execution.git, ...(await resolveGitWorkTarget(resolve(projectRoot), config.execution, layout)).git, workspaceRoot };
+      const broker = new GitWorkspaceBroker(git);
       const lease = await new RunWorkspaceAcquisitionApplication(store, new GitRunWorkspaceProvider(broker)).acquire(identity);
+      await applyAcceptedPredecessorPatches(lease, git, { ...config.artifacts.patchPreview, maxBytes: config.artifacts.maxBytes }, start.patches);
+      await recordAttemptHandoffStart(store, identity, [...start.events, ...start.patches.map(patch => ({ kind: 'workspace-started-from-patch' as const, source: patch.source, digest: patch.receipt.digest }))]);
       // Worker-reported events (redacted in the container, validated by the gateway) project live next to the other sidecars.
       const events = profile.nativeSubscription ? await openWorkerEventSink(dirname(lease.workspace)).catch(() => undefined) : undefined;
       // Connection follows the same authorized, pinned attempt; credential bytes never enter its receipt.
       const connection = profile.nativeSubscription ? await openNativeConnection({ binding: profile.nativeSubscription,
         directory: workspaceRoot, credential: await readLocalNativeCredential(profile.nativeSubscription.provider, options.env),
-        deadlineMs: profile.options.deadlineMs, ...(events ? { onEvents: batch => events.accept(batch) } : {}) }) : undefined;
+        deadlineMs: profile.options.deadlineMs, ...(profile.nativeSubscription.promptDelivery && start.dependencyContext ? { dependencyContext: start.dependencyContext } : {}), ...(events ? { onEvents: batch => events.accept(batch) } : {}) }) : undefined;
       try {
       const supervisor = new DockerSupervisor({ ...profile.options, executable: config.execution.docker.executable, workspaceRoot, uid: os.uid, gid: os.gid,
-        ...(inputs.length ? { inputs } : {}), ...(readOnlyMounts ? { readOnlyMounts } : {}), ...(connection ? { connection: connection.descriptor } : {}) });
+        ...(start.inputs.length ? { inputs: start.inputs } : {}), ...(start.handoffInputs.length ? { handoffInputs: start.handoffInputs } : {}), ...(readOnlyMounts ? { readOnlyMounts } : {}), ...(connection ? { connection: connection.descriptor } : {}) });
       const app = new DispatchApplication(store, supervisor, verifier, authorization, principal.id, artifacts);
-      for (const { source } of declarations) await authorization.authorizeIdentity('read-output', source, principal);
+      for (const { source } of start.declarations) await authorization.authorizeIdentity('read-output', source, principal);
       const request = { protocolVersion: 1 as const, identity, workspace: lease.workspace, argv: profile.argv };
       const observation = await startWorkerObservation(dirname(lease.workspace), config.inspection.workers.heartbeatMs,
         config.inspection.workers.maxFileBytes, async () => {
@@ -105,6 +86,9 @@ export async function executeConfiguredTask(projectRoot: string, input: AttemptI
           }
         } catch { /* live sidecar remains; sealing is observation, not execution */ }
       }
+    } catch (error) {
+      if (error instanceof HandoffError) await recordHandoffRefusal(store, identity, error, { id: principal.id, issuer: principal.issuer, subject: principal.subject });
+      throw error;
     } finally { store.close(); }
   } catch (error) { throw queryFailure(error); }
 }

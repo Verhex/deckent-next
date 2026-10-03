@@ -1,2 +1,11 @@
 export { TaskInputApplication, taskInputBindingSchema, selectTaskInputArtifact } from './internal/resolve.js';
 export type { TaskInputBinding } from './internal/resolve.js';
+export { TaskPatchStartApplication } from './internal/patch-start.js';
+export type { AcceptedPredecessorPatch } from './internal/patch-start.js';
+export { TaskHandoffApplication } from './internal/handoff.js';
+export type { HandoffDeliveryLimits } from './internal/handoff.js';
+export { handoffStartRecordSchema, handoffEventCommandId, readAttemptHandoffEvents, recordAttemptHandoffStart } from '#engine/core/handoff-observation/index.js';
+export type { HandoffStartRecord, HandoffStartEvent } from '#engine/core/handoff-observation/index.js';
+export { HandoffError, evaluateHandoff, verifyAcceptedHandoffSource } from '#engine/core/handoff-observation/index.js';
+export { prepareTaskStart } from './internal/start.js';
+export { recordHandoffRefusal } from './internal/refusal.js';

@@ -72,7 +72,7 @@ async function seeded() {
 
 describe('task graph v3 work input (domain)', () => {
   it('accepts v2 unchanged and v3 with or without a work input; a v2 graph never carries one; inputs are bounded and exact', () => {
-    expect(TASK_GRAPH_SCHEMA_VERSION).toBe(3);
+    expect(TASK_GRAPH_SCHEMA_VERSION).toBe(4);
     expect(validateTaskGraph(graph('hand', undefined, 2)).schemaVersion).toBe(2);
     expect(validateTaskGraph(graph('coding', workInput())).tasks[0]!.workInput!.model.modelId).toBe('claude-sonnet-5-5');
     const invalid = (input: unknown, schemaVersion = 3) => expect(() => validateTaskGraph(graph('coding', input as object, schemaVersion))).toThrow(expect.objectContaining({ code: 'TASK_GRAPH_INVALID' }));

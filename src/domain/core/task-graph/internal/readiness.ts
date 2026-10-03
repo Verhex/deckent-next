@@ -1,5 +1,5 @@
 import { sanitizeIssues } from '#domain/core/primitives/index.js';
-import { readinessInputSchema, TaskGraphError, type TaskProgress } from './contract.js';
+import { readinessInputSchema, taskDependencyIds, TaskGraphError, type TaskProgress } from './contract.js';
 import { validateTaskGraph } from './graph.js';
 
 export type TaskReadiness = Readonly<{
@@ -30,13 +30,13 @@ export function inspectTaskReadiness(graphInput: unknown, snapshotInput: unknown
   const blocked = (id: string): boolean => {
     const cached = blockedMemo.get(id); if (cached !== undefined) return cached;
     const state = progress.get(id)!;
-    const value = state.phase !== 'accepted' && (['failed', 'cancelled', 'skipped'].includes(state.phase) || graph.tasks.find(task => task.id === id)!.dependencies.some(blocked));
+    const value = state.phase !== 'accepted' && (['failed', 'cancelled', 'skipped'].includes(state.phase) || taskDependencyIds(graph.tasks.find(task => task.id === id)!).some(blocked));
     blockedMemo.set(id, value); return value;
   };
   return Object.freeze(graph.tasks.map(task => {
     const state = progress.get(task.id)!;
     let disposition: TaskReadiness['disposition'];
-    const dependencies = task.dependencies.filter(id => progress.get(id)!.phase !== 'accepted');
+    const dependencies = taskDependencyIds(task).filter(id => progress.get(id)!.phase !== 'accepted');
     if (state.unresolvedEffects || state.phase === 'reconciling') disposition = 'reconciliation';
     else if (['accepted', 'failed', 'cancelled', 'skipped'].includes(state.phase)) disposition = 'terminal';
     else if (state.phase === 'awaiting-decision') disposition = 'awaiting-decision';

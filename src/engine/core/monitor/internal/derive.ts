@@ -1,5 +1,6 @@
 import { derivePoolWait, hasRunReservationRoom } from '#engine/core/runs/index.js';
-import { inspectTaskReadiness, type TaskReadiness, type WorkerModelView } from '#domain/index.js';
+import { projectTaskHandoffs } from '#engine/core/handoff-observation/index.js';
+import { inspectTaskReadiness, taskDependencyIds, type TaskReadiness, type WorkerModelView } from '#domain/index.js';
 import type { WorkerObservation } from '#engine/core/worker-observation/index.js';
 import type { MonitorBlocker, MonitorBlockerCode, MonitorRun, MonitorRunState, MonitorTask } from './contract.js';
 import type { MonitorLedgerApproval, MonitorLedgerAttempt, MonitorLedgerPool, MonitorLedgerRun } from './evidence.js';
@@ -128,7 +129,8 @@ export function projectMonitorRun(e: MonitorRunEvidence): MonitorRun {
     const provider = worker && worker.provider !== 'unknown' ? worker.provider : attempt?.provider ?? null;
     return Object.freeze({ taskId: definition.id, kind: definition.kind, phase: progress.phase, ...(wait ? { waiting: wait } : {}), profile: profile ? { id: profile.id, version: profile.version } : null,
       ...(progress.decision ? { decision: { reason: progress.decision.reason, sinceMs: progress.decision.since, deadlineMs: progress.decision.deadline } } : {}),
-      attempts: attempt ? 1 : 0, dependencies: definition.dependencies, evaluation: { verdict: progress.acceptedEvidence === 'model-unverified' ? 'accepted-unverified' : verdict(progress.phase, attempt, progress.decision?.reason), observedAtMs: null },
+      attempts: attempt ? 1 : 0, dependencies: taskDependencyIds(definition),
+      ...(attempt?.handoffStart ? { handoffs: projectTaskHandoffs(snapshot, definition.id, [attempt.handoffStart]) } : {}), evaluation: { verdict: progress.acceptedEvidence === 'model-unverified' ? 'accepted-unverified' : verdict(progress.phase, attempt, progress.decision?.reason), observedAtMs: null },
       lastAttempt: attempt ? Object.freeze({ attemptId: attempt.attemptId, generation: attempt.generation, launch: attempt.dispatch?.launch ?? null,
         exitCode: attempt.dispatch?.terminal?.exitCode ?? null, startedAtMs: attempt.dispatch?.grantedAtMs ?? null, endedAtMs: endOf(attempt),
         endedAtSource: attempt.sealedAtMs !== null ? 'sealed' as const : endOf(attempt) !== null ? 'observed' as const : null,

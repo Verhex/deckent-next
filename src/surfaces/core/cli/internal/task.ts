@@ -1,3 +1,4 @@
+import { inspectTask } from './task-inspect.js';
 import { hasCliAction } from '#surfaces/core/cli-kit/index.js';
 import { cliUsage } from './usage.js';
 import { ErrorRegistry, emit, loadConfig, resolveLocale, t, type ConfigLoadOptions, type ProductLayout } from '#platform/index.js';
@@ -98,6 +99,7 @@ export async function taskCommand(argv: readonly string[], context: CommandConte
   const resolveLatest = ['patch-preview', 'transcript', 'integration-inspect'].includes(action ?? '') && !attemptId && !layoutRevision && !generation;
   let identity: AttemptIdentity;
   let resolvedNotice: Readonly<{ attempt: string; generation: number; layout: string; run: string; task: string }> | undefined;
+  if (action === 'inspect') { await inspectTask(values, context, json, earlyLocale, usage); return; }
   if (resolveLatest) {
     if (!scopeId || !runId || !taskId) throw usage(!scopeId ? '--scope' : !runId ? '--run' : '--task');
     if (!context.inspectInventory) throw ErrorRegistry.createError('INVENTORY_UNAVAILABLE');
