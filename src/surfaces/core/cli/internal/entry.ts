@@ -39,7 +39,7 @@ export function dispatch(argv: readonly string[]): { readonly output: string; re
   if (command === '--version' || command === '-v') {
     const build = readBuildIdentity();
     const line = build ? '\n' + t('cli.version.build', { tree: build.sourceTreeSha256.slice(0, 12), commit: build.sourceCommit?.slice(0, 12) ?? '-',
-      dirty: build.sourceDirty ? t('cli.version.dirty') : '' }) : '';
+      dirty: build.sourceDirty ? t('cli.version.dirty') : '', source: build.sourceCommonDir ? ` · sourceCommonDir ${build.sourceCommonDir}` : '' }) : '';
     return { output: t('cli.version', common) + line, code: 0 };
   }
   return { output: t('cli.unknownCommand', { ...common, command }), code: 2 };

@@ -6,7 +6,8 @@ import { policyResources } from './vocabulary.js';
  * owner approval card, as data. Pure: which calls may stand, the narrow pattern a standing approval covers, and the `policy.administer`
  * change that persists it as the person's OWN grant. The grant is an ordinary policy v2 grant on the resource kind `agent-tool-call`
  * (id = the pattern key, exact string — no policy version changes); it is consulted only by the call decision's lowering step, never by
- * the strict policy sides, so it can lower an approval but never create authority the company denied.
+ * the strict policy sides, so it can lower an approval but never create authority the company denied. SELF-SOURCE-FLOOR adds a separate
+ * session-only pattern: its cell can never persist as a standing approval.
  */
 export const STANDING_GRANT_KIND = policyResources.agentToolCall.kind;
 export const STANDING_GRANT_ACTION = 'invoke';
@@ -18,15 +19,18 @@ export const STANDING_PATTERN_MAX_CHARS = 200;
 /**
  * The cells a standing approval may lower, decided one by one: an ordinary edit (outside the write floor) and the two shell tiers that are
  * bounded by the classifier (read-only with wide reach, the narrow mutating set). Everything else is never standing: the write floor
- * (`edit-floor`, owner: hard floor), destructive / always-ask / other-modify shell commands, and every fetch (no mode lowers a fetch).
+ * (`edit-floor`, owner: hard floor; `edit-self-source`, session only), destructive / always-ask / other-modify shell commands, and every fetch (no mode lowers a fetch).
  */
 export type StandingCell = 'edit' | 'shell-read-low' | 'shell-narrow-mutating';
 const STANDING_CELLS: ReadonlySet<string> = new Set<StandingCell>(['edit', 'shell-read-low', 'shell-narrow-mutating']);
 export const standingCell = (cell: string): cell is StandingCell => STANDING_CELLS.has(cell);
 
 export type StandingRefusal = 'cell-not-standing' | 'no-target' | 'unsafe-target' | 'pattern-too-long';
-export interface StandingPattern { readonly key: string; readonly kind: 'command' | 'directory'; readonly text: string; readonly tool: string; readonly cell: StandingCell }
+export type SessionCell = StandingCell | 'edit-self-source';
+export interface SessionPattern { readonly key: string; readonly kind: 'command' | 'directory'; readonly text: string; readonly tool: string; readonly cell: SessionCell }
+export interface StandingPattern extends SessionPattern { readonly cell: StandingCell }
 export type StandingPatternResult = { readonly ok: true; readonly pattern: StandingPattern } | { readonly ok: false; readonly reason: StandingRefusal };
+export type SessionPatternResult = { readonly ok: true; readonly pattern: SessionPattern } | { readonly ok: false; readonly reason: StandingRefusal };
 
 const hasControl = (text: string) => [...text].some(char => char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127);
 const GLOB = /[*?[\]{}\\]/u;
@@ -43,11 +47,21 @@ const refuse = (reason: StandingRefusal): StandingPatternResult => Object.freeze
  */
 export function standingPattern(call: { readonly tool: string; readonly cell: string; readonly path: string | null; readonly command: string | null }): StandingPatternResult {
   if (!standingCell(call.cell)) return refuse('cell-not-standing');
-  const seal = (kind: StandingPattern['kind'], text: string): StandingPatternResult => {
-    const key = `v1:${call.tool}:${kind}:${text}`;
-    return key.length > IDENTITY_MAX_LENGTH ? refuse('pattern-too-long') : Object.freeze({ ok: true, pattern: Object.freeze({ key, kind, text, tool: call.tool, cell: call.cell as StandingCell }) });
+  return callPattern({ ...call, cell: call.cell }, `v1:${call.tool}`) as StandingPatternResult;
+}
+
+/** A session answer also covers self-source edits, under a distinct key that no ordinary edit grant or memory can match. */
+export function sessionPattern(call: { readonly tool: string; readonly cell: string; readonly path: string | null; readonly command: string | null }): SessionPatternResult {
+  if (call.cell !== 'edit-self-source') return standingPattern(call);
+  return callPattern({ ...call, cell: call.cell }, `v1:session:${call.cell}:${call.tool}`);
+}
+
+function callPattern(call: { readonly tool: string; readonly cell: SessionCell; readonly path: string | null; readonly command: string | null }, prefix: string): SessionPatternResult {
+  const seal = (kind: SessionPattern['kind'], text: string): SessionPatternResult => {
+    const key = `${prefix}:${kind}:${text}`;
+    return key.length > IDENTITY_MAX_LENGTH ? refuse('pattern-too-long') : Object.freeze({ ok: true, pattern: Object.freeze({ key, kind, text, tool: call.tool, cell: call.cell }) });
   };
-  if (call.cell === 'edit') {
+  if (call.cell === 'edit' || (call.cell === 'edit-self-source' && call.path !== null)) {
     const path = call.path;
     if (path === null || path === '') return refuse('no-target');
     if (path.startsWith('/') || hasControl(path) || GLOB.test(path) || path.trim() !== path) return refuse('unsafe-target');

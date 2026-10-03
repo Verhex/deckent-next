@@ -36,6 +36,7 @@ export interface WorklineLabels extends WorklineActionLabels {
   readonly statusReady: string;
   readonly statusBusy: string;
   readonly statusCancelling: string;
+  readonly selfSourceFloor?: string;
   readonly hint: string;
   readonly roleUser: string;
   readonly roleAssistant: string;
@@ -91,6 +92,7 @@ export interface WorklineProps {
   readonly permissionMode?: WorklinePermissionModePort;
   /** MODES-3: the session was launched in full access (the launch checked the company grant); every turn says so until `/mode` tightens it. */
   readonly fullAccess?: boolean;
+  readonly selfSource?: boolean;
   /** The conversation's scratch area through the runtime service (`/scratch`, SCR-A, protocol v16). */
   readonly scratch?: WorklineScratchPort;
   /** Notice-line commands: `/mcp` (MCP-CLIENT: servers and trust — list, approve, reconnect, remove); `/monitor` (MONITOR: text snapshot). */
@@ -369,7 +371,7 @@ export function WorklineApp(props: WorklineProps) {
         ? <ArrowPicker rows={resumePicker.map(item => item.label)} onSelect={finishResume} onCancel={() => finishResume(null)} /> : null}
       <Text {...palette.accent}>{labels.banner}</Text>
       <StatusStrip target={target} state={cancelling ? labels.statusCancelling : busy && !choosing ? labels.statusBusy : labels.statusReady} busy={busy && !choosing}
-        queued={queue.current.length} labels={labels.render} mode={mode.mode} cancellable={turnRunning && !cancelling} />
+        queued={queue.current.length} labels={{ ...labels.render, selfSourceFloor: labels.selfSourceFloor }} mode={mode.mode} selfSource={props.selfSource} cancellable={turnRunning && !cancelling} />
       {/* The composer owns input: Enter submits (queued FIFO while busy), Esc/Ctrl+C cancel a turn, exit is two Ctrl+C or Ctrl+D.
           An open decision card or arrow picker takes the keyboard away from it. */}
       <Composer prompt={labels.prompt} labels={labels.composer} busy={busy} active={!work.modalOpen && !work.pickerOpen && resumePicker === null}

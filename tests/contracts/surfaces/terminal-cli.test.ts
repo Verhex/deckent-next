@@ -151,4 +151,19 @@ describe('deckent terminal CLI', () => {
     expect(t('terminal.session.prompt', {}, 'en')).toBe('deckent> ');
     expect(t('terminal.session.prompt', {}, 'tr')).toBe('deckent› ');
   });
+
+  it('derives the source marker once at terminal startup and leaves a customer session unmarked', async () => {
+    for (const selfSource of [true, false]) {
+      const f = await fixture(); const stdout = new Screen(); const stdin = keyboard(); const rootsSeen: string[] = [];
+      const run = main(['terminal', 'workline', '--scope', 's', '--lang', 'tr'],
+        { root: f.project, env: { ...f.env, NO_COLOR: '1' }, stdout: stdout as unknown as NodeJS.WriteStream, stderr: stdout as unknown as NodeJS.WriteStream,
+          stdin: stdin as unknown as NodeJS.ReadStream, initialize() {}, async completeTerminalChat() { return 'x'; },
+          async selfSourceProject(root) { rootsSeen.push(root); return selfSource; } });
+      await until(() => stdout.text.includes(t('terminal.workline.placeholder', {}, 'tr')), 'terminal startup');
+      expect(stdout.text.includes('öz-kaynak zemini açık')).toBe(selfSource);
+      expect(rootsSeen).toEqual([f.project]);
+      stdin.write('/exit\r');
+      expect(await run).toBe(0);
+    }
+  }, 15_000);
 });

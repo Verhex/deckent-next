@@ -27,7 +27,7 @@ export const FIRST_RUN_POLICY_TEMPLATE_ID = 'first-run-template';
 export const FIRST_RUN_POLICY_TEMPLATE_VERSION = 4;
 /** The hard-floor tool-call cells (write floor and configuration file, destructive and always-ask shell, every fetch, every MCP call): only the
  * terminal of the turn that asked may allow them. The same set is Core's default in the approval engine (a test keeps the two equal). */
-export const HARD_FLOOR_CARD_CELLS = Object.freeze(['edit-floor', 'edit-authority', 'shell-destructive', 'shell-always-ask', 'fetch-listed', 'fetch-unlisted', 'mcp-call', 'mcp-floor'] as const);
+export const HARD_FLOOR_CARD_CELLS = Object.freeze(['edit-floor', 'edit-self-source', 'edit-authority', 'shell-destructive', 'shell-always-ask', 'fetch-listed', 'fetch-unlisted', 'mcp-call', 'mcp-floor'] as const);
 const REVISION_PATTERN = /^first-run-template-v(\d+)$/;
 
 export interface FirstRunPolicyTemplateInput {

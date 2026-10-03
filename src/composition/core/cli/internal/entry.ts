@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { unifiedDiff, readInstallationProfileFile, registerProviderConfig } from '#adapters/index.js';
+import { unifiedDiff, readInstallationProfileFile, registerProviderConfig, isSelfSourceProject } from '#adapters/index.js';
 import { createConfiguredConfigApplication, resolveConfiguredConfigPrincipal } from '#composition/core/config/index.js';
 import { inspectConfiguredWorkers } from '#composition/core/worker-observation/index.js';
 import { prepareConfiguredDecision, askConfiguredDecision, recordConfiguredDecision, outcomeConfiguredDecision, inspectConfiguredDecision } from '#composition/core/decision/index.js';
@@ -47,6 +47,7 @@ export async function main(argv: readonly string[] = process.argv.slice(2)) {
     restartRuntimeService: (projectRoot, options) => restartConfiguredRuntimeService(projectRoot, options),
     openTerminalHistory: (projectRoot, options) => openConfiguredTerminalHistory(projectRoot, options),
     openTerminalSessions: (projectRoot, options) => openConfiguredTerminalSessions(projectRoot, options),
+    selfSourceProject: isSelfSourceProject,
     stopRuntimeService: (projectRoot, options) => stopConfiguredRuntimeService(projectRoot, options),
     readInferenceMetrics: (projectRoot, input, options) => readConfiguredInferenceMetrics(projectRoot, input, options),
     updateToolchains: (projectRoot, input, options) => updateConfiguredToolchains(projectRoot, input, options),

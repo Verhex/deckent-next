@@ -97,6 +97,7 @@ function worklineLabels(locale: Locale, statusLine: string): WorklineLabels {
     banner: t('terminal.workline.banner', {}, locale), prompt: '', // workline input has no visible prompt prefix (placeholder instead); line mode keeps terminal.session.prompt
     statusReady: t('terminal.workline.statusReady', {}, locale), statusBusy: t('terminal.workline.statusBusy', {}, locale),
     statusCancelling: t('terminal.workline.statusCancelling', {}, locale), hint: t('terminal.workline.hint', {}, locale),
+    selfSourceFloor: t('terminal.mode.selfSourceFloor', {}, locale),
     roleUser: t('terminal.workline.roleUser', {}, locale), roleAssistant: t('terminal.workline.roleAssistant', {}, locale),
     runCard: t('terminal.ledger.runCard', {}, locale), workerCard: t('terminal.ledger.workerCard', {}, locale),
     watchFailed: t('terminal.workline.watchFailed', {}, locale), ledgerUnavailable: t('terminal.workline.ledgerUnavailable', {}, locale),
@@ -252,6 +253,7 @@ export async function terminalCommand(argv: readonly string[], context: CommandC
   // and deny as any `@`); a service that is not there or refuses is left to the person's own first `@`.
   if (!serviceFailed && context.findTerminalMentions) void context.findTerminalMentions(root, { scopeId, query: '' }, options, context.signal).catch(() => undefined);
   await runTerminalWorkline({
+    selfSource: await context.selfSourceProject?.(root) ?? false,
     labels: worklineLabels(locale, [t('terminal.status.chat', { target: chatTarget(chat, locale) }, locale), ...(serviceLine ? [serviceLine] : [])].join(' · ')),
     target, systemPrompt: t('terminal.chat.systemPrompt', {}, locale), historyMessages,
     completeTurn: turn, errorText: error => errorText(error, locale),

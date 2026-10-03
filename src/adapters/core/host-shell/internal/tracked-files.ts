@@ -26,8 +26,8 @@ import { join } from 'node:path';
 export const TRACKED_FILES_MAX = 100_000;
 /** Paths one visible line names per list (its count is always the full number). */
 export const TRACKED_FILES_LINE_PATHS = 8;
-const LISTING_MAX_BYTES = 64 * 1024 * 1024;
-const LISTING_TIMEOUT_MS = 5_000;
+export const LISTING_MAX_BYTES = 64 * 1024 * 1024;
+export const LISTING_TIMEOUT_MS = 5_000;
 const YIELD_EVERY = 4_096;
 const GITLINK_MODE = '160000';
 /** The same fixed environment as the git-patch adapter's `GIT_LOCAL_ENV` (`git-patch/internal/local-git.ts`; host-shell may not depend on it,

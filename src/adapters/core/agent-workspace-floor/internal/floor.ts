@@ -2,7 +2,7 @@ import { existsSync } from 'node:fs';
 import { dirname, isAbsolute, join, relative, sep } from 'node:path';
 import { globalStateRoot, productResourcePath, resolveProductLayout, type ProductLayout, type ProductResource } from '#platform/index.js';
 import { createGlobMatcher, DEFAULT_WORKSPACE_READ_DENY, REPOSITORY_INTERNALS_DENY, type WorkspaceScope } from '#adapters/core/workspace-read/index.js';
-import { isDirectoryWriteApprovalFloored, isWriteApprovalFloored, writablePath } from '#adapters/core/workspace-write/index.js';
+import { isDirectoryWriteApprovalFloored, isWriteApprovalFloored, isSelfSourceWriteFloored, writablePath } from '#adapters/core/workspace-write/index.js';
 import type { SandboxWriteCell, ShellSandboxLayout } from '#adapters/core/host-shell/index.js';
 import { MCP_PROJECT_REGISTRY_PATH } from '#adapters/core/mcp-client/index.js';
 
@@ -79,8 +79,8 @@ export function agentProductStateDeny(projectRoot: string, layout: ProductLayout
  * whatever it holds) — is classified by its own name and as a tree (`dir/` denied, `dir/-` on the write floor): the rules for what it holds.
  */
 export function classifySandboxWritePath(scope: WorkspaceScope, authority: (rel: string) => boolean, rel: string,
-  kind: 'write' | 'delete' | 'rmdir' | 'mkdir'): SandboxWriteCell | 'denied' {
+  kind: 'write' | 'delete' | 'rmdir' | 'mkdir', selfSource = false): SandboxWriteCell | 'denied' {
   const directory = kind === 'rmdir' || kind === 'mkdir', lexical = writablePath(scope, rel);
   if (!lexical.ok || lexical.rel !== rel || (directory && scope.denied(`${rel}/`))) return 'denied';
-  return authority(rel) ? 'edit-authority' : (directory ? isDirectoryWriteApprovalFloored(rel) : isWriteApprovalFloored(rel)) ? 'edit-floor' : 'edit';
+  return authority(rel) ? 'edit-authority' : selfSource && (isSelfSourceWriteFloored(rel) || directory && isSelfSourceWriteFloored(`${rel}/-`)) ? 'edit-self-source' : (directory ? isDirectoryWriteApprovalFloored(rel) : isWriteApprovalFloored(rel)) ? 'edit-floor' : 'edit';
 }

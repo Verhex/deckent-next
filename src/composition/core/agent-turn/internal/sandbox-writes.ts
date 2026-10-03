@@ -16,7 +16,7 @@ const sha256 = (text: string) => createHash('sha256').update(text).digest('hex')
  * whatever happened.
  */
 export async function settleSandboxWriteSet(input: { readonly directory: SandboxWriteSetDirectory; readonly scope: WorkspaceScope; readonly decider: SandboxWriteDecider;
-  readonly authority: (rel: string) => boolean; readonly context: Awaited<ReturnType<typeof loadPeerInvocationContext>>; readonly peer: LocalPeerIdentity;
+  readonly authority: (rel: string) => boolean; readonly selfSource?: boolean; readonly context: Awaited<ReturnType<typeof loadPeerInvocationContext>>; readonly peer: LocalPeerIdentity;
   readonly scopeId: string; readonly shellCommandId: string; readonly signal: AbortSignal }): Promise<SandboxWriteSetReport> {
   const { scope, context } = input;
   type Store = Awaited<ReturnType<typeof openSqliteAttemptStore>>;
@@ -34,7 +34,7 @@ export async function settleSandboxWriteSet(input: { readonly directory: Sandbox
       return { sessions, store: attempts };
     })();
     return await applySandboxWriteSet({ scan, decider: input.decider, signal: input.signal,
-      classify: (rel, kind) => classifySandboxWritePath(scope, input.authority, rel, kind),
+      classify: (rel, kind) => classifySandboxWritePath(scope, input.authority, rel, kind, input.selfSource),
       ensureParents: (rel, modeOf, admit) => ensureWorkspaceParents(scope, rel, modeOf, admit),
       async execute(change, gate) {
         const expectedVersion = change.kind === 'rmdir' ? EMPTY_DIRECTORY_VERSION : change.lowerVersion;

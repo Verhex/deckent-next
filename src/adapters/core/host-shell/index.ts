@@ -13,4 +13,4 @@ export { applySandboxWriteSet, describeSandboxWriteSet, prepareSandboxWriteSetDi
   type SandboxWriteCell, type SandboxWriteChange, type SandboxWriteDecider, type SandboxWriteDecision, type SandboxWriteRefusal, type SandboxWriteSetDirectory,
   type SandboxWriteSetReport, type SandboxWriteSetScan } from './internal/write-set.js';
 export { compareTrackedFiles, describeTrackedFilesChange, describeTrackedFilesUnchecked, snapshotTrackedFiles, TRACKED_FILES_LINE_PATHS, TRACKED_FILES_MAX, type TrackedFilesBaseline,
-  type TrackedFilesChange, type TrackedFilesList } from './internal/tracked-files.js';
+  LISTING_MAX_BYTES as GIT_LISTING_MAX_BYTES, LISTING_TIMEOUT_MS as GIT_LISTING_TIMEOUT_MS, type TrackedFilesChange, type TrackedFilesList } from './internal/tracked-files.js';

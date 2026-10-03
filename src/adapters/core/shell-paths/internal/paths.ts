@@ -193,14 +193,15 @@ function shellPathCheck(scope: WorkspaceScope, maxGlobMatches: number, examined:
  * of `mv`). Anything else makes the command not narrow — it then asks, as before. An absolute path inside a second root (SCR-A: the
  * conversation's scratch area) is checked the same way against that root's scope.
  */
-export function createShellWriteContext(project: WorkspaceScope, roots: readonly WorkspaceScope[] = []): ShellWritePathContext {
+export function createShellWriteContext(project: WorkspaceScope, roots: readonly WorkspaceScope[] = [], projectFloor = isWriteApprovalFloored): ShellWritePathContext {
   return {
     async checkWrite(word, kind): Promise<ShellPathVerdict> {
       const scope = roots[secondRoot(roots, word.text)] ?? project;
       const refuse = (reasonCode: 'PATH_OUTSIDE_ROOT' | 'PATH_PROTECTED' | 'PATH_UNRESOLVED'): ShellPathVerdict => ({ ok: false, reasonCode, detail: word.text });
       const target = await resolveWritable(scope, word.text);
       if (!target.ok) return refuse(target.error === 'outside-workspace' ? 'PATH_OUTSIDE_ROOT' : target.error === 'denied' ? 'PATH_PROTECTED' : 'PATH_UNRESOLVED');
-      if (isWriteApprovalFloored(target.rel) || (kind === 'new-directory' && isWriteApprovalFloored(`${target.rel}/-`))) return refuse('PATH_PROTECTED');
+      const floored = scope === project ? projectFloor : isWriteApprovalFloored;
+      if (floored(target.rel) || (kind === 'new-directory' && floored(`${target.rel}/-`))) return refuse('PATH_PROTECTED');
       // An existing directory, link or multi-link file is refused here (`not-a-file`, `is-link`, `hard-linked`): `cp`/`mv` onto a
       // directory would write `target/basename(source)`, a path this check never saw (Astra 2133), so a directory target is not narrow.
       const current = await readWritableFile(scope, target).catch(() => null);
@@ -217,8 +218,8 @@ export function createShellWriteContext(project: WorkspaceScope, roots: readonly
  * and with leading `./`/`../` segments dropped (a `cd` earlier in the same command moves the base). A path or its directory form
  * (`.github` for `.github/**`) counts. A name is not a boundary: the sandbox realm keeps existing floor paths read-only itself.
  */
-export function createShellProtectedNames(root: string, productState: readonly ((rel: string) => boolean)[]): (text: string) => boolean {
-  const named = (rel: string) => rel.length > 0 && [rel, `${rel}/-`].some(path => isWriteApprovalFloored(path) || productState.some(match => match(path)));
+export function createShellProtectedNames(root: string, productState: readonly ((rel: string) => boolean)[], floored = isWriteApprovalFloored): (text: string) => boolean {
+  const named = (rel: string) => rel.length > 0 && [rel, `${rel}/-`].some(path => floored(path) || productState.some(match => match(path)));
   return text => {
     const inside = posix.relative(root, posix.resolve(root, text)), stripped = posix.normalize(text).replace(/^(?:\.\.?\/)+/u, '');
     return (!inside.startsWith('..') && !posix.isAbsolute(inside) && named(inside)) || (!posix.isAbsolute(stripped) && named(stripped.replace(/\/+$/u, '')));

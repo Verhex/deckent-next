@@ -56,6 +56,7 @@ export interface CommandContext extends ModelCommandContext, MonitorCommandConte
   restartRuntimeService?: (root: string, options: ConfigLoadOptions) => Promise<RuntimeServiceReadinessView>;
   openTerminalHistory?: (root: string, options: ConfigLoadOptions) => Promise<ComposerHistoryPort | null>;
   openTerminalSessions?: (root: string, options: ConfigLoadOptions) => Promise<TerminalSessionStoreView | null>;
+  selfSourceProject?: (root: string) => Promise<boolean>;
   stopRuntimeService?: (root: string, options: ConfigLoadOptions) => Promise<{ readonly command: ShutdownCommand; readonly result: ServiceShutdownAdmissionResult }>;
   updateToolchains?: import('./toolchains.js').ToolchainUpdateHandler;
   runMcpCommand?: import('./mcp.js').McpCommandHandler;

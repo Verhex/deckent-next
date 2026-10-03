@@ -88,7 +88,7 @@ export const auditSubjectSchema = z.discriminatedUnion('kind', [
    * the policy decision before the floor raise, whether the floor raised it, the company rule ids a mode lowered (null: none) and the grant
    * rule that allowed full access. The effect gate admits only this decision again.
    */
-  z.object({ kind: z.literal('full-access-call'), cell: z.enum(['edit', 'edit-floor', 'shell-read-none', 'shell-read-low', 'shell-narrow-mutating', 'shell-destructive',
+  z.object({ kind: z.literal('full-access-call'), cell: z.enum(['edit', 'edit-floor', 'edit-self-source', 'shell-read-none', 'shell-read-low', 'shell-narrow-mutating', 'shell-destructive',
     'shell-always-ask', 'shell-other-modify', 'fetch-listed', 'fetch-unlisted', 'mcp-call']), policy: z.enum(['allow', 'require-approval']), raised: z.boolean(),
   company: identitySchema.nullable(), grant: identitySchema, tool: toolRef, call: callRef, summary: auditSummarySchema }).strict(),
   /**
@@ -124,7 +124,7 @@ export const auditSubjectSchema = z.discriminatedUnion('kind', [
    * creation is the `authority-change` event); the pattern itself is named by its digest and the call's own summary, never the raw text.
    */
   z.object({ kind: z.literal('standing-approval'), phase: z.enum(['remembered', 'used']), source: z.enum(['session', 'grant']), grantId: identitySchema.nullable(),
-    cell: z.enum(['edit', 'shell-read-low', 'shell-narrow-mutating']), keyDigest: digest, approvalId: identitySchema.nullable(),
+    cell: z.enum(['edit', 'edit-self-source', 'shell-read-low', 'shell-narrow-mutating']), keyDigest: digest, approvalId: identitySchema.nullable(),
     tool: toolRef, call: callRef,
     summary: auditSummarySchema }).strict(),
   /**
