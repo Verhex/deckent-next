@@ -12,6 +12,7 @@ export function safeData(data, key) {
   return encoded;
 }
 export async function privateDirectory(path) {
+  ensure(process.platform !== 'win32' && typeof process.getuid === 'function' && constants.O_NOFOLLOW > 0, 'JEV_JOURNAL_UNSUPPORTED');
   const absolute = resolve(path);
   let current = parse(absolute).root;
   for (const component of absolute.slice(current.length).split(sep)) {

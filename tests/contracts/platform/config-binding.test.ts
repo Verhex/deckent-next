@@ -46,7 +46,7 @@ describe('configuration binding and schema 4 migration', () => {
       await mkdir(join(root, '.deckent'));
       const bytes = JSON.stringify({ schema_version: 3, mode: 'api', providers: { brain: 'SECRET_FIXTURE' }, projectName: 'kept' });
       await writeFile(path, bytes);
-      const env = { HOME: join(root, 'home'), XDG_CONFIG_HOME: join(root, 'xdg') }, first: unknown[] = [], second: unknown[] = [];
+      const env = { HOME: join(root, 'home'), USERPROFILE: join(root, 'home'), XDG_CONFIG_HOME: join(root, 'xdg') }, first: unknown[] = [], second: unknown[] = [];
       const config = await loadConfig(root, { env, onWarning: warning => first.push(warning) });
       await loadConfig(root, { env, onWarning: warning => second.push(warning) });
       expect(config.schema_version).toBe(4); expect(config.projectName).toBe('kept');

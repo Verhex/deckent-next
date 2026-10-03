@@ -1,7 +1,7 @@
 import { mkdtemp, mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { hostname, tmpdir, userInfo } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
+import { beforeEach, afterEach, describe, expect, it } from 'vitest';
 import { createServer, type Socket } from 'node:net';
 import { createHash } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
@@ -16,6 +16,9 @@ import { fixtureExecution } from '../support/execution-registry.js';
 import { custodyProfiles, dispatchAdmission, grantTestLaunch } from '../support/custody.js';
 
 // MONITOR-DATA: the one composed monitor snapshot over real project ledgers (current + a configured next-project source).
+beforeEach(context => {
+  if (process.platform === 'win32') context.skip('LOCAL_OS_PRINCIPAL_UNSUPPORTED: monitor policy fixture requires verified POSIX UID; native local capability refusal is tested separately');
+});
 const roots: string[] = [];
 afterEach(async () => { clearConfigCache(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 const actor = { id: 'fixture', issuer: 'test', subject: 'service' };
@@ -61,7 +64,7 @@ const unchanged = (before: Awaited<ReturnType<typeof files>>, after: Awaited<Ret
   if (!('missing' in before[1]!) || 'missing' in after[1]!) expect(after[1]).toEqual(before[1]); else expect(after[1]).toMatchObject({ bytes: '' });
 };
 
-describe.skipIf(process.platform === 'win32')('inspectMonitor composition', () => {
+describe('inspectMonitor composition', () => {
   it('shows the installation ceiling as effective pool capacities while retaining actual occupancy', async () => {
     const root = await mkdtemp(join(tmpdir(), 'deckent-monitor-ceiling-')); roots.push(root);
     const current = await project(root, 'current', ['s'], ['s']);
@@ -84,8 +87,9 @@ describe.skipIf(process.platform === 'win32')('inspectMonitor composition', () =
     await expect(stat(gone)).rejects.toMatchObject({ code: 'ENOENT' });
     expect(snapshot).toMatchObject({ schemaVersion: 1, control: 'observe-only' }); expect(snapshot.installs.map(install => install.id)).toEqual(['current', 'dogfood', 'gone']);
     const [mine, dogfood, missing] = snapshot.installs;
-    expect(mine).toMatchObject({ path: current.dir, status: 'available', scopeIds: ['s', 's2'], ledgerVersion: CURRENT_LEDGER_VERSION, service: { state: 'stopped', build: null } });
+    expect(mine).toMatchObject({ path: current.dir, status: 'available', scopeIds: ['s', 's2'], ledgerVersion: CURRENT_LEDGER_VERSION, service: { state: process.platform === 'linux' ? 'stopped' : 'unknown', build: null } });
     expect(mine!.diagnostics).toContain('scope-denied:hidden');
+    if (process.platform !== 'linux') expect(mine!.diagnostics).toContain('service-unavailable:LOCAL_RUNTIME_UNSUPPORTED');
     const runs = Object.fromEntries(mine!.runs.map(run => [run.runId, run]));
     expect(Object.keys(runs).sort()).toEqual(['current-s', 'current-s2']);
     expect(runs['current-s2']).toMatchObject({ scopeId: 's2', state: 'progressing', createdAtMs: 10_001, phaseCounts: { pending: 1 },
@@ -94,7 +98,7 @@ describe.skipIf(process.platform === 'win32')('inspectMonitor composition', () =
       tasks: [{ phase: 'active', attempts: 1, lastAttempt: { attemptId: 'current-s-t', launch: 'pending', startedAtMs: null } }] });
     expect(mine!.workers.map(worker => worker.identity?.attemptId)).toEqual(['current-s-t']);
     expect(mine!.pools).toMatchObject([{ poolId: 'p', capacity: 4, inFlight: 1, held: false, executionCapacity: 4, executing: 1 }]);
-    expect(dogfood).toMatchObject({ path: other.dir, status: 'available', scopeIds: ['s'], service: { state: 'stopped' } });
+    expect(dogfood).toMatchObject({ path: other.dir, status: 'available', scopeIds: ['s'], service: { state: process.platform === 'linux' ? 'stopped' : 'unknown' } });
     expect(dogfood!.runs.map(run => run.runId)).toEqual(['other-s']);
     expect(missing).toMatchObject({ status: 'unavailable', runs: [], service: { state: expect.stringMatching(/stopped|unknown/) } });
     expect(missing!.diagnostics.some(code => code.startsWith('ledger-unavailable:'))).toBe(true);
@@ -131,7 +135,8 @@ describe.skipIf(process.platform === 'win32')('inspectMonitor composition', () =
     expect(monitor.workers.find(worker => worker.identity?.attemptId === 'done-t')).toMatchObject({ terminal: { exitCode: 3 }, diagnostics: ['info:ledger-only'] });
     expect(monitor.runs.find(run => run.runId === 'r-done')!.tasks[0]!.lastAttempt).toMatchObject({ exitCode: 3, startedAtMs: 30_000 });
   });
-  it.skipIf(process.platform !== 'linux')('describes the service with one current-protocol attempt: an unanswering endpoint is unknown + diagnostic, no version fan-out', async () => {
+  it('describes the service with one current-protocol attempt: an unanswering endpoint is unknown + diagnostic, no version fan-out', async context => {
+    if (process.platform !== 'linux') context.skip('LOCAL_RUNTIME_UNSUPPORTED: authenticated runtime socket and live peer identity require Linux');
     const root = await mkdtemp(join(tmpdir(), 'deckent-monitor-')); roots.push(root);
     const current = await project(root, 'current', ['s'], ['s']); const endpoint = productResourcePath(current.layout, 'runtimeSocket');
     await mkdir(join(endpoint, '..'), { recursive: true, mode: 0o700 });
@@ -178,7 +183,7 @@ describe.skipIf(process.platform === 'win32')('inspectMonitor composition', () =
     expect(JSON.stringify(install.map)).not.toContain(join(root, 'current-data'));
   });
 });
-describe.skipIf(process.platform === 'win32')('inspectMonitor content authorization (security)', () => {
+describe('inspectMonitor content authorization (security)', () => {
   async function failedAttempt(current: Awaited<ReturnType<typeof project>>) {
     const artifacts = new FileArtifactStore({ root: await prepareProductDirectory(current.layout, 'artifacts'), maxBytes: 1_048_576 });
     const store = await openSqliteAttemptStore(current.ledger, { busyTimeoutMs: 100, journalMode: 'wal', durability: 'full' }, { now: Date.now, timeoutMs: 86400000 }, 'allow', custodyProfiles);
@@ -246,7 +251,9 @@ describe.skipIf(process.platform === 'win32')('inspectMonitor content authorizat
       } finally { store.close(); }
       return (await inspectMonitor(current.dir, current.options)).installs[0]!.runs.find(value => value.runId === 'r-verify')!.tasks[0]!.lastAttempt!;
     };
-    expect(await run('granted', ['output'])).toMatchObject({ startedAtMs: 30_800, endedAtMs: 498_000, endedAtSource: 'observed' });
+    expect(await run('granted', ['output'])).toMatchObject({ startedAtMs: 30_800,
+      endedAtMs: process.platform === 'linux' ? 498_000 : null, endedAtSource: process.platform === 'linux' ? 'observed' : null });
+    // macOS has no /proc/self/fd custody: the same sidecar cannot prove a host-observed end there.
     expect(await run('denied', [])).toMatchObject({ endedAtMs: null, endedAtSource: null, diagnostics: ['output-denied'] });
     // Sidecars bound to another attempt prove nothing about this one.
     expect(await run('mismatch', ['output'], 'other-attempt')).toMatchObject({ endedAtMs: null, endedAtSource: null });

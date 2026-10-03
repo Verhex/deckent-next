@@ -1,12 +1,19 @@
 import { createHash } from 'node:crypto';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFile, mkdtemp, rm, symlink } from 'node:fs/promises';
+import { readFile, mkdtemp, rm, symlink, readdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { prepare } from './jev-context.mjs';
 import { consult, followup, report } from './jev-review.mjs';
 import { readEvent, writeEvent, callId, entries } from './jev-journal.mjs';
+
+function journalTest(name, fn) {
+  const reason = process.platform === 'win32' && 'JEV_JOURNAL_UNSUPPORTED: private UID/mode/no-follow journal custody has no Windows implementation';
+  if (reason) console.log('verify-not-run: ' + JSON.stringify({ file: new URL(import.meta.url).pathname, test: name, state: 'skipped', reason }));
+  return test(name, { skip: reason }, fn);
+}
+
 const config = JSON.parse(await readFile(new URL('./jev.config.json', import.meta.url), 'utf8'));
 const policy = JSON.parse(await readFile(new URL('./jev.review.config.json', import.meta.url), 'utf8'));
 const key = 'local-test-secret-never-live';
@@ -108,7 +115,7 @@ test('explicit exclusions avoid inventing rejected options; full cases can have 
   c.options[0].tradeoffs = ['Kazanım: kanıt; kayıp: inceleme süresi'];
   assert.deepEqual(prepare(c, policy).diagnostics.sufficiencyRisks.warnings, []);
 });
-test('warnings are journaled locally but do not change or accompany provider state/questions', async () => sandbox(async root => {
+journalTest('warnings are journaled locally but do not change or accompany provider state/questions', async () => sandbox(async root => {
   const c = fixture(); c.options[0].evidenceIds = [];
   let calls = 0;
   const result = await consult(config, policy, c, root, key, async (...args) => {
@@ -130,14 +137,14 @@ test('future evidence is rejected before journal or transport work', async () =>
   await assert.rejects(consult(config, policy, c, root, key, async (...args) => { calls++; return transport(...args); }),
     /JEV_EVIDENCE_FUTURE/);
   assert.equal(calls, 0);
-  assert.equal((await entries(root, 10)).ids.length, 0);
+  assert.deepEqual(await readdir(root), []);
 }));
 test('duplicate/reserved choices and oversized context cannot reach network', async () => {
   for (const change of [c => { c.options[1].id = 'investigate'; }, c => { c.options[1].id = 'defer'; }, c => { c.options[1].id = 'none_of_the_above'; }, c => { c.options[1].id = 'insufficient_information'; }, c => { c.evidence.push(c.evidence[0]); }, c => { c.objective = 'x'.repeat(policy.maxCaseBytes); }]) {
     const c = fixture(); change(c); assert.throws(() => prepare(c, policy));
   }
 });
-test('request exists before call; response, decision and labeled outcome are separate immutable evidence', async () => sandbox(async root => {
+journalTest('request exists before call; response, decision and labeled outcome are separate immutable evidence', async () => sandbox(async root => {
   const result = await consult(config, policy, fixture(), root, key, async (...args) => {
     const pending = await entries(root, 10);
     assert.equal(pending.ids.length, 1);
@@ -163,7 +170,7 @@ test('request exists before call; response, decision and labeled outcome are sep
   assert.ok(Math.abs(summary.quality.brierScore - 0.01) < 1e-10);
   assert.equal(summary.usage.inputTokens, 10);
 }));
-test('failures retain request and safe status; successful calls without labels do not claim quality', async () => sandbox(async root => {
+journalTest('failures retain request and safe status; successful calls without labels do not claim quality', async () => sandbox(async root => {
   const failed = await consult(config, policy, fixture(), root, key, async () => new Response(key, { status: 429 }));
   assert.equal(failed.status, 'unavailable');
   const event = await readEvent(failed.directory, 'failure.json'); assert.equal(event.error, 'JEV_HTTP_429');
@@ -172,12 +179,12 @@ test('failures retain request and safe status; successful calls without labels d
   const summary = await report(root, 10); assert.equal(summary.quality.brierScore, null);
   assert.equal(summary.rows.filter(r => r.status === 'unavailable').length, 1);
 }));
-test('parallel calls have isolated journals and reports disclose truncation', async () => sandbox(async root => {
+journalTest('parallel calls have isolated journals and reports disclose truncation', async () => sandbox(async root => {
   const calls = await Promise.all(Array.from({ length: 5 }, () => consult(config, policy, fixture(), root, key, transport)));
   assert.equal(new Set(calls.map(c => c.callId)).size, 5);
   const summary = await report(root, 2); assert.equal(summary.sampledCalls, 2); assert.equal(summary.truncated, true);
 }));
-test('secret rejection and symlink journal rejection happen before network', async () => sandbox(async root => {
+journalTest('secret rejection and symlink journal rejection happen before network', async () => sandbox(async root => {
   let calls = 0; const fake = async (...args) => { calls++; return transport(...args); };
   const c = fixture(); c.objective = key;
   await assert.rejects(consult(config, policy, c, root, key, fake), /JEV_SECRET_IN_JOURNAL/);
@@ -185,14 +192,14 @@ test('secret rejection and symlink journal rejection happen before network', asy
   await assert.rejects(consult(config, policy, fixture(), join(root, 'redirect'), key, fake), /JEV_JOURNAL_PATH/);
   assert.equal(calls, 0);
 }));
-test('invalid decision and unsupported labels fail without overwriting the record', async () => sandbox(async root => {
+journalTest('invalid decision and unsupported labels fail without overwriting the record', async () => sandbox(async root => {
   const call = await consult(config, policy, fixture(), root, key, transport);
   await assert.rejects(followup(root, call.callId, 'decision', { actor: 'x', selectedOption: 'invented', rationale: 'x', actions: [], evidenceRefs: [] }, key), /JEV_DECISION_OPTION/);
   await assert.rejects(followup(root, '../escape', 'decision', {}, key), /JEV_CALL_ID/);
   await assert.rejects(followup(root, call.callId, 'outcome', { actor: 'x', status: 'verified', observation: 'x', evidenceRefs: [], labels: [], inputQuality: 'x', outputQuality: 'x' }, key), /JEV_OUTCOME_EVIDENCE/);
 }));
 
-test('a persisted request without response remains unknown, not failed or successful', async () => sandbox(async root => {
+journalTest('a persisted request without response remains unknown, not failed or successful', async () => sandbox(async root => {
   const id = callId();
   await writeEvent(join(root, id), 'request.json', { case: fixture(), input: prepare(fixture(), policy).input }, key);
   const summary = await report(root, 10);
@@ -202,7 +209,7 @@ test('a persisted request without response remains unknown, not failed or succes
   assert.equal(summary.usage.excludesFailedAndUnrecordedUsage, true);
 }));
 
-test('abstention choices survive response, decision and reporting as distinct signals', async () => sandbox(async root => {
+journalTest('abstention choices survive response, decision and reporting as distinct signals', async () => sandbox(async root => {
   for (const selected of ['none_of_the_above', 'insufficient_information']) {
     const result = await consult(config, policy, fixture(), root, key, async (_url, options) => {
       const { questions } = JSON.parse(options.body);
@@ -220,7 +227,7 @@ test('abstention choices survive response, decision and reporting as distinct si
   assert.equal(summary.rows.every(r => r.agreement === true), true);
 }));
 
-test('historical defer is interpreted from the recorded request, never relabeled', async () => sandbox(async root => {
+journalTest('historical defer is interpreted from the recorded request, never relabeled', async () => sandbox(async root => {
   const id = callId(); const input = prepare(fixture(), policy).input;
   input.questions.next_action.criteria = { investigate: 'Inspect', accept: 'Accept', defer: 'Old combined deferral' };
   await writeEvent(join(root, id), 'request.json', { case: fixture(), input }, key);
@@ -241,7 +248,7 @@ test('decision context cannot omit process or impact, override the shared charte
     await assert.rejects(consult(config, policy, c, root, key, async (...args) => { calls++; return transport(...args); }));
   }
   assert.equal(calls, 0);
-  assert.equal((await entries(root, 10)).ids.length, 0);
+  assert.deepEqual(await readdir(root), []);
 }));
 
 test('full wire budget and secrets in the injected charter fail before network', async () => sandbox(async root => {
@@ -253,5 +260,12 @@ test('full wire budget and secrets in the injected charter fail before network',
   await assert.rejects(consult({ ...config, maxRequestBytes: bytesWithoutCharter }, policy, c, root, key, fake), /JEV_REQUEST_TOO_LARGE/);
   await assert.rejects(consult(config, policy, c, root, 'customer-installed Agent OS', fake), /JEV_SECRET_IN_JOURNAL/);
   assert.equal(calls, 0);
-  assert.equal((await entries(root, 10)).ids.length, 0);
+  assert.deepEqual(await readdir(root), []);
+}));
+
+
+test('secret-bearing case is rejected before journal custody or transport on every platform', async () => sandbox(async root => {
+  let calls = 0; const c = fixture(); c.objective = key;
+  await assert.rejects(consult(config, policy, c, root, key, async () => { calls++; throw new Error('unexpected transport'); }), /JEV_SECRET_IN_JOURNAL/);
+  assert.equal(calls, 0); assert.deepEqual(await readdir(root), []);
 }));

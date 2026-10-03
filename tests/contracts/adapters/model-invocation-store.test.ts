@@ -343,6 +343,7 @@ it('admits any number of calls for an allocation without a lifetime total while 
   // The allocation contract of an id is fixed: switching the same id to a lifetime total is refused, a new id is needed.
   const capped = { ...base, profile: { ...base.profile, allocation: { ...base.profile.allocation, maxCalls: 100 } } };
   await expect(store.claim(admission(capped, 'command-capped', 'invocation-capped'))).rejects.toThrow('MODEL_INVOCATION_ALLOCATION_CONFLICT');
+  store.close();
 });
 
 /** Start repair custody in which no owner is proven ended: only an earlier build's surplus can be released. */

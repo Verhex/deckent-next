@@ -64,7 +64,7 @@ describe('CLI approval decide declares its channel', () => {
     const run = async (input: Record<string, unknown>) => {
       const stdin = Object.assign(Readable.from([JSON.stringify(input)]), { isTTY: false });
       const out: string[] = [];
-      expect(await main(['approval', 'decide', '--input', '-', '--json'], { root, env: { HOME: root }, stdin, stdout: { write: (text: string) => out.push(text) },
+      expect(await main(['approval', 'decide', '--input', '-', '--json'], { root, env: { HOME: root, USERPROFILE: root }, stdin, stdout: { write: (text: string) => out.push(text) },
         stderr: { write: (text: string) => out.push(text) }, async decideApproval(value: unknown) { seen.push(value); return { status: 'decided' }; } })).toBe(0);
     };
     await run({ ...command, decision: 'allow' });

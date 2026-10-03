@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
-import { mkdtemp, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, readdir, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -23,7 +23,7 @@ afterEach(async () => { await Promise.all(roots.splice(0).map(root => rm(root, {
 async function tree(files: Record<string, string>) {
   const root = await mkdtemp(join(tmpdir(), 'dist-package-')); roots.push(root);
   for (const [path, content] of Object.entries(files)) { await mkdir(join(root, path, '..'), { recursive: true }); await writeFile(join(root, path), content); }
-  return root;
+  return realpath(root);
 }
 const integrity = `sha512-${Buffer.alloc(64, 1).toString('base64')}`;
 const fixture = () => tree({

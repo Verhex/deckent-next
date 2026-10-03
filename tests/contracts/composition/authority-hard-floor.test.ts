@@ -28,7 +28,7 @@ async function project() {
   const base = await mkdtemp(join(tmpdir(), 'dn-hard-floor-')); roots.push(base);
   const root = join(base, 'project');
   for (const path of [...FLOOR, 'src/a.ts']) { await mkdir(join(root, path, '..'), { recursive: true }); await writeFile(join(root, path), `FLOOR ${path}\n`); }
-  const layout = resolveProductLayout({ projectRoot: root, root: join(root, ...DATA.split('/')) });
+  const layout = resolveProductLayout({ platform: process.platform === 'win32' ? 'win32' : 'posix', projectRoot: root, root: join(root, ...DATA.split('/')) });
   const scope = await createWorkspaceScope(root, agentWorkspaceDeny(root, layout));
   return { root, layout, scope };
 }

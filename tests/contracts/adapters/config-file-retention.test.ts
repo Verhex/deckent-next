@@ -1,7 +1,7 @@
 import { afterEach, expect, it, vi } from 'vitest';
 import { mkdir, mkdtemp, readFile, readdir, rm, unlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { createConfigFileDocuments } from '#adapters/core/config-file/index.js';
 import { ConfigApplication } from '#engine/core/config/index.js';
@@ -37,7 +37,7 @@ for (const keep of [3, 2]) it(`keeps exactly ${keep} newest backups through gove
     if (result.backupPath) receipts.push(result.backupPath);
     const names = (await readdir(dirname(f.path))).filter(name => name.includes('.bak.'));
     expect(names).toHaveLength(Math.min(value - 1, keep));
-    if (result.backupPath) expect(names).toContain(result.backupPath.split('/').at(-1));
+    if (result.backupPath) expect(names).toContain(basename(result.backupPath));
     await sleep(2); // Distinct timestamps make prior filename ordering deterministic.
   }
   const values = await Promise.all(receipts.slice(-keep).map(async path => JSON.parse(await readFile(path, 'utf8')).max_workers));

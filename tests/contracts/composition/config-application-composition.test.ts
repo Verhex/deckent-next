@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { beforeEach, afterEach, describe, expect, it } from 'vitest';
 import { mkdtemp, readFile, rm, writeFile, readdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -7,6 +7,9 @@ import { createConfiguredConfigApplication, resolveConfiguredConfigPrincipal } f
 import { applyPolicyTemplateInstallation } from '#composition/core/installation/index.js';
 import { openSqliteLedger } from '#adapters/core/sqlite-ledger/index.js';
 import { getConfigFieldDefault, loadConfig, productResourcePath, resolveProductLayout, prepareProductFile } from '#platform/index.js';
+beforeEach(context => {
+  if (process.platform === 'win32') context.skip('LOCAL_OS_PRINCIPAL_UNSUPPORTED: configured policy/integrity flows require a verified POSIX UID; Windows userInfo.uid is -1');
+});
 const roots: string[] = [];
 afterEach(async () => { await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 async function setup() {

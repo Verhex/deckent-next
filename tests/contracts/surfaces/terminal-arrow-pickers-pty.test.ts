@@ -2,7 +2,7 @@ import { execFile } from 'node:child_process';
 import { access } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { promisify } from 'node:util';
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 
 // Real pseudo-terminal: the built workline sees a TTY, raw arrow keys and a window size. Ports are in-process
 // (the same surface boundary as the Ink tests); this does not start the runtime service.
@@ -157,6 +157,9 @@ async function pty(driver: string, columns: number) {
 }
 
 describe('arrow pickers on a real PTY', () => {
+  beforeEach(context => {
+    if (process.platform === 'win32') context.skip('PYTHON_PTY_UNSUPPORTED: Python pty/fork/termios fixture is Unix-only; this does not test Windows ConPTY');
+  });
   it('Esc returns to the composer, Enter resumes the highlighted session and opens the highlighted approval', async () => {
     const result = await pty(DRIVER, 100);
     expect(result.timeout, result.output?.slice(-500)).toBeUndefined();

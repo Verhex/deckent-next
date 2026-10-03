@@ -11,9 +11,9 @@
 //   - left external: Node built-ins only (`node:*`, resolved by the consumer's @types/node, as before).
 // Deterministic: sorted walk, content-only output. Established practice for this problem is a declaration bundler (api-extractor
 // `bundledPackages`, rollup-plugin-dts `respectExternal`, rolldown-plugin-dts via tsdown); the choice and its losses are in the DEPS-TYPES proof.
-import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, writeFileSync } from 'node:fs';
 import { builtinModules } from 'node:module';
-import { dirname, join, relative, sep } from 'node:path';
+import { dirname, join, normalize, relative, sep } from 'node:path';
 import ts from 'typescript';
 import { packageDirOf } from './dist-sbom.mjs';
 
@@ -45,6 +45,7 @@ export function moduleSpecifiers(sourceFile) {
 
 /** The declaration closure of `<root>/<entry>` for every consumer mode, with each specifier's resolved target. */
 export function declarationClosure(root, entry = 'dist/index.d.ts') {
+  root = realpathSync(root);
   const files = new Map(), problems = [];
   for (const [mode, modeOptions] of Object.entries(CONSUMER_MODES)) {
     // resolveJsonModule off and no automatic @types: the strictest consumer setting; Node built-ins stay unresolved (ambient in @types/node).
@@ -53,14 +54,15 @@ export function declarationClosure(root, entry = 'dist/index.d.ts') {
     const program = ts.createProgram({ rootNames: [join(root, entry)], options, host });
     for (const sourceFile of [...program.getSourceFiles()].sort((a, b) => a.fileName.localeCompare(b.fileName))) {
       if (program.isSourceFileDefaultLibrary(sourceFile)) continue;
-      const path = sourceFile.fileName, row = files.get(path) ?? { path, specifiers: new Map() };
+      // TypeScript uses forward slashes on Windows; filesystem comparisons use native canonical paths.
+      const path = normalize(sourceFile.fileName), row = files.get(path) ?? { path, specifiers: new Map() };
       files.set(path, row);
       for (const ref of sourceFile.typeReferenceDirectives) if (ref.fileName !== 'node') problems.push(`${posix(relative(root, path))}: /// <reference types="${ref.fileName}"> is not supported`);
       for (const { node, kind } of moduleSpecifiers(sourceFile)) {
         const text = node.text, at = `${node.getStart(sourceFile)}`;
         if (kind === 'ambient') { if (!isBuiltin(text)) problems.push(`${posix(relative(root, path))}: declare module '${text}' cannot be relocated`); continue; }
         const resolved = ts.resolveModuleName(text, path, options, host, cache, undefined, program.getModeForUsageLocation(sourceFile, node)).resolvedModule;
-        const target = resolved?.resolvedFileName ?? null;
+        const target = resolved ? normalize(resolved.resolvedFileName) : null;
         if (!target && !isBuiltin(text) && !text.startsWith('#')) problems.push(`${posix(relative(root, path))}: '${text}' does not resolve (${mode})`);
         const previous = row.specifiers.get(at);
         if (previous && previous.target !== target) problems.push(`${posix(relative(root, path))}: '${text}' resolves to ${previous.target} (${previous.mode}) and ${target} (${mode})`);
@@ -73,6 +75,8 @@ export function declarationClosure(root, entry = 'dist/index.d.ts') {
 
 /** Writes the closure into `<stage>/dist` (own declarations at their tsc path, third-party ones under dist/vendor/types). */
 export function vendorDeclarations({ root, stage }) {
+  // TypeScript resolves Windows short-name aliases (RUNNER~1) to their long path names.
+  root = realpathSync(root);
   const { files, problems } = declarationClosure(root);
   const dist = join(root, 'dist') + sep, packages = new Map(), placed = new Map();
   const place = path => {

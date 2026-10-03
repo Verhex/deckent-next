@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, mkdir, copyFile, writeFile, readFile, rm, symlink, rename } from 'node:fs/promises';
 import { realpathSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { tmpdir, homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
@@ -12,7 +12,7 @@ test('Next host launchers pin both surfaces and SDK to Next without legacy data 
   try {
     await mkdir(join(root, '.agents/refactor'), { recursive: true });
     const entry = join(root, '.agents/refactor/next-entry.mjs'); await copyFile(join(here, 'next-entry.mjs'), entry);
-    const probe = 'console.log(JSON.stringify({cwd:process.cwd(),global:process.env.DECKENT_GLOBAL_HOME,data:process.env.DECKENT_HOME??null,home:process.env.HOME,args:process.argv.slice(2)}));';
+    const probe = 'console.log(JSON.stringify({cwd:process.cwd(),global:process.env.DECKENT_GLOBAL_HOME,data:process.env.DECKENT_HOME??null,home:process.env.HOME??null,args:process.argv.slice(2)}));';
     for (const surface of ['cli', 'mcp']) {
       const target = join(root, `dist/composition/core/${surface}/internal/entry.js`);
       await mkdir(dirname(target), { recursive: true }); await writeFile(target, probe);
@@ -21,7 +21,7 @@ test('Next host launchers pin both surfaces and SDK to Next without legacy data 
       assert.equal(run.status, 0, run.stderr);
       // The global root lives outside the checkout (a bundled bwrap copy inside the project is refused; live 2026-09-29).
       const seen = JSON.parse(run.stdout);
-      assert.deepEqual(seen, { cwd: root, global: join(process.env.HOME, '.local/state/deckent-next-dev'), data: null, home: process.env.HOME, args: ['--probe'] });
+      assert.deepEqual(seen, { cwd: root, global: join(homedir(), '.local/state/deckent-next-dev'), data: null, home: process.env.HOME ?? null, args: ['--probe'] });
       assert.equal(seen.global.startsWith(`${root}/`), false);
     }
     const run = spawnSync(process.execPath, [entry, 'node', '-e', probe], { encoding: 'utf8', env: { ...process.env, DECKENT_NEXT_INSTALL_ROOT: join(root, 'no-install') } });
@@ -45,7 +45,7 @@ test('DEV-U2-0: with a staged `current` the launchers run that version by real p
     const launch = surface => spawnSync(process.execPath, [entry, surface], { cwd: tmpdir(), encoding: 'utf8', env });
     // No `current`: today's behaviour (the checkout's dist).
     assert.equal(JSON.parse(launch('cli').stdout).script, join(root, 'dist/composition/core/cli/internal/entry.js'));
-    await symlink(`versions/${id}`, join(install, 'current'));
+    await symlink(`versions/${id}`, join(install, 'current'), 'dir');
     for (const surface of ['cli', 'mcp']) {
       const run = launch(surface); assert.equal(run.status, 0, run.stderr);
       assert.deepEqual(JSON.parse(run.stdout), { cwd: root, script: join(version, `dist/composition/core/${surface}/internal/entry.js`), install: null });
@@ -54,9 +54,9 @@ test('DEV-U2-0: with a staged `current` the launchers run that version by real p
     await rename(join(version, 'release.json'), join(version, 'release.moved'));
     const unreleased = launch('cli'); assert.equal(unreleased.status, 2); assert.match(unreleased.stderr, /NEXT_ENTRY_CURRENT_INVALID/);
     await rename(join(version, 'release.moved'), join(version, 'release.json'));
-    await rm(join(install, 'current')); await symlink(join(root), join(install, 'current'));
+    await rm(join(install, 'current')); await symlink(join(root), join(install, 'current'), 'dir');
     const outside = launch('cli'); assert.equal(outside.status, 2); assert.match(outside.stderr, /NEXT_ENTRY_CURRENT_INVALID/);
-    await rm(join(install, 'current')); await symlink('versions/missing', join(install, 'current'));
+    await rm(join(install, 'current')); await symlink('versions/missing', join(install, 'current'), 'dir');
     const dangling = launch('mcp'); assert.equal(dangling.status, 2); assert.match(dangling.stderr, /NEXT_ENTRY_CURRENT_INVALID/);
   } finally { await rm(base, { recursive: true, force: true }); }
 });

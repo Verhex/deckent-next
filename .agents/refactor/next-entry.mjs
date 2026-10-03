@@ -6,7 +6,7 @@ import { basename, dirname, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { homedir } from 'node:os';
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
-const invoked = process.argv[1]?.split('/').at(-1);
+const invoked = process.argv[1] ? basename(process.argv[1]) : undefined;
 const args = process.argv.slice(2);
 const surface = invoked === 'deckent-mcp' ? 'mcp' : invoked === 'deckent' ? 'cli' : args.shift();
 if (!['cli', 'mcp', 'node'].includes(surface)) { process.stderr.write('NEXT_ENTRY_SURFACE_REQUIRED\n'); process.exit(2); }

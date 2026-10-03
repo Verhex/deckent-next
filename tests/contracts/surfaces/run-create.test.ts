@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Readable } from 'node:stream';
 import { afterEach, expect, it } from 'vitest';
-import { runCommand } from '../../../src/surfaces/core/cli/index.js';
+import { runCommand } from '../../fixtures/cli-input.js';
 
 const roots: string[] = [];
 afterEach(async () => { await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
@@ -22,7 +22,7 @@ async function fixture(cli: Record<string, unknown> = {}) {
   } };
 }
 
-it('passes the same validated graph from a file or pipe to admission and emits the exact JSON result', async () => {
+it('passes the same validated graph from a file (POSIX) or pipe to admission and emits the exact JSON result', async () => {
   const f = await fixture(); const file = join(f.root, 'graph.json'); await writeFile(file, JSON.stringify(graph));
   await runCommand([...command, file, '--json'], f.context);
   expect(f.calls).toEqual([{ schemaVersion: 1, commandId: 'c', scopeId: 's', runId: 'r', graph }]);
@@ -69,7 +69,8 @@ it('uses the configured graph limit and reports automatic progression without cl
   expect(f.output).toEqual([]); expect(f.calls).toHaveLength(2);
 });
 
-it('forwards a bounded versioned branch file and refuses ambiguous stdin', async () => {
+it('forwards a bounded versioned branch file and refuses ambiguous stdin', async (context) => {
+  if (process.platform === 'win32') context.skip('CLI_FILE_INPUT_UNAVAILABLE: branch and graph need separate file inputs; Windows no-follow file transport is refused');
   const f = await fixture(); const file = join(f.root, 'graph.json'), branchPath = join(f.root, 'branch.json');
   const branch = { schemaVersion: 1, input: { id: 'fact', revision: '1', value: false }, whenTrue: 'a', whenFalse: 'b', join: 'join' };
   await writeFile(file, JSON.stringify(graph)); await writeFile(branchPath, JSON.stringify(branch));

@@ -32,7 +32,7 @@ async function project() {
   const put = async (path: string, body: string) => { await mkdir(join(path, '..'), { recursive: true }); await writeFile(path, body); };
   await Promise.all([put(join(root, 'src', 'a.ts'), 'export const a = 1;\n'), put(join(root, '.deckent', 'config.json'), '{"layout":{}}\n'),
     put(join(data, 'notes.txt'), 'ordinary data file\n'), ...STATE_FILES.map(path => put(join(data, ...path.split('/')), `PRODUCT-STATE ${path}\n`))]);
-  const layout = resolveProductLayout({ projectRoot: root, root: data });
+  const layout = resolveProductLayout({ platform: process.platform === 'win32' ? 'win32' : 'posix', projectRoot: root, root: data });
   const deny = agentWorkspaceDeny(root, layout);
   return { base, root, data, layout, deny, scope: await createWorkspaceScope(root, deny) };
 }
@@ -117,7 +117,7 @@ describe.skipIf(!sandboxReady || capabilities.landlock.status !== 'available')('
     await mkdir(data, { recursive: true, mode: 0o700 }); await mkdir(join(root, 'src'), { recursive: true }); await mkdir(scratch, { recursive: true, mode: 0o700 });
     await writeFile(join(root, 'src', 'a.ts'), 'export const a = 1;\n');
     if (gitignore !== null) await writeFile(join(root, '.gitignore'), gitignore);
-    const layout = resolveProductLayout({ projectRoot: root, root: data });
+    const layout = resolveProductLayout({ platform: process.platform === 'win32' ? 'win32' : 'posix', projectRoot: root, root: data });
     const ledger = await prepareProductFile(layout, 'ledger'); await writeFile(ledger, 'SYNTHETIC_PRODUCT_STATE\n');
     const deny = agentWorkspaceDeny(root, layout), scope = await createWorkspaceScope(root, deny);
     const rel = ledger.slice(root.length + 1);
@@ -174,7 +174,7 @@ describe.skipIf(!sandboxReady || capabilities.landlock.status !== 'available')('
     const root = join(base, 'project'), real = join(base, 'elsewhere'); await mkdir(join(real, 'deckent'), { recursive: true }); await mkdir(join(root, '.cache'), { recursive: true });
     await symlink(join(real, 'deckent'), join(root, '.cache', 'deckent'));
     // The product's own file preparation refuses a linked data root (MANAGED_FILE_UNSAFE); the file is placed by hand to prove the realms refuse too.
-    const layout = resolveProductLayout({ projectRoot: root, root: join(root, '.cache', 'deckent') });
+    const layout = resolveProductLayout({ platform: process.platform === 'win32' ? 'win32' : 'posix', projectRoot: root, root: join(root, '.cache', 'deckent') });
     const ledger = productResourcePath(layout, 'ledger'); await mkdir(join(ledger, '..'), { recursive: true }); await writeFile(ledger, 'SYNTHETIC_PRODUCT_STATE\n');
     const scope = await createWorkspaceScope(root, agentWorkspaceDeny(root, layout));
     const sandbox = { project: scope, scratchDir: null };

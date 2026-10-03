@@ -7,7 +7,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
-import { afterEach, expect, it, vi } from 'vitest';
+import { beforeEach, afterEach, expect, it, vi } from 'vitest';
 import { prepareConfiguredDecision, askConfiguredDecision, recordConfiguredDecision, outcomeConfiguredDecision, inspectConfiguredDecision } from '#composition/index.js';
 import { encodeModelBindingDefinition } from '#domain/index.js';
 import { openSqliteModelActivationStore, readLocalOsIdentity, decisionHttpAdapter } from '#adapters/index.js';
@@ -16,6 +16,9 @@ import { clearConfigCache, prepareProductFile, resolveProductLayout } from '#pla
 import { decisionCommand } from '#surfaces/core/cli-decision/index.js';
 import { createMcpServer } from '#surfaces/core/mcp/index.js';
 import { fixtureBudget } from '../../fixtures/priced-provider.js';
+beforeEach(context => {
+  if (process.platform === 'win32') context.skip('LOCAL_OS_PRINCIPAL_UNSUPPORTED: configured policy/integrity flows require a verified POSIX UID; Windows userInfo.uid is -1');
+});
 const roots:string[]=[],servers:Server[]=[];
 afterEach(async()=>{vi.restoreAllMocks();clearConfigCache();await Promise.all(servers.splice(0).map(async server=>{server.closeAllConnections();await new Promise<void>(r=>server.close(()=>r()));}));await Promise.all(roots.splice(0).map(root=>rm(root,{recursive:true,force:true})));});
 const sqlite={busyTimeoutMs:1000,journalMode:'delete' as const,durability:'full' as const};

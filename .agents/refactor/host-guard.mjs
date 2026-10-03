@@ -16,7 +16,7 @@
 
 import { execFileSync } from 'node:child_process';
 import { readFileSync, existsSync } from 'node:fs';
-import { resolve, sep } from 'node:path';
+import { isAbsolute, resolve, sep, win32 } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const SCRIPT_VERBS = new Set(['node', 'bash', 'sh', 'zsh', 'tsx', 'deno', 'bun', 'source', '.']);
@@ -36,7 +36,8 @@ function segments(command) {
 }
 
 export function legacyExecution(command, legacy) {
-  const isLegacy = t => t.includes(legacy) || /(^|\/)deckent-dev(\/|$)/.test(t);
+  const absolute = t => isAbsolute(t) || win32.isAbsolute(t);
+  const isLegacy = t => { const path = t.replaceAll('\\', '/'); return path.includes(legacy.replaceAll('\\', '/')) || /(^|\/)deckent-dev(\/|$)/.test(path); };
   let cwdLegacy = false;
   for (const tokens of segments(command)) {
     const verb = tokens[0];
@@ -44,7 +45,7 @@ export function legacyExecution(command, legacy) {
     if (verb === 'cd' || verb === 'pushd') { cwdLegacy = args[0] ? isLegacy(args[0]) : false; continue; }
     const firstPath = args.find(t => !t.startsWith('-'));
     if (SCRIPT_VERBS.has(verb)) {
-      if (firstPath && (isLegacy(firstPath) || (cwdLegacy && !firstPath.startsWith('/')))) return true;
+      if (firstPath && (isLegacy(firstPath) || (cwdLegacy && !absolute(firstPath)))) return true;
     } else if (PKG_VERBS.has(verb)) {
       if (cwdLegacy) return true;
       const i = args.findIndex(t => t === '--prefix' || t === '-C');
@@ -53,7 +54,7 @@ export function legacyExecution(command, legacy) {
       if (cwdLegacy || args.some(isLegacy)) return true;
     } else if (NEXT_BINS.has(verb)) {
       if (cwdLegacy) return true;
-    } else if ((verb.startsWith('/') || verb.startsWith('./')) && (isLegacy(verb) || (cwdLegacy && verb.startsWith('./')))) {
+    } else if ((absolute(verb) || verb.startsWith('./') || verb.startsWith('.\\')) && (isLegacy(verb) || (cwdLegacy && (verb.startsWith('./') || verb.startsWith('.\\'))))) {
       return true;
     }
   }

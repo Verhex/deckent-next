@@ -7,7 +7,7 @@ import { z } from 'zod';
 const path = z.string().min(1).refine(value => !value.includes('\0') && isAbsolute(value));
 const inputSchema = z.object({ executable: path, entry: path, cwd: path, logPath: path, env: z.record(z.string(), z.string()) }).strict();
 export type DetachedRuntimeLaunchInput = z.infer<typeof inputSchema>;
-export type RuntimeLauncherErrorCode = 'RUNTIME_LAUNCH_INVALID' | 'RUNTIME_LAUNCH_FAILED';
+export type RuntimeLauncherErrorCode = 'RUNTIME_LAUNCH_INVALID' | 'RUNTIME_LAUNCH_FAILED' | 'RUNTIME_LAUNCH_UNSUPPORTED';
 export class RuntimeLauncherError extends Error {
   constructor(readonly code: RuntimeLauncherErrorCode, options?: ErrorOptions) { super(code, options); this.name = 'RuntimeLauncherError'; }
 }
@@ -18,6 +18,8 @@ export class RuntimeLauncherError extends Error {
 export async function launchDetachedRuntimeService(raw: DetachedRuntimeLaunchInput): Promise<{ readonly pid: number }> {
   const parsed = inputSchema.safeParse(raw);
   if (!parsed.success) throw new RuntimeLauncherError('RUNTIME_LAUNCH_INVALID');
+  // Windows ignores O_NOFOLLOW: no private, no-follow log custody is implemented there.
+  if (process.platform === 'win32' || !(constants.O_NOFOLLOW > 0)) throw new RuntimeLauncherError('RUNTIME_LAUNCH_UNSUPPORTED');
   const input = parsed.data;
   const log = await open(input.logPath, constants.O_WRONLY | constants.O_APPEND | constants.O_CREAT | constants.O_NOFOLLOW, 0o600)
     .catch(cause => { throw new RuntimeLauncherError('RUNTIME_LAUNCH_FAILED', { cause }); });

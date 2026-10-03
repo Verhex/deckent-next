@@ -25,8 +25,10 @@ const HELP_NOTICE = '/watch-runs · /watch-stop';
 
 class Screen extends Writable {
   text = '';
+  frame = '';
   readonly isTTY = true; readonly columns = 200; readonly rows = 60;
-  override _write(chunk: Buffer, _encoding: string, done: () => void) { this.text += chunk.toString('utf8'); done(); }
+  override _write(chunk: Buffer, _encoding: string, done: () => void) { const text = chunk.toString('utf8'); this.text += text;
+    if (text !== '\u001b[?2004h' && text !== '\u001b[?2004l') this.frame = text; done(); }
 }
 function keyboard() {
   const stdin = Object.assign(new PassThrough(), { isTTY: true, setRawMode() { return stdin; }, ref() { return stdin; }, unref() { return stdin; } });
@@ -170,7 +172,7 @@ describe('ledger buffer (Ink Static contract)', () => {
     expect(saved[0]!.messages).toEqual([{ role: 'user', content: 'first' }, { role: 'assistant', content: 'reply 1', toolCalls: [] }]);
     view.stdin.write('/context\r'); await until(() => view.stdout.text.includes('CTX 1500/6000 25% 2'), 'context line');
     view.stdin.write('/resume\r'); await until(() => view.stdout.text.includes('> SESSION 1 11111111'), 'picker');
-    view.stdin.write('\u001b'); await settle(40);
+    view.stdin.write('\u001b'); await until(() => !view.stdout.frame.includes('> SESSION 1 11111111'), 'picker dismissed');
     view.stdin.write('/resume 1\r'); await until(() => view.stdout.text.includes('RESUMED 2 11111111'), 'resumed');
     view.stdin.write('continue\r'); await until(() => seen.length === 2, 'second turn');
     expect(seen[1]).toEqual([{ role: 'system', content: 'SYSTEM' }, { role: 'user', content: 'old question' },

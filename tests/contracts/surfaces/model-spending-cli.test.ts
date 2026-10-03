@@ -2,7 +2,7 @@ import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { afterEach, expect, it } from 'vitest';
-import { main } from '#surfaces/core/cli/index.js';
+import { main } from '../../fixtures/cli-input.js';
 import { createProviderSpendAccount, createProviderSpendAuditReceipt, createProviderSpendCheckpoint, type ProviderSpendAccountInspection, type ProviderSpendAuditResult } from '#engine/index.js';
 import { clearConfigCache } from '#platform/index.js';
 

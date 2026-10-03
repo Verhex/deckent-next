@@ -14,11 +14,11 @@ function visit(directory) {
       throw new Error(`Native tests require a platform manifest and test script: ${child}`);
     }
     if (manifest.deckentNative.platforms.includes(process.platform)) {
-      execFileSync(process.platform === 'win32' ? 'npm.cmd' : 'npm', ['test', '--prefix', child], { stdio: 'inherit' });
+      execFileSync(process.platform === 'win32' ? 'npm.cmd' : 'npm', ['test', '--prefix', child], { stdio: 'inherit', timeout: 180_000 });
     } else {
-      console.log(`verify-native-skipped: ${JSON.stringify({ name: manifest.name,
+      console.log(`verify-not-run: ${JSON.stringify({ name: manifest.name,
         platform: process.platform, supportedPlatforms: manifest.deckentNative.platforms,
-        reason: 'platform-not-in-native-manifest' })}`);
+        state: 'skipped', capability: 'NATIVE_PLATFORM_UNSUPPORTED', reason: 'platform-not-in-native-manifest' })}`);
     }
   }
 }

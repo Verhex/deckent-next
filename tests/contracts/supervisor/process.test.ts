@@ -43,7 +43,8 @@ it('bounds input, times out control work and refuses an already aborted launch',
   await expect(new ProcessSupervisor({ ...f.options, timeoutMs: 100 }).execute(f.request)).rejects.toMatchObject({ code: 'SUPERVISOR_CONTROL_FAILED' });
   await expect(f.supervisor.execute(f.request, AbortSignal.abort())).rejects.toMatchObject({ code: 'SUPERVISOR_CANCELLED' });
 });
-it.skipIf(!process.env.DECKENT_TEST_DOCKER_IMAGE)('executes, observes and releases a real Docker worker across the process protocol', async () => {
+it('executes, observes and releases a real Docker worker across the process protocol', async context => {
+  if (!process.env.DECKENT_TEST_DOCKER_IMAGE) context.skip('DOCKER_IMAGE_NOT_CONFIGURED: pinned local Docker image is required for real process-protocol execution');
   const f = await fixture('');
   const options = { executable: '/usr/bin/docker', workspaceRoot: f.root, imageId: process.env.DECKENT_TEST_DOCKER_IMAGE!, uid: process.getuid!(), gid: process.getgid!(), logMaxSizeKiB: 64, logMaxFiles: 2, memoryBytes: 268435456, pids: 64, cpus: 1, tmpBytes: 16777216, deadlineMs: 10000, controlTimeoutMs: 10000, outputBytes: 65536 };
   await writeFile(f.child, `import {DockerSupervisor} from ${JSON.stringify(pathToFileURL(resolve('dist/adapters/index.js')).href)};` + readCommand +
@@ -83,7 +84,8 @@ it('interrupts a confirmed live control process without reporting worker termina
   } finally { controller.abort(); await rejection.catch(() => {}); }
 });
 
-it('does not wait for inherited pipe writers after confirmed control cancellation', async () => {
+it('does not wait for inherited pipe writers after confirmed control cancellation', async (context) => {
+  if (process.platform === 'win32') context.skip('POSIX_INHERITED_PIPE_LIVENESS_UNAVAILABLE: this runner does not preserve live inherited-pipe descendant evidence after Windows cancellation (ESRCH)');
   const f = await fixture("const {spawn}=await import('node:child_process');const child=spawn(process.execPath,['-e','setInterval(()=>{},1000)'],{stdio:['ignore','inherit','inherit']});await import('node:fs/promises').then(async fs=>{await fs.writeFile('descendant.tmp',String(child.pid));await fs.rename('descendant.tmp','descendant')});setInterval(()=>{},1000);");
   let descendant = 0;
   const controller = new AbortController();

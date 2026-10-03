@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { Readable } from 'node:stream';
 import { afterEach, expect, it } from 'vitest';
-import { main } from '#surfaces/core/cli/index.js';
+import { main } from '../../fixtures/cli-input.js';
 import { clearConfigCache } from '#platform/index.js';
 
 const roots: string[] = [];
@@ -23,7 +23,7 @@ async function fixture() {
   await writeFile(join(root, '.deckent/config.json'), JSON.stringify({ cli: { invocationInputMaxBytes: 4096 } }));
   return { root, env: { HOME: home, USERPROFILE: home, PATH: process.env.PATH ?? '/usr/bin:/bin' } };
 }
-it('routes strict file/stdin inspection and renders both abstentions and sufficiency against configured thresholds in EN/TR', async () => {
+it('routes strict file (POSIX) / stdin inspection and renders both abstentions and sufficiency against configured thresholds in EN/TR', async () => {
   const f = await fixture(), path = join(f.root, 'query.json'); await writeFile(path, JSON.stringify(query));
   for (const language of ['en', 'tr']) {
     let output = '', calls = 0;

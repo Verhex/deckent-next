@@ -48,7 +48,12 @@ test('request/response limits and known credential in state fail closed', async 
   assert.equal(calls, 0);
   await assert.rejects(ask({ ...config, maxResponseBytes: 5 }, input, key, transport), /JEV_RESPONSE_TOO_LARGE/);
 });
-test('credentials require private regular owner file; symlinks and broad permissions fail', async () => {
+test('credentials require private regular owner file; symlinks and broad permissions fail', async t => {
+  if (process.platform === 'win32') {
+    const reason = 'JEV_CREDENTIAL_FILE_UNSUPPORTED: Windows lacks private UID/mode/no-follow credential file custody';
+    console.log('verify-not-run: ' + JSON.stringify({ file: '.agents/refactor/jev.test.mjs', test: t.name, state: 'skipped', reason }));
+    t.skip(reason); return;
+  }
   const dir = await mkdtemp(join(tmpdir(), 'jev-credential-test-'));
   const path = join(dir, 'key');
   try {
@@ -71,4 +76,14 @@ test('timeout aborts the request without returning a verdict', async () => {
 test('malformed response and credential echo cannot become advice', async () => {
   await assert.rejects(ask(config, input, key, async () => new Response('not-json')));
   await assert.rejects(ask(config, input, key, async () => Response.json({ ...reply, model: key })), /JEV_SECRET_IN_RESPONSE/);
+});
+
+
+test('environment credentials stay portable while Windows credential-file custody refuses before opening a missing path', async () => {
+  const original = Object.getOwnPropertyDescriptor(process, 'platform');
+  try {
+    Object.defineProperty(process, 'platform', { ...original, value: 'win32' });
+    assert.equal(await readCredential(config, { [config.credentialEnv]: key }), key);
+    await assert.rejects(readCredential(config, { [config.credentialFileEnv]: 'missing-do-not-open' }), /JEV_CREDENTIAL_FILE_UNSUPPORTED/);
+  } finally { Object.defineProperty(process, 'platform', original); }
 });

@@ -24,7 +24,8 @@ async function fixture() {
   return { path, store, identities, sourceRoot, workspaceRoot, git, brokerOptions };
 }
 
-it.skipIf(process.platform === 'win32')('requires POSIX private Git custody: pins one base for two Run attempts across restart despite source HEAD advancement', async () => {
+it('requires POSIX private Git custody: pins one base for two Run attempts across restart despite source HEAD advancement', async context => {
+  if (process.platform === 'win32') context.skip('GIT_PRIVATE_CUSTODY_UNSUPPORTED: private Git workspace custody requires POSIX');
   const f = await fixture(); const firstApp = new RunWorkspaceAcquisitionApplication(f.store, new GitRunWorkspaceProvider(new GitWorkspaceBroker(f.brokerOptions)));
   const first = await firstApp.acquire(f.identities[0]); const custody = await f.store.loadRunWorkspaceCustody('s', 'r');
   expect(custody?.baseRevision).toBe(first.baseCommit);
@@ -37,7 +38,8 @@ it.skipIf(process.platform === 'win32')('requires POSIX private Git custody: pin
   expect(second.baseCommit).toBe(first.baseCommit); expect(await reopened.loadRunWorkspaceCustody('s', 'r')).toEqual(custody);
 });
 
-it.skipIf(process.platform === 'win32')('requires POSIX private Git custody: adopts an existing typed lease into missing Run custody without sampling current HEAD', async () => {
+it('requires POSIX private Git custody: adopts an existing typed lease into missing Run custody without sampling current HEAD', async context => {
+  if (process.platform === 'win32') context.skip('GIT_PRIVATE_CUSTODY_UNSUPPORTED: private Git workspace custody requires POSIX');
   const f = await fixture(); const broker = new GitWorkspaceBroker(f.brokerOptions); const recorded = await broker.captureSourceBase();
   const lease = await broker.allocate({ schemaVersion: 1, identity: f.identities[0]!, baseCommit: recorded.baseCommit });
   expect(await f.store.loadRunWorkspaceCustody('s', 'r')).toBeNull();
@@ -48,7 +50,8 @@ it.skipIf(process.platform === 'win32')('requires POSIX private Git custody: ado
     source: { sourceFingerprint: recorded.sourceFingerprint } });
 });
 
-it.each(['new-attempt', 'recorded-attempt'] as const)('rejects changed adapter version before allocation for %s', async mode => {
+it.each(['new-attempt', 'recorded-attempt'] as const)('rejects changed adapter version before allocation for %s', async (mode, context) => {
+  if (process.platform === 'win32') context.skip('GIT_PRIVATE_CUSTODY_UNSUPPORTED: GitRunWorkspaceProvider requires POSIX directory and process custody');
   const f = await fixture(); const provider = new GitRunWorkspaceProvider(new GitWorkspaceBroker(f.brokerOptions));
   await new RunWorkspaceAcquisitionApplication(f.store, provider).acquire(f.identities[0]);
   const custody = await f.store.loadRunWorkspaceCustody('s', 'r');

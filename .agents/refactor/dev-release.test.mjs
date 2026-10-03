@@ -14,6 +14,13 @@ const here = dirname(fileURLToPath(import.meta.url));
 const { DatabaseSync } = createRequire(import.meta.url)('node:sqlite');
 const sleep = ms => new Promise(done => setTimeout(done, ms));
 
+
+function releaseTest(name, fn) {
+  const reason = process.platform !== 'linux' && 'DEV_RELEASE_PLATFORM_UNSUPPORTED: Linux /proc process custody and util-linux flock are required';
+  if (reason) console.log('verify-not-run: ' + JSON.stringify({ file: '.agents/refactor/dev-release.test.mjs', test: name, state: 'skipped', reason }));
+  return test(name, { skip: reason }, fn);
+}
+
 function fixture() {
   const base = realpathSync(mkdtempSync(join(tmpdir(), 'dev-release-')));
   const repo = join(base, 'checkout'), home = join(base, 'home'), data = join(base, 'data'), bwrap = join(base, 'bwrap');
@@ -36,7 +43,7 @@ function fixture() {
   const ledger = join(data, 'state/ledger.db');
   const cleanup = () => {
     // Every process started from this fixture (fake services, launchers, clients) runs with the fixture path in its command line.
-    for (const pid of readdirSync('/proc').filter(name => /^\d+$/.test(name))) {
+    if (process.platform === 'linux') for (const pid of readdirSync('/proc').filter(name => /^\d+$/.test(name))) {
       try { if (readFileSync(`/proc/${pid}/cmdline`, 'utf8').includes(base) && Number(pid) !== process.pid) process.kill(Number(pid), 'SIGKILL'); } catch { /* gone */ }
     }
     rmSync(base, { recursive: true, force: true });
@@ -47,7 +54,7 @@ const refsHash = repo => execFileSync('git', ['-C', repo, 'for-each-ref', '--for
 const jsonAt = path => JSON.parse(readFileSync(path, 'utf8'));
 const appendBuild = (f, code) => { const path = join(f.repo, 'scripts/build.mjs'); writeFileSync(path, readFileSync(path, 'utf8') + '\n' + code + '\n'); };
 
-test('origin identity survives staging, including preview and allow-local, instead of naming the build clone', { skip: process.platform !== 'linux' }, t => {
+releaseTest('origin identity survives staging, including preview and allow-local, instead of naming the build clone', t => {
   const f = fixture(); t.after(f.cleanup);
   f.env.DECKENT_BUILD_SOURCE_COMMON_DIR = join(f.base, 'inherited-wrong-origin');
   for (const flag of [null, '--preview', '--allow-local']) {
@@ -67,7 +74,7 @@ test('origin identity survives staging, including preview and allow-local, inste
   }
 });
 
-test('origin follows --source through a symlinked linked worktree, independently of the launcher checkout', { skip: process.platform !== 'linux' }, t => {
+releaseTest('origin follows --source through a symlinked linked worktree, independently of the launcher checkout', t => {
   const f = fixture(); t.after(f.cleanup); f.fake.commit('launcher');
   const source = join(f.base, 'other source'), other = fakeRepository(source, join(f.base, 'other-origin.git'));
   const sha = other.commit('origin'); const linked = join(f.base, 'linked'), alias = join(f.base, 'source alias');
@@ -80,7 +87,7 @@ test('origin follows --source through a symlinked linked worktree, independently
   assert.equal(refsHash(source), before);
 });
 
-test('invalid declared origin fails the fake producer and stage installs nothing', { skip: process.platform !== 'linux' }, t => {
+releaseTest('invalid declared origin fails the fake producer and stage installs nothing', t => {
   const f = fixture(); t.after(f.cleanup);
   const path = join(f.repo, 'scripts/build.mjs'), invalid = join(f.base, 'missing-origin');
   writeFileSync(path, `process.env.DECKENT_BUILD_SOURCE_COMMON_DIR = ${JSON.stringify(invalid)};\n` + readFileSync(path, 'utf8'));
@@ -91,7 +98,7 @@ test('invalid declared origin fails the fake producer and stage installs nothing
   assert.deepEqual(readdirSync(join(f.installRoot, 'build')), []); assert.equal(f.current(), null);
 });
 
-test('identity mismatch refuses staging without changing the previous current', { skip: process.platform !== 'linux' }, t => {
+releaseTest('identity mismatch refuses staging without changing the previous current', t => {
   const f = fixture(); t.after(f.cleanup);
   const good = f.tool('stage', f.fake.commit('good-origin')); assert.equal(good.status, 0, good.stdout);
   symlinkSync(`versions/${good.json.id}`, join(f.installRoot, 'current'));
@@ -127,7 +134,7 @@ test('fake build producer honours derived, declared and invalid origins using th
   assert.equal(readFileSync(join(f.repo, 'scripts/build-identity.mjs'), 'utf8'), readFileSync(join(here, '../../scripts/build-identity.mjs'), 'utf8'));
 });
 
-test('stage origin ignores inherited Git common-dir overrides', { skip: process.platform !== 'linux' }, t => {
+releaseTest('stage origin ignores inherited Git common-dir overrides', t => {
   const f = fixture(); t.after(f.cleanup); const sha = f.fake.commit('git-env');
   f.env.GIT_COMMON_DIR = join(f.base, 'origin.git');
   const staged = f.tool('stage', sha);
@@ -135,7 +142,7 @@ test('stage origin ignores inherited Git common-dir overrides', { skip: process.
   assert.equal(staged.json.release.sourceCommonDir, realpathSync(join(f.repo, '.git')));
 });
 
-test('stage refuses a mismatched packaged origin and a stale cached identity', { skip: process.platform !== 'linux' }, t => {
+releaseTest('stage refuses a mismatched packaged origin and a stale cached identity', t => {
   const f = fixture(); t.after(f.cleanup); const sha = f.fake.commit('cached');
   const good = f.tool('stage', sha); assert.equal(good.status, 0, good.stdout);
   symlinkSync(`versions/${good.json.id}`, join(f.installRoot, 'current'));
@@ -162,7 +169,7 @@ async function startFromLauncher(f) {
   throw new Error('fake service did not start');
 }
 
-test('stage builds the exact pushed commit outside the source repository and refuses unknown, dirty, unpushed, unsmoked and sandbox-less input', { skip: process.platform !== 'linux' && 'requires Linux /proc process custody and util-linux flock' }, async t => {
+releaseTest('stage builds the exact pushed commit outside the source repository and refuses unknown, dirty, unpushed, unsmoked and sandbox-less input', async t => {
   const f = fixture(); t.after(f.cleanup);
   const good = f.fake.commit('good');
   const refsBefore = refsHash(f.repo);
@@ -215,7 +222,7 @@ test('stage builds the exact pushed commit outside the source repository and ref
   assert.equal(f.tool('switch', allowed.json.id).json.code, 'DEV_RELEASE_UNREVIEWED');
 });
 
-test('switch stops the running service through its own CLI, moves the pointer atomically and starts the new version; a failed start rolls the pointer back', { skip: process.platform !== 'linux' && 'requires Linux /proc process custody and util-linux flock' }, async t => {
+releaseTest('switch stops the running service through its own CLI, moves the pointer atomically and starts the new version; a failed start rolls the pointer back', async t => {
   const f = fixture(); t.after(f.cleanup);
   const a = f.fake.commit('a'); execFileSync(process.execPath, ['scripts/build.mjs'], { cwd: f.repo }); // today's layout: the service runs from the checkout dist
   const b = f.fake.commit('b'), broken = f.fake.commit('broken', { behavior: { serveExit: true } }), liar = f.fake.commit('liar', { behavior: { wrongBuild: true } });
@@ -266,7 +273,7 @@ test('switch stops the running service through its own CLI, moves the pointer at
   assert.ok(status.json.versionUsers.some(entry => entry.id === ids.b));
 });
 
-test('a process started before a switch keeps loading its own version directory (real path, lazy import after the switch)', { skip: process.platform !== 'linux' && 'requires Linux /proc process custody and util-linux flock' }, async t => {
+releaseTest('a process started before a switch keeps loading its own version directory (real path, lazy import after the switch)', async t => {
   const f = fixture(); t.after(f.cleanup);
   const ids = ['one', 'two'].map(label => f.tool('stage', f.fake.commit(label)).json.id);
   assert.equal(f.tool('switch', ids[0]).status, 0);
@@ -288,7 +295,7 @@ test('a process started before a switch keeps loading its own version directory 
   client.kill();
 });
 
-test('rollback: pointer only when the ledger still fits; a migrated ledger needs --restore-ledger, a bound token and the existing ledger lock', { skip: process.platform !== 'linux' && 'requires Linux /proc process custody and util-linux flock' }, async t => {
+releaseTest('rollback: pointer only when the ledger still fits; a migrated ledger needs --restore-ledger, a bound token and the existing ledger lock', async t => {
   const f = fixture(); t.after(f.cleanup);
   const old = f.tool('stage', f.fake.commit('v43')).json.id, next = f.tool('stage', f.fake.commit('v44', { ledger: 44 })).json.id;
   assert.equal(f.tool('switch', old).status, 0);
@@ -337,7 +344,7 @@ test('rollback: pointer only when the ledger still fits; a migrated ledger needs
   assert.equal(f.tool('switch', next).json.ledgerAfter, 44);
 });
 
-test('prune lists only versions beyond the last three that no process uses; the tool refuses an install root inside the project', { skip: process.platform !== 'linux' && 'requires Linux /proc process custody and util-linux flock' }, async t => {
+releaseTest('prune lists only versions beyond the last three that no process uses; the tool refuses an install root inside the project', async t => {
   const f = fixture(); t.after(f.cleanup);
   const ids = ['p1', 'p2', 'p3', 'p4', 'p5'].map(label => f.tool('stage', f.fake.commit(label)).json.id);
   assert.equal(f.tool('switch', ids[0]).status, 0);
@@ -350,7 +357,7 @@ test('prune lists only versions beyond the last three that no process uses; the 
 
 // Sol U2-R1: a launcher that cannot be created (spawn ENOENT/EACCES/EAGAIN, reported asynchronously as an 'error' event) must become a typed,
 // recorded failure that goes through the same discard / ledger-compatibility / pointer-rollback path as a service that exits.
-test('launcher creation failure (ENOENT, EACCES, EAGAIN) is a typed, recorded failure: switch restores the pointer and old service, start and rollback refuse', { skip: process.platform !== 'linux' && 'requires Linux /proc process custody and util-linux flock' }, async t => {
+releaseTest('launcher creation failure (ENOENT, EACCES, EAGAIN) is a typed, recorded failure: switch restores the pointer and old service, start and rollback refuse', async t => {
   const f = fixture(); t.after(f.cleanup);
   const ids = Object.fromEntries(['a', 'b'].map(label => [label, f.tool('stage', f.fake.commit(label)).json.id]));
   assert.equal(f.tool('switch', ids.a).status, 0);
@@ -399,7 +406,7 @@ test('launcher creation failure (ENOENT, EACCES, EAGAIN) is a typed, recorded fa
   assert.equal(f.tool('start').json.service.build.sourceCommit, serviceA.build.sourceCommit);
 });
 
-test('a new version that migrates the ledger and then fails keeps the old code closed (operator required), unchanged by U2-R1', { skip: process.platform !== 'linux' && 'requires Linux /proc process custody and util-linux flock' }, async t => {
+releaseTest('a new version that migrates the ledger and then fails keeps the old code closed (operator required), unchanged by U2-R1', async t => {
   const f = fixture(); t.after(f.cleanup);
   const old = f.tool('stage', f.fake.commit('v43')).json.id, bad = f.tool('stage', f.fake.commit('v44-exits', { ledger: 44, behavior: { serveExit: true } })).json.id;
   assert.equal(f.tool('switch', old).status, 0);
@@ -411,7 +418,7 @@ test('a new version that migrates the ledger and then fails keeps the old code c
   assert.deepEqual([last.to, last.ok, last.state], [bad, false, 'operator-required']);
 });
 
-test('package version: a second stage with the live version is refused, waivable, bumped passes, missing version is recorded as null', { skip: process.platform !== 'linux' && 'requires Linux /proc process custody and util-linux flock' }, async t => {
+releaseTest('package version: a second stage with the live version is refused, waivable, bumped passes, missing version is recorded as null', async t => {
   const f = fixture(); t.after(f.cleanup);
   const versions = () => readdirSync(join(f.installRoot, 'versions')).sort();
   const releaseOf = r => JSON.parse(readFileSync(join(f.installRoot, 'versions', r.json.id, 'release.json'), 'utf8'));

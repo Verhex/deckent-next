@@ -1,7 +1,8 @@
 import { execFile, spawn, type ChildProcess } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { createServer, type Server } from 'node:https';
-import { access, mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { createServer as createSocketServer } from 'node:net';
+import { access, chmod, lstat, mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { promisify } from 'node:util';
@@ -233,6 +234,23 @@ describe.skipIf(process.platform === 'win32')('deckent terminal in a real pseudo
   });
 
   // Owner report 2026-09-27 at the real boundary: compiled CLI, real runtime service (protocol v15), real pseudo-terminal keys.
+  it.skipIf(process.platform !== 'linux')('surfaces MANAGED_FILE_UNSAFE for a non-private runtime socket without repairing it (requires Linux local runtime transport)', async () => {
+    const f = await governedChat();
+    const endpoint = join(f.projectRoot, '../data/state/runtime.sock');
+    const listener = createSocketServer(socket => socket.destroy());
+    await new Promise<void>((resolve, reject) => { listener.once('error', reject); listener.listen(endpoint, resolve); });
+    try {
+      await chmod(endpoint, 0o755);
+      const result = await inPty(f.projectRoot, f.env, ['terminal', 'workline', '--scope', 'scope'],
+        [['[MANAGED_FILE_UNSAFE]', '/exit\r']]);
+      expect(result.timeout, result.output).toBeUndefined();
+      expect(result.status, result.output).toBe(0);
+      expect(result.output).toContain('[MANAGED_FILE_UNSAFE]');
+      expect(result.output).not.toContain('started in the background');
+      expect((await lstat(endpoint)).mode & 0o777).toBe(0o755);
+    } finally { await new Promise<void>(resolve => listener.close(() => resolve())); }
+  });
+
   it.skipIf(process.platform !== 'linux')('runs the highlighted slash command on Enter and attaches an @file picked from the service in a real terminal (requires Linux local runtime transport)', async () => {
     const f = await governedChat();
     await writeFile(join(f.projectRoot, 'README.md'), '# pty readme\n');
@@ -270,10 +288,22 @@ describe.skipIf(process.platform === 'win32')('deckent terminal in a real pseudo
     // Register the background service for cleanup before any assertion can fail.
     const pid = Number(/\(pid (\d+),/.exec(first.output)?.[1]);
     if (Number.isSafeInteger(pid) && pid > 0) daemons.push(pid);
+    if (first.output.includes('MANAGED_FILE_UNSAFE')) {
+      const objects = await Promise.all(['.', 'state', 'state/runtime.sock', 'state/ledger.db',
+        'state/ledger.db-wal', 'state/ledger.db-shm', 'state/runtime-service.log', 'state/terminal-history.jsonl'].map(async resource => {
+        try {
+          const stat = await lstat(join(config.layout.root, resource));
+          return { resource, uid: stat.uid, mode: (stat.mode & 0o777).toString(8), links: stat.nlink,
+            kind: stat.isSymbolicLink() ? 'link' : stat.isSocket() ? 'socket' : stat.isDirectory() ? 'directory' : 'file' };
+        } catch (error) { return { resource, unavailable: (error as NodeJS.ErrnoException).code }; }
+      }));
+      console.log(`verify-fixture-diagnostics: ${JSON.stringify({ test: 'terminal-autostart',
+        observed: 'after-failure; not-the-original-refusal-stat', objects })}`);
+    }
+    expect(first.timeout, first.output).toBeUndefined();
     expect(first.output).toContain('deckent runtime shutdown');
     const log = await readFile(join(config.layout.root, 'state/runtime-service.log'), 'utf8');
     expect(log).toContain(`Ledger upgraded from schema ${CURRENT_LEDGER_VERSION - 1} to ${CURRENT_LEDGER_VERSION}`);
-    expect(first.timeout, first.output).toBeUndefined();
     expect(first.status, first.output).toBe(0);
     expect(Number.isSafeInteger(pid) && pid > 0, first.output).toBe(true);
     // The service outlives the terminal and answers other commands.

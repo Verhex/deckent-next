@@ -6,9 +6,10 @@ import { assertConfigPreimage, backupConfig, pruneConfigBackups, ErrorRegistry }
 /** Filesystem adapter: fixed bootstrap paths, guarded preimages, durable backups and atomic publication. */
 export function createConfigFileDocuments(projectRoot: string, options: ConfigLoadOptions = {}): ConfigDocumentPort {
   const env = options.env ?? process.env;
+  const platform = options.platform ?? process.platform;
   // The loader's fixed bootstrap path is the existing config owner; layout overrides govern other product resources.
-  const projectPath = productResourcePath(resolveProductLayout({ projectRoot, platform: options.platform === 'win32' ? 'win32' : 'posix' }), 'config');
-  const globalPath = resolveGlobalConfigPaths(env, options.platform).platformPath;
+  const projectPath = productResourcePath(resolveProductLayout({ projectRoot, platform: platform === 'win32' ? 'win32' : 'posix' }), 'config');
+  const globalPath = resolveGlobalConfigPaths(env, platform).platformPath;
   const pathFor = (layer: ConfigLayer) => layer === 'global' ? globalPath : projectPath;
   async function snapshot(layer: ConfigLayer): Promise<ConfigSnapshot> {
     const [globalRead, projectRead, effective] = await Promise.all([

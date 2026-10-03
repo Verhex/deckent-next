@@ -30,7 +30,7 @@ const operation = (commandId = 'cmd-1', inputDigest = digest('input')) => sealAp
   requester, actionDigest: digest(`operation:${commandId}:${inputDigest}`), policyRevision: 'p1', summary: 'post-order@1 · records/PO-1', createdAt: 1_000, expiresAt: 61_000 }),
 revision: 0, status: 'pending', decision: null }, integrity);
 
-it('upgrades a real v39 ledger through v40 (C12 G1) to the current version: 0600 backup at v39 first, task and tool-call approvals byte for byte with verifying seals, then operation approvals are admitted', async () => {
+it('upgrades a real v39 ledger through v40 (C12 G1) to the current version: backup at v39 first, task and tool-call approvals byte for byte with verifying seals, then operation approvals are admitted', async () => {
   const path = await ledger(), backups = join(path, '..', 'backups'); await mkdir(backups, { mode: 0o700 });
   expect(CURRENT_LEDGER_VERSION).toBe(46); expect(PREVIOUS_LEDGER_VERSION).toBe(45);
   const seeded = openSqliteApprovalStore(path, options);
@@ -45,7 +45,8 @@ it('upgrades a real v39 ledger through v40 (C12 G1) to the current version: 0600
   const before = db.prepare('SELECT * FROM approvals ORDER BY approval_id').all(); db.close();
   const upgrade = await upgradeExistingProductLedger(path, options, backups, new Date('2026-09-27T00:00:00.000Z'));
   expect(upgrade).toEqual({ from: 39, to: CURRENT_LEDGER_VERSION, backupPath: join(backups, 'ledger-v39-2026-09-27T00-00-00-000Z.db') });
-  expect((await stat(upgrade!.backupPath)).mode & 0o777).toBe(0o600);
+  if (process.platform !== 'win32') expect((await stat(upgrade!.backupPath)).mode & 0o777).toBe(0o600);
+  else expect((await stat(upgrade!.backupPath)).isFile()).toBe(true); // Windows modes do not prove a 0600 ACL.
   const backup = new DatabaseSync(upgrade!.backupPath, { readOnly: true });
   try { expect(backup.prepare('PRAGMA user_version').get()).toEqual({ user_version: 39 }); expect(backup.prepare('SELECT * FROM approvals ORDER BY approval_id').all()).toEqual(before); }
   finally { backup.close(); }
@@ -79,7 +80,8 @@ it('upgrades a real v39 ledger through v40 (C12 G1) to the current version: 0600
   } finally { upgraded.close(); }
 });
 
-it.skipIf(process.platform !== 'linux')('[requires Linux live OS session /proc identity] stores an operation approval by its exact action digest: idempotent open, one current row per digest, never renewed, untouched by the tool-call sweep (C12 G1)', async () => {
+it('[requires Linux live OS session /proc identity] stores an operation approval by its exact action digest: idempotent open, one current row per digest, never renewed, untouched by the tool-call sweep (C12 G1)', async context => {
+  if (process.platform !== 'linux') context.skip('SESSION_REQUIRED: live OS session identity requires Linux /proc');
   const path = await ledger(), journal = openSqliteApprovalStore(path, options);
   try {
     const first = journal.store.create(operation());
@@ -133,7 +135,8 @@ it('keeps every existing task approval byte for byte across the v38 rebuild, sti
   } finally { upgraded.close(); }
 });
 
-it.skipIf(process.platform !== 'linux')('[requires Linux live OS session /proc identity] stores an agent tool-call approval by its exact action digest, lists it beside tasks, decides it, and never renews it', async () => {
+it('[requires Linux live OS session /proc identity] stores an agent tool-call approval by its exact action digest, lists it beside tasks, decides it, and never renews it', async context => {
+  if (process.platform !== 'linux') context.skip('SESSION_REQUIRED: live OS session identity requires Linux /proc');
   const path = await ledger(), journal = openSqliteApprovalStore(path, options);
   try {
     const first = journal.store.create(toolCall(0));
@@ -242,4 +245,14 @@ it('expires every pending tool-call approval at service start, page by page and 
     expect(expireOrphanedToolCallApprovals(journal.store, createHmacIntegrity('other', randomBytes(32)), 10)).toEqual({ expired: 0, failed: 1 });
     expect(journal.store.load('scope', forged.request.approvalId)?.status).toBe('pending');
   } finally { journal.close(); }
+});
+
+it('upgrade backup has private POSIX 0600 permissions', async context => {
+  if (process.platform === 'win32') context.skip('POSIX_MODE_UNAVAILABLE: Windows chmod modes do not prove a private ACL');
+  const root = await mkdtemp(join(tmpdir(), 'deckent-approval-backup-mode-')); roots.push(root);
+  const path = join(root, 'ledger.db'); const db = openSqliteLedger(path, options);
+  db.exec(DOWNGRADE_TO_V39_LEDGER_SQL); db.close();
+  const backups = join(root, 'backups'); await mkdir(backups, { mode: 0o700 });
+  const upgrade = await upgradeExistingProductLedger(path, options, backups, new Date());
+  expect((await stat(upgrade!.backupPath)).mode & 0o777).toBe(0o600);
 });

@@ -88,7 +88,7 @@ export function embeddedInBundle(root, shipped, licenses = new Map()) {
   return scanned.flatMap(host => {
     const carrier = topLevel.find(item => item.name === host.package);
     return host.embedded.map(component => {
-      const files = component.maps.map(map => map.replace(/\.map$/u, '')).filter(file => carrier.shippedFiles.includes(file));
+      const files = component.maps.map(map => map.replaceAll('\\', '/').replace(/\.map$/u, '')).filter(file => carrier.shippedFiles.includes(file));
       return { name: component.name, version: component.version, license: licenses.get(`${component.name}@${component.version}`) ?? null,
         carrier: `${carrier.name}@${carrier.version}`, shipped: files.length > 0, carrierFiles: files };
     });

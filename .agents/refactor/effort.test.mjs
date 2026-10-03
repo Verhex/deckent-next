@@ -7,6 +7,13 @@ import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { record, summarize, report, events, table, validateConfig, KINDS } from './effort.mjs';
 
+
+function journalTest(name, fn) {
+  const reason = process.platform === 'win32' && 'JEV_JOURNAL_UNSUPPORTED: private UID/mode/no-follow journal custody has no Windows implementation';
+  if (reason) console.log('verify-not-run: ' + JSON.stringify({ file: new URL(import.meta.url).pathname, test: name, state: 'skipped', reason }));
+  return test(name, { skip: reason }, fn);
+}
+
 const config = { schemaVersion: 1, journalRoot: 'unused', longIntervalMinutes: 60, reportLimit: 100 };
 const revision = () => 'fixture-rev';
 const T = m => `2026-09-22T${String(8 + Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}:00Z`;
@@ -16,7 +23,7 @@ async function sandbox(fn) {
 }
 const start = (root, id, at, extra = {}) => record(root, id, 'start', { milestone: 'M1', title: 'Fixture slice', actor: 'test', kind: 'active', at, ...extra }, T(600), revision);
 
-test('explicit events account active/blocked/verification/rework; pause is unknown, never active', () => sandbox(async root => {
+journalTest('explicit events account active/blocked/verification/rework; pause is unknown, never active', () => sandbox(async root => {
   const id = 'A02-fixture';
   await start(root, id, T(0));
   await record(root, id, 'phase', { kind: 'blocked', reason: 'owner-decision', at: T(30) }, T(600), revision);
@@ -38,7 +45,7 @@ test('explicit events account active/blocked/verification/rework; pause is unkno
   for (const f of files) assert.equal((await stat(join(root, id, f))).mode & 0o077, 0);
 }));
 
-test('open tail is reported separately, not counted; paused open tail is an open unknown gap; long intervals flagged without reaccounting', () => sandbox(async root => {
+journalTest('open tail is reported separately, not counted; paused open tail is an open unknown gap; long intervals flagged without reaccounting', () => sandbox(async root => {
   await start(root, 'B05-open', T(0));
   await record(root, 'B05-open', 'phase', { kind: 'active', at: T(100) }, T(600), revision);
   let s = summarize(await events(root, 'B05-open'), config, T(160));
@@ -50,7 +57,7 @@ test('open tail is reported separately, not counted; paused open tail is an open
   assert.deepEqual(s.unknownGaps.at(-1), { from: T(170), to: null, ms: null, open: true }); assert.equal(s.unknownMs, 0);
 }));
 
-test('rejections: ids, enum values, monotonic and future timestamps, lifecycle order', () => sandbox(async root => {
+journalTest('rejections: ids, enum values, monotonic and future timestamps, lifecycle order', () => sandbox(async root => {
   await assert.rejects(start(root, 'Z99-bad', T(0)), /EFFORT_SLICE_ID/);
   await assert.rejects(start(root, 'A02-Bad', T(0)), /EFFORT_SLICE_ID/);
   await assert.rejects(record(root, 'A02-x', 'phase', { kind: 'active', at: T(0) }, T(600), revision), /EFFORT_NOT_STARTED/);
@@ -73,7 +80,7 @@ test('rejections: ids, enum values, monotonic and future timestamps, lifecycle o
   assert.throws(() => validateConfig({ ...config, longIntervalMinutes: 0 }), /EFFORT_CONFIG/);
 }));
 
-test('clock timestamps are recorded as clock source; a tampered sequence is refused', () => sandbox(async root => {
+journalTest('clock timestamps are recorded as clock source; a tampered sequence is refused', () => sandbox(async root => {
   const ev = await record(root, 'C10-clock', 'start', { milestone: 'M2', title: 't', actor: 'a' }, T(50), revision);
   assert.equal(ev.at, T(50)); assert.equal(ev.atSource, 'clock'); assert.equal(ev.kind, null);
   const s = summarize(await events(root, 'C10-clock'), config, T(60));
@@ -82,7 +89,7 @@ test('clock timestamps are recorded as clock source; a tampered sequence is refu
   await assert.rejects(events(root, 'C10-clock'), /EFFORT_SEQUENCE_GAP/);
 }));
 
-test('report aggregates observed and unknown time per milestone, filters, and never derives effort from commits', () => sandbox(async root => {
+journalTest('report aggregates observed and unknown time per milestone, filters, and never derives effort from commits', () => sandbox(async root => {
   await start(root, 'A02-one', T(0)); await record(root, 'A02-one', 'end', { status: 'done', at: T(30) }, T(600), revision);
   await start(root, 'A02-two', T(0), { milestone: 'M2' }); await record(root, 'A02-two', 'pause', { at: T(10) }, T(600), revision);
   await record(root, 'A02-two', 'phase', { kind: 'verification', at: T(40) }, T(600), revision);
@@ -98,7 +105,7 @@ test('report aggregates observed and unknown time per milestone, filters, and ne
   assert.equal(Object.keys(r.milestones.M1.observedMs).length, KINDS.length);
 }));
 
-test('CLI records through a configured private root and reports usage errors as codes', () => sandbox(async root => {
+journalTest('CLI records through a configured private root and reports usage errors as codes', () => sandbox(async root => {
   const script = fileURLToPath(new URL('./effort.mjs', import.meta.url));
   const configPath = join(root, 'effort.config.json');
   await writeFile(configPath, JSON.stringify({ ...config, journalRoot: './journal' }));
@@ -116,3 +123,18 @@ test('CLI records through a configured private root and reports usage errors as 
   }
   assert.throws(() => run(['phase', 'A02-cli', 'blocked', '--reason', 'weather']), e => /EFFORT_BLOCKED_REASON/.test(String(e.stderr)));
 }));
+
+
+test('portable effort arithmetic excludes paused gaps and open tails without a filesystem journal', () => {
+  const list = [
+    { type: 'start', sliceId: 'A02-pure', card: 'A02', milestone: 'M1', title: 'fixture', actor: 'test', kind: 'active', revision: 'fixture', at: T(0), atSource: 'clock', evidenceRefs: [] },
+    { type: 'phase', kind: 'blocked', reason: 'owner-decision', at: T(30), atSource: 'clock', evidenceRefs: [] },
+    { type: 'pause', at: T(45), atSource: 'clock', evidenceRefs: [] },
+    { type: 'phase', kind: 'verification', at: T(90), atSource: 'clock', evidenceRefs: [] },
+  ];
+  const s = summarize(list, config, T(100));
+  assert.deepEqual(s.observedMs, { active: 30 * 60_000, blocked: 15 * 60_000, verification: 0, rework: 0 });
+  assert.equal(s.unknownMs, 45 * 60_000); assert.equal(s.openSinceMs, 10 * 60_000);
+  assert.equal(s.status, 'verification'); assert.deepEqual(s.blockedReasons, { 'owner-decision': 15 * 60_000 });
+  assert.throws(() => validateConfig({ ...config, longIntervalMinutes: 0 }), /EFFORT_CONFIG/);
+});

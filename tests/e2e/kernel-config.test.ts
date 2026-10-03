@@ -27,15 +27,23 @@ async function fixture(kind: 'empty' | 'global-only' | 'project-override') {
 }
 afterEach(async () => { await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 
+async function settledReads<T>(reads: readonly Promise<T>[]): Promise<T[]> {
+  const results = await Promise.allSettled(reads);
+  return results.map(result => { if (result.status === 'rejected') throw result.reason; return result.value; });
+}
+
 describe('K1 real binary journeys', () => {
-  it('reads effective config in three fixture projects, in human and JSON formats', async () => {
-    for (const [kind, expected] of [['empty', 'deckent-project'], ['global-only', 'global-project'], ['project-override', 'project-override']] as const) {
+  it.each([['empty', 'deckent-project'], ['global-only', 'global-project'], ['project-override', 'project-override']] as const)(
+    'reads effective config in %s fixture, in human and JSON formats', async (kind, expected) => {
       const f = await fixture(kind);
-      expect((await f.run(['config', 'get', 'projectName'])).stdout.trim()).toBe(expected);
-      expect(JSON.parse((await f.run(['config', 'get', 'projectName', '--json'])).stdout)).toBe(expected);
-      expect(JSON.parse((await f.run(['config', 'get', '--json'])).stdout)).toMatchObject({ schema_version: 4, projectName: expected });
-      expect(JSON.parse((await f.run(['config', 'get', 'language', '--json'], { DECKENT_LANGUAGE: 'tr' })).stdout)).toBe('tr');
-    }
+      const [human, projected, full, language] = await settledReads([
+        f.run(['config', 'get', 'projectName']), f.run(['config', 'get', 'projectName', '--json']),
+        f.run(['config', 'get', '--json']), f.run(['config', 'get', 'language', '--json'], { DECKENT_LANGUAGE: 'tr' }),
+      ]);
+      expect(human.stdout.trim()).toBe(expected);
+      expect(JSON.parse(projected.stdout)).toBe(expected);
+      expect(JSON.parse(full.stdout)).toMatchObject({ schema_version: 4, projectName: expected });
+      expect(JSON.parse(language.stdout)).toBe('tr');
   });
   it('rejects legacy migration and aliases without altering config bytes', async () => {
     const f = await fixture('project-override'), path = join(f.project, '.deckent/config.json');
@@ -120,19 +128,18 @@ describe('K1 real binary journeys', () => {
 
 
 describe('K1 blocking review reproductions', () => {
-  it('never exposes a resolved secret value in full, subtree or projected human/JSON config output', async () => {
+  it.each([undefined, 'projectName', 'admission', 'admission.registry', 'admission.registry.brain', 'admission.registry.overrides.sample'])(
+    'never exposes a resolved secret value at %s in human/JSON config output', async key => {
     const f = await fixture('project-override'), secret = 'supersecret-value-42';
     Object.assign(f.env, { API_TOKEN: secret });
     // Config schema 4 retired `providers` (CONFIG-SURFACE); a kernel leaf and the free-form `admission.registry` subtree carry the references now.
     await writeFile(join(f.project, '.deckent/config.json'), JSON.stringify({ projectName: '$DECK:API_TOKEN', admission: { registry: { brain: '$DECK:API_TOKEN',
       overrides: { sample: '$DECK:API_TOKEN' } }, poolId: 'pool', executionSlots: 1, inFlightSlots: 1, ordering: 'input-order' } }));
-    for (const key of [undefined, 'projectName', 'admission', 'admission.registry', 'admission.registry.brain', 'admission.registry.overrides.sample']) {
-      for (const format of [[], ['--json']]) {
-        const result = await f.run(['config', 'get', ...(key ? [key] : []), ...format]);
+    const results = await settledReads([[], ['--json']].map(format => f.run(['config', 'get', ...(key ? [key] : []), ...format])));
+    for (const [index, result] of results.entries()) {
         expect(result.stdout + result.stderr).not.toContain(secret);
         expect(result.stdout).toContain('[REDACTED]');
-        if (format.length) expect(() => JSON.parse(result.stdout)).not.toThrow();
-      }
+        if (index === 1) expect(() => JSON.parse(result.stdout)).not.toThrow();
     }
   });
   it('recovers after a real writer process crashes and emits the typed warning on stderr', async () => {

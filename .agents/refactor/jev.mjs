@@ -76,6 +76,7 @@ export async function readCredential(config, env = process.env) {
   let value = env[config.credentialEnv];
   const configuredPath = env[config.credentialFileEnv] || config.credentialFile;
   if (!value && configuredPath) {
+    check(process.platform !== 'win32' && typeof process.getuid === 'function' && constants.O_NOFOLLOW > 0, 'JEV_CREDENTIAL_FILE_UNSUPPORTED');
     const path = configuredPath.startsWith('~/') ? resolve(homedir(), configuredPath.slice(2)) : configuredPath;
     const handle = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW);
     try {

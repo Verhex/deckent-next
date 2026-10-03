@@ -2,12 +2,13 @@ import { spawnSync } from 'node:child_process';
 import { mkdtempSync, mkdirSync, rmSync, readdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { afterEach, expect, it } from 'vitest';
 import { prepareNativeCodingProfile } from '#composition/index.js';
 
 const roots: string[] = [];
 const cli = resolve('dist/composition/core/cli/internal/entry.js');
-const sdk = resolve('dist/index.js');
+const sdk = pathToFileURL(resolve('dist/index.js')).href;
 afterEach(() => { for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true }); });
 function fixture() {
   const root = mkdtempSync(join(tmpdir(), 'deckent-coding-')); roots.push(root);
@@ -54,7 +55,8 @@ it('rejects invalid transport, duplicated flags, unsupported providers and unkno
   expect(readdirSync(f.project)).toEqual([]);
 });
 
-it('reads a relative Unicode input file with Turkish locale', () => {
+it('reads a relative Unicode input file with Turkish locale', (context) => {
+  if (process.platform === 'win32') context.skip('CLI_FILE_INPUT_UNAVAILABLE: Windows no-follow file input is refused; stdin profiles are tested above');
   const f = fixture(); const file = 'görev profili.json';
   writeFileSync(join(f.project, file), JSON.stringify(input('claude')));
   const result = spawnSync(process.execPath, [cli, 'coding', 'prepare', '--input', file, '--json', '--lang', 'tr'],

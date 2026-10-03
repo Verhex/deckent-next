@@ -7,8 +7,8 @@ import { guard } from './host-guard.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const script = resolve(here, 'host-guard.mjs');
-const root = '/tmp/next-root';
-const legacy = '/tmp/deckent-dev';
+const root = resolve('/tmp/next-root');
+const legacy = resolve('/tmp/deckent-dev');
 
 function ctx(over = {}) {
   return {
@@ -92,7 +92,7 @@ test('U1: build/verify of a checkout whose dist runs a live process is denied; o
   assert.equal(decision(guard('pre-tool', bash('npm run test && npm run lint'), live)), 'pass');
   assert.equal(decision(guard('pre-tool', bash('echo "npm run build"'), live)), 'pass');
   assert.equal(decision(guard('pre-tool', bash('npm run build'), ctx())), 'pass');
-  assert.deepEqual(buildTargets('cd /a && cd b && npm run build; node ../c/scripts/build.mjs', '/x'), ['/a/b', '/a/c']);
+  assert.deepEqual(buildTargets('cd /a && cd b && npm run build; node ../c/scripts/build.mjs', '/x'), [resolve('/a/b'), resolve('/a/c')]);
 });
 
 test('post-tool: CLAUDE.md line cap and core-memory manifest refresh', () => {
@@ -134,4 +134,15 @@ test('vitest detection counts real vitest processes only', async () => {
   assert.equal(isVitestProcess('node /home/u/.nvm/bin/codex exec -C /w "run npx vitest run tests/x.test.ts"'), false);
   assert.equal(isVitestProcess('timeout 7800 codex exec "VITEST_MAX_FORKS=2 npx vitest run"'), false);
   assert.equal(isVitestProcess('/bin/bash -c pgrep -f vitest'), false);
+});
+
+
+test('legacy execution denial covers Windows drive and backslash paths without blocking data arguments', async () => {
+  const { legacyExecution } = await import('./host-guard.mjs');
+  const windowsLegacy = String.raw`C:\work\deckent-dev`;
+  assert.equal(legacyExecution(String.raw`C:\work\deckent-dev\bin\deckent --help`, windowsLegacy), true);
+  assert.equal(legacyExecution(String.raw`node C:\work\deckent-dev\dist\cli.js run`, windowsLegacy), true);
+  assert.equal(legacyExecution(String.raw`cd C:\work\deckent-dev && .\bin\deckent run`, windowsLegacy), true);
+  assert.equal(legacyExecution(String.raw`echo C:\work\deckent-dev\bin\deckent`, windowsLegacy), false);
+  assert.equal(legacyExecution(String.raw`node C:\work\deckent-next\script.mjs --legacy C:\work\deckent-dev`, windowsLegacy), false);
 });

@@ -106,7 +106,7 @@ describe.skipIf(process.platform !== 'linux')('MCP registry: scopes, precedence 
         runConfiguredMcpCommand(root, request as never, options, async card => { out.push(JSON.stringify(card)); return confirm(card); }) }); return out.join(''); })();
     expect(approved).toContain('"phase":"launch"'); expect(approved).toContain('"phase":"tools"');
     expect(approved).toContain('${MY_TOKEN}'); expect(approved).toContain('"name":"MY_TOKEN","set":true'); expect(approved).not.toContain('s3cr3t-value-xyz');
-    const view = await loadMcpRegistry({ projectRoot: w.project, layout: resolveProductLayout({ projectRoot: w.project }), environment: w.env, secret: async () => undefined });
+    const view = await loadMcpRegistry({ projectRoot: w.project, layout: resolveProductLayout({ platform: process.platform === 'win32' ? 'win32' : 'posix', projectRoot: w.project }), environment: w.env, secret: async () => undefined });
     const settings = mcpClientSettings(view, {})!;
     expect(settings.servers[0]!.args).toContain('s3cr3t-value-xyz');
     const controller = new AbortController(), pool = new McpClientPool(controller.signal);
@@ -189,7 +189,7 @@ describe('the agent cannot reach the project MCP registry (read floor, shell, bo
     writeFileSync(join(w.project, '.deckent', 'mcp.json'), '{"mcpServers":{"fx":{"command":"REGISTRY-SECRET"}}}\n');
     writeFileSync(join(w.project, '.deckent', '.mcp.json.4242.abcd.tmp'), 'REGISTRY-SECRET\n');
     mkdirSync(join(w.project, 'src')); writeFileSync(join(w.project, 'src', 'a.ts'), 'export const a = 1;\n');
-    const deny = agentWorkspaceDeny(w.project, resolveProductLayout({ projectRoot: w.project, root: join(w.base, 'data') }));
+    const deny = agentWorkspaceDeny(w.project, resolveProductLayout({ platform: process.platform === 'win32' ? 'win32' : 'posix', projectRoot: w.project, root: join(w.base, 'data') }));
     return { ...w, deny, scope: await createWorkspaceScope(w.project, deny) };
   };
   custodyIt('[requires Linux /proc/self/fd custody] read tools refuse it, list and grep do not show it; the configuration stays readable', async () => {
