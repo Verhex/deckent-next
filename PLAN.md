@@ -104,6 +104,13 @@ Lane push yapmaz; pano bu worktree'de yok (ENOENT), lead kendi worker alt-listes
 Güvenlik floorları, mevcut zaman/kaynak bütçeleri korunur; full verify yetkili değildir.
 Socket bind→asyncchmod yarışı ve diğer historical BUSY/PTY/validator borçları R2 kapsamıyla kapanmış sayılmaz.
 Kanıt `proof/CI-FIX-R2-2026-10-03/review.md`; süreç uyumsuzlukları R1 `inconsistencies.md` R2 bölümü.
+**SOCKET-PUBLICATION owner 2026-10-03:**
+`lane/socket-publication`, taban `97851bce`, Codex uygulayıcı; private staging → pin → chmod/fstat600 → listen →
+NOREPLACE atomik final yayın uygulandı. Yazar kanıtı: tabanda watcher022/077 kırmızı → adayda128'er yayım güvenli;
+44 native + 37 Vitest test,0 skip, typecheck/eslint/lint-arch0. Bağımsız inceleme ve hosted Linux/Node24 kabulü açık;
+sonraki adım exact aday incelemesi → lead entegrasyonu → ayrı yetkiyle hosted koşu; şeritte pano yok (ENOENT), main worker alt-listesini uzlaştırır.
+Bu şeritte fixture/CI-FIX-R2, push, dogfood ve canlı yok; proof `proof/SOCKET-PUBLICATION-2026-10-03/`.
+Eski log reddedilen inode'u açıklamadığından batch27 SHA'sına neden atfedilmez.
 
 **CI-WINDOWS-MACOS — owner 2026-10-01, Sol uygulayıcı (`lane/ci-sol-2`, taban `76582f9f`):** şerit `a5fea81c` 24. partide birleşti (`048e47ec`, push `a2971850`; Fable 5.1 bağımsız PASS). Tamamlanan kısım: COMPLETED-PLAN 2026-10-03. Kapanmayanlar: native Windows/macOS yeşil değil (hosted 6/6 kapısı ve exact run/job tablosu CI-FIX satırında); CI-FULL'den taşınan açık sınırlar (simüle missing-proc native overlay conflict kök nedeni, `shell-overlay-write-set.test.ts:111` yük altında bir kez düşme, future repository prune fail-closed/immutable mirror) ve Windows partial-log envanterindeki 14 dosyanın timing/lock/descendant/native kök neden kanıtı açık. Kanıt `proof/CI-WINDOWS-2026-10-01/`, `proof/CI-FULL-2026-10-01/`.
 
