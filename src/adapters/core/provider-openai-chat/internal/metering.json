@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "retrievedAt": "2026-10-03",
+  "sources": {
+    "tokenCounting": "https://developers.openai.com/api/docs/guides/token-counting"
+  },
+  "note": "Adapter-owned fallback estimate policy, preserving the shipped UTF-8-byte formula when no provider counter exists. The official token-counting guidance retrieved 2026-10-03 describes model-dependent formatting and tool/schema tokens; it does not prescribe or guarantee these coefficients for Chat Completions or compatible servers. This is the existing labelled upper-bound estimate, not measured vendor token usage.",
+  "tokenEstimate": {
+    "requestOverheadTokens": 64,
+    "messageOverheadTokens": 16,
+    "toolOverheadTokens": 32
+  }
+}

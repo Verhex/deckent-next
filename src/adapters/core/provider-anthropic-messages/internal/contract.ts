@@ -2,7 +2,7 @@ import { X509Certificate } from 'node:crypto';
 import { z } from 'zod';
 import { createImmutableJsonObjectSchema, MODEL_INVOCATION_NATIVE_JSON_LIMITS } from '#domain/index.js';
 import { OpenAiChatHttpError, parseOpenAiChatHttpLimits } from '#adapters/core/provider-openai-chat/index.js';
-import { ANTHROPIC_EFFORT_LEVELS, anthropicControlsAdmitted } from './model-capabilities.js';
+import { ANTHROPIC_EFFORT_LEVELS, ANTHROPIC_METERING, anthropicControlsAdmitted } from './model-capabilities.js';
 
 export const ANTHROPIC_MESSAGES_HTTP_ADAPTER_ID = 'anthropic-messages-http' as const;
 /** v2 (2026-09-29): profile `effort`, and thinking/effort/max-output checked against the model capability registry at load. */
@@ -14,8 +14,8 @@ export const ANTHROPIC_MESSAGES_PRICING_ID = 'anthropic-published-tariff' as con
 export const ANTHROPIC_MESSAGES_METER_ID = 'anthropic-messages-reservation' as const;
 export const anthropicMessagesProtocol = Object.freeze({ family: ANTHROPIC_MESSAGES_FAMILY, version: ANTHROPIC_MESSAGES_PROTOCOL_VERSION });
 export const ANTHROPIC_MESSAGES_WIRE_LIMITS = MODEL_INVOCATION_NATIVE_JSON_LIMITS;
-/** Fixed allowance for the provider's tool-use system prompt (documented 286-804 tokens) added to the byte-based prompt bound. */
-export const ANTHROPIC_PROMPT_OVERHEAD_TOKENS = 2048;
+/** Versioned local reservation allowance added to the byte-based prompt bound (not an exact vendor count). */
+export const ANTHROPIC_PROMPT_OVERHEAD_TOKENS = ANTHROPIC_METERING.promptOverheadTokens;
 
 const rate = z.string().regex(/^(?:0|[1-9]\d{0,5})(?:\.\d{1,4})?$/);
 /** Published USD per million tokens as decimal strings (at most 4 fraction digits), dated and sourced: adapter-owned pricing data. */
@@ -28,7 +28,7 @@ export type AnthropicPublishedTariff = z.infer<typeof anthropicTariffSchema>;
 const thinkingSchema = z.discriminatedUnion('mode', [
   z.object({ mode: z.literal('model-default'), off: z.enum(['disabled', 'between_tools']).optional() }).strict(),
   z.object({ mode: z.literal('adaptive'), display: z.enum(['summarized', 'omitted']), off: z.enum(['disabled', 'between_tools']).optional() }).strict(),
-  z.object({ mode: z.literal('enabled'), budgetTokens: z.number().int().min(1024).safe(), off: z.literal('disabled').optional() }).strict(),
+  z.object({ mode: z.literal('enabled'), budgetTokens: z.number().int().min(ANTHROPIC_METERING.thinkingBudgetMinTokens).safe(), off: z.literal('disabled').optional() }).strict(),
 ]);
 export type AnthropicThinking = z.infer<typeof thinkingSchema>;
 const certificate = z.string().min(1).max(65_536).refine(value => {

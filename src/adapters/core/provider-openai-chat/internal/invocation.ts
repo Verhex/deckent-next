@@ -1,5 +1,6 @@
 import type { ModelInvocationResult } from '#engine/index.js';
 import { agentToolCallSchema, type AgentToolCall, type AgentTurnMessage, type JsonObject } from '#domain/index.js';
+import { OPENAI_CHAT_METERING } from './metering.js';
 
 function firstChoice(result: ModelInvocationResult): Record<string, unknown> | null {
   const native = result.response?.native;
@@ -71,5 +72,7 @@ export function openAiChatNativeMessages(messages: readonly AgentTurnMessage[]) 
 export function openAiChatPromptUpperBound(nativeRequest: JsonObject): number {
   const request = nativeRequest as { messages?: unknown[]; tools?: unknown[] };
   const messages = request.messages ?? [], tools = request.tools ?? [];
-  return Buffer.byteLength(JSON.stringify({ messages, tools }), 'utf8') + 64 + 16 * messages.length + 32 * tools.length;
+  const estimate = OPENAI_CHAT_METERING.tokenEstimate;
+  return Buffer.byteLength(JSON.stringify({ messages, tools }), 'utf8') + estimate.requestOverheadTokens
+    + estimate.messageOverheadTokens * messages.length + estimate.toolOverheadTokens * tools.length;
 }
