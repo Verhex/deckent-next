@@ -27,7 +27,7 @@ planlanmıştır. Bugün yalnız sürümlü terminal–desktop köprü sözleşm
 
 ## Durum
 
-**1.0.0-alpha.3 (2026-10-03'te canlı), clean-room port sürüyor.** Tamamlanan yetenekler
+**1.0.0-alpha.4 (2026-10-03'te canlı), clean-room port sürüyor.** Tamamlanan yetenekler
 [COMPLETED-PLAN.md](COMPLETED-PLAN.md), kalan işler [PLAN.md](PLAN.md) içindedir. Kimde-ne-var ve sıradaki
 adım host süreç panosundadır (`node .agents/refactor/board.mjs show`). Canlı gözlem için `deckent monitor`
 her kurulumu tek salt-okunur görünümde gösterir. Geliştirme dogfood'u (Deckent işçilerinin izole bir
@@ -36,8 +36,9 @@ Legacy kod tabanının kalan yetenekleri tek tek taşınır; her landing sözle�
 kanıtıyla gelir.
 
 `deckent` npm'de yayımlanmamıştır (2026-10-03 registry sorgusu E404); aşağıdaki kaynak kurulumunu kullanın.
-Canlı alpha.3 bilgisi kayıtlı sürüm durumudur; bu dokümantasyon şeridinde yeni runtime gözlemi yapılmadı.
-CI'da Linux/Node 24 zorunlu hücredir; diğer işletim sistemi/Node 26 hücreleri danışma niteliğindedir.
+Canlı alpha.4 bilgisi kayıtlı sürüm durumudur; bu dokümantasyon şeridinde yeni runtime gözlemi yapılmadı.
+CI'ın altı hücresinin hepsi (Linux, macOS, Windows × Node 24/26) zorunludur (owner 2026-10-03). Bu yüzden açık
+macOS/Windows platform borçları kapanana kadar CI rozeti kırmızı kalır; kırmızı rozet gürültü değil, gerçekten kırılan bir hücredir.
 
 ## Bugün mevcut özellikler
 
@@ -191,7 +192,7 @@ Kurulum, mevcut kullanıcıya ait ve grupça yazılabilir proje/bootstrap journa
 (örneğin `0775`) kabul eder; diğer kullanıcılara yazma izni veren dizinleri reddeder.
 Grup üyeleri dizin girdilerini değiştirebilir; journal namespace muhafazası o grupla paylaşılır.
 Journal dosyaları yine mevcut kullanıcıya ait, tek hard link'li ve private `0400`/`0600` izinli
-olmalıdır. Yeni dizinlerin varsayılanı `0700`'dır. Config yayımı, policy, artifact ve worker
+olmalıdır. Yeni dizinlerin varsayılanı `0700`'dür. Config yayımı, policy, artifact ve worker
 kaynakları daha sıkı, ayrı kontrollerini korur. Grupça yazılabilir proje, ortak yazılabilir ürün
 veri kökünün desteklendiği anlamına gelmez.
 

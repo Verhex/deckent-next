@@ -26,15 +26,16 @@ directly. There is no HTTP API yet; Dashboard and Desktop are planned observer/o
 
 ## Status
 
-**1.0.0-alpha.3 (live 2026-10-03), clean-room port in progress.** Completed capabilities are recorded in
+**1.0.0-alpha.4 (live 2026-10-03), clean-room port in progress.** Completed capabilities are recorded in
 [COMPLETED-PLAN.md](COMPLETED-PLAN.md); remaining work is in [PLAN.md](PLAN.md); who holds what and what comes next is on the host
 process board (`node .agents/refactor/board.mjs show`). Live observation: `deckent monitor` (one read-only snapshot of every installation).
 Development dogfood (Deckent workers writing Deckent cards in an isolated installation) runs as bounded trials; DOGFOOD is officially off. Everything else is being ported from the legacy codebase
 one capability at a time, each landing with contract tests and a real-binary proof.
 
 The `deckent` package is not published on npm (registry E404 verified 2026-10-03); use the source
-checkout below. The live alpha.3 status is the recorded release state, not a fresh runtime check
-from this documentation lane. CI's Linux/Node 24 cell is required; other OS/Node 26 cells are advisory.
+checkout below. The live alpha.4 status is the recorded release state, not a fresh runtime check
+from this documentation lane. All six CI cells (Linux, macOS, Windows × Node 24/26) are required (owner 2026-10-03), so the CI badge stays red
+until the open macOS/Windows platform debts close; a red badge means a real failing cell, not noise.
 
 ## Features that exist today
 

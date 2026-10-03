@@ -3,7 +3,7 @@
 
 Deckent adopts Contributor Covenant **2.1** as requested by the owner. Versioned official text
 verified **2026-10-03**; 2.1 is the selected version, not a claim that it is the latest edition.
-The owner must replace the private conduct-reporting contact placeholder below before operational use.
+Conduct reports use the same private channel as security reports (owner decision 2026-10-03).
 
 ## Our Pledge
 
@@ -41,7 +41,7 @@ This Code of Conduct applies within all community spaces, and also applies when 
 
 ## Enforcement
 
-Instances of abusive, harassing, or otherwise unacceptable behavior may be reported to the community leaders responsible for enforcement at **[OWNER TO FILL: monitored private conduct-reporting email or URL]**. All complaints will be reviewed and investigated promptly and fairly.
+Instances of abusive, harassing, or otherwise unacceptable behavior may be reported to the community leaders responsible for enforcement privately through the repository's GitHub private reporting form ([Security → Report a vulnerability](https://github.com/Verhex/deckent-next/security/advisories/new)); start the title with `[Conduct]`. All complaints will be reviewed and investigated promptly and fairly.
 
 All community leaders are obligated to respect the privacy and security of the reporter of any incident.
 
