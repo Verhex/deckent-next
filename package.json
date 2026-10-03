@@ -49,7 +49,7 @@
     "smoke:dist": "node scripts/pack-smoke.mjs",
     "verify": "node scripts/verify-context.mjs && npm run lint && npm run build && npm run test:native && npm run test && npm run test:host && npm run smoke",
     "test:native": "node scripts/test-native.mjs",
-    "test:host": "node --test .agents/refactor/*.test.mjs"
+    "test:host": "node --test --test-reporter=tap --test-concurrency=2 --test-timeout=180000 .agents/refactor/*.test.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/client": "2.2.0",

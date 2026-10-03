@@ -1255,8 +1255,32 @@ The test harness canonicalizes only the OS temporary parent before fixture alloc
 explicit test global homes and product roots are unchanged. Successful descriptor-relative workspace read/edit cases run only
 when the existing Linux `/proc/self/fd` capability is available. Portable policy/grammar and typed unsupported-refusal tests
 remain active; this partition does not implement macOS/Windows custody or grant platform acceptance.
+**CI-FIX signal (owner 2026-10-03; source candidate, hosted acceptance pending).** All six matrix cells
+are required workflow failures, named `required verify (<os>, node <24|26>)`; `continue-on-error` is absent.
+This does not implement GitHub branch protection: the lead must select those checks in repository rules.
+Same-ref concurrency cancels superseded runs. Existing pull_request remains secret-free with read-only contents
+and no persisted checkout credential. Full history prevents source-history ratchets from silently losing CI coverage;
+Windows disables Git line-ending conversion before checkout so locked license/golden bytes remain exact.
+After setup-node, the workflow canonicalizes only the OS temporary parent into TMPDIR/TMP/TEMP through GITHUB_ENV;
+Vitest, standalone host node:test and native children then allocate fixtures under the same real path.
+Explicit product roots and the managed-file symlink/permission floor remain unchanged.
+The existing job bound stays 30 minutes; verify has a 20-minute step bound, preserving time for always-run summary
+and SHA-pinned official upload-artifact v7.0.1. Host node:test replaces Infinity with a 180-second
+execution bound (existing fixture subprocess ceiling); native node:test uses the existing 30-second Vitest ceiling,
+and each native compile/test invocation is capped at 180 seconds. Host/native test concurrency is two and their reporter is explicitly TAP so failed names/skip notes reach the collector. These bounds
+reduce unbounded defaults; they do not increase existing fixture or Vitest timeouts. Each job retains the original verify exit through bash pipefail,
+raw log, collected `verify-evidence`, failed Vitest/collection and Node host-test names and actual `verify-not-run` notes.
+Missing Vitest outcomes are `VERIFY_OUTCOMES_UNAVAILABLE`, never zero passing tests; summary is not whole-job acceptance.
+Native manifest exclusions now emit `verify-not-run` with `NATIVE_PLATFORM_UNSUPPORTED`.
+The config file adapter defaults its bootstrap layout to the actual host platform; explicit simulations remain explicit.
+The detached runtime launcher refuses Windows/missing O_NOFOLLOW before log I/O as RUNTIME_LAUNCH_UNSUPPORTED.
+Windows rendering fixtures exercise bounded stdin with visible file-variant exclusions and a separate file-refusal negative.
+Packaging evidence normalizes metadata separators and canonicalizes only declaration build roots.
+No new native macOS/Windows custody is claimed; typed refusal tests and portable behavior stay separate.
+Sources/versions dated 2026-10-03 and fresh proof limits live in external `proof/CI-FIX-2026-10-03/`.
+
 **CI-WINDOWS-MACOS (owner 2026-10-01; verification tooling).** Each CI matrix job has a 30-minute ceiling,
-with ~2.1x headroom over run36884716187's successful Linux jobs (14m05s/14m20s); advisory cells cannot inherit
+with ~2.1x headroom over run36884716187's successful Linux jobs (14m05s/14m20s); cells cannot inherit
 the 360-minute GitHub default. Linux-only local runtime socket/live OS-session tests name their capability in
 collected test titles and skip only cases requiring it; portable policy/grammar and existing typed refusals stay
 active. Bubblewrap ancestor traversal stops when dirname reaches its fixed point, including a Windows drive root;
@@ -1887,8 +1911,8 @@ service wiring from the turn's `requestApproval` to `offer`/`remember`/`persist`
 - Platform order (owner 2026-09-29): Linux and Windows WSL2 today; macOS next (Seatbelt + getpeereid), then
   native Windows. Docker stays a worker execution target, not a host platform. A platform without proof reports
   a typed `UNSUPPORTED`/`DEGRADED`, never a silent fallback. Node.js: `engines >=24.15.0` (the first 24.x bundling
-  SQLite 3.51.3, the WAL-reset corruption fix); 24 and 26 are supported (CI matrix [24, 26]; 24 is the required gate
-  until Node 26 LTS on 2026-10-28). Every `node:sqlite` open (the ledger connection, the read-only readers, the scope
+  SQLite 3.51.3, the WAL-reset corruption fix); 24 and 26 are supported (CI matrix [24, 26]; owner 2026-10-03 requires all six hosted cells;
+  Node 26 is the planned default after LTS on 2026-10-28). Every `node:sqlite` open (the ledger connection, the read-only readers, the scope
   registry reader and the upgrade backup: 10 sites) first refuses an engine below 3.51.3 with the typed
   `ATTEMPT_STORE_SQLITE_UNSUPPORTED` (DEPS-P0, numeric comparison; an unparsable version is refused).
 - Project state lives under the project's `.deckent/` (gitignored; layout from `layout-resources.json`), and the

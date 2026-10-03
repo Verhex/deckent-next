@@ -2,7 +2,7 @@
 
 Yerel testler en fazla 16 GB kullanır; tam `npm run verify` varsayılan 4 worker, hedefli/şerit koşuları `VITEST_MAX_FORKS=2` kullanır (owner 2026-09-27; güncel AGENTS.md). Gerçek bellek ve eşzamanlı süreçler gözetilir, gerekirse doğrulama batch'lere bölünür. Bu makine sınırı ürünün worker veya müşteri kapasitesi değildir.
 
-- Landing öncesi `npm run verify` zorunludur. Değişiklik sırasında hedefli testler kullanılır; geçen kontrol sebepsiz tekrarlanmaz. Kaynak değişimi sonrası gerçek binary kanıtından önce build alınır.
+- Dilimlerde hedefli kontroller kullanılır; tam `npm run verify` yalnız geniş özellik ekleyen partilerde ve owner istediğinde koşulur (owner 2026-10-03). Hosted CI ayrı kapıdır; hedefli yerel sonuç hosted başarı değildir. Geçen kontrol sebepsiz tekrarlanmaz. Kaynak değişimi sonrası gerçek binary kanıtından önce build alınır.
 - Aktif suite sırasında build alınmaz: dist/auth/cache karışması sahte sonuç üretir. Exit code doğrudan yakalanır; pipe'ın son komutu test başarısı sanılmaz. Legacy bot restart veya cleanup ritüeli uygulanmaz.
 
 Legacy dersler: sınırsız fork sayısı yaklaşık 40 GB tüketerek WSL OOM/crash üretti (kaynak taşması, flaky test değil); 2026-08-26 beş-landing kadansı 21 dakikalık suite maliyetinden doğdu ve Next için geçerli değildir; eski vitest/heap sayıları güncel kanıt değildir.
