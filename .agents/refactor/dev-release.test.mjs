@@ -422,6 +422,11 @@ test('package version: a second stage with the live version is refused, waivable
   assert.equal(refused.status, 1); assert.equal(refused.json.code, 'DEV_RELEASE_SAME_VERSION');
   assert.equal(refused.json.version, '1.0.0-alpha.7'); assert.equal(refused.json.currentId, live.json.id);
   assert.deepEqual(versions(), before);
+  // Sol 2273 P2: an inherited GIT_DIR must not blind the same-version check (the package.json lookup runs with the tool's clean git environment).
+  const inherited = spawnSync(process.execPath, [join(f.repo, '.agents/refactor/dev-release.mjs'), 'stage', same, '--bwrap', join(f.base, 'bwrap'), '--start-timeout-ms', '20000', '--stop-timeout-ms', '20000'],
+    { cwd: f.base, env: { ...f.env, GIT_DIR: '/definitely-missing-git-dir' }, encoding: 'utf8', timeout: 180_000 });
+  assert.equal(inherited.status, 1, inherited.stdout + inherited.stderr); assert.equal(JSON.parse(inherited.stdout).code, 'DEV_RELEASE_SAME_VERSION');
+  assert.deepEqual(versions(), before);
   const waived = f.tool('stage', same, '--allow-same-version'); assert.equal(waived.status, 0, waived.stdout + waived.stderr);
   assert.equal(releaseOf(waived).sameVersionWaived, true); assert.equal(releaseOf(waived).packageVersion, '1.0.0-alpha.7');
   const bumped = f.tool('stage', f.fake.commit('bumped', { version: '1.0.0-alpha.8' })); assert.equal(bumped.status, 0, bumped.stdout + bumped.stderr);

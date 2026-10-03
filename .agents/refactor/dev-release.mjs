@@ -332,7 +332,8 @@ function verifySourceIdentity(path, sha, sourceCommonDir) {
 
 // --- commands ---------------------------------------------------------------------------------------------------------------------
 function packageVersion(source, sha) {
-  try { const v = JSON.parse(run('git', ['--no-optional-locks', '-C', source, 'show', `${sha}:package.json`]).stdout).version; return typeof v === 'string' && v ? v : null; } catch { return null; }
+  // Clean git environment like every other git call here (Sol 2273 P2): an inherited GIT_DIR must not turn a real version into null.
+  try { const v = JSON.parse(run('git', ['--no-optional-locks', '-C', source, 'show', `${sha}:package.json`], { env: gitEnv() }).stdout).version; return typeof v === 'string' && v ? v : null; } catch { return null; }
 }
 export async function stage(L, ref, opts) {
   const source = opts.source ? resolve(opts.source) : L.project;
