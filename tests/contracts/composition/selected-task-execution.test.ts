@@ -230,7 +230,10 @@ describe.skipIf(!dockerEnabled)('selected task cross-surface and custody', () =>
 
       const inspected = await cliCall<Awaited<ReturnType<typeof inspectRun>>>(f,
         ['run', 'inspect', '--scope', 's', '--id', 'r', '--json']);
-      expect(inspected.run).toEqual((evaluationResult.structuredContent as { evaluation: { run: unknown } }).evaluation.run);
+      const { pool, ...recordedRun } = inspected.run;
+      expect(pool).toEqual({ poolId: 'p', capacity: { executionSlots: 1, inFlightSlots: 1 },
+        effectiveCapacity: { executionSlots: 1, inFlightSlots: 1 }, occupancy: { execution: 0, inFlight: 0 }, drift: [], waiting: [] });
+      expect(recordedRun).toEqual((evaluationResult.structuredContent as { evaluation: { run: unknown } }).evaluation.run);
       record = await runtime.store.loadBoundDispatch(identity);
       const output = JSON.parse(new TextDecoder().decode(await runtime.artifacts.read('s', record!.output!)));
       expect(output).toMatchObject({ schemaVersion: 1, identity, completeness: 'complete', stdout: 'base\n' });

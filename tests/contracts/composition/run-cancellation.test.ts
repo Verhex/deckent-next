@@ -36,7 +36,10 @@ describe.skipIf(process.platform === 'win32')('configured SDK cancellation inten
     const f = await fixture(); const result = await requestRunCancellation(f.project, command, f.options);
     expect(result.cancellation.run).toMatchObject({ cancellationRequested: true, revision: 1 });
     expect(result.cancellation.run.tasks[0]).toMatchObject({ phase: 'cancelled', cancellation: { reason: 'prevented-before-launch' } });
-    expect((await inspectRun(f.project, { schemaVersion: 1, scopeId: 's', runId: 'r' }, f.options)).run).toEqual(result.cancellation.run);
+    const { pool, ...inspected } = (await inspectRun(f.project, { schemaVersion: 1, scopeId: 's', runId: 'r' }, f.options)).run;
+    expect(inspected).toEqual(result.cancellation.run);
+    expect(pool).toEqual({ poolId: 'p', capacity: { executionSlots: 1, inFlightSlots: 1 },
+      effectiveCapacity: { executionSlots: 1, inFlightSlots: 1 }, occupancy: { execution: 0, inFlight: 0 }, drift: [], waiting: [] });
     expect(await requestRunCancellation(f.project, command, f.options)).toEqual(result);
     await expect(requestRunCancellation(f.project, { ...command, commandId: 'stale' }, f.options)).rejects.toMatchObject({ code: 'RUN_STORE_CONFLICT' });
   });

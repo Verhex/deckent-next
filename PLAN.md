@@ -89,6 +89,16 @@ bu oturumda tamamlandı; kalıcı rol haritası ARCHITECTURE, dosya bazlı karar
 sonraki skill delegasyonu bu rule kararlarını otomatik kapsamaz. Üç yeni host oturumunda gerçek
 skill etkinleşme/plugin eval kanıtı açık; ortak kaynak ve dosya eşitliği etkinleşme kanıtı değildir.
 
+**CI-FIX-R3 — owner 2026-10-03, Codex uygulayıcı, `lane/ci-fix-r3`, taban `9740baae`:**
+Hosted `37129289264`, batch 30 `56b2d43e`, altı zorunlu hücrede kırmızı. R2 + SOCKET-PUBLICATION +
+POOL-CAPACITY contract drift uzlaştırıldı; kilit dizini EPERM/EACCES'i RED → typed bounded contention ile düzeltildi.
+Yerel hedef 18 dosya: 125 geçti / 101 sandbox-bağımlı başarısız; composition/surfaces tek deneme final özeti
+oluşmadan çıktı durduğu için 130 ile kesildi. Typecheck/eslint/lint-arch temiz. Kalan: lead ortamında hedefler ve
+iki dizinin final exit'i; native macOS Git timeout ve Windows duplicate-reclaim kökü; exact patch bağımsız
+incelemesi → lead commit/push → altı hosted hücre. Test yeşili veya bu aday hosted kabul değildir.
+Bu lane commit/push/canlı yapmaz; pano yok (ENOENT), lead worker alt-listesini uzlaştırır.
+Kanıt ve açık sınırlar `proof/CI-FIX-R3-2026-10-03/review.md`; yerel sonuç hosted kabul değildir.
+
 **CI-FIX / R2 — owner 2026-10-03, Codex uygulayıcı, `lane/ci-fix-r2`, taban `97851bce`:**
 R1 `35bbe428` + `c0a3f77e` main'e alındı (hosted SHA `38c9dae1`); altı hücre zorunlu ve main ruleset aktif.
 İlk all-required koşu `37111243380` altı hücrede kırmızı: ubuntu24 8, ubuntu26 9, mac24 12, mac26 15,
@@ -99,7 +109,8 @@ commit yerine dış proof'ta patch + stat verilir. mac26 eski Git unavailable al
 fixture producer Git ortamını kullanır, yeni typed tanı keyfî hataları yeşile çevirmez.
 Ubuntu lint fixture'ı REPO-STANDARDS `db61005a` sonrası zorunlu yedi Markdown dosyasını üretmemiştir;
 canonical TMPDIR/full-history altında yerel tekrar aynı sekiz hatayı verir, R1 Git/temp değişimine neden atfedilmez.
-Kalan kapı: R2 exact patch/commit → bağımsız inceleme → lead push → altı hosted hücre ve artifact → sonuç uzlaştırması.
+R2 `e4e8a197` ile batch30 main tarihinde; SOCKET-PUBLICATION `d7e584c3` ve POOL-CAPACITY `517b08ca` aynı tabandadır.
+Kalan kapı R3 satırında: batch30 hosted altı hücre kırmızıdır; R2 yazar kanıtı kabul sağlamaz.
 Lane push yapmaz; pano bu worktree'de yok (ENOENT), lead kendi worker alt-listesini uzlaştırır.
 Güvenlik floorları, mevcut zaman/kaynak bütçeleri korunur; full verify yetkili değildir.
 Socket bind→asyncchmod yarışı ve diğer historical BUSY/PTY/validator borçları R2 kapsamıyla kapanmış sayılmaz.
@@ -108,7 +119,8 @@ Kanıt `proof/CI-FIX-R2-2026-10-03/review.md`; süreç uyumsuzlukları R1 `incon
 `lane/socket-publication`, taban `97851bce`, Codex uygulayıcı; private staging → pin → chmod/fstat600 → listen →
 NOREPLACE atomik final yayın uygulandı. Yazar kanıtı: tabanda watcher022/077 kırmızı → adayda128'er yayım güvenli;
 44 native + 37 Vitest test,0 skip, typecheck/eslint/lint-arch0. Bağımsız inceleme ve hosted Linux/Node24 kabulü açık;
-sonraki adım exact aday incelemesi → lead entegrasyonu → ayrı yetkiyle hosted koşu; şeritte pano yok (ENOENT), main worker alt-listesini uzlaştırır.
+Kaynak `d7e584c3` ile batch30 main tarihinde; `37129289264` altı hücre kırmızı, SOCKET-PUBLICATION kabulü
+bu sonuçla kanıtlanmaz. R3 logundaki Linux iki test assertion drift gösterir; şeritte pano yok (ENOENT), main worker alt-listesini uzlaştırır.
 Bu şeritte fixture/CI-FIX-R2, push, dogfood ve canlı yok; proof `proof/SOCKET-PUBLICATION-2026-10-03/`.
 Eski log reddedilen inode'u açıklamadığından batch27 SHA'sına neden atfedilmez.
 

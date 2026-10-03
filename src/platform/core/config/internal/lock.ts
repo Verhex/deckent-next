@@ -51,7 +51,16 @@ async function observe(lock: string, clock: TrustedClock, started: ClockSample) 
     if (code === 'EPERM' || code === 'EACCES') return null;
     if (code !== 'ENOENT') throw error;
   }
-  const empty = stat.isDirectory() && (await readdir(lock)).length === 0;
+  let empty = false;
+  if (stat.isDirectory()) {
+    try { empty = (await readdir(lock)).length === 0; }
+    catch (error) {
+      // A Windows delete-pending directory is unobservable, never proof of a stale or empty lock.
+      const code = (error as NodeJS.ErrnoException).code;
+      if (code === 'EPERM' || code === 'EACCES') return null;
+      throw error;
+    }
+  }
   const named = await lstat(lock);
   if (stat.ino !== named.ino || stat.dev !== named.dev || stat.mtimeMs !== named.mtimeMs) return null;
   const validPid = Number.isSafeInteger(owner.pid) && owner.pid! > 0;

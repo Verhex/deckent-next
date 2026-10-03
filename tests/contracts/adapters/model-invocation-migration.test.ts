@@ -220,7 +220,7 @@ it('chains genuine receipt1 v14 through receipt2 into separated receipt3/content
 });
 
 
-it('migrates genuine receipt2 v15 responded, rejected, partial, and null-unknown records to receipt3/content and rejects inconsistent v15 inventory', async () => {
+it('migrates genuine receipt2 v15 responded, rejected, partial, and null-unknown records to receipt3/content ', async () => {
   await workspace(async path => {
     await seedV15(path);
     const store = await openSqliteModelInvocationStore(path, options, 'allow'); store.close();
@@ -235,7 +235,11 @@ it('migrates genuine receipt2 v15 responded, rejected, partial, and null-unknown
     expect(String(rows.find(row => row.state === 'rejected')?.content_record)).toContain(Buffer.from('legacy rejected').toString('base64'));
     expect(rows.find(row => row.content_record === null)?.state).toBe('unknown'); db.close();
   });
-  for (const damage of ['state', 'identity', 'count'] as const) await workspace(async path => {
+});
+
+// Separate durable migrations retain every rollback assertion and the same per-test deadline.
+it.each(['state', 'identity', 'count'] as const)('rejects inconsistent v15 %s inventory with full rollback', async damage => {
+  await workspace(async path => {
     await seedV15(path, damage);
     const before = new DatabaseSync(path, { readOnly: true });
     const invocations = before.prepare('SELECT * FROM model_invocations ORDER BY invocation_id').all();

@@ -128,7 +128,10 @@ describe.skipIf(process.platform === 'win32')('new worker Run admission against 
     const created = await createRun(f.project, run('running', 'sonnet'), f.options);
     await f.activation('claude-sonnet-5-5', 'deactivate', 1);
     expect(await createRun(f.project, run('running', 'sonnet'), f.options)).toEqual(created);
-    expect((await inspectRun(f.project, { schemaVersion: 1, scopeId: 's', runId: 'running' }, f.options)).run).toEqual(created.admission.run);
+    const { pool, ...inspected } = (await inspectRun(f.project, { schemaVersion: 1, scopeId: 's', runId: 'running' }, f.options)).run;
+    expect(inspected).toEqual(created.admission.run);
+    expect(pool).toEqual({ poolId: 'p', capacity: { executionSlots: 1, inFlightSlots: 1 },
+      effectiveCapacity: { executionSlots: 1, inFlightSlots: 1 }, occupancy: { execution: 0, inFlight: 0 }, drift: [], waiting: [] });
     expect((await reserveRunTasks(f.project, { schemaVersion: 1, commandId: 'reserve', scopeId: 's', runId: 'running', expectedRevision: 0 }, f.options))
       .reservation.identities).toHaveLength(1);
     await expect(createRun(f.project, run('new', 'sonnet'), f.options)).rejects.toMatchObject({ code: 'WORKER_MODEL_NOT_ACTIVE' });

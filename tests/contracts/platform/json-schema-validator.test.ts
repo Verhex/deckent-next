@@ -11,6 +11,26 @@ const refusal = (schema: object | boolean): JsonSchemaRefusalReason | 'compiled'
 };
 const valid = (schema: object | boolean, instance: unknown) => validator.getValidator(schema)(instance).valid;
 const timed = <T>(run: () => T): { value: T; ms: number } => { const start = performance.now(), value = run(); return { value, ms: performance.now() - start }; };
+// CI-FIX-R3: the previous 50/500ms guards were one-machine wall-clock measurements, not portable CPU limits.
+// Independent 5m xorshift iterations take 5.6–6.9ms on the lane host (Node24, 2026-10-03); preserve 6ms as
+// the reference and the old guards as floors. Three samples expose runner slowdown without timing the validator itself.
+// The factor is capped at 10: excessive calibration load fails visibly, never grants an unbounded timing allowance.
+function timingBudget(baseMs: number): number {
+  const control = () => {
+    let value = 0x5eed;
+    for (let i = 0; i < 5_000_000; i++) { value ^= value << 13; value ^= value >>> 17; value ^= value << 5; }
+    return value;
+  };
+  expect(control()).toBe(-242512527); // warm the independent control, and make its work observable
+  const samples = Array.from({ length: 3 }, () => timed(control));
+  for (const sample of samples) expect(sample.value).toBe(-242512527);
+  const calibrationMs = Math.max(...samples.map(sample => sample.ms)), factor = Math.max(1, calibrationMs / 6);
+  console.info('JSON_SCHEMA_TIMING_CALIBRATION', JSON.stringify({ platform: process.platform, node: process.version,
+    control: 'xorshift32-5000000', samplesMs: samples.map(sample => sample.ms), referenceMs: 6, baseMs, factor, budgetMs: baseMs * factor }));
+  expect(factor, 'JSON_SCHEMA_TIMING_CALIBRATION_OVERLOADED: independent CPU control exceeds the bounded 10x range').toBeLessThanOrEqual(10);
+  return baseMs * factor;
+}
+
 
 // JSON-Schema-Test-Suite @ 5b0ee16 (2026-09-21; the last tag 23.1.0 is from 2023), vendored with its MIT LICENSE and upstream sha256s in
 // MANIFEST.json: every required draft2020-12 and draft7 file plus optional ecmascript-regex, non-bmp-regex and float-overflow. Each group either
@@ -83,27 +103,41 @@ describe('JSON Schema validator: ReDoS (a remote server controls both the patter
   // Measured before (FASTURI-OUT §5): cfworker 1443 ms and ajv 1445 ms synchronous on 27 characters of `^(a+)+$`; the same backtracking is
   // exponential in V8's own RegExp, which this engine never runs on the instance.
   it.each([['^(a+)+$', 27], ['^(a+)+$', 10_000], ['(a*)*b', 10_000], ['^(a|a)*$', 10_000], ['^(\\w+\\s?)*$', 10_000]] as const)(
-    'pattern %s on %i characters answers in linear time (< 50 ms)', (pattern, length) => {
+    'pattern %s on %i characters answers within the independently calibrated 50ms guard', (pattern, length) => {
+      const budgetMs = timingBudget(50);
       const check = validator.getValidator({ type: 'string', pattern });
       check('aaaa');
       const { value, ms } = timed(() => check('a'.repeat(length - 1) + '!'));
       expect(value.valid).toBe(false);
-      expect(ms).toBeLessThan(50);
+      expect(ms).toBeLessThan(budgetMs);
+    });
+  it.each(['^(a+)+$', '(a*)*b', '^(a|a)*$', '^(\\w+\\s?)*$'])(
+    'charges linear bounded work for hostile %s independently of host speed', pattern => {
+      const matcher = compilePattern(pattern, { sourceMax: 4_096, statesMax: 2_000, repeatMax: 1_000 });
+      for (const length of [27, 1_000, 10_000]) {
+        const budget = { remaining: JSON_SCHEMA_LIMITS.validationSteps };
+        expect(matcher.test('a'.repeat(length - 1) + '!', budget)).toBe(false);
+        const used = JSON_SCHEMA_LIMITS.validationSteps - budget.remaining;
+        expect(used).toBeGreaterThanOrEqual(length);
+        expect(used).toBeLessThanOrEqual(8 * matcher.states * (length + 1));
+      }
     });
   it('patternProperties is the same engine: a hostile key answers in linear time', () => {
+    const budgetMs = timingBudget(50);
     const check = validator.getValidator({ type: 'object', patternProperties: { '^(a+)+$': { type: 'string' } }, additionalProperties: false });
     const { value, ms } = timed(() => check({ ['a'.repeat(5_000) + '!']: 1 }));
     expect(value.valid).toBe(false);
-    expect(ms).toBeLessThan(50);
+    expect(ms).toBeLessThan(budgetMs);
   });
   // The budget's time is calibrated in proof/MCP-SCHEMA-VALIDATOR-2026-09-29/logs/budget-bench-weighted.json (≈ 18–45 ms); here only a
   // generous bound, so a loaded full verify cannot turn a correct fail-closed answer red.
   it('the largest accepted pattern on a long string exhausts the step budget and fails closed (bounded time)', () => {
+    const budgetMs = timingBudget(500);
     const pattern = `(?:${'[a-z]?'.repeat(600)})*x`;
     const check = validator.getValidator({ type: 'string', pattern });
     const { value, ms } = timed(() => check('a'.repeat(100_000)));
     expect(value).toMatchObject({ valid: false, errorMessage: expect.stringContaining('not validated, validation step budget exceeded (fail closed)') });
-    expect(ms).toBeLessThan(500);
+    expect(ms).toBeLessThan(budgetMs);
   });
   it.each([['(a)\\1', 'unsupported-pattern'], ['(?<n>a)\\k<n>', 'unsupported-pattern'], ['(?=a)a', 'unsupported-pattern'], ['(?!a)b', 'unsupported-pattern'],
     ['(?<=a)b', 'unsupported-pattern'], ['(?<!a)b', 'unsupported-pattern'], ['(?i:a)', 'unsupported-pattern'], ['a{1001}', 'limit'], ['(a{1000}){3}', 'limit'],
@@ -258,10 +292,11 @@ describe('JSON Schema validator: bounded compile and validation', () => {
     expect(limited({ instanceDepth: 1_000 }).getValidator(list)(deep).valid).toBe(true);
   });
   it('a validation above validationSteps fails closed (a large array with uniqueItems), within the calibrated time', () => {
+    const budgetMs = timingBudget(500);
     const big = Array.from({ length: 300_000 }, (_, k) => k);
     const { value, ms } = timed(() => validator.getValidator({ type: 'array', items: { type: 'integer' }, uniqueItems: true })(big));
     expect(value).toMatchObject({ valid: false, errorMessage: expect.stringContaining('validation step budget exceeded (fail closed)') });
-    expect(ms).toBeLessThan(500);
+    expect(ms).toBeLessThan(budgetMs);
     expect(limited({ validationSteps: 20_000_000 }).getValidator({ type: 'array', items: { type: 'integer' }, uniqueItems: true })(big).valid).toBe(true);
   });
 });

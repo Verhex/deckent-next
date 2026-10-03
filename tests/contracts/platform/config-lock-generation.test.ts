@@ -5,7 +5,7 @@ import { tmpdir, hostname } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, expect, it, vi } from 'vitest';
 
-const race = vi.hoisted(() => ({ path: '', calls: 0, at: 0, denied: '', openPath: '', release: undefined as (() => Promise<void>) | undefined,
+const race = vi.hoisted(() => ({ path: '', calls: 0, at: 0, denied: '', openPath: '', directoryPath: '', directoryDenial: '', release: undefined as (() => Promise<void>) | undefined,
   replace: undefined as (() => Promise<void>) | undefined }));
 vi.mock('node:fs/promises', async () => {
   const actual = await vi.importActual<typeof import('node:fs/promises')>('node:fs/promises');
@@ -16,6 +16,9 @@ vi.mock('node:fs/promises', async () => {
       throw Object.assign(new Error(code), { code });
     }
     return actual.open(...args);
+  }, readdir: async (...args: Parameters<typeof actual.readdir>) => {
+    if (String(args[0]) === race.directoryPath && race.directoryDenial) throw Object.assign(new Error(race.directoryDenial), { code: race.directoryDenial });
+    return actual.readdir(...args);
   }, lstat: async (...args: Parameters<typeof actual.lstat>) => {
     const observed = await actual.lstat(...args);
     if (String(args[0]) === race.path && ++race.calls === race.at && race.replace) {
@@ -28,6 +31,7 @@ import { withConfigWriteLock } from '../../../src/platform/index.js';
 
 const roots: string[] = [];
 afterEach(async () => {
+  race.directoryPath = ''; race.directoryDenial = '';
   race.replace = undefined; race.release = undefined; race.path = ''; race.openPath = ''; race.denied = '';
   await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true })));
 });
@@ -71,4 +75,31 @@ it.each([1, 4])('recognizes file-to-directory generation replacement at observat
     .rejects.toMatchObject({ code: 'CONFIG_WRITE_LOCKED' });
   expect(race.replace).toBeUndefined(); expect(entered).toBe(false);
   expect(JSON.parse(await readFile(join(lock, 'owner.json'), 'utf8'))).toEqual(owner);
+});
+
+// Windows delete-pending directory enumeration is as uncertain as an unreadable owner.
+it.each(['EPERM', 'EACCES'])('holds a directory unreadable on %s without entering or reclaiming', async code => {
+  const root = await mkdtemp(join(tmpdir(), 'deckent-config-lock-scandir-')); roots.push(root);
+  const path = join(root, 'config.json'), lock = `${path}.write-lock`, ownerPath = join(lock, 'owner.json');
+  const owner = JSON.stringify({ pid: process.pid, hostname: hostname(), nonce: 'live-owner' });
+  await mkdir(lock); await writeFile(ownerPath, owner);
+  race.directoryPath = lock; race.directoryDenial = code;
+  let entered = false; const warning = vi.fn();
+  await expect(withConfigWriteLock(path, async () => { entered = true; }, 1, { onWarning: warning }))
+    .rejects.toMatchObject({ code: 'CONFIG_WRITE_LOCKED' });
+  expect(entered).toBe(false); expect(warning).not.toHaveBeenCalled();
+  expect(await readFile(ownerPath, 'utf8')).toBe(owner);
+  race.directoryDenial = '';
+  await rm(lock, { recursive: true });
+  await withConfigWriteLock(path, async () => { entered = true; }, 1000);
+  expect(entered).toBe(true);
+});
+it('propagates directory IO failure instead of treating every error as contention', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'deckent-config-lock-scandir-io-')); roots.push(root);
+  const path = join(root, 'config.json'), lock = `${path}.write-lock`;
+  await mkdir(lock); await writeFile(join(lock, 'owner.json'), JSON.stringify({ pid: process.pid }));
+  race.directoryPath = lock; race.directoryDenial = 'EIO';
+  let entered = false;
+  await expect(withConfigWriteLock(path, async () => { entered = true; }, 1)).rejects.toMatchObject({ code: 'EIO' });
+  expect(entered).toBe(false);
 });

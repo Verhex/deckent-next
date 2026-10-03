@@ -67,8 +67,7 @@ describe.skipIf(process.platform === 'win32')('configured SDK Run admission', ()
     await expect(createRun(f.project, command, f.options)).rejects.toMatchObject({ code: 'EXECUTION_RESOURCE_CEILING', params: { resource, requested: ceiling * 2, ceiling } });
     const db = new DatabaseSync(f.path, { readOnly: true });
     try { for (const table of ['runs', 'run_receipts', 'run_execution_intents', 'attempts']) expect(db.prepare(`SELECT count(*) AS n FROM ${table}`).get()!.n).toBe(0); }
-    finally { db.close(); }
-    parameters[resource] = ceiling;
+    finally { db.close(); } parameters[resource] = ceiling;
     await writeFile(f.configPath, JSON.stringify(config)); clearConfigCache();
     await createRun(f.project, command, f.options);
     const { store } = await openConfiguredAttemptStore(f.project, f.options);
@@ -80,7 +79,8 @@ describe.skipIf(process.platform === 'win32')('configured SDK Run admission', ()
     const result = await createRun(f.project, command, f.options);
     expect(result.admission.run).toMatchObject({ runId: 'r', layoutRevision: f.layout.revision, revision: 0 });
     expect(result.admission.run.tasks[0]!.phase).toBe('pending');
-    expect((await inspectRun(f.project, { schemaVersion: 1, scopeId: 's', runId: 'r' }, f.options)).run).toEqual(result.admission.run);
+    const { pool, ...inspected } = (await inspectRun(f.project, { schemaVersion: 1, scopeId: 's', runId: 'r' }, f.options)).run; expect(inspected).toEqual(result.admission.run);
+    expect(pool).toEqual({ poolId: 'p', capacity: { executionSlots: 2, inFlightSlots: 2 }, effectiveCapacity: { executionSlots: 2, inFlightSlots: 2 }, occupancy: { execution: 0, inFlight: 0 }, drift: [], waiting: [] });
     const { store } = await openConfiguredAttemptStore(f.project, f.options);
     try { expect((await store.loadRun('s', 'r'))!.progress[0]!.eligibility).toEqual({ kind: 'immediate' }); } finally { store.close(); }
     expect(await createRun(f.project, command, f.options)).toEqual(result);

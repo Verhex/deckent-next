@@ -9,7 +9,7 @@ import { compareTrackedFiles, describeTrackedFilesChange, describeTrackedFilesUn
 // on the file system around the call (one `git ls-files` before, `lstat` before and after); the command's text is never read.
 const roots: string[] = [];
 afterEach(async () => { await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
-const git = (cwd: string, ...args: string[]) => execFileSync('git', ['-c', 'user.name=fixture', '-c', 'user.email=fixture@example.invalid', '-c', 'init.defaultBranch=main', ...args],
+const git = (cwd: string, ...args: string[]) => execFileSync('git', ['-c', 'user.name=fixture', '-c', 'user.email=fixture@example.invalid', '-c', 'init.defaultBranch=main', '-c', 'gc.auto=0', '-c', 'gc.autoDetach=false', '-c', 'maintenance.auto=false', ...args],
   { cwd, encoding: 'utf8', timeout: 5_000, env: { PATH: '/usr/bin:/bin', GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: '/dev/null', GIT_TERMINAL_PROMPT: '0', GIT_ALLOW_PROTOCOL: '', GIT_NO_LAZY_FETCH: '1', GIT_OPTIONAL_LOCKS: '0', LC_ALL: 'C' } });
 async function repository(files: Record<string, string>): Promise<string> {
   const root = await mkdtemp(join(tmpdir(), 'deckent-tracked-')); roots.push(root);

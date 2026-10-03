@@ -1284,12 +1284,17 @@ registry, including required Markdown documents; full history/canonical temp alo
 New or materially changed contract tests must exercise portable behavior on every matrix OS, or declare an
 existing typed platform capability, assert its refusal before effects and retain a `verify-not-run` record for
 the unavailable positive variant. Linux positives remain active; no untyped platform skip or security-floor
-relaxation admits a green result. Config-lock owner-metadata EPERM/EACCES is bounded contention, never
+relaxation admits a green result. Config-lock owner-metadata and directory-enumeration EPERM/EACCES is bounded contention, never
 evidence of a dead owner; only a successful later exclusive mkdir admits work, and persistent unreadability
 ends in CONFIG_WRITE_LOCKED. Tracked-file unavailability carries a typed execution diagnostic without
 changing its measurement/security bounds. Build/declaration/CI temp identities use native canonical paths;
 the fast architecture scanner waits for stdout delivery before exiting, including large inventories.
 R2 implementation/verification evidence: external `proof/CI-FIX-R2-2026-10-03/`.
+CI-FIX-R3 (owner 2026-10-03, source candidate on `9740baae`) extends the same unreadability rule to
+`readdir(lock)`: no empty/stale-owner claim, no entry/reclaim, bounded retry; other IO failures propagate.
+Injected EPERM/EACCES → typed lock timeout and unchanged owner metadata is the RED/green contract;
+real Windows contention and the separate duplicate-reclaim warning still require native evidence.
+External exact candidate/checks/open limits: `proof/CI-FIX-R3-2026-10-03/review.md`.
 **SOCKET-PUBLICATION (owner 2026-10-03; source candidate).** The Linux native runtime listener binds inside a pinned
 0700 staging directory in the final parent, pins the socket inode, chmods that inode through `/proc/self/fd` and fstats
 0600, listens, then publishes with descriptor-relative `renameat2(RENAME_NOREPLACE)`. The final name is absent until
@@ -2718,8 +2723,11 @@ patterns, size limits) — the pool then refuses the call before sending (`inval
 cf-worker ignored and answered fail-open is now refused, `astra-2180-dynamic-ref.test.ts`; recursion through a plain `$ref` validates).
 `pattern`/`patternProperties` run on a linear-time Thompson-NFA engine (single-code-point atoms keep V8's u-mode meaning), so a server
 controlling both pattern and instance cannot block the service (27-char `^(a+)+$`: 0.4 ms vs 1.46 s on cf-worker). Validation is bounded by
-a weighted step budget (5 000 000 ≈ 50 ms on the calibration machine) and instance/evaluation depth; an exhausted bound is `valid: false`
-(fail closed; the SDK reports -32602, `kind: 'output-schema'`, answered, never re-sent). `format` is an annotation unless a checker is
+a weighted step budget (5 000 000; historical ≈ 50 ms on the calibration machine, not a portable wall-time guarantee) and instance/evaluation depth; an exhausted bound is `valid: false`
+(fail closed; CI-FIX-R3 tests retain the 50/500ms timing floors, scale only the test guards using
+an independent 5-million-iteration CPU control against its measured 6ms lane reference, log calibration and
+fail if the factor exceeds 10; deterministic NFA step-growth checks remain independent of host timing.
+No production step/depth/pattern limit changes. The SDK reports -32602, `kind: 'output-schema'`, answered, never re-sent). `format` is an annotation unless a checker is
 registered (none in Deckent's wiring) — a relaxation against cf-worker, which asserted formats; owner decision 2026-09-29 (Astra 2183 R4): keep the JSON Schema 2020-12 default (annotation only). The development tree still
 installs the SDK's bundled ajv/fast-uri copy (not loaded by Deckent). Since FASTURI-OUT (tenth batch) the published package does not contain
 that copy at all: `scripts/build-dist.mjs` loads the SDK's `_shims` and `validators/ajv` public subpaths with the one `ajvProvider` import

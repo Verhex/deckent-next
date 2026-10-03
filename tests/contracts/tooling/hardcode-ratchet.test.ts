@@ -52,14 +52,22 @@ describe('hardcode ratchet admission', () => {
     // Afterward read the FIRST version, so legitimate later cleanup stays valid.
     const admittedFile = (path: string) => first ? git('show', `${first}:${path}`) : readFileSync(path, 'utf8');
     const root = mkdtempSync(join(tmpdir(), 'hardcode-admission-')); roots.push(root);
-    const archive = execFileSync('git', ['archive', base, 'src', 'package.json', 'tsconfig.json'], { maxBuffer: 32 * 1024 * 1024 });
-    execFileSync('tar', ['-x', '-C', root], { input: archive });
+    // Windows spawnSync pipe transport returned EOF for this binary archive. Files preserve the exact bytes.
+    const archive = join(root, 'source.tar');
+    execFileSync('git', ['archive', '--output', archive, base, 'src', 'package.json', 'tsconfig.json']);
+    execFileSync('tar', ['-xf', archive, '-C', root]);
+    rmSync(archive);
     put(root, 'arch.json', admittedFile('arch.json'));
     symlinkSync(resolve('node_modules'), join(root, 'node_modules'), 'dir');
     // Admission equality is a claim about the detector AT admission: run that commit's scanner.
     // Later narrowing (e.g. the batch-27 G4 protocol-version exemption) may only retire identities.
     const detector = mkdtempSync(join(tmpdir(), 'hardcode-detector-')); roots.push(detector);
-    if (first) execFileSync('tar', ['-x', '-C', detector], { input: execFileSync('git', ['archive', first, 'scripts'], { maxBuffer: 32 * 1024 * 1024 }) });
+    if (first) {
+      const archive = join(detector, 'scripts.tar');
+      execFileSync('git', ['archive', '--output', archive, first, 'scripts']);
+      execFileSync('tar', ['-xf', archive, '-C', detector]);
+      rmSync(archive);
+    }
     else cpSync('scripts', join(detector, 'scripts'), { recursive: true });
     symlinkSync(resolve('node_modules'), join(detector, 'node_modules'), 'dir');
     // The historical scanner exits immediately after stdout.write. File stdout is
@@ -83,7 +91,8 @@ describe('hardcode ratchet admission', () => {
     expect(admission).toHaveLength(514);
     const frozen = JSON.parse(admittedFile('arch.json')).hardcodeRatchet.frozen;
     expect(frozen.slice().sort()).toEqual(admission.map((id: string) => createHash('sha256').update(id).digest('hex')).sort());
-  });
+  // Two scanner children keep their 20s bounds; 20s remains for archive/history fixture IO on Windows.
+  }, 60_000);
   it('admits a first introduction absent from history, then refuses growth with one list version', () => {
     const root = fixture("if (provider === 'claude') act();");
     const git = (...args: string[]) => execFileSync('git', ['-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid', ...args], { cwd: root, encoding: 'utf8', stdio: 'pipe' }).trim();
@@ -352,7 +361,8 @@ describe('colliding admission history', () => {
       expect(result.out).toContain('[hardcode-allowlist-growth]');
       expect(result.out).toContain(`admission claim absent in first-parent list version ${removedAt}: ${JSON.stringify(a)}`);
       expect(result.out).not.toMatch(/hardcode-history-unavailable|hardcode-allowlist-stale|\[hardcode-G2\]|count \d+ >|duplicate|outside frozen/);
-    });
+    // freeze inventory + final gate are separately bounded 20s scanner processes; history IO gets 20s.
+    }, 60_000);
   });
   it('allows the living B claim to move after A retires, including later moves across normalized history', () => {
     const { root, a, b, commit, list } = collision();

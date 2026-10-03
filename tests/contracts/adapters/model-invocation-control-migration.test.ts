@@ -103,8 +103,10 @@ it('migrates genuine ledger17 receipts, content, purge evidence, and counters to
   expect(db.prepare('PRAGMA foreign_key_check').all()).toEqual([]); db.close();
 }));
 
-it('rejects corrupt ledger17 identity, orphan evidence, purge references, and allocation evidence with full rollback', async () => {
-  for (const damage of ['identity', 'content', 'orphan-content', 'purge', 'purge-identity', 'count', 'allocation-shape'] as const) await workspace(async path => {
+// Each independently seeded corruption keeps the 30s per-case deadline; seven fsync-heavy upgrades do not share one timer.
+it.each(['identity', 'content', 'orphan-content', 'purge', 'purge-identity', 'count', 'allocation-shape'] as const)(
+  'rejects ledger17 %s corruption with full rollback', async damage => {
+  await workspace(async path => {
     await seedV17(path); const db = new DatabaseSync(path);
     try {
       if (damage === 'identity') {

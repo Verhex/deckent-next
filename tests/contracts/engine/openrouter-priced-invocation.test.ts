@@ -5,7 +5,7 @@ import { createServer, type Server } from 'node:https';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
-import { afterAll, beforeAll, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { createOpenRouterPricedNative } from '#adapters/core/provider-openrouter-chat/index.js';
 import { fetchOpenRouterTariff } from '#adapters/core/provider-openrouter-pricing/index.js';
 import { openSqliteModelActivationStore, openSqliteModelInvocationReader, openSqliteModelInvocationStore } from '#adapters/index.js';
@@ -37,7 +37,7 @@ const metadata = (pricing: Record<string, unknown>) => ({ data: { id: 'vendor/mo
 
 async function fixture(pricing: Record<string, unknown> = prices()) {
   let metadataDocument = metadata(pricing), posts = 0, metadataGets = 0, serviceOpen = true;
-  server = createServer({ key: privateKey, cert: certificate }, (request, response) => {
+  const fixtureServer = server = createServer({ key: privateKey, cert: certificate }, (request, response) => {
     if (request.url === '/api/v1/models/vendor/model/endpoints') {
       metadataGets++; response.writeHead(200, { 'content-type': 'application/json' }); response.end(JSON.stringify(metadataDocument)); return;
     }
@@ -48,8 +48,8 @@ async function fixture(pricing: Record<string, unknown> = prices()) {
     }
     response.writeHead(404); response.end();
   });
-  await new Promise<void>((resolve, reject) => { server!.once('error', reject); server!.listen(0, '127.0.0.1', resolve); });
-  const address = server.address(); if (!address || typeof address === 'string') throw new Error('FIXTURE');
+  await new Promise<void>((resolve, reject) => { fixtureServer.once('error', reject); fixtureServer.listen(0, '127.0.0.1', resolve); });
+  const address = fixtureServer.address(); if (!address || typeof address === 'string') throw new Error('FIXTURE');
   const root = await mkdtemp(join(tmpdir(), 'deckent-openrouter-priced-ledger-')), path = join(root, 'ledger.db');
   const origin = `https://127.0.0.1:${address.port}`, metadataEndpoint = `${origin}/api/v1/models/vendor/model/endpoints`;
   // Wire pricing as composition does (I40): the platform trusted clock floor, never raw Date.now. A raw host step the
@@ -93,7 +93,8 @@ async function fixture(pricing: Record<string, unknown> = prices()) {
   }; } finally { db.close(); } };
   const stopService = async () => {
     if (!serviceOpen) return;
-    serviceOpen = false; server!.closeAllConnections(); await new Promise<void>(resolve => server!.close(() => resolve())); server = undefined;
+    serviceOpen = false; fixtureServer.closeAllConnections(); await new Promise<void>(resolve => fixtureServer.close(() => resolve()));
+    if (server === fixtureServer) server = undefined;
   };
   return { application, command, counts, path, priced, fetchObservation, stopService,
     setMetadata(value: ReturnType<typeof metadata>) { metadataDocument = value; },
@@ -101,8 +102,13 @@ async function fixture(pricing: Record<string, unknown> = prices()) {
     async close() { await stopService(); await rm(root, { recursive: true, force: true }); } };
 }
 
+// Keep durable fixture provisioning (full fsync/schema upgrade) under its own 30s hook deadline.
+// Windows/Node24 exhausted the test's shared 30s setup+operation timer; product request limits stay unchanged.
+describe('priced invocation with a separately bounded durable fixture', () => {
+  let prepared: Awaited<ReturnType<typeof fixture>>;
+  beforeEach(async () => { prepared = await fixture(); });
 it('reserves from the actual native-produced quote, holds missing usage, and replays without another POST or reservation', async () => {
-  const f = await fixture();
+  const f = prepared;
   try {
     const first = await f.application().invoke(f.command('one'));
     expect(first.receipt.outcome?.state).toBe('responded'); expect(f.posts).toBe(1); expect(f.counts()).toEqual({ invocations: 1, reservations: 1 });
@@ -144,7 +150,7 @@ it('reserves from the actual native-produced quote, holds missing usage, and rep
 });
 
 it('rejects tampered nested tariff data even when its outer quote and row checksums are recomputed', async () => {
-  const f = await fixture();
+  const f = prepared;
   try {
     const result = await f.application().invoke(f.command('tamper'));
     await f.stopService();
@@ -165,6 +171,8 @@ it('rejects tampered nested tariff data even when its outer quote and row checks
     try { await expect(reopened.loadInspection('scope', result.receipt.claim.invocationId)).rejects.toThrow(); }
     finally { reopened.close(); }
   } finally { await f.close(); }
+});
+
 });
 
 it.each(['missing-price', 'missing-request-price', 'fake-observation', 'currency'] as const)('rejects %s before claim, reservation, or POST', async kind => {

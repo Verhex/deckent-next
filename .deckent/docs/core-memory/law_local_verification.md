@@ -24,3 +24,13 @@ altı OS×Node hücresinde taşınabilir davranışı doğrular ya da mevcut tip
 desteklenmeyen pozitif varyant `verify-not-run` kaydı taşır ve erişim/etki öncesi tipli ret aktif testte doğrulanır.
 Linux pozitifleri korunur. Yerel Linux PASS başka OS kabulü değildir; fixture güncel arch registry'sinin zorunlu
 dosyalarını üretir. Bağımsız inceleme, yazar kontrolü ve hosted sonuç ayrı tutulur.
+
+CI-FIX-R3 dersi (owner 2026-10-03; hosted `37129289264`, batch30 `56b2d43e`):
+Additive gözlem (`RunView.pool`, doctor `poolReadiness`) immutable işlem makbuzuyla aynı byte sözleşmesi değildir;
+Run'ın geri kalanı tam eşitlikte, gözlem ayrıca exact kontrolle korunur. SDK/policy/i18n değişimi yalnız
+exact ekleriyle uzlaştırılır; geçmiş katalog hash'i yeniden üretilmez. Sabit 50/500ms test çıtaları makine
+kalibrasyonundan bağımsız ürün garantisi sayılamaz: bağımsız CPU kontrolüyle loglanan, en fazla 10× test
+kalibrasyonu ve deterministik NFA adım hesabı birlikte kullanılır; üretimin 5 milyon adım sınırı değişmez.
+Windows delete-pending kilit dizini EPERM/EACCES'i sahipliğin bittiğini kanıtlamaz; metadata açma reddi gibi
+sınırlı beklemedir. RED hata enjeksiyonu ve korunmuş sahiplik kanıtı native Windows kabulünden ayrıdır.
+Exact patch, yerel sandbox açıkları ve lead'in kalan komutları dış `proof/CI-FIX-R3-2026-10-03/review.md`'dedir.
