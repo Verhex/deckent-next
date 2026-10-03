@@ -45,13 +45,15 @@ export function compileNativeCodingWorkInput(template: ExecutionProfileDefinitio
   if (!workInput.success) throw new NativeCodingProfileError('NATIVE_CODING_INVOCATION_INVALID');
   const { docker, invocation: { composition, maxTurns, ...invocation } } = parseTemplate(template);
   const { model, task, scope, acceptance } = workInput.data; const turns = workInput.data.maxTurns ?? maxTurns;
+  if (maxTurns !== undefined && turns !== undefined && turns > maxTurns) throw new NativeCodingProfileError('NATIVE_CODING_TURN_LIMIT_EXCEEDS_TEMPLATE');
   return compileNativeCodingDockerProfile(docker, { ...invocation, schemaVersion: 4, ...(turns === undefined ? {} : { maxTurns: turns }),
     model: { channelId: model.channelId, modelId: model.modelId, auxiliaryModelIds: [...model.auxiliaryModelIds] },
     composition: { schemaVersion: 1, ...composition, task, scope: renderWorkScope(scope.paths), acceptance } });
 }
 
 /** Registry code for a refused compilation: exact-model and turn-limit refusals stay typed; anything else is an invalid profile. */
-export function nativeCodingRefusalCode(error: unknown): 'WORKER_MODEL_ALIAS_REFUSED' | 'WORK_INPUT_TURN_LIMIT_UNSUPPORTED' | 'EXECUTION_PROFILE_INVALID' {
+export function nativeCodingRefusalCode(error: unknown): 'WORKER_MODEL_ALIAS_REFUSED' | 'WORK_INPUT_TURN_LIMIT_UNSUPPORTED' | 'WORK_INPUT_TURN_LIMIT_EXCEEDS_TEMPLATE' | 'EXECUTION_PROFILE_INVALID' {
   if (!(error instanceof NativeCodingProfileError)) return 'EXECUTION_PROFILE_INVALID';
-  return error.code === 'WORKER_MODEL_ALIAS_REFUSED' ? error.code : error.code === 'NATIVE_CODING_TURN_LIMIT_UNSUPPORTED' ? 'WORK_INPUT_TURN_LIMIT_UNSUPPORTED' : 'EXECUTION_PROFILE_INVALID';
+  return error.code === 'WORKER_MODEL_ALIAS_REFUSED' ? error.code : error.code === 'NATIVE_CODING_TURN_LIMIT_UNSUPPORTED' ? 'WORK_INPUT_TURN_LIMIT_UNSUPPORTED'
+    : error.code === 'NATIVE_CODING_TURN_LIMIT_EXCEEDS_TEMPLATE' ? 'WORK_INPUT_TURN_LIMIT_EXCEEDS_TEMPLATE' : 'EXECUTION_PROFILE_INVALID';
 }

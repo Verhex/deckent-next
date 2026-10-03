@@ -134,6 +134,7 @@ const definitions: Readonly<Record<string, Definition>> = Object.freeze({
   WORK_INPUT_REQUIRED: { category: 'error', render: (p, l) => ({ message: t('error.WORK_INPUT_REQUIRED', p, l) }) },
   WORK_INPUT_TEMPLATE_REQUIRED: { category: 'error', render: (p, l) => ({ message: t('error.WORK_INPUT_TEMPLATE_REQUIRED', p, l) }) },
   WORK_INPUT_TURN_LIMIT_UNSUPPORTED: { category: 'error', render: (p, l) => ({ message: t('error.WORK_INPUT_TURN_LIMIT_UNSUPPORTED', p, l) }) },
+  WORK_INPUT_TURN_LIMIT_EXCEEDS_TEMPLATE: { category: 'error', render: (p, l) => ({ message: t('error.WORK_INPUT_TURN_LIMIT_EXCEEDS_TEMPLATE', p, l) }) },
   WORKER_EFFORT_UNSUPPORTED: { category: 'error', render: (p, l) => ({ message: t('error.WORKER_EFFORT_UNSUPPORTED', p, l) }) },
   TASK_DECISION_HUMAN_REQUIRED: { category: 'error', render: (p, l) => ({ message: t('error.TASK_DECISION_HUMAN_REQUIRED', p, l) }) },
   RUN_PARKED: { category: 'error', render: (p, l) => ({ message: t('error.RUN_PARKED', p, l) }) },

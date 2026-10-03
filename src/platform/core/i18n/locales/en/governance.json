@@ -921,6 +921,7 @@
   "error.WORK_INPUT_REQUIRED": "A task's kind uses a coding template, which never runs without a task: give the task a typed workInput (task graph schema 3).",
   "error.WORK_INPUT_TEMPLATE_REQUIRED": "A task carries a workInput, but its kind's registered profile is not a coding template. Use a template kind, or remove the workInput for a prepared profile.",
   "error.WORK_INPUT_TURN_LIMIT_UNSUPPORTED": "A turn limit was requested for a worker CLI that has no turn-limit option. Remove maxTurns from the work input (and the template) for this CLI.",
+  "error.WORK_INPUT_TURN_LIMIT_EXCEEDS_TEMPLATE": "The work input asks for a higher turn limit than the template allows. A work input may only lower the template's turn limit; reduce maxTurns in the work input.",
   "error.WORKER_EFFORT_UNSUPPORTED": "Task {taskId}: the model catalog does not declare the requested reasoning effort for model {modelId} on channel {channelId}. Choose a declared effort (`deckent models catalog list`) or omit it.",
   "error.CLI_CATALOG_INPUT_LIMIT": "Model catalog document exceeds cli.invocationInputMaxBytes: {limit} bytes.",
   "error.CLI_CATALOG_INPUT_INVALID": "The model catalog document is not valid JSON.",

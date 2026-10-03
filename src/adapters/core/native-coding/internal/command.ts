@@ -30,7 +30,7 @@ export const nativeCodingInvocationSchema = nativeCodingInvocationFields.refine(
 export type NativeCodingInvocation = z.infer<typeof nativeCodingInvocationSchema>;
 
 export class NativeCodingProfileError extends Error {
-  constructor(readonly code: 'NATIVE_CODING_INVOCATION_INVALID' | 'NATIVE_CODING_TEMPLATE_INVALID' | 'NATIVE_CODING_DISCOVERY_UNSUPPORTED' | 'NATIVE_CODING_TURN_LIMIT_UNSUPPORTED'
+  constructor(readonly code: 'NATIVE_CODING_INVOCATION_INVALID' | 'NATIVE_CODING_TEMPLATE_INVALID' | 'NATIVE_CODING_DISCOVERY_UNSUPPORTED' | 'NATIVE_CODING_TURN_LIMIT_UNSUPPORTED' | 'NATIVE_CODING_TURN_LIMIT_EXCEEDS_TEMPLATE'
     | 'WORKER_MODEL_ALIAS_REFUSED') {
     super(code); this.name = 'NativeCodingProfileError';
   }

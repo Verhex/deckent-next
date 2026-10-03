@@ -103,6 +103,8 @@ describe.skipIf(process.platform === 'win32')('K3 work input admission through t
     // The work input's turn limit overrides the template's; the template itself holds no task text.
     await createRun(f.project, run('turns', 'coding', workInput('claude-sonnet-5-5', { maxTurns: 7 })), f.options);
     expect(encodeExecutionProfileDefinition(f.snapshotProfile('turns').tasks[0]!.profile)).toBe(encodeExecutionProfileDefinition(handPrepared('coding', 7)));
+    await createRun(f.project, run('turns-eq', 'coding', workInput('claude-sonnet-5-5', { maxTurns: 40 })), f.options);
+    expect(encodeExecutionProfileDefinition(f.snapshotProfile('turns-eq').tasks[0]!.profile)).toBe(encodeExecutionProfileDefinition(handPrepared('coding', 40)));
     expect(JSON.stringify(registry.profiles[0])).not.toContain(TASK);
   });
 
@@ -117,6 +119,7 @@ describe.skipIf(process.platform === 'win32')('K3 work input admission through t
       ['inactive', workInput('claude-opus-5-5', {}, []), 'coding', 'WORKER_MODEL_NOT_ACTIVE'],
       ['effort', workInput(HAIKU, { effort: 'high' }, []), 'coding', 'WORKER_EFFORT_UNSUPPORTED'],
       ['codex-turns', workInput('gpt-exact-1', { maxTurns: 5 }, []), 'codex-coding', 'WORK_INPUT_TURN_LIMIT_UNSUPPORTED'],
+      ['turns-exceed', workInput('claude-sonnet-5-5', { maxTurns: 41 }), 'coding', 'WORK_INPUT_TURN_LIMIT_EXCEEDS_TEMPLATE'],
       ['on-prepared', workInput(), 'hand', 'WORK_INPUT_TEMPLATE_REQUIRED'],
     ] as const) {
       await expect(createRun(f.project, run(label, kind, input), f.options), label).rejects.toMatchObject({ code });

@@ -920,6 +920,7 @@
   "error.MODEL_CATALOG_ALIAS_CONFLICT": "Katalog değişikliği, korunan modeller de sayılınca, aynı kanalda bir takma adı tam model kimliğine ya da başka bir takma ada eşitleyecekti. Hiçbir şey yazılmadı; çakışan takma adı yeniden adlandırıp ya da kaldırıp tekrar deneyin.",
   "error.WORK_INPUT_REQUIRED": "Görevin türü bir kodlama şablonu kullanıyor; şablon görev olmadan asla çalışmaz: göreve tipli bir workInput verin (görev grafı şeması 3).",
   "error.WORK_INPUT_TEMPLATE_REQUIRED": "Görev bir workInput taşıyor, ancak türünün kayıtlı profili bir kodlama şablonu değil. Şablon türü kullanın ya da hazırlanmış profil için workInput'u kaldırın.",
+  "error.WORK_INPUT_TURN_LIMIT_EXCEEDS_TEMPLATE": "İş girdisi şablonun izin verdiğinden daha yüksek bir tur sınırı istiyor. İş girdisi şablonun tur sınırını yalnızca düşürebilir; iş girdisindeki maxTurns değerini azaltın.",
   "error.WORK_INPUT_TURN_LIMIT_UNSUPPORTED": "Tur sınırı seçeneği olmayan bir worker CLI için tur sınırı istendi. Bu CLI için maxTurns değerini iş girdisinden (ve şablondan) kaldırın.",
   "error.WORKER_EFFORT_UNSUPPORTED": "Görev {taskId}: model kataloğu, {channelId} kanalındaki {modelId} modeli için istenen akıl yürütme eforunu tanımlamıyor. Tanımlı bir efor seçin (`deckent models catalog list`) ya da efor belirtmeyin.",
   "error.CLI_CATALOG_INPUT_LIMIT": "Model kataloğu belgesi cli.invocationInputMaxBytes sınırını aşıyor: {limit} bayt.",
