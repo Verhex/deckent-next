@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import limits from './work-input-limits.json' with { type: 'json' };
 import { identitySchema } from '#domain/core/primitives/index.js';
 import { exactModelIdSchema, REASONING_EFFORTS } from '#domain/core/provider-catalog/index.js';
 
@@ -15,6 +16,8 @@ const scopePath = z.string().min(1).max(512).refine(value => value.trim() === va
 export const workInputSchema = z.object({
   schemaVersion: z.literal(WORK_INPUT_SCHEMA_VERSION),
   task: workText,
+  /** M1: optional human title; task remains the instruction. Additive work-input v1 metadata. */
+  title: workText.refine(value => bytes(value) <= limits.titleMaxBytes).optional(),
   scope: z.object({ paths: z.array(scopePath).min(1).max(64).readonly() }).strict().readonly(),
   acceptance: workText,
   /** Exact API model ids of a catalog channel; aliases are refused at admission, never resolved. */

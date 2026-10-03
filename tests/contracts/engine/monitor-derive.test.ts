@@ -319,3 +319,21 @@ it('does not label pending work as a pool wait when its own Run wave has no room
   expect(projectMonitorRun(constrained).tasks.find(task => task.taskId === 'b')?.waiting).toBeUndefined();
   expect(blocker(constrained)?.code).toBe('worker-running');
 });
+
+it('H1 binds title/usage/result to the full attempt identity; another generation/task/run/layout cannot borrow them', async () => {
+  const base = snapshot([{ id: 'a', phase: 'failed' }]);
+  const input = { schemaVersion: 1 as const, task: 'Dosyayı düzelt', title: 'Düzeltme işi', acceptance: 'Kontrol geçer', scope: { paths: ['note.txt'] },
+    model: { channelId: 'fixture', modelId: 'model-1', auxiliaryModelIds: [] } };
+  const run = { ...base, graph: { ...base.graph, schemaVersion: 3 as const, tasks: base.graph.tasks.map(task => ({ ...task, workInput: input })) } };
+  const content = { transcript: { state: 'sealed' as const, excerpt: [{ kind: 'message', summary: 'checked' }], truncated: false },
+    patch: { state: 'recorded' as const, files: ['note.txt'], fileCount: 1, truncated: false, baseCommit: 'a'.repeat(40) }, finalReport: null };
+  for (const changed of [{}, { generation: 2 }, { taskId: 'other' }, { runId: 'other' }, { layoutRevision: 'other' }, { scopeId: 'other' }]) {
+    const value = { ...worker('a', 'fresh'), identity: { ...identity('a'), ...changed } };
+    const app = new MonitorApplication({ now: () => NOW, describeService: async () => { throw Object.assign(new Error(), { code: 'LOCAL_RUNTIME_UNAVAILABLE' }); },
+      readLedger: async () => ({ ledgerVersion: 44, scopeIds: ['s'], diagnostics: [], approvals: [], pools: [], runs: [evidence(run, [exited('a', { content, evaluationObserved: true })]).run] }),
+      observeScope: async () => ({ access: 'admitted', workers: [value], workerStatus: 'available', truncated: false }) });
+    const human = (await app.inspect([{ id: 'current', path: '/c' }])).installs[0]!.workers[0]!.human!;
+    if (Object.keys(changed).length) expect(human).toMatchObject({ title: null, titleEvidence: 'missing', evaluation: null, transcript: { state: 'missing' }, patch: { fileCount: null } });
+    else expect(human).toMatchObject({ title: 'Düzeltme işi', titleEvidence: 'title', evaluation: 'rejected', transcript: { state: 'sealed' }, patch: { fileCount: 1 } });
+  }
+});

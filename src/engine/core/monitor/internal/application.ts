@@ -1,6 +1,7 @@
 import type { WorkerObservation } from '#engine/core/worker-observation/index.js';
-import type { MonitorApproval, MonitorInstall, MonitorPool, MonitorService, MonitorSnapshot } from './contract.js';
+import type { MonitorApproval, MonitorInstall, MonitorPool, MonitorService, MonitorSnapshot, MonitorWorker } from './contract.js';
 import type { MonitorLedgerReading, MonitorPorts, MonitorTarget } from './evidence.js';
+import { redactSensitive, terminalSafeText } from '#platform/index.js';
 import { projectMonitorRun } from './derive.js';
 
 /** Finished workers (ledger terminal) shown per install, most recent first by sealed log, else launch grant; open ones are never capped. */
@@ -56,10 +57,7 @@ export class MonitorApplication {
     if (finished.length > MONITOR_FINISHED_WORKERS) diagnostics.push('info:workers-finished-capped:' + (finished.length - MONITOR_FINISHED_WORKERS));
     // Ledger-only observations carry no sidecar provider/model: fill them from the ledger attempt (evaluation record, pin, profile adapter).
     const ledger = new Map(reading.runs.flatMap(run => run.attempts.map(value => [`${run.snapshot.identity.scopeId}/${value.attemptId}`, value] as const)));
-    const enrich = (value: WorkerObservation): WorkerObservation => {
-      const known = ledger.get(`${value.identity?.scopeId}/${value.identity?.attemptId}`);
-      return known ? { ...value, provider: value.provider === 'unknown' ? known.provider ?? value.provider : value.provider, ...(value.model ? {} : known.model ? { model: known.model } : {}) } : value;
-    };
+
     const byAttempt = new Map(workers.filter(value => value.identity).map(value => [`${value.identity!.scopeId}/${value.identity!.attemptId}`, value]));
     const pools = new Map(reading.pools.map(pool => [pool.poolId, pool]));
     const runs = reading.runs.filter(run => admitted.has(run.snapshot.identity.scopeId)).map(run => {
@@ -67,6 +65,27 @@ export class MonitorApplication {
       const own = new Map(run.attempts.flatMap(attempt => { const worker = byAttempt.get(`${scopeId}/${attempt.attemptId}`); return worker ? [[attempt.attemptId, worker] as const] : []; }));
       return projectMonitorRun({ run, approvals: reading.approvals, pool: run.poolId ? pools.get(run.poolId) ?? null : null, workers: own, observedAt });
     }).sort((a, b) => (b.lastActivityMs ?? -1) - (a.lastActivityMs ?? -1));
+    const enrich = (value: WorkerObservation): MonitorWorker => {
+      const id = value.identity;
+      const record = id ? reading.runs.find(run => run.snapshot.identity.scopeId === id.scopeId && run.snapshot.identity.runId === id.runId
+        && run.snapshot.identity.layoutRevision === id.layoutRevision && run.snapshot.bindings.some(binding => binding.identity.taskId === id.taskId
+          && binding.identity.attemptId === id.attemptId && binding.identity.generation === id.generation)) : undefined;
+      const known = record ? ledger.get(`${id!.scopeId}/${id!.attemptId}`) : undefined;
+      const task = record?.snapshot.graph.tasks.find(task => task.id === id!.taskId);
+      const input = task?.workInput, text = input?.title ?? input?.task ?? input?.acceptance ?? null;
+      const title = text ? redactSensitive(terminalSafeText(text)).replace(/\s+/g, ' ').trim() || null : null;
+      const projected = runs.find(run => run.scopeId === id?.scopeId && run.runId === id?.runId)?.tasks.find(task => task.taskId === id?.taskId);
+      const content = known?.content;
+      return { ...value, provider: value.provider === 'unknown' ? known?.provider ?? value.provider : value.provider,
+        ...(value.model ? {} : known?.model ? { model: known.model } : {}),
+        ...(content?.usage && content.usageEvidence ? { usage: content.usage, usageEvidence: content.usageEvidence } : {}),
+        human: { title, tokenUsageRecorded: content?.tokenUsageRecorded ?? !!(value.files?.usage && Object.values(value.files.usage.tokens).some(token => token !== null && token > 0)), titleEvidence: !title ? 'missing' : input?.title ? 'title' : input?.task ? 'task' : 'acceptance',
+          evaluation: known ? projected?.evaluation.verdict ?? null : null,
+          transcript: content?.transcript ?? { state: 'missing', excerpt: [], truncated: false },
+          patch: content?.patch ?? { state: 'missing', files: [], fileCount: null, truncated: false, baseCommit: null }, finalReport: content?.finalReport ?? null,
+          startedAtMs: known?.dispatch?.grantedAtMs ?? null, endedAtMs: known?.sealedAtMs ?? known?.observedEndAtMs ?? null,
+          endedAtSource: known?.sealedAtMs != null ? 'sealed' : known?.observedEndAtMs != null ? 'observed' : null } };
+    };
     const approvals: MonitorApproval[] = reading.approvals.filter(value => admitted.has(value.scopeId)).map(value => Object.freeze({ scopeId: value.scopeId,
       approvalId: value.approvalId, subjectKind: value.subjectKind, summary: summaries.has(value.scopeId) ? value.summary : '', requiredAssurance: null, createdAtMs: value.createdAtMs, expiresAtMs: value.expiresAtMs }));
     const poolViews: MonitorPool[] = !reading.scopeIds.length || admitted.size ? reading.pools.map(pool => Object.freeze({ poolId: pool.poolId, capacity: pool.inFlightSlots, inFlight: pool.inFlight,

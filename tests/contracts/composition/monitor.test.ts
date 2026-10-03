@@ -12,6 +12,8 @@ import { openSqliteAttemptStore } from '#adapters/index.js';
 import { CURRENT_LEDGER_VERSION } from '#adapters/core/sqlite-ledger/index.js';
 import { clearConfigCache, prepareProductDirectory, productResourcePath } from '#platform/index.js';
 import { FileArtifactStore } from '#adapters/index.js';
+import { loadMonitorSurface } from '#surfaces/core/monitor/index.js';
+import { patchExclusions, patchFile } from '#engine/index.js';
 import { fixtureExecution } from '../support/execution-registry.js';
 import { custodyProfiles, dispatchAdmission, grantTestLaunch } from '../support/custody.js';
 
@@ -257,5 +259,56 @@ describe('inspectMonitor content authorization (security)', () => {
     expect(await run('denied', [])).toMatchObject({ endedAtMs: null, endedAtSource: null, diagnostics: ['output-denied'] });
     // Sidecars bound to another attempt prove nothing about this one.
     expect(await run('mismatch', ['output'], 'other-attempt')).toMatchObject({ endedAtMs: null, endedAtSource: null });
+  });
+});
+
+// MONITOR-H1: retained artifacts survive finished-worker sidecar release on the real composed read path.
+describe('monitor human worker evidence', () => {
+  it.each([{ allowed: true, count: 0, transcript: 'sealed' }, { allowed: true, count: 1, transcript: 'missing' }, { allowed: true, count: 1, transcript: 'invalid' }, { allowed: false, count: 0, transcript: 'sealed' }])('reads retained results/claims with $allowed / $count files / $transcript transcript', async ({ allowed, count, transcript }) => {
+    const root = await mkdtemp(join(tmpdir(), 'deckent-monitor-h1-')); roots.push(root);
+    const current = await project(root, 'current', ['s'], ['s'], allowed ? ['output'] : []);
+    const identity = { scopeId: 's', runId: 'r-human', taskId: 't', attemptId: 'human-t', layoutRevision: 'layout', generation: 1 };
+    const store = await openSqliteAttemptStore(current.ledger, { busyTimeoutMs: 100, journalMode: 'wal', durability: 'full' }, { now: Date.now, timeoutMs: 86400000 }, 'allow', custodyProfiles);
+    const artifacts = new FileArtifactStore({ root: await prepareProductDirectory(current.layout, 'artifacts'), maxBytes: 1_048_576 });
+    try {
+      await store.createRun({ commandId: 'create-human', actor, identity: { scopeId: 's', runId: 'r-human', layoutRevision: 'layout' }, graph, execution: fixtureExecution(graph), now: 10_000,
+        policy: { schemaVersion: 2, poolId: 'p', capacity, ordering: ['t'] } });
+      await store.reserveRunTasks({ commandId: 'reserve-human', actor, scopeId: 's', runId: 'r-human', expectedRevision: 0, now: 20_000, identities: [identity] });
+      const claim = { owner: 'worker', request: { protocolVersion: 1 as const, identity, workspace: join(root, 'gone', 'workspace'), argv: ['x'] } };
+      await store.claimDispatch(dispatchAdmission(claim)); await grantTestLaunch(store, claim, 30_000);
+      const report = { schemaVersion: 1, kind: 'native-worker-report', status: 'reported', report: { schemaVersion: 1, summary: 'tests passed secret=private-value', changedFiles: [], checks: [{ command: 'test', outcome: 'passed' }], openIssues: [] } };
+      await store.retainDispatchOutput(claim, await artifacts.put('s', Buffer.from(JSON.stringify({ schemaVersion: 1, identity, completeness: 'complete', stdout: JSON.stringify(report), stderr: '' }))));
+      const events = [{ schemaVersion: 1, sequence: 1, atMs: 5, kind: 'message', role: 'assistant', excerpt: 'checked secret=private-value', textBytes: 34, thinking: false },
+        { schemaVersion: 1, sequence: 2, atMs: 7, kind: 'session.ended', outcome: 'success', turns: 3, durationMs: 2000, apiDurationMs: null, costUsd: null, costBasis: null, tokens: null, permissionDenials: 0 }];
+      if (transcript !== 'missing') await store.saveWorkerEventLog({ schemaVersion: 1, identity, events: await artifacts.put('s', Buffer.from(transcript === 'invalid' ? 'broken log' : events.map(e => JSON.stringify(e)).join('\n') + '\n')), eventCount: 2, sealedAt: 40_000 });
+      await store.finishDispatch(claim, { handle: 'human-handle', exitCode: 0, interrupted: false });
+      await store.retainDispatchPatch(claim, await artifacts.put('s', Buffer.from(JSON.stringify({ schemaVersion: 1, kind: 'workspace-patch', identity,
+        source: { schemaVersion: 1, adapter: { id: 'fixture', version: 1 }, sourceFingerprint: 'a'.repeat(64) }, baseCommit: 'b'.repeat(40), snapshotDigest: 'c'.repeat(64), exclusions: patchExclusions,
+        changes: count ? [{ path: 'note.txt', before: null, after: patchFile(Buffer.from('written'), '100644') }] : [] }))));
+      const dispatch = (await store.readDispatch(claim.request))!, run = (await store.loadRun('s', 'r-human'))!;
+      await store.commitTaskEvaluation({ commandId: 'evaluate-human', actor, expectedRevision: run.revision, dispatch,
+        evaluation: { schemaVersion: 1, evaluationId: 'evaluate-human', identity, graphRevision: 1, attemptRevision: 1, criteria: [{ criterionId: 'verified', verdict: 'fail', evidenceIds: ['fixture-failure'] }] } });
+    } finally { store.close(); }
+    const before = await files(current.ledger), configBefore = await readFile(current.configPath);
+    const snapshot = await inspectMonitor(current.dir, current.options), install = snapshot.installs[0]!;
+    const humanText = (await loadMonitorSurface()).renderMonitorText(snapshot, { locale: 'tr', width: 80, ascii: true });
+    const worker = install.workers.find(w => w.identity?.attemptId === identity.attemptId)!;
+    if (allowed) {
+      expect(worker).toMatchObject({ human: { transcript: { state: transcript === 'invalid' ? 'unavailable' : transcript }, patch: { state: 'recorded', fileCount: count, files: count ? ['note.txt'] : [] }, finalReport: { status: 'reported' }, evaluation: 'rejected', title: null, titleEvidence: 'missing' } });
+      if (transcript === 'sealed') expect(worker).toMatchObject({ usageEvidence: 'sealed', usage: { turns: 3 } });
+      else expect(worker).not.toHaveProperty('usage');
+      expect(JSON.stringify(worker)).toContain('tests passed');
+      expect(humanText).toContain('İddia'); expect(humanText).toContain('tests passed'); expect(humanText).toContain('Değerlendirme: ret');
+      expect(humanText).toContain(count ? 'note.txt' : 'Boş yama');
+      expect(humanText).not.toContain('private-value');
+      expect(JSON.stringify(worker)).not.toContain('private-value');
+    } else {
+      expect(worker).not.toHaveProperty('usage');
+      expect(worker).toMatchObject({ human: { transcript: { state: 'denied' }, finalReport: null } });
+      expect(JSON.stringify(worker)).not.toContain('tests passed');
+      expect(humanText).toContain('policy izin vermedi'); expect(humanText).not.toContain('tests passed');
+    }
+    unchanged(before, await files(current.ledger)); expect(await readFile(current.configPath)).toEqual(configBefore);
+    await expect(stat(join(root, 'gone'))).rejects.toMatchObject({ code: 'ENOENT' });
   });
 });

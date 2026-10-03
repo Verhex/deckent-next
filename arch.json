@@ -1879,7 +1879,8 @@
         "src/domain/core/task-graph",
         "src/domain/core/worker-event",
         "src/platform/core/output",
-        "src/engine/core/runs"
+        "src/engine/core/runs",
+        "src/platform/core/errors"
       ],
       "plan": "MONITOR"
     },
@@ -1907,7 +1908,10 @@
         "src/platform/core/managed-files",
         "src/platform/core/utils",
         "src/adapters/core/local-principal",
-        "src/domain/core/model-activation"
+        "src/domain/core/model-activation",
+        "src/platform/core/errors",
+        "src/platform/core/output",
+        "src/engine/core/workspace-patch"
       ],
       "plan": "MONITOR"
     },

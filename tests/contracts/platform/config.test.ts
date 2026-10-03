@@ -8,7 +8,7 @@ import {
   createDefaultConfig, deepMerge, loadConfig, clearConfigCache, validateConfig, ConfigValidationError,
   registerConfigSection, saveGlobalConfig, writeConfig,
   withConfigWriteLock, readJsonFile, healCorruptProjectConfig, resolveConfigSecrets, getConfigMetadata,
-  getConfigValue, resolveGlobalConfigPaths, productResourcePath, t,
+  getConfigValue, resolveGlobalConfigPaths, productResourcePath, t, ENVIRONMENT_KEYS,
 } from '../../../src/platform/index.js';
 
 import { registerProviderConfig } from '../../../src/adapters/index.js';
@@ -63,6 +63,13 @@ describe('config public contract', () => {
     await writeFile(f.projectPath, '{"language":"tr"}');
     expect((await loadConfig(f.project, { env: f.env })).language).toBe('tr');
     expect((await loadConfig(f.project, { env: { ...f.env, DECKENT_LANGUAGE: '', DECKENT_LANG: 'en', DECKENT_CONFIG_RELOAD: '1' } })).language).toBe('en');
+  });
+  it('does not treat DECKENT_DEBUG as a config input', async () => {
+    expect(ENVIRONMENT_KEYS).not.toContain('DECKENT_DEBUG');
+    const f = await fixture();
+    const unset = await loadConfig(f.project, { env: f.env });
+    const debug = await loadConfig(f.project, { env: { ...f.env, DECKENT_DEBUG: '1' } });
+    expect(debug).toEqual(unset);
   });
   it('retired environment aliases cannot silently reintroduce removed knobs', async () => {
     const f = await fixture(), env = { ...f.env, DECKENT_MODE: 'api', DECKENT_LIVE_TRACE: 'true', DECKENT_BRAIN_PROVIDER: 'ignored' };

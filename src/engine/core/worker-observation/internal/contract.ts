@@ -34,6 +34,8 @@ export interface WorkerObservation {
   readonly diagnostics: readonly string[];
   /** Pinned worker tasks (WORKER-CURRENCY-2): requested → init → usage → verdict; `pending` until the host seals the log. */
   readonly model?: WorkerModelView | null;
+  /** MONITOR-HUMAN: usage summary that survives custody release: the sealed event summary, else the live sidecar summary; absent without either. */
+  readonly usage?: WorkerEventSummary; readonly usageEvidence?: 'sealed' | 'live';
 }
 export interface WorkerObservationSource {
   readonly id: string; readonly path: string; readonly kind: string; readonly status: 'available' | 'unavailable' | 'denied' | 'not-sampled';

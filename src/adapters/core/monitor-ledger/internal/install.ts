@@ -4,10 +4,11 @@ import { CONFIG_FIELDS, createDefaultConfig, envValue, inspectProductDirectory, 
   resolveProductLayout, type Environment, type ResolvedConfig } from '#platform/index.js';
 import { executionRegistrySchema, workerEventSchema, type AttemptIdentity, type WorkerEvent } from '#domain/index.js';
 import { readLocalOsIdentity } from '#adapters/core/local-principal/index.js';
-import { extractFirstFailure, parseRetainedOutputEnvelope, summarizeMonitorEvent, type MonitorEvent, type MonitorLedgerReading, type MonitorMap } from '#engine/index.js';
+import { extractFirstFailure, parseRetainedOutputEnvelope, summarizeMonitorEvent, type MonitorWorkerContent, type MonitorEvent, type MonitorLedgerReading, type MonitorMap } from '#engine/index.js';
 import { FileArtifactStore } from '#adapters/core/file-artifacts/index.js';
 import { FilePolicySource } from '#adapters/core/file-policy/index.js';
 import { readWorkerEventTail, readWorkerSidecars } from '#adapters/core/worker-observation/index.js';
+import { emptyWorkerContent, readMonitorWorkerContent } from './worker-content.js';
 import { scanMonitorLedger, type MonitorAttemptFiles } from './reader.js';
 
 /** MONITOR v1.1 bounds: recorded outputs larger than this are not parsed for a first failure; events kept per attempt; live tail bytes. */
@@ -30,20 +31,20 @@ export async function readMonitorInstall(config: ResolvedConfig, env: Environmen
     { busyTimeoutMs: config.storage.sqlite.busyTimeoutMs, maxRuns: config.inspection.maxPageSize });
   const diagnostics = [...scan.reading.diagnostics];
   const artifacts = FileArtifactStore.reader(() => inspectProductDirectory(layout, 'artifacts'), config.artifacts.maxBytes);
-  const extra = new Map<string, { firstFailure?: string | null; recentEvents?: readonly MonitorEvent[]; diagnostics?: readonly string[]; observedEndAtMs?: number | null }>();
+  const extra = new Map<string, { content?: MonitorWorkerContent; firstFailure?: string | null; recentEvents?: readonly MonitorEvent[]; diagnostics?: readonly string[]; observedEndAtMs?: number | null }>();
   for (const files of scan.files) {
     const key = `${files.identity.scopeId}/${files.identity.attemptId}`;
     try {
       // Security: recorded output and worker events are content of the attempt — read only after its read-output decision (workers list/transcript).
       const needsEnd = files.finished && !files.sealed && !!files.workspace;
-      if ((files.failed || needsEnd || (files.open && files.workspace)) && !(await readOutput(files.identity))) { extra.set(key, { firstFailure: null, diagnostics: ['output-denied'] }); continue; }
-      const found: { firstFailure?: string | null; recentEvents?: readonly MonitorEvent[]; observedEndAtMs?: number | null } = {};
+      if (!(await readOutput(files.identity))) { extra.set(key, { content: emptyWorkerContent('denied'), firstFailure: null, diagnostics: ['output-denied'] }); continue; }
+      const found: { content?: MonitorWorkerContent; firstFailure?: string | null; recentEvents?: readonly MonitorEvent[]; observedEndAtMs?: number | null } = { content: await readMonitorWorkerContent(artifacts, files) };
       if (files.failed) Object.assign(found, { firstFailure: await firstFailure(artifacts, files), ...(files.events ? { recentEvents: await sealedEvents(artifacts, files) } : {}) });
       else if (files.open && files.workspace) found.recentEvents = recent((await readWorkerEventTail(dirname(files.workspace), 'worker', MONITOR_EVENT_TAIL_BYTES))
         .map(line => ({ atMs: line.receivedAt, event: line.event })));
       if (needsEnd) found.observedEndAtMs = await observedEnd(config, files);
       if (Object.keys(found).length) extra.set(key, found);
-    } catch (error) { diagnostics.push(`attempt-files-unavailable:${key}:${code(error)}`); }
+    } catch (error) { extra.set(key, { content: emptyWorkerContent('unavailable') }); diagnostics.push(`attempt-files-unavailable:${key}:${code(error)}`); }
   }
   const runs = scan.reading.runs.map(run => Object.freeze({ ...run, attempts: Object.freeze(run.attempts.map(value => {
     const found = extra.get(`${run.snapshot.identity.scopeId}/${value.attemptId}`); return found ? Object.freeze({ ...value, ...found }) : value;

@@ -24,6 +24,8 @@ export interface MonitorFacets { readonly state?: string; readonly install?: str
   readonly stateLabel?: string }
 export interface MonitorRow {
   readonly key: string; readonly cells: readonly MonitorSpan[]; readonly detail: () => readonly MonitorLine[];
+  /** H1 workers carry the same detail in once/slash text as Enter. */
+  readonly detailInText?: boolean;
   readonly facets?: MonitorFacets;
   /** Sort values: age = epoch ms (newer is larger), state = rank (worse first), name = text. */
   readonly sort?: { readonly age?: number | null; readonly state?: number; readonly name?: string };

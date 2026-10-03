@@ -121,6 +121,17 @@ describe.skipIf(process.platform === 'win32')('worker model acceptance through t
     expect(workers.sources[0]!.workers[0]!.model).toMatchObject({ requested: row.requested, init: SONNET, usage: [SONNET, HAIKU], verdict: 'verified', evidence: 'sealed' });
     expect((await inspectConfiguredWorkerTranscript(f.project, f.identity, f.options)).model).toMatchObject({ verdict: 'verified', usage: [SONNET, HAIKU] });
   });
+  it('shows the sealed usage summary on workers, and no usage without a sealed log or sidecars', async () => {
+    const sealed = await fixture();
+    await sealed.seal([started(SONNET), ended([SONNET, HAIKU]), verdict('verified', [HAIKU, SONNET])]);
+    const worker = (await inspectConfiguredWorkers(sealed.project, { schemaVersion: 1, scopeId: 's' }, sealed.options)).sources[0]!.workers[0]!;
+    expect(worker.usageEvidence).toBe('sealed');
+    expect(worker.usage).toMatchObject({ turns: 3, costUsd: null, model: SONNET });
+    const bare = await fixture();
+    const none = (await inspectConfiguredWorkers(bare.project, { schemaVersion: 1, scopeId: 's' }, bare.options)).sources[0]!.workers[0]!;
+    expect(none).not.toHaveProperty('usage');
+    expect(none).not.toHaveProperty('usageEvidence');
+  });
   it.each([
     ['no sealed log', null],
     ['a sealed log without a host verdict (no session end)', [started(SONNET)]],

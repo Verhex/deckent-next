@@ -1,10 +1,10 @@
 import { configMonitorBlocks, type ConfigMonitorInspection } from './config-view.js';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Box, Text, useApp, useInput, useWindowSize } from 'ink';
+import { Box, Text, useApp, useInput, useWindowSize, type Key } from 'ink';
 import { t, type Locale } from '#platform/index.js';
 import type { WorklineInkPalette } from '#surfaces/core/terminal-kit/index.js';
 import type { MonitorSnapshot } from '#engine/index.js';
-import { clipLine, flattenBlocks, lineText, span, type MonitorFlatLine, type MonitorLine } from './layout.js';
+import { clipLine, flattenBlocks, lineText, span, type MonitorFlatLine, type MonitorLine, type MonitorRow } from './layout.js';
 import { clockText, durationText, MONITOR_TABS, tabLabel } from './labels.js';
 import { wrapDetail } from './text.js';
 import { buildMonitorView, filterSnapshot, type MonitorFilters } from './view.js';
@@ -26,6 +26,22 @@ export interface MonitorAppProps {
   readonly now?: () => number;
   /** A fixed screen size (frame dumps); the live view follows the terminal (`useWindowSize`, re-rendered on resize). */
   readonly size?: { readonly columns: number; readonly rows: number };
+}
+function moveDetail(key: Key, offset: number, max: number, page: number): number | null {
+  if (key.upArrow) return Math.max(0, offset - 1);
+  if (key.downArrow) return Math.min(max, offset + 1);
+  if (key.pageUp) return Math.max(0, offset - page);
+  if (key.pageDown) return Math.min(max, offset + page);
+  if (key.home) return 0;
+  if (key.end) return max;
+  return null;
+}
+function detailBody(row: MonitorRow | null, width: number, requestedOffset: number, height: number, locale: Locale): MonitorLine[] {
+  const lines = row ? wrapDetail(row.detail(), width) : [[span(t('monitor.live.detailGone', {}, locale), 'warning')]];
+  const offset = Math.min(requestedOffset, Math.max(0, lines.length - height + 2));
+  const body = [[span(t('monitor.human.detailScroll', {}, locale), 'muted')], ...lines.slice(offset, offset + height - 1)];
+  if (offset + height - 1 < lines.length) body[body.length - 1] = [span(t('monitor.live.more', { count: lines.length - offset - height + 2 }, locale), 'muted')];
+  return body;
 }
 interface Failure { readonly text: string; readonly at: number }
 /** The snapshot with the local time it arrived and its change marks against the previous one (shown until the next snapshot). */
@@ -54,6 +70,7 @@ export function MonitorApp(props: MonitorAppProps) {
   const [tab, setTab] = useState(0);
   const [selection, setSelection] = useState<readonly number[]>(tabs.map(() => 0));
   const [detail, setDetail] = useState<string | null>(null);
+  const [detailOffset, setDetailOffset] = useState(0);
   const [help, setHelp] = useState(false);
   const [controls, setControls] = useState<MonitorControls>(NO_CONTROLS);
   const [editing, setEditing] = useState(false);
@@ -116,7 +133,7 @@ export function MonitorApp(props: MonitorAppProps) {
           ...(controls.group ? [span(`  ${controls.group === 'install' ? t('monitor.group.install', {}, locale) : t('monitor.group.state', {}, locale)}`, 'muted')] : [])];
   const bodyHeight = Math.max(1, height - shownHeader.length - 4);
   const move = (delta: number) => setSelection(values => values.map((value, index) => index === tab ? Math.max(0, Math.min(items.length - 1, selected + delta)) : value));
-  const switchTab = (next: number) => { setTab((next + tabs.length) % tabs.length); setDetail(null); };
+  const switchTab = (next: number) => { setTab((next + tabs.length) % tabs.length); setDetail(null); setDetailOffset(0); };
   const cycle = <T,>(values: readonly T[], value: T) => values[(values.indexOf(value) + 1) % values.length]!;
   const pointer = ascii ? '>' : '›';
 
@@ -143,19 +160,24 @@ export function MonitorApp(props: MonitorAppProps) {
     if ((key.tab && key.shift) || key.leftArrow) { switchTab(tab - 1); return; }
     if (key.tab || key.rightArrow) { switchTab(tab + 1); return; }
     if (/^[1-9]$/.test(input) && Number(input) <= tabs.length) { switchTab(Number(input) - 1); return; }
-    if (detail !== null) return;
+    if (detail !== null) {
+      const count = detailRow ? wrapDetail(detailRow.detail(), width).length : 0;
+      const max = Math.max(0, count - bodyHeight + 2);
+      const next = moveDetail(key, detailOffset, max, Math.max(1, bodyHeight - 2));
+      if (next !== null) setDetailOffset(next);
+      return;
+    }
     if (key.upArrow) move(-1); else if (key.downArrow) move(1);
     else if (key.pageUp) move(-bodyHeight); else if (key.pageDown) move(bodyHeight);
     else if (key.home) move(-items.length); else if (key.end) move(items.length);
-    else if (key.return) { const row = items[selected]?.row; if (row) setDetail(row.key); }
+    else if (key.return) { const row = items[selected]?.row; if (row) { setDetail(row.key); setDetailOffset(0); } }
   });
 
   let body: MonitorLine[];
   if (help) body = legendLines(locale, ascii, tabs);
   else if (!view) body = [[span(failure ? '' : t('monitor.live.loading', {}, locale), 'muted')]];
-  else if (detail !== null) {
-    body = [[span(t('monitor.live.detailBack', {}, locale), 'muted')], ...(detailRow ? wrapDetail(detailRow.detail(), width) : [[span(t('monitor.live.detailGone', {}, locale), 'warning')]])];
-  } else {
+  else if (detail !== null) body = detailBody(detailRow, width, detailOffset, bodyHeight, locale);
+  else {
     const at = Math.max(0, flat.findIndex(line => line.item === selected));
     const max = Math.max(0, flat.length - bodyHeight);
     const offset = Math.min(max, at < bodyHeight - 1 ? 0 : at - bodyHeight + 2);

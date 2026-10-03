@@ -4,7 +4,7 @@ import { renderWorkerModelLine } from './worker-model.js';
 export type WorkerTranscriptHandler = (root: string, identity: AttemptIdentity, options: ConfigLoadOptions) => Promise<Readonly<{
   schemaVersion: 1 | 2; identity: AttemptIdentity; finalReport?: WorkerFinalReportResult; sealed: Readonly<{ eventCount: number; sealedAt: number; projection?: 'complete' | 'partial' }> | null;
   summary: WorkerEventSummary | null; events: readonly WorkerEvent[]; model?: WorkerModelView | null }>>;
-const seconds = (ms: number | null) => ms === null ? '—' : (ms / 1000).toFixed(1);
+export const seconds = (ms: number | null) => ms === null ? '—' : (ms / 1000).toFixed(1);
 export function phaseLabel(phase: WorkerPhase, locale: Locale) {
   const labels: Record<WorkerPhase, string> = {
     starting: t('cli.worker.phase.starting', {}, locale), thinking: t('cli.worker.phase.thinking', {}, locale), reading: t('cli.worker.phase.reading', {}, locale),

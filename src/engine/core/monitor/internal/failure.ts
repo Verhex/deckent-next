@@ -1,5 +1,5 @@
 import type { WorkerEvent } from '#domain/index.js';
-import { terminalSafeText } from '#platform/index.js';
+import { redactSensitive, terminalSafeText } from '#platform/index.js';
 
 /** MONITOR v1.1 bound for one surfaced line (first failure). */
 export const MONITOR_FAILURE_MAX_CHARS = 200;
@@ -13,7 +13,7 @@ const FAILURE_LINES: readonly RegExp[] = Object.freeze([
   /^\w*Error \[[A-Z][A-Z0-9_]*\]:/, // node coded error
 ]);
 /** Untrusted output → one display line: every escape sequence (CSI, OSC to BEL/ST, other ESC forms) and every C0/C1 control and DEL removed. */
-const clean = (line: string) => terminalSafeText(line).replace(/\s+/g, ' ').trim();
+const clean = (line: string) => redactSensitive(terminalSafeText(line)).replace(/\s+/g, ' ').trim();
 const bound = (line: string) => line.length > MONITOR_FAILURE_MAX_CHARS ? line.slice(0, MONITOR_FAILURE_MAX_CHARS - 1) + '…' : line;
 
 function firstMatch(text: string): string | null {
