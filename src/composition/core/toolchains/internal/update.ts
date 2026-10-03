@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { loadConfig, prepareProductDirectory, type ConfigLoadOptions } from '#platform/index.js';
 import { affectedToolchainProfiles, insertHistoryLine, planToolchainUpdate, proposeProfileRevisions, type ProfileRevisionProposal, type ToolchainUpdatePlan } from '#engine/index.js';
-import { prepareWorkerImageBuildContext, readWorkerImageSources, runWorkerImageBuild, type WorkerImageBuildRunner } from '#adapters/index.js';
+import { assertWorkerImageVersionAvailable, prepareWorkerImageBuildContext, readWorkerImageSources, runWorkerImageBuild, type WorkerImageBuildRunner } from '#adapters/index.js';
 import { inspectConfiguredToolchainCurrency, type NpmLatestVersionFetcher } from './currency.js';
 const packageRoot = fileURLToPath(new URL('../../../../../', import.meta.url));
 export type ToolchainUpdateResult = Readonly<{ schemaVersion: 1; mode: string; decision: 'disabled' | 'no-change' | 'planned' | 'built';
@@ -18,9 +18,7 @@ async function writeArtifact(directory: string, name: string, value: unknown) {
   try { await handle.writeFile(JSON.stringify(value, null, 2) + '\n'); await handle.sync(); } finally { await handle.close(); }
   return path;
 }
-/** Policy-driven update: `off` returns disabled; `propose` writes a typed plan only; `auto` (or an explicit apply) also copies the shipped
- * builder into a product-owned context, builds the next image version and writes a receipt plus a profile-revision proposal.
- * Installed config, package bytes and running work are never modified; applying the proposal is a separate installation revision. */
+/** Plan/build with a daemon preflight before artifacts; config/package bytes and running work stay unchanged. */
 export async function updateConfiguredToolchains(projectRoot: string, input: Readonly<{ apply?: boolean | undefined }> = {}, options: ConfigLoadOptions = {},
   dependencies: ToolchainUpdateDependencies = {}): Promise<ToolchainUpdateResult> {
   const config = await loadConfig(projectRoot, options);
@@ -28,21 +26,23 @@ export async function updateConfiguredToolchains(projectRoot: string, input: Rea
   const now = dependencies.now ?? (() => new Date().toISOString());
   if (policy.mode === 'off') return Object.freeze({ schemaVersion: 1, mode: policy.mode, decision: 'disabled', plan: null, planPath: null, build: null, proposal: null, proposalPath: null });
   const report = await inspectConfiguredToolchainCurrency(projectRoot, options, dependencies.fetcher);
-  const root = dependencies.packageRoot ?? packageRoot;
-  const sources = await readWorkerImageSources(root);
+  const root = dependencies.packageRoot ?? packageRoot; const sources = await readWorkerImageSources(root);
   const plannedAt = now();
   const plan = planToolchainUpdate({ report, recipe: sources.recipe, plannedAt, affectedProfiles: affectedToolchainProfiles(config) });
-  const workspaces = await prepareProductDirectory(config.productLayout, 'workspaces');
-  const home = join(workspaces, 'toolchains');
   if (plan.decision === 'no-change') return Object.freeze({ schemaVersion: 1, mode: policy.mode, decision: 'no-change', plan, planPath: null, build: null, proposal: null, proposalPath: null });
+  const env = Object.fromEntries(Object.entries(options.env ?? process.env).filter((entry): entry is [string, string] => typeof entry[1] === 'string'));
+  const apply = policy.mode === 'auto' || input.apply;
+  if (apply) await assertWorkerImageVersionAvailable({ packageRoot: root, imageVersion: plan.next!.imageVersion,
+    timeoutMs: policy.buildTimeoutMs, outputBytes: policy.outputBytes, env }, dependencies.runner);
+  const home = join(await prepareProductDirectory(config.productLayout, 'workspaces'), 'toolchains');
   const planPath = await writeArtifact(join(home, 'plans'), `${plan.next!.imageVersion}-${plannedAt.replace(/[:.]/g, '-')}.json`, plan);
-  if (policy.mode !== 'auto' && !input.apply) return Object.freeze({ schemaVersion: 1, mode: policy.mode, decision: 'planned', plan, planPath, build: null, proposal: null, proposalPath: null });
+  if (!apply) return Object.freeze({ schemaVersion: 1, mode: policy.mode, decision: 'planned', plan, planPath, build: null, proposal: null, proposalPath: null });
   const prepared = await prepareWorkerImageBuildContext({ packageRoot: root, parent: join(home, 'builds'), imageVersion: plan.next!.imageVersion,
     dockerfile: insertHistoryLine(sources.dockerfile, plan.next!.historyLine), recipe: plan.next!.recipe });
   await mkdir(join(home, 'receipts'), { recursive: true, mode: 0o700 });
   const receiptPath = join(home, 'receipts', `${plan.next!.imageVersion}.json`);
   const built = await runWorkerImageBuild({ context: prepared.context, receiptPath, timeoutMs: policy.buildTimeoutMs, outputBytes: policy.outputBytes,
-    env: Object.fromEntries(Object.entries(options.env ?? process.env).filter((entry): entry is [string, string] => typeof entry[1] === 'string')) }, dependencies.runner);
+    env }, dependencies.runner);
   const proposal = proposeProfileRevisions(plan, built.receipt, now());
   const proposalPath = await writeArtifact(join(home, 'proposals'), `${plan.next!.imageVersion}.json`, proposal);
   return Object.freeze({ schemaVersion: 1, mode: policy.mode, decision: 'built', plan, planPath,

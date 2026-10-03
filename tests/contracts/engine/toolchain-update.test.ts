@@ -19,9 +19,9 @@ it('advances the version counter with the planning day and inserts the newest hi
   expect(nextImageVersion('r3-20260922', '2026-09-30T11:00:00.000Z')).toBe('r4-20260930');
   expect(() => nextImageVersion('v2', '2026-09-23T08:00:00.000Z')).toThrow('TOOLCHAIN_RECIPE_INVALID');
   const dockerfile = await readFile(new URL('../../../assets/worker-image/Dockerfile', import.meta.url), 'utf8');
-  const edited = insertHistoryLine(dockerfile, '# version r4-20260930 | 2026-09-30 | base node:24-trixie-slim | supersedes r3-20260922 | test');
+  const edited = insertHistoryLine(dockerfile, '# version r5-20261003 | 2026-10-03 | base node:24-trixie-slim | supersedes r4-20260930 | test');
   const lines = edited.split('\n').filter(line => /^# version r/.test(line));
-  expect(lines[0]).toMatch(/^# version r4-20260930/); expect(lines[1]).toMatch(/^# version r3-20260922/); expect(lines[2]).toMatch(/^# version r2-20260922/);
+  expect(lines[0]).toMatch(/^# version r5-20261003/); expect(lines[1]).toMatch(/^# version r4-20260930/); expect(lines[2]).toMatch(/^# version r3-20260922/);
   expect(() => insertHistoryLine('FROM x\n', '# version r3-20260923 | ...')).toThrow('TOOLCHAIN_HISTORY_INVALID');
 });
 it('plans no change when nothing is stale and a single next version when an npm provider is stale', () => {

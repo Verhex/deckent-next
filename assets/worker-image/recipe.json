@@ -1,8 +1,8 @@
 {
   "schemaVersion": 2,
   "repository": "deckent/worker",
-  "imageVersion": "r3-20260922",
-  "previousVersion": "r2-20260922",
+  "imageVersion": "r4-20260930",
+  "previousVersion": "r3-20260922",
   "baseImage": "node:24-trixie-slim",
   "npmProviders": [
     {
