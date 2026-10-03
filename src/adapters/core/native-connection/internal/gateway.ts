@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import catalog from './providers.json' with { type: 'json' };
-import { nativeSubscriptionSchema, NativeConnectionError, projectNativeCredential, type NativeSubscription } from './credential.js';
+import { nativeSubscriptionSchema, NativeConnectionError, nativeProviderSpec, projectNativeCredential, type NativeSubscription } from './credential.js';
 import { scrubWorkerEvent } from './event-guard.js';
 import { secretValues } from './worker.js';
 import { nativeCliCommand } from '#adapters/core/native-cli-registry/index.js';
@@ -37,7 +37,7 @@ export function isPublicNativeAddress(address: string) {
 export type WorkerEventSink = (events: readonly WorkerEvent[]) => void;
 export async function openNativeConnection(input: { binding: NativeSubscription; directory: string; credential: Record<string, unknown>; deadlineMs: number;
   onEvents?: WorkerEventSink }) {
-  const binding = nativeSubscriptionSchema.parse(input.binding); const spec = catalog.providers[binding.provider];
+  const binding = nativeSubscriptionSchema.parse(input.binding); const spec = nativeProviderSpec(binding.provider);
   const capabilities = nativeCliCommand(binding.provider).capabilities;
   const projected = projectNativeCredential(binding.provider, input.credential);
   const limits = catalog.limits;

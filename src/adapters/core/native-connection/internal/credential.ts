@@ -25,6 +25,16 @@ export type NativeSubscription = z.infer<typeof nativeSubscriptionSchema>;
 export class NativeConnectionError extends Error {
   constructor(readonly code: 'NATIVE_CREDENTIAL_UNAVAILABLE' | 'NATIVE_CONNECTION_UNAVAILABLE') { super(code); this.name = 'NativeConnectionError'; }
 }
+/** A provider's local credential spec as shipped in `providers.json`; declared explicitly so the published `.d.ts` never references the JSON module. */
+export interface NativeProviderSpec { readonly homeOverride: string; readonly home: string; readonly file: string; readonly destinations: readonly string[];
+  readonly environment: Readonly<Record<string, string>> }
+/** The provider's local credential spec from the adapter catalog; an id the catalog does not list is a typed unavailability, never `any`. */
+export function nativeProviderSpec(provider: NativeSubscription['provider']): NativeProviderSpec {
+  const specs: Readonly<Record<string, NativeProviderSpec | undefined>> = catalog.providers;
+  const spec = specs[provider];
+  if (!spec) throw new NativeConnectionError('NATIVE_CREDENTIAL_UNAVAILABLE');
+  return spec;
+}
 const record = (value: unknown): Record<string, unknown> => value !== null && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
 const token = (value: unknown): string => { if (typeof value !== 'string' || !value) throw new NativeConnectionError('NATIVE_CREDENTIAL_UNAVAILABLE'); return value; };
 /** Expiry metadata is only a preflight hint. Remote authentication remains the authority. */
@@ -56,7 +66,7 @@ export function projectNativeCredential(provider: NativeSubscription['provider']
 }
 /** Local native login cache only; never reads provider settings, sessions, hooks or whole HOME. */
 export async function readLocalNativeCredential(provider: NativeSubscription['provider'], env: Readonly<Record<string, string | undefined>> = process.env) {
-  const spec = catalog.providers[provider]; const home = env.HOME ?? homedir();
+  const spec = nativeProviderSpec(provider); const home = env.HOME ?? homedir();
   const root = provider === 'cursor' ? join(env.XDG_CONFIG_HOME ?? join(home, '.config'), 'cursor') : env[spec.homeOverride] ?? join(home, spec.home);
   const path = resolve(root, spec.file);
   try {

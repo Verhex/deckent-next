@@ -113,7 +113,7 @@ it('refuses a worker-forged model verdict and derives the host verdict from acce
     costUsd: null, costBasis: null, tokens: null, permissionDenials: 0, models: ['claude-fable-5-1', 'claude-haiku-4-5-20251001', 'claude-sonnet-5-5'] });
   expect(await call(socket, 'POST', '/events', [started, forged, ended].join('\n') + '\n')).toBe(204);
   expect(received.flat().map(item => item.kind)).toEqual(['session.started', 'session.ended', 'dropped']);
-  expect(connection.modelVerification()).toEqual({ status: 'substituted', admitted: 'claude-sonnet-5-5',
+  expect(connection.modelVerification()).toEqual({ status: 'substituted', admitted: 'claude-sonnet-5-5', evidenceCapability: 'session-events',
     observed: ['claude-fable-5-1', 'claude-haiku-4-5-20251001', 'claude-sonnet-5-5'], unexpected: ['claude-fable-5-1'] });
 });
 

@@ -18,13 +18,18 @@ export function nativeCliVocabulary(input: unknown): readonly string[] {
   if (!parsed.success) throw new NativeCliRegistryError();
   return Object.freeze(Object.keys(parsed.data.adapters));
 }
-export type NativeCliId = keyof typeof registry.adapters;
-export const nativeCliIds = nativeCliVocabulary(registry) as readonly [NativeCliId, ...NativeCliId[]];
+/** Registry-derived id (a string whose values come from the asset at load); the published declaration must not reference the JSON
+ * module (consumers resolve our `.d.ts` with `resolveJsonModule: false`), so the type is the vocabulary's element type, not `keyof typeof`. */
+export type NativeCliId = string;
+export const nativeCliIds: readonly [NativeCliId, ...NativeCliId[]] = nativeCliVocabulary(registry) as readonly [NativeCliId, ...NativeCliId[]];
 export const nativeCliIdSchema = providerIdSchema(nativeCliIds);
 export const modelUsageEvidenceSchema = z.enum(['session-events', 'none']);
 export type ModelUsageEvidence = z.infer<typeof modelUsageEvidenceSchema>;
 
 /** Read migration only: profiles/records written before capability stamping retain the shipped registry behavior. */
 export function readLegacyModelUsageEvidence(provider: NativeCliId): ModelUsageEvidence {
-  return modelUsageEvidenceSchema.parse(registry.adapters[provider].capabilities.modelUsageEvidence);
+  const adapters: Record<string, { readonly capabilities?: { readonly modelUsageEvidence?: unknown } } | undefined> = registry.adapters;
+  const entry = adapters[provider];
+  if (!entry) throw new NativeCliRegistryError();
+  return modelUsageEvidenceSchema.parse(entry.capabilities?.modelUsageEvidence);
 }
