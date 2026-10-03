@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { initBoard, readBoard, setOwnRow, setMap, clearRow, renderHtml, renderText, writeAtomic, DEFAULT_SLOTS } from './board.mjs';
+import { initBoard, readBoard, setOwnRow, setMap, clearRow, renderHtml, renderText, renderOwnerReport, writeAtomic, DEFAULT_SLOTS } from './board.mjs';
 
 function fixture(t) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'deckent-board-'));
@@ -170,4 +170,20 @@ test('a failed rename after the temporary was written removes that temporary and
   armed = false;
   assert.equal(fs.readFileSync(file, 'utf8'), before);
   assert.deepEqual(fs.readdirSync(dir).filter(name => name.includes('.tmp') || name.endsWith('.lock')), []);
+});
+
+test('owner report renders the agreed flow format from a report body and the board, escaped, and refuses an incomplete body', t => {
+  const { file } = fixture(t); initBoard(file);
+  setOwnRow(file, 'main', { name: 'main', status: 'waiting', waitingOn: 'owner', next: 'alpha.4' }, { session: 'm', revision: 0 });
+  const body = { title: 'Owner raporu', headline: 'Parti push edildi <b>', impact: 'Run paralel.',
+    flow: [{ label: 'Dün', text: 'Tasarım', who: 'owner' }, { label: 'Şimdi', text: 'Push', who: 'main' }],
+    limits: ['CI kırmızı'], decisions: ['alpha.4 canlıya alınsın mı?'], next: { who: 'Main', text: 'alpha.4 hazırla' }, details: ['proof/X'] };
+  const html = renderOwnerReport(body, readBoard(file), { now: new Date() });
+  for (const part of ['Owner raporu', 'Akış', 'Sana etkisi', 'Açık sınır', 'Senden karar', 'Sıradaki adım · Main', 'Kanıt ve ayrıntı', 'Süreç panosu'])
+    assert.ok(html.includes(part), part);
+  assert.ok(html.includes('&lt;b&gt;')); assert.equal(html.includes('<b>'), false); assert.equal((html.match(/<script/g) ?? []).length, 0);
+  assert.ok(html.indexOf('Dün') < html.indexOf('Şimdi'));
+  assert.throws(() => renderOwnerReport({ ...body, headline: '' }, readBoard(file)), /BOARD_REPORT/);
+  assert.throws(() => renderOwnerReport({ ...body, flow: [] }, readBoard(file)), /BOARD_REPORT/);
+  assert.throws(() => renderOwnerReport({ ...body, extra: 1 }, readBoard(file)), /BOARD_REPORT/);
 });

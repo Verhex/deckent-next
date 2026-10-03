@@ -202,11 +202,50 @@ th{font-size:.8rem;color:var(--mute)}small{color:var(--mute)}tr.w td{padding-top
 <table><thead><tr><th>Rol</th><th>Oturum / kimlik</th><th>Odak</th><th>İş</th><th>Durum</th><th>Beklediği</th><th>Sıradaki</th></tr></thead><tbody>${rows}</tbody></table>
 </body></html>\n`;
 }
+// Owner report (owner 2026-10-03): the agreed short flow format — result, flow (before → now → remaining, who holds), impact,
+// open limits, decisions/commands for the owner, next step and who, collapsed evidence, plus the live board. Plain language
+// (ISO 24495-1 reader-first approach adapted; no conformance claim). One file, overwritten; delivered over localhost.
+const REPORT_KEYS = ['title', 'headline', 'impact', 'flow', 'limits', 'decisions', 'next', 'details'];
+function validateReport(body) {
+  const bad = detail => { throw fail('BOARD_REPORT', detail); };
+  if (!plain(body) || Object.keys(body).some(key => !REPORT_KEYS.includes(key))) bad('report body accepts only ' + REPORT_KEYS.join(', '));
+  for (const key of ['title', 'headline', 'impact']) if (typeof body[key] !== 'string' || !body[key].trim() || body[key].length > TEXT) bad(key);
+  if (!Array.isArray(body.flow) || body.flow.length < 2 || body.flow.length > 6) bad('flow needs 2–6 steps');
+  for (const step of body.flow) if (!plain(step) || ['label', 'text', 'who'].some(key => typeof step[key] !== 'string' || !step[key].trim() || step[key].length > TEXT)) bad('flow step');
+  for (const key of ['limits', 'decisions', 'details']) if (!Array.isArray(body[key]) || body[key].some(item => typeof item !== 'string' || !item.trim() || item.length > TEXT)) bad(key);
+  if (!plain(body.next) || typeof body.next.who !== 'string' || typeof body.next.text !== 'string' || !body.next.who.trim() || !body.next.text.trim()) bad('next');
+  return body;
+}
+export function renderOwnerReport(input, board, { now = new Date() } = {}) {
+  const body = validateReport(input), list = items => items.length ? `<ul>${items.map(item => `<li>${escapeHtml(item)}</li>`).join('')}</ul>` : '<p>Yok.</p>';
+  const flow = body.flow.map((step, index) => `${index ? '<div class="arrow" aria-hidden="true">→</div>' : ''}<div class="step"><div class="t">${escapeHtml(step.label)}</div>`
+    + `<div>${escapeHtml(step.text)}</div><div class="who">Kimde: ${escapeHtml(step.who)}</div></div>`).join('');
+  return `<!doctype html><html lang="tr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHtml(body.title)}</title><style>
+:root{color-scheme:light dark;--fg:#1b1b1b;--bg:#fff;--mute:#666;--line:#ddd;--warn:#b26a00}
+@media (prefers-color-scheme:dark){:root{--fg:#eee;--bg:#141414;--mute:#aaa;--line:#333}}
+body{margin:0;padding:16px;font:16px/1.5 system-ui,sans-serif;color:var(--fg);background:var(--bg)}main{max-width:960px;margin:0 auto}
+h1{font-size:1.3rem;margin:0}h2{font-size:1rem;margin:22px 0 6px}.lead{font-size:1.1rem}.m{color:var(--mute);font-size:.85em}
+.flow{display:flex;flex-wrap:wrap;gap:8px;align-items:stretch}.step{flex:1 1 170px;border:1px solid var(--line);border-radius:10px;padding:10px}
+.step .t{font-weight:700}.step .who{margin-top:6px;font-size:.85em;color:var(--mute)}.arrow{align-self:center;color:var(--mute)}
+.decide li{color:var(--warn);font-weight:600}pre{white-space:pre-wrap;font-size:.85em;border:1px solid var(--line);border-radius:8px;padding:10px}
+@media (max-width:640px){.arrow{display:none}}
+</style></head><body><main><h1>${escapeHtml(body.title)}</h1><p class="m">${escapeHtml(now.toISOString().slice(0, 16).replace('T', ' '))}Z · sonuç → etki → açık sınır → karar → kimde/sıradaki</p>
+<p class="lead"><strong>${escapeHtml(body.headline)}</strong></p>
+<h2>Akış</h2><div class="flow">${flow}</div>
+<h2>Sana etkisi</h2><p>${escapeHtml(body.impact)}</p>
+<h2>Açık sınır</h2>${list(body.limits)}
+<h2>Senden karar / komut</h2><div class="decide">${list(body.decisions)}</div>
+<h2>Sıradaki adım · ${escapeHtml(body.next.who)}</h2><p>${escapeHtml(body.next.text)}</p>
+<details><summary>Kanıt ve ayrıntı</summary>${list(body.details)}</details>
+<details><summary>Süreç panosu</summary><pre>${escapeHtml(renderText(board, { now }))}</pre></details>
+</main></body></html>\n`;
+}
 // ---- CLI
 function configuration() {
   const cfg = JSON.parse(safeRead(path.join(here, 'workspace.json'), 8192));
   if (cfg.version !== 1 || typeof cfg.board !== 'string') throw fail('BOARD_CONFIG', 'workspace.json needs version 1 and board');
-  return { file: path.resolve(here, cfg.board), html: path.resolve(here, cfg.boardHtml ?? cfg.board.replace(/\.json$/, '.html')) };
+  return { file: path.resolve(here, cfg.board), html: path.resolve(here, cfg.boardHtml ?? cfg.board.replace(/\.json$/, '.html')),
+    report: cfg.ownerReport ? path.resolve(here, cfg.ownerReport) : null };
 }
 function options(args) {
   const out = { positional: [] };
@@ -221,7 +260,7 @@ async function body(source) {
   if (source === '-') { let data = ''; for await (const chunk of process.stdin) { data += chunk; if (Buffer.byteLength(data) > MAX) throw fail('BOARD_FULL'); } return JSON.parse(data); }
   return JSON.parse(safeRead(source));
 }
-const USAGE = 'Usage: init | get [SLOT] | show | render [--out PATH] | set-own-row SLOT BODY_FILE|- --session ID --revision N | set-map BODY_FILE|- --session ID --revision N | clear-row SLOT --session ID --revision N';
+const USAGE = 'Usage: init | get [SLOT] | show | render [--out PATH] | report BODY_FILE|- | set-own-row SLOT BODY_FILE|- --session ID --revision N | set-map BODY_FILE|- --session ID --revision N | clear-row SLOT --session ID --revision N';
 async function main() {
   const [command, ...rest] = process.argv.slice(2); const opts = options(rest); const cfg = configuration();
   const print = value => console.log(JSON.stringify(value, null, 1));
@@ -231,6 +270,9 @@ async function main() {
     case 'show': return process.stdout.write(renderText(readBoard(cfg.file)));
     case 'render': { const out = opts.out ? path.resolve(opts.out) : cfg.html; const html = renderHtml(readBoard(cfg.file));
       writeAtomic(out, html, { create: !fs.existsSync(out) }); return print({ written: out, bytes: Buffer.byteLength(html) }); }
+    case 'report': { const [source] = opts.positional; if (!source || !cfg.report) throw fail('BOARD_USAGE', 'report BODY_FILE|- (workspace.json ownerReport)');
+      const html = renderOwnerReport(await body(source), readBoard(cfg.file)); fs.mkdirSync(path.dirname(cfg.report), { recursive: true });
+      writeAtomic(cfg.report, html, { create: !fs.existsSync(cfg.report) }); return print({ written: cfg.report, bytes: Buffer.byteLength(html) }); }
     case 'set-own-row': { const [slot, source] = opts.positional; if (!slot || !source) throw fail('BOARD_USAGE', USAGE);
       return print(setOwnRow(cfg.file, slot, await body(source), opts)); }
     case 'set-map': { const [source] = opts.positional; if (!source) throw fail('BOARD_USAGE', USAGE); return print(setMap(cfg.file, await body(source), opts)); }

@@ -3,6 +3,7 @@
   "channel": "../../.deckent/host/channel/communication.md",
   "board": "../../.deckent/host/process-board.json",
   "boardHtml": "../../.deckent/host/process-board.html",
+  "ownerReport": "../../ozet-rapor/index.html",
   "historicalThrough": 2000,
   "productRoot": "../..",
   "legacyRoot": "../../../deckent-dev",
