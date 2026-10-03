@@ -566,5 +566,7 @@
   "monitor.detail.delivery": "Delivery/adoption: {state} · commit {commit}",
   "monitor.detail.deliveryNone": "Delivery/adoption: no integration, delivery or adoption recorded.",
   "monitor.legend.approx": "duration ends at the host-observed worker exit (no sealed log end)",
-  "monitor.map.layer.globalObserver": "global (the observer's own layer, not necessarily this install's)"
+  "monitor.map.layer.globalObserver": "global (the observer's own layer, not necessarily this install's)",
+  "task.acceptance.noChangeProduced": "Not accepted: no change produced.",
+  "monitor.detail.container": "Container {id} · image {image} · start {started} · end {ended} · resource limits: CPU {cpus} · memory {memory} B"
 }

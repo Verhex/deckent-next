@@ -128,6 +128,7 @@ function attemptLines(w: Words, attempt: MonitorAttempt, failed: boolean, live: 
     [span(`    ${t('monitor.detail.attempt', { attempt: short(attempt.attemptId, 8), generation: attempt.generation, launch: attempt.launch ?? '—',
       started: timeText(attempt.startedAtMs), ended: attempt.endedAtMs !== null ? timeText(attempt.endedAtMs) : live ? t('monitor.detail.stillRunning', {}, locale)
         : t('monitor.time.unknown', {}, locale), duration, exit: attempt.exitCode ?? '—', model: attempt.model ?? '—', provider: attempt.provider ?? '—' }, locale)}`, 'muted')],
+    ...(attempt.container ? [[span(`    ${t('monitor.detail.container', { id: attempt.container.containerId, image: attempt.container.imageId, started: attempt.container.startedAt ?? '—', ended: attempt.container.finishedAt ?? '—', cpus: attempt.container.resources.cpus, memory: attempt.container.resources.memoryBytes }, locale)}`, 'muted')]] : []),
     ...describeDiagnostics(attempt.diagnostics ?? [], locale).map(entry => [span(`    ${entry.note ? entry.text : `${w.marks.warn} ${entry.text}`}`, entry.note ? 'muted' : 'warning')]),
     ...(attempt.endedAtMs === null && live ? [[span(`    ${t('monitor.detail.live', { phase: workerPhaseLabel(attempt.workerPhase, locale),
       heartbeat: attempt.heartbeatAgeMs === null ? '—' : durationText(attempt.heartbeatAgeMs, locale) }, locale)}`, 'muted')]] : []),
@@ -158,6 +159,7 @@ function runDetail(w: Words, install: MonitorInstall, run: MonitorRun) {
       [span(`    ${t('monitor.detail.evaluation', { verdict: verdictLabel(task.evaluation.verdict, locale),
         when: task.evaluation.observedAtMs === null ? '' : agoText(now, task.evaluation.observedAtMs, locale) }, locale).trimEnd()}`, 'muted')],
       ...(task.handoffs ?? []).map(receipt => [span(`    ${t('monitor.detail.handoffReceived', { source: receipt.source.taskId, attempt: receipt.source.attemptId, digest: receipt.digest }, locale)}`, 'success')]),
+      ...(task.evaluation.reason ? [[span(`    ${t('task.acceptance.noChangeProduced', {}, locale)}`, 'error')]] : []),
       ...(task.dependencies.length ? [[span(`    ${t('monitor.detail.dependencies', { list: task.dependencies.join(', ') }, locale)}`, 'muted')]] : []),
     ]),
     run.delivery === undefined ? [span(t('monitor.detail.deliveryUnknown', {}, locale), 'muted')] : run.delivery === null ? [span(t('monitor.detail.deliveryNone', {}, locale), 'muted')]
@@ -335,6 +337,7 @@ function summaryBlocks(w: Words, installs: readonly MonitorInstall[], runs: read
         span(run.runId), span(run.blocker!.taskId ?? '—', 'muted'), span(`${marks.states[run.state]} ${w.blockerText(run.blocker!)}`, blockerRole(run.blocker!)),
         span(w.age(run.blocker!.sinceMs)), span(run.scopeId, 'muted'), ...w.installCell(install)])) },
     ...stuck.flatMap(({ value: run }) => run.blocker!.deadlineMs === undefined ? [] : [{ kind: 'line' as const, line: [span(`${run.runId} ${w.sep} ${run.tasks.filter(task => task.decision).map(task => blockerLabel(task.decision!.reason, locale)).join(', ')} ${w.sep} ${expiryText(w.now, run.blocker!.deadlineMs, locale)}`, 'warning')] }]),
+    ...runs.flatMap(({ value: run }) => run.tasks.filter(task => task.evaluation.reason).map(task => ({ kind: 'line' as const, line: [span(`${run.runId}/${task.taskId} ${w.sep} ${t('task.acceptance.noChangeProduced', {}, locale)}`, 'error')] }))),
     ...(failed.length ? [blank, heading(t('monitor.summary.failed', { count: failed.length }, locale)), { kind: 'table' as const, empty: '',
       columns: [w.col(t('monitor.col.run', {}, locale), 0, 20, 44), w.col(t('monitor.col.firstFailure', {}, locale), 1, 24, 90),
         w.col(t('monitor.col.activity', {}, locale), 2, 14, 20), w.col(t('monitor.col.scope', {}, locale), 4, 8, 24), ...w.installColumn(3)],

@@ -19,9 +19,10 @@ export function humanWorkerLines(worker: MonitorWorker, locale: Locale): Monitor
     : h.transcript.state === 'unavailable' ? t('monitor.human.transcriptUnavailable', {}, locale) : t('monitor.human.transcriptMissing', {}, locale);
   return [
     line(t('monitor.human.title', { title: h.title ? safe(h.title) : t('monitor.human.noTitle', {}, locale), source: sources[h.titleEvidence] }, locale), 'strong'),
-    line(t('monitor.human.evaluation', { verdict: verdictLabel(h.evaluation, locale) }, locale), h.evaluation === 'rejected' ? 'warning' : undefined),
-    h.patch.state === 'recorded' ? h.patch.fileCount === 0 ? line(t('monitor.human.emptyPatch', {}, locale), 'warning')
-      : line(t('monitor.human.patch', { count: h.patch.fileCount ?? '—', files: h.patch.files.map(safe).join(', ') }, locale)) : line(patchMissing, 'muted'),
+    line(t('monitor.human.evaluation', { verdict: verdictLabel(h.evaluation, locale) }, locale)
+      + (h.evaluationReason ? ` · ${t('task.acceptance.noChangeProduced', {}, locale)}` : ''), h.evaluation === 'rejected' ? 'warning' : undefined),
+    ...(h.evaluationReason && h.patch.state === 'recorded' && h.patch.fileCount === 0 ? [] : [h.patch.state === 'recorded' ? h.patch.fileCount === 0 ? line(t('monitor.human.emptyPatch', {}, locale), h.evaluation === 'rejected' ? 'warning' : undefined)
+      : line(t('monitor.human.patch', { count: h.patch.fileCount ?? '—', files: h.patch.files.map(safe).join(', ') }, locale)) : line(patchMissing, 'muted')]),
     ...(h.patch.truncated ? [line(t('monitor.human.bounded', {}, locale), 'muted')] : []),
     usage ? line(t('monitor.human.usage', { source: worker.usageEvidence === 'sealed' ? t('monitor.human.sealed', {}, locale) : t('monitor.human.live', {}, locale),
       turns: usage.turns ?? '—', input: usage.tokenUsageRecorded === true ? usage.tokens.input : '—', output: usage.tokenUsageRecorded === true ? usage.tokens.output : '—', cost: usage.costUsd === null ? '—' : usage.costUsd.toFixed(4) }, locale))

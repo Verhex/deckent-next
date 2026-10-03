@@ -19,10 +19,12 @@ export function projectDispatchTerminal(current: AttemptSnapshot, claim: Dispatc
  */
 export function mergeDispatchTerminal(existing: DispatchTerminal, incoming: DispatchTerminal): DispatchTerminal {
   if (existing.handle !== incoming.handle || existing.exitCode !== incoming.exitCode || existing.signal !== incoming.signal ||
-    (existing.interrupted !== null && incoming.interrupted !== null && existing.interrupted !== incoming.interrupted)) {
+    (existing.interrupted !== null && incoming.interrupted !== null && existing.interrupted !== incoming.interrupted) ||
+    (existing.container && incoming.container && JSON.stringify(existing.container) !== JSON.stringify(incoming.container))) {
     throw new DispatchError('DISPATCH_CONFLICT');
   }
-  return existing.interrupted === null && incoming.interrupted !== null ? incoming : existing;
+  const interrupted = existing.interrupted ?? incoming.interrupted, container = existing.container ?? incoming.container;
+  return interrupted !== existing.interrupted || container !== existing.container ? { ...existing, interrupted, ...(container ? { container } : {}) } : existing;
 }
 
 export function projectDispatchCancellation(current: AttemptSnapshot, claim: DispatchClaim): AttemptSnapshot {

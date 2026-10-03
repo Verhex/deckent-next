@@ -9,16 +9,14 @@ import { createLayoutPolicySource } from '#composition/core/policy/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 export async function workspacePatchContext(root: string, input: unknown, options: ConfigLoadOptions, preparing: boolean, access: ScopeAccess, readsTarget = true) {
-  const identity = attemptIdentitySchema.parse(input);
-  const context = await loadConfiguredScopeContext(root, identity.scopeId, options, access);
-  const { config, layout, principal } = context;
-  const policy = createLayoutPolicySource(layout, userInfo().uid, config.inspection.policyMaxBytes), authorization = workTargetAttemptAuthorization(new DispatchPolicyAuthorization(policy), policy, selectWorkTarget(config.execution)?.id ?? null, readsTarget);
+  const identity = attemptIdentitySchema.parse(input), context = await loadConfiguredScopeContext(root, identity.scopeId, options, access);
+  const { config, layout, principal } = context, policy = createLayoutPolicySource(layout, userInfo().uid, config.inspection.policyMaxBytes), authorization = workTargetAttemptAuthorization(new DispatchPolicyAuthorization(policy), policy, selectWorkTarget(config.execution)?.id ?? null, readsTarget);
   await authorization.authorizeIdentity('read-output', identity, principal);
   if (preparing) await authorization.authorizeIdentity('recover-output', identity, principal);
   const artifacts = new FileArtifactStore({ root: await inspectProductDirectory(layout, 'artifacts'), maxBytes: config.artifacts.maxBytes });
   return { ...context, identity, artifacts, authorization, verifier: { async verify() { return principal; } }, scopeMode: selectWorkTarget(config.execution)?.scope?.mode ?? 'warn' };
 }
-export async function prepareConfiguredWorkspacePatch(root: string, input: AttemptIdentity, options: ConfigLoadOptions = {}) {
+async function preparePatch(root: string, input: AttemptIdentity, options: ConfigLoadOptions, release: boolean) {
   try {
     const c = await workspacePatchContext(root, input, options, true, 'write'), execution = c.config.execution;
     if (!execution) throw ErrorRegistry.createError('EXECUTION_NOT_CONFIGURED');
@@ -27,7 +25,7 @@ export async function prepareConfiguredWorkspacePatch(root: string, input: Attem
       const git = { ...execution.git, ...(await resolveGitWorkTarget(resolve(root), execution, c.layout)).git, workspaceRoot: await inspectProductDirectory(c.layout, 'workspaces') };
       const source = new GitWorkspacePatchSource(git, { ...c.config.artifacts.patchPreview, maxBytes: c.config.artifacts.maxBytes }, store);
       const custody = new AttemptCustodyReleaseApplication({ store, artifacts: c.artifacts, verifier: c.verifier, authorization: c.authorization, owner: c.principal.id, retention: execution.retention, ...gitDockerAttemptCustody(git) });
-      const app = new WorkspacePatchApplication(store, c.artifacts, c.verifier, c.authorization, c.config.artifacts.maxBytes, c.scopeMode, custody);
+      const app = new WorkspacePatchApplication(store, c.artifacts, c.verifier, c.authorization, c.config.artifacts.maxBytes, c.scopeMode, release ? custody : undefined);
       return await app.prepare(c.identity, source, store);
     } finally { store.close(); }
   } catch (error) { throw error instanceof ArtifactError ? ErrorRegistry.createError('PATCH_CORRUPT') : queryFailure(error); }
@@ -40,3 +38,6 @@ export async function previewConfiguredWorkspacePatch(root: string, input: Attem
     finally { store.close(); }
   } catch (error) { throw error instanceof ArtifactError ? ErrorRegistry.createError('PATCH_CORRUPT') : queryFailure(error); }
 }
+export const prepareConfiguredWorkspacePatch = (root: string, input: AttemptIdentity, options: ConfigLoadOptions = {}) => preparePatch(root, input, options, true);
+/** Evaluation prepares the delivery patch without releasing execution custody. */
+export const prepareConfiguredEvaluationPatch = (root: string, input: AttemptIdentity, options: ConfigLoadOptions = {}) => preparePatch(root, input, options, false);

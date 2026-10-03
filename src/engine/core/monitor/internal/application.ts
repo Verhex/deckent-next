@@ -84,6 +84,7 @@ export class MonitorApplication {
         ...(usage ? { usage } : {}), ...(usageEvidence ? { usageEvidence } : {}),
         human: { title, tokenUsageRecorded: usage?.tokenUsageRecorded === true, titleEvidence: !title ? 'missing' : input?.title ? 'title' : input?.task ? 'task' : 'acceptance',
           evaluation: known ? projected?.evaluation.verdict ?? null : null,
+          ...(known && projected?.evaluation.reason ? { evaluationReason: projected.evaluation.reason } : {}),
           transcript: content?.transcript ?? { state: 'missing', excerpt: [], truncated: false },
           patch: content?.patch ?? { state: 'missing', files: [], fileCount: null, truncated: false, baseCommit: null }, finalReport: content?.finalReport ?? null,
           startedAtMs: known?.dispatch?.grantedAtMs ?? null, endedAtMs: known?.sealedAtMs ?? known?.observedEndAtMs ?? null,

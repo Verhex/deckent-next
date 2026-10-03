@@ -28,9 +28,11 @@ export const taskEvaluationSchema = z.object({ schemaVersion: z.literal(1), eval
   identity: attemptIdentitySchema, graphRevision: counterSchema.positive(), attemptRevision: counterSchema.positive(),
   sharedNotes: z.object({ digest: z.string().regex(/^[a-f0-9]{64}$/), count: counterSchema.positive() }).strict().optional(),
   handoff: z.discriminatedUnion('status', [z.object({ status: z.literal('valid'), digest: z.string().regex(/^[a-f0-9]{64}$/) }).strict(), z.object({ status: z.literal('invalid'), code: z.enum(['HANDOFF_ARTIFACT_MISMATCH', 'HANDOFF_INVALID']) }).strict()]).optional(),
-  criteria: z.array(criterion).min(1).readonly(), model: taskEvaluationModelSchema.optional(),
-  evidenceDigests: z.array(z.string().regex(/^[a-f0-9]{64}$/)).max(2).readonly().optional(),
-  returnEvidence: z.object({ kind: z.enum(['output', 'model-seal']), digest: z.string().regex(/^[a-f0-9]{64}$/) }).strict().readonly().optional(),
+  criteria: z.array(criterion).min(1).readonly(),
+  /** Host-verified retained patch, not the worker's changedFiles report. The frozen workInput owns no-change policy. */
+  workspaceChange: z.object({ schemaVersion: z.literal(1), patchDigest: z.string().regex(/^[a-f0-9]{64}$/), changedFiles: counterSchema }).strict().readonly().optional(), model: taskEvaluationModelSchema.optional(),
+  evidenceDigests: z.array(z.string().regex(/^[a-f0-9]{64}$/)).max(3).readonly().optional(),
+  returnEvidence: z.object({ kind: z.enum(['output', 'model-seal', 'workspace-patch']), digest: z.string().regex(/^[a-f0-9]{64}$/) }).strict().readonly().optional(),
 }).strict().readonly();
 /** Acceptance consequence: an undeclared model fails the attempt; an attempt with session-event model usage without a sealed
  * 'verified' verdict is held; attempts without per-model evidence stay accepted by their criteria, visibly unverified. */
@@ -68,7 +70,9 @@ export function inspectTaskEvaluation(runInput: unknown, input: unknown) {
   const criteria = task.acceptanceCriteria.map(id => { const value = byId.get(id)!; return { ...value, evidenceIds: [...value.evidenceIds].sort() }; });
   const normalized = taskEvaluationSchema.parse({ ...evaluation, criteria });
   const gate = taskModelConclusion(normalized.model);
-  const conclusion: 'pass' | 'fail' | 'unknown' = gate === 'fail' || criteria.some(value => value.verdict === 'fail') ? 'fail'
-    : gate === 'unknown' || criteria.some(value => value.verdict === 'unknown') ? 'unknown' : 'pass';
+  if (!task.workInput && normalized.workspaceChange) throw new TaskEvaluationError('TASK_EVALUATION_INVALID');
+  const change = task.workInput ? normalized.workspaceChange ? normalized.workspaceChange.changedFiles > 0 || task.workInput.noChangeAllowed === true ? 'pass' : 'fail' : 'unknown' : 'pass';
+  const conclusion: 'pass' | 'fail' | 'unknown' = gate === 'fail' || change === 'fail' || criteria.some(value => value.verdict === 'fail') ? 'fail'
+    : gate === 'unknown' || change === 'unknown' || criteria.some(value => value.verdict === 'unknown') ? 'unknown' : 'pass';
   return Object.freeze({ evaluation: normalized, conclusion });
 }

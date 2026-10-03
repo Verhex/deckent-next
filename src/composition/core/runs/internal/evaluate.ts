@@ -1,3 +1,4 @@
+import { prepareConfiguredEvaluationPatch } from '#composition/core/workspace-patch/index.js';
 import { userInfo } from 'node:os';
 import { inspectProductDirectory, type ConfigLoadOptions } from '#platform/index.js';
 import { FileArtifactStore, openSqliteAttemptStore } from '#adapters/index.js';
@@ -6,7 +7,6 @@ import { authenticate, describeTaskEvaluationReceipt, TaskEvaluationApplication,
 import { createLayoutPolicySource } from '#composition/core/policy/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
-
 /** Installed process-exit evaluator. The current registry cannot replace a Run's pinned definitions. */
 export async function evaluateConfiguredTask(projectRoot: string, input: TaskEvaluationCommand, options: ConfigLoadOptions = {}) {
   try {
@@ -17,11 +17,10 @@ export async function evaluateConfiguredTask(projectRoot: string, input: TaskEva
     const authorization = { authorize: (identity: typeof command.identity, actor: typeof principal) => policy.authorizeIdentity('evaluate', identity, actor) };
     await authorization.authorize(command.identity, await authenticate(verifier, undefined, command.identity.scopeId));
     const store = await openSqliteAttemptStore(await path(), config.storage.sqlite, { now: Date.now, timeoutMs: config.runRuntime.parking.timeoutMs }, 'forbid');
-
     try {
       const artifacts = new FileArtifactStore({ root: await inspectProductDirectory(layout, 'artifacts'), maxBytes: config.artifacts.maxBytes });
       // One retained dispatch-output receipt is the supported producer contract, not a configurable task limit.
-      const application = new TaskEvaluationApplication(store, verifier, authorization, processExitTerminalEvaluator, artifacts, { maxEvidenceItems: 1, maxTotalBytes: config.artifacts.maxBytes }, { now: Date.now, timeoutMs: config.runRuntime.parking.timeoutMs });
+      const application = new TaskEvaluationApplication(store, verifier, authorization, processExitTerminalEvaluator, artifacts, { maxEvidenceItems: 1, maxTotalBytes: config.artifacts.maxBytes }, { now: Date.now, timeoutMs: config.runRuntime.parking.timeoutMs }, undefined, async identity => { await prepareConfiguredEvaluationPatch(projectRoot, identity, options); });
       return Object.freeze({ schemaVersion: 1 as const, layout, evaluation: describeTaskEvaluationReceipt(await application.execute(command)) });
     } finally { store.close(); }
   } catch (error) { throw queryFailure(error); }

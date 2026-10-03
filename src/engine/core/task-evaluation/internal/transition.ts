@@ -27,6 +27,7 @@ export function proposeTaskEvaluationCommit(runInput: unknown, attemptInput: unk
   if (dispatch.launch !== 'granted' || !dispatch.terminal || !dispatch.output || dispatch.terminal.interrupted === true) notReady();
   const observed = attempt.lastObservation.result;
   if (dispatch.terminal.exitCode !== observed.exitCode || dispatch.terminal.signal !== observed.signal) stale();
+  if (evaluation.workspaceChange && evaluation.workspaceChange.patchDigest !== dispatch.patch?.digest) stale();
   const result = applyTaskEvaluation(run, expectedRunRevision, evaluation, timing);
   return Object.freeze({ ...result, output: dispatch.output });
 }

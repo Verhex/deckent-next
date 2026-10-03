@@ -7,11 +7,23 @@ Owner 2026-09-21: dar dilimler ürün hedefini küçültmez; mevcut kararlar yen
 
 ## MONITOR-H1 — human worker evidence (2026-10-03; source candidate on lane/monitor-h1)
 
+BATCH32-ACCEPT integration candidate (2026-10-03): ACCEPT-EVIDENCE `0b2bd6b7` (Sol review 2319
+pending) is resolved onto `c58a2fa4` = main `97590485` + H0/H1 `0293bcb3` + H1-R. RunView pool
+observation, AOF receipts/shared notes and CI corrections remain; acceptance additionally consumes
+`workspaceChange` v1 and retained per-attempt container evidence. `MonitorWorker.human.evaluationReason`
+is an optional projection of the same task evaluation's `no-change-produced`, never derived from a
+worker report or patch count. The worker detail shows that cause on its evaluation line and suppresses
+the duplicate empty-patch warning; explicitly allowed empty patches retain descriptive file evidence.
+H1-R sealed/live/none/invalid/unavailable provenance and tokenUsageRecorded remain unchanged.
+Proof and exact local check limits: external `proof/BATCH32-2026-10-03/accept-resolve.md`; lead owns
+staging/cherry-pick continuation and remaining host checks. Independent combined review, landing and
+live acceptance remain open.
+
 BATCH32-MONITOR integration candidate (2026-10-03): H0/H1 `301f5f9b` is resolved onto main
 `97590485`, retaining AOF-HANDOFF exact-identity `handoffStart` receipts and task handoff projection
 alongside human worker evidence. The source reviews reported by the task remain bounded to their
-original candidates; this combined diff has no independent verdict. Lead applies H1 R1/R2 `58fa3f74`
-next, then verifies the final candidate. Current resolution/checks and sandbox limits are recorded in
+original candidates; this combined diff has no independent verdict. H1 R1/R2 is now present in
+`c58a2fa4`; the current BATCH32-ACCEPT integration below supersedes that next-step pointer. Current resolution/checks and sandbox limits are recorded in
 external `proof/BATCH32-2026-10-03/monitor-resolve.md`; this step does not claim landing or live acceptance.
 
 The read-only `MonitorSnapshot` v1 gains additive optional `MonitorWorker.human` evidence, joined only on the full
@@ -23,7 +35,8 @@ retained patch or report read. No new state transition, authority, ledger migrat
 REVIEW 2304 on exact `301f5f9b` found two gaps in the following target: rejected sealed evidence loses its status in
 composition and workers list/watch can fill it from live usage; live explicit zero is mistaken for absent tokens, while
 event-less summaries can display accumulated zero as measured. MONITOR-H1-R corrects these producer-to-surface paths;
-author targeted verification is recorded in `proof/MONITOR-H1-2026-10-03/monitor-h1-r.md`; independent re-review remains pending.
+author targeted verification is recorded in `proof/MONITOR-H1-2026-10-03/monitor-h1-r.md`. PLAN records Sol 2316 PASS
+on the original `58fa3f74` candidate; that verdict does not carry to this combined BATCH32 diff.
 
 H0 reconciles the D5 unified candidate against `0388c2cf`: sealed usage survives released sidecars through the existing
 worker observation path; sealed evidence wins over live and invalid sealed evidence never silently falls back. H1 also
@@ -3133,6 +3146,34 @@ onto the ledger catalog; Codex/Cursor output-side model evidence (none documente
   use it yet (proposal `proof/K5-POOL-HOLD-2026-10-01/docs-delta.md` §3); G5/G6 are operating rules (after a switch reopen terminals and MCP host
   sessions; never `/service-restart` from an old terminal; old processes fail on a protocol bump); the manifest is checked only before `switch`,
   not at every start; the install root must join the sealed set in U2-1. Evidence `proof/DEV-U2-0-2026-09-30/`.
+
+### ACCEPT-EVIDENCE source candidate (2026-10-03; lane/accept-evidence, base 9740baae)
+
+Coding `workInput` adds optional `noChangeAllowed`; only explicit `true` allows an empty verified workspace patch.
+This is task policy frozen in the existing graph contract; registry-selected process-exit criteria remain pure and unchanged.
+The TaskEvaluation owner composes those criteria with `workspaceChange` v1 (`patchDigest`, `changedFiles`), read from the
+same bounded, exact-identity retained patch used for delivery, never from a worker report. Empty patch without the exception
+means task `failed` with `notAcceptedReason: no-change-produced`; absent evidence parks as evaluation-not-ready; corrupt
+or foreign evidence refuses evaluation. The existing patch owner prepares missing evidence with read-output/recover-output
+and work-target policy, without custody release; replay returns the receipt without recapture. Patch digest is a third bounded
+recovery token alongside output/model seal, enabling one return after patch preparation. Inspect and monitor render EN/TR.
+Graph v2 and tasks without workInput keep their existing criteria; analysis-type policy and migration of fixed native profiles
+are not inferred. Legacy evaluation receipts replay unchanged. New fields are additive to current strict schemas; older builds
+refuse records carrying these fields, so downgrades across new evidence require the existing governed backup/restore path.
+
+Docker terminal observations add `container` v1 to the existing dispatch terminal: immutable container Id, image digest,
+nullable daemon start/end timestamps (nanoseconds preserved), and the frozen CPU/memory/pids/tmp resource profile.
+The labelled exact-request observation is carried by execute/cancel/reconcile into the same attempt-bound dispatch record.
+A conflicting later descriptor is refused; missing historical evidence is not fabricated. Container/workspace release never
+removes that dispatch record. Inspect workers/inventory and monitor lastAttempt expose it after release/reopen. The record
+contains no argv, mounts, environment, endpoint or secrets; one bounded descriptor per dispatch, no new history table or
+sampling loop. Existing ledger storage has no attempt-row age/count prune; existing custody sweep/page/monitor limits stay
+unchanged. This adds constant bytes to already retained rows, not a claim of globally bounded ledger growth. It enables
+joining externally sampled metrics, but does not itself measure CPU/memory or prove engine attribution.
+
+Author evidence and open checks: external `proof/ACCEPT-EVIDENCE-2026-10-03/review.md`. Independent review, lead landing,
+hosted OS coverage and real Docker producer/custody checks remain distinct from deterministic adapter tests. No N1 command
+or live service mutation is admitted by this source change.
 
 ### Typed work input and coding templates (K3 = A; owner 2026-09-30, Jev 97e59d70; lane Jev 22ea0d2c; nineteenth batch)
 

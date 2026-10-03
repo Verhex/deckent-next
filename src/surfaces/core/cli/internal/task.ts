@@ -67,7 +67,8 @@ async function evaluateTask(values: ReadonlyMap<string, string>, context: Comman
       failed: t('cli.run.inspect.states.failed', {}, locale), cancelled: t('cli.run.inspect.states.cancelled', {}, locale),
       reconciling: t('cli.run.inspect.states.reconciling', {}, locale), skipped: t('cli.run.inspect.states.skipped', {}, locale),
       'awaiting-decision': t('cli.run.inspect.states.awaitingDecision', {}, locale) };
-    return t('cli.task.evaluate.result', { task: taskId, command: commandId, phase: phases[task.phase], revision: data.evaluation.run.revision }, locale);
+    return [t('cli.task.evaluate.result', { task: taskId, command: commandId, phase: phases[task.phase], revision: data.evaluation.run.revision }, locale),
+      ...(task.notAcceptedReason ? [t('task.acceptance.noChangeProduced', {}, locale)] : [])].join('\n');
   } });
 }
 

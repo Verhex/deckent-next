@@ -1,10 +1,10 @@
 import { artifactReceiptSchema, type ArtifactReceipt } from '#capabilities/index.js';
 import { z } from 'zod';
 import { identitySchema, counterSchema, processExitCauseShape, isValidExitCause, type AttemptIdentity, type VerifiedPrincipal } from '#domain/index.js';
-import { sandboxRequestSchema, supervisorProfileSchema } from '#engine/core/supervisor/index.js';
+import { sandboxRequestSchema, supervisorProfileSchema, containerEvidenceSchema } from '#engine/core/supervisor/index.js';
 const claimObject = z.object({ request: sandboxRequestSchema, owner: identitySchema }).strict();
 export const dispatchClaimSchema = claimObject.readonly();
-export const dispatchTerminalSchema = z.object({ handle: identitySchema, ...processExitCauseShape, interrupted: z.boolean().nullable() }).strict().refine(isValidExitCause, 'ATTEMPT_EXIT_CAUSE_INVALID').readonly();
+export const dispatchTerminalSchema = z.object({ handle: identitySchema, ...processExitCauseShape, container: containerEvidenceSchema.optional(), interrupted: z.boolean().nullable() }).strict().refine(isValidExitCause, 'ATTEMPT_EXIT_CAUSE_INVALID').readonly();
 const actorSchema = z.object({ id: identitySchema, issuer: identitySchema, subject: identitySchema }).strict().readonly();
 export const dispatchAdmissionSchema = claimObject.extend({ profile: supervisorProfileSchema }).strict().readonly();
 export const dispatchRecordSchema = claimObject.extend({

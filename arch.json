@@ -431,7 +431,8 @@
         "src/adapters/core/git-patch",
         "src/adapters/core/git-workspace",
         "src/engine/core/workspace-patch",
-        "src/engine/core/workspaces"
+        "src/engine/core/workspaces",
+        "src/composition/core/workspace-patch"
       ],
       "plan": "EXECUTION"
     },
@@ -691,7 +692,8 @@
         "src/engine/core/supervisor",
         "src/domain/core/worker-event",
         "src/engine/core/worker-observation",
-        "src/engine/core/handoff-observation"
+        "src/engine/core/handoff-observation",
+        "src/engine/core/workspace-patch"
       ],
       "plan": "CONTRACT"
     },
@@ -1896,7 +1898,8 @@
         "src/platform/core/output",
         "src/engine/core/runs",
         "src/engine/core/handoff-observation",
-        "src/platform/core/errors"
+        "src/platform/core/errors",
+        "src/engine/core/supervisor"
       ],
       "plan": "MONITOR"
     },

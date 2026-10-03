@@ -158,7 +158,7 @@ function attempt(db: DatabaseSync, version: number, binding: MonitorLedgerRun['s
     provider: evaluated?.provider ?? pin?.provider ?? record?.profile.adapterId ?? null, model,
     sealedAtMs: sealed && sealed.identity.attemptId === attemptId ? sealed.sealedAt : null,
     dispatch: record ? Object.freeze({ launch: record.launch, grantedAtMs: record.grant?.grantedAt ?? null, outputRecorded: !!record.output,
-      terminal: record.terminal ? Object.freeze({ exitCode: record.terminal.exitCode, signal: record.terminal.signal ?? null, interrupted: record.terminal.interrupted }) : null }) : null });
+      terminal: record.terminal ? Object.freeze({ ...(record.terminal.container ? { container: record.terminal.container } : {}), exitCode: record.terminal.exitCode, signal: record.terminal.signal ?? null, interrupted: record.terminal.interrupted }) : null }) : null });
 }
 
 /** Current pending approvals (status inside the sealed snapshot; the MAC is not verified here, so the summary is display data only). */

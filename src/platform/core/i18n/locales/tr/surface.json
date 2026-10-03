@@ -566,5 +566,7 @@
   "monitor.detail.delivery": "Teslim/benimseme: {state} · commit {commit}",
   "monitor.detail.deliveryNone": "Teslim/benimseme: birleştirme, teslim ya da benimseme kaydı yok.",
   "monitor.legend.approx": "süre host'un gözlediği worker çıkışında biter (mühürlü log bitişi yok)",
-  "monitor.map.layer.globalObserver": "genel (gözlemcinin global katmanı; bu kurulumunki olmayabilir)"
+  "monitor.map.layer.globalObserver": "genel (gözlemcinin global katmanı; bu kurulumunki olmayabilir)",
+  "task.acceptance.noChangeProduced": "Kabul edilmedi: değişiklik üretilmedi.",
+  "monitor.detail.container": "Konteyner {id} · imaj {image} · başlangıç {started} · bitiş {ended} · kaynak sınırları: CPU {cpus} · bellek {memory} B"
 }
