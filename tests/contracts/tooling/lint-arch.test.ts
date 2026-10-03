@@ -16,7 +16,7 @@ type FixtureDependencies = { dependencies?: Record<string, string>; devDependenc
 const emptyRegistry = { schemaVersion: 2, policy: { reviewIntervalDays: { P0: 30, P1: 60, P2: 90 }, licenses: { runtime: ['MIT'], dev: ['MIT'] }, failSeverities: ['HIGH', 'CRITICAL'] }, dependencies: {}, platform: {}, acceptedRisks: [] as unknown[] };
 async function fixture(files: Record<string, string>, tiersEnforce = true, importsEnforce = false, deps: FixtureDependencies = {}): Promise<string> {
   const root = await mkdtemp(join(tmpdir(), 'lint-arch-')); roots.push(root);
-  const arch = JSON.parse(await (await import('node:fs/promises')).readFile(ARCH, 'utf8')) as { hardcodeRatchet: { frozen: string[]; allowlist: string }; tiers: { enforce: boolean }; imports: { enforce: boolean }; units: Record<string, { dependencies: string[]; plan: string }>; packages: Record<string, unknown>; i18n: { catalogDir: string; families: string[] } };
+  const arch = JSON.parse(await (await import('node:fs/promises')).readFile(ARCH, 'utf8')) as { hardcodeRatchet: { frozen: string[]; allowlist: string }; tiers: { enforce: boolean }; imports: { enforce: boolean }; markdown: { trackedAllow: string[] }; units: Record<string, { dependencies: string[]; plan: string }>; packages: Record<string, unknown>; i18n: { catalogDir: string; families: string[] } };
   arch.tiers.enforce = tiersEnforce;
   arch.imports.enforce = importsEnforce;
   await cp(fileURLToPath(new URL('../../../scripts', import.meta.url)), join(root, 'scripts'), { recursive: true });
@@ -28,7 +28,8 @@ async function fixture(files: Record<string, string>, tiersEnforce = true, impor
   if (deps.registry !== null) await writeFile(join(root, 'dependencies.json'), JSON.stringify(deps.registry ?? emptyRegistry));
   await writeFile(join(root, 'tsconfig.json'), JSON.stringify({ compilerOptions: { baseUrl: '.', paths: Object.fromEntries(packages.map(p => [`#${p}/*`, [`./src/${p}/*`]])) } }));
   const catalogs = Object.fromEntries(arch.i18n.families.flatMap(family => ['en', 'tr'].map(locale => [`${arch.i18n.catalogDir}/locales/${locale}/${family}.json`, '{}'])));
-  const fixtureFiles = { 'README.md': '#', 'ARCHITECTURE.md': '#', 'PLAN.md': '| ID | Scope |\n|---|---|\n| FOUNDATION | fixture |', 'COMPLETED-PLAN.md': '#', 'CHANGELOG.md': '#', ...catalogs, ...files };
+  const requiredDocuments = Object.fromEntries(arch.markdown.trackedAllow.map(path => [path, '#']));
+  const fixtureFiles = { ...requiredDocuments, 'README.md': '#', 'ARCHITECTURE.md': '#', 'PLAN.md': '| ID | Scope |\n|---|---|\n| FOUNDATION | fixture |', 'COMPLETED-PLAN.md': '#', 'CHANGELOG.md': '#', ...catalogs, ...files };
   const sourceFiles = Object.keys(fixtureFiles).filter(path => /\.tsx?$/.test(path));
   const unit = (path: string) => { const parts = path.split('/'); return parts[0] === 'src' && parts.length >= 5 ? parts.slice(0, 4).join('/') : null; };
   const dependency = (path: string) => { const parts = path.split('/'); return parts[0] !== 'src' ? null : parts.length >= 5 ? parts.slice(0, 4).join('/') : parts.length === 3 ? `src/${parts[1]}` : null; };
@@ -73,7 +74,7 @@ describe('lint-arch tier contract', () => {
       'src/engine/core/dispatch/index.ts': "export {\n  dispatchRecordV2Schema,\n  TaskGraphV3,\n  ProviderV2Client,\n} from './internal/version-two.js';\n",
     });
     const rejectedResult = await lint(rejected);
-    expect(rejectedResult.code).toBe(1);
+    expect(rejectedResult.code, rejectedResult.out).toBe(1);
     expect(rejectedResult.out).toContain('[versioning] src/engine/core/dispatch/internal/version-two.ts');
     expect(rejectedResult.out).toContain('parallel versioned contract API');
     expect(rejectedResult.out).not.toContain('ProviderV2Client');
@@ -88,7 +89,7 @@ describe('lint-arch tier contract', () => {
       'src/adapters/core/sqlite-ledger/internal/migration-v5.ts': 'export const dispatchRecordV2Schema = {} as const;\n',
     });
     const historyResult = await lint(history);
-    expect(historyResult.code).toBe(0);
+    expect(historyResult.code, historyResult.out).toBe(0);
 
     const misplaced = await fixture({
       'src/engine/core/dispatch/index.ts': 'export {};\n',
@@ -97,7 +98,7 @@ describe('lint-arch tier contract', () => {
       'src/adapters/core/sqlite-ledger/internal/version-two.ts': 'export const dispatchRecordV2Schema = {} as const;\n',
     });
     const misplacedResult = await lint(misplaced);
-    expect(misplacedResult.code).toBe(1);
+    expect(misplacedResult.code, misplacedResult.out).toBe(1);
     expect(misplacedResult.out).toContain('migration-v5.ts');
     expect(misplacedResult.out).toContain('[versioning] src/adapters/core/sqlite-ledger/internal/version-two.ts');
   });
@@ -110,7 +111,7 @@ describe('lint-arch tier contract', () => {
     });
     const result = await lint(root);
     expect(result.out).toContain('tiers=enforced');
-    expect(result.code).toBe(0);
+    expect(result.code, result.out).toBe(0);
   });
   it('rejects a core module importing base, a bypass of a unit index, and a stray file under the package root', async () => {
     const root = await fixture({
@@ -121,7 +122,7 @@ describe('lint-arch tier contract', () => {
       'src/platform/index.ts': "export { x } from './core/errors/index.js';\n",
     });
     const result = await lint(root);
-    expect(result.code).toBe(1);
+    expect(result.code, result.out).toBe(1);
     expect(result.out).toContain('[tier-direction]');
     expect(result.out).toContain('[unit-api]');
     expect(result.out).toContain('[layout] src/platform/stray.ts');
@@ -130,7 +131,7 @@ describe('lint-arch tier contract', () => {
     const root = await fixture({ 'src/platform/stray.ts': "export const s = 0;\n", 'src/platform/index.ts': "export { s } from './stray.js';\n" }, false);
     const result = await lint(root);
     expect(result.out).toContain('tiers=off');
-    expect(result.code).toBe(0);
+    expect(result.code, result.out).toBe(0);
   });
   it('rejects provider credential environment literals including the former registry exception', async () => {
     const formerRegistry = await fixture({
@@ -138,7 +139,7 @@ describe('lint-arch tier contract', () => {
       'src/adapters/core/registry/internal/auth.ts': "export const key = 'ANTHROPIC_API_KEY';\n",
     });
     const registryResult = await lint(formerRegistry);
-    expect(registryResult.code).toBe(1);
+    expect(registryResult.code, registryResult.out).toBe(1);
     expect(registryResult.out).toContain('[literal]');
     const rejected = await fixture({ 'src/platform/core/config/index.ts': "export const key = 'ANTHROPIC_API_KEY';\n" });
     expect((await lint(rejected)).out).toContain('[literal]');
@@ -152,7 +153,7 @@ describe('lint-arch tier contract', () => {
     ];
     for (const [i, files] of cases.entries()) {
       const result = await lint(await fixture(files));
-      expect(result.code).toBe(1);
+      expect(result.code, result.out).toBe(1);
       expect(result.out).toContain(i === 2 ? '[i18n-placeholder]' : '[i18n-duplicate]');
     }
   });
@@ -291,7 +292,7 @@ describe('lint-arch external dependency contract', () => {
     }, true, false, owned);
     const result = await lint(root);
     expect(result.out).not.toMatch(/\[(?:external-[a-z]+|domain-purity|dependency-registry)\]/);
-    expect(result.code).toBe(0);
+    expect(result.code, result.out).toBe(0);
   });
 
   it('rejects unowned, undeclared, dev-only, unprefixed built-in, non-literal and stale-owner imports', async () => {
@@ -304,7 +305,7 @@ describe('lint-arch external dependency contract', () => {
       'src/engine/core/run/index.ts': "import { z } from 'shared-lib'; export const v = z;\n",
     }, true, false, owned);
     const result = await lint(root);
-    expect(result.code).toBe(1);
+    expect(result.code, result.out).toBe(1);
     expect(result.out).toMatch(/\[external-owner\] src\/surfaces\/core\/view\/index\.ts:1 — acme-lib may only be imported by \[src\/adapters\/core\/acme\]/);
     expect(result.out).toMatch(/\[external-owner\] src\/surfaces\/core\/view\/index\.ts:3 — acme-lib/);
     expect(result.out).toMatch(/\[external-undeclared\] src\/surfaces\/core\/view\/index\.ts:1 — ghost-lib/);
@@ -325,7 +326,7 @@ describe('lint-arch external dependency contract', () => {
 
   it('fails closed on a missing or invalid registry and on drift from package.json', async () => {
     const missing = await lint(await fixture({}, true, false, { registry: null }));
-    expect(missing.code).toBe(1);
+    expect(missing.code, missing.out).toBe(1);
     expect(missing.out).toContain('[dependency-registry] dependencies.json');
     const drift = await lint(await fixture({ 'src/adapters/core/acme/index.ts': "import { a } from 'acme-lib'; export const v = a;\n" }, true, false, {
       dependencies: { 'acme-lib': '1.0.0', 'extra-lib': '1.0.0' }, devDependencies: { 'dev-lib': '1.0.0' },
@@ -334,7 +335,7 @@ describe('lint-arch external dependency contract', () => {
         'late-lib': entry('dev', ['package.json'], { criticality: 'P0', nextReview: '2027-01-01' }),
         'bad-lib': { kind: 'runtime', owners: [] } }),
     }));
-    expect(drift.code).toBe(1);
+    expect(drift.code, drift.out).toBe(1);
     expect(drift.out).toContain('[dependency-registry] package.json — extra-lib is declared in package.json but missing from dependencies.json');
     expect(drift.out).toContain('[dependency-registry] dependencies.json — dev-lib is kind "runtime" but package.json declares it in devDependencies');
     expect(drift.out).toContain('[dependency-registry] dependencies.json — dev-lib owner src/nowhere/core/x is not an arch.json unit or package');
@@ -349,7 +350,7 @@ describe('lint-arch external dependency contract', () => {
       dependencies: { 'acme-lib': '1.0.0' }, registry: registry({ 'acme-lib': entry('runtime', ['src/adapters/core/acme']) },
         { bwrap: { requirement: '>=0.13', owners: ['src/adapters/core/acme'], purpose: 'p', criticality: 'P1', alternatives: [], ownSolution: 'none', ...review } }) });
     const due = await lint(root, { ...process.env, DECKENT_DEPS_TODAY: '2026-12-01' });
-    expect(due.code).toBe(0);
+    expect(due.code, due.out).toBe(0);
     expect(due.out).toContain('⚠ [dependency-review] dependencies.json — acme-lib review is overdue (nextReview 2026-10-29)');
     expect(due.out).toContain('⚠ [dependency-review] dependencies.json — platform bwrap review is overdue (nextReview 2026-10-29)');
     const fresh = await lint(root, { ...process.env, DECKENT_DEPS_TODAY: '2026-10-01' });
@@ -362,7 +363,7 @@ describe('lint-arch external dependency contract', () => {
       'node_modules/acme-lib/dist/index.js.map': JSON.stringify({ sources: ['../../../node_modules/.pnpm/fast-uri@3.1.0/node_modules/fast-uri/index.js'] }) };
     const undeclared = await lint(await fixture(files, true, false, { dependencies: { 'acme-lib': '1.0.0' },
       registry: registry({ 'acme-lib': entry('runtime', ['src/adapters/core/acme']) }) }));
-    expect(undeclared.code).toBe(1);
+    expect(undeclared.code, undeclared.out).toBe(1);
     expect(undeclared.out).toContain('[external-embedded] dependencies.json — acme-lib embeds undeclared fast-uri@3.1.0');
     const declared = await lint(await fixture(files, true, false, { dependencies: { 'acme-lib': '1.0.0' },
       registry: registry({ 'acme-lib': entry('runtime', ['src/adapters/core/acme'], { embedded: [{ name: 'fast-uri', version: '3.1.0' }, { name: 'ajv', version: '8.18.0' }] }) }) }));
@@ -377,14 +378,14 @@ describe('lint-arch external dependency contract', () => {
     const acme = entry('runtime', ['src/adapters/core/acme'], { embedded: [{ name: 'fast-uri', version: '3.1.0' }] });
     const ok = await fixture(files, true, false, { dependencies: { 'acme-lib': '1.0.0' }, registry: registry({ 'acme-lib': acme }, {}, [risk({})]) });
     const valid = await lint(ok, { ...process.env, DECKENT_DEPS_TODAY: '2026-10-01' });
-    expect(valid.code).toBe(0);
+    expect(valid.code, valid.out).toBe(0);
     expect(valid.out).not.toContain('accepted');
     const expired = await lint(ok, { ...process.env, DECKENT_DEPS_TODAY: '2026-10-30' });
-    expect(expired.code).toBe(0);
+    expect(expired.code, expired.out).toBe(0);
     expect(expired.out).toContain('⚠ [accepted-risk] dependencies.json — accepted risk r expired 2026-10-29; deps-watch fails on its advisories again');
     const bad = await lint(await fixture(files, true, false, { dependencies: { 'acme-lib': '1.0.0' }, registry: registry({ 'acme-lib': acme }, {}, [
       risk({ id: 'no-evidence', evidence: [] }), risk({ id: 'long', expires: '2026-10-30' }), risk({ id: 'foreign', carriers: ['other@1.0.0', 'acme-lib@1.0.0'], version: '3.0.0' })]) }));
-    expect(bad.code).toBe(1);
+    expect(bad.code, bad.out).toBe(1);
     expect(bad.out).toContain('[dependency-registry] dependencies.json — acceptedRisks.0.evidence: an accepted risk needs at least one evidence reference');
     expect(bad.out).toContain('[dependency-registry] dependencies.json — accepted risk long window 31 days exceeds 30 for HIGH');
     expect(bad.out).toContain('accepted risk foreign carrier other@1.0.0 is neither "tree" nor a runtime dependency that embeds fast-uri@3.0.0');

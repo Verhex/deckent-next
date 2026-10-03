@@ -14,8 +14,11 @@ async function open(props: Partial<WorklineProps> = {}, columns = 200) {
   await until(() => view.stdout.text.includes('READY'), 'ready');
   const type = async (...chunks: string[]) => {
     for (const chunk of chunks) for (const char of chunk.startsWith(ESC) ? [chunk] : [...chunk]) {
+      // A rendered frame precedes passive useInput subscription changes. Await Ink's documented flush before the next key.
+      await view.instance.waitUntilRenderFlush();
       view.stdin.write(char); await settle(chunk === ESC ? 40 : 3);
     }
+    await view.instance.waitUntilRenderFlush();
   };
   return { ...view, type, frame: () => view.stdout.frame };
 }

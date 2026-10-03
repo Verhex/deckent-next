@@ -1,5 +1,6 @@
+import { existsSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
-import { mkdir, mkdtemp, realpath, rm, symlink, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -77,6 +78,14 @@ describe('derived self-source floor', () => {
     const root = await repository(); await mkdir(join(root, 'dist')); await writeFile(join(root, 'dist/a.js'), 'before');
     const scope = await createWorkspaceScope(root), scratch = await createWorkspaceScope(await repository());
     const writes = createShellWriteContext(scope, [scratch], isSelfSourceWriteFloored);
+    if (process.platform !== 'linux' || !existsSync('/proc/self/fd')) {
+      expect(await scope.resolve('dist/a.js')).toEqual({ ok: false, error: 'platform-unsupported' });
+      expect(await scope.open('dist', 'dir')).toEqual({ ok: false, error: 'platform-unsupported' });
+      expect(await writes.checkWrite({ text: 'dist/a.js', quoted: false, glob: false, tilde: false }, 'file')).toMatchObject({ ok: false, reasonCode: 'PATH_UNRESOLVED' });
+      expect(await readFile(join(root, 'dist/a.js'), 'utf8')).toBe('before');
+      console.log('verify-not-run: ' + JSON.stringify({ file: 'tests/contracts/adapters/self-source-floor.test.ts', test: expect.getState().currentTestName, state: 'skipped', variant: 'descriptor-backed-write-classification', reason: 'WORKSPACE_PLATFORM_UNSUPPORTED: platform-unsupported refusal asserted; Linux descriptor-backed positive remains required' }));
+      return;
+    }
     expect(await writes.checkWrite({ text: 'dist/a.js', quoted: false, glob: false, tilde: false }, 'file')).toMatchObject({ ok: false, reasonCode: 'PATH_PROTECTED' });
     expect(await createShellWriteContext(scope).checkWrite({ text: 'dist/a.js', quoted: false, glob: false, tilde: false }, 'file')).toEqual({ ok: true });
     expect(await writes.checkWrite({ text: join(scratch.root, 'a.js'), quoted: false, glob: false, tilde: false }, 'file')).toEqual({ ok: true });

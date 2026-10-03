@@ -3,7 +3,7 @@ import { StdioClientTransport } from '@modelcontextprotocol/client/stdio';
 import { execFile } from 'node:child_process';
 import { access, mkdtemp, mkdir, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { isAbsolute, join, resolve } from 'node:path';
 import { promisify } from 'node:util';
 import { pathToFileURL } from 'node:url';
 import { afterEach, expect, it } from 'vitest';
@@ -45,7 +45,12 @@ it('runs compiled CLI through a Unicode spaced symlink', async () => {
   expect(output.stderr).toBe('');
   // The compiled binary also names the exact source tree (and commit when built from a checkout) it was built from.
   // SELF-SOURCE-FLOOR: a checkout build may also name its source repository's git common dir (absolute path), never a relative one.
-  expect(output.stdout.trim()).toMatch(/^deckent v\d+\.\d+\.\d+(?:[-+][\w.-]+)? \| Node .+\nbuild [0-9a-f]{12} · commit (?:[0-9a-f]{12}|-)(?: \(uncommitted source changes\))?(?: · sourceCommonDir \/[^\n]+)?$/);
+  const [version, build] = output.stdout.trim().split('\n');
+  expect(version).toMatch(/^deckent v\d+\.\d+\.\d+(?:[-+][\w.-]+)? \| Node .+$/);
+  expect(build).toMatch(/^build [0-9a-f]{12} · commit (?:[0-9a-f]{12}|-)(?: \(uncommitted source changes\))?(?: · sourceCommonDir [^\n]+)?$/);
+  const sourceCommonDir = build?.split(' · sourceCommonDir ')[1];
+  if (sourceCommonDir !== undefined) expect(isAbsolute(sourceCommonDir)).toBe(true);
+  expect(output.stdout.trim().split('\n')).toHaveLength(2);
 });
 
 it('starts compiled MCP through a Unicode spaced symlink and serves initialization/tool discovery', async () => {

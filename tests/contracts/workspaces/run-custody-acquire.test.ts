@@ -50,7 +50,7 @@ it('requires POSIX private Git custody: adopts an existing typed lease into miss
     source: { sourceFingerprint: recorded.sourceFingerprint } });
 });
 
-it.each(['new-attempt', 'recorded-attempt'] as const)('rejects changed adapter version before allocation for %s', async (mode, context) => {
+it.for(['new-attempt', 'recorded-attempt'] as const)('rejects changed adapter version before allocation for %s', async (mode, context) => {
   if (process.platform === 'win32') context.skip('GIT_PRIVATE_CUSTODY_UNSUPPORTED: GitRunWorkspaceProvider requires POSIX directory and process custody');
   const f = await fixture(); const provider = new GitRunWorkspaceProvider(new GitWorkspaceBroker(f.brokerOptions));
   await new RunWorkspaceAcquisitionApplication(f.store, provider).acquire(f.identities[0]);

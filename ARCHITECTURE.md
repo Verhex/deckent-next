@@ -1257,7 +1257,7 @@ when the existing Linux `/proc/self/fd` capability is available. Portable policy
 remain active; this partition does not implement macOS/Windows custody or grant platform acceptance.
 **CI-FIX signal (owner 2026-10-03; source candidate, hosted acceptance pending).** All six matrix cells
 are required workflow failures, named `required verify (<os>, node <24|26>)`; `continue-on-error` is absent.
-This does not implement GitHub branch protection: the lead must select those checks in repository rules.
+Workflow YAML does not implement branch protection; the owner reports the main ruleset active (2026-10-03).
 Same-ref concurrency cancels superseded runs. Existing pull_request remains secret-free with read-only contents
 and no persisted checkout credential. Full history prevents source-history ratchets from silently losing CI coverage;
 Windows disables Git line-ending conversion before checkout so locked license/golden bytes remain exact.
@@ -1278,6 +1278,18 @@ Windows rendering fixtures exercise bounded stdin with visible file-variant excl
 Packaging evidence normalizes metadata separators and canonicalizes only declaration build roots.
 No new native macOS/Windows custody is claimed; typed refusal tests and portable behavior stay separate.
 Sources/versions dated 2026-10-03 and fresh proof limits live in external `proof/CI-FIX-2026-10-03/`.
+R2 starts from the first all-required run `37111243380` on `38c9dae1`: all six cells failed, so R1 review
+and local checks do not establish hosted acceptance. Fixture roots must satisfy the current architecture
+registry, including required Markdown documents; full history/canonical temp alone cannot repair a stale fixture.
+New or materially changed contract tests must exercise portable behavior on every matrix OS, or declare an
+existing typed platform capability, assert its refusal before effects and retain a `verify-not-run` record for
+the unavailable positive variant. Linux positives remain active; no untyped platform skip or security-floor
+relaxation admits a green result. Config-lock owner-metadata EPERM/EACCES is bounded contention, never
+evidence of a dead owner; only a successful later exclusive mkdir admits work, and persistent unreadability
+ends in CONFIG_WRITE_LOCKED. Tracked-file unavailability carries a typed execution diagnostic without
+changing its measurement/security bounds. Build/declaration/CI temp identities use native canonical paths;
+the fast architecture scanner waits for stdout delivery before exiting, including large inventories.
+R2 implementation/verification evidence: external `proof/CI-FIX-R2-2026-10-03/`.
 
 **CI-WINDOWS-MACOS (owner 2026-10-01; verification tooling).** Each CI matrix job has a 30-minute ceiling,
 with ~2.1x headroom over run36884716187's successful Linux jobs (14m05s/14m20s); cells cannot inherit

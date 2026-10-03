@@ -38,8 +38,8 @@ class Screen extends Writable {
   override _write(chunk: Buffer, _encoding: string, done: () => void) {
     const text = chunk.toString('utf8');
     this.text += text;
-    // Bracketed-paste on/off is a separate write. It must not replace the latest screen.
-    if (!isPasteToggle(text)) this.frame = text;
+    // Paste toggles and waitUntilRenderFlush's empty write are not visible frames.
+    if (text.length > 0 && !isPasteToggle(text)) this.frame = text;
     done();
   }
 }

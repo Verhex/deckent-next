@@ -173,6 +173,8 @@ describe('ledger buffer (Ink Static contract)', () => {
     view.stdin.write('/context\r'); await until(() => view.stdout.text.includes('CTX 1500/6000 25% 2'), 'context line');
     view.stdin.write('/resume\r'); await until(() => view.stdout.text.includes('> SESSION 1 11111111'), 'picker');
     view.stdin.write('\u001b'); await until(() => !view.stdout.frame.includes('> SESSION 1 11111111'), 'picker dismissed');
+    // The dismiss frame does not prove the composer's passive useInput subscription has taken over yet.
+    await view.instance.waitUntilRenderFlush();
     view.stdin.write('/resume 1\r'); await until(() => view.stdout.text.includes('RESUMED 2 11111111'), 'resumed');
     view.stdin.write('continue\r'); await until(() => seen.length === 2, 'second turn');
     expect(seen[1]).toEqual([{ role: 'system', content: 'SYSTEM' }, { role: 'user', content: 'old question' },

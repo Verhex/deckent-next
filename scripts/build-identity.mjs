@@ -9,7 +9,7 @@ import { isAbsolute, join, relative, resolve } from 'node:path';
 function declaredCommonDir(value) {
   try {
     if (!isAbsolute(value)) throw new Error('Origin common directory must be absolute');
-    const path = realpathSync(value);
+    const path = realpathSync.native(value);
     if (!statSync(path).isDirectory()) throw new Error('Origin common directory must be a directory');
     accessSync(path, constants.R_OK | constants.X_OK);
     return path;
@@ -34,7 +34,7 @@ export function writeBuildIdentity(root, sourceFiles, dist) {
   if (declared !== undefined) sourceCommonDir = declaredCommonDir(declared);
   else {
     const commonDir = git(['rev-parse', '--git-common-dir']);
-    try { if (commonDir) sourceCommonDir = realpathSync(resolve(root, commonDir)); } catch { /* Missing/unreadable provenance stays absent. */ }
+    try { if (commonDir) sourceCommonDir = realpathSync.native(resolve(root, commonDir)); } catch { /* Missing/unreadable provenance stays absent. */ }
   }
   const identity = { schemaVersion: 1, packageName: pkg.name, packageVersion: pkg.version, sourceTreeSha256: hash.digest('hex'), sourceFileCount: files.length,
     sourceCommit, ...(sourceCommonDir ? { sourceCommonDir } : {}), sourceCommonDirOrigin: declared === undefined ? 'derived' : 'declared',
