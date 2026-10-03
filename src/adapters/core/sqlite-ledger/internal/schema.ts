@@ -15,6 +15,7 @@ import { migrateScopeRegistry } from './migration-v39.js';
 import { migrateAuditEvents } from './migration-v41.js';
 import { migrateAdoptionVerification } from './migration-v42.js';
 import { migrateModelCatalog } from './migration-v43.js';
+import { migratePoolCapacity } from './migration-v47.js';
 import { migrateExecutionPoolHolds } from './migration-v44.js';
 import { migrateRunParking } from './migration-v45.js';
 import { migrateDecisionPort } from './migration-v46.js';
@@ -32,7 +33,8 @@ export const MODEL_ALLOCATION_LEDGER_VERSION = 19;
 export const PROVIDER_SPEND_LEDGER_VERSION = 21;
 export const PROVIDER_SPEND_AUDIT_LEDGER_VERSION = 22;
 // Current durable contract; older writers must not reopen newer records.
-export const CURRENT_LEDGER_VERSION = 46;
+export const CURRENT_LEDGER_VERSION = 47;
+export const POOL_CAPACITY_LEDGER_VERSION = 47;
 export const SCOPE_REGISTRY_LEDGER_VERSION = 39;
 export const OPERATION_APPROVAL_LEDGER_VERSION = 40;
 export const AUDIT_EVENT_LEDGER_VERSION = 41;
@@ -284,6 +286,11 @@ export function migrateLedger(db: DatabaseSync, mode: 'allow' | 'forbid', profil
     if (next === DECISION_PORT_LEDGER_VERSION) {
       migrateDecisionPort(db);
       db.exec(`PRAGMA user_version=${DECISION_PORT_LEDGER_VERSION};`);
+      continue;
+    }
+    if (next === POOL_CAPACITY_LEDGER_VERSION) {
+      migratePoolCapacity(db);
+      db.exec(`PRAGMA user_version=${POOL_CAPACITY_LEDGER_VERSION};`);
       continue;
     }
     const sql = migrations[next];

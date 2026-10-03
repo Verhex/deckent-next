@@ -53,6 +53,7 @@ export const CLI_CATALOG = [
   ] },
   { name: 'pool', group: 'work', summary: 'cli.help.summary.pool', detail: 'cli.help.pool', children: [
     action('status', 'work', 'cli.help.action.status', 'cli.help.pool'),
+    action('set-capacity', 'work', 'cli.help.action.setCapacity', 'cli.help.pool'),
     action('hold', 'work', 'cli.help.action.hold', 'cli.help.pool'),
     action('resume', 'work', 'cli.help.action.resume', 'cli.help.pool'),
   ] },

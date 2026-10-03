@@ -1110,5 +1110,6 @@
   "error.DECISION_EVIDENCE_FUTURE": "Decision evidence cannot have a future observation time.",
   "error.DECISION_EVIDENCE_REFERENCE_INVALID": "A decision option or check references evidence that does not exist.",
   "error.DECISION_LIMIT_EXCEEDED": "The decision case exceeds its configured byte or count limits.",
-  "error.DECISION_RECORD_INVALID": "The actor decision or outcome record is invalid."
+  "error.DECISION_RECORD_INVALID": "The actor decision or outcome record is invalid.",
+  "error.RUN_POOL_CAPACITY_OCCUPIED": "Pool capacity cannot be reduced below current occupancy. Running, evaluating and uncertain work retains its slots."
 }

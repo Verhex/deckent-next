@@ -1,3 +1,4 @@
+import { assessPoolReadiness, poolReadinessLines } from './pool.js';
 import type { ConfigCommandContext } from '#surfaces/core/config/index.js';
 import type { MonitorCommandContext, WorkerTranscriptHandler } from '#surfaces/core/monitor/index.js';
 import type { RunAdmissionHandler, RunDeliveryAdmissionHandler, RunCancellationDeliveryHandler, RunQueryHandler, RunReservationHandler } from './run.js';
@@ -94,6 +95,8 @@ export interface CommandContext extends ModelCommandContext, MonitorCommandConte
   setSecret?: import('./secret.js').SecretSetHandler;
   deleteSecret?: import('./secret.js').SecretDeleteHandler;
   // K5 typed pool hold: `pool hold|resume|status` (local application, no runtime service needed).
+  applyPoolCapacity?: import('./pool.js').PoolCapacityApplyHandler;
+  inspectPoolCapacity?: import('./pool.js').PoolCapacityInspectHandler;
   applyPoolHold?: import('./pool.js').PoolHoldApplyHandler;
   inspectPoolHold?: import('./pool.js').PoolHoldInspectHandler;
   createRun?: RunAdmissionHandler;
@@ -183,9 +186,10 @@ export async function runKernelCommand(argv: readonly string[], context: Command
   const secretStore = context.inspectSecretStore ? await context.inspectSecretStore(root, options) : null;
   // REALM-NOTICE: additive; null when unwired. The measurement itself is bounded and never throws (a failed probe reads `unknown`).
   const shellRealm = context.inspectShellRealm ? await context.inspectShellRealm(root, options) : null;
+  const poolReadiness = await assessPoolReadiness(root, context, options, config.admission, (config.terminal as { scopeId?: string } | undefined)?.scopeId);
   const data = { schemaVersion: 2, scope: 'kernel', platform, host, hostMemory: detectHostMemory(), environment: detectEnvironment(env),
     paths: resolveGlobalScopePaths(platform, env), principal,
-    company: { companyId: config.company.id }, status: 'ready', policyTemplate, modelInvocationDelivery, secretStore, shellRealm,
+    company: { companyId: config.company.id }, status: poolReadiness.status === 'drift' || poolReadiness.status === 'unavailable' ? 'degraded' : 'ready', poolReadiness, policyTemplate, modelInvocationDelivery, secretStore, shellRealm,
     ...(toolchains ? { toolchains } : {}) };
   output(data, result => [t('doctor.host', { platform: result.platform, cpu: result.host.cpuCores, memory: result.host.totalMemMB,
     workers: result.host.recommendedMaxWorkers, company: result.company.companyId, principal: result.principal.id }, locale),
@@ -195,6 +199,7 @@ export async function runKernelCommand(argv: readonly string[], context: Command
   // SECRET-K1: the selected secret store and whether it can be read now (backend id, status and typed code only; never a value).
   ...(result.secretStore ? [t('doctor.secretStore', { backend: result.secretStore.backend, status: result.secretStore.status,
     codeSuffix: result.secretStore.code ? `, ${result.secretStore.code}` : '' }, locale)] : []),
+  ...(result.poolReadiness ? poolReadinessLines(result.poolReadiness, locale) : []),
   ...(result.shellRealm ? shellRealmLines(result.shellRealm) : [])].join('\n'));
   // modelInvocationDelivery is JSON-only for now, like policyTemplate: no human-text rendering yet.
 }

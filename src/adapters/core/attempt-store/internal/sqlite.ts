@@ -16,6 +16,8 @@ import { SqliteRunWorkspaceCustody } from './run-workspace-custody.js';
 import { SqliteServiceShutdownJournal } from './service-shutdown.js';
 import type { AttemptIdentity } from '#domain/index.js';
 import { SqliteRunJournal } from './runs.js';
+import { SqlitePoolCapacityJournal } from './pool-capacity.js';
+import type { PoolCapacityStore } from '#engine/index.js';
 import { SqlitePoolHoldJournal } from './pool-holds.js';
 import type { RunStore, RunCancellation, ExecutionPool, RunCreate, RunReservation, RunProjection, ServiceShutdownStore, TaskEvaluationCommit, TaskEvaluationStore, PoolHoldStore } from '#engine/index.js';
 import type { ArtifactReceipt } from '#capabilities/index.js';
@@ -27,7 +29,7 @@ import { attemptSnapshotSchema, sameAttemptIdentity, verifiedPrincipalSchema, ty
 import { AttemptStoreError, dispatchRecordSchema, readSealedWorkerEvents, type AttemptCommit, type AttemptReceipt, type AttemptStore } from '#engine/index.js';
 
 /** Dedicated execution database. Path ownership/permissions are established by composition, not this adapter. */
-export class SqliteAttemptStore implements AttemptStore, DispatchStore, RunBoundDispatchStore, DispatchInventoryStore, RunStore, CancellationDeliveryStore, ServiceShutdownStore, TaskEvaluationStore, PoolHoldStore {
+export class SqliteAttemptStore implements AttemptStore, DispatchStore, RunBoundDispatchStore, DispatchInventoryStore, RunStore, CancellationDeliveryStore, ServiceShutdownStore, TaskEvaluationStore, PoolHoldStore, PoolCapacityStore {
   private readonly db: DatabaseSync;
   private admission: import('#engine/index.js').RunAdmissionFilter | undefined;
   private poolCeiling: number | undefined;
@@ -84,6 +86,8 @@ export class SqliteAttemptStore implements AttemptStore, DispatchStore, RunBound
   }
   async createExecutionPool(input: ExecutionPool) { return new SqliteRunJournal(this.db, undefined, this.lifecycleTiming).createExecutionPool(input); }
   // K5 typed pool hold (ledger v44): status read, the one hold/resume writer, and a refusal's audit event.
+  readPoolCapacity(poolId: string) { return new SqlitePoolCapacityJournal(this.db).readPoolCapacity(poolId); }
+  applyPoolCapacity(...args: Parameters<PoolCapacityStore['applyPoolCapacity']>) { return new SqlitePoolCapacityJournal(this.db).applyPoolCapacity(...args); }
   readPoolHold(poolId: string) { return new SqlitePoolHoldJournal(this.db).readPoolHold(poolId); }
   applyPoolHold(...args: Parameters<PoolHoldStore['applyPoolHold']>) { return new SqlitePoolHoldJournal(this.db).applyPoolHold(...args); }
   recordPoolHoldRefusal(audit: Parameters<PoolHoldStore['recordPoolHoldRefusal']>[0]) { return new SqlitePoolHoldJournal(this.db).recordPoolHoldRefusal(audit); }

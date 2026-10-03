@@ -5,20 +5,20 @@ import { tmpdir } from 'node:os';
 import { afterEach, expect, it } from 'vitest';
 import { openSqliteLedger, CURRENT_LEDGER_VERSION, DECISION_PORT_LEDGER_VERSION, RUN_PARKING_LEDGER_VERSION } from '#adapters/core/sqlite-ledger/index.js';
 import { upgradeExistingProductLedger } from '#adapters/index.js';
-import { DOWNGRADE_TO_PREVIOUS_LEDGER_SQL, PREVIOUS_LEDGER_VERSION } from '../../fixtures/ledger-previous.js';
+import { DOWNGRADE_TO_V45_LEDGER_SQL, PREVIOUS_LEDGER_VERSION } from '../../fixtures/ledger-previous.js';
 const roots:string[]=[];
 afterEach(async()=>{await Promise.all(roots.splice(0).map(root=>rm(root,{recursive:true,force:true})));});
 const options={journalMode:'delete' as const,durability:'full' as const,busyTimeoutMs:1000};
-async function fixture(){const root=await mkdtemp(join(tmpdir(),'deckent-decision-migration-'));roots.push(root);const path=join(root,'ledger.db'),backups=join(root,'backups');await mkdir(backups,{mode:0o700});openSqliteLedger(path,options).close();const db=new DatabaseSync(path);db.exec(DOWNGRADE_TO_PREVIOUS_LEDGER_SQL);return {path,backups,db};}
+async function fixture(){const root=await mkdtemp(join(tmpdir(),'deckent-decision-migration-'));roots.push(root);const path=join(root,'ledger.db'),backups=join(root,'backups');await mkdir(backups,{mode:0o700});openSqliteLedger(path,options).close();const db=new DatabaseSync(path);db.exec(DOWNGRADE_TO_V45_LEDGER_SQL);return {path,backups,db};}
 // Batch-27 integration: the lane's v45 is renumbered to v46 because A1/A3 (Run snapshot v4) own v45.
 it('pins the decision port after A1/A3 run parking: v45 is Run parking, v46 decision custody',()=>{
- expect(RUN_PARKING_LEDGER_VERSION).toBe(45);expect(DECISION_PORT_LEDGER_VERSION).toBe(46);expect(CURRENT_LEDGER_VERSION).toBe(46);expect(PREVIOUS_LEDGER_VERSION).toBe(45);
+ expect(RUN_PARKING_LEDGER_VERSION).toBe(45);expect(DECISION_PORT_LEDGER_VERSION).toBe(46);expect(CURRENT_LEDGER_VERSION).toBe(47);expect(PREVIOUS_LEDGER_VERSION).toBe(46);
 });
 it('v45 backup retains original rows and v46 adds only decision tables',async()=>{
  const f=await fixture();f.db.prepare('INSERT INTO execution_pools(pool_id,policy) VALUES(?,?)').run('pool','original-policy');f.db.close();
- const upgrade=await upgradeExistingProductLedger(f.path,options,f.backups,new Date('2026-10-02T12:00:00Z'));expect(upgrade).toMatchObject({from:45,to:46});
+ const upgrade=await upgradeExistingProductLedger(f.path,options,f.backups,new Date('2026-10-02T12:00:00Z'));expect(upgrade).toMatchObject({from:45,to:CURRENT_LEDGER_VERSION});
  const current=new DatabaseSync(f.path,{readOnly:true}),backup=new DatabaseSync(upgrade!.backupPath,{readOnly:true});
- try{expect(current.prepare('SELECT * FROM execution_pools').all()).toEqual(backup.prepare('SELECT * FROM execution_pools').all());expect(backup.prepare('PRAGMA user_version').get()?.user_version).toBe(45);expect(current.prepare('PRAGMA user_version').get()?.user_version).toBe(46);
+ try{expect(current.prepare('SELECT * FROM execution_pools').all()).toEqual(backup.prepare('SELECT * FROM execution_pools').all());expect(backup.prepare('PRAGMA user_version').get()?.user_version).toBe(45);expect(current.prepare('PRAGMA user_version').get()?.user_version).toBe(CURRENT_LEDGER_VERSION);
   expect(backup.prepare("SELECT name FROM sqlite_master WHERE name LIKE 'decision_%'").all()).toEqual([]);expect(current.prepare("SELECT name FROM sqlite_master WHERE name LIKE 'decision_%' ORDER BY name").all()).toHaveLength(2);
  }finally{current.close();backup.close();}
 });
@@ -39,7 +39,7 @@ it('lets the exact tables this migration created stand when a ledger is re-marke
  const f=await fixture();f.db.exec(`CREATE TABLE decision_cases(scope_id TEXT NOT NULL,decision_id TEXT NOT NULL,snapshot TEXT NOT NULL,
   PRIMARY KEY(scope_id,decision_id));`);f.db.close();
  // decision_cases pre-exists byte-identical to the migration's own CREATE text; decision_command_receipts is created by the upgrade.
- const upgrade=await upgradeExistingProductLedger(f.path,options,f.backups,new Date('2026-10-02T12:00:00Z'));expect(upgrade).toMatchObject({from:45,to:46});
- const check=new DatabaseSync(f.path,{readOnly:true});try{expect(check.prepare('PRAGMA user_version').get()?.user_version).toBe(46);
+ const upgrade=await upgradeExistingProductLedger(f.path,options,f.backups,new Date('2026-10-02T12:00:00Z'));expect(upgrade).toMatchObject({from:45,to:CURRENT_LEDGER_VERSION});
+ const check=new DatabaseSync(f.path,{readOnly:true});try{expect(check.prepare('PRAGMA user_version').get()?.user_version).toBe(CURRENT_LEDGER_VERSION);
   expect(check.prepare("SELECT name FROM sqlite_master WHERE name LIKE 'decision_%' ORDER BY name").all().map(row=>row.name)).toEqual(['decision_cases','decision_command_receipts']);}finally{check.close();}
 });

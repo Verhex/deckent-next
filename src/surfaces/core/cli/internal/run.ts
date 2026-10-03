@@ -1,3 +1,4 @@
+import { poolDriftLine, poolWaitLine } from './pool.js';
 import { hasCliAction } from '#surfaces/core/cli-kit/index.js';
 import { cliUsage, shellIdentity } from './usage.js';
 import { ErrorRegistry, emit, loadConfig, resolveLocale, t, type ConfigLoadOptions, type Locale, type ProductLayout } from '#platform/index.js';
@@ -127,6 +128,7 @@ export async function runCommand(argv: readonly string[], context: CommandContex
     const run = data.run;
     if (!run) return '';
     return [t('cli.run.inspect.heading', { run: run.runId, revision: run.revision }, locale),
+      ...(run.pool ? [...run.pool.drift.map(drift => poolDriftLine(drift, locale)), ...run.pool.waiting.map(wait => poolWaitLine(wait.taskId, wait.reason, locale))] : []),
       t('cli.run.lifecycle.result', { run: run.runId, revision: run.revision, state: run.state.kind, reason: 'reason' in run.state ? run.state.reason : '—' }, locale),
       ...(run.state.kind === 'terminal' ? [t('cli.run.lifecycle.outcome', { outcome: run.state.outcome }, locale)] : []),
       ...(run.state.kind === 'parked' ? [t('cli.run.lifecycle.deadline', { since: run.state.since, deadline: run.state.deadline }, locale)] : []),

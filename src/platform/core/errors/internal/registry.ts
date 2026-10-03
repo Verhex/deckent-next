@@ -299,6 +299,7 @@ const definitions: Readonly<Record<string, Definition>> = Object.freeze({
   RUN_POOL_REQUIRED: { category: 'error', render: (p, l) => ({ message: t('error.RUN_POOL_REQUIRED', p, l) }) },
   RUN_POOL_CONFLICT: { category: 'error', render: (p, l) => ({ message: t('error.RUN_POOL_CONFLICT', p, l) }) },
   RUN_POOL_FULL: { category: 'error', render: (p, l) => ({ message: t('error.RUN_POOL_FULL', p, l) }) },
+  RUN_POOL_CAPACITY_OCCUPIED: { category: 'error', render: (p, l) => ({ message: t('error.RUN_POOL_CAPACITY_OCCUPIED', p, l) }) },
   RUN_POOL_HELD: { category: 'error', render: (p, l) => ({ message: t('error.RUN_POOL_HELD', p, l) }) },
   RUN_CAPACITY_OR_ORDER: { category: 'error', render: (p, l) => ({ message:
     ['site', 'reason', 'readyCount', 'delayedCount', 'executionOccupied', 'executionSlots'].every(key => p[key] !== undefined)

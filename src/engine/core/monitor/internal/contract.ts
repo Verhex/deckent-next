@@ -18,6 +18,7 @@ export type MonitorBlockerCode = 'parked' | 'awaiting-decision' | 'none' | 'wait
   | 'worker-running' | 'worker-stale-heartbeat' | 'worker-exited-unevaluated' | 'evaluation-not-ready' | 'evaluation-unknown'
   | 'unresolved-effect' | 'cancellation-pending' | 'not-admitted' | 'unknown';
 export interface MonitorBlocker {
+  readonly pool?: import('#engine/core/runs/index.js').PoolWait;
   readonly code: MonitorBlockerCode; readonly taskId: string | null;
   /** Epoch ms since when this condition holds, when the ledger or sidecars prove it; null when unknown (never guessed). */
   readonly sinceMs: number | null;
@@ -42,6 +43,7 @@ export interface MonitorAttempt {
   readonly diagnostics?: readonly string[];
 }
 export interface MonitorTask {
+  readonly waiting?: import('#engine/core/runs/index.js').PoolWait;
   readonly decision?: { readonly reason: 'evaluation-unknown' | 'evaluation-not-ready'; readonly sinceMs: number; readonly deadlineMs: number };
   readonly taskId: string; readonly kind: string; readonly phase: string;
   readonly profile: { readonly id: string; readonly version: number } | null;

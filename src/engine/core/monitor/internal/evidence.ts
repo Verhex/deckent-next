@@ -34,6 +34,7 @@ export interface MonitorLedgerAttempt {
 }
 export interface MonitorEvent { readonly atMs: number | null; readonly kind: string; readonly summary: string }
 export interface MonitorLedgerRun {
+  readonly capacity?: { readonly executionSlots: number; readonly inFlightSlots: number };
   readonly snapshot: RunSnapshot; readonly poolId: string | null;
   /** Automatic progression intent (`run_execution_intents`, v25+); null when the ledger predates the table. */
   readonly admitted: boolean | null;
@@ -49,6 +50,7 @@ export interface MonitorLedgerApproval {
 export interface MonitorLedgerPool {
   readonly poolId: string; readonly executionSlots: number; readonly inFlightSlots: number; readonly execution: number; readonly inFlight: number;
   /** `execution_pool_holds` (v44); null = never held. `changedBy` is the hold actor's subject. */
+  readonly capacity?: { readonly executionSlots: number; readonly inFlightSlots: number };
   readonly hold: { readonly state: 'held' | 'open'; readonly changedAtMs: number; readonly changedBy: string } | null;
 }
 export interface MonitorLedgerReading {

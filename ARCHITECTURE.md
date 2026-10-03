@@ -3075,7 +3075,38 @@ onto the ledger catalog; Codex/Cursor output-side model evidence (none documente
   audit 1 (additive); runtime protocol 18, config 3, Run snapshot 1, graph 3 unchanged; error registry +1 (`RUN_POOL_HELD`).
 - **Open.** First v44 switch cannot drain (the v43 build has no hold); `drained` never becomes true while a pinned Claude attempt waits for
   an operator evaluation (use `occupancy.execution === 0` to see "nothing running"); no per-scope hold; no terminal `/pause`, no
-  `run inspect` waiting reason; dev-release drain integration not implemented. CLI-HELP exposes `pool` in the top-level work group.
+  dev-release drain integration not implemented. Pool wait inspection is added by the POOL-CAPACITY source candidate below. CLI-HELP exposes `pool` in the top-level work group.
+
+### Execution pool capacity and waiting observation (POOL-CAPACITY; owner 2026-10-03, source candidate)
+
+- **Operation and authority.** One `ExecutionPoolCapacityApplication` behind CLI `pool set-capacity --execution-slots <n> --in-flight-slots <n>`,
+  MCP `apply_pool_capacity` / `inspect_pool_capacity`, SDK `applyPoolCapacity` / `inspectPoolCapacity`. Catalogs expose the same typed
+  schema; `pool:set-capacity` is additive policy-vocabulary v1 data. Authenticate scope membership and require both the scoped decision
+  and `scopes: all` delegation over the same pool/policy snapshot, exactly as hold/resume; persona grants nothing. No default control grant.
+  Refused policy decisions use the existing sealed refusal-audit path. CLI offers en/tr human and JSON, status shows the latest change receipt.
+- **Capacity and custody.** Positive safe integer execution/in-flight slots, bounded by the existing pool counter schema
+  (`Number.MAX_SAFE_INTEGER`), no new product limit. Reject either dimension below the current installation-wide occupancy with
+  `RUN_POOL_CAPACITY_OCCUPIED`; executing, evaluating, reconciling and uncertain effects retain their existing occupancy semantics.
+  This avoids accepting an operator target already incompatible with retained work; retry after drainage is explicit. Equal values record
+  `changed: false`; identical resolved (scope, command, actor, capacity) replay returns the original receipt, conflicting bodies refuse.
+- **Ledger owner and receipt.** Additive forward-only v46 → v47: `execution_pool_capacities` (one effective override per pool) and
+  `execution_pool_capacity_receipts` (immutable scope/command record). Preserve original `execution_pools.policy` bytes, so installer exact
+  replay and original provisioning truth survive resizing. `SqlitePoolCapacityJournal` is the only writer: `BEGIN IMMEDIATE` covers replay,
+  pool lookup, all-scope occupancy check, transition, override, receipt and sealed `pool-capacity` audit (actor, scope, time, policy decision,
+  previous → next). No audit means rollback; lost commit acknowledgement is outcome-unknown and same-command replay resolves it.
+  The existing service upgrade creates its versioned 0600 backup; clients never migrate. Migration checks exact CREATE shapes and rolls
+  back a same-name incompatible table. Reservation, dispatch admission and monitor capacity readers use the effective override.
+- **Read-only observation.** Additive optional `RunView v3.pool` carries raw/effective capacity (the `max_workers` ceiling stays explicit),
+  occupancy, `POOL_ADMISSION_CAPACITY_DRIFT` for persisted per-Run/config admission limits above the raw pool capacity and every dependency-ready,
+  automatically admitted pending task's `waiting-pool-slot` / `pool-held` reason. Run snapshot/state is unchanged. Run, policy, pool, hold and
+  occupancy share a deferred read snapshot. Cancelled, parked, terminal, delayed, dependency-waiting and not-admitted work is not called a pool wait.
+  Full-pool `sinceMs` is unknown/null; hold uses its recorded change time. These are current conditions, not historical refusal receipts.
+  Monitor blocker and task data carry the same pool wait contract, with pool id, occupancy, raw and effective capacities. `doctor` uses the
+  policy-checked pool inspection for configured `terminal.scopeId`; missing scope/policy/ledger stays explicitly unavailable. Drift is a degraded
+  diagnostic, never an implicit clamp or configuration rewrite. No per-poll wait writes, retry/budget change or new blocking progression step.
+- **Versions and limits.** Runtime protocol 19 unchanged: capacity controls remain local composition operations like hold/resume; RunView and
+  monitor changes are additive observation fields. Config and Run storage versions unchanged. Author checks and temporary binary proof live in
+  external `proof/POOL-CAPACITY-2026-10-03/review.md`. Independent review, lead landing, hosted/live acceptance and ≥8 native-worker throughput remain open.
 
 ### Patch scope classification (K6 = A; owner 2026-09-30, Jev ddbcaacd; lane Jev c93ceea4 / 4c772497 / bc205c7c)
 

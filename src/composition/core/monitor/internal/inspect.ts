@@ -23,7 +23,7 @@ export async function inspectMonitor(root: string, options: ConfigLoadOptions = 
         const c = await scope(target.path, identity.scopeId); await contextDispatchAuthorization(c).authorizeIdentity('read-output', identity, c.principal); }));
       const ceiling = installed.max_workers === 'auto' ? Infinity : installed.max_workers;
       return { ...reading, pools: reading.pools.map(pool => ({ ...pool,
-        executionSlots: Math.min(pool.executionSlots, ceiling), inFlightSlots: Math.min(pool.inFlightSlots, ceiling) })) };
+        capacity: { executionSlots: pool.executionSlots, inFlightSlots: pool.inFlightSlots }, executionSlots: Math.min(pool.executionSlots, ceiling), inFlightSlots: Math.min(pool.inFlightSlots, ceiling) })) };
     },
     async observeScope(target, scopeId) {
       const workers: WorkerObservation[] = []; let page: WorkerObservationSource | undefined; let after: string | null = null;
