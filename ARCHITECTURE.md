@@ -1734,8 +1734,8 @@ and record optional `sourceCommonDirOrigin: declared|derived` in identity v1. In
 Stage checks origin common directory and selected commit in the built and unpacked identity before installing; mismatches,
 missing/malformed identities and stale cached provenance refuse with `DEV_RELEASE_IDENTITY_MISMATCH`. release.json records
 `sourceCommonDir`; old identity readers accept the additive origin marker. The producer and host-kit candidate have targeted
-author evidence (fake repository staging); host-kit delivery is a patch because lane `.agents` is read-only. Independent review,
-landing and real deployed proof remain open. Lead checkpoints: external
+author evidence (fake repository staging); delivered as one lane commit `03d8807a` (the lead applied the sandbox patch), Fable 5.1 bounded
+PASS 2026-10-03. Landing and real deployed proof (a real stage + a live/N1 turn) remain open. Lead checkpoints: external
 `proof/SELF-SOURCE-FLOOR-2026-10-03/review.md` and `proof/DEV-RELEASE-SOURCE-ORIGIN-2026-10-03/review.md`.
 
 **Standing approvals (PERSISTENT-APPROVALS G6, owner 2026-09-28 "kapsam seçmeli", seventh batch).** A standing approval is the person's
