@@ -140,7 +140,10 @@ describe.skipIf(process.platform === 'win32')('K3 work input admission through t
     await f.activation('claude-sonnet-5-5', 'deactivate', 1);
     expect(await createRun(f.project, run('r', 'coding', workInput()), f.options)).toEqual(created);
     expect(f.snapshotProfile('r')).toEqual(frozen);
-    expect((await inspectRun(f.project, { schemaVersion: 1, scopeId: 's', runId: 'r' }, f.options)).run).toEqual(created.admission.run);
+    // POOL-CAPACITY: inspect adds the read-only pool observation; the admitted Run itself replays unchanged.
+    const { pool, ...inspected } = (await inspectRun(f.project, { schemaVersion: 1, scopeId: 's', runId: 'r' }, f.options)).run;
+    expect(inspected).toEqual(created.admission.run);
+    expect(pool).toMatchObject({ poolId: 'p', drift: [], waiting: [] });
     expect((await reserveRunTasks(f.project, { schemaVersion: 1, commandId: 'reserve', scopeId: 's', runId: 'r', expectedRevision: 0 }, f.options)).reservation.identities).toHaveLength(1);
     await expect(createRun(f.project, run('r', 'coding', { ...workInput(), task: 'Something else.' }), f.options)).rejects.toMatchObject({ code: 'RUN_COMMAND_CONFLICT' });
     await expect(createRun(f.project, run('new', 'coding', workInput()), f.options)).rejects.toMatchObject({ code: 'WORKER_MODEL_NOT_ACTIVE' });
