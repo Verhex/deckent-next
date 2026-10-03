@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { mkdtemp, mkdir, readFile, readdir, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, posix } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { afterEach, describe, expect, it } from 'vitest';
 // DEPS-DIST: the bundled package's SBOM comes from the bundler's metafile (bytes actually shipped), not from package.json; OSV reads it back.
@@ -206,7 +206,7 @@ describe('published manifest', () => {
 describe('published declarations (DEPS-TYPES)', () => {
   const pkg = (name: string, version: string, extra: Record<string, unknown> = {}) => JSON.stringify({ name, version, type: 'module', license: 'MIT', ...extra });
   const files = (root: string, dir = ''): Promise<string[]> => readdir(join(root, dir), { withFileTypes: true }).then(entries => Promise.all(entries.map(entry =>
-    entry.isDirectory() ? files(root, join(dir, entry.name)) : [join(dir, entry.name)]))).then(list => list.flat().sort());
+    entry.isDirectory() ? files(root, posix.join(dir, entry.name)) : [posix.join(dir, entry.name)]))).then(list => list.flat().sort());
 
   it('ships the consumer-reachable closure with third-party declarations vendored per name@version and bare specifiers rewritten', async () => {
     const root = await tree({

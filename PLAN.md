@@ -89,20 +89,21 @@ bu oturumda tamamlandı; kalıcı rol haritası ARCHITECTURE, dosya bazlı karar
 sonraki skill delegasyonu bu rule kararlarını otomatik kapsamaz. Üç yeni host oturumunda gerçek
 skill etkinleşme/plugin eval kanıtı açık; ortak kaynak ve dosya eşitliği etkinleşme kanıtı değildir.
 
-**CI-FIX — owner 2026-10-03, Codex uygulayıcı, `lane/ci-fix` (`35bbe428` + `c0a3f77e`, main `c0af941c` üstünde; Fable PASS `c0a3f77e`, main'e alındı; owner kararı: altı hücre zorunlu + main kuralı):**
-Altı hosted hücre (ubuntu/macOS/Windows × Node24/26) hatası artık workflow sonucunda görünür olmalıdır;
-advisory hücrelerin hata maskelemesi kaldırılır. Fixture/capability doğruluğu, runner path/checkout bytes,
-sonlu 30dk job/20dk verify, host180s/native30s node:test + native invocation180s, ref concurrency ve JSON/log artifact adayı bu şeritte hazır.
-Hedefli yazar kontrolleri ve sonuçları dış review.md içindedir; canonical OS temp parent host-kit de kapsar.
-Açık kaynak bulguları: socket bind→asyncchmod görünürlük yarışı; Windows legacy lock çift reclaim uyarısı (exact yarış nedeni doğrulanmadı);
-shared runner wall-clock validator eşikleri ve geçmiş BUSY/PTY flakes. Bunlar green retry ile kapanmaz.
-Güvenlik reddi, platform desteği ve testin çalışmaması ayrı kanıttır; yerel hedefli sonuç hosted green değildir.
-Sonrun `37078519240`: Linux26 success; Linux24 MANAGED_FILE_UNSAFE; macOS her iki node monitor2;
-Windows24 80, Windows26 78 test failure. `848c8050` workflow success altı yeşil anlamına gelmez.
-Kalan kapı: Sol → push → exact SHA'da hosted koşu (6/6 sonuç + artifact) → owner `main` kuralını ekler. Fable takip notu (bloklamaz): `monitor.test.ts:254-256` Linux dışı sidecar dalı tipli skip/verify-not-run kaydı taşımıyor; Windows 8.3 kısa ad için `realpathSync.native` hosted sonuca göre.
-Push lane'den yok; süreç panosu bu worktree'de yok (ENOENT), lead kendi ana satırının worker alt-listesini uzlaştırır.
-Kanıt/uyumsuzluk raporu: dış `proof/CI-FIX-2026-10-03/`. Socket yayın yarışına ait kaynak düzeltmesi scope checkpoint'idir;
-eski log reddedilen inode'u açıklamadığından batch27 SHA'sına neden atfedilmez.
+**CI-FIX / R2 — owner 2026-10-03, Codex uygulayıcı, `lane/ci-fix-r2`, taban `97851bce`:**
+R1 `35bbe428` + `c0a3f77e` main'e alındı (hosted SHA `38c9dae1`); altı hücre zorunlu ve main ruleset aktif.
+İlk all-required koşu `37111243380` altı hücrede kırmızı: ubuntu24 8, ubuntu26 9, mac24 12, mac26 15,
+win24 23, win26 22 test. Exact listeler/artifact dış `proof/CI-FIX-2026-10-03/hosted-37111243380/`.
+R2 fixture, typed yetenek reddi ve dar ürün düzeltmesi adayı: 17 Linux hedef dosyasında benzersiz 191 test geçti;
+typecheck/değişen dosya eslint/lint-arch temiz. Yazar kanıtı hosted kabul değildir; Git staging EROFS olduğundan
+commit yerine dış proof'ta patch + stat verilir. mac26 eski Git unavailable alt nedeni logda kaybolmuştur;
+fixture producer Git ortamını kullanır, yeni typed tanı keyfî hataları yeşile çevirmez.
+Ubuntu lint fixture'ı REPO-STANDARDS `db61005a` sonrası zorunlu yedi Markdown dosyasını üretmemiştir;
+canonical TMPDIR/full-history altında yerel tekrar aynı sekiz hatayı verir, R1 Git/temp değişimine neden atfedilmez.
+Kalan kapı: R2 exact patch/commit → bağımsız inceleme → lead push → altı hosted hücre ve artifact → sonuç uzlaştırması.
+Lane push yapmaz; pano bu worktree'de yok (ENOENT), lead kendi worker alt-listesini uzlaştırır.
+Güvenlik floorları, mevcut zaman/kaynak bütçeleri korunur; full verify yetkili değildir.
+Socket bind→asyncchmod yarışı ve diğer historical BUSY/PTY/validator borçları R2 kapsamıyla kapanmış sayılmaz.
+Kanıt `proof/CI-FIX-R2-2026-10-03/review.md`; süreç uyumsuzlukları R1 `inconsistencies.md` R2 bölümü.
 
 **CI-WINDOWS-MACOS — owner 2026-10-01, Sol uygulayıcı (`lane/ci-sol-2`, taban `76582f9f`):** şerit `a5fea81c` 24. partide birleşti (`048e47ec`, push `a2971850`; Fable 5.1 bağımsız PASS). Tamamlanan kısım: COMPLETED-PLAN 2026-10-03. Kapanmayanlar: native Windows/macOS yeşil değil (hosted 6/6 kapısı ve exact run/job tablosu CI-FIX satırında); CI-FULL'den taşınan açık sınırlar (simüle missing-proc native overlay conflict kök nedeni, `shell-overlay-write-set.test.ts:111` yük altında bir kez düşme, future repository prune fail-closed/immutable mirror) ve Windows partial-log envanterindeki 14 dosyanın timing/lock/descendant/native kök neden kanıtı açık. Kanıt `proof/CI-WINDOWS-2026-10-01/`, `proof/CI-FULL-2026-10-01/`.
 

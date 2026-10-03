@@ -1,4 +1,4 @@
-import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { get, request } from 'node:http';
@@ -30,14 +30,20 @@ const post = (socketPath: string, provider: string) => new Promise<void>((resolv
 });
 
 const access = 'eyJhbGciOiJub25lIn0.' + Buffer.from(JSON.stringify({ exp: Math.floor(Date.now() / 1000) + 3600 })).toString('base64url') + '.fixture-signature';
-it.each([
+it.for([
   ['claude', { claudeAiOauth: { accessToken: access, expiresAt: Date.now() + 3_600_000, scopes: ['user:inference'] } }, 'session-events', 'verified'],
   ['codex', { auth_mode: 'chatgpt', tokens: { access_token: access, refresh_token: 'fixture-refresh', id_token: 'fixture-id' }, last_refresh: new Date().toISOString() }, 'none', 'unverified'],
   ['cursor', { accessToken: access }, 'none', 'unverified'],
-] as const)('projects bound %s registry capabilities and host model-evidence custody through the real UNIX gateway', async (provider, credential, evidenceCapability, status) => {
+] as const)('projects bound %s registry capabilities and host model-evidence custody through the real UNIX gateway', async ([provider, credential, evidenceCapability, status], context) => {
   const root = await mkdtemp(join(tmpdir(), 'dn-cap-')); cleanups.push(() => rm(root, { recursive: true, force: true }));
-  const connection = await openNativeConnection({ binding: { schemaVersion: 2, provider,
-    model: { channelId: `${provider}-cli-subscription`, modelId: 'fixture-model', auxiliaryModelIds: [] } }, directory: root, credential, deadlineMs: 10000 });
+  const input = { binding: { schemaVersion: 2 as const, provider,
+    model: { channelId: `${provider}-cli-subscription`, modelId: 'fixture-model', auxiliaryModelIds: [] } }, directory: root, credential, deadlineMs: 10000 };
+  if (process.platform === 'win32') {
+    await expect(openNativeConnection(input)).rejects.toMatchObject({ code: 'NATIVE_CONNECTION_UNAVAILABLE' });
+    expect(await readdir(root)).toEqual([]);
+    context.skip('NATIVE_CONNECTION_UNAVAILABLE: private UNIX gateway requires POSIX ownership and socket permissions');
+  }
+  const connection = await openNativeConnection(input);
   cleanups.push(connection.close);
   const bootstrap = await fetchBootstrap(connection.descriptor.socketPath);
   expect(bootstrap.capabilities).toEqual(nativeCliCommand(provider).capabilities);
@@ -49,12 +55,14 @@ it.each([
 
 const imageId = process.env.DECKENT_TEST_DOCKER_IMAGE;
 const hash = (value: string) => createHash('sha256').update(value).digest('hex');
-describe.skipIf(!imageId)('candidate standalone bootstrap through the real pinned Docker worker', () => {
-  it.each([
+describe('candidate standalone bootstrap through the real pinned Docker worker', () => {
+  it.for([
     ['claude', { claudeAiOauth: { accessToken: access, expiresAt: Date.now() + 3_600_000 } }],
     ['codex', { tokens: { access_token: access, id_token: 'fixture-id' } }],
     ['cursor', { accessToken: access }],
-  ] as const)('%s receives the registry prompt channel, preflight, turn probe and structured-report flag', async (provider, credential) => {
+  ] as const)('%s receives the registry prompt channel, preflight, turn probe and structured-report flag', async ([provider, credential], context) => {
+    if (process.platform === 'win32') context.skip('NATIVE_CONNECTION_UNAVAILABLE: Docker bootstrap requires the POSIX private UNIX gateway');
+    if (!imageId) context.skip('DOCKER_TEST_IMAGE_UNAVAILABLE: pinned DECKENT_TEST_DOCKER_IMAGE fixture is not configured');
     const root = await mkdtemp(join(tmpdir(), 'dn-main-cap-')); cleanups.push(() => rm(root, { recursive: true, force: true }));
     const workspace = join(root, 'work'); await mkdir(workspace);
     // Test-only transpilation of this exact candidate; no product build or dist artifact is used.

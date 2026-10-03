@@ -1,6 +1,6 @@
-import { execFileSync, spawnSync } from 'node:child_process';
+import { execFileSync, spawn, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { closeSync, cpSync, mkdtempSync, mkdirSync, openSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -42,7 +42,8 @@ afterEach(() => { for (const root of roots.splice(0)) rmSync(root, { recursive: 
 describe('hardcode ratchet admission', () => {
   const history = spawnSync('git', ['rev-parse', '--is-shallow-repository'], { encoding: 'utf8' });
   // Export/shallow checks below exercise the warning; they cannot prove admission history.
-  it.skipIf(history.status !== 0 || history.stdout.trim() !== 'false')('matches the first admission exactly to the detector inventory of the introduction base tree (requires full Git history)', () => {
+  it('matches the first admission exactly to the detector inventory of the introduction base tree (requires full Git history)', context => {
+    if (history.status !== 0 || history.stdout.trim() !== 'false') context.skip('GIT_ADMISSION_HISTORY_UNAVAILABLE: full first-parent history required');
     const base = '19a6bb42c8eefb0985287f91adeea487e4fc616f';
     const list = 'scripts/hardcode-allowlist.json';
     const git = (...args: string[]) => execFileSync('git', args, { encoding: 'utf8' }).trim();
@@ -59,14 +60,21 @@ describe('hardcode ratchet admission', () => {
     // Later narrowing (e.g. the batch-27 G4 protocol-version exemption) may only retire identities.
     const detector = mkdtempSync(join(tmpdir(), 'hardcode-detector-')); roots.push(detector);
     if (first) execFileSync('tar', ['-x', '-C', detector], { input: execFileSync('git', ['archive', first, 'scripts'], { maxBuffer: 32 * 1024 * 1024 }) });
-    else execFileSync('cp', ['-r', 'scripts', detector]);
+    else cpSync('scripts', join(detector, 'scripts'), { recursive: true });
     symlinkSync(resolve('node_modules'), join(detector, 'node_modules'), 'dir');
-    const admitted = spawnSync(process.execPath, [join(detector, 'scripts/lint-arch.mjs'), '--root', root, '--hardcode-inventory'], { encoding: 'utf8', timeout: 20000, maxBuffer: 32 * 1024 * 1024 });
-    expect(admitted.status).toBe(0);
+    // The historical scanner exits immediately after stdout.write. File stdout is
+    // synchronous on every supported OS, preserving its exact historical inventory.
+    const inventoryFile = join(detector, 'inventory.json');
+    const fd = openSync(inventoryFile, 'w');
+    let admitted;
+    try {
+      admitted = spawnSync(process.execPath, [join(detector, 'scripts/lint-arch.mjs'), '--root', root, '--hardcode-inventory'], { encoding: 'utf8', timeout: 20000, stdio: ['ignore', fd, 'pipe'] });
+    } finally { closeSync(fd); }
+    expect(admitted.status, admitted.stderr).toBe(0);
     const result = run(root, true);
     expect(result.code).toBe(0);
     const identity = ({ file: path, fingerprint, rule }: { file: string; fingerprint: string; rule: string }) => JSON.stringify({ file: path, fingerprint, rule });
-    const inventory = JSON.parse(admitted.stdout).map(identity).sort();
+    const inventory = JSON.parse(readFileSync(inventoryFile, 'utf8')).map(identity).sort();
     const admission = JSON.parse(admittedFile(list)).map(identity).sort();
     // Array equality detects missing, phantom and duplicate members, in both directions.
     expect(admission).toEqual(inventory);
@@ -96,6 +104,24 @@ describe('hardcode ratchet admission', () => {
   });
 });
 
+it('delivers a complete inventory larger than a pipe buffer before exiting', async () => {
+    const declarations = Array.from({ length: 600 }, (_, i) => `function check${i}() { if (provider === 'claude') act(); }`);
+    const root = fixture(declarations.join('\n'));
+    const child = spawn(process.execPath, [script, '--root', root, '--hardcode-inventory'], { timeout: 20_000, stdio: ['ignore', 'pipe', 'pipe'] });
+    const chunks: Buffer[] = [], errors: Buffer[] = [];
+    child.stderr.on('data', chunk => errors.push(chunk));
+    // Hold the first readable chunk so the producer must keep pending pipe writes
+    // alive, rather than relying on this host's consumer scheduling speed.
+    child.stdout.once('readable', () => {
+      setTimeout(() => { child.stdout.on('data', chunk => chunks.push(chunk)); child.stdout.resume(); }, 50);
+    });
+    const code = await new Promise<number | null>((resolve, reject) => { child.once('error', reject); child.once('close', resolve); });
+    const output = Buffer.concat(chunks).toString('utf8');
+    expect(code, Buffer.concat(errors).toString('utf8')).toBe(0);
+    expect(Buffer.byteLength(output)).toBeGreaterThan(65_536);
+    const inventory = JSON.parse(output) as { symbol: string }[];
+    expect(inventory.map(row => row.symbol).sort()).toEqual(declarations.map((_, i) => `check${i}`).sort());
+  });
 describe('hardcode ratchet', () => {
   it.each(['G1', 'G2', 'G3', 'G4'])('detects %s new literals through the CLI', rule => {
     const source = readFileSync(resolve(`tests/fixtures/hardcode-ratchet/${rule}.fixture`), 'utf8');

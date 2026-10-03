@@ -44,7 +44,13 @@ async function observe(lock: string, clock: TrustedClock, started: ClockSample) 
       }
       catch { /* Incomplete publication: grace period via directory mtime. */ }
     } finally { await handle.close(); }
-  } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; }
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    // Windows can deny opening metadata while its owner unlinks it. An unreadable
+    // owner is contention, never evidence of death: retry within the caller's deadline.
+    if (code === 'EPERM' || code === 'EACCES') return null;
+    if (code !== 'ENOENT') throw error;
+  }
   const empty = stat.isDirectory() && (await readdir(lock)).length === 0;
   const named = await lstat(lock);
   if (stat.ino !== named.ino || stat.dev !== named.dev || stat.mtimeMs !== named.mtimeMs) return null;

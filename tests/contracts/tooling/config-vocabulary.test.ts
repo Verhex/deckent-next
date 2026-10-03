@@ -37,7 +37,12 @@ describe('source-derived config vocabulary gate', () => {
   it('is identical for a CRLF checkout of the same sources (Windows autocrlf)', async () => {
     const root = await fixture(), stored = await readFile(join(root, projectionPath), 'utf8');
     const names = (await readdir(join(root, 'src'), { recursive: true })).filter(name => name.endsWith('.ts')), converted = [];
-    for (const name of names) { const file = join(root, 'src', name); await writeFile(file, (await readFile(file, 'utf8')).replace(/\r?\n/gu, '\r\n')); converted.push(name); }
+    // Bound concurrent I/O instead of doing two serial Windows filesystem round trips for every source file.
+    for (let offset = 0; offset < names.length; offset += 16) {
+      await Promise.all(names.slice(offset, offset + 16).map(async name => {
+        const file = join(root, 'src', name); await writeFile(file, (await readFile(file, 'utf8')).replace(/\r?\n/gu, '\r\n')); converted.push(name);
+      }));
+    }
     expect(converted.length).toBeGreaterThan(10);
     expect(JSON.stringify(projectVocabulary(root))).toBe(stored);
   });

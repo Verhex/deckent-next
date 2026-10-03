@@ -45,7 +45,7 @@ export function moduleSpecifiers(sourceFile) {
 
 /** The declaration closure of `<root>/<entry>` for every consumer mode, with each specifier's resolved target. */
 export function declarationClosure(root, entry = 'dist/index.d.ts') {
-  root = realpathSync(root);
+  root = realpathSync.native(root);
   const files = new Map(), problems = [];
   for (const [mode, modeOptions] of Object.entries(CONSUMER_MODES)) {
     // resolveJsonModule off and no automatic @types: the strictest consumer setting; Node built-ins stay unresolved (ambient in @types/node).
@@ -76,7 +76,7 @@ export function declarationClosure(root, entry = 'dist/index.d.ts') {
 /** Writes the closure into `<stage>/dist` (own declarations at their tsc path, third-party ones under dist/vendor/types). */
 export function vendorDeclarations({ root, stage }) {
   // TypeScript resolves Windows short-name aliases (RUNNER~1) to their long path names.
-  root = realpathSync(root);
+  root = realpathSync.native(root);
   const { files, problems } = declarationClosure(root);
   const dist = join(root, 'dist') + sep, packages = new Map(), placed = new Map();
   const place = path => {

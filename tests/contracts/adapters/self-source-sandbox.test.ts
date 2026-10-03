@@ -24,6 +24,15 @@ console.info('self-source shell capabilities:', JSON.stringify(capabilities));
 
 describe('derived self-source floor in both shipped shell providers', () => {
   it('binds source trees read-only in bubblewrap and removes write grants in Landlock, customer trees stay writable', async () => {
+    if (process.platform === 'win32') {
+      const f = await fixture();
+      expect(capabilities.bubblewrap.status).toBe('unsupported');
+      expect(capabilities.landlock.status).toBe('unsupported');
+      expect(bubblewrapShellSandbox(f).usable(capabilities)).toEqual({ ok: false, reason: 'bubblewrap unsupported' });
+      expect(landlockShellSandbox(f).usable(capabilities)).toEqual({ ok: false, reason: 'landlock unsupported' });
+      console.log('verify-not-run: ' + JSON.stringify({ file: 'tests/contracts/adapters/self-source-sandbox.test.ts', test: expect.getState().currentTestName, state: 'skipped', variant: 'posix-sandbox-view', reason: 'SHELL_SANDBOX_PLATFORM_UNSUPPORTED: both shipped providers explicitly refuse this host; POSIX view positive remains required' }));
+      return;
+    }
     for (const selfSource of [true, false]) {
       const f = await fixture(selfSource), view = await resolveBubblewrapView(f, { PATH: '/usr/bin:/bin' }, {}, { floorReadOnly: true });
       const rules = await buildLandlockRules(f, {}, undefined, { floorReadOnly: true });
@@ -43,8 +52,16 @@ describe('derived self-source floor in both shipped shell providers', () => {
   for (const provider of ['bubblewrap', 'landlock'] as const) {
     const supported = provider === 'bubblewrap' ? capabilities.bubblewrap.status === 'available' && capabilities.userNamespace === 'available'
       : capabilities.landlock.status === 'available' && (capabilities.landlock.abi ?? 0) >= 6;
-    it.skipIf(!supported)(`${provider} refuses existing and new dist writes at the real shell boundary`, async () => {
+    it(`${provider} refuses existing and new dist writes at the real shell boundary`, async () => {
       const f = await fixture(), sandbox = provider === 'bubblewrap' ? bubblewrapShellSandbox(f) : landlockShellSandbox(f), usable = sandbox.usable(capabilities);
+      if (!supported) {
+        if (provider === 'landlock' && capabilities.landlock.status === 'available') expect(capabilities.landlock.abi).toBeLessThan(6);
+        else expect(usable.ok).toBe(false);
+        console.log('verify-not-run: ' + JSON.stringify({ file: 'tests/contracts/adapters/self-source-sandbox.test.ts', test: expect.getState().currentTestName, state: 'skipped', variant: 'real-shell-boundary', reason: `SHELL_SANDBOX_CAPABILITY_UNAVAILABLE: ${provider}; ${!usable.ok ? usable.reason : 'Landlock ABI below 6'}` }));
+        expect(await readFile(join(f.root, 'dist/a'), 'utf8')).toBe('before\n');
+        expect(existsSync(join(f.root, 'dist/new'))).toBe(false);
+        return;
+      }
       if (!usable.ok) throw new Error(usable.reason);
       const ran = await usable.realm.run({ command: 'cat dist/a; echo changed >> dist/a; echo new > dist/new; echo written >> docs/a', cwd: f.root,
         environment: { PATH: '/usr/bin:/bin' }, timeoutMs: 20_000, writeFloorReadOnly: true });

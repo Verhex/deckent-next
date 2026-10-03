@@ -26,7 +26,7 @@ describe('build sourceCommonDir producer (no build)', () => {
     const { root, source } = fixture(); git(root, ['init', '-q']);
     git(root, ['add', '.']); git(root, ['-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid', 'commit', '-qm', 'fixture']);
     const built = identity(root, source);
-    expect(built.sourceCommonDir).toBe(realpathSync(join(root, '.git')));
+    expect(built.sourceCommonDir).toBe(realpathSync.native(join(root, '.git')));
     expect(built.sourceCommonDirOrigin).toBe('derived');
     expect(built.sourceCommit).toBe(git(root, ['rev-parse', 'HEAD']));
     expect(built.schemaVersion).toBe(1);
@@ -37,12 +37,12 @@ describe('build sourceCommonDir producer (no build)', () => {
     git(root, ['-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid', 'commit', '-qm', 'fixture']);
     const worktree = join(root, 'linked'); git(root, ['worktree', 'add', '--detach', '-q', worktree]);
     mkdirSync(join(worktree, 'dist'), { recursive: true });
-    expect(identity(worktree, join(worktree, 'src', 'index.ts')).sourceCommonDir).toBe(realpathSync(join(root, '.git')));
+    expect(identity(worktree, join(worktree, 'src', 'index.ts')).sourceCommonDir).toBe(realpathSync.native(join(root, '.git')));
   });
   it('canonicalizes a symlinked source checkout', () => {
     const { root } = fixture(); git(root, ['init', '-q']);
     const alias = join(root, 'alias'); symlinkSync(root, alias, 'dir');
-    expect(identity(alias, join(alias, 'src', 'index.ts')).sourceCommonDir).toBe(realpathSync(join(root, '.git')));
+    expect(identity(alias, join(alias, 'src', 'index.ts')).sourceCommonDir).toBe(realpathSync.native(join(root, '.git')));
   });
   it('archive/customer source trees without Git omit the optional field', () => {
     const { root, source } = fixture();
@@ -55,7 +55,7 @@ describe('build sourceCommonDir producer (no build)', () => {
     const origin = fixture().root, alias = join(root, 'origin alias'); symlinkSync(origin, alias, 'dir');
     vi.stubEnv('DECKENT_BUILD_SOURCE_COMMON_DIR', alias);
     const built = identity(root, source);
-    expect(built.sourceCommonDir).toBe(realpathSync(origin));
+    expect(built.sourceCommonDir).toBe(realpathSync.native(origin));
     expect(built.sourceCommonDirOrigin).toBe('declared');
     expect(built.schemaVersion).toBe(1);
     expect(JSON.parse(readFileSync(join(root, 'dist', 'build-identity.json'), 'utf8'))).toEqual(built);
@@ -80,7 +80,7 @@ describe('build sourceCommonDir producer (no build)', () => {
     const { root, source } = fixture(); const foreign = fixture().root;
     git(root, ['init', '-q']); git(foreign, ['init', '-q']);
     const previous = process.env[variable]; process.env[variable] = join(foreign, '.git');
-    try { expect(identity(root, source).sourceCommonDir).toBe(realpathSync(join(root, '.git'))); }
+    try { expect(identity(root, source).sourceCommonDir).toBe(realpathSync.native(join(root, '.git'))); }
     finally { if (previous === undefined) delete process.env[variable]; else process.env[variable] = previous; }
   });
 });

@@ -46,11 +46,14 @@ if (process.argv.includes('--hardcode-only') || process.argv.includes('--hardcod
     paths: Object.fromEntries(Object.keys(arch.packages).map(pkg => [`#${pkg}/*`, [`src/${pkg}/*`]])) };
   const sourceProgram = ts.createProgram(srcFiles, options);
   const findings = hardcodeInventory(hardcodeSources(srcFiles, sourceProgram), sourceProgram.getTypeChecker(), arch.hardcodeRatchet);
-  if (process.argv.includes('--hardcode-inventory')) process.stdout.write(JSON.stringify(findings, null, 2) + '\n');
+  let output;
+  if (process.argv.includes('--hardcode-inventory')) output = JSON.stringify(findings, null, 2) + '\n';
   else {
     lintHardcode(findings, arch.hardcodeRatchet);
-    process.stdout.write([...violations, ...warnings].map(v => `[${v.rule}] ${v.file} — ${v.message}`).join('\n') + '\n');
+    output = [...violations, ...warnings].map(v => `[${v.rule}] ${v.file} — ${v.message}`).join('\n') + '\n';
   }
+  // Pipes are asynchronous on POSIX: exit must wait for the complete inventory.
+  await new Promise((resolve, reject) => process.stdout.write(output, error => error ? reject(error) : resolve()));
   process.exit(violations.length ? 1 : 0);
 }
 const appFiles = walk(join(ROOT, 'apps'), isTs);

@@ -1,8 +1,9 @@
+import { existsSync } from 'node:fs';
 import { mkdir, mkdtemp, rm, writeFile, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, type TestContext } from 'vitest';
 import { EffectError, resolvePolicyBindings, type AgentToolSpec } from '#domain/index.js';
 import { SessionStanding, type EffectApprovalGate } from '#engine/index.js';
 import { resolveProductLayout, SystemTrustedClock } from '#platform/index.js';
@@ -14,6 +15,7 @@ import { agentTurnWriteFloor, applySandboxWriteSet, fileContentVersion, classify
 // T-L4 slice 4a (MODES-3: a bindings v2 `auto-edit` entry reads as standart, `ask` as standart that asks for every edit too): the turn's
 // permission decision is taken again at the effect on the policy as it is then. A relaxation writes its audit
 // event before the effect runs; the effect gate re-decides on every admission, so a deny or a lost relaxation since stops the effect.
+const privateAudit = (context: TestContext) => { if (process.platform === 'win32') context.skip('APPROVAL_KEY_PLATFORM_UNSUPPORTED: private no-follow POSIX audit keyring positive cannot execute on Windows'); };
 const roots: string[] = [];
 afterEach(async () => Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))));
 const me = { issuer: 'host', subject: '1000' };
@@ -35,7 +37,7 @@ async function fixture(loads: unknown[], options: { standing?: { memory: Session
   const ledger = join(root, 'ledger.db'); openSqliteLedger(ledger, sqlite).close();
   let loaded = 0;
   const context = { principal, policy: { async load() { return loads[Math.min(loaded++, loads.length - 1)]; } }, path: async () => ledger,
-    layout: resolveProductLayout({ projectRoot: root, root: data }), config: { storage: { sqlite }, approvals: { keyFile: 'authority.key' } } };
+    layout: resolveProductLayout({ projectRoot: root, root: data, platform: process.platform === 'win32' ? 'win32' : 'posix' }), config: { storage: { sqlite }, approvals: { keyFile: 'authority.key' } } };
   let plans = 0;
   const edits = { async plan() { plans++; return { ok: true }; }, floored: () => options.floored ?? false, authority: () => false, selfSource: () => options.selfSource ?? false, target: (_tool: string, given: Record<string, unknown>) => String(given['path']) };
   const scope = await createWorkspaceScope(root);
@@ -83,7 +85,7 @@ const withAccess = (tool: Effect, grant: Effect | null, revision = `p-fa-${tool}
 };
 
 describe('permission decision at the effect (T-L4 slice 4a)', () => {
-  it.skipIf(process.platform === 'win32')('requires POSIX private audit keyring — writes the audit event before the effect runs and admits the relaxed call on each admission', async () => {
+  it('requires POSIX private audit keyring — writes the audit event before the effect runs and admits the relaxed call on each admission', async context => { privateAudit(context);
     const f = await fixture([snapshot('require-approval', 'auto-edit')]);
     expect(await f.decisions.authorize(edit, args)).toBe('allow');
     expect(f.decisions.prepare(edit, args)).toEqual({ ok: true, requireApproval: false });
@@ -91,7 +93,7 @@ describe('permission decision at the effect (T-L4 slice 4a)', () => {
     expect(f.events()).toBe(1);
   });
 
-  it.skipIf(process.platform === 'win32')('requires POSIX private audit keyring — stops the effect when the policy denies between the audit and an admission; runs nothing when it changed before the effect', async () => {
+  it('requires POSIX private audit keyring — stops the effect when the policy denies between the audit and an admission; runs nothing when it changed before the effect', async context => { privateAudit(context);
     const denied = await fixture([snapshot('require-approval', 'auto-edit'), snapshot('require-approval', 'auto-edit'), snapshot('require-approval', 'auto-edit'), snapshot('deny', 'auto-edit')]);
     expect(await denied.decisions.authorize(edit, args)).toBe('allow');
     expect(await denied.execute()).toMatchObject({ outcome: { status: 'error', text: 'POLICY_DENIED' }, admissions: ['admitted', 'POLICY_DENIED'] });
@@ -108,7 +110,7 @@ describe('permission decision at the effect (T-L4 slice 4a)', () => {
     }
   });
 
-  it.skipIf(process.platform === 'win32')('requires POSIX private audit keyring — admits only the decision the audit event recorded: another mode, revision or a plain allow since stops the effect (Astra 2133)', async () => {
+  it('requires POSIX private audit keyring — admits only the decision the audit event recorded: another mode, revision or a plain allow since stops the effect (Astra 2133)', async context => { privateAudit(context);
     // authorize, execute (the audited decision), then the admissions. Astra's case: audited in auto-edit, admitted after a switch to full-auto.
     const audited = snapshot('require-approval', 'auto-edit');
     const sameRevision = 'p-require-approval-auto-edit';
@@ -133,7 +135,7 @@ describe('permission decision at the effect (T-L4 slice 4a)', () => {
     expect(await same.execute()).toMatchObject({ outcome: { status: 'ok', text: 'ran' }, admissions: ['admitted', 'admitted'] });
   });
 
-  it.skipIf(process.platform === 'win32')('requires POSIX private audit keyring — Astra 2134 R2 repro: changing the relaxed mode after audit must not use the stale audit event', async () => {
+  it('requires POSIX private audit keyring — Astra 2134 R2 repro: changing the relaxed mode after audit must not use the stale audit event', async context => { privateAudit(context);
     const f = await fixture([snapshot('require-approval', 'auto-edit'), snapshot('require-approval', 'auto-edit'), snapshot('require-approval', 'full-auto')]);
     expect(await f.decisions.authorize(edit, args)).toBe('allow');
     const result = await f.execute();
@@ -144,7 +146,7 @@ describe('permission decision at the effect (T-L4 slice 4a)', () => {
       .toEqual([['p-require-approval-auto-edit+b', 'standart']]);
   });
 
-  it.skipIf(process.platform === 'win32')('requires POSIX private audit keyring — answers deny before planning and fails closed on an unreadable policy', async () => {
+  it('requires POSIX private audit keyring — answers deny before planning and fails closed on an unreadable policy', async context => { privateAudit(context);
     const f = await fixture([snapshot('deny', 'full-auto')]);
     expect(await f.decisions.authorize(edit, args)).toBe('deny');
     expect(f.plans()).toBe(0);
@@ -163,7 +165,7 @@ describe('permission decision at the effect (T-L4 slice 4a)', () => {
       principals: [me], resource: { kind: 'agent-tool-call', ids: [KEY] } }] }, { schemaVersion: 2, revision: 'b', bindings: [], modes: [{ id: 'me-mode', principal: me, scopes: ['scope'], mode: 'ask' }] });
   };
 
-  it.skipIf(process.platform === 'win32')('requires POSIX private audit keyring — this session: asks until the card answer is remembered (audited first), then lowers the call, audits its use before the effect, and is gone after a restart', async () => {
+  it('requires POSIX private audit keyring — this session: asks until the card answer is remembered (audited first), then lowers the call, audits its use before the effect, and is gone after a restart', async context => { privateAudit(context);
     const memory = new SessionStanding(), session = 'conversation-1';
     const f = await fixture([asks], { standing: { memory, session } });
     expect(await f.decisions.authorize(edit, args)).toBe('require-approval');
@@ -179,7 +181,7 @@ describe('permission decision at the effect (T-L4 slice 4a)', () => {
     expect(await restarted.decisions.authorize(edit, args)).toBe('require-approval');
   });
 
-  it.skipIf(process.platform === 'win32')('requires POSIX private audit keyring — a call the standing approval does not name, another conversation, or the write floor still asks; nothing is remembered without an audit', async () => {
+  it('requires POSIX private audit keyring — a call the standing approval does not name, another conversation, or the write floor still asks; nothing is remembered without an audit', async context => { privateAudit(context);
     const memory = new SessionStanding();
     memory.remember('conversation-1', KEY);
     const other = await fixture([asks], { standing: { memory, session: 'conversation-2' } });
@@ -192,7 +194,7 @@ describe('permission decision at the effect (T-L4 slice 4a)', () => {
     expect(floored.events()).toBe(0);
   });
 
-  it.skipIf(process.platform === 'win32')('requires POSIX private audit keyring — the persisted grant lowers the call and is audited as a grant; losing the session memory or the grant before an admission stops the effect', async () => {
+  it('requires POSIX private audit keyring — the persisted grant lowers the call and is audited as a grant; losing the session memory or the grant before an admission stops the effect', async context => { privateAudit(context);
     const granted = await fixture([withGrant()]);
     expect(await granted.decisions.authorize(edit, args)).toBe('allow');
     expect(await granted.execute()).toMatchObject({ outcome: { status: 'ok' }, eventsAtRun: 1, admissions: ['admitted', 'admitted'] });
@@ -219,7 +221,7 @@ describe('permission decision at the effect (T-L4 slice 4a)', () => {
 
   // MODES-3: a launched full-access turn. Every effect call it allows is one sealed `full-access-call` event before the effect — a plain allow
   // too — and the effect gate admits only that decision again: a revoked grant (or a turn without the flag) is not what was audited.
-  it.skipIf(process.platform === 'win32')('requires POSIX private audit keyring — full access: a plain allow and a floor path both run, each audited once as a full-access call before the effect', async () => {
+  it('requires POSIX private audit keyring — full access: a plain allow and a floor path both run, each audited once as a full-access call before the effect', async context => { privateAudit(context);
     const plain = await fixture([withAccess('allow', 'allow')], { fullAccess: true });
     expect(await plain.decisions.authorize(edit, args)).toBe('allow');
     expect(await plain.execute()).toEqual({ outcome: { status: 'ok', text: 'ran' }, eventsAtRun: 1, admissions: ['admitted', 'admitted'] });
@@ -231,7 +233,7 @@ describe('permission decision at the effect (T-L4 slice 4a)', () => {
     expect(floor.auditRecords()[0]!.event.subject).toMatchObject({ kind: 'full-access-call', cell: 'edit-floor', policy: 'require-approval', raised: false, company: 'edit-tool' });
   });
 
-  it.skipIf(process.platform === 'win32')('requires POSIX private audit keyring — full access: a grant revoked or denied after the audit stops the effect; without the grant or without the launch flag it is the stored mode', async () => {
+  it('requires POSIX private audit keyring — full access: a grant revoked or denied after the audit stops the effect; without the grant or without the launch flag it is the stored mode', async context => { privateAudit(context);
     for (const later of [withAccess('allow', null), withAccess('allow', 'deny'), withAccess('allow', 'allow', 'p-edited')]) {
       const f = await fixture([withAccess('allow', 'allow'), withAccess('allow', 'allow'), later], { fullAccess: true });
       expect(await f.decisions.authorize(edit, args)).toBe('allow');
@@ -250,7 +252,7 @@ describe('permission decision at the effect (T-L4 slice 4a)', () => {
 describe('call authority at the effect (merge Astra 2170 x MODES-3)', () => {
   // Merge Astra 2170 x MODES-3 (owner 2026-09-29): the decision tells the effect who stands behind the call — the sandboxed shell derives its
   // write posture from it (`shellWritePosture`): an audited full-access call is `full-access`, never the unattended read-only posture.
-  it.skipIf(process.platform === 'win32')('requires POSIX private audit keyring — hands the effect the call authority: owner-approved for a card, full-access for an audited full-access call, unattended otherwise', async () => {
+  it('requires POSIX private audit keyring — hands the effect the call authority: owner-approved for a card, full-access for an audited full-access call, unattended otherwise', async context => { privateAudit(context);
     const cases: readonly [string, unknown, boolean, string][] = [['card (ask edits)', snapshot('require-approval', 'ask'), false, 'owner-approved'],
       ['full access', withAccess('allow', 'allow'), true, 'full-access'], ['full access over a floor raise', withAccess('require-approval', 'allow'), true, 'full-access'],
       ['mode relaxation', snapshot('require-approval', 'auto-edit'), false, 'unattended'], ['silent allow', snapshot('allow', null), false, 'unattended'],
@@ -294,6 +296,16 @@ describe('SELF-SOURCE-FLOOR R1 classification and normalized session targets', (
   it('classifies actual edit plans with authority then static floor then self-source, and refuses hard-floor session answers', async () => {
     const memory = new SessionStanding(), session = 'r1';
     const f = await fixture([snapshot('allow', 'full-auto')], { realAreas: true, standing: { memory, session } });
+    if (process.platform !== 'linux' || !existsSync('/proc/self/fd')) {
+      expect(await f.scope.open('src', 'dir')).toEqual({ ok: false, error: 'platform-unsupported' });
+      expect(await f.decisions.authorize(edit, args)).toBe('require-approval');
+      expect(f.decisions.prepare(edit, args)).toEqual({ ok: false, text: '[deckent] edit_file: error=parent-platform-unsupported' });
+      expect(await f.decisions.remember(edit, args, { round: 1, index: 0 }, 'call', 'approval')).toBe(false);
+      expect(f.events()).toBe(0);
+      expect(await readFile(join(f.root, args.path), 'utf8')).toBe('a');
+      console.log('verify-not-run: ' + JSON.stringify({ file: 'tests/contracts/composition/agent-call-decisions.test.ts', test: expect.getState().currentTestName, state: 'skipped', variant: 'descriptor-backed-edit-plans', reason: 'WORKSPACE_PLATFORM_UNSUPPORTED: real scope refuses planning; no session answer or effect; Linux classification positive remains required' }));
+      return;
+    }
     for (const path of ['package.json', '.agents/refactor/x.mjs', '.github/w.yml', 'AGENTS.md', 'src/package.json']) {
       const given = { ...args, path };
       expect(await f.decisions.authorize(edit, given), path).toBe('require-approval');
@@ -312,7 +324,8 @@ describe('SELF-SOURCE-FLOOR R1 classification and normalized session targets', (
     expect(f.events()).toBe(0);
   });
 
-  it.skipIf(process.platform !== 'linux')('keeps self-source reads contained and card-free in full-auto while build output entries still ask', async () => {
+  it('keeps self-source reads contained and card-free in full-auto while build output entries still ask', async context => {
+    if (process.platform !== 'linux' || !existsSync('/proc/self/fd')) context.skip('WORKSPACE_PLATFORM_UNSUPPORTED: descriptor-backed read and write-set positive requires Linux /proc/self/fd');
     const base = snapshot('allow', 'full-auto') as { grants: unknown[] };
     const policy = resolvePolicyBindings({ schemaVersion: 2, revision: 'p', roles: [], separationOfDuties: [], restrictions: [], grants: [...base.grants,
       { id: 'shell', effect: 'require-approval', modeEligible: true, actions: ['invoke'], scopes: ['scope'], principals: [me], resource: { kind: 'agent-tool', ids: ['run_shell'] } },
@@ -352,10 +365,19 @@ describe('SELF-SOURCE-FLOOR R1 classification and normalized session targets', (
     expect(result).toEqual({ status: 'ok', text: 'checked' });
   });
 
-  it.skipIf(process.platform === 'win32')('uses the normalized edit target for self-source session keys', async () => {
+  it('uses the normalized edit target for self-source session keys', async () => {
     const memory = new SessionStanding(), session = 'normalized';
     const f = await fixture([snapshot('require-approval', 'ask')], { realAreas: true, standing: { memory, session } });
     const raw = { ...args, path: './src/a.ts' };
+    if (process.platform !== 'linux' || !existsSync('/proc/self/fd')) {
+      expect(await f.scope.resolve(raw.path)).toEqual({ ok: false, error: 'platform-unsupported' });
+      expect(await f.decisions.authorize(edit, raw)).toBe('require-approval');
+      expect(f.decisions.prepare(edit, raw)).toEqual({ ok: false, text: '[deckent] edit_file: error=parent-platform-unsupported' });
+      expect(await f.decisions.remember(edit, raw, { round: 1, index: 0 }, 'call', 'approval')).toBe(false);
+      expect(memory.has(session, 'v1:session:edit-self-source:edit_file:directory:src/*')).toBe(false);
+      console.log('verify-not-run: ' + JSON.stringify({ file: 'tests/contracts/composition/agent-call-decisions.test.ts', test: expect.getState().currentTestName, state: 'skipped', variant: 'normalized-descriptor-backed-session-grant', reason: 'WORKSPACE_PLATFORM_UNSUPPORTED: platform-unsupported planning refusal has no remembered grant; Linux positive remains required' }));
+      return;
+    }
     expect(await f.decisions.authorize(edit, raw)).toBe('require-approval');
     expect(await f.decisions.remember(edit, raw, { round: 1, index: 0 }, 'call', 'approval')).toBe(true);
     expect(memory.has(session, 'v1:session:edit-self-source:edit_file:directory:src/*')).toBe(true);
@@ -365,7 +387,7 @@ describe('SELF-SOURCE-FLOOR R1 classification and normalized session targets', (
 });
 
 describe('SELF-SOURCE-FLOOR session effect integration', () => {
-  it.skipIf(process.platform === 'win32')('requires POSIX private audit keyring — full-access ordinary and static-floor decisions and audit payloads are byte-identical with self-source on or off', async () => {
+  it('requires POSIX private audit keyring — full-access ordinary and static-floor decisions and audit payloads are byte-identical with self-source on or off', async context => { privateAudit(context);
     for (const floored of [false, true]) {
       const baseline = await fixture([withAccess('allow', 'allow')], { fullAccess: true, selfSource: false, floored, clockMs: 1000 });
       const derived = await fixture([withAccess('allow', 'allow')], { fullAccess: true, selfSource: true, floored, clockMs: 1000 });
@@ -377,7 +399,7 @@ describe('SELF-SOURCE-FLOOR session effect integration', () => {
     }
   });
 
-  it.skipIf(process.platform === 'win32')('requires POSIX private audit keyring — a full-auto shell write set refuses dist self-source and authority paths before application, while ordinary customer writes stay allowed', async () => {
+  it('requires POSIX private audit keyring — a full-auto shell write set refuses dist self-source and authority paths before application, while ordinary customer writes stay allowed', async context => { privateAudit(context);
     const base = snapshot('allow', 'full-auto') as { grants: unknown[] };
     const policy = resolvePolicyBindings({ schemaVersion: 2, revision: 'p', roles: [], separationOfDuties: [], restrictions: [], grants: [...base.grants,
       { id: 'shell', effect: 'require-approval', modeEligible: true, actions: ['invoke'], scopes: ['scope'], principals: [me], resource: { kind: 'agent-tool', ids: ['run_shell'] } },
@@ -400,7 +422,7 @@ describe('SELF-SOURCE-FLOOR session effect integration', () => {
     expect(f.events()).toBe(2);
   });
 
-  it.skipIf(process.platform === 'win32')('requires POSIX private audit keyring — a session-lowered self-source shell write-set entry records its sealed use before its effect', async () => {
+  it('requires POSIX private audit keyring — a session-lowered self-source shell write-set entry records its sealed use before its effect', async context => { privateAudit(context);
     const base = snapshot('allow', 'full-auto') as { grants: unknown[] };
     const policy = resolvePolicyBindings({ schemaVersion: 2, revision: 'p', roles: [], separationOfDuties: [], restrictions: [], grants: [...base.grants,
       { id: 'shell', effect: 'require-approval', modeEligible: true, actions: ['invoke'], scopes: ['scope'], principals: [me], resource: { kind: 'agent-tool', ids: ['run_shell'] } },
@@ -434,7 +456,7 @@ describe('SELF-SOURCE-FLOOR session effect integration', () => {
     }
   });
 
-  it.skipIf(process.platform === 'win32')('requires POSIX private audit keyring — unavailable audit never remembers a self-source session or runs its lowered effect', async () => {
+  it('requires POSIX private audit keyring — unavailable audit never remembers a self-source session or runs its lowered effect', async context => { privateAudit(context);
     const memory = new SessionStanding(), session = 'failed-audit-session';
     const key = 'v1:session:edit-self-source:edit_file:directory:src/*';
     const f = await fixture([snapshot('require-approval', 'ask')], { selfSource: true, standing: { memory, session } });
@@ -454,7 +476,7 @@ describe('SELF-SOURCE-FLOOR session effect integration', () => {
     expect(f.events()).toBe(0);
   });
 
-  it.skipIf(process.platform === 'win32')('requires POSIX private audit keyring — self-source session answers are sealed before memory and used before effects; persisted-only grants never replace the answer', async () => {
+  it('requires POSIX private audit keyring — self-source session answers are sealed before memory and used before effects; persisted-only grants never replace the answer', async context => { privateAudit(context);
     const asks = snapshot('require-approval', 'ask');
     const memory = new SessionStanding(), session = 'self-source-conversation';
     const key = 'v1:session:edit-self-source:edit_file:directory:src/*';

@@ -36,9 +36,10 @@ const GIT_ENV: Readonly<Record<string, string>> = Object.freeze({ PATH: '/usr/bi
   GIT_ALLOW_PROTOCOL: '', GIT_NO_LAZY_FETCH: '1', GIT_OPTIONAL_LOCKS: '0', LC_ALL: 'C' });
 
 /** What was known before the call: the measured tracked files, nothing to measure (not a git project), too many files, or git could not answer. */
+export type TrackedFilesUnavailableReason = 'GIT_LIST_TIMEOUT' | 'GIT_LIST_MAX_BUFFER' | 'GIT_LIST_EXECUTION_FAILED' | 'GIT_LISTING_FAILED';
 export type TrackedFilesBaseline =
   | { readonly kind: 'measured'; readonly root: string; readonly paths: readonly string[]; readonly stats: readonly (string | null)[] }
-  | { readonly kind: 'none' } | { readonly kind: 'over-bound'; readonly count: number; readonly bound: number } | { readonly kind: 'unavailable' };
+  | { readonly kind: 'none' } | { readonly kind: 'over-bound'; readonly count: number; readonly bound: number } | { readonly kind: 'unavailable'; readonly reason?: TrackedFilesUnavailableReason };
 export interface TrackedFilesList { readonly count: number; readonly paths: readonly string[] }
 export interface TrackedFilesChange { readonly deleted: TrackedFilesList; readonly overwritten: TrackedFilesList }
 
@@ -61,14 +62,16 @@ async function identities(root: string, paths: readonly string[]): Promise<(stri
   }
   return out;
 }
-function listTracked(root: string): Promise<{ readonly ok: true; readonly stdout: Buffer } | { readonly ok: false; readonly repository: boolean }> {
+function listTracked(root: string): Promise<{ readonly ok: true; readonly stdout: Buffer } | { readonly ok: false; readonly repository: boolean; readonly reason: TrackedFilesUnavailableReason }> {
   return new Promise(resolve => {
     execFile('git', ['--no-replace-objects', '-C', root, '-c', 'core.fsmonitor=false', '-c', 'core.hooksPath=/dev/null', 'ls-files', '-z', '-s'],
       { env: GIT_ENV, encoding: 'buffer', maxBuffer: LISTING_MAX_BYTES, timeout: LISTING_TIMEOUT_MS, windowsHide: true }, (error, stdout, stderr) => {
         if (!error) { resolve({ ok: true, stdout }); return; }
         // Exit 128 with "not a git repository": no repository holds the project — nothing to measure. Anything else: git could not answer.
         const notRepository = (error as { code?: unknown }).code === 128 && /not a git repository/iu.test(Buffer.from(stderr ?? '').toString('utf8'));
-        resolve({ ok: false, repository: !notRepository });
+        const failure = error as { killed?: boolean; code?: unknown };
+        const reason: TrackedFilesUnavailableReason = failure.code === 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER' ? 'GIT_LIST_MAX_BUFFER' : failure.killed ? 'GIT_LIST_TIMEOUT' : 'GIT_LIST_EXECUTION_FAILED';
+        resolve({ ok: false, repository: !notRepository, reason });
       });
   });
 }
@@ -77,7 +80,7 @@ function listTracked(root: string): Promise<{ readonly ok: true; readonly stdout
 export async function snapshotTrackedFiles(root: string, max = TRACKED_FILES_MAX): Promise<TrackedFilesBaseline> {
   try {
     const listed = await listTracked(root);
-    if (!listed.ok) return listed.repository ? { kind: 'unavailable' } : { kind: 'none' };
+    if (!listed.ok) return listed.repository ? { kind: 'unavailable', reason: listed.reason } : { kind: 'none' };
     const seen = new Set<string>(), paths: string[] = [];
     for (const entry of listed.stdout.toString('utf8').split('\0')) {
       const tab = entry.indexOf('\t');
@@ -88,7 +91,7 @@ export async function snapshotTrackedFiles(root: string, max = TRACKED_FILES_MAX
     }
     if (paths.length > max) return { kind: 'over-bound', count: paths.length, bound: max };
     return { kind: 'measured', root, paths, stats: await identities(root, paths) };
-  } catch { return { kind: 'unavailable' }; }
+  } catch { return { kind: 'unavailable', reason: 'GIT_LISTING_FAILED' }; }
 }
 
 /** The tracked files the call deleted or overwrote (null when none), measured against the baseline; never throws. */

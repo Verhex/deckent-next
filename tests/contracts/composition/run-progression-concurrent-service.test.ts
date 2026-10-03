@@ -25,7 +25,8 @@ function bounded<T>(promise: Promise<T>) {
 async function fixture(maxConcurrentExecutions: number) {
   const project = await mkdtemp(join(tmpdir(), 'deckent-run-concurrent-service-')); roots.push(project);
   await mkdir(join(project, '.deckent'), { mode: 0o700 });
-  const env = { HOME: join(project, 'home') };
+  const home = join(project, 'home');
+  const env = { HOME: home, USERPROFILE: home, APPDATA: home, LOCALAPPDATA: home };
   await writeFile(join(project, '.deckent/config.json'), JSON.stringify({ layout: { root: join(project, 'data') },
     cancellation: { maxConcurrentDeliveries: 1, recoveryPageSize: 1, maxAttempts: 1, retryDelayMs: 1, claimTtlMs: 10 },
     cancellationRuntime: { scopeIds: ['s'], pollIntervalMs: 1000, failureBackoffMs: 1000 },
@@ -48,7 +49,8 @@ async function fixture(maxConcurrentExecutions: number) {
   const layout = opened.layout; opened.store.close(); return { project, env, layout };
 }
 
-it.skipIf(!nativeAvailable)('[requires built Linux peer_credentials.node] governed service shutdown drains both concurrent Run turns before releasing custody (controlled execution port)', async () => {
+it('[requires built Linux peer_credentials.node] governed service shutdown drains both concurrent Run turns before releasing custody (controlled execution port)', async context => {
+  if (!nativeAvailable) context.skip('LOCAL_RUNTIME_UNSUPPORTED: requires built Linux peer_credentials.node');
   const f = await fixture(2), gates = [deferred(), deferred()], started = deferred();
   const starts: string[] = [], observed: string[] = [], errors: string[] = [], firstPublished = deferred();
   vi.spyOn(execution, 'executeConfiguredTask').mockImplementation(async (_project, identity) => {
@@ -73,7 +75,8 @@ it.skipIf(!nativeAvailable)('[requires built Linux peer_credentials.node] govern
   } finally { gates.forEach(gate => gate.resolve()); await service.stop(); await service.done; }
 }, 10000);
 
-it.skipIf(!nativeAvailable)('[requires built Linux peer_credentials.node] shares execution cap across concurrent reserved Runs and adds slot wait to the completed observer only (controlled execution port)', async () => {
+it('[requires built Linux peer_credentials.node] shares execution cap across concurrent reserved Runs and adds slot wait to the completed observer only (controlled execution port)', async context => {
+  if (!nativeAvailable) context.skip('LOCAL_RUNTIME_UNSUPPORTED: requires built Linux peer_credentials.node');
   const f = await fixture(1), gates = [deferred(), deferred()], first = deferred(), second = deferred();
   const starts: string[] = [], observed = new Map<string, Parameters<NonNullable<RunProgressionObserver['onRun']>>[1]>(), errors: string[] = [];
   vi.spyOn(execution, 'executeConfiguredTask').mockImplementation(async (_project, identity) => {
@@ -100,7 +103,11 @@ it.skipIf(!nativeAvailable)('[requires built Linux peer_credentials.node] shares
 }, 10000);
 
 
-it.each([1, 2])('configured driver shares execution cap=%s and drains both reserved Run turns without a socket (controlled execution port)', async cap => {
+it.for([1, 2])('configured driver shares execution cap=%s and drains both reserved Run turns without a socket (controlled execution port)', async (cap, context) => {
+  if (process.platform === 'win32') {
+    await expect(fixture(cap)).rejects.toMatchObject({ code: 'MANAGED_FILE_UNSUPPORTED' });
+    context.skip('MANAGED_FILE_UNSUPPORTED: configured ledger custody requires POSIX ownership and permissions');
+  }
   const f = await fixture(cap), gates = [deferred(), deferred()], first = deferred(), second = deferred(), controller = new AbortController();
   const starts: string[] = [], observed = new Map<string, Parameters<NonNullable<RunProgressionObserver['onRun']>>[1]>(), errors: string[] = [];
   vi.spyOn(execution, 'executeConfiguredTask').mockImplementation(async (_project, identity) => {
