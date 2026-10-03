@@ -37,6 +37,8 @@ export class RunLifecycleRuntimeLoop {
         if (backoffUntil > this.now()) { await wait(backoffUntil - this.now(), signal); continue; }
         try {
           const { page, due } = await this.operations.discover(cursor, dueCursor, this.now());
+          // The page cursor advances only past Runs this poll actually visited: a page met with a full bound is re-read next poll (Fable R1).
+          const previous: ProgressionCursor | null = cursor;
           cursor = page.next; dueCursor = due.next;
           for (const query of due.items) {
             if (signal.aborted) break;
@@ -49,7 +51,7 @@ export class RunLifecycleRuntimeLoop {
           let visited: ProgressionCursor | null = null;
           for (const query of page.items) {
             if (signal.aborted || this.inFlight.size >= this.concurrency) {
-              if (visited) cursor = visited;
+              cursor = visited ?? previous;
               break;
             }
             visited = query;

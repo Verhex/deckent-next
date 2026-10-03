@@ -97,3 +97,34 @@ it('keys custody by scope as well as Run id and preserves a single-Run observer 
   expect(advance).toHaveBeenCalledTimes(2); expect(onRun).toHaveBeenCalledTimes(2);
   expect(JSON.stringify(onRun.mock.calls[0]![1])).toBe(JSON.stringify(result));
 });
+
+// Fable 5.1 R1 negative proof: a bound already full at poll start must not consume the page (fairness, not starvation).
+const ovA = { scopeId: 's', runId: 'a' }, ovB = { scopeId: 's', runId: 'b' }, ovC = { scopeId: 's', runId: 'c' };
+const ovAll = [ovA, ovB, ovC];
+const ovResult = { attempted: 1, stopped: false } as Awaited<ReturnType<RunLifecycleRuntimeOperations['advance']>>;
+function ovDeferred() { let resolve!: () => void; const promise = new Promise<void>(done => { resolve = done; }); return { promise, resolve }; }
+it('a Run left out because the bound was already full at poll start is picked up by the next poll (not after a wrap)', async () => {
+  vi.useFakeTimers(); const controller = new AbortController(), slow = ovDeferred();
+  const starts: string[] = [], discoverAfter: (string | null)[] = [];
+  const loop = new RunLifecycleRuntimeLoop({
+    async discover(after) {
+      discoverAfter.push(after?.runId ?? null);
+      const index = after ? ovAll.findIndex(x => x.runId === after.runId) + 1 : 0;
+      const items = ovAll.slice(index, index + 1);
+      return { page: { items, next: index + 1 < ovAll.length ? items[0]! : null }, due: { items: [], next: null } };
+    },
+    async advance(query) { starts.push(query.runId); if (query.runId === 'a') await slow.promise; return ovResult; },
+    async expire() {},
+  }, {}, { pollIntervalMs: 10, failureBackoffMs: 100, maxConcurrentRuns: 1 });
+  const work = loop.run(controller.signal);
+  try {
+    await vi.advanceTimersByTimeAsync(10); // poll 1: a starts and holds the only slot
+    expect(starts).toEqual(['a']);
+    await vi.advanceTimersByTimeAsync(10); // poll 2: page [b] discovered while saturated
+    expect(starts).toEqual(['a']);
+    slow.resolve(); await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(10); // poll 3: slot free — the Run left out (b) should be next
+    expect(discoverAfter).toEqual([null, 'a', 'a']);
+    expect(starts[1]).toBe('b');
+  } finally { controller.abort(); slow.resolve(); await work; }
+});
