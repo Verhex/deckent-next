@@ -1764,8 +1764,15 @@ Internal session patterns are distinct from ordinary standing keys, scope/princi
 `standingPattern` refuses the new cell as `cell-not-standing`, and persisted grants never lower it. **Public session answers remain
 unwired:** the stream has no standing offer and terminal decisions return `saved: false, reason: protocol`; the production turn does
 not supply session memory. Adding those fields is outside this lane's pre-approved contracts. This is an implementation limit,
-not S1 closure. The current dev-release builds in a temporary separate clone, so that build identity does not match the original
-source checkout. Lead checkpoints and verification limits: external `proof/SELF-SOURCE-FLOOR-2026-10-03/review.md` and `revise-1/review.md`.
+not S1 closure. Owner D4 (2026-10-03) admits DEV-RELEASE-SOURCE-ORIGIN option D: retain the separate clone, declare the
+origin checkout common directory through `DECKENT_BUILD_SOURCE_COMMON_DIR` (absolute existing readable directory, canonicalized),
+and record optional `sourceCommonDirOrigin: declared|derived` in identity v1. Invalid declarations fail the build without fallback.
+Stage checks origin common directory and selected commit in the built and unpacked identity before installing; mismatches,
+missing/malformed identities and stale cached provenance refuse with `DEV_RELEASE_IDENTITY_MISMATCH`. release.json records
+`sourceCommonDir`; old identity readers accept the additive origin marker. The producer and host-kit candidate have targeted
+author evidence (fake repository staging); delivered as one lane commit `03d8807a` (the lead applied the sandbox patch), Fable 5.1 bounded
+PASS 2026-10-03. Landing and real deployed proof (a real stage + a live/N1 turn) remain open. Lead checkpoints: external
+`proof/SELF-SOURCE-FLOOR-2026-10-03/review.md`, `revise-1/review.md` (Fable R1 PASS `08eb1d6c`) and `proof/DEV-RELEASE-SOURCE-ORIGIN-2026-10-03/review.md`.
 
 **Standing approvals (PERSISTENT-APPROVALS G6, owner 2026-09-28 "kapsam seçmeli", seventh batch).** A standing approval is the person's
 own v2 grant on resource kind `agent-tool-call` (ids `standing-*`, one person, one scope list, id = key `v1:<tool>:<kind>:<pattern>`), or

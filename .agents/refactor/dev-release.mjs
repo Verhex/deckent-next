@@ -10,6 +10,8 @@
 //   stage <commit> [--allow-local] [--preview] [--bwrap <dir>] [--remote-ref origin/main] [--source <repo>] [--waive-smoke <check,…>] [--keep-build]
 //         [--allow-same-version]
 //       clone --local --no-hardlinks (nothing is written into the live .git; Jev 2b6f9f73) → npm ci → build → build-dist --pack --bwrap →
+//       build receives DECKENT_BUILD_SOURCE_COMMON_DIR = realpath of the origin checkout Git common dir; commit/origin must match
+//       in built and unpacked identity (DEV_RELEASE_IDENTITY_MISMATCH); release.json records sourceCommonDir.
 //       smoke:dist on the tarball and on the unpacked tree → versions/<id>. Refuses unknown commits, a dirty symbolic ref, unpushed commits
 //       (unless --allow-local/--preview), a dirty build and a package without the bundled bubblewrap (other publication blockers are
 //       recorded, not refused); a failed smoke installs nothing. Owner rule 2026-10-03: every live release bumps the package version, so a
@@ -74,7 +76,8 @@ function must(code, command, args, options) {
   if (result.status !== 0) fail(code, { command: [command, ...args].join(' '), status: result.status, stderr: `${result.stderr}${result.error?.message ?? ''}`.slice(-2000) });
   return result.stdout;
 }
-const git = (repo, args, code = 'DEV_RELEASE_GIT') => must(code, 'git', ['--no-optional-locks', '-C', repo, ...args]).trim();
+const gitEnv = () => Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith('GIT_')));
+const git = (repo, args, code = 'DEV_RELEASE_GIT') => must(code, 'git', ['--no-optional-locks', '-C', repo, ...args], { env: gitEnv() }).trim();
 const lastJson = text => { const at = text.search(/^\{/mu); if (at < 0) fail('DEV_RELEASE_OUTPUT', { tail: text.slice(-500) }); return JSON.parse(text.slice(at)); };
 
 /** Exclusive flock on an already open descriptor: util-linux flock(1) locks the inherited open file description, which stays locked in
@@ -317,6 +320,16 @@ function changedState(snapshot) {
     .filter(([, entry]) => !existsSync(entry.path) || sha256(readFileSync(entry.path)) !== entry.sha256).map(([name, entry]) => ({ name, path: entry.path, snapshot: join(snapshot, name) }));
 }
 
+/** Origin and selected commit stay bound through the clone, packaged tree and cached stage. Missing/malformed identities refuse. */
+function verifySourceIdentity(path, sha, sourceCommonDir) {
+  let identity;
+  try { identity = readJson(path); }
+  catch { fail('DEV_RELEASE_IDENTITY_MISMATCH', { path, sha, sourceCommonDir }); }
+  if (identity?.sourceCommit !== sha || identity?.sourceCommonDir !== sourceCommonDir) fail('DEV_RELEASE_IDENTITY_MISMATCH', {
+    path, expected: { sourceCommit: sha, sourceCommonDir }, actual: { sourceCommit: identity?.sourceCommit ?? null, sourceCommonDir: identity?.sourceCommonDir ?? null } });
+  return identity;
+}
+
 // --- commands ---------------------------------------------------------------------------------------------------------------------
 function packageVersion(source, sha) {
   try { const v = JSON.parse(run('git', ['--no-optional-locks', '-C', source, 'show', `${sha}:package.json`]).stdout).version; return typeof v === 'string' && v ? v : null; } catch { return null; }
@@ -325,13 +338,17 @@ export async function stage(L, ref, opts) {
   const source = opts.source ? resolve(opts.source) : L.project;
   let sha; try { sha = git(source, ['rev-parse', '--verify', '--quiet', `${ref}^{commit}`], 'DEV_RELEASE_UNKNOWN_COMMIT'); } catch { fail('DEV_RELEASE_UNKNOWN_COMMIT', { ref }); }
   if (!/^[0-9a-f]{7,64}$/u.test(ref) && git(source, ['status', '--porcelain', '--untracked-files=no'])) fail('DEV_RELEASE_SOURCE_DIRTY', { ref, hint: 'the build uses the commit, not the working tree: pass the commit sha' });
-  const pushed = run('git', ['--no-optional-locks', '-C', source, 'merge-base', '--is-ancestor', sha, opts.remoteRef]).status === 0;
+  const pushed = run('git', ['--no-optional-locks', '-C', source, 'merge-base', '--is-ancestor', sha, opts.remoteRef], { env: gitEnv() }).status === 0;
   if (!pushed && !opts.allowLocal && !opts.preview) fail('DEV_RELEASE_UNPUSHED', { sha, remoteRef: opts.remoteRef });
   const bwrap = opts.bwrap ?? (() => { const packs = join(source, '.pack/bwrap');
     return existsSync(packs) ? readdirSync(packs).map(name => join(packs, name)).filter(dir => existsSync(join(dir, 'out'))).sort((a, b) => statSync(b).mtimeMs - statSync(a).mtimeMs)[0] : undefined; })();
   if (!bwrap || !existsSync(bwrap)) fail('DEV_RELEASE_BWRAP_MISSING', { hint: 'pass --bwrap <build-bwrap output>' });
+  const sourceCommonDir = realpathSync(resolve(source, git(source, ['rev-parse', '--git-common-dir'])));
   const staged = existsSync(L.versions) ? readdirSync(L.versions).find(name => ID.test(name) && name.startsWith(`${sha.slice(0, 12)}-`)) : undefined;
-  if (staged) return { ok: true, alreadyStaged: true, id: staged, dir: join(L.versions, staged) };
+  if (staged) {
+    verifySourceIdentity(join(L.versions, staged, 'dist/build-identity.json'), sha, sourceCommonDir);
+    return { ok: true, alreadyStaged: true, id: staged, dir: join(L.versions, staged) };
+  }
   const packageVer = packageVersion(source, sha), live = currentId(L);
   const liveVer = live ? packageVersion(source, readRelease(L, live).sourceCommit) : null, same = packageVer !== null && packageVer === liveVer;
   if (same && !opts.allowSameVersion) fail('DEV_RELEASE_SAME_VERSION', { sha, version: packageVer, currentId: live, hint: 'bump package.json (owner rule 2026-10-03) or pass --allow-same-version' });
@@ -339,14 +356,14 @@ export async function stage(L, ref, opts) {
   const step = (name, fn) => { const at = Date.now(); try { return fn(); } finally { timings[name] = Date.now() - at; } };
   try {
     mkdirSync(L.versions, { recursive: true, mode: 0o700 });
-    step('clone', () => { must('DEV_RELEASE_CLONE', 'git', ['clone', '--quiet', '--local', '--no-hardlinks', '--no-checkout', source, build]);
+    step('clone', () => { must('DEV_RELEASE_CLONE', 'git', ['clone', '--quiet', '--local', '--no-hardlinks', '--no-checkout', source, build], { env: gitEnv() });
       git(build, ['-c', 'advice.detachedHead=false', 'checkout', '--quiet', '--detach', sha]); });
     const npmCli = join(dirname(opts.node), '../lib/node_modules/npm/bin/npm-cli.js'), npm = existsSync(npmCli) ? [opts.node, npmCli] : ['npm'];
-    const env = { ...process.env, DECKENT_BWRAP_BUILD: bwrap, PATH: `${dirname(opts.node)}:${process.env.PATH}` };
+    const env = { ...gitEnv(), DECKENT_BUILD_SOURCE_COMMON_DIR: sourceCommonDir, DECKENT_BWRAP_BUILD: bwrap, PATH: `${dirname(opts.node)}:${process.env.PATH}` };
     step('npmCi', () => must('DEV_RELEASE_NPM_CI', npm[0], [...npm.slice(1), 'ci', '--prefer-offline', '--no-audit', '--no-fund'], { cwd: build, env }));
     step('build', () => must('DEV_RELEASE_BUILD', opts.node, ['scripts/build.mjs'], { cwd: build, env }));
-    const identity = readJson(join(build, 'dist/build-identity.json'));
-    if (identity.sourceCommit !== sha || identity.sourceDirty !== false) fail('DEV_RELEASE_BUILD_DIRTY', { sha, sourceCommit: identity.sourceCommit, sourceDirty: identity.sourceDirty });
+    const identity = verifySourceIdentity(join(build, 'dist/build-identity.json'), sha, sourceCommonDir);
+    if (identity.sourceDirty !== false) fail('DEV_RELEASE_BUILD_DIRTY', { sha, sourceCommit: identity.sourceCommit, sourceDirty: identity.sourceDirty });
     const packed = step('buildDist', () => lastJson(must('DEV_RELEASE_BUILD_DIST', opts.node, ['scripts/build-dist.mjs', '--out', join(build, '.pack/release'), '--pack', '--bwrap', bwrap], { cwd: build, env })));
     // The bundled bubblewrap is a runtime requirement (without it the sandbox falls back to Landlock, live 2026-09-29): refused. The other
     // publication blockers (third-party licence texts, declaration leaks; PLAN DEPS-DIST, owner-open) gate a public release, not the
@@ -362,8 +379,8 @@ export async function stage(L, ref, opts) {
     const partial = `${dir}.partial-${process.pid}`; mkdirSync(partial, { mode: 0o700 });
     try {
       must('DEV_RELEASE_UNPACK', 'tar', ['-xzf', packed.packed.tarball, '-C', partial, '--strip-components=1', '--no-same-owner']);
-      const unpacked = readJson(join(partial, 'dist/build-identity.json'));
-      if (unpacked.sourceCommit !== sha || unpacked.sourceTreeSha256 !== identity.sourceTreeSha256) fail('DEV_RELEASE_BUILD_DIRTY', { unpacked });
+      const unpacked = verifySourceIdentity(join(partial, 'dist/build-identity.json'), sha, sourceCommonDir);
+      if (unpacked.sourceTreeSha256 !== identity.sourceTreeSha256) fail('DEV_RELEASE_BUILD_DIRTY', { unpacked });
       const version = must('DEV_RELEASE_SMOKE_FAILED', opts.node, [join(partial, CLI_ENTRY), '--version'], { cwd: build }).trim();
       const smokeRoot = step('smokeRoot', () => run(opts.node, ['scripts/pack-smoke.mjs', '--root', partial, '--node', opts.node], { cwd: build, env }));
       const rootReport = (() => { try { return lastJson(smokeRoot.stdout); } catch { return null; } })();
@@ -372,7 +389,7 @@ export async function stage(L, ref, opts) {
       writeFileSync(join(partial, 'manifest.json'), manifest, { mode: 0o600 });
       let protocol = null;
       try { protocol = /RUNTIME_SERVICE_SCHEMA_VERSION = (\d+)/u.exec(readFileSync(join(partial, 'dist/engine/core/runtime/internal/service-protocol.js'), 'utf8'))?.[1] ?? null; } catch { /* recorded as null */ }
-      const release = { schemaVersion: 1, versionId: id, sequence: (stagedOrder(L)[0]?.sequence ?? 0) + 1, sourceCommit: sha, sourceTreeSha256: identity.sourceTreeSha256, identity, version, packageVersion: packageVer, sameVersionWaived: same,
+      const release = { schemaVersion: 1, versionId: id, sequence: (stagedOrder(L)[0]?.sequence ?? 0) + 1, sourceCommit: sha, sourceCommonDir, sourceTreeSha256: identity.sourceTreeSha256, identity, version, packageVersion: packageVer, sameVersionWaived: same,
         publishable: { ok: Boolean(packed.publishable?.ok), blockers: packed.publishable?.blockers ?? [] }, pushed, remoteRef: opts.remoteRef, local: !pushed && !opts.preview, preview: Boolean(opts.preview), node: spawnSync(opts.node, ['--version'], { encoding: 'utf8' }).stdout.trim(),
         ledgerVersion: codeLedgerVersion(partial), protocolVersion: protocol === null ? null : Number(protocol),
         tarball: { name: basename(packed.packed.tarball), sha256: packed.packed.sha256, size: packed.packed.size },

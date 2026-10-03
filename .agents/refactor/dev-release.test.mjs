@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn, spawnSync, execFileSync } from 'node:child_process';
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, readlinkSync, realpathSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, readlinkSync, realpathSync, renameSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -44,6 +44,117 @@ function fixture() {
   return { base, repo, home, data, env, installRoot, fake, tool, cli, describe, ledger, cleanup, current: () => { try { return readlinkSync(join(installRoot, 'current')); } catch { return null; } } };
 }
 const refsHash = repo => execFileSync('git', ['-C', repo, 'for-each-ref', '--format=%(refname) %(objectname)'], { encoding: 'utf8' }) + readdirSync(join(repo, '.git')).sort().join(',');
+const jsonAt = path => JSON.parse(readFileSync(path, 'utf8'));
+const appendBuild = (f, code) => { const path = join(f.repo, 'scripts/build.mjs'); writeFileSync(path, readFileSync(path, 'utf8') + '\n' + code + '\n'); };
+
+test('origin identity survives staging, including preview and allow-local, instead of naming the build clone', { skip: process.platform !== 'linux' }, t => {
+  const f = fixture(); t.after(f.cleanup);
+  f.env.DECKENT_BUILD_SOURCE_COMMON_DIR = join(f.base, 'inherited-wrong-origin');
+  for (const flag of [null, '--preview', '--allow-local']) {
+    const sha = f.fake.commit(`origin-${flag}`, { push: flag === null });
+    const staged = f.tool('stage', sha, '--keep-build', ...(flag ? [flag] : []));
+    assert.equal(staged.status, 0, staged.stdout + staged.stderr);
+    const origin = realpathSync(join(f.repo, '.git'));
+    const dir = join(f.installRoot, 'versions', staged.json.id);
+    const identity = jsonAt(join(dir, 'dist/build-identity.json')), release = jsonAt(join(dir, 'release.json'));
+    assert.equal(identity.sourceCommonDir, origin);
+    assert.equal(identity.sourceCommonDirOrigin, 'declared'); assert.equal(identity.sourceCommit, sha);
+    assert.equal(release.sourceCommonDir, origin); assert.deepEqual(release.identity, identity);
+    const build = readdirSync(join(f.installRoot, 'build')).find(name => name.startsWith(sha.slice(0, 12)));
+    assert.notEqual(identity.sourceCommonDir, realpathSync(join(f.installRoot, 'build', build, '.git')));
+    assert.equal(release.preview, flag === '--preview'); assert.equal(release.local, flag === '--allow-local');
+    assert.equal(f.current(), null);
+  }
+});
+
+test('origin follows --source through a symlinked linked worktree, independently of the launcher checkout', { skip: process.platform !== 'linux' }, t => {
+  const f = fixture(); t.after(f.cleanup); f.fake.commit('launcher');
+  const source = join(f.base, 'other source'), other = fakeRepository(source, join(f.base, 'other-origin.git'));
+  const sha = other.commit('origin'); const linked = join(f.base, 'linked'), alias = join(f.base, 'source alias');
+  other.git('worktree', 'add', '--quiet', '--detach', linked, sha); symlinkSync(linked, alias, 'dir');
+  const before = refsHash(source), staged = f.tool('stage', sha, '--source', alias);
+  assert.equal(staged.status, 0, staged.stdout + staged.stderr);
+  const identity = jsonAt(join(staged.json.dir, 'dist/build-identity.json'));
+  assert.equal(identity.sourceCommonDir, realpathSync(join(source, '.git')));
+  assert.notEqual(identity.sourceCommonDir, realpathSync(join(f.repo, '.git')));
+  assert.equal(refsHash(source), before);
+});
+
+test('invalid declared origin fails the fake producer and stage installs nothing', { skip: process.platform !== 'linux' }, t => {
+  const f = fixture(); t.after(f.cleanup);
+  const path = join(f.repo, 'scripts/build.mjs'), invalid = join(f.base, 'missing-origin');
+  writeFileSync(path, `process.env.DECKENT_BUILD_SOURCE_COMMON_DIR = ${JSON.stringify(invalid)};\n` + readFileSync(path, 'utf8'));
+  const sha = f.fake.commit('invalid-origin'), staged = f.tool('stage', sha);
+  assert.equal(staged.status, 1, staged.stdout + staged.stderr);
+  assert.equal(staged.json.code, 'DEV_RELEASE_BUILD'); assert.match(staged.json.stderr, /BUILD_SOURCE_COMMON_DIR_INVALID/);
+  assert.deepEqual(readdirSync(join(f.installRoot, 'versions')), []);
+  assert.deepEqual(readdirSync(join(f.installRoot, 'build')), []); assert.equal(f.current(), null);
+});
+
+test('identity mismatch refuses staging without changing the previous current', { skip: process.platform !== 'linux' }, t => {
+  const f = fixture(); t.after(f.cleanup);
+  const good = f.tool('stage', f.fake.commit('good-origin')); assert.equal(good.status, 0, good.stdout);
+  symlinkSync(`versions/${good.json.id}`, join(f.installRoot, 'current'));
+  const path = join(f.repo, 'scripts/build.mjs'), original = readFileSync(path, 'utf8');
+  for (const [name, change] of Object.entries({ common: "identity.sourceCommonDir = process.cwd() + '/.git';",
+    commit: "identity.sourceCommit = '0'.repeat(40);", missing: 'delete identity.sourceCommonDir;',
+    malformed: "writeFileSync('dist/build-identity.json', '{bad json');", absent: "rmSync('dist/build-identity.json');" })) {
+    writeFileSync(path, original);
+    appendBuild(f, `const identity = JSON.parse(readFileSync('dist/build-identity.json', 'utf8'));\n${name === 'malformed' || name === 'absent' ? change : change + "\nwriteFileSync('dist/build-identity.json', JSON.stringify(identity));"}`);
+    const sha = f.fake.commit(`mismatch-${name}`), staged = f.tool('stage', sha);
+    assert.equal(staged.status, 1, staged.stdout + staged.stderr);
+    assert.equal(staged.json.code, 'DEV_RELEASE_IDENTITY_MISMATCH', staged.stdout);
+    assert.deepEqual(readdirSync(join(f.installRoot, 'versions')), [good.json.id]);
+    assert.deepEqual(readdirSync(join(f.installRoot, 'build')), []);
+    assert.equal(f.current(), `versions/${good.json.id}`);
+  }
+});
+
+test('fake build producer honours derived, declared and invalid origins using the real producer', t => {
+  const f = fixture(); t.after(f.cleanup); f.fake.commit('fake-provenance');
+  const env = { ...f.env }; delete env.DECKENT_BUILD_SOURCE_COMMON_DIR;
+  const build = () => spawnSync(process.execPath, ['scripts/build.mjs'], { cwd: f.repo, env, encoding: 'utf8' });
+  assert.equal(build().status, 0);
+  assert.equal(jsonAt(join(f.repo, 'dist/build-identity.json')).sourceCommonDirOrigin, 'derived');
+  const alias = join(f.base, 'origin alias'); symlinkSync(join(f.repo, '.git'), alias, 'dir');
+  env.DECKENT_BUILD_SOURCE_COMMON_DIR = alias;
+  assert.equal(build().status, 0);
+  const declared = jsonAt(join(f.repo, 'dist/build-identity.json'));
+  assert.equal(declared.sourceCommonDir, realpathSync(alias)); assert.equal(declared.sourceCommonDirOrigin, 'declared');
+  env.DECKENT_BUILD_SOURCE_COMMON_DIR = join(f.base, 'missing');
+  const invalid = build(); assert.notEqual(invalid.status, 0); assert.match(invalid.stderr, /BUILD_SOURCE_COMMON_DIR_INVALID/);
+  assert.equal(existsSync(join(f.repo, 'dist/build-identity.json')), false);
+  assert.equal(readFileSync(join(f.repo, 'scripts/build-identity.mjs'), 'utf8'), readFileSync(join(here, '../../scripts/build-identity.mjs'), 'utf8'));
+});
+
+test('stage origin ignores inherited Git common-dir overrides', { skip: process.platform !== 'linux' }, t => {
+  const f = fixture(); t.after(f.cleanup); const sha = f.fake.commit('git-env');
+  f.env.GIT_COMMON_DIR = join(f.base, 'origin.git');
+  const staged = f.tool('stage', sha);
+  assert.equal(staged.status, 0, staged.stdout + staged.stderr);
+  assert.equal(staged.json.release.sourceCommonDir, realpathSync(join(f.repo, '.git')));
+});
+
+test('stage refuses a mismatched packaged origin and a stale cached identity', { skip: process.platform !== 'linux' }, t => {
+  const f = fixture(); t.after(f.cleanup); const sha = f.fake.commit('cached');
+  const good = f.tool('stage', sha); assert.equal(good.status, 0, good.stdout);
+  symlinkSync(`versions/${good.json.id}`, join(f.installRoot, 'current'));
+  const cachedPath = join(good.json.dir, 'dist/build-identity.json'), cached = jsonAt(cachedPath);
+  writeFileSync(cachedPath, JSON.stringify({ ...cached, sourceCommonDir: '/wrong-origin' }));
+  const reused = f.tool('stage', sha);
+  assert.equal(reused.json.code, 'DEV_RELEASE_IDENTITY_MISMATCH', reused.stdout);
+  const pack = join(f.repo, 'scripts/build-dist.mjs');
+  const original = readFileSync(pack, 'utf8');
+  const marker = "writeFileSync(join(stage, 'package.json')";
+  const poison = "const identityPath = join(stage, 'dist/build-identity.json'); const identity = JSON.parse(readFileSync(identityPath, 'utf8')); identity.sourceCommonDir = '/wrong-packaged-origin'; writeFileSync(identityPath, JSON.stringify(identity));\n";
+  assert.ok(original.includes(marker)); writeFileSync(pack, original.replace(marker, poison + marker));
+  const bad = f.tool('stage', f.fake.commit('bad-package-origin'));
+  assert.equal(bad.json.code, 'DEV_RELEASE_IDENTITY_MISMATCH', bad.stdout);
+  assert.deepEqual(readdirSync(join(f.installRoot, 'versions')), [good.json.id]);
+  assert.deepEqual(readdirSync(join(f.installRoot, 'build')), []);
+  assert.equal(f.current(), `versions/${good.json.id}`);
+});
+
 async function startFromLauncher(f) {
   const child = spawn(process.execPath, [join(f.repo, '.agents/refactor/next-entry.mjs'), 'cli', 'runtime', 'serve', '--json'], { cwd: f.base, env: f.env, detached: true, stdio: 'ignore' });
   child.unref();
