@@ -40,7 +40,7 @@ export function createAgentShell(input: { readonly scope: WorkspaceScope; readon
   /** MODES-3: the turn was launched in full access (its sandbox layout: the configuration file as the floor, `.git` writable). */
   readonly fullAccess?: boolean;
   /** SHELL-OVERLAY: the installation's configuration file inside the project (a write-set entry there is `edit-authority`). */
-  readonly authority?: (rel: string) => boolean;
+  readonly authority?: (rel: string) => boolean; readonly selfSource?: boolean; readonly writeFloor?: (rel: string) => boolean;
   /** SHELL-OVERLAY: where this turn's write-set directories live (outside the project), or null when nowhere can (no write sets). */
   readonly writeSetRoot?: () => Promise<string | null> }) {
   const { scope, context, scopeId, turnId, channel } = input, roots = input.scratch ? [input.scratch.scope] : [];
@@ -65,7 +65,7 @@ export function createAgentShell(input: { readonly scope: WorkspaceScope; readon
     const risk = classifyShellRisk(command, readOnly);
     // The narrow mutating tier is asked only for a command that is neither read-only nor destructive (it never demotes either).
     const mutation = readOnly.readOnly || risk.risk === 'destructive' ? { tier: 'unrecognized' as const, reasonCode: 'NOT_NARROW' as const }
-      : await classifyShellMutation(command, paths, createShellWriteContext(scope, roots));
+      : await classifyShellMutation(command, paths, createShellWriteContext(scope, roots, input.writeFloor));
     // A protected path that is the product's own state is a hard floor: refused here, never turned into a risk tier for approval.
     for (const verdict of [readOnly, mutation]) {
       if (verdict.reasonCode === 'PATH_PROTECTED' && namesProductState(verdict.detail)) return { ok: false, text: `[deckent] run_shell: error=PRODUCT_STATE_PROTECTED (${verdict.detail}); Deckent's own state is not opened by any approval; nothing was run` };
@@ -187,7 +187,7 @@ export function createAgentShell(input: { readonly scope: WorkspaceScope; readon
         const note = projectReadOnly && ran.exitCode !== 0 && realm.containment !== 'host' ? `\n${HOST_SHELL_NOTES.projectReadOnly}` : '';
         // SHELL-OVERLAY: the command exited (whatever its code: a direct-write posture keeps its writes too), so its write set is decided
         // and applied now, entry by entry, like edits; the directory is removed afterwards.
-        const settled = directory && writes ? describeSandboxWriteSet(await settleSandboxWriteSet({ directory, scope, decider: writes, authority: input.authority ?? (() => false),
+        const settled = directory && writes ? describeSandboxWriteSet(await settleSandboxWriteSet({ directory, scope, decider: writes, authority: input.authority ?? (() => false), selfSource: input.selfSource === true,
           context, peer: input.peer, scopeId, shellCommandId: commandId, signal })) : '';
         return { status: ran.exitCode === 0 ? 'ok' : 'error', text: `${describeHostShellResult(planned.command, ran, realm, counts)}${note}${unavailable}${settled ? `\n${settled}` : ''}${trackedLine}`,
           cleanup: ran.cleanup };

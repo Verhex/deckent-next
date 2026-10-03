@@ -54,13 +54,15 @@ export function fillTemplate(template: string, values: Readonly<Record<string, s
 }
 
 /** `cancelHint` (TL-A D5) is optional until the catalog carries `terminal.render.cancelHint` (`i18n-delta.json`); neutral text meanwhile. */
-export type WorklineStatusLabels = Readonly<{ queued: string; elapsed: string; cancelHint?: string }>;
+export type WorklineStatusLabels = Readonly<{ queued: string; elapsed: string; cancelHint?: string; selfSourceFloor?: string | undefined }>;
 const NEUTRAL_CANCEL_HINT = 'Esc cancels';
 export type WorklineStatusInput = Readonly<{
   scope: string; model?: string | undefined; state: string; busy: boolean; spinner?: string | undefined; elapsedMs?: number | undefined;
   queued?: number | undefined; notice?: string | undefined; labels: WorklineStatusLabels;
   /** The person's permission mode from the service (T-L4 slice 4c); shown only as its catalog text, never free text. */
   mode?: PermissionMode | undefined;
+  /** Derived repository identity; no setting or authority is inferred from this display fact. */
+  selfSource?: boolean | undefined;
   /** A running turn that Esc (or Ctrl+C) cancels now (TL-A D5): the row says so while it runs. */
   cancellable?: boolean | undefined;
 }>;
@@ -77,8 +79,9 @@ export function worklineStatusSegments(input: WorklineStatusInput): StatusSegmen
     ...(input.model ? [segment('model', input.model, 'code', 60)] : []),
     segment('state', state, input.busy ? 'success' : 'muted', 100, false),
     ...(input.busy && input.cancellable ? [segment('cancel', input.labels.cancelHint ?? NEUTRAL_CANCEL_HINT, 'muted', 45)] : []),
-    // Full access (MODES-3) is a standing warning: never dropped, whatever the width (the other modes are droppable).
-    ...(mode ? [mode === 'full-access' ? segment('mode', mode, 'error', 95, false) : segment('mode', mode, mode === 'standart' ? 'muted' : 'warning', 55)] : []),
+    // Full access is a standing warning; a derived source marker also keeps its mode, which names the full-access exception.
+    ...(mode ? [mode === 'full-access' ? segment('mode', mode, 'error', 95, false) : segment('mode', mode, mode === 'standart' ? 'muted' : 'warning', 55, !input.selfSource)] : []),
+    ...(input.selfSource && input.labels.selfSourceFloor ? [segment('self-source', input.labels.selfSourceFloor, 'warning', 96, false)] : []),
     ...(input.busy && input.elapsedMs !== undefined ? [segment('elapsed', fillTemplate(input.labels.elapsed, { seconds: Math.floor(input.elapsedMs / 1000) }), 'muted', 50)] : []),
     ...(input.queued ? [segment('queue', fillTemplate(input.labels.queued, { count: input.queued }), 'warning', 70)] : []),
     ...(input.notice ? [segment('notice', input.notice, 'warning', 40)] : []),

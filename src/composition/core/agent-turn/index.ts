@@ -6,4 +6,5 @@ export { createAgentCallDecisions, permissionModeEventId, SILENT_DECISION_COUNTE
 export { attachPeerWorkspaceFile, findPeerWorkspaceFiles } from './internal/workspace-files.js';
 export { executePeerScratchOperation, scratchResource } from './internal/scratch.js';
 export { renderMcpStartNotice, runConfiguredMcpCommand } from './internal/mcp.js';
-export { inspectConfiguredShellRealm } from './internal/shell.js';
+export { createAgentShell, inspectConfiguredShellRealm } from './internal/shell.js';
+export { createAgentFileEdits } from './internal/edits.js';

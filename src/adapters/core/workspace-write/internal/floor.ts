@@ -11,3 +11,10 @@ const floorMatchers = WORKSPACE_WRITE_APPROVAL_FLOOR.map(createGlobMatcher);
 export const isWriteApprovalFloored = (rel: string) => floorMatchers.some(match => match(rel));
 /** True when a workspace-relative directory is on the approval floor by its own name or as a tree (`dir/-`: what it would hold). */
 export const isDirectoryWriteApprovalFloored = (rel: string) => isWriteApprovalFloored(rel) || isWriteApprovalFloored(`${rel}/-`);
+
+/** A2 policy data: only the running build's source repository gets this additional floor. */
+export const SELF_SOURCE_WRITE_APPROVAL_FLOOR: readonly string[] = Object.freeze(['src/**', 'dist/**', 'scripts/**', 'assets/**']);
+const selfSourceMatchers = SELF_SOURCE_WRITE_APPROVAL_FLOOR.map(createGlobMatcher);
+export const isSelfSourceWriteFloored = (rel: string) => selfSourceMatchers.some(match => match(rel));
+/** Boolean protection for sandbox/write checks; cell classification must keep the two floors distinct. */
+export const isAnyWriteFloored = (rel: string) => isWriteApprovalFloored(rel) || isSelfSourceWriteFloored(rel);

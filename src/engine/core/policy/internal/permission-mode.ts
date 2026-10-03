@@ -4,18 +4,19 @@ import { AUDIT_EVENT_SCHEMA_VERSION, AUDIT_TRACKED_PATHS_MAX, evaluatePolicy, fu
 /**
  * What an agent tool call is, as far as permission is concerned (T-L4 slice 4a). Classification is the caller's (the plan of the
  * call); this module only decides. `edit`: a write outside the write floor; `edit-floor`: a write the floor always asks for;
+ * `edit-self-source`: a derived self-source write, session approval only, never mode-lowered or persisted;
  * shell cells come from the classifier's tiers (`shell-read-none` runs silently under allow; `shell-narrow-mutating` is the
  * owner's q1 set). `read` is a read tool. A fetch (FETCH S7) is `fetch-listed` (an allowlisted host: the policy decision stands) or
  * `fetch-unlisted` (any other host: allow asks); neither is ever relaxable, so no permission mode lowers a fetch (owner 2026-09-28). An MCP
  * tool call (MCP-CLIENT, owner 2026-09-28 S6 a) asks by default even under allow: `mcp-call` may be lowered in full-auto only ("full access
  * does not ask again"), `mcp-floor` (the owner's `alwaysAsk` pin or a pinned `destructiveHint`) never.
  */
-export type AgentToolCallCell = 'read' | 'edit' | 'edit-floor' | 'edit-authority' | 'shell-read-none' | 'shell-read-low' | 'shell-narrow-mutating' | 'shell-destructive'
+export type AgentToolCallCell = 'read' | 'edit' | 'edit-floor' | 'edit-self-source' | 'edit-authority' | 'shell-read-none' | 'shell-read-low' | 'shell-narrow-mutating' | 'shell-destructive'
   | 'shell-always-ask' | 'shell-other-modify' | 'fetch-listed' | 'fetch-unlisted' | 'mcp-call' | 'mcp-floor';
 /** Cells that ask even when every policy says allow (the floor raise). Only a launched full-access turn removes this raise (MODES-3).
  * `edit-authority` (MODES-3): a write of the installation's configuration file inside the project — it decides where policy, bindings and
  * approvals live, the shell realm and the network — asks in every mode, full access included. */
-const RAISING: ReadonlySet<AgentToolCallCell> = new Set(['edit-floor', 'edit-authority', 'shell-read-low', 'shell-narrow-mutating', 'shell-destructive', 'shell-always-ask',
+const RAISING: ReadonlySet<AgentToolCallCell> = new Set(['edit-floor', 'edit-self-source', 'edit-authority', 'shell-read-low', 'shell-narrow-mutating', 'shell-destructive', 'shell-always-ask',
   'shell-other-modify', 'fetch-unlisted', 'mcp-call', 'mcp-floor']);
 /** What full access never lowers: the owner's explicit ask pin on an MCP tool (Claude's "ask rule" analog) and the configuration write. */
 const FULL_ACCESS_KEEPS: ReadonlySet<AgentToolCallCell> = new Set(['mcp-floor', 'edit-authority']);
@@ -40,6 +41,12 @@ const SANDBOX_RELAXABLE: ReadonlySet<AgentToolCallCell> = new Set(['shell-read-n
 const SANDBOX_RELAXATION: Relaxable = { modes: ['full-auto'], audit: 'shell-modify' };
 const relaxableFor = (request: AgentToolCallRequest, askEdits: boolean): Relaxable | undefined => request.cell === 'edit' && askEdits ? undefined : RELAXABLE[request.cell]
   ?? (SANDBOX_RELAXABLE.has(request.cell) && request.shell?.realm === 'sandbox' && request.shell.contained ? SANDBOX_RELAXATION : undefined);
+
+// Card presentation reads the same policy-owned mode; composition never evaluates bindings itself.
+export function agentCallPermissionMode(policy: unknown, principal: VerifiedPrincipal, scopeId: string): PermissionMode {
+  const mode = principalPermissionMode(policy, principal, scopeId)?.mode;
+  return mode === 'full-access' ? 'standart' : mode ?? 'standart';
+}
 
 export interface AgentToolCallRequest {
   readonly principal: VerifiedPrincipal;
@@ -93,7 +100,8 @@ export interface AgentToolCallDecision {
  *    side that asks is company-marked `modeEligible`, the cell is relaxable in the person's mode (for the sandbox cells: in an enforced
  *    sandbox realm and contained), and the person has exactly one mode entry for the scope. Allow rules never lower anything; a raised
  *    `allow` is never lowered by a mode (no eligible rule produced it).
- * 4. a standing approval (owner 2026-09-28: this session's memory or the person's own persisted grant, only on a `standingCell`) lowers
+ * 4. a standing approval (owner 2026-09-28: this session's memory or the person's own persisted grant on a `standingCell`;
+ *    `edit-self-source` permits session memory only) lowers
  *    the floor raise of such a cell, or an eligible require-approval that no mode lowered — the mode first, the standing approval last
  *    (SHELL-AUTONOMY merge, lead). A deny is never lowered; the write floor, destructive shell, always-ask, other-modify and fetch cells
  *    are not standing cells.
@@ -117,15 +125,15 @@ export function decideAgentToolCall(policy: unknown, request: AgentToolCallReque
   const person = access ? null : principalPermissionMode(policy, request.principal, request.scopeId);
   // A stored full-access start mode without a launched turn is standart (MODES-3: an explicit parameter, never implied by bindings).
   const mode = person === null ? null : person.mode === 'full-access' ? { mode: 'standart' as const, askEdits: person.askEdits, id: person.id } : person;
-  // A standing approval names a persistable cell's pattern. It is asked like any other rule (a company deny or require-approval on the
+  // A standing approval names a persistable cell's pattern (self-source only names a session pattern). It is asked like any other rule (a company deny or require-approval on the
   // same key beats it), but only the person's EXPLICIT standing grant stands: a role's all-ids authority over the kind (the owner root)
   // is authority to delegate, never an approval. Without any rule on the key, this session's memory may stand.
   const standing = ((): StandingApproval | null => {
     const key = request.standing?.key;
-    if (key === undefined || !standingCell(request.cell)) return null;
+    if (key === undefined || (!standingCell(request.cell) && request.cell !== 'edit-self-source')) return null;
     const grant = evaluatePolicy(policy, ask(STANDING_GRANT_KIND, key, STANDING_GRANT_ACTION));
     const { principal, scopeId } = request;
-    const explicit = grant.decision === 'allow' ? policySchema.parse(policy).grants.find(rule => rule.effect === 'allow' && isStandingGrantId(rule.id)
+    const explicit = request.cell !== 'edit-self-source' && grant.decision === 'allow' ? policySchema.parse(policy).grants.find(rule => rule.effect === 'allow' && isStandingGrantId(rule.id)
       && rule.resource.kind === STANDING_GRANT_KIND && rule.resource.ids !== 'all' && rule.resource.ids.includes(key) && (rule.actions === 'all' || rule.actions.includes(STANDING_GRANT_ACTION))
       && (rule.scopes === 'all' || rule.scopes.includes(scopeId)) && rule.principals !== 'all' && rule.principals.some(item => item.issuer === principal.issuer && item.subject === principal.subject)) : undefined;
     if (explicit) return Object.freeze({ source: 'grant' as const, key, grantId: explicit.id });
@@ -163,7 +171,8 @@ export function decideAgentToolCall(policy: unknown, request: AgentToolCallReque
 
 /**
  * Whether a standing answer to this call's card would actually lower it: the same decision with a hypothetical session memory (a persisted
- * grant lowers exactly where a session memory does). The card offers a scope only when this holds — a company `require-approval` that is not
+ * grant lowers the same persistable cells; edit-self-source permits only a session answer). The card offers a scope only when this holds:
+ * a company `require-approval` that is not
  * `modeEligible` would otherwise "save" an answer that never lowers anything.
  */
 export function standingWouldLower(policy: unknown, request: AgentToolCallRequest): boolean {

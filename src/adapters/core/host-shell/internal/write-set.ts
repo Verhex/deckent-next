@@ -230,7 +230,7 @@ export async function prepareSandboxWriteSetDirectory(root: string, callKey: str
 }
 
 /** The edit cell a write-set entry is decided under (the same three an edit tool call can be), or a path the edit rules deny. */
-export type SandboxWriteCell = 'edit' | 'edit-floor' | 'edit-authority';
+export type SandboxWriteCell = 'edit' | 'edit-floor' | 'edit-authority' | 'edit-self-source';
 export type SandboxWriteDecision = { readonly ok: true; readonly gate: EffectApprovalGate }
   | { readonly ok: false; readonly reason: 'write-floor' | 'configuration-file' | 'approval-required' | 'denied-by-policy' | 'audit-unavailable' };
 /** Decides one entry exactly like an edit of that path (design §6); the decision's owner audits a relaxation before handing out the gate. */

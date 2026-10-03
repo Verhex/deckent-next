@@ -1,5 +1,12 @@
 import { createHash } from 'node:crypto';
 
+/** The sealed summary and streamed card share this reason; ordinary cells retain their existing summary. */
+export function agentToolApprovalSummary(input: { readonly tool: string; readonly resource: string; readonly argsDigest: string;
+  readonly cell: string | null; readonly selfSourceReason: string }): string {
+  const binding = `${input.tool} · ${input.resource} · ${input.argsDigest.slice(0, 12)}`;
+  return input.cell === 'edit-self-source' ? `${binding}\n${input.selfSourceReason}` : binding;
+}
+
 /** Largest approval preview in UTF-8 bytes: far below the event bound and any frame, whatever the script (Astra 2094 R3). */
 export const APPROVAL_PREVIEW_MAX_BYTES = 16_384;
 

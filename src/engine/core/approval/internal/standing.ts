@@ -1,5 +1,5 @@
 import { AUDIT_EVENT_SCHEMA_VERSION, AUTHORITY_DOCUMENT_TARGET_KIND, POLICY_ADMINISTER_OPERATION, STANDING_GRANT_KIND, STANDING_GRANTS_MAX, authorityDocuments, delegationWithin, isStandingGrantId,
-  planPolicyChange, policySchema, standingGrantChange, standingPattern, standingGrantId, standingRevokeChange, type AuditEvent, type EffectCommand, type PolicyChange, type StandingCell, type StandingPattern,
+  planPolicyChange, policySchema, standingGrantChange, sessionPattern, standingGrantId, standingRevokeChange, type AuditEvent, type EffectCommand, type PolicyChange, type SessionCell, type StandingPattern,
   type VerifiedPrincipal } from '#domain/index.js';
 import { sha256 } from '#platform/index.js';
 import type { PolicySource } from '#engine/core/policy/index.js';
@@ -7,16 +7,17 @@ import type { EffectOutcome } from '#engine/core/effect/index.js';
 
 /**
  * The standing-approval key of one agent call and whether this conversation already stands for it (`memory`), or null when the call's cell
- * or target cannot stand (write floor, destructive shell, fetch, an unsafe or oversized target). The application service composition asks.
+ * or target cannot stand (static write floor, destructive shell, fetch, an unsafe or oversized target). Self-source permits a session
+ * answer only, through a separate key. The application service composition asks.
  */
 export function standingCallKey(call: { readonly tool: string; readonly cell: string; readonly path: string | null; readonly command: string | null },
   memory?: { readonly sessions: SessionStanding; readonly session: string }): { readonly key: string; readonly cell: StandingCellName; readonly session: boolean } | null {
-  const found = standingPattern(call);
+  const found = sessionPattern(call);
   return found.ok ? { key: found.pattern.key, cell: found.pattern.cell, session: memory?.sessions.has(memory.session, found.pattern.key) ?? false } : null;
 }
 
-/** The cells a standing approval may lower (the domain's `StandingCell`, restated as the engine's own type). */
-export type StandingCellName = StandingCell;
+/** Cells a session answer may lower; persisted grants remain restricted to the domain's StandingCell. */
+export type StandingCellName = SessionCell;
 
 /** Typed refusals of the standing-approval application (never a silent no-op: the card tells the person what was not saved). */
 export class StandingApprovalError extends Error {

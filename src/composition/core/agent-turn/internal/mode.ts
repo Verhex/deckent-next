@@ -12,7 +12,6 @@ import type { createAgentShell } from './shell.js';
 import type { createAgentFetch } from './fetch.js';
 import type { createAgentCallApprovals } from './call-approvals.js';
 import type { createAgentMcp } from './mcp.js';
-
 type Execution = { readonly round: number; readonly index: number };
 type Context = Awaited<ReturnType<typeof loadPeerInvocationContext>>;
 const sha256 = (text: string) => createHash('sha256').update(text).digest('hex');
@@ -63,7 +62,7 @@ export function createAgentCallDecisions(input: { readonly context: Context; rea
     : mcps(tool) ? MCP_TOOL_CALL_OPERATION.operation : null;
   // Standing approvals (G6) cover only the edit and shell cells a standing pattern names; any other cell (fetch, MCP) has none.
   const standingOf = (tool: AgentToolSpec, cell: AgentToolCallCell, args: Record<string, unknown> | undefined) => !args ? null : standingCallKey({ tool: tool.name, cell,
-    path: tool.toolClass === 'edit' ? edits(tool.name)?.target(tool.name, args) ?? null : null, command: typeof args['command'] === 'string' ? args['command'] : null },
+    path: tool.toolClass === 'edit' ? edits(tool.name)?.target(tool.name, args) ?? null : cell === 'edit-self-source' && typeof args['path'] === 'string' ? args['path'] : null, command: typeof args['command'] === 'string' ? args['command'] : null },
   input.standing && { sessions: input.standing.memory, session: input.standing.session });
   const load = async (): Promise<unknown> => { try { return await context.policy.load(); } catch { return null; } };
   /** Pure decision on one snapshot (a fresh one unless given); an unreadable or invalid policy is null, i.e. `deny` (fail closed). */
@@ -77,7 +76,7 @@ export function createAgentCallDecisions(input: { readonly context: Context; rea
   const cellOf = (tool: AgentToolSpec, args: Record<string, unknown>): AgentToolCallCell | null => {
     if (tool.toolClass === 'edit') {
       const area = edits(tool.name);
-      return !area || area.target(tool.name, args) === null ? null : area.authority(tool.name, args) ? 'edit-authority' : area.floored(tool.name, args) ? 'edit-floor' : 'edit';
+      return !area || area.target(tool.name, args) === null ? null : area.authority(tool.name, args) ? 'edit-authority' : area.floored(tool.name, args) ? 'edit-floor' : !input.fullAccess && area.selfSource(tool.name, args) ? 'edit-self-source' : 'edit';
     }
     if (tool.toolClass === 'shell') { const tier = shell?.tier(tool.name, args) ?? null; return tier === null ? null : SHELL_CELLS[tier]; }
     if (fetches(tool)) return fetch?.cell(args) ?? null;
@@ -90,8 +89,8 @@ export function createAgentCallDecisions(input: { readonly context: Context; rea
     : fetches(tool) ? { kind: 'fetch' as const, host: hostOf(args).slice(0, 253), argsDigest: agentToolArgumentsDigest(tool.name, args) }
     : { kind: 'shell' as const, head: String(args['command'] ?? '').slice(0, AUDIT_SHELL_HEAD_MAX_CHARS), argsDigest: agentToolArgumentsDigest(tool.name, args) };
   const standingEvent = (phase: 'remembered' | 'used', tool: AgentToolSpec, args: Record<string, unknown>, execution: Execution, callId: string, cell: Parameters<typeof standingApprovalAuditEvent>[0]['cell'],
-    revision: string, standing: Parameters<typeof standingApprovalAuditEvent>[0]['standing'], approvalId: string | null) => standingApprovalAuditEvent({ phase, scopeId, turnId, execution, callId,
-    principal: context.principal, revision, atMs: clock.sample().wallMs, standing, cell, approvalId, tool, argsDigest: agentToolArgumentsDigest(tool.name, args), summary: callSummary(tool, args) });
+    revision: string, standing: Parameters<typeof standingApprovalAuditEvent>[0]['standing'], approvalId: string | null, summary = callSummary(tool, args)) => standingApprovalAuditEvent({ phase, scopeId, turnId, execution, callId,
+    principal: context.principal, revision, atMs: clock.sample().wallMs, standing, cell, approvalId, tool, argsDigest: agentToolArgumentsDigest(tool.name, args), summary });
   /**
    * SHELL-OVERLAY (design §6): the decider of one shell call's write set. Each entry is decided exactly like an edit of its path — the tool
    * that wrote it (`run_shell`) on the agent-tool side, `workspace.file.write` on the operation side, the edit cell of its path — on a fresh
@@ -102,13 +101,14 @@ export function createAgentCallDecisions(input: { readonly context: Context; rea
   const writeSet = (tool: AgentToolSpec, args: Record<string, unknown>, execution: Execution, callId: string): SandboxWriteDecider => ({
     async decide(rel: string, cell: SandboxWriteCell) {
       const writeOperation = WORKSPACE_FILE_WRITE_OPERATION.operation;
-      const again = () => decide(tool, cell, undefined, undefined, undefined, writeOperation);
+      const again = () => decide(tool, cell, undefined, { path: rel }, undefined, writeOperation);
       const fresh = await again();
       if (!fresh || fresh.decision === 'deny') return { ok: false, reason: 'denied-by-policy' };
       if (fresh.decision !== 'allow') return { ok: false, reason: cell === 'edit' ? 'approval-required' : cell === 'edit-authority' ? 'configuration-file' : 'write-floor' };
-      const audited = fresh.relaxation !== null || fresh.fullAccess !== undefined;
+      const audited = fresh.relaxation !== null || fresh.fullAccess !== undefined || fresh.standing !== undefined;
       if (audited) {
-        const event = agentCallAuditEvent({ scopeId, principal: context.principal, atMs: clock.sample().wallMs, tool, summary: { kind: 'edit', path: rel },
+        const event = fresh.standing ? standingEvent('used', tool, { path: rel }, execution, callId, cell as Parameters<typeof standingApprovalAuditEvent>[0]['cell'],
+          fresh.revision, fresh.standing, null, { kind: 'edit', path: rel }) : agentCallAuditEvent({ scopeId, principal: context.principal, atMs: clock.sample().wallMs, tool, summary: { kind: 'edit', path: rel },
           eventId: permissionModeEventId(scopeId, turnId, execution, sha256(`${agentToolArgumentsDigest(tool.name, args)}\0${rel}`), 'sandbox-write'),
           call: { turnId, round: execution.round, index: execution.index, callId } }, fresh);
         try { await withAudit(audit => audit.record(event)); } catch { return { ok: false, reason: 'audit-unavailable' }; }
@@ -121,7 +121,7 @@ export function createAgentCallDecisions(input: { readonly context: Context; rea
           if (descriptor.approval === 'required') throw new EffectError('EFFECT_APPROVAL_REQUIRED');
           const now = await again();
           if (!now || now.decision === 'deny') throw new PolicyAuthorizationError('POLICY_DENIED');
-          if (!(audited ? isAuditedDecision(fresh, now) : now.decision === 'allow' && now.relaxation === null && now.fullAccess === undefined)) throw new EffectError('EFFECT_APPROVAL_REQUIRED');
+          if (!(fresh.standing ? isAuditedStanding(fresh.standing, fresh.revision, now) : audited ? isAuditedDecision(fresh, now) : now.decision === 'allow' && now.relaxation === null && now.fullAccess === undefined)) throw new EffectError('EFFECT_APPROVAL_REQUIRED');
         },
       } };
     },

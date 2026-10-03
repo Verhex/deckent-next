@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, writeFile, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
@@ -7,8 +7,9 @@ import { EffectError, resolvePolicyBindings, type AgentToolSpec } from '#domain/
 import { SessionStanding, type EffectApprovalGate } from '#engine/index.js';
 import { resolveProductLayout, SystemTrustedClock } from '#platform/index.js';
 import { openSqliteLedger } from '#adapters/core/sqlite-ledger/index.js';
-import { createAgentCallDecisions } from '#composition/core/agent-turn/index.js';
-import { shellWritePosture, type ShellCallAuthority } from '#adapters/index.js';
+import { createAgentCallDecisions, createAgentFileEdits, createAgentShell } from '#composition/core/agent-turn/index.js';
+import { agentTurnWriteFloor, applySandboxWriteSet, fileContentVersion, classifySandboxWritePath, createWorkspaceScope, isSelfSourceWriteFloored, projectEditArea, shellWritePosture, type ShellCallAuthority } from '#adapters/index.js';
+
 
 // T-L4 slice 4a (MODES-3: a bindings v2 `auto-edit` entry reads as standart, `ask` as standart that asks for every edit too): the turn's
 // permission decision is taken again at the effect on the policy as it is then. A relaxation writes its audit
@@ -28,7 +29,7 @@ const snapshot = (tool: Effect, mode: string | null, revision = `p-${tool}-${mod
 mode === null ? { schemaVersion: 1, revision: 'b', bindings: [] } : { schemaVersion: 2, revision: 'b', bindings: [], modes: [{ id: modeEntry, principal: me, scopes: ['scope'], mode }] });
 
 /** `loads[i]` is what the i-th policy load returns (the last one repeats): authorize loads once, execute once, each admission once. */
-async function fixture(loads: unknown[], options: { standing?: { memory: SessionStanding; session: string }; floored?: boolean; fullAccess?: boolean } = {}) {
+async function fixture(loads: unknown[], options: { standing?: { memory: SessionStanding; session: string }; floored?: boolean; selfSource?: boolean; fullAccess?: boolean; shell?: boolean; realAreas?: boolean; clockMs?: number } = {}) {
   const root = await mkdtemp(join(tmpdir(), 'dn-call-decisions-')); roots.push(root);
   const data = join(root, 'data'); await mkdir(data, { mode: 0o700 });
   const ledger = join(root, 'ledger.db'); openSqliteLedger(ledger, sqlite).close();
@@ -36,11 +37,21 @@ async function fixture(loads: unknown[], options: { standing?: { memory: Session
   const context = { principal, policy: { async load() { return loads[Math.min(loaded++, loads.length - 1)]; } }, path: async () => ledger,
     layout: resolveProductLayout({ projectRoot: root, root: data }), config: { storage: { sqlite }, approvals: { keyFile: 'authority.key' } } };
   let plans = 0;
-  const edits = { async plan() { plans++; return { ok: true }; }, floored: () => options.floored ?? false, authority: () => false, target: (_tool: string, given: Record<string, unknown>) => String(given['path']) };
+  const edits = { async plan() { plans++; return { ok: true }; }, floored: () => options.floored ?? false, authority: () => false, selfSource: () => options.selfSource ?? false, target: (_tool: string, given: Record<string, unknown>) => String(given['path']) };
+  const scope = await createWorkspaceScope(root);
+  if (options.realAreas) {
+    for (const dir of ['src', 'dist', 'scripts', 'assets', '.agents/refactor', '.github', '.deckent']) await mkdir(join(root, dir), { recursive: true });
+    for (const path of ['src/a.ts', 'dist/x.js', 'scripts/b.mjs', 'assets/c.json', 'package.json', '.agents/refactor/x.mjs', '.github/w.yml', 'AGENTS.md', 'src/package.json', '.deckent/config.json']) await writeFile(join(root, path), 'a');
+  }
+  const realEdits = options.realAreas ? createAgentFileEdits({ area: projectEditArea(scope), peer: {} as never, context: context as never, scopeId: 'scope', turnId: 'turn',
+    authority: rel => rel === '.deckent/config.json', selfSource: isSelfSourceWriteFloored }) : null;
+  const realShell = options.realAreas ? createAgentShell({ scope, peer: {} as never, config: { realm: 'require-sandbox' } as never, context: context as never,
+    scopeId: 'scope', turnId: 'turn', channel: {} as never, scratch: null, productState: [], selfSource: true, writeFloor: agentTurnWriteFloor(() => false, false, true),
+    sandboxes: [{ kind: 'bubblewrap', usable: () => ({ ok: true, realm: { kind: 'bubblewrap' } as never, marker: 'sandbox: test', notice: null, posture: () => '', containment: 'sandbox', writeSets: true }) }] }) : null;
   const inner: EffectApprovalGate = { async admit(_descriptor, decision) { if (decision !== 'allow') throw new EffectError('EFFECT_APPROVAL_REQUIRED'); } };
   const approvals = { gate: () => ({ gate: inner, async close() {} }) };
-  const decisions = createAgentCallDecisions({ context: context as never, clock: new SystemTrustedClock(), scopeId: 'scope', turnId: 'turn', edits: (() => edits) as never,
-    shell: null, approvals: approvals as never, fetch: null, ...(options.standing ? { standing: options.standing } : {}), ...(options.fullAccess ? { fullAccess: true } : {}) });
+  const decisions = createAgentCallDecisions({ context: context as never, clock: options.clockMs === undefined ? new SystemTrustedClock() : { sample: () => ({ wallMs: options.clockMs!, monotonicMs: 1 }) }, scopeId: 'scope', turnId: 'turn', edits: (() => realEdits ?? edits) as never,
+    shell: realShell ?? (options.shell ? { async plan() { return { ok: true }; }, tier: () => 'other-modify', containment: () => ({ realm: 'sandbox', contained: true }) } as never : null), approvals: approvals as never, fetch: null, ...(options.standing ? { standing: options.standing } : {}), ...(options.fullAccess ? { fullAccess: true } : {}) });
   const events = () => { const db = new DatabaseSync(ledger, { readOnly: true }); try { return db.prepare('SELECT event_id FROM audit_events').all().length; } finally { db.close(); } };
   const auditRecords = () => { const db = new DatabaseSync(ledger, { readOnly: true }); try {
     return db.prepare('SELECT record FROM audit_events').all().map(row => JSON.parse(String(row['record'])) as { event: { policyRevision: string; subject: { mode: string; kind: string; phase?: string; source?: string; approvalId?: string | null } & Record<string, unknown> } });
@@ -60,7 +71,7 @@ async function fixture(loads: unknown[], options: { standing?: { memory: Session
     });
     return { outcome, ...seen };
   };
-  return { decisions, execute, events, auditRecords, plans: () => plans, authority: () => lastAuthority };
+  return { decisions, root, scope, realShell, execute, events, auditRecords, plans: () => plans, authority: () => lastAuthority, failAudit: () => { context.config.approvals.keyFile = '/'; } };
 }
 
 /** MODES-3: a policy snapshot with the company grant `permission-mode`/`set` `full-access` (null: none) and a v3 mode entry. */
@@ -277,4 +288,194 @@ describe('call authority at the effect (merge Astra 2170 x MODES-3)', () => {
       }
     }
   });
+});
+
+describe('SELF-SOURCE-FLOOR R1 classification and normalized session targets', () => {
+  it('classifies actual edit plans with authority then static floor then self-source, and refuses hard-floor session answers', async () => {
+    const memory = new SessionStanding(), session = 'r1';
+    const f = await fixture([snapshot('allow', 'full-auto')], { realAreas: true, standing: { memory, session } });
+    for (const path of ['package.json', '.agents/refactor/x.mjs', '.github/w.yml', 'AGENTS.md', 'src/package.json']) {
+      const given = { ...args, path };
+      expect(await f.decisions.authorize(edit, given), path).toBe('require-approval');
+      expect(f.decisions.cell(edit, given), path).toBe('edit-floor');
+      expect(await f.decisions.remember(edit, given, { round: 1, index: 0 }, 'call', 'approval'), path).toBe(false);
+    }
+    const authority = { ...args, path: '.deckent/config.json' };
+    expect(await f.decisions.authorize(edit, authority)).toBe('require-approval');
+    expect(f.decisions.cell(edit, authority)).toBe('edit-authority');
+    expect(await f.decisions.remember(edit, authority, { round: 1, index: 0 }, 'call', 'approval')).toBe(false);
+    for (const path of ['src/a.ts', 'dist/x.js', 'scripts/b.mjs', 'assets/c.json']) {
+      const given = { ...args, path };
+      expect(await f.decisions.authorize(edit, given), path).toBe('require-approval');
+      expect(f.decisions.cell(edit, given), path).toBe('edit-self-source');
+    }
+    expect(f.events()).toBe(0);
+  });
+
+  it.skipIf(process.platform !== 'linux')('keeps self-source reads contained and card-free in full-auto while build output entries still ask', async () => {
+    const base = snapshot('allow', 'full-auto') as { grants: unknown[] };
+    const policy = resolvePolicyBindings({ schemaVersion: 2, revision: 'p', roles: [], separationOfDuties: [], restrictions: [], grants: [...base.grants,
+      { id: 'shell', effect: 'require-approval', modeEligible: true, actions: ['invoke'], scopes: ['scope'], principals: [me], resource: { kind: 'agent-tool', ids: ['run_shell'] } },
+      { id: 'run', effect: 'allow', actions: ['execute'], scopes: ['scope'], principals: [me], resource: { kind: 'operation', ids: ['host.shell.run'] } }] },
+      { schemaVersion: 3, revision: 'b', bindings: [], modes: [{ id: 'mode', principal: me, scopes: ['scope'], mode: 'full-auto' }] });
+    const f = await fixture([policy], { realAreas: true });
+    const tool = { ...edit, name: 'run_shell', toolClass: 'shell' } as AgentToolSpec;
+    for (const command of ['grep -rn x src/', 'git log -- src/a.ts', 'ls -R dist']) {
+      const given = { command };
+      expect(await f.decisions.authorize(tool, given), command).toBe('allow');
+      expect(f.realShell!.containment(tool.name, given), command).toEqual({ realm: 'sandbox', contained: true });
+      expect(f.decisions.prepare(tool, given), command).toEqual({ ok: true, requireApproval: false });
+    }
+    const given = { command: 'node scripts/build.mjs' };
+    expect(await f.decisions.authorize(tool, given)).toBe('require-approval');
+    expect(f.decisions.prepare(tool, given)).toEqual({ ok: true, requireApproval: true }); // Existing node always-ask: one pre-card.
+    const overlayCall = { command: 'touch dist/x.js' };
+    expect(await f.decisions.authorize(tool, overlayCall)).toBe('allow');
+    const result = await f.decisions.execute(tool, overlayCall, { round: 1, index: 0 }, 'overlay', async (_gate, _authority, writes) => {
+      const cell = classifySandboxWritePath(f.scope, () => false, 'dist/x.js', 'write', true);
+      expect(cell).toBe('edit-self-source');
+      if (cell === 'denied') throw new Error('unexpected denial');
+      const upper = join(f.root, 'upper'); await mkdir(join(upper, 'dist'), { recursive: true });
+      await writeFile(join(upper, 'dist/x.js'), 'build output');
+      // The scan input is injected; this verifies settlement, not native overlay listing.
+      const scan = { ok: true as const, refused: [], conflicts: [], emptyDirectories: [], directoryModes: new Map<string, number>(), newDirectories: new Set<string>(),
+        changes: [{ kind: 'write' as const, rel: 'dist/x.js', lowerVersion: fileContentVersion(Buffer.from('a')), digest: 'a'.repeat(64), mode: 0o600, size: 12 }] };
+      let effects = 0;
+      const report = await applySandboxWriteSet({ scan, signal: new AbortController().signal, ensureParents: async () => true,
+        classify: (rel, kind) => classifySandboxWritePath(f.scope, () => false, rel, kind, true), decider: writes!, async execute() { effects++; } });
+      expect(report.notApplied).toEqual([{ rel: 'dist/x.js', reason: 'write-floor' }]);
+      expect(effects).toBe(0);
+      expect(await readFile(join(f.root, 'dist/x.js'), 'utf8')).toBe('a');
+      expect(await readFile(join(upper, 'dist/x.js'), 'utf8')).toBe('build output');
+      return { status: 'ok', text: 'checked' };
+    });
+    expect(result).toEqual({ status: 'ok', text: 'checked' });
+  });
+
+  it.skipIf(process.platform === 'win32')('uses the normalized edit target for self-source session keys', async () => {
+    const memory = new SessionStanding(), session = 'normalized';
+    const f = await fixture([snapshot('require-approval', 'ask')], { realAreas: true, standing: { memory, session } });
+    const raw = { ...args, path: './src/a.ts' };
+    expect(await f.decisions.authorize(edit, raw)).toBe('require-approval');
+    expect(await f.decisions.remember(edit, raw, { round: 1, index: 0 }, 'call', 'approval')).toBe(true);
+    expect(memory.has(session, 'v1:session:edit-self-source:edit_file:directory:src/*')).toBe(true);
+    expect(await f.decisions.authorize(edit, args)).toBe('allow');
+  });
+
+});
+
+describe('SELF-SOURCE-FLOOR session effect integration', () => {
+  it.skipIf(process.platform === 'win32')('requires POSIX private audit keyring — full-access ordinary and static-floor decisions and audit payloads are byte-identical with self-source on or off', async () => {
+    for (const floored of [false, true]) {
+      const baseline = await fixture([withAccess('allow', 'allow')], { fullAccess: true, selfSource: false, floored, clockMs: 1000 });
+      const derived = await fixture([withAccess('allow', 'allow')], { fullAccess: true, selfSource: true, floored, clockMs: 1000 });
+      expect(await derived.decisions.authorize(edit, args)).toBe(await baseline.decisions.authorize(edit, args));
+      expect(derived.decisions.cell(edit, args)).toBe(floored ? 'edit-floor' : 'edit');
+      expect(JSON.stringify(derived.decisions.prepare(edit, args))).toBe(JSON.stringify(baseline.decisions.prepare(edit, args)));
+      expect(await derived.execute()).toEqual(await baseline.execute());
+      expect(JSON.stringify(derived.auditRecords().map(record => record.event))).toBe(JSON.stringify(baseline.auditRecords().map(record => record.event)));
+    }
+  });
+
+  it.skipIf(process.platform === 'win32')('requires POSIX private audit keyring — a full-auto shell write set refuses dist self-source and authority paths before application, while ordinary customer writes stay allowed', async () => {
+    const base = snapshot('allow', 'full-auto') as { grants: unknown[] };
+    const policy = resolvePolicyBindings({ schemaVersion: 2, revision: 'p', roles: [], separationOfDuties: [], restrictions: [], grants: [...base.grants,
+      { id: 'shell', effect: 'require-approval', modeEligible: true, actions: ['invoke'], scopes: ['scope'], principals: [me], resource: { kind: 'agent-tool', ids: ['run_shell'] } },
+      { id: 'run', effect: 'allow', actions: ['execute'], scopes: ['scope'], principals: [me], resource: { kind: 'operation', ids: ['host.shell.run'] } }] },
+    { schemaVersion: 3, revision: 'b', bindings: [], modes: [{ id: 'mode', principal: me, scopes: ['scope'], mode: 'full-auto' }] });
+    const f = await fixture([policy], { shell: true, selfSource: true });
+    const tool = { name: 'run_shell', version: 1, toolClass: 'shell', description: 'shell', inputSchema: { type: 'object' } } as AgentToolSpec;
+    const given = { command: 'touch dist/a.js' };
+    expect(await f.decisions.authorize(tool, given)).toBe('allow');
+    const result = await f.decisions.execute(tool, given, { round: 1, index: 0 }, 'shell-call', async (_gate, authority, writes) => {
+      expect(authority).toBe('full-auto');
+      expect(writes).toBeDefined();
+      expect(await writes!.decide('dist/a.js', 'edit-self-source')).toEqual({ ok: false, reason: 'write-floor' });
+      expect(await writes!.decide('deckent.json', 'edit-authority')).toEqual({ ok: false, reason: 'configuration-file' });
+      expect(await writes!.decide('docs/a.md', 'edit')).toMatchObject({ ok: true });
+      return { status: 'ok', text: 'checked' };
+    });
+    expect(result).toEqual({ status: 'ok', text: 'checked' });
+    // Only the shell call and the ordinary-write relaxation were audited; neither refused write reached an effect.
+    expect(f.events()).toBe(2);
+  });
+
+  it.skipIf(process.platform === 'win32')('requires POSIX private audit keyring — a session-lowered self-source shell write-set entry records its sealed use before its effect', async () => {
+    const base = snapshot('allow', 'full-auto') as { grants: unknown[] };
+    const policy = resolvePolicyBindings({ schemaVersion: 2, revision: 'p', roles: [], separationOfDuties: [], restrictions: [], grants: [...base.grants,
+      { id: 'shell', effect: 'require-approval', modeEligible: true, actions: ['invoke'], scopes: ['scope'], principals: [me], resource: { kind: 'agent-tool', ids: ['run_shell'] } },
+      { id: 'run', effect: 'allow', actions: ['execute'], scopes: ['scope'], principals: [me], resource: { kind: 'operation', ids: ['host.shell.run'] } }] },
+    { schemaVersion: 3, revision: 'b', bindings: [], modes: [{ id: 'mode', principal: me, scopes: ['scope'], mode: 'full-auto' }] });
+    const changed = resolvePolicyBindings({ schemaVersion: 2, revision: 'changed', roles: [], separationOfDuties: [], restrictions: [], grants: policy.grants },
+    { schemaVersion: 3, revision: 'b', bindings: [], modes: [{ id: 'mode', principal: me, scopes: ['scope'], mode: 'full-auto' }] });
+    for (const loss of ['memory', 'policy'] as const) {
+      const memory = new SessionStanding(), session = 'shell-source-session';
+      memory.remember(session, 'v1:session:edit-self-source:run_shell:directory:dist/*');
+      const f = await fixture(loss === 'policy' ? [policy, policy, policy, policy, changed] : [policy], { shell: true, selfSource: true, standing: { memory, session } });
+      const tool = { name: 'run_shell', version: 1, toolClass: 'shell', description: 'shell', inputSchema: { type: 'object' } } as AgentToolSpec;
+      const given = { command: 'touch dist/a.js' };
+      expect(await f.decisions.authorize(tool, given)).toBe('allow');
+      const result = await f.decisions.execute(tool, given, { round: 1, index: 0 }, 'shell-call', async (_gate, _authority, writes) => {
+        const decision = await writes!.decide('dist/a.js', 'edit-self-source');
+        expect(decision.ok).toBe(true);
+        expect(f.auditRecords().at(-1)!.event.subject).toMatchObject({ kind: 'standing-approval', phase: 'used', source: 'session', cell: 'edit-self-source',
+          summary: { kind: 'edit', path: 'dist/a.js' } });
+        const second = await writes!.decide('dist/b.js', 'edit-self-source');
+        expect(second.ok).toBe(true);
+        const used = f.auditRecords().filter(record => record.event.subject.kind === 'standing-approval');
+        expect(used.map(record => record.event.subject['summary'])).toEqual([{ kind: 'edit', path: 'dist/a.js' }, { kind: 'edit', path: 'dist/b.js' }]);
+        if (!decision.ok) return { status: 'error', text: 'refused' };
+        if (loss === 'memory') memory.forget(session);
+        await expect(decision.gate.admit({ approval: 'policy' } as never, 'require-approval', {} as never, principal as never, { record: null } as never))
+          .rejects.toMatchObject({ code: 'EFFECT_APPROVAL_REQUIRED' });
+        return { status: 'ok', text: 'checked' };
+      });
+      expect(result).toEqual({ status: 'ok', text: 'checked' });
+    }
+  });
+
+  it.skipIf(process.platform === 'win32')('requires POSIX private audit keyring — unavailable audit never remembers a self-source session or runs its lowered effect', async () => {
+    const memory = new SessionStanding(), session = 'failed-audit-session';
+    const key = 'v1:session:edit-self-source:edit_file:directory:src/*';
+    const f = await fixture([snapshot('require-approval', 'ask')], { selfSource: true, standing: { memory, session } });
+    expect(await f.decisions.authorize(edit, args)).toBe('require-approval');
+    f.failAudit();
+    expect(await f.decisions.remember(edit, args, { round: 1, index: 0 }, 'call_1', 'approval')).toBe(false);
+    expect(memory.has(session, key)).toBe(false);
+    expect(f.events()).toBe(0);
+    // Existing session memory cannot bypass a lost audit key: no effect callback is reached.
+    memory.remember(session, key);
+    expect(await f.decisions.authorize(edit, args)).toBe('allow');
+    const result = await f.execute();
+    expect(result.outcome).toMatchObject({ status: 'error' });
+    expect(result.outcome.text).toContain('audit-unavailable');
+    expect(result.eventsAtRun).toBe(-1);
+    expect(result.admissions).toEqual([]);
+    expect(f.events()).toBe(0);
+  });
+
+  it.skipIf(process.platform === 'win32')('requires POSIX private audit keyring — self-source session answers are sealed before memory and used before effects; persisted-only grants never replace the answer', async () => {
+    const asks = snapshot('require-approval', 'ask');
+    const memory = new SessionStanding(), session = 'self-source-conversation';
+    const key = 'v1:session:edit-self-source:edit_file:directory:src/*';
+    const f = await fixture([asks], { standing: { memory, session }, selfSource: true });
+    expect(await f.decisions.authorize(edit, args)).toBe('require-approval');
+    expect(await f.decisions.remember(edit, args, { round: 1, index: 0 }, 'call_1', 'approval-self-source')).toBe(true);
+    expect(f.auditRecords()[0]!.event.subject).toMatchObject({ kind: 'standing-approval', phase: 'remembered', source: 'session', cell: 'edit-self-source', grantId: null });
+    expect(memory.has(session, key)).toBe(true);
+    expect(memory.has(session, 'v1:edit_file:directory:src/*')).toBe(false);
+    expect(await f.decisions.authorize(edit, args)).toBe('allow');
+    expect(await f.execute()).toMatchObject({ outcome: { status: 'ok' }, eventsAtRun: 2, admissions: ['admitted', 'admitted'] });
+    expect(f.auditRecords()[1]!.event.subject).toMatchObject({ kind: 'standing-approval', phase: 'used', source: 'session', cell: 'edit-self-source' });
+    const restarted = await fixture([asks], { standing: { memory: new SessionStanding(), session }, selfSource: true });
+    expect(await restarted.decisions.authorize(edit, args)).toBe('require-approval');
+    const base = snapshot('require-approval', 'ask') as { grants: unknown[] };
+    const persisted = resolvePolicyBindings({ schemaVersion: 2, revision: 'p', roles: [], separationOfDuties: [], restrictions: [], grants: [...base.grants,
+      { id: 'standing-self-source', effect: 'allow', actions: ['invoke'], scopes: ['scope'], principals: [me], resource: { kind: 'agent-tool-call', ids: [key] } }] },
+    { schemaVersion: 2, revision: 'b', bindings: [], modes: [{ id: 'asks', principal: me, scopes: ['scope'], mode: 'ask' }] });
+    const granted = await fixture([persisted], { selfSource: true });
+    expect(await granted.decisions.authorize(edit, args)).toBe('require-approval');
+    expect(granted.events()).toBe(0);
+  });
+
 });

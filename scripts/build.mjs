@@ -1,13 +1,14 @@
 // deckent build: tsc → copy JSON/text assets into dist → executable bits on bins → native (when present).
 // Single entry point for local and CI builds. No staging/quarantine machinery: dist is disposable.
 import { execFileSync } from 'node:child_process';
-import { chmodSync, cpSync, existsSync, mkdirSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { chmodSync, cpSync, existsSync, mkdirSync, readdirSync, rmSync, statSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { readFileSync } from 'node:fs';
 import { BUNDLED_DIR, bundleProblems, stageBundle } from './build-bwrap.mjs';
 import { buildTypeScript } from './build-typescript.mjs';
+import { writeBuildIdentity } from './build-identity.mjs';
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const SRC = join(ROOT, 'src');
@@ -41,25 +42,6 @@ function copyAssets() {
     copied += 1;
   }
   return copied;
-}
-
-function buildIdentity() {
-  const hash = createHash('sha256');
-  const files = walk(SRC).sort();
-  for (const file of files) {
-    hash.update(relative(SRC, file));
-    hash.update(readFileSync(file));
-  }
-  const pkg = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8'));
-  // Commit is best-effort provenance (null outside a Git checkout, e.g. a `git archive` tree); the source tree digest is the product identity.
-  const git = args => { try { return execFileSync('git', ['-C', ROOT, ...args], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim(); } catch { return null; } };
-  const sourceCommit = git(['rev-parse', 'HEAD']) || null;
-  const status = sourceCommit === null ? null : git(['--no-optional-locks', 'status', '--porcelain', '--', 'src']);
-  const sourceDirty = status === null ? null : status.length > 0;
-  const identity = { schemaVersion: 1, packageName: pkg.name, packageVersion: pkg.version, sourceTreeSha256: hash.digest('hex'), sourceFileCount: files.length,
-    sourceCommit, sourceDirty, builtAt: new Date().toISOString() };
-  writeFileSync(join(DIST, 'build-identity.json'), JSON.stringify(identity, null, 2) + '\n');
-  return identity;
 }
 
 function buildNative() {
@@ -129,5 +111,5 @@ for (const bin of BINS) {
 }
 const native = buildNative();
 const bundled = stageBubblewrap();
-const identity = buildIdentity();
+const identity = writeBuildIdentity(ROOT, walk(SRC), DIST);
 process.stdout.write(`build ok: ${identity.sourceFileCount} source files, ${assets} assets, native=${native}, bubblewrap=${bundled}, ${Math.round(performance.now() - started)}ms\n`);
