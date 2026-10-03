@@ -4,7 +4,8 @@
 // subset dev-release drives: `runtime serve --json` (ledger lock via flock on <ledger>-lock, forward-only ledger upgrade with a VACUUM INTO
 // backup and a ledger-upgraded event, ready event), `runtime describe --json` and governed `runtime shutdown`.
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { copyFileSync, mkdirSync, writeFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
 const FAKE_ENTRY = String.raw`#!/usr/bin/env node
@@ -65,22 +66,19 @@ else {
 }
 `;
 
-const BUILD = String.raw`import { execFileSync } from 'node:child_process';
+const BUILD = String.raw`import { writeBuildIdentity } from './build-identity.mjs';
 import { appendFileSync, cpSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
-import { createHash } from 'node:crypto';
-import { dirname, join, relative } from 'node:path';
+import { dirname, join, relative, resolve } from 'node:path';
 const walk = (dir, out = []) => { for (const e of readdirSync(dir, { withFileTypes: true })) { const p = join(dir, e.name); if (e.isDirectory()) walk(p, out); else out.push(p); } return out; };
 rmSync('dist', { recursive: true, force: true });
 const behavior = JSON.parse(readFileSync('src/behavior.json', 'utf8'));
 if (behavior.dirtyOnBuild) appendFileSync('src/behavior.json', ' ');
-const hash = createHash('sha256'); const files = walk('src').sort();
-for (const file of files) { hash.update(relative('src', file)); hash.update(readFileSync(file));
+const files = walk('src').sort();
+for (const file of files) {
   const target = join('dist', relative('src', file).replace(/\.ts$/, '.js')); mkdirSync(dirname(target), { recursive: true }); cpSync(file, target); }
 for (const surface of ['cli', 'mcp']) { const dir = join('dist/composition/core', surface, 'internal'); mkdirSync(dir, { recursive: true });
   cpSync('src/fake-entry.js', join(dir, 'entry.js')); cpSync('src/lazy.js', join(dir, 'lazy.js')); }
-const git = args => execFileSync('git', args, { encoding: 'utf8' }).trim();
-writeFileSync('dist/build-identity.json', JSON.stringify({ schemaVersion: 1, packageName: 'deckent', packageVersion: '0.0.0', sourceTreeSha256: hash.digest('hex'),
-  sourceFileCount: files.length, sourceCommit: git(['rev-parse', 'HEAD']), sourceDirty: git(['status', '--porcelain', '--', 'src']).length > 0, builtAt: new Date().toISOString() }));
+writeBuildIdentity(process.cwd(), files.map(file => resolve(file)), resolve('dist'));
 process.stdout.write('build ok (fake)\n');
 `;
 
@@ -117,6 +115,9 @@ export function fakeRepository(root, origin) {
   put(root, 'package.json', JSON.stringify({ name: 'deckent', version: '0.0.0', private: true, type: 'module' }));
   put(root, 'package-lock.json', JSON.stringify({ name: 'deckent', version: '0.0.0', lockfileVersion: 3, requires: true, packages: { '': { name: 'deckent', version: '0.0.0' } } }));
   put(root, '.gitignore', 'dist/\nnode_modules/\n.deckent/\n.pack/\n.agents/\n');
+  // Share the real provenance producer: the fake build copies tiny fixtures, never compiles product code.
+  mkdirSync(join(root, 'scripts'), { recursive: true });
+  copyFileSync(fileURLToPath(new URL('../../scripts/build-identity.mjs', import.meta.url)), join(root, 'scripts/build-identity.mjs'));
   put(root, 'scripts/build.mjs', BUILD); put(root, 'scripts/build-dist.mjs', BUILD_DIST); put(root, 'scripts/pack-smoke.mjs', PACK_SMOKE);
   put(root, 'src/fake-entry.js', FAKE_ENTRY); put(root, 'src/lazy.js', 'export const where = import.meta.url;\n');
   put(root, 'src/engine/core/runtime/internal/service-protocol.ts', 'export const RUNTIME_SERVICE_SCHEMA_VERSION = 18 as const;\n');

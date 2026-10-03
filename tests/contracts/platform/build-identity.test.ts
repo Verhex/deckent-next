@@ -7,8 +7,8 @@ const identity = { schemaVersion: 1, sourceTreeSha256: 'a'.repeat(64), sourceCom
 beforeEach(() => { vi.mocked(readFileSync).mockReset(); });
 
 describe('build identity optional source repository provenance', () => {
-  it('returns sourceCommonDir from a current identity', () => {
-    vi.mocked(readFileSync).mockReturnValue(JSON.stringify({ ...identity, sourceCommonDir: '/source/repo/.git' }));
+  it.each([undefined, 'declared', 'derived'])('returns sourceCommonDir with optional provenance origin %s', sourceCommonDirOrigin => {
+    vi.mocked(readFileSync).mockReturnValue(JSON.stringify({ ...identity, sourceCommonDir: '/source/repo/.git', sourceCommonDirOrigin }));
     expect(readBuildIdentity()).toEqual({ sourceTreeSha256: identity.sourceTreeSha256, sourceCommit: identity.sourceCommit,
       sourceDirty: false, sourceCommonDir: '/source/repo/.git' });
   });
