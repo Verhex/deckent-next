@@ -248,7 +248,7 @@ async function assertRetainedNativeContent(project: string, root: string, env: R
   expect(explicit).toMatchObject({ ok: true, value: { responseContent: { kind: 'native-response', response: {
     native: { usage: { private_note: 'retained-sensitive-usage' } }, usage: { private_note: 'retained-sensitive-usage' },
   } } } });
-  const db = new DatabaseSync(ledger, { readOnly: true });
+  const db = new DatabaseSync(ledger, { readOnly: true, timeout: sqlite.busyTimeoutMs });
   try {
     const id = String(query.invocationId);
     const receipt = String(db.prepare('SELECT record FROM model_invocations WHERE scope_id=? AND invocation_id=?').get('scope', id)?.record);
@@ -265,12 +265,12 @@ function bindingDigest(definition: Parameters<typeof encodeModelBindingDefinitio
     digest: createHash('sha256').update(encodeModelBindingDefinition(definition)).digest('hex') };
 }
 function countInvocations(ledger: string, commandId: string) {
-  const db = new DatabaseSync(ledger, { readOnly: true });
+  const db = new DatabaseSync(ledger, { readOnly: true, timeout: sqlite.busyTimeoutMs });
   try { return db.prepare('SELECT count(*) AS count FROM model_invocations WHERE scope_id=? AND command_id=?').get('scope', commandId)?.count; }
   finally { db.close(); }
 }
 function invocationId(ledger: string, commandId: string): string {
-  const db = new DatabaseSync(ledger, { readOnly: true });
+  const db = new DatabaseSync(ledger, { readOnly: true, timeout: sqlite.busyTimeoutMs });
   try { return String(db.prepare('SELECT invocation_id FROM model_invocations WHERE scope_id=? AND command_id=?').get('scope', commandId)?.invocation_id); }
   finally { db.close(); }
 }
@@ -356,7 +356,7 @@ async function assertPurgedContent(input: { project: string; root: string; env: 
   reference: Record<string, unknown>; bodies: string[]; allow(): Promise<void> }): Promise<void> {
   const { project, root, env, ledger, reference } = input, count = input.bodies.length;
   const snapshot = () => {
-    const db = new DatabaseSync(ledger, { readOnly: true });
+    const db = new DatabaseSync(ledger, { readOnly: true, timeout: sqlite.busyTimeoutMs });
     try { return { receipts: db.prepare('SELECT * FROM model_invocations ORDER BY command_id').all(),
       allocations: db.prepare('SELECT * FROM model_invocation_allocations ORDER BY allocation_id').all() }; }
     finally { db.close(); }
@@ -403,7 +403,7 @@ async function assertPurgedContent(input: { project: string; root: string; env: 
   const human = await timedExecute(process.execPath, [cli, 'models', 'invoke', '--input', join(root, 'first.json'), '--lang', 'en'],
     { cwd: project, env, timeout: 10_000 });
   expect(human.stdout).toMatch(/purged/i); expect(human.stdout).not.toContain('retained-sensitive-usage');
-  const db = new DatabaseSync(ledger, { readOnly: true });
+  const db = new DatabaseSync(ledger, { readOnly: true, timeout: sqlite.busyTimeoutMs });
   try {
     for (const receipt of receipts) expect(db.prepare('SELECT record,purge_command_id FROM model_invocation_contents WHERE invocation_id=?')
       .get(receipt.command.invocationId)).toEqual({ record: null, purge_command_id: receipt.command.commandId });

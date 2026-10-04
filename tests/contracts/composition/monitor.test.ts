@@ -375,7 +375,9 @@ describe('MONITOR-H1-R usage evidence', () => {
       expect(text).not.toMatch(/(?:tokens? 987|987 (?:in|giriş))/); expect(text).not.toContain('$0.1234');
     }
     const value = (await inspectConfiguredWorkers(current.dir, { schemaVersion: 1, scopeId: 's' }, current.options)).sources[0]!.workers[0]!;
-    expect(value).toMatchObject({ usageEvidence: sealed === 'unavailable' ? 'unavailable' : 'invalid', files: { heartbeat: { state: 'available' }, activity: { phase: 'finished' }, usage: { tokens: { input: 987 } } } });
+    expect(value.usageEvidence).toBe(sealed === 'unavailable' ? 'unavailable' : 'invalid');
+    if (process.platform === 'linux') expect(value.files).toMatchObject({ heartbeat: { state: 'available' }, activity: { phase: 'finished' }, usage: { tokens: { input: 987 } } });
+    else expect(value.files).toMatchObject({ heartbeat: { state: 'missing' }, activity: null, usage: null });
     expect(value).not.toHaveProperty('usage');
     const snapshot = await inspectMonitor(current.dir, current.options), surface = await loadMonitorSurface();
     for (const locale of ['en', 'tr'] as const) {
@@ -402,8 +404,20 @@ describe('MONITOR-H1-R usage evidence', () => {
     finally { instance.unmount(); stdin.destroy(); stdout.destroy(); }
   }
   const cases = (['live', 'sealed', 'finished-sealed'] as const).flatMap(source => [null, 0, 17].flatMap(amount => [false, true].map(ended => ({ source, amount, ended }))));
-  it.each(cases)('R2: $source tokens=$amount ended=$ended through production inference → shared JSON/text/Ink detail and list/watch', async ({ source, amount, ended }) => {
+  it.for(cases)('R2: $source tokens=$amount ended=$ended through production inference → shared JSON/text/Ink detail and list/watch', async ({ source, amount, ended }, context) => {
     const current = await evidence(source === 'live' ? null : tokenEvent(amount, ended), source === 'live' ? tokenEvent(amount, ended) : tokenEvent(987, true), source === 'finished-sealed');
+    if (source === 'live' && process.platform !== 'linux') {
+      // The real adapter pins sidecars through Linux /proc/self/fd; never replace
+      // that custody floor with a path-based read to make a platform test pass.
+      const observation = (await inspectConfiguredWorkers(current.dir, { schemaVersion: 1, scopeId: 's' }, current.options)).sources[0]!.workers[0]!;
+      expect(observation).toMatchObject({ usageEvidence: 'none', files: { heartbeat: { state: 'missing' }, activity: null, usage: null } });
+      expect(observation).not.toHaveProperty('usage');
+      const snapshot = await inspectMonitor(current.dir, current.options);
+      expect(snapshot.installs[0]!.workers).toHaveLength(1);
+      expect(snapshot.installs[0]!.workers[0]).toMatchObject({ usageEvidence: 'none' });
+      expect(snapshot.installs[0]!.workers[0]).not.toHaveProperty('usage');
+      context.skip('WORKER_SIDECAR_CUSTODY_UNAVAILABLE: live sidecars require Linux /proc/self/fd; real adapter exposes no live usage on this platform');
+    }
     const snapshot = await inspectMonitor(current.dir, current.options), worker = snapshot.installs[0]!.workers[0]!, surface = await loadMonitorSurface();
     const expected = amount === null ? '—/—' : `${amount}/${amount}`;
     for (const locale of ['en', 'tr'] as const) {

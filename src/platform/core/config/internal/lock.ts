@@ -82,7 +82,8 @@ async function observe(lock: string, clock: TrustedClock, started: ClockSample) 
 async function reclaim(lock: string, observed: NonNullable<Awaited<ReturnType<typeof observe>>>, options: ConfigLockOptions, clock: TrustedClock, started: ClockSample): Promise<boolean> {
   const current = await observe(lock, clock, started);
   if (!current?.stale || current.stat.dev !== observed.stat.dev || current.stat.ino !== observed.stat.ino
-    || current.stat.mtimeMs !== observed.stat.mtimeMs || current.owner.nonce !== observed.owner.nonce) return false;
+    || current.stat.birthtimeMs !== observed.stat.birthtimeMs || current.stat.mtimeMs !== observed.stat.mtimeMs
+    || current.owner.nonce !== observed.owner.nonce) return false;
   const stalePath = `${lock}.stale-${current.stat.dev}-${current.stat.ino}-${current.stat.birthtimeMs}`;
   try {
     if (current.empty) await rmdir(lock); // Atomic removal only while unpublished; cannot remove a populated live lock.
@@ -93,6 +94,26 @@ async function reclaim(lock: string, observed: NonNullable<Awaited<ReturnType<ty
     // Windows may report an existing protected rename destination as EPERM/EACCES.
     if (['EPERM', 'EACCES'].includes(code) && await lstat(stalePath).catch(() => null)) return false;
     throw error;
+  }
+  if (!current.empty) {
+    // On Windows two racing renames can both resolve for one generation. A successful
+    // return alone proves neither movement nor exclusive recovery ownership.
+    const moved = await lstat(stalePath).catch(error => {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null;
+      throw error;
+    });
+    if (!moved || moved.dev !== current.stat.dev || moved.ino !== current.stat.ino
+      || moved.birthtimeMs !== current.stat.birthtimeMs || moved.isSymbolicLink()) return false;
+    const named = await lstat(lock).catch(error => {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null;
+      throw error;
+    });
+    if (named?.dev === current.stat.dev && named.ino === current.stat.ino
+      && named.birthtimeMs === current.stat.birthtimeMs) return false;
+    // Keep the receipt beside the tombstone: it cannot block a new lock owner.
+    // Exclusive creation elects one warning claimant after verified movement.
+    try { const receipt = await open(`${stalePath}.reclaimed`, 'wx', 0o600); await receipt.close(); }
+    catch (error) { if ((error as NodeJS.ErrnoException).code === 'EEXIST') return false; throw error; }
   }
   const warning: ConfigWarning = { code: 'CONFIG_LOCK_STALE_RECLAIMED', path: lock,
     message: t('config.lockReclaimed', { path: lock, pid: current.owner.pid ?? 'unknown', ageSeconds: Math.floor(current.ageSeconds) }, options.locale ?? resolveLocale()) };
