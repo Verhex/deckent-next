@@ -316,12 +316,12 @@ describe('monitor v1.1: first failure, timeline, map, diagnostics, order', () =>
     const order = ['run-broken ', 'run-broken-quiet', 'run-dog-1', 'run-not-admitted', 'run-stopped', 'run-unknown'].map(name => runs.indexOf(name));
     expect(order.every(index => index > 0)).toBe(true);
     expect([...order].sort((a, b) => a - b)).toEqual(order);
-    expect(runs).toMatch(/run-broken\s+✗ failed\s+—\s+—\s+≈ 15 min\s+0\/2 accepted\s+—\s/);
+    expect(runs).toMatch(/run-broken\s+Stopped\s+—\s+—\s+≈ 15 min\s+0\/2 accepted\s+—\s/);
     // No proven end → unknown, never last-activity arithmetic (owner: the "1 s" for 8-minute Runs on N1).
-    expect(runs).toMatch(/run-broken-quiet\s+✗ failed\s+—\s+—\s+unknown\s/);
-    expect(runs).toMatch(/run-done\s+✓ accepted\s+—\s+—\s+1 h 10 min\s+2\/2 accepted\s+adopted\s/);
-    expect(runs).toMatch(/run-stopped\s+■ cancelled\s+—\s+—\s+unknown\s+0\/2 accepted\s+rolled back\s/);
-    expect(runs).toMatch(/run-not-admitted\s+~ waiting\s+not admitted yet\s+1 h 33 min\s+running\s/);
+    expect(runs).toMatch(/run-broken-quiet\s+Stopped\s+—\s+—\s+unknown\s/);
+    expect(runs).toMatch(/run-done\s+Done\s+—\s+—\s+1 h 10 min\s+2\/2 accepted\s+adopted\s/);
+    expect(runs).toMatch(/run-stopped\s+Stopped\s+—\s+—\s+unknown\s+0\/2 accepted\s+rolled back\s/);
+    expect(runs).toMatch(/run-not-admitted\s+On hold \(system\)\s+not admitted yet\s+1 h 33 min\s+running\s/);
     const workers = text.slice(text.indexOf('── Workers'), text.indexOf('── Approvals'));
     expect(workers).toMatch(/run-broken\/build .*exited 1 .*claude\/model-alpha-2/);
   });
@@ -386,7 +386,7 @@ describe('fullscreen controls: filter, sort, group, change marks, snapshot age',
       await view.press(KEY.tab); await view.press('s');
       expect(view.stdout.frame).toContain('Duration ▼'); expect(view.stdout.frame).toContain('sorted by age (newest first)');
       await view.press('s');
-      expect(view.stdout.frame).toContain('State ▼'); expect(view.stdout.frame).toMatch(/› run-[a-z-]+\s+! blocked/);
+      expect(view.stdout.frame).toContain('State ▼'); expect(view.stdout.frame).toMatch(/› run-[a-z-]+\s+On hold \(system\)/);
       await view.press('s');
       expect(view.stdout.frame).toContain('Run ▼'); expect(view.stdout.frame).toMatch(/› run-blocked-approval/);
       await view.press('S');
@@ -396,7 +396,7 @@ describe('fullscreen controls: filter, sort, group, change marks, snapshot age',
       await view.press('g');
       expect(view.stdout.frame).toContain('grouped by install'); expect(view.stdout.frame).toMatch(/\n {1}current\n/); expect(view.stdout.frame).toMatch(/\n {1}dogfood\n/);
       await view.press('g');
-      expect(view.stdout.frame).toContain('grouped by state'); expect(view.stdout.frame).toMatch(/\n {1}✗ failed\n/);
+      expect(view.stdout.frame).toContain('grouped by state'); expect(view.stdout.frame).toMatch(/\n {1}Stopped\n/);
       await view.press('g');
       expect(view.stdout.frame).not.toContain('grouped by');
     } finally { view.instance.unmount(); }
@@ -499,7 +499,7 @@ describe('terminal /monitor', () => {
   });
   it('/monitor through the CLI wiring renders the same text and refuses chat-only flags', async () => {
     const { monitorSlash } = await import('#surfaces/core/monitor/index.js');
-    const lines = await monitorSlash('/root', '--install dogfood', { async inspectMonitor() { return fullSnapshot; } } as never, { env: {} }, 'tr', 90);
+    const lines = await monitorSlash('/root', '--install dogfood', { env: { TERM: 'xterm-256color' }, async inspectMonitor() { return fullSnapshot; } } as never, { env: {} }, 'tr', 90);
     expect(lines.join('\n')).toBe(surface.renderMonitorText(fullSnapshot, { locale: 'tr', width: 90, ascii: false, filters: { install: 'dogfood' } }));
     expect(await monitorSlash('/root', '--json', { async inspectMonitor() { return fullSnapshot; } } as never, { env: {} }, 'en', 90)).toEqual([t('monitor.slash.usage', {}, 'en')]);
     await expect(monitorSlash('/root', '', {} as never, { env: {} }, 'en', 90)).rejects.toMatchObject({ code: 'MONITOR_UNAVAILABLE' });
@@ -630,5 +630,82 @@ it('H1 token absence stays unknown; an explicit sealed zero remains zero', () =>
     const worker = { ...base, usage: summarizeWorkerEvents(events) };
     const text = surface.renderMonitorText({ ...sample, installs: [{ ...install, workers: [worker] }] }, { locale: 'tr', width: 120, ascii: true });
     expect(text).toContain(recorded ? 'token 0/0' : 'token —/—');
+  }
+});
+
+it.each([{ locale: 'en' as const, columns: 80, rows: 24 }, { locale: 'tr' as const, columns: 120, rows: 36 }])('H1B Brief meanings survive Enter, detail scrolling and no-color ($locale $columns × $rows)', async ({ locale, columns, rows }) => {
+  const sample = humanWorkerSnapshot(), install = sample.installs[0]!, worker = install.workers[0]!;
+  const human = { ...worker.human!, taskBrief: { schemaVersion: 1 as const, task: 'Preserve result evidence', scopePaths: ['src/**'], acceptance: 'Checks retain source attribution', criteria: [],
+    profile: { id: 'frozen-profile', version: 1 }, model: null, effort: 'high', contextRefs: [] },
+    resultBrief: { schemaVersion: 1 as const, attemptId: worker.identity!.attemptId, claimLabel: 'CLAIM' as const, report: { ...worker.human!.finalReport!, report: { ...worker.human!.finalReport!.report, openIssues: ['still pending'] } }, evaluation: { verdict: 'rejected' as const, reason: 'no-change-produced' as const },
+      openIssues: ['still pending'], runDelivery: { state: 'adopting' as const, commit: 'b'.repeat(40), targetRef: 'refs/heads/main', commandId: 'landing' } } };
+  const snapshot = { ...sample, installs: [{ ...install, workers: [{ ...worker, human }] }] }, before = JSON.stringify(snapshot);
+  const detail = surface.buildMonitorView(snapshot, locale, true).tabs.workers.flatMap(b => b.kind === 'table' ? b.rows : [])[0]!.detail().flat().map(span => span.text).join('\n');
+  for (const value of ['src/**', 'Checks retain source attribution', 'still pending', 'refs/heads/main', 'frozen-profile', 'high']) expect(detail).toContain(value);
+  expect(detail).toContain(locale === 'en' ? 'CLAIM' : 'İDDİA'); expect(detail).toContain(t('task.acceptance.noChangeProduced', {}, locale));
+  const view = mount({ load: async () => snapshot, locale, columns, rows });
+  try {
+    await until(() => view.stdout.frame.includes(t('monitor.title', {}, locale)), 'loaded Brief frame');
+    await view.press('3'); await view.press(KEY.enter);
+    expect(view.stdout.frame).toContain('Preserve result evidence'); expect(view.stdout.frame).toContain('src/**');
+    let frames = view.stdout.frame;
+    for (let n = 0; n < 8; n++) { await view.press('\u001b[6~'); frames += '\n' + view.stdout.frame; }
+    expect(frames).toContain(locale === 'en' ? 'CLAIM' : 'İDDİA'); expect(frames).toContain('still pending');
+    expect(widest(view.stdout.frame)).toBeLessThanOrEqual(columns); expect(frames).not.toContain('\u001b[');
+    await view.press(KEY.esc); expect(JSON.stringify(snapshot)).toBe(before);
+  } finally { view.instance.unmount(); }
+});
+
+for (const locale of ['en', 'tr'] as const) for (const columns of [80, 40]) it(`S2 closed held-worker owner survives real Ink tab/group/navigation (${locale}, ${columns})`, async () => {
+  const install = fullSnapshot.installs[0]!, observed = install.workers[0]!, run = install.runs.find(value => value.runId === observed.identity!.runId)!;
+  for (const [code, who] of [['awaiting-approval', 'you'], ['pool-held', 'operator'], ['unknown', 'system']] as const) {
+    const held = { ...run, blocker: { code, taskId: observed.taskId, sinceMs: null, detail: null }, state: 'blocked' as const };
+    const snapshot = { ...emptySnapshot, installs: [{ ...install, runs: [held], workers: [observed], approvals: [], pools: [], diagnostics: [] }] };
+    const view = mount({ load: async () => snapshot, locale, columns, rows: 24 });
+    const label = t('monitor.global.heldBy', { state: t('monitor.global.held', {}, locale), waitingOn: t(`monitor.global.${who}`, {}, locale) }, locale);
+    try {
+      await until(() => view.stdout.frame.includes(t('monitor.global.held', {}, locale)), 'held snapshot');
+      await view.press('3'); expect(view.stdout.frame).toContain(label); expect(widest(view.stdout.frame)).toBeLessThanOrEqual(columns);
+      await view.press('g'); await view.press('g'); expect(view.stdout.frame).toContain(label);
+      await view.press(KEY.enter); await view.press(KEY.esc); expect(view.stdout.frame).toContain(label);
+      expect(view.stdout.frame).not.toContain('\u001b[');
+    } finally { view.instance.unmount(); }
+  }
+});
+
+for (const locale of ['en', 'tr'] as const) for (const columns of [80, 40]) it(`S2 scrolling closed held-owner survives overflow indicator (${locale}, ${columns})`, async () => {
+  const install = fullSnapshot.installs[0]!, seedWorker = install.workers[0]!, seedRun = install.runs.find(run => run.runId === seedWorker.identity!.runId)!;
+  for (const [code, who, previousCode] of [['awaiting-approval', 'you', 'pool-held'], ['pool-held', 'operator', 'awaiting-approval'], ['unknown', 'system', 'awaiting-approval']] as const) {
+    const runs = Array.from({ length: 10 }, (_, i) => {
+      const runId = `held-${String(i + 1).padStart(2, '0')}`, attemptId = `attempt-${i + 1}`;
+      return { ...seedRun, runId, state: 'blocked' as const, blocker: { code: i === 8 ? code : i === 9 ? 'worker-stale-heartbeat' as const : previousCode,
+        taskId: seedWorker.taskId, sinceMs: null, detail: null }, tasks: [{ ...seedRun.tasks[0]!, lastAttempt: { ...seedRun.tasks[0]!.lastAttempt!, attemptId } }] };
+    });
+    const workers = runs.map(run => ({ ...seedWorker, identity: { ...seedWorker.identity!, runId: run.runId, attemptId: run.tasks[0]!.lastAttempt!.attemptId } }));
+    const snapshot = { ...emptySnapshot, installs: [{ ...install, runs, workers, approvals: [], pools: [], diagnostics: [] }] }, before = JSON.stringify(snapshot);
+    const view = mount({ load: async () => snapshot, locale, columns, rows: 24 });
+    const label = t('monitor.global.heldBy', { state: t('monitor.global.held', {}, locale), waitingOn: t(`monitor.global.${who}`, {}, locale) }, locale);
+    const selectedOwner = () => {
+      const lines = view.stdout.frame.split('\n'), at = lines.findIndex(line => line.startsWith('› held-09/build'));
+      expect(at, view.stdout.frame).toBeGreaterThanOrEqual(0);
+      expect(lines[at + 1]).toContain(label); // the selected row's own carrier, never a different row/group's label.
+      expect(widest(view.stdout.frame)).toBeLessThanOrEqual(columns); expect(lines.length).toBeLessThanOrEqual(24);
+      expect(view.stdout.frame).not.toContain('\u001b[');
+    };
+    try {
+      await until(() => view.stdout.frame.includes('held-01'), 'long held snapshot');
+      await view.press('3');
+      for (let i = 0; i < 8; i++) await view.press(KEY.down);
+      selectedOwner();
+      await view.press(KEY.enter); await view.press(KEY.esc); selectedOwner();
+      await view.press('g'); await view.press('g');
+      // Grouping may reorder rows; explicitly navigate back to the same worker identity.
+      for (let i = 0; i < 8; i++) await view.press(KEY.up);
+      for (let i = 0; i < 10 && !view.stdout.frame.split('\n').some(line => line.startsWith('› held-09/build')); i++) await view.press(KEY.down);
+      selectedOwner();
+      await view.press(KEY.enter); await view.press(KEY.esc); selectedOwner();
+      await view.press(KEY.down); await view.press(KEY.up); selectedOwner();
+      expect(JSON.stringify(snapshot)).toBe(before);
+    } finally { view.instance.unmount(); }
   }
 });

@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 2,
+  "schemaVersion": 3,
   "adapters": {
     "codex": {
       "executable": "codex",
@@ -34,7 +34,25 @@
           "flag": "--output-schema",
           "channel": "schema-file"
         },
-        "modelUsageEvidence": "none"
+        "modelUsageEvidence": "none",
+        "reasoningEffort": {
+          "mode": "arguments",
+          "levels": [
+            "low",
+            "medium",
+            "high",
+            "xhigh",
+            "max",
+            "ultra"
+          ],
+          "args": [
+            "-c",
+            "model_reasoning_effort={effort}"
+          ],
+          "requiredFlags": [
+            "--config"
+          ]
+        }
       }
     },
     "claude": {
@@ -89,7 +107,24 @@
           "flag": "--json-schema",
           "channel": "inline-json"
         },
-        "modelUsageEvidence": "session-events"
+        "modelUsageEvidence": "session-events",
+        "reasoningEffort": {
+          "mode": "arguments",
+          "levels": [
+            "low",
+            "medium",
+            "high",
+            "xhigh",
+            "max"
+          ],
+          "args": [
+            "--effort",
+            "{effort}"
+          ],
+          "requiredFlags": [
+            "--effort"
+          ]
+        }
       }
     },
     "cursor": {
@@ -113,7 +148,20 @@
         "settings": null,
         "promptChannel": "inline",
         "structuredReport": null,
-        "modelUsageEvidence": "none"
+        "modelUsageEvidence": "none",
+        "reasoningEffort": {
+          "mode": "model-id",
+          "levels": [
+            "low",
+            "medium",
+            "high",
+            "xhigh",
+            "max",
+            "ultra"
+          ],
+          "args": [],
+          "requiredFlags": []
+        }
       }
     }
   }

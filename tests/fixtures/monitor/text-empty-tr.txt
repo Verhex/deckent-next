@@ -2,7 +2,7 @@ Deckent izleyici · gözlem 2026-10-02 09:30:00Z · yalnız gözlem
 ● current · servis kaydı yok · build bilinmiyor · ledger sürüm 44 · /home/owner/projects/fresh
 
 ── Özet ────────────────────────────────────────────────────────────────────────────────────────────
-Run'lar: 0 ilerliyor · 0 bekliyor · 0 takılı · 0 kabul · 0 başarısız · 0 iptal
+Run: 0 sırada · 0 çalışıyor · 0 kontrolde · 0 beklemede · 0 tamam · 0 durdu
 
 Sizi bekleyen (0)
   Bekleyen onay yok.

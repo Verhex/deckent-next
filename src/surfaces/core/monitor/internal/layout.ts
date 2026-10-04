@@ -1,5 +1,5 @@
 import { terminalSafeText } from '#platform/index.js';
-import { cells, truncateEnd, truncateStart } from '#surfaces/core/terminal-render/index.js';
+import { cells, truncateEnd, truncateStart, wrapCells } from '#surfaces/core/terminal-render/index.js';
 
 /**
  * Display primitives shared by the plain-text snapshot and the fullscreen view: a line is spans with a semantic role. Meaning never
@@ -26,6 +26,8 @@ export interface MonitorRow {
   readonly key: string; readonly cells: readonly MonitorSpan[]; readonly detail: () => readonly MonitorLine[];
   /** H1 workers carry the same detail in once/slash text as Enter. */
   readonly detailInText?: boolean;
+  /** Essential collapsed-row context wraps at display-cell width; it never becomes another selectable item. */
+  readonly context?: readonly MonitorLine[];
   readonly facets?: MonitorFacets;
   /** Sort values: age = epoch ms (newer is larger), state = rank (worse first), name = text. */
   readonly sort?: { readonly age?: number | null; readonly state?: number; readonly name?: string };
@@ -130,6 +132,10 @@ export function flattenBlocks(blocks: readonly MonitorBlock[], width: number, el
       if (label !== null && label !== group) { group = label; out.push({ line: clipLine([span(` ${label}`, 'accent')], width, ellipsis) }); }
       const line = render(row.cells, false);
       out.push({ line: row.mark ? [span(row.mark, 'accent'), ...line.slice(1)] : line, item: item++, row });
+      for (const context of row.context ?? []) {
+        const role = context.find(part => part.role)?.role;
+        for (const text of wrapCells(lineText(context), Math.max(1, width - 2))) out.push({ line: [span('  '), span(text, role)] });
+      }
     }
   }
   return out;

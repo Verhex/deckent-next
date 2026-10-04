@@ -1,3 +1,5 @@
+import { renderBriefLines } from './brief.js';
+import { renderWorkerModelLine } from './worker-model.js';
 import { redactSensitive, t, terminalSafeText, type Locale } from '#platform/index.js';
 import { resolveWorkerUsage, type MonitorWorker } from '#engine/index.js';
 import { span, type MonitorLine } from './layout.js';
@@ -19,8 +21,10 @@ export function humanWorkerLines(worker: MonitorWorker, locale: Locale): Monitor
     : h.transcript.state === 'unavailable' ? t('monitor.human.transcriptUnavailable', {}, locale) : t('monitor.human.transcriptMissing', {}, locale);
   return [
     line(t('monitor.human.title', { title: h.title ? safe(h.title) : t('monitor.human.noTitle', {}, locale), source: sources[h.titleEvidence] }, locale), 'strong'),
-    line(t('monitor.human.evaluation', { verdict: verdictLabel(h.evaluation, locale) }, locale)
-      + (h.evaluationReason ? ` · ${t('task.acceptance.noChangeProduced', {}, locale)}` : ''), h.evaluation === 'rejected' ? 'warning' : undefined),
+    ...renderBriefLines(h.taskBrief, h.resultBrief, locale).map(text => line(text)),
+    ...(worker.model?.reasoningEffort ? [line(renderWorkerModelLine(worker.model, locale))] : []),
+    ...(h.resultBrief ? [] : [line(t('monitor.human.evaluation', { verdict: verdictLabel(h.evaluation, locale) }, locale)
+      + (h.evaluationReason ? ` · ${t('task.acceptance.noChangeProduced', {}, locale)}` : ''), h.evaluation === 'rejected' ? 'warning' : undefined)]),
     ...(h.evaluationReason && h.patch.state === 'recorded' && h.patch.fileCount === 0 ? [] : [h.patch.state === 'recorded' ? h.patch.fileCount === 0 ? line(t('monitor.human.emptyPatch', {}, locale), h.evaluation === 'rejected' ? 'warning' : undefined)
       : line(t('monitor.human.patch', { count: h.patch.fileCount ?? '—', files: h.patch.files.map(safe).join(', ') }, locale)) : line(patchMissing, 'muted')]),
     ...(h.patch.truncated ? [line(t('monitor.human.bounded', {}, locale), 'muted')] : []),
@@ -32,7 +36,7 @@ export function humanWorkerLines(worker: MonitorWorker, locale: Locale): Monitor
     h.startedAtMs === null ? line(t('monitor.human.startMissing', {}, locale), 'muted') : line(t('monitor.human.start', { time: clockText(h.startedAtMs) }, locale), 'muted'),
     h.endedAtMs === null ? line(t('monitor.human.endMissing', {}, locale), 'muted') : line(h.endedAtSource === 'sealed'
       ? t('monitor.human.endSealed', { time: clockText(h.endedAtMs) }, locale) : t('monitor.human.endObserved', { time: clockText(h.endedAtMs) }, locale), 'muted'),
-    ...(report ? [line(t('monitor.human.report', { summary: safe(report.summary) }, locale)), ...report.checks.map(check => line(t('monitor.human.check', { command: safe(check.command), outcome: checks[check.outcome] }, locale)))]
+    ...(h.resultBrief ? [] : report ? [line(t('monitor.human.report', { summary: safe(report.summary) }, locale)), ...report.checks.map(check => line(t('monitor.human.check', { command: safe(check.command), outcome: checks[check.outcome] }, locale)))]
       : [line(t('monitor.human.reportMissing', {}, locale), 'muted')]),
     ...(h.transcript.state === 'sealed' ? [line(t('monitor.human.transcript', {}, locale), 'muted'), ...h.transcript.excerpt.map(event => [span(`${event.kind}: ${safe(event.summary)}`)])] : [line(transcriptMissing, 'muted')]),
     ...(h.transcript.truncated ? [line(t('monitor.human.bounded', {}, locale), 'muted')] : []),

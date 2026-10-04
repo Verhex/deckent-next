@@ -98,7 +98,8 @@
         "src/engine/core/worker-observation",
         "src/engine/core/workspace-patch",
         "src/engine/core/workspaces",
-        "src/platform/core/clock"
+        "src/platform/core/clock",
+        "src/domain/core/worker-event"
       ],
       "plan": "STORE"
     },
@@ -432,7 +433,8 @@
         "src/adapters/core/git-workspace",
         "src/engine/core/workspace-patch",
         "src/engine/core/workspaces",
-        "src/composition/core/workspace-patch"
+        "src/composition/core/workspace-patch",
+        "src/adapters/core/monitor-ledger"
       ],
       "plan": "EXECUTION"
     },
@@ -527,7 +529,8 @@
     },
     "src/domain/core/attempt": {
       "dependencies": [
-        "src/domain/core/primitives"
+        "src/domain/core/primitives",
+        "src/domain/core/provider-catalog"
       ],
       "plan": "CONTRACT"
     },
@@ -552,7 +555,8 @@
       "dependencies": [
         "src/domain/core/attempt",
         "src/domain/core/primitives",
-        "src/domain/core/task-graph"
+        "src/domain/core/task-graph",
+        "src/domain/core/provider-catalog"
       ],
       "plan": "CONTRACT"
     },
@@ -638,7 +642,11 @@
         "src/engine/core/worker-observation",
         "src/platform/core/errors",
         "src/engine/core/handoff-observation",
-        "src/engine/core/attempts"
+        "src/engine/core/attempts",
+        "src/domain/core/provider-catalog",
+        "src/domain/core/worker-event",
+        "src/engine/core/model-activation",
+        "src/platform/core/output"
       ],
       "plan": "CONTRACT"
     },
@@ -1899,7 +1907,8 @@
         "src/engine/core/runs",
         "src/engine/core/handoff-observation",
         "src/platform/core/errors",
-        "src/engine/core/supervisor"
+        "src/engine/core/supervisor",
+        "src/domain/core/attempt"
       ],
       "plan": "MONITOR"
     },
@@ -1968,7 +1977,8 @@
         "src/surfaces/core/terminal-kit",
         "src/surfaces/core/terminal-render",
         "src/surfaces/core/config",
-        "src/engine/core/config"
+        "src/engine/core/config",
+        "src/engine/core/runs"
       ],
       "plan": "MONITOR"
     },

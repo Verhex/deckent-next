@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { approvalRecordSchema, approvalSubject, sameAttemptIdentity, parseModelCatalogModelRecord, parseModelCatalogChannelRecord, readWorkerModelPin, runSnapshotSchema, taskEvaluationModelSchema, type AttemptIdentity, type WorkerModelView } from '#domain/index.js';
 import type { ArtifactReceipt } from '#capabilities/index.js';
 import { poolCapacityReceiptSchema, runExecutionPolicySchema, AttemptStoreError, handoffEventCommandId, handoffStartRecordSchema, dispatchRecordSchema, executionPoolSchema, measureTaskOccupancy, poolHoldRecordSchema, workerEventLogSchema,
-  type MonitorDeliveryState, type MonitorLedgerApproval, type MonitorLedgerAttempt, type MonitorLedgerPool, type MonitorLedgerReading, type MonitorLedgerRun, type MonitorMap } from '#engine/index.js';
+  type ResultBrief, type MonitorDeliveryState, type MonitorLedgerApproval, type MonitorLedgerAttempt, type MonitorLedgerPool, type MonitorLedgerReading, type MonitorLedgerRun, type MonitorMap } from '#engine/index.js';
 import { assertSqliteEngineSupported, CURRENT_LEDGER_VERSION, POOL_CAPACITY_LEDGER_VERSION, POOL_HOLD_LEDGER_VERSION, RUN_LEDGER_VERSION, sqliteFailure, WORKER_EVENT_LOG_LEDGER_VERSION } from '#adapters/core/sqlite-ledger/index.js';
 
 // First ledger versions of the optional evidence tables (schema.ts history): intents + evaluation observations, task approvals.
@@ -16,7 +16,7 @@ export interface MonitorAttemptFiles {
 }
 
 const OPEN_PHASES = "('pending','active','evaluating','reconciling','awaiting-decision')";
-const optionsSchema = z.object({ busyTimeoutMs: z.number().int().nonnegative().max(2_147_483_647), maxRuns: z.number().int().positive().max(100_000) }).strict();
+const optionsSchema = z.object({ busyTimeoutMs: z.number().int().nonnegative().max(2_147_483_647), maxRuns: z.number().int().positive().max(100_000), run: z.object({ scopeId: z.string(), runId: z.string() }).strict().optional() }).strict();
 export type MonitorLedgerOptions = z.infer<typeof optionsSchema>;
 const num = (value: unknown) => typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? value : null;
 const json = (value: unknown) => { try { return JSON.parse(String(value)) as unknown; } catch { return undefined; } };
@@ -45,12 +45,12 @@ export function scanMonitorLedger(path: string, input: MonitorLedgerOptions): { 
       return { reading: Object.freeze({ ledgerVersion: version, scopeIds: [], runs: [], approvals: [], pools: [], diagnostics: ['ledger-version-unsupported:' + version] }), files: [] };
     }
     const files: MonitorAttemptFiles[] = [];
-    return { reading: read(db, version, options.data.maxRuns, files), files };
+    return { reading: read(db, version, options.data.maxRuns, files, options.data.run), files };
   } catch (error) { throw sqliteFailure(error); }
   finally { try { if (db.isTransaction) db.exec('ROLLBACK'); } finally { db.close(); } }
 }
 
-function read(db: DatabaseSync, version: number, maxRuns: number, files: MonitorAttemptFiles[]): MonitorLedgerReading {
+function read(db: DatabaseSync, version: number, maxRuns: number, files: MonitorAttemptFiles[], selected?: { scopeId: string; runId: string }): MonitorLedgerReading {
   const diagnostics: string[] = version < CURRENT_LEDGER_VERSION ? ['info:ledger-version-older:' + version] : [];
   // One pass over run receipts (command text only; snapshots are not loaded): creation time per Run and reservation time per attempt.
   // MONITOR v1.1: the evaluation receipt also carries the worker model record (requested → init → usage → verdict) of pinned tasks.
@@ -72,7 +72,7 @@ function read(db: DatabaseSync, version: number, maxRuns: number, files: Monitor
   if (total > maxRuns) diagnostics.push('info:runs-truncated:' + total);
   const rows = db.prepare(`SELECT scope_id,run_id,revision,snapshot,policy,CASE WHEN json_valid(policy) THEN json_extract(policy,'$.poolId') END AS pool_id,
     CASE WHEN json_valid(snapshot) THEN EXISTS(SELECT 1 FROM json_each(snapshot,'$.progress') p WHERE json_extract(p.value,'$.phase') IN ${OPEN_PHASES}) ELSE 1 END AS open
-    FROM runs ORDER BY open DESC,rowid DESC LIMIT ?`).all(maxRuns);
+    FROM runs ${selected ? 'WHERE scope_id=? AND run_id=?' : ''} ORDER BY open DESC,rowid DESC LIMIT ?`).all(...(selected ? [selected.scopeId, selected.runId, maxRuns] : [maxRuns]));
   const runs: MonitorLedgerRun[] = []; const deliveries = deliveryStates(db, version);
   for (const row of rows) {
     const key = `${row.scope_id}/${row.run_id}`;
@@ -101,21 +101,28 @@ function read(db: DatabaseSync, version: number, maxRuns: number, files: Monitor
 
 /** Furthest proven delivery step per Run: adoption (latest sequence) › delivery › integration; only the ledger's own intent records. */
 function deliveryStates(db: DatabaseSync, version: number) {
-  const states = new Map<string, { state: MonitorDeliveryState; commit: string | null }>(); const rank = new Map<string, number>();
-  const put = (key: string, order: number, state: MonitorDeliveryState, commit: unknown) => {
+  const states = new Map<string, NonNullable<ResultBrief['runDelivery']>>(); const rank = new Map<string, number>();
+  const histories = new Map<string, NonNullable<NonNullable<ResultBrief['runDelivery']>['receipts']>[number][]>();
+  const put = (key: string, order: number, state: MonitorDeliveryState, commit: unknown, commandId: unknown, targetRef: unknown) => {
+    const receipt = { state, commit: typeof commit === 'string' && /^[0-9a-f]{40,64}$/.test(commit) ? commit : null,
+      commandId: typeof commandId === 'string' ? commandId : null, targetRef: typeof targetRef === 'string' ? targetRef : null };
+    let receipts = histories.get(key);
+    if (!receipts) histories.set(key, receipts = []);
+    receipts.push(receipt);
     if ((rank.get(key) ?? -1) > order) return;
-    rank.set(key, order); states.set(key, Object.freeze({ state, commit: typeof commit === 'string' && /^[0-9a-f]{40,64}$/.test(commit) ? commit : null }));
+    rank.set(key, order); states.set(key, receipt);
   };
   const runOf = "CASE WHEN json_valid(intent) THEN json_extract(intent,'$.command.identity.runId') END";
-  if (version >= INTEGRATION_VERSION) for (const row of db.prepare(`SELECT scope_id,${runOf} AS run_id,manifest FROM workspace_integrations`).all()) {
-    put(`${row.scope_id}/${row.run_id}`, 1, row.manifest === null ? 'integrating' : 'integrated', null);
+  if (version >= INTEGRATION_VERSION) for (const row of db.prepare(`SELECT scope_id,command_id,${runOf} AS run_id,manifest FROM workspace_integrations`).all()) {
+    put(`${row.scope_id}/${row.run_id}`, 1, row.manifest === null ? 'integrating' : 'integrated', null, row.command_id, null);
   }
-  if (version >= DELIVERY_VERSION) for (const row of db.prepare(`SELECT scope_id,${runOf} AS run_id,delivered,CASE WHEN json_valid(intent) THEN json_extract(intent,'$.plan.commit') END AS commit_id
-    FROM workspace_deliveries`).all()) put(`${row.scope_id}/${row.run_id}`, 2, row.delivered === 1 ? 'delivered' : 'delivering', row.commit_id);
-  if (version >= ADOPTION_VERSION) for (const row of db.prepare(`SELECT scope_id,${runOf} AS run_id,kind,settled,sequence,CASE WHEN json_valid(intent) THEN json_extract(intent,'$.toCommit') END AS commit_id
+  if (version >= DELIVERY_VERSION) for (const row of db.prepare(`SELECT scope_id,command_id,${runOf} AS run_id,delivered,CASE WHEN json_valid(intent) THEN json_extract(intent,'$.plan.ref') END AS target_ref,CASE WHEN json_valid(intent) THEN json_extract(intent,'$.plan.commit') END AS commit_id
+    FROM workspace_deliveries`).all()) put(`${row.scope_id}/${row.run_id}`, 2, row.delivered === 1 ? 'delivered' : 'delivering', row.commit_id, row.command_id, row.target_ref);
+  if (version >= ADOPTION_VERSION) for (const row of db.prepare(`SELECT scope_id,command_id,${runOf} AS run_id,CASE WHEN json_valid(intent) THEN json_extract(intent,'$.targetRef') END AS target_ref,kind,settled,sequence,CASE WHEN json_valid(intent) THEN json_extract(intent,'$.toCommit') END AS commit_id
     FROM workspace_adoptions ORDER BY sequence`).all()) {
-    put(`${row.scope_id}/${row.run_id}`, 3, row.kind === 'rollback' ? (row.settled === 1 ? 'rolled-back' : 'rolling-back') : (row.settled === 1 ? 'adopted' : 'adopting'), row.commit_id);
+    put(`${row.scope_id}/${row.run_id}`, 3, row.kind === 'rollback' ? (row.settled === 1 ? 'rolled-back' : 'rolling-back') : (row.settled === 1 ? 'adopted' : 'adopting'), row.commit_id, row.command_id, row.target_ref);
   }
+  for (const [key, state] of states) states.set(key, Object.freeze({ ...state, receipts: Object.freeze(histories.get(key)!) }));
   return states;
 }
 /** Installation map: a model is active only when both channel and model are active in the same scope. v2 metadata stays unknown. */
@@ -153,7 +160,9 @@ function attempt(db: DatabaseSync, version: number, binding: MonitorLedgerRun['s
   const failed = !!terminal && (terminal.exitCode !== 0 || terminal.signal !== undefined || terminal.interrupted === true);
   files.push(Object.freeze({ identity: binding.identity, patch: record?.patch ?? null, output: record?.output ?? null, events: sealed?.identity.attemptId === attemptId ? sealed.events : null,
     workspace: record?.request.workspace ?? null, failed, open: record?.launch === 'granted' && !terminal, finished: !!terminal, sealed: !!sealed }));
-  const model = evaluated ?? (pin ? Object.freeze({ provider: pin.provider, evidenceCapability: pin.evidenceCapability, requested: pin.pin, init: null, usage: null, verdict: 'pending' as const, unexpected: [], evidence: 'none' as const }) : null);
+  const evidenceModel = evaluated ?? (pin ? Object.freeze({ provider: pin.provider, evidenceCapability: pin.evidenceCapability, requested: pin.pin, init: null, usage: null, verdict: 'pending' as const, unexpected: [], evidence: 'none' as const }) : null);
+  // Selection belongs to the frozen profile, independently of evaluation/usage evidence. Legacy pins remain absent.
+  const model = evidenceModel && pin?.reasoningEffort ? Object.freeze({ ...evidenceModel, reasoningEffort: pin.reasoningEffort }) : evidenceModel;
   return Object.freeze({ attemptId, generation, ...(handoffStart ? { handoffStart } : {}), observedKind: binding.observedKind, observedRevision: binding.observedRevision, evaluationObserved, reservedAtMs,
     provider: evaluated?.provider ?? pin?.provider ?? record?.profile.adapterId ?? null, model,
     sealedAtMs: sealed && sealed.identity.attemptId === attemptId ? sealed.sealedAt : null,

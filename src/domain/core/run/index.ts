@@ -9,3 +9,6 @@ export { runExecutionSnapshotSchema } from './internal/registry.js';
 export type { RunExecutionSnapshot } from './internal/registry.js';
 export { reconcileRunLifecycle, advanceRunLifecycle, expireParkedRun, closeParkedRun, resumeParkedRun, parkTaskAwaitingDecision, resolveTaskDecision } from './internal/lifecycle.js';
 export type { RunLifecycleTiming, TaskDecisionReason } from './internal/lifecycle.js';
+
+export { workClassRegistrySchema, CORE_WORK_CLASSES, selectWorkerEffort, WorkerEffortError } from './internal/work-class.js';
+export type { WorkClassRegistry } from './internal/work-class.js';

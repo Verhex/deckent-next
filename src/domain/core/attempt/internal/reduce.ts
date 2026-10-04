@@ -1,3 +1,4 @@
+import type { WorkerEffort } from '#domain/core/provider-catalog/index.js';
 import { attemptIdentitySchema, attemptObservationSchema, attemptSnapshotSchema, ATTEMPT_PROTOCOL_VERSION,
   AttemptError, sameAttemptIdentity, type AttemptSnapshot, type AttemptPhase } from './contract.js';
 
@@ -6,11 +7,11 @@ function snapshot(input: unknown): AttemptSnapshot {
   if (!parsed.success) throw new AttemptError('ATTEMPT_INVALID');
   return parsed.data;
 }
-export function createAttempt(identity: unknown): AttemptSnapshot {
+export function createAttempt(identity: unknown, reasoningEffort?: WorkerEffort): AttemptSnapshot {
   const parsed = attemptIdentitySchema.safeParse(identity);
   if (!parsed.success) throw new AttemptError('ATTEMPT_INVALID');
   return snapshot({ schemaVersion: ATTEMPT_PROTOCOL_VERSION, identity: parsed.data, revision: 0,
-    cancelRequested: false, lastObservation: null });
+    ...(reasoningEffort ? { reasoningEffort } : {}), cancelRequested: false, lastObservation: null });
 }
 export function attemptPhase(state: AttemptSnapshot): AttemptPhase {
   switch (state.lastObservation?.result.kind) {

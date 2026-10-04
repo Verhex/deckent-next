@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "revision": "worker-effort-2026-10-03",
+  "classes": [
+    { "id": "small", "defaultEffort": "high" },
+    { "id": "test", "defaultEffort": "high" },
+    { "id": "feature", "defaultEffort": "xhigh" },
+    { "id": "design", "defaultEffort": "max" },
+    { "id": "architecture", "defaultEffort": "max" },
+    { "id": "security-critical", "defaultEffort": "max" }
+  ],
+  "bindings": [
+    { "kind": "coding", "classId": "feature" },
+    { "kind": "small", "classId": "small" },
+    { "kind": "test", "classId": "test" },
+    { "kind": "feature", "classId": "feature" },
+    { "kind": "design", "classId": "design" },
+    { "kind": "architecture", "classId": "architecture" },
+    { "kind": "security-critical", "classId": "security-critical" }
+  ]
+}

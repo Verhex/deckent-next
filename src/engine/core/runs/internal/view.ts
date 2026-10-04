@@ -1,7 +1,8 @@
+import { projectTaskBrief, projectResultBrief, taskBriefSchema, resultBriefSchema } from './brief.js';
 import { handoffReceiptViewSchema, projectTaskHandoffs } from '#engine/core/handoff-observation/index.js';
 import type { HandoffStartRecord } from '#engine/core/handoff-observation/index.js';
 import { z } from 'zod';
-import { taskDependencyIds, taskDefinitionSchema, taskProgressSchema, runStateSchema, branchDecisionSchema, identitySchema, counterSchema, runSnapshotSchema } from '#domain/index.js';
+import { taskDependencyIds, taskDefinitionSchema, taskProgressSchema, runStateSchema, branchDecisionSchema, identitySchema, counterSchema, runSnapshotSchema, workerEffortSchema } from '#domain/index.js';
 import { runPoolObservationSchema } from './pool-observation.js';
 import { RunStoreError } from './store.js';
 /** Public query contract. Storage schema changes must be mapped here, never spread into the API. */
@@ -12,6 +13,7 @@ export const runViewSchema = z.object({
   criteria: z.array(z.object({ id: identitySchema, version: counterSchema.positive(), description: z.string(), evaluator: z.object({ id: identitySchema, version: counterSchema.positive() }).strict().readonly(), fingerprint: z.string().regex(/^[a-f0-9]{64}$/) }).strict().readonly()).readonly(),
   revision: counterSchema, cancellationRequested: z.boolean(), state: runStateSchema,
   tasks: z.array(z.object({
+    taskBrief: taskBriefSchema.optional(), resultBrief: resultBriefSchema.optional(),
     id: identitySchema, kind: identitySchema, dependencies: z.array(identitySchema).readonly(),
     acceptanceCriteria: z.array(identitySchema).readonly(), handoffs: z.array(handoffReceiptViewSchema).readonly().optional(),
     inputs: taskDefinitionSchema.unwrap().shape.inputs,
@@ -19,6 +21,7 @@ export const runViewSchema = z.object({
     phase: taskProgressSchema.unwrap().innerType().shape.phase,
     notAcceptedReason: taskProgressSchema.unwrap().innerType().shape.notAcceptedReason,
     skippedReason: taskProgressSchema.unwrap().innerType().shape.skippedReason, decision: taskProgressSchema.unwrap().innerType().shape.decision, acceptedEvidence: taskProgressSchema.unwrap().innerType().shape.acceptedEvidence,
+    reasoningEffort: workerEffortSchema.optional(),
     unresolvedEffects: z.boolean(),
     cancellation: z.object({ reason: z.enum(['prevented-before-launch', 'exited-under-cancellation']) }).strict().readonly().optional(),
   }).strict().readonly()).readonly(),
@@ -32,8 +35,15 @@ export function projectRunView(input: unknown, receipts: readonly HandoffStartRe
     layoutRevision: run.identity.layoutRevision, ...(run.branch ? { branch: { schemaVersion: run.branch.schemaVersion, request: run.branch.request, selectedTaskId: run.branch.selectedTaskId, notSelectedTaskId: run.branch.notSelectedTaskId } } : {}), registryRevision: run.execution.registryRevision,
     criteria: run.graph.criterionDefinitions.map(criterion => ({ id: criterion.id, version: criterion.version, description: criterion.description, evaluator: criterion.evaluator, fingerprint: run.execution.criteria.find(entry => entry.criterionId === criterion.id)!.fingerprint })),
     revision: run.revision, cancellationRequested: run.cancelRequested, state: run.state,
-    tasks: run.graph.tasks.map(task => ({ id: task.id, kind: task.kind, dependencies: taskDependencyIds(task), acceptanceCriteria: [...task.acceptanceCriteria], ...(task.inputs ? { inputs: task.inputs } : {}),
+    tasks: run.graph.tasks.map(task => ({ taskBrief: projectTaskBrief(run, task.id), resultBrief: projectResultBrief(run.bindings.find(binding => binding.identity.taskId === task.id)?.identity.attemptId ?? null,
+      { verdict: progress.get(task.id)!.phase === 'accepted' ? progress.get(task.id)!.acceptedEvidence === 'model-unverified' ? 'accepted-unverified' : 'accepted' : null,
+        ...(progress.get(task.id)!.notAcceptedReason ? { reason: progress.get(task.id)!.notAcceptedReason } : {}) }), id: task.id, kind: task.kind, dependencies: taskDependencyIds(task), acceptanceCriteria: [...task.acceptanceCriteria], ...(task.inputs ? { inputs: task.inputs } : {}),
       profile: { id: run.execution.tasks.find(entry => entry.taskId === task.id)!.profile.id, version: run.execution.tasks.find(entry => entry.taskId === task.id)!.profile.version },
+      ...(() => {
+        const subscription = run.execution.tasks.find(entry => entry.taskId === task.id)!.profile.parameters['nativeSubscription'];
+        const parsed = workerEffortSchema.safeParse(subscription && typeof subscription === 'object' && !Array.isArray(subscription) ? (subscription as Record<string, unknown>)['reasoningEffort'] : undefined);
+        return parsed.success ? { reasoningEffort: parsed.data } : {};
+      })(),
       phase: progress.get(task.id)!.phase,
       ...(projectTaskHandoffs(run, task.id, receipts).length ? { handoffs: projectTaskHandoffs(run, task.id, receipts) } : {}),
       ...(progress.get(task.id)!.notAcceptedReason ? { notAcceptedReason: progress.get(task.id)!.notAcceptedReason } : {}),

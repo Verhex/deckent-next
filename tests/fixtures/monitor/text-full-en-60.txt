@@ -4,8 +4,8 @@ Deckent monitor · observed 2026-10-02 09:30:00Z · observe o…
 ○ remote-lab · unavailable · build unknown · ledger version…
 
 ── Summary ─────────────────────────────────────────────────
-Runs: 3 progressing · 5 waiting · 7 blocked · 1 accepted · 2
-failed · 1 cancelled
+Runs: 3 queued · 2 running · 2 checking · 8 on hold · 1 done
+· 3 stopped
 ⚠ current has problems: scope scope-x could not be read
 (LEDGER_LOCKED)
 ⚠ dogfood has problems: the ledger is version 43, older than
@@ -45,38 +45,125 @@ Failed Runs and where they first failed (2)
   run-broken-quiet  ✗ build: first failing l…  35 min ago
 
 Workers running now (2)
-  Run/Task                    Doing now  Heartbeat   Process
-  run-blocked-approval/build  editing    1 s         running
-  run-blocked-approval/lint   running    ⚠ 1 min 3…  running
+  Run/Task                    State    Heartbeat     Process
+  run-blocked-approval/build  On hold  1 s           running
+  On hold (you)
+  run-blocked-approval/lint   On hold  ⚠ 1 min 35 …  running
+  On hold (system)
 
 ── Runs ────────────────────────────────────────────────────
   Run                            State
-  run-broken                     ✗ failed
-  run-broken-quiet               ✗ failed
-  run-dog-1                      ▶ progressing
-  run-not-admitted               ~ waiting
-  run-done                       ✓ accepted
-  run-cancellation-pending       ! blocked
-  run-unresolved-effect          ! blocked
-  run-evaluation-unknown         ! blocked
-  run-evaluation-not-ready       ! blocked
-  run-worker-exited-unevaluated  ! blocked
-  run-worker-stale-heartbeat     ! blocked
-  run-worker-running             ▶ progressing
-  run-blocked-approval           ~ waiting
-  run-waiting-dependency         ~ waiting
-  run-pool-held                  ~ waiting
-  run-waiting-pool-slot          ~ waiting
-  run-none                       ▶ progressing
-  run-stopped                    ■ cancelled
-  run-unknown                    ! blocked
+  run-broken                     Stopped
+  run-broken-quiet               Stopped
+  run-dog-1                      Running
+  run-not-admitted               On hold (system)
+  run-done                       Done
+  run-cancellation-pending       On hold (system)
+  run-unresolved-effect          On hold (system)
+  run-evaluation-unknown         On hold (system)
+  run-evaluation-not-ready       Checking
+  run-worker-exited-unevaluated  Checking
+  run-worker-stale-heartbeat     On hold (system)
+  run-worker-running             Running
+  run-blocked-approval           On hold (you)
+  run-waiting-dependency         Queued
+  run-pool-held                  On hold (operator)
+  run-waiting-pool-slot          Queued
+  run-none                       Queued
+  run-stopped                    Stopped
+  run-unknown                    On hold (system)
+run-pool-held  ·  Waiting on operator · reason: pool on hold
+· since: 2026-10-02 09:08:34Z · deadline: unknown · next:
+Inspect the pool
+run-blocked-approval  ·  Waiting on you · reason: awaiting
+approval (appr-0001) · since: 2026-10-02 06:18:00Z ·
+deadline: unknown · next: Inspect approvals
+run-worker-stale-heartbeat  ·  Waiting on system · reason:
+worker silent (stale heartbeat) · since: 2026-10-02
+08:39:42Z · deadline: unknown · next: Inspect the worker
+run-evaluation-unknown  ·  Waiting on system · reason:
+evaluation result unknown · since: 2026-10-02 08:18:03Z ·
+deadline: unknown · next: Inspect the Run
+run-unresolved-effect  ·  Waiting on system · reason: effect
+outcome uncertain · since: 2026-10-02 08:10:50Z · deadline:
+unknown · next: Inspect the Run
+run-cancellation-pending  ·  Waiting on system · reason:
+cancellation pending · since: 2026-10-02 08:03:37Z ·
+deadline: unknown · next: Inspect the Run
+run-not-admitted  ·  Waiting on system · reason: not
+admitted yet · since: 2026-10-02 07:56:24Z · deadline:
+unknown · next: Inspect the Run
+run-unknown  ·  Waiting on system · reason: reason unknown ·
+since: unknown · deadline: unknown · next: Inspect the Run
 
 ── Workers ─────────────────────────────────────────────────
-  Run/Task                   Doing now  Heartbeat   Process
-  run-blocked-approval/bui…  editing    1 s         running
-  run-broken/build           —          —           exited 1
-  run-blocked-approval/lint  running    ⚠ 1 min 3…  running
-  run-blocked-approval/pack  —          released    missing
+  Run/Task                    State    Heartbeat    Process
+  run-blocked-approval/build  On hold  1 s          running
+  On hold (you)
+  run-broken/build            Stopped  —            exited 1
+  run-blocked-approval/lint   On hold  ⚠ 1 min 35…  running
+  On hold (system)
+  run-blocked-approval/pack   On hold  released     missing
+  On hold (system)
+
+On hold (you)
+Waiting on you · reason: awaiting approval (appr-0001) ·
+since: 2026-10-02 06:18:00Z · deadline: unknown · next:
+Inspect approvals
+Worker run-blocked-approval/build · attempt c76f549a-attempt
+· gen 1 · claude · install current
+Doing now: editing · src/app.ts — apply patch
+Heartbeat 1 s · process running · pid 4242 · handle
+ctr-build
+    attempt c76f549a gen 1 · launch launched · 09:10:00Z →
+still running (20 min) · exit — · claude/model-alpha-2
+    now editing · heartbeat 1 s
+    last 3 worker events (reported by the worker):
+      09:28:30Z · tool.call · edit
+src/surfaces/core/monitor/internal/view.ts
+      09:29:30Z · tool.call · shell npm test --
+monitor-surface
+      09:29:55Z · message · Applying the review fixes to the
+monitor view
+Usage so far: 12 turns · 12000 in / 3400 out tokens · cost
+0.4321 USD · 1 tool errors
+Model on subscription: requested model-alpha-2 (declared
+auxiliary: none) → init model-alpha-2 → usage none → pending
+[live, not sealed yet]
+Workspace /srv/deckent/workspaces/build
+
+On hold (system)
+Waiting on system · reason: worker silent (stale heartbeat)
+· since: unknown · deadline: unknown · next: Inspect the
+worker
+Worker run-blocked-approval/lint · attempt ed5a5613-attempt
+· gen 1 · claude · install current
+Doing now: running · src/app.ts — apply patch
+Heartbeat ⚠ 1 min 35 s (stale) · process running · pid 4242
+· handle ctr-lint
+Usage so far: 12 turns · 12000 in / 3400 out tokens · cost
+0.4321 USD · 1 tool errors
+Model on subscription: requested model-alpha-2 (declared
+auxiliary: none) → init model-alpha-2 → usage none → pending
+[live, not sealed yet]
+Workspace /srv/deckent/workspaces/lint
+
+On hold (system)
+Waiting on system · reason: reason unknown · since: unknown
+· deadline: unknown · next: Inspect the Run
+Worker run-blocked-approval/pack · attempt a465c0eb-attempt
+· gen 1 · claude · install current
+Doing now: — · —
+Heartbeat released · process missing · pid 4242 · handle
+ctr-pack
+Usage so far: 12 turns · 12000 in / 3400 out tokens · cost
+0.4321 USD · 1 tool errors
+Model on subscription: requested model-alpha-2 (declared
+auxiliary: none) → init model-alpha-2 → usage none → pending
+[live, not sealed yet]
+Workspace /srv/deckent/workspaces/pack
+Custody released: the container and the attempt directory
+are gone; the patch was retained.
 
 ── Approvals ───────────────────────────────────────────────
   Subject                       Waiting     Expires
