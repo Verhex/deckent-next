@@ -1,7 +1,7 @@
 import type { HandoffStartRecord } from '#engine/core/handoff-observation/index.js';
 import type { ContainerEvidence } from '#engine/core/supervisor/index.js';
-import type { RunSnapshot, WorkerModelView } from '#domain/index.js';
-import type { MonitorDeliveryState, MonitorMap, MonitorWorkerContent } from './contract.js';
+import type { AttemptIdentity, RunSnapshot, WorkerModelView } from '#domain/index.js';
+import type { MonitorMap, MonitorWorkerContent } from './contract.js';
 import type { RuntimeServiceDescriptor } from '#engine/core/runtime/index.js';
 import type { WorkerObservation } from '#engine/core/worker-observation/index.js';
 
@@ -44,7 +44,7 @@ export interface MonitorLedgerRun {
   /** `create-run` receipt `now`, else `run_execution_intents.admitted_at`. */
   readonly createdAtMs: number | null;
   readonly attempts: readonly MonitorLedgerAttempt[];
-  readonly delivery?: { readonly state: MonitorDeliveryState; readonly commit: string | null } | null;
+  readonly delivery?: import('#engine/core/runs/index.js').ResultBrief['runDelivery'];
 }
 export interface MonitorLedgerApproval {
   readonly scopeId: string; readonly approvalId: string; readonly subjectKind: string; readonly runId: string | null; readonly taskId: string | null;
@@ -77,6 +77,8 @@ export interface MonitorScopeObservation {
 export interface MonitorPorts {
   /** Recorded output and worker events are read only for attempts the adapter's read-output gate admits. */
   readLedger(target: MonitorTarget): Promise<MonitorLedgerReading>;
+  /** Hydrate only shown workers, after admitted scopes and the finished-worker limit. Must use the captured ledger snapshot and read-output gate. */
+  readShown?(target: MonitorTarget, identities: readonly AttemptIdentity[]): Promise<MonitorLedgerReading>;
   /** Rejects with a coded error; `LOCAL_RUNTIME_UNAVAILABLE` means no service is listening. */
   describeService(target: MonitorTarget): Promise<RuntimeServiceDescriptor>;
   observeScope(target: MonitorTarget, scopeId: string): Promise<MonitorScopeObservation>;

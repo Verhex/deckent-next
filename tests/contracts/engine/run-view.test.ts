@@ -13,10 +13,16 @@ it('projects explicit public registry bindings without storage bindings or priva
     registryRevision: 'fixture-registry', criteria: [{ id: 'private-criterion', version: 1, description: 'Private verification details',
       evaluator: { id: 'test-evaluator', version: 1 }, fingerprint: expect.stringMatching(/^[a-f0-9]{64}$/) }],
     tasks: [{ id: 't', kind: 'custom', dependencies: [], acceptanceCriteria: ['private-criterion'],
-      profile: { id: 'fixture-profile', version: 1 }, phase: 'pending', unresolvedEffects: false }] });
+      profile: { id: 'fixture-profile', version: 1 }, phase: 'pending', unresolvedEffects: false,
+      taskBrief: { schemaVersion: 1, task: null, scopePaths: null, acceptance: null, model: null, effort: null,
+        profile: { id: 'fixture-profile', version: 1 }, contextRefs: [], criteria: [{ id: 'private-criterion',
+          description: 'Private verification details', evaluator: { id: 'test-evaluator', version: 1 } }] },
+      resultBrief: { schemaVersion: 1, attemptId: null, claimLabel: 'CLAIM', report: null, evaluation: { verdict: null },
+        runDelivery: null, openIssues: null } }] });
   expect(JSON.stringify(view)).not.toContain('"parameters"'); expect(JSON.stringify(view)).not.toContain('argv');
   expect(view).not.toHaveProperty('bindings'); expect(view).not.toHaveProperty('graph'); expect(view).not.toHaveProperty('execution');
   expect(Object.isFrozen(view)).toBe(true); expect(Object.isFrozen(view.tasks[0]!.dependencies)).toBe(true);
+  expect(Object.isFrozen(view.tasks[0]!.taskBrief)).toBe(true); expect(Object.isFrozen(view.tasks[0]!.resultBrief)).toBe(true);
 });
 it('rejects malformed storage and refuses a reader that returns another scope or Run', async () => {
   expect(() => projectRunView({ ...run, progress: [] })).toThrow('RUN_STORE_CORRUPT');

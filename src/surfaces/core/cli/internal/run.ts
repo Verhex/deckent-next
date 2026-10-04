@@ -7,7 +7,7 @@ import { resolve } from 'node:path';
 import { readGraphInput } from './graph-input.js';
 import { validateTaskGraph, TaskGraphError, sanitizeIssues, type AttemptIdentity } from '#domain/index.js';
 import type { CommandContext } from './kernel-commands.js';
-import { renderWorkerModelLine } from '#surfaces/core/monitor/index.js';
+import { renderBriefLines, renderWorkerModelLine } from '#surfaces/core/monitor/index.js';
 export type RunQueryHandler = (root: string, query: RunQuery, options: ConfigLoadOptions) => Promise<Readonly<{ schemaVersion: 1; layout: ProductLayout; run: RunView | null;
   models?: readonly TaskWorkerModel[] }>>;
 export type RunAdmissionHandler = (root: string, command: RunAdmission, options: ConfigLoadOptions) => Promise<Readonly<{ schemaVersion: 1; layout: ProductLayout; admission: Readonly<{ schemaVersion: 1; commandId: string; run: RunView }> }>>;
@@ -134,6 +134,7 @@ export async function runCommand(argv: readonly string[], context: CommandContex
       ...(run.state.kind === 'parked' ? [t('cli.run.lifecycle.deadline', { since: run.state.since, deadline: run.state.deadline }, locale)] : []),
       run.cancellationRequested ? t('cli.run.inspect.cancelRequested', {}, locale) : t('cli.run.inspect.cancelAbsent', {}, locale),
       ...run.tasks.flatMap(task => [t('cli.run.inspect.task', { task: task.id, kind: task.kind }, locale),
+        ...renderBriefLines(task.taskBrief, task.resultBrief, locale),
         t('cli.run.inspect.stateLabel', { phase: task.acceptedEvidence === 'model-unverified' ? t('cli.task.decision.acceptedUnverified', {}, locale) : phases[task.phase] }, locale),
         ...(task.notAcceptedReason ? [t('task.acceptance.noChangeProduced', {}, locale)] : []),
         ...(task.skippedReason ? [t('cli.run.lifecycle.reason', { reason: task.skippedReason }, locale)] : []),

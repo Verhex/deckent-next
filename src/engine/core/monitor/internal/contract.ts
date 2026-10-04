@@ -1,3 +1,4 @@
+import type { TaskBrief, ResultBrief } from '#engine/core/runs/index.js';
 import type { HandoffReceiptView } from '#engine/core/handoff-observation/index.js';
 import type { WorkerEventSummary, WorkerFinalReportResult } from '#domain/index.js';
 import type { ContainerEvidence } from '#engine/core/supervisor/index.js';
@@ -67,7 +68,7 @@ export interface MonitorRun {
   /** MONITOR v1.1 (optional): a terminal Run's latest proven attempt end (sealed worker log), null when any end is unproven; and its delivery
    * from the ledger's integration → delivery → adoption records (the furthest proven step; `commit` is the delivered/adopted commit). */
   readonly finishedAtMs?: number | null;
-  readonly delivery?: { readonly state: MonitorDeliveryState; readonly commit: string | null } | null;
+  readonly delivery?: ResultBrief['runDelivery'];
 }
 export type MonitorDeliveryState = 'integrating' | 'integrated' | 'delivering' | 'delivered' | 'adopting' | 'adopted' | 'rolling-back' | 'rolled-back';
 export interface MonitorApproval {
@@ -82,6 +83,7 @@ export interface MonitorPool {
 }
 /** H1: bounded read-output evidence of this exact worker, never a claim of acceptance. */
 export interface MonitorWorkerHuman {
+  readonly taskBrief?: TaskBrief; readonly resultBrief?: ResultBrief;
   readonly title: string | null; readonly titleEvidence: 'title' | 'task' | 'acceptance' | 'missing';
   readonly evaluation: MonitorTask['evaluation']['verdict'];
   /** Acceptance reason from the same evaluation owner; patch counts never decide acceptance. */

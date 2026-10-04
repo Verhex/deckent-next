@@ -1,3 +1,4 @@
+import { projectTaskBrief, projectResultBrief } from '#engine/core/runs/index.js';
 import { resolveWorkerUsage, type WorkerObservation } from '#engine/core/worker-observation/index.js';
 import type { MonitorApproval, MonitorInstall, MonitorPool, MonitorService, MonitorSnapshot, MonitorWorker } from './contract.js';
 import type { MonitorLedgerReading, MonitorPorts, MonitorTarget } from './evidence.js';
@@ -55,6 +56,12 @@ export class MonitorApplication {
     const rank = (value: WorkerObservation) => recency.get(`${value.identity?.scopeId}/${value.identity?.attemptId}`) ?? -1;
     const finished = workers.filter(value => value.terminal).sort((a, b) => rank(b) - rank(a)); const kept = new Set(finished.slice(0, MONITOR_FINISHED_WORKERS));
     if (finished.length > MONITOR_FINISHED_WORKERS) diagnostics.push('info:workers-finished-capped:' + (finished.length - MONITOR_FINISHED_WORKERS));
+    const shown = workers.filter(value => !value.terminal || kept.has(value)).sort((a, b) => rank(b) - rank(a));
+    if (this.ports.readShown) {
+      try { reading = await this.ports.readShown(target, shown.flatMap(value => value.identity ? [value.identity] : []));
+        diagnostics.push(...reading.diagnostics.filter(value => !diagnostics.includes(value))); }
+      catch (error) { diagnostics.push('shown-content-unavailable:' + code(error)); }
+    }
     // Ledger-only observations carry no sidecar provider/model: fill them from the ledger attempt (evaluation record, pin, profile adapter).
     const ledger = new Map(reading.runs.flatMap(run => run.attempts.map(value => [`${run.snapshot.identity.scopeId}/${value.attemptId}`, value] as const)));
 
@@ -82,7 +89,9 @@ export class MonitorApplication {
       return { ...baseValue, provider: value.provider === 'unknown' ? known?.provider ?? value.provider : value.provider,
         ...(value.model ? {} : known?.model ? { model: known.model } : {}),
         ...(usage ? { usage } : {}), ...(usageEvidence ? { usageEvidence } : {}),
-        human: { title, tokenUsageRecorded: usage?.tokenUsageRecorded === true, titleEvidence: !title ? 'missing' : input?.title ? 'title' : input?.task ? 'task' : 'acceptance',
+        human: { ...(record ? { taskBrief: projectTaskBrief(record.snapshot, id!.taskId),
+          resultBrief: projectResultBrief(id!.attemptId, { verdict: known ? projected?.evaluation.verdict ?? null : null,
+            ...(known && projected?.evaluation.reason ? { reason: projected.evaluation.reason } : {}) }, content?.finalReport ?? null, record.delivery ?? null) } : {}), title, tokenUsageRecorded: usage?.tokenUsageRecorded === true, titleEvidence: !title ? 'missing' : input?.title ? 'title' : input?.task ? 'task' : 'acceptance',
           evaluation: known ? projected?.evaluation.verdict ?? null : null,
           ...(known && projected?.evaluation.reason ? { evaluationReason: projected.evaluation.reason } : {}),
           transcript: content?.transcript ?? { state: 'missing', excerpt: [], truncated: false },
@@ -97,6 +106,6 @@ export class MonitorApplication {
     const status = !reading.scopeIds.length || admitted.size ? 'available' : denied ? 'denied' : 'unavailable';
     return Object.freeze({ id: target.id, path: target.path, status, scopeIds: Object.freeze([...admitted]), service: serviceState, ledgerVersion: reading.ledgerVersion,
       runs: Object.freeze(runs),
-      workers: Object.freeze(workers.filter(value => !value.terminal || kept.has(value)).sort((a, b) => rank(b) - rank(a)).map(enrich)), map: !reading.scopeIds.length || admitted.size ? reading.map ?? null : null, approvals: Object.freeze(approvals), pools: Object.freeze(poolViews), diagnostics: Object.freeze(diagnostics) });
+      workers: Object.freeze(shown.map(enrich)), map: !reading.scopeIds.length || admitted.size ? reading.map ?? null : null, approvals: Object.freeze(approvals), pools: Object.freeze(poolViews), diagnostics: Object.freeze(diagnostics) });
   }
 }

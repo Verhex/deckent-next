@@ -115,8 +115,10 @@ describe.skipIf(process.platform === 'win32')('monitor ledger reader', () => {
         verdict: 'verified', unexpected: [], evidence: 'sealed' } } }), '{}');
     writer.close();
     const reading = await read(f.path); const runs = Object.fromEntries(reading.runs.map(run => [run.snapshot.identity.runId, run]));
-    expect(runs.r1!.delivery).toEqual({ state: 'adopting', commit: c2 });
-    expect(runs.r3!.delivery).toEqual({ state: 'integrating', commit: null }); expect(runs.r2!.delivery).toBeNull();
+    expect(runs.r1!.delivery).toMatchObject({ state: 'adopting', commit: c2, commandId: 'a1', receipts: [{ state: 'integrated', commandId: 'i1' }, { state: 'delivered', commandId: 'd1' }, { state: 'adopting', commandId: 'a1' }] });
+    expect(runs.r3!.delivery).toMatchObject({ state: 'integrating', commit: null }); expect(runs.r2!.delivery).toBeNull();
+    const exact = await readMonitorLedger(f.path, { busyTimeoutMs: 100, maxRuns: 1, run: { scopeId: 's', runId: 'r1' } });
+    expect(exact.runs.map(run => run.snapshot.identity.runId)).toEqual(['r1']);
     expect(runs.r3!.attempts[0]).toMatchObject({ provider: 'claude', model: { usage: ['m-1'], verdict: 'verified', evidence: 'sealed' } });
     expect(runs.r1!.attempts[0]).toMatchObject({ provider: 'test-supervisor', model: null });
     expect(reading.map).toMatchObject({ models: [] });
