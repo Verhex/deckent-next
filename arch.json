@@ -98,7 +98,8 @@
         "src/engine/core/worker-observation",
         "src/engine/core/workspace-patch",
         "src/engine/core/workspaces",
-        "src/platform/core/clock"
+        "src/platform/core/clock",
+        "src/domain/core/worker-event"
       ],
       "plan": "STORE"
     },
@@ -527,7 +528,8 @@
     },
     "src/domain/core/attempt": {
       "dependencies": [
-        "src/domain/core/primitives"
+        "src/domain/core/primitives",
+        "src/domain/core/provider-catalog"
       ],
       "plan": "CONTRACT"
     },
@@ -552,7 +554,8 @@
       "dependencies": [
         "src/domain/core/attempt",
         "src/domain/core/primitives",
-        "src/domain/core/task-graph"
+        "src/domain/core/task-graph",
+        "src/domain/core/provider-catalog"
       ],
       "plan": "CONTRACT"
     },
@@ -638,7 +641,10 @@
         "src/engine/core/worker-observation",
         "src/platform/core/errors",
         "src/engine/core/handoff-observation",
-        "src/engine/core/attempts"
+        "src/engine/core/attempts",
+        "src/domain/core/provider-catalog",
+        "src/domain/core/worker-event",
+        "src/engine/core/model-activation"
       ],
       "plan": "CONTRACT"
     },

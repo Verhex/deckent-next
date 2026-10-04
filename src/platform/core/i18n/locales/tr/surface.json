@@ -117,7 +117,7 @@
   "cliContract.run.opt.files_read": "Bu görevin bağlam olarak OKUYABİLECEĞİ tam repo-relative dosyalar (yolları seçenekten sonra sıralayın).",
   "cliContract.run.opt.files_write": "Bu görevin YAZABİLECEĞİ tam repo-relative dosyalar (yolları seçenekten sonra sıralayın). Tek başına dizin kapsamı dosya yetkisi taşımaz; landing checkpoint gerektiren koşumlar bunu ister.",
   "cliContract.run.opt.keep": "Tamamlandıktan sonra görev dosyalarını koru (temizliği atla)",
-  "cliContract.run.opt.model_effort": "Yerel model muhakeme-eforu (claude: low|medium|high|xhigh|max, codex: minimal|low|medium|high). Opt-in; desteklenmeyen veya geçersiz seviyeler yok sayılır",
+  "cliContract.run.opt.model_effort": "Yerel muhakeme eforu. Açık istek önceliklidir; desteklenmeyen seviyeler tam model kataloğu ve CLI yeteneğine göre reddedilir.",
   "cliContract.run.opt.scope": "Worker kapsam dizini (varsayılan: ./)",
   "cliContract.run.opt.timeout": "Milisaniye cinsinden azami bekleme süresi (varsayılan: 300000)",
   "cliContract.run.opt.verbose": "Worker log çıktısını gerçek zamanlı olarak stdout’a akıt",

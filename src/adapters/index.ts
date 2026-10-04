@@ -52,7 +52,7 @@ export type { NativeJsonHttpAuthentication } from '#adapters/core/provider-http-
 
 export { createBoundedMcpTransport, mcpToolDeliveryCapacityForProbe } from '#adapters/core/mcp-transport/index.js';
 export { compileNativeCodingDockerProfile, nativeCodingInvocationSchema, NativeCodingProfileError, assertNativeWorkerBinding,
-  NATIVE_CODING_TEMPLATE_ADAPTER, compileNativeCodingWorkInput, isNativeCodingTemplate, nativeCodingRefusalCode, nativeCodingTemplateBase } from '#adapters/core/native-coding/index.js';
+  nativeWorkerEffortCapability, bindNativeWorkerEffort, NATIVE_CODING_TEMPLATE_ADAPTER, compileNativeCodingWorkInput, isNativeCodingTemplate, nativeCodingRefusalCode, nativeCodingTemplateBase } from '#adapters/core/native-coding/index.js';
 export type { NativeCodingInvocation } from '#adapters/core/native-coding/index.js';
 export * from '#adapters/core/native-connection/index.js';
 

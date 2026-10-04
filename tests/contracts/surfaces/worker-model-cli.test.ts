@@ -69,3 +69,17 @@ it('run inspect and the transcript report view show the same row; the transcript
   const raporTr = await run([...args, '--lang', 'tr'], { async inspectWorkerTranscript() { return transcript; } }, root);
   expect(raporTr.text).toContain('sağlayıcı onayı (attestation) değildir');
 });
+
+it('run inspect and worker detail carry effort + source in EN/TR and JSON', async () => {
+  const root = await project();
+  const reasoningEffort = { schemaVersion: 1, level: 'high', source: 'explicit', status: 'selected' } as const;
+  const model = { ...codex, reasoningEffort };
+  const view = { schemaVersion: 3, state: { kind: 'running' }, runId: 'r', scopeId: 's', layoutRevision: 'l', registryRevision: 'reg', criteria: [], revision: 0, cancellationRequested: false,
+    tasks: [{ id: 't', kind: 'coding', dependencies: [], acceptanceCriteria: ['exit'], profile: { id: 'coding', version: 1 }, phase: 'pending', unresolvedEffects: false, reasoningEffort }] };
+  const inspectRun = async () => ({ schemaVersion: 1, layout: {}, run: view, models: [{ ...model, taskId: 't', attemptId: null }] });
+  for (const lang of ['en', 'tr']) {
+    const result = await run(['run', 'inspect', '--scope', 's', '--id', 'r', '--lang', lang], { inspectRun }, root);
+    expect(result.text).toContain(lang === 'en' ? 'Reasoning effort: high (explicit' : 'Muhakeme eforu: high (açık istek');
+  }
+  expect(JSON.parse((await run(['run', 'inspect', '--scope', 's', '--id', 'r', '--json'], { inspectRun }, root)).text).models[0].reasoningEffort).toEqual(reasoningEffort);
+});

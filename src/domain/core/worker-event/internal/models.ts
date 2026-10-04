@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { modelUsageEvidenceSchema, readLegacyModelUsageEvidence, type ModelUsageEvidence } from '#domain/core/provider-catalog/index.js';
+import { workerEffortSchema, type WorkerEffort, modelUsageEvidenceSchema, readLegacyModelUsageEvidence, type ModelUsageEvidence } from '#domain/core/provider-catalog/index.js';
 import { workerProviderSchema, type WorkerEventSummary } from './contract.js';
 
 /**
@@ -13,13 +13,14 @@ export const workerModelPinSchema = z.object({ channelId: modelText, modelId: mo
   auxiliaryModelIds: z.array(modelText).max(16).readonly() }).strict().readonly();
 export type WorkerModelPin = z.infer<typeof workerModelPinSchema>;
 export type WorkerProvider = z.infer<typeof workerProviderSchema>;
-const pinnedSubscriptionSchema = z.object({ provider: workerProviderSchema, model: workerModelPinSchema, modelUsageEvidence: modelUsageEvidenceSchema.optional() }).passthrough();
+const pinnedSubscriptionSchema = z.object({ provider: workerProviderSchema, model: workerModelPinSchema, modelUsageEvidence: modelUsageEvidenceSchema.optional(), reasoningEffort: workerEffortSchema.optional() }).passthrough();
 const parametersSchema = z.object({ nativeSubscription: pinnedSubscriptionSchema }).passthrough();
 
 /** The exact-model pin a native worker profile carries (nativeSubscription v2 `model`), or null: not a pinned worker profile. */
-export function readWorkerModelPin(profileParameters: unknown): Readonly<{ provider: WorkerProvider; pin: WorkerModelPin; evidenceCapability: ModelUsageEvidence }> | null {
+export function readWorkerModelPin(profileParameters: unknown): Readonly<{ provider: WorkerProvider; pin: WorkerModelPin; evidenceCapability: ModelUsageEvidence; reasoningEffort?: WorkerEffort }> | null {
   const parsed = parametersSchema.safeParse(profileParameters);
   return parsed.success ? Object.freeze({ provider: parsed.data.nativeSubscription.provider, pin: parsed.data.nativeSubscription.model,
+    ...(parsed.data.nativeSubscription.reasoningEffort ? { reasoningEffort: parsed.data.nativeSubscription.reasoningEffort } : {}),
     evidenceCapability: parsed.data.nativeSubscription.modelUsageEvidence ?? readLegacyModelUsageEvidence(parsed.data.nativeSubscription.provider) }) : null;
 }
 
@@ -28,16 +29,17 @@ export function readWorkerModelPin(profileParameters: unknown): Readonly<{ provi
 export type WorkerModelEvidence = 'sealed' | 'invalid' | 'live' | 'none' | 'denied';
 export type WorkerModelVerdict = 'verified' | 'substituted' | 'unverified' | 'pending';
 export interface WorkerModelView {
+  readonly reasoningEffort?: WorkerEffort;
   readonly provider: WorkerProvider; readonly evidenceCapability: ModelUsageEvidence; readonly requested: WorkerModelPin; readonly init: string | null; readonly usage: readonly string[] | null;
   readonly verdict: WorkerModelVerdict; readonly unexpected: readonly string[]; readonly evidence: WorkerModelEvidence;
 }
 /** Pure projection. A sealed log without a host verdict (no session end, provider without usage) or an invalid one is `unverified`;
  * unsealed evidence is `pending`. */
 export function viewWorkerModels(input: Readonly<{ provider: WorkerProvider; pin: WorkerModelPin; evidenceCapability: ModelUsageEvidence; summary: WorkerEventSummary | null;
-  evidence: WorkerModelEvidence }>): WorkerModelView {
+  evidence: WorkerModelEvidence; reasoningEffort?: WorkerEffort }>): WorkerModelView {
   const sealed = input.evidence === 'sealed', verification = sealed ? input.summary?.modelVerification ?? null : null;
   const visible = input.evidence === 'denied' || input.evidence === 'invalid' ? null : input.summary;
-  return Object.freeze({ provider: input.provider, evidenceCapability: input.evidenceCapability, requested: input.pin, init: visible?.model ?? null, usage: visible?.models ?? null,
+  return Object.freeze({ ...(input.reasoningEffort ? { reasoningEffort: input.reasoningEffort } : {}), provider: input.provider, evidenceCapability: input.evidenceCapability, requested: input.pin, init: visible?.model ?? null, usage: visible?.models ?? null,
     verdict: sealed ? verification?.status ?? 'unverified' : input.evidence === 'invalid' ? 'unverified' : 'pending',
     unexpected: verification?.unexpected ?? Object.freeze([]), evidence: input.evidence });
 }

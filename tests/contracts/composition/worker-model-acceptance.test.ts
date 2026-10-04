@@ -114,7 +114,7 @@ describe.skipIf(process.platform === 'win32')('worker model acceptance through t
     const result = await f.evaluate();
     expect(result.evaluation.run.tasks[0]!.phase).toBe('accepted');
     expect(result.evaluation.model).toMatchObject({ verdict: 'verified', init: SONNET, usage: [SONNET, HAIKU], unexpected: [] });
-    const row = { taskId: 't', attemptId: 'a', provider: 'claude', evidenceCapability: 'session-events', requested: { channelId: SEED_CHANNEL, modelId: SONNET, auxiliaryModelIds: [HAIKU] },
+    const row = { reasoningEffort: { schemaVersion: 1, level: null, source: 'cli-default', status: 'cli-default' }, taskId: 't', attemptId: 'a', provider: 'claude', evidenceCapability: 'session-events', requested: { channelId: SEED_CHANNEL, modelId: SONNET, auxiliaryModelIds: [HAIKU] },
       init: SONNET, usage: [SONNET, HAIKU], verdict: 'verified', unexpected: [], evidence: 'sealed' };
     expect((await inspectRun(f.project, { schemaVersion: 1, scopeId: 's', runId: 'r' }, f.options)).models).toEqual([row]);
     const workers = await inspectConfiguredWorkers(f.project, { schemaVersion: 1, scopeId: 's' }, f.options);

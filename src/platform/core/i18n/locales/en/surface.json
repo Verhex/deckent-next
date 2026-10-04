@@ -117,7 +117,7 @@
   "cliContract.run.opt.files_read": "Exact repo-relative files this task may READ as context (repeat paths after the option).",
   "cliContract.run.opt.files_write": "Exact repo-relative files this task may WRITE (repeat paths after the option). A directory scope alone carries no file authority, so a run that needs a landing checkpoint requires this.",
   "cliContract.run.opt.keep": "Keep task files after completion (skip cleanup)",
-  "cliContract.run.opt.model_effort": "Native model reasoning-effort (claude: low|medium|high|xhigh|max, codex: minimal|low|medium|high). Opt-in; unsupported or invalid levels are ignored",
+  "cliContract.run.opt.model_effort": "Native reasoning effort. Explicit input wins; unsupported levels are refused against the exact model catalog and CLI capability.",
   "cliContract.run.opt.scope": "Worker scope directory (default: ./)",
   "cliContract.run.opt.timeout": "Maximum wait time in milliseconds (default: 300000)",
   "cliContract.run.opt.verbose": "Stream worker log output to stdout in real-time",

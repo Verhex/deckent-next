@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { identitySchema, counterSchema, immutableJsonObjectSchema, type JsonValue } from '#domain/core/primitives/index.js';
 import { encodeDeckentJson } from '#domain/core/task-graph/index.js';
+import { workClassRegistrySchema } from './work-class.js';
 /** Registry entries are product data; installed implementations own parameter semantics. */
 export const implementationReferenceSchema = z.object({ id: identitySchema, version: counterSchema.positive() }).strict().readonly();
 export const executionProfileDefinitionSchema = z.object({ id: identitySchema, version: counterSchema.positive(),
@@ -10,6 +11,7 @@ export const evaluatorDefinitionSchema = z.object({ id: identitySchema, version:
   implementation: implementationReferenceSchema,
 }).strict().readonly();
 export const executionRegistrySchema = z.object({ schemaVersion: z.literal(1), revision: identitySchema,
+  workClasses: workClassRegistrySchema.optional(),
   profiles: z.array(executionProfileDefinitionSchema).min(1).readonly(),
   kinds: z.array(z.object({ kind: identitySchema, profile: implementationReferenceSchema }).strict().readonly()).min(1).readonly(),
   evaluators: z.array(evaluatorDefinitionSchema).min(1).readonly(),

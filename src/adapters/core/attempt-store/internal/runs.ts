@@ -3,7 +3,7 @@ import { settleRunCancellation } from './run-settlement.js';
 import { SqliteExecutionPools } from './pools.js';
 import type { RunAdmissionFilter } from '#engine/index.js';
 import type { DatabaseSync } from 'node:sqlite';
-import { identitySchema, requestRunCancellation, createRun, reserveRunTasks, runSnapshotSchema, createAttempt, attemptSnapshotSchema, reconcileRunLifecycle, observeRunAttempt, RunError } from '#domain/index.js';
+import { readWorkerModelPin, identitySchema, requestRunCancellation, createRun, reserveRunTasks, runSnapshotSchema, createAttempt, attemptSnapshotSchema, reconcileRunLifecycle, observeRunAttempt, RunError } from '#domain/index.js';
 import { runCancellationSchema, type RunCancellation, runCreateSchema, runReservationSchema, runProjectionSchema, RunStoreError, AttemptStoreError, planSchedulingWave,
   assertRunExecution, assertTaskEvaluationCustody, diagnoseReservationWave, proposeTaskEvaluationCommit, taskEvaluationCommitSchema, type TaskEvaluationCommit, type ExecutionPool, runExecutionPolicySchema,
   type RunCreate, type RunReservation, type RunProjection, type RunReceipt } from '#engine/index.js';
@@ -247,7 +247,8 @@ export class SqliteRunJournal {
       const snapshot = admitted.length === parsed.identities.length ? proposed
         : reserveRunTasks(current, parsed.expectedRevision, admitted, parsed.now);
       for (const identity of admitted) {
-        const attempt = createAttempt(identity);
+        const effort = readWorkerModelPin(current.execution.tasks.find(task => task.taskId === identity.taskId)?.profile.parameters)?.reasoningEffort;
+        const attempt = createAttempt(identity, effort);
         const inserted = this.db.prepare('INSERT INTO attempts(scope_id,attempt_id,revision,snapshot) VALUES(?,?,?,?) ON CONFLICT DO NOTHING')
           .run(scopeId, identity.attemptId, attempt.revision, JSON.stringify(attempt));
         if (inserted.changes !== 1) throw new RunStoreError('RUN_STORE_CONFLICT');

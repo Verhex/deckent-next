@@ -12,3 +12,6 @@ export type { ProviderCatalogDocument, CatalogChannel, CatalogModel, ModelLifecy
 export { providerIdSchema, nativeCliIds, nativeCliIdSchema, modelUsageEvidenceSchema, readLegacyModelUsageEvidence } from './internal/native-cli.js';
 export type { NativeCliId, ModelUsageEvidence } from './internal/native-cli.js';
 export { NativeCliRegistryError, nativeCliVocabulary } from './internal/native-cli.js';
+
+export { workerEffortSchema } from './internal/worker-effort.js';
+export type { WorkerEffort, ReasoningEffort } from './internal/worker-effort.js';

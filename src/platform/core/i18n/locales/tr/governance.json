@@ -1111,5 +1111,6 @@
   "error.DECISION_EVIDENCE_REFERENCE_INVALID": "Karar seçeneği veya denetimi, var olmayan bir kanıta referans veriyor.",
   "error.DECISION_LIMIT_EXCEEDED": "Karar vakası yapılandırılmış bayt veya adet sınırlarını aşıyor.",
   "error.DECISION_RECORD_INVALID": "Aktör kararı veya sonuç kaydı geçersiz.",
-  "error.RUN_POOL_CAPACITY_OCCUPIED": "Havuz kapasitesi mevcut doluluğun altına indirilemez. Çalışan, değerlendirmedeki ve belirsiz işler slotlarını korur."
+  "error.RUN_POOL_CAPACITY_OCCUPIED": "Havuz kapasitesi mevcut doluluğun altına indirilemez. Çalışan, değerlendirmedeki ve belirsiz işler slotlarını korur.",
+  "error.WORK_CLASS_NOT_REGISTERED": "İstenen iş sınıfı kayıtlı değil. Kayıtlı bir iş sınıfı seçin veya sınıfı belirtmeyin."
 }

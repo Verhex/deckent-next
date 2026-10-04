@@ -5,8 +5,9 @@ export interface ExecutionRegistryValidation {
   profile(profile: ExecutionProfileDefinition): undefined;
   criterion(evaluator: EvaluatorDefinition, criterion: CriterionDefinition): undefined;
   /** K3: installed template adapters. A template never runs as is; it is compiled with the task's typed work input (pure, no I/O). */
+  prepareProfile?(profile: ExecutionProfileDefinition, kind: string, taskId: string): ExecutionProfileDefinition;
   isTemplate?(profile: ExecutionProfileDefinition): boolean;
-  compile?(template: ExecutionProfileDefinition, workInput: WorkInput): ExecutionProfileDefinition;
+  compile?(template: ExecutionProfileDefinition, workInput: WorkInput, kind: string, taskId: string): ExecutionProfileDefinition;
 }
 export class ExecutionRegistryError extends Error {
   constructor(readonly code: 'TASK_KIND_NOT_REGISTERED' | 'TASK_EVALUATOR_NOT_REGISTERED' | 'EXECUTION_REGISTRY_VALIDATOR_INVALID' | 'RUN_EXECUTION_INTEGRITY'
@@ -39,7 +40,7 @@ export function resolveExecutionRegistry(graphInput: unknown, registryInput: unk
     // K3 pairing (decided here, before any validator): a template kind needs a work input and a work input needs a template kind.
     const template = validation.isTemplate?.(selected) === true;
     if (template !== (task.workInput !== undefined)) throw new ExecutionRegistryError(template ? 'WORK_INPUT_REQUIRED' : 'WORK_INPUT_TEMPLATE_REQUIRED');
-    const profile = template ? executionProfileDefinitionSchema.parse(validation.compile!(selected, task.workInput!)) : selected;
+    const profile = template ? executionProfileDefinitionSchema.parse(validation.compile!(selected, task.workInput!, task.kind, task.id)) : validation.prepareProfile?.(selected, task.kind, task.id) ?? selected;
     // The compiled profile keeps its template's registry identity (provenance) and must itself pass every installed profile check.
     if (profile.id !== selected.id || profile.version !== selected.version || (template && validation.isTemplate!(profile))
       || validation.profile(profile) !== undefined) throw new ExecutionRegistryError('EXECUTION_REGISTRY_VALIDATOR_INVALID');

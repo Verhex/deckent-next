@@ -1198,5 +1198,13 @@
   "monitor.human.usageOutcomeError": "hata bildirdi",
   "monitor.human.usageOutcomeLimit": "sınıra ulaştı",
   "monitor.human.usageOutcomeRunning": "devam ediyor",
-  "monitor.build.summary": "build kaydı var ({builtAt})"
+  "monitor.build.summary": "build kaydı var ({builtAt})",
+  "cli.worker.effort.line": " · Muhakeme eforu: {level} ({source}; sınıf {workClass})",
+  "cli.worker.effort.source.explicit": "açık istek",
+  "cli.worker.effort.source.policy-default": "politika varsayılanı",
+  "cli.worker.effort.source.cli-default": "CLI varsayılanı",
+  "cli.worker.effort.status.unsupported": "desteklenmiyor",
+  "cli.worker.effort.status.cli-default": "CLI varsayılanı",
+  "cli.worker.effort.status.selected": "seçildi",
+  "cli.worker.effort.status.ultra-opt-in-required": "Ultra için açık efor isteği veya Ultra registry hedefi gerekir"
 }
