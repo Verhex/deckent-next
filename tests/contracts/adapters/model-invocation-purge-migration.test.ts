@@ -99,8 +99,9 @@ it('migrates a genuine ledger16 content inventory through the current ledger wit
   expect(String(after.tables.find(table => table.name === 'model_invocation_contents')?.sql)).toContain('CHECK((record IS NOT NULL AND purge_command_id IS NULL)');
 }));
 
-it('rejects corrupt v16 content inventories and rolls the ledger back unchanged', async () => {
-  for (const damage of ['missing', 'extra', 'identity'] as const) await workspace(async path => {
+// Each independent inventory owns its full fixture and existing per-test deadline.
+it.each(['missing', 'extra', 'identity'] as const)('rejects corrupt v16 %s content inventory and rolls the ledger back unchanged', async damage =>
+  workspace(async path => {
     await seedV16(path);
     const db = new DatabaseSync(path);
     try {
@@ -118,5 +119,4 @@ it('rejects corrupt v16 content inventories and rolls the ledger back unchanged'
     const before = inventory(path);
     await expect(openSqliteModelInvocationStore(path, options, 'allow')).rejects.toThrow('LEDGER_MIGRATION_EVIDENCE_REQUIRED');
     expect(inventory(path)).toEqual(before);
-  });
-});
+  }));
