@@ -184,7 +184,9 @@ describe('K1 blocking review reproductions', () => {
         await new Promise(r=>setTimeout(r,25)); await f.close(); await unlink(process.argv[2]);
       });`;
     await Promise.all(Array.from({ length: 6 }, () => exec(process.execPath, ['--input-type=module', '-e', script, path, witness], { cwd: f.project, env: f.env, timeout: 10_000 })));
-    expect((await readdir(join(f.project, '.deckent'))).filter(name => name.includes('.stale-'))).toHaveLength(1);
+    const retained = (await readdir(join(f.project, '.deckent'))).filter(name => name.includes('.stale-'));
+    expect(retained.filter(name => !name.endsWith('.reclaimed'))).toHaveLength(1);
+    expect(retained.filter(name => name.endsWith('.reclaimed'))).toHaveLength(1);
   });
 
 });

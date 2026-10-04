@@ -120,12 +120,14 @@ it('delivers a complete inventory larger than a pipe buffer before exiting', asy
     const child = spawn(process.execPath, [script, '--root', root, '--hardcode-inventory'], { timeout: 20_000, stdio: ['ignore', 'pipe', 'pipe'] });
     const chunks: Buffer[] = [], errors: Buffer[] = [];
     child.stderr.on('data', chunk => errors.push(chunk));
-    // Hold the first readable chunk so the producer must keep pending pipe writes
-    // alive, rather than relying on this host's consumer scheduling speed.
-    child.stdout.once('readable', () => {
-      setTimeout(() => { child.stdout.on('data', chunk => chunks.push(chunk)); child.stdout.resume(); }, 50);
-    });
-    const code = await new Promise<number | null>((resolve, reject) => { child.once('error', reject); child.once('close', resolve); });
+    // Register the collector before pausing: ChildProcess drains stdout on exit,
+    // even before a delayed consumer starts. Its forced drain must not discard data.
+    child.stdout.on('data', chunk => chunks.push(chunk));
+    child.stdout.pause();
+    const resume = setTimeout(() => child.stdout.resume(), 50);
+    let code: number | null;
+    try { code = await new Promise<number | null>((resolve, reject) => { child.once('error', reject); child.once('close', resolve); }); }
+    finally { clearTimeout(resume); }
     const output = Buffer.concat(chunks).toString('utf8');
     expect(code, Buffer.concat(errors).toString('utf8')).toBe(0);
     expect(Buffer.byteLength(output)).toBeGreaterThan(65_536);

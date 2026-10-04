@@ -5,6 +5,8 @@
 Ortak ürün/geliştirme ölçütü: [.deckent/docs/core-memory/project_product_north_star.md](.deckent/docs/core-memory/project_product_north_star.md).
 Owner 2026-09-21: dar dilimler ürün hedefini küçültmez; mevcut kararlar yeni kanıt olmadan yeniden açılmaz.
 
+**Owner 2026-10-04 — main handoff:** Sol is the main session under the owner's direct assignment and external `proof/HANDOFF-MAIN-2026-10-03-SOL/README.md`; Claude is not triggered. This supersedes the historical Claude-main/Sol-review role map for this session only. Independent review stays in a separate session; main never gives its own implementation an independent PASS. Existing commit, reviewed-push and owner-only live-switch boundaries remain. The main UUID is reconciled on the host board. Main uses model-independent coordination address `opus`; the separately assigned reviewer retains `astra` and its real UUID. These addresses do not select models or trigger Claude. The Codex hook default is unchanged; main handles only its addressed records. This amendment grants no new product/runtime authority.
+
 ## MONITOR-H1 — human worker evidence (2026-10-03; source candidate on lane/monitor-h1)
 
 BATCH32-ACCEPT integration candidate (2026-10-03): ACCEPT-EVIDENCE `0b2bd6b7` (Sol review 2319
@@ -2590,6 +2592,17 @@ tariff expiry and never bypasses MAC integrity or `requestDigest` checks. Cancel
 taken over only when it is at most `now − MAX_WALL_SKEW_MS`, in the atomic claim decision for every entry point (I40-b; cost: every
 retry waits retryDelayMs + 5 s, including a process's own). Config write-lock waits and in-process failure backoff are monotonic;
 lock age subtracts the allowance before age-based reclaim; worker heartbeat age is `max(0, now − mtime − MAX_WALL_SKEW_MS)`.
+
+CI-FIX-R5 source candidate (`lane/ci-fix-r5`, 2026-10-04): nonempty stale config-lock recovery retains the
+existing generation tombstone, verifies that the observed generation moved and is no longer named at the lock,
+then exclusively creates a sibling `.reclaimed` receipt before emitting the typed warning. Two successful Windows
+rename returns therefore cannot elect two warning claimants; a same-generation no-op remains bounded contention.
+The receipt cannot block a new lock owner. A receipt IO failure propagates after movement, retaining the tombstone;
+a later caller can acquire the free lock. A crash between movement/receipt and warning can omit the warning;
+this is not an exactly-once notification guarantee across crashes. Live, foreign and unreadable owners remain holds.
+Receipts and tombstones remain retained without automatic pruning. Evidence and exact candidate identity:
+external `proof/CI-FIX-R5-2026-10-04/README.md`; exact ff871b73 received bounded independent source/evidence PASS (assigned2331 and supplementary reviewer), while hosted platform acceptance and landing remain open. Owner published PR1. Hosted run37227979617 ended5/6: WindowsNode26 corrupt-v16 inventory fixture timed out in30000ms; the tested PR merge was1869f448, distinct from headff871b73. CI-FIX-R6 splits the three independent corruption cases into ordinary parameterized tests, each retaining full seed, mutation, typed migration refusal and unchanged inventory proof. Global30s test timeout, SQLite durability and product migration behavior stay unchanged. Linux and nativeWindowsNode26 author checks pass4/4; the original is also locally green, so hosted slowdown cause and fresh hosted acceptance remain unknown. Proof: external CI-FIX-R6-2026-10-04.
+
 Remaining raw-`Date.now` comparisons across
 processes (record-only timestamps) are listed in the I40 review and are not yet on this contract. Agent tool approvals (I40-c B, owner 2026-09-27): request and turn timestamps read the trusted clock, and only the requesting process determines expiry, using its floored wall clock and the monotonic TTL anchored at request creation. The deciding application authenticates, authorizes, seals and persists the decision without independently expiring tool-call requests; a record already expired is still refused. The producer checks expiry while waiting, after asynchronous policy work and immediately before the effect claim. A recorded allow is decision history, not evidence of execution nor an extension. The record schema permits `decidedAt >= expiresAt` only for `agent-tool-call` subjects (createdAt lower bound and task/operation expiry bounds unchanged); an older build refuses such a record with `APPROVAL_INTEGRITY`, and mixed reading is prevented because the same batch moves the ledger to v41, which older builds refuse.
 This Linux local witness

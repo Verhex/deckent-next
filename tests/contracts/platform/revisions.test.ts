@@ -54,7 +54,9 @@ describe('K1 review regression contracts', () => {
       expect(owner.nonce).toMatch(/^[\da-f-]+$/); expect(Date.parse(owner.createdAt)).toBeGreaterThan(0);
     }, 2_000, { onWarning: w => warnings.push(w) })));
     expect(max).toBe(1); expect(warnings.map(w => w.code)).toEqual(['CONFIG_LOCK_STALE_RECLAIMED']);
-    expect((await readdir(join(f.root, '.deckent'))).filter(name => name.includes('.stale-'))).toHaveLength(1);
+    const retained = (await readdir(join(f.root, '.deckent'))).filter(name => name.includes('.stale-'));
+    expect(retained.filter(name => !name.endsWith('.reclaimed'))).toHaveLength(1);
+    expect(retained.filter(name => name.endsWith('.reclaimed'))).toHaveLength(1);
   });
   it('atomically removes an aged unpublished empty directory', async () => {
     const f = await fixture(); await mkdir(f.lock);
