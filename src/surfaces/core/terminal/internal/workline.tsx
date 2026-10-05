@@ -6,7 +6,7 @@ import { StatusStrip } from './status-strip.js';
 import { AssistantLive, openAssistantStream, renderAssistantStream, renderCompleteReply, type AssistantStreamStep } from '#surfaces/core/terminal-render/index.js';
 import type { WorklineStreamTurn } from '#surfaces/core/terminal-kit/index.js';
 import type { AssistantRenderLabels } from '#surfaces/core/terminal-render/index.js';
-import { HumanTextContext, humanRecordText, RenderGlyphsContext, resolveRenderGlyphs } from '#surfaces/core/terminal-render/index.js';
+import { HumanTextContext, humanRecordText, projectHumanPickerText, RenderGlyphsContext, resolveRenderGlyphs } from '#surfaces/core/terminal-render/index.js';
 import type { KnownSecretSnapshot } from '#platform/index.js';
 import { assistantLedgerEntries, streamStepEntries } from './ledger-units.js';
 import { parseSlashLine } from '#surfaces/core/terminal-kit/index.js';
@@ -379,7 +379,9 @@ export function WorklineApp(props: WorklineProps) {
         queued={queue.current.length} labels={{ ...labels.render, selfSourceFloor: labels.selfSourceFloor }} mode={mode.mode} selfSource={props.selfSource} cancellable={turnRunning && !cancelling} />
       {/* The composer owns input: Enter submits (queued FIFO while busy), Esc/Ctrl+C cancel a turn, exit is two Ctrl+C or Ctrl+D.
           An open decision card or arrow picker takes the keyboard away from it. */}
-      <Composer prompt={labels.prompt} labels={labels.composer} busy={busy} active={!work.modalOpen && !work.pickerOpen && resumePicker === null}
+      <Composer prompt={labels.prompt} labels={{ ...labels.composer,
+        slash: Object.fromEntries(Object.entries(labels.composer.slash).map(([key, text]) => [key, projectHumanPickerText(text, props.knownSecrets).label])) }}
+        busy={busy} active={!work.modalOpen && !work.pickerOpen && resumePicker === null}
         onSubmit={(text, mentioned) => void submit(text, mentioned)} onCancel={cancel} onExit={exit}
         {...(props.inputHistory ? { history: props.inputHistory } : {})} {...(props.mentions ? { mentions: props.mentions } : {})}
         {...(props.mentionDelayMs === undefined ? {} : { mentionDelayMs: props.mentionDelayMs })} />

@@ -818,6 +818,7 @@
     "src/surfaces/core/terminal-labels": {
       "dependencies": [
         "src/platform/core/i18n",
+        "src/surfaces/core/terminal-kit",
         "src/surfaces/core/terminal",
         "src/surfaces/core/terminal-composer",
         "src/surfaces/core/terminal-render"

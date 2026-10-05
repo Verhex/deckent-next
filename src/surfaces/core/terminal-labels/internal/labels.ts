@@ -1,7 +1,8 @@
-import { t, type Locale } from '#platform/index.js';
+import { MESSAGE_REGISTRY, t, type Locale } from '#platform/index.js';
 import type { AssistantRenderLabels } from '#surfaces/core/terminal-render/index.js';
 import type { ComposerLabels } from '#surfaces/core/terminal-composer/index.js';
 import type { ConversationSessionLabels } from '#surfaces/core/terminal/index.js';
+import { WORKLINE_SLASH_COMMANDS } from '#surfaces/core/terminal-kit/index.js';
 
 /** Catalog strings of the rendered answer (terminal.render.*): narration, footer, tool lines, context, compaction. */
 export function terminalRenderLabels(locale: Locale): AssistantRenderLabels {
@@ -35,23 +36,13 @@ export function terminalRenderLabels(locale: Locale): AssistantRenderLabels {
 
 /** Catalog strings of the composer (terminal.composer.*) and the slash popup (terminal.slash.*). */
 export function terminalComposerLabels(locale: Locale): ComposerLabels {
+  // Registry descriptions/hints contain no interpolation, matching the CLI help catalog lookup.
+  const catalog = MESSAGE_REGISTRY.catalogs[locale === 'tr' ? 'tr' : 'en'];
   return { pasteChip: t('terminal.composer.pasteChip', {}, locale), search: t('terminal.composer.search', {}, locale),
     exitArmed: t('terminal.composer.exitArmed', {}, locale), shortcuts: t('terminal.composer.shortcuts', {}, locale),
     placeholder: t('terminal.workline.placeholder', {}, locale),
-    slash: { 'terminal.slash.status': t('terminal.slash.status', {}, locale), 'terminal.slash.workers': t('terminal.slash.workers', {}, locale),
-      'terminal.slash.watchWorkers': t('terminal.slash.watchWorkers', {}, locale), 'terminal.slash.watchRuns': t('terminal.slash.watchRuns', {}, locale),
-      'terminal.slash.watchStop': t('terminal.slash.watchStop', {}, locale), 'terminal.slash.run': t('terminal.slash.run', {}, locale),
-      'terminal.slash.runArgument': t('terminal.slash.runArgument', {}, locale), 'terminal.slash.runs': t('terminal.slash.runs', {}, locale),
-      'terminal.slash.serviceRestart': t('terminal.slash.serviceRestart', {}, locale), 'terminal.slash.exit': t('terminal.slash.exit', {}, locale),
-      'terminal.slash.help': t('terminal.slash.help', {}, locale), 'terminal.slash.transcript': t('terminal.slash.transcript', {}, locale),
-      'terminal.slash.approvals': t('terminal.slash.approvals', {}, locale), 'terminal.slash.cancel': t('terminal.slash.cancel', {}, locale),
-      'terminal.slash.context': t('terminal.slash.context', {}, locale), 'terminal.slash.resume': t('terminal.slash.resume', {}, locale),
-      'terminal.slash.resumeArgument': t('terminal.slash.resumeArgument', {}, locale), 'terminal.slash.clear': t('terminal.slash.clear', {}, locale),
-      'terminal.slash.transcriptArgument': t('terminal.slash.transcriptArgument', {}, locale),
-      'terminal.slash.cancelArgument': t('terminal.slash.cancelArgument', {}, locale),
-      'terminal.slash.mode': t('terminal.slash.mode', {}, locale), 'terminal.slash.modeArgument': t('terminal.slash.modeArgument', {}, locale),
-      'terminal.slash.reasoning': t('terminal.slash.reasoning', {}, locale), 'terminal.slash.scratch': t('terminal.slash.scratch', {}, locale),
-      'terminal.slash.monitor': t('terminal.slash.monitor', {}, locale) } };
+    slash: Object.fromEntries(WORKLINE_SLASH_COMMANDS.flatMap(command => [command.descriptionKey, ...(command.argumentKey ? [command.argumentKey] : [])])
+      .map(key => [key, catalog[key] ?? key])) };
 }
 
 /** Catalog strings of `/resume`, `/context` and `/clear` (terminal.session.*). */
