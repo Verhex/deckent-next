@@ -666,6 +666,11 @@ Owner 2026-10-02: `deckent-next-refactor` retains its name as the shared entry g
 Next development, fixes, refactoring, reviews and handoffs. Codex, Claude and Cursor resolve this skill
 to the same `.agents/skills/deckent-next-refactor` source; specialist skills supply task-specific methods.
 Jev details live in the skill's `jev-workflow.md`, read before case preparation or consultation.
+Owner 2026-10-06 host amendment: checks remain Noul, with local advisory non-binary/multi-question diagnostics;
+report v3 orders recorded requests by time within a bounded scan and exposes missing decision/outcome and label coverage.
+Undated/truncated recency and absent outcomes remain unknown; agreement is not correctness. Provider thresholds,
+full curated charter, both abstentions, immutable receipts and product authority stay unchanged. Evaluation freezes
+claim/state/labels and model version; context compaction requires measured quality retention, not automatic promotion.
 Shared content does not prove identical host activation or grant work/runtime authority.
 Owner 2026-10-02: `deckent-authority-bootstrap` remains a separate read-only Next authority/context
 snapshot, refreshed on relevant changes. It checks scope and work ownership; runtime inspection is

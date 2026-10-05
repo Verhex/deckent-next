@@ -7,6 +7,7 @@ const unverified = /^\s*\[(?:plan|assumption|hypothesis|varsayım|hipotez)\]/i;
 const rejected = /\brejected alternatives?\b|\bruled out\b|\bnot applicable\b|reddedilen alternatif|elenen alternatif|uygulanamaz/i;
 const gains = /\bgain\b|\bbenefit\b|kazanım|kazanç|fayda/i;
 const losses = /\bloss\b|\bcost\b|\brisk\b|kayıp|maliyet|bedel/i;
+const openQuestion = /^(?:which|what|how|why|who|where|when)\b|^(?:hangi|nasıl|neden|kim|nerede|ne zaman)(?:\s|[?:]|$)/iu;
 
 // Called only after schema validation. No evidence source is opened or automatically uploaded.
 export function sufficiencyRisks(c) {
@@ -26,6 +27,12 @@ export function sufficiencyRisks(c) {
   if (sameRefs(c.options)) add('OPTIONS_SHARE_ALL_EVIDENCE', 'options', 'Bütün seçenekler aynı kanıtlara bağlı. Her gözlemin seçenekleri nasıl ayırdığını açıklayın; ortak kanıt tek başına hata değildir.');
   if (sameRefs(c.checks)) add('CHECKS_SHARE_ALL_EVIDENCE', 'checks', 'Bütün kontroller aynı kanıtlara bağlı. Her kontrol için ilgili gözlemi ve kalan boşluğu belirtin; referans varlığı anlamsal bağ kanıtı değildir.');
   for (const [i, q] of c.checks.entries()) {
+    if (openQuestion.test(q.instructions.trim())) {
+      add('CHECK_NOT_BINARY', `checks[${i}].instructions`, 'Kontrol Noul (evet/hayır) derlenir; bu ifade seçenek, liste veya açıklama istiyor olabilir. İlgili seçeneği/kanıtı adlandırıp tek evet/hayır önermesi yazın. Bu dil sezgisi otomatik düzeltme veya ret değildir.');
+    }
+    if ((q.instructions.match(/\?/g) || []).length > 1) {
+      add('CHECK_MULTIPLE_QUESTIONS', `checks[${i}].instructions`, 'Bir Noul içinde birden fazla soru tanındı. Her önermeyi ayrı kontrol yapın; aynı çağrıdaki kontroller bağımsızdır.');
+    }
     const observations = linked(q.evidenceIds);
     if (observations.every(e => unverified.test(e.observation))) {
       add('CHECK_ONLY_UNVERIFIED_EVIDENCE', `checks[${i}].evidenceIds`, 'Kontrol yalnız plan/varsayım/hipotez olarak etiketlenmiş gözlemlere bağlı; gerçekleşmiş kanıt ile beklenen davranışı ayırın.');
@@ -44,5 +51,5 @@ export function sufficiencyRisks(c) {
     ...c.evidence.map(e => e.observation), ...c.options.flatMap(o => o.tradeoffs)].join(' ');
   if (!rejected.test(decisionContext)) add('REJECTED_ALTERNATIVES_UNCLEAR', 'process', 'Reddedilen/elenen alternatif ve gerekçesi tanınamadı. Varsa yazın; yoksa uygulanamaz olduğunu belirtin. Yeni bir alternatif uydurmayın.');
   if (!c.unknowns.length) add('NO_EXPLICIT_UNKNOWNS', 'unknowns', 'Bilinmeyenler boş; karar için gerekli bilinmeyenlerle kapsam dışı ölçümleri ayrı değerlendirin. Boş olması hata değildir.');
-  return { version: 1, mode: 'advisory-only', semanticQuality: 'not-measured', warnings };
+  return { version: 2, mode: 'advisory-only', semanticQuality: 'not-measured', warnings };
 }

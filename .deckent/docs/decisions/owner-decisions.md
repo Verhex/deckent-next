@@ -202,3 +202,7 @@ O2, O3, O5 ve O6 uygulandı ([COMPLETED-PLAN](COMPLETED-PLAN.md)).
 “Çalışmayı iptal edelim qwen eski haliyle korunsun. jev kullanmaya devam edeceğiz.”
 
 Yerel karar başlığı/eğitim, vLLM özel endpoint/worker katmanı, alternatif yerel karar modelleri, Qwen–Jev gölge kıyası ve HF hazırlığı iptal. Native Qwen standart model/profile ile korunur, karar danışmanlığı mevcut Jev'dir. Yeni deney dalı geri alınır; tarihsel kanıt/veri saklanır. PR#11'in main'deki host araçları kullanılmayan tarihsel kaynak olarak kalır, otomatik kullanım yoktur. Eski kabul ve kalan-iş metinleri çalıştırmayı yeniden kabul etmez; yeni owner yönü gerekir. Karar, kesin%20/%30 hız üstünlüğü kanıtlanamadığı durumda owner'ın çalışmayı bırakma tercihidir; teknik imkânsızlık bulgusu değildir. Kapanış dış `proof/QWEN-CANCELED-2026-10-06/REPORT.md`.
+
+## Owner — 2026-10-06: Jev host kullanım önerileri kabul edildi
+
+Owner “Öneriler kabul edildi”: önce Noul kontrollerini tek önerme yapma ve sonuç kayıt disiplini, ardından farklı kapanmış vakalarda değerlendirme, sonra context sadeleştirmesini ölçme sırası yetkilidir. Geliştirme-host aracı kapsamındadır; mevcut seçim/yeterlilik eşikleri, zorunlu north star ve iki çekimserlik korunur. Tarihsel eksik sonuçlar veya aktör/öneri uyumu doğruluk sayılmaz; kalite kabulü ölçümden ayrıdır. Qwen araştırması iptal kalır; commit/push yetkisi verilmedi. Kaynak: dış `proof/JEV-USAGE-RESEARCH-2026-10-06/REPORT.md`; uygulama kanıtı `proof/JEV-HOST-HYGIENE-2026-10-06/`.

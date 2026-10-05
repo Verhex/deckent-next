@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { readFile, mkdtemp, rm, symlink, readdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { prepare } from './jev-context.mjs';
+import { prepare, validateReviewConfig } from './jev-context.mjs';
 import { consult, followup, report } from './jev-review.mjs';
 import { readEvent, writeEvent, callId, entries } from './jev-journal.mjs';
 
@@ -18,6 +18,13 @@ const config = JSON.parse(await readFile(new URL('./jev.config.json', import.met
 const policy = JSON.parse(await readFile(new URL('./jev.review.config.json', import.meta.url), 'utf8'));
 const key = 'local-test-secret-never-live';
 const fixture = () => ({ schemaVersion: 2, process: { stage: 'validation', currentState: 'Failure unexplained', acceptedDecisions: ['Do not accept without proof'], nextStep: 'Investigate failure', reopenReason: null }, objective: 'Choose next validation action.', scope: 'host-test', revision: 'fixture-v1', evidence: [{ id: 'test', source: 'fixture', observedAt: '2026-09-19T00:00:00Z', observation: 'A test failed without a known cause.' }], constraints: ['Do not claim an unexplained failure fixed.'], unknowns: ['Failure cause'], options: [{ id: 'investigate', action: 'Inspect failure evidence', tradeoffs: ['Gain: reliable acceptance; loss: investigation time'], northStarImpact: 'Preserves evidence-based enterprise reliability', evidenceIds: ['test'] }, { id: 'accept', action: 'Accept without investigation', tradeoffs: ['Gain: immediate progress; loss: unresolved failure risk'], northStarImpact: 'Compromises reliable acceptance', evidenceIds: ['test'] }], checks: [{ id: 'supported', instructions: 'Is acceptance supported?', evidenceIds: ['test'] }] });
+test('optional report scan limit preserves old review config and refuses an incomplete window budget', () => {
+  assert.equal(validateReviewConfig(policy), policy);
+  assert.equal(validateReviewConfig({ ...policy, reportScanLimit: policy.reportLimit }).reportScanLimit, policy.reportLimit);
+  for (const reportScanLimit of [0, policy.reportLimit - 1, 1.5, 1048577]) {
+    assert.throws(() => validateReviewConfig({ ...policy, reportScanLimit }), /JEV_REVIEW_CONFIG/);
+  }
+});
 const transport = async (_url, options) => {
   const request = JSON.parse(options.body);
   return Response.json({ model: 'fixture-model', answers: Object.fromEntries(Object.entries(request.questions).map(([id, q]) => [id, q.type === 'noul' ? { type: 'noul', noul: 0.1 } : { type: 'choice', choice: 'investigate', confidence: 0.8, probabilities: { investigate: 0.9, accept: 0.05, none_of_the_above: 0.02, insufficient_information: 0.03 } }])), usage: { input_tokens: 10, output_tokens: 5 } });
@@ -84,6 +91,24 @@ test('plan-only checks warn without claiming to understand untagged prose', () =
   c.evidence.push({ ...c.evidence[0], id: 'actual', observation: 'The recorded fixture failed.' });
   c.checks[0].evidenceIds.push('actual');
   assert.ok(!codes().includes('CHECK_ONLY_UNVERIFIED_EVIDENCE'));
+});
+test('non-binary and multiple questions warn locally without rewriting evidence or model input', () => {
+  const c = fixture();
+  for (const instruction of ['Which option preserves scope?', 'Hangi seçenek sınırı koruyor?', 'Nasıl ilerlemeliyiz?', 'What evidence is missing?']) {
+    c.checks[0].instructions = instruction;
+    const before = structuredClone(c);
+    const p = prepare(c, policy);
+    assert.ok(p.diagnostics.sufficiencyRisks.warnings.some(w => w.code === 'CHECK_NOT_BINARY' && w.path === 'checks[0].instructions'));
+    assert.deepEqual(p.input.state.case, before);
+    assert.equal(p.input.questions.supported.instructions.question, instruction);
+    assert.equal(p.diagnostics.sufficiencyRisks.mode, 'advisory-only');
+  }
+  c.checks[0].instructions = 'Is A supported? Does B preserve authority?';
+  assert.ok(prepare(c, policy).diagnostics.sufficiencyRisks.warnings.some(w => w.code === 'CHECK_MULTIPLE_QUESTIONS'));
+  for (const instruction of ['Does option A preserve the observed boundary?', 'A seçeneği gözlenen sınırı koruyor mu?', 'Does the source contain the phrase "which option"?', 'The cited observation states that configuration was unchanged.']) {
+    c.checks[0].instructions = instruction;
+    assert.ok(!prepare(c, policy).diagnostics.sufficiencyRisks.warnings.some(w => ['CHECK_NOT_BINARY', 'CHECK_MULTIPLE_QUESTIONS'].includes(w.code)));
+  }
 });
 test('measurement hint requires linked numeric units; a commit number is not a measurement', () => {
   const c = fixture(); c.options[0].action = 'Faster execution';
@@ -184,6 +209,37 @@ journalTest('parallel calls have isolated journals and reports disclose truncati
   assert.equal(new Set(calls.map(c => c.callId)).size, 5);
   const summary = await report(root, 2); assert.equal(summary.sampledCalls, 2); assert.equal(summary.truncated, true);
 }));
+journalTest('report orders by request time, exposes follow-up gaps and discloses scan truncation', async () => sandbox(async root => {
+  const items = [];
+  for (const at of ['2026-09-20T09:00:00Z', '2026-09-20T12:00:00Z', '2026-09-20T13:00:00+02:00']) {
+    const id = callId();
+    const directory = join(root, id);
+    await writeEvent(directory, 'request.json', { at, case: fixture(), input: prepare(fixture(), policy).input }, key);
+    items.push({ id, at });
+  }
+  const latest = items[1];
+  await writeEvent(join(root, latest.id), 'response.json', {
+    model: 'fixture-model', answers: { supported: { type: 'noul', noul: 0.9 }, sufficiency: { type: 'noul', noul: 0.8 }, next_action: { choice: 'investigate', probabilities: { investigate: 0.9 }, confidence: 0.8 } }, usage: { input_tokens: 5, output_tokens: 1 }, latencyMs: 12,
+  }, key);
+  const selected = await report(root, 2);
+  assert.deepEqual(selected.rows.map(r => r.callId), [latest.id, items[2].id]);
+  assert.equal(selected.schemaVersion, 3);
+  assert.equal(selected.scannedCalls, 3); assert.equal(selected.scanTruncated, false); assert.equal(selected.truncated, true);
+  assert.equal(selected.followUp.adviceWithoutDecision, 1);
+  assert.equal(selected.followUp.callsWithoutOutcome, 2);
+  assert.equal(selected.quality.brierScore, null);
+  assert.equal(selected.rows[1].status, 'response-unknown');
+  assert.equal(selected.rows[0].selectedProbability, 0.9); assert.equal(selected.rows[0].confidence, 0.8);
+  await followup(root, latest.id, 'decision', { actor: 'test', selectedOption: 'investigate', rationale: 'Await actual validation.', actions: [], evidenceRefs: [] }, key);
+  const waiting = await report(root, 1);
+  assert.equal(waiting.followUp.adviceWithoutDecision, 0);
+  assert.equal(waiting.followUp.decisionsWithoutOutcome, 1);
+  assert.equal(waiting.followUp.pendingOrOmittedIsUnknown, true);
+  const bounded = await report(root, 1, { scanLimit: 2 });
+  assert.equal(bounded.scannedCalls, 2); assert.equal(bounded.scanTruncated, true);
+  assert.match(bounded.selection, /global recency unknown/);
+  await assert.rejects(report(root, 2, { scanLimit: 1 }), /JEV_REPORT_LIMIT/);
+}));
 journalTest('secret rejection and symlink journal rejection happen before network', async () => sandbox(async root => {
   let calls = 0; const fake = async (...args) => { calls++; return transport(...args); };
   const c = fixture(); c.objective = key;
@@ -204,6 +260,8 @@ journalTest('a persisted request without response remains unknown, not failed or
   await writeEvent(join(root, id), 'request.json', { case: fixture(), input: prepare(fixture(), policy).input }, key);
   const summary = await report(root, 10);
   assert.equal(summary.rows[0].status, 'response-unknown');
+  assert.equal(summary.rows[0].requestedAt, null);
+  assert.equal(summary.undatedScannedCalls, 1);
   assert.equal(summary.rows[0].outcome, 'unobserved');
   assert.equal(summary.usage.inputTokens, 0);
   assert.equal(summary.usage.excludesFailedAndUnrecordedUsage, true);
