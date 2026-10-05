@@ -1,4 +1,4 @@
-import { attemptIdentitySchema, attemptSnapshotSchema, runSnapshotSchema, sameAttemptIdentity } from '#domain/index.js';
+import { readWorkerModelPin, attemptIdentitySchema, attemptSnapshotSchema, runSnapshotSchema, sameAttemptIdentity } from '#domain/index.js';
 import { RunStoreError } from './store.js';
 import { assertRunExecution } from './registry.js';
 
@@ -14,5 +14,8 @@ export function selectReservedTaskProfile(runInput: unknown, attemptInput: unkno
   }
   const selected = run.execution.tasks.find(task => task.taskId === identity.taskId);
   if (!selected) throw new RunStoreError('RUN_STORE_CORRUPT');
+  if (JSON.stringify(attempt.reasoningEffort) !== JSON.stringify(readWorkerModelPin(selected.profile.parameters)?.reasoningEffort)) {
+    throw new RunStoreError('RUN_STORE_CORRUPT');
+  }
   return selected.profile;
 }

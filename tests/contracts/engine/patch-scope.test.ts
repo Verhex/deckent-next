@@ -22,6 +22,37 @@ describe('patch scope classification (one deny grammar, exact full-path match)',
   it('uses the platform matcher the workspace deny language uses (moved, not copied)', () => {
     expect(adapterMatcher).toBe(createGlobMatcher);
   });
+  it('suggests unique literal parents only for uncovered paths, without changing classification or mutable inputs', () => {
+    const declared = ['src', 'src/notes', 'src', 'docs/readme.md', 'dir[1]'];
+    const paths = ['src/notes/a.ts', 'src/notes/b.ts', 'src/other.ts', 'docs/readme.md', 'dir[1]/a.txt'];
+    const scope = classify(declared, paths, 'enforce');
+    expect(scope).toEqual({ schemaVersion: 1, matcher: 1, mode: 'enforce', status: 'out-of-scope', declared,
+      outOfScope: ['src/notes/a.ts', 'src/notes/b.ts', 'src/other.ts', 'dir[1]/a.txt'],
+      directoryHints: [{ declared: 'src', suggested: 'src/**' }, { declared: 'src/notes', suggested: 'src/notes/**' },
+        { declared: 'dir[1]', suggested: 'dir[1]/**' }] });
+    expect(() => assertPatchScope(scope)).toThrow(expect.objectContaining({ code: 'PATCH_SCOPE_VIOLATION' }));
+    if (scope.status === 'unscoped') throw new Error('expected declared scope');
+    expect([scope, scope.declared, scope.outOfScope, scope.directoryHints, ...scope.directoryHints!].every(Object.isFrozen)).toBe(true);
+    declared.push('extra'); paths.push('later');
+    expect(scope.declared).not.toContain('extra'); expect(scope.outOfScope).not.toContain('later');
+  });
+  it.each([
+    [['note.txt'], ['note.txt']], // exact file
+    [['src'], ['srcx/a.ts', 'else/src/a.ts', 'Src/a.ts']], // segment boundary, root and case
+    [['src/**'], ['src/a.ts', 'src/deep/a.ts']], // directory declaration already covers them
+    [['src/*'], ['src/deep/a.ts']], // wildcard declaration is not a literal directory
+    [['src?'], ['src1/a.ts']],
+    [['**'], ['src/a.ts', 'README.md']], // root glob
+    [['src', 'src/**'], ['src/a.ts']], // another scope already covers the child
+    [['src', 'src/notes/**'], ['src/notes/a.ts', 'other/a.ts']], // unrelated uncovered path
+  ])('does not advise for exact, covered, wildcard or unrelated paths (%j, %j)', (declared, paths) => {
+    expect(classify(declared, paths)).not.toHaveProperty('directoryHints');
+  });
+  it('uses only uncovered paths across multiple declarations', () => {
+    expect(classify(['src', 'src/notes/**'], ['src/notes/a.ts', 'src/other.ts'])).toMatchObject({
+      outOfScope: ['src/other.ts'], directoryHints: [{ declared: 'src', suggested: 'src/**' }],
+    });
+  });
   it.each([
     // [declared, path, inScope]
     [['note.txt'], 'note.txt', true],
@@ -132,5 +163,20 @@ describe('patch application and integration gate with the Run-bound task scope',
   it('reads the declared scope from the exact Run binding of the attempt', async () => {
     const h = harness('warn', input); await h.prepare();
     expect(h.loadBoundTask).toHaveBeenCalledWith(identity);
+  });
+  it('retained producer advice survives prepare/preview/check and preserves receipt/proposal and pre-claim refusal', async () => {
+    const hinted = harness('enforce', { ...input, scope: { paths: ['notes', 'stray.log'] } });
+    const covered = harness('enforce', { ...input, scope: { paths: ['notes/**', 'stray.log'] } });
+    const prepared = await hinted.prepare(), inScope = await covered.prepare();
+    expect(prepared.scope).toEqual({ schemaVersion: 1, matcher: 1, mode: 'enforce', status: 'out-of-scope',
+      declared: ['notes', 'stray.log'], outOfScope: ['notes/in.txt'], directoryHints: [{ declared: 'notes', suggested: 'notes/**' }] });
+    expect((await hinted.patches.preview(identity)).scope).toEqual(prepared.scope);
+    const checked = await hinted.integration.check(identity), coveredCheck = await covered.integration.check(identity);
+    expect(checked.scope).toEqual(prepared.scope);
+    expect(prepared.receipt).toEqual(inScope.receipt); expect(prepared.patch).toEqual(inScope.patch);
+    expect(checked.proposal).toEqual(coveredCheck.proposal);
+    await expect(hinted.integration.prepare({ schemaVersion: 1, commandId: 'c', identity, proposal: checked.proposal },
+      { claimIntegration: hinted.claimIntegration, finishIntegration: vi.fn() })).rejects.toMatchObject({ code: 'PATCH_SCOPE_VIOLATION' });
+    expect(hinted.claimIntegration).not.toHaveBeenCalled(); expect(hinted.targetPrepare).not.toHaveBeenCalled();
   });
 });

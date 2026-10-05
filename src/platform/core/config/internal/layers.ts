@@ -1,3 +1,4 @@
+import { bindConfigKnownSecrets } from './redaction-context.js';
 import { lstat } from 'node:fs/promises';
 import { resolve, dirname } from 'node:path';
 import { ErrorRegistry } from '#platform/core/errors/index.js';
@@ -122,6 +123,7 @@ export async function loadConfig(projectRoot = process.cwd(), options: ConfigLoa
     throw error;
   }
   const value: ResolvedConfig = { ...secrets.config, projectRoot: root, productLayout, secretPaths: secrets.secretPaths };
+  bindConfigKnownSecrets(value, secrets.knownSecrets);
   for (const section of configSections().values()) section.options.validateEffective?.(structuredClone(value), env);
   warnings.forEach(w => options.onWarning?.(w));
   const cacheable = secrets.references.length === 0 && (await Promise.all(paths.map(stamp))).every((s, i) => s === stamps[i]);

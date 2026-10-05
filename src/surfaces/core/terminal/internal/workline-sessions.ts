@@ -1,7 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { useCallback, useRef } from 'react';
 import { resolveSessionReference, type SessionRefusal, type ConversationSessionPort, type ConversationSessionSummary, type AgentChatMessage, type TurnDelta } from '#surfaces/core/terminal-kit/index.js';
-import { contextViewLines, fillTemplate, type ContextCompaction, type ContextViewLabels } from '#surfaces/core/terminal-render/index.js';
+import { contextViewLines, fillTemplate, projectHumanPickerText, type Span, type ContextCompaction, type ContextViewLabels } from '#surfaces/core/terminal-render/index.js';
+import type { KnownSecretSnapshot } from '#platform/index.js';
 import { notice } from './workline-actions.js';
 import type { WorkLedgerEntry } from './work-ledger.js';
 import { resumedHistoryEntries, type ResumedHistoryLabels } from './workline-history.js';
@@ -11,6 +12,7 @@ export type { ConversationSessionSummary, ConversationSessionPort, TerminalSessi
 export interface ConversationSessionLabels {
   /** `{index}. {session} · {when} · {count} messages · {preview}` */
   readonly entry: string;
+  readonly hiddenCount?: string;
   readonly none: string; readonly notFound: string; readonly unavailable: string; readonly saveFailed: string;
   readonly exactRequired?: string; readonly listStale?: string;
   /** `{count}` messages resumed from `{session}`. */
@@ -24,7 +26,7 @@ export interface ConversationSessionLabels {
   readonly history?: ResumedHistoryLabels; readonly view?: ContextViewLabels;
 }
 /** One row of the arg-less `/resume` picker. Enter loads `sessionId` through the same path as `/resume <id>`. */
-export interface ResumePickerItem { readonly sessionId: string; readonly label: string }
+export interface ResumePickerItem { readonly sessionId: string; readonly label: string; readonly spans?: readonly Span[]; readonly hiddenNotice?: string }
 export type SessionCommandResult = Readonly<{ entries: readonly WorkLedgerEntry[]; resumePicker?: readonly ResumePickerItem[]; refusal?: SessionRefusal }>;
 type ContextView = Omit<Extract<TurnDelta, { kind: 'context' }>, 'kind'>;
 const LISTED = 10;
@@ -38,7 +40,7 @@ const when = (ms: number) => new Date(ms).toISOString().slice(0, 16).replace('T'
  * `/resume` with no argument opens an arrow-key picker (a typed `/resume <n|id>` still loads one), `/context` for the latest measured prompt. A failed save is shown once
  * and never blocks the conversation.
  */
-export function useConversationSession(port: ConversationSessionPort | undefined, labels: ConversationSessionLabels | undefined) {
+export function useConversationSession(port: ConversationSessionPort | undefined, labels: ConversationSessionLabels | undefined, known?: KnownSecretSnapshot) {
   const sessionId = useRef<string>(randomUUID());
   const saveFailed = useRef(false), listed = useRef<readonly ConversationSessionSummary[]>([]), context = useRef<ContextView | null>(null), compaction = useRef<ContextCompaction | null>(null);
   const noteContext = useCallback((delta: TurnDelta) => {
@@ -77,8 +79,9 @@ export function useConversationSession(port: ConversationSessionPort | undefined
       listed.current = (await freshList()).map(summary => ({ ...summary }));
       if (!listed.current.length) return done([notice('info', labels.none)]);
       // The index stays filled so a later typed `/resume 2` still resolves. The rows are the picker, not ledger lines.
-      return done([], listed.current.map((summary, index) => ({ sessionId: summary.sessionId, label: fillTemplate(labels.entry, {
-        index: index + 1, session: summary.sessionId.slice(0, 8), when: when(summary.updatedAtMs), count: summary.messages, preview: summary.preview }) })));
+      return done([], listed.current.map((summary, index) => ({ sessionId: summary.sessionId,
+        ...projectHumanPickerText(fillTemplate(labels.entry, { index: index + 1, session: summary.sessionId.slice(0, 8), when: when(summary.updatedAtMs),
+          count: summary.messages, preview: summary.preview }), known, labels.hiddenCount) })));
     }
     const reference = resolveSessionReference(args, listed.current, /^\d+$/.test(args) && listed.current.length ? await freshList() : []);
     if ('refusal' in reference) {
@@ -90,8 +93,8 @@ export function useConversationSession(port: ConversationSessionPort | undefined
     if (!messages) return refuse('SESSION_NOT_FOUND', labels.notFound);
     history.current = [history.current[0]!, ...messages.filter(message => message.role !== 'system')];
     sessionId.current = target; context.current = null; compaction.current = null; listed.current = [];
-    return done([notice('info', fillTemplate(labels.resumed, { count: messages.length, session: target.slice(0, 8) })), ...resumedHistoryEntries(messages, labels.history)]);
-  }, [labels, port]);
+    return done([notice('info', fillTemplate(labels.resumed, { count: messages.length, session: target.slice(0, 8) })), ...resumedHistoryEntries(messages, labels.history, known)]);
+  }, [labels, port, known]);
   const id = useCallback(() => sessionId.current, []);
   return { noteContext, save, run, id };
 }

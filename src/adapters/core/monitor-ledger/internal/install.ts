@@ -2,7 +2,7 @@ import { userInfo } from 'node:os';
 import { dirname } from 'node:path';
 import { CONFIG_FIELDS, createDefaultConfig, envValue, inspectProductDirectory, inspectProductFile, loadGlobalConfig, productResourcePath, readJsonFile, resolveGlobalConfigReadPath,
   resolveProductLayout, type Environment, type ResolvedConfig } from '#platform/index.js';
-import { executionRegistrySchema, workerEventSchema, type AttemptIdentity, type WorkerEvent } from '#domain/index.js';
+import { sameAttemptIdentity, executionRegistrySchema, workerEventSchema, type AttemptIdentity, type WorkerEvent } from '#domain/index.js';
 import { readLocalOsIdentity } from '#adapters/core/local-principal/index.js';
 import { extractFirstFailure, parseRetainedOutputEnvelope, summarizeMonitorEvent, type MonitorWorkerContent, type MonitorEvent, type MonitorLedgerReading, type MonitorMap } from '#engine/index.js';
 import { FileArtifactStore } from '#adapters/core/file-artifacts/index.js';
@@ -19,38 +19,43 @@ const code = (error: unknown) => error && typeof error === 'object' && 'code' in
 const recent = (events: readonly { readonly atMs: number | null; readonly event: WorkerEvent }[]): readonly MonitorEvent[] =>
   Object.freeze(events.slice(-MONITOR_RECENT_EVENTS).map(({ atMs, event }) => Object.freeze({ atMs, ...summarizeMonitorEvent(event) })));
 
-/**
- * MONITOR v1.1: everything the monitor reads about one installation from its resolved config, read-only. The ledger view, then — outside
- * its transaction — the first failing line of each failed attempt's recorded output, the last worker events of failed (sealed log) and
- * running (live tail) attempts, and the install map (config layers, registry, model catalog, policy summary, memory). Every secondary read
- * failure is a typed diagnostic; nothing is created or written.
- */
-export async function readMonitorInstall(config: ResolvedConfig, env: Environment | undefined, readOutput: (identity: AttemptIdentity) => Promise<boolean>): Promise<MonitorLedgerReading> {
+/** Capture one read-only ledger transaction and its file identities. Content is deferred until readShown:
+ * only exact selected identities pass through read-output, then artifact/sidecar reads outside the transaction.
+ * No product files, state or policy are created or healed. */
+export async function prepareMonitorInstall(config: ResolvedConfig, env: Environment | undefined, readOutput: (identity: AttemptIdentity) => Promise<boolean>, run?: { scopeId: string; runId: string }) {
   const layout = config.productLayout;
   const scan = scanMonitorLedger(await inspectProductFile(layout, 'ledger', ['-wal', '-shm', '-journal']),
-    { busyTimeoutMs: config.storage.sqlite.busyTimeoutMs, maxRuns: config.inspection.maxPageSize });
+    { busyTimeoutMs: config.storage.sqlite.busyTimeoutMs, maxRuns: config.inspection.maxPageSize, ...(run ? { run } : {}) });
   const diagnostics = [...scan.reading.diagnostics];
   const artifacts = FileArtifactStore.reader(() => inspectProductDirectory(layout, 'artifacts'), config.artifacts.maxBytes);
-  const extra = new Map<string, { content?: MonitorWorkerContent; firstFailure?: string | null; recentEvents?: readonly MonitorEvent[]; diagnostics?: readonly string[]; observedEndAtMs?: number | null }>();
-  for (const files of scan.files) {
-    const key = `${files.identity.scopeId}/${files.identity.attemptId}`;
-    try {
-      // Security: recorded output and worker events are content of the attempt — read only after its read-output decision (workers list/transcript).
-      const needsEnd = files.finished && !files.sealed && !!files.workspace;
-      if (!(await readOutput(files.identity))) { extra.set(key, { content: emptyWorkerContent('denied'), firstFailure: null, diagnostics: ['output-denied'] }); continue; }
-      const found: { content?: MonitorWorkerContent; firstFailure?: string | null; recentEvents?: readonly MonitorEvent[]; observedEndAtMs?: number | null } = { content: await readMonitorWorkerContent(artifacts, files) };
-      if (files.failed) Object.assign(found, { firstFailure: await firstFailure(artifacts, files), ...(files.events ? { recentEvents: await sealedEvents(artifacts, files) } : {}) });
-      else if (files.open && files.workspace) found.recentEvents = recent((await readWorkerEventTail(dirname(files.workspace), 'worker', MONITOR_EVENT_TAIL_BYTES))
-        .map(line => ({ atMs: line.receivedAt, event: line.event })));
-      if (needsEnd) found.observedEndAtMs = await observedEnd(config, files);
-      if (Object.keys(found).length) extra.set(key, found);
-    } catch (error) { extra.set(key, { content: emptyWorkerContent('unavailable') }); diagnostics.push(`attempt-files-unavailable:${key}:${code(error)}`); }
-  }
-  const runs = scan.reading.runs.map(run => Object.freeze({ ...run, attempts: Object.freeze(run.attempts.map(value => {
-    const found = extra.get(`${run.snapshot.identity.scopeId}/${value.attemptId}`); return found ? Object.freeze({ ...value, ...found }) : value;
-  })) }));
-  const map = await installMap(config, env ?? process.env, scan.reading.map ?? null, diagnostics);
-  return Object.freeze({ ...scan.reading, runs: Object.freeze(runs), map, diagnostics: Object.freeze(diagnostics) });
+  const map = run ? scan.reading.map ?? null : await installMap(config, env ?? process.env, scan.reading.map ?? null, diagnostics);
+  const reading = Object.freeze({ ...scan.reading, map, diagnostics: Object.freeze([...diagnostics]) });
+  return { reading, async readShown(identities: readonly AttemptIdentity[]): Promise<MonitorLedgerReading> {
+    const selected = scan.files.filter(files => identities.some(identity => sameAttemptIdentity(identity, files.identity)));
+    const extra = new Map<string, { content?: MonitorWorkerContent; firstFailure?: string | null; recentEvents?: readonly MonitorEvent[]; diagnostics?: readonly string[]; observedEndAtMs?: number | null }>();
+    for (const files of selected) {
+      const key = `${files.identity.scopeId}/${files.identity.attemptId}`;
+      try {
+        // Security: recorded output and worker events are content of the attempt — read only after its read-output decision (workers list/transcript).
+        const needsEnd = files.finished && !files.sealed && !!files.workspace;
+        if (!(await readOutput(files.identity))) { extra.set(key, { content: emptyWorkerContent('denied'), firstFailure: null, diagnostics: ['output-denied'] }); continue; }
+        const found: { content?: MonitorWorkerContent; firstFailure?: string | null; recentEvents?: readonly MonitorEvent[]; observedEndAtMs?: number | null } = { content: await readMonitorWorkerContent(artifacts, files) };
+        if (files.failed) Object.assign(found, { firstFailure: await firstFailure(artifacts, files), ...(files.events ? { recentEvents: await sealedEvents(artifacts, files) } : {}) });
+        else if (files.open && files.workspace) found.recentEvents = recent((await readWorkerEventTail(dirname(files.workspace), 'worker', MONITOR_EVENT_TAIL_BYTES))
+          .map(line => ({ atMs: line.receivedAt, event: line.event })));
+        if (needsEnd) found.observedEndAtMs = await observedEnd(config, files);
+        if (Object.keys(found).length) extra.set(key, found);
+      } catch (error) { extra.set(key, { content: emptyWorkerContent('unavailable') }); diagnostics.push(`attempt-files-unavailable:${key}:${code(error)}`); }
+    }
+    const runs = reading.runs.map(run => Object.freeze({ ...run, attempts: Object.freeze(run.attempts.map(value => {
+      const found = extra.get(`${run.snapshot.identity.scopeId}/${value.attemptId}`); return found ? Object.freeze({ ...value, ...found }) : value;
+    })) }));
+    return Object.freeze({ ...reading, runs: Object.freeze(runs), map: reading.map, diagnostics: Object.freeze(diagnostics) });
+  } };
+}
+/** Metadata only. Artifact reads are explicitly deferred until the application selects its visible worker set. */
+export async function readMonitorInstall(config: ResolvedConfig, env: Environment | undefined, readOutput: (identity: AttemptIdentity) => Promise<boolean>) {
+  return (await prepareMonitorInstall(config, env, readOutput)).reading;
 }
 
 // An exited attempt's sidecar log no longer changes: its observed end is kept once found.

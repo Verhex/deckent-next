@@ -66,7 +66,7 @@ describe('errors, output and locale public contracts', () => {
   it('writes private schema-v1 crash artifacts, redacts secrets and does not throw on fatal IO failures', async () => {
     const root = await mkdtemp(join(tmpdir(), 'deckent-crash-'));
     try {
-      const path = await writeCrashArtifact(new Error('password=sample-secret'), root, ['deckent', '--token', 'another-secret'], {});
+      const path = await writeCrashArtifact(new Error('password=sample-secret'), root, ['deckent', '--token=another-secret'], {});
       expect(path).not.toBeNull();
       const bytes = await readFile(path!, 'utf8'); expect(bytes).not.toContain('sample-secret'); expect(bytes).not.toContain('another-secret');
       expect(JSON.parse(bytes)).toMatchObject({ schemaVersion: 1, name: 'Error' });
@@ -79,8 +79,8 @@ describe('errors, output and locale public contracts', () => {
       expect((await readdir(join(root, '.deckent/crashes'))).some(name => name.endsWith('.tmp'))).toBe(false);
     } finally { await rm(root, { recursive: true, force: true }); }
   });
-  it('redacts bearer, URL passwords, argv secrets and environment assignments', () => {
-    for (const text of ['Bearer example-secret', 'https://user:example-secret@host', '--password example-secret', 'API_KEY=example-secret']) expect(redactSensitive(text)).not.toContain('example-secret');
+  it('redacts admitted bearer, URL passwords, bounded argv assignments and environment assignments', () => {
+    for (const text of ['Bearer example-secret-12345', 'https://user:example-secret@host', '--password=example-secret', 'API_KEY=example-secret']) expect(redactSensitive(text)).not.toContain('example-secret');
     expect(() => getConfigValue({}, 'constructor')).toThrow();
   });
 });

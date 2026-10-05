@@ -1,7 +1,8 @@
 import { z } from 'zod';
-import { executionProfileDefinitionSchema, immutableJsonObjectSchema, workInputSchema, type ExecutionProfileDefinition } from '#domain/index.js';
+import { executionProfileDefinitionSchema, immutableJsonObjectSchema, workInputSchema, type WorkerEffort, type ExecutionProfileDefinition } from '#domain/index.js';
 import { validateDockerTaskProfile } from '#adapters/core/docker-supervisor/index.js';
 import { compileNativeCodingDockerProfile, nativeCodingInvocationFields, NativeCodingProfileError } from './command.js';
+import { nativeCliCommand } from '#adapters/core/native-cli-registry/index.js';
 import { promptPartSchema } from './composition.js';
 
 /**
@@ -13,7 +14,7 @@ import { promptPartSchema } from './composition.js';
 export const NATIVE_CODING_TEMPLATE_ADAPTER = Object.freeze({ id: 'native-coding-template', version: 1 });
 const TEMPLATE_ARGV = '__DECKENT_TEMPLATE__';
 const templateParametersSchema = z.object({ schemaVersion: z.literal(1), docker: immutableJsonObjectSchema,
-  invocation: nativeCodingInvocationFields.omit({ schemaVersion: true, model: true, prompt: true, composition: true }).extend({
+  invocation: nativeCodingInvocationFields.omit({ schemaVersion: true, model: true, prompt: true, composition: true, effort: true }).extend({
     composition: z.object({ core: promptPartSchema.optional(), persona: promptPartSchema.optional(),
       skills: z.array(promptPartSchema).max(16).optional(), context: z.array(promptPartSchema).max(8).optional() }).strict().optional(),
   }).strict(),
@@ -40,20 +41,28 @@ export const renderWorkScope = (paths: readonly string[]) => paths.join('\n');
 
 /** Pure admission compilation of template + typed work input: invocation v4 with the exact pinned model, the work input's turn limit
  * (else the template's) and the template's prompt parts plus task/scope/acceptance. Keeps the template id/version as provenance. */
-export function compileNativeCodingWorkInput(template: ExecutionProfileDefinition, input: unknown): ExecutionProfileDefinition {
+export function compileNativeCodingWorkInput(template: ExecutionProfileDefinition, input: unknown, effort?: WorkerEffort): ExecutionProfileDefinition {
   const workInput = workInputSchema.safeParse(input);
   if (!workInput.success) throw new NativeCodingProfileError('NATIVE_CODING_INVOCATION_INVALID');
   const { docker, invocation: { composition, maxTurns, ...invocation } } = parseTemplate(template);
   const { model, task, scope, acceptance } = workInput.data; const turns = workInput.data.maxTurns ?? maxTurns;
   if (maxTurns !== undefined && turns !== undefined && turns > maxTurns) throw new NativeCodingProfileError('NATIVE_CODING_TURN_LIMIT_EXCEEDS_TEMPLATE');
   return compileNativeCodingDockerProfile(docker, { ...invocation, schemaVersion: 4, ...(turns === undefined ? {} : { maxTurns: turns }),
+    ...(workInput.data.effort === undefined ? {} : { effort: workInput.data.effort }),
     model: { channelId: model.channelId, modelId: model.modelId, auxiliaryModelIds: [...model.auxiliaryModelIds] },
-    composition: { schemaVersion: 1, ...composition, task, scope: renderWorkScope(scope.paths), acceptance } });
+    composition: { schemaVersion: 1, ...composition, task, scope: renderWorkScope(scope.paths), acceptance } }, effort);
 }
 
 /** Registry code for a refused compilation: exact-model and turn-limit refusals stay typed; anything else is an invalid profile. */
-export function nativeCodingRefusalCode(error: unknown): 'WORKER_MODEL_ALIAS_REFUSED' | 'WORK_INPUT_TURN_LIMIT_UNSUPPORTED' | 'WORK_INPUT_TURN_LIMIT_EXCEEDS_TEMPLATE' | 'EXECUTION_PROFILE_INVALID' {
+export function nativeCodingRefusalCode(error: unknown): 'WORKER_MODEL_ALIAS_REFUSED' | 'WORKER_EFFORT_UNSUPPORTED' | 'WORK_INPUT_TURN_LIMIT_UNSUPPORTED' | 'WORK_INPUT_TURN_LIMIT_EXCEEDS_TEMPLATE' | 'EXECUTION_PROFILE_INVALID' {
   if (!(error instanceof NativeCodingProfileError)) return 'EXECUTION_PROFILE_INVALID';
-  return error.code === 'WORKER_MODEL_ALIAS_REFUSED' ? error.code : error.code === 'NATIVE_CODING_TURN_LIMIT_UNSUPPORTED' ? 'WORK_INPUT_TURN_LIMIT_UNSUPPORTED'
+  return (error.code === 'WORKER_MODEL_ALIAS_REFUSED' || error.code === 'WORKER_EFFORT_UNSUPPORTED') ? error.code : error.code === 'NATIVE_CODING_TURN_LIMIT_UNSUPPORTED' ? 'WORK_INPUT_TURN_LIMIT_UNSUPPORTED'
     : error.code === 'NATIVE_CODING_TURN_LIMIT_EXCEEDS_TEMPLATE' ? 'WORK_INPUT_TURN_LIMIT_EXCEEDS_TEMPLATE' : 'EXECUTION_PROFILE_INVALID';
+}
+
+/** Adapter-owned capability lookup for template/prepared profiles; no provider-specific application logic. */
+export function nativeWorkerEffortCapability(profile: ExecutionProfileDefinition) {
+  if (isNativeCodingTemplate(profile)) return nativeCliCommand(parseTemplate(profile).invocation.provider).capabilities.reasoningEffort;
+  const binding = profile.parameters['nativeSubscription'] as { provider: string };
+  return nativeCliCommand(binding.provider).capabilities.reasoningEffort;
 }

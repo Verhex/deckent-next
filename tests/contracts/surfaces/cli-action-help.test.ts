@@ -51,3 +51,44 @@ it.each([['run', 'not-a-command'], ['task', 'not-a-command']] as const)('localiz
 it('keeps extra help flags strict', async () => {
   const f = context(); expect(await main(['run', '--help', '--json'], f.context)).toBe(2); expect(f.initialized()).toBe(1);
 });
+
+it.each(['en', 'tr'] as const)('distinguishes each qualified resume and its owning family in %s', async language => {
+  const summaries = language === 'en' ? {
+    init: 'Resume an interrupted installation', run: 'Resume a parked Run', pool: 'Allow new pool task reservations',
+  } : { init: 'Kesilen kurulumu sürdür', run: "Bekletilen Run'ı sürdür", pool: 'Havuzda yeni görev rezervasyonlarını aç' };
+  for (const family of ['init', 'run', 'pool'] as const) {
+    for (const alias of ['--help', '-h']) {
+      let stdout = '', stderr = '', initialized = 0;
+      const code = await main([family, 'resume', alias, '--lang', language], {
+        env: { TERM: 'dumb', NO_COLOR: '1' },
+        stdout: { write: text => { stdout += text; } }, stderr: { write: text => { stderr += text; } },
+        initialize: () => { initialized++; },
+        resumeInstallation: async () => { throw new Error('installation handler called'); },
+        applyRunLifecycle: async () => { throw new Error('Run handler called'); },
+        applyPoolHold: async () => { throw new Error('pool handler called'); },
+      });
+      expect(code).toBe(0); expect(stderr).toBe(''); expect(initialized).toBe(0);
+      expect(stdout.split('\n')[0]).toBe(`deckent ${family} resume`);
+      expect(stdout).toContain(summaries[family]);
+      for (const other of ['init', 'run', 'pool'] as const) if (other !== family) expect(stdout).not.toContain(summaries[other]);
+      expect(stdout).toContain(language === 'en' ? `Command family: deckent ${family} <action>` : `Komut ailesi: deckent ${family} <eylem>`);
+      expect(stdout).not.toContain(String.fromCharCode(27));
+      expect(stdout.split('\n').every(line => [...line].length <= 80)).toBe(true);
+    }
+  }
+});
+
+it.each(['en', 'tr'] as const)('keeps nested catalog help qualified and execution flags strict in %s', async language => {
+  let stdout = '', stderr = '', initialized = 0;
+  const ctx = { env: { TERM: 'dumb', NO_COLOR: '1' }, stdout: { write: (text: string) => { stdout += text; } },
+    stderr: { write: (text: string) => { stderr += text; } }, initialize: () => { initialized++; } };
+  expect(await main(['models', 'catalog', 'activate', '-h', '--lang', language], ctx)).toBe(0);
+  expect(stdout.split('\n')[0]).toBe('deckent models catalog activate');
+  expect(stdout).toContain(language === 'en' ? 'Activate a catalog channel or model' : 'Katalog kanalını veya modelini etkinleştir');
+  expect(stdout).toContain(language === 'en' ? 'Command family: deckent models catalog <action>' : 'Komut ailesi: deckent models catalog <eylem>');
+  expect(stderr).toBe(''); expect(initialized).toBe(0);
+  stdout = ''; expect(await main(['run', 'unknown-action', '-h', '--lang', language], ctx)).toBe(0);
+  expect(stdout).not.toContain('deckent run unknown-action'); expect(initialized).toBe(0);
+  stdout = ''; expect(await main(['run', 'resume', '--help', '--json', '--lang', language], ctx)).toBe(2);
+  expect(stdout).toBe(''); expect(stderr).not.toBe(''); expect(initialized).toBe(1);
+});

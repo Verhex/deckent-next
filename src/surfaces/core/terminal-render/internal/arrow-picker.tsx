@@ -8,6 +8,8 @@ import { Box, Text, useInput, useWindowSize } from 'ink';
 import { useWorklinePalette } from '#surfaces/core/terminal-kit/index.js';
 import { truncateEnd } from './text-width.js';
 import { useRenderGlyphs } from './glyphs.js';
+import { SpanText } from './lines-view.js';
+import { sliceSpans, span, type Span } from './spans.js';
 
 export const ARROW_PICKER_ROWS = 6;
 
@@ -25,6 +27,9 @@ export function movePicker(selected: number, count: number, direction: 'up' | 'd
 
 export function ArrowPicker(props: {
   readonly rows: readonly string[];
+  /** Optional already projected display spans; selection still binds the original row index. */
+  readonly styledRows?: readonly (readonly Span[])[];
+  readonly details?: readonly (string | undefined)[];
   readonly onSelect: (index: number) => void;
   readonly onCancel: () => void;
 }): ReactNode {
@@ -66,12 +71,17 @@ export function ArrowPicker(props: {
       {props.rows.slice(first, first + ARROW_PICKER_ROWS).map((row, offset) => {
         const at = first + offset;
         const marked = `${at === index ? '>' : ' '} ${row}`;
+        const fitted = truncateEnd(marked, width, glyphs.ellipsis);
+        const projected = props.styledRows?.[at];
+        const visible = fitted.endsWith(glyphs.ellipsis) && fitted !== marked ? fitted.length - glyphs.ellipsis.length : fitted.length;
         return (
           <Text key={at} wrap="truncate" {...(at === index ? palette.accent : {})}>
-            {truncateEnd(marked, width, glyphs.ellipsis)}
+            {projected ? <SpanText spans={[...sliceSpans([span(`${at === index ? '>' : ' '} `), ...projected], 0, visible),
+              ...(visible < fitted.length ? [span(glyphs.ellipsis)] : [])]} /> : fitted}
           </Text>
         );
       })}
+      {props.details?.[index] ? <Text {...palette.warning} wrap="wrap">{props.details[index]}</Text> : null}
       {props.rows.length > first + ARROW_PICKER_ROWS
         ? <Text {...palette.muted} wrap="truncate">{`  +${props.rows.length - first - ARROW_PICKER_ROWS}`}</Text> : null}
     </Box>

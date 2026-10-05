@@ -347,5 +347,7 @@
   "tui.transcript.tools_turn_summary": "{n} tools",
   "tui.transcript.user": "You",
   "tui.transcript.user_hint": "your message",
-  "tui.turn_error": "turn failed: {error}"
+  "tui.turn_error": "turn failed: {error}",
+  "terminal.safety.hiddenCount": "{count} hidden characters",
+  "terminal.safety.credentialLikeCount": "Credential-like matches: {count}"
 }

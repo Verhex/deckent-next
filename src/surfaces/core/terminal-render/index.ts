@@ -4,6 +4,8 @@ export * from './internal/assistant-view.js';
 export * from './internal/context-view.js';
 export * from './internal/glyphs.js';
 export * from './internal/highlight.js';
+export * from './internal/human-text.js';
+export * from './internal/human-text-view.js';
 export * from './internal/inline.js';
 export * from './internal/lines-view.js';
 export * from './internal/markdown.js';

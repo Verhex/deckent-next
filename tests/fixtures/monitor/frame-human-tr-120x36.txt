@@ -2,6 +2,10 @@ Deckent izleyici · gözlem 2026-10-02 09:30:00Z · yalnız gözlem
 ● current · servis çalışıyor (pid 31337) · build kaydı var (2026-10-02 08:00:00Z) · ledger sürüm 44 · ⚠ 1 uyarı · /home…
  1 Özet   2 Run'lar  [3 Worker'lar]  4 Onaylar   5 Havuzlar   6 Kurulumlar   7 Harita
 Esc: geri · ↑/↓, PgUp/PgDn: ayrıntıyı kaydır
+Beklemede (sen bekleniyor)
+sen bekleniyor · neden: onay bekliyor (appr-0001) · başlangıç: 2026-10-02 06:18:00Z · son tarih: bilinmiyor · sonraki:
+Onayları incele
+Şu an: düzenliyor · src/app.ts — apply patch
 İş: Test sonucunu açıkla (görev metni)
 Değerlendirme: ret
 Boş yama: dosya değişikliği yok
@@ -13,10 +17,6 @@ Bitiş: zaman kaydı yok
 Ne yaptı — mühürlü, redakte kesit (worker anlatımı):
 message: Dosyayı okudu; testleri çalıştırdı.
 Ayrıntı: build · deneme c76f549a-attempt · nesil 1 · taban SHA aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
-
-
-
-
 
 
 

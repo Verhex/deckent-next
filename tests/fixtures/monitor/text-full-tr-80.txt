@@ -4,7 +4,7 @@ Deckent izleyici · gözlem 2026-10-02 09:30:00Z · yalnız gözlem
 ○ remote-lab · erişilemiyor · build bilinmiyor · ledger sürümü bilinmiyor · ⚠ 2…
 
 ── Özet ────────────────────────────────────────────────────────────────────────
-Run'lar: 3 ilerliyor · 5 bekliyor · 7 takılı · 1 kabul · 2 başarısız · 1 iptal
+Run: 3 sırada · 2 çalışıyor · 2 kontrolde · 8 beklemede · 1 tamam · 3 durdu
 ⚠ current sorunları: scope-x kapsamı okunamadı (LEDGER_LOCKED)
 ⚠ dogfood sorunları: ledger sürüm 43, bu derlemeden eski: yeni alanlar boş
 görünebilir; future-code:abc; scope-dog kapsamının onayları gizli: görme izniniz
@@ -40,38 +40,115 @@ Başarısız Run'lar ve ilk hata yeri (2)
   run-broken-quiet  ✗ build: ilk hata satırı ka…  35 dk önce    scope-a  current
 
 Şu an çalışan worker'lar (2)
-  Run/Görev                   Şu an         Heartbeat yaşı       Süreç
-  run-blocked-approval/build  düzenliyor    1 sn                 çalışıyor
-  run-blocked-approval/lint   çalıştırıyor  ⚠ 1 dk 35 sn (eski)  çalışıyor
+  Run/Görev                   Durum      Heartbeat…  Süreç      Sağlayıcı/model
+  run-blocked-approval/build  Beklemede  1 sn        çalışıyor  claude/model-al…
+  Beklemede (sen bekleniyor)
+  run-blocked-approval/lint   Beklemede  ⚠ 1 dk 35…  çalışıyor  claude/model-al…
+  Beklemede (sistem bekleniyor)
 
 ── Run'lar ─────────────────────────────────────────────────────────────────────
-  Run kimliği                 Durum           Engel                   Süre
-  run-broken                  ✗ başarısız     —                       ≈ 15 dk
-  run-broken-quiet            ✗ başarısız     —                       bilinmiyor
-  run-dog-1                   ▶ ilerliyor     worker çalışıyor        sürüyor
-  run-not-admitted            ~ bekliyor      henüz kabul edilmedi    sürüyor
-  run-done                    ✓ kabul edildi  —                       1 sa 10 dk
-  run-cancellation-pending    ! takılı        iptal bekleniyor        sürüyor
-  run-unresolved-effect       ! takılı        etki sonucu belirsiz    sürüyor
-  run-evaluation-unknown      ! takılı        değerlendirme sonucu …  sürüyor
-  run-evaluation-not-ready    ! takılı        değerlendirme hazır d…  sürüyor
-  run-worker-exited-unevalu…  ! takılı        worker bitti, değerle…  sürüyor
-  run-worker-stale-heartbeat  ! takılı        worker sessiz (heartb…  sürüyor
-  run-worker-running          ▶ ilerliyor     worker çalışıyor        sürüyor
-  run-blocked-approval        ~ bekliyor      onay bekliyor (appr-0…  sürüyor
-  run-waiting-dependency      ~ bekliyor      bağımlılığını bekliyor  sürüyor
-  run-pool-held               ~ bekliyor      havuz bekletiliyor      sürüyor
-  run-waiting-pool-slot       ~ bekliyor      havuzda yer bekliyor    sürüyor
-  run-none                    ▶ ilerliyor     normal ilerliyor        sürüyor
-  run-stopped                 ■ iptal edildi  —                       bilinmiyor
-  run-unknown                 ! takılı        neden bilinmiyor        sürüyor
+  Run kimliği             Durum               Engel                   Süre
+  run-broken              Durdu               —                       ≈ 15 dk
+  run-broken-quiet        Durdu               —                       bilinmiyor
+  run-dog-1               Çalışıyor           worker çalışıyor        sürüyor
+  run-not-admitted        Beklemede (sistem…  henüz kabul edilmedi    sürüyor
+  run-done                Tamam               —                       1 sa 10 dk
+  run-cancellation-pend…  Beklemede (sistem…  iptal bekleniyor        sürüyor
+  run-unresolved-effect   Beklemede (sistem…  etki sonucu belirsiz    sürüyor
+  run-evaluation-unknown  Beklemede (sistem…  değerlendirme sonucu …  sürüyor
+  run-evaluation-not-re…  Kontrolde           değerlendirme hazır d…  sürüyor
+  run-worker-exited-une…  Kontrolde           worker bitti, değerle…  sürüyor
+  run-worker-stale-hear…  Beklemede (sistem…  worker sessiz (heartb…  sürüyor
+  run-worker-running      Çalışıyor           worker çalışıyor        sürüyor
+  run-blocked-approval    Beklemede (sen be…  onay bekliyor (appr-0…  sürüyor
+  run-waiting-dependency  Sırada              bağımlılığını bekliyor  sürüyor
+  run-pool-held           Beklemede (operat…  havuz bekletiliyor      sürüyor
+  run-waiting-pool-slot   Sırada              havuzda yer bekliyor    sürüyor
+  run-none                Sırada              normal ilerliyor        sürüyor
+  run-stopped             Durdu               —                       bilinmiyor
+  run-unknown             Beklemede (sistem…  neden bilinmiyor        sürüyor
+run-pool-held  ·  operatör bekleniyor · neden: havuz bekletiliyor · başlangıç:
+2026-10-02 09:08:34Z · son tarih: bilinmiyor · sonraki: Havuzu incele
+run-blocked-approval  ·  sen bekleniyor · neden: onay bekliyor (appr-0001) ·
+başlangıç: 2026-10-02 06:18:00Z · son tarih: bilinmiyor · sonraki: Onayları
+incele
+run-worker-stale-heartbeat  ·  sistem bekleniyor · neden: worker sessiz
+(heartbeat eski) · başlangıç: 2026-10-02 08:39:42Z · son tarih: bilinmiyor ·
+sonraki: İşçiyi incele
+run-evaluation-unknown  ·  sistem bekleniyor · neden: değerlendirme sonucu
+belirsiz · başlangıç: 2026-10-02 08:18:03Z · son tarih: bilinmiyor · sonraki:
+Run ayrıntılarını incele
+run-unresolved-effect  ·  sistem bekleniyor · neden: etki sonucu belirsiz ·
+başlangıç: 2026-10-02 08:10:50Z · son tarih: bilinmiyor · sonraki: Run
+ayrıntılarını incele
+run-cancellation-pending  ·  sistem bekleniyor · neden: iptal bekleniyor ·
+başlangıç: 2026-10-02 08:03:37Z · son tarih: bilinmiyor · sonraki: Run
+ayrıntılarını incele
+run-not-admitted  ·  sistem bekleniyor · neden: henüz kabul edilmedi ·
+başlangıç: 2026-10-02 07:56:24Z · son tarih: bilinmiyor · sonraki: Run
+ayrıntılarını incele
+run-unknown  ·  sistem bekleniyor · neden: neden bilinmiyor · başlangıç:
+bilinmiyor · son tarih: bilinmiyor · sonraki: Run ayrıntılarını incele
 
 ── Worker'lar ──────────────────────────────────────────────────────────────────
-  Run/Görev                   Şu an         Heartbeat yaşı       Süreç
-  run-blocked-approval/build  düzenliyor    1 sn                 çalışıyor
-  run-broken/build            —             —                    çıktı 1
-  run-blocked-approval/lint   çalıştırıyor  ⚠ 1 dk 35 sn (eski)  çalışıyor
-  run-blocked-approval/pack   —             bırakıldı            kayıp
+  Run/Görev                   Durum      Heartbeat…  Süreç      Sağlayıcı/model
+  run-blocked-approval/build  Beklemede  1 sn        çalışıyor  claude/model-al…
+  Beklemede (sen bekleniyor)
+  run-broken/build            Durdu      —           çıktı 1    claude/model-al…
+  run-blocked-approval/lint   Beklemede  ⚠ 1 dk 35…  çalışıyor  claude/model-al…
+  Beklemede (sistem bekleniyor)
+  run-blocked-approval/pack   Beklemede  bırakıldı   kayıp      claude/model-al…
+  Beklemede (sistem bekleniyor)
+
+Beklemede (sen bekleniyor)
+sen bekleniyor · neden: onay bekliyor (appr-0001) · başlangıç: 2026-10-02
+06:18:00Z · son tarih: bilinmiyor · sonraki: Onayları incele
+Worker run-blocked-approval/build · deneme c76f549a-attempt · nesil 1 · claude ·
+kurulum current
+Şu an: düzenliyor · src/app.ts — apply patch
+Heartbeat 1 sn · süreç çalışıyor · pid 4242 · tanıtıcı ctr-build
+    deneme c76f549a nesil 1 · başlatma launched · 09:10:00Z → sürüyor (20 dk) ·
+çıkış — · claude/model-alpha-2
+    şu an düzenliyor · heartbeat 1 sn
+    son 3 worker olayı (worker'ın bildirdiği):
+      09:28:30Z · tool.call · edit src/surfaces/core/monitor/internal/view.ts
+      09:29:30Z · tool.call · shell npm test -- monitor-surface
+      09:29:55Z · message · Applying the review fixes to the monitor view
+Şimdiye kadar: 12 tur · 12000 giriş / 3400 çıkış token · maliyet 0.4321 USD · 1
+araç hatası
+subscription kanalında model: istenen model-alpha-2 (beyan edilen yardımcılar:
+yok) → başlangıç model-alpha-2 → kullanım yok → bekliyor [canlı, henüz
+mühürlenmedi]
+Çalışma alanı /srv/deckent/workspaces/build
+
+Beklemede (sistem bekleniyor)
+sistem bekleniyor · neden: worker sessiz (heartbeat eski) · başlangıç:
+bilinmiyor · son tarih: bilinmiyor · sonraki: İşçiyi incele
+Worker run-blocked-approval/lint · deneme ed5a5613-attempt · nesil 1 · claude ·
+kurulum current
+Şu an: çalıştırıyor · src/app.ts — apply patch
+Heartbeat ⚠ 1 dk 35 sn (eski) · süreç çalışıyor · pid 4242 · tanıtıcı ctr-lint
+Şimdiye kadar: 12 tur · 12000 giriş / 3400 çıkış token · maliyet 0.4321 USD · 1
+araç hatası
+subscription kanalında model: istenen model-alpha-2 (beyan edilen yardımcılar:
+yok) → başlangıç model-alpha-2 → kullanım yok → bekliyor [canlı, henüz
+mühürlenmedi]
+Çalışma alanı /srv/deckent/workspaces/lint
+
+Beklemede (sistem bekleniyor)
+sistem bekleniyor · neden: neden bilinmiyor · başlangıç: bilinmiyor · son tarih:
+bilinmiyor · sonraki: Run ayrıntılarını incele
+Worker run-blocked-approval/pack · deneme a465c0eb-attempt · nesil 1 · claude ·
+kurulum current
+Şu an: — · —
+Heartbeat bırakıldı · süreç kayıp · pid 4242 · tanıtıcı ctr-pack
+Şimdiye kadar: 12 tur · 12000 giriş / 3400 çıkış token · maliyet 0.4321 USD · 1
+araç hatası
+subscription kanalında model: istenen model-alpha-2 (beyan edilen yardımcılar:
+yok) → başlangıç model-alpha-2 → kullanım yok → bekliyor [canlı, henüz
+mühürlenmedi]
+Çalışma alanı /srv/deckent/workspaces/pack
+Gözetim bırakıldı: konteyner ve deneme dizini kaldırıldı; yama saklandı.
 
 ── Onaylar ─────────────────────────────────────────────────────────────────────
   Konu                                    Bekliyor    Süre sonu         Güvence

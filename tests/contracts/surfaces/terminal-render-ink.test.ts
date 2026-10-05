@@ -230,3 +230,37 @@ describe("finished tool call line's tracked-file suffix", () => {
       trackedChanges: { deleted: 0, overwritten: 2 } });
   });
 });
+
+describe('S06 actual assistant unit and live-tail field projection', () => {
+  it('keeps marker/count meaning at 60/80/120 columns in both semantic palette tiers without changing source fields', async () => {
+    const source = 'Türkçe می\u200cروم 👩\u200d💻 ❤️ literal <U+202E>\n`a\u200bb` prose \u202eEND';
+    for (const tier of ['none', 'ansi16'] as const) for (const columns of [60, 80, 120]) {
+      const labelSet = { ...render_, hiddenCount: '{count} hidden characters' };
+      const unit = Object.freeze({ kind: 'text' as const, markdown: source, lead: true });
+      const final = mountElement(createElement(AssistantUnitRow, { unit, labels: labelSet }), tier, columns);
+      await until(() => final.stdout.last.includes('2 hidden characters'), 'finished unit hidden count');
+      expect(final.stdout.last).toContain('a<U+200B>b'); expect(final.stdout.last).toContain('<U+202E>END');
+      expect(final.stdout.last).toContain('می\u200cروم 👩\u200d💻 ❤️');
+      expect(unit.markdown).toBe(source);
+      const tail = Object.freeze({ markdown: source, open: null });
+      const live = mountElement(createElement(AssistantLive, { tail, narration: null, labels: labelSet, lead: true }), tier, columns);
+      await until(() => live.stdout.last.includes('2 hidden characters'), 'live unit hidden count');
+      expect(live.stdout.last).toContain('a<U+200B>b'); expect(live.stdout.last).toContain('<U+202E>END');
+      expect(tail.markdown).toBe(source);
+    }
+  });
+});
+
+
+it('S06 R2 actual AssistantUnitRow reports real fence-info FEFF at 60/80/120 columns', async () => {
+  for (const columns of [60, 80, 120]) for (const label of ['\ufeffsh', 'sh\ufeff', '\ufeff', 'sh', '<U+FEFF>', '', ' \t ']) {
+    const source = `\`\`\`${label}\necho ok\n\`\`\``;
+    const unit = Object.freeze({ kind: 'text' as const, markdown: source, lead: true });
+    const view = mountElement(createElement(AssistantUnitRow, { unit, labels: { ...render_, hiddenCount: '{count} hidden characters' } }), 'none', columns);
+    await until(() => view.stdout.last.includes('echo ok'), 'fence metadata frame');
+    if (label.includes('\ufeff')) {
+      expect(view.stdout.last).toContain('<U+FEFF>'); expect(view.stdout.last).toContain('1 hidden characters');
+    } else expect(view.stdout.last).not.toContain('hidden characters');
+    expect(view.stdout.last).not.toContain('\ufeff'); expect(unit.markdown).toBe(source);
+  }
+});

@@ -6,6 +6,8 @@ import type { ConversationSessionLabels } from '#surfaces/core/terminal/index.js
 /** Catalog strings of the rendered answer (terminal.render.*): narration, footer, tool lines, context, compaction. */
 export function terminalRenderLabels(locale: Locale): AssistantRenderLabels {
   return {
+    hiddenCount: t('terminal.safety.hiddenCount', {}, locale),
+    credentialLikeCount: t('terminal.safety.credentialLikeCount', {}, locale),
     assistant: t('terminal.workline.roleAssistant', {}, locale), thinking: t('terminal.render.thinking', {}, locale),
     toolCleanup: { 'group-ended': t('terminal.render.toolCleanup.groupEnded', {}, locale), unverified: t('terminal.render.toolCleanup.unverified', {}, locale) },
     waiting: { model: t('terminal.render.waiting.model', {}, locale), compaction: t('terminal.render.waiting.compaction', {}, locale) },
@@ -54,7 +56,7 @@ export function terminalComposerLabels(locale: Locale): ComposerLabels {
 
 /** Catalog strings of `/resume`, `/context` and `/clear` (terminal.session.*). */
 export function terminalSessionLabels(locale: Locale): ConversationSessionLabels {
-  return { entry: t('terminal.session.entry', {}, locale), none: t('terminal.session.none', {}, locale), notFound: t('terminal.session.notFound', {}, locale),
+  return { entry: t('terminal.session.entry', {}, locale), hiddenCount: t('terminal.safety.hiddenCount', {}, locale), none: t('terminal.session.none', {}, locale), notFound: t('terminal.session.notFound', {}, locale),
     unavailable: t('terminal.session.unavailable', {}, locale), saveFailed: t('terminal.session.saveFailed', {}, locale),
     exactRequired: t('terminal.session.exactRequired', {}, locale), listStale: t('terminal.session.listStale', {}, locale),
     resumed: t('terminal.session.resumed', {}, locale), started: t('terminal.session.started', {}, locale),

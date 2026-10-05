@@ -114,6 +114,7 @@ it.each(['en', 'tr'] as const)('keeps %s syntax whole and creates no short wrapp
     const sourceLines = new Set([
       ...catalog[command.detail]!.split('\n').map(line => line.replace(/ ?\[--(?:json|no-color|lang [^\]]+)\]/g, '').trim()),
       catalog[command.summary], catalog['cli.help.heading.commands'],
+      ...(command.parent ? [`deckent ${command.path.join(' ')}`, catalog[command.parent.summary]] : []),
       ...(command.children ?? []).map(child => `${child.name} ${catalog[child.summary]}`),
     ]);
     for (const line of renderCommandHelp(command, language).split('\n')) {

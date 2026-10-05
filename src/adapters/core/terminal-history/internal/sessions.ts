@@ -1,5 +1,5 @@
 import { constants } from 'node:fs';
-import { ManagedFileError } from '#platform/index.js';
+import { ManagedFileError, redactForRecord, terminalSafeText, type KnownSecretSnapshot } from '#platform/index.js';
 import { open, readdir, rename, unlink } from 'node:fs/promises';
 import { join } from 'node:path';
 import { z } from 'zod';
@@ -33,7 +33,7 @@ const redacted = (message: AgentTurnMessage): AgentTurnMessage => message.role =
  * never carry pre-compaction messages twice (legacy defect). Owner-only (0600, no-follow), known secret shapes redacted before
  * writing, bounded in count (oldest removed) and size. Snapshots are context for a later turn, never authority.
  */
-export function openTerminalSessionStore(directory: string, limits = TERMINAL_SESSION_LIMITS): TerminalSessionStore {
+export function openTerminalSessionStore(directory: string, limits = TERMINAL_SESSION_LIMITS, displaySecrets?: KnownSecretSnapshot): TerminalSessionStore {
   if (process.platform === 'win32' || !constants.O_NOFOLLOW) throw new ManagedFileError('MANAGED_FILE_UNSUPPORTED');
   const pathOf = (sessionId: string) => join(directory, `${sessionIdSchema.parse(sessionId)}.json`);
   const read = async (path: string): Promise<TerminalSessionSnapshot | null> => {
@@ -71,7 +71,7 @@ export function openTerminalSessionStore(directory: string, limits = TERMINAL_SE
       return Object.freeze((await all()).filter(snapshot => snapshot.scopeId === scopeId).map(snapshot => {
         const first = snapshot.messages.find(message => message.role === 'user');
         return Object.freeze({ sessionId: snapshot.sessionId, updatedAtMs: snapshot.updatedAtMs, messages: snapshot.messages.length,
-          preview: (first?.content ?? '').replace(/\s+/g, ' ').slice(0, limits.previewChars) });
+          preview: redactForRecord(terminalSafeText(redactForRecord(first?.content ?? '', displaySecrets)).replace(/\s+/g, ' '), displaySecrets).slice(0, limits.previewChars) });
       }));
     },
     async load(scopeId, sessionId) {

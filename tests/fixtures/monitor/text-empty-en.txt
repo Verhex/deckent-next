@@ -2,7 +2,7 @@ Deckent monitor · observed 2026-10-02 09:30:00Z · observe only
 ● current · no service record · build unknown · ledger v44 · /home/owner/projects/fresh
 
 ── Summary ─────────────────────────────────────────────────────────────────────────────────────────
-Runs: 0 progressing · 0 waiting · 0 blocked · 0 accepted · 0 failed · 0 cancelled
+Runs: 0 queued · 0 running · 0 checking · 0 on hold · 0 done · 0 stopped
 
 Waiting for you (0)
   No approval is waiting.

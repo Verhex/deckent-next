@@ -2,8 +2,9 @@ import { Box, Text } from 'ink';
 import { useWorklinePalette } from '#surfaces/core/terminal-kit/index.js';
 import type { WorkLedgerEntry } from './work-ledger.js';
 import { formatWorkerLine, type WorkerLineLabels } from './worker-line.js';
-import { AssistantUnitRow, type AssistantRenderLabels } from '#surfaces/core/terminal-render/index.js';
-
+import { AssistantUnitRow, HumanTextRow, type AssistantRenderLabels } from '#surfaces/core/terminal-render/index.js';
+import { readApprovalDecisionNotice } from './approval-decision-notice.js';
+import { ApprovalDecisionNoticeRow } from './approval-decision-view.js';
 export interface LedgerEntryLabels {
   readonly runCard: string;
   readonly workerCard: string;
@@ -13,7 +14,6 @@ export interface LedgerEntryLabels {
   readonly workerLine?: WorkerLineLabels;
   readonly render: AssistantRenderLabels;
 }
-
 export function LedgerEntryRow({ entry, labels }: { readonly entry: WorkLedgerEntry; readonly labels: LedgerEntryLabels }) {
   const ink = useWorklinePalette();
   if (entry.kind === 'chat' && entry.role === 'assistant') {
@@ -23,10 +23,12 @@ export function LedgerEntryRow({ entry, labels }: { readonly entry: WorkLedgerEn
   if (entry.kind === 'chat') {
     const palette = entry.role === 'user' ? ink.user : ink.assistant;
     const prefix = entry.role === 'user' ? labels.chatUser : labels.chatAssistant;
-    return <Text {...palette}>{prefix}: {entry.text}</Text>;
+    return <HumanTextRow text={entry.text} prefix={`${prefix}: `} style={palette} hiddenLabel={labels.render.hiddenCount} inline />;
   }
   if (entry.kind === 'notice') {
-    return <Text {...(entry.level === 'error' ? ink.error : ink.muted)}>{entry.text}</Text>;
+    const decision = readApprovalDecisionNotice(entry);
+    if (decision) return <ApprovalDecisionNoticeRow raw={decision} labels={labels.render} error={entry.level === 'error'} />;
+    return <HumanTextRow text={entry.text} style={entry.level === 'error' ? ink.error : ink.muted} hiddenLabel={labels.render.hiddenCount} />;
   }
   if (entry.kind === 'run') {
     return (

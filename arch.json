@@ -98,7 +98,8 @@
         "src/engine/core/worker-observation",
         "src/engine/core/workspace-patch",
         "src/engine/core/workspaces",
-        "src/platform/core/clock"
+        "src/platform/core/clock",
+        "src/domain/core/worker-event"
       ],
       "plan": "STORE"
     },
@@ -432,7 +433,8 @@
         "src/adapters/core/git-workspace",
         "src/engine/core/workspace-patch",
         "src/engine/core/workspaces",
-        "src/composition/core/workspace-patch"
+        "src/composition/core/workspace-patch",
+        "src/adapters/core/monitor-ledger"
       ],
       "plan": "EXECUTION"
     },
@@ -527,7 +529,8 @@
     },
     "src/domain/core/attempt": {
       "dependencies": [
-        "src/domain/core/primitives"
+        "src/domain/core/primitives",
+        "src/domain/core/provider-catalog"
       ],
       "plan": "CONTRACT"
     },
@@ -552,7 +555,8 @@
       "dependencies": [
         "src/domain/core/attempt",
         "src/domain/core/primitives",
-        "src/domain/core/task-graph"
+        "src/domain/core/task-graph",
+        "src/domain/core/provider-catalog"
       ],
       "plan": "CONTRACT"
     },
@@ -638,7 +642,11 @@
         "src/engine/core/worker-observation",
         "src/platform/core/errors",
         "src/engine/core/handoff-observation",
-        "src/engine/core/attempts"
+        "src/engine/core/attempts",
+        "src/domain/core/provider-catalog",
+        "src/domain/core/worker-event",
+        "src/engine/core/model-activation",
+        "src/platform/core/output"
       ],
       "plan": "CONTRACT"
     },
@@ -718,7 +726,8 @@
         "src/platform/core/host",
         "src/platform/core/i18n",
         "src/platform/core/output",
-        "src/platform/core/utils"
+        "src/platform/core/utils",
+        "src/platform/core/redaction"
       ],
       "plan": "FOUNDATION"
     },
@@ -742,7 +751,8 @@
     "src/platform/core/errors": {
       "dependencies": [
         "src/platform/core/common",
-        "src/platform/core/i18n"
+        "src/platform/core/i18n",
+        "src/platform/core/redaction"
       ],
       "plan": "FOUNDATION"
     },
@@ -818,7 +828,9 @@
       "dependencies": [
         "src/surfaces/core/terminal-kit",
         "src/domain/core/policy",
-        "src/platform/core/output"
+        "src/platform/core/output",
+        "src/domain/core/text",
+        "src/platform/core/redaction"
       ],
       "plan": "SURFACES"
     },
@@ -839,7 +851,8 @@
         "src/engine/core/runs",
         "src/engine/core/worker-observation",
         "src/domain/core/policy",
-        "src/platform/core/output"
+        "src/platform/core/redaction",
+        "src/surfaces/core/approval-presentation"
       ],
       "plan": "SURFACES"
     },
@@ -1580,7 +1593,8 @@
         "src/platform/core/integrity",
         "src/domain/core/effect",
         "src/engine/core/effect",
-        "src/domain/core/audit"
+        "src/domain/core/audit",
+        "src/platform/core/redaction"
       ],
       "plan": "SECURITY"
     },
@@ -1641,7 +1655,9 @@
       "dependencies": [
         "src/platform/core/managed-files",
         "src/domain/core/agent-turn",
-        "src/adapters/core/native-connection"
+        "src/adapters/core/native-connection",
+        "src/platform/core/redaction",
+        "src/platform/core/output"
       ],
       "plan": "SURFACES"
     },
@@ -1899,7 +1915,8 @@
         "src/engine/core/runs",
         "src/engine/core/handoff-observation",
         "src/platform/core/errors",
-        "src/engine/core/supervisor"
+        "src/engine/core/supervisor",
+        "src/domain/core/attempt"
       ],
       "plan": "MONITOR"
     },
@@ -1968,7 +1985,8 @@
         "src/surfaces/core/terminal-kit",
         "src/surfaces/core/terminal-render",
         "src/surfaces/core/config",
-        "src/engine/core/config"
+        "src/engine/core/config",
+        "src/engine/core/runs"
       ],
       "plan": "MONITOR"
     },
@@ -2118,6 +2136,23 @@
         "src/engine/core/dispatch"
       ],
       "plan": "AOF-HANDOFF"
+    },
+    "src/domain/core/text": {
+      "dependencies": [],
+      "plan": "CONTRACT"
+    },
+    "src/platform/core/redaction": {
+      "dependencies": [],
+      "plan": "SECRET-REDACTOR (B7)"
+    },
+    "src/surfaces/core/approval-presentation": {
+      "dependencies": [
+        "src/platform/core/redaction",
+        "src/platform/core/output",
+        "src/surfaces/core/terminal-kit",
+        "src/surfaces/core/terminal-render"
+      ],
+      "plan": "SURFACES"
     }
   },
   "composition": {

@@ -1,5 +1,6 @@
 import type { RenderGlyphs } from './glyphs.js';
 import { parseInline } from './inline.js';
+import type { HumanTextProjector } from './human-text.js';
 import { line, padSpans, span, spanCells, wrapSpans, type RenderedLine, type Span } from './spans.js';
 
 /**
@@ -31,12 +32,12 @@ function fitColumns(natural: readonly number[], available: number): number[] {
   return widths;
 }
 
-export function renderTable(rows: readonly string[], width: number, glyphs: RenderGlyphs): RenderedLine[] {
+export function renderTable(rows: readonly string[], width: number, glyphs: RenderGlyphs, project?: HumanTextProjector): RenderedLine[] {
   const header = splitRow(rows[0] ?? '');
   const aligns: Align[] = splitRow(rows[1] ?? '').map(cell => cell.endsWith(':') ? (cell.startsWith(':') ? 'center' : 'right') : 'left');
   const count = header.length;
   const body = rows.slice(2).map(splitRow).map(cellsOf => Array.from({ length: count }, (_, index) => cellsOf[index] ?? ''));
-  const parse = (text: string, bold: boolean): Span[] => parseInline(text, bold ? { bold: true } : {});
+  const parse = (text: string, bold: boolean): Span[] => parseInline(text, bold ? { bold: true } : {}, project);
   const head = header.map(text => parse(text, true));
   const grid = body.map(cellsOf => cellsOf.map(text => parse(text, false)));
   const natural = head.map((cell, index) => Math.max(1, spanCells(cell), ...grid.map(row => spanCells(row[index]!))));

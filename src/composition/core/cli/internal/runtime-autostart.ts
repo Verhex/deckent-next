@@ -1,7 +1,7 @@
 import { access } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { setTimeout as delay } from 'node:timers/promises';
-import { DeckentError, ErrorRegistry, loadConfig, prepareProductDirectory, prepareProductFile, type ConfigLoadOptions } from '#platform/index.js';
+import { DeckentError, ErrorRegistry, getConfigKnownSecrets, loadConfig, prepareProductDirectory, prepareProductFile, type ConfigLoadOptions } from '#platform/index.js';
 import { launchDetachedRuntimeService, openTerminalHistoryFile, openTerminalSessionStore, readTerminalConfig, registerProviderConfig } from '#adapters/index.js';
 import { randomUUID } from 'node:crypto';
 import { createConfiguredRuntimeClient } from '#composition/core/runtime-service/index.js';
@@ -132,5 +132,5 @@ export async function openConfiguredTerminalSessions(projectRoot: string, option
   registerProviderConfig();
   const config = await loadConfig(projectRoot, { ...options, heal: false });
   if (!readTerminalConfig(config as Record<string, unknown>).persistHistory) return null;
-  return openTerminalSessionStore(await prepareProductDirectory(config.productLayout, 'terminalSessions'));
+  return openTerminalSessionStore(await prepareProductDirectory(config.productLayout, 'terminalSessions'), undefined, getConfigKnownSecrets(config));
 }

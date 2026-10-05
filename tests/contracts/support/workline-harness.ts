@@ -23,7 +23,7 @@ export const WORKLINE_TEST_LABELS: WorklineLabels = { banner: 'BANNER', prompt: 
     tokens: '{prompt} in {completion} out', reasoningTokens: '{count} reasoning', truncated: 'TRUNCATED', cancelled: 'CANCELLED', failed: 'FAILED',
     code: 'code', moreAbove: '{count} more above', queued: '{count} queued', tool: 'TOOL {name} {target}', toolRunning: 'RUNNING {tool} {seconds}s',
     toolStatus: { error: 'TOOL-FAILED', denied: 'TOOL-DENIED', 'approval-required': 'TOOL-APPROVAL', 'invalid-arguments': 'TOOL-INVALID',
-      duplicate: 'TOOL-DUPLICATE', cancelled: 'TOOL-CANCELLED' }, context: 'CTX {approx}{percent}% of {window}', compacted: 'COMPACTED {count}' },
+      duplicate: 'TOOL-DUPLICATE', cancelled: 'TOOL-CANCELLED', 'approval-expired': 'TOOL-APPROVAL-EXPIRED' }, context: 'CTX {approx}{percent}% of {window}', compacted: 'COMPACTED {count}' },
   sessions: { entry: 'SESSION {index} {session} {count} {preview}', none: 'NO-SESSIONS', notFound: 'SESSION-NOT-FOUND', unavailable: 'NO-SESSION-PORT',
     saveFailed: 'SAVE-FAILED', resumed: 'RESUMED {count} {session}', started: 'NEW-SESSION', context: 'CTX {approx}{prompt}/{window} {percent}% {count}',
     contextNone: 'CTX-NONE {count}' },

@@ -6,9 +6,9 @@ import { DatabaseSync } from 'node:sqlite';
 import { afterEach, describe, expect, it } from 'vitest';
 import { FilePolicySource, LocalOsSessionAuthority, openSqliteApprovalStore, openSqliteAttemptStore, openSqliteAuditStore } from '#adapters/index.js';
 import { openSqliteLedger } from '#adapters/core/sqlite-ledger/index.js';
-import { getPolicyVocabulary, installationOwnerPermissions, INSTALLATION_OWNER_ROLE_ID, standingPattern, STANDING_GRANTS_MAX, type AuditEvent } from '#domain/index.js';
+import { getPolicyVocabulary, installationOwnerPermissions, INSTALLATION_OWNER_ROLE_ID, standingPattern, STANDING_GRANTS_MAX, verifiedPrincipalSchema, type AuditEvent } from '#domain/index.js';
 import { ApprovalApplication, AuditApplication, decideAgentToolCall, PersistentStanding, PolicyAdministrationApplication, SessionStanding, StandingApprovalError } from '#engine/index.js';
-import { createHmacIntegrity } from '#platform/index.js';
+import { snapshotKnownSecrets, type KnownSecretSnapshot, createHmacIntegrity } from '#platform/index.js';
 
 // PERSISTENT-APPROVALS G6: "in this project always" is the person's OWN grant written through policy.administer@1 — same approval chain,
 // delegation bound, audit and archive; no second card; a person cannot persist what they do not hold; the company's separation of duties applies.
@@ -19,7 +19,7 @@ afterEach(async () => { for (const close of closers.splice(0).reverse()) await c
 type Actor = { issuer: string; subject: string };
 const shell = (command: string) => { const result = standingPattern({ tool: 'run_shell', cell: 'shell-narrow-mutating', path: null, command }); if (!result.ok) throw new Error('pattern'); return result.pattern; };
 
-async function fixture(options: { grants?: (me: Actor) => unknown[]; bindings?: (me: Actor) => unknown[]; separation?: boolean; v1?: boolean } = {}) {
+async function fixture(options: { grants?: (me: Actor) => unknown[]; bindings?: (me: Actor) => unknown[]; separation?: boolean; v1?: boolean; knownSecrets?: KnownSecretSnapshot } = {}) {
   const root = await mkdtemp(join(tmpdir(), 'deckent-standing-')); closers.push(() => rm(root, { recursive: true, force: true }));
   const ledger = join(root, 'ledger.db'); openSqliteLedger(ledger, sqlite).close();
   const clock = { sample: () => ({ wallMs: 1_000, monotonicMs: 1_000 }) };
@@ -41,7 +41,7 @@ async function fixture(options: { grants?: (me: Actor) => unknown[]; bindings?: 
     audit: (event: AuditEvent) => { audit.record(event); } });
   const approve = (approval: { approvalId: string; revision: number }, commandId: string, reason: string) => new ApprovalApplication(journal.store, { verify: async () => principal }, sessions, source,
     integrity, clock, 'local-runtime', 10).decide({ schemaVersion: 1, scopeId: 's', approvalId: approval.approvalId, commandId, expectedRevision: approval.revision, decision: 'allow', reason });
-  const standing = new PersistentStanding({ administration, approve, policy: source });
+  const standing = new PersistentStanding({ administration, approve, policy: source, ...(options.knownSecrets ? { knownSecrets: options.knownSecrets } : {}) });
   const files = async () => JSON.parse(await readFile(policyPath, 'utf8'));
   const events = () => {
     const db = new DatabaseSync(ledger, { readOnly: true });
@@ -152,5 +152,44 @@ describe('this session\'s memory (G6)', () => {
     memory.remember(a, 'k1');
     // A restarted service is a new instance: nothing is written anywhere.
     expect(new SessionStanding().has(a, 'k1')).toBe(false);
+  });
+});
+
+describe('B7 standing refusal before persistence or policy lookup', () => {
+  it('refuses known and pattern secrets through the portable engine contract before reading policy or invoking effects', async () => {
+    const knownSecrets = snapshotKnownSecrets([{ name: 'B7_TEST', value: 'fictitious-opaque-value' }]);
+    let policyReads = 0, administrationCalls = 0, approvalCalls = 0;
+    const standing = new PersistentStanding({
+      knownSecrets,
+      policy: { async load() { policyReads++; throw new Error('secret refusal must precede policy access'); } },
+      administration: { async submit() { administrationCalls++; throw new Error('secret refusal must precede administration'); } },
+      async approve() { approvalCalls++; throw new Error('secret refusal must precede approval'); },
+    });
+    const principal = verifiedPrincipalSchema.parse({ id: 'b7-test-person', issuer: 'host', subject: 'b7-test-person', assurance: 'os-user', scopeIds: ['s'] });
+    for (const command of ['echo fictitious-opaque-value', 'echo API_KEY=fictitious', 'echo Bearer fictitious-bearer-0123456789',
+      ...[';', '$', '&', '(', ')'].map(delimiter => `printf '%s' 'https://user:fictitious${delimiter}tail@example.invalid/p'`)]) {
+      const pattern = shell(command);
+      expect(await standing.offer('s', principal, pattern)).toEqual({ available: false, reason: 'unsupported' });
+      await expect(standing.persist({ scopeId: 's', principal, pattern, sourceApprovalId: 'fixture-card' }))
+        .rejects.toMatchObject({ code: 'STANDING_UNSUPPORTED', detail: 'unsafe-target' });
+    }
+    expect({ policyReads, administrationCalls, approvalCalls }).toEqual({ policyReads: 0, administrationCalls: 0, approvalCalls: 0 });
+  });
+
+  it('refuses known and pattern secrets before any durable approval, policy or audit change on Linux', async context => {
+    if (process.platform !== 'linux') context.skip('LOCAL_OS_SESSION_PROC_IDENTITY_UNSUPPORTED: durable fixture requires Linux /proc identity');
+    const knownSecrets = snapshotKnownSecrets([{ name: 'B7_TEST', value: 'fictitious-opaque-value' }]);
+    const f = await fixture({ knownSecrets });
+    const before = JSON.stringify(await f.files()), events = f.events().length;
+    for (const command of ['echo fictitious-opaque-value', 'echo API_KEY=fictitious', 'echo Bearer fictitious-bearer-0123456789',
+      ...[';', '$', '&', '(', ')'].map(delimiter => `printf '%s' 'https://user:fictitious${delimiter}tail@example.invalid/p'`)]) {
+      const pattern = shell(command);
+      expect(await f.standing.offer('s', f.me, pattern)).toEqual({ available: false, reason: 'unsupported' });
+      await expect(f.standing.persist({ scopeId: 's', principal: f.principal, pattern, sourceApprovalId: 'fixture-card' })).rejects.toMatchObject({ code: 'STANDING_UNSUPPORTED', detail: 'unsafe-target' });
+    }
+    expect(JSON.stringify(await f.files())).toBe(before);
+    expect(f.events()).toHaveLength(events);
+    expect(await f.standing.list('s', f.me)).toEqual([]);
+    expect(await f.standing.offer('s', f.me, shell('mkdir reports'))).toEqual({ available: true });
   });
 });

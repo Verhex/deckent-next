@@ -2,7 +2,7 @@ export { registerProviderConfig, providerSpendingSchema, providerSpendingBudgetF
   openConfiguredSecretStore, readSecretsConfig, registerSecretStoreBackend, secretsConfigSchema, type SecretsConfig } from '#adapters/core/contract/index.js';
 export { openSqliteAttemptStore, openSqliteInventoryReader, inventoryReadsPerCall, upgradeExistingProductLedger, type LedgerUpgrade } from '#adapters/core/attempt-store/index.js';
 export type { SqliteAttemptStore, SqliteInventoryReader, SqliteInventoryOptions } from '#adapters/core/attempt-store/index.js';
-export { readMonitorLedger, readMonitorInstall, type MonitorLedgerOptions } from '#adapters/core/monitor-ledger/index.js';
+export { readMonitorLedger, readMonitorInstall, prepareMonitorInstall, readMonitorRunResults, type MonitorLedgerOptions } from '#adapters/core/monitor-ledger/index.js';
 export type { SqliteLedgerOptions } from '#adapters/core/sqlite-ledger/index.js';
 export { readScopeCompanies, registerLedgerScopes, type ScopeRegistration } from '#adapters/core/sqlite-ledger/index.js';
 export { DockerSupervisor, recordedDockerSupervisor, validateDockerSupervisorProfile, validateDockerTaskProfile, resolveDockerTaskProfile, DockerTaskProfileError, identifyDockerRequest, runNodeDockerCommand, DockerCommandFailure,
@@ -52,7 +52,7 @@ export type { NativeJsonHttpAuthentication } from '#adapters/core/provider-http-
 
 export { createBoundedMcpTransport, mcpToolDeliveryCapacityForProbe } from '#adapters/core/mcp-transport/index.js';
 export { compileNativeCodingDockerProfile, nativeCodingInvocationSchema, NativeCodingProfileError, assertNativeWorkerBinding,
-  NATIVE_CODING_TEMPLATE_ADAPTER, compileNativeCodingWorkInput, isNativeCodingTemplate, nativeCodingRefusalCode, nativeCodingTemplateBase } from '#adapters/core/native-coding/index.js';
+  nativeWorkerEffortCapability, bindNativeWorkerEffort, NATIVE_CODING_TEMPLATE_ADAPTER, compileNativeCodingWorkInput, isNativeCodingTemplate, nativeCodingRefusalCode, nativeCodingTemplateBase } from '#adapters/core/native-coding/index.js';
 export type { NativeCodingInvocation } from '#adapters/core/native-coding/index.js';
 export * from '#adapters/core/native-connection/index.js';
 

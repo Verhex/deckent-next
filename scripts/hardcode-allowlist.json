@@ -458,7 +458,7 @@
   {"file":"src/surfaces/core/terminal/internal/ledger-buffer.ts","fingerprint":"042ca6a8d237e8ffbb6def1747189e8da1574589915d513fd78b03a24d0f773b","rule":"G2"},
   {"file":"src/surfaces/core/terminal/internal/ledger-entry.tsx","fingerprint":"54ebca4492f70b42a16d837b35ecc5e13d18cae6123391bb6e8dc517148f5d1e","rule":"G3"},
   {"file":"src/surfaces/core/terminal/internal/status-strip.tsx","fingerprint":"38473442dab9e7b5f57d3509ba253252e9ce88bd33f92a837fc7633d5b5d1804","rule":"G2"},
-  {"file":"src/surfaces/core/terminal/internal/work-surface.tsx","fingerprint":"f1eb449614ee51ecd0b39250a2fb9f037d8a8577d7fed7f397d6a411115cee2d","rule":"G2"},
+  {"file":"src/surfaces/core/approval-presentation/internal/text.ts","fingerprint":"f1eb449614ee51ecd0b39250a2fb9f037d8a8577d7fed7f397d6a411115cee2d","rule":"G2","origin":"src/surfaces/core/terminal/internal/work-surface.tsx"},
   {"file":"src/surfaces/core/terminal/internal/worker-line.ts","fingerprint":"1b9f95700f36be23fd45ea6f7484bd8b4812c12b70b6294dbcdbeafa57dbea0e","rule":"G2"},
   {"file":"src/surfaces/core/terminal/internal/worker-watch.ts","fingerprint":"d2732bfa6892de4c5fb4eb47e1a11918ffbb3b609058818f3c39401c5034e6ff","rule":"G2"},
   {"file":"src/surfaces/core/terminal/internal/workline.tsx","fingerprint":"53ba805d7dd0b16149df4450603994a4e188705fb370e7dca211e0643dd4bf5a","rule":"G2"}

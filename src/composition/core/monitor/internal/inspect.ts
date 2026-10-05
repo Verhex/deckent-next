@@ -1,6 +1,6 @@
 import { resolve } from 'node:path';
 import { loadConfig, SystemTrustedClock, type ConfigLoadOptions } from '#platform/index.js';
-import { readMonitorInstall, registerProviderConfig } from '#adapters/index.js';
+import { prepareMonitorInstall, registerProviderConfig } from '#adapters/index.js';
 import { MonitorApplication, authorizeApproval, type MonitorSnapshot, type WorkerObservation, type WorkerObservationSource } from '#engine/index.js';
 import { inspectConfiguredWorkers } from '#composition/core/worker-observation/index.js';
 import { createConfiguredRuntimeClient } from '#composition/core/runtime-service/index.js';
@@ -15,15 +15,23 @@ export async function inspectMonitor(root: string, options: ConfigLoadOptions = 
     .map(source => ({ id: source.id, path: resolve(source.path) }))].filter((target, index, all) => all.findIndex(other => other.path === target.path) === index);
   const contexts = new Map<string, ReturnType<typeof loadConfiguredScopeContext>>(), scope = (path: string, scopeId: string) => contexts.get(`${path}\0${scopeId}`)
     ?? contexts.set(`${path}\0${scopeId}`, loadConfiguredScopeContext(path, scopeId, options, 'read')).get(`${path}\0${scopeId}`)!;
+  const captures = new Map<string, Awaited<ReturnType<typeof prepareMonitorInstall>>>();
   return new MonitorApplication({ now: () => new SystemTrustedClock().sample().wallMs,
     describeService: target => createConfiguredRuntimeClient(target.path, options).describeService(undefined, 'current'),
     readLedger: async target => {
       const installed = await loadConfig(target.path, { ...options, heal: false });
-      const reading = await readMonitorInstall(installed, options.env, identity => granted(async () => {
+      const captured = await prepareMonitorInstall(installed, options.env, identity => granted(async () => {
         const c = await scope(target.path, identity.scopeId); await contextDispatchAuthorization(c).authorizeIdentity('read-output', identity, c.principal); }));
+      const reading = captured.reading;
       const ceiling = installed.max_workers === 'auto' ? Infinity : installed.max_workers;
-      return { ...reading, pools: reading.pools.map(pool => ({ ...pool,
+      const effective = { ...reading, pools: reading.pools.map(pool => ({ ...pool,
         capacity: { executionSlots: pool.executionSlots, inFlightSlots: pool.inFlightSlots }, executionSlots: Math.min(pool.executionSlots, ceiling), inFlightSlots: Math.min(pool.inFlightSlots, ceiling) })) };
+      captures.set(target.path, { ...captured, reading: effective }); return effective;
+    },
+    readShown: async (target, identities) => {
+      const captured = captures.get(target.path)!;
+      const hydrated = await captured.readShown(identities);
+      return { ...hydrated, pools: captured.reading.pools };
     },
     async observeScope(target, scopeId) {
       const workers: WorkerObservation[] = []; let page: WorkerObservationSource | undefined; let after: string | null = null;

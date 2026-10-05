@@ -7,3 +7,5 @@ export { normalizeClaudeLine, normalizeCodexLine, createCodexState, createNative
 export type { NormalizerState } from './internal/worker.js';
 export { nativePromptArguments, nativePreflightCapabilities, nativeReportArguments } from './internal/worker.js';
 export type { NativeWorkerCapabilities } from './internal/worker.js';
+// B7 generated mirror entries, exposed for parity/custody checks; product callers use the platform producer.
+export { redactForRecord as workerRedactForRecord, redactForDecision as workerRedactForDecision, snapshotKnownSecrets as workerSnapshotKnownSecrets } from './internal/worker.js';

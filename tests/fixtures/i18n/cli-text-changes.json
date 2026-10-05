@@ -283,6 +283,10 @@
     "decision.choice": {
       "before": "Choice: {choice}; confidence {confidence}; choice threshold {threshold}.",
       "after": "Choice: {choice} · choice probability {probability} (threshold {threshold}) · confidence {confidence}"
+    },
+    "cliContract.run.opt.model_effort": {
+      "before": "Native model reasoning-effort (claude: low|medium|high|xhigh|max, codex: minimal|low|medium|high). Opt-in; unsupported or invalid levels are ignored",
+      "after": "Native reasoning effort. Explicit input wins; unsupported levels are refused against the exact model catalog and CLI capability."
     }
   },
   "tr": {
@@ -685,6 +689,10 @@
     "decision.choice": {
       "before": "Seçim: {choice}; güven {confidence}; seçim eşiği {threshold}.",
       "after": "Seçim: {choice} · seçim olasılığı {probability} (eşik {threshold}) · güven {confidence}"
+    },
+    "cliContract.run.opt.model_effort": {
+      "before": "Yerel model muhakeme-eforu (claude: low|medium|high|xhigh|max, codex: minimal|low|medium|high). Opt-in; desteklenmeyen veya geçersiz seviyeler yok sayılır",
+      "after": "Yerel muhakeme eforu. Açık istek önceliklidir; desteklenmeyen seviyeler tam model kataloğu ve CLI yeteneğine göre reddedilir."
     }
   }
 }

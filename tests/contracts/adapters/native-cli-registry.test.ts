@@ -29,7 +29,7 @@ it('uses one registry-fed accepted set on every schema and refuses unknown ids',
   expect(workerProviderSchema.safeParse('unknown-cli').success).toBe(false);
   expect(() => compileNativeCodingDockerProfile(template, invocation('unknown-cli'))).toThrow('NATIVE_CODING_INVOCATION_INVALID');
 });
-it.each(['maxTurns', 'settings', 'promptChannel', 'structuredReport', 'modelUsageEvidence'])('refuses missing capability %s without defaults', field => {
+it.each(['maxTurns', 'settings', 'promptChannel', 'structuredReport', 'modelUsageEvidence', 'reasoningEffort'])('refuses missing capability %s without defaults', field => {
   const asset = structuredClone(registry);
   delete (asset.adapters.claude.capabilities as Record<string, unknown>)[field];
   expect(() => parseNativeCliRegistry(asset)).toThrow(NativeCliRegistryError);
@@ -75,7 +75,7 @@ it('refuses evidence capability substitution at native model admission binding',
 });
 
 it('refuses a stale registry envelope before the pure vocabulary is initialized with the typed asset error', () => {
-  for (const input of [registry.adapters, { ...registry, schemaVersion: 1 }, { schemaVersion: 2, adapters: {} }]) {
+  for (const input of [registry.adapters, { ...registry, schemaVersion: 1 }, { schemaVersion: 3, adapters: {} }]) {
     expect(() => domain.nativeCliVocabulary(input)).toThrow(NativeCliRegistryError);
     expect(() => domain.nativeCliVocabulary(input)).toThrow('NATIVE_CLI_REGISTRY_INVALID');
   }

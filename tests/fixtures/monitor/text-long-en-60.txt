@@ -2,8 +2,8 @@ Deckent monitor · observed 2026-10-02 09:30:00Z · observe o…
 ● current · service running (pid 31337) · build recorded (b…
 
 ── Summary ─────────────────────────────────────────────────
-Runs: 0 progressing · 0 waiting · 1 blocked · 0 accepted · 0
-failed · 0 cancelled
+Runs: 0 queued · 0 running · 0 checking · 1 on hold · 0 done
+· 0 stopped
 
 Waiting for you (1)
   Subject                               Waiting    Expires
@@ -14,16 +14,43 @@ Stuck or waiting, oldest first (1)
   run-2026-10-02-extreme…  ! worker silent (stal…  2 d 3 h
 
 Workers running now (1)
-  Run/Task                    Doing now  Heartbeat   Process
-  run-2026-10-02-extremely-…  editing    ⚠ 1 h 0 m…  running
+  Run/Task                      State    Heartbeat   Process
+  run-2026-10-02-extremely-lo…  On hold  ⚠ 1 h 0 m…  running
+  On hold (system)
 
 ── Runs ────────────────────────────────────────────────────
-  Run                      State      Blocker
-  run-2026-10-02-extreme…  ! blocked  worker silent (stale …
+  Run                                       State
+  run-2026-10-02-extremely-long-identifie…  On hold (system)
+run-2026-10-02-extremely-long-identifier-for-a-delivery-run-
+0123456789abcdef  ·  Waiting on system · reason: worker
+silent (stale heartbeat)
+(HEARTBEAT_STALE_FOR_LONGER_THAN_ALLOWED) · since:
+2026-09-30 06:30:00Z · deadline: unknown · next: Inspect the
+worker
 
 ── Workers ─────────────────────────────────────────────────
-  Run/Task                    Doing now  Heartbeat   Process
-  run-2026-10-02-extremely-…  editing    ⚠ 1 h 0 m…  running
+  Run/Task                      State    Heartbeat   Process
+  run-2026-10-02-extremely-lo…  On hold  ⚠ 1 h 0 m…  running
+  On hold (system)
+
+On hold (system)
+Waiting on system · reason: worker silent (stale heartbeat)
+· since: unknown · deadline: unknown · next: Inspect the
+worker
+Worker
+run-2026-10-02-extremely-long-identifier-for-a-delivery-run-
+0123456789abcdef/task-with-a-long-name-0123456789 · attempt
+att-0123456789abcdef · gen 2 · claude · install current
+Doing now: editing · src/app.ts — apply patch
+Heartbeat ⚠ 1 h 0 min (stale) · process running · pid 4242 ·
+handle ctr-task-with-a-long-name-0123456789
+Usage so far: 12 turns · 12000 in / 3400 out tokens · cost
+0.4321 USD · 1 tool errors
+Model on subscription: requested model-alpha-2 (declared
+auxiliary: none) → init model-alpha-2 → usage none → pending
+[live, not sealed yet]
+Workspace
+/srv/deckent/workspaces/task-with-a-long-name-0123456789
 
 ── Approvals ───────────────────────────────────────────────
   Subject                    Waiting    Expires    Assurance

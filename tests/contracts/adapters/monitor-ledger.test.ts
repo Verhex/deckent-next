@@ -115,10 +115,72 @@ describe.skipIf(process.platform === 'win32')('monitor ledger reader', () => {
         verdict: 'verified', unexpected: [], evidence: 'sealed' } } }), '{}');
     writer.close();
     const reading = await read(f.path); const runs = Object.fromEntries(reading.runs.map(run => [run.snapshot.identity.runId, run]));
-    expect(runs.r1!.delivery).toEqual({ state: 'adopting', commit: c2 });
-    expect(runs.r3!.delivery).toEqual({ state: 'integrating', commit: null }); expect(runs.r2!.delivery).toBeNull();
+    expect(runs.r1!.delivery).toMatchObject({ state: 'adopting', commit: c2, commandId: 'a1', receipts: [{ state: 'integrated', commandId: 'i1' }, { state: 'delivered', commandId: 'd1' }, { state: 'adopting', commandId: 'a1' }] });
+    expect(runs.r3!.delivery).toMatchObject({ state: 'integrating', commit: null }); expect(runs.r2!.delivery).toBeNull();
+    const exact = await readMonitorLedger(f.path, { busyTimeoutMs: 100, maxRuns: 1, run: { scopeId: 's', runId: 'r1' } });
+    expect(exact.runs.map(run => run.snapshot.identity.runId)).toEqual(['r1']);
     expect(runs.r3!.attempts[0]).toMatchObject({ provider: 'claude', model: { usage: ['m-1'], verdict: 'verified', evidence: 'sealed' } });
     expect(runs.r1!.attempts[0]).toMatchObject({ provider: 'test-supervisor', model: null });
     expect(reading.map).toMatchObject({ models: [] });
+  });
+  it('keeps mixed delivery receipts in ledger order with exact scope/Run identity, nulls and frozen results', async () => {
+    const f = await fixture(); const g = graph(['only']);
+    await f.store.createRun({ commandId: 'create-s2-r1', actor, identity: { scopeId: 's2', runId: 'r1', layoutRevision: 'layout' },
+      graph: g, execution: fixtureExecution(g), now: 7000, policy: { schemaVersion: 2, poolId: 'p', capacity: { executionSlots: 2, inFlightSlots: 3 }, ordering: ['only'] } });
+    f.store.close(); const writer = new DatabaseSync(f.path), commit = 'c'.repeat(40);
+    const intent = (runId: string, extra: object) => JSON.stringify({ command: { identity: { runId } }, ...extra });
+    const integration = writer.prepare('INSERT INTO workspace_integrations(scope_id,command_id,intent,manifest) VALUES(?,?,?,?)');
+    integration.run('s', 'i-pending', intent('r1', {}), null); integration.run('s2', 'i-other-scope', intent('r1', {}), '{}');
+    integration.run('s', 'i-finished', intent('r1', {}), '{}'); integration.run('s', 'i-other-run', intent('r3', {}), null);
+    const delivery = writer.prepare('INSERT INTO workspace_deliveries(scope_id,command_id,intent,delivered) VALUES(?,?,?,?)');
+    delivery.run('s', 'd-pending', intent('r1', { plan: { commit: 'invalid', ref: 7 } }), 0);
+    delivery.run('s', 'd-finished', intent('r1', { plan: { commit, ref: 'refs/heads/delivery' } }), 1);
+    const adoption = writer.prepare('INSERT INTO workspace_adoptions(scope_id,command_id,target_ref,sequence,kind,intent,settled) VALUES(?,?,?,?,?,?,?)');
+    // Insertion order differs from the per-target sequence; later rollback is not delivery success.
+    adoption.run('s', 'rollback-pending', 'refs/heads/main', 4, 'rollback', intent('r1', { toCommit: null, targetRef: 'refs/heads/main' }), 0);
+    adoption.run('s2', 'adopt-other-scope', 'refs/heads/other', 3, 'adopt', intent('r1', { toCommit: commit, targetRef: 'refs/heads/other' }), 1);
+    adoption.run('s', 'rollback-finished', 'refs/heads/main', 2, 'rollback', intent('r1', { toCommit: commit }), 1);
+    adoption.run('s', 'adopt-pending', 'refs/heads/main', 1, 'adopt', intent('r1', { toCommit: commit, targetRef: 'refs/heads/main' }), 0);
+    writer.close(); const before = await files(f.path), reading = await readMonitorLedger(f.path, { busyTimeoutMs: 100, maxRuns: 10 });
+    expect((await files(f.path))[0]).toEqual(before[0]);
+    const find = (scopeId: string, runId: string) => reading.runs.find(run => run.snapshot.identity.scopeId === scopeId && run.snapshot.identity.runId === runId)!.delivery!;
+    const result = find('s', 'r1');
+    expect(result).toEqual({ state: 'rolling-back', commit: null, commandId: 'rollback-pending', targetRef: 'refs/heads/main', receipts: [
+      { state: 'integrating', commit: null, commandId: 'i-pending', targetRef: null },
+      { state: 'integrated', commit: null, commandId: 'i-finished', targetRef: null },
+      { state: 'delivering', commit: null, commandId: 'd-pending', targetRef: null },
+      { state: 'delivered', commit, commandId: 'd-finished', targetRef: 'refs/heads/delivery' },
+      { state: 'adopting', commit, commandId: 'adopt-pending', targetRef: 'refs/heads/main' },
+      { state: 'rolled-back', commit, commandId: 'rollback-finished', targetRef: null },
+      { state: 'rolling-back', commit: null, commandId: 'rollback-pending', targetRef: 'refs/heads/main' },
+    ] });
+    expect(find('s2', 'r1').receipts?.map(receipt => receipt.commandId)).toEqual(['i-other-scope', 'adopt-other-scope']);
+    expect(find('s', 'r3').receipts?.map(receipt => receipt.commandId)).toEqual(['i-other-run']);
+    expect(reading.runs.find(run => run.snapshot.identity.runId === 'r2')!.delivery).toBeNull();
+    expect(Object.isFrozen(result)).toBe(true); expect(Object.isFrozen(result.receipts)).toBe(true);
+    expect(Reflect.set(result, 'state', 'adopted')).toBe(false);
+    expect(() => Array.prototype.push.call(result.receipts, {})).toThrow(TypeError);
+    expect(find('s2', 'r1').receipts).not.toBe(result.receipts); expect(find('s', 'r3').receipts).not.toBe(result.receipts);
+  });
+  it('retains a large single-Run receipt history and isolates earlier readings from later ledger receipts', async () => {
+    const f = await fixture(); f.store.close(); const writer = new DatabaseSync(f.path), count = 4096, commit = 'd'.repeat(40);
+    const insert = writer.prepare('INSERT INTO workspace_adoptions(scope_id,command_id,target_ref,sequence,kind,intent,settled) VALUES(?,?,?,?,?,?,?)');
+    const intent = JSON.stringify({ command: { identity: { runId: 'r1' } }, toCommit: commit, targetRef: 'refs/heads/main' });
+    writer.exec('BEGIN');
+    for (let sequence = count; sequence > 0; sequence--) insert.run('s', `adopt-${sequence}`, 'refs/heads/main', sequence, 'adopt', intent, 1);
+    writer.exec('COMMIT'); writer.close();
+    const previous = (await read(f.path)).runs.find(run => run.snapshot.identity.runId === 'r1')!.delivery!;
+    expect(previous.receipts).toHaveLength(count);
+    expect(previous.receipts?.map(receipt => receipt.commandId)).toEqual(Array.from({ length: count }, (_, index) => `adopt-${index + 1}`));
+    expect(previous).toMatchObject({ state: 'adopted', commit, commandId: `adopt-${count}`, targetRef: 'refs/heads/main' });
+    expect(Object.isFrozen(previous)).toBe(true); expect(Object.isFrozen(previous.receipts)).toBe(true);
+    const later = new DatabaseSync(f.path);
+    later.prepare('INSERT INTO workspace_adoptions(scope_id,command_id,target_ref,sequence,kind,intent,settled) VALUES(?,?,?,?,?,?,?)')
+      .run('s', 'latest-rollback', 'refs/heads/main', count + 1, 'rollback', intent, 0); later.close();
+    const current = await read(f.path), result = current.runs.find(run => run.snapshot.identity.runId === 'r1')!.delivery!;
+    expect(result).toMatchObject({ state: 'rolling-back', commandId: 'latest-rollback' }); expect(result.receipts).toHaveLength(count + 1);
+    expect(result.receipts?.at(-1)).toEqual({ state: 'rolling-back', commit, commandId: 'latest-rollback', targetRef: 'refs/heads/main' });
+    expect(previous.receipts).toHaveLength(count); expect(previous.commandId).toBe(`adopt-${count}`); expect(result.receipts).not.toBe(previous.receipts);
+    expect(current.runs.filter(run => run.snapshot.identity.runId !== 'r1').every(run => run.delivery === null)).toBe(true);
   });
 });

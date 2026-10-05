@@ -1,5 +1,13 @@
+import { createHash } from 'node:crypto';
+import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { openConfiguredTerminalSessions } from '#composition/core/cli/index.js';
+import { getConfigKnownSecrets, loadConfig, prepareProductDirectory } from '#platform/index.js';
+import { bindSessionScope, type AgentChatMessage } from '#surfaces/core/terminal-kit/index.js';
+import { terminalRenderLabels, terminalSessionLabels } from '#surfaces/core/terminal-labels/index.js';
 import { afterEach, describe, expect, it } from 'vitest';
-import { mountWorkline, settle, until } from '../support/workline-harness.js';
+import { WORKLINE_TEST_LABELS, mountWorkline, settle, until } from '../support/workline-harness.js';
 import { resumedHistoryEntries, RESUME_SHOWN_MESSAGES, RESUME_USER_TEXT_CHARS } from '#surfaces/core/terminal/index.js';
 
 const user = (content: string) => ({ role: 'user' as const, content });
@@ -76,3 +84,79 @@ describe('markers shared with the engine and the mention composition', () => {
     expect(contextBreakdown([message]).attachments).toBeGreaterThan(9);
   });
 });
+
+
+it.skipIf(process.platform === 'win32').each(['ordinary', 'known-control'] as const)('S06 %s real config snapshot → full store preview/replay → selected Workline surfaces preserves loaded code units', async variant => {
+  const root = await mkdtemp(join(tmpdir(), 'dn-s06-producer-'));
+  const canary = `fictitious-s06-${variant === 'known-control' ? '\u0001' : ''}known-value-0123456789`;
+  const csiSplit = variant === 'known-control' ? canary : `${canary.slice(0, 14)}\u001b[31m${canary.slice(14)}`;
+  const controlSplit = variant === 'known-control' ? canary : `${canary.slice(0, 14)}\u0002${canary.slice(14)}`;
+  const id = 'aaaaaaaa-1111-4111-8111-111111111111';
+  const other = 'bbbbbbbb-2222-4222-8222-222222222222';
+  try {
+    await mkdir(join(root, '.deckent'));
+    await writeFile(join(root, '.deckent/config.json'), JSON.stringify({ projectName: '$DECK:S06_TEST', layout: { root: join(root, 'data') }, terminal: { persistHistory: true } }));
+    const options = { env: { HOME: root, USERPROFILE: root, XDG_CONFIG_HOME: join(root, '.config'), DECKENT_GLOBAL_HOME: join(root, 'global'), S06_TEST: canary } };
+    const store = (await openConfiguredTerminalSessions(root, options))!;
+    const config = await loadConfig(root, options);
+    const known = getConfigKnownSecrets(config);
+    expect(JSON.stringify(known)).toBe('{}');
+    const first = user(`${'x'.repeat(110)}${csiSplit} preview \u202e`);
+    const second = user(`${'x'.repeat(590)}${controlSplit} cutoff \`a\u200bb\` \u202e`);
+    const answer = assistant(`Türkçe می\u200cروم 👩\u200d💻 ❤️ <U+202E>\n\`a\u200bb\` \u202e \n\`\`\`sh\necho "tag\u{e0041}" ${canary} ${csiSplit} ${controlSplit}\n\`\`\`\n\u001b]52;c;ZmljdGl0aW91cw==\u0007DONE`);
+    const messages = [first, second, answer];
+    await store.save({ schemaVersion: 1, sessionId: other, scopeId: 'scope', updatedAtMs: 2, messages: [user('other')] });
+    await store.save({ schemaVersion: 1, sessionId: id, scopeId: 'scope', updatedAtMs: 1, messages });
+    // A historically edited snapshot supplies untrusted raw loaded units; the production save scrub is not bypassed by product code.
+    const fixtureFile = join(await prepareProductDirectory(config.productLayout, 'terminalSessions'), `${id}.json`);
+    const fixture = JSON.parse(await readFile(fixtureFile, 'utf8'));
+    fixture.messages = messages;
+    await writeFile(fixtureFile, JSON.stringify(fixture));
+    const summaries = await store.list('scope');
+    expect.soft(summaries[1]!.preview).toContain('‹secret:S0');
+    expect.soft(summaries[1]!.preview).not.toContain('fictitious');
+    const loaded = (await store.load('scope', id))!;
+    // The S06 list display seam changes no raw stored payload; this is loaded evidence, not pre-store original custody.
+    expect(loaded[0]!.content).toBe(first.content);
+    const before = loaded.map(message => createHash('sha256').update(Buffer.from(message.content, 'utf16le')).digest('hex'));
+    const bound = bindSessionScope(store, 'scope');
+    for (const locale of ['en', 'tr'] as const) {
+      await writeFile(fixtureFile, JSON.stringify(fixture));
+      const frames: string[] = [];
+      let sent: readonly { content: string }[] = [];
+      const view = mountWorkline({ knownSecrets: known, sessions: { ...bound, load: async target => target === id ? loaded : bound.load(target) },
+        labels: { ...WORKLINE_TEST_LABELS, render: { ...WORKLINE_TEST_LABELS.render, hiddenCount: terminalRenderLabels(locale).hiddenCount },
+          sessions: { ...WORKLINE_TEST_LABELS.sessions!, hiddenCount: terminalSessionLabels(locale).hiddenCount } },
+        completeTurn: async () => 'unused', streamTurn: async function* (history: readonly AgentChatMessage[]) {
+          sent = history; yield { kind: 'text' as const, text: 'fresh' }; yield { kind: 'done' as const, finish: 'stop' as const, note: null };
+        } }, 200, { onFrame: frame => frames.push(frame) });
+      views.push(view);
+      await until(() => view.stdout.text.includes('READY'), 'ready');
+      view.stdin.write('/resume\r');
+      await until(() => view.stdout.frame.includes('> SESSION 1 bbbbbbbb'), 'actual store picker');
+      await view.instance.waitUntilRenderFlush(); view.stdin.write('\u001b[B');
+      await until(() => view.stdout.frame.includes('> SESSION 2 aaaaaaaa'), 'selected exact session');
+      await view.instance.waitUntilRenderFlush(); view.stdin.write('\r');
+      await until(() => view.stdout.text.includes('DONE') && view.stdout.text.includes('tag<U+E0041>'), 'actual resumed assistant code');
+      const frame = view.stdout.frame;
+      expect(frame).toContain('a<U+200B>b');
+      expect(frame).toContain('Türkçe می\u200cروم 👩\u200d💻 ❤️');
+      expect(frame).toContain(locale === 'en' ? '3 hidden characters' : '3 gizli karakter');
+      expect.soft(frame).not.toContain(canary);
+      expect.soft(frame).not.toContain('fictitious-s06');
+      expect.soft(frame).not.toContain('known-value-0123456789');
+      expect.soft(frame).not.toContain('[31m');
+      expect(frame).not.toContain(']52;');
+      await view.instance.waitUntilRenderFlush(); view.stdin.write('next\r');
+      await until(() => sent.length > 0, 'loaded history next turn');
+      await until(() => view.stdout.frame.includes('fresh') && view.stdout.frame.includes('READY'), 'turn settled before next locale fixture');
+      expect(sent.slice(1, 4)).toEqual(loaded);
+      expect(sent[1]).toBe(loaded[0]); expect(sent[3]).toBe(loaded[2]);
+      const after = loaded.map(message => createHash('sha256').update(Buffer.from(message.content, 'utf16le')).digest('hex'));
+      expect(after).toEqual(before);
+      console.info('s06-source-surface-evidence', JSON.stringify({ locale, variant, source: 'openConfiguredTerminalSessions/loadConfig/bindSessionScope/Workline',
+        loadedUtf16Hashes: before, afterUtf16Hashes: after, projectionFrame: frame, pickerFrames: frames.filter(value => value.includes('> SESSION')).slice(-2) }));
+      view.instance.unmount();
+    }
+  } finally { await rm(root, { recursive: true, force: true }); }
+}, 30_000);

@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { ModelCatalogModelRecord } from '#domain/index.js';
+import { workerEffortSchema, type ModelCatalogModelRecord } from '#domain/index.js';
 import { compareToolchainVersions, extractToolchainVersion } from '#engine/core/toolchain-currency/index.js';
 import type { ModelCatalogReader } from './catalog.js';
 
@@ -12,7 +12,7 @@ import type { ModelCatalogReader } from './catalog.js';
  */
 export type WorkerModelAdmissionCode = 'WORKER_MODEL_UNPINNED' | 'WORKER_MODEL_ALIAS_REFUSED' | 'WORKER_CHANNEL_NOT_ACTIVE'
   | 'WORKER_CHANNEL_MISMATCH' | 'WORKER_MODEL_UNKNOWN' | 'WORKER_MODEL_RETIRED' | 'WORKER_MODEL_NOT_CURRENT' | 'WORKER_MODEL_NOT_ACTIVE'
-  | 'WORKER_MODEL_CLI_TOO_OLD' | 'WORKER_MODEL_BINDING_MISMATCH' | 'WORKER_EFFORT_UNSUPPORTED';
+  | 'WORKER_MODEL_CLI_TOO_OLD' | 'WORKER_MODEL_BINDING_MISMATCH' | 'WORKER_EFFORT_UNSUPPORTED' | 'WORK_CLASS_NOT_REGISTERED';
 export interface WorkerModelAdmissionDetail {
   readonly taskId: string; readonly channelId: string | null; readonly modelId: string | null;
   readonly exactModelId?: string; readonly minCliVersion?: string; readonly cliVersion?: string | null;
@@ -22,6 +22,7 @@ export class WorkerModelAdmissionError extends Error {
 }
 const pinned = z.object({ channelId: z.string(), modelId: z.string(), auxiliaryModelIds: z.array(z.string()).readonly() }).strict();
 const subscriptionSchema = z.object({ schemaVersion: z.number(), provider: z.enum(['claude', 'codex', 'cursor']),
+  reasoningEffort: workerEffortSchema.optional(), effortMode: z.enum(['arguments', 'model-id']).nullable().optional(),
   preflight: z.object({ cliVersion: z.string() }).passthrough().optional(), model: pinned.optional() }).passthrough();
 const taskSchema = z.object({ taskId: z.string(), profile: z.object({ parameters: z.object({ nativeSubscription: z.unknown().optional() }).passthrough() }).passthrough() }).passthrough();
 const today = (nowMs: number) => new Date(nowMs).toISOString().slice(0, 10);
@@ -56,7 +57,7 @@ export type WorkerTaskRequest = Readonly<{ id: string; workInput?: Readonly<{ mo
 
 /** Throws the first typed refusal in task order; resolves when every worker task may be admitted. Reads only, writes nothing.
  * `requests` (the Run graph tasks) add the K3 checks: a compiled pin must equal the requested one exactly, and a requested effort must be
- * one the catalog declares for the main model. The effort is recorded in the Run graph; no CLI adapter passes it yet. */
+ * one the catalog declares for the main model. The effort is recorded in the Run graph; the chosen CLI setting is frozen in the execution profile. */
 export async function admitWorkerModels(tasksInput: readonly unknown[], scopeId: string, reader: ModelCatalogReader, nowMs: number,
   requests: readonly WorkerTaskRequest[] = []): Promise<void> {
   const requested = new Map(requests.map(task => [task.id, task.workInput]));
@@ -68,13 +69,16 @@ export async function admitWorkerModels(tasksInput: readonly unknown[], scopeId:
     if (!subscription.success || !subscription.data.model) {
       throw new WorkerModelAdmissionError('WORKER_MODEL_UNPINNED', Object.freeze({ taskId: task.taskId, channelId: null, modelId: null }));
     }
-    const { provider, preflight, model } = subscription.data; const request = requested.get(task.taskId);
+    const { provider, preflight, model, reasoningEffort, effortMode } = subscription.data; const request = requested.get(task.taskId);
     const detail = Object.freeze({ taskId: task.taskId, channelId: model.channelId, modelId: model.modelId });
     if (request && JSON.stringify([request.model.channelId, request.model.modelId, request.model.auxiliaryModelIds])
       !== JSON.stringify([model.channelId, model.modelId, model.auxiliaryModelIds])) throw new WorkerModelAdmissionError('WORKER_MODEL_BINDING_MISMATCH', detail);
     for (const modelId of [model.modelId, ...model.auxiliaryModelIds]) {
       const entry = await checkModel(reader, scopeId, task.taskId, provider, preflight?.cliVersion ?? null, model.channelId, modelId, nowMs);
-      if (modelId === model.modelId && request?.effort !== undefined && !(entry.model.efforts as readonly string[]).includes(request.effort)) {
+      if (modelId === model.modelId && ((request?.effort !== undefined && (!entry.model.efforts.includes(request.effort as never)
+        || reasoningEffort?.source !== 'explicit' || reasoningEffort.level !== request.effort))
+        || (reasoningEffort?.level != null && (!entry.model.efforts.includes(reasoningEffort.level)
+          || (effortMode === 'model-id' && entry.model.effortBinding?.level !== reasoningEffort.level))))) {
         throw new WorkerModelAdmissionError('WORKER_EFFORT_UNSUPPORTED', detail);
       }
     }

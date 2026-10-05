@@ -6,3 +6,5 @@ export { deriveRunBlocker, deriveRunState, projectMonitorRun, MONITOR_BLOCKER_PR
 export type { MonitorRunEvidence } from './internal/derive.js';
 export { MonitorApplication, MONITOR_FINISHED_WORKERS } from './internal/application.js';
 export { extractFirstFailure, summarizeMonitorEvent, MONITOR_FAILURE_MAX_CHARS } from './internal/failure.js';
+export { projectHumanState } from './internal/human-state.js';
+export type { HumanState, HumanStateCode, HumanStateSubject, HumanNextAction } from './internal/human-state.js';

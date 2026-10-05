@@ -1,17 +1,22 @@
 import { t, resolveLocale, LOCALES, MESSAGE_REGISTRY, type Locale, type MessageKey } from '#platform/index.js';
 import { CLI_CATALOG, HELP_GROUPS, type CliCommandName, type CliCommandSpec } from './command-catalog.js';
 
-export interface RegisteredCliCommand<C> extends CliCommandSpec {
+interface CliHelpSpec extends CliCommandSpec {
+  readonly path?: readonly string[];
+  readonly parent?: CliHelpSpec;
+}
+export interface RegisteredCliCommand<C> extends CliHelpSpec {
   readonly path: readonly string[];
   readonly run: (argv: readonly string[], context: C) => Promise<void>;
 }
 /** Bind the one catalog to actual dispatch handlers. No second command/help inventory. */
 export function registerCliCommands<C>(handlers: Readonly<Record<CliCommandName, RegisteredCliCommand<C>['run']>>): readonly RegisteredCliCommand<C>[] {
-  const visit = (spec: CliCommandSpec, parent: readonly string[], run: RegisteredCliCommand<C>['run']): RegisteredCliCommand<C>[] => {
-    const path = [...parent, spec.name];
-    return [{ ...spec, path, run }, ...(spec.children ?? []).flatMap(child => visit(child, path, run))];
+  const visit = (spec: CliCommandSpec, parent: RegisteredCliCommand<C> | undefined, run: RegisteredCliCommand<C>['run']): RegisteredCliCommand<C>[] => {
+    const path = [...(parent?.path ?? []), spec.name];
+    const entry = { ...spec, path, run, ...(parent ? { parent } : {}) };
+    return [entry, ...(spec.children ?? []).flatMap(child => visit(child, entry, run))];
   };
-  return CLI_CATALOG.flatMap(spec => visit(spec, [], handlers[spec.name]));
+  return CLI_CATALOG.flatMap(spec => visit(spec, undefined, handlers[spec.name]));
 }
 
 /** Catalog newlines are intentional boundaries; author flowing prose as one source line.
@@ -46,9 +51,12 @@ export function renderTopHelp(locale: Locale = resolveLocale(), all = false, cat
   }), t('cli.help.common', {}, locale), t('cli.help.examples', {}, locale), t('cli.help.details', {}, locale), t('cli.help.default', {}, locale)].join('\n');
 }
 
-export function renderCommandHelp(command: CliCommandSpec, locale: Locale): string {
+export function renderCommandHelp(command: CliHelpSpec, locale: Locale): string {
   const examples = MESSAGE_REGISTRY.catalogs[locale][`${command.detail}.examples`];
-  return wrapHelp([message(command.detail, locale).replace(/ ?\[--(?:json|no-color|lang (?:en\|tr|<locale>))\]/g, '').replace(/\n +(?=\n)/g, ''), '', message(command.summary, locale),
+  const family = command.parent;
+  const overview = family ? [`deckent ${command.path!.join(' ')}`, message(command.summary, locale), '',
+    t('cli.help.familySynopsis', { command: family.path!.join(' ') }, locale), message(family.summary, locale), ''] : [];
+  return wrapHelp([...overview, message(command.detail, locale).replace(/ ?\[--(?:json|no-color|lang (?:en\|tr|<locale>))\]/g, '').replace(/\n +(?=\n)/g, ''), ...(family ? [] : ['', message(command.summary, locale)]),
     ...(command.children?.length ? [t('cli.help.heading.commands', {}, locale), ...command.children.map(child => `  ${child.name.padEnd(22)}${message(child.summary, locale)}`)] : []),
     '', t('cli.help.common', {}, locale), t('cli.help.output', {}, locale), ...(examples ? [examples] : [])].join('\n'));
 }

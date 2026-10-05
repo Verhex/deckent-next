@@ -347,5 +347,7 @@
   "tui.transcript.tools_turn_summary": "{n} araç",
   "tui.transcript.user": "Sen",
   "tui.transcript.user_hint": "mesajın",
-  "tui.turn_error": "tur başarısız: {error}"
+  "tui.turn_error": "tur başarısız: {error}",
+  "terminal.safety.hiddenCount": "{count} gizli karakter",
+  "terminal.safety.credentialLikeCount": "Kimlik bilgisi benzeri eşleşme: {count}"
 }

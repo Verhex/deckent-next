@@ -72,3 +72,6 @@ export * from '#engine/core/secret-store/index.js';
 
 export * from '#engine/core/config/index.js';
 export * from '#engine/core/decision/index.js';
+
+export { taskBriefSchema, resultBriefSchema, projectTaskBrief, projectResultBrief } from '#engine/core/runs/index.js';
+export type { TaskBrief, ResultBrief } from '#engine/core/runs/index.js';

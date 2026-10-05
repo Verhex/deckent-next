@@ -85,7 +85,7 @@ if (${JSON.stringify(mode === 'no-handoff' || mode === 'codex-handoff')}) consol
       expect(receipt).toMatchObject({ sha256: delivery.sha256, taskSha256: hash(task + '\n\n' + contextText), dependencyContextSha256: dependencyContext.sha256 });
       const final = readWorkerFinalReport(result.stdout);
       if (mode === 'valid' || mode === 'codex-handoff') {
-        expect(final).toMatchObject({ status: 'reported', report: { handoff: { summary: 'Continue [REDACTED]', artifacts: note.artifacts, openQuestions: ['[REDACTED]'] }, sharedNotes: ['[REDACTED]'] } });
+        expect(final).toMatchObject({ status: 'reported', report: { handoff: { summary: 'Continue [REDACTED]', artifacts: note.artifacts, openQuestions: ['Bearer [REDACTED]'] }, sharedNotes: ['[REDACTED]'] } });
         expect(result.stdout).not.toContain(secret); expect(result.stdout).not.toContain('abc.def.ghi');
         if (mode === 'codex-handoff' && final.status === 'reported') expect(final.report.handoff).not.toHaveProperty('toTask');
       } else if (mode === 'no-handoff') {

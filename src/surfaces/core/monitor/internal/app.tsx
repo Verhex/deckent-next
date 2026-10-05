@@ -179,8 +179,10 @@ export function MonitorApp(props: MonitorAppProps) {
   else if (detail !== null) body = detailBody(detailRow, width, detailOffset, bodyHeight, locale);
   else {
     const at = Math.max(0, flat.findIndex(line => line.item === selected));
+    // Keep the selected row's wrapped essential context above the reserved final overflow-indicator line.
+    const focusEnd = at + wrapDetail(flat[at]?.row?.context ?? [], Math.max(1, width - 2)).length;
     const max = Math.max(0, flat.length - bodyHeight);
-    const offset = Math.min(max, at < bodyHeight - 1 ? 0 : at - bodyHeight + 2);
+    const offset = Math.min(max, focusEnd < bodyHeight - 1 ? 0 : focusEnd - bodyHeight + 2);
     const windowed = flat.slice(offset, offset + bodyHeight);
     const below = flat.length - offset - windowed.length;
     // The two-cell row prefix becomes pointer + change mark (`›+`, `›*`, `› `): selection never hides a new/changed mark.

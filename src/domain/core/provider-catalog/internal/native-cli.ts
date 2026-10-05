@@ -11,7 +11,7 @@ export class NativeCliRegistryError extends Error {
   readonly code = 'NATIVE_CLI_REGISTRY_INVALID';
   constructor() { super('NATIVE_CLI_REGISTRY_INVALID'); this.name = 'NativeCliRegistryError'; }
 }
-const vocabularyEnvelope = z.object({ schemaVersion: z.literal(2), adapters: z.record(z.string().regex(/^[a-z][a-z0-9-]*$/), z.unknown())
+const vocabularyEnvelope = z.object({ schemaVersion: z.literal(3), adapters: z.record(z.string().regex(/^[a-z][a-z0-9-]*$/), z.unknown())
   .refine(value => Object.keys(value).length > 0) }).strict();
 export function nativeCliVocabulary(input: unknown): readonly string[] {
   const parsed = vocabularyEnvelope.safeParse(input);

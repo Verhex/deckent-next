@@ -6,7 +6,8 @@ import { StatusStrip } from './status-strip.js';
 import { AssistantLive, openAssistantStream, renderAssistantStream, renderCompleteReply, type AssistantStreamStep } from '#surfaces/core/terminal-render/index.js';
 import type { WorklineStreamTurn } from '#surfaces/core/terminal-kit/index.js';
 import type { AssistantRenderLabels } from '#surfaces/core/terminal-render/index.js';
-import { RenderGlyphsContext, resolveRenderGlyphs } from '#surfaces/core/terminal-render/index.js';
+import { HumanTextContext, humanRecordText, RenderGlyphsContext, resolveRenderGlyphs } from '#surfaces/core/terminal-render/index.js';
+import type { KnownSecretSnapshot } from '#platform/index.js';
 import { assistantLedgerEntries, streamStepEntries } from './ledger-units.js';
 import { parseSlashLine } from '#surfaces/core/terminal-kit/index.js';
 import type { WorkLedgerEntry } from './work-ledger.js';
@@ -88,6 +89,8 @@ export interface WorklineProps {
   readonly mentionDelayMs?: number;
   /** Conversation snapshots of this scope for `/resume` (T-L5c). */
   readonly sessions?: ConversationSessionPort;
+  /** Opaque provenance of the config already resolved for this operation; display only. */
+  readonly knownSecrets?: KnownSecretSnapshot;
   /** The person's permission mode through the runtime service (status row segment and `/mode`, T-L4 slice 4c). */
   readonly permissionMode?: WorklinePermissionModePort;
   /** MODES-3: the session was launched in full access (the launch checked the company grant); every turn says so until `/mode` tightens it. */
@@ -131,7 +134,7 @@ export function WorklineApp(props: WorklineProps) {
   const [watch, setWatch] = useState<WatchState>({ workers: false, runs: false });
   const watchRef = useRef(watch);
   const history = useRef<readonly AgentChatMessage[]>([{ role: 'system', content: systemPrompt }]);
-  const session = useConversationSession(props.sessions, labels.sessions);
+  const session = useConversationSession(props.sessions, labels.sessions, props.knownSecrets);
   const resumeGate = useRef<((choice: number | null) => void) | null>(null);
   const [resumePicker, setResumePicker] = useState<readonly ResumePickerItem[] | null>(null);
   const turn = useRef<AbortController | null>(null);
@@ -258,7 +261,7 @@ export function WorklineApp(props: WorklineProps) {
         history.current = boundAgentHistory(messages[0]!, [...messages, { role: 'assistant', content: reply, toolCalls: [] }], historyMessages);
         push(await session.save(history.current));
         // Render seam (P3): the complete reply is one turn of text deltas + `done`, printed as finished markdown units.
-        push(assistantLedgerEntries(renderCompleteReply(reply, startedAtMs, Date.now())));
+        push(assistantLedgerEntries(renderCompleteReply(humanRecordText(reply, props.knownSecrets), startedAtMs, Date.now())));
       }
     } catch (error) {
       history.current = messages;
@@ -360,6 +363,7 @@ export function WorklineApp(props: WorklineProps) {
     resolve?.(choice);
   };
   return (
+    <HumanTextContext.Provider value={props.knownSecrets}>
     <Box flexDirection="column">
       <Static key={buffer.epoch} items={[...buffer.pending]}>
         {row => <LedgerEntryRow key={row.seq} entry={row.entry} labels={ledgerLabels} />}
@@ -368,7 +372,8 @@ export function WorklineApp(props: WorklineProps) {
         waiting={live.step.waiting} reasoningPreview={reasoning.show ? live.step.reasoningPreview : []} /> : null}
       {work.region}
       {resumePicker && !work.modalOpen && !work.pickerOpen
-        ? <ArrowPicker rows={resumePicker.map(item => item.label)} onSelect={finishResume} onCancel={() => finishResume(null)} /> : null}
+        ? <ArrowPicker rows={resumePicker.map(item => item.label)} styledRows={resumePicker.map(item => item.spans ?? [])}
+          details={resumePicker.map(item => item.hiddenNotice)} onSelect={finishResume} onCancel={() => finishResume(null)} /> : null}
       <Text {...palette.accent}>{labels.banner}</Text>
       <StatusStrip target={target} state={cancelling ? labels.statusCancelling : busy && !choosing ? labels.statusBusy : labels.statusReady} busy={busy && !choosing}
         queued={queue.current.length} labels={{ ...labels.render, selfSourceFloor: labels.selfSourceFloor }} mode={mode.mode} selfSource={props.selfSource} cancellable={turnRunning && !cancelling} />
@@ -380,6 +385,7 @@ export function WorklineApp(props: WorklineProps) {
         {...(props.mentionDelayMs === undefined ? {} : { mentionDelayMs: props.mentionDelayMs })} />
       <Text {...palette.muted}>{labels.hint}</Text>
     </Box>
+    </HumanTextContext.Provider>
   );
 }
 
