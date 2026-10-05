@@ -15,11 +15,12 @@ Bu dosya yalnız **devam eden işi** taşır: kısa durum, tek iş tablosu, aç�
 | İş | Hedef | Durum | Sıradaki adım | Kanıt |
 |---|---|---|---|---|
 | İLK-20 DALGA 1 | Dogfood engelini kaldır + katman kaymasını durdur (#2–#6 + VERIFY-ENV) | lane'ler `wave/1`'de; Astra parti incelemesi | Astra parti incelemesi → PR → alpha.7 | `proof/W1-*-2026-10-06/`; [work-list](.deckent/docs/plan/work-list.md) |
+| IDENTITY-BINDING-V2 | Makine kimliği yokken taşınma koruması: yapılandırılabilir kaynak → /etc/machine-id → zayıf yol+cihaz+inode bağı; `installation.requireMachineBinding` (owner 2026-10-06) | Karar verildi | Dalga 2 Opus kartı (sürümlü bağ + v1 göçü) | [owner-decisions](.deckent/docs/decisions/owner-decisions.md) |
 | IDENTITY-PROFILES | Solo/ekip/enterprise/özel sürümlü kimlik profilleri (I0–I5), K1–K3 = A | I0 main'de; I1 `a1abf235` rebase bekliyor | I1 rebase + inceleme, sonra I2 | `proof/IDENTITY-PROFILES-DESIGN-2026-10-05/design.md` |
 | MODEL-INGRESS-UNICODE | Gizli Unicode: not/audit/karantina | P1 main'de; P2 `de286888` rebase | P2 inceleme; P3 araç/MCP şema + argüman JSON | [work-list](.deckent/docs/plan/work-list.md) |
 | FLAKY-RECOVERY | Installed offline completion/cancellation | Kaynak indi | Gerçek Docker ile doğrulama | [work-list](.deckent/docs/plan/work-list.md) |
 | CI-DEBT | Kalan CI hataları tek iş (ubuntu-only ruleset owner komutu) | Owner'ın ayrı Codex ajanı | Ajan STATUS çıktısını izle | `proof/CI-DEBT-2026-10-05/STATUS.md` |
-| QWEN–JEV gölge | Idle-only base-Qwen ile Jev karşılaştırması | 12 vaka kaydı (10–11 geçersiz giriş; 03–09 Qwen GPU meşgul → unknown/busy) | Kalan 18 vaka; temiz 384/48/48 baş eğitimi | [qwen-host-pilot](.deckent/docs/plan/qwen-host-pilot.md) |
+| QWEN–JEV gölge | Idle-only base-Qwen ile Jev karşılaştırması | Owner 2026-10-06 iptal etti; `shadow.sh` yalnız Jev (12 vaka geçmiş kayıt) | Kalan 18 vaka; temiz 384/48/48 baş eğitimi | [qwen-host-pilot](.deckent/docs/plan/qwen-host-pilot.md) |
 | QWEN-DEV-DECISION / HEAD-QUALITY | Host pilotu: CLI + loopback API, v4 veri | CLI/API indi (PR #11); eğitim ölçümü yok | 275/32/32 → 384/48/48 sürücü uyarlaması | [host pilot](.deckent/docs/architecture/modules/host-qwen-decision-pilot.md) |
 | NODE-26 | Node 26 geçişi | Hedef LTS 2026-10-28 | O tarihte tam verify | owner-decisions |
 | NATIVE-AGENTS | Owner öncelik #4 OpenCode, #5 Copilot CLI, #6 Kimi Code CLI, #7 Antigravity/Gemini | Hazırlanmadı | `commands.json` kayıtları + credential spec + imaj + usage kanıtı; Devin = ayrı remote-worker adaptörü | [hedefler](.deckent/docs/plan/owner-targets-2026-10-05.md) |

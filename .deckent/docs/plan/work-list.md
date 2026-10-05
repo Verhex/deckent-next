@@ -88,3 +88,7 @@ PLAN "Aktif iş alanları" satırının önceki hâli:
 - K-LATENCY-METRICS: teslim edildi (`tests/perf` kapısı, 3 yol, p95 ≤ 500 ms); sonraki: CI'ya ayrı perf job/script (owner kararı).
 - MCP-KAYIT-DENETİMİ (#5) ve SANDBOX-AD-SIZINTISI (#6): tamam (`lane/w1-mcp-sandbox`); açık sınır: karma dizinlerde ürün dosyası adları listelenir.
 - VERIFY-ENV: tamam (machine-id yeteneği + doctor çıktısı, noexec not-run).
+
+### PLAN.md QWEN–JEV satırı — iptal öncesi (2026-10-06)
+
+| QWEN–JEV gölge | Idle-only base-Qwen ile Jev karşılaştırması | 12 vaka kaydı (10–11 geçersiz giriş; 03–09 Qwen GPU meşgul → unknown/busy) | Kalan 18 vaka; temiz 384/48/48 baş eğitimi | [qwen-host-pilot](.deckent/docs/plan/qwen-host-pilot.md) |
