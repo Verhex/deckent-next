@@ -42,6 +42,10 @@
     }
   },
   "installation": {
+    "identityProbe": {
+      "outputBytes": 65536,
+      "timeoutMs": 2000
+    },
     "imageProbe": {
       "outputBytes": 65536,
       "timeoutMs": 5000

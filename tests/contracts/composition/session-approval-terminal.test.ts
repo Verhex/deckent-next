@@ -2,7 +2,7 @@ import { hostname, tmpdir, userInfo } from 'node:os';
 import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
-import { afterEach, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import * as adapters from '#adapters/index.js';
 import * as modelInvocation from '#composition/core/model-invocation/index.js';
 import * as catalog from '#composition/core/provider-catalog/index.js';
@@ -19,12 +19,27 @@ import { agentTurnStreamEventSchema, type AgentTurnStreamEvent } from '#domain/i
 import { mountWorkline, settle, until, WORKLINE_TEST_LABELS } from '../support/workline-harness.js';
 
 const cleanups: Array<() => Promise<void>> = [];
+beforeEach(async context => {
+  if (process.platform === 'linux') return;
+  if (process.platform !== 'win32') {
+    await expect(adapters.LocalOsSessionAuthority.create(['scope'], 60000, { sample: () => ({ wallMs: Date.now(), monotonicMs: 0 }) }))
+      .rejects.toMatchObject({ code: 'SESSION_REQUIRED' });
+    context.skip('SESSION_REQUIRED: real session approval requires Linux process-liveness evidence; no macOS OS-session authority is implemented');
+  }
+  const root = await mkdtemp(join(tmpdir(), 's02-capability-'));
+  try {
+    const home = join(root, 'home');
+    await expect(openConfiguredAttemptStore(root, { env: { HOME: home, USERPROFILE: home } }))
+      .rejects.toMatchObject({ code: 'MANAGED_FILE_UNSUPPORTED' });
+    context.skip('MANAGED_FILE_UNSUPPORTED: real session approval effects require POSIX managed ledger and OS peer identity');
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
 afterEach(async () => { for (const cleanup of cleanups.splice(0)) await cleanup(); vi.restoreAllMocks(); clearConfigCache(); });
 async function fixture(locale: Locale, settings: { fullAccess?: boolean; path?: string; companyAsk?: boolean } = {}) {
   const root = await mkdtemp(join(tmpdir(), 's02-terminal-')), project = join(root, 'project'), data = join(root, 'data');
   await mkdir(join(project, '.deckent'), { recursive: true }); await mkdir(join(project, 'src'));
   const reference = { providerId: 'fixture', providerVersion: 1, modelId: 'chat', modelVersion: 1 };
-  const env = { HOME: join(root, 'home'), PATH: process.env.PATH ?? '/usr/bin:/bin' };
+  const env = { HOME: join(root, 'home'), USERPROFILE: join(root, 'home'), PATH: process.env.PATH ?? '/usr/bin:/bin' };
   await writeFile(join(project, '.deckent/config.json'), JSON.stringify({ layout: { root: data }, language: locale,
     terminal: { chat: { schemaVersion: 1, reference, maxCompletionTokens: 128 }, shell: { schemaVersion: 1, realm: 'host' } } }));
   adapters.registerProviderConfig();

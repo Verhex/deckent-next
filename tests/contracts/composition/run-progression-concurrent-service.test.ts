@@ -7,6 +7,7 @@ import { readLocalOsIdentity } from '#adapters/index.js';
 import { clearConfigCache, productResourcePath } from '#platform/index.js';
 import { startConfiguredRuntimeService, createConfiguredRuntimeClient } from '#composition/core/runtime-service/index.js';
 import { openConfiguredAttemptStore } from '#composition/core/storage/index.js';
+import { ensureConfiguredTerminalIdentity } from '#composition/core/scoped-request/index.js';
 import * as execution from '#composition/core/execution/index.js';
 import { RuntimeServiceLifecycle } from '#engine/index.js';
 import { prepareConfiguredRunRuntime, type RunProgressionObserver } from '#composition/core/run-progression/index.js';
@@ -40,6 +41,7 @@ async function fixture(maxConcurrentExecutions: number) {
     { id: 'pool', effect: 'allow', actions: ['use'], scopes: ['s'], principals, resource: { kind: 'pool', ids: ['p'] } },
     { id: 'stop', effect: 'allow', actions: ['shutdown'], scopes: ['s'], principals, resource: { kind: 'service', ids: ['runtime'] } },
   ] }), { mode: 0o600 });
+  await ensureConfiguredTerminalIdentity(project, 's', { env });
   const graph = { schemaVersion: 2 as const, revision: 1, tasks: [{ id: 't', kind: 'fixture', dependencies: [], acceptanceCriteria: ['verified'] }],
     criterionDefinitions: [{ id: 'verified', version: 1, description: 'fixture', evaluator: { id: 'test', version: 1 }, parameters: {} }] };
   const capacity = { executionSlots: 2, inFlightSlots: 2 };
@@ -108,7 +110,7 @@ it.for([1, 2])('configured driver shares execution cap=%s and drains both reserv
     await expect(fixture(cap)).rejects.toMatchObject({ code: 'MANAGED_FILE_UNSUPPORTED' });
     context.skip('MANAGED_FILE_UNSUPPORTED: configured ledger custody requires POSIX ownership and permissions');
   }
-  const f = await fixture(cap), gates = [deferred(), deferred()], first = deferred(), second = deferred(), controller = new AbortController();
+  const f = await fixture(cap), gates = [deferred(), deferred()], first = deferred(), second = deferred(), firstObserved = deferred(), controller = new AbortController();
   const starts: string[] = [], observed = new Map<string, Parameters<NonNullable<RunProgressionObserver['onRun']>>[1]>(), errors: string[] = [];
   vi.spyOn(execution, 'executeConfiguredTask').mockImplementation(async (_project, identity) => {
     const index = starts.length; starts.push(identity.runId); (index === 0 ? first : second).resolve();
@@ -123,7 +125,7 @@ it.for([1, 2])('configured driver shares execution cap=%s and drains both reserv
     await new Promise<void>(done => { const timer = setTimeout(done, milliseconds); signal.addEventListener('abort', () => { clearTimeout(timer); done(); }, { once: true }); });
   } });
   const loop = await prepareConfiguredRunRuntime(f.project, {
-    onRun(query, result) { observed.set(query.runId, result); }, onError(_query, error) { errors.push(error.code); },
+    onRun(query, result) { observed.set(query.runId, result); if (query.runId === starts[0]) firstObserved.resolve(); }, onError(_query, error) { errors.push(error.code); },
   }, (operation, onSlotWait) => lifecycle.admitExecution(operation, onSlotWait), { env: f.env });
   work = loop.run(controller.signal);
   try {
@@ -137,7 +139,8 @@ it.for([1, 2])('configured driver shares execution cap=%s and drains both reserv
     if (cap === 1) { gates[0]!.resolve(); await bounded(second.promise); }
     const stopping = lifecycle.stop(2000); let settled = false; void stopping.then(() => { settled = true; });
     if (cap === 2) gates[0]!.resolve();
-    await new Promise(resolve => setTimeout(resolve, 25)); expect(settled).toBe(false);
+    // Releasing an execution slot does not order the Run's later publication. Observe it before releasing the second execution.
+    await bounded(firstObserved.promise); expect([...observed.keys()]).toEqual([starts[0]!]); expect(settled).toBe(false);
     gates[1]!.resolve(); await expect(bounded(stopping)).resolves.toMatchObject({ state: 'clean', remainingRequests: 0, recoveryPending: false });
     await work; expect([...starts].sort()).toEqual(['a', 'b']); expect(errors).toEqual([]); expect([...observed.keys()]).toEqual(starts);
     expect(observed.get(starts[0]!)).not.toHaveProperty('waitedForSlotMs');

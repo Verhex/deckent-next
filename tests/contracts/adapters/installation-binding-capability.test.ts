@@ -28,8 +28,10 @@ afterEach(async () => {
 });
 async function fixture(platform: NodeJS.Platform) {
   const root = await mkdtemp(join(tmpdir(), 'deckent-binding-capability-')); roots.push(root);
+  // Paths belong to the real filesystem; only the machine capability is simulated.
+  const layout = resolveProductLayout({ projectRoot: root, platform: nativePlatform === 'win32' ? 'win32' : 'posix' });
   Object.defineProperty(process, 'platform', { value: platform });
-  return { root, layout: resolveProductLayout({ projectRoot: root }), path: join(root, '.deckent/installation-identity/identity.json') };
+  return { root, layout, path: join(root, '.deckent/installation-identity/identity.json') };
 }
 
 it.skipIf(process.platform === 'win32')('uses bounded macOS IOPlatformUUID capture and never persists raw machine identity (simulated host)', async () => {

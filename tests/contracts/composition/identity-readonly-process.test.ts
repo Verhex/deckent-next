@@ -78,12 +78,17 @@ it('compiled MCP startup and read tool over POSIX stdio leave identity and proje
   const f = await fixture(), before = await snapshot(f.project, f.home), fifo = join(f.root, 'input.fifo');
   // FIFO input and regular-file output exercise actual stdio without the sandbox's socketpair-backed child pipes.
   execFileSync('/usr/bin/mkfifo', [fifo], { stdio: 'ignore' });
-  const writer = await open(fifo, 'r+'), input = await open(fifo, 'r'), outputPath = join(f.root, 'mcp-output');
+  // O_RDWR on a FIFO is not defined by POSIX. Separate ends give macOS and Linux the same EOF contract.
+  const [input, writer] = await Promise.all([open(fifo, 'r'), open(fifo, 'w')]);
+  const outputPath = join(f.root, 'mcp-output');
   const output = await open(outputPath, 'w'), errors = await open(join(f.root, 'mcp-errors'), 'w');
   const child = spawn(process.execPath, [mcp, '--project', f.project], { cwd: f.project,
     env: { HOME: f.home, USERPROFILE: f.home, DECKENT_GLOBAL_HOME: join(f.home, 'global'), PATH: process.env.PATH ?? '' },
     stdio: [input.fd, output.fd, errors.fd] });
-  const closed = new Promise<number | null>((accept, reject) => { child.once('close', accept); child.once('error', reject); });
+  const closed = new Promise<{ code: number | null; signal: NodeJS.Signals | null }>((accept, reject) => {
+    child.once('close', (code, signal) => accept({ code, signal })); child.once('error', reject);
+  });
+  await input.close();
   const timer = setTimeout(() => child.kill(), 10_000);
   const readResponse = async (id: number) => {
     const deadline = Date.now() + 8000;
@@ -104,7 +109,7 @@ it('compiled MCP startup and read tool over POSIX stdio leave identity and proje
     const response = await readResponse(2);
     expect(response.result).toMatchObject({ structuredContent: { status: 'not-configured' } });
     expect(response.result.isError).not.toBe(true);
-    await writer.close(); expect(await closed).toBe(0);
+    await writer.close(); expect(await closed).toEqual({ code: 0, signal: null });
     expect(await snapshot(f.project, f.home)).toEqual(before);
   } finally {
     clearTimeout(timer); child.kill(); await closed;

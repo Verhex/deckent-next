@@ -65,7 +65,7 @@ export async function main(argv: readonly string[] = process.argv.slice(2), cont
     context.initialize?.();
     const interactive = (argv.length === 0 && interactiveTerminal(context)) || (argv.length === 1 && argv[0] === '--full-access');
     if (context.loadInstallationIdentity && (interactive || CLI_COMMANDS.some(item => item.name === argv[0]))
-      && !(argv[0] === 'init' && argv[1] === 'identity')) {
+      && argv[0] !== 'config' && !(argv[0] === 'init' && argv[1] === 'identity')) {
       locale = resolveLocale(argv.includes('--lang') ? argv[argv.indexOf('--lang') + 1] : undefined, context.env,
         await loadConfigLanguage(context.root, { ...(context.env ? { env: context.env } : {}) }));
       await context.loadInstallationIdentity(context.root ?? process.cwd(), { ...(context.env ? { env: context.env } : {}), globalOnly: argv.includes('--global') });

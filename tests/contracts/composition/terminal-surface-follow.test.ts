@@ -7,6 +7,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { createConfiguredRuntimeClient } from '../../../src/index.js';
 import { followLedgerSurface } from '../../../src/composition/core/monitor/index.js';
 import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
+import { ensureConfiguredTerminalIdentity } from '#composition/core/scoped-request/index.js';
 import { createWorklineLedgerPorts } from '#surfaces/core/cli/index.js';
 import { acceptSurfaceEvent, openSurfacePush, releaseSurfacePush, type SurfacePushEvent } from '#surfaces/core/terminal-kit/index.js';
 import { clearConfigCache, productResourcePath, t } from '#platform/index.js';
@@ -87,6 +88,7 @@ it('binds the production follow to the ledger publications and skips another sco
 
 it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket] the production follow sees a run the runtime service committed', async () => {
   const f = await project();
+  await ensureConfiguredTerminalIdentity(f.folder, 's', { env: f.env });
   const service = await startTestRuntimeService(f.folder, f.env);
   const client = createConfiguredRuntimeClient(f.folder, { env: f.env });
   const live = await openedFollow(f.folder, f.env);
@@ -101,6 +103,7 @@ it.skipIf(process.platform !== 'linux' || !process.env['S18B_LATENCY_OUTPUT'])('
   const output = process.env['S18B_LATENCY_OUTPUT'];
   if (!output) return;
   const f = await project();
+  await ensureConfiguredTerminalIdentity(f.folder, 's', { env: f.env });
   const service = await startTestRuntimeService(f.folder, f.env);
   const client = createConfiguredRuntimeClient(f.folder, { env: f.env });
   const live = await openedFollow(f.folder, f.env);
