@@ -1286,5 +1286,7 @@
   "terminal.slash.approvalsArgument": "[numara|kimlik|clear-session]",
   "terminal.approval.standing.unconfirmedSession": "Onay {id}: oturum izni doğrulanamadı ({reason}).",
   "terminal.approval.sessionCleared": "{session} konuşmasının hatırlanan izinleri temizlendi; mevcut tek seferlik kararlar değişmedi.",
-  "terminal.approval.sessionClearUnconfirmed": "{session} konuşmasının hatırlanan izinlerinin temizlendiği doğrulanamadı."
+  "terminal.approval.sessionClearUnconfirmed": "{session} konuşmasının hatırlanan izinlerinin temizlendiği doğrulanamadı.",
+  "terminal.identity.notCreated": "kullanılamıyor (henüz oluşturulmadı)",
+  "terminal.identity.unsupported": "kullanılamıyor (yetenek desteklenmiyor)"
 }

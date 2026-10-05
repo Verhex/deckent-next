@@ -1286,5 +1286,7 @@
   "terminal.slash.approvalsArgument": "[number|id|clear-session]",
   "terminal.approval.standing.unconfirmedSession": "Approval {id}: session permission could not be confirmed ({reason}).",
   "terminal.approval.sessionCleared": "Remembered permissions for conversation {session} cleared; existing once decisions unchanged.",
-  "terminal.approval.sessionClearUnconfirmed": "Could not confirm clearing remembered permissions for conversation {session}."
+  "terminal.approval.sessionClearUnconfirmed": "Could not confirm clearing remembered permissions for conversation {session}.",
+  "terminal.identity.notCreated": "unavailable (not yet created)",
+  "terminal.identity.unsupported": "unavailable (unsupported capability)"
 }

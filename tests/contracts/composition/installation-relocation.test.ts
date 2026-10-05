@@ -2,7 +2,7 @@ import { cp, mkdtemp, mkdir, readFile, rm, stat, writeFile } from 'node:fs/promi
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { readLocalOsIdentity, readScopeCompanies } from '#adapters/index.js';
+import { FileInstallationIdentityStore, FileProjectIdentityStore, readLocalOsIdentity, readScopeCompanies } from '#adapters/index.js';
 import { clearConfigCache, productResourcePath, resolveProductLayout } from '#platform/index.js';
 import { loadConfiguredInstallationIdentity, loadConfiguredProjectIdentity, loadConfiguredPeerScopeContext,
   resolveConfiguredInstallationIdentity } from '#composition/core/scoped-request/index.js';
@@ -19,7 +19,8 @@ async function fixture() {
   const root = await mkdtemp(join(tmpdir(), 'deckent-relocated-')); roots.push(root);
   const original = join(root, 'original'), project = join(root, 'copy'); await mkdir(original);
   const env = { DECKENT_GLOBAL_HOME: join(root, 'global'), HOME: join(root, 'home') }, options = { env };
-  const identity = await loadConfiguredInstallationIdentity(original, options), projectIdentity = await loadConfiguredProjectIdentity(original, options);
+  const identity = await new FileInstallationIdentityStore(resolveProductLayout({ projectRoot: original })).loadOrCreate(),
+    projectIdentity = await new FileProjectIdentityStore(original).loadOrCreate();
   const actor = readLocalOsIdentity();
   await writeFile(join(original, '.deckent/policy.json'), JSON.stringify({ schemaVersion: 1, revision: 'p', restrictions: [],
     grants: [{ id: 'g', effect: 'allow', actions: ['inspect'], scopes: ['s'], principals: [{ issuer: actor.issuer, subject: actor.subject }],
@@ -54,12 +55,14 @@ describe('relocation producer to actual CLI surface', () => {
       const f = await fixture(), projectPath = join(f.project, '.deckent/project-identity/identity.json');
       const projectBytes = await readFile(projectPath, 'utf8');
       expect(await main(['init', 'identity', `--${choice}`, '--lang', lang], f.context)).toBe(0);
-      const identity = await loadConfiguredInstallationIdentity(f.project, f.options);
+      const observed = await loadConfiguredInstallationIdentity(f.project, f.options);
+      expect(observed.status).toBe('available'); if (observed.status !== 'available') throw new Error('IDENTITY_NOT_CREATED');
+      const identity = observed.value;
       expect(f.output.join('')).toContain(f.identity.installationId); expect(f.output.join('')).toContain(identity.installationId);
       expect(f.output.join('')).toContain(lang === 'en' ? 'Previous installationId' : 'Önceki installationId');
       if (choice === 'keep') expect(identity).toEqual(f.identity); else expect(identity.installationId).not.toBe(f.identity.installationId);
       expect(await readFile(projectPath, 'utf8')).toBe(projectBytes);
-      expect(await loadConfiguredProjectIdentity(f.project, f.options)).toEqual(f.projectIdentity);
+      expect(await loadConfiguredProjectIdentity(f.project, f.options)).toEqual({ status: 'available', value: f.projectIdentity });
       const record = JSON.parse(await readFile(f.path, 'utf8'));
       expect(record.lastResolution).toMatchObject({ choice, previousInstallationId: f.identity.installationId, installationId: identity.installationId,
         principal: { issuer: readLocalOsIdentity().issuer, subject: readLocalOsIdentity().subject } });
@@ -79,7 +82,7 @@ describe('relocation producer to actual CLI surface', () => {
     expect(await composedMain(['init', 'identity', '--new', '--json'])).toBe(0);
     const result = JSON.parse(f.output.join(''));
     expect(result.schemaVersion).toBe(1); expect(result.previousInstallationId).toBe(f.identity.installationId);
-    expect(result.installationId).toBe((await loadConfiguredInstallationIdentity(f.project, f.options)).installationId);
+    expect(await loadConfiguredInstallationIdentity(f.project, f.options)).toMatchObject({ status: 'available', value: { installationId: result.installationId } });
     expect(result.installationId).not.toBe(result.previousInstallationId);
     expect(result).not.toHaveProperty('binding');
   });

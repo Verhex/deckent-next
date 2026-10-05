@@ -946,7 +946,8 @@
         "src/surfaces/core/config",
         "src/surfaces/core/cli-decision",
         "src/engine/core/approval",
-        "src/surfaces/core/approval-presentation"
+        "src/surfaces/core/approval-presentation",
+        "src/engine/core/installation"
       ],
       "plan": "SURFACES"
     },
@@ -1040,7 +1041,8 @@
         "src/platform/core/managed-files",
         "src/platform/core/host",
         "src/platform/core/config",
-        "src/platform/core/utils"
+        "src/platform/core/utils",
+        "src/platform/core/config-fields"
       ],
       "plan": "INSTALLATION"
     },

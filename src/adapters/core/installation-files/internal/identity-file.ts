@@ -31,6 +31,21 @@ export class IdentityFile<T> {
     try { return this.codec.parse(read.value); } catch { throw new IdentityFileError('INVALID'); }
   }
 
+  /** Absence is observed without locks, directories, healing or publication. Retained loss is invalid. */
+  async load(): Promise<T | null> {
+    try {
+      const directory = productResourcePath(this.layout, this.resource);
+      try { await inspectProductDirectory(this.layout, this.resource); }
+      catch (error) {
+        if (error instanceof ManagedFileError && error.code === 'MANAGED_FILE_MISSING') return null;
+        throw error;
+      }
+      const record = await this.read(directory);
+      if (!record) throw new IdentityFileError('INVALID');
+      return record;
+    } catch (error) { return this.fail(error); }
+  }
+
   /** Existing-record replacement uses the same custody and atomic writer as first publication. */
   async update(change: (record: T) => Promise<T>): Promise<T> {
     try {

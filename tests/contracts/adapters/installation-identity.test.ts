@@ -149,3 +149,39 @@ it('refuses unsupported layout capability before reading or creating identity me
     await expect(new FileInstallationIdentityStore(f.layout).loadOrCreate()).rejects.toMatchObject({ code: 'INSTALLATION_IDENTITY_UNSUPPORTED' });
   }
 });
+
+it.skipIf(process.platform === 'win32')('observes absence without creating ancestors or locks, and validates retained loss on reads', async () => {
+  const f = await fixture(), store = new FileInstallationIdentityStore(f.layout);
+  expect(await store.read()).toEqual({ status: 'unavailable', reason: 'not-created', bindingCapability: 'not-observed' });
+  await expect(readFile(f.path)).rejects.toMatchObject({ code: 'ENOENT' });
+  const { lstat } = await import('node:fs/promises');
+  await expect(lstat(f.layout.root)).rejects.toMatchObject({ code: 'ENOENT' });
+  await mkdir(f.directory, { recursive: true, mode: 0o700 });
+  await expect(store.read()).rejects.toMatchObject({ code: 'INSTALLATION_IDENTITY_INVALID' });
+  await expect(lstat(f.directory + '-lock')).rejects.toMatchObject({ code: 'ENOENT' });
+});
+
+it.skipIf(process.platform === 'win32')('reports unsupported binding capability without blocking identity reads or writes, preserving bound bytes', async () => {
+  const f = await fixture(), unsupported = { capture: async () => ({ status: 'unsupported' as const }) };
+  const store = new FileInstallationIdentityStore(f.layout, undefined, unsupported);
+  const identity = await store.loadOrCreate();
+  expect(await store.read()).toEqual({ status: 'available', value: identity, bindingCapability: 'unsupported' });
+  const bytes = await readFile(f.path, 'utf8');
+  expect(JSON.parse(bytes)).toEqual(identity); // v1 is explicitly unbound; no made-up machine discriminator.
+  expect(await store.loadOrCreate()).toEqual(identity);
+  expect(await readFile(f.path, 'utf8')).toBe(bytes);
+  await expect(store.resolveRelocation('new', { issuer: 'h', subject: '1' })).rejects.toMatchObject({ code: 'INSTALLATION_IDENTITY_UNSUPPORTED' });
+  expect(await readFile(f.path, 'utf8')).toBe(bytes);
+  await writeFile(f.path, '{}');
+  await expect(store.read()).rejects.toMatchObject({ code: 'INSTALLATION_IDENTITY_INVALID' });
+});
+
+it.skipIf(process.platform !== 'linux')('skips only the unsupported comparison and resumes relocation enforcement when capability returns', async () => {
+  const f = await fixture(), original = new FileInstallationIdentityStore(f.layout), identity = await original.loadOrCreate();
+  const bytes = await readFile(f.path, 'utf8');
+  const store = new FileInstallationIdentityStore(f.layout, undefined, { capture: async () => ({ status: 'unsupported' }) });
+  expect(await store.read()).toEqual({ status: 'available', value: identity, bindingCapability: 'unsupported' });
+  expect(await readFile(f.path, 'utf8')).toBe(bytes);
+  const record = JSON.parse(bytes); record.binding.machineDigest = 'b'.repeat(64); await writeFile(f.path, JSON.stringify(record));
+  await expect(original.read()).rejects.toMatchObject({ code: 'INSTALLATION_IDENTITY_RELOCATED' });
+});
