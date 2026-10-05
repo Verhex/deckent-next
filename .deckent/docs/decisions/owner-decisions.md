@@ -195,3 +195,16 @@ Bu eşleme tarihsel kartlardaki sıra/ledger numaralarını yeni yürütme izni 
 | O7 | SURFACES / ASSURANCE | Legacy cli-command-contract.ts salt okunur port envanteri kaynağıdır. Eski komut adları/alias'lar Next kabul şartı değildir; Statik manifest aracı bağlı: mevcut kaynakta 280 yol (269 CLI/39 MCP/41 REPL, 11 yalnız REPL). Tarihsel 282 sayımı kullanılmaz; çalışma zamanı erişilebilirliği ve Next davranış eşlemesi açık. |
 
 O2, O3, O5 ve O6 uygulandı ([COMPLETED-PLAN](COMPLETED-PLAN.md)).
+
+## İlk 20 iş kararları — owner 2026-10-06
+
+Owner ilk 20 iş listesini (proof `WORKLIST-TOP20-2026-10-06/analysis.md`) ve K1–K8 önerilerini kabul etti. Owner isteğiyle K2–K8 başlamadan önce Jev ile simüle edildi (Qwen gölgesi: shadow vakaları 03–09; GPU meşgul olduğu için Qwen sonucu `unknown`/`busy` kaydedildi). Jev 7 vakada da öneriyle aynı seçeneği seçti. Seçim olasılığı K3 0,98, K6 0,97, K4 0,92, K8 0,85, K2 0,81, K5 0,81, K7 0,73; yeterlilik puanı 0,51–0,74 arasında. Karar owner kabulüdür; Jev puanı tavsiye niteliğindedir.
+
+- K1 Yama bütçesi: ürün düzeltmesi. PATCH-BUDGET (PR #17) bütçeye yalnız taşınan içeriği sayar.
+- K2 Worker imajı: açılışta ve periyodik olarak güncellik denetimi yapılır, gerekirse arka planda otomatik build başlar. Yalnız yeni Run'lar yeni imaja geçer. Build sürerken en yeni mevcut imajla kabul ve görünür uyarı; kabul edilmiş Run'ların imajı değişmez.
+- K3 CI: zorunlu hücre kümesi ubuntu-only ruleset olur (owner komutu). macOS/Windows ayrı CI borcu olarak izlenir.
+- K4 Kompozisyon bütçesi 5500 → 6500 (gerekçeli artış). Tek composition root (#20, dalga 4) bütçeyi küçültür. Tier başına bütçe kuralı ARCH-GUARDS'ta.
+- K5 N1 D5: DT-1 benimsemeye kadar tekrarlanır, ardından HARDCODE-P1 kartları D4 modunda verilir. DOGFOOD resmî olarak OFF kalır.
+- K6 Boşta durma: yalnız terminalin otomatik başlattığı servis, son istemci kapandıktan sonra N dakika (config, varsayılan 15) boşta kalırsa yönetilen kapanış yapar. Bilinçli başlatılan servisler etkilenmez.
+- K7 Enterprise uzantı noktası: ilk küçük dilim dalga 4'te.
+- K8 IDENTITY-I1: dalga 4'te tek rebase lane'iyle yapılır; dal o zamana kadar donuk kalır.
