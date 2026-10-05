@@ -661,3 +661,13 @@ Current 2026-10-04 source supervision: N1-P33 actual workClass integration owned
 ##### Owner-directed landing cadence — 2026-10-05
 
 Owner 2026-10-05: önceki CI-first/current-closure iniş sırası tamamlandı; main Opus, bağımsız inceleyen Astra. Hazırlık/plan/belge için ayrı review yok; parti başına tek review ve en çok bir düzeltme turu, ardından logged Jev seçim ≥0,90 veya owner kararı. Current-closure yalnız gerçek P0/P1 ile açılır. Sonraki ürün işleri 4–6 author lane, reviewer ≤ author; kapsam/yetki kendiliğinden genişlemez. Owner PR #5’i CI kırmızıyken admin merge ettirdi, CI borcu haftaya tek iş; şimdilik ubuntu required kararı var, ruleset uygulaması owner komutudur ve ayrıca kanıtlanır. DOGFOOD OFF, canlı geçiş owner yetkisindedir; concurrent WIP ve kaynak muhafazası korunur.
+
+### PLAN.md aktif tablodan tamamlananlar — 2026-10-06
+
+| İş | Hedef | Durum | Sıradaki adım | Kanıt |
+|---|---|---|---|---|
+| IDENTITY-UX | Temiz kurulumda salt-okunur follow `not-initialized`; `ADMISSION_DEFERRED` bilgi notu | Lane çalışıyor | Lane teslimi + parti incelemesi | [work-list](.deckent/docs/plan/work-list.md) |
+| BOARD-DASHBOARD | Process board HTML paneli | PR #14 indi | Canlı kullanımda ölçüm | PR #14 |
+| B36-REGRESSIONS (PR #12) | Batch-36 gerilemelerinin düzeltmesi | İndi; Astra 2365 PASS, main `0e773b3b` | Tam verify sonucu | Astra 2365 |
+
+- IDENTITY-UX PR #8, B36-REGRESSIONS PR #12, BOARD-DASHBOARD PR #14 main'de; canlı alpha.5/alpha.6 içinde.
