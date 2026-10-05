@@ -40,7 +40,7 @@
     "build:terminal-tokens": "node scripts/build-terminal-palette.mjs",
     "build:bwrap": "node scripts/build-bwrap.mjs",
     "typecheck": "tsc --noEmit",
-    "lint": "node scripts/package-metadata.mjs && node scripts/run-parallel.mjs \"npm run typecheck\" \"eslint .\" \"node scripts/lint-arch.mjs\" \"node scripts/lint-core-memory.mjs\"",
+    "lint": "node scripts/package-metadata.mjs && node scripts/run-parallel.mjs \"npm run typecheck\" \"eslint .\" \"node scripts/lint-arch.mjs\" \"node scripts/lint-core-memory.mjs\" \"node scripts/lint-docs.mjs\"",
     "test": "vitest run",
     "test:e2e": "vitest run tests/e2e",
     "smoke": "node dist/composition/core/cli/internal/entry.js --version",

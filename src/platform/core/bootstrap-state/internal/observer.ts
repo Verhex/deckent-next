@@ -172,8 +172,18 @@ export async function observeBootstrapState(projectRoot: string): Promise<Bootst
   } finally { await handle?.close(); }
 }
 
-export function assertBootstrapUsable(observation: BootstrapObservation): void {
-  if (observation.record?.phase === 'pending') throw new BootstrapStateError('BOOTSTRAP_INSTALLATION_INCOMPLETE');
+/** `config-settled` (opt-in, observe-only readers): a pending transaction that publishes no project config (the policy template) leaves the
+ * config settled. A pending transaction that publishes it (by resource or path) stays INCOMPLETE; every other journal check is unchanged. */
+export type BootstrapPendingAdmission = 'none' | 'config-settled';
+export function bootstrapPublishesConfig(observation: BootstrapObservation, projectRoot: string): boolean {
+  if (observation.record?.phase !== 'pending') return false;
+  const config = productResourcePath(resolveProductLayout({ projectRoot: resolve(projectRoot), platform: process.platform === 'win32' ? 'win32' : 'posix' }), 'config');
+  return observation.record.resources.some(item => item.resource === 'config' || item.path === config);
+}
+export function assertBootstrapUsable(observation: BootstrapObservation, admission: BootstrapPendingAdmission = 'none', projectRoot = ''): void {
+  if (observation.record?.phase === 'pending' && (admission === 'none' || bootstrapPublishesConfig(observation, projectRoot))) {
+    throw new BootstrapStateError('BOOTSTRAP_INSTALLATION_INCOMPLETE');
+  }
 }
 export function assertBootstrapUnchanged(before: BootstrapObservation, after: BootstrapObservation): void {
   if (before.generation !== after.generation) throw new BootstrapStateError('BOOTSTRAP_STATE_CHANGED');

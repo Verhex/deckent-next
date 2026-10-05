@@ -19,10 +19,12 @@ export function registerCliCommands<C>(handlers: Readonly<Record<CliCommandName,
   return CLI_CATALOG.flatMap(spec => visit(spec, undefined, handlers[spec.name]));
 }
 
-/** The installation contract of the deepest registered command naming argv's leading non-flag words (as the command parsers read positionals,
- * e.g. `policy --json vocabulary`), inherited from its family when undeclared. It only skips the preflight; the handler still validates argv. */
+/** The installation contract of the deepest registered command naming argv's leading positionals, read as the kernel parser reads them (flags dropped,
+ * the common `--lang <locale>` value skipped: `policy --json vocabulary`, `policy --lang tr vocabulary`), inherited from its family when undeclared.
+ * It only skips the preflight; the handler still validates argv (an unknown option or extra word is CLI_USAGE before any installation read). */
 export function cliInstallationContract<C>(argv: readonly string[], commands: readonly RegisteredCliCommand<C>[]): CliInstallationContract | undefined {
-  const words = argv.filter(value => !value.startsWith('-'));
+  const words: string[] = [];
+  for (let index = 0; index < argv.length; index++) { if (argv[index] === '--lang') index++; else if (!argv[index]!.startsWith('-')) words.push(argv[index]!); }
   let command: CliHelpSpec | undefined = commands.reduce<RegisteredCliCommand<C> | undefined>((found, item) =>
     item.path.length > (found?.path.length ?? 0) && item.path.every((name, index) => words[index] === name) ? item : found, undefined);
   while (command && command.installation === undefined) command = command.parent;
