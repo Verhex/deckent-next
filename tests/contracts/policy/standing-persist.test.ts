@@ -139,6 +139,39 @@ describe.skipIf(process.platform === 'win32')('persistent standing approvals (G6
 
 describe('this session\'s memory (G6)', () => {
   const me = { issuer: 'host', subject: '1' };
+  it('invalidates pending remembered writes on own-session clear, global stop and release; a new binding cannot revive an old callback', () => {
+    const memory = new SessionStanding(), own = SessionStanding.sessionKey('s', me, 'c'), other = SessionStanding.sessionKey('s', { ...me, subject: '2' }, 'c');
+    const old = memory.bind(own)!, unaffected = memory.bind(other)!;
+    expect(JSON.stringify(old)).toBe('{}');
+    memory.forget(own);
+    expect(old.valid()).toBe(false);
+    expect(memory.rememberBound(old, 'key')).toBe(false);
+    expect(unaffected.valid()).toBe(true);
+    const fresh = memory.bind(own)!;
+    old.close(); // Idempotent cleanup must not delete the newer bucket of the same session.
+    expect(memory.rememberBound(fresh, 'key')).toBe(true);
+    memory.clear();
+    expect([fresh.valid(), unaffected.valid(), memory.has(own, 'key')]).toEqual([false, false, false]);
+    for (const binding of [old, fresh, unaffected]) expect(memory.rememberBound(binding, 'key')).toBe(false);
+    const released = memory.bind(own)!;
+    released.close();
+    expect(memory.rememberBound(released, 'key')).toBe(false);
+  });
+
+  it('bounds active bindings with the existing session limits, releases empty buckets and refuses forged or foreign custody', () => {
+    const memory = new SessionStanding(1, 1), a = memory.bind('a')!;
+    expect(memory.bind('a')).toBeNull();
+    expect(memory.bind('b')).toBeNull();
+    a.close();
+    const b = memory.bind('b')!;
+    expect(memory.rememberBound({ valid: () => true, close() {} }, 'forged')).toBe(false);
+    expect(new SessionStanding().rememberBound(b, 'foreign')).toBe(false);
+    expect(memory.rememberBound(b, 'key')).toBe(true);
+    memory.remember('c', 'other'); // Oldest session eviction also fences its pending audit callbacks.
+    expect([b.valid(), memory.has('b', 'key'), memory.rememberBound(b, 'late')]).toEqual([false, false, false]);
+    expect(memory.bind('c')).not.toBeNull();
+  });
+
   it('is per scope, person and conversation, bounded, and empty after a restart', () => {
     const memory = new SessionStanding(2);
     const a = SessionStanding.sessionKey('s', me, 'conv-1'), b = SessionStanding.sessionKey('s', me, 'conv-2'), c = SessionStanding.sessionKey('s', { ...me, subject: '2' }, 'conv-1'), d = SessionStanding.sessionKey('t', me, 'conv-1');

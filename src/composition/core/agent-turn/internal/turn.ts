@@ -261,7 +261,8 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
           // Policy revalidation is asynchronous: it spends the same authorization budget as waiting.
           if (outcome === 'allow') {
             const consumed = clock.sample();
-            if (consumed.wallMs >= record.request.expiresAt || consumed.monotonicMs - started.monotonicMs >= record.request.expiresAt - started.wallMs) outcome = 'expired';
+            if (approvalSignal.aborted) outcome = 'cancelled';
+            else if (consumed.wallMs >= record.request.expiresAt || consumed.monotonicMs - started.monotonicMs >= record.request.expiresAt - started.wallMs) outcome = 'expired';
           }
           // The effect gate verifies this stored record (MAC, allow, digest of the executed call, expiry) before anything is written or run.
           if (outcome === 'allow') approvals.allowed({ round, index }, { approvalId: record.request.approvalId, actionDigest: record.request.actionDigest, started });

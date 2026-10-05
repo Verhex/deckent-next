@@ -7,7 +7,7 @@ import { authenticate, authenticateSession, assertSessionActive, DECISION_CAPABI
   type SessionAuthority } from '#engine/core/authentication/index.js';
 import { PolicyAuthorizationError, authorityRefusalAuditEvent, type PolicySource } from '#engine/core/policy/index.js';
 import type { OperationCatalog } from '#engine/core/effect/index.js';
-import type { ApprovalStore, ApprovalSubjectKind } from './store.js';
+import type { ApprovalStore, ApprovalSubjectKind, ApprovalSettlement } from './store.js';
 import { approvalRequestDigest, expireApproval, verifyApproval, sealApproval } from './integrity.js';
 import { approvalAssuranceRegistry, requiredApprovalAssurance } from './assurance.js';
 
@@ -114,6 +114,10 @@ export class ApprovalApplication {
     return this.store.renew(previous, next, { operation: 'renew', scopeId: command.scopeId, commandId: command.commandId, fingerprint, record: next });
   }
   async decide(input: unknown, credential?: unknown) {
+    return (await this.decideWithSettlement(input, credential)).record;
+  }
+  /** Trusted producer result: exactly one decision owner; settlement is supplied by the atomic store transaction. */
+  async decideWithSettlement(input: unknown, credential?: unknown): Promise<ApprovalSettlement> {
     const parsed = approvalCommandSchema.safeParse(input); if (!parsed.success) throw new ApprovalError('APPROVAL_INVALID');
     const command = parsed.data, { channels } = this.assurance;
     if (command.channel !== undefined && channels && !channels.has(command.channel)) throw new ApprovalError('APPROVAL_INVALID');
@@ -130,7 +134,7 @@ export class ApprovalApplication {
       if (replay.operation !== 'decide' || replay.fingerprint !== fingerprint) throw new ApprovalError('APPROVAL_CONFLICT');
       const verified = await authenticateSession(this.sessions, this.sessions, this.clock, credential, command.scopeId);
       if (JSON.stringify(verified.session.principalRef) !== JSON.stringify(actor)) throw new ApprovalError('APPROVAL_DENIED');
-      return verifyApproval(replay.record, this.integrity);
+      return { record: verifyApproval(replay.record, this.integrity), commit: 'replay' };
     }
     record = this.expired(record, this.clock.sample().wallMs);
     if (record.status === 'expired') throw new ApprovalError('APPROVAL_EXPIRED');
@@ -158,9 +162,11 @@ export class ApprovalApplication {
       commandDigest: fingerprint, idempotencyKeyHash: sha256(command.commandId), assurance: attested.level };
     const next = sealApproval({ request: record.request, revision: 1, status: 'decided', decision }, this.integrity);
     this.beforeCommit(next);
-    const committed = this.store.transition(record, next, { scopeId: command.scopeId, commandId: command.commandId, fingerprint, record: next });
-    attested.settle();
-    return committed;
+    const committed = this.store.transitionWithSettlement(record, next, { scopeId: command.scopeId, commandId: command.commandId, fingerprint, record: next });
+    // A competing caller can win after our receipt miss. Only this transaction's fresh commit spends B1 evidence.
+    const settled = { record: verifyApproval(committed.record, this.integrity), commit: committed.commit };
+    if (settled.commit === 'fresh') attested.settle();
+    return settled;
   }
 }
 /** Producer-only trusted port. No surface accepts caller-authored action bindings or request timestamps. */

@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { AUDIT_SHELL_HEAD_MAX_CHARS, EffectError, type AgentToolOutcome, type AgentToolSpec, type AuditEvent } from '#domain/index.js';
 import { AuditApplication, PolicyAuthorizationError, agentCallAuditEvent, agentToolArgumentsDigest, decideAgentToolCall, isAuditedDecision, type AgentToolCallCell, type AgentToolCallDecision,
-  type AgentToolCallRequest, type EffectApprovalGate, isAuditedStanding, standingApprovalAuditEvent, standingCallKey, type SessionStanding, type ShellPermissionTier,
+  type AgentToolCallRequest, type EffectApprovalGate, isAuditedStanding, standingApprovalAuditEvent, standingCallKey, rememberSessionStanding, type SessionStanding, type ShellPermissionTier,
   trackedFilesAuditEvent, type TrackedFilesAuditList } from '#engine/index.js';
 import { getConfigKnownSecrets, type TrustedClock } from '#platform/index.js';
 import { FETCH_URL_TOOL_SPEC, HOST_SHELL_RUN_OPERATION, type SandboxWriteCell, type SandboxWriteDecider, type ShellCallAuthority, MCP_TOOL_CALL_OPERATION, NETWORK_FETCH_OPERATION, openLocalIntegrityAuthority, openSqliteAuditStore,
@@ -156,15 +156,14 @@ export function createAgentCallDecisions(input: { readonly context: Context; rea
       if (kept && 'planError' in kept) return { ok: false, text: kept.planError };
       return { ok: true, requireApproval: kept?.decision.decision !== 'allow' };
     },
-    /** "This session" answer of the card (G6): audited first (no record, no memory); only a standing cell can be remembered. */
-    async remember(tool: AgentToolSpec, args: Record<string, unknown>, execution: Execution, callId: string, approvalId: string): Promise<boolean> {
-      const kept = stored.get(keyOf(tool, args)), memory = input.standing;
-      const found = kept && 'cell' in kept ? standingOf(tool, kept.cell, args) : null;
-      if (!memory || !kept || !found) return false;
-      try { await withAudit(audit => audit.record(standingEvent('remembered', tool, args, execution, callId, found.cell, 'decision' in kept ? kept.decision.revision : '', { source: 'session', key: found.key, grantId: null }, approvalId))); }
-      catch { return false; }
-      memory.memory.remember(memory.session, found.key);
-      return true;
+    /** Producer-only answer port: guard holds the active card's validity, signal and wall/monotonic deadline. No record, no memory. */
+    async remember(tool: AgentToolSpec, args: Record<string, unknown>, execution: Execution, callId: string, approvalId: string, guard: { readonly valid: () => boolean }): Promise<boolean> {
+      const kept = stored.get(keyOf(tool, args)), memory = input.standing, found = kept && 'cell' in kept ? standingOf(tool, kept.cell, args) : null;
+      if (!memory || !kept || !('cell' in kept) || !found) return false;
+      return rememberSessionStanding({ memory: memory.memory, session: memory.session, key: found.key, cell: found.cell, decision: kept.decision, valid: guard.valid,
+        revalidate: async () => ({ decision: await decide(tool, kept.cell, undefined, args, kept.shell), cell: cellOf(tool, args), key: standingOf(tool, kept.cell, args)?.key ?? null }),
+        audit: () => withAudit(audit => audit.record(standingEvent('remembered', tool, args, execution, callId, found.cell, kept.decision.revision,
+          { source: 'session', key: found.key, grantId: null }, approvalId))) });
     },
     /**
      * Runs one edit or shell call at its effect with the right gate. `run` performs the C11 effect with the gate it is given.
