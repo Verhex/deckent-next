@@ -1,19 +1,28 @@
 import { Client } from '@modelcontextprotocol/client';
 import { StdioClientTransport } from '@modelcontextprotocol/client/stdio';
-import { execFile } from 'node:child_process';
+import { execFile, spawn, type ChildProcess } from 'node:child_process';
 import { access, mkdtemp, mkdir, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { isAbsolute, join, resolve } from 'node:path';
 import { promisify } from 'node:util';
 import { pathToFileURL } from 'node:url';
 import { afterEach, expect, it } from 'vitest';
+import { processReady } from '../../fixtures/process-readiness.js';
 
 const execute = promisify(execFile);
 const roots: string[] = [];
+const children: ChildProcess[] = [];
 const cli = resolve('dist/composition/core/cli/internal/entry.js');
 const mcp = resolve('dist/composition/core/mcp/internal/entry.js');
 
-afterEach(async () => { await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
+afterEach(async () => {
+  for (const child of children.splice(0)) {
+    if (child.exitCode === null && child.signalCode === null) {
+      await new Promise<void>(done => { child.once('close', () => done()); child.kill('SIGKILL'); });
+    }
+  }
+  await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true })));
+});
 
 async function bounded<T>(promise: Promise<T>, label: string, milliseconds = 5_000): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -77,10 +86,24 @@ it('imports compiled CLI and MCP entry modules without starting either process s
   const f = await fixture();
   const program = `import { pathToFileURL } from 'node:url';
 const entry = process.argv[1];
-await import(pathToFileURL(entry).href);`;
+await import(pathToFileURL(entry).href);
+process.send('entry-imported', () => process.disconnect());`;
   for (const entry of [f.cliAlias, f.mcpAlias]) {
-    const output = await bounded(execute(process.execPath, ['--input-type=module', '-e', program, entry],
-      { cwd: f.project, env: f.env, timeout: 4_000, maxBuffer: 65_536 }), 'ENTRY_IMPORT_TIMEOUT');
+    const child = spawn(process.execPath, ['--input-type=module', '-e', program, entry],
+      { cwd: f.project, env: f.env, stdio: ['pipe', 'pipe', 'pipe', 'ipc'] });
+    children.push(child);
+    const output = { stdout: '', stderr: '' };
+    for (const stream of ['stdout', 'stderr'] as const) child[stream]!.on('data', chunk => {
+      output[stream] += String(chunk);
+      if (Buffer.byteLength(output[stream]) > 65_536) child.kill('SIGKILL');
+    });
+    const closed = new Promise<{ code: number | null; signal: NodeJS.Signals | null }>(done => {
+      child.once('close', (code, signal) => done({ code, signal }));
+    });
+    // Startup remains bounded by the existing test timeout. Only a completed import starts the
+    // unchanged 4s natural-exit guard; a surface accidentally started on import must still fail it.
+    await processReady(child, 'entry-imported');
+    expect(await bounded(closed, 'ENTRY_IMPORT_EXIT_TIMEOUT', 4_000), JSON.stringify(output)).toEqual({ code: 0, signal: null });
     expect(output.stdout).toBe('');
     expect(output.stderr).toBe('');
   }

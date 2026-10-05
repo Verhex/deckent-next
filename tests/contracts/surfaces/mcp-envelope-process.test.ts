@@ -1,9 +1,10 @@
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
-import { once } from 'node:events';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { afterEach, expect, it } from 'vitest';
+import { processReady } from '../../fixtures/process-readiness.js';
 
 const roots: string[] = [], children: ChildProcessWithoutNullStreams[] = [];
 const mcp = resolve('dist/composition/core/mcp/internal/entry.js');
@@ -30,20 +31,39 @@ async function fixture(responseMaxBytes: number) {
   return { root, env: { HOME: home, USERPROFILE: home, PATH: process.env.PATH ?? '/usr/bin:/bin' } };
 }
 
-function launch(root: string, env: Record<string, string>) {
-  const child = spawn(process.execPath, [mcp, '--project', root], { cwd: root, env, stdio: ['pipe', 'pipe', 'pipe'] });
-  children.push(child); let buffer = Buffer.alloc(0); const frames: Buffer[] = [], waiters: ((value: Buffer) => void)[] = [];
+async function launch(root: string, env: Record<string, string>) {
+  const preload = pathToFileURL(resolve('tests/fixtures/stdio-ready.mjs')).href;
+  const child = spawn(process.execPath, ['--import', preload, mcp, '--project', root],
+    { cwd: root, env, stdio: ['pipe', 'pipe', 'pipe', 'ipc'] }) as ChildProcessWithoutNullStreams;
+  children.push(child); let buffer = Buffer.alloc(0), stderr = '', failure: Error | undefined;
+  const frames: Buffer[] = [], waiters: Array<{ resolve: (value: Buffer) => void; reject: (error: Error) => void }> = [];
+  const failed = (error: Error) => { failure = error; for (const waiter of waiters.splice(0)) waiter.reject(error); };
+  child.stderr.on('data', chunk => { stderr = (stderr + String(chunk)).slice(-2048); });
+  child.on('error', failed); child.stdin.on('error', failed);
+  const closed = new Promise<number | null>(done => {
+    child.once('close', (code, signal) => { failed(new Error(`MCP_CLOSED:${code}:${signal}:${stderr}`)); done(code); });
+  });
   child.stdout.on('data', chunk => {
     buffer = Buffer.concat([buffer, Buffer.from(chunk)]);
     for (;;) {
       const newline = buffer.indexOf(0x0a); if (newline < 0) return;
       const frame = buffer.subarray(0, newline + 1); buffer = buffer.subarray(newline + 1);
-      const waiter = waiters.shift(); if (waiter) waiter(frame); else frames.push(frame);
+      const waiter = waiters.shift(); if (waiter) waiter.resolve(frame); else frames.push(frame);
     }
   });
-  const next = (label: string) => frames.shift() ?? within(new Promise<Buffer>(resolveFrame => waiters.push(resolveFrame)), label);
+  const next = async (label: string) => {
+    const frame = frames.shift(); if (frame) return frame;
+    if (failure) throw failure;
+    let waiter: (typeof waiters)[number] | undefined;
+    try {
+      return await within(new Promise<Buffer>((resolveFrame, reject) => { waiter = { resolve: resolveFrame, reject }; waiters.push(waiter); }), label);
+    } finally { if (waiter) { const index = waiters.indexOf(waiter); if (index >= 0) waiters.splice(index, 1); } }
+  };
   const send = (message: unknown) => child.stdin.write(`${JSON.stringify(message)}\n`);
-  return { child, next, send };
+  // The existing 15s test bound covers startup. The unchanged 5s frame bound starts only after
+  // the compiled entry's real transport is consuming stdin, not while its module graph is loading.
+  await processReady(child, 'stdio-ready');
+  return { child, next, send, closed };
 }
 
 const initialize = (id: string | number) => ({ jsonrpc: '2.0' as const, id, method: 'initialize', params: {
@@ -65,7 +85,7 @@ function assertVocabularyResult(value: unknown) {
 }
 
 it('caps actual compiled stdio JSON-RPC lines for initialize, tools list, protocol errors, and surface tool errors', async () => {
-  const cap = 65_536, f = await fixture(cap), raw = launch(f.root, f.env);
+  const cap = 65_536, f = await fixture(cap), raw = await launch(f.root, f.env);
   raw.send(initialize('initialize-id'));
   expect(decode(await raw.next('MCP_INITIALIZE_TIMEOUT'), cap)).toMatchObject({ id: 'initialize-id', result: expect.any(Object) });
   raw.send(initialized);
@@ -88,7 +108,7 @@ it('caps actual compiled stdio JSON-RPC lines for initialize, tools list, protoc
 }, 15_000);
 
 it('caps the supported 2026 envelope codec for discovery and an enveloped tools-list request', async () => {
-  const cap = 65_536, f = await fixture(cap), raw = launch(f.root, f.env);
+  const cap = 65_536, f = await fixture(cap), raw = await launch(f.root, f.env);
   raw.send({ jsonrpc: '2.0', id: 'modern-discover-id', method: 'server/discover', params: { _meta: modernEnvelope } });
   expect(decode(await raw.next('MCP_MODERN_DISCOVER_TIMEOUT'), cap)).toMatchObject({ id: 'modern-discover-id', result: expect.any(Object) });
   raw.send({ jsonrpc: '2.0', id: 'modern-tools-list-id', method: 'tools/list', params: { _meta: modernEnvelope } });
@@ -99,7 +119,7 @@ it('caps the supported 2026 envelope codec for discovery and an enveloped tools-
 }, 15_000);
 
 it('falls back to a correlated bounded error when compiled tools-list output exceeds the configured wire cap', async () => {
-  const cap = 512, f = await fixture(cap), raw = launch(f.root, f.env);
+  const cap = 512, f = await fixture(cap), raw = await launch(f.root, f.env);
   raw.send(initialize('small-initialize-id'));
   expect(decode(await raw.next('MCP_SMALL_INITIALIZE_TIMEOUT'), cap)).toMatchObject({ id: 'small-initialize-id', result: expect.any(Object) });
   raw.send(initialized);
@@ -109,9 +129,9 @@ it('falls back to a correlated bounded error when compiled tools-list output exc
 }, 15_000);
 
 it('closes before dispatch when a request id cannot carry the correlated fallback error', async () => {
-  const cap = 512, f = await fixture(cap), raw = launch(f.root, f.env);
+  const cap = 512, f = await fixture(cap), raw = await launch(f.root, f.env);
   raw.send(initialize('request-id-too-large-'.repeat(100)));
   raw.child.stdin.end();
-  const [code] = await within(once(raw.child, 'close') as Promise<[number | null]>, 'MCP_LONG_ID_CLOSE_TIMEOUT');
+  const code = await within(raw.closed, 'MCP_LONG_ID_CLOSE_TIMEOUT');
   expect(code).toBe(0);
 }, 15_000);

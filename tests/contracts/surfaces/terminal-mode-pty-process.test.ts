@@ -14,6 +14,7 @@ import { ModelBindingApplication } from '#engine/core/provider-catalog/index.js'
 import { clearConfigCache, prepareProductFile, resolveProductLayout, withConfigWriteLock } from '#platform/index.js';
 import { fixtureBudget } from '../../fixtures/priced-provider.js';
 import { measureTestShellHost } from '../../fixtures/shell-host.js';
+import { terminalScreen } from '../../fixtures/terminal-screen.js';
 
 // T-L4 slice 4c (MODES-3: v17, three modes) at the real boundary: compiled CLI in a real pseudo-terminal, a real runtime service process,
 // the company policy (v2) and the person's bindings as real layout files. `/mode` shows the mode, `/mode full-auto` changes it through the
@@ -126,7 +127,7 @@ async function modeProject(policy: 'v2' | 'v1' | 'no-set-grant' = 'v2',
     });
   });
   servers.push(server);
-  await new Promise<void>(done => server.listen(0, '127.0.0.1', done));
+  await new Promise<void>((done, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', done); });
   const address = server.address(); if (!address || typeof address === 'string') throw new Error('FIXTURE_ADDRESS');
   const reference = { providerId: 'local-openai', providerVersion: 1, modelId: 'chat', modelVersion: 1 };
   const model = { id: 'chat', version: 1, nativeId: 'native-chat', protocols: [{ family: 'openai-chat-completions', version: 'v1',
@@ -198,11 +199,14 @@ describe.skipIf(process.platform !== 'linux')('/mode in a real pseudo-terminal a
     // After the change the status row carries the mode on a wide terminal: more occurrences than the one notice line.
     const after = wide.output.slice(wide.output.indexOf('Permission mode: standart → full-auto'));
     expect(after.split('full-auto').length - 1).toBeGreaterThan(1);
-    // Narrow: the mode is shown once by `/mode` (the notice) and never in the status row.
+    // Narrow: replay cursor movement/erasure. Ink may redraw the same notice in the raw PTY stream;
+    // the terminal buffer must still contain exactly one notice and no mode segment in the status row.
     const narrow = await inPty(f.projectRoot, f.env, ['terminal', 'workline', '--scope', 'scope'], [['Deckent workline', '/mode\r'], ['full-auto', '/exit\r']], 30);
     expect(narrow.timeout, narrow.output).toBeUndefined();
     expect(narrow.status, narrow.output).toBe(0);
-    expect(narrow.output.split('full-auto').length - 1).toBe(1);
+    const screen = terminalScreen(narrow.output, 30);
+    expect(screen, narrow.output).toContain('Permission mode: full-auto');
+    expect(screen.split('full-auto').length - 1, screen).toBe(1);
   }, 180_000);
   // SHELL-AUTONOMY (owner 2026-09-28): the owner's own full-auto command, through the compiled CLI and a real service process whose shell
   // realm is the default `prefer-sandbox` (bubblewrap here): no approval card, the command ran in the sandbox, one audit event.
