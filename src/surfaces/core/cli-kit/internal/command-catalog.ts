@@ -2,9 +2,19 @@ import type { MessageKey } from '#platform/index.js';
 
 export const HELP_GROUPS = ['start', 'observe', 'work', 'models', 'approvals', 'setup', 'developer'] as const;
 export type HelpGroup = typeof HELP_GROUPS[number];
-export interface CliCommandSpec { readonly name: string; readonly group: HelpGroup; readonly summary: MessageKey; readonly detail: MessageKey; readonly children?: readonly CliCommandSpec[] }
+/**
+ * How a command relates to the dispatcher's installation identity preflight (ID-1C relocation stop). Absent: the dispatcher reads the
+ * installation identity before the command runs. `owned`: the command loads, heals or recovers the installation and checks its identity
+ * itself (config; init apply/resume/policy read it under the installation journal). `independent`: the command needs no installation or
+ * project at all. Actions inherit their family's value unless they declare their own.
+ */
+export type CliInstallationContract = 'owned' | 'independent';
+export interface CliCommandSpec { readonly name: string; readonly group: HelpGroup; readonly summary: MessageKey; readonly detail: MessageKey;
+  readonly installation?: CliInstallationContract; readonly children?: readonly CliCommandSpec[] }
 
-function action(name: string, group: HelpGroup, summary: MessageKey, detail: MessageKey): CliCommandSpec { return { name, group, summary, detail }; }
+function action(name: string, group: HelpGroup, summary: MessageKey, detail: MessageKey, installation?: CliInstallationContract): CliCommandSpec {
+  return { name, group, summary, detail, ...(installation ? { installation } : {}) };
+}
 
 /** The dispatch catalog. Register a command here with its group, localized summary and detail.
  * Children inherit the family handler; existing handlers retain argument validation and execution. */
@@ -16,7 +26,7 @@ export const CLI_CATALOG = [
     action('chat-plan', 'start', 'cli.help.action.chat-plan', 'cli.help.terminal'),
     action('snapshot', 'start', 'cli.help.action.snapshot', 'cli.help.terminal'),
   ] },
-  { name: 'init', group: 'start', summary: 'cli.help.summary.init', detail: 'cli.help.initPreview', children: [
+  { name: 'init', group: 'start', summary: 'cli.help.summary.init', detail: 'cli.help.initPreview', installation: 'owned', children: [
     action('preview', 'start', 'cli.help.action.preview', 'cli.help.initPreview'),
     action('inspect', 'start', 'cli.help.action.init.inspect', 'cli.help.initPreview'),
     action('apply', 'start', 'cli.help.action.apply', 'cli.help.initPreview'),
@@ -91,11 +101,11 @@ export const CLI_CATALOG = [
     action('renew', 'approvals', 'cli.help.action.renew', 'cli.approval.help'),
   ] },
   { name: 'policy', group: 'approvals', summary: 'cli.help.summary.policy', detail: 'cli.help.policy', children: [
-    action('vocabulary', 'approvals', 'cli.help.action.vocabulary', 'cli.help.policy'),
+    action('vocabulary', 'approvals', 'cli.help.action.vocabulary', 'cli.help.policy', 'independent'),
     action('grants', 'approvals', 'cli.help.action.grants', 'cli.help.policy'),
     action('revoke', 'approvals', 'cli.help.action.revoke', 'cli.help.policy'),
   ] },
-  { name: 'config', group: 'setup', summary: 'cli.help.summary.config', detail: 'config.surface.help', children: [
+  { name: 'config', group: 'setup', summary: 'cli.help.summary.config', detail: 'config.surface.help', installation: 'owned', children: [
     action('get', 'setup', 'cli.help.action.config.get', 'config.surface.help'),
     action('explain', 'setup', 'cli.help.action.explain', 'config.surface.help'),
     action('validate', 'setup', 'cli.help.action.validate', 'config.surface.help'),

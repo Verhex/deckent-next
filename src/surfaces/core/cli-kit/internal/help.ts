@@ -1,5 +1,5 @@
 import { t, resolveLocale, LOCALES, MESSAGE_REGISTRY, type Locale, type MessageKey } from '#platform/index.js';
-import { CLI_CATALOG, HELP_GROUPS, type CliCommandName, type CliCommandSpec } from './command-catalog.js';
+import { CLI_CATALOG, HELP_GROUPS, type CliCommandName, type CliCommandSpec, type CliInstallationContract } from './command-catalog.js';
 
 interface CliHelpSpec extends CliCommandSpec {
   readonly path?: readonly string[];
@@ -17,6 +17,18 @@ export function registerCliCommands<C>(handlers: Readonly<Record<CliCommandName,
     return [entry, ...(spec.children ?? []).flatMap(child => visit(child, entry, run))];
   };
   return CLI_CATALOG.flatMap(spec => visit(spec, undefined, handlers[spec.name]));
+}
+
+/** The installation contract of the deepest registered command naming argv's leading positionals, read as the kernel parser reads them (flags dropped,
+ * the common `--lang <locale>` value skipped: `policy --json vocabulary`, `policy --lang tr vocabulary`), inherited from its family when undeclared.
+ * It only skips the preflight; the handler still validates argv (an unknown option or extra word is CLI_USAGE before any installation read). */
+export function cliInstallationContract<C>(argv: readonly string[], commands: readonly RegisteredCliCommand<C>[]): CliInstallationContract | undefined {
+  const words: string[] = [];
+  for (let index = 0; index < argv.length; index++) { if (argv[index] === '--lang') index++; else if (!argv[index]!.startsWith('-')) words.push(argv[index]!); }
+  let command: CliHelpSpec | undefined = commands.reduce<RegisteredCliCommand<C> | undefined>((found, item) =>
+    item.path.length > (found?.path.length ?? 0) && item.path.every((name, index) => words[index] === name) ? item : found, undefined);
+  while (command && command.installation === undefined) command = command.parent;
+  return command?.installation;
 }
 
 /** Catalog newlines are intentional boundaries; author flowing prose as one source line.

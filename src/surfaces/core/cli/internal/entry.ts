@@ -1,4 +1,4 @@
-import { registerCliCommands, renderTopHelp, cliHelpRequest } from '#surfaces/core/cli-kit/index.js';
+import { registerCliCommands, renderTopHelp, cliHelpRequest, cliInstallationContract } from '#surfaces/core/cli-kit/index.js';
 import { approvalsCommand } from './approvals.js';
 import { workersCommand, runInventoryCommand, monitorCommand } from '#surfaces/core/monitor/index.js';
 import { runCommand } from './run.js';
@@ -64,8 +64,10 @@ export async function main(argv: readonly string[] = process.argv.slice(2), cont
     }
     context.initialize?.();
     const interactive = (argv.length === 0 && interactiveTerminal(context)) || (argv.length === 1 && argv[0] === '--full-access');
+    // ID-1C: the relocation stop precedes every installation-bound command. Commands that own their installation load/recovery and
+    // identity check (config, init) or need no installation (policy vocabulary) declare it in the catalog and are not gated here.
     if (context.loadInstallationIdentity && (interactive || CLI_COMMANDS.some(item => item.name === argv[0]))
-      && argv[0] !== 'config' && !(argv[0] === 'init' && argv[1] === 'identity')) {
+      && cliInstallationContract(argv, CLI_COMMANDS) === undefined) {
       locale = resolveLocale(argv.includes('--lang') ? argv[argv.indexOf('--lang') + 1] : undefined, context.env,
         await loadConfigLanguage(context.root, { ...(context.env ? { env: context.env } : {}) }));
       await context.loadInstallationIdentity(context.root ?? process.cwd(), { ...(context.env ? { env: context.env } : {}), globalOnly: argv.includes('--global') });

@@ -3,7 +3,7 @@ import { DecisionError, ApprovalError, AuditError, EffectError, ModelActivationE
 import { ProviderSpendError, ModelInvocationStoreError } from '#engine/index.js';
 import { OpenAiChatHttpError, OpenRouterChatError, OpenRouterPricingError, NativeConnectionError } from '#adapters/index.js';
 import { ModelActivationStoreError, AgentTurnStoreError, WorkerModelAdmissionError } from '#engine/index.js';
-import { InstallationProfileError, InstallationEvidenceError, InstallationRecoveryError, InstallationPublicationError } from '#engine/index.js';
+import { InstallationProfileError, InstallationEvidenceError, InstallationRecoveryError, InstallationPublicationError, InstallationIdentityError, ProjectIdentityError } from '#engine/index.js';
 import { InstallationProfileFileError, InstallationArtifactError, DockerImageProbeError,
   InstallationJournalError, InstallationLedgerError, InstallationFileError } from '#adapters/index.js';
 import { LocalRuntimeSocketError } from '#adapters/index.js';
@@ -33,7 +33,7 @@ export function queryFailure(error: unknown): DeckentError {
   if (error instanceof InstallationProfileError || error instanceof InstallationProfileFileError || error instanceof InstallationEvidenceError
     || error instanceof InstallationArtifactError || error instanceof DockerImageProbeError || error instanceof InstallationRecoveryError
     || error instanceof InstallationPublicationError || error instanceof InstallationJournalError || error instanceof InstallationLedgerError
-    || error instanceof InstallationFileError || error instanceof BootstrapStateError) return ErrorRegistry.createError(error.code);
+    || error instanceof InstallationFileError || error instanceof BootstrapStateError || error instanceof InstallationIdentityError || error instanceof ProjectIdentityError) return ErrorRegistry.createError(error.code);
   if (error instanceof RunWorkspaceCustodyError && error.reason === 'adapter-version-mismatch') {
     return ErrorRegistry.createError(error.code, { params: { reason: error.reason } });
   }

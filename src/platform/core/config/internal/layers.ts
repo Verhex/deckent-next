@@ -20,6 +20,7 @@ import { validateConfig } from './validate/sections.js';
 import { assertConfigSecretPolicies } from './validate/secret-policy.js';
 import { readProjectConfig } from './heal.js';
 import { inspectInstallationBootstrap, assertInstallationBootstrap } from './bootstrap.js';
+import type { BootstrapPendingAdmission } from '#platform/core/bootstrap-state/index.js';
 
 export interface ResolvedConfig extends DeckentConfig {
   readonly projectRoot: string;
@@ -36,6 +37,9 @@ export interface ConfigLoadOptions {
   readonly heal?: boolean;
   readonly globalOnly?: boolean;
   readonly onWarning?: (warning: ConfigWarning) => void;
+  /** Observe-only readers (owned init identity check) under a pending transaction that publishes no project config; requires `heal: false`.
+   * Changes nothing for UNSAFE/INVALID/CHANGED/UNAVAILABLE/UNSUPPORTED journals or a pending transaction that publishes config. */
+  readonly pendingBootstrap?: BootstrapPendingAdmission;
 }
 function cloneResolved(value: ResolvedConfig): ResolvedConfig {
   const clone = structuredClone(value);
@@ -74,7 +78,8 @@ export async function loadConfigLanguage(projectRoot = process.cwd(), options: P
 export async function loadConfig(projectRoot = process.cwd(), options: ConfigLoadOptions = {}): Promise<ResolvedConfig> {
   const root = resolve(projectRoot), env = { ...(options.env ?? process.env) };
   const platform = options.platform ?? process.platform;
-  const bootstrap = options.globalOnly ? undefined : await inspectInstallationBootstrap(root);
+  const admission = options.pendingBootstrap === 'config-settled' && options.heal === false ? 'config-settled' : 'none';
+  const bootstrap = options.globalOnly ? undefined : await inspectInstallationBootstrap(root, admission);
   const globalPath = await resolveGlobalConfigReadPath(env, platform);
   const layout = resolveProductLayout({ projectRoot: root, platform: platform === 'win32' ? 'win32' : 'posix' });
   const projectPath = productResourcePath(layout, 'config');
@@ -86,13 +91,13 @@ export async function loadConfig(projectRoot = process.cwd(), options: ConfigLoa
   if (cached) {
     for (const section of configSections().values()) section.options.validateEffective?.(structuredClone(cached.value), env);
     cached.warnings.forEach(w => options.onWarning?.(w));
-    if (bootstrap) await assertInstallationBootstrap(root, bootstrap);
+    if (bootstrap) await assertInstallationBootstrap(root, bootstrap, admission);
     return cloneResolved(cached.value); }
   const warnings: ConfigWarning[] = [];
   const global = await loadGlobalConfig({ env, platform, onWarning: w => warnings.push(w) }) ?? {};
   const project: unknown = options.globalOnly || projectPath === globalPath ? {} : await readProjectConfig(projectPath, {
     ...(options.heal === undefined ? {} : { heal: options.heal }),
-    ...(bootstrap ? { beforeHeal: () => assertInstallationBootstrap(root, bootstrap) } : {}),
+    ...(bootstrap ? { beforeHeal: () => assertInstallationBootstrap(root, bootstrap, admission) } : {}),
     locale: resolveLocale(undefined, env),
     onWarning: warning => warnings.push(warning),
     onHeal: path => warnings.push({ code: 'CONFIG_HEALED', path, message: t('config.corrupt', { path }, resolveLocale(undefined, env)) }),
@@ -127,7 +132,7 @@ export async function loadConfig(projectRoot = process.cwd(), options: ConfigLoa
   for (const section of configSections().values()) section.options.validateEffective?.(structuredClone(value), env);
   warnings.forEach(w => options.onWarning?.(w));
   const cacheable = secrets.references.length === 0 && (await Promise.all(paths.map(stamp))).every((s, i) => s === stamps[i]);
-  if (bootstrap) await assertInstallationBootstrap(root, bootstrap);
+  if (bootstrap) await assertInstallationBootstrap(root, bootstrap, admission);
   if (cacheable) {
     if (cache.size >= 128) cache.delete(cache.keys().next().value!);
     cache.set(key, { value: structuredClone(value), warnings: structuredClone(warnings) });
