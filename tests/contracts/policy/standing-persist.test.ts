@@ -6,7 +6,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { afterEach, describe, expect, it } from 'vitest';
 import { FilePolicySource, LocalOsSessionAuthority, openSqliteApprovalStore, openSqliteAttemptStore, openSqliteAuditStore } from '#adapters/index.js';
 import { openSqliteLedger } from '#adapters/core/sqlite-ledger/index.js';
-import { getPolicyVocabulary, installationOwnerPermissions, INSTALLATION_OWNER_ROLE_ID, standingPattern, STANDING_GRANTS_MAX, type AuditEvent } from '#domain/index.js';
+import { getPolicyVocabulary, installationOwnerPermissions, INSTALLATION_OWNER_ROLE_ID, standingPattern, STANDING_GRANTS_MAX, verifiedPrincipalSchema, type AuditEvent } from '#domain/index.js';
 import { ApprovalApplication, AuditApplication, decideAgentToolCall, PersistentStanding, PolicyAdministrationApplication, SessionStanding, StandingApprovalError } from '#engine/index.js';
 import { snapshotKnownSecrets, type KnownSecretSnapshot, createHmacIntegrity } from '#platform/index.js';
 
@@ -156,7 +156,28 @@ describe('this session\'s memory (G6)', () => {
 });
 
 describe('B7 standing refusal before persistence or policy lookup', () => {
-  it('refuses known and pattern secrets before any durable approval, policy or audit change', async () => {
+  it('refuses known and pattern secrets through the portable engine contract before reading policy or invoking effects', async () => {
+    const knownSecrets = snapshotKnownSecrets([{ name: 'B7_TEST', value: 'fictitious-opaque-value' }]);
+    let policyReads = 0, administrationCalls = 0, approvalCalls = 0;
+    const standing = new PersistentStanding({
+      knownSecrets,
+      policy: { async load() { policyReads++; throw new Error('secret refusal must precede policy access'); } },
+      administration: { async submit() { administrationCalls++; throw new Error('secret refusal must precede administration'); } },
+      async approve() { approvalCalls++; throw new Error('secret refusal must precede approval'); },
+    });
+    const principal = verifiedPrincipalSchema.parse({ id: 'b7-test-person', issuer: 'host', subject: 'b7-test-person', assurance: 'os-user', scopeIds: ['s'] });
+    for (const command of ['echo fictitious-opaque-value', 'echo API_KEY=fictitious', 'echo Bearer fictitious-bearer-0123456789',
+      ...[';', '$', '&', '(', ')'].map(delimiter => `printf '%s' 'https://user:fictitious${delimiter}tail@example.invalid/p'`)]) {
+      const pattern = shell(command);
+      expect(await standing.offer('s', principal, pattern)).toEqual({ available: false, reason: 'unsupported' });
+      await expect(standing.persist({ scopeId: 's', principal, pattern, sourceApprovalId: 'fixture-card' }))
+        .rejects.toMatchObject({ code: 'STANDING_UNSUPPORTED', detail: 'unsafe-target' });
+    }
+    expect({ policyReads, administrationCalls, approvalCalls }).toEqual({ policyReads: 0, administrationCalls: 0, approvalCalls: 0 });
+  });
+
+  it('refuses known and pattern secrets before any durable approval, policy or audit change on Linux', async context => {
+    if (process.platform !== 'linux') context.skip('LOCAL_OS_SESSION_PROC_IDENTITY_UNSUPPORTED: durable fixture requires Linux /proc identity');
     const knownSecrets = snapshotKnownSecrets([{ name: 'B7_TEST', value: 'fictitious-opaque-value' }]);
     const f = await fixture({ knownSecrets });
     const before = JSON.stringify(await f.files()), events = f.events().length;

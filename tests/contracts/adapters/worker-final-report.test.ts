@@ -99,7 +99,7 @@ if (${JSON.stringify(variant !== 'missing')}) console.log(JSON.stringify(${provi
     expect(result.result).toEqual({ kind: 'exited', exitCode: 0 });
     const final = readWorkerFinalReport(result.stdout);
     if (expected === 'reported') {
-      expect(final).toMatchObject({ status: 'reported', report: { changedFiles: ['note.txt'], summary: 'Completed [REDACTED]', openIssues: ['[REDACTED]'] } });
+      expect(final).toMatchObject({ status: 'reported', report: { changedFiles: ['note.txt'], summary: 'Completed [REDACTED]', openIssues: ['Bearer [REDACTED]'] } });
       expect(result.stdout).not.toContain(fixtureSecret); expect(result.stdout).not.toContain('abc.def.ghi');
     } else expect(final).toMatchObject({ status: 'unavailable', reason: expected });
     const dropped = received.filter(e => e.kind === 'dropped').reduce((n, e) => n + (e.kind === 'dropped' ? e.count : 0), 0);
