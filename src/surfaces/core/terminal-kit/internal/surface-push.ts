@@ -137,7 +137,8 @@ export function createSurfaceFollowSession() {
             }
             continue;
           }
-          if (step.status === 'applied' && !(await synchronize([event.kind]))) return signal.aborted ? 'abort' : 'denied';
+          // A Run can admit a worker before any finished worker event log exists.
+          if (step.status === 'applied' && !(await synchronize(event.kind === 'run' ? ['run', 'worker'] : [event.kind]))) return signal.aborted ? 'abort' : 'denied';
           if (signal.aborted) return 'abort';
           state = step.status === 'applied' ? releaseSurfacePush(step.state) : step.state;
           onStep(step);

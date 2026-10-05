@@ -9,8 +9,8 @@ import { surfaceSnapshotFixture } from '../support/surface-snapshot-fixture.js';
 const fixtures: Awaited<ReturnType<typeof surfaceSnapshotFixture>>[] = [];
 const mounted: { unmount(): void }[] = [];
 beforeEach(context => { if (process.platform === 'win32') context.skip('Local OS identity requires POSIX UID'); });
-afterEach(async () => { for (const view of mounted.splice(0)) view.unmount(); vi.restoreAllMocks(); clearConfigCache(); await Promise.all(fixtures.splice(0).map(f => rm(f.root, { recursive: true, force: true }))); });
-async function fixture() { const f = await surfaceSnapshotFixture(); fixtures.push(f); return f; }
+afterEach(async () => { for (const view of mounted.splice(0)) view.unmount(); vi.restoreAllMocks(); clearConfigCache(); await Promise.all(fixtures.splice(0).map(async f => { await f.close(); await rm(f.root, { recursive: true, force: true }); })); });
+async function fixture(initialWorker = true) { const f = await surfaceSnapshotFixture(initialWorker); fixtures.push(f); return f; }
 const labels = { ...WORKLINE_TEST_LABELS, watchStep: 'STEP {status}', watchAccessStopped: 'ACCESS-STOPPED {kinds}', watchAccessDenied: 'ACCESS-DENIED {kinds}', watchDelivery: 'DELIVERY {mode}' };
 async function type(stdin: { write(text: string): unknown }, text: string) { for (const char of text) { stdin.write(char); await settle(2); } }
 
@@ -27,13 +27,97 @@ it('loads pending approval, Run (including never dispatched) and worker at open 
   await type(view.stdin, '/watch-workers\r');
   await until(() => view.stdout.frame.includes('LIVE-PANEL') && view.stdout.frame.includes('worker 1'), 'actual WorkerPanel');
   await snapshotDone(read, 2); await settle(60);
-  expect(read).toHaveBeenCalledTimes(2); // Opening and watch activation snapshots; healthy idle push does not poll.
+  expect(read).toHaveBeenCalledTimes(2); // Opening/watch snapshots, before the first 100 ms heartbeat. Empty idle is tested below.
   await f.publishWorker();
   await until(() => view.stdout.frame.includes('246 tokens'), 'worker invalidation refreshes the actual panel');
   expect(read.mock.calls.some(call => call[0].length === 1 && call[0][0] === 'worker')).toBe(true);
   f.addApproval('new-pending');
   await until(() => read.mock.calls.some(call => call[0].length === 1 && call[0][0] === 'approval'), 'approval invalidation snapshot');
   expect(view.stdout.text).not.toContain('approval:'); // Payload is an invalidation, not surface data.
+});
+
+it.each(['finished', 'denied'] as const)('refreshes unsealed live sidecars through composition into Ink and stops when %s', async ending => {
+  const f = await fixture(false), follow = vi.fn(f.follow);
+  let revokeOnRefresh = false;
+  const read = vi.fn(async (kinds: Parameters<NonNullable<typeof f.ports.readSurfaceSnapshot>>[0], signal: AbortSignal) => {
+    if (revokeOnRefresh) await f.setGrants(undefined, true);
+    return f.ports.readSurfaceSnapshot!(kinds, signal);
+  });
+  const view = mountWorkline({ labels, pollMs: 20, ledger: { ...f.ports, readSurfaceSnapshot: read, followEvents: follow } }); mounted.push(view.instance);
+  const sealedCount = () => {
+    const db = new DatabaseSync(f.ledger, { readOnly: true });
+    try { return db.prepare('SELECT count(*) AS count FROM worker_event_logs').get()!.count; } finally { db.close(); }
+  };
+  await snapshotDone(read, 1);
+  await type(view.stdin, '/watch-workers\r'); await snapshotDone(read, 2);
+  expect(view.stdout.frame).not.toContain('worker 1');
+  await settle(350); expect(read).toHaveBeenCalledTimes(2); // No active worker: no heartbeat snapshots.
+  const connections = follow.mock.calls.length;
+  const worker = await f.startLiveWorker(async () => {
+    await until(() => read.mock.calls.some(call => call[0].join(',') === 'run,worker'), 'Run reaches the snapshot before sidecars exist');
+    const index = read.mock.calls.findIndex(call => call[0].join(',') === 'run,worker');
+    const snapshot = await read.mock.results[index]!.value;
+    expect(snapshot.workers?.sources[0]?.workers[0]).toMatchObject({ process: 'unknown', files: { heartbeat: { state: 'missing' } } });
+  });
+  await until(() => view.stdout.frame.includes('LIVE-PANEL') && view.stdout.frame.includes('worker 1'), 'Run invalidation discovers the new unsealed worker');
+  expect(read.mock.calls.some(call => call[0].join(',') === 'run,worker')).toBe(true);
+  worker.usage(123);
+  await until(() => view.stdout.frame.includes('246 tokens'), 'first live sidecar usage');
+  worker.usage(200);
+  await until(() => view.stdout.frame.includes('646 tokens'), 'subsequent live sidecar usage without ledger publication');
+  expect(sealedCount()).toBe(0);
+  expect(follow).toHaveBeenCalledTimes(connections);
+  expect(read.mock.calls.some(call => call[0].join(',') === 'worker')).toBe(true);
+  if (ending === 'denied') {
+    revokeOnRefresh = true;
+    worker.usage(9999);
+    await until(() => view.stdout.text.includes('ACCESS-STOPPED'), 'fresh principal denial stops the feed');
+    expect(view.stdout.frame).not.toContain('LIVE-PANEL');
+    expect(view.stdout.text).not.toContain('20.6k tokens');
+    const denied = await read.mock.results.at(-1)!.value;
+    expect(denied.workers).toBeUndefined();
+  } else {
+    await worker.finish();
+    await until(() => view.stdout.frame.includes('finished'), 'heartbeat reports worker completion');
+  }
+  const stopped = read.mock.calls.length;
+  await settle(350); expect(read).toHaveBeenCalledTimes(stopped);
+  expect(follow).toHaveBeenCalledTimes(connections); expect(sealedCount()).toBe(0);
+  if (ending === 'denied') {
+    await type(view.stdin, '/watch-stop\r'); await type(view.stdin, '/watch-workers\r'); await settle(250);
+    expect(read).toHaveBeenCalledTimes(stopped); expect(follow).toHaveBeenCalledTimes(connections);
+  }
+});
+
+it('serializes a Run invalidation behind a live heartbeat snapshot and stops heartbeat reads when watch closes', async () => {
+  const f = await fixture(false); await f.startLiveWorker();
+  let release!: () => void;
+  const gate = new Promise<void>(resolve => { release = resolve; });
+  let held = false, holdNext = true, inFlight = 0, maximum = 0, runPublished = false;
+  const read = vi.fn(async (kinds: Parameters<NonNullable<typeof f.ports.readSurfaceSnapshot>>[0], signal: AbortSignal) => {
+    inFlight++; maximum = Math.max(maximum, inFlight);
+    try {
+      if (holdNext && kinds.join(',') === 'worker') { holdNext = false; held = true; await gate; }
+      return await f.ports.readSurfaceSnapshot!(kinds, signal);
+    } finally { inFlight--; }
+  });
+  async function* followEvents(signal: AbortSignal) {
+    for await (const event of f.follow(signal)) { if ('kind' in event && event.kind === 'run') runPublished = true; yield event; }
+  }
+  const view = mountWorkline({ labels, pollMs: 20, ledger: { ...f.ports, readSurfaceSnapshot: read, followEvents } }); mounted.push(view.instance);
+  try {
+    await snapshotDone(read, 1); await type(view.stdin, '/watch-workers\r');
+    await until(() => held, 'heartbeat held in snapshot');
+    const before = read.mock.calls.length;
+    f.advanceRun(2); await until(() => runPublished, 'real producer Run invalidation');
+    await settle(150); expect(read).toHaveBeenCalledTimes(before); expect(maximum).toBe(1);
+    release();
+    await until(() => read.mock.calls.some(call => call[0].join(',') === 'run,worker') && inFlight === 0, 'queued invalidation settles');
+    expect(maximum).toBe(1);
+    await type(view.stdin, '/watch-stop\r'); await settle(150);
+    const stopped = read.mock.calls.length;
+    await settle(350); expect(read).toHaveBeenCalledTimes(stopped);
+  } finally { release(); }
 });
 
 it('resynchronizes a real two-revision Run gap once, then renders subsequent revisions normally', async () => {
@@ -47,7 +131,7 @@ it('resynchronizes a real two-revision Run gap once, then renders subsequent rev
   f.advanceRun(6); await until(() => view.stdout.text.includes('rev 6'), 'next normal publication');
   // Latest debug frame contains each static entry once; accumulated writes repeat old frames.
   expect(view.stdout.frame.match(/STEP gap/g)).toHaveLength(1);
-  expect(read.mock.calls.map(call => call[0])).toEqual([['approval', 'run', 'worker'], ['approval', 'run', 'worker'], ['run'], ['approval', 'run', 'worker'], ['run'], ['run']]);
+  expect(read.mock.calls.map(call => call[0])).toEqual([['approval', 'run', 'worker'], ['approval', 'run', 'worker'], ['run', 'worker'], ['approval', 'run', 'worker'], ['run', 'worker'], ['run', 'worker']]);
   expect(view.stdout.text).not.toContain('rev 3');
 });
 

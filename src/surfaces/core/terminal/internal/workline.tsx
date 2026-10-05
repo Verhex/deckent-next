@@ -4,8 +4,7 @@ import { useWorklinePanel, type LocalExecution } from './workline-panel.js';
 import { WorklinePaletteProvider, useWorklinePalette, parseSlashLine, useWorklineWatch, surfaceDeliveryValues, surfaceFollowLine, useSurfacePushFeed,
   type TerminalLocalContext, type WorklineInkPalette, type WorklineStreamTurn } from '#surfaces/core/terminal-kit/index.js';
 import { StatusStrip } from './status-strip.js';
-import { AssistantLive, openAssistantStream, renderAssistantStream, renderCompleteReply, type AssistantStreamStep } from '#surfaces/core/terminal-render/index.js';
-import type { AssistantRenderLabels } from '#surfaces/core/terminal-render/index.js';
+import { AssistantLive, openAssistantStream, renderAssistantStream, renderCompleteReply, type AssistantStreamStep, type AssistantRenderLabels } from '#surfaces/core/terminal-render/index.js';
 import { HumanTextContext, humanRecordText, projectHumanPickerText, RenderGlyphsContext, resolveRenderGlyphs } from '#surfaces/core/terminal-render/index.js';
 import type { KnownSecretSnapshot } from '#platform/index.js';
 import { assistantLedgerEntries, streamStepEntries } from './ledger-units.js';
@@ -133,7 +132,7 @@ export function WorklineApp(props: WorklineProps) {
   const resumePicker = presentation?.kind === 'resume' && state.picker ? presentation.rows : null;
   const seenWorkers = useRef(new Set<string>()), seenRuns = useRef(new Map<string, string>()), snapshotOpened = useRef(false);
   const pollMs = props.pollMs ?? ledger?.workerHeartbeatMs ?? 5000;
-  const workRef = useRef<ReturnType<typeof useWorkSurface> | null>(null);
+  const workRef = useRef<ReturnType<typeof useWorkSurface> | null>(null), activeWorkers = useRef(false);
   const pushMode = useSurfacePushFeed(ledger?.followEvents, ledger?.scopeId ?? '', pollMs, step => {
     if (step.status === 'denied') workRef.current?.observeWorkers([]);
     // With snapshots, publications are invalidations, never a substitute for typed surface state.
@@ -146,6 +145,8 @@ export function WorklineApp(props: WorklineProps) {
     if (signal.aborted) return [];
     if (snapshot.scopeId !== ledger.scopeId) return kinds; const opening = !snapshotOpened.current; snapshotOpened.current = true;
     if (snapshot.workers) {
+      activeWorkers.current = snapshot.workers.sources.some(source => source.workers.some(worker => !worker.terminal &&
+        (['running', 'created', 'paused'].includes(worker.process) || (worker.identity !== null && worker.process === 'unknown' && worker.files?.heartbeat.phase !== 'exited'))));
       const workers = workerReportToLedgerEntries(snapshot.workers, 'watch').filter(entry => entry.kind === 'worker');
       workRef.current?.observeWorkers(workers);
       if (opening || watchRef.current.workers) { const { seen, fresh } = newWorkerTaskIds(seenWorkers.current, workers); seenWorkers.current = seen; push(fresh); }
@@ -153,7 +154,7 @@ export function WorklineApp(props: WorklineProps) {
     if (snapshot.runs && (opening || watchRef.current.runs)) { const { seen, fresh } = newRunLedgerEntries(seenRuns.current, snapshot.runs, 'watch'); seenRuns.current = seen; push(fresh); }
     if (snapshot.approvals) workRef.current?.observeApprovals(snapshot.approvals);
     return snapshot.denied;
-  } : undefined, ledger?.readSurfaceSnapshot ? `${watch.workers}:${watch.runs}` : '');
+  } : undefined, ledger?.readSurfaceSnapshot ? `${watch.workers}:${watch.runs}` : '', { heartbeatMs: ledger?.workerHeartbeatMs ?? pollMs, active: () => watchRef.current.workers && activeWorkers.current });
   const pushLive = pushMode !== 'poll'; // A refused feed must not restart through fallback polling.
   const followWorkers = ledger?.followEvents ? undefined : ledger?.followWorkers, followRuns = ledger?.followEvents ? undefined : ledger?.followRuns;
   const failed = useCallback((error: unknown) => push([notice('error', `${labels.watchFailed}: ${errorText(error)}`)]), [errorText, labels.watchFailed, push]);

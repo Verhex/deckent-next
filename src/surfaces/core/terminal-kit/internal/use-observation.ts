@@ -70,10 +70,13 @@ export function useSurfacePushFeed(
   onDelivery: (mode: SurfaceDeliveryMode) => void,
   refresh?: SurfaceRefresh,
   refreshKey = '',
+  liveWorkers?: { readonly heartbeatMs: number; readonly active: () => boolean },
 ): SurfaceDeliveryMode {
   const deniedSource = useRef<{ follow: typeof follow; scopeId: string } | null>(null);
   const [mode, setMode] = useState<SurfaceDeliveryMode>(follow ? 'push' : 'poll');
   const refreshRef = useRef(refresh); refreshRef.current = refresh;
+  const workersRef = useRef(liveWorkers); workersRef.current = liveWorkers;
+  const heartbeatMs = liveWorkers?.heartbeatMs;
   const stepRef = useRef(onStep);
   const deliveryRef = useRef(onDelivery);
   stepRef.current = onStep;
@@ -86,21 +89,51 @@ export function useSurfacePushFeed(
     const session = createSurfaceFollowSession();
     const controller = new AbortController();
     let stopped = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let pending = Promise.resolve();
+    const clearHeartbeat = () => { clearTimeout(timer); timer = undefined; };
+    const observe = (step: SurfacePushStep) => {
+      if (stopped || controller.signal.aborted) return;
+      if (step.status === 'denied' && step.kinds.includes('worker')) clearHeartbeat();
+      if (step.status === 'denied' && step.stopped) { clearHeartbeat(); deny(); controller.abort(); }
+      stepRef.current(step);
+    };
+    const schedule = () => {
+      clearHeartbeat();
+      if (stopped || controller.signal.aborted || !heartbeatMs || !session.allowedKinds().includes('worker') || !workersRef.current?.active()) return;
+      timer = setTimeout(() => { void synchronize(['worker'], controller.signal).catch(() => {}); }, heartbeatMs);
+    };
+    // Push invalidations and live sidecars share one serialized, authorized snapshot reader.
+    const synchronize: SurfaceRefresh = (kinds, signal) => {
+      clearHeartbeat();
+      const result = pending.then(async () => {
+        if (stopped || signal.aborted) return [];
+        const allowed = kinds.filter(kind => session.allowedKinds().includes(kind));
+        if (!allowed.length) return [];
+        const denied = await refreshRef.current!(allowed, signal);
+        if (!signal.aborted && denied.length) observe({ status: 'denied', access: 'denied', scopeId, kinds: denied, stopped: true,
+          state: openSurfacePush(), wait: surfaceWait('refuse-scope', pace) });
+        return denied;
+      });
+      pending = result.then(schedule, schedule);
+      return result;
+    };
     const run = async () => {
       while (!stopped && !controller.signal.aborted) {
         setMode('push');
         try {
-          const outcome = await session.read(follow(controller.signal), scopeId, pace, controller.signal, step => { if (!stopped) stepRef.current(step); }, hasRefresh ? (kinds, signal) => refreshRef.current!(kinds, signal) : undefined);
+          const outcome = await session.read(follow(controller.signal), scopeId, pace, controller.signal, observe, hasRefresh ? synchronize : undefined);
           if (stopped || outcome === 'abort' || controller.signal.aborted) return;
           if (outcome === 'denied') { deny(); return; }
         } catch { if (stopped || controller.signal.aborted) return; }
         if (stopped || controller.signal.aborted) return;
+        clearHeartbeat();
         setMode('poll');
         session.reportBreak(pace, step => { if (!stopped) stepRef.current(step); });
         deliveryRef.current('poll');
         if (hasRefresh) {
           try {
-            const denied = await refreshRef.current!(session.allowedKinds(), controller.signal);
+            const denied = await synchronize(session.allowedKinds(), controller.signal);
             if (stopped || controller.signal.aborted) return;
             if (denied.length) {
               stepRef.current({ status: 'denied', access: 'denied', scopeId, kinds: denied, stopped: true, state: openSurfacePush(), wait: surfaceWait('refuse-scope', pace) });
@@ -114,8 +147,8 @@ export function useSurfacePushFeed(
       }
     };
     void run();
-    return () => { stopped = true; controller.abort(); };
-  }, [follow, pace, scopeId, hasRefresh, refreshKey]);
+    return () => { stopped = true; clearHeartbeat(); controller.abort(); };
+  }, [follow, pace, scopeId, hasRefresh, refreshKey, heartbeatMs]);
   return follow ? mode : 'poll';
 }
 
