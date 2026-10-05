@@ -214,7 +214,9 @@ configuration, hooks, filters, index or attributes. Linux descriptor-relative no
 reads reject symlinks, hardlinks and special files, and detect changed snapshots. Versioned exclusion
 rules omit Git/product/auth metadata and environment files; exclusions are included in the package.
 Untracked non-excluded files are included. Only regular UTF-8 text files and executable mode are
-supported; binary/submodule/symlink input fails explicitly. Scan bytes/time use artifact/Git limits;
+supported; changed or added binary/submodule/symlink input fails explicitly (an unchanged binary equal to the
+recorded base is not read or carried). Scan time uses the Git limit; the artifact byte budget counts only content
+carried into the patch (changed, added or kept files), never the unchanged repository (PATCH-BUDGET 2026-10-06);
 `artifacts.patchPreview` config bounds entries, depth and path bytes.
 
 Git transport closure (GIT-NET, owner 2026-09-29 P1; eighth batch): every local Git invocation of the patch adapter (`git-patch`:

@@ -10,7 +10,8 @@ import { GIT_LOCAL_ENV, localGitArgs } from './local-git.js';
 export class GitCommand {
   constructor(private readonly options: GitWorkspaceOptions) {}
   run(args: string[], input = '', index?: string, deadline = Date.now() + this.options.timeoutMs) {
-    if (Date.now() >= deadline) throw new WorkspacePatchError('PATCH_LIMIT', 'time');
+    // The remaining budget is spent before Git starts: report the configured bound like the snapshot scan does (Astra 2367 P2).
+    if (Date.now() >= deadline) throw new WorkspacePatchError('PATCH_LIMIT', 'time', { observed: this.options.timeoutMs + Math.max(0, Date.now() - deadline), limit: this.options.timeoutMs });
     return new Promise<string>((resolve, reject) => {
       const child = execFile(this.options.gitExecutable, localGitArgs(this.options.sourceRoot, args), {
         env: { ...GIT_LOCAL_ENV,
