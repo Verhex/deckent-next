@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { AGENT_COMPACTION_HIGH_WATER, planAgentCompaction, renderAgentCompaction, type AgentCompactionSummary } from './compaction.js';
+import { createAgentContextCarry } from './carry.js';
 import type { AgentContextQuality, AgentToolCall, AgentToolCleanup, AgentToolOutcome, AgentToolSpec, AgentToolCallStatus, AgentTurnEvent, AgentTurnFinish,
   AgentTurnMessage } from '#domain/index.js';
 
@@ -162,6 +163,7 @@ function checkArguments(tool: AgentToolSpec, raw: string): { ok: true; args: Rec
 export async function runAgentTurn(input: AgentTurnInput, ports: AgentTurnPorts): Promise<AgentTurnResult> {
   const { signal, emit } = input;
   const messages: AgentTurnMessage[] = [...input.messages];
+  const carry = createAgentContextCarry(messages);
   const byName = new Map(input.tools.map(tool => [tool.name, tool]));
   // Read dedupe answers only with a result the model can still see: entries leave with compaction and after a successful edit. An
   // entry is bound to the result message itself, never to the provider's call id (providers reuse ids across rounds; Astra 2106 R1).
@@ -211,6 +213,9 @@ export async function runAgentTurn(input: AgentTurnInput, ports: AgentTurnPorts)
       || historyBytes + (input.admission?.requestReserveBytes ?? 0) > byteBound);
     const plan = ports.summarize && (tokenPressure || bytePressure) ? planAgentCompaction(messages) : null;
     if (plan && ports.summarize) {
+      const canonical = carry.fold(plan.older, byteBound);
+      if (!canonical) return finish('error', '[deckent] AGENT_CONTEXT_CARRY_TOO_LARGE: the turn context record reached its byte bound.'
+        + ' Nothing more was sent; the conversation history is unchanged. Start a new conversation.');
       compactions++;
       let summaryOf: AgentCompactionSummary | 'unreadable' | null;
       try { summaryOf = await ports.summarize({ sequence: compactions, messages: plan.older }, signal); } catch { summaryOf = null; }
@@ -222,7 +227,10 @@ export async function runAgentTurn(input: AgentTurnInput, ports: AgentTurnPorts)
           + ' Send the message again to retry, or start a new conversation (this one stays saved).');
       }
       if (summaryOf === 'unreadable') mechanical++;
-      const next = [...(plan.system ? [plan.system] : []), renderAgentCompaction(plan, summaryOf === 'unreadable' ? null : summaryOf), ...plan.tail];
+      const next = [...(plan.system ? [plan.system] : []), renderAgentCompaction(plan, summaryOf === 'unreadable' ? null : summaryOf, canonical), ...plan.tail];
+      if (byteBound !== undefined && Buffer.byteLength(JSON.stringify(next), 'utf8') > byteBound) return finish('error',
+        '[deckent] AGENT_CONTEXT_CARRY_TOO_LARGE: the preserved context and summary exceed the request byte bound.'
+        + ' Nothing more was sent; the conversation history is unchanged. Start a new conversation.');
       messages.splice(0, messages.length, ...next);
       const visible = new Set<AgentTurnMessage>(plan.tail);
       for (const [digest, seen] of seenReads) if (!visible.has(seen.message)) seenReads.delete(digest);
@@ -263,11 +271,12 @@ export async function runAgentTurn(input: AgentTurnInput, ports: AgentTurnPorts)
     const truncated = outcome.finish === 'length' || (limitTokens !== null && outcome.usage !== null && outcome.usage.completionTokens >= limitTokens);
     for (const [index, call] of outcome.toolCalls.entries()) {
       const tool = byName.get(call.name), started = ports.now();
-      let digestOf: string | null = null, targetOf: string | null = null;
+      let digestOf: string | null = null, targetOf: string | null = null, invoked = false;
       // `cleanup` (Astra 2124): only the host shell tool's outcome ever carries it; the event omits the field otherwise.
       const result = async (status: AgentToolCallStatus, content: string, cleanup?: AgentToolCleanup) => {
         if (!NO_PROGRESS_STATUSES.has(status)) progressed = true;
         const message = push({ role: 'tool', toolCallId: call.id, name: call.name, content });
+        carry.observed(message, call, rounds, index, invoked, status, cleanup);
         emit({ kind: 'tool.finished', callId: call.id, name: call.name, status, ms: Math.max(0, ports.now() - started), bytes: Buffer.byteLength(content, 'utf8'),
           ...(cleanup !== undefined ? { cleanup } : {}) });
         await ports.settled?.({ round: rounds, index, call, tool: tool ?? null, argsDigest: digestOf, target: targetOf, status, content });
@@ -307,6 +316,7 @@ export async function runAgentTurn(input: AgentTurnInput, ports: AgentTurnPorts)
         if (answer === 'expired') { await result('approval-expired', `[deckent] ${call.name}: error=approval-expired (nothing ran)`); continue; }
       }
       toolCalls++;
+      invoked = true;
       let outcomeText: AgentToolOutcome;
       try { outcomeText = await ports.execute(tool, checked.args, signal, call.id, { round: rounds, index }); } catch { outcomeText = { status: 'error', text: `[deckent] ${call.name}: error=failed` }; }
       // An executed non-read call may have changed files even when it ended in error (e.g. a non-zero exit after `sed -i`): earlier reads run again.
