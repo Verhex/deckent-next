@@ -39,7 +39,7 @@ until the open macOS/Windows platform debts close; a red badge means a real fail
 
 ## Features that exist today
 
-The current scope below comes from the [capability map](PLAN.md#bugün-ne-var-ne-eksik) and
+The current scope below comes from the [capability map](.deckent/docs/plan/capability-map.md#bugün-ne-var-ne-eksik) and
 [alpha.3 release record](CHANGELOG.md). Availability is bounded by each installed profile and policy.
 
 - Run/Task/Attempt admission, dependency scheduling, reservations and a durable SQLite ledger;

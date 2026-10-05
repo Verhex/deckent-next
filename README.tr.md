@@ -42,7 +42,7 @@ macOS/Windows platform borçları kapanana kadar CI rozeti kırmızı kalır; k�
 
 ## Bugün mevcut özellikler
 
-Aşağıdaki kapsam [yetenek haritası](PLAN.md#bugün-ne-var-ne-eksik) ve
+Aşağıdaki kapsam [yetenek haritası](.deckent/docs/plan/capability-map.md#bugün-ne-var-ne-eksik) ve
 [alpha.3 sürüm kaydına](CHANGELOG.md) dayanır. Her yeteneğin kullanımı kurulu profil ve policy ile sınırlıdır.
 
 - Run/Task/Attempt kabulü, bağımlılık sıralaması, rezervasyon ve kalıcı SQLite ledger;

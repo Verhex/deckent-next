@@ -142,6 +142,6 @@ node .agents/refactor/pr.mjs prepare <patch-dir> --card <id> [--scope <glob>]...
 node .agents/refactor/pr.mjs open <patch-dir> --card <id> --push
 ```
 
-[PLAN.md](PLAN.md#worker-git-pr--host-branch-ve-pr-akışı) carries the script, patch/report contract,
+[PLAN.md](.deckent/docs/plan/workstreams.md#worker-git-pr--host-branch-ve-pr-akışı) carries the script, patch/report contract,
 replay/failure checks and owner test planned for **2026-10-04**. The script is present; owner test and landing remain open.
 Credential plumbing, live GitHub push, live PR creation, main landing and a DOGFOOD/live switch stay outside this script.
