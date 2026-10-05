@@ -1,9 +1,11 @@
 import { lstat, mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
-import { ManagedFileError, inspectProductDirectory, prepareProductCompanionPath, productResourcePath, readJsonFile,
+import { ManagedFileError, getConfigFieldDefault, inspectProductDirectory, prepareProductCompanionPath, productResourcePath, readJsonFile,
   withConfigWriteLock, writeJsonAtomic, type ProductLayout } from '#platform/index.js';
 
 type IdentityResource = 'projectIdentity' | 'installationIdentity';
+/** The poll step keeps a concurrent first publication cheap to observe; the bound is the writer-lock timeout. */
+const PUBLICATION_POLL_MS = 10;
 type Failure = 'INVALID' | 'UNAVAILABLE' | 'LOCKED' | 'UNSUPPORTED';
 class IdentityFileError extends Error { constructor(readonly reason: Failure) { super(reason); } }
 interface IdentityCodec<T> { parse(value: unknown): T; create(): T | Promise<T>; error(reason: Failure): Error; isError?(error: unknown): boolean }
@@ -40,10 +42,25 @@ export class IdentityFile<T> {
         if (error instanceof ManagedFileError && error.code === 'MANAGED_FILE_MISSING') return null;
         throw error;
       }
-      const record = await this.read(directory);
+      const record = await this.read(directory) ?? await this.settled(directory);
       if (!record) throw new IdentityFileError('INVALID');
       return record;
     } catch (error) { return this.fail(error); }
+  }
+
+  /**
+   * First publication creates the directory and then the record under the writer lock, so an unlocked reader can see the
+   * directory before the record. Re-read without locks or writes for at most the writer-lock bound; a record that is still
+   * missing afterwards is retained loss (INVALID), never a fresh identity.
+   */
+  private async settled(directory: string): Promise<T | null> {
+    const deadline = Date.now() + (this.lockTimeoutMs ?? getConfigFieldDefault('configFile').writeLockTimeoutMs);
+    while (Date.now() < deadline) {
+      await new Promise(resolve => setTimeout(resolve, PUBLICATION_POLL_MS));
+      const record = await this.read(directory);
+      if (record) return record;
+    }
+    return null;
   }
 
   /** Existing-record replacement uses the same custody and atomic writer as first publication. */
