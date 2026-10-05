@@ -127,7 +127,7 @@ it('measures every round before sending it, reports the context, and never sends
     admission: { outputReserveTokens: 4096, safetyReserveTokens: 2048 } },
   { ...full.value, measure: async input => ({ promptTokens: input.round === 1 ? 1000 : 1900, windowTokens: 8000, quality: 'upper-bound' }) });
   expect(refused).toMatchObject({ finish: 'error', rounds: 2, toolCalls: 1 }); expect(full.invoked).toEqual([1]);
-  expect(refused.note).toMatch(/1900 prompt tokens \(upper bound\) \+ 6144 reserved > 8000.*Nothing was sent/);
+  expect(refused.note).toMatch(/1900 prompt tokens \(upper-bound\) \+ 6144 reserved > 8000.*Nothing was sent/);
   // An unknown window or a failed measurement never blocks a round: the provider stays the arbiter.
   const unknown = ports([answer('ok')]);
   expect(await runAgentTurn({ messages: user, tools, signal: new AbortController().signal, emit: () => undefined },

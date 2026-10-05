@@ -18,6 +18,7 @@ export interface AgentTurnAdmission {
 
 export function agentTurnAdmission(maxCompletionTokens: number, inputMaxBytes: number): AgentTurnAdmission {
   return Object.freeze({ outputReserveTokens: maxCompletionTokens, safetyReserveTokens: SAFETY_RESERVE_TOKENS, requestMaxBytes: inputMaxBytes,
-    // The longest answer (a token is at most 4 UTF-8 bytes) and one user message of up to an eighth of the bound, at most 32 KiB.
+    // Compaction headroom heuristic, not a token-to-byte guarantee. Exact JSON byte guards still admit each request.
+    // Reserve an estimated answer and one user message of up to an eighth of the bound, at most 32 KiB.
     requestReserveBytes: maxCompletionTokens * 4 + Math.min(32_768, Math.floor(inputMaxBytes / 8)), completionLimitTokens: maxCompletionTokens });
 }

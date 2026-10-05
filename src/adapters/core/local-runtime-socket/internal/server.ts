@@ -101,6 +101,10 @@ function accept(socket: Socket, options: ResolvedLocalRuntimeSocketOptions, hand
       .then(value => {
         stream?.finish(); turn?.finish();
         let response = value.response;
+        // A required event that could not be delivered is a capacity failure, never a successful or user-cancelled turn.
+        if (turn?.signal.reason instanceof ServiceFrameError && turn.signal.reason.code === 'SERVICE_FRAME_LIMIT') {
+          response = transportFailure(request.requestId, 'RUNTIME_CHAT_EVENT_TOO_LARGE');
+        }
         afterResponseOrDisconnect = value.afterResponseOrDisconnect;
         if (disconnected) { finishHandoff(); return; }
         if (response.requestId !== request.requestId) response = transportFailure(request.requestId);

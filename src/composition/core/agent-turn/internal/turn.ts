@@ -10,7 +10,7 @@ import { agentTurnWriteFloor, isSelfSourceProject, agentAuthorityPaths, agentPro
   OPENAI_CHAT_ENABLE_THINKING_CAPABILITY, OPENAI_CHAT_TOOL_CALLS_CAPABILITY, openScratchSession, projectEditArea, readTerminalChatConfig, readTerminalScratchConfig,
   readTerminalFetchConfig, FETCH_URL_TOOL_SPEC, SYSTEM_FETCH_TRANSPORT, readTerminalShellConfig, shellSandboxCapabilities, RUN_SHELL_TOOL_SPEC, SCRATCH_TOOL_SPECS, scratchSessionKey, registerProviderConfig, createScratchActivity,
   isWriteApprovalFloored, isSelfSourceWriteFloored, shippedShellSandboxes, McpClientPool, type HttpFetchTransport, type LocalPeerIdentity,
-  sandboxWriteSetRoot, dropFullPreview, keepFullPreview, type RuntimeServiceTurnChannel, type ScratchActivity, type ShellSandboxFactory, type WorkspaceEditArea } from '#adapters/index.js';
+  sandboxWriteSetRoot, dropFullPreview, keepFullPreview, ServiceFrameError, type RuntimeServiceTurnChannel, type ScratchActivity, type ShellSandboxFactory, type WorkspaceEditArea } from '#adapters/index.js';
 import { createAgentShell } from './shell.js';
 import { createAgentFetch } from './fetch.js';
 import { createAgentMcp } from './mcp.js';
@@ -195,6 +195,8 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
     registered = !host.running.has(key);
     if (registered) host.running.set(key, { principalKey, controller: cancel });
     const ports: AgentTurnPorts = {
+      contextFailure: () => channel.signal.reason instanceof ServiceFrameError && channel.signal.reason.code === 'SERVICE_FRAME_LIMIT'
+        ? 'RUNTIME_CHAT_EVENT_TOO_LARGE' : null,
       async invokeRound({ round, messages, tools: declared }, onDelta, roundSignal): Promise<AgentRoundOutcome> {
         await channel.drained();
         const invocation = roundCommand(round, messages, declared);
@@ -308,7 +310,7 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
       now: () => clock.sample().wallMs,
     };
     const result = await runDurableAgentTurn({ claim: { scopeId: command.scopeId, turnId: command.turnId, principalKey, requestDigest, claimedAtMs: clock.sample().wallMs },
-      messages: command.messages, tools, signal, emit: event => { if (event.kind !== 'done') channel.emit(event); },
+      messages: command.messages, tools, signal, language, emit: event => { if (event.kind !== 'done') channel.emit(event); },
       admission: agentTurnAdmission(chat.maxCompletionTokens, context.config.service.inputMaxBytes) }, store, ports);
     await channel.drained();
     const answer = result.answer;

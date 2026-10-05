@@ -1,7 +1,7 @@
 import type { Socket } from 'node:net';
 import type { AgentTurnStreamEvent } from '#domain/index.js';
 import { RUNTIME_SERVICE_EVENT_FRAME_EVENTS, RUNTIME_SERVICE_SCHEMA_VERSION } from '#engine/index.js';
-import { encodeServiceFrame } from './framing.js';
+import { encodeServiceFrame, ServiceFrameError } from './framing.js';
 
 /**
  * Required-data channel of one `chatTurn` request (v12). Events are never dropped: the producer awaits `drained()` between steps,
@@ -31,7 +31,7 @@ export function createServerTurnChannel(socket: Socket, requestId: string, maxFr
   // Worst case JSON escapes one UTF-16 code unit as six bytes; the fixed text wrapper is under 32 bytes.
   const pieceUnits = Math.max(1, Math.floor((maxFrameBytes - envelope - 32) / 6));
   const release = () => { const resume = waiters; waiters = []; for (const wake of resume) wake(); };
-  const fail = () => { if (!controller.signal.aborted) controller.abort(); pending = []; pendingBytes = 0; release(); };
+  const fail = (reason?: ServiceFrameError) => { if (!controller.signal.aborted) controller.abort(reason); pending = []; pendingBytes = 0; release(); };
   const idle = () => pending.length === 0 && !socket.writableNeedDrain;
   const split = (event: Piece): Piece[] => {
     if (!textual(event)) return [event];
@@ -73,7 +73,7 @@ export function createServerTurnChannel(socket: Socket, requestId: string, maxFr
     for (const piece of merged.flatMap(split)) {
       const bytes = Buffer.byteLength(JSON.stringify(piece), 'utf8') + 1;
       // A structured event larger than one frame cannot be split: fail closed rather than drop it.
-      if (envelope + bytes > maxFrameBytes) { fail(); return; }
+      if (envelope + bytes > maxFrameBytes) { fail(new ServiceFrameError('SERVICE_FRAME_LIMIT')); return; }
       if (frame.length > 0 && (frame.length >= RUNTIME_SERVICE_EVENT_FRAME_EVENTS || frameBytes + bytes > maxFrameBytes) && !send()) return;
       frame.push(piece); frameBytes += bytes;
     }
@@ -88,7 +88,10 @@ export function createServerTurnChannel(socket: Socket, requestId: string, maxFr
     signal: controller.signal,
     emit(event: AgentTurnStreamEvent) {
       if (controller.signal.aborted || finished) return;
-      pending.push(event); pendingBytes += Buffer.byteLength(JSON.stringify(event), 'utf8');
+      const bytes = Buffer.byteLength(JSON.stringify(event), 'utf8');
+      // Check before queue capacity: even a very large structured event has the same typed single-frame refusal.
+      if (!textual(event) && envelope + bytes + 1 > maxFrameBytes) { fail(new ServiceFrameError('SERVICE_FRAME_LIMIT')); return; }
+      pending.push(event); pendingBytes += bytes;
       if (pendingBytes > pendingMaxBytes) { fail(); return; }
       if (!scheduled) { scheduled = true; setImmediate(() => write(false)); }
     },

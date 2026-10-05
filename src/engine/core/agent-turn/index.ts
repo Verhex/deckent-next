@@ -12,3 +12,4 @@ export { agentTurnAdmission, type AgentTurnAdmission } from './internal/admissio
 export { APPROVAL_PREVIEW_MAX_BYTES, boundApprovalPreview, agentToolApprovalSummary } from './internal/approval-preview.js';
 export { AGENT_TURN_REPLY_LANGUAGES, AGENT_TURN_SYSTEM_PROMPT_VERSION, agentTurnReplyLanguageRule, renderAgentTurnSystemPrompt, withAgentTurnSystemPrompt, type AgentTurnReplyLanguage,
   type AgentTurnShellPosture } from './internal/system-prompt.js';
+export { agentCompactionExpected, agentContextFailureNote, agentHistoryBytes, createAgentCompactionGuard, type AgentContextFailure } from './internal/pressure.js';

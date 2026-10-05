@@ -79,7 +79,7 @@ describe.skipIf(process.platform !== 'linux')('local runtime socket turn stream'
       const events: AgentTurnStreamEvent[] = [];
       const response = await turnLocalRuntime(options, turnRequest(), batch => events.push(...batch));
       expect(events).toEqual([]);
-      expect(response).toMatchObject({ ok: true, result: { aborted: true } }); expect(signal?.aborted).toBe(true);
+      expect(response).toMatchObject({ ok: false, error: { code: 'RUNTIME_CHAT_EVENT_TOO_LARGE' } }); expect(signal?.aborted).toBe(true);
     } finally { await server.dispose(); }
   });
 
