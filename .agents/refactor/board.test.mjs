@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
+import crypto from 'node:crypto';
 import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -212,9 +213,10 @@ test('render escapes every field, shows age without a liveness claim and marks u
   const now = new Date(Date.parse(board.sessions[0].updatedAt) + 7 * 60_000);
   const html = renderHtml(board, { now });
   assert.equal(html.includes('<img'), false); assert.equal(html.includes('</script><img'), false);
-  assert.equal((html.match(/<script/g) ?? []).length, 0);
+  assert.equal((html.match(/<script/g) ?? []).length, 1);
+  assert.equal(html.match(/<script>([\s\S]*?)<\/script>/)[1].includes(hostile), false);
   assert.ok(html.includes('&lt;img src=x onerror=alert(1)&gt;'));
-  assert.ok(/7 dk önce/.test(html)); assert.ok(!/canlı|live/i.test(html.replace(/yalnız pano verisi[^<]*/g, '')));
+  assert.ok(/7 dk önce/.test(html)); assert.match(html, /canlılık\/yetki kanıtı değildir/);
   assert.ok(/Atanmadı/.test(html)); assert.ok(/Dogfood[^<]*OFF/.test(html) || /OFF/.test(html));
   const text = renderText(board, { now });
   assert.ok(text.includes('7 dk önce')); assert.ok(text.includes('Atanmadı')); assert.ok(!/<img/.test(text) || text.includes(hostile));
@@ -316,9 +318,9 @@ test('owner panel copy reports success only when a copy really happened; a refus
       getElementById: id => (id === 'toast' ? toast : { textContent: '', className: '' }),
       addEventListener: (_type, fn) => { handler = fn; },
       createElement: () => { const area = { removed: false, select() {}, remove() { area.removed = true; } }; areas.push(area); return area; },
-      execCommand: () => exec(), body: { dataset: { generated: new Date().toISOString() }, append() {} } };
+      execCommand: () => exec(), body: { dataset: { updated: new Date().toISOString() }, append() {} } };
     vm.runInNewContext(source, { document, navigator: { clipboard }, setTimeout: () => 0, clearTimeout() {}, setInterval() {}, Date });
-    await handler({ target: { closest: () => ({ getAttribute: () => 'node run.mjs' }) } });
+    await handler({ target: { closest: selector => selector === '[data-copy]' ? ({ getAttribute: () => 'node run.mjs' }) : null } });
     return { toast, areas };
   }
   const native = await click({ clipboard: { writeText: async () => {} }, exec: () => assert.fail('no fallback') });
@@ -330,4 +332,179 @@ test('owner panel copy reports success only when a copy really happened; a refus
     assert.match(failed.toast.textContent, /^Kopyalanamadı/); assert.equal(failed.toast.className, 'bad');
     assert.equal(failed.areas.length, 1); assert.equal(failed.areas[0].removed, true);
   }
+});
+
+const reportBody = () => ({ title: 'Takip', headline: 'Güncel kayıt', impact: 'İşler tek tabloda.',
+  flow: [{ label: 'Önce', text: 'Birleşti', who: 'Ana' }, { label: 'Şimdi', text: 'İnceleme', who: 'Astra' }],
+  limits: [], decisions: [], next: { who: 'Ana', text: 'Sonraki parti' }, details: [] });
+function dashboardFixture(t) {
+  const { file } = fixture(t), now = new Date('2026-10-05T12:00:00Z');
+  initBoard(file, { now });
+  const workers = ['running', 'running', 'review', 'landed', 'failed', 'canceled'].map((status, i) => ({
+    id: `worker-${i}`, kind: 'codex-exec', model: 'model', worktree: `/home/user/lane-${i}`, card: `CARD-${i}`, status, since: '2026-10-05T10:00:00Z' }));
+  setOwnRow(file, 'main', { name: 'Ana', status: 'active', focus: 'Yazıyor', next: 'Teslim', workers }, { session: 'main-id', revision: 0, now });
+  setOwnRow(file, 'review', { name: 'İnceleyen', status: 'waiting', waitingOn: 'owner', next: 'Yanıt' }, { session: 'review-id', revision: 1, now });
+  setOwnRow(file, 'analysis', { name: 'Analiz', status: 'blocked' }, { session: 'analysis-id', revision: 2, now });
+  return { board: readBoard(file), now };
+}
+const inlineScript = html => html.match(/<script>([\s\S]*?)<\/script>/)[1];
+const metricValue = (html, key) => html.match(new RegExp(`data-kpi="${key}"><span>[^<]*</span><strong>([^<]*)</strong>`))[1];
+
+test('both dashboards derive exact KPI counts, all worker statuses and one filterable table from unchanged board bodies', t => {
+  const { board, now } = dashboardFixture(t), before = JSON.stringify(board);
+  for (const html of [renderHtml(board, { now }), renderOwnerReport(reportBody(), board, { now })]) {
+    const expected = { 'sessions-active': '1', 'sessions-waiting': '1', 'sessions-blocked': '1', 'workers-running': '2', 'workers-review': '1', 'workers-landed': '1' };
+    for (const [key, value] of Object.entries(expected)) assert.equal(metricValue(html, key), value, key);
+    assert.equal((html.match(/data-kpi=/g) ?? []).length, 10);
+    assert.equal((html.match(/<tr data-work-state=/g) ?? []).length, 10);
+    assert.equal((html.match(/data-work-state="running"/g) ?? []).length, 3);
+    for (const label of ['Çalışıyor', 'İncelemede', 'İndi', 'İptal', 'Başarısız', 'Engelli', 'Bekliyor', 'Atanmadı']) assert.ok(html.includes(label), label);
+    for (const state of ['all', 'running', 'review', 'landed']) assert.ok(html.includes(`data-filter="${state}"`));
+    assert.match(html, /İşçi durum dağılımı · 6 işçi/);
+    assert.match(html, /tone-info" style="flex-grow:2"/);
+    assert.equal((html.match(/class="segment /g) ?? []).length, 5);
+    assert.ok(html.includes('İşçi için kayıt yok'));
+    assert.ok(html.includes('main-id'));
+    assert.ok(html.includes('title="/home/user/lane-0">lane-0</code>'));
+    for (const label of ['Yapıldı', 'Şimdi', 'Sonra', 'Paralel']) assert.ok(html.includes(`<h3>${label}</h3>`));
+    assert.equal((html.match(/class="step tone-/g) ?? []).length, 4);
+    assert.ok(html.indexOf('id="bekleyen') < html.indexOf('id="kim'));
+  }
+  assert.equal(JSON.stringify(board), before, 'rendering never mutates board state');
+  const closed = structuredClone(board); closed.sessions[2].status = 'closed'; closed.sessions[2].focus = 'Yarım kalan iş';
+  const completed = renderHtml(closed, { now }).match(/<h3>Yapıldı<\/h3>([\s\S]*?)<\/article>/)[1];
+  assert.equal(completed.includes('Yarım kalan iş'), false);
+  assert.ok(completed.includes('CARD-3'));
+});
+
+test('missing metadata remains unknown; old report bodies work; optional main SHA and explicit CI states render honestly', t => {
+  const { board, now } = dashboardFixture(t);
+  for (const html of [renderHtml(board, { now }), renderOwnerReport(reportBody(), board, { now })]) {
+    for (const key of ['live-version', 'main-sha', 'ci']) assert.equal(metricValue(html, key), 'Bilinmiyor');
+  }
+  for (const state of ['ok', 'warn', 'fail']) {
+    const body = { ...reportBody(), version: { live: 'alpha.4', n1: 'alpha.4', ci: 'CI kaydı', ciState: state, mainSha: '58537c7ffa93f5e0793773b16b936aa2c7c0f9bc' } };
+    const html = renderOwnerReport(body, board, { now });
+    assert.equal(metricValue(html, 'main-sha'), '58537c7f');
+    assert.equal(metricValue(html, 'live-version'), 'alpha.4');
+    assert.ok(html.includes(`class="tile tone-${state}" data-kpi="ci"`));
+    for (const invalid of ['xyz', '<script>', 12345678, null]) assert.throws(() => renderOwnerReport({ ...body, version: { ...body.version, mainSha: invalid } }, board), /BOARD_REPORT/);
+    const shortened = renderOwnerReport({ ...body, headline: 'Run 37233301305; SHA 58537c7ffa93f5e0793773b16b936aa2c7c0f9bc', version: { ...body.version, mainSha: '58537c7ffa93' } }, board, { now });
+    assert.equal(metricValue(shortened, 'main-sha'), '58537c7f');
+    assert.ok(shortened.includes('Run 37233301305; SHA 58537c7f'));
+    delete body.version.mainSha; delete body.version.ciState;
+    const old = renderOwnerReport(body, board, { now });
+    assert.equal(metricValue(old, 'main-sha'), 'Bilinmiyor');
+    assert.match(old, /tone-warn" data-kpi="ci"/);
+  }
+});
+
+test('empty worker sets and unknown/future/stale board times never look fresh because HTML was regenerated', t => {
+  const { file } = fixture(t), now = new Date('2026-10-05T12:00:00Z'), board = initBoard(file, { now });
+  const check = (updatedAt, tone, text) => {
+    for (const html of [renderHtml({ ...board, updatedAt }, { now }), renderOwnerReport(reportBody(), { ...board, updatedAt }, { now })]) {
+      assert.match(html, new RegExp(`id="freshness" class="tile tone-${tone}"`));
+      assert.ok(html.includes(text));
+      assert.ok(html.includes('İşçi kaydı yok; dağılım hesaplanmadı.'));
+      assert.equal((html.match(/class="segment /g) ?? []).length, 0);
+    }
+  };
+  check('2026-10-05T11:31:00Z', 'ok', '29 dk önce');
+  check('2026-10-05T11:30:00Z', 'warn', '30 dk önce · Bayat');
+  check('2026-10-04T11:00:00Z', 'warn', '25 sa 0 dk önce · Bayat');
+  for (const value of [null, 'bad', '2026-10-05T12:01:00Z']) check(value, 'warn', 'Zaman bilinmiyor');
+});
+
+// Small DOM port for the actual shipped inline script: no browser/network/clipboard side effects.
+function scriptHarness(html, now) {
+  const element = (attrs = {}) => ({ attrs, hidden: false, textContent: '', className: '', getAttribute(key) { return this.attrs[key]; }, setAttribute(key, value) { this.attrs[key] = value; } });
+  const rows = [...html.matchAll(/<tr data-work-state="([^"]+)"/g)].map(match => element({ 'data-work-state': match[1] }));
+  const buttons = [...html.matchAll(/<button type="button" data-filter="([^"]+)"[^>]*aria-pressed="([^"]+)"/g)].map(match => element({ 'data-filter': match[1], 'aria-pressed': match[2] }));
+  const nodes = Object.fromEntries(['toast', 'filter-result', 'filter-empty', 'age', 'freshness'].map(id => [id, element()]));
+  let click, tick;
+  const document = { body: { dataset: { updated: html.match(/data-updated="([^"]*)"/)[1] } },
+    getElementById: id => nodes[id], addEventListener: (_event, handler) => { click = handler; },
+    querySelectorAll: selector => selector === '[data-work-state]' ? rows : buttons };
+  class Clock extends Date { static now() { return now.getTime(); } }
+  vm.runInNewContext(inlineScript(html), { document, Date: Clock, setInterval: fn => { tick = fn; }, setTimeout() {}, clearTimeout() {} });
+  return { rows, buttons, nodes, tick, click: key => click({ target: { closest: selector => selector === '[data-filter]' ? buttons.find(button => button.attrs['data-filter'] === key) : null } }) };
+}
+
+test('real inline filter hides only nonmatches, restores all states, reports an empty selection and updates pressed state', async t => {
+  const { board, now } = dashboardFixture(t);
+  for (const render of [b => renderHtml(b, { now }), b => renderOwnerReport(reportBody(), b, { now })]) {
+    const h = scriptHarness(render(board), now);
+    for (const [filter, count] of [['running', 3], ['review', 1], ['landed', 1], ['all', 10]]) {
+      await h.click(filter);
+      assert.equal(h.rows.filter(row => !row.hidden).length, count);
+      assert.equal(h.nodes['filter-result'].textContent, `${count} kayıt gösteriliyor`);
+      assert.equal(h.buttons.filter(button => button.attrs['aria-pressed'] === 'true').length, 1);
+      assert.equal(h.buttons.find(button => button.attrs['aria-pressed'] === 'true').attrs['data-filter'], filter);
+      assert.equal(h.nodes['filter-empty'].hidden, true);
+    }
+    const emptyBoard = structuredClone(board); emptyBoard.sessions[0].workers = [];
+    const empty = scriptHarness(render(emptyBoard), now); await empty.click('review');
+    assert.equal(empty.nodes['filter-empty'].hidden, false);
+    assert.equal(empty.nodes['filter-result'].textContent, '0 kayıt gösteriliyor');
+  }
+});
+
+test('inline freshness clock uses source time and crosses the warning threshold without fetching data', t => {
+  const { board, now } = dashboardFixture(t);
+  board.updatedAt = '2026-10-05T11:31:00Z';
+  const h = scriptHarness(renderHtml(board, { now }), now);
+  assert.equal(h.nodes.age.textContent, '29 dk önce');
+  now.setMinutes(now.getMinutes() + 1); h.tick();
+  assert.equal(h.nodes.age.textContent, '30 dk önce · Bayat');
+  assert.equal(h.nodes.freshness.className, 'tile tone-warn');
+  for (const updatedAt of [null, 'bad', '2026-10-05T13:00:00Z']) {
+    const unknown = scriptHarness(renderOwnerReport(reportBody(), { ...board, updatedAt }, { now }), now);
+    assert.equal(unknown.nodes.age.textContent, 'Zaman bilinmiyor');
+    assert.equal(unknown.nodes.freshness.className, 'tile tone-warn');
+  }
+});
+
+test('both surfaces escape hostile content in text/attributes and pin the same data-free inline script to the exact CSP hash', t => {
+  const { board, now } = dashboardFixture(t), attack = '</script><img src=x onerror="alert(1)"> & \'quote\'';
+  const row = board.sessions[0];
+  for (const key of ['name', 'role', 'sessionId', 'cwd', 'workRef', 'focus', 'waitingOn', 'next', 'channel']) row[key] = attack;
+  for (const key of ['id', 'model', 'worktree', 'card']) row.workers[0][key] = attack;
+  board.dogfood.source = attack;
+  const body = { title: attack, headline: attack, impact: attack, flow: [{ label: attack, text: attack, who: attack }, { label: attack, text: attack, who: attack }],
+    limits: [attack], decisions: [attack], next: { who: attack, text: attack }, details: [attack],
+    version: { live: attack, n1: attack, ci: attack }, commands: [{ label: attack, command: attack, why: attack }], places: [{ label: attack, path: '/tmp/' + attack, what: attack }] };
+  const cleanScript = inlineScript(renderHtml(dashboardFixture(t).board, { now }));
+  for (const html of [renderHtml(board, { now }), renderOwnerReport(body, board, { now })]) {
+    assert.equal((html.match(/<script>/g) ?? []).length, 1);
+    assert.equal(html.includes('<img'), false);
+    assert.equal(html.includes(attack), false);
+    assert.ok(html.includes('&lt;img'));
+    const script = inlineScript(html), hash = crypto.createHash('sha256').update(script).digest('base64');
+    assert.equal(script, cleanScript);
+    assert.ok(html.includes(`default-src 'none'; style-src 'unsafe-inline'; script-src 'sha256-${hash}'; base-uri 'none'; form-action 'none'`));
+    assert.equal(/<script[^>]+src=|<link[^>]+href=|<iframe|<img/.test(html), false);
+  }
+});
+
+test('declared light/dark text tokens meet 4.5:1; narrow layouts reflow and controls have noncolor/focus/forced-color cues', t => {
+  const { board } = dashboardFixture(t), html = renderHtml(board);
+  const luminance = hex => {
+    const rgb = hex.match(/[a-f\d]{2}/gi).map(c => parseInt(c, 16) / 255).map(c => c <= .04045 ? c / 12.92 : ((c + .055) / 1.055) ** 2.4);
+    return rgb[0] * .2126 + rgb[1] * .7152 + rgb[2] * .0722;
+  };
+  const contrast = (a, b) => { const x = luminance(a), y = luminance(b); return (Math.max(x, y) + .05) / (Math.min(x, y) + .05); };
+  const themes = [...html.matchAll(/:root\{([^}]+)\}/g)];
+  assert.equal(themes.length, 2);
+  for (const [, rule] of themes) {
+    const tokens = Object.fromEntries([...rule.matchAll(/--([a-z]+):(#[a-f0-9]{6})/g)].map(([, name, hex]) => [name, hex]));
+    const pairs = [['fg', 'bg'], ['fg', 'card'], ['mute', 'bg'], ['mute', 'card'], ['info', 'card']];
+    for (const tone of ['info', 'warn', 'fail', 'ok', 'neutral']) pairs.push([tone, `${tone}bg`], ['fg', `${tone}bg`], ['mute', `${tone}bg`]);
+    for (const [fg, bg] of pairs) assert.ok(contrast(tokens[fg], tokens[bg]) >= 4.5, `${fg}/${bg}: ${contrast(tokens[fg], tokens[bg])}`);
+  }
+  assert.ok(html.includes('@media(max-width:640px){.tiles{grid-template-columns:1fr}'));
+  assert.ok(html.includes('overflow-wrap:anywhere'));
+  assert.ok(html.includes(':focus-visible'));
+  assert.ok(html.includes('@media(forced-colors:active)'));
+  assert.ok(html.includes('aria-label="İş durumu filtresi"'));
+  assert.ok(html.includes('scope="col"'));
 });
