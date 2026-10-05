@@ -131,7 +131,10 @@ describe('I40-c B: only the producer determines tool approval expiry', () => {
     try {
       const app = await f.application(new SystemTrustedClock(() => 14000));
       const decided = await app.decide(f.command);
-      expect(await awaitAgentToolApproval(f.journal.store, integrity, f.record, timePort(new SystemTrustedClock(() => now)), new AbortController().signal))
+      // Wall and monotonic are both pinned: at wall=19999 only 1 ms of TTL is left, so a real monotonic source would turn a slow
+      // store read on a loaded runner into 'expired' (ubuntu node 24, run 37306411163). The boundary under test is the wall expiry.
+      const pinned: TrustedClock = { sample: () => ({ wallMs: now, monotonicMs: 0 }) };
+      expect(await awaitAgentToolApproval(f.journal.store, integrity, f.record, timePort(pinned), new AbortController().signal))
         .toBe(now < 20000 ? 'allow' : 'expired');
       expect(f.journal.store.load('scope', f.record.request.approvalId)).toEqual(decided);
     } finally { f.journal.close(); }
