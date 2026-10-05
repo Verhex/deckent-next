@@ -3,7 +3,7 @@ import { AUDIT_SHELL_HEAD_MAX_CHARS, EffectError, type AgentToolOutcome, type Ag
 import { AuditApplication, PolicyAuthorizationError, agentCallAuditEvent, agentToolArgumentsDigest, decideAgentToolCall, isAuditedDecision, type AgentToolCallCell, type AgentToolCallDecision,
   type AgentToolCallRequest, type EffectApprovalGate, isAuditedStanding, standingApprovalAuditEvent, standingCallKey, type SessionStanding, type ShellPermissionTier,
   trackedFilesAuditEvent, type TrackedFilesAuditList } from '#engine/index.js';
-import type { TrustedClock } from '#platform/index.js';
+import { getConfigKnownSecrets, type TrustedClock } from '#platform/index.js';
 import { FETCH_URL_TOOL_SPEC, HOST_SHELL_RUN_OPERATION, type SandboxWriteCell, type SandboxWriteDecider, type ShellCallAuthority, MCP_TOOL_CALL_OPERATION, NETWORK_FETCH_OPERATION, openLocalIntegrityAuthority, openSqliteAuditStore,
   WORKSPACE_FILE_WRITE_OPERATION } from '#adapters/index.js';
 import type { loadPeerInvocationContext } from '#composition/core/model-invocation/index.js';
@@ -54,7 +54,7 @@ export function createAgentCallDecisions(input: { readonly context: Context; rea
   const { context, clock, scopeId, turnId, edits, shell, approvals, fetch } = input, mcp = input.mcp ?? null;
   const fetches = (tool: AgentToolSpec) => tool.name === FETCH_URL_TOOL_SPEC.name;
   const mcps = (tool: AgentToolSpec) => tool.toolClass === 'mcp';
-  const stored = new Map<string, Stored>();
+  const stored = new Map<string, Stored>(), knownSecrets = getConfigKnownSecrets(context.config);
   const keyOf = (tool: AgentToolSpec, args: Record<string, unknown>) => agentToolArgumentsDigest(tool.name, args);
   // An edit tool no area serves still carries the project's write operation (never a one-sided decision).
   const operationOf = (tool: AgentToolSpec) => tool.toolClass === 'edit' ? edits(tool.name)?.operation ?? WORKSPACE_FILE_WRITE_OPERATION.operation
@@ -63,7 +63,7 @@ export function createAgentCallDecisions(input: { readonly context: Context; rea
   // Standing approvals (G6) cover only the edit and shell cells a standing pattern names; any other cell (fetch, MCP) has none.
   const standingOf = (tool: AgentToolSpec, cell: AgentToolCallCell, args: Record<string, unknown> | undefined) => !args ? null : standingCallKey({ tool: tool.name, cell,
     path: tool.toolClass === 'edit' ? edits(tool.name)?.target(tool.name, args) ?? null : cell === 'edit-self-source' && typeof args['path'] === 'string' ? args['path'] : null, command: typeof args['command'] === 'string' ? args['command'] : null },
-  input.standing && { sessions: input.standing.memory, session: input.standing.session });
+  input.standing && { sessions: input.standing.memory, session: input.standing.session }, knownSecrets);
   const load = async (): Promise<unknown> => { try { return await context.policy.load(); } catch { return null; } };
   /** Pure decision on one snapshot (a fresh one unless given); an unreadable or invalid policy is null, i.e. `deny` (fail closed). */
   const decide = async (tool: AgentToolSpec, cell: AgentToolCallCell, snapshot?: unknown, args?: Record<string, unknown>, shellInput?: Shell,

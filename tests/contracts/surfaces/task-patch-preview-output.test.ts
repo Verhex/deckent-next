@@ -1,6 +1,7 @@
 import { afterEach, expect, it } from 'vitest';
 import { main } from '../../../src/surfaces/index.js';
 import { unifiedDiff } from '../../../src/adapters/core/workspace-write/index.js';
+import { patchDigest, patchExclusions, WorkspaceIntegrationApplication, WorkspacePatchApplication, type WorkspacePatch } from '#engine/index.js';
 
 const out: string[] = [];
 afterEach(() => { out.length = 0; });
@@ -46,4 +47,48 @@ it('keeps --json output as the full result', async () => {
 it.each([[['--stat', '--diff']], [['--stat', '--json']], [['--diff', '--json']]])('rejects %j as a usage error', async extra => {
   expect(await main([...base, ...extra], ctx())).not.toBe(0);
   expect(out.join('')).toContain('Usage');
+});
+
+it('carries real retained patch advice through prepare, preview variants and integration check, human EN/TR and exact JSON', async () => {
+  const identity = { scopeId: 's', runId: 'r', taskId: 't', attemptId: 'a', generation: 1, layoutRevision: 'l' };
+  const patch: WorkspacePatch = { schemaVersion: 1, kind: 'workspace-patch', identity, baseCommit: 'b'.repeat(40), snapshotDigest: 'd'.repeat(64),
+    source: { schemaVersion: 1, adapter: { id: 'git', version: 1 }, sourceFingerprint: 'f'.repeat(64) },
+    exclusions: { ...patchExclusions, excludedSegments: [...patchExclusions.excludedSegments], excludedPrefixes: [...patchExclusions.excludedPrefixes] },
+    changes: [{ path: 'notes/new.txt', before: null, after: { mode: '100644', text: 'new\n', digest: patchDigest('new\n') } }] };
+  const artifact = Buffer.from(JSON.stringify(patch));
+  const receipt = { schemaVersion: 1 as const, scopeId: 's', digest: patchDigest(artifact), byteLength: artifact.length };
+  const artifacts = { async put() { return receipt; }, async read() { return artifact; } };
+  const dispatch = { request: { identity }, owner: 'o', terminal: { handle: 'h' }, patch: receipt };
+  const store = { async loadBoundDispatch() { return dispatch; }, async retainDispatchPatch() { return dispatch; },
+    async loadBoundTask() { return { id: 't', kind: 'coding', dependencies: [], acceptanceCriteria: ['exit'],
+      workInput: { schemaVersion: 1, task: 'Edit notes.', scope: { paths: ['notes'] }, acceptance: 'Done.',
+        model: { channelId: 'c', modelId: 'm', auxiliaryModelIds: [] } } }; } };
+  const verifier = { async verify() { return { id: 'p', issuer: 'i', subject: 'u', assurance: 'os-user' as const, scopeIds: ['s'] }; } };
+  const authorization = { async authorizeIdentity() {} };
+  const patches = new WorkspacePatchApplication(store as never, artifacts, verifier, authorization, 65536, 'enforce');
+  const prepare = () => patches.prepare(identity, { async capture() { return patch; } }, store as never);
+  const integration = new WorkspaceIntegrationApplication(patches, { async observe() {
+    return { digest: 'e'.repeat(64), source: 'git', head: 'b'.repeat(40) };
+  } } as never, verifier, authorization, artifacts, 65536);
+  const expectedPatch = await prepare(), expectedCheck = await integration.check(identity);
+  const commandContext = { env: { HOME: '/tmp/deckent-scope-hint-test', NO_COLOR: '1' },
+    stdout: { write(v: string) { out.push(v); } }, stderr: { write(v: string) { out.push(v); } },
+    prepareWorkspacePatch: prepare, previewWorkspacePatch: () => patches.preview(identity),
+    checkWorkspaceIntegration: () => integration.check(identity), renderUnifiedDiff: unifiedDiff };
+  for (const [action, extra] of [['patch-prepare', []], ['patch-preview', []], ['patch-preview', ['--stat']],
+    ['patch-preview', ['--diff']], ['integration-check', []]] as const) {
+    const command = [base[0]!, action, ...base.slice(2), ...extra];
+    for (const locale of ['en', 'tr']) {
+      out.length = 0;
+      expect(await main([...command, '--lang', locale], commandContext as never)).toBe(0);
+      const text = out.join('');
+      expect(text).toContain(locale === 'en' ? 'Did you mean notes/** instead of notes?' : 'notes yerine notes/** mi demek istediniz?');
+      expect(text).toContain(locale === 'en' ? 'this suggestion does not change' : 'bu öneri görevin kapsamını değiştirmez');
+      expect(text).toContain(locale === 'en' ? 'integration and delivery of this patch are refused' : 'entegrasyonu ve teslimi reddedilir');
+    }
+    if (extra.length) continue; // --stat/--diff cannot be combined with --json.
+    out.length = 0;
+    expect(await main([...command, '--json'], commandContext as never)).toBe(0);
+    expect(JSON.parse(out.join(''))).toEqual(action === 'integration-check' ? expectedCheck : expectedPatch);
+  }
 });

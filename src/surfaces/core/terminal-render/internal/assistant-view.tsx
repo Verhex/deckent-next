@@ -4,7 +4,8 @@ import type { ToolResultSummary } from '#surfaces/core/terminal-kit/index.js';
 import type { ActiveTool, AssistantUnit, FooterUnit, Narration, ToolUnit, TurnStage, WaitingView } from './assistant-stream.js';
 import { useRenderGlyphs } from './glyphs.js';
 import { RenderedLines } from './lines-view.js';
-import { renderMarkdown } from './markdown.js';
+import { renderHumanMarkdown } from './human-text.js';
+import { HiddenTextNotice, useHumanTextSecrets } from './human-text-view.js';
 import type { LiveTail } from './stream-segmenter.js';
 import { fillTemplate } from './status-row.js';
 import { cells, truncateEnd } from './text-width.js';
@@ -12,6 +13,10 @@ import { cells, truncateEnd } from './text-width.js';
 /** Catalog strings (terminal.render.*) resolved by the surface; placeholders are filled here. */
 export type AssistantRenderLabels = Readonly<{
   assistant: string; thinking: string; thought: string; elapsed: string; tokens: string; reasoningTokens: string;
+  /** Catalog count for the complete transported answer projection, before live line clipping. */
+  hiddenCount?: string;
+  /** Informational original-field decision pattern signal; never a secret or policy verdict. */
+  credentialLikeCount?: string;
   truncated: string; cancelled: string; failed: string; code: string; moreAbove: string; queued: string;
   /** `{name} {target}` of a tool call; `toolRunning` adds the live seconds; statuses other than ok have their own words. */
   tool: string; toolRunning: string; toolStatus: Readonly<Record<Exclude<ToolUnit['status'], 'ok'>, string>>;
@@ -99,6 +104,7 @@ export function toolText(unit: Pick<ToolUnit, 'name' | 'target'>, labels: Assist
 /** One finished unit of an assistant turn, printed once by `Static` at the width current at print time. */
 export function AssistantUnitRow({ unit, labels }: { readonly unit: AssistantUnit; readonly labels: AssistantRenderLabels }) {
   const palette = useWorklinePalette(), glyphs = useRenderGlyphs(), width = useBodyWidth();
+  const known = useHumanTextSecrets();
   if (unit.kind === 'reasoning') {
     return <Box paddingLeft={INDENT}><Text {...palette.muted} wrap="truncate-end">{fillTemplate(labels.thought, { seconds: seconds(unit.elapsedMs), tokens: tokenText(unit.tokens, unit.approximate) })}</Text></Box>;
   }
@@ -140,11 +146,11 @@ export function AssistantUnitRow({ unit, labels }: { readonly unit: AssistantUni
       </Box>
     );
   }
-  const lines = renderMarkdown(unit.markdown, { width, glyphs, codeLabel: labels.code });
+  const projection = renderHumanMarkdown(unit.markdown, { width, glyphs, codeLabel: labels.code }, known);
   return (
     <Box flexDirection="column">
       {unit.lead && <Text {...palette.assistant} {...palette.strong}>{glyphs.assistant} {labels.assistant}</Text>}
-      <Box paddingLeft={INDENT}><RenderedLines lines={lines} /></Box>
+      <Box flexDirection="column" paddingLeft={INDENT}><RenderedLines lines={projection.lines} /><HiddenTextNotice count={projection.hiddenCount} label={labels.hiddenCount} /></Box>
     </Box>
   );
 }
@@ -181,7 +187,9 @@ export function AssistantLive({ tail, narration, labels, lead, activeTool = null
   readonly waiting?: WaitingView | null; readonly reasoningPreview?: readonly string[];
 }) {
   const palette = useWorklinePalette(), glyphs = useRenderGlyphs(), width = useBodyWidth();
-  const lines = tail.markdown === '' ? [] : renderMarkdown(tail.markdown, { width, glyphs, codeLabel: labels.code });
+  const known = useHumanTextSecrets();
+  const projection = renderHumanMarkdown(tail.markdown, { width, glyphs, codeLabel: labels.code }, known);
+  const lines = tail.markdown === '' ? [] : projection.lines;
   const hidden = Math.max(0, lines.length - maxLines);
   return (
     <Box flexDirection="column">
@@ -190,6 +198,7 @@ export function AssistantLive({ tail, narration, labels, lead, activeTool = null
       {lead && lines.length > 0 && <Text {...palette.assistant} {...palette.strong}>{glyphs.assistant} {labels.assistant}</Text>}
       {hidden > 0 && <Box paddingLeft={INDENT}><Text {...palette.muted}>{glyphs.ellipsis} {fillTemplate(labels.moreAbove, { count: hidden })}</Text></Box>}
       {lines.length > 0 && <Box paddingLeft={INDENT}><RenderedLines lines={lines.slice(hidden)} /></Box>}
+      <Box paddingLeft={INDENT}><HiddenTextNotice count={projection.hiddenCount} label={labels.hiddenCount} /></Box>
       {activeTool && <ToolRunning tool={activeTool} labels={labels} />}
     </Box>
   );

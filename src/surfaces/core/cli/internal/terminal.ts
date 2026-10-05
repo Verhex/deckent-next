@@ -2,7 +2,7 @@ import { configSlash } from '#surfaces/core/config/index.js';
 import { createInterface } from 'node:readline';
 import { mcpSlash } from './mcp.js';
 import { monitorSlash } from '#surfaces/core/monitor/index.js';
-import { DeckentError, ErrorRegistry, emit, loadConfig, readBuildIdentity, resolveLocale, t, formatValue, colorTier, type ConfigLoadOptions, type Locale } from '#platform/index.js';
+import { DeckentError, ErrorRegistry, emit, getConfigKnownSecrets, loadConfig, readBuildIdentity, resolveLocale, t, formatValue, colorTier, type ConfigLoadOptions, type Locale } from '#platform/index.js';
 import { buildInferenceServingPlan, estimateReplicaCapacity, readInferenceServingProfile } from '#engine/index.js';
 import { prefersAsciiGlyphs, runTerminalWorkline, resolveWorklinePalette, buildWorklineBridgeSnapshot, boundChatHistory, bindSessionScope, type AgentChatMessage, type ChatTurnMessage, type WorklineLabels } from '#surfaces/core/terminal/index.js';
 import { terminalComposerLabels, terminalRenderLabels, terminalSessionLabels } from '#surfaces/core/terminal-labels/index.js';
@@ -253,6 +253,7 @@ export async function terminalCommand(argv: readonly string[], context: CommandC
   // and deny as any `@`); a service that is not there or refuses is left to the person's own first `@`.
   if (!serviceFailed && context.findTerminalMentions) void context.findTerminalMentions(root, { scopeId, query: '' }, options, context.signal).catch(() => undefined);
   await runTerminalWorkline({
+    knownSecrets: getConfigKnownSecrets(config),
     selfSource: await context.selfSourceProject?.(root) ?? false,
     labels: worklineLabels(locale, [t('terminal.status.chat', { target: chatTarget(chat, locale) }, locale), ...(serviceLine ? [serviceLine] : [])].join(' · ')),
     target, systemPrompt: t('terminal.chat.systemPrompt', {}, locale), historyMessages,

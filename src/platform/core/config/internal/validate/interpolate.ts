@@ -1,9 +1,10 @@
+import { snapshotKnownSecrets, type KnownSecretSnapshot } from '#platform/core/redaction/index.js';
 import { isRecord } from '#platform/core/utils/index.js';
 import { DeckentError } from '#platform/core/errors/index.js';
 
 /** Composition supplies the authorized secret backend; no file-format or keyring policy lives here. */
 export type SecretResolver = (reference: string) => Promise<string | undefined>;
-export interface SecretResolution<T> { readonly config: T; readonly secretPaths: readonly string[]; readonly references: readonly string[] }
+export interface SecretResolution<T> { readonly config: T; readonly secretPaths: readonly string[]; readonly references: readonly string[]; readonly knownSecrets: KnownSecretSnapshot }
 /** One exact grammar shared by interpolation and the pre-resolution section guard. */
 export function parseSecretReference(value: unknown): string | undefined {
   return typeof value === 'string' ? value.match(/^\$DECK:([A-Z_][A-Z0-9_]*)$/)?.[1] : undefined;
@@ -45,5 +46,6 @@ export async function resolveConfigSecrets<T>(config: T, resolver: SecretResolve
     return value;
   }
   const output = await visit(config, '') as T;
-  return { config: output, secretPaths: Object.freeze(secretPaths), references: Object.freeze([...resolved.keys()]) };
+  return { config: output, secretPaths: Object.freeze(secretPaths), references: Object.freeze([...resolved.keys()]),
+    knownSecrets: snapshotKnownSecrets([...resolved].flatMap(([name, value]) => typeof value === 'string' ? [{ name, value }] : [])) };
 }

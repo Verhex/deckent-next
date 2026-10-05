@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import type { WorklineApproval, WorklineProps } from '#surfaces/core/terminal/index.js';
-import { mountWorkline, settle, until } from '../support/workline-harness.js';
+import { WORKLINE_TEST_LABELS, mountWorkline, settle, until } from '../support/workline-harness.js';
 
 // Argümansız /resume ve /approvals liste basmak yerine ok tuşlu seçici açar. Enter vurgulanan satırı
 // mevcut yola verir (/resume <id>, onay kartı); Esc kapatır. Down sonrası Enter ilk satırı seçerse bu dosya kırmızıdır.
@@ -134,4 +134,24 @@ describe('arrow pickers for /resume and /approvals', () => {
     await until(() => view.stdout.text.includes('RESUMED 3') && view.stdout.text.includes('bbbbbbbb'), 'highlighted session resumed');
     expect(fake.loaded).toEqual([SECOND_ID]);
   });
+});
+
+
+it('S06 selected preview counts only real classified tokens and preserves Down+Enter identity', async () => {
+  const fake = sessions();
+  const port = { ...fake.props.sessions, async list() { return [
+    { sessionId: FIRST_ID, updatedAtMs: 1, messages: 1, preview: 'literal <U+202E>' },
+    { sessionId: SECOND_ID, updatedAtMs: 2, messages: 3, preview: 'real \u202ePREVIEW' },
+  ]; } };
+  const view = await open({ sessions: port, labels: { ...WORKLINE_TEST_LABELS,
+    sessions: { ...WORKLINE_TEST_LABELS.sessions!, hiddenCount: '{count} gizli karakter' } } }, 80);
+  await view.type('/resume\r');
+  await until(() => view.frame().includes('literal <U+202E>'), 'literal preview');
+  expect(view.frame()).not.toContain('gizli karakter');
+  await view.type(DOWN);
+  await until(() => view.frame().includes('1 gizli karakter'), 'trusted selected preview count');
+  expect(view.frame()).toContain('real <U+202E>PREVIEW');
+  await view.type('\r');
+  await until(() => view.stdout.text.includes('RESUMED 3 bbbbbbbb'), 'selected session resumed');
+  expect(fake.loaded).toEqual([SECOND_ID]);
 });

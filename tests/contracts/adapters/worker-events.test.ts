@@ -44,7 +44,7 @@ it('never lets credentials, bearer tokens, key-shaped strings, proxy credentials
   const assistant = (id: string, content: unknown[]) => JSON.stringify({ type: 'assistant', message: { id, content, usage: { input_tokens: 1, output_tokens: 1 } } });
   const lines = [
     JSON.stringify({ type: 'system', subtype: 'init', cwd: '/workspace', model: 'm', claude_code_version: 'v' }),
-    assistant('a', [{ type: 'text', text: `the token is ${token} and refresh-secret-value; Authorization: Bearer abc.def.ghi` }]),
+    assistant('a', [{ type: 'text', text: `the token is ${token} and refresh-secret-value; Authorization: Bearer abc.def.ghi.fictional` }]),
     assistant('b', [{ type: 'tool_use', id: 't1', name: 'Bash', input: { command: `curl -H "Authorization: Bearer ${token}" ${proxy}`, description: `export API_KEY=sk-live-0123456789abcdef and token=${token}` } }]),
     assistant('c', [{ type: 'tool_use', id: 't2', name: 'WebFetch', input: { url: 'https://user:hunter2@example.com/path?token=abc' } }]),
     assistant('d', [{ type: 'tool_use', id: 't3', name: 'Read', input: { file_path: '/home/owner/.claude/.credentials.json' } }]),
@@ -54,7 +54,7 @@ it('never lets credentials, bearer tokens, key-shaped strings, proxy credentials
   ];
   const events = await normalize(lines, [...secrets, proxy]);
   const serialized = JSON.stringify(events);
-  for (const leaked of [token, 'refresh-secret-value', 'sk-live-0123456789abcdef', 'abc.def.ghi', 'hunter2', 'raw output', proxy]) expect(serialized).not.toContain(leaked);
+  for (const leaked of [token, 'refresh-secret-value', 'sk-live-0123456789abcdef', 'abc.def.ghi.fictional', 'hunter2', 'raw output', proxy]) expect(serialized).not.toContain(leaked);
   expect(serialized).toContain('[REDACTED]');
   expect(events.find(event => event.kind === 'tool.call' && event.name === 'Read')).toMatchObject({ target: '(outside-workspace)/.credentials.json' });
   expect(events.find(event => event.kind === 'tool.result')).toMatchObject({ status: 'error' });

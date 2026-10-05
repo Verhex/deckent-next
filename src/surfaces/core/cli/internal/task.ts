@@ -18,7 +18,10 @@ function scopeLine(scope: PatchScope, locale: ReturnType<typeof resolveLocale>) 
   const line = scope.status === 'unscoped' ? t('cli.task.patch.scope.unscoped', { mode: scope.mode }, locale)
     : scope.status === 'in-scope' ? t('cli.task.patch.scope.inScope', { mode: scope.mode }, locale)
       : t('cli.task.patch.scope.outOfScope', { mode: scope.mode, count: scope.outOfScope.length, paths: scope.outOfScope.join(', ') }, locale);
-  return scope.mode === 'enforce' && scope.status !== 'in-scope' ? [line, t('cli.task.patch.scope.enforced', {}, locale)].join('\n') : line;
+  const hints = scope.status === 'out-of-scope' ? (scope.directoryHints ?? [])
+    .map(hint => t('cli.task.patch.scope.directoryHint', hint, locale)) : [];
+  return [line, ...hints, ...(scope.mode === 'enforce' && scope.status !== 'in-scope'
+    ? [t('cli.task.patch.scope.enforced', {}, locale)] : [])].join('\n');
 }
 import type { CommandContext } from './kernel-commands.js';
 import { renderWorkerTranscript } from '#surfaces/core/monitor/index.js';

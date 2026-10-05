@@ -20,3 +20,4 @@ export * from '#domain/core/inference-serving/index.js';
 export * from '#domain/core/agent-tool/index.js';
 export * from '#domain/core/agent-turn/index.js';
 export * from '#domain/core/decision/index.js';
+export * from '#domain/core/text/index.js';

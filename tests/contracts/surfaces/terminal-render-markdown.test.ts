@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { renderMarkdown, renderedText, resolveRenderGlyphs, type RenderedLine } from '#surfaces/core/terminal/index.js';
 
+import { projectHiddenText, renderHumanMarkdown, type HumanTextProjector } from '#surfaces/core/terminal-render/index.js';
+
 const unicode = resolveRenderGlyphs(false), ascii = resolveRenderGlyphs(true);
 const plain = (markdown: string, width = 60, glyphs = unicode) => renderedText(renderMarkdown(markdown, { width, glyphs, codeLabel: 'code' }));
 const styled = (lines: readonly RenderedLine[]) => lines.flatMap(entry => [...entry.prefix, ...entry.body]).filter(part => part.role || part.bold || part.italic || part.strike);
@@ -93,5 +95,63 @@ describe('terminal markdown tables (width-aware)', () => {
 
   it('uses ASCII borders for the ASCII glyph set', () => {
     expect(plain('| a |\n|---|\n| 1 |', 40, ascii)).toBe(['+---+', '| a |', '+---+', '| 1 |', '+---+'].join('\n'));
+  });
+});
+
+
+describe('S06 contextual hidden-text projection', () => {
+  it('marks real exact-code tokens before wrapping; prose shaping and literal look-alikes retain their meaning', () => {
+    const prose = 'Türkçe العربية فارسی می\u200cروم 👩\u200d💻 ❤️';
+    const source = `${prose} <U+202E>\nInline \`pay\u200broll.ts\` and override \u202eX.\n\`\`\`sh\necho "tag\u{e0041}"\n\`\`\``;
+    for (const width of [60, 80, 120]) {
+      let count = 0;
+      const project: HumanTextProjector = (text, context, style) => {
+        const result = projectHiddenText(text, context, style); count += result.hiddenCount; return [...result.spans];
+      };
+      const lines = renderMarkdown(source, { width, glyphs: unicode, codeLabel: 'code', projectText: project });
+      const text = renderedText(lines);
+      expect(count).toBe(3);
+      expect(text).toContain(prose);
+      expect(text).toContain('pay<U+200B>roll.ts');
+      expect(text).toContain('override <U+202E>X');
+      expect(text).toContain('tag<U+E0041>');
+      expect(text).not.toMatch(/[\u202e\u200b\u{e0041}]/u);
+      expect(lines.flatMap(row => row.body).filter(part => part.hiddenCodePoint !== undefined).every(part => part.role === 'warning')).toBe(true);
+    }
+    const literal = projectHiddenText('<U+202E>', 'exact');
+    expect(literal.hiddenCount).toBe(0);
+    expect(literal.spans[0]).not.toHaveProperty('hiddenCodePoint');
+  });
+
+  it('classifies table inline code and URL identifiers with exact context before cell fitting', () => {
+    let count = 0;
+    const project: HumanTextProjector = (text, context, style) => {
+      const result = projectHiddenText(text, context, style); count += result.hiddenCount; return [...result.spans];
+    };
+    const lines = renderMarkdown('| value | url |\n|---|---|\n| `a\u200bb` | [site](https://x/a\u200bb) |',
+      { width: 60, glyphs: ascii, codeLabel: 'code', projectText: project });
+    expect(count).toBe(2);
+    expect(renderedText(lines)).toContain('a<U+200B>b');
+  });
+});
+
+
+describe('S06 R1/R2 public projection regressions', () => {
+  it('retains real fence-info FEFF metadata and distinguishes fake/clean/blank labels', () => {
+    for (const width of [60, 80, 120]) for (const label of ['\ufeffsh', 'sh\ufeff', '\ufeff']) {
+      const result = renderHumanMarkdown(`\`\`\`${label}\necho ok\n\`\`\``, { width, glyphs: unicode, codeLabel: 'code' });
+      expect(result.hiddenCount).toBe(1);
+      expect(renderedText(result.lines)).toContain('<U+FEFF>');
+      expect(result.lines.flatMap(row => row.body).filter(part => part.hiddenCodePoint === 0xfeff)).toEqual([
+        expect.objectContaining({ text: '<U+FEFF>', role: 'warning', hiddenCodePoint: 0xfeff }),
+      ]);
+      expect(renderedText(result.lines)).not.toContain('\ufeff');
+    }
+    for (const label of ['sh', '<U+FEFF>', '', ' \t ']) {
+      const result = renderHumanMarkdown(`\`\`\`${label}\necho ok\n\`\`\``, { width: 60, glyphs: unicode, codeLabel: 'code' });
+      expect(result.hiddenCount).toBe(0);
+      expect(result.lines.flatMap(row => row.body).some(part => part.hiddenCodePoint !== undefined)).toBe(false);
+      expect(renderedText(result.lines)).toContain(label.trim() || 'code');
+    }
   });
 });

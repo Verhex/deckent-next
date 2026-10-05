@@ -6,7 +6,8 @@ import { DatabaseSync } from 'node:sqlite';
 import { afterEach, describe, expect, it, type TestContext } from 'vitest';
 import { EffectError, resolvePolicyBindings, type AgentToolSpec } from '#domain/index.js';
 import { SessionStanding, type EffectApprovalGate } from '#engine/index.js';
-import { resolveProductLayout, SystemTrustedClock } from '#platform/index.js';
+import { loadConfig, configDisplayView, getConfigKnownSecrets, registerConfigSection, redactForDecision, resolveProductLayout, SystemTrustedClock } from '#platform/index.js';
+import { z } from 'zod';
 import { openSqliteLedger } from '#adapters/core/sqlite-ledger/index.js';
 import { createAgentCallDecisions, createAgentFileEdits, createAgentShell } from '#composition/core/agent-turn/index.js';
 import { agentTurnWriteFloor, applySandboxWriteSet, fileContentVersion, classifySandboxWritePath, createWorkspaceScope, isSelfSourceWriteFloored, projectEditArea, shellWritePosture, type ShellCallAuthority } from '#adapters/index.js';
@@ -19,6 +20,8 @@ const privateAudit = (context: TestContext) => { if (process.platform === 'win32
 const roots: string[] = [];
 afterEach(async () => Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))));
 const me = { issuer: 'host', subject: '1000' };
+registerConfigSection('b7_fixture', z.object({ secondary: z.string() }).strict(), { optional: true,
+  metadata: { descriptionKey: 'config.section', tier: 'advanced', since: '1.0.0-alpha.4', apply: 'live', binding: { state: 'bound', consumers: ['src/platform/core/config'] } } });
 const principal = { id: 'os:1000', ...me, assurance: 'os-user' as const, scopeIds: ['scope'] };
 const sqlite = { busyTimeoutMs: 1_000, journalMode: 'delete' as const, durability: 'full' as const };
 const edit: AgentToolSpec = { name: 'edit_file', version: 1, toolClass: 'edit', description: 'edit', inputSchema: { type: 'object' } } as AgentToolSpec;
@@ -31,13 +34,24 @@ const snapshot = (tool: Effect, mode: string | null, revision = `p-${tool}-${mod
 mode === null ? { schemaVersion: 1, revision: 'b', bindings: [] } : { schemaVersion: 2, revision: 'b', bindings: [], modes: [{ id: modeEntry, principal: me, scopes: ['scope'], mode }] });
 
 /** `loads[i]` is what the i-th policy load returns (the last one repeats): authorize loads once, execute once, each admission once. */
-async function fixture(loads: unknown[], options: { standing?: { memory: SessionStanding; session: string }; floored?: boolean; selfSource?: boolean; fullAccess?: boolean; shell?: boolean; realAreas?: boolean; clockMs?: number } = {}) {
+async function fixture(loads: unknown[], options: { standing?: { memory: SessionStanding; session: string }; floored?: boolean; selfSource?: boolean; fullAccess?: boolean; shell?: boolean; realAreas?: boolean; clockMs?: number; knownSecret?: string; secondaryKnownSecret?: string; shellTier?: 'read-low' } = {}) {
   const root = await mkdtemp(join(tmpdir(), 'dn-call-decisions-')); roots.push(root);
   const data = join(root, 'data'); await mkdir(data, { mode: 0o700 });
   const ledger = join(root, 'ledger.db'); openSqliteLedger(ledger, sqlite).close();
   let loaded = 0;
+  let config: object = { storage: { sqlite }, approvals: { keyFile: 'authority.key' } };
+  if (options.knownSecret) {
+    await mkdir(join(root, '.deckent'), { recursive: true });
+    await writeFile(join(root, '.deckent/config.json'), JSON.stringify({ projectName: '$DECK:B7_TEST', ...(options.secondaryKnownSecret ? { b7_fixture: { secondary: '$DECK:B7_SECOND' } } : {}) }));
+    config = await loadConfig(root, { env: { HOME: root, USERPROFILE: root, APPDATA: root, LOCALAPPDATA: root, XDG_CONFIG_HOME: root },
+      secretResolver: async name => name === 'B7_TEST' ? options.knownSecret : name === 'B7_SECOND' ? options.secondaryKnownSecret : undefined });
+    expect(configDisplayView(config as never).projectName).toBe('[REDACTED]');
+    if (options.secondaryKnownSecret) expect(configDisplayView(config as never)['b7_fixture']).toEqual({ secondary: '[REDACTED]' });
+    expect(config).not.toHaveProperty('knownSecrets');
+    expect(JSON.stringify(getConfigKnownSecrets(config))).toBe('{}');
+  }
   const context = { principal, policy: { async load() { return loads[Math.min(loaded++, loads.length - 1)]; } }, path: async () => ledger,
-    layout: resolveProductLayout({ projectRoot: root, root: data, platform: process.platform === 'win32' ? 'win32' : 'posix' }), config: { storage: { sqlite }, approvals: { keyFile: 'authority.key' } } };
+    layout: resolveProductLayout({ projectRoot: root, root: data, platform: process.platform === 'win32' ? 'win32' : 'posix' }), config };
   let plans = 0;
   const edits = { async plan() { plans++; return { ok: true }; }, floored: () => options.floored ?? false, authority: () => false, selfSource: () => options.selfSource ?? false, target: (_tool: string, given: Record<string, unknown>) => String(given['path']) };
   const scope = await createWorkspaceScope(root);
@@ -53,7 +67,7 @@ async function fixture(loads: unknown[], options: { standing?: { memory: Session
   const inner: EffectApprovalGate = { async admit(_descriptor, decision) { if (decision !== 'allow') throw new EffectError('EFFECT_APPROVAL_REQUIRED'); } };
   const approvals = { gate: () => ({ gate: inner, async close() {} }) };
   const decisions = createAgentCallDecisions({ context: context as never, clock: options.clockMs === undefined ? new SystemTrustedClock() : { sample: () => ({ wallMs: options.clockMs!, monotonicMs: 1 }) }, scopeId: 'scope', turnId: 'turn', edits: (() => realEdits ?? edits) as never,
-    shell: realShell ?? (options.shell ? { async plan() { return { ok: true }; }, tier: () => 'other-modify', containment: () => ({ realm: 'sandbox', contained: true }) } as never : null), approvals: approvals as never, fetch: null, ...(options.standing ? { standing: options.standing } : {}), ...(options.fullAccess ? { fullAccess: true } : {}) });
+    shell: realShell ?? (options.shell ? { async plan() { return { ok: true }; }, tier: () => options.shellTier ?? 'other-modify', containment: () => ({ realm: 'sandbox', contained: true }) } as never : null), approvals: approvals as never, fetch: null, ...(options.standing ? { standing: options.standing } : {}), ...(options.fullAccess ? { fullAccess: true } : {}) });
   const events = () => { const db = new DatabaseSync(ledger, { readOnly: true }); try { return db.prepare('SELECT event_id FROM audit_events').all().length; } finally { db.close(); } };
   const auditRecords = () => { const db = new DatabaseSync(ledger, { readOnly: true }); try {
     return db.prepare('SELECT record FROM audit_events').all().map(row => JSON.parse(String(row['record'])) as { event: { policyRevision: string; subject: { mode: string; kind: string; phase?: string; source?: string; approvalId?: string | null } & Record<string, unknown> } });
@@ -73,7 +87,7 @@ async function fixture(loads: unknown[], options: { standing?: { memory: Session
     });
     return { outcome, ...seen };
   };
-  return { decisions, root, scope, realShell, execute, events, auditRecords, plans: () => plans, authority: () => lastAuthority, failAudit: () => { context.config.approvals.keyFile = '/'; } };
+  return { decisions, root, scope, realShell, execute, events, auditRecords, knownSecrets: getConfigKnownSecrets(config), plans: () => plans, authority: () => lastAuthority, failAudit: () => { context.config.approvals.keyFile = '/'; } };
 }
 
 /** MODES-3: a policy snapshot with the company grant `permission-mode`/`set` `full-access` (null: none) and a v3 mode entry. */
@@ -500,4 +514,42 @@ describe('SELF-SOURCE-FLOOR session effect integration', () => {
     expect(granted.events()).toBe(0);
   });
 
+});
+
+describe('B7 service-owned resolved snapshot standing guard', () => {
+  it('refuses URL passwords with valid userinfo sub-delimiters even for historical session approvals', async () => {
+    for (const delimiter of [';', '$', '&', '(', ')']) {
+      const memory = new SessionStanding(), session = 'b7-url-fixture';
+      const command = `printf '%s' 'https://user:fictitious${delimiter}tail@example.invalid/p'`;
+      const policy = resolvePolicyBindings({ schemaVersion: 2, revision: 'b7-url', roles: [], separationOfDuties: [], restrictions: [], grants: [
+        { id: 'shell', effect: 'require-approval', modeEligible: true, actions: ['invoke'], scopes: ['scope'], principals: [me], resource: { kind: 'agent-tool', ids: ['run_shell'] } },
+        { id: 'execute', effect: 'allow', actions: ['execute'], scopes: ['scope'], principals: [me], resource: { kind: 'operation', ids: ['host.shell.run'] } },
+      ] }, { schemaVersion: 3, revision: 'b7-url-bindings', bindings: [], modes: [{ id: 'me-mode', scopes: ['scope'], principal: me, mode: 'standart' }] });
+      const f = await fixture([policy], { shell: true, shellTier: 'read-low', standing: { memory, session } });
+      const tool = { ...edit, name: 'run_shell', toolClass: 'shell' } as AgentToolSpec;
+      memory.remember(session, `v1:run_shell:command:${command}`);
+      expect(await f.decisions.authorize(tool, { command })).toBe('require-approval');
+      expect(await f.decisions.remember(tool, { command }, { round: 1, index: 0 }, 'fixture-call', 'fixture-card')).toBe(false);
+      expect(f.events()).toBe(0);
+    }
+  });
+  it.each([
+    { knownSecret: 'fictitious-opaque-value', secondaryKnownSecret: undefined, command: 'echo fictitious-opaque-value', expected: 'echo ‹secret:B7_TEST›', matches: 1 },
+    { knownSecret: 'fictitious-SHARED', secondaryKnownSecret: 'SHARED-tail-0123456789', command: 'echo fictitious-SHARED-tail-0123456789', expected: 'echo ‹secret:B7_TEST›‹secret:B7_SECOND›', matches: 2 },
+  ])('uses actual loadConfig provenance to refuse remembered and historical session keys for a known secret command: $matches occurrence(s)', async ({ knownSecret, secondaryKnownSecret, command, expected, matches }) => {
+    const memory = new SessionStanding(), session = 'b7-fixture';
+    const key = `v1:run_shell:command:${command}`;
+    const policy = resolvePolicyBindings({ schemaVersion: 2, revision: 'b7', roles: [], separationOfDuties: [], restrictions: [], grants: [
+      { id: 'shell', effect: 'require-approval', modeEligible: true, actions: ['invoke'], scopes: ['scope'], principals: [me], resource: { kind: 'agent-tool', ids: ['run_shell'] } },
+      { id: 'execute', effect: 'allow', actions: ['execute'], scopes: ['scope'], principals: [me], resource: { kind: 'operation', ids: ['host.shell.run'] } },
+    ] }, { schemaVersion: 3, revision: 'b7-bindings', bindings: [], modes: [{ id: 'me-mode', scopes: ['scope'], principal: me, mode: 'standart' }] });
+    const f = await fixture([policy], { shell: true, shellTier: 'read-low', knownSecret, secondaryKnownSecret, standing: { memory, session } });
+    expect(redactForDecision(command, f.knownSecrets)).toEqual({ text: expected, knownMatches: matches, patternMatches: [] });
+    const tool = { ...edit, name: 'run_shell', toolClass: 'shell' } as AgentToolSpec;
+    memory.remember(session, key); // Historical entry is never trusted for a command classified as secret-bearing now.
+    expect(await f.decisions.authorize(tool, { command })).toBe('require-approval');
+    expect(await f.decisions.remember(tool, { command }, { round: 1, index: 0 }, 'fixture-call', 'fixture-card')).toBe(false);
+    expect(f.events()).toBe(0);
+    expect(redactForDecision(command).text).toBe(command); // Opaque value has no pattern-only detection.
+  });
 });

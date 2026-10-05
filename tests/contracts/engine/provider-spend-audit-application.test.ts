@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { createProviderSpendAccount, createProviderSpendAuditReceipt, createProviderSpendCheckpoint,
   ProviderSpendAuditApplication, ProviderSpendError, parseProviderSpendAuditResultForCommand, providerSpendEvidenceDigest, providerSpendQuoteDigest,
   reserveProviderSpend, type ProviderSpendAuditReceipt, type ProviderSpendAuditStore,
@@ -187,14 +187,29 @@ describe('provider spending audit application', () => {
   });
 
   it('disposes a reader that resolves only after the audit deadline', async () => {
-    const f = harness(), opening = deferred<ProviderSpendIntegrityReader>();
-    const app = new ProviderSpendAuditApplication({ async verify() { return principal; } },
-      { async authorize() { return authorization; } }, async () => f.store, () => opening.promise,
-      { pageSize: 10, maxReservations: 10, timeoutMs: 20, maxResultBytes: 64_000 });
-    await expect(app.audit(f.command)).rejects.toThrow('PROVIDER_SPEND_UNAVAILABLE');
-    expect(f.calls).toMatchObject({ records: 0, readerCloses: 0, storeCloses: 1 });
-    opening.resolve(f.reader); await new Promise(resolve => setTimeout(resolve, 0));
-    expect(f.calls.readerCloses).toBe(1);
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    try {
+      const f = harness(), opening = deferred<ProviderSpendIntegrityReader>(), entered = deferred<void>(), closed = deferred<void>();
+      let elapsed = 0, settled = false;
+      f.reader.close = () => { f.calls.readerCloses++; closed.resolve(); };
+      const app = new ProviderSpendAuditApplication({ async verify() { return principal; } },
+        { async authorize() { return authorization; } }, async () => f.store, () => {
+          f.calls.readerOpens++; entered.resolve(); return opening.promise;
+        }, { pageSize: 10, maxReservations: 10, timeoutMs: 20, maxResultBytes: 64_000 }, () => 0, () => elapsed);
+      const pending = app.audit(f.command);
+      void pending.then(() => { settled = true; }, () => { settled = true; });
+      const rejected = expect(pending).rejects.toMatchObject({ code: 'PROVIDER_SPEND_UNAVAILABLE' });
+      // Reach the late-reader acquisition before advancing the one whole-audit deadline.
+      await entered.promise;
+      elapsed = 19; await vi.advanceTimersByTimeAsync(19);
+      expect(settled).toBe(false);
+      expect(f.calls).toMatchObject({ readerOpens: 1, reads: 0, records: 0, readerCloses: 0, storeCloses: 0 });
+      elapsed = 20; await vi.advanceTimersByTimeAsync(1); await rejected;
+      expect(f.calls).toMatchObject({ reads: 0, records: 0, readerCloses: 0, storeCloses: 1 });
+      expect(vi.getTimerCount()).toBe(0);
+      opening.resolve(f.reader); await closed.promise; await vi.advanceTimersByTimeAsync(0);
+      expect(f.calls).toMatchObject({ readerOpens: 1, reads: 0, records: 0, readerCloses: 1, storeCloses: 1 });
+    } finally { vi.useRealTimers(); }
   });
 
   it('does not record when the second authorization remains pending past the deadline', async () => {

@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, rm } from 'node:fs/promises';
+import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { PassThrough, Readable, Writable } from 'node:stream';
@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { main } from '../../../src/surfaces/index.js';
 import { runtimeBuildSkew } from '#surfaces/core/cli/index.js';
 import { clearConfigCache, t } from '#platform/index.js';
+import { registerProviderConfig } from '#adapters/index.js';
 
 /** A minimal in-memory TTY screen: the composer's real render lands here through `runTerminalWorkline`. */
 class Screen extends Writable {
@@ -167,3 +168,32 @@ describe('deckent terminal CLI', () => {
     }
   }, 15_000);
 });
+
+
+it('S06 CLI config snapshot protects actual complete and streamed assistant fields before markdown parsing in EN/TR', async () => {
+  registerProviderConfig();
+  for (const locale of ['en', 'tr'] as const) for (const streamed of [false, true]) {
+    const f = await fixture(); const stdout = new Screen(); const stdin = keyboard();
+    const canary = `fictitious-**s06**${streamed ? '-' : '\n'}known-0123456789`;
+    await writeFile(join(f.project, '.deckent/config.json'), JSON.stringify({ projectName: '$DECK:S06_TEST', terminal: { autostartService: false } }));
+    const reply = `Prose می\u200cروم 👩\u200d💻 ❤️ literal <U+202E>\n\`path\u200bfile\` ${canary} ${canary.slice(0, 14)}\u001b[31m${canary.slice(14)} ${canary.slice(0, 14)}\u0002${canary.slice(14)} override \u202eEND`;
+    const stream = async function* () { yield { kind: 'text' as const, text: reply }; yield { kind: 'done' as const, finish: 'stop' as const, note: null }; };
+    const run = main(['terminal', 'workline', '--scope', 's', '--lang', locale], {
+      root: f.project, env: { ...f.env, S06_TEST: canary, NO_COLOR: '1' }, stdout: stdout as unknown as NodeJS.WriteStream,
+      stderr: stdout as unknown as NodeJS.WriteStream, stdin: stdin as unknown as NodeJS.ReadStream, initialize() {},
+      async completeTerminalChat() { return reply; }, ...(streamed ? { streamTerminalChat: stream } : {}) });
+    try {
+      await until(() => stdout.text.includes(t('terminal.workline.placeholder', {}, locale)), 'catalog composer');
+      stdin.write('hello\r');
+      await until(() => stdout.text.includes('path<U+200B>file') && stdout.text.includes('‹secret:S06_TEST›'), 'actual CLI known snapshot projection');
+      expect(stdout.text).toContain(locale === 'en' ? '2 hidden characters' : '2 gizli karakter');
+      expect(stdout.text).toContain('می\u200cروم 👩\u200d💻 ❤️');
+      expect(stdout.text).not.toContain(canary);
+      expect(stdout.text).not.toContain('fictitious-');
+      expect(stdout.text).not.toContain('known-0123456789');
+      expect(stdout.text).not.toContain('[31m');
+      console.info('s06-cli-source-surface-evidence', JSON.stringify({ locale, streamed, snapshot: 'getConfigKnownSecrets(loadConfig) opaque production injection',
+        renderedFrame: stdout.text.slice(stdout.text.lastIndexOf('Prose') - 40) }));
+    } finally { stdin.write('/exit\r'); expect(await run, stdout.text).toBe(0); }
+  }
+}, 30_000);

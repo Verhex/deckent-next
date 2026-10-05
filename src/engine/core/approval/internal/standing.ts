@@ -1,17 +1,18 @@
 import { AUDIT_EVENT_SCHEMA_VERSION, AUTHORITY_DOCUMENT_TARGET_KIND, POLICY_ADMINISTER_OPERATION, STANDING_GRANT_KIND, STANDING_GRANTS_MAX, authorityDocuments, delegationWithin, isStandingGrantId,
   planPolicyChange, policySchema, standingGrantChange, sessionPattern, standingGrantId, standingRevokeChange, type AuditEvent, type EffectCommand, type PolicyChange, type SessionCell, type StandingPattern,
   type VerifiedPrincipal } from '#domain/index.js';
-import { sha256 } from '#platform/index.js';
+import { hasSecret, sha256, type KnownSecretSnapshot } from '#platform/index.js';
 import type { PolicySource } from '#engine/core/policy/index.js';
 import type { EffectOutcome } from '#engine/core/effect/index.js';
 
 /**
  * The standing-approval key of one agent call and whether this conversation already stands for it (`memory`), or null when the call's cell
- * or target cannot stand (static write floor, destructive shell, fetch, an unsafe or oversized target). Self-source permits a session
+ * or target cannot stand (static write floor, destructive shell, fetch, a secret-bearing command, an unsafe or oversized target). Self-source permits a session
  * answer only, through a separate key. The application service composition asks.
  */
 export function standingCallKey(call: { readonly tool: string; readonly cell: string; readonly path: string | null; readonly command: string | null },
-  memory?: { readonly sessions: SessionStanding; readonly session: string }): { readonly key: string; readonly cell: StandingCellName; readonly session: boolean } | null {
+  memory?: { readonly sessions: SessionStanding; readonly session: string }, knownSecrets?: KnownSecretSnapshot): { readonly key: string; readonly cell: StandingCellName; readonly session: boolean } | null {
+  if (call.command !== null && hasSecret(call.command, knownSecrets)) return null;
   const found = sessionPattern(call);
   return found.ok ? { key: found.pattern.key, cell: found.pattern.cell, session: memory?.sessions.has(memory.session, found.pattern.key) ?? false } : null;
 }
@@ -62,6 +63,8 @@ export interface PersistentStandingDependencies {
   /** Decides one pending operation approval `allow` as the person the card belongs to (the same session and channel as the card's decision). */
   readonly approve: (approval: { readonly approvalId: string; readonly revision: number }, commandId: string, reason: string) => Promise<unknown>;
   readonly policy: PolicySource;
+  /** Snapshot of values already resolved for this operation; never a new backend lookup. */
+  readonly knownSecrets?: KnownSecretSnapshot;
 }
 const parseKey = (key: string): Pick<StandingGrantView, 'tool' | 'kind' | 'text'> => {
   const match = /^v1:([^:]+):(command|directory):([\s\S]*)$/u.exec(key);
@@ -95,6 +98,7 @@ export class PersistentStanding {
   }
   /** Whether "always" can be offered for this pattern now: a policy that supports it, room for one more, and the person's own authority over it. */
   async offer(scopeId: string, principal: { readonly issuer: string; readonly subject: string }, pattern: StandingPattern): Promise<StandingOffer> {
+    if (pattern.kind === 'command' && hasSecret(pattern.text, this.deps.knownSecrets)) return { available: false, reason: 'unsupported' };
     let policy;
     try { policy = await this.snapshot(); } catch { return { available: false, reason: 'unsupported' }; }
     if (this.mine(policy, principal).length >= STANDING_GRANTS_MAX) return { available: false, reason: 'limit' };
@@ -107,6 +111,7 @@ export class PersistentStanding {
   /** Persists one pattern as the person's own grant; an already persisted pattern is returned as it is (no second card, no second change). */
   async persist(input: { readonly scopeId: string; readonly principal: VerifiedPrincipal; readonly pattern: StandingPattern; readonly sourceApprovalId: string }): Promise<StandingGrantView> {
     const { scopeId, principal, pattern } = input;
+    if (pattern.kind === 'command' && hasSecret(pattern.text, this.deps.knownSecrets)) throw new StandingApprovalError('STANDING_UNSUPPORTED', 'unsafe-target');
     const policy = await this.snapshot();
     const own = this.mine(policy, principal);
     const existing = own.find(grant => grant.resource.ids !== 'all' && grant.resource.ids.includes(pattern.key) && (grant.scopes === 'all' || grant.scopes.includes(scopeId)));

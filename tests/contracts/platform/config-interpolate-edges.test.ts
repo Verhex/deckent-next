@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { parseSecretReference, resolveConfigSecrets } from '../../../src/platform/core/config/index.js';
+import { redactForDecision } from '#platform/index.js';
 import { DeckentError } from '../../../src/platform/core/errors/index.js';
 
 describe('parseSecretReference edges', () => {
@@ -56,4 +57,15 @@ describe('resolveConfigSecrets edges', () => {
     expect(r.config).toEqual({ n: 1, z: null, t: true, o: {} });
     expect(Object.getPrototypeOf(r.config)).toBeNull();
   });
+});
+
+it('B7 snapshots only already resolved names once, keeping raw metadata out of the config and missing references out of the snapshot', async () => {
+  let calls = 0;
+  const result = await resolveConfigSecrets({ a: '$DECK:TEST_KEY', b: '$DECK:TEST_KEY', missing: '$DECK:MISSING' }, async name => {
+    calls++; return name === 'TEST_KEY' ? 'fictitious-config-value' : undefined;
+  });
+  expect(calls).toBe(2);
+  expect(Object.keys(result.config)).toEqual(['a', 'b', 'missing']);
+  expect(JSON.stringify(result.knownSecrets)).toBe('{}');
+  expect(redactForDecision('echo fictitious-config-value $DECK:MISSING', result.knownSecrets).text).toBe('echo ‹secret:TEST_KEY› $DECK:MISSING');
 });
