@@ -4,7 +4,7 @@
  */
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { Box, Text, useInput, usePaste, useWindowSize } from 'ink';
-import { useWorklinePalette } from '#surfaces/core/terminal-kit/index.js';
+import { slashCommandRow, useWorklinePalette } from '#surfaces/core/terminal-kit/index.js';
 import { mentionText, pendingArgument, type ComposerMentionPort, type PastePolicy } from './assist.js';
 import { composerKey } from './keys.js';
 import { COMPOSER_LIMITS, composerMenu, EMPTY_COMPOSER, exitArmed, reduceComposer, searchMatches, type ComposerHistoryPort, type ComposerKey, type ComposerMenu } from './reducer.js';
@@ -58,7 +58,7 @@ function MenuRows({ menu, labels }: { readonly menu: ComposerMenu; readonly labe
   const palette = useWorklinePalette();
   const first = Math.max(0, Math.min(menu.selected - MENU_ROWS + 1, menu.items.length - MENU_ROWS));
   const rows = menu.kind === 'slash'
-    ? menu.items.map(command => ({ name: `/${command.name}${command.argumentKey ? ` ${labels.slash[command.argumentKey] ?? ''}` : ''}`, detail: labels.slash[command.descriptionKey] ?? '' }))
+    ? menu.items.map(command => slashCommandRow(command, labels.slash))
     : menu.items.map(path => ({ name: mentionText(path), detail: '' }));
   const width = Math.max(...rows.map(row => displayWidth(row.name)));
   return (

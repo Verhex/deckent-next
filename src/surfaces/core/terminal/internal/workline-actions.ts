@@ -2,7 +2,7 @@ import type { WorkLedgerEntry, WorkLedgerWorkerEntry } from './work-ledger.js';
 import { WORK_LEDGER_SCHEMA_VERSION } from './work-ledger.js';
 import { fillTemplate, type WorkerLineLabels } from './worker-line.js';
 import type { WorkerPanelLabels } from './worker-panel.js';
-import { WORKLINE_SLASH_COMMANDS } from '#surfaces/core/terminal-kit/index.js';
+import { slashHelpText, WORKLINE_SLASH_COMMANDS } from '#surfaces/core/terminal-kit/index.js';
 import type { WorklineLedgerPorts } from './workline-ledger.js';
 import { ledgerEntriesForRuns, ledgerEntriesForWorkers, ledgerEntryForRun } from './workline-ledger.js';
 
@@ -19,6 +19,8 @@ export interface WorklineActionLabels {
   readonly watchStopped: string;
   readonly statusLine: string;
   readonly unknownCommand: string;
+  /** The same registry-derived labels as the palette; optional for callers without a composer. */
+  readonly composer?: { readonly slash: Readonly<Record<string, string>> };
   /** Worker live line, transcript, approvals and run control; absent means those commands are not offered. */
   readonly work?: WorkSurfaceLabels;
 }
@@ -99,15 +101,11 @@ export function notice(level: 'info' | 'error', text: string): WorkLedgerEntry {
   return Object.freeze({ schemaVersion: WORK_LEDGER_SCHEMA_VERSION, kind: 'notice' as const, id: 'notice', level, text });
 }
 
-function helpLine(): string {
-  return [...new Set(WORKLINE_SLASH_COMMANDS.map(command => `/${command.name}`))].join(' · ');
-}
-
 /** Pure dispatch for immediate commands; `needsLedger` commands return null and run through `runLedgerCommand`. */
 export function immediateSlashAction(command: string, context: WorklineActionContext): WorklineActionResult | null {
   const { labels, watch, ledger } = context;
   if (command === 'exit' || command === 'quit') return { entries: [], exit: true };
-  if (command === 'help') return { entries: [notice('info', helpLine())] };
+  if (command === 'help') return { entries: [notice('info', slashHelpText(labels.composer?.slash ?? {}, WORKLINE_SLASH_COMMANDS))] };
   if (command === 'status' || command === 'chat-backend') return { entries: [notice('info', labels.statusLine)] };
   if (command === 'watch-workers') {
     if (!ledger) return { entries: [notice('error', labels.ledgerUnavailable)] };
