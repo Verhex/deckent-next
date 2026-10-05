@@ -267,6 +267,17 @@
           "type": "string"
         }
       }
+    },
+    "guards": {
+      "type": "object",
+      "description": "Shrink-only structural guards (ARCH-GUARDS): outsideSrcImports, testHostImports, hostWords, vendorSlugCaps, effectFlows.",
+      "required": [
+        "outsideSrcImports",
+        "testHostImports",
+        "hostWords",
+        "vendorSlugCaps",
+        "effectFlows"
+      ]
     }
   }
 }

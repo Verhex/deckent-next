@@ -17,6 +17,7 @@ function fixture(source: string, extra = {}) {
   const root = mkdtempSync(join(tmpdir(), 'hardcode-ratchet-')); roots.push(root);
   const arch = JSON.parse(readFileSync('arch.json', 'utf8'));
   arch.hardcodeRatchet = { ...policy, ...extra };
+  arch.guards.vendorSlugCaps = {}; // the per-layer cap describes the real tree; these fixtures exercise the ratchet itself
   put(root, 'arch.json', JSON.stringify(arch));
   put(root, 'tsconfig.json', JSON.stringify({ compilerOptions: { jsx: 'preserve' }, include: ['src/**/*'] }));
   put(root, 'package.json', JSON.stringify({ dependencies: {}, devDependencies: {} }));

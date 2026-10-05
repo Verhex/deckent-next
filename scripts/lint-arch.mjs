@@ -8,6 +8,8 @@
 //  5. no product source writes .md files (docs are not product output)
 //  6. budgets: file ≤ maxLinesPerFile (all text files), per-package and total src lines, test-case count
 //  7. tracked markdown set is exactly the allowlist (+ pointer files within their line cap)
+//  9. structural guards (arch.json guards): src never imports outside src except assets/, tests never import .agents,
+//     host vocabulary absent from src (shrink-only allowlist), vendor-slug caps per layer, claim/delivery/adoption files only in the effect owner
 //  8. external dependencies: dependencies.json registry, owned bare imports, embedded components (scripts/dependencies.mjs)
 import ts from 'typescript';
 import { createHash } from 'node:crypto';
@@ -264,6 +266,12 @@ for (const file of [...srcFiles, ...appFiles]) {
   if (from.startsWith('(unknown')) fail('layout', rel(file), `file is outside a declared package (${from}); declare it in arch.json`);
   for (const imp of importsOf(file)) {
     const targetRel = rel(imp.target);
+    if (rel(file).startsWith('src/') && !imp.aliased && !targetRel.startsWith('src/')) {
+      const guard = arch.guards?.outsideSrcImports;
+      const denied = guard?.deny?.find(prefix => targetRel.startsWith(prefix));
+      if (denied) fail('src-boundary', `${rel(file)}:${imp.line}`, `product source may not import ${denied} (got ${imp.spec}); host tools, scripts and tests are not part of the product package`);
+      else if (guard && !guard.allow.some(prefix => targetRel.startsWith(prefix))) fail('src-boundary', `${rel(file)}:${imp.line}`, `relative import leaves src/ (got ${imp.spec}); only ${guard.allow.join(', ')} is allowed`);
+    }
     if (!targetRel.startsWith('src/')) continue;
     if (arch.imports?.enforce && !existsSync(imp.target)) fail('import-target', `${rel(file)}:${imp.line}`, `missing target ${imp.spec}`);
     const to = packageOf(imp.target);
@@ -309,6 +317,17 @@ for (const [unit, declaration] of Object.entries(declaredUnits)) {
   }
   const observed = observedUnitDependencies.get(unit) ?? new Set();
   for (const dependency of observed) if (!declared.has(dependency)) fail('unit-dependency', unit, `undeclared dependency ${dependency}`);
+  // Tier direction also holds across packages and through package index re-exports: a lower-tier unit may not
+  // end up depending on a higher-tier unit just because a package index.ts composes it.
+  if (tiers.enforce) {
+    const tierOfUnit = id => id.split('/')[2];
+    for (const dependency of observed) {
+      const from = tierRank.get(tierOfUnit(unit)), to = tierRank.get(tierOfUnit(dependency));
+      if (discoveredUnits.has(dependency) && from !== undefined && to !== undefined && to > from) {
+        fail('tier-direction', unit, `${tierOfUnit(unit)} unit depends on ${tierOfUnit(dependency)} unit ${dependency} (resolved through re-exports; order: ${tiers.order.join(' ← ')})`);
+      }
+    }
+  }
   for (const dependency of declared) if (!observed.has(dependency)) fail('unit-dependency', unit, `stale dependency ${dependency}`);
 }
 const visitState = new Map(), visitStack = [];
@@ -458,11 +477,13 @@ lintDependencies({ root: ROOT, registryFile: arch.dependencies?.registry, regist
 
 // ---- 4: model/flow literals
 const literalAllow = new Set(arch.literals.allow);
-const literalRes = arch.literals.forbidden.map((p) => new RegExp(p, 'g'));
+const literalRes = arch.literals.forbidden.map((p) => new RegExp(p, 'gi')); // vendor/model names are case-insensitive ("Opus 5.5")
+const literalUnits = (arch.literals.allowUnits ?? []).map(entry => `${entry.unit}/`);
+for (const entry of arch.literals.allowUnits ?? []) if (!entry.reason) fail('literal', entry.unit, 'literals.allowUnits entry needs a reason');
 for (const file of srcFiles) {
-  if (literalAllow.has(rel(file))) continue;
+  if (literalAllow.has(rel(file)) || literalUnits.some(unit => rel(file).startsWith(unit))) continue;
   const src = readFileSync(file, 'utf8');
-  for (const re of literalRes) for (const m of src.matchAll(re)) fail('literal', `${rel(file)}:${src.slice(0, m.index).split('\n').length}`, `hardcoded model/provider literal "${m[0]}" (only ${arch.literals.allow.join(', ')})`);
+  for (const re of literalRes) for (const m of src.matchAll(re)) fail('literal', `${rel(file)}:${src.slice(0, m.index).split('\n').length}`, `hardcoded model/provider literal "${m[0]}" (only files [${arch.literals.allow.join(', ')}] or units [${literalUnits.join(', ')}])`);
 }
 
 if (arch.hardcodeRatchet) lintHardcode(hardcodeInventory(hardcodeSources(srcFiles, program), checker, arch.hardcodeRatchet), arch.hardcodeRatchet);
@@ -676,8 +697,53 @@ function lintHardcode(findings, policy) {
     const moved = unlisted.find(other => lineage(other) === lineage(row));
     fail('hardcode-allowlist-stale', row.file, `remove resolved allowance ${row.fingerprint}${moved ? ` (or relocate it to ${moved.file} with origin)` : ''}`);
   }
+  // Per-layer vendor-slug cap: G1 findings in domain/engine are frozen debt that can only shrink.
+  for (const [layer, cap] of Object.entries(arch.guards?.vendorSlugCaps ?? {})) {
+    if (!packageNames.includes(layer)) continue;
+    const count = findings.filter(row => row.rule === 'G1' && row.file.startsWith(`src/${layer}/`)).length;
+    if (count > cap) fail('slug-cap', `src/${layer}`, `${count} vendor-slug findings > cap ${cap}; derive provider/CLI ids from the registry (commands.json, nativeCliIdSchema) instead of literals`);
+    if (count < cap) fail('slug-cap', 'arch.json', `guards.vendorSlugCaps.${layer} is ${cap} but only ${count} remain; lower the cap (shrink-only)`);
+  }
   const delta = frozen.size - ids.size;
   if (delta > 0) process.stdout.write(`hardcode allowlist delta: -${delta} from frozen admission (${ids.size} remaining)\n`);
+}
+
+// ---- 4c: structural guards (G-c tests -> .agents, G-d host words in src, G-h effect-flow files)
+if (arch.guards) {
+  const guards = arch.guards;
+  const anyFiles = (root, predicate) => walk(join(ROOT, root), predicate);
+  // G-c: product tests never import host tooling; host tests live in the test:host pack (.agents/refactor/*.test.mjs).
+  const testFiles = (guards.testHostImports?.scope ?? []).flatMap(root => anyFiles(root, p => /\.(ts|tsx|mts|mjs|js)$/.test(p)));
+  for (const file of testFiles) {
+    for (const imp of importsOf(file)) {
+      const target = rel(imp.target);
+      const denied = guards.testHostImports.deny.find(prefix => target.startsWith(prefix));
+      if (denied) fail('test-host-import', `${rel(file)}:${imp.line}`, `product tests may not import ${denied} (got ${imp.spec}); move host-tool tests into the test:host pack`);
+    }
+  }
+  // G-d: host vocabulary never appears in src (comments, strings, catalogs included); existing hits are a shrink-only allowlist.
+  const hostRes = (guards.hostWords?.patterns ?? []).map(pattern => new RegExp(pattern, 'giu'));
+  const hostAllow = new Map((guards.hostWords?.allow ?? []).map(entry => [entry.file, entry]));
+  for (const entry of hostAllow.values()) if (!entry.reason || !Number.isInteger(entry.count) || entry.count < 1) fail('host-word', entry.file, 'hostWords.allow entry needs a reason and a positive count');
+  const hostSeen = new Set();
+  for (const file of anyFiles('src', p => /\.(ts|tsx|mts|json|mjs|js|md)$/.test(p))) {
+    const path = rel(file), text = readFileSync(file, 'utf8');
+    let count = 0, first = null;
+    for (const re of hostRes) for (const m of text.matchAll(re)) { count++; first ??= { word: m[0], line: text.slice(0, m.index).split('\n').length }; }
+    if (count === 0) continue;
+    const entry = hostAllow.get(path); hostSeen.add(path);
+    if (!entry) fail('host-word', `${path}:${first.line}`, `host/process word "${first.word}" in product source (${count} hit(s)); src stays host-neutral: use a generic operator/contract term`);
+    else if (count > entry.count) fail('host-word', `${path}:${first.line}`, `${count} host-word hits > allowed ${entry.count}`);
+    else if (count < entry.count) fail('host-word', path, `${count} host-word hits < allowed ${entry.count}; lower the allowance (shrink-only)`);
+  }
+  for (const path of hostAllow.keys()) if (!hostSeen.has(path)) fail('host-word', path, 'stale hostWords.allow entry: no host word remains; remove it');
+  // G-h: claim/delivery/adoption/lease flow files belong to the effect port owner; the five legacy flows are a shrink-only list.
+  if (guards.effectFlows) {
+    const { owner, pattern, frozen } = guards.effectFlows, flowRe = new RegExp(pattern, 'i'), frozenSet = new Set(frozen);
+    const flowFiles = new Set(srcFiles.map(rel).filter(path => flowRe.test(path.split('/').at(-1)) && !path.startsWith(owner)));
+    for (const path of flowFiles) if (!frozenSet.has(path)) fail('effect-flow', path, `new claim/delivery/adoption/lease flow file outside ${owner}; route effects through the generic effect port (EffectApplication) and register a target instead of a module-specific flow`);
+    for (const path of frozenSet) if (!flowFiles.has(path)) fail('effect-flow', path, 'stale guards.effectFlows.frozen entry: file no longer exists or no longer matches; remove it (shrink-only)');
+  }
 }
 
 // ---- 5: .md write gate
@@ -704,13 +770,23 @@ for (const file of textFiles) {
   if (lines > maxLinesPerFile) fail('file-size', rel(file), `${lines} lines > ${maxLinesPerFile}`);
   if (lines > designTargetLines) aboveDesignTarget++;
 }
-const perPackage = {};
+const perPackage = {}, perTier = {};
+const tierBudgets = arch.budgets.tierLines ?? {};
+for (const key of Object.keys(tierBudgets)) {
+  const [pkg, tier, extra] = key.split('/');
+  if (extra !== undefined || !packageNames.includes(pkg) || !tierRank.has(tier) || !Number.isSafeInteger(tierBudgets[key]) || tierBudgets[key] < 1) fail('budget-config', 'arch.json', `budgets.tierLines key "${key}" must be <package>/<tier> with a positive integer`);
+}
 let total = 0;
 for (const file of srcFiles) {
   const lines = readFileSync(file, 'utf8').split('\n').length;
   total += lines;
-  const pkg = packageOf(file);
-  perPackage[pkg] = (perPackage[pkg] ?? 0) + lines;
+  const pkg = packageOf(file), tier = unitOf(file)?.tier;
+  // A tier with its own budget is counted only there, so an optional tier never consumes the Core package budget.
+  if (tier && Object.hasOwn(tierBudgets, `${pkg}/${tier}`)) perTier[`${pkg}/${tier}`] = (perTier[`${pkg}/${tier}`] ?? 0) + lines;
+  else perPackage[pkg] = (perPackage[pkg] ?? 0) + lines;
+}
+for (const [key, budget] of Object.entries(tierBudgets)) {
+  if ((perTier[key] ?? 0) > budget) fail('tier-budget', `src/${key}`, `${perTier[key]} lines > tier budget ${budget}`);
 }
 for (const [pkg, budget] of Object.entries(arch.budgets.packageLines)) {
   if ((perPackage[pkg] ?? 0) > budget) fail('package-budget', `src/${pkg}`, `${perPackage[pkg]} lines > budget ${budget}`);
