@@ -1,3 +1,6 @@
+import { mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { afterEach, expect, it } from 'vitest';
 import { main } from '../../../src/surfaces/index.js';
 
@@ -7,6 +10,8 @@ afterEach(() => { outputs.length = 0; });
 function context() {
   let initialized = 0;
   return { initialized: () => initialized, context: {
+    // An empty project root: help language must not come from whatever project the suite is run in.
+    root: mkdtempSync(join(tmpdir(), 'deckent-cli-help-')),
     env: { HOME: '/tmp/deckent-cli-help-test', NO_COLOR: '1' },
     stdout: { write(value: string) { outputs.push(value); } },
     stderr: { write(value: string) { outputs.push(value); } },
