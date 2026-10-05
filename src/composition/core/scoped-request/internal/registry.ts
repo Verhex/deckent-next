@@ -8,8 +8,7 @@ async function existingLedger(config: ResolvedConfig): Promise<string | null> {
   try { return await inspectProductFile(config.productLayout, 'ledger', ['-wal', '-shm', '-journal']); }
   catch (error) { if (error instanceof ManagedFileError && error.code === 'MANAGED_FILE_MISSING') return null; throw error; }
 }
-/** Ledger-backed registry. Lookups are read-only; only a declared scope's first write admission writes (one insert-only
- * transaction). A missing ledger has no pins and nothing is created: writers need an existing current ledger anyway. */
+/** Read-only lookup; only first write admission inserts pins. Missing ledgers stay absent. */
 function configuredScopeRegistry(config: ResolvedConfig): ScopeRegistry {
   return {
     async pinnedCompanies(scopeIds) {
@@ -22,25 +21,16 @@ function configuredScopeRegistry(config: ResolvedConfig): ScopeRegistry {
     },
   };
 }
-/** The one fail-closed membership decision for every scoped entry point (CLI/SDK/MCP, runtime socket peer, inventory, service
- * shutdown): trusted grants, then a durable pin to the configured company, written at a declared scope's first admission (H34 S1). */
+/** H34 S1: all entry points share trusted grants plus durable company pins at first write admission. */
 export async function resolveConfiguredScopeMembership(config: ResolvedConfig, document: unknown,
   identity: { readonly issuer: string; readonly subject: string }, scopeIds: readonly string[], access: ScopeAccess): Promise<readonly string[]> {
   return resolvePolicyScopeMembership(document, identity, scopeIds, config.company.id, configuredScopeRegistry(config), access);
 }
-/**
- * First-start registration (solo: no user step). Under the caller's endpoint custody, after the ledger upgrade: pins the configured
- * company and the installation's own scopes — the service identity scope, the runtime loop scopes and every scope the trusted policy
- * names. An unavailable policy registers the configured scopes only (a start does not require a policy). A missing ledger is not
- * created; the next start registers.
- *
- * H34 S3 Q1 (owner 2026-09-27 evening decision 6): a start never proceeds while one of these own scopes is already pinned to another
- * company — every loop and governed shutdown would otherwise fail closed on each page with no way to recover short of editing the
- * ledger by hand. The read-only precheck runs before any write, so a start that refuses here leaves the ledger byte-identical (no
- * `companies` row, no scope pin); `registerLedgerScopes`'s own `pinnedElsewhere` is kept as a narrow backstop for the admission race
- * (a declared-scope admission from another process does not hold this start's endpoint guard and could pin a scope in the gap between
- * the precheck and the write). The refusal never names the other company (Astra 2122/2123 non-disclosure extends to start).
- */
+/** Under endpoint custody after upgrade, register configured company/service/loop and trusted policy scopes.
+ * Missing policy uses configured scopes; missing ledger stays absent. H34 S3 Q1 (owner 2026-09-27):
+ * foreign pins refuse start before any write (ledger byte-identical), preventing unusable loops/shutdown.
+ * Recheck registration pins for admissions racing outside endpoint custody; never name the foreign company
+ * (Astra 2122/2123). The registry retains its transaction-level race backstop. */
 export async function registerConfiguredScopesAtStart(config: ResolvedConfig) {
   const path = await existingLedger(config);
   if (!path) return null;

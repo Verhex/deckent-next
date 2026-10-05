@@ -4,6 +4,7 @@
   "resources": {
     "config": "config.json",
     "installationJournal": "installation/journal.json",
+    "projectIdentity": "project-identity",
     "brain": "brain",
     "memory": "brain/memory.db",
     "tasks": "tasks",
@@ -28,7 +29,7 @@
     "scratch": "state/scratch"
   },
   "bootstrapResource": "config",
-  "fixedResources": ["config", "installationJournal"],
+  "fixedResources": ["config", "installationJournal", "projectIdentity"],
   "rootEnvironmentKey": "DECKENT_HOME",
   "globalRootEnvironmentKey": "DECKENT_GLOBAL_HOME"
 }

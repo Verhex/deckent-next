@@ -1,4 +1,7 @@
 {
+  "error.PROJECT_IDENTITY_INVALID": "Proje kimlik kaydı eksik veya geçersiz. Özgün kaydı yedekten geri yükleyin; yeni kimlik üretilmedi.",
+  "error.PROJECT_IDENTITY_UNAVAILABLE": "Proje kimliği güvenle okunamadı veya kaydedilemedi. Proje metadata dizinine erişimi kontrol edin.",
+  "error.PROJECT_IDENTITY_LOCKED": "Başka bir süreç proje kimliğini oluşturuyor. Tamamlandıktan sonra yeniden deneyin.",
   "acceptance.confirmation.confirmed": "{confirmationId} kabul doğrulaması, kimliği doğrulanmış {surface} yüzeyinde onaylandı.",
   "acceptance.confirmation.reconciliation_hold": "{confirmationId} kabul doğrulaması uzlaştırma HOLD durumunda ({reason}). Kimliği doğrulanmış {surface} yüzeyinde çözümleyin.",
   "approval.broker_authority_pending": "Karar kanal-otoritesi bekliyor; CLI: deckent approvals decide #{code}",

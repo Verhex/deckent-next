@@ -1,4 +1,7 @@
 {
+  "error.PROJECT_IDENTITY_INVALID": "The project identity record is missing or invalid. Restore the original record from backup; no replacement identity was generated.",
+  "error.PROJECT_IDENTITY_UNAVAILABLE": "The project identity could not be read or persisted safely. Check access to the project metadata directory.",
+  "error.PROJECT_IDENTITY_LOCKED": "Another process is initializing the project identity. Retry after it finishes.",
   "acceptance.confirmation.confirmed": "Acceptance confirmation {confirmationId} was confirmed on the authenticated {surface} surface.",
   "acceptance.confirmation.reconciliation_hold": "Acceptance confirmation {confirmationId} is on reconciliation HOLD ({reason}). Resolve it on the authenticated {surface} surface.",
   "approval.broker_authority_pending": "Decision channel authority is pending; CLI: deckent approvals decide #{code}",

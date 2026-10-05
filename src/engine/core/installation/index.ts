@@ -1,5 +1,7 @@
 export { installationProfilePayloadSchema, installationProfileSchema, encodeInstallationProfilePayload,
   hashInstallationProfilePayload, snapshotInstallationProfile } from './internal/profile.js';
+export { ProjectIdentityError } from './internal/project-identity.js';
+export type { ProjectIdentityStore, ProjectIdentityErrorCode } from './internal/project-identity.js';
 export type { InstallationProfilePayload, InstallationProfile } from './internal/profile.js';
 export { InstallationPreviewApplication, InstallationProfileError } from './internal/application.js';
 export type { InstallationProfileErrorCode, InstallationPreviewPorts, InstallationPreviewChoices,

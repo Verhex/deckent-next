@@ -15,6 +15,10 @@ function mcpSandboxUnreachable(p: Params, l: Locale): string {
 }
 interface Definition { readonly category: ErrorCategory; readonly render: (params: Params, locale: Locale) => ErrorEntry }
 const definitions: Readonly<Record<string, Definition>> = Object.freeze({
+  PROJECT_IDENTITY_INVALID: { category: 'config', render: (p, l) => ({ message: t('error.PROJECT_IDENTITY_INVALID', p, l) }) },
+  PROJECT_IDENTITY_UNAVAILABLE: { category: 'config', render: (p, l) => ({ message: t('error.PROJECT_IDENTITY_UNAVAILABLE', p, l) }) },
+  PROJECT_IDENTITY_LOCKED: { category: 'config', render: (p, l) => ({ message: t('error.PROJECT_IDENTITY_LOCKED', p, l) }) },
+
   CONFIG_SECRET_SECTION_REFUSED: { category: 'config', render: (p, l) => ({ message: t('error.CONFIG_SECRET_SECTION_REFUSED', p, l) }) },
   CONFIG_LAYER_INVALID: { category: 'config', render: (p, l) => ({ message: t('error.CONFIG_LAYER_INVALID', p, l) }) },
   CONFIG_DIGEST_INVALID: { category: 'config', render: (p, l) => ({ message: t('error.CONFIG_DIGEST_INVALID', p, l) }) },

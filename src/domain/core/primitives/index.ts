@@ -2,3 +2,5 @@ export { IDENTITY_MAX_LENGTH, identitySchema, counterSchema, sanitizeIssues } fr
 export type { ValidationIssue } from './internal/values.js';
 export { JSON_VALUE_LIMITS, createImmutableJsonObjectSchema, immutableJsonObjectSchema } from './internal/json.js';
 export type { JsonValue, JsonObject, JsonValueLimits } from './internal/json.js';
+export { projectIdSchema, projectIdentitySchema } from './internal/project-identity.js';
+export type { ProjectId, ProjectIdentity } from './internal/project-identity.js';

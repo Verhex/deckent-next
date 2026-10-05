@@ -1,23 +1,18 @@
 import { userInfo } from 'node:os';
-import { loadConfig, inspectProductFile, type ConfigLoadOptions } from '#platform/index.js';
-import { registerProviderConfig, readLocalOsIdentity, verifyLocalPeerIdentity, type LocalPeerIdentity } from '#adapters/index.js';
+import { ErrorRegistry, loadConfig, inspectProductFile, type ResolvedConfig, type ConfigLoadOptions } from '#platform/index.js';
+import { FileProjectIdentityStore, registerProviderConfig, readLocalOsIdentity, verifyLocalPeerIdentity, type LocalPeerIdentity } from '#adapters/index.js';
 import { policySchema } from '#domain/index.js';
-import { PolicyAuthorizationError, type ScopeAccess } from '#engine/index.js';
+import { ProjectIdentityError, type ProjectIdentityStore, PolicyAuthorizationError, type ScopeAccess } from '#engine/index.js';
 import { createLayoutPolicySource } from '#composition/core/policy/index.js';
 import { resolveConfiguredScopeMembership } from './registry.js';
-/** One fresh local config/identity/policy snapshot per request. The only ledger access here is the scope registry, after a trusted
- * grant exists (H34 S1: fail-closed membership): a lookup, plus — for `write` access only — the insert-only pin of a
- * declared scope at its first admission. Every caller states its mode; queries pass `read` and never write (Astra 2126 R1).
- * The caller's application still authenticates/authorizes before invoking the deferred ledger locator.
- */
-export async function loadConfiguredScopeContext(projectRoot: string, scopeId: string, options: ConfigLoadOptions, access: ScopeAccess) {
-  return loadScopeContext(projectRoot, scopeId, options, readLocalOsIdentity(), access);
-}
+/** Fresh config/policy/identity. Trusted membership precedes project bootstrap; only write admission pins scopes.
+ * Queries never write ledger pins (H34 S1, Astra 2126 R1). Bootstrap grants no authority.
+ * Application authentication/authorization still precedes the deferred ledger locator. */
+export const loadConfiguredScopeContext = async (projectRoot: string, scopeId: string, options: ConfigLoadOptions, access: ScopeAccess) =>
+  loadScopeContext(projectRoot, scopeId, options, readLocalOsIdentity(), access);
 /** Runtime peer verification precedes config/policy access. Scope membership still belongs to current policy. */
-export async function loadConfiguredPeerScopeContext(projectRoot: string, scopeId: string,
-  options: ConfigLoadOptions, peer: LocalPeerIdentity, access: ScopeAccess) {
-  return loadScopeContext(projectRoot, scopeId, options, verifyLocalPeerIdentity(peer), access);
-}
+export const loadConfiguredPeerScopeContext = async (projectRoot: string, scopeId: string, options: ConfigLoadOptions, peer: LocalPeerIdentity, access: ScopeAccess) =>
+  loadScopeContext(projectRoot, scopeId, options, verifyLocalPeerIdentity(peer), access);
 async function loadScopeContext(projectRoot: string, scopeId: string, options: ConfigLoadOptions,
   identity: ReturnType<typeof readLocalOsIdentity>, access: ScopeAccess) {
   registerProviderConfig();
@@ -27,7 +22,19 @@ async function loadScopeContext(projectRoot: string, scopeId: string, options: C
   catch { throw new PolicyAuthorizationError('POLICY_UNAVAILABLE'); }
   const scopeIds = await resolveConfiguredScopeMembership(config, document, identity, [scopeId], access);
   const principal = Object.freeze({ ...identity, scopeIds });
-  return Object.freeze({ config, layout, document, principal,
+  const { projectId } = await loadProjectIdentityForConfig(config);
+  return Object.freeze({ config, layout, document, principal, projectId,
     path: () => inspectProductFile(layout, 'ledger', ['-wal', '-shm', '-journal']),
   });
+}
+async function loadProjectIdentityForConfig(config: ResolvedConfig) {
+  const store: ProjectIdentityStore = new FileProjectIdentityStore(config.projectRoot, config.configFile.writeLockTimeoutMs);
+  try { return await store.loadOrCreate(); }
+  catch (error) {
+    if (error instanceof ProjectIdentityError) throw ErrorRegistry.createError(error.code);
+    throw error;
+  }
+}
+export async function loadConfiguredProjectIdentity(projectRoot: string, options: ConfigLoadOptions = {}) {
+  return loadProjectIdentityForConfig(await loadConfig(projectRoot, { ...options, heal: false }));
 }
