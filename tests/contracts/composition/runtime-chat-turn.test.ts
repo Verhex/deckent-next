@@ -269,7 +269,7 @@ describe.skipIf(process.platform !== 'linux')('agent chat turn through the runti
     full.state.script = [{ content: 'never' }];
     const refused = await full.client().chatTurn(ask('turn-full'), () => undefined);
     expect(refused).toMatchObject({ finish: 'error', rounds: 1, answer: null });
-    expect(refused.note).toMatch(/3000 prompt tokens \+ 2176 reserved > 4000.*Nothing was sent/);
+    expect(refused.note).toMatch(/3000 prompt tokens \(provider-count\) \+ 2176 reserved > 4000.*Nothing was sent/);
     expect(full.state.requests).toEqual([]);
   }, 30_000);
 
@@ -1443,7 +1443,7 @@ describe.skipIf(process.platform !== 'linux')('composer @file and slash keys thr
       await typeInto(view, '/hel');
       await until(() => view.stdout.text.includes('> /help'), 'palette');
       await typeInto(view, '\r');
-      await until(() => view.stdout.text.includes('/watch-runs · /watch-stop'), 'help ran');
+      await until(() => view.stdout.text.includes('/watch-runs\n/watch-stop\n'), 'help ran');
       await typeInto(view, '/res');
       await until(() => view.stdout.text.includes('> /resume'), 'palette');
       await typeInto(view, '\r');

@@ -72,4 +72,20 @@ describe.skipIf(process.platform === 'win32')('durable project identity', () => 
     });
     expect((await new FileProjectIdentityStore(f.root).loadOrCreate()).projectId).toBeTruthy();
   });
+  it('an unlocked read that meets a first publication between its directory and record waits for the record', async () => {
+    const f = await fixture(), other = await fixture();
+    const bytes = await (async () => { await new FileProjectIdentityStore(other.root).loadOrCreate(); return readFile(other.path); })();
+    await mkdir(f.directory, { recursive: true, mode: 0o700 });
+    const read = new FileProjectIdentityStore(f.root, 1_000).read();
+    await new Promise(resolve => setTimeout(resolve, 40));
+    await writeFile(f.path, bytes, { mode: 0o600 });
+    await expect(read).resolves.toEqual({ status: 'available', value: JSON.parse(bytes.toString()) });
+  });
+  it('a directory whose record never appears within the writer-lock bound stays retained loss', async () => {
+    const f = await fixture(); await mkdir(f.directory, { recursive: true, mode: 0o700 });
+    const started = Date.now();
+    await expect(new FileProjectIdentityStore(f.root, 60).read()).rejects.toMatchObject({ code: 'PROJECT_IDENTITY_INVALID' });
+    expect(Date.now() - started).toBeLessThan(1_000);
+    await expect(readFile(f.path)).rejects.toMatchObject({ code: 'ENOENT' });
+  });
 });
