@@ -1,5 +1,6 @@
-export { installationIdSchema, installationIdentitySchema } from './internal/installation-identity.js';
-export type { InstallationId, InstallationIdentity } from './internal/installation-identity.js';
+export { installationIdSchema, installationIdentitySchema, installationBindingSchema, installationIdentityChoiceSchema,
+  installationIdentityResolutionSchema, boundInstallationIdentitySchema, installationIdentityRecordSchema } from './internal/installation-identity.js';
+export type { InstallationId, InstallationIdentity, InstallationBinding, InstallationIdentityChoice, InstallationIdentityResolution } from './internal/installation-identity.js';
 export { IDENTITY_MAX_LENGTH, identitySchema, counterSchema, sanitizeIssues } from './internal/values.js';
 export type { ValidationIssue } from './internal/values.js';
 export { JSON_VALUE_LIMITS, createImmutableJsonObjectSchema, immutableJsonObjectSchema } from './internal/json.js';

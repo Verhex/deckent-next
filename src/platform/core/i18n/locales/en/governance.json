@@ -1,4 +1,6 @@
 {
+  "error.INSTALLATION_IDENTITY_RELOCATED": "The installation was copied, restored or moved, or has no machine binding. Commands are stopped. Choose explicitly: same installation (move/restore), keep identity and update binding: deckent init identity --keep; or new installation, generate a new installationId and preserve projects: deckent init identity --new.",
+  "error.INSTALLATION_IDENTITY_RESOLUTION_INVALID": "The installation identity choice is invalid or the current binding is already accepted. No identity was changed.",
   "error.INSTALLATION_IDENTITY_INVALID": "The installation identity record is missing or invalid. Restore the original record from backup; no replacement identity was generated.",
   "error.INSTALLATION_IDENTITY_UNAVAILABLE": "The installation identity could not be read or persisted safely. Check access to the installation metadata directory.",
   "error.INSTALLATION_IDENTITY_LOCKED": "Another process is initializing the installation identity. Retry after it finishes.",

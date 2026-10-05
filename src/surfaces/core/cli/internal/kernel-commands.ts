@@ -8,8 +8,7 @@ import type { Readable } from 'node:stream';
 import type { TaskIntegrationDeliverHandler, TaskIntegrationInspectHandler, TaskIntegrationCheckHandler, TaskIntegrationPrepareHandler, TaskPatchHandler, TaskEvaluationHandler, TaskExecutionHandler } from './task.js';
 import { getPolicyVocabulary } from '#engine/index.js';
 import type { RuntimeServiceDescribeHandler, RuntimeServiceShutdownHandler, RuntimeServiceStartHandler } from './runtime.js';
-import type { InstallationPreviewHandler, InstallationInspectionHandler, InstallationApplyHandler, InstallationResumeHandler,
-  PolicyTemplatePreviewHandler, PolicyTemplateApplyHandler } from './init.js';
+import type { InstallationCommandContext } from '#surfaces/core/cli-installation/index.js';
 import type { ToolchainCurrencyReport, ModelInvocationDeliveryFinding } from '#engine/index.js';
 import {
   inspectProductPaths, getConfigFieldDefault, ErrorRegistry, loadConfig,
@@ -37,7 +36,7 @@ export interface RuntimeServiceReadinessView {
 
 /** Every host operation a CLI command may use; the model commands' narrower context is part of it. */
 export type RunLifecycleHandler = (root: string, input: import('#engine/index.js').RunLifecycleCommand, options: ConfigLoadOptions) => Promise<{ readonly schemaVersion: 1; readonly layout: import('#platform/index.js').ProductLayout; readonly lifecycle: { readonly schemaVersion: 1; readonly commandId: string; readonly run: import('#engine/index.js').RunView } } | null>;
-export interface CommandContext extends ModelCommandContext, MonitorCommandContext, ConfigCommandContext, DecisionCommandContext {
+export interface CommandContext extends InstallationCommandContext, ModelCommandContext, MonitorCommandContext, ConfigCommandContext, DecisionCommandContext {
   applyRunLifecycle?: RunLifecycleHandler;
   renewApproval?: (input: unknown) => Promise<unknown>;
   listApprovals?: (input: unknown) => Promise<unknown>;
@@ -77,12 +76,6 @@ export interface CommandContext extends ModelCommandContext, MonitorCommandConte
   inspectScratch?: TerminalScratchInspectHandler;
   clearScratch?: TerminalScratchClearHandler;
   describeTerminalChatPlan?: TerminalChatPlanHandler;
-  previewInstallation?: InstallationPreviewHandler;
-  inspectInstallation?: InstallationInspectionHandler;
-  applyInstallation?: InstallationApplyHandler;
-  resumeInstallation?: InstallationResumeHandler;
-  previewPolicyTemplateInstallation?: PolicyTemplatePreviewHandler;
-  applyPolicyTemplateInstallation?: PolicyTemplateApplyHandler;
   // Doctor-only, read-soft (SCR-B): null on a missing/unsafe/custom policy, never a hard failure of `doctor`.
   listStandingGrants?: import('./policy-grants.js').StandingGrantsHandler;
   revokeStandingGrant?: import('./policy-grants.js').StandingRevokeHandler;

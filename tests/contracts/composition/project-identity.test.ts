@@ -27,7 +27,7 @@ async function fixture() {
 }
 
 describe('installation and project identity composition', () => {
-  beforeEach(context => { if (process.platform === 'win32') context.skip('INSTALLATION_IDENTITY_UNSUPPORTED: POSIX identity persistence is unavailable; typed refusal has a separate active test'); });
+  beforeEach(context => { if (process.platform !== 'linux') context.skip('INSTALLATION_IDENTITY_UNSUPPORTED: POSIX identity persistence is unavailable; typed refusal has a separate active test'); });
   it('upgrades an existing project on first use without editing config or creating a ledger; alternate data roots share no project identity', async () => {
     const f = await fixture(); const before = await readFile(f.config, 'utf8');
     const identity = await loadConfiguredProjectIdentity(f.project, f.options);
@@ -40,7 +40,7 @@ describe('installation and project identity composition', () => {
     await writeFile(join(other, '.deckent/config.json'), before);
     expect((await loadConfiguredProjectIdentity(other, f.options)).projectId).not.toBe(identity.projectId);
     expect(await loadConfiguredInstallationIdentity(other, f.options)).toEqual(installation);
-    expect(JSON.parse(await readFile(join(f.data, 'installation-identity/identity.json'), 'utf8'))).toEqual(installation);
+    expect(JSON.parse(await readFile(join(f.data, 'installation-identity/identity.json'), 'utf8'))).toMatchObject({ schemaVersion: 2, installationId: installation.installationId });
     await expect(stat(join(f.project, '.deckent/installation-identity'))).rejects.toMatchObject({ code: 'ENOENT' });
   });
   it('carries the durable value through peer scope and invocation contexts without changing company or principal', async () => {

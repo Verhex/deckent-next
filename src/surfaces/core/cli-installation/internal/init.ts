@@ -1,7 +1,8 @@
+import { identityCommand } from './identity.js';
 import { isAbsolute } from 'node:path';
 import { ErrorRegistry, emit, formatValue, resolveLocale, t } from '#platform/index.js';
 import type { InstallationPreview, InstallationEvidencePreview, InstallationPublicationApplication } from '#engine/index.js';
-import type { CommandContext } from './kernel-commands.js';
+import type { InstallationCommandContext } from './context.js';
 
 export interface InstallationPreviewInput { readonly profilePath: string; readonly allowShutdown: boolean }
 export type InstallationPreviewHandler = (projectRoot: string, input: InstallationPreviewInput) => Promise<InstallationPreview>;
@@ -23,7 +24,8 @@ export type PolicyTemplatePreviewHandler = (projectRoot: string, scopeId: string
 export type PolicyTemplateApplyHandler = (projectRoot: string, scopeId: string) => Promise<unknown>;
 
 /** Preview is deliberately non-mutating. No surface invents profile data or policy grants. */
-export async function initCommand(argv: readonly string[], context: CommandContext): Promise<void> {
+export async function initCommand(argv: readonly string[], context: InstallationCommandContext): Promise<void> {
+  if (argv[1] === 'identity') return identityCommand(argv, context);
   const action = argv[1]; let profilePath: string | undefined, language: string | undefined, dockerExecutable: string | undefined;
   let proposalDigest: string | undefined, json = false, allowShutdown = false, acceptCustom = false;
   let scopeId: string | undefined, policyPreview = false, policyApply = false;

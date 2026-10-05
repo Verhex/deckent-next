@@ -3,6 +3,7 @@ import { admitConfiguredModelActivation, applyConfiguredModelCatalog, inspectCon
 import { parseArgs } from 'node:util';
 import { resolve } from 'node:path';
 import { serveStdio, StdioServerTransport } from '@modelcontextprotocol/server/stdio';
+import { loadConfiguredInstallationIdentity } from '#composition/core/scoped-request/index.js';
 import { loadConfig, resolveLocale, isMainModule } from '#platform/index.js';
 import { createBoundedMcpTransport, registerProviderConfig } from '#adapters/index.js';
 import { loadMcpSurface } from '#surfaces/index.js';
@@ -15,7 +16,7 @@ import { applyConfiguredPoolCapacity, inspectConfiguredPoolCapacity, applyConfig
 import { inspectConfiguredDecision } from '#composition/core/decision/index.js';
 /** Stdio peer inherits this local OS user's identity. This entry is not a remote authentication mechanism. */
 export async function main(root = process.cwd()) {
-  registerProviderConfig(); const config = await loadConfig(root, { heal: false });
+  registerProviderConfig(); await loadConfiguredInstallationIdentity(root); const config = await loadConfig(root, { heal: false });
   const locale = resolveLocale(undefined, process.env, config.language);
   const runtime = createConfiguredRuntimeClient(root), { createMcpServer } = await loadMcpSurface();
   // Catalog operations run on the service (runtime client handlers); their tool hints come from this installation's reachable catalog.

@@ -1,4 +1,6 @@
 {
+  "error.INSTALLATION_IDENTITY_RELOCATED": "Kurulum kopyalanmış, geri yüklenmiş veya taşınmış ya da makine bağı yok. Komutlar durduruldu. Açıkça seçin: aynı kurulum (taşıma/geri yükleme), kimliği koru ve bağı güncelle: deckent init identity --keep; veya yeni kurulum, yeni installationId üret ve projeleri koru: deckent init identity --new.",
+  "error.INSTALLATION_IDENTITY_RESOLUTION_INVALID": "Kurulum kimliği seçimi geçersiz veya mevcut bağ zaten kabul edilmiş. Kimlik değiştirilmedi.",
   "error.INSTALLATION_IDENTITY_INVALID": "Kurulum kimlik kaydı eksik veya geçersiz. Özgün kaydı yedekten geri yükleyin; yeni kimlik üretilmedi.",
   "error.INSTALLATION_IDENTITY_UNAVAILABLE": "Kurulum kimliği güvenle okunamadı veya kaydedilemedi. Kurulum metadata dizinine erişimi kontrol edin.",
   "error.INSTALLATION_IDENTITY_LOCKED": "Başka bir süreç kurulum kimliğini oluşturuyor. Tamamlandıktan sonra yeniden deneyin.",

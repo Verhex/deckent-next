@@ -1,4 +1,9 @@
 {
+  "cli.help.action.identity": "Kopya veya geri yüklenmiş kurulum kimliğini çözümle",
+  "cli.help.identity": "Kullanım: deckent init identity --keep|--new [--json] [--lang en|tr]\n--keep: Aynı kurulum (taşıma/geri yükleme): kimliği koru, bağı güncelle.\n--new: Yeni kurulum: yeni installationId üret; projeleri koru.\nYerel kimlik kaydı yalnız açık seçimle güncellenir.",
+  "cli.identity.keep": "Aynı kurulum (taşıma/geri yükleme): kimlik korundu, bağ güncellendi",
+  "cli.identity.new": "Yeni kurulum: yeni installationId üretildi, projeler korundu",
+  "cli.identity.resolved": "{choice}\nÖnceki installationId: {previous}\nGüncel installationId: {current}",
   "terminal.status.installationId": "Kurulum kimliği: {installationId}",
   "terminal.status.projectId": "Proje kimliği: {projectId}",
   "cli.agent.delete.desc": "Bir agent'ı havuzdan silin",

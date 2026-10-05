@@ -1,7 +1,7 @@
 import { userInfo } from 'node:os';
 import { ErrorRegistry, loadConfig, inspectProductFile, type ConfigLoadOptions } from '#platform/index.js';
 import { FileInstallationIdentityStore, FileProjectIdentityStore, registerProviderConfig, readLocalOsIdentity, verifyLocalPeerIdentity, type LocalPeerIdentity } from '#adapters/index.js';
-import { policySchema } from '#domain/index.js';
+import { policySchema, type InstallationIdentityChoice } from '#domain/index.js';
 import { InstallationIdentityError, ProjectIdentityError, PolicyAuthorizationError, type ScopeAccess } from '#engine/index.js';
 import { createLayoutPolicySource } from '#composition/core/policy/index.js';
 import { resolveConfiguredScopeMembership } from './registry.js';
@@ -17,10 +17,11 @@ async function loadScopeContext(projectRoot: string, scopeId: string, options: C
   let document;
   try { document = policySchema.parse(await createLayoutPolicySource(layout, userInfo().uid, config.inspection.policyMaxBytes).load()); }
   catch { throw new PolicyAuthorizationError('POLICY_UNAVAILABLE'); }
-  const scopeIds = await resolveConfiguredScopeMembership(config, document, identity, [scopeId], access);
+  const scopeIds = await resolveConfiguredScopeMembership(config, document, identity, [scopeId], 'read');
   const principal = Object.freeze({ ...identity, scopeIds });
-  const { projectId } = await readIdentity(new FileProjectIdentityStore(config.projectRoot, config.configFile.writeLockTimeoutMs));
   const { installationId } = await readIdentity(new FileInstallationIdentityStore(layout, config.configFile.writeLockTimeoutMs));
+  if (access === 'write') await resolveConfiguredScopeMembership(config, document, identity, [scopeId], access);
+  const { projectId } = await readIdentity(new FileProjectIdentityStore(config.projectRoot, config.configFile.writeLockTimeoutMs));
   return Object.freeze({ config, layout, document, principal, projectId, installationId,
     path: () => inspectProductFile(layout, 'ledger', ['-wal', '-shm', '-journal']) });
 }
@@ -38,4 +39,11 @@ export async function loadConfiguredProjectIdentity(projectRoot: string, options
 export async function loadConfiguredInstallationIdentity(projectRoot: string, options: ConfigLoadOptions = {}) {
   const config = await loadConfig(projectRoot, { ...options, heal: false });
   return readIdentity(new FileInstallationIdentityStore(config.productLayout, config.configFile.writeLockTimeoutMs));
+}
+
+/** Local bootstrap-metadata consent, under existing OS ownership guards; no policy or ledger authority is granted. */
+export async function resolveConfiguredInstallationIdentity(projectRoot: string, choice: InstallationIdentityChoice, options: ConfigLoadOptions = {}) {
+  const principal = readLocalOsIdentity(), config = await loadConfig(projectRoot, { ...options, heal: false });
+  return readIdentity({ loadOrCreate: () => new FileInstallationIdentityStore(config.productLayout, config.configFile.writeLockTimeoutMs)
+    .resolveRelocation(choice, { issuer: principal.issuer, subject: principal.subject }) });
 }

@@ -6,7 +6,7 @@ import { ManagedFileError, inspectProductDirectory, prepareProductCompanionPath,
 type IdentityResource = 'projectIdentity' | 'installationIdentity';
 type Failure = 'INVALID' | 'UNAVAILABLE' | 'LOCKED' | 'UNSUPPORTED';
 class IdentityFileError extends Error { constructor(readonly reason: Failure) { super(reason); } }
-interface IdentityCodec<T> { parse(value: unknown): T; create(): T; error(reason: Failure): Error }
+interface IdentityCodec<T> { parse(value: unknown): T; create(): T | Promise<T>; error(reason: Failure): Error; isError?(error: unknown): boolean }
 
 /** Shared first-publication mechanism. A retained directory with a missing record means lost or
  * interrupted publication, never a fresh identity. The bounded config lock serializes writers;
@@ -31,6 +31,30 @@ export class IdentityFile<T> {
     try { return this.codec.parse(read.value); } catch { throw new IdentityFileError('INVALID'); }
   }
 
+  /** Existing-record replacement uses the same custody and atomic writer as first publication. */
+  async update(change: (record: T) => Promise<T>): Promise<T> {
+    try {
+      const directory = productResourcePath(this.layout, this.resource);
+      await inspectProductDirectory(this.layout, this.resource);
+      await prepareProductCompanionPath(this.layout, this.resource, '-lock');
+      return await withConfigWriteLock(directory, async () => {
+        await inspectProductDirectory(this.layout, this.resource);
+        const current = await this.read(directory);
+        if (!current) throw new IdentityFileError('INVALID');
+        const next = await change(current);
+        await writeJsonAtomic(join(directory, 'identity.json'), next);
+        return next;
+      }, this.lockTimeoutMs);
+    } catch (error) { return this.fail(error); }
+  }
+
+  private fail(error: unknown): never {
+    const code = (error as { code?: string }).code;
+    if (this.codec.isError?.(error)) throw error;
+    throw this.codec.error(error instanceof IdentityFileError ? error.reason : code === 'CONFIG_WRITE_LOCKED'
+      ? 'LOCKED' : code === 'MANAGED_FILE_UNSUPPORTED' ? 'UNSUPPORTED' : 'UNAVAILABLE');
+  }
+
   async loadOrCreate(): Promise<T> {
     try {
       const { layout, resource } = this;
@@ -50,7 +74,7 @@ export class IdentityFile<T> {
         await inspectProductDirectory(layout, resource);
         const path = join(directory, 'identity.json');
         if (fresh) {
-          const record = this.codec.create();
+          const record = await this.codec.create();
           await writeJsonAtomic(path, record);
           return record;
         }
@@ -58,10 +82,6 @@ export class IdentityFile<T> {
         if (!record) throw new IdentityFileError('INVALID');
         return record;
       }, this.lockTimeoutMs);
-    } catch (error) {
-      const code = (error as { code?: string }).code;
-      throw this.codec.error(error instanceof IdentityFileError ? error.reason : code === 'CONFIG_WRITE_LOCKED'
-        ? 'LOCKED' : code === 'MANAGED_FILE_UNSUPPORTED' ? 'UNSUPPORTED' : 'UNAVAILABLE');
-    }
+    } catch (error) { return this.fail(error); }
   }
 }

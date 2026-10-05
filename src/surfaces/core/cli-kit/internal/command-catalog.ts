@@ -21,6 +21,7 @@ export const CLI_CATALOG = [
     action('inspect', 'start', 'cli.help.action.init.inspect', 'cli.help.initPreview'),
     action('apply', 'start', 'cli.help.action.apply', 'cli.help.initPreview'),
     action('resume', 'start', 'cli.help.action.init.resume', 'cli.help.initPreview'),
+    action('identity', 'start', 'cli.help.action.identity', 'cli.help.identity'),
     action('policy', 'start', 'cli.help.action.policy', 'cli.help.initPreview'),
   ] },
   { name: 'monitor', group: 'observe', summary: 'cli.help.summary.monitor', detail: 'cli.monitor.help' },
