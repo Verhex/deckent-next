@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { refreshInProgress, refreshIntervalMs, refreshStatus, refreshTriggerAllowed, reviseRegistryForProposal, toolchainUpdateApplies,
+import { failedContextsToPrune, refreshInProgress, refreshIntervalMs, refreshStatus, refreshTriggerAllowed, reviseRegistryForProposal, toolchainUpdateApplies,
   toolchainRefreshStateSchema, unverifiedReason, type ToolchainCurrencyReport } from '#engine/index.js';
 
 const sha = (c: string) => 'sha256:' + c.repeat(64);
@@ -73,5 +73,16 @@ describe('registry revision of a built image', () => {
   it('ignores proposals for unknown or unpointed profiles and refuses an invalid registry', () => {
     expect(reviseRegistryForProposal(registry([native('n', 1, sha('a'), 'old')], [['kn', 'n', 1]]), proposal(['missing', 1]))).toBeNull();
     expect(() => reviseRegistryForProposal({ schemaVersion: 1 }, proposal(['n', 1]))).toThrow();
+  });
+});
+
+describe('failed build context retention', () => {
+  const names = ['r5-20261006', 'r5-20261006.failed-100', 'r5-20261006.failed-300', 'r4-20260930', 'r5-20261006.failed-200', 'notes.failed-9'];
+  it('keeps the newest N, always at least one, and never touches other names', () => {
+    expect(failedContextsToPrune(names, 2)).toEqual(['r5-20261006.failed-100']);
+    expect(failedContextsToPrune(names, 1).sort()).toEqual(['r5-20261006.failed-100', 'r5-20261006.failed-200']);
+    expect(failedContextsToPrune(names, 0).sort()).toEqual(['r5-20261006.failed-100', 'r5-20261006.failed-200']); // never below one
+    expect(failedContextsToPrune(names, 3)).toEqual([]);
+    expect(failedContextsToPrune(['r5-20261006', 'r4-20260930'], 1)).toEqual([]);
   });
 });

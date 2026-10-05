@@ -184,4 +184,15 @@ describe('autonomous worker image refresh (WORKER-AUTO-REFRESH)', () => {
     const builds = (await readdir(join(f.root, '.deckent'), { recursive: true })).filter(name => /toolchains\/builds\/[^/]+$/.test(name)).map(name => name.split('/').pop()!);
     expect(builds).toHaveLength(1); expect(builds[0]).toMatch(/\.failed-\d+$/);
   });
+
+  it.each([[2], [1]])('keeps only the newest %i failed build contexts as evidence (never fewer than one), and leaves a successful build alone', async keep => {
+    const f = await fixture({ failedContextsKept: keep }); f.state.failFirst = 4;
+    for (let i = 0; i < 4; i++) { expect((await refreshConfiguredToolchains(f.root, 'interval', f.options, f.deps, f.observer)).outcome).toBe('failed'); await new Promise(resolve => setTimeout(resolve, 5)); }
+    const builds = async () => (await readdir(join(f.root, '.deckent'), { recursive: true })).filter(name => /toolchains\/builds\/[^/]+$/.test(name)).map(name => name.split('/').pop()!).sort();
+    const kept = await builds(); expect(kept).toHaveLength(keep); expect(kept.every(name => /\.failed-\d+$/.test(name))).toBe(true);
+    const stamps = kept.map(name => Number(name.split('failed-')[1]));
+    expect((await refreshConfiguredToolchains(f.root, 'interval', f.options, f.deps, f.observer)).outcome).toBe('current'); // success: its context is not a failed one and stays
+    const after = await builds(); expect(after.filter(name => name.includes('.failed-')).map(name => Number(name.split('failed-')[1]))).toEqual(stamps);
+    expect(after).toHaveLength(keep + 1);
+  });
 });

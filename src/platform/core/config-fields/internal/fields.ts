@@ -118,6 +118,8 @@ export const CONFIG_FIELDS = Object.freeze({
     outputBytes: z.number().int().positive().safe().default(1_048_576),
     atStartup: z.boolean().default(true),
     /** WORKER-AUTO-REFRESH (owner 2026-10-06 K2): the running service re-checks currency every `intervalMs`; 0 turns the periodic check off. */
+    /** Failed build contexts kept as evidence (newest first); older ones are removed after each failure. At least one always stays. */
+    failedContextsKept: z.number().int().min(1).max(1000).default(3),
     intervalMs: z.number().int().min(0).max(2_147_483_647).default(86_400_000),
   }).strict().default({}) }).strict().default({}), [], LAYOUT_CONTRACT_SINCE),
   projectName: field('config.field.projectName', { state: 'bound', consumers: ['src/surfaces/core/config'] }, 'live', z.string().min(1).default('deckent-project')),

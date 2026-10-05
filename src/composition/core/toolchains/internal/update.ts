@@ -1,9 +1,9 @@
 import { constants } from 'node:fs';
-import { mkdir, open, rename } from 'node:fs/promises';
+import { mkdir, open, readdir, rename, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { loadConfig, prepareProductDirectory, type ConfigLoadOptions } from '#platform/index.js';
-import { toolchainUpdateApplies, affectedToolchainProfiles, insertHistoryLine, planToolchainUpdate, proposeProfileRevisions, type ProfileRevisionProposal, type ToolchainUpdatePlan } from '#engine/index.js';
+import { failedContextsToPrune, toolchainUpdateApplies, affectedToolchainProfiles, insertHistoryLine, planToolchainUpdate, proposeProfileRevisions, type ProfileRevisionProposal, type ToolchainUpdatePlan } from '#engine/index.js';
 import { assertWorkerImageVersionAvailable, prepareWorkerImageBuildContext, readWorkerImageSources, runWorkerImageBuild, type WorkerImageBuildRunner } from '#adapters/index.js';
 import { inspectConfiguredToolchainCurrency, type NpmLatestVersionFetcher } from './currency.js';
 const packageRoot = fileURLToPath(new URL('../../../../../', import.meta.url));
@@ -48,7 +48,12 @@ export async function updateConfiguredToolchains(projectRoot: string, input: Rea
   const receiptPath = join(home, 'receipts', `${plan.next!.imageVersion}.json`);
   // A failed build keeps its context as evidence under another name, so the next attempt may reuse the planned version.
   const built = await runWorkerImageBuild({ context: prepared.context, receiptPath, timeoutMs: policy.buildTimeoutMs, outputBytes: policy.outputBytes,
-    env, ...(dependencies.signal ? { signal: dependencies.signal } : {}) }, dependencies.runner).catch(async (error: unknown) => { await rename(prepared.context, `${prepared.context}.failed-${Date.now()}`).catch(() => undefined); throw error; });
+    env, ...(dependencies.signal ? { signal: dependencies.signal } : {}) }, dependencies.runner).catch(async (error: unknown) => {
+      await rename(prepared.context, `${prepared.context}.failed-${Date.now()}`).catch(() => undefined);
+      const builds = join(home, 'builds'); // bounded retention: the newest failed contexts stay as evidence
+      for (const name of failedContextsToPrune(await readdir(builds).catch(() => []), policy.failedContextsKept)) await rm(join(builds, name), { recursive: true, force: true }).catch(() => undefined);
+      throw error;
+    });
   const proposal = proposeProfileRevisions(plan, built.receipt, now());
   const proposalPath = await writeArtifact(join(home, 'proposals'), `${plan.next!.imageVersion}.json`, proposal);
   return Object.freeze({ schemaVersion: 1, mode: policy.mode, decision: 'built', plan, planPath,

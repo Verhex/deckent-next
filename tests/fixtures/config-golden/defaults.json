@@ -125,6 +125,7 @@
     "update": {
       "atStartup": true,
       "buildTimeoutMs": 1800000,
+      "failedContextsKept": 3,
       "intervalMs": 86400000,
       "mode": "auto",
       "outputBytes": 1048576

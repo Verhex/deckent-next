@@ -23,6 +23,14 @@ export const refreshIntervalMs = (policy: ToolchainRefreshPolicy): number => ref
 /** Audit record file name of one refresh attempt (one file per start instant and trigger; written exclusively). */
 export const refreshAuditName = (startedAt: string, trigger: ToolchainRefreshTrigger): string => `${startedAt.replace(/[:.]/g, '-')}-${trigger}.json`;
 
+const FAILED_CONTEXT = /^r[1-9][0-9]*-\d{8}\.failed-(\d+)$/;
+/** Failed build contexts to remove: everything but the newest `keep` (at least one is always kept); other names are never touched. */
+export function failedContextsToPrune(names: readonly string[], keep: number): string[] {
+  const failed = names.flatMap(name => { const match = FAILED_CONTEXT.exec(name); return match ? [{ name, at: Number(match[1]) }] : []; })
+    .sort((a, b) => b.at - a.at || (a.name < b.name ? 1 : -1));
+  return failed.slice(Math.max(1, keep)).map(entry => entry.name);
+}
+
 const isoTime = z.string().datetime();
 const imageDigest = z.string().regex(/^sha256:[a-f0-9]{64}$/);
 /** The durable refresh marker. `expiresAt` bounds an `updating` marker (build timeout plus a grace): a crashed process never masks a refusal for good. */
