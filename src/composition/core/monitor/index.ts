@@ -1,1 +1,1 @@
-export { inspectMonitor } from './internal/inspect.js';
+export { inspectMonitor, followLedgerSurface } from './internal/inspect.js';

@@ -245,7 +245,8 @@ export async function terminalCommand(argv: readonly string[], context: CommandC
     ...(context.inspectWorkerTranscript ? { inspectWorkerTranscript: context.inspectWorkerTranscript } : {}),
     ...(context.listApprovals ? { listApprovals: context.listApprovals } : {}),
     ...(context.decideApproval ? { decideApproval: context.decideApproval } : {}),
-    ...(context.deliverRunCancellation ? { deliverRunCancellation: context.deliverRunCancellation } : {}) });
+    ...(context.deliverRunCancellation ? { deliverRunCancellation: context.deliverRunCancellation } : {}),
+    ...(context.followSurfaceEvents ? { followEvents: signal => context.followSurfaceEvents!(root, scopeId, options, signal) } : {}) });
   const target = `${scopeId} · ${chatTarget(chat, locale)}`;
   // History is a convenience: an unavailable history file never blocks the terminal.
   const inputHistory = context.openTerminalHistory ? await context.openTerminalHistory(root, options).catch(() => null) : null;

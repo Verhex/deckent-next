@@ -1,5 +1,6 @@
 import { writeFile } from 'node:fs/promises';
 import { afterEach, describe, expect, it } from 'vitest';
+import { t } from '#platform/index.js';
 import {
   acceptSurfaceEvent, openSurfacePush, releaseSurfacePush, SURFACE_PUSH_QUEUE, SURFACE_WATCH_OWNER,
   type SurfacePushEvent,
@@ -77,12 +78,13 @@ describe('surface push on the workline', () => {
     let release!: () => void;
     const gate = new Promise<void>(resolve => { release = resolve; });
     let polls = 0;
-    async function* followEvents() {
+    async function* followEvents(signal: AbortSignal) {
       await gate;
       yield event(1, { text: 'pushed-worker-1' });
       yield event(3, { text: 'skipped-worker-3' });
       yield event(2, { scopeId: 'other', text: 'foreign-worker' });
       yield { kind: 'approval' as const, scopeId: 'scope-a', sequence: 1, id: 'a1', text: 'pushed-approval-1' };
+      await new Promise<void>(resolve => { if (signal.aborted) resolve(); else signal.addEventListener('abort', () => resolve(), { once: true }); });
     }
     const view = mountWorkline({ labels, pollMs: 5, ledger: { scopeId: 'scope-a', followEvents, async listWorkers() { polls += 1; return emptyWorkers; },
       async inspectRun() { return null; } } });
@@ -97,5 +99,74 @@ describe('surface push on the workline', () => {
     expect(view.stdout.text).not.toContain('foreign-worker');
     expect(view.stdout.text).toContain('action report-gap');
     expect(view.stdout.text).toContain('STEP foreign-scope');
+  });
+
+  it('falls back to poll when the stream cuts, reconnects, reports the gap, and does not paint another scope', async () => {
+    let releaseYield!: () => void;
+    const gate = new Promise<void>(resolve => { releaseYield = resolve; });
+    let releaseCut!: () => void;
+    const hold = new Promise<void>(resolve => { releaseCut = resolve; });
+    let calls = 0;
+    let polls = 0;
+    async function* followEvents(signal: AbortSignal) {
+      calls += 1;
+      if (calls === 1) {
+        await gate;
+        yield event(1, { text: 'pushed-worker-1' });
+        await hold;
+        throw new Error('cut');
+      }
+      yield event(3, { text: 'skipped-worker-3' });
+      yield event(2, { scopeId: 'other', text: 'foreign-worker' });
+      await new Promise<void>(resolve => { if (signal.aborted) resolve(); else signal.addEventListener('abort', () => resolve(), { once: true }); });
+    }
+    const view = mountWorkline({ labels, pollMs: 5, ledger: { scopeId: 'scope-a', followEvents, async listWorkers() { polls += 1; return emptyWorkers; },
+      async inspectRun() { return null; } } });
+    mounted.push(view.instance);
+    await type(view.stdin, '/watch-workers\r');
+    await until(() => view.stdout.text.includes('DELIVERY push'), 'push mark');
+    releaseYield();
+    await until(() => view.stdout.text.includes('pushed-worker-1'), 'first push');
+    expect(polls).toBe(0);
+    releaseCut();
+    await until(() => view.stdout.text.includes('DELIVERY poll') && view.stdout.text.includes('STEP gap') && polls > 0, 'poll fallback');
+    await settle(40);
+    expect(view.stdout.text).not.toContain('skipped-worker-3');
+    expect(view.stdout.text).not.toContain('foreign-worker');
+    expect(calls).toBeGreaterThan(1);
+  });
+
+  it('says poll and gap in English and Turkish catalog lines', async () => {
+    const catalog = (locale: 'en' | 'tr') => ({
+      watchDelivery: t('terminal.workline.watchDelivery', {}, locale),
+      watchStep: t('terminal.workline.watchStep', {}, locale),
+      watchPushFailed: t('terminal.workline.watchPushFailed', {}, locale),
+    });
+    for (const locale of ['en', 'tr'] as const) {
+      let releaseYield!: () => void;
+      const gate = new Promise<void>(resolve => { releaseYield = resolve; });
+      let releaseCut!: () => void;
+      const hold = new Promise<void>(resolve => { releaseCut = resolve; });
+      async function* followEvents() {
+        await gate;
+        yield event(1, { text: 'pushed-worker-1' });
+        await hold;
+        throw new Error('cut');
+      }
+      const view = mountWorkline({ labels: { ...labels, ...catalog(locale) }, pollMs: 5, ledger: { scopeId: 'scope-a', followEvents,
+        async listWorkers() { return emptyWorkers; }, async inspectRun() { return null; } } });
+      mounted.push(view.instance);
+      await type(view.stdin, '/watch-workers\r');
+      const started = t('terminal.workline.watchDelivery', { mode: 'push', timeoutMs: 5, owner: 'terminal-watch', action: 'read-next' }, locale);
+      await until(() => view.stdout.text.includes(started), `${locale} push mark`);
+      releaseYield();
+      await until(() => view.stdout.text.includes('pushed-worker-1'), `${locale} push`);
+      releaseCut();
+      const poll = t('terminal.workline.watchDelivery', { mode: 'poll', timeoutMs: 5, owner: 'terminal-watch', action: 'poll-scope' }, locale);
+      const gap = t('terminal.workline.watchStep', { status: 'gap', timeoutMs: 5, owner: 'terminal-watch', action: 'report-gap' }, locale);
+      await until(() => view.stdout.text.includes(poll) && view.stdout.text.includes(gap), `${locale} fallback`);
+      view.instance.unmount();
+      mounted.pop();
+    }
   });
 });

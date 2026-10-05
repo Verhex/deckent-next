@@ -89,11 +89,34 @@ export function surfaceFollowLine(step: SurfacePushStep, watch: { readonly worke
 /** Sequential reader. Releases the slot after an applied event so one painted event does not fill the queue. */
 export async function consumeSurfaceFollow(events: AsyncIterable<SurfacePushEvent>, scopeId: string, pace: number, signal: AbortSignal,
   onStep: (step: SurfacePushStep) => void): Promise<void> {
+  const session = createSurfaceFollowSession();
+  await session.read(events, scopeId, pace, signal, onStep);
+}
+
+/** One watch keeps its cursors across a reconnect. A break does not invent the missing event. */
+export function createSurfaceFollowSession() {
   let state = openSurfacePush();
-  for await (const event of events) {
-    if (signal.aborted) return;
-    const step = acceptSurfaceEvent(state, event, scopeId, pace);
-    state = step.status === 'applied' ? releaseSurfacePush(step.state) : step.state;
-    onStep(step);
-  }
+  return {
+    async read(events: AsyncIterable<SurfacePushEvent>, scopeId: string, pace: number, signal: AbortSignal, onStep: (step: SurfacePushStep) => void): Promise<'end' | 'abort'> {
+      try {
+        for await (const event of events) {
+          if (signal.aborted) return 'abort';
+          const step = acceptSurfaceEvent(state, event, scopeId, pace);
+          state = step.status === 'applied' ? releaseSurfacePush(step.state) : step.state;
+          onStep(step);
+        }
+      } catch (error) {
+        if (signal.aborted) return 'abort';
+        throw error;
+      }
+      return signal.aborted ? 'abort' : 'end';
+    },
+    reportBreak(pace: number, onStep: (step: SurfacePushStep) => void) {
+      for (const kind of SURFACE_PUSH_KINDS) {
+        const last = state.cursors[kind];
+        if (last === null) continue;
+        onStep({ status: 'gap', state, wait: surfaceWait('report-gap', pace), expected: last + 1, sequence: last + 2 });
+      }
+    },
+  };
 }

@@ -15,13 +15,14 @@ import { WORK_LEDGER_SCHEMA_VERSION } from './work-ledger.js';
 import { LedgerEntryRow, type LedgerEntryLabels } from './ledger-entry.js';
 import type { WorklineLedgerPorts } from './workline-ledger.js';
 import { ledgerEntriesForWorkers, loadRunViewsForWatch } from './workline-ledger.js';
+import { fillTemplate } from './worker-line.js';
 import { newWorkerTaskIds } from './worker-watch.js';
 import { freshRunCards, newRunLedgerEntries } from './run-watch.js';
 import { useConversationSession, type ConversationSessionLabels, type ConversationSessionPort, type ResumePickerItem } from './workline-sessions.js';
 import { ArrowPicker } from '#surfaces/core/terminal-render/index.js';
 import { agentHistory, appendLedger, boundAgentHistory, compactLedger, EMPTY_LEDGER, plainChatHistory, type AgentChatMessage, type ChatTurnMessage, type LedgerBuffer } from './ledger-buffer.js';
 import { immediateSlashAction, notice, runLedgerCommand, type WatchState, type WorklineActionLabels } from './workline-actions.js';
-import { consumeSurfaceFollow, surfaceFollowLine, useSingleFlightPoll } from '#surfaces/core/terminal-kit/index.js';
+import { surfaceDeliveryValues, surfaceFollowLine, useSingleFlightPoll, useSurfacePushFeed } from '#surfaces/core/terminal-kit/index.js';
 import { useWorkSurface } from './work-surface.js';
 import { Composer, type ComposerLabels } from '#surfaces/core/terminal-composer/index.js';
 import type { ComposerHistoryPort } from '#surfaces/core/terminal-composer/index.js';
@@ -141,9 +142,13 @@ export function WorklineApp(props: WorklineProps) {
   const seenWorkers = useRef(new Set<string>());
   const seenRuns = useRef(new Map<string, string>());
   const pollMs = props.pollMs ?? ledger?.workerHeartbeatMs ?? 5000;
+  const pushLive = useSurfacePushFeed(ledger?.followEvents, ledger?.scopeId ?? '', pollMs, step => {
+    const text = surfaceFollowLine(step, watchRef.current, labels.watchStep);
+    if (text) push([notice(step.status === 'applied' ? 'info' : 'error', text)]);
+  }, mode => { if (labels.watchDelivery) push([notice('info', fillTemplate(labels.watchDelivery, surfaceDeliveryValues(mode, pollMs)))]); });
   const failed = useCallback((error: unknown) => push([notice('error', `${labels.watchFailed}: ${errorText(error)}`)]), [errorText, labels.watchFailed, push]);
   // P4 work surface: live worker panel, approval notifications/cards and run-cancel confirmation (dynamic region only).
-  const work = useWorkSurface({ ledger, labels, push, errorText, pollMs, watchingWorkers: watch.workers,
+  const work = useWorkSurface({ ledger, labels, push, errorText, pollMs, pushLive, watchingWorkers: watch.workers,
     ...(props.approvalPollMs === undefined ? {} : { approvalPollMs: props.approvalPollMs }) });
   const mode = useWorklineMode(props.permissionMode, push, errorText, labels.work?.unavailable ?? labels.ledgerUnavailable, labels.mode, props.fullAccess === true);
   const refreshMode = mode.refresh;
@@ -196,7 +201,7 @@ export function WorklineApp(props: WorklineProps) {
     })();
     return () => { cancelled = true; controller.abort(); };
   }, [failed, ledger, push, watch.runs]);
-  useSingleFlightPoll(watch.workers && Boolean(ledger) && !ledger?.followWorkers && !ledger?.followEvents, pollMs, async current => {
+  useSingleFlightPoll(watch.workers && Boolean(ledger) && !ledger?.followWorkers && !pushLive, pollMs, async current => {
     const workers = (await ledgerEntriesForWorkers(ledger!, 'watch')).filter(entry => entry.kind === 'worker');
     if (!current()) return;
     work.observeWorkers(workers);
@@ -204,26 +209,13 @@ export function WorklineApp(props: WorklineProps) {
     seenWorkers.current = seen;
     push(fresh);
   }, failed);
-  useSingleFlightPoll(watch.runs && Boolean(ledger?.listRunIds) && !ledger?.followRuns && !ledger?.followEvents, pollMs, async current => {
+  useSingleFlightPoll(watch.runs && Boolean(ledger?.listRunIds) && !ledger?.followRuns && !pushLive, pollMs, async current => {
     const runs = await loadRunViewsForWatch(ledger!);
     if (!current()) return;
     const { seen, fresh } = newRunLedgerEntries(seenRuns.current, runs, 'watch');
     seenRuns.current = seen;
     push(fresh);
   }, failed);
-  useEffect(() => {
-    const follow = ledger?.followEvents;
-    if (!follow) return undefined;
-    const controller = new AbortController();
-    let cancelled = false;
-    void consumeSurfaceFollow(follow(controller.signal), ledger.scopeId, pollMs, controller.signal, step => {
-      if (cancelled) return;
-      const text = surfaceFollowLine(step, watchRef.current, labels.watchStep);
-      if (text) push([notice(step.status === 'applied' ? 'info' : 'error', text)]);
-    }).catch(error => { if (!cancelled) push([notice('error', `${labels.watchPushFailed ?? labels.watchFailed}: ${errorText(error)}`)]); });
-    return () => { cancelled = true; controller.abort(); };
-  }, [errorText, labels.watchFailed, labels.watchPushFailed, labels.watchStep, ledger, push]);
-
   const runTurn = useCallback(async (text: string, mentioned: readonly string[] = []) => {
     push([chat('user', text)]);
     const startedAtMs = Date.now();

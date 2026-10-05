@@ -22,6 +22,8 @@ export interface WorkSurfaceInput {
   readonly pollMs: number;
   /** The live panel shows only while the worker watch runs; it is cleared when the watch stops. */
   readonly watchingWorkers: boolean;
+  /** False while a bound push stream is down; omitted keeps the port's own presence. */
+  readonly pushLive?: boolean;
   /** Approval notification cadence; defaults to max(pollMs, APPROVAL_NOTIFY_MIN_MS). */
   readonly approvalPollMs?: number;
 }
@@ -38,7 +40,7 @@ type Modal =
  * through a runtime port; the view never decides, remembers or auto-approves anything. Read-only commands never prompt.
  */
 export const APPROVAL_NOTIFY_MIN_MS = 10_000;
-export function useWorkSurface({ ledger, labels, push, errorText, pollMs, watchingWorkers, approvalPollMs }: WorkSurfaceInput) {
+export function useWorkSurface({ ledger, labels, push, errorText, pollMs, watchingWorkers, approvalPollMs, pushLive }: WorkSurfaceInput) {
   const work = labels.work;
   const [workers, setWorkers] = useState<readonly WorkLedgerWorkerEntry[]>([]);
   const [modal, setModal] = useState<Modal>(null);
@@ -53,14 +55,15 @@ export function useWorkSurface({ ledger, labels, push, errorText, pollMs, watchi
   // Default on whenever approvals are wired (legacy kept approvals behind an off-by-default flag): one bounded page per tick,
   // never more often than APPROVAL_NOTIFY_MIN_MS so an idle terminal adds negligible runtime load (lead integration decision).
   const toldDelivery = useRef(false);
+  const connected = pushLive ?? Boolean(ledger?.followEvents);
   useEffect(() => {
     if (toldDelivery.current || !work || !ledger?.listApprovalPage || !labels.watchDelivery) return;
     toldDelivery.current = true;
-    const mode = ledger.followEvents ? 'push' : 'poll';
+    const mode = connected ? 'push' : 'poll';
     const pace = mode === 'poll' ? (approvalPollMs ?? Math.max(pollMs, APPROVAL_NOTIFY_MIN_MS)) : pollMs;
     push([notice('info', fillTemplate(labels.watchDelivery, surfaceDeliveryValues(mode, pace)))]);
-  }, [approvalPollMs, labels.watchDelivery, ledger, pollMs, push, work]);
-  useSingleFlightPoll(Boolean(work && ledger?.listApprovalPage) && !ledger?.followEvents, approvalPollMs ?? Math.max(pollMs, APPROVAL_NOTIFY_MIN_MS), async current => {
+  }, [approvalPollMs, connected, labels.watchDelivery, ledger, pollMs, push, work]);
+  useSingleFlightPoll(Boolean(work && ledger?.listApprovalPage) && !connected, approvalPollMs ?? Math.max(pollMs, APPROVAL_NOTIFY_MIN_MS), async current => {
     const page = await ledger!.listApprovalPage!(approvalWatch.current.cursor);
     if (!current()) return;
     const { state, fresh } = approvalWatchStep(approvalWatch.current, page, Date.now());
