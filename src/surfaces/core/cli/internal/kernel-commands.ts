@@ -94,6 +94,8 @@ export interface CommandContext extends InstallationCommandContext, ModelCommand
   inspectSecretStore?: import('./secret.js').SecretStoreInspectHandler;
   // REALM-NOTICE: the shell realm a call here gets and every sandbox provider passed over (read-only measurement); doctor-only.
   inspectShellRealm?: (root: string, options: ConfigLoadOptions) => Promise<ShellRealmDoctorView>;
+  // Doctor-only, read-soft: whether the installation identity can be bound to this machine (relocation/copy detection); null when unwired or unreadable.
+  inspectInstallationBinding?: (root: string, options: ConfigLoadOptions) => Promise<{ readonly capability: 'supported' | 'unsupported' } | null>;
   listSecretNames?: import('./secret.js').SecretNamesHandler;
   // SECRET-WRITE: `secret set|delete` through the runtime service (the socket peer is the principal; the `secret` policy cell decides).
   setSecret?: import('./secret.js').SecretSetHandler;
@@ -190,10 +192,11 @@ export async function runKernelCommand(argv: readonly string[], context: Command
   const secretStore = context.inspectSecretStore ? await context.inspectSecretStore(root, options) : null;
   // REALM-NOTICE: additive; null when unwired. The measurement itself is bounded and never throws (a failed probe reads `unknown`).
   const shellRealm = context.inspectShellRealm ? await context.inspectShellRealm(root, options) : null;
+  const installationBinding = context.inspectInstallationBinding ? await context.inspectInstallationBinding(root, options) : null;
   const poolReadiness = await assessPoolReadiness(root, context, options, config.admission, (config.terminal as { scopeId?: string } | undefined)?.scopeId);
   const data = { schemaVersion: 2, scope: 'kernel', platform, host, hostMemory: detectHostMemory(), environment: detectEnvironment(env),
     paths: resolveGlobalScopePaths(platform, env), principal,
-    company: { companyId: config.company.id }, status: poolReadiness.status === 'drift' || poolReadiness.status === 'unavailable' ? 'degraded' : 'ready', poolReadiness, policyTemplate, modelInvocationDelivery, secretStore, shellRealm,
+    company: { companyId: config.company.id }, status: poolReadiness.status === 'drift' || poolReadiness.status === 'unavailable' ? 'degraded' : 'ready', poolReadiness, policyTemplate, modelInvocationDelivery, secretStore, shellRealm, installationBinding,
     ...(toolchains ? { toolchains } : {}) };
   output(data, result => [t('doctor.host', { platform: result.platform, cpu: result.host.cpuCores, memory: result.host.totalMemMB,
     workers: result.host.recommendedMaxWorkers, company: result.company.companyId, principal: result.principal.id }, locale),
@@ -203,6 +206,7 @@ export async function runKernelCommand(argv: readonly string[], context: Command
   // SECRET-K1: the selected secret store and whether it can be read now (backend id, status and typed code only; never a value).
   ...(result.secretStore ? [t('doctor.secretStore', { backend: result.secretStore.backend, status: result.secretStore.status,
     codeSuffix: result.secretStore.code ? `, ${result.secretStore.code}` : '' }, locale)] : []),
+  ...(result.installationBinding ? [t(`doctor.installationBinding.${result.installationBinding.capability}`, { platform: result.platform }, locale)] : []),
   ...(result.poolReadiness ? poolReadinessLines(result.poolReadiness, locale) : []),
   ...(result.shellRealm ? shellRealmLines(result.shellRealm) : [])].join('\n'));
   // modelInvocationDelivery is JSON-only for now, like policyTemplate: no human-text rendering yet.

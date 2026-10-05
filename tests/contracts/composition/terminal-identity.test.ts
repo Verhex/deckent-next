@@ -11,6 +11,8 @@ import { main } from '#surfaces/index.js';
 import { until } from '../support/workline-harness.js';
 import { followLedgerSurface } from '#composition/core/monitor/index.js';
 import { openConfiguredAttemptStore } from '#composition/core/storage/index.js';
+import { machineBindingNotRunReason } from '../support/binding-capability.js';
+const bindingNotRun = await machineBindingNotRunReason();
 
 const roots: string[] = [];
 afterEach(async () => { vi.restoreAllMocks(); vi.unstubAllEnvs(); clearConfigCache(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
@@ -28,6 +30,7 @@ async function fixture() {
 }
 
 describe.skipIf(process.platform !== 'linux')('terminal managed identity admission (Linux filesystem evidence)', () => {
+  beforeEach(context => { if (bindingNotRun) context.skip(bindingNotRun); });
   it('creates both identities through write admission and retains the exact persisted values and bytes on reopen', async () => {
     const f = await fixture(), before = await readFile(join(f.project, '.deckent/config.json'));
     const ids = await ensureConfiguredTerminalIdentity(f.project, 's', f.options);
