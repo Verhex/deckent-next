@@ -112,6 +112,23 @@ describe('agent workspace deny: the product state of a data root inside the proj
   // SANDBOX-AD-SIZINTISI (top-20 #6): a directory that holds product state only is an empty tmpfs, so not even the names of its entries
   // (`ledger.db`, `runtime.sock`, `backups`) are listed; a directory that also holds the project's own files keeps per-entry masks, and the
   // project's own `.deckent/docs` stays writable (owner 2026-09-30 Y).
+  // Lead decision (2026-10-06): the layout root is never emptied whole — on a fresh `.deckent` (data and host, no docs yet) a command creates `.deckent/docs`
+  // and the file lands on the host (owner Y); the state names under `data` are still not listed, and the policy and ledger stay refused.
+  it.skipIf(!sandboxReady)('a fresh layout root keeps `.deckent/docs` creatable (lands on the host) while the state below it stays unlisted and refused', async () => {
+    const p = await project();
+    await mkdir(join(p.root, '.deckent', 'host'), { recursive: true }); await writeFile(join(p.root, '.deckent', 'host', 'x.md'), 'HOST-SECRET\n');
+    const usable = bubblewrapShellSandbox({ project: p.scope, scratchDir: null }).usable(capabilities);
+    expect(usable.ok).toBe(true); if (!usable.ok) return;
+    const result = await usable.realm.run({ command: `mkdir -p .deckent/docs && touch .deckent/docs/x; echo "docs=$?"; echo "state=[$(ls -A ${DATA}/state | tr '\\n' ' ')]";`
+      + ` cat ${DATA}/policy.json 2>&1; echo "policy=$?"; cat ${DATA}/state/ledger.db 2>&1; echo "ledger=$?"; cat .deckent/host/x.md 2>&1; echo "host=$?"`,
+    cwd: p.scope.root, environment: { PATH: '/usr/bin:/bin', HOME: p.base, USERPROFILE: p.base }, fixedEnv: {}, timeoutMs: 20_000 });
+    const lines = result.output.split('\n');
+    for (const line of ['docs=0', 'state=[]', 'policy=1', 'ledger=1']) expect(lines).toContain(line);
+    expect(result.output).not.toMatch(/PRODUCT-STATE|HOST-SECRET/u);
+    expect(await readFile(join(p.root, '.deckent', 'docs', 'x'), 'utf8')).toBe('');
+    const view = await resolveBubblewrapView({ project: p.scope, scratchDir: null }, { PATH: '/usr/bin:/bin' });
+    expect(view.ok && view.view.emptiedDirectories).not.toContain(join(p.root, '.deckent'));
+  });
   it.skipIf(!sandboxReady)('lists no product state name inside a state-only directory, keeps the project own files and .deckent/docs readable and writable, and lands no write on the host state', async () => {
     const p = await project();
     await mkdir(join(p.root, '.deckent', 'docs'), { recursive: true }); await writeFile(join(p.root, '.deckent', 'docs', 'a.md'), 'doc\n');

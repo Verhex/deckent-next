@@ -156,9 +156,10 @@ describe.skipIf(process.platform === 'win32')('bubblewrap realm selection (S9; r
     expect(view.view.maskedFiles).not.toContain(join(f.scope.root, '.brain', 'memory.db'));
     expect(view.view.maskedFiles).not.toContain(join(f.scope.root, 'plain.txt'));
     // Astra 2154 R3: what the walk could not see is closed — the unreadable directory and the subtree beyond the depth bound are masked.
-    // `.deckent` holds only the denied `host` here, so it is the one empty read-only tmpfs that covers it (SANDBOX-AD-SIZINTISI).
-    expect(view.view.emptiedDirectories).toContain(join(f.scope.root, '.deckent'));
-    expect(view.view.maskedDirectories).toEqual(expect.arrayContaining([join(f.scope.root, 'locked'),
+    
+    // The layout root itself is never emptied (a command may create `.deckent/docs`); its denied `host` keeps its own mask.
+    expect(view.view.emptiedDirectories ?? []).not.toContain(join(f.scope.root, '.deckent'));
+    expect(view.view.maskedDirectories).toEqual(expect.arrayContaining([join(f.scope.root, '.deckent', 'host'), join(f.scope.root, 'locked'),
       join(f.scope.root, Array.from({ length: 33 }, () => 'd').join('/'))]));
     expect(view.view.readOnlyPaths).toEqual([join(f.scope.root, '.git')]);
     const all = [...view.view.maskedFiles, ...view.view.maskedDirectories, ...view.view.emptiedDirectories ?? []];

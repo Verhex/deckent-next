@@ -4,6 +4,7 @@ import { basename, dirname, isAbsolute, join, relative } from 'node:path';
 import type { ShellRealm, ShellRealmRequest, ShellRealmResult } from '#domain/index.js';
 import { BASH_LAUNCH, describeShellWritePosture, fsOpsFor, gitWorktreeRepository, longLivedWritePosture, runShellProcess, sandboxWriteView, scanGitDirectory, type FsOps,
   type ShellCapabilities, type ShellSandbox, type ShellSandboxLayout, type ShellSandboxWriteView } from '#adapters/core/host-shell/index.js';
+import { DECKENT_DIR } from '#platform/index.js';
 import { BASELINE_IGNORED_DIRS } from '#adapters/core/workspace-read/index.js';
 import { BUBBLEWRAP_ANCESTOR_PIN_MAX, BUBBLEWRAP_SYSTEM_PATHS, bubblewrapArguments, ancestorPins, type BubblewrapView } from './arguments.js';
 import { BUBBLEWRAP_OVERLAY_VERSION, verifyBubblewrapLauncher } from './launcher.js';
@@ -154,7 +155,9 @@ async function holdsProductStateOnly(input: { readonly dir: string; readonly rel
   readonly denied: (rel: string) => boolean; readonly protectedBeneath: (rel: string) => boolean; readonly list: (path: string) => ListedEntries | Promise<ListedEntries>;
   readonly count: (entries: number) => boolean }): Promise<boolean> {
   const { dir, rel, names, depth } = input;
-  if (rel === '' || names.length === 0 || depth > MAX_DEPTH || !input.protectedBeneath(rel)) return false;
+  // The configured layout root (`DECKENT_DIR`) is never emptied whole: the project's own `docs` may not exist yet and a command must be able to create it (owner Y 2026-09-30);
+  // its product-state subtrees (`data`, `state`) are emptied below it, and its own names stay listed.
+  if (rel === '' || rel === DECKENT_DIR || names.length === 0 || depth > MAX_DEPTH || !input.protectedBeneath(rel)) return false;
   for (const entry of names) {
     if (entry.isSymbolicLink()) return false;
     const entryRel = `${rel}/${entry.name}`;
