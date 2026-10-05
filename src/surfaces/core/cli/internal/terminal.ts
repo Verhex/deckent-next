@@ -1,3 +1,4 @@
+import type { WorklineStreamTurn } from '#surfaces/core/terminal-kit/index.js';
 import { configSlash } from '#surfaces/core/config/index.js';
 import { createInterface } from 'node:readline';
 import { mcpSlash } from './mcp.js';
@@ -256,7 +257,10 @@ export async function terminalCommand(argv: readonly string[], context: CommandC
   // TERM-UX-1 a: the first `@` finds the service's file list already walked. One empty query warms it in the background (same authorization
   // and deny as any `@`); a service that is not there or refuses is left to the person's own first `@`.
   if (!serviceFailed && context.findTerminalMentions) void context.findTerminalMentions(root, { scopeId, query: '' }, options, context.signal).catch(() => undefined);
+  if (!installationId) throw ErrorRegistry.createError('INSTALLATION_IDENTITY_UNAVAILABLE');
+  if (!projectId) throw ErrorRegistry.createError('PROJECT_IDENTITY_UNAVAILABLE');
   await runTerminalWorkline({
+    context: { installationId, projectId, scopeId },
     knownSecrets: getConfigKnownSecrets(config),
     selfSource: await context.selfSourceProject?.(root) ?? false,
     labels: worklineLabels(locale, [t('terminal.status.chat', { target: chatTarget(chat, locale) }, locale), ...(serviceLine ? [serviceLine] : [])].join(' · ')),
@@ -269,9 +273,9 @@ export async function terminalCommand(argv: readonly string[], context: CommandC
       context.attachTerminalMentions!(root, { scopeId, text, paths }, options, signal) } : {}),
     ...(sessions ? { sessions } : {}),
     ...(modePort ? { permissionMode: modePort } : {}), ...(fullAccess ? { fullAccess } : {}),
-    ...(context.streamTerminalChat ? { streamTurn: (messages: readonly AgentChatMessage[], signal: AbortSignal, turn?: Readonly<{ reasoning?: 'off'; sessionId?: string; fullAccess?: true }>) =>
+    ...(context.streamTerminalChat ? { streamTurn: (messages: readonly AgentChatMessage[], signal: AbortSignal, turn?: Parameters<WorklineStreamTurn>[2]) =>
       context.streamTerminalChat!(root, { scopeId, messages, ...(turn?.reasoning ? { reasoning: turn.reasoning } : {}),
-        ...(turn?.sessionId ? { sessionId: turn.sessionId } : {}), ...(turn?.fullAccess ? { fullAccess: true as const } : {}) }, options, signal) } : {}),
+        ...(turn?.sessionId ? { sessionId: turn.sessionId } : {}), ...(turn?.fullAccess ? { fullAccess: true as const } : {}), ...(turn?.onTurnBound ? { onTurnBound: turn.onTurnBound } : {}) }, options, signal) } : {}),
     // SCR-A `/scratch`: the conversation's scratch area through the runtime service (v16); this surface reads and deletes no file.
     ...(context.inspectScratch && context.clearScratch ? { scratch: {
       inspect: (sessionId: string, signal?: AbortSignal) => context.inspectScratch!(root, { schemaVersion: 1, scopeId, sessionId }, options, signal),

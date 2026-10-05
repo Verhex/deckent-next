@@ -1,3 +1,4 @@
+import { loadConfiguredInstallationIdentity, loadConfiguredProjectIdentity } from '#composition/core/scoped-request/index.js';
 import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -82,7 +83,7 @@ describe('deckent terminal CLI', () => {
 
   it('requires a scope (flag or terminal.scopeId) for chat modes and rejects --json there before any turn', async () => {
     const f = await fixture(); const out = sink(); let turns = 0;
-    const context = { root: f.project, env: f.env, stdout: out.output, stderr: out.output, initialize() {},
+    const context = { root: f.project, env: f.env, stdout: out.output, stderr: out.output, initialize() {}, loadInstallationIdentity: loadConfiguredInstallationIdentity, loadProjectIdentity: loadConfiguredProjectIdentity,
       async completeTerminalChat() { turns++; return 'x'; } };
     expect(await main(['terminal', 'workline'], context)).toBe(2);
     expect(await main(['terminal', 'session'], context)).toBe(2);
@@ -94,7 +95,7 @@ describe('deckent terminal CLI', () => {
   it('refuses the rich view without a terminal on stdin and stdout', async () => {
     const f = await fixture(); const out = sink();
     const code = await main(['terminal', 'workline', '--scope', 's', '--lang', 'en'], { root: f.project, env: f.env, stdout: out.output, stderr: out.output,
-      stdin: Object.assign(Readable.from([]), { isTTY: false }), initialize() {}, async completeTerminalChat() { return 'x'; } });
+      stdin: Object.assign(Readable.from([]), { isTTY: false }), initialize() {}, loadInstallationIdentity: loadConfiguredInstallationIdentity, loadProjectIdentity: loadConfiguredProjectIdentity, async completeTerminalChat() { return 'x'; } });
     expect(code).toBe(2); expect(out.text()).toContain('TERMINAL_TTY_REQUIRED');
   });
 
@@ -139,7 +140,7 @@ describe('deckent terminal CLI', () => {
     const f = await fixture(); const stdout = new Screen(); const stdin = keyboard();
     const run = main(['terminal', 'workline', '--scope', 's', '--lang', 'en'],
       { root: f.project, env: { ...f.env, NO_COLOR: '1' }, stdout: stdout as unknown as NodeJS.WriteStream, stderr: stdout as unknown as NodeJS.WriteStream,
-        stdin: stdin as unknown as NodeJS.ReadStream, initialize() {}, async completeTerminalChat() { return 'x'; } });
+        stdin: stdin as unknown as NodeJS.ReadStream, initialize() {}, loadInstallationIdentity: loadConfiguredInstallationIdentity, loadProjectIdentity: loadConfiguredProjectIdentity, async completeTerminalChat() { return 'x'; } });
     await until(() => stdout.text.includes('Ask anything'), 'catalog placeholder rendered on the empty draft');
     expect(stdout.text).not.toContain('deckent>');
     stdin.write('/exit\r');
@@ -158,7 +159,7 @@ describe('deckent terminal CLI', () => {
       const f = await fixture(); const stdout = new Screen(); const stdin = keyboard(); const rootsSeen: string[] = [];
       const run = main(['terminal', 'workline', '--scope', 's', '--lang', 'tr'],
         { root: f.project, env: { ...f.env, NO_COLOR: '1' }, stdout: stdout as unknown as NodeJS.WriteStream, stderr: stdout as unknown as NodeJS.WriteStream,
-          stdin: stdin as unknown as NodeJS.ReadStream, initialize() {}, async completeTerminalChat() { return 'x'; },
+          stdin: stdin as unknown as NodeJS.ReadStream, initialize() {}, loadInstallationIdentity: loadConfiguredInstallationIdentity, loadProjectIdentity: loadConfiguredProjectIdentity, async completeTerminalChat() { return 'x'; },
           async selfSourceProject(root) { rootsSeen.push(root); return selfSource; } });
       await until(() => stdout.text.includes(t('terminal.workline.placeholder', {}, 'tr')), 'terminal startup');
       expect(stdout.text.includes('öz-kaynak zemini açık')).toBe(selfSource);
@@ -180,7 +181,7 @@ it('S06 CLI config snapshot protects actual complete and streamed assistant fiel
     const stream = async function* () { yield { kind: 'text' as const, text: reply }; yield { kind: 'done' as const, finish: 'stop' as const, note: null }; };
     const run = main(['terminal', 'workline', '--scope', 's', '--lang', locale], {
       root: f.project, env: { ...f.env, S06_TEST: canary, NO_COLOR: '1' }, stdout: stdout as unknown as NodeJS.WriteStream,
-      stderr: stdout as unknown as NodeJS.WriteStream, stdin: stdin as unknown as NodeJS.ReadStream, initialize() {},
+      stderr: stdout as unknown as NodeJS.WriteStream, stdin: stdin as unknown as NodeJS.ReadStream, initialize() {}, loadInstallationIdentity: loadConfiguredInstallationIdentity, loadProjectIdentity: loadConfiguredProjectIdentity,
       async completeTerminalChat() { return reply; }, ...(streamed ? { streamTerminalChat: stream } : {}) });
     try {
       await until(() => stdout.text.includes(t('terminal.workline.placeholder', {}, locale)), 'catalog composer');

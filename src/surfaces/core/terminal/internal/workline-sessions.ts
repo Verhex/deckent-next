@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { useCallback, useRef } from 'react';
 import { resolveSessionReference, type SessionRefusal, type ConversationSessionPort, type ConversationSessionSummary, type AgentChatMessage, type TurnDelta } from '#surfaces/core/terminal-kit/index.js';
 import { contextViewLines, fillTemplate, projectHumanPickerText, type Span, type ContextCompaction, type ContextViewLabels } from '#surfaces/core/terminal-render/index.js';
+import type { LocalExecution } from './workline-panel.js';
 import type { KnownSecretSnapshot } from '#platform/index.js';
 import { notice } from './workline-actions.js';
 import type { WorkLedgerEntry } from './work-ledger.js';
@@ -40,8 +41,7 @@ const when = (ms: number) => new Date(ms).toISOString().slice(0, 16).replace('T'
  * `/resume` with no argument opens an arrow-key picker (a typed `/resume <n|id>` still loads one), `/context` for the latest measured prompt. A failed save is shown once
  * and never blocks the conversation.
  */
-export function useConversationSession(port: ConversationSessionPort | undefined, labels: ConversationSessionLabels | undefined, known?: KnownSecretSnapshot) {
-  const sessionId = useRef<string>(randomUUID());
+export function useConversationSession(port: ConversationSessionPort | undefined, labels: ConversationSessionLabels | undefined, id: () => string, known?: KnownSecretSnapshot) {
   const saveFailed = useRef(false), listed = useRef<readonly ConversationSessionSummary[]>([]), context = useRef<ContextView | null>(null), compaction = useRef<ContextCompaction | null>(null);
   const noteContext = useCallback((delta: TurnDelta) => {
     if (delta.kind === 'context') context.current = { promptTokens: delta.promptTokens, windowTokens: delta.windowTokens, quality: delta.quality };
@@ -49,19 +49,20 @@ export function useConversationSession(port: ConversationSessionPort | undefined
   }, []);
   const save = useCallback(async (history: readonly AgentChatMessage[]): Promise<WorkLedgerEntry[]> => {
     if (!port || !labels) return [];
-    try { await port.save({ sessionId: sessionId.current, messages: history.filter(message => message.role !== 'system') }); listed.current = []; return []; }
+    try { await port.save({ sessionId: id(), messages: history.filter(message => message.role !== 'system') }); listed.current = []; return []; }
     catch {
       if (saveFailed.current) return [];
       saveFailed.current = true;
       return [notice('error', labels.saveFailed)];
     }
-  }, [labels, port]);
+  }, [labels, port, id]);
   const run = useCallback(async (command: 'resume' | 'context' | 'clear', args: string,
-    history: { current: readonly AgentChatMessage[] }): Promise<SessionCommandResult> => {
+    history: { current: readonly AgentChatMessage[] }, execution: LocalExecution): Promise<SessionCommandResult> => {
     if (!labels) return done([]);
     const count = history.current.filter(message => message.role !== 'system').length;
     if (command === 'clear') {
-      history.current = history.current.slice(0, 1); sessionId.current = randomUUID(); context.current = null; compaction.current = null; listed.current = [];
+      if (!execution.selectSession({ ...execution.input.context, sessionId: randomUUID() })) return done([]);
+      history.current = history.current.slice(0, 1); context.current = null; compaction.current = null; listed.current = [];
       return done([notice('info', labels.started)]);
     }
     if (command === 'context') {
@@ -73,7 +74,7 @@ export function useConversationSession(port: ConversationSessionPort | undefined
       return done([notice('info', head), ...view.map(line => notice('info', line))]);
     }
     if (!port) return done([notice('error', labels.unavailable)]);
-    const freshList = async () => (await port.list()).filter(summary => summary.sessionId !== sessionId.current).slice(0, LISTED);
+    const freshList = async () => (await port.list()).filter(summary => summary.sessionId !== id()).slice(0, LISTED);
     const refuse = (refusal: SessionRefusal, text: string): SessionCommandResult => ({ refusal, entries: [notice('error', text)] });
     if (!args) {
       listed.current = (await freshList()).map(summary => ({ ...summary }));
@@ -91,10 +92,10 @@ export function useConversationSession(port: ConversationSessionPort | undefined
     const target = reference.target;
     const messages = await port.load(target);
     if (!messages) return refuse('SESSION_NOT_FOUND', labels.notFound);
+    if (!execution.selectSession({ ...execution.input.context, sessionId: target })) return done([]);
     history.current = [history.current[0]!, ...messages.filter(message => message.role !== 'system')];
-    sessionId.current = target; context.current = null; compaction.current = null; listed.current = [];
+    context.current = null; compaction.current = null; listed.current = [];
     return done([notice('info', fillTemplate(labels.resumed, { count: messages.length, session: target.slice(0, 8) })), ...resumedHistoryEntries(messages, labels.history, known)]);
-  }, [labels, port, known]);
-  const id = useCallback(() => sessionId.current, []);
+  }, [labels, port, known, id]);
   return { noteContext, save, run, id };
 }

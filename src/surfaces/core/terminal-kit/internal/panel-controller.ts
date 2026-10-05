@@ -1,7 +1,7 @@
 import type { ExactContext, PanelApprovalView, PanelContext, PanelController, PanelInput, PanelPort,
   PanelSnapshot, PanelPickerView, PanelSubmission, PanelTurnBinding, TerminalLocalContext } from './panel-contract.js';
 
-type Active<C extends PanelContext> = { readonly input: PanelSubmission<C>; readonly abort: AbortController; binding: PanelTurnBinding | null; readonly handles: Set<string>; readonly revisions: Map<string, number> };
+type Active<C extends PanelContext> = { input: PanelSubmission<C>; readonly abort: AbortController; binding: PanelTurnBinding | null; readonly handles: Set<string>; readonly revisions: Map<string, number> };
 type Card<C extends PanelContext> = { readonly view: PanelApprovalView<C>; phase: 'pending' | 'deciding' | 'unknown' };
 function validContext(context: PanelContext): boolean {
   return !!context && [context.installationId, context.projectId, context.scopeId, context.sessionId].every(id => typeof id === 'string' && id.trim().length > 0)
@@ -23,18 +23,27 @@ function sameCard<C extends PanelContext>(a: PanelApprovalView<C>, b: PanelAppro
     && a.revision === b.revision && a.cardHandle === b.cardHandle && a.presentationHandle === b.presentationHandle;
 }
 
-/** One control owner, independent of React/Ink, storage, OS identity and runtime authority.
- * Production adoption awaits the trusted installation/project context producer (DESKTOP-O7 Source-A option 1). */
-export function createPanelController(ports: PanelPort<TerminalLocalContext>): PanelController<TerminalLocalContext>;
-export function createPanelController(ports: PanelPort<ExactContext>): PanelController<ExactContext>;
-export function createPanelController<C extends PanelContext>(ports: PanelPort<C>): PanelController<C> {
+function validHistory<C extends PanelContext>(ports: PanelPort<C>): boolean {
   const history = ports.history;
-  const validHistory = ports.kind === 'terminal-local'
+  return ports.kind === 'terminal-local'
     ? 'port' in history && (history.kind === 'enabled' ? !!history.port
       && ['save', 'list', 'load'].every(key => typeof history.port[key as keyof typeof history.port] === 'function')
       : (history.kind === 'disabled' || history.kind === 'unavailable') && history.port === null)
     : history.kind === 'unavailable' && 'read' in history && history.read === null;
-  if (!validContext(ports.context) || ports.kind !== ports.context.kind || !validHistory) throw new TypeError();
+}
+function capturePicker(view: PanelPickerView): PanelPickerView | null {
+  if (!view.pickerHandle || !view.items.length || view.items.some(item => !item.itemHandle || !item.presentationHandle)
+    || new Set(view.items.map(item => item.itemHandle)).size !== view.items.length) return null;
+  return Object.freeze({ pickerHandle: view.pickerHandle, items: Object.freeze(view.items.map(item =>
+    Object.freeze({ itemHandle: item.itemHandle, presentationHandle: item.presentationHandle }))) });
+}
+
+/** One control owner, independent of React/Ink, storage, OS identity and runtime authority.
+ * Terminal adoption injects the trusted installation/project identity and private application adapters. */
+export function createPanelController(ports: PanelPort<TerminalLocalContext>): PanelController<TerminalLocalContext>;
+export function createPanelController(ports: PanelPort<ExactContext>): PanelController<ExactContext>;
+export function createPanelController<C extends PanelContext>(ports: PanelPort<C>): PanelController<C> {
+  if (!validContext(ports.context) || ports.kind !== ports.context.kind || !validHistory(ports)) throw new TypeError();
   let context = captureContext(ports.context), active: Active<C> | null = null, approval: Card<C> | null = null;
   let picker: { view: PanelPickerView; resolve: (choice: string | null) => void } | null = null;
   let closed = false, last: PanelSnapshot<C>['last'] = null;
@@ -69,11 +78,8 @@ export function createPanelController<C extends PanelContext>(ports: PanelPort<C
     const old = picker; picker = null; old?.resolve(choice);
   };
   const pick = (operation: Active<C>, view: PanelPickerView): Promise<string | null> => {
-    if (!current(operation) || picker || !view.pickerHandle || !view.items.length
-      || view.items.some(item => !item.itemHandle || !item.presentationHandle)
-      || new Set(view.items.map(item => item.itemHandle)).size !== view.items.length) return Promise.resolve(null);
-    const captured = Object.freeze({ pickerHandle: view.pickerHandle, items: Object.freeze(view.items.map(item =>
-      Object.freeze({ itemHandle: item.itemHandle, presentationHandle: item.presentationHandle }))) });
+    if (!current(operation) || picker) return Promise.resolve(null);
+    const captured = capturePicker(view); if (!captured) return Promise.resolve(null);
     return new Promise(resolve => { picker = { view: captured, resolve }; publish(); });
   };
   const current = (operation: Active<C>) => !closed && active === operation && !operation.abort.signal.aborted && sameContext(context, operation.input.context);
@@ -105,6 +111,15 @@ export function createPanelController<C extends PanelContext>(ports: PanelPort<C
       let outcome: 'returned' | 'unknown' = 'returned';
       try {
         await ports.execute(Object.freeze({ input, signal: operation.abort.signal, pick: (view: PanelPickerView) => pick(operation, view),
+          selectSession: next => {
+            if (!current(operation) || operation.binding || picker || approval || context.kind !== 'terminal-local'
+              || !validContext(next) || next.kind !== context.kind || next.installationId !== context.installationId
+              || next.projectId !== context.projectId || next.scopeId !== context.scopeId) return false;
+            context = captureContext(next);
+            operation.input = Object.freeze({ ...operation.input, context });
+            for (let index = 0; index < queue.length; index++) queue[index] = Object.freeze({ ...queue[index]!, context });
+            publish(); return true;
+          },
           onTurnBound: (binding: PanelTurnBinding) => bind(operation, binding),
           onApproval: (view: PanelApprovalView<C>) => present(operation, view),
           onApprovalSettled: settlement => {
@@ -132,7 +147,7 @@ export function createPanelController<C extends PanelContext>(ports: PanelPort<C
       try { await ports.decideApproval(captured.view, Object.freeze({ cardHandle: input.cardHandle, decision: input.decision, reason: input.reason })); }
       catch { refused = true; }
       if (closed || approval !== captured) return;
-      if (refused) captured.phase = 'pending'; else retire();
+      if (refused) { if (captured.phase !== 'unknown') captured.phase = 'pending'; } else retire();
       publish();
     })();
     return true;
@@ -145,8 +160,9 @@ export function createPanelController<C extends PanelContext>(ports: PanelPort<C
       operation?.handles.clear(); operation?.revisions.clear(); operation?.abort.abort();
       publish(); listeners.clear(); return true;
     }
-    if (input.kind === 'cancel') {
-      if (!active || active.abort.signal.aborted || active.binding?.turnId !== input.turnId) return false;
+    if (input.kind === 'cancel' || input.kind === 'cancel-input') {
+      if (!active || active.abort.signal.aborted || (input.kind === 'cancel'
+        ? active.binding?.turnId !== input.turnId : active.input.inputId !== input.inputId || active.binding !== null)) return false;
       retire(); finishPicker(null); active.abort.abort(); publish(); return true;
     }
     if (input.kind === 'choose-item') {

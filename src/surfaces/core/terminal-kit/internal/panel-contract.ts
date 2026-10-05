@@ -24,6 +24,7 @@ export type PanelInput<C extends PanelContext> =
   | Readonly<{ kind: 'submit'; context: C; inputId: string; text: string; mentions?: readonly string[] }>
   | Readonly<{ kind: 'edit-queued'; context: C; inputId: string; text: string; mentions?: readonly string[] }>
   | Readonly<{ kind: 'cancel'; context: C; turnId: string }>
+  | Readonly<{ kind: 'cancel-input'; context: C; inputId: string }>
   | Readonly<{ kind: 'close-view'; context: C }>
   | (Readonly<{ kind: 'decide-approval'; context: C }> & PanelApprovalIntent)
   | Readonly<{ kind: 'choose-item'; context: C; pickerHandle: string; itemHandle: string | null }>;
@@ -43,6 +44,9 @@ export type PanelPickerView = Readonly<{ pickerHandle: string;
 export type PanelExecution<C extends PanelContext> = Readonly<{
   input: PanelSubmission<C>; signal: AbortSignal;
   pick(view: PanelPickerView): Promise<string | null>;
+  /** Only the active, unbound local session command may replace its session after canonical load/clear.
+   * Queued input follows that serialized transition, as in the terminal's existing FIFO. */
+  selectSession(next: C): boolean;
   onTurnBound(binding: PanelTurnBinding): boolean;
   onApproval(view: PanelApprovalView<C>): boolean;
   onApprovalSettled(settlement: PanelApprovalSettlement<C>): boolean;

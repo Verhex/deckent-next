@@ -1,5 +1,6 @@
+import { panelFixture } from './workline-panel-fixture.js';
 import { PassThrough, Writable } from 'node:stream';
-import { createElement } from 'react';
+import { createElement, Fragment, StrictMode } from 'react';
 import { render } from 'ink';
 import { WorklineApp, WorklinePaletteProvider, resolveWorklinePalette, type WorklineLabels, type WorklineProps, type WorkSurfaceLabels } from '#surfaces/core/terminal/index.js';
 import { WORKER_LINE_EN } from './worker-line-labels.js';
@@ -58,13 +59,14 @@ export async function until(check: () => boolean, label: string, attempts = 500)
   throw new Error(`timed out waiting for ${label}`);
 }
 /** Mounts the real interactive workline on an in-memory TTY; the caller unmounts it. */
-export function mountWorkline(props: Partial<WorklineProps>, columns = 200, observation: { onFrame?: (text: string) => void; debug?: boolean } = {}) {
+export function mountWorkline(props: Partial<WorklineProps>, columns = 200, observation: { onFrame?: (text: string) => void; debug?: boolean; strict?: boolean } = {}) {
   const stdout = new Screen(columns, observation.onFrame);
   const stdin = Object.assign(new PassThrough(), { isTTY: true, setRawMode() { return stdin; }, ref() { return stdin; }, unref() { return stdin; } });
-  const instance = render(createElement(WorklinePaletteProvider, { palette: resolveWorklinePalette('none'), children: createElement(WorklineApp, {
+  const wrapper = observation.strict ? StrictMode : Fragment;
+  const instance = render(createElement(wrapper, null, createElement(WorklinePaletteProvider, { palette: resolveWorklinePalette('none'), children: createElement(WorklineApp, {
     labels: WORKLINE_TEST_LABELS, target: 'scope · model', systemPrompt: 'SYSTEM', historyMessages: 40, errorText: (error: unknown) => `ERR:${(error as Error).message}`,
-    completeTurn: async () => 'unused', ...props,
-  }) }), { stdout: stdout as unknown as NodeJS.WriteStream, stdin: stdin as unknown as NodeJS.ReadStream, debug: observation.debug ?? true,
+    completeTurn: async () => 'unused', ...props, ...panelFixture(props),
+  }) })), { stdout: stdout as unknown as NodeJS.WriteStream, stdin: stdin as unknown as NodeJS.ReadStream, debug: observation.debug ?? true,
     interactive: true, exitOnCtrlC: false, patchConsole: false });
   return { stdout, stdin, instance };
 }

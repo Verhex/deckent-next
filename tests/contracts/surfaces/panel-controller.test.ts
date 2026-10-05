@@ -216,3 +216,38 @@ function contextTypeProof(localPort: PanelPort<TerminalLocalContext>, servicePor
   void missingRevision; void fabricatedRevision; void wrongHistory;
 }
 void contextTypeProof;
+
+describe('serialized local session adoption', () => {
+  it('only an active unbound local operation can switch session; queued text follows that exact transition', async () => {
+    const f = fixture(local, { kind: 'unavailable', port: null }), c = createPanelController(f.ports);
+    c.send({ kind: 'submit', context: local, inputId: 'resume', text: '/resume other' });
+    c.send({ kind: 'submit', context: local, inputId: 'next', text: 'next' });
+    const a = f.executions[0]!, next = { ...local, sessionId: 'loaded-session' };
+    expect(a.selectSession({ ...next, projectId: 'other-project' })).toBe(false);
+    expect(a.selectSession(next)).toBe(true); expect(c.snapshot().context).toEqual(next);
+    f.turns[0]!.resolve(); await tick();
+    expect(f.executions[1]!.input.context).toEqual(next); expect(a.selectSession(local)).toBe(false);
+    expect(bind(f.executions[1]!)).toBe(true); expect(f.executions[1]!.selectSession(local)).toBe(false);
+    c.send({ kind: 'close-view', context: next });
+  });
+  it('preflight cancel is scoped by active input address and is unavailable after binding', async () => {
+    const f = fixture(local, { kind: 'disabled', port: null }), c = createPanelController(f.ports);
+    c.send({ kind: 'submit', context: local, inputId: 'a', text: 'a' });
+    expect(c.send({ kind: 'cancel-input', context: local, inputId: 'wrong' })).toBe(false);
+    expect(c.send({ kind: 'cancel-input', context: local, inputId: 'a' })).toBe(true);
+    expect(bind(f.executions[0]!)).toBe(false); f.turns[0]!.resolve(); await tick();
+    expect(c.snapshot().last?.outcome).toBe('unknown');
+    c.send({ kind: 'submit', context: local, inputId: 'b', text: 'b' }); bind(f.executions[1]!);
+    expect(c.send({ kind: 'cancel-input', context: local, inputId: 'b' })).toBe(false);
+    c.send({ kind: 'close-view', context: local });
+  });
+  it('preserves explicit unsettled while a decision transport failure arrives late', async () => {
+    const f = fixture(local, { kind: 'disabled', port: null }), c = createPanelController(f.ports);
+    c.send({ kind: 'submit', context: local, inputId: 'a', text: 'a' }); const e = f.executions[0]!; bind(e); const view = card(local); e.onApproval(view);
+    c.send({ kind: 'decide-approval', context: local, cardHandle: view.cardHandle, decision: 'allow', reason: '' });
+    e.onApprovalSettled({ ...view, outcome: 'unsettled' }); f.replies[0]!.reject(new Error('lost response')); await tick();
+    expect(c.snapshot().approval?.phase).toBe('unknown');
+    expect(c.send({ kind: 'decide-approval', context: local, cardHandle: view.cardHandle, decision: 'allow', reason: '' })).toBe(false);
+    c.send({ kind: 'close-view', context: local });
+  });
+});

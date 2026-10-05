@@ -1,3 +1,4 @@
+import { panelFixture } from '../support/workline-panel-fixture.js';
 import { PassThrough, Writable } from 'node:stream';
 import { createElement } from 'react';
 import { render } from 'ink';
@@ -45,7 +46,7 @@ afterEach(() => { for (const instance of mounted.splice(0)) instance.unmount(); 
 function mount(props: Partial<WorklineProps> & Pick<WorklineProps, 'completeTurn'>, tier: 'none' = 'none') {
   const stdout = new Screen(), stdin = keyboard();
   const instance = render(createElement(WorklinePaletteProvider, { palette: resolveWorklinePalette(tier), children: createElement(WorklineApp, {
-    labels, target: 'scope-a · model', systemPrompt: 'SYSTEM', historyMessages: 4, errorText: (error: unknown) => `ERR:${(error as Error).message}`, ...props,
+    labels, target: 'scope-a · model', systemPrompt: 'SYSTEM', historyMessages: 4, errorText: (error: unknown) => `ERR:${(error as Error).message}`, ...props, ...panelFixture(props),
   }) }), { stdout: stdout as unknown as NodeJS.WriteStream, stdin: stdin as unknown as NodeJS.ReadStream, debug: true, exitOnCtrlC: false, patchConsole: false });
   mounted.push(instance);
   const type = async (text: string) => { for (const char of text) { stdin.write(char); await settle(2); } };
