@@ -1866,7 +1866,8 @@
       "dependencies": [
         "src/adapters/core/host-shell",
         "src/adapters/core/workspace-read",
-        "src/domain/core/agent-tool"
+        "src/domain/core/agent-tool",
+        "src/platform/core/common"
       ],
       "plan": "SURFACES"
     },
