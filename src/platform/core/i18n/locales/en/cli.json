@@ -1,4 +1,5 @@
 {
+  "terminal.status.installationId": "Installation identity: {installationId}",
   "terminal.status.projectId": "Project identity: {projectId}",
   "cli.agent.delete.desc": "Delete an agent from the pool",
   "cli.agent.desc": "Manage agent pool",

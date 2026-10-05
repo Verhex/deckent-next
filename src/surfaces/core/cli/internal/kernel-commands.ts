@@ -1,4 +1,4 @@
-import type { ProjectIdentity } from '#domain/index.js';
+import type { InstallationIdentity, ProjectIdentity } from '#domain/index.js';
 import { assessPoolReadiness, poolReadinessLines } from './pool.js';
 import type { ConfigCommandContext } from '#surfaces/core/config/index.js';
 import type { MonitorCommandContext, WorkerTranscriptHandler } from '#surfaces/core/monitor/index.js';
@@ -58,6 +58,7 @@ export interface CommandContext extends ModelCommandContext, MonitorCommandConte
   restartRuntimeService?: (root: string, options: ConfigLoadOptions) => Promise<RuntimeServiceReadinessView>;
   openTerminalHistory?: (root: string, options: ConfigLoadOptions) => Promise<ComposerHistoryPort | null>;
   openTerminalSessions?: (root: string, options: ConfigLoadOptions) => Promise<TerminalSessionStoreView | null>;
+  loadInstallationIdentity?: (root: string, options: ConfigLoadOptions) => Promise<InstallationIdentity>;
   loadProjectIdentity?: (root: string, options: ConfigLoadOptions) => Promise<ProjectIdentity>;
   selfSourceProject?: (root: string) => Promise<boolean>;
   stopRuntimeService?: (root: string, options: ConfigLoadOptions) => Promise<{ readonly command: ShutdownCommand; readonly result: ServiceShutdownAdmissionResult }>;

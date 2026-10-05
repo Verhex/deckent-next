@@ -4,6 +4,7 @@
   "resources": {
     "config": "config.json",
     "installationJournal": "installation/journal.json",
+    "installationIdentity": "installation-identity",
     "projectIdentity": "project-identity",
     "brain": "brain",
     "memory": "brain/memory.db",

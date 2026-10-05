@@ -1,3 +1,5 @@
+export { InstallationIdentityError } from './internal/installation-identity.js';
+export type { InstallationIdentityStore, InstallationIdentityErrorCode } from './internal/installation-identity.js';
 export { installationProfilePayloadSchema, installationProfileSchema, encodeInstallationProfilePayload,
   hashInstallationProfilePayload, snapshotInstallationProfile } from './internal/profile.js';
 export { ProjectIdentityError } from './internal/project-identity.js';

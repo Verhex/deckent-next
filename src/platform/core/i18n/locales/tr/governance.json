@@ -1,4 +1,8 @@
 {
+  "error.INSTALLATION_IDENTITY_INVALID": "Kurulum kimlik kaydı eksik veya geçersiz. Özgün kaydı yedekten geri yükleyin; yeni kimlik üretilmedi.",
+  "error.INSTALLATION_IDENTITY_UNAVAILABLE": "Kurulum kimliği güvenle okunamadı veya kaydedilemedi. Kurulum metadata dizinine erişimi kontrol edin.",
+  "error.INSTALLATION_IDENTITY_LOCKED": "Başka bir süreç kurulum kimliğini oluşturuyor. Tamamlandıktan sonra yeniden deneyin.",
+  "error.INSTALLATION_IDENTITY_UNSUPPORTED": "Bu platformda güvenli kurulum kimliği depolaması desteklenmiyor. Kimlik okunmadı veya oluşturulmadı.",
   "error.PROJECT_IDENTITY_INVALID": "Proje kimlik kaydı eksik veya geçersiz. Özgün kaydı yedekten geri yükleyin; yeni kimlik üretilmedi.",
   "error.PROJECT_IDENTITY_UNAVAILABLE": "Proje kimliği güvenle okunamadı veya kaydedilemedi. Proje metadata dizinine erişimi kontrol edin.",
   "error.PROJECT_IDENTITY_LOCKED": "Başka bir süreç proje kimliğini oluşturuyor. Tamamlandıktan sonra yeniden deneyin.",

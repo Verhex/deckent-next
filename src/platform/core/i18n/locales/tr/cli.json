@@ -1,4 +1,5 @@
 {
+  "terminal.status.installationId": "Kurulum kimliği: {installationId}",
   "terminal.status.projectId": "Proje kimliği: {projectId}",
   "cli.agent.delete.desc": "Bir agent'ı havuzdan silin",
   "cli.agent.desc": "Agent havuzunu yönetin",

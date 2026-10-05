@@ -15,6 +15,10 @@ function mcpSandboxUnreachable(p: Params, l: Locale): string {
 }
 interface Definition { readonly category: ErrorCategory; readonly render: (params: Params, locale: Locale) => ErrorEntry }
 const definitions: Readonly<Record<string, Definition>> = Object.freeze({
+  INSTALLATION_IDENTITY_INVALID: { category: 'config', render: (p, l) => ({ message: t('error.INSTALLATION_IDENTITY_INVALID', p, l) }) },
+  INSTALLATION_IDENTITY_UNAVAILABLE: { category: 'config', render: (p, l) => ({ message: t('error.INSTALLATION_IDENTITY_UNAVAILABLE', p, l) }) },
+  INSTALLATION_IDENTITY_LOCKED: { category: 'config', render: (p, l) => ({ message: t('error.INSTALLATION_IDENTITY_LOCKED', p, l) }) },
+  INSTALLATION_IDENTITY_UNSUPPORTED: { category: 'config', render: (p, l) => ({ message: t('error.INSTALLATION_IDENTITY_UNSUPPORTED', p, l) }) },
   PROJECT_IDENTITY_INVALID: { category: 'config', render: (p, l) => ({ message: t('error.PROJECT_IDENTITY_INVALID', p, l) }) },
   PROJECT_IDENTITY_UNAVAILABLE: { category: 'config', render: (p, l) => ({ message: t('error.PROJECT_IDENTITY_UNAVAILABLE', p, l) }) },
   PROJECT_IDENTITY_LOCKED: { category: 'config', render: (p, l) => ({ message: t('error.PROJECT_IDENTITY_LOCKED', p, l) }) },

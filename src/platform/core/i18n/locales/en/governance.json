@@ -1,4 +1,8 @@
 {
+  "error.INSTALLATION_IDENTITY_INVALID": "The installation identity record is missing or invalid. Restore the original record from backup; no replacement identity was generated.",
+  "error.INSTALLATION_IDENTITY_UNAVAILABLE": "The installation identity could not be read or persisted safely. Check access to the installation metadata directory.",
+  "error.INSTALLATION_IDENTITY_LOCKED": "Another process is initializing the installation identity. Retry after it finishes.",
+  "error.INSTALLATION_IDENTITY_UNSUPPORTED": "Secure installation identity storage is unsupported on this platform. No identity was read or created.",
   "error.PROJECT_IDENTITY_INVALID": "The project identity record is missing or invalid. Restore the original record from backup; no replacement identity was generated.",
   "error.PROJECT_IDENTITY_UNAVAILABLE": "The project identity could not be read or persisted safely. Check access to the project metadata directory.",
   "error.PROJECT_IDENTITY_LOCKED": "Another process is initializing the project identity. Retry after it finishes.",

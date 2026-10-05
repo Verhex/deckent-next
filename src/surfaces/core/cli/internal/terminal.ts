@@ -9,7 +9,7 @@ import { terminalComposerLabels, terminalRenderLabels, terminalSessionLabels } f
 import { createWorklineLedgerPorts } from './terminal-ledger.js';
 import { runtimeBuildSkew, workSurfaceLabels } from './work-labels.js';
 import type { CommandContext } from './kernel-commands.js';
-import type { ProjectId, PermissionMode } from '#domain/index.js';
+import type { InstallationId, ProjectId, PermissionMode } from '#domain/index.js';
 import type { TerminalChatPlanView } from './terminal-chat.js';
 
 type Action = 'status' | 'session' | 'workline' | 'snapshot' | 'chat-plan';
@@ -68,8 +68,9 @@ function chatTarget(plan: TerminalChatPlanView | null, locale: Locale): string {
 }
 
 function renderStatus(payload: ReturnType<typeof statusPayload>, locale: Locale): string {
-  const { tty, inference, chat, projectId } = payload;
+  const { tty, inference, chat, projectId, installationId } = payload;
   return [
+    t('terminal.status.installationId', { installationId: installationId ?? t('terminal.value.unknown', {}, locale) }, locale),
     t('terminal.status.projectId', { projectId: projectId ?? t('terminal.value.unknown', {}, locale) }, locale),
     t('terminal.status.tty', { stdin: yesNo(tty.stdin, locale), stdout: yesNo(tty.stdout, locale),
       columns: tty.columns ?? t('terminal.value.unknown', {}, locale), rows: tty.rows ?? t('terminal.value.unknown', {}, locale) }, locale),
@@ -82,14 +83,14 @@ function renderStatus(payload: ReturnType<typeof statusPayload>, locale: Locale)
   ].join('\n');
 }
 
-function statusPayload(tty: ReturnType<typeof ttyState>, config: Record<string, unknown>, chat: TerminalChatPlanView | null, projectId: ProjectId | null) {
+function statusPayload(tty: ReturnType<typeof ttyState>, config: Record<string, unknown>, chat: TerminalChatPlanView | null, projectId: ProjectId | null, installationId: InstallationId | null) {
   const profile = readInferenceServingProfile(config);
   const inference = profile ? (() => {
     const capacity = estimateReplicaCapacity(profile);
     return { configured: true as const, profileId: profile.id, tokenBudget: capacity.totalTokenBudget, maxSeqs: capacity.maxNumSeqs,
       endpoint: buildInferenceServingPlan(profile).openaiBaseUrl };
   })() : { configured: false as const };
-  return { schemaVersion: 1 as const, tty, inference, chat, projectId };
+  return { schemaVersion: 1 as const, tty, inference, chat, projectId, installationId };
 }
 
 function worklineLabels(locale: Locale, statusLine: string): WorklineLabels {
@@ -185,9 +186,10 @@ export async function terminalCommand(argv: readonly string[], context: CommandC
     emit(snapshot, { ...sinks, json: true, render: value => formatValue(value) });
     return;
   }
+  const installationId = (await context.loadInstallationIdentity?.(root, options))?.installationId ?? null;
   const projectId = (await context.loadProjectIdentity?.(root, options))?.projectId ?? null;
   if (parsed.action === 'status') {
-    const payload = statusPayload(tty, config, chat, projectId);
+    const payload = statusPayload(tty, config, chat, projectId, installationId);
     emit(payload, { ...sinks, json: parsed.json, render: value => parsed.json ? formatValue(value) : renderStatus(value, locale) });
     return;
   }
@@ -218,7 +220,7 @@ export async function terminalCommand(argv: readonly string[], context: CommandC
   if (parsed.action === 'session') {
     if (serviceLine && tty.stdin && tty.stdout) emit(serviceLine, sinks);
     await runSession(locale, context, turn, historyMessages, tty.stdin && tty.stdout,
-      () => [renderStatus(statusPayload(tty, config, chat, projectId), locale), ...(serviceLine ? [serviceLine] : [])].join('\n'));
+      () => [renderStatus(statusPayload(tty, config, chat, projectId, installationId), locale), ...(serviceLine ? [serviceLine] : [])].join('\n'));
     return;
   }
   if (!tty.stdin || !tty.stdout) throw ErrorRegistry.createError('TERMINAL_TTY_REQUIRED');
