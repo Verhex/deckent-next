@@ -1,6 +1,7 @@
 import { lstat, mkdir, readdir, readFile, stat, symlink, utimes, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
+import { AGENT_TURN_SYSTEM_PROMPT_VERSION } from '#engine/index.js';
 import type { AgentTurnStreamEvent } from '#domain/index.js';
 import { scratchSessionKey } from '#adapters/index.js';
 import { me, principal, runtime } from '../support/chat-turn-harness.js';
@@ -41,7 +42,7 @@ describe.skipIf(process.platform !== 'linux')('agent scratch area through the ru
     expect(f.rows('SELECT target_kind, target_id, state FROM effect_intents')).toEqual([{ target_kind: 'scratch-file', target_id: `${key}/notes/plan.md`, state: 'settled' }]);
     // The model was told where the area is (system prompt v2) and which tools work there.
     const system = (f.state.requests[0]!['messages'] as { role: string; content: string }[])[0]!.content;
-    expect(system.startsWith('[Deckent runtime instructions v7]')).toBe(true);
+    expect(system.startsWith(`[Deckent runtime instructions v${AGENT_TURN_SYSTEM_PROMPT_VERSION}]`)).toBe(true);
     expect(system).toContain(`Scratch area: ${dir}`); expect(system).toContain('Edit tools: edit_file, write_file, scratch_write');
     // Nothing reached the project.
     await expect(lstat(join(f.project, 'notes'))).rejects.toMatchObject({ code: 'ENOENT' });

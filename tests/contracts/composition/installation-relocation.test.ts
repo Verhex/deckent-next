@@ -79,6 +79,15 @@ describe('relocation producer to actual CLI surface', () => {
     vi.spyOn(process.stderr, 'write').mockImplementation(chunk => { f.output.push(String(chunk)); return true; });
     expect(await composedMain(['terminal', 'status', '--json'])).toBe(78);
     expect(JSON.parse(f.output.join('')).code).toBe('INSTALLATION_IDENTITY_RELOCATED'); f.output.length = 0;
+    // init owns its identity check (catalog `installation: 'owned'`): the dispatcher does not gate it, the command still refuses typed and writes nothing.
+    const owned = [f.path, join(f.project, '.deckent/policy.json')], before = await Promise.all(owned.map(path => readFile(path)));
+    expect(await composedMain(['init', 'policy', '--scope', 's', '--apply', '--json'])).toBe(78);
+    expect(JSON.parse(f.output.join('')).code).toBe('INSTALLATION_IDENTITY_RELOCATED'); f.output.length = 0;
+    expect(await Promise.all(owned.map(path => readFile(path)))).toEqual(before);
+    await expect(stat(join(f.project, '.deckent/installation'))).rejects.toMatchObject({ code: 'ENOENT' });
+    // An installation-independent command answers without reading the installation.
+    expect(await composedMain(['policy', 'vocabulary', '--json'])).toBe(0);
+    expect(JSON.parse(f.output.join(''))).toHaveProperty('resources'); f.output.length = 0;
     expect(await composedMain(['init', 'identity', '--new', '--json'])).toBe(0);
     const result = JSON.parse(f.output.join(''));
     expect(result.schemaVersion).toBe(1); expect(result.previousInstallationId).toBe(f.identity.installationId);

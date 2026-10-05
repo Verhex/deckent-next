@@ -28,7 +28,8 @@ describe.skipIf(process.platform !== 'linux')('well-formed model text through th
     expect(await f.client().chatTurn({ schemaVersion: 1, scopeId: 'scope', turnId: 'turn-cut', messages: history }, event => events.push(event)))
       .toMatchObject({ finish: 'stop', answer: 'Continued.' });
     const compacted = events.flatMap(event => event.kind === 'compacted' ? event.messages : []);
-    const excerpt = compacted.find(message => message.content.startsWith('[Deckent context excerpt'))!.content;
+    // TERMINAL-S03: the render header (context render and carry versions) leads; the excerpt label follows on the next line.
+    const excerpt = compacted.find(message => /^\[Deckent context render v\d+; carry v\d+; [^\n]*\]\n\[Deckent context excerpt: /u.test(message.content))!.content;
     expect(excerpt).toMatch(new RegExp(`- write_file ${head.replace(/[{"}.]/g, '\\$&')}a+ …\\[cut: 1471 characters, sha256 [a-f0-9]{16}\\]`));
     expect(lone(excerpt)).toBe(false);
     const round = f.state.raw.at(-1)!;

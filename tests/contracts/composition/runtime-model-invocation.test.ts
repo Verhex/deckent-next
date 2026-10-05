@@ -15,6 +15,7 @@ import { encodeServiceFrame, openSqliteModelActivationStore, requestLocalRuntime
 import { ModelActivationApplication, ModelBindingApplication, ModelInvocationControllers, modelInvocationRequestDigest, modelInvocationTargetId,
   runtimeServiceModelOwnerId } from '#engine/index.js';
 import { createConfiguredRuntimeClient, startConfiguredRuntimeService } from '#composition/core/runtime-service/index.js';
+import { ensureConfiguredTerminalIdentity } from '#composition/core/scoped-request/index.js';
 import { clearConfigCache, prepareProductFile, resolveProductLayout } from '#platform/index.js';
 import { createPricedProviderTls, fixtureBudget, pricedProviderDefinition, replyPricedProviderMetadata } from '../../fixtures/priced-provider.js';
 
@@ -114,6 +115,10 @@ async function fixture(nativeTimeoutMs = 2_000) {
     { id: 'scope', effect: 'allow', actions: ['inspect'], scopes: ['scope'], principals: [{ issuer: principal.issuer, subject: principal.subject }],
       resource: { kind: 'scope', ids: ['scope'] } }] : [] }), { mode: 0o600 });
   await policy(true);
+  const env = { HOME: home, PATH: process.env.PATH ?? '/usr/bin:/bin' };
+  // ID-1D: identities are created at init/terminal start or the first governed write. Establish them through the production terminal
+  // ensure path, so the two concurrent admissions below race on the invocation claim, not on first identity publication (writer lock).
+  await ensureConfiguredTerminalIdentity(project, 'scope', { env });
   const command = (commandId: string) => ({ schemaVersion: 1 as const, commandId, scopeId: 'scope', reference,
     catalogRevision: 'catalog', expectedBinding: binding,
     nativeRequest: { model: 'vendor/model', messages: [{ role: 'user', content: `prompt-${commandId}` }], max_completion_tokens: 4 } });
@@ -121,7 +126,7 @@ async function fixture(nativeTimeoutMs = 2_000) {
     try { return Number(db.prepare('SELECT count(*) AS count FROM model_invocations WHERE command_id=?').get(commandId)?.count); } finally { db.close(); } };
   const totalCount = () => { const db = new DatabaseSync(ledger, { readOnly: true });
     try { return Number(db.prepare('SELECT count(*) AS count FROM model_invocations').get()?.count); } finally { db.close(); } };
-  return { project, data, env: { HOME: home, PATH: process.env.PATH ?? '/usr/bin:/bin' }, ledger, reference, command, count, policy,
+  return { project, data, env, ledger, reference, command, count, policy,
     setServiceResponseMaxBytes, setMcpResponseMaxBytes,
     totalCount, serviceOptions: { inputMaxBytes: 65536, responseMaxBytes: 65536, maxConnections: 8,
       headerTimeoutMs: 1000, responseTimeoutMs: 1000, acceptRetryDelayMs: 10, acceptRetryLimit: 2 },
