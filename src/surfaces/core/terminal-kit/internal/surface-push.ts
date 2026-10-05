@@ -1,4 +1,4 @@
-import type { SurfaceAccessDenied, SurfacePublicationEvent, SurfaceFollowEvent } from '#engine/index.js';
+import type { SurfaceAccessDenied, SurfaceNotInitialized, SurfacePublicationEvent, SurfaceFollowEvent } from '#engine/index.js';
 export type { SurfaceFollowEvent } from '#engine/index.js';
 /** Cursor, gap, scope and backpressure for an in-process approval/run/worker push.
  * The runtime stays the event-source owner. Missing cursors are never invented. */
@@ -14,13 +14,14 @@ export type SurfaceWait = {
   readonly owner: typeof SURFACE_WATCH_OWNER;
   readonly action: SurfaceWaitAction;
 };
-export type SurfaceDeliveryMode = 'push' | 'poll' | 'denied';
+export type SurfaceDeliveryMode = 'push' | 'poll' | 'denied' | 'not-initialized';
 export type SurfacePushEvent = SurfacePublicationEvent;
 export type SurfacePushState = {
   readonly cursors: Readonly<Record<SurfacePushKind, number | null>>;
   readonly queued: number;
 };
 export type SurfacePushStep =
+  | (SurfaceNotInitialized & { readonly status: 'not-initialized'; readonly state: SurfacePushState; readonly wait: SurfaceWait })
   | (SurfaceAccessDenied & { readonly status: 'denied'; readonly state: SurfacePushState; readonly wait: SurfaceWait })
   | { readonly status: 'ready'; readonly state: SurfacePushState; readonly wait: SurfaceWait }
   | { readonly status: 'applied'; readonly state: SurfacePushState; readonly wait: SurfaceWait; readonly event: SurfacePushEvent }
@@ -37,7 +38,7 @@ export function pollWait(pace: number): SurfaceWait {
   return surfaceWait('poll-scope', pace);
 }
 export function surfaceDeliveryValues(mode: SurfaceDeliveryMode, pace: number) {
-  const wait = surfaceWait(mode === 'denied' ? 'refuse-scope' : mode === 'poll' ? 'poll-scope' : 'read-next', pace);
+  const wait = surfaceWait(mode === 'denied' || mode === 'not-initialized' ? 'refuse-scope' : mode === 'poll' ? 'poll-scope' : 'read-next', pace);
   return { mode, timeoutMs: wait.timeoutMs, owner: wait.owner, action: wait.action };
 }
 export function openSurfacePush(): SurfacePushState {
@@ -73,7 +74,8 @@ export function releaseSurfacePush(state: SurfacePushState): SurfacePushState {
 }
 
 /** Paints an applied event only for a watched kind. Approval is always visible. Exceptions use the catalog template. */
-export function surfaceFollowLine(step: SurfacePushStep, watch: { readonly workers: boolean; readonly runs: boolean }, template: string | undefined, deniedTemplate?: string): string | null {
+export function surfaceFollowLine(step: SurfacePushStep, watch: { readonly workers: boolean; readonly runs: boolean }, template: string | undefined, deniedTemplate?: string, notInitializedTemplate?: string): string | null {
+  if (step.status === 'not-initialized') return notInitializedTemplate ?? null;
   if (step.status === 'denied') return deniedTemplate?.replace(/\{kinds\}/g, step.kinds.join(', ')) ?? null;
   if (step.status === 'applied') {
     const visible = step.event.kind === 'approval' || (step.event.kind === 'worker' && watch.workers) || (step.event.kind === 'run' && watch.runs);
@@ -98,7 +100,7 @@ export function createSurfaceFollowSession() {
   let state = openSurfacePush();
   let deniedKinds = new Set<SurfacePushKind>();
   return {
-    async read(events: AsyncIterable<SurfaceFollowEvent>, scopeId: string, pace: number, signal: AbortSignal, onStep: (step: SurfacePushStep) => void, refresh?: SurfaceRefresh): Promise<'end' | 'abort' | 'denied'> {
+    async read(events: AsyncIterable<SurfaceFollowEvent>, scopeId: string, pace: number, signal: AbortSignal, onStep: (step: SurfacePushStep) => void, refresh?: SurfaceRefresh): Promise<'end' | 'abort' | 'denied' | 'not-initialized'> {
       deniedKinds = new Set();
       const synchronize = async (kinds: readonly SurfacePushKind[]) => {
         if (!refresh) return true;
@@ -121,6 +123,11 @@ export function createSurfaceFollowSession() {
           }
           if ('access' in event) {
             if (event.scopeId !== scopeId) { onStep({ status: 'foreign-scope', state, wait: surfaceWait('refuse-scope', pace) }); continue; }
+            if (event.access === 'not-initialized') {
+              deniedKinds = new Set(SURFACE_PUSH_KINDS);
+              onStep({ ...event, status: 'not-initialized', state, wait: surfaceWait('refuse-scope', pace) });
+              return 'not-initialized';
+            }
             if (event.access !== 'denied' || !event.kinds.length || event.kinds.some(kind => !SURFACE_PUSH_KINDS.includes(kind))) continue;
             for (const kind of event.kinds) deniedKinds.add(kind);
             onStep({ ...event, status: 'denied', state, wait: surfaceWait('refuse-scope', pace) });

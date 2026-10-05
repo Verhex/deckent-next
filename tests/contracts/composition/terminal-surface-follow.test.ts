@@ -23,7 +23,7 @@ afterEach(async () => { vi.restoreAllMocks(); clearConfigCache(); await Promise.
 const graph = { schemaVersion: 2 as const, revision: 1, tasks: [{ id: 't', kind: 'selected', dependencies: [], acceptanceCriteria: ['exit'] }],
   criterionDefinitions: [{ id: 'exit', version: 1, description: 'Accept zero exit', evaluator: { id: 'process-exit', version: 1 }, parameters: { acceptedExitCodes: [0] } }] };
 
-async function project() {
+async function project(initializeIdentity = true) {
   const root = await mkdtemp(join(tmpdir(), 'dk-s18b-')); roots.push(root);
   const folder = join(root, 'project'); const data = join(root, 'data');
   await mkdir(join(folder, '.deckent'), { recursive: true });
@@ -46,6 +46,7 @@ async function project() {
   ] }), { mode: 0o600 });
   const ledger = opened.path;
   opened.store.close();
+  if (initializeIdentity) await ensureConfiguredTerminalIdentity(folder, 's', { env });
   return { folder, env, ledger, policy: productResourcePath(opened.layout, 'policy') };
 }
 
@@ -288,7 +289,7 @@ it('honors v2 role bindings and revocation without a policy revision change', as
 it('refuses a scope pinned to another company before publication SQL', async () => {
   const f = await project(); const db = new DatabaseSync(f.ledger);
   db.prepare('INSERT INTO companies(company_id) VALUES(?)').run('foreign-company');
-  db.prepare('INSERT INTO scope_registry(scope_id,company_id,origin) VALUES(?,?,?)').run('s', 'foreign-company', 'admission');
+  db.prepare('UPDATE scope_registry SET company_id=? WHERE scope_id=?').run('foreign-company', 's');
   db.close();
   const sql = vi.spyOn(DatabaseSync.prototype, 'prepare');
   const iterator = followLedgerSurface(f.folder, 's', { env: f.env }, new AbortController().signal);
@@ -316,4 +317,30 @@ it('closes the publication connection before reporting a revoked follow', async 
     expect((await live.iterator.next()).value).toMatchObject({ access: 'denied', stopped: true });
     expect(closes).toHaveBeenCalledTimes(1);
   } finally { live.controller.abort(); await live.iterator.return(); db.close(); }
+});
+
+
+it.each(['en', 'tr'] as const)('renders missing identity in %s and stops without reconnect, snapshot or polling', async locale => {
+  const f = await project(false);
+  const follow = vi.fn((signal: AbortSignal) => followLedgerSurface(f.folder, 's', { env: f.env }, signal));
+  const read = vi.fn(async () => ({ scopeId: 's', denied: [] }));
+  const poll = vi.fn(async () => []);
+  const view = mountWorkline({ labels: { ...WORKLINE_TEST_LABELS,
+    watchNotInitialized: t('terminal.workline.watchNotInitialized', {}, locale),
+    watchAccessStopped: t('terminal.workline.watchAccessStopped', {}, locale),
+    watchDelivery: t('terminal.workline.watchDelivery', {}, locale) }, pollMs: 5, ledger: { scopeId: 's',
+    followEvents: follow, readSurfaceSnapshot: read, listRunIds: poll, listApprovalPage: poll,
+  } });
+  try {
+    await until(() => view.stdout.text.includes('deckent init identity'), 'missing identity notice');
+    expect(view.stdout.text).toContain(t('terminal.workline.watchNotInitialized', {}, locale));
+    for (const command of ['/watch-workers\r', '/watch-stop\r', '/watch-runs\r']) {
+      for (const char of command) { view.stdin.write(char); await settle(2); }
+    }
+    await settle(50);
+    expect(follow).toHaveBeenCalledOnce(); expect(read).not.toHaveBeenCalled(); expect(poll).not.toHaveBeenCalled();
+    expect(view.stdout.text).toContain(t('terminal.workline.watchDelivery', { mode: 'not-initialized', timeoutMs: 5, owner: 'terminal-watch', action: 'refuse-scope' }, locale));
+    expect(view.stdout.text).not.toContain('poll-scope');
+    expect(view.stdout.text).not.toContain(t('terminal.workline.watchAccessStopped', { kinds: 'approval, run, worker' }, locale));
+  } finally { view.instance.unmount(); }
 });

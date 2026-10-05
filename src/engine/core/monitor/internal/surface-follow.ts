@@ -13,12 +13,17 @@ export type SurfaceAccessDenied = {
   readonly kinds: readonly SurfacePublicationKind[];
   readonly stopped: boolean;
 };
+export type SurfaceNotInitialized = {
+  readonly access: 'not-initialized';
+  readonly scopeId: string;
+  readonly stopped: true;
+};
 /** Each newly opened producer starts at these cursors after capturing its baseline. */
 export type SurfaceStreamStart = {
   readonly control: 'start'; readonly scopeId: string;
   readonly cursors: Readonly<Record<SurfacePublicationKind, number>>;
 };
-export type SurfaceFollowEvent = SurfacePublicationEvent | SurfaceAccessDenied | SurfaceStreamStart;
+export type SurfaceFollowEvent = SurfacePublicationEvent | SurfaceAccessDenied | SurfaceNotInitialized | SurfaceStreamStart;
 
 /** Opaque principal/company/ledger binding; fresh permission results never grant a different capture. */
 export type SurfaceSnapshotAccess = { readonly binding: string; readonly kinds: readonly SurfacePublicationKind[] };
