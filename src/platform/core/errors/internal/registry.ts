@@ -15,6 +15,17 @@ function mcpSandboxUnreachable(p: Params, l: Locale): string {
 }
 interface Definition { readonly category: ErrorCategory; readonly render: (params: Params, locale: Locale) => ErrorEntry }
 const definitions: Readonly<Record<string, Definition>> = Object.freeze({
+  IDENTITY_PROFILE_INVALID: { category: 'usage', render: (p, l) => ({ message: t('error.IDENTITY_PROFILE_INVALID', p, l) }) },
+  IDENTITY_PROFILE_NAMESPACE_UNKNOWN: { category: 'usage', render: (p, l) => ({ message: t('error.IDENTITY_PROFILE_NAMESPACE_UNKNOWN', p, l) }) },
+  IDENTITY_PROFILE_VERSION_UNKNOWN: { category: 'usage', render: (p, l) => ({ message: t('error.IDENTITY_PROFILE_VERSION_UNKNOWN', p, l) }) },
+  IDENTITY_PROFILE_UNKNOWN: { category: 'usage', render: (p, l) => ({ message: t('error.IDENTITY_PROFILE_UNKNOWN', p, l) }) },
+  IDENTITY_PROFILE_SHADOW: { category: 'usage', render: (p, l) => ({ message: t('error.IDENTITY_PROFILE_SHADOW', p, l) }) },
+  IDENTITY_PROFILE_DIGEST_MISMATCH: { category: 'usage', render: (p, l) => ({ message: t('error.IDENTITY_PROFILE_DIGEST_MISMATCH', p, l) }) },
+  IDENTITY_PREVIEW_INVALID: { category: 'usage', render: (p, l) => ({ message: t('error.IDENTITY_PREVIEW_INVALID', p, l) }) },
+  IDENTITY_PREVIEW_SCOPE_DENIED: { category: 'usage', render: (p, l) => ({ message: t('error.IDENTITY_PREVIEW_SCOPE_DENIED', p, l) }) },
+  IDENTITY_PREVIEW_CONFLICT: { category: 'usage', render: (p, l) => ({ message: t('error.IDENTITY_PREVIEW_CONFLICT', p, l) }) },
+  IDENTITY_PREVIEW_LIMIT: { category: 'usage', render: (p, l) => ({ message: t('error.IDENTITY_PREVIEW_LIMIT', p, l) }) },
+  IDENTITY_PREVIEW_UNAVAILABLE: { category: 'usage', render: (p, l) => ({ message: t('error.IDENTITY_PREVIEW_UNAVAILABLE', p, l) }) },
   PROJECT_IDENTITY_INVALID: { category: 'config', render: (p, l) => ({ message: t('error.PROJECT_IDENTITY_INVALID', p, l) }) },
   PROJECT_IDENTITY_UNAVAILABLE: { category: 'config', render: (p, l) => ({ message: t('error.PROJECT_IDENTITY_UNAVAILABLE', p, l) }) },
   PROJECT_IDENTITY_LOCKED: { category: 'config', render: (p, l) => ({ message: t('error.PROJECT_IDENTITY_LOCKED', p, l) }) },

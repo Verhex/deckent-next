@@ -1,3 +1,4 @@
+import { registerIdentityProfileConfig } from './identity-profile.js';
 import { registerDecisionConfig } from './decision.js';
 import { registerProviderCatalogConfig } from './catalog.js';
 import { registerInvocationProfileConfig } from './invocation.js';
@@ -20,6 +21,7 @@ export function registerProviderConfig(): void {
   registerOperationsConfig();
   registerSecretStoreConfig();
   registerDecisionConfig();
+  registerIdentityProfileConfig();
   registered = true;
 }
 export { providerSpendingBudgetFor, providerSpendingSchema, registerProviderSpendingConfig, validateProviderSpendingLayers } from './spending.js';
@@ -29,3 +31,4 @@ export { readOperationsConfig, operationsConfigSchema, registerOperationAdapterM
 export { readTerminalChatConfig, readTerminalConfig, readTerminalFetchConfig, readTerminalScratchConfig, readTerminalShellConfig, terminalConfigSchema,
   type TerminalChatConfig, type TerminalFetchConfig, type TerminalScratchConfig, type TerminalShellConfig } from './terminal.js';
 export { readDecisionPolicy, registerDecisionConfig, validateDecisionPolicyLayers } from './decision.js';
+export { readIdentityProfileConfig, registerIdentityProfileConfig } from './identity-profile.js';

@@ -43,6 +43,7 @@ const localId = z.string().regex(/^[a-z0-9][a-z0-9._-]{0,62}$/);
 const revision = identitySchema.refine(value => value.length <= 127);
 const permission = z.object({ id: localId, effect, actions: selection, resource, ...modeEligible }).strict().refine(eligibleOnlyOnApproval, 'POLICY_MODE_ELIGIBLE').readonly();
 const role = z.object({ id: localId, permissions: z.array(permission).min(1).readonly() }).strict().readonly();
+export const policyRoleSchema = role;
 /** Separation of duties is organization policy data (C12 Q6); the rule vocabulary is versioned code. */
 const duty = z.object({ id: identitySchema, rule: z.literal('requester-cannot-approve'), scopes: selection }).strict().readonly();
 const binding = z.object({ id: localId, principals: z.array(principalRef).min(1).readonly(), roles: z.array(localId).min(1).readonly(),
