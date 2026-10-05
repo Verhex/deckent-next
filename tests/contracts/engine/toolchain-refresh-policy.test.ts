@@ -15,7 +15,7 @@ describe('refresh policy', () => {
     expect(refreshTriggerAllowed({ mode: 'auto', atStartup: true, intervalMs: 0 }, 'interval')).toBe(false);
     expect(refreshTriggerAllowed({ mode: 'auto', atStartup: false, intervalMs: 5 }, 'interval')).toBe(true);
     expect(refreshIntervalMs({ mode: 'auto', atStartup: true, intervalMs: 7 })).toBe(7); expect(refreshIntervalMs({ mode: 'propose', atStartup: true, intervalMs: 7 })).toBe(0);
-    expect(toolchainUpdateApplies('auto')).toBe(true); expect(toolchainUpdateApplies('propose')).toBe(false); expect(toolchainUpdateApplies('propose', true)).toBe(true); expect(toolchainUpdateApplies('off')).toBe(false);
+    expect(toolchainUpdateApplies()).toBe(false); expect(toolchainUpdateApplies(false)).toBe(false); expect(toolchainUpdateApplies(true)).toBe(true);
   });
   it('an updating marker counts as in flight only inside its bound; other phases and no marker never do', () => {
     expect(refreshInProgress(state(), T('2026-10-06T10:30:00.000Z'))).toBe(true);

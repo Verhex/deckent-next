@@ -16,8 +16,8 @@ export function refreshTriggerAllowed(policy: ToolchainRefreshPolicy, trigger: T
   return trigger === 'startup' ? policy.atStartup : policy.intervalMs > 0;
 }
 
-/** Whether `toolchains update` builds without `--apply`: only the autonomous mode does; an explicit flag always decides when given. */
-export const toolchainUpdateApplies = (mode: ToolchainRefreshPolicy['mode'], flag?: boolean): boolean => mode === 'auto' || flag === true;
+/** A manual `toolchains update` (CLI, MCP, SDK) builds only with an explicit apply flag, whatever the mode; the service's autonomous refresh passes it itself and is gated by `mode=auto`. */
+export const toolchainUpdateApplies = (flag?: boolean): boolean => flag === true;
 /** The interval the service's periodic check sleeps, 0 when the policy does not allow an interval refresh. */
 export const refreshIntervalMs = (policy: ToolchainRefreshPolicy): number => refreshTriggerAllowed(policy, 'interval') ? policy.intervalMs : 0;
 /** Audit record file name of one refresh attempt (one file per start instant and trigger; written exclusively). */

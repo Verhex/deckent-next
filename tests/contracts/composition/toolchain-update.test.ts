@@ -105,13 +105,16 @@ describe.skipIf(process.platform !== 'linux')('policy-driven toolchain update', 
     // A second apply for the same day refuses to reuse the taken context.
     await expect(updateToolchains(f.project, { apply: true }, f.options, { fetcher: f.fetcher, runner: f.runner, now: () => '2026-09-23T08:10:00.000Z' })).rejects.toMatchObject({ code: 'WORKER_IMAGE_CONTEXT_EXISTS' });
   });
-  it('auto builds without a flag, fresh toolchains yield no-change, and the CLI command renders the decision', async () => {
+  it('auto without a flag only plans (manual command), fresh toolchains yield no-change, and the CLI command renders the decision', async () => {
     const f = await fixture({ mode: 'auto' });
     f.latest['@openai/codex'] = '0.155.1';
     expect(await updateToolchains(f.project, {}, f.options, { fetcher: f.fetcher, runner: f.runner })).toMatchObject({ decision: 'no-change', planPath: null });
     f.latest['@openai/codex'] = '0.157.0';
     const built = await updateToolchains(f.project, {}, f.options, { fetcher: f.fetcher, runner: f.runner, now: () => '2026-09-24T08:00:00.000Z' });
-    expect(built).toMatchObject({ mode: 'auto', decision: 'built', plan: { next: { imageVersion: 'r5-20260924' } } });
+    expect(built).toMatchObject({ mode: 'auto', decision: 'planned', build: null, proposal: null, plan: { next: { imageVersion: 'r5-20260924' } } });
+    expect(f.runs).toEqual([]); // the default config + no flag never builds
+    const applied = await updateToolchains(f.project, { apply: true }, f.options, { fetcher: f.fetcher, runner: f.runner, now: () => '2026-09-24T08:05:00.000Z' });
+    expect(applied).toMatchObject({ decision: 'built' }); expect(f.runs).toHaveLength(1);
     const lines: string[] = [];
     await toolchainsCommand(['toolchains', 'update', '--json'], { root: f.project, env: f.options.env, stdout: { write: (text: string) => { lines.push(text); return true; } },
       updateToolchains: async () => ({ decision: 'planned', plan: { next: { imageVersion: 'r5-20260924' } }, build: null, proposalPath: null }) });

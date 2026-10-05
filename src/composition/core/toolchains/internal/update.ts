@@ -33,7 +33,7 @@ export async function updateConfiguredToolchains(projectRoot: string, input: Rea
   const plan = planToolchainUpdate({ report, recipe: sources.recipe, plannedAt, affectedProfiles: affectedToolchainProfiles(config) });
   if (plan.decision === 'no-change') return Object.freeze({ schemaVersion: 1, mode: policy.mode, decision: 'no-change', plan, planPath: null, build: null, proposal: null, proposalPath: null });
   const env = Object.fromEntries(Object.entries(options.env ?? process.env).filter((entry): entry is [string, string] => typeof entry[1] === 'string'));
-  const apply = toolchainUpdateApplies(policy.mode, input.apply);
+  const apply = toolchainUpdateApplies(input.apply);
   if (apply) await assertWorkerImageVersionAvailable({ packageRoot: root, imageVersion: plan.next!.imageVersion,
     timeoutMs: policy.buildTimeoutMs, outputBytes: policy.outputBytes, env }, dependencies.runner);
   const home = join(await prepareProductDirectory(config.productLayout, 'workspaces'), 'toolchains');
