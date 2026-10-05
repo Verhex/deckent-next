@@ -186,14 +186,15 @@ it('keeps the history and sends nothing when the summary call fails, and does no
   expect(calls).toBe(0);
 });
 
-it('plans compaction without ever keeping a tool result apart from its call, and renders long user messages cut with a digest', () => {
+it('plans compaction without ever keeping a tool result apart from its call, and preserves long user messages without shortening directives', () => {
   const call = { id: 'c', name: 'grep', argumentsJson: '{}' };
   const history = [{ role: 'system' as const, content: 'S' }, { role: 'user' as const, content: 'u'.repeat(5000) },
     { role: 'assistant' as const, content: '', toolCalls: [call] }, ...Array.from({ length: 8 }, () => ({ role: 'tool' as const, toolCallId: 'c', name: 'grep', content: 'r' }))];
   const plan = planAgentCompaction(history)!;
   expect(plan.tail[0]).toMatchObject({ role: 'assistant' }); expect(plan.older).toEqual([history[1]]);
   const rendered = renderAgentCompaction(plan, { objective: 'o', findings: [], decisions: [], unresolved: [], nextActions: [], inspectedAreas: [] });
-  expect(rendered.content).toMatch(/1\. u{4000} …\[cut: 5000 characters, sha256 [0-9a-f]{16}\]/);
+  expect(rendered.content).toContain(`1. ${'u'.repeat(5000)}`);
+  expect(rendered.content).not.toContain('[cut: 5000');
   expect(planAgentCompaction(history.slice(0, 3))).toBeNull();
 });
 
@@ -480,7 +481,7 @@ it('names the running model from its catalog reference and tells the model that 
   const layout = resolveProductLayout({ projectRoot: '/p', root: '/p/.deckent/live-data' });
   const prompt = renderAgentTurnSystemPrompt({ projectRoot: '/p', layout, tools: [readFile],
     model: { providerId: 'vllm-local', providerVersion: 2, modelId: 'qwen', modelVersion: 3, nativeId: 'Qwen/Qwen3-Coder' }, language: 'en' });
-  expect(AGENT_TURN_SYSTEM_PROMPT_VERSION).toBe(7); expect(prompt.startsWith('[Deckent runtime instructions v7]')).toBe(true);
+  expect(AGENT_TURN_SYSTEM_PROMPT_VERSION).toBe(8); expect(prompt.startsWith('[Deckent runtime instructions v8]')).toBe(true);
   expect(prompt).toContain('- Model: you are Qwen/Qwen3-Coder (Deckent catalog: provider vllm-local v2, model qwen v3), running inside Deckent.');
   expect(prompt).toMatch(/When asked who or which model you are, answer with this/);
   expect(prompt).toMatch(/ledger, saved conversations and history, logs, the runtime socket, approvals[^\n]*are protected/);
@@ -523,10 +524,10 @@ it('states the shell posture it is given, separately from fetch_url (v6)', () =>
   const render = (posture: Parameters<typeof renderAgentTurnSystemPrompt>[0]['shell'], fetch = false) => renderAgentTurnSystemPrompt({ projectRoot: '/p', layout,
     tools: [readFile, shell], model, language: 'en', shell: posture, ...(fetch ? { network: { allowedHosts: ['docs.example'], others: 'refused' as const } } : {}) });
   const shellLine = (prompt: string) => prompt.split('\n').find(line => line.startsWith('- Shell tool: run_shell.'))!;
-  expect(AGENT_TURN_SYSTEM_PROMPT_VERSION).toBe(7);
+  expect(AGENT_TURN_SYSTEM_PROMPT_VERSION).toBe(8);
 
   const open = render({ kind: 'sandbox', realm: 'bubblewrap', open: true, configuration: 'owner-approved' });
-  expect(open.startsWith('[Deckent runtime instructions v7]')).toBe(true);
+  expect(open.startsWith('[Deckent runtime instructions v8]')).toBe(true);
   expect(shellLine(open)).toBe('- Shell tool: run_shell. It runs in the project root in an open bubblewrap sandbox (full access): shell commands have network access'
     + ' (for example curl, git fetch, npm install), your real home directory (HOME) is visible and writable, and the project and its .git are writable.'
     + ' Deckent\'s own state, policy and credential files stay sealed: they are hidden or read-only, and a write to them fails. Its configuration file is'
