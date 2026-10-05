@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "baseUrl": "http://127.0.0.1:18080",
+  "model": "Qwen3.8-27B-INT4-W4A16",
+  "journalRoot": "../../.deckent/host/qwen-decisions",
+  "authFile": "../../.deckent/host/qwen-decision-api-token",
+  "port": 18081,
+  "timeoutMs": 30000,
+  "maxRequestBytes": 65536,
+  "maxResponseBytes": 131072,
+  "maxQuestions": 12,
+  "maxOptions": 10,
+  "minCodeMass": 0.8
+}

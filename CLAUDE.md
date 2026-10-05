@@ -56,4 +56,5 @@
 - Owner 2026-10-05: CI green first in one lane, then frozen current-closure landing; no new preparation/analysis lanes until both land.
 - Review once per batch before landing; do not review preparation, plans or documents separately. At most one correction round, then logged Jev selection >=0.90 decides; below that ask owner.
 - Current-closure changes reopen only for real P0/P1. After these land, use 4–6 parallel product-author lanes, with no more review lanes than author lanes.
+- Owner 2026-10-05: Qwen development-host tool uses separate source/docs commits and a PR; Astra review is exempt for this host-tool delivery only. Model-quality/HF publication acceptance stays separate.
 - Never fabricate independent review or treat Jev/self-review as independent PASS.
