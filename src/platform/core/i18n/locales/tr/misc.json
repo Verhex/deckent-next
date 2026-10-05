@@ -582,6 +582,7 @@
   "cli.runtime.toolchainRefreshStarted": "Worker imajı güncellemesi arka planda başladı; yeni imaj hazır olana kadar Run'lar mevcut imajı kullanır.",
   "cli.runtime.toolchainRefreshFailed": "Worker imajı yenilemesi başarısız ({code}); önceki imaj kullanılmaya devam eder, sonraki denetim yeniden dener.",
   "cli.runtime.toolchainRefreshUpdated": "Worker imajı {version} sürümüne güncellendi; {count} profil revizyonu yalnız yeni Run'lara uygulanır.",
+  "cli.runtime.toolchainRefreshUnverified": "Worker imajı güncelliği doğrulanamadı ({code}); mevcut imaj kullanılmaya devam eder, sonraki denetim yeniden dener.",
   "cli.runtime.toolchainRefreshCurrent": "Worker imajı güncel.",
   "doctor.imageRefresh": "Worker imajı: {status}",
   "doctor.imageRefresh.updating": "arka planda güncelleniyor; Run'lar mevcut imajı kullanıyor",

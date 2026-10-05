@@ -2,12 +2,12 @@ import { setTimeout as wait } from 'node:timers/promises';
 import { readFile, mkdir } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { loadConfig, inspectProductDirectory, prepareProductDirectory, writeJsonAtomic, type ConfigLoadOptions } from '#platform/index.js';
-import { refreshAuditName, refreshIntervalMs, refreshInProgress, refreshStatus, refreshTriggerAllowed, toolchainRefreshStateSchema, reviseRegistryForProposal, type ToolchainRefreshState, type ToolchainRefreshTrigger } from '#engine/index.js';
+import { unverifiedReason, refreshAuditName, refreshIntervalMs, refreshInProgress, refreshStatus, refreshTriggerAllowed, toolchainRefreshStateSchema, reviseRegistryForProposal, type ToolchainRefreshState, type ToolchainRefreshTrigger } from '#engine/index.js';
 import { createConfiguredConfigApplication, resolveConfiguredConfigPrincipal } from '#composition/core/config/index.js';
 import { updateConfiguredToolchains, writeArtifact, type ToolchainUpdateDependencies } from './update.js';
 
 /** Typed event of one refresh: `started` when a build was admitted, then exactly one of `current` or `failed` (WORKER-AUTO-REFRESH). */
-export type ToolchainRefreshEvent = Readonly<{ schemaVersion: 1; event: 'toolchain-refresh'; phase: 'started' | 'current' | 'failed'; trigger: ToolchainRefreshTrigger;
+export type ToolchainRefreshEvent = Readonly<{ schemaVersion: 1; event: 'toolchain-refresh'; phase: 'started' | 'current' | 'failed' | 'unverified'; trigger: ToolchainRefreshTrigger;
   imageVersion: string | null; imageId: string | null; appliedProfiles: number; code: string | null }>;
 export interface ToolchainRefreshObserver { onToolchainRefresh?(event: ToolchainRefreshEvent): void | Promise<void> }
 /** Grace added to the build timeout before an `updating` marker stops counting as in flight. */
@@ -38,7 +38,7 @@ export async function isToolchainRefreshInProgress(projectRoot: string, options:
 }
 async function writeState(home: string, state: ToolchainRefreshState) { await mkdir(home, { recursive: true, mode: 0o700 }); await writeJsonAtomic(join(home, 'refresh-state.json'), state); }
 
-export type ToolchainRefreshOutcome = Readonly<{ outcome: 'skipped' | 'current' | 'failed'; event: ToolchainRefreshEvent | null }>;
+export type ToolchainRefreshOutcome = Readonly<{ outcome: 'skipped' | 'current' | 'failed' | 'unverified'; event: ToolchainRefreshEvent | null }>;
 export interface ToolchainRefreshDependencies extends ToolchainUpdateDependencies { readonly signal?: AbortSignal; readonly now?: () => string }
 /**
  * One refresh: policy gate, durable `updating` marker, the existing update path with apply (plan, daemon preflight, build, receipt, proposal),
@@ -58,7 +58,8 @@ async function runRefresh(projectRoot: string, trigger: ToolchainRefreshTrigger,
   dependencies: ToolchainRefreshDependencies, observer: ToolchainRefreshObserver): Promise<ToolchainRefreshOutcome> {
   const { config, home } = await toolchainHome(projectRoot, options);
   const policy = config.toolchains.update;
-  if (!refreshTriggerAllowed(policy, trigger)) return Object.freeze({ outcome: 'skipped', event: null });
+  // A worker image matters only to an installation that runs workers in Docker; any other install is never touched by the refresh.
+  if (!refreshTriggerAllowed(policy, trigger) || !config.execution?.docker) return Object.freeze({ outcome: 'skipped', event: null });
   const now = dependencies.now ?? (() => new Date().toISOString()); const startedAt = now();
   const base = { schemaVersion: 1 as const, trigger, startedAt, expiresAt: new Date(Date.parse(startedAt) + policy.buildTimeoutMs + MARKER_GRACE_MS).toISOString() };
   const emit = async (phase: ToolchainRefreshEvent['phase'], extra: Partial<ToolchainRefreshEvent> = {}) => {
@@ -66,11 +67,13 @@ async function runRefresh(projectRoot: string, trigger: ToolchainRefreshTrigger,
     try { await observer.onToolchainRefresh?.(event); } catch { /* an observer never settles or fails a refresh */ }
     return event;
   };
-  await writeState(home, { ...base, phase: 'updating', finishedAt: null, imageVersion: null, imageId: null, staleProviders: [], appliedProfiles: 0, reason: null });
   let result: Awaited<ReturnType<typeof updateConfiguredToolchains>> | null = null; let applied = 0; let configWrite: unknown = null; let code: string | null = null;
   try {
-    await emit('started');
-    result = await updateConfiguredToolchains(projectRoot, { apply: true }, options, dependencies);
+    // The `updating` marker (what admission and the surfaces read) exists only once a build is certain, never during the currency check itself.
+    result = await updateConfiguredToolchains(projectRoot, { apply: true }, options, { ...dependencies, onBuild: async plan => {
+      await writeState(home, { ...base, phase: 'updating', finishedAt: null, imageVersion: plan.next?.imageVersion ?? null, imageId: null, staleProviders: plan.staleProviders, appliedProfiles: 0, reason: null });
+      await emit('started', { imageVersion: plan.next?.imageVersion ?? null }); await dependencies.onBuild?.(plan);
+    } });
     if (result.decision === 'built' && result.proposal) {
       if (dependencies.signal?.aborted) throw Object.assign(new Error('REFRESH_STOPPED'), { code: 'REFRESH_STOPPED' });
       // The registry is re-read after the long build, so an edit made meanwhile is revised, never overwritten by the pre-build copy.
@@ -89,12 +92,14 @@ async function runRefresh(projectRoot: string, trigger: ToolchainRefreshTrigger,
   } catch (error) { code = failureCode(error); }
   const finishedAt = now();
   const imageId = result?.build?.imageId ?? null, imageVersion = result?.plan?.next?.imageVersion ?? null;
-  const state: ToolchainRefreshState = { ...base, phase: code ? 'failed' : 'current', finishedAt, imageVersion, imageId, staleProviders: result?.plan?.staleProviders ?? [], appliedProfiles: applied, reason: code };
+  const unverified = code ? null : result?.plan ? unverifiedReason(result.plan.report) : null;
+  const state: ToolchainRefreshState = { ...base, phase: code ? 'failed' : unverified ? 'unverified' : 'current', reason: code ?? unverified, finishedAt, imageVersion, imageId, staleProviders: result?.plan?.staleProviders ?? [], appliedProfiles: applied };
   try { await writeState(home, state); } catch { /* the audit record below still states the outcome */ }
   try { await writeArtifact(join(home, 'refreshes'), refreshAuditName(startedAt, trigger), { schemaVersion: 1, kind: 'toolchain-refresh-audit', state, decision: result?.decision ?? null,
     planPath: result?.planPath ?? null, receiptPath: result?.build?.receiptPath ?? null, proposalPath: result?.proposalPath ?? null, configWrite }); } catch { /* idempotent per millisecond; never fails the refresh */ }
-  const event = await emit(code ? 'failed' : 'current', { imageVersion, imageId, appliedProfiles: applied, code });
-  return Object.freeze({ outcome: code ? 'failed' : 'current', event });
+  const phase = code ? 'failed' : unverified ? 'unverified' : 'current';
+  const event = await emit(phase, { imageVersion, imageId, appliedProfiles: applied, code: code ?? unverified });
+  return Object.freeze({ outcome: phase, event });
 }
 
 export interface ToolchainRefreshHandle { readonly done: Promise<void> }

@@ -28,7 +28,8 @@ async function fixture(update: Record<string, unknown> = {}) {
   const profiles = [nativeProfile('codex-pinned', 'codex', 'codex-cli 0.155.1'), nativeProfile('claude-pinned', 'claude', '2.1.278 (Claude Code)')];
   const path = join(root, '.deckent/config.json'); await mkdir(join(root, '.deckent'), { recursive: true });
   const existing = (() => { try { return {}; } catch { return {}; } })();
-  await writeFile(path, JSON.stringify({ ...existing, service: { identity: { scopeId: 'installation', serviceId: 'refresh-service' } }, toolchains: { currency: { registryEndpoint: 'http://127.0.0.1:1' }, update },
+  await writeFile(path, JSON.stringify({ ...existing, execution: { docker: { executable: 'docker', imageId: 'sha256:' + 'a'.repeat(64), memoryBytes: 2147483648, pids: 128, cpus: 2, logMaxSizeKiB: 1024, logMaxFiles: 2, tmpBytes: 1048576, deadlineMs: 60000, controlTimeoutMs: 5000, outputBytes: 65536 }, git: { gitExecutable: 'git', timeoutMs: 5000 } },
+    service: { identity: { scopeId: 'installation', serviceId: 'refresh-service' } }, toolchains: { currency: { registryEndpoint: 'http://127.0.0.1:1' }, update },
     admission: { poolId: 'p', executionSlots: 1, inFlightSlots: 1, ordering: 'input-order', registry: { schemaVersion: 1, revision: 'r', profiles,
       kinds: profiles.map(profile => ({ kind: profile.id, profile: { id: profile.id, version: profile.version } })), evaluators: [{ id: 'process-exit', version: 1, implementation: { id: 'process-exit', version: 1 } }] } } }));
   const latest: Record<string, string> = { '@openai/codex': '0.156.0', '@anthropic-ai/claude-code': '2.1.278' };

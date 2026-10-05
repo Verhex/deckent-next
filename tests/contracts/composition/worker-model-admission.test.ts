@@ -7,7 +7,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { applyModelCatalog, createConfiguredRuntimeClient, createRun, inspectRun, reserveRunTasks, startConfiguredRuntimeService } from '../../../src/index.js';
 import { compileNativeCodingDockerProfile } from '#adapters/index.js';
 import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
-import { clearConfigCache } from '#platform/index.js';
+import { clearConfigCache, loadConfig, prepareProductDirectory } from '#platform/index.js';
 import { seedCatalog, SEED_CHANNEL } from '../support/model-catalog.js';
 
 const roots: string[] = [];
@@ -243,6 +243,30 @@ describe.skipIf(process.platform === 'win32')('WORKER-CURRENCY-1 review fixes (A
       }
       expect(f.runs()).toBe(0); expect(f.count('run_receipts')).toBe(0);
     } finally { await service.stop(); await service.done; }
+  });
+  it('WORKER-AUTO-REFRESH: a stale CLI pin is admitted with a typed warning only while a refresh is in flight; without one the refusal is unchanged', async () => {
+    const f = await seeded();
+    const home = join(await prepareProductDirectory((await loadConfig(f.project, f.options)).productLayout, 'workspaces'), 'toolchains'); await mkdir(home, { recursive: true });
+    const marker = (phase: string, expiresAt: string) => writeFile(join(home, 'refresh-state.json'), JSON.stringify({ schemaVersion: 1, phase, trigger: 'startup', startedAt: new Date().toISOString(),
+      finishedAt: phase === 'updating' ? null : new Date().toISOString(), expiresAt, imageVersion: null, imageId: null, staleProviders: ['claude'], appliedProfiles: 0, reason: phase === 'failed' ? 'WORKER_IMAGE_BUILD_FAILED' : null }));
+    const future = new Date(Date.now() + 600_000).toISOString(), past = new Date(Date.now() - 1000).toISOString();
+    // No marker: refused exactly as before.
+    await expect(createRun(f.project, run('no-marker', 'sonnet-r3-cli'), f.options)).rejects.toMatchObject({ code: 'WORKER_MODEL_CLI_TOO_OLD' });
+    // Updating inside its bound: admitted on the current image with the warning (and an ordinary Run carries none).
+    await marker('updating', future); clearConfigCache();
+    const warned = await createRun(f.project, run('while-updating', 'sonnet-r3-cli'), f.options);
+    expect(warned.admission.run.runId).toBe('while-updating');
+    expect(warned.warnings).toEqual([expect.objectContaining({ code: 'WORKER_IMAGE_REFRESHING', modelId: 'claude-sonnet-5-5', minCliVersion: '2.1.284' })]);
+    expect((await createRun(f.project, run('while-updating-ok', 'sonnet'), f.options)).warnings).toEqual([]);
+    expect(f.runs()).toBe(2);
+    // Other refusals are never softened by a running refresh.
+    await expect(createRun(f.project, run('alias-while-updating', 'cli-alias'), f.options)).rejects.toMatchObject({ code: 'WORKER_MODEL_ALIAS_REFUSED' });
+    // A failed refresh, a finished one and an expired marker give no allowance.
+    for (const [phase, expiresAt] of [['failed', future], ['current', future], ['updating', past]] as const) {
+      await marker(phase, expiresAt);
+      await expect(createRun(f.project, run(`after-${phase}-${expiresAt === past ? 'expired' : 'live'}`, 'sonnet-r3-cli'), f.options)).rejects.toMatchObject({ code: 'WORKER_MODEL_CLI_TOO_OLD' });
+    }
+    expect(f.runs()).toBe(2);
   });
 });
 

@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { identitySchema, executionRegistrySchema, type ExecutionRegistry, type JsonValue } from '#domain/index.js';
 import type { ProfileRevisionProposal } from './update.js';
+import type { ToolchainCurrencyReport } from './contract.js';
 
 /**
  * WORKER-AUTO-REFRESH (owner 2026-10-06 K2): pure policy of the autonomous worker image refresh. The composition owns the clock, the
@@ -25,7 +26,7 @@ export const refreshAuditName = (startedAt: string, trigger: ToolchainRefreshTri
 const isoTime = z.string().datetime();
 const imageDigest = z.string().regex(/^sha256:[a-f0-9]{64}$/);
 /** The durable refresh marker. `expiresAt` bounds an `updating` marker (build timeout plus a grace): a crashed process never masks a refusal for good. */
-export const toolchainRefreshStateSchema = z.object({ schemaVersion: z.literal(1), phase: z.enum(['updating', 'current', 'failed']),
+export const toolchainRefreshStateSchema = z.object({ schemaVersion: z.literal(1), phase: z.enum(['updating', 'current', 'failed', 'unverified']),
   trigger: z.enum(['startup', 'interval']), startedAt: isoTime, finishedAt: isoTime.nullable(), expiresAt: isoTime,
   imageVersion: z.string().nullable(), imageId: imageDigest.nullable(), staleProviders: z.array(identitySchema).readonly(),
   appliedProfiles: z.number().int().min(0).safe(), reason: z.string().max(128).nullable() }).strict().readonly();
@@ -40,9 +41,19 @@ export function refreshInProgress(state: ToolchainRefreshState | null, nowMs: nu
 export function refreshStatus(state: ToolchainRefreshState | null, nowMs: number): Readonly<{ status: ToolchainRefreshStatus; reason: string | null }> {
   if (state === null) return Object.freeze({ status: 'unknown', reason: null });
   if (state.phase === 'updating') return refreshInProgress(state, nowMs) ? Object.freeze({ status: 'updating', reason: null }) : Object.freeze({ status: 'failed', reason: 'REFRESH_EXPIRED' });
-  return Object.freeze({ status: state.phase, reason: state.reason });
+  return state.phase === 'unverified' ? Object.freeze({ status: 'unknown', reason: state.reason }) : Object.freeze({ status: state.phase, reason: state.reason });
 }
 
+/** `current` is claimed only when every admitted provider could be compared; otherwise the check is `unverified` with the first typed reason. */
+export function unverifiedReason(report: ToolchainCurrencyReport): string | null {
+  for (const entry of report.providers) {
+    if (!entry.admitted.length) continue;
+    if (entry.status === 'unknown-offline') return entry.reason ?? 'CURRENCY_UNKNOWN_OFFLINE';
+    if (entry.status === 'unparsed') return 'CURRENCY_UNPARSED';
+    if (entry.status === 'disabled') return 'CURRENCY_DISABLED';
+  }
+  return null;
+}
 const baseRevision = (revision: string) => revision.split('@')[0]!;
 const asRecord = (value: unknown): Record<string, JsonValue> | null => value !== null && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, JsonValue> : null;
 /** Rewrites the image id and CLI pin of one profile in place of a clone: a prepared native profile (`parameters.imageId`, preflight pin) or a coding template (`docker.imageId`, invocation pin). */

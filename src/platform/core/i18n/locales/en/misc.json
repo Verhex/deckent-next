@@ -582,6 +582,7 @@
   "cli.runtime.toolchainRefreshStarted": "Worker image update started in the background; Runs keep the current image until the new one is ready.",
   "cli.runtime.toolchainRefreshFailed": "Worker image refresh failed ({code}); the previous image stays in use and the next check retries.",
   "cli.runtime.toolchainRefreshUpdated": "Worker image updated to {version}; {count} profile revision(s) apply to new Runs only.",
+  "cli.runtime.toolchainRefreshUnverified": "Worker image currency could not be verified ({code}); the current image stays in use and the next check retries.",
   "cli.runtime.toolchainRefreshCurrent": "Worker image is current.",
   "doctor.imageRefresh": "Worker image: {status}",
   "doctor.imageRefresh.updating": "being updated in the background; Runs use the current image",

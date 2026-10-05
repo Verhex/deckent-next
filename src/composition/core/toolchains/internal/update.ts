@@ -10,7 +10,9 @@ const packageRoot = fileURLToPath(new URL('../../../../../', import.meta.url));
 export type ToolchainUpdateResult = Readonly<{ schemaVersion: 1; mode: string; decision: 'disabled' | 'no-change' | 'planned' | 'built';
   plan: ToolchainUpdatePlan | null; planPath: string | null; build: Readonly<{ context: string; receiptPath: string; imageId: string; tag: string | null }> | null;
   proposal: ProfileRevisionProposal | null; proposalPath: string | null }>;
-export interface ToolchainUpdateDependencies { readonly fetcher?: NpmLatestVersionFetcher; readonly runner?: WorkerImageBuildRunner; readonly packageRoot?: string; readonly now?: () => string }
+export interface ToolchainUpdateDependencies { readonly fetcher?: NpmLatestVersionFetcher; readonly runner?: WorkerImageBuildRunner; readonly packageRoot?: string; readonly now?: () => string;
+  /** Called once a build is certain (plan written, daemon preflight passed), before its context is created: the refresh's durable `updating` marker. */
+  readonly onBuild?: (plan: ToolchainUpdatePlan) => void | Promise<void> }
 export async function writeArtifact(directory: string, name: string, value: unknown) {
   await mkdir(directory, { recursive: true, mode: 0o700 });
   const path = join(directory, name);
@@ -37,6 +39,7 @@ export async function updateConfiguredToolchains(projectRoot: string, input: Rea
   const home = join(await prepareProductDirectory(config.productLayout, 'workspaces'), 'toolchains');
   const planPath = await writeArtifact(join(home, 'plans'), `${plan.next!.imageVersion}-${plannedAt.replace(/[:.]/g, '-')}.json`, plan);
   if (!apply) return Object.freeze({ schemaVersion: 1, mode: policy.mode, decision: 'planned', plan, planPath, build: null, proposal: null, proposalPath: null });
+  await dependencies.onBuild?.(plan);
   const prepared = await prepareWorkerImageBuildContext({ packageRoot: root, parent: join(home, 'builds'), imageVersion: plan.next!.imageVersion,
     dockerfile: insertHistoryLine(sources.dockerfile, plan.next!.historyLine), recipe: plan.next!.recipe });
   await mkdir(join(home, 'receipts'), { recursive: true, mode: 0o700 });

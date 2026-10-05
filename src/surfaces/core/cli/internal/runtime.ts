@@ -19,7 +19,7 @@ export interface RuntimeServiceObserver {
   onError(command: CancellationRecoveryCommand, error: { readonly code: string }): void | Promise<void>;
   onLedgerUpgraded?(upgrade: Readonly<{ from: number; to: number; backupPath: string }>): void | Promise<void>;
   onToolCallApprovalsExpired?(result: Readonly<{ expired: number; failed: number; keyUnavailable: boolean }>): void | Promise<void>;
-  onToolchainRefresh?(event: Readonly<{ phase: 'started' | 'current' | 'failed'; imageVersion: string | null; imageId: string | null; appliedProfiles: number; code: string | null }>): void | Promise<void>;
+  onToolchainRefresh?(event: Readonly<{ phase: 'started' | 'current' | 'failed' | 'unverified'; imageVersion: string | null; imageId: string | null; appliedProfiles: number; code: string | null }>): void | Promise<void>;
 }
 export type RuntimeServiceStartHandler = (root: string, observer: RuntimeServiceObserver, options: ConfigLoadOptions) => Promise<RuntimeServiceHost>;
 export type RuntimeServiceDescribeHandler = (root: string, options: ConfigLoadOptions) => Promise<RuntimeServiceDescriptor>;
@@ -112,6 +112,7 @@ export async function runtimeCommand(argv: readonly string[], context: CommandCo
     onToolchainRefresh: async event => { output({ ...event },
       () => event.phase === 'started' ? t('cli.runtime.toolchainRefreshStarted', {}, locale)
         : event.phase === 'failed' ? t('cli.runtime.toolchainRefreshFailed', { code: event.code ?? 'UNKNOWN' }, locale)
+        : event.phase === 'unverified' ? t('cli.runtime.toolchainRefreshUnverified', { code: event.code ?? 'UNKNOWN' }, locale)
         : event.imageId ? t('cli.runtime.toolchainRefreshUpdated', { version: event.imageVersion ?? '-', count: event.appliedProfiles }, locale)
         : t('cli.runtime.toolchainRefreshCurrent', {}, locale), event.phase === 'failed' ? 'error' : 'info'); },
     onToolCallApprovalsExpired: async result => { output({ schemaVersion: 1, event: 'tool-call-approvals-expired', ...result },
