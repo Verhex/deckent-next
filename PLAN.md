@@ -1,5 +1,7 @@
 # Deckent Next — ana plan
 
+**Owner 2026-10-05 — CI-first landing:** Sol main yürütme yetkisini taşır; kanal2334 ters yorumu geçersiz. Önce tek CI lane, tek bağımsız landing review ve hosted6/6; ardından frozen current-closure e0f0aaad (tek51dosya724/724, finalSOURCE/DOC/EXEC PASS) CI üstüne PR. Hazırlık/plan/belge ayrı incelenmez; batch birreview/ençokbir düzeltme, sonrası loggedJev seçim≥0.90 veya ownerkararı. İki landing'e kadar yeni hazırlık/analiz yok; sonrası4–6 ürün author lane, reviewer≤author. DOGFOOD OFF/live switch owner/Claude lane kapalı. CI hedef~3saat, adayPR~5saat; hosted ve landing yerel yeşilden türetilmez.
+
 **MCP-NO-DECIDE (owner 2026-10-02):** MCP'de onay kararı yok (ne `allow` ne `deny`); B1'in MCP-yalnız-deny istisnası kaldırıldı. 25. partide main'de ve canlıda (`aa58f559`, Sol 2242/2246 kapsamında incelendi). Protokol/ledger değişmedi.
 
 Bu dosya kalıcı ürün kararları, ana iş alanları ve önemli açık bulgular içindir. Küçük iş, iptal,

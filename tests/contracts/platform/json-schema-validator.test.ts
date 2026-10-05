@@ -11,10 +11,19 @@ const refusal = (schema: object | boolean): JsonSchemaRefusalReason | 'compiled'
 };
 const valid = (schema: object | boolean, instance: unknown) => validator.getValidator(schema)(instance).valid;
 const timed = <T>(run: () => T): { value: T; ms: number } => { const start = performance.now(), value = run(); return { value, ms: performance.now() - start }; };
+interface ControlClock { readonly wallNow: () => number; readonly cpuUsage: (previous?: NodeJS.CpuUsage) => NodeJS.CpuUsage }
+function timedControl<T>(run: () => T, clock: ControlClock = {
+  wallNow: () => performance.now(), cpuUsage: previous => process.threadCpuUsage(previous),
+}): { value: T; ms: number; wallMs: number } {
+  const cpuStart = clock.cpuUsage(), wallStart = clock.wallNow(), value = run(), cpu = clock.cpuUsage(cpuStart);
+  return { value, ms: (cpu.user + cpu.system) / 1_000, wallMs: clock.wallNow() - wallStart };
+}
 // CI-FIX-R3: the previous 50/500ms guards were one-machine wall-clock measurements, not portable CPU limits.
 // Independent 5m xorshift iterations take 5.6–6.9ms on the lane host (Node24, 2026-10-03); preserve 6ms as
 // the reference and the old guards as floors. Three samples expose runner slowdown without timing the validator itself.
 // CI-FIX-R4: use their median so one scheduler pause is not mistaken for sustained CPU slowdown.
+// CI-MAIN mac24: measure the independent control's current-thread CPU time, with wall time retained as diagnostics.
+// The validator still has the same wall-time assertions; scheduler waiting cannot increase the CPU-based allowance.
 // The factor is capped at 10: excessive calibration load fails visibly, never grants an unbounded timing allowance.
 function calibrationFactor(samplesMs: readonly number[]): number {
   const factor = Math.max(1, [...samplesMs].sort((a, b) => a - b)[1]! / 6);
@@ -28,12 +37,13 @@ function timingBudget(baseMs: number): number {
     return value;
   };
   expect(control()).toBe(-242512527); // warm the independent control, and make its work observable
-  const samples = Array.from({ length: 3 }, () => timed(control));
+  const samples = Array.from({ length: 3 }, () => timedControl(control));
   for (const sample of samples) expect(sample.value).toBe(-242512527);
   const samplesMs = samples.map(sample => sample.ms), calibrationMs = [...samplesMs].sort((a, b) => a - b)[1]!;
   const rawFactor = Math.max(1, calibrationMs / 6);
   console.info('JSON_SCHEMA_TIMING_CALIBRATION', JSON.stringify({ platform: process.platform, node: process.version,
-    control: 'xorshift32-5000000', estimator: 'median-of-3', samplesMs, calibrationMs, referenceMs: 6, baseMs, factor: rawFactor, budgetMs: baseMs * rawFactor }));
+    control: 'xorshift32-5000000', clock: 'current-thread-cpu', estimator: 'median-of-3', samplesMs,
+    samplesWallMs: samples.map(sample => sample.wallMs), calibrationMs, referenceMs: 6, baseMs, factor: rawFactor, budgetMs: baseMs * rawFactor }));
   return baseMs * calibrationFactor(samplesMs);
 }
 
@@ -43,6 +53,26 @@ it('calibrates the hosted macOS outliers without raising the 6ms reference or 10
   expect(calibrationFactor([60, 60, 60])).toBe(10);
   expect(calibrationFactor([1, 2, 3])).toBe(1);
   expect(() => calibrationFactor([60.001, 60.002, 60.003])).toThrow('JSON_SCHEMA_TIMING_CALIBRATION_OVERLOADED');
+});
+
+it('keeps wall-only control pauses out of the allowance and still refuses genuine CPU overload', () => {
+  const sample = (cpuMs: number, wallMs: number) => {
+    const start = { user: 1_000, system: 2_000 };
+    let wallRead = 0;
+    return timedControl(() => 7, { wallNow: () => wallRead++ === 0 ? 100 : 100 + wallMs,
+      cpuUsage: previous => {
+        if (!previous) return start;
+        expect(previous).toBe(start);
+        return { user: cpuMs * 1_000 - 1_000, system: 1_000 };
+      } });
+  };
+  const samples = [43.166625, 73.246708, 78.515708].map(wallMs => sample(6, wallMs));
+  for (const entry of samples) expect(entry.value).toBe(7);
+  expect(samples.map(entry => entry.ms)).toEqual([6, 6, 6]);
+  expect(calibrationFactor(samples.map(entry => entry.ms))).toBe(1);
+  expect(() => calibrationFactor(samples.map(entry => entry.wallMs))).toThrow('JSON_SCHEMA_TIMING_CALIBRATION_OVERLOADED');
+  expect(() => calibrationFactor([60.001, 60.002, 60.003].map(cpuMs => sample(cpuMs, 100).ms)))
+    .toThrow('JSON_SCHEMA_TIMING_CALIBRATION_OVERLOADED');
 });
 
 // JSON-Schema-Test-Suite @ 5b0ee16 (2026-09-21; the last tag 23.1.0 is from 2023), vendored with its MIT LICENSE and upstream sha256s in
