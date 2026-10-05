@@ -17,6 +17,9 @@ type Action = 'status' | 'session' | 'workline' | 'snapshot' | 'chat-plan';
 interface Parsed { action: Action; json: boolean; help: boolean; fullAccess: boolean; language?: string; scopeId?: string }
 const ACTIONS: readonly Action[] = ['status', 'session', 'workline', 'snapshot', 'chat-plan'];
 const DEFAULT_HISTORY_MESSAGES = 40;
+/** Refusals of the identity write admission that leave the interactive view usable (nothing was created; no authority is implied). */
+const ADMISSION_DEFERRED: ReadonlySet<string> = new Set(['POLICY_UNAVAILABLE', 'POLICY_DENIED', 'SCOPE_UNKNOWN', 'ATTEMPT_STORE_VERSION']);
+const UNADMITTED_CUSTODY_LABEL = 'unadmitted';
 
 function parse(argv: readonly string[]): Parsed {
   // Bare `deckent terminal` (options only) is the interactive terminal, the same as `deckent` with no arguments on a TTY.
@@ -212,7 +215,16 @@ export async function terminalCommand(argv: readonly string[], context: CommandC
   let installationId: string | undefined, projectId: string | undefined;
   if (tty.stdin && tty.stdout) {
     if (!context.ensureTerminalIdentity) throw ErrorRegistry.createError('INSTALLATION_IDENTITY_UNAVAILABLE');
-    ({ installationId, projectId } = await context.ensureTerminalIdentity(root, scopeId, options));
+    try { ({ installationId, projectId } = await context.ensureTerminalIdentity(root, scopeId, options)); }
+    catch (error) {
+      // Identity integrity refusals (unsupported, relocated, invalid, locked) stay fatal. A write admission that the trusted policy or a
+      // not-yet-upgraded ledger refuses creates nothing; the view still opens and every governed command meets its own gate (B36 R6).
+      // Existing identities are only read; absent ones get a fixed panel custody label that is never persisted, shown or authority.
+      if (!ADMISSION_DEFERRED.has(String((error as { code?: unknown }).code))) throw error;
+      const observed = await readIdentity();
+      installationId = observed.installation.status === 'available' ? observed.installation.value.installationId : UNADMITTED_CUSTODY_LABEL;
+      projectId = observed.project.status === 'available' ? observed.project.value.projectId : UNADMITTED_CUSTODY_LABEL;
+    }
     if (!installationId) throw ErrorRegistry.createError('INSTALLATION_IDENTITY_UNAVAILABLE');
     if (!projectId) throw ErrorRegistry.createError('PROJECT_IDENTITY_UNAVAILABLE');
   }

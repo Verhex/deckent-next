@@ -51,6 +51,8 @@ const labels = {
 const view = createElement(WorklinePaletteProvider, {
   palette: resolveWorklinePalette('none'),
   children: createElement(WorklineApp, {
+    // O7-A3: the trusted installation/project custody labels come from CLI composition; this in-process fixture supplies fixed ones.
+    context: { installationId: 'fixture-installation', projectId: 'fixture-project', scopeId: 'scope' },
     labels, target: 'scope · model', systemPrompt: 'SYSTEM', historyMessages: 20,
     errorText: (error) => `ERR:${error instanceof Error ? error.message : 'error'}`,
     completeTurn: async () => 'unused',

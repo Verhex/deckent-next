@@ -71,6 +71,23 @@ describe.skipIf(process.platform !== 'linux')('terminal managed identity admissi
       expect(output.join('')).toContain(record.installationId ?? record.projectId);
     }
   });
+  // B36 R6: a fresh project without a trusted policy still opens the interactive terminal (as before ID-1D); the refused write admission
+  // creates no identity metadata and grants nothing — governed commands meet their own POLICY_UNAVAILABLE gate.
+  it('opens the interactive terminal without a policy and creates no identity metadata', async () => {
+    const f = await fixture(), output: string[] = [];
+    await rm(join(f.project, '.deckent/policy.json'));
+    vi.spyOn(process, 'cwd').mockReturnValue(f.project);
+    for (const [key, value] of Object.entries(f.options.env)) vi.stubEnv(key, value);
+    const input = Object.assign(new PassThrough(), { isTTY: true }); input.write('/status\n/exit\n');
+    vi.spyOn(process, 'stdin', 'get').mockReturnValue(input as NodeJS.ReadStream);
+    const screen = Object.assign(new Writable({ write(chunk, _encoding, done) { output.push(String(chunk)); done(); } }), { isTTY: true });
+    vi.spyOn(process, 'stdout', 'get').mockReturnValue(screen as NodeJS.WriteStream);
+    vi.spyOn(process, 'stderr', 'get').mockReturnValue(screen as NodeJS.WriteStream);
+    const code = await composedMain(['terminal', 'session', '--scope', 's', '--lang', 'en']);
+    input.destroy(); expect(code, output.join('')).toBe(0);
+    expect(output.join('')).toContain('not yet created');
+    expect(await readdir(join(f.project, '.deckent'))).toEqual(['config.json']);
+  });
 });
 
 it('refuses unsupported identity capability before policy or project metadata access on any platform', async () => {
