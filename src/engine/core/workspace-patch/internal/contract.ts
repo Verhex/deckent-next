@@ -5,6 +5,10 @@ import { workspaceSourceSchema } from '#engine/core/workspaces/index.js';
 import rules from './rules.json' with { type: 'json' };
 /** Bounded reason for PATCH_LIMIT: which configured budget or Git output bound was exceeded. Never carries paths or content. */
 export type WorkspacePatchLimitDetail = 'git-output' | 'git-timeout' | 'time' | 'bytes' | 'entries' | 'depth' | 'path';
+/** Config field an operator changes to raise each PATCH_LIMIT bound (shown in the error text; never a hidden default). */
+export const patchLimitFields: Readonly<Record<WorkspacePatchLimitDetail, string>> = Object.freeze({
+  bytes: 'artifacts.maxBytes', entries: 'artifacts.patchPreview.maxEntries', depth: 'artifacts.patchPreview.maxDepth', path: 'artifacts.patchPreview.maxPathBytes',
+  time: 'execution.git.timeoutMs', 'git-timeout': 'execution.git.timeoutMs', 'git-output': 'execution.git.outputBytes' });
 export class WorkspacePatchError extends Error {
   constructor(readonly code: 'PATCH_INTEGRATION_PENDING' | 'PATCH_UNAVAILABLE' | 'PATCH_UNSAFE' | 'PATCH_LIMIT' | 'PATCH_UNSUPPORTED' | 'PATCH_CONFLICT' | 'PATCH_CORRUPT'
     | 'PATCH_BASE_ADVANCED' | 'PATCH_SCOPE_VIOLATION' | 'PATCH_SCOPE_UNDECLARED',

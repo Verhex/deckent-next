@@ -4,7 +4,7 @@ export { AttemptCustodyReleaseApplication, sweepAttemptCustodyScopes } from './i
 export type { AttemptCustodyOutcome, AttemptCustodyHoldReason, AttemptCustodyRetention, AttemptCustodySweep, AttemptCustodySweepEntry, AttemptWorkspaceCustody, AttemptCustodyPorts } from './internal/custody.js';
 export { classifyPatchScope, assertPatchScope, PATCH_SCOPE_MATCHER, PATCH_SCOPE_ERROR_PATHS } from './internal/scope.js';
 export type { PatchScope, PatchScopeMode } from './internal/scope.js';
-export { workspacePatchSchema, patchPathSchema, patchFile, patchDigest, patchExclusions, isPatchExcluded, WorkspacePatchError } from './internal/contract.js';
+export { workspacePatchSchema, patchPathSchema, patchFile, patchDigest, patchExclusions, isPatchExcluded, patchLimitFields, WorkspacePatchError } from './internal/contract.js';
 export type { WorkspacePatch, PatchFile, PatchLimits } from './internal/contract.js';
 export { WorkspaceIntegrationApplication, integrationCommandSchema, integrationIntentSchema, integrationManifestSchema } from './internal/integration.js';
 export type { IntegrationCommand, IntegrationIntent, IntegrationManifest, IntegrationRecord, IntegrationStore, IntegrationTarget, IntegrationObservation } from './internal/integration.js';

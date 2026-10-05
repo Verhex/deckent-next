@@ -4,6 +4,19 @@ import { DeckentError, type ErrorCategory } from './error.js';
 export interface ErrorEntry { readonly message: string; readonly suggestion?: string; readonly whatHappened?: string; readonly why?: string; readonly howToFix?: readonly string[] }
 /** MCP_SANDBOX_COMMAND_UNREACHABLE (MCP-SANDBOX-PATHS): one catalog sentence per diagnosis kind (params name, kind, role, path, target
  * ('' = none), runner); `{targetSuffix}` is ' -> <target>' when the link target differs, the role is its own localized label. */
+/** PATCH_LIMIT names the exceeded bound (params detail, observed, limit, field); an unknown or absent detail keeps the generic sentence. */
+function patchLimit(p: Params, l: Locale): string {
+  switch (p['detail']) {
+    case 'bytes': return t('error.PATCH_LIMIT.bytes', p, l);
+    case 'entries': return t('error.PATCH_LIMIT.entries', p, l);
+    case 'depth': return t('error.PATCH_LIMIT.depth', p, l);
+    case 'path': return t('error.PATCH_LIMIT.path', p, l);
+    case 'time': return t('error.PATCH_LIMIT.time', p, l);
+    case 'git-timeout': return t('error.PATCH_LIMIT.gitTimeout', p, l);
+    case 'git-output': return t('error.PATCH_LIMIT.gitOutput', p, l);
+    default: return t('error.PATCH_LIMIT', p, l);
+  }
+}
 function mcpSandboxUnreachable(p: Params, l: Locale): string {
   const name = String(p['name'] ?? '');
   if (p['kind'] === 'path-hidden') {
@@ -292,7 +305,7 @@ const definitions: Readonly<Record<string, Definition>> = Object.freeze({
   ADOPTION_VERIFICATION_CRITERIA_WEAKER: { category: 'error', render: (p, l) => ({ message: t('error.ADOPTION_VERIFICATION_CRITERIA_WEAKER', p, l) }) },
   ADOPTION_VERIFICATION_NOT_CONFIGURED: { category: 'config', render: (p, l) => ({ message: t('error.ADOPTION_VERIFICATION_NOT_CONFIGURED', p, l) }) },
   PATCH_UNSUPPORTED: { category: 'error', render: (p, l) => ({ message: t('error.PATCH_UNSUPPORTED', p, l) }) },
-  PATCH_LIMIT: { category: 'error', render: (p, l) => ({ message: t('error.PATCH_LIMIT', p, l) }) },
+  PATCH_LIMIT: { category: 'error', render: (p, l) => ({ message: patchLimit(p, l) }) },
   PATCH_UNSAFE: { category: 'error', render: (p, l) => ({ message: t('error.PATCH_UNSAFE', p, l) }) },
   WORKER_OBSERVATION_INVALID: { category: 'error', render: (p, l) => ({ message: t('error.WORKER_OBSERVATION_INVALID', p, l) }) },
   WORKER_OBSERVATION_UNAVAILABLE: { category: 'error', render: (p, l) => ({ message: t('error.WORKER_OBSERVATION_UNAVAILABLE', p, l) }) },

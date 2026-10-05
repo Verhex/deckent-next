@@ -11,20 +11,25 @@ export type Snapshot = Map<string, PatchFile>;
 /** Base tree entry from the trusted source repository: identity only, no content read. */
 export type BaseEntry = Readonly<{ mode: PatchFile['mode']; oid: string; size: number }>;
 export type BaseListing = Map<string, BaseEntry>;
+/** Scan bounds (entries, depth, path bytes, time) cover every directory entry; the byte bound covers only content carried into the
+ * patch (changed or added files, base blobs of changed paths) — never the unchanged repository. Each refusal names its limit and value. */
 export class SnapshotBudget {
-  bytes = 0; entries = 0;
+  bytes = 0; entries = 0; readonly started = Date.now();
   constructor(readonly limits: PatchLimits, readonly deadline: number) {}
-  time() { if (Date.now() >= this.deadline) throw new WorkspacePatchError('PATCH_LIMIT', 'time'); }
+  time() { if (Date.now() >= this.deadline) throw new WorkspacePatchError('PATCH_LIMIT', 'time', { observed: Date.now() - this.started, limit: this.deadline - this.started }); }
   path(path: string) {
     this.time();
-    if (path.split('/').length > this.limits.maxDepth) throw new WorkspacePatchError('PATCH_LIMIT', 'depth');
-    if (Buffer.byteLength(path) > this.limits.maxPathBytes) throw new WorkspacePatchError('PATCH_LIMIT', 'path');
+    const depth = path.split('/').length;
+    if (depth > this.limits.maxDepth) throw new WorkspacePatchError('PATCH_LIMIT', 'depth', { observed: depth, limit: this.limits.maxDepth });
+    const bytes = Buffer.byteLength(path);
+    if (bytes > this.limits.maxPathBytes) throw new WorkspacePatchError('PATCH_LIMIT', 'path', { observed: bytes, limit: this.limits.maxPathBytes });
     if (!patchPathSchema.safeParse(path).success) throw new WorkspacePatchError('PATCH_UNSAFE');
   }
-  entry() { this.time(); if (++this.entries > this.limits.maxEntries) throw new WorkspacePatchError('PATCH_LIMIT', 'entries'); }
+  entry() { this.time(); if (++this.entries > this.limits.maxEntries) throw new WorkspacePatchError('PATCH_LIMIT', 'entries', { observed: this.entries, limit: this.limits.maxEntries }); }
   size(size: number) {
     this.time(); this.bytes += size;
-    if (!Number.isSafeInteger(size) || size < 0 || this.bytes > this.limits.maxBytes) throw new WorkspacePatchError('PATCH_LIMIT', 'bytes');
+    if (!Number.isSafeInteger(size) || size < 0) throw new WorkspacePatchError('PATCH_LIMIT', 'bytes');
+    if (this.bytes > this.limits.maxBytes) throw new WorkspacePatchError('PATCH_LIMIT', 'bytes', { observed: this.bytes, limit: this.limits.maxBytes });
   }
 }
 /** Distinguishes an exhausted output/time bound (typed limit) from Git being unavailable or refusing the command. */
@@ -73,11 +78,14 @@ export function gitBlobOid(bytes: Uint8Array, algorithm: 'sha1' | 'sha256'): str
 }
 export const hashAlgorithmOf = (commit: string): 'sha1' | 'sha256' => commit.length === 64 ? 'sha256' : 'sha1';
 /** Paths whose workspace content or mode differs from the base listing, plus additions and removals. Unchanged blobs are never read from Git. */
+/** Entries readWorkspace verified byte-identical (mode and blob id) to a base entry without retaining content: the base oid they matched. */
+const baseIdentical = new WeakMap<PatchFile, string>();
 export function diffAgainstBase(base: BaseListing, after: Snapshot, algorithm: 'sha1' | 'sha256'): string[] {
   const changed = new Set<string>();
   for (const [path, entry] of base) {
     const file = after.get(path);
     if (!file) { changed.add(path); continue; }
+    if (file.mode === entry.mode && baseIdentical.get(file) === entry.oid) continue;
     if (file.mode !== entry.mode || gitBlobOid(Buffer.from(file.text, 'utf8'), algorithm) !== entry.oid) changed.add(path);
   }
   for (const path of after.keys()) if (!base.has(path)) changed.add(path);
@@ -97,7 +105,24 @@ export async function readBaseBlobs(lease: GitWorkspaceLease, options: GitWorksp
   return snapshot;
 }
 /** Linux descriptor-relative traversal; worker metadata is never interpreted by Git on the host. */
-export async function readWorkspace(workspace: string, budget: SnapshotBudget): Promise<Snapshot> {
+export type WorkspaceBase = Readonly<{ listing: BaseListing; algorithm: 'sha1' | 'sha256'; keep?: ReadonlySet<string> }>;
+const CHUNK = 65_536;
+/** Streams a file through the patch digest and the Git blob id without retaining it; the scan budget is checked per chunk. */
+async function hashStreaming(handle: FileHandle, size: number, algorithm: 'sha1' | 'sha256', budget: SnapshotBudget) {
+  const digest = createHash('sha256'), oid = createHash(algorithm).update(`blob ${size}\0`), chunk = Buffer.alloc(Math.min(CHUNK, Math.max(1, size)));
+  let offset = 0;
+  while (offset < size) {
+    budget.time();
+    const read = await handle.read(chunk, 0, Math.min(chunk.length, size - offset), offset);
+    if (!read.bytesRead) break;
+    digest.update(chunk.subarray(0, read.bytesRead)); oid.update(chunk.subarray(0, read.bytesRead)); offset += read.bytesRead;
+  }
+  return { offset, digest: digest.digest('hex'), oid: oid.digest('hex') };
+}
+/** With `base`, files identical to the base are only hashed (streamed, not retained, not charged to the byte budget) and appear as
+ * digest-only entries that `diffAgainstBase` accepts against the same listing; only changed/added files (and `base.keep` paths) are loaded
+ * and charged. Without `base` every file is loaded and charged. */
+export async function readWorkspace(workspace: string, budget: SnapshotBudget, base?: WorkspaceBase): Promise<Snapshot> {
   if (process.platform !== 'linux' || await realpath(workspace) !== workspace) throw new WorkspacePatchError('PATCH_UNSAFE');
   const result: Snapshot = new Map();
   async function visit(directory: FileHandle, prefix: string) {
@@ -115,6 +140,18 @@ export async function readWorkspace(workspace: string, budget: SnapshotBudget): 
         if (before.uid !== process.getuid!()) throw new WorkspacePatchError('PATCH_UNSAFE');
         if (before.isDirectory()) { await visit(handle, path + '/'); continue; }
         if (!before.isFile() || before.nlink !== 1) throw new WorkspacePatchError('PATCH_UNSAFE');
+        const mode = before.mode & 0o111 ? '100755' : '100644';
+        const known = base?.listing.get(path);
+        if (base && known && known.mode === mode && known.size === before.size && !base.keep?.has(path)) {
+          const hashed = await hashStreaming(handle, before.size, base.algorithm, budget);
+          const settled = await handle.stat();
+          if (hashed.offset !== before.size || settled.size !== before.size || settled.mtimeMs !== before.mtimeMs
+            || settled.ctimeMs !== before.ctimeMs || settled.nlink !== 1) throw new WorkspacePatchError('PATCH_CONFLICT');
+          if (hashed.oid === known.oid) {
+            const light: PatchFile = Object.freeze({ mode, text: '', digest: hashed.digest });
+            baseIdentical.set(light, known.oid); result.set(path, light); continue;
+          }
+        }
         budget.size(before.size);
         const bytes = Buffer.alloc(before.size); let offset = 0;
         while (offset < bytes.length) {
@@ -124,7 +161,7 @@ export async function readWorkspace(workspace: string, budget: SnapshotBudget): 
         const after = await handle.stat();
         if (offset !== before.size || after.size !== before.size || after.mtimeMs !== before.mtimeMs
           || after.ctimeMs !== before.ctimeMs || after.nlink !== 1) throw new WorkspacePatchError('PATCH_CONFLICT');
-        result.set(path, patchFile(bytes, before.mode & 0o111 ? '100755' : '100644'));
+        result.set(path, patchFile(bytes, mode));
       } finally { await handle.close(); }
     }
   }

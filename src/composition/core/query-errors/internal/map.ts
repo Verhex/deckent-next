@@ -1,4 +1,4 @@
-import { DecisionApplicationError, SessionAuthenticationError, WorkerObservationError, WorkspacePatchError, WorkspaceAdoptionError } from '#engine/index.js';
+import { DecisionApplicationError, SessionAuthenticationError, WorkerObservationError, WorkspacePatchError, WorkspaceAdoptionError, patchLimitFields } from '#engine/index.js';
 import { DecisionError, ApprovalError, AuditError, EffectError, ModelActivationError, ModelCatalogError, ModelInvocationError } from '#domain/index.js';
 import { ProviderSpendError, ModelInvocationStoreError } from '#engine/index.js';
 import { OpenAiChatHttpError, OpenRouterChatError, OpenRouterPricingError, NativeConnectionError } from '#adapters/index.js';
@@ -16,7 +16,7 @@ import { HandoffError, RunLifecycleError, reservationDiagnosticParams, ServiceSh
 export function queryFailure(error: unknown): DeckentError {
   if (error instanceof DecisionError || error instanceof DecisionApplicationError || error instanceof ApprovalError || error instanceof SessionAuthenticationError
     || error instanceof AuditError || error instanceof WorkerObservationError || error instanceof WorkspaceAdoptionError || error instanceof EffectError) return ErrorRegistry.createError(error.code);
-  if (error instanceof WorkspacePatchError) return ErrorRegistry.createError(error.code, error.detail ? { params: { detail: error.detail } } : error.params ? { params: error.params } : {});
+  if (error instanceof WorkspacePatchError) return ErrorRegistry.createError(error.code, error.detail ? { params: { ...error.params, detail: error.detail, field: patchLimitFields[error.detail] } } : error.params ? { params: error.params } : {});
   if (error instanceof DeckentError) return error;
   if (error instanceof HandoffError) return ErrorRegistry.createError(error.code);
   if (error instanceof NativeConnectionError) return ErrorRegistry.createError(error.code);
