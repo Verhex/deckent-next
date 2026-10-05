@@ -21,6 +21,12 @@ const globalHome = process.env['DECKENT_TEST_GLOBAL_HOME'] ??= mkdtempSync(join(
 // test's afterEach removes the directory (ENOTEMPTY). Every test process gets gc/maintenance off through Git's own environment config (GIT_CONFIG_COUNT,
 // Git >= 2.31; appended after any config the developer already exports). Product git children never see it: they use plumbing only and build an explicit
 // environment (tracked-files, local-git) or drop every GIT_* variable (git-workspace broker); the tests that assert those child environments are unchanged.
+// Per-test bound: 30 s by default. Hosted macOS (3 vCPU) and Windows (4 vCPU) runners finish the heavy migration/process tests in 30–54 s
+// (main run 37285853079), so CI sets DECKENT_TEST_TIMEOUT_MS for those cells; a hang still fails at that bound. Invalid values are refused.
+const testTimeoutRaw = process.env['DECKENT_TEST_TIMEOUT_MS'];
+const testTimeout = testTimeoutRaw === undefined || testTimeoutRaw === '' ? 30_000 : Number(testTimeoutRaw);
+if (!Number.isSafeInteger(testTimeout) || testTimeout < 1_000 || testTimeout > 600_000) throw new Error(`DECKENT_TEST_TIMEOUT_MS must be an integer 1000..600000, got ${testTimeoutRaw}`);
+
 const gitQuiet = { 'gc.auto': '0', 'gc.autoDetach': 'false', 'maintenance.auto': 'false' };
 const gitBase = Number(process.env['GIT_CONFIG_COUNT'] ?? 0) || 0;
 const gitConfigEnv: Record<string, string> = { GIT_CONFIG_COUNT: String(gitBase + Object.keys(gitQuiet).length) };
@@ -35,7 +41,7 @@ export default defineConfig({
     pool: 'forks',
     // Full suite: 4 workers (owner 2026-09-27; measured 10.9 GB peak, 297 s verify). Lanes' targeted runs set VITEST_MAX_FORKS=2.
     maxWorkers: Number(process.env.VITEST_MAX_FORKS ?? 4),
-    testTimeout: 30_000,
+    testTimeout,
     env: { DECKENT_GLOBAL_HOME: globalHome, ...gitConfigEnv, ...temporaryEnv },
     globalSetup: ['./tests/fixtures/global-home-teardown.ts'],
   },

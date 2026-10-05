@@ -166,13 +166,30 @@ describe('provider spending audit application', () => {
     expect(conflict.calls).toMatchObject({ records: 1, storeCloses: 1, readerCloses: 1 });
   });
 
+});
+
+describe('provider spending audit application deadlines', () => {
   it('times out a never-settling page read and closes the acquired reader and store', async () => {
-    const f = harness(); f.reader.readPage = async () => { f.calls.reads++; return new Promise(() => {}); };
-    const app = new ProviderSpendAuditApplication({ async verify() { return principal; } },
-      { async authorize() { return authorization; } }, async () => f.store, async () => f.reader,
-      { pageSize: 10, maxReservations: 10, timeoutMs: 20, maxResultBytes: 64_000 });
-    await expect(app.audit(f.command)).rejects.toThrow('PROVIDER_SPEND_UNAVAILABLE');
-    expect(f.calls).toMatchObject({ reads: 1, records: 0, readerCloses: 1, storeCloses: 1 });
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    try {
+      const f = harness(), entered = deferred<void>(); let elapsed = 0, settled = false;
+      f.reader.readPage = async () => { f.calls.reads++; entered.resolve(); return new Promise(() => {}); };
+      const app = new ProviderSpendAuditApplication({ async verify() { return principal; } },
+        { async authorize() { return authorization; } }, async () => f.store, async () => f.reader,
+        { pageSize: 10, maxReservations: 10, timeoutMs: 20, maxResultBytes: 64_000 }, () => 0, () => elapsed);
+      const pending = app.audit(f.command);
+      void pending.then(() => { settled = true; }, () => { settled = true; });
+      const rejected = expect(pending).rejects.toThrow('PROVIDER_SPEND_UNAVAILABLE');
+      // Enter the intended pending operation before advancing the whole-audit deadline.
+      await entered.promise;
+      elapsed = 19; await vi.advanceTimersByTimeAsync(19);
+      expect(settled).toBe(false);
+      expect(f.calls).toMatchObject({ reads: 1, records: 0, readerCloses: 0, storeCloses: 0 });
+      elapsed = 20; await vi.advanceTimersByTimeAsync(1);
+      expect(settled).toBe(true); await rejected;
+      expect(f.calls).toMatchObject({ reads: 1, records: 0, readerCloses: 1, storeCloses: 1 });
+      expect(vi.getTimerCount()).toBe(0);
+    } finally { vi.useRealTimers(); }
   });
 
   it('honors caller abort while a page read is pending and closes acquired resources', async () => {
@@ -213,21 +230,46 @@ describe('provider spending audit application', () => {
   });
 
   it('does not record when the second authorization remains pending past the deadline', async () => {
-    const f = harness(); let authorizations = 0;
-    const app = new ProviderSpendAuditApplication({ async verify() { return principal; } },
-      { async authorize() { if (++authorizations === 2) return new Promise(() => {}); return authorization; } },
-      async () => f.store, async () => f.reader, { pageSize: 10, maxReservations: 10, timeoutMs: 20, maxResultBytes: 64_000 });
-    await expect(app.audit(f.command)).rejects.toThrow('PROVIDER_SPEND_UNAVAILABLE');
-    expect(authorizations).toBe(2);
-    expect(f.calls).toMatchObject({ reads: 1, records: 0, readerCloses: 1, storeCloses: 1 });
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    try {
+      const f = harness(), entered = deferred<void>(); let authorizations = 0, elapsed = 0, settled = false;
+      const app = new ProviderSpendAuditApplication({ async verify() { return principal; } },
+        { async authorize() { if (++authorizations === 2) { entered.resolve(); return new Promise(() => {}); } return authorization; } },
+        async () => f.store, async () => f.reader, { pageSize: 10, maxReservations: 10, timeoutMs: 20, maxResultBytes: 64_000 }, () => 0, () => elapsed);
+      const pending = app.audit(f.command);
+      void pending.then(() => { settled = true; }, () => { settled = true; });
+      const rejected = expect(pending).rejects.toThrow('PROVIDER_SPEND_UNAVAILABLE');
+      await entered.promise;
+      elapsed = 19; await vi.advanceTimersByTimeAsync(19);
+      expect(settled).toBe(false); expect(authorizations).toBe(2);
+      expect(f.calls).toMatchObject({ reads: 1, records: 0, readerCloses: 0, storeCloses: 0 });
+      elapsed = 20; await vi.advanceTimersByTimeAsync(1);
+      expect(settled).toBe(true); await rejected;
+      expect(authorizations).toBe(2);
+      expect(f.calls).toMatchObject({ reads: 1, records: 0, readerCloses: 1, storeCloses: 1 });
+      expect(vi.getTimerCount()).toBe(0);
+    } finally { vi.useRealTimers(); }
   });
 
   it('times out a never-settling receipt lookup before opening a reader', async () => {
-    const f = harness(); f.store.find = async () => { f.calls.finds++; return new Promise(() => {}); };
-    const app = new ProviderSpendAuditApplication({ async verify() { return principal; } },
-      { async authorize() { return authorization; } }, async () => f.store, async () => f.reader,
-      { pageSize: 10, maxReservations: 10, timeoutMs: 20, maxResultBytes: 64_000 });
-    await expect(app.audit(f.command)).rejects.toThrow('PROVIDER_SPEND_UNAVAILABLE');
-    expect(f.calls).toMatchObject({ finds: 1, readerOpens: 0, records: 0, storeCloses: 1 });
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    try {
+      const f = harness(), entered = deferred<void>(); let elapsed = 0, settled = false;
+      f.store.find = async () => { f.calls.finds++; entered.resolve(); return new Promise(() => {}); };
+      const app = new ProviderSpendAuditApplication({ async verify() { return principal; } },
+        { async authorize() { return authorization; } }, async () => f.store, async () => f.reader,
+        { pageSize: 10, maxReservations: 10, timeoutMs: 20, maxResultBytes: 64_000 }, () => 0, () => elapsed);
+      const pending = app.audit(f.command);
+      void pending.then(() => { settled = true; }, () => { settled = true; });
+      const rejected = expect(pending).rejects.toThrow('PROVIDER_SPEND_UNAVAILABLE');
+      await entered.promise;
+      elapsed = 19; await vi.advanceTimersByTimeAsync(19);
+      expect(settled).toBe(false);
+      expect(f.calls).toMatchObject({ finds: 1, readerOpens: 0, records: 0, storeCloses: 0 });
+      elapsed = 20; await vi.advanceTimersByTimeAsync(1);
+      expect(settled).toBe(true); await rejected;
+      expect(f.calls).toMatchObject({ finds: 1, readerOpens: 0, records: 0, storeCloses: 1 });
+      expect(vi.getTimerCount()).toBe(0);
+    } finally { vi.useRealTimers(); }
   });
 });
