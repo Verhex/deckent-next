@@ -2,7 +2,7 @@ export { registerProviderConfig, providerSpendingSchema, providerSpendingBudgetF
   openConfiguredSecretStore, readSecretsConfig, registerSecretStoreBackend, secretsConfigSchema, type SecretsConfig } from '#adapters/core/contract/index.js';
 export { openSqliteAttemptStore, openSqliteInventoryReader, inventoryReadsPerCall, upgradeExistingProductLedger, type LedgerUpgrade } from '#adapters/core/attempt-store/index.js';
 export type { SqliteAttemptStore, SqliteInventoryReader, SqliteInventoryOptions } from '#adapters/core/attempt-store/index.js';
-export { readMonitorLedger, readMonitorInstall, prepareMonitorInstall, readMonitorRunResults, type MonitorLedgerOptions } from '#adapters/core/monitor-ledger/index.js';
+export { readMonitorLedger, readMonitorInstall, prepareMonitorInstall, readMonitorRunResults, listSurfaceRunIds, followLedgerSurface, type MonitorLedgerOptions } from '#adapters/core/monitor-ledger/index.js';
 export type { SqliteLedgerOptions } from '#adapters/core/sqlite-ledger/index.js';
 export { readScopeCompanies, registerLedgerScopes, type ScopeRegistration } from '#adapters/core/sqlite-ledger/index.js';
 export { DockerSupervisor, recordedDockerSupervisor, validateDockerSupervisorProfile, validateDockerTaskProfile, resolveDockerTaskProfile, DockerTaskProfileError, identifyDockerRequest, runNodeDockerCommand, DockerCommandFailure,
@@ -35,7 +35,7 @@ export { probeDockerImageAvailability, DockerImageProbeError } from '#adapters/c
 
 export { withInstallationJournal, InstallationJournalError } from '#adapters/core/installation-journal/index.js';
 export type { InstallationJournalOptions, InstallationJournalSession, InstallationJournalErrorCode } from '#adapters/core/installation-journal/index.js';
-export { inspectInstallationFile, publishInstallationFile, InstallationFileError } from '#adapters/core/installation-files/index.js';
+export { FileInstallationIdentityStore, FileProjectIdentityStore, inspectInstallationFile, publishInstallationFile, InstallationFileError } from '#adapters/core/installation-files/index.js';
 export { initializeInstallationLedger, verifyInstallationLedger, InstallationLedgerError } from '#adapters/core/attempt-store/index.js';
 export { openSqliteModelActivationStore, openSqliteModelActivationReader, openSqliteModelCatalogStore, openSqliteModelCatalogReader } from '#adapters/core/sqlite-model-activation/index.js';
 export * from '#adapters/core/sqlite-model-invocation/index.js';

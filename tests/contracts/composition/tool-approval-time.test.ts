@@ -131,10 +131,7 @@ describe('I40-c B: only the producer determines tool approval expiry', () => {
     try {
       const app = await f.application(new SystemTrustedClock(() => 14000));
       const decided = await app.decide(f.command);
-      // Wall and monotonic are both pinned: at wall=19999 only 1 ms of TTL is left, so a real monotonic source would turn a slow
-      // store read on a loaded runner into 'expired' (ubuntu node 24, run 37306411163). The boundary under test is the wall expiry.
-      const pinned: TrustedClock = { sample: () => ({ wallMs: now, monotonicMs: 0 }) };
-      expect(await awaitAgentToolApproval(f.journal.store, integrity, f.record, timePort(pinned), new AbortController().signal))
+      expect(await awaitAgentToolApproval(f.journal.store, integrity, f.record, timePort({ sample: () => ({ wallMs: now, monotonicMs: 0 }) }), new AbortController().signal))
         .toBe(now < 20000 ? 'allow' : 'expired');
       expect(f.journal.store.load('scope', f.record.request.approvalId)).toEqual(decided);
     } finally { f.journal.close(); }
@@ -178,7 +175,7 @@ describe('I40-c B: only the producer determines tool approval expiry', () => {
 
 // This focused harness exercises the actual composition producer and surface emission. Model/turn dispatch are
 // isolated here; runtime-chat-turn.test.ts separately covers the real loop, local transport and tool execution.
-it.skipIf(process.platform !== 'linux').each(['preview-expiry', 'policy-expiry', 'timely-allow'] as const)('[requires Linux live OS session /proc identity] wires trusted request/turn timestamps through the composition surface: %s', async mode => {
+it.skipIf(process.platform !== 'linux').each(['preview-expiry', 'policy-expiry', 'policy-cancel', 'timely-allow'] as const)('[requires Linux live OS session /proc identity] wires trusted request/turn timestamps through the composition surface: %s', async mode => {
   const f = await fixture();
   let watchdog: ReturnType<typeof setTimeout> | undefined;
   try {
@@ -198,8 +195,10 @@ it.skipIf(process.platform !== 'linux').each(['preview-expiry', 'policy-expiry',
     let rawWall = 10000, monotonicMs = 100;
     const source = new SystemTrustedClock(() => rawWall), sample = source.sample.bind(source);
     vi.spyOn(SystemTrustedClock.prototype, 'sample').mockImplementation(() => ({ wallMs: sample().wallMs, monotonicMs }));
+    const controller = new AbortController();
     vi.spyOn(engine.AgentToolPolicyAuthorization.prototype, 'decide').mockImplementation(async () => {
       if (mode === 'policy-expiry') monotonicMs = 10100;
+      if (mode === 'policy-cancel') controller.abort();
       return 'allow';
     });
     const events: AgentTurnStreamEvent[] = [];
@@ -215,7 +214,6 @@ it.skipIf(process.platform !== 'linux').each(['preview-expiry', 'policy-expiry',
       return { finish: 'stop', note: null, rounds: 1, toolCalls: 0, answer: null, appendedCount: 0,
         appendedDigest: null, replayed: false, recorded: true };
     });
-    const controller = new AbortController();
     // Bound regressions too: raw timestamps or a lost production anchor must fail, never strand a wait.
     watchdog = setTimeout(() => controller.abort(), 5000);
     const host = createRuntimeChatTurnHost({} as Parameters<typeof createRuntimeChatTurnHost>[0], controller.signal);
@@ -241,7 +239,7 @@ it.skipIf(process.platform !== 'linux').each(['preview-expiry', 'policy-expiry',
     const requested = events.find(event => event.kind === 'approval.requested');
     expect(requested).toMatchObject({ expiresAt: 20000 });
     expect(claimedAt).toBe(10000); expect(recordedAt).toBe(10000);
-    const expected = mode === 'timely-allow' ? 'allow' : 'expired';
+    const expected = mode === 'timely-allow' ? 'allow' : mode === 'policy-cancel' ? 'cancelled' : 'expired';
     expect(settlement).toBe(expected);
     expect(events.find(event => event.kind === 'approval.settled')).toMatchObject({ outcome: expected });
     if (requested?.kind !== 'approval.requested') throw new Error('APPROVAL_NOT_EMITTED');

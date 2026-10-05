@@ -16,7 +16,7 @@ export const WORKLINE_SLASH_COMMANDS: readonly SlashCommand[] = Object.freeze([
   { name: 'run', descriptionKey: 'terminal.slash.run', argumentKey: 'terminal.slash.runArgument' },
   { name: 'runs', descriptionKey: 'terminal.slash.runs' },
   { name: 'transcript', descriptionKey: 'terminal.slash.transcript', argumentKey: 'terminal.slash.transcriptArgument' },
-  { name: 'approvals', descriptionKey: 'terminal.slash.approvals' },
+  { name: 'approvals', descriptionKey: 'terminal.slash.approvals', argumentKey: 'terminal.slash.approvalsArgument' },
   { name: 'cancel', descriptionKey: 'terminal.slash.cancel', argumentKey: 'terminal.slash.cancelArgument' },
   { name: 'service-restart', descriptionKey: 'terminal.slash.serviceRestart' },
   { name: 'context', descriptionKey: 'terminal.slash.context' },
@@ -36,6 +36,19 @@ export const WORKLINE_SLASH_COMMANDS: readonly SlashCommand[] = Object.freeze([
   { name: 'quit', descriptionKey: 'terminal.slash.exit' },
   { name: 'help', descriptionKey: 'terminal.slash.help' },
 ]);
+
+/** Display labels only; the original registry name and argument metadata still own completion/dispatch. */
+export function slashCommandRow(command: SlashCommand, labels: Readonly<Record<string, string>>): Readonly<{ name: string; detail: string }> {
+  const argument = command.argumentKey ? labels[command.argumentKey] : undefined;
+  return { name: `/${command.name}${argument ? ` ${argument}` : ''}`, detail: labels[command.descriptionKey] ?? '' };
+}
+
+export function slashHelpText(labels: Readonly<Record<string, string>>, commands: readonly SlashCommand[] = WORKLINE_SLASH_COMMANDS): string {
+  return commands.map(command => {
+    const row = slashCommandRow(command, labels);
+    return `${row.name}${row.detail ? `  ${row.detail}` : ''}`;
+  }).join('\n');
+}
 
 export function parseSlashLine(line: string): { command: string; args: string } | null {
   const trimmed = line.trim();

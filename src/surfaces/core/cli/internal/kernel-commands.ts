@@ -1,3 +1,4 @@
+import type { ProjectIdentity } from '#domain/index.js';
 import { assessPoolReadiness, poolReadinessLines } from './pool.js';
 import type { ConfigCommandContext } from '#surfaces/core/config/index.js';
 import type { MonitorCommandContext, WorkerTranscriptHandler } from '#surfaces/core/monitor/index.js';
@@ -5,10 +6,9 @@ import type { RunAdmissionHandler, RunDeliveryAdmissionHandler, RunCancellationD
 import type { CodingProfilePreparationHandler } from './coding.js';
 import type { Readable } from 'node:stream';
 import type { TaskIntegrationDeliverHandler, TaskIntegrationInspectHandler, TaskIntegrationCheckHandler, TaskIntegrationPrepareHandler, TaskPatchHandler, TaskEvaluationHandler, TaskExecutionHandler } from './task.js';
-import { getPolicyVocabulary } from '#engine/index.js';
+import { getPolicyVocabulary, type IdentityRead, type InstallationIdentityRead } from '#engine/index.js';
 import type { RuntimeServiceDescribeHandler, RuntimeServiceShutdownHandler, RuntimeServiceStartHandler } from './runtime.js';
-import type { InstallationPreviewHandler, InstallationInspectionHandler, InstallationApplyHandler, InstallationResumeHandler,
-  PolicyTemplatePreviewHandler, PolicyTemplateApplyHandler } from './init.js';
+import type { InstallationCommandContext } from '#surfaces/core/cli-installation/index.js';
 import type { ToolchainCurrencyReport, ModelInvocationDeliveryFinding } from '#engine/index.js';
 import {
   inspectProductPaths, getConfigFieldDefault, ErrorRegistry, loadConfig,
@@ -27,6 +27,7 @@ export type { InferenceMetricsReading } from '#surfaces/core/cli-models/index.js
 
 import type { ShutdownCommand, ServiceShutdownAdmissionResult } from '#engine/index.js';
 import type { ComposerHistoryPort } from '#surfaces/core/terminal-composer/index.js';
+import type { SurfaceFollowEvent } from '#surfaces/core/terminal-kit/index.js';
 import type { TerminalSessionStoreView } from '#surfaces/core/terminal/index.js';
 
 export interface RuntimeServiceReadinessView {
@@ -36,11 +37,16 @@ export interface RuntimeServiceReadinessView {
 
 /** Every host operation a CLI command may use; the model commands' narrower context is part of it. */
 export type RunLifecycleHandler = (root: string, input: import('#engine/index.js').RunLifecycleCommand, options: ConfigLoadOptions) => Promise<{ readonly schemaVersion: 1; readonly layout: import('#platform/index.js').ProductLayout; readonly lifecycle: { readonly schemaVersion: 1; readonly commandId: string; readonly run: import('#engine/index.js').RunView } } | null>;
-export interface CommandContext extends ModelCommandContext, MonitorCommandContext, ConfigCommandContext, DecisionCommandContext {
+export interface CommandContext extends InstallationCommandContext, ModelCommandContext, MonitorCommandContext, ConfigCommandContext, DecisionCommandContext {
   applyRunLifecycle?: RunLifecycleHandler;
   renewApproval?: (input: unknown) => Promise<unknown>;
   listApprovals?: (input: unknown) => Promise<unknown>;
+  /** Approval, run and worker publications already written by the runtime service. */
+  inspectSurfaceAccess?: (root: string, scopeId: string, options: ConfigLoadOptions) => Promise<import('#engine/index.js').SurfaceSnapshotAccess | null>;
+  inspectSurfaceRunIds?: (root: string, scopeId: string, options: ConfigLoadOptions) => Promise<readonly string[]>;
+  followSurfaceEvents?: (root: string, scopeId: string, options: ConfigLoadOptions, signal: AbortSignal) => AsyncIterable<SurfaceFollowEvent>;
   inspectApproval?: (input: unknown) => Promise<unknown>;
+  clearSessionStanding?: (input: { schemaVersion: 1; scopeId: string; sessionId: string }) => Promise<unknown>;
   decideApproval?: (input: unknown) => Promise<unknown>;
   deliverWorkspaceIntegration?: TaskIntegrationDeliverHandler;
   executeOperation?: import('./operation.js').OperationEffectHandler;
@@ -57,6 +63,10 @@ export interface CommandContext extends ModelCommandContext, MonitorCommandConte
   restartRuntimeService?: (root: string, options: ConfigLoadOptions) => Promise<RuntimeServiceReadinessView>;
   openTerminalHistory?: (root: string, options: ConfigLoadOptions) => Promise<ComposerHistoryPort | null>;
   openTerminalSessions?: (root: string, options: ConfigLoadOptions) => Promise<TerminalSessionStoreView | null>;
+  loadInstallationIdentity?: (root: string, options: ConfigLoadOptions) => Promise<InstallationIdentityRead>;
+  loadProjectIdentity?: (root: string, options: ConfigLoadOptions) => Promise<IdentityRead<ProjectIdentity>>;
+  /** Managed interactive startup only; status and piped observation never call this write port. */
+  ensureTerminalIdentity?: (root: string, scopeId: string, options: ConfigLoadOptions) => Promise<{ readonly installationId: string; readonly projectId: string }>;
   selfSourceProject?: (root: string) => Promise<boolean>;
   stopRuntimeService?: (root: string, options: ConfigLoadOptions) => Promise<{ readonly command: ShutdownCommand; readonly result: ServiceShutdownAdmissionResult }>;
   updateToolchains?: import('./toolchains.js').ToolchainUpdateHandler;
@@ -74,12 +84,6 @@ export interface CommandContext extends ModelCommandContext, MonitorCommandConte
   inspectScratch?: TerminalScratchInspectHandler;
   clearScratch?: TerminalScratchClearHandler;
   describeTerminalChatPlan?: TerminalChatPlanHandler;
-  previewInstallation?: InstallationPreviewHandler;
-  inspectInstallation?: InstallationInspectionHandler;
-  applyInstallation?: InstallationApplyHandler;
-  resumeInstallation?: InstallationResumeHandler;
-  previewPolicyTemplateInstallation?: PolicyTemplatePreviewHandler;
-  applyPolicyTemplateInstallation?: PolicyTemplateApplyHandler;
   // Doctor-only, read-soft (SCR-B): null on a missing/unsafe/custom policy, never a hard failure of `doctor`.
   listStandingGrants?: import('./policy-grants.js').StandingGrantsHandler;
   revokeStandingGrant?: import('./policy-grants.js').StandingRevokeHandler;

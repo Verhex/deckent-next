@@ -66,6 +66,7 @@ describe('config defaults (zod 4 .default/.prefault guard)', () => {
     // Incomplete literal `.default({ maxBytes: 16777216 })`: maxInputs and patchPreview come from the inner schema.
     expect(d.artifacts).toEqual({ maxBytes: 16_777_216, maxInputs: 64, patchPreview: { maxEntries: 10_000, maxDepth: 32, maxPathBytes: 1024 } });
     expect(d.installation).toEqual({ profileMaxBytes: 1_048_576, writeLockTimeoutMs: 2000, imageProbe: { timeoutMs: 5000, outputBytes: 65_536 },
+      identityProbe: { timeoutMs: 2000, outputBytes: 65_536 },
       packageMeasurement: { maxFiles: 8192, maxFileBytes: 67_108_864, maxTotalBytes: 536_870_912, maxDepth: 32 } });
     expect(d.approvals).toEqual({ requestTtlMs: 600_000, sessionTtlMs: 60_000, pageSize: 100, keyFile: 'authority.key' });
     expect(d.cli).toEqual({ graphInputMaxBytes: 1_048_576, invocationInputMaxBytes: 1_048_576 });
@@ -89,6 +90,7 @@ describe('config defaults (zod 4 .default/.prefault guard)', () => {
     ['layout', { layout: {} }], ['storage', { storage: {} }], ['storage', { storage: { driver: 'sqlite' } }],
     ['artifacts', { artifacts: { maxBytes: 16_777_216 } }], ['artifacts', { artifacts: { maxBytes: 16_777_216, patchPreview: { maxEntries: 10_000, maxDepth: 32, maxPathBytes: 1024 } } }],
     ['installation', { installation: {} }], ['installation', { installation: { imageProbe: {}, packageMeasurement: {} } }],
+    ['installation', { installation: { identityProbe: {}, imageProbe: {}, packageMeasurement: {} } }],
     ['approvals', { approvals: {} }], ['cli', { cli: {} }], ['mcp', { mcp: {} }], ['service', { service: {} }], ['runRuntime', { runRuntime: {} }],
     ['inspection', { inspection: {} }], ['inspection', { inspection: { workers: {} } }],
     ['toolchains', { toolchains: {} }], ['toolchains', { toolchains: { currency: {} } }], ['toolchains', { toolchains: { update: {} } }],

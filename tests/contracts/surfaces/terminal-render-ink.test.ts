@@ -1,3 +1,4 @@
+import { panelFixture } from '../support/workline-panel-fixture.js';
 import { PassThrough, Writable } from 'node:stream';
 import { createElement, type ReactElement } from 'react';
 import { render } from 'ink';
@@ -43,7 +44,7 @@ function mountElement(element: ReactElement, tier: ColorTier = 'none', columns =
   return { stdout, stdin, rerender: (next: ReactElement) => instance.rerender(wrap(next)), type: async (text: string) => { for (const char of text) { stdin.write(char); await settle(2); } } };
 }
 function mountWorkline(props: Partial<WorklineProps> & Pick<WorklineProps, 'completeTurn'>, tier: ColorTier = 'none', columns = 100) {
-  return mountElement(createElement(WorklineApp, { labels, target: 'scope-a · model', systemPrompt: 'SYSTEM', historyMessages: 4, errorText: (error: unknown) => `ERR:${(error as Error).message}`, ...props }), tier, columns);
+  return mountElement(createElement(WorklineApp, { labels, target: 'scope-a · model', systemPrompt: 'SYSTEM', historyMessages: 4, errorText: (error: unknown) => `ERR:${(error as Error).message}`, ...props, ...panelFixture(props) }), tier, columns);
 }
 
 const REPLY = ['# Plan', 'Use **bold** and `npm test`.', '', '```ts', 'const answer = 42; // ok', '```', '', '| Step | Owner |', '|---|---|', '| build | ci |'].join('\n');

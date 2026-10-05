@@ -1,3 +1,4 @@
+import { panelFixture } from '../support/workline-panel-fixture.js';
 import { createHash } from 'node:crypto';
 import { writeFileSync } from 'node:fs';
 import { createElement } from 'react';
@@ -110,14 +111,14 @@ describe('A1 complete-field decision projection and private custody', () => {
   });
 
   it('no_snapshot_and_changed_snapshot: the same mounted actual Provider child reprojects only its current snapshot', async () => {
-    const item = approval('snapshot-fixture', SECRET), props: WorklineProps = { labels: labels(), target: 'scope · model', systemPrompt: 'SYSTEM', historyMessages: 40,
+    const item = approval('snapshot-fixture', SECRET), props: WorklineProps = { context: { installationId: 'fixture-installation', projectId: 'fixture-project', scopeId: 'scope-a' }, labels: labels(), target: 'scope · model', systemPrompt: 'SYSTEM', historyMessages: 40,
       errorText: error => `ERR:${(error as Error).message}`, completeTurn: async () => 'unused', pollMs: 10_000, ledger: ledger([item]) };
     // A current dynamic card can reproject; an already printed Static row is historical output and cannot be retracted.
     const view = mount(props); await type(view, '/approvals\r'); await until(() => view.stdout.frame.includes('> A-ITEM 1 snapshot-fixture'), 'snapshot picker');
     await view.instance.waitUntilRenderFlush(); view.stdin.write('\r'); await until(() => view.stdout.frame.includes('A-PROMPT'), 'snapshot card');
     expect(view.stdout.frame).toContain(SECRET); observe('snapshot-none-initial', view);
     for (const snapshot of [known, snapshotKnownSecrets([{ name: 'OTHER_FIXTURE', value: 'unrelated-known-value' }]), undefined]) {
-      view.instance.rerender(createElement(WorklinePaletteProvider, { palette: resolveWorklinePalette('none'), children: createElement(WorklineApp, { ...props, ...(snapshot ? { knownSecrets: snapshot } : {}) }) }));
+      view.instance.rerender(createElement(WorklinePaletteProvider, { palette: resolveWorklinePalette('none'), children: createElement(WorklineApp, { ...props, ...panelFixture(props), ...(snapshot ? { knownSecrets: snapshot } : {}) }) }));
       const expected = snapshot === known ? '‹secret:FIXTURE_ONLY›' : SECRET;
       await until(() => view.stdout.frame.includes('A-PROMPT') && view.stdout.frame.includes(expected), 'same mounted snapshot update');
       expect(item.summary).toBe(SECRET); if (snapshot === known) expect(view.stdout.frame).not.toContain(SECRET);

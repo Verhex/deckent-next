@@ -15,7 +15,7 @@ export interface ResumedHistoryLabels {
 const NEUTRAL: ResumedHistoryLabels = { omitted: '… {count}', toolResults: '· {count} tool', summarized: '· summary' };
 /** Newest messages replayed and longest user text shown: the model still receives the whole history (context, not display). */
 export const RESUME_SHOWN_MESSAGES = 24, RESUME_USER_TEXT_CHARS = 600;
-const SUMMARY_MARK = '[Deckent context summary:', EXCERPT_MARK = '[Deckent context excerpt:', ATTACHED = '\n\n--- attached file ';
+const SUMMARY_MARK = '[Deckent context summary:', EXCERPT_MARK = '[Deckent context excerpt:', RENDER_MARK = '[Deckent context render v', ATTACHED = '\n\n--- attached file ';
 
 const chat = (role: 'user' | 'assistant', text: string): WorkLedgerEntry =>
   Object.freeze({ schemaVersion: WORK_LEDGER_SCHEMA_VERSION, kind: 'chat' as const, id: 'chat', role, text });
@@ -35,7 +35,7 @@ export function resumedHistoryEntries(messages: readonly AgentChatMessage[], lab
     if (message.role === 'tool') { tools++; continue; }
     flush();
     if (message.role === 'user') {
-      if (message.content.startsWith(SUMMARY_MARK) || message.content.startsWith(EXCERPT_MARK)) { rows.push(notice('info', labels.summarized)); continue; }
+      if ([SUMMARY_MARK, EXCERPT_MARK, RENDER_MARK].some(mark => message.content.startsWith(mark))) { rows.push(notice('info', labels.summarized)); continue; }
       const safe = humanRecordText(message.content, known);
       const attached = safe.indexOf(ATTACHED);
       const text = (attached >= 0 ? safe.slice(0, attached) : safe).trim();

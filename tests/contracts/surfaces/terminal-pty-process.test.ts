@@ -259,7 +259,8 @@ describe.skipIf(process.platform === 'win32')('deckent terminal in a real pseudo
     const result = await inPty(f.projectRoot, f.env, ['terminal', 'workline', '--scope', 'scope'], [
       ['Deckent workline', '/hel'],
       ['/help', '\r'],
-      ['/watch-runs · /watch-stop', 'see @READ'],
+      // S08: /help lists registry rows (name, two spaces, detail); the palette pads names to a column, so this row only matches the notice.
+      ['/watch-stop  Stop worker and run watch polling.', 'see @READ'],
       ['> @README.md', '\r'],
       ['see @README.md |', '\r'],
       ['pty-ok', '/exit\r'],

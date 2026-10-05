@@ -1,21 +1,25 @@
+import type { WorklineStreamTurn } from '#surfaces/core/terminal-kit/index.js';
 import { configSlash } from '#surfaces/core/config/index.js';
 import { createInterface } from 'node:readline';
 import { mcpSlash } from './mcp.js';
 import { monitorSlash } from '#surfaces/core/monitor/index.js';
 import { DeckentError, ErrorRegistry, emit, getConfigKnownSecrets, loadConfig, readBuildIdentity, resolveLocale, t, formatValue, colorTier, type ConfigLoadOptions, type Locale } from '#platform/index.js';
-import { buildInferenceServingPlan, estimateReplicaCapacity, readInferenceServingProfile } from '#engine/index.js';
+import { buildInferenceServingPlan, estimateReplicaCapacity, readInferenceServingProfile, type IdentityRead, type InstallationIdentityRead } from '#engine/index.js';
 import { prefersAsciiGlyphs, runTerminalWorkline, resolveWorklinePalette, buildWorklineBridgeSnapshot, boundChatHistory, bindSessionScope, type AgentChatMessage, type ChatTurnMessage, type WorklineLabels } from '#surfaces/core/terminal/index.js';
 import { terminalComposerLabels, terminalRenderLabels, terminalSessionLabels } from '#surfaces/core/terminal-labels/index.js';
 import { createWorklineLedgerPorts } from './terminal-ledger.js';
 import { runtimeBuildSkew, workSurfaceLabels } from './work-labels.js';
 import type { CommandContext } from './kernel-commands.js';
-import type { PermissionMode } from '#domain/index.js';
+import type { ProjectIdentity, PermissionMode } from '#domain/index.js';
 import type { TerminalChatPlanView } from './terminal-chat.js';
 
 type Action = 'status' | 'session' | 'workline' | 'snapshot' | 'chat-plan';
 interface Parsed { action: Action; json: boolean; help: boolean; fullAccess: boolean; language?: string; scopeId?: string }
 const ACTIONS: readonly Action[] = ['status', 'session', 'workline', 'snapshot', 'chat-plan'];
 const DEFAULT_HISTORY_MESSAGES = 40;
+/** Refusals of the identity write admission that leave the interactive view usable (nothing was created; no authority is implied). */
+const ADMISSION_DEFERRED: ReadonlySet<string> = new Set(['POLICY_UNAVAILABLE', 'POLICY_DENIED', 'SCOPE_UNKNOWN', 'ATTEMPT_STORE_VERSION']);
+const UNADMITTED_CUSTODY_LABEL = 'unadmitted';
 
 function parse(argv: readonly string[]): Parsed {
   // Bare `deckent terminal` (options only) is the interactive terminal, the same as `deckent` with no arguments on a TTY.
@@ -68,8 +72,12 @@ function chatTarget(plan: TerminalChatPlanView | null, locale: Locale): string {
 }
 
 function renderStatus(payload: ReturnType<typeof statusPayload>, locale: Locale): string {
-  const { tty, inference, chat } = payload;
+  const { tty, inference, chat, projectId, installationId, identity } = payload;
+  const unavailable = (reason: 'not-created' | 'unsupported') => reason === 'not-created'
+    ? t('terminal.identity.notCreated', {}, locale) : t('terminal.identity.unsupported', {}, locale);
   return [
+    t('terminal.status.installationId', { installationId: installationId ?? unavailable(identity.installation.status === 'unavailable' ? identity.installation.reason : 'not-created') }, locale),
+    t('terminal.status.projectId', { projectId: projectId ?? unavailable(identity.project.status === 'unavailable' ? identity.project.reason : 'not-created') }, locale),
     t('terminal.status.tty', { stdin: yesNo(tty.stdin, locale), stdout: yesNo(tty.stdout, locale),
       columns: tty.columns ?? t('terminal.value.unknown', {}, locale), rows: tty.rows ?? t('terminal.value.unknown', {}, locale) }, locale),
     inference.configured
@@ -81,14 +89,16 @@ function renderStatus(payload: ReturnType<typeof statusPayload>, locale: Locale)
   ].join('\n');
 }
 
-function statusPayload(tty: ReturnType<typeof ttyState>, config: Record<string, unknown>, chat: TerminalChatPlanView | null) {
+function statusPayload(tty: ReturnType<typeof ttyState>, config: Record<string, unknown>, chat: TerminalChatPlanView | null, identity: { readonly project: IdentityRead<ProjectIdentity>; readonly installation: InstallationIdentityRead }) {
   const profile = readInferenceServingProfile(config);
   const inference = profile ? (() => {
     const capacity = estimateReplicaCapacity(profile);
     return { configured: true as const, profileId: profile.id, tokenBudget: capacity.totalTokenBudget, maxSeqs: capacity.maxNumSeqs,
       endpoint: buildInferenceServingPlan(profile).openaiBaseUrl };
   })() : { configured: false as const };
-  return { schemaVersion: 1 as const, tty, inference, chat };
+  const projectId = identity.project.status === 'available' ? identity.project.value.projectId : null;
+  const installationId = identity.installation.status === 'available' ? identity.installation.value.installationId : null;
+  return { schemaVersion: 1 as const, tty, inference, chat, projectId, installationId, identity };
 }
 
 function worklineLabels(locale: Locale, statusLine: string): WorklineLabels {
@@ -100,7 +110,10 @@ function worklineLabels(locale: Locale, statusLine: string): WorklineLabels {
     selfSourceFloor: t('terminal.mode.selfSourceFloor', {}, locale),
     roleUser: t('terminal.workline.roleUser', {}, locale), roleAssistant: t('terminal.workline.roleAssistant', {}, locale),
     runCard: t('terminal.ledger.runCard', {}, locale), workerCard: t('terminal.ledger.workerCard', {}, locale),
-    watchFailed: t('terminal.workline.watchFailed', {}, locale), ledgerUnavailable: t('terminal.workline.ledgerUnavailable', {}, locale),
+    watchFailed: t('terminal.workline.watchFailed', {}, locale),
+    watchDelivery: t('terminal.workline.watchDelivery', {}, locale), watchStep: t('terminal.workline.watchStep', {}, locale),
+    watchAccessDenied: t('terminal.workline.watchAccessDenied', {}, locale), watchAccessStopped: t('terminal.workline.watchAccessStopped', {}, locale),
+    watchPushFailed: t('terminal.workline.watchPushFailed', {}, locale), ledgerUnavailable: t('terminal.workline.ledgerUnavailable', {}, locale),
     runNotFound: t('terminal.workline.runNotFound', {}, locale), workersEmpty: t('terminal.workline.workersEmpty', {}, locale),
     runsEmpty: t('terminal.workline.runsEmpty', {}, locale), serviceRestartUnavailable: t('terminal.service.restartUnavailable', {}, locale),
     queued: t('terminal.workline.queued', {}, locale),
@@ -125,7 +138,7 @@ function worklineLabels(locale: Locale, statusLine: string): WorklineLabels {
 
 /** Line mode is the degraded adapter: it works piped (one turn per input line) and prompts only on a terminal. */
 async function runSession(locale: Locale, context: CommandContext, turn: (messages: readonly ChatTurnMessage[], signal?: AbortSignal) => Promise<string>,
-  historyMessages: number, interactive: boolean, status: () => string): Promise<void> {
+  historyMessages: number, interactive: boolean, status: () => Promise<string>): Promise<void> {
   const stdin = context.stdin ?? process.stdin;
   const sinks = { ...(context.stdout ? { stdout: context.stdout } : {}), ...(context.stderr ? { stderr: context.stderr } : {}) };
   const rl = createInterface({ input: stdin, ...(interactive ? { output: process.stdout } : {}), terminal: interactive,
@@ -137,7 +150,7 @@ async function runSession(locale: Locale, context: CommandContext, turn: (messag
     for await (const line of rl) {
       const trimmed = line.trim();
       if (trimmed === '/exit' || trimmed === '/quit') break;
-      if (trimmed === '/status') { emit(status(), sinks); }
+      if (trimmed === '/status') { emit(await status(), sinks); }
       // Slash input is a local command; an unknown one is reported, never sent to the model as a user message.
       else if (trimmed.startsWith('/')) emit(`${t('terminal.workline.unknownCommand', {}, locale)}: ${trimmed}`, { ...sinks, level: 'error' });
       else if (trimmed.length > 0) {
@@ -184,8 +197,11 @@ export async function terminalCommand(argv: readonly string[], context: CommandC
     emit(snapshot, { ...sinks, json: true, render: value => formatValue(value) });
     return;
   }
+  const readIdentity = async () => ({ installation: await context.loadInstallationIdentity?.(root, options)
+    ?? { status: 'unavailable', reason: 'unsupported', bindingCapability: 'not-observed' } as const,
+  project: await context.loadProjectIdentity?.(root, options) ?? { status: 'unavailable', reason: 'unsupported' } as const });
   if (parsed.action === 'status') {
-    const payload = statusPayload(tty, config, chat);
+    const payload = statusPayload(tty, config, chat, await readIdentity());
     emit(payload, { ...sinks, json: parsed.json, render: value => parsed.json ? formatValue(value) : renderStatus(value, locale) });
     return;
   }
@@ -194,6 +210,24 @@ export async function terminalCommand(argv: readonly string[], context: CommandC
   const configured = (config['terminal'] as { scopeId?: unknown } | undefined)?.scopeId;
   const scopeId = parsed.scopeId ?? (typeof configured === 'string' ? configured : undefined);
   if (!scopeId) throw ErrorRegistry.createError('TERMINAL_SCOPE_REQUIRED');
+  if (parsed.action !== 'session' && (!tty.stdin || !tty.stdout)) throw ErrorRegistry.createError('TERMINAL_TTY_REQUIRED');
+  // Admit identity before runtime startup or session/history writes. Piped line mode remains read-only until a governed turn writes.
+  let installationId: string | undefined, projectId: string | undefined;
+  if (tty.stdin && tty.stdout) {
+    if (!context.ensureTerminalIdentity) throw ErrorRegistry.createError('INSTALLATION_IDENTITY_UNAVAILABLE');
+    try { ({ installationId, projectId } = await context.ensureTerminalIdentity(root, scopeId, options)); }
+    catch (error) {
+      // Identity integrity refusals (unsupported, relocated, invalid, locked) stay fatal. A write admission that the trusted policy or a
+      // not-yet-upgraded ledger refuses creates nothing; the view still opens and every governed command meets its own gate (B36 R6).
+      // Existing identities are only read; absent ones get a fixed panel custody label that is never persisted, shown or authority.
+      if (!ADMISSION_DEFERRED.has(String((error as { code?: unknown }).code))) throw error;
+      const observed = await readIdentity();
+      installationId = observed.installation.status === 'available' ? observed.installation.value.installationId : UNADMITTED_CUSTODY_LABEL;
+      projectId = observed.project.status === 'available' ? observed.project.value.projectId : UNADMITTED_CUSTODY_LABEL;
+    }
+    if (!installationId) throw ErrorRegistry.createError('INSTALLATION_IDENTITY_UNAVAILABLE');
+    if (!projectId) throw ErrorRegistry.createError('PROJECT_IDENTITY_UNAVAILABLE');
+  }
   // Owner 2026-09-23: an interactive terminal starts the runtime service when none is running; it keeps running after exit.
   // Piped line mode never starts background processes. A start failure is shown, not fatal: local commands still work.
   const autostart = (config['terminal'] as { autostartService?: unknown } | undefined)?.autostartService !== false;
@@ -216,7 +250,7 @@ export async function terminalCommand(argv: readonly string[], context: CommandC
   if (parsed.action === 'session') {
     if (serviceLine && tty.stdin && tty.stdout) emit(serviceLine, sinks);
     await runSession(locale, context, turn, historyMessages, tty.stdin && tty.stdout,
-      () => [renderStatus(statusPayload(tty, config, chat), locale), ...(serviceLine ? [serviceLine] : [])].join('\n'));
+      async () => [renderStatus(statusPayload(tty, config, chat, await readIdentity()), locale), ...(serviceLine ? [serviceLine] : [])].join('\n'));
     return;
   }
   if (!tty.stdin || !tty.stdout) throw ErrorRegistry.createError('TERMINAL_TTY_REQUIRED');
@@ -242,8 +276,12 @@ export async function terminalCommand(argv: readonly string[], context: CommandC
     ...(context.inspectInventory ? { inspectInventory: context.inspectInventory } : {}),
     ...(context.inspectWorkerTranscript ? { inspectWorkerTranscript: context.inspectWorkerTranscript } : {}),
     ...(context.listApprovals ? { listApprovals: context.listApprovals } : {}),
+    ...(context.clearSessionStanding ? { clearSessionStanding: context.clearSessionStanding } : {}),
     ...(context.decideApproval ? { decideApproval: context.decideApproval } : {}),
-    ...(context.deliverRunCancellation ? { deliverRunCancellation: context.deliverRunCancellation } : {}) });
+    ...(context.deliverRunCancellation ? { deliverRunCancellation: context.deliverRunCancellation } : {}),
+    ...(context.inspectSurfaceAccess ? { inspectSurfaceAccess: () => context.inspectSurfaceAccess!(root, scopeId, options) } : {}),
+    ...(context.inspectSurfaceRunIds ? { inspectSurfaceRunIds: () => context.inspectSurfaceRunIds!(root, scopeId, options) } : {}),
+    ...(context.followSurfaceEvents ? { followEvents: signal => context.followSurfaceEvents!(root, scopeId, options, signal) } : {}) });
   const target = `${scopeId} · ${chatTarget(chat, locale)}`;
   // History is a convenience: an unavailable history file never blocks the terminal.
   const inputHistory = context.openTerminalHistory ? await context.openTerminalHistory(root, options).catch(() => null) : null;
@@ -252,7 +290,10 @@ export async function terminalCommand(argv: readonly string[], context: CommandC
   // TERM-UX-1 a: the first `@` finds the service's file list already walked. One empty query warms it in the background (same authorization
   // and deny as any `@`); a service that is not there or refuses is left to the person's own first `@`.
   if (!serviceFailed && context.findTerminalMentions) void context.findTerminalMentions(root, { scopeId, query: '' }, options, context.signal).catch(() => undefined);
+  if (!installationId) throw ErrorRegistry.createError('INSTALLATION_IDENTITY_UNAVAILABLE');
+  if (!projectId) throw ErrorRegistry.createError('PROJECT_IDENTITY_UNAVAILABLE');
   await runTerminalWorkline({
+    context: { installationId, projectId, scopeId },
     knownSecrets: getConfigKnownSecrets(config),
     selfSource: await context.selfSourceProject?.(root) ?? false,
     labels: worklineLabels(locale, [t('terminal.status.chat', { target: chatTarget(chat, locale) }, locale), ...(serviceLine ? [serviceLine] : [])].join(' · ')),
@@ -265,9 +306,9 @@ export async function terminalCommand(argv: readonly string[], context: CommandC
       context.attachTerminalMentions!(root, { scopeId, text, paths }, options, signal) } : {}),
     ...(sessions ? { sessions } : {}),
     ...(modePort ? { permissionMode: modePort } : {}), ...(fullAccess ? { fullAccess } : {}),
-    ...(context.streamTerminalChat ? { streamTurn: (messages: readonly AgentChatMessage[], signal: AbortSignal, turn?: Readonly<{ reasoning?: 'off'; sessionId?: string; fullAccess?: true }>) =>
+    ...(context.streamTerminalChat ? { streamTurn: (messages: readonly AgentChatMessage[], signal: AbortSignal, turn?: Parameters<WorklineStreamTurn>[2]) =>
       context.streamTerminalChat!(root, { scopeId, messages, ...(turn?.reasoning ? { reasoning: turn.reasoning } : {}),
-        ...(turn?.sessionId ? { sessionId: turn.sessionId } : {}), ...(turn?.fullAccess ? { fullAccess: true as const } : {}) }, options, signal) } : {}),
+        ...(turn?.sessionId ? { sessionId: turn.sessionId } : {}), ...(turn?.fullAccess ? { fullAccess: true as const } : {}), ...(turn?.onTurnBound ? { onTurnBound: turn.onTurnBound } : {}) }, options, signal) } : {}),
     // SCR-A `/scratch`: the conversation's scratch area through the runtime service (v16); this surface reads and deletes no file.
     ...(context.inspectScratch && context.clearScratch ? { scratch: {
       inspect: (sessionId: string, signal?: AbortSignal) => context.inspectScratch!(root, { schemaVersion: 1, scopeId, sessionId }, options, signal),

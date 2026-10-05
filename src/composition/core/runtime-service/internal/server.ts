@@ -11,11 +11,11 @@ import { registerProviderConfig, acquireLocalRuntimeSocketGuard, LocalRuntimeSoc
   startScratchSweeper, sweepScratch, createRuntimeWorkspaceFileHost, sweepFullPreviews, type HttpFetchTransport, type ScratchSweepResult, type ShellSandboxFactory } from '#adapters/index.js';
 import { ModelInvocationControllers, runtimeServiceModelOwnerId, RuntimeServiceLifecycle, classifyRuntimeServiceOperation, isRuntimeServiceEffectOperation, isRuntimeServicePermissionModeOperation, runtimeServiceDescriptorSchema, runtimeServiceDescriptionInputSchema,
   serviceInstanceSchema, ServiceShutdownError, type ShutdownAdmission, type RuntimeServiceDrainResult } from '#engine/index.js';
-import { prepareConfiguredCancellationRuntime, prepareConfiguredReconciliationRuntime, type ConfiguredReconciliationRuntimeObserver, type ConfiguredCancellationRuntimeObserver } from '#composition/core/runtime/index.js';
-import { prepareConfiguredModelCancellationRuntime, type ConfiguredModelCancellationRuntimeObserver } from '#composition/core/runtime/index.js';
+import { prepareConfiguredCancellationRuntime, prepareConfiguredReconciliationRuntime, prepareConfiguredModelCancellationRuntime,
+  type ConfiguredReconciliationRuntimeObserver, type ConfiguredCancellationRuntimeObserver, type ConfiguredModelCancellationRuntimeObserver } from '#composition/core/runtime/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 import { releaseSettledModelSlots } from '#composition/core/model-invocation/index.js';
-import { registerConfiguredScopesAtStart } from '#composition/core/scoped-request/index.js';
+import { loadConfiguredInstallationIdentity, registerConfiguredScopesAtStart } from '#composition/core/scoped-request/index.js';
 import { sweepConfiguredAttemptCustody } from '#composition/core/runs/index.js';
 import { executeConfiguredRuntimeOperation } from './operations.js';
 import { executeConfiguredRuntimeModelOperation } from './model-invocation.js';
@@ -34,21 +34,19 @@ export interface ConfiguredRuntimeServiceObserver extends ConfiguredCancellation
   onModelCancellationPage?: ConfiguredModelCancellationRuntimeObserver['onPage'];
   onModelCancellationError?: ConfiguredModelCancellationRuntimeObserver['onError'];
   onLedgerUpgraded?(upgrade: LedgerUpgrade): void | Promise<void>;
-  /** Turns a stopped service left running, closed as interrupted at this start; damaged rows are reported, not closed. */
+  /** Close turns left by a stopped service as interrupted; report damaged rows without closing them. */
   onAgentTurnsInterrupted?(result: { readonly interrupted: number; readonly corrupt: readonly { readonly scopeId: string; readonly turnId: string }[] }): void | Promise<void>;
   /** Pending tool-call approvals of turns no longer running, closed as expired at this start; `failed` counts records not verified or
    * not closed; `keyUnavailable`: the integrity key could not be opened, so nothing was closed. */
   onToolCallApprovalsExpired?(result: { readonly expired: number; readonly failed: number; readonly keyUnavailable: boolean }): void | Promise<void>;
-  /** Open model calls of an ended instance of this endpoint settled `unknown`, and slots an earlier build kept for settled `unknown` calls,
-   * released at this start (INFLIGHT-FIX, FIX-2143-SLOTS); allocations whose records do not verify are reported untouched. */
+  /** INFLIGHT-FIX/FIX-2143-SLOTS: settle ended-instance calls unknown and release settled slots; unverifiable records stay untouched. */
   onModelAllocationSlotsReleased?(result: Awaited<ReturnType<typeof releaseSettledModelSlots>>): void | Promise<void>;
   /** Scratch areas unused past retention removed at start and by the running service's periodic sweep (SCR-A S4). */
   onScratchSwept?(result: ScratchSweepResult): void | Promise<void>;
   /** EXEC-RELEASE: attempts with a verified retained patch, released or held (typed) under the same custody at start. */ onAttemptCustodySwept?(result: Awaited<ReturnType<typeof sweepConfiguredAttemptCustody>>): void | Promise<void>;
 }
 
-/** An existing older ledger is backed up and migrated once, under ledger and endpoint custody and before the service accepts
- * connections (Jev 8bb2a0c7, Astra 2054 R1, LEDGER-SINGLETON). */
+/** LEDGER-SINGLETON (Astra 2054 R1): backup/upgrade under ledger and endpoint custody before accepting connections. */
 async function upgradeLedgerAtStart(config: Awaited<ReturnType<typeof loadConfig>>, observer: ConfiguredRuntimeServiceObserver) {
   let path: string;
   try { path = await inspectProductFile(config.productLayout, 'ledger', ['-wal', '-shm', '-journal']); }
@@ -58,8 +56,7 @@ async function upgradeLedgerAtStart(config: Awaited<ReturnType<typeof loadConfig
   if (upgrade) await observer.onLedgerUpgraded?.(upgrade);
 }
 
-/** Agent turns left running by a stopped service are closed as interrupted, never resumed. Like the upgrade, this runs only
- * under ledger custody: a second start (on any endpoint) that fails to take it never closes a live service's turns. */
+/** Interrupt abandoned turns only under ledger custody; a second start cannot close a live service's turns. */
 async function interruptAgentTurnsAtStart(config: Awaited<ReturnType<typeof loadConfig>>, observer: ConfiguredRuntimeServiceObserver, custodyId: string) {
   let path: string;
   try { path = await inspectProductFile(config.productLayout, 'ledger', ['-wal', '-shm', '-journal']); }
@@ -69,8 +66,7 @@ async function interruptAgentTurnsAtStart(config: Awaited<ReturnType<typeof load
     const result = await store.interruptRunning(Date.now());
     if (result.interrupted || result.corrupt.length) await observer.onAgentTurnsInterrupted?.(result);
   } finally { store.close(); }
-  // Open model calls of an instance that held this same custody settle `unknown` (FIX-2143-SLOTS, Astra 2145 R1) and slots an earlier
-  // build kept for settled `unknown` calls are released (INFLIGHT-FIX); any other open call is never touched.
+  // FIX-2143-SLOTS/INFLIGHT-FIX (Astra 2145 R1): settle this custody's abandoned calls and release settled slots; leave other open calls intact.
   const slots = await releaseSettledModelSlots(path, config.storage.sqlite, custodyId);
   if (slots.released || slots.settled || slots.inconsistent.length) await observer.onModelAllocationSlotsReleased?.(slots);
   // Previews kept for approvals that were pending when the service stopped (none survives a restart).
@@ -92,12 +88,12 @@ async function interruptAgentTurnsAtStart(config: Awaited<ReturnType<typeof load
 async function startService(projectRoot: string, observer: ConfiguredRuntimeServiceObserver,
   options: ConfigLoadOptions = {}, ports: RuntimeServicePorts = {}) {
   registerProviderConfig();
+  await loadConfiguredInstallationIdentity(projectRoot, options);
   const config = await loadConfig(projectRoot, { ...options, heal: false });
   if (!config.cancellationRuntime || !config.cancellation) throw ErrorRegistry.createError('CANCELLATION_NOT_CONFIGURED');
   await resolveGitWorkTarget(projectRoot, config.execution, config.productLayout); // WORK-TARGETS: typed refusal before any custody or write
   const endpoint = await prepareProductSocket(config.productLayout, 'runtimeSocket');
-  // Ledger custody, then endpoint custody, before the ledger is backed up or migrated: one service per ledger whatever its endpoint
-  // (LEDGER-SINGLETON), so a second start fails here and never touches that host's schema; kept until the listener is up (Astra 2054 R1).
+  // LEDGER-SINGLETON (Astra 2054 R1): acquire ledger then endpoint custody before upgrade; hold through listener start.
   const guard = await acquireLocalRuntimeSocketGuard(socketOptions(config.service, endpoint), await prepareProductCompanionPath(config.productLayout, 'ledger', '-lock'));
   try { return await startUnderCustody(projectRoot, observer, options, config, guard, ports); }
   catch (error) { await guard.release(); throw error; }
@@ -165,8 +161,8 @@ async function startUnderCustody(projectRoot: string, observer: ConfiguredRuntim
         return { response: { schemaVersion: RUNTIME_SERVICE_SCHEMA_VERSION, requestId: request.requestId, ok: true, result },
           afterResponseOrDisconnect: () => finishRemoteShutdown(result.admission) };
       }
-      const result = await lifecycle.admit(() => request.operation === 'renewApproval' || request.operation === 'listApprovals' || request.operation === 'inspectApproval' || request.operation === 'decideApproval'
-        ? executeRuntimeApproval(projectRoot, request, peer, config.service.responseMaxBytes, options, chatTurnHost.decisions)
+      const result = await lifecycle.admit(() => request.operation === 'renewApproval' || request.operation === 'listApprovals' || request.operation === 'inspectApproval' || request.operation === 'decideApproval' || request.operation === 'clearSessionStanding'
+        ? executeRuntimeApproval(projectRoot, request, peer, config.service.responseMaxBytes, options, chatTurnHost.decisions, chatTurnHost.answers)
         : request.operation === 'inspectProviderSpendAccount' || request.operation === 'auditProviderSpendAccount'
         ? executeConfiguredRuntimeProviderSpendOperation(projectRoot, request, peer, config.service.responseMaxBytes, options)
         : request.operation === 'invokeModel' || request.operation === 'invokeModelStream' || request.operation === 'inspectModelInvocation' || request.operation === 'purgeModelInvocationContent' || request.operation === 'cancelModelInvocation'

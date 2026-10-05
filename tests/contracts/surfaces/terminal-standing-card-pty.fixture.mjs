@@ -45,7 +45,9 @@ const labels = {
 
 let release;
 const decided = new Promise(resolve => { release = resolve; });
-const streamTurn = async function* () {
+const streamTurn = async function* (_messages, _signal, turn) {
+  // O7-A3: a card is offered only on a bound turn; this renderer-only fixture simulates the trusted producer's binding (as workline-panel-fixture).
+  turn?.onTurnBound?.({ scopeId: 'scope', sessionId: turn.sessionId ?? null, turnId: 'fixture-turn', phase: 'command-generated' });
   yield { kind: 'approval', phase: 'requested', callId: 'c1', approvalId: 'appr-pty', revision: 0, summary: 'run_shell · npm test · 0123456789ab',
     preview: '$ npm test', expiresAt: Date.now() + 600_000, standing: { scopes, pattern: 'npm test' } };
   // The turn continues once the card is decided (or after 30 s: the test's own failure path).
@@ -56,6 +58,8 @@ const streamTurn = async function* () {
 const view = createElement(WorklinePaletteProvider, {
   palette: resolveWorklinePalette('none'),
   children: createElement(WorklineApp, {
+    // O7-A3: the trusted installation/project custody labels come from CLI composition; this in-process fixture supplies fixed ones.
+    context: { installationId: 'fixture-installation', projectId: 'fixture-project', scopeId: 'scope' },
     labels, target: 'scope · model', systemPrompt: 'SYSTEM', historyMessages: 20,
     errorText: (error) => `ERR:${error instanceof Error ? error.message : 'error'}`,
     completeTurn: async () => 'unused', streamTurn,

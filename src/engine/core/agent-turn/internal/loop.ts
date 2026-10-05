@@ -1,5 +1,8 @@
 import { createHash } from 'node:crypto';
-import { AGENT_COMPACTION_HIGH_WATER, planAgentCompaction, renderAgentCompaction, type AgentCompactionSummary } from './compaction.js';
+import { AGENT_COMPACTION_HIGH_WATER, renderAgentCompaction, type AgentCompactionSummary } from './compaction.js';
+import { createAgentContextCarry } from './carry.js';
+import { agentContextFailureNote, agentHistoryBytes, createAgentCompactionGuard, type AgentContextFailure } from './pressure.js';
+import type { Locale } from '#platform/index.js';
 import type { AgentContextQuality, AgentToolCall, AgentToolCleanup, AgentToolOutcome, AgentToolSpec, AgentToolCallStatus, AgentTurnEvent, AgentTurnFinish,
   AgentTurnMessage } from '#domain/index.js';
 
@@ -15,6 +18,8 @@ export type AgentRoundOutcome =
  * run. The loop itself holds no authority and no provider or storage knowledge.
  */
 export interface AgentTurnPorts {
+  /** Delivery failure reported by the host, retained in the same durable outcome rather than mislabeled as user cancellation. */
+  contextFailure?(): AgentContextFailure | null;
   invokeRound(input: { readonly round: number; readonly messages: readonly AgentTurnMessage[]; readonly tools: readonly AgentToolSpec[] },
     onDelta: (delta: { readonly kind: 'text' | 'reasoning'; readonly text: string }) => void, signal: AbortSignal): Promise<AgentRoundOutcome>;
   /** Per call, with its checked arguments so a resource floor (e.g. writes to CI or hooks) can raise `allow` to `require-approval`. */
@@ -92,6 +97,8 @@ export function agentTurnTruncatedCallsNote(count: number, limitTokens: number |
 export interface AgentToolExecution { readonly round: number; readonly index: number }
 
 export interface AgentTurnInput {
+  /** Service-resolved locale; the existing wire carries the resulting note. */
+  readonly language?: Locale;
   readonly messages: readonly AgentTurnMessage[];
   readonly tools: readonly AgentToolSpec[];
   readonly signal: AbortSignal;
@@ -162,6 +169,8 @@ function checkArguments(tool: AgentToolSpec, raw: string): { ok: true; args: Rec
 export async function runAgentTurn(input: AgentTurnInput, ports: AgentTurnPorts): Promise<AgentTurnResult> {
   const { signal, emit } = input;
   const messages: AgentTurnMessage[] = [...input.messages];
+  const carry = createAgentContextCarry(messages);
+  const compactionGuard = createAgentCompactionGuard();
   const byName = new Map(input.tools.map(tool => [tool.name, tool]));
   // Read dedupe answers only with a result the model can still see: entries leave with compaction and after a successful edit. An
   // entry is bound to the result message itself, never to the provider's call id (providers reuse ids across rounds; Astra 2106 R1).
@@ -176,6 +185,12 @@ export async function runAgentTurn(input: AgentTurnInput, ports: AgentTurnPorts)
     return message;
   };
   const finish = (value: AgentTurnFinish, closure: string | null): AgentTurnResult => {
+    const deliveryFailure = ports.contextFailure?.();
+    if (deliveryFailure) { value = 'error'; closure = agentContextFailureNote(deliveryFailure, input.language); }
+    if ((value === 'stop' || value === 'length') && input.admission?.requestMaxBytes !== undefined
+      && agentHistoryBytes(messages) > input.admission.requestMaxBytes) {
+      value = 'error'; closure = agentContextFailureNote('AGENT_CONTEXT_REQUEST_TOO_LARGE', input.language);
+    }
     // A mechanical compaction and refused truncated calls are never silent: the turn's note says what happened and what to do.
     const extra = [...(cut ? [agentTurnTruncatedCallsNote(cut, limitTokens)] : []), ...(mechanical ? [AGENT_TURN_MECHANICAL_COMPACTION_NOTE] : [])];
     const note = extra.length ? [closure, ...extra].filter(Boolean).join(' ') : closure;
@@ -205,12 +220,14 @@ export async function runAgentTurn(input: AgentTurnInput, ports: AgentTurnPorts)
     const current = measured as Awaited<ReturnType<NonNullable<AgentTurnPorts['measure']>>> | null;
     const tokenPressure = current !== null && current.windowTokens !== null && current.promptTokens + reserve > current.windowTokens * AGENT_COMPACTION_HIGH_WATER;
     const byteBound = input.admission?.requestMaxBytes;
-    const historyBytes = byteBound === undefined ? 0 : Buffer.byteLength(JSON.stringify(messages), 'utf8');
+    const historyBytes = byteBound === undefined ? 0 : agentHistoryBytes(messages);
     // Past the high-water mark, or when this round's longest answer plus the next user message would not fit the next request.
     const bytePressure = byteBound !== undefined && (historyBytes > byteBound * AGENT_COMPACTION_HIGH_WATER
       || historyBytes + (input.admission?.requestReserveBytes ?? 0) > byteBound);
-    const plan = ports.summarize && (tokenPressure || bytePressure) ? planAgentCompaction(messages) : null;
+    const plan = ports.summarize && (tokenPressure || bytePressure) ? compactionGuard.plan(messages) : null;
     if (plan && ports.summarize) {
+      const canonical = carry.fold(plan.older, byteBound);
+      if (!canonical) return finish('error', agentContextFailureNote('AGENT_CONTEXT_CARRY_TOO_LARGE', input.language));
       compactions++;
       let summaryOf: AgentCompactionSummary | 'unreadable' | null;
       try { summaryOf = await ports.summarize({ sequence: compactions, messages: plan.older }, signal); } catch { summaryOf = null; }
@@ -222,7 +239,10 @@ export async function runAgentTurn(input: AgentTurnInput, ports: AgentTurnPorts)
           + ' Send the message again to retry, or start a new conversation (this one stays saved).');
       }
       if (summaryOf === 'unreadable') mechanical++;
-      const next = [...(plan.system ? [plan.system] : []), renderAgentCompaction(plan, summaryOf === 'unreadable' ? null : summaryOf), ...plan.tail];
+      const next = [...(plan.system ? [plan.system] : []), renderAgentCompaction(plan, summaryOf === 'unreadable' ? null : summaryOf, canonical), ...plan.tail];
+      if (byteBound !== undefined && agentHistoryBytes(next) > byteBound) return finish('error',
+        agentContextFailureNote('AGENT_CONTEXT_CARRY_TOO_LARGE', input.language));
+      compactionGuard.applied(messages, next);
       messages.splice(0, messages.length, ...next);
       const visible = new Set<AgentTurnMessage>(plan.tail);
       for (const [digest, seen] of seenReads) if (!visible.has(seen.message)) seenReads.delete(digest);
@@ -233,9 +253,11 @@ export async function runAgentTurn(input: AgentTurnInput, ports: AgentTurnPorts)
     const admitted = measured as Awaited<ReturnType<NonNullable<AgentTurnPorts['measure']>>> | null;
     // Admission before any send: a prompt that cannot fit is never sent (the provider would reject it after a billed attempt).
     if (admitted && admitted.windowTokens !== null && admitted.promptTokens + reserve > admitted.windowTokens) {
-      return finish('error', `The conversation no longer fits the model's context window: ${admitted.promptTokens} prompt tokens`
-        + `${admitted.quality === 'upper-bound' ? ' (upper bound)' : ''} + ${reserve} reserved > ${admitted.windowTokens}. Nothing was sent for`
-        + ` this round. ${summary()}. Start a new conversation or ask a shorter question.`);
+      return finish('error', agentContextFailureNote('AGENT_CONTEXT_WINDOW_EXCEEDED', input.language, {
+        prompt: admitted.promptTokens, reserve, window: admitted.windowTokens, quality: admitted.quality }));
+    }
+    if (byteBound !== undefined && agentHistoryBytes(messages) > byteBound) {
+      return finish('error', agentContextFailureNote('AGENT_CONTEXT_REQUEST_TOO_LARGE', input.language));
     }
     let outcome: AgentRoundOutcome;
     let streamed = '';
@@ -263,11 +285,12 @@ export async function runAgentTurn(input: AgentTurnInput, ports: AgentTurnPorts)
     const truncated = outcome.finish === 'length' || (limitTokens !== null && outcome.usage !== null && outcome.usage.completionTokens >= limitTokens);
     for (const [index, call] of outcome.toolCalls.entries()) {
       const tool = byName.get(call.name), started = ports.now();
-      let digestOf: string | null = null, targetOf: string | null = null;
+      let digestOf: string | null = null, targetOf: string | null = null, invoked = false;
       // `cleanup` (Astra 2124): only the host shell tool's outcome ever carries it; the event omits the field otherwise.
       const result = async (status: AgentToolCallStatus, content: string, cleanup?: AgentToolCleanup) => {
         if (!NO_PROGRESS_STATUSES.has(status)) progressed = true;
         const message = push({ role: 'tool', toolCallId: call.id, name: call.name, content });
+        carry.observed(message, call, rounds, index, invoked, status, cleanup);
         emit({ kind: 'tool.finished', callId: call.id, name: call.name, status, ms: Math.max(0, ports.now() - started), bytes: Buffer.byteLength(content, 'utf8'),
           ...(cleanup !== undefined ? { cleanup } : {}) });
         await ports.settled?.({ round: rounds, index, call, tool: tool ?? null, argsDigest: digestOf, target: targetOf, status, content });
@@ -307,6 +330,7 @@ export async function runAgentTurn(input: AgentTurnInput, ports: AgentTurnPorts)
         if (answer === 'expired') { await result('approval-expired', `[deckent] ${call.name}: error=approval-expired (nothing ran)`); continue; }
       }
       toolCalls++;
+      invoked = true;
       let outcomeText: AgentToolOutcome;
       try { outcomeText = await ports.execute(tool, checked.args, signal, call.id, { round: rounds, index }); } catch { outcomeText = { status: 'error', text: `[deckent] ${call.name}: error=failed` }; }
       // An executed non-read call may have changed files even when it ended in error (e.g. a non-zero exit after `sed -i`): earlier reads run again.

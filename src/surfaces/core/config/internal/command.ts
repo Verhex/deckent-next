@@ -11,6 +11,7 @@ import { applyWord, renderConfigExplanation, renderConfigInspection, sourceWord 
 export type ConfigApplicationFactory = (root: string, options: ConfigLoadOptions) => ConfigApplication;
 export interface ConfigCommandContext extends CliBaseContext {
   configApplication?: ConfigApplicationFactory;
+  loadInstallationIdentity?: (root: string, options: ConfigLoadOptions) => Promise<unknown>;
   resolveConfigPrincipal?: (root: string, scopeId: string, options: ConfigLoadOptions) => Promise<VerifiedPrincipal>;
 }
 interface Parsed { readonly args: string[]; json: boolean; global: boolean; help: boolean; language?: string; expect?: string; scope?: string; commandId?: string }
@@ -42,9 +43,13 @@ export async function configCommand(argv: readonly string[], context: ConfigComm
     if (parsed.args.length > 2) throw ErrorRegistry.createError('CLI_USAGE');
     const config = await loadConfig(root, { ...options, heal: true, globalOnly: parsed.global });
     locale = resolveLocale(parsed.language, env, config.language); context.onLocale?.(locale);
+    // Config owns its bootstrap fence, recovery lock and warnings. Identity observation follows that load,
+    // so the dispatcher's non-healing language/identity probe cannot preempt recovery or inspect project for --global.
+    await context.loadInstallationIdentity?.(root, { env, heal: false, globalOnly: parsed.global });
     const display = configDisplayView(config), value = keyPath === undefined ? display : getConfigValue(display, keyPath);
     emit(value, { ...sinks, mode: config.output_mode, render: formatValue }); return;
   }
+  await context.loadInstallationIdentity?.(root, { env, heal: false, globalOnly: parsed.global });
   if (!context.configApplication) throw ErrorRegistry.createError('CLI_USAGE', { params: { usage: t('config.surface.unavailable', {}, locale) } });
   const app = context.configApplication(root, options), layer = parsed.global ? 'global' as const : 'project' as const;
   if (action === undefined && parsed.args.length === 0) {

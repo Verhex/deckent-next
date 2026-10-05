@@ -15,6 +15,16 @@ function mcpSandboxUnreachable(p: Params, l: Locale): string {
 }
 interface Definition { readonly category: ErrorCategory; readonly render: (params: Params, locale: Locale) => ErrorEntry }
 const definitions: Readonly<Record<string, Definition>> = Object.freeze({
+  INSTALLATION_IDENTITY_RELOCATED: { category: 'config', render: (p, l) => ({ message: t('error.INSTALLATION_IDENTITY_RELOCATED', p, l) }) },
+  INSTALLATION_IDENTITY_RESOLUTION_INVALID: { category: 'config', render: (p, l) => ({ message: t('error.INSTALLATION_IDENTITY_RESOLUTION_INVALID', p, l) }) },
+  INSTALLATION_IDENTITY_INVALID: { category: 'config', render: (p, l) => ({ message: t('error.INSTALLATION_IDENTITY_INVALID', p, l) }) },
+  INSTALLATION_IDENTITY_UNAVAILABLE: { category: 'config', render: (p, l) => ({ message: t('error.INSTALLATION_IDENTITY_UNAVAILABLE', p, l) }) },
+  INSTALLATION_IDENTITY_LOCKED: { category: 'config', render: (p, l) => ({ message: t('error.INSTALLATION_IDENTITY_LOCKED', p, l) }) },
+  INSTALLATION_IDENTITY_UNSUPPORTED: { category: 'config', render: (p, l) => ({ message: t('error.INSTALLATION_IDENTITY_UNSUPPORTED', p, l) }) },
+  PROJECT_IDENTITY_INVALID: { category: 'config', render: (p, l) => ({ message: t('error.PROJECT_IDENTITY_INVALID', p, l) }) },
+  PROJECT_IDENTITY_UNAVAILABLE: { category: 'config', render: (p, l) => ({ message: t('error.PROJECT_IDENTITY_UNAVAILABLE', p, l) }) },
+  PROJECT_IDENTITY_LOCKED: { category: 'config', render: (p, l) => ({ message: t('error.PROJECT_IDENTITY_LOCKED', p, l) }) },
+
   CONFIG_SECRET_SECTION_REFUSED: { category: 'config', render: (p, l) => ({ message: t('error.CONFIG_SECRET_SECTION_REFUSED', p, l) }) },
   CONFIG_LAYER_INVALID: { category: 'config', render: (p, l) => ({ message: t('error.CONFIG_LAYER_INVALID', p, l) }) },
   CONFIG_DIGEST_INVALID: { category: 'config', render: (p, l) => ({ message: t('error.CONFIG_DIGEST_INVALID', p, l) }) },
@@ -43,6 +53,7 @@ const definitions: Readonly<Record<string, Definition>> = Object.freeze({
   CLI_CATALOG_INPUT_INVALID: { category: 'usage', render: (p, l) => ({ message: t('error.CLI_CATALOG_INPUT_INVALID', p, l) }) },
   CLI_CATALOG_INPUT_TTY: { category: 'usage', render: (p, l) => ({ message: t('error.CLI_CATALOG_INPUT_TTY', p, l) }) },
   CLI_CATALOG_INPUT_UNAVAILABLE: { category: 'usage', render: (p, l) => ({ message: t('error.CLI_CATALOG_INPUT_UNAVAILABLE', p, l) }) },
+  RUNTIME_CHAT_EVENT_TOO_LARGE: { category: 'error', render: (p, l) => ({ message: t('error.RUNTIME_CHAT_EVENT_TOO_LARGE', p, l) }) },
   TERMINAL_CHAT_NOT_CONFIGURED: { category: 'usage', render: (p, l) => ({ message: t('error.TERMINAL_CHAT_NOT_CONFIGURED', p, l) }) },
   TERMINAL_CHAT_MODEL_NOT_DECLARED: { category: 'error', render: (p, l) => ({ message: t('error.TERMINAL_CHAT_MODEL_NOT_DECLARED', p, l) }) },
   TERMINAL_CHAT_TRUNCATED: { category: 'error', render: (p, l) => ({ message: t('error.TERMINAL_CHAT_TRUNCATED', p, l) }) },

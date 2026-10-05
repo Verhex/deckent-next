@@ -5,3 +5,4 @@ export type { McpApplications, McpLimits } from '#surfaces/core/mcp/index.js';
 // at import time, so the barrel offers a lazy loader instead of a static `createMcpServer` export (STARTUP-COST).
 export function loadMcpSurface(): Promise<typeof import('#surfaces/core/mcp/index.js')> { return import('#surfaces/core/mcp/index.js'); }
 export type { ToolResultSummary, TurnDelta, WorklineStreamTurn } from '#surfaces/core/terminal/index.js';
+export type { PanelTurnBinding } from '#surfaces/core/terminal-kit/index.js';

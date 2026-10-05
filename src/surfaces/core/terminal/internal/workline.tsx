@@ -1,31 +1,25 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, createElement } from 'react';
 import { render, Box, Static, Text, useApp, type Instance } from 'ink';
-import type { WorklineInkPalette } from '#surfaces/core/terminal-kit/index.js';
-import { WorklinePaletteProvider, useWorklinePalette } from '#surfaces/core/terminal-kit/index.js';
+import { useWorklinePanel, type LocalExecution } from './workline-panel.js';
+import { WorklinePaletteProvider, useWorklinePalette, parseSlashLine, useWorklineWatch, surfaceDeliveryValues, surfaceFollowLine, useSurfacePushFeed,
+  type TerminalLocalContext, type WorklineInkPalette, type WorklineStreamTurn } from '#surfaces/core/terminal-kit/index.js';
 import { StatusStrip } from './status-strip.js';
-import { AssistantLive, openAssistantStream, renderAssistantStream, renderCompleteReply, type AssistantStreamStep } from '#surfaces/core/terminal-render/index.js';
-import type { WorklineStreamTurn } from '#surfaces/core/terminal-kit/index.js';
-import type { AssistantRenderLabels } from '#surfaces/core/terminal-render/index.js';
-import { HumanTextContext, humanRecordText, RenderGlyphsContext, resolveRenderGlyphs } from '#surfaces/core/terminal-render/index.js';
+import { AssistantLive, openAssistantStream, renderAssistantStream, renderCompleteReply, type AssistantStreamStep, type AssistantRenderLabels } from '#surfaces/core/terminal-render/index.js';
+import { HumanTextContext, humanRecordText, projectHumanPickerText, RenderGlyphsContext, resolveRenderGlyphs } from '#surfaces/core/terminal-render/index.js';
 import type { KnownSecretSnapshot } from '#platform/index.js';
 import { assistantLedgerEntries, streamStepEntries } from './ledger-units.js';
-import { parseSlashLine } from '#surfaces/core/terminal-kit/index.js';
-import type { WorkLedgerEntry } from './work-ledger.js';
-import { WORK_LEDGER_SCHEMA_VERSION } from './work-ledger.js';
+import { workerReportToLedgerEntries, WORK_LEDGER_SCHEMA_VERSION, type WorkLedgerEntry } from './work-ledger.js';
 import { LedgerEntryRow, type LedgerEntryLabels } from './ledger-entry.js';
-import type { WorklineLedgerPorts } from './workline-ledger.js';
-import { ledgerEntriesForWorkers, loadRunViewsForWatch } from './workline-ledger.js';
+import { ledgerEntriesForWorkers, ledgerEntriesForRuns, type WorklineLedgerPorts } from './workline-ledger.js';
+import { fillTemplate } from './worker-line.js';
 import { newWorkerTaskIds } from './worker-watch.js';
 import { freshRunCards, newRunLedgerEntries } from './run-watch.js';
-import { useConversationSession, type ConversationSessionLabels, type ConversationSessionPort, type ResumePickerItem } from './workline-sessions.js';
+import { useConversationSession, type ConversationSessionLabels, type ConversationSessionPort } from './workline-sessions.js';
 import { ArrowPicker } from '#surfaces/core/terminal-render/index.js';
 import { agentHistory, appendLedger, boundAgentHistory, compactLedger, EMPTY_LEDGER, plainChatHistory, type AgentChatMessage, type ChatTurnMessage, type LedgerBuffer } from './ledger-buffer.js';
 import { immediateSlashAction, notice, runLedgerCommand, type WatchState, type WorklineActionLabels } from './workline-actions.js';
-import { useSingleFlightPoll } from './use-poll.js';
 import { useWorkSurface } from './work-surface.js';
-import { Composer, type ComposerLabels } from '#surfaces/core/terminal-composer/index.js';
-import type { ComposerHistoryPort } from '#surfaces/core/terminal-composer/index.js';
-import type { ComposerMentionPort } from '#surfaces/core/terminal-composer/index.js';
+import { Composer, type ComposerLabels, type ComposerHistoryPort, type ComposerMentionPort } from '#surfaces/core/terminal-composer/index.js';
 import { messageWithMentions, type WorklineAttachMentions, type WorklineMentionLabels } from './workline-mentions.js';
 import { useWorklineMode, type WorklineModeLabels, type WorklinePermissionModePort } from './workline-mode.js';
 import { useReasoningPreview, type WorklineReasoningLabels } from './workline-reasoning.js';
@@ -64,6 +58,8 @@ export type WorklineErrorText = (error: unknown) => string;
 
 export interface WorklineProps {
   readonly labels: WorklineLabels;
+  /** Trusted persistent identities from CLI composition; session identity is generated once by the local adapter. */
+  readonly context: Omit<TerminalLocalContext, 'kind' | 'sessionId'>;
   readonly target: string;
   readonly systemPrompt: string;
   /** Window of the plain (non-streaming) path only; the agent path sends the whole conversation (T-L5, Astra 2091 R1). */
@@ -122,127 +118,97 @@ export function WorklineApp(props: WorklineProps) {
   const palette = useWorklinePalette();
   const { exit } = useApp();
   const { buffer, push } = useLedgerBuffer();
-  const [busy, setBusyState] = useState(false);
-  // Input typed while a turn runs is queued in order and never dropped (legacy input-queue contract).
-  const busyRef = useRef(false);
-  const queue = useRef<Array<{ readonly text: string; readonly mentions: readonly string[] }>>([]);
-  const setBusy = useCallback((next: boolean) => { busyRef.current = next; setBusyState(next); }, []);
-  const [cancelling, setCancelling] = useState(false);
+  const { panel, state, execute, decide } = useWorklinePanel(props.context, props.sessions);
+  const busy = state.phase === 'running' || state.phase === 'cancelling', cancelling = state.phase === 'cancelling';
   // A chat turn is running: Esc cancels it now (TL-A D5).
   const [turnRunning, setTurnRunning] = useState(false);
   const [live, setLive] = useState<{ readonly step: AssistantStreamStep; readonly lead: boolean } | null>(null);
   const [watch, setWatch] = useState<WatchState>({ workers: false, runs: false });
   const watchRef = useRef(watch);
   const history = useRef<readonly AgentChatMessage[]>([{ role: 'system', content: systemPrompt }]);
-  const session = useConversationSession(props.sessions, labels.sessions, props.knownSecrets);
-  const resumeGate = useRef<((choice: number | null) => void) | null>(null);
-  const [resumePicker, setResumePicker] = useState<readonly ResumePickerItem[] | null>(null);
-  const turn = useRef<AbortController | null>(null);
-  const seenWorkers = useRef(new Set<string>());
-  const seenRuns = useRef(new Map<string, string>());
+  const sessionId = useCallback(() => panel.controller.snapshot().context.sessionId, [panel]);
+  const session = useConversationSession(props.sessions, labels.sessions, sessionId, props.knownSecrets);
+  const presentation = panel.presentation(state);
+  const resumePicker = presentation?.kind === 'resume' && state.picker ? presentation.rows : null;
+  const seenWorkers = useRef(new Set<string>()), seenRuns = useRef(new Map<string, string>()), snapshotOpened = useRef(false);
   const pollMs = props.pollMs ?? ledger?.workerHeartbeatMs ?? 5000;
+  const workRef = useRef<ReturnType<typeof useWorkSurface> | null>(null), activeWorkers = useRef(false);
+  const pushMode = useSurfacePushFeed(ledger?.followEvents, ledger?.scopeId ?? '', pollMs, step => {
+    if (step.status === 'denied') workRef.current?.observeWorkers([]);
+    // With snapshots, publications are invalidations, never a substitute for typed surface state.
+    if (ledger?.readSurfaceSnapshot && step.status === 'applied') return;
+    const text = surfaceFollowLine(step, watchRef.current, labels.watchStep, step.status === 'denied' && step.stopped ? labels.watchAccessStopped : labels.watchAccessDenied);
+    if (text) push([notice(step.status === 'applied' ? 'info' : 'error', text)]);
+  }, mode => { if (labels.watchDelivery) push([notice('info', fillTemplate(labels.watchDelivery, surfaceDeliveryValues(mode, pollMs)))]); },
+  ledger?.readSurfaceSnapshot ? async (kinds, signal) => {
+    const snapshot = await ledger.readSurfaceSnapshot!(kinds, signal);
+    if (signal.aborted) return [];
+    if (snapshot.scopeId !== ledger.scopeId) return kinds; const opening = !snapshotOpened.current; snapshotOpened.current = true;
+    if (snapshot.workers) {
+      activeWorkers.current = snapshot.workers.sources.some(source => source.workers.some(worker => !worker.terminal &&
+        (['running', 'created', 'paused'].includes(worker.process) || (worker.identity !== null && worker.process === 'unknown' && worker.files?.heartbeat.phase !== 'exited'))));
+      const workers = workerReportToLedgerEntries(snapshot.workers, 'watch').filter(entry => entry.kind === 'worker');
+      workRef.current?.observeWorkers(workers);
+      if (opening || watchRef.current.workers) { const { seen, fresh } = newWorkerTaskIds(seenWorkers.current, workers); seenWorkers.current = seen; push(fresh); }
+    }
+    if (snapshot.runs && (opening || watchRef.current.runs)) { const { seen, fresh } = newRunLedgerEntries(seenRuns.current, snapshot.runs, 'watch'); seenRuns.current = seen; push(fresh); }
+    if (snapshot.approvals) workRef.current?.observeApprovals(snapshot.approvals);
+    return snapshot.denied;
+  } : undefined, ledger?.readSurfaceSnapshot ? `${watch.workers}:${watch.runs}` : '', { heartbeatMs: ledger?.workerHeartbeatMs ?? pollMs, active: () => watchRef.current.workers && activeWorkers.current });
+  const pushLive = pushMode !== 'poll'; // A refused feed must not restart through fallback polling.
+  const followWorkers = ledger?.followEvents ? undefined : ledger?.followWorkers, followRuns = ledger?.followEvents ? undefined : ledger?.followRuns;
   const failed = useCallback((error: unknown) => push([notice('error', `${labels.watchFailed}: ${errorText(error)}`)]), [errorText, labels.watchFailed, push]);
-  // P4 work surface: live worker panel, approval notifications/cards and run-cancel confirmation (dynamic region only).
-  const work = useWorkSurface({ ledger, labels, push, errorText, pollMs, watchingWorkers: watch.workers,
+  const work = useWorkSurface({ panel, state, ledger, labels, push, errorText, pollMs, pushLive, watchingWorkers: watch.workers,
     ...(props.approvalPollMs === undefined ? {} : { approvalPollMs: props.approvalPollMs }) });
+  workRef.current = work; decide.current = work.decideApproval;
   const mode = useWorklineMode(props.permissionMode, push, errorText, labels.work?.unavailable ?? labels.ledgerUnavailable, labels.mode, props.fullAccess === true);
   const refreshMode = mode.refresh;
   const reasoning = useReasoningPreview(push, labels.reasoning);
   const scratch = useWorklineScratch(props.scratch, session.id, push, errorText, labels.work?.unavailable ?? labels.ledgerUnavailable, labels.scratch);
   useEffect(() => { void refreshMode(); }, [refreshMode]);
 
-  // Unmount aborts the running turn and stops the drain: a queued line never starts a governed turn after the view closed.
-  const closed = useRef(false);
-  useEffect(() => { closed.current = false; return () => { closed.current = true; turn.current?.abort(); resumeGate.current?.(null); }; }, []);
   const opening = useRef(props.openingNotices);
   useEffect(() => {
     const notices = opening.current;
     if (notices?.length) push(notices.map(item => notice(item.level, item.text)));
   }, [push]);
-  useEffect(() => {
-    const follow = ledger?.followWorkers;
-    if (!watch.workers || !follow) return;
-    const controller = new AbortController();
-    let cancelled = false;
-    void (async () => {
-      try {
-        for await (const batch of follow(controller.signal)) {
-          if (cancelled || controller.signal.aborted) return;
-          const workers = batch.filter(entry => entry.kind === 'worker').map(entry => ({ ...entry, observedAtMs: Date.now() }));
-          work.observeWorkers(workers);
-          const { seen, fresh } = newWorkerTaskIds(seenWorkers.current, workers);
-          seenWorkers.current = seen;
-          push(fresh);
-        }
-      } catch (error) { if (!cancelled) failed(error); }
-    })();
-    return () => { cancelled = true; controller.abort(); };
-  }, [failed, ledger, push, watch.workers, work.observeWorkers]);
-  useEffect(() => {
-    const follow = ledger?.followRuns;
-    if (!watch.runs || !follow) return;
-    const controller = new AbortController();
-    let cancelled = false;
-    void (async () => {
-      try {
-        for await (const batch of follow(controller.signal)) {
-          if (cancelled || controller.signal.aborted) return;
-          const runs = batch.filter(entry => entry.kind === 'run').map(entry => ({ ...entry, observedAtMs: Date.now() }));
-          const { seen, fresh } = freshRunCards(seenRuns.current, runs);
-          seenRuns.current = seen;
-          push(fresh);
-        }
-      } catch (error) { if (!cancelled) failed(error); }
-    })();
-    return () => { cancelled = true; controller.abort(); };
-  }, [failed, ledger, push, watch.runs]);
-  useSingleFlightPoll(watch.workers && Boolean(ledger) && !ledger?.followWorkers, pollMs, async current => {
-    const workers = (await ledgerEntriesForWorkers(ledger!, 'watch')).filter(entry => entry.kind === 'worker');
-    if (!current()) return;
+  useWorklineWatch(watch.workers && Boolean(ledger) && !pushLive && !ledger?.readSurfaceSnapshot, followWorkers, pollMs, () => ledgerEntriesForWorkers(ledger!, 'watch'), batch => {
+    const workers = batch.filter(entry => entry.kind === 'worker').map(entry => ({ ...entry, observedAtMs: Date.now() }));
     work.observeWorkers(workers);
-    const { seen, fresh } = newWorkerTaskIds(seenWorkers.current, workers);
-    seenWorkers.current = seen;
-    push(fresh);
+    const { seen, fresh } = newWorkerTaskIds(seenWorkers.current, workers); seenWorkers.current = seen; push(fresh);
   }, failed);
-  useSingleFlightPoll(watch.runs && Boolean(ledger?.listRunIds) && !ledger?.followRuns, pollMs, async current => {
-    const runs = await loadRunViewsForWatch(ledger!);
-    if (!current()) return;
-    const { seen, fresh } = newRunLedgerEntries(seenRuns.current, runs, 'watch');
-    seenRuns.current = seen;
-    push(fresh);
+  useWorklineWatch(watch.runs && Boolean(ledger) && !pushLive && !ledger?.readSurfaceSnapshot, followRuns, pollMs, () => ledgerEntriesForRuns(ledger!, 'watch'), batch => {
+    const runs = batch.filter(entry => entry.kind === 'run').map(entry => ({ ...entry, observedAtMs: Date.now() }));
+    const { seen, fresh } = freshRunCards(seenRuns.current, runs); seenRuns.current = seen; push(fresh);
   }, failed);
-
-  const runTurn = useCallback(async (text: string, mentioned: readonly string[] = []) => {
+  const runTurn = useCallback(async (text: string, mentioned: readonly string[], execution: LocalExecution) => {
     push([chat('user', text)]);
     const startedAtMs = Date.now();
-    const controller = new AbortController();
-    turn.current = controller;
-    setBusy(true);
+    const signal = execution.signal;
+    const stream = panel.stream(execution);
     // T-L5 `@file`: the service attaches the mentioned files (bounded, labelled) to this message; a failure leaves the text as typed.
-    const content = await messageWithMentions(text, mentioned, props.attachMentions, controller.signal, push, errorText, labels.mentions);
-    // The agent path sends the whole conversation: the runtime measures and compacts it (T-L5, Astra 2091 R1); a message-count cut
-    // would drop early instructions before any measurement. The plain line mode keeps its `historyMessages` window.
+    const content = await messageWithMentions(text, mentioned, props.attachMentions, signal, push, errorText, labels.mentions);
+    // Agent history stays whole for runtime compaction; only plain turns use the message window.
     const system: AgentChatMessage = { role: 'system', content: systemPrompt }, asked = [...history.current, { role: 'user' as const, content }];
     const messages = props.streamTurn ? agentHistory(system, asked) : boundAgentHistory(system, asked, historyMessages);
     try {
       // Cancelled while the files were being attached: nothing is sent.
-      if (controller.signal.aborted) return;
+      if (signal.aborted) return;
       if (props.streamTurn) {
-        // S-STREAM: finished units go to scrollback as they complete; only the open tail and the reasoning narration stay live.
-        // From the start the live region says what the turn waits for (TL-A D1): never a silent wait.
+        // Completed units enter scrollback; the open tail names what the active turn waits for.
         const opened = openAssistantStream(startedAtMs);
         let state = opened.state, answer = '';
         setLive({ step: opened, lead: true }); setTurnRunning(true);
         let base: readonly AgentChatMessage[] = messages, appended: AgentChatMessage[] = [];
-        // One `/reasoning` state: off hides the preview and asks the service for a turn without model thinking (v16).
-        // The conversation's id travels with every turn (v16): its scratch area lives across the conversation.
-        for await (const delta of props.streamTurn(messages, controller.signal, { ...(reasoning.current.current ? {} : { reasoning: 'off' as const }), sessionId: session.id(),
+        // Forward the session and reasoning choices with the composition's generated binding callback.
+        for await (const delta of props.streamTurn(messages, signal, { ...(reasoning.current.current ? {} : { reasoning: 'off' as const }), sessionId: execution.input.context.sessionId, onTurnBound: stream.onTurnBound,
           ...(mode.fullAccess.current ? { fullAccess: true as const } : {}) })) {
           if (delta.kind === 'text') answer += delta.text;
           if (delta.kind === 'message') appended.push(delta.message);
           session.noteContext(delta);
           if (delta.kind === 'approval') {
-            if (delta.phase === 'requested') work.askTurnApproval(delta); else work.settleTurnApproval(delta.approvalId, delta.outcome);
+            stream.approval(delta);
+            if (delta.phase === 'settled' && delta.outcome === 'unsettled') work.noteUnsettled(delta.approvalId);
           }
           // A compaction replaces every non-system message the turn started from, including what it appended so far.
           if (delta.kind === 'compacted') { base = [messages[0]!, ...delta.messages.filter(message => message.role !== 'system')]; appended = []; }
@@ -257,7 +223,7 @@ export function WorklineApp(props: WorklineProps) {
         history.current = next.length || base !== messages ? agentHistory(base[0]!, [...base, ...next]) : messages;
         push(await session.save(history.current));
       } else {
-        const reply = await completeTurn(plainChatHistory(messages), controller.signal);
+        const reply = await completeTurn(plainChatHistory(messages), signal);
         history.current = boundAgentHistory(messages[0]!, [...messages, { role: 'assistant', content: reply, toolCalls: [] }], historyMessages);
         push(await session.save(history.current));
         // Render seam (P3): the complete reply is one turn of text deltas + `done`, printed as finished markdown units.
@@ -265,103 +231,79 @@ export function WorklineApp(props: WorklineProps) {
       }
     } catch (error) {
       history.current = messages;
-      push([notice('error', errorText(error))]);
+      push([notice('error', errorText(error))]); throw error;
     } finally {
       setLive(null); setTurnRunning(false);
-      turn.current = null;
-      setBusy(false);
-      setCancelling(false);
       // The mode may have been changed elsewhere meanwhile; the status row follows the service.
       void refreshMode();
     }
-  }, [completeTurn, errorText, historyMessages, labels.mentions, mode.fullAccess, props.attachMentions, props.streamTurn, push, refreshMode, session, systemPrompt, work]);
+  }, [completeTurn, errorText, historyMessages, labels.mentions, mode.fullAccess, props.attachMentions, props.streamTurn, push, refreshMode, session, systemPrompt, work, panel]);
 
   // Runs exactly one line: a chat turn, an immediate slash command or an awaited slash operation. `false` means the view is closing.
-  const perform = useCallback(async (line: string, mentioned: readonly string[] = []): Promise<boolean> => {
+  const perform = useCallback(async (line: string, mentioned: readonly string[], execution: LocalExecution): Promise<boolean> => {
     const slash = parseSlashLine(line);
-    if (!slash) { await runTurn(line, mentioned); return true; }
+    if (!slash) { await runTurn(line, mentioned, execution); return true; }
     if (slash.command === 'reasoning') { reasoning.run(slash.args); return true; }
     if (slash.command === 'mode' || slash.command === 'scratch') {
-      setBusy(true);
-      try { await (slash.command === 'mode' ? mode.run : scratch)(slash.args); } finally { setBusy(false); }
+      await (slash.command === 'mode' ? mode.run : scratch)(slash.args);
       return true;
     }
     if (slash.command === 'mcp' || slash.command === 'monitor' || slash.command === 'config') {
-      const lines = props[slash.command]; setBusy(true);
+      const lines = props[slash.command];
       try { push((lines ? await lines(slash.args) : [`${slash.command}: not available in this terminal`]).map(line => notice('info', line))); }
       catch (error) { push([notice('error', errorText(error))]); }
-      finally { setBusy(false); }
       return true;
     }
     if (slash.command === 'resume' || slash.command === 'context' || slash.command === 'clear') {
-      setBusy(true);
       try {
-        const result = await session.run(slash.command, slash.args, history);
+        const result = await session.run(slash.command, slash.args, history, execution);
         if (result.resumePicker) {
           // The drain stays inside this call, so a line queued while the list loads cannot run under the picker.
-          setResumePicker(result.resumePicker);
-          const choice = await new Promise<number | null>(resolve => { resumeGate.current = resolve; });
-          resumeGate.current = null;
-          if (!closed.current) setResumePicker(null);
-          const item = choice === null ? undefined : result.resumePicker[choice];
-          if (item && !closed.current) push((await session.run('resume', String(choice! + 1), history)).entries);
+          const choice = await panel.pick(execution, { kind: 'resume', rows: result.resumePicker }, result.resumePicker.map((_, index) => String(index)));
+          if (choice !== null && !execution.signal.aborted) push((await session.run('resume', String(Number(choice) + 1), history, execution)).entries);
         } else push(result.entries);
       }
       catch (error) { push([notice('error', errorText(error))]); }
-      finally { setBusy(false); }
       return true;
     }
-    const action = immediateSlashAction(slash.command, { ledger, labels, watch: watchRef.current, canRestartService: Boolean(props.restartService) });
-    // Quit before any setState: a render scheduled beside unmount leaves the TTY ref'd after a governed turn.
-    if (action?.exit) { exit(); return false; }
+    const action = immediateSlashAction(slash.command, { ledger, labels, watch: watchRef.current, canRestartService: Boolean(props.restartService), pollMs, ...(ledger?.followEvents ? { followDelivery: pushMode } : {}) });
+    // Close the controller before exit so queued work cannot dispatch.
+    if (action?.exit) { panel.close(); exit(); return false; }
     if (action) {
       push(action.entries);
-      // The ref moves with the state so a queued `/watch-stop` behind `/watch-workers` sees the new watch before any render.
+      // Queued watch commands see the transition even before React renders.
       if (action.watch) { watchRef.current = action.watch; setWatch(action.watch); }
       return true;
     }
-    setBusy(true);
     try {
       if (slash.command === 'service-restart') push([notice('info', await props.restartService!())]);
-      else if (slash.command === 'approvals' || slash.command === 'cancel') await work.run(slash.command, slash.args);
+      else if (slash.command === 'approvals' || slash.command === 'cancel') await work.run(slash.command, slash.args, execution);
       else push(await runLedgerCommand(slash.command as 'workers' | 'run' | 'runs' | 'transcript', slash.args, ledger!, labels));
     }
     catch (error) { push([notice('error', errorText(error))]); }
-    finally { setBusy(false); }
     return true;
-  }, [errorText, exit, labels, ledger, mode.run, props.mcp, props.monitor, props.config, props.restartService, push, reasoning.run, runTurn, scratch, session, setBusy, work.run]);
+  }, [errorText, exit, labels, ledger, mode.run, props.mcp, props.monitor, props.config, props.restartService, pollMs, pushMode, push, reasoning.run, runTurn, scratch, session, work.run, panel]);
 
-  // The one FIFO drain: after every line (turn, immediate or awaited slash) the next queued entry runs here, in order, once.
-  // Serialized without a flag: a turn or awaited slash holds `busyRef`, so Enter only enqueues; the hop from one line to the
-  // next `shift()` is microtask-only, so no keystroke can interleave. An open decision card keeps the keys (Composer inactive).
-  const submit = useCallback(async (text: string, mentioned: readonly string[] = []): Promise<void> => {
-    const trimmed = text.trim();
-    if (!trimmed) return;
-    if (busyRef.current) {
-      queue.current.push({ text: trimmed, mentions: mentioned });
-      push([notice('info', `${labels.queued}: ${trimmed}`)]);
-      return;
-    }
-    let next: { readonly text: string; readonly mentions: readonly string[] } | undefined = { text: trimmed, mentions: mentioned };
-    while (next !== undefined && !closed.current) {
-      if (!(await perform(next.text, next.mentions))) return;
-      next = queue.current.shift();
-    }
-  }, [labels.queued, perform, push]);
-
-  // A running turn is cancelled, never abandoned: the governed invocation receives a cancellation request.
-  const cancel = useCallback(() => {
-    if (turn.current && !cancelling) { setCancelling(true); turn.current.abort(); }
-  }, [cancelling]);
+  execute.current = async execution => {
+    await perform(execution.input.text, execution.input.mentions, execution);
+  };
+  const inputSequence = useRef(0);
+  const submit = (text: string, mentions: readonly string[] = []) => {
+    const before = panel.controller.snapshot();
+    if (panel.controller.send({ kind: 'submit', context: before.context, inputId: `input-${++inputSequence.current}`, text, mentions }) && before.active)
+      push([notice('info', `${labels.queued}: ${text.trim()}`)]);
+  };
+  const cancel = () => {
+    const current = panel.controller.snapshot(), active = current.active;
+    if (active) panel.controller.send(active.binding
+      ? { kind: 'cancel', context: current.context, turnId: active.binding.turnId }
+      : { kind: 'cancel-input', context: current.context, inputId: active.inputId });
+  };
 
   const ledgerLabels: LedgerEntryLabels = { runCard: labels.runCard, workerCard: labels.workerCard, chatUser: labels.roleUser, chatAssistant: labels.roleAssistant,
     render: labels.render, ...(labels.work ? { workerLine: labels.work.workerLine } : {}) };
   const choosing = resumePicker !== null || work.pickerOpen;
-  const finishResume = (choice: number | null) => {
-    const resolve = resumeGate.current;
-    resumeGate.current = null;
-    resolve?.(choice);
-  };
+  const finishResume = (choice: number | null) => { panel.choose(state.picker?.pickerHandle, choice === null ? null : String(choice)); };
   return (
     <HumanTextContext.Provider value={props.knownSecrets}>
     <Box flexDirection="column">
@@ -376,11 +318,13 @@ export function WorklineApp(props: WorklineProps) {
           details={resumePicker.map(item => item.hiddenNotice)} onSelect={finishResume} onCancel={() => finishResume(null)} /> : null}
       <Text {...palette.accent}>{labels.banner}</Text>
       <StatusStrip target={target} state={cancelling ? labels.statusCancelling : busy && !choosing ? labels.statusBusy : labels.statusReady} busy={busy && !choosing}
-        queued={queue.current.length} labels={{ ...labels.render, selfSourceFloor: labels.selfSourceFloor }} mode={mode.mode} selfSource={props.selfSource} cancellable={turnRunning && !cancelling} />
+        queued={state.queued.length} labels={{ ...labels.render, selfSourceFloor: labels.selfSourceFloor }} mode={mode.mode} selfSource={props.selfSource} cancellable={turnRunning && !cancelling} />
       {/* The composer owns input: Enter submits (queued FIFO while busy), Esc/Ctrl+C cancel a turn, exit is two Ctrl+C or Ctrl+D.
           An open decision card or arrow picker takes the keyboard away from it. */}
-      <Composer prompt={labels.prompt} labels={labels.composer} busy={busy} active={!work.modalOpen && !work.pickerOpen && resumePicker === null}
-        onSubmit={(text, mentioned) => void submit(text, mentioned)} onCancel={cancel} onExit={exit}
+      <Composer prompt={labels.prompt} labels={{ ...labels.composer,
+        slash: Object.fromEntries(Object.entries(labels.composer.slash).map(([key, text]) => [key, projectHumanPickerText(text, props.knownSecrets).label])) }}
+        busy={busy} active={!work.modalOpen && !work.pickerOpen && resumePicker === null}
+        onSubmit={(text, mentioned) => void submit(text, mentioned)} onCancel={cancel} onExit={() => { panel.close(); exit(); }}
         {...(props.inputHistory ? { history: props.inputHistory } : {})} {...(props.mentions ? { mentions: props.mentions } : {})}
         {...(props.mentionDelayMs === undefined ? {} : { mentionDelayMs: props.mentionDelayMs })} />
       <Text {...palette.muted}>{labels.hint}</Text>

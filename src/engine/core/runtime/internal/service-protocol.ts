@@ -2,9 +2,10 @@ import { z } from 'zod';
 import { agentTurnStreamEventSchema, effectCommandSchema, effectRecordSchema, effectTargetRefSchema, identitySchema, modelInvocationDeltaSchema, operationRefSchema, parseChatTurnCancellation, parseChatTurnCommand, parseModelInvocationCancellationCommand, parseModelInvocationCommand, parseModelInvocationQuery,
   parseModelInvocationPurgeCommand, parsePermissionModeCommand, parsePermissionModeQuery, parseProviderSpendAccountQuery, parseProviderSpendAuditCommand, parseScratchQuery,
   parseWorkspaceAttachmentRequest, parseWorkspaceFileQuery } from '#domain/index.js';
+import { clearSessionStandingSchema } from '#engine/core/approval/index.js';
 import { secretDeleteCommandSchema, secretSetCommandSchema } from '#engine/core/secret-store/index.js';
 
-export const RUNTIME_SERVICE_SCHEMA_VERSION = 19 as const;
+export const RUNTIME_SERVICE_SCHEMA_VERSION = 20 as const;
 export const RUNTIME_SERVICE_ERROR_PARAMS = 8;
 export const RUNTIME_SERVICE_ERROR_PARAM_CHARS = 512;
 /** Bounded, serializable message parameters for a typed error response (strings truncated, other values dropped). */
@@ -20,7 +21,7 @@ export const runtimeServiceOperationSchema = z.enum(['renewApproval', 'listAppro
   'inspectInventory', 'requestRunCancellation', 'deliverRunCancellation', 'reconcileAttempt', 'recoverCancellations', 'describeService', 'shutdownService',
   'invokeModel', 'inspectModelInvocation', 'purgeModelInvocationContent', 'cancelModelInvocation', 'inspectProviderSpendAccount', 'auditProviderSpendAccount',
   'invokeModelStream', 'chatTurn', 'cancelChatTurn', 'findWorkspaceFiles', 'attachWorkspaceFile', 'executeOperation', 'compensateOperation', 'inspectOperation',
-  'inspectPermissionMode', 'setPermissionMode', 'inspectScratch', 'clearScratch', 'setSecret', 'deleteSecret']);
+  'inspectPermissionMode', 'setPermissionMode', 'inspectScratch', 'clearScratch', 'clearSessionStanding', 'setSecret', 'deleteSecret']);
 export const runtimeServiceDescriptionInputSchema = z.object({}).strict().readonly();
 export const runtimeServiceDeliverySchema = z.object({ maxResultBytes: z.number().int().positive().safe() }).strict().readonly();
 const invocationOperation = (operation: RuntimeServiceOperation): boolean => operation === 'invokeModel' || operation === 'invokeModelStream' || operation === 'inspectModelInvocation'
@@ -30,7 +31,7 @@ export const isRuntimeServiceBoundedResultOperation = (operation: RuntimeService
   || operation === 'renewApproval' || operation === 'listApprovals' || operation === 'inspectApproval' || operation === 'decideApproval'
   || operation === 'inspectProviderSpendAccount' || operation === 'auditProviderSpendAccount' || operation === 'chatTurn' || operation === 'cancelChatTurn'
   || isRuntimeServiceWorkspaceFileOperation(operation) || isRuntimeServiceEffectOperation(operation) || isRuntimeServicePermissionModeOperation(operation)
-  || isRuntimeServiceScratchOperation(operation) || isRuntimeServiceSecretOperation(operation);
+  || operation === 'clearSessionStanding' || isRuntimeServiceScratchOperation(operation) || isRuntimeServiceSecretOperation(operation);
 /** v15 (T-L5 `@file`): candidate files and one file's bounded content for the composer, through the service's scoped read port. */
 export function isRuntimeServiceWorkspaceFileOperation(operation: RuntimeServiceOperation): operation is 'findWorkspaceFiles' | 'attachWorkspaceFile' {
   return operation === 'findWorkspaceFiles' || operation === 'attachWorkspaceFile';
@@ -51,6 +52,7 @@ export function isRuntimeServicePermissionModeOperation(operation: RuntimeServic
 export function isRuntimeServiceScratchOperation(operation: RuntimeServiceOperation): operation is 'inspectScratch' | 'clearScratch' {
   return operation === 'inspectScratch' || operation === 'clearScratch';
 }
+/** v20 (S02): conditional session approval answers and own-conversation clear. Stored approval/receipt/ledger formats stay unchanged. */
 /** v19 (B1 APPROVAL-ASSURANCE; v18 was pushed): `decideApproval` takes the declared `channel` and the turn's one-time `decisionCapability`, and a
  * turn's `approval.requested` carries that capability (only on the stream of the connection that started the turn) with the card's risk and
  * required assurance. A v18 client is outside the window: its decision is closed unanswered, never silently recorded as peer-session. */
@@ -80,7 +82,8 @@ export const runtimeServiceRequestSchema = z.object({ schemaVersion: z.literal(R
       context.addIssue({ code: z.ZodIssueCode.custom, path: ['delivery'], message: 'RUNTIME_SERVICE_DELIVERY_REQUIRED' });
     }
     try {
-      if (value.operation === 'inspectProviderSpendAccount') parseProviderSpendAccountQuery(value.input);
+      if (value.operation === 'clearSessionStanding') clearSessionStandingSchema.parse(value.input);
+      else if (value.operation === 'inspectProviderSpendAccount') parseProviderSpendAccountQuery(value.input);
       else if (value.operation === 'auditProviderSpendAccount') parseProviderSpendAuditCommand(value.input);
       else if (value.operation === 'invokeModel' || value.operation === 'invokeModelStream') parseModelInvocationCommand(value.input);
       else if (value.operation === 'inspectModelInvocation') parseModelInvocationQuery(value.input);
@@ -150,11 +153,11 @@ export class RuntimeServiceProtocolError extends Error {
  * bumps so an upgraded terminal can see (build skew) and stop (governed shutdown) a service started from an older build.
  * The server accepts them in these versions and answers in the request's version; every other operation is current-only.
  * A mismatched non-lifecycle envelope is closed unanswered (the client's typed `LOCAL_RUNTIME_TRANSPORT`); a v18 client's describe of a v17
- * service retries at v17 and the terminal shows the build skew. v18 (SECRET-WRITE) kept [18, 17]; v19 (B1) keeps [19, 18]: a v17 service is outside.
+ * service retries at v17 and the terminal shows the build skew. v18 (SECRET-WRITE) kept [18, 17]; v20 (S02) keeps [20, 19]: a v18 service is outside.
  */
-export const RUNTIME_SERVICE_LIFECYCLE_VERSIONS = Object.freeze([RUNTIME_SERVICE_SCHEMA_VERSION, 18] as const);
+export const RUNTIME_SERVICE_LIFECYCLE_VERSIONS = Object.freeze([RUNTIME_SERVICE_SCHEMA_VERSION, 19] as const);
 export type RuntimeServiceLifecycleVersion = typeof RUNTIME_SERVICE_LIFECYCLE_VERSIONS[number];
-const lifecycleVersionSchema = z.union([z.literal(RUNTIME_SERVICE_SCHEMA_VERSION), z.literal(18)]);
+const lifecycleVersionSchema = z.union([z.literal(RUNTIME_SERVICE_SCHEMA_VERSION), z.literal(19)]);
 export const runtimeServiceLifecycleRequestSchema = z.object({ schemaVersion: lifecycleVersionSchema, requestId: identitySchema,
   operation: z.enum(['describeService', 'shutdownService']), input: z.unknown() }).strict()
   .refine(value => Object.hasOwn(value, 'input'), { path: ['input'], message: 'RUNTIME_SERVICE_INPUT_REQUIRED' }).readonly();

@@ -46,7 +46,7 @@ export async function executeConfiguredRuntimeOperation(projectRoot: string, req
     deliverRunCancellation: input => operations.deliverRunCancellation(runCommandSchema.parse(input)),
     reconcileAttempt: input => operations.reconcileAttempt(attemptIdentitySchema.parse(input)),
     recoverCancellations: input => operations.recoverCancellations(cancellationRecoveryCommandSchema.parse(input)),
-  } satisfies Record<Exclude<RuntimeServiceOperation, 'renewApproval' | 'listApprovals' | 'inspectApproval' | 'decideApproval' | 'describeService' | 'shutdownService' | 'invokeModel' | 'invokeModelStream' | 'inspectModelInvocation'
+  } satisfies Record<Exclude<RuntimeServiceOperation, 'clearSessionStanding' | 'renewApproval' | 'listApprovals' | 'inspectApproval' | 'decideApproval' | 'describeService' | 'shutdownService' | 'invokeModel' | 'invokeModelStream' | 'inspectModelInvocation'
     | 'purgeModelInvocationContent' | 'cancelModelInvocation' | 'inspectProviderSpendAccount' | 'auditProviderSpendAccount' | 'chatTurn' | 'cancelChatTurn'
     | 'findWorkspaceFiles' | 'attachWorkspaceFile' | 'executeOperation' | 'compensateOperation' | 'inspectOperation' | 'inspectPermissionMode' | 'setPermissionMode'
     | 'inspectScratch' | 'clearScratch' | 'setSecret' | 'deleteSecret'>, RuntimeOperationHandler>;

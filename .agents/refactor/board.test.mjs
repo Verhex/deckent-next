@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import vm from 'node:vm';
 import os from 'node:os';
 import path from 'node:path';
+import { spawnSync } from 'node:child_process';
 import { initBoard, readBoard, setOwnRow, setMap, clearRow, renderHtml, renderText, renderOwnerReport, writeAtomic, DEFAULT_SLOTS } from './board.mjs';
 
 function fixture(t) {
@@ -34,6 +35,109 @@ test('a session claims an unassigned row, later writes need the same session id;
   assert.equal(code(() => setOwnRow(file, 'review', { focus: 'hijack' }, { session: 'other', revision: 1 })), 'BOARD_IDENTITY_MISMATCH');
   assert.equal(fs.readFileSync(file, 'utf8'), before);
   assert.equal(setOwnRow(file, 'review', { focus: 'next batch' }, { session: 'sol-1', revision: 1 }).revision, 2);
+});
+
+test('a closed main is replaced with the new body, previous identity and takeover time; old work is cleared', t => {
+  const { file } = fixture(t); initBoard(file);
+  const worker = { id: 'old-worker', kind: 'codex-exec', model: 'test-model', worktree: '/old', card: 'old-card', status: 'running', since: '2026-10-03T00:00:00.000Z' };
+  setOwnRow(file, 'main', { name: 'Old', channel: 'old-channel', cwd: '/old', workRef: 'old-work', focus: 'old-focus',
+    status: 'closed', waitingOn: 'owner', next: 'old-next', workers: [worker] }, { session: 'old-main', revision: 0 });
+  const before = readBoard(file), now = new Date('2026-10-05T10:00:00.000Z');
+  assert.deepEqual(setOwnRow(file, 'main', { name: 'New', focus: 'new-focus' }, { session: 'new-main', revision: 1, now }),
+    { revision: 2, updatedAt: now.toISOString() });
+  const board = readBoard(file);
+  assert.deepEqual(board.sessions[0], { slot: 'main', role: before.sessions[0].role, name: 'New', sessionId: 'new-main',
+    channel: null, cwd: null, workRef: null, focus: 'new-focus', status: 'active', waitingOn: null, next: null,
+    updatedAt: now.toISOString(), workers: [], previousSessionId: 'old-main', takenOverAt: now.toISOString() });
+  assert.equal(board.schemaVersion, 1);
+  assert.deepEqual(board.sessions.slice(1), before.sessions.slice(1)); assert.deepEqual(board.dogfood, before.dogfood);
+  setOwnRow(file, 'main', { next: 'continue' }, { session: 'new-main', revision: 2 });
+  assert.equal(readBoard(file).sessions[0].takenOverAt, now.toISOString());
+  assert.equal(readBoard(file).sessions[0].previousSessionId, 'old-main');
+});
+
+for (const status of ['active', 'waiting', 'blocked']) test(`a stranger cannot take over a ${status} row, even with a closed body`, t => {
+  const { file } = fixture(t); initBoard(file);
+  setOwnRow(file, 'main', { status }, { session: 'old-main', revision: 0 });
+  const before = fs.readFileSync(file, 'utf8');
+  assert.equal(code(() => setOwnRow(file, 'main', { status: 'closed' }, { session: 'new-main', revision: 1 })), 'BOARD_IDENTITY_MISMATCH');
+  assert.equal(fs.readFileSync(file, 'utf8'), before);
+});
+
+test('the new main can reconcile and clear rows; the old main loses all three write paths', t => {
+  const { file } = fixture(t); initBoard(file);
+  setOwnRow(file, 'main', { status: 'closed' }, { session: 'old-main', revision: 0 });
+  setOwnRow(file, 'main', {}, { session: 'new-main', revision: 1 });
+  assert.equal(setMap(file, { sessions: { review: { sessionId: 'reviewer' } } }, { session: 'new-main', revision: 2 }).revision, 3);
+  assert.equal(clearRow(file, 'review', { session: 'new-main', revision: 3 }).revision, 4);
+  assert.equal(readBoard(file).sessions.find(row => row.slot === 'review').sessionId, null);
+  const before = fs.readFileSync(file, 'utf8'), auth = { session: 'old-main', revision: 4 };
+  assert.equal(code(() => setOwnRow(file, 'main', {}, auth)), 'BOARD_IDENTITY_MISMATCH');
+  assert.equal(code(() => setMap(file, { sessions: { review: { sessionId: 'old-main' } } }, auth)), 'BOARD_NOT_MAIN');
+  assert.equal(code(() => clearRow(file, 'review', auth)), 'BOARD_NOT_MAIN');
+  assert.equal(fs.readFileSync(file, 'utf8'), before);
+});
+
+test('a takeover keeps revision fencing, validates the body and does not allow forged provenance', t => {
+  const { dir, file } = fixture(t); initBoard(file);
+  setOwnRow(file, 'main', { status: 'closed' }, { session: 'old-main', revision: 0 });
+  const before = fs.readFileSync(file, 'utf8');
+  assert.throws(() => setOwnRow(file, 'main', {}, { session: 'new-main', revision: 0 }),
+    error => error.code === 'BOARD_REVISION_CONFLICT' && error.currentRevision === 1);
+  for (const patch of [null, { workers: [{}] }, { previousSessionId: 'forged' }, { takenOverAt: '2026-10-01' }]) {
+    assert.equal(code(() => setOwnRow(file, 'main', patch, { session: 'new-main', revision: 1 })), 'BOARD_FIELD');
+    assert.equal(fs.readFileSync(file, 'utf8'), before);
+  }
+  assert.deepEqual(fs.readdirSync(dir), ['process-board.json']);
+  setOwnRow(file, 'main', {}, { session: 'new-main', revision: 1 });
+  const after = fs.readFileSync(file, 'utf8');
+  assert.throws(() => setOwnRow(file, 'main', {}, { session: 'racing-main', revision: 1 }),
+    error => error.code === 'BOARD_REVISION_CONFLICT' && error.currentRevision === 2);
+  assert.equal(fs.readFileSync(file, 'utf8'), after);
+});
+
+test('closed row takeover accepts new workers, handles other slots and records only the immediate predecessor', t => {
+  const { file } = fixture(t); initBoard(file);
+  const workers = [{ id: 'new-worker', kind: 'codex-exec', model: 'test-model', worktree: '/new', card: 'new-card', status: 'running', since: '2026-10-05T00:00:00.000Z' }];
+  setOwnRow(file, 'main', { status: 'closed' }, { session: 'old-main', revision: 0 });
+  setOwnRow(file, 'main', { workers, status: 'waiting' }, { session: 'new-main', revision: 1 });
+  assert.deepEqual(readBoard(file).sessions[0].workers, workers);
+  assert.equal(readBoard(file).sessions[0].status, 'waiting');
+  setOwnRow(file, 'review', { status: 'closed', focus: 'old' }, { session: 'old-review', revision: 2 });
+  setOwnRow(file, 'review', { next: 'new' }, { session: 'new-review', revision: 3 });
+  let row = readBoard(file).sessions.find(item => item.slot === 'review');
+  assert.equal(row.previousSessionId, 'old-review'); assert.equal(row.focus, null); assert.equal('workers' in row, false);
+  setOwnRow(file, 'review', { status: 'closed' }, { session: 'new-review', revision: 4 });
+  const now = new Date('2026-10-05T11:00:00.000Z');
+  setOwnRow(file, 'review', {}, { session: 'third-review', revision: 5, now });
+  row = readBoard(file).sessions.find(item => item.slot === 'review');
+  assert.equal(row.previousSessionId, 'new-review'); assert.equal(row.takenOverAt, now.toISOString()); assert.equal(row.next, null);
+});
+
+test('the same session updating its closed row retains ordinary patch semantics', t => {
+  const { file } = fixture(t); initBoard(file);
+  setOwnRow(file, 'main', { status: 'closed', focus: 'keep' }, { session: 'main', revision: 0 });
+  setOwnRow(file, 'main', { next: 'handoff' }, { session: 'main', revision: 1 });
+  const row = readBoard(file).sessions[0];
+  assert.equal(row.focus, 'keep'); assert.equal(row.status, 'closed'); assert.equal('previousSessionId' in row, false);
+});
+
+test('CLI set-own-row takes over a closed main through an isolated workspace and rejects the former main', t => {
+  const { dir, file } = fixture(t); initBoard(file);
+  setOwnRow(file, 'main', { status: 'closed', focus: 'old' }, { session: 'old-main', revision: 0 });
+  const script = path.join(dir, 'board.mjs');
+  fs.copyFileSync(new URL('./board.mjs', import.meta.url), script);
+  fs.writeFileSync(path.join(dir, 'workspace.json'), JSON.stringify({ version: 1, board: 'process-board.json' }));
+  const run = session => spawnSync(process.execPath, [script, 'set-own-row', 'main', '-', '--session', session, '--revision', String(readBoard(file).revision)],
+    { cwd: dir, input: JSON.stringify({ name: 'New' }), encoding: 'utf8', timeout: 10_000 });
+  const result = run('new-main');
+  assert.equal(result.error, undefined); assert.equal(result.status, 0, result.stderr); assert.equal(JSON.parse(result.stdout).revision, 2);
+  const row = readBoard(file).sessions[0];
+  assert.equal(row.sessionId, 'new-main'); assert.equal(row.previousSessionId, 'old-main'); assert.equal(row.focus, null);
+  assert.equal(row.takenOverAt, row.updatedAt); assert.ok(Number.isFinite(Date.parse(row.takenOverAt)));
+  const before = fs.readFileSync(file, 'utf8'), refused = run('old-main');
+  assert.equal(refused.status, 1); assert.equal(JSON.parse(refused.stderr).error, 'BOARD_IDENTITY_MISMATCH');
+  assert.equal(fs.readFileSync(file, 'utf8'), before);
 });
 
 test('a stale revision is refused and the error names the current revision; the file is unchanged', t => {

@@ -118,8 +118,8 @@ permissions, the base branch and repository protection settings. These files do 
 
 ## Deckent-worker branches and PRs — WORKER-GIT-PR
 
-This is the owner-admitted **design and documentation** from 2026-10-03. The host PR script is not
-implemented yet; workers do not currently open PRs automatically. The intended workflow is:
+This is the owner-admitted **design and documentation** from 2026-10-03. The host PR script
+(`.agents/refactor/pr.mjs`) is present; workers still do not open PRs automatically. Owner test and landing remain open. The intended workflow is:
 
 1. The admitted worker runs in its isolated attempt checkout. Git credentials stay out of worker
    containers; workers neither push nor open PRs. Existing product patch/delivery custody remains
@@ -135,12 +135,13 @@ implemented yet; workers do not currently open PRs automatically. The intended w
    only the lead may land after the gate. A worker report, prepared candidate or opened PR is not
    Task acceptance, independent PASS or live delivery.
 
-Proposed host-kit interface (not runnable today):
+Host-kit interface (script present; owner test and landing remain open):
 
 ```text
-node .agents/refactor/pr.mjs open <patch-dir> --card <id>
+node .agents/refactor/pr.mjs prepare <patch-dir> --card <id> [--scope <glob>]...
+node .agents/refactor/pr.mjs open <patch-dir> --card <id> --push
 ```
 
 [PLAN.md](PLAN.md#worker-git-pr--host-branch-ve-pr-akışı) carries the script, patch/report contract,
-replay/failure checks and owner test planned for **2026-10-04**. This lane implements no script,
-credential plumbing, push, PR creation, main landing or DOGFOOD/live switch.
+replay/failure checks and owner test planned for **2026-10-04**. The script is present; owner test and landing remain open.
+Credential plumbing, live GitHub push, live PR creation, main landing and a DOGFOOD/live switch stay outside this script.

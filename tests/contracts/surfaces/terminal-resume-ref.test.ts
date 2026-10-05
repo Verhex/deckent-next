@@ -1,3 +1,4 @@
+import { createPanelController } from '#surfaces/core/terminal-kit/index.js';
 import { createElement } from 'react';
 import { render, Text } from 'ink';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -17,10 +18,19 @@ function open(locale: 'en' | 'tr' = 'en') {
   const history = { current: [{ role: 'system' as const, content: 'system' }, { role: 'user' as const, content: 'current' }] };
   let session!: ReturnType<typeof useConversationSession>;
   const labels = terminalSessionLabels(locale);
-  function App() { session = useConversationSession(port, labels); return createElement(Text, null, 'hook'); }
+  let result: Awaited<ReturnType<typeof session.run>>, sequence = 0;
+  const controller = createPanelController({ kind: 'terminal-local', context: { kind: 'terminal-local', installationId: 'fixture-installation', projectId: 'fixture-project', scopeId: 's', sessionId: 'fixture-session' },
+    history: { kind: 'enabled', port }, now: Date.now,
+    async execute(e) { result = await session.run(e.input.text === '/clear' ? 'clear' : 'resume', e.input.mentions[0] ?? '', history, e); },
+    async decideApproval() { throw new Error('unused'); }, retireApproval() {} });
+  function App() { session = useConversationSession(port, labels, () => controller.snapshot().context.sessionId); return createElement(Text, null, 'hook'); }
+  const run = async (command: string, arg = '') => {
+    controller.send({ kind: 'submit', context: controller.snapshot().context, inputId: String(++sequence), text: command, mentions: [arg] });
+    await until(() => controller.snapshot().phase === 'idle', 'serialized session command'); return result;
+  };
   mounted.push(render(createElement(App), { debug: true, patchConsole: false }));
   return { port, history, labels, session: () => session, change: (next: readonly ConversationSessionSummary[]) => { summaries = next; },
-    run: (arg: string) => session.run('resume', arg, history) };
+    run: (arg: string) => run('/resume', arg), clear: () => run('/clear') };
 }
 
 describe('TC-0 exact resume references', () => {
@@ -54,7 +64,7 @@ describe('TC-0 exact resume references', () => {
     await view.run(''); await view.run('1'); expect(view.port.load).toHaveBeenCalledTimes(1);
   });
   it('invalidates shown indices when starting a new conversation', async () => {
-    const view = open(); await view.run(''); await view.session().run('clear', '', view.history);
+    const view = open(); await view.run(''); await view.clear();
     expect(await view.run('1')).toMatchObject({ refusal: 'SESSION_LIST_STALE' }); expect(view.port.load).not.toHaveBeenCalled();
   });
   it('invalidates indices after saving, and reports a missing exact id without replacing history', async () => {

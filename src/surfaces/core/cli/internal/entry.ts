@@ -5,7 +5,7 @@ import { runCommand } from './run.js';
 import { codingCommand } from './coding.js';
 import { taskCommand } from './task.js';
 import { runtimeCommand } from './runtime.js';
-import { initCommand } from './init.js';
+import { initCommand } from '#surfaces/core/cli-installation/index.js';
 import { toolchainsCommand } from './toolchains.js';
 import { mcpCommand } from './mcp.js';
 import { operationCommand } from './operation.js';
@@ -63,9 +63,16 @@ export async function main(argv: readonly string[] = process.argv.slice(2), cont
       return 0;
     }
     context.initialize?.();
+    const interactive = (argv.length === 0 && interactiveTerminal(context)) || (argv.length === 1 && argv[0] === '--full-access');
+    if (context.loadInstallationIdentity && (interactive || CLI_COMMANDS.some(item => item.name === argv[0]))
+      && argv[0] !== 'config' && !(argv[0] === 'init' && argv[1] === 'identity')) {
+      locale = resolveLocale(argv.includes('--lang') ? argv[argv.indexOf('--lang') + 1] : undefined, context.env,
+        await loadConfigLanguage(context.root, { ...(context.env ? { env: context.env } : {}) }));
+      await context.loadInstallationIdentity(context.root ?? process.cwd(), { ...(context.env ? { env: context.env } : {}), globalOnly: argv.includes('--global') });
+    }
     // `deckent` alone opens the interactive terminal on a real terminal; piped or dumb terminals get help (owner 2026-09-23).
     // `deckent --full-access` (MODES-3) opens it in full access; without a terminal it is refused by the terminal itself (never silent).
-    if ((argv.length === 0 && interactiveTerminal(context)) || (argv.length === 1 && argv[0] === '--full-access')) {
+    if (interactive) {
       await (await import('./terminal.js')).terminalCommand(['terminal', ...argv], { ...context, onLocale: value => { locale = value; context.onLocale?.(value); } });
       return 0;
     }

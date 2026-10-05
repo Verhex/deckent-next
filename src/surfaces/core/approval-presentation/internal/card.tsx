@@ -24,6 +24,8 @@ export interface DecisionCardProps {
   readonly decisionLabels?: ApprovalDecisionLabels;
   readonly prompt: string;
   readonly pendingText: string;
+  /** Shared controller owns pending/retry when supplied; standalone cards retain their one-shot behavior. */
+  readonly pending?: boolean;
   /** Standing scopes this card offers (`s` session, `a` always); none = the plain y/N card. */
   readonly scopes?: readonly StandingScope[];
   /** Called once; later keys are ignored while the decision is recorded. */
@@ -31,16 +33,15 @@ export interface DecisionCardProps {
 }
 
 /** Modal y/N card in the dynamic region; owns input while mounted (the composer is inactive). */
-export function DecisionCard({ title, projectedLines, decisionLabels = {}, prompt, pendingText, scopes = [], onDecide }: DecisionCardProps) {
+export function DecisionCard({ title, projectedLines, decisionLabels = {}, prompt, pendingText, pending: controlledPending, scopes = [], onDecide }: DecisionCardProps) {
   const ink = useWorklinePalette();
   const decided = useRef(false);
   const [pending, setPending] = useState(false);
   useInput((input, key) => {
-    if (decided.current) return;
+    if (controlledPending ?? decided.current) return;
     const answer = scopedDecisionKey(input, key, scopes);
     if (answer === null) return;
-    decided.current = true;
-    setPending(true);
+    if (controlledPending === undefined) { decided.current = true; setPending(true); }
     onDecide(answer.yes, answer.standing);
   });
   return (
@@ -49,7 +50,7 @@ export function DecisionCard({ title, projectedLines, decisionLabels = {}, promp
       {projectedLines.map((line, index) => <Box key={`decision:${index}`} flexDirection="column">
         <Text><SpanText spans={line.spans} /></Text><ApprovalDecisionWarnings fields={line.fields} labels={decisionLabels} />
       </Box>)}
-      <Text {...ink.muted}>{pending ? pendingText : prompt}</Text>
+      <Text {...ink.muted}>{(controlledPending ?? pending) ? pendingText : prompt}</Text>
     </Box>
   );
 }

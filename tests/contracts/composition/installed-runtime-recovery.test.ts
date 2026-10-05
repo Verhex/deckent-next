@@ -11,6 +11,7 @@ import { DockerSupervisor, FileArtifactStore, identifyDockerRequest } from '#ada
 import { clearConfigCache, loadConfig } from '#platform/index.js';
 import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
 import { installationProfile } from '../support/installation-profile.js';
+import { waitForRecoveredOutput } from '../support/recovered-output-event.js';
 
 const imageId = process.env.DECKENT_TEST_DOCKER_IMAGE, exec = promisify(execFile);
 const cli = resolve('dist/composition/core/cli/internal/entry.js');
@@ -23,11 +24,16 @@ function closed(child: Child) { return new Promise<number | null>((resolveExit, 
 async function bounded<T>(promise: Promise<T>, child: Child, label: string, milliseconds = 20_000) {
   let timer: ReturnType<typeof setTimeout> | undefined;
   try { return await Promise.race([promise, new Promise<never>((_, reject) => { timer = setTimeout(() => { child.kill('SIGKILL');
-    const captured = diagnostics.get(child); reject(new Error(`${label}: ${captured?.stderr ?? ''}`)); }, milliseconds); })]); }
+    const captured = diagnostics.get(child); reject(new Error(`${label}: stdout=${captured?.stdout ?? ''} stderr=${captured?.stderr ?? ''}`)); }, milliseconds); })]); }
   finally { if (timer) clearTimeout(timer); }
 }
+// The service may hold the ledger write lock while this observer opens it; on a loaded runner the open can exceed the busy
+// timeout (ATTEMPT_STORE_BUSY, hosted ubuntu node 26). That is "not observable yet" for this bounded poll, never a result.
+async function observe<T>(read: () => Promise<T | undefined>): Promise<T | undefined> {
+  try { return await read(); } catch (error) { if ((error as { code?: unknown }).code === 'ATTEMPT_STORE_BUSY') return undefined; throw error; }
+}
 async function poll<T>(read: () => Promise<T | undefined>, label: string): Promise<T> {
-  for (let count = 0; count < 1_000; count++) { const value = await read(); if (value !== undefined) return value;
+  for (let count = 0; count < 1_000; count++) { const value = await observe(read); if (value !== undefined) return value;
     await new Promise(resolveWait => setTimeout(resolveWait, 20)); }
   throw new Error(label);
 }
@@ -127,7 +133,9 @@ it.skipIf(process.platform !== 'linux')('recovers installed offline completion a
     secondClient.kill('SIGKILL'); await bounded(secondClosed, secondClient, 'SECOND_CLIENT_CLOSE');
     service.kill('SIGKILL'); await bounded(serviceClose, service, 'SECOND_SERVICE_CLOSE');
     await requestRunCancellation(project, { schemaVersion: 1, commandId: 'cancel-run', action: 'cancel', scopeId: 'scope-1', runId: 'cancel', expectedRevision: 1 }, options);
-    service = start(); serviceClose = closed(service); await bounded(ready(service), service, 'RESTART_TWO_READY');
+    service = start(); serviceClose = closed(service);
+    const cancelledOutputRecovered = waitForRecoveredOutput(service.stdout, second);
+    await bounded(ready(service), service, 'RESTART_TWO_READY');
     await poll(async () => (await exec('/usr/bin/docker', ['--host', endpoint!, 'inspect', '--format', '{{.State.Running}}', secondHandle!])).stdout.trim() === 'false' ? true : undefined, 'SECOND_STOPPED');
     const ledger = resolve(data, 'state/ledger.db');
     const busyTimeoutMs = (await loadConfig(project, { ...options, heal: false })).storage.sqlite.busyTimeoutMs;
@@ -135,7 +143,12 @@ it.skipIf(process.platform !== 'linux')('recovers installed offline completion a
     await poll(async () => { const db = new DatabaseSync(ledger, { readOnly: true, timeout: busyTimeoutMs }); try { const row = db.prepare('SELECT record FROM cancellation_deliveries WHERE scope_id=? AND attempt_id=?').get('scope-1', second.attemptId) as { record: string } | undefined;
       return row && JSON.parse(row.record).state === 'terminal' ? row : undefined; } finally { db.close(); } }, 'CANCELLATION_DURABLE');
     const proof = await openConfiguredAttemptStore(project, options); try { expect(await proof.store.load('scope-1', second.attemptId)).toMatchObject({ cancelRequested: true, lastObservation: { result: { kind: 'exited' } } }); } finally { proof.store.close(); }
-    const finalClose = serviceClose; service.kill('SIGTERM'); expect(await bounded(finalClose, service, 'FINAL_SERVICE_CLOSE')).toBe(0);
+    // A terminal cancellation delivery precedes the independent reconciliation/output page. Stopping
+    // there races Docker log collection against shutdownGraceMs. Wait for the page's existing event.
+    await bounded(cancelledOutputRecovered, service, 'CANCELLED_OUTPUT_RECOVERED');
+    const finalClose = serviceClose; service.kill('SIGTERM');
+    const exitCode = await bounded(finalClose, service, 'FINAL_SERVICE_CLOSE');
+    expect(exitCode, JSON.stringify(diagnostics.get(service))).toBe(0);
   } catch (error) { testFailed = true; testFailure = error; } finally {
     for (const child of children) if (child.exitCode === null && child.signalCode === null) { const ending = closed(child); child.kill('SIGKILL'); await ending.catch(() => null); }
     const releases = await Promise.allSettled([firstIdentity, secondIdentity].filter((identity): identity is Identity => !!identity).map(async identity => {

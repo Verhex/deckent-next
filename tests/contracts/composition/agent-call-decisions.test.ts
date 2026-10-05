@@ -26,6 +26,8 @@ const principal = { id: 'os:1000', ...me, assurance: 'os-user' as const, scopeId
 const sqlite = { busyTimeoutMs: 1_000, journalMode: 'delete' as const, durability: 'full' as const };
 const edit: AgentToolSpec = { name: 'edit_file', version: 1, toolClass: 'edit', description: 'edit', inputSchema: { type: 'object' } } as AgentToolSpec;
 const args = { path: 'src/a.ts', old_string: 'a', new_string: 'b' };
+// Trusted producer fixture: no wire caller supplies this card/deadline validity port.
+const liveRemember = { valid: () => true };
 type Effect = 'allow' | 'deny' | 'require-approval';
 const snapshot = (tool: Effect, mode: string | null, revision = `p-${tool}-${mode}`, toolGrant = 'edit-tool', modeEntry = 'me-mode') => resolvePolicyBindings({ schemaVersion: 2, revision, roles: [], separationOfDuties: [], restrictions: [],
   grants: [{ id: toolGrant, effect: tool, actions: ['invoke'], scopes: ['scope'], principals: [me], resource: { kind: 'agent-tool', ids: ['edit_file'] },
@@ -34,7 +36,8 @@ const snapshot = (tool: Effect, mode: string | null, revision = `p-${tool}-${mod
 mode === null ? { schemaVersion: 1, revision: 'b', bindings: [] } : { schemaVersion: 2, revision: 'b', bindings: [], modes: [{ id: modeEntry, principal: me, scopes: ['scope'], mode }] });
 
 /** `loads[i]` is what the i-th policy load returns (the last one repeats): authorize loads once, execute once, each admission once. */
-async function fixture(loads: unknown[], options: { standing?: { memory: SessionStanding; session: string }; floored?: boolean; selfSource?: boolean; fullAccess?: boolean; shell?: boolean; realAreas?: boolean; clockMs?: number; knownSecret?: string; secondaryKnownSecret?: string; shellTier?: 'read-low' } = {}) {
+async function fixture(loads: unknown[], options: { standing?: { memory: SessionStanding; session: string }; floored?: boolean; selfSource?: boolean; fullAccess?: boolean; shell?: boolean; realAreas?: boolean; clockMs?: number; knownSecret?: string; secondaryKnownSecret?: string; shellTier?: 'read-low';
+  onPolicy?: (read: number) => void | Promise<void>; auditWait?: Promise<void>; auditStarted?: () => void } = {}) {
   const root = await mkdtemp(join(tmpdir(), 'dn-call-decisions-')); roots.push(root);
   const data = join(root, 'data'); await mkdir(data, { mode: 0o700 });
   const ledger = join(root, 'ledger.db'); openSqliteLedger(ledger, sqlite).close();
@@ -50,7 +53,8 @@ async function fixture(loads: unknown[], options: { standing?: { memory: Session
     expect(config).not.toHaveProperty('knownSecrets');
     expect(JSON.stringify(getConfigKnownSecrets(config))).toBe('{}');
   }
-  const context = { principal, policy: { async load() { return loads[Math.min(loaded++, loads.length - 1)]; } }, path: async () => ledger,
+  const context = { principal, policy: { async load() { await options.onPolicy?.(loaded + 1); return loads[Math.min(loaded++, loads.length - 1)]; } },
+    path: async () => { options.auditStarted?.(); await options.auditWait; return ledger; },
     layout: resolveProductLayout({ projectRoot: root, root: data, platform: process.platform === 'win32' ? 'win32' : 'posix' }), config };
   let plans = 0;
   const edits = { async plan() { plans++; return { ok: true }; }, floored: () => options.floored ?? false, authority: () => false, selfSource: () => options.selfSource ?? false, target: (_tool: string, given: Record<string, unknown>) => String(given['path']) };
@@ -183,7 +187,7 @@ describe('permission decision at the effect (T-L4 slice 4a)', () => {
     const memory = new SessionStanding(), session = 'conversation-1';
     const f = await fixture([asks], { standing: { memory, session } });
     expect(await f.decisions.authorize(edit, args)).toBe('require-approval');
-    expect(await f.decisions.remember(edit, args, { round: 1, index: 0 }, 'call_1', 'approval-1')).toBe(true);
+    expect(await f.decisions.remember(edit, args, { round: 1, index: 0 }, 'call_1', 'approval-1', liveRemember)).toBe(true);
     expect(f.auditRecords().map(record => [record.event.subject.kind, record.event.subject.phase, record.event.subject.source, record.event.subject.approvalId]))
       .toEqual([['standing-approval', 'remembered', 'session', 'approval-1']]);
     expect(memory.has(session, KEY)).toBe(true);
@@ -204,7 +208,7 @@ describe('permission decision at the effect (T-L4 slice 4a)', () => {
     expect(await elsewhere.decisions.authorize(edit, { ...args, path: 'docs/a.md' })).toBe('require-approval');
     const floored = await fixture([asks], { standing: { memory, session: 'conversation-1' }, floored: true });
     expect(await floored.decisions.authorize(edit, args)).toBe('require-approval');
-    expect(await floored.decisions.remember(edit, args, { round: 1, index: 0 }, 'call_1', 'approval-1')).toBe(false);
+    expect(await floored.decisions.remember(edit, args, { round: 1, index: 0 }, 'call_1', 'approval-1', liveRemember)).toBe(false);
     expect(floored.events()).toBe(0);
   });
 
@@ -314,7 +318,7 @@ describe('SELF-SOURCE-FLOOR R1 classification and normalized session targets', (
       expect(await f.scope.open('src', 'dir')).toEqual({ ok: false, error: 'platform-unsupported' });
       expect(await f.decisions.authorize(edit, args)).toBe('require-approval');
       expect(f.decisions.prepare(edit, args)).toEqual({ ok: false, text: '[deckent] edit_file: error=parent-platform-unsupported' });
-      expect(await f.decisions.remember(edit, args, { round: 1, index: 0 }, 'call', 'approval')).toBe(false);
+      expect(await f.decisions.remember(edit, args, { round: 1, index: 0 }, 'call', 'approval', liveRemember)).toBe(false);
       expect(f.events()).toBe(0);
       expect(await readFile(join(f.root, args.path), 'utf8')).toBe('a');
       console.log('verify-not-run: ' + JSON.stringify({ file: 'tests/contracts/composition/agent-call-decisions.test.ts', test: expect.getState().currentTestName, state: 'skipped', variant: 'descriptor-backed-edit-plans', reason: 'WORKSPACE_PLATFORM_UNSUPPORTED: real scope refuses planning; no session answer or effect; Linux classification positive remains required' }));
@@ -324,12 +328,12 @@ describe('SELF-SOURCE-FLOOR R1 classification and normalized session targets', (
       const given = { ...args, path };
       expect(await f.decisions.authorize(edit, given), path).toBe('require-approval');
       expect(f.decisions.cell(edit, given), path).toBe('edit-floor');
-      expect(await f.decisions.remember(edit, given, { round: 1, index: 0 }, 'call', 'approval'), path).toBe(false);
+      expect(await f.decisions.remember(edit, given, { round: 1, index: 0 }, 'call', 'approval', liveRemember), path).toBe(false);
     }
     const authority = { ...args, path: '.deckent/config.json' };
     expect(await f.decisions.authorize(edit, authority)).toBe('require-approval');
     expect(f.decisions.cell(edit, authority)).toBe('edit-authority');
-    expect(await f.decisions.remember(edit, authority, { round: 1, index: 0 }, 'call', 'approval')).toBe(false);
+    expect(await f.decisions.remember(edit, authority, { round: 1, index: 0 }, 'call', 'approval', liveRemember)).toBe(false);
     for (const path of ['src/a.ts', 'dist/x.js', 'scripts/b.mjs', 'assets/c.json']) {
       const given = { ...args, path };
       expect(await f.decisions.authorize(edit, given), path).toBe('require-approval');
@@ -387,13 +391,13 @@ describe('SELF-SOURCE-FLOOR R1 classification and normalized session targets', (
       expect(await f.scope.resolve(raw.path)).toEqual({ ok: false, error: 'platform-unsupported' });
       expect(await f.decisions.authorize(edit, raw)).toBe('require-approval');
       expect(f.decisions.prepare(edit, raw)).toEqual({ ok: false, text: '[deckent] edit_file: error=parent-platform-unsupported' });
-      expect(await f.decisions.remember(edit, raw, { round: 1, index: 0 }, 'call', 'approval')).toBe(false);
+      expect(await f.decisions.remember(edit, raw, { round: 1, index: 0 }, 'call', 'approval', liveRemember)).toBe(false);
       expect(memory.has(session, 'v1:session:edit-self-source:edit_file:directory:src/*')).toBe(false);
       console.log('verify-not-run: ' + JSON.stringify({ file: 'tests/contracts/composition/agent-call-decisions.test.ts', test: expect.getState().currentTestName, state: 'skipped', variant: 'normalized-descriptor-backed-session-grant', reason: 'WORKSPACE_PLATFORM_UNSUPPORTED: platform-unsupported planning refusal has no remembered grant; Linux positive remains required' }));
       return;
     }
     expect(await f.decisions.authorize(edit, raw)).toBe('require-approval');
-    expect(await f.decisions.remember(edit, raw, { round: 1, index: 0 }, 'call', 'approval')).toBe(true);
+    expect(await f.decisions.remember(edit, raw, { round: 1, index: 0 }, 'call', 'approval', liveRemember)).toBe(true);
     expect(memory.has(session, 'v1:session:edit-self-source:edit_file:directory:src/*')).toBe(true);
     expect(await f.decisions.authorize(edit, args)).toBe('allow');
   });
@@ -476,7 +480,7 @@ describe('SELF-SOURCE-FLOOR session effect integration', () => {
     const f = await fixture([snapshot('require-approval', 'ask')], { selfSource: true, standing: { memory, session } });
     expect(await f.decisions.authorize(edit, args)).toBe('require-approval');
     f.failAudit();
-    expect(await f.decisions.remember(edit, args, { round: 1, index: 0 }, 'call_1', 'approval')).toBe(false);
+    expect(await f.decisions.remember(edit, args, { round: 1, index: 0 }, 'call_1', 'approval', liveRemember)).toBe(false);
     expect(memory.has(session, key)).toBe(false);
     expect(f.events()).toBe(0);
     // Existing session memory cannot bypass a lost audit key: no effect callback is reached.
@@ -496,7 +500,7 @@ describe('SELF-SOURCE-FLOOR session effect integration', () => {
     const key = 'v1:session:edit-self-source:edit_file:directory:src/*';
     const f = await fixture([asks], { standing: { memory, session }, selfSource: true });
     expect(await f.decisions.authorize(edit, args)).toBe('require-approval');
-    expect(await f.decisions.remember(edit, args, { round: 1, index: 0 }, 'call_1', 'approval-self-source')).toBe(true);
+    expect(await f.decisions.remember(edit, args, { round: 1, index: 0 }, 'call_1', 'approval-self-source', liveRemember)).toBe(true);
     expect(f.auditRecords()[0]!.event.subject).toMatchObject({ kind: 'standing-approval', phase: 'remembered', source: 'session', cell: 'edit-self-source', grantId: null });
     expect(memory.has(session, key)).toBe(true);
     expect(memory.has(session, 'v1:edit_file:directory:src/*')).toBe(false);
@@ -529,7 +533,7 @@ describe('B7 service-owned resolved snapshot standing guard', () => {
       const tool = { ...edit, name: 'run_shell', toolClass: 'shell' } as AgentToolSpec;
       memory.remember(session, `v1:run_shell:command:${command}`);
       expect(await f.decisions.authorize(tool, { command })).toBe('require-approval');
-      expect(await f.decisions.remember(tool, { command }, { round: 1, index: 0 }, 'fixture-call', 'fixture-card')).toBe(false);
+      expect(await f.decisions.remember(tool, { command }, { round: 1, index: 0 }, 'fixture-call', 'fixture-card', liveRemember)).toBe(false);
       expect(f.events()).toBe(0);
     }
   });
@@ -548,8 +552,70 @@ describe('B7 service-owned resolved snapshot standing guard', () => {
     const tool = { ...edit, name: 'run_shell', toolClass: 'shell' } as AgentToolSpec;
     memory.remember(session, key); // Historical entry is never trusted for a command classified as secret-bearing now.
     expect(await f.decisions.authorize(tool, { command })).toBe('require-approval');
-    expect(await f.decisions.remember(tool, { command }, { round: 1, index: 0 }, 'fixture-call', 'fixture-card')).toBe(false);
+    expect(await f.decisions.remember(tool, { command }, { round: 1, index: 0 }, 'fixture-call', 'fixture-card', liveRemember)).toBe(false);
     expect(f.events()).toBe(0);
     expect(redactForDecision(command).text).toBe(command); // Opaque value has no pattern-only detection.
   });
+});
+
+describe('S02 fenced remembered audit and final producer validity', () => {
+  const asks = snapshot('require-approval', 'ask');
+  it.for(['clear', 'stop', 'cancel', 'wall-expiry', 'monotonic-expiry'] as const)('requires POSIX private audit keyring — %s during a remembered audit cannot resurrect self-source permission', async (reason, context) => { privateAudit(context);
+    const memory = new SessionStanding(), session = 'remember-race';
+    const waiting = Promise.withResolvers<void>(), entered = Promise.withResolvers<void>();
+    const controller = new AbortController();
+    let wall = 1000, monotonic = 100;
+    const guard = { valid: () => !controller.signal.aborted && wall < 1100 && monotonic - 100 < 100 };
+    const f = await fixture([asks], { standing: { memory, session }, selfSource: true, auditWait: waiting.promise, auditStarted: () => entered.resolve() });
+    expect(await f.decisions.authorize(edit, args)).toBe('require-approval');
+    let settled = false;
+    const remembering = f.decisions.remember(edit, args, { round: 1, index: 0 }, 'call', 'card', guard).finally(() => { settled = true; });
+    await entered.promise;
+    expect(settled).toBe(false);
+    expect(memory.has(session, 'v1:session:edit-self-source:edit_file:directory:src/*')).toBe(false);
+    if (reason === 'clear') memory.forget(session);
+    else if (reason === 'stop') memory.clear();
+    else if (reason === 'cancel') controller.abort();
+    else if (reason === 'wall-expiry') wall = 1100;
+    else monotonic = 200;
+    waiting.resolve();
+    expect(await remembering).toBe(false);
+    expect(f.auditRecords()[0]!.event.subject).toMatchObject({ phase: 'remembered', cell: 'edit-self-source' });
+    expect(memory.has(session, 'v1:session:edit-self-source:edit_file:directory:src/*')).toBe(false);
+    expect(await f.decisions.authorize(edit, args)).toBe('require-approval');
+  });
+
+  it.for(['clear', 'cancel', 'policy-deny', 'policy-revision', 'target-changed'] as const)('requires POSIX private audit keyring — %s in final asynchronous policy revalidation is checked after audit and before the map write', async (reason, context) => { privateAudit(context);
+    const memory = new SessionStanding(), session = 'final-recheck';
+    const loads = [asks, asks, reason === 'policy-deny' ? snapshot('deny', 'ask') : reason === 'policy-revision' ? snapshot('require-approval', 'ask', 'changed') : asks];
+    const entered = Promise.withResolvers<void>(), waiting = Promise.withResolvers<void>(), controller = new AbortController();
+    const given = { ...args };
+    const f = await fixture(loads, { standing: { memory, session }, selfSource: true, onPolicy: async read => {
+      if (read === 3) { entered.resolve(); await waiting.promise; }
+    } });
+    expect(await f.decisions.authorize(edit, given)).toBe('require-approval');
+    const remembering = f.decisions.remember(edit, given, { round: 1, index: 0 }, 'call', 'card', { valid: () => !controller.signal.aborted });
+    await entered.promise;
+    expect(f.auditRecords()[0]!.event.subject).toMatchObject({ phase: 'remembered', cell: 'edit-self-source' });
+    if (reason === 'clear') memory.forget(session);
+    else if (reason === 'cancel') controller.abort();
+    else if (reason === 'target-changed') given.path = 'docs/a.md';
+    waiting.resolve();
+    expect(await remembering).toBe(false);
+    for (const dir of ['src', 'docs']) expect(memory.has(session, `v1:session:edit-self-source:edit_file:directory:${dir}/*`)).toBe(false);
+  });
+
+  it('requires POSIX private audit keyring — a denied policy or invalid producer refuses before audit; released bindings do not exhaust later valid answers', async context => { privateAudit(context);
+    const memory = new SessionStanding(1, 1), session = 'early-refusal';
+    const denied = await fixture([asks, snapshot('deny', 'ask')], { standing: { memory, session }, selfSource: true });
+    expect(await denied.decisions.authorize(edit, args)).toBe('require-approval');
+    expect(await denied.decisions.remember(edit, args, { round: 1, index: 0 }, 'call', 'card', liveRemember)).toBe(false);
+    expect(denied.events()).toBe(0);
+    const valid = await fixture([asks], { standing: { memory, session }, selfSource: true });
+    expect(await valid.decisions.authorize(edit, args)).toBe('require-approval');
+    expect(await valid.decisions.remember(edit, args, { round: 1, index: 0 }, 'call', 'card', { valid: () => false })).toBe(false);
+    expect(valid.events()).toBe(0);
+    expect(await valid.decisions.remember(edit, args, { round: 1, index: 0 }, 'call', 'card', liveRemember)).toBe(true);
+  });
+
 });

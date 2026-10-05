@@ -1,3 +1,4 @@
+import { panelFixture } from '../support/workline-panel-fixture.js';
 import { PassThrough, Writable } from 'node:stream';
 import { createElement } from 'react';
 import { render } from 'ink';
@@ -15,7 +16,7 @@ const work: WorkSurfaceLabels = { workerLine: EN, panel: { title: 'LIVE-PANEL', 
   approvalNotify: 'A-NOTIFY {count}', approvalPollFailed: 'A-POLLFAIL', approvalCard: { risk: 'R-RISK {risk} {undo}', notDeclared: 'R-UNDECLARED', onExpiry: 'R-NOTHING-RUNS', assuranceTurnHere: 'R-TURN-HERE',
     assuranceTurnElsewhere: 'R-TURN-ELSEWHERE', assurancePeer: 'R-PEER', assuranceOther: 'R-OTHER {level}' },
   approvalStanding: { covers: 'S-COVERS {pattern}', promptBoth: 'S-PROMPT-BOTH', promptSession: 'S-PROMPT-SESSION', promptAlways: 'S-PROMPT-ALWAYS', savedSession: 'S-SAVED-SESSION {id}',
-    savedAlways: 'S-SAVED-ALWAYS {id}', notSavedSession: 'S-NOT-SAVED-SESSION {id} {reason}', notSavedAlways: 'S-NOT-SAVED-ALWAYS {id} {reason}' }, cancelUsage: 'C-USAGE', cancelTitle: 'C-TITLE {run}',
+    savedAlways: 'S-SAVED-ALWAYS {id}', unconfirmedSession: 'S-UNCONFIRMED {id} {reason}', notSavedSession: 'S-NOT-SAVED-SESSION {id} {reason}', notSavedAlways: 'S-NOT-SAVED-ALWAYS {id} {reason}' }, cancelUsage: 'C-USAGE', cancelTitle: 'C-TITLE {run}',
   cancelDetail: 'C-DETAIL {revision} {phases}', cancelAlreadyRequested: 'C-ALREADY', cancelPrompt: 'C-PROMPT', cancelPending: 'C-PENDING', cancelKept: 'C-KEPT {run}' };
 const labels: WorklineLabels = { banner: 'BANNER', prompt: '> ', statusReady: 'READY', statusBusy: 'BUSY', statusCancelling: 'CANCELLING',
   hint: 'HINT', roleUser: 'you', roleAssistant: 'bot', runCard: 'Run', workerCard: 'Worker', watchFailed: 'WATCH-FAILED',
@@ -49,14 +50,14 @@ function mount(props: Partial<WorklineProps>) {
   const stdout = new Screen(), stdin = keyboard();
   const instance = render(createElement(WorklinePaletteProvider, { palette: resolveWorklinePalette('none'), children: createElement(WorklineApp, {
     labels, target: 'scope-a · model', systemPrompt: 'SYSTEM', historyMessages: 4, errorText: (error: unknown) => `ERR:${(error as Error).message}`,
-    completeTurn: async () => 'unused', ...props,
+    completeTurn: async () => 'unused', ...props, ...panelFixture(props),
   }) }), { stdout: stdout as unknown as NodeJS.WriteStream, stdin: stdin as unknown as NodeJS.ReadStream, debug: true, exitOnCtrlC: false, patchConsole: false });
   mounted.push(instance);
   const type = async (text: string) => { for (const char of text) { stdin.write(char); await settle(2); } };
   const frame = () => stdout.frame;
   const count = (text: string) => stdout.frame.split(text).length - 1;
   /** Waits until a decision card is on screen and its key handler is subscribed (effects run after the frame is written). */
-  const card = async (text: string, label: string) => { await until(() => frame().includes(text), label); await settle(40); };
+  const card = async (text: string, label: string) => { await until(() => frame().includes(text), label).catch(error => { throw new Error(`${String(error)}\n${frame()}`); }); await settle(40); };
   return { stdout, stdin, instance, type, frame, count, card };
 }
 
@@ -172,13 +173,13 @@ describe('work surface: approvals', () => {
     await until(() => view.frame().includes('A-ALLOWED ap-1') && !view.frame().includes('A-PROMPT'), 'approved');
     expect(view.frame()).toContain('A-MORE 2');
     await view.type('/approvals\r');
-    await until(() => view.frame().includes('> A-ITEM 1 ap-2'), 'second picker');
+    await until(() => view.frame().includes('> A-ITEM 1 ap-2'), 'second picker'); await view.instance.waitUntilRenderFlush(); await settle(30);
     await view.type('\r');
     await view.card('A-SUBJECT ap-2', 'second card');
     view.stdin.write('\r');
     await until(() => view.frame().includes('A-DENIED ap-2'), 'enter denies');
     await view.type('/approvals\r');
-    await until(() => view.frame().includes('> A-ITEM 1 ap-3'), 'third picker');
+    await until(() => view.frame().includes('> A-ITEM 1 ap-3'), 'third picker'); await view.instance.waitUntilRenderFlush(); await settle(30);
     await view.type('\r');
     await view.card('A-SUBJECT ap-3', 'third card');
     view.stdin.write('\u001b');

@@ -1,5 +1,5 @@
 export { approvalActionDigest, approvalRequestDigest, sealApproval, verifyApproval } from './internal/integrity.js';
-export type { ApprovalStore, ApprovalReceipt, ApprovalSubjectKind } from './internal/store.js';
+export type { ApprovalStore, ApprovalReceipt, ApprovalSubjectKind, ApprovalSettlement } from './internal/store.js';
 export { ApprovalApplication, authorizeApproval, requestTaskApproval, approvalQuerySchema, approvalListSchema, approvalCommandSchema, approvalRenewalSchema } from './internal/application.js';
 export type { ApprovalCommand, ApprovalDecisionRestriction } from './internal/application.js';
 export { TaskApprovalAdmission, assertApprovalPolicyCurrent } from './internal/admission.js';
@@ -9,10 +9,15 @@ export { OperationApprovalBroker, OPERATION_SUBJECT_PROTOCOL_VERSION, approvalRe
   type OperationApprovalBrokerOptions, type OperationApprovalWait } from './internal/operation.js';
 export { AuthorityDocumentTarget, DelegationBoundGate, PolicyAdministrationApplication } from './internal/policy-admin.js';
 export type { AuthorityTargetHooks, PolicyAdministrationDependencies } from './internal/policy-admin.js';
-export { isAuditedStanding, PersistentStanding, SessionStanding, StandingApprovalError, standingApprovalAuditEvent, standingCallKey } from './internal/standing.js';
+export { isAuditedStanding, PersistentStanding, SessionStanding, StandingApprovalError, standingApprovalAuditEvent, standingCallKey, rememberSessionStanding } from './internal/standing.js';
+export type { SessionStandingBinding } from './internal/standing.js';
 export type { PersistentStandingDependencies, StandingGrantView, StandingOffer } from './internal/standing.js';
 export type { StandingCellName } from './internal/standing.js';
 export { HARD_FLOOR_APPROVAL_CELLS, agentToolApprovalFacts, approvalAssuranceRegistry, createTurnDecisionCapabilities, minimumApprovalAssurance, operationApprovalFacts,
   registerApprovalChannel, registeredApprovalChannels, requiredApprovalAssurance, undeclaredAgentToolApprovalFacts } from './internal/assurance.js';
 export type { ApprovalAssuranceOptions } from './internal/application.js';
 export type { AgentToolApprovalFacts, TurnDecisionCapabilities } from './internal/assurance.js';
+export { approvalCommandFingerprint } from './internal/application.js';
+export { sessionStandingResultSchema, sessionApprovalResultSchema, parseApprovalAnswer, clearSessionStandingSchema, sessionStandingClearanceSchema, acceptSessionStandingClearance } from './internal/session-contract.js';
+export type { SessionStandingResult, SessionApprovalResult, ClearSessionStanding, SessionStandingClearance } from './internal/session-contract.js';
+export { SessionApprovalAnswers } from './internal/session-answers.js';

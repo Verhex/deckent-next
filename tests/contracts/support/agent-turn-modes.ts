@@ -9,6 +9,7 @@ import type { AgentTurnStreamEvent } from '#domain/index.js';
 import { openSqliteModelActivationStore, type ShellSandboxFactory } from '#adapters/index.js';
 import { ModelActivationApplication, ModelBindingApplication, modelInvocationTargetId } from '#engine/index.js';
 import { createConfiguredRuntimeClient, startConfiguredRuntimeService } from '#composition/core/runtime-service/index.js';
+import { ensureConfiguredTerminalIdentity } from '#composition/core/scoped-request/index.js';
 import { clearConfigCache, prepareProductFile, resolveProductLayout } from '#platform/index.js';
 import { fixtureBudget } from '../../fixtures/priced-provider.js';
 
@@ -101,7 +102,8 @@ export async function modeRuntime(input: { grants: Record<string, unknown>[]; mo
         : { schemaVersion: 3, revision: `b-${revision}`, bindings: [], modes: [{ id: 'me-mode', principal: me[0], scopes: ['scope'], ...mode }] }), { mode: 0o600 });
   };
   await writeAuthority(input.grants, input.mode);
-  const env = { HOME: home, PATH: process.env.PATH ?? '/usr/bin:/bin' };
+  const env = { HOME: home, USERPROFILE: home, PATH: process.env.PATH ?? '/usr/bin:/bin' };
+  await ensureConfiguredTerminalIdentity(project, 'scope', { env });
   const service = await startConfiguredRuntimeService(project, { async onPage() {}, async onError() {} }, { env }, input.sandboxes ? { shellSandboxes: input.sandboxes } : {});
   services.push(service);
   const rows = (sql: string) => { const db = new DatabaseSync(ledger, { readOnly: true }); try { return db.prepare(sql).all(); } finally { db.close(); } };

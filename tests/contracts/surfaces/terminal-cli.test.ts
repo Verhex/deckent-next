@@ -1,3 +1,4 @@
+import { ensureConfiguredTerminalIdentity, loadConfiguredInstallationIdentity, loadConfiguredProjectIdentity } from '#composition/core/scoped-request/index.js';
 import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -6,7 +7,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { main } from '../../../src/surfaces/index.js';
 import { runtimeBuildSkew } from '#surfaces/core/cli/index.js';
 import { clearConfigCache, t } from '#platform/index.js';
-import { registerProviderConfig } from '#adapters/index.js';
+import { readLocalOsIdentity, registerProviderConfig } from '#adapters/index.js';
 
 /** A minimal in-memory TTY screen: the composer's real render lands here through `runTerminalWorkline`. */
 class Screen extends Writable {
@@ -31,6 +32,12 @@ async function fixture() {
   const root = await mkdtemp(join(tmpdir(), 'deckent-terminal-cli-')); roots.push(root);
   const project = join(root, 'project'), home = join(root, 'home');
   await Promise.all([mkdir(join(project, '.deckent'), { recursive: true }), mkdir(home, { recursive: true })]);
+  if (process.platform !== 'win32') {
+    const actor = readLocalOsIdentity();
+    await writeFile(join(project, '.deckent/policy.json'), JSON.stringify({ schemaVersion: 1, revision: 'p', restrictions: [],
+      grants: [{ id: 'g', effect: 'allow', actions: ['inspect'], scopes: ['s'], principals: [{ issuer: actor.issuer, subject: actor.subject }],
+        resource: { kind: 'scope', ids: 'all' } }] }), { mode: 0o600 });
+  }
   return { project, env: { HOME: home, USERPROFILE: home, XDG_CONFIG_HOME: join(home, '.config'), DECKENT_GLOBAL_HOME: join(home, 'global') } };
 }
 function sink() { const values: string[] = []; return { values, text: () => values.join(''), output: { write(value: string) { values.push(value); } } }; }
@@ -82,7 +89,7 @@ describe('deckent terminal CLI', () => {
 
   it('requires a scope (flag or terminal.scopeId) for chat modes and rejects --json there before any turn', async () => {
     const f = await fixture(); const out = sink(); let turns = 0;
-    const context = { root: f.project, env: f.env, stdout: out.output, stderr: out.output, initialize() {},
+    const context = { root: f.project, env: f.env, stdout: out.output, stderr: out.output, initialize() {}, loadInstallationIdentity: loadConfiguredInstallationIdentity, loadProjectIdentity: loadConfiguredProjectIdentity, ensureTerminalIdentity: ensureConfiguredTerminalIdentity,
       async completeTerminalChat() { turns++; return 'x'; } };
     expect(await main(['terminal', 'workline'], context)).toBe(2);
     expect(await main(['terminal', 'session'], context)).toBe(2);
@@ -94,7 +101,7 @@ describe('deckent terminal CLI', () => {
   it('refuses the rich view without a terminal on stdin and stdout', async () => {
     const f = await fixture(); const out = sink();
     const code = await main(['terminal', 'workline', '--scope', 's', '--lang', 'en'], { root: f.project, env: f.env, stdout: out.output, stderr: out.output,
-      stdin: Object.assign(Readable.from([]), { isTTY: false }), initialize() {}, async completeTerminalChat() { return 'x'; } });
+      stdin: Object.assign(Readable.from([]), { isTTY: false }), initialize() {}, loadInstallationIdentity: loadConfiguredInstallationIdentity, loadProjectIdentity: loadConfiguredProjectIdentity, ensureTerminalIdentity: ensureConfiguredTerminalIdentity, async completeTerminalChat() { return 'x'; } });
     expect(code).toBe(2); expect(out.text()).toContain('TERMINAL_TTY_REQUIRED');
   });
 
@@ -129,17 +136,20 @@ describe('deckent terminal CLI', () => {
     expect(await main(['terminal', 'status', '--json'], { root: f.project, env: f.env, stdout: out.output, stderr: out.output,
       stdin: Object.assign(Readable.from([]), { isTTY: true }), initialize() {}, async describeTerminalChatPlan() { return plan; } })).toBe(0);
     expect(JSON.parse(out.text())).toEqual({ schemaVersion: 1, tty: { stdin: true, stdout: false, columns: null, rows: null },
-      inference: { configured: false }, chat: plan });
+      inference: { configured: false }, chat: plan, projectId: null, installationId: null, identity: {
+        installation: { status: 'unavailable', reason: 'unsupported', bindingCapability: 'not-observed' },
+        project: { status: 'unavailable', reason: 'unsupported' } } });
   });
 
   // D1-3: the workline's real label construction (worklineLabels in terminal.ts) wires the composer with no visible
   // `deckent> ` prefix; earlier tests only mounted the Composer with `prompt: ''` supplied directly, so a revert of
   // that one field to `t('terminal.session.prompt')` would still pass them. This mounts through the real CLI entry.
-  it('wires the workline composer with no visible "deckent>" prefix, through the real terminal entry', async () => {
+  // Windows cannot persist guarded local identities; typed refusal is covered by terminal-identity.test.ts.
+  it.skipIf(process.platform === 'win32')('wires the workline composer with no visible "deckent>" prefix, through the real terminal entry', async () => {
     const f = await fixture(); const stdout = new Screen(); const stdin = keyboard();
     const run = main(['terminal', 'workline', '--scope', 's', '--lang', 'en'],
       { root: f.project, env: { ...f.env, NO_COLOR: '1' }, stdout: stdout as unknown as NodeJS.WriteStream, stderr: stdout as unknown as NodeJS.WriteStream,
-        stdin: stdin as unknown as NodeJS.ReadStream, initialize() {}, async completeTerminalChat() { return 'x'; } });
+        stdin: stdin as unknown as NodeJS.ReadStream, initialize() {}, loadInstallationIdentity: loadConfiguredInstallationIdentity, loadProjectIdentity: loadConfiguredProjectIdentity, ensureTerminalIdentity: ensureConfiguredTerminalIdentity, async completeTerminalChat() { return 'x'; } });
     await until(() => stdout.text.includes('Ask anything'), 'catalog placeholder rendered on the empty draft');
     expect(stdout.text).not.toContain('deckent>');
     stdin.write('/exit\r');
@@ -153,12 +163,12 @@ describe('deckent terminal CLI', () => {
     expect(t('terminal.session.prompt', {}, 'tr')).toBe('deckent› ');
   });
 
-  it('derives the source marker once at terminal startup and leaves a customer session unmarked', async () => {
+  it.skipIf(process.platform === 'win32')('derives the source marker once at terminal startup and leaves a customer session unmarked', async () => {
     for (const selfSource of [true, false]) {
       const f = await fixture(); const stdout = new Screen(); const stdin = keyboard(); const rootsSeen: string[] = [];
       const run = main(['terminal', 'workline', '--scope', 's', '--lang', 'tr'],
         { root: f.project, env: { ...f.env, NO_COLOR: '1' }, stdout: stdout as unknown as NodeJS.WriteStream, stderr: stdout as unknown as NodeJS.WriteStream,
-          stdin: stdin as unknown as NodeJS.ReadStream, initialize() {}, async completeTerminalChat() { return 'x'; },
+          stdin: stdin as unknown as NodeJS.ReadStream, initialize() {}, loadInstallationIdentity: loadConfiguredInstallationIdentity, loadProjectIdentity: loadConfiguredProjectIdentity, ensureTerminalIdentity: ensureConfiguredTerminalIdentity, async completeTerminalChat() { return 'x'; },
           async selfSourceProject(root) { rootsSeen.push(root); return selfSource; } });
       await until(() => stdout.text.includes(t('terminal.workline.placeholder', {}, 'tr')), 'terminal startup');
       expect(stdout.text.includes('öz-kaynak zemini açık')).toBe(selfSource);
@@ -170,7 +180,7 @@ describe('deckent terminal CLI', () => {
 });
 
 
-it('S06 CLI config snapshot protects actual complete and streamed assistant fields before markdown parsing in EN/TR', async () => {
+it.skipIf(process.platform === 'win32')('S06 CLI config snapshot protects actual complete and streamed assistant fields before markdown parsing in EN/TR', async () => {
   registerProviderConfig();
   for (const locale of ['en', 'tr'] as const) for (const streamed of [false, true]) {
     const f = await fixture(); const stdout = new Screen(); const stdin = keyboard();
@@ -180,7 +190,7 @@ it('S06 CLI config snapshot protects actual complete and streamed assistant fiel
     const stream = async function* () { yield { kind: 'text' as const, text: reply }; yield { kind: 'done' as const, finish: 'stop' as const, note: null }; };
     const run = main(['terminal', 'workline', '--scope', 's', '--lang', locale], {
       root: f.project, env: { ...f.env, S06_TEST: canary, NO_COLOR: '1' }, stdout: stdout as unknown as NodeJS.WriteStream,
-      stderr: stdout as unknown as NodeJS.WriteStream, stdin: stdin as unknown as NodeJS.ReadStream, initialize() {},
+      stderr: stdout as unknown as NodeJS.WriteStream, stdin: stdin as unknown as NodeJS.ReadStream, initialize() {}, loadInstallationIdentity: loadConfiguredInstallationIdentity, loadProjectIdentity: loadConfiguredProjectIdentity, ensureTerminalIdentity: ensureConfiguredTerminalIdentity,
       async completeTerminalChat() { return reply; }, ...(streamed ? { streamTerminalChat: stream } : {}) });
     try {
       await until(() => stdout.text.includes(t('terminal.workline.placeholder', {}, locale)), 'catalog composer');

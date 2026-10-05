@@ -31,9 +31,11 @@ export const CONFIG_FIELDS = Object.freeze({
     backupKeep: z.number().int().positive().safe().default(3),
     writeLockTimeoutMs: z.number().int().positive().max(2147483647).default(2000),
   }).strict().default({})),
-  installation: field('config.field.installation', { state: 'bound', consumers: ['src/composition/core/installation'] }, 'live', z.object({
+  installation: field('config.field.installation', { state: 'bound', consumers: ['src/composition/core/installation', 'src/adapters/core/installation-files'] }, 'live', z.object({
     profileMaxBytes: z.number().int().positive().safe().default(1048576),
     writeLockTimeoutMs: z.number().int().positive().max(2147483647).default(2000),
+    identityProbe: z.object({ timeoutMs: z.number().int().positive().max(2147483647).default(2000),
+      outputBytes: z.number().int().positive().safe().default(65536) }).strict().default({}),
     imageProbe: z.object({ timeoutMs: z.number().int().positive().max(2147483647).default(5000),
       outputBytes: z.number().int().positive().safe().default(65536) }).strict().default({}),
     packageMeasurement: z.object({

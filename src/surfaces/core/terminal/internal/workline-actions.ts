@@ -2,7 +2,7 @@ import type { WorkLedgerEntry, WorkLedgerWorkerEntry } from './work-ledger.js';
 import { WORK_LEDGER_SCHEMA_VERSION } from './work-ledger.js';
 import { fillTemplate, type WorkerLineLabels } from './worker-line.js';
 import type { WorkerPanelLabels } from './worker-panel.js';
-import { WORKLINE_SLASH_COMMANDS } from '#surfaces/core/terminal-kit/index.js';
+import { slashHelpText, surfaceDeliveryValues, WORKLINE_SLASH_COMMANDS } from '#surfaces/core/terminal-kit/index.js';
 import type { WorklineLedgerPorts } from './workline-ledger.js';
 import { ledgerEntriesForRuns, ledgerEntriesForWorkers, ledgerEntryForRun } from './workline-ledger.js';
 
@@ -17,8 +17,17 @@ export interface WorklineActionLabels {
   readonly watchStarted: string;
   readonly watchRunsStarted: string;
   readonly watchStopped: string;
+  /** `{mode}` is `push` or `poll`. Present in production; tests omit it unless they assert the mark. */
+  readonly watchDelivery?: string;
+  /** `{status}` is `gap`, `backpressure` or `foreign-scope`. */
+  readonly watchStep?: string;
+  readonly watchPushFailed?: string;
+  readonly watchAccessDenied?: string;
+  readonly watchAccessStopped?: string;
   readonly statusLine: string;
   readonly unknownCommand: string;
+  /** The same registry-derived labels as the palette; optional for callers without a composer. */
+  readonly composer?: { readonly slash: Readonly<Record<string, string>> };
   /** Worker live line, transcript, approvals and run control; absent means those commands are not offered. */
   readonly work?: WorkSurfaceLabels;
 }
@@ -32,6 +41,7 @@ export interface WorkSurfaceLabels {
   readonly transcriptNotFound: string;
   readonly transcriptNoAttempt: string;
   readonly transcriptHeader: string;
+  readonly sessionStandingClear?: { readonly cleared: string; readonly unconfirmed: string };
   readonly approvalsNone: string;
   readonly approvalItem: string;
   readonly approvalsTruncated: string;
@@ -62,6 +72,7 @@ export interface WorkSurfaceLabels {
     /** `{id}`: the approval was allowed and the standing answer saved; `notSaved…` adds `{reason}` (the call was allowed once either way). */
     readonly savedSession: string;
     readonly savedAlways: string;
+    readonly unconfirmedSession: string;
     readonly notSavedSession: string;
     readonly notSavedAlways: string;
   };
@@ -84,10 +95,13 @@ export function isWorkSurfaceCommand(command: string): command is WorkSurfaceCom
 export type WatchState = Readonly<{ workers: boolean; runs: boolean }>;
 
 export interface WorklineActionContext {
+  readonly followDelivery?: 'push' | 'poll' | 'denied';
   readonly ledger: WorklineLedgerPorts | undefined;
   readonly labels: WorklineActionLabels;
   readonly watch: WatchState;
   readonly canRestartService?: boolean;
+  /** Poll interval used when the watch has no push port. The delivery line reports this timeout. */
+  readonly pollMs?: number;
 }
 
 /** Result of one slash command; the view applies it. Entries carry no identity: the ledger buffer assigns sequence ids. */
@@ -97,23 +111,20 @@ export function notice(level: 'info' | 'error', text: string): WorkLedgerEntry {
   return Object.freeze({ schemaVersion: WORK_LEDGER_SCHEMA_VERSION, kind: 'notice' as const, id: 'notice', level, text });
 }
 
-function helpLine(): string {
-  return [...new Set(WORKLINE_SLASH_COMMANDS.map(command => `/${command.name}`))].join(' · ');
-}
-
 /** Pure dispatch for immediate commands; `needsLedger` commands return null and run through `runLedgerCommand`. */
 export function immediateSlashAction(command: string, context: WorklineActionContext): WorklineActionResult | null {
   const { labels, watch, ledger } = context;
   if (command === 'exit' || command === 'quit') return { entries: [], exit: true };
-  if (command === 'help') return { entries: [notice('info', helpLine())] };
+  if (command === 'help') return { entries: [notice('info', slashHelpText(labels.composer?.slash ?? {}, WORKLINE_SLASH_COMMANDS))] };
   if (command === 'status' || command === 'chat-backend') return { entries: [notice('info', labels.statusLine)] };
-  if (command === 'watch-workers') {
-    if (!ledger) return { entries: [notice('error', labels.ledgerUnavailable)] };
-    return watch.workers ? { entries: [] } : { entries: [notice('info', labels.watchStarted)], watch: { ...watch, workers: true } };
-  }
-  if (command === 'watch-runs') {
-    if (!ledger?.listRunIds) return { entries: [notice('error', labels.ledgerUnavailable)] };
-    return watch.runs ? { entries: [] } : { entries: [notice('info', labels.watchRunsStarted)], watch: { ...watch, runs: true } };
+  if (command === 'watch-workers' || command === 'watch-runs') {
+    const runs = command === 'watch-runs';
+    if (!ledger || (runs && !ledger.listRunIds)) return { entries: [notice('error', labels.ledgerUnavailable)] };
+    if (runs ? watch.runs : watch.workers) return { entries: [] };
+    const mode = context.followDelivery ?? (ledger.followEvents || (runs ? ledger.followRuns : ledger.followWorkers) ? 'push' as const : 'poll' as const);
+    const pace = context.pollMs ?? ledger.workerHeartbeatMs;
+    const delivery = labels.watchDelivery && pace !== undefined ? [notice('info', fillTemplate(labels.watchDelivery, surfaceDeliveryValues(mode, pace)))] : [];
+    return { entries: [notice('info', runs ? labels.watchRunsStarted : labels.watchStarted), ...delivery], watch: { ...watch, [runs ? 'runs' : 'workers']: true } };
   }
   if (command === 'watch-stop') {
     return watch.workers || watch.runs ? { entries: [notice('info', labels.watchStopped)], watch: { workers: false, runs: false } } : { entries: [] };

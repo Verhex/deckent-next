@@ -2,7 +2,7 @@ import { AUDIT_EVENT_SCHEMA_VERSION, AUTHORITY_DOCUMENT_TARGET_KIND, POLICY_ADMI
   planPolicyChange, policySchema, standingGrantChange, sessionPattern, standingGrantId, standingRevokeChange, type AuditEvent, type EffectCommand, type PolicyChange, type SessionCell, type StandingPattern,
   type VerifiedPrincipal } from '#domain/index.js';
 import { hasSecret, sha256, type KnownSecretSnapshot } from '#platform/index.js';
-import type { PolicySource } from '#engine/core/policy/index.js';
+import type { AgentToolCallDecision, PolicySource } from '#engine/core/policy/index.js';
 import type { EffectOutcome } from '#engine/core/effect/index.js';
 
 /**
@@ -11,10 +11,10 @@ import type { EffectOutcome } from '#engine/core/effect/index.js';
  * answer only, through a separate key. The application service composition asks.
  */
 export function standingCallKey(call: { readonly tool: string; readonly cell: string; readonly path: string | null; readonly command: string | null },
-  memory?: { readonly sessions: SessionStanding; readonly session: string }, knownSecrets?: KnownSecretSnapshot): { readonly key: string; readonly cell: StandingCellName; readonly session: boolean } | null {
+  memory?: { readonly sessions: SessionStanding; readonly session: string }, knownSecrets?: KnownSecretSnapshot): { readonly key: string; readonly cell: StandingCellName; readonly session: boolean; readonly pattern: string } | null {
   if (call.command !== null && hasSecret(call.command, knownSecrets)) return null;
   const found = sessionPattern(call);
-  return found.ok ? { key: found.pattern.key, cell: found.pattern.cell, session: memory?.sessions.has(memory.session, found.pattern.key) ?? false } : null;
+  return found.ok ? { key: found.pattern.key, cell: found.pattern.cell, pattern: found.pattern.text, session: memory?.sessions.has(memory.session, found.pattern.key) ?? false } : null;
 }
 
 /** Cells a session answer may lower; persisted grants remain restricted to the domain's StandingCell. */
@@ -27,6 +27,9 @@ export class StandingApprovalError extends Error {
   }
 }
 
+/** Opaque process-local custody for one pending remembered audit; only its SessionStanding owner can commit it. */
+export interface SessionStandingBinding { valid(): boolean; close(): void }
+
 /**
  * "This session" memory (owner 2026-09-28): one service-process map, never a file — a restarted service starts empty. The key names the
  * scope, the person and the client's conversation (`sessionId`; a turn without one is its own session), so a standing approval never
@@ -34,6 +37,8 @@ export class StandingApprovalError extends Error {
  */
 export class SessionStanding {
   private readonly sessions = new Map<string, Set<string>>();
+  private readonly pending = new Map<string, Set<SessionStandingBinding>>();
+  private readonly bindings = new WeakMap<SessionStandingBinding, { readonly session: string; valid: boolean }>();
   constructor(private readonly perSession = STANDING_GRANTS_MAX, private readonly maxSessions = 256) {}
   static sessionKey(scopeId: string, principal: { readonly issuer: string; readonly subject: string }, conversation: string) {
     return sha256(`standing-session:1\0${scopeId}\0${principal.issuer}\0${principal.subject}\0${conversation}`);
@@ -43,14 +48,60 @@ export class SessionStanding {
     if (!keys) {
       keys = new Set();
       this.sessions.set(session, keys);
-      for (const oldest of this.sessions.keys()) { if (this.sessions.size <= this.maxSessions) break; this.sessions.delete(oldest); }
+      for (const oldest of this.sessions.keys()) { if (this.sessions.size <= this.maxSessions) break; this.forget(oldest); }
     }
     keys.delete(key); keys.add(key);
     for (const oldest of keys) { if (keys.size <= this.perSession) break; keys.delete(oldest); }
   }
   has(session: string, key: string) { return this.sessions.get(session)?.has(key) ?? false; }
-  forget(session: string) { this.sessions.delete(session); }
-  clear() { this.sessions.clear(); }
+  /** Active callbacks use the existing per-session/session-count bounds too; no historical generations or tombstones are retained. */
+  bind(session: string): SessionStandingBinding | null {
+    let pending = this.pending.get(session);
+    if (!pending && this.pending.size >= this.maxSessions || pending && pending.size >= this.perSession) return null;
+    if (!pending) { pending = new Set(); this.pending.set(session, pending); }
+    const state = { session, valid: true }, bucket = pending;
+    const binding: SessionStandingBinding = Object.freeze({ valid: () => state.valid, close: () => {
+      state.valid = false; bucket.delete(binding);
+      if (!bucket.size && this.pending.get(session) === bucket) this.pending.delete(session);
+    } });
+    this.bindings.set(binding, state); bucket.add(binding);
+    return binding;
+  }
+  /** Final check + write is synchronous: forget/clear cannot interleave after validation. Foreign, closed and forged handles refuse. */
+  rememberBound(binding: SessionStandingBinding, key: string): boolean {
+    const state = this.bindings.get(binding);
+    if (!state?.valid) return false;
+    this.remember(state.session, key);
+    return this.has(state.session, key);
+  }
+  forget(session: string) {
+    for (const binding of this.pending.get(session) ?? []) binding.close();
+    this.sessions.delete(session);
+  }
+  clear() { for (const session of this.pending.keys()) this.forget(session); this.sessions.clear(); }
+}
+
+/** One remembered audit, fenced by its active producer and the memory owner; a durable audit alone never confirms membership. */
+export async function rememberSessionStanding(input: { readonly memory: SessionStanding; readonly session: string; readonly key: string;
+  readonly cell: StandingCellName; readonly decision: AgentToolCallDecision; readonly valid: () => boolean;
+  readonly revalidate: () => Promise<{ readonly cell: string | null; readonly key: string | null; readonly decision: AgentToolCallDecision | null }>;
+  readonly audit: () => Promise<unknown>; readonly refused?: (reason: 'audit-unavailable' | 'policy-changed' | 'evicted') => void }): Promise<boolean> {
+  if (!input.valid()) return false;
+  const binding = input.memory.bind(input.session);
+  if (!binding) { input.refused?.('evicted'); return false; }
+  const current = async () => {
+    const fresh = await input.revalidate();
+    return binding.valid() && input.valid() && fresh.cell === input.cell && fresh.key === input.key && fresh.decision !== null
+      && fresh.decision.decision !== 'deny' && JSON.stringify(fresh.decision) === JSON.stringify(input.decision);
+  };
+  try {
+    if (!await current()) { input.refused?.('policy-changed'); return false; }
+    try { await input.audit(); } catch { input.refused?.('audit-unavailable'); return false; }
+    if (!await current()) { input.refused?.('policy-changed'); return false; }
+    // Last await is over: the producer check and owner check + map write share one synchronous section.
+    return input.valid() && input.memory.rememberBound(binding, input.key);
+  } catch { input.refused?.('policy-changed'); return false; }
+  finally { binding.close(); }
 }
 
 export interface StandingGrantView { readonly id: string; readonly key: string; readonly tool: string; readonly kind: 'command' | 'directory' | 'unknown'; readonly text: string }

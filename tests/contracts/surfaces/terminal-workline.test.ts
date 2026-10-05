@@ -1,3 +1,4 @@
+import { panelFixture } from '../support/workline-panel-fixture.js';
 import { PassThrough, Writable } from 'node:stream';
 import { createElement } from 'react';
 import { render } from 'ink';
@@ -20,8 +21,8 @@ const labels: WorklineLabels = { banner: 'BANNER', prompt: '> ', statusReady: 'R
     saveFailed: 'SAVE-FAILED', resumed: 'RESUMED {count} {session}', started: 'NEW-SESSION', context: 'CTX {approx}{prompt}/{window} {percent}% {count}',
     contextNone: 'CTX-NONE {count}' },
   composer: { pasteChip: '[PASTE {lines}]', search: 'SEARCH', exitArmed: 'EXIT-ARMED', shortcuts: 'KEYS\nENTER-SENDS', slash: { 'terminal.slash.run': 'RUN-DESC', 'terminal.slash.runArgument': '<RUN-ID>' } } };
-// The /help notice joins commands with " · "; the slash popup lists them one per row, so this only matches the notice.
-const HELP_NOTICE = '/watch-runs · /watch-stop';
+// The palette's rows have selection/alignment prefixes; this unprefixed pair only matches the /help notice.
+const HELP_NOTICE = '/watch-runs\n/watch-stop';
 
 class Screen extends Writable {
   text = '';
@@ -45,7 +46,7 @@ afterEach(() => { for (const instance of mounted.splice(0)) instance.unmount(); 
 function mount(props: Partial<WorklineProps> & Pick<WorklineProps, 'completeTurn'>, tier: 'none' = 'none') {
   const stdout = new Screen(), stdin = keyboard();
   const instance = render(createElement(WorklinePaletteProvider, { palette: resolveWorklinePalette(tier), children: createElement(WorklineApp, {
-    labels, target: 'scope-a · model', systemPrompt: 'SYSTEM', historyMessages: 4, errorText: (error: unknown) => `ERR:${(error as Error).message}`, ...props,
+    labels, target: 'scope-a · model', systemPrompt: 'SYSTEM', historyMessages: 4, errorText: (error: unknown) => `ERR:${(error as Error).message}`, ...props, ...panelFixture(props),
   }) }), { stdout: stdout as unknown as NodeJS.WriteStream, stdin: stdin as unknown as NodeJS.ReadStream, debug: true, exitOnCtrlC: false, patchConsole: false });
   mounted.push(instance);
   const type = async (text: string) => { for (const char of text) { stdin.write(char); await settle(2); } };

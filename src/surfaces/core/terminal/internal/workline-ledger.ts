@@ -1,11 +1,16 @@
-import type { RunView, WorkerObservationReport } from '#engine/index.js';
+import type { SurfacePublicationKind, RunView, WorkerObservationReport } from '#engine/index.js';
 import type { WorkerAttemptIdentity, WorkLedgerEntry } from './work-ledger.js';
 import type { ListApprovalPage, WorklineApproval } from './approval-watch.js';
-import type { StandingScope } from '#surfaces/core/terminal-kit/index.js';
+import type { StandingScope, SurfaceFollowEvent } from '#surfaces/core/terminal-kit/index.js';
 import { runViewToLedgerEntry, workerReportToLedgerEntries } from './work-ledger.js';
-
+export interface WorklineSurfaceSnapshot { readonly scopeId: string; readonly denied: readonly SurfacePublicationKind[];
+  readonly runs?: readonly RunView[]; readonly workers?: WorkerObservationReport; readonly approvals?: readonly WorklineApproval[];
+}
 export interface WorklineLedgerPorts {
+  /** Collection-authorized current state. Required for production push startup, invalidation and resync. */
+  readonly readSurfaceSnapshot?: (kinds: readonly SurfacePublicationKind[], signal: AbortSignal) => Promise<WorklineSurfaceSnapshot>;
   readonly scopeId: string;
+  readonly clearSessionStanding?: (sessionId: string) => Promise<void>;
   readonly listWorkers: () => Promise<WorkerObservationReport>;
   readonly inspectRun: (runId: string) => Promise<RunView | null>;
   readonly listRunIds?: () => Promise<readonly string[]>;
@@ -13,6 +18,8 @@ export interface WorklineLedgerPorts {
   /** When set, replaces polling for that watch. The runtime owns the event source. */
   readonly followWorkers?: (signal: AbortSignal) => AsyncIterable<readonly WorkLedgerEntry[]>;
   readonly followRuns?: (signal: AbortSignal) => AsyncIterable<readonly WorkLedgerEntry[]>;
+  /** Cursor-aware approval/run/worker push. When set, replaces polling. The runtime owns the source. */
+  readonly followEvents?: (signal: AbortSignal) => AsyncIterable<SurfaceFollowEvent>;
   /** Sealed worker transcript of one attempt, rendered by the CLI renderer (attempt `read-output` policy applies). */
   readonly inspectTranscript?: (attempt: WorkerAttemptIdentity) => Promise<string>;
   /** One page of the scope's approval records through the runtime approval application. */

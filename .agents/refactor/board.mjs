@@ -110,12 +110,17 @@ function applyRow(row, patch, allowed, now) {
   }
   row.updatedAt = now.toISOString();
 }
-/** A session writes its own row. An unassigned row is claimed by the first writer; a different session id is refused. */
+/** A session writes its own row; a different session may replace a closed row, retaining the previous identity. */
 export function setOwnRow(file, slot, patch, { session, revision, now = new Date() } = {}) {
   return mutate(file, { session, revision }, now, board => {
-    const row = board.sessions.find(item => item.slot === slot);
+    const index = board.sessions.findIndex(item => item.slot === slot);
+    let row = board.sessions[index];
     if (!row) throw fail('BOARD_SLOT', slot);
-    if (row.sessionId !== null && row.sessionId !== session) throw fail('BOARD_IDENTITY_MISMATCH', `row ${slot} belongs to another session; leave handoff information for main instead`);
+    if (row.sessionId !== null && row.sessionId !== session) {
+      if (row.status !== 'closed') throw fail('BOARD_IDENTITY_MISMATCH', `row ${slot} belongs to another session; leave handoff information for main instead`);
+      row = { ...emptyRow(slot, row.role), previousSessionId: row.sessionId, takenOverAt: now.toISOString() };
+      board.sessions[index] = row;
+    }
     applyRow(row, patch, ROW_FIELDS, now);
     row.sessionId = session;
     if (row.status === 'unassigned') row.status = 'active';

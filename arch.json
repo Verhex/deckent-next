@@ -259,7 +259,8 @@
         "src/composition/core/secrets",
         "src/composition/core/monitor",
         "src/composition/core/config",
-        "src/composition/core/decision"
+        "src/composition/core/decision",
+        "src/composition/core/scoped-request"
       ],
       "plan": "SURFACES"
     },
@@ -307,6 +308,7 @@
     },
     "src/composition/core/mcp": {
       "dependencies": [
+        "src/composition/core/scoped-request",
         "src/composition/core/runs",
         "src/adapters/core/contract",
         "src/adapters/core/mcp-transport",
@@ -665,7 +667,8 @@
         "src/domain/core/provider-spend",
         "src/domain/core/effect",
         "src/domain/core/policy",
-        "src/engine/core/secret-store"
+        "src/engine/core/secret-store",
+        "src/engine/core/approval"
       ],
       "plan": "EXECUTION"
     },
@@ -811,6 +814,7 @@
     },
     "src/surfaces/core/terminal-kit": {
       "dependencies": [
+        "src/engine/core/monitor",
         "src/domain/core/agent-turn"
       ],
       "plan": "SURFACES"
@@ -818,6 +822,7 @@
     "src/surfaces/core/terminal-labels": {
       "dependencies": [
         "src/platform/core/i18n",
+        "src/surfaces/core/terminal-kit",
         "src/surfaces/core/terminal",
         "src/surfaces/core/terminal-composer",
         "src/surfaces/core/terminal-render"
@@ -842,6 +847,7 @@
     },
     "src/surfaces/core/terminal": {
       "dependencies": [
+        "src/engine/core/monitor",
         "src/surfaces/core/terminal-kit",
         "src/surfaces/core/terminal-render",
         "src/surfaces/core/terminal-composer",
@@ -883,8 +889,21 @@
       ],
       "plan": "SURFACES"
     },
+    "src/surfaces/core/cli-installation": {
+      "dependencies": [
+        "src/domain/core/primitives",
+        "src/engine/core/installation",
+        "src/platform/core/config",
+        "src/platform/core/errors",
+        "src/platform/core/i18n",
+        "src/platform/core/output"
+      ],
+      "plan": "SURFACES"
+    },
     "src/surfaces/core/cli": {
       "dependencies": [
+        "src/surfaces/core/cli-installation",
+        "src/engine/core/monitor",
         "src/engine/core/secret-store",
         "src/surfaces/core/terminal-labels",
         "src/surfaces/core/terminal-composer",
@@ -897,7 +916,6 @@
         "src/domain/core/provider-catalog",
         "src/domain/core/task-graph",
         "src/engine/core/dispatch",
-        "src/engine/core/installation",
         "src/engine/core/inference-serving",
         "src/engine/core/runs",
         "src/engine/core/runtime",
@@ -926,7 +944,10 @@
         "src/engine/core/model-invocation",
         "src/surfaces/core/monitor",
         "src/surfaces/core/config",
-        "src/surfaces/core/cli-decision"
+        "src/surfaces/core/cli-decision",
+        "src/engine/core/approval",
+        "src/surfaces/core/approval-presentation",
+        "src/engine/core/installation"
       ],
       "plan": "SURFACES"
     },
@@ -1014,7 +1035,15 @@
       "plan": "INSTALLATION"
     },
     "src/adapters/core/installation-files": {
-      "dependencies": [],
+      "dependencies": [
+        "src/domain/core/primitives",
+        "src/engine/core/installation",
+        "src/platform/core/managed-files",
+        "src/platform/core/host",
+        "src/platform/core/config",
+        "src/platform/core/utils",
+        "src/platform/core/config-fields"
+      ],
       "plan": "INSTALLATION"
     },
     "src/domain/core/provider-catalog": {
@@ -1099,6 +1128,7 @@
     },
     "src/composition/core/scoped-request": {
       "dependencies": [
+        "src/domain/core/primitives",
         "src/adapters/core/contract",
         "src/adapters/core/local-principal",
         "src/adapters/core/local-runtime-socket",
@@ -1107,7 +1137,10 @@
         "src/domain/core/policy",
         "src/engine/core/policy",
         "src/platform/core/config",
-        "src/platform/core/managed-files"
+        "src/platform/core/managed-files",
+        "src/adapters/core/installation-files",
+        "src/engine/core/installation",
+        "src/platform/core/errors"
       ],
       "plan": "PROVIDERS"
     },
@@ -1700,7 +1733,9 @@
       "dependencies": [
         "src/domain/core/agent-tool",
         "src/domain/core/agent-turn",
-        "src/platform/core/host"
+        "src/platform/core/host",
+        "src/domain/core/model-invocation",
+        "src/platform/core/i18n"
       ],
       "plan": "SURFACES"
     },
@@ -2150,7 +2185,8 @@
         "src/platform/core/redaction",
         "src/platform/core/output",
         "src/surfaces/core/terminal-kit",
-        "src/surfaces/core/terminal-render"
+        "src/surfaces/core/terminal-render",
+        "src/engine/core/approval"
       ],
       "plan": "SURFACES"
     }

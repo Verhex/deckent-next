@@ -1,0 +1,113 @@
+import { cp, mkdtemp, mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { FileInstallationIdentityStore, FileProjectIdentityStore, readLocalOsIdentity, readScopeCompanies } from '#adapters/index.js';
+import { clearConfigCache, productResourcePath, resolveProductLayout } from '#platform/index.js';
+import { loadConfiguredInstallationIdentity, loadConfiguredProjectIdentity, loadConfiguredPeerScopeContext,
+  resolveConfiguredInstallationIdentity } from '#composition/core/scoped-request/index.js';
+import { openConfiguredAttemptStore } from '#composition/core/storage/index.js';
+import { startConfiguredRuntimeService } from '#composition/core/runtime-service/index.js';
+import { main as composedMain } from '#composition/core/cli/index.js';
+import { main as mcpMain } from '#composition/core/mcp/index.js';
+import { main } from '#surfaces/index.js';
+
+const roots: string[] = [];
+afterEach(async () => { vi.restoreAllMocks(); vi.unstubAllEnvs(); clearConfigCache(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
+beforeEach(context => { if (process.platform !== 'linux') context.skip('Linux machine binding required; unsupported capability has a separate adapter test'); });
+async function fixture() {
+  const root = await mkdtemp(join(tmpdir(), 'deckent-relocated-')); roots.push(root);
+  const original = join(root, 'original'), project = join(root, 'copy'); await mkdir(original);
+  const env = { DECKENT_GLOBAL_HOME: join(root, 'global'), HOME: join(root, 'home') }, options = { env };
+  const identity = await new FileInstallationIdentityStore(resolveProductLayout({ projectRoot: original })).loadOrCreate(),
+    projectIdentity = await new FileProjectIdentityStore(original).loadOrCreate();
+  const actor = readLocalOsIdentity();
+  await writeFile(join(original, '.deckent/policy.json'), JSON.stringify({ schemaVersion: 1, revision: 'p', restrictions: [],
+    grants: [{ id: 'g', effect: 'allow', actions: ['inspect'], scopes: ['s'], principals: [{ issuer: actor.issuer, subject: actor.subject }],
+      resource: { kind: 'scope', ids: 'all' } }] }), { mode: 0o600 });
+  await cp(original, project, { recursive: true });
+  const path = join(project, '.deckent/installation-identity/identity.json');
+  const output: string[] = [], sink = { write: (value: string) => { output.push(value); } };
+  const context = { root: project, env, stdout: sink, stderr: sink, loadInstallationIdentity: loadConfiguredInstallationIdentity,
+    loadProjectIdentity: loadConfiguredProjectIdentity, resolveInstallationIdentity: resolveConfiguredInstallationIdentity };
+  return { root, original, project, options, identity, projectIdentity, path, output, context };
+}
+
+describe('relocation producer to actual CLI surface', () => {
+  it.each(['en', 'tr'])('stops commands and offers two explicit choices, without mutation (%s)', async lang => {
+    const f = await fixture(), bytes = await readFile(f.path, 'utf8'), startRuntimeService = vi.fn();
+    expect(await main(['runtime', 'serve', '--lang', lang], { ...f.context, startRuntimeService })).toBe(78);
+    expect(startRuntimeService).not.toHaveBeenCalled();
+    expect(f.output.join('')).toContain('INSTALLATION_IDENTITY_RELOCATED');
+    expect(f.output.join('')).toContain('deckent init identity --keep'); expect(f.output.join('')).toContain('deckent init identity --new');
+    expect(f.output.join('')).toContain(lang === 'en' ? 'same installation' : 'aynı kurulum');
+    expect(await readFile(f.path, 'utf8')).toBe(bytes); f.output.length = 0;
+    expect(await main(['init', 'identity', '--lang', lang], f.context)).toBe(78);
+    expect(await readFile(f.path, 'utf8')).toBe(bytes); f.output.length = 0;
+    expect(await main(['init', 'identity', '--keep', '--new'], f.context)).toBe(2);
+    expect(await readFile(f.path, 'utf8')).toBe(bytes); f.output.length = 0;
+    expect(await main(['init', 'identity', '--help', '--lang', lang], f.context)).toBe(0);
+    expect(f.output.join('')).toContain('--keep'); expect(f.output.join('')).toContain('--new');
+    expect(await readFile(f.path, 'utf8')).toBe(bytes);
+  });
+  it.each(['en', 'tr'])('keeps or replaces the installation identity while preserving project bytes (%s)', async lang => {
+    for (const choice of ['keep', 'new'] as const) {
+      const f = await fixture(), projectPath = join(f.project, '.deckent/project-identity/identity.json');
+      const projectBytes = await readFile(projectPath, 'utf8');
+      expect(await main(['init', 'identity', `--${choice}`, '--lang', lang], f.context)).toBe(0);
+      const observed = await loadConfiguredInstallationIdentity(f.project, f.options);
+      expect(observed.status).toBe('available'); if (observed.status !== 'available') throw new Error('IDENTITY_NOT_CREATED');
+      const identity = observed.value;
+      expect(f.output.join('')).toContain(f.identity.installationId); expect(f.output.join('')).toContain(identity.installationId);
+      expect(f.output.join('')).toContain(lang === 'en' ? 'Previous installationId' : 'Önceki installationId');
+      if (choice === 'keep') expect(identity).toEqual(f.identity); else expect(identity.installationId).not.toBe(f.identity.installationId);
+      expect(await readFile(projectPath, 'utf8')).toBe(projectBytes);
+      expect(await loadConfiguredProjectIdentity(f.project, f.options)).toEqual({ status: 'available', value: f.projectIdentity });
+      const record = JSON.parse(await readFile(f.path, 'utf8'));
+      expect(record.lastResolution).toMatchObject({ choice, previousInstallationId: f.identity.installationId, installationId: identity.installationId,
+        principal: { issuer: readLocalOsIdentity().issuer, subject: readLocalOsIdentity().subject } });
+      f.output.length = 0;
+      expect(await main(['terminal', 'status', '--json'], f.context)).toBe(0);
+      expect(JSON.parse(f.output.join(''))).toMatchObject({ installationId: identity.installationId, projectId: f.projectIdentity.projectId });
+      await expect(stat(productResourcePath(resolveProductLayout({ projectRoot: f.project }), 'ledger'))).rejects.toMatchObject({ code: 'ENOENT' });
+    }
+  });
+  it('wires real CLI recovery to persistence and returns previous/current IDs in JSON', async () => {
+    const f = await fixture(); vi.spyOn(process, 'cwd').mockReturnValue(f.project);
+    for (const [key, value] of Object.entries(f.options.env)) vi.stubEnv(key, value);
+    vi.spyOn(process.stdout, 'write').mockImplementation(chunk => { f.output.push(String(chunk)); return true; });
+    vi.spyOn(process.stderr, 'write').mockImplementation(chunk => { f.output.push(String(chunk)); return true; });
+    expect(await composedMain(['terminal', 'status', '--json'])).toBe(78);
+    expect(JSON.parse(f.output.join('')).code).toBe('INSTALLATION_IDENTITY_RELOCATED'); f.output.length = 0;
+    expect(await composedMain(['init', 'identity', '--new', '--json'])).toBe(0);
+    const result = JSON.parse(f.output.join(''));
+    expect(result.schemaVersion).toBe(1); expect(result.previousInstallationId).toBe(f.identity.installationId);
+    expect(await loadConfiguredInstallationIdentity(f.project, f.options)).toMatchObject({ status: 'available', value: { installationId: result.installationId } });
+    expect(result.installationId).not.toBe(result.previousInstallationId);
+    expect(result).not.toHaveProperty('binding');
+  });
+  it('does not pin a scope in a copied ledger or change ledger/policy/project bytes when selecting new', async () => {
+    const f = await fixture(), opened = await openConfiguredAttemptStore(f.original, f.options); opened.store.close();
+    await cp(join(f.original, '.deckent/state'), join(f.project, '.deckent/state'), { recursive: true });
+    const ledger = productResourcePath(resolveProductLayout({ projectRoot: f.project }), 'ledger');
+    const paths = [ledger, join(f.project, '.deckent/policy.json'), join(f.project, '.deckent/project-identity/identity.json')];
+    const bytes = await Promise.all(paths.map(path => readFile(path)));
+    expect(readScopeCompanies(ledger, 1000, ['s']).size).toBe(0);
+    const peer = { pid: process.pid, uid: process.getuid!(), gid: process.getgid!(), assurance: 'linux-so-peercred' as const };
+    await expect(loadConfiguredPeerScopeContext(f.project, 's', f.options, peer, 'write')).rejects.toMatchObject({ code: 'INSTALLATION_IDENTITY_RELOCATED' });
+    expect(readScopeCompanies(ledger, 1000, ['s']).size).toBe(0);
+    await resolveConfiguredInstallationIdentity(f.project, 'new', f.options);
+    expect(await Promise.all(paths.map(path => readFile(path)))).toEqual(bytes);
+    expect(readScopeCompanies(ledger, 1000, ['s']).size).toBe(0);
+  });
+  it('refuses direct service, MCP and peer admissions before ledger/transport startup', async () => {
+    const f = await fixture(), before = await readFile(f.path, 'utf8');
+    await expect(startConfiguredRuntimeService(f.project, {}, f.options)).rejects.toMatchObject({ code: 'INSTALLATION_IDENTITY_RELOCATED' });
+    for (const [key, value] of Object.entries(f.options.env)) vi.stubEnv(key, value);
+    await expect(mcpMain(f.project)).rejects.toMatchObject({ code: 'INSTALLATION_IDENTITY_RELOCATED' });
+    const peer = { pid: process.pid, uid: process.getuid!(), gid: process.getgid!(), assurance: 'linux-so-peercred' as const };
+    await expect(loadConfiguredPeerScopeContext(f.project, 's', f.options, peer, 'write')).rejects.toMatchObject({ code: 'INSTALLATION_IDENTITY_RELOCATED' });
+    expect(await readFile(f.path, 'utf8')).toBe(before);
+    await expect(stat(productResourcePath(resolveProductLayout({ projectRoot: f.project }), 'ledger'))).rejects.toMatchObject({ code: 'ENOENT' });
+  });
+});

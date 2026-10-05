@@ -1,8 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import type { AgentTurnMessage, AgentTurnStreamEvent, ChatTurnCancellation, ChatTurnCommand, ChatTurnResult } from '#domain/index.js';
-import type { AgentTurnAdmission } from '#engine/index.js';
-import type { ConfigLoadOptions } from '#platform/index.js';
-import type { TurnDelta } from '#surfaces/index.js';
+import { createAgentCompactionGuard, type AgentTurnAdmission } from '#engine/index.js';
+import { ErrorRegistry, type ConfigLoadOptions } from '#platform/index.js';
+import type { PanelTurnBinding, TurnDelta } from '#surfaces/index.js';
 import { terminalCompactionExpected } from './turn-phase.js';
 
 /** Runtime `chatTurn` / `cancelChatTurn` (v12); the shipped executable wires the local runtime client. */
@@ -10,8 +10,7 @@ export interface TerminalAgentTurnPorts {
   chatTurn(projectRoot: string, command: ChatTurnCommand, onEvent: (event: AgentTurnStreamEvent) => void, options: ConfigLoadOptions,
     signal?: AbortSignal): Promise<ChatTurnResult>;
   cancelChatTurn(projectRoot: string, command: ChatTurnCancellation, options: ConfigLoadOptions): Promise<unknown>;
-  /** Local configuration check before contacting the service (a missing `terminal.chat` is named, not a transport error); it may
-   * return the service's admission from the same configuration, which lets the stream name the summarizing phase (TL-A). */
+  /** Local preflight; returns service admission for the summarizing phase when available. */
   preflight?(projectRoot: string, options: ConfigLoadOptions): Promise<AgentTurnAdmission | void>;
 }
 export interface TerminalAgentTurnInput {
@@ -26,47 +25,51 @@ export interface TerminalAgentTurnInput {
   readonly sessionId?: string;
   /** MODES-3 (v17): the terminal was launched in full access; the service admits it only on the company grant. */
   readonly fullAccess?: true;
+  readonly onTurnBound?: (binding: PanelTurnBinding) => void;
 }
 type Outcome = { readonly result: ChatTurnResult } | { readonly error: unknown };
 
-/**
- * One terminal agent turn (T-L3) as the surface's `TurnDelta` stream: the service runs the loop; tool calls arrive as one started and
- * one finished line; `message` deltas carry the history the next turn continues from; exactly one `done` ends it, with the engine's
- * closure note. A replayed turn shows its stored answer. Aborting (or leaving the loop early) cancels this exact turn at once.
- */
+/** Streams the service-owned turn/history and one final done; abort or early exit cancels the same command exactly once. */
 export async function* streamTerminalAgentTurn(input: TerminalAgentTurnInput, ports: TerminalAgentTurnPorts): AsyncGenerator<TurnDelta> {
+  input.signal?.throwIfAborted();
   const admission = await ports.preflight?.(input.projectRoot, input.options) ?? null;
+  input.signal?.throwIfAborted();
   const command: ChatTurnCommand = { schemaVersion: 1, scopeId: input.scopeId, turnId: randomUUID(), messages: [...input.messages],
     ...(input.reasoning === 'off' ? { reasoning: 'off' as const } : {}), ...(input.sessionId ? { sessionId: input.sessionId } : {}),
     ...(input.fullAccess === true ? { fullAccess: true as const } : {}) };
-  const cancel = () => ports.cancelChatTurn(input.projectRoot, { schemaVersion: 1, scopeId: command.scopeId, turnId: command.turnId }, input.options)
+  let cancellation: Promise<unknown> | undefined;
+  const cancel = () => cancellation ??= ports.cancelChatTurn(input.projectRoot, { schemaVersion: 1, scopeId: command.scopeId, turnId: command.turnId }, input.options)
     .catch(() => undefined);
   const local = new AbortController(), signal = input.signal ? AbortSignal.any([input.signal, local.signal]) : local.signal;
-  // The engine's target only; the terminal derives its tool-line display (TL-B D2) from the `message` deltas itself, so composition
-  // never loads the surface layer at runtime (COMPOSITION-BUDGET follow-up).
+  // Preserve engine targets; the renderer derives display targets from message events.
   const queue: TurnDelta[] = [], targets = new Map<string, string | null>();
   let outcome: Outcome | null = null, wake: (() => void) | null = null, roundText = '';
-  // The history the service measures (TL-A): the sent messages, each appended message, a compaction's replacement. Protocol v15 has no
-  // phase event, so a measurement after which the engine's rule compacts is marked `compacting` here; one round compacts at most once.
+  // Follow measured history and mark at most one compaction per round using the service admission.
   const history: AgentTurnMessage[] = [...input.messages];
   let round = 0, compactedRound = 0;
+  const compactionGuard = createAgentCompactionGuard();
   const notify = () => { const resume = wake; wake = null; resume?.(); };
   const onEvent = (event: AgentTurnStreamEvent) => {
     if (event.kind === 'text') roundText += event.text;
     if (event.kind === 'tool.started') { roundText = ''; targets.set(event.callId, event.target); }
     if (event.kind === 'message') history.push(event.message);
-    if (event.kind === 'compacted') { history.splice(0, history.length, ...(history[0]?.role === 'system' ? [history[0]] : []), ...event.messages); compactedRound = round; }
+    if (event.kind === 'compacted') {
+      const next = [...(history[0]?.role === 'system' ? [history[0]] : []), ...event.messages];
+      compactionGuard.applied(history, next); history.splice(0, history.length, ...next); compactedRound = round;
+    }
     if (event.kind === 'context') round = event.round;
-    const compacting = event.kind === 'context' && admission !== null && event.round !== compactedRound && terminalCompactionExpected(history, event, admission);
+    const compacting = event.kind === 'context' && admission !== null && event.round !== compactedRound && terminalCompactionExpected(history, event, admission) && compactionGuard.plan(history) !== null;
     queue.push(toDelta(event, targets, compacting)); notify();
   };
   // Cancel at once when the caller aborts; the transport disconnect alone is only seen at the service's next write.
   const onAbort = () => { void cancel(); };
+  input.onTurnBound?.({ scopeId: command.scopeId, sessionId: command.sessionId ?? null, turnId: command.turnId, phase: 'command-generated' });
+  signal.throwIfAborted();
   signal.addEventListener('abort', onAbort, { once: true });
-  void ports.chatTurn(input.projectRoot, command, onEvent, input.options, signal)
-    .then(result => { outcome = { result }; }, (error: unknown) => { outcome = { error }; }).finally(notify);
   let finished = false;
   try {
+    void ports.chatTurn(input.projectRoot, command, onEvent, input.options, signal)
+      .then(result => { outcome = { result }; }, (error: unknown) => { outcome = { error }; }).finally(notify);
     for (;;) {
       while (queue.length > 0) yield queue.shift()!;
       if (outcome) break;
@@ -79,6 +82,7 @@ export async function* streamTerminalAgentTurn(input: TerminalAgentTurnInput, po
       yield { kind: 'done', finish: 'cancelled', note: null }; return;
     }
     const { result } = settled;
+    if (result.turnId !== command.turnId) throw ErrorRegistry.createError('AGENT_TURN_INVALID');
     // The answer came as text events; a replay or a lost tail is completed from the bounded result, never merged when it differs.
     if (result.answer !== null && result.answer.startsWith(roundText) && result.answer.length > roundText.length) {
       yield { kind: 'text', text: result.answer.slice(roundText.length) };
@@ -99,7 +103,7 @@ function toDelta(event: AgentTurnStreamEvent, targets: ReadonlyMap<string, strin
       ...(compacting ? { compacting } : {}) };
     case 'compacted': return { kind: 'compacted', messages: event.messages, replacedMessages: event.replacedMessages };
     case 'approval.requested': return { kind: 'approval', phase: 'requested', callId: event.callId, approvalId: event.approvalId, revision: event.revision, summary: event.summary, preview: event.preview,
-      expiresAt: event.expiresAt, ...(event.decisionCapability ? { decisionCapability: event.decisionCapability } : {}), ...(event.risk !== undefined ? { risk: event.risk } : {}), ...(event.requiredAssurance ? { requiredAssurance: event.requiredAssurance } : {}) };
+      expiresAt: event.expiresAt, ...(event.standing ? { standing: event.standing } : {}), ...(event.decisionCapability ? { decisionCapability: event.decisionCapability } : {}), ...(event.risk !== undefined ? { risk: event.risk } : {}), ...(event.requiredAssurance ? { requiredAssurance: event.requiredAssurance } : {}) };
     case 'approval.settled': return { kind: 'approval', phase: 'settled', callId: event.callId, approvalId: event.approvalId, outcome: event.outcome };
     case 'tool.output': return { kind: 'output', callId: event.callId, stream: event.stream, text: event.text };
     case 'tool.started': return { kind: 'tool', phase: 'started', callId: event.callId, name: event.name, target: event.target, status: null, ms: null };

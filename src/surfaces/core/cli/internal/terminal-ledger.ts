@@ -1,3 +1,4 @@
+import { type SurfaceSnapshotAccess, sessionApprovalResultSchema, acceptSessionStandingClearance } from '#engine/index.js';
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { t, type ConfigLoadOptions, type Locale } from '#platform/index.js';
@@ -7,6 +8,8 @@ import type { RunCancellationDeliveryHandler, RunQueryHandler } from './run.js';
 import { renderRunCancellation } from './run.js';
 import { renderWorkerTranscript, type WorkerObservationHandler, type InventoryQueryHandler, type WorkerTranscriptHandler } from '#surfaces/core/monitor/index.js';
 import type { WorklineApproval, WorklineLedgerPorts } from '#surfaces/core/terminal/index.js';
+
+import { withSurfaceSnapshot } from './terminal-snapshot.js';
 
 const approvalPageSchema = z.array(approvalRecordSchema);
 
@@ -31,18 +34,27 @@ export function createWorklineLedgerPorts(input: {
   readonly inspectInventory?: InventoryQueryHandler;
   readonly inspectWorkerTranscript?: WorkerTranscriptHandler;
   readonly listApprovals?: (input: unknown) => Promise<unknown>; readonly decideApproval?: (input: unknown) => Promise<unknown>;
+  readonly clearSessionStanding?: (input: { schemaVersion: 1; scopeId: string; sessionId: string }) => Promise<unknown>;
+  readonly followEvents?: WorklineLedgerPorts['followEvents'];
+  readonly inspectSurfaceAccess?: () => Promise<SurfaceSnapshotAccess | null>;
+  readonly inspectSurfaceRunIds?: () => Promise<readonly string[]>;
   readonly deliverRunCancellation?: RunCancellationDeliveryHandler;
 }): WorklineLedgerPorts | undefined {
   if (!input.inspectWorkers || !input.inspectRun) return undefined;
   const { root, scopeId, options, inspectWorkers, inspectRun, inspectInventory, workerHeartbeatMs, inspectWorkerTranscript, listApprovals, decideApproval,
-    deliverRunCancellation } = input;
+    deliverRunCancellation, followEvents } = input;
   const locale = input.locale ?? 'en', pageSize = input.approvalPageSize ?? 100;
-  return {
+  return withSurfaceSnapshot({
     scopeId,
+    ...(input.clearSessionStanding ? { async clearSessionStanding(sessionId: string) {
+      const command = { schemaVersion: 1 as const, scopeId, sessionId };
+      acceptSessionStandingClearance(command, await input.clearSessionStanding!(command));
+    } } : {}),
+    ...(followEvents ? { followEvents } : {}),
     ...(workerHeartbeatMs === undefined ? {} : { workerHeartbeatMs }),
     async listWorkers() { return inspectWorkers(root, { schemaVersion: 1, scopeId, after: null, limit: 20 }, options); },
     async inspectRun(runId: string) { return (await inspectRun(root, { schemaVersion: 1, scopeId, runId }, options)).run; },
-    ...(inspectInventory ? {
+    ...(input.inspectSurfaceRunIds ? { listRunIds: input.inspectSurfaceRunIds } : inspectInventory ? {
       async listRunIds() {
         const page = await inspectInventory(root, { schemaVersion: 1, scopeId, after: null, limit: 50 }, options);
         const ids = new Set<string>();
@@ -66,12 +78,16 @@ export function createWorklineLedgerPorts(input: {
       },
       // B1: the card declares itself and forwards its turn's one-time capability when it has one (the same single y; nothing else to type).
       async decideApproval(approval: Pick<WorklineApproval, 'approvalId' | 'revision' | 'decisionCapability'>, decision: 'allow' | 'deny', standing?: StandingScope) {
-        const record = approvalRecordSchema.parse(await decideApproval({ schemaVersion: 1, scopeId, approvalId: approval.approvalId,
+        const result = await decideApproval({ schemaVersion: 1, scopeId, approvalId: approval.approvalId,
           commandId: `terminal-${randomUUID()}`, expectedRevision: approval.revision, decision, channel: 'local-terminal-card',
+          ...(standing === 'session' ? { standing: 'session' } : {}),
           ...(approval.decisionCapability ? { decisionCapability: approval.decisionCapability } : {}),
-          reason: decision === 'allow' ? t('terminal.approval.reasonAllow', {}, locale) : t('terminal.approval.reasonDeny', {}, locale) }));
-        // The runtime protocol (v16) has no standing-scope field yet (v17 checkpoint): the answer is allowed once, and the view is told the
-        // scope was not saved rather than left to assume it.
+          reason: decision === 'allow' ? t('terminal.approval.reasonAllow', {}, locale) : t('terminal.approval.reasonDeny', {}, locale) });
+        if (standing === 'session') {
+          const answer = sessionApprovalResultSchema.parse(result);
+          return { ...approvalView(answer.record), standing: answer.standing };
+        }
+        const record = approvalRecordSchema.parse(result);
         return standing ? { ...approvalView(record), standing: { scope: standing, saved: false, reason: 'protocol' } } : approvalView(record);
       },
     } : {}),
@@ -83,5 +99,5 @@ export function createWorklineLedgerPorts(input: {
         return renderRunCancellation(result, commandId, scopeId, runId, locale);
       },
     } : {}),
-  };
+  }, input.inspectSurfaceAccess);
 }

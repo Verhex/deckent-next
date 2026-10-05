@@ -1,3 +1,4 @@
+import type { PanelTurnBinding } from '#surfaces/core/terminal-kit/index.js';
 import type { ModelReference, PermissionModeChange, PermissionModeCommand, PermissionModeQuery, PermissionModeView, ScratchClearance, ScratchQuery,
   ScratchView } from '#domain/index.js';
 import type { ConfigLoadOptions } from '#platform/index.js';
@@ -27,7 +28,7 @@ export type TerminalChatTurnHandler = (
  */
 export type TerminalChatStreamHandler = (
   root: string,
-  input: Readonly<{ scopeId: string; messages: readonly AgentChatMessage[]; reasoning?: 'off'; sessionId?: string; fullAccess?: true }>,
+  input: Readonly<{ scopeId: string; messages: readonly AgentChatMessage[]; reasoning?: 'off'; sessionId?: string; fullAccess?: true; onTurnBound?: (binding: PanelTurnBinding) => void }>,
   options: ConfigLoadOptions,
   signal?: AbortSignal,
 ) => AsyncIterable<TurnDelta>;
