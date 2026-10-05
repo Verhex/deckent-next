@@ -937,9 +937,9 @@
   "terminal.approval.standing.promptBoth": "y bu sefer onayla · s bu oturum boyunca onayla · a bu projede her zaman · n reddet · Enter/Esc reddet (varsayılan).",
   "terminal.approval.standing.promptSession": "y bu sefer onayla · s bu oturum boyunca onayla · n reddet · Enter/Esc reddet (varsayılan).",
   "terminal.approval.standing.promptAlways": "y bu sefer onayla · a bu projede her zaman · n reddet · Enter/Esc reddet (varsayılan).",
-  "terminal.approval.standing.savedSession": "Onay {id} verildi; aynı çağrı bu oturum ya da servis bitene kadar yeniden sormaz.",
+  "terminal.approval.standing.savedSession": "Onay {id} bir kez verildi; izin bu konuşma için kaydedildi. Sonraki çağrılarda güncel politika yine denetlenir.",
   "terminal.approval.standing.savedAlways": "Onay {id} verildi; bu proje için kendi kalıcı grant'iniz olarak kaydedildi (görmek ve geri almak için: deckent policy grants --mine / revoke).",
-  "terminal.approval.standing.notSavedSession": "Onay {id} bu sefer verildi ama oturum yanıtı kaydedilemedi ({reason}); sonraki benzer çağrı yeniden sorar.",
+  "terminal.approval.standing.notSavedSession": "Onay {id} bu sefer verildi ama bu oturum yanıtı kaydedilemedi ({reason}). Sonraki çağrılarda güncel politika ve hatırlanan izinler yine denetlenir.",
   "terminal.approval.standing.notSavedAlways": "Onay {id} bu sefer verildi ama kalıcı grant kaydedilemedi ({reason}); sonraki benzer çağrı yeniden sorar.",
   "terminal.approval.reasonAllow": "Operatör Deckent terminalinde onayladı.",
   "terminal.approval.reasonDeny": "Operatör Deckent terminalinde reddetti.",
@@ -1270,5 +1270,9 @@
   "cli.help.action.secret.set": "Korumalı girdiden gizli değer sakla",
   "cli.help.action.operation.execute": "Tipli işlemi yürüt",
   "cli.help.action.operation.inspect": "İşlem etki kaydını incele",
-  "cli.help.familySynopsis": "Komut ailesi: deckent {command} <eylem>"
+  "cli.help.familySynopsis": "Komut ailesi: deckent {command} <eylem>",
+  "terminal.slash.approvalsArgument": "[numara|kimlik|clear-session]",
+  "terminal.approval.standing.unconfirmedSession": "Onay {id}: oturum izni doğrulanamadı ({reason}).",
+  "terminal.approval.sessionCleared": "{session} konuşmasının hatırlanan izinleri temizlendi; mevcut tek seferlik kararlar değişmedi.",
+  "terminal.approval.sessionClearUnconfirmed": "{session} konuşmasının hatırlanan izinlerinin temizlendiği doğrulanamadı."
 }

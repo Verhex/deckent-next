@@ -1,6 +1,6 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { approvalRecordSchema, approvalSubject, ApprovalError, type ApprovalRecord } from '#domain/index.js';
-import type { ApprovalStore, ApprovalReceipt, ApprovalSubjectKind } from '#engine/index.js';
+import type { ApprovalStore, ApprovalReceipt, ApprovalSubjectKind, ApprovalSettlement } from '#engine/index.js';
 import { openSqliteLedger, type SqliteLedgerOptions } from '#adapters/core/sqlite-ledger/index.js';
 
 /** Uses the shared ledger; callers may supply the current reservation transaction's connection. */
@@ -110,6 +110,9 @@ export class SqliteApprovalStore implements ApprovalStore {
     });
   }
   transition(previous: ApprovalRecord, next: ApprovalRecord, receipt?: ApprovalReceipt): ApprovalRecord {
+    return this.transitionWithSettlement(previous, next, receipt).record;
+  }
+  transitionWithSettlement(previous: ApprovalRecord, next: ApprovalRecord, receipt?: ApprovalReceipt): ApprovalSettlement {
     approvalRecordSchema.parse(next);
     if (previous.status !== 'pending' || next.status === 'pending' || next.revision !== previous.revision + 1
       || JSON.stringify(previous.request) !== JSON.stringify(next.request)) throw new ApprovalError('APPROVAL_CONFLICT');
@@ -117,8 +120,8 @@ export class SqliteApprovalStore implements ApprovalStore {
       if (receipt) {
         const replay = this.receipt(receipt.scopeId, receipt.commandId);
         if (replay) {
-          if (replay.fingerprint !== receipt.fingerprint) throw new ApprovalError('APPROVAL_CONFLICT');
-          return replay.record;
+          if (replay.operation !== (receipt.operation ?? 'decide') || replay.fingerprint !== receipt.fingerprint) throw new ApprovalError('APPROVAL_CONFLICT');
+          return { record: replay.record, commit: 'replay' };
         }
       }
       const current = this.load(previous.request.scopeId, previous.request.approvalId);
@@ -128,7 +131,7 @@ export class SqliteApprovalStore implements ApprovalStore {
       if (updated.changes !== 1) throw new ApprovalError('APPROVAL_CONFLICT');
       if (receipt) this.db.prepare('INSERT INTO approval_receipts(scope_id,command_id,operation,fingerprint,snapshot) VALUES(?,?,?,?,?)')
         .run(receipt.scopeId, receipt.commandId, receipt.operation ?? 'decide', receipt.fingerprint, JSON.stringify(next));
-      this.event(next); return next;
+      this.event(next); return { record: next, commit: 'fresh' };
     });
   }
 }

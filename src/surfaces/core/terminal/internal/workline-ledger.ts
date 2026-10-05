@@ -6,6 +6,7 @@ import { runViewToLedgerEntry, workerReportToLedgerEntries } from './work-ledger
 
 export interface WorklineLedgerPorts {
   readonly scopeId: string;
+  readonly clearSessionStanding?: (sessionId: string) => Promise<void>;
   readonly listWorkers: () => Promise<WorkerObservationReport>;
   readonly inspectRun: (runId: string) => Promise<RunView | null>;
   readonly listRunIds?: () => Promise<readonly string[]>;

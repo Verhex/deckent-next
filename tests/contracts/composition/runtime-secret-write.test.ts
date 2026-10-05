@@ -182,7 +182,7 @@ describe.skipIf(process.platform !== 'linux')('secret set/delete through the run
     await new Promise<void>((resolve, reject) => { socket.once('connect', resolve); socket.once('error', reject); });
     const chunks: Buffer[] = []; socket.on('data', chunk => { chunks.push(chunk as Buffer); });
     const closed = new Promise<void>(resolve => socket.once('close', () => resolve()));
-    socket.end(encodeServiceFrame({ schemaVersion: 19, requestId: `budget-${maxResultBytes}`, operation, delivery: { maxResultBytes },
+    socket.end(encodeServiceFrame({ schemaVersion: 20, requestId: `budget-${maxResultBytes}`, operation, delivery: { maxResultBytes },
       input: { schemaVersion: 1, scopeId: 'installation', ...input } }, 262144));
     await closed;
     return JSON.parse(Buffer.concat(chunks).subarray(4).toString('utf8')) as { ok: boolean; result?: unknown; error?: { code: string } };

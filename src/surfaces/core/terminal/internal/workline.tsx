@@ -143,7 +143,7 @@ export function WorklineApp(props: WorklineProps) {
   const pollMs = props.pollMs ?? ledger?.workerHeartbeatMs ?? 5000;
   const failed = useCallback((error: unknown) => push([notice('error', `${labels.watchFailed}: ${errorText(error)}`)]), [errorText, labels.watchFailed, push]);
   // P4 work surface: live worker panel, approval notifications/cards and run-cancel confirmation (dynamic region only).
-  const work = useWorkSurface({ ledger, labels, push, errorText, pollMs, watchingWorkers: watch.workers,
+  const work = useWorkSurface({ ledger, labels, push, errorText, pollMs, sessionId: session.id, watchingWorkers: watch.workers,
     ...(props.approvalPollMs === undefined ? {} : { approvalPollMs: props.approvalPollMs }) });
   const mode = useWorklineMode(props.permissionMode, push, errorText, labels.work?.unavailable ?? labels.ledgerUnavailable, labels.mode, props.fullAccess === true);
   const refreshMode = mode.refresh;

@@ -99,7 +99,7 @@ function toDelta(event: AgentTurnStreamEvent, targets: ReadonlyMap<string, strin
       ...(compacting ? { compacting } : {}) };
     case 'compacted': return { kind: 'compacted', messages: event.messages, replacedMessages: event.replacedMessages };
     case 'approval.requested': return { kind: 'approval', phase: 'requested', callId: event.callId, approvalId: event.approvalId, revision: event.revision, summary: event.summary, preview: event.preview,
-      expiresAt: event.expiresAt, ...(event.decisionCapability ? { decisionCapability: event.decisionCapability } : {}), ...(event.risk !== undefined ? { risk: event.risk } : {}), ...(event.requiredAssurance ? { requiredAssurance: event.requiredAssurance } : {}) };
+      expiresAt: event.expiresAt, ...(event.standing ? { standing: event.standing } : {}), ...(event.decisionCapability ? { decisionCapability: event.decisionCapability } : {}), ...(event.risk !== undefined ? { risk: event.risk } : {}), ...(event.requiredAssurance ? { requiredAssurance: event.requiredAssurance } : {}) };
     case 'approval.settled': return { kind: 'approval', phase: 'settled', callId: event.callId, approvalId: event.approvalId, outcome: event.outcome };
     case 'tool.output': return { kind: 'output', callId: event.callId, stream: event.stream, text: event.text };
     case 'tool.started': return { kind: 'tool', phase: 'started', callId: event.callId, name: event.name, target: event.target, status: null, ms: null };

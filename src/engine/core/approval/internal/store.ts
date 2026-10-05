@@ -1,6 +1,8 @@
 import type { ApprovalRecord, ApprovalSubject } from '#domain/index.js';
 export type ApprovalSubjectKind = ApprovalSubject['kind'];
 export interface ApprovalReceipt { readonly operation?: 'decide' | 'renew'; readonly scopeId: string; readonly commandId: string; readonly fingerprint: string; readonly record: ApprovalRecord }
+/** Producer metadata from the atomic record/receipt/outbox transaction, never inferred from a preflight receipt read. */
+export interface ApprovalSettlement { readonly record: ApprovalRecord; readonly commit: 'fresh' | 'replay' }
 /** All mutations atomically persist record, command receipt (when present) and outbox event. */
 export interface ApprovalStore {
   load(scopeId: string, approvalId: string): ApprovalRecord | null;
@@ -18,4 +20,5 @@ export interface ApprovalStore {
   receipt(scopeId: string, commandId: string): ApprovalReceipt | null;
   renew(previous: ApprovalRecord, next: ApprovalRecord, receipt: ApprovalReceipt): ApprovalRecord;
   transition(previous: ApprovalRecord, next: ApprovalRecord, receipt?: ApprovalReceipt): ApprovalRecord;
+  transitionWithSettlement(previous: ApprovalRecord, next: ApprovalRecord, receipt?: ApprovalReceipt): ApprovalSettlement;
 }

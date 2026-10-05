@@ -1,7 +1,9 @@
+import { canonicalTurnRequest as canonical, withMcpNotices, chatTurnRoundFailureState } from '#engine/index.js';
+export { withMcpNotices, chatTurnRoundFailureState } from '#engine/index.js';
 import { createHash, randomUUID } from 'node:crypto';
 import { chatTurnCancellationSchema, chatTurnCommandSchema, modelInvocationProfileSchema, type AgentToolApprovalSettlement, type AgentToolSpec, type AgentTurnMessage,
-  type AgentTurnStreamEvent, type ChatTurnCancellationResult, type ChatTurnResult, type JsonObject, type ModelInvocationCommand, type ModelInvocationOutcome } from '#domain/index.js';
-import { agentCallPermissionMode, agentToolApprovalSummary, agentCompactionInstruction, AGENT_TURN_ANSWER_MAX_BYTES, APPROVAL_PREVIEW_MAX_BYTES, AgentToolPolicyAuthorization, AgentTurnStoreError, admitFullAccessTurn,
+  type AgentTurnStreamEvent, type ChatTurnCancellationResult, type ChatTurnResult, type JsonObject, type ModelInvocationCommand } from '#domain/index.js';
+import { SessionStanding, SessionApprovalAnswers, agentCallPermissionMode, agentToolApprovalSummary, agentCompactionInstruction, AGENT_TURN_ANSWER_MAX_BYTES, APPROVAL_PREVIEW_MAX_BYTES, AgentToolPolicyAuthorization, AgentTurnStoreError, admitFullAccessTurn,
   agentCompactionTranscript, agentToolApprovalFacts, agentTurnAdmission, awaitAgentToolApproval, boundApprovalPreview, createTurnDecisionCapabilities, parseAgentCompactionSummary,
   renderAgentTurnSystemPrompt, requestAgentToolApproval, runDurableAgentTurn, withAgentTurnSystemPrompt, type AgentRoundOutcome, type AgentTurnPorts, type TurnDecisionCapabilities,
   type ModelInvocationDelivery } from '#engine/index.js';
@@ -35,44 +37,20 @@ export interface RuntimeChatTurnHost {
   readonly shellSandboxes: ShellSandboxFactory;
   /** MCP-CLIENT: the owner's local MCP servers, started by the turns that need them and closed with the service. */
   readonly mcp: McpClientPool;
-  /** B1: one-time decision capabilities of the running turns' cards (service memory; every decision of this service reads them). */ readonly decisions: TurnDecisionCapabilities;
+  /** B1: one-time decision capabilities of the running turns' cards (service memory; every decision of this service reads them). */ readonly decisions: TurnDecisionCapabilities; readonly answers: SessionApprovalAnswers;
 }
 export function createRuntimeChatTurnHost(model: RuntimeModelInvocationHost, signal: AbortSignal, scratch = createScratchActivity(),
   fetchTransport: HttpFetchTransport = SYSTEM_FETCH_TRANSPORT, shellSandboxes: ShellSandboxFactory = shippedShellSandboxes): RuntimeChatTurnHost {
   void shellSandboxCapabilities(globalStateRoot()); // Start once with the service; turns await the same bounded observation (BWRAP-SELECT: launcher under the global state root).
-  return Object.freeze({ model, signal, running: new Map(), scratch, fetchTransport, shellSandboxes, mcp: new McpClientPool(signal), decisions: createTurnDecisionCapabilities() });
+  return Object.freeze({ model, signal, running: new Map(), scratch, fetchTransport, shellSandboxes, mcp: new McpClientPool(signal), decisions: createTurnDecisionCapabilities(), answers: new SessionApprovalAnswers(signal) });
 }
 
 const sha256 = (text: string) => createHash('sha256').update(text).digest('hex');
-function canonical(value: unknown): string {
-  if (Array.isArray(value)) return `[${value.map(canonical).join(',')}]`;
-  if (value && typeof value === 'object') return `{${Object.keys(value).sort().map(key => `${JSON.stringify(key)}:${canonical((value as Record<string, unknown>)[key])}`).join(',')}}`;
-  return JSON.stringify(value);
-}
 const principalKeyOf = (principal: { readonly issuer: string; readonly subject: string }) => sha256(`agent-turn-principal:1\0${principal.issuer}\0${principal.subject}`);
 const runningKey = (scopeId: string, turnId: string) => `${scopeId}\0${turnId}`;
 /** Compaction command id: the n-th compaction of a turn is one governed invocation, never billed twice on replay. */
 export const chatTurnCompactionCommandId = (scopeId: string, turnId: string, sequence: number) => sha256(`turn-compact:1\0${scopeId}\0${turnId}\0${sequence}`);
 
-const TURN_NOTE_MAX_CHARS = 4_096; // The result note's bound (`chatTurnResultSchema`).
-/** The turn's note with the MCP notices first (MCP-SANDBOX-PATHS): the engine's own note is kept whole; only the MCP part is shortened to fit. */
-export function withMcpNotices(notices: readonly string[], note: string | null): string | null {
-  if (!notices.length) return note;
-  const room = TURN_NOTE_MAX_CHARS - (note ? note.length + 1 : 0), joined = notices.join(' ');
-  if (room < 2) return note;
-  const mcp = joined.length <= room ? joined : `${joined.slice(0, room - 1)}…`;
-  return note ? `${mcp} ${note}` : mcp;
-}
-/**
- * How a round that ended without an answer is named in the turn's note: the outcome state and, when the provider answered, its bounded
- * diagnostic (rejection reason, HTTP status) — never the response body, which stays in the receipt (it may echo the sent input).
- */
-export function chatTurnRoundFailureState(outcome: ModelInvocationOutcome): string {
-  const evidence = outcome.state === 'rejected' || outcome.state === 'unknown' ? outcome.evidence : null;
-  if (!evidence) return outcome.state;
-  return `${outcome.state}: ${evidence.reason === 'http-status' && evidence.httpStatus !== null ? `HTTP ${evidence.httpStatus}`
-    : `${evidence.reason}${evidence.httpStatus !== null ? `, HTTP ${evidence.httpStatus}` : ''}`}`;
-}
 /** MODES-3: a turn launched in full access is admitted only on the company grant, and recorded before anything runs (no record, no turn; a
  * refusal is recorded when it can be). */
 async function admitFullAccess(context: Awaited<ReturnType<typeof loadPeerInvocationContext>>, command: { readonly scopeId: string; readonly turnId: string;
@@ -89,14 +67,8 @@ export function chatTurnApprovalPreview(tool: string, args: Record<string, unkno
 /** Round command id (Astra 2074 D3): the same turn and round is the same governed invocation, so a replay never bills twice. */
 export const chatTurnRoundCommandId = (scopeId: string, turnId: string, round: number) => sha256(`turn-round:1\0${scopeId}\0${turnId}\0${round}`);
 
-/**
- * One terminal agent turn inside the runtime service (T-L3, runtime `chatTurn`). The principal comes from the connection; the model,
- * limits and tools from fresh configuration; the loop is the engine's. Every round is the existing governed invocation (policy,
- * activation, allocation, spending, receipt) under a command id derived from the turn and round; every tool call is authorized per
- * call by policy (`agent-tool`/`invoke`, fail closed) and runs as a workspace read tool on this project. Events go to the turn
- * channel, which the loop waits on between steps (no dropped history, bounded memory); a disconnected peer, `cancelChatTurn` of the
- * same principal, or service stop cancel the turn. Tools are declared to the model only when its binding declares tool calling.
- */
+/** One governed terminal turn: authenticated peer, fresh policy and tools; the engine owns execution.
+ * Required events drain before further work; disconnect, own-principal cancellation and stop abort the turn. */
 export async function runPeerConfiguredChatTurn(projectRoot: string, input: unknown, peer: LocalPeerIdentity, options: ConfigLoadOptions,
   delivery: ModelInvocationDelivery, host: RuntimeChatTurnHost, channel: RuntimeServiceTurnChannel): Promise<ChatTurnResult> {
   const parsed = chatTurnCommandSchema.safeParse(input);
@@ -188,7 +160,7 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
     const describe = (tool: AgentToolSpec, args: Record<string, unknown>) => mcps(tool) ? mcp!.display(tool.name) : describeAgentCall(tool, args);
     const approvals = createAgentCallApprovals({ context, clock, scopeId: command.scopeId, turnId: command.turnId, describe });
     // One permission decision per call (T-L4 slice 4a): strict policy, floor raise and permission-mode lowering, again at the effect.
-    const decisions = createAgentCallDecisions({ context, clock, scopeId: command.scopeId, turnId: command.turnId, edits: editsOf, shell, approvals, fetch: fetcher, mcp, fullAccess });
+    const decisions = createAgentCallDecisions({ context, clock, scopeId: command.scopeId, turnId: command.turnId, edits: editsOf, shell, approvals, fetch: fetcher, mcp, fullAccess, standing: { memory: host.answers.memory, session: SessionStanding.sessionKey(command.scopeId, context.principal, command.sessionId ?? command.turnId) } });
     const fetches = (tool: AgentToolSpec) => fetcher !== null && tool.name === FETCH_URL_TOOL_SPEC.name;
 
     store = await openSqliteAgentTurnStore(await context.path(), context.config.storage.sqlite, 'forbid');
@@ -235,6 +207,7 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
         // C12: one single-use approval bound to exactly this call; the preview is presentation, the digest is what is approved.
         const journal = openSqliteApprovalStore(await context.path(), context.config.storage.sqlite);
         // Once a card was requested it is always settled: `unsettled` when the wait failed (the request may stay pending, it permits nothing).
+        let answer: { wait(): Promise<void>; close(): void } | null = null;
         let requested: { readonly approvalId: string } | null = null, settlement: AgentToolApprovalSettlement = 'unsettled', kept: string | null = null;
         try {
           // A producer of approvals, like Run reservation: the integrity key is created on first use (decisions only read it).
@@ -249,26 +222,32 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
           // A diff larger than the preview bound is shown cut, with the whole change kept owner-only while the approval is pending.
           const diff = editsOf(tool.name)?.preview(tool.name, args);
           if (diff !== undefined && Buffer.byteLength(diff, 'utf8') > APPROVAL_PREVIEW_MAX_BYTES) kept = await keepFullPreview(context.layout, record.request.approvalId, diff);
+          const offer = await decisions.sessionOffer(tool, args);
+          if (offer) answer = host.answers.register({ record, principal: context.principal, peerPid: peer.pid,
+            session: SessionStanding.sessionKey(command.scopeId, context.principal, command.sessionId ?? command.turnId), key: offer.key, signal: approvalSignal, clock, started,
+            remember: (valid, refused) => decisions.remember(tool, args, { round, index }, call.id, record.request.approvalId, { valid, refused }) });
           emitApproval({ kind: 'approval.requested', callId: call.id, approvalId: record.request.approvalId, revision: record.revision, risk: facts.risk?.source === 'cell' ? facts.risk.cell : null,
             requiredAssurance: facts.requiredAssurance, summary: record.request.summary, preview: diff !== undefined ? boundApprovalPreview(diff, kept)
               : (tool.toolClass === 'shell' ? shell?.preview(tool.name, args) : fetches(tool) ? fetcher?.preview(args) : mcps(tool) ? boundApprovalPreview(mcp!.preview(tool.name, args)!)
                 : undefined) ?? chatTurnApprovalPreview(tool.name, args),
-            expiresAt: record.request.expiresAt });
+            expiresAt: record.request.expiresAt, ...(answer && offer ? { standing: { scopes: ['session'] as const, pattern: offer.pattern } } : {}) });
           requested = { approvalId: record.request.approvalId };
           let outcome = await awaitAgentToolApproval(journal.store, integrity, record, clock, approvalSignal, 250, started);
+          if (outcome === 'allow') await answer?.wait();
           // Approved: re-evaluate policy now; a deny since the request wins (contract §2).
           if (outcome === 'allow' && await toolAuthority.decide(tool, command.scopeId, context.principal) === 'deny') outcome = 'deny';
           // Policy revalidation is asynchronous: it spends the same authorization budget as waiting.
           if (outcome === 'allow') {
             const consumed = clock.sample();
-            if (consumed.wallMs >= record.request.expiresAt || consumed.monotonicMs - started.monotonicMs >= record.request.expiresAt - started.wallMs) outcome = 'expired';
+            if (approvalSignal.aborted) outcome = 'cancelled';
+            else if (consumed.wallMs >= record.request.expiresAt || consumed.monotonicMs - started.monotonicMs >= record.request.expiresAt - started.wallMs) outcome = 'expired';
           }
           // The effect gate verifies this stored record (MAC, allow, digest of the executed call, expiry) before anything is written or run.
           if (outcome === 'allow') approvals.allowed({ round, index }, { approvalId: record.request.approvalId, actionDigest: record.request.actionDigest, started });
           settlement = outcome;
           return outcome;
         } finally {
-          journal.close();
+          answer?.close(); journal.close();
           if (kept) await dropFullPreview(kept);
           if (requested) emitApproval({ kind: 'approval.settled', callId: call.id, approvalId: requested.approvalId, outcome: settlement });
         }
