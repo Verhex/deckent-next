@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { AGENT_COMPACTION_HIGH_WATER, planAgentCompaction, renderAgentCompaction, type AgentCompactionSummary } from './compaction.js';
+import { projectModelIngressField, type ModelIngressProjection } from './model-ingress-project.js';
 import type { AgentContextQuality, AgentToolCall, AgentToolCleanup, AgentToolOutcome, AgentToolSpec, AgentToolCallStatus, AgentTurnEvent, AgentTurnFinish,
   AgentTurnMessage } from '#domain/index.js';
 
@@ -54,6 +55,8 @@ export interface AgentTurnPorts {
   /** Durable projection of every settled call (optional for pure tests; the runtime composition always records). */
   settled?(call: { readonly round: number; readonly index: number; readonly call: AgentToolCall; readonly tool: AgentToolSpec | null;
     readonly argsDigest: string | null; readonly target: string | null; readonly status: AgentToolCallStatus; readonly content: string }): Promise<void>;
+  /** Sealed digests of a marked field. A failure withholds the field; the decoded payload is not an argument. */
+  recordIngress?(notice: ModelIngressProjection): Promise<void>;
 }
 
 /**
@@ -110,6 +113,8 @@ export interface AgentTurnInput {
      * `length` marks a round.
      */
     readonly completionLimitTokens?: number };
+  /** MODES-3: a quarantined tool result does not wait. The model still receives only the withheld sentence. */
+  readonly fullAccess?: boolean;
 }
 
 export interface AgentTurnResult {
@@ -151,6 +156,23 @@ function checkArguments(tool: AgentToolSpec, raw: string): { ok: true; args: Rec
   return { ok: true, args };
 }
 
+type IngressPause = { readonly call: AgentToolCall; readonly tool: AgentToolSpec; readonly index: number;
+  readonly args: Record<string, unknown>; readonly argsDigest: string; readonly target: string | null };
+/** The model and the approval card share this text. Decode stays on the projection and is not returned here. */
+async function presentModelIngress(content: string, pause: IngressPause | null, input: AgentTurnInput, ports: AgentTurnPorts, round: number): Promise<string> {
+  const projected = projectModelIngressField(content);
+  if (projected.disposition === 'unchanged') return content;
+  try { await ports.recordIngress?.(projected); } catch { return projected.withheld; }
+  if (projected.disposition === 'note') return projected.modelText;
+  if (!pause || input.fullAccess || !ports.requestApproval) return projected.withheld;
+  let answer: 'allow' | 'deny' | 'expired' | 'cancelled' | null;
+  try { answer = await ports.requestApproval({ round, index: pause.index, call: pause.call, tool: pause.tool, args: pause.args,
+    argsDigest: pause.argsDigest, target: pause.target }, input.signal); }
+  catch { answer = null; }
+  if (answer === 'allow') return projected.modelText;
+  return projected.withheld;
+}
+
 /**
  * One agent turn (T-L3, engine-owned): model round → declared tool calls authorized and executed one by one → results back to the
  * model → next round, until the model answers without tools, the user cancels, or a round has no answer. There is no round, call
@@ -161,7 +183,11 @@ function checkArguments(tool: AgentToolSpec, raw: string): { ok: true; args: Rec
  */
 export async function runAgentTurn(input: AgentTurnInput, ports: AgentTurnPorts): Promise<AgentTurnResult> {
   const { signal, emit } = input;
-  const messages: AgentTurnMessage[] = [...input.messages];
+  const messages: AgentTurnMessage[] = [];
+  for (const message of input.messages) {
+    if (message.role === 'user' || message.role === 'tool') messages.push({ ...message, content: await presentModelIngress(message.content, null, input, ports, 0) });
+    else messages.push(message);
+  }
   const byName = new Map(input.tools.map(tool => [tool.name, tool]));
   // Read dedupe answers only with a result the model can still see: entries leave with compaction and after a successful edit. An
   // entry is bound to the result message itself, never to the provider's call id (providers reuse ids across rounds; Astra 2106 R1).
@@ -263,14 +289,15 @@ export async function runAgentTurn(input: AgentTurnInput, ports: AgentTurnPorts)
     const truncated = outcome.finish === 'length' || (limitTokens !== null && outcome.usage !== null && outcome.usage.completionTokens >= limitTokens);
     for (const [index, call] of outcome.toolCalls.entries()) {
       const tool = byName.get(call.name), started = ports.now();
-      let digestOf: string | null = null, targetOf: string | null = null;
+      let digestOf: string | null = null, targetOf: string | null = null, pauseArgs: Record<string, unknown> = {};
       // `cleanup` (Astra 2124): only the host shell tool's outcome ever carries it; the event omits the field otherwise.
       const result = async (status: AgentToolCallStatus, content: string, cleanup?: AgentToolCleanup) => {
         if (!NO_PROGRESS_STATUSES.has(status)) progressed = true;
-        const message = push({ role: 'tool', toolCallId: call.id, name: call.name, content });
-        emit({ kind: 'tool.finished', callId: call.id, name: call.name, status, ms: Math.max(0, ports.now() - started), bytes: Buffer.byteLength(content, 'utf8'),
+        const shown = tool && digestOf !== null ? await presentModelIngress(content, { call, tool, index, args: pauseArgs, argsDigest: digestOf, target: targetOf }, input, ports, rounds) : content;
+        const message = push({ role: 'tool', toolCallId: call.id, name: call.name, content: shown });
+        emit({ kind: 'tool.finished', callId: call.id, name: call.name, status, ms: Math.max(0, ports.now() - started), bytes: Buffer.byteLength(shown, 'utf8'),
           ...(cleanup !== undefined ? { cleanup } : {}) });
-        await ports.settled?.({ round: rounds, index, call, tool: tool ?? null, argsDigest: digestOf, target: targetOf, status, content });
+        await ports.settled?.({ round: rounds, index, call, tool: tool ?? null, argsDigest: digestOf, target: targetOf, status, content: shown });
         return message;
       };
       if (signal.aborted) { emit({ kind: 'tool.started', callId: call.id, name: call.name, target: null }); await result('cancelled', `[deckent] ${call.name}: error=cancelled`); continue; }
@@ -281,7 +308,7 @@ export async function runAgentTurn(input: AgentTurnInput, ports: AgentTurnPorts)
       targetOf = checked.ok ? ports.describe(tool, checked.args) : null;
       emit({ kind: 'tool.started', callId: call.id, name: call.name, target: targetOf });
       if (!checked.ok) { await result('invalid-arguments', `[deckent] ${call.name}: error=invalid-arguments (${checked.detail})`); continue; }
-      const digest = agentToolArgumentsDigest(tool.name, checked.args); digestOf = digest;
+      const digest = agentToolArgumentsDigest(tool.name, checked.args); digestOf = digest; pauseArgs = checked.args;
       if (tool.toolClass === 'read' && seenReads.has(digest)) {
         await result('duplicate', `[deckent] ${call.name}: same call as ${seenReads.get(digest)!.callId} earlier in this turn; its result is above. Change the arguments to read something else.`);
         continue;

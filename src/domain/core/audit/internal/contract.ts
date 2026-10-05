@@ -140,6 +140,12 @@ export const auditSubjectSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('pool-hold'), action: z.enum(['hold', 'resume']), poolId: identitySchema, commandId: identitySchema,
     decision: z.object({ effect: z.enum(['allow', 'deny', 'require-approval']), ruleId: identitySchema.nullable() }).strict(),
     state: z.object({ previous: z.enum(['open', 'held']), next: z.enum(['open', 'held']) }).strict().nullable() }).strict(),
+  /**
+   * A model-bound field carried hidden, bidi or tag Unicode (MODEL-INGRESS). Digests only: the raw field frame, the text the model
+   * was shown, and the decoder output. The decoded payload itself is never stored and never enters the model.
+   */
+  z.object({ kind: z.literal('model-ingress'), fieldDigest: digest, projectedDigest: digest, decodedDigest: digest.nullable(),
+    codePoints: counterSchema, disposition: z.enum(['note', 'quarantine']) }).strict(),
 ]);
 export const auditEventSchema = z.object({ schemaVersion: z.literal(AUDIT_EVENT_SCHEMA_VERSION), eventId: identitySchema, scopeId: identitySchema,
   principal: auditPrincipalSchema, policyRevision: identitySchema, atMs: counterSchema, subject: auditSubjectSchema }).strict().readonly();

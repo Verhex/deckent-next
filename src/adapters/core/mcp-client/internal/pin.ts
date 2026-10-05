@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { agentToolSpecSchema, modelTextPrefix, type AgentToolSpec } from '#domain/index.js';
+import { projectModelIngressField } from '#engine/index.js';
 
 /**
  * Deckent as an MCP client (MCP-CLIENT, owner 2026-09-28 S6 a): a server's tools are offered to the agent only when the owner approved the
@@ -102,7 +103,8 @@ export function verifyMcpTools(server: McpClientServerSettings, live: readonly M
     if (!wireName || (wires.get(wireName) ?? 0) > 1) return { ...base, status: 'unmappable', cell: null, spec: null, reason: 'no unique provider-safe name' };
     const schema = tool.inputSchema;
     if (!schema || schema['type'] !== 'object') return { ...base, status: 'unmappable', cell: null, spec: null, reason: 'the input schema is not an object' };
-    const text = `[MCP server ${server.id}; untrusted] ${tool.title ? `${tool.title}: ` : ''}${tool.description ?? tool.name}`;
+    const ingress = projectModelIngressField(`[MCP server ${server.id}; untrusted] ${tool.title ? `${tool.title}: ` : ''}${tool.description ?? tool.name}`);
+    const text = ingress.disposition === 'quarantine' ? ingress.withheld : ingress.modelText;
     const spec = agentToolSpecSchema.safeParse({ name: wireName, version: 1, toolClass: 'mcp', description: text.length > DESCRIPTION_MAX ? `${modelTextPrefix(text, DESCRIPTION_MAX - 1)}…` : text,
       inputSchema: { ...schema, properties: schema['properties'] ?? {} } });
     if (!spec.success) return { ...base, status: 'unmappable', cell: null, spec: null, reason: 'the input schema cannot be offered' };

@@ -22,8 +22,9 @@ export function projectHumanText(text: string, context: HiddenTextContext, known
 
 export function projectHumanPickerText(text: string, known?: KnownSecretSnapshot, hiddenLabel?: string): Readonly<{ label: string; spans: readonly Span[]; hiddenNotice?: string }> {
   const projection = projectHumanText(text, 'prose', known);
+  const hiddenCount = projection.hiddenCount + modelIngressHiddenCount(text);
   return { label: plainText(projection.spans), spans: projection.spans,
-    ...(projection.hiddenCount > 0 && hiddenLabel ? { hiddenNotice: fillTemplate(hiddenLabel, { count: projection.hiddenCount }) } : {}) };
+    ...(hiddenCount > 0 && hiddenLabel ? { hiddenNotice: fillTemplate(hiddenLabel, { count: hiddenCount }) } : {}) };
 }
 
 function countedProjector(): { project: HumanTextProjector; count: () => number } {
@@ -41,6 +42,21 @@ export function renderHumanMarkdown(text: string, options: MarkdownOptions, know
   const counter = countedProjector();
   const lines = renderMarkdown(humanRecordText(text, known), { ...options, projectText: counter.project });
   return Object.freeze({ lines: Object.freeze(lines), hiddenCount: counter.count() });
+}
+
+const INGRESS_NOTE = /\[hidden-unicode: (\d+) cp, [^,\]]+, [a-f0-9]{12}\]/g;
+const INGRESS_WITHHELD = /hidden payload \((\d+) cp, [a-f0-9]{12}\)/g;
+/** Count already produced by the model-ingress projection. This does not classify the field again. */
+export function modelIngressHiddenCount(text: string): number {
+  let count = 0;
+  for (const match of text.matchAll(INGRESS_NOTE)) count += Number(match[1]);
+  for (const match of text.matchAll(INGRESS_WITHHELD)) count += Number(match[1]);
+  return count;
+}
+/** The existing catalog label, filled with a count the producer already wrote. This file does not look up a locale. */
+export function modelIngressNotice(text: string, label: string | undefined): string | null {
+  const count = modelIngressHiddenCount(text);
+  return count > 0 && label ? fillTemplate(label, { count }) : null;
 }
 
 /** Display adapter only: marker.source stays in the classifier's custody and is never emitted. */
