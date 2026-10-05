@@ -1,10 +1,14 @@
-import type { RunView, WorkerObservationReport } from '#engine/index.js';
+import type { SurfacePublicationKind, RunView, WorkerObservationReport } from '#engine/index.js';
 import type { WorkerAttemptIdentity, WorkLedgerEntry } from './work-ledger.js';
 import type { ListApprovalPage, WorklineApproval } from './approval-watch.js';
 import type { StandingScope, SurfaceFollowEvent } from '#surfaces/core/terminal-kit/index.js';
 import { runViewToLedgerEntry, workerReportToLedgerEntries } from './work-ledger.js';
-
+export interface WorklineSurfaceSnapshot { readonly scopeId: string; readonly denied: readonly SurfacePublicationKind[];
+  readonly runs?: readonly RunView[]; readonly workers?: WorkerObservationReport; readonly approvals?: readonly WorklineApproval[];
+}
 export interface WorklineLedgerPorts {
+  /** Collection-authorized current state. Required for production push startup, invalidation and resync. */
+  readonly readSurfaceSnapshot?: (kinds: readonly SurfacePublicationKind[], signal: AbortSignal) => Promise<WorklineSurfaceSnapshot>;
   readonly scopeId: string;
   readonly clearSessionStanding?: (sessionId: string) => Promise<void>;
   readonly listWorkers: () => Promise<WorkerObservationReport>;

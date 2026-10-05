@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { pollWait, createSurfaceFollowSession, type SurfaceDeliveryMode, type SurfaceFollowEvent, type SurfacePushStep } from './surface-push.js';
+import { openSurfacePush, surfaceWait, pollWait, createSurfaceFollowSession, type SurfaceDeliveryMode, type SurfaceFollowEvent, type SurfacePushStep, type SurfaceRefresh } from './surface-push.js';
 
 /**
  * Observe-only polling: one poll in flight at a time (the next is scheduled after the previous settles), results
@@ -68,14 +68,21 @@ export function useSurfacePushFeed(
   pace: number,
   onStep: (step: SurfacePushStep) => void,
   onDelivery: (mode: SurfaceDeliveryMode) => void,
+  refresh?: SurfaceRefresh,
+  refreshKey = '',
 ): SurfaceDeliveryMode {
+  const deniedSource = useRef<{ follow: typeof follow; scopeId: string } | null>(null);
   const [mode, setMode] = useState<SurfaceDeliveryMode>(follow ? 'push' : 'poll');
+  const refreshRef = useRef(refresh); refreshRef.current = refresh;
   const stepRef = useRef(onStep);
   const deliveryRef = useRef(onDelivery);
   stepRef.current = onStep;
   deliveryRef.current = onDelivery;
+  const hasRefresh = Boolean(refresh);
   useEffect(() => {
     if (!follow || scopeId.length === 0) { setMode('poll'); return undefined; }
+    if (deniedSource.current?.follow === follow && deniedSource.current.scopeId === scopeId) { setMode('denied'); return undefined; }
+    const deny = () => { deniedSource.current = { follow, scopeId }; setMode('denied'); };
     const session = createSurfaceFollowSession();
     const controller = new AbortController();
     let stopped = false;
@@ -83,14 +90,24 @@ export function useSurfacePushFeed(
       while (!stopped && !controller.signal.aborted) {
         setMode('push');
         try {
-          const outcome = await session.read(follow(controller.signal), scopeId, pace, controller.signal, step => { if (!stopped) stepRef.current(step); });
+          const outcome = await session.read(follow(controller.signal), scopeId, pace, controller.signal, step => { if (!stopped) stepRef.current(step); }, hasRefresh ? (kinds, signal) => refreshRef.current!(kinds, signal) : undefined);
           if (stopped || outcome === 'abort' || controller.signal.aborted) return;
-          if (outcome === 'denied') { setMode('denied'); return; }
+          if (outcome === 'denied') { deny(); return; }
         } catch { if (stopped || controller.signal.aborted) return; }
         if (stopped || controller.signal.aborted) return;
         setMode('poll');
         session.reportBreak(pace, step => { if (!stopped) stepRef.current(step); });
         deliveryRef.current('poll');
+        if (hasRefresh) {
+          try {
+            const denied = await refreshRef.current!(session.allowedKinds(), controller.signal);
+            if (stopped || controller.signal.aborted) return;
+            if (denied.length) {
+              stepRef.current({ status: 'denied', access: 'denied', scopeId, kinds: denied, stopped: true, state: openSurfacePush(), wait: surfaceWait('refuse-scope', pace) });
+              deny(); return;
+            }
+          } catch { if (stopped || controller.signal.aborted) return; }
+        }
         await waitPace(pace, controller.signal);
         if (stopped || controller.signal.aborted) return;
         deliveryRef.current('push');
@@ -98,6 +115,16 @@ export function useSurfacePushFeed(
     };
     void run();
     return () => { stopped = true; controller.abort(); };
-  }, [follow, pace, scopeId]);
+  }, [follow, pace, scopeId, hasRefresh, refreshKey]);
   return follow ? mode : 'poll';
+}
+
+/** One observe callback for the same typed batch, whichever transport is available. */
+export function useWorklineWatch<T>(enabled: boolean, follow: ((signal: AbortSignal) => AsyncIterable<T>) | undefined,
+  pace: number, read: () => Promise<T>, observe: (batch: T) => void, failed: (error: unknown) => void) {
+  useWorklineFollow(enabled, follow, observe, failed);
+  useSingleFlightPoll(enabled && !follow, pace, async current => {
+    const batch = await read();
+    if (current()) observe(batch);
+  }, failed);
 }

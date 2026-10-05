@@ -1,4 +1,4 @@
-import { sessionApprovalResultSchema, acceptSessionStandingClearance } from '#engine/index.js';
+import { type SurfaceSnapshotAccess, sessionApprovalResultSchema, acceptSessionStandingClearance } from '#engine/index.js';
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { t, type ConfigLoadOptions, type Locale } from '#platform/index.js';
@@ -8,6 +8,8 @@ import type { RunCancellationDeliveryHandler, RunQueryHandler } from './run.js';
 import { renderRunCancellation } from './run.js';
 import { renderWorkerTranscript, type WorkerObservationHandler, type InventoryQueryHandler, type WorkerTranscriptHandler } from '#surfaces/core/monitor/index.js';
 import type { WorklineApproval, WorklineLedgerPorts } from '#surfaces/core/terminal/index.js';
+
+import { withSurfaceSnapshot } from './terminal-snapshot.js';
 
 const approvalPageSchema = z.array(approvalRecordSchema);
 
@@ -34,13 +36,15 @@ export function createWorklineLedgerPorts(input: {
   readonly listApprovals?: (input: unknown) => Promise<unknown>; readonly decideApproval?: (input: unknown) => Promise<unknown>;
   readonly clearSessionStanding?: (input: { schemaVersion: 1; scopeId: string; sessionId: string }) => Promise<unknown>;
   readonly followEvents?: WorklineLedgerPorts['followEvents'];
+  readonly inspectSurfaceAccess?: () => Promise<SurfaceSnapshotAccess | null>;
+  readonly inspectSurfaceRunIds?: () => Promise<readonly string[]>;
   readonly deliverRunCancellation?: RunCancellationDeliveryHandler;
 }): WorklineLedgerPorts | undefined {
   if (!input.inspectWorkers || !input.inspectRun) return undefined;
   const { root, scopeId, options, inspectWorkers, inspectRun, inspectInventory, workerHeartbeatMs, inspectWorkerTranscript, listApprovals, decideApproval,
     deliverRunCancellation, followEvents } = input;
   const locale = input.locale ?? 'en', pageSize = input.approvalPageSize ?? 100;
-  return {
+  return withSurfaceSnapshot({
     scopeId,
     ...(input.clearSessionStanding ? { async clearSessionStanding(sessionId: string) {
       const command = { schemaVersion: 1 as const, scopeId, sessionId };
@@ -50,7 +54,7 @@ export function createWorklineLedgerPorts(input: {
     ...(workerHeartbeatMs === undefined ? {} : { workerHeartbeatMs }),
     async listWorkers() { return inspectWorkers(root, { schemaVersion: 1, scopeId, after: null, limit: 20 }, options); },
     async inspectRun(runId: string) { return (await inspectRun(root, { schemaVersion: 1, scopeId, runId }, options)).run; },
-    ...(inspectInventory ? {
+    ...(input.inspectSurfaceRunIds ? { listRunIds: input.inspectSurfaceRunIds } : inspectInventory ? {
       async listRunIds() {
         const page = await inspectInventory(root, { schemaVersion: 1, scopeId, after: null, limit: 50 }, options);
         const ids = new Set<string>();
@@ -95,5 +99,5 @@ export function createWorklineLedgerPorts(input: {
         return renderRunCancellation(result, commandId, scopeId, runId, locale);
       },
     } : {}),
-  };
+  }, input.inspectSurfaceAccess);
 }

@@ -8,4 +8,4 @@ export { MonitorApplication, MONITOR_FINISHED_WORKERS } from './internal/applica
 export { extractFirstFailure, summarizeMonitorEvent, MONITOR_FAILURE_MAX_CHARS } from './internal/failure.js';
 export { projectHumanState } from './internal/human-state.js';
 export type { HumanState, HumanStateCode, HumanStateSubject, HumanNextAction } from './internal/human-state.js';
-export type { SurfacePublicationKind, SurfacePublicationEvent, SurfaceAccessDenied, SurfaceFollowEvent } from './internal/surface-follow.js';
+export type { SurfacePublicationKind, SurfacePublicationEvent, SurfaceAccessDenied, SurfaceStreamStart, SurfaceSnapshotAccess, SurfaceFollowEvent } from './internal/surface-follow.js';

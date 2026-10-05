@@ -46,10 +46,14 @@ export function useWorkSurface({ panel, state, ledger, labels, push, errorText, 
   const modal = presentation?.kind === 'approval' || presentation?.kind === 'cancel' ? presentation : null;
   const picker = presentation?.kind === 'approvals' && state.picker ? presentation.rows : null;
   const approvalWatch = useRef(EMPTY_APPROVAL_WATCH);
-  useEffect(() => { if (!watchingWorkers) setWorkers([]); }, [watchingWorkers]);
+  useEffect(() => { if (!watchingWorkers && !ledger?.readSurfaceSnapshot) setWorkers([]); }, [watchingWorkers, ledger?.readSurfaceSnapshot]);
+  const observeApprovals = useCallback((items: readonly WorklineApproval[]) => {
+    const { state, fresh } = approvalWatchStep(approvalWatch.current, { items, nextAfter: null }, Date.now());
+    approvalWatch.current = state;
+    if (work && fresh.length) push([notice('info', fillTemplate(work.approvalNotify, { count: fresh.length }))]);
+  }, [push, work]);
   const observeWorkers = useCallback((entries: readonly WorkLedgerEntry[]) => { setWorkers(entries.filter((entry): entry is WorkLedgerWorkerEntry => entry.kind === 'worker')); }, []);
-  // Default on whenever approvals are wired (legacy kept approvals behind an off-by-default flag): one bounded page per tick,
-  // never more often than APPROVAL_NOTIFY_MIN_MS so an idle terminal adds negligible runtime load (lead integration decision).
+  // Without push snapshots: one bounded approval page per tick, never faster than APPROVAL_NOTIFY_MIN_MS.
   const toldDelivery = useRef(false);
   const connected = pushLive ?? Boolean(ledger?.followEvents);
   useEffect(() => {
@@ -59,7 +63,7 @@ export function useWorkSurface({ panel, state, ledger, labels, push, errorText, 
     const pace = mode === 'poll' ? (approvalPollMs ?? Math.max(pollMs, APPROVAL_NOTIFY_MIN_MS)) : pollMs;
     push([notice('info', fillTemplate(labels.watchDelivery, surfaceDeliveryValues(mode, pace)))]);
   }, [approvalPollMs, connected, labels.watchDelivery, ledger, pollMs, push, work]);
-  useSingleFlightPoll(Boolean(work && ledger?.listApprovalPage) && !connected, approvalPollMs ?? Math.max(pollMs, APPROVAL_NOTIFY_MIN_MS), async current => {
+  useSingleFlightPoll(Boolean(work && ledger?.listApprovalPage) && !connected && !ledger?.readSurfaceSnapshot, approvalPollMs ?? Math.max(pollMs, APPROVAL_NOTIFY_MIN_MS), async current => {
     const page = await ledger!.listApprovalPage!(approvalWatch.current.cursor);
     if (!current()) return;
     const { state, fresh } = approvalWatchStep(approvalWatch.current, page, Date.now());
@@ -149,13 +153,13 @@ export function useWorkSurface({ panel, state, ledger, labels, push, errorText, 
   const pickerOpen = picker !== null && modal === null;
   const region = (
     <>
-      {work ? <WorkerPanel workers={workers} labels={work.panel} line={work.workerLine} /> : null}
+      {work && watchingWorkers ? <WorkerPanel workers={workers} labels={work.panel} line={work.workerLine} /> : null}
       {picker && modal === null && work ? <ApprovalDecisionPicker key={state.picker?.pickerHandle} rows={picker.map((item, index) => approvalRowPresentation(item, index + 1, Date.now(), work))} labels={labels.render ?? {}}
         onSelect={index => { panel.choose(state.picker?.pickerHandle, String(index)); }} onCancel={() => { panel.choose(state.picker?.pickerHandle, null); }} /> : null}
       {card}
     </>
   );
-  return { observeWorkers, run, decideApproval, noteUnsettled, modalOpen: modal !== null, pickerOpen, region };
+  return { observeWorkers, observeApprovals, run, decideApproval, noteUnsettled, modalOpen: modal !== null, pickerOpen, region };
 }
 /** Legacy string compatibility; the actual card consumes completed spans/counts in a Provider child. */
 export function approvalCardLines(approval: WorklineApproval, work: WorkSurfaceLabels, preview: string | undefined, covers: string | null): string[] {

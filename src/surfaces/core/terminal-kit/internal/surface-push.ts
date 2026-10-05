@@ -22,6 +22,7 @@ export type SurfacePushState = {
 };
 export type SurfacePushStep =
   | (SurfaceAccessDenied & { readonly status: 'denied'; readonly state: SurfacePushState; readonly wait: SurfaceWait })
+  | { readonly status: 'ready'; readonly state: SurfacePushState; readonly wait: SurfaceWait }
   | { readonly status: 'applied'; readonly state: SurfacePushState; readonly wait: SurfaceWait; readonly event: SurfacePushEvent }
   | { readonly status: 'gap'; readonly state: SurfacePushState; readonly wait: SurfaceWait; readonly expected: number; readonly sequence: number }
   | { readonly status: 'backpressure'; readonly state: SurfacePushState; readonly wait: SurfaceWait }
@@ -78,7 +79,7 @@ export function surfaceFollowLine(step: SurfacePushStep, watch: { readonly worke
     const visible = step.event.kind === 'approval' || (step.event.kind === 'worker' && watch.workers) || (step.event.kind === 'run' && watch.runs);
     return visible ? step.event.text : null;
   }
-  if (!template || step.status === 'invalid') return null;
+  if (!template || step.status === 'invalid' || step.status === 'ready') return null;
   const values: Record<string, string | number> = { status: step.status, timeoutMs: step.wait.timeoutMs, owner: step.wait.owner, action: step.wait.action };
   return template.replace(/\{(\w+)\}/g, (whole, name: string) => (name in values ? String(values[name]) : whole));
 }
@@ -90,22 +91,54 @@ export async function consumeSurfaceFollow(events: AsyncIterable<SurfaceFollowEv
   await session.read(events, scopeId, pace, signal, onStep);
 }
 
-/** One watch keeps its cursors across a reconnect. A break does not invent the missing event. */
+/** A snapshot must be applied before acknowledging a start, invalidation or gap. Denial is terminal. */
+export type SurfaceRefresh = (kinds: readonly SurfacePushKind[], signal: AbortSignal) => Promise<readonly SurfacePushKind[]>;
+/** A new producer explicitly announces its starting cursors; a gap never invents historical events. */
 export function createSurfaceFollowSession() {
   let state = openSurfacePush();
+  let deniedKinds = new Set<SurfacePushKind>();
   return {
-    async read(events: AsyncIterable<SurfaceFollowEvent>, scopeId: string, pace: number, signal: AbortSignal, onStep: (step: SurfacePushStep) => void): Promise<'end' | 'abort' | 'denied'> {
+    async read(events: AsyncIterable<SurfaceFollowEvent>, scopeId: string, pace: number, signal: AbortSignal, onStep: (step: SurfacePushStep) => void, refresh?: SurfaceRefresh): Promise<'end' | 'abort' | 'denied'> {
+      deniedKinds = new Set();
+      const synchronize = async (kinds: readonly SurfacePushKind[]) => {
+        if (!refresh) return true;
+        const denied = await refresh(kinds.filter(kind => !deniedKinds.has(kind)), signal);
+        if (signal.aborted) return false;
+        if (!denied.length) return true;
+        onStep({ access: 'denied', scopeId, kinds: denied, stopped: true, status: 'denied', state, wait: surfaceWait('refuse-scope', pace) });
+        return false;
+      };
       try {
         for await (const event of events) {
           if (signal.aborted) return 'abort';
+          if ('control' in event) {
+            if (event.scopeId !== scopeId) { onStep({ status: 'foreign-scope', state, wait: surfaceWait('refuse-scope', pace) }); continue; }
+            if (event.control !== 'start' || SURFACE_PUSH_KINDS.some(kind => !Number.isSafeInteger(event.cursors[kind]) || event.cursors[kind] < 0)) continue;
+            if (!(await synchronize(SURFACE_PUSH_KINDS))) return signal.aborted ? 'abort' : 'denied';
+            state = { cursors: { ...event.cursors }, queued: 0 };
+            onStep({ status: 'ready', state, wait: surfaceWait('read-next', pace) });
+            continue;
+          }
           if ('access' in event) {
             if (event.scopeId !== scopeId) { onStep({ status: 'foreign-scope', state, wait: surfaceWait('refuse-scope', pace) }); continue; }
             if (event.access !== 'denied' || !event.kinds.length || event.kinds.some(kind => !SURFACE_PUSH_KINDS.includes(kind))) continue;
+            for (const kind of event.kinds) deniedKinds.add(kind);
             onStep({ ...event, status: 'denied', state, wait: surfaceWait('refuse-scope', pace) });
             if (event.stopped) return 'denied';
             continue;
           }
+          if (deniedKinds.has(event.kind)) continue;
           const step = acceptSurfaceEvent(state, event, scopeId, pace);
+          if (step.status === 'gap') {
+            onStep(step);
+            if (refresh) {
+              if (!(await synchronize(SURFACE_PUSH_KINDS))) return signal.aborted ? 'abort' : 'denied';
+              state = { ...state, cursors: { ...state.cursors, [event.kind]: event.sequence } };
+            }
+            continue;
+          }
+          if (step.status === 'applied' && !(await synchronize([event.kind]))) return signal.aborted ? 'abort' : 'denied';
+          if (signal.aborted) return 'abort';
           state = step.status === 'applied' ? releaseSurfacePush(step.state) : step.state;
           onStep(step);
         }
@@ -115,10 +148,11 @@ export function createSurfaceFollowSession() {
       }
       return signal.aborted ? 'abort' : 'end';
     },
+    allowedKinds() { return SURFACE_PUSH_KINDS.filter(kind => !deniedKinds.has(kind)); },
     reportBreak(pace: number, onStep: (step: SurfacePushStep) => void) {
       for (const kind of SURFACE_PUSH_KINDS) {
         const last = state.cursors[kind];
-        if (last === null) continue;
+        if (last === null || last === 0) continue;
         onStep({ status: 'gap', state, wait: surfaceWait('report-gap', pace), expected: last + 1, sequence: last + 2 });
       }
     },

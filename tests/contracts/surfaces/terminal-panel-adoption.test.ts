@@ -5,7 +5,7 @@ import { PassThrough, Writable } from 'node:stream';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { readLocalOsIdentity, openTerminalSessionStore } from '#adapters/index.js';
 import { clearConfigCache, snapshotKnownSecrets } from '#platform/index.js';
-import { loadConfiguredInstallationIdentity, loadConfiguredProjectIdentity, loadConfiguredPeerScopeContext } from '#composition/core/scoped-request/index.js';
+import { ensureConfiguredTerminalIdentity, loadConfiguredInstallationIdentity, loadConfiguredProjectIdentity, loadConfiguredPeerScopeContext } from '#composition/core/scoped-request/index.js';
 import { streamTerminalAgentTurn, type TerminalAgentTurnPorts } from '#composition/core/terminal-chat/index.js';
 import { main } from '#surfaces/index.js';
 import * as kit from '#surfaces/core/terminal-kit/index.js';
@@ -27,7 +27,9 @@ async function fixture() {
     scopes: ['s'], principals: [{ issuer: actor.issuer, subject: actor.subject }], resource: { kind: 'scope', ids: 'all' } }] }), { mode: 0o600 });
   const peer = { pid: process.pid, uid: process.getuid!(), gid: process.getgid!(), assurance: 'linux-so-peercred' as const };
   const options = { env: { DECKENT_GLOBAL_HOME: join(root, 'global'), HOME: join(root, 'home'), NO_COLOR: '1' } };
+  const ensured = await ensureConfiguredTerminalIdentity(project, 's', options);
   const scoped = await loadConfiguredPeerScopeContext(project, 's', options, peer, 'read');
+  expect({ installationId: scoped.installationId, projectId: scoped.projectId }).toEqual(ensured);
   return { root, project, options, peer, identity: { installationId: scoped.installationId, projectId: scoped.projectId, scopeId: 's' } };
 }
 function observeController() {
@@ -73,7 +75,7 @@ describe('real identity producer → shared controller → private adapter → W
     const stop = new AbortController();
     const run = main(['terminal', 'workline', '--scope', 's', '--lang', 'en'], { root: f.project, env: f.options.env,
       stdout: stdout as unknown as NodeJS.WriteStream, stderr: stdout as unknown as NodeJS.WriteStream, stdin: stdin as unknown as NodeJS.ReadStream, signal: stop.signal,
-      initialize() {}, loadInstallationIdentity: loadConfiguredInstallationIdentity, loadProjectIdentity: loadConfiguredProjectIdentity,
+      initialize() {}, ensureTerminalIdentity: ensureConfiguredTerminalIdentity, loadInstallationIdentity: loadConfiguredInstallationIdentity, loadProjectIdentity: loadConfiguredProjectIdentity,
       async completeTerminalChat() { throw new Error('stream must own turn'); }, async openTerminalSessions() { return sessions; },
       async inspectWorkers() { throw new Error('unused worker observation'); }, async inspectRun() { throw new Error('unused run observation'); }, async listApprovals() { return []; },
       async decideApproval(input) { decisions.push(input); await settle(50); answered.resolve(); return decisionRecord(); },

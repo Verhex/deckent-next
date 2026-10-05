@@ -42,6 +42,8 @@ export interface CommandContext extends InstallationCommandContext, ModelCommand
   renewApproval?: (input: unknown) => Promise<unknown>;
   listApprovals?: (input: unknown) => Promise<unknown>;
   /** Approval, run and worker publications already written by the runtime service. */
+  inspectSurfaceAccess?: (root: string, scopeId: string, options: ConfigLoadOptions) => Promise<import('#engine/index.js').SurfaceSnapshotAccess | null>;
+  inspectSurfaceRunIds?: (root: string, scopeId: string, options: ConfigLoadOptions) => Promise<readonly string[]>;
   followSurfaceEvents?: (root: string, scopeId: string, options: ConfigLoadOptions, signal: AbortSignal) => AsyncIterable<SurfaceFollowEvent>;
   inspectApproval?: (input: unknown) => Promise<unknown>;
   clearSessionStanding?: (input: { schemaVersion: 1; scopeId: string; sessionId: string }) => Promise<unknown>;

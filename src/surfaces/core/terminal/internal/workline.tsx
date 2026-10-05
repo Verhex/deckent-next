@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, createElement } from 'react';
 import { render, Box, Static, Text, useApp, type Instance } from 'ink';
 import { useWorklinePanel, type LocalExecution } from './workline-panel.js';
-import { WorklinePaletteProvider, useWorklinePalette, parseSlashLine, useSingleFlightPoll, useWorklineFollow, surfaceDeliveryValues, surfaceFollowLine, useSurfacePushFeed,
+import { WorklinePaletteProvider, useWorklinePalette, parseSlashLine, useWorklineWatch, surfaceDeliveryValues, surfaceFollowLine, useSurfacePushFeed,
   type TerminalLocalContext, type WorklineInkPalette, type WorklineStreamTurn } from '#surfaces/core/terminal-kit/index.js';
 import { StatusStrip } from './status-strip.js';
 import { AssistantLive, openAssistantStream, renderAssistantStream, renderCompleteReply, type AssistantStreamStep } from '#surfaces/core/terminal-render/index.js';
@@ -9,9 +9,9 @@ import type { AssistantRenderLabels } from '#surfaces/core/terminal-render/index
 import { HumanTextContext, humanRecordText, projectHumanPickerText, RenderGlyphsContext, resolveRenderGlyphs } from '#surfaces/core/terminal-render/index.js';
 import type { KnownSecretSnapshot } from '#platform/index.js';
 import { assistantLedgerEntries, streamStepEntries } from './ledger-units.js';
-import { WORK_LEDGER_SCHEMA_VERSION, type WorkLedgerEntry } from './work-ledger.js';
+import { workerReportToLedgerEntries, WORK_LEDGER_SCHEMA_VERSION, type WorkLedgerEntry } from './work-ledger.js';
 import { LedgerEntryRow, type LedgerEntryLabels } from './ledger-entry.js';
-import { ledgerEntriesForWorkers, loadRunViewsForWatch, type WorklineLedgerPorts } from './workline-ledger.js';
+import { ledgerEntriesForWorkers, ledgerEntriesForRuns, type WorklineLedgerPorts } from './workline-ledger.js';
 import { fillTemplate } from './worker-line.js';
 import { newWorkerTaskIds } from './worker-watch.js';
 import { freshRunCards, newRunLedgerEntries } from './run-watch.js';
@@ -131,21 +131,35 @@ export function WorklineApp(props: WorklineProps) {
   const session = useConversationSession(props.sessions, labels.sessions, sessionId, props.knownSecrets);
   const presentation = panel.presentation(state);
   const resumePicker = presentation?.kind === 'resume' && state.picker ? presentation.rows : null;
-  const seenWorkers = useRef(new Set<string>());
-  const seenRuns = useRef(new Map<string, string>());
+  const seenWorkers = useRef(new Set<string>()), seenRuns = useRef(new Map<string, string>()), snapshotOpened = useRef(false);
   const pollMs = props.pollMs ?? ledger?.workerHeartbeatMs ?? 5000;
+  const workRef = useRef<ReturnType<typeof useWorkSurface> | null>(null);
   const pushMode = useSurfacePushFeed(ledger?.followEvents, ledger?.scopeId ?? '', pollMs, step => {
+    if (step.status === 'denied') workRef.current?.observeWorkers([]);
+    // With snapshots, publications are invalidations, never a substitute for typed surface state.
+    if (ledger?.readSurfaceSnapshot && step.status === 'applied') return;
     const text = surfaceFollowLine(step, watchRef.current, labels.watchStep, step.status === 'denied' && step.stopped ? labels.watchAccessStopped : labels.watchAccessDenied);
     if (text) push([notice(step.status === 'applied' ? 'info' : 'error', text)]);
-  }, mode => { if (labels.watchDelivery) push([notice('info', fillTemplate(labels.watchDelivery, surfaceDeliveryValues(mode, pollMs)))]); });
+  }, mode => { if (labels.watchDelivery) push([notice('info', fillTemplate(labels.watchDelivery, surfaceDeliveryValues(mode, pollMs)))]); },
+  ledger?.readSurfaceSnapshot ? async (kinds, signal) => {
+    const snapshot = await ledger.readSurfaceSnapshot!(kinds, signal);
+    if (signal.aborted) return [];
+    if (snapshot.scopeId !== ledger.scopeId) return kinds; const opening = !snapshotOpened.current; snapshotOpened.current = true;
+    if (snapshot.workers) {
+      const workers = workerReportToLedgerEntries(snapshot.workers, 'watch').filter(entry => entry.kind === 'worker');
+      workRef.current?.observeWorkers(workers);
+      if (opening || watchRef.current.workers) { const { seen, fresh } = newWorkerTaskIds(seenWorkers.current, workers); seenWorkers.current = seen; push(fresh); }
+    }
+    if (snapshot.runs && (opening || watchRef.current.runs)) { const { seen, fresh } = newRunLedgerEntries(seenRuns.current, snapshot.runs, 'watch'); seenRuns.current = seen; push(fresh); }
+    if (snapshot.approvals) workRef.current?.observeApprovals(snapshot.approvals);
+    return snapshot.denied;
+  } : undefined, ledger?.readSurfaceSnapshot ? `${watch.workers}:${watch.runs}` : '');
   const pushLive = pushMode !== 'poll'; // A refused feed must not restart through fallback polling.
-  const followWorkers = ledger?.followEvents ? undefined : ledger?.followWorkers;
-  const followRuns = ledger?.followEvents ? undefined : ledger?.followRuns;
+  const followWorkers = ledger?.followEvents ? undefined : ledger?.followWorkers, followRuns = ledger?.followEvents ? undefined : ledger?.followRuns;
   const failed = useCallback((error: unknown) => push([notice('error', `${labels.watchFailed}: ${errorText(error)}`)]), [errorText, labels.watchFailed, push]);
-  // P4 work surface: live worker panel, approval notifications/cards and run-cancel confirmation (dynamic region only).
   const work = useWorkSurface({ panel, state, ledger, labels, push, errorText, pollMs, pushLive, watchingWorkers: watch.workers,
     ...(props.approvalPollMs === undefined ? {} : { approvalPollMs: props.approvalPollMs }) });
-  decide.current = work.decideApproval;
+  workRef.current = work; decide.current = work.decideApproval;
   const mode = useWorklineMode(props.permissionMode, push, errorText, labels.work?.unavailable ?? labels.ledgerUnavailable, labels.mode, props.fullAccess === true);
   const refreshMode = mode.refresh;
   const reasoning = useReasoningPreview(push, labels.reasoning);
@@ -157,31 +171,15 @@ export function WorklineApp(props: WorklineProps) {
     const notices = opening.current;
     if (notices?.length) push(notices.map(item => notice(item.level, item.text)));
   }, [push]);
-  useWorklineFollow(watch.workers, followWorkers, batch => {
+  useWorklineWatch(watch.workers && Boolean(ledger) && !pushLive && !ledger?.readSurfaceSnapshot, followWorkers, pollMs, () => ledgerEntriesForWorkers(ledger!, 'watch'), batch => {
     const workers = batch.filter(entry => entry.kind === 'worker').map(entry => ({ ...entry, observedAtMs: Date.now() }));
     work.observeWorkers(workers);
     const { seen, fresh } = newWorkerTaskIds(seenWorkers.current, workers); seenWorkers.current = seen; push(fresh);
   }, failed);
-  useWorklineFollow(watch.runs, followRuns, batch => {
+  useWorklineWatch(watch.runs && Boolean(ledger) && !pushLive && !ledger?.readSurfaceSnapshot, followRuns, pollMs, () => ledgerEntriesForRuns(ledger!, 'watch'), batch => {
     const runs = batch.filter(entry => entry.kind === 'run').map(entry => ({ ...entry, observedAtMs: Date.now() }));
     const { seen, fresh } = freshRunCards(seenRuns.current, runs); seenRuns.current = seen; push(fresh);
   }, failed);
-  useSingleFlightPoll(watch.workers && Boolean(ledger) && !followWorkers && !pushLive, pollMs, async current => {
-    const workers = (await ledgerEntriesForWorkers(ledger!, 'watch')).filter(entry => entry.kind === 'worker');
-    if (!current()) return;
-    work.observeWorkers(workers);
-    const { seen, fresh } = newWorkerTaskIds(seenWorkers.current, workers);
-    seenWorkers.current = seen;
-    push(fresh);
-  }, failed);
-  useSingleFlightPoll(watch.runs && Boolean(ledger?.listRunIds) && !followRuns && !pushLive, pollMs, async current => {
-    const runs = await loadRunViewsForWatch(ledger!);
-    if (!current()) return;
-    const { seen, fresh } = newRunLedgerEntries(seenRuns.current, runs, 'watch');
-    seenRuns.current = seen;
-    push(fresh);
-  }, failed);
-
   const runTurn = useCallback(async (text: string, mentioned: readonly string[], execution: LocalExecution) => {
     push([chat('user', text)]);
     const startedAtMs = Date.now();

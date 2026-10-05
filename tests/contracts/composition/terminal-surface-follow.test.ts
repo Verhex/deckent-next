@@ -53,8 +53,10 @@ async function openedFollow(folder: string, env: NodeJS.ProcessEnv) {
   let ready!: () => void;
   const opened = new Promise<void>(resolve => { ready = resolve; });
   const iterator = followLedgerSurface(folder, 's', { env }, controller.signal, ready)[Symbol.asyncIterator]();
+  const start = await iterator.next();
+  expect(start.value).toEqual({ control: 'start', scopeId: 's', cursors: { approval: 0, run: 0, worker: 0 } });
+  await opened;
   const first = iterator.next();
-  await Promise.race([opened, first.then(() => undefined, error => { throw error; })]);
   return { controller, iterator, first };
 }
 
@@ -182,6 +184,7 @@ it.each(['run-only', 'approval-only'] as const)('reads only the granted kinds in
   const iterator = followLedgerSurface(f.folder, 's', { env: f.env }, controller.signal, ready);
   try {
     expect((await iterator.next()).value).toEqual({ access: 'denied', scopeId: 's', kinds: mode === 'run-only' ? ['approval'] : ['run', 'worker'], stopped: false });
+    expect((await iterator.next()).value).toEqual({ control: 'start', scopeId: 's', cursors: { approval: 0, run: 0, worker: 0 } });
     const next = iterator.next(); await opened;
     for (const scope of ['other', 's']) {
       db.prepare('INSERT INTO approval_outbox(scope_id,approval_id,revision,snapshot) VALUES(?,?,?,?)').run(scope, 'a', 0, '{}');

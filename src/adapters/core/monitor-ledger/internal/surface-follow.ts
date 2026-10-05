@@ -1,6 +1,6 @@
 import { watch, type FSWatcher } from 'node:fs';
 import { dirname } from 'node:path';
-import { openLedgerSurfaceTail, type LedgerSurfaceKind } from '#adapters/core/sqlite-ledger/index.js';
+import { openSqliteLedgerReadOnly, openLedgerSurfaceTail, type LedgerSurfaceKind } from '#adapters/core/sqlite-ledger/index.js';
 import type { ResolvedConfig } from '#platform/index.js';
 import type { SurfaceFollowEvent } from '#engine/index.js';
 
@@ -63,6 +63,7 @@ export async function* followLedgerSurface(initial: AuthorizedSurfaceRead, autho
   const sequence = { approval: 0, run: 0, worker: 0 };
   try {
     onReady?.();
+    yield { control: 'start', scopeId, cursors: { ...sequence } };
     while (!signal.aborted) {
       if (!(await fresh())) { close(); yield { access: 'denied', scopeId, kinds, stopped: true }; return; }
       if (signal.aborted) return;
@@ -76,4 +77,13 @@ export async function* followLedgerSurface(initial: AuthorizedSurfaceRead, autho
       }
     }
   } finally { close(); }
+}
+
+/** Collection membership only; composition admits the scope and run kind before this read. */
+export function listSurfaceRunIds(read: AuthorizedSurfaceRead): readonly string[] {
+  if (!read.kinds.includes('run')) return [];
+  const db = openSqliteLedgerReadOnly(read.ledger, read.config.storage.sqlite);
+  try { return db.prepare('SELECT run_id FROM runs WHERE scope_id=? ORDER BY rowid DESC LIMIT ?')
+    .all(read.scopeId, read.config.inspection.workers.maxEntries).map(row => String(row.run_id)); }
+  finally { db.close(); }
 }

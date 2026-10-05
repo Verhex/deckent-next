@@ -81,3 +81,25 @@ it('clear-session validates exact scope/conversation correlation and never expos
   }
   expect(createWorklineLedgerPorts(base)!.clearSessionStanding).toBeUndefined();
 });
+
+it.each(['revoke', 'binding', 'abort'] as const)('does not release a snapshot whose authority changed during a read: %s', async change => {
+  const controller = new AbortController(); let binding = 'first', admitted = true;
+  const ports = createWorklineLedgerPorts({ ...base,
+    async inspectSurfaceAccess() { return admitted ? { binding, kinds: ['approval', 'run', 'worker'] } : null; },
+    async inspectWorkers() {
+      if (change === 'binding') binding = 'different-company-or-principal';
+      if (change === 'revoke') admitted = false;
+      if (change === 'abort') controller.abort();
+      return { schemaVersion: 1, scopeId: 's', sources: [], observedAt: 0, control: 'observe-only' };
+    },
+  })!;
+  expect(await ports.readSurfaceSnapshot!(['worker'], controller.signal)).toEqual({ scopeId: 's', denied: ['worker'] });
+});
+
+it('does not downgrade a data-port policy denial to an empty successful snapshot', async () => {
+  const ports = createWorklineLedgerPorts({ ...base,
+    async inspectSurfaceAccess() { return { binding: 'same-principal', kinds: ['worker'] }; },
+    async inspectWorkers() { throw Object.assign(new Error('denied'), { code: 'POLICY_DENIED' }); },
+  })!;
+  expect(await ports.readSurfaceSnapshot!(['worker'], new AbortController().signal)).toEqual({ scopeId: 's', denied: ['worker'] });
+});
