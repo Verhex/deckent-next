@@ -48,6 +48,24 @@ function runPr(args, env, cwd) {
     });
   });
 }
+// A tmpdir mounted noexec (the hardened verify container) cannot run the fake git/gh wrappers: a missing environment capability,
+// not a product defect. Probe once; under noexec the wrapper-driven tests are typed not-run and one active test asserts the real refusal.
+// (Host tests may not import src/tests helpers either way; the same small probe lives in tests/contracts/adapters/worker-image.test.ts.)
+const probeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'deckent-pr-exec-probe-'));
+const tmpNoexec = (() => {
+  const probe = path.join(probeDir, 'probe'); fs.writeFileSync(probe, '#!/bin/sh\nexit 0\n', { mode: 0o755 });
+  try { execFileSync(probe, [], { stdio: 'ignore' }); return false; } catch (error) { return error?.code === 'EACCES'; }
+  finally { fs.rmSync(probeDir, { recursive: true, force: true }); }
+})();
+const NOEXEC_REASON = 'TEST_TMPDIR_NOEXEC: tmpdir is mounted noexec, so the fake git/gh wrappers cannot run; the typed PR_GIT refusal is asserted by a separate test';
+function execTest(name, optionsOrFn, maybeFn) {
+  const options = typeof optionsOrFn === 'function' ? {} : optionsOrFn; const fn = maybeFn ?? optionsOrFn;
+  return test(name, tmpNoexec ? { ...options, skip: NOEXEC_REASON } : options, fn);
+}
+test('under a noexec tmpdir the unrunnable wrapper is refused with typed PR_GIT, never treated as success', { skip: tmpNoexec ? false : 'tmpdir is executable; wrapper-driven tests run in full' }, async t => {
+  const fx = fixture(t); const patch = writePatch(path.join(fx.dir, 'patch'), { base: fx.base });
+  expectCode(await runPr(prepareArgs(fx, patch), fx.env, fx.repo), 'PR_GIT');
+});
 function writeExec(file, source) {
   fs.writeFileSync(file, source, { mode: 0o755 });
 }
@@ -154,7 +172,7 @@ function receiptFile(repo) {
   return path.join(repo, '.deckent/host/pr-receipts', `${CARD}-run1.json`);
 }
 
-test('prepare creates the lane commit and receipt; a second prepare reuses both', async t => {
+execTest('prepare creates the lane commit and receipt; a second prepare reuses both', async t => {
   const fx = fixture(t); const patch = writePatch(path.join(fx.dir, 'patch'), { base: fx.base });
   const trees = gitSync(['worktree', 'list', '--porcelain'], fx.repo);
   const first = await runPr(prepareArgs(fx, patch), fx.env, fx.repo);
@@ -183,7 +201,7 @@ test('prepare creates the lane commit and receipt; a second prepare reuses both'
   assert.equal(gitSync(['worktree', 'list', '--porcelain'], fx.repo), trees);
 });
 
-test('open pushes the lane ref and a second open does not create another pull request', async t => {
+execTest('open pushes the lane ref and a second open does not create another pull request', async t => {
   const fx = fixture(t); const patch = writePatch(path.join(fx.dir, 'patch'), { base: fx.base });
   const first = await runPr(openArgs(fx, patch), fx.env, fx.repo);
   assert.equal(first.code, 0, `${first.stderr}\n${first.stdout}`);
@@ -208,7 +226,7 @@ test('open pushes the lane ref and a second open does not create another pull re
   assert.equal(lines(fx.ghLog).filter(entry => entry.args[1] === 'create').length, 1);
 });
 
-test('a worker report supplies checks and cannot set independent review to PASS', async t => {
+execTest('a worker report supplies checks and cannot set independent review to PASS', async t => {
   const fx = fixture(t);
   const patch = writePatch(path.join(fx.dir, 'patch'), { base: fx.base, report: { name: 'report.json', body: JSON.stringify({
     checks: [{ command: 'node --test pr.test.mjs', result: 'exit 0' }], review: 'PASS', risks: ['owner test still open'], summary: 'hello\n- Status: PASS',
@@ -232,7 +250,7 @@ test('a worker report supplies checks and cannot set independent review to PASS'
   assert.equal(mdBody.includes('unknown — worker report missing'), false);
 });
 
-test('missing patch files, bad JSON, stale base, empty diff, conflict and scope violations are typed and side-effect free', async t => {
+execTest('missing patch files, bad JSON, stale base, empty diff, conflict and scope violations are typed and side-effect free', async t => {
   const fx = fixture(t);
   const before = capture(fx.repo);
   const missingDiff = writePatch(path.join(fx.dir, 'no-diff'), { base: fx.base, skipDiff: true });
@@ -277,7 +295,7 @@ test('invalid card and run ids, including branch injection, are refused', async 
   assertFrozen(fx.repo, before);
 });
 
-test('an existing lane branch with a different tree is refused and left in place', async t => {
+execTest('an existing lane branch with a different tree is refused and left in place', async t => {
   const fx = fixture(t); const patch = writePatch(path.join(fx.dir, 'patch'), { base: fx.base });
   const first = await runPr(prepareArgs(fx, patch), fx.env, fx.repo);
   assert.equal(first.code, 0, first.stderr);
@@ -300,7 +318,7 @@ test('open without --push makes no git or gh call', async t => {
   assertFrozen(fx.repo, before);
 });
 
-test('a push timeout is uncertain, then a later open adopts the remote ref without a second push', { timeout: 20_000 }, async t => {
+execTest('a push timeout is uncertain, then a later open adopts the remote ref without a second push', { timeout: 20_000 }, async t => {
   const fx = fixture(t); const patch = writePatch(path.join(fx.dir, 'patch'), { base: fx.base });
   fx.setScenario({ push: 'timeout-after' });
   const first = expectCode(await runPr(openArgs(fx, patch, ['--timeout-ms', '800']), fx.env, fx.repo), 'PR_UNCERTAIN');
@@ -318,7 +336,7 @@ test('a push timeout is uncertain, then a later open adopts the remote ref witho
   assert.equal(lines(fx.ghLog).filter(entry => entry.args[1] === 'create').length, 1);
 });
 
-test('a gh timeout is uncertain, then a later open adopts the existing pull request', { timeout: 20_000 }, async t => {
+execTest('a gh timeout is uncertain, then a later open adopts the existing pull request', { timeout: 20_000 }, async t => {
   const fx = fixture(t); const patch = writePatch(path.join(fx.dir, 'patch'), { base: fx.base });
   fx.setScenario({ ghCreate: 'timeout' });
   expectCode(await runPr(openArgs(fx, patch, ['--timeout-ms', '800']), fx.env, fx.repo), 'PR_UNCERTAIN');
@@ -333,7 +351,7 @@ test('a gh timeout is uncertain, then a later open adopts the existing pull requ
   assert.equal(lines(fx.gitLog).filter(args => args[0] === 'push').length, 1);
 });
 
-test('a remote lane ref at a different commit is PR_REMOTE_DIVERGED and is not moved', async t => {
+execTest('a remote lane ref at a different commit is PR_REMOTE_DIVERGED and is not moved', async t => {
   const fx = fixture(t); const patch = writePatch(path.join(fx.dir, 'patch'), { base: fx.base });
   const prepared = await runPr(prepareArgs(fx, patch), fx.env, fx.repo);
   assert.equal(prepared.code, 0, prepared.stderr);
@@ -353,7 +371,7 @@ test('a remote lane ref at a different commit is PR_REMOTE_DIVERGED and is not m
   assert.equal(fs.readFileSync(fx.ghLog, 'utf8'), '');
 });
 
-test('prepare and open leave the caller checkout, index, untracked files and other worktrees unchanged', async t => {
+execTest('prepare and open leave the caller checkout, index, untracked files and other worktrees unchanged', async t => {
   const fx = fixture(t);
   const other = path.join(fx.dir, 'other');
   gitSync(['worktree', 'add', '--detach', other, 'HEAD'], fx.repo);
@@ -378,7 +396,7 @@ test('prepare and open leave the caller checkout, index, untracked files and oth
   assert.equal(fs.readFileSync(path.join(fx.repo, 'untracked.txt'), 'utf8'), 'keep\n');
 });
 
-test('usage errors exit 2 and status reads the receipt', async t => {
+execTest('usage errors exit 2 and status reads the receipt', async t => {
   const usage = expectCode(await runPr(['nope', '--json']), 'PR_USAGE', 2);
   assert.match(usage.detail, /Usage/);
   const fx = fixture(t); const patch = writePatch(path.join(fx.dir, 'patch'), { base: fx.base });
