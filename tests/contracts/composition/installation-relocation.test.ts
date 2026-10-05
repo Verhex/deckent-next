@@ -14,10 +14,12 @@ import { main as composedMain } from '#composition/core/cli/index.js';
 import { main as mcpMain } from '#composition/core/mcp/index.js';
 import { applyPolicyTemplateInstallation, applySuppliedInstallation } from '#composition/core/installation/index.js';
 import { main } from '#surfaces/index.js';
+import { machineBindingNotRunReason } from '../support/binding-capability.js';
+const bindingNotRun = await machineBindingNotRunReason();
 
 const roots: string[] = [];
 afterEach(async () => { vi.restoreAllMocks(); vi.unstubAllEnvs(); clearConfigCache(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
-beforeEach(context => { if (process.platform !== 'linux') context.skip('Linux machine binding required; unsupported capability has a separate adapter test'); });
+beforeEach(context => { if (process.platform !== 'linux') context.skip('Linux machine binding required; unsupported capability has a separate adapter test'); else if (bindingNotRun) context.skip(bindingNotRun); });
 async function fixture() {
   const root = await mkdtemp(join(tmpdir(), 'deckent-relocated-')); roots.push(root);
   const original = join(root, 'original'), project = join(root, 'copy'); await mkdir(original);

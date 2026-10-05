@@ -5,6 +5,8 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { FileInstallationIdentityStore } from '#adapters/core/installation-files/index.js';
 import { installationIdentitySchema, installationIdentityRecordSchema } from '#domain/index.js';
 import { resolveProductLayout, withConfigWriteLock } from '#platform/index.js';
+import { machineBindingNotRunReason } from '../support/binding-capability.js';
+const bindingNotRun = await machineBindingNotRunReason();
 
 const roots: string[] = [];
 afterEach(async () => { await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
@@ -15,7 +17,7 @@ async function fixture() {
 }
 
 describe('durable installation identity', () => {
-  beforeEach(context => { if (process.platform !== 'linux') context.skip('INSTALLATION_IDENTITY_UNSUPPORTED: Linux machine binding is unavailable; typed refusal has a separate active test'); });
+  beforeEach(context => { if (process.platform !== 'linux') context.skip('INSTALLATION_IDENTITY_UNSUPPORTED: Linux machine binding is unavailable; typed refusal has a separate active test'); else if (bindingNotRun) context.skip(bindingNotRun); });
   it('automatically persists a typed identity and reopens the same bytes', async () => {
     const f = await fixture(); const first = await new FileInstallationIdentityStore(f.layout).loadOrCreate();
     expect(installationIdentitySchema.parse(first)).toEqual(first);
@@ -176,7 +178,7 @@ it.skipIf(process.platform === 'win32')('reports unsupported binding capability 
   await expect(store.read()).rejects.toMatchObject({ code: 'INSTALLATION_IDENTITY_INVALID' });
 });
 
-it.skipIf(process.platform !== 'linux')('skips only the unsupported comparison and resumes relocation enforcement when capability returns', async () => {
+it.skipIf(process.platform !== 'linux' || bindingNotRun !== null)('[requires machine binding capability] skips only the unsupported comparison and resumes relocation enforcement when capability returns', async () => {
   const f = await fixture(), original = new FileInstallationIdentityStore(f.layout), identity = await original.loadOrCreate();
   const bytes = await readFile(f.path, 'utf8');
   const store = new FileInstallationIdentityStore(f.layout, undefined, { capture: async () => ({ status: 'unsupported' }) });
