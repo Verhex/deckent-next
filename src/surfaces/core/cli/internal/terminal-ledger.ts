@@ -33,11 +33,12 @@ export function createWorklineLedgerPorts(input: {
   readonly inspectWorkerTranscript?: WorkerTranscriptHandler;
   readonly listApprovals?: (input: unknown) => Promise<unknown>; readonly decideApproval?: (input: unknown) => Promise<unknown>;
   readonly clearSessionStanding?: (input: { schemaVersion: 1; scopeId: string; sessionId: string }) => Promise<unknown>;
+  readonly followEvents?: WorklineLedgerPorts['followEvents'];
   readonly deliverRunCancellation?: RunCancellationDeliveryHandler;
 }): WorklineLedgerPorts | undefined {
   if (!input.inspectWorkers || !input.inspectRun) return undefined;
   const { root, scopeId, options, inspectWorkers, inspectRun, inspectInventory, workerHeartbeatMs, inspectWorkerTranscript, listApprovals, decideApproval,
-    deliverRunCancellation } = input;
+    deliverRunCancellation, followEvents } = input;
   const locale = input.locale ?? 'en', pageSize = input.approvalPageSize ?? 100;
   return {
     scopeId,
@@ -45,6 +46,7 @@ export function createWorklineLedgerPorts(input: {
       const command = { schemaVersion: 1 as const, scopeId, sessionId };
       acceptSessionStandingClearance(command, await input.clearSessionStanding!(command));
     } } : {}),
+    ...(followEvents ? { followEvents } : {}),
     ...(workerHeartbeatMs === undefined ? {} : { workerHeartbeatMs }),
     async listWorkers() { return inspectWorkers(root, { schemaVersion: 1, scopeId, after: null, limit: 20 }, options); },
     async inspectRun(runId: string) { return (await inspectRun(root, { schemaVersion: 1, scopeId, runId }, options)).run; },

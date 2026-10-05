@@ -4,7 +4,7 @@ import { unifiedDiff, readInstallationProfileFile, registerProviderConfig, isSel
 import { createConfiguredConfigApplication, resolveConfiguredConfigPrincipal } from '#composition/core/config/index.js';
 import { inspectConfiguredWorkerTranscript, inspectConfiguredWorkers } from '#composition/core/worker-observation/index.js';
 import { prepareConfiguredDecision, askConfiguredDecision, recordConfiguredDecision, outcomeConfiguredDecision, inspectConfiguredDecision } from '#composition/core/decision/index.js';
-import { inspectMonitor } from '#composition/core/monitor/index.js';
+import { inspectMonitor, followLedgerSurface } from '#composition/core/monitor/index.js';
 import { inspectConfiguredToolchainCurrency, updateConfiguredToolchains } from '#composition/core/toolchains/index.js';
 import { executeConfiguredOperation, compensateConfiguredOperation, inspectConfiguredOperation } from '#composition/core/operations/index.js';
 import { listConfiguredStandingGrants, revokeConfiguredStandingGrant } from '#composition/core/approvals/index.js';
@@ -42,7 +42,7 @@ export async function main(argv: readonly string[] = process.argv.slice(2)) {
     checkWorkspaceIntegration: checkConfiguredWorkspaceIntegration, prepareWorkspaceIntegration: prepareConfiguredWorkspaceIntegration,
     prepareWorkspacePatch: prepareConfiguredWorkspacePatch, previewWorkspacePatch: previewConfiguredWorkspacePatch, renderUnifiedDiff: unifiedDiff,
     configApplication: createConfiguredConfigApplication, resolveConfigPrincipal: resolveConfiguredConfigPrincipal,
-    inspectWorkers: inspectConfiguredWorkers, inspectMonitor, inspectToolchainCurrency: (projectRoot, options) => inspectConfiguredToolchainCurrency(projectRoot, options),
+    inspectWorkers: inspectConfiguredWorkers, inspectMonitor, inspectToolchainCurrency: (projectRoot, options) => inspectConfiguredToolchainCurrency(projectRoot, options), followSurfaceEvents: followLedgerSurface,
     ensureRuntimeService: (projectRoot, options) => ensureConfiguredRuntimeService(projectRoot, options),
     restartRuntimeService: (projectRoot, options) => restartConfiguredRuntimeService(projectRoot, options),
     openTerminalHistory: (projectRoot, options) => openConfiguredTerminalHistory(projectRoot, options),

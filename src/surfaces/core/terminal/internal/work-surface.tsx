@@ -13,7 +13,7 @@ import type { ApprovalDecisionLabels } from '#surfaces/core/approval-presentatio
 import { ApprovalDecisionCard, ApprovalDecisionPicker, approvalRowPresentation, approvalCardPresentation, approvalDecisionCardLines, CancellationDecisionCard, cancellationCardPresentation } from './approval-decision-view.js';
 import { makeApprovalNotFoundNotice, makeApprovalRowNotice } from './approval-decision-notice.js';
 import { plainText } from '#surfaces/core/terminal-render/index.js';
-import { useSingleFlightPoll } from '#surfaces/core/terminal-kit/index.js';
+import { surfaceDeliveryValues, useSingleFlightPoll } from '#surfaces/core/terminal-kit/index.js';
 export interface WorkSurfaceInput {
   readonly panel: WorklinePanel;
   readonly state: PanelSnapshot<TerminalLocalContext>;
@@ -25,6 +25,8 @@ export interface WorkSurfaceInput {
   readonly pollMs: number;
   /** The live panel shows only while the worker watch runs; it is cleared when the watch stops. */
   readonly watchingWorkers: boolean;
+  /** False while a bound push stream is down; omitted keeps the port's own presence. */
+  readonly pushLive?: boolean;
   /** Approval notification cadence; defaults to max(pollMs, APPROVAL_NOTIFY_MIN_MS). */
   readonly approvalPollMs?: number;
 }
@@ -37,7 +39,7 @@ export type TurnApprovalRequest = Readonly<{ approvalId: string; revision: numbe
  * through a runtime port; the view never decides, remembers or auto-approves anything. Read-only commands never prompt.
  */
 export const APPROVAL_NOTIFY_MIN_MS = 10_000;
-export function useWorkSurface({ panel, state, ledger, labels, push, errorText, pollMs, watchingWorkers, approvalPollMs }: WorkSurfaceInput) {
+export function useWorkSurface({ panel, state, ledger, labels, push, errorText, pollMs, watchingWorkers, approvalPollMs, pushLive }: WorkSurfaceInput) {
   const work = labels.work;
   const [workers, setWorkers] = useState<readonly WorkLedgerWorkerEntry[]>([]);
   const presentation = panel.presentation(state);
@@ -48,7 +50,16 @@ export function useWorkSurface({ panel, state, ledger, labels, push, errorText, 
   const observeWorkers = useCallback((entries: readonly WorkLedgerEntry[]) => { setWorkers(entries.filter((entry): entry is WorkLedgerWorkerEntry => entry.kind === 'worker')); }, []);
   // Default on whenever approvals are wired (legacy kept approvals behind an off-by-default flag): one bounded page per tick,
   // never more often than APPROVAL_NOTIFY_MIN_MS so an idle terminal adds negligible runtime load (lead integration decision).
-  useSingleFlightPoll(Boolean(work && ledger?.listApprovalPage), approvalPollMs ?? Math.max(pollMs, APPROVAL_NOTIFY_MIN_MS), async current => {
+  const toldDelivery = useRef(false);
+  const connected = pushLive ?? Boolean(ledger?.followEvents);
+  useEffect(() => {
+    if (toldDelivery.current || !work || !ledger?.listApprovalPage || !labels.watchDelivery) return;
+    toldDelivery.current = true;
+    const mode = connected ? 'push' : 'poll';
+    const pace = mode === 'poll' ? (approvalPollMs ?? Math.max(pollMs, APPROVAL_NOTIFY_MIN_MS)) : pollMs;
+    push([notice('info', fillTemplate(labels.watchDelivery, surfaceDeliveryValues(mode, pace)))]);
+  }, [approvalPollMs, connected, labels.watchDelivery, ledger, pollMs, push, work]);
+  useSingleFlightPoll(Boolean(work && ledger?.listApprovalPage) && !connected, approvalPollMs ?? Math.max(pollMs, APPROVAL_NOTIFY_MIN_MS), async current => {
     const page = await ledger!.listApprovalPage!(approvalWatch.current.cursor);
     if (!current()) return;
     const { state, fresh } = approvalWatchStep(approvalWatch.current, page, Date.now());

@@ -103,7 +103,10 @@ function worklineLabels(locale: Locale, statusLine: string): WorklineLabels {
     selfSourceFloor: t('terminal.mode.selfSourceFloor', {}, locale),
     roleUser: t('terminal.workline.roleUser', {}, locale), roleAssistant: t('terminal.workline.roleAssistant', {}, locale),
     runCard: t('terminal.ledger.runCard', {}, locale), workerCard: t('terminal.ledger.workerCard', {}, locale),
-    watchFailed: t('terminal.workline.watchFailed', {}, locale), ledgerUnavailable: t('terminal.workline.ledgerUnavailable', {}, locale),
+    watchFailed: t('terminal.workline.watchFailed', {}, locale),
+    watchDelivery: t('terminal.workline.watchDelivery', {}, locale), watchStep: t('terminal.workline.watchStep', {}, locale),
+    watchAccessDenied: t('terminal.workline.watchAccessDenied', {}, locale), watchAccessStopped: t('terminal.workline.watchAccessStopped', {}, locale),
+    watchPushFailed: t('terminal.workline.watchPushFailed', {}, locale), ledgerUnavailable: t('terminal.workline.ledgerUnavailable', {}, locale),
     runNotFound: t('terminal.workline.runNotFound', {}, locale), workersEmpty: t('terminal.workline.workersEmpty', {}, locale),
     runsEmpty: t('terminal.workline.runsEmpty', {}, locale), serviceRestartUnavailable: t('terminal.service.restartUnavailable', {}, locale),
     queued: t('terminal.workline.queued', {}, locale),
@@ -249,7 +252,8 @@ export async function terminalCommand(argv: readonly string[], context: CommandC
     ...(context.listApprovals ? { listApprovals: context.listApprovals } : {}),
     ...(context.clearSessionStanding ? { clearSessionStanding: context.clearSessionStanding } : {}),
     ...(context.decideApproval ? { decideApproval: context.decideApproval } : {}),
-    ...(context.deliverRunCancellation ? { deliverRunCancellation: context.deliverRunCancellation } : {}) });
+    ...(context.deliverRunCancellation ? { deliverRunCancellation: context.deliverRunCancellation } : {}),
+    ...(context.followSurfaceEvents ? { followEvents: signal => context.followSurfaceEvents!(root, scopeId, options, signal) } : {}) });
   const target = `${scopeId} · ${chatTarget(chat, locale)}`;
   // History is a convenience: an unavailable history file never blocks the terminal.
   const inputHistory = context.openTerminalHistory ? await context.openTerminalHistory(root, options).catch(() => null) : null;

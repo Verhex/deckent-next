@@ -30,29 +30,41 @@ it.each(['en', 'tr'] as const)('preserves a producer frame failure through SQLit
   const { channel, socket } = transport();
   const input = { messages: [{ role: 'user' as const, content: 'read' }], tools: [], language, signal: channel.signal,
     emit: (event: AgentTurnEvent) => { if (event.kind !== 'done') channel.emit(event); },
-    claim: { scopeId: 'scope', turnId: 'frame-pressure', principalKey: 'person', requestDigest: 'a'.repeat(64), claimedAtMs: 1 } };
+    claim: { scopeId: 'scope', principalKey: 'person', requestDigest: 'a'.repeat(64), claimedAtMs: 1 } };
   const invokeRound = vi.fn(async (): Promise<AgentRoundOutcome> => ({ status: 'responded', content: '🙂漢字'.repeat(2_000), reasoning: '',
     toolCalls: [], usage: null, finish: 'stop' }));
   const ports = { invokeRound, contextFailure: () => channel.signal.reason instanceof ServiceFrameError ? 'RUNTIME_CHAT_EVENT_TOO_LARGE' as const : null,
     authorize: async () => 'allow' as const, execute: async () => ({ status: 'ok' as const, text: '' }), describe: () => null, now: () => 1 };
-  try {
-    const failed = await runDurableAgentTurn(input, store, ports);
+  const replayTurn = async (turnId: string) => {
+    const claimed = { ...input, claim: { ...input.claim, turnId } };
+    const failed = await runDurableAgentTurn(claimed, store, ports);
     expect(channel.signal.reason).toMatchObject({ code: 'SERVICE_FRAME_LIMIT' });
     expect(failed).toMatchObject({ finish: 'error', recorded: true, replayed: false });
     expect(failed.note).toContain('RUNTIME_CHAT_EVENT_TOO_LARGE');
     store.close(); store = await openSqliteAgentTurnStore(path, options);
     // Fresh channel and abort signal: the failure must come from the persisted outcome, not from the original signal.
-    const replay = await runDurableAgentTurn({ ...input, signal: new AbortController().signal, emit: () => undefined }, store, { ...ports, contextFailure: () => null });
+    const replay = await runDurableAgentTurn({ ...claimed, signal: new AbortController().signal, emit: () => undefined }, store, { ...ports, contextFailure: () => null });
     expect(replay).toMatchObject({ finish: 'error', replayed: true, note: failed.note });
     expect(invokeRound).toHaveBeenCalledTimes(1);
-    const view = mountWorkline({ streamTurn: (messages, signal) => streamTerminalAgentTurn({ projectRoot: root, scopeId: 'scope', messages, signal, options: {} }, {
-      chatTurn: async () => ({ schemaVersion: 1, turnId: input.claim.turnId, ...replay, answer: null, answerBytes: 0 }),
+    return { schemaVersion: 1 as const, turnId, ...replay, answer: null, answerBytes: 0 };
+  };
+  try {
+    // Exercise the actual generated binding: the durable failure and replay belong to that exact command.
+    // An explicit context bypasses the renderer-only harness's synthetic binding.
+    let boundTurnId: string | undefined;
+    const errorText = vi.fn((error: unknown) => String(error));
+    const view = mountWorkline({ context: { installationId: 'test-installation', projectId: 'test-project', scopeId: 'scope' }, errorText,
+      streamTurn: (messages, signal, turn) => streamTerminalAgentTurn({ projectRoot: root, scopeId: 'scope', messages, signal, options: {}, ...turn,
+        onTurnBound(binding) { boundTurnId = binding.turnId; turn?.onTurnBound?.(binding); } }, {
+      chatTurn: async (_root, command) => { expect(command.turnId).toBe(boundTurnId); return replayTurn(command.turnId); },
       cancelChatTurn: async () => undefined,
     }) }); mounted.push(view);
     await settle(); view.stdin.write('replay\r');
     await until(() => view.stdout.text.includes('RUNTIME_CHAT_EVENT_TOO_LARGE'), 'durable frame failure on terminal');
     expect(view.stdout.text).toContain(language === 'tr' ? 'tek çerçeve kapasitesini aşıyor' : 'exceeds the single-frame capacity');
     expect(view.stdout.text).toContain('/clear');
+    expect(errorText).not.toHaveBeenCalled();
+    expect(invokeRound).toHaveBeenCalledTimes(1);
   } finally { channel.finish(); socket.destroy(); store.close(); }
 });
 

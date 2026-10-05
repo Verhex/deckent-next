@@ -814,6 +814,7 @@
     },
     "src/surfaces/core/terminal-kit": {
       "dependencies": [
+        "src/engine/core/monitor",
         "src/domain/core/agent-turn"
       ],
       "plan": "SURFACES"
@@ -846,6 +847,7 @@
     },
     "src/surfaces/core/terminal": {
       "dependencies": [
+        "src/engine/core/monitor",
         "src/surfaces/core/terminal-kit",
         "src/surfaces/core/terminal-render",
         "src/surfaces/core/terminal-composer",
@@ -901,6 +903,7 @@
     "src/surfaces/core/cli": {
       "dependencies": [
         "src/surfaces/core/cli-installation",
+        "src/engine/core/monitor",
         "src/engine/core/secret-store",
         "src/surfaces/core/terminal-labels",
         "src/surfaces/core/terminal-composer",

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, createElement } from 'react';
 import { render, Box, Static, Text, useApp, type Instance } from 'ink';
 import { useWorklinePanel, type LocalExecution } from './workline-panel.js';
-import { WorklinePaletteProvider, useWorklinePalette, parseSlashLine, useSingleFlightPoll, useWorklineFollow,
+import { WorklinePaletteProvider, useWorklinePalette, parseSlashLine, useSingleFlightPoll, useWorklineFollow, surfaceDeliveryValues, surfaceFollowLine, useSurfacePushFeed,
   type TerminalLocalContext, type WorklineInkPalette, type WorklineStreamTurn } from '#surfaces/core/terminal-kit/index.js';
 import { StatusStrip } from './status-strip.js';
 import { AssistantLive, openAssistantStream, renderAssistantStream, renderCompleteReply, type AssistantStreamStep } from '#surfaces/core/terminal-render/index.js';
@@ -12,6 +12,7 @@ import { assistantLedgerEntries, streamStepEntries } from './ledger-units.js';
 import { WORK_LEDGER_SCHEMA_VERSION, type WorkLedgerEntry } from './work-ledger.js';
 import { LedgerEntryRow, type LedgerEntryLabels } from './ledger-entry.js';
 import { ledgerEntriesForWorkers, loadRunViewsForWatch, type WorklineLedgerPorts } from './workline-ledger.js';
+import { fillTemplate } from './worker-line.js';
 import { newWorkerTaskIds } from './worker-watch.js';
 import { freshRunCards, newRunLedgerEntries } from './run-watch.js';
 import { useConversationSession, type ConversationSessionLabels, type ConversationSessionPort } from './workline-sessions.js';
@@ -133,9 +134,16 @@ export function WorklineApp(props: WorklineProps) {
   const seenWorkers = useRef(new Set<string>());
   const seenRuns = useRef(new Map<string, string>());
   const pollMs = props.pollMs ?? ledger?.workerHeartbeatMs ?? 5000;
+  const pushMode = useSurfacePushFeed(ledger?.followEvents, ledger?.scopeId ?? '', pollMs, step => {
+    const text = surfaceFollowLine(step, watchRef.current, labels.watchStep, step.status === 'denied' && step.stopped ? labels.watchAccessStopped : labels.watchAccessDenied);
+    if (text) push([notice(step.status === 'applied' ? 'info' : 'error', text)]);
+  }, mode => { if (labels.watchDelivery) push([notice('info', fillTemplate(labels.watchDelivery, surfaceDeliveryValues(mode, pollMs)))]); });
+  const pushLive = pushMode !== 'poll'; // A refused feed must not restart through fallback polling.
+  const followWorkers = ledger?.followEvents ? undefined : ledger?.followWorkers;
+  const followRuns = ledger?.followEvents ? undefined : ledger?.followRuns;
   const failed = useCallback((error: unknown) => push([notice('error', `${labels.watchFailed}: ${errorText(error)}`)]), [errorText, labels.watchFailed, push]);
   // P4 work surface: live worker panel, approval notifications/cards and run-cancel confirmation (dynamic region only).
-  const work = useWorkSurface({ panel, state, ledger, labels, push, errorText, pollMs, watchingWorkers: watch.workers,
+  const work = useWorkSurface({ panel, state, ledger, labels, push, errorText, pollMs, pushLive, watchingWorkers: watch.workers,
     ...(props.approvalPollMs === undefined ? {} : { approvalPollMs: props.approvalPollMs }) });
   decide.current = work.decideApproval;
   const mode = useWorklineMode(props.permissionMode, push, errorText, labels.work?.unavailable ?? labels.ledgerUnavailable, labels.mode, props.fullAccess === true);
@@ -149,16 +157,16 @@ export function WorklineApp(props: WorklineProps) {
     const notices = opening.current;
     if (notices?.length) push(notices.map(item => notice(item.level, item.text)));
   }, [push]);
-  useWorklineFollow(watch.workers, ledger?.followWorkers, batch => {
+  useWorklineFollow(watch.workers, followWorkers, batch => {
     const workers = batch.filter(entry => entry.kind === 'worker').map(entry => ({ ...entry, observedAtMs: Date.now() }));
     work.observeWorkers(workers);
     const { seen, fresh } = newWorkerTaskIds(seenWorkers.current, workers); seenWorkers.current = seen; push(fresh);
   }, failed);
-  useWorklineFollow(watch.runs, ledger?.followRuns, batch => {
+  useWorklineFollow(watch.runs, followRuns, batch => {
     const runs = batch.filter(entry => entry.kind === 'run').map(entry => ({ ...entry, observedAtMs: Date.now() }));
     const { seen, fresh } = freshRunCards(seenRuns.current, runs); seenRuns.current = seen; push(fresh);
   }, failed);
-  useSingleFlightPoll(watch.workers && Boolean(ledger) && !ledger?.followWorkers, pollMs, async current => {
+  useSingleFlightPoll(watch.workers && Boolean(ledger) && !followWorkers && !pushLive, pollMs, async current => {
     const workers = (await ledgerEntriesForWorkers(ledger!, 'watch')).filter(entry => entry.kind === 'worker');
     if (!current()) return;
     work.observeWorkers(workers);
@@ -166,7 +174,7 @@ export function WorklineApp(props: WorklineProps) {
     seenWorkers.current = seen;
     push(fresh);
   }, failed);
-  useSingleFlightPoll(watch.runs && Boolean(ledger?.listRunIds) && !ledger?.followRuns, pollMs, async current => {
+  useSingleFlightPoll(watch.runs && Boolean(ledger?.listRunIds) && !followRuns && !pushLive, pollMs, async current => {
     const runs = await loadRunViewsForWatch(ledger!);
     if (!current()) return;
     const { seen, fresh } = newRunLedgerEntries(seenRuns.current, runs, 'watch');
@@ -259,7 +267,7 @@ export function WorklineApp(props: WorklineProps) {
       catch (error) { push([notice('error', errorText(error))]); }
       return true;
     }
-    const action = immediateSlashAction(slash.command, { ledger, labels, watch: watchRef.current, canRestartService: Boolean(props.restartService) });
+    const action = immediateSlashAction(slash.command, { ledger, labels, watch: watchRef.current, canRestartService: Boolean(props.restartService), pollMs, ...(ledger?.followEvents ? { followDelivery: pushMode } : {}) });
     // Close the controller before exit so queued work cannot dispatch.
     if (action?.exit) { panel.close(); exit(); return false; }
     if (action) {
@@ -275,7 +283,7 @@ export function WorklineApp(props: WorklineProps) {
     }
     catch (error) { push([notice('error', errorText(error))]); }
     return true;
-  }, [errorText, exit, labels, ledger, mode.run, props.mcp, props.monitor, props.config, props.restartService, push, reasoning.run, runTurn, scratch, session, work.run, panel]);
+  }, [errorText, exit, labels, ledger, mode.run, props.mcp, props.monitor, props.config, props.restartService, pollMs, pushMode, push, reasoning.run, runTurn, scratch, session, work.run, panel]);
 
   execute.current = async execution => {
     await perform(execution.input.text, execution.input.mentions, execution);

@@ -35,3 +35,14 @@ export function openSqliteLedger(path: string, options: SqliteLedgerOptions,
     db.close(); throw sqliteFailure(error);
   }
 }
+
+/** Read an existing ledger without migrating or taking the write lock. The runtime service remains the writer. */
+export function openSqliteLedgerReadOnly(path: string, options: SqliteLedgerOptions): DatabaseSync {
+  assertSqliteEngineSupported(process.versions.sqlite);
+  const parsed = sqliteLedgerOptionsSchema.safeParse(options);
+  if (!parsed.success) throw new AttemptStoreError('ATTEMPT_STORE_OPTIONS');
+  try {
+    const { DatabaseSync: NativeDatabase } = createRequire(import.meta.url)('node:sqlite') as typeof import('node:sqlite');
+    return new NativeDatabase(path, { readOnly: true, timeout: parsed.data.busyTimeoutMs });
+  } catch (error) { throw sqliteFailure(error); }
+}
