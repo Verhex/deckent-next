@@ -59,12 +59,18 @@ async function materializeHistory(base: Awaited<ReturnType<typeof fixture>>, cou
   if (count === 0) return;
   const activation = await base.activate('scope'), db = new DatabaseSync(base.path);
   const example = admission(base, 'example', 'example'), budget = example.spending.budget;
-  let account = createProviderSpendAccount(budget);
+  const emptyAccount = createProviderSpendAccount(budget);
+  // Synthetic ledger volume, not 10,000 admissions: bind one valid request/profile/quote once.
+  // Command/invocation ids stay unique; both real read-only audits below still verify every stored row.
+  const input = parseModelInvocationAdmission({ ...example, activation });
+  const receiptTemplate = createModelInvocationClaimReceipt(input), quote = input.spending!.quote;
+  const reservationTemplate = reserveProviderSpend(emptyAccount, budget, { schemaVersion: 1, scopeId: 'scope', invocationId: 'example',
+    budgetId: budget.budgetId, budgetRevision: budget.revision, currency: budget.currency, quoteDigest: providerSpendQuoteDigest(quote), quote }).reservation;
   try {
     db.exec('BEGIN IMMEDIATE');
-    const initial = createProviderSpendCheckpoint(account, 1, 0);
+    const initial = createProviderSpendCheckpoint(emptyAccount, 1, 0);
     db.prepare('INSERT INTO provider_spend_accounts(scope_id,revision,reservation_count,digest,record) VALUES(?,?,?,?,?)')
-      .run('scope', initial.revision, 0, initial.digest, JSON.stringify(account));
+      .run('scope', initial.revision, 0, initial.digest, JSON.stringify(emptyAccount));
     const allocation = { schemaVersion: 1, scopeId: 'scope', allocationId: example.profile.allocation.id,
       maxCalls: example.profile.allocation.maxCalls, maxInFlight: example.profile.allocation.maxInFlight, lifetimeCalls: count, inFlight: count };
     db.prepare(`INSERT INTO model_invocation_allocations(scope_id,allocation_id,max_calls,max_in_flight,lifetime_calls,in_flight,record)
@@ -77,16 +83,16 @@ async function materializeHistory(base: Awaited<ReturnType<typeof fixture>>, cou
     const spend = db.prepare('INSERT INTO model_invocation_spend_reservations(scope_id,invocation_id,digest,record) VALUES(?,?,?,?)');
     for (let index = 0; index < count; index++) {
       const id = `history-invocation-${String(index).padStart(5, '0')}`;
-      const input = parseModelInvocationAdmission({ ...admission(base, `history-command-${index}`, id), activation });
-      const receipt = createModelInvocationClaimReceipt(input), quote = input.spending!.quote;
-      const next = reserveProviderSpend(account, budget, { schemaVersion: 1, scopeId: 'scope', invocationId: id,
-        budgetId: budget.budgetId, budgetRevision: budget.revision, currency: budget.currency, quoteDigest: providerSpendQuoteDigest(quote), quote });
-      account = next.account;
-      invocation.run('scope', input.command.commandId, id, allocation.allocationId, 'claimed', JSON.stringify(receipt));
+      const commandId = `history-command-${index}`;
+      const receipt = { ...receiptTemplate, request: { ...receiptTemplate.request, commandId },
+        claim: { ...receiptTemplate.claim, commandId, invocationId: id } };
+      const reservation = { ...reservationTemplate, descriptor: { ...reservationTemplate.descriptor, invocationId: id } };
+      invocation.run('scope', commandId, id, allocation.allocationId, 'claimed', JSON.stringify(receipt));
       control.run('scope', id, 'pending', JSON.stringify({ schemaVersion: 1, claim: receipt.claim, reference,
         send: { state: 'pending' }, cancellation: null }));
-      spend.run('scope', id, providerSpendReservationDigest(next.reservation), JSON.stringify(next.reservation));
+      spend.run('scope', id, providerSpendReservationDigest(reservation), JSON.stringify(reservation));
     }
+    const account = { ...emptyAccount, reservedMinorUnits: count * quote.maxChargeMinorUnits };
     const checkpoint = createProviderSpendCheckpoint(account, count, count);
     db.prepare('UPDATE provider_spend_accounts SET revision=?,reservation_count=?,digest=?,record=? WHERE scope_id=?')
       .run(checkpoint.revision, count, checkpoint.digest, JSON.stringify(account), 'scope');
@@ -181,7 +187,8 @@ it('rejects a missing zero-charge reservation even though reserved units remain 
 });
 
 it('reports prepared-claim median and p95 after bounded synthetic histories', async () => {
-  const timings: Array<{ history: number; samples: number; medianMs: number; p95Ms: number }> = [];
+  const timings: Array<{ history: number; samples: number; medianMs: number; p95Ms: number;
+    controlMedianMs: number; medianControlRatio: number; p95ControlRatio: number }> = [];
   for (const history of [0, 100, 10_000]) {
     const base = await fixture(); await seed(base, 0); await materializeHistory(base, history);
     const auditor = await openSqliteProviderSpendIntegrityReader(base.path, { busyTimeoutMs: 20 });
@@ -196,18 +203,38 @@ it('reports prepared-claim median and p95 after bounded synthetic histories', as
       if (history === 0) expect(quota).toEqual({ status: 'not-found' });
       else expect(quota).toMatchObject({ lifetimeCalls: history, inFlight: history });
     } finally { quotaAuditor.close(); }
-    const store = await openSqliteModelInvocationStore(base.path, options, 'forbid');
+    // Independent durable SQLite append on a separate DB: the claim never calibrates its own allowance.
+    // These ratios are diagnostics, not a machine-independent product latency claim or an enlarged timeout.
+    const control = new DatabaseSync(`${base.path}.control`);
+    let store: Awaited<ReturnType<typeof openSqliteModelInvocationStore>> | undefined;
     try {
+      control.exec('PRAGMA journal_mode=DELETE; PRAGMA synchronous=FULL; CREATE TABLE control(payload TEXT)');
+      const append = control.prepare('INSERT INTO control(payload) VALUES(?)'), payload = 'x'.repeat(1024);
+      const controlSamples: number[] = [];
+      const measureControl = () => { const start = performance.now(); append.run(payload); controlSamples.push(performance.now() - start); };
+      store = await openSqliteModelInvocationStore(base.path, options, 'forbid');
       const activation = await base.activate('scope');
       const inputs = Array.from({ length: 12 }, (_unused, index) => ({ ...admission(base, `benchmark-${history}-${index}`, `benchmark-invocation-${history}-${index}`), activation }));
       await store.claim(inputs[0]!); await store.claim(inputs[1]!);
       const samples: number[] = [];
-      for (const input of inputs.slice(2)) { const start = performance.now(); await store.claim(input); samples.push(performance.now() - start); }
+      append.run(payload); // independent control warmup
+      for (const input of inputs.slice(2)) {
+        measureControl();
+        const start = performance.now(); await store.claim(input); samples.push(performance.now() - start);
+        measureControl();
+      }
       const ordered = [...samples].sort((left, right) => left - right), median = (ordered[4]! + ordered[5]!) / 2;
-      timings.push({ history, samples: samples.length, medianMs: median, p95Ms: ordered[Math.ceil(samples.length * 0.95) - 1]! });
-    } finally { store.close(); }
+      expect(controlSamples).toHaveLength(20);
+      controlSamples.sort((left, right) => left - right);
+      const controlMedianMs = (controlSamples[9]! + controlSamples[10]!) / 2, p95Ms = ordered[Math.ceil(samples.length * 0.95) - 1]!;
+      expect(controlMedianMs).toBeGreaterThan(0);
+      timings.push({ history, samples: samples.length, medianMs: median, p95Ms, controlMedianMs,
+        medianControlRatio: median / controlMedianMs, p95ControlRatio: p95Ms / controlMedianMs });
+    } finally { try { store?.close(); } finally { control.close(); } }
   }
   expect(timings.map(value => [value.history, value.samples])).toEqual([[0, 10], [100, 10], [10_000, 10]]);
   expect(timings.every(value => Number.isFinite(value.medianMs) && Number.isFinite(value.p95Ms))).toBe(true);
-  process.stdout.write(`${JSON.stringify({ benchmark: 'provider-spend-store-claim', historyKind: 'schema-valid receipts and monetary reservations in one scope/allocation; both audits before warmup', warmupClaims: 2, timings })}\n`);
+  expect(timings.every(value => Number.isFinite(value.medianControlRatio) && Number.isFinite(value.p95ControlRatio))).toBe(true);
+  console.info(JSON.stringify({ benchmark: 'provider-spend-store-claim', historyKind: 'unique command/invocation ids with a shared synthetic request; both complete audits before warmup',
+    control: 'separate SQLite DELETE/FULL 1KiB append, 20 interleaved samples, median', warmupClaims: 2, timings }));
 }, process.platform === 'win32' ? 240_000 : 120_000);
