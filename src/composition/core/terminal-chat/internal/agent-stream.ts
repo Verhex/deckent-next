@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { AgentTurnMessage, AgentTurnStreamEvent, ChatTurnCancellation, ChatTurnCommand, ChatTurnResult } from '#domain/index.js';
-import type { AgentTurnAdmission } from '#engine/index.js';
+import { createAgentCompactionGuard, type AgentTurnAdmission } from '#engine/index.js';
 import { ErrorRegistry, type ConfigLoadOptions } from '#platform/index.js';
 import type { PanelTurnBinding, TurnDelta } from '#surfaces/index.js';
 import { terminalCompactionExpected } from './turn-phase.js';
@@ -47,14 +47,18 @@ export async function* streamTerminalAgentTurn(input: TerminalAgentTurnInput, po
   // Follow measured history and mark at most one compaction per round using the service admission.
   const history: AgentTurnMessage[] = [...input.messages];
   let round = 0, compactedRound = 0;
+  const compactionGuard = createAgentCompactionGuard();
   const notify = () => { const resume = wake; wake = null; resume?.(); };
   const onEvent = (event: AgentTurnStreamEvent) => {
     if (event.kind === 'text') roundText += event.text;
     if (event.kind === 'tool.started') { roundText = ''; targets.set(event.callId, event.target); }
     if (event.kind === 'message') history.push(event.message);
-    if (event.kind === 'compacted') { history.splice(0, history.length, ...(history[0]?.role === 'system' ? [history[0]] : []), ...event.messages); compactedRound = round; }
+    if (event.kind === 'compacted') {
+      const next = [...(history[0]?.role === 'system' ? [history[0]] : []), ...event.messages];
+      compactionGuard.applied(history, next); history.splice(0, history.length, ...next); compactedRound = round;
+    }
     if (event.kind === 'context') round = event.round;
-    const compacting = event.kind === 'context' && admission !== null && event.round !== compactedRound && terminalCompactionExpected(history, event, admission);
+    const compacting = event.kind === 'context' && admission !== null && event.round !== compactedRound && terminalCompactionExpected(history, event, admission) && compactionGuard.plan(history) !== null;
     queue.push(toDelta(event, targets, compacting)); notify();
   };
   // Cancel at once when the caller aborts; the transport disconnect alone is only seen at the service's next write.

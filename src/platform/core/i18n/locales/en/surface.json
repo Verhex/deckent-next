@@ -1,4 +1,8 @@
 {
+  "error.RUNTIME_CHAT_EVENT_TOO_LARGE": "A required conversation event exceeds the single-frame capacity. Delivery stopped; some history may be missing. Check any tool effects before retrying. Start a new conversation with /clear and use smaller parts.",
+  "agent.context.AGENT_CONTEXT_CARRY_TOO_LARGE": "The preserved context and summary exceed the request byte bound. Nothing more was sent; the conversation history is unchanged. Start a new conversation with /clear and send smaller parts.",
+  "agent.context.AGENT_CONTEXT_REQUEST_TOO_LARGE": "The conversation exceeds the request byte bound. No further model request was sent; the history was not shortened. Start a new conversation with /clear and send smaller parts.",
+  "agent.context.AGENT_CONTEXT_WINDOW_EXCEEDED": "The conversation no longer fits the model context window: {prompt} prompt tokens ({quality}) + {reserve} reserved > {window}. Nothing was sent for this round. Start a new conversation with /clear and send smaller parts.",
   "chat.agentic_no_match": "[agentic] no matching intent — falling back to chat.",
   "chat.audit_not_in_mcp": "Audit action \"{sub}\" is not available over MCP yet — run it via the CLI: deckent audit {sub}",
   "chat.autonomous_id_required": "Usage: /autonomous {sub} <id>",

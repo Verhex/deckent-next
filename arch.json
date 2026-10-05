@@ -1729,7 +1729,8 @@
         "src/domain/core/agent-tool",
         "src/domain/core/agent-turn",
         "src/platform/core/host",
-        "src/domain/core/model-invocation"
+        "src/domain/core/model-invocation",
+        "src/platform/core/i18n"
       ],
       "plan": "SURFACES"
     },

@@ -13,3 +13,4 @@ export { APPROVAL_PREVIEW_MAX_BYTES, boundApprovalPreview, agentToolApprovalSumm
 export { AGENT_TURN_REPLY_LANGUAGES, AGENT_TURN_SYSTEM_PROMPT_VERSION, agentTurnReplyLanguageRule, renderAgentTurnSystemPrompt, withAgentTurnSystemPrompt, type AgentTurnReplyLanguage,
   type AgentTurnShellPosture } from './internal/system-prompt.js';
 export { canonicalTurnRequest, withMcpNotices, chatTurnRoundFailureState } from './internal/metadata.js';
+export { agentCompactionExpected, agentContextFailureNote, agentHistoryBytes, createAgentCompactionGuard, type AgentContextFailure } from './internal/pressure.js';

@@ -1,4 +1,8 @@
 {
+  "error.RUNTIME_CHAT_EVENT_TOO_LARGE": "Konuşmanın zorunlu bir olayı tek çerçeve kapasitesini aşıyor. Aktarım durdu; geçmişin bir bölümü eksik olabilir. Yeniden denemeden önce araç etkilerini kontrol edin. /clear ile yeni konuşma açıp daha küçük parçalar kullanın.",
+  "agent.context.AGENT_CONTEXT_CARRY_TOO_LARGE": "Korunan bağlam ve özet, istek bayt sınırını aşıyor. Başka veri gönderilmedi; konuşma geçmişi değiştirilmedi. /clear ile yeni konuşma açıp daha küçük parçalar gönderin.",
+  "agent.context.AGENT_CONTEXT_REQUEST_TOO_LARGE": "Konuşma, istek bayt sınırını aşıyor. Modele yeni istek gönderilmedi; geçmiş kısaltılmadı. /clear ile yeni konuşma açıp daha küçük parçalar gönderin.",
+  "agent.context.AGENT_CONTEXT_WINDOW_EXCEEDED": "Konuşma artık modelin bağlam penceresine sığmıyor: {prompt} girdi tokenı ({quality}) + {reserve} ayrılan > {window}. Bu tur için veri gönderilmedi. /clear ile yeni konuşma açıp daha küçük parçalar gönderin.",
   "chat.agentic_no_match": "[agentic] eşleşen niyet yok — sohbete dönülüyor.",
   "chat.audit_not_in_mcp": "\"{sub}\" audit aksiyonu henüz MCP'de yok — CLI ile çalıştırın: deckent audit {sub}",
   "chat.autonomous_id_required": "Kullanım: /autonomous {sub} <id>",
