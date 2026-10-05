@@ -13,11 +13,16 @@ import { admitRunAttempts } from '../support/admission.js';
 import { custodyProfiles } from '../support/custody.js';
 import { clearConfigCache } from '#platform/index.js';
 import { cliChildEnv } from '../support/child-env.js';
-import { startTestRuntimeService } from '../support/runtime-service.js';
+import { startTestRuntimeService, stopTestRuntimeService } from '../support/runtime-service.js';
 
 const exec = promisify(execFile); const roots: string[] = [];
+const services: Awaited<ReturnType<typeof startTestRuntimeService>>[] = [];
 const binary = resolve('dist/composition/core/cli/internal/entry.js'); const sdk = pathToFileURL(resolve('dist/index.js')).href;
-afterEach(async () => { clearConfigCache(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
+afterEach(async () => {
+  // Imported afterEach hooks run later (stack order); join our services before removing their state.
+  for (const service of services.splice(0)) await stopTestRuntimeService(service);
+  clearConfigCache(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true })));
+});
 const actor = { issuer: hostname(), subject: String(userInfo().uid) };
 const inspectAll = { id: 'inspect-all', effect: 'allow', actions: ['inspect'], scopes: 'all', principals: [actor], resource: { kind: 'scope', ids: 'all' } };
 const spendAll = { id: 'spend-all', effect: 'allow', actions: ['inspect'], scopes: 'all', principals: [actor], resource: { kind: 'provider-spend-account', ids: 'all' } };
@@ -32,7 +37,7 @@ async function fixture(config: Record<string, unknown> = {}, grants: readonly un
   const opened = await openConfiguredAttemptStore(project, { env }); opened.store.close();
   await writeFile(join(data, 'policy.json'), JSON.stringify({ schemaVersion: 1, revision: 'p', restrictions: [], grants }), { mode: 0o600 });
   prepare?.(opened.path);
-  if (start) await startTestRuntimeService(project, env);
+  if (start) services.push(await startTestRuntimeService(project, env));
   return { project, data, env, ledger: opened.path };
 }
 async function cliFailure(f: { project: string; env: NodeJS.ProcessEnv }, args: readonly string[]) {
