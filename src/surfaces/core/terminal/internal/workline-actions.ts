@@ -2,7 +2,7 @@ import type { WorkLedgerEntry, WorkLedgerWorkerEntry } from './work-ledger.js';
 import { WORK_LEDGER_SCHEMA_VERSION } from './work-ledger.js';
 import { fillTemplate, type WorkerLineLabels } from './worker-line.js';
 import type { WorkerPanelLabels } from './worker-panel.js';
-import { WORKLINE_SLASH_COMMANDS } from '#surfaces/core/terminal-kit/index.js';
+import { surfaceDeliveryValues, WORKLINE_SLASH_COMMANDS } from '#surfaces/core/terminal-kit/index.js';
 import type { WorklineLedgerPorts } from './workline-ledger.js';
 import { ledgerEntriesForRuns, ledgerEntriesForWorkers, ledgerEntryForRun } from './workline-ledger.js';
 
@@ -17,6 +17,11 @@ export interface WorklineActionLabels {
   readonly watchStarted: string;
   readonly watchRunsStarted: string;
   readonly watchStopped: string;
+  /** `{mode}` is `push` or `poll`. Present in production; tests omit it unless they assert the mark. */
+  readonly watchDelivery?: string;
+  /** `{status}` is `gap`, `backpressure` or `foreign-scope`. */
+  readonly watchStep?: string;
+  readonly watchPushFailed?: string;
   readonly statusLine: string;
   readonly unknownCommand: string;
   /** Worker live line, transcript, approvals and run control; absent means those commands are not offered. */
@@ -88,6 +93,8 @@ export interface WorklineActionContext {
   readonly labels: WorklineActionLabels;
   readonly watch: WatchState;
   readonly canRestartService?: boolean;
+  /** Poll interval used when the watch has no push port. The delivery line reports this timeout. */
+  readonly pollMs?: number;
 }
 
 /** Result of one slash command; the view applies it. Entries carry no identity: the ledger buffer assigns sequence ids. */
@@ -107,13 +114,14 @@ export function immediateSlashAction(command: string, context: WorklineActionCon
   if (command === 'exit' || command === 'quit') return { entries: [], exit: true };
   if (command === 'help') return { entries: [notice('info', helpLine())] };
   if (command === 'status' || command === 'chat-backend') return { entries: [notice('info', labels.statusLine)] };
-  if (command === 'watch-workers') {
-    if (!ledger) return { entries: [notice('error', labels.ledgerUnavailable)] };
-    return watch.workers ? { entries: [] } : { entries: [notice('info', labels.watchStarted)], watch: { ...watch, workers: true } };
-  }
-  if (command === 'watch-runs') {
-    if (!ledger?.listRunIds) return { entries: [notice('error', labels.ledgerUnavailable)] };
-    return watch.runs ? { entries: [] } : { entries: [notice('info', labels.watchRunsStarted)], watch: { ...watch, runs: true } };
+  if (command === 'watch-workers' || command === 'watch-runs') {
+    const runs = command === 'watch-runs';
+    if (!ledger || (runs && !ledger.listRunIds)) return { entries: [notice('error', labels.ledgerUnavailable)] };
+    if (runs ? watch.runs : watch.workers) return { entries: [] };
+    const mode = ledger.followEvents || (runs ? ledger.followRuns : ledger.followWorkers) ? 'push' as const : 'poll' as const;
+    const pace = context.pollMs ?? ledger.workerHeartbeatMs;
+    const delivery = labels.watchDelivery && pace !== undefined ? [notice('info', fillTemplate(labels.watchDelivery, surfaceDeliveryValues(mode, pace)))] : [];
+    return { entries: [notice('info', runs ? labels.watchRunsStarted : labels.watchStarted), ...delivery], watch: { ...watch, [runs ? 'runs' : 'workers']: true } };
   }
   if (command === 'watch-stop') {
     return watch.workers || watch.runs ? { entries: [notice('info', labels.watchStopped)], watch: { workers: false, runs: false } } : { entries: [] };

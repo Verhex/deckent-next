@@ -21,7 +21,7 @@ import { useConversationSession, type ConversationSessionLabels, type Conversati
 import { ArrowPicker } from '#surfaces/core/terminal-render/index.js';
 import { agentHistory, appendLedger, boundAgentHistory, compactLedger, EMPTY_LEDGER, plainChatHistory, type AgentChatMessage, type ChatTurnMessage, type LedgerBuffer } from './ledger-buffer.js';
 import { immediateSlashAction, notice, runLedgerCommand, type WatchState, type WorklineActionLabels } from './workline-actions.js';
-import { useSingleFlightPoll } from './use-poll.js';
+import { consumeSurfaceFollow, surfaceFollowLine, useSingleFlightPoll } from '#surfaces/core/terminal-kit/index.js';
 import { useWorkSurface } from './work-surface.js';
 import { Composer, type ComposerLabels } from '#surfaces/core/terminal-composer/index.js';
 import type { ComposerHistoryPort } from '#surfaces/core/terminal-composer/index.js';
@@ -161,7 +161,7 @@ export function WorklineApp(props: WorklineProps) {
   }, [push]);
   useEffect(() => {
     const follow = ledger?.followWorkers;
-    if (!watch.workers || !follow) return;
+    if (!watch.workers || !follow || ledger?.followEvents) return;
     const controller = new AbortController();
     let cancelled = false;
     void (async () => {
@@ -180,7 +180,7 @@ export function WorklineApp(props: WorklineProps) {
   }, [failed, ledger, push, watch.workers, work.observeWorkers]);
   useEffect(() => {
     const follow = ledger?.followRuns;
-    if (!watch.runs || !follow) return;
+    if (!watch.runs || !follow || ledger?.followEvents) return;
     const controller = new AbortController();
     let cancelled = false;
     void (async () => {
@@ -196,7 +196,7 @@ export function WorklineApp(props: WorklineProps) {
     })();
     return () => { cancelled = true; controller.abort(); };
   }, [failed, ledger, push, watch.runs]);
-  useSingleFlightPoll(watch.workers && Boolean(ledger) && !ledger?.followWorkers, pollMs, async current => {
+  useSingleFlightPoll(watch.workers && Boolean(ledger) && !ledger?.followWorkers && !ledger?.followEvents, pollMs, async current => {
     const workers = (await ledgerEntriesForWorkers(ledger!, 'watch')).filter(entry => entry.kind === 'worker');
     if (!current()) return;
     work.observeWorkers(workers);
@@ -204,13 +204,25 @@ export function WorklineApp(props: WorklineProps) {
     seenWorkers.current = seen;
     push(fresh);
   }, failed);
-  useSingleFlightPoll(watch.runs && Boolean(ledger?.listRunIds) && !ledger?.followRuns, pollMs, async current => {
+  useSingleFlightPoll(watch.runs && Boolean(ledger?.listRunIds) && !ledger?.followRuns && !ledger?.followEvents, pollMs, async current => {
     const runs = await loadRunViewsForWatch(ledger!);
     if (!current()) return;
     const { seen, fresh } = newRunLedgerEntries(seenRuns.current, runs, 'watch');
     seenRuns.current = seen;
     push(fresh);
   }, failed);
+  useEffect(() => {
+    const follow = ledger?.followEvents;
+    if (!follow) return undefined;
+    const controller = new AbortController();
+    let cancelled = false;
+    void consumeSurfaceFollow(follow(controller.signal), ledger.scopeId, pollMs, controller.signal, step => {
+      if (cancelled) return;
+      const text = surfaceFollowLine(step, watchRef.current, labels.watchStep);
+      if (text) push([notice(step.status === 'applied' ? 'info' : 'error', text)]);
+    }).catch(error => { if (!cancelled) push([notice('error', `${labels.watchPushFailed ?? labels.watchFailed}: ${errorText(error)}`)]); });
+    return () => { cancelled = true; controller.abort(); };
+  }, [errorText, labels.watchFailed, labels.watchPushFailed, labels.watchStep, ledger, push]);
 
   const runTurn = useCallback(async (text: string, mentioned: readonly string[] = []) => {
     push([chat('user', text)]);
@@ -311,7 +323,7 @@ export function WorklineApp(props: WorklineProps) {
       finally { setBusy(false); }
       return true;
     }
-    const action = immediateSlashAction(slash.command, { ledger, labels, watch: watchRef.current, canRestartService: Boolean(props.restartService) });
+    const action = immediateSlashAction(slash.command, { ledger, labels, watch: watchRef.current, canRestartService: Boolean(props.restartService), pollMs });
     // Quit before any setState: a render scheduled beside unmount leaves the TTY ref'd after a governed turn.
     if (action?.exit) { exit(); return false; }
     if (action) {
