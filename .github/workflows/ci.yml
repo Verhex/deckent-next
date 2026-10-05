@@ -65,6 +65,8 @@ jobs:
           npm run verify 2>&1 | tee .pack/ci-evidence/verify.log
         env:
           DECKENT_TEST_STARTUP_COST: '1'
+          # Hosted macOS/Windows per-test bound (main run 37285853079: six 30-54 s completions timed out at 30 s); Linux keeps 30 s.
+          DECKENT_TEST_TIMEOUT_MS: "${{ runner.os == 'Linux' && '30000' || '120000' }}"
       - name: Collect verification summary
         if: always()
         run: node scripts/ci-verification-summary.mjs
