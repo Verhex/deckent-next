@@ -82,5 +82,7 @@ export interface MonitorPorts {
   /** Rejects with a coded error; `LOCAL_RUNTIME_UNAVAILABLE` means no service is listening. */
   describeService(target: MonitorTarget): Promise<RuntimeServiceDescriptor>;
   observeScope(target: MonitorTarget, scopeId: string): Promise<MonitorScopeObservation>;
+  /** WORKER-AUTO-REFRESH: the install's worker image refresh status (updating / current / failed with a typed reason); absent port or `unknown` adds nothing. */
+  readImageRefresh?(target: MonitorTarget): Promise<Readonly<{ status: 'updating' | 'current' | 'failed' | 'unknown'; reason: string | null; imageVersion: string | null }>>;
   now(): number;
 }

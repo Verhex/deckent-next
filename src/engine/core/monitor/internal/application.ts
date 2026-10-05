@@ -31,8 +31,19 @@ export class MonitorApplication {
     for (const target of targets) installs.push(await this.install(target, observedAt));
     return Object.freeze({ schemaVersion: 1, observedAt, installs: Object.freeze(installs), control: 'observe-only' });
   }
+  /** Typed diagnostics, never an exception: `info:image-updating`, `info:image-current:<version>`, or the problem `image-refresh-failed:<reason>`. */
+  private async imageRefresh(target: MonitorTarget, diagnostics: string[]) {
+    if (!this.ports.readImageRefresh) return;
+    try {
+      const refresh = await this.ports.readImageRefresh(target);
+      if (refresh.status === 'updating') diagnostics.push('info:image-updating');
+      else if (refresh.status === 'current') diagnostics.push(`info:image-current:${refresh.imageVersion ?? ''}`);
+      else if (refresh.status === 'failed') diagnostics.push(`image-refresh-failed:${refresh.reason ?? 'UNKNOWN'}`);
+    } catch (error) { diagnostics.push('image-refresh-unreadable:' + code(error)); }
+  }
   private async install(target: MonitorTarget, observedAt: number): Promise<MonitorInstall> {
     const diagnostics: string[] = []; const serviceState = await service(this.ports, target, diagnostics);
+    await this.imageRefresh(target, diagnostics);
     let reading: MonitorLedgerReading;
     try { reading = await this.ports.readLedger(target); } catch (error) {
       diagnostics.push('ledger-unavailable:' + code(error));

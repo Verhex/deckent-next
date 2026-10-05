@@ -1,7 +1,7 @@
 import { setTimeout as wait } from 'node:timers/promises';
 import { readFile, mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
-import { loadConfig, prepareProductDirectory, writeJsonAtomic, type ConfigLoadOptions } from '#platform/index.js';
+import { loadConfig, inspectProductDirectory, prepareProductDirectory, writeJsonAtomic, type ConfigLoadOptions } from '#platform/index.js';
 import { refreshTriggerAllowed, toolchainRefreshStateSchema, reviseRegistryForProposal, type ToolchainRefreshState, type ToolchainRefreshTrigger } from '#engine/index.js';
 import { createConfiguredConfigApplication, resolveConfiguredConfigPrincipal } from '#composition/core/config/index.js';
 import { updateConfiguredToolchains, writeArtifact, type ToolchainUpdateDependencies } from './update.js';
@@ -21,7 +21,8 @@ async function toolchainHome(projectRoot: string, options: ConfigLoadOptions) {
 /** The durable refresh marker (null when none was ever written or it is unreadable). Admission, doctor and monitor read it; only the refresh writes it. */
 export async function readToolchainRefreshState(projectRoot: string, options: ConfigLoadOptions = {}): Promise<ToolchainRefreshState | null> {
   try {
-    const { home } = await toolchainHome(projectRoot, options);
+    // Read-only (monitor, admission, doctor): never creates a directory.
+    const home = join(await inspectProductDirectory((await loadConfig(projectRoot, options)).productLayout, 'workspaces'), 'toolchains');
     const parsed = toolchainRefreshStateSchema.safeParse(JSON.parse(await readFile(join(home, 'refresh-state.json'), 'utf8')));
     return parsed.success ? parsed.data : null;
   } catch { return null; }
