@@ -1,4 +1,13 @@
 {
+  "error.INSTALLATION_IDENTITY_RELOCATED": "The installation was copied, restored or moved, or has no machine binding. Commands are stopped. Choose explicitly: same installation (move/restore), keep identity and update binding: deckent init identity --keep; or new installation, generate a new installationId and preserve projects: deckent init identity --new.",
+  "error.INSTALLATION_IDENTITY_RESOLUTION_INVALID": "The installation identity choice is invalid or the current binding is already accepted. No identity was changed.",
+  "error.INSTALLATION_IDENTITY_INVALID": "The installation identity record is missing or invalid. Restore the original record from backup; no replacement identity was generated.",
+  "error.INSTALLATION_IDENTITY_UNAVAILABLE": "The installation identity could not be read or persisted safely. Check access to the installation metadata directory.",
+  "error.INSTALLATION_IDENTITY_LOCKED": "Another process is initializing the installation identity. Retry after it finishes.",
+  "error.INSTALLATION_IDENTITY_UNSUPPORTED": "Secure installation identity storage is unsupported on this platform. No identity was read or created.",
+  "error.PROJECT_IDENTITY_INVALID": "The project identity record is missing or invalid. Restore the original record from backup; no replacement identity was generated.",
+  "error.PROJECT_IDENTITY_UNAVAILABLE": "The project identity could not be read or persisted safely. Check access to the project metadata directory.",
+  "error.PROJECT_IDENTITY_LOCKED": "Another process is initializing the project identity. Retry after it finishes.",
   "acceptance.confirmation.confirmed": "Acceptance confirmation {confirmationId} was confirmed on the authenticated {surface} surface.",
   "acceptance.confirmation.reconciliation_hold": "Acceptance confirmation {confirmationId} is on reconciliation HOLD ({reason}). Resolve it on the authenticated {surface} surface.",
   "approval.broker_authority_pending": "Decision channel authority is pending; CLI: deckent approvals decide #{code}",

@@ -1,4 +1,11 @@
 {
+  "cli.help.action.identity": "Resolve a copied or restored installation identity",
+  "cli.help.identity": "Usage: deckent init identity --keep|--new [--json] [--lang en|tr]\n--keep: Same installation (move/restore): keep identity and update binding.\n--new: New installation: generate a new installationId; preserve projects.\nOnly an explicit choice updates the local identity record.",
+  "cli.identity.keep": "Same installation (move/restore): identity kept, binding updated",
+  "cli.identity.new": "New installation: new installationId, projects preserved",
+  "cli.identity.resolved": "{choice}\nPrevious installationId: {previous}\nCurrent installationId: {current}",
+  "terminal.status.installationId": "Installation identity: {installationId}",
+  "terminal.status.projectId": "Project identity: {projectId}",
   "cli.agent.delete.desc": "Delete an agent from the pool",
   "cli.agent.desc": "Manage agent pool",
   "cli.agent.disable.desc": "Disable an agent",

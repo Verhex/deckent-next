@@ -259,7 +259,8 @@
         "src/composition/core/secrets",
         "src/composition/core/monitor",
         "src/composition/core/config",
-        "src/composition/core/decision"
+        "src/composition/core/decision",
+        "src/composition/core/scoped-request"
       ],
       "plan": "SURFACES"
     },
@@ -307,6 +308,7 @@
     },
     "src/composition/core/mcp": {
       "dependencies": [
+        "src/composition/core/scoped-request",
         "src/composition/core/runs",
         "src/adapters/core/contract",
         "src/adapters/core/mcp-transport",
@@ -884,8 +886,20 @@
       ],
       "plan": "SURFACES"
     },
+    "src/surfaces/core/cli-installation": {
+      "dependencies": [
+        "src/domain/core/primitives",
+        "src/engine/core/installation",
+        "src/platform/core/config",
+        "src/platform/core/errors",
+        "src/platform/core/i18n",
+        "src/platform/core/output"
+      ],
+      "plan": "SURFACES"
+    },
     "src/surfaces/core/cli": {
       "dependencies": [
+        "src/surfaces/core/cli-installation",
         "src/engine/core/secret-store",
         "src/surfaces/core/terminal-labels",
         "src/surfaces/core/terminal-composer",
@@ -898,7 +912,6 @@
         "src/domain/core/provider-catalog",
         "src/domain/core/task-graph",
         "src/engine/core/dispatch",
-        "src/engine/core/installation",
         "src/engine/core/inference-serving",
         "src/engine/core/runs",
         "src/engine/core/runtime",
@@ -1017,7 +1030,14 @@
       "plan": "INSTALLATION"
     },
     "src/adapters/core/installation-files": {
-      "dependencies": [],
+      "dependencies": [
+        "src/domain/core/primitives",
+        "src/engine/core/installation",
+        "src/platform/core/managed-files",
+        "src/platform/core/host",
+        "src/platform/core/config",
+        "src/platform/core/utils"
+      ],
       "plan": "INSTALLATION"
     },
     "src/domain/core/provider-catalog": {
@@ -1102,6 +1122,7 @@
     },
     "src/composition/core/scoped-request": {
       "dependencies": [
+        "src/domain/core/primitives",
         "src/adapters/core/contract",
         "src/adapters/core/local-principal",
         "src/adapters/core/local-runtime-socket",
@@ -1110,7 +1131,10 @@
         "src/domain/core/policy",
         "src/engine/core/policy",
         "src/platform/core/config",
-        "src/platform/core/managed-files"
+        "src/platform/core/managed-files",
+        "src/adapters/core/installation-files",
+        "src/engine/core/installation",
+        "src/platform/core/errors"
       ],
       "plan": "PROVIDERS"
     },
