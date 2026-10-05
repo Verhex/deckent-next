@@ -1,0 +1,66 @@
+{
+  "schemaVersion": 1,
+  "ucdVersion": "17.0.0",
+  "emojiVersion": "17.0",
+  "cldrVersion": "48.2",
+  "cldrCommit": "11299982335beb974c1c63c45265184e759c0f41",
+  "assetSha256": "c81b40d719cfbe73963c630d4044ad03731c9fe42983042c92a0aafced708cd0",
+  "assetBytes": 124155,
+  "license": "Unicode-3.0",
+  "sources": [
+    {
+      "url": "https://www.unicode.org/Public/17.0.0/ucd/emoji/emoji-data.txt",
+      "bytes": 107324,
+      "sha256": "2cb2bb9455cda83e8481541ecf5b6dfda66a3bb89efa3fa7c5297eccf607b72b",
+      "file": "emoji-data-17.txt"
+    },
+    {
+      "url": "https://www.unicode.org/Public/17.0.0/ucd/emoji/emoji-variation-sequences.txt",
+      "bytes": 38315,
+      "sha256": "bb3d09ef03f206012c7532dd52dc0a21c9efddba0135ea4cf0d9201b8b9bba7e",
+      "file": "emoji-variation-sequences-17.txt"
+    },
+    {
+      "url": "https://www.unicode.org/Public/17.0.0/ucd/extracted/DerivedJoiningType.txt",
+      "bytes": 40635,
+      "sha256": "f39ebe974825d6736aee15582250307aa532b2cfab3caf3f86bd23fddc9c5c4d",
+      "file": "derived-joining-type-17.txt"
+    },
+    {
+      "url": "https://www.unicode.org/Public/17.0.0/ucd/extracted/DerivedCombiningClass.txt",
+      "bytes": 182705,
+      "sha256": "191463abfbd202703c6fd6776a92a23ac44ec65e0476a7f95aa91ca492cef29b",
+      "file": "derived-combining-class-17.txt"
+    },
+    {
+      "url": "https://www.unicode.org/Public/17.0.0/ucd/extracted/DerivedGeneralCategory.txt",
+      "bytes": 277514,
+      "sha256": "d62e5bab70ca74f099343f71224fa051cb1fdd61a1ab45c0488c44cfc0b6102e",
+      "file": "derived-general-category-17.txt"
+    },
+    {
+      "url": "https://www.unicode.org/license.txt",
+      "bytes": 1995,
+      "sha256": "e7a93b009565cfce55919a381437ac4db883e9da2126fa28b91d12732bc53d96",
+      "file": "license-unicode.txt"
+    },
+    {
+      "url": "https://raw.githubusercontent.com/unicode-org/cldr/11299982335beb974c1c63c45265184e759c0f41/common/validity/region.xml",
+      "bytes": 1905,
+      "sha256": "e751e0eedd46b52c38f3cdb72b0fab61ac8b48e052e8b28ba74b6ac26c4c8cb1",
+      "file": "cldr-region-48-2.xml"
+    },
+    {
+      "url": "https://raw.githubusercontent.com/unicode-org/cldr/11299982335beb974c1c63c45265184e759c0f41/common/validity/subdivision.xml",
+      "bytes": 22807,
+      "sha256": "93b12c9d55938266c96d44a7ccbb66800afeef4f9dd48b0dc16edfab89833d95",
+      "file": "cldr-subdivision-48-2.xml"
+    },
+    {
+      "url": "https://www.unicode.org/Public/17.0.0/ucd/IndicSyllabicCategory.txt",
+      "bytes": 86695,
+      "sha256": "3fc122f4cf58b0c19268d5f810263b04ab4e1e67743386ec0e0ada9c76aec5be",
+      "file": "indic-syllabic-category-17.txt"
+    }
+  ]
+}
