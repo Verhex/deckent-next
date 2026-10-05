@@ -2,7 +2,8 @@
 // Permanent size guard for the single-source-of-truth documents (owner 2026-10-05): PLAN.md stays a short
 // working document; detail lives in .deckent/docs/. Limits are deliberately loose guard rails, not targets.
 import { readFileSync } from 'node:fs';
-const ROOT = new URL('..', import.meta.url).pathname;
+import { fileURLToPath } from 'node:url';
+const ROOT = fileURLToPath(new URL('..', import.meta.url));
 const LIMITS = { planBytes: 60 * 1024, planLineChars: 800, architectureLines: 1200 };
 const read = (name) => readFileSync(ROOT + name, 'utf8');
 const failures = [];

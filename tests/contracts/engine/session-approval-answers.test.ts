@@ -2,12 +2,19 @@ import { randomBytes } from 'node:crypto';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { openSqliteApprovalStore, LocalOsSessionAuthority } from '#adapters/index.js';
 import { ApprovalApplication, SessionApprovalAnswers, SessionStanding, approvalCommandSchema, approvalRenewalSchema, approvalCommandFingerprint,
   requestAgentToolApproval, requestTaskApproval, agentToolApprovalFacts, sessionApprovalResultSchema, acceptSessionStandingClearance, OperationApprovalBroker } from '#engine/index.js';
 import type { ApprovalRecord } from '#domain/index.js';
 import { createHmacIntegrity } from '#platform/index.js';
+
+beforeEach(async context => {
+  if (process.platform === 'linux') return;
+  await expect(LocalOsSessionAuthority.create(['scope'], 60000, { sample: () => ({ wallMs: Date.now(), monotonicMs: 0 }) }))
+    .rejects.toThrow('SESSION_REQUIRED');
+  context.skip('SESSION_REQUIRED: local process session evidence requires Linux /proc; real refusal verified');
+});
 
 const cleanups: Array<() => Promise<void>> = [];
 afterEach(async () => { for (const close of cleanups.splice(0)) await close(); });

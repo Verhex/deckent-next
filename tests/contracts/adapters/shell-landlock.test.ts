@@ -233,7 +233,8 @@ describe.skipIf(kernelAbi < 1)('Landlock realm, real kernel and real bash (S11 a
       const scope = await createWorkspaceScope(root);
       const resolution = resolveShellRealm('prefer-sandbox', caps(kernelAbi), [landlockShellSandbox({ project: scope, scratchDir: scratch })]);
       if (!resolution.ok) throw new Error('realm expected');
-      const ran = await resolution.realm.run({ command: `for p in ${aliases.map(alias => `'${alias}'`).join(' ')}; do cat "$p" 2>&1; echo x >> "$p" 2>&1; echo "w=$?"; done; git status --short; echo "status=$?"; git log --oneline -1 | wc -l`,
+      // One pipe preserves shell write order, including redirection failures, before the exact suffix assertion.
+      const ran = await resolution.realm.run({ command: `exec 2>&1; for p in ${aliases.map(alias => `'${alias}'`).join(' ')}; do cat "$p" 2>&1; echo x >> "$p" 2>&1; echo "w=$?"; done; git status --short; echo "status=$?"; git log --oneline -1 | wc -l`,
         cwd: scope.root, environment: { PATH: '/usr/bin:/bin' }, fixedEnv: { TMPDIR: scratch }, timeoutMs: 60_000 });
       expect(ran.output, root).not.toContain('ALIAS_SECRET');
       expect(ran.output.match(/Permission denied/gu)?.length, root).toBe(aliases.length * 2); expect(ran.output.match(/w=1/gu)?.length, root).toBe(aliases.length);

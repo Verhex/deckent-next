@@ -134,7 +134,9 @@ it.for([1, 2])('configured driver shares execution cap=%s and drains both reserv
       const opened = await openConfiguredAttemptStore(f.project, { env: f.env });
       try { return ((await opened.store.loadRun('s', 'a'))!.bindings.length + (await opened.store.loadRun('s', 'b'))!.bindings.length); } finally { opened.store.close(); }
     }).toBe(2);
-    await new Promise(resolve => setTimeout(resolve, 25));
+    // A durable reservation precedes execution admission; join the second start when capacity allows it.
+    if (cap === 2) await bounded(second.promise);
+    else await new Promise(resolve => setTimeout(resolve, 25));
     expect(starts).toHaveLength(cap);
     if (cap === 1) { gates[0]!.resolve(); await bounded(second.promise); }
     const stopping = lifecycle.stop(2000); let settled = false; void stopping.then(() => { settled = true; });
