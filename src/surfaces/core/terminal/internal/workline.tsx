@@ -134,10 +134,10 @@ export function WorklineApp(props: WorklineProps) {
   const pollMs = props.pollMs ?? ledger?.workerHeartbeatMs ?? 5000;
   const workRef = useRef<ReturnType<typeof useWorkSurface> | null>(null), activeWorkers = useRef(false);
   const pushMode = useSurfacePushFeed(ledger?.followEvents, ledger?.scopeId ?? '', pollMs, step => {
-    if (step.status === 'denied') workRef.current?.observeWorkers([]);
+    if (step.status === 'denied' || step.status === 'not-initialized') workRef.current?.observeWorkers([]);
     // With snapshots, publications are invalidations, never a substitute for typed surface state.
     if (ledger?.readSurfaceSnapshot && step.status === 'applied') return;
-    const text = surfaceFollowLine(step, watchRef.current, labels.watchStep, step.status === 'denied' && step.stopped ? labels.watchAccessStopped : labels.watchAccessDenied);
+    const text = surfaceFollowLine(step, watchRef.current, labels.watchStep, step.status === 'denied' && step.stopped ? labels.watchAccessStopped : labels.watchAccessDenied, labels.watchNotInitialized);
     if (text) push([notice(step.status === 'applied' ? 'info' : 'error', text)]);
   }, mode => { if (labels.watchDelivery) push([notice('info', fillTemplate(labels.watchDelivery, surfaceDeliveryValues(mode, pollMs)))]); },
   ledger?.readSurfaceSnapshot ? async (kinds, signal) => {

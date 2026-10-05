@@ -72,7 +72,7 @@ export function useSurfacePushFeed(
   refreshKey = '',
   liveWorkers?: { readonly heartbeatMs: number; readonly active: () => boolean },
 ): SurfaceDeliveryMode {
-  const deniedSource = useRef<{ follow: typeof follow; scopeId: string } | null>(null);
+  const stoppedSource = useRef<{ follow: typeof follow; scopeId: string; mode: 'denied' | 'not-initialized' } | null>(null);
   const [mode, setMode] = useState<SurfaceDeliveryMode>(follow ? 'push' : 'poll');
   const refreshRef = useRef(refresh); refreshRef.current = refresh;
   const workersRef = useRef(liveWorkers); workersRef.current = liveWorkers;
@@ -84,8 +84,8 @@ export function useSurfacePushFeed(
   const hasRefresh = Boolean(refresh);
   useEffect(() => {
     if (!follow || scopeId.length === 0) { setMode('poll'); return undefined; }
-    if (deniedSource.current?.follow === follow && deniedSource.current.scopeId === scopeId) { setMode('denied'); return undefined; }
-    const deny = () => { deniedSource.current = { follow, scopeId }; setMode('denied'); };
+    if (stoppedSource.current?.follow === follow && stoppedSource.current.scopeId === scopeId) { setMode(stoppedSource.current.mode); return undefined; }
+    const stop = (mode: 'denied' | 'not-initialized') => { stoppedSource.current = { follow, scopeId, mode }; setMode(mode); };
     const session = createSurfaceFollowSession();
     const controller = new AbortController();
     let stopped = false;
@@ -95,7 +95,7 @@ export function useSurfacePushFeed(
     const observe = (step: SurfacePushStep) => {
       if (stopped || controller.signal.aborted) return;
       if (step.status === 'denied' && step.kinds.includes('worker')) clearHeartbeat();
-      if (step.status === 'denied' && step.stopped) { clearHeartbeat(); deny(); controller.abort(); }
+      if (step.status === 'not-initialized' || (step.status === 'denied' && step.stopped)) { clearHeartbeat(); stop(step.status); controller.abort(); }
       stepRef.current(step);
     };
     const schedule = () => {
@@ -124,7 +124,7 @@ export function useSurfacePushFeed(
         try {
           const outcome = await session.read(follow(controller.signal), scopeId, pace, controller.signal, observe, hasRefresh ? synchronize : undefined);
           if (stopped || outcome === 'abort' || controller.signal.aborted) return;
-          if (outcome === 'denied') { deny(); return; }
+          if (outcome === 'denied' || outcome === 'not-initialized') { stop(outcome); return; }
         } catch { if (stopped || controller.signal.aborted) return; }
         if (stopped || controller.signal.aborted) return;
         clearHeartbeat();
@@ -137,7 +137,7 @@ export function useSurfacePushFeed(
             if (stopped || controller.signal.aborted) return;
             if (denied.length) {
               stepRef.current({ status: 'denied', access: 'denied', scopeId, kinds: denied, stopped: true, state: openSurfacePush(), wait: surfaceWait('refuse-scope', pace) });
-              deny(); return;
+              stop('denied'); return;
             }
           } catch { if (stopped || controller.signal.aborted) return; }
         }

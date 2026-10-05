@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { createWorklineLedgerPorts } from '#surfaces/core/cli/index.js';
 import { openConfiguredAttemptStore } from '#composition/core/storage/index.js';
+import { ensureConfiguredTerminalIdentity } from '#composition/core/scoped-request/index.js';
 import { configuredApproval } from '#composition/core/approvals/index.js';
 import { inspectConfiguredRun } from '#composition/core/runs/index.js';
 import { inspectConfiguredWorkers } from '#composition/core/worker-observation/index.js';
@@ -37,6 +38,7 @@ export async function surfaceSnapshotFixture(initialWorker = true) {
   const setGrants = async (ids = grants.map(grant => grant.id), foreign = false) => writeFile(policy, JSON.stringify({ schemaVersion: 1, revision: 'unchanged', restrictions: [],
     grants: grants.filter(grant => ids.includes(grant.id)).map(grant => ({ ...grant, effect: 'allow', scopes: ['s'], principals: [foreign ? { issuer: 'foreign', subject: 'foreign' } : principal] })) }), { mode: 0o600 });
   await setGrants();
+  await ensureConfiguredTerminalIdentity(folder, 's', options);
   const store = await openSqliteAttemptStore(opened.path, sqlite, { now: Date.now, timeoutMs: 86400000 }, 'forbid', custodyProfiles);
   const identity = { scopeId: 's', runId: 'snapshot-run', taskId: 'snapshot-task', attemptId: 'snapshot-attempt', generation: 1, layoutRevision: opened.layout.revision };
   const claimWorker = async () => {

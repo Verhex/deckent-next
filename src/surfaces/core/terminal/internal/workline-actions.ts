@@ -2,7 +2,7 @@ import type { WorkLedgerEntry, WorkLedgerWorkerEntry } from './work-ledger.js';
 import { WORK_LEDGER_SCHEMA_VERSION } from './work-ledger.js';
 import { fillTemplate, type WorkerLineLabels } from './worker-line.js';
 import type { WorkerPanelLabels } from './worker-panel.js';
-import { slashHelpText, surfaceDeliveryValues, WORKLINE_SLASH_COMMANDS } from '#surfaces/core/terminal-kit/index.js';
+import { slashHelpText, surfaceDeliveryValues, WORKLINE_SLASH_COMMANDS, type SurfaceDeliveryMode } from '#surfaces/core/terminal-kit/index.js';
 import type { WorklineLedgerPorts } from './workline-ledger.js';
 import { ledgerEntriesForRuns, ledgerEntriesForWorkers, ledgerEntryForRun } from './workline-ledger.js';
 
@@ -22,7 +22,7 @@ export interface WorklineActionLabels {
   /** `{status}` is `gap`, `backpressure` or `foreign-scope`. */
   readonly watchStep?: string;
   readonly watchPushFailed?: string;
-  readonly watchAccessDenied?: string;
+  readonly watchNotInitialized?: string; readonly watchAccessDenied?: string;
   readonly watchAccessStopped?: string;
   readonly statusLine: string;
   readonly unknownCommand: string;
@@ -95,7 +95,7 @@ export function isWorkSurfaceCommand(command: string): command is WorkSurfaceCom
 export type WatchState = Readonly<{ workers: boolean; runs: boolean }>;
 
 export interface WorklineActionContext {
-  readonly followDelivery?: 'push' | 'poll' | 'denied';
+  readonly followDelivery?: SurfaceDeliveryMode;
   readonly ledger: WorklineLedgerPorts | undefined;
   readonly labels: WorklineActionLabels;
   readonly watch: WatchState;

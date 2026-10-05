@@ -1,7 +1,7 @@
 import { resolve } from 'node:path';
 import { loadConfig, SystemTrustedClock, type ConfigLoadOptions } from '#platform/index.js';
 import { listSurfaceRunIds, prepareMonitorInstall, registerProviderConfig, followLedgerSurface as readLedgerSurface } from '#adapters/index.js';
-import { MonitorApplication, authorizeApproval, type MonitorSnapshot, type WorkerObservation, type WorkerObservationSource } from '#engine/index.js';
+import { MonitorApplication, authorizeApproval, type SurfaceNotInitialized, type MonitorSnapshot, type WorkerObservation, type WorkerObservationSource } from '#engine/index.js';
 import { inspectConfiguredWorkers } from '#composition/core/worker-observation/index.js';
 import { createConfiguredRuntimeClient } from '#composition/core/runtime-service/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
@@ -11,13 +11,14 @@ const DENIED = new Set(['POLICY_DENIED', 'POLICY_APPROVAL_UNSUPPORTED', 'SCOPE_U
 async function authorizeSurfaceRead(root: string, scopeId: string, options: ConfigLoadOptions) { try {
       const c = await loadConfiguredScopeContext(root, scopeId, { ...options, force: true }, 'read'), auth = contextDispatchAuthorization(c, c.document);
       const output = await granted(() => auth.authorizeScopeReadOutput(scopeId, c.principal)), approval = await granted(async () => { authorizeApproval(c.document, 'inspect', scopeId, scopeId, c.principal); });
-      if (!output && !approval) return null; const ledger = await c.path(), binding = JSON.stringify([c.config.company.id, ledger, c.principal.issuer, c.principal.subject]);
+      if (!output && !approval) return null; if (c.identity.installation.status === 'unavailable' && c.identity.installation.reason === 'not-created') return { access: 'not-initialized', scopeId, stopped: true } satisfies SurfaceNotInitialized;
+      const ledger = await c.path(), binding = JSON.stringify([c.config.company.id, ledger, c.principal.issuer, c.principal.subject]);
       return { config: c.config, ledger, binding, scopeId, kinds: [...(output ? ['run', 'worker'] as const : []), ...(approval ? ['approval'] as const : [])] };
   } catch { return null; } }
 export async function* followLedgerSurface(root: string, scopeId: string, options: ConfigLoadOptions, signal: AbortSignal, onReady?: () => void) {
   if (signal.aborted) return; const authorize = () => authorizeSurfaceRead(root, scopeId, options), initial = await authorize();
-  if (!initial) { yield { access: 'denied' as const, scopeId, kinds: ['approval', 'run', 'worker'] as const, stopped: true }; return; }
-  yield* readLedgerSurface(initial, authorize, signal, onReady); }
+  if (!initial) { yield { access: 'denied' as const, scopeId, kinds: ['approval', 'run', 'worker'] as const, stopped: true }; return; } if ('access' in initial) { yield initial; return; }
+  yield* readLedgerSurface(initial, async () => { const current = await authorize(); return current && !('access' in current) ? current : null; }, signal, onReady); }
 export async function inspectMonitor(root: string, options: ConfigLoadOptions = {}): Promise<MonitorSnapshot> {
   registerProviderConfig(); const config = await loadConfig(root, { ...options, heal: false }).catch(error => { throw queryFailure(error); });
   const targets = [{ id: 'current', path: resolve(root) }, ...config.inspection.workers.sources.filter(source => source.kind === 'next-project')
@@ -45,6 +46,5 @@ export async function inspectMonitor(root: string, options: ConfigLoadOptions = 
         const c = await scope(target.path, scopeId); authorizeApproval(c.document, 'inspect', scopeId, scopeId, c.principal); }) };
     } }).inspect(targets);
 }
-/** Snapshot reads use the stream's fresh collection admission. */
-export async function inspectSurfaceAccess(root: string, scopeId: string, options: ConfigLoadOptions) { const read = await authorizeSurfaceRead(root, scopeId, options); return read ? { binding: read.binding, kinds: read.kinds } : null; }
-export async function inspectSurfaceRunIds(root: string, scopeId: string, options: ConfigLoadOptions) { const read = await authorizeSurfaceRead(root, scopeId, options); return read?.kinds.includes('run') ? listSurfaceRunIds(read) : []; }
+/** Snapshot reads use the stream's fresh collection admission. */ export async function inspectSurfaceAccess(root: string, scopeId: string, options: ConfigLoadOptions) { const read = await authorizeSurfaceRead(root, scopeId, options); return read && !('access' in read) ? { binding: read.binding, kinds: read.kinds } : null; }
+export async function inspectSurfaceRunIds(root: string, scopeId: string, options: ConfigLoadOptions) { const read = await authorizeSurfaceRead(root, scopeId, options); return read && !('access' in read) && read.kinds.includes('run') ? listSurfaceRunIds(read) : []; }
