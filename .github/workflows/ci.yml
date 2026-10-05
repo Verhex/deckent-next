@@ -39,6 +39,13 @@ jobs:
         id: docker_fixture
         if: runner.os == 'Linux'
         run: bash scripts/ci-docker-fixture.sh
+      - name: Restore locked bubblewrap downloads (Linux)
+        id: bwrap_cache
+        if: runner.os == 'Linux'
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .pack/bwrap/cache
+          key: bwrap-${{ hashFiles('packaging/bwrap/bwrap.lock.json') }}
       - name: Build and stage the locked bundled bubblewrap (Linux)
         id: bubblewrap
         if: runner.os == 'Linux'
@@ -46,6 +53,12 @@ jobs:
           node scripts/build-bwrap.mjs --arch x86_64 --out "$RUNNER_TEMP/bwrap-x86_64"
           node scripts/build-bwrap.mjs --stage-dev "$RUNNER_TEMP/bwrap-x86_64"
           echo "DECKENT_GLOBAL_HOME=$RUNNER_TEMP/deckent-global" >> "$GITHUB_ENV"
+      - name: Save verified bubblewrap downloads before tests (Linux)
+        if: runner.os == 'Linux' && steps.bwrap_cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .pack/bwrap/cache
+          key: ${{ steps.bwrap_cache.outputs.cache-primary-key }}
       - name: Prove the built product selects bubblewrap before tests (Linux)
         id: shell_realm
         if: runner.os == 'Linux'
