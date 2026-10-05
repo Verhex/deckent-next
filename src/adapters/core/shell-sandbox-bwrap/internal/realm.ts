@@ -141,6 +141,33 @@ async function canPinAncestors(view: BubblewrapView): Promise<string | null> {
   return null;
 }
 
+type ListedEntries = readonly { readonly name: string; isSymbolicLink(): boolean; isDirectory(): boolean }[];
+/**
+ * SANDBOX-AD-SIZINTISI (top-20 #6): whether a directory holds the product's state and nothing of the project's own, so it can be one empty
+ * read-only tmpfs instead of a row of per-entry masks: a `/dev/null` mask keeps the entry's name (`ledger.db`, `runtime.sock`, `backups`) listed,
+ * and the names alone tell a command what the installation keeps. Every present entry must be denied (file or tree) or itself such a directory
+ * (`state` beside denied siblings), a protected anchor must lie beneath, and no entry may be a symbolic link (a chain through one keeps its
+ * refusal). One entry that is the project's own (an owner-Y `docs`, the readable configuration) keeps the per-entry masks. Never narrows a mask:
+ * what was hidden still is, and nothing can be written there. The walk's entry budget is charged for every listing read here.
+ */
+async function holdsProductStateOnly(input: { readonly dir: string; readonly rel: string; readonly names: ListedEntries; readonly depth: number;
+  readonly denied: (rel: string) => boolean; readonly protectedBeneath: (rel: string) => boolean; readonly list: (path: string) => ListedEntries | Promise<ListedEntries>;
+  readonly count: (entries: number) => boolean }): Promise<boolean> {
+  const { dir, rel, names, depth } = input;
+  if (rel === '' || names.length === 0 || depth > MAX_DEPTH || !input.protectedBeneath(rel)) return false;
+  for (const entry of names) {
+    if (entry.isSymbolicLink()) return false;
+    const entryRel = `${rel}/${entry.name}`;
+    if (input.denied(entryRel) || input.denied(`${entryRel}/`)) continue;
+    if (!entry.isDirectory() || !input.protectedBeneath(entryRel)) return false;
+    const path = join(dir, entry.name);
+    let inner: ListedEntries;
+    try { inner = await input.list(path); } catch { return false; }
+    if (!input.count(inner.length) || !await holdsProductStateOnly({ ...input, dir: path, rel: entryRel, names: inner, depth: depth + 1 })) return false;
+  }
+  return true;
+}
+
 /**
  * Resolves the sandbox's view for a layout: the deny floor is enumerated from the project root (no symlink is followed or masked;
  * `BASELINE`-ignored directories such as `node_modules` and `dist` are not entered), every `.git` becomes read-only, HOME comes
@@ -176,9 +203,9 @@ export async function resolveBubblewrapView(layout: ShellSandboxLayout, environm
   const floored = write.floorReadOnly && layout.writeFloor ? layout.writeFloor : () => false;
   const root = layout.project.root;
   const openFloor = seal?.ok && !write.floorReadOnly && layout.writeFloor ? (rel: string) => seal.sealed.some(sealed => under(join(root, rel), sealed)) && layout.writeFloor!(rel) : () => false;
-  const readOnly = new Set<string>(), writable = new Set<string>(), maskedDirectories: string[] = [], maskedFiles: string[] = [];
+  const readOnly = new Set<string>(), writable = new Set<string>(), maskedDirectories: string[] = [], maskedFiles: string[] = [], emptied: string[] = [];
   let entries = 0, gitEntries = 0;
-  const overMasks = () => maskedDirectories.length + maskedFiles.length > BUBBLEWRAP_MASK_MAX ? `deny masks over their bound (${BUBBLEWRAP_MASK_MAX})` : null;
+  const overMasks = () => maskedDirectories.length + maskedFiles.length + emptied.length > BUBBLEWRAP_MASK_MAX ? `deny masks over their bound (${BUBBLEWRAP_MASK_MAX})` : null;
   /**
    * The inode floor over Git metadata (Astra 2156): a `.git` tree or a worktree's common repository is bound read-only, but read-only
    * does not hide another name of a protected inode, so every regular file with more than one link inside it is masked, an unreadable
@@ -226,9 +253,12 @@ export async function resolveBubblewrapView(layout: ShellSandboxLayout, environm
   const anchors = [...layout.project.protectedAnchors];
   const onChain = (rel: string) => anchors.some(path => path === rel || path.startsWith(`${rel}/`));
   const hasProtectedBeneath = (rel: string) => anchors.some(path => path.startsWith(`${rel}/`));
+  const stateOnly = (dir: string, rel: string, names: ListedEntries, depth: number) => holdsProductStateOnly({ dir, rel, names, depth, denied: layout.project.denied,
+    protectedBeneath: hasProtectedBeneath, list: path => fsOps(path).readdir(path), count: n => (entries += n) <= maxEntries });
   const walkProtected = async (dir: string, rel: string, depth: number): Promise<string | null> => {
     let names;
     try { names = await fsOps(dir).readdir(dir); } catch { maskedDirectories.push(dir); return null; }
+    if (await stateOnly(dir, rel, names, depth)) { entries += names.length; if (entries > maxEntries) return `deny walk over its bound (${maxEntries} entries)`; emptied.push(dir); return overMasks(); }
     for (const entry of names) {
       if (++entries > maxEntries) return `deny walk over its bound (${maxEntries} entries)`;
       const over = overMasks(); if (over) return over;
@@ -247,6 +277,7 @@ export async function resolveBubblewrapView(layout: ShellSandboxLayout, environm
     const ops = fsOps(dir);
     try { names = await ops.readdir(dir); }
     catch { if (rel === '') return 'the project root could not be read'; maskedDirectories.push(dir); return null; }
+    if (await stateOnly(dir, rel, names, depth)) { entries += names.length; if (entries > maxEntries) return `deny walk over its bound (${maxEntries} entries)`; emptied.push(dir); return overMasks(); }
     // Link counts of this directory's regular files (a failed read masks): read synchronously on a local file system, concurrently
     // through the thread pool otherwise.
     const links = new Map(await Promise.all(names.filter(entry => entry.isFile()).map(async entry =>
@@ -309,13 +340,13 @@ export async function resolveBubblewrapView(layout: ShellSandboxLayout, environm
     if (refusedHome) return { ok: false, reason: refusedHome };
     const over = overMasks(); if (over) return { ok: false, reason: over };
     const view: BubblewrapView = Object.freeze({ projectRoot: root, open: { sealed: seal.sealed, hidden: seal.hidden }, scratchDir, home: homeDir, systemPaths: [], toolchainPaths: [],
-      readOnlyPaths: [...readOnly], ...(writable.size ? { writablePaths: [...writable] } : {}), maskedDirectories, maskedFiles });
+      readOnlyPaths: [...readOnly], ...(writable.size ? { writablePaths: [...writable] } : {}), maskedDirectories, maskedFiles, ...(emptied.length ? { emptiedDirectories: emptied } : {}) });
     const refusedPins = await canPinAncestors(view);
     return refusedPins ? { ok: false, reason: refusedPins } : { ok: true, view };
   }
   const toolchainPaths = await toolchainOf(environment['PATH'], { enclosed: [root, ...(scratchDir ? [scratchDir] : [])], home: homeDir });
   const view: BubblewrapView = Object.freeze({ projectRoot: root, ...(overlay ? { overlay } : write.projectReadOnly ? { projectReadOnly: true } : {}), scratchDir, home: homeDir,
-    systemPaths: BUBBLEWRAP_SYSTEM_PATHS, toolchainPaths, readOnlyPaths: [...readOnly], ...(writable.size ? { writablePaths: [...writable] } : {}), maskedDirectories, maskedFiles });
+    systemPaths: BUBBLEWRAP_SYSTEM_PATHS, toolchainPaths, readOnlyPaths: [...readOnly], ...(writable.size ? { writablePaths: [...writable] } : {}), maskedDirectories, maskedFiles, ...(emptied.length ? { emptiedDirectories: emptied } : {}) });
   // R7 follow-up: a closed view with a writable project pins the in-project ancestors of its masks and read-only paths too.
   const refusedPins = await canPinAncestors(view);
   return refusedPins ? { ok: false, reason: refusedPins } : { ok: true, view };

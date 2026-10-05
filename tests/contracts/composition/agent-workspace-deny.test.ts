@@ -76,11 +76,14 @@ describe('agent workspace deny: the product state of a data root inside the proj
     const p = await project();
     const view = await resolveBubblewrapView({ project: p.scope, scratchDir: null }, { PATH: '/usr/bin:/bin' });
     expect(view.ok).toBe(true); if (!view.ok) return;
-    const masked = [...view.view.maskedDirectories, ...view.view.maskedFiles];
+    const masked = [...view.view.maskedDirectories, ...view.view.maskedFiles, ...view.view.emptiedDirectories ?? []];
+    // SANDBOX-AD-SIZINTISI: a directory that holds product state only is one empty tmpfs (its entries' names are not listed), so a path is
+    // protected when it or a directory above it is masked.
+    const covered = (path: string) => masked.some(mask => path === mask || path.startsWith(`${mask}/`));
     for (const path of ['state/terminal-sessions', 'state/ledger.db', 'state/ledger.db-wal', 'policy.json', 'audit', 'approvals', 'workspaces']) {
-      expect(masked, path).toContain(join(p.scope.root, ...DATA.split('/'), ...path.split('/')));
+      expect(covered(join(p.scope.root, ...DATA.split('/'), ...path.split('/'))), path).toBe(true);
     }
-    expect(masked).not.toContain(join(p.scope.root, '.deckent', 'config.json'));
+    expect(covered(join(p.scope.root, '.deckent', 'config.json'))).toBe(false);
     const built = await buildLandlockRules({ project: p.scope, scratchDir: null });
     expect(built.ok).toBe(true); if (!built.ok) return;
     const ruled = built.rules.map(([, path]) => path);
@@ -104,6 +107,30 @@ describe('agent workspace deny: the product state of a data root inside the proj
     expect(result.output).not.toContain('PRODUCT-STATE'); expect(result.output).not.toContain('SERVICE-ANSWER');
     // The masked directory lists empty (a tmpfs): no other conversation's name.
     expect(result.output).not.toMatch(/^other-session\.json$/m);
+  });
+
+  // SANDBOX-AD-SIZINTISI (top-20 #6): a directory that holds product state only is an empty tmpfs, so not even the names of its entries
+  // (`ledger.db`, `runtime.sock`, `backups`) are listed; a directory that also holds the project's own files keeps per-entry masks, and the
+  // project's own `.deckent/docs` stays writable (owner 2026-09-30 Y).
+  it.skipIf(!sandboxReady)('lists no product state name inside a state-only directory, keeps the project own files and .deckent/docs readable and writable, and lands no write on the host state', async () => {
+    const p = await project();
+    await mkdir(join(p.root, '.deckent', 'docs'), { recursive: true }); await writeFile(join(p.root, '.deckent', 'docs', 'a.md'), 'doc\n');
+    const usable = bubblewrapShellSandbox({ project: p.scope, scratchDir: null }).usable(capabilities);
+    expect(usable.ok).toBe(true); if (!usable.ok) return;
+    const result = await usable.realm.run({ command: `echo "state=[$(ls -A ${DATA}/state | tr '\\n' ' ')]"; echo "backups=[$(ls -A ${DATA}/state/backups 2>&1 | tr '\\n' ' ')]";`
+      + ` cat ${DATA}/state/ledger.db 2>&1; echo "ledger=$?"; echo planted > ${DATA}/state/planted.txt; echo "plant=$?"; cat ${DATA}/notes.txt;`
+      + ` cat ${DATA}/policy.json 2>&1; echo "policy=$?"; echo new > .deckent/docs/b.md; echo "docs=$?"; cat .deckent/docs/a.md`,
+    cwd: p.scope.root, environment: { PATH: '/usr/bin:/bin', HOME: p.base, USERPROFILE: p.base }, fixedEnv: {}, timeoutMs: 20_000 });
+    const lines = result.output.split('\n');
+    expect(lines).toContain('state=[]');
+    expect(result.output).not.toMatch(/ledger-1\.db|terminal-sessions|file-effects|terminal-history|runtime-service/u);
+    expect(result.output).not.toContain('PRODUCT-STATE');
+    expect(lines).toContain('ledger=1'); expect(lines).toContain('policy=1');
+    expect(lines).toContain('ordinary data file'); expect(lines).toContain('docs=0'); expect(lines).toContain('doc');
+    expect(await readFile(join(p.root, '.deckent', 'docs', 'b.md'), 'utf8')).toBe('new\n');
+    // The state directory of the host is unchanged: the write landed in the sandbox's own tmpfs and ended with the call.
+    await expect(readFile(join(p.data, 'state', 'planted.txt'), 'utf8')).rejects.toMatchObject({ code: 'ENOENT' });
+    expect(await readFile(join(p.data, 'state', 'ledger.db'), 'utf8')).toBe('PRODUCT-STATE state/ledger.db\n');
   });
 });
 
@@ -142,7 +169,7 @@ describe.skipIf(!sandboxReady || capabilities.landlock.status !== 'available')('
         await rm(join(p.root, 'src', 'made.txt')); await rm(join(p.scratch, 's.txt'));
       }
       const view = await resolveBubblewrapView(p.sandbox, environment);
-      expect(view.ok && view.view.maskedFiles).toContain(p.ledger);
+      expect(view.ok && [...view.view.maskedFiles, ...view.view.maskedDirectories, ...view.view.emptiedDirectories ?? []].some(mask => p.ledger === mask || p.ledger.startsWith(`${mask}/`))).toBe(true);
       const rules = await buildLandlockRules(p.sandbox);
       expect(rules.ok && rules.rules.some(([cls, path]) => cls === 'w' && (path === '.' || p.rel.startsWith(`${path}/`)))).toBe(false);
     });

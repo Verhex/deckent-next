@@ -28,6 +28,10 @@ export interface BubblewrapView {
   readonly writablePaths?: readonly string[];
   /** Denied directories inside the project: an empty tmpfs in their place. */
   readonly maskedDirectories: readonly string[];
+  /** Directories inside the project that hold the product's state and nothing of the project's own: an empty read-only tmpfs in their place, so
+   * neither their content nor the names of their entries are visible and nothing can be created in them (SANDBOX-AD-SIZINTISI). Remounted
+   * read-only after every other mount, like a hidden root; the scratch area's mount point inside one is made first and stays writable. */
+  readonly emptiedDirectories?: readonly string[];
   /** Denied files inside the project: `/dev/null` bound read-only in their place. A plain (non-device) bind carries `nodev`, so the
    * file opens with EACCES either way: no bytes are readable, no write lands; it is protected, not absent. */
   readonly maskedFiles: readonly string[];
@@ -73,6 +77,7 @@ function viewMounts(view: BubblewrapView): ViewMount[] {
   for (const path of view.writablePaths ?? []) add(path, ['--bind', path, path], true, false);
   for (const path of view.readOnlyPaths) add(path, ['--ro-bind', path, path], false, true);
   for (const path of view.maskedDirectories) add(path, ['--tmpfs', path], false, true);
+  for (const path of view.emptiedDirectories ?? []) add(path, ['--perms', '0555', '--tmpfs', path], false, true);
   for (const path of view.maskedFiles) add(path, ['--ro-bind', '/dev/null', path], false, true);
   for (const path of view.open?.hidden ?? []) add(path, ['--perms', '0700', '--tmpfs', path], false, true);
   if (view.scratchDir) add(view.scratchDir, ['--bind', view.scratchDir, view.scratchDir], true, true);
@@ -135,6 +140,7 @@ export function bubblewrapArguments(view: BubblewrapView): string[] {
   viewMounts(view).forEach((mount, index) => args.push(...mount.args, ...pins.get(index) ?? []));
   // `--remount-ro` changes only that mount point (man page), so a scratch area bound inside a hidden root stays writable.
   for (const path of view.open?.hidden ?? []) args.push('--remount-ro', path);
+  for (const path of view.emptiedDirectories ?? []) args.push('--remount-ro', path);
   args.push('--chdir', view.projectRoot);
   return args;
 }
