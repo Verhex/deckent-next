@@ -1,6 +1,5 @@
 import type { SurfaceSnapshotAccess, SurfacePublicationKind, RunView, WorkerObservationReport } from '#engine/index.js';
-import { loadRunViewsForWatch, type WorklineLedgerPorts, type WorklineSurfaceSnapshot, type WorklineApproval } from '#surfaces/core/terminal/index.js';
-import { scanPendingApprovals } from '#surfaces/core/approval-presentation/index.js';
+import type { WorklineLedgerPorts, WorklineSurfaceSnapshot, WorklineApproval } from '#surfaces/core/terminal/index.js';
 
 export function withSurfaceSnapshot(ports: WorklineLedgerPorts, access: (() => Promise<SurfaceSnapshotAccess | null>) | undefined): WorklineLedgerPorts {
   if (!access) return ports;
@@ -15,8 +14,9 @@ export function withSurfaceSnapshot(ports: WorklineLedgerPorts, access: (() => P
       if (signal.aborted) break;
       try {
         if (kind === 'worker') data.workers = await ports.listWorkers();
-        if (kind === 'run') data.runs = await loadRunViewsForWatch(ports);
-        if (kind === 'approval' && ports.listApprovalPage) data.approvals = (await scanPendingApprovals(ports.listApprovalPage, Date.now())).pending;
+        // The terminal and approval-presentation barrels carry the Ink/React UI; the CLI entry graph reaches them only when a snapshot reads.
+        if (kind === 'run') data.runs = await (await import('#surfaces/core/terminal/index.js')).loadRunViewsForWatch(ports);
+        if (kind === 'approval' && ports.listApprovalPage) data.approvals = (await (await import('#surfaces/core/approval-presentation/index.js')).scanPendingApprovals(ports.listApprovalPage, Date.now())).pending;
       } catch (error) {
         if (['POLICY_DENIED', 'POLICY_APPROVAL_UNSUPPORTED', 'SCOPE_UNKNOWN', 'APPROVAL_DENIED'].includes(String((error as { code?: unknown })?.code))) denied.add(kind);
         else throw error;
