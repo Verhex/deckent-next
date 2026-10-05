@@ -1,0 +1,75 @@
+import { z } from 'zod';
+import { identitySchema, executionRegistrySchema, type ExecutionRegistry, type JsonValue } from '#domain/index.js';
+import type { ProfileRevisionProposal } from './update.js';
+
+/**
+ * WORKER-AUTO-REFRESH (owner 2026-10-06 K2): pure policy of the autonomous worker image refresh. The composition owns the clock, the
+ * build and the files; this module decides when a refresh may start, whether one is still in flight, how it is shown, and what exact new
+ * profile versions a built image yields. Nothing here names a vendor: providers come from the proposal, which comes from the registry.
+ */
+export type ToolchainRefreshTrigger = 'startup' | 'interval';
+export type ToolchainRefreshPolicy = Readonly<{ mode: 'off' | 'propose' | 'auto'; atStartup: boolean; intervalMs: number }>;
+/** A build is started only in `auto` mode; a start trigger also needs `atStartup`, an interval trigger a positive `intervalMs` (0 = off). */
+export function refreshTriggerAllowed(policy: ToolchainRefreshPolicy, trigger: ToolchainRefreshTrigger): boolean {
+  if (policy.mode !== 'auto') return false;
+  return trigger === 'startup' ? policy.atStartup : policy.intervalMs > 0;
+}
+
+const isoTime = z.string().datetime();
+const imageDigest = z.string().regex(/^sha256:[a-f0-9]{64}$/);
+/** The durable refresh marker. `expiresAt` bounds an `updating` marker (build timeout plus a grace): a crashed process never masks a refusal for good. */
+export const toolchainRefreshStateSchema = z.object({ schemaVersion: z.literal(1), phase: z.enum(['updating', 'current', 'failed']),
+  trigger: z.enum(['startup', 'interval']), startedAt: isoTime, finishedAt: isoTime.nullable(), expiresAt: isoTime,
+  imageVersion: z.string().nullable(), imageId: imageDigest.nullable(), staleProviders: z.array(identitySchema).readonly(),
+  appliedProfiles: z.number().int().min(0).safe(), reason: z.string().max(128).nullable() }).strict().readonly();
+export type ToolchainRefreshState = z.infer<typeof toolchainRefreshStateSchema>;
+export type ToolchainRefreshStatus = 'updating' | 'current' | 'failed' | 'unknown';
+
+/** True while a refresh is in flight and still inside its own bound: admission then carries a warning instead of refusing a stale pin. */
+export function refreshInProgress(state: ToolchainRefreshState | null, nowMs: number): boolean {
+  return state !== null && state.phase === 'updating' && Date.parse(state.expiresAt) > nowMs;
+}
+/** Operator-facing status; an `updating` marker past its bound is reported as failed (`REFRESH_EXPIRED`), never as still running. */
+export function refreshStatus(state: ToolchainRefreshState | null, nowMs: number): Readonly<{ status: ToolchainRefreshStatus; reason: string | null }> {
+  if (state === null) return Object.freeze({ status: 'unknown', reason: null });
+  if (state.phase === 'updating') return refreshInProgress(state, nowMs) ? Object.freeze({ status: 'updating', reason: null }) : Object.freeze({ status: 'failed', reason: 'REFRESH_EXPIRED' });
+  return Object.freeze({ status: state.phase, reason: state.reason });
+}
+
+const baseRevision = (revision: string) => revision.split('@')[0]!;
+const asRecord = (value: unknown): Record<string, JsonValue> | null => value !== null && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, JsonValue> : null;
+/** Rewrites the image id and CLI pin of one profile in place of a clone: a prepared native profile (`parameters.imageId`, preflight pin) or a coding template (`docker.imageId`, invocation pin). */
+function repinParameters(parameters: Record<string, JsonValue>, to: { cliVersion: string; imageId: string }): boolean {
+  const docker = asRecord(parameters['docker']), invocation = asRecord(parameters['invocation']);
+  if (docker && invocation) { docker['imageId'] = to.imageId; invocation['cliVersion'] = to.cliVersion; return true; }
+  const preflight = asRecord(asRecord(parameters['nativeSubscription'])?.['preflight']);
+  if (preflight && typeof parameters['imageId'] === 'string') { parameters['imageId'] = to.imageId; preflight['cliVersion'] = to.cliVersion; return true; }
+  return false;
+}
+export type RegistryRevision = Readonly<{ registry: ExecutionRegistry; applied: readonly Readonly<{ profile: string; from: number; to: number }>[] }>;
+/**
+ * The exact new execution registry for a built image: every proposed profile gets a NEW version (highest existing + 1) carrying the new
+ * image id and CLI pin, and the task kinds that used the old version point at the new one. Old versions stay registered, so Runs already
+ * admitted (which froze their profile) are untouched and rollback is a pointer edit. Returns null when nothing changes (already at the
+ * proposed image, or no proposed profile is present), so a repeated refresh is idempotent.
+ */
+export function reviseRegistryForProposal(registryInput: unknown, proposal: ProfileRevisionProposal): RegistryRevision | null {
+  const registry = executionRegistrySchema.parse(registryInput);
+  const profiles: Record<string, JsonValue>[] = structuredClone(registry.profiles) as unknown as Record<string, JsonValue>[];
+  const kinds = structuredClone(registry.kinds) as unknown as { kind: string; profile: { id: string; version: number } }[];
+  const applied: { profile: string; from: number; to: number }[] = [];
+  for (const entry of proposal.profiles) {
+    const current = profiles.find(profile => profile['id'] === entry.profile.id && profile['version'] === entry.profile.version);
+    if (!current) continue;
+    const parameters = asRecord(current['parameters']); if (!parameters) continue;
+    const next = structuredClone(current); const nextParameters = asRecord(next['parameters'])!;
+    if (!repinParameters(nextParameters, { cliVersion: entry.changes.cliVersion.to, imageId: entry.changes.imageId.to })) continue;
+    if (JSON.stringify(nextParameters) === JSON.stringify(parameters)) continue;
+    const version = Math.max(...profiles.filter(profile => profile['id'] === entry.profile.id).map(profile => profile['version'] as number)) + 1;
+    next['version'] = version; profiles.push(next);
+    for (const kind of kinds) if (kind.profile.id === entry.profile.id && kind.profile.version === entry.profile.version) kind.profile = { id: entry.profile.id, version };
+    applied.push({ profile: entry.profile.id, from: entry.profile.version, to: version });
+  }
+  if (!applied.length) return null;
+  return Object.freeze({ registry: executionRegistrySchema.parse({ ...registry, revision: `${baseRevision(registry.revision)}@${proposal.imageVersion}`, profiles, kinds }), applied: Object.freeze(applied) });
+}

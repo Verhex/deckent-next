@@ -536,7 +536,7 @@
   "config.field.execution": "Sabit Docker ve Git yürütme ayarları; Docker memoryBytes, cpus ve pids her yeni Run profilini kabulde sınırlar. Null yürütmeyi kapatır.",
   "config.field.operations": "Operasyon kataloğu ve etki hedefleri (politika verisi); varsayılan boş, tanımlanmadan hiçbir operasyon çalışmaz",
   "config.field.inspection": "Salt-okunur inceleme için sayfa ve politika belgesi sınırları",
-  "config.field.toolchains": "Worker toolchain güncellik kontrolü: mod, registry uç noktası ve sorgu sınırları (salt okunur, güncelleme yapmaz)",
+  "config.field.toolchains": "Worker toolchain güncelliği ve imaj yenileme: güncellik sorgusu (registry uç noktası, sınırlar) ve güncelleme politikası (mode off/propose/auto, build sınırları, servis açılışında denetim, ms cinsinden periyodik denetim aralığı, 0 = kapalı). Varsayılan: açılışta ve 24 saatte bir otomatik yenileme; çalışan Run'lar imajını korur",
   "config.field.admission": "Run kabulü için havuz, kapasite ve görev sırası",
   "config.field.mcp": "Yerel MCP girdi, yanıt ve eşzamanlılık sınırları",
   "config.field.secrets": "$DECK:NAME referanslarının çözüldüğü yer: secrets.store kayıtlı bir arka ucu adlandırır (varsayılan core.secret-store.env@1; core.secret-store.file@1 onları <global kök>/secrets.json içinde, 0600 tutar). Yalnız kurulum config'i; proje dosyası ayarlayamaz.",

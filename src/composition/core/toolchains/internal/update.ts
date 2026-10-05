@@ -11,7 +11,7 @@ export type ToolchainUpdateResult = Readonly<{ schemaVersion: 1; mode: string; d
   plan: ToolchainUpdatePlan | null; planPath: string | null; build: Readonly<{ context: string; receiptPath: string; imageId: string; tag: string | null }> | null;
   proposal: ProfileRevisionProposal | null; proposalPath: string | null }>;
 export interface ToolchainUpdateDependencies { readonly fetcher?: NpmLatestVersionFetcher; readonly runner?: WorkerImageBuildRunner; readonly packageRoot?: string; readonly now?: () => string }
-async function writeArtifact(directory: string, name: string, value: unknown) {
+export async function writeArtifact(directory: string, name: string, value: unknown) {
   await mkdir(directory, { recursive: true, mode: 0o700 });
   const path = join(directory, name);
   const handle = await open(path, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, 0o600);

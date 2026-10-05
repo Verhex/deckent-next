@@ -11,13 +11,15 @@ const nativeProfileSchema = z.object({ id: z.string(), version: z.number(), para
 /** K3 coding templates (adapter `native-coding-template`) pin their CLI in the invocation and their image in the Docker part. */
 const templateProfileSchema = z.object({ id: z.string(), version: z.number(), adapter: z.object({ id: z.literal('native-coding-template') }).passthrough(),
   parameters: z.object({ docker: z.object({ imageId: z.string().optional() }).passthrough(), invocation: z.object({ provider: z.string(), cliVersion: z.string() }).passthrough() }).passthrough() }).passthrough();
-const registrySchema = z.object({ profiles: z.array(z.unknown()) }).passthrough();
+const registrySchema = z.object({ profiles: z.array(z.unknown()), kinds: z.array(z.object({ profile: z.object({ id: z.string(), version: z.number() }).passthrough() }).passthrough()).optional() }).passthrough();
 
 /** The CLI pin of a prepared native profile or of a coding template, with its image id as written (null when none). */
 function nativePins(config: ToolchainAdmissionSource) {
   const registry = registrySchema.safeParse(config.admission?.registry);
   if (!registry.success) return [];
-  return registry.data.profiles.flatMap(candidate => {
+  // WORKER-AUTO-REFRESH: a superseded profile version stays registered for rollback, but only versions a task kind points at are admitted.
+  const used = registry.data.kinds ? new Set(registry.data.kinds.map(kind => JSON.stringify([kind.profile.id, kind.profile.version]))) : null;
+  return registry.data.profiles.filter(candidate => used === null || (typeof candidate === 'object' && candidate !== null && used.has(JSON.stringify([(candidate as { id?: unknown }).id, (candidate as { version?: unknown }).version])))).flatMap(candidate => {
     const template = templateProfileSchema.safeParse(candidate);
     if (template.success) {
       const { id, version, parameters: { docker, invocation } } = template.data;
