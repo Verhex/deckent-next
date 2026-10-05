@@ -6,5 +6,5 @@ export type { WorkerImageRecipe, AffectedProfile, ToolchainUpdatePlan, ProfileRe
 export type { ToolchainCatalog, ToolchainMechanism, AdmittedToolchain, PublishedVersion, LatestLookup, ToolchainStatus,
   ToolchainCurrencyEntry, ToolchainCurrencyReport } from './internal/contract.js';
 export { admittedToolchains, affectedToolchainProfiles, type ToolchainAdmissionSource } from './internal/registry.js';
-export { toolchainRefreshStateSchema, refreshTriggerAllowed, refreshInProgress, refreshStatus, reviseRegistryForProposal } from './internal/refresh.js';
+export { toolchainRefreshStateSchema, refreshTriggerAllowed, refreshInProgress, refreshStatus, reviseRegistryForProposal, toolchainUpdateApplies, refreshIntervalMs, refreshAuditName } from './internal/refresh.js';
 export type { ToolchainRefreshState, ToolchainRefreshStatus, ToolchainRefreshTrigger, ToolchainRefreshPolicy, RegistryRevision } from './internal/refresh.js';

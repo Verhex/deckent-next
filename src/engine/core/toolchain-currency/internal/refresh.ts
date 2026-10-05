@@ -15,6 +15,13 @@ export function refreshTriggerAllowed(policy: ToolchainRefreshPolicy, trigger: T
   return trigger === 'startup' ? policy.atStartup : policy.intervalMs > 0;
 }
 
+/** Whether `toolchains update` builds without `--apply`: only the autonomous mode does; an explicit flag always decides when given. */
+export const toolchainUpdateApplies = (mode: ToolchainRefreshPolicy['mode'], flag?: boolean): boolean => mode === 'auto' || flag === true;
+/** The interval the service's periodic check sleeps, 0 when the policy does not allow an interval refresh. */
+export const refreshIntervalMs = (policy: ToolchainRefreshPolicy): number => refreshTriggerAllowed(policy, 'interval') ? policy.intervalMs : 0;
+/** Audit record file name of one refresh attempt (one file per start instant and trigger; written exclusively). */
+export const refreshAuditName = (startedAt: string, trigger: ToolchainRefreshTrigger): string => `${startedAt.replace(/[:.]/g, '-')}-${trigger}.json`;
+
 const isoTime = z.string().datetime();
 const imageDigest = z.string().regex(/^sha256:[a-f0-9]{64}$/);
 /** The durable refresh marker. `expiresAt` bounds an `updating` marker (build timeout plus a grace): a crashed process never masks a refusal for good. */
@@ -40,10 +47,11 @@ const baseRevision = (revision: string) => revision.split('@')[0]!;
 const asRecord = (value: unknown): Record<string, JsonValue> | null => value !== null && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, JsonValue> : null;
 /** Rewrites the image id and CLI pin of one profile in place of a clone: a prepared native profile (`parameters.imageId`, preflight pin) or a coding template (`docker.imageId`, invocation pin). */
 function repinParameters(parameters: Record<string, JsonValue>, to: { cliVersion: string; imageId: string }): boolean {
-  const docker = asRecord(parameters['docker']), invocation = asRecord(parameters['invocation']);
+  const view = parameters as { docker?: JsonValue; invocation?: JsonValue; imageId?: JsonValue; nativeSubscription?: JsonValue };
+  const docker = asRecord(view.docker ?? null), invocation = asRecord(view.invocation ?? null);
   if (docker && invocation) { docker['imageId'] = to.imageId; invocation['cliVersion'] = to.cliVersion; return true; }
-  const preflight = asRecord(asRecord(parameters['nativeSubscription'])?.['preflight']);
-  if (preflight && typeof parameters['imageId'] === 'string') { parameters['imageId'] = to.imageId; preflight['cliVersion'] = to.cliVersion; return true; }
+  const preflight = asRecord(asRecord(view.nativeSubscription ?? null)?.['preflight']);
+  if (preflight && typeof view.imageId === 'string') { view.imageId = to.imageId; preflight['cliVersion'] = to.cliVersion; return true; }
   return false;
 }
 export type RegistryRevision = Readonly<{ registry: ExecutionRegistry; applied: readonly Readonly<{ profile: string; from: number; to: number }>[] }>;

@@ -436,7 +436,8 @@
         "src/engine/core/workspace-patch",
         "src/engine/core/workspaces",
         "src/composition/core/workspace-patch",
-        "src/adapters/core/monitor-ledger"
+        "src/adapters/core/monitor-ledger",
+        "src/composition/core/toolchains"
       ],
       "plan": "EXECUTION"
     },
@@ -508,7 +509,8 @@
         "src/adapters/core/scratch-store",
         "src/adapters/core/http-fetch",
         "src/adapters/core/host-shell",
-        "src/adapters/core/git-workspace"
+        "src/adapters/core/git-workspace",
+        "src/composition/core/toolchains"
       ],
       "plan": "EXECUTION"
     },
@@ -1673,7 +1675,8 @@
     },
     "src/engine/core/toolchain-currency": {
       "dependencies": [
-        "src/domain/core/primitives"
+        "src/domain/core/primitives",
+        "src/domain/core/run"
       ],
       "plan": "PROVIDERS"
     },
@@ -1713,7 +1716,9 @@
         "src/adapters/core/worker-image",
         "src/engine/core/toolchain-currency",
         "src/platform/core/config",
-        "src/platform/core/managed-files"
+        "src/platform/core/managed-files",
+        "src/platform/core/utils",
+        "src/composition/core/config"
       ],
       "plan": "PROVIDERS"
     },
@@ -2002,7 +2007,8 @@
         "src/platform/core/config",
         "src/composition/core/scoped-request",
         "src/composition/core/policy",
-        "src/engine/core/approval"
+        "src/engine/core/approval",
+        "src/composition/core/toolchains"
       ],
       "plan": "MONITOR"
     },

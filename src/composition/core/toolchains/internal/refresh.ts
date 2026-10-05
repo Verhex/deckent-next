@@ -2,7 +2,7 @@ import { setTimeout as wait } from 'node:timers/promises';
 import { readFile, mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { loadConfig, inspectProductDirectory, prepareProductDirectory, writeJsonAtomic, type ConfigLoadOptions } from '#platform/index.js';
-import { refreshTriggerAllowed, toolchainRefreshStateSchema, reviseRegistryForProposal, type ToolchainRefreshState, type ToolchainRefreshTrigger } from '#engine/index.js';
+import { refreshAuditName, refreshIntervalMs, refreshInProgress, refreshStatus, refreshTriggerAllowed, toolchainRefreshStateSchema, reviseRegistryForProposal, type ToolchainRefreshState, type ToolchainRefreshTrigger } from '#engine/index.js';
 import { createConfiguredConfigApplication, resolveConfiguredConfigPrincipal } from '#composition/core/config/index.js';
 import { updateConfiguredToolchains, writeArtifact, type ToolchainUpdateDependencies } from './update.js';
 
@@ -26,6 +26,15 @@ export async function readToolchainRefreshState(projectRoot: string, options: Co
     const parsed = toolchainRefreshStateSchema.safeParse(JSON.parse(await readFile(join(home, 'refresh-state.json'), 'utf8')));
     return parsed.success ? parsed.data : null;
   } catch { return null; }
+}
+/** The operator view of the marker (doctor, monitor): status, typed reason and the image version it concerns. */
+export async function inspectToolchainRefresh(projectRoot: string, options: ConfigLoadOptions = {}) {
+  const state = await readToolchainRefreshState(projectRoot, options);
+  return { ...refreshStatus(state, Date.now()), imageVersion: state?.imageVersion ?? null };
+}
+/** True while a refresh is in flight and inside its own bound (admission carries a warning instead of refusing a stale pin). */
+export async function isToolchainRefreshInProgress(projectRoot: string, options: ConfigLoadOptions = {}): Promise<boolean> {
+  return refreshInProgress(await readToolchainRefreshState(projectRoot, options), Date.now());
 }
 async function writeState(home: string, state: ToolchainRefreshState) { await mkdir(home, { recursive: true, mode: 0o700 }); await writeJsonAtomic(join(home, 'refresh-state.json'), state); }
 
@@ -72,7 +81,7 @@ export async function refreshConfiguredToolchains(projectRoot: string, trigger: 
   const imageId = result?.build?.imageId ?? null, imageVersion = result?.plan?.next?.imageVersion ?? null;
   const state: ToolchainRefreshState = { ...base, phase: code ? 'failed' : 'current', finishedAt, imageVersion, imageId, staleProviders: result?.plan?.staleProviders ?? [], appliedProfiles: applied, reason: code };
   try { await writeState(home, state); } catch { /* the audit record below still states the outcome */ }
-  try { await writeArtifact(join(home, 'refreshes'), `${startedAt.replace(/[:.]/g, '-')}-${trigger}.json`, { schemaVersion: 1, kind: 'toolchain-refresh-audit', state, decision: result?.decision ?? null,
+  try { await writeArtifact(join(home, 'refreshes'), refreshAuditName(startedAt, trigger), { schemaVersion: 1, kind: 'toolchain-refresh-audit', state, decision: result?.decision ?? null,
     planPath: result?.planPath ?? null, receiptPath: result?.build?.receiptPath ?? null, proposalPath: result?.proposalPath ?? null, configWrite }); } catch { /* idempotent per millisecond; never fails the refresh */ }
   const event = await emit(code ? 'failed' : 'current', { imageVersion, imageId, appliedProfiles: applied, code });
   return Object.freeze({ outcome: code ? 'failed' : 'current', event });
@@ -95,7 +104,7 @@ export function startToolchainRefresh(projectRoot: string, options: ConfigLoadOp
   };
   const done = (async () => {
     let intervalMs = 0;
-    try { const policy = (await loadConfig(projectRoot, options)).toolchains.update; intervalMs = policy.mode === 'auto' ? policy.intervalMs : 0; } catch { return; }
+    try { intervalMs = refreshIntervalMs((await loadConfig(projectRoot, options)).toolchains.update); } catch { return; }
     if (!signal.aborted) await run('startup');
     while (intervalMs > 0 && !signal.aborted) {
       try { await wait(intervalMs, undefined, { signal }); } catch { return; }

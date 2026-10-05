@@ -4,11 +4,11 @@ import { validateProcessExitCriterion } from '#capabilities/index.js';
 import { ErrorRegistry, prepareProductDirectory, type ConfigLoadOptions } from '#platform/index.js';
 import { nativeWorkerEffortCapability, bindNativeWorkerEffort, assertNativeWorkerBinding, compileNativeCodingWorkInput, isNativeCodingTemplate, nativeCodingRefusalCode, validateDockerTaskProfile, resolveDockerTaskProfile, openSqliteInventoryReader, openSqliteAttemptStore, openSqliteModelCatalogReader, GitIntegrationDelivery, GitRunWorkspaceProvider, GitWorkspaceBroker, resolveGitWorkTarget, selectWorkTarget } from '#adapters/index.js';
 import { resolveWorkerEffortExecution, admitWorkerModels, RunAdmissionApplication, runAdmissionSchema, runDeliveryAdmissionSchema, RunPolicyAuthorization, executionResourceAuthorization, authorizeWorkTargetUse,
-  assertDockerResourceCeiling, DispatchPolicyAuthorization, pinRunToDelivery, refreshInProgress, type WorkerAdmissionWarning, type RunAdmission, type RunCreate, type RunDeliveryAdmission, type RunWorkspaceCustody } from '#engine/index.js';
+  assertDockerResourceCeiling, DispatchPolicyAuthorization, pinRunToDelivery, type WorkerAdmissionWarning, type RunAdmission, type RunCreate, type RunDeliveryAdmission, type RunWorkspaceCustody } from '#engine/index.js';
 import { createLayoutPolicySource } from '#composition/core/policy/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
-import { readToolchainRefreshState } from '#composition/core/toolchains/index.js';
+import { isToolchainRefreshInProgress } from '#composition/core/toolchains/index.js';
 type ScopeContext = Awaited<ReturnType<typeof loadConfiguredScopeContext>>;
 async function admitConfiguredRun(projectRoot: string, command: RunAdmission, options: ConfigLoadOptions,
   pin?: (context: ScopeContext, replay: boolean) => Promise<RunWorkspaceCustody>) {
@@ -50,7 +50,7 @@ async function admitConfiguredRun(projectRoot: string, command: RunAdmission, op
           compile(template, input, selection) { try { return compileNativeCodingWorkInput(template, input, selection); } catch (error) { throw ErrorRegistry.createError(nativeCodingRefusalCode(error)); } } });
         // WORKER-AUTO-REFRESH: while a refresh is in flight a stale CLI pin is admitted with a typed warning instead of refused.
         warnings = await admitWorkerModels(execution.tasks, admitted.scopeId, catalog, Date.now(), admitted.graph.tasks,
-          { imageRefreshInProgress: refreshInProgress(await readToolchainRefreshState(projectRoot, options), Date.now()) });
+          { imageRefreshInProgress: await isToolchainRefreshInProgress(projectRoot, options) });
       } finally { catalog.close(); }
       return { execution, layoutRevision: layout.revision, now: Date.now(), policy: { schemaVersion: 2, poolId: profile.poolId,
         capacity: { executionSlots: Math.min(profile.executionSlots, config.max_workers === 'auto' ? Infinity : config.max_workers),
