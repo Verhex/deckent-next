@@ -89,8 +89,6 @@
   "recover.separator",
   "resources.table_header_container",
   "resources.table_header_cpu_pct",
-  "sync.format_run_label",
-  "sync.scope_prompt",
   "terminal.render.tool",
   "terminal.scratch.path",
   "terminal.slash.modeArgument",

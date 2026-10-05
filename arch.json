@@ -2261,7 +2261,10 @@
     ],
     "evidenceFiles": [
       "tests/contracts/HARVEST.json"
-    ]
+    ],
+    "tierLines": {
+      "composition/enterprise": 4000
+    }
   },
   "i18n": {
     "catalogDir": "src/platform/core/i18n",
@@ -2293,7 +2296,13 @@
       "\\b(sonnet|opus|haiku)\\b",
       "\\b(ANTHROPIC|OPENAI|GOOGLE|GEMINI|XAI)_API_KEY\\b"
     ],
-    "allow": []
+    "allow": [],
+    "allowUnits": [
+      {
+        "unit": "src/adapters/core/provider-anthropic-messages",
+        "reason": "Vendor wire-protocol adapter documents the vendor's own model family names in comments."
+      }
+    ]
   },
   "markdown": {
     "trackedAllow": [
@@ -2316,7 +2325,6 @@
       "AGENTS.md": 70,
       ".codex/AGENTS.md": 5
     },
-    "writerModule": "src/platform/core/docs-authority/",
     "trackedAllowGlobs": [
       ".agents/skills/claude-design-sync/*.md",
       ".agents/skills/deckent-agentic-ux/*.md",
@@ -2962,5 +2970,91 @@
       "4cf286542f4c5cd7dac25908550de06250147e8d1e1180626bf9ebd8da9d4865",
       "063cc2e147a1d7549e0b35cf833eeece854db14494f06ffeb0b69e34f2336ed2"
     ]
+  },
+  "guards": {
+    "note": "Shrink-only structural guards (owner 2026-10-06 ARCH-GUARDS). Counts and lists may only go down; a lower observed value must lower the entry.",
+    "outsideSrcImports": {
+      "allow": [
+        "assets/"
+      ],
+      "deny": [
+        "scripts/",
+        "tests/",
+        ".agents/"
+      ]
+    },
+    "testHostImports": {
+      "scope": [
+        "tests/"
+      ],
+      "deny": [
+        ".agents/"
+      ]
+    },
+    "hostWords": {
+      "patterns": [
+        "dogfood",
+        "qwen",
+        "(?<![\\\\\\w])n1(?!\\w)",
+        "\\bboard\\b",
+        "dev-release",
+        "deckent-dev",
+        "/home/"
+      ],
+      "allow": [
+        {
+          "file": "src/adapters/core/workspace-read/internal/bounded.ts",
+          "count": 1,
+          "reason": "Comment cites the legacy terminal source this module was ported from."
+        },
+        {
+          "file": "src/platform/core/i18n/locales/en/run.json",
+          "count": 1,
+          "reason": "runs.diff.no_base names the pre-N1 run generation; rewrite to a neutral phrase and remove."
+        },
+        {
+          "file": "src/platform/core/i18n/locales/tr/run.json",
+          "count": 1,
+          "reason": "runs.diff.no_base names the pre-N1 run generation; rewrite to a neutral phrase and remove."
+        },
+        {
+          "file": "src/platform/core/i18n/locales/tr/tui.json",
+          "count": 1,
+          "reason": "tui.slash.desc.cd example path names the frozen reference checkout; use a neutral example and remove."
+        }
+      ]
+    },
+    "vendorSlugCaps": {
+      "domain": 3,
+      "engine": 23,
+      "note": "G1 vendor-slug findings per layer; adapter vendorUnits are exempt. Derive ids from the registry (commands.json, nativeCliIdSchema)."
+    },
+    "effectFlows": {
+      "owner": "src/engine/core/effect/",
+      "pattern": "(delivery|adoption|claim|lease)",
+      "frozen": [
+        "src/adapters/core/attempt-store/internal/adoption.ts",
+        "src/adapters/core/attempt-store/internal/cancellation-delivery.ts",
+        "src/adapters/core/attempt-store/internal/delivery.ts",
+        "src/adapters/core/git-patch/internal/adoption.ts",
+        "src/adapters/core/git-patch/internal/delivery.ts",
+        "src/adapters/core/mcp-transport/internal/delivery.ts",
+        "src/composition/core/model-invocation/internal/delivery-audit.ts",
+        "src/composition/core/workspace-patch/internal/adoption.ts",
+        "src/composition/core/workspace-patch/internal/delivery.ts",
+        "src/engine/core/model-allocation/internal/release.ts",
+        "src/engine/core/model-invocation/internal/claim.ts",
+        "src/engine/core/model-invocation/internal/delivery.ts",
+        "src/engine/core/model-invocation/internal/profile-delivery.ts",
+        "src/engine/core/runs/internal/delivery-port.ts",
+        "src/engine/core/runs/internal/delivery-transition.ts",
+        "src/engine/core/runs/internal/delivery-worker.ts",
+        "src/engine/core/workspace-patch/internal/adoption-error.ts",
+        "src/engine/core/workspace-patch/internal/adoption.ts",
+        "src/engine/core/workspace-patch/internal/delivery-run.ts",
+        "src/engine/core/workspace-patch/internal/delivery.ts",
+        "src/surfaces/core/mcp/internal/delivery.ts"
+      ]
+    }
   }
 }

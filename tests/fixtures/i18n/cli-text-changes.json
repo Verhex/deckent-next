@@ -287,6 +287,142 @@
     "cliContract.run.opt.model_effort": {
       "before": "Native model reasoning-effort (claude: low|medium|high|xhigh|max, codex: minimal|low|medium|high). Opt-in; unsupported or invalid levels are ignored",
       "after": "Native reasoning effort. Explicit input wins; unsupported levels are refused against the exact model catalog and CLI capability."
+    },
+    "sync.adapter_skipped": {
+      "before": "Warning: {label} skipped ({file}) — {reason}",
+      "after": null
+    },
+    "sync.adapter_synced": {
+      "before": "{prefix}{label} synced → @DECKENT.md ensured",
+      "after": null
+    },
+    "sync.agent_manifest_created": {
+      "before": "{prefix}Agent manifest created: .deckent/agents/{id}/agent.json",
+      "after": null
+    },
+    "sync.agent_manifest_updated": {
+      "before": "{prefix}Agent manifest updated: .deckent/agents/{id}/agent.json",
+      "after": null
+    },
+    "sync.agent_prompt_created": {
+      "before": "{prefix}Agent prompt created: .deckent/agents/{id}/PROMPT.md",
+      "after": null
+    },
+    "sync.agent_prompt_updated": {
+      "before": "{prefix}Agent prompt updated: .deckent/agents/{id}/PROMPT.md",
+      "after": null
+    },
+    "sync.aggregate_summary": {
+      "before": "Sync summary: {adapters} adapter(s) · {skills} skill(s) · {commits} commit(s) · {conflicts} conflict(s) · {missing} without baseline",
+      "after": null
+    },
+    "sync.capabilities_issue": {
+      "before": "Warning: agent \"{id}\" capabilities migration issue ({code}) — {message}",
+      "after": null
+    },
+    "sync.capabilities_migrated": {
+      "before": "{prefix}Agent capabilities migrated: .deckent/agents/{id}/agent.json (provisional v3)",
+      "after": null
+    },
+    "sync.capabilities_protected": {
+      "before": "Agent capabilities: {count} manifest(s) kept as-is (locally owned shadow): {ids}",
+      "after": null
+    },
+    "sync.capabilities_summary": {
+      "before": "Agent capabilities: {migrated} migrated, {alreadyV3} already v3",
+      "after": null
+    },
+    "sync.complete": {
+      "before": "Sync complete. Existing file contents preserved.",
+      "after": null
+    },
+    "sync.conflict_local_edit": {
+      "before": "Conflict: {scope} \"{id}\" kept as your local edit — it differs from both the last-synced baseline and the current builtin ({path})",
+      "after": null
+    },
+    "sync.deckent_not_found": {
+      "before": "DECKENT.md not found. Run deckent init first.",
+      "after": null
+    },
+    "sync.dry_run_memory": {
+      "before": "[dry-run] Would record to memory.db:",
+      "after": null
+    },
+    "sync.dry_run_prefix": {
+      "before": "[dry-run] ",
+      "after": null
+    },
+    "sync.format_deleted": {
+      "before": "  Deleted: {files}",
+      "after": null
+    },
+    "sync.format_modified": {
+      "before": "  Modified: {files}",
+      "after": null
+    },
+    "sync.format_more": {
+      "before": ", and {remaining} more...",
+      "after": null
+    },
+    "sync.format_new": {
+      "before": "  New: {files}",
+      "after": null
+    },
+    "sync.format_renamed": {
+      "before": "  Renamed: {files}",
+      "after": null
+    },
+    "sync.git_change_detection_unavailable": {
+      "before": "Warning: git change detection unavailable ({code}) — file lists are empty, not verified: {detail}",
+      "after": null
+    },
+    "sync.missing_baseline_summary": {
+      "before": "{count} shadow file(s) have no recorded sync baseline and were kept as-is (not a conflict): {ids}",
+      "after": null
+    },
+    "sync.not_git_repo": {
+      "before": "Warning: Not a git repository — skipping change detection.",
+      "after": null
+    },
+    "sync.scope_manifest": {
+      "before": "agent manifest",
+      "after": null
+    },
+    "sync.scope_prompt": {
+      "before": "agent prompt",
+      "after": null
+    },
+    "sync.skill_manifest_created": {
+      "before": "{prefix}Skill manifest created: .deckent/skills/{id}/manifest.json",
+      "after": null
+    },
+    "sync.skill_manifest_issue": {
+      "before": "Warning: skill manifest \"{id}\" could not be synced ({reason})",
+      "after": null
+    },
+    "sync.skill_manifest_kept_local": {
+      "before": "Warning: skill manifest \"{id}\" kept as a local definition",
+      "after": null
+    },
+    "sync.skill_manifest_summary": {
+      "before": "Skill manifests: {changed} changed, {unchanged} unchanged",
+      "after": null
+    },
+    "sync.skill_manifest_updated": {
+      "before": "{prefix}Skill manifest updated: .deckent/skills/{id}/manifest.json",
+      "after": null
+    },
+    "sync.workspace_summary": {
+      "before": "Workspace artifacts: {changed} changed, {unchanged} unchanged",
+      "after": null
+    },
+    "sync.workspace_updated": {
+      "before": "{prefix}Workspace artifact updated: {path}",
+      "after": null
+    },
+    "mcp.sync.detail": {
+      "before": "Ensures the AI adapter files (CLAUDE.md, AGENTS.md) import DECKENT.md as the single source of truth. Additive only — prepends the @DECKENT.md reference when missing and never overwrites existing content. Use it when an adapter file loses its Deckent reference after a manual edit or a merge conflict. Requires DECKENT.md to exist (run deckent_init first).",
+      "after": null
     }
   },
   "tr": {
@@ -693,6 +829,142 @@
     "cliContract.run.opt.model_effort": {
       "before": "Yerel model muhakeme-eforu (claude: low|medium|high|xhigh|max, codex: minimal|low|medium|high). Opt-in; desteklenmeyen veya geçersiz seviyeler yok sayılır",
       "after": "Yerel muhakeme eforu. Açık istek önceliklidir; desteklenmeyen seviyeler tam model kataloğu ve CLI yeteneğine göre reddedilir."
+    },
+    "sync.adapter_skipped": {
+      "before": "Uyarı: {label} atlandı ({file}) — {reason}",
+      "after": null
+    },
+    "sync.adapter_synced": {
+      "before": "{prefix}{label} senkronlandı → @DECKENT.md sağlandı",
+      "after": null
+    },
+    "sync.agent_manifest_created": {
+      "before": "{prefix}Agent manifesti oluşturuldu: .deckent/agents/{id}/agent.json",
+      "after": null
+    },
+    "sync.agent_manifest_updated": {
+      "before": "{prefix}Agent manifesti güncellendi: .deckent/agents/{id}/agent.json",
+      "after": null
+    },
+    "sync.agent_prompt_created": {
+      "before": "{prefix}Agent prompt oluşturuldu: .deckent/agents/{id}/PROMPT.md",
+      "after": null
+    },
+    "sync.agent_prompt_updated": {
+      "before": "{prefix}Agent prompt güncellendi: .deckent/agents/{id}/PROMPT.md",
+      "after": null
+    },
+    "sync.aggregate_summary": {
+      "before": "Senkron özeti: {adapters} adapter · {skills} skill · {commits} commit · {conflicts} çakışma · {missing} baseline'sız",
+      "after": null
+    },
+    "sync.capabilities_issue": {
+      "before": "Uyarı: agent \"{id}\" yetenek taşıma sorunu ({code}) — {message}",
+      "after": null
+    },
+    "sync.capabilities_migrated": {
+      "before": "{prefix}Agent yetenekleri taşındı: .deckent/agents/{id}/agent.json (geçici v3)",
+      "after": null
+    },
+    "sync.capabilities_protected": {
+      "before": "Agent yetenekleri: {count} manifest olduğu gibi korundu (yerel sahipli shadow): {ids}",
+      "after": null
+    },
+    "sync.capabilities_summary": {
+      "before": "Agent yetenekleri: {migrated} taşındı, {alreadyV3} zaten v3",
+      "after": null
+    },
+    "sync.complete": {
+      "before": "Senkronizasyon tamamlandı. Mevcut dosya içerikleri korundu.",
+      "after": null
+    },
+    "sync.conflict_local_edit": {
+      "before": "Çakışma: {scope} \"{id}\" yerel düzenlemeniz olarak korundu — hem son senkron baseline'ından hem de güncel builtin'den farklı ({path})",
+      "after": null
+    },
+    "sync.deckent_not_found": {
+      "before": "DECKENT.md bulunamadı. Önce deckent init çalıştırın.",
+      "after": null
+    },
+    "sync.dry_run_memory": {
+      "before": "[kuru-çalıştırma] memory.db'ye kaydedilecekti:",
+      "after": null
+    },
+    "sync.dry_run_prefix": {
+      "before": "[kuru-çalıştırma] ",
+      "after": null
+    },
+    "sync.format_deleted": {
+      "before": "  Silinen: {files}",
+      "after": null
+    },
+    "sync.format_modified": {
+      "before": "  Değiştirilen: {files}",
+      "after": null
+    },
+    "sync.format_more": {
+      "before": " ve {remaining} tane daha...",
+      "after": null
+    },
+    "sync.format_new": {
+      "before": "  Yeni: {files}",
+      "after": null
+    },
+    "sync.format_renamed": {
+      "before": "  Yeniden adlandırılan: {files}",
+      "after": null
+    },
+    "sync.git_change_detection_unavailable": {
+      "before": "Uyarı: git değişiklik tespiti kullanılamıyor ({code}) — dosya listeleri boş, doğrulanmadı: {detail}",
+      "after": null
+    },
+    "sync.missing_baseline_summary": {
+      "before": "{count} shadow dosyasının kayıtlı senkron baseline'ı yok; olduğu gibi korundu (çakışma değil): {ids}",
+      "after": null
+    },
+    "sync.not_git_repo": {
+      "before": "Uyarı: Git deposu değil — değişiklik tespiti atlanıyor.",
+      "after": null
+    },
+    "sync.scope_manifest": {
+      "before": "agent manifesti",
+      "after": null
+    },
+    "sync.scope_prompt": {
+      "before": "agent prompt",
+      "after": null
+    },
+    "sync.skill_manifest_created": {
+      "before": "{prefix}Skill manifesti oluşturuldu: .deckent/skills/{id}/manifest.json",
+      "after": null
+    },
+    "sync.skill_manifest_issue": {
+      "before": "Uyarı: \"{id}\" skill manifesti eşitlenemedi ({reason})",
+      "after": null
+    },
+    "sync.skill_manifest_kept_local": {
+      "before": "Uyarı: \"{id}\" skill manifesti yerel tanım olarak korundu",
+      "after": null
+    },
+    "sync.skill_manifest_summary": {
+      "before": "Skill manifestleri: {changed} değişti, {unchanged} değişmedi",
+      "after": null
+    },
+    "sync.skill_manifest_updated": {
+      "before": "{prefix}Skill manifesti güncellendi: .deckent/skills/{id}/manifest.json",
+      "after": null
+    },
+    "sync.workspace_summary": {
+      "before": "Workspace artifactları: {changed} değişti, {unchanged} değişmedi",
+      "after": null
+    },
+    "sync.workspace_updated": {
+      "before": "{prefix}Workspace artifactı güncellendi: {path}",
+      "after": null
+    },
+    "mcp.sync.detail": {
+      "before": "AI adapter dosyalarının (CLAUDE.md, AGENTS.md) tek doğruluk kaynağı olarak DECKENT.md'yi içe aktarmasını sağlar. Yalnızca eklemeli — @DECKENT.md referansı eksikse başa ekler, mevcut içeriğin üzerine asla yazmaz. Bir adapter dosyası elle düzenleme veya merge çakışması sonrası Deckent referansını kaybettiğinde kullanın. DECKENT.md'nin var olmasını gerektirir (önce deckent_init).",
+      "after": null
     }
   }
 }
