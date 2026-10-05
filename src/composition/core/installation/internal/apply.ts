@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { FileInstallationIdentityStore, FileProjectIdentityStore, withInstallationJournal } from '#adapters/index.js';
 import { immutableJsonObjectSchema } from '#domain/index.js';
 import { InstallationPublicationApplication, InstallationPublicationError, validateInstallationRecovery, type InstallationConsent, type InstallationRecovery, type PreparedInstallation } from '#engine/index.js';
-import { getConfigFieldDefault, observeBootstrapState, SystemTrustedClock, validateConfig, versionedConfig, resolveProductLayout, type BootstrapObservation } from '#platform/index.js';
+import { bootstrapPublishesConfig, getConfigFieldDefault, observeBootstrapState, SystemTrustedClock, validateConfig, versionedConfig, resolveProductLayout, type BootstrapObservation } from '#platform/index.js';
 import { prepareSuppliedInstallation } from './preview.js';
 import { inspectPreparedInstallation } from './evidence.js';
 import { installationPublicationPorts } from './publication.js';
@@ -26,11 +26,11 @@ function retained(observed: BootstrapObservation): InstallationRecovery | null {
   if (!schema.safeParse(observed.record.recovery).success) throw new InstallationPublicationError('INSTALLATION_PUBLICATION_INVALID');
   return observed.record.recovery as unknown as InstallationRecovery;
 }
-/** ID-1C before any effect of an owned init mutation: the configured layout's identity, by the CLI preflight's own check. A pending journal has no settled configuration;
- * its recovery reads the target layout's identity under the journal. `publicationGuarded` (apply/resume): an invalid existing config resolves no layout and is never published over (typed CONFLICT). */
+/** ID-1C before any effect of an owned init mutation: the configured identity, by the CLI preflight's own observe-only read (also under a pending policy-template journal,
+ * which leaves config settled). A pending config-publishing transaction reads its target layout under the journal; `publicationGuarded` (apply/resume): invalid config is never published over. */
 export async function assertConfiguredInstallationIdentity(projectRoot: string, publicationGuarded = false) {
-  if ((await observeBootstrapState(projectRoot)).record?.phase === 'pending') return;
-  await loadConfiguredInstallationIdentity(projectRoot).catch(error => { if (!publicationGuarded || (error as { code?: unknown }).code !== 'CONFIG_VALIDATION') throw error; });
+  if (bootstrapPublishesConfig(await observeBootstrapState(projectRoot), projectRoot)) return;
+  await loadConfiguredInstallationIdentity(projectRoot, { pendingBootstrap: 'config-settled' }).catch(error => { if (!publicationGuarded || (error as { code?: unknown }).code !== 'CONFIG_VALIDATION') throw error; });
 }
 /** Explicit local operator action. No model, worker, or supplied profile can grant consent. */
 export async function applySuppliedInstallation(projectRoot: string, supplied: unknown, input: InstallationApplyChoices) {
