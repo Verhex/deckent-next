@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { t } from '#platform/index.js';
 import {
   acceptSurfaceEvent, openSurfacePush, releaseSurfacePush, SURFACE_PUSH_QUEUE, SURFACE_WATCH_OWNER,
-  type SurfacePushEvent,
+  createSurfaceFollowSession, type SurfaceFollowEvent, type SurfacePushEvent, type SurfacePushStep,
 } from '#surfaces/core/terminal-kit/index.js';
 import { mountWorkline, settle, until, WORKLINE_TEST_LABELS } from '../support/workline-harness.js';
 import { measureSurfacePush, surfacePushLatencyReport } from '../support/surface-push-latency.js';
@@ -169,4 +169,19 @@ describe('surface push on the workline', () => {
       mounted.pop();
     }
   });
+});
+
+it('keeps cursors on a partial denial, ignores a foreign denial, and stops at a scoped terminal denial', async () => {
+  const steps: SurfacePushStep[] = [];
+  async function* events(): AsyncGenerator<SurfaceFollowEvent> {
+    yield { access: 'denied', scopeId: 'other', kinds: ['run'], stopped: true };
+    yield { access: 'denied', scopeId: 'scope-a', kinds: ['approval'], stopped: false };
+    yield event(1);
+    yield { access: 'denied', scopeId: 'scope-a', kinds: ['worker'], stopped: true };
+    yield event(2, { text: 'must-not-be-painted' });
+  }
+  const outcome = await createSurfaceFollowSession().read(events(), 'scope-a', 5, new AbortController().signal, step => steps.push(step));
+  expect(outcome).toBe('denied');
+  expect(steps.map(step => step.status)).toEqual(['foreign-scope', 'denied', 'applied', 'denied']);
+  expect(steps.at(-1)?.state.cursors).toEqual({ approval: null, run: null, worker: 1 });
 });

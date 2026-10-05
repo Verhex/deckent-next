@@ -1,15 +1,16 @@
 import { watch, type FSWatcher } from 'node:fs';
 import { dirname } from 'node:path';
-import { openLedgerSurfaceTail, type LedgerSurfaceRow } from '#adapters/core/sqlite-ledger/index.js';
-import { loadConfig, productResourcePath, type ConfigLoadOptions } from '#platform/index.js';
+import { openLedgerSurfaceTail, type LedgerSurfaceKind } from '#adapters/core/sqlite-ledger/index.js';
+import type { ResolvedConfig } from '#platform/index.js';
+import type { SurfaceFollowEvent } from '#engine/index.js';
 
-export type RuntimeSurfaceEvent = {
-  readonly kind: LedgerSurfaceRow['kind'];
+export type RuntimeSurfaceEvent = SurfaceFollowEvent;
+export interface AuthorizedSurfaceRead {
+  readonly config: ResolvedConfig;
+  readonly ledger: string;
   readonly scopeId: string;
-  readonly sequence: number;
-  readonly id: string;
-  readonly text: string;
-};
+  readonly kinds: readonly LedgerSurfaceKind[];
+}
 
 function waitForLedger(ledger: string, pace: number, signal: AbortSignal): Promise<void> {
   if (signal.aborted) return Promise.resolve();
@@ -41,23 +42,38 @@ function waitForLedger(ledger: string, pace: number, signal: AbortSignal): Promi
  * The service stays the writer. This reader does not delete outbox rows and does not open an effect.
  * `onReady` runs after the baseline is taken and before the first wait.
  */
-export async function* followLedgerSurface(root: string, scopeId: string, options: ConfigLoadOptions, signal: AbortSignal,
-  onReady?: () => void): AsyncGenerator<RuntimeSurfaceEvent> {
-  const config = await loadConfig(root, { ...options, heal: false });
-  const ledger = productResourcePath(config.productLayout, 'ledger');
-  const pace = config.inspection.workers.heartbeatMs;
-  const tail = openLedgerSurfaceTail(ledger, config.storage.sqlite, scopeId);
+export async function* followLedgerSurface(initial: AuthorizedSurfaceRead, authorize: () => Promise<AuthorizedSurfaceRead | null>,
+  signal: AbortSignal, onReady?: () => void): AsyncGenerator<RuntimeSurfaceEvent> {
+  const { config, ledger, scopeId, kinds } = initial;
+  if (signal.aborted) return;
+  const denied = (['approval', 'run', 'worker'] as const).filter(kind => !kinds.includes(kind));
+  if (denied.length) yield { access: 'denied', scopeId, kinds: denied, stopped: kinds.length === 0 };
+  if (kinds.length === 0 || signal.aborted) return;
+  const fresh = async () => {
+    const current = await authorize();
+    return current !== null && current.scopeId === scopeId && current.ledger === ledger && current.config.company.id === config.company.id
+      && kinds.every(kind => current.kinds.includes(kind));
+  };
+  // A consumer can pause at a denial or publication: recheck before opening and before every subsequent read/yield.
+  if (!(await fresh())) { yield { access: 'denied', scopeId, kinds, stopped: true }; return; }
+  if (signal.aborted) return;
+  const tail = openLedgerSurfaceTail(ledger, config.storage.sqlite, scopeId, kinds);
+  let closed = false;
+  const close = () => { if (!closed) { closed = true; tail.close(); } };
   const sequence = { approval: 0, run: 0, worker: 0 };
   try {
     onReady?.();
     while (!signal.aborted) {
+      if (!(await fresh())) { close(); yield { access: 'denied', scopeId, kinds, stopped: true }; return; }
+      if (signal.aborted) return;
       const rows = tail.read();
-      if (rows.length === 0) { await waitForLedger(ledger, pace, signal); continue; }
+      if (rows.length === 0) { await waitForLedger(ledger, config.inspection.workers.heartbeatMs, signal); continue; }
       for (const row of rows) {
+        if (!(await fresh())) { close(); yield { access: 'denied', scopeId, kinds, stopped: true }; return; }
         if (signal.aborted) return;
         sequence[row.kind] += 1 + row.missed;
         yield { kind: row.kind, scopeId, sequence: sequence[row.kind], id: row.id, text: `${row.kind}:${row.id}` };
       }
     }
-  } finally { tail.close(); }
+  } finally { close(); }
 }

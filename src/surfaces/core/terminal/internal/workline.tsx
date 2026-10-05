@@ -142,10 +142,11 @@ export function WorklineApp(props: WorklineProps) {
   const seenWorkers = useRef(new Set<string>());
   const seenRuns = useRef(new Map<string, string>());
   const pollMs = props.pollMs ?? ledger?.workerHeartbeatMs ?? 5000;
-  const pushLive = useSurfacePushFeed(ledger?.followEvents, ledger?.scopeId ?? '', pollMs, step => {
-    const text = surfaceFollowLine(step, watchRef.current, labels.watchStep);
+  const pushMode = useSurfacePushFeed(ledger?.followEvents, ledger?.scopeId ?? '', pollMs, step => {
+    const text = surfaceFollowLine(step, watchRef.current, labels.watchStep, step.status === 'denied' && step.stopped ? labels.watchAccessStopped : labels.watchAccessDenied);
     if (text) push([notice(step.status === 'applied' ? 'info' : 'error', text)]);
   }, mode => { if (labels.watchDelivery) push([notice('info', fillTemplate(labels.watchDelivery, surfaceDeliveryValues(mode, pollMs)))]); });
+  const pushLive = pushMode !== 'poll'; // A refused feed must not restart through fallback polling.
   const failed = useCallback((error: unknown) => push([notice('error', `${labels.watchFailed}: ${errorText(error)}`)]), [errorText, labels.watchFailed, push]);
   // P4 work surface: live worker panel, approval notifications/cards and run-cancel confirmation (dynamic region only).
   const work = useWorkSurface({ ledger, labels, push, errorText, pollMs, pushLive, watchingWorkers: watch.workers,
@@ -315,7 +316,7 @@ export function WorklineApp(props: WorklineProps) {
       finally { setBusy(false); }
       return true;
     }
-    const action = immediateSlashAction(slash.command, { ledger, labels, watch: watchRef.current, canRestartService: Boolean(props.restartService), pollMs });
+    const action = immediateSlashAction(slash.command, { ledger, labels, watch: watchRef.current, canRestartService: Boolean(props.restartService), pollMs, ...(ledger?.followEvents ? { followDelivery: pushMode } : {}) });
     // Quit before any setState: a render scheduled beside unmount leaves the TTY ref'd after a governed turn.
     if (action?.exit) { exit(); return false; }
     if (action) {
@@ -333,7 +334,7 @@ export function WorklineApp(props: WorklineProps) {
     catch (error) { push([notice('error', errorText(error))]); }
     finally { setBusy(false); }
     return true;
-  }, [errorText, exit, labels, ledger, mode.run, props.mcp, props.monitor, props.config, props.restartService, push, reasoning.run, runTurn, scratch, session, setBusy, work.run]);
+  }, [errorText, exit, labels, ledger, mode.run, props.mcp, props.monitor, props.config, props.restartService, pollMs, pushMode, push, reasoning.run, runTurn, scratch, session, setBusy, work.run]);
 
   // The one FIFO drain: after every line (turn, immediate or awaited slash) the next queued entry runs here, in order, once.
   // Serialized without a flag: a turn or awaited slash holds `busyRef`, so Enter only enqueues; the hop from one line to the

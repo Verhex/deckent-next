@@ -854,6 +854,8 @@
   "terminal.workline.statusCancelling": "İptal ediliyor…",
   "terminal.workline.watchFailed": "İzleme sorgusu başarısız",
   "terminal.workline.watchDelivery": "İzleme teslimi: {mode}. Zaman aşımı {timeoutMs} ms. Sahip: {owner}. Eylem: {action}.",
+  "terminal.workline.watchAccessDenied": "İzleme erişimi: reddedildi ({kinds}). Bu olay türleri okunmuyor.",
+  "terminal.workline.watchAccessStopped": "İzleme erişimi: reddedildi ({kinds}). Takip durdu; otomatik yeniden deneme yok.",
   "terminal.workline.watchStep": "İzleme {status}. Zaman aşımı {timeoutMs} ms. Sahip: {owner}. Eylem: {action}.",
   "terminal.workline.watchPushFailed": "İzleme itmesi başarısız",
   "terminal.workline.unknownCommand": "Bilinmeyen komut",

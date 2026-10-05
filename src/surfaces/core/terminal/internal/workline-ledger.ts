@@ -1,7 +1,7 @@
 import type { RunView, WorkerObservationReport } from '#engine/index.js';
 import type { WorkerAttemptIdentity, WorkLedgerEntry } from './work-ledger.js';
 import type { ListApprovalPage, WorklineApproval } from './approval-watch.js';
-import type { StandingScope, SurfacePushEvent } from '#surfaces/core/terminal-kit/index.js';
+import type { StandingScope, SurfaceFollowEvent } from '#surfaces/core/terminal-kit/index.js';
 import { runViewToLedgerEntry, workerReportToLedgerEntries } from './work-ledger.js';
 
 export interface WorklineLedgerPorts {
@@ -14,7 +14,7 @@ export interface WorklineLedgerPorts {
   readonly followWorkers?: (signal: AbortSignal) => AsyncIterable<readonly WorkLedgerEntry[]>;
   readonly followRuns?: (signal: AbortSignal) => AsyncIterable<readonly WorkLedgerEntry[]>;
   /** Cursor-aware approval/run/worker push. When set, replaces polling. The runtime owns the source. */
-  readonly followEvents?: (signal: AbortSignal) => AsyncIterable<SurfacePushEvent>;
+  readonly followEvents?: (signal: AbortSignal) => AsyncIterable<SurfaceFollowEvent>;
   /** Sealed worker transcript of one attempt, rendered by the CLI renderer (attempt `read-output` policy applies). */
   readonly inspectTranscript?: (attempt: WorkerAttemptIdentity) => Promise<string>;
   /** One page of the scope's approval records through the runtime approval application. */

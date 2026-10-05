@@ -102,6 +102,7 @@ function worklineLabels(locale: Locale, statusLine: string): WorklineLabels {
     runCard: t('terminal.ledger.runCard', {}, locale), workerCard: t('terminal.ledger.workerCard', {}, locale),
     watchFailed: t('terminal.workline.watchFailed', {}, locale),
     watchDelivery: t('terminal.workline.watchDelivery', {}, locale), watchStep: t('terminal.workline.watchStep', {}, locale),
+    watchAccessDenied: t('terminal.workline.watchAccessDenied', {}, locale), watchAccessStopped: t('terminal.workline.watchAccessStopped', {}, locale),
     watchPushFailed: t('terminal.workline.watchPushFailed', {}, locale), ledgerUnavailable: t('terminal.workline.ledgerUnavailable', {}, locale),
     runNotFound: t('terminal.workline.runNotFound', {}, locale), workersEmpty: t('terminal.workline.workersEmpty', {}, locale),
     runsEmpty: t('terminal.workline.runsEmpty', {}, locale), serviceRestartUnavailable: t('terminal.service.restartUnavailable', {}, locale),

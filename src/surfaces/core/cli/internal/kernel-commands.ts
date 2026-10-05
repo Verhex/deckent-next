@@ -27,7 +27,7 @@ export type { InferenceMetricsReading } from '#surfaces/core/cli-models/index.js
 
 import type { ShutdownCommand, ServiceShutdownAdmissionResult } from '#engine/index.js';
 import type { ComposerHistoryPort } from '#surfaces/core/terminal-composer/index.js';
-import type { SurfacePushEvent } from '#surfaces/core/terminal-kit/index.js';
+import type { SurfaceFollowEvent } from '#surfaces/core/terminal-kit/index.js';
 import type { TerminalSessionStoreView } from '#surfaces/core/terminal/index.js';
 
 export interface RuntimeServiceReadinessView {
@@ -42,7 +42,7 @@ export interface CommandContext extends ModelCommandContext, MonitorCommandConte
   renewApproval?: (input: unknown) => Promise<unknown>;
   listApprovals?: (input: unknown) => Promise<unknown>;
   /** Approval, run and worker publications already written by the runtime service. */
-  followSurfaceEvents?: (root: string, scopeId: string, options: ConfigLoadOptions, signal: AbortSignal) => AsyncIterable<SurfacePushEvent>;
+  followSurfaceEvents?: (root: string, scopeId: string, options: ConfigLoadOptions, signal: AbortSignal) => AsyncIterable<SurfaceFollowEvent>;
   inspectApproval?: (input: unknown) => Promise<unknown>;
   decideApproval?: (input: unknown) => Promise<unknown>;
   deliverWorkspaceIntegration?: TaskIntegrationDeliverHandler;

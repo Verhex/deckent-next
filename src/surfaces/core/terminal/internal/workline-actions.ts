@@ -22,6 +22,8 @@ export interface WorklineActionLabels {
   /** `{status}` is `gap`, `backpressure` or `foreign-scope`. */
   readonly watchStep?: string;
   readonly watchPushFailed?: string;
+  readonly watchAccessDenied?: string;
+  readonly watchAccessStopped?: string;
   readonly statusLine: string;
   readonly unknownCommand: string;
   /** Worker live line, transcript, approvals and run control; absent means those commands are not offered. */
@@ -89,6 +91,7 @@ export function isWorkSurfaceCommand(command: string): command is WorkSurfaceCom
 export type WatchState = Readonly<{ workers: boolean; runs: boolean }>;
 
 export interface WorklineActionContext {
+  readonly followDelivery?: 'push' | 'poll' | 'denied';
   readonly ledger: WorklineLedgerPorts | undefined;
   readonly labels: WorklineActionLabels;
   readonly watch: WatchState;
@@ -118,7 +121,7 @@ export function immediateSlashAction(command: string, context: WorklineActionCon
     const runs = command === 'watch-runs';
     if (!ledger || (runs && !ledger.listRunIds)) return { entries: [notice('error', labels.ledgerUnavailable)] };
     if (runs ? watch.runs : watch.workers) return { entries: [] };
-    const mode = ledger.followEvents || (runs ? ledger.followRuns : ledger.followWorkers) ? 'push' as const : 'poll' as const;
+    const mode = context.followDelivery ?? (ledger.followEvents || (runs ? ledger.followRuns : ledger.followWorkers) ? 'push' as const : 'poll' as const);
     const pace = context.pollMs ?? ledger.workerHeartbeatMs;
     const delivery = labels.watchDelivery && pace !== undefined ? [notice('info', fillTemplate(labels.watchDelivery, surfaceDeliveryValues(mode, pace)))] : [];
     return { entries: [notice('info', runs ? labels.watchRunsStarted : labels.watchStarted), ...delivery], watch: { ...watch, [runs ? 'runs' : 'workers']: true } };
