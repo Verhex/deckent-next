@@ -54,8 +54,9 @@ export class IdentityFile<T> {
    * missing afterwards is retained loss (INVALID), never a fresh identity.
    */
   private async settled(directory: string): Promise<T | null> {
-    const deadline = Date.now() + (this.lockTimeoutMs ?? getConfigFieldDefault('configFile').writeLockTimeoutMs);
-    while (Date.now() < deadline) {
+    // Monotonic, so a wall-clock step neither stretches the wait nor ends it early (Astra 2359 P2).
+    const deadline = performance.now() + (this.lockTimeoutMs ?? getConfigFieldDefault('configFile').writeLockTimeoutMs);
+    while (performance.now() < deadline) {
       await new Promise(resolve => setTimeout(resolve, PUBLICATION_POLL_MS));
       const record = await this.read(directory);
       if (record) return record;
