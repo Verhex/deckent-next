@@ -5,7 +5,7 @@
 //  3. i18n: locale catalogs have identical key sets; t('key') keys exist; no dynamic keys;
 //     surfaces never print string literals directly
 //  4. model/flow literals only in the registry allowlist
-//  5. .md writes only from kernel/docs-authority
+//  5. no product source writes .md files (docs are not product output)
 //  6. budgets: file ≤ maxLinesPerFile (all text files), per-package and total src lines, test-case count
 //  7. tracked markdown set is exactly the allowlist (+ pointer files within their line cap)
 //  8. external dependencies: dependencies.json registry, owned bare imports, embedded components (scripts/dependencies.mjs)
@@ -683,9 +683,8 @@ function lintHardcode(findings, policy) {
 // ---- 5: .md write gate
 const MD_WRITE = /(?:writeFile|writeFileSync|appendFile|appendFileSync|createWriteStream|copyFile|copyFileSync|renameSync|rename)\([^\n]*\.md/g;
 for (const file of srcFiles) {
-  if (rel(file).startsWith(arch.markdown.writerModule)) continue;
   const src = readFileSync(file, 'utf8');
-  for (const m of src.matchAll(MD_WRITE)) fail('md-write', `${rel(file)}:${src.slice(0, m.index).split('\n').length}`, `markdown write outside ${arch.markdown.writerModule}`);
+  for (const m of src.matchAll(MD_WRITE)) fail('md-write', `${rel(file)}:${src.slice(0, m.index).split('\n').length}`, 'markdown write from product source; documentation is not written by src');
 }
 
 // ---- 6: budgets

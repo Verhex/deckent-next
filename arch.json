@@ -2316,7 +2316,6 @@
       "AGENTS.md": 70,
       ".codex/AGENTS.md": 5
     },
-    "writerModule": "src/platform/core/docs-authority/",
     "trackedAllowGlobs": [
       ".agents/skills/claude-design-sync/*.md",
       ".agents/skills/deckent-agentic-ux/*.md",
