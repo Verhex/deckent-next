@@ -1,5 +1,5 @@
 import { t, resolveLocale, LOCALES, MESSAGE_REGISTRY, type Locale, type MessageKey } from '#platform/index.js';
-import { CLI_CATALOG, HELP_GROUPS, type CliCommandName, type CliCommandSpec } from './command-catalog.js';
+import { CLI_CATALOG, HELP_GROUPS, type CliCommandName, type CliCommandSpec, type CliInstallationContract } from './command-catalog.js';
 
 interface CliHelpSpec extends CliCommandSpec {
   readonly path?: readonly string[];
@@ -17,6 +17,16 @@ export function registerCliCommands<C>(handlers: Readonly<Record<CliCommandName,
     return [entry, ...(spec.children ?? []).flatMap(child => visit(child, entry, run))];
   };
   return CLI_CATALOG.flatMap(spec => visit(spec, undefined, handlers[spec.name]));
+}
+
+/** The installation contract of the deepest registered command naming argv's leading non-flag words (as the command parsers read positionals,
+ * e.g. `policy --json vocabulary`), inherited from its family when undeclared. It only skips the preflight; the handler still validates argv. */
+export function cliInstallationContract<C>(argv: readonly string[], commands: readonly RegisteredCliCommand<C>[]): CliInstallationContract | undefined {
+  const words = argv.filter(value => !value.startsWith('-'));
+  let command: CliHelpSpec | undefined = commands.reduce<RegisteredCliCommand<C> | undefined>((found, item) =>
+    item.path.length > (found?.path.length ?? 0) && item.path.every((name, index) => words[index] === name) ? item : found, undefined);
+  while (command && command.installation === undefined) command = command.parent;
+  return command?.installation;
 }
 
 /** Catalog newlines are intentional boundaries; author flowing prose as one source line.

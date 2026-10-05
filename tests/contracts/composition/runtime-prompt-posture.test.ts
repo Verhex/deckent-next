@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
+import { AGENT_TURN_SYSTEM_PROMPT_VERSION } from '#engine/index.js';
 import { landlockShellSandbox, type ShellSandboxFactory } from '#adapters/index.js';
 import { closeModeRuntimes, modeRuntime, rule, type Mode } from '../support/agent-turn-modes.js';
 import { linuxShellHost, measureTestShellHost } from '../../fixtures/shell-host.js';
@@ -26,7 +27,7 @@ async function systemPrompt(input: { readonly realm: 'require-sandbox' | 'prefer
   expect(turn.status).toBe('ok');
   const system = f.sent[0]!.messages[0]!;
   expect(system.role).toBe('system');
-  expect(system.content.startsWith('[Deckent runtime instructions v7]')).toBe(true);
+  expect(system.content.startsWith(`[Deckent runtime instructions v${AGENT_TURN_SYSTEM_PROMPT_VERSION}]`)).toBe(true);
   return system.content;
 }
 const shellLine = (prompt: string) => prompt.split('\n').find(line => line.startsWith('- Shell tool: run_shell.')) ?? '';

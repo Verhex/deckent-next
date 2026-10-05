@@ -1,6 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { AGENT_TURN_SYSTEM_PROMPT_VERSION } from '#engine/index.js';
 import type { AgentTurnMessage, AgentTurnStreamEvent } from '#domain/index.js';
 import type { TurnDelta } from '#surfaces/index.js';
 import { cancelRuntimeChatTurn, runRuntimeChatTurn } from '#composition/core/runtime-service/index.js';
@@ -46,7 +47,7 @@ describe.skipIf(process.platform !== 'linux')('a tool call cut at the completion
     expect(sent.map(message => message.content)).toEqual([texts[0]]);
     // The model was told beforehand (system prompt v7): its answer limit and how to write large content in parts.
     const system = (f.state.requests[0]!['messages'] as { role: string; content: string }[])[0]!.content;
-    expect(system.startsWith('[Deckent runtime instructions v7]')).toBe(true);
+    expect(system.startsWith(`[Deckent runtime instructions v${AGENT_TURN_SYSTEM_PROMPT_VERSION}]`)).toBe(true);
     expect(system).toContain('- One answer, tool call arguments included, may use at most 128 output tokens');
   }, 30_000);
 

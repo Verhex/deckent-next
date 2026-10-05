@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { AgentTurnStreamEvent } from '#domain/index.js';
-import { agentToolArgumentsDigest } from '#engine/index.js';
+import { AGENT_TURN_SYSTEM_PROMPT_VERSION, agentToolArgumentsDigest } from '#engine/index.js';
 import { landlockShellSandbox, scratchSessionKey, type ShellSandboxFactory } from '#adapters/index.js';
 import { linuxShellHost } from '../../fixtures/shell-host.js';
 import { me, principal, runtime } from '../support/chat-turn-harness.js';
@@ -74,7 +74,7 @@ describe.skipIf(process.platform !== 'linux')('fetch_url through the runtime ser
     // One C11 effect of the Core network operation, settled; the model learned the tool from the system prompt v3.
     expect(f.rows('SELECT target_kind, state FROM effect_intents')).toEqual([{ target_kind: 'network-fetch', state: 'settled' }]);
     const system = systemOf(f.state.requests[0]!);
-    expect(system.startsWith('[Deckent runtime instructions v7]')).toBe(true);
+    expect(system.startsWith(`[Deckent runtime instructions v${AGENT_TURN_SYSTEM_PROMPT_VERSION}]`)).toBe(true);
     expect(system).toContain('fetch_url'); expect(system).toContain('docs.example');
     expect(toolNames(f.state.requests[0]!)).toContain('fetch_url');
   }, 60_000);
