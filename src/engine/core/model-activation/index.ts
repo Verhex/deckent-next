@@ -10,4 +10,4 @@ export type { ModelActivationInspection, ModelActivationReader } from './interna
 export { ModelCatalogApplication, ModelCatalogInspectionApplication, sameModelCatalogRequest, modelCatalogTargetId } from './internal/catalog.js';
 export type { ModelCatalogAdmission, ModelCatalogResult, ModelCatalogStore, ModelCatalogReader, ModelCatalogAuthorizer, ModelCatalogInspection, ModelCatalogChannelView } from './internal/catalog.js';
 export { admitWorkerModels, WorkerModelAdmissionError } from './internal/worker-admission.js';
-export type { WorkerModelAdmissionCode, WorkerModelAdmissionDetail } from './internal/worker-admission.js';
+export type { WorkerModelAdmissionCode, WorkerModelAdmissionDetail, WorkerAdmissionWarning, WorkerAdmissionOptions } from './internal/worker-admission.js';

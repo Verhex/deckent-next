@@ -17,6 +17,7 @@ import { queryFailure } from '#composition/core/query-errors/index.js';
 import { releaseSettledModelSlots } from '#composition/core/model-invocation/index.js';
 import { loadConfiguredInstallationIdentity, registerConfiguredScopesAtStart } from '#composition/core/scoped-request/index.js';
 import { sweepConfiguredAttemptCustody } from '#composition/core/runs/index.js';
+import { startToolchainRefresh, type ToolchainRefreshDependencies, type ToolchainRefreshObserver } from '#composition/core/toolchains/index.js';
 import { executeConfiguredRuntimeOperation } from './operations.js';
 import { executeConfiguredRuntimeModelOperation } from './model-invocation.js';
 import { executeConfiguredRuntimeProviderSpendOperation } from './provider-spend.js';
@@ -26,7 +27,7 @@ import { executeConfiguredRuntimeWorkspaceFileOperation } from './workspace-file
 import { executeConfiguredRuntimeEffectOperation } from './effect-operations.js';
 import { executeConfiguredRuntimePermissionModeOperation } from './permission-mode.js';
 import { executeConfiguredRuntimeSecretOperation } from './secret.js';
-export interface ConfiguredRuntimeServiceObserver extends ConfiguredCancellationRuntimeObserver {
+export interface ConfiguredRuntimeServiceObserver extends ConfiguredCancellationRuntimeObserver, ToolchainRefreshObserver {
   onRunProgression?: RunProgressionObserver['onRun'];
   onRunProgressionError?: RunProgressionObserver['onError'];
   onReconciliationPage?: ConfiguredReconciliationRuntimeObserver['onPage'];
@@ -189,6 +190,8 @@ async function startUnderCustody(projectRoot: string, observer: ConfiguredRuntim
   // Started once the listener is up: a start that fails before leaves no sweep running after its custody is released.
   startScratchSweeper({ root: () => scratchResource(config.productLayout), limits: scratchLimits, active: scratchActivity, signal: turnStop.signal,
     onSweep: result => { void observer.onScratchSwept?.(result); } });
+  // WORKER-AUTO-REFRESH: never awaited by readiness; the controller's signal ends its interval timer when the service stops.
+  startToolchainRefresh(projectRoot, options, observer, controller.signal, ports.toolchainRefresh);
   let resolveDone!: () => void; let rejectDone!: (error: unknown) => void;
   const done = new Promise<void>((resolve, reject) => { resolveDone = resolve; rejectDone = reject; });
   void done.catch(() => undefined);
@@ -250,7 +253,7 @@ async function startUnderCustody(projectRoot: string, observer: ConfiguredRuntim
 
 /** Code-only ports of an in-process service (never configuration or environment): `fetchTransport` defaults to the system transport,
  * `shellSandboxes` to the shipped sandbox providers (S9 bubblewrap). */
-export interface RuntimeServicePorts { readonly fetchTransport?: HttpFetchTransport; readonly shellSandboxes?: ShellSandboxFactory }
+export interface RuntimeServicePorts { readonly fetchTransport?: HttpFetchTransport; readonly shellSandboxes?: ShellSandboxFactory; readonly toolchainRefresh?: ToolchainRefreshDependencies }
 export async function startConfiguredRuntimeService(projectRoot: string, observer: ConfiguredRuntimeServiceObserver,
   options: ConfigLoadOptions = {}, ports: RuntimeServicePorts = {}) {
   try { return await startService(projectRoot, observer, options, ports); }
