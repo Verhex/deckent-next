@@ -2,7 +2,7 @@ import { cp, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/pr
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { PassThrough, Readable, Writable } from 'node:stream';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { FileInstallationIdentityStore, FileProjectIdentityStore, readLocalOsIdentity } from '#adapters/index.js';
 import { clearConfigCache, ErrorRegistry, t } from '#platform/index.js';
 import { main as composedMain } from '#composition/core/cli/index.js';

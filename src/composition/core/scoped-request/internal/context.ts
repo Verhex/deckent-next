@@ -48,7 +48,8 @@ export async function loadConfiguredInstallationIdentity(projectRoot: string, op
 export async function inspectConfiguredInstallationBinding(projectRoot: string, options: ConfigLoadOptions = {}): Promise<{ readonly capability: 'supported' | 'unsupported' } | null> {
   try {
     const config = await loadConfig(projectRoot, { ...options, heal: false });
-    const binding = await localInstallationBindingSource(config.productLayout, config.installation.identityProbe).capture();
+    // The capability is machine-level: probe against the project directory, which exists before `.deckent` is initialized.
+    const binding = await localInstallationBindingSource({ ...config.productLayout, root: config.projectRoot }, config.installation.identityProbe).capture();
     return { capability: 'status' in binding ? 'unsupported' : 'supported' };
   } catch { return null; }
 }

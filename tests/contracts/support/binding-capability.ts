@@ -10,7 +10,7 @@ import { resolveProductLayout } from '#platform/index.js';
 export async function machineBindingNotRunReason(): Promise<string | null> {
   if (process.platform === 'win32') return 'INSTALLATION_BINDING_UNSUPPORTED: win32 has no machine binding';
   try {
-    const binding = await localInstallationBindingSource(resolveProductLayout({ projectRoot: process.cwd() })).capture();
+    const binding = await localInstallationBindingSource({ ...resolveProductLayout({ projectRoot: process.cwd() }), root: process.cwd() }).capture();
     return 'status' in binding ? 'INSTALLATION_BINDING_UNSUPPORTED: no usable machine identity on this host (Linux: valid /etc/machine-id); relocation and copy detection is off and has separate typed tests' : null;
   } catch { return 'INSTALLATION_BINDING_UNSUPPORTED: machine binding could not be probed'; }
 }
