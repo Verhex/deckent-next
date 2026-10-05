@@ -206,7 +206,8 @@ export async function runKernelCommand(argv: readonly string[], context: Command
   // SECRET-K1: the selected secret store and whether it can be read now (backend id, status and typed code only; never a value).
   ...(result.secretStore ? [t('doctor.secretStore', { backend: result.secretStore.backend, status: result.secretStore.status,
     codeSuffix: result.secretStore.code ? `, ${result.secretStore.code}` : '' }, locale)] : []),
-  ...(result.installationBinding ? [t(`doctor.installationBinding.${result.installationBinding.capability}`, { platform: result.platform }, locale)] : []),
+  ...(result.installationBinding ? [result.installationBinding.capability === 'supported' ? t('doctor.installationBinding.supported', {}, locale)
+    : t('doctor.installationBinding.unsupported', { platform: result.platform }, locale)] : []),
   ...(result.poolReadiness ? poolReadinessLines(result.poolReadiness, locale) : []),
   ...(result.shellRealm ? shellRealmLines(result.shellRealm) : [])].join('\n'));
   // modelInvocationDelivery is JSON-only for now, like policyTemplate: no human-text rendering yet.
