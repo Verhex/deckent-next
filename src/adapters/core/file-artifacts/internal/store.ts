@@ -1,6 +1,6 @@
 import { ARTIFACT_STORAGE_LIMITS } from '#platform/index.js';
 import { constants, type Stats } from 'node:fs';
-import { link, lstat, mkdir, open, realpath, unlink } from 'node:fs/promises';
+import { lstat, mkdir, open, realpath, rename, unlink } from 'node:fs/promises';
 import { createHash, randomUUID } from 'node:crypto';
 import { isAbsolute, join, resolve } from 'node:path';
 import { z } from 'zod';
@@ -10,7 +10,6 @@ const optionsSchema = ARTIFACT_STORAGE_LIMITS.extend({ root: z.string().min(1) }
 export type FileArtifactOptions = z.infer<typeof optionsSchema>;
 function digest(bytes: Uint8Array | string) { return createHash('sha256').update(bytes).digest('hex'); }
 function missing(error: unknown) { return !!error && typeof error === 'object' && 'code' in error && error.code === 'ENOENT'; }
-function present(error: unknown) { return !!error && typeof error === 'object' && 'code' in error && error.code === 'EEXIST'; }
 /** POSIX trusted-host store; managed tree must be outside worker mounts. Preflight is not openat custody. */
 export class FileArtifactStore implements ArtifactStore {
   private readonly options: FileArtifactOptions;
@@ -79,11 +78,7 @@ export class FileArtifactStore implements ArtifactStore {
     const handle = await open(temporary, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, 0o600);
     try {
       try { await handle.writeFile(bytes); await handle.sync(); } finally { await handle.close(); }
-      // Publish without replacement: the first identical publication keeps its inode, so a concurrent reader's lstat and open
-      // never see two files (a replacing rename turned a benign identical put into ARTIFACT_UNSAFE). A path that already exists is
-      // verified by the read below like any existing artifact; a tampered or linked one is refused there, never overwritten.
-      try { await link(temporary, path); } catch (error) { if (!present(error)) throw error; }
-      await unlink(temporary); await this.syncDirectory(directory); await this.syncDirectory(this.options.root);
+      await rename(temporary, path); await this.syncDirectory(directory); await this.syncDirectory(this.options.root);
     } catch (error) {
       // Preserve the primary write/durability failure; a crash or cleanup failure may leave an unreferenced staging file.
       try { await unlink(temporary); } catch { /* No receipt is issued; staged files are not addressable artifacts. */ }
