@@ -8,7 +8,14 @@ import { surfaceSnapshotFixture } from '../support/surface-snapshot-fixture.js';
 
 const fixtures: Awaited<ReturnType<typeof surfaceSnapshotFixture>>[] = [];
 const mounted: { unmount(): void }[] = [];
-beforeEach(context => { if (process.platform === 'win32') context.skip('Local OS identity requires POSIX UID'); });
+beforeEach(async context => {
+  if (process.platform === 'win32') context.skip('Local OS identity requires POSIX UID');
+  if (process.platform === 'darwin') {
+    const f = await fixture();
+    await expect(f.ports.readSurfaceSnapshot!(['approval'], new AbortController().signal)).rejects.toMatchObject({ code: 'SESSION_REQUIRED' });
+    context.skip('SESSION_REQUIRED: snapshot session evidence requires Linux /proc; real surface refusal verified');
+  }
+});
 afterEach(async () => { for (const view of mounted.splice(0)) view.unmount(); vi.restoreAllMocks(); clearConfigCache(); await Promise.all(fixtures.splice(0).map(async f => { await f.close(); await rm(f.root, { recursive: true, force: true }); })); });
 async function fixture(initialWorker = true) { const f = await surfaceSnapshotFixture(initialWorker); fixtures.push(f); return f; }
 const labels = { ...WORKLINE_TEST_LABELS, watchStep: 'STEP {status}', watchAccessStopped: 'ACCESS-STOPPED {kinds}', watchAccessDenied: 'ACCESS-DENIED {kinds}', watchDelivery: 'DELIVERY {mode}' };

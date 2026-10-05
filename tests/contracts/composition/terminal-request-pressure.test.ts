@@ -14,7 +14,7 @@ afterEach(async () => {
 });
 async function fixture() {
   const project = await mkdtemp(join(tmpdir(), 'deckent-input-pressure-')); roots.push(project);
-  const options = { env: { HOME: join(project, 'home') } };
+  const options = { env: { HOME: join(project, 'home'), USERPROFILE: join(project, 'home') } };
   await mkdir(join(project, '.deckent'));
   await writeFile(join(project, '.deckent/config.json'), JSON.stringify({ layout: { root: join(project, 'data') }, service: { inputMaxBytes: 4096 } }));
   const config = await loadConfig(project, options);
