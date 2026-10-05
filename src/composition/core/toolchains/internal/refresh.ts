@@ -12,6 +12,8 @@ export type ToolchainRefreshEvent = Readonly<{ schemaVersion: 1; event: 'toolcha
 export interface ToolchainRefreshObserver { onToolchainRefresh?(event: ToolchainRefreshEvent): void | Promise<void> }
 /** Grace added to the build timeout before an `updating` marker stops counting as in flight. */
 const MARKER_GRACE_MS = 60_000;
+/** Bounded re-derivations when another authorized writer changed the config between the read and the write. */
+const REGISTRY_WRITE_ATTEMPTS = 3;
 const failureCode = (error: unknown) => (error && typeof error === 'object' && 'code' in error && typeof (error as { code: unknown }).code === 'string' ? (error as { code: string }).code : 'UNKNOWN').slice(0, 128);
 
 async function toolchainHome(projectRoot: string, options: ConfigLoadOptions) {
@@ -39,7 +41,10 @@ export async function isToolchainRefreshInProgress(projectRoot: string, options:
 async function writeState(home: string, state: ToolchainRefreshState) { await mkdir(home, { recursive: true, mode: 0o700 }); await writeJsonAtomic(join(home, 'refresh-state.json'), state); }
 
 export type ToolchainRefreshOutcome = Readonly<{ outcome: 'skipped' | 'current' | 'failed' | 'unverified'; event: ToolchainRefreshEvent | null }>;
-export type ToolchainRefreshDependencies = ToolchainUpdateDependencies;
+export interface ToolchainRefreshDependencies extends ToolchainUpdateDependencies {
+  /** Test seam: runs after the registry was read and the revision derived, immediately before the compare-and-set write. */
+  readonly beforeRegistryWrite?: (attempt: number) => void | Promise<void>;
+}
 /**
  * One refresh: policy gate, durable `updating` marker, the existing update path with apply (plan, daemon preflight, build, receipt, proposal),
  * then the proposal applied as a governed `admission.registry` config write (new profile versions only; old versions and every admitted Run
@@ -76,17 +81,24 @@ async function runRefresh(projectRoot: string, trigger: ToolchainRefreshTrigger,
     } });
     if (result.decision === 'built' && result.proposal) {
       if (dependencies.signal?.aborted) throw Object.assign(new Error('REFRESH_STOPPED'), { code: 'REFRESH_STOPPED' });
-      // The registry is re-read after the long build, so an edit made meanwhile is revised, never overwritten by the pre-build copy.
-      const fresh = await loadConfig(projectRoot, { ...options, force: true });
-      const revision = reviseRegistryForProposal(fresh.admission?.registry, result.proposal);
-      if (revision) {
-        // The service's own scope; a project without a service identity falls back to the terminal scope (the scope `config set` uses).
-        const scopeId = fresh.service.identity?.scopeId ?? (fresh as unknown as { terminal?: { scopeId?: string } }).terminal?.scopeId;
+      // Compare-and-set: the registry is read together with the digest of the layer document it will be written to, the revision is derived
+      // from exactly that read, and the write carries the digest as `expect` (checked under the config write lock). A change published in
+      // between is a typed hold: re-read and re-derive (bounded), never overwrite the other writer's registry with an older derivation.
+      const scopeIdOf = (effective: { service: { identity: { scopeId: string } | null } }) => effective.service.identity?.scopeId ?? (effective as unknown as { terminal?: { scopeId?: string } }).terminal?.scopeId;
+      for (let attempt = 1; ; attempt++) {
+        const app = createConfiguredConfigApplication(projectRoot, options);
+        const read = await app.inspect({ keyPath: 'admission.registry', layer: 'project' });
+        const revision = reviseRegistryForProposal(read.fields[0]?.value, result.proposal);
+        if (!revision) break;
+        const scopeId = scopeIdOf(await loadConfig(projectRoot, { ...options, force: true })); // the service's own scope, else the terminal scope `config set` uses
         if (!scopeId) throw Object.assign(new Error('TERMINAL_SCOPE_REQUIRED'), { code: 'TERMINAL_SCOPE_REQUIRED' });
         const principal = await resolveConfiguredConfigPrincipal(projectRoot, scopeId, options);
-        configWrite = await createConfiguredConfigApplication(projectRoot, options).set({ keyPath: 'admission.registry', value: revision.registry, layer: 'project',
-          principal, scopeId, commandId: `toolchain-refresh-${startedAt}` });
-        applied = revision.applied.length;
+        await dependencies.beforeRegistryWrite?.(attempt);
+        try {
+          configWrite = await app.set({ keyPath: 'admission.registry', value: revision.registry, layer: 'project', principal, scopeId,
+            commandId: `toolchain-refresh-${startedAt}-${attempt}`, expect: read.digest });
+          applied = revision.applied.length; break;
+        } catch (error) { if (failureCode(error) !== 'CONFIG_CONCURRENT_REVISION_HOLD' || attempt >= REGISTRY_WRITE_ATTEMPTS) throw error; }
       }
     }
   } catch (error) { code = dependencies.signal?.aborted ? 'REFRESH_STOPPED' : failureCode(error); } // a build ended by the stop is a stop, not a build fault

@@ -7,6 +7,7 @@ import { prepareNativeCodingProfile } from '../../../src/index.js';
 import { applyPolicyTemplateInstallation } from '#composition/core/installation/index.js';
 import { inspectToolchainRefresh, isToolchainRefreshInProgress, readToolchainRefreshState, refreshConfiguredToolchains, startToolchainRefresh,
   type ToolchainRefreshEvent } from '#composition/core/toolchains/index.js';
+import { createConfiguredConfigApplication, resolveConfiguredConfigPrincipal } from '#composition/core/config/index.js';
 import { openSqliteLedger } from '#adapters/core/sqlite-ledger/index.js';
 import { clearConfigCache, getConfigFieldDefault, loadConfig, prepareProductFile, resolveProductLayout } from '#platform/index.js';
 import type { WorkerImageBuildRunner } from '#adapters/index.js';
@@ -232,5 +233,31 @@ describe('autonomous worker image refresh (WORKER-AUTO-REFRESH)', () => {
     const f = await fixture(); f.state.tags.push('r5-20261006'); // an r5 already exists on the daemon
     const outcome = await refreshConfiguredToolchains(f.root, 'startup', f.options, { ...f.deps, now: () => '2026-10-07T08:00:00.000Z' }, f.observer);
     expect(outcome.outcome).toBe('failed'); expect(outcome.event!.code).toBe('WORKER_VERSION_COUNTER_TAKEN'); expect(f.state.builds).toBe(0);
+  });
+
+  /** Another authorized writer (an operator's config set) adds a task kind to the registry: the hook runs after refresh derived its value. */
+  const operatorEdit = (f: Awaited<ReturnType<typeof fixture>>, kind: string) => async () => {
+    const app = createConfiguredConfigApplication(f.root, f.options); const current = (await app.inspect({ keyPath: 'admission.registry' })).fields[0]!.value as { kinds: { kind: string; profile: unknown }[] };
+    const principal = await resolveConfiguredConfigPrincipal(f.root, 'installation', f.options);
+    await app.set({ keyPath: 'admission.registry', value: { ...current, kinds: [...current.kinds, { kind, profile: { id: 'claude-pinned', version: 1 } }] }, layer: 'project', principal, scopeId: 'installation', commandId: `operator-${kind}` });
+  };
+  it('P1-2: an authorized registry change that lands between the refresh read and its write is kept; the refresh re-derives from it', async () => {
+    const f = await fixture(); const edit = operatorEdit(f, 'operator-kind');
+    const outcome = await refreshConfiguredToolchains(f.root, 'startup', f.options, { ...f.deps, beforeRegistryWrite: async attempt => { if (attempt === 1) await edit(); } }, f.observer);
+    expect(outcome.outcome).toBe('current');
+    const registry = await f.registry();
+    expect(registry.kinds.map(kind => kind.kind)).toContain('operator-kind'); // the operator's edit survives
+    expect(registry.kinds.find(kind => kind.kind === 'codex-pinned')!.profile.version).toBe(2); // and the refresh still applied
+    expect((await readToolchainRefreshState(f.root, f.options))).toMatchObject({ phase: 'current', appliedProfiles: 1 });
+  });
+  it('P1-2: a registry that keeps changing is never overwritten: typed hold after the bounded retries, nothing of the refresh written, audit kept', async () => {
+    const f = await fixture(); let n = 0;
+    const outcome = await refreshConfiguredToolchains(f.root, 'startup', f.options, { ...f.deps, beforeRegistryWrite: async () => { await operatorEdit(f, `operator-${++n}`)(); } }, f.observer);
+    expect(outcome.outcome).toBe('failed'); expect(outcome.event!.code).toBe('CONFIG_CONCURRENT_REVISION_HOLD'); expect(n).toBe(3);
+    const registry = await f.registry();
+    expect(registry.kinds.map(kind => kind.kind)).toEqual(expect.arrayContaining(['operator-1', 'operator-2', 'operator-3']));
+    expect(registry.profiles.filter(profile => profile.id === 'codex-pinned')).toHaveLength(1); // no refreshed version was written
+    expect(await inspectToolchainRefresh(f.root, f.options)).toMatchObject({ status: 'failed', reason: 'CONFIG_CONCURRENT_REVISION_HOLD' });
+    expect((await readdir(join(f.root, '.deckent'), { recursive: true })).some(name => name.includes('refreshes/'))).toBe(true);
   });
 });
