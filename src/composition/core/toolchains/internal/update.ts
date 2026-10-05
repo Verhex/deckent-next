@@ -1,5 +1,5 @@
 import { constants } from 'node:fs';
-import { mkdir, open } from 'node:fs/promises';
+import { mkdir, open, rename } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { loadConfig, prepareProductDirectory, type ConfigLoadOptions } from '#platform/index.js';
@@ -41,8 +41,9 @@ export async function updateConfiguredToolchains(projectRoot: string, input: Rea
     dockerfile: insertHistoryLine(sources.dockerfile, plan.next!.historyLine), recipe: plan.next!.recipe });
   await mkdir(join(home, 'receipts'), { recursive: true, mode: 0o700 });
   const receiptPath = join(home, 'receipts', `${plan.next!.imageVersion}.json`);
+  // A failed build keeps its context as evidence under another name, so the next attempt may reuse the planned version.
   const built = await runWorkerImageBuild({ context: prepared.context, receiptPath, timeoutMs: policy.buildTimeoutMs, outputBytes: policy.outputBytes,
-    env }, dependencies.runner);
+    env }, dependencies.runner).catch(async (error: unknown) => { await rename(prepared.context, `${prepared.context}.failed-${Date.now()}`).catch(() => undefined); throw error; });
   const proposal = proposeProfileRevisions(plan, built.receipt, now());
   const proposalPath = await writeArtifact(join(home, 'proposals'), `${plan.next!.imageVersion}.json`, proposal);
   return Object.freeze({ schemaVersion: 1, mode: policy.mode, decision: 'built', plan, planPath,

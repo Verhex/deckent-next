@@ -67,6 +67,8 @@ export function reviseRegistryForProposal(registryInput: unknown, proposal: Prof
   const kinds = structuredClone(registry.kinds) as unknown as { kind: string; profile: { id: string; version: number } }[];
   const applied: { profile: string; from: number; to: number }[] = [];
   for (const entry of proposal.profiles) {
+    // Only a version a task kind still points at is revised: a superseded version kept for rollback is never revised again.
+    if (!kinds.some(kind => kind.profile.id === entry.profile.id && kind.profile.version === entry.profile.version)) continue;
     const current = profiles.find(profile => profile['id'] === entry.profile.id && profile['version'] === entry.profile.version);
     if (!current) continue;
     const parameters = asRecord(current['parameters']); if (!parameters) continue;

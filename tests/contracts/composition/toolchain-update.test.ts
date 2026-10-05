@@ -85,7 +85,7 @@ describe.skipIf(process.platform !== 'linux')('policy-driven toolchain update', 
   it('off is disabled; propose writes only a plan; apply builds in a product-owned context and proposes exact profile revisions', async () => {
     const off = await fixture({ mode: 'off' });
     expect(await updateToolchains(off.project, {}, off.options, { fetcher: off.fetcher, runner: off.runner })).toMatchObject({ decision: 'disabled', plan: null });
-    const f = await fixture({});
+    const f = await fixture({ mode: 'propose' });
     const planned = await updateToolchains(f.project, {}, f.options, { fetcher: f.fetcher, runner: f.runner, now: () => '2026-09-23T08:00:00.000Z' });
     expect(planned).toMatchObject({ mode: 'propose', decision: 'planned', build: null, proposal: null, plan: { decision: 'build', staleProviders: ['codex'], next: { imageVersion: 'r5-20260923' } } });
     // The packaged recipe carries the r4-20260930 lineage, so the product path plans r4 (never a second r3).

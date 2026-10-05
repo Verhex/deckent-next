@@ -1,6 +1,6 @@
 import { setTimeout as wait } from 'node:timers/promises';
 import { readFile, mkdir } from 'node:fs/promises';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { loadConfig, inspectProductDirectory, prepareProductDirectory, writeJsonAtomic, type ConfigLoadOptions } from '#platform/index.js';
 import { refreshAuditName, refreshIntervalMs, refreshInProgress, refreshStatus, refreshTriggerAllowed, toolchainRefreshStateSchema, reviseRegistryForProposal, type ToolchainRefreshState, type ToolchainRefreshTrigger } from '#engine/index.js';
 import { createConfiguredConfigApplication, resolveConfiguredConfigPrincipal } from '#composition/core/config/index.js';
@@ -45,8 +45,17 @@ export interface ToolchainRefreshDependencies extends ToolchainUpdateDependencie
  * then the proposal applied as a governed `admission.registry` config write (new profile versions only; old versions and every admitted Run
  * stay as they were). Every attempt leaves an audit record under `toolchains/refreshes`; a failure keeps the previous registry and image.
  */
-export async function refreshConfiguredToolchains(projectRoot: string, trigger: ToolchainRefreshTrigger, options: ConfigLoadOptions = {},
+export function refreshConfiguredToolchains(projectRoot: string, trigger: ToolchainRefreshTrigger, options: ConfigLoadOptions = {},
   dependencies: ToolchainRefreshDependencies = {}, observer: ToolchainRefreshObserver = {}): Promise<ToolchainRefreshOutcome> {
+  // One build at a time per project: a trigger that arrives while a refresh runs joins it instead of starting a second build.
+  const key = resolve(projectRoot), running = inflight.get(key);
+  if (running) return running;
+  const started = runRefresh(projectRoot, trigger, options, dependencies, observer).finally(() => { inflight.delete(key); });
+  inflight.set(key, started); return started;
+}
+const inflight = new Map<string, Promise<ToolchainRefreshOutcome>>();
+async function runRefresh(projectRoot: string, trigger: ToolchainRefreshTrigger, options: ConfigLoadOptions,
+  dependencies: ToolchainRefreshDependencies, observer: ToolchainRefreshObserver): Promise<ToolchainRefreshOutcome> {
   const { config, home } = await toolchainHome(projectRoot, options);
   const policy = config.toolchains.update;
   if (!refreshTriggerAllowed(policy, trigger)) return Object.freeze({ outcome: 'skipped', event: null });
@@ -68,7 +77,8 @@ export async function refreshConfiguredToolchains(projectRoot: string, trigger: 
       const fresh = await loadConfig(projectRoot, { ...options, force: true });
       const revision = reviseRegistryForProposal(fresh.admission?.registry, result.proposal);
       if (revision) {
-        const scopeId = (config as unknown as { terminal?: { scopeId?: string } }).terminal?.scopeId;
+        // The service's own scope; a project without a service identity falls back to the terminal scope (the scope `config set` uses).
+        const scopeId = fresh.service.identity?.scopeId ?? (fresh as unknown as { terminal?: { scopeId?: string } }).terminal?.scopeId;
         if (!scopeId) throw Object.assign(new Error('TERMINAL_SCOPE_REQUIRED'), { code: 'TERMINAL_SCOPE_REQUIRED' });
         const principal = await resolveConfiguredConfigPrincipal(projectRoot, scopeId, options);
         configWrite = await createConfiguredConfigApplication(projectRoot, options).set({ keyPath: 'admission.registry', value: revision.registry, layer: 'project',
@@ -95,13 +105,7 @@ export interface ToolchainRefreshHandle { readonly done: Promise<void> }
  */
 export function startToolchainRefresh(projectRoot: string, options: ConfigLoadOptions, observer: ToolchainRefreshObserver, signal: AbortSignal,
   dependencies: ToolchainRefreshDependencies = {}): ToolchainRefreshHandle {
-  let inflight: Promise<unknown> | null = null;
-  const run = (trigger: ToolchainRefreshTrigger) => {
-    if (inflight) return inflight;
-    inflight = refreshConfiguredToolchains(projectRoot, trigger, options, { ...dependencies, signal }, observer)
-      .catch(() => undefined).finally(() => { inflight = null; });
-    return inflight;
-  };
+  const run = (trigger: ToolchainRefreshTrigger) => refreshConfiguredToolchains(projectRoot, trigger, options, { ...dependencies, signal }, observer).catch(() => undefined);
   const done = (async () => {
     let intervalMs = 0;
     try { intervalMs = refreshIntervalMs((await loadConfig(projectRoot, options)).toolchains.update); } catch { return; }
