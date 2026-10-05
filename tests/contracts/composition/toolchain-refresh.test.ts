@@ -35,10 +35,11 @@ async function fixture(update: Record<string, unknown> = {}) {
   const latest: Record<string, string> = { '@openai/codex': '0.156.0', '@anthropic-ai/claude-code': '2.1.278' };
   const fetcher = async (request: { package: string }) => ({ version: latest[request.package]!, source: `fixture/${request.package}`, observedAt: new Date().toISOString() });
   const state = { builds: 0, failFirst: 0, gate: null as Promise<void> | null };
-  const runner: WorkerImageBuildRunner = async command => {
+  const runner: WorkerImageBuildRunner = async (command, signal) => {
     if (command.args[1] === '--check-version') return ok(command.requestId);
     state.builds++;
-    if (state.gate) await state.gate;
+    if (state.gate) await Promise.race([state.gate, new Promise<void>(resolve => signal?.addEventListener('abort', () => resolve(), { once: true }))]);
+    if (signal?.aborted) return { ...ok(command.requestId), reason: 'cancelled' as const, exitCode: null, started: true };
     if (state.failFirst > 0) { state.failFirst--; return { ...ok(command.requestId), exitCode: 1, stderrBase64: Buffer.from('Error: WORKER_IMAGE_BUILD_FAILED fixture').toString('base64') }; }
     const recipe = JSON.parse(await readFile(join(command.cwd, 'recipe.json'), 'utf8')) as { imageVersion: string; repository: string };
     await writeFile(command.args[1]!, JSON.stringify({ schemaVersion: 2, imageId: 'sha256:' + 'b'.repeat(64), imageVersion: recipe.imageVersion, tag: `${recipe.repository}:${recipe.imageVersion}`,
@@ -171,5 +172,16 @@ describe('autonomous worker image refresh (WORKER-AUTO-REFRESH)', () => {
     const f = await fixture(); const config = JSON.parse(await readFile(f.path, 'utf8')); delete config.execution; await writeFile(f.path, JSON.stringify(config));
     expect((await refreshConfiguredToolchains(f.root, 'startup', f.options, f.deps, f.observer)).outcome).toBe('skipped');
     expect(f.state.builds).toBe(0); expect(await readToolchainRefreshState(f.root, f.options)).toBeNull();
+  });
+
+  it('stopping the service ends a running build: the builder is cancelled, the registry is not written and the context stays as failed-', async () => {
+    const f = await fixture(); f.state.gate = new Promise<void>(() => undefined); // the build never finishes by itself
+    const registryBefore = await f.registry();
+    const controller = new AbortController(); const handle = startToolchainRefresh(f.root, f.options, f.observer, controller.signal, f.deps);
+    await settle(() => f.state.builds === 1); controller.abort(); await handle.done;
+    expect(f.events.at(-1)).toMatchObject({ phase: 'failed', code: 'REFRESH_STOPPED' });
+    expect(await f.registry()).toEqual(registryBefore);
+    const builds = (await readdir(join(f.root, '.deckent'), { recursive: true })).filter(name => /toolchains\/builds\/[^/]+$/.test(name)).map(name => name.split('/').pop()!);
+    expect(builds).toHaveLength(1); expect(builds[0]).toMatch(/\.failed-\d+$/);
   });
 });

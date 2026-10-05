@@ -39,7 +39,7 @@ export async function isToolchainRefreshInProgress(projectRoot: string, options:
 async function writeState(home: string, state: ToolchainRefreshState) { await mkdir(home, { recursive: true, mode: 0o700 }); await writeJsonAtomic(join(home, 'refresh-state.json'), state); }
 
 export type ToolchainRefreshOutcome = Readonly<{ outcome: 'skipped' | 'current' | 'failed' | 'unverified'; event: ToolchainRefreshEvent | null }>;
-export interface ToolchainRefreshDependencies extends ToolchainUpdateDependencies { readonly signal?: AbortSignal; readonly now?: () => string }
+export type ToolchainRefreshDependencies = ToolchainUpdateDependencies;
 /**
  * One refresh: policy gate, durable `updating` marker, the existing update path with apply (plan, daemon preflight, build, receipt, proposal),
  * then the proposal applied as a governed `admission.registry` config write (new profile versions only; old versions and every admitted Run
@@ -89,7 +89,7 @@ async function runRefresh(projectRoot: string, trigger: ToolchainRefreshTrigger,
         applied = revision.applied.length;
       }
     }
-  } catch (error) { code = failureCode(error); }
+  } catch (error) { code = dependencies.signal?.aborted ? 'REFRESH_STOPPED' : failureCode(error); } // a build ended by the stop is a stop, not a build fault
   const finishedAt = now();
   const imageId = result?.build?.imageId ?? null, imageVersion = result?.plan?.next?.imageVersion ?? null;
   const unverified = code ? null : result?.plan ? unverifiedReason(result.plan.report) : null;

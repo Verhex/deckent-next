@@ -11,6 +11,8 @@ export type ToolchainUpdateResult = Readonly<{ schemaVersion: 1; mode: string; d
   plan: ToolchainUpdatePlan | null; planPath: string | null; build: Readonly<{ context: string; receiptPath: string; imageId: string; tag: string | null }> | null;
   proposal: ProfileRevisionProposal | null; proposalPath: string | null }>;
 export interface ToolchainUpdateDependencies { readonly fetcher?: NpmLatestVersionFetcher; readonly runner?: WorkerImageBuildRunner; readonly packageRoot?: string; readonly now?: () => string;
+  /** Ends a running build (the service stopping): the builder process is terminated and the build context is kept as `failed-`. */
+  readonly signal?: AbortSignal;
   /** Called once a build is certain (plan written, daemon preflight passed), before its context is created: the refresh's durable `updating` marker. */
   readonly onBuild?: (plan: ToolchainUpdatePlan) => void | Promise<void> }
 export async function writeArtifact(directory: string, name: string, value: unknown) {
@@ -46,7 +48,7 @@ export async function updateConfiguredToolchains(projectRoot: string, input: Rea
   const receiptPath = join(home, 'receipts', `${plan.next!.imageVersion}.json`);
   // A failed build keeps its context as evidence under another name, so the next attempt may reuse the planned version.
   const built = await runWorkerImageBuild({ context: prepared.context, receiptPath, timeoutMs: policy.buildTimeoutMs, outputBytes: policy.outputBytes,
-    env }, dependencies.runner).catch(async (error: unknown) => { await rename(prepared.context, `${prepared.context}.failed-${Date.now()}`).catch(() => undefined); throw error; });
+    env, ...(dependencies.signal ? { signal: dependencies.signal } : {}) }, dependencies.runner).catch(async (error: unknown) => { await rename(prepared.context, `${prepared.context}.failed-${Date.now()}`).catch(() => undefined); throw error; });
   const proposal = proposeProfileRevisions(plan, built.receipt, now());
   const proposalPath = await writeArtifact(join(home, 'proposals'), `${plan.next!.imageVersion}.json`, proposal);
   return Object.freeze({ schemaVersion: 1, mode: policy.mode, decision: 'built', plan, planPath,
