@@ -83,3 +83,7 @@ the caller's existing typed *_INPUT_UNAVAILABLE error before opening a path; bou
 history/session file factories similarly refuse Windows or absent O_NOFOLLOW with existing MANAGED_FILE_UNSUPPORTED,
 before reading/writing any state. They retain POSIX permission/link guarantees instead of claiming a Windows private
 store. Terminal-history declares exactly the public platform managed-files error dependency; no contract schema changes.
+
+**Gecikme kapısı (W1-LATENCY, 2026-10-06).** `tests/perf/` ayrı `vitest.config.ts` ile `*.perf.ts` serisidir (ledger, worker, approval yolları; p95 ≤ 500 ms, taban JSON); varsayılan paket etkilenmez; eşik ölçüm girdisidir, ürün config'i değildir. CI'ya ayrı perf job/script bağlanması owner kararı bekler.
+
+**Verify ortamı (VERIFY-ENV, 2026-10-06).** `/etc/machine-id` yoksa (Docker konteyneri) makine bağı yeteneği düşer ve ilgili testler tipli not-run olur; `noexec` tmpdir altında `pr.test.mjs` tipli not-run verir, gerçek `PR_GIT` ret iddiası korunur; `doctor` makine bağını proje dizinine karşı yoklar.
