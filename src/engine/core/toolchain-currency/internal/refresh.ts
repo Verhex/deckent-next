@@ -31,6 +31,23 @@ export function failedContextsToPrune(names: readonly string[], keep: number): s
   return failed.slice(Math.max(1, keep)).map(entry => entry.name);
 }
 
+export type WorkerLineage = Readonly<{ recipe: unknown; dockerfile: string }>;
+const counterOf = (recipe: unknown): number => { const id = (recipe as { imageVersion?: unknown } | null)?.imageVersion; const match = typeof id === 'string' ? /^r([1-9][0-9]*)-/.exec(id) : null; return match ? Number(match[1]) : 0; };
+const stripVersions = (recipe: unknown) => JSON.stringify({ ...(recipe as object), imageVersion: null, previousVersion: null });
+const stripHistory = (dockerfile: string) => dockerfile.split('\n').filter(line => !line.startsWith('# version ')).join('\n');
+/**
+ * Where the next image version is planned from. The packaged recipe never advances by itself, so the newest verified build of this
+ * installation (its own recipe and Dockerfile, confirmed by a receipt) continues the lineage: without it every later refresh would
+ * plan the same counter and the builder's counter guard would refuse it for good. The built lineage is used only when it is ahead and
+ * still the same sources as the package (recipe and Dockerfile bodies equal apart from version and history lines); otherwise the
+ * package decides and the builder's guard stays the authority.
+ */
+export function selectWorkerLineage(packaged: WorkerLineage, built: WorkerLineage | null): WorkerLineage {
+  if (!built || counterOf(built.recipe) <= counterOf(packaged.recipe)) return packaged;
+  if (stripVersions(built.recipe) !== stripVersions(packaged.recipe) || stripHistory(built.dockerfile) !== stripHistory(packaged.dockerfile)) return packaged;
+  return built;
+}
+
 const isoTime = z.string().datetime();
 const imageDigest = z.string().regex(/^sha256:[a-f0-9]{64}$/);
 /** The durable refresh marker. `expiresAt` bounds an `updating` marker (build timeout plus a grace): a crashed process never masks a refusal for good. */

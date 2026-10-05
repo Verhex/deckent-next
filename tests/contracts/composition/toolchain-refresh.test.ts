@@ -1,6 +1,7 @@
 import { mkdtemp, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { prepareNativeCodingProfile } from '../../../src/index.js';
 import { applyPolicyTemplateInstallation } from '#composition/core/installation/index.js';
@@ -17,6 +18,9 @@ const bounds = { imageId: 'sha256:' + 'a'.repeat(64), memoryBytes: 268435456, pi
 const nativeProfile = (id: string, provider: 'codex' | 'claude', cliVersion: string) => structuredClone(prepareNativeCodingProfile({ schemaVersion: 1,
   template: { id, version: 1, adapter: { id: 'docker', version: 2 }, parameters: { ...bounds, argv: ['unused'] } },
   invocation: { schemaVersion: 2, provider, cliVersion, discovery: { schemaVersion: 1, mode: provider === 'claude' ? 'disabled' : 'repository' }, permissionMode: 'unattended', model: 'fixture-model', prompt: 'fixture task' } }).profile);
+/** The shipped history owner, so the fake daemon refuses exactly what the real builder refuses (counter guard, history chain). */
+const historyOwner = async () => await import(pathToFileURL(join(process.cwd(), 'assets/worker-image/history.mjs')).href) as {
+  assertVersionAdvances(version: string, tags: string[]): void; parseVersionHistory(dockerfile: string, recipe: unknown): unknown[] };
 const ok = (requestId: string) => ({ schemaVersion: 1 as const, requestId, started: true, reason: 'exit' as const, exitCode: 0, signal: null, stdoutBase64: '', stderrBase64: '', stdoutTruncated: false, stderrTruncated: false, durationMs: 1 });
 
 /** A real policy/ledger installation (config writes are governed), a stale codex pin, and a fake builder; Docker is never reached. */
@@ -34,16 +38,24 @@ async function fixture(update: Record<string, unknown> = {}) {
       kinds: profiles.map(profile => ({ kind: profile.id, profile: { id: profile.id, version: profile.version } })), evaluators: [{ id: 'process-exit', version: 1, implementation: { id: 'process-exit', version: 1 } }] } } }));
   const latest: Record<string, string> = { '@openai/codex': '0.156.0', '@anthropic-ai/claude-code': '2.1.278' };
   const fetcher = async (request: { package: string }) => ({ version: latest[request.package]!, source: `fixture/${request.package}`, observedAt: new Date().toISOString() });
-  const state = { builds: 0, failFirst: 0, gate: null as Promise<void> | null };
+  const state = { builds: 0, failFirst: 0, gate: null as Promise<void> | null, tags: ['r4-20260930'], checks: [] as string[] };
   const runner: WorkerImageBuildRunner = async (command, signal) => {
-    if (command.args[1] === '--check-version') return ok(command.requestId);
+    if (command.args[1] === '--check-version') {
+      state.checks.push(command.args[2]!);
+      try { (await historyOwner()).assertVersionAdvances(command.args[2]!, state.tags); } catch (error) {
+        return { ...ok(command.requestId), exitCode: 1, stderrBase64: Buffer.from(`Error: ${(error as Error).message}`).toString('base64') };
+      }
+      return ok(command.requestId);
+    }
     state.builds++;
     if (state.gate) await Promise.race([state.gate, new Promise<void>(resolve => signal?.addEventListener('abort', () => resolve(), { once: true }))]);
     if (signal?.aborted) return { ...ok(command.requestId), reason: 'cancelled' as const, exitCode: null, started: true };
     if (state.failFirst > 0) { state.failFirst--; return { ...ok(command.requestId), exitCode: 1, stderrBase64: Buffer.from('Error: WORKER_IMAGE_BUILD_FAILED fixture').toString('base64') }; }
     const recipe = JSON.parse(await readFile(join(command.cwd, 'recipe.json'), 'utf8')) as { imageVersion: string; repository: string };
-    await writeFile(command.args[1]!, JSON.stringify({ schemaVersion: 2, imageId: 'sha256:' + 'b'.repeat(64), imageVersion: recipe.imageVersion, tag: `${recipe.repository}:${recipe.imageVersion}`,
-      manifest: { providers: [{ id: 'codex', version: 'codex-cli 0.156.0' }, { id: 'claude', version: '2.1.278 (Claude Code)' }, { id: 'cursor', version: '2026.09.18-9a7762b' }] } }));
+    (await historyOwner()).parseVersionHistory(await readFile(join(command.cwd, 'Dockerfile'), 'utf8'), recipe); // the context's own history chain must validate
+    state.tags.push(recipe.imageVersion);
+    await writeFile(command.args[1]!, JSON.stringify({ schemaVersion: 2, imageId: 'sha256:' + (state.builds % 2 ? 'b' : 'c').repeat(64), imageVersion: recipe.imageVersion, tag: `${recipe.repository}:${recipe.imageVersion}`,
+      manifest: { providers: [{ id: 'codex', version: `codex-cli ${latest['@openai/codex']}` }, { id: 'claude', version: '2.1.278 (Claude Code)' }, { id: 'cursor', version: '2026.09.18-9a7762b' }] } }));
     return ok(command.requestId);
   };
   const events: ToolchainRefreshEvent[] = [];
@@ -194,5 +206,31 @@ describe('autonomous worker image refresh (WORKER-AUTO-REFRESH)', () => {
     expect((await refreshConfiguredToolchains(f.root, 'interval', f.options, f.deps, f.observer)).outcome).toBe('current'); // success: its context is not a failed one and stays
     const after = await builds(); expect(after.filter(name => name.includes('.failed-')).map(name => Number(name.split('failed-')[1]))).toEqual(stamps);
     expect(after).toHaveLength(keep + 1);
+  });
+
+  it('P1-1: two consecutive genuinely new CLI releases on different days each build the next counter (r5, then r6), and a daemon holding a higher counter is still refused', async () => {
+    const f = await fixture(); const day = (d: string) => () => `2026-10-${d}T08:00:00.000Z`;
+    expect((await refreshConfiguredToolchains(f.root, 'startup', f.options, { ...f.deps, now: day('06') }, f.observer)).outcome).toBe('current');
+    expect(f.state.tags).toEqual(['r4-20260930', 'r5-20261006']);
+    f.latest['@openai/codex'] = '0.157.0'; // a new release, next day: the packaged r4 recipe alone would plan r5-20261007 and be refused
+    expect((await refreshConfiguredToolchains(f.root, 'interval', f.options, { ...f.deps, now: day('07') }, f.observer)).outcome).toBe('current');
+    expect(f.state.tags).toEqual(['r4-20260930', 'r5-20261006', 'r6-20261007']);
+    f.latest['@openai/codex'] = '0.158.0';
+    expect((await refreshConfiguredToolchains(f.root, 'interval', f.options, { ...f.deps, now: day('09') }, f.observer)).outcome).toBe('current');
+    expect(f.state.tags.at(-1)).toBe('r7-20261009');
+    const registry = await f.registry();
+    expect(registry.profiles.filter(profile => profile.id === 'codex-pinned').map(profile => profile.version)).toEqual([1, 2, 3, 4]);
+    expect(registry.profiles.find(profile => profile.id === 'codex-pinned' && profile.version === 4)!.parameters.nativeSubscription.preflight.cliVersion).toBe('codex-cli 0.158.0');
+    // Negative: the daemon already holds a higher counter than this installation built; the guard stays and the refresh fails typed.
+    f.state.tags.push('r12-20261010'); f.latest['@openai/codex'] = '0.159.0';
+    const refused = await refreshConfiguredToolchains(f.root, 'interval', f.options, { ...f.deps, now: day('11') }, f.observer);
+    expect(refused.outcome).toBe('failed'); expect(refused.event!.code).toBe('WORKER_VERSION_COUNTER_TAKEN');
+    expect(f.state.builds).toBe(3);
+  });
+
+  it('P1-1 control: without the persisted lineage the packaged recipe would be refused (the fake preflight really checks)', async () => {
+    const f = await fixture(); f.state.tags.push('r5-20261006'); // an r5 already exists on the daemon
+    const outcome = await refreshConfiguredToolchains(f.root, 'startup', f.options, { ...f.deps, now: () => '2026-10-07T08:00:00.000Z' }, f.observer);
+    expect(outcome.outcome).toBe('failed'); expect(outcome.event!.code).toBe('WORKER_VERSION_COUNTER_TAKEN'); expect(f.state.builds).toBe(0);
   });
 });
