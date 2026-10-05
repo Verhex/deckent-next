@@ -34,15 +34,8 @@ export async function withAgentAudit<T>(context: Context, work: (audit: AuditApp
   finally { store.close(); }
 }
 
-/**
- * The permission decision of one turn's tool calls (T-L4 slice 4a): the one pure `decideAgentToolCall` over a fresh policy + bindings
- * snapshot, asked when the loop authorizes a call and again at its effect. `authorize` answers `deny` before anything is planned; then
- * the call is planned (the plan is the cell) and the whole decision — strict policy, floor raise, mode lowering — is kept for the
- * call, so `prepare` repeats it and never re-raises a lowered call. At the effect a call the owner was not asked for is decided again:
- * a mode relaxation writes its sealed `permission-mode` audit event before the effect (no event, nothing runs) and the effect gate
- * re-decides on every admission and admits only that audited decision; a decision that was silent without a mode is counted.
- * Owner-approved calls keep the C12 gate as is.
- */
+/** One fresh policy/cell/mode/standing decision at authorization and again at the effect.
+ * Audit every relaxation before effect admission, then recheck it; owner-approved calls retain C12. */
 export function createAgentCallDecisions(input: { readonly context: Context; readonly clock: TrustedClock; readonly scopeId: string; readonly turnId: string;
   readonly edits: (tool: string) => ReturnType<typeof createAgentFileEdits> | null; readonly shell: ReturnType<typeof createAgentShell> | null;
   readonly approvals: ReturnType<typeof createAgentCallApprovals>; readonly fetch: ReturnType<typeof createAgentFetch> | null;
@@ -67,9 +60,10 @@ export function createAgentCallDecisions(input: { readonly context: Context; rea
   const load = async (): Promise<unknown> => { try { return await context.policy.load(); } catch { return null; } };
   /** Pure decision on one snapshot (a fresh one unless given); an unreadable or invalid policy is null, i.e. `deny` (fail closed). */
   const decide = async (tool: AgentToolSpec, cell: AgentToolCallCell, snapshot?: unknown, args?: Record<string, unknown>, shellInput?: Shell,
-    operation: { readonly id: string } | null = operationOf(tool)): Promise<AgentToolCallDecision | null> => {
+    operation: { readonly id: string } | null = operationOf(tool), probeSession = false): Promise<AgentToolCallDecision | null> => {
     const policy = snapshot === undefined ? await load() : snapshot;
-    try { return policy === null ? null : decideAgentToolCall(policy, { principal: context.principal, scopeId, tool, operation, cell, standing: standingOf(tool, cell, args),
+    const standing = standingOf(tool, cell, args);
+    try { return policy === null ? null : decideAgentToolCall(policy, { principal: context.principal, scopeId, tool, operation, cell, standing: probeSession && standing ? { ...standing, session: true } : standing,
       ...(shellInput ? { shell: shellInput } : {}), ...(input.fullAccess ? { fullAccess: true } : {}) }); }
     catch { return null; }
   };
@@ -156,12 +150,21 @@ export function createAgentCallDecisions(input: { readonly context: Context; rea
       if (kept && 'planError' in kept) return { ok: false, text: kept.planError };
       return { ok: true, requireApproval: kept?.decision.decision !== 'allow' };
     },
+    async sessionOffer(tool: AgentToolSpec, args: Record<string, unknown>) {
+      const kept = stored.get(keyOf(tool, args));
+      if (!input.standing || !kept || !('cell' in kept) || kept.cell !== 'edit-self-source' || kept.decision.decision !== 'require-approval') return null;
+      const probe = await decide(tool, kept.cell, undefined, args, kept.shell, operationOf(tool), true);
+      return probe?.decision === 'allow' && probe.standing ? standingOf(tool, kept.cell, args) : null;
+    },
     /** Producer-only answer port: guard holds the active card's validity, signal and wall/monotonic deadline. No record, no memory. */
-    async remember(tool: AgentToolSpec, args: Record<string, unknown>, execution: Execution, callId: string, approvalId: string, guard: { readonly valid: () => boolean }): Promise<boolean> {
+    async remember(tool: AgentToolSpec, args: Record<string, unknown>, execution: Execution, callId: string, approvalId: string, guard: { readonly valid: () => boolean; readonly refused?: (reason: 'audit-unavailable' | 'policy-changed' | 'evicted') => void }): Promise<boolean> {
       const kept = stored.get(keyOf(tool, args)), memory = input.standing, found = kept && 'cell' in kept ? standingOf(tool, kept.cell, args) : null;
       if (!memory || !kept || !('cell' in kept) || !found) return false;
-      return rememberSessionStanding({ memory: memory.memory, session: memory.session, key: found.key, cell: found.cell, decision: kept.decision, valid: guard.valid,
-        revalidate: async () => ({ decision: await decide(tool, kept.cell, undefined, args, kept.shell), cell: cellOf(tool, args), key: standingOf(tool, kept.cell, args)?.key ?? null }),
+      return rememberSessionStanding({ memory: memory.memory, session: memory.session, key: found.key, cell: found.cell, decision: kept.decision, valid: guard.valid, ...(guard.refused ? { refused: guard.refused } : {}),
+        revalidate: async () => {
+          const snapshot = await load(), probe = await decide(tool, kept.cell, snapshot, args, kept.shell, operationOf(tool), true);
+          return { decision: probe?.decision === 'allow' && probe.standing ? await decide(tool, kept.cell, snapshot, args, kept.shell) : null, cell: cellOf(tool, args), key: standingOf(tool, kept.cell, args)?.key ?? null };
+        },
         audit: () => withAudit(audit => audit.record(standingEvent('remembered', tool, args, execution, callId, found.cell, kept.decision.revision,
           { source: 'session', key: found.key, grantId: null }, approvalId))) });
     },

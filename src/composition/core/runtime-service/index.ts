@@ -8,3 +8,4 @@ export type { ConfiguredRuntimeOperations } from './internal/operations.js';
 export type { ConfiguredRuntimeServiceObserver } from './internal/server.js';
 
 export type { ConfiguredRuntimeClient } from './internal/client.js';
+export { executeRuntimeApproval } from './internal/approvals.js';

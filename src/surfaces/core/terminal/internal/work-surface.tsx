@@ -1,3 +1,4 @@
+import { standingAnswerNotice, clearStandingNotice } from '#surfaces/core/approval-presentation/index.js';
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import type { AgentToolApprovalSettlement } from '#domain/index.js';
 import type { RunView } from '#engine/index.js';
@@ -19,6 +20,7 @@ export interface WorkSurfaceInput {
   readonly push: (entries: readonly WorkLedgerEntry[]) => void;
   readonly errorText: (error: unknown) => string;
   /** The worker heartbeat; the approval notification poll never runs faster. */
+  readonly sessionId?: () => string;
   readonly pollMs: number;
   /** The live panel shows only while the worker watch runs; it is cleared when the watch stops. */
   readonly watchingWorkers: boolean;
@@ -38,7 +40,7 @@ type Modal =
  * through a runtime port; the view never decides, remembers or auto-approves anything. Read-only commands never prompt.
  */
 export const APPROVAL_NOTIFY_MIN_MS = 10_000;
-export function useWorkSurface({ ledger, labels, push, errorText, pollMs, watchingWorkers, approvalPollMs }: WorkSurfaceInput) {
+export function useWorkSurface({ ledger, labels, push, errorText, pollMs, watchingWorkers, approvalPollMs, sessionId }: WorkSurfaceInput) {
   const work = labels.work;
   const [workers, setWorkers] = useState<readonly WorkLedgerWorkerEntry[]>([]);
   const [modal, setModal] = useState<Modal>(null);
@@ -69,6 +71,12 @@ export function useWorkSurface({ ledger, labels, push, errorText, pollMs, watchi
       setModal({ kind: 'cancel', run: view });
       return;
     }
+    if (ref === 'clear-session') {
+      if (!sessionId || !ledger.clearSessionStanding || !work.sessionStandingClear) { push([notice('error', work.unavailable)]); return; }
+      const answer = await clearStandingNotice(sessionId(), ledger.clearSessionStanding, work.sessionStandingClear);
+      push([notice(answer.level, answer.text)]);
+      return;
+    }
     const now = Date.now();
     const { pending, truncated } = await scanPendingApprovals(ledger.listApprovalPage!, now);
     const rows = pending.map((item, index) => makeApprovalRowNotice(approvalRowPresentation(item, index + 1, now, work), work.approvalTitle));
@@ -92,7 +100,7 @@ export function useWorkSurface({ ledger, labels, push, errorText, pollMs, watchi
     push([...rows, ...bound]);
     setPicker(null);
     setModal({ kind: 'approval', approval: target, remaining: pending.length - 1 });
-  }, [labels.runNotFound, ledger, push, work]);
+  }, [labels.runNotFound, ledger, push, sessionId, work]);
   const decideApproval = useCallback(async (approval: WorklineApproval, remaining: number, yes: boolean, standing?: StandingScope) => {
     let refused = false; try {
       const record = await ledger!.decideApproval!(approval, yes ? 'allow' : 'deny', standing);
@@ -101,13 +109,13 @@ export function useWorkSurface({ ledger, labels, push, errorText, pollMs, watchi
       // What the service answered about the standing scope is shown as it is: a saved answer, or the reason it was not saved (the call
       // itself was allowed once either way).
       if (standing && work!.approvalStanding) {
-        const answer = record.standing;
-        const labels = work!.approvalStanding, always = standing === 'always';
-        push([notice(answer?.saved ? 'info' : 'error', fillTemplate(answer?.saved ? (always ? labels.savedAlways : labels.savedSession) : (always ? labels.notSavedAlways : labels.notSavedSession),
-          { id: record.approvalId, reason: answer?.reason ?? 'unconfirmed' }))]);
+        const answer = standingAnswerNotice(record.approvalId, standing, record.standing, work!.approvalStanding);
+        push([notice(answer.level, answer.text)]);
       }
       if (remaining > 0) push([notice('info', fillTemplate(work!.approvalMore, { count: remaining }))]);
-    } catch (error) { push([notice('error', errorText(error))]); refused = ['APPROVAL_ASSURANCE_INSUFFICIENT', 'APPROVAL_SURFACE_RESTRICTED'].includes(String((error as { code?: unknown }).code)); }
+    } catch (error) {
+      if (standing === 'session' && work?.approvalStanding?.unconfirmedSession) push([notice('error', fillTemplate(work.approvalStanding.unconfirmedSession, { id: approval.approvalId, reason: 'transport-unknown' }))]);
+      push([notice('error', errorText(error))]); refused = ['APPROVAL_ASSURANCE_INSUFFICIENT', 'APPROVAL_SURFACE_RESTRICTED'].includes(String((error as { code?: unknown }).code)); }
     // A late answer touches only its own card (Astra 2092 R1); a typed refusal that leaves the request pending (B1/K3, Sol 2234 R3) keeps it open for a new answer (a deny); any other failure closes it, never as decided.
     finally { setModal(current => current?.kind === 'approval' && current.approval.approvalId === approval.approvalId ? (refused ? { ...current, retry: (current.retry ?? 0) + 1 } : null) : current); }
   }, [errorText, ledger, push, work]);

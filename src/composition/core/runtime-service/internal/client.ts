@@ -1,4 +1,4 @@
-import { RUNTIME_SERVICE_LIFECYCLE_VERSIONS, RUNTIME_SERVICE_SCHEMA_VERSION, isRuntimeServiceBoundedResultOperation, acceptSecretChangeResult, prepareSecretChange, type RuntimeServiceLifecycleVersion, type RuntimeServiceRequest,
+import { clearSessionStandingSchema, acceptSessionStandingClearance, approvalCommandSchema, parseApprovalAnswer, type ClearSessionStanding, type SessionStandingClearance, RUNTIME_SERVICE_LIFECYCLE_VERSIONS, RUNTIME_SERVICE_SCHEMA_VERSION, isRuntimeServiceBoundedResultOperation, acceptSecretChangeResult, prepareSecretChange, type RuntimeServiceLifecycleVersion, type RuntimeServiceRequest,
   type SecretChangeResult, type SecretDeleteCommand, type SecretSetCommand } from '#engine/index.js';
 import { socketOptions } from './socket-options.js';
 import { randomUUID } from 'node:crypto';
@@ -55,6 +55,7 @@ export type ConfiguredRuntimeClient = ConfiguredRuntimeOperations & Readonly<{
   setPermissionMode(command: PermissionModeCommand, signal?: AbortSignal): Promise<PermissionModeChange>;
   /** v16 (SCR-A `/scratch`): the caller's own scratch area of one conversation — its files, or emptied (the directory stays). */
   inspectScratch(query: ScratchQuery, signal?: AbortSignal): Promise<ScratchView>;
+  clearSessionStanding(query: ClearSessionStanding, signal?: AbortSignal): Promise<SessionStandingClearance>;
   clearScratch(query: ScratchQuery, signal?: AbortSignal): Promise<ScratchClearance>;
   /** v18 (SECRET-WRITE): one secret of the installation's store, set or deleted by the socket peer under the `secret` policy cell. */
   setSecret(command: SecretSetCommand, signal?: AbortSignal): Promise<SecretChangeResult>;
@@ -218,6 +219,14 @@ export function createConfiguredRuntimeClient(projectRoot: string, options: Conf
     && (!isRuntimeServiceBoundedResultOperation(operation) || operation === 'renewApproval' || operation === 'listApprovals' || operation === 'inspectApproval' || operation === 'decideApproval')).map(operation =>
     [operation, (input: unknown, delivery?: RuntimeServiceDelivery) => call(operation, input, delivery)])) as ConfiguredRuntimeOperations;
   return Object.freeze({ ...operations,
+    async decideApproval(input: unknown, delivery?: RuntimeServiceDelivery) {
+      const command = approvalCommandSchema.parse(input);
+      return parseApprovalAnswer('standing' in command, await call('decideApproval', command, delivery));
+    },
+    async clearSessionStanding(input: ClearSessionStanding, signal?: AbortSignal) {
+      const command = clearSessionStandingSchema.parse(input);
+      return acceptSessionStandingClearance(command, await call('clearSessionStanding', command, undefined, signal));
+    },
     async chatTurn(input: ChatTurnCommand, onEvent: (event: AgentTurnStreamEvent) => void, signal?: AbortSignal) {
       try {
         const parsed = chatTurnCommandSchema.safeParse(input);

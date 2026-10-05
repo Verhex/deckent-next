@@ -131,7 +131,7 @@ describe('I40-c B: only the producer determines tool approval expiry', () => {
     try {
       const app = await f.application(new SystemTrustedClock(() => 14000));
       const decided = await app.decide(f.command);
-      expect(await awaitAgentToolApproval(f.journal.store, integrity, f.record, timePort(new SystemTrustedClock(() => now)), new AbortController().signal))
+      expect(await awaitAgentToolApproval(f.journal.store, integrity, f.record, timePort({ sample: () => ({ wallMs: now, monotonicMs: 0 }) }), new AbortController().signal))
         .toBe(now < 20000 ? 'allow' : 'expired');
       expect(f.journal.store.load('scope', f.record.request.approvalId)).toEqual(decided);
     } finally { f.journal.close(); }

@@ -36,6 +36,7 @@ export type AgentTurnEvent =
   /** A call waits for the owner's decision (T-L4, C12): the preview is presentation; the approval binds the exact call. v19 (B1): the turn's
    * one-time `decisionCapability` (sent only on this stream), the card's `risk` (its permission cell; null = not declared) and `requiredAssurance`. */
   | { readonly kind: 'approval.requested'; readonly callId: string; readonly approvalId: string; readonly revision: number; readonly summary: string;
+    readonly standing?: { readonly scopes: readonly ['session']; readonly pattern: string };
     readonly preview: string; readonly expiresAt: number; readonly decisionCapability?: string; readonly risk?: string | null; readonly requiredAssurance?: string }
   | { readonly kind: 'approval.settled'; readonly callId: string; readonly approvalId: string; readonly outcome: AgentToolApprovalSettlement }
   /** Streamed output of a running call (T-L4 shell): presentation; the call's result stays the only history. */
@@ -72,6 +73,7 @@ export const agentTurnStreamEventSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('compacted'), messages: z.array(agentTurnMessageSchema).min(1).readonly(), replacedMessages: count }).strict(),
   z.object({ kind: z.literal('approval.requested'), callId: z.string().min(1).max(256), approvalId: z.string().min(1).max(256), revision: count,
     summary: z.string().min(1).max(2048), preview: z.string().max(65_536), expiresAt: count, decisionCapability: z.string().regex(/^[A-Za-z0-9_-]{43}$/).optional(),
+    standing: z.object({ scopes: z.tuple([z.literal('session')]).readonly(), pattern: z.string().min(1).max(2048) }).strict().optional(),
     risk: z.string().regex(/^[a-z][a-z0-9-]{1,63}$/).nullable().optional(), requiredAssurance: z.string().regex(/^[a-z][a-z0-9-]{1,63}$/).optional() }).strict(),
   z.object({ kind: z.literal('approval.settled'), callId: z.string().min(1).max(256), approvalId: z.string().min(1).max(256),
     outcome: z.enum(['allow', 'deny', 'expired', 'cancelled', 'unsettled']) }).strict(),

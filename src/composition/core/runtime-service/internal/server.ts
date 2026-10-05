@@ -165,8 +165,8 @@ async function startUnderCustody(projectRoot: string, observer: ConfiguredRuntim
         return { response: { schemaVersion: RUNTIME_SERVICE_SCHEMA_VERSION, requestId: request.requestId, ok: true, result },
           afterResponseOrDisconnect: () => finishRemoteShutdown(result.admission) };
       }
-      const result = await lifecycle.admit(() => request.operation === 'renewApproval' || request.operation === 'listApprovals' || request.operation === 'inspectApproval' || request.operation === 'decideApproval'
-        ? executeRuntimeApproval(projectRoot, request, peer, config.service.responseMaxBytes, options, chatTurnHost.decisions)
+      const result = await lifecycle.admit(() => request.operation === 'renewApproval' || request.operation === 'listApprovals' || request.operation === 'inspectApproval' || request.operation === 'decideApproval' || request.operation === 'clearSessionStanding'
+        ? executeRuntimeApproval(projectRoot, request, peer, config.service.responseMaxBytes, options, chatTurnHost.decisions, chatTurnHost.answers)
         : request.operation === 'inspectProviderSpendAccount' || request.operation === 'auditProviderSpendAccount'
         ? executeConfiguredRuntimeProviderSpendOperation(projectRoot, request, peer, config.service.responseMaxBytes, options)
         : request.operation === 'invokeModel' || request.operation === 'invokeModelStream' || request.operation === 'inspectModelInvocation' || request.operation === 'purgeModelInvocationContent' || request.operation === 'cancelModelInvocation'

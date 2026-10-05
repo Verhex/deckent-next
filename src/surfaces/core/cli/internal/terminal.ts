@@ -242,6 +242,7 @@ export async function terminalCommand(argv: readonly string[], context: CommandC
     ...(context.inspectInventory ? { inspectInventory: context.inspectInventory } : {}),
     ...(context.inspectWorkerTranscript ? { inspectWorkerTranscript: context.inspectWorkerTranscript } : {}),
     ...(context.listApprovals ? { listApprovals: context.listApprovals } : {}),
+    ...(context.clearSessionStanding ? { clearSessionStanding: context.clearSessionStanding } : {}),
     ...(context.decideApproval ? { decideApproval: context.decideApproval } : {}),
     ...(context.deliverRunCancellation ? { deliverRunCancellation: context.deliverRunCancellation } : {}) });
   const target = `${scopeId} · ${chatTarget(chat, locale)}`;

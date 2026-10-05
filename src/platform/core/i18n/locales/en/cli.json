@@ -937,9 +937,9 @@
   "terminal.approval.standing.promptBoth": "y approve once · s approve for this session · a always in this project · n deny · Enter/Esc deny (default).",
   "terminal.approval.standing.promptSession": "y approve once · s approve for this session · n deny · Enter/Esc deny (default).",
   "terminal.approval.standing.promptAlways": "y approve once · a always in this project · n deny · Enter/Esc deny (default).",
-  "terminal.approval.standing.savedSession": "Approval {id} approved; the same call will not ask again until this session or the service ends.",
+  "terminal.approval.standing.savedSession": "Approval {id} approved once; permission saved for this conversation. Later calls still check current policy.",
   "terminal.approval.standing.savedAlways": "Approval {id} approved; saved as your own standing grant for this project (see and undo: deckent policy grants --mine / revoke).",
-  "terminal.approval.standing.notSavedSession": "Approval {id} approved once, but the session answer was not saved ({reason}); the next such call asks again.",
+  "terminal.approval.standing.notSavedSession": "Approval {id} approved once, but this session answer was not saved ({reason}). Later calls still check current policy and remembered permissions.",
   "terminal.approval.standing.notSavedAlways": "Approval {id} approved once, but the standing grant was not saved ({reason}); the next such call asks again.",
   "terminal.approval.reasonAllow": "Approved by the operator in the Deckent terminal.",
   "terminal.approval.reasonDeny": "Denied by the operator in the Deckent terminal.",
@@ -1270,5 +1270,9 @@
   "cli.help.action.secret.set": "Store a secret from protected input",
   "cli.help.action.operation.execute": "Execute a typed operation",
   "cli.help.action.operation.inspect": "Inspect an operation effect record",
-  "cli.help.familySynopsis": "Command family: deckent {command} <action>"
+  "cli.help.familySynopsis": "Command family: deckent {command} <action>",
+  "terminal.slash.approvalsArgument": "[number|id|clear-session]",
+  "terminal.approval.standing.unconfirmedSession": "Approval {id}: session permission could not be confirmed ({reason}).",
+  "terminal.approval.sessionCleared": "Remembered permissions for conversation {session} cleared; existing once decisions unchanged.",
+  "terminal.approval.sessionClearUnconfirmed": "Could not confirm clearing remembered permissions for conversation {session}."
 }

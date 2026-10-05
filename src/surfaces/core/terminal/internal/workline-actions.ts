@@ -32,6 +32,7 @@ export interface WorkSurfaceLabels {
   readonly transcriptNotFound: string;
   readonly transcriptNoAttempt: string;
   readonly transcriptHeader: string;
+  readonly sessionStandingClear?: { readonly cleared: string; readonly unconfirmed: string };
   readonly approvalsNone: string;
   readonly approvalItem: string;
   readonly approvalsTruncated: string;
@@ -62,6 +63,7 @@ export interface WorkSurfaceLabels {
     /** `{id}`: the approval was allowed and the standing answer saved; `notSaved…` adds `{reason}` (the call was allowed once either way). */
     readonly savedSession: string;
     readonly savedAlways: string;
+    readonly unconfirmedSession: string;
     readonly notSavedSession: string;
     readonly notSavedAlways: string;
   };

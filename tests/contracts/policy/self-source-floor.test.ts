@@ -22,7 +22,7 @@ describe('SELF-SOURCE-FLOOR session and policy boundary', () => {
     expect(sessionPattern(CALL)).toMatchObject({ ok: true, pattern: { key: KEY, cell: CALL.cell, kind: 'directory', text: 'src/*' } });
     const ordinary = { ...CALL, cell: 'edit' };
     expect(sessionPattern(ordinary)).toEqual(standingPattern(ordinary));
-    expect(standingCallKey(CALL)).toEqual({ key: KEY, cell: CALL.cell, session: false });
+    expect(standingCallKey(CALL)).toEqual({ key: KEY, cell: CALL.cell, session: false, pattern: 'src/*' });
   });
 
   it('never offers a session or standing key for any static hard-floor target', () => {

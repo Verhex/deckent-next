@@ -11,10 +11,10 @@ import type { EffectOutcome } from '#engine/core/effect/index.js';
  * answer only, through a separate key. The application service composition asks.
  */
 export function standingCallKey(call: { readonly tool: string; readonly cell: string; readonly path: string | null; readonly command: string | null },
-  memory?: { readonly sessions: SessionStanding; readonly session: string }, knownSecrets?: KnownSecretSnapshot): { readonly key: string; readonly cell: StandingCellName; readonly session: boolean } | null {
+  memory?: { readonly sessions: SessionStanding; readonly session: string }, knownSecrets?: KnownSecretSnapshot): { readonly key: string; readonly cell: StandingCellName; readonly session: boolean; readonly pattern: string } | null {
   if (call.command !== null && hasSecret(call.command, knownSecrets)) return null;
   const found = sessionPattern(call);
-  return found.ok ? { key: found.pattern.key, cell: found.pattern.cell, session: memory?.sessions.has(memory.session, found.pattern.key) ?? false } : null;
+  return found.ok ? { key: found.pattern.key, cell: found.pattern.cell, pattern: found.pattern.text, session: memory?.sessions.has(memory.session, found.pattern.key) ?? false } : null;
 }
 
 /** Cells a session answer may lower; persisted grants remain restricted to the domain's StandingCell. */
@@ -85,22 +85,22 @@ export class SessionStanding {
 export async function rememberSessionStanding(input: { readonly memory: SessionStanding; readonly session: string; readonly key: string;
   readonly cell: StandingCellName; readonly decision: AgentToolCallDecision; readonly valid: () => boolean;
   readonly revalidate: () => Promise<{ readonly cell: string | null; readonly key: string | null; readonly decision: AgentToolCallDecision | null }>;
-  readonly audit: () => Promise<unknown> }): Promise<boolean> {
+  readonly audit: () => Promise<unknown>; readonly refused?: (reason: 'audit-unavailable' | 'policy-changed' | 'evicted') => void }): Promise<boolean> {
   if (!input.valid()) return false;
   const binding = input.memory.bind(input.session);
-  if (!binding) return false;
+  if (!binding) { input.refused?.('evicted'); return false; }
   const current = async () => {
     const fresh = await input.revalidate();
     return binding.valid() && input.valid() && fresh.cell === input.cell && fresh.key === input.key && fresh.decision !== null
       && fresh.decision.decision !== 'deny' && JSON.stringify(fresh.decision) === JSON.stringify(input.decision);
   };
   try {
-    if (!await current()) return false;
-    await input.audit();
-    if (!await current()) return false;
+    if (!await current()) { input.refused?.('policy-changed'); return false; }
+    try { await input.audit(); } catch { input.refused?.('audit-unavailable'); return false; }
+    if (!await current()) { input.refused?.('policy-changed'); return false; }
     // Last await is over: the producer check and owner check + map write share one synchronous section.
     return input.valid() && input.memory.rememberBound(binding, input.key);
-  } catch { return false; }
+  } catch { input.refused?.('policy-changed'); return false; }
   finally { binding.close(); }
 }
 

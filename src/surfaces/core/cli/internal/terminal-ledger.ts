@@ -1,3 +1,4 @@
+import { sessionApprovalResultSchema, acceptSessionStandingClearance } from '#engine/index.js';
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { t, type ConfigLoadOptions, type Locale } from '#platform/index.js';
@@ -31,6 +32,7 @@ export function createWorklineLedgerPorts(input: {
   readonly inspectInventory?: InventoryQueryHandler;
   readonly inspectWorkerTranscript?: WorkerTranscriptHandler;
   readonly listApprovals?: (input: unknown) => Promise<unknown>; readonly decideApproval?: (input: unknown) => Promise<unknown>;
+  readonly clearSessionStanding?: (input: { schemaVersion: 1; scopeId: string; sessionId: string }) => Promise<unknown>;
   readonly deliverRunCancellation?: RunCancellationDeliveryHandler;
 }): WorklineLedgerPorts | undefined {
   if (!input.inspectWorkers || !input.inspectRun) return undefined;
@@ -39,6 +41,10 @@ export function createWorklineLedgerPorts(input: {
   const locale = input.locale ?? 'en', pageSize = input.approvalPageSize ?? 100;
   return {
     scopeId,
+    ...(input.clearSessionStanding ? { async clearSessionStanding(sessionId: string) {
+      const command = { schemaVersion: 1 as const, scopeId, sessionId };
+      acceptSessionStandingClearance(command, await input.clearSessionStanding!(command));
+    } } : {}),
     ...(workerHeartbeatMs === undefined ? {} : { workerHeartbeatMs }),
     async listWorkers() { return inspectWorkers(root, { schemaVersion: 1, scopeId, after: null, limit: 20 }, options); },
     async inspectRun(runId: string) { return (await inspectRun(root, { schemaVersion: 1, scopeId, runId }, options)).run; },
@@ -66,12 +72,16 @@ export function createWorklineLedgerPorts(input: {
       },
       // B1: the card declares itself and forwards its turn's one-time capability when it has one (the same single y; nothing else to type).
       async decideApproval(approval: Pick<WorklineApproval, 'approvalId' | 'revision' | 'decisionCapability'>, decision: 'allow' | 'deny', standing?: StandingScope) {
-        const record = approvalRecordSchema.parse(await decideApproval({ schemaVersion: 1, scopeId, approvalId: approval.approvalId,
+        const result = await decideApproval({ schemaVersion: 1, scopeId, approvalId: approval.approvalId,
           commandId: `terminal-${randomUUID()}`, expectedRevision: approval.revision, decision, channel: 'local-terminal-card',
+          ...(standing === 'session' ? { standing: 'session' } : {}),
           ...(approval.decisionCapability ? { decisionCapability: approval.decisionCapability } : {}),
-          reason: decision === 'allow' ? t('terminal.approval.reasonAllow', {}, locale) : t('terminal.approval.reasonDeny', {}, locale) }));
-        // The runtime protocol (v16) has no standing-scope field yet (v17 checkpoint): the answer is allowed once, and the view is told the
-        // scope was not saved rather than left to assume it.
+          reason: decision === 'allow' ? t('terminal.approval.reasonAllow', {}, locale) : t('terminal.approval.reasonDeny', {}, locale) });
+        if (standing === 'session') {
+          const answer = sessionApprovalResultSchema.parse(result);
+          return { ...approvalView(answer.record), standing: answer.standing };
+        }
+        const record = approvalRecordSchema.parse(result);
         return standing ? { ...approvalView(record), standing: { scope: standing, saved: false, reason: 'protocol' } } : approvalView(record);
       },
     } : {}),

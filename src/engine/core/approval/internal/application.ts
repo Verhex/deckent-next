@@ -15,10 +15,11 @@ export const approvalQuerySchema = z.object({ schemaVersion: z.literal(1), scope
 export const approvalListSchema = approvalQuerySchema.omit({ approvalId: true }).extend({ afterId: identitySchema.nullable(), limit: counterSchema.positive() });
 /** v19 (B1): `channel` is the surface the client declares (recorded, never authority); `decisionCapability` is the one-time capability an agent
  * turn sent on its own stream. There is no assurance field: a client cannot claim one (strict schema → `APPROVAL_INVALID`). */
-export const approvalCommandSchema = approvalQuerySchema.extend({ commandId: identitySchema, expectedRevision: counterSchema,
+const onceApprovalCommandSchema = approvalQuerySchema.extend({ commandId: identitySchema, expectedRevision: counterSchema,
   decision: z.enum(['allow', 'deny']), reason: z.string().min(1).max(2048).refine(v => v.trim() === v), channel: identitySchema.optional(),
   decisionCapability: z.string().regex(DECISION_CAPABILITY_PATTERN).optional() }).strict();
-export const approvalRenewalSchema = approvalCommandSchema.omit({ decision: true, channel: true, decisionCapability: true });
+export const approvalCommandSchema = z.union([onceApprovalCommandSchema, onceApprovalCommandSchema.extend({ decision: z.literal('allow'), standing: z.literal('session') }).strict()]);
+export const approvalRenewalSchema = onceApprovalCommandSchema.omit({ decision: true, channel: true, decisionCapability: true });
 export type ApprovalCommand = z.infer<typeof approvalCommandSchema>;
 export function authorizeApproval(policy: unknown, action: 'inspect' | 'decide' | 'renew', scopeId: string, id: string, principal: VerifiedPrincipal) {
   const decision = evaluatePolicy(policy, { principal, scopeId, action, resource: { kind: 'approval', id } }).decision;
@@ -26,11 +27,11 @@ export function authorizeApproval(policy: unknown, action: 'inspect' | 'decide' 
   if (decision === 'require-approval') throw new PolicyAuthorizationError('POLICY_APPROVAL_UNSUPPORTED');
   if (decision !== 'allow') throw new ApprovalError('APPROVAL_DENIED');
 }
-function commandFingerprint(tag: string, command: z.infer<typeof approvalRenewalSchema> | ApprovalCommand, actor: VerifiedPrincipal | { id: string; issuer: string; subject: string }) {
+export function approvalCommandFingerprint(tag: string, command: z.infer<typeof approvalRenewalSchema> | ApprovalCommand, actor: VerifiedPrincipal | { id: string; issuer: string; subject: string }) {
   const envelope = commandEnvelopeSchema.parse({ schemaVersion: 1, commandId: command.commandId, scopeId: command.scopeId,
     principalRef: { id: actor.id, issuer: actor.issuer, subject: actor.subject }, expectedRevision: command.expectedRevision, idempotencyKeyHash: sha256(command.commandId) });
   return sha256(encodeCommandProjection(tag, { envelope, approvalId: command.approvalId, reason: command.reason,
-    ...('decision' in command ? { decision: command.decision } : {}) }));
+    ...('decision' in command ? { decision: command.decision } : {}), ...('standing' in command ? { standing: command.standing } : {}) }));
 }
 /**
  * Which approvals this decision surface may allow (POLICY-HARDEN K3). Approvals of an operation whose descriptor is `surface: 'authority'`
@@ -95,7 +96,7 @@ export class ApprovalApplication {
     const policy = await this.authorize('renew', command.scopeId, command.approvalId, verified.principal);
     await assertSessionActive(verified.session, this.sessions, this.clock);
     const actor = verified.session.principalRef;
-    const fingerprint = commandFingerprint('approval-renewal:1', command, actor);
+    const fingerprint = approvalCommandFingerprint('approval-renewal:1', command, actor);
     const replay = this.store.receipt(command.scopeId, command.commandId);
     if (replay) {
       if (replay.operation !== 'renew' || replay.fingerprint !== fingerprint) throw new ApprovalError('APPROVAL_CONFLICT');
@@ -117,7 +118,7 @@ export class ApprovalApplication {
     return (await this.decideWithSettlement(input, credential)).record;
   }
   /** Trusted producer result: exactly one decision owner; settlement is supplied by the atomic store transaction. */
-  async decideWithSettlement(input: unknown, credential?: unknown): Promise<ApprovalSettlement> {
+  async decideWithSettlement(input: unknown, credential?: unknown, sessionGuard?: (record: ApprovalRecord, actor: VerifiedPrincipal) => void): Promise<ApprovalSettlement> {
     const parsed = approvalCommandSchema.safeParse(input); if (!parsed.success) throw new ApprovalError('APPROVAL_INVALID');
     const command = parsed.data, { channels } = this.assurance;
     if (command.channel !== undefined && channels && !channels.has(command.channel)) throw new ApprovalError('APPROVAL_INVALID');
@@ -125,9 +126,10 @@ export class ApprovalApplication {
     await this.authorize('decide', command.scopeId, command.approvalId, principal);
     const loaded = this.store.load(command.scopeId, command.approvalId); if (!loaded) throw new ApprovalError('APPROVAL_MISSING');
     let record = verifyApproval(loaded, this.integrity);
+    if ('standing' in command && approvalSubject(record.request).kind !== 'agent-tool-call') throw new ApprovalError('APPROVAL_INVALID');
     const actor = { id: principal.id, issuer: principal.issuer, subject: principal.subject };
     if (command.decision === 'allow') await this.assertDecidableHere(record, actor);
-    const fingerprint = commandFingerprint('approval-command:1', command, actor);
+    const fingerprint = approvalCommandFingerprint('approval-command:1', command, actor);
     const replay = this.store.receipt(command.scopeId, command.commandId);
     // A replay returns the exact receipt; it never issues a new authorization or reopens the request.
     if (replay) {
@@ -162,6 +164,10 @@ export class ApprovalApplication {
       commandDigest: fingerprint, idempotencyKeyHash: sha256(command.commandId), assurance: attested.level };
     const next = sealApproval({ request: record.request, revision: 1, status: 'decided', decision }, this.integrity);
     this.beforeCommit(next);
+    if ('standing' in command) {
+      if (approvalSubject(record.request).kind !== 'agent-tool-call' || !sessionGuard) throw new ApprovalError('APPROVAL_INVALID');
+      sessionGuard(record, verified.principal);
+    }
     const committed = this.store.transitionWithSettlement(record, next, { scopeId: command.scopeId, commandId: command.commandId, fingerprint, record: next });
     // A competing caller can win after our receipt miss. Only this transaction's fresh commit spends B1 evidence.
     const settled = { record: verifyApproval(committed.record, this.integrity), commit: committed.commit };

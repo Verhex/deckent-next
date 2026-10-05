@@ -41,6 +41,7 @@ export interface CommandContext extends ModelCommandContext, MonitorCommandConte
   renewApproval?: (input: unknown) => Promise<unknown>;
   listApprovals?: (input: unknown) => Promise<unknown>;
   inspectApproval?: (input: unknown) => Promise<unknown>;
+  clearSessionStanding?: (input: { schemaVersion: 1; scopeId: string; sessionId: string }) => Promise<unknown>;
   decideApproval?: (input: unknown) => Promise<unknown>;
   deliverWorkspaceIntegration?: TaskIntegrationDeliverHandler;
   executeOperation?: import('./operation.js').OperationEffectHandler;

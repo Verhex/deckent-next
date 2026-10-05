@@ -68,3 +68,16 @@ describe('terminal work ports over the CLI handlers', () => {
     expect([ports.inspectTranscript, ports.listApprovalPage, ports.decideApproval, ports.cancelRun]).toEqual([undefined, undefined, undefined, undefined]);
   });
 });
+
+
+it('clear-session validates exact scope/conversation correlation and never exposes an unwired clear port', async () => {
+  const inputs: unknown[] = [];
+  const ports = createWorklineLedgerPorts({ ...base, clearSessionStanding: async input => { inputs.push(input); return { ...input, cleared: true }; } })!;
+  await ports.clearSessionStanding!('selected-conversation');
+  expect(inputs).toEqual([{ schemaVersion: 1, scopeId: 's', sessionId: 'selected-conversation' }]);
+  for (const wrong of [{ scopeId: 'other' }, { sessionId: 'other' }, { cleared: false }, { principal: 'injected' }]) {
+    const broken = createWorklineLedgerPorts({ ...base, clearSessionStanding: async input => ({ ...input, cleared: true, ...wrong }) })!;
+    await expect(broken.clearSessionStanding!('selected-conversation')).rejects.toThrow();
+  }
+  expect(createWorklineLedgerPorts(base)!.clearSessionStanding).toBeUndefined();
+});
