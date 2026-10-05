@@ -48,13 +48,13 @@ export async function applyAcceptedPredecessorPatches(lease: WorkspaceLease, opt
     }).sort((a, b) => a.path < b.path ? -1 : a.path > b.path ? 1 : 0);
     if (new Set(changes.map(change => change.path)).size !== changes.length) throw new HandoffError('HANDOFF_PATCH_UNAPPLICABLE');
     const prior = await existing(path, options.outputBytes);
-    const current = await readWorkspace(lease.workspace, budget());
+    const listing = await listBase(recorded, options, budget()); const algorithm = hashAlgorithmOf(lease.baseCommit);
+    const current = await readWorkspace(lease.workspace, budget(), { listing, algorithm, keep: new Set(changes.map(change => change.path)) });
     if (prior) {
       if (prior.state !== 'ready' || prior.bindingDigest !== bindingDigest || prior.snapshotDigest !== snapshotDigest(current)) throw new HandoffError('HANDOFF_PATCH_UNAPPLICABLE');
       return Object.freeze(receipts);
     }
-    const listing = await listBase(recorded, options, budget());
-    if (diffAgainstBase(listing, current, hashAlgorithmOf(lease.baseCommit)).length) throw new HandoffError('HANDOFF_PATCH_UNAPPLICABLE');
+    if (diffAgainstBase(listing, current, algorithm).length) throw new HandoffError('HANDOFF_PATCH_UNAPPLICABLE');
     const expected: Snapshot = new Map(current);
     for (const change of changes) {
       if (JSON.stringify(current.get(change.path) ?? null) !== JSON.stringify(change.before)) throw new HandoffError('HANDOFF_PATCH_UNAPPLICABLE');
@@ -66,7 +66,7 @@ export async function applyAcceptedPredecessorPatches(lease: WorkspaceLease, opt
     const record = { schemaVersion: 1 as const, state: 'applying' as const, bindingDigest, snapshotDigest: snapshotDigest(expected) };
     await durable(path, record);
     await applyWorkspacePatchChanges(lease.workspace, changes);
-    if (snapshotDigest(await readWorkspace(lease.workspace, budget())) !== record.snapshotDigest) throw new HandoffError('HANDOFF_PATCH_UNAPPLICABLE');
+    if (snapshotDigest(await readWorkspace(lease.workspace, budget(), { listing, algorithm, keep: new Set(changes.map(change => change.path)) })) !== record.snapshotDigest) throw new HandoffError('HANDOFF_PATCH_UNAPPLICABLE');
     await durable(path + '.pending', { ...record, state: 'ready' }); await rename(path + '.pending', path);
     const directory = await open(dirname(path), constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW);
     try { await directory.sync(); } finally { await directory.close(); }

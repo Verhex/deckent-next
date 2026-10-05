@@ -48,7 +48,8 @@ export class GitIntegrationTarget implements IntegrationTarget {
     await mkdir(this.location(intent.command), { mode: 0o700 });
     const lease = await this.broker(intent.command).allocate({ schemaVersion: 1, identity: intent.command.identity, baseCommit: patch.baseCommit });
     const { listing, algorithm } = await this.expected(intent.command, patch);
-    const initial = await readWorkspace(lease.workspace, this.budget());
+    const kept = new Set(patch.changes.map(change => change.path));
+    const initial = await readWorkspace(lease.workspace, this.budget(), { listing, algorithm, keep: kept });
     if (diffAgainstBase(listing, initial, algorithm).length) throw new WorkspacePatchError('PATCH_CONFLICT');
     for (const change of patch.changes) {
       if (JSON.stringify(initial.get(change.path) ?? null) !== JSON.stringify(change.before)) throw new WorkspacePatchError('PATCH_CONFLICT');
@@ -64,7 +65,7 @@ export class GitIntegrationTarget implements IntegrationTarget {
     const { lease, listing, algorithm } = await this.expected(manifest.command, patch);
     if (lease.workspace !== manifest.workspace) throw new WorkspacePatchError('PATCH_CORRUPT');
     for (let pass = 0; pass < 2; pass++) {
-      const current = await readWorkspace(lease.workspace, this.budget());
+      const current = await readWorkspace(lease.workspace, this.budget(), { listing, algorithm, keep: new Set(patch.changes.map(change => change.path)) });
       this.assertCandidate(listing, algorithm, patch, current);
       if (snapshotDigest(current) !== manifest.snapshotDigest) throw new WorkspacePatchError('PATCH_CONFLICT');
     }

@@ -28,11 +28,12 @@ export class GitWorkspacePatchSource implements WorkspacePatchSource {
       const deadline = Date.now() + this.options.timeoutMs;
       // The base is listed once (ids only); only paths whose content, mode or presence differs are read from Git.
       const listing = await listBase(lease, this.options, new SnapshotBudget(this.limits, deadline));
-      const after = await readWorkspace(lease.workspace, new SnapshotBudget(this.limits, deadline));
-      const again = await readWorkspace(lease.workspace, new SnapshotBudget(this.limits, deadline));
+      const algorithm = hashAlgorithmOf(lease.baseCommit);
+      const after = await readWorkspace(lease.workspace, new SnapshotBudget(this.limits, deadline), { listing, algorithm });
+      const again = await readWorkspace(lease.workspace, new SnapshotBudget(this.limits, deadline), { listing, algorithm });
       if (snapshotDigest(after) !== snapshotDigest(again)) throw new WorkspacePatchError('PATCH_CONFLICT');
       await stopped();
-      const changedPaths = diffAgainstBase(listing, after, hashAlgorithmOf(lease.baseCommit));
+      const changedPaths = diffAgainstBase(listing, after, algorithm);
       const base = await readBaseBlobs(lease, this.options, new SnapshotBudget(this.limits, deadline),
         changedPaths.flatMap(path => { const entry = listing.get(path); return entry ? [[path, entry] as const] : []; }));
       const changes = changedPaths.flatMap(path => {
