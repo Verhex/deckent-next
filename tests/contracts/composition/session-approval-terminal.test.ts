@@ -76,10 +76,13 @@ async function fixture(locale: Locale, settings: { fullAccess?: boolean; path?: 
     inspectRun: async () => ({ run: null } as never), listApprovals: input => client.listApprovals(input), decideApproval: input => client.decideApproval(input),
     clearSessionStanding: input => client.clearSessionStanding(input) })!;
   const snapshots = new Map<string, readonly AgentChatMessage[]>();
-  const view = mountWorkline({ ledger, fullAccess: settings.fullAccess === true, sessions: { async save(input) { snapshots.set(input.sessionId, input.messages); },
+  // Explicit test identity bypasses the renderer-only synthetic binding; the composition below binds its actual command.
+  const context = { installationId: 'fixture-installation', projectId: 'fixture-project', scopeId: 'scope' };
+  const view = mountWorkline({ context, ledger, fullAccess: settings.fullAccess === true, sessions: { async save(input) { snapshots.set(input.sessionId, input.messages); },
     async list() { return [...snapshots].map(([sessionId, messages]) => ({ sessionId, messages: messages.length, updatedAtMs: Date.now(), preview: 'saved' })); },
     async load(id) { return snapshots.get(id) ?? null; } }, labels: { ...WORKLINE_TEST_LABELS, work: workSurfaceLabels(locale) },
     streamTurn: (messages, signal, turn) => streamTerminalAgentTurn({ projectRoot: project, scopeId: 'scope', options: { env }, messages, signal,
+      ...(turn?.onTurnBound ? { onTurnBound: turn.onTurnBound } : {}),
       ...(turn?.sessionId ? { sessionId: turn.sessionId } : {}), ...(turn?.fullAccess ? { fullAccess: true as const } : {}) }, { chatTurn: (_root, command, emit, _options, signal) => client.chatTurn(command, emit, signal),
       cancelChatTurn: async () => undefined }) });
   cleanups.push(async () => { view.instance.unmount(); controller.abort(); await rm(root, { recursive: true, force: true }); });

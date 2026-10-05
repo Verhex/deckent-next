@@ -30,3 +30,18 @@ export function useSingleFlightPoll(enabled: boolean, intervalMs: number, task: 
     return () => { stopped = true; if (timer) clearTimeout(timer); };
   }, [enabled, intervalMs]);
 }
+
+/** One subscription lifecycle; a late batch/failure from a stopped view cannot update its replacement. */
+export function useWorklineFollow<T>(enabled: boolean, follow: ((signal: AbortSignal) => AsyncIterable<T>) | undefined,
+  observe: (batch: T) => void, onFailure: (error: unknown) => void) {
+  const handlers = useRef({ observe, onFailure }); handlers.current = { observe, onFailure };
+  useEffect(() => {
+    if (!enabled || !follow) return;
+    const controller = new AbortController();
+    void (async () => {
+      try { for await (const batch of follow(controller.signal)) { if (controller.signal.aborted) return; handlers.current.observe(batch); } }
+      catch (error) { if (!controller.signal.aborted) handlers.current.onFailure(error); }
+    })();
+    return () => { controller.abort(); };
+  }, [enabled, follow]);
+}

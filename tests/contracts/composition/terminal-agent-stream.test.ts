@@ -169,3 +169,35 @@ describe('terminal agent turn stream', () => {
     expect(p.commands).toEqual([]);
   });
 });
+
+describe('terminal generated command binding', () => {
+  it('binds the exact command before dispatch, then cancels it once with the same closure', async () => {
+    const abort = new AbortController(), order: string[] = [], bindings: unknown[] = [];
+    const p = ports((command, onEvent, signal) => new Promise((_resolve, reject) => {
+      order.push('dispatch'); expect(bindings).toEqual([{ scopeId: command.scopeId, sessionId: command.sessionId, turnId: command.turnId, phase: 'command-generated' }]);
+      onEvent({ kind: 'text', text: 'held' }); signal!.addEventListener('abort', () => reject(new Error('aborted')), { once: true });
+    }));
+    const source = streamTerminalAgentTurn({ ...input, sessionId: 'session', signal: abort.signal, onTurnBound(binding) { order.push('binding'); bindings.push(binding); } }, p.value);
+    for await (const delta of source) { if (delta.kind === 'text') abort.abort(); }
+    expect(order).toEqual(['binding', 'dispatch']); expect(p.cancelled).toEqual([{ schemaVersion: 1, scopeId: input.scopeId, turnId: p.commands[0]!.turnId }]);
+    abort.abort(); expect(p.cancelled).toHaveLength(1);
+  });
+  it('does not bind or dispatch after preflight fails or an abort wins preflight', async () => {
+    const bindings: unknown[] = [], abort = new AbortController(), p = ports(async command => result({ turnId: command.turnId }));
+    await expect(collect(streamTerminalAgentTurn({ ...input, onTurnBound: b => bindings.push(b) }, { ...p.value,
+      preflight: async () => { throw new Error('preflight failed'); } }))).rejects.toThrow('preflight failed');
+    await expect(collect(streamTerminalAgentTurn({ ...input, signal: abort.signal, onTurnBound: b => bindings.push(b) }, { ...p.value,
+      preflight: async () => { abort.abort(); } }))).rejects.toThrow();
+    expect(bindings).toEqual([]); expect(p.commands).toEqual([]); expect(p.cancelled).toEqual([]);
+  });
+  it('an abort inside the generated callback never dispatches the command', async () => {
+    const abort = new AbortController(), bindings: unknown[] = [], p = ports(async command => result({ turnId: command.turnId }));
+    await expect(collect(streamTerminalAgentTurn({ ...input, signal: abort.signal, onTurnBound: b => { bindings.push(b); abort.abort(); } }, p.value))).rejects.toThrow();
+    expect(bindings).toHaveLength(1); expect(p.commands).toEqual([]); expect(p.cancelled).toEqual([]);
+  });
+  it('rejects a mismatched final turn id without emitting its result tail or a successful done', async () => {
+    const seen: TurnDelta[] = [], p = ports(async () => result({ turnId: 'different-turn', answer: 'FOREIGN-TAIL' }));
+    await expect((async () => { for await (const delta of streamTerminalAgentTurn(input, p.value)) seen.push(delta); })()).rejects.toMatchObject({ code: 'AGENT_TURN_INVALID' });
+    expect(seen).toEqual([]); expect(p.cancelled).toEqual([]);
+  });
+});

@@ -37,11 +37,11 @@ export function approvalDecisionCardLines(approval: ApprovalCardPresentation, wo
     summary: p(approval.summary), risk: approvalTemplateLine(card.risk, { risk: p(approval.risk || card.notDeclared), undo: p(approval.undo || card.notDeclared) }), preview: preview === undefined ? null : p(preview), previewMore: work.approvalPreviewMore,
     covers: covers ? approvalTemplateLine(covers.template, { pattern: p(covers.pattern) }) : null, expiry: approvalTemplateLine(`${fillTemplate(work.approvalExpires, { duration: formatDuration(approval.expiresAt - Date.now(), work.workerLine) })} ${card.onExpiry}`, {}), assurance });
 }
-export function ApprovalDecisionCard({ presentation, work, labels, preview, scoped, onDecide }: { readonly presentation: ApprovalCardPresentation; readonly work: WorkSurfaceLabels; readonly labels: ApprovalDecisionLabels; readonly preview: string | undefined;
-  readonly scoped: Readonly<{ scopes: readonly StandingScope[]; pattern: string; labels: NonNullable<WorkSurfaceLabels['approvalStanding']> }> | null; readonly onDecide: (yes: boolean, standing?: StandingScope) => void }) {
+export function ApprovalDecisionCard({ presentation, work, labels, preview, scoped, pending, onDecide }: { readonly presentation: ApprovalCardPresentation; readonly work: WorkSurfaceLabels; readonly labels: ApprovalDecisionLabels; readonly preview: string | undefined;
+  readonly pending?: boolean; readonly scoped: Readonly<{ scopes: readonly StandingScope[]; pattern: string; labels: NonNullable<WorkSurfaceLabels['approvalStanding']> }> | null; readonly onDecide: (yes: boolean, standing?: StandingScope) => void }) {
   const known = useHumanTextSecrets(), prompt = !scoped ? work.approvalPrompt : scoped.scopes.length === 2 ? scoped.labels.promptBoth : scoped.scopes[0] === 'session' ? scoped.labels.promptSession : scoped.labels.promptAlways;
   return <DecisionCard title={approvalTemplateLine(work.approvalTitle, {})} projectedLines={approvalDecisionCardLines(presentation, work, preview, scoped ? { template: scoped.labels.covers, pattern: scoped.pattern } : null, known)} decisionLabels={labels}
-    prompt={prompt} pendingText={work.approvalPending} scopes={scoped?.scopes ?? []} onDecide={onDecide} />;
+    prompt={prompt} pendingText={work.approvalPending} {...(pending === undefined ? {} : { pending })} scopes={scoped?.scopes ?? []} onDecide={onDecide} />;
 }
 type CancellationCardPresentation = Readonly<{ displayRun: string; displayScope: string; displayRevision: number; displayPhases: string; cancellationRequested: boolean }>;
 export function cancellationCardPresentation(run: RunView): CancellationCardPresentation {
@@ -49,8 +49,8 @@ export function cancellationCardPresentation(run: RunView): CancellationCardPres
   return { displayRun: run.runId, displayScope: run.scopeId, displayRevision: run.revision, displayPhases: [...counts.entries()].map(([phase, count]) => `${phase}:${count}`).join(' ') || '—', cancellationRequested: run.cancellationRequested };
 }
 /** Cancellation shares the private Provider boundary; the public card receives no transported strings or Run DTO. */
-export function CancellationDecisionCard({ presentation: raw, work, labels, onDecide }: { readonly presentation: CancellationCardPresentation; readonly work: WorkSurfaceLabels; readonly labels: ApprovalDecisionLabels; readonly onDecide: (yes: boolean) => void }) {
+export function CancellationDecisionCard({ presentation: raw, work, labels, pending, onDecide }: { readonly presentation: CancellationCardPresentation; readonly pending?: boolean; readonly work: WorkSurfaceLabels; readonly labels: ApprovalDecisionLabels; readonly onDecide: (yes: boolean) => void }) {
   const known = useHumanTextSecrets(), p = (text: string) => projectApprovalDecisionText(text, known);
   return <DecisionCard title={approvalTemplateLine(work.cancelTitle, { run: p(raw.displayRun) })} projectedLines={[approvalTemplateLine(work.cancelDetail, { revision: p(String(raw.displayRevision)), scope: p(raw.displayScope), phases: p(raw.displayPhases) }), ...(raw.cancellationRequested ? [approvalTemplateLine(work.cancelAlreadyRequested, {})] : [])]}
-    decisionLabels={labels} prompt={work.cancelPrompt} pendingText={work.cancelPending} onDecide={onDecide} />;
+    decisionLabels={labels} prompt={work.cancelPrompt} pendingText={work.cancelPending} {...(pending === undefined ? {} : { pending })} onDecide={onDecide} />;
 }
