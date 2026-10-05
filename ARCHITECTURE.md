@@ -490,7 +490,7 @@ Layers: `platform` (config, errors/i18n, identity, paths) → `domain` (pure ver
 | [ci-and-verification](.deckent/docs/architecture/modules/ci-and-verification.md) | CI-FULL, CI-FIX signal, SOCKET-PUBLICATION, CI-WINDOWS-MACOS verification tooling. |
 | [permission-modes](.deckent/docs/architecture/modules/permission-modes.md) | MODES-3 (standart/full-auto/full-access), decision and audit, write postures, FA-TRACKED-WARN, `/mode`. |
 | [record-redaction-and-safe-approval](.deckent/docs/architecture/modules/record-redaction-and-safe-approval.md) | Canonical record redactor, terminal S06, SAFE-APPROVAL-A1 custody (former "Current closure"). |
-| [host-qwen-decision-pilot](.deckent/docs/architecture/modules/host-qwen-decision-pilot.md) | Development-host Qwen decision pilot (host tool outside customer src/native). |
+| [host-qwen-decision-pilot](.deckent/docs/architecture/modules/host-qwen-decision-pilot.md) | Canceled development-host Qwen decision research (owner2026-10-06; historical host tool outside customer src/native). |
 
 ## Package contract
 

@@ -1,5 +1,17 @@
 # Deckent Next — tamamlanan plan
 
+## Host Jev kullanım araştırması — 2026-10-06 (araştırma tamamlandı)
+
+- Owner isteğiyle resmi TypeSafe rehberleri, dış birincil benchmark/preprint ve retained host journal incelendi: 661 istek/649 yanıt; son100 p50/p95 368/438 ms, 17 seçim/liste sorusu Noul kontrolüne yazılmış, yalnız5 inconclusive outcome/0 truth label. Kullanımın tek çağrıda batching, structured evidence ve iki çekimserlik temeli uygun; temsili doğruluk ölçümü yok.
+- Tek logged Jev görüşü `fb4f2cfd-9e83-42ff-8988-f2bd761efe25`: önce küçük soru/sonuç hijyeni seçimi0,99, sufficiency0,78, 404ms; decision öneri, outcome inconclusive. Ürün/native/provider/prompt/eşik değişikliği, bağımsız PASS, commit/push yok. Qwen iptali korunur. Sonraki küçük host slice/pilot owner'a öneridir, kabul edilmiş PLAN işi değildir. Kanıt: dış `proof/JEV-USAGE-RESEARCH-2026-10-06/REPORT.md`, tam census + kaynak SHA/zamanı + request/response/follow-up.
+
+
+## 2026-10-06 — Qwen karar araştırması iptali (owner kararı)
+
+Owner, Jev'den en az%20 hız ve paralelde%30 hız üstünlüğü kesinleşmediği için Qwen decision çalışmasını iptal etti. Bu bir başarı/kalite kabulü veya hedefin imkânsızlık kanıtı değildir. Yeni başlık eğitimi, vLLM özel karar katmanı, küçük-model/CLEF alternatif çalışması, gölge kıyas ve HF yayın hazırlığı durduruldu; yeniden açılış yeni owner yönü ister.
+
+Native Qwen mevcut standart ağırlık/container/profile ile korunur; karar danışmanlığı mevcut Jev akışıdır. Yeni unmerged JSON/hata deneyi ayrı klonda geri alındı, patch/ölçüm kanıtları dış alanda korundu. Main'deki PR#11 host CLI/API kaynakları tarihsel ve kullanılmayan araçtır, native/ürün bağımlılığı değildir; çalışan decision daemon yok. Dış shadow.sh aynı çağrı biçiminde yalnız Jev'i çağırır, yeni Qwen kıyas kaydı/call üretmez. Eski başlıklar/veri/ölçümler tarihsel kanıt; eğitilmiş başlık native'de kurulu değildir. Commit/push/merge yapılmadı; aşağıdaki eski kalan-iş ifadeleri bu iptal ile güncel iş planı sayılmaz. Dış kanıt: `proof/QWEN-CANCELED-2026-10-06/REPORT.md`.
+
 
 ## 2026-10-05 — QWEN-DATA-QUALITY-v4 (host veri dilimi; model kabulü değil)
 

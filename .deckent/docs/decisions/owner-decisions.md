@@ -195,3 +195,10 @@ Bu eşleme tarihsel kartlardaki sıra/ledger numaralarını yeni yürütme izni 
 | O7 | SURFACES / ASSURANCE | Legacy cli-command-contract.ts salt okunur port envanteri kaynağıdır. Eski komut adları/alias'lar Next kabul şartı değildir; Statik manifest aracı bağlı: mevcut kaynakta 280 yol (269 CLI/39 MCP/41 REPL, 11 yalnız REPL). Tarihsel 282 sayımı kullanılmaz; çalışma zamanı erişilebilirliği ve Next davranış eşlemesi açık. |
 
 O2, O3, O5 ve O6 uygulandı ([COMPLETED-PLAN](COMPLETED-PLAN.md)).
+
+
+## Owner kararı — 2026-10-06: Qwen karar araştırması iptali
+
+“Çalışmayı iptal edelim qwen eski haliyle korunsun. jev kullanmaya devam edeceğiz.”
+
+Yerel karar başlığı/eğitim, vLLM özel endpoint/worker katmanı, alternatif yerel karar modelleri, Qwen–Jev gölge kıyası ve HF hazırlığı iptal. Native Qwen standart model/profile ile korunur, karar danışmanlığı mevcut Jev'dir. Yeni deney dalı geri alınır; tarihsel kanıt/veri saklanır. PR#11'in main'deki host araçları kullanılmayan tarihsel kaynak olarak kalır, otomatik kullanım yoktur. Eski kabul ve kalan-iş metinleri çalıştırmayı yeniden kabul etmez; yeni owner yönü gerekir. Karar, kesin%20/%30 hız üstünlüğü kanıtlanamadığı durumda owner'ın çalışmayı bırakma tercihidir; teknik imkânsızlık bulgusu değildir. Kapanış dış `proof/QWEN-CANCELED-2026-10-06/REPORT.md`.
