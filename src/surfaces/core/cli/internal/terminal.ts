@@ -197,9 +197,8 @@ export async function terminalCommand(argv: readonly string[], context: CommandC
   const readIdentity = async () => ({ installation: await context.loadInstallationIdentity?.(root, options)
     ?? { status: 'unavailable', reason: 'unsupported', bindingCapability: 'not-observed' } as const,
   project: await context.loadProjectIdentity?.(root, options) ?? { status: 'unavailable', reason: 'unsupported' } as const });
-  const identity = await readIdentity();
   if (parsed.action === 'status') {
-    const payload = statusPayload(tty, config, chat, identity);
+    const payload = statusPayload(tty, config, chat, await readIdentity());
     emit(payload, { ...sinks, json: parsed.json, render: value => parsed.json ? formatValue(value) : renderStatus(value, locale) });
     return;
   }
@@ -208,6 +207,15 @@ export async function terminalCommand(argv: readonly string[], context: CommandC
   const configured = (config['terminal'] as { scopeId?: unknown } | undefined)?.scopeId;
   const scopeId = parsed.scopeId ?? (typeof configured === 'string' ? configured : undefined);
   if (!scopeId) throw ErrorRegistry.createError('TERMINAL_SCOPE_REQUIRED');
+  if (parsed.action !== 'session' && (!tty.stdin || !tty.stdout)) throw ErrorRegistry.createError('TERMINAL_TTY_REQUIRED');
+  // Admit identity before runtime startup or session/history writes. Piped line mode remains read-only until a governed turn writes.
+  let installationId: string | undefined, projectId: string | undefined;
+  if (tty.stdin && tty.stdout) {
+    if (!context.ensureTerminalIdentity) throw ErrorRegistry.createError('INSTALLATION_IDENTITY_UNAVAILABLE');
+    ({ installationId, projectId } = await context.ensureTerminalIdentity(root, scopeId, options));
+    if (!installationId) throw ErrorRegistry.createError('INSTALLATION_IDENTITY_UNAVAILABLE');
+    if (!projectId) throw ErrorRegistry.createError('PROJECT_IDENTITY_UNAVAILABLE');
+  }
   // Owner 2026-09-23: an interactive terminal starts the runtime service when none is running; it keeps running after exit.
   // Piped line mode never starts background processes. A start failure is shown, not fatal: local commands still work.
   const autostart = (config['terminal'] as { autostartService?: unknown } | undefined)?.autostartService !== false;

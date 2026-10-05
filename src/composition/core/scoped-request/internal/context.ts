@@ -50,3 +50,12 @@ export async function resolveConfiguredInstallationIdentity(projectRoot: string,
   return readIdentity(() => new FileInstallationIdentityStore(config.productLayout, config.configFile.writeLockTimeoutMs, undefined, config.installation.identityProbe)
     .resolveRelocation(choice, { issuer: principal.issuer, subject: principal.subject }));
 }
+/** Interactive session startup shares the existing managed-write principal, scope and policy admission. */
+export async function ensureConfiguredTerminalIdentity(root: string, scopeId: string, options: ConfigLoadOptions) {
+  registerProviderConfig(); const observed = await loadConfiguredInstallationIdentity(root, options);
+  if (observed.status === 'unavailable' && observed.reason === 'unsupported') throw ErrorRegistry.createError('INSTALLATION_IDENTITY_UNAVAILABLE');
+  const { installationId, projectId } = await loadConfiguredScopeContext(root, scopeId, options, 'write');
+  if (!installationId) throw ErrorRegistry.createError('INSTALLATION_IDENTITY_UNAVAILABLE');
+  if (!projectId) throw ErrorRegistry.createError('PROJECT_IDENTITY_UNAVAILABLE');
+  return Object.freeze({ installationId, projectId });
+}

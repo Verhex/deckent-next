@@ -63,6 +63,8 @@ export interface CommandContext extends InstallationCommandContext, ModelCommand
   openTerminalSessions?: (root: string, options: ConfigLoadOptions) => Promise<TerminalSessionStoreView | null>;
   loadInstallationIdentity?: (root: string, options: ConfigLoadOptions) => Promise<InstallationIdentityRead>;
   loadProjectIdentity?: (root: string, options: ConfigLoadOptions) => Promise<IdentityRead<ProjectIdentity>>;
+  /** Managed interactive startup only; status and piped observation never call this write port. */
+  ensureTerminalIdentity?: (root: string, scopeId: string, options: ConfigLoadOptions) => Promise<{ readonly installationId: string; readonly projectId: string }>;
   selfSourceProject?: (root: string) => Promise<boolean>;
   stopRuntimeService?: (root: string, options: ConfigLoadOptions) => Promise<{ readonly command: ShutdownCommand; readonly result: ServiceShutdownAdmissionResult }>;
   updateToolchains?: import('./toolchains.js').ToolchainUpdateHandler;
