@@ -5,7 +5,7 @@ import { chatTurnCancellationSchema, chatTurnCommandSchema, modelInvocationProfi
   type AgentTurnStreamEvent, type ChatTurnCancellationResult, type ChatTurnResult, type JsonObject, type ModelInvocationCommand } from '#domain/index.js';
 import { SessionStanding, SessionApprovalAnswers, agentCallPermissionMode, agentToolApprovalSummary, agentCompactionInstruction, AGENT_TURN_ANSWER_MAX_BYTES, APPROVAL_PREVIEW_MAX_BYTES, AgentToolPolicyAuthorization, AgentTurnStoreError, admitFullAccessTurn,
   agentCompactionTranscript, agentToolApprovalFacts, agentTurnAdmission, awaitAgentToolApproval, boundApprovalPreview, createTurnDecisionCapabilities, parseAgentCompactionSummary,
-  renderAgentTurnSystemPrompt, requestAgentToolApproval, runDurableAgentTurn, withAgentTurnSystemPrompt, type AgentRoundOutcome, type AgentTurnPorts, type TurnDecisionCapabilities,
+  renderAgentTurnSystemPrompt, requestAgentToolApproval, runDurableAgentTurn, withAgentTurnSystemPrompt, projectModelIngressField, type AgentRoundOutcome, type AgentTurnPorts, type TurnDecisionCapabilities,
   type ModelInvocationDelivery } from '#engine/index.js';
 import { t, globalStateRoot, ErrorRegistry, loadConfig, prepareProductDirectory, resolveLocale, SystemTrustedClock, type ConfigLoadOptions } from '#platform/index.js';
 import { agentTurnWriteFloor, isSelfSourceProject, agentAuthorityPaths, agentProductStateDeny, agentShellHardFloor, agentWorkspaceDeny, createWorkspaceReadTools, WORKSPACE_EDIT_TOOL_SPECS, openLocalIntegrityAuthority, openSqliteApprovalStore, openSqliteAgentTurnStore, OPENAI_CHAT_COMPLETIONS_FAMILY, ANTHROPIC_MESSAGES_FAMILY,
@@ -63,7 +63,7 @@ async function admitFullAccess(context: Awaited<ReturnType<typeof loadPeerInvoca
 }
 
 /** What the owner sees before deciding a call: the tool and its arguments (slice 2 adds the edit diff). Bounded presentation. */
-export function chatTurnApprovalPreview(tool: string, args: Record<string, unknown>): string { return boundApprovalPreview(`${tool} ${JSON.stringify(args, null, 2)}`); }
+export function chatTurnApprovalPreview(tool: string, args: Record<string, unknown>): string { return projectModelIngressField(boundApprovalPreview(`${tool} ${JSON.stringify(args, null, 2)}`)).modelText; }
 /** Round command id (Astra 2074 D3): the same turn and round is the same governed invocation, so a replay never bills twice. */
 export const chatTurnRoundCommandId = (scopeId: string, turnId: string, round: number) => sha256(`turn-round:1\0${scopeId}\0${turnId}\0${round}`);
 
@@ -229,9 +229,9 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
             session: SessionStanding.sessionKey(command.scopeId, context.principal, command.sessionId ?? command.turnId), key: offer.key, signal: approvalSignal, clock, started,
             remember: (valid, refused) => decisions.remember(tool, args, { round, index }, call.id, record.request.approvalId, { valid, refused }) });
           emitApproval({ kind: 'approval.requested', callId: call.id, approvalId: record.request.approvalId, revision: record.revision, risk: facts.risk?.source === 'cell' ? facts.risk.cell : null,
-            requiredAssurance: facts.requiredAssurance, summary: record.request.summary, preview: diff !== undefined ? boundApprovalPreview(diff, kept)
+            requiredAssurance: facts.requiredAssurance, summary: record.request.summary, preview: projectModelIngressField(((diff !== undefined ? boundApprovalPreview(diff, kept)
               : (tool.toolClass === 'shell' ? shell?.preview(tool.name, args) : fetches(tool) ? fetcher?.preview(args) : mcps(tool) ? boundApprovalPreview(mcp!.preview(tool.name, args)!)
-                : undefined) ?? chatTurnApprovalPreview(tool.name, args),
+                : undefined) ?? chatTurnApprovalPreview(tool.name, args)))).modelText,
             expiresAt: record.request.expiresAt, ...(answer && offer ? { standing: { scopes: ['session'] as const, pattern: offer.pattern } } : {}) });
           requested = { approvalId: record.request.approvalId };
           let outcome = await awaitAgentToolApproval(journal.store, integrity, record, clock, approvalSignal, 250, started);
@@ -286,11 +286,11 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
         if (mcps(tool)) return decisions.execute(tool, args, execution, callId, gate => mcp!.apply(tool.name, args, toolSignal, execution, gate));
         return scratch?.reads(tool.name) ? scratch.read(tool.name, args, toolSignal) : workspace.execute(tool.name, args, toolSignal);
       },
-      now: () => clock.sample().wallMs,
+      now: () => clock.sample().wallMs, recordIngress: async notice => { if (notice.disposition === 'unchanged') return; const loaded = await context.policy.load() as { revision?: unknown }; const policyRevision = typeof loaded.revision === 'string' ? loaded.revision : 'unknown'; const atMs = clock.sample().wallMs; await withAgentAudit(context, audit => audit.record({ schemaVersion: 1, eventId: sha256(`model-ingress:1\0${command.scopeId}\0${command.turnId}\0${notice.fieldDigest}\0${notice.codePoints}\0${atMs}`), scopeId: command.scopeId, principal: { issuer: context.principal.issuer, subject: context.principal.subject }, policyRevision, atMs, subject: { kind: 'model-ingress', fieldDigest: notice.fieldDigest, projectedDigest: notice.projectedDigest, decodedDigest: notice.decodedDigest, codePoints: notice.codePoints, disposition: notice.disposition } })); },
     };
     const result = await runDurableAgentTurn({ claim: { scopeId: command.scopeId, turnId: command.turnId, principalKey, requestDigest, claimedAtMs: clock.sample().wallMs },
       messages: command.messages, tools, signal, language, emit: event => { if (event.kind !== 'done') channel.emit(event); },
-      admission: agentTurnAdmission(chat.maxCompletionTokens, context.config.service.inputMaxBytes) }, store, ports);
+      admission: agentTurnAdmission(chat.maxCompletionTokens, context.config.service.inputMaxBytes), fullAccess }, store, ports);
     await channel.drained();
     const answer = result.answer;
     const answerBytes = answer === null ? 0 : Buffer.byteLength(answer, 'utf8');
