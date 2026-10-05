@@ -1,4 +1,6 @@
-import { readFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { expect, it } from 'vitest';
 import { main } from '#surfaces/core/cli/index.js';
 
@@ -95,7 +97,9 @@ it('enforces 80 display columns independently of golden matching', () => {
 
 it.each(['run', 'task'])('preserves existing %s unknown-action help and extra-flag refusal', async family => {
   let output = '';
-  const context = { stdout: { write: (text: string) => { output += text; } }, stderr: { write: () => undefined } };
+  // Isolated from the host project and environment: the default (English) help is what is asserted.
+  const context = { root: mkdtempSync(join(tmpdir(), 'deckent-cli-help-')), env: { NO_COLOR: '1' },
+    stdout: { write: (text: string) => { output += text; } }, stderr: { write: () => undefined } };
   expect(await main([family, 'unknown-action', '--help'], context)).toBe(0);
   expect(output).toContain('Usage: deckent ' + family);
   expect(await main([family, '--help', '--json'], context)).toBe(2);
