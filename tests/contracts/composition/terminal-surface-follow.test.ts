@@ -332,7 +332,7 @@ it.each(['en', 'tr'] as const)('renders missing identity in %s and stops without
     followEvents: follow, readSurfaceSnapshot: read, listRunIds: poll, listApprovalPage: poll,
   } });
   try {
-    await until(() => view.stdout.text.includes('deckent init identity'), 'missing identity notice');
+    await until(() => view.stdout.text.includes(t('terminal.workline.watchNotInitialized', {}, locale)), 'missing identity notice');
     expect(view.stdout.text).toContain(t('terminal.workline.watchNotInitialized', {}, locale));
     for (const command of ['/watch-workers\r', '/watch-stop\r', '/watch-runs\r']) {
       for (const char of command) { view.stdin.write(char); await settle(2); }

@@ -861,7 +861,7 @@
   "terminal.workline.statusCancelling": "Cancelling…",
   "terminal.workline.watchFailed": "Watch poll failed",
   "terminal.workline.watchDelivery": "Watch delivery: {mode}. Timeout {timeoutMs} ms. Owner: {owner}. Action: {action}.",
-  "terminal.workline.watchNotInitialized": "This installation has no identity yet — open the terminal or run `deckent init identity`.",
+  "terminal.workline.watchNotInitialized": "This installation has no identity yet — open the terminal (`deckent`) once to create it.",
   "terminal.admission.policyUnavailable": "Identity admission deferred: policy is unavailable. Governed commands will be rejected by their own authorization checks.",
   "terminal.admission.policyDenied": "Identity admission deferred: policy denied access. Governed commands will be rejected by their own authorization checks.",
   "terminal.admission.scopeUnknown": "Identity admission deferred: the scope is unknown. Governed commands will be rejected by their own authorization checks.",
