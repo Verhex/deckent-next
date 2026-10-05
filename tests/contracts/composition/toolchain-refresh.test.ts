@@ -158,4 +158,18 @@ describe('autonomous worker image refresh (WORKER-AUTO-REFRESH)', () => {
     expect(await isToolchainRefreshInProgress(f.root, f.options)).toBe(false);
     expect(await inspectToolchainRefresh(f.root, f.options)).toMatchObject({ status: 'failed', reason: 'REFRESH_EXPIRED' });
   });
+
+  it('an unreachable registry is reported unverified, never current, and never marks an update in flight', async () => {
+    const f = await fixture();
+    const outcome = await refreshConfiguredToolchains(f.root, 'startup', f.options, { ...f.deps, fetcher: async () => { throw new Error('offline'); } }, f.observer);
+    expect(outcome.outcome).toBe('unverified'); expect(f.state.builds).toBe(0);
+    expect(f.events.map(event => event.phase)).toEqual(['unverified']); expect(f.events[0]!.code).toEqual(expect.any(String));
+    expect(await isToolchainRefreshInProgress(f.root, f.options)).toBe(false);
+    expect(await inspectToolchainRefresh(f.root, f.options)).toMatchObject({ status: 'unknown' });
+  });
+  it('an installation without Docker execution is never touched', async () => {
+    const f = await fixture(); const config = JSON.parse(await readFile(f.path, 'utf8')); delete config.execution; await writeFile(f.path, JSON.stringify(config));
+    expect((await refreshConfiguredToolchains(f.root, 'startup', f.options, f.deps, f.observer)).outcome).toBe('skipped');
+    expect(f.state.builds).toBe(0); expect(await readToolchainRefreshState(f.root, f.options)).toBeNull();
+  });
 });
