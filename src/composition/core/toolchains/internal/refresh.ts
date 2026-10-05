@@ -112,7 +112,7 @@ export function startToolchainRefresh(projectRoot: string, options: ConfigLoadOp
   dependencies: ToolchainRefreshDependencies = {}): ToolchainRefreshHandle {
   const run = (trigger: ToolchainRefreshTrigger) => refreshConfiguredToolchains(projectRoot, trigger, options, { ...dependencies, signal }, observer).catch(() => undefined);
   const done = (async () => {
-    let intervalMs = 0;
+    let intervalMs: number;
     try { intervalMs = refreshIntervalMs((await loadConfig(projectRoot, options)).toolchains.update); } catch { return; }
     if (!signal.aborted) await run('startup');
     while (intervalMs > 0 && !signal.aborted) {

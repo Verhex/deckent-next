@@ -4,14 +4,15 @@ import { join } from 'node:path';
 import { afterEach, expect, it } from 'vitest';
 import { resolveProductPaths } from '#platform/index.js';
 import { main, runKernelCommand } from '#surfaces/core/cli/index.js';
-import { describeDiagnostic } from '#surfaces/core/monitor/internal/diagnostics.js';
+import { loadMonitorSurface } from '#surfaces/core/monitor/index.js';
 import { MonitorApplication } from '#engine/index.js';
 
 const roots: string[] = [];
 afterEach(async () => { await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 const stdout = (lines: string[]) => ({ write: (text: string) => { lines.push(text); return true; } });
 
-it('WORKER-AUTO-REFRESH monitor: updating and current are notes, a failed refresh is a problem; all three read in EN and TR', () => {
+it('WORKER-AUTO-REFRESH monitor: updating and current are notes, a failed refresh is a problem; all three read in EN and TR', async () => {
+  const { describeDiagnostic } = await loadMonitorSurface();
   expect(describeDiagnostic('info:image-updating', 'en')).toMatchObject({ note: true, text: expect.stringContaining('updated in the background') });
   expect(describeDiagnostic('info:image-updating', 'tr')).toMatchObject({ note: true, text: expect.stringContaining('arka planda') });
   expect(describeDiagnostic('info:image-current:r5-20261006', 'en')).toMatchObject({ note: true, text: expect.stringContaining('r5-20261006') });
