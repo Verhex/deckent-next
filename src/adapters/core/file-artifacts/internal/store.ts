@@ -1,6 +1,6 @@
 import { ARTIFACT_STORAGE_LIMITS } from '#platform/index.js';
 import { constants, type Stats } from 'node:fs';
-import { lstat, mkdir, open, realpath, rename, unlink } from 'node:fs/promises';
+import { link, lstat, mkdir, open, readdir, realpath, unlink } from 'node:fs/promises';
 import { createHash, randomUUID } from 'node:crypto';
 import { isAbsolute, join, resolve } from 'node:path';
 import { z } from 'zod';
@@ -10,6 +10,8 @@ const optionsSchema = ARTIFACT_STORAGE_LIMITS.extend({ root: z.string().min(1) }
 export type FileArtifactOptions = z.infer<typeof optionsSchema>;
 function digest(bytes: Uint8Array | string) { return createHash('sha256').update(bytes).digest('hex'); }
 function missing(error: unknown) { return !!error && typeof error === 'object' && 'code' in error && error.code === 'ENOENT'; }
+function present(error: unknown) { return !!error && typeof error === 'object' && 'code' in error && error.code === 'EEXIST'; }
+const STAGING_PREFIX = '.staging.';
 /** POSIX trusted-host store; managed tree must be outside worker mounts. Preflight is not openat custody. */
 export class FileArtifactStore implements ArtifactStore {
   private readonly options: FileArtifactOptions;
@@ -25,6 +27,25 @@ export class FileArtifactStore implements ArtifactStore {
   }
   private privateFile(stat: Stats) {
     if (!stat.isFile() || stat.isSymbolicLink() || stat.nlink !== 1 || stat.uid !== process.getuid!() || (stat.mode & 0o777) !== 0o600) throw new ArtifactError('ARTIFACT_UNSAFE');
+  }
+  /**
+   * A publish names a finished staging file with link(2). Until that extra name is removed the inode's nlink is 2.
+   * Only a name this store allocated (`.staging.`) and the same inode is removed, then the strict check runs once.
+   * A foreign extra name is left in place and still fails `privateFile`. This is not a retry of ARTIFACT_UNSAFE.
+   */
+  private async withoutOwnStaging(directory: string, path: string, linked: Stats): Promise<Stats> {
+    if (linked.nlink === 1 || !linked.isFile() || linked.isSymbolicLink()) return linked;
+    for (const name of await readdir(directory)) {
+      if (!name.startsWith(STAGING_PREFIX)) continue;
+      const staged = join(directory, name);
+      let stat: Stats;
+      try { stat = await lstat(staged); } catch (error) { if (missing(error)) continue; throw error; }
+      if (stat.isSymbolicLink() || !stat.isFile() || stat.ino !== linked.ino || stat.dev !== linked.dev) continue;
+      try { await unlink(staged); } catch (error) { if (!missing(error)) throw error; }
+    }
+    const settled = await lstat(path);
+    if (settled.ino !== linked.ino || settled.dev !== linked.dev) throw new ArtifactError('ARTIFACT_UNSAFE');
+    return settled;
   }
   private async directory(path: string) {
     const stat = await lstat(path);
@@ -47,11 +68,11 @@ export class FileArtifactStore implements ArtifactStore {
     if (scopeId !== receipt.scopeId) throw new ArtifactError('ARTIFACT_SCOPE_DENIED');
     if (receipt.byteLength > this.options.maxBytes) throw new ArtifactError('ARTIFACT_TOO_LARGE');
     const directory = await this.scope(scopeId, false); const path = join(directory, receipt.digest);
-    const linked = await lstat(path); this.privateFile(linked);
+    const linked = await lstat(path); const current = await this.withoutOwnStaging(directory, path, linked); this.privateFile(current);
     const handle = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW);
     try {
       const stat = await handle.stat(); this.privateFile(stat);
-      if (stat.ino !== linked.ino || stat.dev !== linked.dev) throw new ArtifactError('ARTIFACT_UNSAFE');
+      if (stat.ino !== current.ino || stat.dev !== current.dev) throw new ArtifactError('ARTIFACT_UNSAFE');
       if (stat.size !== receipt.byteLength) throw new ArtifactError('ARTIFACT_CORRUPT');
       const bytes = Buffer.alloc(stat.size); let offset = 0;
       while (offset < bytes.length) { const read = await handle.read(bytes, offset, bytes.length - offset, offset); if (!read.bytesRead) break; offset += read.bytesRead; }
@@ -74,11 +95,16 @@ export class FileArtifactStore implements ArtifactStore {
     const directory = await this.scope(scopeId, true); const path = join(directory, receipt.digest);
     try { await this.read(scopeId, receipt); await this.syncDirectory(directory); await this.syncDirectory(this.options.root); return receipt; }
     catch (error) { if (!missing(error)) throw error; }
-    const temporary = join(directory, randomUUID());
+    const temporary = join(directory, `${STAGING_PREFIX}${randomUUID()}`);
     const handle = await open(temporary, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, 0o600);
     try {
       try { await handle.writeFile(bytes); await handle.sync(); } finally { await handle.close(); }
-      await rename(temporary, path); await this.syncDirectory(directory); await this.syncDirectory(this.options.root);
+      // link fails with EEXIST when the digest name exists, so a late publisher cannot replace that inode.
+      // rename(2) would. Node 24 fs.rename has no RENAME_NOREPLACE (uv_fs_rename). The staging name is removed
+      // before the receipt; a crash that leaves it is reconciled by withoutOwnStaging on the next put/read.
+      try { await link(temporary, path); } catch (error) { if (!present(error)) throw error; }
+      try { await unlink(temporary); } catch (error) { if (!missing(error)) throw error; }
+      await this.syncDirectory(directory); await this.syncDirectory(this.options.root);
     } catch (error) {
       // Preserve the primary write/durability failure; a crash or cleanup failure may leave an unreferenced staging file.
       try { await unlink(temporary); } catch { /* No receipt is issued; staged files are not addressable artifacts. */ }
