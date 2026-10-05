@@ -91,3 +91,27 @@ it('quarantines a tag payload outside the model and does not pause a full-access
   const round = open.seen[1]?.find(message => message.role === 'tool');
   expect(round && round.role === 'tool' ? round.content : '').toBe(shown[0]);
 });
+
+it('records an ingress notice only for a flagged field and settles the text the model saw (rebase check)', async () => {
+  const recorded: string[] = [], settled: string[] = [];
+  payload = 'plain file';
+  const plain = harness([answer('', [call]), answer('done')]);
+  await runAgentTurn({ messages: [{ role: 'user', content: 'read' }], tools: [readFile], signal: new AbortController().signal, emit() {} },
+    { ...plain.ports, async recordIngress(notice) { recorded.push(notice.disposition); }, async settled(entry) { settled.push(entry.content); } });
+  expect(recorded).toEqual([]);
+  expect(settled).toEqual(['file plain file']);
+  payload = `a${'‎'}b`;
+  const marked = harness([answer('', [call]), answer('done')]);
+  await runAgentTurn({ messages: [{ role: 'user', content: 'read' }], tools: [readFile], signal: new AbortController().signal, emit() {} },
+    { ...marked.ports, async recordIngress(notice) { recorded.push(notice.disposition); }, async settled(entry) { settled.push(entry.content); } });
+  expect(recorded).toEqual(['note']);
+  expect(settled[1]).toContain('[hidden-unicode:');
+  expect(settled[1]).not.toContain('‎');
+});
+
+it('withholds the field when the ingress record cannot be written', async () => {
+  const run = harness([answer('ok')]);
+  await runAgentTurn({ messages: [{ role: 'user', content: 'x‎y' }], tools: [readFile], signal: new AbortController().signal, emit() {} },
+    { ...run.ports, async recordIngress() { throw new Error('audit down'); } });
+  expect(run.seen[0]?.[0]?.content).toContain('result withheld');
+});
