@@ -1277,5 +1277,7 @@
   "cli.help.action.secret.set": "Store a secret from protected input",
   "cli.help.action.operation.execute": "Execute a typed operation",
   "cli.help.action.operation.inspect": "Inspect an operation effect record",
-  "cli.help.familySynopsis": "Command family: deckent {command} <action>"
+  "cli.help.familySynopsis": "Command family: deckent {command} <action>",
+  "terminal.identity.notCreated": "unavailable (not yet created)",
+  "terminal.identity.unsupported": "unavailable (unsupported capability)"
 }

@@ -1,4 +1,4 @@
-import type { InstallationIdentity, ProjectIdentity } from '#domain/index.js';
+import type { ProjectIdentity } from '#domain/index.js';
 import { assessPoolReadiness, poolReadinessLines } from './pool.js';
 import type { ConfigCommandContext } from '#surfaces/core/config/index.js';
 import type { MonitorCommandContext, WorkerTranscriptHandler } from '#surfaces/core/monitor/index.js';
@@ -6,7 +6,7 @@ import type { RunAdmissionHandler, RunDeliveryAdmissionHandler, RunCancellationD
 import type { CodingProfilePreparationHandler } from './coding.js';
 import type { Readable } from 'node:stream';
 import type { TaskIntegrationDeliverHandler, TaskIntegrationInspectHandler, TaskIntegrationCheckHandler, TaskIntegrationPrepareHandler, TaskPatchHandler, TaskEvaluationHandler, TaskExecutionHandler } from './task.js';
-import { getPolicyVocabulary } from '#engine/index.js';
+import { getPolicyVocabulary, type IdentityRead, type InstallationIdentityRead } from '#engine/index.js';
 import type { RuntimeServiceDescribeHandler, RuntimeServiceShutdownHandler, RuntimeServiceStartHandler } from './runtime.js';
 import type { InstallationCommandContext } from '#surfaces/core/cli-installation/index.js';
 import type { ToolchainCurrencyReport, ModelInvocationDeliveryFinding } from '#engine/index.js';
@@ -57,8 +57,8 @@ export interface CommandContext extends InstallationCommandContext, ModelCommand
   restartRuntimeService?: (root: string, options: ConfigLoadOptions) => Promise<RuntimeServiceReadinessView>;
   openTerminalHistory?: (root: string, options: ConfigLoadOptions) => Promise<ComposerHistoryPort | null>;
   openTerminalSessions?: (root: string, options: ConfigLoadOptions) => Promise<TerminalSessionStoreView | null>;
-  loadInstallationIdentity?: (root: string, options: ConfigLoadOptions) => Promise<InstallationIdentity>;
-  loadProjectIdentity?: (root: string, options: ConfigLoadOptions) => Promise<ProjectIdentity>;
+  loadInstallationIdentity?: (root: string, options: ConfigLoadOptions) => Promise<InstallationIdentityRead>;
+  loadProjectIdentity?: (root: string, options: ConfigLoadOptions) => Promise<IdentityRead<ProjectIdentity>>;
   selfSourceProject?: (root: string) => Promise<boolean>;
   stopRuntimeService?: (root: string, options: ConfigLoadOptions) => Promise<{ readonly command: ShutdownCommand; readonly result: ServiceShutdownAdmissionResult }>;
   updateToolchains?: import('./toolchains.js').ToolchainUpdateHandler;

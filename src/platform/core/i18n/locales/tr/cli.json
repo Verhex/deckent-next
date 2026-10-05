@@ -1277,5 +1277,7 @@
   "cli.help.action.secret.set": "Korumalı girdiden gizli değer sakla",
   "cli.help.action.operation.execute": "Tipli işlemi yürüt",
   "cli.help.action.operation.inspect": "İşlem etki kaydını incele",
-  "cli.help.familySynopsis": "Komut ailesi: deckent {command} <eylem>"
+  "cli.help.familySynopsis": "Komut ailesi: deckent {command} <eylem>",
+  "terminal.identity.notCreated": "kullanılamıyor (henüz oluşturulmadı)",
+  "terminal.identity.unsupported": "kullanılamıyor (yetenek desteklenmiyor)"
 }

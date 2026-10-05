@@ -3,13 +3,13 @@ import { createInterface } from 'node:readline';
 import { mcpSlash } from './mcp.js';
 import { monitorSlash } from '#surfaces/core/monitor/index.js';
 import { DeckentError, ErrorRegistry, emit, getConfigKnownSecrets, loadConfig, readBuildIdentity, resolveLocale, t, formatValue, colorTier, type ConfigLoadOptions, type Locale } from '#platform/index.js';
-import { buildInferenceServingPlan, estimateReplicaCapacity, readInferenceServingProfile } from '#engine/index.js';
+import { buildInferenceServingPlan, estimateReplicaCapacity, readInferenceServingProfile, type IdentityRead, type InstallationIdentityRead } from '#engine/index.js';
 import { prefersAsciiGlyphs, runTerminalWorkline, resolveWorklinePalette, buildWorklineBridgeSnapshot, boundChatHistory, bindSessionScope, type AgentChatMessage, type ChatTurnMessage, type WorklineLabels } from '#surfaces/core/terminal/index.js';
 import { terminalComposerLabels, terminalRenderLabels, terminalSessionLabels } from '#surfaces/core/terminal-labels/index.js';
 import { createWorklineLedgerPorts } from './terminal-ledger.js';
 import { runtimeBuildSkew, workSurfaceLabels } from './work-labels.js';
 import type { CommandContext } from './kernel-commands.js';
-import type { InstallationId, ProjectId, PermissionMode } from '#domain/index.js';
+import type { ProjectIdentity, PermissionMode } from '#domain/index.js';
 import type { TerminalChatPlanView } from './terminal-chat.js';
 
 type Action = 'status' | 'session' | 'workline' | 'snapshot' | 'chat-plan';
@@ -68,10 +68,12 @@ function chatTarget(plan: TerminalChatPlanView | null, locale: Locale): string {
 }
 
 function renderStatus(payload: ReturnType<typeof statusPayload>, locale: Locale): string {
-  const { tty, inference, chat, projectId, installationId } = payload;
+  const { tty, inference, chat, projectId, installationId, identity } = payload;
+  const unavailable = (reason: 'not-created' | 'unsupported') => reason === 'not-created'
+    ? t('terminal.identity.notCreated', {}, locale) : t('terminal.identity.unsupported', {}, locale);
   return [
-    t('terminal.status.installationId', { installationId: installationId ?? t('terminal.value.unknown', {}, locale) }, locale),
-    t('terminal.status.projectId', { projectId: projectId ?? t('terminal.value.unknown', {}, locale) }, locale),
+    t('terminal.status.installationId', { installationId: installationId ?? unavailable(identity.installation.status === 'unavailable' ? identity.installation.reason : 'not-created') }, locale),
+    t('terminal.status.projectId', { projectId: projectId ?? unavailable(identity.project.status === 'unavailable' ? identity.project.reason : 'not-created') }, locale),
     t('terminal.status.tty', { stdin: yesNo(tty.stdin, locale), stdout: yesNo(tty.stdout, locale),
       columns: tty.columns ?? t('terminal.value.unknown', {}, locale), rows: tty.rows ?? t('terminal.value.unknown', {}, locale) }, locale),
     inference.configured
@@ -83,14 +85,16 @@ function renderStatus(payload: ReturnType<typeof statusPayload>, locale: Locale)
   ].join('\n');
 }
 
-function statusPayload(tty: ReturnType<typeof ttyState>, config: Record<string, unknown>, chat: TerminalChatPlanView | null, projectId: ProjectId | null, installationId: InstallationId | null) {
+function statusPayload(tty: ReturnType<typeof ttyState>, config: Record<string, unknown>, chat: TerminalChatPlanView | null, identity: { readonly project: IdentityRead<ProjectIdentity>; readonly installation: InstallationIdentityRead }) {
   const profile = readInferenceServingProfile(config);
   const inference = profile ? (() => {
     const capacity = estimateReplicaCapacity(profile);
     return { configured: true as const, profileId: profile.id, tokenBudget: capacity.totalTokenBudget, maxSeqs: capacity.maxNumSeqs,
       endpoint: buildInferenceServingPlan(profile).openaiBaseUrl };
   })() : { configured: false as const };
-  return { schemaVersion: 1 as const, tty, inference, chat, projectId, installationId };
+  const projectId = identity.project.status === 'available' ? identity.project.value.projectId : null;
+  const installationId = identity.installation.status === 'available' ? identity.installation.value.installationId : null;
+  return { schemaVersion: 1 as const, tty, inference, chat, projectId, installationId, identity };
 }
 
 function worklineLabels(locale: Locale, statusLine: string): WorklineLabels {
@@ -127,7 +131,7 @@ function worklineLabels(locale: Locale, statusLine: string): WorklineLabels {
 
 /** Line mode is the degraded adapter: it works piped (one turn per input line) and prompts only on a terminal. */
 async function runSession(locale: Locale, context: CommandContext, turn: (messages: readonly ChatTurnMessage[], signal?: AbortSignal) => Promise<string>,
-  historyMessages: number, interactive: boolean, status: () => string): Promise<void> {
+  historyMessages: number, interactive: boolean, status: () => Promise<string>): Promise<void> {
   const stdin = context.stdin ?? process.stdin;
   const sinks = { ...(context.stdout ? { stdout: context.stdout } : {}), ...(context.stderr ? { stderr: context.stderr } : {}) };
   const rl = createInterface({ input: stdin, ...(interactive ? { output: process.stdout } : {}), terminal: interactive,
@@ -139,7 +143,7 @@ async function runSession(locale: Locale, context: CommandContext, turn: (messag
     for await (const line of rl) {
       const trimmed = line.trim();
       if (trimmed === '/exit' || trimmed === '/quit') break;
-      if (trimmed === '/status') { emit(status(), sinks); }
+      if (trimmed === '/status') { emit(await status(), sinks); }
       // Slash input is a local command; an unknown one is reported, never sent to the model as a user message.
       else if (trimmed.startsWith('/')) emit(`${t('terminal.workline.unknownCommand', {}, locale)}: ${trimmed}`, { ...sinks, level: 'error' });
       else if (trimmed.length > 0) {
@@ -186,10 +190,12 @@ export async function terminalCommand(argv: readonly string[], context: CommandC
     emit(snapshot, { ...sinks, json: true, render: value => formatValue(value) });
     return;
   }
-  const installationId = (await context.loadInstallationIdentity?.(root, options))?.installationId ?? null;
-  const projectId = (await context.loadProjectIdentity?.(root, options))?.projectId ?? null;
+  const readIdentity = async () => ({ installation: await context.loadInstallationIdentity?.(root, options)
+    ?? { status: 'unavailable', reason: 'unsupported', bindingCapability: 'not-observed' } as const,
+  project: await context.loadProjectIdentity?.(root, options) ?? { status: 'unavailable', reason: 'unsupported' } as const });
+  const identity = await readIdentity();
   if (parsed.action === 'status') {
-    const payload = statusPayload(tty, config, chat, projectId, installationId);
+    const payload = statusPayload(tty, config, chat, identity);
     emit(payload, { ...sinks, json: parsed.json, render: value => parsed.json ? formatValue(value) : renderStatus(value, locale) });
     return;
   }
@@ -220,7 +226,7 @@ export async function terminalCommand(argv: readonly string[], context: CommandC
   if (parsed.action === 'session') {
     if (serviceLine && tty.stdin && tty.stdout) emit(serviceLine, sinks);
     await runSession(locale, context, turn, historyMessages, tty.stdin && tty.stdout,
-      () => [renderStatus(statusPayload(tty, config, chat, projectId, installationId), locale), ...(serviceLine ? [serviceLine] : [])].join('\n'));
+      async () => [renderStatus(statusPayload(tty, config, chat, await readIdentity()), locale), ...(serviceLine ? [serviceLine] : [])].join('\n'));
     return;
   }
   if (!tty.stdin || !tty.stdout) throw ErrorRegistry.createError('TERMINAL_TTY_REQUIRED');

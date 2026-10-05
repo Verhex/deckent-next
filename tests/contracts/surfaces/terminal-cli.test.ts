@@ -129,7 +129,9 @@ describe('deckent terminal CLI', () => {
     expect(await main(['terminal', 'status', '--json'], { root: f.project, env: f.env, stdout: out.output, stderr: out.output,
       stdin: Object.assign(Readable.from([]), { isTTY: true }), initialize() {}, async describeTerminalChatPlan() { return plan; } })).toBe(0);
     expect(JSON.parse(out.text())).toEqual({ schemaVersion: 1, tty: { stdin: true, stdout: false, columns: null, rows: null },
-      inference: { configured: false }, chat: plan, projectId: null, installationId: null });
+      inference: { configured: false }, chat: plan, projectId: null, installationId: null, identity: {
+        installation: { status: 'unavailable', reason: 'unsupported', bindingCapability: 'not-observed' },
+        project: { status: 'unavailable', reason: 'unsupported' } } });
   });
 
   // D1-3: the workline's real label construction (worklineLabels in terminal.ts) wires the composer with no visible
