@@ -53,4 +53,7 @@
 - Current machine gates remain enforced; host-kit Markdown is an owner-authorized exception.
 - DOGFOOD stays OFF until explicitly admitted; historical receipts do not prove Next completion.
 - Review channel (owner 2026-09-23): Opus implements, Astra reviews via `.agents/refactor/channel.mjs`; recipients consume handled entries.
+- Owner 2026-10-05: CI green first in one lane, then frozen current-closure landing; no new preparation/analysis lanes until both land.
+- Review once per batch before landing; do not review preparation, plans or documents separately. At most one correction round, then logged Jev selection >=0.90 decides; below that ask owner.
+- Current-closure changes reopen only for real P0/P1. After these land, use 4–6 parallel product-author lanes, with no more review lanes than author lanes.
 - Never fabricate independent review or treat Jev/self-review as independent PASS.

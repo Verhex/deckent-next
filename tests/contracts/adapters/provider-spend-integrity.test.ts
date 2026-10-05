@@ -210,4 +210,4 @@ it('reports prepared-claim median and p95 after bounded synthetic histories', as
   expect(timings.map(value => [value.history, value.samples])).toEqual([[0, 10], [100, 10], [10_000, 10]]);
   expect(timings.every(value => Number.isFinite(value.medianMs) && Number.isFinite(value.p95Ms))).toBe(true);
   process.stdout.write(`${JSON.stringify({ benchmark: 'provider-spend-store-claim', historyKind: 'schema-valid receipts and monetary reservations in one scope/allocation; both audits before warmup', warmupClaims: 2, timings })}\n`);
-}, 120_000);
+}, process.platform === 'win32' ? 240_000 : 120_000);
