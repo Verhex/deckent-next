@@ -19,7 +19,8 @@ export async function previewPolicyTemplateInstallation(projectRoot: string, sco
 export async function applyPolicyTemplateInstallation(projectRoot: string, scopeId: string) {
   await assertConfiguredInstallationIdentity(projectRoot); const { prepared, layout, maxBytes, timeoutMs } = prepare(projectRoot, scopeId), clock = new SystemTrustedClock(); // I40: journal times are compared (TIME_ORDER), never raw Date.now
   const installationIdentity = new FileInstallationIdentityStore(layout, timeoutMs, undefined, await configuredInstallationBinding(projectRoot)), projectIdentity = new FileProjectIdentityStore(projectRoot, timeoutMs);
-  await installationIdentity.read(); await projectIdentity.read();
+  // Identity write admission (relocation, configured source, required machine binding) before the journal or any target is written.
+  await installationIdentity.admitWrite(); await projectIdentity.read();
   const file = (target: PolicyTemplatePublishTarget) => ({ root: layout.root, path: target.path, maxBytes });
   const result = await withInstallationJournal(projectRoot, { timeoutMs }, journal => new PolicyTemplateInstallationApplication({
     journal,

@@ -1,4 +1,6 @@
 import { randomUUID } from 'node:crypto';
+import { stat } from 'node:fs/promises';
+import { dirname } from 'node:path';
 import { boundInstallationIdentitySchema, installationIdentityChoiceSchema, installationIdentityRecordSchema,
   installationIdentityResolutionSchema, installationIdentitySchema, retainedInstallationBinding, type InstallationBindingCapture, type InstallationIdentityChoice } from '#domain/index.js';
 import { assessInstallationBinding, InstallationIdentityError, type InstallationBindingCapability, type InstallationIdentityStore,
@@ -58,6 +60,24 @@ export class FileInstallationIdentityStore implements InstallationIdentityStore 
     const required = this.settings.requireMachineBinding === true && captured.strength !== 'machine';
     return { status: 'available', value: identity(record), bindingCapability: 'supported', binding: { strength: captured.strength, source: captured.source },
       ...(outcome === 'bind' || outcome === 'strengthen' || required ? { pendingWrite: true as const } : {}) };
+  }
+  /**
+   * Owned-init preflight (init apply/resume, direct policy setup) before their first persistent effect: configured source validity,
+   * relocation and required machine binding, with the same rules as the write path. ID-1D: observes only; no identity, directory, lock
+   * or upgrade. Without a record the capability is probed at the nearest existing ancestor of the layout root (strength and source do
+   * not depend on the location; the location is bound later, at first publication).
+   */
+  async admitWrite(): Promise<void> {
+    if (process.platform === 'win32' || this.layout.platform !== 'posix') return this.requireMachine({ status: 'unsupported' });
+    const record = await this.file(() => this.source().capture()).load();
+    if (!record) {
+      let root = this.layout.root;
+      while (!(await stat(root).then(info => info.isDirectory(), () => false)) && dirname(root) !== root) root = dirname(root);
+      return this.requireMachine(await (this.bindingSource ?? localInstallationBindingSource({ ...this.layout, root }, this.settings)).capture());
+    }
+    const captured = await this.source().capture();
+    if (assess(record, captured) === 'relocated') throw new InstallationIdentityError('INSTALLATION_IDENTITY_RELOCATED');
+    this.requireMachine(captured);
   }
   /** Write path: first publication, v1 weak bind and weak-to-machine strengthening, each under the identity writer lock. */
   async loadOrCreate() {
