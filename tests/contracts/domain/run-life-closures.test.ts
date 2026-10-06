@@ -27,24 +27,10 @@ it('launch-refused cannot follow any observation: a started or unknown attempt i
   }
 });
 
-it('a lost worker is an unknown outcome: the task is held in reconciliation with unresolved effects, never failed, and later exit cannot clear it', () => {
-  for (const prior of [[], [{ kind: 'started' }]]) {
-    let attempt = createAttempt(identity), run = reserved();
-    for (const result of prior) { attempt = applyAttemptObservation(attempt, observation(attempt.revision + 1, result), attempt.revision); run = observeRunAttempt(run, run.revision, attempt); }
-    attempt = applyAttemptObservation(attempt, observation(attempt.revision + 1, { kind: 'unknown', reasonCode: 'WORKER_LOST' }), attempt.revision);
-    expect(attemptPhase(attempt)).toBe('unknown');
-    run = observeRunAttempt(run, run.revision, attempt);
-    expect(run.progress[0]).toMatchObject({ phase: 'reconciling', unresolvedEffects: true }); expect(run.bindings[0]).toMatchObject({ observedKind: 'unknown' });
-    // A resumed executor's exit is still recorded, but the uncertain hold stays: no acceptance, no failure, no freed slot.
-    attempt = applyAttemptObservation(attempt, observation(attempt.revision + 1, { kind: 'exited', exitCode: 0 }), attempt.revision);
-    expect(observeRunAttempt(run, run.revision, attempt).progress[0]).toMatchObject({ phase: 'reconciling', unresolvedEffects: true });
-  }
-});
-
 it('negative: the attempt and Run vocabularies have no closing kind for a launched attempt, and refusals cannot follow an unknown outcome', () => {
   expect(() => applyAttemptObservation(createAttempt(identity), observation(1, { kind: 'abandoned' }), 0)).toThrow('ATTEMPT_INVALID');
   expect(closesAttemptWithoutExit('abandoned')).toBe(false);
-  const unknown = applyAttemptObservation(createAttempt(identity), observation(1, { kind: 'unknown', reasonCode: 'WORKER_LOST' }), 0);
+  const unknown = applyAttemptObservation(createAttempt(identity), observation(1, { kind: 'unknown', reasonCode: 'SUPERVISOR_OUTCOME_UNRESOLVED' }), 0);
   const held = observeRunAttempt(reserved(), 1, unknown);
   // Even a forged refusal snapshot cannot close a task whose effects are unresolved.
   const forged = applyAttemptObservation(createAttempt(identity), observation(1, { kind: 'launch-refused', code: 'EXECUTION_NOT_CONFIGURED' }), 0);

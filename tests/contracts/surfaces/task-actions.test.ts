@@ -60,17 +60,3 @@ it.each([
   expect(await main(args, { stderr, async executeTask() { calls++; throw new Error(); }, async evaluateTask() { calls++; throw new Error(); } })).toBe(2);
   expect(calls).toBe(0);
 });
-
-it('mark-lost passes the exact identity and renders held/refused in EN and TR without claiming an exit, a failure or a freed slot', async () => {
-  let received: unknown, text = '';
-  let hold: { identity: typeof identity; status: 'held'; heartbeat: 'stale'; phase: string } | { identity: typeof identity; status: 'refused'; reason: 'container-present'; phase: string }
-    = { identity, status: 'held', heartbeat: 'stale', phase: 'reconciling' };
-  const context = { env: { NO_COLOR: '1' }, stdout: { write(value: string) { text += value; } },
-    async markLostAttempt(_root: string, value: unknown) { received = value; return { schemaVersion: 1 as const, layout, hold }; } };
-  expect(await main(['task', 'mark-lost', ...identityArgs], context)).toBe(0); expect(received).toEqual(identity);
-  expect(text).toContain('(executor heartbeat stale)'); expect(text).toContain('Its outcome is unknown'); expect(text).toContain('its slot stays held');
-  text = ''; hold = { identity, status: 'refused', reason: 'container-present', phase: 'active' };
-  expect(await main(['task', 'mark-lost', ...identityArgs, '--lang', 'tr'], context)).toBe(0);
-  expect(text).toContain('Reddedildi'); expect(text).toContain('konteyner hâlâ var');
-  text = ''; expect(await main(['task', 'mark-lost', ...identityArgs, '--json'], context)).toBe(0); expect(JSON.parse(text).hold).toEqual(hold);
-});

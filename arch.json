@@ -253,7 +253,6 @@
         "src/platform/core/errors",
         "src/platform/core/managed-files",
         "src/composition/core/runs",
-        "src/composition/core/execution",
         "src/composition/core/model-invocation",
         "src/composition/core/agent-turn",
         "src/composition/core/approvals",

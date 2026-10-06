@@ -1,20 +1,18 @@
-import { createHash } from 'node:crypto';
 import { mkdir, mkdtemp, rm, stat, writeFile } from 'node:fs/promises';
 import { arch, hostname, tmpdir, userInfo } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, expect, it, vi, type TestContext } from 'vitest';
-import { DockerSupervisor, FileArtifactStore, readLocalOsIdentity } from '#adapters/index.js';
+import { FileArtifactStore, readLocalOsIdentity } from '#adapters/index.js';
 import { DispatchApplication, SupervisorError, type SandboxRequest, type SupervisorProfile } from '#engine/index.js';
 import { clearConfigCache, prepareProductDirectory, productResourcePath } from '#platform/index.js';
 import { openConfiguredAttemptStore } from '#composition/core/storage/index.js';
 import { createConfiguredRun, reserveConfiguredRunTasks } from '#composition/core/runs/index.js';
-import { markLostConfiguredAttempt } from '#composition/core/execution/index.js';
 import { fixtureDockerRegistry } from '../support/execution-registry.js';
 
 const roots: string[] = [];
 afterEach(async () => { vi.restoreAllMocks(); clearConfigCache(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 type Fixture = Awaited<ReturnType<typeof fixture>>;
-/** Two independent tasks on a one-slot pool; task `a` is reserved. Its workspace (and so any executor heartbeat) never exists. */
+/** Two independent tasks on a one-slot pool; task `a` is reserved. */
 async function fixture(context: TestContext, attemptActions: readonly string[] = ['execute', 'reconcile']) {
   const root = await mkdtemp(join(tmpdir(), 'lost-attempt-')); roots.push(root);
   const project = join(root, 'project'), data = join(root, 'data'), home = join(root, 'home');
@@ -27,7 +25,7 @@ async function fixture(context: TestContext, attemptActions: readonly string[] =
   if (process.platform === 'win32') {
     await expect(openConfiguredAttemptStore(project, options)).rejects.toMatchObject({ code: 'MANAGED_FILE_UNSUPPORTED' });
     await expect(stat(data)).rejects.toMatchObject({ code: 'ENOENT' });
-    context.skip('MANAGED_FILE_UNSUPPORTED: worker-loss hold requires POSIX private ledger');
+    context.skip('MANAGED_FILE_UNSUPPORTED: unresolved launch custody requires POSIX private ledger');
   }
   const opened = await openConfiguredAttemptStore(project, options), store = opened.store;
   await store.createExecutionPool({ schemaVersion: 1, poolId: 'p', capacity: { executionSlots: 1, inFlightSlots: 1 } });
@@ -57,24 +55,11 @@ function dispatcher(f: Fixture, execute: (request: SandboxRequest) => Promise<un
     async recoverOutput() { throw new Error('unused'); }, async release() { throw new Error('unused'); } };
   return new DispatchApplication(f.store, supervisor as never, { async verify() { return f.principal; } }, { async authorize() {} }, f.principal.id, f.artifacts, () => 1);
 }
-async function recordedGrant(f: Fixture) {
-  const claim = { owner: f.principal.id, request: f.request };
-  await f.store.claimDispatch({ ...claim, profile: f.profile }); await f.store.grantLaunch({ claim, principal: f.principal, now: 1 });
-}
-function daemon(state: string) {
-  const inspectActivity = vi.fn(async () => ({ handle: 'fixture', state }));
-  const restore = vi.spyOn(DockerSupervisor, 'restoreProfile').mockResolvedValue({ inspectActivity } as never);
-  return { inspectActivity, restore };
-}
 const reserveB = (f: Fixture, expectedRevision: number) => reserveConfiguredRunTasks(f.project, { schemaVersion: 1, scopeId: 's', runId: 'r', commandId: `reserve-b-${expectedRevision}`, expectedRevision }, f.options);
-const slotHeld = async (f: Fixture) => expect(reserveB(f, (await f.store.loadRun('s', 'r'))!.revision)).rejects.toMatchObject({ code: expect.stringMatching(/^RUN_(CAPACITY_OR_ORDER|POOL_FULL)$/) });
-async function expectHeld(f: Fixture, observedKind = 'unknown') {
-  const run = (await f.store.loadRun('s', 'r'))!;
-  expect(run.progress[0]).toMatchObject({ phase: 'reconciling', unresolvedEffects: true }); expect(run.bindings[0]).toMatchObject({ observedKind });
-  await slotHeld(f);
-}
 
-it.for(['unknown', 'throw'] as const)('real execute %s path, worker gone: mark-lost holds the unknown outcome; the task is never failed and the slot stays held', async (path, context) => {
+// Owner 2026-10-06: the worker-loss marking is deferred to a follow-up card (atomic mark-lost + KARAR 12). Until then an unresolved
+// launch keeps main's behaviour: granted custody without terminal evidence stays silently `active`, holds its slot and is never failed.
+it.for(['unknown', 'throw'] as const)('real execute %s path keeps the launch unresolved: the task stays active, holds its slot and is never failed', async (path, context) => {
   const f = await fixture(context);
   try {
     const app = dispatcher(f, async () => {
@@ -83,61 +68,11 @@ it.for(['unknown', 'throw'] as const)('real execute %s path, worker gone: mark-l
     });
     if (path === 'throw') await expect(app.execute(f.request)).rejects.toMatchObject({ code: 'SUPERVISOR_CONTROL_FAILED' });
     else expect((await app.execute(f.request)).kind).toBe('unresolved');
-    // The real path leaves granted custody with no terminal and no attempt observation: the task still looks active.
     expect(await f.store.loadBoundDispatch(f.identity)).toMatchObject({ launch: 'granted', terminal: null });
-    expect((await f.store.loadRun('s', 'r'))!.progress[0]).toMatchObject({ phase: 'active', unresolvedEffects: false });
-    const { inspectActivity } = daemon('missing');
-    expect((await markLostConfiguredAttempt(f.project, f.identity, f.options)).hold).toMatchObject({ status: 'held', heartbeat: 'missing', phase: 'reconciling' });
-    expect(inspectActivity).toHaveBeenCalledTimes(1);
-    await expectHeld(f);
-    expect(await f.store.loadBoundDispatch(f.identity)).toMatchObject({ launch: 'granted', terminal: null });
-    const receipt = JSON.parse((await f.store.receipt('s', 'unknown-' + createHash('sha256').update(JSON.stringify(f.identity)).digest('hex')))!.command);
-    expect(receipt).toMatchObject({ observation: { result: { kind: 'unknown', reasonCode: 'WORKER_LOST' } }, audit: { container: 'missing', heartbeat: 'missing', grantedAt: 1 } });
-    expect(receipt.actor.id).toBeTypeOf('string');
-    // Replay is idempotent and does not contact the daemon again.
-    expect((await markLostConfiguredAttempt(f.project, f.identity, f.options)).hold).toMatchObject({ status: 'held', heartbeat: 'recorded' });
-    expect(inspectActivity).toHaveBeenCalledTimes(1);
-  } finally { f.store.close(); }
-});
-
-it('negative: an executor paused after its grant and before container start resumes inside the held slot; its exit cannot fail, accept or free the task', async context => {
-  const f = await fixture(context);
-  try {
-    let resume!: () => void; const paused = new Promise<void>(resolve => { resume = resolve; }); let reached!: () => void; const atStart = new Promise<void>(resolve => { reached = resolve; });
-    const app = dispatcher(f, async () => { reached(); await paused;
-      return { handle: 'fixture', result: { kind: 'exited', exitCode: 0 }, outputCompleteness: 'complete', stdout: 'done', stderr: '', interrupted: false }; });
-    const running = app.execute(f.request); await atStart;
-    daemon('missing');
-    expect((await markLostConfiguredAttempt(f.project, f.identity, f.options)).hold).toMatchObject({ status: 'held', phase: 'reconciling' });
-    await expectHeld(f);
-    resume(); expect((await running).kind).toBe('terminal');
-    // The late exit is recorded as evidence, yet the outcome stays held: never failed, never evaluated, slot never released.
-    await expectHeld(f, 'exited');
-    expect(await f.store.loadBoundDispatch(f.identity)).toMatchObject({ launch: 'granted', terminal: { exitCode: 0 } });
-  } finally { f.store.close(); }
-});
-
-it('negative: a principal without reconcile authority is refused before any ledger read or daemon contact', async context => {
-  const f = await fixture(context, ['execute']);
-  try {
-    await recordedGrant(f); const { restore } = daemon('missing');
-    await expect(markLostConfiguredAttempt(f.project, f.identity, f.options)).rejects.toMatchObject({ code: 'POLICY_DENIED' });
-    expect(restore).not.toHaveBeenCalled();
-    expect((await f.store.loadRun('s', 'r'))!.progress[0]).toMatchObject({ phase: 'active' });
-  } finally { f.store.close(); }
-});
-
-it('negative: a present container, an unproven executor or no granted launch change nothing', async context => {
-  const f = await fixture(context);
-  try {
-    const { restore } = daemon('running');
-    expect((await markLostConfiguredAttempt(f.project, f.identity, f.options)).hold).toMatchObject({ status: 'refused', reason: 'not-launched', phase: 'active' });
-    expect(restore).not.toHaveBeenCalled();
-    await recordedGrant(f);
-    expect((await markLostConfiguredAttempt(f.project, f.identity, f.options)).hold).toMatchObject({ status: 'refused', reason: 'container-present', phase: 'active' });
-    vi.restoreAllMocks(); daemon('unknown');
-    expect((await markLostConfiguredAttempt(f.project, f.identity, f.options)).hold).toMatchObject({ status: 'refused', reason: 'container-present' });
-    expect((await f.store.loadRun('s', 'r'))!.progress[0]).toMatchObject({ phase: 'active', unresolvedEffects: false });
-    expect((await f.store.load('s', f.identity.attemptId))!.lastObservation).toBeNull();
+    const run = (await f.store.loadRun('s', 'r'))!;
+    expect(run.progress[0]).toMatchObject({ phase: 'active', unresolvedEffects: false }); expect(run.bindings[0]).toMatchObject({ observedKind: null });
+    await expect(reserveB(f, run.revision)).rejects.toMatchObject({ code: expect.stringMatching(/^RUN_(CAPACITY_OR_ORDER|POOL_FULL)$/) });
+    // A repeated start never launches again: existing custody answers unresolved.
+    expect((await app.execute(f.request)).kind).toBe('unresolved');
   } finally { f.store.close(); }
 });
