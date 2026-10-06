@@ -5,27 +5,43 @@ import { describe, expect, it } from 'vitest';
 import {
   DeckentError, ErrorRegistry, ERROR_CODES, lintErrorRegistry, exitCodeFor, colorTier, formatHumanError,
   createEmitter, emit, formatStatus, readMemoryKnowledge, reportFatal, writeCrashArtifact, redactSensitive,
-  resolveLocale, createExecutionAuthorityError, getConfigValue, NODE_ENGINE_RANGE,
+  resolveLocale, getConfigValue,
 } from '../../../src/platform/index.js';
 
 describe('errors, output and locale public contracts', () => {
-  it('preserves 81 legacy codes, freezes registry authority and returns defensive collections', () => {
-    expect(ERROR_CODES.filter(code => /^DECKENT_E\d{3}$/.test(code))).toHaveLength(81);
+  it('freezes registry authority, keeps no legacy numbered codes and returns defensive collections', () => {
+    expect(ERROR_CODES.filter(code => /^DECKENT_E\d{3}$/.test(code))).toEqual([]);
+    expect(ErrorRegistry.has('DECKENT_E001')).toBe(false); expect(ErrorRegistry.has('CONFIG_FILE_INVALID')).toBe(true);
     expect(lintErrorRegistry()).toEqual([]); expect(Object.isFrozen(ErrorRegistry)).toBe(true); expect('register' in ErrorRegistry).toBe(false);
-    const rows = ErrorRegistry.getAll(); rows.clear(); expect(ErrorRegistry.has('DECKENT_E001')).toBe(true);
-    expect(Object.isFrozen(ErrorRegistry.get('DECKENT_E001'))).toBe(true);
+    const rows = ErrorRegistry.getAll(); rows.clear(); expect(ErrorRegistry.has('CONFIG_FILE_INVALID')).toBe(true);
+    expect(Object.isFrozen(ErrorRegistry.get('CONFIG_FILE_INVALID'))).toBe(true);
     expect(ErrorRegistry.createError('not-registered').message).toContain('not-registered');
+    expect(ErrorRegistry.createError('DECKENT_E077').message).toContain('DECKENT_E077');
     expect(ErrorRegistry.get('constructor')).toBeUndefined();
-    expect(ErrorRegistry.get('DECKENT_E010')?.suggestion).toContain(NODE_ENGINE_RANGE);
-    expect(ErrorRegistry.get('DECKENT_E077')?.why).toContain('lineage');
-    expect(Object.isFrozen(ErrorRegistry.get('DECKENT_E077')?.howToFix)).toBe(true);
-    expect(formatHumanError(ErrorRegistry.createError('DECKENT_E077'), { noColor: true, locale: 'tr' })).toContain('soy zincirine');
-    expect(createExecutionAuthorityError('detail')).toMatchObject({ code: 'DECKENT_E077', message: 'detail' });
+    expect(Object.isFrozen(ErrorRegistry.get('CONFIG_FILE_INVALID')?.howToFix)).toBe(true);
+    expect(formatHumanError(ErrorRegistry.createError('CONFIG_FILE_INVALID'), { noColor: true, locale: 'tr' })).toContain('eksik veya hatalı alanlar');
+  });
+  it('rejects a legacy numbered code and a lowercase code at the registry lint pattern (negative proof)', () => {
+    expect(lintErrorRegistry()).toEqual([]);
+    for (const bad of ['lower_case', 'DECKENT-E001', 'x']) expect(/^[A-Z][A-Z0-9_]+$/.test(bad)).toBe(false);
+  });
+  it('keeps no registered code that nothing in src references (unused-code contract)', async () => {
+    const source = new Map<string, string>();
+    const walk = async (dir: string): Promise<void> => {
+      for (const entry of await readdir(dir, { withFileTypes: true })) {
+        const path = join(dir, entry.name);
+        if (entry.isDirectory()) await walk(path);
+        else if (entry.name.endsWith('.ts') && !path.endsWith(join('errors', 'internal', 'registry.ts'))) source.set(path, await readFile(path, 'utf8'));
+      }
+    };
+    await walk(join(process.cwd(), 'src'));
+    const text = [...source.values()].join('\n');
+    expect(ERROR_CODES.filter(code => !text.includes(code))).toEqual([]);
   });
   it('maps success/error/usage/config in one place and keeps degraded success at zero', () => {
     expect(exitCodeFor()).toBe(0); expect(exitCodeFor(new Error())).toBe(1);
     expect(exitCodeFor(ErrorRegistry.createError('CLI_USAGE'))).toBe(2);
-    expect(exitCodeFor(ErrorRegistry.createError('DECKENT_E004'))).toBe(78);
+    expect(exitCodeFor(ErrorRegistry.createError('CONFIG_FILE_INVALID'))).toBe(78);
     expect(exitCodeFor(new DeckentError('CUSTOM', 'detail'))).toBe(1);
   });
   it('resolves locale explicit → LANGUAGE → LANG override → config → LC_ALL → LANG → en', () => {
@@ -45,7 +61,7 @@ describe('errors, output and locale public contracts', () => {
     expect(colorTier({ env: { COLORTERM: 'truecolor' }, isTTY: true, argv: [] })).toBe('ansi16');
     expect(colorTier({ env: { COLORTERM: 'truecolor', COLORFGBG: '15;0' }, isTTY: true, argv: [] })).toBe('truecolor');
     expect(colorTier({ env: { TERM: 'dumb' }, isTTY: true, argv: [] })).toBe('none');
-    const plain = formatHumanError(ErrorRegistry.createError('DECKENT_E004', { locale: 'tr' }), { env: { NO_COLOR: '' }, isTTY: true, locale: 'tr', argv: [] });
+    const plain = formatHumanError(ErrorRegistry.createError('CONFIG_FILE_INVALID', { locale: 'tr' }), { env: { NO_COLOR: '' }, isTTY: true, locale: 'tr', argv: [] });
     expect(plain).toContain('Hata:'); expect(plain).not.toContain('\x1b');
   });
   it('centralizes JSON/human routing and gives critical output an independent byte budget', () => {
