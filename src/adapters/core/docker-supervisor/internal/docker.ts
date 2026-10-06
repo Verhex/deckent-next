@@ -7,8 +7,8 @@ import { dockerSupervisorOptionsSchema, type DockerSupervisorOptions } from './o
 import { identifyDockerRequest } from './identity.js';
 import { runNodeDockerCommand, type DockerCommandRunner } from './command.js';
 import { dockerConnectionMounts } from './connection.js';
-import { assertReadOnlyMountSource } from './mounts.js';
-type Inspection = { Id: string; Image: string; Config: { Labels: Record<string, string> }; State: { Status: string; ExitCode: number; StartedAt?: unknown; FinishedAt?: unknown } };
+import { assertDockerMountsMatch, assertReadOnlyMountSource, type DockerExpectedMount } from './mounts.js';
+type Inspection = { Id: string; Image: string; Config: { Labels: Record<string, string> }; Mounts?: unknown; State: { Status: string; ExitCode: number; StartedAt?: unknown; FinishedAt?: unknown } };
 /** Containers remain as reconciliation evidence until the application explicitly releases them.
  * Only an application with durable dispatch ownership may call execute; this adapter does not grant policy.
  */
@@ -129,7 +129,7 @@ export class DockerSupervisor implements ExecutionSupervisor {
     const previous = await this.inspect(handle, digest);
     if (previous) return this.result(handle, previous);
     const o = this.options;
-    const inputMounts: string[] = [];
+    const inputMounts: string[] = []; const expected: DockerExpectedMount[] = [{ source: workspace, target: '/workspace', writable: true }];
     const names = new Set<string>();
     for (const input of o.inputs ?? []) {
       const local = relative(root, input.path);
@@ -139,6 +139,7 @@ export class DockerSupervisor implements ExecutionSupervisor {
         || !(await lstat(input.path)).isFile()) throw new SupervisorError('SUPERVISOR_REQUEST_INVALID');
       names.add(input.name);
       inputMounts.push('--mount', `type=bind,src=${input.path},dst=/deckent/inputs/${input.name},readonly`);
+      expected.push({ source: input.path, target: `/deckent/inputs/${input.name}`, writable: false });
     }
     for (const input of o.handoffInputs ?? []) {
       const local = relative(root, input.path);
@@ -148,14 +149,18 @@ export class DockerSupervisor implements ExecutionSupervisor {
         || !(await lstat(input.path)).isFile()) throw new SupervisorError('SUPERVISOR_REQUEST_INVALID');
       names.add(input.target);
       inputMounts.push('--mount', `type=bind,src=${input.path},dst=${input.target},readonly`);
+      expected.push({ source: input.path, target: input.target, writable: false });
     }
     // Dependency binds (B06-2c) are re-checked at launch (real directory, outside the workspaces) and always read-only.
     const readOnlyMounts: string[] = [];
     for (const mount of o.readOnlyMounts ?? []) {
       await assertReadOnlyMountSource(mount.source, [root]);
       readOnlyMounts.push('--mount', `type=bind,src=${mount.source},dst=${mount.target},readonly`);
+      expected.push({ source: mount.source, target: mount.target, writable: false });
     }
     const connectionMounts = o.connection ? await dockerConnectionMounts(o.connection, o.uid) : [];
+    if (o.connection) expected.push({ source: o.connection.socketPath, target: '/run/deckent-connection.sock', writable: false },
+      { source: o.connection.bootstrapPath, target: '/run/deckent-bootstrap.mjs', writable: false });
     const argv = o.connection ? ['node', '/run/deckent-bootstrap.mjs', ...request.argv] : request.argv;
     try {
       await this.command(['create', '--name', handle, '--label', 'deckent.request=' + digest,
@@ -170,6 +175,10 @@ export class DockerSupervisor implements ExecutionSupervisor {
       if (existing) return this.result(handle, existing);
       throw new SupervisorError('SUPERVISOR_CONTROL_FAILED');
     }
+    // Created, not started: the realised mount set must be exactly the requested one before any task code can run.
+    const created = await this.inspect(handle, digest);
+    if (!created) throw new SupervisorError('SUPERVISOR_CONTROL_FAILED');
+    assertDockerMountsMatch(created.Mounts, expected);
     let stdout: string; let stderr: string; let interrupted = false;
     try {
       const output = await this.command(['start', '--attach', handle], o.deadlineMs, signal);

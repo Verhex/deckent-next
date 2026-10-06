@@ -52,6 +52,12 @@ export const OPENAI_CHAT_TOKEN_COUNT_CAPABILITY = 'token-count';
  * template that reads the flag), never inferred from a model name; without it the adapter refuses the field.
  */
 export const OPENAI_CHAT_ENABLE_THINKING_CAPABILITY = 'chat-template-enable-thinking';
+/**
+ * Per-scope prefix-cache isolation (vLLM `cache_salt`, docs.vllm.ai OpenAI-compatible server, 2026-10-07): the server salts its prefix
+ * cache with the string, so a prompt prefix cached for one scope never serves (or times) another. Sent only to a binding whose catalog
+ * data declares this capability; a server that does not know the field is never sent it.
+ */
+export const OPENAI_CHAT_PREFIX_CACHE_SALT_CAPABILITY = 'prefix-cache-salt';
 export type OpenAiChatHttpResponse = Readonly<{ schemaVersion: 1; native: JsonObject; usage: JsonObject | null }>;
 
 const positive = z.number().int().positive().safe();

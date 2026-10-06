@@ -1,9 +1,10 @@
+import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import { modelInvocationNativeResponseUpperBound, type ModelInvocationNativePort } from '#engine/index.js';
 import { modelInvocationProfileSchema, parseModelBindingDefinition, type ModelInvocationDeltaSink, type ModelInvocationNativeResult } from '#domain/index.js';
 import { NativeJsonHttpError, sendNativeJsonHttp } from '#adapters/core/provider-http-json/index.js';
 import { OPENAI_CHAT_HTTP_ADAPTER_ID, OPENAI_CHAT_HTTP_ADAPTER_VERSION, OPENAI_CHAT_COMPLETIONS_FAMILY, OPENAI_CHAT_COMPLETIONS_VERSION, OpenAiChatHttpError,
-  OPENAI_CHAT_ENABLE_THINKING_CAPABILITY, OPENAI_CHAT_TOOL_CALLS_CAPABILITY, OPENAI_CHAT_TOKEN_COUNT_CAPABILITY,
+  OPENAI_CHAT_ENABLE_THINKING_CAPABILITY, OPENAI_CHAT_TOOL_CALLS_CAPABILITY, OPENAI_CHAT_TOKEN_COUNT_CAPABILITY, OPENAI_CHAT_PREFIX_CACHE_SALT_CAPABILITY,
   openAiChatFinishReasonSchema, openAiChatUsageSchema, openAiChatWireObjectSchema, parseOpenAiChatHttpDefinition, parseOpenAiChatHttpLimits, parseOpenAiChatTextRequest,
   type OpenAiChatHttpDefinition, type OpenAiChatHttpErrorCode, type OpenAiChatHttpLimits,
   type OpenAiChatHttpResponse, type OpenAiChatTextRequest } from './contract.js';
@@ -58,8 +59,14 @@ async function countPreparedOpenAiChatRequest(prepared: PreparedOpenAiChatReques
   } catch { return null; }
 }
 
+/** 43-character base64url (256 bit, within vLLM's 1..1024 bound) salt, one per scope: stable across calls of a scope (its own prefix
+ * cache keeps hitting), distinct across scopes, never the raw scope id. */
+export function openAiChatCacheSalt(scopeId: string): string {
+  return createHash('sha256').update('deckent.prefix-cache-salt.v1\0' + scopeId).digest('base64url');
+}
+
 /** Pure preparation: it has no network, credential, or profile-resolution effect. */
-export function prepareOpenAiChatHttpRequest(definitionInput: unknown, limitsInput: unknown, nativeRequestInput: unknown): PreparedOpenAiChatRequest {
+export function prepareOpenAiChatHttpRequest(definitionInput: unknown, limitsInput: unknown, nativeRequestInput: unknown, cacheSalt?: string): PreparedOpenAiChatRequest {
   const definition = parseOpenAiChatHttpDefinition(definitionInput), limits = parseOpenAiChatHttpLimits(limitsInput);
   const nativeRequest = parseOpenAiChatTextRequest(nativeRequestInput, definition);
   const streamed = nativeRequest.stream === true;
@@ -67,7 +74,8 @@ export function prepareOpenAiChatHttpRequest(definitionInput: unknown, limitsInp
     max_completion_tokens: nativeRequest.max_completion_tokens, stream: streamed,
     ...(streamed ? { stream_options: { include_usage: true } } : {}), ...(nativeRequest.n === 1 ? { n: 1 } : {}),
     ...(nativeRequest.tools ? { tools: nativeRequest.tools } : {}), ...(nativeRequest.tool_choice ? { tool_choice: nativeRequest.tool_choice } : {}),
-    ...(nativeRequest.chat_template_kwargs ? { chat_template_kwargs: nativeRequest.chat_template_kwargs } : {}) });
+    ...(nativeRequest.chat_template_kwargs ? { chat_template_kwargs: nativeRequest.chat_template_kwargs } : {}),
+    ...(cacheSalt ? { cache_salt: cacheSalt } : {}) });
   if (Buffer.byteLength(body, 'utf8') > limits.requestMaxBytes) throw new OpenAiChatHttpError('OPENAI_CHAT_REQUEST_TOO_LARGE');
   return Object.freeze({ definition, limits, request: nativeRequest, body });
 }
@@ -149,7 +157,8 @@ export function createOpenAiChatNativePort(options: OpenAiChatNativePortOptions 
       // Tools and the thinking switch are sent only to a model whose binding declares them supported (catalog data, not a request flag).
       if ((request.tools && !declares(OPENAI_CHAT_TOOL_CALLS_CAPABILITY))
         || (request.chat_template_kwargs && !declares(OPENAI_CHAT_ENABLE_THINKING_CAPABILITY))) throw new OpenAiChatHttpError('OPENAI_CHAT_REQUEST_INVALID');
-      const prepared = prepareOpenAiChatHttpRequest(adapterDefinition, parsedProfile.data.limits, request);
+      const prepared = prepareOpenAiChatHttpRequest(adapterDefinition, parsedProfile.data.limits, request,
+        declares(OPENAI_CHAT_PREFIX_CACHE_SALT_CAPABILITY) ? openAiChatCacheSalt(parsedProfile.data.scopeId) : undefined);
       preparedTokens.add(prepared);
       // A counter is used only for a model whose binding declares it (catalog data) and a profile that names its endpoint.
       if (adapterDefinition.tokenizeEndpoint && declares(OPENAI_CHAT_TOKEN_COUNT_CAPABILITY)) countable.add(prepared);
