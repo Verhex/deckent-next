@@ -847,6 +847,8 @@
   "terminal.slash.serviceRestart": "Runtime servisini yönetilen kapatma ile durdurur ve bu derlemeden yeniden başlatır.",
   "terminal.workline.queued": "Sıraya alındı (mevcut tur bitince çalışır)",
   "terminal.session.prompt": "deckent› ",
+  "terminal.line.tool": "araç {name} {target}: {status} ({ms} ms)",
+  "terminal.line.approvalRefused": "Onay gerekli: {summary}. Satır modunda karar verecek kimse yok; tur iptal edildi ve hiçbir şey çalışmadı.",
   "terminal.session.closed": "Oturum kapandı.",
   "terminal.value.yes": "evet",
   "terminal.value.no": "hayır",

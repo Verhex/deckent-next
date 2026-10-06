@@ -847,6 +847,8 @@
   "terminal.slash.serviceRestart": "Stop the runtime service through governed shutdown and start it again from this build.",
   "terminal.workline.queued": "Queued (runs after the current turn)",
   "terminal.session.prompt": "deckent> ",
+  "terminal.line.tool": "tool {name} {target}: {status} ({ms} ms)",
+  "terminal.line.approvalRefused": "Approval required: {summary}. Line mode has nobody to decide it; the turn is cancelled and nothing ran.",
   "terminal.session.closed": "Session closed.",
   "terminal.value.yes": "yes",
   "terminal.value.no": "no",
