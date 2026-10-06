@@ -1,5 +1,8 @@
 # QWEN host pilotu — PLAN.md notları (2026-10-05)
 
+
+> **Güncel durum — owner2026-10-06: İPTAL.** Qwen karar başlığı/eğitim/vLLM katmanı, yerel alternatifler, gölge ölçümü ve HF hazırlığı durduruldu. Native Qwen standart haliyle korunur; mevcut Jev akışı devam eder. Aşağıdaki2026-10-05 kabuller ve Sıradaki/Kalan ifadeleri tarihsel kayıttır, yeni iş/çalıştırma yetkisi değildir. PR#11 host kaynakları kullanılmayan tarihsel araç olarak kalır. Yeni deney dalındaki değişiklikler geri alındı; dış shadow.sh yalnız Jev'e yönlenir. Ölçüm/patch/veri kanıtları saklanır. Kapanış: `proof/QWEN-CANCELED-2026-10-06/REPORT.md`.
+
 Qwen host aracı, QWEN-HEAD-QUALITY, QWEN–JEV gölge karşılaştırma, QWEN-DEV-DECISION ve QWEN-REPLAY20 paragraflarının özgün metni. Mimari ayrıntı: [host-qwen-decision-pilot](../architecture/modules/host-qwen-decision-pilot.md).
 Kaynak/Source: PLAN.md @58537c7f lines 7–16; text below is verbatim.
 

@@ -26,9 +26,10 @@ export const instant = value => {
 };
 
 export function validateReviewConfig(c) {
-  ensure(exact(c, ['schemaVersion', 'journalRoot', 'maxCaseBytes', 'maxEvidence', 'maxOptions', 'maxQuestions', 'reportLimit', 'templates']), 'JEV_REVIEW_CONFIG');
+  ensure(exact(c, ['schemaVersion', 'journalRoot', 'maxCaseBytes', 'maxEvidence', 'maxOptions', 'maxQuestions', 'reportLimit', 'reportScanLimit', 'templates']), 'JEV_REVIEW_CONFIG');
   ensure(c.schemaVersion === 2 && text(c.journalRoot), 'JEV_REVIEW_CONFIG');
   for (const k of ['maxCaseBytes', 'maxEvidence', 'maxOptions', 'maxQuestions', 'reportLimit']) ensure(Number.isSafeInteger(c[k]) && c[k] > 0 && c[k] <= 1048576, 'JEV_REVIEW_CONFIG');
+  ensure(c.reportScanLimit === undefined || (Number.isSafeInteger(c.reportScanLimit) && c.reportScanLimit >= c.reportLimit && c.reportScanLimit <= 1048576), 'JEV_REVIEW_CONFIG');
   ensure(exact(c.templates, ['sufficiency', 'selection', 'none_of_the_above', 'insufficient_information']) && ['sufficiency', 'selection', 'none_of_the_above', 'insufficient_information'].every(k => text(c.templates[k])), 'JEV_REVIEW_CONFIG');
   return c;
 }

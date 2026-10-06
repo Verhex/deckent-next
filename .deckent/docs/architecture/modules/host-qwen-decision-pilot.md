@@ -1,5 +1,8 @@
 # Development-host Qwen decision pilot — module note
 
+
+> **Güncel durum — owner2026-10-06: İPTAL.** Qwen karar başlığı/eğitim/vLLM katmanı, yerel alternatifler, gölge ölçümü ve HF hazırlığı durduruldu. Native Qwen standart haliyle korunur; mevcut Jev akışı devam eder. Aşağıdaki2026-10-05 kabuller ve Sıradaki/Kalan ifadeleri tarihsel kayıttır, yeni iş/çalıştırma yetkisi değildir. PR#11 host kaynakları kullanılmayan tarihsel araç olarak kalır. Yeni deney dalındaki değişiklikler geri alındı; dış shadow.sh yalnız Jev'e yönlenir. Ölçüm/patch/veri kanıtları saklanır. Kapanış: `proof/QWEN-CANCELED-2026-10-06/REPORT.md`.
+
 Development-host tool outside customer src/native (moved from ARCHITECTURE.md 2026-10-05). Status notes: [qwen-host-pilot](../../plan/qwen-host-pilot.md).
 Kaynak/Source: ARCHITECTURE.md @58537c7f lines 3376–3420; text below is verbatim.
 
