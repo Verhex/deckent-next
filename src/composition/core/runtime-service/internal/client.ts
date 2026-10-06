@@ -166,6 +166,26 @@ function secretMethods(call: RuntimeCall) {
   return { setSecret: (input: SecretSetCommand, signal?: AbortSignal) => change('setSecret', input, signal),
     deleteSecret: (input: SecretDeleteCommand, signal?: AbortSignal) => change('deleteSecret', input, signal) };
 }
+type RuntimeCallRest = [onDelta?: ModelInvocationDeltaSink, version?: RuntimeServiceLifecycleVersion, onEvent?: (event: AgentTurnStreamEvent) => void];
+/** BUSY is refused before anything was admitted, so a retry cannot repeat an effect. Bounded: at most `service.busyRetryLimit` more
+ * attempts, each after the service's `retryAfterMs` (never beyond this installation's own `service.admissionWaitMs`), ended by the
+ * caller's signal; then the typed BUSY stands. A zero wait means the installation chose immediate refusal, so nothing is retried. */
+function busyRetrying(projectRoot: string, options: ConfigLoadOptions,
+  attempt: (operation: RuntimeServiceOperation, input: unknown, delivery?: RuntimeServiceDelivery, signal?: AbortSignal, ...rest: RuntimeCallRest) => Promise<unknown>) {
+  return async (operation: RuntimeServiceOperation, input: unknown, delivery?: RuntimeServiceDelivery, signal?: AbortSignal, ...rest: RuntimeCallRest): Promise<unknown> => {
+    for (let retry = 0; ; retry++) {
+      try { return await attempt(operation, input, delivery, signal, ...rest); }
+      catch (error) {
+        if (!(error instanceof DeckentError) || error.code !== 'RUNTIME_SERVICE_BUSY' || signal?.aborted) throw error;
+        const service = (await loadConfig(projectRoot, { ...options, heal: false }).catch(() => null))?.service;
+        if (!service || retry >= service.busyRetryLimit || service.admissionWaitMs === 0) throw error;
+        const hinted = Number(error.params?.retryAfterMs);
+        try { await sleep(Number.isFinite(hinted) && hinted > 0 ? Math.min(hinted, service.admissionWaitMs) : service.admissionWaitMs, undefined, signal ? { signal } : {}); }
+        catch { throw error; }
+      }
+    }
+  };
+}
 /** No direct-execution fallback: a missing service is an explicit transport failure. */
 export function createConfiguredRuntimeClient(projectRoot: string, options: ConfigLoadOptions = {}): ConfiguredRuntimeClient {
   const attempt = async (operation: RuntimeServiceOperation, input: unknown, delivery?: RuntimeServiceDelivery, signal?: AbortSignal,
@@ -199,23 +219,7 @@ export function createConfiguredRuntimeClient(projectRoot: string, options: Conf
       return response.result;
     } catch (error) { throw queryFailure(error); }
   };
-  /** BUSY is refused before anything was admitted, so a retry cannot repeat an effect. Bounded: at most `service.busyRetryLimit` more
-   * attempts, each after the service's `retryAfterMs` (never beyond this installation's own `service.admissionWaitMs`), ended by the
-   * caller's signal; then the typed BUSY stands. A zero wait means the installation chose immediate refusal, so nothing is retried. */
-  const call = async (operation: RuntimeServiceOperation, input: unknown, delivery?: RuntimeServiceDelivery, signal?: AbortSignal,
-    ...rest: [onDelta?: ModelInvocationDeltaSink, version?: RuntimeServiceLifecycleVersion, onEvent?: (event: AgentTurnStreamEvent) => void]): Promise<unknown> => {
-    for (let retry = 0; ; retry++) {
-      try { return await attempt(operation, input, delivery, signal, ...rest); }
-      catch (error) {
-        if (!(error instanceof DeckentError) || error.code !== 'RUNTIME_SERVICE_BUSY' || signal?.aborted) throw error;
-        const service = (await loadConfig(projectRoot, { ...options, heal: false }).catch(() => null))?.service;
-        if (!service || retry >= service.busyRetryLimit || service.admissionWaitMs === 0) throw error;
-        const hinted = Number(error.params?.retryAfterMs);
-        try { await sleep(Number.isFinite(hinted) && hinted > 0 ? Math.min(hinted, service.admissionWaitMs) : service.admissionWaitMs, undefined, signal ? { signal } : {}); }
-        catch { throw error; }
-      }
-    }
-  };
+  const call = busyRetrying(projectRoot, options, attempt);
   /** Lifecycle operations retry once in each older protocol version of the window when the connection closed unanswered
    * (a service started from an older build drops current-version envelopes). describe is read-only; shutdown is durable. */
   const lifecycle = async (operation: 'describeService' | 'shutdownService', input: unknown, signal?: AbortSignal, versions: 'window' | 'current' = 'window'): Promise<unknown> => {
