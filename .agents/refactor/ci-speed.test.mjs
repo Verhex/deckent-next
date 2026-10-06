@@ -44,16 +44,20 @@ for (const [name, damage] of [
 ]) test(`aggregate refuses ${name}`, () => { const r = receipts(); damage(r); assert.throws(() => validateShards(inventory, r, identity)); });
 
 test('hosted landing requires latest exact-SHA GitHub Actions success on both Node versions', () => {
-  const checks = REQUIRED_CHECKS.map((name, i) => ({ name, id: i + 1, head_sha: identity.sha,
+  const checks = REQUIRED_CHECKS.map((name, i) => ({ name, id: i + 1, head_sha: identity.sha, check_suite: { id: 9 },
     app: { slug: 'github-actions' }, status: 'completed', conclusion: 'success' }));
-  assert.equal(validateHostedChecks(checks, identity.sha), true);
-  assert.throws(() => validateHostedChecks(checks.slice(1), identity.sha));
-  assert.throws(() => validateHostedChecks(checks, 'b'.repeat(40)));
+  const runs = [{ id: 7, check_suite_id: 9, head_sha: identity.sha, event: 'workflow_dispatch', status: 'completed', conclusion: 'success' }];
+  assert.equal(validateHostedChecks(checks, identity.sha, runs), true);
+  assert.throws(() => validateHostedChecks(checks.slice(1), identity.sha, runs));
+  assert.throws(() => validateHostedChecks(checks, 'b'.repeat(40), runs));
   for (const conclusion of ['failure', 'cancelled', 'skipped', 'neutral', null]) {
-    assert.throws(() => validateHostedChecks([...checks, { ...checks[0], id: 20, conclusion }], identity.sha));
+    assert.throws(() => validateHostedChecks([...checks, { ...checks[0], id: 20, conclusion }], identity.sha, runs));
   }
-  assert.throws(() => validateHostedChecks(checks.map(c => ({ ...c, status: 'in_progress' })), identity.sha));
-  assert.throws(() => validateHostedChecks(checks.map(c => ({ ...c, app: { slug: 'other' } })), identity.sha));
+  assert.throws(() => validateHostedChecks(checks.map(c => ({ ...c, status: 'in_progress' })), identity.sha, runs));
+  assert.throws(() => validateHostedChecks(checks.map(c => ({ ...c, app: { slug: 'other' } })), identity.sha, runs));
+  assert.throws(() => validateHostedChecks(checks, identity.sha, [{ ...runs[0], event: 'pull_request' }]), /HOSTED_SOURCE_NOT_EXACT/);
+  assert.throws(() => validateHostedChecks([checks[0], { ...checks[1], check_suite: { id: 10 } }], identity.sha, runs), /HOSTED_RUN_SPLIT/);
+  assert.throws(() => validateHostedChecks(checks, identity.sha, [{ ...runs[0], conclusion: 'failure' }]), /HOSTED_RUN_NOT_GREEN/);
 });
 test('built reuse binds Node, source content, native/product bytes and build inputs', t => {
   const root = mkdtempSync(join(tmpdir(), 'ci-build-proof-')); t.after(() => rmSync(root, { recursive: true, force: true }));

@@ -18,7 +18,9 @@ in separate files, removing the measured 105.298s/98.741s serial sums. The clean
 Architecture scenario tests call the same fresh-state scanner as the CLI; genuine CLI exit/pipe tests and Git
 admission/negative ratchet history remain. Scanner imports perform no execution or process/environment mutation.
 `land:check` reads the latest GitHub Actions required checks for an exact SHA, refuses missing/non-success outcomes
-and never runs a local full suite or reuses a cached PASS. `land:check:local` retains the explicit diagnostic mirror
+and never runs a local full suite or reuses a cached PASS. Both Node checks must belong to one workflow run whose latest
+attempt passed at that SHA, and the run event must check out that SHA (push, workflow_dispatch, merge_group): a
+pull_request run tested `refs/pull/N/merge`, so it is refused as `HOSTED_SOURCE_NOT_EXACT` (Astra REVIEW2402 P1). `land:check:local` retains the explicit diagnostic mirror
 and its receipts. Marked pre-push uses the hosted reader; unmarked author pushes stay lightweight.
 PR and manual integration runs keep the full Ubuntu suite. `merge_group` is supported, but this candidate does not
 activate/change a remote merge queue or ruleset. Main push uses separately named post-merge build/lint/smoke checks,
@@ -148,12 +150,12 @@ Logs and `result.json` go to `.pack/ci-local/<sha12>-node<N>/` (gitignored). `--
 installs, and otherwise fails with `CI_LOCAL_NODE_UNAVAILABLE`.
 Not covered: macOS, Windows, the runner's `sudo sysctl` AppArmor step, hosted-runner differences. It does not replace hosted CI.
 `npm run precommit:fast` (typecheck, eslint on changed `.ts|.mjs`, lint-arch, lint-docs; no tests) backs the tracked
-`scripts/git-hooks/pre-commit`. Landing (owner 2026-10-06): `npm run land:check [-- --ref <sha>] [--force]` runs `ci:local --node 24`
-and, on PASS only, writes the receipt `.pack/ci-local/passed/<sha>`; a receipt for the same SHA returns PASS without re-running.
-Required before merging a PR. Fail closed: an existing receipt is removed before any re-run, so a failed, cancelled or running `--force` leaves none; the receipt is written atomically from `ci:local`'s own `result.json` (SHA, node, outcomes, counts, log path) and validated on read, not by existence. The test seam `DECKENT_CI_LOCAL_SCRIPT` writes only `passed-test/`, which no production reader uses. `pre-push` runs `land:check` only for `refs/heads/main` and `refs/heads/wave/*` pushes marked
-`DECKENT_LANDING=1 git push ...`; unmarked pushes print a note and pass (not a skip, no log). Git push options are not used: they
-reach only server-side hooks and the server must advertise them. Skipping a marked landing needs
-`DECKENT_CI_LOCAL_SKIP="<reason>"` (>= 8 characters), logged to `.pack/ci-local/skips.log`.
+`scripts/git-hooks/pre-commit`. Explicit local mirror (owner 2026-10-06, renamed by CI-SPEED): `npm run land:check:local [-- --ref <sha>] [--force]` runs
+`ci:local --node 24` and, on PASS only, writes the receipt `.pack/ci-local/passed/<sha>`; it is a diagnostic, not a merge
+precondition. Fail closed: an existing receipt is removed before any re-run, and the receipt is written atomically from
+`ci:local`'s own `result.json` and validated on read. `pre-push` runs the hosted `land:check` only for `refs/heads/main`
+and `refs/heads/wave/*` pushes marked `DECKENT_LANDING=1 git push ...`; unmarked pushes print a note and pass. Owner
+landing practice: Astra PASS → admin merge; hosted CI is a post-merge signal.
 `npm run hooks:install` sets relative `core.hooksPath=scripts/git-hooks` (shared `.git/config` unless
 `extensions.worktreeConfig` is on, then per worktree); each worktree resolves it against its own root, so branches without
 the directory run no hooks, and clones do not inherit the setting. Measured times: external `proof/CI-LOCAL-2026-10-06/review.md`.

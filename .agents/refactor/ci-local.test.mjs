@@ -82,7 +82,8 @@ process.exit(process.env.STUB_FAIL ? 1 : 0);`);
   const bin = path.join(dir, 'bin'); fs.mkdirSync(bin);
   fs.writeFileSync(path.join(bin, 'gh'), `#!/usr/bin/env node
 if (process.argv[2] === 'repo') console.log(JSON.stringify({nameWithOwner:'test/repo'}));
-else console.log(JSON.stringify([{check_runs: ['24','26'].map((node,i) => ({id:i+1, name:'required verify (ubuntu-latest, node '+node+')', head_sha:'${sha}', app:{slug:'github-actions'}, status:'completed', conclusion:process.env.STUB_FAIL ? 'failure' : 'success'}))}]));
+else if (process.argv[3].includes('/actions/runs')) console.log(JSON.stringify([{workflow_runs: [{id:7, check_suite_id:9, head_sha:'${sha}', event:'workflow_dispatch', status:'completed', conclusion:'success'}]}]));
+else console.log(JSON.stringify([{check_runs: ['24','26'].map((node,i) => ({id:i+1, name:'required verify (ubuntu-latest, node '+node+')', head_sha:'${sha}', check_suite:{id:9}, app:{slug:'github-actions'}, status:'completed', conclusion:process.env.STUB_FAIL ? 'failure' : 'success'}))}]));
 `, {mode:0o755});
   const env = { ...process.env, PATH: bin + path.delimiter + process.env.PATH, DECKENT_CI_LOCAL_SCRIPT: stub };
   delete env.STUB_FAIL;
