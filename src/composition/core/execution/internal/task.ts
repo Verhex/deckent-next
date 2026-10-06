@@ -6,7 +6,7 @@ import { DockerSupervisor, GitWorkspaceBroker, GitRunWorkspaceProvider, FileArti
   validateDockerSupervisorProfile, resolveDockerTaskProfile, resolveDockerReadOnlyMounts, readLocalNativeCredential, openNativeConnection,
   applyAcceptedPredecessorPatches, startWorkerObservation, openWorkerEventSink, sealWorkerEventLog, selectWorkTarget } from '#adapters/index.js';
 import { authenticate, DispatchApplication, DispatchPolicyAuthorization, RunWorkspaceAcquisitionApplication, selectReservedTaskProfile,
-  RunStoreError, DispatchError, HandoffError, recordHandoffRefusal, prepareTaskStart, recordAttemptHandoffStart, workTargetAttemptAuthorization } from '#engine/index.js';
+  RunStoreError, DispatchError, HandoffError, recordHandoffRefusal, recordAttemptClosure, classifyLaunchRefusal, prepareTaskStart, recordAttemptHandoffStart, workTargetAttemptAuthorization } from '#engine/index.js';
 import { createLayoutPolicySource } from '#composition/core/policy/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
@@ -22,7 +22,8 @@ export async function executeConfiguredTask(projectRoot: string, input: AttemptI
     const policy = createLayoutPolicySource(layout, os.uid, config.inspection.policyMaxBytes), authorization = workTargetAttemptAuthorization(new DispatchPolicyAuthorization(policy), policy, selectWorkTarget(config.execution)?.id ?? null);
     await authorization.authorizeIdentity('execute', identity, await authenticate(verifier, undefined, identity.scopeId));
     const store = await openSqliteAttemptStore(await path(), config.storage.sqlite, { now: Date.now, timeoutMs: config.runRuntime.parking.timeoutMs }, 'forbid', { validate: validateDockerSupervisorProfile });
-
+    // Set immediately before the dispatch application may claim; a refusal after this point is never a pre-launch refusal.
+    let dispatching = false;
     try {
       const existing = await store.loadBoundDispatch(identity);
       if (existing) return Object.freeze({ schemaVersion: 1 as const, layout, execution: Object.freeze({ identity,
@@ -66,6 +67,7 @@ export async function executeConfiguredTask(projectRoot: string, input: AttemptI
             terminal: record.terminal, outputRecorded: !!record.output };
         });
       let result;
+      dispatching = true;
       try { result = await app.execute(request); } finally { await observation.close(); }
       return Object.freeze({ schemaVersion: 1 as const, layout, execution: Object.freeze({ identity, status: result.kind,
         terminal: result.record.terminal, outputRecorded: !!result.record.output }) });
@@ -87,7 +89,13 @@ export async function executeConfiguredTask(projectRoot: string, input: AttemptI
         } catch { /* live sidecar remains; sealing is observation, not execution */ }
       }
     } catch (error) {
-      if (error instanceof HandoffError) await recordHandoffRefusal(store, identity, error, { id: principal.id, issuer: principal.issuer, subject: principal.subject });
+      const actor = { id: principal.id, issuer: principal.issuer, subject: principal.subject };
+      if (error instanceof HandoffError) await recordHandoffRefusal(store, identity, error, actor);
+      else if (!dispatching) {
+        // A permanent refusal before any dispatch claim closes the attempt once (no launch, no effect); transient ones keep the turn's backoff.
+        const refusal = classifyLaunchRefusal(error);
+        if (refusal.disposition === 'permanent' && !await store.loadBoundDispatch(identity)) await recordAttemptClosure(store, identity, { kind: 'launch-refused', code: refusal.code }, actor);
+      }
       throw error;
     } finally { store.close(); }
   } catch (error) { throw queryFailure(error); }

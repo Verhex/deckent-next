@@ -20,7 +20,7 @@ export interface MonitorLedgerAttempt {
   readonly content?: MonitorWorkerContent;
   readonly attemptId: string; readonly generation: number; readonly handoffStart?: HandoffStartRecord | null;
   /** The Run binding's last projected observation. */
-  readonly observedKind: 'started' | 'exited' | 'cancelled' | 'unknown' | 'handoff-refused' | null; readonly observedRevision: number | null;
+  readonly observedKind: RunSnapshot['bindings'][number]['observedKind']; readonly observedRevision: number | null;
   readonly dispatch: MonitorLedgerDispatch | null;
   /** A `task_evaluation_observations` row exists for (attempt, observed revision): an evaluation was committed (HOLD keeps `evaluating`). */
   readonly evaluationObserved: boolean;

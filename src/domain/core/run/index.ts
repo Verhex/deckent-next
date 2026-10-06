@@ -1,6 +1,6 @@
 export { runIdentitySchema, runSnapshotSchema, runStateSchema, RunError } from './internal/contract.js';
 export type { RunIdentity, RunSnapshot } from './internal/contract.js';
-export { createRun, reserveRunTasks, observeRunAttempt, requestRunCancellation } from './internal/reduce.js';
+export { createRun, reserveRunTasks, observeRunAttempt, requestRunCancellation, closesAttemptWithoutExit } from './internal/reduce.js';
 export { preventRunAttempt } from './internal/prevent.js';
 export { settleCancelledRunAttempt } from './internal/settle.js';
 export { executionRegistrySchema, executionProfileDefinitionSchema, evaluatorDefinitionSchema, encodeExecutionProfileDefinition } from './internal/registry.js';

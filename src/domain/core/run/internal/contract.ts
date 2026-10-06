@@ -5,7 +5,7 @@ import { attemptIdentitySchema } from '#domain/core/attempt/index.js';
 import { taskGraphSchema, taskProgressSchema, inspectTaskReadiness, branchDecisionSchema, assertAdmissionBranch } from '#domain/core/task-graph/index.js';
 export const runIdentitySchema = z.object({ runId: identitySchema, scopeId: identitySchema, layoutRevision: identitySchema }).strict().readonly();
 export const runBindingSchema = z.object({ identity: attemptIdentitySchema, observedRevision: counterSchema.positive().nullable(),
-  observedKind: z.enum(['started', 'exited', 'cancelled', 'unknown', 'handoff-refused']).nullable(),
+  observedKind: z.enum(['started', 'exited', 'cancelled', 'unknown', 'handoff-refused', 'launch-refused', 'abandoned']).nullable(),
 }).strict().readonly();
 export const runStateSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('running') }).strict(),
