@@ -215,3 +215,13 @@ Owner ilk 20 iş listesini (proof `WORKLIST-TOP20-2026-10-06/analysis.md`) ve K1
 - İlk gecikme tabanı (W1-LATENCY, cd7e58a7, yüklü WSL2): p95 ledger 74–84 ms, worker 110–136 ms, approval 63–65 ms; kapı eşiği p95 ≤ 500 ms; eşik ölçüm girdisidir, ürün config'i değildir.
 - Makine bağı (owner 2026-10-06; Jev seçim 0,90 / yeterlilik 0,71 → owner): `/etc/machine-id` olmayan Linux'ta (çoğu konteyner) taşınma/kopya tespiti bugün kapalı; dalga 1 yalnız `doctor` görünürlüğü ekler. Karar: kimlik bağı v2 — config'te yapılandırılabilir makine-kimliği kaynağı (ör. bağlanmış secret dosyası), yoksa `/etc/machine-id`, yoksa yol+cihaz+inode "zayıf bağ"; `installation.requireMachineBinding` politikası makine kimliği yoksa yazmayı reddeder. Sürümlü sözleşme + v1 kayıt göçü; dalga 2 Opus kartı (IDENTITY-BINDING-V2).
 - Qwen karar araştırması owner tarafından iptal edildi (2026-10-06); `shadow.sh` aynı arayüzle yalnız Jev çağırır.
+
+## Owner kararı — 2026-10-06: Qwen karar araştırması iptali
+
+“Çalışmayı iptal edelim qwen eski haliyle korunsun. jev kullanmaya devam edeceğiz.”
+
+Yerel karar başlığı/eğitim, vLLM özel endpoint/worker katmanı, alternatif yerel karar modelleri, Qwen–Jev gölge kıyası ve HF hazırlığı iptal. Native Qwen standart model/profile ile korunur, karar danışmanlığı mevcut Jev'dir. Yeni deney dalı geri alınır; tarihsel kanıt/veri saklanır. PR#11'in main'deki host araçları kullanılmayan tarihsel kaynak olarak kalır, otomatik kullanım yoktur. Eski kabul ve kalan-iş metinleri çalıştırmayı yeniden kabul etmez; yeni owner yönü gerekir. Karar, kesin%20/%30 hız üstünlüğü kanıtlanamadığı durumda owner'ın çalışmayı bırakma tercihidir; teknik imkânsızlık bulgusu değildir. Kapanış dış `proof/QWEN-CANCELED-2026-10-06/REPORT.md`.
+
+## Owner — 2026-10-06: Jev host kullanım önerileri kabul edildi
+
+Owner “Öneriler kabul edildi”: önce Noul kontrollerini tek önerme yapma ve sonuç kayıt disiplini, ardından farklı kapanmış vakalarda değerlendirme, sonra context sadeleştirmesini ölçme sırası yetkilidir. Geliştirme-host aracı kapsamındadır; mevcut seçim/yeterlilik eşikleri, zorunlu north star ve iki çekimserlik korunur. Tarihsel eksik sonuçlar veya aktör/öneri uyumu doğruluk sayılmaz; kalite kabulü ölçümden ayrıdır. Qwen araştırması iptal kalır; commit/push yetkisi verilmedi. Kaynak: dış `proof/JEV-USAGE-RESEARCH-2026-10-06/REPORT.md`; uygulama kanıtı `proof/JEV-HOST-HYGIENE-2026-10-06/`.

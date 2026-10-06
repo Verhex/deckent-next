@@ -8,7 +8,7 @@ Bu dosya yalnız **devam eden işi** taşır: kısa durum, tek iş tablosu, aç�
 - **Canlı = main = N1:** `9e01322c` **1.0.0-alpha.6** (PATCH-BUDGET), ledger 47 / runtime protocol 20 (48 rezerve). CI zorunlu hücreler yalnız ubuntu node24+26 (owner ruleset 2026-10-06).
 - **İlk 20 iş (owner 2026-10-06 kabul, K1–K8):** 4 dalga × 4–5 lane; analiz `proof/WORKLIST-TOP20-2026-10-06/analysis.md`, kararlar [owner-decisions](.deckent/docs/decisions/owner-decisions.md) "İlk 20 iş kararları". **Dalga 1** `wave/1` dalında: WORKER-AUTO-REFRESH, ARCH-GUARDS, K-LATENCY-METRICS, MCP-KAYIT-DENETİMİ + SANDBOX-AD-SIZINTISI, VERIFY-ENV (machine-id yeteneği + doctor görünürlüğü); tek Astra parti incelemesi → PR → alpha.7. Dalga 2: DOGFOOD-D5, RUN-YAŞAM, MODEL-INGRESS-P2, KATALOG-TEMİZLİK, MONITOR-M2M3.
 - **Dogfood DT-1 R2 (N1, alpha.6):** Run → patch → candidate → delivery ürün yolundan tamam; verify 22 test ortam kaynaklı (verify imajında `/etc/machine-id` yok, `/tmp` noexec; ürün hatası yok) → machine-id'li verify imajı + profil v8 ile yeniden doğrulama, sonra benimseme.
-- **Teslim düzeni:** parti başına tek bağımsız inceleme, en çok bir düzeltme turu, sonra Jev ≥0,90 / ≥0,75 veya owner; her Jev danışması Qwen gölgesiyle (`shadow.sh`). Önceki durum notu: [durum notları](.deckent/docs/plan/status-2026-10-05.md).
+- **Teslim düzeni:** parti başına tek bağımsız inceleme, en çok bir düzeltme turu, sonra Jev ≥0,90 / ≥0,75 veya owner; Jev danışmaları `shadow.sh` ile (Qwen araştırması 2026-10-06 iptal, yalnız Jev). Önceki durum notu: [durum notları](.deckent/docs/plan/status-2026-10-05.md).
 
 ## Aktif iş alanları
 
@@ -20,8 +20,6 @@ Bu dosya yalnız **devam eden işi** taşır: kısa durum, tek iş tablosu, aç�
 | MODEL-INGRESS-UNICODE | Gizli Unicode: not/audit/karantina | P1 main'de; P2 `de286888` rebase | P2 inceleme; P3 araç/MCP şema + argüman JSON | [work-list](.deckent/docs/plan/work-list.md) |
 | FLAKY-RECOVERY | Installed offline completion/cancellation | Kaynak indi | Gerçek Docker ile doğrulama | [work-list](.deckent/docs/plan/work-list.md) |
 | CI-DEBT | Kalan CI hataları tek iş (ubuntu-only ruleset owner komutu) | Owner'ın ayrı Codex ajanı | Ajan STATUS çıktısını izle | `proof/CI-DEBT-2026-10-05/STATUS.md` |
-| QWEN–JEV gölge | Idle-only base-Qwen ile Jev karşılaştırması | Owner 2026-10-06 iptal etti; `shadow.sh` yalnız Jev (12 vaka geçmiş kayıt) | Kalan 18 vaka; temiz 384/48/48 baş eğitimi | [qwen-host-pilot](.deckent/docs/plan/qwen-host-pilot.md) |
-| QWEN-DEV-DECISION / HEAD-QUALITY | Host pilotu: CLI + loopback API, v4 veri | CLI/API indi (PR #11); eğitim ölçümü yok | 275/32/32 → 384/48/48 sürücü uyarlaması | [host pilot](.deckent/docs/architecture/modules/host-qwen-decision-pilot.md) |
 | NODE-26 | Node 26 geçişi | Hedef LTS 2026-10-28 | O tarihte tam verify | owner-decisions |
 | NATIVE-AGENTS | Owner öncelik #4 OpenCode, #5 Copilot CLI, #6 Kimi Code CLI, #7 Antigravity/Gemini | Hazırlanmadı | `commands.json` kayıtları + credential spec + imaj + usage kanıtı; Devin = ayrı remote-worker adaptörü | [hedefler](.deckent/docs/plan/owner-targets-2026-10-05.md) |
 | MODEL-PROVIDERS | Owner öncelik #8 GLM, #9 DeepSeek | Hazırlanmadı | Katalog kaydı: `provider-openai-chat` veya `provider-openrouter-chat` | [hedefler](.deckent/docs/plan/owner-targets-2026-10-05.md) |
@@ -84,3 +82,7 @@ Tam metinler [owner-decisions](.deckent/docs/decisions/owner-decisions.md) ve AR
 - 2026-10-02 MCP-NO-DECIDE, CONFIG-SURFACE, monitör görevi → [status notları](.deckent/docs/plan/status-2026-10-05.md), ARCHITECTURE.
 - 2026-10-03 dalga 6 (WorkClass, kendi computer-use mekanizması, Slack+Discord), süreç panosu → [work-list](.deckent/docs/plan/work-list.md) (DALGA-6), core-memory.
 - 2026-10-05 kimlik profilleri K1–K3 = A; Qwen host pilotu; NATIVE-AGENTS/MODEL-PROVIDERS/SIWC/CLAUDE-API-KEY-TERMINAL/COMPUTER-USE hedefleri → bu tablo, [qwen-host-pilot](.deckent/docs/plan/qwen-host-pilot.md).
+
+- 2026-10-06 Qwen karar araştırması owner tarafından iptal edildi; native Qwen korunur, karar danışmanlığı mevcut Jev ile sürer. Kapanış: [COMPLETED-PLAN](COMPLETED-PLAN.md), dış proof `QWEN-CANCELED-2026-10-06/`.
+
+- 2026-10-06 Jev host kullanım önerileri kabul edildi; soru tanılaması/yönerge, zaman sıralı follow-up raporu ve 20 farklı kaynaklı pilot uygulandı. Context genellemesi için kazanç kanıtlanmadı; kapanış ve sınırlar [COMPLETED-PLAN](COMPLETED-PLAN.md), dış `proof/JEV-HOST-HYGIENE-2026-10-06/REPORT.md`.
