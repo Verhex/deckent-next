@@ -2,6 +2,7 @@ import { mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { defineConfig } from 'vitest/config';
+import DurationSequencer from './scripts/ci-sequencer.mjs';
 import { canonicalTemporaryEnvironment } from './tests/fixtures/canonical-temp.js';
 
 import { fileURLToPath } from 'node:url';
@@ -39,6 +40,7 @@ export default defineConfig({
     include: ['tests/**/*.test.ts'],
     exclude: ['node_modules', 'dist', 'apps'],
     pool: 'forks',
+    sequence: { sequencer: DurationSequencer },
     // Full suite: 4 workers (owner 2026-09-27; measured 10.9 GB peak, 297 s verify). Lanes' targeted runs set VITEST_MAX_FORKS=2.
     maxWorkers: Number(process.env.VITEST_MAX_FORKS ?? 4),
     testTimeout,

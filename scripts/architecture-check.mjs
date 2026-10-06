@@ -1,0 +1,830 @@
+// lint-arch: the single architecture gate for deckent (fail-closed; only hardcode debt has a shrink-only baseline).
+// Rules come from arch.json. Checks:
+//  1. package import direction + public-API-only cross-package imports (index.ts), internal/ isolation
+//  2. observability is never imported; apps import only surfaces
+//  3. i18n: locale catalogs have identical key sets; t('key') keys exist; no dynamic keys;
+//     surfaces never print string literals directly
+//  4. model/flow literals only in the registry allowlist
+//  5. no product source writes .md files (docs are not product output)
+//  6. budgets: file ≤ maxLinesPerFile (all text files), per-package and total src lines, test-case count
+//  7. tracked markdown set is exactly the allowlist (+ pointer files within their line cap)
+//  9. structural guards (arch.json guards): src never imports outside src except assets/, tests never import .agents,
+//     host vocabulary absent from src (shrink-only allowlist), vendor-slug caps per layer, claim/delivery/adoption files only in the effect owner
+//  8. external dependencies: dependencies.json registry, owned bare imports, embedded components (scripts/dependencies.mjs)
+import ts from 'typescript';
+import { createHash } from 'node:crypto';
+import { collectConfigBindings } from './config-bindings.mjs';
+import { lintConfigVocabulary } from './config-vocabulary.mjs';
+import { lintDependencies, loadRegistry, ownsImport, packageName } from './dependencies.mjs';
+import { execFileSync } from 'node:child_process';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import { dirname, extname, join, relative, resolve, sep } from 'node:path';
+
+// Fresh per-call state: fixture edits, policies and Git history are always re-read.
+export function analyzeArchitecture(root, { mode = 'full', today = new Date().toISOString().slice(0, 10) } = {}) {
+const ROOT = resolve(root);
+if (!['full', 'hardcode-only', 'hardcode-inventory'].includes(mode)) throw new Error('Invalid architecture mode');
+const arch = JSON.parse(readFileSync(join(ROOT, 'arch.json'), 'utf8'));
+const violations = [], warnings = [], messages = [];
+const packageNames = Object.keys(arch.packages);
+const fail = (rule, file, message) => violations.push({ rule, file, message });
+const warn = (rule, file, message) => warnings.push({ rule, file, message });
+const rel = (p) => relative(ROOT, p).split(sep).join('/');
+
+function walk(dir, predicate, out = []) {
+  if (!existsSync(dir)) return out;
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    if (entry.name === 'node_modules' || entry.name === 'dist' || entry.name === '.git') continue;
+    const path = join(dir, entry.name);
+    if (entry.isDirectory()) walk(path, predicate, out);
+    else if (predicate(path)) out.push(path);
+  }
+  return out;
+}
+
+const isTs = (p) => /\.(ts|tsx|mts)$/.test(p) && !p.endsWith('.d.ts');
+const srcFiles = walk(join(ROOT, 'src'), isTs);
+// Fast entry points execute the very same scanner/enforcer as the complete gate.
+if (mode === 'hardcode-only' || mode === 'hardcode-inventory') {
+  const options = { target: ts.ScriptTarget.Latest, jsx: ts.JsxEmit.Preserve, baseUrl: ROOT,
+    paths: Object.fromEntries(Object.keys(arch.packages).map(pkg => [`#${pkg}/*`, [`src/${pkg}/*`]])) };
+  const sourceProgram = ts.createProgram(srcFiles, options);
+  const findings = hardcodeInventory(hardcodeSources(srcFiles, sourceProgram), sourceProgram.getTypeChecker(), arch.hardcodeRatchet);
+  let output;
+  if (mode === 'hardcode-inventory') output = JSON.stringify(findings, null, 2) + '\n';
+  else {
+    lintHardcode(findings, arch.hardcodeRatchet);
+    output = [...violations, ...warnings].map(v => `[${v.rule}] ${v.file} — ${v.message}`).join('\n') + '\n';
+  }
+  return { code: violations.length ? 1 : 0, out: messages.join('') + output };
+}
+const appFiles = walk(join(ROOT, 'apps'), isTs);
+const tsConfig = ts.parseJsonConfigFileContent(JSON.parse(readFileSync(join(ROOT, 'tsconfig.json'), 'utf8')), ts.sys, ROOT);
+const program = ts.createProgram(tsConfig.fileNames, tsConfig.options);
+const checker = program.getTypeChecker();
+const { registry: dependencyRegistry, errors: registryErrors } = loadRegistry(ROOT, arch.dependencies?.registry);
+// Current domain/runtime contracts have one active shape. A second source module
+// or public V2 name creates two authorities; migration history is the explicit
+// boundary where old shapes may remain for forward-only conversion.
+const VERSIONED_SHAPE_PACKAGES = new Set(['domain', 'capabilities', 'engine', 'adapters', 'composition']);
+const VERSION_HISTORY_SEGMENTS = new Set(['migration', 'migrations']);
+const versioningScope = (file) => {
+  const path = rel(file).split('/');
+  const migrationHistory = path[1] === 'adapters'
+    && (path.some(segment => VERSION_HISTORY_SEGMENTS.has(segment.toLowerCase()))
+      || /^migration-v\d+\.ts$/i.test(path.at(-1) ?? ''))
+    && path.some(segment => /(?:attempt|persistence|store|ledger)/i.test(segment));
+  return path[0] === 'src' && VERSIONED_SHAPE_PACKAGES.has(path[1]) && !migrationHistory;
+};
+const tiers = arch.tiers ?? { order: [], enforce: false, unitLines: Infinity };
+const tierRank = new Map(tiers.order.map((name, index) => [name, index]));
+if (arch.imports?.enforce) {
+  try {
+    const runtime = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8')).imports;
+    const source = JSON.parse(readFileSync(join(ROOT, 'tsconfig.json'), 'utf8')).compilerOptions.paths;
+    for (const pkg of packageNames) {
+      const key = `${arch.imports.aliasPrefix}${pkg}/*`;
+      if (runtime?.[key] !== `./dist/${pkg}/*` || JSON.stringify(source?.[key]) !== JSON.stringify([`./src/${pkg}/*`])) {
+        fail('import-map', 'package.json/tsconfig.json', `runtime/source mapping drift for ${key}`);
+      }
+    }
+  } catch (error) { fail('import-map', 'package.json/tsconfig.json', error.message); }
+}
+
+
+function unitOf(file) {
+  // src/<pkg>/<tier>/<unit>/... → { pkg, tier, unit } ; src/<pkg>/index.ts → { pkg, tier: null, unit: null }
+  const parts = rel(file).split('/');
+  if (parts[0] !== 'src' || parts.length < 3) return null;
+  const [, pkg, third, fourth] = parts;
+  if (parts.length === 3) return { pkg, tier: null, unit: null, rootFile: third };
+  return { pkg, tier: third, unit: parts.length >= 5 ? fourth : null, rootFile: null };
+}
+
+const unitId = info => info?.unit ? `src/${info.pkg}/${info.tier}/${info.unit}` : null;
+const dependencyId = file => {
+  const info = unitOf(file);
+  return unitId(info) ?? (info?.pkg && info.tier === null ? `src/${info.pkg}` : null);
+};
+
+function packageOf(file) {
+  const r = rel(file);
+  if (r.startsWith('src/')) {
+    const seg = r.split('/')[1];
+    return packageNames.includes(seg) ? seg : (seg === 'index.ts' ? '(root)' : `(unknown:${seg})`);
+  }
+  if (r.startsWith('apps/')) return `apps/${r.split('/')[1]}`;
+  return '(outside)';
+}
+
+const IMPORT_RE = /(?:import|export)\s+(?:type\s+)?(?:[^'"]*?\s+from\s+)?['"]([^'"]+)['"]|import\(\s*['"]([^'"]+)['"]\s*\)/g;
+
+function importsOf(file) {
+  const src = readFileSync(file, 'utf8');
+  const out = [];
+  for (const m of src.matchAll(IMPORT_RE)) {
+    const spec = m[1] ?? m[2];
+    if (!spec) continue;
+    const aliasPrefix = arch.imports?.aliasPrefix ?? '#';
+    let target;
+    if (spec.startsWith(aliasPrefix)) target = resolve(ROOT, 'src', spec.slice(aliasPrefix.length).replace(/\.js$/, '.ts'));
+    else if (spec.startsWith('.')) {
+      const base = resolve(dirname(file), spec.replace(/\.js$/, ''));
+      const candidates = [`${base}.ts`, `${base}.tsx`, `${base}.json`, base];
+      target = candidates.find(path => existsSync(path)) ?? `${base}.ts`;
+    }
+    else continue;
+    out.push({ spec, target, aliased: spec.startsWith(aliasPrefix), line: src.slice(0, m.index).split('\n').length });
+  }
+  return out;
+}
+
+function resolvedSymbol(node) {
+  let symbol = checker.getSymbolAtLocation(node);
+  if (symbol && symbol.flags & ts.SymbolFlags.Alias) symbol = checker.getAliasedSymbol(symbol);
+  return symbol;
+}
+
+function symbolDependency(symbol) {
+  for (const declaration of symbol?.declarations ?? []) {
+    const dependency = dependencyId(declaration.getSourceFile().fileName);
+    if (dependency) return dependency;
+  }
+  return null;
+}
+
+function effectiveDependencies(file) {
+  const sourceFile = program.getSourceFile(file);
+  const dependencies = new Set();
+  if (!sourceFile) return dependencies;
+  for (const statement of sourceFile.statements) {
+    if (ts.isExportDeclaration(statement) && statement.moduleSpecifier && ts.isStringLiteral(statement.moduleSpecifier)) {
+      let resolved = false;
+      const add = symbol => { const dependency = symbolDependency(symbol); if (dependency) { dependencies.add(dependency); resolved = true; } };
+      if (statement.exportClause && ts.isNamedExports(statement.exportClause)) {
+        for (const element of statement.exportClause.elements) add(resolvedSymbol(element.name));
+      } else {
+        const moduleSymbol = resolvedSymbol(statement.moduleSpecifier);
+        for (const exported of moduleSymbol ? checker.getExportsOfModule(moduleSymbol) : []) add(exported.flags & ts.SymbolFlags.Alias ? checker.getAliasedSymbol(exported) : exported);
+      }
+      if (!resolved) {
+        const specifier = statement.moduleSpecifier.text;
+        const target = specifier.startsWith(arch.imports?.aliasPrefix ?? '#')
+          ? resolve(ROOT, 'src', specifier.slice((arch.imports?.aliasPrefix ?? '#').length).replace(/\.js$/, '.ts'))
+          : specifier.startsWith('.') ? resolve(dirname(file), specifier.replace(/\.js$/, '.ts')) : null;
+        const dependency = target ? dependencyId(target) : null;
+        if (dependency) dependencies.add(dependency);
+      }
+      continue;
+    }
+    if (!ts.isImportDeclaration(statement) || !ts.isStringLiteral(statement.moduleSpecifier)) continue;
+    const clause = statement.importClause;
+    let resolved = false;
+    const add = symbol => { const dependency = symbolDependency(symbol); if (dependency) { dependencies.add(dependency); resolved = true; } };
+    if (clause?.name) add(resolvedSymbol(clause.name));
+    if (clause?.namedBindings && ts.isNamedImports(clause.namedBindings)) {
+      for (const element of clause.namedBindings.elements) add(resolvedSymbol(element.name));
+    } else if (clause?.namedBindings && ts.isNamespaceImport(clause.namedBindings)) {
+      const moduleSymbol = resolvedSymbol(statement.moduleSpecifier);
+      for (const exported of moduleSymbol ? checker.getExportsOfModule(moduleSymbol) : []) add(exported.flags & ts.SymbolFlags.Alias ? checker.getAliasedSymbol(exported) : exported);
+    }
+    if (!resolved) {
+      const specifier = statement.moduleSpecifier.text;
+      let target;
+      if (specifier.startsWith(arch.imports?.aliasPrefix ?? '#')) target = resolve(ROOT, 'src', specifier.slice((arch.imports?.aliasPrefix ?? '#').length).replace(/\.js$/, '.ts'));
+      else if (specifier.startsWith('.')) target = resolve(dirname(file), specifier.replace(/\.js$/, '.ts'));
+      const dependency = target ? dependencyId(target) : null;
+      if (dependency) dependencies.add(dependency);
+    }
+  }
+  return dependencies;
+}
+
+// ---- 0: one active contract shape (migration history is exempt)
+for (const file of srcFiles) {
+  if (!versioningScope(file)) continue;
+  const path = rel(file);
+  if (/(^|\/)(?:version-(?:\d+|[a-z]+)|v\d+|migration-v\d+)\.ts$/.test(path)) {
+    fail('versioning', path, 'parallel versioned module; evolve the current contract in place or keep the old shape under adapter persistence migrations');
+  }
+  const source = readFileSync(file, 'utf8');
+  // AST declarations/export lists avoid comments and strings. Provider-native
+  // names such as ProviderV2 remain valid unless the name is contract-shaped.
+  const sourceFile = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true);
+  const contractWord = /(?:schema|contract|record|graph|claim|protocol|snapshot|request|response|event|envelope|receipt|command|attempt|run|task|policy|config|manifest)/i;
+  const versionMarker = /V\d+/i;
+  const checkName = (name, node) => {
+    if (!versionMarker.test(name) || !contractWord.test(name)) return;
+    const line = sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile)).line + 1;
+    fail('versioning', `${path}:${line}`, `parallel versioned contract API "${name}"; keep one current contract shape (adapter persistence migrations are exempt)`);
+  };
+  const visit = (node) => {
+    if (ts.isVariableDeclaration(node) || ts.isBindingElement(node) || ts.isTypeParameterDeclaration(node)) {
+      if (ts.isIdentifier(node.name)) checkName(node.name.text, node.name);
+    } else if (ts.isClassDeclaration(node) || ts.isFunctionDeclaration(node) || ts.isInterfaceDeclaration(node)
+      || ts.isTypeAliasDeclaration(node) || ts.isEnumDeclaration(node)) {
+      if (node.name) checkName(node.name.text, node.name);
+    } else if (ts.isExportDeclaration(node) && node.exportClause && ts.isNamedExports(node.exportClause)) {
+      for (const element of node.exportClause.elements) checkName(element.name.text, element.name);
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(sourceFile);
+}
+
+// Pure domain packages cannot acquire host capabilities through external modules or ambient globals.
+for (const file of srcFiles) {
+  const policy = arch.packages[packageOf(file)];
+  if (!policy?.pure) continue;
+  const source = ts.createSourceFile(file, readFileSync(file, 'utf8'), ts.ScriptTarget.Latest, true);
+  const ambient = new Set(['process', 'globalThis', 'global', 'Buffer', 'require', 'eval', 'Function', 'Date']);
+  function visit(node) {
+    if (ts.isIdentifier(node) && ambient.has(node.text)) fail('domain-purity', rel(file), `ambient capability ${node.text}`);
+    const spec = (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) ? node.moduleSpecifier : undefined;
+    if (spec && ts.isStringLiteral(spec) && !spec.text.startsWith('.') && !spec.text.startsWith('#')
+      && !ownsImport(dependencyRegistry, rel(file), packageName(spec.text))) fail('domain-purity', rel(file), `external dependency ${spec.text}`);
+    if (ts.isCallExpression(node) && node.expression.kind === ts.SyntaxKind.ImportKeyword) fail('domain-purity', rel(file), 'dynamic import');
+    ts.forEachChild(node, visit);
+  }
+  visit(source);
+}
+
+// ---- 1 + 2: direction, public API, internal isolation, observability, apps
+const discoveredUnits = new Set();
+const observedUnitDependencies = new Map();
+for (const file of srcFiles) {
+  const id = unitId(unitOf(file));
+  if (id) {
+    discoveredUnits.add(id);
+    if (!observedUnitDependencies.has(id)) observedUnitDependencies.set(id, new Set());
+    for (const dependency of effectiveDependencies(file)) if (dependency !== id) observedUnitDependencies.get(id).add(dependency);
+  }
+}
+for (const file of [...srcFiles, ...appFiles]) {
+  const from = packageOf(file);
+  if (from.startsWith('(unknown')) fail('layout', rel(file), `file is outside a declared package (${from}); declare it in arch.json`);
+  for (const imp of importsOf(file)) {
+    const targetRel = rel(imp.target);
+    if (rel(file).startsWith('src/') && !imp.aliased && !targetRel.startsWith('src/')) {
+      const guard = arch.guards?.outsideSrcImports;
+      const denied = guard?.deny?.find(prefix => targetRel.startsWith(prefix));
+      if (denied) fail('src-boundary', `${rel(file)}:${imp.line}`, `product source may not import ${denied} (got ${imp.spec}); host tools, scripts and tests are not part of the product package`);
+      else if (guard && !guard.allow.some(prefix => targetRel.startsWith(prefix))) fail('src-boundary', `${rel(file)}:${imp.line}`, `relative import leaves src/ (got ${imp.spec}); only ${guard.allow.join(', ')} is allowed`);
+    }
+    if (!targetRel.startsWith('src/')) continue;
+    if (arch.imports?.enforce && !existsSync(imp.target)) fail('import-target', `${rel(file)}:${imp.line}`, `missing target ${imp.spec}`);
+    const to = packageOf(imp.target);
+    if (to === from) {
+      if (!tiers.enforce || !from.startsWith('(') && packageNames.includes(from)) {
+        const src = unitOf(file), dst = unitOf(imp.target);
+        if (tiers.enforce && src && dst && dst.tier) {
+          const srcRank = src.tier ? tierRank.get(src.tier) : Infinity; // package index.ts may import any tier
+          const dstRank = tierRank.get(dst.tier);
+          if (srcRank !== undefined && dstRank !== undefined && dstRank > srcRank) fail('tier-direction', `${rel(file)}:${imp.line}`, `${src.tier} may not import ${dst.tier} (order: ${tiers.order.join(' ← ')})`);
+          const sameUnit = src.tier === dst.tier && src.unit === dst.unit && src.unit !== null;
+          if (!sameUnit && !/^src\/[^/]+\/[^/]+\/[^/]+\/index\.ts$/.test(targetRel)) fail('unit-api', `${rel(file)}:${imp.line}`, `cross-unit import must target the unit index.ts (got ${imp.spec})`);
+          if (!sameUnit && arch.imports?.enforce && !imp.aliased) fail('import-style', `${rel(file)}:${imp.line}`, `cross-unit import must use the ${arch.imports.aliasPrefix}<pkg>/<tier>/<unit>/index.js alias (got ${imp.spec})`);
+        }
+      }
+      continue;
+    }
+    const allowed = from === '(root)' ? packageNames : from.startsWith('apps/') ? arch.apps.imports : (arch.packages[from]?.imports ?? []);
+    if (!allowed.includes(to)) fail('direction', `${rel(file)}:${imp.line}`, `${from} → ${to} is not allowed (allowed: ${allowed.join(', ') || 'none'})`);
+    if (arch.imports?.enforce && !imp.aliased && !from.startsWith('apps/')) fail('import-style', `${rel(file)}:${imp.line}`, `cross-package import must use the ${arch.imports.aliasPrefix}<pkg>/index.js alias (got ${imp.spec})`);
+    const isIndex = /^src\/[^/]+\/index\.ts$/.test(targetRel) || /^src\/[^/]+\/index$/.test(targetRel);
+    if (!isIndex) fail('public-api', `${rel(file)}:${imp.line}`, `cross-package import must target src/${to}/index.ts (got ${imp.spec})`);
+    if (targetRel.includes('/internal/')) fail('internal', `${rel(file)}:${imp.line}`, `internal/ module imported from another package`);
+    const importedBy = arch.packages[to]?.importedBy;
+    if (Array.isArray(importedBy) && !importedBy.includes(from)) fail('read-only', `${rel(file)}:${imp.line}`, `${to} may only be imported by [${importedBy.join(', ') || 'nobody'}]`);
+  }
+}
+
+// Every unit declares its exact static dependencies and an accountable PLAN row. The graph has no baseline:
+// discovered and declared units are a bijection, and every cycle is a violation.
+const declaredUnits = arch.units ?? {};
+const planText = existsSync(join(ROOT, 'PLAN.md')) ? readFileSync(join(ROOT, 'PLAN.md'), 'utf8') : '';
+const planIds = new Set([...planText.matchAll(/^\|\s*([^|\s][^|]*?)\s*\|/gm)].map(match => match[1].trim()).filter(id => id !== 'ID' && id !== 'Card'));
+for (const unit of discoveredUnits) if (!Object.hasOwn(declaredUnits, unit)) fail('unit-declaration', unit, 'unit is missing from arch.json units');
+for (const [unit, declaration] of Object.entries(declaredUnits)) {
+  if (!discoveredUnits.has(unit)) fail('unit-declaration', unit, 'declared unit does not exist');
+  if (!planIds.has(declaration.plan)) fail('unit-plan', unit, `unknown PLAN row "${declaration.plan}"`);
+  const declared = new Set(declaration.dependencies ?? []);
+  if (declared.size !== (declaration.dependencies ?? []).length) fail('unit-dependency', unit, 'duplicate declared dependency');
+  for (const dependency of declared) {
+    const valid = discoveredUnits.has(dependency) || /^src\/[^/]+$/.test(dependency) && packageNames.includes(dependency.slice(4));
+    if (!valid) fail('unit-dependency', unit, `unknown dependency ${dependency}`);
+  }
+  const observed = observedUnitDependencies.get(unit) ?? new Set();
+  for (const dependency of observed) if (!declared.has(dependency)) fail('unit-dependency', unit, `undeclared dependency ${dependency}`);
+  // Tier direction also holds across packages and through package index re-exports: a lower-tier unit may not
+  // end up depending on a higher-tier unit just because a package index.ts composes it.
+  if (tiers.enforce) {
+    const tierOfUnit = id => id.split('/')[2];
+    for (const dependency of observed) {
+      const from = tierRank.get(tierOfUnit(unit)), to = tierRank.get(tierOfUnit(dependency));
+      if (discoveredUnits.has(dependency) && from !== undefined && to !== undefined && to > from) {
+        fail('tier-direction', unit, `${tierOfUnit(unit)} unit depends on ${tierOfUnit(dependency)} unit ${dependency} (resolved through re-exports; order: ${tiers.order.join(' ← ')})`);
+      }
+    }
+  }
+  for (const dependency of declared) if (!observed.has(dependency)) fail('unit-dependency', unit, `stale dependency ${dependency}`);
+}
+const visitState = new Map(), visitStack = [];
+function visitUnit(unit) {
+  visitState.set(unit, 1); visitStack.push(unit);
+  for (const dependency of observedUnitDependencies.get(unit) ?? []) {
+    if (!discoveredUnits.has(dependency)) continue;
+    if (!visitState.has(dependency)) visitUnit(dependency);
+    else if (visitState.get(dependency) === 1) {
+      const start = visitStack.indexOf(dependency);
+      fail('unit-cycle', unit, visitStack.slice(start).concat(dependency).join(' → '));
+    }
+  }
+  visitStack.pop(); visitState.set(unit, 2);
+}
+for (const unit of discoveredUnits) if (!visitState.has(unit)) visitUnit(unit);
+
+// Composition may validate schemas and carry domain types, but domain decision functions belong behind
+// application services. Resolve re-exports with the TypeScript checker so aliases cannot hide their origin.
+if (arch.composition?.enforceDomainDecisionImports) {
+  const isDomainCallable = (symbol, node) => Boolean(symbol && (symbol.declarations ?? []).some(declaration => rel(declaration.getSourceFile().fileName).startsWith('src/domain/'))
+    && checker.getTypeOfSymbolAtLocation(symbol, node).getCallSignatures().length);
+  for (const sourceFile of program.getSourceFiles()) {
+    if (!rel(sourceFile.fileName).startsWith('src/composition/')) continue;
+    const namespaces = new Map();
+    for (const statement of sourceFile.statements) {
+      if (!ts.isImportDeclaration(statement) || !ts.isStringLiteral(statement.moduleSpecifier)) continue;
+      const clause = statement.importClause;
+      if (!clause || clause.isTypeOnly) continue;
+      const check = (node, name) => {
+        const symbol = resolvedSymbol(node);
+        if (!isDomainCallable(symbol, node)) return;
+        const line = sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile)).line + 1;
+        fail('composition-purity', `${rel(sourceFile.fileName)}:${line}`, `domain decision function ${name} must be invoked by an application service`);
+      };
+      if (clause.name) check(clause.name, clause.name.text);
+      if (clause.namedBindings && ts.isNamedImports(clause.namedBindings)) {
+        for (const element of clause.namedBindings.elements) if (!element.isTypeOnly) check(element.name, element.name.text);
+      } else if (clause.namedBindings && ts.isNamespaceImport(clause.namedBindings)) {
+        namespaces.set(clause.namedBindings.name.text, clause.namedBindings.name);
+      }
+    }
+    const visitNamespaceAccess = node => {
+      if (ts.isPropertyAccessExpression(node) && ts.isIdentifier(node.expression) && namespaces.has(node.expression.text)) checkNamespaceMember(node.name, node.name.text);
+      if (ts.isElementAccessExpression(node) && ts.isIdentifier(node.expression) && namespaces.has(node.expression.text)
+        && ts.isStringLiteral(node.argumentExpression)) checkNamespaceMember(node.argumentExpression, node.argumentExpression.text);
+      ts.forEachChild(node, visitNamespaceAccess);
+    };
+    const checkNamespaceMember = (node, name) => {
+      const symbol = resolvedSymbol(node);
+      if (!isDomainCallable(symbol, node)) return;
+      const line = sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile)).line + 1;
+      fail('composition-purity', `${rel(sourceFile.fileName)}:${line}`, `domain decision function ${name} must be invoked by an application service`);
+    };
+    visitNamespaceAccess(sourceFile);
+  }
+}
+
+// ---- 2b: tier layout and unit budgets
+if (tiers.enforce) {
+  const unitLines = new Map();
+  for (const file of srcFiles) {
+    const info = unitOf(file);
+    if (!info || !packageNames.includes(info.pkg)) continue;
+    if (info.rootFile !== null) { if (info.rootFile !== 'index.ts') fail('layout', rel(file), `only index.ts may sit directly under src/${info.pkg}/; place it in src/${info.pkg}/<tier>/<unit>/`); continue; }
+    if (!tierRank.has(info.tier)) { fail('layout', rel(file), `unknown tier "${info.tier}" (tiers: ${tiers.order.join(', ')})`); continue; }
+    if (info.unit === null) { fail('layout', rel(file), `files under src/${info.pkg}/${info.tier}/ must belong to a unit directory`); continue; }
+    const key = `src/${info.pkg}/${info.tier}/${info.unit}`;
+    unitLines.set(key, (unitLines.get(key) ?? 0) + readFileSync(file, 'utf8').split('\n').length);
+    if (!existsSync(join(ROOT, key, 'index.ts'))) fail('layout', key, 'unit has no index.ts (public surface)');
+  }
+  for (const [unit, lines] of unitLines) if (lines > tiers.unitLines) fail('unit-budget', unit, `${lines} lines > unit budget ${tiers.unitLines}; split the unit or move behaviour to a higher tier`);
+}
+
+// ---- 3: i18n
+const catalogDir = join(ROOT, arch.i18n.catalogDir);
+const catalogs = {}, familyOwners = {};
+for (const locale of arch.i18n.locales) {
+  const merged = Object.create(null);
+  familyOwners[locale] = Object.create(null);
+  for (const family of arch.i18n.families) {
+    const path = join(catalogDir, 'locales', locale, `${family}.json`);
+    if (!existsSync(path)) { fail('i18n', rel(path), 'locale family missing'); continue; }
+    const source = readFileSync(path, 'utf8');
+    const ast = ts.parseJsonText(path, source);
+    function checkDuplicates(node) {
+      if (ts.isObjectLiteralExpression(node)) {
+        const seen = new Set();
+        for (const property of node.properties) {
+          const key = property.name?.text;
+          if (seen.has(key)) fail('i18n-duplicate', rel(path), `duplicate key "${key}"`);
+          seen.add(key);
+        }
+      }
+      ts.forEachChild(node, checkDuplicates);
+    }
+    checkDuplicates(ast);
+    let entries;
+    try { entries = JSON.parse(source); } catch { fail('i18n', rel(path), 'invalid JSON'); continue; }
+    for (const [key, value] of Object.entries(entries)) {
+      if (Object.hasOwn(merged, key)) fail('i18n-duplicate', rel(path), `duplicate family key "${key}"`);
+      if (typeof value !== 'string' || !value.trim() || value.includes('\u001b')) fail('i18n-value', rel(path), `empty/nonstring/ANSI value for "${key}"`);
+      merged[key] = value;
+      familyOwners[locale][key] = family;
+    }
+  }
+  catalogs[locale] = merged;
+}
+const localeNames = Object.keys(catalogs);
+if (localeNames.length > 1) {
+  const base = new Set(Object.keys(catalogs[localeNames[0]]));
+  for (const locale of localeNames.slice(1)) {
+    const keys = new Set(Object.keys(catalogs[locale]));
+    for (const k of base) if (!keys.has(k)) fail('i18n', `${arch.i18n.catalogDir}/${locale}.json`, `missing key "${k}"`);
+    for (const k of keys) if (!base.has(k)) fail('i18n', `${arch.i18n.catalogDir}/${locale}.json`, `extra key "${k}" not in ${localeNames[0]}`);
+    for (const key of keys) if (base.has(key)) {
+      if (familyOwners[locale][key] !== familyOwners[localeNames[0]][key]) fail('i18n-family', arch.i18n.catalogDir, `locale families disagree for "${key}"`);
+      const placeholders = value => typeof value === 'string' ? [...new Set([...value.matchAll(/\{(\w+)\}/g)].map(m => m[1]))].sort().join(',') : null;
+      if (placeholders(catalogs[locale][key]) !== placeholders(catalogs[localeNames[0]][key])) fail('i18n-placeholder', arch.i18n.catalogDir, `placeholder sets disagree for "${key}"`);
+    }
+  }
+}
+const knownKeys = new Set(Object.keys(catalogs[localeNames[0]] ?? {}));
+const T_CALL = new RegExp(`(?<![\\w.])${arch.i18n.callee}\\(\\s*([^)]*?)\\s*[,)]`, 'g');
+const OUTPUT_CALL = /(?:console\.(?:log|error|warn|info)|process\.(?:stdout|stderr)\.write)\(\s*(['"`])((?:\\.|(?!\1).)*)\1/g;
+for (const file of srcFiles) {
+  if (rel(file).startsWith(`${arch.i18n.catalogDir}/`)) continue; // the t() implementation itself
+  const src = readFileSync(file, 'utf8');
+  for (const m of src.matchAll(T_CALL)) {
+    const arg = m[1].trim();
+    const lit = arg.match(/^(['"])([^'"]+)\1$/);
+    const line = src.slice(0, m.index).split('\n').length;
+    if (!lit) { fail('i18n-dynamic', `${rel(file)}:${line}`, `t() key must be a string literal (got ${arg || 'empty'})`); continue; }
+    if (!knownKeys.has(lit[2])) fail('i18n-key', `${rel(file)}:${line}`, `unknown i18n key "${lit[2]}"`);
+  }
+  if (rel(file).startsWith('src/surfaces/')) {
+    for (const m of src.matchAll(OUTPUT_CALL)) {
+      if (/[A-Za-z]{3,}/.test(m[2])) fail('i18n-literal', `${rel(file)}:${src.slice(0, m.index).split('\n').length}`, 'user-facing string literal in surface output; use t()');
+    }
+  }
+}
+
+lintConfigVocabulary(ROOT, srcFiles, fail);
+lintDependencies({ root: ROOT, registryFile: arch.dependencies?.registry, registry: dependencyRegistry, errors: registryErrors, srcFiles, rel, fail, warn,
+  known: new Set([...Object.keys(declaredUnits), ...packageNames.map(pkg => `src/${pkg}`)]),
+  today: today });
+
+// ---- 4: model/flow literals
+const literalAllow = new Set(arch.literals.allow);
+const literalRes = arch.literals.forbidden.map((p) => new RegExp(p, 'gi')); // vendor/model names are case-insensitive ("Opus 5.5")
+const literalUnits = (arch.literals.allowUnits ?? []).map(entry => `${entry.unit}/`);
+for (const entry of arch.literals.allowUnits ?? []) if (!entry.reason) fail('literal', entry.unit, 'literals.allowUnits entry needs a reason');
+for (const file of srcFiles) {
+  if (literalAllow.has(rel(file)) || literalUnits.some(unit => rel(file).startsWith(unit))) continue;
+  const src = readFileSync(file, 'utf8');
+  for (const re of literalRes) for (const m of src.matchAll(re)) fail('literal', `${rel(file)}:${src.slice(0, m.index).split('\n').length}`, `hardcoded model/provider literal "${m[0]}" (only files [${arch.literals.allow.join(', ')}] or units [${literalUnits.join(', ')}])`);
+}
+
+if (arch.hardcodeRatchet) lintHardcode(hardcodeInventory(hardcodeSources(srcFiles, program), checker, arch.hardcodeRatchet), arch.hardcodeRatchet);
+
+// ---- 4b: frozen hardcode debt. This is part of lint-arch, not a separate linter.
+function hardcodeSources(files, sourceProgram) {
+  return files.map(file => ({ path: rel(file), source: sourceProgram.getSourceFile(file)
+    ?? ts.createSourceFile(file, readFileSync(file, 'utf8'), ts.ScriptTarget.Latest, true) }));
+}
+function hardcodeInventory(sources, sourceChecker, policy) {
+  const findings = [], schemas = new Set(), defaults = new Map();
+  const name = node => node && (ts.isIdentifier(node) || ts.isStringLiteralLike(node)) ? node.text : node && ts.isPropertyAccessExpression(node) ? node.name.text : '';
+  const property = (node, key) => node && ts.isObjectLiteralExpression(node) ? node.properties.find(p => ts.isPropertyAssignment(p) && name(p.name) === key)?.initializer : undefined;
+  const resolveValue = node => {
+    if (!node || !ts.isIdentifier(node)) return node;
+    let symbol = sourceChecker.getSymbolAtLocation(node);
+    if (symbol?.flags & ts.SymbolFlags.Alias) symbol = sourceChecker.getAliasedSymbol(symbol);
+    const declaration = symbol?.valueDeclaration;
+    return declaration && ts.isVariableDeclaration(declaration) ? declaration.initializer : node;
+  };
+  const scalar = (node, seen = new Set()) => {
+    if (!node || seen.has(node)) return undefined;
+    seen.add(node);
+    if (ts.isStringLiteralLike(node)) return node.text;
+    if (ts.isNumericLiteral(node)) return Number(node.text);
+    if (ts.isPrefixUnaryExpression(node) && node.operator === ts.SyntaxKind.MinusToken) return -scalar(node.operand, seen);
+    if (ts.isParenthesizedExpression(node) || ts.isAsExpression(node)) return scalar(node.expression, seen);
+    const resolved = resolveValue(node);
+    return resolved !== node ? scalar(resolved, seen) : undefined;
+  };
+  for (const row of collectConfigBindings(sources)) {
+    const consumers = property(row.binding, 'consumers');
+    if (!consumers || !ts.isArrayLiteralExpression(consumers)) continue;
+    const values = new Set(), seen = new Set();
+    function defaultLeaves(node) {
+      const value = scalar(node);
+      if (typeof value === 'string' || Number.isFinite(value)) values.add(JSON.stringify(value));
+      else if (node && ts.isObjectLiteralExpression(node)) for (const p of node.properties) if (ts.isPropertyAssignment(p)) defaultLeaves(p.initializer);
+    }
+    function schema(node) {
+      if (!node || seen.has(node)) return;
+      seen.add(node); schemas.add(node);
+      if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression) && node.expression.name.text === 'default') defaultLeaves(node.arguments[0]);
+      const resolved = resolveValue(node);
+      if (resolved !== node) schema(resolved);
+      ts.forEachChild(node, schema);
+    }
+    schema(row.schema);
+    for (const consumer of consumers.elements) {
+      const unit = scalar(consumer);
+      if (typeof unit !== 'string') continue;
+      if (!defaults.has(unit)) defaults.set(unit, new Map());
+      for (const value of values) {
+        const fields = defaults.get(unit).get(value) ?? new Set(); fields.add(row.key);
+        defaults.get(unit).set(value, fields);
+      }
+    }
+  }
+  const slugs = new Set(policy.slugs);
+  const operational = /(?:Ms$|Timeout|Interval|Retry|Retries|Max|Limit|Bytes|Threshold|Ttl|TTL|TIMEOUT|INTERVAL|RETRY|RETRIES|MAX|LIMIT|BYTES|THRESHOLD|^(?:timeout|interval|retry|retries|max|limit|bytes|threshold|ttl))/;
+  const ancestors = node => { const out = []; for (let p = node.parent; p && !ts.isSourceFile(p); p = p.parent) out.push(p); return out; };
+  const symbolOf = node => ancestors(node).filter(p => (ts.isFunctionLike(p) || ts.isVariableDeclaration(p) || ts.isPropertyAssignment(p) || ts.isClassDeclaration(p)) && p.name)
+    .reverse().map(p => name(p.name) || p.name.getText()).join('/') || '<module>';
+  for (const { path, source } of sources) {
+    if (policy.registryFiles.some(entry => entry.file === path && entry.reason)) continue;
+    const unit = path.split('/').slice(0, 4).join('/'), occurrences = new Map();
+    function add(rule, node, literal, detail = '') {
+      const symbol = symbolOf(node);
+      if (policy.invariants.some(entry => entry.file === path && entry.symbol === symbol && entry.values.includes(literal) && entry.reason)) return;
+      const key = JSON.stringify([rule, symbol, literal, node.parent.kind, detail]);
+      const occurrence = (occurrences.get(key) ?? 0) + 1; occurrences.set(key, occurrence);
+      const fingerprint = createHash('sha256').update(`${key}:${occurrence}`).digest('hex');
+      findings.push({ file: path, rule, fingerprint, line: source.getLineAndCharacterOfPosition(node.getStart(source)).line + 1, symbol, literal, detail });
+    }
+    function visit(node) {
+      const parents = ancestors(node), parent = node.parent;
+      const string = ts.isStringLiteralLike(node), numeric = ts.isNumericLiteral(node);
+      const value = string || numeric ? scalar(numeric && ts.isPrefixUnaryExpression(parent) ? parent : node) : undefined;
+      if (string || ts.isIdentifier(node)) {
+        const slug = node.text;
+        // Only climb the expression side: type references and registry property reads
+        // are not slug literals. Keep the original node for existing fingerprints.
+        let expression = node, contextParent = parent;
+        while ((ts.isParenthesizedExpression(contextParent) || ts.isAsExpression(contextParent)
+          || ts.isTypeAssertionExpression(contextParent) || ts.isSatisfiesExpression(contextParent)
+          || ts.isNonNullExpression(contextParent)) && contextParent.expression === expression) {
+          expression = contextParent; contextParent = expression.parent;
+        }
+        const context = ts.isBinaryExpression(contextParent) && [ts.SyntaxKind.EqualsEqualsToken, ts.SyntaxKind.EqualsEqualsEqualsToken, ts.SyntaxKind.ExclamationEqualsToken, ts.SyntaxKind.ExclamationEqualsEqualsToken].includes(contextParent.operatorToken.kind)
+          || ts.isCaseClause(contextParent) || ts.isArrayLiteralExpression(contextParent)
+          || ts.isComputedPropertyName(contextParent) && ts.isPropertyAssignment(contextParent.parent)
+          || (ts.isPropertyAssignment(contextParent) || ts.isShorthandPropertyAssignment(contextParent) || ts.isMethodDeclaration(contextParent)) && contextParent.name === expression
+          || ts.isElementAccessExpression(contextParent) && contextParent.argumentExpression === expression
+          || ts.isCallExpression(contextParent) && ts.isPropertyAccessExpression(contextParent.expression) && ['has', 'includes', 'indexOf'].includes(contextParent.expression.name.text);
+        if (slugs.has(slug) && context && !policy.vendorUnits.some(entry => entry.unit === unit && entry.reason && entry.slugs.includes(slug))) add('G1', node, slug);
+      }
+      const declaration = path.startsWith('src/platform/core/config-fields/') || schemas.has(node);
+      if (numeric && !declaration && ![-1, 0, 1, 2].includes(value) && !(ts.isElementAccessExpression(parent) && parent.argumentExpression === node)) {
+        let applies = false;
+        for (const p of parents) {
+          if (ts.isFunctionLike(p) || ts.isStatement(p)) break;
+          if ((ts.isVariableDeclaration(p) || ts.isPropertyAssignment(p) || ts.isParameter(p) || ts.isPropertyDeclaration(p)) && operational.test(name(p.name))) applies = true;
+          if (ts.isBinaryExpression(p)) {
+            const identifiers = [];
+            const names = n => { if (ts.isIdentifier(n)) identifiers.push(n.text); ts.forEachChild(n, names); };
+            names(p.left); if (p.right !== node) names(p.right);
+            if (identifiers.some(id => operational.test(id))) applies = true;
+          }
+          if (ts.isCallExpression(p)) {
+            const callee = p.expression.getText(source);
+            const argument = callee === 'AbortSignal.timeout' ? p.arguments[0] : /^(?:(?:globalThis|global)\.)?set(?:Timeout|Interval)$/.test(callee) ? p.arguments[1] : undefined;
+            if (argument && (argument === node || parents.includes(argument))) applies = true;
+          }
+        }
+        if (applies) add('G2', node, value);
+      }
+      if ((string || ts.isTemplateExpression(node) || ts.isJsxText(node)) && !declaration) {
+        const text = ts.isTemplateExpression(node) ? [node.head.text, ...node.templateSpans.map(span => span.literal.text)].join(' ') : node.text;
+        const human = /\p{L}/u.test(text) && (ts.isJsxText(node) || /\s/u.test(text));
+        let shown = ts.isJsxText(node), translated = false, returned = false;
+        for (const p of parents) {
+          if (ts.isCallExpression(p) || ts.isNewExpression(p)) {
+            const callee = p.expression.getText(source).split('.').at(-1);
+            if (callee === arch.i18n.callee) { translated = true; break; }
+            if (/^(?:emit|render|print|notify|show|display|write|log|warn|error|info)/i.test(callee) || /Error$/.test(callee)) shown = true;
+          }
+          if (ts.isReturnStatement(p)) returned = true;
+          if (ts.isFunctionLike(p)) {
+            const functionName = name(p.name) || (ts.isVariableDeclaration(p.parent) ? name(p.parent.name) : ts.isPropertyAssignment(p.parent) ? name(p.parent.name) : '');
+            if ((returned || ts.isArrowFunction(p) && !ts.isBlock(p.body)) && /render|label|format/i.test(functionName)) shown = true;
+            break;
+          }
+        }
+        if (human && shown && !translated) add('G3', node, text.replace(/\s+/gu, ' ').trim());
+      }
+      if ((string || numeric) && !declaration && defaults.get(unit)?.has(JSON.stringify(value))) {
+        // Data uses only: do not count field names, imports, type literals or translation keys.
+        const key = (ts.isPropertyAssignment(parent) || ts.isPropertySignature(parent)) && parent.name === node;
+        // A protocol version field (`schemaVersion: 1`, `encodingVersion: 1 as const`) states a versioned
+        // wire contract, not a copy of an equal config default.
+        let owner = node;
+        while ((ts.isParenthesizedExpression(owner.parent) || ts.isAsExpression(owner.parent) || ts.isSatisfiesExpression(owner.parent)
+          || ts.isTypeAssertionExpression(owner.parent)) && owner.parent.expression === owner) owner = owner.parent;
+        const version = ts.isPropertyAssignment(owner.parent) && owner.parent.initializer === owner && /^(?:schemaVersion|encodingVersion)$/.test(name(owner.parent.name));
+        if (!key && !version && !ts.isLiteralTypeNode(parent) && !ts.isImportDeclaration(parent) && !ts.isExportDeclaration(parent)
+          && !(ts.isCallExpression(parent) && name(parent.expression) === arch.i18n.callee)) add('G4', node, value, [...defaults.get(unit).get(JSON.stringify(value))].sort().join(','));
+      }
+      ts.forEachChild(node, visit);
+    }
+    visit(source);
+  }
+  return findings.sort((a, b) => a.file.localeCompare(b.file) || a.fingerprint.localeCompare(b.fingerprint));
+}
+function lintHardcode(findings, policy) {
+  const identity = row => JSON.stringify({ file: row.file, fingerprint: row.fingerprint, rule: row.rule });
+  const hash = row => createHash('sha256').update(identity(row)).digest('hex');
+  // Fingerprints are file-independent; admission identity is not. A relocated entry names its
+  // admission file in `origin`; frozen membership and history preserve that claim, at most once.
+  const admission = row => ({ ...row, file: row.origin ?? row.file });
+  const lineage = row => JSON.stringify({ fingerprint: row.fingerprint, rule: row.rule });
+  const counts = rows => rows.reduce((map, row) => map.set(lineage(row), (map.get(lineage(row)) ?? 0) + 1), new Map());
+  let allowed;
+  try { allowed = JSON.parse(readFileSync(join(ROOT, policy.allowlist), 'utf8')); }
+  catch (error) { fail('hardcode-allowlist', policy.allowlist, error.message); return; }
+  const frozen = new Set(policy.frozen ?? []), ids = new Set(), claims = new Set();
+  for (const row of allowed) {
+    const id = identity(row), relocated = Object.hasOwn(row, 'origin');
+    if (relocated && (typeof row.origin !== 'string' || row.origin === row.file)) fail('hardcode-allowlist-growth', policy.allowlist, `origin must name a different admission file: ${id}`);
+    const admitted = admission(row), claim = identity(admitted);
+    if (!frozen.has(hash(admitted))) fail('hardcode-allowlist-growth', policy.allowlist, `entry outside frozen membership: ${claim}`);
+    if (claims.has(claim)) fail('hardcode-allowlist-growth', policy.allowlist, `duplicate admission claim: ${claim}`);
+    if (ids.has(id)) fail('hardcode-allowlist-growth', policy.allowlist, `duplicate entry: ${id}`);
+    ids.add(id); claims.add(claim);
+  }
+  // Per (fingerprint, rule) the current count may never exceed ANY list version on the first-parent
+  // chain. Including merge changes keeps older removals authoritative after restoration, later
+  // cleanups and no-op commits. Every admission claim must also survive every version: equal
+  // counts cannot hide a retired claim behind another claim's removal. Moves keep the origin.
+  // No second mutable retired-set authority.
+  const current = counts(allowed);
+  const git = args => execFileSync('git', args, { cwd: ROOT, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
+  try {
+    if (git(['rev-parse', '--is-shallow-repository']) === 'true') {
+      warn('hardcode-history-unavailable', policy.allowlist, 'shallow Git history: only available first-parent versions checked; historical shrink is not proven');
+    }
+    const revisions = git(['log', '--first-parent', '--full-history', '--format=%H', 'HEAD', '--', policy.allowlist]).split('\n').filter(Boolean);
+    // No versions means first introduction into an existing tree: frozen/current
+    // inventory checks still apply. One version is admission and constrains growth.
+    const rejected = new Set();
+    for (const revision of revisions) {
+      // A deletion is an empty version, not initial admission or missing history.
+      const present = git(['ls-tree', '--name-only', revision, '--', policy.allowlist]);
+      const priorRows = present ? JSON.parse(git(['show', `${revision}:${policy.allowlist}`])) : [];
+      const prior = counts(priorRows), priorClaims = new Set(priorRows.map(row => identity(admission(row))));
+      for (const claim of claims) if (!priorClaims.has(claim) && !rejected.has(claim)) {
+        fail('hardcode-allowlist-growth', policy.allowlist, `admission claim absent in first-parent list version ${revision}: ${claim}`);
+        rejected.add(claim);
+      }
+      for (const [key, count] of current) if (count > (prior.get(key) ?? 0) && !rejected.has(key)) {
+        fail('hardcode-allowlist-growth', policy.allowlist, `entry absent in first-parent list version ${revision}: ${key} (count ${count} > ${prior.get(key) ?? 0})`);
+        rejected.add(key);
+      }
+    }
+  } catch {
+    warn('hardcode-history-unavailable', policy.allowlist, 'Git list history unavailable: frozen membership enforced, historical shrink is not proven');
+  }
+  const observed = new Set(findings.map(identity));
+  const unlisted = findings.filter(row => !ids.has(identity(row)));
+  for (const row of unlisted) fail(`hardcode-${row.rule}`, `${row.file}:${row.line}`, `${JSON.stringify(row.literal)} in ${row.symbol}; ${row.fingerprint}`);
+  for (const row of allowed) if (!observed.has(identity(row))) {
+    const moved = unlisted.find(other => lineage(other) === lineage(row));
+    fail('hardcode-allowlist-stale', row.file, `remove resolved allowance ${row.fingerprint}${moved ? ` (or relocate it to ${moved.file} with origin)` : ''}`);
+  }
+  // Per-layer vendor-slug cap: G1 findings in domain/engine are frozen debt that can only shrink.
+  for (const [layer, cap] of Object.entries(arch.guards?.vendorSlugCaps ?? {})) {
+    if (!packageNames.includes(layer)) continue;
+    const count = findings.filter(row => row.rule === 'G1' && row.file.startsWith(`src/${layer}/`)).length;
+    if (count > cap) fail('slug-cap', `src/${layer}`, `${count} vendor-slug findings > cap ${cap}; derive provider/CLI ids from the registry (commands.json, nativeCliIdSchema) instead of literals`);
+    if (count < cap) fail('slug-cap', 'arch.json', `guards.vendorSlugCaps.${layer} is ${cap} but only ${count} remain; lower the cap (shrink-only)`);
+  }
+  const delta = frozen.size - ids.size;
+  if (delta > 0) messages.push(`hardcode allowlist delta: -${delta} from frozen admission (${ids.size} remaining)\n`);
+}
+
+// ---- 4c: structural guards (G-c tests -> .agents, G-d host words in src, G-h effect-flow files)
+if (arch.guards) {
+  const guards = arch.guards;
+  const anyFiles = (root, predicate) => walk(join(ROOT, root), predicate);
+  // G-c: product tests never import host tooling; host tests live in the test:host pack (.agents/refactor/*.test.mjs).
+  const testFiles = (guards.testHostImports?.scope ?? []).flatMap(root => anyFiles(root, p => /\.(ts|tsx|mts|mjs|js)$/.test(p)));
+  for (const file of testFiles) {
+    for (const imp of importsOf(file)) {
+      const target = rel(imp.target);
+      const denied = guards.testHostImports.deny.find(prefix => target.startsWith(prefix));
+      if (denied) fail('test-host-import', `${rel(file)}:${imp.line}`, `product tests may not import ${denied} (got ${imp.spec}); move host-tool tests into the test:host pack`);
+    }
+  }
+  // G-d: host vocabulary never appears in src (comments, strings, catalogs included); existing hits are a shrink-only allowlist.
+  const hostRes = (guards.hostWords?.patterns ?? []).map(pattern => new RegExp(pattern, 'giu'));
+  const hostAllow = new Map((guards.hostWords?.allow ?? []).map(entry => [entry.file, entry]));
+  for (const entry of hostAllow.values()) if (!entry.reason || !Number.isInteger(entry.count) || entry.count < 1) fail('host-word', entry.file, 'hostWords.allow entry needs a reason and a positive count');
+  const hostSeen = new Set();
+  for (const file of anyFiles('src', p => /\.(ts|tsx|mts|json|mjs|js|md)$/.test(p))) {
+    const path = rel(file), text = readFileSync(file, 'utf8');
+    let count = 0, first = null;
+    for (const re of hostRes) for (const m of text.matchAll(re)) { count++; first ??= { word: m[0], line: text.slice(0, m.index).split('\n').length }; }
+    if (count === 0) continue;
+    const entry = hostAllow.get(path); hostSeen.add(path);
+    if (!entry) fail('host-word', `${path}:${first.line}`, `host/process word "${first.word}" in product source (${count} hit(s)); src stays host-neutral: use a generic operator/contract term`);
+    else if (count > entry.count) fail('host-word', `${path}:${first.line}`, `${count} host-word hits > allowed ${entry.count}`);
+    else if (count < entry.count) fail('host-word', path, `${count} host-word hits < allowed ${entry.count}; lower the allowance (shrink-only)`);
+  }
+  for (const path of hostAllow.keys()) if (!hostSeen.has(path)) fail('host-word', path, 'stale hostWords.allow entry: no host word remains; remove it');
+  // G-h: claim/delivery/adoption/lease flow files belong to the effect port owner; the five legacy flows are a shrink-only list.
+  if (guards.effectFlows) {
+    const { owner, pattern, frozen } = guards.effectFlows, flowRe = new RegExp(pattern, 'i'), frozenSet = new Set(frozen);
+    const flowFiles = new Set(srcFiles.map(rel).filter(path => flowRe.test(path.split('/').at(-1)) && !path.startsWith(owner)));
+    for (const path of flowFiles) if (!frozenSet.has(path)) fail('effect-flow', path, `new claim/delivery/adoption/lease flow file outside ${owner}; route effects through the generic effect port (EffectApplication) and register a target instead of a module-specific flow`);
+    for (const path of frozenSet) if (!flowFiles.has(path)) fail('effect-flow', path, 'stale guards.effectFlows.frozen entry: file no longer exists or no longer matches; remove it (shrink-only)');
+  }
+}
+
+// ---- 5: .md write gate
+const MD_WRITE = /(?:writeFile|writeFileSync|appendFile|appendFileSync|createWriteStream|copyFile|copyFileSync|renameSync|rename)\([^\n]*\.md/g;
+for (const file of srcFiles) {
+  const src = readFileSync(file, 'utf8');
+  for (const m of src.matchAll(MD_WRITE)) fail('md-write', `${rel(file)}:${src.slice(0, m.index).split('\n').length}`, 'markdown write from product source; documentation is not written by src');
+}
+
+// ---- 6: budgets
+const { fileRoots, textExtensions, maxLinesPerFile, designTargetLines } = arch.budgets;
+if (!Array.isArray(fileRoots) || !fileRoots.length || !Array.isArray(textExtensions) || !textExtensions.length
+  || !Number.isSafeInteger(maxLinesPerFile) || maxLinesPerFile < 1
+  || !Number.isSafeInteger(designTargetLines) || designTargetLines < 1 || designTargetLines > maxLinesPerFile) {
+  fail('budget-config', 'arch.json', 'invalid file scope or line limits');
+}
+const textFiles = [...new Set((Array.isArray(fileRoots) ? fileRoots : []).flatMap(dir => walk(join(ROOT, dir),
+  p => Array.isArray(textExtensions) && textExtensions.includes(extname(p)))))];
+let aboveDesignTarget = 0;
+for (const file of textFiles) {
+  if (arch.budgets.evidenceFiles?.includes(rel(file))) continue;
+  const text = readFileSync(file, 'utf8');
+  const lines = text.length === 0 ? 0 : text.split('\n').length - Number(text.endsWith('\n'));
+  if (lines > maxLinesPerFile) fail('file-size', rel(file), `${lines} lines > ${maxLinesPerFile}`);
+  if (lines > designTargetLines) aboveDesignTarget++;
+}
+const perPackage = {}, perTier = {};
+const tierBudgets = arch.budgets.tierLines ?? {};
+for (const key of Object.keys(tierBudgets)) {
+  const [pkg, tier, extra] = key.split('/');
+  if (extra !== undefined || !packageNames.includes(pkg) || !tierRank.has(tier) || !Number.isSafeInteger(tierBudgets[key]) || tierBudgets[key] < 1) fail('budget-config', 'arch.json', `budgets.tierLines key "${key}" must be <package>/<tier> with a positive integer`);
+}
+let total = 0;
+for (const file of srcFiles) {
+  const lines = readFileSync(file, 'utf8').split('\n').length;
+  total += lines;
+  const pkg = packageOf(file), tier = unitOf(file)?.tier;
+  // A tier with its own budget is counted only there, so an optional tier never consumes the Core package budget.
+  if (tier && Object.hasOwn(tierBudgets, `${pkg}/${tier}`)) perTier[`${pkg}/${tier}`] = (perTier[`${pkg}/${tier}`] ?? 0) + lines;
+  else perPackage[pkg] = (perPackage[pkg] ?? 0) + lines;
+}
+for (const [key, budget] of Object.entries(tierBudgets)) {
+  if ((perTier[key] ?? 0) > budget) fail('tier-budget', `src/${key}`, `${perTier[key]} lines > tier budget ${budget}`);
+}
+for (const [pkg, budget] of Object.entries(arch.budgets.packageLines)) {
+  if ((perPackage[pkg] ?? 0) > budget) fail('package-budget', `src/${pkg}`, `${perPackage[pkg]} lines > budget ${budget}`);
+}
+if (total > arch.budgets.totalSrcLines) fail('total-budget', 'src', `${total} lines > budget ${arch.budgets.totalSrcLines}`);
+const TEST_CASE = /^\s*(?:it|test)(?:\.(?:each|skip|only|todo|concurrent))*\(/gm;
+let testCases = 0;
+for (const file of walk(join(ROOT, 'tests'), (p) => /\.test\.tsx?$/.test(p))) testCases += (readFileSync(file, 'utf8').match(TEST_CASE) ?? []).length;
+if (testCases > arch.budgets.testCases) fail('test-budget', 'tests', `${testCases} test cases > budget ${arch.budgets.testCases}`);
+
+// ---- 7: tracked markdown
+const tracked = (() => { try { return execFileSync('git', ['ls-files', '--', '*.md'], { cwd: ROOT, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).split('\n').filter(Boolean); } catch { return []; } })();
+const allow = new Set(arch.markdown.trackedAllow);
+const allowGlobs = (arch.markdown.trackedAllowGlobs ?? []).map(g => new RegExp('^' + g.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*\*/g, '.*').replace(/\*/g, '[^/]*') + '$'));
+for (const file of tracked) {
+  if (allowGlobs.some(re => re.test(file))) continue;
+  const cap = arch.markdown.pointerFiles[file];
+  if (cap !== undefined) {
+    const lines = readFileSync(join(ROOT, file), 'utf8').trimEnd().split('\n').length;
+    if (lines > cap) fail('markdown', file, `pointer file has ${lines} lines > ${cap}`);
+    continue;
+  }
+  if (!allow.has(file)) fail('markdown', file, `tracked markdown outside allowlist [${[...allow].join(', ')}]`);
+}
+for (const file of allow) if (!existsSync(join(ROOT, file))) fail('markdown', file, 'required document missing');
+
+// ---- 8: canonical product vocabulary
+const vocab = arch.vocabulary;
+if (vocab?.enforce) {
+  const vocabRes = vocab.forbidden.map(p => new RegExp(p, 'g'));
+  const vocabFiles = vocab.scope.flatMap(dir => walk(join(ROOT, dir), p => /\.(ts|tsx|mts|js|mjs|json|sh|yml|yaml)$/.test(p) && rel(p) !== 'tests/contracts/HARVEST.json'));
+  for (const file of vocabFiles) {
+    const text = readFileSync(file, 'utf8');
+    for (const re of vocabRes) for (const m of text.matchAll(re)) fail('vocabulary', `${rel(file)}:${text.slice(0, m.index).split('\n').length}`, `forbidden vocabulary "${m[0]}" (canonical chain: ${vocab.canonicalChain.join(' → ')})`);
+  }
+}
+
+// ---- report
+const summary = `lint-arch: ${srcFiles.length} src files, ${total} src lines, ${aboveDesignTarget} files above design target, ${testCases} test cases, tiers=${tiers.enforce ? 'enforced' : 'off'}, imports=${arch.imports?.enforce ? 'aliased' : 'off'}, vocabulary=${arch.vocabulary?.enforce ? 'enforced' : 'off'}, ${violations.length} violation(s), ${warnings.length} warning(s)`;
+const report = [...violations.map(v => `✗ [${v.rule}] ${v.file} — ${v.message}`), ...warnings.map(w => `⚠ [${w.rule}] ${w.file} — ${w.message}`), summary].join('\n') + '\n';
+return { code: violations.length === 0 ? 0 : 1, out: messages.join('') + report };
+}

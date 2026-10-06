@@ -1,9 +1,7 @@
 #!/usr/bin/env bash
 # Tracked hook; enabled per checkout by `npm run hooks:install`.
-# Landing gate only (owner 2026-10-06): for refs/heads/main and refs/heads/wave/* it runs `land:check` (ci:local + receipt)
-# solely when the push is marked `DECKENT_LANDING=1 git push ...`. Unmarked pushes print a note and pass (not a skip, no log).
-# git push options are NOT used: they reach only server-side hooks, and the server must advertise them.
-# Skipping a marked landing needs DECKENT_CI_LOCAL_SKIP="<reason>" (logged to .pack/ci-local/skips.log, never silent).
+# Marked landing pushes read existing exact-SHA GitHub checks; they never launch a full local suite.
+# Unmarked author pushes remain lightweight; GitHub rules enforce required integration checks.
 set -euo pipefail
 cd "$(git rev-parse --show-toplevel)"
 zero=0000000000000000000000000000000000000000
@@ -21,19 +19,8 @@ if [ "${DECKENT_LANDING:-}" != 1 ]; then
   echo "pre-push: not a landing push (set DECKENT_LANDING=1 to run land:check); no CI mirror run" >&2
   exit 0
 fi
-if [ "${DECKENT_CI_LOCAL_SKIP+set}" = set ]; then
-  reason="${DECKENT_CI_LOCAL_SKIP}"
-  if [ -z "${reason// /}" ] || [ "${#reason}" -lt 8 ]; then
-    echo "pre-push: DECKENT_CI_LOCAL_SKIP needs a written reason (>= 8 characters); refusing." >&2
-    exit 1
-  fi
-  mkdir -p "$(git rev-parse --show-toplevel)/.pack/ci-local"
-  printf '%s\t%s\t%s\t%s\n' "$(date -u +%FT%TZ)" "$(git rev-parse --abbrev-ref HEAD)" "${targets[*]}" "$reason" >> .pack/ci-local/skips.log
-  echo "pre-push: ci:local skipped, reason logged: $reason" >&2
-  exit 0
-fi
 for target in "${targets[@]}"; do
   sha="${target#* }"
   echo "pre-push: land:check for ${target% *} @ $sha" >&2
-  node scripts/land-check.mjs --ref "$sha" || { echo "pre-push: land:check failed; push aborted (logs under .pack/ci-local/)" >&2; exit 1; }
+  node scripts/land-hosted-check.mjs --ref "$sha" || { echo "pre-push: land:check failed; push aborted (required hosted checks must be green)" >&2; exit 1; }
 done

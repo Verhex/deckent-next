@@ -492,7 +492,7 @@ Layers: `platform` (config, errors/i18n, identity, paths) → `domain` (pure ver
 | [agent-turn-engine](.deckent/docs/architecture/modules/agent-turn-engine.md) | Agent turn loop, durable turns, `chatTurn` runtime (protocol v12+), context measurement, compaction, history lifecycle, system prompt, reasoning control. |
 | [agent-tools](.deckent/docs/architecture/modules/agent-tools.md) | Composer `@file`, file edits as C11 effects, scratch area, `run_shell`, `terminal.fetch`/`network.fetch@1`, tool calls over openai-chat, terminal direction. |
 | [shell-realms](.deckent/docs/architecture/modules/shell-realms.md) | Shell realm, bubblewrap and Landlock providers, doctor realm report, sandbox scan speed. |
-| [ci-and-verification](.deckent/docs/architecture/modules/ci-and-verification.md) | CI-FULL, CI-FIX signal, SOCKET-PUBLICATION, CI-WINDOWS-MACOS verification tooling. |
+| [ci-and-verification](.deckent/docs/architecture/modules/ci-and-verification.md) | CI-FULL, CI-FIX, CI-SPEED (one build/Node, complete shard collection), SOCKET-PUBLICATION, platform verification tooling. |
 | [permission-modes](.deckent/docs/architecture/modules/permission-modes.md) | MODES-3 (standart/full-auto/full-access), decision and audit, write postures, FA-TRACKED-WARN, `/mode`. |
 | [record-redaction-and-safe-approval](.deckent/docs/architecture/modules/record-redaction-and-safe-approval.md) | Canonical record redactor, terminal S06, SAFE-APPROVAL-A1 custody (former "Current closure"). |
 | [host-qwen-decision-pilot](.deckent/docs/architecture/modules/host-qwen-decision-pilot.md) | Canceled development-host Qwen decision research (owner2026-10-06; historical host tool outside customer src/native). |
@@ -571,7 +571,7 @@ Layers: `platform` (config, errors/i18n, identity, paths) → `domain` (pure ver
 - Platform order (owner 2026-09-29): Linux and Windows WSL2 today; macOS next (Seatbelt + getpeereid), then
   native Windows. Docker stays a worker execution target, not a host platform. A platform without proof reports
   a typed `UNSUPPORTED`/`DEGRADED`, never a silent fallback. Node.js: `engines >=24.15.0` (the first 24.x bundling
-  SQLite 3.51.3, the WAL-reset corruption fix); 24 and 26 are supported (CI matrix [24, 26]; owner 2026-10-03 requires all six hosted cells;
+  SQLite 3.51.3, the WAL-reset corruption fix); 24 and 26 are supported (CI matrix [24, 26]; owner 2026-10-06 requires Ubuntu 24/26 for merging; macOS/Windows remain separately visible platform verification;
   Node 26 is the planned default after LTS on 2026-10-28). Every `node:sqlite` open (the ledger connection, the read-only readers, the scope
   registry reader and the upgrade backup: 10 sites) first refuses an engine below 3.51.3 with the typed
   `ATTEMPT_STORE_SQLITE_UNSUPPORTED` (DEPS-P0, numeric comparison; an unparsable version is refused).
@@ -730,3 +730,5 @@ Contract summary (full text: [approval-and-delivery.md](.deckent/docs/architectu
 - Secrets (SecretStore), MCP client send authority, delivery-pinned Runs and adoption verification binding keep one owner per state transition.
 - MCP istemci kayıt dosyası ancak denetlenmiş güven kararından sonra yazılır (add/remove audit reddi kayıt ve güveni değiştirmez; karar sonrası yazım hatası audit'li revoke ile geri alınır); worker imajı otonom yenilemesi (K2) `toolchains.update` policy verisidir (`mode` varsayılan `auto`, `atStartup` `true`, `intervalMs` 24 sa; registry yalnız proje katmanından CAS ile yazılır, global katkıda tipli hold; kapı her dizin yazımından önce, stop yenilemeyi bekler); ayrıntı [approval-and-delivery](.deckent/docs/architecture/approval-and-delivery.md).
 - Toolchain/model currency, work targets, typed work input, pool hold/capacity and patch scope classification are specified in the full document.
+
+CI-SPEED author candidate (owner-approved CI stability, 2026-10-06): local integrity custody write-mode opens reuse the existing bounded per-path config lock through creation/flush/close; read mode stays read-only. Strict owner/mode/link/inode/32-byte validation is unchanged; an existing partial key is not repaired. The real first-creation race and exact author proof/open limits live in the ci-and-verification module note and external `proof/CI-SPEED-2026-10-06/`; this is not independent or hosted acceptance.

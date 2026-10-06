@@ -7,6 +7,8 @@ import { promisify } from 'node:util';
 import { afterEach, describe, expect, it } from 'vitest';
 
 const run = promisify(execFile);
+import { analyzeArchitecture } from '../../../scripts/architecture-check.mjs';
+
 const LINT = fileURLToPath(new URL('../../../scripts/lint-arch.mjs', import.meta.url));
 const ARCH = fileURLToPath(new URL('../../../arch.json', import.meta.url));
 const roots: string[] = [];
@@ -61,7 +63,7 @@ async function fixture(files: Record<string, string>, tiersEnforce = true, impor
   }
   return root;
 }
-async function lint(root: string, env: NodeJS.ProcessEnv = process.env): Promise<{ code: number; out: string }> {
+async function lintCli(root: string, env: NodeJS.ProcessEnv = process.env): Promise<{ code: number; out: string }> {
   try { const { stdout } = await run(process.execPath, [LINT, '--root', root], { timeout: 20_000, killSignal: 'SIGKILL', env }); return { code: 0, out: stdout }; }
   catch (error) {
     const e = error as { code?: number | string | null; signal?: string | null; killed?: boolean;
@@ -73,6 +75,10 @@ async function lint(root: string, env: NodeJS.ProcessEnv = process.env): Promise
   }
 }
 
+async function lint(root: string, env: NodeJS.ProcessEnv = process.env): Promise<{ code: number; out: string }> {
+  return analyzeArchitecture(root, { today: env.DECKENT_DEPS_TODAY });
+}
+
 describe('lint-arch tier contract', () => {
   it('rejects side-by-side current version modules and V2 APIs, while allowing migration history', async () => {
     const rejected = await fixture({
@@ -80,7 +86,7 @@ describe('lint-arch tier contract', () => {
       'src/engine/core/dispatch/internal/version-three.ts': 'export const TaskGraphV3 = {} as const;\n// export const CommentV4Schema = {};\nexport const ProviderV2Client = {} as const;\n',
       'src/engine/core/dispatch/index.ts': "export {\n  dispatchRecordV2Schema,\n  TaskGraphV3,\n  ProviderV2Client,\n} from './internal/version-two.js';\n",
     });
-    const rejectedResult = await lint(rejected);
+    const rejectedResult = await lintCli(rejected);
     expect(rejectedResult.code, rejectedResult.out).toBe(1);
     expect(rejectedResult.out).toContain('[versioning] src/engine/core/dispatch/internal/version-two.ts');
     expect(rejectedResult.out).toContain('parallel versioned contract API');
@@ -95,7 +101,7 @@ describe('lint-arch tier contract', () => {
       'src/adapters/core/sqlite-ledger/index.ts': 'export {};\n',
       'src/adapters/core/sqlite-ledger/internal/migration-v5.ts': 'export const dispatchRecordV2Schema = {} as const;\n',
     });
-    const historyResult = await lint(history);
+    const historyResult = await lintCli(history);
     expect(historyResult.code, historyResult.out).toBe(0);
 
     const misplaced = await fixture({

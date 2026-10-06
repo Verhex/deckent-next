@@ -5,7 +5,7 @@ import {
   type CleanupBoundary, type ContentionIdentity, type ContentionRecord,
 } from '../support/installed-runtime-harness.js';
 
-it.skipIf(process.platform !== 'linux').each(['custody-read'] as const)('known-identity cleanup keeps the primary, reports a %s fault and still releases the workspace', async stage => {
+it.skipIf(process.platform !== 'linux').each(['restore'] as const)('known-identity cleanup keeps the primary, reports a %s fault and still releases the workspace', async stage => {
   const observed: { root?: string; identity?: ContentionIdentity } = {};
   const known = (identity: ContentionIdentity) => identity.attemptId === observed.identity?.attemptId;
   const withheld: NonNullable<ContentionRecord>[] = [], released: string[] = [];

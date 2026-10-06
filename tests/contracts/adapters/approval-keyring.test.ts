@@ -1,5 +1,6 @@
 import { it, expect } from 'vitest';
-import { mkdtemp, rm, chmod, link, symlink, lstat } from 'node:fs/promises';
+import { mkdtemp, rm, chmod, link, symlink, lstat, writeFile, readFile } from 'node:fs/promises';
+import { withConfigWriteLock } from '../../../src/platform/core/config/index.js';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { openLocalIntegrityAuthority } from '../../../src/adapters/core/local-keyring/index.js';
@@ -37,4 +38,31 @@ it('canonicalizes object ordering without conflating text or accepting malformed
   expect(authority.verify('different', mac, 'key')).toBe(false);
   expect(authority.verify('message', mac, 'other-key')).toBe(false);
   for (const invalid of ['', mac.slice(2), mac + 'ff', 'z'.repeat(64)]) expect(constantTimeDigestEqual(mac, invalid)).toBe(false);
+});
+
+it.skipIf(process.platform === 'win32')('read-only signing custody stays available under a held writer lock without changing key bytes', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'key-read-only-'));
+  const layout = resolveProductLayout({ projectRoot: root });
+  try {
+    const authority = await openLocalIntegrityAuthority(layout, 'key', true);
+    const path = join(productResourcePath(layout, 'approvals'), 'key');
+    const before = await readFile(path);
+    await withConfigWriteLock(path, async () => {
+      const readOnly = await openLocalIntegrityAuthority(layout, 'key');
+      expect(readOnly.verify('read-only', authority.sign('read-only'), authority.keyId)).toBe(true);
+      expect(await readFile(path)).toEqual(before);
+    });
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+it.skipIf(process.platform === 'win32')('a failed first publication remains unavailable: create mode never repairs or truncates an existing partial key', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'key-partial-'));
+  const layout = resolveProductLayout({ projectRoot: root });
+  try {
+    await openLocalIntegrityAuthority(layout, 'good', true);
+    const path = join(productResourcePath(layout, 'approvals'), 'partial');
+    await writeFile(path, Buffer.alloc(0), { mode: 0o600 });
+    await expect(openLocalIntegrityAuthority(layout, 'partial', true)).rejects.toMatchObject({ code: 'INTEGRITY_KEY_UNAVAILABLE' });
+    expect((await readFile(path)).length).toBe(0);
+    expect((await lstat(path)).mode & 0o777).toBe(0o600);
+  } finally { await rm(root, { recursive: true, force: true }); }
 });

@@ -5,6 +5,8 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 
+import { analyzeArchitecture } from '../../../scripts/architecture-check.mjs';
+
 const script = resolve(process.env.DECKENT_TEST_ARCH_SCRIPT ?? 'scripts/lint-arch.mjs');
 const roots: string[] = [];
 const file = 'src/engine/core/example/index.tsx';
@@ -25,9 +27,13 @@ function fixture(source: string, extra = {}) {
   put(root, 'baseline.json', '[]');
   return root;
 }
-function run(root: string, inventory = false) {
+function runCli(root: string, inventory = false) {
   const result = spawnSync(process.execPath, [script, '--root', root, inventory ? '--hardcode-inventory' : '--hardcode-only'], { encoding: 'utf8', timeout: 20000 });
   return { code: result.status, out: result.stdout + result.stderr };
+}
+function run(root: string, inventory = false) {
+  if (process.env.DECKENT_TEST_ARCH_SCRIPT) return runCli(root, inventory);
+  return analyzeArchitecture(root, { mode: inventory ? 'hardcode-inventory' : 'hardcode-only' });
 }
 function freeze(root: string) {
   const entries = JSON.parse(run(root, true).out).map(({ file: path, fingerprint, rule }: { file: string; fingerprint: string; rule: string }) => ({ file: path, fingerprint, rule }));
@@ -140,7 +146,7 @@ describe('hardcode ratchet', () => {
     const source = readFileSync(resolve(`tests/fixtures/hardcode-ratchet/${rule}.fixture`), 'utf8');
     const root = fixture(source);
     if (rule === 'G4') put(root, 'src/platform/core/config-fields/internal/fields.ts', "const fields = { pageSize: field('config.pageSize', { state: 'bound', consumers: ['src/engine/core/example'] }, 'live', z.number().default(73)) };");
-    const result = run(root);
+    const result = runCli(root);
     expect(result.out).toContain(`[hardcode-${rule}]`);
     expect(result.code).toBe(1);
     const inventory = JSON.parse(run(root, true).out).filter((row: { rule: string }) => row.rule === rule);

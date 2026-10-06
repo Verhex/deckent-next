@@ -49,3 +49,7 @@ native OS kabulü değildir. Windows Node24 CRLF vocabulary testi bütün kaynak
 30s sınırını aşmıştı; tüm tüketilen `.ts` kaynakları compiler read sınırında CRLF görünümüne dönüşür,
 projection kaynaklarının tamamının dönüştüğü ve exact eşitlik ayrıca doğrulanır; timeout artırılmaz.
 Kanıt/açık sınırlar dış `proof/CI-FIX-R4-2026-10-03/review.md`.
+
+Owner 2026-10-06 CI-SPEED onayı: geliştirme dilimlerinde hedefli kontroller; tam kapsam tek entegrasyon adayında hosted Ubuntu Node24/26 shard kapısından gelir. `land:check` mevcut exact-SHA hosted kanıtı okur; otomatik ikinci yerel tam verify kaldırılır, `land:check:local` açık istekli tanılama olarak kalır. Main push ayrı build/lint/smoke adıdır; tam-kapsam kabulü sayılmaz. macOS/Windows tam suite günlük/manual görünür işte korunur. 2–3 dakika hedefi hosted ölçüm yapılmadan başarı ilan edilmez.
+
+CI-SPEED yazar kanıtı (2026-10-06): tam tarama 671 dosyada 2 gerçek hata gösterdi; kaynak değişmeden tekrar koşturmak veya skip eklemek çözüm değildir. Reporter mock güncellenir; ilk anahtarın 0-byte görünürlük yarışı mevcut yazıcı kilidiyle, gerçek dosya bariyerli RED→green ve salt-okuma/bozuk-anahtar negatifleriyle düzeltilir. Seri test dosyası kuyruğu ölçülür; senaryolar ve timeoutlar korunarak ayrılır. Tam tarama + değişen yolların hedefli kanıtı, fresh exact-SHA hosted kabulünün yerine geçmez.

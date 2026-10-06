@@ -290,9 +290,13 @@ export async function main(argv, deps = {}) {
     await step('bubblewrap', 'bubblewrap-stage', 'node', ['scripts/build-bwrap.mjs', '--stage-dev', bwrapOut]);
     appendFileSync(githubEnvFile, `DECKENT_GLOBAL_HOME=${join(dirs['runner-temp'], 'deckent-global')}\n`);
     await step('shellRealm', 'build', 'node', ['scripts/build.mjs']);
+    // The archived revision owns its verification protocol; older refs keep their original verify.
+    const reuseBuild = existsSync(join(wt, 'scripts/ci-build-artifact.mjs'))
+      && typeof JSON.parse(readFileSync(join(wt, 'package.json'), 'utf8')).scripts?.['verify:built'] === 'string';
+    if (reuseBuild) await step('shellRealm', 'seal-build', 'node', ['scripts/ci-build-artifact.mjs', 'seal']);
     await step('shellRealm', 'shell-realm', 'node', ['scripts/ci-shell-realm.mjs']);
     mkdirSync(join(wt, '.pack', 'ci-evidence'), { recursive: true });
-    await step('verification', 'verify', 'bash', ['-c', 'set -o pipefail; npm run verify 2>&1 | tee .pack/ci-evidence/verify.log'],
+    await step('verification', 'verify', 'bash', ['-c', `set -o pipefail; npm run ${reuseBuild ? 'verify:built' : 'verify'} 2>&1 | tee .pack/ci-evidence/verify.log`],
       { env: { DECKENT_TEST_STARTUP_COST: '1', DECKENT_TEST_TIMEOUT_MS: '30000' }, timeoutMs: 20 * 60_000 }); // workflow verify step bound
     if (aborting) await aborting.done;
     // The summary step is always() in the workflow.
