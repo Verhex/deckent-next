@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, createElement } from 'react';
 import { render, Box, Static, Text, useApp, type Instance } from 'ink';
 import { useWorklinePanel, type LocalExecution } from './workline-panel.js';
-import { WorklinePaletteProvider, useWorklinePalette, parseSlashLine, useWorklineWatch, surfaceDeliveryValues, surfaceFollowLine, useSurfacePushFeed,
+import { WorklinePaletteProvider, useWorklinePalette, parseSlashLine, isInspectSlashCommand, addSessionUsage, bindInspectPorts, EMPTY_SESSION_USAGE, type InspectSlashPorts, type SessionUsageView, useWorklineWatch, surfaceDeliveryValues, surfaceFollowLine, useSurfacePushFeed,
   type TerminalLocalContext, type WorklineInkPalette, type WorklineStreamTurn } from '#surfaces/core/terminal-kit/index.js';
 import { StatusStrip } from './status-strip.js';
 import { AssistantLive, openAssistantStream, renderAssistantStream, renderCompleteReply, type AssistantStreamStep, type AssistantRenderLabels } from '#surfaces/core/terminal-render/index.js';
@@ -95,6 +95,7 @@ export interface WorklineProps {
   /** The conversation's scratch area through the runtime service (`/scratch`, SCR-A, protocol v16). */
   readonly scratch?: WorklineScratchPort;
   /** Notice-line commands: `/mcp` (MCP-CLIENT: servers and trust — list, approve, reconnect, remove); `/monitor` (MONITOR: text snapshot). */
+  /** Read-only management (S09): `/status` (fresh), `/model`, `/usage`, `/doctor`, `/scope`; each port re-reads its typed query per call. */ readonly inspect?: InspectSlashPorts;
   readonly config?: (args: string) => Promise<readonly string[]>; readonly mcp?: (args: string) => Promise<readonly string[]>; readonly monitor?: (args: string) => Promise<readonly string[]>;
 }
 
@@ -123,6 +124,7 @@ export function WorklineApp(props: WorklineProps) {
   // A chat turn is running: Esc cancels it now (TL-A D5).
   const [turnRunning, setTurnRunning] = useState(false);
   const [live, setLive] = useState<{ readonly step: AssistantStreamStep; readonly lead: boolean } | null>(null);
+  const usage = useRef<SessionUsageView>(EMPTY_SESSION_USAGE);
   const [watch, setWatch] = useState<WatchState>({ workers: false, runs: false });
   const watchRef = useRef(watch);
   const history = useRef<readonly AgentChatMessage[]>([{ role: 'system', content: systemPrompt }]);
@@ -205,7 +207,7 @@ export function WorklineApp(props: WorklineProps) {
           ...(mode.fullAccess.current ? { fullAccess: true as const } : {}) })) {
           if (delta.kind === 'text') answer += delta.text;
           if (delta.kind === 'message') appended.push(delta.message);
-          session.noteContext(delta);
+          session.noteContext(delta); if (delta.kind === 'usage') usage.current = addSessionUsage(usage.current, delta);
           if (delta.kind === 'approval') {
             stream.approval(delta);
             if (delta.phase === 'settled' && delta.outcome === 'unsettled') work.noteUnsettled(delta.approvalId);
@@ -244,12 +246,10 @@ export function WorklineApp(props: WorklineProps) {
     const slash = parseSlashLine(line);
     if (!slash) { await runTurn(line, mentioned, execution); return true; }
     if (slash.command === 'reasoning') { reasoning.run(slash.args); return true; }
-    if (slash.command === 'mode' || slash.command === 'scratch') {
-      await (slash.command === 'mode' ? mode.run : scratch)(slash.args);
-      return true;
-    }
-    if (slash.command === 'mcp' || slash.command === 'monitor' || slash.command === 'config') {
-      const lines = props[slash.command];
+    if (slash.command === 'mode' || slash.command === 'scratch') { await (slash.command === 'mode' ? mode.run : scratch)(slash.args); return true; }
+    const lineCommands: Readonly<Record<string, ((args: string) => Promise<readonly string[]>) | undefined>> = { ...bindInspectPorts(props.inspect, () => usage.current), mcp: props.mcp, monitor: props.monitor, config: props.config };
+    if (slash.command === 'mcp' || slash.command === 'monitor' || slash.command === 'config' || (isInspectSlashCommand(slash.command) && (slash.command !== 'status' || lineCommands['status']))) {
+      const lines = lineCommands[slash.command];
       try { push((lines ? await lines(slash.args) : [`${slash.command}: not available in this terminal`]).map(line => notice('info', line))); }
       catch (error) { push([notice('error', errorText(error))]); }
       return true;
@@ -282,7 +282,7 @@ export function WorklineApp(props: WorklineProps) {
     }
     catch (error) { push([notice('error', errorText(error))]); }
     return true;
-  }, [errorText, exit, labels, ledger, mode.run, props.mcp, props.monitor, props.config, props.restartService, pollMs, pushMode, push, reasoning.run, runTurn, scratch, session, work.run, panel]);
+  }, [errorText, exit, labels, ledger, mode.run, props.inspect, props.mcp, props.monitor, props.config, props.restartService, pollMs, pushMode, push, reasoning.run, runTurn, scratch, session, work.run, panel]);
 
   execute.current = async execution => {
     await perform(execution.input.text, execution.input.mentions, execution);

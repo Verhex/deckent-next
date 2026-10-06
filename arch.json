@@ -833,6 +833,20 @@
       ],
       "plan": "SURFACES"
     },
+    "src/surfaces/core/terminal-admin": {
+      "dependencies": [
+        "src/domain/core/policy",
+        "src/domain/core/provider-spend",
+        "src/domain/core/provider-catalog",
+        "src/platform/core/config",
+        "src/platform/core/errors",
+        "src/platform/core/i18n",
+        "src/platform/core/output",
+        "src/surfaces/core/cli-models",
+        "src/surfaces/core/terminal-kit"
+      ],
+      "plan": "SURFACES"
+    },
     "src/surfaces/core/terminal-render": {
       "dependencies": [
         "src/surfaces/core/terminal-kit",
@@ -961,7 +975,8 @@
         "src/surfaces/core/approval-presentation",
         "src/engine/core/installation",
         "src/engine/core/config",
-        "src/platform/core/utils"
+        "src/platform/core/utils",
+        "src/surfaces/core/terminal-admin"
       ],
       "plan": "SURFACES"
     },

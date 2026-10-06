@@ -9,7 +9,8 @@ import { prefersAsciiGlyphs, runTerminalWorkline, resolveWorklinePalette, buildW
 import { terminalComposerLabels, terminalRenderLabels, terminalSessionLabels } from '#surfaces/core/terminal-labels/index.js';
 import { createWorklineLedgerPorts } from './terminal-ledger.js';
 import { runtimeBuildSkew, workSurfaceLabels } from './work-labels.js';
-import type { CommandContext } from './kernel-commands.js';
+import { runKernelCommand, type CommandContext } from './kernel-commands.js';
+import { terminalAdminPorts } from '#surfaces/core/terminal-admin/index.js';
 import type { ProjectIdentity, PermissionMode } from '#domain/index.js';
 import type { TerminalChatPlanView } from './terminal-chat.js';
 
@@ -348,6 +349,10 @@ export async function terminalCommand(argv: readonly string[], context: CommandC
     ...(context.inspectScratch && context.clearScratch ? { scratch: {
       inspect: (sessionId: string, signal?: AbortSignal) => context.inspectScratch!(root, { schemaVersion: 1, scopeId, sessionId }, options, signal),
       clear: (sessionId: string) => context.clearScratch!(root, { schemaVersion: 1, scopeId, sessionId }, options) } } : {}),
+    // TERMINAL-CLOSE S09: `/status`, `/model`, `/usage`, `/doctor`, `/scope` re-read their typed producers on every call (this surface keeps no copy).
+    ...terminalAdminPorts({ root, scopeId, installationId, projectId, options, locale, context,
+      status: async () => renderStatus(statusPayload(ttyState(context), await loadConfig(root, options), context.describeTerminalChatPlan ? await context.describeTerminalChatPlan(root, options) : null, await readIdentity()), locale),
+      doctor: sink => runKernelCommand(['doctor', '--lang', locale], { ...context, root, env, stdout: sink, stderr: sink }) }),
     ...(context.runMcpCommand ? { mcp: (args: string) => mcpSlash(root, args, context, options, locale) } : {}),
     ...(context.configApplication ? { config: (args: string) => configSlash(root, args, context, options, locale, Math.max(40, (tty.columns ?? 100) - 4)) } : {}),
     // MONITOR: `/monitor` prints the monitor's text snapshot as notice lines (the fullscreen view is `deckent monitor`).
