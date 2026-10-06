@@ -18,6 +18,8 @@ export type InstallationIdentityRead = IdentityRead<InstallationIdentity> & {
 export interface InstallationIdentityStore {
   read(): Promise<InstallationIdentityRead>;
   loadOrCreate(): Promise<InstallationIdentity>;
+  /** Owned-init preflight before any persistent effect: the write path's binding rules, observed only (no identity, directory or lock). */
+  admitWrite(): Promise<void>;
   resolveRelocation(choice: InstallationIdentityChoice, principal: { readonly issuer: string; readonly subject: string }): Promise<InstallationIdentityResolution>;
 }
 export interface InstallationBindingSource { capture(): Promise<InstallationBindingCapability> }
