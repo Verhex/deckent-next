@@ -59,9 +59,9 @@ export class RunLifecycleRuntimeLoop {
           cursor = page.next; dueCursor = due.next;
           for (const query of due.items) {
             if (signal.aborted) break;
-            if (this.inFlight.has(this.key(query)) || this.backedOff(query)) continue;
-            try { await this.operations.expire(query); this.retryNotBefore.delete(this.key(query)); }
-            catch (error) { this.retryNotBefore.set(this.key(query), this.now() + this.settings.failureBackoffMs); await this.report(query, error); }
+            if (this.inFlight.has(this.key(query))) continue;
+            try { await this.operations.expire(query); }
+            catch (error) { await this.report(query, error); }
           }
           // A failed turn parks only its own Run (retryNotBefore); the driver and every other Run keep going.
           let visited: ProgressionCursor | null = null;
