@@ -1,6 +1,5 @@
 import { poolDriftLine, poolWaitLine } from './pool.js';
-import { hasCliAction } from '#surfaces/core/cli-kit/index.js';
-import { cliUsage, shellIdentity } from './usage.js';
+import { cliUsage, hasCliAction, shellIdentity } from '#surfaces/core/cli-kit/index.js';
 import { ErrorRegistry, emit, loadConfig, resolveLocale, t, type ConfigLoadOptions, type Locale, type ProductLayout } from '#platform/index.js';
 import { runLifecycleCommandSchema, runAdmissionSchema, runDeliveryAdmissionSchema, runReservationCommandSchema, type RunAdmission, type RunDeliveryAdmission, type RunCommand, type RunQuery, type RunView, type RunCancellationOutcome, type RunReservationCommand, type TaskWorkerModel } from '#engine/index.js';
 import { resolve } from 'node:path';
