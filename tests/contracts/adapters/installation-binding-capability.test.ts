@@ -43,8 +43,9 @@ it.skipIf(process.platform === 'win32')('uses bounded macOS IOPlatformUUID captu
   const identity = await store.loadOrCreate(), bytes = await readFile(f.path, 'utf8');
   expect(probe.execute).toHaveBeenCalledWith('/usr/sbin/ioreg', ['-rd1', '-c', 'IOPlatformExpertDevice'],
     { timeout: 37, maxBuffer: 4096, encoding: 'utf8' });
-  expect(JSON.parse(bytes).binding).toMatchObject({ schemaVersion: 2, strength: 'machine', source: 'platform',
-    machineDigest: createHmac('sha256', 'deckent.installation-binding.v1').update(uuid).digest('hex') });
+  // A platform machine binding keeps the v1 persisted shape (rollback-safe); strength and source are reported on reads.
+  expect(JSON.parse(bytes).binding).toEqual({ schemaVersion: 1, machineDigest: createHmac('sha256', 'deckent.installation-binding.v1').update(uuid).digest('hex'),
+    canonicalRoot: await realpath(join(f.root, '.deckent')), device: expect.stringMatching(/^\d+$/u), inode: expect.stringMatching(/^[1-9]\d*$/u) });
   expect(bytes).not.toContain(uuid);
   expect(await store.read()).toEqual({ status: 'available', value: identity, bindingCapability: 'supported', binding: { strength: 'machine', source: 'platform' } });
 });

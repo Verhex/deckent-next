@@ -20,10 +20,19 @@ export const installationBindingCaptureSchema = z.discriminatedUnion('strength',
     machineDigest: machineDigestSchema, ...bindingLocation }).strict(),
   z.object({ schemaVersion: z.literal(2), strength: z.literal('weak'), source: z.literal('location'), ...bindingLocation }).strict(),
 ]).readonly();
-/** Retained records hold v1 (always machine strength) or v2; new bindings are always written as v2. */
+/** Retained records hold the v1 shape (always platform machine strength) or v2 (configured source or weak). */
 export const installationBindingSchema = z.union([installationBindingCaptureSchema, legacyInstallationBindingSchema]);
 export type InstallationBinding = z.infer<typeof installationBindingSchema>;
 export type InstallationBindingCapture = z.infer<typeof installationBindingCaptureSchema>;
+/**
+ * The shape a capture is persisted in (expand/contract): a platform machine binding keeps the v1 shape so a rollback to a release that only
+ * reads v1 stays valid; only bindings the v1 shape cannot express (configured source, weak) are written as v2.
+ */
+export function retainedInstallationBinding(capture: InstallationBindingCapture): InstallationBinding {
+  if (capture.strength !== 'machine' || capture.source !== 'platform') return capture;
+  return legacyInstallationBindingSchema.parse({ schemaVersion: 1, machineDigest: capture.machineDigest,
+    canonicalRoot: capture.canonicalRoot, device: capture.device, inode: capture.inode });
+}
 export type InstallationBindingStrength = InstallationBindingCapture['strength'];
 export type InstallationBindingSourceKind = InstallationBindingCapture['source'];
 export const installationIdentityChoiceSchema = z.enum(['keep', 'new']);

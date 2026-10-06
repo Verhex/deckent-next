@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { boundInstallationIdentitySchema, installationIdentityChoiceSchema, installationIdentityRecordSchema,
-  installationIdentityResolutionSchema, installationIdentitySchema, type InstallationBindingCapture, type InstallationIdentityChoice } from '#domain/index.js';
+  installationIdentityResolutionSchema, installationIdentitySchema, retainedInstallationBinding, type InstallationBindingCapture, type InstallationIdentityChoice } from '#domain/index.js';
 import { assessInstallationBinding, InstallationIdentityError, type InstallationBindingCapability, type InstallationIdentityStore,
   type InstallationBindingSource, type InstallationIdentityRead } from '#engine/index.js';
 import type { ProductLayout } from '#platform/index.js';
@@ -17,7 +17,7 @@ function assess(record: IdentityRecord, captured: InstallationBindingCapability)
   return assessInstallationBinding(record.binding, captured);
 }
 const bound = (installationId: string, binding: InstallationBindingCapture, lastResolution: unknown) =>
-  boundInstallationIdentitySchema.parse({ schemaVersion: 2, installationId, binding, lastResolution });
+  boundInstallationIdentitySchema.parse({ schemaVersion: 2, installationId, binding: retainedInstallationBinding(binding), lastResolution });
 const identity = (record: IdentityRecord) => installationIdentitySchema.parse({ schemaVersion: 1, installationId: record.installationId });
 
 /** One local metadata transition owner. Binding evidence detects relocation; it grants no authority. */

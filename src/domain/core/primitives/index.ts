@@ -1,4 +1,4 @@
-export { installationIdSchema, installationIdentitySchema, installationBindingSchema, installationBindingCaptureSchema, installationIdentityChoiceSchema,
+export { installationIdSchema, installationIdentitySchema, installationBindingSchema, installationBindingCaptureSchema, retainedInstallationBinding, installationIdentityChoiceSchema,
   installationIdentityResolutionSchema, boundInstallationIdentitySchema, installationIdentityRecordSchema } from './internal/installation-identity.js';
 export type { InstallationId, InstallationIdentity, InstallationBinding, InstallationBindingCapture, InstallationBindingStrength, InstallationBindingSourceKind, InstallationIdentityChoice, InstallationIdentityResolution } from './internal/installation-identity.js';
 export { IDENTITY_MAX_LENGTH, identitySchema, counterSchema, sanitizeIssues } from './internal/values.js';
