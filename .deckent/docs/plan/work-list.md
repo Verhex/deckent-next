@@ -105,12 +105,12 @@ PLAN satırlarının önceki hâli:
 | MODEL-INGRESS-UNICODE | Gizli Unicode: not/audit/karantina | P1 main'de; P2 `de286888` rebase | P2 inceleme; P3 araç/MCP şema + argüman JSON | [work-list](.deckent/docs/plan/work-list.md) |
 | MONITOR | İnsan okur canlı izleme yüzeyi (v1+v1.1 indi) | Kalan: push akışı | M2/M3 worker başlangıç/bitiş (MONITOR-HUMAN) | [work-list](.deckent/docs/plan/work-list.md) |
 
-- RUN-YAŞAM (#8): `launch-refused {code}` attempt gözlemi, `recordAttemptClosure`, `deckent task mark-lost` (reconcile yetkisi; tipli `unknown {WORKER_LOST}` hold'u: görev `reconciling`, `unresolvedEffects:true`, slot tutulur, kapanış yok); ledger 47 değişmedi. Kod `lane/w2-run-life` (`e2dfd807`, `fe42dfa7`, `b6bf8111`) + düzeltme `d7abb36e`, `7c74587b` (Astra 2382 P1-1, P1-2). Açık: MCP `mark_lost_attempt`; mühürlü audit kaydı; kaybolan dispatch kaydı/workspace serbest bırakma (#13 EXEC-RELEASE) ve KARAR 12 (slot bırakma: tipli manuel inceleme/yerleşim kararı veya dispatch fence + sonlanma kanıtı, ayrı kart).
+- RUN-YAŞAM (#8): `launch-refused {code}` attempt gözlemi, `recordAttemptClosure`; `abandoned` kapanış türü kaldırıldı; ledger 47 değişmedi. Kod `lane/w2-run-life` (`e2dfd807`, `fe42dfa7`, `b6bf8111`) + düzeltme `d7abb36e`, `7c74587b` (Astra 2382 P1-1, P1-2); `mark-lost` owner 2026-10-06 kararıyla `wave/2`'den çıkarıldı (`2165a931`, Astra 2384) → MARK-LOST-ATOMIC takip kartı (atomik hold + KARAR 12, mühürlü audit, MCP aracı, kaybolan dispatch kaydı/workspace serbest bırakma #13 EXEC-RELEASE).
 - MODEL-INGRESS-P2: alan çerçeveleme + gizli Unicode işaretleme, onay kartı + terminal EN/TR (`363fd061`, `9dd85f7b`); landing sonrası COMPLETED-PLAN; kalan P3 (araç/MCP şema açıklaması ve argüman JSON).
 - KATALOG-TEMİZLİK (`0ba5c2e7`) + DISPATCH-KATALOG (`4987ca07`): LAYOUT_* insan metni, 83 kullanılmayan kod silindi, 4 DispatchError kodu registry'de; açık: `LayoutError` insan metni (config dışı), I18N-ORPHANS ayrı kart.
 - MONITOR-M2M3 (`f633d275`): worker anlatısı, tipli teslim sütunu, düşen test listesi; açık: PATCH_LIMIT sebebinin kalıcı kaydı (patch-prepare reddi için tipli makbuz, ledger sürümü + göç).
 - IDENTITY-BINDING-V2 (`9433ecbb`..`d775ea2f`): kurulum bağı v2; owner-decisions'ta rollback notu. VERIFY-ENV: verify imajında taşınma/kopya testleri zayıf bağ yoluyla koşar. Düzeltme (Astra 2382 P1-3): owned init (`init policy --apply`, `init apply/resume`) `admitWrite` kabulünü ilk kalıcı etkiden önce çalıştırır; ret durumunda dosya/journal yazılmaz.
-- CLI-SPLIT (`09c9e5ba`, `09ba0bf6`): doctor render `src/surfaces/core/doctor` birimine taşındı (cli 2003 → 1976 satır, bütçe 2000); `task mark-lost` yardım özeti (önce `close-abandoned`), golden yeniden üretildi.
+- CLI-SPLIT (`09c9e5ba`, `09ba0bf6`): doctor render `src/surfaces/core/doctor` birimine taşındı (cli 2003 → 1976 satır, bütçe 2000); `task` alt eylem yardımı ve golden'lar `mark-lost` çıkarıldıktan sonra dalga öncesi hâlinde.
 - CI-PERF: CI'ya ayrı perf job (K-LATENCY-METRICS owner kararı) hâlâ açık.
 
 #### Astra 2382 düzeltme turu — değişen satırların önceki hâli (Astra 2382 sonrası geçersiz)
@@ -168,3 +168,43 @@ Aşağıdaki metinler `close-abandoned → failed` anlatımını ve binding admi
 Önceki hâl `work-list.md:113` (Astra 2382 sonrası geçersiz):
 
 - CLI-SPLIT (`09c9e5ba`, `09ba0bf6`): doctor render `src/surfaces/core/doctor` birimine taşındı (cli 2003 → 1976 satır, bütçe 2000); `task close-abandoned` yardım özeti kısaltıldı, golden yeniden üretildi.
+
+#### Owner 2026-10-06 mark-lost ertelemesi — değişen satırların önceki hâli (Astra 2384 sonrası geçersiz)
+
+Aşağıdaki metinler `mark-lost` unknown hold anlatımını taşır; owner 2026-10-06 kararıyla (Jev 5d4fc3e4) `mark-lost` dalga 2'den çıkarılıp MARK-LOST-ATOMIC takip kartına ertelendiği için geçersizdir, yalnız geçmiş olarak saklanır. Güncel metin ilgili dosyalardadır.
+
+Önceki hâl `ARCHITECTURE.md:148` (owner 2026-10-06 sonrası geçersiz):
+
+- **Attempt kapanışı: launch-refused ve mark-lost (RUN-YAŞAM, 2026-10-06, `wave/2`; Astra 2382 P1-1/P1-2 sonrası düzeltildi):** dispatch claim'inden önce kalıcı ret (`EXECUTION_NOT_CONFIGURED|EXECUTION_HOST_UNSUPPORTED|EXECUTION_PROFILE_INVALID|DISPATCH_ARTIFACT_REQUIRED`, engine `classifyLaunchRefusal`) tipli `launch-refused {code}` gözlemi olarak bir kez kaydedilir (geçici retler kayıt yazmaz). `deckent task mark-lost` (yalnız operatör, `reconcile` yetkisi): granted + terminal yok + görev `active` + kayıtlı sonuç yok + daemon container'ı `missing` + yürütücü nabzı stale/yok (grant `inspection.workers.staleMs`'den eski) ise tipli `unknown {WORKER_LOST}` yazar: görev `reconciling`, `unresolvedEffects:true`, slot tutulur, görev başarısız sayılmaz, bağımlılar kapanmaz; geç çıkış kanıtı hold'u çözmez. Başlatılmış deneme için kapanış türü yoktur (`abandoned`/`failed` yolu kaldırıldı). Slotun bırakılması ayrı karardır (KARAR 12, açık). Ortak kaydedici `recordAttemptClosure`; ledger 47 değişmedi. Ayrıntı [approval-and-delivery](.deckent/docs/architecture/approval-and-delivery.md).
+
+Önceki hâl `.deckent/docs/architecture/approval-and-delivery.md:792` (owner 2026-10-06 sonrası geçersiz):
+
+- `deckent task mark-lost <kimlik>` (`--json`, `--lang`; `reconcile` attempt yetkisi, yalnız operatör): ancak ledger'da granted + terminal yok + görev `active` + kayıtlı sonuç yok + daemon container'ı açıkça `missing` + yürütücü nabzı `stale` ya da yok ve grant `inspection.workers.staleMs`'den eski ise tipli `unknown {WORKER_LOST}` hold'u yazar: görev `reconciling`, `unresolvedEffects:true`, slot tutulur, görev başarısız sayılmaz, bağımlılar kapanmaz; geç çıkış kanıtı hold'u çözmez. Ledger koşulları geçmezse daemon'a gidilmez. Ret `status:'refused'` + sebep (`not-launched|terminal|not-active|effects-unresolved|container-present|executor-live`), çıkış 0, "Nothing was changed", hiçbir şey değişmez. Replay idempotent. Uncertain-effect sözleşmesi değişmedi: operatör override'ı ve kapanış yok. Denetim izi attempt receipt'inde (actor + kanıt); mühürlü audit kaydı, MCP aracı ve kaybolan dispatch kaydının envanterden/workspace'ten düşmesi açık takip. Slot bırakma: tipli manuel inceleme/yerleşim kararı veya dispatch fence + sonlanma kanıtı (KARAR 12, lead/owner, ayrı kart).
+
+Önceki hâl `.deckent/docs/architecture/modules/config-and-cli-help.md:78` (owner 2026-10-06 sonrası geçersiz):
+
+`deckent task mark-lost` yardımı EN/TR katalogdadır; sub-help özeti kardeş kalıbında tek satırdır ("Hold a launched attempt whose worker is lost (unknown outcome)" / "Çalışanı kaybolan başlatılmış denemeyi tut (sonuç bilinmiyor)"), reconcile yetkisi `cli.help.task` kullanım metnindedir; `tests/fixtures/cli-help/commands-{en,tr}.json` golden'ları `vitest -u` ile yeniden üretildi (2026-10-06). Yeni config alanları: `installation.machineIdentity.source`, `installation.requireMachineBinding` ([platform-and-layers](platform-and-layers.md)).
+
+Önceki hâl `PLAN.md:19` (owner 2026-10-06 sonrası geçersiz):
+
+| İLK-20 DALGA 2 | RUN-YAŞAM (launch-refused + mark-lost), MODEL-INGRESS-P2, KATALOG-TEMİZLİK + DISPATCH-KATALOG, MONITOR-M2M3, CLI-SPLIT (+ BINDING-V2 yukarıda) | lane'ler `wave/2`'de toplandı; Astra parti incelemesi bekliyor | Astra parti incelemesi → PR; açık takipler: patch-prepare reddi için tipli makbuz [ledger sürümü+göç], LayoutError insan metni, mühürlü audit kaydı (mark-lost), CI'ya perf job, MCP `mark_lost_attempt`, KARAR 12 kaybolan denemenin slot bırakma kararı | `proof/W2-*-2026-10-06/`; [work-list](.deckent/docs/plan/work-list.md) |
+
+Önceki hâl `PLAN.md:68` (owner 2026-10-06 sonrası geçersiz):
+
+- **Dalga 2 takipleri** (lead kararları 2026-10-06): patch-prepare reddi tipli makbuz (`attempt_receipts`, ledger sürümü + göç); `LayoutError` insan metni (config dışı yüzeyler); mark-lost için mühürlü audit kaydı (#13 EXEC-RELEASE veya ayrı kart; MCP `mark_lost_attempt` ve kaybolan dispatch kaydının envanterden/workspace'ten düşmesi de orada); **KARAR 12 (ayrı kart, lead/owner):** kaybolan denemenin slotunu bırakacak tipli manuel inceleme/yerleşim kararı veya dispatch fence + sonlanma kanıtı; CI'ya ayrı perf job; MODEL-INGRESS-P3 yukarıda. Ayrıntı [open-findings](.deckent/docs/plan/open-findings.md).
+
+Önceki hâl `.deckent/docs/plan/open-findings.md:70` (owner 2026-10-06 sonrası geçersiz):
+
+- **Dalga 2 takipleri (lead 2026-10-06, `wave/2`):** (1) patch-prepare reddi (PATCH_LIMIT: limit/değer/config alanı) bugün kayıtlı değil; monitor sebep uydurmaz — `attempt_receipts` ile tipli makbuz gerekir (ledger sürümü + göç). (2) `LayoutError` (host/layout/resolve.ts) `message = code` taşır; config dışı yüzeylerde yalın kod çıkar — insan metni ayrı kart. (3) mark-lost operatör hold'unun denetim izi bugün attempt receipt'inde; mühürlü audit kaydı için `projectRunAttempt` audit geri çağrısı (adapter işlem değişikliği) gerekir. (4) MCP `mark_lost_attempt` aracı yok. (8) KARAR 12 (ayrı kart, lead/owner): kaybolan (`unknown {WORKER_LOST}`) denemenin slotu tutulur; bırakma ancak tipli manuel inceleme/yerleşim kararı veya dispatch fence + sonlanma kanıtı ile; o zamana dek kaybolan dispatch kaydı envanterden düşmez. (5) MODEL-INGRESS-P3: araç/MCP şema açıklaması ve argüman JSON'u; ZWJ yetim/eşleşmemiş VS açık sınır. (6) CI'ya ayrı perf job. (7) Monitor: failed-test çıkarma yalnız `verify-failed-test:` satırlarını tanır (node:test host testleri değil); `awaiting-delivery` boş yamayı ayırt etmez.
+
+Önceki hâl `.deckent/docs/decisions/owner-decisions.md:219` (owner 2026-10-06 sonrası geçersiz):
+
+- RUN-YAŞAM (lead, 2026-10-06; Astra 2382 sonrası düzeltildi): başlatılmış denemede `close-abandoned → failed` yolu kaldırıldı; `deckent task mark-lost` kanıtlı kayıp için tipli `unknown {WORKER_LOST}` yazar (görev `reconciling`, `unresolvedEffects:true`, slot tutulur, kapanış yok, operatör override'ı yok); yalnız operatör (`reconcile` yetkisi), otomasyon yok; kalıcı pre-launch ret listesi 4 kod (engine sabiti), `POLICY_DENIED` geçici; ret çıkış 0; audit bu dilimde attempt receipt'inde, mühürlü audit kaydı ayrı takip. KARAR 12 (ayrı kart, lead/owner): slot bırakma = tipli manuel inceleme/yerleşim kararı veya dispatch fence + sonlanma kanıtı.
+
+Önceki hâl `.deckent/docs/plan/work-list.md:108` (owner 2026-10-06 sonrası geçersiz):
+
+- RUN-YAŞAM (#8): `launch-refused {code}` attempt gözlemi, `recordAttemptClosure`, `deckent task mark-lost` (reconcile yetkisi; tipli `unknown {WORKER_LOST}` hold'u: görev `reconciling`, `unresolvedEffects:true`, slot tutulur, kapanış yok); ledger 47 değişmedi. Kod `lane/w2-run-life` (`e2dfd807`, `fe42dfa7`, `b6bf8111`) + düzeltme `d7abb36e`, `7c74587b` (Astra 2382 P1-1, P1-2). Açık: MCP `mark_lost_attempt`; mühürlü audit kaydı; kaybolan dispatch kaydı/workspace serbest bırakma (#13 EXEC-RELEASE) ve KARAR 12 (slot bırakma: tipli manuel inceleme/yerleşim kararı veya dispatch fence + sonlanma kanıtı, ayrı kart).
+
+Önceki hâl `.deckent/docs/plan/work-list.md:113` (owner 2026-10-06 sonrası geçersiz):
+
+- CLI-SPLIT (`09c9e5ba`, `09ba0bf6`): doctor render `src/surfaces/core/doctor` birimine taşındı (cli 2003 → 1976 satır, bütçe 2000); `task mark-lost` yardım özeti (önce `close-abandoned`), golden yeniden üretildi.
