@@ -16,7 +16,9 @@ const execute = (command, args) => {
   if (result.error) console.error(result.error.message);
   return result.status ?? 1;
 };
-const exitCode = execute(process.execPath, ['node_modules/vitest/vitest.mjs', 'run', '--shard', `${index}/${SHARDS}`]);
+// Suites load the fault-injection native variants (build/Test); they are test-only and never part of the sealed build.
+const variantsExit = execute(process.execPath, ['scripts/test-native.mjs', '--build-test-variants']);
+const exitCode = variantsExit || execute(process.execPath, ['node_modules/vitest/vitest.mjs', 'run', '--shard', `${index}/${SHARDS}`]);
 let nativeExit = null, hostExit = null, smokeExit = null;
 if (index === 1) {
   const npm = process.platform === 'win32' ? 'npm.cmd' : 'npm';
