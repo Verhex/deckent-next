@@ -64,10 +64,10 @@ export class FileInstallationIdentityStore implements InstallationIdentityStore 
     const source = this.source(); let prepared: InstallationBindingCapability | undefined;
     // A refused first use (required machine binding) stops before the record directory exists; nothing is left that reads as lost.
     const file = this.file(async () => { prepared = await source.capture(); this.requireMachine(prepared); return prepared; });
-    const record = await file.loadOrCreate(), captured = prepared ?? await source.capture();
-    if (!prepared) this.requireMachine(captured);
-    const outcome = assess(record, captured);
+    const record = await file.loadOrCreate(), captured = prepared ?? await source.capture(), outcome = assess(record, captured);
+    // Relocation first, as on the read path, so the operator sees the `--keep` / `--new` choice before the required-binding refusal.
     if (outcome === 'relocated') throw new InstallationIdentityError('INSTALLATION_IDENTITY_RELOCATED');
+    if (!prepared) this.requireMachine(captured);
     if (outcome !== 'bind' && outcome !== 'strengthen') return identity(record);
     // Re-capture and re-assess under the lock: a concurrent writer may already have recorded the binding, or the host may have changed.
     return identity(await file.update(async current => {

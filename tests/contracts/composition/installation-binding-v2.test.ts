@@ -163,6 +163,10 @@ describe.skipIf(process.platform !== 'linux')('installation binding v2 through c
     if (bindingNotRun) context.skip(bindingNotRun);
     const f = await fixture(); noMachineId(); await f.configure({ machineIdentity: { source: await mountedSecret(f.root, RAW) } });
     const ids = await ensureConfiguredTerminalIdentity(f.project, 's', f.options), bytes = await readFile(f.path, 'utf8');
+    // Required machine binding: the write path reports relocation first (same as the read path), and --keep cannot record a weak binding.
+    await f.configure({ requireMachineBinding: true });
+    await expect(ensureConfiguredTerminalIdentity(f.project, 's', f.options)).rejects.toMatchObject({ code: 'INSTALLATION_IDENTITY_RELOCATED' });
+    await expect(resolveConfiguredInstallationIdentity(f.project, 'keep', f.options)).rejects.toMatchObject({ code: 'INSTALLATION_IDENTITY_MACHINE_BINDING_REQUIRED' });
     await f.configure({});
     await expect(loadConfiguredInstallationIdentity(f.project, f.options)).rejects.toMatchObject({ code: 'INSTALLATION_IDENTITY_RELOCATED' });
     expect(await readFile(f.path, 'utf8')).toBe(bytes);
