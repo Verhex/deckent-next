@@ -7,11 +7,13 @@ import { InstallationProfileError, InstallationEvidenceError, InstallationRecove
 import { InstallationProfileFileError, InstallationArtifactError, DockerImageProbeError,
   InstallationJournalError, InstallationLedgerError, InstallationFileError } from '#adapters/index.js';
 import { LocalRuntimeSocketError } from '#adapters/index.js';
-import { RunError, TaskEvaluationError } from '#domain/index.js';
+import { RunError, TaskEvaluationError, TaskGraphError } from '#domain/index.js';
 import { EvaluationEvidenceError } from '#capabilities/index.js';
 import { ZodError } from 'zod';
 import { DeckentError, ErrorRegistry, ManagedFileError, BootstrapStateError } from '#platform/index.js';
 import { HandoffError, RunLifecycleError, reservationDiagnosticParams, ServiceShutdownError, ReconciliationRecoveryError, ReconciliationRuntimeLoopError, CancellationRuntimeLoopError, RuntimeServiceProtocolError, RuntimeServiceLifecycleError, RunWorkspaceCustodyError, WorkspaceError, CancellationDeliveryError, TaskEvidenceError, ExecutionRegistryError, AuthenticationError, AttemptStoreError, DispatchError, DispatchInventoryError, PolicyAuthorizationError, RunStoreError, ScopeRegistrationError, WorkTargetError } from '#engine/index.js';
+const GRAPH_INPUT_CODES: ReadonlySet<string> = new Set(['TASK_GRAPH_INVALID', 'TASK_DUPLICATE', 'TASK_DEPENDENCY_DUPLICATE', 'TASK_DEPENDENCY_MISSING',
+  'TASK_GRAPH_CYCLE', 'TASK_ACCEPTANCE_DUPLICATE', 'TASK_CRITERION_DEFINITION_MISSING', 'TASK_CRITERION_DEFINITION_UNUSED', 'TASK_CRITERION_DEFINITION_DUPLICATE']);
 /** Preserve stable failure identities without exposing paths, database messages or query contents. */
 export function queryFailure(error: unknown): DeckentError {
   if (error instanceof DecisionError || error instanceof DecisionApplicationError || error instanceof ApprovalError || error instanceof SessionAuthenticationError
@@ -44,6 +46,10 @@ export function queryFailure(error: unknown): DeckentError {
   }
   if (error instanceof RuntimeServiceLifecycleError && error.retryAfterMs !== undefined) return ErrorRegistry.createError(error.code, { params: { retryAfterMs: error.retryAfterMs } });
   if (error instanceof ScopeRegistrationError) return ErrorRegistry.createError(error.code, { params: { scopeIds: error.scopeIds.join(',') } });
+  // A structurally invalid submitted graph (cycle, missing/duplicate task or dependency, criterion mismatch) is the caller's input,
+  // not an unavailable inventory; progress/revision codes stay internal (they describe stored state, never caller input).
+  if (error instanceof TaskGraphError && GRAPH_INPUT_CODES.has(error.code)) return ErrorRegistry.createError('TASK_GRAPH_INVALID', {
+    params: { reason: error.code, path: ['graph', ...(error.issues[0]?.path ?? [])].join('.') } });
   if (error instanceof ZodError) return ErrorRegistry.createError('INVENTORY_QUERY_INVALID');
   if (error instanceof DispatchInventoryError) return ErrorRegistry.createError('DISPATCH_INVENTORY_LIMIT');
   if (error instanceof RunStoreError && error.code === 'RUN_CAPACITY_OR_ORDER' && error.diagnostic) {

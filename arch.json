@@ -378,7 +378,8 @@
         "src/domain/core/run",
         "src/engine/core/decision",
         "src/domain/core/decision",
-        "src/engine/core/handoff-observation"
+        "src/engine/core/handoff-observation",
+        "src/domain/core/task-graph"
       ],
       "plan": "FOUNDATION"
     },
