@@ -48,13 +48,13 @@ const allowedEnvironment = (input: Readonly<Record<string, string | undefined>>)
   .filter((entry): entry is [string, string] => ['PATH', 'HOME', 'DOCKER_HOST', 'DOCKER_CONTEXT', 'DOCKER_CONFIG', 'DOCKER_TLS_VERIFY', 'DOCKER_CERT_PATH'].includes(entry[0]) && typeof entry[1] === 'string'));
 /** Checks the proposed counter against this repository's daemon tags through the installed builder's shared guard.
  * No build context, receipt, tag or image is created. A lagging lineage must be reconciled, never invented. */
-export async function assertWorkerImageVersionAvailable(input: Readonly<{ packageRoot: string; imageVersion: string; timeoutMs: number; outputBytes: number; env?: Readonly<Record<string, string>> }>,
+export async function assertWorkerImageVersionAvailable(input: Readonly<{ packageRoot: string; imageVersion: string; timeoutMs: number; outputBytes: number; env?: Readonly<Record<string, string>>; signal?: AbortSignal }>,
   runner: WorkerImageBuildRunner = runNodeProcess): Promise<void> {
   if (!isAbsolute(input.packageRoot) || !/^r[1-9][0-9]*-\d{8}$/.test(input.imageVersion)) throw new WorkerImageBuildError('WORKER_IMAGE_SOURCE_INVALID');
   const directory = join(input.packageRoot, WORKER_IMAGE_ASSET_DIRECTORY);
   const evidence = await runner({ schemaVersion: 1, requestId: randomUUID(), executable: process.execPath,
     args: [join(directory, 'build.mjs'), '--check-version', input.imageVersion], cwd: directory,
-    env: allowedEnvironment(input.env ?? process.env), timeoutMs: input.timeoutMs, outputBytes: input.outputBytes });
+    env: allowedEnvironment(input.env ?? process.env), timeoutMs: input.timeoutMs, outputBytes: input.outputBytes }, input.signal); // a stopping service ends the daemon check too
   if (evidence.reason === 'timeout') throw new WorkerImageBuildError('WORKER_IMAGE_VERSION_CHECK_TIMEOUT', evidence);
   if (evidence.reason !== 'exit' || evidence.exitCode !== 0) throw processFailure(evidence, 'WORKER_IMAGE_VERSION_CHECK_FAILED');
 }

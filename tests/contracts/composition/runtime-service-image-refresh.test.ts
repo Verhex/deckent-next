@@ -29,8 +29,13 @@ async function installation(update: Record<string, unknown>, docker = true) {
     delete config['execution']; delete config['admission']; await writeFile(join(project, '.deckent/config.json'), JSON.stringify(config));
   }
   let builds = 0; let release!: () => void; const gate = new Promise<void>(resolve => { release = resolve; });
-  let honorStop = false;
+  let honorStop = false, hangPreflight = false;
   const runner: WorkerImageBuildRunner = async (command, signal) => {
+    // A daemon check that never answers by itself (a hung Docker daemon): only the stopping service's signal ends it, like the real runner.
+    if (command.args[1] === '--check-version' && hangPreflight) {
+      await new Promise<void>(resolve => signal?.addEventListener('abort', () => resolve(), { once: true }));
+      return { ...ok(command.requestId), reason: 'cancelled' as const, exitCode: null };
+    }
     if (command.args[1] === '--check-version') return ok(command.requestId);
     builds++;
     // The real runner ends the builder process on the signal; this one takes a while to do so, like a process that exits on SIGTERM.
@@ -42,7 +47,7 @@ async function installation(update: Record<string, unknown>, docker = true) {
     return ok(command.requestId);
   };
   const fetcher = async (request: { package: string }) => ({ version: request.package === '@openai/codex' ? '0.156.0' : '2.1.278', source: 'fixture', observedAt: new Date().toISOString() });
-  return { project, env: { HOME: join(project, 'home') }, runner, fetcher, release, builds: () => builds, honorStop: () => { honorStop = true; } };
+  return { project, env: { HOME: join(project, 'home') }, runner, fetcher, release, builds: () => builds, honorStop: () => { honorStop = true; }, hangPreflight: () => { hangPreflight = true; } };
 }
 const until = async (check: () => boolean) => { for (let i = 0; i < 400 && !check(); i++) await new Promise(resolve => setTimeout(resolve, 10)); expect(check()).toBe(true); };
 
@@ -92,5 +97,19 @@ it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket] t
   expect(events).toEqual(['started', 'failed:REFRESH_STOPPED']);
   const state = JSON.parse(await readFile(join(f.project, 'data', 'workspaces', 'toolchains', 'refresh-state.json'), 'utf8')) as { phase: string; reason: string };
   expect({ phase: state.phase, reason: state.reason }).toEqual({ phase: 'failed', reason: 'REFRESH_STOPPED' });
+  f.release();
+});
+
+it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket] a stop during the daemon check ends it too: the service is done without waiting for the check\'s own bound', async () => {
+  const f = await installation({}); f.hangPreflight();
+  const events: string[] = [];
+  const service = await startConfiguredRuntimeService(f.project, { async onPage() {}, async onError() {}, onToolchainRefresh: event => { events.push(`${event.phase}${event.code ? ':' + event.code : ''}`); } },
+    { env: f.env }, { toolchainRefresh: { fetcher: f.fetcher, runner: f.runner } });
+  await new Promise(resolve => setTimeout(resolve, 300)); // the startup refresh is waiting on the daemon check (no build was admitted)
+  const stoppedAt = Date.now();
+  await service.stop().catch(() => undefined); await service.done;
+  // Bounded by the stop, not by `buildTimeoutMs` (30 min by default): no `started` (the build was never certain), one stopped outcome.
+  expect(Date.now() - stoppedAt).toBeLessThan(5_000);
+  expect({ builds: f.builds(), events }).toEqual({ builds: 0, events: ['failed:REFRESH_STOPPED'] });
   f.release();
 });
