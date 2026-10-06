@@ -8,3 +8,4 @@ export { renderWorkerModelLine } from './internal/worker-model.js';
 export { phaseLabel, renderWorkerTranscript, type WorkerTranscriptHandler } from './internal/transcript.js';
 
 export { renderBriefLines } from './internal/brief.js';
+export { renderGraphSummaryLines } from './internal/graph-summary.js';

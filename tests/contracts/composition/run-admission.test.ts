@@ -185,6 +185,29 @@ describe.skipIf(process.platform === 'win32')('configured SDK Run admission', ()
   });
 
 });
+describe.skipIf(process.platform === 'win32')('configured SDK Run graph limits (PARALLEL-S3)', () => {
+  it.each([['tasks', { maxTasks: 3 }, 4, 3], ['edges', { maxEdges: 2 }, 3, 2], ['depth', { maxDepth: 3 }, 4, 3]] as const)(
+    'PARALLEL-S3: refuses a graph above admission.graph %s with typed TASK_GRAPH_LIMIT, writes nothing, and admits once config is raised', async (detail, limits, observed, limit) => {
+      const f = await fixture(); await f.policy(true, true);
+      const chain = { ...command, graph: { ...command.graph, tasks: ['a', 'b', 'c', 'd'].map((id, index, ids) => ({ id, kind: 'purchase',
+        dependencies: index ? [ids[index - 1]!] : [], acceptanceCriteria: ['verified'] })) } };
+      const config = JSON.parse(await readFile(f.configPath, 'utf8')); config.admission.graph = limits;
+      await writeFile(f.configPath, JSON.stringify(config)); clearConfigCache();
+      const field = `admission.graph.max${detail[0]!.toUpperCase()}${detail.slice(1)}`;
+      const refusal = await createRun(f.project, chain, f.options).then(() => null, (error: unknown) => error);
+      expect(refusal).toMatchObject({ code: 'TASK_GRAPH_LIMIT', params: { detail, observed, limit, field } });
+      expect((refusal as Error).message).toContain(field);
+      const db = new DatabaseSync(f.path, { readOnly: true });
+      try { for (const table of ['runs', 'run_receipts', 'run_execution_intents', 'attempts']) expect(db.prepare(`SELECT count(*) AS n FROM ${table}`).get()!.n).toBe(0); }
+      finally { db.close(); }
+      delete config.admission.graph; // defaults (256 tasks, 1024 edges, depth 32) admit the same graph
+      await writeFile(f.configPath, JSON.stringify(config)); clearConfigCache();
+      await createRun(f.project, chain, f.options);
+      const graph = (await inspectRun(f.project, { schemaVersion: 1, scopeId: 's', runId: 'r' }, f.options)).run!.graphSummary;
+      expect(graph).toEqual({ schemaVersion: 1, shape: { tasks: 4, edges: 3, depth: 4 }, criticalPath: ['a', 'b', 'c', 'd'],
+        counts: { pending: 4, running: 0, attention: 0, accepted: 0, failed: 0, stopped: 0, total: 4 } });
+    });
+});
 
 it.skipIf(process.platform === 'win32')('requires POSIX managed storage: SDK admits a conditional graph, retains the decision after config removal and reserves only its selected branch', async () => {
   const f = await fixture(); await f.policy(true, true);

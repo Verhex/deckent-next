@@ -9,6 +9,7 @@ import { describeDiagnostics } from './diagnostics.js';
 import { humanWorkerLines } from './human-worker.js';
 import { mapBlocks } from './map.js';
 import { globalRunCell, globalStateCell, globalStateLabel, globalStateLines, globalSummary } from './global-state.js';
+import { renderGraphSummaryLines } from './graph-summary.js';
 
 /**
  * The one view model of the MonitorSnapshot (MONITOR-SURFACE): the `--once` text, `/monitor` and the fullscreen view all project these
@@ -74,7 +75,7 @@ function wordsFor(snapshot: MonitorSnapshot, locale: Locale, ascii: boolean) {
     if (task.lastAttempt) attempts.set(identityKey(install, run.runId, run.scopeId, task.taskId, task.lastAttempt), { run, task, attempt: task.lastAttempt });
   }
   const words = {
-    locale, now, marks, sep, multi,
+    locale, now, marks, sep, multi, ascii,
     col: (header: string, priority: number, min: number, max: number, extra: Partial<Pick<MonitorColumn, 'cut' | 'sortKey'>> = {}): MonitorColumn => ({ header, priority, min, max, ...extra }),
     installColumn: (priority: number): readonly MonitorColumn[] => multi ? [{ header: t('monitor.col.install', {}, locale), priority, min: 8, max: 16 }] : [],
     installCell: (install: MonitorInstall): readonly MonitorSpan[] => multi ? [span(install.id, 'muted')] : [],
@@ -186,6 +187,7 @@ function runDetail(w: Words, install: MonitorInstall, run: MonitorRun) {
     [span(t('monitor.detail.run', { run: run.runId, scope: run.scopeId, revision: run.revision, install: install.id }, locale), 'strong')],
     [w.stateCell(run), span(sep), span(w.progress(run)), span(sep), span(t('monitor.detail.span', { created: timeText(run.createdAtMs ?? null), duration: w.runDuration(run) }, locale)),
       span(sep), span(t('monitor.detail.activity', { when: agoText(now, run.lastActivityMs, locale) }, locale), 'muted')],
+    ...(run.graphSummary ? renderGraphSummaryLines(run.graphSummary, locale, w.ascii).map(text => [span(text, 'muted')]) : []),
     ...globalStateLines(projectHumanState({ kind: 'run', value: run }), locale),
     ...(run.blocker ? [[span(t('monitor.detail.blocker', { reason: w.blockerText(run.blocker), task: run.blocker.taskId ?? '—', since: forText(now, run.blocker.sinceMs, locale) }, locale),
       blockerRole(run.blocker))]] : []),

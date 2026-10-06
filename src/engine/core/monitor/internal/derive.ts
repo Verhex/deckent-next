@@ -1,6 +1,6 @@
 import { derivePoolWait, hasRunReservationRoom } from '#engine/core/runs/index.js';
 import { projectTaskHandoffs } from '#engine/core/handoff-observation/index.js';
-import { inspectTaskReadiness, taskDependencyIds, type TaskReadiness, type WorkerModelView } from '#domain/index.js';
+import { inspectTaskReadiness, summarizeTaskGraph, taskDependencyIds, type TaskReadiness, type WorkerModelView } from '#domain/index.js';
 import type { WorkerObservation } from '#engine/core/worker-observation/index.js';
 import type { MonitorBlocker, MonitorBlockerCode, MonitorCloseReason, MonitorDeliveryOutlook, MonitorRun, MonitorRunState, MonitorTask } from './contract.js';
 import type { MonitorLedgerApproval, MonitorLedgerAttempt, MonitorLedgerPool, MonitorLedgerRun } from './evidence.js';
@@ -175,6 +175,6 @@ export function projectMonitorRun(e: MonitorRunEvidence): MonitorRun {
   const finishedAtMs = !current && ends.length && ends.every(value => value !== null) ? Math.max(...ends as number[]) : null;
   const state = deriveRunState(e, current), outlook = deliveryOutlookOf(e, state);
   return Object.freeze({ scopeId: snapshot.identity.scopeId, runId: snapshot.identity.runId, revision: snapshot.revision, state,
-    phaseCounts: Object.freeze(phaseCounts), tasks: Object.freeze(tasks), blocker: current, cancellationRequested: snapshot.cancelRequested,
+    phaseCounts: Object.freeze(phaseCounts), graphSummary: summarizeTaskGraph(snapshot.graph, snapshot.progress), tasks: Object.freeze(tasks), blocker: current, cancellationRequested: snapshot.cancelRequested,
     lastActivityMs: times.length ? Math.max(...times) : null, createdAtMs: e.run.createdAtMs, finishedAtMs, delivery: e.run.delivery ?? null, ...(outlook ? { deliveryOutlook: outlook } : {}) });
 }

@@ -4,7 +4,7 @@ import { validateProcessExitCriterion } from '#capabilities/index.js';
 import { ErrorRegistry, prepareProductDirectory, type ConfigLoadOptions } from '#platform/index.js';
 import { nativeWorkerEffortCapability, bindNativeWorkerEffort, assertNativeWorkerBinding, compileNativeCodingWorkInput, isNativeCodingTemplate, nativeCodingRefusalCode, validateDockerTaskProfile, resolveDockerTaskProfile, openSqliteInventoryReader, openSqliteAttemptStore, openSqliteModelCatalogReader, GitIntegrationDelivery, GitRunWorkspaceProvider, GitWorkspaceBroker, resolveGitWorkTarget, selectWorkTarget } from '#adapters/index.js';
 import { resolveWorkerEffortExecution, admitWorkerModels, RunAdmissionApplication, runAdmissionSchema, runDeliveryAdmissionSchema, RunPolicyAuthorization, executionResourceAuthorization, authorizeWorkTargetUse,
-  assertDockerResourceCeiling, DispatchPolicyAuthorization, pinRunToDelivery, type WorkerAdmissionWarning, type RunAdmission, type RunCreate, type RunDeliveryAdmission, type RunWorkspaceCustody } from '#engine/index.js';
+  assertDockerResourceCeiling, assertTaskGraphLimits, DispatchPolicyAuthorization, pinRunToDelivery, type WorkerAdmissionWarning, type RunAdmission, type RunCreate, type RunDeliveryAdmission, type RunWorkspaceCustody } from '#engine/index.js';
 import { createLayoutPolicySource } from '#composition/core/policy/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
@@ -33,6 +33,7 @@ async function admitConfiguredRun(projectRoot: string, command: RunAdmission, op
     new RunPolicyAuthorization({ async load() { return document; } }), executionResourceAuthorization({ async load() { return document; } }, selectWorkTarget(config.execution)?.id ?? null), { async resolve(admitted) {
       const profile = config.admission;
       if (!profile) throw ErrorRegistry.createError('RUN_ADMISSION_NOT_CONFIGURED');
+      assertTaskGraphLimits(admitted.graph, profile.graph); // PARALLEL-S3: config policy, refused before the catalog read and any write
       const catalog = await openSqliteModelCatalogReader(await path(), { busyTimeoutMs: config.storage.sqlite.busyTimeoutMs });
       let execution;
       try {
