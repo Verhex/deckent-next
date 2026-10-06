@@ -26,6 +26,14 @@ function taskGraphLimit(p: Params, l: Locale): string {
     default: return t('error.TASK_GRAPH_LIMIT', p, l);
   }
 }
+/** TASK_GRAPH_INVALID (params reason = structural TaskGraphError code, path): cycle and missing dependency get their own sentence. */
+function taskGraphInvalid(p: Params, l: Locale): string {
+  switch (p['reason']) {
+    case 'TASK_GRAPH_CYCLE': return t('error.TASK_GRAPH_INVALID.cycle', p, l);
+    case 'TASK_DEPENDENCY_MISSING': return t('error.TASK_GRAPH_INVALID.dependencyMissing', p, l);
+    default: return t('error.TASK_GRAPH_INVALID', { ...p, path: p['path'] ?? 'graph', reason: p['reason'] ?? 'invalid' }, l);
+  }
+}
 function mcpSandboxUnreachable(p: Params, l: Locale): string {
   const name = String(p['name'] ?? '');
   if (p['kind'] === 'path-hidden') {
@@ -247,6 +255,7 @@ const definitions: Readonly<Record<string, Definition>> = Object.freeze({
   EXECUTION_PROFILE_INVALID: { category: 'error', render: (p, l) => ({ message: t('error.EXECUTION_PROFILE_INVALID', p, l) }) },
   EXECUTION_RESOURCE_CEILING: { category: 'config', render: (p, l) => ({ message: t('error.EXECUTION_RESOURCE_CEILING', p, l) }) },
   TASK_GRAPH_LIMIT: { category: 'config', render: (p, l) => ({ message: taskGraphLimit(p, l) }) },
+  TASK_GRAPH_INVALID: { category: 'usage', render: (p, l) => ({ message: taskGraphInvalid(p, l) }) },
   PATCH_CORRUPT: { category: 'error', render: (p, l) => ({ message: t('error.PATCH_CORRUPT', p, l) }) },
   PATCH_INTEGRATION_PENDING: { category: 'error', render: (p, l) => ({ message: t('error.PATCH_INTEGRATION_PENDING', p, l) }) },
   PATCH_CONFLICT: { category: 'error', render: (p, l) => ({ message: t('error.PATCH_CONFLICT', p, l) }) },

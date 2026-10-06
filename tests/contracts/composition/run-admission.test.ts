@@ -200,12 +200,24 @@ describe.skipIf(process.platform === 'win32')('configured SDK Run graph limits (
       const db = new DatabaseSync(f.path, { readOnly: true });
       try { for (const table of ['runs', 'run_receipts', 'run_execution_intents', 'attempts']) expect(db.prepare(`SELECT count(*) AS n FROM ${table}`).get()!.n).toBe(0); }
       finally { db.close(); }
-      delete config.admission.graph; // defaults (256 tasks, 1024 edges, depth 32) admit the same graph
+      delete config.admission.graph; // defaults (256 tasks, 1024 edges, depth 64) admit the same graph
       await writeFile(f.configPath, JSON.stringify(config)); clearConfigCache();
       await createRun(f.project, chain, f.options);
       const graph = (await inspectRun(f.project, { schemaVersion: 1, scopeId: 's', runId: 'r' }, f.options)).run!.graphSummary;
       expect(graph).toEqual({ schemaVersion: 1, shape: { tasks: 4, edges: 3, depth: 4 }, criticalPath: ['a', 'b', 'c', 'd'],
         counts: { pending: 4, running: 0, attention: 0, accepted: 0, failed: 0, stopped: 0, total: 4 } });
+    });
+  it.each([['TASK_GRAPH_CYCLE', { a: ['b'], b: ['a'] }, /dependency cycle/], ['TASK_DEPENDENCY_MISSING', { a: ['ghost'] }, /not in the graph/]] as const)(
+    'SDK admission returns typed TASK_GRAPH_INVALID (%s), not INVENTORY_UNAVAILABLE, and writes nothing', async (reason, deps, message) => {
+      const f = await fixture(); await f.policy(true, true);
+      const invalid = { ...command, graph: { ...command.graph, tasks: Object.entries(deps).map(([id, dependencies]) => ({ id, kind: 'purchase',
+        dependencies: [...dependencies], acceptanceCriteria: ['verified'] })) } };
+      const refusal = await createRun(f.project, invalid, f.options).then(() => null, (error: unknown) => error);
+      expect(refusal).toMatchObject({ code: 'TASK_GRAPH_INVALID', params: { reason } });
+      expect((refusal as Error).message).toMatch(message);
+      const db = new DatabaseSync(f.path, { readOnly: true });
+      try { for (const table of ['runs', 'run_receipts', 'run_execution_intents', 'attempts']) expect(db.prepare(`SELECT count(*) AS n FROM ${table}`).get()!.n).toBe(0); }
+      finally { db.close(); }
     });
 });
 

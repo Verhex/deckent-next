@@ -103,7 +103,7 @@ export const CONFIG_FIELDS = Object.freeze({
     ordering: z.literal('input-order'),
     /** PARALLEL-S3: admission policy (not a wire invariant); a larger graph is refused with typed TASK_GRAPH_LIMIT before any write. */
     graph: z.object({ maxTasks: z.number().int().positive().safe().default(256), maxEdges: z.number().int().positive().safe().default(1024),
-      maxDepth: z.number().int().positive().safe().default(32) }).strict().default({}),
+      maxDepth: z.number().int().positive().safe().default(64) }).strict().default({}),
   }).strict().nullable().default(null), [], LAYOUT_CONTRACT_SINCE),
   inspection: field('config.field.inspection', { state: 'bound', consumers: ['src/composition/core/worker-observation'] }, 'restart', z.object({
     maxPageSize: z.number().int().positive().max(2_147_483_646).default(64),
