@@ -48,6 +48,8 @@ export function selectWorkerLineage(packaged: WorkerLineage, built: WorkerLineag
   return built;
 }
 
+/** Bounded re-derivations when another authorized writer changed the config between the registry read and its write. */
+export const REGISTRY_WRITE_ATTEMPTS = 3;
 const isoTime = z.string().datetime();
 const imageDigest = z.string().regex(/^sha256:[a-f0-9]{64}$/);
 /** The durable refresh marker. `expiresAt` bounds an `updating` marker (build timeout plus a grace): a crashed process never masks a refusal for good. */

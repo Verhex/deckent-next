@@ -2,7 +2,7 @@ import { setTimeout as wait } from 'node:timers/promises';
 import { readFile, mkdir } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { loadConfig, inspectProductDirectory, prepareProductDirectory, writeJsonAtomic, type ConfigLoadOptions } from '#platform/index.js';
-import { unverifiedReason, refreshAuditName, refreshIntervalMs, refreshInProgress, refreshStatus, refreshTriggerAllowed, toolchainRefreshStateSchema, reviseRegistryForProposal, type ToolchainRefreshState, type ToolchainRefreshTrigger } from '#engine/index.js';
+import { REGISTRY_WRITE_ATTEMPTS, unverifiedReason, refreshAuditName, refreshIntervalMs, refreshInProgress, refreshStatus, refreshTriggerAllowed, toolchainRefreshStateSchema, reviseRegistryForProposal, type ToolchainRefreshState, type ToolchainRefreshTrigger } from '#engine/index.js';
 import { createConfiguredConfigApplication, resolveConfiguredConfigPrincipal } from '#composition/core/config/index.js';
 import { updateConfiguredToolchains, writeArtifact, type ToolchainUpdateDependencies } from './update.js';
 
@@ -12,8 +12,6 @@ export type ToolchainRefreshEvent = Readonly<{ schemaVersion: 1; event: 'toolcha
 export interface ToolchainRefreshObserver { onToolchainRefresh?(event: ToolchainRefreshEvent): void | Promise<void> }
 /** Grace added to the build timeout before an `updating` marker stops counting as in flight. */
 const MARKER_GRACE_MS = 60_000;
-/** Bounded re-derivations when another authorized writer changed the config between the read and the write. */
-const REGISTRY_WRITE_ATTEMPTS = 3;
 const failureCode = (error: unknown) => (error && typeof error === 'object' && 'code' in error && typeof (error as { code: unknown }).code === 'string' ? (error as { code: string }).code : 'UNKNOWN').slice(0, 128);
 
 async function toolchainHome(projectRoot: string, options: ConfigLoadOptions) {

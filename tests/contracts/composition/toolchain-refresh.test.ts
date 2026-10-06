@@ -209,6 +209,9 @@ describe('autonomous worker image refresh (WORKER-AUTO-REFRESH)', () => {
     expect(after).toHaveLength(keep + 1);
   });
 
+});
+
+describe('version lineage across refreshes (Astra 2371 P1-1)', () => {
   it('P1-1: two consecutive genuinely new CLI releases on different days each build the next counter (r5, then r6), and a daemon holding a higher counter is still refused', async () => {
     const f = await fixture(); const day = (d: string) => () => `2026-10-${d}T08:00:00.000Z`;
     expect((await refreshConfiguredToolchains(f.root, 'startup', f.options, { ...f.deps, now: day('06') }, f.observer)).outcome).toBe('current');
@@ -235,6 +238,9 @@ describe('autonomous worker image refresh (WORKER-AUTO-REFRESH)', () => {
     expect(outcome.outcome).toBe('failed'); expect(outcome.event!.code).toBe('WORKER_VERSION_COUNTER_TAKEN'); expect(f.state.builds).toBe(0);
   });
 
+});
+
+describe('registry revision is a compare-and-set (Astra 2371 P1-2)', () => {
   /** Another authorized writer (an operator's config set) adds a task kind to the registry: the hook runs after refresh derived its value. */
   const operatorEdit = (f: Awaited<ReturnType<typeof fixture>>, kind: string) => async () => {
     const app = createConfiguredConfigApplication(f.root, f.options); const current = (await app.inspect({ keyPath: 'admission.registry' })).fields[0]!.value as { kinds: { kind: string; profile: unknown }[] };

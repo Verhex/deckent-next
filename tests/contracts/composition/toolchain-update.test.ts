@@ -102,8 +102,10 @@ describe.skipIf(process.platform !== 'linux')('policy-driven toolchain update', 
     expect(JSON.parse(await readFile(built.proposalPath!, 'utf8'))).toEqual(built.proposal);
     // Installed config is never rewritten by the update operation.
     expect(JSON.parse(await readFile(join(f.project, '.deckent/config.json'), 'utf8')).admission.registry.profiles[0].parameters.nativeSubscription.preflight.cliVersion).toBe('codex-cli 0.155.1');
-    // A second apply for the same day refuses to reuse the taken context.
-    await expect(updateToolchains(f.project, { apply: true }, f.options, { fetcher: f.fetcher, runner: f.runner, now: () => '2026-09-23T08:10:00.000Z' })).rejects.toMatchObject({ code: 'WORKER_IMAGE_CONTEXT_EXISTS' });
+    // The built r5 continues the lineage (WORKER-AUTO-REFRESH): a second apply, still stale because manual update never rewrites config, plans r6 from r5
+    // and never reuses r5's taken context; the next counter is what the builder's guard demands.
+    const second = await updateToolchains(f.project, { apply: true }, f.options, { fetcher: f.fetcher, runner: f.runner, now: () => '2026-09-23T08:10:00.000Z' });
+    expect(second.plan).toMatchObject({ current: { imageVersion: 'r5-20260923' }, next: { imageVersion: 'r6-20260923', previousVersion: 'r5-20260923' } });
   });
   it('auto without a flag only plans (manual command), fresh toolchains yield no-change, and the CLI command renders the decision', async () => {
     const f = await fixture({ mode: 'auto' });
