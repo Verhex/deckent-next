@@ -431,19 +431,23 @@ describe('ARCH-GUARDS: layer-drift guards (each rule has a deliberate violation 
 
   it('G-d: host words are red in src comments and strings (case-insensitive), frozen hits only shrink, and \\n1 is not N1', async () => {
     const body = (text: string) => unit('engine', 'core', 'a', 'x', text);
-    for (const text of ['// run it on the dogfood board\nexport const x = 1;\n', "export const x = 'QWEN';\n", "export const x = '/home/me';\n", '/** pre-N1 note */\nexport const x = 1;\n', '// dev-release switch\nexport const x = 1;\n']) {
-      const red = await lint(await fixture(body(text)));
-      expect(red.code, text).toBe(1);
-      expect(red.out, text).toContain('[host-word] src/engine/core/a/internal/x.ts:');
-    }
+    // Independent fixtures run concurrently: ten sequential lint-arch processes exceeded the 30 s CI test timeout under load.
+    const texts = ['// run it on the dogfood board\nexport const x = 1;\n', "export const x = 'QWEN';\n", "export const x = '/home/me';\n", '/** pre-N1 note */\nexport const x = 1;\n', '// dev-release switch\nexport const x = 1;\n'];
+    const reds = await Promise.all(texts.map(async text => lint(await fixture(body(text)))));
+    reds.forEach((red, index) => {
+      expect(red.code, texts[index]).toBe(1);
+      expect(red.out, texts[index]).toContain('[host-word] src/engine/core/a/internal/x.ts:');
+    });
     const harmless = await lint(await fixture(body("export const x = 'exit\\n1 error; dashboard; onboard';\n")));
     expect(harmless.out).not.toContain('[host-word]');
     const allow = (count: number): ArchPatch => arch => { arch.guards.hostWords.allow = [{ file: 'src/engine/core/a/internal/x.ts', count, reason: 'fixture' }]; };
     const one = '// legacy dogfood note\nexport const x = 1;\n', two = '// legacy dogfood and qwen note\nexport const x = 1;\n';
-    expect((await lint(await fixture(body(one), true, false, {}, allow(1)))).out).not.toContain('[host-word]');
-    expect((await lint(await fixture(body(two), true, false, {}, allow(1)))).out).toContain('2 host-word hits > allowed 1');
-    expect((await lint(await fixture(body('export const x = 1;\n'), true, false, {}, allow(1)))).out).toContain('stale hostWords.allow entry');
-    expect((await lint(await fixture(body(one), true, false, {}, allow(2)))).out).toContain('lower the allowance (shrink-only)');
+    const [within, over, stale, loose] = await Promise.all([[one, 1], [two, 1], ['export const x = 1;\n', 1], [one, 2]].map(async ([text, count]) =>
+      lint(await fixture(body(text as string), true, false, {}, allow(count as number)))));
+    expect(within!.out).not.toContain('[host-word]');
+    expect(over!.out).toContain('2 host-word hits > allowed 1');
+    expect(stale!.out).toContain('stale hostWords.allow entry');
+    expect(loose!.out).toContain('lower the allowance (shrink-only)');
   });
 
   it('G-e: vendor slugs in a layer are capped; a new literal exceeds the cap and a smaller count demands a lower cap', async () => {
