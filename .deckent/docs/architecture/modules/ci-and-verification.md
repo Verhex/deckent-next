@@ -92,14 +92,14 @@ store. Terminal-history declares exactly the public platform managed-files error
 directory; HOME/USERPROFILE/XDG_*/TMPDIR/`DECKENT_GLOBAL_HOME` are empty temporary directories, `DECKENT_*`/`GITHUB_*`/`LC_*`/`LANG*`
 are not inherited, and `GITHUB_ENV`/`RUNNER_TEMP` are provided locally. Only npm's download cache and the docker client config
 are shared (bytes, no user settings). A local copy of the locked bubblewrap download cache seeds the run; when the pinned image digest
-is already local only the `docker pull` is skipped. One run at a time per repository (lock in the git common dir).
+is already local only the `docker pull` is skipped. One run at a time per repository (lock in the git common dir, published atomically, owned by a token; it stays held while the run pid or its step process group lives, and an unreadable lock refuses). Steps run in their own process groups; cancellation (SIGINT/SIGTERM) and the whole-run `--deadline <minutes>` (default 30, the job bound; verify step 20) stop the group with SIGTERM, bounded wait, SIGKILL, record `cancel.json`, and remove the worktree/lock only after the group is gone. The mirror drops inherited `VITEST_*`, `NODE_OPTIONS`, `GIT_*` and `npm_*` variables.
 Logs and `result.json` go to `.pack/ci-local/<sha12>-node<N>/` (gitignored). `--node` resolves the running node, then nvm/fnm
 installs, and otherwise fails with `CI_LOCAL_NODE_UNAVAILABLE`.
 Not covered: macOS, Windows, the runner's `sudo sysctl` AppArmor step, hosted-runner differences. It does not replace hosted CI.
 `npm run precommit:fast` (typecheck, eslint on changed `.ts|.mjs`, lint-arch, lint-docs; no tests) backs the tracked
 `scripts/git-hooks/pre-commit`. Landing (owner 2026-10-06): `npm run land:check [-- --ref <sha>] [--force]` runs `ci:local --node 24`
 and, on PASS only, writes the receipt `.pack/ci-local/passed/<sha>`; a receipt for the same SHA returns PASS without re-running.
-Required before merging a PR. `pre-push` runs `land:check` only for `refs/heads/main` and `refs/heads/wave/*` pushes marked
+Required before merging a PR. Fail closed: an existing receipt is removed before any re-run, so a failed, cancelled or running `--force` leaves none; the receipt is written atomically from `ci:local`'s own `result.json` (SHA, node, outcomes, counts, log path) and validated on read, not by existence. The test seam `DECKENT_CI_LOCAL_SCRIPT` writes only `passed-test/`, which no production reader uses. `pre-push` runs `land:check` only for `refs/heads/main` and `refs/heads/wave/*` pushes marked
 `DECKENT_LANDING=1 git push ...`; unmarked pushes print a note and pass (not a skip, no log). Git push options are not used: they
 reach only server-side hooks and the server must advertise them. Skipping a marked landing needs
 `DECKENT_CI_LOCAL_SKIP="<reason>"` (>= 8 characters), logged to `.pack/ci-local/skips.log`.

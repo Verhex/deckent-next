@@ -2,10 +2,11 @@
 // Local mirror of the ubuntu job in .github/workflows/ci.yml (developer tooling; no dependencies).
 // Runs the repository's own scripts/ci-*.mjs|sh in the workflow's order, on a clean worktree of an exact SHA,
 // with HOME/XDG/DECKENT_GLOBAL_HOME isolated. It does not cover macOS or Windows cells.
-// Usage: node scripts/ci-local.mjs [--ref <git-ref|HEAD>] [--node 24|26] [--keep]
+// Usage: node scripts/ci-local.mjs [--ref <git-ref|HEAD>] [--node 24|26] [--keep] [--deadline <minutes, default 30>]
 import { spawn, spawnSync } from 'node:child_process';
-import { appendFileSync, closeSync, cpSync, existsSync, mkdirSync, mkdtempSync, openSync, readFileSync,
-  readdirSync, rmSync, writeFileSync, chmodSync } from 'node:fs';
+import { randomBytes } from 'node:crypto';
+import { appendFileSync, closeSync, cpSync, existsSync, linkSync, mkdirSync, mkdtempSync, openSync, readFileSync,
+  readdirSync, renameSync, rmSync, writeFileSync, chmodSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
 import { delimiter, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -26,24 +27,26 @@ export function parseEnvFile(text) {
 export function cleanBaseEnv(source) {
   const out = {};
   for (const [key, value] of Object.entries(source)) {
-    if (/^(DECKENT_|GITHUB_|RUNNER_|LC_|LANG$|LANGUAGE$|XDG_|HOME$|USERPROFILE$|TMPDIR$|TMP$|TEMP$)/u.test(key)) continue;
+    // VITEST_*/NODE_OPTIONS/GIT_*/npm_*: lane-worker tuning or owner repo state must not change the 4-worker CI shape.
+    if (/^(DECKENT_|GITHUB_|RUNNER_|LC_|LANG$|LANGUAGE$|XDG_|HOME$|USERPROFILE$|TMPDIR$|TMP$|TEMP$|VITEST_|NODE_OPTIONS$|GIT_|npm_|NPM_)/u.test(key)) continue;
     out[key] = value;
   }
   return out;
 }
 
 export function parseArgs(argv) {
-  const options = { ref: 'HEAD', node: '24', keep: false };
+  const options = { ref: 'HEAD', node: '24', keep: false, deadline: '30' };
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
     if (arg === '--keep') options.keep = true;
-    else if (arg === '--ref' || arg === '--node') {
+    else if (arg === '--ref' || arg === '--node' || arg === '--deadline') {
       const value = argv[++i];
       if (!value) throw new Error(`CI_LOCAL_USAGE: ${arg} needs a value`);
       options[arg.slice(2)] = value;
     } else throw new Error(`CI_LOCAL_USAGE: unknown argument ${arg}`);
   }
   if (!/^\d+$/u.test(options.node)) throw new Error('CI_LOCAL_USAGE: --node must be a major number (24 or 26)');
+  if (!/^\d+$/u.test(options.deadline) || Number(options.deadline) < 1) throw new Error('CI_LOCAL_USAGE: --deadline is whole minutes >= 1 (default 30, the workflow job bound)');
   return options;
 }
 
@@ -70,63 +73,109 @@ export function findNodeBin(major, env = process.env) {
 }
 
 function git(cwd, ...args) {
-  const r = spawnSync('git', args, { cwd, encoding: 'utf8' });
+  const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith('GIT_')));
+  const r = spawnSync('git', args, { cwd, encoding: 'utf8', env });
   if (r.status !== 0) throw new Error(`git ${args.join(' ')} failed: ${r.stderr.trim()}`);
   return r.stdout.trim();
 }
 
+const sleep = ms => new Promise(done => setTimeout(done, ms));
 function pidAlive(pid) { try { process.kill(pid, 0); return true; } catch (e) { return e.code === 'EPERM'; } }
+function groupAlive(pgid) { try { process.kill(-pgid, 0); return true; } catch (e) { return e.code === 'EPERM'; } }
 
-/** Returns a refusal message when a live process holds the lock, else null (stale or unreadable locks are removed). */
-function lockHolderMessage(path) {
-  let holder = {};
-  try { holder = JSON.parse(readFileSync(path, 'utf8')); } catch { /* unreadable lock is treated as stale */ }
-  if (holder.pid && pidAlive(holder.pid)) {
-    return `CI_LOCAL_BUSY: another ci:local run holds the lock (pid ${holder.pid}, ref ${holder.ref}, since ${holder.startedAt}). Wait for it; two full runs overload the machine.`;
+/** Empties a whole process group: SIGTERM, bounded wait, SIGKILL, bounded wait. Returns exit evidence. */
+export async function stopGroup(pgid, { termMs = 10_000, killMs = 5_000 } = {}) {
+  const evidence = { pgid, sentTerm: false, sentKill: false, settled: !groupAlive(pgid), waitedMs: 0 };
+  if (evidence.settled) return evidence;
+  const started = Date.now();
+  try { process.kill(-pgid, 'SIGTERM'); evidence.sentTerm = true; } catch { /* group vanished */ }
+  while (groupAlive(pgid) && Date.now() - started < termMs) await sleep(50);
+  if (groupAlive(pgid)) {
+    try { process.kill(-pgid, 'SIGKILL'); evidence.sentKill = true; } catch { /* group vanished */ }
+    while (groupAlive(pgid) && Date.now() - started < termMs + killMs) await sleep(50);
   }
-  rmSync(path, { force: true });
-  return null;
+  evidence.settled = !groupAlive(pgid); evidence.waitedMs = Date.now() - started;
+  return evidence;
 }
 
-/** One full run at a time per repository (all worktrees share the git common dir). */
-function acquireLock(path, info) {
+function readLock(path) {
+  try { return JSON.parse(readFileSync(path, 'utf8')); } catch { return null; }
+}
+function lockBusyMessage(holder) {
+  return `CI_LOCAL_BUSY: another ci:local run holds the lock (pid ${holder.pid}${holder.pgid ? `, process group ${holder.pgid}` : ''}, ref ${holder.ref}, since ${holder.startedAt}). Wait for it; two full runs overload the machine.`;
+}
+function publishAtomically(path, text, { exclusive }) {
+  const temporary = `${path}.${process.pid}.${randomBytes(4).toString('hex')}.tmp`;
+  writeFileSync(temporary, text);
+  try {
+    if (exclusive) linkSync(temporary, path); else renameSync(temporary, path); // link fails with EEXIST: atomic, complete-content publication
+  } finally { rmSync(temporary, { force: true }); }
+}
+
+/**
+ * One full run at a time per repository (all worktrees share the git common dir). The lock is published complete
+ * (temp file + link), is owned by a token, and counts as held while the run process OR its step process group lives.
+ * An unreadable lock is treated as held (fail closed); only a lock whose recorded pid and group are both gone is stale.
+ */
+export function acquireLock(path, info) {
+  const token = randomBytes(8).toString('hex');
+  const state = { ...info, token, pgid: null };
   for (let attempt = 0; attempt < 2; attempt++) {
-    let fd = null;
-    try { fd = openSync(path, 'wx'); } catch (error) { if (error.code !== 'EEXIST') throw error; }
-    if (fd !== null) {
-      writeFileSync(fd, JSON.stringify(info)); closeSync(fd);
-      return () => { try { rmSync(path); } catch { /* already gone */ } };
+    try {
+      publishAtomically(path, JSON.stringify(state), { exclusive: true });
+      return {
+        setGroup(pgid) { state.pgid = pgid; if (readLock(path)?.token === token) publishAtomically(path, JSON.stringify(state), { exclusive: false }); },
+        release() { if (readLock(path)?.token === token) rmSync(path, { force: true }); },
+      };
+    } catch (error) {
+      if (error.code !== 'EEXIST') throw error;
     }
-    const busy = lockHolderMessage(path);
-    if (busy) throw new Error(busy);
+    const holder = readLock(path);
+    if (!holder || !holder.token) throw new Error(`CI_LOCAL_BUSY: lock ${path} is unreadable; refusing (fail closed). Remove it manually only if no ci:local run is active.`);
+    if (pidAlive(holder.pid) || (holder.pgid && groupAlive(holder.pgid))) throw new Error(lockBusyMessage(holder));
+    // Stale: move it aside first so a concurrent winner's fresh lock is never deleted by mistake.
+    const aside = `${path}.stale.${process.pid}`;
+    try { renameSync(path, aside); } catch { continue; }
+    if (readLock(aside)?.token !== holder.token) { try { linkSync(aside, path); } catch { /* someone re-published */ } rmSync(aside, { force: true }); throw new Error(lockBusyMessage(readLock(path) ?? holder)); }
+    rmSync(aside, { force: true });
   }
   throw new Error('CI_LOCAL_LOCK_UNAVAILABLE');
 }
 
-function runStep(label, command, args, { cwd, env, logFile, tee }) {
+let activeGroup = null;
+
+/** Runs one step in its own process group; the group is reaped after exit and on timeout. */
+export function runStep(label, command, args, { cwd, env, logFile, tee, timeoutMs, onGroup }) {
   return new Promise(resolveStep => {
     const out = openSync(logFile, 'a');
     appendFileSync(logFile, `\n=== ${label}: ${command} ${args.join(' ')} ===\n`);
     const started = Date.now();
-    const child = spawn(command, args, { cwd, env, stdio: ['ignore', 'pipe', 'pipe'] });
-    activeChild = child;
+    const child = spawn(command, args, { cwd, env, stdio: ['ignore', 'pipe', 'pipe'], detached: true });
+    const pgid = child.pid;
+    if (pgid) { activeGroup = pgid; onGroup?.(pgid); }
     const sink = tee ? openSync(tee, 'a') : null;
+    let timedOut = false;
+    const timer = timeoutMs ? setTimeout(() => { timedOut = true; appendFileSync(logFile, `step deadline ${timeoutMs}ms reached; stopping process group\n`); if (pgid) void stopGroup(pgid); }, timeoutMs) : null;
     const forward = chunk => {
       appendFileSync(out, chunk); if (sink !== null) appendFileSync(sink, chunk);
       if (process.env.CI_LOCAL_QUIET !== '1') process.stdout.write(chunk);
     };
     child.stdout.on('data', forward); child.stderr.on('data', forward);
-    child.on('close', (code, signal) => {
-      activeChild = null; closeSync(out); if (sink !== null) closeSync(sink);
+    child.on('close', async (code, signal) => {
+      if (timer) clearTimeout(timer);
+      // Descendants that outlived the step (and closed their pipes) are reaped before the next step or any cleanup.
+      const reaped = pgid ? await stopGroup(pgid) : { settled: true };
+      if (reaped.sentTerm) appendFileSync(logFile, `leaked descendants reaped after step exit: ${JSON.stringify(reaped)}\n`);
+      if (activeGroup === pgid && reaped.settled) activeGroup = null;
+      closeSync(out); if (sink !== null) closeSync(sink);
       const seconds = Math.round((Date.now() - started) / 1000);
-      process.stdout.write(`--- ${label}: ${code === 0 ? 'success' : `failure (${signal ?? `exit ${code}`})`} in ${seconds}s\n`);
-      resolveStep({ code: code ?? 1, seconds });
+      const status = timedOut ? 'failure (step deadline)' : code === 0 ? 'success' : `failure (${signal ?? `exit ${code}`})`;
+      process.stdout.write(`--- ${label}: ${status} in ${seconds}s\n`);
+      resolveStep({ code: timedOut ? 124 : (code ?? 1), seconds, reaped });
     });
     child.on('error', error => { appendFileSync(logFile, `spawn error: ${error.message}\n`); resolveStep({ code: 127, seconds: 0 }); });
   });
 }
-
-let activeChild = null;
 
 export async function main(argv) {
   const options = parseArgs(argv);
@@ -136,7 +185,7 @@ export async function main(argv) {
   const nodeBin = findNodeBin(options.node);
   const nodeVersion = spawnSync(join(nodeBin, 'node'), ['--version'], { encoding: 'utf8' }).stdout.trim();
   const logDir = join(repo, '.pack', 'ci-local', `${sha.slice(0, 12)}-node${options.node}`);
-  const release = acquireLock(join(commonDir, 'ci-local.lock'), { pid: process.pid, ref: sha, startedAt: new Date().toISOString() });
+  const lock = acquireLock(join(commonDir, 'ci-local.lock'), { pid: process.pid, ref: sha, startedAt: new Date().toISOString() });
   rmSync(logDir, { recursive: true, force: true }); mkdirSync(logDir, { recursive: true });
   const scratch = mkdtempSync(join(tmpdir(), 'ci-local-'));
   const wt = join(scratch, 'wt');
@@ -149,15 +198,34 @@ export async function main(argv) {
   const started = Date.now();
   let worktreeAdded = false;
   const cleanup = () => {
-    if (activeChild) activeChild.kill('SIGTERM');
     if (!options.keep) {
       if (worktreeAdded) spawnSync('git', ['worktree', 'remove', '--force', wt], { cwd: repo });
       rmSync(scratch, { recursive: true, force: true });
       spawnSync('git', ['worktree', 'prune'], { cwd: repo });
     }
-    release();
+    lock.release();
   };
-  for (const sig of ['SIGINT', 'SIGTERM']) process.on(sig, () => { cleanup(); process.exit(130); });
+  // Cancellation and the whole-run deadline empty the active step's process group FIRST; the worktree is removed and the
+  // lock released only after the group is verified gone. If it cannot be settled the lock stays (it records the group).
+  let aborting = null;
+  const abort = (reason, code) => {
+    if (aborting) return aborting.done;
+    const record = { reason, code, at: new Date().toISOString(), group: null };
+    aborting = record;
+    process.stderr.write(`ci:local ${reason}: stopping the active process group before cleanup\n`);
+    record.done = (async () => {
+      record.group = activeGroup ? await stopGroup(activeGroup) : { settled: true, pgid: null };
+      if (record.group.settled) activeGroup = null;
+      try { writeFileSync(join(logDir, 'cancel.json'), JSON.stringify({ reason, code, at: record.at, group: record.group }, null, 2) + '\n'); } catch { /* log dir already gone */ }
+      if (record.group.settled) cleanup();
+      else process.stderr.write(`ci:local: process group ${record.group.pgid} still alive after SIGKILL; lock and worktree kept (fail closed)\n`);
+      process.exit(code);
+    })();
+    return record.done;
+  };
+  for (const sig of ['SIGINT', 'SIGTERM']) process.on(sig, () => { void abort(sig, 130); });
+  const deadlineTimer = setTimeout(() => { void abort(`deadline ${options.deadline}m`, 124); }, Number(options.deadline) * 60_000);
+  deadlineTimer.unref();
 
   const outcomes = { temporaryParent: 'skipped', npmCi: 'skipped', dockerFixture: 'skipped', bubblewrap: 'skipped', shellRealm: 'skipped', verification: 'skipped' };
   const durations = {};
@@ -193,9 +261,9 @@ export async function main(argv) {
       chmodSync(join(shimDir, 'docker'), 0o755); env.PATH = `${shimDir}${delimiter}${env.PATH}`;
     }
     const step = async (key, label, command, args, extra = {}) => {
-      if (failed) return;
+      if (failed || aborting) return;
       Object.assign(env, parseEnvFile(readFileSync(githubEnvFile, 'utf8')));
-      const result = await runStep(label, command, args, { cwd: wt, env: { ...env, ...extra.env }, logFile: join(logDir, `${label}.log`), tee: extra.tee });
+      const result = await runStep(label, command, args, { cwd: wt, env: { ...env, ...extra.env }, logFile: join(logDir, `${label}.log`), tee: extra.tee, timeoutMs: extra.timeoutMs, onGroup: pgid => lock.setGroup(pgid) });
       outcomes[key] = result.code === 0 ? 'success' : 'failure'; durations[label] = result.seconds;
       if (result.code !== 0) failed = true;
     };
@@ -210,14 +278,15 @@ export async function main(argv) {
     await step('shellRealm', 'shell-realm', 'node', ['scripts/ci-shell-realm.mjs']);
     mkdirSync(join(wt, '.pack', 'ci-evidence'), { recursive: true });
     await step('verification', 'verify', 'bash', ['-c', 'set -o pipefail; npm run verify 2>&1 | tee .pack/ci-evidence/verify.log'],
-      { env: { DECKENT_TEST_STARTUP_COST: '1', DECKENT_TEST_TIMEOUT_MS: '30000' } });
+      { env: { DECKENT_TEST_STARTUP_COST: '1', DECKENT_TEST_TIMEOUT_MS: '30000' }, timeoutMs: 20 * 60_000 }); // workflow verify step bound
+    if (aborting) await aborting.done;
     // The summary step is always() in the workflow.
     const summaryEnv = { ...env, DECKENT_CI_VERIFY_OUTCOME: outcomes.verification, DECKENT_CI_TEMP_OUTCOME: outcomes.temporaryParent,
       DECKENT_CI_INSTALL_OUTCOME: outcomes.npmCi, DECKENT_CI_DOCKER_OUTCOME: outcomes.dockerFixture,
       DECKENT_CI_BWRAP_OUTCOME: outcomes.bubblewrap, DECKENT_CI_REALM_OUTCOME: outcomes.shellRealm };
     mkdirSync(join(wt, '.pack', 'ci-evidence'), { recursive: true });
     const summaryResult = await runStep('verification-summary', 'node', ['scripts/ci-verification-summary.mjs'],
-      { cwd: wt, env: summaryEnv, logFile: join(logDir, 'verification-summary.log') });
+      { cwd: wt, env: summaryEnv, logFile: join(logDir, 'verification-summary.log'), onGroup: pgid => lock.setGroup(pgid) });
     if (summaryResult.code !== 0) failed = true;
     cpSync(join(wt, '.pack', 'ci-evidence'), join(logDir, 'ci-evidence'), { recursive: true });
     // Keep downloaded bubblewrap sources for the next run.
@@ -228,6 +297,8 @@ export async function main(argv) {
   } catch (error) {
     failed = true; process.stderr.write(`ci:local error: ${error.message}\n`);
   }
+  if (aborting) await aborting.done;
+  clearTimeout(deadlineTimer);
   const total = Math.round((Date.now() - started) / 1000);
   let evidence = null; let failedTests = [];
   try {
