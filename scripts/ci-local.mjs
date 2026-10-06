@@ -79,6 +79,17 @@ function git(cwd, ...args) {
   return r.stdout.trim();
 }
 
+/** The mirror manages POSIX process groups and an ubuntu workflow; Windows is a typed refusal, not a degraded run. */
+export function assertSupportedPlatform(platform = process.platform) {
+  if (platform === 'win32') throw new Error('CI_LOCAL_UNSUPPORTED_PLATFORM: ci:local needs POSIX process groups (negative-pid signals) and mirrors the ubuntu job; Windows is not supported');
+}
+
+/** A step whose process group could not be proven empty holds the run: it fails and nothing may be cleaned up. */
+export function classifyStep(result) {
+  const hold = result.reaped?.settled === false;
+  return { outcome: result.code === 0 && !hold ? 'success' : 'failure', hold };
+}
+
 const sleep = ms => new Promise(done => setTimeout(done, ms));
 function pidAlive(pid) { try { process.kill(pid, 0); return true; } catch (e) { return e.code === 'EPERM'; } }
 function groupAlive(pgid) { try { process.kill(-pgid, 0); return true; } catch (e) { return e.code === 'EPERM'; } }
@@ -145,7 +156,7 @@ export function acquireLock(path, info) {
 let activeGroup = null;
 
 /** Runs one step in its own process group; the group is reaped after exit and on timeout. */
-export function runStep(label, command, args, { cwd, env, logFile, tee, timeoutMs, onGroup }) {
+export function runStep(label, command, args, { cwd, env, logFile, tee, timeoutMs, onGroup, reap = stopGroup }) {
   return new Promise(resolveStep => {
     const out = openSync(logFile, 'a');
     appendFileSync(logFile, `\n=== ${label}: ${command} ${args.join(' ')} ===\n`);
@@ -155,7 +166,7 @@ export function runStep(label, command, args, { cwd, env, logFile, tee, timeoutM
     if (pgid) { activeGroup = pgid; onGroup?.(pgid); }
     const sink = tee ? openSync(tee, 'a') : null;
     let timedOut = false;
-    const timer = timeoutMs ? setTimeout(() => { timedOut = true; appendFileSync(logFile, `step deadline ${timeoutMs}ms reached; stopping process group\n`); if (pgid) void stopGroup(pgid); }, timeoutMs) : null;
+    const timer = timeoutMs ? setTimeout(() => { timedOut = true; appendFileSync(logFile, `step deadline ${timeoutMs}ms reached; stopping process group\n`); if (pgid) void reap(pgid); }, timeoutMs) : null;
     const forward = chunk => {
       appendFileSync(out, chunk); if (sink !== null) appendFileSync(sink, chunk);
       if (process.env.CI_LOCAL_QUIET !== '1') process.stdout.write(chunk);
@@ -164,7 +175,7 @@ export function runStep(label, command, args, { cwd, env, logFile, tee, timeoutM
     child.on('close', async (code, signal) => {
       if (timer) clearTimeout(timer);
       // Descendants that outlived the step (and closed their pipes) are reaped before the next step or any cleanup.
-      const reaped = pgid ? await stopGroup(pgid) : { settled: true };
+      const reaped = pgid ? await reap(pgid) : { settled: true };
       if (reaped.sentTerm) appendFileSync(logFile, `leaked descendants reaped after step exit: ${JSON.stringify(reaped)}\n`);
       if (activeGroup === pgid && reaped.settled) activeGroup = null;
       closeSync(out); if (sink !== null) closeSync(sink);
@@ -177,7 +188,8 @@ export function runStep(label, command, args, { cwd, env, logFile, tee, timeoutM
   });
 }
 
-export async function main(argv) {
+export async function main(argv, deps = {}) {
+  assertSupportedPlatform();
   const options = parseArgs(argv);
   const repo = git(process.cwd(), 'rev-parse', '--show-toplevel');
   const sha = git(repo, 'rev-parse', '--verify', `${options.ref}^{commit}`);
@@ -230,6 +242,7 @@ export async function main(argv) {
   const outcomes = { temporaryParent: 'skipped', npmCi: 'skipped', dockerFixture: 'skipped', bubblewrap: 'skipped', shellRealm: 'skipped', verification: 'skipped' };
   const durations = {};
   let failed = false;
+  let unsettled = null; // a step group that could not be proven gone: custody stays, nothing is cleaned up
   try {
     process.stdout.write(`ci:local ref=${options.ref} sha=${sha} node=${nodeVersion} scratch=${scratch} logs=${logDir}\n`);
     git(repo, 'worktree', 'add', '--detach', wt, sha); worktreeAdded = true;
@@ -261,11 +274,13 @@ export async function main(argv) {
       chmodSync(join(shimDir, 'docker'), 0o755); env.PATH = `${shimDir}${delimiter}${env.PATH}`;
     }
     const step = async (key, label, command, args, extra = {}) => {
-      if (failed || aborting) return;
+      if (failed || aborting || unsettled) return;
       Object.assign(env, parseEnvFile(readFileSync(githubEnvFile, 'utf8')));
-      const result = await runStep(label, command, args, { cwd: wt, env: { ...env, ...extra.env }, logFile: join(logDir, `${label}.log`), tee: extra.tee, timeoutMs: extra.timeoutMs, onGroup: pgid => lock.setGroup(pgid) });
-      outcomes[key] = result.code === 0 ? 'success' : 'failure'; durations[label] = result.seconds;
-      if (result.code !== 0) failed = true;
+      const result = await runStep(label, command, args, { cwd: wt, env: { ...env, ...extra.env }, logFile: join(logDir, `${label}.log`), tee: extra.tee, timeoutMs: extra.timeoutMs, onGroup: pgid => lock.setGroup(pgid), reap: deps.reap });
+      const { outcome, hold } = classifyStep(result);
+      outcomes[key] = outcome; durations[label] = result.seconds;
+      if (outcome !== 'success') failed = true;
+      if (hold) unsettled = { step: label, group: result.reaped };
     };
     await step('temporaryParent', 'temporary-parent', 'node', ['scripts/ci-temporary-environment.mjs']);
     await step('npmCi', 'npm-ci', 'npm', ['ci']);
@@ -285,9 +300,13 @@ export async function main(argv) {
       DECKENT_CI_INSTALL_OUTCOME: outcomes.npmCi, DECKENT_CI_DOCKER_OUTCOME: outcomes.dockerFixture,
       DECKENT_CI_BWRAP_OUTCOME: outcomes.bubblewrap, DECKENT_CI_REALM_OUTCOME: outcomes.shellRealm };
     mkdirSync(join(wt, '.pack', 'ci-evidence'), { recursive: true });
-    const summaryResult = await runStep('verification-summary', 'node', ['scripts/ci-verification-summary.mjs'],
-      { cwd: wt, env: summaryEnv, logFile: join(logDir, 'verification-summary.log'), onGroup: pgid => lock.setGroup(pgid) });
-    if (summaryResult.code !== 0) failed = true;
+    if (!unsettled) {
+      const summaryResult = await runStep('verification-summary', 'node', ['scripts/ci-verification-summary.mjs'],
+        { cwd: wt, env: summaryEnv, logFile: join(logDir, 'verification-summary.log'), onGroup: pgid => lock.setGroup(pgid), reap: deps.reap });
+      const { outcome, hold } = classifyStep(summaryResult);
+      if (outcome !== 'success') failed = true;
+      if (hold) unsettled = { step: 'verification-summary', group: summaryResult.reaped };
+    }
     cpSync(join(wt, '.pack', 'ci-evidence'), join(logDir, 'ci-evidence'), { recursive: true });
     // Keep downloaded bubblewrap sources for the next run.
     const ownCache = join(repo, '.pack', 'bwrap', 'cache');
@@ -306,13 +325,17 @@ export async function main(argv) {
     evidence = summary.evidence; failedTests = summary.failedTests;
   } catch { /* summary not produced */ }
   const report = { ref: options.ref, sha, node: nodeVersion, outcomes, stepSeconds: durations, totalSeconds: total,
-    counts: evidence?.counts ?? null, failedTests: failedTests.map(t => `${t.file ?? ''} :: ${t.test}`), exit: failed ? 1 : 0 };
+    counts: evidence?.counts ?? null, failedTests: failedTests.map(t => `${t.file ?? ''} :: ${t.test}`), unsettled, exit: failed ? 1 : 0 };
   writeFileSync(join(logDir, 'result.json'), JSON.stringify(report, null, 2) + '\n');
   process.stdout.write(`\nci:local result: ${failed ? 'FAILED' : 'PASSED'} in ${Math.floor(total / 60)}m${total % 60}s (node ${nodeVersion}, ${sha.slice(0, 12)})\n`);
   process.stdout.write(`outcomes: ${JSON.stringify(outcomes)}\n`);
   if (report.counts) process.stdout.write(`tests: ${JSON.stringify(report.counts)}\n`);
   if (failedTests.length) process.stdout.write(`failed tests (${failedTests.length}):\n${report.failedTests.map(t => `  - ${t}`).join('\n')}\n`);
   process.stdout.write(`logs: ${logDir}${options.keep ? `\nkept worktree: ${wt}` : ''}\n`);
+  if (unsettled) {
+    process.stderr.write(`ci:local: process group of step ${unsettled.step} not proven gone; FAILED, lock and worktree kept (fail closed): ${JSON.stringify(unsettled.group)}\n`);
+    return 1;
+  }
   cleanup();
   return failed ? 1 : 0;
 }
