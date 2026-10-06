@@ -90,7 +90,9 @@ describe('durable installation identity', () => {
     if (machineNotRun) context.skip(machineNotRun);
     const f = await fixture(), original = await new FileInstallationIdentityStore(f.layout).loadOrCreate();
     const before = await readFile(f.path, 'utf8'), binding = JSON.parse(before).binding;
-    const source = { capture: async () => ({ ...binding, machineDigest: 'a'.repeat(64) }) };
+    // Persisted in the v1 shape; the injected source returns a current (v2) capture at the same location.
+    const location = { canonicalRoot: binding.canonicalRoot, device: binding.device, inode: binding.inode };
+    const source = { capture: async () => ({ ...location, schemaVersion: 2 as const, strength: 'machine' as const, source: 'platform' as const, machineDigest: 'a'.repeat(64) }) };
     const store = new FileInstallationIdentityStore(f.layout, undefined, source);
     await expect(store.loadOrCreate()).rejects.toMatchObject({ code: 'INSTALLATION_IDENTITY_RELOCATED' });
     expect(await readFile(f.path, 'utf8')).toBe(before);
