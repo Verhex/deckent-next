@@ -143,7 +143,7 @@ posixTest('normal exit + failed drain: run is FAILED, no further step, lock and 
   fs.writeFileSync(path.join(dir, 'package.json'), '{}'); git('add', '-A'); git('commit', '-qm', 'base');
   const driver = path.join(dir, 'driver.mjs');
   fs.writeFileSync(driver, `import { main } from ${JSON.stringify(path.join(root, 'scripts', 'ci-local.mjs'))};
-process.exit(await main(['--ref', 'HEAD'], { reap: async pgid => ({ pgid, sentTerm: true, sentKill: true, settled: false, waitedMs: 1 }) }));`);
+process.exit(await main(['--ref', 'HEAD', '--node', ${JSON.stringify(process.versions.node.split('.')[0])}], { reap: async pgid => ({ pgid, sentTerm: true, sentKill: true, settled: false, waitedMs: 1 }) }));`);
   const run = spawnSync(process.execPath, [driver], { cwd: dir, encoding: 'utf8', env: { ...process.env, CI_LOCAL_QUIET: '1' } });
   const scratch = /scratch=(\S+)/u.exec(run.stdout)?.[1];
   t.after(() => { spawnSync('git', ['worktree', 'remove', '--force', path.join(scratch, 'wt')], { cwd: dir }); fs.rmSync(scratch, { recursive: true, force: true }); });
