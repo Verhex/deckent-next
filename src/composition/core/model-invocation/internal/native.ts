@@ -1,11 +1,13 @@
 import { isDeepStrictEqual } from 'node:util';
 import { modelInvocationProfileSchema, type ModelBindingDefinition, type ModelInvocationProfile } from '#domain/index.js';
 import { ProviderSpendError, type ModelInvocationNativePort, type ModelInvocationSpendingAuthority, type ModelInvocationSpendingInput } from '#engine/index.js';
-import { createOpenAiChatNativePort, OPENAI_CHAT_HTTP_ADAPTER_ID, OPENAI_CHAT_HTTP_ADAPTER_VERSION, parseOpenAiChatHttpDefinition, createOpenRouterPricedNative, OPENROUTER_CHAT_HTTP_ADAPTER_ID, OPENROUTER_CHAT_HTTP_ADAPTER_VERSION, parseOpenRouterChatDefinition, type OpenRouterPricedNative, fetchOpenRouterTariff, type OpenRouterMetadataObservation, providerSpendingBudgetFor, quoteOpenAiChatOperatorTariff, createAnthropicMessagesPricedNative, parseAnthropicMessagesDefinition, createDecisionHttpNativePort, decisionHttpAdapter, parseDecisionHttpDefinition, quoteDecisionHttpOperatorTariff, ANTHROPIC_MESSAGES_HTTP_ADAPTER_ID, ANTHROPIC_MESSAGES_HTTP_ADAPTER_VERSION, type AnthropicMessagesPricedNative } from '#adapters/index.js';
+import { createOpenAiChatNativePort, OPENAI_CHAT_HTTP_ADAPTER_ID, OPENAI_CHAT_HTTP_ADAPTER_VERSION, parseOpenAiChatHttpDefinition, createOpenRouterPricedNative, OPENROUTER_CHAT_HTTP_ADAPTER_ID, OPENROUTER_CHAT_HTTP_ADAPTER_VERSION, parseOpenRouterChatDefinition, type OpenRouterPricedNative, fetchOpenRouterTariff, createOpenRouterTariffCache, type OpenRouterMetadataObservation, providerSpendingBudgetFor, quoteOpenAiChatOperatorTariff, createAnthropicMessagesPricedNative, parseAnthropicMessagesDefinition, createDecisionHttpNativePort, decisionHttpAdapter, parseDecisionHttpDefinition, quoteDecisionHttpOperatorTariff, ANTHROPIC_MESSAGES_HTTP_ADAPTER_ID, ANTHROPIC_MESSAGES_HTTP_ADAPTER_VERSION, type AnthropicMessagesPricedNative } from '#adapters/index.js';
 import type { ConfigLoadOptions, TrustedClock } from '#platform/index.js';
 import { scopedInvocationCredentialResolver } from './credential.js';
 import type { loadInvocationContext } from './context.js';
 import { invocationEffectAuthority } from './authority.js';
+/** One tariff per (endpoint, model, tag, CA) for the process lifetime of the freshness window: calls inside it make no metadata request. The fetcher is resolved per miss. */
+const tariffCache = createOpenRouterTariffCache((options, now, signal) => fetchOpenRouterTariff(options, now, signal));
 type InvocationNativeContext = Awaited<ReturnType<typeof loadInvocationContext>>;
 /** One invocation-scoped registry owns the exact OpenRouter native/quote pair. Metadata acquisition is unauthenticated and completes before pure preparation; credential resolution remains send-only. Tariff acquisition, preparation, quote and send read one trusted clock: the host wall may step backwards between them (I40), and the platform floor, not raw Date.now, keeps them ordered within this process. */
 export function createConfiguredModelInvocationNative(context: InvocationNativeContext, options: ConfigLoadOptions, clock: TrustedClock) {
@@ -41,7 +43,7 @@ export function createConfiguredModelInvocationNative(context: InvocationNativeC
       // Reject absent/revoked scope authority before the metadata network effect.
       providerSpendingBudgetFor(await invocationEffectAuthority(context, input.profile)(signal), input.profile.scopeId);
       const definition = parseOpenRouterChatDefinition(input.profile.adapter.definition);
-      current.cell.observation = await fetchOpenRouterTariff({ endpoint: definition.metadataEndpoint, modelId: input.definition.model.nativeId, endpointTag: definition.endpointTag,
+      current.cell.observation = await tariffCache.get({ endpoint: definition.metadataEndpoint, modelId: input.definition.model.nativeId, endpointTag: definition.endpointTag,
         ...definition.metadataLimits, ...(definition.transport.tls ? { caPem: definition.transport.tls.caPem } : {}) }, now, signal);
     },
   });
