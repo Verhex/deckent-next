@@ -105,10 +105,66 @@ PLAN satırlarının önceki hâli:
 | MODEL-INGRESS-UNICODE | Gizli Unicode: not/audit/karantina | P1 main'de; P2 `de286888` rebase | P2 inceleme; P3 araç/MCP şema + argüman JSON | [work-list](.deckent/docs/plan/work-list.md) |
 | MONITOR | İnsan okur canlı izleme yüzeyi (v1+v1.1 indi) | Kalan: push akışı | M2/M3 worker başlangıç/bitiş (MONITOR-HUMAN) | [work-list](.deckent/docs/plan/work-list.md) |
 
-- RUN-YAŞAM (#8): `launch-refused {code}` ve `abandoned` attempt gözlemleri, `recordAttemptClosure`, `deckent task close-abandoned` (reconcile yetkisi); ledger 47 değişmedi. Kod `lane/w2-run-life` (`e2dfd807`, `fe42dfa7`, `b6bf8111`). Açık: MCP `close_abandoned_attempt`; mühürlü audit kaydı; terk dispatch kaydı/workspace serbest bırakma (#13 EXEC-RELEASE).
+- RUN-YAŞAM (#8): `launch-refused {code}` attempt gözlemi, `recordAttemptClosure`, `deckent task mark-lost` (reconcile yetkisi; tipli `unknown {WORKER_LOST}` hold'u: görev `reconciling`, `unresolvedEffects:true`, slot tutulur, kapanış yok); ledger 47 değişmedi. Kod `lane/w2-run-life` (`e2dfd807`, `fe42dfa7`, `b6bf8111`) + düzeltme `d7abb36e`, `7c74587b` (Astra 2382 P1-1, P1-2). Açık: MCP `mark_lost_attempt`; mühürlü audit kaydı; kaybolan dispatch kaydı/workspace serbest bırakma (#13 EXEC-RELEASE) ve KARAR 12 (slot bırakma: tipli manuel inceleme/yerleşim kararı veya dispatch fence + sonlanma kanıtı, ayrı kart).
 - MODEL-INGRESS-P2: alan çerçeveleme + gizli Unicode işaretleme, onay kartı + terminal EN/TR (`363fd061`, `9dd85f7b`); landing sonrası COMPLETED-PLAN; kalan P3 (araç/MCP şema açıklaması ve argüman JSON).
 - KATALOG-TEMİZLİK (`0ba5c2e7`) + DISPATCH-KATALOG (`4987ca07`): LAYOUT_* insan metni, 83 kullanılmayan kod silindi, 4 DispatchError kodu registry'de; açık: `LayoutError` insan metni (config dışı), I18N-ORPHANS ayrı kart.
 - MONITOR-M2M3 (`f633d275`): worker anlatısı, tipli teslim sütunu, düşen test listesi; açık: PATCH_LIMIT sebebinin kalıcı kaydı (patch-prepare reddi için tipli makbuz, ledger sürümü + göç).
-- IDENTITY-BINDING-V2 (`9433ecbb`..`d775ea2f`): kurulum bağı v2; owner-decisions'ta rollback notu. VERIFY-ENV: verify imajında taşınma/kopya testleri zayıf bağ yoluyla koşar.
-- CLI-SPLIT (`09c9e5ba`, `09ba0bf6`): doctor render `src/surfaces/core/doctor` birimine taşındı (cli 2003 → 1976 satır, bütçe 2000); `task close-abandoned` yardım özeti kısaltıldı, golden yeniden üretildi.
+- IDENTITY-BINDING-V2 (`9433ecbb`..`d775ea2f`): kurulum bağı v2; owner-decisions'ta rollback notu. VERIFY-ENV: verify imajında taşınma/kopya testleri zayıf bağ yoluyla koşar. Düzeltme (Astra 2382 P1-3): owned init (`init policy --apply`, `init apply/resume`) `admitWrite` kabulünü ilk kalıcı etkiden önce çalıştırır; ret durumunda dosya/journal yazılmaz.
+- CLI-SPLIT (`09c9e5ba`, `09ba0bf6`): doctor render `src/surfaces/core/doctor` birimine taşındı (cli 2003 → 1976 satır, bütçe 2000); `task mark-lost` yardım özeti (önce `close-abandoned`), golden yeniden üretildi.
 - CI-PERF: CI'ya ayrı perf job (K-LATENCY-METRICS owner kararı) hâlâ açık.
+
+#### Astra 2382 düzeltme turu — değişen satırların önceki hâli (Astra 2382 sonrası geçersiz)
+
+Aşağıdaki metinler `close-abandoned → failed` anlatımını ve binding admission öncesi hâli taşır; Astra 2382 P1-1/P1-2/P1-3 sonrası geçersizdir, yalnız geçmiş olarak saklanır. Güncel metin ilgili dosyalardadır.
+
+Önceki hâl `ARCHITECTURE.md:148` (Astra 2382 sonrası geçersiz):
+
+- **Attempt kapanışı: launch-refused ve close-abandoned (RUN-YAŞAM, 2026-10-06, `wave/2`):** dispatch claim'inden önce kalıcı ret (`EXECUTION_NOT_CONFIGURED|EXECUTION_HOST_UNSUPPORTED|EXECUTION_PROFILE_INVALID|DISPATCH_ARTIFACT_REQUIRED`, engine `classifyLaunchRefusal`) tipli `launch-refused {code}` gözlemi olarak bir kez kaydedilir (geçici retler kayıt yazmaz); `deckent task close-abandoned` kanıtlı yokluk (granted, terminal yok, container daemon'da `missing`, yürütücü nabzı stale/yok) + bilinen etki varsa `abandoned` gözlemi yazar, görev `failed`, bağımlılar aynı projeksiyonda kapanır. `unknown`/`cancelled` gözlemli veya `unresolvedEffects` açık attempt kapanmaz; yalnız operatör/`reconcile` yetkisi. Ortak kaydedici `recordAttemptClosure`; ledger 47 değişmedi. Ayrıntı [approval-and-delivery](.deckent/docs/architecture/approval-and-delivery.md).
+
+Önceki hâl `ARCHITECTURE.md:335` (Astra 2382 sonrası geçersiz):
+
+- **Kurulum bağı v2 (IDENTITY-BINDING-V2, owner 2026-10-06, `wave/2`):** kaynak sırası yapılandırılmış `installation.machineIdentity.source` (mutlak yol, bozuksa tipli `INSTALLATION_IDENTITY_SOURCE_INVALID`, daha zayıfa düşülmez) → platform (`/etc/machine-id`, IOPlatformUUID) → zayıf bağ (canonicalRoot + device + inode). Platform makine bağı alpha.6 v1 şekliyle yazılır (rollback güvenli); v2 (`binding.schemaVersion: 2`, `strength` machine|weak, `source` configured|platform|location) yalnız configured ve weak bağlar içindir. Karşılaştırmanın tek sahibi engine `assessInstallationBinding`: makine kaydı + yalnız zayıf yakalama = RELOCATED; `installation.requireMachineBinding` (varsayılan false) true iken makine kanıtı yoksa kuruluma bağlı yazmalar tipli `INSTALLATION_IDENTITY_MACHINE_BINDING_REQUIRED` ile reddedilir. ID-1D korunur: read yolu yalnız gözler (`pendingWrite`), yükseltme yazma yolunda kilit altında olur. Yukarıdaki VERIFY-ENV "bağsız v1" düşüşü artık zayıf bağa yükselir. Rollback: weak/configured kayıtlar alpha.6'da INVALID okunur ([owner-decisions](.deckent/docs/decisions/owner-decisions.md) canlı geçiş notu); ayrıntı [platform-and-layers](.deckent/docs/architecture/modules/platform-and-layers.md).
+
+Önceki hâl `approval-and-delivery.md:790` (Astra 2382 sonrası geçersiz):
+
+- Attempt gözlemine iki tipli kapanış türü: `launch-refused {code}` (`identitySchema`, Enterprise ön-kontrolleri yeni kod ekleyebilir; yalnız `reserved`'dan) ve `abandoned` (yalnız `reserved|running`'den, `unknown`'dan asla). İkisi çıkış değildir; görev `failed`, bağımlılar aynı projeksiyon işleminde `skipped (dependency-failed)`. Ortak kaydedici `recordAttemptClosure` (engine/core/runs); handoff-refused aynı yoldan geçer. Ledger 47 değişmedi; yeni türler JSON snapshot değeridir (eski binary okuyamaz, handoff-refused ile aynı).
+
+Önceki hâl `approval-and-delivery.md:792` (Astra 2382 sonrası geçersiz):
+
+- `deckent task close-abandoned <kimlik>` (`--json`, `--lang`; `reconcile` attempt yetkisi, yalnız operatör): kapanış ancak ledger'da granted + terminal yok + görev `active` + etki biliniyor + daemon container'ı açıkça `missing` + yürütücü nabzı `stale` ya da yok ve grant `inspection.workers.staleMs`'den eski ise; ledger koşulları geçmezse daemon'a gidilmez. Ret `status:'refused'` + sebep (`not-launched|terminal|not-active|effects-unresolved|container-present|executor-live`), çıkış 0, hiçbir şey değişmez. Replay idempotent. Uncertain-effect sözleşmesi değişmedi: operatör override'ı yok. Denetim izi attempt receipt'inde (actor + kanıt); mühürlü audit kaydı, MCP aracı ve terk dispatch kaydının envanterden/workspace'ten düşmesi açık takip.
+
+Önceki hâl `config-and-cli-help.md:78` (Astra 2382 sonrası geçersiz):
+
+`deckent task close-abandoned` yardımı EN/TR katalogdadır; sub-help özeti kardeş kalıbında tek satırdır ("Close an abandoned attempt (container absent, executor inactive)" / "Terk edilmiş denemeyi kapat (konteyner yok, yürütücü pasif)"), reconcile yetkisi `cli.help.task` kullanım metnindedir; `tests/fixtures/cli-help/commands-{en,tr}.json` golden'ları `vitest -u` ile yeniden üretildi (2026-10-06). Yeni config alanları: `installation.machineIdentity.source`, `installation.requireMachineBinding` ([platform-and-layers](platform-and-layers.md)).
+
+Önceki hâl `PLAN.md:19` (Astra 2382 sonrası geçersiz):
+
+| İLK-20 DALGA 2 | RUN-YAŞAM (launch-refused + close-abandoned), MODEL-INGRESS-P2, KATALOG-TEMİZLİK + DISPATCH-KATALOG, MONITOR-M2M3, CLI-SPLIT (+ BINDING-V2 yukarıda) | lane'ler `wave/2`'de toplandı; Astra parti incelemesi bekliyor | Astra parti incelemesi → PR; açık takipler: patch-prepare reddi için tipli makbuz [ledger sürümü+göç], LayoutError insan metni, mühürlü audit kaydı (close-abandoned), CI'ya perf job, MCP `close_abandoned_attempt` | `proof/W2-*-2026-10-06/`; [work-list](.deckent/docs/plan/work-list.md) |
+
+Önceki hâl `PLAN.md:68` (Astra 2382 sonrası geçersiz):
+
+- **Dalga 2 takipleri** (lead kararları 2026-10-06): patch-prepare reddi tipli makbuz (`attempt_receipts`, ledger sürümü + göç); `LayoutError` insan metni (config dışı yüzeyler); close-abandoned için mühürlü audit kaydı (#13 EXEC-RELEASE veya ayrı kart; MCP `close_abandoned_attempt` ve terk dispatch kaydının envanterden/workspace'ten düşmesi de orada); CI'ya ayrı perf job; MODEL-INGRESS-P3 yukarıda. Ayrıntı [open-findings](.deckent/docs/plan/open-findings.md).
+
+Önceki hâl `open-findings.md:70` (Astra 2382 sonrası geçersiz):
+
+- **Dalga 2 takipleri (lead 2026-10-06, `wave/2`):** (1) patch-prepare reddi (PATCH_LIMIT: limit/değer/config alanı) bugün kayıtlı değil; monitor sebep uydurmaz — `attempt_receipts` ile tipli makbuz gerekir (ledger sürümü + göç). (2) `LayoutError` (host/layout/resolve.ts) `message = code` taşır; config dışı yüzeylerde yalın kod çıkar — insan metni ayrı kart. (3) close-abandoned operatör kapanışının denetim izi bugün attempt receipt'inde; mühürlü audit kaydı için `projectRunAttempt` audit geri çağrısı (adapter işlem değişikliği) gerekir. (4) MCP `close_abandoned_attempt` aracı yok. (5) MODEL-INGRESS-P3: araç/MCP şema açıklaması ve argüman JSON'u; ZWJ yetim/eşleşmemiş VS açık sınır. (6) CI'ya ayrı perf job. (7) Monitor: failed-test çıkarma yalnız `verify-failed-test:` satırlarını tanır (node:test host testleri değil); `awaiting-delivery` boş yamayı ayırt etmez.
+
+Önceki hâl `owner-decisions.md:218` (Astra 2382 sonrası geçersiz):
+
+- Dalga 2 lead kararları (2026-10-06, `wave/2`; Jev kayıtlı): IDENTITY-BINDING-V2 KARAR 3 makine kaydı + yalnız zayıf yakalama = RELOCATED, strict (Jev c5548c22, 0,96); KARAR 6 platform makine bağı alpha.6 v1 şekliyle yazılır, v2 yalnız configured/weak (Jev 22cfdd0b, 0,79 — eşik 0,90 altı, en muhafazakâr seçim); KARAR 1 v1 bağsız kayıt + makine kimliği = açık `--keep/--new`; KARAR 4 yapılandırılmış kaynak fail-closed, platformla aynı HMAC etiketi; KARAR 5 `requireMachineBinding` config alanı; KARAR 7 zayıf kaynak adı `location`. PR #19 ikinci tur incelemesi owner onayıyla kabul edildi.
+
+Önceki hâl `owner-decisions.md:219` (Astra 2382 sonrası geçersiz):
+
+- RUN-YAŞAM (lead, 2026-10-06): kanıtlı yokluk + bilinen etki → görev `failed`; `unknown`/`cancelled` gözlemli veya `unresolvedEffects` açık kalır, operatör override'ı yok; kapanışı yalnız operatör (`reconcile` yetkisi) yapar, otomasyon yok; kalıcı pre-launch ret listesi 4 kod (engine sabiti), `POLICY_DENIED` geçici; ret çıkış 0; audit bu dilimde attempt receipt'inde, mühürlü audit kaydı ayrı takip.
+
+Önceki hâl `work-list.md:108` (Astra 2382 sonrası geçersiz):
+
+- RUN-YAŞAM (#8): `launch-refused {code}` ve `abandoned` attempt gözlemleri, `recordAttemptClosure`, `deckent task close-abandoned` (reconcile yetkisi); ledger 47 değişmedi. Kod `lane/w2-run-life` (`e2dfd807`, `fe42dfa7`, `b6bf8111`). Açık: MCP `close_abandoned_attempt`; mühürlü audit kaydı; terk dispatch kaydı/workspace serbest bırakma (#13 EXEC-RELEASE).
+
+Önceki hâl `work-list.md:112` (Astra 2382 sonrası geçersiz):
+
+- IDENTITY-BINDING-V2 (`9433ecbb`..`d775ea2f`): kurulum bağı v2; owner-decisions'ta rollback notu. VERIFY-ENV: verify imajında taşınma/kopya testleri zayıf bağ yoluyla koşar.
+
+Önceki hâl `work-list.md:113` (Astra 2382 sonrası geçersiz):
+
+- CLI-SPLIT (`09c9e5ba`, `09ba0bf6`): doctor render `src/surfaces/core/doctor` birimine taşındı (cli 2003 → 1976 satır, bütçe 2000); `task close-abandoned` yardım özeti kısaltıldı, golden yeniden üretildi.
