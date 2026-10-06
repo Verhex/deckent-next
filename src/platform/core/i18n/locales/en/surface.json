@@ -483,6 +483,7 @@
   "monitor.detail.deliveryUnknown": "Delivery/adoption: not in this snapshot yet.",
   "monitor.note": "Note:",
   "monitor.summary.installNote": "{install} note: {note}",
+  "monitor.diagnostic.configRestartRequired": "The runtime service started before a restart-apply configuration change: restart it (deckent runtime restart) to use the new values",
   "monitor.diagnostic.imageUpdating": "Worker image is being updated in the background; Runs use the current image",
   "monitor.diagnostic.imageCurrent": "Worker image is current ({detail})",
   "monitor.diagnostic.imageRefreshFailed": "Worker image refresh failed ({detail}); the previous image stays in use",

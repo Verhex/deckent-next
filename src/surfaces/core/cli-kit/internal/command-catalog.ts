@@ -135,6 +135,7 @@ export const CLI_CATALOG = [
     action('serve', 'developer', 'cli.help.action.serve', 'cli.help.runtime'),
     action('describe', 'developer', 'cli.help.action.describe', 'cli.help.runtime'),
     action('shutdown', 'developer', 'cli.help.action.shutdown', 'cli.help.runtime'),
+    action('restart', 'developer', 'cli.help.action.restart', 'cli.help.runtime'),
   ] },
   { name: 'coding', group: 'developer', summary: 'cli.help.summary.coding', detail: 'cli.coding.help', children: [
     action('prepare', 'developer', 'cli.help.action.prepare', 'cli.coding.help'),

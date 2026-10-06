@@ -12,6 +12,8 @@ const code = (error: unknown) => error && typeof error === 'object' && 'code' in
 async function service(ports: MonitorPorts, target: MonitorTarget, diagnostics: string[]): Promise<MonitorService> {
   try {
     const value = await ports.describeService(target);
+    // Typed diagnostic `config-restart-required`: a restart-apply section changed since this service started (a failed read adds nothing).
+    if (await ports.readConfigFreshness?.(target, value).catch(() => 'unknown') === 'stale') diagnostics.push('config-restart-required');
     return Object.freeze({ state: 'running', instanceId: value.instanceId, processId: value.processId ?? null,
       build: value.build ? Object.freeze({ sourceCommit: value.build.sourceCommit, sourceTreeSha256: value.build.sourceTreeSha256, builtAt: null }) : null });
   } catch (error) {

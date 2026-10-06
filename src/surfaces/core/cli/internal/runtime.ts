@@ -1,4 +1,4 @@
-import { ErrorRegistry, emit, loadConfig, resolveLocale, t, type ConfigLoadOptions, type ProductLayout } from '#platform/index.js';
+import { ErrorRegistry, emit, formatDuration, loadConfig, resolveLocale, t, type ConfigLoadOptions, type ProductLayout } from '#platform/index.js';
 import { shutdownCommandSchema, type CancellationRecoveryCommand, type CancellationRecoveryPageResult, type RuntimeServiceDescriptor,
   type RuntimeServiceDrainResult, type RunView, type ProgressionCursor, type ReconciliationRecoveryCommand, type ReconciliationRecoveryPage,
   type ServiceShutdownAdmissionResult, type ShutdownCommand } from '#engine/index.js';
@@ -19,6 +19,7 @@ export interface RuntimeServiceObserver {
   onError(command: CancellationRecoveryCommand, error: { readonly code: string }): void | Promise<void>;
   onLedgerUpgraded?(upgrade: Readonly<{ from: number; to: number; backupPath: string }>): void | Promise<void>;
   onToolCallApprovalsExpired?(result: Readonly<{ expired: number; failed: number; keyUnavailable: boolean }>): void | Promise<void>;
+  onIdleShutdown?(event: Readonly<{ afterMs: number }>): void | Promise<void>;
   onToolchainRefresh?(event: Readonly<{ phase: 'started' | 'current' | 'failed' | 'unverified'; imageVersion: string | null; imageId: string | null; appliedProfiles: number; code: string | null }>): void | Promise<void>;
 }
 export type RuntimeServiceStartHandler = (root: string, observer: RuntimeServiceObserver, options: ConfigLoadOptions) => Promise<RuntimeServiceHost>;
@@ -32,7 +33,7 @@ function waitForStop(signal: AbortSignal): Promise<void> {
  * background when no service answers (owner 2026-09-23). */
 export async function runtimeCommand(argv: readonly string[], context: CommandContext): Promise<void> {
   const action = argv[1];
-  if (!['serve', 'describe', 'shutdown', '--help', '-h'].includes(action ?? '')) throw ErrorRegistry.createError('CLI_USAGE');
+  if (!['serve', 'describe', 'shutdown', 'restart', '--help', '-h'].includes(action ?? '')) throw ErrorRegistry.createError('CLI_USAGE');
   let json = false; let language: string | undefined; const shutdown: Record<string, string> = {};
   for (let i = 2; i < argv.length; i++) {
     const value = argv[i]!;
@@ -62,6 +63,13 @@ export async function runtimeCommand(argv: readonly string[], context: CommandCo
     output(descriptor, () => descriptor.shutdownAvailable
       ? t('cli.runtime.descriptorAvailable', { serviceId: descriptor.identity.serviceId, instanceId: descriptor.instanceId }, locale)
       : t('cli.runtime.descriptorUnavailable', { instanceId: descriptor.instanceId }, locale));
+    return;
+  }
+  if (action === 'restart') {
+    // Managed restart: the governed stop (waits for drain and the endpoint's absence), then a start from the current build and configuration.
+    if (!context.restartRuntimeService || Object.keys(shutdown).length) throw ErrorRegistry.createError('RUNTIME_SERVICE_TRANSPORT');
+    const restarted = await context.restartRuntimeService(root, options);
+    output(restarted, () => t('cli.runtime.restarted', { pid: restarted.pid ?? '-', instanceId: restarted.instanceId }, locale));
     return;
   }
   if (action === 'shutdown' && Object.keys(shutdown).length === 0 && context.stopRuntimeService) {
@@ -106,6 +114,8 @@ export async function runtimeCommand(argv: readonly string[], context: CommandCo
         () => t('cli.runtime.recovery', { count: outcomes.length }, locale)); },
     onError: async (_command, error) => { output({ schemaVersion: 1, event: 'recovery-failed', code: error.code },
       () => t('cli.runtime.recoveryFailed', { code: error.code }, locale), 'error'); },
+    onIdleShutdown: async event => { output({ schemaVersion: 1, event: 'idle-shutdown', ...event },
+      () => t('cli.runtime.idleShutdown', { duration: formatDuration(event.afterMs) }, locale)); },
     onLedgerUpgraded: async upgrade => { output({ schemaVersion: 1, event: 'ledger-upgraded', ...upgrade },
       () => t('cli.runtime.ledgerUpgraded', { from: upgrade.from, to: upgrade.to, backup: upgrade.backupPath }, locale)); },
     // WORKER-AUTO-REFRESH: the background refresh reports its typed events here; none of them delays or fails readiness.

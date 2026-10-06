@@ -10,7 +10,7 @@ import { registerProviderConfig, acquireLocalRuntimeSocketGuard, LocalRuntimeSoc
   type LocalRuntimeSocketGuard, openSqliteAgentTurnStore, openSqliteApprovalStore, openLocalIntegrityAuthority, createScratchActivity, readTerminalScratchConfig, resolveGitWorkTarget,
   startScratchSweeper, sweepScratch, createRuntimeWorkspaceFileHost, sweepFullPreviews, type HttpFetchTransport, type ScratchSweepResult, type ShellSandboxFactory } from '#adapters/index.js';
 import { ModelInvocationControllers, runtimeServiceModelOwnerId, RuntimeServiceLifecycle, classifyRuntimeServiceOperation, isRuntimeServiceEffectOperation, isRuntimeServicePermissionModeOperation, runtimeServiceDescriptorSchema, runtimeServiceDescriptionInputSchema,
-  serviceInstanceSchema, ServiceShutdownError, type ShutdownAdmission, type RuntimeServiceDrainResult } from '#engine/index.js';
+  serviceInstanceSchema, ServiceShutdownError, RuntimeServiceIdlePolicy, type RuntimeServiceIdleOptions, RUNTIME_SERVICE_AUTOSTART_ENV, restartConfigDigest, type ShutdownAdmission, type RuntimeServiceDrainResult } from '#engine/index.js';
 import { prepareConfiguredCancellationRuntime, prepareConfiguredReconciliationRuntime, prepareConfiguredModelCancellationRuntime,
   type ConfiguredReconciliationRuntimeObserver, type ConfiguredCancellationRuntimeObserver, type ConfiguredModelCancellationRuntimeObserver } from '#composition/core/runtime/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
@@ -35,6 +35,8 @@ export interface ConfiguredRuntimeServiceObserver extends ConfiguredCancellation
   onModelCancellationPage?: ConfiguredModelCancellationRuntimeObserver['onPage'];
   onModelCancellationError?: ConfiguredModelCancellationRuntimeObserver['onError'];
   onLedgerUpgraded?(upgrade: LedgerUpgrade): void | Promise<void>;
+  /** K6 = A: an automatically started service found itself idle for `afterMs` and begins its governed stop. */
+  onIdleShutdown?(event: { readonly afterMs: number }): void | Promise<void>;
   /** Close turns left by a stopped service as interrupted; report damaged rows without closing them. */
   onAgentTurnsInterrupted?(result: { readonly interrupted: number; readonly corrupt: readonly { readonly scopeId: string; readonly turnId: string }[] }): void | Promise<void>;
   /** Pending tool-call approvals of turns no longer running, closed as expired at this start; `failed` counts records not verified or
@@ -130,7 +132,12 @@ async function startUnderCustody(projectRoot: string, observer: ConfiguredRuntim
     onError: (command, error) => observer.onModelCancellationError?.(command, error),
   }, options);
   const build = readBuildIdentity();
-  const descriptor = runtimeServiceDescriptorSchema.parse({ schemaVersion: 1, instanceId,
+  // K6 = A: only a service the terminal started itself (launch marker) ever stops by idleness; a hand- or config-started one never does.
+  const autoStarted = options.env?.[RUNTIME_SERVICE_AUTOSTART_ENV] === '1';
+  const idle = new RuntimeServiceIdlePolicy({ autoStarted, afterMs: config.service.idleShutdown.afterMs, now: ports.idleClock?.now ?? (() => performance.now()),
+    wait: ports.idleClock?.wait ?? (async (milliseconds, signal) => { try { await wait(milliseconds, undefined, { signal }); } catch (error) { if (!signal.aborted) throw error; } }) });
+  const descriptor = runtimeServiceDescriptorSchema.parse({ schemaVersion: 1, instanceId, configDigest: restartConfigDigest(config as unknown as Record<string, unknown>),
+    autoStarted, idleStopMs: idle.enabled ? config.service.idleShutdown.afterMs : null,
     shutdownAvailable: config.service.identity !== null, identity: config.service.identity, processId: process.pid,
     ...(build ? { build: { sourceTreeSha256: build.sourceTreeSha256, sourceCommit: build.sourceCommit } } : {}) });
   const shutdown = config.service.identity ? configuredServiceShutdown(config,
@@ -152,8 +159,8 @@ async function startUnderCustody(projectRoot: string, observer: ConfiguredRuntim
   const preparedRunRuntime = await prepareConfiguredRunRuntime(projectRoot, {
     ...(observer.onRunProgression ? { onRun: observer.onRunProgression } : {}),
     ...(observer.onRunProgressionError ? { onError: observer.onRunProgressionError } : {}),
-  }, (work, onSlotWait) => lifecycle.admitExecution(work, onSlotWait), options);
-  const server = await guard.start(async (request, peer, stream, turn) => {
+  }, (work, onSlotWait) => lifecycle.admitExecution(() => idle.track(work), onSlotWait), options);
+  const server = await guard.start((request, peer, stream, turn) => idle.track(async () => {
     try {
       if (request.operation === 'describeService') {
         const result = await lifecycle.admit(() => { runtimeServiceDescriptionInputSchema.parse(request.input); return descriptor; });
@@ -189,7 +196,7 @@ async function startUnderCustody(projectRoot: string, observer: ConfiguredRuntim
       return { schemaVersion: RUNTIME_SERVICE_SCHEMA_VERSION, requestId: request.requestId, ok: false,
         error: { code: failure.code, category: failure.category, ...(params ? { params } : {}) } };
     }
-  });
+  }));
   // Started once the listener is up: a start that fails before leaves no sweep running after its custody is released.
   startScratchSweeper({ root: () => scratchResource(config.productLayout), limits: scratchLimits, active: scratchActivity, signal: turnStop.signal,
     onSweep: result => { void observer.onScratchSwept?.(result); } });
@@ -252,12 +259,20 @@ async function startUnderCustody(projectRoot: string, observer: ConfiguredRuntim
     if (failed?.status === 'rejected') throw failed.reason;
   });
   void recovery.catch(() => { void stop().catch(() => undefined); });
+  // The idle stop is the ordinary governed stop (it waits recovery, the toolchain refresh and the scratch work); it records no shutdown admission.
+  if (idle.enabled) void idle.run(controller.signal).then(async outcome => {
+    if (outcome !== 'idle') return;
+    await observer.onIdleShutdown?.({ afterMs: config.service.idleShutdown.afterMs! });
+    await stop();
+  }).catch(error => rejectDone(queryFailure(error)));
   return Object.freeze({ endpoint: server.endpoint, layout: config.productLayout, done, stop });
 }
 
 /** Code-only ports of an in-process service (never configuration or environment): `fetchTransport` defaults to the system transport,
  * `shellSandboxes` to the shipped sandbox providers (S9 bubblewrap). */
-export interface RuntimeServicePorts { readonly fetchTransport?: HttpFetchTransport; readonly shellSandboxes?: ShellSandboxFactory; readonly toolchainRefresh?: ToolchainRefreshDependencies }
+export interface RuntimeServicePorts { readonly fetchTransport?: HttpFetchTransport; readonly shellSandboxes?: ShellSandboxFactory; readonly toolchainRefresh?: ToolchainRefreshDependencies;
+  /** Clock and wait of the idle stop (default: monotonic clock and timer). */
+  readonly idleClock?: Pick<RuntimeServiceIdleOptions, 'now' | 'wait'> }
 export async function startConfiguredRuntimeService(projectRoot: string, observer: ConfiguredRuntimeServiceObserver,
   options: ConfigLoadOptions = {}, ports: RuntimeServicePorts = {}) {
   try { return await startService(projectRoot, observer, options, ports); }

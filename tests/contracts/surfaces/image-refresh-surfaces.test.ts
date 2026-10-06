@@ -64,3 +64,23 @@ it.each([['started', 'en', 'started in the background'], ['failed', 'tr', 'başa
   expect(code).toBe(0);
   expect([...out, ...errs].join('')).toContain(text);
 });
+
+it('monitor and doctor say "restart required" only for a measured stale service; current, unknown and failing reads add nothing (EN and TR)', async () => {
+  const { describeDiagnostic } = await loadMonitorSurface();
+  expect(describeDiagnostic('config-restart-required', 'en')).toMatchObject({ note: false, text: expect.stringContaining('deckent runtime restart') });
+  expect(describeDiagnostic('config-restart-required', 'tr')).toMatchObject({ note: false, text: expect.stringContaining('yeniden başlatın') });
+  const running = { schemaVersion: 1 as const, instanceId: 'i', shutdownAvailable: false as const, identity: null, configDigest: '0'.repeat(64) };
+  const snapshot = async (readConfigFreshness: () => Promise<'current' | 'stale' | 'unknown'>) => (await new MonitorApplication({ now: () => 1,
+    readLedger: async () => { throw Object.assign(new Error('x'), { code: 'LEDGER_ABSENT' }); }, describeService: async () => running, observeScope: async () => { throw new Error('unused'); },
+    readConfigFreshness } as never).inspect([{ id: 'current', path: '/fixture/project' }])).installs[0]!.diagnostics;
+  expect(await snapshot(async () => 'stale')).toContain('config-restart-required');
+  for (const state of ['current', 'unknown'] as const) expect(await snapshot(async () => state)).not.toContain('config-restart-required');
+  expect(await snapshot(async () => { throw new Error('x'); })).not.toContain('config-restart-required');
+  const root = await mkdtemp(join(tmpdir(), 'deckent-doctor-config-')); roots.push(root); const env = { HOME: join(root, '..', 'home'), USERPROFILE: join(root, '..', 'home') };
+  const lines: string[] = [];
+  await runKernelCommand(['doctor', '--lang', 'en'], { root, env, stdout: stdout(lines), describeRuntimeService: async () => running as never });
+  expect(lines.join('')).toContain('restart required');
+  lines.length = 0;
+  await runKernelCommand(['doctor', '--lang', 'en'], { root, env, stdout: stdout(lines), describeRuntimeService: async () => { throw Object.assign(new Error('x'), { code: 'LOCAL_RUNTIME_UNAVAILABLE' }); } });
+  expect(lines.join('')).not.toContain('restart required');
+});

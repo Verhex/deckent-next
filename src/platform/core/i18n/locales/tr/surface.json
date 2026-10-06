@@ -483,6 +483,7 @@
   "monitor.detail.deliveryUnknown": "Teslim/benimseme: bu görüntüde henüz bilgi yok.",
   "monitor.note": "Not:",
   "monitor.summary.installNote": "{install} notu: {note}",
+  "monitor.diagnostic.configRestartRequired": "Runtime servisi, yeniden başlatma gerektiren bir yapılandırma değişikliğinden önce başladı: yeni değerler için yeniden başlatın (deckent runtime restart)",
   "monitor.diagnostic.imageUpdating": "Worker imajı arka planda güncelleniyor; Run'lar mevcut imajı kullanıyor",
   "monitor.diagnostic.imageCurrent": "Worker imajı güncel ({detail})",
   "monitor.diagnostic.imageRefreshFailed": "Worker imajı yenilemesi başarısız ({detail}); önceki imaj kullanılıyor",

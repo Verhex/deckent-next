@@ -4,3 +4,4 @@ export type { ConfigFieldView, ConfigSnapshot, ConfigLayer, ConfigSource, Config
 export { planConfigChange, validateConfigLayers } from './internal/planner.js';
 export { configDefinitions, configPath, atConfigPath, definitionFor, configFieldView, allConfigKeys } from './internal/registry.js';
 export { authorizeConfigWrite } from './internal/policy.js';
+export { restartConfigDigest, runtimeConfigFreshness } from './internal/restart-digest.js';

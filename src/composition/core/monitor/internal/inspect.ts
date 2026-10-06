@@ -1,7 +1,7 @@
 import { resolve } from 'node:path';
 import { loadConfig, SystemTrustedClock, type ConfigLoadOptions } from '#platform/index.js';
 import { listSurfaceRunIds, prepareMonitorInstall, registerProviderConfig, followLedgerSurface as readLedgerSurface } from '#adapters/index.js';
-import { MonitorApplication, authorizeApproval, type SurfaceNotInitialized, type MonitorSnapshot, type WorkerObservation, type WorkerObservationSource } from '#engine/index.js';
+import { MonitorApplication, authorizeApproval, runtimeConfigFreshness, type SurfaceNotInitialized, type MonitorSnapshot, type WorkerObservation, type WorkerObservationSource } from '#engine/index.js';
 import { inspectConfiguredWorkers } from '#composition/core/worker-observation/index.js';
 import { createConfiguredRuntimeClient } from '#composition/core/runtime-service/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
@@ -27,6 +27,7 @@ export async function inspectMonitor(root: string, options: ConfigLoadOptions = 
   const contexts = new Map<string, ReturnType<typeof loadConfiguredScopeContext>>(), scope = (path: string, scopeId: string) => contexts.get(`${path}\0${scopeId}`)
     ?? contexts.set(`${path}\0${scopeId}`, loadConfiguredScopeContext(path, scopeId, options, 'read')).get(`${path}\0${scopeId}`)!;
   const captures = new Map<string, Awaited<ReturnType<typeof prepareMonitorInstall>>>(); return new MonitorApplication({ now: () => new SystemTrustedClock().sample().wallMs,
+    readConfigFreshness: async (target, descriptor) => runtimeConfigFreshness(descriptor.configDigest, await loadConfig(target.path, { ...options, heal: false }) as unknown as Record<string, unknown>),
     readImageRefresh: target => inspectToolchainRefresh(target.path, options),
     describeService: target => createConfiguredRuntimeClient(target.path, options).describeService(undefined, 'current'),
     readLedger: async target => { const installed = await loadConfig(target.path, { ...options, heal: false });
