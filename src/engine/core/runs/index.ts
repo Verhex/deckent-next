@@ -40,3 +40,5 @@ export { prepareWorkerEffortAdmission, resolveWorkerEffortExecution } from './in
 export type { WorkerEffortCompiler } from './internal/worker-effort.js';
 export { taskBriefSchema, resultBriefSchema, projectTaskBrief, projectResultBrief } from './internal/brief.js';
 export type { TaskBrief, ResultBrief } from './internal/brief.js';
+export { recordAttemptClosure, classifyLaunchRefusal, assessAbandonment } from './internal/closure.js';
+export type { AbandonmentLedger, AbandonmentLive, AbandonmentAssessment, AbandonmentRefusal } from './internal/closure.js';
