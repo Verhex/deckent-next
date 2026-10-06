@@ -21,14 +21,17 @@ const unfinishedEscape = (tail: string) => tail.length === 1 || (tail[1] === '['
 /* eslint-enable no-control-regex */
 
 /**
- * Line mode (pipe, no terminal) writes the answer as it arrives: plain text on `out`, no ANSI, the last line ended. Tool results and
- * approval cards are one plain line each on `err`, so a pipe carries the answer alone. Line mode cannot decide an approval card (no
- * owner is at the other end): the first card cancels the turn through `cancel`, and nothing is allowed. Untrusted text is stripped of
- * escapes and controls; an escape or CR split across two deltas is held back until its end is known.
+ * Line mode (pipe, no terminal) writes the answer as it arrives, one complete line at a time: plain text on `out`, no ANSI, the last line
+ * ended. Tool results and approval cards are one plain line each on `err`, so a pipe carries the answer alone. Line mode cannot decide an
+ * approval card (no owner is at the other end): the first card cancels the turn through `cancel`, and nothing is allowed. A pipe cannot take
+ * back what it wrote, so a line is projected only once it is complete (its newline or the turn's end has arrived): a secret or escape
+ * split across deltas is redacted or removed whole, the same commit unit as the rich view's scrollback. The held tail is never larger than
+ * the turn's own answer text, which the outcome already carries.
  */
 export type LineTurnIo = Readonly<{ out: Sink; err: Sink; cancel: () => void;
-  /** Strips escapes and controls from untrusted text (the caller's platform sanitizer). */
-  safe: (text: string) => string;
+  /** The caller's human-surface projection of untrusted text (record redaction, escapes/controls removed, hidden characters marked):
+   * `prose` for the answer, `exact` for tool targets and approval summaries. */
+  project: (text: string, context: 'exact' | 'prose') => string;
   /** The caller's catalog lines for a finished tool call and for a refused approval card. */
   toolLine: (call: Readonly<{ name: string; target: string | null; status: string | null; ms: number | null }>) => string;
   approvalLine: (summary: string) => string }>;
@@ -36,14 +39,14 @@ export async function streamLineTurn(stream: AsyncIterable<TurnDelta>, io: LineT
   const appended: AgentChatMessage[] = [];
   let compacted: readonly AgentChatMessage[] | null = null, finish: Finish | null = null, answer = '', held = '', lastChar = '\n', approvalRefused = false;
   const write = (text: string) => { if (text.length === 0) return; io.out.write(text); lastChar = text.at(-1)!; };
-  const note = (line: string) => { io.err.write(`${io.safe(line).replace(/\s+/gu, ' ').trim()}\n`); };
+  const note = (line: string) => { io.err.write(`${io.project(line, 'exact').replace(/\s+/gu, ' ').trim()}\n`); };
   const feed = (text: string) => {
     answer += text;
-    // An unfinished escape or a trailing CR waits for one more delta only; a tail still unfinished then is cleaned and written.
-    const buffer = held + text, escape = buffer.lastIndexOf('\u001b'), fresh = held === '';
-    const cut = fresh && escape >= 0 && unfinishedEscape(buffer.slice(escape)) ? escape : fresh && buffer.endsWith('\r') ? buffer.length - 1 : buffer.length;
+    // Only complete lines are written. An escape new in this delta and still unfinished waits one more delta only (a malformed one cannot stall the pipe).
+    const buffer = held + text, lineEnd = buffer.lastIndexOf('\n') + 1, escape = buffer.lastIndexOf('\u001b', lineEnd - 1);
+    const cut = escape >= held.length && unfinishedEscape(buffer.slice(escape)) ? escape : lineEnd;
     held = buffer.slice(cut);
-    write(io.safe(buffer.slice(0, cut)));
+    write(io.project(buffer.slice(0, cut), 'prose'));
   };
   for await (const delta of stream) {
     if (delta.kind === 'text') feed(delta.text);
@@ -57,11 +60,11 @@ export async function streamLineTurn(stream: AsyncIterable<TurnDelta>, io: LineT
       io.cancel();
     } else if (delta.kind === 'done') {
       finish = delta.finish;
-      if (held) { write(io.safe(held)); held = ''; }
-      if (answer.length === 0 && delta.note) { write(`${io.safe(delta.note)}`); answer = delta.note; }
+      if (held) { write(io.project(held, 'prose')); held = ''; }
+      if (answer.length === 0 && delta.note) { write(io.project(delta.note, 'prose')); answer = delta.note; }
     }
   }
-  if (held) write(io.safe(held));
+  if (held) write(io.project(held, 'prose'));
   if (lastChar !== '\n') write('\n');
   return Object.freeze({ appended, compacted, finish, answer, approvalRefused });
 }
