@@ -158,6 +158,9 @@ async function holdsProductStateOnly(input: { readonly dir: string; readonly rel
   // The configured layout root (`DECKENT_DIR`) is never emptied whole: the project's own `docs` may not exist yet and a command must be able to create it (owner Y 2026-09-30);
   // its product-state subtrees (`data`, `state`) are emptied below it, and its own names stay listed.
   if (rel === '' || rel === DECKENT_DIR || names.length === 0 || depth > MAX_DEPTH || !input.protectedBeneath(rel)) return false;
+  // A directory that only passes through to the state (`.cache` above a custom data root `.cache/deckent`) is an ancestor of the data root, shared with other tools: it is never
+  // emptied. A state directory holds denied entries itself (the ledger, the policy, a resource), so one denied entry directly in it is the mark of the product's own.
+  if (!names.some(entry => input.denied(`${rel}/${entry.name}`) || input.denied(`${rel}/${entry.name}/`))) return false;
   for (const entry of names) {
     if (entry.isSymbolicLink()) return false;
     const entryRel = `${rel}/${entry.name}`;
