@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+# Tracked hook; enabled per checkout by `npm run hooks:install`. Fast gate only (typecheck, eslint on changes, lint-arch, lint-docs).
+set -euo pipefail
+cd "$(git rev-parse --show-toplevel)"
+[ -f scripts/precommit-fast.mjs ] || exit 0
+[ -d node_modules ] || { echo "pre-commit: node_modules missing, run npm ci" >&2; exit 1; }
+exec node scripts/precommit-fast.mjs
