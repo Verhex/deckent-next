@@ -2,13 +2,15 @@ import { projectTaskBrief, projectResultBrief, taskBriefSchema, resultBriefSchem
 import { handoffReceiptViewSchema, projectTaskHandoffs } from '#engine/core/handoff-observation/index.js';
 import type { HandoffStartRecord } from '#engine/core/handoff-observation/index.js';
 import { z } from 'zod';
-import { taskDependencyIds, taskDefinitionSchema, taskProgressSchema, runStateSchema, branchDecisionSchema, identitySchema, counterSchema, runSnapshotSchema, workerEffortSchema } from '#domain/index.js';
+import { summarizeTaskGraph, taskGraphSummarySchema, taskDependencyIds, taskDefinitionSchema, taskProgressSchema, runStateSchema, branchDecisionSchema, identitySchema, counterSchema, runSnapshotSchema, workerEffortSchema } from '#domain/index.js';
 import { runPoolObservationSchema } from './pool-observation.js';
 import { RunStoreError } from './store.js';
 /** Public query contract. Storage schema changes must be mapped here, never spread into the API. */
 export const runViewSchema = z.object({
   schemaVersion: z.literal(3), runId: identitySchema, scopeId: identitySchema, layoutRevision: identitySchema,
   registryRevision: identitySchema, pool: runPoolObservationSchema.optional(),
+  /** PARALLEL-S3 (additive): DAG summary from the same domain projection the monitor uses; always set by `projectRunView`. */
+  graphSummary: taskGraphSummarySchema.optional(),
   branch: branchDecisionSchema.unwrap().omit({ sourceGraph: true }).optional(),
   criteria: z.array(z.object({ id: identitySchema, version: counterSchema.positive(), description: z.string(), evaluator: z.object({ id: identitySchema, version: counterSchema.positive() }).strict().readonly(), fingerprint: z.string().regex(/^[a-f0-9]{64}$/) }).strict().readonly()).readonly(),
   revision: counterSchema, cancellationRequested: z.boolean(), state: runStateSchema,
@@ -34,7 +36,7 @@ export function projectRunView(input: unknown, receipts: readonly HandoffStartRe
   return runViewSchema.parse({ schemaVersion: 3, runId: run.identity.runId, scopeId: run.identity.scopeId,
     layoutRevision: run.identity.layoutRevision, ...(run.branch ? { branch: { schemaVersion: run.branch.schemaVersion, request: run.branch.request, selectedTaskId: run.branch.selectedTaskId, notSelectedTaskId: run.branch.notSelectedTaskId } } : {}), registryRevision: run.execution.registryRevision,
     criteria: run.graph.criterionDefinitions.map(criterion => ({ id: criterion.id, version: criterion.version, description: criterion.description, evaluator: criterion.evaluator, fingerprint: run.execution.criteria.find(entry => entry.criterionId === criterion.id)!.fingerprint })),
-    revision: run.revision, cancellationRequested: run.cancelRequested, state: run.state,
+    revision: run.revision, cancellationRequested: run.cancelRequested, state: run.state, graphSummary: summarizeTaskGraph(run.graph, run.progress),
     tasks: run.graph.tasks.map(task => ({ taskBrief: projectTaskBrief(run, task.id), resultBrief: projectResultBrief(run.bindings.find(binding => binding.identity.taskId === task.id)?.identity.attemptId ?? null,
       { verdict: progress.get(task.id)!.phase === 'accepted' ? progress.get(task.id)!.acceptedEvidence === 'model-unverified' ? 'accepted-unverified' : 'accepted' : null,
         ...(progress.get(task.id)!.notAcceptedReason ? { reason: progress.get(task.id)!.notAcceptedReason } : {}) }), id: task.id, kind: task.kind, dependencies: taskDependencyIds(task), acceptanceCriteria: [...task.acceptanceCriteria], ...(task.inputs ? { inputs: task.inputs } : {}),

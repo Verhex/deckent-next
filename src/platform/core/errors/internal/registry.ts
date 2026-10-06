@@ -17,6 +17,15 @@ function patchLimit(p: Params, l: Locale): string {
     default: return t('error.PATCH_LIMIT', p, l);
   }
 }
+/** TASK_GRAPH_LIMIT (PARALLEL-S3) names the exceeded admission bound; an unknown detail keeps the generic sentence. */
+function taskGraphLimit(p: Params, l: Locale): string {
+  switch (p['detail']) {
+    case 'tasks': return t('error.TASK_GRAPH_LIMIT.tasks', p, l);
+    case 'edges': return t('error.TASK_GRAPH_LIMIT.edges', p, l);
+    case 'depth': return t('error.TASK_GRAPH_LIMIT.depth', p, l);
+    default: return t('error.TASK_GRAPH_LIMIT', p, l);
+  }
+}
 function mcpSandboxUnreachable(p: Params, l: Locale): string {
   const name = String(p['name'] ?? '');
   if (p['kind'] === 'path-hidden') {
@@ -238,6 +247,7 @@ const definitions: Readonly<Record<string, Definition>> = Object.freeze({
   CANCELLATION_NOT_CONFIGURED: { category: 'error', render: (p, l) => ({ message: t('error.CANCELLATION_NOT_CONFIGURED', p, l) }) },
   EXECUTION_PROFILE_INVALID: { category: 'error', render: (p, l) => ({ message: t('error.EXECUTION_PROFILE_INVALID', p, l) }) },
   EXECUTION_RESOURCE_CEILING: { category: 'config', render: (p, l) => ({ message: t('error.EXECUTION_RESOURCE_CEILING', p, l) }) },
+  TASK_GRAPH_LIMIT: { category: 'config', render: (p, l) => ({ message: taskGraphLimit(p, l) }) },
   PATCH_CORRUPT: { category: 'error', render: (p, l) => ({ message: t('error.PATCH_CORRUPT', p, l) }) },
   PATCH_INTEGRATION_PENDING: { category: 'error', render: (p, l) => ({ message: t('error.PATCH_INTEGRATION_PENDING', p, l) }) },
   PATCH_CONFLICT: { category: 'error', render: (p, l) => ({ message: t('error.PATCH_CONFLICT', p, l) }) },

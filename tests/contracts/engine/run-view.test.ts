@@ -10,7 +10,8 @@ const run = createRun({ runId: 'r', scopeId: 's', layoutRevision: 'l' }, graph, 
 it('projects explicit public registry bindings without storage bindings or private profile parameters', () => {
   const view = projectRunView(run);
   expect(view).toEqual({ schemaVersion: 3, state: { kind: 'running' }, runId: 'r', scopeId: 's', layoutRevision: 'l', revision: 0, cancellationRequested: false,
-    registryRevision: 'fixture-registry', criteria: [{ id: 'private-criterion', version: 1, description: 'Private verification details',
+    registryRevision: 'fixture-registry', graphSummary: { schemaVersion: 1, shape: { tasks: 1, edges: 0, depth: 1 }, criticalPath: ['t'],
+      counts: { pending: 1, running: 0, attention: 0, accepted: 0, failed: 0, stopped: 0, total: 1 } }, criteria: [{ id: 'private-criterion', version: 1, description: 'Private verification details',
       evaluator: { id: 'test-evaluator', version: 1 }, fingerprint: expect.stringMatching(/^[a-f0-9]{64}$/) }],
     tasks: [{ id: 't', kind: 'custom', dependencies: [], acceptanceCriteria: ['private-criterion'],
       profile: { id: 'fixture-profile', version: 1 }, phase: 'pending', unresolvedEffects: false,
