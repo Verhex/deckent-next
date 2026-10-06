@@ -50,6 +50,9 @@
       "outputBytes": 65536,
       "timeoutMs": 5000
     },
+    "machineIdentity": {
+      "source": null
+    },
     "packageMeasurement": {
       "maxDepth": 32,
       "maxFileBytes": 67108864,
@@ -57,6 +60,7 @@
       "maxTotalBytes": 536870912
     },
     "profileMaxBytes": 1048576,
+    "requireMachineBinding": false,
     "writeLockTimeoutMs": 2000
   },
   "language": "en",

@@ -74,3 +74,5 @@ Wrapping keeps bracket/angle tokens, flag-placeholder pairs and inline commands 
 Sub-help renders an optional `<detail-key>.examples` message (shared by the family); absent examples are omitted.
 This is presentation discovery, not an authorization registry. Source-surface evidence does not establish
 packaged-binary or cross-platform acceptance; the lane excluded build and full verify by owner direction (batch-27 integration runs full verify).
+
+`deckent task mark-lost` (önce `close-abandoned`) bu dalgadan çıkarıldı (owner 2026-10-06, takip kartına ertelendi); `task` yardımı ve `tests/fixtures/cli-help/commands-{en,tr}.json` golden'ları dalga öncesi hâline döndü (`vitest run <dosya> --update`; `-u <dosya>` biçimi dosya yolunu değer olarak yutar). Yeni config alanları: `installation.machineIdentity.source`, `installation.requireMachineBinding` ([platform-and-layers](platform-and-layers.md)).

@@ -1,7 +1,7 @@
 import { OpenRouterChatError, OpenRouterPricingError } from '#adapters/index.js';
 import { expect, it } from 'vitest';
 import { queryFailure } from '../../../src/composition/core/query-errors/index.js';
-import { ProviderSpendError, RunWorkspaceCustodyError, WorkspaceError, CancellationDeliveryError, RunStoreError, PolicyAuthorizationError } from '#engine/index.js';
+import { DispatchError, ProviderSpendError, RunWorkspaceCustodyError, WorkspaceError, CancellationDeliveryError, RunStoreError, PolicyAuthorizationError } from '#engine/index.js';
 import { ErrorRegistry, ManagedFileError } from '#platform/index.js';
 import { TaskEvaluationError } from '#domain/index.js';
 import { TaskEvidenceError } from '#engine/index.js';
@@ -91,4 +91,19 @@ it('carries a reservation diagnostic as RUN_CAPACITY_OR_ORDER parameters in the 
   const delayed = queryFailure(new RunStoreError('RUN_CAPACITY_OR_ORDER', { ...diagnostic, reason: 'delayed', eligibilityGapMs: 250 }));
   expect(Object.keys(delayed.params ?? {})).toEqual([...order.slice(0, 3), 'eligibilityGapMs', ...order.slice(3)]);
   expect(delayed.params?.['eligibilityGapMs']).toBe(250);
+});
+
+it.each(['DISPATCH_ARTIFACT_REQUIRED', 'DISPATCH_CONFLICT', 'DISPATCH_NOT_ADMITTED', 'DISPATCH_CORRUPT', 'DISPATCH_PROFILE_VALIDATION_REQUIRED'] as const)(
+  'preserves the typed dispatch failure code with EN/TR text and no internal details: %s', code => {
+    const error = new DispatchError(code); error.message += ' /private/ledger credential=secret';
+    const safe = queryFailure(error);
+    expect(safe.code).toBe(code);
+    expect(safe.localize?.('en').message).not.toMatch(/^error\./); expect(safe.localize?.('tr').message).not.toMatch(/^error\./);
+    expect(safe.localize?.('tr').message).not.toBe(safe.localize?.('en').message);
+    expect(String(safe)).not.toContain('/private'); expect(String(safe)).not.toContain('secret');
+  });
+
+it('keeps unrelated error classes as INVENTORY_UNAVAILABLE (no over-generalisation of dispatch codes)', () => {
+  const plain = new Error('DISPATCH_CONFLICT'); expect(queryFailure(plain).code).toBe('INVENTORY_UNAVAILABLE');
+  const spoof = Object.assign(new Error('x'), { code: 'DISPATCH_CONFLICT' }); expect(queryFailure(spoof).code).toBe('INVENTORY_UNAVAILABLE');
 });

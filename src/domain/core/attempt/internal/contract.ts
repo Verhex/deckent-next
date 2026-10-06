@@ -25,6 +25,8 @@ export const attemptObservationSchema = z.object({
     z.object({ kind: z.literal('exited'), ...processExitCauseShape }).strict(),
     z.object({ kind: z.literal('cancelled') }).strict(),
     z.object({ kind: z.literal('unknown'), reasonCode: identity }).strict(),
+    // Typed refusal before any dispatch claim (no launch, no effect); `code` is the refusing error code, open to adapter checks.
+    z.object({ kind: z.literal('launch-refused'), code: identity }).strict(),
   ]).superRefine((result, context) => {
     if (result.kind === 'exited' && !isValidExitCause(result)) {
       context.addIssue({ code: z.ZodIssueCode.custom, message: 'ATTEMPT_EXIT_CAUSE_INVALID' });

@@ -1,7 +1,7 @@
 import { t, type Locale } from '#platform/index.js';
 import type { WorkerPhase } from '#domain/index.js';
 import type { WorkerProcessState } from '#engine/index.js';
-import type { MonitorDeliveryState, MonitorBlockerCode, MonitorInstallStatus, MonitorRunState } from '#engine/index.js';
+import type { MonitorDeliveryState, MonitorDeliveryOutlook, MonitorBlockerCode, MonitorInstallStatus, MonitorRunState } from '#engine/index.js';
 import { phaseLabel } from './transcript.js';
 
 /** Every monitor word comes from the catalogs; the maps keep each key a literal (lint-arch i18n rule). */
@@ -88,4 +88,16 @@ export function deliveryLabel(state: MonitorDeliveryState, locale: Locale): stri
     delivering: t('monitor.delivery.delivering', {}, locale), delivered: t('monitor.delivery.delivered', {}, locale), adopting: t('monitor.delivery.adopting', {}, locale),
     adopted: t('monitor.delivery.adopted', {}, locale), 'rolling-back': t('monitor.delivery.rollingBack', {}, locale), 'rolled-back': t('monitor.delivery.rolledBack', {}, locale) };
   return labels[state];
+}
+/** Table cell wording of an accepted Run's delivery outlook (no receipt yet). */
+export function deliveryOutlookLabel(outlook: MonitorDeliveryOutlook, locale: Locale): string {
+  const labels: Record<MonitorDeliveryOutlook, string> = { none: t('monitor.delivery.none', {}, locale), 'patch-not-prepared': t('monitor.delivery.patchNotPrepared', {}, locale),
+    'awaiting-delivery': t('monitor.delivery.awaiting', {}, locale) };
+  return labels[outlook];
+}
+/** The detail sentence of the outlook; `patch-not-prepared` names that the cause is not recorded and where the exact one is shown. */
+export function deliveryOutlookDetail(outlook: MonitorDeliveryOutlook, locale: Locale): string {
+  const labels: Record<MonitorDeliveryOutlook, string> = { none: t('monitor.detail.deliveryOutlook.none', {}, locale),
+    'patch-not-prepared': t('monitor.detail.deliveryOutlook.patchNotPrepared', {}, locale), 'awaiting-delivery': t('monitor.detail.deliveryOutlook.awaiting', {}, locale) };
+  return labels[outlook];
 }

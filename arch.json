@@ -891,6 +891,13 @@
       ],
       "plan": "SURFACES"
     },
+    "src/surfaces/core/doctor": {
+      "dependencies": [
+        "src/engine/core/toolchain-currency",
+        "src/platform/core/i18n"
+      ],
+      "plan": "SURFACES"
+    },
     "src/surfaces/core/cli-installation": {
       "dependencies": [
         "src/domain/core/primitives",
@@ -905,6 +912,7 @@
     "src/surfaces/core/cli": {
       "dependencies": [
         "src/surfaces/core/cli-installation",
+        "src/surfaces/core/doctor",
         "src/engine/core/monitor",
         "src/engine/core/secret-store",
         "src/surfaces/core/terminal-labels",
@@ -3033,7 +3041,7 @@
     },
     "vendorSlugCaps": {
       "domain": 3,
-      "engine": 23,
+      "engine": 20,
       "note": "G1 vendor-slug findings per layer; adapter vendorUnits are exempt. Derive ids from the registry (commands.json, nativeCliIdSchema)."
     },
     "effectFlows": {

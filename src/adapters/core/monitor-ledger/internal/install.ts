@@ -4,17 +4,18 @@ import { CONFIG_FIELDS, createDefaultConfig, envValue, inspectProductDirectory, 
   resolveProductLayout, type Environment, type ResolvedConfig } from '#platform/index.js';
 import { sameAttemptIdentity, executionRegistrySchema, workerEventSchema, type AttemptIdentity, type WorkerEvent } from '#domain/index.js';
 import { readLocalOsIdentity } from '#adapters/core/local-principal/index.js';
-import { extractFirstFailure, parseRetainedOutputEnvelope, summarizeMonitorEvent, type MonitorWorkerContent, type MonitorEvent, type MonitorLedgerReading, type MonitorMap } from '#engine/index.js';
+import { extractFirstFailure, extractFailedTests, parseRetainedOutputEnvelope, summarizeMonitorEvent, type MonitorWorkerContent, type MonitorEvent, type MonitorLedgerReading, type MonitorMap, type MonitorFailedTests } from '#engine/index.js';
 import { FileArtifactStore } from '#adapters/core/file-artifacts/index.js';
 import { FilePolicySource } from '#adapters/core/file-policy/index.js';
 import { readWorkerEventTail, readWorkerSidecars } from '#adapters/core/worker-observation/index.js';
 import { emptyWorkerContent, readMonitorWorkerContent } from './worker-content.js';
 import { scanMonitorLedger, type MonitorAttemptFiles } from './reader.js';
+import limits from './display-limits.json' with { type: 'json' };
 
 /** MONITOR v1.1 bounds: recorded outputs larger than this are not parsed for a first failure; events kept per attempt; live tail bytes. */
-export const MONITOR_OUTPUT_MAX_BYTES = 8 * 1024 * 1024, MONITOR_RECENT_EVENTS = 10, MONITOR_EVENT_TAIL_BYTES = 65_536;
+export const MONITOR_OUTPUT_MAX_BYTES = 8 * 1024 * 1024, MONITOR_RECENT_EVENTS = 10, MONITOR_EVENT_TAIL_BYTES = 65_536, MONITOR_FAILED_TESTS = limits.maxFailedTests;
 // Content-addressed outputs never change, so a first failure is computed once per (scope, digest) and kept in a small bounded cache.
-const failures = new Map<string, string | null>();
+const failures = new Map<string, { readonly line: string | null; readonly failedTests: MonitorFailedTests | null }>();
 const code = (error: unknown) => error && typeof error === 'object' && 'code' in error && typeof error.code === 'string' ? error.code : 'UNKNOWN';
 const recent = (events: readonly { readonly atMs: number | null; readonly event: WorkerEvent }[]): readonly MonitorEvent[] =>
   Object.freeze(events.slice(-MONITOR_RECENT_EVENTS).map(({ atMs, event }) => Object.freeze({ atMs, ...summarizeMonitorEvent(event) })));
@@ -32,15 +33,18 @@ export async function prepareMonitorInstall(config: ResolvedConfig, env: Environ
   const reading = Object.freeze({ ...scan.reading, map, diagnostics: Object.freeze([...diagnostics]) });
   return { reading, async readShown(identities: readonly AttemptIdentity[]): Promise<MonitorLedgerReading> {
     const selected = scan.files.filter(files => identities.some(identity => sameAttemptIdentity(identity, files.identity)));
-    const extra = new Map<string, { content?: MonitorWorkerContent; firstFailure?: string | null; recentEvents?: readonly MonitorEvent[]; diagnostics?: readonly string[]; observedEndAtMs?: number | null }>();
+    const extra = new Map<string, { content?: MonitorWorkerContent; firstFailure?: string | null; failedTests?: MonitorFailedTests; recentEvents?: readonly MonitorEvent[]; diagnostics?: readonly string[]; observedEndAtMs?: number | null }>();
     for (const files of selected) {
       const key = `${files.identity.scopeId}/${files.identity.attemptId}`;
       try {
         // Security: recorded output and worker events are content of the attempt — read only after its read-output decision (workers list/transcript).
         const needsEnd = files.finished && !files.sealed && !!files.workspace;
         if (!(await readOutput(files.identity))) { extra.set(key, { content: emptyWorkerContent('denied'), firstFailure: null, diagnostics: ['output-denied'] }); continue; }
-        const found: { content?: MonitorWorkerContent; firstFailure?: string | null; recentEvents?: readonly MonitorEvent[]; observedEndAtMs?: number | null } = { content: await readMonitorWorkerContent(artifacts, files) };
-        if (files.failed) Object.assign(found, { firstFailure: await firstFailure(artifacts, files), ...(files.events ? { recentEvents: await sealedEvents(artifacts, files) } : {}) });
+        const found: { content?: MonitorWorkerContent; firstFailure?: string | null; failedTests?: MonitorFailedTests; recentEvents?: readonly MonitorEvent[]; observedEndAtMs?: number | null } = { content: await readMonitorWorkerContent(artifacts, files) };
+        if (files.failed) {
+          const failure = await failureEvidence(artifacts, files);
+          Object.assign(found, { firstFailure: failure.line, ...(failure.failedTests ? { failedTests: failure.failedTests } : {}), ...(files.events ? { recentEvents: await sealedEvents(artifacts, files) } : {}) });
+        }
         else if (files.open && files.workspace) found.recentEvents = recent((await readWorkerEventTail(dirname(files.workspace), 'worker', MONITOR_EVENT_TAIL_BYTES))
           .map(line => ({ atMs: line.receivedAt, event: line.event })));
         if (needsEnd) found.observedEndAtMs = await observedEnd(config, files);
@@ -71,14 +75,15 @@ async function observedEnd(config: ResolvedConfig, files: MonitorAttemptFiles): 
   if (exit !== null) { if (ends.size >= 1024) ends.delete(ends.keys().next().value!); ends.set(key, exit); }
   return exit;
 }
-async function firstFailure(artifacts: ReturnType<typeof FileArtifactStore.reader>, files: MonitorAttemptFiles): Promise<string | null> {
-  const output = files.output; if (!output || output.byteLength > MONITOR_OUTPUT_MAX_BYTES) return null;
+/** First failing line and failed tests of one recorded output: computed once per (scope, digest) (content-addressed, never changes), bounded by MONITOR_OUTPUT_MAX_BYTES. */
+async function failureEvidence(artifacts: ReturnType<typeof FileArtifactStore.reader>, files: MonitorAttemptFiles) {
+  const output = files.output; if (!output || output.byteLength > MONITOR_OUTPUT_MAX_BYTES) return { line: null, failedTests: null };
   const key = `${output.scopeId}/${output.digest}`;
-  if (failures.has(key)) return failures.get(key)!;
+  const known = failures.get(key); if (known) return known;
   const envelope = parseRetainedOutputEnvelope(await artifacts.read(files.identity.scopeId, output), files.identity);
-  const line = extractFirstFailure(envelope.stdout, envelope.stderr);
+  const found = { line: extractFirstFailure(envelope.stdout, envelope.stderr), failedTests: extractFailedTests(envelope.stdout, MONITOR_FAILED_TESTS, envelope.completeness === 'complete') };
   if (failures.size >= 256) failures.delete(failures.keys().next().value!);
-  failures.set(key, line); return line;
+  failures.set(key, found); return found;
 }
 /** The sealed (host-redacted) event log's last events; `atMs` is the worker's own clock there (untrusted, like the events). */
 async function sealedEvents(artifacts: ReturnType<typeof FileArtifactStore.reader>, files: MonitorAttemptFiles) {

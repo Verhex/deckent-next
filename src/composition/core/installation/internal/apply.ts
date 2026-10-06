@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { FileInstallationIdentityStore, FileProjectIdentityStore, withInstallationJournal } from '#adapters/index.js';
 import { immutableJsonObjectSchema } from '#domain/index.js';
 import { InstallationPublicationApplication, InstallationPublicationError, validateInstallationRecovery, type InstallationConsent, type InstallationRecovery, type PreparedInstallation } from '#engine/index.js';
-import { bootstrapPublishesConfig, getConfigFieldDefault, observeBootstrapState, SystemTrustedClock, validateConfig, versionedConfig, resolveProductLayout, type BootstrapObservation } from '#platform/index.js';
+import { bootstrapPublishesConfig, getConfigFieldDefault, loadConfig, observeBootstrapState, SystemTrustedClock, validateConfig, versionedConfig, resolveProductLayout, type BootstrapObservation } from '#platform/index.js';
 import { prepareSuppliedInstallation } from './preview.js';
 import { inspectPreparedInstallation } from './evidence.js';
 import { installationPublicationPorts } from './publication.js';
@@ -32,10 +32,16 @@ export async function assertConfiguredInstallationIdentity(projectRoot: string, 
   if (bootstrapPublishesConfig(await observeBootstrapState(projectRoot), projectRoot)) return;
   await loadConfiguredInstallationIdentity(projectRoot, { pendingBootstrap: 'config-settled' }).catch(error => { if (!publicationGuarded || (error as { code?: unknown }).code !== 'CONFIG_VALIDATION') throw error; });
 }
+/** The binding settings an owned init identity write uses: the settled configuration, or registry defaults while a config-publishing transaction is pending. */
+export async function configuredInstallationBinding(projectRoot: string) {
+  if (bootstrapPublishesConfig(await observeBootstrapState(projectRoot), projectRoot)) return getConfigFieldDefault('installation');
+  return (await loadConfig(projectRoot, { pendingBootstrap: 'config-settled', heal: false })).installation;
+}
 /** Explicit local operator action. No model, worker, or supplied profile can grant consent. */
 export async function applySuppliedInstallation(projectRoot: string, supplied: unknown, input: InstallationApplyChoices) {
   const operator = choices(input); await assertConfiguredInstallationIdentity(projectRoot, true); // Snapshot and validate before the lock or bootstrap directory.
   const initial = await prepareSuppliedInstallation(projectRoot, supplied, operator); await preflightEvidence(initial, operator);
+  await identityStores(projectRoot, initial, lockTimeout(initial)).installation.admitWrite(); // before the journal or any bootstrap directory
   return executeInstallation(projectRoot, operator, lockTimeout(initial), initial.material.authoredProfile);
 }
 /** Recovery requires the local operator, exact proposal, custom-mode consent and host executable; no profile file. */
@@ -44,10 +50,17 @@ export async function resumeInstallation(projectRoot: string, input: Installatio
   if (!recovery) throw new InstallationPublicationError('INSTALLATION_PUBLICATION_INVALID');
   const initial = await prepareSuppliedInstallation(projectRoot, recovery.material.authoredProfile, { allowShutdown: operator.allowShutdown }, recovery.material.configuration);
   validateInstallationRecovery(recovery, initial); await preflightEvidence(initial, operator);
+  await identityStores(projectRoot, initial, lockTimeout(initial)).installation.admitWrite();
   return executeInstallation(projectRoot, operator, lockTimeout(initial));
 }
 async function preflightEvidence(prepared: PreparedInstallation, operator: InstallationApplyChoices) {
   if ((await inspectPreparedInstallation(prepared, operator.dockerExecutable)).proposalDigest !== operator.proposalDigest) throw new InstallationPublicationError('INSTALLATION_PUBLICATION_CHANGED');
+}
+/** The identity stores of the prepared configuration: its layout root and resources and its installation binding settings. */
+function identityStores(projectRoot: string, prepared: PreparedInstallation, timeoutMs: number) {
+  const config = validateConfig(versionedConfig(prepared.material.configuration)).config;
+  const layout = resolveProductLayout({ projectRoot, root: prepared.material.layout.root, resources: config.layout.resources });
+  return { installation: new FileInstallationIdentityStore(layout, timeoutMs, undefined, config.installation), project: new FileProjectIdentityStore(projectRoot, timeoutMs) };
 }
 function lockTimeout(prepared: PreparedInstallation) {
   return Math.min(getConfigFieldDefault('installation').writeLockTimeoutMs, validateConfig(versionedConfig(prepared.material.configuration)).config.installation.writeLockTimeoutMs);
@@ -61,10 +74,8 @@ async function executeInstallation(projectRoot: string, operator: InstallationAp
     if (recovery) validateInstallationRecovery(recovery, prepared);
     const evidence = await inspectPreparedInstallation(prepared, operator.dockerExecutable);
     if (evidence.proposalDigest !== operator.proposalDigest) throw new InstallationPublicationError('INSTALLATION_PUBLICATION_CHANGED');
-    const config = validateConfig(versionedConfig(prepared.material.configuration)).config;
-    const layout = resolveProductLayout({ projectRoot, root: prepared.material.layout.root, resources: config.layout.resources });
-    const installationIdentity = new FileInstallationIdentityStore(layout, timeoutMs, undefined, config.installation.identityProbe), projectIdentity = new FileProjectIdentityStore(projectRoot, timeoutMs);
-    await installationIdentity.read(); await projectIdentity.read();
+    const { installation: installationIdentity, project: projectIdentity } = identityStores(projectRoot, prepared, timeoutMs);
+    await installationIdentity.admitWrite(); await projectIdentity.read(); // re-admitted under the journal lock, before any target is published
     const consent: InstallationConsent = recovery?.consent ?? Object.freeze({ schemaVersion: 1, mode: 'operator-custom',
       id: randomUUID(), atMs: Date.now(), proposalDigest: operator.proposalDigest, principal: prepared.preview.principal });
     const result = await new InstallationPublicationApplication({ journal, ...installationPublicationPorts(projectRoot, prepared),

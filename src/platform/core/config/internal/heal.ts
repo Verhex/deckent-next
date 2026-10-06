@@ -28,7 +28,7 @@ export async function readProjectConfig(path: string, options: ConfigHealingOpti
   if (result.kind === 'io') throw ErrorRegistry.createError('CONFIG_READ_IO_HOLD', { cause: result.error });
   if (result.kind === 'absent') return {};
   if (result.kind === 'ready') return result.value;
-  if (options.heal === false) throw ErrorRegistry.createError('DECKENT_E004');
+  if (options.heal === false) throw ErrorRegistry.createError('CONFIG_FILE_INVALID');
   const healed = await healCorruptProjectConfig(path, result, options);
   options.onHeal?.(healed.backupPath);
   return healed.config;

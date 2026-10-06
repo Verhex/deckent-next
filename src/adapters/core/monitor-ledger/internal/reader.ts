@@ -166,7 +166,7 @@ function attempt(db: DatabaseSync, version: number, binding: MonitorLedgerRun['s
   return Object.freeze({ attemptId, generation, ...(handoffStart ? { handoffStart } : {}), observedKind: binding.observedKind, observedRevision: binding.observedRevision, evaluationObserved, reservedAtMs,
     provider: evaluated?.provider ?? pin?.provider ?? record?.profile.adapterId ?? null, model,
     sealedAtMs: sealed && sealed.identity.attemptId === attemptId ? sealed.sealedAt : null,
-    dispatch: record ? Object.freeze({ launch: record.launch, grantedAtMs: record.grant?.grantedAt ?? null, outputRecorded: !!record.output,
+    dispatch: record ? Object.freeze({ launch: record.launch, grantedAtMs: record.grant?.grantedAt ?? null, outputRecorded: !!record.output, patchRecorded: !!record.patch,
       terminal: record.terminal ? Object.freeze({ ...(record.terminal.container ? { container: record.terminal.container } : {}), exitCode: record.terminal.exitCode, signal: record.terminal.signal ?? null, interrupted: record.terminal.interrupted }) : null }) : null });
 }
 

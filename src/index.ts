@@ -2,7 +2,7 @@
 // execution settings, bootstrapJournalSchema) stay Core-internal; the data types derived from them are exported. Inventory: tests/contracts/composition/sdk-public-exports.json.
 export { PACKAGE_NAME, PACKAGE_VERSION, resolveLocale, t, DECKENT_DIR, CONFIG_FILE, PROJECT_CONFIG_PATH, CONFIG_SCHEMA_VERSION,
   CONFIG_CONTRACT_SINCE, OUTPUT_MODES, DECKENT_VERSION, NODE_ENGINE_RANGE, SUPPORTED_LANGUAGES, DeckentError, ErrorRegistry, ERROR_CODES,
-  createCrossVerifyContractError, createExecutionAuthorityError, createExecutionAdmissionError, createDockerLifecycleError, EXIT_CODES, exitCodeFor,
+  EXIT_CODES, exitCodeFor,
   lintErrorRegistry, assertErrorRegistry, redactSensitive, formatHumanError, buildCrashArtifact, writeCrashArtifact, reportFatal, ENVIRONMENT_KEYS,
   envValue, isMainModule, normalizeGlobalScopePlatform, resolveGlobalScopePaths, resolveGlobalConfigPaths, resolveGlobalConfigReadPath,
   resolveProductPaths, detectHostMemory, suggestMaxWorkers, calcRecommendedMaxWorkers, suggestMaxWorkersFromCapacity, getSystemProfile,

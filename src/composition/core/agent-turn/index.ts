@@ -1,4 +1,4 @@
-export { cancelPeerConfiguredChatTurn, chatTurnCompactionCommandId, chatTurnRoundFailureState,
+export { cancelPeerConfiguredChatTurn, chatTurnApprovalPreview, chatTurnCompactionCommandId, chatTurnRoundFailureState,
   chatTurnRoundCommandId, createRuntimeChatTurnHost,
   runPeerConfiguredChatTurn, withMcpNotices } from './internal/turn.js';
 export type { RuntimeChatTurnHost } from './internal/turn.js';

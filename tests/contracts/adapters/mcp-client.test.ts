@@ -68,6 +68,19 @@ describe('MCP client: pin and names (pure)', () => {
     expect(by['extra']).toMatchObject({ status: 'unpinned', spec: null });
     expect(by['drop']!.spec!.description).toContain('[MCP server fx; untrusted]');
   });
+  it('a tag payload in a pinned description is withheld from the offered spec; the pin digest stays on the raw tool', () => {
+    const tags = Array.from('pwn', char => String.fromCodePoint(0xe0000 + char.charCodeAt(0))).join('');
+    const live = tool('echo', 'echo', { description: `keep ${tags} secret` });
+    const marked = tool('mark', 'echo', { description: 'hello\u200Eworld' });
+    const verdicts = verifyMcpTools({ id: 'fx', command: 'x', args: [], env: {}, realm: 'host', tools: [
+      { ...pinOf(live), alwaysAsk: false }, { ...pinOf(marked), alwaysAsk: false }] }, [live, marked]);
+    const by = Object.fromEntries(verdicts.map(verdict => [verdict.name, verdict]));
+    expect(by['echo']).toMatchObject({ status: 'pinned' });
+    expect(by['echo']?.spec?.description).toContain('result withheld');
+    expect(by['echo']?.spec?.description).not.toContain('pwn');
+    expect(by['mark']?.spec?.description).toContain('[hidden-unicode:');
+    expect(by['mark']?.spec?.description).not.toContain('\u200E');
+  });
 });
 
 describe('MCP client: both protocol eras over stdio (real SDK servers)', () => {

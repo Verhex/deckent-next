@@ -17,10 +17,15 @@ const deliveryReceiptSchema = z.object({ state: z.enum(['integrating', 'integrat
   commit: text.nullable(), commandId: text.nullable().optional(), targetRef: text.nullable().optional(),
 }).strict().readonly();
 export const briefDeliverySchema = deliveryReceiptSchema.unwrap().extend({ receipts: z.array(deliveryReceiptSchema).readonly().optional() }).strict().readonly();
+/** Failed tests of a failed verification attempt, read from its retained output under the read-output decision: the true count and the first names only. */
+export const briefFailedTestsSchema = z.object({ count: z.number().int().nonnegative(), names: z.array(text).readonly(), truncated: z.boolean() }).strict().readonly();
+/** What a terminal accepted Run still owes its delivery when no integration/delivery/adoption receipt exists: no patch needed, a patch that was never prepared, or a prepared patch awaiting delivery. */
+export const briefDeliveryOutlookSchema = z.enum(['none', 'patch-not-prepared', 'awaiting-delivery']);
 export const resultBriefSchema = z.object({ schemaVersion: z.literal(1), attemptId: text.nullable(), claimLabel: z.literal('CLAIM'),
   report: workerFinalReportResultSchema.nullable(), evaluation: briefEvaluationSchema,
   /** This receipt belongs to the Run; it does not prove this individual worker patch landed. */
   runDelivery: briefDeliverySchema.nullable(), openIssues: z.array(text).readonly().nullable(),
+  failedTests: briefFailedTestsSchema.optional(), deliveryOutlook: briefDeliveryOutlookSchema.optional(),
 }).strict().readonly();
 export type ResultBrief = z.infer<typeof resultBriefSchema>;
 export function projectTaskBrief(run: RunSnapshot, taskId: string): TaskBrief {
@@ -42,11 +47,12 @@ export function projectTaskBrief(run: RunSnapshot, taskId: string): TaskBrief {
     effort: input?.effort ?? null, contextRefs: refs });
 }
 export function projectResultBrief(attemptId: string | null, evaluation: ResultBrief['evaluation'], report: WorkerFinalReportResult | null = null,
-  runDelivery: ResultBrief['runDelivery'] = null): ResultBrief {
+  runDelivery: ResultBrief['runDelivery'] = null, extra: Pick<ResultBrief, 'failedTests' | 'deliveryOutlook'> = {}): ResultBrief {
   // Revalidate and redact all claim leaves, including optional handoff/shared notes. Sealing never promotes these to acceptance.
   const scrub = (value: unknown): unknown => typeof value === 'string' ? safe(value) : Array.isArray(value) ? value.map(scrub)
     : value && typeof value === 'object' ? Object.fromEntries(Object.entries(value).map(([key, leaf]) => [key, scrub(leaf)])) : value;
   const claim = report ? workerFinalReportResultSchema.parse(scrub(report)) : null;
   return resultBriefSchema.parse({ schemaVersion: 1, attemptId, claimLabel: 'CLAIM', report: claim, evaluation,
-    runDelivery: runDelivery ? scrub(runDelivery) : null, openIssues: claim?.status === 'reported' ? claim.report.openIssues : null });
+    runDelivery: runDelivery ? scrub(runDelivery) : null, openIssues: claim?.status === 'reported' ? claim.report.openIssues : null,
+    ...(extra.failedTests ? { failedTests: scrub(extra.failedTests) } : {}), ...(extra.deliveryOutlook ? { deliveryOutlook: extra.deliveryOutlook } : {}) });
 }

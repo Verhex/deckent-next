@@ -5,9 +5,9 @@ import { describe, afterEach, expect, it } from 'vitest';
 import { applyPolicyTemplateInstallation, inspectPolicyTemplate, previewPolicyTemplateInstallation } from '#composition/core/installation/index.js';
 import { FileInstallationIdentityStore, readLocalOsIdentity } from '#adapters/index.js';
 
-import { resolveProductLayout } from '#platform/index.js';
-import { machineBindingNotRunReason } from '../support/binding-capability.js';
-const bindingNotRun = await machineBindingNotRunReason();
+import { clearConfigCache, resolveProductLayout } from '#platform/index.js';
+import { installationBindingNotRunReason } from '../support/binding-capability.js';
+const bindingNotRun = await installationBindingNotRunReason();
 
 // SCR-B (owner 2026-09-28, checkpoint option B, proof/SCR-B-2026-09-28/review.md): a real journal + real adapters
 // end to end. No Docker, no pool, no config.json is ever created or required for this path.
@@ -68,7 +68,7 @@ it('two different scopes cannot both occupy the same project\'s one installation
 
 });
 
-it.skipIf(process.platform !== 'linux' || bindingNotRun !== null)('[requires machine binding capability] refuses copied identity before direct policy setup publishes policy, bindings or journal', async () => {
+it.skipIf(process.platform !== 'linux' || bindingNotRun !== null)('[requires installation binding] refuses copied identity before direct policy setup publishes policy, bindings or journal', async () => {
   const original = await project(), copied = await project();
   await new FileInstallationIdentityStore(resolveProductLayout({ projectRoot: original })).loadOrCreate();
   await mkdir(join(copied, '.deckent'), { mode: 0o700 });
@@ -79,4 +79,19 @@ it.skipIf(process.platform !== 'linux' || bindingNotRun !== null)('[requires mac
   for (const name of ['policy.json', 'bindings.json', 'installation', 'project-identity']) {
     await expect(stat(join(copied, '.deckent', name))).rejects.toMatchObject({ code: 'ENOENT' });
   }
+});
+
+it.skipIf(process.platform !== 'linux' || bindingNotRun !== null)('[requires installation binding] direct policy setup binds through the configured machine identity source, not the platform one', async () => {
+  const root = await project(), source = join(root, 'machine-identity'); await writeFile(source, 'site-policy-template.node-0001\n');
+  await mkdir(join(root, '.deckent'), { mode: 0o700 });
+  await writeFile(join(root, '.deckent/config.json'), JSON.stringify({ installation: { machineIdentity: { source } } }), { mode: 0o600 }); clearConfigCache();
+  const settings = { machineIdentity: { source } };
+  const identity = await new FileInstallationIdentityStore(resolveProductLayout({ projectRoot: root }), undefined, undefined, settings).loadOrCreate();
+  const path = join(root, '.deckent/installation-identity/identity.json'), bytes = await readFile(path, 'utf8');
+  expect(JSON.parse(bytes).binding).toMatchObject({ strength: 'machine', source: 'configured' });
+  // Without the configured settings the policy write path would compare against the platform identity (or a weak binding) and stop as RELOCATED.
+  await expect(applyPolicyTemplateInstallation(root, 'installation')).resolves.toMatchObject({ status: 'installed' });
+  expect(await readFile(path, 'utf8')).toBe(bytes);
+  expect(JSON.parse(bytes).installationId).toBe(identity.installationId);
+  clearConfigCache();
 });

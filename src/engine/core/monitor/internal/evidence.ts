@@ -1,6 +1,7 @@
 import type { HandoffStartRecord } from '#engine/core/handoff-observation/index.js';
 import type { ContainerEvidence } from '#engine/core/supervisor/index.js';
 import type { AttemptIdentity, RunSnapshot, WorkerModelView } from '#domain/index.js';
+import type { ResultBrief } from '#engine/core/runs/index.js';
 import type { MonitorMap, MonitorWorkerContent } from './contract.js';
 import type { RuntimeServiceDescriptor } from '#engine/core/runtime/index.js';
 import type { WorkerObservation } from '#engine/core/worker-observation/index.js';
@@ -15,12 +16,14 @@ export interface MonitorLedgerDispatch {
   readonly grantedAtMs: number | null;
   readonly terminal: { readonly container?: ContainerEvidence; readonly exitCode: number | null; readonly signal: string | null; readonly interrupted: boolean | null } | null;
   readonly outputRecorded: boolean;
+  /** `dispatches.record.patch` exists: the patch was prepared and retained (metadata only, no content read). Absent on older readers. */
+  readonly patchRecorded?: boolean;
 }
 export interface MonitorLedgerAttempt {
   readonly content?: MonitorWorkerContent;
   readonly attemptId: string; readonly generation: number; readonly handoffStart?: HandoffStartRecord | null;
   /** The Run binding's last projected observation. */
-  readonly observedKind: 'started' | 'exited' | 'cancelled' | 'unknown' | 'handoff-refused' | null; readonly observedRevision: number | null;
+  readonly observedKind: RunSnapshot['bindings'][number]['observedKind']; readonly observedRevision: number | null;
   readonly dispatch: MonitorLedgerDispatch | null;
   /** A `task_evaluation_observations` row exists for (attempt, observed revision): an evaluation was committed (HOLD keeps `evaluating`). */
   readonly evaluationObserved: boolean;
@@ -31,6 +34,8 @@ export interface MonitorLedgerAttempt {
   /** MONITOR v1.1 (optional): provider from the evaluation's model record, the frozen profile pin or the dispatch profile adapter; model view from
    * the evaluation record or the pin; first failing line of a failed attempt's recorded output; last worker-reported events (untrusted). */
   readonly provider?: string | null; readonly model?: WorkerModelView | null; readonly firstFailure?: string | null;
+  /** M3: the failed tests of a failed attempt's recorded output (count + first names), read under the same read-output gate as `firstFailure`. */
+  readonly failedTests?: NonNullable<ResultBrief['failedTests']>;
   readonly recentEvents?: readonly MonitorEvent[]; readonly diagnostics?: readonly string[];
   /** Host-observed process exit (`worker.log` `exited` event, host clock) of an attempt without a sealed log. */
   readonly observedEndAtMs?: number | null;
