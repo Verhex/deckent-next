@@ -1293,5 +1293,10 @@
   "terminal.approval.sessionCleared": "Remembered permissions for conversation {session} cleared; existing once decisions unchanged.",
   "terminal.approval.sessionClearUnconfirmed": "Could not confirm clearing remembered permissions for conversation {session}.",
   "terminal.identity.notCreated": "unavailable (not yet created)",
-  "terminal.identity.unsupported": "unavailable (unsupported capability)"
+  "terminal.identity.unsupported": "unavailable (unsupported capability)",
+  "monitor.brief.failedTests": "Failed tests: {count} (first {shown}): {names}",
+  "monitor.brief.failedTestsMore": "… {more} more not listed",
+  "monitor.brief.deliveryNone": "Delivery: nothing to deliver; no accepted task of this Run carries a patch.",
+  "monitor.brief.deliveryPatchNotPrepared": "Accepted · patch not prepared: no retained patch exists for this work, so nothing can be delivered. The ledger does not record why; `task patch-prepare` names the exact limit and config field.",
+  "monitor.brief.deliveryAwaiting": "Accepted · patch ready, awaiting delivery: nothing has been delivered yet."
 }

@@ -502,3 +502,84 @@ it('reads artifacts only for shown workers when finished history exceeds the lim
     expect(install.diagnostics).toContain('info:workers-finished-capped:11');
   } finally { spy.mockRestore(); }
 });
+
+// M2/M3: the delivery outlook and the failed tests on the real composed read path (ledger + artifacts + read-output gate), monitor and `run inspect`.
+describe('monitor delivery outlook and failed tests (M2/M3)', () => {
+  const input = { schemaVersion: 1 as const, task: 'Add the edge tests', scope: { paths: ['tests/**'] }, acceptance: 'Tests pass', model: { channelId: 'fixture', modelId: 'fixture-model-1', auxiliaryModelIds: [] } };
+  const workGraph = { ...graph, schemaVersion: 3 as const, tasks: graph.tasks.map(task => ({ ...task, workInput: input })) };
+  async function finished(current: Awaited<ReturnType<typeof project>>, runId: string, options: { exitCode: number; stdout?: string; patch?: boolean; accept?: boolean; work?: boolean }) {
+    const identity = { scopeId: 's', runId, taskId: 't', attemptId: runId + '-t', layoutRevision: 'layout', generation: 1 };
+    const store = await openSqliteAttemptStore(current.ledger, { busyTimeoutMs: 100, journalMode: 'wal', durability: 'full' }, { now: Date.now, timeoutMs: 86400000 }, 'allow', custodyProfiles);
+    const artifacts = new FileArtifactStore({ root: await prepareProductDirectory(current.layout, 'artifacts'), maxBytes: 1_048_576 });
+    try {
+      await store.createRun({ commandId: 'create-' + runId, actor, identity: { scopeId: 's', runId, layoutRevision: 'layout' }, graph: options.work === false ? graph : workGraph, execution: fixtureExecution(graph),
+        now: 10_000, policy: { schemaVersion: 2, poolId: 'p', capacity, ordering: ['t'] } });
+      await store.reserveRunTasks({ commandId: 'reserve-' + runId, actor, scopeId: 's', runId, expectedRevision: 0, now: 20_000, identities: [identity] });
+      const claim = { owner: 'worker', request: { protocolVersion: 1 as const, identity, workspace: join(current.dir, 'gone', runId), argv: ['x'] } };
+      await store.claimDispatch(dispatchAdmission(claim)); await grantTestLaunch(store, claim, 30_000);
+      await store.retainDispatchOutput(claim, await artifacts.put('s', Buffer.from(JSON.stringify({ schemaVersion: 1, identity, completeness: 'complete', stdout: options.stdout ?? '', stderr: '' }))));
+      const events = [{ schemaVersion: 1, sequence: 1, atMs: 5, kind: 'session.ended', outcome: 'success', turns: 8, durationMs: 59_000, apiDurationMs: null, costUsd: null, costBasis: null, tokens: null, permissionDenials: 0 }];
+      await store.saveWorkerEventLog({ schemaVersion: 1, identity, events: await artifacts.put('s', Buffer.from(events.map(event => JSON.stringify(event)).join('\n') + '\n')), eventCount: 1, sealedAt: 89_000 });
+      await store.finishDispatch(claim, { handle: runId, exitCode: options.exitCode, interrupted: false });
+      let patchDigest = 'c'.repeat(64);
+      if (options.patch) {
+        const receipt = await artifacts.put('s', Buffer.from(JSON.stringify({ schemaVersion: 1, kind: 'workspace-patch', identity, source: { schemaVersion: 1, adapter: { id: 'fixture', version: 1 }, sourceFingerprint: 'a'.repeat(64) },
+          baseCommit: 'b'.repeat(40), snapshotDigest: 'c'.repeat(64), exclusions: patchExclusions, changes: [{ path: 'tests/a.test.ts', before: null, after: patchFile(Buffer.from('x'), '100644') }] })));
+        await store.retainDispatchPatch(claim, receipt); patchDigest = receipt.digest;
+      }
+      if (options.accept) {
+        const dispatch = (await store.readDispatch(claim.request))!, run = (await store.loadRun('s', runId))!;
+        await store.commitTaskEvaluation({ commandId: 'evaluate-' + runId, actor, expectedRevision: run.revision, dispatch,
+          evaluation: { schemaVersion: 1, evaluationId: 'evaluate-' + runId, identity, graphRevision: 1, attemptRevision: 1, criteria: [{ criterionId: 'verified', verdict: 'pass', evidenceIds: ['fixture-ok'] }],
+            ...(options.work === false ? {} : { workspaceChange: { schemaVersion: 1, patchDigest, changedFiles: 1 } }) } });
+      }
+    } finally { store.close(); }
+  }
+  const text = async (current: Awaited<ReturnType<typeof project>>, locale: 'en' | 'tr') => (await loadMonitorSurface()).renderMonitorText(await inspectMonitor(current.dir, current.options), { locale, width: 200, ascii: true });
+  /** Every Run's expanded detail (what Enter opens in the fullscreen view), flattened to text. */
+  const details = async (current: Awaited<ReturnType<typeof project>>, locale: 'en' | 'tr') => (await loadMonitorSurface()).buildMonitorView(await inspectMonitor(current.dir, current.options), locale, true).tabs.runs
+    .flatMap(block => block.kind === 'table' ? block.rows : []).flatMap(row => row.detail().map(line => line.map(item => item.text).join(''))).join('\n');
+  /** A ledger written before patches were retained at evaluation (the state a legacy accepted Run is in): the dispatch record has no retained patch. */
+  const withoutPatchRecord = (ledger: string, runId: string) => { const db = new DatabaseSync(ledger); try { db.prepare("UPDATE dispatches SET record=json_remove(record,'$.patch') WHERE attempt_id=?").run(runId + '-t'); } finally { db.close(); } };
+  it('DT-1 shape: an accepted Run whose patch was never prepared reads "accepted · patch not prepared" in the monitor and in run inspect; a retained patch reads awaiting delivery', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'deckent-monitor-m2-')); roots.push(root);
+    const current = await project(root, 'current', ['s'], ['s'], ['output', 'runs']);
+    await finished(current, 'dt-like', { exitCode: 0, accept: true, patch: true }); withoutPatchRecord(current.ledger, 'dt-like'); await finished(current, 'with-patch', { exitCode: 0, accept: true, patch: true }); await finished(current, 'no-work', { exitCode: 0, accept: true, work: false });
+    const install = (await inspectMonitor(current.dir, current.options)).installs[0]!;
+    const outlook = (runId: string) => install.runs.find(run => run.runId === runId)!;
+    expect(outlook('dt-like')).toMatchObject({ state: 'accepted', deliveryOutlook: 'patch-not-prepared' });
+    expect(outlook('with-patch')).toMatchObject({ state: 'accepted', deliveryOutlook: 'awaiting-delivery' });
+    expect(outlook('no-work')).toMatchObject({ state: 'accepted', deliveryOutlook: 'none' });
+    expect(outlook('dt-like').tasks[0]!.lastAttempt).toMatchObject({ closeReason: 'exit-ok', turns: 8, sessionOutcome: 'success' });
+    expect(await text(current, 'en')).toContain('! dt-like · accepted · patch not prepared'); expect(await text(current, 'tr')).toContain('dt-like · kabul edildi · yama hazırlanamadı');
+    expect(await details(current, 'en')).toContain('Accepted · patch not prepared: no retained patch exists'); expect(await details(current, 'tr')).toContain('Kabul edildi · yama hazırlanamadı');
+    const inspected = await inspectConfiguredRun(current.dir, { schemaVersion: 1, scopeId: 's', runId: 'dt-like' }, current.options);
+    expect(inspected.run!.tasks[0]!.resultBrief).toMatchObject({ deliveryOutlook: 'patch-not-prepared' });
+    for (const [lang, expected] of [['en', 'Accepted · patch not prepared'], ['tr', 'Kabul edildi · yama hazırlanamadı']] as const) {
+      let output = ''; const stdout = new Writable({ write(chunk, _encoding, done) { output += chunk.toString(); done(); } });
+      expect(await main(['run', 'inspect', '--scope', 's', '--id', 'dt-like', '--lang', lang, '--no-color'], { root: current.dir, env: current.options.env, stdout, inspectRun: inspectConfiguredRun })).toBe(0);
+      expect(output).toContain(expected);
+    }
+  });
+  const stdout = Array.from({ length: 22 }, (_, i) => `verify-failed-test: ${JSON.stringify({ file: `tests/f${i}.test.ts`, test: `suite > case ${i}`, state: 'failed' })}`).join('\n');
+  it('a failed verification attempt shows the failed-test count and the first names in the monitor and run inspect; without read-output nothing is read or shown', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'deckent-monitor-m3-')); roots.push(root);
+    const current = await project(root, 'current', ['s'], ['s'], ['output', 'runs']);
+    await finished(current, 'verify-failed', { exitCode: 1, stdout, work: false });
+    const failed = (await inspectMonitor(current.dir, current.options)).installs[0]!.runs.find(run => run.runId === 'verify-failed')!;
+    expect(failed.tasks[0]!.lastAttempt!.failedTests).toEqual({ count: 22, names: [0, 1, 2, 3, 4].map(i => `tests/f${i}.test.ts > suite > case ${i}`), truncated: true });
+    expect(failed.tasks[0]!.lastAttempt).toMatchObject({ closeReason: 'exit-error', exitCode: 1 });
+    expect(await details(current, 'en')).toContain('failed tests: 22 (showing 5)'); expect(await details(current, 'tr')).toContain('başarısız test: 22 (5 tanesi gösteriliyor)');
+    let output = ''; const sink = new Writable({ write(chunk, _encoding, done) { output += chunk.toString(); done(); } });
+    expect(await main(['run', 'inspect', '--scope', 's', '--id', 'verify-failed', '--lang', 'en', '--no-color'], { root: current.dir, env: current.options.env, stdout: sink, inspectRun: inspectConfiguredRun })).toBe(0);
+    expect(output).toContain('Failed tests: 22 (first 5): tests/f0.test.ts > suite > case 0'); expect(output).not.toContain('tests/f5.test.ts');
+    // Negative: the same ledger, the same output, but this principal holds no read-output grant.
+    const denied = await project(await mkdtemp(join(tmpdir(), 'deckent-monitor-m3d-')).then(dir => { roots.push(dir); return dir; }), 'current', ['s'], ['s'], ['runs']);
+    await finished(denied, 'verify-failed', { exitCode: 1, stdout, work: false });
+    const hidden = (await inspectMonitor(denied.dir, denied.options)).installs[0]!;
+    expect(hidden.runs.find(run => run.runId === 'verify-failed')!.tasks[0]!.lastAttempt).not.toHaveProperty('failedTests');
+    expect(JSON.stringify(hidden)).not.toContain('suite > case'); expect(await details(denied, 'en')).not.toContain('suite > case');
+    const refused = await inspectConfiguredRun(denied.dir, { schemaVersion: 1, scopeId: 's', runId: 'verify-failed' }, denied.options);
+    expect(JSON.stringify(refused)).not.toContain('suite > case'); expect(refused.run!.tasks[0]!.resultBrief?.failedTests).toBeUndefined();
+  });
+});

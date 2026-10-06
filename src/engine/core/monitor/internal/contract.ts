@@ -31,6 +31,10 @@ export interface MonitorBlocker {
   /** Durable park/decision deadline, when this blocker is bounded by one. */
   readonly deadlineMs?: number;
 }
+/** How an attempt's process closed, from the dispatch terminal record and the Run's observation (never a verdict): null while it runs. */
+export type MonitorCloseReason = 'exit-ok' | 'exit-error' | 'signal' | 'interrupted' | 'cancelled';
+/** What an accepted Run owes its delivery without any integration/delivery/adoption receipt (see ResultBrief.deliveryOutlook); undefined = not applicable (open or unsuccessful Run). */
+export type MonitorDeliveryOutlook = NonNullable<ResultBrief['deliveryOutlook']>;
 export interface MonitorAttempt {
   readonly container?: ContainerEvidence;
   readonly attemptId: string; readonly generation: number; readonly launch: string | null; readonly exitCode: number | null;
@@ -46,6 +50,10 @@ export interface MonitorAttempt {
   readonly recentEvents?: readonly { readonly atMs: number | null; readonly kind: string; readonly summary: string }[];
   /** MONITOR-DATA (optional): why recorded content is absent, e.g. `output-denied` (no attempt read-output decision: nothing was read). */
   readonly diagnostics?: readonly string[];
+  /** M2/M3 (optional): close reason of the process; turns and session outcome the sealed worker events report (null without them); and the failed tests of a failed
+   * attempt's recorded output (count + first names; read only under the attempt's read-output decision, display evidence only). */
+  readonly closeReason?: MonitorCloseReason | null; readonly turns?: number | null; readonly sessionOutcome?: 'success' | 'error' | 'limit' | null;
+  readonly failedTests?: NonNullable<ResultBrief['failedTests']>;
 }
 export interface MonitorTask {
   readonly waiting?: import('#engine/core/runs/index.js').PoolWait;
@@ -69,6 +77,8 @@ export interface MonitorRun {
    * from the ledger's integration → delivery → adoption records (the furthest proven step; `commit` is the delivered/adopted commit). */
   readonly finishedAtMs?: number | null;
   readonly delivery?: ResultBrief['runDelivery'];
+  /** M2 (optional): the typed delivery outlook of an accepted Run, derived from the task's work input and the dispatch's retained-patch record. */
+  readonly deliveryOutlook?: MonitorDeliveryOutlook;
 }
 export type MonitorDeliveryState = 'integrating' | 'integrated' | 'delivering' | 'delivered' | 'adopting' | 'adopted' | 'rolling-back' | 'rolled-back';
 export interface MonitorApproval {
