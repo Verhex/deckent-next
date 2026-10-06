@@ -83,3 +83,22 @@ the caller's existing typed *_INPUT_UNAVAILABLE error before opening a path; bou
 history/session file factories similarly refuse Windows or absent O_NOFOLLOW with existing MANAGED_FILE_UNSUPPORTED,
 before reading/writing any state. They retain POSIX permission/link guarantees instead of claiming a Windows private
 store. Terminal-history declares exactly the public platform managed-files error dependency; no contract schema changes.
+
+**Yerel CI eşleniği (CI-LOCAL, owner 2026-10-06; developer tooling).** `npm run ci:local -- [--ref <ref|HEAD>] [--node 24|26] [--keep]`
+(`scripts/ci-local.mjs`) runs the ubuntu job of `.github/workflows/ci.yml` in its order, using the repository's own
+`scripts/ci-*` files unchanged: temporary parent, `npm ci`, pinned Docker fixture, locked bubblewrap build and stage,
+`build.mjs` + `ci-shell-realm.mjs`, `npm run verify` (`DECKENT_TEST_STARTUP_COST=1`, `DECKENT_TEST_TIMEOUT_MS=30000`, default
+4 workers) and `ci-verification-summary.mjs`. It works on a clean detached `git worktree` of the exact SHA in a scratch
+directory; HOME/USERPROFILE/XDG_*/TMPDIR/`DECKENT_GLOBAL_HOME` are empty temporary directories, `DECKENT_*`/`GITHUB_*`/`LC_*`/`LANG*`
+are not inherited, and `GITHUB_ENV`/`RUNNER_TEMP` are provided locally. Only npm's download cache and the docker client config
+are shared (bytes, no user settings). A local copy of the locked bubblewrap download cache seeds the run; when the pinned image digest
+is already local only the `docker pull` is skipped. One run at a time per repository (lock in the git common dir).
+Logs and `result.json` go to `.pack/ci-local/<sha12>-node<N>/` (gitignored). `--node` resolves the running node, then nvm/fnm
+installs, and otherwise fails with `CI_LOCAL_NODE_UNAVAILABLE`.
+Not covered: macOS, Windows, the runner's `sudo sysctl` AppArmor step, hosted-runner differences. It does not replace hosted CI.
+`npm run precommit:fast` (typecheck, eslint on changed `.ts|.mjs`, lint-arch, lint-docs; no tests) backs the tracked
+`scripts/git-hooks/pre-commit`; `pre-push` runs `ci:local --ref <pushed sha> --node 24` only for `refs/heads/main` and
+`refs/heads/wave/*`. A skip needs `DECKENT_CI_LOCAL_SKIP="<reason>"` (>= 8 characters), logged to `.pack/ci-local/skips.log`.
+`npm run hooks:install` sets relative `core.hooksPath=scripts/git-hooks` (shared `.git/config` unless
+`extensions.worktreeConfig` is on, then per worktree); each worktree resolves it against its own root, so branches without
+the directory run no hooks, and clones do not inherit the setting. Measured times: external `proof/CI-LOCAL-2026-10-06/review.md`.

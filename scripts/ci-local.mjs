@@ -4,7 +4,7 @@
 // with HOME/XDG/DECKENT_GLOBAL_HOME isolated. It does not cover macOS or Windows cells.
 // Usage: node scripts/ci-local.mjs [--ref <git-ref|HEAD>] [--node 24|26] [--keep]
 import { spawn, spawnSync } from 'node:child_process';
-import { appendFileSync, closeSync, copyFileSync, cpSync, existsSync, mkdirSync, mkdtempSync, openSync, readFileSync,
+import { appendFileSync, closeSync, cpSync, existsSync, mkdirSync, mkdtempSync, openSync, readFileSync,
   readdirSync, rmSync, writeFileSync, chmodSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
 import { delimiter, dirname, join, resolve } from 'node:path';
@@ -77,20 +77,28 @@ function git(cwd, ...args) {
 
 function pidAlive(pid) { try { process.kill(pid, 0); return true; } catch (e) { return e.code === 'EPERM'; } }
 
+/** Returns a refusal message when a live process holds the lock, else null (stale or unreadable locks are removed). */
+function lockHolderMessage(path) {
+  let holder = {};
+  try { holder = JSON.parse(readFileSync(path, 'utf8')); } catch { /* unreadable lock is treated as stale */ }
+  if (holder.pid && pidAlive(holder.pid)) {
+    return `CI_LOCAL_BUSY: another ci:local run holds the lock (pid ${holder.pid}, ref ${holder.ref}, since ${holder.startedAt}). Wait for it; two full runs overload the machine.`;
+  }
+  rmSync(path, { force: true });
+  return null;
+}
+
 /** One full run at a time per repository (all worktrees share the git common dir). */
 function acquireLock(path, info) {
   for (let attempt = 0; attempt < 2; attempt++) {
-    try {
-      const fd = openSync(path, 'wx');
+    let fd = null;
+    try { fd = openSync(path, 'wx'); } catch (error) { if (error.code !== 'EEXIST') throw error; }
+    if (fd !== null) {
       writeFileSync(fd, JSON.stringify(info)); closeSync(fd);
       return () => { try { rmSync(path); } catch { /* already gone */ } };
-    } catch (error) {
-      if (error.code !== 'EEXIST') throw error;
-      let holder = {};
-      try { holder = JSON.parse(readFileSync(path, 'utf8')); } catch { /* unreadable lock is treated as stale */ }
-      if (holder.pid && pidAlive(holder.pid)) throw new Error(`CI_LOCAL_BUSY: another ci:local run holds the lock (pid ${holder.pid}, ref ${holder.ref}, since ${holder.startedAt}). Wait for it; two full runs overload the machine.`);
-      rmSync(path, { force: true });
     }
+    const busy = lockHolderMessage(path);
+    if (busy) throw new Error(busy);
   }
   throw new Error('CI_LOCAL_LOCK_UNAVAILABLE');
 }
@@ -134,6 +142,8 @@ export async function main(argv) {
   const wt = join(scratch, 'wt');
   const dirs = Object.fromEntries(['home', 'config', 'data', 'state', 'cache', 'runner-temp', 'tmp', 'global-home'].map(n => [n, join(scratch, n)]));
   for (const d of Object.values(dirs)) mkdirSync(d, { recursive: true });
+  // Hosted runner homes are not empty (tests such as S9 need a regular file in HOME); seed neutral dotfiles, no owner content.
+  for (const name of ['.profile', '.bashrc']) writeFileSync(join(dirs.home, name), '# ci-local placeholder\n');
   const githubEnvFile = join(scratch, 'github-env'); writeFileSync(githubEnvFile, '');
   const stepSummary = join(scratch, 'step-summary'); writeFileSync(stepSummary, '');
   const started = Date.now();
