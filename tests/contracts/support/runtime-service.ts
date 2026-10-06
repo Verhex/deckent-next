@@ -22,6 +22,10 @@ export async function startTestRuntimeService(project: string, env: NodeJS.Proce
   if (!config.cancellationRuntime) config.cancellationRuntime = {
     scopeIds: ['runtime-test'], pollIntervalMs: 1000, failureBackoffMs: 1000,
   };
+  // WORKER-AUTO-REFRESH is automatic-runtime work as well: its start and periodic triggers are off here unless a fixture sets them
+  // (runtime-service-image-refresh and toolchain-refresh exercise them on the normal host).
+  const toolchains = (config.toolchains ?? {}) as Record<string, unknown>;
+  if (!toolchains.update) config.toolchains = { ...toolchains, update: { atStartup: false, intervalMs: 0 } };
   await writeFile(configPath, JSON.stringify(config));
   clearConfigCache();
   const service = await startConfiguredRuntimeService(project, observer, { env });
