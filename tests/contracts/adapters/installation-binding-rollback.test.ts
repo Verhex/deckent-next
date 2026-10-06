@@ -107,6 +107,11 @@ describe.skipIf(process.platform !== 'linux')('binding v2 rollback compatibility
     expect(JSON.parse(bytes).binding).toMatchObject({ schemaVersion: 2, strength: 'machine', source: 'configured' });
     expect(await alpha6(f.path)).toBe(false);
     await expect(alpha6Reader(f.layout).load()).rejects.toMatchObject({ code: 'INSTALLATION_IDENTITY_INVALID' });
+    // alpha.6 `init identity --keep` replaces the record through the same update path, which parses the current record first: also INVALID.
+    await expect(alpha6Reader(f.layout).update(async current => current)).rejects.toMatchObject({ code: 'INSTALLATION_IDENTITY_INVALID' });
     expect(await readFile(f.path, 'utf8')).toBe(bytes);
+    // The operator path that alpha.6 does accept: the same installationId as an unbound v1 record (no machine value involved).
+    const { installationId } = JSON.parse(bytes); await writeFile(f.path, JSON.stringify({ schemaVersion: 1, installationId }));
+    expect(await alpha6Reader(f.layout).load()).toEqual({ schemaVersion: 1, installationId });
   });
 });
