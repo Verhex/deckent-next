@@ -3089,6 +3089,47 @@
         "src/engine/core/workspace-patch/internal/delivery.ts",
         "src/surfaces/core/mcp/internal/delivery.ts"
       ]
+    },
+    "publicExtensions": {
+      "note": "G-i/G-j (ENTERPRISE-EXT-1, owner K7 = A): an external package registers through deckent/extensions only, before the composition root seals the registries; an overlay fixture proves it with public imports only.",
+      "entry": "src/extensions.ts",
+      "sdkEntry": "src/index.ts",
+      "packageExport": "./extensions",
+      "packageImport": "./dist/extensions.js",
+      "pendingPackageExport": true,
+      "registrations": [
+        "registerOperationAdapterModule",
+        "registerSecretStoreBackend"
+      ],
+      "compositionOnly": [
+        {
+          "name": "registerProviderConfig",
+          "reason": "Closes and seals the registries; called only by the composition root (composeCore)."
+        },
+        {
+          "name": "registerLedgerScopes",
+          "reason": "Ledger scope registration of an opened installation, not an extension registry."
+        }
+      ],
+      "sdkRegisterAllow": [
+        {
+          "name": "registerConfigSection",
+          "reason": "Pre-existing SDK export (config section registry); moving it to deckent/extensions is a BREAKING SDK change awaiting a decision."
+        }
+      ],
+      "rootOnly": {
+        "registerProviderConfig": "src/composition/core/root"
+      },
+      "unitImports": [
+        "src/composition/core/cli"
+      ],
+      "fixture": {
+        "root": "tests/fixtures/overlay-package",
+        "allowedSpecifiers": [
+          "deckent",
+          "deckent/extensions"
+        ]
+      }
     }
   }
 }

@@ -54,6 +54,7 @@ async function fixture(files: Record<string, string>, tiersEnforce = true, impor
   // Shrink-only repository debt (allowlists, caps, frozen lists) describes the real tree, not a fixture: start every fixture from zero.
   const guards = (arch as unknown as { guards: { hostWords: { allow: unknown[] }; vendorSlugCaps: Record<string, number>; effectFlows: { frozen: string[] } } }).guards;
   guards.hostWords.allow = []; guards.vendorSlugCaps = {}; guards.effectFlows.frozen = [];
+  delete (guards as { publicExtensions?: unknown }).publicExtensions; // names the real tree's entry, registrations and overlay fixture
   (arch as unknown as { literals: { allowUnits: unknown[] } }).literals.allowUnits = [];
   patch?.(arch);
   await writeFile(join(root, 'arch.json'), JSON.stringify(arch));
@@ -516,5 +517,30 @@ describe('ARCH-GUARDS: layer-drift guards (each rule has a deliberate violation 
     const frozen = (list: string[]): ArchPatch => arch => { arch.guards.effectFlows.frozen = list; };
     expect((await lint(await fixture(flow, true, false, {}, frozen(['src/engine/core/a/internal/run-delivery.ts'])))).out).not.toContain('[effect-flow]');
     expect((await lint(await fixture(clean, true, false, {}, frozen(['src/engine/core/gone/internal/old-claim.ts'])))).out).toContain('stale guards.effectFlows.frozen entry');
+  });
+
+  it('G-i/G-j: registrations are public only through the extension entry, one root closes them, the overlay fixture uses public imports only', async () => {
+    const extensions: ArchPatch = arch => { arch.guards.publicExtensions = { entry: 'src/extensions.ts', sdkEntry: 'src/index.ts', packageExport: './extensions',
+      packageImport: './dist/extensions.js', pendingPackageExport: true, registrations: ['registerThing'], compositionOnly: [], sdkRegisterAllow: [],
+      rootOnly: { closeThing: 'src/composition/core/root' }, unitImports: [], fixture: { root: 'tests/fixtures/overlay-package', allowedSpecifiers: ['deckent/extensions'] } }; };
+    const base = { ...unit('engine', 'core', 'a', 'x', 'export function registerThing(): void {}\nexport function closeThing(): void {}\n'),
+      'src/engine/index.ts': "export * from '#engine/core/a/index.js';\n", 'src/extensions.ts': "export { registerThing } from '#engine/index.js';\n", 'src/index.ts': 'export {};\n',
+      'tests/fixtures/overlay-package/bin.mjs': "import { registerThing } from 'deckent/extensions';\nregisterThing();\n" };
+    const green = await lint(await fixture(base, true, false, {}, extensions));
+    expect(green.code, green.out).toBe(0);
+    expect(green.out).toContain('⚠ [public-extensions] package.json — exports["./extensions"].import must be ./dist/extensions.js (got none)');
+    const reds = await Promise.all([
+      { 'src/index.ts': "export { registerThing } from '#engine/index.js';\n" },
+      { 'src/extensions.ts': 'export {};\n' },
+      { 'tests/fixtures/overlay-package/bin.mjs': "import { registerThing } from '#engine/index.js';\nregisterThing();\n" },
+      { 'tests/fixtures/overlay-package/bin.mjs': "import 'deckent/extensions';\n" },
+      unit('composition', 'core', 'b', 'y', "import { closeThing } from '#engine/index.js';\nexport const y = closeThing;\n"),
+    ].map(async files => lint(await fixture({ ...base, ...files }, true, false, {}, extensions))));
+    for (const red of reds) expect(red.code, red.out).toBe(1);
+    expect(reds[0]!.out).toContain('[public-extensions] src/index.ts — the SDK entry exports registration registerThing');
+    expect(reds[1]!.out).toContain('[public-extensions] src/extensions.ts — registration registerThing is not exported by the extension entry');
+    expect(reds[2]!.out).toContain('[overlay-fixture] tests/fixtures/overlay-package/bin.mjs:1 — the overlay fixture imports only deckent/extensions');
+    expect(reds[3]!.out).toContain('[overlay-fixture] tests/fixtures/overlay-package — the overlay fixture registers nothing through the extension entry');
+    expect(reds[4]!.out).toContain('[composition-root] src/composition/core/b/internal/y.ts — closeThing is called only by the composition root src/composition/core/root');
   });
 });
