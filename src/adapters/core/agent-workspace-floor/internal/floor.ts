@@ -84,3 +84,9 @@ export function classifySandboxWritePath(scope: WorkspaceScope, authority: (rel:
   if (!lexical.ok || lexical.rel !== rel || (directory && scope.denied(`${rel}/`))) return 'denied';
   return authority(rel) ? 'edit-authority' : (directory ? isDirectoryWriteApprovalFloored(rel) : isWriteApprovalFloored(rel)) ? 'edit-floor' : selfSource && (isSelfSourceWriteFloored(rel) || directory && isSelfSourceWriteFloored(`${rel}/-`)) ? 'edit-self-source' : 'edit';
 }
+
+/** The configured data root as a project-relative POSIX path, or undefined when it is the project or lies outside it (`ShellSandboxLayout.dataRoot`). */
+export function agentDataRootRel(projectRoot: string, layout: ProductLayout): string | undefined {
+  const rel = relative(projectRoot, layout.root);
+  return rel === '' || rel.startsWith('..') || isAbsolute(rel) ? undefined : rel.split(sep).join('/');
+}

@@ -141,6 +141,8 @@ export interface ShellSandboxLayout {
    * that cannot be protected (a symbolic link on it) refuses the call (Astra 2162). */
   readonly project: { readonly root: string; readonly ignoredDirs: ReadonlySet<string>; readonly protectedAnchors: ReadonlySet<string>; denied(rel: string): boolean };
   readonly scratchDir: string | null;
+  /** The configured data root as a project-relative POSIX path (absent: outside the project or not known). The shared directories above it (`.cache`) are never emptied whole. */
+  readonly dataRoot?: string;
   /** SHELL-AUTONOMY: the write floor over a workspace-relative path (a call the owner did not approve sees its existing paths read-only). */
   readonly writeFloor: ((rel: string) => boolean) | null;
   /** MODES-3: a full-access turn — `.git` (and a worktree's common repository) is writable (commit, branch) unless the call's project is

@@ -152,15 +152,14 @@ type ListedEntries = readonly { readonly name: string; isSymbolicLink(): boolean
  * what was hidden still is, and nothing can be written there. The walk's entry budget is charged for every listing read here.
  */
 async function holdsProductStateOnly(input: { readonly dir: string; readonly rel: string; readonly names: ListedEntries; readonly depth: number;
-  readonly denied: (rel: string) => boolean; readonly protectedBeneath: (rel: string) => boolean; readonly list: (path: string) => ListedEntries | Promise<ListedEntries>;
+  readonly denied: (rel: string) => boolean; readonly protectedBeneath: (rel: string) => boolean; readonly dataRootAncestor: (rel: string) => boolean; readonly list: (path: string) => ListedEntries | Promise<ListedEntries>;
   readonly count: (entries: number) => boolean }): Promise<boolean> {
   const { dir, rel, names, depth } = input;
   // The configured layout root (`DECKENT_DIR`) is never emptied whole: the project's own `docs` may not exist yet and a command must be able to create it (owner Y 2026-09-30);
   // its product-state subtrees (`data`, `state`) are emptied below it, and its own names stay listed.
-  if (rel === '' || rel === DECKENT_DIR || names.length === 0 || depth > MAX_DEPTH || !input.protectedBeneath(rel)) return false;
-  // A directory that only passes through to the state (`.cache` above a custom data root `.cache/deckent`) is an ancestor of the data root, shared with other tools: it is never
-  // emptied. A state directory holds denied entries itself (the ledger, the policy, a resource), so one denied entry directly in it is the mark of the product's own.
-  if (!names.some(entry => input.denied(`${rel}/${entry.name}`) || input.denied(`${rel}/${entry.name}/`))) return false;
+  // A strict ancestor of the configured data root (`.cache` above `.cache/deckent`) is shared with other tools and is never emptied (owner 2026-10-06); the data root itself and
+  // everything below it stay as they were: state-only directories are an empty read-only tmpfs.
+  if (rel === '' || rel === DECKENT_DIR || input.dataRootAncestor(rel) || names.length === 0 || depth > MAX_DEPTH || !input.protectedBeneath(rel)) return false;
   for (const entry of names) {
     if (entry.isSymbolicLink()) return false;
     const entryRel = `${rel}/${entry.name}`;
@@ -260,7 +259,7 @@ export async function resolveBubblewrapView(layout: ShellSandboxLayout, environm
   const onChain = (rel: string) => anchors.some(path => path === rel || path.startsWith(`${rel}/`));
   const hasProtectedBeneath = (rel: string) => anchors.some(path => path.startsWith(`${rel}/`));
   const stateOnly = (dir: string, rel: string, names: ListedEntries, depth: number) => holdsProductStateOnly({ dir, rel, names, depth, denied: layout.project.denied,
-    protectedBeneath: hasProtectedBeneath, list: path => fsOps(path).readdir(path), count: n => (entries += n) <= maxEntries });
+    protectedBeneath: hasProtectedBeneath, dataRootAncestor: rel => layout.dataRoot !== undefined && layout.dataRoot.startsWith(`${rel}/`), list: path => fsOps(path).readdir(path), count: n => (entries += n) <= maxEntries });
   const walkProtected = async (dir: string, rel: string, depth: number): Promise<string | null> => {
     let names;
     try { names = await fsOps(dir).readdir(dir); } catch { maskedDirectories.push(dir); return null; }
