@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { afterEach, describe, expect, it } from 'vitest';
 import { FileArtifactStore, openSqliteAttemptStore, sealWorkerEventLog, type SqliteAttemptStore } from '#adapters/index.js';
-import { AttemptCustodyReleaseApplication, DispatchApplication, SupervisorError, WorkspacePatchApplication, patchExclusions, type AttemptWorkspaceCustody,
+import { AttemptCustodyReleaseApplication, DispatchApplication, SupervisorError, TaskEvaluationApplication, WorkspacePatchApplication, patchExclusions, type AttemptWorkspaceCustody,
   type ExecutionSupervisor, type SandboxRequest } from '#engine/index.js';
 import type { AttemptIdentity } from '#domain/index.js';
 import { admitRunAttempts } from '../support/admission.js';
@@ -17,16 +17,17 @@ const verifier = { async verify() { return principal; } };
 const allow = { async authorize() {}, async authorizeIdentity() {} };
 const exited = (handle = 'h1', exitCode = 0) => ({ handle, result: { kind: 'exited' as const, exitCode } });
 
-/** Real ledger + artifact store; fake supervisor and clone custody record every release call. */
-async function fixture(count = 1) {
+/** Real ledger + artifact store; fake supervisor and clone custody record every release call. `workInput` (default): coding tasks that
+ * deliver a retained patch; false: tasks without workspace delivery (C2). */
+async function fixture(count = 1, workInput = true) {
   const root = await mkdtemp(join(tmpdir(), 'deckent-custody-')); roots.push(root);
   const store = await openSqliteAttemptStore(join(root, 'ledger.db'), { busyTimeoutMs: 20, journalMode: 'wal', durability: 'full' }, { now: Date.now, timeoutMs: 86400000 }, 'allow', custodyOrDockerProfiles); stores.push(store);
   const runId = 'r-' + randomUUID();
   const identities: AttemptIdentity[] = Array.from({ length: count }, (_, index) => ({ runId, taskId: 't' + index, attemptId: randomUUID(), scopeId: 's', generation: 1, layoutRevision: 'l' }));
-  await admitRunAttempts(store, identities);
+  await admitRunAttempts(store, identities, { workInput });
   const artifactRoot = join(root, 'artifacts'); await mkdir(artifactRoot, { mode: 0o700 });
   const artifacts = new FileArtifactStore({ root: artifactRoot, maxBytes: 1048576 });
-  const calls = { container: [] as string[], workspace: [] as string[] };
+  const calls = { container: [] as string[], workspace: [] as string[] }; const bases: string[] = [];
   let observed = exited(); let containerFailure: Error | null = null; let workspaceFailure: Error | null = null;
   const supervisor: ExecutionSupervisor & { captureProfile(): Promise<typeof custodyProfile> } = {
     async captureProfile() { return custodyProfile; }, async cancel() { throw new Error('unused'); }, async recoverOutput() { throw new Error('unused'); },
@@ -35,8 +36,8 @@ async function fixture(count = 1) {
     async release(request: SandboxRequest) { if (containerFailure) throw containerFailure; calls.container.push(request.identity.attemptId); return 'removed'; },
   };
   const workspaces: AttemptWorkspaceCustody = {
-    async releaseAttempt(request) { if (workspaceFailure) throw workspaceFailure; calls.workspace.push(request.identity.attemptId); return 'removed'; },
-    async holds() { return true; }, async countDetached() { return 0; },
+    async releaseAttempt(request) { if (workspaceFailure) throw workspaceFailure; calls.workspace.push(request.identity.attemptId); bases.push(request.baseCommit); return 'removed'; },
+    async holds() { return true; }, async countDetached() { return 0; }, async sweepSourceBases() { return { removed: 0, kept: 0 }; },
   };
   const request = (identity: AttemptIdentity) => ({ protocolVersion: 1 as const, identity, workspace: join(root, 'w', identity.attemptId, 'tree'), argv: ['node'] });
   const execute = (identity: AttemptIdentity) => new DispatchApplication(store, supervisor, verifier, allow, 'owner', artifacts).execute(request(identity));
@@ -48,10 +49,16 @@ async function fixture(count = 1) {
   };
   const app = (overrides: Partial<ConstructorParameters<typeof AttemptCustodyReleaseApplication>[0]> = {}) => new AttemptCustodyReleaseApplication({ store, artifacts, verifier,
     authorization: allow, owner: 'owner', supervisor: () => supervisor, observed: () => false, workspaces, retention: { release: 'after-retained-patch', sweepLimit: 16 }, ...overrides });
-  return { root, store, artifacts, identities, identity: identities[0]!, calls, execute, retain, patchOf, app, request, workspaces,
+  // The task settles through the real evaluation transition (fake verdict); the Run's workspace custody is what acquisition records first.
+  const settle = async (identity: AttemptIdentity) => new TaskEvaluationApplication(store, verifier, allow, { async evaluate() { return 'pass' as const; } }, artifacts,
+    { maxEvidenceItems: 1, maxTotalBytes: 1048576 }, { now: Date.now, timeoutMs: 86400000 }).execute({ schemaVersion: 1, commandId: 'evaluate-' + identity.attemptId,
+    identity, expectedRevision: (await store.loadRun('s', runId))!.revision });
+  const recordCustody = () => store.resolveRunWorkspaceCustody({ schemaVersion: 1, scopeId: 's', runId, baseRevision: 'd'.repeat(40),
+    source: { schemaVersion: 1, adapter: { id: 'git', version: 1 }, sourceFingerprint: 'c'.repeat(64) } });
+  return { root, store, artifacts, identities, identity: identities[0]!, calls, bases, execute, retain, patchOf, app, request, workspaces, settle, recordCustody,
     setObserved(value: ReturnType<typeof exited>) { observed = value; }, failContainer(error: Error | null) { containerFailure = error; }, failWorkspace(error: Error | null) { workspaceFailure = error; } };
 }
-const released = { schemaVersion: 1, status: 'released', container: 'removed', workspace: 'removed' };
+const released = { schemaVersion: 1, status: 'released', container: 'removed', workspace: 'removed', delivery: 'retained-patch' };
 
 describe.skipIf(process.platform === 'win32')('requires POSIX private FileArtifactStore; ARTIFACT_UNSUPPORTED', () => {
 describe('attempt custody release (EXEC-RELEASE)', () => {
@@ -63,7 +70,7 @@ describe('attempt custody release (EXEC-RELEASE)', () => {
   });
   it('negative 2: a capture or retain failure never reaches release', async () => {
     const f = await fixture(); await f.execute(f.identity); let releases = 0; const expected: unknown[] = [];
-    const custody = { async release(_identity: unknown, receipt?: unknown) { releases++; expected.push(receipt); return { schemaVersion: 1 as const, status: 'released' as const, container: 'removed' as const, workspace: 'removed' as const }; } };
+    const custody = { async release(_identity: unknown, receipt?: unknown) { releases++; expected.push(receipt); return { schemaVersion: 1 as const, status: 'released' as const, container: 'removed' as const, workspace: 'removed' as const, delivery: 'retained-patch' as const }; } };
     const patches = new WorkspacePatchApplication(f.store, f.artifacts, verifier, allow, 1048576, 'warn', custody);
     await expect(patches.prepare(f.identity, { async capture() { throw new Error('capture-failed'); } }, f.store)).rejects.toThrow('capture-failed');
     const failingWriter = { loadBoundDispatch: (identity: AttemptIdentity) => f.store.loadBoundDispatch(identity), async retainDispatchPatch(): Promise<never> { throw new Error('retain-failed'); } };
@@ -156,6 +163,36 @@ describe('attempt custody release (EXEC-RELEASE)', () => {
     const isolated = await f.app({ workspaces: flaky }).sweep('s', 2);
     expect(isolated.entries.find(entry => entry.identity.attemptId === ready.attemptId)?.outcome).toMatchObject({ reason: 'record-unreadable', code: 'EIO' });
     expect(isolated.entries.filter(entry => entry.outcome.status === 'released').length).toBe(1);
+  });
+  it('C2: a settled task without workspace delivery is released by the same owner on the Run custody base; unsettled or unprovable ones are held', async () => {
+    const f = await fixture(2, false); const [settled, pending] = f.identities as [AttemptIdentity, AttemptIdentity];
+    for (const identity of f.identities) await f.execute(identity);
+    // Executed but not evaluated: evaluation or an operator decision may still need the clone.
+    expect(await f.app().release(settled)).toEqual({ schemaVersion: 1, status: 'held', reason: 'delivery-pending', code: null });
+    expect((await f.settle(settled)).snapshot.progress.find(task => task.taskId === settled.taskId)?.phase).toBe('accepted');
+    // No recorded Run workspace custody: the exact clone request is not provable from the ledger, so nothing is removed.
+    expect(await f.app().release(settled)).toEqual({ schemaVersion: 1, status: 'held', reason: 'delivery-unknown', code: null });
+    expect(f.calls).toEqual({ container: [], workspace: [] });
+    await f.recordCustody();
+    expect(await f.app().release(settled)).toEqual({ ...released, delivery: 'not-required' });
+    expect(f.calls).toEqual({ container: [settled.attemptId], workspace: [settled.attemptId] }); expect(f.bases).toEqual(['d'.repeat(40)]);
+    // Negative: the other task of the same Run is still evaluating, and an observed worker still needs its sealed stream.
+    expect(await f.app().release(pending)).toMatchObject({ status: 'held', reason: 'delivery-pending' });
+    await f.settle(pending); expect(await f.app({ observed: () => true }).release(pending)).toMatchObject({ status: 'held', reason: 'events-unsealed' });
+    expect(f.calls.workspace).toEqual([settled.attemptId]);
+  });
+  it('C2 sweep: settled no-delivery attempts are candidates, an unsettled one is skipped, and the sweep reports source-base remnants', async () => {
+    const f = await fixture(2, false); const [settled, pending] = f.identities as [AttemptIdentity, AttemptIdentity];
+    for (const identity of f.identities) await f.execute(identity);
+    await f.settle(settled); await f.recordCustody();
+    let limit = -1; const workspaces = { ...f.workspaces, async sweepSourceBases(value: number) { limit = value; return { removed: 1, kept: 2 }; } };
+    const swept = await f.app({ workspaces }).sweep('s', 2);
+    expect(swept).toMatchObject({ released: 1, error: null, sourceBases: { removed: 1, kept: 2 } });
+    expect(swept.entries).toEqual([{ identity: settled, outcome: { ...released, delivery: 'not-required' } }]);
+    expect(swept.entries.some(entry => entry.identity.attemptId === pending.attemptId)).toBe(false); expect(limit).toBe(16);
+    // `keep` retention never releases custody, but crash temporaries are still swept within the bound.
+    limit = -1; const kept = await f.app({ workspaces, retention: { release: 'keep', sweepLimit: 4 } }).sweep('s', 2);
+    expect(kept).toMatchObject({ released: 0, entries: [], sourceBases: { removed: 1, kept: 2 } }); expect(limit).toBe(4);
   });
 });
 

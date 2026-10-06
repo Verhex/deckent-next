@@ -1,6 +1,6 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { chmod, mkdtemp, mkdir, open, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import { chmod, mkdtemp, mkdir, open, readdir, readFile, rm, stat, symlink, utimes, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { randomUUID } from 'node:crypto';
@@ -85,5 +85,29 @@ describe.skipIf(process.platform === 'win32')('requires POSIX private Git custod
     expect(await present(detachedPath)).toBe(false); expect(await present(leaseless)).toBe(true); expect(await present(foreign)).toBe(true);
     await rm(leaseless, { recursive: true }); expect(await f.broker.releaseAttempt(requestB, leaseB.workspace)).toBe('absent');
     expect(await f.broker.holds(requestB.identity)).toBe(false); expect(await tombstones()).toEqual(['.released-foreign']);
+  });
+  it('C3: a crashed source-base probe is removed only when owned, exact-footprint and stale; anything else is kept and counted', async () => {
+    const f = await fixture(); const past = new Date(Date.now() - 60_000); // fixture timeoutMs 10 s → probes older than 30 s are stale
+    const probe = async (options: { config?: boolean; hooks?: boolean; extra?: boolean; mode?: number; name?: string; at?: Date; root?: string } = {}) => {
+      const path = join(options.root ?? f.workspaces, options.name ?? '.base-' + randomUUID()); await mkdir(path, { mode: 0o700 });
+      if (options.config !== false) await writeFile(join(path, 'gitconfig'), '', { mode: 0o600 });
+      if (options.hooks !== false) await mkdir(join(path, 'hooks'), { mode: 0o700 });
+      if (options.extra) await writeFile(join(path, 'note'), 'x');
+      if (options.mode) await chmod(path, options.mode);
+      await utimes(path, options.at ?? past, options.at ?? past); return path;
+    };
+    const removable = [await probe(), await probe({ hooks: false }), await probe({ config: false, hooks: false })];
+    const kept = [await probe({ at: new Date() }), await probe({ extra: true }), await probe({ mode: 0o755 }), await probe({ name: '.base-foreign' })];
+    const outside = await probe({ root: f.root, name: 'outside' }); const linked = join(f.workspaces, '.base-' + randomUUID()); await symlink(outside, linked);
+    const tombstone = join(f.workspaces, '.released-foreign'); await mkdir(tombstone, { mode: 0o700 });
+    expect(await f.broker.sweepSourceBases(16)).toEqual({ removed: 3, kept: 5 });
+    for (const path of removable) expect(await present(path)).toBe(false);
+    for (const path of [...kept, outside, tombstone, f.lease.workspace]) expect(await present(path), path).toBe(true);
+    expect(await readFile(join(kept[1]!, 'note'), 'utf8')).toBe('x'); expect(await present(join(outside, 'gitconfig'))).toBe(true);
+    // Bounded: at most `limit` removals per sweep; the rest stays counted for the next start.
+    await probe(); await probe(); expect(await f.broker.sweepSourceBases(1)).toEqual({ removed: 1, kept: 6 });
+    expect(await f.broker.sweepSourceBases(16)).toEqual({ removed: 1, kept: 5 });
+    // A live probe leaves nothing behind (its own `finally`), so a normal capture adds no remnant.
+    await f.broker.captureSourceBase(); expect(await f.broker.sweepSourceBases(16)).toEqual({ removed: 0, kept: 5 });
   });
 });
