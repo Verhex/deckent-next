@@ -7,7 +7,7 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it } from 'vitest';
 import { resolveGlobalConfigPaths } from '../../src/platform/index.js';
-import { machineBindingNotRunReason } from '../contracts/support/binding-capability.js';
+import { hostBindingStrength } from '../contracts/support/binding-capability.js';
 
 const exec = promisify(execFile);
 const binary = fileURLToPath(new URL('../../dist/composition/core/cli/internal/entry.js', import.meta.url));
@@ -64,7 +64,12 @@ describe('K1 real binary journeys', () => {
     expect(Object.keys(result).sort()).toEqual(['company', 'environment', 'host', 'hostMemory', 'imageRefresh', 'installationBinding', 'modelInvocationDelivery', 'paths', 'platform', 'policyTemplate', 'poolReadiness', 'principal', 'schemaVersion', 'scope', 'secretStore', 'shellRealm', 'status']);
     // No refresh ever ran in this installation (no Docker execution): nothing is claimed.
     expect(result.imageRefresh).toEqual({ status: 'unknown', reason: null, imageVersion: null });
-    expect(result.installationBinding).toEqual({ capability: await machineBindingNotRunReason() ? 'unsupported' : 'supported' });
+    // Binding v2 (wave 2): the doctor reports the strength and source this host reaches by the product's own capture and whether company
+    // config requires machine strength (default false); no identity value or digest is shown.
+    const strength = await hostBindingStrength();
+    expect(result.installationBinding).toEqual(strength === 'machine' ? { capability: 'supported', strength: 'machine', source: 'platform', required: false }
+      : strength === 'weak' ? { capability: 'supported', strength: 'weak', source: 'location', required: false }
+        : strength === 'unsupported' ? { capability: 'unsupported', strength: null, source: null, required: false } : null);
     // SECRET-K1: the selected store (default: the environment) is reported without resolving any reference, in JSON and as a human line.
     expect(result.secretStore).toEqual({ schemaVersion: 1, backend: 'core.secret-store.env@1', writable: false, enumerable: false, status: 'ready', code: null });
     expect(result.shellRealm).toMatchObject({ schemaVersion: 1 });
