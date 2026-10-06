@@ -132,16 +132,10 @@ function imageRefreshText(view: { readonly status: string; readonly reason: stri
   const params = { reason: view.reason ?? '-', version: view.imageVersion ?? '-' };
   return view.status === 'updating' ? t('doctor.imageRefresh.updating', params, locale) : view.status === 'failed' ? t('doctor.imageRefresh.failed', params, locale) : t('doctor.imageRefresh.current', params, locale);
 }
-/** Doctor's installation binding view (strength and source kind only; never a machine value, digest or configured path). */
-export interface InstallationBindingReport { readonly capability: 'supported' | 'unsupported' | 'source-invalid';
-  readonly strength?: 'machine' | 'weak' | null; readonly source?: 'configured' | 'platform' | 'location' | null; readonly required?: boolean }
-function installationBindingLines(report: InstallationBindingReport, platform: string, locale: Locale): string[] {
-  const line = report.capability === 'source-invalid' ? t('doctor.installationBinding.sourceInvalid', {}, locale)
-    : report.capability === 'unsupported' ? t('doctor.installationBinding.unsupported', { platform }, locale)
-      : report.strength === 'weak' ? t('doctor.installationBinding.weak', {}, locale)
-        : t('doctor.installationBinding.machine', { source: t(report.source === 'configured' ? 'doctor.installationBinding.source.configured' : 'doctor.installationBinding.source.platform', {}, locale) }, locale);
-  return [line, ...(report.required && report.strength !== 'machine' ? [t('doctor.installationBinding.required', {}, locale)] : [])];
-}
+/** Doctor's installation binding view: strength and source kind only, never a machine value, digest or configured path. */ export interface InstallationBindingReport { readonly capability: 'supported' | 'unsupported' | 'source-invalid'; readonly strength?: 'machine' | 'weak' | null; readonly source?: string | null; readonly required?: boolean }
+const installationBindingLines = (r: InstallationBindingReport, platform: string, locale: Locale): string[] => [r.capability === 'source-invalid' ? t('doctor.installationBinding.sourceInvalid', {}, locale)
+  : r.capability === 'unsupported' ? t('doctor.installationBinding.unsupported', { platform }, locale) : r.strength === 'weak' ? t('doctor.installationBinding.weak', {}, locale)
+    : t('doctor.installationBinding.machine', { source: r.source === 'configured' ? t('doctor.installationBinding.source.configured', {}, locale) : t('doctor.installationBinding.source.platform', {}, locale) }, locale), ...(r.required && r.strength !== 'machine' ? [t('doctor.installationBinding.required', {}, locale)] : [])];
 function shellRealmLines(report: ShellRealmDoctorView): string[] {
   const lines = (view: ShellRealmSelection, label: string) => [`${view.marker ?? (view.selected === 'host' ? 'sandbox: host' : `sandbox: refused (${view.code ?? '-'})`)} [${label}]`,
     ...(view.notice ? [view.notice] : view.rejected.length ? [view.rejected.map(item => `${item.kind}: ${item.reason}`).join('; ')] : [])];

@@ -1,10 +1,10 @@
-import type { InstallationIdentity, InstallationBinding, InstallationBindingV2, InstallationBindingSourceKind, InstallationBindingStrength,
+import type { InstallationIdentity, InstallationBinding, InstallationBindingCapture, InstallationBindingSourceKind, InstallationBindingStrength,
   InstallationIdentityChoice, InstallationIdentityResolution } from '#domain/index.js';
 
 import type { IdentityRead } from './project-identity.js';
 
 /** What this host can bind now. Posix hosts reach at least `weak`; `unsupported` remains for a host without any binding mechanism. */
-export type InstallationBindingCapability = InstallationBindingV2 | { readonly status: 'unsupported' };
+export type InstallationBindingCapability = InstallationBindingCapture | { readonly status: 'unsupported' };
 /** Additive read observation: strength and source kind of the current capture, never a machine value or digest. */
 export interface InstallationBindingObservation { readonly strength: InstallationBindingStrength; readonly source: InstallationBindingSourceKind }
 export type InstallationIdentityRead = IdentityRead<InstallationIdentity> & {
@@ -36,7 +36,7 @@ export class InstallationIdentityError extends Error {
  *   or copied onto a host without one). Resolution stays the explicit `--keep` / `--new` choice.
  */
 export type InstallationBindingAssessment = 'match' | 'strengthen' | 'relocated';
-export function assessInstallationBinding(recorded: InstallationBinding, captured: InstallationBindingV2): InstallationBindingAssessment {
+export function assessInstallationBinding(recorded: InstallationBinding, captured: InstallationBindingCapture): InstallationBindingAssessment {
   if (recorded.canonicalRoot !== captured.canonicalRoot || recorded.device !== captured.device || recorded.inode !== captured.inode) return 'relocated';
   if (recorded.schemaVersion === 2 && recorded.strength === 'weak') return captured.strength === 'machine' ? 'strengthen' : 'match';
   if (captured.strength !== 'machine') return 'relocated';

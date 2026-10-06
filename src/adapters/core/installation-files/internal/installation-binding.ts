@@ -3,7 +3,7 @@ import { createHmac } from 'node:crypto';
 import { constants } from 'node:fs';
 import { open, readFile, realpath, stat } from 'node:fs/promises';
 import { promisify } from 'node:util';
-import { installationBindingV2Schema } from '#domain/index.js';
+import { installationBindingCaptureSchema } from '#domain/index.js';
 import { InstallationIdentityError, type InstallationBindingSource } from '#engine/index.js';
 import { getConfigFieldDefault, type ProductLayout } from '#platform/index.js';
 
@@ -68,7 +68,7 @@ export function localInstallationBindingSource(layout: ProductLayout, settings: 
       if (!info.isDirectory() || info.ino === 0n) return { status: 'unsupported' };
       location = { canonicalRoot, device: String(info.dev), inode: String(info.ino) };
     } catch { throw new InstallationIdentityError('INSTALLATION_IDENTITY_UNAVAILABLE'); }
-    return installationBindingV2Schema.parse(machine ? { schemaVersion: 2, strength: 'machine', ...machine, ...location }
+    return installationBindingCaptureSchema.parse(machine ? { schemaVersion: 2, strength: 'machine', ...machine, ...location }
       : { schemaVersion: 2, strength: 'weak', source: 'location', ...location });
   } };
 }

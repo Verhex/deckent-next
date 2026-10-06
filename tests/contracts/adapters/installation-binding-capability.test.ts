@@ -1,5 +1,5 @@
 import { createHmac } from 'node:crypto';
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, realpath, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, expect, it, vi } from 'vitest';
@@ -37,30 +37,41 @@ async function fixture(platform: NodeJS.Platform) {
 it.skipIf(process.platform === 'win32')('uses bounded macOS IOPlatformUUID capture and never persists raw machine identity (simulated host)', async () => {
   const f = await fixture('darwin'), uuid = '11111111-2222-4333-8444-555555555555';
   probe.execute.mockResolvedValue({ stdout: `  "IOPlatformUUID" = "${uuid}"\n`, stderr: '' });
-  const limits = { timeoutMs: 37, outputBytes: 4096 }, store = new FileInstallationIdentityStore(f.layout, undefined, undefined, limits);
+  const limits = { timeoutMs: 37, outputBytes: 4096 }, store = new FileInstallationIdentityStore(f.layout, undefined, undefined, { identityProbe: limits });
   expect(await store.read()).toMatchObject({ status: 'unavailable', reason: 'not-created' });
   expect(probe.execute).not.toHaveBeenCalled(); // Read of absence needs no OS subprocess.
   const identity = await store.loadOrCreate(), bytes = await readFile(f.path, 'utf8');
   expect(probe.execute).toHaveBeenCalledWith('/usr/sbin/ioreg', ['-rd1', '-c', 'IOPlatformExpertDevice'],
     { timeout: 37, maxBuffer: 4096, encoding: 'utf8' });
-  expect(JSON.parse(bytes).binding.machineDigest).toBe(createHmac('sha256', 'deckent.installation-binding.v1').update(uuid).digest('hex'));
+  expect(JSON.parse(bytes).binding).toMatchObject({ schemaVersion: 2, strength: 'machine', source: 'platform',
+    machineDigest: createHmac('sha256', 'deckent.installation-binding.v1').update(uuid).digest('hex') });
   expect(bytes).not.toContain(uuid);
-  expect(await store.read()).toEqual({ status: 'available', value: identity, bindingCapability: 'supported' });
+  expect(await store.read()).toEqual({ status: 'available', value: identity, bindingCapability: 'supported', binding: { strength: 'machine', source: 'platform' } });
 });
 
-it.skipIf(process.platform === 'win32').each(['absent', 'malformed', 'timeout'])('macOS %s capability does not fail a metadata command (simulated host)', async scenario => {
+const weakRead = (value: unknown) => ({ status: 'available', value, bindingCapability: 'supported', binding: { strength: 'weak', source: 'location' } });
+/** Binding v2: without machine evidence the record is still bound, weakly, to root/device/inode; no machine value is fabricated. */
+async function expectWeakRecord(path: string, root: string, installationId: string) {
+  const record = JSON.parse(await readFile(path, 'utf8'));
+  expect(record).toMatchObject({ schemaVersion: 2, installationId, lastResolution: null,
+    binding: { schemaVersion: 2, strength: 'weak', source: 'location', canonicalRoot: await realpath(join(root, '.deckent')) } });
+  expect(record.binding).not.toHaveProperty('machineDigest');
+}
+
+it.skipIf(process.platform === 'win32').each(['absent', 'malformed', 'timeout'])('macOS %s machine evidence falls back to a weak binding without failing a metadata command (simulated host)', async scenario => {
   const f = await fixture('darwin');
   if (scenario === 'timeout') probe.execute.mockRejectedValue(new Error('ETIMEDOUT'));
   else probe.execute.mockResolvedValue({ stdout: scenario === 'absent' ? '' : '"IOPlatformUUID" = "00000000-0000-0000-0000-000000000000"', stderr: '' });
   const store = new FileInstallationIdentityStore(f.layout), identity = await store.loadOrCreate();
-  expect(await store.read()).toEqual({ status: 'available', value: identity, bindingCapability: 'unsupported' });
+  expect(await store.read()).toEqual(weakRead(identity));
+  await expectWeakRecord(f.path, f.root, identity.installationId);
 });
 
-it.skipIf(process.platform === 'win32').each(['', '0'.repeat(32), 'invalid', new Error('ENOENT')])('Linux missing or invalid machine evidence yields unsupported without fabricated binding: %s', async machine => {
+it.skipIf(process.platform === 'win32').each(['', '0'.repeat(32), 'invalid', new Error('ENOENT')])('Linux missing or invalid machine evidence writes a weak binding, never a fabricated machine digest: %s', async machine => {
   const f = await fixture('linux'); probe.machine = machine;
   const store = new FileInstallationIdentityStore(f.layout), identity = await store.loadOrCreate();
-  expect(await store.read()).toEqual({ status: 'available', value: identity, bindingCapability: 'unsupported' });
-  expect(JSON.parse(await readFile(f.path, 'utf8'))).toEqual(identity);
+  expect(await store.read()).toEqual(weakRead(identity));
+  await expectWeakRecord(f.path, f.root, identity.installationId);
   expect(probe.execute).not.toHaveBeenCalled();
 });
 
