@@ -63,7 +63,7 @@ async function executeInstallation(projectRoot: string, operator: InstallationAp
     if (evidence.proposalDigest !== operator.proposalDigest) throw new InstallationPublicationError('INSTALLATION_PUBLICATION_CHANGED');
     const config = validateConfig(versionedConfig(prepared.material.configuration)).config;
     const layout = resolveProductLayout({ projectRoot, root: prepared.material.layout.root, resources: config.layout.resources });
-    const installationIdentity = new FileInstallationIdentityStore(layout, timeoutMs, undefined, config.installation.identityProbe), projectIdentity = new FileProjectIdentityStore(projectRoot, timeoutMs);
+    const installationIdentity = new FileInstallationIdentityStore(layout, timeoutMs, undefined, config.installation), projectIdentity = new FileProjectIdentityStore(projectRoot, timeoutMs);
     await installationIdentity.read(); await projectIdentity.read();
     const consent: InstallationConsent = recovery?.consent ?? Object.freeze({ schemaVersion: 1, mode: 'operator-custom',
       id: randomUUID(), atMs: Date.now(), proposalDigest: operator.proposalDigest, principal: prepared.preview.principal });

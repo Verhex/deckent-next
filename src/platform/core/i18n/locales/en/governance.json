@@ -1128,5 +1128,7 @@
   "error.DECISION_LIMIT_EXCEEDED": "The decision case exceeds its configured byte or count limits.",
   "error.DECISION_RECORD_INVALID": "The actor decision or outcome record is invalid.",
   "error.RUN_POOL_CAPACITY_OCCUPIED": "Pool capacity cannot be reduced below current occupancy. Running, evaluating and uncertain work retains its slots.",
-  "error.WORK_CLASS_NOT_REGISTERED": "The requested work class is not registered. Choose a declared work class or omit the override."
+  "error.WORK_CLASS_NOT_REGISTERED": "The requested work class is not registered. Choose a declared work class or omit the override.",
+  "error.INSTALLATION_IDENTITY_SOURCE_INVALID": "The configured machine identity source (installation.machineIdentity.source) is missing, unreadable or malformed. No identity was read, created or changed, and no weaker binding was used. Point it at a readable regular file holding a stable identity token (16-256 characters: letters, digits, '.', '_', ':', '-').",
+  "error.INSTALLATION_IDENTITY_MACHINE_BINDING_REQUIRED": "installation.requireMachineBinding is on, but this host has no machine identity (only a weak path binding is possible). Installation-bound writes are refused. Configure installation.machineIdentity.source or provide a platform machine identity; reads are unaffected."
 }

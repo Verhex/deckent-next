@@ -6,12 +6,26 @@ export type InstallationId = z.infer<typeof installationIdSchema>;
 export const installationIdentitySchema = z.object({ schemaVersion: z.literal(1), installationId: installationIdSchema }).strict().readonly();
 export type InstallationIdentity = z.infer<typeof installationIdentitySchema>;
 
-/** Local relocation evidence, never an authorization credential. The machine value is app-specific. */
-export const installationBindingSchema = z.object({
-  schemaVersion: z.literal(1), machineDigest: z.string().regex(/^[a-f0-9]{64}$/),
-  canonicalRoot: z.string().min(1), device: z.string().regex(/^\d+$/), inode: z.string().regex(/^[1-9]\d*$/),
-}).strict().readonly();
+const bindingLocation = { canonicalRoot: z.string().min(1), device: z.string().regex(/^\d+$/), inode: z.string().regex(/^[1-9]\d*$/) };
+const machineDigestSchema = z.string().regex(/^[a-f0-9]{64}$/);
+/** Local relocation evidence, never an authorization credential. The machine value is app-specific (keyed digest, never raw). */
+export const installationBindingV1Schema = z.object({ schemaVersion: z.literal(1), machineDigest: machineDigestSchema, ...bindingLocation }).strict().readonly();
+/**
+ * Binding v2 states its strength and source. `machine` carries a keyed digest of a configured or platform machine identity;
+ * `weak` has no machine identity and binds only canonical root, device and inode, so a copy, restore or new container is still detected.
+ * Strength and source kinds are versioned invariants (each has its own capture code), not an extensible vocabulary.
+ */
+export const installationBindingV2Schema = z.discriminatedUnion('strength', [
+  z.object({ schemaVersion: z.literal(2), strength: z.literal('machine'), source: z.union([z.literal('configured'), z.literal('platform')]),
+    machineDigest: machineDigestSchema, ...bindingLocation }).strict(),
+  z.object({ schemaVersion: z.literal(2), strength: z.literal('weak'), source: z.literal('location'), ...bindingLocation }).strict(),
+]).readonly();
+/** Retained records hold v1 (always machine strength) or v2; new bindings are always written as v2. */
+export const installationBindingSchema = z.union([installationBindingV2Schema, installationBindingV1Schema]);
 export type InstallationBinding = z.infer<typeof installationBindingSchema>;
+export type InstallationBindingV2 = z.infer<typeof installationBindingV2Schema>;
+export type InstallationBindingStrength = InstallationBindingV2['strength'];
+export type InstallationBindingSourceKind = InstallationBindingV2['source'];
 export const installationIdentityChoiceSchema = z.enum(['keep', 'new']);
 export type InstallationIdentityChoice = z.infer<typeof installationIdentityChoiceSchema>;
 export const installationIdentityResolutionSchema = z.object({
@@ -22,5 +36,6 @@ export type InstallationIdentityResolution = z.infer<typeof installationIdentity
 export const boundInstallationIdentitySchema = z.object({ schemaVersion: z.literal(2), installationId: installationIdSchema,
   binding: installationBindingSchema, lastResolution: installationIdentityResolutionSchema.nullable(),
 }).strict().readonly();
-/** v1 is readable only to support an explicit operator decision; it is never trusted as bound. */
+/** An unbound v1 record is never trusted as bound: on a machine-capable host it needs an explicit operator decision; on a host with only
+ * weak binding the next write path binds it (weak) under the identity writer lock. Reads never upgrade. */
 export const installationIdentityRecordSchema = z.union([boundInstallationIdentitySchema, installationIdentitySchema]);

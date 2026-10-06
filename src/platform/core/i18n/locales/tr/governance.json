@@ -1128,5 +1128,7 @@
   "error.DECISION_LIMIT_EXCEEDED": "Karar vakası yapılandırılmış bayt veya adet sınırlarını aşıyor.",
   "error.DECISION_RECORD_INVALID": "Aktör kararı veya sonuç kaydı geçersiz.",
   "error.RUN_POOL_CAPACITY_OCCUPIED": "Havuz kapasitesi mevcut doluluğun altına indirilemez. Çalışan, değerlendirmedeki ve belirsiz işler slotlarını korur.",
-  "error.WORK_CLASS_NOT_REGISTERED": "İstenen iş sınıfı kayıtlı değil. Kayıtlı bir iş sınıfı seçin veya sınıfı belirtmeyin."
+  "error.WORK_CLASS_NOT_REGISTERED": "İstenen iş sınıfı kayıtlı değil. Kayıtlı bir iş sınıfı seçin veya sınıfı belirtmeyin.",
+  "error.INSTALLATION_IDENTITY_SOURCE_INVALID": "Yapılandırılmış makine kimliği kaynağı (installation.machineIdentity.source) yok, okunamıyor veya biçimi geçersiz. Kimlik okunmadı, oluşturulmadı veya değiştirilmedi; daha zayıf bağ kullanılmadı. Alanı kalıcı bir kimlik değeri içeren, okunabilir normal bir dosyaya yöneltin (16-256 karakter: harf, rakam, '.', '_', ':', '-').",
+  "error.INSTALLATION_IDENTITY_MACHINE_BINDING_REQUIRED": "installation.requireMachineBinding açık, ancak bu ortamda makine kimliği yok (yalnız zayıf yol bağı mümkün). Kuruluma bağlı yazmalar reddedildi. installation.machineIdentity.source alanını yapılandırın veya bir platform makine kimliği sağlayın; okumalar etkilenmez."
 }
