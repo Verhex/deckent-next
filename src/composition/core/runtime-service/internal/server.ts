@@ -5,7 +5,7 @@ import { socketOptions } from './socket-options.js';
 import { configuredServiceShutdown } from './shutdown.js';
 import { randomUUID } from 'node:crypto';
 import { setTimeout as wait } from 'node:timers/promises';
-import { ErrorRegistry, inspectProductFile, loadConfig, ManagedFileError, readBuildIdentity, prepareProductCompanionPath, prepareProductDirectory, prepareProductSocket, type ConfigLoadOptions } from '#platform/index.js';
+import { ErrorRegistry, type DeckentError, inspectProductFile, loadConfig, ManagedFileError, readBuildIdentity, prepareProductCompanionPath, prepareProductDirectory, prepareProductSocket, type ConfigLoadOptions } from '#platform/index.js';
 import { registerProviderConfig, acquireLocalRuntimeSocketGuard, LocalRuntimeSocketError, upgradeExistingProductLedger, validateDockerSupervisorProfile, type LedgerUpgrade,
   type LocalRuntimeSocketGuard, openSqliteAgentTurnStore, openSqliteApprovalStore, openLocalIntegrityAuthority, createScratchActivity, readTerminalScratchConfig, resolveGitWorkTarget,
   startScratchSweeper, sweepScratch, createRuntimeWorkspaceFileHost, sweepFullPreviews, type HttpFetchTransport, type ScratchSweepResult, type ShellSandboxFactory } from '#adapters/index.js';
@@ -141,7 +141,7 @@ async function startUnderCustody(projectRoot: string, observer: ConfiguredRuntim
   // WORKER-AUTO-REFRESH: the background refresh started below; a stop waits for it (its build is ended by the controller's signal) so no
   // refresh write lands after this service released its custody.
   let toolchainRefresh: Promise<void> = Promise.resolve();
-  const lifecycle = new RuntimeServiceLifecycle({ maxConcurrentRequests: config.service.maxConcurrentRequests, maxConcurrentExecutions: config.service.maxConcurrentExecutions }, () => {
+  const lifecycle = new RuntimeServiceLifecycle({ maxConcurrentRequests: config.service.maxConcurrentRequests, maxConcurrentExecutions: config.service.maxConcurrentExecutions, admissionWaitMs: config.service.admissionWaitMs }, () => {
     // A scratch removal in flight, every MCP server the turns started (stdin closed, then SIGTERM/SIGKILL) and a toolchain refresh in flight
     // end before the endpoint and ledger custody are released (finalize runs after this settles).
     controller.abort(); turnStop.abort();
@@ -151,21 +151,21 @@ async function startUnderCustody(projectRoot: string, observer: ConfiguredRuntim
   });
   const preparedRunRuntime = await prepareConfiguredRunRuntime(projectRoot, {
     ...(observer.onRunProgression ? { onRun: observer.onRunProgression } : {}),
-    ...(observer.onRunProgressionError ? { onError: observer.onRunProgressionError } : {}),
+    ...(observer.onRunProgressionError ? { onError: observer.onRunProgressionError, onScopeSkipped: (note: DeckentError) => observer.onRunProgressionError?.(null, note) } : {}),
   }, (work, onSlotWait) => lifecycle.admitExecution(work, onSlotWait), options);
   const server = await guard.start(async (request, peer, stream, turn) => {
     try {
       if (request.operation === 'describeService') {
-        const result = await lifecycle.admit(() => { runtimeServiceDescriptionInputSchema.parse(request.input); return descriptor; });
+        const result = await lifecycle.admitBounded(() => { runtimeServiceDescriptionInputSchema.parse(request.input); return descriptor; });
         return { schemaVersion: RUNTIME_SERVICE_SCHEMA_VERSION, requestId: request.requestId, ok: true, result };
       }
       if (request.operation === 'shutdownService') {
         if (!shutdown) throw new ServiceShutdownError('SERVICE_SHUTDOWN_INVALID');
-        const result = await lifecycle.admit(() => shutdown.admit(request.input, peer));
+        const result = await lifecycle.admitBounded(() => shutdown.admit(request.input, peer));
         return { response: { schemaVersion: RUNTIME_SERVICE_SCHEMA_VERSION, requestId: request.requestId, ok: true, result },
           afterResponseOrDisconnect: () => finishRemoteShutdown(result.admission) };
       }
-      const result = await lifecycle.admit(() => request.operation === 'renewApproval' || request.operation === 'listApprovals' || request.operation === 'inspectApproval' || request.operation === 'decideApproval' || request.operation === 'clearSessionStanding'
+      const result = await lifecycle.admitBounded(() => request.operation === 'renewApproval' || request.operation === 'listApprovals' || request.operation === 'inspectApproval' || request.operation === 'decideApproval' || request.operation === 'clearSessionStanding'
         ? executeRuntimeApproval(projectRoot, request, peer, config.service.responseMaxBytes, options, chatTurnHost.decisions, chatTurnHost.answers)
         : request.operation === 'inspectProviderSpendAccount' || request.operation === 'auditProviderSpendAccount'
         ? executeConfiguredRuntimeProviderSpendOperation(projectRoot, request, peer, config.service.responseMaxBytes, options)

@@ -96,6 +96,8 @@
   "service": {
     "acceptRetryDelayMs": 25,
     "acceptRetryLimit": 3,
+    "admissionWaitMs": 250,
+    "busyRetryLimit": 2,
     "headerTimeoutMs": 10000,
     "identity": null,
     "inputMaxBytes": 1048576,

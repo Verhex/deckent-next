@@ -424,6 +424,7 @@
   "error.RUNTIME_SERVICE_RECOVERY_FAILED": "Runtime kurtarma döngüsü başarısız oldu; servis kapatılıyor.",
   "error.RUNTIME_SERVICE_NOT_STOPPING": "Kapanış başlamadan tamamlanma durumu beklenemez.",
   "error.RUNTIME_SERVICE_SHUTDOWN_INCOMPLETE": "Kapanış bekleme süresi doldu. Kalan işler iptal edilmedi; yeniden başlatınca kalıcı kayıtları inceleyin.",
+  "error.RUN_PROGRESSION_SCOPE_SKIPPED": "Run ilerletme {scopeId} kapsamını atlıyor: bu kurulumun company'si için {reason} (foreign: başka company'ye kayıtlı; unregistered: kaydı yok). Bu kapsamın Run'ları burada listelenmez ve ilerletilmez.",
   "error.RUNTIME_SERVICE_SCOPE_FOREIGN": "Bu çalışma zamanı servisi başlamayacak: bu kurulumun kendi kapsamlarından biri zaten başka bir company'ye kayıtlı. Bu kurulumun company.id değerini ya da ledger'daki kapsam kaydını düzeltip yeniden başlatın.",
   "error.CANCELLATION_RUNTIME_LOOP_OPTIONS": "İptal runtime kapsam veya zamanlama ayarları geçersiz.",
   "error.CANCELLATION_RUNTIME_LOOP_RUNNING": "İptal runtime döngüsü zaten çalışıyor.",

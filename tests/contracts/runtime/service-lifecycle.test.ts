@@ -211,3 +211,55 @@ it.each([1, 2, 8])('uses every configured execution slot without exceeding cap=%
   gates.forEach(gate => gate.resolve()); await Promise.all(operations);
   await expect(lifecycle.stop(25)).resolves.toMatchObject({ state: 'clean' });
 });
+
+function bounded(admissionWaitMs = 40) {
+  const timer = deadline();
+  const lifecycle = new RuntimeServiceLifecycle({ maxConcurrentRequests: 2, maxConcurrentExecutions: 1, admissionWaitMs }, () => {}, timer.value);
+  return { timer, lifecycle };
+}
+
+it('waits a bounded time for capacity instead of refusing at once, and starts the waiter when a slot frees', async () => {
+  const { timer, lifecycle } = bounded(); const first = deferred<void>(), second = deferred<void>(); let started = 0;
+  void lifecycle.admit(() => first.promise); void lifecycle.admit(() => second.promise);
+  const waiting = lifecycle.admitBounded(() => { started++; return 'done'; });
+  await Promise.resolve(); expect(started).toBe(0); expect(timer.waits[0]!.milliseconds).toBe(40);
+  first.resolve();
+  await expect(waiting).resolves.toBe('done'); expect(started).toBe(1);
+  expect(timer.waits[0]!.signal.aborted).toBe(true); // the wait timer is released once admitted
+});
+
+it('refuses with the typed BUSY and retryAfterMs when the bounded wait elapses, and never runs the operation', async () => {
+  const { timer, lifecycle } = bounded(); let calls = 0;
+  void lifecycle.admit(() => new Promise<void>(() => undefined)); void lifecycle.admit(() => new Promise<void>(() => undefined));
+  const waiting = lifecycle.admitBounded(() => { calls++; });
+  await Promise.resolve(); timer.waits[0]!.release();
+  await expect(waiting).rejects.toMatchObject({ code: 'RUNTIME_SERVICE_BUSY', retryAfterMs: 40 }); expect(calls).toBe(0);
+  // The expired waiter left the queue: capacity freed later is not consumed by it.
+  expect(() => lifecycle.admit(() => undefined)).toThrow('RUNTIME_SERVICE_BUSY');
+});
+
+it('keeps the wait queue bounded, serves waiters in arrival order and refuses an execution-class overtake', async () => {
+  const { lifecycle } = bounded(); const gates = [deferred<void>(), deferred<void>()], order: string[] = [];
+  void lifecycle.admit(() => gates[0]!.promise); void lifecycle.admit(() => gates[1]!.promise);
+  const a = lifecycle.admitBounded(() => { order.push('a'); }), b = lifecycle.admitBounded(() => { order.push('b'); });
+  await expect(lifecycle.admitBounded(() => undefined)).rejects.toMatchObject({ code: 'RUNTIME_SERVICE_BUSY' }); // queue holds at most maxConcurrentRequests
+  gates[0]!.resolve(); await a; gates[1]!.resolve(); await b; expect(order).toEqual(['a', 'b']);
+});
+
+it('without a configured wait admitBounded refuses at once, and a stop rejects the waiters as stopping', async () => {
+  const immediate = bounded(0).lifecycle;
+  void immediate.admit(() => new Promise<void>(() => undefined)); void immediate.admit(() => new Promise<void>(() => undefined));
+  await expect(immediate.admitBounded(() => undefined)).rejects.toMatchObject({ code: 'RUNTIME_SERVICE_BUSY' });
+  const { lifecycle } = bounded(); void lifecycle.admit(() => new Promise<void>(() => undefined)); void lifecycle.admit(() => new Promise<void>(() => undefined));
+  const waiting = lifecycle.admitBounded(() => undefined); await Promise.resolve();
+  void lifecycle.stop(25);
+  await expect(waiting).rejects.toMatchObject({ code: 'RUNTIME_SERVICE_STOPPING' });
+});
+
+it('a control request that fits is not held behind a waiting execution request', async () => {
+  const { lifecycle } = bounded(); const exec = deferred<void>();
+  void lifecycle.admit(() => exec.promise, 'execution');
+  const waitingExecution = lifecycle.admitBounded(() => 'exec', 'execution'); await Promise.resolve();
+  await expect(lifecycle.admitBounded(() => 'control', 'control')).resolves.toBe('control');
+  exec.resolve(); await expect(waitingExecution).resolves.toBe('exec');
+});

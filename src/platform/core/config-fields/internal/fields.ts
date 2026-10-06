@@ -74,6 +74,9 @@ export const CONFIG_FIELDS = Object.freeze({
     acceptRetryDelayMs: z.number().int().positive().max(2147483647).default(25),
     acceptRetryLimit: z.number().int().positive().max(2147483647).default(3),
     shutdownGraceMs: z.number().int().positive().max(2147483647).default(30000),
+    // Bounded wait for capacity before the typed BUSY refusal (0: refuse at once), and the client's bounded retries after a BUSY (0: none).
+    admissionWaitMs: z.number().int().nonnegative().max(60000).default(250),
+    busyRetryLimit: z.number().int().nonnegative().max(10).default(2),
   }).strict().superRefine((value, context) => { if (value.maxConcurrentExecutions >= value.maxConcurrentRequests) context.addIssue({ code: z.ZodIssueCode.custom, path: ['maxConcurrentExecutions'], message: 'SERVICE_EXECUTIONS_CAPACITY' }); }).default({}), [], LAYOUT_CONTRACT_SINCE),
   cancellation: field('config.field.cancellation', { state: 'bound', consumers: ['src/composition/core/runtime'] }, 'restart', z.object({ maxConcurrentDeliveries: z.number().int().positive().safe(),
     recoveryPageSize: z.number().int().positive().safe().default(64),

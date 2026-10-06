@@ -424,6 +424,7 @@
   "error.RUNTIME_SERVICE_RECOVERY_FAILED": "The runtime recovery loop failed; service shutdown is in progress.",
   "error.RUNTIME_SERVICE_NOT_STOPPING": "Shutdown completion is unavailable before shutdown starts.",
   "error.RUNTIME_SERVICE_SHUTDOWN_INCOMPLETE": "The shutdown grace period expired. Remaining work was not cancelled; inspect durable records after restart.",
+  "error.RUN_PROGRESSION_SCOPE_SKIPPED": "Run progression skips scope {scopeId}: it is {reason} for this installation's company (foreign: registered to another company; unregistered: no registration). Its Runs are not listed or advanced here.",
   "error.RUNTIME_SERVICE_SCOPE_FOREIGN": "This runtime service will not start: one of this installation's own scopes is already registered to another company. Fix this installation's company.id or the ledger's scope registration, then start again.",
   "error.CANCELLATION_RUNTIME_LOOP_OPTIONS": "Cancellation runtime scope or timing settings are invalid.",
   "error.CANCELLATION_RUNTIME_LOOP_RUNNING": "The cancellation runtime loop is already running.",

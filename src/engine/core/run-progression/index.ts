@@ -4,4 +4,4 @@ export { progressionQuerySchema, progressionCursorSchema } from './internal/jour
 export type { ProgressionQuery, ProgressionCursor, RunProgressionJournal } from './internal/journal.js';
 
 export { RunLifecycleRuntimeLoop } from './internal/runtime.js';
-export type { RunLifecycleRuntimeOperations, RunLifecycleRuntimeObserver } from './internal/runtime.js';
+export type { RunLifecycleRuntimeOperations, RunLifecycleRuntimeObserver, SkippedProgressionScope } from './internal/runtime.js';
