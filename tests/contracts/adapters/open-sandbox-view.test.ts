@@ -68,7 +68,11 @@ describe.skipIf(process.platform !== 'linux')('OPEN-SANDBOX bubblewrap view', ()
     // A missing root (the global one) is created empty and private, then hidden; the project's product root is sealed (nested data root folded in).
     expect((await stat(f.global)).mode & 0o777).toBe(0o700);
     expect(view.open).toEqual({ sealed: [join(f.project, '.deckent')], hidden: [f.global] });
-    expect(view.maskedFiles).toEqual(expect.arrayContaining([join(f.home, '.npmrc'), join(f.home, '.ssh/id_ed25519'), join(f.home, 'a/b/key.pem'), join(f.project, '.deckent/data/policy.json')]));
+    expect(view.maskedFiles).toEqual(expect.arrayContaining([join(f.home, '.npmrc'), join(f.home, '.ssh/id_ed25519'), join(f.home, 'a/b/key.pem')]));
+    // SANDBOX-AD-SIZINTISI: `.deckent/data` holds only product state (the denied policy file, and `state` whose one entry is the denied scratch
+    // tree), so it is one empty read-only tmpfs instead of a `/dev/null` mask that would keep `policy.json` listed: neither its bytes nor its name.
+    expect(view.emptiedDirectories).toEqual([join(f.project, '.deckent/data')]);
+    expect(view.maskedFiles).not.toContain(join(f.project, '.deckent/data/policy.json'));
     // Bounded walk: depth 3, vendored trees and symbolic links not entered/masked.
     for (const path of ['a/b/c/deep.pem', 'node_modules/pkg/x.pem', 'link.pem', 'notes.txt']) expect(view.maskedFiles).not.toContain(join(f.home, path));
     const args = bubblewrapArguments(view), at = (...token: string[]) => args.findIndex((_, index) => token.every((part, offset) => args[index + offset] === part));
@@ -77,7 +81,11 @@ describe.skipIf(process.platform !== 'linux')('OPEN-SANDBOX bubblewrap view', ()
     expect(at('--tmpfs', '/tmp')).toBe(-1);
     expect(at('--tmpfs', f.home)).toBe(-1);
     expect(at('--bind', f.project, f.project)).toBeLessThan(at('--ro-bind', join(f.project, '.deckent'), join(f.project, '.deckent')));
-    expect(at('--ro-bind', join(f.project, '.deckent'), join(f.project, '.deckent'))).toBeLessThan(at('--ro-bind', '/dev/null', join(f.project, '.deckent/data/policy.json')));
+    // The emptied data root covers the sealed bind; the scratch area's mount point is made inside it before it is remounted read-only.
+    const emptied = at('--perms', '0555', '--tmpfs', join(f.project, '.deckent/data'));
+    expect(at('--ro-bind', join(f.project, '.deckent'), join(f.project, '.deckent'))).toBeLessThan(emptied);
+    expect(emptied).toBeLessThan(at('--bind', f.scratch, f.scratch));
+    expect(at('--bind', f.scratch, f.scratch)).toBeLessThan(at('--remount-ro', join(f.project, '.deckent/data')));
     expect(at('--perms', '0700', '--tmpfs', f.global)).toBeLessThan(at('--bind', f.scratch, f.scratch));
     expect(at('--bind', f.scratch, f.scratch)).toBeLessThan(at('--remount-ro', f.global));
     // The configuration file (the turn's write floor) stays read-only under full access; an owner-approved call of that turn (its card
@@ -173,11 +181,12 @@ describe.skipIf(process.platform !== 'linux')('OPEN-SANDBOX bubblewrap view', ()
       if (!closed.ok) throw new Error(closed.reason);
       const args = bubblewrapArguments(closed.view), pins = ancestorPins(closed.view);
       const at = (...token: string[]) => args.findIndex((_, index) => token.every((part, offset) => args[index + offset] === part));
-      // Only inside the project (HOME is a tmpfs, the system paths are read-only, the root is the call's own): `.deckent` above the masked
-      // policy file, `.deckent/data/state` above the masked scratch tree, `a` and `a/b` above the masked `.env`; never the project itself or
-      // anything above it, never inside a tmpfs mask.
-      expect({ write, pins: [...pins].sort() }).toEqual({ write, pins: [join(f.project, '.deckent'), join(f.project, '.deckent/data'),
-        join(f.project, '.deckent/data/state'), join(f.project, 'a'), join(f.project, 'a/b')].sort() });
+      // Only inside the project (HOME is a tmpfs, the system paths are read-only, the root is the call's own): `.deckent` above the emptied
+      // data root, `a` and `a/b` above the masked `.env`; never the project itself or anything above it, never inside a tmpfs. SANDBOX-AD-SIZINTISI:
+      // `.deckent/data` is itself the emptied tmpfs's mount target (a rename of it fails with EBUSY) and `.deckent/data/state` lies inside that
+      // tmpfs, remounted read-only (EROFS), so neither needs the pin it had above the former per-file masks.
+      expect(closed.view.emptiedDirectories).toEqual([join(f.project, '.deckent/data')]);
+      expect({ write, pins: [...pins].sort() }).toEqual({ write, pins: [join(f.project, '.deckent'), join(f.project, 'a'), join(f.project, 'a/b')].sort() });
       const project = at('--bind', f.project, f.project);
       expect(args.slice(project + 3, project + 3 + pins.length * 3)).toEqual(pins.flatMap(path => ['--bind', path, path]));
       const depths = pins.map(path => path.split('/').length);
