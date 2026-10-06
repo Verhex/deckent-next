@@ -208,3 +208,6 @@ Aşağıdaki metinler `mark-lost` unknown hold anlatımını taşır; owner 2026
 Önceki hâl `.deckent/docs/plan/work-list.md:113` (owner 2026-10-06 sonrası geçersiz):
 
 - CLI-SPLIT (`09c9e5ba`, `09ba0bf6`): doctor render `src/surfaces/core/doctor` birimine taşındı (cli 2003 → 1976 satır, bütçe 2000); `task mark-lost` yardım özeti (önce `close-abandoned`), golden yeniden üretildi.
+### ARCHITECTURE.md:726 — Astra 2388 düzeltme notu öncesi (2026-10-06)
+
+- MCP istemci kayıt dosyası ancak denetlenmiş güven kararından sonra yazılır (add/remove audit reddi kayıt ve güveni değiştirmez; karar sonrası yazım hatası audit'li revoke ile geri alınır); worker imajı otonom yenilemesi (K2) `toolchains.update` policy verisidir (`mode` varsayılan `auto`, `atStartup` `true`, `intervalMs` 24 sa); ayrıntı [approval-and-delivery](.deckent/docs/architecture/approval-and-delivery.md).

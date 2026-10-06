@@ -59,7 +59,8 @@ describe('catalog v3 packaged seeds through ledger and admission', () => {
         await expect(admitWorkerModels(task('default'), 's', reader, Date.parse('2026-10-02'))).rejects.toMatchObject({ code: 'WORKER_MODEL_ALIAS_REFUSED' });
         await apply({ action: 'activate', channelId, modelId, expectedRevision: 0 });
         await expect(admitWorkerModels(task(modelId, 'codex-cli 0.159.1'), 's', reader, Date.parse('2026-10-02'))).rejects.toMatchObject({ code: 'WORKER_MODEL_CLI_TOO_OLD' });
-        await expect(admitWorkerModels(task(), 's', reader, Date.parse('2026-10-02'))).resolves.toBeUndefined();
+        // Admitted with no caveat: admission now resolves to its typed warnings (WORKER-AUTO-REFRESH), none without a refresh in flight.
+        await expect(admitWorkerModels(task(), 's', reader, Date.parse('2026-10-02'))).resolves.toEqual([]);
         await expect(admitWorkerModels(task(), 'other', reader, Date.parse('2026-10-02'))).rejects.toMatchObject({ code: 'WORKER_CHANNEL_NOT_ACTIVE' });
       } finally { reader.close(); }
       const map = (await readMonitorLedger(path, { busyTimeoutMs: 1000, maxRuns: 10 })).map;

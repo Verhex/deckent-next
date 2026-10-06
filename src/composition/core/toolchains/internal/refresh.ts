@@ -15,10 +15,6 @@ const MARKER_GRACE_MS = 60_000;
 const holdError = (code: string) => Object.assign(new Error(code), { code });
 const failureCode = (error: unknown) => (error && typeof error === 'object' && 'code' in error && typeof (error as { code: unknown }).code === 'string' ? (error as { code: string }).code : 'UNKNOWN').slice(0, 128);
 
-async function toolchainHome(projectRoot: string, options: ConfigLoadOptions) {
-  const config = await loadConfig(projectRoot, options);
-  return { config, home: join(await prepareProductDirectory(config.productLayout, 'workspaces'), 'toolchains') };
-}
 /** The durable refresh marker (null when none was ever written or it is unreadable). Admission, doctor and monitor read it; only the refresh writes it. */
 export async function readToolchainRefreshState(projectRoot: string, options: ConfigLoadOptions = {}): Promise<ToolchainRefreshState | null> {
   try {
@@ -60,10 +56,13 @@ export function refreshConfiguredToolchains(projectRoot: string, trigger: Toolch
 const inflight = new Map<string, Promise<ToolchainRefreshOutcome>>();
 async function runRefresh(projectRoot: string, trigger: ToolchainRefreshTrigger, options: ConfigLoadOptions,
   dependencies: ToolchainRefreshDependencies, observer: ToolchainRefreshObserver): Promise<ToolchainRefreshOutcome> {
-  const { config, home } = await toolchainHome(projectRoot, options);
+  const config = await loadConfig(projectRoot, options);
   const policy = config.toolchains.update;
-  // A worker image matters only to an installation that runs workers in Docker; any other install is never touched by the refresh.
-  if (!refreshTriggerAllowed(policy, trigger) || !config.execution?.docker) return Object.freeze({ outcome: 'skipped', event: null });
+  // A worker image matters only to an installation that runs workers in Docker; any other install is never touched by the refresh, and a
+  // trigger the policy refuses (or one that arrives after the service stopped) leaves no trace either: the gate precedes every write,
+  // the product directory included.
+  if (!refreshTriggerAllowed(policy, trigger) || !config.execution?.docker || dependencies.signal?.aborted) return Object.freeze({ outcome: 'skipped', event: null });
+  const home = join(await prepareProductDirectory(config.productLayout, 'workspaces'), 'toolchains');
   const now = dependencies.now ?? (() => new Date().toISOString()); const startedAt = now();
   const base = { schemaVersion: 1 as const, trigger, startedAt, expiresAt: new Date(Date.parse(startedAt) + policy.buildTimeoutMs + MARKER_GRACE_MS).toISOString() };
   const emit = async (phase: ToolchainRefreshEvent['phase'], extra: Partial<ToolchainRefreshEvent> = {}) => {

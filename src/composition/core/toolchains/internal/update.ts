@@ -58,7 +58,7 @@ export async function updateConfiguredToolchains(projectRoot: string, input: Rea
   const env = Object.fromEntries(Object.entries(options.env ?? process.env).filter((entry): entry is [string, string] => typeof entry[1] === 'string'));
   const apply = toolchainUpdateApplies(input.apply);
   if (apply) await assertWorkerImageVersionAvailable({ packageRoot: root, imageVersion: plan.next!.imageVersion,
-    timeoutMs: policy.buildTimeoutMs, outputBytes: policy.outputBytes, env }, dependencies.runner);
+    timeoutMs: policy.buildTimeoutMs, outputBytes: policy.outputBytes, env, ...(dependencies.signal ? { signal: dependencies.signal } : {}) }, dependencies.runner);
   const planPath = await writeArtifact(join(home, 'plans'), `${plan.next!.imageVersion}-${plannedAt.replace(/[:.]/g, '-')}.json`, plan);
   if (!apply) return Object.freeze({ schemaVersion: 1, mode: policy.mode, decision: 'planned', plan, planPath, build: null, proposal: null, proposalPath: null });
   await dependencies.onBuild?.(plan);

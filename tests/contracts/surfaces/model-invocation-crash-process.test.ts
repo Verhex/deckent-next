@@ -5,6 +5,7 @@ import { createServer, type Server } from 'node:https';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
+import { Worker } from 'node:worker_threads';
 import { afterEach, expect, it } from 'vitest';
 import { encodeModelBindingDefinition } from '#domain/core/provider-catalog/index.js';
 import { openSqliteModelActivationStore, readLocalOsIdentity } from '#adapters/index.js';
@@ -18,8 +19,9 @@ import { createPricedProviderTls, fixtureBudget, pricedProviderDefinition, reply
 // call of any other, still-running owner is left as it is.
 const cli = resolve('dist/composition/core/cli/internal/entry.js');
 const sqlite = { busyTimeoutMs: 1_000, journalMode: 'delete' as const, durability: 'full' as const };
-const roots: string[] = [], servers: Server[] = [], children: ChildProcess[] = [], releases: (() => void)[] = [];
+const roots: string[] = [], servers: Server[] = [], children: ChildProcess[] = [], releases: (() => void)[] = [], workers: Worker[] = [];
 afterEach(async () => {
+  await Promise.all(workers.splice(0).map(worker => worker.terminate()));
   for (const release of releases.splice(0)) release();
   for (const child of children.splice(0)) {
     if (child.exitCode === null && child.signalCode === null) { child.kill('SIGKILL'); await new Promise(done => child.once('exit', done)); }
@@ -27,6 +29,13 @@ afterEach(async () => {
   await Promise.all(servers.splice(0).map(server => new Promise<void>(done => { server.closeAllConnections(); server.close(() => done()); })));
   clearConfigCache(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true })));
 });
+/** A read of the live ledger from outside the product, under the installation's own SQLite busy contract (`storage.sqlite.busyTimeoutMs`, the
+ * bound every product reader uses). With the default `timeout: 0` the read is refused the instant a running service commits (journal
+ * mode `delete` blocks readers for the commit's whole write and fsync window), which is a harness defect, not a product outcome. */
+function readLedger<T>(ledger: string, statement: string, busyTimeoutMs: number): T[] {
+  const db = new DatabaseSync(ledger, { readOnly: true, timeout: busyTimeoutMs });
+  try { return db.prepare(statement).all() as T[]; } finally { db.close(); }
+}
 async function bounded<T>(work: Promise<T>, label: string, milliseconds = 10_000): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   try { return await Promise.race([work, new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error(label)), milliseconds); })]); }
@@ -98,7 +107,7 @@ async function installation(maxInFlight: number) {
   const env = { HOME: home, PATH: process.env.PATH ?? '/usr/bin:/bin' };
   const command = (commandId: string) => ({ schemaVersion: 1 as const, commandId, scopeId: 'scope', reference, catalogRevision: catalog.revision,
     expectedBinding: binding, nativeRequest: { model: 'vendor/model', messages: [{ role: 'user', content: `prompt-${commandId}` }], max_completion_tokens: 4 } });
-  const query = <T>(statement: string) => { const db = new DatabaseSync(ledger, { readOnly: true }); try { return db.prepare(statement).all() as T[]; } finally { db.close(); } };
+  const query = <T>(statement: string) => readLedger<T>(ledger, statement, sqlite.busyTimeoutMs);
   const counters = () => query('SELECT lifetime_calls,in_flight FROM model_invocation_allocations')[0];
   const states = () => query('SELECT command_id,state FROM model_invocations ORDER BY command_id');
   const invokeThroughService = async (commandId: string) => {
@@ -175,3 +184,32 @@ it.skipIf(process.platform !== 'linux')('a service on another socket over the sa
   const [live] = query<{ record: string }>("SELECT record FROM model_invocations WHERE command_id='live'");
   expect(JSON.parse(live!.record).outcome).toMatchObject({ state: 'responded' });
 }, 60_000);
+
+// CI run 37441923387 (ubuntu, Node 26): the test's own ledger read failed with `database is locked` while the live service committed. The reader
+// is held to the installation's busy contract: a commit in progress (an exclusive lock held until the gate opens) refuses a reader without a
+// busy handler at once, and the same read under `storage.sqlite.busyTimeoutMs` waits for that commit and sees its row.
+it('a ledger read from outside the product waits for a commit in progress under the installation busy contract', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'deckent-model-crash-process-')); roots.push(root);
+  const ledger = join(root, 'ledger.db'), setup = new DatabaseSync(ledger);
+  try { setup.exec("PRAGMA journal_mode=DELETE; CREATE TABLE calls(state TEXT NOT NULL); INSERT INTO calls(state) VALUES ('claimed')"); } finally { setup.close(); }
+  const gate = new SharedArrayBuffer(4), messages: string[] = [];
+  const writer = new Worker(`
+    const { parentPort, workerData } = require('node:worker_threads');
+    const db = new (require('node:sqlite').DatabaseSync)(workerData.ledger);
+    db.exec('PRAGMA synchronous=OFF'); // the lock is under test, not durability: the commit after the gate costs no fsync
+    db.exec('BEGIN EXCLUSIVE'); db.exec("INSERT INTO calls(state) VALUES ('responded')");
+    parentPort.postMessage('locked'); Atomics.wait(new Int32Array(workerData.gate), 0, 0);
+    db.exec('COMMIT'); db.close(); parentPort.postMessage('committed');`, { eval: true, workerData: { ledger, gate } });
+  workers.push(writer);
+  const waiters = new Map<string, () => void>(), failed = new Promise<never>((_, fail) => { writer.once('error', fail); });
+  void failed.catch(() => undefined);
+  writer.on('message', value => { messages.push(String(value)); waiters.get(String(value))?.(); });
+  const seen = (message: string) => Promise.race([failed, new Promise<void>(done => { waiters.set(message, done); })]);
+  const locked = seen('locked'), committed = seen('committed');
+  await bounded(locked, 'WRITER_NOT_LOCKED');
+  expect(() => readLedger(ledger, 'SELECT state FROM calls', 0)).toThrow(/database is locked/);
+  Atomics.store(new Int32Array(gate), 0, 1); Atomics.notify(new Int32Array(gate), 0);
+  expect(readLedger(ledger, 'SELECT state FROM calls ORDER BY rowid', sqlite.busyTimeoutMs)).toEqual([{ state: 'claimed' }, { state: 'responded' }]);
+  await bounded(committed, 'WRITER_NOT_COMMITTED');
+  expect(messages).toEqual(['locked', 'committed']);
+});
