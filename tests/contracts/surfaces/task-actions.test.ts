@@ -60,3 +60,17 @@ it.each([
   expect(await main(args, { stderr, async executeTask() { calls++; throw new Error(); }, async evaluateTask() { calls++; throw new Error(); } })).toBe(2);
   expect(calls).toBe(0);
 });
+
+it('close-abandoned passes the exact identity and renders closed/refused in EN and TR without claiming an exit', async () => {
+  let received: unknown, text = '';
+  let closure: { identity: typeof identity; status: 'closed'; heartbeat: 'stale'; phase: string } | { identity: typeof identity; status: 'refused'; reason: 'effects-unresolved'; phase: string }
+    = { identity, status: 'closed', heartbeat: 'stale', phase: 'failed' };
+  const context = { env: { NO_COLOR: '1' }, stdout: { write(value: string) { text += value; } },
+    async closeAbandonedAttempt(_root: string, value: unknown) { received = value; return { schemaVersion: 1 as const, layout, closure }; } };
+  expect(await main(['task', 'close-abandoned', ...identityArgs], context)).toBe(0); expect(received).toEqual(identity);
+  expect(text).toContain('closed as abandoned (executor heartbeat stale)'); expect(text).toContain('No exit was recorded');
+  text = ''; closure = { identity, status: 'refused', reason: 'effects-unresolved', phase: 'reconciling' };
+  expect(await main(['task', 'close-abandoned', ...identityArgs, '--lang', 'tr'], context)).toBe(0);
+  expect(text).toContain('Reddedildi'); expect(text).toContain('etkiler çözülmemiş');
+  text = ''; expect(await main(['task', 'close-abandoned', ...identityArgs, '--json'], context)).toBe(0); expect(JSON.parse(text).closure).toEqual(closure);
+});

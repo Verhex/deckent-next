@@ -1,5 +1,5 @@
 import { inspectTask } from './task-inspect.js';
-import { hasCliAction } from '#surfaces/core/cli-kit/index.js';
+import { hasCliAction, renderAbandonedClosure, type AbandonedClosureView } from '#surfaces/core/cli-kit/index.js';
 import { cliUsage } from './usage.js';
 import { ErrorRegistry, emit, loadConfig, resolveLocale, t, type ConfigLoadOptions, type ProductLayout } from '#platform/index.js';
 import { attemptIdentitySchema, type AttemptIdentity } from '#domain/index.js';
@@ -28,6 +28,7 @@ import { renderWorkerTranscript } from '#surfaces/core/monitor/index.js';
 
 export type TaskExecutionHandler = (root: string, identity: AttemptIdentity, options: ConfigLoadOptions) => Promise<Readonly<{ schemaVersion: 1; layout: ProductLayout;
   execution: Readonly<{ identity: AttemptIdentity; status: 'terminal' | 'prevented' | 'unresolved'; terminal: DispatchTerminal | null; outputRecorded: boolean }> }>>;
+export type TaskAbandonedClosureHandler = (root: string, identity: AttemptIdentity, options: ConfigLoadOptions) => Promise<Readonly<{ schemaVersion: 1; layout: ProductLayout; closure: AbandonedClosureView & Readonly<{ identity: AttemptIdentity }> }>>;
 export type TaskEvaluationHandler = (root: string, command: TaskEvaluationCommand, options: ConfigLoadOptions) => Promise<Readonly<{ schemaVersion: 1; layout: ProductLayout;
   evaluation: Readonly<{ schemaVersion: 1; commandId: string; run: RunView }> }>>;
 async function resolveLatestAttempt(context: CommandContext, scopeId: string, runId: string, taskId: string): Promise<AttemptIdentity> {
@@ -224,5 +225,6 @@ export async function taskCommand(argv: readonly string[], context: CommandConte
       t('cli.task.execute.notice', {}, locale),
     ].join('\n') }); return;
   }
+  if (action === 'close-abandoned') { if (!context.closeAbandonedAttempt) throw ErrorRegistry.createError('INVENTORY_UNAVAILABLE'); emit(await context.closeAbandonedAttempt(context.root ?? process.cwd(), identity, options), { json, ...(context.stdout ? { stdout: context.stdout } : {}), render: data => renderAbandonedClosure(data.closure, locale) }); return; }
   await evaluateTask(values, context, identity, json, usage);
 }
