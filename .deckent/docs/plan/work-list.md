@@ -92,3 +92,7 @@ PLAN "Aktif iş alanları" satırının önceki hâli:
 ### PLAN.md QWEN–JEV satırı — iptal öncesi (2026-10-06)
 
 | QWEN–JEV gölge | Idle-only base-Qwen ile Jev karşılaştırması | 12 vaka kaydı (10–11 geçersiz giriş; 03–09 Qwen GPU meşgul → unknown/busy) | Kalan 18 vaka; temiz 384/48/48 baş eğitimi | [qwen-host-pilot](.deckent/docs/plan/qwen-host-pilot.md) |
+
+### ARCHITECTURE.md:726 — Astra 2388 düzeltme notu öncesi (2026-10-06)
+
+- MCP istemci kayıt dosyası ancak denetlenmiş güven kararından sonra yazılır (add/remove audit reddi kayıt ve güveni değiştirmez; karar sonrası yazım hatası audit'li revoke ile geri alınır); worker imajı otonom yenilemesi (K2) `toolchains.update` policy verisidir (`mode` varsayılan `auto`, `atStartup` `true`, `intervalMs` 24 sa); ayrıntı [approval-and-delivery](.deckent/docs/architecture/approval-and-delivery.md).
