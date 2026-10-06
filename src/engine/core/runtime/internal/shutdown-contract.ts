@@ -68,11 +68,18 @@ export const serviceBuildSchema = z.object({ sourceTreeSha256: z.string().regex(
   sourceCommit: z.string().regex(/^[0-9a-f]{40,64}$/).nullable() }).strict().readonly();
 /** `processId` lets a launcher tell its own process from a concurrent winner on the same endpoint (Astra 2054 R2). */
 const processIdSchema = z.number().int().positive().optional();
+/** Restart-apply configuration fingerprint (`restartConfigDigest`), whether this service was started automatically by a terminal, and its
+ * idle stop period (K6 = A). Absent from a service built before these fields: observers report unknown, never stale. */
+const configDigestSchema = z.string().regex(/^[0-9a-f]{64}$/).optional();
+const autoStartedSchema = z.boolean().optional();
+const idleStopMsSchema = z.number().int().positive().safe().nullable().optional();
 export const runtimeServiceDescriptorSchema = z.discriminatedUnion('shutdownAvailable', [
   z.object({ schemaVersion: z.literal(1), instanceId: identitySchema,
-    shutdownAvailable: z.literal(false), identity: z.null(), build: serviceBuildSchema.optional(), processId: processIdSchema }).strict(),
+    shutdownAvailable: z.literal(false), identity: z.null(), build: serviceBuildSchema.optional(), processId: processIdSchema,
+    configDigest: configDigestSchema, autoStarted: autoStartedSchema, idleStopMs: idleStopMsSchema }).strict(),
   z.object({ schemaVersion: z.literal(1), instanceId: identitySchema,
-    shutdownAvailable: z.literal(true), identity: serviceIdentitySchema, build: serviceBuildSchema.optional(), processId: processIdSchema }).strict(),
+    shutdownAvailable: z.literal(true), identity: serviceIdentitySchema, build: serviceBuildSchema.optional(), processId: processIdSchema,
+    configDigest: configDigestSchema, autoStarted: autoStartedSchema, idleStopMs: idleStopMsSchema }).strict(),
 ]).readonly();
 
 export type ServiceIdentity = z.infer<typeof serviceIdentitySchema>;

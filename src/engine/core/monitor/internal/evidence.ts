@@ -88,6 +88,8 @@ export interface MonitorPorts {
   describeService(target: MonitorTarget): Promise<RuntimeServiceDescriptor>;
   observeScope(target: MonitorTarget, scopeId: string): Promise<MonitorScopeObservation>;
   /** WORKER-AUTO-REFRESH: the install's worker image refresh status (updating / current / failed with a typed reason); absent port or `unknown` adds nothing. */
+  /** Whether the answering service started with the restart-apply configuration this target has now; absent: not reported. */
+  readConfigFreshness?(target: MonitorTarget, descriptor: RuntimeServiceDescriptor): Promise<'current' | 'stale' | 'unknown'>;
   readImageRefresh?(target: MonitorTarget): Promise<Readonly<{ status: 'updating' | 'current' | 'failed' | 'unknown'; reason: string | null; imageVersion: string | null }>>;
   now(): number;
 }

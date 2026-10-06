@@ -77,6 +77,8 @@ export const CONFIG_FIELDS = Object.freeze({
     // Bounded wait for capacity before the typed BUSY refusal (0: refuse at once), and the client's bounded retries after a BUSY (0: none).
     admissionWaitMs: z.number().int().nonnegative().max(60000).default(250),
     busyRetryLimit: z.number().int().nonnegative().max(10).default(2),
+    // K6 = A: a service the terminal started on its own stops through the governed stop once no request or execution ran for this long (null: never).
+    idleShutdown: z.object({ afterMs: z.number().int().min(60000).max(86400000).nullable().default(900000) }).strict().default({}),
   }).strict().superRefine((value, context) => { if (value.maxConcurrentExecutions >= value.maxConcurrentRequests) context.addIssue({ code: z.ZodIssueCode.custom, path: ['maxConcurrentExecutions'], message: 'SERVICE_EXECUTIONS_CAPACITY' }); }).default({}), [], LAYOUT_CONTRACT_SINCE),
   cancellation: field('config.field.cancellation', { state: 'bound', consumers: ['src/composition/core/runtime'] }, 'restart', z.object({ maxConcurrentDeliveries: z.number().int().positive().safe(),
     recoveryPageSize: z.number().int().positive().safe().default(64),

@@ -27,7 +27,7 @@ import type { ModelCommandContext } from '#surfaces/core/cli-models/index.js';
 import type { DecisionCommandContext } from '#surfaces/core/cli-decision/index.js';
 export type { InferenceMetricsReading } from '#surfaces/core/cli-models/index.js';
 
-import type { ShutdownCommand, ServiceShutdownAdmissionResult } from '#engine/index.js';
+import { configServiceState, type ShutdownCommand, type ServiceShutdownAdmissionResult } from '#engine/index.js';
 import type { ComposerHistoryPort } from '#surfaces/core/terminal-composer/index.js';
 import type { SurfaceFollowEvent } from '#surfaces/core/terminal-kit/index.js';
 import type { TerminalSessionStoreView } from '#surfaces/core/terminal/index.js';
@@ -35,6 +35,8 @@ import type { TerminalSessionStoreView } from '#surfaces/core/terminal/index.js'
 export interface RuntimeServiceReadinessView {
   readonly mode: 'connected' | 'started'; readonly instanceId: string; readonly pid: number | null; readonly logPath: string | null;
   readonly shutdownAvailable: boolean; readonly build: { readonly sourceTreeSha256: string; readonly sourceCommit: string | null } | null;
+  /** Restart-apply configuration fingerprint the service started with (undefined from an older service) and its idle stop period (null: never). */
+  readonly configDigest?: string | undefined; readonly idleStopMs?: number | null;
 }
 
 /** Every host operation a CLI command may use; the model commands' narrower context is part of it. */
@@ -187,11 +189,13 @@ export async function runKernelCommand(argv: readonly string[], context: Command
   // REALM-NOTICE: additive; null when unwired. The measurement itself is bounded and never throws (a failed probe reads `unknown`).
   const shellRealm = context.inspectShellRealm ? await context.inspectShellRealm(root, options) : null;
   const imageRefresh = context.inspectToolchainRefresh ? await context.inspectToolchainRefresh(root, options).catch(() => null) : null;
+  // Read-soft: whether the running service still uses the restart-apply configuration now on disk (null when it cannot be asked).
+  const serviceConfig = await configServiceState(root, options, context.describeRuntimeService);
   const installationBinding = context.inspectInstallationBinding ? await context.inspectInstallationBinding(root, options) : null;
   const poolReadiness = await assessPoolReadiness(root, context, options, config.admission, (config.terminal as { scopeId?: string } | undefined)?.scopeId);
   const data = { schemaVersion: 2, scope: 'kernel', platform, host, hostMemory: detectHostMemory(), environment: detectEnvironment(env),
     paths: resolveGlobalScopePaths(platform, env), principal,
-    company: { companyId: config.company.id }, status: poolReadiness.status === 'drift' || poolReadiness.status === 'unavailable' ? 'degraded' : 'ready', poolReadiness, policyTemplate, modelInvocationDelivery, secretStore, shellRealm, imageRefresh, installationBinding,
+    company: { companyId: config.company.id }, status: poolReadiness.status === 'drift' || poolReadiness.status === 'unavailable' ? 'degraded' : 'ready', poolReadiness, policyTemplate, modelInvocationDelivery, secretStore, shellRealm, imageRefresh, installationBinding, serviceConfig,
     ...(toolchains ? { toolchains } : {}) };
   output(data, result => renderDoctorReport(result, result.poolReadiness ? poolReadinessLines(result.poolReadiness, locale) : [], locale));
   // modelInvocationDelivery is JSON-only for now, like policyTemplate: no human-text rendering yet.

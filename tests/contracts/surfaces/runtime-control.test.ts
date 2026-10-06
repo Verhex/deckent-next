@@ -30,6 +30,18 @@ describe('runtime control surfaces', () => {
     expect(accepted.values.join('')).not.toContain('stopped');
   });
 
+  it('CLI restart goes through the managed restart handler only, and refuses shutdown fields or an unwired host', async () => {
+    let restarts = 0; const output = sink();
+    const base = { env: { HOME: '/tmp/deckent-runtime-control' }, stdout: output.output, stderr: output.output, initialize() {} };
+    const readiness = { mode: 'started' as const, instanceId: 'instance-b', pid: 4242, logPath: null, shutdownAvailable: true, build: null };
+    expect(await main(['runtime', 'restart'], { ...base, async restartRuntimeService() { restarts++; return readiness; } })).toBe(0);
+    expect(restarts).toBe(1); expect(output.values.join('')).toContain('restarted'); expect(output.values.join('')).toContain('instance-b');
+    // Negative: no handler wired, or hand-written shutdown fields: nothing is restarted and the command fails typed.
+    expect(await main(['runtime', 'restart'], base)).not.toBe(0);
+    expect(await main(['runtime', 'restart', '--service', 'runtime'], { ...base, async restartRuntimeService() { restarts++; return readiness; } })).not.toBe(0);
+    expect(restarts).toBe(1);
+  });
+
   it('CLI rejects incomplete or wire-forged shutdown input before invoking the handler', async () => {
     let invoked = 0; const output = sink();
     const context = { env: { HOME: '/tmp/deckent-runtime-control' }, stdout: output.output, stderr: output.output,

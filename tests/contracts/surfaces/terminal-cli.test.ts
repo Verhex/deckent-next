@@ -3,7 +3,8 @@ import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { PassThrough, Readable, Writable } from 'node:stream';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { RUNTIME_SERVICE_HEARTBEAT_MS } from '#engine/index.js';
 import { main } from '../../../src/surfaces/index.js';
 import { runtimeBuildSkew } from '#surfaces/core/cli/index.js';
 import { clearConfigCache, t } from '#platform/index.js';
@@ -190,6 +191,29 @@ describe('deckent terminal CLI', () => {
     stdin.write('/exit\r');
     expect(await run).toBe(0);
   }, 15_000);
+
+  // #16: the terminal measures the answering service's configuration fingerprint against the one now in effect and keeps an idle-stopping
+  // service alive with its own describe beat (clients connect per request, so an open terminal is otherwise invisible to the service).
+  it.skipIf(process.platform === 'win32')('shows "restart required" only for a stale service and beats a describe while an idle-stopping service is connected', async () => {
+    const { restartConfigDigest } = await import('#engine/index.js'); const { loadConfig } = await import('#platform/index.js');
+    for (const stale of [true, false]) {
+      const f = await fixture(); const stdout = new Screen(); const stdin = keyboard(); let described = 0;
+      const digest = stale ? '0'.repeat(64) : restartConfigDigest(await loadConfig(f.project, { env: f.env, heal: false }) as never);
+      vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+      try {
+        const run = main(['terminal', 'workline', '--scope', 's', '--lang', 'en'],
+          { root: f.project, env: { ...f.env, NO_COLOR: '1' }, stdout: stdout as unknown as NodeJS.WriteStream, stderr: stdout as unknown as NodeJS.WriteStream,
+            stdin: stdin as unknown as NodeJS.ReadStream, initialize() {}, loadInstallationIdentity: loadConfiguredInstallationIdentity, loadProjectIdentity: loadConfiguredProjectIdentity, ensureTerminalIdentity: ensureConfiguredTerminalIdentity, async completeTerminalChat() { return 'x'; },
+            async ensureRuntimeService() { return { mode: 'connected' as const, instanceId: 'i', pid: null, logPath: null, shutdownAvailable: true, build: null, configDigest: digest, idleStopMs: 900_000 }; },
+            async describeRuntimeService() { described++; return {} as never; } });
+        await until(() => stdout.text.includes('Ask anything'), 'terminal startup');
+        expect(stdout.text.includes('/service-restart')).toBe(stale);
+        expect(described).toBe(0); vi.advanceTimersByTime(RUNTIME_SERVICE_HEARTBEAT_MS * 2); expect(described).toBe(2);
+        stdin.write('/exit\r'); expect(await run).toBe(0);
+        vi.advanceTimersByTime(RUNTIME_SERVICE_HEARTBEAT_MS * 2); expect(described).toBe(2); // the beat ends with the session
+      } finally { vi.useRealTimers(); }
+    }
+  }, 30_000);
 
   it('keeps line mode\'s own prompt on the terminal.session.prompt catalog text', () => {
     // Line mode (`terminal session`) is a separate code path (readline, not the Composer) and unaffected by the

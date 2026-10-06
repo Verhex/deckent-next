@@ -4,7 +4,7 @@ import { createInterface } from 'node:readline';
 import { mcpSlash } from './mcp.js';
 import { monitorSlash } from '#surfaces/core/monitor/index.js';
 import { DeckentError, ErrorRegistry, emit, getConfigKnownSecrets, loadConfig, readBuildIdentity, resolveLocale, t, formatValue, colorTier, terminalSafeText, type ConfigLoadOptions, type Locale } from '#platform/index.js';
-import { buildInferenceServingPlan, estimateReplicaCapacity, readInferenceServingProfile, type IdentityRead, type InstallationIdentityRead } from '#engine/index.js';
+import { buildInferenceServingPlan, estimateReplicaCapacity, readInferenceServingProfile, runtimeConfigFreshness, RUNTIME_SERVICE_HEARTBEAT_MS, type IdentityRead, type InstallationIdentityRead } from '#engine/index.js';
 import { prefersAsciiGlyphs, runTerminalWorkline, resolveWorklinePalette, buildWorklineBridgeSnapshot, streamLineTurn, boundAgentHistory, boundChatHistory, bindSessionScope, type AgentChatMessage, type ChatTurnMessage, type TurnDelta, type WorklineLabels } from '#surfaces/core/terminal/index.js';
 import { terminalComposerLabels, terminalRenderLabels, terminalSessionLabels } from '#surfaces/core/terminal-labels/index.js';
 import { createWorklineLedgerPorts } from './terminal-ledger.js';
@@ -260,7 +260,7 @@ export async function terminalCommand(argv: readonly string[], context: CommandC
   // Owner 2026-09-23: an interactive terminal starts the runtime service when none is running; it keeps running after exit.
   // Piped line mode never starts background processes. A start failure is shown, not fatal: local commands still work.
   const autostart = (config['terminal'] as { autostartService?: unknown } | undefined)?.autostartService !== false;
-  let serviceLine: string | null = null, serviceFailed = false, skewLine: string | null = null;
+  let serviceLine: string | null = null, serviceFailed = false, skewLine: string | null = null, configLine: string | null = null, idleStops = false;
   if (context.ensureRuntimeService && autostart && tty.stdin && tty.stdout) {
     try {
       const service = await context.ensureRuntimeService(root, options);
@@ -270,6 +270,8 @@ export async function terminalCommand(argv: readonly string[], context: CommandC
         : t('terminal.service.connected', { instance: service.instanceId, stop }, locale);
       // A service started from another build answers with that build's code; say so instead of failing later (Jev 8bb2a0c7).
       const skew = runtimeBuildSkew(readBuildIdentity(), service.build);
+      // A restart-apply section changed since the service started (measured against the service's own fingerprint, never assumed).
+      if (runtimeConfigFreshness(service.configDigest, config) === 'stale') configLine = t('terminal.service.configStale', {}, locale); idleStops = service.idleStopMs != null;
       if (skew) skewLine = t('terminal.service.buildSkew', { service: skew.service ?? t('terminal.value.unknown', {}, locale), terminal: skew.terminal }, locale);
     } catch (error) { serviceLine = errorText(error, locale); serviceFailed = true; }
   }
@@ -323,7 +325,9 @@ export async function terminalCommand(argv: readonly string[], context: CommandC
   if (!serviceFailed && context.findTerminalMentions) void context.findTerminalMentions(root, { scopeId, query: '' }, options, context.signal).catch(() => undefined);
   if (!installationId) throw ErrorRegistry.createError('INSTALLATION_IDENTITY_UNAVAILABLE');
   if (!projectId) throw ErrorRegistry.createError('PROJECT_IDENTITY_UNAVAILABLE');
-  await runTerminalWorkline({
+  // K6 = A: a service that stops itself when idle counts this open terminal as a client only through this beat (clients connect per request).
+  const beat = idleStops && context.describeRuntimeService ? setInterval(() => { void context.describeRuntimeService!(root, options).catch(() => undefined); }, RUNTIME_SERVICE_HEARTBEAT_MS).unref() : null;
+  try { await runTerminalWorkline({
     context: { installationId, projectId, scopeId },
     knownSecrets: getConfigKnownSecrets(config),
     selfSource: await context.selfSourceProject?.(root) ?? false,
@@ -349,7 +353,7 @@ export async function terminalCommand(argv: readonly string[], context: CommandC
     // MONITOR: `/monitor` prints the monitor's text snapshot as notice lines (the fullscreen view is `deckent monitor`).
     ...(context.inspectMonitor ? { monitor: (args: string) => monitorSlash(root, args, context, options, locale, Math.max(40, (tty.columns ?? 100) - 4)) } : {}),
     ...(serviceLine || accessNotices.length ? { openingNotices: [...accessNotices, ...(serviceLine ? [{ level: serviceFailed ? 'error' as const : 'info' as const, text: serviceLine }] : []),
-      ...(skewLine ? [{ level: 'error' as const, text: skewLine }] : [])] } : {}),
+      ...(skewLine ? [{ level: 'error' as const, text: skewLine }] : []), ...(configLine ? [{ level: 'error' as const, text: configLine }] : [])] } : {}),
     ...(context.restartRuntimeService ? { restartService: async () => {
       const restarted = await context.restartRuntimeService!(root, options);
       return t('terminal.service.restarted', { pid: restarted.pid ?? '-', instance: restarted.instanceId }, locale);
@@ -359,5 +363,5 @@ export async function terminalCommand(argv: readonly string[], context: CommandC
     ...(context.stdin ? { stdin: context.stdin as NodeJS.ReadStream } : {}),
     ...(context.stdout ? { stdout: context.stdout as unknown as NodeJS.WriteStream } : {}),
     ...(context.signal ? { signal: context.signal } : {}),
-  });
+  }); } finally { if (beat) clearInterval(beat); }
 }

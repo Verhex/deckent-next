@@ -28,3 +28,5 @@ export { ServiceShutdownApplication } from './internal/shutdown-application.js';
 export type { ServiceShutdownAuthentication, ServiceShutdownAuthorization } from './internal/shutdown-application.js';
 export { ModelCancellationRuntimeLoop } from './internal/model-cancellation-loop.js';
 export type { ModelCancellationRuntimeLoopOptions, ModelCancellationRuntimeObserver } from './internal/model-cancellation-loop.js';
+export { RuntimeServiceIdlePolicy, RUNTIME_SERVICE_AUTOSTART_ENV, RUNTIME_SERVICE_HEARTBEAT_MS } from './internal/idle-policy.js';
+export type { RuntimeServiceIdleOptions } from './internal/idle-policy.js';

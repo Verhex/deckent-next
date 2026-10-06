@@ -3,6 +3,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import { configCommand, configSlash, renderConfigInspection, renderConfigExplanation } from '#surfaces/core/config/index.js';
+import { restartConfigDigest } from '#engine/index.js';
+import { loadConfig } from '#platform/index.js';
 const field = { key: 'max_workers', value: 2, defaultValue: 'auto', descriptionKey: 'config.field.max_workers', description: 'Workers', schema: { type: 'number' }, source: 'project', binding: { state: 'bound', consumers: ['src/composition/core/runs'] }, apply: 'restart', redacted: false } as const;
 const snapshot = { schemaVersion: 1 as const, digest: 'digest', layer: 'project' as const, fields: [field] };
 function fixture() {
@@ -86,4 +88,34 @@ it('CLI absent fence reaches set/unset as null and global explain refuses before
   f.explain.mockClear();
   await expect(configCommand(['config', 'explain', 'max_workers', '--global'], f.ctx)).rejects.toMatchObject({ code: 'CLI_USAGE' });
   expect(f.explain).not.toHaveBeenCalled();
+});
+
+const HOME_ENV = { HOME: '/tmp/config-surface-home' };
+describe('restart-apply change against the running service (K6/#16)', () => {
+  const set = async (describeRuntimeService: unknown, language = ['--lang', 'en']) => {
+    const f = fixture(); await configCommand(['config', 'set', 'max_workers', '2', '--scope', 'scope-a', ...language], { ...f.ctx, env: HOME_ENV, describeRuntimeService } as never); return f.output.join('');
+  };
+  it('says restart is required when the service started with other restart-apply values, and names the command', async () => {
+    const text = await set(async () => ({ configDigest: '0'.repeat(64) }));
+    expect(text).toContain('Restart required'); expect(text).toContain('deckent runtime restart');
+    expect(await set(async () => ({ configDigest: '0'.repeat(64) }), ['--lang', 'tr'])).toContain('Yeniden başlatma gerekli');
+  });
+  it('reports the value as already in use when the digests match, never stale', async () => {
+    const digest = restartConfigDigest(await loadConfig('/tmp/config-surface', { env: HOME_ENV, heal: false, force: true }) as never);
+    expect(await set(async () => ({ configDigest: digest }))).toContain('already uses this configuration');
+  });
+  it('is soft: no service answering, or one without a fingerprint, never fails the saved write and never claims stale', async () => {
+    const stopped = await set(async () => { throw Object.assign(new Error('x'), { code: 'LOCAL_RUNTIME_UNAVAILABLE' }); });
+    expect(stopped).toContain('No service is running'); expect(stopped).not.toContain('Restart required');
+    const older = await set(async () => ({}));
+    expect(older).toContain('could not be determined'); expect(older).not.toContain('Restart required');
+  });
+  it('a live field never asks for a restart: the digest ignores language but follows a restart-apply section', () => {
+    const base = { language: 'en', service: { maxConnections: 4 }, secretPaths: [] };
+    expect(restartConfigDigest({ ...base, language: 'tr' })).toBe(restartConfigDigest(base));
+    expect(restartConfigDigest({ ...base, service: { maxConnections: 5 } })).not.toBe(restartConfigDigest(base));
+    // The Docker resource ceiling (`execution.docker`) is a restart-apply section: raising it asks for a restart like any other.
+    const docker = (memoryBytes: number) => ({ ...base, execution: { docker: { memoryBytes, cpus: 1, pids: 128 } } });
+    expect(restartConfigDigest(docker(8_589_934_592))).not.toBe(restartConfigDigest(docker(1_073_741_824)));
+  });
 });

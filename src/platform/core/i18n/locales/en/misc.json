@@ -584,6 +584,7 @@
   "cli.runtime.toolchainRefreshUpdated": "Worker image updated to {version}; {count} profile revision(s) apply to new Runs only.",
   "cli.runtime.toolchainRefreshUnverified": "Worker image currency could not be verified ({code}); the current image stays in use and the next check retries.",
   "cli.runtime.toolchainRefreshCurrent": "Worker image is current.",
+  "doctor.serviceConfigStale": "Runtime service: restart required, it started before a restart-apply configuration change (deckent runtime restart)",
   "doctor.imageRefresh": "Worker image: {status}",
   "doctor.imageRefresh.updating": "being updated in the background; Runs use the current image",
   "doctor.imageRefresh.failed": "refresh failed ({reason}); the previous image stays in use",

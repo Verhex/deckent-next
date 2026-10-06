@@ -100,6 +100,9 @@
     "busyRetryLimit": 2,
     "headerTimeoutMs": 10000,
     "identity": null,
+    "idleShutdown": {
+      "afterMs": 900000
+    },
     "inputMaxBytes": 1048576,
     "maxConcurrentExecutions": 8,
     "maxConcurrentRequests": 16,
