@@ -71,7 +71,7 @@ function landRepo(t) {
   const run = (...a) => spawnSync('git', a, { cwd: dir, encoding: 'utf8' });
   run('init', '-q'); run('config', 'user.email', 'a@b'); run('config', 'user.name', 'a');
   fs.mkdirSync(path.join(dir, 'scripts', 'git-hooks'), { recursive: true });
-  for (const f of ['land-check.mjs']) fs.copyFileSync(path.join(root, 'scripts', f), path.join(dir, 'scripts', f));
+  for (const f of ['land-check.mjs', 'land-hosted-check.mjs']) fs.copyFileSync(path.join(root, 'scripts', f), path.join(dir, 'scripts', f));
   fs.copyFileSync(path.join(root, 'scripts', 'git-hooks', 'pre-push'), path.join(dir, 'scripts', 'git-hooks', 'pre-push'));
   fs.writeFileSync(path.join(dir, 'f'), 'x'); run('add', '-A'); run('commit', '-qm', 'base');
   const sha = run('rev-parse', 'HEAD').stdout.trim();
@@ -79,7 +79,13 @@ function landRepo(t) {
   fs.writeFileSync(stub, `import fs from 'node:fs'; fs.appendFileSync(${JSON.stringify(counter)}, 'x');
 if (process.env.STUB_SLEEP) await new Promise(r => setTimeout(r, 60000));
 process.exit(process.env.STUB_FAIL ? 1 : 0);`);
-  const env = { ...process.env, DECKENT_CI_LOCAL_SCRIPT: stub };
+  const bin = path.join(dir, 'bin'); fs.mkdirSync(bin);
+  fs.writeFileSync(path.join(bin, 'gh'), `#!/usr/bin/env node
+if (process.argv[2] === 'repo') console.log(JSON.stringify({nameWithOwner:'test/repo'}));
+else if (process.argv[3].includes('/actions/runs')) console.log(JSON.stringify([{workflow_runs: [{id:7, check_suite_id:9, head_sha:'${sha}', event:'workflow_dispatch', status:'completed', conclusion:'success'}]}]));
+else console.log(JSON.stringify([{check_runs: ['24','26'].map((node,i) => ({id:i+1, name:'required verify (ubuntu-latest, node '+node+')', head_sha:'${sha}', check_suite:{id:9}, app:{slug:'github-actions'}, status:'completed', conclusion:process.env.STUB_FAIL ? 'failure' : 'success'}))}]));
+`, {mode:0o755});
+  const env = { ...process.env, PATH: bin + path.delimiter + process.env.PATH, DECKENT_CI_LOCAL_SCRIPT: stub };
   delete env.STUB_FAIL;
   const runs = () => (fs.existsSync(counter) ? fs.readFileSync(counter, 'utf8').length : 0);
   const land = (extra = {}, ...args) => spawnSync(process.execPath, ['scripts/land-check.mjs', ...args], { cwd: dir, env: { ...env, ...extra }, encoding: 'utf8' });
@@ -88,11 +94,12 @@ process.exit(process.env.STUB_FAIL ? 1 : 0);`);
   return { dir, sha, runs, land, push, receipt: path.join(dir, '.pack', 'ci-local', 'passed-test', sha) };
 }
 
-posixTest('unmarked push never runs ci:local; marked push does; receipt is reused', t => {
+posixTest('author and marked pushes never launch ci:local; marked pushes require hosted evidence', t => {
   const r = landRepo(t);
   assert.equal(r.push().status, 0); assert.equal(r.runs(), 0);
-  assert.equal(r.push({ DECKENT_LANDING: '1' }).status, 0); assert.equal(r.runs(), 1);
-  assert.equal(r.push({ DECKENT_LANDING: '1' }).status, 0); assert.equal(r.runs(), 1, 'receipt reused');
+  assert.equal(r.push({ DECKENT_LANDING: '1' }).status, 0); assert.equal(r.runs(), 0);
+  assert.equal(r.push({ DECKENT_LANDING: '1' }).status, 0); assert.equal(r.runs(), 0, 'hosted checks read without a local suite');
+  assert.notEqual(r.push({ DECKENT_LANDING: '1', STUB_FAIL: '1' }).status, 0);
 });
 
 posixTest('a failed --force removes the older PASS: the next marked push is rejected', t => {
@@ -101,7 +108,7 @@ posixTest('a failed --force removes the older PASS: the next marked push is reje
   const failed = r.land({ STUB_FAIL: '1' }, '--force');
   assert.equal(failed.status, 1); assert.equal(fs.existsSync(r.receipt), false, 'old receipt gone');
   assert.notEqual(r.push({ DECKENT_LANDING: '1', STUB_FAIL: '1' }).status, 0);
-  assert.equal(r.push({ DECKENT_LANDING: '1' }).status, 0, 'passes only by really re-running');
+  assert.equal(r.push({ DECKENT_LANDING: '1' }).status, 0, 'passes only with current hosted success');
 });
 
 posixTest('an invalid receipt is not trusted', t => {

@@ -7,7 +7,7 @@ import { applyInstallation, inspectInstallation } from '../../../src/index.js';
 import { fixture, unsupported } from './installation-apply-process.fixture.js';
 
 
-it.skipIf(unsupported).each([0o700])('publishes a relocated installation in project mode %s through SDK and replays through compiled CLI', async mode => {
+it.skipIf(unsupported).each([0o775])('publishes a relocated installation in project mode %s through SDK and replays through compiled CLI', async mode => {
   const f = await fixture(); await chmod(f.project, mode);
   const control = { allowShutdown: false, dockerExecutable: '/usr/bin/docker' };
   const evidence = await inspectInstallation(f.project, f.profile, control);

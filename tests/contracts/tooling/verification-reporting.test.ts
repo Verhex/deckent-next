@@ -9,6 +9,7 @@ describe('hosted verification evidence', () => {
     console.log = (line: string) => { lines.push(line); };
     try {
       new VerificationReporter().onTestRunEnd([{ relativeModuleId: 'tests/example.test.ts',
+        state: () => 'failed', diagnostic: () => ({ duration: 0 }),
         errors: () => [{ name: 'ImportError' }], children: { allTests: () => [
           { fullName: 'fails', result: () => ({ state: 'failed' }) },
           { fullName: 'unsupported', result: () => ({ state: 'skipped', note: 'NATIVE_PLATFORM_UNSUPPORTED: fixture requires Linux' }) },

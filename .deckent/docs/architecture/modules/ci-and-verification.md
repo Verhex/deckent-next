@@ -1,5 +1,54 @@
 # CI and verification tooling — module note
 
+**CI-SPEED amendment (owner approved 2026-10-06; isolated author candidate, hosted acceptance pending).**
+The required Ubuntu Node24/26 check names stay unchanged for PR/integration verification. Each Node builds once,
+then all Vitest files run in eight duration-balanced shards with normal fork/file isolation and four workers per runner.
+The complete inventory comes from Vitest itself, not a changed-file filter. New files always enter the partition.
+The required collector rejects missing/duplicate shards or files, wrong SHA/Node/run/attempt, failed/cancelled/pending
+execution, collection/unhandled errors and missing native/host/smoke success. Native binaries and dist are bound to
+Node major, platform, source/build-input hashes and artifact bytes; they are never shared across Node24 and Node26.
+Preparation runs lint checks; the installed compiler's normal build performs strict source typechecking once.
+`npm run lint` still includes explicit typecheck; standalone `npm run verify` builds once and keeps every test pack.
+The local mirror validates its sealed build before `verify:built` and never rebuilds during a suite.
+Explicit older refs retain their own original verification protocol; current helpers are not overlaid onto old source.
+The six installation apply scenarios and four installed-runtime modes keep every assertion, permission variant and
+existing timeout; separate files with the same fixture behavior remove the measured 176.927s/129.711s serial tails.
+The two known-identity cleanup faults and two contention witness faults also keep their exact callbacks/timeouts
+in separate files, removing the measured 105.298s/98.741s serial sums. The cleanup oracle stays once.
+Architecture scenario tests call the same fresh-state scanner as the CLI; genuine CLI exit/pipe tests and Git
+admission/negative ratchet history remain. Scanner imports perform no execution or process/environment mutation.
+`land:check` reads the latest GitHub Actions required checks for an exact SHA, refuses missing/non-success outcomes
+and never runs a local full suite or reuses a cached PASS. Both Node checks must belong to one workflow run whose latest
+attempt passed at that SHA, and the run event must check out that SHA (push, workflow_dispatch, merge_group): a
+pull_request run tested `refs/pull/N/merge`, so it is refused as `HOSTED_SOURCE_NOT_EXACT` (Astra REVIEW2402 P1). `land:check:local` retains the explicit diagnostic mirror
+and its receipts. Marked pre-push uses the hosted reader; unmarked author pushes stay lightweight.
+PR and manual integration runs keep the full Ubuntu suite. `merge_group` is supported, but this candidate does not
+activate/change a remote merge queue or ruleset. Main push uses separately named post-merge build/lint/smoke checks,
+so its result cannot masquerade as full verification. Native macOS/Windows full suites stay in a separate daily/manual
+workflow with visible failures; this scheduling does not resolve existing platform debt or claim platform acceptance.
+The full author scan exposed a genuine first integrity-key creation race during concurrent secret changes.
+Write-mode key custody now holds the existing bounded configuration path lock through create/read/fsync/close;
+read-only calls perform no lock writes. UID,0600,nlink1,O_NOFOLLOW,inode and32-byte checks stay unchanged.
+A deterministic real-file pause retains RED before the fix and verifies that another creator waits; read-under-held-lock
+and partial-key refusal remain explicit tests. Existing partial keys are never repaired; crashes and hostile same-UID
+isolation are not newly solved. Write-mode opens incur bounded lock contention; no throughput claim is made.
+Author evidence: 671-file full scan retained 5361 passes, two failures and three existing skips. The two failures
+were repaired with targeted evidence; final additions/splits produce a 682-file inventory with no missing/duplicate
+assignments. Targeted repair/split checks passed 33 cases, latest key source checks 14, and final service splits five;
+these overlap and are not a new whole-suite PASS. The updated timing profile labels its mixed four/two-worker sources.
+Target: 120–180 seconds for the required integration path. Configuration/estimated loads are not a measured latency
+result; fresh exact-SHA hosted wall time, cold-cache/queue behavior and independent review remain open.
+Checkout/setup-node use pinned v7.0.1/v7.0.0 commits with Node24 action runtime; the retained hosted runner
+2.337.0 exceeds the documented minimum 2.327.1. Credentials stay disabled and npm caching explicit.
+Reruns need the complete run attempt: earlier successful shard/build artifacts cannot satisfy a later attempt.
+Sources checked 2026-10-06: [checkout v7](https://github.com/actions/checkout/releases/tag/v7.0.1),
+[setup-node v7](https://github.com/actions/setup-node/releases/tag/v7.0.0), [Node24 file handles](https://nodejs.org/docs/latest-v24.x/api/fs.html#fspromisesopenpath-flags-mode), [Vitest sequencing](https://vitest.dev/config/sequence.html),
+[reporter API](https://vitest.dev/guide/advanced/reporters), installed Vitest 5.0.1 declarations,
+[TypeScript noEmit](https://www.typescriptlang.org/tsconfig/noEmit.html),
+[GitHub check runs](https://docs.github.com/en/rest/checks/runs#list-check-runs-for-a-git-reference).
+Author proof and scope: external `proof/CI-SPEED-2026-10-06/`. The following dated notes are historical where
+this amendment changes workflow scheduling or local landing requirements.
+
 CI-FULL, CI-FIX, SOCKET-PUBLICATION, CI-WINDOWS-MACOS (moved from ARCHITECTURE.md Packages 2026-10-05).
 Kaynak/Source: ARCHITECTURE.md @58537c7f lines 1327–1406; text below is verbatim.
 
@@ -89,9 +138,9 @@ store. Terminal-history declares exactly the public platform managed-files error
 **Verify ortamı (VERIFY-ENV, 2026-10-06).** `/etc/machine-id` yoksa (Docker konteyneri) makine bağı yeteneği düşer ve ilgili testler tipli not-run olur; `noexec` tmpdir altında `pr.test.mjs` tipli not-run verir, gerçek `PR_GIT` ret iddiası korunur; `doctor` makine bağını proje dizinine karşı yoklar.
 
 **Yerel CI eşleniği (CI-LOCAL, owner 2026-10-06; developer tooling).** `npm run ci:local -- [--ref <ref|HEAD>] [--node 24|26] [--keep]`
-(`scripts/ci-local.mjs`) runs the ubuntu job of `.github/workflows/ci.yml` in its order, using the repository's own
+(`scripts/ci-local.mjs`) runs the explicit serial Ubuntu diagnostic equivalent (not the hosted shard topology), using the repository's own
 `scripts/ci-*` files unchanged: temporary parent, `npm ci`, pinned Docker fixture, locked bubblewrap build and stage,
-`build.mjs` + `ci-shell-realm.mjs`, `npm run verify` (`DECKENT_TEST_STARTUP_COST=1`, `DECKENT_TEST_TIMEOUT_MS=30000`, default
+`build.mjs` + sealed build identity + `ci-shell-realm.mjs`, `npm run verify:built` (`DECKENT_TEST_STARTUP_COST=1`, `DECKENT_TEST_TIMEOUT_MS=30000`, default
 4 workers) and `ci-verification-summary.mjs`. It works on a clean detached `git worktree` of the exact SHA in a scratch
 directory; HOME/USERPROFILE/XDG_*/TMPDIR/`DECKENT_GLOBAL_HOME` are empty temporary directories, `DECKENT_*`/`GITHUB_*`/`LC_*`/`LANG*`
 are not inherited, and `GITHUB_ENV`/`RUNNER_TEMP` are provided locally. Only npm's download cache and the docker client config
@@ -101,12 +150,12 @@ Logs and `result.json` go to `.pack/ci-local/<sha12>-node<N>/` (gitignored). `--
 installs, and otherwise fails with `CI_LOCAL_NODE_UNAVAILABLE`.
 Not covered: macOS, Windows, the runner's `sudo sysctl` AppArmor step, hosted-runner differences. It does not replace hosted CI.
 `npm run precommit:fast` (typecheck, eslint on changed `.ts|.mjs`, lint-arch, lint-docs; no tests) backs the tracked
-`scripts/git-hooks/pre-commit`. Landing (owner 2026-10-06): `npm run land:check [-- --ref <sha>] [--force]` runs `ci:local --node 24`
-and, on PASS only, writes the receipt `.pack/ci-local/passed/<sha>`; a receipt for the same SHA returns PASS without re-running.
-Required before merging a PR. Fail closed: an existing receipt is removed before any re-run, so a failed, cancelled or running `--force` leaves none; the receipt is written atomically from `ci:local`'s own `result.json` (SHA, node, outcomes, counts, log path) and validated on read, not by existence. The test seam `DECKENT_CI_LOCAL_SCRIPT` writes only `passed-test/`, which no production reader uses. `pre-push` runs `land:check` only for `refs/heads/main` and `refs/heads/wave/*` pushes marked
-`DECKENT_LANDING=1 git push ...`; unmarked pushes print a note and pass (not a skip, no log). Git push options are not used: they
-reach only server-side hooks and the server must advertise them. Skipping a marked landing needs
-`DECKENT_CI_LOCAL_SKIP="<reason>"` (>= 8 characters), logged to `.pack/ci-local/skips.log`.
+`scripts/git-hooks/pre-commit`. Explicit local mirror (owner 2026-10-06, renamed by CI-SPEED): `npm run land:check:local [-- --ref <sha>] [--force]` runs
+`ci:local --node 24` and, on PASS only, writes the receipt `.pack/ci-local/passed/<sha>`; it is a diagnostic, not a merge
+precondition. Fail closed: an existing receipt is removed before any re-run, and the receipt is written atomically from
+`ci:local`'s own `result.json` and validated on read. `pre-push` runs the hosted `land:check` only for `refs/heads/main`
+and `refs/heads/wave/*` pushes marked `DECKENT_LANDING=1 git push ...`; unmarked pushes print a note and pass. Owner
+landing practice: Astra PASS → admin merge; hosted CI is a post-merge signal.
 `npm run hooks:install` sets relative `core.hooksPath=scripts/git-hooks` (shared `.git/config` unless
 `extensions.worktreeConfig` is on, then per worktree); each worktree resolves it against its own root, so branches without
 the directory run no hooks, and clones do not inherit the setting. Measured times: external `proof/CI-LOCAL-2026-10-06/review.md`.
