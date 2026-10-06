@@ -42,9 +42,9 @@ export async function streamLineTurn(stream: AsyncIterable<TurnDelta>, io: LineT
   const note = (line: string) => { io.err.write(`${io.project(line, 'exact').replace(/\s+/gu, ' ').trim()}\n`); };
   const feed = (text: string) => {
     answer += text;
-    // Only complete lines are written; an escape still unfinished at that cut waits with the partial line.
+    // Only complete lines are written. An escape new in this delta and still unfinished waits one more delta only (a malformed one cannot stall the pipe).
     const buffer = held + text, lineEnd = buffer.lastIndexOf('\n') + 1, escape = buffer.lastIndexOf('\u001b', lineEnd - 1);
-    const cut = escape >= 0 && unfinishedEscape(buffer.slice(escape)) ? escape : lineEnd;
+    const cut = escape >= held.length && unfinishedEscape(buffer.slice(escape)) ? escape : lineEnd;
     held = buffer.slice(cut);
     write(io.project(buffer.slice(0, cut), 'prose'));
   };

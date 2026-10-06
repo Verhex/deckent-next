@@ -114,25 +114,30 @@ describe('deckent terminal CLI', () => {
       async completeTerminalChat(_root: string, input: { scopeId: string; messages: readonly { role: string; content: string }[] }) {
         calls.push({ scopeId: input.scopeId, roles: input.messages.map(message => message.role), last: input.messages.at(-1)!.content });
         if (input.messages.at(-1)!.content === 'two') throw new Error('provider detail must not leak');
-        return `reply:${input.messages.at(-1)!.content}`;
+        return `reply:${input.messages.at(-1)!.content} \u001b[31mpassword=hunter2x\u001b[0m`;
       } });
     expect(code).toBe(0);
     expect(calls.map(call => [call.scopeId, call.last])).toEqual([['team-a', 'one'], ['team-a', 'two'], ['team-a', 'three']]);
     expect(calls[2]!.roles).toEqual(['system', 'user', 'user']);
-    expect(out.text()).toContain('reply:one'); expect(out.text()).toContain('reply:three');
+    expect(out.text()).toContain('reply:one password=[REDACTED]'); expect(out.text()).toContain('reply:three');
+    expect(out.text()).not.toContain('\u001b'); expect(out.text()).not.toContain('hunter2x');
     expect(out.text()).toContain('The chat turn failed.'); expect(out.text()).not.toContain('provider detail');
   });
 
   // TERMINAL-GAPS: piped line mode writes the answer as the service streams it, plain, and cancels a turn that raises an approval card.
   it('streams piped line mode: first complete line before the turn ends, plain text, last line ended, tool and approval as plain stderr lines, a card cancels the turn', async () => {
-    const f = await fixture(); const out = sink(), err = sink(); const stamps: { at: number; text: string }[] = []; let finishedAt = 0, aborted = false; const seen: string[][] = [];
+    const f = await fixture(); const out = sink(), err = sink(); const stamps: { at: number; text: string }[] = []; let finishedAt = 0, brokenAt = 0, aborted = false; const seen: string[][] = [];
     const out2 = { write(value: string) { stamps.push({ at: performance.now(), text: value }); out.values.push(value); } };
     const code = await main(['terminal', 'session', '--scope', 's', '--lang', 'en'], { root: f.project, env: f.env, stdout: out2, stderr: err.output,
-      stdin: Object.assign(Readable.from(['first\n', 'ask\n', 'again\n', '/exit\n']), { isTTY: false }), initialize() {},
+      stdin: Object.assign(Readable.from(['first\n', 'ask\n', 'again\n', 'broken\n', '/exit\n']), { isTTY: false }), initialize() {},
       async describeTerminalChatPlan() { return { ...plan, historyMessages: 40 }; },
       async completeTerminalChat() { throw new Error('line mode must stream'); },
       async *streamTerminalChat(_root: string, input: { messages: readonly { role: string; content: string }[] }, _o: unknown, signal?: AbortSignal) {
         const last = input.messages.at(-1)!.content; seen.push(input.messages.map(message => message.role));
+        if (last === 'broken') { // A malformed escape before a newline waits one delta only: the pipe never stalls until the turn's end.
+          yield { kind: 'text', text: '\u001b[3\nbroken\n' }; yield { kind: 'text', text: 'x\n' };
+          await settle(150); brokenAt = performance.now(); yield { kind: 'done', finish: 'stop', note: null }; return;
+        }
         if (last === 'ask') {
           yield { kind: 'approval', phase: 'requested', callId: 'c1', approvalId: 'a1', revision: 0, summary: 'write_file · x.txt', preview: '', expiresAt: 1 };
           await new Promise<void>(resolve => { if (signal?.aborted) resolve(); else signal?.addEventListener('abort', () => resolve(), { once: true }); });
@@ -144,19 +149,20 @@ describe('deckent terminal CLI', () => {
         yield { kind: 'text', text: 'lo\u001b[3' };
         yield { kind: 'text', text: '1m!\nsec' };
         yield { kind: 'text', text: 'ond' };
-        await settle(150); finishedAt = performance.now();
+        await settle(150); finishedAt ||= performance.now();
         yield { kind: 'message', message: { role: 'assistant', content: 'hello', toolCalls: [] } };
         yield { kind: 'done', finish: 'stop', note: null };
       } });
     expect(code).toBe(0);
     // The first complete line reached stdout well before the turn's end; the open last line waits for it; nothing carries an escape.
     expect(stamps[0]!.at).toBeLessThan(finishedAt - 100); expect(stamps[0]!.text).toBe('hello!\n');
-    expect(out.text()).not.toContain('\u001b'); expect(out.text()).toBe('hello!\nsecond\nhello!\nsecond\n');
+    expect(out.text()).not.toContain('\u001b'); expect(out.text()).toBe('hello!\nsecond\nhello!\nsecond\n3\nbroken\nx\n');
+    expect(stamps.find(stamp => stamp.text.includes('broken'))!.at).toBeLessThan(brokenAt - 100);
     expect(err.text()).toContain('tool read_file a.ts: ok (5 ms)');
     expect(err.text()).toContain('Approval required: write_file · x.txt');
     // Negative: the card was never answered, the turn was cancelled, and the cancelled question stays in history without an answer.
     expect(aborted).toBe(true);
-    expect(seen).toEqual([['system', 'user'], ['system', 'user', 'assistant', 'user'], ['system', 'user', 'assistant', 'user', 'user']]);
+    expect(seen).toEqual([['system', 'user'], ['system', 'user', 'assistant', 'user'], ['system', 'user', 'assistant', 'user', 'user'], ['system', 'user', 'assistant', 'user', 'user', 'assistant', 'user']]);
   });
 
   it('fails typed when the executable composes no governed chat handler', async () => {
