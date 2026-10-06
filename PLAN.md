@@ -88,4 +88,4 @@ Tam metinler [owner-decisions](.deckent/docs/decisions/owner-decisions.md) ve AR
 
 - 2026-10-06 Jev host kullanım önerileri kabul edildi; soru tanılaması/yönerge, zaman sıralı follow-up raporu ve 20 farklı kaynaklı pilot uygulandı. Context genellemesi için kazanç kanıtlanmadı; kapanış ve sınırlar [COMPLETED-PLAN](COMPLETED-PLAN.md), dış `proof/JEV-HOST-HYGIENE-2026-10-06/REPORT.md`.
 
-- 2026-10-06 CI-LOCAL: `npm run ci:local` ubuntu job eşleniği, `precommit:fast`, `hooks:install` (yalnız main/wave pre-push); macOS/Windows kapsam dışı. Ayrıntı: ci-and-verification modül notu, dış `proof/CI-LOCAL-2026-10-06/`.
+- 2026-10-06 CI-LOCAL: `ci:local` ubuntu eşleniği, `precommit:fast`, `hooks:install`; PR merge öncesi `land:check` (makbuz) zorunlu, pre-push yalnız `DECKENT_LANDING=1`; macOS/Windows kapsam dışı. Ayrıntı: ci-and-verification modül notu, dış `proof/CI-LOCAL-2026-10-06/`.

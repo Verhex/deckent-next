@@ -50,6 +50,7 @@
     "verify": "node scripts/verify-context.mjs && npm run lint && npm run build && npm run test:native && npm run test && npm run test:host && npm run smoke",
     "test:native": "node scripts/test-native.mjs",
     "ci:local": "node scripts/ci-local.mjs",
+    "land:check": "node scripts/land-check.mjs",
     "precommit:fast": "node scripts/precommit-fast.mjs",
     "hooks:install": "node scripts/git-hooks-install.mjs",
     "test:host": "node --test --test-reporter=tap --test-concurrency=2 --test-timeout=180000 .agents/refactor/*.test.mjs"

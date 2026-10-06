@@ -97,8 +97,12 @@ Logs and `result.json` go to `.pack/ci-local/<sha12>-node<N>/` (gitignored). `--
 installs, and otherwise fails with `CI_LOCAL_NODE_UNAVAILABLE`.
 Not covered: macOS, Windows, the runner's `sudo sysctl` AppArmor step, hosted-runner differences. It does not replace hosted CI.
 `npm run precommit:fast` (typecheck, eslint on changed `.ts|.mjs`, lint-arch, lint-docs; no tests) backs the tracked
-`scripts/git-hooks/pre-commit`; `pre-push` runs `ci:local --ref <pushed sha> --node 24` only for `refs/heads/main` and
-`refs/heads/wave/*`. A skip needs `DECKENT_CI_LOCAL_SKIP="<reason>"` (>= 8 characters), logged to `.pack/ci-local/skips.log`.
+`scripts/git-hooks/pre-commit`. Landing (owner 2026-10-06): `npm run land:check [-- --ref <sha>] [--force]` runs `ci:local --node 24`
+and, on PASS only, writes the receipt `.pack/ci-local/passed/<sha>`; a receipt for the same SHA returns PASS without re-running.
+Required before merging a PR. `pre-push` runs `land:check` only for `refs/heads/main` and `refs/heads/wave/*` pushes marked
+`DECKENT_LANDING=1 git push ...`; unmarked pushes print a note and pass (not a skip, no log). Git push options are not used: they
+reach only server-side hooks and the server must advertise them. Skipping a marked landing needs
+`DECKENT_CI_LOCAL_SKIP="<reason>"` (>= 8 characters), logged to `.pack/ci-local/skips.log`.
 `npm run hooks:install` sets relative `core.hooksPath=scripts/git-hooks` (shared `.git/config` unless
 `extensions.worktreeConfig` is on, then per worktree); each worktree resolves it against its own root, so branches without
 the directory run no hooks, and clones do not inherit the setting. Measured times: external `proof/CI-LOCAL-2026-10-06/review.md`.
