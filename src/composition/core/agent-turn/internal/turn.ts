@@ -146,15 +146,20 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
       ...(command.reasoning ? { reasoning: command.reasoning } : {}), ...(command.sessionId ? { sessionId: command.sessionId } : {}), ...(fullAccess ? { fullAccess } : {}) })}`);
 
     // The deployment's served window (profile data, T-L5); the provider's own report narrows it further.
-    const profileWindow = ((config['provider_invocation_profiles'] as { profiles?: unknown[] } | undefined)?.profiles ?? [])
+    const profile = ((config['provider_invocation_profiles'] as { profiles?: unknown[] } | undefined)?.profiles ?? [])
       .map(value => modelInvocationProfileSchema.safeParse(value)).flatMap(parsed => parsed.success ? [parsed.data] : [])
-      .find(profile => profile.scopeId === command.scopeId && JSON.stringify(profile.reference) === JSON.stringify(chat.reference))?.contextWindowTokens ?? null;
+      .find(profile => profile.scopeId === command.scopeId && JSON.stringify(profile.reference) === JSON.stringify(chat.reference));
+    const profileWindow = profile?.contextWindowTokens ?? null;
+    // W3-CI-FIX: only the streaming adapters (OpenAI chat, Anthropic messages) take a streamed round; another family (the priced
+    // OpenRouter adapter accepts `stream: false` only) gets one non-streamed round, and the answer arrives with the governed result.
+    const roundStream = !profile || profile.protocol.family === OPENAI_CHAT_COMPLETIONS_FAMILY || profile.protocol.family === ANTHROPIC_MESSAGES_FAMILY
+      ? { stream: true, stream_options: { include_usage: true } } : { stream: false };
     /** The one governed command of a round: measured and sent identically (the count is of exactly what is sent). */
     const roundCommand = (round: number, messages: readonly AgentTurnMessage[], declared: readonly AgentToolSpec[]): ModelInvocationCommand => ({
       schemaVersion: 1, commandId: chatTurnRoundCommandId(command.scopeId, command.turnId, round),
       scopeId: command.scopeId, reference: chat.reference, catalogRevision: binding.catalogRevision, expectedBinding: binding.binding,
       nativeRequest: { model: binding.definition.model.nativeId, messages: openAiChatNativeMessages(withAgentTurnSystemPrompt(messages, systemPrompt)), max_completion_tokens: chat.maxCompletionTokens,
-        stream: true, stream_options: { include_usage: true }, ...roundThinking,
+        ...roundStream, ...roundThinking,
         ...(declared.length ? { tools: declared.map(tool => ({ type: 'function', function: { name: tool.name, description: tool.description,
           parameters: tool.inputSchema } })), tool_choice: 'auto' } : {}) } as unknown as JsonObject });
 

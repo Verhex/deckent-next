@@ -61,7 +61,7 @@ describe('K1 real binary journeys', () => {
     expect(result).toMatchObject({ schemaVersion: 2, principal: { assurance: 'os-user', provenance: 'cli' }, company: { companyId: 'default' }, status: 'ready', policyTemplate: null, modelInvocationDelivery: [] });
     // Doctor JSON 2 grows only by additive fields (shellRealm, poolReadiness before; wave 1: imageRefresh for WORKER-AUTO-REFRESH and
     // installationBinding for VERIFY-ENV, both always present, null when unwired or unreadable).
-    expect(Object.keys(result).sort()).toEqual(['company', 'environment', 'host', 'hostMemory', 'imageRefresh', 'installationBinding', 'modelInvocationDelivery', 'paths', 'platform', 'policyTemplate', 'poolReadiness', 'principal', 'schemaVersion', 'scope', 'secretStore', 'shellRealm', 'status']);
+    expect(Object.keys(result).sort()).toEqual(['company', 'environment', 'host', 'hostMemory', 'imageRefresh', 'installationBinding', 'modelInvocationDelivery', 'paths', 'platform', 'policyTemplate', 'poolReadiness', 'principal', 'schemaVersion', 'scope', 'secretStore', 'serviceConfig', 'shellRealm', 'status']);
     // No refresh ever ran in this installation (no Docker execution): nothing is claimed.
     expect(result.imageRefresh).toEqual({ status: 'unknown', reason: null, imageVersion: null });
     // Binding v2 (wave 2): the doctor reports the strength and source this host reaches by the product's own capture and whether company
