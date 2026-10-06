@@ -230,10 +230,18 @@ describe.skipIf(!dockerEnabled)('selected task cross-surface and custody', () =>
 
       const inspected = await cliCall<Awaited<ReturnType<typeof inspectRun>>>(f,
         ['run', 'inspect', '--scope', 's', '--id', 'r', '--json']);
+      // Inspection adds read-time observations to the recorded Run: the pool and (M2) the delivery outlook of an accepted Run without a
+      // delivery receipt. Both are asserted exactly and are identical on the MCP inspection; everything else equals the evaluation result.
+      expect((await client.callTool({ name: 'inspect_run', arguments: { schemaVersion: 1, scopeId: 's', runId: 'r' } })).structuredContent).toEqual(inspected);
       const { pool, ...recordedRun } = inspected.run;
       expect(pool).toEqual({ poolId: 'p', capacity: { executionSlots: 1, inFlightSlots: 1 },
         effectiveCapacity: { executionSlots: 1, inFlightSlots: 1 }, occupancy: { execution: 0, inFlight: 0 }, drift: [], waiting: [] });
-      expect(recordedRun).toEqual((evaluationResult.structuredContent as { evaluation: { run: unknown } }).evaluation.run);
+      // The only task carries no work input, so nothing is owed to delivery.
+      expect(recordedRun.tasks.map(task => task.resultBrief?.deliveryOutlook)).toEqual(['none']);
+      const recordedTasks = recordedRun.tasks.map(({ resultBrief, ...task }) => {
+        const brief = { ...resultBrief! }; delete brief.deliveryOutlook; return { ...task, resultBrief: brief };
+      });
+      expect({ ...recordedRun, tasks: recordedTasks }).toEqual((evaluationResult.structuredContent as { evaluation: { run: unknown } }).evaluation.run);
       record = await runtime.store.loadBoundDispatch(identity);
       const output = JSON.parse(new TextDecoder().decode(await runtime.artifacts.read('s', record!.output!)));
       expect(output).toMatchObject({ schemaVersion: 1, identity, completeness: 'complete', stdout: 'base\n' });
