@@ -4,6 +4,7 @@ export * from './internal/ink-palette.js';
 export * from './internal/slash-registry.js';
 export * from './internal/tool-line.js';
 export * from './internal/turn-stream.js';
+export * from './internal/line-stream.js';
 export * from './internal/session-references.js';
 export * from './internal/panel-contract.js';
 export * from './internal/panel-controller.js';

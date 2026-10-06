@@ -3,9 +3,9 @@ import { configSlash } from '#surfaces/core/config/index.js';
 import { createInterface } from 'node:readline';
 import { mcpSlash } from './mcp.js';
 import { monitorSlash } from '#surfaces/core/monitor/index.js';
-import { DeckentError, ErrorRegistry, emit, getConfigKnownSecrets, loadConfig, readBuildIdentity, resolveLocale, t, formatValue, colorTier, type ConfigLoadOptions, type Locale } from '#platform/index.js';
+import { DeckentError, ErrorRegistry, emit, getConfigKnownSecrets, loadConfig, readBuildIdentity, resolveLocale, t, formatValue, colorTier, terminalSafeText, type ConfigLoadOptions, type Locale } from '#platform/index.js';
 import { buildInferenceServingPlan, estimateReplicaCapacity, readInferenceServingProfile, type IdentityRead, type InstallationIdentityRead } from '#engine/index.js';
-import { prefersAsciiGlyphs, runTerminalWorkline, resolveWorklinePalette, buildWorklineBridgeSnapshot, boundChatHistory, bindSessionScope, type AgentChatMessage, type ChatTurnMessage, type WorklineLabels } from '#surfaces/core/terminal/index.js';
+import { prefersAsciiGlyphs, runTerminalWorkline, resolveWorklinePalette, buildWorklineBridgeSnapshot, streamLineTurn, boundAgentHistory, boundChatHistory, bindSessionScope, type AgentChatMessage, type ChatTurnMessage, type TurnDelta, type WorklineLabels } from '#surfaces/core/terminal/index.js';
 import { terminalComposerLabels, terminalRenderLabels, terminalSessionLabels } from '#surfaces/core/terminal-labels/index.js';
 import { createWorklineLedgerPorts } from './terminal-ledger.js';
 import { runtimeBuildSkew, workSurfaceLabels } from './work-labels.js';
@@ -144,13 +144,16 @@ function worklineLabels(locale: Locale, statusLine: string): WorklineLabels {
 
 /** Line mode is the degraded adapter: it works piped (one turn per input line) and prompts only on a terminal. */
 async function runSession(locale: Locale, context: CommandContext, turn: (messages: readonly ChatTurnMessage[], signal?: AbortSignal) => Promise<string>,
-  historyMessages: number, interactive: boolean, status: () => Promise<string>): Promise<void> {
+  historyMessages: number, interactive: boolean, status: () => Promise<string>,
+  stream?: (messages: readonly AgentChatMessage[], signal: AbortSignal | undefined) => AsyncIterable<TurnDelta>): Promise<void> {
   const stdin = context.stdin ?? process.stdin;
   const sinks = { ...(context.stdout ? { stdout: context.stdout } : {}), ...(context.stderr ? { stderr: context.stderr } : {}) };
   const rl = createInterface({ input: stdin, ...(interactive ? { output: process.stdout } : {}), terminal: interactive,
     prompt: t('terminal.session.prompt', {}, locale) });
-  const system: ChatTurnMessage = { role: 'system', content: t('terminal.chat.systemPrompt', {}, locale) };
+  const system = { role: 'system' as const, content: t('terminal.chat.systemPrompt', {}, locale) };
   let history: readonly ChatTurnMessage[] = [system];
+  // Streaming path (the service's agent turn): the history is the agent's own (tool messages included), written as the turn appends.
+  let agentHistory: readonly AgentChatMessage[] = [system];
   if (interactive) { emit(t('terminal.session.banner', {}, locale), sinks); rl.prompt(); }
   try {
     for await (const line of rl) {
@@ -160,6 +163,23 @@ async function runSession(locale: Locale, context: CommandContext, turn: (messag
       // Slash input is a local command; an unknown one is reported, never sent to the model as a user message.
       else if (trimmed.startsWith('/')) emit(`${t('terminal.workline.unknownCommand', {}, locale)}: ${trimmed}`, { ...sinks, level: 'error' });
       else if (trimmed.length > 0) {
+        if (stream) {
+          const messages = boundAgentHistory(system, [...agentHistory, { role: 'user', content: trimmed }], historyMessages);
+          const stop = new AbortController(), signal = context.signal ? AbortSignal.any([context.signal, stop.signal]) : stop.signal;
+          try {
+            const turn = await streamLineTurn(stream(messages, signal), { out: context.stdout ?? process.stdout, err: context.stderr ?? process.stderr, cancel: () => stop.abort(), safe: terminalSafeText,
+              toolLine: call => t('terminal.line.tool', { name: call.name, target: call.target ?? '-', status: call.status ?? '-', ms: call.ms ?? 0 }, locale),
+              approvalLine: summary => t('terminal.line.approvalRefused', { summary }, locale) });
+            // Only a finished turn continues the conversation; a cancelled or failed one leaves the question without an answer.
+            agentHistory = turn.finish === 'stop' || turn.finish === 'length'
+              ? boundAgentHistory(system, [...(turn.compacted ? [system, ...turn.compacted] : messages), ...turn.appended], historyMessages) : messages;
+          } catch (error) {
+            agentHistory = messages;
+            emit(errorText(error, locale), { ...sinks, level: 'error' });
+          }
+          if (interactive) rl.prompt();
+          continue;
+        }
         const messages = boundChatHistory(system, [...history, { role: 'user', content: trimmed }], historyMessages);
         try {
           const reply = await turn(messages, context.signal);
@@ -259,8 +279,10 @@ export async function terminalCommand(argv: readonly string[], context: CommandC
   if (parsed.action === 'session') {
     for (const notice of accessNotices) emit(notice.text, sinks);
     if (serviceLine && tty.stdin && tty.stdout) emit(serviceLine, sinks);
+    const lineStream = context.streamTerminalChat ? (messages: readonly AgentChatMessage[], signal: AbortSignal | undefined) =>
+      context.streamTerminalChat!(root, { scopeId, messages }, options, signal) : undefined;
     await runSession(locale, context, turn, historyMessages, tty.stdin && tty.stdout,
-      async () => [renderStatus(statusPayload(tty, config, chat, await readIdentity()), locale), ...(serviceLine ? [serviceLine] : [])].join('\n'));
+      async () => [renderStatus(statusPayload(tty, config, chat, await readIdentity()), locale), ...(serviceLine ? [serviceLine] : [])].join('\n'), lineStream);
     return;
   }
   if (!tty.stdin || !tty.stdout) throw ErrorRegistry.createError('TERMINAL_TTY_REQUIRED');
