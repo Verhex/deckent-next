@@ -3042,7 +3042,7 @@
     },
     "vendorSlugCaps": {
       "domain": 3,
-      "engine": 23,
+      "engine": 20,
       "note": "G1 vendor-slug findings per layer; adapter vendorUnits are exempt. Derive ids from the registry (commands.json, nativeCliIdSchema)."
     },
     "effectFlows": {
