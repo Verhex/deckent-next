@@ -42,6 +42,7 @@ export function queryFailure(error: unknown): DeckentError {
     return ErrorRegistry.createError(error.code, { params: { resource: d.resource, companion: d.companion,
       stage: d.stage, reason: d.reason, mode: d.mode, links: d.links } });
   }
+  if (error instanceof RuntimeServiceLifecycleError && error.retryAfterMs !== undefined) return ErrorRegistry.createError(error.code, { params: { retryAfterMs: error.retryAfterMs } });
   if (error instanceof ScopeRegistrationError) return ErrorRegistry.createError(error.code, { params: { scopeIds: error.scopeIds.join(',') } });
   if (error instanceof ZodError) return ErrorRegistry.createError('INVENTORY_QUERY_INVALID');
   if (error instanceof DispatchInventoryError) return ErrorRegistry.createError('DISPATCH_INVENTORY_LIMIT');

@@ -26,18 +26,19 @@ it('polls and refills free Run capacity while another turn is still in flight, s
   } finally { controller.abort(); slow.resolve(); await work; }
 });
 
-it.each([false, true])('backs off only when every admitted advance failed (allFailed=%s)', async allFailed => {
-  vi.useFakeTimers(); const controller = new AbortController(), errors: (ProgressionCursor | null)[] = [];
+it.each([false, true])('backs off each failed Run on its own and never parks the driver (allFailed=%s)', async allFailed => {
+  vi.useFakeTimers(); const controller = new AbortController(), errors: (ProgressionCursor | null)[] = [], advanced: string[] = [];
   let polls = 0;
   const loop = new RunLifecycleRuntimeLoop({
-    async discover() { polls++; return { page: { items: polls === 1 ? [a, b] : [], next: null }, due: empty }; },
-    async advance(query) { if (query.runId === 'a' || allFailed) throw new Error('DENIED'); return result; }, async expire() {},
+    async discover() { polls++; return { page: { items: [a, b], next: null }, due: empty }; },
+    async advance(query) { advanced.push(query.runId); if (query.runId === 'a' || allFailed) throw new Error('DENIED'); return result; }, async expire() {},
   }, { onError(query) { errors.push(query); } }, { pollIntervalMs: 10, failureBackoffMs: 100, maxConcurrentRuns: 2 });
   const work = loop.run(controller.signal);
   try {
     await vi.advanceTimersByTimeAsync(10); expect(errors).toEqual(allFailed ? [a, b] : [a]);
-    await vi.advanceTimersByTimeAsync(10); expect(polls).toBe(allFailed ? 1 : 2);
-    if (allFailed) { await vi.advanceTimersByTimeAsync(89); expect(polls).toBe(1); await vi.advanceTimersByTimeAsync(1); expect(polls).toBe(2); }
+    await vi.advanceTimersByTimeAsync(50); expect(polls).toBeGreaterThanOrEqual(5); // discovery is never paused by a failed Run
+    expect(advanced.filter(id => id === 'a')).toHaveLength(1); expect(advanced.filter(id => id === 'b')).toHaveLength(allFailed ? 1 : polls);
+    await vi.advanceTimersByTimeAsync(50); expect(advanced.filter(id => id === 'a')).toHaveLength(2); // retried once its own window ended
   } finally { controller.abort(); await work; }
 });
 

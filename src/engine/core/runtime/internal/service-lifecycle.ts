@@ -2,11 +2,15 @@ import { z } from 'zod';
 
 const positiveSafeInteger = z.number().int().positive().safe();
 export interface RuntimeServiceDeadline { wait(milliseconds: number, signal: AbortSignal): Promise<void> }
-export interface RuntimeServiceLifecycleOptions { readonly maxConcurrentRequests: number; readonly maxConcurrentExecutions: number }
+/** `admissionWaitMs` bounds how long a transport request may wait for capacity before the typed refusal (0 or absent: refuse at once);
+ * the wait queue never holds more than `maxConcurrentRequests` requests. */
+export interface RuntimeServiceLifecycleOptions { readonly maxConcurrentRequests: number; readonly maxConcurrentExecutions: number; readonly admissionWaitMs?: number }
 export type RuntimeServiceWorkClass = 'execution' | 'control';
 export type RuntimeServiceDrainResult = Readonly<{ state: 'clean' | 'incomplete'; remainingRequests: number; recoveryPending: boolean }>;
 export class RuntimeServiceLifecycleError extends Error {
-  constructor(readonly code: 'RUNTIME_SERVICE_OPTIONS' | 'RUNTIME_SERVICE_BUSY' | 'RUNTIME_SERVICE_STOPPING' | 'RUNTIME_SERVICE_RECOVERY_FAILED' | 'RUNTIME_SERVICE_NOT_STOPPING') { super(code); this.name = 'RuntimeServiceLifecycleError'; }
+  /** Set on a refusal after a bounded wait: when the caller may reasonably try again. */
+  constructor(readonly code: 'RUNTIME_SERVICE_OPTIONS' | 'RUNTIME_SERVICE_BUSY' | 'RUNTIME_SERVICE_STOPPING' | 'RUNTIME_SERVICE_RECOVERY_FAILED' | 'RUNTIME_SERVICE_NOT_STOPPING',
+    readonly retryAfterMs?: number) { super(code); this.name = 'RuntimeServiceLifecycleError'; }
 }
 
 /** Transport-neutral admission and graceful recovery-loop shutdown. It never cancels worker operations. */
@@ -16,6 +20,8 @@ export class RuntimeServiceLifecycle {
   private requests = 0;
   private executions = 0;
   private readonly executionWaiters: (() => void)[] = [];
+  private readonly admissionWaitMs: number;
+  private readonly admissionQueue: { workClass: RuntimeServiceWorkClass; start: () => void; reject: (error: unknown) => void }[] = [];
   private readonly active = new Set<Promise<void>>();
   private accepting = true;
   private stopping: Promise<RuntimeServiceDrainResult> | null = null;
@@ -25,12 +31,53 @@ export class RuntimeServiceLifecycle {
       this.maxConcurrentRequests = positiveSafeInteger.parse(options.maxConcurrentRequests);
       this.maxConcurrentExecutions = positiveSafeInteger.parse(options.maxConcurrentExecutions);
       if (this.maxConcurrentExecutions >= this.maxConcurrentRequests) throw new Error('invalid');
+      this.admissionWaitMs = options.admissionWaitMs === undefined ? 0 : z.number().int().nonnegative().safe().parse(options.admissionWaitMs);
     } catch { throw new RuntimeServiceLifecycleError('RUNTIME_SERVICE_OPTIONS'); }
     if (typeof stopRecovery !== 'function' || !deadline || typeof deadline.wait !== 'function') throw new RuntimeServiceLifecycleError('RUNTIME_SERVICE_OPTIONS');
   }
+  private fits(workClass: RuntimeServiceWorkClass): boolean {
+    return this.requests < this.maxConcurrentRequests && (workClass !== 'execution' || this.executions < this.maxConcurrentExecutions);
+  }
   admit<T>(operation: () => Promise<T> | T, workClass: RuntimeServiceWorkClass = 'control'): Promise<T> {
     if (!this.accepting) throw new RuntimeServiceLifecycleError('RUNTIME_SERVICE_STOPPING');
-    if (this.requests >= this.maxConcurrentRequests || (workClass === 'execution' && this.executions >= this.maxConcurrentExecutions)) throw new RuntimeServiceLifecycleError('RUNTIME_SERVICE_BUSY');
+    if (!this.fits(workClass)) throw new RuntimeServiceLifecycleError('RUNTIME_SERVICE_BUSY');
+    return this.start(operation, workClass);
+  }
+  /** Transport admission with a bounded wait: a request that does not fit waits at most `admissionWaitMs` (FIFO, bounded queue) and is then
+   * refused with the typed BUSY carrying `retryAfterMs`. Without a configured wait it is `admit`. Never waits unboundedly. */
+  async admitBounded<T>(operation: () => Promise<T> | T, workClass: RuntimeServiceWorkClass = 'control'): Promise<T> {
+    if (!this.accepting) throw new RuntimeServiceLifecycleError('RUNTIME_SERVICE_STOPPING');
+    if (this.fits(workClass) && !this.admissionQueue.some(waiting => waiting.workClass === workClass)) return this.start(operation, workClass);
+    if (this.admissionWaitMs === 0 || this.admissionQueue.length >= this.maxConcurrentRequests) throw new RuntimeServiceLifecycleError('RUNTIME_SERVICE_BUSY', this.admissionWaitMs || undefined);
+    const controller = new AbortController();
+    return new Promise<T>((resolve, reject) => {
+      // The slot is reserved by `pump`; the operation starts in the same turn, so a stop cannot fall between reservation and tracking.
+      const entry = { workClass, start: () => { controller.abort(); resolve(this.startAdmitted(operation, workClass)); }, reject: (error: unknown) => { controller.abort(); reject(error); } };
+      this.admissionQueue.push(entry);
+      const expire = (failure: unknown) => {
+        const index = this.admissionQueue.indexOf(entry);
+        if (index >= 0) { this.admissionQueue.splice(index, 1); reject(failure); }
+      };
+      Promise.resolve().then(() => this.deadline.wait(this.admissionWaitMs, controller.signal))
+        .then(() => expire(new RuntimeServiceLifecycleError('RUNTIME_SERVICE_BUSY', this.admissionWaitMs)), expire);
+    });
+  }
+  /** Hands freed capacity to waiting requests in arrival order; a waiter that still does not fit never blocks one that does. */
+  private pump(): void {
+    for (let index = 0; index < this.admissionQueue.length;) {
+      const entry = this.admissionQueue[index]!;
+      if (!this.fits(entry.workClass)) { index++; continue; }
+      this.admissionQueue.splice(index, 1);
+      // The slot is taken here, synchronously: a later arrival cannot overtake the waiter.
+      this.requests++; if (entry.workClass === 'execution') this.executions++;
+      entry.start();
+    }
+  }
+  private startAdmitted<T>(operation: () => Promise<T> | T, workClass: RuntimeServiceWorkClass): Promise<T> {
+    const result = Promise.resolve().then(operation);
+    return this.track(result, true, workClass === 'execution');
+  }
+  private start<T>(operation: () => Promise<T> | T, workClass: RuntimeServiceWorkClass): Promise<T> {
     this.requests++;
     if (workClass === 'execution') this.executions++;
     const result = Promise.resolve().then(operation);
@@ -56,6 +103,7 @@ export class RuntimeServiceLifecycle {
         // Transfer the occupied slot directly: a new admission cannot bypass an existing waiter.
         if (next) next(); else this.executions--;
       }
+      this.pump();
     });
     this.active.add(tracked);
     return result;
@@ -65,6 +113,7 @@ export class RuntimeServiceLifecycle {
     try { positiveSafeInteger.parse(graceMilliseconds); }
     catch { throw new RuntimeServiceLifecycleError('RUNTIME_SERVICE_OPTIONS'); }
     this.accepting = false;
+    for (const waiting of this.admissionQueue.splice(0)) waiting.reject(new RuntimeServiceLifecycleError('RUNTIME_SERVICE_STOPPING'));
     let recoveryPending = true;
     const recovery = Promise.resolve().then(this.stopRecovery).then(() => { recoveryPending = false; }, () => {
       recoveryPending = false; throw new RuntimeServiceLifecycleError('RUNTIME_SERVICE_RECOVERY_FAILED');

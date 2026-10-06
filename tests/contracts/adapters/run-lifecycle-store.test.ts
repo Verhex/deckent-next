@@ -113,3 +113,25 @@ it('reads empty deadline polls without requesting a SQLite write lock', async ()
     expect(await f.store.loadRunReceipt('s', 'expire')).toBeNull();
   } finally { writer.exec('ROLLBACK'); writer.close(); }
 });
+
+it('lists only scopes registered to the installation company; foreign and unregistered scopes are skipped and surveyed with their reason', async () => {
+  const f = await fixture(), own = { ...f.lookup, companyId: 'acme' };
+  const raw = new DatabaseSync(f.path);
+  try {
+    const registered = raw.prepare('SELECT company_id FROM scope_registry WHERE scope_id=?').get('s') as { company_id: string } | undefined;
+    if (registered) raw.prepare('DELETE FROM scope_registry WHERE scope_id=?').run('s');
+    expect((await f.store.listRunProgression(own)).items).toEqual([]);
+    expect((await f.store.listRunLifecycleDue({ ...own, now: 1 })).items).toEqual([]);
+    expect(await f.store.listForeignProgressionScopes({ actor: f.lookup.actor, companyId: 'acme', limit: 8 })).toEqual([{ scopeId: 's', reason: 'unregistered' }]);
+    raw.prepare('INSERT OR IGNORE INTO companies(company_id) VALUES(?)').run('other');
+    raw.prepare("INSERT INTO scope_registry(scope_id,company_id,origin) VALUES('s','other','admission')").run();
+    expect((await f.store.listRunProgression(own)).items).toEqual([]);
+    expect(await f.store.listForeignProgressionScopes({ actor: f.lookup.actor, companyId: 'acme', limit: 8 })).toEqual([{ scopeId: 's', reason: 'foreign' }]);
+    raw.prepare('INSERT OR IGNORE INTO companies(company_id) VALUES(?)').run('acme');
+    raw.prepare("UPDATE scope_registry SET company_id='acme' WHERE scope_id='s'").run();
+  } finally { raw.close(); }
+  expect((await f.store.listRunProgression(own)).items).toEqual([{ scopeId: 's', runId: 'r' }]);
+  expect(await f.store.listForeignProgressionScopes({ actor: f.lookup.actor, companyId: 'acme', limit: 8 })).toEqual([]);
+  // Without a company filter discovery is unchanged.
+  expect((await f.store.listRunProgression(f.lookup)).items).toHaveLength(1);
+});
