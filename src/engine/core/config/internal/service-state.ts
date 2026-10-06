@@ -1,8 +1,9 @@
 import { loadConfig, type ConfigLoadOptions } from '#platform/index.js';
-import { runtimeConfigFreshness, type RuntimeServiceDescriptor } from '#engine/index.js';
+import { runtimeConfigFreshness } from './restart-digest.js';
 
 export type ConfigServiceState = 'current' | 'stale' | 'unknown' | 'stopped';
-export type DescribeService = (root: string, options: ConfigLoadOptions) => Promise<RuntimeServiceDescriptor>;
+/** The one thing read from the service's answer; the full descriptor satisfies it. */
+export type DescribeService = (root: string, options: ConfigLoadOptions) => Promise<{ readonly configDigest?: string | undefined }>;
 const timeoutAfter = (milliseconds: number) => new Promise<never>((_, reject) => { setTimeout(() => reject(new Error('timeout')), milliseconds).unref(); });
 /**
  * Whether the running service already works with the configuration now on disk and in the environment (restart-apply sections only).

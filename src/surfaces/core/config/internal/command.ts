@@ -4,17 +4,16 @@ import { configDisplayView, getConfigValue, loadConfig, type ConfigLoadOptions }
 import { emit, formatValue } from '#platform/index.js';
 import { resolveLocale, t, type Locale } from '#platform/index.js';
 import type { VerifiedPrincipal } from '#domain/index.js';
-import type { ConfigApplication, RuntimeServiceDescriptor } from '#engine/index.js';
+import { configServiceState, type ConfigApplication, type DescribeService } from '#engine/index.js';
 import type { CliBaseContext } from '#surfaces/core/cli-kit/index.js';
 import { applyWord, renderConfigExplanation, renderConfigInspection, sourceWord } from './render.js';
-import { configServiceState } from './service-state.js';
 
 export type ConfigApplicationFactory = (root: string, options: ConfigLoadOptions) => ConfigApplication;
 export interface ConfigCommandContext extends CliBaseContext {
   configApplication?: ConfigApplicationFactory;
   loadInstallationIdentity?: (root: string, options: ConfigLoadOptions) => Promise<unknown>;
   /** Read-only service describe: a restart-apply change is compared with what the running service started with. */
-  describeRuntimeService?: (root: string, options: ConfigLoadOptions) => Promise<RuntimeServiceDescriptor>;
+  describeRuntimeService?: DescribeService;
   resolveConfigPrincipal?: (root: string, scopeId: string, options: ConfigLoadOptions) => Promise<VerifiedPrincipal>;
 }
 interface Parsed { readonly args: string[]; json: boolean; global: boolean; help: boolean; language?: string; expect?: string; scope?: string; commandId?: string }

@@ -5,9 +5,8 @@ import { fileURLToPath } from 'node:url';
 import { afterEach, expect, it } from 'vitest';
 import { createConfiguredRuntimeClient, startConfiguredRuntimeService } from '../../../src/index.js';
 import { restartConfiguredRuntimeService } from '../../../src/composition/core/cli/index.js';
-import { configServiceState } from '../../../src/surfaces/core/config/index.js';
 import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
-import { RUNTIME_SERVICE_AUTOSTART_ENV, restartConfigDigest } from '#engine/index.js';
+import { RUNTIME_SERVICE_AUTOSTART_ENV, restartConfigDigest, configServiceState } from '#engine/index.js';
 import { clearConfigCache, loadConfig, productResourcePath } from '#platform/index.js';
 
 const roots: string[] = [], services: Awaited<ReturnType<typeof startConfiguredRuntimeService>>[] = [];

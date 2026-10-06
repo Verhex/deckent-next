@@ -21,14 +21,13 @@ import {
 import type { TerminalChatPlanHandler, TerminalChatStreamHandler, TerminalChatTurnHandler, TerminalMentionAttachHandler, TerminalMentionFindHandler,
   TerminalPermissionModeInspectHandler, TerminalPermissionModeSetHandler, TerminalScratchClearHandler, TerminalScratchInspectHandler } from './terminal-chat.js';
 
-import { configServiceState } from '#surfaces/core/config/index.js';
 import { renderDoctorReport, type InstallationBindingReport, type ShellRealmDoctorView } from '#surfaces/core/doctor/index.js';
 export type { InstallationBindingReport, ShellRealmDoctorView } from '#surfaces/core/doctor/index.js';
 import type { ModelCommandContext } from '#surfaces/core/cli-models/index.js';
 import type { DecisionCommandContext } from '#surfaces/core/cli-decision/index.js';
 export type { InferenceMetricsReading } from '#surfaces/core/cli-models/index.js';
 
-import type { ShutdownCommand, ServiceShutdownAdmissionResult } from '#engine/index.js';
+import { configServiceState, type ShutdownCommand, type ServiceShutdownAdmissionResult } from '#engine/index.js';
 import type { ComposerHistoryPort } from '#surfaces/core/terminal-composer/index.js';
 import type { SurfaceFollowEvent } from '#surfaces/core/terminal-kit/index.js';
 import type { TerminalSessionStoreView } from '#surfaces/core/terminal/index.js';

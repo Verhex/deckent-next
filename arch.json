@@ -2055,8 +2055,7 @@
         "src/platform/core/i18n",
         "src/domain/core/principal",
         "src/surfaces/core/cli-kit",
-        "src/surfaces/core/terminal-render",
-        "src/engine/core/runtime"
+        "src/surfaces/core/terminal-render"
       ],
       "plan": "CONFIG-SURFACE"
     },
