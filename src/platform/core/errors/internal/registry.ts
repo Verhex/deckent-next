@@ -392,6 +392,10 @@ const definitions: Readonly<Record<string, Definition>> = Object.freeze({
   ATTEMPT_STORE_READ_UNAVAILABLE: { category: 'error', render: (p, l) => ({ message: t('error.ATTEMPT_STORE_READ_UNAVAILABLE', p, l) }) },
   ATTEMPT_STORE_CORRUPT: { category: 'error', render: (p, l) => ({ message: t('error.ATTEMPT_STORE_CORRUPT', p, l) }) },
   DISPATCH_CORRUPT: { category: 'error', render: (p, l) => ({ message: t('error.DISPATCH_CORRUPT', p, l) }) },
+  DISPATCH_ARTIFACT_REQUIRED: { category: 'error', render: (p, l) => ({ message: t('error.DISPATCH_ARTIFACT_REQUIRED', p, l) }) },
+  DISPATCH_CONFLICT: { category: 'error', render: (p, l) => ({ message: t('error.DISPATCH_CONFLICT', p, l) }) },
+  DISPATCH_NOT_ADMITTED: { category: 'error', render: (p, l) => ({ message: t('error.DISPATCH_NOT_ADMITTED', p, l) }) },
+  DISPATCH_PROFILE_VALIDATION_REQUIRED: { category: 'config', render: (p, l) => ({ message: t('error.DISPATCH_PROFILE_VALIDATION_REQUIRED', p, l) }) },
 
   CONFIG_FILE_INVALID: { category: 'config', render: (p, l) => ({ message: t('error.CONFIG_FILE_INVALID', p, l), suggestion: t('remedy.CONFIG_FILE_INVALID', p, l), whatHappened: t('what.CONFIG_FILE_INVALID', p, l), why: t('why.CONFIG_FILE_INVALID', p, l), howToFix: Object.freeze(t('fix.CONFIG_FILE_INVALID', p, l).split('\n')) }) },
   UNSUPPORTED_PLATFORM: { category: 'error', render: (p, l) => ({ message: t('error.UNSUPPORTED_PLATFORM', p, l) }) },
