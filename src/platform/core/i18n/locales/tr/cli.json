@@ -1267,7 +1267,7 @@
   "cli.help.action.run.resume": "Bekletilen Run'ı sürdür",
   "cli.help.action.task.inspect": "Görev ve deneme kanıtını incele",
   "cli.help.action.task.execute": "Rezerve görev denemesini yürüt",
-  "cli.help.action.task.close-abandoned": "Konteyneri yok olduğu kanıtlanan ve yürütücüsü pasif olan başlatılmış denemeyi kapat (reconcile yetkisi)",
+  "cli.help.action.task.close-abandoned": "Terk edilmiş denemeyi kapat (konteyner yok, yürütücü pasif)",
   "cli.help.action.pool.status": "Havuz bekletme durumunu ve kapasiteyi incele",
   "cli.help.action.pool.resume": "Havuzda yeni görev rezervasyonlarını aç",
   "cli.help.action.decide.inspect": "Danışman karar günlüğünü incele",

@@ -1267,7 +1267,7 @@
   "cli.help.action.run.resume": "Resume a parked Run",
   "cli.help.action.task.inspect": "Inspect Task and Attempt evidence",
   "cli.help.action.task.execute": "Execute a reserved Task attempt",
-  "cli.help.action.task.close-abandoned": "Close a launched attempt whose container is proven absent and whose executor is inactive (reconcile authority)",
+  "cli.help.action.task.close-abandoned": "Close an abandoned attempt (container absent, executor inactive)",
   "cli.help.action.pool.status": "Inspect pool hold and capacity",
   "cli.help.action.pool.resume": "Allow new pool task reservations",
   "cli.help.action.decide.inspect": "Inspect an advisory decision journal",
