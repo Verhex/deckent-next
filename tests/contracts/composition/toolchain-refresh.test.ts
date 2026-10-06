@@ -266,4 +266,34 @@ describe('registry revision is a compare-and-set (Astra 2371 P1-2)', () => {
     expect(await inspectToolchainRefresh(f.root, f.options)).toMatchObject({ status: 'failed', reason: 'CONFIG_CONCURRENT_REVISION_HOLD' });
     expect((await readdir(join(f.root, '.deckent'), { recursive: true })).some(name => name.includes('refreshes/'))).toBe(true);
   });
+
+  const globalEdit = async (f: Awaited<ReturnType<typeof fixture>>, registry: unknown) => {
+    const app = createConfiguredConfigApplication(f.root, f.options); const principal = await resolveConfiguredConfigPrincipal(f.root, 'installation', f.options);
+    await app.set({ keyPath: 'admission.registry', value: registry, layer: 'global', principal, scopeId: 'installation', commandId: `global-${Math.random()}` });
+  };
+  it('a global edit (kind removed) between the read and the write is never shadowed: typed hold, the removed kind stays removed, the project registry is untouched', async () => {
+    const f = await fixture(); const before = await f.registry();
+    const outcome = await refreshConfiguredToolchains(f.root, 'startup', f.options, { ...f.deps, beforeRegistryWrite: async () => {
+      await globalEdit(f, { ...before, kinds: before.kinds.filter(kind => kind.kind !== 'claude-pinned') }); } }, f.observer);
+    expect(outcome.outcome).toBe('failed'); expect(outcome.event!.code).toBe('TOOLCHAIN_REGISTRY_LAYER_HOLD');
+    expect(await f.registry()).toEqual(before); // nothing written to the project layer
+    expect((await loadConfig(f.root, { ...f.options, force: true })).admission!.registry).not.toBeNull();
+    expect(await inspectToolchainRefresh(f.root, f.options)).toMatchObject({ status: 'failed', reason: 'TOOLCHAIN_REGISTRY_LAYER_HOLD' });
+  });
+  it('with a global layer already contributing a registry nothing is built or written automatically, and the hold is visible', async () => {
+    const f = await fixture(); const before = await f.registry(); await globalEdit(f, before);
+    const outcome = await refreshConfiguredToolchains(f.root, 'startup', f.options, f.deps, f.observer);
+    expect(outcome).toMatchObject({ outcome: 'failed', event: { code: 'TOOLCHAIN_REGISTRY_LAYER_HOLD' } });
+    expect(f.state.builds).toBe(0); expect(await f.registry()).toEqual(before); expect(f.events.map(event => event.phase)).toEqual(['failed']);
+    expect(await inspectToolchainRefresh(f.root, f.options)).toMatchObject({ status: 'failed', reason: 'TOOLCHAIN_REGISTRY_LAYER_HOLD' });
+    expect(await isToolchainRefreshInProgress(f.root, f.options)).toBe(false);
+  });
+  it('a project document changed by a raw write after the read (value and digest no longer from one read) is refused by the digest check', async () => {
+    const f = await fixture(); let n = 0;
+    const outcome = await refreshConfiguredToolchains(f.root, 'startup', f.options, { ...f.deps, beforeRegistryWrite: async () => {
+      const config = JSON.parse(await readFile(f.path, 'utf8')); config.admission.registry.kinds = config.admission.registry.kinds.filter((kind: { kind: string }) => kind.kind !== `x${n}`);
+      config.admission.registry.revision = `raw-${++n}`; await writeFile(f.path, JSON.stringify(config)); } }, f.observer);
+    expect(outcome.event!.code).toBe('CONFIG_CONCURRENT_REVISION_HOLD'); expect((await f.registry()).revision).toBe('raw-3');
+    expect((await f.registry()).profiles).toHaveLength(2);
+  });
 });

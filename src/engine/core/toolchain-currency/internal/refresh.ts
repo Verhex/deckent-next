@@ -50,6 +50,18 @@ export function selectWorkerLineage(packaged: WorkerLineage, built: WorkerLineag
 
 /** Bounded re-derivations when another authorized writer changed the config between the registry read and its write. */
 export const REGISTRY_WRITE_ATTEMPTS = 3;
+const registryOf = (document: unknown): unknown => (document as { admission?: { registry?: unknown } | null } | null)?.admission?.registry;
+/**
+ * The automatic registry revision writes the project layer, so it is safe only when that layer alone defines `admission.registry`: a registry
+ * that a global layer also contributes to could be changed by an authorized writer the project layer's lock never sees, and a project copy
+ * derived from the old effective value would shadow that change. Then (and when the project defines none) nothing is written: a typed hold
+ * that doctor and monitor show, with the build's proposal file kept for the operator to apply.
+ */
+export function registryLayerHold(layers: Readonly<{ global: unknown; project: unknown }>): 'TOOLCHAIN_REGISTRY_LAYER_HOLD' | 'TOOLCHAIN_REGISTRY_NOT_IN_PROJECT' | null {
+  if (registryOf(layers.global) !== undefined) return 'TOOLCHAIN_REGISTRY_LAYER_HOLD';
+  return registryOf(layers.project) === undefined ? 'TOOLCHAIN_REGISTRY_NOT_IN_PROJECT' : null;
+}
+
 const isoTime = z.string().datetime();
 const imageDigest = z.string().regex(/^sha256:[a-f0-9]{64}$/);
 /** The durable refresh marker. `expiresAt` bounds an `updating` marker (build timeout plus a grace): a crashed process never masks a refusal for good. */
