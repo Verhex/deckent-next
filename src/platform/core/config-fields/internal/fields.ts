@@ -36,6 +36,11 @@ export const CONFIG_FIELDS = Object.freeze({
     writeLockTimeoutMs: z.number().int().positive().max(2147483647).default(2000),
     identityProbe: z.object({ timeoutMs: z.number().int().positive().max(2147483647).default(2000),
       outputBytes: z.number().int().positive().safe().default(65536) }).strict().default({}),
+    // Installation binding: an operator-configured machine identity file (absolute path, e.g. a mounted secret) is preferred over the
+    // platform identity; without either the binding is weak (root, device, inode). Required machine binding refuses installation-bound writes.
+    machineIdentity: z.object({ source: z.string().min(1).max(4096).refine(value => value.startsWith('/'), 'MACHINE_IDENTITY_SOURCE_ABSOLUTE')
+      .nullable().default(null) }).strict().default({}),
+    requireMachineBinding: z.boolean().default(false),
     imageProbe: z.object({ timeoutMs: z.number().int().positive().max(2147483647).default(5000),
       outputBytes: z.number().int().positive().safe().default(65536) }).strict().default({}),
     packageMeasurement: z.object({

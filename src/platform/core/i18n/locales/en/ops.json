@@ -144,8 +144,7 @@
   "doctor.tmux_not_required_docker": "not required (docker backend)",
   "doctor.tmux_not_required_subprocess": "not required (subprocess backend)",
   "doctor.tmux_not_required_win32": "not required (Windows — tmux not supported natively)",
-  "doctor.installationBinding.supported": "Machine binding: available (installation relocation and copy detection is on)",
-  "doctor.installationBinding.unsupported": "Machine binding: not supported on this host ({platform}) - relocation and copy detection is off (no usable machine identity; on Linux a valid /etc/machine-id is required)",
+  "doctor.installationBinding.unsupported": "Installation binding: not supported on this host ({platform}) - relocation and copy detection is off",
   "doctor.secretStore": "Secret store: {backend} ({status}{codeSuffix})",
   "health.auth": "auth",
   "health.logged_in": "logged in",
@@ -420,5 +419,11 @@
   "error.TOOLCHAIN_RECIPE_INVALID": "Worker image update failed (TOOLCHAIN_RECIPE_INVALID); inspect the recipe, daemon and retained receipt before retrying. {detail}",
   "error.TOOLCHAIN_HISTORY_INVALID": "Worker image update failed (TOOLCHAIN_HISTORY_INVALID); inspect the recipe, daemon and retained receipt before retrying. {detail}",
   "error.TOOLCHAIN_RECEIPT_INVALID": "Worker image update failed (TOOLCHAIN_RECEIPT_INVALID); inspect the recipe, daemon and retained receipt before retrying. {detail}",
-  "error.TOOLCHAIN_PLAN_INVALID": "Worker image update failed (TOOLCHAIN_PLAN_INVALID); inspect the recipe, daemon and retained receipt before retrying. {detail}"
+  "error.TOOLCHAIN_PLAN_INVALID": "Worker image update failed (TOOLCHAIN_PLAN_INVALID); inspect the recipe, daemon and retained receipt before retrying. {detail}",
+  "doctor.installationBinding.machine": "Installation binding: machine ({source}) - relocation and copy detection is on",
+  "doctor.installationBinding.source.platform": "platform machine identity",
+  "doctor.installationBinding.source.configured": "configured source installation.machineIdentity.source",
+  "doctor.installationBinding.weak": "Installation binding: weak (path, device and inode; no machine identity) - moves, copies, restores and new containers are still detected; set installation.machineIdentity.source to a stable identity file for machine binding",
+  "doctor.installationBinding.sourceInvalid": "Installation binding: the configured machine identity source (installation.machineIdentity.source) is missing, unreadable or malformed - installation commands stop with INSTALLATION_IDENTITY_SOURCE_INVALID; no fallback to a weaker binding",
+  "doctor.installationBinding.required": "installation.requireMachineBinding is on and no machine identity is available: installation-bound writes are refused (INSTALLATION_IDENTITY_MACHINE_BINDING_REQUIRED)"
 }

@@ -97,7 +97,7 @@ export interface CommandContext extends InstallationCommandContext, ModelCommand
   // WORKER-AUTO-REFRESH: the worker image refresh status (updating / current / failed with a typed reason); doctor-only, local file read, null when unwired or never run.
   inspectToolchainRefresh?: (root: string, options: ConfigLoadOptions) => Promise<{ readonly status: string; readonly reason: string | null; readonly imageVersion: string | null } | null>;
   // Doctor-only, read-soft: whether the installation identity can be bound to this machine (relocation/copy detection); null when unwired or unreadable.
-  inspectInstallationBinding?: (root: string, options: ConfigLoadOptions) => Promise<{ readonly capability: 'supported' | 'unsupported' } | null>;
+  inspectInstallationBinding?: (root: string, options: ConfigLoadOptions) => Promise<InstallationBindingReport | null>;
   listSecretNames?: import('./secret.js').SecretNamesHandler;
   // SECRET-WRITE: `secret set|delete` through the runtime service (the socket peer is the principal; the `secret` policy cell decides).
   setSecret?: import('./secret.js').SecretSetHandler;
@@ -133,6 +133,10 @@ function imageRefreshText(view: { readonly status: string; readonly reason: stri
   const params = { reason: view.reason ?? '-', version: view.imageVersion ?? '-' };
   return view.status === 'updating' ? t('doctor.imageRefresh.updating', params, locale) : view.status === 'failed' ? t('doctor.imageRefresh.failed', params, locale) : t('doctor.imageRefresh.current', params, locale);
 }
+/** Doctor's installation binding view: strength and source kind only, never a machine value, digest or configured path. */ export interface InstallationBindingReport { readonly capability: 'supported' | 'unsupported' | 'source-invalid'; readonly strength?: 'machine' | 'weak' | null; readonly source?: string | null; readonly required?: boolean }
+const installationBindingLines = (r: InstallationBindingReport, platform: string, locale: Locale): string[] => [r.capability === 'source-invalid' ? t('doctor.installationBinding.sourceInvalid', {}, locale)
+  : r.capability === 'unsupported' ? t('doctor.installationBinding.unsupported', { platform }, locale) : r.strength === 'weak' ? t('doctor.installationBinding.weak', {}, locale)
+    : t('doctor.installationBinding.machine', { source: r.source === 'configured' ? t('doctor.installationBinding.source.configured', {}, locale) : t('doctor.installationBinding.source.platform', {}, locale) }, locale), ...(r.required && r.strength !== 'machine' ? [t('doctor.installationBinding.required', {}, locale)] : [])];
 function shellRealmLines(report: ShellRealmDoctorView): string[] {
   const lines = (view: ShellRealmSelection, label: string) => [`${view.marker ?? (view.selected === 'host' ? 'sandbox: host' : `sandbox: refused (${view.code ?? '-'})`)} [${label}]`,
     ...(view.notice ? [view.notice] : view.rejected.length ? [view.rejected.map(item => `${item.kind}: ${item.reason}`).join('; ')] : [])];
@@ -215,8 +219,7 @@ export async function runKernelCommand(argv: readonly string[], context: Command
   ...(result.secretStore ? [t('doctor.secretStore', { backend: result.secretStore.backend, status: result.secretStore.status,
     codeSuffix: result.secretStore.code ? `, ${result.secretStore.code}` : '' }, locale)] : []),
   ...(result.imageRefresh && result.imageRefresh.status !== 'unknown' ? [t('doctor.imageRefresh', { status: imageRefreshText(result.imageRefresh, locale) }, locale)] : []),
-  ...(result.installationBinding ? [result.installationBinding.capability === 'supported' ? t('doctor.installationBinding.supported', {}, locale)
-    : t('doctor.installationBinding.unsupported', { platform: result.platform }, locale)] : []),
+  ...(result.installationBinding ? installationBindingLines(result.installationBinding, result.platform, locale) : []),
   ...(result.poolReadiness ? poolReadinessLines(result.poolReadiness, locale) : []),
   ...(result.shellRealm ? shellRealmLines(result.shellRealm) : [])].join('\n'));
   // modelInvocationDelivery is JSON-only for now, like policyTemplate: no human-text rendering yet.

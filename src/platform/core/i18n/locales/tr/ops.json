@@ -144,8 +144,7 @@
   "doctor.tmux_not_required_docker": "gerekli değil (docker backend)",
   "doctor.tmux_not_required_subprocess": "gerekli değil (subprocess backend)",
   "doctor.tmux_not_required_win32": "gerekli değil (Windows — tmux yerel olarak desteklenmiyor)",
-  "doctor.installationBinding.supported": "Makine bağı: kullanılabilir (kurulum taşınma ve kopya tespiti açık)",
-  "doctor.installationBinding.unsupported": "Makine bağı: bu ortamda desteklenmiyor ({platform}) - taşınma ve kopya tespiti kapalı (kullanılabilir makine kimliği yok; Linux'ta geçerli bir /etc/machine-id gerekir)",
+  "doctor.installationBinding.unsupported": "Kurulum bağı: bu ortamda desteklenmiyor ({platform}) - taşınma ve kopya tespiti kapalı",
   "doctor.secretStore": "Secret deposu: {backend} ({status}{codeSuffix})",
   "health.auth": "kimlik doğrulama",
   "health.logged_in": "oturum açık",
@@ -420,5 +419,11 @@
   "error.TOOLCHAIN_RECIPE_INVALID": "Worker imaj güncellemesi başarısız (TOOLCHAIN_RECIPE_INVALID); tekrar denemeden önce recipe, daemon ve saklanan receipt kanıtını inceleyin. {detail}",
   "error.TOOLCHAIN_HISTORY_INVALID": "Worker imaj güncellemesi başarısız (TOOLCHAIN_HISTORY_INVALID); tekrar denemeden önce recipe, daemon ve saklanan receipt kanıtını inceleyin. {detail}",
   "error.TOOLCHAIN_RECEIPT_INVALID": "Worker imaj güncellemesi başarısız (TOOLCHAIN_RECEIPT_INVALID); tekrar denemeden önce recipe, daemon ve saklanan receipt kanıtını inceleyin. {detail}",
-  "error.TOOLCHAIN_PLAN_INVALID": "Worker imaj güncellemesi başarısız (TOOLCHAIN_PLAN_INVALID); tekrar denemeden önce recipe, daemon ve saklanan receipt kanıtını inceleyin. {detail}"
+  "error.TOOLCHAIN_PLAN_INVALID": "Worker imaj güncellemesi başarısız (TOOLCHAIN_PLAN_INVALID); tekrar denemeden önce recipe, daemon ve saklanan receipt kanıtını inceleyin. {detail}",
+  "doctor.installationBinding.machine": "Kurulum bağı: makine ({source}) - taşınma ve kopya tespiti açık",
+  "doctor.installationBinding.source.platform": "platform makine kimliği",
+  "doctor.installationBinding.source.configured": "yapılandırılmış kaynak installation.machineIdentity.source",
+  "doctor.installationBinding.weak": "Kurulum bağı: zayıf (yol, cihaz ve inode; makine kimliği yok) - taşıma, kopya, geri yükleme ve yeni konteyner yine tespit edilir; makine bağı için installation.machineIdentity.source alanını kalıcı bir kimlik dosyasına ayarlayın",
+  "doctor.installationBinding.sourceInvalid": "Kurulum bağı: yapılandırılmış makine kimliği kaynağı (installation.machineIdentity.source) yok, okunamıyor veya biçimi geçersiz - kurulum komutları INSTALLATION_IDENTITY_SOURCE_INVALID ile durur; daha zayıf bağa düşülmez",
+  "doctor.installationBinding.required": "installation.requireMachineBinding açık ve makine kimliği yok: kuruluma bağlı yazmalar reddedilir (INSTALLATION_IDENTITY_MACHINE_BINDING_REQUIRED)"
 }

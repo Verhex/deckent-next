@@ -1,5 +1,7 @@
 export { InstallationIdentityError } from './internal/installation-identity.js';
-export type { InstallationIdentityStore, InstallationIdentityErrorCode, InstallationBindingSource, InstallationBindingCapability, InstallationIdentityRead } from './internal/installation-identity.js';
+export { assessInstallationBinding } from './internal/installation-identity.js';
+export type { InstallationIdentityStore, InstallationIdentityErrorCode, InstallationBindingSource, InstallationBindingCapability, InstallationIdentityRead,
+  InstallationBindingObservation, InstallationBindingAssessment } from './internal/installation-identity.js';
 export { installationProfilePayloadSchema, installationProfileSchema, encodeInstallationProfilePayload,
   hashInstallationProfilePayload, snapshotInstallationProfile } from './internal/profile.js';
 export { ProjectIdentityError } from './internal/project-identity.js';

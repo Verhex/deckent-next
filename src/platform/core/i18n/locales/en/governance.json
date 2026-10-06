@@ -737,5 +737,7 @@
   "error.LAYOUT_ROOT_INVALID": "The project root or data root is not an absolute path without control characters; set layout.root (or the project or data path) to an absolute path.",
   "error.LAYOUT_RESOURCE_INVALID": "A layout resource path is invalid: it must be a relative path of plain segments (no \"..\", backslash, colon, wildcard or reserved device name), cannot override a fixed resource and cannot collide with another resource; fix layout.resources.",
   "error.LAYOUT_RESOURCE_UNKNOWN": "layout.resources names a resource this version does not define; remove it or correct the resource name.",
-  "error.LAYOUT_PATH_UNEXPRESSIBLE": "The project root, data root or configuration path contains * or ?, which the workspace deny rules cannot name literally, so the product state under it could not be protected; rename the directory."
+  "error.LAYOUT_PATH_UNEXPRESSIBLE": "The project root, data root or configuration path contains * or ?, which the workspace deny rules cannot name literally, so the product state under it could not be protected; rename the directory.",
+  "error.INSTALLATION_IDENTITY_SOURCE_INVALID": "The configured machine identity source (installation.machineIdentity.source) is missing, unreadable or malformed. No identity was read, created or changed, and no weaker binding was used. Point it at a readable regular file holding a stable identity token (16-256 characters: letters, digits, '.', '_', ':', '-').",
+  "error.INSTALLATION_IDENTITY_MACHINE_BINDING_REQUIRED": "installation.requireMachineBinding is on, but this host has no machine identity (only a weak path binding is possible). Installation-bound writes are refused. Configure installation.machineIdentity.source or provide a platform machine identity; reads are unaffected."
 }
