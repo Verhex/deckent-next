@@ -115,6 +115,8 @@ Worker run-blocked-approval/build · attempt c76f549a-attempt
 Doing now: editing · src/app.ts — apply patch
 Heartbeat 1 s · process running · pid 4242 · handle
 ctr-build
+    worker claude/model-alpha-2 · started 09:10:00Z ·
+running for 20 min
     attempt c76f549a gen 1 · launch launched · 09:10:00Z →
 still running (20 min) · exit — · claude/model-alpha-2
     now editing · heartbeat 1 s

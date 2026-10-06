@@ -5,8 +5,9 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { FileInstallationIdentityStore } from '#adapters/core/installation-files/index.js';
 import { installationIdentitySchema, installationIdentityRecordSchema } from '#domain/index.js';
 import { resolveProductLayout, withConfigWriteLock } from '#platform/index.js';
-import { machineBindingNotRunReason } from '../support/binding-capability.js';
-const bindingNotRun = await machineBindingNotRunReason();
+import { installationBindingNotRunReason, machineBindingNotRunReason } from '../support/binding-capability.js';
+// Location evidence (root, device, inode) is bound on every posix host; only machine-digest assertions need a machine identity.
+const bindingNotRun = await installationBindingNotRunReason(), machineNotRun = await machineBindingNotRunReason();
 
 const roots: string[] = [];
 afterEach(async () => { await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
@@ -85,10 +86,13 @@ describe('durable installation identity', () => {
     expect((await new FileInstallationIdentityStore(fresh.layout).loadOrCreate()).installationId).not.toBe(original.installationId);
   });
 
-  it('detects a changed machine binding and refuses implicit or repeated choices', async () => {
+  it('detects a changed machine binding and refuses implicit or repeated choices', async context => {
+    if (machineNotRun) context.skip(machineNotRun);
     const f = await fixture(), original = await new FileInstallationIdentityStore(f.layout).loadOrCreate();
     const before = await readFile(f.path, 'utf8'), binding = JSON.parse(before).binding;
-    const source = { capture: async () => ({ ...binding, machineDigest: 'a'.repeat(64) }) };
+    // Persisted in the v1 shape; the injected source returns a current (v2) capture at the same location.
+    const location = { canonicalRoot: binding.canonicalRoot, device: binding.device, inode: binding.inode };
+    const source = { capture: async () => ({ ...location, schemaVersion: 2 as const, strength: 'machine' as const, source: 'platform' as const, machineDigest: 'a'.repeat(64) }) };
     const store = new FileInstallationIdentityStore(f.layout, undefined, source);
     await expect(store.loadOrCreate()).rejects.toMatchObject({ code: 'INSTALLATION_IDENTITY_RELOCATED' });
     expect(await readFile(f.path, 'utf8')).toBe(before);
@@ -110,7 +114,8 @@ describe('durable installation identity', () => {
     expect((await store.resolveRelocation('keep', { issuer: 'h', subject: '1' })).installationId).toBe(original.installationId);
     expect(await store.loadOrCreate()).toEqual(original);
   });
-  it('requires explicit consent to bind a legacy v1 identity', async () => {
+  it('requires explicit consent to bind a legacy v1 identity on a machine-capable host', async context => {
+    if (machineNotRun) context.skip(machineNotRun);
     const f = await fixture(), store = new FileInstallationIdentityStore(f.layout), original = await store.loadOrCreate();
     await writeFile(f.path, JSON.stringify(original)); const bytes = await readFile(f.path, 'utf8');
     await expect(store.loadOrCreate()).rejects.toMatchObject({ code: 'INSTALLATION_IDENTITY_RELOCATED' });
@@ -178,7 +183,7 @@ it.skipIf(process.platform === 'win32')('reports unsupported binding capability 
   await expect(store.read()).rejects.toMatchObject({ code: 'INSTALLATION_IDENTITY_INVALID' });
 });
 
-it.skipIf(process.platform !== 'linux' || bindingNotRun !== null)('[requires machine binding capability] skips only the unsupported comparison and resumes relocation enforcement when capability returns', async () => {
+it.skipIf(process.platform !== 'linux' || machineNotRun !== null)('[requires machine binding capability] skips only the unsupported comparison and resumes relocation enforcement when capability returns', async () => {
   const f = await fixture(), original = new FileInstallationIdentityStore(f.layout), identity = await original.loadOrCreate();
   const bytes = await readFile(f.path, 'utf8');
   const store = new FileInstallationIdentityStore(f.layout, undefined, { capture: async () => ({ status: 'unsupported' }) });

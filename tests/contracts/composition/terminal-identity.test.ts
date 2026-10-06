@@ -11,8 +11,8 @@ import { main } from '#surfaces/index.js';
 import { until } from '../support/workline-harness.js';
 import { followLedgerSurface } from '#composition/core/monitor/index.js';
 import { openConfiguredAttemptStore } from '#composition/core/storage/index.js';
-import { machineBindingNotRunReason } from '../support/binding-capability.js';
-const bindingNotRun = await machineBindingNotRunReason();
+import { installationBindingNotRunReason } from '../support/binding-capability.js';
+const bindingNotRun = await installationBindingNotRunReason();
 
 const roots: string[] = [];
 afterEach(async () => { vi.restoreAllMocks(); vi.unstubAllEnvs(); clearConfigCache(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });

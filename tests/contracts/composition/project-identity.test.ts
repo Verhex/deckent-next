@@ -9,8 +9,8 @@ import { loadConfiguredInstallationIdentity, loadConfiguredProjectIdentity, load
 import { loadPeerInvocationContext } from '#composition/core/model-invocation/index.js';
 import { main } from '#surfaces/index.js';
 import { main as composedMain } from '#composition/core/cli/index.js';
-import { machineBindingNotRunReason } from '../support/binding-capability.js';
-const bindingNotRun = await machineBindingNotRunReason();
+import { installationBindingNotRunReason } from '../support/binding-capability.js';
+const bindingNotRun = await installationBindingNotRunReason();
 
 const roots: string[] = [];
 afterEach(async () => { vi.restoreAllMocks(); vi.unstubAllEnvs(); clearConfigCache(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });

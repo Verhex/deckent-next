@@ -1,16 +1,33 @@
 import { localInstallationBindingSource } from '#adapters/index.js';
 import { resolveProductLayout } from '#platform/index.js';
 
-/**
- * Typed not-run reason when this host cannot bind an installation identity to the machine (container without a valid /etc/machine-id,
- * unsupported platform), else null. Asks the product's own binding source; no machine-id parsing is copied into tests. The product's
- * behavior without the capability (unbound v1 identity, relocation comparison skipped, typed INSTALLATION_IDENTITY_UNSUPPORTED) has its
- * own active tests that inject an unsupported source, so nothing in the unsupported path goes unasserted.
- */
-export async function machineBindingNotRunReason(): Promise<string | null> {
-  if (process.platform === 'win32') return 'INSTALLATION_BINDING_UNSUPPORTED: win32 has no machine binding';
+/** The binding this host reaches by the product's own capture (no machine-id parsing is copied into tests). */
+export async function hostBindingStrength(): Promise<'machine' | 'weak' | 'unsupported' | 'probe-failed'> {
+  if (process.platform === 'win32') return 'unsupported';
   try {
     const binding = await localInstallationBindingSource({ ...resolveProductLayout({ projectRoot: process.cwd() }), root: process.cwd() }).capture();
-    return 'status' in binding ? 'INSTALLATION_BINDING_UNSUPPORTED: no usable machine identity on this host (Linux: valid /etc/machine-id); relocation and copy detection is off and has separate typed tests' : null;
-  } catch { return 'INSTALLATION_BINDING_UNSUPPORTED: machine binding could not be probed'; }
+    return 'status' in binding ? 'unsupported' : binding.strength;
+  } catch { return 'probe-failed'; }
+}
+
+/**
+ * Typed not-run reason when this host cannot bind an installation identity at all (win32, or a posix root without a usable inode),
+ * else null. Binding v2 reaches at least a weak root/device/inode binding on posix, so move, copy and restore detection runs on hosts
+ * without a machine identity too (containers, the verify image).
+ */
+export async function installationBindingNotRunReason(): Promise<string | null> {
+  const binding = await hostBindingStrength();
+  if (binding === 'unsupported') return `INSTALLATION_BINDING_UNSUPPORTED: no installation binding on ${process.platform}`;
+  return binding === 'probe-failed' ? 'INSTALLATION_BINDING_UNSUPPORTED: installation binding could not be probed' : null;
+}
+
+/**
+ * Typed not-run reason when this host has no machine-strength binding (no valid platform machine identity), else null. Only tests that
+ * assert machine-digest behavior use it; the weak path has its own active tests on every posix host.
+ */
+export async function machineBindingNotRunReason(): Promise<string | null> {
+  const binding = await hostBindingStrength();
+  if (binding === 'machine') return null;
+  return binding === 'weak' ? 'INSTALLATION_MACHINE_BINDING_UNAVAILABLE: no machine identity on this host (Linux: valid /etc/machine-id); the weak binding path runs instead'
+    : installationBindingNotRunReason();
 }

@@ -1,11 +1,13 @@
 import { mkdtemp, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { prepareNativeCodingProfile } from '../../../src/index.js';
 import { applyPolicyTemplateInstallation } from '#composition/core/installation/index.js';
 import { inspectToolchainRefresh, isToolchainRefreshInProgress, readToolchainRefreshState, refreshConfiguredToolchains, startToolchainRefresh,
   type ToolchainRefreshEvent } from '#composition/core/toolchains/index.js';
+import { createConfiguredConfigApplication, resolveConfiguredConfigPrincipal } from '#composition/core/config/index.js';
 import { openSqliteLedger } from '#adapters/core/sqlite-ledger/index.js';
 import { clearConfigCache, getConfigFieldDefault, loadConfig, prepareProductFile, resolveProductLayout } from '#platform/index.js';
 import type { WorkerImageBuildRunner } from '#adapters/index.js';
@@ -17,6 +19,9 @@ const bounds = { imageId: 'sha256:' + 'a'.repeat(64), memoryBytes: 268435456, pi
 const nativeProfile = (id: string, provider: 'codex' | 'claude', cliVersion: string) => structuredClone(prepareNativeCodingProfile({ schemaVersion: 1,
   template: { id, version: 1, adapter: { id: 'docker', version: 2 }, parameters: { ...bounds, argv: ['unused'] } },
   invocation: { schemaVersion: 2, provider, cliVersion, discovery: { schemaVersion: 1, mode: provider === 'claude' ? 'disabled' : 'repository' }, permissionMode: 'unattended', model: 'fixture-model', prompt: 'fixture task' } }).profile);
+/** The shipped history owner, so the fake daemon refuses exactly what the real builder refuses (counter guard, history chain). */
+const historyOwner = async () => await import(pathToFileURL(join(process.cwd(), 'assets/worker-image/history.mjs')).href) as {
+  assertVersionAdvances(version: string, tags: string[]): void; parseVersionHistory(dockerfile: string, recipe: unknown): unknown[] };
 const ok = (requestId: string) => ({ schemaVersion: 1 as const, requestId, started: true, reason: 'exit' as const, exitCode: 0, signal: null, stdoutBase64: '', stderrBase64: '', stdoutTruncated: false, stderrTruncated: false, durationMs: 1 });
 
 /** A real policy/ledger installation (config writes are governed), a stale codex pin, and a fake builder; Docker is never reached. */
@@ -34,16 +39,24 @@ async function fixture(update: Record<string, unknown> = {}) {
       kinds: profiles.map(profile => ({ kind: profile.id, profile: { id: profile.id, version: profile.version } })), evaluators: [{ id: 'process-exit', version: 1, implementation: { id: 'process-exit', version: 1 } }] } } }));
   const latest: Record<string, string> = { '@openai/codex': '0.156.0', '@anthropic-ai/claude-code': '2.1.278' };
   const fetcher = async (request: { package: string }) => ({ version: latest[request.package]!, source: `fixture/${request.package}`, observedAt: new Date().toISOString() });
-  const state = { builds: 0, failFirst: 0, gate: null as Promise<void> | null };
+  const state = { builds: 0, failFirst: 0, gate: null as Promise<void> | null, tags: ['r4-20260930'], checks: [] as string[] };
   const runner: WorkerImageBuildRunner = async (command, signal) => {
-    if (command.args[1] === '--check-version') return ok(command.requestId);
+    if (command.args[1] === '--check-version') {
+      state.checks.push(command.args[2]!);
+      try { (await historyOwner()).assertVersionAdvances(command.args[2]!, state.tags); } catch (error) {
+        return { ...ok(command.requestId), exitCode: 1, stderrBase64: Buffer.from(`Error: ${(error as Error).message}`).toString('base64') };
+      }
+      return ok(command.requestId);
+    }
     state.builds++;
     if (state.gate) await Promise.race([state.gate, new Promise<void>(resolve => signal?.addEventListener('abort', () => resolve(), { once: true }))]);
     if (signal?.aborted) return { ...ok(command.requestId), reason: 'cancelled' as const, exitCode: null, started: true };
     if (state.failFirst > 0) { state.failFirst--; return { ...ok(command.requestId), exitCode: 1, stderrBase64: Buffer.from('Error: WORKER_IMAGE_BUILD_FAILED fixture').toString('base64') }; }
     const recipe = JSON.parse(await readFile(join(command.cwd, 'recipe.json'), 'utf8')) as { imageVersion: string; repository: string };
-    await writeFile(command.args[1]!, JSON.stringify({ schemaVersion: 2, imageId: 'sha256:' + 'b'.repeat(64), imageVersion: recipe.imageVersion, tag: `${recipe.repository}:${recipe.imageVersion}`,
-      manifest: { providers: [{ id: 'codex', version: 'codex-cli 0.156.0' }, { id: 'claude', version: '2.1.278 (Claude Code)' }, { id: 'cursor', version: '2026.09.18-9a7762b' }] } }));
+    (await historyOwner()).parseVersionHistory(await readFile(join(command.cwd, 'Dockerfile'), 'utf8'), recipe); // the context's own history chain must validate
+    state.tags.push(recipe.imageVersion);
+    await writeFile(command.args[1]!, JSON.stringify({ schemaVersion: 2, imageId: 'sha256:' + (state.builds % 2 ? 'b' : 'c').repeat(64), imageVersion: recipe.imageVersion, tag: `${recipe.repository}:${recipe.imageVersion}`,
+      manifest: { providers: [{ id: 'codex', version: `codex-cli ${latest['@openai/codex']}` }, { id: 'claude', version: '2.1.278 (Claude Code)' }, { id: 'cursor', version: '2026.09.18-9a7762b' }] } }));
     return ok(command.requestId);
   };
   const events: ToolchainRefreshEvent[] = [];
@@ -194,5 +207,93 @@ describe('autonomous worker image refresh (WORKER-AUTO-REFRESH)', () => {
     expect((await refreshConfiguredToolchains(f.root, 'interval', f.options, f.deps, f.observer)).outcome).toBe('current'); // success: its context is not a failed one and stays
     const after = await builds(); expect(after.filter(name => name.includes('.failed-')).map(name => Number(name.split('failed-')[1]))).toEqual(stamps);
     expect(after).toHaveLength(keep + 1);
+  });
+
+});
+
+describe('version lineage across refreshes (Astra 2371 P1-1)', () => {
+  it('P1-1: two consecutive genuinely new CLI releases on different days each build the next counter (r5, then r6), and a daemon holding a higher counter is still refused', async () => {
+    const f = await fixture(); const day = (d: string) => () => `2026-10-${d}T08:00:00.000Z`;
+    expect((await refreshConfiguredToolchains(f.root, 'startup', f.options, { ...f.deps, now: day('06') }, f.observer)).outcome).toBe('current');
+    expect(f.state.tags).toEqual(['r4-20260930', 'r5-20261006']);
+    f.latest['@openai/codex'] = '0.157.0'; // a new release, next day: the packaged r4 recipe alone would plan r5-20261007 and be refused
+    expect((await refreshConfiguredToolchains(f.root, 'interval', f.options, { ...f.deps, now: day('07') }, f.observer)).outcome).toBe('current');
+    expect(f.state.tags).toEqual(['r4-20260930', 'r5-20261006', 'r6-20261007']);
+    f.latest['@openai/codex'] = '0.158.0';
+    expect((await refreshConfiguredToolchains(f.root, 'interval', f.options, { ...f.deps, now: day('09') }, f.observer)).outcome).toBe('current');
+    expect(f.state.tags.at(-1)).toBe('r7-20261009');
+    const registry = await f.registry();
+    expect(registry.profiles.filter(profile => profile.id === 'codex-pinned').map(profile => profile.version)).toEqual([1, 2, 3, 4]);
+    expect(registry.profiles.find(profile => profile.id === 'codex-pinned' && profile.version === 4)!.parameters.nativeSubscription.preflight.cliVersion).toBe('codex-cli 0.158.0');
+    // Negative: the daemon already holds a higher counter than this installation built; the guard stays and the refresh fails typed.
+    f.state.tags.push('r12-20261010'); f.latest['@openai/codex'] = '0.159.0';
+    const refused = await refreshConfiguredToolchains(f.root, 'interval', f.options, { ...f.deps, now: day('11') }, f.observer);
+    expect(refused.outcome).toBe('failed'); expect(refused.event!.code).toBe('WORKER_VERSION_COUNTER_TAKEN');
+    expect(f.state.builds).toBe(3);
+  });
+
+  it('P1-1 control: without the persisted lineage the packaged recipe would be refused (the fake preflight really checks)', async () => {
+    const f = await fixture(); f.state.tags.push('r5-20261006'); // an r5 already exists on the daemon
+    const outcome = await refreshConfiguredToolchains(f.root, 'startup', f.options, { ...f.deps, now: () => '2026-10-07T08:00:00.000Z' }, f.observer);
+    expect(outcome.outcome).toBe('failed'); expect(outcome.event!.code).toBe('WORKER_VERSION_COUNTER_TAKEN'); expect(f.state.builds).toBe(0);
+  });
+
+});
+
+describe('registry revision is a compare-and-set (Astra 2371 P1-2)', () => {
+  /** Another authorized writer (an operator's config set) adds a task kind to the registry: the hook runs after refresh derived its value. */
+  const operatorEdit = (f: Awaited<ReturnType<typeof fixture>>, kind: string) => async () => {
+    const app = createConfiguredConfigApplication(f.root, f.options); const current = (await app.inspect({ keyPath: 'admission.registry' })).fields[0]!.value as { kinds: { kind: string; profile: unknown }[] };
+    const principal = await resolveConfiguredConfigPrincipal(f.root, 'installation', f.options);
+    await app.set({ keyPath: 'admission.registry', value: { ...current, kinds: [...current.kinds, { kind, profile: { id: 'claude-pinned', version: 1 } }] }, layer: 'project', principal, scopeId: 'installation', commandId: `operator-${kind}` });
+  };
+  it('P1-2: an authorized registry change that lands between the refresh read and its write is kept; the refresh re-derives from it', async () => {
+    const f = await fixture(); const edit = operatorEdit(f, 'operator-kind');
+    const outcome = await refreshConfiguredToolchains(f.root, 'startup', f.options, { ...f.deps, beforeRegistryWrite: async attempt => { if (attempt === 1) await edit(); } }, f.observer);
+    expect(outcome.outcome).toBe('current');
+    const registry = await f.registry();
+    expect(registry.kinds.map(kind => kind.kind)).toContain('operator-kind'); // the operator's edit survives
+    expect(registry.kinds.find(kind => kind.kind === 'codex-pinned')!.profile.version).toBe(2); // and the refresh still applied
+    expect((await readToolchainRefreshState(f.root, f.options))).toMatchObject({ phase: 'current', appliedProfiles: 1 });
+  });
+  it('P1-2: a registry that keeps changing is never overwritten: typed hold after the bounded retries, nothing of the refresh written, audit kept', async () => {
+    const f = await fixture(); let n = 0;
+    const outcome = await refreshConfiguredToolchains(f.root, 'startup', f.options, { ...f.deps, beforeRegistryWrite: async () => { await operatorEdit(f, `operator-${++n}`)(); } }, f.observer);
+    expect(outcome.outcome).toBe('failed'); expect(outcome.event!.code).toBe('CONFIG_CONCURRENT_REVISION_HOLD'); expect(n).toBe(3);
+    const registry = await f.registry();
+    expect(registry.kinds.map(kind => kind.kind)).toEqual(expect.arrayContaining(['operator-1', 'operator-2', 'operator-3']));
+    expect(registry.profiles.filter(profile => profile.id === 'codex-pinned')).toHaveLength(1); // no refreshed version was written
+    expect(await inspectToolchainRefresh(f.root, f.options)).toMatchObject({ status: 'failed', reason: 'CONFIG_CONCURRENT_REVISION_HOLD' });
+    expect((await readdir(join(f.root, '.deckent'), { recursive: true })).some(name => name.includes('refreshes/'))).toBe(true);
+  });
+
+  const globalEdit = async (f: Awaited<ReturnType<typeof fixture>>, registry: unknown) => {
+    const app = createConfiguredConfigApplication(f.root, f.options); const principal = await resolveConfiguredConfigPrincipal(f.root, 'installation', f.options);
+    await app.set({ keyPath: 'admission.registry', value: registry, layer: 'global', principal, scopeId: 'installation', commandId: `global-${Math.random()}` });
+  };
+  it('a global edit (kind removed) between the read and the write is never shadowed: typed hold, the removed kind stays removed, the project registry is untouched', async () => {
+    const f = await fixture(); const before = await f.registry();
+    const outcome = await refreshConfiguredToolchains(f.root, 'startup', f.options, { ...f.deps, beforeRegistryWrite: async () => {
+      await globalEdit(f, { ...before, kinds: before.kinds.filter(kind => kind.kind !== 'claude-pinned') }); } }, f.observer);
+    expect(outcome.outcome).toBe('failed'); expect(outcome.event!.code).toBe('TOOLCHAIN_REGISTRY_LAYER_HOLD');
+    expect(await f.registry()).toEqual(before); // nothing written to the project layer
+    expect((await loadConfig(f.root, { ...f.options, force: true })).admission!.registry).not.toBeNull();
+    expect(await inspectToolchainRefresh(f.root, f.options)).toMatchObject({ status: 'failed', reason: 'TOOLCHAIN_REGISTRY_LAYER_HOLD' });
+  });
+  it('with a global layer already contributing a registry nothing is built or written automatically, and the hold is visible', async () => {
+    const f = await fixture(); const before = await f.registry(); await globalEdit(f, before);
+    const outcome = await refreshConfiguredToolchains(f.root, 'startup', f.options, f.deps, f.observer);
+    expect(outcome).toMatchObject({ outcome: 'failed', event: { code: 'TOOLCHAIN_REGISTRY_LAYER_HOLD' } });
+    expect(f.state.builds).toBe(0); expect(await f.registry()).toEqual(before); expect(f.events.map(event => event.phase)).toEqual(['failed']);
+    expect(await inspectToolchainRefresh(f.root, f.options)).toMatchObject({ status: 'failed', reason: 'TOOLCHAIN_REGISTRY_LAYER_HOLD' });
+    expect(await isToolchainRefreshInProgress(f.root, f.options)).toBe(false);
+  });
+  it('a project document changed by a raw write after the read (value and digest no longer from one read) is refused by the digest check', async () => {
+    const f = await fixture(); let n = 0;
+    const outcome = await refreshConfiguredToolchains(f.root, 'startup', f.options, { ...f.deps, beforeRegistryWrite: async () => {
+      const config = JSON.parse(await readFile(f.path, 'utf8')); config.admission.registry.kinds = config.admission.registry.kinds.filter((kind: { kind: string }) => kind.kind !== `x${n}`);
+      config.admission.registry.revision = `raw-${++n}`; await writeFile(f.path, JSON.stringify(config)); } }, f.observer);
+    expect(outcome.event!.code).toBe('CONFIG_CONCURRENT_REVISION_HOLD'); expect((await f.registry()).revision).toBe('raw-3');
+    expect((await f.registry()).profiles).toHaveLength(2);
   });
 });

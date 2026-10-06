@@ -92,3 +92,23 @@ PLAN "Aktif iş alanları" satırının önceki hâli:
 ### PLAN.md QWEN–JEV satırı — iptal öncesi (2026-10-06)
 
 | QWEN–JEV gölge | Idle-only base-Qwen ile Jev karşılaştırması | 12 vaka kaydı (10–11 geçersiz giriş; 03–09 Qwen GPU meşgul → unknown/busy) | Kalan 18 vaka; temiz 384/48/48 baş eğitimi | [qwen-host-pilot](.deckent/docs/plan/qwen-host-pilot.md) |
+
+### İlk 20 — Dalga 2 durum geçmişi (2026-10-06)
+
+PLAN "Şimdi" satırının önceki hâli:
+
+- **İlk 20 iş (owner 2026-10-06 kabul, K1–K8):** 4 dalga × 4–5 lane; analiz `proof/WORKLIST-TOP20-2026-10-06/analysis.md`, kararlar [owner-decisions](.deckent/docs/decisions/owner-decisions.md) "İlk 20 iş kararları". **Dalga 1** `wave/1` dalında: WORKER-AUTO-REFRESH, ARCH-GUARDS, K-LATENCY-METRICS, MCP-KAYIT-DENETİMİ + SANDBOX-AD-SIZINTISI, VERIFY-ENV (machine-id yeteneği + doctor görünürlüğü); tek Astra parti incelemesi → PR → alpha.7. Dalga 2: DOGFOOD-D5, RUN-YAŞAM, MODEL-INGRESS-P2, KATALOG-TEMİZLİK, MONITOR-M2M3.
+
+PLAN satırlarının önceki hâli:
+
+| IDENTITY-BINDING-V2 | Makine kimliği yokken taşınma koruması: yapılandırılabilir kaynak → /etc/machine-id → zayıf yol+cihaz+inode bağı; `installation.requireMachineBinding` (owner 2026-10-06) | Karar verildi | Dalga 2 Opus kartı (sürümlü bağ + v1 göçü) | [owner-decisions](.deckent/docs/decisions/owner-decisions.md) |
+| MODEL-INGRESS-UNICODE | Gizli Unicode: not/audit/karantina | P1 main'de; P2 `de286888` rebase | P2 inceleme; P3 araç/MCP şema + argüman JSON | [work-list](.deckent/docs/plan/work-list.md) |
+| MONITOR | İnsan okur canlı izleme yüzeyi (v1+v1.1 indi) | Kalan: push akışı | M2/M3 worker başlangıç/bitiş (MONITOR-HUMAN) | [work-list](.deckent/docs/plan/work-list.md) |
+
+- RUN-YAŞAM (#8): `launch-refused {code}` ve `abandoned` attempt gözlemleri, `recordAttemptClosure`, `deckent task close-abandoned` (reconcile yetkisi); ledger 47 değişmedi. Kod `lane/w2-run-life` (`e2dfd807`, `fe42dfa7`, `b6bf8111`). Açık: MCP `close_abandoned_attempt`; mühürlü audit kaydı; terk dispatch kaydı/workspace serbest bırakma (#13 EXEC-RELEASE).
+- MODEL-INGRESS-P2: alan çerçeveleme + gizli Unicode işaretleme, onay kartı + terminal EN/TR (`363fd061`, `9dd85f7b`); landing sonrası COMPLETED-PLAN; kalan P3 (araç/MCP şema açıklaması ve argüman JSON).
+- KATALOG-TEMİZLİK (`0ba5c2e7`) + DISPATCH-KATALOG (`4987ca07`): LAYOUT_* insan metni, 83 kullanılmayan kod silindi, 4 DispatchError kodu registry'de; açık: `LayoutError` insan metni (config dışı), I18N-ORPHANS ayrı kart.
+- MONITOR-M2M3 (`f633d275`): worker anlatısı, tipli teslim sütunu, düşen test listesi; açık: PATCH_LIMIT sebebinin kalıcı kaydı (patch-prepare reddi için tipli makbuz, ledger sürümü + göç).
+- IDENTITY-BINDING-V2 (`9433ecbb`..`d775ea2f`): kurulum bağı v2; owner-decisions'ta rollback notu. VERIFY-ENV: verify imajında taşınma/kopya testleri zayıf bağ yoluyla koşar.
+- CLI-SPLIT (`09c9e5ba`, `09ba0bf6`): doctor render `src/surfaces/core/doctor` birimine taşındı (cli 2003 → 1976 satır, bütçe 2000); `task close-abandoned` yardım özeti kısaltıldı, golden yeniden üretildi.
+- CI-PERF: CI'ya ayrı perf job (K-LATENCY-METRICS owner kararı) hâlâ açık.

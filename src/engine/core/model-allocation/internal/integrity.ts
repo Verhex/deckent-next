@@ -29,10 +29,10 @@ export async function verifyModelAllocationIntegrity(reader: ModelAllocationInte
     throw new ModelInvocationStoreError('MODEL_INVOCATION_CORRUPT');
   }
   validateModelAllocationPageSize(pageSize);
-  let checkpoint: ModelAllocationCheckpoint | null = null, cursor: string | null = null, lifetimeCalls = 0, inFlight = 0;
+  let checkpoint: ModelAllocationCheckpoint | null = null, lastInvocationId: string | null = null, lifetimeCalls = 0, inFlight = 0;
   for (;;) {
     if (signal?.aborted) throw new ModelInvocationStoreError('MODEL_INVOCATION_UNAVAILABLE');
-    const page = await reader.readPage({ scopeId, allocationId, checkpoint, afterInvocationId: cursor, limit: pageSize });
+    const page = await reader.readPage({ scopeId, allocationId, checkpoint, afterInvocationId: lastInvocationId, limit: pageSize });
     if (signal?.aborted) throw new ModelInvocationStoreError('MODEL_INVOCATION_UNAVAILABLE');
     if (!page) {
       if (checkpoint) throw new ModelInvocationStoreError('MODEL_INVOCATION_ALLOCATION_CONFLICT');
@@ -42,22 +42,22 @@ export async function verifyModelAllocationIntegrity(reader: ModelAllocationInte
     if (allocation.scopeId !== scopeId || allocation.allocationId !== allocationId) throw new ModelInvocationStoreError('MODEL_INVOCATION_CORRUPT');
     if (checkpoint && checkpoint.digest !== current.digest) throw new ModelInvocationStoreError('MODEL_INVOCATION_ALLOCATION_CONFLICT');
     checkpoint = current;
-    if (!Array.isArray(page.receipts) || page.receipts.length > pageSize || (cursor !== null && page.receipts.length === 0)) {
+    if (!Array.isArray(page.receipts) || page.receipts.length > pageSize || (lastInvocationId !== null && page.receipts.length === 0)) {
       throw new ModelInvocationStoreError('MODEL_INVOCATION_CORRUPT');
     }
     for (const input of page.receipts) {
       const receipt = verifyModelInvocationReceipt(input), profile = receipt.profile.allocation, id = receipt.claim.invocationId;
       if (receipt.claim.scopeId !== scopeId || profile.id !== allocationId || profile.maxCalls !== allocation.maxCalls
-        || profile.maxInFlight !== allocation.maxInFlight || (cursor !== null && Buffer.compare(Buffer.from(id), Buffer.from(cursor)) <= 0)) {
+        || profile.maxInFlight !== allocation.maxInFlight || (lastInvocationId !== null && Buffer.compare(Buffer.from(id), Buffer.from(lastInvocationId)) <= 0)) {
         throw new ModelInvocationStoreError('MODEL_INVOCATION_CORRUPT');
       }
-      cursor = id; lifetimeCalls++;
+      lastInvocationId = id; lifetimeCalls++;
       // Only an open claim holds a slot; a settled `unknown` was written after its local request closed (INFLIGHT-FIX).
       if (receipt.outcome === null) inFlight++;
       if (lifetimeCalls > allocation.lifetimeCalls || inFlight > allocation.inFlight) throw new ModelInvocationStoreError('MODEL_INVOCATION_CORRUPT');
     }
     if (page.nextInvocationId !== null) {
-      if (page.receipts.length !== pageSize || page.nextInvocationId !== cursor) throw new ModelInvocationStoreError('MODEL_INVOCATION_CORRUPT');
+      if (page.receipts.length !== pageSize || page.nextInvocationId !== lastInvocationId) throw new ModelInvocationStoreError('MODEL_INVOCATION_CORRUPT');
       continue;
     }
     if (lifetimeCalls !== allocation.lifetimeCalls || inFlight !== allocation.inFlight) throw new ModelInvocationStoreError('MODEL_INVOCATION_CORRUPT');

@@ -6,22 +6,21 @@ Bu dosya yalnız **devam eden işi** taşır: kısa durum, tek iş tablosu, aç�
 
 - **Roller:** main Opus; bağımsız inceleyen Astra (`gpt-6-astra`, kanal `astra`); Sol yalnız analiz; lane'ler varsayılan Sonnet 5.5 alt ajan, kritikte Opus (owner 2026-10-05). DOGFOOD OFF (N1'de D4 denemeleri); canlı geçiş ayrı owner yetkisi. Rol ataması bu belgeden doğmaz.
 - **Canlı = main = N1:** `9e01322c` **1.0.0-alpha.6** (PATCH-BUDGET), ledger 47 / runtime protocol 20 (48 rezerve). CI zorunlu hücreler yalnız ubuntu node24+26 (owner ruleset 2026-10-06).
-- **İlk 20 iş (owner 2026-10-06 kabul, K1–K8):** 4 dalga × 4–5 lane; analiz `proof/WORKLIST-TOP20-2026-10-06/analysis.md`, kararlar [owner-decisions](.deckent/docs/decisions/owner-decisions.md) "İlk 20 iş kararları". **Dalga 1** `wave/1` dalında: WORKER-AUTO-REFRESH, ARCH-GUARDS, K-LATENCY-METRICS, MCP-KAYIT-DENETİMİ + SANDBOX-AD-SIZINTISI, VERIFY-ENV (machine-id yeteneği + doctor görünürlüğü); tek Astra parti incelemesi → PR → alpha.7. Dalga 2: DOGFOOD-D5, RUN-YAŞAM, MODEL-INGRESS-P2, KATALOG-TEMİZLİK, MONITOR-M2M3.
+- **İlk 20 iş (owner 2026-10-06 kabul, K1–K8):** 4 dalga × 4–5 lane; analiz `proof/WORKLIST-TOP20-2026-10-06/analysis.md`, kararlar [owner-decisions](.deckent/docs/decisions/owner-decisions.md) "İlk 20 iş kararları". **Dalga 1** `wave/1` dalında: WORKER-AUTO-REFRESH, ARCH-GUARDS, K-LATENCY-METRICS, MCP-KAYIT-DENETİMİ + SANDBOX-AD-SIZINTISI, VERIFY-ENV (machine-id yeteneği + doctor görünürlüğü); tek Astra parti incelemesi → PR → alpha.7. **Dalga 2** `wave/2` dalında toplandı (RUN-YAŞAM, MODEL-INGRESS-P2, KATALOG-TEMİZLİK + DISPATCH-KATALOG, MONITOR-M2M3, IDENTITY-BINDING-V2, CLI-SPLIT; DOGFOOD-D5 N1'de ayrı); tek Astra parti incelemesi bekliyor → PR. Önceki hâl: [work-list](.deckent/docs/plan/work-list.md) dalga 2 geçmişi.
 - **Dogfood DT-1 R2 (N1, alpha.6):** Run → patch → candidate → delivery ürün yolundan tamam; verify 22 test ortam kaynaklı (verify imajında `/etc/machine-id` yok, `/tmp` noexec; ürün hatası yok) → machine-id'li verify imajı + profil v8 ile yeniden doğrulama, sonra benimseme.
-- **Teslim düzeni:** parti başına tek bağımsız inceleme, en çok bir düzeltme turu, sonra Jev ≥0,90 / ≥0,75 veya owner; her Jev danışması Qwen gölgesiyle (`shadow.sh`). Önceki durum notu: [durum notları](.deckent/docs/plan/status-2026-10-05.md).
+- **Teslim düzeni:** parti başına tek bağımsız inceleme, en çok bir düzeltme turu, sonra Jev ≥0,90 / ≥0,75 veya owner; Jev danışmaları `shadow.sh` ile (Qwen araştırması 2026-10-06 iptal, yalnız Jev). Önceki durum notu: [durum notları](.deckent/docs/plan/status-2026-10-05.md).
 
 ## Aktif iş alanları
 
 | İş | Hedef | Durum | Sıradaki adım | Kanıt |
 |---|---|---|---|---|
 | İLK-20 DALGA 1 | Dogfood engelini kaldır + katman kaymasını durdur (#2–#6 + VERIFY-ENV) | lane'ler `wave/1`'de; Astra parti incelemesi | Astra parti incelemesi → PR → alpha.7 | `proof/W1-*-2026-10-06/`; [work-list](.deckent/docs/plan/work-list.md) |
-| IDENTITY-BINDING-V2 | Makine kimliği yokken taşınma koruması: yapılandırılabilir kaynak → /etc/machine-id → zayıf yol+cihaz+inode bağı; `installation.requireMachineBinding` (owner 2026-10-06) | Karar verildi | Dalga 2 Opus kartı (sürümlü bağ + v1 göçü) | [owner-decisions](.deckent/docs/decisions/owner-decisions.md) |
+| IDENTITY-BINDING-V2 | Makine kimliği yokken taşınma koruması: yapılandırılabilir kaynak → /etc/machine-id → zayıf yol+cihaz+inode bağı; `installation.requireMachineBinding` (owner 2026-10-06) | `wave/2`'de; inceleme | Astra parti incelemesi; rollback notu owner-decisions'ta | `proof/W2-BINDING-V2-2026-10-06/`; [owner-decisions](.deckent/docs/decisions/owner-decisions.md) |
+| İLK-20 DALGA 2 | RUN-YAŞAM (launch-refused + close-abandoned), MODEL-INGRESS-P2, KATALOG-TEMİZLİK + DISPATCH-KATALOG, MONITOR-M2M3, CLI-SPLIT (+ BINDING-V2 yukarıda) | lane'ler `wave/2`'de toplandı; Astra parti incelemesi bekliyor | Astra parti incelemesi → PR; açık takipler: patch-prepare reddi için tipli makbuz [ledger sürümü+göç], LayoutError insan metni, mühürlü audit kaydı (close-abandoned), CI'ya perf job, MCP `close_abandoned_attempt` | `proof/W2-*-2026-10-06/`; [work-list](.deckent/docs/plan/work-list.md) |
 | IDENTITY-PROFILES | Solo/ekip/enterprise/özel sürümlü kimlik profilleri (I0–I5), K1–K3 = A | I0 main'de; I1 `a1abf235` rebase bekliyor | I1 rebase + inceleme, sonra I2 | `proof/IDENTITY-PROFILES-DESIGN-2026-10-05/design.md` |
-| MODEL-INGRESS-UNICODE | Gizli Unicode: not/audit/karantina | P1 main'de; P2 `de286888` rebase | P2 inceleme; P3 araç/MCP şema + argüman JSON | [work-list](.deckent/docs/plan/work-list.md) |
+| MODEL-INGRESS-UNICODE | Gizli Unicode: not/audit/karantina | P1 main'de; P2 `wave/2`'de (inceleme) | Astra parti incelemesi; P3 araç/MCP şema + argüman JSON | [work-list](.deckent/docs/plan/work-list.md) |
 | FLAKY-RECOVERY | Installed offline completion/cancellation | Kaynak indi | Gerçek Docker ile doğrulama | [work-list](.deckent/docs/plan/work-list.md) |
 | CI-DEBT | Kalan CI hataları tek iş (ubuntu-only ruleset owner komutu) | Owner'ın ayrı Codex ajanı | Ajan STATUS çıktısını izle | `proof/CI-DEBT-2026-10-05/STATUS.md` |
-| QWEN–JEV gölge | Idle-only base-Qwen ile Jev karşılaştırması | Owner 2026-10-06 iptal etti; `shadow.sh` yalnız Jev (12 vaka geçmiş kayıt) | Kalan 18 vaka; temiz 384/48/48 baş eğitimi | [qwen-host-pilot](.deckent/docs/plan/qwen-host-pilot.md) |
-| QWEN-DEV-DECISION / HEAD-QUALITY | Host pilotu: CLI + loopback API, v4 veri | CLI/API indi (PR #11); eğitim ölçümü yok | 275/32/32 → 384/48/48 sürücü uyarlaması | [host pilot](.deckent/docs/architecture/modules/host-qwen-decision-pilot.md) |
 | NODE-26 | Node 26 geçişi | Hedef LTS 2026-10-28 | O tarihte tam verify | owner-decisions |
 | NATIVE-AGENTS | Owner öncelik #4 OpenCode, #5 Copilot CLI, #6 Kimi Code CLI, #7 Antigravity/Gemini | Hazırlanmadı | `commands.json` kayıtları + credential spec + imaj + usage kanıtı; Devin = ayrı remote-worker adaptörü | [hedefler](.deckent/docs/plan/owner-targets-2026-10-05.md) |
 | MODEL-PROVIDERS | Owner öncelik #8 GLM, #9 DeepSeek | Hazırlanmadı | Katalog kaydı: `provider-openai-chat` veya `provider-openrouter-chat` | [hedefler](.deckent/docs/plan/owner-targets-2026-10-05.md) |
@@ -31,7 +30,7 @@ Bu dosya yalnız **devam eden işi** taşır: kısa durum, tek iş tablosu, aç�
 | DESKTOP-ARCH | Masaüstü D1–D7: Electron 44 ↔ Tauri 2 ölçümü, Windows+WSL | O7-A2/A3 indi | Windows UI↔WSL köprü dilimi; terminal önce | [work-list](.deckent/docs/plan/work-list.md) |
 | TERMINAL-CLOSE | Terminal O1–O7 kapanışı | S02…R6 indi | S09 yönetim yüzeyleri, 26 dilimlik kabul | `proof/TERMINAL-CLOSE-2026-10-03/analysis.md` |
 | PARALLEL-ORCHESTRATION | 8+ paralel işçi, DAG özeti | P33/S2 indi | S3 grafik sınırı + DAG özeti | [work-list](.deckent/docs/plan/work-list.md) |
-| MONITOR | İnsan okur canlı izleme yüzeyi (v1+v1.1 indi) | Kalan: push akışı | M2/M3 worker başlangıç/bitiş (MONITOR-HUMAN) | [work-list](.deckent/docs/plan/work-list.md) |
+| MONITOR | İnsan okur canlı izleme yüzeyi (v1+v1.1 indi; M2 worker anlatısı + teslim sütunu, M3 düşen testler `wave/2`'de) | Kalan: push akışı; PATCH_LIMIT sebebi kayıtlı değil | Astra parti incelemesi; patch-prepare reddi tipli makbuz kartı | [work-list](.deckent/docs/plan/work-list.md) |
 | WORKER-GIT-PR | Host branch/PR akışı | Araç PR #5 ile indi | Ayrıca yetkili ilk gerçek worker patch → PR denemesi | [workstreams](.deckent/docs/plan/workstreams.md) |
 | AOF-HANDOFF | Tipli devir + accepted-attempt Run notları | Kaynak adayı `edd2512a`+`378cc93e`; birleşik aday bağımsız kabulsüz | Lead entegrasyonu + exact aday incelemesi | `proof/AOF-HANDOFF-2026-10-03/review.md` |
 | AOF-DECISION-PORT | Karar portu (ledger v46) | Main'de ve canlıda | Ücret tavanı, pending-intent uzlaştırma/retention | [work-list](.deckent/docs/plan/work-list.md) |
@@ -66,6 +65,7 @@ Bu dosya yalnız **devam eden işi** taşır: kısa durum, tek iş tablosu, aç�
 - **P0:** belgelenmiş açık P0 yok (2026-10-05).
 - **P1 AOF-HANDOFF R1** (Astra 2300: platform yeteneği/taşınabilir testler): dar şeritte düzeltildi; birleşik aday için bağımsız kabul yok → [work-list](.deckent/docs/plan/work-list.md).
 - **P1-benzeri güvenlik takibi MODEL-INGRESS-P3:** araç/MCP şema açıklaması ve argüman JSON'unda gizli Unicode; sonraki batch'in ilk güvenlik işi.
+- **Dalga 2 takipleri** (lead kararları 2026-10-06): patch-prepare reddi tipli makbuz (`attempt_receipts`, ledger sürümü + göç); `LayoutError` insan metni (config dışı yüzeyler); close-abandoned için mühürlü audit kaydı (#13 EXEC-RELEASE veya ayrı kart; MCP `close_abandoned_attempt` ve terk dispatch kaydının envanterden/workspace'ten düşmesi de orada); CI'ya ayrı perf job; MODEL-INGRESS-P3 yukarıda. Ayrıntı [open-findings](.deckent/docs/plan/open-findings.md).
 - Etiketsiz açıklar (SBOM gömülü kopya tespiti Astra 2192, SURROGATE-CUT sınırları, terminal/provider açıkları): [open-findings](.deckent/docs/plan/open-findings.md).
 
 ## Owner karar indeksi
@@ -84,3 +84,7 @@ Tam metinler [owner-decisions](.deckent/docs/decisions/owner-decisions.md) ve AR
 - 2026-10-02 MCP-NO-DECIDE, CONFIG-SURFACE, monitör görevi → [status notları](.deckent/docs/plan/status-2026-10-05.md), ARCHITECTURE.
 - 2026-10-03 dalga 6 (WorkClass, kendi computer-use mekanizması, Slack+Discord), süreç panosu → [work-list](.deckent/docs/plan/work-list.md) (DALGA-6), core-memory.
 - 2026-10-05 kimlik profilleri K1–K3 = A; Qwen host pilotu; NATIVE-AGENTS/MODEL-PROVIDERS/SIWC/CLAUDE-API-KEY-TERMINAL/COMPUTER-USE hedefleri → bu tablo, [qwen-host-pilot](.deckent/docs/plan/qwen-host-pilot.md).
+
+- 2026-10-06 Qwen karar araştırması owner tarafından iptal edildi; native Qwen korunur, karar danışmanlığı mevcut Jev ile sürer. Kapanış: [COMPLETED-PLAN](COMPLETED-PLAN.md), dış proof `QWEN-CANCELED-2026-10-06/`.
+
+- 2026-10-06 Jev host kullanım önerileri kabul edildi; soru tanılaması/yönerge, zaman sıralı follow-up raporu ve 20 farklı kaynaklı pilot uygulandı. Context genellemesi için kazanç kanıtlanmadı; kapanış ve sınırlar [COMPLETED-PLAN](COMPLETED-PLAN.md), dış `proof/JEV-HOST-HYGIENE-2026-10-06/REPORT.md`.

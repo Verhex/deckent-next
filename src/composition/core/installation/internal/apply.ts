@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { FileInstallationIdentityStore, FileProjectIdentityStore, withInstallationJournal } from '#adapters/index.js';
 import { immutableJsonObjectSchema } from '#domain/index.js';
 import { InstallationPublicationApplication, InstallationPublicationError, validateInstallationRecovery, type InstallationConsent, type InstallationRecovery, type PreparedInstallation } from '#engine/index.js';
-import { bootstrapPublishesConfig, getConfigFieldDefault, observeBootstrapState, SystemTrustedClock, validateConfig, versionedConfig, resolveProductLayout, type BootstrapObservation } from '#platform/index.js';
+import { bootstrapPublishesConfig, getConfigFieldDefault, loadConfig, observeBootstrapState, SystemTrustedClock, validateConfig, versionedConfig, resolveProductLayout, type BootstrapObservation } from '#platform/index.js';
 import { prepareSuppliedInstallation } from './preview.js';
 import { inspectPreparedInstallation } from './evidence.js';
 import { installationPublicationPorts } from './publication.js';
@@ -31,6 +31,11 @@ function retained(observed: BootstrapObservation): InstallationRecovery | null {
 export async function assertConfiguredInstallationIdentity(projectRoot: string, publicationGuarded = false) {
   if (bootstrapPublishesConfig(await observeBootstrapState(projectRoot), projectRoot)) return;
   await loadConfiguredInstallationIdentity(projectRoot, { pendingBootstrap: 'config-settled' }).catch(error => { if (!publicationGuarded || (error as { code?: unknown }).code !== 'CONFIG_VALIDATION') throw error; });
+}
+/** The binding settings an owned init identity write uses: the settled configuration, or registry defaults while a config-publishing transaction is pending. */
+export async function configuredInstallationBinding(projectRoot: string) {
+  if (bootstrapPublishesConfig(await observeBootstrapState(projectRoot), projectRoot)) return getConfigFieldDefault('installation');
+  return (await loadConfig(projectRoot, { pendingBootstrap: 'config-settled', heal: false })).installation;
 }
 /** Explicit local operator action. No model, worker, or supplied profile can grant consent. */
 export async function applySuppliedInstallation(projectRoot: string, supplied: unknown, input: InstallationApplyChoices) {
@@ -63,7 +68,7 @@ async function executeInstallation(projectRoot: string, operator: InstallationAp
     if (evidence.proposalDigest !== operator.proposalDigest) throw new InstallationPublicationError('INSTALLATION_PUBLICATION_CHANGED');
     const config = validateConfig(versionedConfig(prepared.material.configuration)).config;
     const layout = resolveProductLayout({ projectRoot, root: prepared.material.layout.root, resources: config.layout.resources });
-    const installationIdentity = new FileInstallationIdentityStore(layout, timeoutMs, undefined, config.installation.identityProbe), projectIdentity = new FileProjectIdentityStore(projectRoot, timeoutMs);
+    const installationIdentity = new FileInstallationIdentityStore(layout, timeoutMs, undefined, config.installation), projectIdentity = new FileProjectIdentityStore(projectRoot, timeoutMs);
     await installationIdentity.read(); await projectIdentity.read();
     const consent: InstallationConsent = recovery?.consent ?? Object.freeze({ schemaVersion: 1, mode: 'operator-custom',
       id: randomUUID(), atMs: Date.now(), proposalDigest: operator.proposalDigest, principal: prepared.preview.principal });

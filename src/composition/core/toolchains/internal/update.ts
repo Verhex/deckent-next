@@ -1,9 +1,9 @@
 import { constants } from 'node:fs';
-import { mkdir, open, readdir, rename, rm } from 'node:fs/promises';
+import { mkdir, open, readdir, readFile, rename, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { loadConfig, prepareProductDirectory, type ConfigLoadOptions } from '#platform/index.js';
-import { failedContextsToPrune, toolchainUpdateApplies, affectedToolchainProfiles, insertHistoryLine, planToolchainUpdate, proposeProfileRevisions, type ProfileRevisionProposal, type ToolchainUpdatePlan } from '#engine/index.js';
+import { selectWorkerLineage, workerImageRecipeSchema, failedContextsToPrune, toolchainUpdateApplies, affectedToolchainProfiles, insertHistoryLine, planToolchainUpdate, proposeProfileRevisions, type ProfileRevisionProposal, type ToolchainUpdatePlan } from '#engine/index.js';
 import { assertWorkerImageVersionAvailable, prepareWorkerImageBuildContext, readWorkerImageSources, runWorkerImageBuild, type WorkerImageBuildRunner } from '#adapters/index.js';
 import { inspectConfiguredToolchainCurrency, type NpmLatestVersionFetcher } from './currency.js';
 const packageRoot = fileURLToPath(new URL('../../../../../', import.meta.url));
@@ -22,6 +22,25 @@ export async function writeArtifact(directory: string, name: string, value: unkn
   try { await handle.writeFile(JSON.stringify(value, null, 2) + '\n'); await handle.sync(); } finally { await handle.close(); }
   return path;
 }
+/** The newest build this installation completed and verified: the receipt names the version, and the retained build context holds the exact
+ * recipe and Dockerfile that produced it. Anything missing or inconsistent reads as none (the packaged lineage then decides). */
+async function readBuiltLineage(home: string): Promise<{ recipe: unknown; dockerfile: string } | null> {
+  try {
+    const names = (await readdir(join(home, 'receipts'))).filter(name => /^r[1-9][0-9]*-\d{8}\.json$/.test(name))
+      .sort((a, b) => Number(/^r(\d+)-/.exec(b)![1]) - Number(/^r(\d+)-/.exec(a)![1]));
+    for (const name of names) {
+      const version = name.slice(0, -5);
+      try {
+        const receipt = JSON.parse(await readFile(join(home, 'receipts', name), 'utf8')) as { imageVersion?: unknown; imageId?: unknown };
+        const recipe = JSON.parse(await readFile(join(home, 'builds', version, 'recipe.json'), 'utf8')) as unknown;
+        const parsed = workerImageRecipeSchema.safeParse(recipe);
+        if (receipt.imageVersion !== version || typeof receipt.imageId !== 'string' || !parsed.success || parsed.data.imageVersion !== version) continue;
+        return { recipe: parsed.data, dockerfile: await readFile(join(home, 'builds', version, 'Dockerfile'), 'utf8') };
+      } catch { continue; }
+    }
+  } catch { /* no receipts yet */ }
+  return null;
+}
 /** Plan/build with a daemon preflight before artifacts; config/package bytes and running work stay unchanged. */
 export async function updateConfiguredToolchains(projectRoot: string, input: Readonly<{ apply?: boolean | undefined }> = {}, options: ConfigLoadOptions = {},
   dependencies: ToolchainUpdateDependencies = {}): Promise<ToolchainUpdateResult> {
@@ -32,18 +51,19 @@ export async function updateConfiguredToolchains(projectRoot: string, input: Rea
   const report = await inspectConfiguredToolchainCurrency(projectRoot, options, dependencies.fetcher);
   const root = dependencies.packageRoot ?? packageRoot; const sources = await readWorkerImageSources(root);
   const plannedAt = now();
-  const plan = planToolchainUpdate({ report, recipe: sources.recipe, plannedAt, affectedProfiles: affectedToolchainProfiles(config) });
+  const home = join(await prepareProductDirectory(config.productLayout, 'workspaces'), 'toolchains');
+  const lineage = selectWorkerLineage(sources, await readBuiltLineage(home));
+  const plan = planToolchainUpdate({ report, recipe: lineage.recipe, plannedAt, affectedProfiles: affectedToolchainProfiles(config) });
   if (plan.decision === 'no-change') return Object.freeze({ schemaVersion: 1, mode: policy.mode, decision: 'no-change', plan, planPath: null, build: null, proposal: null, proposalPath: null });
   const env = Object.fromEntries(Object.entries(options.env ?? process.env).filter((entry): entry is [string, string] => typeof entry[1] === 'string'));
   const apply = toolchainUpdateApplies(input.apply);
   if (apply) await assertWorkerImageVersionAvailable({ packageRoot: root, imageVersion: plan.next!.imageVersion,
     timeoutMs: policy.buildTimeoutMs, outputBytes: policy.outputBytes, env }, dependencies.runner);
-  const home = join(await prepareProductDirectory(config.productLayout, 'workspaces'), 'toolchains');
   const planPath = await writeArtifact(join(home, 'plans'), `${plan.next!.imageVersion}-${plannedAt.replace(/[:.]/g, '-')}.json`, plan);
   if (!apply) return Object.freeze({ schemaVersion: 1, mode: policy.mode, decision: 'planned', plan, planPath, build: null, proposal: null, proposalPath: null });
   await dependencies.onBuild?.(plan);
   const prepared = await prepareWorkerImageBuildContext({ packageRoot: root, parent: join(home, 'builds'), imageVersion: plan.next!.imageVersion,
-    dockerfile: insertHistoryLine(sources.dockerfile, plan.next!.historyLine), recipe: plan.next!.recipe });
+    dockerfile: insertHistoryLine(lineage.dockerfile, plan.next!.historyLine), recipe: plan.next!.recipe });
   await mkdir(join(home, 'receipts'), { recursive: true, mode: 0o700 });
   const receiptPath = join(home, 'receipts', `${plan.next!.imageVersion}.json`);
   // A failed build keeps its context as evidence under another name, so the next attempt may reuse the planned version.

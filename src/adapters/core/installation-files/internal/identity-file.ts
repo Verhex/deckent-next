@@ -8,15 +8,16 @@ type IdentityResource = 'projectIdentity' | 'installationIdentity';
 const PUBLICATION_POLL_MS = 10;
 type Failure = 'INVALID' | 'UNAVAILABLE' | 'LOCKED' | 'UNSUPPORTED';
 class IdentityFileError extends Error { constructor(readonly reason: Failure) { super(reason); } }
-interface IdentityCodec<T> { parse(value: unknown): T; create(): T | Promise<T>; error(reason: Failure): Error; isError?(error: unknown): boolean }
+/** `prepare` runs under the writer lock before the record directory is created, so its refusal leaves no retained (lost-looking) directory. */
+interface IdentityCodec<T, P = undefined> { parse(value: unknown): T; prepare?(): Promise<P>; create(prepared: P | undefined): T | Promise<T>; error(reason: Failure): Error; isError?(error: unknown): boolean }
 
 /** Shared first-publication mechanism. A retained directory with a missing record means lost or
  * interrupted publication, never a fresh identity. The bounded config lock serializes writers;
  * established identities are read without a lock. Failure deliberately retains the directory.
  */
-export class IdentityFile<T> {
+export class IdentityFile<T, P = undefined> {
   constructor(private readonly layout: ProductLayout, private readonly resource: IdentityResource,
-    private readonly codec: IdentityCodec<T>, private readonly lockTimeoutMs?: number) {}
+    private readonly codec: IdentityCodec<T, P>, private readonly lockTimeoutMs?: number) {}
 
   private async read(directory: string): Promise<T | null> {
     const path = join(directory, 'identity.json');
@@ -64,7 +65,7 @@ export class IdentityFile<T> {
     return null;
   }
 
-  /** Existing-record replacement uses the same custody and atomic writer as first publication. */
+  /** Existing-record replacement uses the same custody and atomic writer as first publication. Returning the current record unchanged writes nothing. */
   async update(change: (record: T) => Promise<T>): Promise<T> {
     try {
       const directory = productResourcePath(this.layout, this.resource);
@@ -75,7 +76,7 @@ export class IdentityFile<T> {
         const current = await this.read(directory);
         if (!current) throw new IdentityFileError('INVALID');
         const next = await change(current);
-        await writeJsonAtomic(join(directory, 'identity.json'), next);
+        if (next !== current) await writeJsonAtomic(join(directory, 'identity.json'), next);
         return next;
       }, this.lockTimeoutMs);
     } catch (error) { return this.fail(error); }
@@ -101,13 +102,14 @@ export class IdentityFile<T> {
       }
       await prepareProductCompanionPath(layout, resource, '-lock');
       return await withConfigWriteLock(directory, async () => {
+        const prepared = await this.codec.prepare?.();
         let fresh = false;
         try { await mkdir(directory, { mode: 0o700 }); fresh = true; }
         catch (error) { if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error; }
         await inspectProductDirectory(layout, resource);
         const path = join(directory, 'identity.json');
         if (fresh) {
-          const record = await this.codec.create();
+          const record = await this.codec.create(prepared);
           await writeJsonAtomic(path, record);
           return record;
         }

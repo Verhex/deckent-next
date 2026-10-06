@@ -3,7 +3,7 @@ import { Box, Text } from 'ink';
 import type { KnownSecretSnapshot } from '#platform/index.js';
 import { useWorklinePalette, type InkRoleStyle } from '#surfaces/core/terminal-kit/index.js';
 import { fillTemplate } from './status-row.js';
-import { projectHumanInline, projectHumanText } from './human-text.js';
+import { modelIngressHiddenCount, projectHumanInline, projectHumanText } from './human-text.js';
 import { SpanText } from './lines-view.js';
 
 /** Operation-scoped opaque config provenance, never raw values or a second credential store. */
@@ -21,5 +21,5 @@ export function HumanTextRow({ text, prefix = '', style, hiddenLabel, inline = f
   const known = useHumanTextSecrets();
   const projection = inline ? projectHumanInline(text, known) : projectHumanText(text, 'prose', known);
   return <Box flexDirection="column"><Text {...style}>{prefix}<SpanText spans={projection.spans} /></Text>
-    <HiddenTextNotice count={projection.hiddenCount} label={hiddenLabel} /></Box>;
+    <HiddenTextNotice count={projection.hiddenCount + modelIngressHiddenCount(text)} label={hiddenLabel} /></Box>;
 }

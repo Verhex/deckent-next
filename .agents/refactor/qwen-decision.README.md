@@ -1,5 +1,8 @@
 # Qwen geliştirme içi karar pilotu
 
+
+> Owner2026-10-06 bu araştırmayı iptal etti. CLI/API kaynakları tarihsel ve kullanılmayan host araçlarıdır; çalıştırma/eğitim/gölge araştırması yeniden owner yönü olmadan sürdürülmez. Native Qwen standart haliyle korunur, karar danışmanlığı Jev ile devam eder. Aktif decision daemon yok; dış shadow.sh yalnız Jev'i çağırır. Kapanış kanıtı dış `QWEN-CANCELED-2026-10-06/REPORT.md`.
+
 Owner 2026-10-05: ürün yüzeyinden ayrı host pilotu; sonraki yönlendirme **chat kullanılmayan zamanlar**.
 Araç hazırdır, Jev'in otomatik ikamesi değildir. Native chat/agent profili ve vLLM konteyner ayarları değişmez.
 

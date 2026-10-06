@@ -14,13 +14,15 @@ import {
   inspectProductPaths, getConfigFieldDefault, ErrorRegistry, loadConfig,
   resolveGlobalScopePaths, normalizeGlobalScopePlatform, getSystemProfile,
   detectHostMemory, detectEnvironment, resolveLocalOsPrincipal,
-  assertActorAssurance, principalToActor, resolveLocale, t, formatValue, emit,
+  assertActorAssurance, principalToActor, resolveLocale, formatValue, emit,
   type ConfigLoadOptions, type OutputMode, type OutputSink, type Locale,
 } from '#platform/index.js';
 
 import type { TerminalChatPlanHandler, TerminalChatStreamHandler, TerminalChatTurnHandler, TerminalMentionAttachHandler, TerminalMentionFindHandler,
   TerminalPermissionModeInspectHandler, TerminalPermissionModeSetHandler, TerminalScratchClearHandler, TerminalScratchInspectHandler } from './terminal-chat.js';
 
+import { renderDoctorReport, type InstallationBindingReport, type ShellRealmDoctorView } from '#surfaces/core/doctor/index.js';
+export type { InstallationBindingReport, ShellRealmDoctorView } from '#surfaces/core/doctor/index.js';
 import type { ModelCommandContext } from '#surfaces/core/cli-models/index.js';
 import type { DecisionCommandContext } from '#surfaces/core/cli-decision/index.js';
 export type { InferenceMetricsReading } from '#surfaces/core/cli-models/index.js';
@@ -97,7 +99,7 @@ export interface CommandContext extends InstallationCommandContext, ModelCommand
   // WORKER-AUTO-REFRESH: the worker image refresh status (updating / current / failed with a typed reason); doctor-only, local file read, null when unwired or never run.
   inspectToolchainRefresh?: (root: string, options: ConfigLoadOptions) => Promise<{ readonly status: string; readonly reason: string | null; readonly imageVersion: string | null } | null>;
   // Doctor-only, read-soft: whether the installation identity can be bound to this machine (relocation/copy detection); null when unwired or unreadable.
-  inspectInstallationBinding?: (root: string, options: ConfigLoadOptions) => Promise<{ readonly capability: 'supported' | 'unsupported' } | null>;
+  inspectInstallationBinding?: (root: string, options: ConfigLoadOptions) => Promise<InstallationBindingReport | null>;
   listSecretNames?: import('./secret.js').SecretNamesHandler;
   // SECRET-WRITE: `secret set|delete` through the runtime service (the socket peer is the principal; the `secret` policy cell decides).
   setSecret?: import('./secret.js').SecretSetHandler;
@@ -123,20 +125,6 @@ export interface CommandContext extends InstallationCommandContext, ModelCommand
   initialize?: () => void;
   root?: string; env?: NodeJS.ProcessEnv; stdout?: OutputSink; stderr?: OutputSink;
   onLocale?: (locale: Locale) => void;
-}
-/** One realm resolution as doctor shows it (the adapter's `ShellRealmReport` shape; surfaces keep their own view). */
-interface ShellRealmSelection { readonly selected: string | null; readonly marker: string | null; readonly notice: string | null; readonly code: string | null;
-  readonly rejected: readonly { readonly kind: string; readonly reason: string }[] }
-export interface ShellRealmDoctorView extends ShellRealmSelection { readonly mode: string; readonly preferSandbox: ShellRealmSelection | null }
-/** The realm lines in the product's own sandbox words (the result marker, then the notice the live stream shows); no catalog text. */
-function imageRefreshText(view: { readonly status: string; readonly reason: string | null; readonly imageVersion: string | null }, locale: Locale): string {
-  const params = { reason: view.reason ?? '-', version: view.imageVersion ?? '-' };
-  return view.status === 'updating' ? t('doctor.imageRefresh.updating', params, locale) : view.status === 'failed' ? t('doctor.imageRefresh.failed', params, locale) : t('doctor.imageRefresh.current', params, locale);
-}
-function shellRealmLines(report: ShellRealmDoctorView): string[] {
-  const lines = (view: ShellRealmSelection, label: string) => [`${view.marker ?? (view.selected === 'host' ? 'sandbox: host' : `sandbox: refused (${view.code ?? '-'})`)} [${label}]`,
-    ...(view.notice ? [view.notice] : view.rejected.length ? [view.rejected.map(item => `${item.kind}: ${item.reason}`).join('; ')] : [])];
-  return [...lines(report, `terminal.shell.realm ${report.mode}`), ...(report.preferSandbox ? lines(report.preferSandbox, 'prefer-sandbox (MCP default)') : [])];
 }
 interface Parsed { positionals: string[]; json: boolean; global: boolean; dryRun: boolean; toolchains: boolean; language?: string }
 function parse(argv: readonly string[]): Parsed {
@@ -206,18 +194,6 @@ export async function runKernelCommand(argv: readonly string[], context: Command
     paths: resolveGlobalScopePaths(platform, env), principal,
     company: { companyId: config.company.id }, status: poolReadiness.status === 'drift' || poolReadiness.status === 'unavailable' ? 'degraded' : 'ready', poolReadiness, policyTemplate, modelInvocationDelivery, secretStore, shellRealm, imageRefresh, installationBinding,
     ...(toolchains ? { toolchains } : {}) };
-  output(data, result => [t('doctor.host', { platform: result.platform, cpu: result.host.cpuCores, memory: result.host.totalMemMB,
-    workers: result.host.recommendedMaxWorkers, company: result.company.companyId, principal: result.principal.id }, locale),
-  ...(result.toolchains ? [t('doctor.toolchains.header', { mode: result.toolchains.mode, endpoint: result.toolchains.registryEndpoint ?? '-' }, locale),
-    ...result.toolchains.providers.map(entry => t('doctor.toolchains.entry', { provider: entry.provider, status: entry.reason ? `${entry.status} (${entry.reason})` : entry.status,
-      admitted: entry.admitted.length ? entry.admitted.map(item => item.version ?? item.cliVersion).join(', ') : '-', latest: entry.latest?.version ?? '-' }, locale))] : []),
-  // SECRET-K1: the selected secret store and whether it can be read now (backend id, status and typed code only; never a value).
-  ...(result.secretStore ? [t('doctor.secretStore', { backend: result.secretStore.backend, status: result.secretStore.status,
-    codeSuffix: result.secretStore.code ? `, ${result.secretStore.code}` : '' }, locale)] : []),
-  ...(result.imageRefresh && result.imageRefresh.status !== 'unknown' ? [t('doctor.imageRefresh', { status: imageRefreshText(result.imageRefresh, locale) }, locale)] : []),
-  ...(result.installationBinding ? [result.installationBinding.capability === 'supported' ? t('doctor.installationBinding.supported', {}, locale)
-    : t('doctor.installationBinding.unsupported', { platform: result.platform }, locale)] : []),
-  ...(result.poolReadiness ? poolReadinessLines(result.poolReadiness, locale) : []),
-  ...(result.shellRealm ? shellRealmLines(result.shellRealm) : [])].join('\n'));
+  output(data, result => renderDoctorReport(result, result.poolReadiness ? poolReadinessLines(result.poolReadiness, locale) : [], locale));
   // modelInvocationDelivery is JSON-only for now, like policyTemplate: no human-text rendering yet.
 }

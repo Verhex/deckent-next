@@ -31,6 +31,37 @@ export function failedContextsToPrune(names: readonly string[], keep: number): s
   return failed.slice(Math.max(1, keep)).map(entry => entry.name);
 }
 
+export type WorkerLineage = Readonly<{ recipe: unknown; dockerfile: string }>;
+const counterOf = (recipe: unknown): number => { const id = (recipe as { imageVersion?: unknown } | null)?.imageVersion; const match = typeof id === 'string' ? /^r([1-9][0-9]*)-/.exec(id) : null; return match ? Number(match[1]) : 0; };
+const stripVersions = (recipe: unknown) => JSON.stringify({ ...(recipe as object), imageVersion: null, previousVersion: null });
+const stripHistory = (dockerfile: string) => dockerfile.split('\n').filter(line => !line.startsWith('# version ')).join('\n');
+/**
+ * Where the next image version is planned from. The packaged recipe never advances by itself, so the newest verified build of this
+ * installation (its own recipe and Dockerfile, confirmed by a receipt) continues the lineage: without it every later refresh would
+ * plan the same counter and the builder's counter guard would refuse it for good. The built lineage is used only when it is ahead and
+ * still the same sources as the package (recipe and Dockerfile bodies equal apart from version and history lines); otherwise the
+ * package decides and the builder's guard stays the authority.
+ */
+export function selectWorkerLineage(packaged: WorkerLineage, built: WorkerLineage | null): WorkerLineage {
+  if (!built || counterOf(built.recipe) <= counterOf(packaged.recipe)) return packaged;
+  if (stripVersions(built.recipe) !== stripVersions(packaged.recipe) || stripHistory(built.dockerfile) !== stripHistory(packaged.dockerfile)) return packaged;
+  return built;
+}
+
+/** Bounded re-derivations when another authorized writer changed the config between the registry read and its write. */
+export const REGISTRY_WRITE_ATTEMPTS = 3;
+const registryOf = (document: unknown): unknown => (document as { admission?: { registry?: unknown } | null } | null)?.admission?.registry;
+/**
+ * The automatic registry revision writes the project layer, so it is safe only when that layer alone defines `admission.registry`: a registry
+ * that a global layer also contributes to could be changed by an authorized writer the project layer's lock never sees, and a project copy
+ * derived from the old effective value would shadow that change. Then (and when the project defines none) nothing is written: a typed hold
+ * that doctor and monitor show, with the build's proposal file kept for the operator to apply.
+ */
+export function registryLayerHold(layers: Readonly<{ global: unknown; project: unknown }>): 'TOOLCHAIN_REGISTRY_LAYER_HOLD' | 'TOOLCHAIN_REGISTRY_NOT_IN_PROJECT' | null {
+  if (registryOf(layers.global) !== undefined) return 'TOOLCHAIN_REGISTRY_LAYER_HOLD';
+  return registryOf(layers.project) === undefined ? 'TOOLCHAIN_REGISTRY_NOT_IN_PROJECT' : null;
+}
+
 const isoTime = z.string().datetime();
 const imageDigest = z.string().regex(/^sha256:[a-f0-9]{64}$/);
 /** The durable refresh marker. `expiresAt` bounds an `updating` marker (build timeout plus a grace): a crashed process never masks a refusal for good. */
