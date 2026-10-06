@@ -14,7 +14,9 @@ afterEach(async () => { await Promise.all(roots.splice(0).map(r => rm(r, { recur
 
 type FixtureDependencies = { dependencies?: Record<string, string>; devDependencies?: Record<string, string>; registry?: unknown };
 const emptyRegistry = { schemaVersion: 2, policy: { reviewIntervalDays: { P0: 30, P1: 60, P2: 90 }, licenses: { runtime: ['MIT'], dev: ['MIT'] }, failSeverities: ['HIGH', 'CRITICAL'] }, dependencies: {}, platform: {}, acceptedRisks: [] as unknown[] };
-async function fixture(files: Record<string, string>, tiersEnforce = true, importsEnforce = false, deps: FixtureDependencies = {}): Promise<string> {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- the fixture patches an arbitrary slice of arch.json per test
+type ArchPatch = (arch: any) => void;
+async function fixture(files: Record<string, string>, tiersEnforce = true, importsEnforce = false, deps: FixtureDependencies = {}, patch?: ArchPatch): Promise<string> {
   const root = await mkdtemp(join(tmpdir(), 'lint-arch-')); roots.push(root);
   const arch = JSON.parse(await (await import('node:fs/promises')).readFile(ARCH, 'utf8')) as { hardcodeRatchet: { frozen: string[]; allowlist: string }; tiers: { enforce: boolean }; imports: { enforce: boolean }; markdown: { trackedAllow: string[] }; units: Record<string, { dependencies: string[]; plan: string }>; packages: Record<string, unknown>; i18n: { catalogDir: string; families: string[] } };
   arch.tiers.enforce = tiersEnforce;
@@ -47,6 +49,11 @@ async function fixture(files: Record<string, string>, tiersEnforce = true, impor
     }
     arch.units[from]!.dependencies = [...dependencies].sort();
   }
+  // Shrink-only repository debt (allowlists, caps, frozen lists) describes the real tree, not a fixture: start every fixture from zero.
+  const guards = (arch as unknown as { guards: { hostWords: { allow: unknown[] }; vendorSlugCaps: Record<string, number>; effectFlows: { frozen: string[] } } }).guards;
+  guards.hostWords.allow = []; guards.vendorSlugCaps = {}; guards.effectFlows.frozen = [];
+  (arch as unknown as { literals: { allowUnits: unknown[] } }).literals.allowUnits = [];
+  patch?.(arch);
   await writeFile(join(root, 'arch.json'), JSON.stringify(arch));
   for (const [path, content] of Object.entries(fixtureFiles)) {
     await mkdir(join(root, path, '..'), { recursive: true });
@@ -390,5 +397,118 @@ describe('lint-arch external dependency contract', () => {
     expect(bad.out).toContain('[dependency-registry] dependencies.json — accepted risk long window 31 days exceeds 30 for HIGH');
     expect(bad.out).toContain('accepted risk foreign carrier other@1.0.0 is neither "tree" nor a runtime dependency that embeds fast-uri@3.0.0');
     expect(bad.out).toContain('accepted risk foreign carrier acme-lib@1.0.0 is neither');
+  });
+});
+
+describe('ARCH-GUARDS: layer-drift guards (each rule has a deliberate violation that must stay red)', () => {
+  const unit = (layer: string, tier: string, name: string, file: string, body: string) => ({
+    [`src/${layer}/${tier}/${name}/index.ts`]: `export * from './internal/${file}.js';\n`, [`src/${layer}/${tier}/${name}/internal/${file}.ts`]: body });
+  const clean = unit('engine', 'core', 'a', 'x', 'export const x = 1;\n');
+
+  it('G-b: product source may import outside src only from assets/', async () => {
+    const files = (specifier: string) => ({ ...clean, 'assets/y.json': '{}', 'scripts/s.mjs': '', 'tests/t.ts': '', '.agents/refactor/h.mjs': '',
+      'src/engine/core/a/internal/x.ts': `import data from '${specifier}' with { type: 'json' };\nexport const x = data;\n` });
+    const up = '../../../../../';
+    const green = await lint(await fixture(files(`${up}assets/y.json`)));
+    expect(green.out).not.toContain('[src-boundary]');
+    for (const [target, text] of [['scripts/s.mjs', 'may not import scripts/'], ['tests/t.ts', 'may not import tests/'], ['.agents/refactor/h.mjs', 'may not import .agents/'],
+      ['other/z.json', 'relative import leaves src/']] as const) {
+      const red = await lint(await fixture(files(`${up}${target}`)));
+      expect(red.code, red.out).toBe(1);
+      expect(red.out, target).toContain(`[src-boundary] src/engine/core/a/internal/x.ts:1 — `);
+      expect(red.out, target).toContain(text);
+    }
+  });
+
+  it('G-c: product tests may not import .agents host tooling', async () => {
+    const red = await lint(await fixture({ ...clean, '.agents/refactor/h.mjs': 'export const h = 1;\n',
+      'tests/contracts/tooling/host.test.ts': ['import { h } from ', "'../../../.agents/refactor/h.mjs';\nexport const v = h;\n"].join('') }));
+    expect(red.code, red.out).toBe(1);
+    expect(red.out).toContain('[test-host-import] tests/contracts/tooling/host.test.ts:1 — product tests may not import .agents/');
+    const green = await lint(await fixture({ ...clean, 'tests/contracts/tooling/ok.ts': 'export const ok = 1;\n', 'tests/contracts/tooling/other.test.ts': "import { ok } from './ok.js';\nexport const v = ok;\n" }));
+    expect(green.out).not.toContain('[test-host-import]');
+  });
+
+  it('G-d: host words are red in src comments and strings (case-insensitive), frozen hits only shrink, and \\n1 is not N1', async () => {
+    const body = (text: string) => unit('engine', 'core', 'a', 'x', text);
+    // Independent fixtures run concurrently: ten sequential lint-arch processes exceeded the 30 s CI test timeout under load.
+    const texts = ['// run it on the dogfood board\nexport const x = 1;\n', "export const x = 'QWEN';\n", "export const x = '/home/me';\n", '/** pre-N1 note */\nexport const x = 1;\n', '// dev-release switch\nexport const x = 1;\n'];
+    const reds = await Promise.all(texts.map(async text => lint(await fixture(body(text)))));
+    reds.forEach((red, index) => {
+      expect(red.code, texts[index]).toBe(1);
+      expect(red.out, texts[index]).toContain('[host-word] src/engine/core/a/internal/x.ts:');
+    });
+    const harmless = await lint(await fixture(body("export const x = 'exit\\n1 error; dashboard; onboard';\n")));
+    expect(harmless.out).not.toContain('[host-word]');
+    const allow = (count: number): ArchPatch => arch => { arch.guards.hostWords.allow = [{ file: 'src/engine/core/a/internal/x.ts', count, reason: 'fixture' }]; };
+    const one = '// legacy dogfood note\nexport const x = 1;\n', two = '// legacy dogfood and qwen note\nexport const x = 1;\n';
+    const [within, over, stale, loose] = await Promise.all([[one, 1], [two, 1], ['export const x = 1;\n', 1], [one, 2]].map(async ([text, count]) =>
+      lint(await fixture(body(text as string), true, false, {}, allow(count as number)))));
+    expect(within!.out).not.toContain('[host-word]');
+    expect(over!.out).toContain('2 host-word hits > allowed 1');
+    expect(stale!.out).toContain('stale hostWords.allow entry');
+    expect(loose!.out).toContain('lower the allowance (shrink-only)');
+  });
+
+  it('G-e: vendor slugs in a layer are capped; a new literal exceeds the cap and a smaller count demands a lower cap', async () => {
+    const files = unit('engine', 'core', 'a', 'x', "export const x = (id: string) => id === 'claude';\n");
+    const cap = (n: number): ArchPatch => arch => { arch.guards.vendorSlugCaps = { engine: n }; };
+    const over = await lint(await fixture(files, true, false, {}, cap(0)));
+    expect(over.out).toContain('[slug-cap] src/engine — 1 vendor-slug findings > cap 0');
+    const exact = await lint(await fixture(files, true, false, {}, cap(1)));
+    expect(exact.out).not.toContain('[slug-cap]');
+    const stale = await lint(await fixture(files, true, false, {}, cap(2)));
+    expect(stale.out).toContain('[slug-cap] arch.json — guards.vendorSlugCaps.engine is 2 but only 1 remain; lower the cap');
+  });
+
+  it('G-g: forbidden model literals are case-insensitive and exempt only by file or declared unit', async () => {
+    const files = unit('adapters', 'core', 'vendor', 'x', "export const x = 'CLAUDE-5-x and OPUS 5.5';\n");
+    const red = await lint(await fixture(files));
+    expect(red.code, red.out).toBe(1);
+    expect(red.out).toContain('hardcoded model/provider literal "CLAUDE-5-x"');
+    expect(red.out).toContain('hardcoded model/provider literal "OPUS"');
+    const exempt = await lint(await fixture(files, true, false, {}, arch => { arch.literals.allowUnits = [{ unit: 'src/adapters/core/vendor', reason: 'fixture' }]; }));
+    expect(exempt.out).not.toContain('hardcoded model/provider literal');
+    const noReason = await lint(await fixture(files, true, false, {}, arch => { arch.literals.allowUnits = [{ unit: 'src/adapters/core/vendor' }]; }));
+    expect(noReason.out).toContain('literals.allowUnits entry needs a reason');
+  });
+
+  it('G-a: a core unit may not reach a higher-tier unit across packages through a package index re-export', async () => {
+    const files = (tier: string) => ({ ...unit('engine', 'enterprise', 'up', 'u', 'export const up = 1;\n'),
+      'src/engine/index.ts': "export { up } from './enterprise/up/index.js';\n",
+      [`src/adapters/${tier}/c/index.ts`]: "export { c } from './internal/c.js';\n",
+      [`src/adapters/${tier}/c/internal/c.ts`]: "import { up } from '#engine/index.js';\nexport const c = up;\n" });
+    const red = await lint(await fixture(files('core')));
+    expect(red.code, red.out).toBe(1);
+    expect(red.out).toContain('[tier-direction] src/adapters/core/c — core unit depends on enterprise unit src/engine/enterprise/up');
+    const green = await lint(await fixture(files('enterprise')));
+    expect(green.out).not.toContain('[tier-direction]');
+  });
+
+  it('G-l: a tier with its own budget does not consume the package budget; its own budget is enforced', async () => {
+    const enterprise = unit('engine', 'enterprise', 'up', 'u', `${'export const a = 1;\n'.repeat(30)}`);
+    const budgets = (tier: Record<string, number> | undefined, pkg: number): ArchPatch => arch => { arch.budgets.packageLines.engine = pkg; arch.budgets.tierLines = tier; };
+    const files = { ...clean, ...enterprise };
+    const shared = await lint(await fixture(files, true, false, {}, budgets({}, 20)));
+    expect(shared.out).toContain('[package-budget] src/engine');
+    const own = await lint(await fixture(files, true, false, {}, budgets({ 'engine/enterprise': 100 }, 20)));
+    expect(own.out).not.toContain('[package-budget]');
+    expect(own.out).not.toContain('[tier-budget]');
+    const over = await lint(await fixture(files, true, false, {}, budgets({ 'engine/enterprise': 10 }, 20)));
+    expect(over.out).toContain('[tier-budget] src/engine/enterprise');
+    const bad = await lint(await fixture(files, true, false, {}, budgets({ 'engine/nope': 10, 'ghost/core': 5 }, 20)));
+    expect(bad.out).toContain('budgets.tierLines key "engine/nope"');
+    expect(bad.out).toContain('budgets.tierLines key "ghost/core"');
+  });
+
+  it('G-h: claim/delivery/adoption/lease flow files belong to the effect port owner; legacy files are a shrink-only list', async () => {
+    const flow = unit('engine', 'core', 'a', 'run-delivery', 'export const x = 1;\n');
+    const red = await lint(await fixture(flow));
+    expect(red.out).toContain('[effect-flow] src/engine/core/a/internal/run-delivery.ts — new claim/delivery/adoption/lease flow file outside src/engine/core/effect/');
+    const owner = await lint(await fixture(unit('engine', 'core', 'effect', 'target-delivery', 'export const x = 1;\n')));
+    expect(owner.out).not.toContain('[effect-flow]');
+    const frozen = (list: string[]): ArchPatch => arch => { arch.guards.effectFlows.frozen = list; };
+    expect((await lint(await fixture(flow, true, false, {}, frozen(['src/engine/core/a/internal/run-delivery.ts'])))).out).not.toContain('[effect-flow]');
+    expect((await lint(await fixture(clean, true, false, {}, frozen(['src/engine/core/gone/internal/old-claim.ts'])))).out).toContain('stale guards.effectFlows.frozen entry');
   });
 });

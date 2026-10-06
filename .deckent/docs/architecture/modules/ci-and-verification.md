@@ -84,6 +84,10 @@ history/session file factories similarly refuse Windows or absent O_NOFOLLOW wit
 before reading/writing any state. They retain POSIX permission/link guarantees instead of claiming a Windows private
 store. Terminal-history declares exactly the public platform managed-files error dependency; no contract schema changes.
 
+**Gecikme kapısı (W1-LATENCY, 2026-10-06).** `tests/perf/` ayrı `vitest.config.ts` ile `*.perf.ts` serisidir (ledger, worker, approval yolları; p95 ≤ 500 ms, taban JSON); varsayılan paket etkilenmez; eşik ölçüm girdisidir, ürün config'i değildir. CI'ya ayrı perf job/script bağlanması owner kararı bekler.
+
+**Verify ortamı (VERIFY-ENV, 2026-10-06).** `/etc/machine-id` yoksa (Docker konteyneri) makine bağı yeteneği düşer ve ilgili testler tipli not-run olur; `noexec` tmpdir altında `pr.test.mjs` tipli not-run verir, gerçek `PR_GIT` ret iddiası korunur; `doctor` makine bağını proje dizinine karşı yoklar.
+
 **Yerel CI eşleniği (CI-LOCAL, owner 2026-10-06; developer tooling).** `npm run ci:local -- [--ref <ref|HEAD>] [--node 24|26] [--keep]`
 (`scripts/ci-local.mjs`) runs the ubuntu job of `.github/workflows/ci.yml` in its order, using the repository's own
 `scripts/ci-*` files unchanged: temporary parent, `npm ci`, pinned Docker fixture, locked bubblewrap build and stage,

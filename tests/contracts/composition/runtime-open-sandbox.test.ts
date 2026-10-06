@@ -147,6 +147,23 @@ describe.skipIf(process.platform !== 'linux')('OPEN-SANDBOX: the full-access vie
     for (const path of ['.deckent/docs2', '.deckent/mcp.json', '.deckent/newdir', '.deckent/crashes/x', '.deckent/data/x']) expect({ path, exists: await exists(join(f.project, path)) }).toEqual({ path, exists: false });
   }, 180_000);
 
+  it.skipIf(!bwrapReady)('SANDBOX-AD-SIZINTISI: neither view lists a product state name; the data root shows only the call\'s own scratch path, and .deckent/docs stays writable', async () => {
+    const f = await openRuntime({ schemaVersion: 1, realm: 'require-sandbox' });
+    await mkdir(join(f.project, '.deckent/docs'), { recursive: true });
+    const names = 'find .deckent/data | sort; touch .deckent/data/planted 2>&1; echo "plant=$?"; echo ok > .deckent/docs/n.md; echo "rc=$?"';
+    const open = await f.call('run_shell', { command: names }, 'deny', fa);
+    const closed = await f.call('run_shell', { command: names }, 'allow');
+    for (const [view, result] of [['open', open], ['closed', closed]] as const) {
+      const listed = [...new Set(result.text.split('\n').filter(line => line.startsWith('.deckent/data')).map(line => line.replace(/\/[0-9a-f]{32}.*$/u, '')))];
+      expect({ view, listed }).toEqual({ view, listed: ['.deckent/data', '.deckent/data/state', '.deckent/data/state/scratch'] });
+      expect(result.text, view).not.toMatch(/ledger|runtime\.sock|backups|approvals|policy\.json|bindings\.json|installation-identity/u);
+      expect(result.text, view).toContain('rc=0');
+      expect(result.text, view).toContain('plant=1');   // the emptied directory is read-only: nothing is created in it
+    }
+    expect(await exists(join(f.project, '.deckent/data/planted'))).toBe(false);
+    expect(await readFile(join(f.project, '.deckent/docs/n.md'), 'utf8')).toBe('ok\n');
+  }, 180_000);
+
   it.skipIf(landlockAbi < 6)('without bubblewrap: prefer-sandbox runs a full-access call on the host with a visible notice; require-sandbox keeps the closed Landlock view', async () => {
     const f = await openRuntime({ schemaVersion: 1, realm: 'prefer-sandbox' }, landlockOnly);
     const port = await loopback();

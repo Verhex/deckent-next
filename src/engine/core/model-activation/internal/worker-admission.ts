@@ -17,6 +17,12 @@ export interface WorkerModelAdmissionDetail {
   readonly taskId: string; readonly channelId: string | null; readonly modelId: string | null;
   readonly exactModelId?: string; readonly minCliVersion?: string; readonly cliVersion?: string | null;
 }
+/** Admission that passes with a visible caveat (WORKER-AUTO-REFRESH, owner K2): the pinned worker CLI is older than the model's minimum while
+ * a worker image refresh is in flight, so the Run is admitted on the newest image it can use today. Never raised when no refresh runs. */
+export interface WorkerAdmissionWarning {
+  readonly code: 'WORKER_IMAGE_REFRESHING'; readonly taskId: string; readonly modelId: string; readonly minCliVersion: string; readonly cliVersion: string | null;
+}
+export type WorkerAdmissionOptions = Readonly<{ imageRefreshInProgress?: boolean }>;
 export class WorkerModelAdmissionError extends Error {
   constructor(readonly code: WorkerModelAdmissionCode, readonly detail: WorkerModelAdmissionDetail) { super(code); this.name = 'WorkerModelAdmissionError'; }
 }
@@ -28,7 +34,7 @@ const taskSchema = z.object({ taskId: z.string(), profile: z.object({ parameters
 const today = (nowMs: number) => new Date(nowMs).toISOString().slice(0, 10);
 
 async function checkModel(reader: ModelCatalogReader, scopeId: string, taskId: string, provider: string, cliVersion: string | null,
-  channelId: string, modelId: string, nowMs: number): Promise<ModelCatalogModelRecord> {
+  channelId: string, modelId: string, nowMs: number, warnings?: WorkerAdmissionWarning[]): Promise<ModelCatalogModelRecord> {
   const refuse = (code: WorkerModelAdmissionCode, extra: Partial<WorkerModelAdmissionDetail> = {}): never => {
     throw new WorkerModelAdmissionError(code, Object.freeze({ taskId, channelId, modelId, ...extra }));
   };
@@ -47,7 +53,8 @@ async function checkModel(reader: ModelCatalogReader, scopeId: string, taskId: s
   if (entry.model.minCliVersion !== null) {
     const observed = cliVersion === null ? null : extractToolchainVersion(provider, cliVersion);
     if (observed === null || compareToolchainVersions(observed, entry.model.minCliVersion) < 0) {
-      refuse('WORKER_MODEL_CLI_TOO_OLD', { minCliVersion: entry.model.minCliVersion, cliVersion: observed });
+      if (!warnings) refuse('WORKER_MODEL_CLI_TOO_OLD', { minCliVersion: entry.model.minCliVersion, cliVersion: observed });
+      else warnings.push({ code: 'WORKER_IMAGE_REFRESHING', taskId, modelId, minCliVersion: entry.model.minCliVersion, cliVersion: observed });
     }
   }
   return entry;
@@ -55,11 +62,12 @@ async function checkModel(reader: ModelCatalogReader, scopeId: string, taskId: s
 /** K3 work input as recorded in the Run graph: the requested pin and optional effort of a task compiled from a template. */
 export type WorkerTaskRequest = Readonly<{ id: string; workInput?: Readonly<{ model: Readonly<{ channelId: string; modelId: string; auxiliaryModelIds: readonly string[] }>; effort?: string | undefined }> | undefined }>;
 
-/** Throws the first typed refusal in task order; resolves when every worker task may be admitted. Reads only, writes nothing.
+/** Throws the first typed refusal in task order; resolves (with any caveats) when every worker task may be admitted. Reads only, writes nothing.
  * `requests` (the Run graph tasks) add the K3 checks: a compiled pin must equal the requested one exactly, and a requested effort must be
  * one the catalog declares for the main model. The effort is recorded in the Run graph; the chosen CLI setting is frozen in the execution profile. */
 export async function admitWorkerModels(tasksInput: readonly unknown[], scopeId: string, reader: ModelCatalogReader, nowMs: number,
-  requests: readonly WorkerTaskRequest[] = []): Promise<void> {
+  requests: readonly WorkerTaskRequest[] = [], options: WorkerAdmissionOptions = {}): Promise<readonly WorkerAdmissionWarning[]> {
+  const warnings: WorkerAdmissionWarning[] = [];
   const requested = new Map(requests.map(task => [task.id, task.workInput]));
   for (const input of tasksInput) {
     const task = taskSchema.parse(input);
@@ -74,7 +82,7 @@ export async function admitWorkerModels(tasksInput: readonly unknown[], scopeId:
     if (request && JSON.stringify([request.model.channelId, request.model.modelId, request.model.auxiliaryModelIds])
       !== JSON.stringify([model.channelId, model.modelId, model.auxiliaryModelIds])) throw new WorkerModelAdmissionError('WORKER_MODEL_BINDING_MISMATCH', detail);
     for (const modelId of [model.modelId, ...model.auxiliaryModelIds]) {
-      const entry = await checkModel(reader, scopeId, task.taskId, provider, preflight?.cliVersion ?? null, model.channelId, modelId, nowMs);
+      const entry = await checkModel(reader, scopeId, task.taskId, provider, preflight?.cliVersion ?? null, model.channelId, modelId, nowMs, options.imageRefreshInProgress ? warnings : undefined);
       if (modelId === model.modelId && ((request?.effort !== undefined && (!entry.model.efforts.includes(request.effort as never)
         || reasoningEffort?.source !== 'explicit' || reasoningEffort.level !== request.effort))
         || (reasoningEffort?.level != null && (!entry.model.efforts.includes(reasoningEffort.level)
@@ -83,4 +91,5 @@ export async function admitWorkerModels(tasksInput: readonly unknown[], scopeId:
       }
     }
   }
+  return warnings;
 }

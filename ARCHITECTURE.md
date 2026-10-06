@@ -329,6 +329,7 @@ refresh, usage and dogfood closure remain open.
   legacy stores/keys are not moved/deleted. Current BRAIN_HOME/global-scope behavior is not target completion.
 
 - **Kalıcı kimlik (ID-1/1B/1C/1D, batch 36):** `installation-files` adapter’ı `installationId` ve `projectId` kayıtlarını mevcut layout kaynaklarında kilit + atomik dosya yazımıyla yayımlar; ledger migration’ı değildir. `read`/inspect/follow kimlik, dizin veya kilit yaratmaz; kayıp/bozuk tutulmuş kayıt yeni kimlikle iyileştirilmez. Etkileşimli terminal `ensureConfiguredTerminalIdentity` üzerinden mevcut principal/scope/policy write-admission yolunu kullanır; kimlik yetki vermez. Taşıma/kopya uyuşmazlığı açık `deckent init identity --keep/--new` seçimine gider. CLI dağıtıcısı bu durdurmayı kuruluma bağlı her komuttan önce uygular; kurulumu kendisi yükleyen/kurtaran ve kimliği kendisi denetleyen komutlar (`init`, `config`: katalogda `installation: 'owned'`) ile kurulum gerektirmeyen komutlar (`policy vocabulary`: `independent`) bunu komut kataloğunda bildirir; `init` apply/resume/policy her etkiden önce yapılandırılmış layout’taki (özel `installationIdentity` kaynağı dahil) kurulum kimliğini ön kontrolün aynı denetimiyle okur; config yayımlayan bekleyen bir işlemde (apply/resume) yapılandırma yerleşmemiştir, bu yüzden recovery hedef layout’un kimliğini journal callback’i içinde yayından önce okur; config yayımlamayan bekleyen işlem (policy şablonu) yapılandırmayı yerleşik bırakır ve yapılandırılmış kimlik `loadConfig` `pendingBootstrap: 'config-settled'` ile yalnız gözlemle (heal, yazma, kilit yok) okunur, diğer journal çitleri değişmez; apply/resume’da geçersiz mevcut config layout çözmez ve üzerine yayın yapılamaz (tipli `INSTALLATION_PUBLICATION_CONFLICT`); ret tipli `INSTALLATION_IDENTITY_RELOCATED` kalır. O7 panel bağlamı bu güvenilir üreticiyi tüketir; kullanıcıdan gelen etiket kimlik kanıtı değildir.
+- **Makine bağı yeteneği (VERIFY-ENV, 2026-10-06):** Makine bağı yeteneği yoksa (Linux'ta geçerli `/etc/machine-id` yok, örn. Docker konteyneri) kimlik bağsız v1 yazılır ve taşınma/kopya tespiti kapalıdır; bu düşüş `deckent doctor` çıktısında ve `--json` `installationBinding.capability` alanında görünür (kimlik/yetki davranışı değişmez). Yetenek denetimi proje dizinine karşı yapılır.
 
 ### Deterministic storage and customer data access
 
@@ -383,6 +384,7 @@ refresh, usage and dogfood closure remain open.
 - Cancel, crash and disconnect preserve evidence and uncertain effects. Stop only owned processes/resources;
   cleanup has retention and ownership rules. Discarding a worktree cannot undo an external API/DB operation.
   Those effects need idempotency, reconciliation or an explicitly supported compensation action.
+- bwrap: yalnız ürün durumu tutan dizin boş salt-okunur tmpfs olur (`BubblewrapView.emptiedDirectories`), içerik ve giriş adları görünmez; karma dizin giriş-başı maskede kalır, layout kökü hiç emptied olmaz; ayrıntı [shell-realms](.deckent/docs/architecture/modules/shell-realms.md).
 - Proof covers sibling/main-workspace access, symlink/path escape, shared metadata, secrets/network, concurrent
   landing, stale ownership, cancel/restart and partial effects on the supported platform/realm matrix.
 
@@ -498,6 +500,7 @@ Layers: `platform` (config, errors/i18n, identity, paths) → `domain` (pure ver
 - Every configured text source file ≤ 1,500 lines (eslint + lint-arch; 800 design target), functions ≤ 150 lines (warning).
 - Package line budgets and the total budget live in `arch.json` (`budgets`); growth past a budget is a
   design decision, not a lint fix.
+- lint-arch geliştirme kapıları (ARCH-GUARDS, 2026-10-06): src-boundary, test-host-import, host-word, slug-cap, tier-direction, tier-budget, effect-flow; `arch.json guards`, `budgets.tierLines`, `literals.allowUnits`; ayrıntı [platform-and-layers](.deckent/docs/architecture/modules/platform-and-layers.md).
 - Mechanism code is string-free: user-facing text comes from `src/platform/core/i18n/locales/{en,tr}/*.json` through `t('key')`.
   Keys are literals (lint), catalogs have identical key sets (lint), surfaces never print literals (lint).
 - Config field values live in `src/platform/core/config-fields`; `config-literal` uses source-derived
@@ -644,6 +647,7 @@ config sections wait for C1.
   diffed against the new one during the port.
 - Budget: ≤ 8,000 test cases total, every test file ≤ 1,500 lines (lint; 800 design target). Legacy invariant titles are in
   `tests/contracts/HARVEST.json`; each port card lists which titles it honours.
+- `tests/perf/` — ayrı `tests/perf/vitest.config.ts` serisi (`*.perf.ts`): üç yolda gecikme kapısı (p95 ≤ 500 ms, taban JSON); varsayılan paketi etkilemez; eşik ölçüm girdisidir, ürün config'i değildir.
 
 ## Documents
 
@@ -719,4 +723,5 @@ Contract summary (full text: [approval-and-delivery.md](.deckent/docs/architectu
 - Core components read the platform `SystemTrustedClock`; wall skew is bounded by `MAX_WALL_SKEW_MS` and orders records only; expiry and elapsed limits use exact/monotonic rules.
 - Operation approval (C12), roles/bindings/four-eyes (H34), company scope registry, operation target registry and the unified catalog are registry-driven; Enterprise/ERP layer on without editing Core.
 - Secrets (SecretStore), MCP client send authority, delivery-pinned Runs and adoption verification binding keep one owner per state transition.
+- MCP istemci kayıt dosyası ancak denetlenmiş güven kararından sonra yazılır (add/remove audit reddi kayıt ve güveni değiştirmez; karar sonrası yazım hatası audit'li revoke ile geri alınır); worker imajı otonom yenilemesi (K2) `toolchains.update` policy verisidir (`mode` varsayılan `auto`, `atStartup` `true`, `intervalMs` 24 sa; registry yalnız proje katmanından CAS ile yazılır, global katkıda tipli hold; kapı her dizin yazımından önce, stop yenilemeyi bekler); ayrıntı [approval-and-delivery](.deckent/docs/architecture/approval-and-delivery.md).
 - Toolchain/model currency, work targets, typed work input, pool hold/capacity and patch scope classification are specified in the full document.

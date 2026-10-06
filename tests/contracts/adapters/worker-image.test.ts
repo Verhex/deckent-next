@@ -1,3 +1,4 @@
+import { spawnSync } from 'node:child_process';
 import { mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -10,7 +11,7 @@ afterEach(async () => { await Promise.all(roots.splice(0).map(root => rm(root, {
 const packageRoot = process.cwd();
 
 describe.skipIf(process.platform !== 'linux')('worker image build context and bounded build run', () => {
-  it('uses the installed builder shared guard before any effect, comparing numeric counters and ignoring unrelated tags', async () => {
+  it('uses the installed builder shared guard before any effect, comparing numeric counters and ignoring unrelated tags', async context => {
     const parent = await mkdtemp(join(tmpdir(), 'deckent-worker-version-check-')); roots.push(parent);
     const bin = join(parent, 'bin'); await mkdir(bin);
     const log = join(parent, 'docker-calls.jsonl');
@@ -27,6 +28,15 @@ esac
     const input = { packageRoot, imageVersion: 'r5-20261003', timeoutMs: 5000, outputBytes: 4096,
       env: { PATH: bin, HOME: parent, SECRET_TOKEN: 'never-forward' } };
     await fakeDocker('r3-20260922\nr4-20260930\nlatest\nr4-malformed');
+    // The fake docker must be executable where the test writes it. A noexec tmpdir (the verify container's hardened /tmp) is a missing
+    // environment capability, not a product defect: assert the real refusal first, then report a typed not-run; never loosen the mount.
+    const probePath = join(parent, 'exec-probe'); await writeFile(probePath, '#!/bin/sh\nexit 0\n', { mode: 0o700 });
+    const probe = spawnSync(probePath, [], { encoding: 'utf8' });
+    if (probe.error && (probe.error as NodeJS.ErrnoException).code === 'EACCES') {
+      await expect(assertWorkerImageVersionAvailable(input)).rejects.toMatchObject({ code: 'WORKER_IMAGE_COMMAND_FAILED' });
+      context.skip('TEST_TMPDIR_NOEXEC: tmpdir is mounted noexec, so the fake docker cannot run; the product refusal (WORKER_IMAGE_COMMAND_FAILED) was asserted instead');
+    }
+    await rm(probePath);
     await expect(assertWorkerImageVersionAvailable(input)).resolves.toBeUndefined();
     let calls = (await readFile(log, 'utf8')).trim().split('\n');
     expect(calls).toEqual(['context inspect --format {{json .Endpoints.docker.Host}}',

@@ -26,7 +26,16 @@ const shellGrants = [
 const toolText = (events: AgentTurnStreamEvent[]) => events.flatMap(event => event.kind === 'message' && event.message.role === 'tool' ? [event.message.content] : [])[0] ?? '';
 const ask = (turnId: string) => ({ schemaVersion: 1 as const, scopeId: 'scope', turnId, messages: [{ role: 'user' as const, content: 'show me the ledger' }] });
 
-async function productStateTurn(sandboxes: ShellSandboxFactory | undefined, marker: string, dataRoot = '.cache/deckent') {
+// How each realm's floor refuses the two reaches. Landlock denies the existing file (EACCES twice). Bubblewrap (SANDBOX-AD-SIZINTISI) shows a
+// directory that holds only product state as an empty read-only tmpfs: the ledger is not there to read (ENOENT, its name hidden too) and
+// nothing can be created in its place (EROFS).
+type Refusals = (path: string) => readonly RegExp[];
+const landlockRefusals: Refusals = () => [/Permission denied/u, /Permission denied/u];
+// coreutils quotes a name holding shell-special characters (`'.cache/deckent[1]/…'`); bash does not.
+const literal = (path: string) => path.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
+const bubblewrapRefusals: Refusals = path => [new RegExp(`^cat: '?${literal(path)}'?: No such file or directory$`, 'u'), new RegExp(`^bash: line \\d+: ${literal(path)}: Read-only file system$`, 'u')];
+
+async function productStateTurn(sandboxes: ShellSandboxFactory | undefined, marker: string, refusals: Refusals, dataRoot = '.cache/deckent') {
   const f = await runtime({ toolGrant: false, extraGrants: shellGrants, shell: { schemaVersion: 1, realm: 'require-sandbox' }, dataRoot, ...(sandboxes ? { sandboxes } : {}) });
   await f.start();
   const client = f.client();
@@ -49,7 +58,11 @@ async function productStateTurn(sandboxes: ShellSandboxFactory | undefined, mark
   expect(reached.some(event => event.kind === 'approval.requested')).toBe(true);
   const text = toolText(reached), lines = text.split('\n');
   expect(text).toMatch(new RegExp(`^\\[deckent\\] run_shell: ${marker}; exit 0`, 'u')); expect(text).not.toContain('SQLite format');
-  expect(lines).toContain('cat=1'); expect(lines).toContain('append=1'); expect(text.match(/Permission denied/gu)?.length).toBe(2);
+  expect(lines).toContain('cat=1'); expect(lines).toContain('append=1');
+  // Exactly the two refusals the realm gives, one per reach (cat, append), and nothing else from the commands.
+  const errors = lines.filter(line => line.startsWith('cat: ') || line.startsWith('bash: '));
+  expect(errors).toHaveLength(2);
+  refusals(`${dataRoot}/state/ledger.db`).forEach((refusal, index) => expect(errors[index], text).toMatch(refusal));
   expect(f.rows('SELECT target_kind, state FROM effect_intents')).toEqual([{ target_kind: 'host-shell', state: 'settled' }]);
 }
 
@@ -73,9 +86,9 @@ describe.skipIf(process.platform !== 'linux')('layout admission refuses wildcard
 });
 
 describe.skipIf(process.platform !== 'linux')('product state under an ignored ancestor through a real turn (Astra 2162)', () => {
-  it.skipIf(!bwrapReady)('S9: plan refusal without a card, then the bubblewrap floor', async () => { await productStateTurn(undefined, 'sandbox: bubblewrap'); }, 30_000);
-  it.skipIf(landlockAbi < 1)('S11: plan refusal without a card, then the Landlock floor', async () => { await productStateTurn(landlockOnly(landlockAbi), 'sandbox: landlock'); }, 30_000);
+  it.skipIf(!bwrapReady)('S9: plan refusal without a card, then the bubblewrap floor', async () => { await productStateTurn(undefined, 'sandbox: bubblewrap', bubblewrapRefusals); }, 30_000);
+  it.skipIf(landlockAbi < 1)('S11: plan refusal without a card, then the Landlock floor', async () => { await productStateTurn(landlockOnly(landlockAbi), 'sandbox: landlock', landlockRefusals); }, 30_000);
   // Astra 2164: a data root with brackets (`[` is literal to the deny matcher) is protected the same way in both realms.
-  it.skipIf(!bwrapReady)('S9: a bracketed data root stays closed (Astra 2164)', async () => { await productStateTurn(undefined, 'sandbox: bubblewrap', '.cache/deckent[1]'); }, 30_000);
-  it.skipIf(landlockAbi < 1)('S11: a bracketed data root stays closed (Astra 2164)', async () => { await productStateTurn(landlockOnly(landlockAbi), 'sandbox: landlock', '.cache/deckent[1]'); }, 30_000);
+  it.skipIf(!bwrapReady)('S9: a bracketed data root stays closed (Astra 2164)', async () => { await productStateTurn(undefined, 'sandbox: bubblewrap', bubblewrapRefusals, '.cache/deckent[1]'); }, 30_000);
+  it.skipIf(landlockAbi < 1)('S11: a bracketed data root stays closed (Astra 2164)', async () => { await productStateTurn(landlockOnly(landlockAbi), 'sandbox: landlock', landlockRefusals, '.cache/deckent[1]'); }, 30_000);
 });

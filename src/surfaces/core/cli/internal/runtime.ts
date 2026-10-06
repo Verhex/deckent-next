@@ -19,6 +19,7 @@ export interface RuntimeServiceObserver {
   onError(command: CancellationRecoveryCommand, error: { readonly code: string }): void | Promise<void>;
   onLedgerUpgraded?(upgrade: Readonly<{ from: number; to: number; backupPath: string }>): void | Promise<void>;
   onToolCallApprovalsExpired?(result: Readonly<{ expired: number; failed: number; keyUnavailable: boolean }>): void | Promise<void>;
+  onToolchainRefresh?(event: Readonly<{ phase: 'started' | 'current' | 'failed' | 'unverified'; imageVersion: string | null; imageId: string | null; appliedProfiles: number; code: string | null }>): void | Promise<void>;
 }
 export type RuntimeServiceStartHandler = (root: string, observer: RuntimeServiceObserver, options: ConfigLoadOptions) => Promise<RuntimeServiceHost>;
 export type RuntimeServiceDescribeHandler = (root: string, options: ConfigLoadOptions) => Promise<RuntimeServiceDescriptor>;
@@ -107,6 +108,13 @@ export async function runtimeCommand(argv: readonly string[], context: CommandCo
       () => t('cli.runtime.recoveryFailed', { code: error.code }, locale), 'error'); },
     onLedgerUpgraded: async upgrade => { output({ schemaVersion: 1, event: 'ledger-upgraded', ...upgrade },
       () => t('cli.runtime.ledgerUpgraded', { from: upgrade.from, to: upgrade.to, backup: upgrade.backupPath }, locale)); },
+    // WORKER-AUTO-REFRESH: the background refresh reports its typed events here; none of them delays or fails readiness.
+    onToolchainRefresh: async event => { output({ ...event },
+      () => event.phase === 'started' ? t('cli.runtime.toolchainRefreshStarted', {}, locale)
+        : event.phase === 'failed' ? t('cli.runtime.toolchainRefreshFailed', { code: event.code ?? 'UNKNOWN' }, locale)
+        : event.phase === 'unverified' ? t('cli.runtime.toolchainRefreshUnverified', { code: event.code ?? 'UNKNOWN' }, locale)
+        : event.imageId ? t('cli.runtime.toolchainRefreshUpdated', { version: event.imageVersion ?? '-', count: event.appliedProfiles }, locale)
+        : t('cli.runtime.toolchainRefreshCurrent', {}, locale), event.phase === 'failed' ? 'error' : 'info'); },
     onToolCallApprovalsExpired: async result => { output({ schemaVersion: 1, event: 'tool-call-approvals-expired', ...result },
       () => result.keyUnavailable ? t('cli.runtime.toolCallApprovalsKeyUnavailable', {}, locale)
         : t('cli.runtime.toolCallApprovalsExpired', { expired: result.expired, failed: result.failed }, locale), result.failed || result.keyUnavailable ? 'error' : 'info'); },
@@ -120,7 +128,7 @@ export async function runtimeCommand(argv: readonly string[], context: CommandCo
   // Optional startup currency report (policy data, read-only): advisory only; it never builds, updates or affects readiness.
   try {
     const startupPolicy = (await loadConfig(root, options)).toolchains.update;
-    if (startupPolicy.atStartup && context.inspectToolchainCurrency) {
+    if (startupPolicy.atStartup && startupPolicy.mode !== 'auto' && context.inspectToolchainCurrency) { // `auto` refreshes in the service itself
       try { const report = await context.inspectToolchainCurrency(root, options); output({ schemaVersion: 1, event: 'toolchains', report },
         () => t('cli.runtime.toolchains', { count: report.providers.filter(entry => entry.status === 'stale').length }, locale)); }
       catch (error) { output({ schemaVersion: 1, event: 'toolchains-failed', code: error instanceof Error && 'code' in error ? String((error as { code: unknown }).code) : 'UNKNOWN' },

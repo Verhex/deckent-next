@@ -152,3 +152,6 @@ a local file system, asynchronous elsewhere (`fs-ops`); the verdict is re-read o
 trailing `*` or `**` — without the dynamic program, on the platform's one wildcard set (`GLOB_WILDCARD`, only `*` and `?`); equivalence
 with the general matcher is an oracle test. Measured on this repository (ext4/WSL2, warm): bubblewrap ~465 → ~60 ms, Landlock ~316 →
 ~51 ms per call. Open: execution off the event loop (~50 ms block), network file systems, `statfs`/`readdir` micro-costs.
+
+
+**Bubblewrap ad sızıntısı (SANDBOX-AD-SIZINTISI, 2026-10-06).** Yalnız ürün durumu tutan dizin boş salt-okunur tmpfs olur (`BubblewrapView.emptiedDirectories`, `--perms 0555 --tmpfs` + `--remount-ro`): içerik ve giriş adları görünmez; karma dizin (ürün durumu + proje dosyası yan yana) giriş-başı maskede kalır; scratch bağı içte yazılabilir kalır; layout kökü hiç emptied olmaz. Açık sınır: karma dizinlerde ürün dosyası adları listelenir (lead kabul); scratch yolu (`.deckent/.../state/scratch/…`) çağrının kendi TMPDIR'i olarak görünür kalır (taşınmadan gizlenemez).

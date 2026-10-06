@@ -144,6 +144,8 @@
   "doctor.tmux_not_required_docker": "gerekli değil (docker backend)",
   "doctor.tmux_not_required_subprocess": "gerekli değil (subprocess backend)",
   "doctor.tmux_not_required_win32": "gerekli değil (Windows — tmux yerel olarak desteklenmiyor)",
+  "doctor.installationBinding.supported": "Makine bağı: kullanılabilir (kurulum taşınma ve kopya tespiti açık)",
+  "doctor.installationBinding.unsupported": "Makine bağı: bu ortamda desteklenmiyor ({platform}) - taşınma ve kopya tespiti kapalı (kullanılabilir makine kimliği yok; Linux'ta geçerli bir /etc/machine-id gerekir)",
   "doctor.secretStore": "Secret deposu: {backend} ({status}{codeSuffix})",
   "health.auth": "kimlik doğrulama",
   "health.logged_in": "oturum açık",

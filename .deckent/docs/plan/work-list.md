@@ -76,3 +76,23 @@ Kaynak/Source: PLAN.md @58537c7f lines 244–317; text below is verbatim.
 | PACKAGED-WORKER-BOOTSTRAP | Lead 2026-10-01 dogfood D3-1 ürün hatası; düzeltme main'de ve canlıda (`aa58f559`, birleşme `a72d3661`; Sol 2238 sınırlı PASS); N1'de paketli build ile gerçek native worker açılışı gözlendi 2026-10-02 (`probe-packaged-aa58`). Tamamlanan kısım: COMPLETED-PLAN 2026-10-03. Açık: güncel hosted CI borcu (CI-DEBT satırı). | Canlıda; K7 köprüsü canlı paketli build'e (`current`) döndü. |
 
 Bu bölme yeni yürütme motoru veya eski proof/journal kayıtlarının geriye dönük değiştirilmesi değildir.
+
+### İlk 20 — Dalga 1 durum geçmişi (2026-10-06)
+
+PLAN "Aktif iş alanları" satırının önceki hâli:
+
+| İLK-20 DALGA 1 | Dogfood engelini kaldır + katman kaymasını durdur (#2–#6 + VERIFY-ENV) | `wave/1` lane'leri toplandı | Astra parti incelemesi → PR → alpha.7 | `proof/W1-*-2026-10-06/` |
+
+- WORKER-AUTO-REFRESH: kod tamam (servis açılışı + periyodik otonom yenileme; sözleşme [approval-and-delivery](.deckent/docs/architecture/approval-and-delivery.md)); kalan: yalnız Docker execution'lı kurulumlar, Windows'ta `LOCAL_OS_PRINCIPAL` yok, K6 global katman izleme maddesi. Varsayılan değişikliği (`mode` auto, `atStartup` true) sürüm satırında belirtilecek.
+- ARCH-GUARDS: tamam (G-a/b/c/d/e/g/h/l); kalan G-f, G-i/G-j/G-k, içerik tabanlı G-h, host-word allowlist düzeltmesi, slugCaps küçültme, effectFlows.frozen azaltma. CHANGELOG: ürün davranışı değişmedi.
+- K-LATENCY-METRICS: teslim edildi (`tests/perf` kapısı, 3 yol, p95 ≤ 500 ms); sonraki: CI'ya ayrı perf job/script (owner kararı).
+- MCP-KAYIT-DENETİMİ (#5) ve SANDBOX-AD-SIZINTISI (#6): tamam (`lane/w1-mcp-sandbox`); açık sınır: karma dizinlerde ürün dosyası adları listelenir.
+- VERIFY-ENV: tamam (machine-id yeteneği + doctor çıktısı, noexec not-run).
+
+### PLAN.md QWEN–JEV satırı — iptal öncesi (2026-10-06)
+
+| QWEN–JEV gölge | Idle-only base-Qwen ile Jev karşılaştırması | 12 vaka kaydı (10–11 geçersiz giriş; 03–09 Qwen GPU meşgul → unknown/busy) | Kalan 18 vaka; temiz 384/48/48 baş eğitimi | [qwen-host-pilot](.deckent/docs/plan/qwen-host-pilot.md) |
+
+### ARCHITECTURE.md:726 — Astra 2388 düzeltme notu öncesi (2026-10-06)
+
+- MCP istemci kayıt dosyası ancak denetlenmiş güven kararından sonra yazılır (add/remove audit reddi kayıt ve güveni değiştirmez; karar sonrası yazım hatası audit'li revoke ile geri alınır); worker imajı otonom yenilemesi (K2) `toolchains.update` policy verisidir (`mode` varsayılan `auto`, `atStartup` `true`, `intervalMs` 24 sa); ayrıntı [approval-and-delivery](.deckent/docs/architecture/approval-and-delivery.md).

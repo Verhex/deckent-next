@@ -123,9 +123,11 @@
       "timeoutMs": 5000
     },
     "update": {
-      "atStartup": false,
+      "atStartup": true,
       "buildTimeoutMs": 1800000,
-      "mode": "propose",
+      "failedContextsKept": 3,
+      "intervalMs": 86400000,
+      "mode": "auto",
       "outputBytes": 1048576
     }
   }

@@ -196,6 +196,25 @@ Bu eşleme tarihsel kartlardaki sıra/ledger numaralarını yeni yürütme izni 
 
 O2, O3, O5 ve O6 uygulandı ([COMPLETED-PLAN](COMPLETED-PLAN.md)).
 
+## İlk 20 iş kararları — owner 2026-10-06
+
+Owner ilk 20 iş listesini (proof `WORKLIST-TOP20-2026-10-06/analysis.md`) ve K1–K8 önerilerini kabul etti. Owner isteğiyle K2–K8 başlamadan önce Jev ile simüle edildi (Qwen gölgesi: shadow vakaları 03–09; GPU meşgul olduğu için Qwen sonucu `unknown`/`busy` kaydedildi). Jev 7 vakada da öneriyle aynı seçeneği seçti. Seçim olasılığı K3 0,98, K6 0,97, K4 0,92, K8 0,85, K2 0,81, K5 0,81, K7 0,73; yeterlilik puanı 0,51–0,74 arasında. Karar owner kabulüdür; Jev puanı tavsiye niteliğindedir.
+
+- K1 Yama bütçesi: ürün düzeltmesi. PATCH-BUDGET (PR #17) bütçeye yalnız taşınan içeriği sayar.
+- K2 Worker imajı: açılışta ve periyodik olarak güncellik denetimi yapılır, gerekirse arka planda otomatik build başlar. Yalnız yeni Run'lar yeni imaja geçer. Build sürerken en yeni mevcut imajla kabul ve görünür uyarı; kabul edilmiş Run'ların imajı değişmez.
+- K3 CI: zorunlu hücre kümesi ubuntu-only ruleset olur (owner komutu). macOS/Windows ayrı CI borcu olarak izlenir.
+- K4 Kompozisyon bütçesi 5500 → 6500 (gerekçeli artış). Tek composition root (#20, dalga 4) bütçeyi küçültür. Tier başına bütçe kuralı ARCH-GUARDS'ta.
+- K5 N1 D5: DT-1 benimsemeye kadar tekrarlanır, ardından HARDCODE-P1 kartları D4 modunda verilir. DOGFOOD resmî olarak OFF kalır.
+- K6 Boşta durma: yalnız terminalin otomatik başlattığı servis, son istemci kapandıktan sonra N dakika (config, varsayılan 15) boşta kalırsa yönetilen kapanış yapar. Bilinçli başlatılan servisler etkilenmez.
+- K7 Enterprise uzantı noktası: ilk küçük dilim dalga 4'te.
+- K8 IDENTITY-I1: dalga 4'te tek rebase lane'iyle yapılır; dal o zamana kadar donuk kalır.
+- K2 uygulama ayrıntısı (2026-10-06, lead): yenilemenin profil revizyonu otomatik uygulanır (yeni profil sürümü, kind'lar yeni sürüme taşınır, eski sürüm ve kabul edilmiş Run'lar dokunulmaz); başarısız build eski imajı korur ve sonraki periyotta yeniden denenir (bağlam `<sürüm>.failed-<ms>`, `failedContextsKept` varsayılan 3). Varsayılanlar `mode` auto, `atStartup` true, `intervalMs` 24 sa. Registry yazımı yalnız proje katmanına yapılır (global katman desteği ayrı kart/izleme).
+- Elle `toolchains update` (CLI/MCP/SDK) her modda yalnız `--apply` ile build eder; `mode=auto` yalnız servisin otonom yenilemesini açar (lead, 2026-10-06).
+- Sandbox (lead, 2026-10-06): bwrap görünümünde layout kökü hiç emptied olmaz; yalnız ürün durumu tutan dizin boş salt-okunur tmpfs olur; karma dizinlerde ürün dosyası adlarının listelenmesi kabul edilen açık sınırdır; scratch yolu çağrının TMPDIR'i olarak görünür kalır.
+- Verify ortamı (lead, 2026-10-06): `/etc/machine-id` yok (Docker konteyneri) veya `noexec` tmpdir gibi ortam yetersizlikleri tipli not-run olarak kaydedilir, sessiz geçiş veya sahte başarı sayılmaz; makine bağı yeteneği yoksa kimlik bağsız v1 yazılır ve doctor'da görünür.
+- İlk gecikme tabanı (W1-LATENCY, cd7e58a7, yüklü WSL2): p95 ledger 74–84 ms, worker 110–136 ms, approval 63–65 ms; kapı eşiği p95 ≤ 500 ms; eşik ölçüm girdisidir, ürün config'i değildir.
+- Makine bağı (owner 2026-10-06; Jev seçim 0,90 / yeterlilik 0,71 → owner): `/etc/machine-id` olmayan Linux'ta (çoğu konteyner) taşınma/kopya tespiti bugün kapalı; dalga 1 yalnız `doctor` görünürlüğü ekler. Karar: kimlik bağı v2 — config'te yapılandırılabilir makine-kimliği kaynağı (ör. bağlanmış secret dosyası), yoksa `/etc/machine-id`, yoksa yol+cihaz+inode "zayıf bağ"; `installation.requireMachineBinding` politikası makine kimliği yoksa yazmayı reddeder. Sürümlü sözleşme + v1 kayıt göçü; dalga 2 Opus kartı (IDENTITY-BINDING-V2).
+- Qwen karar araştırması owner tarafından iptal edildi (2026-10-06); `shadow.sh` aynı arayüzle yalnız Jev çağırır.
 
 ## Owner kararı — 2026-10-06: Qwen karar araştırması iptali
 

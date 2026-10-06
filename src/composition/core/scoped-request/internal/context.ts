@@ -1,6 +1,6 @@
 import { userInfo } from 'node:os';
 import { ErrorRegistry, loadConfig, inspectProductFile, type ConfigLoadOptions } from '#platform/index.js';
-import { FileInstallationIdentityStore, FileProjectIdentityStore, registerProviderConfig, readLocalOsIdentity, verifyLocalPeerIdentity, type LocalPeerIdentity } from '#adapters/index.js';
+import { FileInstallationIdentityStore, FileProjectIdentityStore, localInstallationBindingSource, registerProviderConfig, readLocalOsIdentity, verifyLocalPeerIdentity, type LocalPeerIdentity } from '#adapters/index.js';
 import { policySchema, type InstallationIdentityChoice } from '#domain/index.js';
 import { InstallationIdentityError, ProjectIdentityError, PolicyAuthorizationError, type ScopeAccess } from '#engine/index.js';
 import { createLayoutPolicySource } from '#composition/core/policy/index.js';
@@ -43,6 +43,15 @@ export async function loadConfiguredProjectIdentity(projectRoot: string, options
 export async function loadConfiguredInstallationIdentity(projectRoot: string, options: ConfigLoadOptions = {}) {
   const config = await loadConfig(projectRoot, { ...options, heal: false });
   return accessIdentity(new FileInstallationIdentityStore(config.productLayout, config.configFile.writeLockTimeoutMs, undefined, config.installation.identityProbe), 'read');
+}
+/** Doctor-only, read-soft: whether this host can bind the installation identity to the machine (the product's own capture; nothing is written). */
+export async function inspectConfiguredInstallationBinding(projectRoot: string, options: ConfigLoadOptions = {}): Promise<{ readonly capability: 'supported' | 'unsupported' } | null> {
+  try {
+    const config = await loadConfig(projectRoot, { ...options, heal: false });
+    // The capability is machine-level: probe against the project directory, which exists before `.deckent` is initialized.
+    const binding = await localInstallationBindingSource({ ...config.productLayout, root: config.projectRoot }, config.installation.identityProbe).capture();
+    return { capability: 'status' in binding ? 'unsupported' : 'supported' };
+  } catch { return null; }
 }
 /** Local bootstrap-metadata consent, under existing OS ownership guards; no policy or ledger authority is granted. */
 export async function resolveConfiguredInstallationIdentity(projectRoot: string, choice: InstallationIdentityChoice, options: ConfigLoadOptions = {}) {

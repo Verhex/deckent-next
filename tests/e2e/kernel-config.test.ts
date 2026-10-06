@@ -7,6 +7,7 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it } from 'vitest';
 import { resolveGlobalConfigPaths } from '../../src/platform/index.js';
+import { machineBindingNotRunReason } from '../contracts/support/binding-capability.js';
 
 const exec = promisify(execFile);
 const binary = fileURLToPath(new URL('../../dist/composition/core/cli/internal/entry.js', import.meta.url));
@@ -58,7 +59,12 @@ describe('K1 real binary journeys', () => {
     const f = await fixture('project-override');
     const result = JSON.parse((await f.run(['doctor', '--json'])).stdout);
     expect(result).toMatchObject({ schemaVersion: 2, principal: { assurance: 'os-user', provenance: 'cli' }, company: { companyId: 'default' }, status: 'ready', policyTemplate: null, modelInvocationDelivery: [] });
-    expect(Object.keys(result).sort()).toEqual(['company', 'environment', 'host', 'hostMemory', 'modelInvocationDelivery', 'paths', 'platform', 'policyTemplate', 'poolReadiness', 'principal', 'schemaVersion', 'scope', 'secretStore', 'shellRealm', 'status']);
+    // Doctor JSON 2 grows only by additive fields (shellRealm, poolReadiness before; wave 1: imageRefresh for WORKER-AUTO-REFRESH and
+    // installationBinding for VERIFY-ENV, both always present, null when unwired or unreadable).
+    expect(Object.keys(result).sort()).toEqual(['company', 'environment', 'host', 'hostMemory', 'imageRefresh', 'installationBinding', 'modelInvocationDelivery', 'paths', 'platform', 'policyTemplate', 'poolReadiness', 'principal', 'schemaVersion', 'scope', 'secretStore', 'shellRealm', 'status']);
+    // No refresh ever ran in this installation (no Docker execution): nothing is claimed.
+    expect(result.imageRefresh).toEqual({ status: 'unknown', reason: null, imageVersion: null });
+    expect(result.installationBinding).toEqual({ capability: await machineBindingNotRunReason() ? 'unsupported' : 'supported' });
     // SECRET-K1: the selected store (default: the environment) is reported without resolving any reference, in JSON and as a human line.
     expect(result.secretStore).toEqual({ schemaVersion: 1, backend: 'core.secret-store.env@1', writable: false, enumerable: false, status: 'ready', code: null });
     expect(result.shellRealm).toMatchObject({ schemaVersion: 1 });

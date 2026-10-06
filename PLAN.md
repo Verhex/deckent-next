@@ -2,25 +2,24 @@
 
 Bu dosya yalnız **devam eden işi** taşır: kısa durum, tek iş tablosu, açık P0/P1 ve karar indeksi. Tamamlananlar [COMPLETED-PLAN](COMPLETED-PLAN.md), tarihli owner kararları ve legacy envanter [owner-decisions](.deckent/docs/decisions/owner-decisions.md), iş ayrıntıları `.deckent/docs/plan/` altındadır (SSOT sadeleştirmesi, owner 2026-10-05; hiçbir metin silinmedi). Kimde-ne-var host panosunda: `node .agents/refactor/board.mjs show`; sözleşmeler [ARCHITECTURE](ARCHITECTURE.md).
 
-## Şimdi (2026-10-05)
+## Şimdi (2026-10-06)
 
-- **Roller:** main Opus; bağımsız inceleyen Astra (`gpt-6-astra`, kanal `astra`); Sol yalnız analiz; Codex/Sonnet lane'leri `gpt-6-astra`/Sonnet. DOGFOOD OFF; canlı geçiş ayrı owner yetkisi. Rol ataması bu belgeden doğmaz.
-- **main:** `0e773b3b` (PR #12 B36 gerilemeleri indi, Astra 2365 PASS; PR #14 board dashboard indi); tam verify main üzerinde koşuyor. Bu dal tabanı `58537c7f`, rebase lead'de.
-- **Canlı:** alpha.4 / ledger 46. **main:** ledger 47 (48 rezerve, kullanılmadı) / runtime protocol 20.
-- **Sıradaki 3:** (1) IDENTITY-UX + IDENTITY-I1 rebase/parti incelemesi; (2) MODEL-INGRESS-P2 inceleme, ardından P3 güvenlik; (3) CI-DEBT toplu iş ve tam verify sonucu.
-- **Teslim düzeni:** parti başına tek bağımsız inceleme, en çok bir düzeltme turu, sonra Jev ≥0,90 veya owner. Ayrıntı: [durum notları](.deckent/docs/plan/status-2026-10-05.md).
+- **Roller:** main Opus; bağımsız inceleyen Astra (`gpt-6-astra`, kanal `astra`); Sol yalnız analiz; lane'ler varsayılan Sonnet 5.5 alt ajan, kritikte Opus (owner 2026-10-05). DOGFOOD OFF (N1'de D4 denemeleri); canlı geçiş ayrı owner yetkisi. Rol ataması bu belgeden doğmaz.
+- **Canlı = main = N1:** `9e01322c` **1.0.0-alpha.6** (PATCH-BUDGET), ledger 47 / runtime protocol 20 (48 rezerve). CI zorunlu hücreler yalnız ubuntu node24+26 (owner ruleset 2026-10-06).
+- **İlk 20 iş (owner 2026-10-06 kabul, K1–K8):** 4 dalga × 4–5 lane; analiz `proof/WORKLIST-TOP20-2026-10-06/analysis.md`, kararlar [owner-decisions](.deckent/docs/decisions/owner-decisions.md) "İlk 20 iş kararları". **Dalga 1** `wave/1` dalında: WORKER-AUTO-REFRESH, ARCH-GUARDS, K-LATENCY-METRICS, MCP-KAYIT-DENETİMİ + SANDBOX-AD-SIZINTISI, VERIFY-ENV (machine-id yeteneği + doctor görünürlüğü); tek Astra parti incelemesi → PR → alpha.7. Dalga 2: DOGFOOD-D5, RUN-YAŞAM, MODEL-INGRESS-P2, KATALOG-TEMİZLİK, MONITOR-M2M3.
+- **Dogfood DT-1 R2 (N1, alpha.6):** Run → patch → candidate → delivery ürün yolundan tamam; verify 22 test ortam kaynaklı (verify imajında `/etc/machine-id` yok, `/tmp` noexec; ürün hatası yok) → machine-id'li verify imajı + profil v8 ile yeniden doğrulama, sonra benimseme.
+- **Teslim düzeni:** parti başına tek bağımsız inceleme, en çok bir düzeltme turu, sonra Jev ≥0,90 / ≥0,75 veya owner; Jev danışmaları `shadow.sh` ile (Qwen araştırması 2026-10-06 iptal, yalnız Jev). Önceki durum notu: [durum notları](.deckent/docs/plan/status-2026-10-05.md).
 
 ## Aktif iş alanları
 
 | İş | Hedef | Durum | Sıradaki adım | Kanıt |
 |---|---|---|---|---|
-| IDENTITY-UX | Temiz kurulumda salt-okunur follow `not-initialized`; `ADMISSION_DEFERRED` bilgi notu | Lane çalışıyor | Lane teslimi + parti incelemesi | [work-list](.deckent/docs/plan/work-list.md) |
+| İLK-20 DALGA 1 | Dogfood engelini kaldır + katman kaymasını durdur (#2–#6 + VERIFY-ENV) | lane'ler `wave/1`'de; Astra parti incelemesi | Astra parti incelemesi → PR → alpha.7 | `proof/W1-*-2026-10-06/`; [work-list](.deckent/docs/plan/work-list.md) |
+| IDENTITY-BINDING-V2 | Makine kimliği yokken taşınma koruması: yapılandırılabilir kaynak → /etc/machine-id → zayıf yol+cihaz+inode bağı; `installation.requireMachineBinding` (owner 2026-10-06) | Karar verildi | Dalga 2 Opus kartı (sürümlü bağ + v1 göçü) | [owner-decisions](.deckent/docs/decisions/owner-decisions.md) |
 | IDENTITY-PROFILES | Solo/ekip/enterprise/özel sürümlü kimlik profilleri (I0–I5), K1–K3 = A | I0 main'de; I1 `a1abf235` rebase bekliyor | I1 rebase + inceleme, sonra I2 | `proof/IDENTITY-PROFILES-DESIGN-2026-10-05/design.md` |
 | MODEL-INGRESS-UNICODE | Gizli Unicode: not/audit/karantina | P1 main'de; P2 `de286888` rebase | P2 inceleme; P3 araç/MCP şema + argüman JSON | [work-list](.deckent/docs/plan/work-list.md) |
 | FLAKY-RECOVERY | Installed offline completion/cancellation | Kaynak indi | Gerçek Docker ile doğrulama | [work-list](.deckent/docs/plan/work-list.md) |
 | CI-DEBT | Kalan CI hataları tek iş (ubuntu-only ruleset owner komutu) | Owner'ın ayrı Codex ajanı | Ajan STATUS çıktısını izle | `proof/CI-DEBT-2026-10-05/STATUS.md` |
-| BOARD-DASHBOARD | Process board HTML paneli | PR #14 indi | Canlı kullanımda ölçüm | PR #14 |
-| B36-REGRESSIONS (PR #12) | Batch-36 gerilemelerinin düzeltmesi | İndi; Astra 2365 PASS, main `0e773b3b` | Tam verify sonucu | Astra 2365 |
 | NODE-26 | Node 26 geçişi | Hedef LTS 2026-10-28 | O tarihte tam verify | owner-decisions |
 | NATIVE-AGENTS | Owner öncelik #4 OpenCode, #5 Copilot CLI, #6 Kimi Code CLI, #7 Antigravity/Gemini | Hazırlanmadı | `commands.json` kayıtları + credential spec + imaj + usage kanıtı; Devin = ayrı remote-worker adaptörü | [hedefler](.deckent/docs/plan/owner-targets-2026-10-05.md) |
 | MODEL-PROVIDERS | Owner öncelik #8 GLM, #9 DeepSeek | Hazırlanmadı | Katalog kaydı: `provider-openai-chat` veya `provider-openrouter-chat` | [hedefler](.deckent/docs/plan/owner-targets-2026-10-05.md) |

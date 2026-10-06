@@ -7,6 +7,7 @@ import { createConfiguredRuntimeClient } from '#composition/core/runtime-service
 import { queryFailure } from '#composition/core/query-errors/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
 import { contextDispatchAuthorization } from '#composition/core/policy/index.js';
+import { inspectToolchainRefresh } from '#composition/core/toolchains/index.js';
 const DENIED = new Set(['POLICY_DENIED', 'POLICY_APPROVAL_UNSUPPORTED', 'SCOPE_UNKNOWN', 'APPROVAL_DENIED']); const granted = (check: () => Promise<unknown>) => check().then(() => true, (error: unknown) => { if (DENIED.has(queryFailure(error).code)) return false; throw error; });
 async function authorizeSurfaceRead(root: string, scopeId: string, options: ConfigLoadOptions) { try {
       const c = await loadConfiguredScopeContext(root, scopeId, { ...options, force: true }, 'read'), auth = contextDispatchAuthorization(c, c.document);
@@ -26,6 +27,7 @@ export async function inspectMonitor(root: string, options: ConfigLoadOptions = 
   const contexts = new Map<string, ReturnType<typeof loadConfiguredScopeContext>>(), scope = (path: string, scopeId: string) => contexts.get(`${path}\0${scopeId}`)
     ?? contexts.set(`${path}\0${scopeId}`, loadConfiguredScopeContext(path, scopeId, options, 'read')).get(`${path}\0${scopeId}`)!;
   const captures = new Map<string, Awaited<ReturnType<typeof prepareMonitorInstall>>>(); return new MonitorApplication({ now: () => new SystemTrustedClock().sample().wallMs,
+    readImageRefresh: target => inspectToolchainRefresh(target.path, options),
     describeService: target => createConfiguredRuntimeClient(target.path, options).describeService(undefined, 'current'),
     readLedger: async target => { const installed = await loadConfig(target.path, { ...options, heal: false });
       const captured = await prepareMonitorInstall(installed, options.env, identity => granted(async () => {

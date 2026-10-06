@@ -85,7 +85,7 @@ describe.skipIf(process.platform !== 'linux')('policy-driven toolchain update', 
   it('off is disabled; propose writes only a plan; apply builds in a product-owned context and proposes exact profile revisions', async () => {
     const off = await fixture({ mode: 'off' });
     expect(await updateToolchains(off.project, {}, off.options, { fetcher: off.fetcher, runner: off.runner })).toMatchObject({ decision: 'disabled', plan: null });
-    const f = await fixture({});
+    const f = await fixture({ mode: 'propose' });
     const planned = await updateToolchains(f.project, {}, f.options, { fetcher: f.fetcher, runner: f.runner, now: () => '2026-09-23T08:00:00.000Z' });
     expect(planned).toMatchObject({ mode: 'propose', decision: 'planned', build: null, proposal: null, plan: { decision: 'build', staleProviders: ['codex'], next: { imageVersion: 'r5-20260923' } } });
     // The packaged recipe carries the r4-20260930 lineage, so the product path plans r4 (never a second r3).
@@ -102,16 +102,21 @@ describe.skipIf(process.platform !== 'linux')('policy-driven toolchain update', 
     expect(JSON.parse(await readFile(built.proposalPath!, 'utf8'))).toEqual(built.proposal);
     // Installed config is never rewritten by the update operation.
     expect(JSON.parse(await readFile(join(f.project, '.deckent/config.json'), 'utf8')).admission.registry.profiles[0].parameters.nativeSubscription.preflight.cliVersion).toBe('codex-cli 0.155.1');
-    // A second apply for the same day refuses to reuse the taken context.
-    await expect(updateToolchains(f.project, { apply: true }, f.options, { fetcher: f.fetcher, runner: f.runner, now: () => '2026-09-23T08:10:00.000Z' })).rejects.toMatchObject({ code: 'WORKER_IMAGE_CONTEXT_EXISTS' });
+    // The built r5 continues the lineage (WORKER-AUTO-REFRESH): a second apply, still stale because manual update never rewrites config, plans r6 from r5
+    // and never reuses r5's taken context; the next counter is what the builder's guard demands.
+    const second = await updateToolchains(f.project, { apply: true }, f.options, { fetcher: f.fetcher, runner: f.runner, now: () => '2026-09-23T08:10:00.000Z' });
+    expect(second.plan).toMatchObject({ current: { imageVersion: 'r5-20260923' }, next: { imageVersion: 'r6-20260923', previousVersion: 'r5-20260923' } });
   });
-  it('auto builds without a flag, fresh toolchains yield no-change, and the CLI command renders the decision', async () => {
+  it('auto without a flag only plans (manual command), fresh toolchains yield no-change, and the CLI command renders the decision', async () => {
     const f = await fixture({ mode: 'auto' });
     f.latest['@openai/codex'] = '0.155.1';
     expect(await updateToolchains(f.project, {}, f.options, { fetcher: f.fetcher, runner: f.runner })).toMatchObject({ decision: 'no-change', planPath: null });
     f.latest['@openai/codex'] = '0.157.0';
     const built = await updateToolchains(f.project, {}, f.options, { fetcher: f.fetcher, runner: f.runner, now: () => '2026-09-24T08:00:00.000Z' });
-    expect(built).toMatchObject({ mode: 'auto', decision: 'built', plan: { next: { imageVersion: 'r5-20260924' } } });
+    expect(built).toMatchObject({ mode: 'auto', decision: 'planned', build: null, proposal: null, plan: { next: { imageVersion: 'r5-20260924' } } });
+    expect(f.runs).toEqual([]); // the default config + no flag never builds
+    const applied = await updateToolchains(f.project, { apply: true }, f.options, { fetcher: f.fetcher, runner: f.runner, now: () => '2026-09-24T08:05:00.000Z' });
+    expect(applied).toMatchObject({ decision: 'built' }); expect(f.runs).toHaveLength(1);
     const lines: string[] = [];
     await toolchainsCommand(['toolchains', 'update', '--json'], { root: f.project, env: f.options.env, stdout: { write: (text: string) => { lines.push(text); return true; } },
       updateToolchains: async () => ({ decision: 'planned', plan: { next: { imageVersion: 'r5-20260924' } }, build: null, proposalPath: null }) });

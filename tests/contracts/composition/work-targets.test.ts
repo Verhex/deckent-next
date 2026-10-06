@@ -94,7 +94,8 @@ async function fixture({ workTarget = 'clone' as 'clone' | 'none' | ((r: { root:
       expect(await store.store.loadRunWorkspaceCustody(identity.scopeId, identity.runId)).toBeNull();
       expect(await store.store.loadBoundDispatch(identity)).toBeNull();
     } finally { store.store.close(); }
-    expect(await readdir(join(data, 'workspaces')).catch(() => [])).toEqual([]);
+    // `toolchains` is the worker image refresh's own home (WORKER-AUTO-REFRESH), not an attempt workspace: nothing else may exist.
+    expect((await readdir(join(data, 'workspaces')).catch(() => [])).filter(name => name !== 'toolchains')).toEqual([]);
   };
   /** A second independent clone with its own base branch (the config may switch to it). */
   const secondTarget = async () => { const path = join(root, 'target2'); await exec('/usr/bin/git', ['clone', '-q', project, path]);

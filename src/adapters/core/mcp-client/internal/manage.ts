@@ -11,7 +11,7 @@ import { MCP_CLIENT_DEFAULTS, type McpClientServerSettings, type McpClientSettin
 import { decideMcpTrust, mcpTrustApprovalAsker, mcpTrustAuditWriter, recordMcpTrust, type McpTrustAsk, type McpTrustAudit, type McpTrustContext } from './approve.js';
 import { openMcpAgentTools, type McpOfferedTool } from './agent.js';
 import { openLocalIntegrityAuthority } from '#adapters/core/local-keyring/index.js';
-import { expandMcpEntry, mcpRegistryPaths, mcpServerEntrySchema, MCP_SERVER_NAME, readMcpRegistryFile, resolveMcpRegistry, type ManagedMcpPolicy,
+import { expandMcpEntry, mcpDefinitionDigest, MCP_SCOPE_PRECEDENCE, mcpRegistryPaths, mcpServerEntrySchema, MCP_SERVER_NAME, readMcpRegistryFile, resolveMcpRegistry, type ManagedMcpPolicy,
   type McpRegistryProblem, type McpScope, type McpServerEntry } from './registry.js';
 import { findMcpTrust, MCP_TRUST_FILE, readMcpTrust, type McpTrustRecord } from './trust.js';
 import { modelTextPrefix } from '#domain/index.js';
@@ -208,18 +208,32 @@ export async function runMcpCommand(request: McpCommandRequest, context: McpComm
     if (!MCP_SERVER_NAME.test(request.name)) throw fail('MCP_SERVER_NAME_INVALID', { name: request.name });
     const entry = mcpServerEntrySchema.safeParse(request.entry);
     if (!entry.success) throw fail('MCP_SERVER_ENTRY_INVALID', { name: request.name, reason: modelTextPrefix(entry.error.issues[0]?.message ?? 'schema', 200) });
-    const path = fileOf(view, request.scope);
-    await mutateRegistry(path, request.scope === 'project' ? 0o644 : 0o600, raw => {
-      const servers = serversOf(raw, request.scope, view.projectKey, true)!;
-      if (Object.hasOwn(servers, request.name)) throw fail('MCP_SERVER_EXISTS', { name: request.name, scope: request.scope });
-      servers[request.name] = entry.data;
-    });
-    // Owner 2026-09-28: adding a personal (local/user) server is its trust decision, in one step; a project entry is asked on first use.
-    if (request.scope === 'project' || request.approve === false) return { schemaVersion: 1, added: { name: request.name, scope: request.scope, file: path }, trust: 'pending' };
-    const added = (await loadMcpRegistry(context)).servers.find(server => server.name === request.name && server.scope === request.scope);
-    if (!added) return { schemaVersion: 1, added: { name: request.name, scope: request.scope, file: path }, trust: 'shadowed' };
-    const decided = await decideMcpTrust(added, trustContext, context.ask);
-    return { schemaVersion: 1, added: { name: request.name, scope: request.scope, file: path }, trust: decided.decision, pinnedTools: decided.pinned };
+    const path = fileOf(view, request.scope), mode = request.scope === 'project' ? 0o644 : 0o600;
+    const target = { name: request.name, scope: request.scope, definitionDigest: mcpDefinitionDigest(request.name, entry.data) };
+    const exists = async () => { const servers = serversOf(await rawFile(path), request.scope, view.projectKey, false); return !!servers && Object.hasOwn(servers, request.name); };
+    if (await exists()) throw fail('MCP_SERVER_EXISTS', { name: request.name, scope: request.scope });
+    // MCP-REGISTRY-AUDIT: the audited trust decision comes first, the registry file after it. An audit refusal or failure leaves the registry and the trust
+    // record as they were; a registry write that fails after a recorded decision revokes it again (audited), so no trust outlives an entry that never landed.
+    // Owner 2026-09-28: adding a personal (local/user) server is its trust decision, in one step; a project entry is asked on first use. Every other add
+    // (project, `--no-approve`, shadowed, unanswered) still audits a `reset`: a decision left by an earlier entry of this name never carries over.
+    const outranked = view.servers.some(server => server.name === request.name && MCP_SCOPE_PRECEDENCE.indexOf(server.scope) < MCP_SCOPE_PRECEDENCE.indexOf(request.scope));
+    let decided: { readonly decision: 'trusted' | 'declined' | 'unanswered'; readonly pinned: number } | null = null;
+    if (request.scope !== 'project' && request.approve !== false && !outranked)
+      decided = await decideMcpTrust({ ...target, file: path, entry: entry.data, trust: null }, trustContext, context.ask);
+    if (!decided || decided.decision === 'unanswered') await recordMcpTrust(target, trustContext, 'reset', () => null);
+    try {
+      await mutateRegistry(path, mode, raw => {
+        const servers = serversOf(raw, request.scope, view.projectKey, true)!;
+        if (Object.hasOwn(servers, request.name)) throw fail('MCP_SERVER_EXISTS', { name: request.name, scope: request.scope });
+        servers[request.name] = entry.data;
+      });
+    } catch (error) {
+      if (decided && decided.decision !== 'unanswered') await recordMcpTrust(target, trustContext, 'revoke', () => null).catch(() => undefined);
+      throw error;
+    }
+    const added = { name: request.name, scope: request.scope, file: path };
+    if (!decided) return { schemaVersion: 1, added, trust: outranked ? 'shadowed' : 'pending' };
+    return { schemaVersion: 1, added, trust: decided.decision, pinnedTools: decided.pinned };
   }
   if (request.verb === 'remove') {
     const holders: Exclude<McpScope, 'managed'>[] = [];
@@ -231,8 +245,10 @@ export async function runMcpCommand(request: McpCommandRequest, context: McpComm
     if (!holders.length) throw fail('MCP_SERVER_UNKNOWN', { name: request.name });
     if (holders.length > 1) throw fail('MCP_SERVER_SCOPE_AMBIGUOUS', { name: request.name, scopes: holders.join(',') });
     const scope = holders[0]!, path = fileOf(view, scope), held = view.servers.find(server => server.name === request.name && server.scope === scope);
-    await mutateRegistry(path, scope === 'project' ? 0o644 : 0o600, raw => { delete serversOf(raw, scope, view.projectKey, false)![request.name]; });
+    // MCP-REGISTRY-AUDIT: the audited revoke first, the registry file after it; a failed audit changes nothing, a failed registry write leaves the
+    // server untrusted (it asks again), never trusted without its audit.
     await recordMcpTrust({ name: request.name, scope, definitionDigest: held?.definitionDigest ?? '0'.repeat(64) }, trustContext, 'revoke', () => null);
+    await mutateRegistry(path, scope === 'project' ? 0o644 : 0o600, raw => { delete serversOf(raw, scope, view.projectKey, false)![request.name]; });
     await forgetFailure(scope, request.name);
     return { schemaVersion: 1, removed: { name: request.name, scope, file: path } };
   }

@@ -4,14 +4,16 @@ import { validateProcessExitCriterion } from '#capabilities/index.js';
 import { ErrorRegistry, prepareProductDirectory, type ConfigLoadOptions } from '#platform/index.js';
 import { nativeWorkerEffortCapability, bindNativeWorkerEffort, assertNativeWorkerBinding, compileNativeCodingWorkInput, isNativeCodingTemplate, nativeCodingRefusalCode, validateDockerTaskProfile, resolveDockerTaskProfile, openSqliteInventoryReader, openSqliteAttemptStore, openSqliteModelCatalogReader, GitIntegrationDelivery, GitRunWorkspaceProvider, GitWorkspaceBroker, resolveGitWorkTarget, selectWorkTarget } from '#adapters/index.js';
 import { resolveWorkerEffortExecution, admitWorkerModels, RunAdmissionApplication, runAdmissionSchema, runDeliveryAdmissionSchema, RunPolicyAuthorization, executionResourceAuthorization, authorizeWorkTargetUse,
-  assertDockerResourceCeiling, DispatchPolicyAuthorization, pinRunToDelivery, type RunAdmission, type RunCreate, type RunDeliveryAdmission, type RunWorkspaceCustody } from '#engine/index.js';
+  assertDockerResourceCeiling, DispatchPolicyAuthorization, pinRunToDelivery, type WorkerAdmissionWarning, type RunAdmission, type RunCreate, type RunDeliveryAdmission, type RunWorkspaceCustody } from '#engine/index.js';
 import { createLayoutPolicySource } from '#composition/core/policy/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
+import { isToolchainRefreshInProgress } from '#composition/core/toolchains/index.js';
 type ScopeContext = Awaited<ReturnType<typeof loadConfiguredScopeContext>>;
 async function admitConfiguredRun(projectRoot: string, command: RunAdmission, options: ConfigLoadOptions,
   pin?: (context: ScopeContext, replay: boolean) => Promise<RunWorkspaceCustody>) {
   const context = await loadConfiguredScopeContext(projectRoot, command.scopeId, options, 'write');
+  let warnings: readonly WorkerAdmissionWarning[] = [];
   const { config, layout, document, principal, path } = context;
   const store = {
     async loadRunReceipt(scopeId: string, commandId: string) {
@@ -46,13 +48,16 @@ async function admitConfiguredRun(projectRoot: string, command: RunAdmission, op
         }, { capability(value) { try { return nativeWorkerEffortCapability(value); } catch (error) { throw ErrorRegistry.createError(nativeCodingRefusalCode(error)); } },
           bind(value, selection) { try { return bindNativeWorkerEffort(value, selection); } catch { throw ErrorRegistry.createError('WORKER_MODEL_BINDING_MISMATCH'); } },
           compile(template, input, selection) { try { return compileNativeCodingWorkInput(template, input, selection); } catch (error) { throw ErrorRegistry.createError(nativeCodingRefusalCode(error)); } } });
-        await admitWorkerModels(execution.tasks, admitted.scopeId, catalog, Date.now(), admitted.graph.tasks);
+        // WORKER-AUTO-REFRESH: while a refresh is in flight a stale CLI pin is admitted with a typed warning instead of refused.
+        warnings = await admitWorkerModels(execution.tasks, admitted.scopeId, catalog, Date.now(), admitted.graph.tasks,
+          { imageRefreshInProgress: await isToolchainRefreshInProgress(projectRoot, options) });
       } finally { catalog.close(); }
       return { execution, layoutRevision: layout.revision, now: Date.now(), policy: { schemaVersion: 2, poolId: profile.poolId,
         capacity: { executionSlots: Math.min(profile.executionSlots, config.max_workers === 'auto' ? Infinity : config.max_workers),
           inFlightSlots: Math.min(profile.inFlightSlots, config.max_workers === 'auto' ? Infinity : config.max_workers) }, ordering: admitted.graph.tasks.map(task => task.id) } };
     } });
-  return Object.freeze({ schemaVersion: 1 as const, layout, admission: await app.create(command, undefined, pin ? replay => pin(context, replay) : undefined) });
+  const admission = await app.create(command, undefined, pin ? replay => pin(context, replay) : undefined);
+  return Object.freeze({ schemaVersion: 1 as const, layout, admission, warnings });
 }
 export async function createConfiguredRun(projectRoot: string, input: RunAdmission, options: ConfigLoadOptions = {}) {
   try { return await admitConfiguredRun(projectRoot, runAdmissionSchema.parse(input), options); }

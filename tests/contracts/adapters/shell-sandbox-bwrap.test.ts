@@ -93,6 +93,16 @@ describe('bubblewrap argument contract (S9, pure)', () => {
     expect(order.every(index => index > -1)).toBe(true);
     expect([...order].sort((a, b) => a - b)).toEqual(order);
   });
+  it('an emptied product-state directory is an empty tmpfs that is remounted read-only after every mount, the scratch bind inside it included (SANDBOX-AD-SIZINTISI)', () => {
+    const emptied = bubblewrapArguments({ ...view, emptiedDirectories: ['/tmp/x/project/.deckent/data'], scratchDir: '/tmp/x/project/.deckent/data/state/scratch/o/s' });
+    const index = (...pair: string[]) => { for (let i = 0; i + pair.length <= emptied.length; i++) if (pair.every((part, j) => emptied[i + j] === part)) return i; return -1; };
+    const tmpfs = index('--perms', '0555', '--tmpfs', '/tmp/x/project/.deckent/data'), scratch = index('--bind', '/tmp/x/project/.deckent/data/state/scratch/o/s', '/tmp/x/project/.deckent/data/state/scratch/o/s');
+    const remount = index('--remount-ro', '/tmp/x/project/.deckent/data');
+    expect(tmpfs).toBeGreaterThan(index('--bind', '/tmp/x/project', '/tmp/x/project'));
+    expect(scratch).toBeGreaterThan(tmpfs); expect(remount).toBeGreaterThan(scratch);
+    // Without the field the arguments carry no remount at all: nothing else changed.
+    expect(args).not.toContain('--remount-ro');
+  });
   it('bounds the tmpfs mounts and ends before the command', () => {
     expect(at('--size', String(64 * 1024 * 1024), '--tmpfs', '/tmp')).toBeGreaterThan(-1);
     expect(args.at(-1)).not.toBe('--');
@@ -139,14 +149,20 @@ describe.skipIf(process.platform === 'win32')('bubblewrap realm selection (S9; r
     const view = await resolveBubblewrapView(f.layout, f.environment);
     if (!view.ok) throw new Error(view.reason);
     expect(view.view).toMatchObject({ projectRoot: f.scope.root, scratchDir: f.scratch, home: f.home });
-    expect(view.view.maskedFiles).toEqual(expect.arrayContaining([join(f.scope.root, '.env'), join(f.scope.root, 'secrets', 'key.pem'), join(f.scope.root, '.brain', 'memory.db'),
+    expect(view.view.maskedFiles).toEqual(expect.arrayContaining([join(f.scope.root, '.env'), join(f.scope.root, 'secrets', 'key.pem'),
       join(f.scope.root, 'alias.txt')]));
+    // SANDBOX-AD-SIZINTISI: `.brain` holds the protected `memory.db` and nothing else, so it is one empty tmpfs (no per-file mask that would list the name).
+    expect(view.view.emptiedDirectories).toContain(join(f.scope.root, '.brain'));
+    expect(view.view.maskedFiles).not.toContain(join(f.scope.root, '.brain', 'memory.db'));
     expect(view.view.maskedFiles).not.toContain(join(f.scope.root, 'plain.txt'));
     // Astra 2154 R3: what the walk could not see is closed — the unreadable directory and the subtree beyond the depth bound are masked.
+    
+    // The layout root itself is never emptied (a command may create `.deckent/docs`); its denied `host` keeps its own mask.
+    expect(view.view.emptiedDirectories ?? []).not.toContain(join(f.scope.root, '.deckent'));
     expect(view.view.maskedDirectories).toEqual(expect.arrayContaining([join(f.scope.root, '.deckent', 'host'), join(f.scope.root, 'locked'),
       join(f.scope.root, Array.from({ length: 33 }, () => 'd').join('/'))]));
     expect(view.view.readOnlyPaths).toEqual([join(f.scope.root, '.git')]);
-    const all = [...view.view.maskedFiles, ...view.view.maskedDirectories];
+    const all = [...view.view.maskedFiles, ...view.view.maskedDirectories, ...view.view.emptiedDirectories ?? []];
     expect(all).not.toContain(join(f.scope.root, 'env-link')); expect(all).not.toContain(join(f.scope.root, 'src', 'a.ts'));
     expect(all.some(path => path.includes('node_modules'))).toBe(false);
     expect(view.view.maskedFiles.some(path => path.endsWith('/node_modules/pkg/.npmrc'))).toBe(false);
@@ -211,7 +227,7 @@ describe.skipIf(!sandboxReady)('bubblewrap realm with the real bwrap and a real 
       + ' echo project > made.txt; echo scratch > "$TMPDIR/made.txt"; hello; echo tool > ~/tools/bin/z 2>&1; echo "tool-write=$?"; echo leak > .env 2>&1; echo "env-write=$?"; echo "pid=$$"');
     expect(result.status).toBe('exited');
     expect(result.output).not.toContain('SECRET');
-    expect(result.output).toMatch(/cat: \.env: Permission denied/u); expect(result.output).toMatch(/cat: \.brain\/memory\.db: Permission denied/u);
+    expect(result.output).toMatch(/cat: \.env: Permission denied/u); expect(result.output).toMatch(/cat: \.brain\/memory\.db: No such file or directory/u); // the directory is an empty tmpfs: the name is not there either
     expect(result.output).toMatch(/cat: \.deckent\/host\/channel\.md: No such file or directory/u);
     expect(result.output).toContain('hello-from-tools\nlib-data\n');
     expect(result.output).toMatch(/tool-write=1/u); expect(result.output).toMatch(/env-write=1/u);

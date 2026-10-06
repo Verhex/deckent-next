@@ -9,6 +9,8 @@ import { loadConfiguredInstallationIdentity, loadConfiguredProjectIdentity, load
 import { loadPeerInvocationContext } from '#composition/core/model-invocation/index.js';
 import { main } from '#surfaces/index.js';
 import { main as composedMain } from '#composition/core/cli/index.js';
+import { machineBindingNotRunReason } from '../support/binding-capability.js';
+const bindingNotRun = await machineBindingNotRunReason();
 
 const roots: string[] = [];
 afterEach(async () => { vi.restoreAllMocks(); vi.unstubAllEnvs(); clearConfigCache(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
@@ -38,7 +40,7 @@ function available<T>(read: { status: 'available'; value: T } | { status: 'unava
 }
 
 describe('installation and project identity composition', () => {
-  beforeEach(context => { if (process.platform !== 'linux') context.skip('Linux peer identity fixture; portable read/status tests run separately'); });
+  beforeEach(context => { if (process.platform !== 'linux') context.skip('Linux peer identity fixture; portable read/status tests run separately'); else if (bindingNotRun) context.skip(bindingNotRun); });
   it('reads identities created by explicit initialization without editing config or creating a ledger; alternate data roots share no project identity', async () => {
     const f = await fixture(); const before = await readFile(f.config, 'utf8');
     await createIdentities(f); const identity = available(await loadConfiguredProjectIdentity(f.project, f.options));

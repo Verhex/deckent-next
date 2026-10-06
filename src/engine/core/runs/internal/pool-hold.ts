@@ -11,7 +11,7 @@ import { RunStoreError } from './store.js';
  * reservation on it (`RUN_POOL_HELD`, inside the reservation transaction); Run admission still accepts Runs, already reserved attempts
  * still launch, run and are evaluated, and an immediate stop stays the explicit Run cancel. `resume` restarts reservations. The pool is
  * installation-wide, so the hold is too (one row per pool, ledger v44); `drained` is the typed "held and nothing left" status the
- * dev-release switch (U2) waits on.
+ * operator release or restart sequence waits on before it replaces the installation.
  */
 const reasonSchema = z.string().min(1).max(256).regex(/^[^\p{Cc}]+$/u);
 const actorSchema = z.object({ issuer: identitySchema, subject: identitySchema }).strict().readonly();

@@ -94,6 +94,10 @@ export interface CommandContext extends InstallationCommandContext, ModelCommand
   inspectSecretStore?: import('./secret.js').SecretStoreInspectHandler;
   // REALM-NOTICE: the shell realm a call here gets and every sandbox provider passed over (read-only measurement); doctor-only.
   inspectShellRealm?: (root: string, options: ConfigLoadOptions) => Promise<ShellRealmDoctorView>;
+  // WORKER-AUTO-REFRESH: the worker image refresh status (updating / current / failed with a typed reason); doctor-only, local file read, null when unwired or never run.
+  inspectToolchainRefresh?: (root: string, options: ConfigLoadOptions) => Promise<{ readonly status: string; readonly reason: string | null; readonly imageVersion: string | null } | null>;
+  // Doctor-only, read-soft: whether the installation identity can be bound to this machine (relocation/copy detection); null when unwired or unreadable.
+  inspectInstallationBinding?: (root: string, options: ConfigLoadOptions) => Promise<{ readonly capability: 'supported' | 'unsupported' } | null>;
   listSecretNames?: import('./secret.js').SecretNamesHandler;
   // SECRET-WRITE: `secret set|delete` through the runtime service (the socket peer is the principal; the `secret` policy cell decides).
   setSecret?: import('./secret.js').SecretSetHandler;
@@ -124,6 +128,10 @@ interface ShellRealmSelection { readonly selected: string | null; readonly marke
   readonly rejected: readonly { readonly kind: string; readonly reason: string }[] }
 export interface ShellRealmDoctorView extends ShellRealmSelection { readonly mode: string; readonly preferSandbox: ShellRealmSelection | null }
 /** The realm lines in the product's own sandbox words (the result marker, then the notice the live stream shows); no catalog text. */
+function imageRefreshText(view: { readonly status: string; readonly reason: string | null; readonly imageVersion: string | null }, locale: Locale): string {
+  const params = { reason: view.reason ?? '-', version: view.imageVersion ?? '-' };
+  return view.status === 'updating' ? t('doctor.imageRefresh.updating', params, locale) : view.status === 'failed' ? t('doctor.imageRefresh.failed', params, locale) : t('doctor.imageRefresh.current', params, locale);
+}
 function shellRealmLines(report: ShellRealmDoctorView): string[] {
   const lines = (view: ShellRealmSelection, label: string) => [`${view.marker ?? (view.selected === 'host' ? 'sandbox: host' : `sandbox: refused (${view.code ?? '-'})`)} [${label}]`,
     ...(view.notice ? [view.notice] : view.rejected.length ? [view.rejected.map(item => `${item.kind}: ${item.reason}`).join('; ')] : [])];
@@ -190,10 +198,12 @@ export async function runKernelCommand(argv: readonly string[], context: Command
   const secretStore = context.inspectSecretStore ? await context.inspectSecretStore(root, options) : null;
   // REALM-NOTICE: additive; null when unwired. The measurement itself is bounded and never throws (a failed probe reads `unknown`).
   const shellRealm = context.inspectShellRealm ? await context.inspectShellRealm(root, options) : null;
+  const imageRefresh = context.inspectToolchainRefresh ? await context.inspectToolchainRefresh(root, options).catch(() => null) : null;
+  const installationBinding = context.inspectInstallationBinding ? await context.inspectInstallationBinding(root, options) : null;
   const poolReadiness = await assessPoolReadiness(root, context, options, config.admission, (config.terminal as { scopeId?: string } | undefined)?.scopeId);
   const data = { schemaVersion: 2, scope: 'kernel', platform, host, hostMemory: detectHostMemory(), environment: detectEnvironment(env),
     paths: resolveGlobalScopePaths(platform, env), principal,
-    company: { companyId: config.company.id }, status: poolReadiness.status === 'drift' || poolReadiness.status === 'unavailable' ? 'degraded' : 'ready', poolReadiness, policyTemplate, modelInvocationDelivery, secretStore, shellRealm,
+    company: { companyId: config.company.id }, status: poolReadiness.status === 'drift' || poolReadiness.status === 'unavailable' ? 'degraded' : 'ready', poolReadiness, policyTemplate, modelInvocationDelivery, secretStore, shellRealm, imageRefresh, installationBinding,
     ...(toolchains ? { toolchains } : {}) };
   output(data, result => [t('doctor.host', { platform: result.platform, cpu: result.host.cpuCores, memory: result.host.totalMemMB,
     workers: result.host.recommendedMaxWorkers, company: result.company.companyId, principal: result.principal.id }, locale),
@@ -203,6 +213,9 @@ export async function runKernelCommand(argv: readonly string[], context: Command
   // SECRET-K1: the selected secret store and whether it can be read now (backend id, status and typed code only; never a value).
   ...(result.secretStore ? [t('doctor.secretStore', { backend: result.secretStore.backend, status: result.secretStore.status,
     codeSuffix: result.secretStore.code ? `, ${result.secretStore.code}` : '' }, locale)] : []),
+  ...(result.imageRefresh && result.imageRefresh.status !== 'unknown' ? [t('doctor.imageRefresh', { status: imageRefreshText(result.imageRefresh, locale) }, locale)] : []),
+  ...(result.installationBinding ? [result.installationBinding.capability === 'supported' ? t('doctor.installationBinding.supported', {}, locale)
+    : t('doctor.installationBinding.unsupported', { platform: result.platform }, locale)] : []),
   ...(result.poolReadiness ? poolReadinessLines(result.poolReadiness, locale) : []),
   ...(result.shellRealm ? shellRealmLines(result.shellRealm) : [])].join('\n'));
   // modelInvocationDelivery is JSON-only for now, like policyTemplate: no human-text rendering yet.

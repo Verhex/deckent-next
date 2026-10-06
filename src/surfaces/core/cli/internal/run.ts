@@ -10,7 +10,7 @@ import type { CommandContext } from './kernel-commands.js';
 import { renderBriefLines, renderWorkerModelLine } from '#surfaces/core/monitor/index.js';
 export type RunQueryHandler = (root: string, query: RunQuery, options: ConfigLoadOptions) => Promise<Readonly<{ schemaVersion: 1; layout: ProductLayout; run: RunView | null;
   models?: readonly TaskWorkerModel[] }>>;
-export type RunAdmissionHandler = (root: string, command: RunAdmission, options: ConfigLoadOptions) => Promise<Readonly<{ schemaVersion: 1; layout: ProductLayout; admission: Readonly<{ schemaVersion: 1; commandId: string; run: RunView }> }>>;
+export type RunAdmissionHandler = (root: string, command: RunAdmission, options: ConfigLoadOptions) => Promise<Readonly<{ schemaVersion: 1; layout: ProductLayout; admission: Readonly<{ schemaVersion: 1; commandId: string; run: RunView }>; warnings?: readonly Readonly<{ code: string; taskId: string; modelId: string; minCliVersion: string; cliVersion: string | null }>[] }>>;
 /** Local (not runtime-service) admission of a Run pinned to a completed delivery's commit (B06-2a `createDeliveryRun`). */
 export type RunDeliveryAdmissionHandler = (root: string, command: RunDeliveryAdmission, options: ConfigLoadOptions) => ReturnType<RunAdmissionHandler>;
 export type RunCancellationDeliveryHandler = (root: string, command: RunCommand, options: ConfigLoadOptions) => Promise<Readonly<{ schemaVersion: 1; layout: ProductLayout; delivery: Readonly<{ schemaVersion: 2; runId: string; scopeId: string; cancellationRequested: true; outcomes: readonly RunCancellationOutcome[] }> }>>;
@@ -83,7 +83,8 @@ export async function runCommand(argv: readonly string[], context: CommandContex
       : await context.createDeliveryRun!(root, runDeliveryAdmissionSchema.parse({ ...parsed.data, deliveryCommandId }), options);
     emit(result, { json, ...(context.stdout ? { stdout: context.stdout } : {}), render: data => t('cli.run.create.result', {
       run: data.admission.run.runId, revision: data.admission.run.revision,
-    }, locale) }); return;
+    }, locale) + (data.warnings ?? []).map(warning => `\n${t('run.warning.WORKER_IMAGE_REFRESHING', { taskId: warning.taskId, modelId: warning.modelId,
+      minCliVersion: warning.minCliVersion, cliVersion: warning.cliVersion ?? '-' }, locale)}`).join('') }); return;
   }
   if (action === 'reserve') {
     const commandId = values.get('--command-id'); const revision = values.get('--expected-revision');

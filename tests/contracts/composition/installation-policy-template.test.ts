@@ -6,6 +6,8 @@ import { applyPolicyTemplateInstallation, inspectPolicyTemplate, previewPolicyTe
 import { FileInstallationIdentityStore, readLocalOsIdentity } from '#adapters/index.js';
 
 import { resolveProductLayout } from '#platform/index.js';
+import { machineBindingNotRunReason } from '../support/binding-capability.js';
+const bindingNotRun = await machineBindingNotRunReason();
 
 // SCR-B (owner 2026-09-28, checkpoint option B, proof/SCR-B-2026-09-28/review.md): a real journal + real adapters
 // end to end. No Docker, no pool, no config.json is ever created or required for this path.
@@ -66,7 +68,7 @@ it('two different scopes cannot both occupy the same project\'s one installation
 
 });
 
-it.skipIf(process.platform !== 'linux')('refuses copied identity before direct policy setup publishes policy, bindings or journal', async () => {
+it.skipIf(process.platform !== 'linux' || bindingNotRun !== null)('[requires machine binding capability] refuses copied identity before direct policy setup publishes policy, bindings or journal', async () => {
   const original = await project(), copied = await project();
   await new FileInstallationIdentityStore(resolveProductLayout({ projectRoot: original })).loadOrCreate();
   await mkdir(join(copied, '.deckent'), { mode: 0o700 });
