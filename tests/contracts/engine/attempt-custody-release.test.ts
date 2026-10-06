@@ -17,14 +17,15 @@ const verifier = { async verify() { return principal; } };
 const allow = { async authorize() {}, async authorizeIdentity() {} };
 const exited = (handle = 'h1', exitCode = 0) => ({ handle, result: { kind: 'exited' as const, exitCode } });
 
-/** Real ledger + artifact store; fake supervisor and clone custody record every release call. `workInput` (default): coding tasks that
- * deliver a retained patch; false: tasks without workspace delivery (C2). */
-async function fixture(count = 1, workInput = true) {
+/** Real ledger + artifact store; fake supervisor and clone custody record every release call. `coding` (default): tasks with typed work
+ * input that deliver a retained patch; `declared`: no work input, kind declared `workspaceDelivery: 'none'` (C2); `unmarked`: no work
+ * input and no declaration (fail-closed). */
+async function fixture(count = 1, mode: 'coding' | 'declared' | 'unmarked' = 'coding') {
   const root = await mkdtemp(join(tmpdir(), 'deckent-custody-')); roots.push(root);
   const store = await openSqliteAttemptStore(join(root, 'ledger.db'), { busyTimeoutMs: 20, journalMode: 'wal', durability: 'full' }, { now: Date.now, timeoutMs: 86400000 }, 'allow', custodyOrDockerProfiles); stores.push(store);
   const runId = 'r-' + randomUUID();
   const identities: AttemptIdentity[] = Array.from({ length: count }, (_, index) => ({ runId, taskId: 't' + index, attemptId: randomUUID(), scopeId: 's', generation: 1, layoutRevision: 'l' }));
-  await admitRunAttempts(store, identities, { workInput });
+  await admitRunAttempts(store, identities, { workInput: mode === 'coding', noWorkspaceDelivery: mode === 'declared' });
   const artifactRoot = join(root, 'artifacts'); await mkdir(artifactRoot, { mode: 0o700 });
   const artifacts = new FileArtifactStore({ root: artifactRoot, maxBytes: 1048576 });
   const calls = { container: [] as string[], workspace: [] as string[] }; const bases: string[] = [];
@@ -164,8 +165,15 @@ describe('attempt custody release (EXEC-RELEASE)', () => {
     expect(isolated.entries.find(entry => entry.identity.attemptId === ready.attemptId)?.outcome).toMatchObject({ reason: 'record-unreadable', code: 'EIO' });
     expect(isolated.entries.filter(entry => entry.outcome.status === 'released').length).toBe(1);
   });
-  it('C2: a settled task without workspace delivery is released by the same owner on the Run custody base; unsettled or unprovable ones are held', async () => {
-    const f = await fixture(2, false); const [settled, pending] = f.identities as [AttemptIdentity, AttemptIdentity];
+  it('owner B negative: an unmarked task without work input keeps its clone even when settled; only a retained patch releases it', async () => {
+    const f = await fixture(1, 'unmarked'); await f.execute(f.identity); await f.recordCustody();
+    expect((await f.settle(f.identity)).snapshot.progress[0]?.phase).toBe('accepted');
+    expect((await f.store.loadRun('s', f.identity.runId))!.execution.tasks[0]).not.toHaveProperty('workspaceDelivery');
+    expect(await f.app().release(f.identity)).toEqual({ schemaVersion: 1, status: 'held', reason: 'patch-missing', code: null });
+    expect((await f.app().sweep('s', 2)).entries).toEqual([]); expect(f.calls).toEqual({ container: [], workspace: [] });
+  });
+  it('C2: a settled task of a declared no-delivery kind is released by the same owner on the Run custody base; unsettled or unprovable ones are held', async () => {
+    const f = await fixture(2, 'declared'); const [settled, pending] = f.identities as [AttemptIdentity, AttemptIdentity];
     for (const identity of f.identities) await f.execute(identity);
     // Executed but not evaluated: evaluation or an operator decision may still need the clone.
     expect(await f.app().release(settled)).toEqual({ schemaVersion: 1, status: 'held', reason: 'delivery-pending', code: null });
@@ -182,7 +190,7 @@ describe('attempt custody release (EXEC-RELEASE)', () => {
     expect(f.calls.workspace).toEqual([settled.attemptId]);
   });
   it('C2 sweep: settled no-delivery attempts are candidates, an unsettled one is skipped, and the sweep reports source-base remnants', async () => {
-    const f = await fixture(2, false); const [settled, pending] = f.identities as [AttemptIdentity, AttemptIdentity];
+    const f = await fixture(2, 'declared'); const [settled, pending] = f.identities as [AttemptIdentity, AttemptIdentity];
     for (const identity of f.identities) await f.execute(identity);
     await f.settle(settled); await f.recordCustody();
     let limit = -1; const workspaces = { ...f.workspaces, async sweepSourceBases(value: number) { limit = value; return { removed: 1, kept: 2 }; } };
@@ -190,9 +198,20 @@ describe('attempt custody release (EXEC-RELEASE)', () => {
     expect(swept).toMatchObject({ released: 1, error: null, sourceBases: { removed: 1, kept: 2 } });
     expect(swept.entries).toEqual([{ identity: settled, outcome: { ...released, delivery: 'not-required' } }]);
     expect(swept.entries.some(entry => entry.identity.attemptId === pending.attemptId)).toBe(false); expect(limit).toBe(16);
+    expect((await f.store.loadRun('s', settled.runId))!.execution.tasks.every(task => task.workspaceDelivery === 'none')).toBe(true);
     // `keep` retention never releases custody, but crash temporaries are still swept within the bound.
     limit = -1; const kept = await f.app({ workspaces, retention: { release: 'keep', sweepLimit: 4 } }).sweep('s', 2);
     expect(kept).toMatchObject({ released: 0, entries: [], sourceBases: { removed: 1, kept: 2 } }); expect(limit).toBe(4);
+  });
+  it('C2 sweep filter: an interrupted or recovered run (partial output) is never a candidate, so it spends no sweep slot', async () => {
+    const f = await fixture(1, 'declared'); await f.execute(f.identity); await f.settle(f.identity); await f.recordCustody();
+    for (const interrupted of [true, null]) {
+      const store = Object.assign(Object.create(f.store) as typeof f.store, { async loadBoundDispatch(identity: AttemptIdentity) {
+        const record = (await f.store.loadBoundDispatch(identity))!; return { ...record, terminal: { ...record.terminal!, interrupted } }; } });
+      expect(await f.app({ store }).sweep('s', 2)).toMatchObject({ released: 0, entries: [], error: null });
+    }
+    expect(f.calls).toEqual({ container: [], workspace: [] });
+    expect((await f.app().sweep('s', 2)).released).toBe(1);
   });
 });
 

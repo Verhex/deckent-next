@@ -53,7 +53,7 @@ const held = (reason: AttemptCustodyHoldReason, code: string | null = null): Att
 
 /** Single owner of the attempt custody release transition. Eligibility comes only from the ledger: a terminal record whose required delivery
  * is proven — a retained patch receipt that reads back with its digest, parses and binds this exact attempt (always verified when present,
- * required for a task with typed work input); or, with no patch, a task without workspace delivery (C2) whose Run progress has settled and
+ * required unless the task's kind is declared without workspace delivery); or, with no patch, a task of such a declared kind (C2) whose Run progress has settled and
  * whose Run workspace custody is recorded — plus a sealed worker
  * event log when the recorded profile had an event channel. Order: container (the existing release authority re-verifies retained output
  * and the exact terminal container) then clone (detached atomically, then removed); a failed step stops, keeps the rest and is retryable
@@ -83,7 +83,7 @@ export class AttemptCustodyReleaseApplication {
     return run ? workspaceDeliveryState(run, identity) : 'unbound';
   }
   /** The exact clone request. A retained (or just retained) patch is always the proof and must verify, whatever the task; without one,
-   * a coding task is still owed its patch, and only a settled task without workspace delivery (C2) is released on the Run's recorded
+   * any task not of a declared no-delivery kind is still owed its patch (fail-closed), and only a settled task of such a kind (C2) is released on the Run's recorded
    * workspace custody, the base every attempt clone of the Run is allocated and verified against. */
   private async request(identity: AttemptIdentity, record: DispatchRecord, expected?: ArtifactReceipt): Promise<WorkspaceRequest | AttemptCustodyOutcome> {
     if (expected || record.patch) {
@@ -119,9 +119,12 @@ export class AttemptCustodyReleaseApplication {
     } catch (error) { return held('workspace-release-failed', codeOf(error)); }
   }
   /** Sweep work filter (never eligibility): a retained patch, or (C2) a settled task without workspace delivery; an attempt still awaiting
-   * its patch or its task's settlement is not a candidate yet. */
+   * its patch or its task's settlement, or holding only partial output, is not a candidate yet. */
   private async candidate(identity: AttemptIdentity, record: DispatchRecord) {
-    return !!record.patch || await this.delivery(identity) === 'not-required';
+    if (record.patch) return true;
+    // An interrupted or recovered run (`interrupted` true/null) has partial output that the container release refuses on every start;
+    // it is not a candidate, so it never spends a `sweepLimit` slot (work filter only; `release` itself still decides).
+    return !!record.output && record.terminal?.interrupted === false && await this.delivery(identity) === 'not-required';
   }
   /** Bounded start sweep of one scope: ledger-terminal records whose delivery is proven (retained patch, or C2 settled no-delivery task) and
    * whose attempt directory (or own interrupted detach) still exists; each goes through the same authorized `release`. At most `sweepLimit`
