@@ -16,10 +16,12 @@ const exec = promisify(execFile);
 export interface FixtureTracker { readonly roots: string[]; readonly cleanup: (() => Promise<void>)[] }
 export interface WorkspacePatchFixtureOptions { readonly restartable?: boolean; readonly adoptionTargets?: readonly string[];
   /** Extra tracked files of the base commit (relative path → content). */
-  readonly baseFiles?: Readonly<Record<string, string>> }
+  readonly baseFiles?: Readonly<Record<string, string>>;
+  /** EXEC-RELEASE C2 (owner B): the `coding` kind declares `workspaceDelivery: 'none'` in the admission registry. */
+  readonly noWorkspaceDelivery?: boolean }
 
 /** Real Git project, configured Docker execution and one reserved coding attempt whose worker edits note/removed/added files. */
-export async function workspacePatchFixture(track: FixtureTracker, { restartable = false, adoptionTargets, baseFiles = {} }: WorkspacePatchFixtureOptions = {}) {
+export async function workspacePatchFixture(track: FixtureTracker, { restartable = false, adoptionTargets, baseFiles = {}, noWorkspaceDelivery = false }: WorkspacePatchFixtureOptions = {}) {
   const root = await mkdtemp(join(tmpdir(), 'dn-patch-')); track.roots.push(root);
   const project = join(root, 'project'); await mkdir(join(project, '.deckent'), { recursive: true, mode: 0o700 });
   const git = async (...args: string[]) => (await exec('/usr/bin/git', ['-C', project, ...args])).stdout.trim();
@@ -32,10 +34,11 @@ export async function workspacePatchFixture(track: FixtureTracker, { restartable
     "const fs=require('node:fs');fs.writeFileSync('note.txt','after\\n');fs.unlinkSync('removed.txt');fs.writeFileSync('added.txt','new\\n');fs.mkdirSync('.codex');fs.writeFileSync('.codex/auth.json','synthetic-private');fs.appendFileSync('.git/config','\\n[diff]\\n external = touch /workspace/hook-fired\\n');"];
   if (restartable) registry.profiles[0]!.parameters.argv = ['node', '-e', "const fs=require('node:fs');if(fs.existsSync('.git/restarted'))setInterval(()=>{},1000);else fs.writeFileSync('.git/restarted','1')"];
   registry.profiles[0]!.parameters.imageId = process.env.DECKENT_TEST_DOCKER_IMAGE!;
+  const kinds = noWorkspaceDelivery ? registry.kinds.map(kind => ({ ...kind, workspaceDelivery: 'none' as const })) : registry.kinds;
   const { argv: _argv, ...bounds } = registry.profiles[0]!.parameters; void _argv;
   const configPath = join(project, '.deckent/config.json'); const options = { env: { HOME: join(root, 'home') } };
   await writeFile(configPath, JSON.stringify({ layout: { root: join(root, 'data') }, artifacts: { maxBytes: 4_227_072 },
-    admission: { poolId: 'p', executionSlots: 1, inFlightSlots: 1, ordering: 'input-order', registry },
+    admission: { poolId: 'p', executionSlots: 1, inFlightSlots: 1, ordering: 'input-order', registry: { ...registry, kinds } },
     execution: { docker: { executable: '/usr/bin/docker', ...bounds }, git: { gitExecutable: '/usr/bin/git', timeoutMs: 10000, outputBytes: 65536 },
       ...(adoptionTargets ? { adoption: { targets: adoptionTargets } } : {}) } }));
   const opened = await openConfiguredAttemptStore(project, options);

@@ -2,10 +2,12 @@ import { sameAttemptIdentity, type AttemptIdentity } from '#domain/core/attempt/
 import type { RunSnapshot } from './contract.js';
 
 /** EXEC-RELEASE C2: what an attempt's clone still owes before its custody (stopped container, Git clone) may be released.
- * - `patch-required`: the task carries typed work input, so its workspace change is delivered only as a retained, verified patch.
- * - `not-required`: the task delivers nothing from its workspace (its output envelope is retained by dispatch) and has settled,
- *   so no evaluation, operator decision or reconciliation can still read the clone.
- * - `not-settled`: no workspace delivery, but the task is still evaluating, awaiting a decision, reconciling or active.
+ * - `patch-required`: a workspace delivery may be owed, so only a retained, verified patch releases it. Fail-closed default: every task
+ *   whose kind carries no explicit `workspaceDelivery: 'none'` declaration in the Run's frozen execution snapshot, and every task with
+ *   typed work input, whatever its kind (owner 2026-10-06 B: absence of work input never implies "nothing to deliver").
+ * - `not-required`: the kind is declared to deliver nothing from its workspace (its output envelope is retained by dispatch) and the
+ *   task has settled, so no evaluation, operator decision or reconciliation can still read the clone.
+ * - `not-settled`: declared without workspace delivery, but the task is still evaluating, awaiting a decision, reconciling or active.
  * - `unbound`: the Run does not bind this exact attempt (never released on this basis). */
 export type WorkspaceDeliveryState = 'patch-required' | 'not-required' | 'not-settled' | 'unbound';
 const SETTLED_PHASES: ReadonlySet<string> = new Set(['accepted', 'failed', 'cancelled', 'skipped']);
@@ -16,6 +18,7 @@ export function workspaceDeliveryState(run: RunSnapshot, identity: AttemptIdenti
   const progress = run.progress.find(value => value.taskId === identity.taskId);
   if (!task || !progress || run.identity.scopeId !== identity.scopeId || run.identity.runId !== identity.runId
     || !run.bindings.some(binding => sameAttemptIdentity(binding.identity, identity))) return 'unbound';
-  if (task.workInput) return 'patch-required';
+  const declared = run.execution.tasks.find(value => value.taskId === identity.taskId)?.workspaceDelivery === 'none';
+  if (task.workInput || !declared) return 'patch-required';
   return SETTLED_PHASES.has(progress.phase) && !progress.unresolvedEffects ? 'not-required' : 'not-settled';
 }

@@ -118,8 +118,19 @@ describe.skipIf(process.platform !== 'linux' || !process.env.DECKENT_TEST_DOCKER
     expect((await readdir(workspaces)).filter(name => name.startsWith('.released-'))).toEqual([]);
     expect(await f.preview()).toMatchObject({ patch: { changes: [{ path: 'added.txt' }, { path: 'note.txt' }, { path: 'removed.txt' }] } });
   });
-  it('C2: an attempt of a task without workspace delivery is released by the sweep once its task settled; never before', async () => {
+  it('owner B negative: a settled coding task without work input and without a kind declaration keeps its container and clone', async () => {
     const f = await workspacePatchFixture({ roots, cleanup }); await policy(f, [...RELEASE, 'evaluate']);
+    const worker = await f.run(); const handle = (await f.runtime.store.loadBoundDispatch(f.identity))!.terminal!.handle;
+    const run = (await f.runtime.store.loadRun('s', 'r'))!;
+    const evaluated = await evaluateTask(f.project, { schemaVersion: 1, commandId: 'evaluate', identity: f.identity, expectedRevision: run.revision }, f.options);
+    expect(evaluated.evaluation.run.tasks.find(task => task.id === 't')?.phase).toBe('accepted');
+    expect((await sweepConfiguredAttemptCustody(f.project, ['s'], f.options))[0]).toMatchObject({ released: 0, entries: [], error: null });
+    expect(await container(handle)).toBe(true); expect(await present(worker)).toBe(true);
+    // The code is still deliverable: a manual patch preparation captures it, then the same owner releases.
+    expect((await f.prepare()).custody).toEqual(released('removed', 'removed'));
+  });
+  it('C2: an attempt of a declared no-delivery kind is released by the sweep once its task settled; never before', async () => {
+    const f = await workspacePatchFixture({ roots, cleanup }, { noWorkspaceDelivery: true }); await policy(f, [...RELEASE, 'evaluate']);
     const worker = await f.run(); const handle = (await f.runtime.store.loadBoundDispatch(f.identity))!.terminal!.handle;
     const sweep = async () => (await sweepConfiguredAttemptCustody(f.project, ['s'], f.options))[0]!;
     // Negative: terminal with complete output but the task is still evaluating, so the clone and container stay.
