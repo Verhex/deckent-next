@@ -23,13 +23,13 @@ export async function closeAbandonedConfiguredAttempt(projectRoot: string, input
     await new DispatchPolicyAuthorization(createLayoutPolicySource(layout, userInfo().uid, config.inspection.policyMaxBytes)).authorizeIdentity('reconcile', identity, actor);
     const store = await openSqliteAttemptStore(await path(), config.storage.sqlite, { now: Date.now, timeoutMs: config.runRuntime.parking.timeoutMs }, 'forbid');
     try {
-      const audit = { id: actor.id, issuer: actor.issuer, subject: actor.subject };
+      const actorRecord = { id: actor.id, issuer: actor.issuer, subject: actor.subject };
       const [run, attempt, dispatch] = await Promise.all([store.loadRun(identity.scopeId, identity.runId), store.load(identity.scopeId, identity.attemptId), store.loadBoundDispatch(identity)]);
       if (!run || !attempt) throw new RunStoreError('RUN_STORE_CONFLICT');
       const phase = () => run.progress.find(task => task.taskId === identity.taskId)?.phase ?? 'pending';
       // Replay: an attempt already recorded as abandoned completes its projection once; a settled one answers without new evidence.
       if (attempt.lastObservation?.result.kind === 'abandoned') {
-        await recordAttemptClosure(store, identity, { kind: 'abandoned' }, audit);
+        await recordAttemptClosure(store, identity, { kind: 'abandoned' }, actorRecord);
         const settled = await store.loadRun(identity.scopeId, identity.runId);
         return Object.freeze({ schemaVersion: 1 as const, layout, closure: Object.freeze({ identity, status: 'closed' as const, heartbeat: 'recorded' as const,
           phase: settled?.progress.find(task => task.taskId === identity.taskId)?.phase ?? 'pending' }) });
@@ -45,7 +45,7 @@ export async function closeAbandonedConfiguredAttempt(projectRoot: string, input
         .then(files => files.heartbeat, (error: { code?: unknown }) => ({ state: error?.code === 'ENOENT' ? 'missing' : 'unavailable', freshness: 'unknown' as const }));
       const assessment = assessAbandonment(ledger, { container: activity.state, heartbeat, now, staleMs: config.inspection.workers.staleMs });
       if (assessment.kind !== 'abandoned') return refused(assessment.kind === 'refused' ? assessment.reason : 'executor-live');
-      await recordAttemptClosure(store, identity, { kind: 'abandoned' }, audit, { container: activity.state, heartbeat: assessment.heartbeat, grantedAt: assessment.grantedAt, observedAt: now });
+      await recordAttemptClosure(store, identity, { kind: 'abandoned' }, actorRecord, { container: activity.state, heartbeat: assessment.heartbeat, grantedAt: assessment.grantedAt, observedAt: now });
       const closed = await store.loadRun(identity.scopeId, identity.runId);
       return Object.freeze({ schemaVersion: 1 as const, layout, closure: Object.freeze({ identity, status: 'closed' as const, heartbeat: assessment.heartbeat,
         phase: closed?.progress.find(task => task.taskId === identity.taskId)?.phase ?? 'pending' }) });
