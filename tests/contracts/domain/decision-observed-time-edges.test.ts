@@ -70,6 +70,14 @@ it('rejects offsets beyond 23:59', () => {
   expect(isFuture('2024-06-15T12:00+23:59', T)).toBe(false);
 });
 
+it('rejects calendar-impossible dates and times instead of rolling them into another day', () => {
+  for (const bad of ['2023-02-30T00:00Z', '2023-02-29T00:00Z', '1900-02-29T00:00Z', '2024-04-31T00:00Z', '2024-13-01T00:00Z',
+    '2024-00-10T00:00Z', '2024-06-00T00:00Z', '2024-06-15T24:00Z', '2024-06-15T12:60Z', '2024-06-15T12:00:60Z'])
+    invalid(bad);
+  expect(isFuture('2024-02-29T00:00Z', T)).toBe(false);
+  expect(isFuture('2000-02-29T00:00Z', T)).toBe(false);
+});
+
 it('throws DECISION_CASE_INVALID for malformed inputs', () => {
   for (const bad of ['', 'not a date', '2024-06-15', '2024-06-15T12:00', '2024-06-15 12:00Z', '2024-6-15T12:00Z', '2024-06-15T12:00:00.Z', '2024-06-15T12:00+2Z', ' 2024-06-15T12:00Z'])
     invalid(bad);
