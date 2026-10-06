@@ -853,7 +853,12 @@
         "src/platform/core/i18n",
         "src/platform/core/output",
         "src/surfaces/core/cli-models",
-        "src/surfaces/core/terminal-kit"
+        "src/surfaces/core/terminal-kit",
+        "src/engine/core/monitor",
+        "src/engine/core/runs",
+        "src/engine/core/worker-observation",
+        "src/surfaces/core/terminal",
+        "src/surfaces/core/approval-presentation"
       ],
       "plan": "SURFACES"
     },
@@ -3111,7 +3116,6 @@
       "sdkEntry": "src/index.ts",
       "packageExport": "./extensions",
       "packageImport": "./dist/extensions.js",
-      "pendingPackageExport": true,
       "registrations": [
         "registerOperationAdapterModule",
         "registerSecretStoreBackend"
