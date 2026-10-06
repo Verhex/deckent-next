@@ -1,7 +1,8 @@
+import { loadComposedConfig } from '#composition/core/root/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 import { userInfo } from 'node:os';
-import { loadConfig, inspectProductFile, type ConfigLoadOptions } from '#platform/index.js';
-import { registerProviderConfig, readLocalOsIdentity, openSqliteInventoryReader } from '#adapters/index.js';
+import { inspectProductFile, type ConfigLoadOptions } from '#platform/index.js';
+import { readLocalOsIdentity, openSqliteInventoryReader } from '#adapters/index.js';
 import { policySchema } from '#domain/index.js';
 import { DispatchInventoryApplication, DispatchInventoryError, dispatchInventoryQuerySchema, dispatchInventoryInputSchema, DispatchInventoryPolicyAuthorization, PolicyAuthorizationError, type DispatchInventoryInput, type DispatchInventoryStore } from '#engine/index.js';
 import { createLayoutPolicySource } from '#composition/core/policy/index.js';
@@ -14,8 +15,7 @@ export async function inspectConfiguredInventory(projectRoot: string, input: Dis
   try { return await inspect(projectRoot, input, options); } catch (error) { throw queryFailure(error); }
 }
 async function inspect(projectRoot: string, input: unknown, options: ConfigLoadOptions) {
-  registerProviderConfig();
-  const config = await loadConfig(projectRoot, { ...options, heal: false });
+  const config = await loadComposedConfig(projectRoot, { ...options, heal: false });
   const parsed = dispatchInventoryInputSchema.parse(input);
   const query = dispatchInventoryQuerySchema.parse({ ...parsed, limit: parsed.limit ?? config.inspection.maxPageSize });
   if (query.limit > config.inspection.maxPageSize) throw new DispatchInventoryError();

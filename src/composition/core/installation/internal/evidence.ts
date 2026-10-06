@@ -1,6 +1,7 @@
+import { composeCore } from '#composition/core/root/index.js';
 import { fileURLToPath } from 'node:url';
 import { isAbsolute } from 'node:path';
-import { measureInstalledPackage, probeDockerImageAvailability, registerProviderConfig } from '#adapters/index.js';
+import { measureInstalledPackage, probeDockerImageAvailability } from '#adapters/index.js';
 import { InstallationEvidenceApplication, InstallationProfileError, type PreparedInstallation } from '#engine/index.js';
 import { getConfigFieldDefault, validateConfig, versionedConfig } from '#platform/index.js';
 import { prepareSuppliedInstallation } from './preview.js';
@@ -18,7 +19,7 @@ export async function inspectSuppliedInstallation(projectRoot: string, supplied:
 
 /** The installer reuses its exact normalized snapshot instead of consulting mutable defaults again. */
 export async function inspectPreparedInstallation(prepared: PreparedInstallation, dockerExecutable: string) {
-  registerProviderConfig();
+  composeCore();
   if (typeof dockerExecutable !== 'string' || !isAbsolute(dockerExecutable)) throw new InstallationProfileError('INSTALLATION_PROFILE_CONFIG');
   const config = validateConfig(versionedConfig(prepared.material.configuration)).config;
   const control = config.execution?.docker;

@@ -1,8 +1,9 @@
+import { loadComposedConfig } from '#composition/core/root/index.js';
 import { access } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { setTimeout as delay } from 'node:timers/promises';
-import { DeckentError, ErrorRegistry, getConfigKnownSecrets, loadConfig, prepareProductDirectory, prepareProductFile, type ConfigLoadOptions } from '#platform/index.js';
-import { launchDetachedRuntimeService, openTerminalHistoryFile, openTerminalSessionStore, readTerminalConfig, registerProviderConfig } from '#adapters/index.js';
+import { DeckentError, ErrorRegistry, getConfigKnownSecrets, prepareProductDirectory, prepareProductFile, type ConfigLoadOptions } from '#platform/index.js';
+import { launchDetachedRuntimeService, openTerminalHistoryFile, openTerminalSessionStore, readTerminalConfig } from '#adapters/index.js';
 import { randomUUID } from 'node:crypto';
 import { createConfiguredRuntimeClient } from '#composition/core/runtime-service/index.js';
 import { RUNTIME_SERVICE_AUTOSTART_ENV, type RuntimeServiceDescriptor } from '#engine/index.js';
@@ -36,8 +37,7 @@ function monotonicDeadline(timeoutMs: number) {
 type LifecycleDeadline = ReturnType<typeof monotonicDeadline>;
 const within = (deadline: LifecycleDeadline) => AbortSignal.timeout(Math.max(1, Math.ceil(deadline.remaining())));
 async function lifecycleDeadline(projectRoot: string, options: ConfigLoadOptions) {
-  registerProviderConfig();
-  const config = await loadConfig(projectRoot, { ...options, heal: false });
+  const config = await loadComposedConfig(projectRoot, { ...options, heal: false });
   return monotonicDeadline(readTerminalConfig(config as Record<string, unknown>).serviceStartTimeoutMs);
 }
 async function describeWithin(client: ReturnType<typeof createConfiguredRuntimeClient>, deadline: LifecycleDeadline) {
@@ -59,8 +59,7 @@ async function describeWithin(client: ReturnType<typeof createConfiguredRuntimeC
 export async function ensureConfiguredRuntimeService(projectRoot: string, options: ConfigLoadOptions = {},
   launch = launchDetachedRuntimeService, entry = ENTRY, budget?: LifecycleDeadline, autoStarted = true): Promise<RuntimeServiceReadiness> {
   const client = createConfiguredRuntimeClient(projectRoot, options);
-  registerProviderConfig();
-  const config = await loadConfig(projectRoot, { ...options, heal: false });
+  const config = await loadComposedConfig(projectRoot, { ...options, heal: false });
   const deadline = budget ?? monotonicDeadline(readTerminalConfig(config as Record<string, unknown>).serviceStartTimeoutMs);
   const first = await describeWithin(client, deadline);
   if (first.descriptor) return readiness('connected', first.descriptor, null, null);
@@ -123,8 +122,7 @@ export async function restartConfiguredRuntimeService(projectRoot: string, optio
 /** The interactive terminal's composer history for this project, or null when disabled in `terminal.persistHistory`.
  * Entries that carried pasted content are not stored (only the visible line would survive, as a chip label). */
 export async function openConfiguredTerminalHistory(projectRoot: string, options: ConfigLoadOptions = {}) {
-  registerProviderConfig();
-  const config = await loadConfig(projectRoot, { ...options, heal: false });
+  const config = await loadComposedConfig(projectRoot, { ...options, heal: false });
   if (!readTerminalConfig(config as Record<string, unknown>).persistHistory) return null;
   const file = openTerminalHistoryFile(await prepareProductFile(config.productLayout, 'terminalHistory'));
   return Object.freeze({
@@ -135,8 +133,7 @@ export async function openConfiguredTerminalHistory(projectRoot: string, options
 
 /** Conversation snapshots for `/resume` (T-L5c): the same owner switch as the composer history; null when it is off. */
 export async function openConfiguredTerminalSessions(projectRoot: string, options: ConfigLoadOptions = {}) {
-  registerProviderConfig();
-  const config = await loadConfig(projectRoot, { ...options, heal: false });
+  const config = await loadComposedConfig(projectRoot, { ...options, heal: false });
   if (!readTerminalConfig(config as Record<string, unknown>).persistHistory) return null;
   return openTerminalSessionStore(await prepareProductDirectory(config.productLayout, 'terminalSessions'), undefined, getConfigKnownSecrets(config));
 }

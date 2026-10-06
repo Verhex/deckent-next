@@ -1,8 +1,9 @@
+import { loadComposedConfig } from '#composition/core/root/index.js';
 import { randomUUID } from 'node:crypto';
 import type { JsonObject, ModelInvocationCancellationCommand, ModelInvocationCommand, ModelReference } from '#domain/index.js';
 import { agentTurnAdmission, modelInvocationRequestDigest, type AgentTurnAdmission, type ModelInvocationResult } from '#engine/index.js';
-import { ErrorRegistry, loadConfig, type ConfigLoadOptions } from '#platform/index.js';
-import { extractOpenAiChatTextFromInvocation, openAiChatStoppedAtLength, readTerminalChatConfig, registerProviderConfig } from '#adapters/index.js';
+import { ErrorRegistry, type ConfigLoadOptions } from '#platform/index.js';
+import { extractOpenAiChatTextFromInvocation, openAiChatStoppedAtLength, readTerminalChatConfig } from '#adapters/index.js';
 import { inspectModelBinding } from '#composition/core/provider-catalog/index.js';
 
 export type TerminalChatMessage = Readonly<{ role: 'system' | 'user' | 'assistant'; content: string }>;
@@ -31,8 +32,7 @@ export interface TerminalChatTurnInput {
 }
 
 export async function describeTerminalChat(projectRoot: string, options: ConfigLoadOptions = {}): Promise<TerminalChatPlan> {
-  registerProviderConfig();
-  const chat = readTerminalChatConfig(await loadConfig(projectRoot, options) as Record<string, unknown>);
+  const chat = readTerminalChatConfig(await loadComposedConfig(projectRoot, options) as Record<string, unknown>);
   if (!chat) return Object.freeze({ schemaVersion: 1, status: 'not-configured', reference: null, catalogRevision: null, maxCompletionTokens: null, historyMessages: null });
   const binding = await inspectModelBinding(projectRoot, chat.reference, options);
   return Object.freeze({ schemaVersion: 1, status: binding.status === 'declared' ? 'ready' : 'model-not-declared', reference: chat.reference,
@@ -45,8 +45,7 @@ export async function describeTerminalChat(projectRoot: string, options: ConfigL
  */
 /** Builds the governed command of one turn from fresh config and catalog binding (shared by both turn forms). */
 export async function prepareTerminalChatCommand(input: TerminalChatTurnInput, streamed: boolean) {
-  registerProviderConfig();
-  const chat = readTerminalChatConfig(await loadConfig(input.projectRoot, input.options) as Record<string, unknown>);
+  const chat = readTerminalChatConfig(await loadComposedConfig(input.projectRoot, input.options) as Record<string, unknown>);
   if (!chat) throw ErrorRegistry.createError('TERMINAL_CHAT_NOT_CONFIGURED');
   const binding = await inspectModelBinding(input.projectRoot, chat.reference, input.options);
   if (binding.status !== 'declared') throw ErrorRegistry.createError('TERMINAL_CHAT_MODEL_NOT_DECLARED');
@@ -98,6 +97,6 @@ export async function assertTerminalChatReady(projectRoot: string, options: Conf
   const plan = await describeTerminalChat(projectRoot, options);
   if (plan.status === 'not-configured') throw ErrorRegistry.createError('TERMINAL_CHAT_NOT_CONFIGURED');
   if (plan.status === 'model-not-declared') throw ErrorRegistry.createError('TERMINAL_CHAT_MODEL_NOT_DECLARED');
-  const config = await loadConfig(projectRoot, options) as { service: { inputMaxBytes: number } };
+  const config = await loadComposedConfig(projectRoot, options) as { service: { inputMaxBytes: number } };
   return agentTurnAdmission(plan.maxCompletionTokens!, config.service.inputMaxBytes);
 }
