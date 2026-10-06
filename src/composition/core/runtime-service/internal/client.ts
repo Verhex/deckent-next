@@ -1,10 +1,11 @@
+import { loadComposedConfig } from '#composition/core/root/index.js';
 import { clearSessionStandingSchema, acceptSessionStandingClearance, approvalCommandSchema, parseApprovalAnswer, type ClearSessionStanding, type SessionStandingClearance, RUNTIME_SERVICE_LIFECYCLE_VERSIONS, RUNTIME_SERVICE_SCHEMA_VERSION, isRuntimeServiceBoundedResultOperation, acceptSecretChangeResult, prepareSecretChange, type RuntimeServiceLifecycleVersion, type RuntimeServiceRequest,
   type SecretChangeResult, type SecretDeleteCommand, type SecretSetCommand } from '#engine/index.js';
 import { socketOptions } from './socket-options.js';
 import { randomUUID } from 'node:crypto';
 import { setTimeout as sleep } from 'node:timers/promises';
-import { DeckentError, ErrorRegistry, loadConfig, ManagedFileError, prepareProductSocket, type ConfigLoadOptions } from '#platform/index.js';
-import { LocalRuntimeSocketError, registerProviderConfig, requestLocalRuntime, streamLocalRuntime, turnLocalRuntime } from '#adapters/index.js';
+import { DeckentError, ErrorRegistry, ManagedFileError, prepareProductSocket, type ConfigLoadOptions } from '#platform/index.js';
+import { LocalRuntimeSocketError, requestLocalRuntime, streamLocalRuntime, turnLocalRuntime } from '#adapters/index.js';
 import { runtimeServiceOperationSchema, runtimeServiceDescriptorSchema, shutdownCommandSchema, shutdownAdmissionSchema, type RuntimeServiceOperation, type ShutdownCommand, type RuntimeServiceDescriptor, type ServiceShutdownAdmissionResult } from '#engine/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 import { modelInvocationCancellationCommandInputSchema, modelInvocationCommandInputSchema, modelInvocationQueryInputSchema, modelInvocationPurgeCommandInputSchema, ModelInvocationError,
@@ -177,7 +178,7 @@ function busyRetrying(projectRoot: string, options: ConfigLoadOptions,
       try { return await attempt(operation, input, delivery, signal, ...rest); }
       catch (error) {
         if (!(error instanceof DeckentError) || error.code !== 'RUNTIME_SERVICE_BUSY' || signal?.aborted) throw error;
-        const service = (await loadConfig(projectRoot, { ...options, heal: false }).catch(() => null))?.service;
+        const service = (await loadComposedConfig(projectRoot, { ...options, heal: false }).catch(() => null))?.service;
         if (!service || retry >= service.busyRetryLimit || service.admissionWaitMs === 0) throw error;
         const hinted = Number(error.params?.retryAfterMs);
         try { await sleep(Number.isFinite(hinted) && hinted > 0 ? Math.min(hinted, service.admissionWaitMs) : service.admissionWaitMs, undefined, signal ? { signal } : {}); }
@@ -192,8 +193,7 @@ export function createConfiguredRuntimeClient(projectRoot: string, options: Conf
     onDelta?: ModelInvocationDeltaSink, version: RuntimeServiceLifecycleVersion = RUNTIME_SERVICE_SCHEMA_VERSION,
     onEvent?: (event: AgentTurnStreamEvent) => void): Promise<unknown> => {
     try {
-      registerProviderConfig();
-      const config = await loadConfig(projectRoot, { ...options, heal: false });
+      const config = await loadComposedConfig(projectRoot, { ...options, heal: false });
       // The endpoint's never-created state directory is the same fact as a missing endpoint: no live service.
       const endpoint = await prepareProductSocket(config.productLayout, 'runtimeSocket', false).catch(error => {
         if (error instanceof ManagedFileError && error.code === 'MANAGED_FILE_MISSING') throw new LocalRuntimeSocketError('LOCAL_RUNTIME_UNAVAILABLE', { cause: error });

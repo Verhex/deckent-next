@@ -1,0 +1,36 @@
+import { expect, it } from 'vitest';
+import * as extensions from '../../../src/extensions.js';
+import * as sdk from '../../../src/index.js';
+import { composeCore } from '#composition/core/root/index.js';
+import { openConfiguredSecretStore } from '#adapters/index.js';
+
+// ENTERPRISE-EXT-1 (owner K7 = A): `deckent/extensions` is the one public registration entry. This file's module graph is fresh (vitest
+// isolates files), so nothing has composed Core yet when the first registration runs.
+const memoryBackend = (id: string) => ({ id, create: () => {
+  const values = new Map<string, string>();
+  return { descriptor: { id, writable: true, enumerable: true }, get: async (name: string) => values.get(name),
+    set: async (name: string, value: string) => { values.set(name, value); }, delete: async (name: string) => values.delete(name),
+    listNames: async () => [...values.keys()].sort(), inspect: async () => ({ status: 'ready' as const, code: null }) };
+} });
+
+it('exports exactly the reviewed extension surface; the SDK entry exports none of its registrations', () => {
+  expect(Object.keys(extensions).sort()).toEqual(['CORE_API_VERSION', 'EffectTargetError', 'RegistryError', 'SECRET_STORE_ID_PATTERN',
+    'registerOperationAdapterModule', 'registerSecretStoreBackend', 'runCli']);
+  expect(['registerOperationAdapterModule', 'registerSecretStoreBackend', 'registerProviderConfig'].filter(name => name in sdk)).toEqual([]);
+});
+
+it('registers a non-Core secret backend before the composition root seals, and refuses every later registration with REGISTRY_SEALED', () => {
+  const id = 'overlay.secret-store.memory@1';
+  // Admission rules still apply before sealing: the `core.` namespace stays Core's.
+  expect(() => extensions.registerSecretStoreBackend(memoryBackend('core.secret-store.overlay@1'))).toThrow(expect.objectContaining({ code: 'REGISTRY_NAMESPACE_RESERVED' }));
+  extensions.registerSecretStoreBackend(memoryBackend(id));
+  composeCore();
+  // The registered backend resolves through the same selection path as Core's own backends.
+  expect(openConfiguredSecretStore({ secrets: { store: id } }, {}).descriptor.id).toBe(id);
+  const sealed = expect.objectContaining({ name: 'RegistryError', code: 'REGISTRY_SEALED' });
+  expect(() => extensions.registerSecretStoreBackend(memoryBackend('overlay.secret-store.late@1'))).toThrow(sealed);
+  expect(() => extensions.registerOperationAdapterModule({ manifest: { schemaVersion: 1, module: { id: 'late.module', version: '0.1.0', tier: 'custom', namespace: 'late' },
+    requires: { coreApi: { min: extensions.CORE_API_VERSION, max: extensions.CORE_API_VERSION } }, provides: { targetAdapters: [], operations: [] }, signature: null },
+    factories: {} })).toThrow(sealed);
+  expect(() => openConfiguredSecretStore({ secrets: { store: 'overlay.secret-store.late@1' } }, {})).toThrow(expect.objectContaining({ code: 'SECRET_STORE_UNKNOWN' }));
+});

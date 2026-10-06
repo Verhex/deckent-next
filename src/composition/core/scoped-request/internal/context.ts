@@ -1,6 +1,7 @@
+import { loadComposedConfig } from '#composition/core/root/index.js';
 import { userInfo } from 'node:os';
-import { ErrorRegistry, loadConfig, inspectProductFile, type ConfigLoadOptions } from '#platform/index.js';
-import { FileInstallationIdentityStore, FileProjectIdentityStore, localInstallationBindingSource, registerProviderConfig, readLocalOsIdentity, verifyLocalPeerIdentity, type LocalPeerIdentity } from '#adapters/index.js';
+import { ErrorRegistry, inspectProductFile, type ConfigLoadOptions } from '#platform/index.js';
+import { FileInstallationIdentityStore, FileProjectIdentityStore, localInstallationBindingSource, readLocalOsIdentity, verifyLocalPeerIdentity, type LocalPeerIdentity } from '#adapters/index.js';
 import { policySchema, type InstallationIdentityChoice } from '#domain/index.js';
 import { InstallationIdentityError, ProjectIdentityError, PolicyAuthorizationError, type ScopeAccess } from '#engine/index.js';
 import { createLayoutPolicySource } from '#composition/core/policy/index.js';
@@ -9,7 +10,7 @@ import { resolveConfiguredScopeMembership } from './registry.js';
 export const loadConfiguredScopeContext = async (projectRoot: string, scopeId: string, options: ConfigLoadOptions, access: ScopeAccess) => loadScopeContext(projectRoot, scopeId, options, readLocalOsIdentity(), access);
 export const loadConfiguredPeerScopeContext = async (projectRoot: string, scopeId: string, options: ConfigLoadOptions, peer: LocalPeerIdentity, access: ScopeAccess) => loadScopeContext(projectRoot, scopeId, options, verifyLocalPeerIdentity(peer), access);
 async function loadScopeContext(projectRoot: string, scopeId: string, options: ConfigLoadOptions, identity: ReturnType<typeof readLocalOsIdentity>, access: ScopeAccess) {
-  registerProviderConfig(); const config = await loadConfig(projectRoot, { ...options, heal: false }); const layout = config.productLayout;
+  const config = await loadComposedConfig(projectRoot, { ...options, heal: false }); const layout = config.productLayout;
   let document; try { document = policySchema.parse(await createLayoutPolicySource(layout, userInfo().uid, config.inspection.policyMaxBytes).load()); }
   catch { throw new PolicyAuthorizationError('POLICY_UNAVAILABLE'); }
   const scopeIds = await resolveConfiguredScopeMembership(config, document, identity, [scopeId], 'read'), principal = Object.freeze({ ...identity, scopeIds });
@@ -38,11 +39,11 @@ async function readIdentity<T>(read: () => Promise<T>) {
   }
 }
 export async function loadConfiguredProjectIdentity(projectRoot: string, options: ConfigLoadOptions = {}) {
-  const config = await loadConfig(projectRoot, { ...options, heal: false });
+  const config = await loadComposedConfig(projectRoot, { ...options, heal: false });
   return accessIdentity(new FileProjectIdentityStore(config.projectRoot, config.configFile.writeLockTimeoutMs), 'read');
 }
 export async function loadConfiguredInstallationIdentity(projectRoot: string, options: ConfigLoadOptions = {}) {
-  const config = await loadConfig(projectRoot, { ...options, heal: false });
+  const config = await loadComposedConfig(projectRoot, { ...options, heal: false });
   return accessIdentity(new FileInstallationIdentityStore(config.productLayout, config.configFile.writeLockTimeoutMs, undefined, config.installation), 'read');
 }
 /** Doctor-only, read-soft: the binding strength and source this host reaches now (the product's own capture; nothing is written, no value shown). */
@@ -50,7 +51,7 @@ export type InstallationBindingInspection = { readonly capability: 'supported' |
   readonly strength: 'machine' | 'weak' | null; readonly source: 'configured' | 'platform' | 'location' | null; readonly required: boolean };
 export async function inspectConfiguredInstallationBinding(projectRoot: string, options: ConfigLoadOptions = {}): Promise<InstallationBindingInspection | null> {
   let config;
-  try { config = await loadConfig(projectRoot, { ...options, heal: false }); } catch { return null; }
+  try { config = await loadComposedConfig(projectRoot, { ...options, heal: false }); } catch { return null; }
   const required = config.installation.requireMachineBinding;
   try {
     // The capability is machine-level: probe against the project directory, which exists before `.deckent` is initialized.
@@ -64,13 +65,13 @@ export async function inspectConfiguredInstallationBinding(projectRoot: string, 
 }
 /** Local bootstrap-metadata consent, under existing OS ownership guards; no policy or ledger authority is granted. */
 export async function resolveConfiguredInstallationIdentity(projectRoot: string, choice: InstallationIdentityChoice, options: ConfigLoadOptions = {}) {
-  const principal = readLocalOsIdentity(), config = await loadConfig(projectRoot, { ...options, heal: false });
+  const principal = readLocalOsIdentity(), config = await loadComposedConfig(projectRoot, { ...options, heal: false });
   return readIdentity(() => new FileInstallationIdentityStore(config.productLayout, config.configFile.writeLockTimeoutMs, undefined, config.installation)
     .resolveRelocation(choice, { issuer: principal.issuer, subject: principal.subject }));
 }
 /** Interactive session startup shares the existing managed-write principal, scope and policy admission. */
 export async function ensureConfiguredTerminalIdentity(root: string, scopeId: string, options: ConfigLoadOptions) {
-  registerProviderConfig(); const observed = await loadConfiguredInstallationIdentity(root, options);
+  const observed = await loadConfiguredInstallationIdentity(root, options);
   if (observed.status === 'unavailable' && observed.reason === 'unsupported') throw ErrorRegistry.createError('INSTALLATION_IDENTITY_UNAVAILABLE');
   const { installationId, projectId } = await loadConfiguredScopeContext(root, scopeId, options, 'write');
   if (!installationId) throw ErrorRegistry.createError('INSTALLATION_IDENTITY_UNAVAILABLE');

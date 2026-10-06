@@ -1,0 +1,9 @@
+{
+  "name": "deckent-overlay-fixture",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Test fixture: a non-Core package that layers an effect target on Deckent through the public deckent/extensions entry only.",
+  "type": "module",
+  "bin": { "overlay-deckent": "./bin.mjs" },
+  "peerDependencies": { "deckent": "*" }
+}

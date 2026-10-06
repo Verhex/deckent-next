@@ -1,5 +1,6 @@
+import { composeCore } from '#composition/core/root/index.js';
 import { resolve } from 'node:path';
-import { registerProviderConfig, readLocalOsIdentity, resolveDockerTaskProfile, isNativeCodingTemplate, nativeCodingTemplateBase } from '#adapters/index.js';
+import { readLocalOsIdentity, resolveDockerTaskProfile, isNativeCodingTemplate, nativeCodingTemplateBase } from '#adapters/index.js';
 import { validateInstalledProcessExitEvaluator } from '#capabilities/index.js';
 import { InstallationPreviewApplication, InstallationProfileError, type InstallationPreviewChoices } from '#engine/index.js';
 import { immutableJsonObjectSchema, type JsonObject } from '#domain/index.js';
@@ -14,7 +15,7 @@ export async function previewSuppliedInstallation(projectRoot: string, supplied:
 /** Internal installer preparation; the full configuration never becomes public preview output. */
 export async function prepareSuppliedInstallation(projectRoot: string, supplied: unknown,
   choices: Pick<InstallationPreviewChoices, 'allowShutdown'>, retainedConfiguration?: JsonObject) {
-  registerProviderConfig();
+  composeCore();
   const identity = readLocalOsIdentity();
   const application = new InstallationPreviewApplication({
     async resolvePaths(root, authoredConfig) {

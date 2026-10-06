@@ -1,3 +1,4 @@
+import { loadComposedConfig } from '#composition/core/root/index.js';
 import { executeRuntimeApproval } from './approvals.js';
 import { prepareConfiguredRunRuntime, type RunProgressionObserver } from '#composition/core/run-progression/index.js';
 import { RUNTIME_SERVICE_SCHEMA_VERSION, expireOrphanedToolCallApprovals, isRuntimeServiceScratchOperation, isRuntimeServiceSecretOperation, runtimeServiceErrorParams } from '#engine/index.js';
@@ -5,8 +6,8 @@ import { socketOptions } from './socket-options.js';
 import { configuredServiceShutdown } from './shutdown.js';
 import { randomUUID } from 'node:crypto';
 import { setTimeout as wait } from 'node:timers/promises';
-import { ErrorRegistry, type DeckentError, inspectProductFile, loadConfig, ManagedFileError, readBuildIdentity, prepareProductCompanionPath, prepareProductDirectory, prepareProductSocket, type ConfigLoadOptions } from '#platform/index.js';
-import { registerProviderConfig, acquireLocalRuntimeSocketGuard, LocalRuntimeSocketError, upgradeExistingProductLedger, validateDockerSupervisorProfile, type LedgerUpgrade,
+import { ErrorRegistry, type DeckentError, inspectProductFile, ManagedFileError, readBuildIdentity, prepareProductCompanionPath, prepareProductDirectory, prepareProductSocket, type ConfigLoadOptions } from '#platform/index.js';
+import { acquireLocalRuntimeSocketGuard, LocalRuntimeSocketError, upgradeExistingProductLedger, validateDockerSupervisorProfile, type LedgerUpgrade,
   type LocalRuntimeSocketGuard, openSqliteAgentTurnStore, openSqliteApprovalStore, openLocalIntegrityAuthority, createScratchActivity, readTerminalScratchConfig, resolveGitWorkTarget,
   startScratchSweeper, sweepScratch, createRuntimeWorkspaceFileHost, sweepFullPreviews, type HttpFetchTransport, type ScratchSweepResult, type ShellSandboxFactory } from '#adapters/index.js';
 import { ModelInvocationControllers, runtimeServiceModelOwnerId, RuntimeServiceLifecycle, classifyRuntimeServiceOperation, isRuntimeServiceEffectOperation, isRuntimeServicePermissionModeOperation, runtimeServiceDescriptorSchema, runtimeServiceDescriptionInputSchema,
@@ -50,7 +51,7 @@ export interface ConfiguredRuntimeServiceObserver extends ConfiguredCancellation
 }
 
 /** LEDGER-SINGLETON (Astra 2054 R1): backup/upgrade under ledger and endpoint custody before accepting connections. */
-async function upgradeLedgerAtStart(config: Awaited<ReturnType<typeof loadConfig>>, observer: ConfiguredRuntimeServiceObserver) {
+async function upgradeLedgerAtStart(config: Awaited<ReturnType<typeof loadComposedConfig>>, observer: ConfiguredRuntimeServiceObserver) {
   let path: string;
   try { path = await inspectProductFile(config.productLayout, 'ledger', ['-wal', '-shm', '-journal']); }
   catch (error) { if (error instanceof ManagedFileError && error.code === 'MANAGED_FILE_MISSING') return; throw error; }
@@ -60,7 +61,7 @@ async function upgradeLedgerAtStart(config: Awaited<ReturnType<typeof loadConfig
 }
 
 /** Interrupt abandoned turns only under ledger custody; a second start cannot close a live service's turns. */
-async function interruptAgentTurnsAtStart(config: Awaited<ReturnType<typeof loadConfig>>, observer: ConfiguredRuntimeServiceObserver, custodyId: string) {
+async function interruptAgentTurnsAtStart(config: Awaited<ReturnType<typeof loadComposedConfig>>, observer: ConfiguredRuntimeServiceObserver, custodyId: string) {
   let path: string;
   try { path = await inspectProductFile(config.productLayout, 'ledger', ['-wal', '-shm', '-journal']); }
   catch (error) { if (error instanceof ManagedFileError && error.code === 'MANAGED_FILE_MISSING') return; throw error; }
@@ -90,9 +91,8 @@ async function interruptAgentTurnsAtStart(config: Awaited<ReturnType<typeof load
 /** Explicit local host. Only durable authorized shutdown intent may turn client completion into host shutdown. */
 async function startService(projectRoot: string, observer: ConfiguredRuntimeServiceObserver,
   options: ConfigLoadOptions = {}, ports: RuntimeServicePorts = {}) {
-  registerProviderConfig();
   await loadConfiguredInstallationIdentity(projectRoot, options);
-  const config = await loadConfig(projectRoot, { ...options, heal: false });
+  const config = await loadComposedConfig(projectRoot, { ...options, heal: false });
   if (!config.cancellationRuntime || !config.cancellation) throw ErrorRegistry.createError('CANCELLATION_NOT_CONFIGURED');
   await resolveGitWorkTarget(projectRoot, config.execution, config.productLayout); // WORK-TARGETS: typed refusal before any custody or write
   const endpoint = await prepareProductSocket(config.productLayout, 'runtimeSocket');
@@ -103,7 +103,7 @@ async function startService(projectRoot: string, observer: ConfiguredRuntimeServ
 }
 
 async function startUnderCustody(projectRoot: string, observer: ConfiguredRuntimeServiceObserver, options: ConfigLoadOptions,
-  config: Awaited<ReturnType<typeof loadConfig>>, guard: LocalRuntimeSocketGuard, ports: RuntimeServicePorts) {
+  config: Awaited<ReturnType<typeof loadComposedConfig>>, guard: LocalRuntimeSocketGuard, ports: RuntimeServicePorts) {
   await upgradeLedgerAtStart(config, observer);
   // H34 S1: the configured company and the installation's own scopes are registered under the same custody (first start).
   const scopes = await registerConfiguredScopesAtStart(config);

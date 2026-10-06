@@ -111,7 +111,8 @@ function packageOf(file) {
   const r = rel(file);
   if (r.startsWith('src/')) {
     const seg = r.split('/')[1];
-    return packageNames.includes(seg) ? seg : (seg === 'index.ts' ? '(root)' : `(unknown:${seg})`);
+    // Public package entries sit directly under src/: the SDK (`index.ts`) and the extension entry (G-i, `guards.publicExtensions.entry`).
+    return packageNames.includes(seg) ? seg : (seg === 'index.ts' || r === arch.guards?.publicExtensions?.entry ? '(root)' : `(unknown:${seg})`);
   }
   if (r.startsWith('apps/')) return `apps/${r.split('/')[1]}`;
   return '(outside)';
@@ -292,7 +293,9 @@ for (const file of [...srcFiles, ...appFiles]) {
     if (!allowed.includes(to)) fail('direction', `${rel(file)}:${imp.line}`, `${from} → ${to} is not allowed (allowed: ${allowed.join(', ') || 'none'})`);
     if (arch.imports?.enforce && !imp.aliased && !from.startsWith('apps/')) fail('import-style', `${rel(file)}:${imp.line}`, `cross-package import must use the ${arch.imports.aliasPrefix}<pkg>/index.js alias (got ${imp.spec})`);
     const isIndex = /^src\/[^/]+\/index\.ts$/.test(targetRel) || /^src\/[^/]+\/index$/.test(targetRel);
-    if (!isIndex) fail('public-api', `${rel(file)}:${imp.line}`, `cross-package import must target src/${to}/index.ts (got ${imp.spec})`);
+    // The extension entry may lazily reach the listed unit indexes (the CLI runner), which the SDK entry must never load.
+    const extensionUnit = rel(file) === arch.guards?.publicExtensions?.entry && (arch.guards.publicExtensions.unitImports ?? []).some(unit => targetRel === `${unit}/index.ts`);
+    if (!isIndex && !extensionUnit) fail('public-api', `${rel(file)}:${imp.line}`, `cross-package import must target src/${to}/index.ts (got ${imp.spec})`);
     if (targetRel.includes('/internal/')) fail('internal', `${rel(file)}:${imp.line}`, `internal/ module imported from another package`);
     const importedBy = arch.packages[to]?.importedBy;
     if (Array.isArray(importedBy) && !importedBy.includes(from)) fail('read-only', `${rel(file)}:${imp.line}`, `${to} may only be imported by [${importedBy.join(', ') || 'nobody'}]`);
@@ -742,6 +745,49 @@ if (arch.guards) {
     const flowFiles = new Set(srcFiles.map(rel).filter(path => flowRe.test(path.split('/').at(-1)) && !path.startsWith(owner)));
     for (const path of flowFiles) if (!frozenSet.has(path)) fail('effect-flow', path, `new claim/delivery/adoption/lease flow file outside ${owner}; route effects through the generic effect port (EffectApplication) and register a target instead of a module-specific flow`);
     for (const path of frozenSet) if (!flowFiles.has(path)) fail('effect-flow', path, 'stale guards.effectFlows.frozen entry: file no longer exists or no longer matches; remove it (shrink-only)');
+  }
+  // G-i: registrations reach external packages only through the extension entry; G-j: an overlay fixture proves it with public imports only.
+  const ext = guards.publicExtensions;
+  if (ext) {
+    const exportsOf = path => { const source = program.getSourceFile(join(ROOT, path)), symbol = source && checker.getSymbolAtLocation(source);
+      return symbol ? new Set(checker.getExportsOfModule(symbol).map(item => item.name)) : null; };
+    const entryExports = exportsOf(ext.entry), sdkExports = exportsOf(ext.sdkEntry), adapterExports = exportsOf('src/adapters/index.ts') ?? new Set();
+    if (!entryExports) fail('public-extensions', ext.entry, 'extension entry missing');
+    for (const name of ext.registrations) if (entryExports && !entryExports.has(name)) fail('public-extensions', ext.entry, `registration ${name} is not exported by the extension entry`);
+    const sdkAllow = new Map((ext.sdkRegisterAllow ?? []).map(entry => [entry.name, entry]));
+    for (const entry of sdkAllow.values()) if (!entry.reason) fail('public-extensions', 'arch.json', `sdkRegisterAllow ${entry.name} needs a reason`);
+    for (const name of sdkExports ?? []) if (/^register[A-Z]/.test(name) && !sdkAllow.has(name)) fail('public-extensions', ext.sdkEntry, `the SDK entry exports registration ${name}; registrations are public only through ${ext.entry}`);
+    for (const name of sdkAllow.keys()) if (!sdkExports?.has(name)) fail('public-extensions', 'arch.json', `stale sdkRegisterAllow ${name}: no longer exported; remove it (shrink-only)`);
+    // Every register* of the adapter package is classified: public (extension entry) or composition-only with a reason.
+    const internalOnly = new Map((ext.compositionOnly ?? []).map(entry => [entry.name, entry]));
+    for (const name of adapterExports) if (/^register[A-Z]/.test(name) && !ext.registrations.includes(name) && !internalOnly.get(name)?.reason) fail('public-extensions', 'src/adapters/index.ts', `unclassified registration ${name}: export it from ${ext.entry} or list it in guards.publicExtensions.compositionOnly with a reason`);
+    // One composition root: only the listed unit closes the registries.
+    for (const [name, owner] of Object.entries(ext.rootOnly ?? {})) {
+      const importRe = new RegExp(`import\\s*\\{[^}]*\\b${name}\\b[^}]*\\}\\s*from`, 'u');
+      for (const file of srcFiles) {
+        const path = rel(file);
+        if (path.startsWith(`${owner}/`) || path.startsWith('src/adapters/')) continue;
+        if (importRe.test(readFileSync(file, 'utf8'))) fail('composition-root', path, `${name} is called only by the composition root ${owner}; use composeCore/loadComposedConfig`);
+      }
+    }
+    let manifest = {}; try { manifest = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8')); } catch { /* reported by the import-map check */ }
+    const published = manifest.exports?.[ext.packageExport]?.import;
+    if (published !== ext.packageImport) (ext.pendingPackageExport ? warn : fail)('public-extensions', 'package.json', `exports["${ext.packageExport}"].import must be ${ext.packageImport} (got ${published ?? 'none'})`);
+    else if (ext.pendingPackageExport) fail('public-extensions', 'arch.json', 'package.json publishes the extension entry: remove guards.publicExtensions.pendingPackageExport');
+    const fixture = ext.fixture, fixtureRoot = join(ROOT, fixture?.root ?? '\0');
+    const fixtureFiles = fixture ? anyFiles(fixture.root, p => /\.(ts|mts|mjs|js)$/.test(p)) : [];
+    if (fixture && fixtureFiles.length === 0) fail('overlay-fixture', fixture.root, 'the overlay fixture package is missing');
+    let registers = false;
+    for (const file of fixtureFiles) {
+      const text = readFileSync(file, 'utf8');
+      for (const m of text.matchAll(/(?:\bfrom\s*|\bimport\s*\(?\s*)['"]([^'"]+)['"]/gu)) {
+        const spec = m[1], line = text.slice(0, m.index).split('\n').length;
+        const inside = spec.startsWith('.') && resolve(dirname(file), spec).startsWith(fixtureRoot + sep);
+        if (!inside && !spec.startsWith('node:') && !fixture.allowedSpecifiers.includes(spec)) fail('overlay-fixture', `${rel(file)}:${line}`, `the overlay fixture imports only ${fixture.allowedSpecifiers.join(', ')}, node: built-ins and its own files (got ${spec})`);
+      }
+      if (ext.registrations.some(name => new RegExp(`\\b${name}\\(`, 'u').test(text))) registers = true;
+    }
+    if (fixture && fixtureFiles.length > 0 && !registers) fail('overlay-fixture', fixture.root, 'the overlay fixture registers nothing through the extension entry');
   }
 }
 
