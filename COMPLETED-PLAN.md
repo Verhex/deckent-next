@@ -690,3 +690,4 @@ Owner 2026-10-05: önceki CI-first/current-closure iniş sırası tamamlandı; m
 | B36-REGRESSIONS (PR #12) | Batch-36 gerilemelerinin düzeltmesi | İndi; Astra 2365 PASS, main `0e773b3b` | Tam verify sonucu | Astra 2365 |
 
 - IDENTITY-UX PR #8, B36-REGRESSIONS PR #12, BOARD-DASHBOARD PR #14 main'de; canlı alpha.5/alpha.6 içinde.
+| CI-SPEED | Tek build/Node, 8 süre dengeli shard, kapalı tam-kapsam toplayıcı; exact-source `land:check` | PR #27 main `20e0d1f3` (Astra 2408/2410); main push tam suite owner kararıyla geri | Opsiyonel: shard 1 native/host/smoke ayrı job | Hosted 5 dk 25 sn, 682 dosya/5366 geçti/0 fail; dış `proof/CI-SPEED-ANALYSIS-OPUS-2026-10-06/RESULT.md` |
