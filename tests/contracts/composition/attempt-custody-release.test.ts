@@ -1,10 +1,11 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { chmod, lstat, mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { chmod, lstat, mkdir, readdir, readFile, rm, utimes, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
+import { randomUUID } from 'node:crypto';
 import { hostname, userInfo } from 'node:os';
 import { afterEach, describe, expect, it } from 'vitest';
-import { checkConfiguredWorkspaceIntegration, deliverConfiguredWorkspaceIntegration, inspectConfiguredWorkers, prepareConfiguredWorkspaceIntegration, startConfiguredRuntimeService } from '../../../src/index.js';
+import { checkConfiguredWorkspaceIntegration, deliverConfiguredWorkspaceIntegration, evaluateTask, inspectConfiguredWorkers, prepareConfiguredWorkspaceIntegration, startConfiguredRuntimeService } from '../../../src/index.js';
 import { sweepConfiguredAttemptCustody } from '../../../src/composition/core/runs/index.js';
 import { clearConfigCache, productResourcePath } from '#platform/index.js';
 import { workspacePatchFixture } from '../support/workspace-patch-fixture.js';
@@ -29,7 +30,8 @@ async function policy(f: Awaited<ReturnType<typeof workspacePatchFixture>>, acti
     { id: 'inspect', effect: 'allow', actions: ['inspect'], scopes: ['s'], principals, resource: { kind: 'scope', ids: ['s'] } },
   ] }), { mode: 0o600 });
 }
-const released = (container: string, workspace: string) => ({ schemaVersion: 1, status: 'released', container, workspace });
+const released = (container: string, workspace: string, delivery = 'retained-patch') => ({ schemaVersion: 1, status: 'released', container, workspace, delivery });
+const noBases = { removed: 0, kept: 0 };
 
 describe.skipIf(process.platform !== 'linux' || !process.env.DECKENT_TEST_DOCKER_IMAGE)('attempt custody release (EXEC-RELEASE)', () => {
   it('negative 4 + producer→surface: releases container and clone only after the verified patch is retained; consumers keep the exact content', async () => {
@@ -67,7 +69,7 @@ describe.skipIf(process.platform !== 'linux' || !process.env.DECKENT_TEST_DOCKER
     const f = await workspacePatchFixture({ roots, cleanup }); await policy(f, RELEASE);
     const worker = await f.run(); const handle = (await f.runtime.store.loadBoundDispatch(f.identity))!.terminal!.handle;
     const sweep = async () => (await sweepConfiguredAttemptCustody(f.project, ['s'], f.options))[0]!;
-    expect(await sweep()).toEqual({ schemaVersion: 1, scopeId: 's', released: 0, detachedKept: 0, entries: [], error: null });
+    expect(await sweep()).toEqual({ schemaVersion: 1, scopeId: 's', released: 0, detachedKept: 0, sourceBases: noBases, entries: [], error: null });
     expect(await container(handle)).toBe(true); expect(await present(worker)).toBe(true);
     await policy(f, ['execute', 'read-output', 'recover-output']);
     const prepared = await f.prepare();
@@ -105,16 +107,43 @@ describe.skipIf(process.platform !== 'linux' || !process.env.DECKENT_TEST_DOCKER
     await chmod(join(workspaces, detached[0]!, 'tree', '.git', 'pinned'), 0o700);
     // Sol ER-R2: the detached removal is finished only by this attempt's own authorized release — denied release keeps it.
     await policy(f, ['execute', 'read-output', 'recover-output']);
-    expect(await sweep()).toEqual({ schemaVersion: 1, scopeId: 's', released: 0, detachedKept: 1, error: null,
+    expect(await sweep()).toEqual({ schemaVersion: 1, scopeId: 's', released: 0, detachedKept: 1, sourceBases: noBases, error: null,
       entries: [{ identity: f.identity, outcome: { schemaVersion: 1, status: 'held', reason: 'release-denied', code: 'POLICY_DENIED' } }] });
     expect((await readdir(workspaces)).filter(name => name.startsWith('.released-'))).toEqual(detached);
     // Another scope's sweep in the same root never touches it.
     expect((await sweepConfiguredAttemptCustody(f.project, ['other'], f.options))[0]).toMatchObject({ scopeId: 'other', released: 0, entries: [] });
     expect((await readdir(workspaces)).filter(name => name.startsWith('.released-'))).toEqual(detached);
     await policy(f, RELEASE);
-    expect(await sweep()).toEqual({ schemaVersion: 1, scopeId: 's', released: 1, detachedKept: 0, error: null, entries: [{ identity: f.identity, outcome: released('absent', 'removed') }] });
+    expect(await sweep()).toEqual({ schemaVersion: 1, scopeId: 's', released: 1, detachedKept: 0, sourceBases: noBases, error: null, entries: [{ identity: f.identity, outcome: released('absent', 'removed') }] });
     expect((await readdir(workspaces)).filter(name => name.startsWith('.released-'))).toEqual([]);
     expect(await f.preview()).toMatchObject({ patch: { changes: [{ path: 'added.txt' }, { path: 'note.txt' }, { path: 'removed.txt' }] } });
+  });
+  it('owner B negative: a settled coding task without work input and without a kind declaration keeps its container and clone', async () => {
+    const f = await workspacePatchFixture({ roots, cleanup }); await policy(f, [...RELEASE, 'evaluate']);
+    const worker = await f.run(); const handle = (await f.runtime.store.loadBoundDispatch(f.identity))!.terminal!.handle;
+    const run = (await f.runtime.store.loadRun('s', 'r'))!;
+    const evaluated = await evaluateTask(f.project, { schemaVersion: 1, commandId: 'evaluate', identity: f.identity, expectedRevision: run.revision }, f.options);
+    expect(evaluated.evaluation.run.tasks.find(task => task.id === 't')?.phase).toBe('accepted');
+    expect((await sweepConfiguredAttemptCustody(f.project, ['s'], f.options))[0]).toMatchObject({ released: 0, entries: [], error: null });
+    expect(await container(handle)).toBe(true); expect(await present(worker)).toBe(true);
+    // The code is still deliverable: a manual patch preparation captures it, then the same owner releases.
+    expect((await f.prepare()).custody).toEqual(released('removed', 'removed'));
+  });
+  it('C2: an attempt of a declared no-delivery kind is released by the sweep once its task settled; never before', async () => {
+    const f = await workspacePatchFixture({ roots, cleanup }, { noWorkspaceDelivery: true }); await policy(f, [...RELEASE, 'evaluate']);
+    const worker = await f.run(); const handle = (await f.runtime.store.loadBoundDispatch(f.identity))!.terminal!.handle;
+    const sweep = async () => (await sweepConfiguredAttemptCustody(f.project, ['s'], f.options))[0]!;
+    // Negative: terminal with complete output but the task is still evaluating, so the clone and container stay.
+    expect(await sweep()).toMatchObject({ released: 0, entries: [], error: null });
+    expect(await container(handle)).toBe(true); expect(await present(worker)).toBe(true);
+    const run = (await f.runtime.store.loadRun('s', 'r'))!;
+    const evaluated = await evaluateTask(f.project, { schemaVersion: 1, commandId: 'evaluate', identity: f.identity, expectedRevision: run.revision }, f.options);
+    expect(evaluated.evaluation.run.tasks.find(task => task.id === 't')?.phase).toBe('accepted');
+    // The real broker verifies the lease against the Run's recorded workspace custody base, then removes the exact clone.
+    expect(await sweep()).toMatchObject({ released: 1, error: null, entries: [{ identity: f.identity, outcome: released('removed', 'removed', 'not-required') }] });
+    expect(await container(handle)).toBe(false); expect(await present(dirname(worker))).toBe(false);
+    expect((await f.runtime.store.loadBoundDispatch(f.identity))!.patch).toBeUndefined();
+    expect((await sweep()).entries).toEqual([]);
   });
   it('service start: the runtime service sweeps under its ledger custody, honouring the configured retention', async () => {
     const f = await workspacePatchFixture({ roots, cleanup }); await policy(f, ['execute', 'read-output', 'recover-output']);
@@ -130,11 +159,16 @@ describe.skipIf(process.platform !== 'linux' || !process.env.DECKENT_TEST_DOCKER
       const service = await startConfiguredRuntimeService(f.project, { async onPage() {}, async onError() {}, onAttemptCustodySwept(result) { swept.push(result); } }, f.options);
       await service.stop(); await service.done; return swept;
     };
+    // C3: a source-base probe left by a crash (exact footprint, older than 3 × git timeoutMs) and a foreign directory beside it.
+    const workspaces = dirname(dirname(worker)), probe = join(workspaces, '.base-' + randomUUID()), foreign = join(workspaces, '.base-foreign');
+    await mkdir(join(probe, 'hooks'), { recursive: true, mode: 0o700 }); await writeFile(join(probe, 'gitconfig'), '', { mode: 0o600 });
+    await mkdir(foreign, { mode: 0o700 }); const old = new Date(Date.now() - 120_000); await utimes(probe, old, old); await utimes(foreign, old, old);
     await configure({ schemaVersion: 1, release: 'keep' });
-    expect(await start()).toEqual([[{ schemaVersion: 1, scopeId: 's', released: 0, detachedKept: 0, entries: [], error: null }]]);
+    expect(await start()).toEqual([[{ schemaVersion: 1, scopeId: 's', released: 0, detachedKept: 0, sourceBases: { removed: 1, kept: 1 }, entries: [], error: null }]]);
     expect(await container(handle)).toBe(true); expect(await present(worker)).toBe(true);
+    expect(await present(probe)).toBe(false); expect(await present(foreign)).toBe(true);
     await configure();
-    expect(await start()).toEqual([[{ schemaVersion: 1, scopeId: 's', released: 1, detachedKept: 0, entries: [{ identity: f.identity, outcome: released('removed', 'removed') }], error: null }]]);
+    expect(await start()).toEqual([[{ schemaVersion: 1, scopeId: 's', released: 1, detachedKept: 0, sourceBases: { removed: 0, kept: 1 }, entries: [{ identity: f.identity, outcome: released('removed', 'removed') }], error: null }]]);
     expect(await container(handle)).toBe(false); expect(await present(dirname(worker))).toBe(false);
   });
 });

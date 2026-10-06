@@ -1,13 +1,12 @@
 import { poolDriftLine, poolWaitLine } from './pool.js';
-import { hasCliAction } from '#surfaces/core/cli-kit/index.js';
-import { cliUsage, shellIdentity } from './usage.js';
+import { cliUsage, hasCliAction, shellIdentity } from '#surfaces/core/cli-kit/index.js';
 import { ErrorRegistry, emit, loadConfig, resolveLocale, t, type ConfigLoadOptions, type Locale, type ProductLayout } from '#platform/index.js';
 import { runLifecycleCommandSchema, runAdmissionSchema, runDeliveryAdmissionSchema, runReservationCommandSchema, type RunAdmission, type RunDeliveryAdmission, type RunCommand, type RunQuery, type RunView, type RunCancellationOutcome, type RunReservationCommand, type TaskWorkerModel } from '#engine/index.js';
 import { resolve } from 'node:path';
 import { readGraphInput } from './graph-input.js';
 import { validateTaskGraph, TaskGraphError, sanitizeIssues, type AttemptIdentity } from '#domain/index.js';
 import type { CommandContext } from './kernel-commands.js';
-import { renderBriefLines, renderWorkerModelLine } from '#surfaces/core/monitor/index.js';
+import { renderBriefLines, renderGraphSummaryLines, renderWorkerModelLine } from '#surfaces/core/monitor/index.js';
 export type RunQueryHandler = (root: string, query: RunQuery, options: ConfigLoadOptions) => Promise<Readonly<{ schemaVersion: 1; layout: ProductLayout; run: RunView | null;
   models?: readonly TaskWorkerModel[] }>>;
 export type RunAdmissionHandler = (root: string, command: RunAdmission, options: ConfigLoadOptions) => Promise<Readonly<{ schemaVersion: 1; layout: ProductLayout; admission: Readonly<{ schemaVersion: 1; commandId: string; run: RunView }>; warnings?: readonly Readonly<{ code: string; taskId: string; modelId: string; minCliVersion: string; cliVersion: string | null }>[] }>>;
@@ -134,6 +133,7 @@ export async function runCommand(argv: readonly string[], context: CommandContex
       ...(run.state.kind === 'terminal' ? [t('cli.run.lifecycle.outcome', { outcome: run.state.outcome }, locale)] : []),
       ...(run.state.kind === 'parked' ? [t('cli.run.lifecycle.deadline', { since: run.state.since, deadline: run.state.deadline }, locale)] : []),
       run.cancellationRequested ? t('cli.run.inspect.cancelRequested', {}, locale) : t('cli.run.inspect.cancelAbsent', {}, locale),
+      ...(run.graphSummary ? renderGraphSummaryLines(run.graphSummary, locale).map(line => `  ${line}`) : []),
       ...run.tasks.flatMap(task => [t('cli.run.inspect.task', { task: task.id, kind: task.kind }, locale),
         ...renderBriefLines(task.taskBrief, task.resultBrief, locale),
         t('cli.run.inspect.stateLabel', { phase: task.acceptedEvidence === 'model-unverified' ? t('cli.task.decision.acceptedUnverified', {}, locale) : phases[task.phase] }, locale),

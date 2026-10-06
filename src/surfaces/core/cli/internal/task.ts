@@ -1,6 +1,5 @@
 import { inspectTask } from './task-inspect.js';
-import { hasCliAction } from '#surfaces/core/cli-kit/index.js';
-import { cliUsage } from './usage.js';
+import { cliUsage, hasCliAction } from '#surfaces/core/cli-kit/index.js';
 import { ErrorRegistry, emit, loadConfig, resolveLocale, t, type ConfigLoadOptions, type ProductLayout } from '#platform/index.js';
 import { attemptIdentitySchema, type AttemptIdentity } from '#domain/index.js';
 import { runLifecycleCommandSchema, taskEvaluationCommandSchema, type DispatchTerminal, type RunView, type TaskEvaluationCommand } from '#engine/index.js';

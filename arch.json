@@ -378,7 +378,8 @@
         "src/domain/core/run",
         "src/engine/core/decision",
         "src/domain/core/decision",
-        "src/engine/core/handoff-observation"
+        "src/engine/core/handoff-observation",
+        "src/domain/core/task-graph"
       ],
       "plan": "FOUNDATION"
     },
@@ -510,7 +511,8 @@
         "src/adapters/core/http-fetch",
         "src/adapters/core/host-shell",
         "src/adapters/core/git-workspace",
-        "src/composition/core/toolchains"
+        "src/composition/core/toolchains",
+        "src/engine/core/config"
       ],
       "plan": "EXECUTION"
     },
@@ -957,7 +959,9 @@
         "src/surfaces/core/cli-decision",
         "src/engine/core/approval",
         "src/surfaces/core/approval-presentation",
-        "src/engine/core/installation"
+        "src/engine/core/installation",
+        "src/engine/core/config",
+        "src/platform/core/utils"
       ],
       "plan": "SURFACES"
     },
@@ -2017,7 +2021,8 @@
         "src/composition/core/scoped-request",
         "src/composition/core/policy",
         "src/engine/core/approval",
-        "src/composition/core/toolchains"
+        "src/composition/core/toolchains",
+        "src/engine/core/config"
       ],
       "plan": "MONITOR"
     },

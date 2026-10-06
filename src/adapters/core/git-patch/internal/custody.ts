@@ -6,6 +6,6 @@ import { recordedDockerSupervisor, dockerProfileObservesWorker } from '#adapters
 export function gitDockerAttemptCustody(options: GitWorkspaceOptions) {
   const broker = new GitWorkspaceBroker(options);
   const workspaces: AttemptWorkspaceCustody = Object.freeze({ releaseAttempt: broker.releaseAttempt.bind(broker), holds: broker.holds.bind(broker),
-    countDetached: broker.countDetached.bind(broker) });
+    countDetached: broker.countDetached.bind(broker), sweepSourceBases: broker.sweepSourceBases.bind(broker) });
   return Object.freeze({ supervisor: recordedDockerSupervisor, observed: dockerProfileObservesWorker, workspaces });
 }

@@ -31,6 +31,7 @@ export function describeDiagnostic(raw: string, locale: Locale): MonitorDiagnost
     'ledger-only': () => t('monitor.diagnostic.ledgerOnly', { detail }, locale),
     'ledger-version-unsupported': () => t('monitor.diagnostic.ledgerVersionUnsupported', { detail }, locale),
     'approvals-denied': () => t('monitor.diagnostic.approvalsDenied', { detail }, locale),
+    'config-restart-required': () => t('monitor.diagnostic.configRestartRequired', {}, locale),
     'image-updating': () => t('monitor.diagnostic.imageUpdating', {}, locale),
     'image-current': () => t('monitor.diagnostic.imageCurrent', { detail }, locale),
     'image-refresh-failed': () => t('monitor.diagnostic.imageRefreshFailed', { detail }, locale),

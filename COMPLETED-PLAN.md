@@ -691,3 +691,4 @@ Owner 2026-10-05: önceki CI-first/current-closure iniş sırası tamamlandı; m
 
 - IDENTITY-UX PR #8, B36-REGRESSIONS PR #12, BOARD-DASHBOARD PR #14 main'de; canlı alpha.5/alpha.6 içinde.
 | CI-SPEED | Tek build/Node, 8 süre dengeli shard, kapalı tam-kapsam toplayıcı; exact-source `land:check` | PR #27 main `20e0d1f3` (Astra 2408/2410); main push tam suite owner kararıyla geri | Opsiyonel: shard 1 native/host/smoke ayrı job | Hosted 5 dk 25 sn, 682 dosya/5366 geçti/0 fail; dış `proof/CI-SPEED-ANALYSIS-OPUS-2026-10-06/RESULT.md` |
+| İLK-20 DALGA 1+2 | Dogfood engeli, katman kayması, RUN-YAŞAM, MODEL-INGRESS-P2, katalog, monitor, binding v2 | PR #19/#22/#23 indi; canlı alpha.7 (`0fcea7c8`) | Takipler PLAN'da (MARK-LOST-ATOMIC vb.) | `proof/W1-*`, `proof/W2-*`, `proof/WAVE-1/2-2026-10-06/` |

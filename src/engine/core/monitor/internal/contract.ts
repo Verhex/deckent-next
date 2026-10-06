@@ -1,6 +1,6 @@
 import type { TaskBrief, ResultBrief } from '#engine/core/runs/index.js';
 import type { HandoffReceiptView } from '#engine/core/handoff-observation/index.js';
-import type { WorkerEventSummary, WorkerFinalReportResult } from '#domain/index.js';
+import type { TaskGraphSummary, WorkerEventSummary, WorkerFinalReportResult } from '#domain/index.js';
 import type { ContainerEvidence } from '#engine/core/supervisor/index.js';
 import type { WorkerObservation } from '#engine/core/worker-observation/index.js';
 
@@ -79,6 +79,8 @@ export interface MonitorRun {
   readonly delivery?: ResultBrief['runDelivery'];
   /** M2 (optional): the typed delivery outlook of an accepted Run, derived from the task's work input and the dispatch's retained-patch record. */
   readonly deliveryOutlook?: MonitorDeliveryOutlook;
+  /** PARALLEL-S3 (optional, additive): the DAG summary (counts + critical path), the same typed value `run inspect` shows. */
+  readonly graphSummary?: TaskGraphSummary;
 }
 export type MonitorDeliveryState = 'integrating' | 'integrated' | 'delivering' | 'delivered' | 'adopting' | 'adopted' | 'rolling-back' | 'rolled-back';
 export interface MonitorApproval {

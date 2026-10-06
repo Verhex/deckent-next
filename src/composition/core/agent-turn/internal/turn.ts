@@ -20,6 +20,7 @@ import { createAgentCallApprovals, describeAgentCall } from './call-approvals.js
 import { invokePeerConfiguredModel, loadPeerInvocationContext, measurePeerConfiguredModel, type RuntimeModelInvocationHost } from '#composition/core/model-invocation/index.js';
 import { inspectModelBinding } from '#composition/core/provider-catalog/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
+import { watchTurnConnection } from './connection-watch.js';
 import { createAgentFileEdits } from './edits.js';
 import { createAgentCallDecisions, withAgentAudit } from './mode.js';
 import { extractOpenAiChatTextFromInvocation, openAiChatMessageFromInvocation, openAiChatNativeMessages, openAiChatPromptUpperBound,
@@ -104,7 +105,8 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
     { maxResultBytes: chat.readResultMaxBytes }) : null;
   const key = runningKey(command.scopeId, command.turnId);
   const cancel = new AbortController();
-  const signal = AbortSignal.any([channel.signal, cancel.signal, host.signal]);
+  const connection = watchTurnConnection(peer);
+  const signal = AbortSignal.any([channel.signal, cancel.signal, host.signal, connection.signal]);
   // B1: each card of this turn (tool call, MCP trust) gets a one-time capability for this principal and peer process, sent only on this turn's stream; settled → revoked.
   const emitApproval = (event: Extract<AgentTurnStreamEvent, { kind: 'approval.requested' | 'approval.settled' }>) => channel.emit(event.kind === 'approval.settled' ? (host.decisions.revoke(command.scopeId,
     event.approvalId), event) : { ...event, decisionCapability: host.decisions.mint({ scopeId: command.scopeId, approvalId: event.approvalId, principal: context.principal, peerPid: peer.pid, expiresAt: event.expiresAt }, clock.sample().wallMs) });
@@ -299,6 +301,7 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
     return Object.freeze({ schemaVersion: 1, turnId: command.turnId, finish: result.finish, note: withMcpNotices(mcpNotices, result.note), rounds: result.rounds,
       toolCalls: result.toolCalls, answer: kept, answerBytes, replayed: result.replayed, recorded: result.recorded });
   } finally {
+    connection.stop();
     if (registered) host.running.delete(key);
     scratch?.release();
     store?.close();

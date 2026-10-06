@@ -584,6 +584,7 @@
   "cli.runtime.toolchainRefreshUpdated": "Worker imajı {version} sürümüne güncellendi; {count} profil revizyonu yalnız yeni Run'lara uygulanır.",
   "cli.runtime.toolchainRefreshUnverified": "Worker imajı güncelliği doğrulanamadı ({code}); mevcut imaj kullanılmaya devam eder, sonraki denetim yeniden dener.",
   "cli.runtime.toolchainRefreshCurrent": "Worker imajı güncel.",
+  "doctor.serviceConfigStale": "Runtime servisi: yeniden başlatma gerekli, yeniden başlatma gerektiren bir yapılandırma değişikliğinden önce başladı (deckent runtime restart)",
   "doctor.imageRefresh": "Worker imajı: {status}",
   "doctor.imageRefresh.updating": "arka planda güncelleniyor; Run'lar mevcut imajı kullanıyor",
   "doctor.imageRefresh.failed": "yenileme başarısız ({reason}); önceki imaj kullanılıyor",

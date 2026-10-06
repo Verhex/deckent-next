@@ -3,7 +3,7 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { createHash, randomUUID } from 'node:crypto';
 import { constants } from 'node:fs';
-import { lstat, mkdir, open, readdir, readFile, realpath, rename, rm, writeFile } from 'node:fs/promises';
+import { lstat, mkdir, open, readdir, readFile, realpath, rename, rm, rmdir, writeFile } from 'node:fs/promises';
 import { isAbsolute, join, resolve } from 'node:path';
 import { z } from 'zod';
 import { attemptIdentitySchema, type AttemptIdentity } from '#domain/index.js';
@@ -11,6 +11,7 @@ import { workspaceRequestSchema, WorkspaceError, type WorkspaceBroker, type Work
 import format from './format.json' with { type: 'json' };
 import { fingerprintGitSource, gitSourceBaseSchema, gitSourcePreimageSchema, type GitSourceBase } from './source-base.js';
 const exec = promisify(execFile);
+const SOURCE_BASE_NAME = new RegExp(`^${format.sourceBase.replace('.', '\\.')}[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`);
 /** `baseRef` (WORK-TARGETS): a configured work target's base branch. Present, a Run's base is its tip and delivery/integration compare
  * against it; absent, the source checkout's HEAD as before (the option is then not part of any fingerprint). */
 const optionsSchema = GIT_EXECUTION_SETTINGS.extend({ sourceRoot: z.string().min(1), workspaceRoot: z.string().min(1),
@@ -120,7 +121,7 @@ export class GitWorkspaceBroker implements WorkspaceBroker {
   private async currentSource(explicitCommit?: string): Promise<GitSourceBase> {
     if (explicitCommit !== undefined && !/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/.test(explicitCommit)) throw new WorkspaceError('WORKSPACE_REQUEST_INVALID');
     await this.checkedDirectory(this.options.sourceRoot); await this.checkedDirectory(this.options.workspaceRoot);
-    const temporary = join(this.options.workspaceRoot, `.base-${randomUUID()}`);
+    const temporary = join(this.options.workspaceRoot, `${format.sourceBase}${randomUUID()}`);
     await mkdir(temporary, { mode: 0o700 });
     try {
       await writeFile(join(temporary, format.emptyConfig), '', { flag: 'wx', mode: 0o600 });
@@ -219,6 +220,41 @@ export class GitWorkspaceBroker implements WorkspaceBroker {
     const target = this.identityTarget(identity);
     try { await lstat(target.directory); return true; } catch (error) { if (code(error) !== 'ENOENT') throw error; }
     return (await this.detachedOf(target.id)).length > 0;
+  }
+  /** EXEC-RELEASE C3: a crash between creating a source-base probe and its `finally` removal leaves `.base-<uuid>` in the shared root.
+   * Only probes this broker provably created are removed: the exact name, a private directory owned by this uid holding nothing but its
+   * empty Git config file and an empty hooks directory, unchanged for longer than a probe can live (it makes two Git calls, each bounded by
+   * `timeoutMs`; the derived bound is `format.sourceBaseStaleAfterGitTimeouts` × `timeoutMs`). Anything else (foreign, symlink, extra content, younger) is kept and counted.
+   * Removal is exact (file, hooks directory, directory), never recursive: a concurrent addition makes `rmdir` fail and keeps it. */
+  async sweepSourceBases(limit: number): Promise<Readonly<{ removed: number; kept: number }>> {
+    const root = this.options.workspaceRoot; await this.checkedDirectory(root);
+    const staleBefore = Date.now() - format.sourceBaseStaleAfterGitTimeouts * this.options.timeoutMs; let removed = 0, kept = 0;
+    for (const name of await readdir(root)) {
+      if (!name.startsWith(format.sourceBase)) continue;
+      if (removed < limit && await this.removeSourceBase(root, name, staleBefore)) removed++; else kept++;
+    }
+    return Object.freeze({ removed, kept });
+  }
+  private async removeSourceBase(root: string, name: string, staleBefore: number): Promise<boolean> {
+    if (!SOURCE_BASE_NAME.test(name)) return false;
+    const path = join(root, name), config = join(path, format.emptyConfig), hooks = join(path, format.hooks);
+    const owned = (stat: { uid: number }) => !process.getuid || stat.uid === process.getuid();
+    try {
+      await this.checkedDirectory(path); const stat = await lstat(path);
+      if ((stat.mode & 0o077) !== 0) return false;
+      if (stat.mtimeMs > staleBefore) return false;
+      const names = await readdir(path);
+      if (names.some(entry => entry !== format.emptyConfig && entry !== format.hooks)) return false;
+      if (names.includes(format.emptyConfig)) {
+        const file = await lstat(config); if (!file.isFile() || file.size !== 0 || file.nlink !== 1 || !owned(file)) return false;
+      }
+      if (names.includes(format.hooks)) {
+        const directory = await lstat(hooks); if (!directory.isDirectory() || !owned(directory) || (await readdir(hooks)).length) return false;
+      }
+      if (names.includes(format.emptyConfig)) await rm(config);
+      if (names.includes(format.hooks)) await rmdir(hooks);
+      await rmdir(path); return true;
+    } catch { return false; }
   }
   /** Detached removals left in the shared root (any attempt, any scope); counted for visibility, never removed here. */
   async countDetached(): Promise<number> {

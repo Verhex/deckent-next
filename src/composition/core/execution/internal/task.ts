@@ -4,12 +4,13 @@ import { prepareProductDirectory, ErrorRegistry, type ConfigLoadOptions } from '
 import { attemptIdentitySchema, type AttemptIdentity } from '#domain/index.js';
 import { DockerSupervisor, GitWorkspaceBroker, GitRunWorkspaceProvider, FileArtifactStore, openSqliteAttemptStore, resolveGitWorkTarget,
   validateDockerSupervisorProfile, resolveDockerTaskProfile, resolveDockerReadOnlyMounts, readLocalNativeCredential, openNativeConnection,
-  applyAcceptedPredecessorPatches, startWorkerObservation, openWorkerEventSink, sealWorkerEventLog, selectWorkTarget } from '#adapters/index.js';
+  applyAcceptedPredecessorPatches, startWorkerObservation, openWorkerEventSink, selectWorkTarget } from '#adapters/index.js';
 import { authenticate, DispatchApplication, DispatchPolicyAuthorization, RunWorkspaceAcquisitionApplication, selectReservedTaskProfile,
   RunStoreError, DispatchError, HandoffError, recordHandoffRefusal, recordAttemptClosure, classifyLaunchRefusal, prepareTaskStart, recordAttemptHandoffStart, workTargetAttemptAuthorization } from '#engine/index.js';
 import { createLayoutPolicySource } from '#composition/core/policy/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
+import { sealAttemptWorkerEvents, type WorkerEventSealing } from './seal.js';
 
 /** Execute a reserved identity using its pinned task template. The trusted project root is the
  * Git source; the command cannot supply argv, image, workspace, base commit or host paths.
@@ -52,6 +53,7 @@ export async function executeConfiguredTask(projectRoot: string, input: AttemptI
       const connection = profile.nativeSubscription ? await openNativeConnection({ binding: profile.nativeSubscription,
         directory: workspaceRoot, credential: await readLocalNativeCredential(profile.nativeSubscription.provider, options.env),
         deadlineMs: profile.options.deadlineMs, ...(profile.nativeSubscription.promptDelivery && start.dependencyContext ? { dependencyContext: start.dependencyContext } : {}), ...(events ? { onEvents: batch => events.accept(batch) } : {}) }) : undefined;
+      let sealing: WorkerEventSealing = Object.freeze({ status: 'nothing-to-seal' }), outcome;
       try {
       const supervisor = new DockerSupervisor({ ...profile.options, executable: config.execution.docker.executable, workspaceRoot, uid: os.uid, gid: os.gid,
         ...(start.inputs.length ? { inputs: start.inputs } : {}), ...(start.handoffInputs.length ? { handoffInputs: start.handoffInputs } : {}), ...(readOnlyMounts ? { readOnlyMounts } : {}), ...(connection ? { connection: connection.descriptor } : {}) });
@@ -69,25 +71,17 @@ export async function executeConfiguredTask(projectRoot: string, input: AttemptI
       let result;
       dispatching = true;
       try { result = await app.execute(request); } finally { await observation.close(); }
-      return Object.freeze({ schemaVersion: 1 as const, layout, execution: Object.freeze({ identity, status: result.kind,
-        terminal: result.record.terminal, outputRecorded: !!result.record.output }) });
+      outcome = { status: result.kind, terminal: result.record.terminal, outputRecorded: !!result.record.output };
       } finally {
         await connection?.close();
-        // Seal the event log once the gateway is closed; retention failure never changes the execution outcome.
+        // Seal the event log once the gateway is closed; a sealing failure never changes the execution outcome and is returned typed.
         const closedSink = await events?.close();
         // Batches refused after the gateway's budget was spent are sealed as one final loss marker (never silent).
-        const unreported = connection?.statistics().eventsUnreported ?? 0;
-        const verification = connection?.modelVerification() ?? null;
-        try {
-          // Keep the events that fit the artifact limit; the loss stays visible as a byte-cap marker, never silent.
-          const lines = sealWorkerEventLog(closedSink?.events ?? [], verification, unreported, config.artifacts.maxBytes);
-          if (lines.length) {
-            const receipt = await artifacts.put(identity.scopeId, Buffer.from(lines.join('')));
-            await store.saveWorkerEventLog({ schemaVersion: 1, identity, events: receipt, eventCount: lines.length, sealedAt: Date.now(),
-              projection: closedSink?.projectionComplete === false ? 'partial' : 'complete' });
-          }
-        } catch { /* live sidecar remains; sealing is observation, not execution */ }
+        sealing = await sealAttemptWorkerEvents(identity, artifacts, store, { events: closedSink?.events ?? [], verification: connection?.modelVerification() ?? null,
+          unreported: connection?.statistics().eventsUnreported ?? 0, projectionComplete: closedSink?.projectionComplete, maxBytes: config.artifacts.maxBytes });
       }
+      // Only a sealing failure is reported: the replay of a settled execution (above) keeps the same shape as a successful first call.
+      return Object.freeze({ schemaVersion: 1 as const, layout, execution: Object.freeze({ identity, ...outcome, ...(sealing.status === 'failed' ? { eventLog: sealing } : {}) }) });
     } catch (error) {
       const actor = { id: principal.id, issuer: principal.issuer, subject: principal.subject };
       if (error instanceof HandoffError) await recordHandoffRefusal(store, identity, error, actor);

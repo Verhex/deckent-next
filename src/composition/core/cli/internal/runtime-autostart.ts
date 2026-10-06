@@ -5,7 +5,7 @@ import { DeckentError, ErrorRegistry, getConfigKnownSecrets, loadConfig, prepare
 import { launchDetachedRuntimeService, openTerminalHistoryFile, openTerminalSessionStore, readTerminalConfig, registerProviderConfig } from '#adapters/index.js';
 import { randomUUID } from 'node:crypto';
 import { createConfiguredRuntimeClient } from '#composition/core/runtime-service/index.js';
-import type { RuntimeServiceDescriptor } from '#engine/index.js';
+import { RUNTIME_SERVICE_AUTOSTART_ENV, type RuntimeServiceDescriptor } from '#engine/index.js';
 
 export interface RuntimeServiceReadiness {
   readonly mode: 'connected' | 'started';
@@ -14,9 +14,13 @@ export interface RuntimeServiceReadiness {
   readonly logPath: string | null;
   readonly shutdownAvailable: boolean;
   readonly build: NonNullable<RuntimeServiceDescriptor['build']> | null;
+  /** Restart-apply configuration fingerprint the service started with, and its idle stop period (null: never); undefined from an older service. */
+  readonly configDigest: string | undefined;
+  readonly idleStopMs: number | null;
 }
 const readiness = (mode: 'connected' | 'started', descriptor: RuntimeServiceDescriptor, pid: number | null, logPath: string | null): RuntimeServiceReadiness =>
-  Object.freeze({ mode, instanceId: descriptor.instanceId, pid, logPath, shutdownAvailable: descriptor.shutdownAvailable, build: descriptor.build ?? null });
+  Object.freeze({ mode, instanceId: descriptor.instanceId, pid, logPath, shutdownAvailable: descriptor.shutdownAvailable, build: descriptor.build ?? null,
+    configDigest: descriptor.configDigest, idleStopMs: descriptor.idleStopMs ?? null });
 /** Only positive evidence of absence starts a service: no endpoint (or its never-created state directory) or a refused
  * connection (nothing listens). A peer that accepts but fails or stays silent may be a live incompatible or unhealthy
  * service, so it is reported, never replaced; ownership/unsafe failures are never auto-repaired (Astra 2054 R2). */
@@ -53,7 +57,7 @@ async function describeWithin(client: ReturnType<typeof createConfiguredRuntimeC
  * The launch is reported as ours only when the answering service's process is the one launched.
  */
 export async function ensureConfiguredRuntimeService(projectRoot: string, options: ConfigLoadOptions = {},
-  launch = launchDetachedRuntimeService, entry = ENTRY, budget?: LifecycleDeadline): Promise<RuntimeServiceReadiness> {
+  launch = launchDetachedRuntimeService, entry = ENTRY, budget?: LifecycleDeadline, autoStarted = true): Promise<RuntimeServiceReadiness> {
   const client = createConfiguredRuntimeClient(projectRoot, options);
   registerProviderConfig();
   const config = await loadConfig(projectRoot, { ...options, heal: false });
@@ -62,7 +66,9 @@ export async function ensureConfiguredRuntimeService(projectRoot: string, option
   if (first.descriptor) return readiness('connected', first.descriptor, null, null);
   const logPath = await prepareProductFile(config.productLayout, 'runtimeLog');
   try { await access(entry); } catch { throw ErrorRegistry.createError('RUNTIME_AUTOSTART_FAILED', { params: { log: logPath } }); }
-  const env = Object.fromEntries(Object.entries(options.env ?? process.env).filter((entry): entry is [string, string] => typeof entry[1] === 'string'));
+  const env = Object.fromEntries(Object.entries(options.env ?? process.env).filter((entry): entry is [string, string] => typeof entry[1] === 'string' && entry[0] !== RUNTIME_SERVICE_AUTOSTART_ENV));
+  // K6 = A: the launch marks an automatic start; a restart passes the previous service's origin on (a hand-started service stays one).
+  if (autoStarted) env[RUNTIME_SERVICE_AUTOSTART_ENV] = '1';
   const { pid } = await launch({ executable: process.execPath, entry, cwd: projectRoot, logPath, env })
     .catch(() => { throw ErrorRegistry.createError('RUNTIME_AUTOSTART_FAILED', { params: { log: logPath } }); });
   while (!deadline.expired()) {
@@ -92,7 +98,7 @@ export async function stopConfiguredRuntimeService(projectRoot: string, options:
   if (!descriptor.shutdownAvailable) throw ErrorRegistry.createError('RUNTIME_SHUTDOWN_UNAVAILABLE');
   const command = { schemaVersion: 1 as const, commandId: randomUUID(), serviceId: descriptor.identity.serviceId,
     instanceId: descriptor.instanceId, reason };
-  return { command, result: await client.shutdownService(command, within(deadline)) };
+  return { command, autoStarted: descriptor.autoStarted === true, result: await client.shutdownService(command, within(deadline)) };
 }
 
 /** Stop the running service through governed shutdown, wait until its endpoint no longer answers, then start the current
@@ -100,12 +106,12 @@ export async function stopConfiguredRuntimeService(projectRoot: string, options:
 export async function restartConfiguredRuntimeService(projectRoot: string, options: ConfigLoadOptions = {},
   launch = launchDetachedRuntimeService, entry = ENTRY): Promise<RuntimeServiceReadiness> {
   const deadline = await lifecycleDeadline(projectRoot, options);
-  await stopConfiguredRuntimeService(projectRoot, options, 'terminal restart onto the current build', deadline);
+  const stopped = await stopConfiguredRuntimeService(projectRoot, options, 'managed restart onto the current build and configuration', deadline);
   const client = createConfiguredRuntimeClient(projectRoot, options);
   while (!deadline.expired()) {
     try { await client.describeService(within(deadline)); }
     catch (error) {
-      if (error instanceof DeckentError && ABSENT.has(error.code)) return ensureConfiguredRuntimeService(projectRoot, options, launch, entry, deadline);
+      if (error instanceof DeckentError && ABSENT.has(error.code)) return ensureConfiguredRuntimeService(projectRoot, options, launch, entry, deadline, stopped.autoStarted);
       // The stopping service may close connections while it drains; keep waiting for absence until the deadline.
       if (!(error instanceof DeckentError && (error.code === 'LOCAL_RUNTIME_TRANSPORT' || error.code === 'RUNTIME_SERVICE_TRANSPORT'))) throw error;
     }

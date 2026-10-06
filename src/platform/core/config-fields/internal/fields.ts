@@ -74,6 +74,11 @@ export const CONFIG_FIELDS = Object.freeze({
     acceptRetryDelayMs: z.number().int().positive().max(2147483647).default(25),
     acceptRetryLimit: z.number().int().positive().max(2147483647).default(3),
     shutdownGraceMs: z.number().int().positive().max(2147483647).default(30000),
+    // Bounded wait for capacity before the typed BUSY refusal (0: refuse at once), and the client's bounded retries after a BUSY (0: none).
+    admissionWaitMs: z.number().int().nonnegative().max(60000).default(250),
+    busyRetryLimit: z.number().int().nonnegative().max(10).default(2),
+    // K6 = A: a service the terminal started on its own stops through the governed stop once no request or execution ran for this long (null: never).
+    idleShutdown: z.object({ afterMs: z.number().int().min(60000).max(86400000).nullable().default(900000) }).strict().default({}),
   }).strict().superRefine((value, context) => { if (value.maxConcurrentExecutions >= value.maxConcurrentRequests) context.addIssue({ code: z.ZodIssueCode.custom, path: ['maxConcurrentExecutions'], message: 'SERVICE_EXECUTIONS_CAPACITY' }); }).default({}), [], LAYOUT_CONTRACT_SINCE),
   cancellation: field('config.field.cancellation', { state: 'bound', consumers: ['src/composition/core/runtime'] }, 'restart', z.object({ maxConcurrentDeliveries: z.number().int().positive().safe(),
     recoveryPageSize: z.number().int().positive().safe().default(64),
@@ -101,6 +106,9 @@ export const CONFIG_FIELDS = Object.freeze({
   admission: field('config.field.admission', { state: 'bound', consumers: ['src/composition/core/runs'] }, 'restart', z.object({ registry: z.record(z.unknown()), poolId: z.string().min(1),
     executionSlots: z.number().int().positive().safe(), inFlightSlots: z.number().int().positive().safe(),
     ordering: z.literal('input-order'),
+    /** PARALLEL-S3: admission policy (not a wire invariant); a larger graph is refused with typed TASK_GRAPH_LIMIT before any write. */
+    graph: z.object({ maxTasks: z.number().int().positive().safe().default(256), maxEdges: z.number().int().positive().safe().default(1024),
+      maxDepth: z.number().int().positive().safe().default(64) }).strict().default({}),
   }).strict().nullable().default(null), [], LAYOUT_CONTRACT_SINCE),
   inspection: field('config.field.inspection', { state: 'bound', consumers: ['src/composition/core/worker-observation'] }, 'restart', z.object({
     maxPageSize: z.number().int().positive().max(2_147_483_646).default(64),

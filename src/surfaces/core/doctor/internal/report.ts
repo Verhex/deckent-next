@@ -23,6 +23,8 @@ export interface DoctorRenderInput {
   readonly imageRefresh: ImageRefreshDoctorView | null;
   readonly installationBinding: InstallationBindingReport | null;
   readonly shellRealm: ShellRealmDoctorView | null;
+  /** Running service vs. the restart-apply configuration now in effect; absent/null when not asked. */
+  readonly serviceConfig?: 'current' | 'stale' | 'unknown' | 'stopped' | null;
 }
 
 function imageRefreshText(view: ImageRefreshDoctorView, locale: Locale): string {
@@ -50,6 +52,7 @@ export function renderDoctorReport(result: DoctorRenderInput, poolLines: readonl
   ...(result.secretStore ? [t('doctor.secretStore', { backend: result.secretStore.backend, status: result.secretStore.status,
     codeSuffix: result.secretStore.code ? `, ${result.secretStore.code}` : '' }, locale)] : []),
   ...(result.imageRefresh && result.imageRefresh.status !== 'unknown' ? [t('doctor.imageRefresh', { status: imageRefreshText(result.imageRefresh, locale) }, locale)] : []),
+  ...(result.serviceConfig === 'stale' ? [t('doctor.serviceConfigStale', {}, locale)] : []),
   ...(result.installationBinding ? installationBindingLines(result.installationBinding, result.platform, locale) : []),
   ...poolLines,
   ...(result.shellRealm ? shellRealmLines(result.shellRealm) : [])].join('\n');

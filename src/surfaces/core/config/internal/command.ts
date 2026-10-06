@@ -4,7 +4,7 @@ import { configDisplayView, getConfigValue, loadConfig, type ConfigLoadOptions }
 import { emit, formatValue } from '#platform/index.js';
 import { resolveLocale, t, type Locale } from '#platform/index.js';
 import type { VerifiedPrincipal } from '#domain/index.js';
-import type { ConfigApplication } from '#engine/index.js';
+import { configServiceState, type ConfigApplication, type DescribeService } from '#engine/index.js';
 import type { CliBaseContext } from '#surfaces/core/cli-kit/index.js';
 import { applyWord, renderConfigExplanation, renderConfigInspection, sourceWord } from './render.js';
 
@@ -12,6 +12,8 @@ export type ConfigApplicationFactory = (root: string, options: ConfigLoadOptions
 export interface ConfigCommandContext extends CliBaseContext {
   configApplication?: ConfigApplicationFactory;
   loadInstallationIdentity?: (root: string, options: ConfigLoadOptions) => Promise<unknown>;
+  /** Read-only service describe: a restart-apply change is compared with what the running service started with. */
+  describeRuntimeService?: DescribeService;
   resolveConfigPrincipal?: (root: string, scopeId: string, options: ConfigLoadOptions) => Promise<VerifiedPrincipal>;
 }
 interface Parsed { readonly args: string[]; json: boolean; global: boolean; help: boolean; language?: string; expect?: string; scope?: string; commandId?: string }
@@ -72,8 +74,12 @@ export async function configCommand(argv: readonly string[], context: ConfigComm
     commandId: parsed.commandId ?? randomUUID(), ...(parsed.expect === undefined ? {} : { expect: parsed.expect === 'absent' ? null : parsed.expect }) };
   const field = await app.explain({ keyPath });
   const result = action === 'set' ? await app.set({ ...input, value }) : await app.unset(input);
-  emit(result, { ...sinks, render: () => [t('config.surface.changed', { key: keyPath, layer: sourceWord(layer, locale), apply: applyWord(field.apply, locale), backup: result.backupPath ?? '-' }, locale),
-    ...(result.overridden ? [t('config.surface.overridden', {}, locale)] : [])].join('\n') });
+  // A restart-apply change is compared with the running service's own fingerprint, so "restart" is a measured state, not a standing hint.
+  const service = field.apply === 'restart' ? await configServiceState(root, options, context.describeRuntimeService) : null;
+  emit(service ? { ...result, service } : result, { ...sinks, render: () => [t('config.surface.changed', { key: keyPath, layer: sourceWord(layer, locale), apply: applyWord(field.apply, locale), backup: result.backupPath ?? '-' }, locale),
+    ...(result.overridden ? [t('config.surface.overridden', {}, locale)] : []),
+    ...(service ? [{ current: t('config.surface.service.current', {}, locale), stale: t('config.surface.service.stale', {}, locale),
+      unknown: t('config.surface.service.unknown', {}, locale), stopped: t('config.surface.service.stopped', {}, locale) }[service]] : [])].join('\n') });
 }
 /** Terminal observation shares the application; this slash view exposes no write route. */
 export async function configSlash(root: string, args: string, context: ConfigCommandContext, options: ConfigLoadOptions, locale: Locale, width: number): Promise<readonly string[]> {

@@ -3,7 +3,8 @@ import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { PassThrough, Readable, Writable } from 'node:stream';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { RUNTIME_SERVICE_HEARTBEAT_MS } from '#engine/index.js';
 import { main } from '../../../src/surfaces/index.js';
 import { runtimeBuildSkew } from '#surfaces/core/cli/index.js';
 import { clearConfigCache, t } from '#platform/index.js';
@@ -122,6 +123,41 @@ describe('deckent terminal CLI', () => {
     expect(out.text()).toContain('The chat turn failed.'); expect(out.text()).not.toContain('provider detail');
   });
 
+  // TERMINAL-GAPS: piped line mode writes the answer as the service streams it, plain, and cancels a turn that raises an approval card.
+  it('streams piped line mode: first delta before the turn ends, plain text, last line ended, tool and approval as plain stderr lines, a card cancels the turn', async () => {
+    const f = await fixture(); const out = sink(), err = sink(); const stamps: { at: number; text: string }[] = []; let finishedAt = 0, aborted = false; const seen: string[][] = [];
+    const out2 = { write(value: string) { stamps.push({ at: performance.now(), text: value }); out.values.push(value); } };
+    const code = await main(['terminal', 'session', '--scope', 's', '--lang', 'en'], { root: f.project, env: f.env, stdout: out2, stderr: err.output,
+      stdin: Object.assign(Readable.from(['first\n', 'ask\n', 'again\n', '/exit\n']), { isTTY: false }), initialize() {},
+      async describeTerminalChatPlan() { return { ...plan, historyMessages: 40 }; },
+      async completeTerminalChat() { throw new Error('line mode must stream'); },
+      async *streamTerminalChat(_root: string, input: { messages: readonly { role: string; content: string }[] }, _o: unknown, signal?: AbortSignal) {
+        const last = input.messages.at(-1)!.content; seen.push(input.messages.map(message => message.role));
+        if (last === 'ask') {
+          yield { kind: 'approval', phase: 'requested', callId: 'c1', approvalId: 'a1', revision: 0, summary: 'write_file · x.txt', preview: '', expiresAt: 1 };
+          await new Promise<void>(resolve => { if (signal?.aborted) resolve(); else signal?.addEventListener('abort', () => resolve(), { once: true }); });
+          aborted = signal?.aborted === true;
+          yield { kind: 'done', finish: 'cancelled', note: null }; return;
+        }
+        yield { kind: 'tool', phase: 'finished', callId: 't1', name: 'read_file', target: 'a.ts', status: 'ok', ms: 5 };
+        yield { kind: 'text', text: '\u001b[31mhel\u001b[0m' };
+        yield { kind: 'text', text: 'lo\u001b[3' };
+        yield { kind: 'text', text: '1m!' };
+        await settle(150); finishedAt = performance.now();
+        yield { kind: 'message', message: { role: 'assistant', content: 'hello', toolCalls: [] } };
+        yield { kind: 'done', finish: 'stop', note: null };
+      } });
+    expect(code).toBe(0);
+    // The first delta reached stdout well before the turn's end; nothing carries an escape.
+    expect(stamps[0]!.at).toBeLessThan(finishedAt - 100);
+    expect(out.text()).not.toContain('\u001b'); expect(out.text()).toBe('hello!\nhello!\n');
+    expect(err.text()).toContain('tool read_file a.ts: ok (5 ms)');
+    expect(err.text()).toContain('Approval required: write_file · x.txt');
+    // Negative: the card was never answered, the turn was cancelled, and the cancelled question stays in history without an answer.
+    expect(aborted).toBe(true);
+    expect(seen).toEqual([['system', 'user'], ['system', 'user', 'assistant', 'user'], ['system', 'user', 'assistant', 'user', 'user']]);
+  });
+
   it('fails typed when the executable composes no governed chat handler', async () => {
     const f = await fixture(); const out = sink();
     const context = { root: f.project, env: f.env, stdout: out.output, stderr: out.output, initialize() {},
@@ -155,6 +191,29 @@ describe('deckent terminal CLI', () => {
     stdin.write('/exit\r');
     expect(await run).toBe(0);
   }, 15_000);
+
+  // #16: the terminal measures the answering service's configuration fingerprint against the one now in effect and keeps an idle-stopping
+  // service alive with its own describe beat (clients connect per request, so an open terminal is otherwise invisible to the service).
+  it.skipIf(process.platform === 'win32')('shows "restart required" only for a stale service and beats a describe while an idle-stopping service is connected', async () => {
+    const { restartConfigDigest } = await import('#engine/index.js'); const { loadConfig } = await import('#platform/index.js');
+    for (const stale of [true, false]) {
+      const f = await fixture(); const stdout = new Screen(); const stdin = keyboard(); let described = 0;
+      const digest = stale ? '0'.repeat(64) : restartConfigDigest(await loadConfig(f.project, { env: f.env, heal: false }) as never);
+      vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+      try {
+        const run = main(['terminal', 'workline', '--scope', 's', '--lang', 'en'],
+          { root: f.project, env: { ...f.env, NO_COLOR: '1' }, stdout: stdout as unknown as NodeJS.WriteStream, stderr: stdout as unknown as NodeJS.WriteStream,
+            stdin: stdin as unknown as NodeJS.ReadStream, initialize() {}, loadInstallationIdentity: loadConfiguredInstallationIdentity, loadProjectIdentity: loadConfiguredProjectIdentity, ensureTerminalIdentity: ensureConfiguredTerminalIdentity, async completeTerminalChat() { return 'x'; },
+            async ensureRuntimeService() { return { mode: 'connected' as const, instanceId: 'i', pid: null, logPath: null, shutdownAvailable: true, build: null, configDigest: digest, idleStopMs: 900_000 }; },
+            async describeRuntimeService() { described++; return {} as never; } });
+        await until(() => stdout.text.includes('Ask anything'), 'terminal startup');
+        expect(stdout.text.includes('/service-restart')).toBe(stale);
+        expect(described).toBe(0); vi.advanceTimersByTime(RUNTIME_SERVICE_HEARTBEAT_MS * 2); expect(described).toBe(2);
+        stdin.write('/exit\r'); expect(await run).toBe(0);
+        vi.advanceTimersByTime(RUNTIME_SERVICE_HEARTBEAT_MS * 2); expect(described).toBe(2); // the beat ends with the session
+      } finally { vi.useRealTimers(); }
+    }
+  }, 30_000);
 
   it('keeps line mode\'s own prompt on the terminal.session.prompt catalog text', () => {
     // Line mode (`terminal session`) is a separate code path (readline, not the Composer) and unaffected by the

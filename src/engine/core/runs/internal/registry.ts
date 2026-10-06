@@ -44,7 +44,8 @@ export function resolveExecutionRegistry(graphInput: unknown, registryInput: unk
     // The compiled profile keeps its template's registry identity (provenance) and must itself pass every installed profile check.
     if (profile.id !== selected.id || profile.version !== selected.version || (template && validation.isTemplate!(profile))
       || validation.profile(profile) !== undefined) throw new ExecutionRegistryError('EXECUTION_REGISTRY_VALIDATOR_INVALID');
-    return Object.freeze({ taskId: task.id, profile });
+    // EXEC-RELEASE C2 (owner B): the kind's explicit no-workspace-delivery declaration is frozen with the Run, only when present.
+    return Object.freeze({ taskId: task.id, profile, ...(kind.workspaceDelivery ? { workspaceDelivery: kind.workspaceDelivery } : {}) });
   });
   const criteria = graph.criterionDefinitions.map(criterion => {
     const evaluator = registry.evaluators.find(entry => entry.id === criterion.evaluator.id && entry.version === criterion.evaluator.version);
