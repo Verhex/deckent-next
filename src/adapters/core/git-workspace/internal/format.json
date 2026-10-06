@@ -4,5 +4,7 @@
   "lease": "lease.json",
   "emptyConfig": "gitconfig",
   "hooks": "hooks",
-  "detached": ".released-"
+  "detached": ".released-",
+  "sourceBase": ".base-",
+  "sourceBaseStaleAfterGitTimeouts": 3
 }

@@ -2,6 +2,8 @@ export { runIdentitySchema, runSnapshotSchema, runStateSchema, RunError } from '
 export type { RunIdentity, RunSnapshot } from './internal/contract.js';
 export { createRun, reserveRunTasks, observeRunAttempt, requestRunCancellation, closesAttemptWithoutExit } from './internal/reduce.js';
 export { preventRunAttempt } from './internal/prevent.js';
+export { workspaceDeliveryState } from './internal/workspace-custody.js';
+export type { WorkspaceDeliveryState } from './internal/workspace-custody.js';
 export { settleCancelledRunAttempt } from './internal/settle.js';
 export { executionRegistrySchema, executionProfileDefinitionSchema, evaluatorDefinitionSchema, encodeExecutionProfileDefinition } from './internal/registry.js';
 export type { ExecutionRegistry, ExecutionProfileDefinition, EvaluatorDefinition } from './internal/registry.js';

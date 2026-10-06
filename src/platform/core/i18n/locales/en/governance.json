@@ -670,6 +670,7 @@
   "error.PATCH_CORRUPT": "Workspace patch artifact or producer binding is corrupt.",
   "error.WORKER_OBSERVATION_INVALID": "Worker observation query or source selection is invalid.",
   "error.WORKER_OBSERVATION_UNAVAILABLE": "Worker observation is unavailable; execution state was not changed.",
+  "error.WORKER_EVENTS_SEAL_FAILED": "The worker event log could not be sealed; the live event file stays in the attempt directory and its custody is held until it is sealed. The execution result is unchanged.",
   "error.PATCH_INTEGRATION_PENDING": "This preparation has no completed manifest. Its candidate is held; automatic takeover and repair are unavailable.",
   "error.APPROVAL_INVALID": "Invalid approval command.",
   "error.APPROVAL_DENIED": "Approval operation is not permitted.",

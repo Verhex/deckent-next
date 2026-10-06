@@ -322,6 +322,7 @@ const definitions: Readonly<Record<string, Definition>> = Object.freeze({
   PATCH_UNSAFE: { category: 'error', render: (p, l) => ({ message: t('error.PATCH_UNSAFE', p, l) }) },
   WORKER_OBSERVATION_INVALID: { category: 'error', render: (p, l) => ({ message: t('error.WORKER_OBSERVATION_INVALID', p, l) }) },
   WORKER_OBSERVATION_UNAVAILABLE: { category: 'error', render: (p, l) => ({ message: t('error.WORKER_OBSERVATION_UNAVAILABLE', p, l) }) },
+  WORKER_EVENTS_SEAL_FAILED: { category: 'error', render: (p, l) => ({ message: t('error.WORKER_EVENTS_SEAL_FAILED', p, l) }) },
   PATCH_UNAVAILABLE: { category: 'error', render: (p, l) => ({ message: t('error.PATCH_UNAVAILABLE', p, l) }) },
   NATIVE_CREDENTIAL_UNAVAILABLE: { category: 'error', render: (p, l) => ({ message: t('error.NATIVE_CREDENTIAL_UNAVAILABLE', p, l) }) },
   NATIVE_CONNECTION_UNAVAILABLE: { category: 'error', render: (p, l) => ({ message: t('error.NATIVE_CONNECTION_UNAVAILABLE', p, l) }) },
