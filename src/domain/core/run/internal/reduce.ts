@@ -28,9 +28,9 @@ export function reserveRunTasks(input: unknown, expectedRevision: number, identi
     progress: run.progress.map(task => selected.has(task.taskId) ? { ...task, phase: 'active' } : task),
     bindings: [...run.bindings, ...identities.map(identity => ({ identity, observedRevision: null, observedKind: null }))] });
 }
-/** Attempt evidence that fails its task without a process exit: a typed refusal before launch (`handoff-refused`, `launch-refused`)
- * or a proven-absent launch (`abandoned`). None of them can follow an unknown outcome or unresolved effects. */
-const CLOSING_KINDS: ReadonlySet<string> = new Set(['handoff-refused', 'launch-refused', 'abandoned']);
+/** Attempt evidence that fails its task without a process exit: only a typed refusal before any launch (`handoff-refused`,
+ * `launch-refused`). A granted launch never closes this way: without exit evidence its effects are unknown and stay held. */
+const CLOSING_KINDS: ReadonlySet<string> = new Set(['handoff-refused', 'launch-refused']);
 export function closesAttemptWithoutExit(kind: string | null | undefined): boolean { return kind !== null && kind !== undefined && CLOSING_KINDS.has(kind); }
 /** Only consumes authoritative attempt evidence; process exit is evaluation input, never acceptance.
  * Unknown effects remain held until a separate reconciler establishes their disposition.
@@ -46,9 +46,8 @@ export function observeRunAttempt(input: unknown, expectedRevision: number, atte
     if (task.taskId !== attempt.identity.taskId) return task;
     if (!['active', 'evaluating', 'reconciling'].includes(task.phase)) throw new RunError('RUN_ATTEMPT_CONFLICT');
     const closing = closesAttemptWithoutExit(observation.result.kind);
-    // Pre-launch refusals follow no observation; abandonment may follow only `started`. Unknown or unresolved effects never close here.
-    if (closing && (task.phase !== 'active' || task.unresolvedEffects
-      || !(binding.observedKind === null || (observation.result.kind === 'abandoned' && binding.observedKind === 'started')))) throw new RunError('RUN_ATTEMPT_CONFLICT');
+    // Pre-launch refusals follow no observation. Unknown or unresolved effects never close here.
+    if (closing && (task.phase !== 'active' || task.unresolvedEffects || binding.observedKind !== null)) throw new RunError('RUN_ATTEMPT_CONFLICT');
     const uncertain = task.unresolvedEffects || observation.result.kind === 'unknown' || observation.result.kind === 'cancelled';
     const phase: TaskProgress['phase'] = closing ? 'failed' : uncertain ? 'reconciling' : observation.result.kind === 'exited' ? 'evaluating' : 'active';
     return { ...task, phase, unresolvedEffects: uncertain };

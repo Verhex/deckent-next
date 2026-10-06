@@ -5,18 +5,19 @@ import type { DispatchRecord } from '#engine/core/dispatch/index.js';
 import type { WorkerSidecars } from '#engine/core/worker-observation/index.js';
 import { RunStoreError, type RunStore } from './store.js';
 
-type ClosingResult = Extract<AttemptObservation['result'], { kind: 'handoff-refused' | 'launch-refused' | 'abandoned' }>;
+type RecordedResult = Extract<AttemptObservation['result'], { kind: 'handoff-refused' | 'launch-refused' | 'unknown' }>;
 type Actor = Readonly<{ id: string; issuer: string; subject: string }>;
-/** The one recorder of attempt evidence that fails a task without a process exit (typed pre-launch refusal or proven abandonment).
+/** The one recorder of engine-produced attempt evidence without a process exit: a typed pre-launch refusal (task fails) or the
+ * operator-observed loss of a launched worker, recorded as `unknown` (task held in reconciliation with unresolved effects, never failed).
  * The observation and the Run projection are separate receipts; a replay completes an interrupted projection and never rewrites history.
  * `audit`, when given, is kept verbatim in the attempt receipt next to the observation and the acting principal. */
 export async function recordAttemptClosure(store: AttemptStore & Pick<RunStore, 'loadRun' | 'projectRunAttempt'>,
-  identity: AttemptIdentity, result: ClosingResult, actor: Actor, audit?: unknown) {
+  identity: AttemptIdentity, result: RecordedResult, actor: Actor, audit?: unknown) {
   const snapshot = await store.load(identity.scopeId, identity.attemptId);
   if (!snapshot || !sameAttemptIdentity(snapshot.identity, identity)) throw new AttemptStoreError('ATTEMPT_STORE_CONFLICT');
   const commandId = result.kind + '-' + createHash('sha256').update(JSON.stringify(identity)).digest('hex');
   const recorded = snapshot.lastObservation?.result;
-  if (!recorded || (result.kind === 'abandoned' && recorded.kind === 'started')) {
+  if (!recorded || (result.kind === 'unknown' && recorded.kind === 'started')) {
     const observation = { protocolVersion: 1 as const, identity, sequence: (snapshot.lastObservation?.sequence ?? 0) + 1, eventId: commandId, result };
     const next = applyAttemptObservation(snapshot, observation, snapshot.revision);
     const command = JSON.stringify(audit === undefined ? observation : { observation, actor, audit });
@@ -39,24 +40,25 @@ export function classifyLaunchRefusal(error: unknown): Readonly<{ disposition: '
 }
 
 /** Ledger state of one attempt; `dispatch` is its exact bound dispatch record. */
-export interface AbandonmentLedger { readonly identity: AttemptIdentity; readonly run: RunSnapshot; readonly attempt: AttemptSnapshot; readonly dispatch: DispatchRecord | null }
+export interface WorkerLossLedger { readonly identity: AttemptIdentity; readonly run: RunSnapshot; readonly attempt: AttemptSnapshot; readonly dispatch: DispatchRecord | null }
 /** Live evidence, gathered only for a ledger candidate. `container` is the supervisor's read-only activity state (`missing` only on the
  * daemon's explicit absent response); `heartbeat` is the executor sidecar read bound to this attempt. */
-export interface AbandonmentLive {
+export interface WorkerLossLive {
   readonly container: string;
   readonly heartbeat: Pick<WorkerSidecars['heartbeat'], 'state' | 'freshness'>;
   readonly now: number;
   readonly staleMs: number;
 }
-export type AbandonmentRefusal = 'not-launched' | 'terminal' | 'not-active' | 'effects-unresolved' | 'container-present' | 'executor-live';
-export type AbandonmentAssessment = Readonly<{ kind: 'candidate' }> | Readonly<{ kind: 'abandoned'; heartbeat: 'stale' | 'missing'; grantedAt: number }>
-  | Readonly<{ kind: 'refused'; reason: AbandonmentRefusal }>;
-/** Pure abandonment decision. A launch is abandoned only when it was granted, has no terminal evidence, its task is still active
- * with known effects (no unknown/cancelled observation), the container is proven absent and the executor is proven inactive:
- * a stale heartbeat, or no heartbeat at all once the grant is older than the stale window. Anything else stays with its owner.
+export type WorkerLossRefusal = 'not-launched' | 'terminal' | 'not-active' | 'effects-unresolved' | 'container-present' | 'executor-live';
+export type WorkerLossAssessment = Readonly<{ kind: 'candidate' }> | Readonly<{ kind: 'lost'; heartbeat: 'stale' | 'missing'; grantedAt: number }>
+  | Readonly<{ kind: 'refused'; reason: WorkerLossRefusal }>;
+/** Pure worker-loss decision. A granted launch without terminal evidence has an unknown outcome: whatever the worker did before it
+ * vanished is not known, so loss never fails the task or frees its slot. It only replaces a silently `active` task with the typed
+ * uncertain hold (`unknown` → `reconciling`, unresolved effects), and only when the task is still active with no recorded outcome,
+ * the container is proven absent and the executor is proven inactive (stale heartbeat, or none past the stale window after the grant).
  * Without live evidence the result is only whether the ledger makes the attempt a candidate worth observing. */
-export function assessAbandonment(ledger: AbandonmentLedger, live?: AbandonmentLive): AbandonmentAssessment {
-  const refused = (reason: AbandonmentRefusal) => Object.freeze({ kind: 'refused' as const, reason });
+export function assessWorkerLoss(ledger: WorkerLossLedger, live?: WorkerLossLive): WorkerLossAssessment {
+  const refused = (reason: WorkerLossRefusal) => Object.freeze({ kind: 'refused' as const, reason });
   const { run, attempt, dispatch, identity } = ledger;
   if (!sameAttemptIdentity(attempt.identity, identity)) throw new RunStoreError('RUN_STORE_CONFLICT');
   const binding = run.bindings.find(value => sameAttemptIdentity(value.identity, identity));
@@ -68,7 +70,7 @@ export function assessAbandonment(ledger: AbandonmentLedger, live?: AbandonmentL
   if (dispatch.terminal) return refused('terminal');
   if (!live) return Object.freeze({ kind: 'candidate' });
   if (live.container !== 'missing') return refused('container-present');
-  if (live.heartbeat.state === 'available' && live.heartbeat.freshness === 'stale') return Object.freeze({ kind: 'abandoned', heartbeat: 'stale', grantedAt: dispatch.grant.grantedAt });
-  if (live.heartbeat.state === 'missing' && live.now - dispatch.grant.grantedAt > live.staleMs) return Object.freeze({ kind: 'abandoned', heartbeat: 'missing', grantedAt: dispatch.grant.grantedAt });
+  if (live.heartbeat.state === 'available' && live.heartbeat.freshness === 'stale') return Object.freeze({ kind: 'lost', heartbeat: 'stale', grantedAt: dispatch.grant.grantedAt });
+  if (live.heartbeat.state === 'missing' && live.now - dispatch.grant.grantedAt > live.staleMs) return Object.freeze({ kind: 'lost', heartbeat: 'missing', grantedAt: dispatch.grant.grantedAt });
   return refused('executor-live');
 }

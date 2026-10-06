@@ -61,16 +61,16 @@ it.each([
   expect(calls).toBe(0);
 });
 
-it('close-abandoned passes the exact identity and renders closed/refused in EN and TR without claiming an exit', async () => {
+it('mark-lost passes the exact identity and renders held/refused in EN and TR without claiming an exit, a failure or a freed slot', async () => {
   let received: unknown, text = '';
-  let closure: { identity: typeof identity; status: 'closed'; heartbeat: 'stale'; phase: string } | { identity: typeof identity; status: 'refused'; reason: 'effects-unresolved'; phase: string }
-    = { identity, status: 'closed', heartbeat: 'stale', phase: 'failed' };
+  let hold: { identity: typeof identity; status: 'held'; heartbeat: 'stale'; phase: string } | { identity: typeof identity; status: 'refused'; reason: 'container-present'; phase: string }
+    = { identity, status: 'held', heartbeat: 'stale', phase: 'reconciling' };
   const context = { env: { NO_COLOR: '1' }, stdout: { write(value: string) { text += value; } },
-    async closeAbandonedAttempt(_root: string, value: unknown) { received = value; return { schemaVersion: 1 as const, layout, closure }; } };
-  expect(await main(['task', 'close-abandoned', ...identityArgs], context)).toBe(0); expect(received).toEqual(identity);
-  expect(text).toContain('closed as abandoned (executor heartbeat stale)'); expect(text).toContain('No exit was recorded');
-  text = ''; closure = { identity, status: 'refused', reason: 'effects-unresolved', phase: 'reconciling' };
-  expect(await main(['task', 'close-abandoned', ...identityArgs, '--lang', 'tr'], context)).toBe(0);
-  expect(text).toContain('Reddedildi'); expect(text).toContain('etkiler çözülmemiş');
-  text = ''; expect(await main(['task', 'close-abandoned', ...identityArgs, '--json'], context)).toBe(0); expect(JSON.parse(text).closure).toEqual(closure);
+    async markLostAttempt(_root: string, value: unknown) { received = value; return { schemaVersion: 1 as const, layout, hold }; } };
+  expect(await main(['task', 'mark-lost', ...identityArgs], context)).toBe(0); expect(received).toEqual(identity);
+  expect(text).toContain('(executor heartbeat stale)'); expect(text).toContain('Its outcome is unknown'); expect(text).toContain('its slot stays held');
+  text = ''; hold = { identity, status: 'refused', reason: 'container-present', phase: 'active' };
+  expect(await main(['task', 'mark-lost', ...identityArgs, '--lang', 'tr'], context)).toBe(0);
+  expect(text).toContain('Reddedildi'); expect(text).toContain('konteyner hâlâ var');
+  text = ''; expect(await main(['task', 'mark-lost', ...identityArgs, '--json'], context)).toBe(0); expect(JSON.parse(text).hold).toEqual(hold);
 });

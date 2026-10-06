@@ -116,7 +116,7 @@ export interface CommandContext extends InstallationCommandContext, ModelCommand
   deliverRunCancellation?: RunCancellationDeliveryHandler;
   reserveRunTasks?: RunReservationHandler;
   executeTask?: TaskExecutionHandler;
-  closeAbandonedAttempt?: import('./task.js').TaskAbandonedClosureHandler;
+  markLostAttempt?: import('./task.js').TaskLostAttemptHandler;
   evaluateTask?: TaskEvaluationHandler;
   startRuntimeService?: RuntimeServiceStartHandler;
   describeRuntimeService?: RuntimeServiceDescribeHandler;
