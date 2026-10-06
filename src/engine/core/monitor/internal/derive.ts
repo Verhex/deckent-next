@@ -2,7 +2,7 @@ import { derivePoolWait, hasRunReservationRoom } from '#engine/core/runs/index.j
 import { projectTaskHandoffs } from '#engine/core/handoff-observation/index.js';
 import { inspectTaskReadiness, taskDependencyIds, type TaskReadiness, type WorkerModelView } from '#domain/index.js';
 import type { WorkerObservation } from '#engine/core/worker-observation/index.js';
-import type { MonitorBlocker, MonitorBlockerCode, MonitorRun, MonitorRunState, MonitorTask } from './contract.js';
+import type { MonitorBlocker, MonitorBlockerCode, MonitorCloseReason, MonitorDeliveryOutlook, MonitorRun, MonitorRunState, MonitorTask } from './contract.js';
 import type { MonitorLedgerApproval, MonitorLedgerAttempt, MonitorLedgerPool, MonitorLedgerRun } from './evidence.js';
 
 /** Everything the pure derivation reads about one Run; `observedAt` is the snapshot's sampling time (host clock). */
@@ -44,7 +44,9 @@ function boundBlocker(taskId: string, phase: string, attempt: MonitorLedgerAttem
     if (!terminal) return blocker('evaluation-not-ready', taskId, null, 'terminal-missing');
     if (terminal.interrupted === true) return blocker('evaluation-not-ready', taskId, endOf(attempt), 'interrupted');
     if (!dispatch?.outputRecorded) return blocker('evaluation-not-ready', taskId, endOf(attempt), 'output-missing');
-    return blocker('worker-exited-unevaluated', taskId, endOf(attempt));
+    // A work task whose dispatch holds no retained patch yet: the evaluation's patch preparation has not run or failed (its failure is reported to its caller, not recorded in the ledger).
+    const work = e.run.snapshot.graph.tasks.find(value => value.id === taskId)?.workInput !== undefined;
+    return blocker('worker-exited-unevaluated', taskId, endOf(attempt), work && dispatch.patchRecorded === false ? 'patch-missing' : null);
   }
   if (!attempt) return blocker('unknown', taskId, null, 'attempt-missing');
   // Reserved automatic work without dispatch awaits execution; this is derived ledger evidence, not a measured service-gate wait.
@@ -105,6 +107,31 @@ export function deriveRunState(e: MonitorRunEvidence, current: MonitorBlocker | 
   if (current.code === 'waiting-dependency' && current.taskId && readiness(e.run, e.observedAt).get(current.taskId)?.disposition === 'blocked') return 'blocked';
   return STATE[current.code];
 }
+/** How the process closed (never a verdict); null while it still runs or when no terminal record exists. A cancelled observation wins over the exit it caused. */
+function closeReasonOf(attempt: MonitorLedgerAttempt): MonitorCloseReason | null {
+  const terminal = attempt.dispatch?.terminal ?? null; if (!terminal) return null;
+  if (attempt.observedKind === 'cancelled') return 'cancelled';
+  if (terminal.interrupted === true) return 'interrupted';
+  if (terminal.signal !== null) return 'signal';
+  return terminal.exitCode === 0 ? 'exit-ok' : 'exit-error';
+}
+/**
+ * M2: what an accepted Run without any integration/delivery/adoption receipt owes its delivery. Only tasks that carry work input deliver a patch:
+ * one whose dispatch recorded no retained patch is `patch-not-prepared` (the preparation failure itself is not recorded in the ledger, so no cause is claimed),
+ * else a retained patch awaits delivery; no such task means nothing to deliver. Unknown evidence (an older reader without the patch record) yields no outlook.
+ */
+function deliveryOutlookOf(e: MonitorRunEvidence, state: MonitorRunState): MonitorDeliveryOutlook | undefined {
+  if (state !== 'accepted' || e.run.delivery) return undefined;
+  const snapshot = e.run.snapshot; let ready = false, unknown = false;
+  for (const task of snapshot.graph.tasks) {
+    const progress = snapshot.progress.find(value => value.taskId === task.id);
+    if (!task.workInput || progress?.phase !== 'accepted') continue;
+    const recorded = attemptOf(e.run, task.id)?.dispatch?.patchRecorded;
+    if (recorded === false) return 'patch-not-prepared';
+    if (recorded === true) ready = true; else unknown = true;
+  }
+  return ready ? 'awaiting-delivery' : unknown ? undefined : 'none';
+}
 /** The model a worker ran: the sealed usage, else its init, else the requested pin (named honestly: a pin is what was asked for). */
 const modelName = (view: WorkerModelView | null | undefined) => view ? view.usage?.[0] ?? view.init ?? view.requested.modelId : null;
 function verdict(phase: string, attempt: MonitorLedgerAttempt | null, reason?: string): MonitorTask['evaluation']['verdict'] {
@@ -136,13 +163,18 @@ export function projectMonitorRun(e: MonitorRunEvidence): MonitorRun {
         endedAtSource: attempt.sealedAtMs !== null ? 'sealed' as const : endOf(attempt) !== null ? 'observed' as const : null,
         workerPhase: worker?.files?.activity?.phase ?? null, heartbeatAgeMs: worker?.files?.heartbeat.ageMs ?? null, provider,
         model: modelName(worker?.model ?? attempt.model), firstFailure: attempt.firstFailure ?? null, ...(attempt.recentEvents ? { recentEvents: attempt.recentEvents } : {}),
-        ...(attempt.diagnostics ? { diagnostics: attempt.diagnostics } : {}) }) : null });
+        ...(attempt.diagnostics ? { diagnostics: attempt.diagnostics } : {}),
+        ...(closeReasonOf(attempt) ? { closeReason: closeReasonOf(attempt) } : {}),
+        ...(attempt.content?.usage?.turns != null ? { turns: attempt.content.usage.turns } : {}),
+        ...(attempt.content?.usage && attempt.content.usage.outcome !== 'running' ? { sessionOutcome: attempt.content.usage.outcome } : {}),
+        ...(attempt.failedTests ? { failedTests: attempt.failedTests } : {}) }) : null });
   });
   const current = deriveRunBlocker(e);
   // Proven finish of a terminal Run: every bound attempt has a proven end (sealed or host-observed); the latest of them.
   const ends = snapshot.bindings.map(binding => endOf(e.run.attempts.find(value => value.attemptId === binding.identity.attemptId)));
   const finishedAtMs = !current && ends.length && ends.every(value => value !== null) ? Math.max(...ends as number[]) : null;
-  return Object.freeze({ scopeId: snapshot.identity.scopeId, runId: snapshot.identity.runId, revision: snapshot.revision, state: deriveRunState(e, current),
+  const state = deriveRunState(e, current), outlook = deliveryOutlookOf(e, state);
+  return Object.freeze({ scopeId: snapshot.identity.scopeId, runId: snapshot.identity.runId, revision: snapshot.revision, state,
     phaseCounts: Object.freeze(phaseCounts), tasks: Object.freeze(tasks), blocker: current, cancellationRequested: snapshot.cancelRequested,
-    lastActivityMs: times.length ? Math.max(...times) : null, createdAtMs: e.run.createdAtMs, finishedAtMs, delivery: e.run.delivery ?? null });
+    lastActivityMs: times.length ? Math.max(...times) : null, createdAtMs: e.run.createdAtMs, finishedAtMs, delivery: e.run.delivery ?? null, ...(outlook ? { deliveryOutlook: outlook } : {}) });
 }

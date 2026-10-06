@@ -15,6 +15,7 @@ export async function readMonitorRunResults(config: ResolvedConfig, env: Environ
   return new Map(projected.tasks.map(task => {
     const content = run.attempts.find(attempt => attempt.attemptId === task.lastAttempt?.attemptId)?.content;
     return [task.taskId, projectResultBrief(task.lastAttempt?.attemptId ?? null, { verdict: task.evaluation.verdict,
-      ...(task.evaluation.reason ? { reason: task.evaluation.reason } : {}) }, content?.finalReport ?? null, run.delivery ?? null)];
+      ...(task.evaluation.reason ? { reason: task.evaluation.reason } : {}) }, content?.finalReport ?? null, run.delivery ?? null,
+      { ...(task.lastAttempt?.failedTests ? { failedTests: task.lastAttempt.failedTests } : {}), ...(projected.deliveryOutlook ? { deliveryOutlook: projected.deliveryOutlook } : {}) })];
   }));
 }

@@ -41,6 +41,28 @@ export function extractFirstFailure(stdout: string, stderr: string): string | nu
   }
   return null;
 }
+/** Prefix of the verification reporter's structured failure line (`verify-failed-test: {"file","test","state"|"reason"}`), one per failed test, collection error or unhandled error. */
+const FAILED_TEST_PREFIX = 'verify-failed-test: ';
+export interface MonitorFailedTests { readonly count: number; readonly names: readonly string[]; readonly truncated: boolean }
+/**
+ * M3: the failed tests of a failed verification attempt. Pure and display-only: it reads the reporter's structured failure lines from the
+ * recorded stdout (untrusted process text, same escape stripping and redaction as the first failure), counts every one and keeps the first
+ * `limit` names (`file > test`, bounded). Null when the output carries none. `complete` false (a partial recorded output) marks the list truncated.
+ */
+export function extractFailedTests(stdout: string, limit: number, complete = true): MonitorFailedTests | null {
+  let count = 0; const names: string[] = [];
+  for (const line of stdout.split('\n')) {
+    if (!line.startsWith(FAILED_TEST_PREFIX)) continue;
+    let value: unknown; try { value = JSON.parse(line.slice(FAILED_TEST_PREFIX.length)); } catch { continue; }
+    if (!value || typeof value !== 'object') continue;
+    const entry = value as { file?: unknown; test?: unknown; reason?: unknown; state?: unknown };
+    count++; if (names.length >= limit) continue;
+    const part = (field: unknown) => typeof field === 'string' && field !== '' ? clean(field) : null;
+    const file = part(entry.file), test = part(entry.test), reason = part(entry.reason) ?? part(entry.state);
+    names.push(bound(test ? (file ? `${file} > ${test}` : test) : `${file ?? '—'}${reason ? ` (${reason})` : ''}`));
+  }
+  return count === 0 ? null : Object.freeze({ count, names: Object.freeze(names), truncated: count > names.length || !complete });
+}
 const SUMMARY_CHARS = 120;
 /** A worker-reported event (untrusted) as a short kind + summary for the monitor; no content beyond the redacted fields. */
 export function summarizeMonitorEvent(event: WorkerEvent): { readonly kind: string; readonly summary: string } {

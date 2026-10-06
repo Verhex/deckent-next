@@ -1293,5 +1293,10 @@
   "terminal.approval.sessionCleared": "{session} konuşmasının hatırlanan izinleri temizlendi; mevcut tek seferlik kararlar değişmedi.",
   "terminal.approval.sessionClearUnconfirmed": "{session} konuşmasının hatırlanan izinlerinin temizlendiği doğrulanamadı.",
   "terminal.identity.notCreated": "kullanılamıyor (henüz oluşturulmadı)",
-  "terminal.identity.unsupported": "kullanılamıyor (yetenek desteklenmiyor)"
+  "terminal.identity.unsupported": "kullanılamıyor (yetenek desteklenmiyor)",
+  "monitor.brief.failedTests": "Başarısız testler: {count} (ilk {shown}): {names}",
+  "monitor.brief.failedTestsMore": "… {more} test daha listelenmedi",
+  "monitor.brief.deliveryNone": "Teslim: teslim edilecek bir şey yok; bu Run'ın kabul edilen hiçbir görevi yama taşımıyor.",
+  "monitor.brief.deliveryPatchNotPrepared": "Kabul edildi · yama hazırlanamadı: bu iş için saklanmış yama yok, bu yüzden teslim edilecek bir şey yok. Nedeni ledger'da kayıtlı değil; tam sınırı ve yapılandırma alanını `task patch-prepare` söyler.",
+  "monitor.brief.deliveryAwaiting": "Kabul edildi · yama hazır, teslim bekliyor: henüz hiçbir şey teslim edilmedi."
 }

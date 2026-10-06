@@ -107,6 +107,7 @@ Worker run-blocked-approval/build · deneme c76f549a-attempt · nesil 1 · claud
 kurulum current
 Şu an: düzenliyor · src/app.ts — apply patch
 Heartbeat 1 sn · süreç çalışıyor · pid 4242 · tanıtıcı ctr-build
+    worker: claude/model-alpha-2 · başladı 09:10:00Z · 20 dk süredir çalışıyor
     deneme c76f549a nesil 1 · başlatma launched · 09:10:00Z → sürüyor (20 dk) ·
 çıkış — · claude/model-alpha-2
     şu an düzenliyor · heartbeat 1 sn

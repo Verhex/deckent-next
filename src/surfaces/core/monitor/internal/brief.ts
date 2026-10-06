@@ -33,7 +33,13 @@ export function renderBriefLines(task: TaskBrief | undefined, result: ResultBrie
     const receipts = result.runDelivery?.receipts ?? (result.runDelivery ? [result.runDelivery] : []);
     for (const receipt of receipts) lines.push(t('monitor.brief.runReceipt', { state: deliveryLabel(receipt.state, locale), command: receipt.commandId ? safe(receipt.commandId) : missing,
       target: receipt.targetRef ? safe(receipt.targetRef) : missing, commit: receipt.commit ?? missing }, locale));
-    lines.push(receipts.length ? t('monitor.brief.attribution', {}, locale) : t('monitor.brief.deliveryMissing', {}, locale));
+    if (result.failedTests) {
+      lines.push(t('monitor.brief.failedTests', { count: result.failedTests.count, shown: result.failedTests.names.length, names: result.failedTests.names.map(safe).join('; ') }, locale));
+      if (result.failedTests.count > result.failedTests.names.length) lines.push(t('monitor.brief.failedTestsMore', { more: result.failedTests.count - result.failedTests.names.length }, locale));
+    }
+    const outlook = result.deliveryOutlook === 'none' ? t('monitor.brief.deliveryNone', {}, locale) : result.deliveryOutlook === 'patch-not-prepared' ? t('monitor.brief.deliveryPatchNotPrepared', {}, locale)
+      : result.deliveryOutlook === 'awaiting-delivery' ? t('monitor.brief.deliveryAwaiting', {}, locale) : null;
+    lines.push(receipts.length ? t('monitor.brief.attribution', {}, locale) : outlook ?? t('monitor.brief.deliveryMissing', {}, locale));
   }
   return lines;
 }
