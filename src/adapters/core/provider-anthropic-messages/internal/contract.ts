@@ -18,11 +18,29 @@ export const ANTHROPIC_MESSAGES_WIRE_LIMITS = MODEL_INVOCATION_NATIVE_JSON_LIMIT
 export const ANTHROPIC_PROMPT_OVERHEAD_TOKENS = ANTHROPIC_METERING.promptOverheadTokens;
 
 const rate = z.string().regex(/^(?:0|[1-9]\d{0,5})(?:\.\d{1,4})?$/);
-/** Published USD per million tokens as decimal strings (at most 4 fraction digits), dated and sourced: adapter-owned pricing data. */
-export const anthropicTariffSchema = z.object({ kind: z.literal('anthropic-published'), version: z.literal(1), currency: z.literal('USD'),
-  modelId: z.string().min(1).max(256),
-  usdPerMTok: z.object({ input: rate, cacheWrite5m: rate, cacheWrite1h: rate, cacheRead: rate, output: rate }).strict(),
-  source: z.object({ url: z.string().url().startsWith('https://'), retrievedAt: z.string().regex(/^\d{4}-\d{2}-\d{2}$/) }).strict() }).strict();
+const ratesSchema = z.object({ input: rate, cacheWrite5m: rate, cacheWrite1h: rate, cacheRead: rate, output: rate }).strict();
+// Key order is the v1 order (kind, version, currency, modelId, usdPerMTok, source): parsed tariffs keep their serialized bytes and digests.
+const tariffFields = <V extends 1 | 2>(version: V) => ({ kind: z.literal('anthropic-published'), version: z.literal(version), currency: z.literal('USD'),
+  modelId: z.string().min(1).max(256), usdPerMTok: ratesSchema,
+  source: z.object({ url: z.string().url().startsWith('https://'), retrievedAt: z.string().regex(/^\d{4}-\d{2}-\d{2}$/) }).strict() });
+export type AnthropicTariffRates = z.infer<typeof ratesSchema>;
+/** A later tier never costs less in any class, so the last tier is the dearest (the price of an unknown prompt size). */
+const notCheaper = (before: AnthropicTariffRates, after: AnthropicTariffRates) =>
+  (Object.keys(before) as (keyof AnthropicTariffRates)[]).every(key => Number(after[key]) >= Number(before[key]));
+/**
+ * Published USD per million tokens as decimal strings (at most 4 fraction digits), dated and sourced: adapter-owned pricing data.
+ * v1 is one flat rate set (shape unchanged, so stored profiles and their digests stay valid). v2 (2026-10-08) adds prompt-length tiers:
+ * `usdPerMTok` applies up to the first threshold and each tier to prompts of more than `aboveTokens` tokens counted as `promptTokenBasis`.
+ */
+export const anthropicTariffSchema = z.union([
+  z.object(tariffFields(1)).strict(),
+  z.object({ ...tariffFields(2), promptTokenBasis: z.literal('input+cache-write+cache-read'),
+    promptTiers: z.array(z.object({ aboveTokens: z.number().int().positive().safe(), usdPerMTok: ratesSchema }).strict()).min(1) }).strict()
+    .refine(tariff => tariff.promptTiers.every((tier, index) => {
+      const previous = index === 0 ? null : tariff.promptTiers[index - 1]!;
+      return (previous === null || previous.aboveTokens < tier.aboveTokens) && notCheaper(previous?.usdPerMTok ?? tariff.usdPerMTok, tier.usdPerMTok);
+    })),
+]);
 export type AnthropicPublishedTariff = z.infer<typeof anthropicTariffSchema>;
 
 const thinkingSchema = z.discriminatedUnion('mode', [
@@ -42,9 +60,9 @@ const certificate = z.string().min(1).max(65_536).refine(value => {
 const definitionSchema = z.object({ endpoint: z.string().min(1), maxOutputTokens: z.number().int().positive().safe(),
   authentication: z.object({ type: z.literal('header'), name: z.literal('x-api-key'), credentialRef: z.string().regex(/^[A-Z_][A-Z0-9_]{0,127}$/) }).strict(),
   tls: z.object({ caPem: certificate }).strict().optional(), tariff: anthropicTariffSchema,
-  /** Absent = the model's default thinking (Opus 5.5 / Fable 5.1 / Sonnet 5.5: adaptive, thinking text omitted). */
+  /** Absent = the model's default thinking (Opus 5.5 / Fable 5.1 / Sonnet 5.5 / Haiku 5.5: adaptive, thinking text omitted). */
   thinking: thinkingSchema.optional(),
-  /** `output_config.effort`; absent = the model's default (Opus 5.5: medium, others: high). Only levels the model's registry row lists. */
+  /** `output_config.effort`; absent = the model's registry default (e.g. Opus 5.5 and Haiku 5.5: medium). Only levels the model's registry row lists. */
   effort: z.enum(ANTHROPIC_EFFORT_LEVELS).optional(), cache: z.enum(['none', '5m', '1h']).optional(),
   tokenCountEndpoint: z.string().min(1).optional() }).strict();
 export type AnthropicMessagesDefinition = Readonly<z.infer<typeof definitionSchema>>;

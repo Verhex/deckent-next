@@ -68,7 +68,7 @@ describe.skipIf(process.platform === 'win32')('model catalog operator surface (W
     const receipt = JSON.parse(first.stdout);
     expect(receipt).toMatchObject({ replayed: false, receipt: { command: { action: 'register', commandId: 'seed-1' }, authorizations: [{ level: 'installation' }] } });
     expect(receipt.receipt.changes.map((change: { kind: string; modelId: string | null }) => `${change.kind}:${change.modelId}`)).toEqual([`channel:null`,
-      'model:claude-fable-5-1', 'model:claude-haiku-4-5-20251001', 'model:claude-opus-5-5', 'model:claude-sonnet-5-5']);
+      'model:claude-fable-5-1', 'model:claude-haiku-4-5-20251001', 'model:claude-haiku-5-5', 'model:claude-opus-5-5', 'model:claude-sonnet-5-5']);
     const facts = f.tables();
     const replay = JSON.parse((await f.cli('register', '--scope', 's', '--command-id', 'seed-1', '--seed', 'claude-cli-subscription', '--json')).stdout);
     expect(replay).toEqual({ ...receipt, replayed: true });

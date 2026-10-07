@@ -280,7 +280,11 @@ The adapter takes the provider-neutral (OpenAI-shaped) local request and returns
 do not know the family (one exception: the capability check knows both). `provider-http-json` credential kinds are `none | bearer |
 header(x-api-key)` with bounded static headers; `header` only over https. Spend: price id `anthropic-published-tariff` v1 (published rates
 are profile data; the quote ceiling is integer arithmetic); settlement of usage × tariff does not exist yet, so a responded call stays
-`held` (checkpoint A, blocks real Anthropic use). Thinking continuity: a process-local bounded cache inside the adapter, bound to the
+`held` (checkpoint A, blocks real Anthropic use). HAIKU55-CATALOG (2026-10-08): `pricing.json` schema 2 and tariff v2 add prompt-length
+tiers (Claude Haiku 5.5: more than 100,000 prompt tokens pays the upper rates, output included; basis input + cache write + cache read, the
+docs do not define it); flat models keep byte-identical v1 tariffs. The reservation prices the tier of its byte-based prompt bound (a real
+prompt is never larger, so it never under-reserves) and records `promptTier` in the evidence; the pricing version is the tariff version.
+`anthropicTariffRates` / `anthropicReportedPromptTokens` give the settlement-side tier of reported usage, unused until checkpoint A exists. Thinking continuity: a process-local bounded cache inside the adapter, bound to the
 unchanged request prefix (checkpoint B: `providerContinuation`, v17). Error codes reuse `OPENAI_CHAT_*`. Per-model request contract
 (ANTHROPIC-PROFILE, adapter v2): an adapter-owned, dated and sourced capability registry (`internal/models.json`, docs read 2026-09-29;
 owner 2026-10-01 D6: becomes a dated seed of the ledger v43 model catalog, PLAN CATALOG-SEED)

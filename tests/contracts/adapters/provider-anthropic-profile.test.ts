@@ -29,6 +29,9 @@ const EXPECT: Record<string, { adaptive: boolean; enabled: boolean; off: Off | n
   'claude-sonnet-5': { adaptive: true, enabled: false, off: 'disabled', effort: ALL, max: 128_000 },
   'claude-sonnet-4-6': { adaptive: true, enabled: true, off: 'disabled', effort: ['low', 'medium', 'high', 'max'], max: 128_000 },
   'claude-sonnet-4-5-20250929': { adaptive: false, enabled: true, off: 'disabled', effort: null, max: 64_000 },
+  // HAIKU55-CATALOG, read 2026-10-08 (models/haiku-5-5 overview + whats-new, build-with-claude/effort): adaptive on by default, manual
+  // budget_tokens refused, `disabled` only at high effort or below, all five levels (default medium), 128K synchronous output.
+  'claude-haiku-5-5': { adaptive: true, enabled: false, off: 'disabled', offCeiling: 'high', effort: ALL, max: 128_000 },
   'claude-haiku-4-5-20251001': { adaptive: false, enabled: true, off: 'disabled', effort: null, max: 64_000 },
 };
 const UNKNOWN = 'claude-unlisted-9';
