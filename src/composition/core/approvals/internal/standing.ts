@@ -1,6 +1,6 @@
 import { userInfo } from 'node:os';
 import { SystemTrustedClock, type ConfigLoadOptions } from '#platform/index.js';
-import { ApprovalApplication, AuditApplication, FIRST_RUN_MCP_CALL_OPERATION_ID, FIRST_RUN_PROPOSE_MCP_TOOL_NAME, McpToolGrants, PersistentStanding, PolicyAdministrationApplication,
+import { ApprovalApplication, AuditApplication, FIRST_RUN_MCP_CALL_OPERATION_ID, FIRST_RUN_POLICY_ADMINISTER_OPERATION_ID, FIRST_RUN_PROPOSE_MCP_TOOL_NAME, McpToolGrants, PersistentStanding, PolicyAdministrationApplication,
   PolicyTemplateUpgrade, type McpToolGrantOutcome, type McpToolGrantTarget, type TemplateUpgradeResult,
   type PersistentStandingDependencies, type StandingGrantView } from '#engine/index.js';
 import { LocalOsSessionAuthority, openLocalIntegrityAuthority, openSqliteApprovalStore, openSqliteAttemptStore, openSqliteAuditStore } from '#adapters/index.js';
@@ -77,6 +77,7 @@ export function configuredMcpToolGrants(root: string, scopeId: string, options: 
 export function configuredPolicyTemplateUpgrade(root: string, scopeId: string, options: ConfigLoadOptions, input: { readonly mode: 'preview' | 'apply' | 'rollback';
   readonly expect?: string; readonly reason: string }): Promise<TemplateUpgradeResult> {
   return withPolicyAdministration(root, scopeId, options, input.mode === 'preview' ? 'read' : 'write', (deps, person) =>
-    new PolicyTemplateUpgrade(deps, { proposeMcpToolName: FIRST_RUN_PROPOSE_MCP_TOOL_NAME, mcpCallOperationId: FIRST_RUN_MCP_CALL_OPERATION_ID })
+    new PolicyTemplateUpgrade(deps, { proposeMcpToolName: FIRST_RUN_PROPOSE_MCP_TOOL_NAME, mcpCallOperationId: FIRST_RUN_MCP_CALL_OPERATION_ID,
+      policyAdministerOperationId: FIRST_RUN_POLICY_ADMINISTER_OPERATION_ID })
       .run({ scopeId, principal: person, mode: input.mode, reason: input.reason, ...(input.expect === undefined ? {} : { expect: input.expect }) }));
 }

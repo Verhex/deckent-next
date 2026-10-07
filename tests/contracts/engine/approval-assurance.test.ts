@@ -195,7 +195,7 @@ describe('B1 attested assurance on the one approval decision path', () => {
   it('the first-run template v3 carries the Core hard-floor minimum as visible policy data (the same cells the Core default uses)', () => {
     const template = firstRunPolicyTemplate({ scopeId: 'scope', principal: { issuer: 'host', subject: '1000' }, readToolNames: ['read_file'], scratchToolNames: ['scratch_read'],
       scratchWriteOperationId: 'workspace.scratch.write', editShellToolNames: ['write_file'], writeOperationId: 'workspace.file.write', shellOperationId: 'host.shell.run',
-      proposeMcpToolName: 'propose_mcp_server', mcpCallOperationId: 'mcp.tool.call' });
+      proposeMcpToolName: 'propose_mcp_server', mcpCallOperationId: 'mcp.tool.call', policyAdministerOperationId: 'policy.administer' });
     expect(template.version).toBe(5); // v4 (CONFIG-SURFACE) and v5 (MCP) keep the v3 (B1) assurance rule below unchanged
     const rules = (template.policy as { approvalAssurance?: { subject: string; cells?: string[]; minimum: string }[] }).approvalAssurance ?? [];
     expect(rules).toHaveLength(1);

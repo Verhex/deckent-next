@@ -5,7 +5,8 @@ import { WORKSPACE_READ_TOOL_SPECS } from '#adapters/core/workspace-read/index.j
 import { WORKSPACE_EDIT_TOOL_SPECS, WORKSPACE_FILE_WRITE_OPERATION } from '#adapters/core/workspace-write/index.js';
 import { FETCH_URL_TOOL_SPEC, NETWORK_FETCH_OPERATION } from '#adapters/core/http-fetch/index.js';
 import { MCP_TOOL_CALL_OPERATION, PROPOSE_MCP_SERVER_TOOL_SPEC } from '#adapters/core/mcp-client/index.js';
-import { FIRST_RUN_EDIT_SHELL_TOOL_NAMES, FIRST_RUN_MCP_CALL_OPERATION_ID, FIRST_RUN_PROPOSE_MCP_TOOL_NAME, FIRST_RUN_READ_TOOL_NAMES, FIRST_RUN_SCRATCH_TOOL_NAMES,
+import { POLICY_ADMINISTER_OPERATION } from '#domain/index.js';
+import { FIRST_RUN_EDIT_SHELL_TOOL_NAMES, FIRST_RUN_MCP_CALL_OPERATION_ID, FIRST_RUN_POLICY_ADMINISTER_OPERATION_ID, FIRST_RUN_PROPOSE_MCP_TOOL_NAME, FIRST_RUN_READ_TOOL_NAMES, FIRST_RUN_SCRATCH_TOOL_NAMES,
   FIRST_RUN_SCRATCH_WRITE_OPERATION_ID, FIRST_RUN_SHELL_OPERATION_ID, FIRST_RUN_WRITE_OPERATION_ID } from '#engine/core/installation/index.js';
 
 // SCR-A × SCR-B integration (2026-09-28): the first-run template names tools and operations as data (engine may not import the
@@ -27,6 +28,7 @@ describe('first-run policy template names match the Core tool and operation cata
     expect(FIRST_RUN_SHELL_OPERATION_ID).toBe(HOST_SHELL_RUN_OPERATION.operation.id);
     expect(FIRST_RUN_SCRATCH_WRITE_OPERATION_ID).toBe(SCRATCH_FILE_WRITE_OPERATION.operation.id);
     expect(FIRST_RUN_MCP_CALL_OPERATION_ID).toBe(MCP_TOOL_CALL_OPERATION.operation.id);
+    expect(FIRST_RUN_POLICY_ADMINISTER_OPERATION_ID).toBe(POLICY_ADMINISTER_OPERATION.operation.id);
   });
 
   it('grants no fetch: the default egress is none, and opening the network is a separate owner decision (FETCH, 2026-09-28)', () => {

@@ -27,7 +27,9 @@ export const FIRST_RUN_POLICY_TEMPLATE_ID = 'first-run-template';
  * v4 (CONFIG-SURFACE): the explicitly named installing owner may write configuration; the installation grant covers global writes.
  * v5 (owner 2026-10-07, MCP decisions: Jev 04f75210, d3d1817d): the installing owner holds `mcp-server` for every server in every scope — the
  * authority a trust approval delegates per server inside I2 (the owner's own call still asks: `mcp-call` raises an allow) — plus the
- * `mcp.tool.call` operation side, and the read tool `propose_mcp_server` (a proposal opens a human window in every mode and carries no secret). */
+ * `mcp.tool.call` operation side, and the read tool `propose_mcp_server` (a proposal opens a human window in every mode and carries no secret).
+ * With it (owner 2026-10-07, K1 option A, Jev 3e7c5b38) the owner may run the governed `policy.administer@1` operation and inspect/decide approvals in
+ * the installed scope: the trust grant and every other policy change still pass the card, the audit and the delegation bound (I2). */
 // No template bump for assurance: Core's assurance minimum is a code constant; policy data can only raise it.
 export const FIRST_RUN_POLICY_TEMPLATE_VERSION = 5;
 /** The hard-floor tool-call cells (write floor and configuration file, destructive and always-ask shell, every fetch, every MCP call): only the
@@ -47,6 +49,8 @@ export interface FirstRunPolicyTemplateInput {
   /** v5: the model's MCP proposal tool (a read tool) and the Core MCP call operation. */
   readonly proposeMcpToolName: string;
   readonly mcpCallOperationId: string;
+  /** v5 (K1 option A): the governed policy change operation (`policy.administer`). */
+  readonly policyAdministerOperationId: string;
 }
 export interface FirstRunPolicyTemplate {
   readonly id: typeof FIRST_RUN_POLICY_TEMPLATE_ID;
@@ -65,7 +69,7 @@ function buildTemplate(input: FirstRunPolicyTemplateInput, version: 4 | 5) {
   const scopeId = identitySchema.parse(input.scopeId);
   const principal = { issuer: identitySchema.parse(input.principal.issuer), subject: identitySchema.parse(input.principal.subject) };
   const revision = `${FIRST_RUN_POLICY_TEMPLATE_ID}-v${version}`;
-  const actionsOf = { 'agent-tool': ['invoke'], operation: ['execute'], secret: ['set', 'delete'], config: ['write'], 'mcp-server': ['invoke'] } as const;
+  const actionsOf = { 'agent-tool': ['invoke'], operation: ['execute'], secret: ['set', 'delete'], config: ['write'], 'mcp-server': ['invoke'], approval: ['inspect', 'decide'] } as const;
   const grant = (id: string, effect: 'allow' | 'require-approval', kind: keyof typeof actionsOf, ids: readonly string[] | 'all', modeEligible?: boolean) =>
     Object.freeze({ id, effect, actions: [...actionsOf[kind]], scopes: [scopeId], principals: [principal],
       resource: { kind, ids: ids === 'all' ? ids : [...ids] }, ...(modeEligible === undefined ? {} : { modeEligible }) });
@@ -84,7 +88,9 @@ function buildTemplate(input: FirstRunPolicyTemplateInput, version: 4 | 5) {
       grant('first-run-secret-store', 'allow', 'secret', 'all'),
       { ...grant('first-run-config', 'allow', 'config', 'all'), scopes: 'all' },
       // v5: every MCP server in every scope (a user-scope server's trust grant covers all of this person's scopes), and the call operation.
-      ...(v5 ? [{ ...grant('first-run-mcp-servers', 'allow', 'mcp-server', 'all'), scopes: 'all' }, grant('first-run-mcp-call-operation', 'allow', 'operation', [input.mcpCallOperationId])] : []),
+      ...(v5 ? [{ ...grant('first-run-mcp-servers', 'allow', 'mcp-server', 'all'), scopes: 'all' }, grant('first-run-mcp-call-operation', 'allow', 'operation', [input.mcpCallOperationId]),
+        // K1 option A: the governed chain (each change still asks on its card, is audited and stays inside I2) and the cards it asks.
+        grant('first-run-policy-administer', 'allow', 'operation', [input.policyAdministerOperationId]), grant('first-run-approvals', 'allow', 'approval', 'all')] : []),
     ],
   });
   const bindings = bindingsFileSchema.parse({ schemaVersion: 1, revision: `${revision}-bindings`, bindings: [] });
@@ -127,36 +133,46 @@ export function matchFirstRunPolicyTemplate(policyRevision: string): { readonly 
   return version >= 1 && version <= FIRST_RUN_POLICY_TEMPLATE_VERSION ? Object.freeze({ id: FIRST_RUN_POLICY_TEMPLATE_ID, version }) : null;
 }
 
-/** The v5 rule ids a governed upgrade adds (never replaces: the proposal tool gets its own rule so a hand-edited read rule stays as it is). */
-export const FIRST_RUN_UPGRADE_RULE_IDS = Object.freeze({ servers: 'first-run-mcp-servers', operation: 'first-run-mcp-call-operation', propose: 'first-run-mcp-propose-tool' });
-export type FirstRunTemplateAdditions = { readonly status: 'plan'; readonly change: PolicyChange; readonly rules: readonly PolicyGrant[] }
-  | { readonly status: 'current' } | { readonly status: 'unavailable'; readonly reason: 'not-first-run' | 'invalid' };
+/** The v5 rule ids an upgrade adds (never replaces: the proposal tool gets its own rule so a hand-edited read rule stays as it is). */
+export const FIRST_RUN_UPGRADE_RULE_IDS = Object.freeze({ servers: 'first-run-mcp-servers', operation: 'first-run-mcp-call-operation', propose: 'first-run-mcp-propose-tool',
+  administer: 'first-run-policy-administer', approvals: 'first-run-approvals' });
+export type FirstRunTemplateAdditions = { readonly status: 'plan'; readonly change: PolicyChange; readonly rules: readonly PolicyGrant[]; readonly conflicts: readonly string[] }
+  | { readonly status: 'current'; readonly conflicts: readonly string[] } | { readonly status: 'unavailable'; readonly reason: 'not-first-run' | 'not-this-person' | 'invalid' };
+type Selection = 'all' | readonly string[];
+const coversAll = (held: Selection, wanted: Selection) => held === 'all' || (wanted !== 'all' && wanted.every(item => held.includes(item)));
+const sameRule = (a: unknown, b: unknown) => JSON.stringify(policyGrantSchema.parse(a)) === JSON.stringify(policyGrantSchema.parse(b));
 /**
- * The governed v4 → v5 upgrade plan (owner 2026-10-07, `deckent policy upgrade --template v5`): over any v2 policy that carries the first-run
- * template's `first-run-read-tools` rule (its scopes are the installation's), the `grant.add` changes for whatever v5 rule is missing — the
- * person's `mcp-server` authority over every server in every scope, the `mcp.tool.call` operation in the template's scopes, and
- * `propose_mcp_server` as an allowed read tool (unless some rule of this person already allows it). Nothing is removed or replaced, so hand-added
- * rules stay; an empty plan is `current` (a second run changes nothing). Pure; the caller submits it through `policy.administer@1` (I2, audit).
+ * The first-run v4 → v5 additions (owner 2026-10-07): over any v2 policy that carries the template's `first-run-read-tools` rule naming this person
+ * (its scopes are the installation's), the `grant.add` changes for every v5 rule this person does not hold yet — `mcp-server` over every server in
+ * every scope, the `mcp.tool.call` operation, `propose_mcp_server`, the `policy.administer` operation and approval inspect/decide (K1 option A).
+ * A rule counts as held when its id exists or another `allow` rule of this person already covers it. Nothing is removed or replaced: hand-added
+ * rules stay, and a rule whose id exists with other content is kept and named in `conflicts`. An empty plan is `current` (a second run changes
+ * nothing). Pure; the caller writes it (installer upgrade) or submits it through `policy.administer@1` (governed upgrade).
  */
 export function firstRunTemplateAdditions(current: unknown, input: { readonly person: { readonly issuer: string; readonly subject: string };
-  readonly proposeMcpToolName: string; readonly mcpCallOperationId: string }): FirstRunTemplateAdditions {
+  readonly proposeMcpToolName: string; readonly mcpCallOperationId: string; readonly policyAdministerOperationId: string }): FirstRunTemplateAdditions {
   const parsed = policyFileSchema.safeParse(current);
   if (!parsed.success || parsed.data.schemaVersion !== 2) return Object.freeze({ status: 'unavailable', reason: 'invalid' });
   const grants = parsed.data.grants, read = grants.find(grant => grant.id === 'first-run-read-tools');
   if (!read || read.scopes === 'all') return Object.freeze({ status: 'unavailable', reason: 'not-first-run' });
   const person = { issuer: identitySchema.parse(input.person.issuer), subject: identitySchema.parse(input.person.subject) };
   const mine = (grant: PolicyGrant) => grant.principals === 'all' || grant.principals.some(item => item.issuer === person.issuer && item.subject === person.subject);
-  const has = (id: string) => grants.some(grant => grant.id === id);
-  const proposes = grants.some(grant => grant.effect === 'allow' && mine(grant) && grant.resource.kind === 'agent-tool'
-    && (grant.resource.ids === 'all' || grant.resource.ids.includes(input.proposeMcpToolName)));
-  const rule = (id: string, kind: string, action: string, ids: readonly string[] | 'all', scopes: readonly string[] | 'all'): PolicyGrant => policyGrantSchema.parse({
-    id, effect: 'allow', actions: [action], scopes: scopes === 'all' ? 'all' : [...scopes], principals: [person], resource: { kind, ids: ids === 'all' ? 'all' : [...ids] } });
-  const rules = [
-    ...(has(FIRST_RUN_UPGRADE_RULE_IDS.servers) ? [] : [rule(FIRST_RUN_UPGRADE_RULE_IDS.servers, 'mcp-server', 'invoke', 'all', 'all')]),
-    ...(has(FIRST_RUN_UPGRADE_RULE_IDS.operation) ? [] : [rule(FIRST_RUN_UPGRADE_RULE_IDS.operation, 'operation', 'execute', [input.mcpCallOperationId], read.scopes)]),
-    ...(proposes || has(FIRST_RUN_UPGRADE_RULE_IDS.propose) ? [] : [rule(FIRST_RUN_UPGRADE_RULE_IDS.propose, 'agent-tool', 'invoke', [input.proposeMcpToolName], read.scopes)]),
-  ];
-  if (!rules.length) return Object.freeze({ status: 'current' });
-  return Object.freeze({ status: 'plan', rules: Object.freeze(rules),
+  if (!mine(read)) return Object.freeze({ status: 'unavailable', reason: 'not-this-person' });
+  const rule = (id: string, kind: string, actions: readonly string[], ids: Selection, scopes: Selection): PolicyGrant => policyGrantSchema.parse({
+    id, effect: 'allow', actions: [...actions], scopes: scopes === 'all' ? 'all' : [...scopes], principals: [person], resource: { kind, ids: ids === 'all' ? 'all' : [...ids] } });
+  const ids = FIRST_RUN_UPGRADE_RULE_IDS, scopes = read.scopes;
+  const wanted = [rule(ids.servers, 'mcp-server', ['invoke'], 'all', 'all'), rule(ids.operation, 'operation', ['execute'], [input.mcpCallOperationId], scopes),
+    rule(ids.propose, 'agent-tool', ['invoke'], [input.proposeMcpToolName], scopes), rule(ids.administer, 'operation', ['execute'], [input.policyAdministerOperationId], scopes),
+    rule(ids.approvals, 'approval', ['inspect', 'decide'], 'all', scopes)];
+  const conflicts: string[] = [], rules: PolicyGrant[] = [];
+  for (const want of wanted) {
+    const same = grants.find(grant => grant.id === want.id);
+    if (same) { if (!sameRule(same, want)) conflicts.push(want.id); continue; }
+    const covered = grants.some(grant => grant.effect === 'allow' && mine(grant) && grant.resource.kind === want.resource.kind && coversAll(grant.actions, want.actions)
+      && coversAll(grant.resource.ids, want.resource.ids) && coversAll(grant.scopes, want.scopes));
+    if (!covered) rules.push(want);
+  }
+  if (!rules.length) return Object.freeze({ status: 'current', conflicts: Object.freeze(conflicts) });
+  return Object.freeze({ status: 'plan', rules: Object.freeze(rules), conflicts: Object.freeze(conflicts),
     change: policyChangeSchema.parse({ schemaVersion: 1, changes: rules.map(grant => ({ kind: 'grant.add', grant })) }) });
 }

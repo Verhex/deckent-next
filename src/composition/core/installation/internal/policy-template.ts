@@ -1,15 +1,17 @@
 import { readFile, stat } from 'node:fs/promises';
 import { FileInstallationIdentityStore, FileProjectIdentityStore, inspectInstallationFile, publishInstallationFile, readLocalOsIdentity, withInstallationJournal } from '#adapters/index.js';
 import { userInfo } from 'node:os';
-import { FIRST_RUN_EDIT_SHELL_TOOL_NAMES, FIRST_RUN_MCP_CALL_OPERATION_ID, FIRST_RUN_PROPOSE_MCP_TOOL_NAME, FIRST_RUN_READ_TOOL_NAMES, FIRST_RUN_SCRATCH_TOOL_NAMES,
+import { FIRST_RUN_EDIT_SHELL_TOOL_NAMES, FIRST_RUN_MCP_CALL_OPERATION_ID, FIRST_RUN_POLICY_ADMINISTER_OPERATION_ID, FIRST_RUN_PROPOSE_MCP_TOOL_NAME, FIRST_RUN_READ_TOOL_NAMES, FIRST_RUN_SCRATCH_TOOL_NAMES,
   FIRST_RUN_SCRATCH_WRITE_OPERATION_ID, FIRST_RUN_SHELL_OPERATION_ID, FIRST_RUN_WRITE_OPERATION_ID, inspectFirstRunPolicyTemplate, InstallationPublicationError,
   PolicyTemplateInstallationApplication, preparePolicyTemplateInstallation, upgradePolicyTemplate, type FirstRunToolNames, type PolicyTemplatePublishTarget } from '#engine/index.js';
-import { getConfigFieldDefault, productResourcePath, resolveProductLayout, SystemTrustedClock } from '#platform/index.js';
+import { getConfigFieldDefault, productResourcePath, resolveProductLayout, SystemTrustedClock, type ConfigLoadOptions } from '#platform/index.js';
 import { createLayoutPolicySource } from '#composition/core/policy/index.js';
+import { loadComposedConfig } from '#composition/core/root/index.js';
 import { assertConfiguredInstallationIdentity, configuredInstallationBinding } from './apply.js';
 const TOOL_NAMES: FirstRunToolNames = Object.freeze({ readToolNames: FIRST_RUN_READ_TOOL_NAMES, scratchToolNames: FIRST_RUN_SCRATCH_TOOL_NAMES,
   scratchWriteOperationId: FIRST_RUN_SCRATCH_WRITE_OPERATION_ID, editShellToolNames: FIRST_RUN_EDIT_SHELL_TOOL_NAMES, writeOperationId: FIRST_RUN_WRITE_OPERATION_ID,
-  shellOperationId: FIRST_RUN_SHELL_OPERATION_ID, proposeMcpToolName: FIRST_RUN_PROPOSE_MCP_TOOL_NAME, mcpCallOperationId: FIRST_RUN_MCP_CALL_OPERATION_ID });
+  shellOperationId: FIRST_RUN_SHELL_OPERATION_ID, proposeMcpToolName: FIRST_RUN_PROPOSE_MCP_TOOL_NAME, mcpCallOperationId: FIRST_RUN_MCP_CALL_OPERATION_ID,
+  policyAdministerOperationId: FIRST_RUN_POLICY_ADMINISTER_OPERATION_ID });
 /** No project config is read or required: a policy-only installation works without Docker/pool/registry. */
 function prepare(projectRoot: string, scopeId: string) {
   const layout = resolveProductLayout({ projectRoot }), identity = readLocalOsIdentity(); const installation = getConfigFieldDefault('installation'), inspection = getConfigFieldDefault('inspection');
@@ -35,11 +37,12 @@ export async function applyPolicyTemplateInstallation(projectRoot: string, scope
 }
 /** `deckent init policy --upgrade [--apply]` (owner 2026-10-07): the first-run v4 → v5 migration of this installation's policy, as the local person
  * the template names, through the authority documents' one conditional writer. Without `--apply` it only reads (what would change, or why not). */
-export async function upgradePolicyTemplateInstallation(projectRoot: string, scopeId: string, apply: boolean) {
-  const layout = resolveProductLayout({ projectRoot }), identity = readLocalOsIdentity();
+export async function upgradePolicyTemplateInstallation(projectRoot: string, scopeId: string, apply: boolean, expect?: string, options: ConfigLoadOptions = {}) {
+  // An existing installation: its configured layout (a custom data root, as a live installation has), not only the default `.deckent`.
+  const config = await loadComposedConfig(projectRoot, { ...options, heal: false }), layout = config.productLayout, identity = readLocalOsIdentity();
   if (apply) await assertConfiguredInstallationIdentity(projectRoot);
-  const writer = createLayoutPolicySource(layout, userInfo().uid, getConfigFieldDefault('inspection').policyMaxBytes);
-  return upgradePolicyTemplate(writer, { scopeId, principal: { issuer: identity.issuer, subject: identity.subject }, toolNames: TOOL_NAMES, apply });
+  const writer = createLayoutPolicySource(layout, userInfo().uid, config.inspection.policyMaxBytes);
+  return upgradePolicyTemplate(writer, { scopeId, principal: { issuer: identity.issuer, subject: identity.subject }, toolNames: TOOL_NAMES, apply, ...(expect === undefined ? {} : { expect }) });
 }
 /** Doctor-only, read-soft: not the trusted gate (that stays FilePolicySource); oversized/missing/unparsable/custom -> null, never a doctor failure. */
 export async function inspectPolicyTemplate(projectRoot: string) {

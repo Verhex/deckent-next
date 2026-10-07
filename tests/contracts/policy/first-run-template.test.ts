@@ -12,7 +12,7 @@ const SCRATCH_TOOLS = ['scratch_write', 'scratch_read', 'scratch_list'];
 const EDIT_SHELL_TOOLS = ['edit_file', 'write_file', 'run_shell'];
 const input = { scopeId: 'installation', principal: me, readToolNames: READ_TOOLS, scratchToolNames: SCRATCH_TOOLS,
   scratchWriteOperationId: 'workspace.scratch.write', editShellToolNames: EDIT_SHELL_TOOLS,
-  writeOperationId: 'workspace.file.write', shellOperationId: 'host.shell.run', proposeMcpToolName: 'propose_mcp_server', mcpCallOperationId: 'mcp.tool.call' };
+  writeOperationId: 'workspace.file.write', shellOperationId: 'host.shell.run', proposeMcpToolName: 'propose_mcp_server', mcpCallOperationId: 'mcp.tool.call', policyAdministerOperationId: 'policy.administer' };
 const decide = (policy: unknown, tool: string, cell: AgentToolCallCell, operation: string | null, extra: { mcpServer?: string; fullAccess?: boolean } = {}) =>
   decideAgentToolCall(policy, { principal, scopeId: 'installation', tool: { name: tool }, operation: operation ? { id: operation } : null, cell, ...extra });
 
@@ -119,6 +119,9 @@ describe('first-run v5: MCP server authority, trust grant and the proposal tool'
     expect(grants.find(grant => grant.id === 'first-run-mcp-servers')).toEqual({ id: 'first-run-mcp-servers', effect: 'allow', actions: ['invoke'], scopes: 'all',
       principals: [me], resource: { kind: 'mcp-server', ids: 'all' } });
     expect(grants.find(grant => grant.id === 'first-run-mcp-call-operation')).toMatchObject({ effect: 'allow', resource: { kind: 'operation', ids: ['mcp.tool.call'] } });
+    // K1 option A (owner 2026-10-07): the governed chain and its cards in the installed scope.
+    expect(grants.find(grant => grant.id === 'first-run-policy-administer')).toMatchObject({ effect: 'allow', scopes: ['installation'], resource: { kind: 'operation', ids: ['policy.administer'] } });
+    expect(grants.find(grant => grant.id === 'first-run-approvals')).toMatchObject({ effect: 'allow', actions: ['inspect', 'decide'], scopes: ['installation'], resource: { kind: 'approval', ids: 'all' } });
     const policy = withModes(template().policy);
     expect(decide(policy, 'propose_mcp_server', 'read', null)).toMatchObject({ decision: 'allow', relaxation: null });
     const change = mcpToolGrantChange({ digest: 'd'.repeat(24), principal: me, scopes: 'all', server: 'docs', replaces: [] });
@@ -152,7 +155,7 @@ describe('first-run v5: MCP server authority, trust grant and the proposal tool'
 describe('first-run v4 → v5 migration (pure)', () => {
   const v4 = () => { const { proposeMcpToolName: _p, mcpCallOperationId: _o, ...rest } = input; void _p; void _o;
     const current = firstRunPolicyTemplate(input).policy as { grants: { id: string; resource: { ids: unknown } }[] };
-    return { ...current, revision: 'first-run-template-v4', grants: current.grants.filter(grant => grant.id !== 'first-run-mcp-servers' && grant.id !== 'first-run-mcp-call-operation')
+    return { ...current, revision: 'first-run-template-v4', grants: current.grants.filter(grant => !['first-run-mcp-servers', 'first-run-mcp-call-operation', 'first-run-policy-administer', 'first-run-approvals'].includes(grant.id))
       .map(grant => grant.id === 'first-run-read-tools' ? { ...grant, resource: { ...grant.resource, ids: rest.readToolNames } } : grant) }; };
   it('exactly this installation\'s v4 template upgrades to exactly the v5 template; v5 is current', () => {
     expect(upgradeFirstRunPolicy(v4(), input)).toEqual({ status: 'upgrade', from: 4, policy: firstRunPolicyTemplate(input).policy });
@@ -170,25 +173,34 @@ describe('first-run v4 → v5 migration (pure)', () => {
 
 describe('first-run v4 → v5 governed additions (deckent policy upgrade --template v5, pure plan)', () => {
   const v4 = () => { const current = firstRunPolicyTemplate(input).policy as unknown as { grants: { id: string; resource: { ids: unknown } }[] };
-    return { ...current, revision: 'first-run-template-v4', grants: current.grants.filter(grant => grant.id !== 'first-run-mcp-servers' && grant.id !== 'first-run-mcp-call-operation')
+    return { ...current, revision: 'first-run-template-v4', grants: current.grants.filter(grant => !['first-run-mcp-servers', 'first-run-mcp-call-operation', 'first-run-policy-administer', 'first-run-approvals'].includes(grant.id))
       .map(grant => grant.id === 'first-run-read-tools' ? { ...grant, resource: { ...grant.resource, ids: READ_TOOLS } } : grant) }; };
-  const names = { person: me, proposeMcpToolName: 'propose_mcp_server', mcpCallOperationId: 'mcp.tool.call' };
+  const names = { person: me, proposeMcpToolName: 'propose_mcp_server', mcpCallOperationId: 'mcp.tool.call', policyAdministerOperationId: 'policy.administer' };
   it('adds exactly the three missing rules and never replaces or removes one: hand-added rules and an edited read rule stay', () => {
     const extra = { id: 'hand-added', effect: 'allow', actions: ['invoke'], scopes: ['installation'], principals: [me], resource: { kind: 'agent-tool', ids: ['fetch_url'] } };
     const edited = v4(); edited.grants = [...edited.grants.map(grant => grant.id === 'first-run-read-tools' ? { ...grant, resource: { ...grant.resource, ids: ['read_file'] } } : grant), extra as never];
     const plan = firstRunTemplateAdditions(edited, names);
     expect(plan.status).toBe('plan');
     if (plan.status !== 'plan') return;
-    expect(plan.change.changes.map(change => change.kind)).toEqual(['grant.add', 'grant.add', 'grant.add']);
+    expect(plan.change.changes.every(change => change.kind === 'grant.add')).toBe(true);
     expect(plan.rules.map(rule => [rule.id, rule.resource.kind, rule.resource.ids, rule.scopes])).toEqual([
       ['first-run-mcp-servers', 'mcp-server', 'all', 'all'], ['first-run-mcp-call-operation', 'operation', ['mcp.tool.call'], ['installation']],
-      ['first-run-mcp-propose-tool', 'agent-tool', ['propose_mcp_server'], ['installation']]]);
+      ['first-run-mcp-propose-tool', 'agent-tool', ['propose_mcp_server'], ['installation']], ['first-run-policy-administer', 'operation', ['policy.administer'], ['installation']],
+      ['first-run-approvals', 'approval', 'all', ['installation']]]);
+    expect(plan.conflicts).toEqual([]);
     // Applied (the plan's documents), a second run has nothing to add.
     const applied = { ...edited, grants: [...edited.grants, ...plan.rules] };
-    expect(firstRunTemplateAdditions(applied, names)).toEqual({ status: 'current' });
+    expect(firstRunTemplateAdditions(applied, names)).toEqual({ status: 'current', conflicts: [] });
+  });
+  it('a hand-added rule under a v5 id with other content is kept and named as a conflict; another person\'s first-run policy is not theirs to upgrade', () => {
+    const odd = { id: 'first-run-approvals', effect: 'allow', actions: ['inspect'], scopes: ['installation'], principals: [me], resource: { kind: 'approval', ids: 'all' } };
+    const plan = firstRunTemplateAdditions({ ...v4(), grants: [...v4().grants, odd] }, names);
+    expect(plan).toMatchObject({ status: 'plan', conflicts: ['first-run-approvals'] });
+    if (plan.status === 'plan') expect(plan.rules.map(rule => rule.id)).not.toContain('first-run-approvals');
+    expect(firstRunTemplateAdditions(v4(), { ...names, person: { issuer: 'os', subject: 'colleague' } })).toEqual({ status: 'unavailable', reason: 'not-this-person' });
   });
   it('a fresh v5 template is current (the proposal tool inside its read rule); a policy without the first-run read rule is not this template', () => {
-    expect(firstRunTemplateAdditions(firstRunPolicyTemplate(input).policy, names)).toEqual({ status: 'current' });
+    expect(firstRunTemplateAdditions(firstRunPolicyTemplate(input).policy, names)).toEqual({ status: 'current', conflicts: [] });
     expect(firstRunTemplateAdditions({ ...v4(), grants: v4().grants.filter(grant => grant.id !== 'first-run-read-tools') }, names)).toEqual({ status: 'unavailable', reason: 'not-first-run' });
     expect(firstRunTemplateAdditions({ nope: 1 }, names)).toEqual({ status: 'unavailable', reason: 'invalid' });
   });

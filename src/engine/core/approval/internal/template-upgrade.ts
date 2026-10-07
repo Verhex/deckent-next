@@ -25,7 +25,7 @@ export interface TemplateUpgradeResult {
  */
 export class PolicyTemplateUpgrade {
   constructor(private readonly deps: Pick<PersistentStandingDependencies, 'administration' | 'approve' | 'policy'>,
-    private readonly names: { readonly proposeMcpToolName: string; readonly mcpCallOperationId: string }) {}
+    private readonly names: { readonly proposeMcpToolName: string; readonly mcpCallOperationId: string; readonly policyAdministerOperationId: string }) {}
   private async snapshot() { return policySchema.parse(await this.deps.policy.load()); }
   private missing(policy: ReturnType<typeof policySchema.parse>, principal: VerifiedPrincipal, scopeId: string, touched: Parameters<typeof delegationWithin>[2]): TemplateUpgradeMissing[] {
     const out: TemplateUpgradeMissing[] = [];

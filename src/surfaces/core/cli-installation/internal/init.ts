@@ -1,6 +1,6 @@
 import { identityCommand } from './identity.js';
 import { isAbsolute } from 'node:path';
-import { ErrorRegistry, emit, formatValue, resolveLocale, t } from '#platform/index.js';
+import { ErrorRegistry, emit, formatValue, resolveLocale, t, type Locale } from '#platform/index.js';
 import type { InstallationPreview, InstallationEvidencePreview, InstallationPublicationApplication } from '#engine/index.js';
 import type { InstallationCommandContext } from './context.js';
 
@@ -23,14 +23,15 @@ export type InstallationResumeHandler = (projectRoot: string, input: Installatio
 export type PolicyTemplatePreviewHandler = (projectRoot: string, scopeId: string) => Promise<unknown>;
 export type PolicyTemplateApplyHandler = (projectRoot: string, scopeId: string) => Promise<unknown>;
 /** Owner 2026-10-07: the first-run v4 → v5 migration (`--upgrade`); `apply: false` reads only. */
-export type PolicyTemplateUpgradeHandler = (projectRoot: string, scopeId: string, apply: boolean) => Promise<{ readonly status: string }>;
+export type PolicyTemplateUpgradeHandler = (projectRoot: string, scopeId: string, apply: boolean, expect?: string) => Promise<{ readonly status: string; readonly revision?: string | null;
+  readonly rules?: readonly unknown[]; readonly conflicts?: readonly string[]; readonly wireRules?: readonly string[] }>;
 
 /** Preview is deliberately non-mutating. No surface invents profile data or policy grants. */
 export async function initCommand(argv: readonly string[], context: InstallationCommandContext): Promise<void> {
   if (argv[1] === 'identity') return identityCommand(argv, context);
   const action = argv[1]; let profilePath: string | undefined, language: string | undefined, dockerExecutable: string | undefined;
   let proposalDigest: string | undefined, json = false, allowShutdown = false, acceptCustom = false;
-  let scopeId: string | undefined, policyPreview = false, policyApply = false, policyUpgrade = false;
+  let scopeId: string | undefined, policyPreview = false, policyApply = false, policyUpgrade = false, expect: string | undefined;
   if (!['preview', 'inspect', 'apply', 'resume', 'policy', '--help', '-h'].includes(action ?? '')) throw ErrorRegistry.createError('CLI_USAGE');
   for (let i = 2; i < argv.length; i++) {
     const flag = argv[i];
@@ -40,6 +41,11 @@ export async function initCommand(argv: readonly string[], context: Installation
     if (flag === '--preview' && action === 'policy' && !policyPreview && !policyApply) { policyPreview = true; continue; }
     if (flag === '--apply' && action === 'policy' && !policyApply && !policyPreview) { policyApply = true; continue; }
     if (flag === '--upgrade' && action === 'policy' && !policyUpgrade) { policyUpgrade = true; continue; }
+    if (flag === '--expect' && action === 'policy' && expect === undefined) {
+      expect = argv[++i];
+      if (!expect || expect.startsWith('-')) throw ErrorRegistry.createError('CLI_USAGE');
+      continue;
+    }
     if (flag === '--scope' && action === 'policy' && scopeId === undefined) {
       scopeId = argv[++i];
       if (!scopeId || scopeId.startsWith('-')) throw ErrorRegistry.createError('CLI_USAGE');
@@ -82,15 +88,14 @@ export async function initCommand(argv: readonly string[], context: Installation
     return;
   }
   if (action === 'policy') {
+    if (expect !== undefined && !policyUpgrade) throw ErrorRegistry.createError('CLI_USAGE');
     if (!scopeId || policyPreview === policyApply || profilePath || dockerExecutable || proposalDigest || acceptCustom || allowShutdown) {
       throw ErrorRegistry.createError('CLI_USAGE');
     }
     if (policyUpgrade) {
-      if (!context.upgradePolicyTemplateInstallation) throw ErrorRegistry.createError('CLI_USAGE');
-      const result = await context.upgradePolicyTemplateInstallation(root, scopeId, policyApply);
-      const line = result.status === 'preview' ? t('cli.init.policyUpgrade.preview', {}, locale) : result.status === 'upgraded' ? t('cli.init.policyUpgrade.upgraded', {}, locale)
-        : result.status === 'current' ? t('cli.init.policyUpgrade.current', {}, locale) : t('cli.init.policyUpgrade.unavailable', {}, locale);
-      emit(result, { ...sinks, json, render: value => `${line}\n${formatValue(value)}` });
+      if (!context.upgradePolicyTemplateInstallation || (expect !== undefined && !policyApply)) throw ErrorRegistry.createError('CLI_USAGE');
+      const result = await context.upgradePolicyTemplateInstallation(root, scopeId, policyApply, expect);
+      emit(result, { ...sinks, json, render: value => policyUpgradeText(value, scopeId!, locale) });
       return;
     }
     if (policyApply) {
@@ -121,4 +126,17 @@ export async function initCommand(argv: readonly string[], context: Installation
   if (!context.previewInstallation) throw ErrorRegistry.createError('INSTALL_PREVIEW_UNAVAILABLE');
   const result = await context.previewInstallation(root, { profilePath, allowShutdown });
   emit(result, { ...sinks, json, render: value => `${t('cli.init.previewOnly', {}, locale)}\n${formatValue(value)}` });
+}
+
+/** `init policy --upgrade` in the person's words: what happened, the exact next command, the rules added, and what is kept as it is. */
+function policyUpgradeText(value: Awaited<ReturnType<PolicyTemplateUpgradeHandler>>, scope: string, locale: Locale): string {
+  const revision = value.revision ?? '-';
+  const head = value.status === 'preview' ? t('cli.init.policyUpgrade.preview', { scope, revision }, locale) : value.status === 'upgraded' ? t('cli.init.policyUpgrade.upgraded', {}, locale)
+    : value.status === 'current' ? t('cli.init.policyUpgrade.current', {}, locale) : value.status === 'conflict' ? t('cli.init.policyUpgrade.conflict', { revision }, locale)
+    : t('cli.init.policyUpgrade.unavailable', {}, locale);
+  const rules = (value.rules ?? []).map(rule => { const grant = rule as { id?: string; resource?: { kind?: string; ids?: unknown } };
+    return `  + ${grant.id ?? '-'}: ${grant.resource?.kind ?? '-'} ${Array.isArray(grant.resource?.ids) ? grant.resource!.ids.join(', ') : '*'}`; });
+  const kept = (value.conflicts ?? []).length ? [t('cli.init.policyUpgrade.conflicts', { ids: value.conflicts!.join(', ') }, locale)] : [];
+  const wire = (value.wireRules ?? []).length ? [t('cli.init.policyUpgrade.wireRules', { ids: value.wireRules!.join(', ') }, locale)] : [];
+  return [head, ...rules, ...kept, ...wire].join('\n');
 }

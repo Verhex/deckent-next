@@ -7,7 +7,7 @@ import { encodeBootstrapJournal, type BootstrapJournalPayload, type BootstrapObs
 // custody discipline as installation-publication.test.ts (fake in-memory journal + effects), narrower resources.
 const toolNames = { readToolNames: ['read_file'], scratchToolNames: ['scratch_write'], scratchWriteOperationId: 'workspace.scratch.write',
   editShellToolNames: ['edit_file'], writeOperationId: 'workspace.file.write', shellOperationId: 'host.shell.run', proposeMcpToolName: 'propose_mcp_server',
-  mcpCallOperationId: 'mcp.tool.call' };
+  mcpCallOperationId: 'mcp.tool.call', policyAdministerOperationId: 'policy.administer' };
 function prepared(scopeId = 'installation'): PreparedPolicyTemplateInstallation {
   return preparePolicyTemplateInstallation({ scopeId, principal: { issuer: 'host', subject: '1000' },
     paths: { policy: '/project/.deckent/policy.json', bindings: '/project/.deckent/bindings.json' }, toolNames });

@@ -51,18 +51,18 @@ it('migrates exactly an untouched first-run v4 policy to v5 (owner 2026-10-07): 
   const policyPath = join(root, '.deckent/policy.json'), bindingsPath = join(root, '.deckent/bindings.json');
   const v5 = JSON.parse(await readFile(policyPath, 'utf8')) as { revision: string; grants: { id: string; resource: { ids: unknown } }[] };
   // The bytes alpha.10 `init policy` wrote: v5 without the MCP rules, read tools without the proposal tool, the v4 revision.
-  const v4 = { ...v5, revision: 'first-run-template-v4', grants: v5.grants.filter(grant => !['first-run-mcp-servers', 'first-run-mcp-call-operation'].includes(grant.id))
+  const v4 = { ...v5, revision: 'first-run-template-v4', grants: v5.grants.filter(grant => !['first-run-mcp-servers', 'first-run-mcp-call-operation', 'first-run-policy-administer', 'first-run-approvals'].includes(grant.id))
     .map(grant => grant.id === 'first-run-read-tools' ? { ...grant, resource: { ...grant.resource, ids: (grant.resource.ids as string[]).filter(name => name !== 'propose_mcp_server') } } : grant) };
   await writeFile(policyPath, `${JSON.stringify(v4)}\n`, { mode: 0o600 });
   const bindingsBefore = await readFile(bindingsPath, 'utf8'), v4Bytes = await readFile(policyPath, 'utf8');
   expect(await inspectPolicyTemplate(root)).toEqual({ id: 'first-run-template', version: 4 });
 
   const preview = await upgradePolicyTemplateInstallation(root, 'installation', false);
-  expect(preview).toMatchObject({ status: 'preview', template: { from: 4, to: 5 } });
-  expect(preview.rules.map(rule => (rule as { id: string }).id)).toEqual(['first-run-read-tools', 'first-run-mcp-servers', 'first-run-mcp-call-operation']);
+  expect(preview).toMatchObject({ status: 'preview', template: { to: 5 } });
+  expect(preview.rules.map(rule => (rule as { id: string }).id)).toEqual(['first-run-read-tools', 'first-run-mcp-servers', 'first-run-mcp-call-operation', 'first-run-policy-administer', 'first-run-approvals']);
   expect(await readFile(policyPath, 'utf8')).toBe(v4Bytes);
 
-  expect(await upgradePolicyTemplateInstallation(root, 'installation', true)).toMatchObject({ status: 'upgraded', template: { from: 4, to: 5 } });
+  expect(await upgradePolicyTemplateInstallation(root, 'installation', true)).toMatchObject({ status: 'upgraded', template: { to: 5 } });
   expect(JSON.parse(await readFile(policyPath, 'utf8'))).toEqual(v5);
   expect(await readFile(bindingsPath, 'utf8')).toBe(bindingsBefore);
   expect((await stat(policyPath)).mode & 0o777).toBe(0o600);
@@ -70,18 +70,33 @@ it('migrates exactly an untouched first-run v4 policy to v5 (owner 2026-10-07): 
   expect(await upgradePolicyTemplateInstallation(root, 'installation', true)).toMatchObject({ status: 'current' });
 });
 
-it('never rewrites a changed v4 policy: the upgrade is unavailable, the bytes stay, and the result lists the v5 rules as the explicit step', async () => {
+it('upgrades a changed v4 policy additively (owner 2026-10-07): hand-added and edited rules stay, a same-id rule with other content is a named conflict, wire-name MCP rules are named; on the previewed revision only; a second run is current', async () => {
   const root = await project();
   await applyPolicyTemplateInstallation(root, 'installation');
-  const policyPath = join(root, '.deckent/policy.json');
-  const v5 = JSON.parse(await readFile(policyPath, 'utf8')) as { grants: { id: string }[] };
-  const edited = { ...v5, revision: 'a-0000000000000000000000000000000000000000', grants: v5.grants.filter(grant => grant.id !== 'first-run-mcp-servers') };
+  const policyPath = join(root, '.deckent/policy.json'), bindingsPath = join(root, '.deckent/bindings.json');
+  const v5 = JSON.parse(await readFile(policyPath, 'utf8')) as { grants: { id: string; principals: unknown; resource: { ids: unknown } }[] };
+  const person = v5.grants[0]!.principals;
+  const wire = { id: 'hand-mcp-github', effect: 'allow', actions: ['invoke'], scopes: ['installation'], principals: person, resource: { kind: 'agent-tool', ids: ['mcp__github__search'] } };
+  const odd = { id: 'first-run-approvals', effect: 'allow', actions: ['inspect'], scopes: ['installation'], principals: person, resource: { kind: 'approval', ids: 'all' } };
+  const edited = { ...v5, revision: 'a-0000000000000000000000000000000000000000', grants: [...v5.grants.filter(grant => !['first-run-mcp-servers', 'first-run-mcp-call-operation',
+    'first-run-policy-administer', 'first-run-approvals'].includes(grant.id)).map(grant => grant.id === 'first-run-read-tools' ? { ...grant, resource: { ...grant.resource,
+    ids: (grant.resource.ids as string[]).filter(name => name !== 'propose_mcp_server') } } : grant), wire, odd] };
   await writeFile(policyPath, `${JSON.stringify(edited)}\n`, { mode: 0o600 });
-  const before = await readFile(policyPath, 'utf8');
-  const result = await upgradePolicyTemplateInstallation(root, 'installation', true);
-  expect(result).toMatchObject({ status: 'unavailable', reason: 'not-v4-template' });
-  expect(result.rules).toHaveLength(3);
-  expect(await readFile(policyPath, 'utf8')).toBe(before);
+  const bindingsBefore = await readFile(bindingsPath, 'utf8');
+  const preview = await upgradePolicyTemplateInstallation(root, 'installation', false);
+  expect(preview).toMatchObject({ status: 'preview', revision: edited.revision, conflicts: ['first-run-approvals'], wireRules: ['hand-mcp-github'] });
+  expect(preview.rules.map(rule => (rule as { id: string }).id)).toEqual(['first-run-mcp-servers', 'first-run-mcp-call-operation', 'first-run-mcp-propose-tool', 'first-run-policy-administer']);
+  expect(await upgradePolicyTemplateInstallation(root, 'installation', true, 'stale')).toMatchObject({ status: 'conflict' });
+  const applied = await upgradePolicyTemplateInstallation(root, 'installation', true, preview.revision!);
+  expect(applied).toMatchObject({ status: 'upgraded' });
+  const after = JSON.parse(await readFile(policyPath, 'utf8')) as { revision: string; grants: { id: string }[] };
+  expect(after.revision).not.toBe(edited.revision);
+  expect(after.grants.slice(0, edited.grants.length)).toEqual(edited.grants); // nothing removed or replaced
+  expect(after.grants.map(grant => grant.id).slice(edited.grants.length)).toEqual(preview.rules.map(rule => (rule as { id: string }).id));
+  expect(await readFile(bindingsPath, 'utf8')).toBe(bindingsBefore);
+  const again = await upgradePolicyTemplateInstallation(root, 'installation', true);
+  expect(again).toMatchObject({ status: 'current', conflicts: ['first-run-approvals'] });
+  expect(JSON.parse(await readFile(policyPath, 'utf8'))).toEqual(after);
 });
 
 it('never overwrites an existing, different policy.json: apply refuses before any journal entry, the file stays byte-identical, and doctor does not recognize it', async () => {
