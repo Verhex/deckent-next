@@ -63,7 +63,8 @@ describe('/provider port', () => {
       'Key|stored as DECKENT_ANTHROPIC_KEY in the secret store (core.secret-store.file@1); the value is never shown',
       'Next|No model uses DECKENT_ANTHROPIC_KEY yet. Binding models to it is a governed catalog step; see: deckent models catalog list --scope scope']);
     expect(JSON.stringify(outcome)).not.toContain(CANARY);
-    expect(port.transparency[0]!.text).toContain('core.secret-store.file@1'); expect(port.transparency[0]!.text).toContain('same OS user');
+    // The custody words `doctor` uses for the backend the key went to (SECRET-AT-REST 1c).
+    expect(port.transparency[0]!.text).toBe('Keys are plain text on disk (a 0600 file only you can read). The encrypted store is recommended: secrets.store = core.secret-store.encrypted-file@1.');
     expect((await port.inspect()).kinds[0]!.detail).toBe('key DECKENT_ANTHROPIC_KEY stored · 0 model profile(s) use it');
   });
 

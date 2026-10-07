@@ -1,3 +1,4 @@
+import { classifyProviderRejection, type ProviderRejectionKind } from '#engine/index.js';
 import { PROVIDER_CONNECT_LIMITS, providerConnectKind, providerEndpoint, type ProviderConnectKind } from './registry.js';
 
 /**
@@ -7,7 +8,8 @@ import { PROVIDER_CONNECT_LIMITS, providerConnectKind, providerEndpoint, type Pr
  */
 export const PROVIDER_PROBE_OUTCOMES = ['ok', 'credential-rejected', 'access-denied', 'spend-limit', 'rate-limit', 'limit-reached', 'unreachable', 'unexpected'] as const;
 export type ProviderProbeOutcome = typeof PROVIDER_PROBE_OUTCOMES[number];
-export type ProviderProbeRejection = Exclude<ProviderProbeOutcome, 'ok' | 'unreachable' | 'unexpected'>;
+/** The secret lane's `ProviderRejectionKind` (one vocabulary for a refused turn and a refused check). */
+export type ProviderProbeRejection = ProviderRejectionKind;
 /** `key`: `verified` — the endpoint answered a request that needs the key; `none` — no key was sent; `unverified` — a local server answered,
  * but it may not check keys at all. Nothing of the answer body is ever returned. */
 export type ProviderProbeResult = Readonly<{ outcome: ProviderProbeOutcome; httpStatus: number | null; key: 'verified' | 'none' | 'unverified' }>;
@@ -21,21 +23,25 @@ export class ProviderProbeError extends Error {
 /** How much of a refusal's body is read to tell a spend limit from a rate limit; the text is matched, never kept or returned. */
 const BODY_PREFIX_BYTES = PROVIDER_CONNECT_LIMITS.bodyPrefixBytes;
 
+/** A 429 is a rate limit only when its body says so (Anthropic `rate_limit_error`, OpenAI `rate_limit_exceeded`); a body that is missing,
+ * unreadable or names nothing known is an unknown limit, never guessed as a rate limit (Astra note on the classifier, 2026-10-08). */
+function namesRateLimit(bodyPrefix: string): boolean {
+  try {
+    const error = (JSON.parse(bodyPrefix) as { error?: { type?: unknown; code?: unknown } } | null)?.error;
+    return error?.type === 'rate_limit_error' || error?.code === 'rate_limit_exceeded' || error?.type === 'requests' || error?.type === 'tokens';
+  } catch { return false; }
+}
+
 /**
- * The one mapping point of an HTTP refusal to its typed kind. INTEGRATION (SECRET-AT-REST, feat/secret-at-rest d55f9cad): replace this body with
- * the secret lane's `classifyProviderRejection(evidence)` from `#engine` (engine/core/agent-turn/internal/metadata.ts) once it is on main; the
- * kind names here are already that function's `PROVIDER_REJECTION_KINDS`. Until then it applies the same published rules.
+ * The one mapping point of an HTTP refusal to its typed kind: the secret lane's `classifyProviderRejection` (SECRET-AT-REST 1b, the same kinds
+ * the terminal shows for a refused turn), fed the bounded body prefix the same way the invocation evidence carries it (base64 `data`). The
+ * connection check only narrows a 429 the classifier calls `rate-limit` to `limit-reached` when the body does not name a rate limit.
  */
 export function providerProbeRejection(status: number, bodyPrefix: string | null): ProviderProbeRejection | null {
-  if (status === 401) return 'credential-rejected';
-  if (status === 403) return 'access-denied';
-  if (status === 402) return 'spend-limit';
-  if (status === 429) {
-    if (bodyPrefix === null || bodyPrefix === '') return 'limit-reached';
-    return /enforced_spend_limit_reached|insufficient_quota/u.test(bodyPrefix) ? 'spend-limit' : 'rate-limit';
-  }
-  if (status === 400 && bodyPrefix !== null && /API usage limits/u.test(bodyPrefix)) return 'spend-limit';
-  return null;
+  const kind = classifyProviderRejection({ reason: 'http-status', httpStatus: status,
+    ...(bodyPrefix ? { body: { data: Buffer.from(bodyPrefix, 'utf8').toString('base64') } } : {}) });
+  if (kind === 'rate-limit' && (bodyPrefix === null || !namesRateLimit(bodyPrefix))) return 'limit-reached';
+  return kind;
 }
 
 async function readPrefix(response: Response): Promise<string | null> {

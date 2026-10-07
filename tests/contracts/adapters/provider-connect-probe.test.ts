@@ -34,16 +34,22 @@ describe('provider connection check', () => {
 
   it('maps every refusal to its typed kind and never returns the key or the body', async () => {
     const cases: [number, string, string][] = [[401, '', 'credential-rejected'], [403, '', 'access-denied'], [402, '', 'spend-limit'],
-      [429, '{"error":{"type":"rate_limit_error","error_code":"enforced_spend_limit_reached"}}', 'spend-limit'],
-      [429, '{"error":{"code":"insufficient_quota"}}', 'spend-limit'], [429, '{"error":{"type":"rate_limit_error"}}', 'rate-limit'], [429, '', 'limit-reached'],
-      [400, '{"error":{"message":"You have reached your specified workspace API usage limits"}}', 'spend-limit'], [400, '{}', 'unexpected'],
+      [429, '{"error":{"type":"rate_limit_error","details":{"error_code":"enforced_spend_limit_reached"}}}', 'spend-limit'],
+      [429, '{"error":{"code":"insufficient_quota"}}', 'spend-limit'], [429, '{"error":{"type":"rate_limit_error"}}', 'rate-limit'], [429, '{"error":{"code":"rate_limit_exceeded"}}', 'rate-limit'], [429, '', 'limit-reached'],
+      // Astra 2026-10-08: a 429 whose body is unreadable or names no known limit is an unknown limit, never guessed as a rate limit.
+      [429, 'not json', 'limit-reached'], [429, '{"error":{"type":"overloaded"}}', 'limit-reached'],
+      [400, '{"error":{"type":"invalid_request_error","message":"You have reached your specified workspace API usage limits until 2026-11-01"}}', 'spend-limit'], [400, '{}', 'unexpected'],
       [302, '', 'unexpected'], [404, '', 'unexpected'], [503, '', 'unreachable']];
     for (const [status, body, outcome] of cases) {
-      const result = await probeProviderConnection({ kind: 'openai-compatible', endpoint: null, key: CANARY }, { fetch: fakeFetch(status, `${body}${CANARY}`.slice(0, body ? undefined : 0)) });
+      const result = await probeProviderConnection({ kind: 'openai-compatible', endpoint: null, key: CANARY }, { fetch: fakeFetch(status, body) });
       expect(result).toEqual({ outcome, httpStatus: status, key: 'unverified' });
       expect(JSON.stringify(result)).not.toContain(CANARY);
     }
     expect(providerProbeRejection(429, null)).toBe('limit-reached');
+    // A body that echoes the key is read for its error code only; nothing of it comes back.
+    const echoed = await probeProviderConnection({ kind: 'openai-compatible', endpoint: null, key: CANARY },
+      { fetch: fakeFetch(429, `{"error":{"type":"rate_limit_error","message":"key ${CANARY} is rate limited"}}`) });
+    expect(echoed).toEqual({ outcome: 'rate-limit', httpStatus: 429, key: 'unverified' }); expect(JSON.stringify(echoed)).not.toContain(CANARY);
   });
 
   it('a network failure or a timeout is unreachable without any detail; a caller abort is the caller\'s', async () => {

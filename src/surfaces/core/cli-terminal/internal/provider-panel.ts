@@ -38,6 +38,17 @@ const credentialRefs = (config: Record<string, unknown>, scopeId: string): reado
   });
 };
 
+/**
+ * Who can read a stored key, in the same words `doctor` uses for each Core backend (SECRET-AT-REST 1c); another backend (or one not read yet)
+ * gets the general note, which the secret lane may replace (`tui.panel.provider.transparency`).
+ */
+function custodyText(backend: string, locale: Locale): string {
+  if (backend === 'core.secret-store.env@1') return t('doctor.secretStore.custody.env', {}, locale).trim();
+  if (backend === 'core.secret-store.file@1') return t('doctor.secretStore.custody.file', {}, locale).trim();
+  if (backend === 'core.secret-store.encrypted-file@1') return t('doctor.secretStore.custody.encryptedFile', {}, locale).trim();
+  return t('tui.panel.provider.transparency', { backend }, locale);
+}
+
 type Host = Pick<TerminalLaunchContext, 'providerConnect' | 'listSecretNames' | 'setSecret' | 'deleteSecret'>;
 /**
  * The terminal `/provider` window's port (T4 PROVIDER-CONNECT). It lists the kinds the host's adapter data names, the key name each is kept
@@ -120,7 +131,7 @@ export function providerPanelPort(root: string, scopeId: string, host: Host & { 
         ...(using > 0 ? [t('tui.provider.disconnectedBound', { count: using, name }, locale)] : [])];
     },
     get transparency(): readonly PanelLine[] {
-      return [{ label: t('tui.provider.field.storage', {}, locale), text: t('tui.panel.provider.transparency', { backend }, locale), tone: 'muted' }];
+      return [{ label: t('tui.provider.field.storage', {}, locale), text: custodyText(backend, locale), tone: 'muted' }];
     },
   };
 }

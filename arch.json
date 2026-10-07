@@ -1487,7 +1487,9 @@
       "plan": "PROVIDERS"
     },
     "src/adapters/core/provider-connect": {
-      "dependencies": [],
+      "dependencies": [
+        "src/engine/core/agent-turn"
+      ],
       "plan": "PROVIDERS"
     },
     "src/adapters/core/provider-http-json": {
