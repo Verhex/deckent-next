@@ -102,6 +102,13 @@ export function configFieldView(snapshot: ConfigSnapshot, keyPath: string): Conf
     description: (MESSAGE_REGISTRY.catalogs[resolveLocale(undefined, snapshot.env, snapshot.effective.language)] as Readonly<Record<string, string>>)[definition.descriptionKey] ?? definition.descriptionKey, schema: schemaDisplayView(jsonSchemaView(schema, schemaKey), path, secretPaths),
     binding: definition.binding, apply: definition.apply, redacted: value === '[REDACTED]' };
 }
+/** A card's bounded display copy of a value at `keyPath` (T3 L2): redacted like every field view, JSON text, cut with "…" past `max`. */
+export function configDisplayText(snapshot: ConfigSnapshot, keyPath: string, value: unknown, max: number): string {
+  const provenance = snapshot.effective['secretPaths'];
+  const secretPaths = new Set<string>(Array.isArray(provenance) ? provenance.filter((item): item is string => typeof item === 'string') : []);
+  const text = JSON.stringify(redact(value, configPath(keyPath), secretPaths) ?? null);
+  return text.length > max ? `${text.slice(0, max - 1)}…` : text;
+}
 export function allConfigKeys(snapshot: ConfigSnapshot): string[] {
   const keys: string[] = [];
   function visit(schema: z.ZodTypeAny, path: string[], value: unknown) {

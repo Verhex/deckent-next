@@ -117,6 +117,8 @@
   "disposition.remediation.provider_adapter_unavailable": "Restore provider authentication or access before retrying this task.",
   "error.ACTOR_UNVERIFIED": "Principal assurance is insufficient.",
   "error.CLI_USAGE": "Invalid {flag} for {command}.\n{usage}",
+  "error.CONFIG_APPROVAL_STALE": "The configuration changed after this change was previewed; nothing was written. Run the change again to preview it against the current configuration (a new approval may be needed).",
+  "error.CONFIG_APPROVAL_REQUIRED": "Policy now asks for approval of this configuration change; nothing was written. Run the change again to request approval.",
   "error.CONFIG_CONCURRENT_REVISION_HOLD": "Configuration changed concurrently; retry after the writer finishes.",
   "error.CONFIG_KEY_UNKNOWN": "Unknown configuration key: {key}.",
   "error.CONFIG_BACKUP_PRUNE_FAILED": "Configuration was saved, but backup cleanup failed. Inspect the saved document before retrying.",

@@ -33,8 +33,10 @@ export const MODEL_ALLOCATION_LEDGER_VERSION = 19;
 export const PROVIDER_SPEND_LEDGER_VERSION = 21;
 export const PROVIDER_SPEND_AUDIT_LEDGER_VERSION = 22;
 // Current durable contract; older writers must not reopen newer records.
-export const CURRENT_LEDGER_VERSION = 47;
+export const CURRENT_LEDGER_VERSION = 48;
 export const POOL_CAPACITY_LEDGER_VERSION = 47;
+// T3 L2 CONFIG-APPROVAL: the `config-change` approval subject (approvals CHECK widened, one current row per (scope, digest)).
+export const CONFIG_CHANGE_APPROVAL_LEDGER_VERSION = 48;
 export const SCOPE_REGISTRY_LEDGER_VERSION = 39;
 export const OPERATION_APPROVAL_LEDGER_VERSION = 40;
 export const AUDIT_EVENT_LEDGER_VERSION = 41;
@@ -54,6 +56,20 @@ const migrations: Readonly<Record<number, string>> = Object.freeze({
   // 44 (execution pool hold, K5): `migrateExecutionPoolHolds` in migration-v44.ts, dispatched below like v43.
   // 43 (ledger model catalog, WORKER-CURRENCY-1): `migrateModelCatalog` in migration-v43.ts, dispatched below like v41.
   // 41 (audit events, general Core audit port): `migrateAuditEvents` in migration-v41.ts, dispatched below like v39.
+  // T3 L2 CONFIG-APPROVAL: a policy `require-approval` on a config write opens a `config-change` approval. As in v40, SQLite cannot widen a
+  // CHECK in place: `approvals` is rebuilt row for row (every task, tool-call and operation row and its sealed snapshot unchanged), the v40
+  // indexes are recreated and config changes get their own (scope, digest) index.
+  48: `CREATE TABLE approvals_v48(scope_id TEXT NOT NULL,approval_id TEXT NOT NULL,subject_kind TEXT NOT NULL CHECK(subject_kind IN('task','agent-tool-call','operation','config-change')),
+    run_id TEXT,task_id TEXT,action_digest TEXT NOT NULL,revision INTEGER NOT NULL,snapshot TEXT NOT NULL,current INTEGER NOT NULL DEFAULT 1,
+    PRIMARY KEY(scope_id,approval_id),CHECK((subject_kind='task')=(run_id IS NOT NULL AND task_id IS NOT NULL)));
+    INSERT INTO approvals_v48(scope_id,approval_id,subject_kind,run_id,task_id,action_digest,revision,snapshot,current)
+      SELECT scope_id,approval_id,subject_kind,run_id,task_id,action_digest,revision,snapshot,current FROM approvals;
+    DROP TABLE approvals; ALTER TABLE approvals_v48 RENAME TO approvals;
+    CREATE UNIQUE INDEX approvals_current_action ON approvals(scope_id,run_id,task_id,action_digest) WHERE current=1 AND subject_kind='task';
+    CREATE UNIQUE INDEX approvals_current_tool_call ON approvals(scope_id,action_digest) WHERE current=1 AND subject_kind='agent-tool-call';
+    CREATE UNIQUE INDEX approvals_current_operation ON approvals(scope_id,action_digest) WHERE current=1 AND subject_kind='operation';
+    CREATE UNIQUE INDEX approvals_current_config_change ON approvals(scope_id,action_digest) WHERE current=1 AND subject_kind='config-change';
+    PRAGMA user_version=48;`,
   // C12 G1: catalog operation approvals. SQLite cannot widen a CHECK in place, so `approvals` is rebuilt row for row (every task and
   // tool-call row and its sealed snapshot unchanged), the v38 indexes are recreated and operations get their own (scope, digest) index.
   40: `CREATE TABLE approvals_v40(scope_id TEXT NOT NULL,approval_id TEXT NOT NULL,subject_kind TEXT NOT NULL CHECK(subject_kind IN('task','agent-tool-call','operation')),

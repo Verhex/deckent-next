@@ -11,6 +11,8 @@ export interface ApprovalStore {
   findToolCall(scopeId: string, actionDigest: string): ApprovalRecord | null;
   /** The current approval of one catalog operation command (C12 G1): its action digest binds scope, requester and the exact subject. */
   findOperation(scopeId: string, actionDigest: string): ApprovalRecord | null;
+  /** The current approval of one config change (T3 L2): its action digest binds scope, requester, command, layer, key, value and previewed digest. */
+  findConfigChange(scopeId: string, actionDigest: string): ApprovalRecord | null;
   /** One page after `afterId`; `excludeSubjects` keeps the page selection itself to visible subject kinds (a released client's page never
    * comes back empty because of a record it could not parse, and its cursor always names a record it received). */
   list(scopeId: string, afterId: string | null, limit: number, excludeSubjects?: readonly ApprovalSubjectKind[]): readonly ApprovalRecord[];

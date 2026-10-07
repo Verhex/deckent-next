@@ -1,6 +1,7 @@
 /**
- * Previous-schema fixtures. `DOWNGRADE_TO_PREVIOUS_LEDGER_SQL` turns a current ledger into the exact previous schema (v46: v47
- * only adds capacity override and receipt tables). V45 additionally drops the two v46 decision tables. `DOWNGRADE_TO_V44_LEDGER_SQL` also reverts
+ * Previous-schema fixtures. `DOWNGRADE_TO_PREVIOUS_LEDGER_SQL` turns a current ledger into the exact previous schema (v47: v48 only
+ * widened the approvals subject CHECK to `config-change`, so the rebuild back to three values is exact — a config-change row makes it fail, as it
+ * must). `DOWNGRADE_TO_V46_LEDGER_SQL` also drops the v47 capacity override and receipt tables. V45 additionally drops the two v46 decision tables. `DOWNGRADE_TO_V44_LEDGER_SQL` also reverts
  * the v45 (A1/A3) Run snapshot v4 -> v3 change (exact for ledgers whose Runs were never parked/closed).
  * `DOWNGRADE_TO_V43_LEDGER_SQL` also drops the two execution pool hold tables (v43 -> v44 only
  * added the two execution pool hold tables, so dropping them is exact); `DOWNGRADE_TO_V42_LEDGER_SQL` also drops the four v43 model
@@ -14,9 +15,17 @@
  * `DOWNGRADE_TO_V35_LEDGER_SQL` goes one step further and reverses the v36 allocation rebuild (max_calls NOT NULL again, the
  * checkpoint child rebuilt against it).
  */
-export const PREVIOUS_LEDGER_VERSION = 46;
-export const DOWNGRADE_TO_PREVIOUS_LEDGER_SQL = `DROP TABLE execution_pool_capacity_receipts; DROP TABLE execution_pool_capacities; PRAGMA user_version=46;`;
-export const DOWNGRADE_TO_V45_LEDGER_SQL = `${DOWNGRADE_TO_PREVIOUS_LEDGER_SQL} DROP TABLE decision_command_receipts; DROP TABLE decision_cases; PRAGMA user_version=45;`;
+export const PREVIOUS_LEDGER_VERSION = 47;
+export const DOWNGRADE_TO_PREVIOUS_LEDGER_SQL = `CREATE TABLE approvals_v47(scope_id TEXT NOT NULL,approval_id TEXT NOT NULL,subject_kind TEXT NOT NULL CHECK(subject_kind IN('task','agent-tool-call','operation')),
+    run_id TEXT,task_id TEXT,action_digest TEXT NOT NULL,revision INTEGER NOT NULL,snapshot TEXT NOT NULL,current INTEGER NOT NULL DEFAULT 1,
+    PRIMARY KEY(scope_id,approval_id),CHECK((subject_kind='task')=(run_id IS NOT NULL AND task_id IS NOT NULL)));
+  INSERT INTO approvals_v47 SELECT scope_id,approval_id,subject_kind,run_id,task_id,action_digest,revision,snapshot,current FROM approvals;
+  DROP TABLE approvals; ALTER TABLE approvals_v47 RENAME TO approvals;
+  CREATE UNIQUE INDEX approvals_current_action ON approvals(scope_id,run_id,task_id,action_digest) WHERE current=1 AND subject_kind='task';
+  CREATE UNIQUE INDEX approvals_current_tool_call ON approvals(scope_id,action_digest) WHERE current=1 AND subject_kind='agent-tool-call';
+  CREATE UNIQUE INDEX approvals_current_operation ON approvals(scope_id,action_digest) WHERE current=1 AND subject_kind='operation'; PRAGMA user_version=47;`;
+export const DOWNGRADE_TO_V46_LEDGER_SQL = `${DOWNGRADE_TO_PREVIOUS_LEDGER_SQL} DROP TABLE execution_pool_capacity_receipts; DROP TABLE execution_pool_capacities; PRAGMA user_version=46;`;
+export const DOWNGRADE_TO_V45_LEDGER_SQL = `${DOWNGRADE_TO_V46_LEDGER_SQL} DROP TABLE decision_command_receipts; DROP TABLE decision_cases; PRAGMA user_version=45;`;
 export const DOWNGRADE_TO_V44_LEDGER_SQL = `${DOWNGRADE_TO_V45_LEDGER_SQL} UPDATE runs SET snapshot=json_remove(json_set(snapshot,'$.schemaVersion',3),'$.state');
   UPDATE run_receipts SET snapshot=json_remove(json_set(snapshot,'$.schemaVersion',3),'$.state'); PRAGMA user_version=44;`;
 export const DOWNGRADE_TO_V43_LEDGER_SQL = `${DOWNGRADE_TO_V44_LEDGER_SQL} DROP TABLE execution_pool_hold_receipts; DROP TABLE execution_pool_holds; PRAGMA user_version=43;`;

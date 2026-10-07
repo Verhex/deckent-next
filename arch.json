@@ -2202,7 +2202,10 @@
         "src/domain/core/principal",
         "src/domain/core/primitives",
         "src/domain/core/policy",
-        "src/platform/core/errors"
+        "src/platform/core/errors",
+        "src/domain/core/approval",
+        "src/domain/core/command",
+        "src/platform/core/integrity"
       ],
       "plan": "CONFIG-SURFACE"
     },
@@ -2213,7 +2216,12 @@
         "src/adapters/core/config-file",
         "src/platform/core/config",
         "src/composition/core/scoped-request",
-        "src/composition/core/root"
+        "src/composition/core/root",
+        "src/engine/core/approval",
+        "src/adapters/core/local-keyring",
+        "src/adapters/core/approval-store",
+        "src/platform/core/i18n",
+        "src/platform/core/clock"
       ],
       "plan": "CONFIG-SURFACE"
     },

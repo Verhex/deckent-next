@@ -55,8 +55,10 @@ async function fixture() {
 // (every non-lifecycle operation is current-version only, socket.test.ts); the v14 view below is kept as the engine contract.
 it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket] delivers operation-subject approvals to a v15 runtime client in the record shape the terminal parses, as the in-process SDK sees them (C12 G4)', async () => {
   expect(RUNTIME_SERVICE_SCHEMA_VERSION).toBe(21);
-  expect(approvalSubjectsHiddenFromProtocol(14)).toEqual(['operation']);
-  expect(approvalSubjectsHiddenFromProtocol(15)).toEqual([]);
+  // T3 L2: config-change records reach clients from v22 (the integration raises the protocol to it); below, they are hidden like operations below v15.
+  expect(approvalSubjectsHiddenFromProtocol(14)).toEqual(['operation', 'config-change']);
+  expect(approvalSubjectsHiddenFromProtocol(15)).toEqual(['config-change']);
+  expect(approvalSubjectsHiddenFromProtocol(22)).toEqual([]);
   const f = await fixture();
   const service = await startTestRuntimeService(f.project, f.env);
   try {
