@@ -13,5 +13,6 @@ export { expandMcpEntry, isMcpHttpEntry, mcpEndpointRefusal, mcpEntryDisplay, MC
 export { findMcpTrust, MCP_TRUST_FILE, readMcpTrust, updateMcpTrust, type McpTrustRecord, type McpTrustState } from './internal/trust.js';
 export { loadMcpRegistry, mcpClientSettings, mcpGlobalRoot, mcpSendAuthority, mcpTrustContext, mcpTrustDirectory, openTurnMcp, runMcpCommand, type McpCommandContext, type McpCommandRequest,
   type McpRegistryContext, type McpRegistryView, type McpServerStatus, type McpServerView } from './internal/manage.js';
-export { decideMcpTrust, describeMcpTrustCard, MCP_TRUST_CARD_TOOL, mcpTrustApprovalAsker, mcpTrustAuditWriter, recordMcpTrust, type McpTrustAsk, type McpTrustAudit, type McpTrustCard, type McpTrustChange, type McpTrustContext,
+export { planMcpProposal, PROPOSE_MCP_SERVER_TOOL, PROPOSE_MCP_SERVER_TOOL_SPEC, type McpProposal, type McpProposalPlan } from './internal/propose.js';
+export { decideMcpTrust, describeMcpTrustCard, mcpCardApprovalAsker, MCP_TRUST_CARD_TOOL, mcpTrustApprovalAsker, mcpTrustAuditWriter, recordMcpTrust, type McpCardAskerInput, type McpTrustAsk, type McpTrustAudit, type McpTrustCard, type McpTrustChange, type McpTrustContext,
   type McpTrustServer } from './internal/approve.js';

@@ -163,14 +163,8 @@ export function describeMcpTrustCard(card: McpTrustCard): string {
   return lines.join('\n');
 }
 
-/** The pseudo tool of a first-use trust card on the turn's approval path (no approval schema change: an agent-tool-call subject named `mcp_trust`). */
-export const MCP_TRUST_CARD_TOOL = 'mcp_trust';
-/**
- * The turn's first-use trust question (owner 2026-09-28): each card is one single-use approval of the turn (C12 `agent-tool-call` subject with the
- * reserved tool `mcp_trust`, resource `mcp:<server>`, digest over the card), shown on the terminal's approval card and answered there. A card the
- * owner does not answer in time counts as no answer (nothing is trusted, nothing recorded).
- */
-export function mcpTrustApprovalAsker(input: { readonly ledgerPath: () => Promise<string>; readonly sqlite: Parameters<typeof openSqliteApprovalStore>[1];
+/** The input of a turn's MCP card asker (trust cards, model proposals): the turn's approval journal, integrity, clock and stream. */
+export interface McpCardAskerInput { readonly ledgerPath: () => Promise<string>; readonly sqlite: Parameters<typeof openSqliteApprovalStore>[1];
   readonly integrity: () => ReturnType<typeof openLocalIntegrityAuthority>; readonly clock: TrustedClock; readonly scopeId: string; readonly turnId: string;
   readonly requester: { readonly id: string; readonly issuer: string; readonly subject: string }; readonly policyRevision: string; readonly ttlMs: number;
   /** B1 (Sol 2237 R2b): the card facts from the same request-time policy snapshot as `policyRevision`; sealed in the record, the event repeats them. */
@@ -178,22 +172,29 @@ export function mcpTrustApprovalAsker(input: { readonly ledgerPath: () => Promis
   readonly signal: AbortSignal; readonly emit: (event: { readonly kind: 'approval.requested'; readonly callId: string; readonly approvalId: string; readonly revision: number;
     readonly summary: string; readonly preview: string; readonly expiresAt: number; readonly risk?: string | null; readonly requiredAssurance?: string }
     | { readonly kind: 'approval.settled'; readonly callId: string; readonly approvalId: string;
-    readonly outcome: AgentToolApprovalOutcome | 'unsettled' }) => void }): McpTrustAsk {
+    readonly outcome: AgentToolApprovalOutcome | 'unsettled' }) => void }
+/**
+ * One MCP card of a turn as a single-use approval (C12 `agent-tool-call` subject with a reserved tool name, resource `mcp:<server>`, digest over the
+ * card's text), shown on the terminal's approval card and answered there. No answer in time (or a turn that ended) is null: nothing is recorded.
+ * Nothing here consults a permission mode: the card is always asked (a trust decision or a model's proposal is never lowered).
+ */
+export function mcpCardApprovalAsker(input: McpCardAskerInput, indexBase: number) {
   let asked = 0;
-  return async (card: McpTrustCard): Promise<boolean | null> => {
+  return async (card: { readonly tool: string; readonly name: string; readonly phase: string; readonly text: string }): Promise<boolean | null> => {
     const journal = openSqliteApprovalStore(await input.ledgerPath(), input.sqlite);
-    const text = describeMcpTrustCard(card), argsDigest = createHash('sha256').update(`mcp-trust-card:1\0${text}`).digest('hex'), callId = `mcp-trust-${card.name}-${card.phase}`;
+    // `mcp_trust` keeps its digest and call id scheme (`mcp-trust-card:1`, `mcp-trust-<server>-<phase>`); another card tool gets its own.
+    const kind = card.tool.replace(/_/gu, '-'), argsDigest = createHash('sha256').update(`${kind}-card:1\0${card.text}`).digest('hex'), callId = `${kind}-${card.name}-${card.phase}`;
     let requested: string | null = null, outcome: AgentToolApprovalOutcome | 'unsettled' = 'unsettled';
     try {
       const integrity = await input.integrity(), started = input.clock.sample();
       const record = requestAgentToolApproval(journal.store, integrity, { scopeId: input.scopeId, requester: input.requester, policyRevision: input.policyRevision,
-        subject: { kind: 'agent-tool-call', turnId: input.turnId, round: 1, index: 1_000_000 + asked++, tool: MCP_TRUST_CARD_TOOL, toolVersion: 1, resource: `mcp:${card.name}`, argsDigest },
-        summary: `${MCP_TRUST_CARD_TOOL} · mcp:${card.name} · ${card.phase}`, createdAt: started.wallMs, expiresAt: started.wallMs + input.ttlMs, facts: input.facts });
+        subject: { kind: 'agent-tool-call', turnId: input.turnId, round: 1, index: indexBase + asked++, tool: card.tool, toolVersion: 1, resource: `mcp:${card.name}`, argsDigest },
+        summary: `${card.tool} · mcp:${card.name} · ${card.phase}`, createdAt: started.wallMs, expiresAt: started.wallMs + input.ttlMs, facts: input.facts });
       requested = record.request.approvalId;
       // The event's facts come from the sealed record itself (an existing record keeps its own), so the card and the record never disagree.
       const sealed = record.request.schemaVersion === 3 ? record.request.facts : null;
       input.emit({ kind: 'approval.requested', callId, approvalId: requested, revision: record.revision, summary: record.request.summary,
-        preview: boundApprovalPreview(text), expiresAt: record.request.expiresAt, ...(sealed ? { risk: sealed.risk?.source === 'cell' ? sealed.risk.cell : null,
+        preview: boundApprovalPreview(card.text), expiresAt: record.request.expiresAt, ...(sealed ? { risk: sealed.risk?.source === 'cell' ? sealed.risk.cell : null,
           requiredAssurance: sealed.requiredAssurance } : {}) });
       outcome = await awaitAgentToolApproval(journal.store, integrity, record, input.clock, input.signal, 250, started);
       return outcome === 'allow' ? true : outcome === 'deny' ? false : null;
@@ -202,4 +203,11 @@ export function mcpTrustApprovalAsker(input: { readonly ledgerPath: () => Promis
       if (requested) input.emit({ kind: 'approval.settled', callId, approvalId: requested, outcome });
     }
   };
+}
+/** The pseudo tool of a first-use trust card on the turn's approval path (no approval schema change: an agent-tool-call subject named `mcp_trust`). */
+export const MCP_TRUST_CARD_TOOL = 'mcp_trust';
+/** The turn's first-use trust question (owner 2026-09-28): each card one single-use approval of the turn (`mcpCardApprovalAsker`, tool `mcp_trust`). */
+export function mcpTrustApprovalAsker(input: McpCardAskerInput): McpTrustAsk {
+  const ask = mcpCardApprovalAsker(input, 1_000_000);
+  return card => ask({ tool: MCP_TRUST_CARD_TOOL, name: card.name, phase: card.phase, text: describeMcpTrustCard(card) });
 }
