@@ -22,6 +22,8 @@ export const WORKLINE_SLASH_COMMANDS: readonly SlashCommand[] = Object.freeze([
   { name: 'watch-workers', group: 'work', descriptionKey: 'terminal.slash.watchWorkers' },
   { name: 'watch-runs', group: 'work', descriptionKey: 'terminal.slash.watchRuns' },
   { name: 'watch-stop', group: 'work', descriptionKey: 'terminal.slash.watchStop' },
+  // T3 L5: one window over the observed workers and runs (read-only; stopping a Run stays `/cancel`'s confirmation window).
+  { name: 'tasks', group: 'work', descriptionKey: 'terminal.slash.tasks' },
   { name: 'run', group: 'work', descriptionKey: 'terminal.slash.run', argumentKey: 'terminal.slash.runArgument' },
   { name: 'runs', group: 'work', descriptionKey: 'terminal.slash.runs' },
   { name: 'transcript', group: 'work', descriptionKey: 'terminal.slash.transcript', argumentKey: 'terminal.slash.transcriptArgument' },

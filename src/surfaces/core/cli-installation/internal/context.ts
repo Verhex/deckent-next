@@ -1,7 +1,7 @@
 import type { InstallationIdentityChoice, InstallationIdentityResolution } from '#domain/index.js';
 import type { ConfigLoadOptions, Locale, OutputSink } from '#platform/index.js';
 import type { InstallationPreviewHandler, InstallationInspectionHandler, InstallationApplyHandler, InstallationResumeHandler,
-  PolicyTemplatePreviewHandler, PolicyTemplateApplyHandler } from './init.js';
+  PolicyTemplatePreviewHandler, PolicyTemplateApplyHandler, PolicyTemplateUpgradeHandler } from './init.js';
 
 /** Installation commands receive only their local bootstrap ports. */
 export interface InstallationCommandContext {
@@ -14,4 +14,5 @@ export interface InstallationCommandContext {
   resumeInstallation?: InstallationResumeHandler;
   previewPolicyTemplateInstallation?: PolicyTemplatePreviewHandler;
   applyPolicyTemplateInstallation?: PolicyTemplateApplyHandler;
+  upgradePolicyTemplateInstallation?: PolicyTemplateUpgradeHandler;
 }

@@ -32,7 +32,7 @@ revision: 0, status: 'pending', decision: null }, integrity);
 
 it('upgrades a real v39 ledger through v40 (C12 G1) to the current version: backup at v39 first, task and tool-call approvals byte for byte with verifying seals, then operation approvals are admitted', async () => {
   const path = await ledger(), backups = join(path, '..', 'backups'); await mkdir(backups, { mode: 0o700 });
-  expect(CURRENT_LEDGER_VERSION).toBe(47); expect(PREVIOUS_LEDGER_VERSION).toBe(46);
+  expect(CURRENT_LEDGER_VERSION).toBe(48); expect(PREVIOUS_LEDGER_VERSION).toBe(47);
   const seeded = openSqliteApprovalStore(path, options);
   const task = requestTaskApproval(seeded.store, integrity, { scopeId: 'scope', runId: 'run', taskId: 'a', requester, actionDigest: digest('task-a'),
     policyRevision: 'p1', summary: 'a', createdAt: 1_000, expiresAt: 61_000 });
@@ -57,7 +57,7 @@ it('upgrades a real v39 ledger through v40 (C12 G1) to the current version: back
       expect(check.prepare('PRAGMA user_version').get()).toEqual({ user_version: CURRENT_LEDGER_VERSION });
       expect(check.prepare('SELECT * FROM approvals ORDER BY approval_id').all()).toEqual(before);
       expect(check.prepare("SELECT name FROM sqlite_schema WHERE type='index' AND tbl_name='approvals' ORDER BY name").all().map(row => row.name))
-        .toEqual(['approvals_current_action', 'approvals_current_operation', 'approvals_current_tool_call', 'sqlite_autoindex_approvals_1']);
+        .toEqual(['approvals_current_action', 'approvals_current_config_change', 'approvals_current_operation', 'approvals_current_tool_call', 'sqlite_autoindex_approvals_1']);
     } finally { check.close(); }
     expect(verifyApproval(upgraded.store.load('scope', task.request.approvalId), integrity)).toEqual(task);
     expect(verifyApproval(upgraded.store.findToolCall('scope', call.request.actionDigest), integrity)).toEqual(call);

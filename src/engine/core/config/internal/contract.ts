@@ -1,6 +1,6 @@
 import type { z } from 'zod';
 import { DeckentError, ErrorRegistry } from '#platform/index.js';
-import type { AuditEvent, VerifiedPrincipal } from '#domain/index.js';
+import type { ApprovalSubject, AuditEvent, VerifiedPrincipal } from '#domain/index.js';
 import type { DeckentConfig } from '#platform/index.js';
 import type { Environment } from '#platform/index.js';
 export type ConfigLayer = 'project' | 'global';
@@ -29,9 +29,37 @@ export interface ConfigDocumentPort {
   publish(input: ConfigWriteInput, plan: (snapshot: ConfigSnapshot) => Promise<ConfigPlan>): Promise<ConfigWriteResult>;
 }
 export interface ConfigAuthorityPort {
+  /** Allow-only authorization (`require-approval` is `POLICY_APPROVAL_UNSUPPORTED`): `set`/`unset` and every caller without approvals. */
   authorize(input: ConfigWriteInput): Promise<string>;
   audit(event: AuditEvent): Promise<void>;
+  /** T3 L2: the approval-aware write path of `submit`; absent, `submit` behaves as `set`/`unset`. */
+  readonly approvals?: ConfigApprovalPort;
 }
+/** The policy decision of one config write (`deny` is thrown, never returned); `ruleId` names the rule that decided. */
+export interface ConfigAuthorization { readonly decision: 'allow' | 'require-approval'; readonly revision: string; readonly ruleId: string | null }
+/** A decision read for display (T3 L4 `/config` locks): `deny` included; writes nothing and grants nothing — `submit` decides again. */
+export type ConfigPermissionDecision = Readonly<{ decision: 'allow' | 'require-approval' | 'deny'; ruleId: string | null }>;
+/** One key on one layer as the `/config` panel shows it: what policy says now, or `refused` (a section no write reaches, e.g. `secrets`). */
+export type ConfigWritePermission = Readonly<{ keyPath: string; layer: ConfigLayer; decision: ConfigPermissionDecision['decision'] | 'refused'; ruleId: string | null }>;
+export type ConfigChangeSubject = Extract<ApprovalSubject, { kind: 'config-change' }>;
+export type ConfigApprovalAdmission =
+  | { readonly pending: { readonly approvalId: string; readonly revision: number; readonly expiresAt: number; readonly summary: string } }
+  | { readonly approved: { readonly approvalId: string; readonly actionDigest: string } };
+/**
+ * T3 L2 CONFIG-APPROVAL (Jev 9181d2be): the policy decision under the current policy and the approval broker of exactly one change. Trusted
+ * composition binds the principal's policy, the approval store and the card's words (the requester's language); no surface or model supplies them.
+ */
+export interface ConfigApprovalPort {
+  evaluate(input: ConfigWriteInput): Promise<ConfigAuthorization>;
+  /** T3 L4: the same decision for many writes of one scope under one policy read (display only: `deny` is returned, not thrown). */
+  evaluateMany?(inputs: readonly ConfigWriteInput[]): Promise<readonly ConfigPermissionDecision[]>;
+  admit(input: ConfigWriteInput, subject: ConfigChangeSubject, authorization: ConfigAuthorization): Promise<ConfigApprovalAdmission>;
+}
+/** What `submit` did: applied (with the approval it consumed, if one was needed) or nothing written and an approval pending. */
+export type ConfigChangeOutcome =
+  | { readonly status: 'applied'; readonly result: ConfigWriteResult; readonly approvalId: string | null }
+  | { readonly status: 'approval-pending'; readonly commandId: string; readonly expect: string | null; readonly keyPath: string; readonly layer: ConfigLayer;
+    readonly approval: { readonly approvalId: string; readonly revision: number; readonly expiresAt: number; readonly summary: string } };
 export class ConfigApplicationError extends DeckentError {
   constructor(code: string) {
     const error = ErrorRegistry.createError(code);

@@ -19,6 +19,10 @@ export const policyResources = Object.freeze({
   providerSpendAccount: Object.freeze({ kind: 'provider-spend-account' as const, actions: Object.freeze(['inspect', 'audit'] as const) }),
   // Terminal agent tools (T-L3): the resource id is the tool name; every call of the loop is authorized with action invoke.
   agentTool: Object.freeze({ kind: 'agent-tool' as const, actions: Object.freeze(['invoke'] as const) }),
+  // An MCP server (owner 2026-10-07, Jev 04f75210): the resource id is the server's registry name and `invoke` covers exactly that server's pinned
+  // tools (trust pins them; an unpinned or drifted tool is never offered). It replaces the `agent-tool` side for MCP tools; the trust approval
+  // writes it per server inside the approver's own authority (I2), and the first-run template's owner holds it for every server.
+  mcpServer: Object.freeze({ kind: 'mcp-server' as const, actions: Object.freeze(['invoke'] as const) }),
   // A person setting their own terminal permission mode (T-L4 slice 4c): the resource id is the target mode; the rule never names
   // whose entry — only the caller's own entry is ever written. The mode itself creates no authority.
   permissionMode: Object.freeze({ kind: 'permission-mode' as const, actions: Object.freeze(['set'] as const) }),

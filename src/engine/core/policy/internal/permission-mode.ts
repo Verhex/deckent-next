@@ -1,5 +1,6 @@
 import { AUDIT_EVENT_SCHEMA_VERSION, AUDIT_TRACKED_PATHS_MAX, evaluatePolicy, fullAccessGrant, identitySchema, isStandingGrantId, modeEligibleApproval, policyResources, policySchema, principalPermissionMode,
   standingCell, STANDING_GRANT_ACTION, STANDING_GRANT_KIND, type AuditEvent, type PermissionMode, type ShellRealmContainment, type VerifiedPrincipal } from '#domain/index.js';
+import { agentToolPolicyResource } from './agent-tool.js';
 
 /**
  * What an agent tool call is, as far as permission is concerned (T-L4 slice 4a). Classification is the caller's (the plan of the
@@ -54,6 +55,8 @@ export interface AgentToolCallRequest {
   readonly tool: { readonly name: string };
   /** The Core operation the call's effect is (`workspace.file.write`, `host.shell.run`, `network.fetch`, `mcp.tool.call`), or null for a read tool. */
   readonly operation: { readonly id: string } | null;
+  /** An MCP tool only: its server's registry name. The `mcp-server` rule of that server replaces the `agent-tool` side (owner 2026-10-07). */
+  readonly mcpServer?: string;
   readonly cell: AgentToolCallCell;
   /** A shell call only: where its plan runs (the realm's containment) and whether the command is contained (`classifyShellContainment`). */
   readonly shell?: { readonly realm: ShellRealmContainment; readonly contained: boolean };
@@ -109,10 +112,13 @@ export interface AgentToolCallDecision {
  */
 export function decideAgentToolCall(policy: unknown, request: AgentToolCallRequest): AgentToolCallDecision {
   const ask = (kind: string, id: string, action: string) => ({ principal: request.principal, scopeId: request.scopeId, action, resource: { kind, id } });
-  const sides = [ask(policyResources.agentTool.kind, request.tool.name, 'invoke'),
-    ...(request.operation ? [ask(policyResources.operation.kind, request.operation.id, 'execute')] : [])];
+  const tool = agentToolPolicyResource(request.tool, request.mcpServer);
+  const sides = [ask(tool.kind, tool.id, 'invoke'), ...(request.operation ? [ask(policyResources.operation.kind, request.operation.id, 'execute')] : [])];
   const decided = sides.map(side => ({ side, decision: evaluatePolicy(policy, side) }));
   const revision = decided[0]!.decision.revision;
+  // An MCP tool's own `agent-tool` rule never allows it any more, but an explicit company deny of that wire name still denies.
+  if (request.mcpServer !== undefined && evaluatePolicy(policy, ask(policyResources.agentTool.kind, request.tool.name, 'invoke')).reason === 'DENIED')
+    return Object.freeze({ decision: 'deny' as const, revision, relaxation: null });
   const done = (decision: AgentToolCallDecision['decision'], relaxation: PermissionModeRelaxation | null = null, standing?: StandingApproval, fullAccess?: FullAccessDecision) =>
     Object.freeze({ decision, revision, relaxation, ...(standing ? { standing } : {}), ...(fullAccess ? { fullAccess: Object.freeze(fullAccess) } : {}) });
   // A deny is never lowered, in any mode (full access included).

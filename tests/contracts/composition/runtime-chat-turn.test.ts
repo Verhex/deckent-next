@@ -169,7 +169,7 @@ describe.skipIf(process.platform !== 'linux')('agent chat turn through the runti
     // The model saw the declared tools and, in round 2, the tool result.
     expect(f.state.requests).toHaveLength(2);
     expect((f.state.requests[0]!['tools'] as { function: { name: string } }[]).map(tool => tool.function.name)).toEqual(['read_file', 'list_dir', 'grep', 'glob', 'edit_file', 'write_file', 'run_shell',
-      'scratch_write', 'scratch_read', 'scratch_list']);
+      'scratch_write', 'scratch_read', 'scratch_list', 'propose_mcp_server']);
     expect(f.state.requests[1]!['messages']).toEqual(expect.arrayContaining([expect.objectContaining({ role: 'tool', tool_call_id: 'call_1' })]));
     // Each round is one governed invocation under the command id derived from turn and round.
     expect(f.rows("SELECT command_id FROM model_invocations ORDER BY command_id").map(row => (row as { command_id: string }).command_id).sort())

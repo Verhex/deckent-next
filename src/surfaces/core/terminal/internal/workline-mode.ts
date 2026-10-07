@@ -38,6 +38,8 @@ export interface WorklineModeLabels {
    * `cycledFullAccess` is the step into full access, which also says what that means. Neutral catalog ids meanwhile. */
   readonly stops?: Readonly<Record<PermissionModeStop, string>>;
   readonly cycled?: string; readonly cycledFullAccess?: string;
+  /** T3 L4 (owner 2026-10-07): the one standing line above the composer while the session holds full access (what it means, how to leave). */
+  readonly fullAccessLine?: string;
 }
 // Until the catalog carries these templates the notices stay language-neutral: the command, the catalog mode and the policy field.
 const NEUTRAL: WorklineModeLabels = { current: '/mode · {mode}', changed: '/mode · {previous} → {mode}', inert: ' · modeEligible: 0',
@@ -90,7 +92,7 @@ function options(view: PermissionModeView, labels: WorklineModeLabels, fullAcces
 }
 
 /**
- * `/mode` shows the mode; `/mode standart|full-auto|full-access` sets it with the revision last read (read first when none is known). Full
+ * `/mode` (and `/mode show`) shows the mode; `/mode standart|full-auto|full-access` sets it with the revision last read (read first when none is known). Full
  * access (T2, owner 2026-10-07) is switched into inside the session through the same service set, for this session only (FA-SESSION): the
  * service decides the company grant and audits the switch (`permission-mode-session`) but stores nothing, so the next launch starts in the last
  * stored mode; every later turn is admitted and audited on the grant again; choosing standart or full-auto leaves it (and stores that mode). `/mode ask-edits on|off` sets the person's preference; `/mode start full-access` saves full access as the start mode of
@@ -100,7 +102,10 @@ export async function runModeCommand(args: string, port: WorklinePermissionModeP
   fullAccess = false, terminal: WorklineModeSession = { sessionId: null }): Promise<{ readonly entries: readonly WorkLedgerEntry[]; readonly view: PermissionModeView | null; readonly fullAccess: boolean }> {
   const words = args.trim().split(/\s+/u).filter(Boolean);
   const done = (entries: readonly WorkLedgerEntry[], view: PermissionModeView | null, session = fullAccess) => ({ entries, view, fullAccess: session });
-  if (words.length === 0) { const view = await port.inspect(); return done([notice('info', line(view, labels, fullAccess)), ...options(view, labels, fullAccess)], view); }
+  // T3 (lead, L4 decision 3): a bare `/mode` opens the window where one can; `/mode show` is the same answer as text (no TTY, scripts, scrollback).
+  if (words.length === 0 || (words.length === 1 && words[0] === 'show')) {
+    const view = await port.inspect(); return done([notice('info', line(view, labels, fullAccess)), ...options(view, labels, fullAccess)], view);
+  }
   const askEdits = words.length === 2 && words[0] === 'ask-edits' && (words[1] === 'on' || words[1] === 'off') ? words[1] === 'on' : undefined;
   const start = words.length === 2 && words[0] === 'start' && words[1] === 'full-access';
   const mode = words.length === 1 ? SWITCHABLE.find(value => value === words[0]) : undefined;
@@ -116,7 +121,7 @@ export async function runModeCommand(args: string, port: WorklinePermissionModeP
   const session = mode ? mode === 'full-access' : fullAccess;
   const said = askEdits === undefined ? (wrote || fullAccess !== session ? line(view, labels, session, fullAccess ? 'full-access' : previous) : line(view, labels, session))
     : (askEdits ? labels.askEditsOn : labels.askEditsOff) ?? line(view, labels, session);
-  return done([notice(mode === 'full-access' ? 'error' : 'info', said)], view, session);
+  return done([notice(mode === 'full-access' ? 'warning' : 'info', said)], view, session);
 }
 
 /**
@@ -128,7 +133,23 @@ export async function cyclePermissionMode(port: WorklinePermissionModePort, know
   fullAccess = false, session: WorklineModeSession = { sessionId: null }): Promise<{ readonly entries: readonly WorkLedgerEntry[]; readonly view: PermissionModeView | null; readonly fullAccess: boolean }> {
   const base = known ?? await port.inspect();
   if (!base.supported) return { entries: [notice('error', line(base, labels, fullAccess))], view: base, fullAccess };
-  const current = permissionModeStop(base, fullAccess), next = nextPermissionModeStop(permissionModeCycle(base), current) ?? 'standart';
+  const current = permissionModeStop(base, fullAccess);
+  return stepPermissionMode(port, base, labels, current, nextPermissionModeStop(permissionModeCycle(base), current) ?? 'standart', session);
+}
+
+/**
+ * T3 L4 `/mode` panel: the chosen stop, set exactly as a Shift+Tab step to it would be (same service set, grant check and audit); the
+ * view is read first so the set carries the current revision. A stop the cycle does not hold here is refused by the service, not here.
+ */
+export async function selectPermissionModeStop(port: WorklinePermissionModePort, target: PermissionModeStop, labels: WorklineModeLabels = NEUTRAL,
+  fullAccess = false, session: WorklineModeSession = { sessionId: null }): Promise<{ readonly entries: readonly WorkLedgerEntry[]; readonly view: PermissionModeView | null; readonly fullAccess: boolean }> {
+  const base = await port.inspect();
+  if (!base.supported) return { entries: [notice('error', line(base, labels, fullAccess))], view: base, fullAccess };
+  return stepPermissionMode(port, base, labels, permissionModeStop(base, fullAccess), target, session);
+}
+
+async function stepPermissionMode(port: WorklinePermissionModePort, base: PermissionModeView, labels: WorklineModeLabels, current: PermissionModeStop, next: PermissionModeStop,
+  session: WorklineModeSession): Promise<{ readonly entries: readonly WorkLedgerEntry[]; readonly view: PermissionModeView | null; readonly fullAccess: boolean }> {
   const target = STOP_TARGET[next];
   // FA-SESSION: the full-access stop is this session's only; every other stop is stored (the next launch's mode).
   const changed = next === 'full-access' ? await port.set('full-access', base.revision, undefined, session) : await port.set(target.mode, base.revision, target.askEdits);
@@ -136,7 +157,8 @@ export async function cyclePermissionMode(port: WorklinePermissionModePort, know
     askEdits: changed.askEdits, revision: changed.revision, eligible: changed.eligible, fullAccess: changed.fullAccess, ...(changed.fullAuto === undefined ? {} : { fullAuto: changed.fullAuto }) });
   const word = (stop: PermissionModeStop) => labels.stops?.[stop] ?? stop;
   const template = next === 'full-access' ? labels.cycledFullAccess ?? labels.changed : labels.cycled ?? labels.changed;
-  return { entries: [notice(next === 'full-access' ? 'error' : 'info', fillTemplate(template, { previous: word(current), mode: word(next) }))], view, fullAccess: next === 'full-access' };
+  // T3 L4 (owner 2026-10-07): entering full access is said in the warning tone (text and mark carry it without colour).
+  return { entries: [notice(next === 'full-access' ? 'warning' : 'info', fillTemplate(template, { previous: word(current), mode: word(next) }))], view, fullAccess: next === 'full-access' };
 }
 
 /** The status row's mode stop (null: unknown or unsupported — no segment; full access always shown), `/mode` and the Shift+Tab step. A failure
@@ -170,8 +192,14 @@ export function useWorklineMode(port: WorklinePermissionModePort | undefined, pu
     stepping.current = true;
     try { await apply(() => cyclePermissionMode(port, view, labels, current.current, { sessionId: sessionId() })); } finally { stepping.current = false; }
   }, [apply, labels, port, push, sessionId, unavailable, view]);
+  const select = useCallback(async (stop: PermissionModeStop) => {
+    if (!port) { push([notice('error', unavailable)]); return; }
+    if (stepping.current) return;
+    stepping.current = true;
+    try { await apply(() => selectPermissionModeStop(port, stop, labels, current.current, { sessionId: sessionId() })); } finally { stepping.current = false; }
+  }, [apply, labels, port, push, sessionId, unavailable]);
   const stop = fullAccess ? 'full-access' as const : view?.supported ? permissionModeStop(view, false) : undefined;
-  return { mode: fullAccess ? 'full-access' as const : view?.supported ? sessionMode(view, false) : undefined, stop, fullAccess: current, refresh, run, cycle };
+  return { mode: fullAccess ? 'full-access' as const : view?.supported ? sessionMode(view, false) : undefined, stop, fullAccess: current, refresh, run, cycle, select };
 }
 
 /**

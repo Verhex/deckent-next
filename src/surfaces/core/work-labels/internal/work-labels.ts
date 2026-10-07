@@ -1,5 +1,6 @@
 import { t, type Locale } from '#platform/index.js';
 import type { WorkSurfaceLabels, LedgerCardLabels } from '#surfaces/core/terminal/index.js';
+import type { PickerLabels } from '#surfaces/core/terminal-picker/index.js';
 import { phaseLabel, processLabel } from '#surfaces/core/monitor/index.js';
 
 // Kept apart from `terminal.ts`: that module reaches Ink/React through the terminal barrel and is loaded only when a terminal opens
@@ -86,6 +87,11 @@ export function workSurfaceLabels(locale: Locale): WorkSurfaceLabels {
       restartDetail: t('terminal.window.restartDetail', {}, locale),
       restartPrompt: t('terminal.window.restartPrompt', {}, locale),
       restartKept: t('terminal.window.restartKept', {}, locale) },
+    live: { monitorTitle: t('terminal.live.monitorTitle', {}, locale), runsTitle: t('terminal.live.runsTitle', {}, locale), tasksTitle: t('terminal.live.tasksTitle', {}, locale),
+      hints: t('terminal.live.hints', {}, locale), monitorHints: t('terminal.live.monitorHints', {}, locale), statusWorkers: t('terminal.live.statusWorkers', {}, locale),
+      statusRuns: t('terminal.live.statusRuns', {}, locale), statusTasks: t('terminal.live.statusTasks', {}, locale), empty: t('terminal.live.empty', {}, locale),
+      runsMore: t('terminal.live.runsMore', {}, locale), closedWorkers: t('terminal.live.closedWorkers', {}, locale), closedRuns: t('terminal.live.closedRuns', {}, locale),
+      closedTasks: t('terminal.live.closedTasks', {}, locale), monitorFailed: t('terminal.live.monitorFailed', {}, locale) },
     approvalWindow: approvalWindowLabels(locale),
     cancelUsage: t('terminal.cancel.usage', {}, locale), cancelTitle: t('terminal.cancel.title', {}, locale), cancelDetail: t('terminal.cancel.detail', {}, locale),
     cancelAlreadyRequested: t('terminal.cancel.alreadyRequested', {}, locale), cancelPrompt: t('terminal.cancel.prompt', {}, locale), cancelPending: t('terminal.cancel.pending', {}, locale),
@@ -128,6 +134,9 @@ function approvalWindowLabels(locale: Locale): WorkSurfaceLabels['approvalWindow
       changes: t('terminal.approval.window.what.changes', {}, locale) },
     where: t('terminal.approval.window.where', {}, locale), whereUnknown: t('terminal.approval.window.whereUnknown', {}, locale), onBehalfSelf: t('terminal.approval.window.onBehalfSelf', {}, locale),
     scope: t('terminal.approval.window.scope', {}, locale), why: t('terminal.approval.window.why', {}, locale),
+    config: { title: t('terminal.approval.window.config.title', {}, locale), scope: t('terminal.approval.window.config.scope', {}, locale),
+      why: t('terminal.approval.window.config.why', {}, locale), undo: t('terminal.approval.window.config.undo', {}, locale),
+      layers: { project: t('config.surface.source.project', {}, locale), global: t('config.surface.source.global', {}, locale) } },
     rule: {
       read: t('terminal.approval.window.rule.read', {}, locale),
       edit: t('terminal.approval.window.rule.edit', {}, locale),
@@ -209,3 +218,10 @@ export function runtimeBuildSkew(own: { readonly sourceTreeSha256: string } | nu
   return { service: service ? service.sourceTreeSha256.slice(0, 12) : null, terminal: own.sourceTreeSha256.slice(0, 12) };
 }
 
+
+/** Catalog words of the list picker (filter, paging, scope step, blocked rows); one set for every picker, EN and TR. */
+export function pickerLabels(locale: Locale): PickerLabels {
+  return { hintList: t('tui.picker.hint_pick', {}, locale), hintFilter: t('tui.picker.hint_filter_esc', {}, locale), hintScope: t('tui.picker.hint_scope', {}, locale),
+    filter: t('tui.picker.hint_filter', {}, locale), noMatches: t('tui.picker.no_matches', {}, locale), empty: t('tui.picker.empty', {}, locale),
+    blocked: t('tui.picker.state.blocked', {}, locale), position: t('tui.picker.position', {}, locale) };
+}

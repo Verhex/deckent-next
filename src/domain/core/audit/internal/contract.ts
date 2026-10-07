@@ -37,9 +37,10 @@ const toolRef = z.object({ name: z.string().regex(/^[a-z][a-z0-9_]{1,63}$/), ver
  * further Core decisions gain an audit record; a SIEM adapter reads them all through the same port.
  */
 export const auditSubjectSchema = z.discriminatedUnion('kind', [
-  /** Config document write intent, recorded before atomic publication; digests only, no authored values. */
+  /** Config document write intent, recorded before atomic publication; digests only, no authored values. `approvalId` (T3 L2, lead
+   * 2026-10-07): the config-change approval this write consumed — present only then, so every other config write keeps its earlier shape. */
   z.object({ kind: z.literal('config-change'), action: z.enum(['set', 'unset']), layer: z.enum(['project', 'global']),
-    keyPath: identitySchema, commandId: identitySchema, beforeDigest: digest.nullable(), afterDigest: digest }).strict(),
+    keyPath: identitySchema, commandId: identitySchema, beforeDigest: digest.nullable(), afterDigest: digest, approvalId: identitySchema.optional() }).strict(),
   z.object({ kind: z.literal('run-lifecycle'), action: z.enum(['close', 'resume', 'accept', 'reject']),
     runId: identitySchema, commandId: identitySchema, taskId: identitySchema.nullable(), revision: counterSchema,
     evidence: z.literal('model-unverified').nullable() }).strict(),

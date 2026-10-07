@@ -6,7 +6,7 @@ import { cells, truncateEnd, truncateStart } from './text-width.js';
  * Width-aware status row (behavior of legacy repl/status-row fitStatusRow, f18d53fb8): measured in display cells,
  * optional facts dropped lowest priority first, the scope tail-truncated with a leading ellipsis, never wrapped.
  */
-export type StatusSegment = Readonly<{ id: string; text: string; role: SpanRole | null; priority: number; droppable: boolean; shrink: boolean }>;
+export type StatusSegment = Readonly<{ id: string; text: string; role: SpanRole | null; priority: number; droppable: boolean; shrink: boolean; bold?: boolean }>;
 export type StatusRowLayout = Readonly<{ segments: readonly StatusSegment[]; dropped: readonly string[] }>;
 
 const MIN_SHRINK_CELLS = 12;
@@ -93,8 +93,9 @@ export function worklineStatusSegments(input: WorklineStatusInput): StatusSegmen
     ...(input.model ? [segment('model', input.model, 'code', 60)] : []),
     segment('state', state, input.busy ? 'success' : 'muted', 100, false),
     ...(input.busy && input.cancellable ? [segment('cancel', input.labels.cancelHint ?? NEUTRAL_CANCEL_HINT, 'muted', 45)] : []),
-    // Full access is a standing warning; a derived source marker also keeps its mode, which names the full-access exception.
-    ...(mode ? [mode === 'full-access' ? segment('mode', modeText(input, mode), 'error', 95, false)
+    // Full access is a standing warning (T3 L4, owner 2026-10-07: mark, word and the warning tone together, bold); a derived source marker also
+    // keeps its mode, which names the full-access exception.
+    ...(mode ? [mode === 'full-access' ? Object.freeze({ ...segment('mode', modeText(input, mode), 'warning', 95, false), bold: true })
       : segment('mode', modeText(input, mode), mode === 'standart' ? 'muted' : 'modeIndicator', 55, !input.selfSource)] : []),
     ...(input.selfSource && input.labels.selfSourceFloor ? [segment('self-source', input.labels.selfSourceFloor, 'warning', 96, false)] : []),
     ...(input.busy && input.elapsedMs !== undefined ? [segment('elapsed', fillTemplate(input.labels.elapsed, { seconds: Math.floor(input.elapsedMs / 1000) }), 'muted', 50)] : []),

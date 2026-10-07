@@ -850,7 +850,9 @@
         "src/platform/core/i18n",
         "src/surfaces/core/terminal-ledger",
         "src/surfaces/core/terminal-work",
-        "src/surfaces/core/monitor"
+        "src/surfaces/core/monitor",
+        "src/surfaces/core/terminal-picker",
+        "src/surfaces/core/terminal-panels"
       ],
       "plan": "SURFACES"
     },
@@ -905,7 +907,21 @@
     "src/surfaces/core/terminal-picker": {
       "dependencies": [
         "src/surfaces/core/terminal-kit",
-        "src/surfaces/core/terminal-render"
+        "src/surfaces/core/terminal-render",
+        "src/surfaces/core/terminal-window"
+      ],
+      "plan": "SURFACES"
+    },
+    "src/surfaces/core/terminal-panels": {
+      "dependencies": [
+        "src/surfaces/core/terminal-picker",
+        "src/surfaces/core/terminal-window",
+        "src/surfaces/core/terminal-render",
+        "src/surfaces/core/terminal-kit",
+        "src/surfaces/core/terminal-composer",
+        "src/surfaces/core/approval-presentation",
+        "src/domain/core/policy",
+        "src/platform/core/redaction"
       ],
       "plan": "SURFACES"
     },
@@ -958,7 +974,8 @@
         "src/surfaces/core/terminal-work",
         "src/surfaces/core/terminal-theme",
         "src/surfaces/core/terminal-picker",
-        "src/surfaces/core/terminal-window"
+        "src/surfaces/core/terminal-window",
+        "src/surfaces/core/terminal-panels"
       ],
       "plan": "SURFACES"
     },
@@ -1082,7 +1099,9 @@
         "src/surfaces/core/terminal-render",
         "src/surfaces/core/terminal-theme",
         "src/surfaces/core/terminal-labels",
-        "src/surfaces/core/work-labels"
+        "src/surfaces/core/work-labels",
+        "src/surfaces/core/terminal-panels",
+        "src/surfaces/core/terminal-picker"
       ],
       "plan": "SURFACES"
     },
@@ -1129,6 +1148,7 @@
     },
     "src/composition/core/installation": {
       "dependencies": [
+        "src/composition/core/policy",
         "src/adapters/core/local-keyring",
         "src/adapters/core/attempt-store",
         "src/adapters/core/docker-supervisor",
@@ -1207,6 +1227,7 @@
     "src/adapters/core/sqlite-agent-turn": {
       "dependencies": [
         "src/adapters/core/sqlite-ledger",
+        "src/domain/core/agent-tool",
         "src/engine/core/agent-turn"
       ],
       "plan": "SURFACES"
@@ -1391,7 +1412,9 @@
         "src/platform/core/i18n",
         "src/adapters/core/agent-workspace-floor",
         "src/platform/core/common",
-        "src/composition/core/root"
+        "src/composition/core/root",
+        "src/adapters/core/mcp-import",
+        "src/composition/core/approvals"
       ],
       "plan": "SURFACES"
     },
@@ -1793,6 +1816,7 @@
     },
     "src/composition/core/approvals": {
       "dependencies": [
+        "src/engine/core/installation",
         "src/platform/core/clock",
         "src/platform/core/config",
         "src/adapters/core/approval-store",
@@ -2039,7 +2063,8 @@
         "src/engine/core/audit",
         "src/platform/core/clock",
         "src/platform/core/config",
-        "src/domain/core/agent-turn"
+        "src/domain/core/agent-turn",
+        "src/platform/core/config-fields"
       ],
       "plan": "SURFACES"
     },
@@ -2200,7 +2225,10 @@
         "src/domain/core/principal",
         "src/domain/core/primitives",
         "src/domain/core/policy",
-        "src/platform/core/errors"
+        "src/platform/core/errors",
+        "src/domain/core/approval",
+        "src/domain/core/command",
+        "src/platform/core/integrity"
       ],
       "plan": "CONFIG-SURFACE"
     },
@@ -2211,7 +2239,12 @@
         "src/adapters/core/config-file",
         "src/platform/core/config",
         "src/composition/core/scoped-request",
-        "src/composition/core/root"
+        "src/composition/core/root",
+        "src/engine/core/approval",
+        "src/adapters/core/local-keyring",
+        "src/adapters/core/approval-store",
+        "src/platform/core/i18n",
+        "src/platform/core/clock"
       ],
       "plan": "CONFIG-SURFACE"
     },
@@ -2387,6 +2420,12 @@
         "src/surfaces/core/cli-kit"
       ],
       "plan": "INSTALLATION"
+    },
+    "src/adapters/core/mcp-import": {
+      "dependencies": [
+        "src/adapters/core/mcp-client"
+      ],
+      "plan": "SURFACES"
     }
   },
   "composition": {

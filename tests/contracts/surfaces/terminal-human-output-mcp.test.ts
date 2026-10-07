@@ -40,6 +40,6 @@ describe('/mcp human output', () => {
     expect(await run('tr', 'approve fx', {})).toEqual(['fx için güven sıfırlandı. Onay kartı bir sonraki mesajınızda açılacak.']);
     expect(await run('en', 'reconnect fx', {})).toEqual(['fx restarts the next time it is used']);
     expect(await run('tr', 'remove fx', { removed: { scope: 'user' } })).toEqual(['fx kaldırıldı (kullanıcı)']);
-    expect(await run('en', 'frobnicate')).toEqual(['Usage: /mcp [list] | /mcp approve|reconnect|remove <name>']);
+    expect(await run('en', 'frobnicate')).toEqual(['Usage: /mcp [list] | /mcp approve|reconnect|revoke|remove <name>']);
   });
 });

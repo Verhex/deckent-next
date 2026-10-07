@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { readFileSync as readFixture } from 'node:fs';
 import { join } from 'node:path';
 import { expect, it } from 'vitest';
-import { AGENT_TURN_NO_PROGRESS_NOTE, AGENT_TURN_REPLY_LANGUAGES, AGENT_TURN_SYSTEM_PROMPT_VERSION, agentCompactionInstruction, agentCompactionSummarySchema, agentCompactionTranscript, parseAgentCompactionSummary, planAgentCompaction, renderAgentCompaction, runAgentTurn,
+import { AGENT_TURN_NO_PROGRESS_NOTE, agentTurnNoProgressNote, AGENT_TURN_REPLY_LANGUAGES, AGENT_TURN_SYSTEM_PROMPT_VERSION, agentCompactionInstruction, agentCompactionSummarySchema, agentCompactionTranscript, parseAgentCompactionSummary, planAgentCompaction, renderAgentCompaction, runAgentTurn,
   renderAgentTurnSystemPrompt, type AgentRoundOutcome, type AgentTurnPorts } from '#engine/index.js';
 import { resolveProductLayout } from '#platform/index.js';
 import type { AgentToolSpec, AgentTurnEvent, AgentTurnMessage } from '#domain/index.js';
@@ -385,6 +385,27 @@ it('adds one [deckent] note after the second consecutive no-progress round and k
   // The note is part of the client's history, in order, like every appended message.
   const appended = events.flatMap(event => event.kind === 'message' ? [event.message] : []);
   expect(appended.filter(message => message.role === 'user')).toEqual([{ role: 'user', content: AGENT_TURN_NO_PROGRESS_NOTE }, { role: 'user', content: AGENT_TURN_NO_PROGRESS_NOTE }]);
+});
+
+// Owner terminal test 2026-10-07: the note was English in a Turkish conversation; it follows the turn's language (the context notes' rule).
+it('writes the no-progress note in the turn language', async () => {
+  const p = ports([answer('', [call('c1', 'read_file', '{bad')]), answer('', [call('c2', 'no_such_tool', {})]), answer('done')]);
+  const events: AgentTurnEvent[] = [];
+  await runAgentTurn({ messages: user, tools, signal: new AbortController().signal, emit: event => events.push(event), language: 'tr' }, p.value);
+  const notes = events.flatMap(event => event.kind === 'message' && event.message.role === 'user' ? [event.message.content] : []);
+  expect(notes).toEqual([agentTurnNoProgressNote('tr')]);
+  expect(notes[0]).toMatch(/^\[deckent\] Son iki turda ilerleme olmadı/u);
+  expect(agentTurnNoProgressNote('en')).toBe(AGENT_TURN_NO_PROGRESS_NOTE); expect(agentTurnNoProgressNote('tr')).not.toBe(AGENT_TURN_NO_PROGRESS_NOTE);
+});
+
+// Owner terminal test 2026-10-07: grep got an unknown `maxMatches` twice; the refusal now names the arguments the tool takes.
+it('names the valid arguments when a call carries an unknown one, and runs nothing', async () => {
+  const p = ports([answer('', [call('c1', 'grep', { pattern: 'x', maxMatches: 5 }), call('c2', 'read_file', { path: 'a', limit: 3 })]), answer('done')]);
+  const { events } = await run(p);
+  const results = events.flatMap(event => event.kind === 'message' && event.message.role === 'tool' ? [event.message.content] : []);
+  expect(results).toEqual(['[deckent] grep: error=invalid-arguments (unknown argument "maxMatches"; valid arguments: pattern)',
+    '[deckent] read_file: error=invalid-arguments (unknown argument "limit"; valid arguments: path, startLine)']);
+  expect(p.executed).toEqual([]);
 });
 
 it('never counts a denied call, a round with text, or a cancelled turn as no progress', async () => {

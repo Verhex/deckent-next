@@ -185,9 +185,12 @@ export interface ShellSandbox {
  * the view resolved now (always `longLivedWritePosture`); the caller appends `--`, the command and its arguments. `view` is the write view
  * that launch enforces and `posture` the mechanism's words for it (the cards read these, never a fixed text). Absent: the mechanism only
  * runs one command at a time. */
-export type ShellSandboxLaunch = (environment: Readonly<Record<string, string | undefined>>) =>
+export type ShellSandboxLaunch = (environment: Readonly<Record<string, string | undefined>>, profile?: ShellSandboxLaunchProfile) =>
   Promise<{ readonly ok: true; readonly file: string; readonly args: readonly string[]; readonly view: ShellSandboxWriteView; readonly posture: string }
     | { readonly ok: false; readonly reason: string }>;
+/** K4 (`sandbox-net`, the MCP default): the launch keeps the host network and binds `home` — a private, persistent directory of its own — as
+ * HOME instead of an empty one; everything else of the view is unchanged (the project read-only, the user's HOME and Deckent's state hidden). */
+export interface ShellSandboxLaunchProfile { readonly network: boolean; readonly home: string }
 /** Composition's (code-only) port: the providers a turn may pick, in preference order, built for the turn's layout. */
 export type ShellSandboxFactory = (layout: ShellSandboxLayout) => readonly ShellSandbox[];
 

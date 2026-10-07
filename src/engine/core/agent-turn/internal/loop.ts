@@ -4,8 +4,8 @@ import { createAgentContextCarry } from './carry.js';
 import { agentContextFailureNote, agentHistoryBytes, createAgentCompactionGuard, type AgentContextFailure } from './pressure.js';
 import { projectModelIngressField, type ModelIngressProjection } from './model-ingress-project.js';
 import { agentTurnApproverNote, type AgentToolOwnerAnswer } from './approver-note.js';
-import type { Locale } from '#platform/index.js';
-import type { AgentContextQuality, AgentToolCall, AgentToolCleanup, AgentToolOutcome, AgentToolSpec, AgentToolCallStatus, AgentTurnEvent, AgentTurnFinish,
+import { LOCALES, t, type Locale } from '#platform/index.js';
+import type { AgentContextQuality, AgentToolCall, AgentToolCleanup, AgentToolDiagnostic, AgentToolOutcome, AgentToolSpec, AgentToolCallStatus, AgentTurnEvent, AgentTurnFinish,
   AgentTurnMessage } from '#domain/index.js';
 
 /** One governed model round as the loop sees it: the provider-neutral answer, or why there is none. */
@@ -62,17 +62,21 @@ export interface AgentTurnPorts {
     Promise<'allow' | 'deny' | 'expired' | 'cancelled' | 'policy-deny' | AgentToolOwnerAnswer>;
   /** Durable projection of every settled call (optional for pure tests; the runtime composition always records). */
   settled?(call: { readonly round: number; readonly index: number; readonly call: AgentToolCall; readonly tool: AgentToolSpec | null;
-    readonly argsDigest: string | null; readonly target: string | null; readonly status: AgentToolCallStatus; readonly content: string }): Promise<void>;
+    readonly argsDigest: string | null; readonly target: string | null; readonly status: AgentToolCallStatus; readonly content: string;
+    /** B4: where a workspace path failed (step, errno), when the tool said so; kept on the durable tool-call record. */
+    readonly diagnostic?: AgentToolDiagnostic }): Promise<void>;
   /** Sealed digests of a marked field. A failure withholds the field; the decoded payload is not an argument. */
   recordIngress?(notice: ModelIngressProjection): Promise<void>;
 }
 
 /**
  * Engine note after the second consecutive round that made no progress (TL-C D7): every call of the round was a duplicate, had
- * invalid arguments or failed, and the model wrote no text. Once per such streak; the turn goes on (no counter, no limit).
+ * invalid arguments or failed, and the model wrote no text. Once per such streak; the turn goes on (no counter, no limit). In the turn's
+ * language (the service-resolved locale), like the context notes: the user reads it in the conversation too.
  */
-export const AGENT_TURN_NO_PROGRESS_NOTE = '[deckent] The last two rounds made no progress: every tool call was a duplicate, had invalid'
-  + ' arguments or failed, and no text was written. Do not repeat those calls; write what you know so far, try another approach, or ask the user.';
+export const agentTurnNoProgressNote = (language: Locale = LOCALES[0]): string => `[deckent] ${t('agent.turn.noProgress', {}, language)}`;
+/** The English note (the catalog's default locale); the loop sends the turn's own language (owner terminal test 2026-10-07). */
+export const AGENT_TURN_NO_PROGRESS_NOTE = agentTurnNoProgressNote();
 /**
  * Closure-note sentence of a turn that compacted without a model summary (TERM-FEEDBACK-1): the model answered the summary call with
  * nothing readable, so the older messages became Deckent's labelled mechanical excerpt.
@@ -160,7 +164,8 @@ function checkArguments(tool: AgentToolSpec, raw: string): { ok: true; args: Rec
   for (const key of tool.inputSchema.required ?? []) if (args[key] === undefined) return { ok: false, detail: `missing required argument "${key}"` };
   for (const [key, value] of Object.entries(args)) {
     const type = Object.hasOwn(properties, key) ? properties[key]?.type : undefined;
-    if (type === undefined) return { ok: false, detail: `unknown argument "${key}"` };
+    // Owner terminal test 2026-10-07: grep got `maxMatches` twice; the refusal names the arguments the tool takes, so the next call can be right.
+    if (type === undefined) return { ok: false, detail: `unknown argument "${key}"; valid arguments: ${Object.keys(properties).join(', ') || 'none'}` };
     const matches = type === 'string' ? typeof value === 'string' : type === 'integer' ? Number.isSafeInteger(value) : type === 'boolean' ? typeof value === 'boolean'
       : type === 'number' ? typeof value === 'number' && Number.isFinite(value) : true;
     if (!matches) return { ok: false, detail: `argument "${key}" must be ${String(type)}` };
@@ -331,14 +336,14 @@ export async function runAgentTurn(input: AgentTurnInput, ports: AgentTurnPorts)
       const tool = byName.get(call.name), started = ports.now();
       let digestOf: string | null = null, targetOf: string | null = null, invoked = false, pauseArgs: Record<string, unknown> = {}, noteOf: string | null = null;
       // `cleanup` (Astra 2124): only the host shell tool's outcome ever carries it; the event omits the field otherwise.
-      const result = async (status: AgentToolCallStatus, content: string, cleanup?: AgentToolCleanup) => {
+      const result = async (status: AgentToolCallStatus, content: string, cleanup?: AgentToolCleanup, diagnostic?: AgentToolDiagnostic) => {
         if (!NO_PROGRESS_STATUSES.has(status)) progressed = true;
         const shown = tool && digestOf !== null ? await presentModelIngress(content, { call, tool, index, args: pauseArgs, argsDigest: digestOf, target: targetOf }, input, ports, rounds) : content;
         const message = push({ role: 'tool', toolCallId: call.id, name: call.name, content: shown });
         carry.observed(message, call, rounds, index, invoked, status, cleanup);
         emit({ kind: 'tool.finished', callId: call.id, name: call.name, status, ms: Math.max(0, ports.now() - started), bytes: Buffer.byteLength(shown, 'utf8'),
           ...(cleanup !== undefined ? { cleanup } : {}) });
-        await ports.settled?.({ round: rounds, index, call, tool: tool ?? null, argsDigest: digestOf, target: targetOf, status, content: shown });
+        await ports.settled?.({ round: rounds, index, call, tool: tool ?? null, argsDigest: digestOf, target: targetOf, status, content: shown, ...(diagnostic ? { diagnostic } : {}) });
         return message;
       };
       if (signal.aborted) { emit({ kind: 'tool.started', callId: call.id, name: call.name, target: null }); await result('cancelled', `[deckent] ${call.name}: error=cancelled`); continue; }
@@ -384,10 +389,10 @@ export async function runAgentTurn(input: AgentTurnInput, ports: AgentTurnPorts)
       if (tool.toolClass !== 'read') seenReads.clear();
       // APPROVER-NOTE: an allowed call's note follows its result (bound to this call, never a separate instruction message).
       const resultMessage = await result(signal.aborted ? 'cancelled' : outcomeText.status, `${outcomeText.text}${await approverNoteLine(noteOf, input, ports)}`,
-        tool.toolClass === 'shell' ? outcomeText.cleanup : undefined);
+        tool.toolClass === 'shell' ? outcomeText.cleanup : undefined, outcomeText.diagnostic);
       if (tool.toolClass === 'read' && outcomeText.status === 'ok' && !signal.aborted) seenReads.set(digest, { callId: call.id, message: resultMessage });
     }
     stalled = progressed ? 0 : stalled + 1;
-    if (stalled === 2 && !signal.aborted) push({ role: 'user', content: AGENT_TURN_NO_PROGRESS_NOTE });
+    if (stalled === 2 && !signal.aborted) push({ role: 'user', content: agentTurnNoProgressNote(input.language) });
   }
 }

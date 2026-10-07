@@ -29,12 +29,14 @@ worker inspection and patch/integration operations use direct composition. MCP s
 Run/Task/approval/model/spend and direct composition for catalog/activation. SDK exposes both configured
 applications and a runtime client. One application/state owner does not imply one transport; direct SDK
 access alone is not evidence of a policy bypass. Further custody/parity changes need their own proof.
-Only CLI (including its `terminal` line/rich views) and MCP surfaces are shipped here; the MCP client reaches only the owner's
-local stdio servers (MCP-CLIENT); Desktop/HTTP, remote MCP servers and IFS connectors remain targets. Unused translation keys are not handlers or evidence of a shipped surface.
+Only CLI (including its `terminal` line/rich views) and MCP surfaces are shipped here; the MCP client reaches the owner's local stdio
+servers and, since T3 (2026-10-07), Streamable HTTP servers (https; plain http only on loopback); Desktop/HTTP API surfaces, MCP OAuth and IFS
+connectors remain targets. Unused translation keys are not handlers or evidence of a shipped surface.
 
 **Startup cost (STARTUP-COST, seventh batch).** A process entry's static import graph is paid on every run. Heavy packages (`ink`,
 `react`, `@modelcontextprotocol/server|client`) load only on the entry path that uses them and through dynamic `import()`: the terminal UI
-loads with `deckent terminal` / the arg-less TTY opening (`workSurfaceLabels`/`runtimeBuildSkew` live in `cli/internal/work-labels.ts`),
+loads with `deckent terminal` / the arg-less TTY opening (`workSurfaceLabels`/`runtimeBuildSkew` live in the `work-labels` unit since TUI1; the
+launch itself is `cli-terminal`'s lazy `launchTerminal` since TERMINAL-LAUNCH, 2026-10-07),
 `surfaces/index.ts` offers `loadMcpSurface()` instead of `createMcpServer`, and the MCP client SDK loads with the first MCP server start.
 `tests/contracts/composition/startup-graph.test.ts` (on `dist`, static edges only) holds this for the SDK and CLI entries and "no Ink/React/
 MCP client" for the stdio MCP entry. Measured by the lane: `deckent --version` 468 → 247 ms, SDK import 311 → 237 ms. Next: the whole

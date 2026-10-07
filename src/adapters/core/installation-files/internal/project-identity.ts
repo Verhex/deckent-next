@@ -20,7 +20,7 @@ export class FileProjectIdentityStore implements ProjectIdentityStore {
         parse: value => projectIdentitySchema.parse(value),
         create: () => projectIdentitySchema.parse({ schemaVersion: 1, projectId: randomUUID() }),
         error: reason => new ProjectIdentityError(({ INVALID: 'PROJECT_IDENTITY_INVALID', UNAVAILABLE: 'PROJECT_IDENTITY_UNAVAILABLE',
-          LOCKED: 'PROJECT_IDENTITY_LOCKED', UNSUPPORTED: 'PROJECT_IDENTITY_UNAVAILABLE' } as const)[reason]),
+          LOCKED: 'PROJECT_IDENTITY_LOCKED', UNSUPPORTED: 'PROJECT_IDENTITY_UNAVAILABLE', MASKED: 'PROJECT_IDENTITY_MASKED' } as const)[reason]),
       }, this.lockTimeoutMs);
       return await (create ? file.loadOrCreate() : file.load());
     } catch (error) {

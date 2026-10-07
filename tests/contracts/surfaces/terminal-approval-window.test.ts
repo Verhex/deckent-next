@@ -55,6 +55,21 @@ describe('approval window fields per tool kind (catalog EN and TR)', () => {
     }
   }
 
+  // L1 MCP-CORE item 6 (Astra 2435 P2): a hyphenated server's wire name (`docs-search` → `mcp__docs_search__…`) is an MCP tool, titled with its
+  // real server name; the separator is the first `__` after the server, so a tool name with `_` stays whole.
+  it('titles a hyphenated server\'s MCP tool as MCP with the server name restored (EN and TR)', () => {
+    for (const locale of ['en', 'tr'] as const) {
+      const work = workSurfaceLabels(locale), w = work.approvalWindow;
+      const what = (tool: string) => approvalCardLines(base({ tool, target: null, risk: 'mcp-call', summary: `${tool} · mcp:x · 0123456789ab` }), work, `${tool} {}`, null, {}, NOW)
+        .find(line => line.startsWith(w.field.what))!;
+      const hyphenated = what('mcp__docs_search__query_docs');
+      expect(hyphenated).toContain('query_docs'); expect(hyphenated).toContain('docs-search'); expect(hyphenated).not.toContain('mcp__docs_search__query_docs');
+      expect(hyphenated).toBe(what('mcp__context7__query_docs').replace('context7', 'docs-search'));
+      expect(what('mcp__a__b_c')).toBe(what('mcp__context7__query_docs').replace('context7', 'a').replace('query_docs', 'b_c'));
+      expect(what('mcp__a_b__x')).toBe(what('mcp__context7__query_docs').replace('context7', 'a-b').replace('query_docs', 'x'));
+    }
+  });
+
   it('names the careful mode (the status row\'s ask-edits stop) under why asked, EN and TR (T2 integration)', () => {
     for (const [locale, words] of [['en', 'Mode: careful (edits ask too)'], ['tr', 'Mod: dikkatli (düzenlemeler de sorulur)']] as const) {
       const text = approvalCardLines(KINDS.edit.approval, workSurfaceLabels(locale), KINDS.edit.preview, null, { project: '/home/u/acme', mode: 'ask-edits' }, NOW).join('\n');
@@ -138,27 +153,34 @@ describe('approval window in the real Workline', () => {
     });
   }
 
-  it('a window leaves room for a visible worker panel: the whole live area stays within the terminal rows', async () => {
-    let release!: () => void; const hold = new Promise<void>(resolve => { release = resolve; });
-    const labels = { ...WORKLINE_TEST_LABELS, work: workSurfaceLabels('en') };
-    const identity = (attemptId: string) => ({ scopeId: 'scope-a', runId: 'r', taskId: `t-${attemptId}`, attemptId, generation: 1, layoutRevision: 'l' });
-    const report = () => ({ schemaVersion: 1, observedAt: Date.now(), scopeId: 'scope-a', control: 'observe-only', sources: [{ workers: Array.from({ length: 10 }, (_, index) =>
-      ({ taskId: `t-${index}`, identity: identity(`a${index}`), provider: 'claude', process: 'running', authority: 'next-ledger', files: null })) }] });
-    const ledger = { ...port([]), async listWorkers() { return report() as never; } };
-    const view = mountWorkline({ labels, streamTurn: turn({ preview: `$ ${'x '.repeat(10)}\nrisk: destructive (rm)\n${Array.from({ length: 30 }, (_, i) => `posture ${i}`).join('\n')}` }, hold) as never,
-      ledger: ledger as never, pollMs: 40 }, 120, { rows: 30 });
+  it('an approval window takes the screen from an open watch window (one visible window), fits the terminal rows, and the watch window returns after the decision (T3 L5)', async () => {
+    let releaseA!: () => void, releaseB!: () => void;
+    const gateA = new Promise<void>(resolve => { releaseA = resolve; }), holdB = new Promise<void>(resolve => { releaseB = resolve; });
+    let started = 0;
+    const streamTurn = () => {
+      started++;
+      return started === 1 ? (async function* () { await gateA; yield { kind: 'done' as const, finish: 'stop' as const }; })()
+        : turn({ preview: `$ ${'x '.repeat(10)}\nrisk: destructive (rm)\n${Array.from({ length: 30 }, (_, i) => `posture ${i}`).join('\n')}` }, holdB)();
+    };
+    const work = workSurfaceLabels('en'), labels = { ...WORKLINE_TEST_LABELS, work };
+    const calls: unknown[][] = [];
+    const view = mountWorkline({ labels, streamTurn: streamTurn as never, ledger: { ...port(calls), async listWorkers() { return { schemaVersion: 1, observedAt: Date.now(), scopeId: 'scope-a', control: 'observe-only',
+      sources: [{ workers: Array.from({ length: 10 }, (_, index) => ({ taskId: `t-${index}`, provider: 'claude', process: 'running', authority: 'next-ledger', files: null })) }] } as never; } } as never, pollMs: 40 }, 120, { rows: 30 });
     mounted.push(view.instance);
-    for (const char of '/watch-workers\r') { view.stdin.write(char); await settle(2); }
-    await until(() => view.stdout.frame.includes('+2'), 'worker panel with more');
-    for (const char of 'go\r') { view.stdin.write(char); await settle(2); }
-    await until(() => view.stdout.frame.includes('What:'), 'approval window'); await settle(80);
+    await settle(20);
+    // Turn one is busy; the watch command and the second turn queue behind it. When turn one ends the watch window opens and turn two asks for approval over it.
+    for (const line of ['one', '/watch-workers', 'two']) { for (const char of `${line}\r`) { view.stdin.write(char); await settle(2); } }
+    releaseA();
+    await until(() => view.stdout.frame.includes('What:'), 'approval window over the watch window'); await settle(80);
     const frame = view.stdout.frame;
-    proof('workline en 30 rows with worker panel', frame);
+    proof('workline en 30 rows, approval over a watch window', frame);
+    expect(frame).not.toContain(work.live!.hints); // the watch window steps aside while the approval window is up
     expect(frame).toMatch(/rows 1–\d+ of \d+/u);
-    // Everything below the scrollback (worker panel, window, status, composer) fits the 30-row terminal.
-    const live = frame.slice(frame.indexOf(labels.work.panel.title));
+    const live = frame.slice(frame.indexOf('What:') - 400);
     expect(live.split('\n').filter(Boolean).length).toBeLessThanOrEqual(30);
-    release();
+    view.stdin.write('\u001B'); // Esc denies
+    await until(() => calls.length === 1, 'decision reached the port'); releaseB();
+    await until(() => view.stdout.frame.includes(work.live!.hints), 'the watch window is back after the decision');
   });
 
   it('/approvals rows with the catalog: what, who and how long; no approval id on the row', async () => {

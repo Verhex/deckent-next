@@ -73,6 +73,7 @@
   "mcp": {
     "inputMaxBytes": 1048576,
     "maxConcurrentCalls": 8,
+    "maxServers": 20,
     "responseMaxBytes": 1048576
   },
   "operations": {

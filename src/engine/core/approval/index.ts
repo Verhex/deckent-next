@@ -8,8 +8,12 @@ export { agentToolApprovalNote, agentToolCallActionDigest, agentToolCallApproval
   type AgentToolCallAdmission } from './internal/tool-call.js';
 export { OperationApprovalBroker, OPERATION_SUBJECT_PROTOCOL_VERSION, approvalResultForProtocol, approvalSubjectsHiddenFromProtocol, awaitOperationApproval, operationApprovalActionDigest,
   type OperationApprovalBrokerOptions, type OperationApprovalWait } from './internal/operation.js';
+export { ConfigChangeApprovalBroker, CONFIG_CHANGE_SUBJECT_PROTOCOL_VERSION, configChangeApprovalActionDigest, configChangeApprovalFacts,
+  type ConfigChangeApprovalAdmission, type ConfigChangeApprovalRequest } from './internal/config-change.js';
 export { AuthorityDocumentTarget, DelegationBoundGate, PolicyAdministrationApplication } from './internal/policy-admin.js';
 export type { AuthorityTargetHooks, PolicyAdministrationDependencies } from './internal/policy-admin.js';
+export { McpToolGrants, type McpToolGrantOutcome, type McpToolGrantTarget } from './internal/mcp-grant.js';
+export { PolicyTemplateUpgrade, type TemplateUpgradeMissing, type TemplateUpgradeResult } from './internal/template-upgrade.js';
 export { isAuditedStanding, PersistentStanding, SessionStanding, StandingApprovalError, standingApprovalAuditEvent, standingCallKey, rememberSessionStanding } from './internal/standing.js';
 export type { SessionStandingBinding } from './internal/standing.js';
 export type { PersistentStandingDependencies, StandingGrantView, StandingOffer } from './internal/standing.js';

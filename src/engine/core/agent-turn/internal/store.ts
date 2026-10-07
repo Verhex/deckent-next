@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import type { AgentToolCallStatus, AgentTurnFinish } from '#domain/index.js';
+import type { AgentToolCallStatus, AgentToolDiagnostic, AgentTurnFinish } from '#domain/index.js';
 
 export type AgentTurnStoreErrorCode = 'AGENT_TURN_IN_PROGRESS' | 'AGENT_TURN_CONFLICT' | 'AGENT_TURN_CORRUPT' | 'AGENT_TURN_INVALID' | 'AGENT_TURN_UNAVAILABLE';
 export class AgentTurnStoreError extends Error {
@@ -38,6 +38,8 @@ export interface AgentTurnToolCallRecord {
   readonly scopeId: string; readonly turnId: string; readonly round: number; readonly index: number;
   readonly callId: string; readonly tool: string; readonly toolVersion: number; readonly argsDigest: string | null;
   readonly target: string | null; readonly status: AgentToolCallStatus; readonly bytes: number; readonly resultDigest: string; readonly atMs: number;
+  /** B4 (optional, additive): where a workspace path failed — step and errno, never a path. Records without it stay valid. */
+  readonly diagnostic?: AgentToolDiagnostic;
 }
 
 /**

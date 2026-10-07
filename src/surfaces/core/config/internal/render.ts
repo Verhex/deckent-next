@@ -49,7 +49,7 @@ export function renderConfigExplanation(field: ConfigFieldView, locale: Locale, 
     .split('\n').flatMap(line => wrapCells(terminalSafeText(line), Math.max(40, Math.min(80, width)))).join('\n');
 }
 
-function schemaWord(schema: unknown, locale: Locale): string {
+export function schemaWord(schema: unknown, locale: Locale): string {
   if (!schema || typeof schema !== 'object') return '-';
   const value = schema as Record<string, unknown>;
   const options = value['anyOf'] ?? value['oneOf'];

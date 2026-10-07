@@ -45,7 +45,7 @@ const approveWithout = (f: { project: string; data: string; env: Record<string, 
     principal: { issuer: 'test', subject: '1' }, ask: async () => true, audit: async () => undefined, describeNotice: notice => renderMcpStartNotice(notice, 'en') });
 type Effect = 'allow' | 'require-approval' | 'deny';
 const mcpGrants = (tool: Effect = 'allow', operation: Effect = 'allow') => [
-  { id: 'mcp-tool', effect: tool, actions: ['invoke'], scopes: ['scope'], principals: me, resource: { kind: 'agent-tool', ids: ['mcp__fx__echo', 'mcp__fx__slow'] } },
+  { id: 'mcp-tool', effect: tool, actions: ['invoke'], scopes: ['scope'], principals: me, resource: { kind: 'mcp-server', ids: ['fx'] } },
   { id: 'mcp-operation', effect: operation, actions: ['execute'], scopes: ['scope'], principals: me, resource: { kind: 'operation', ids: ['mcp.tool.call'] } },
   { id: 'decide', effect: 'allow', actions: ['inspect', 'decide'], scopes: ['scope'], principals: me, resource: { kind: 'approval', ids: 'all' } }];
 const call = (name: string, args: Record<string, unknown>) => ({ toolCall: { name, arguments: JSON.stringify(args) } });
@@ -357,7 +357,7 @@ describe.skipIf(process.platform !== 'linux')('MCP server lifecycle and the prot
 });
 
 describe.skipIf(process.platform !== 'linux')('MCP tools under the permission modes (MCP-CLIENT)', () => {
-  const both = (effect: Effect, eligible: boolean) => [rule('mcp-tools', 'agent-tool', ['mcp__fx__echo', 'mcp__fx__drop'], effect, eligible),
+  const both = (effect: Effect, eligible: boolean) => [rule('mcp-tools', 'mcp-server', ['fx'], effect, eligible),
     rule('mcp-op', 'operation', ['mcp.tool.call'], effect, eligible)];
   const drop = { name: 'drop', description: 'Drop things', inputSchema: { type: 'object', properties: {} } };
 
@@ -465,12 +465,12 @@ describe('the MCP start notices and the sandbox refusal come from the catalog (p
     expect(await mcpSlash('/p', 'approve fx', stub, {}, 'tr')).toEqual(['fx için güven sıfırlandı. Onay kartı bir sonraki mesajınızda açılacak.']);
     expect(seen).toEqual([{ verb: 'reset', name: 'fx' }, { verb: 'reset', name: 'fx' }]);
   });
-  // MCP-VISIBILITY: `mcp add` is stdio only and the registry file is `mcp.json` (project: `.deckent/mcp.json`), never `.mcp.json`.
-  it('the mcp add help names only stdio and the real registry file (en and tr)', () => {
+  // MCP-VISIBILITY: the registry file is `mcp.json` (project: `.deckent/mcp.json`), never `.mcp.json`; L1 MCP-CORE: `mcp add` names both transports.
+  it('the mcp add help names stdio and Streamable HTTP and the real registry file (en and tr)', () => {
     for (const locale of ['en', 'tr'] as const) for (const key of ['cli.mcp.add.desc', 'cli.memcat.mcp.help.paths'] as const) {
       const text = t(key, {}, locale);
-      expect(text).not.toMatch(/\bhttp\b/iu); expect(text).not.toContain('.mcp.json');
-      if (key === 'cli.mcp.add.desc') expect(text).toContain('stdio');
+      expect(text).not.toContain('.mcp.json');
+      if (key === 'cli.mcp.add.desc') { expect(text).toContain('stdio'); expect(text).toContain('Streamable HTTP'); expect(text).not.toMatch(/stdio only|yalnız stdio/u); }
       expect(text).toContain('.deckent/mcp.json');
     }
   });

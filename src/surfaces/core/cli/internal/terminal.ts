@@ -11,7 +11,8 @@ import { runKernelCommand, type CommandContext } from './kernel-commands.js';
 export async function terminalCommand(argv: readonly string[], context: CommandContext = {}): Promise<void> {
   await launchTerminal(argv, context, {
     runKernelCommand: (args, overrides) => runKernelCommand(args, { ...context, ...overrides }),
-    ...(context.runMcpCommand ? { mcpSlash: (root: string, args: string, options: Parameters<typeof mcpSlash>[3], locale: Locale) => mcpSlash(root, args, context, options, locale) } : {}),
+    ...(context.runMcpCommand ? { mcpSlash: (root: string, args: string, options: Parameters<typeof mcpSlash>[3], locale: Locale) => mcpSlash(root, args, context, options, locale),
+      runMcp: context.runMcpCommand } : {}),
     renderRunCancellation,
   });
 }

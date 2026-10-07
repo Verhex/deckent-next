@@ -11,7 +11,7 @@ it('exposes the same versioned action/resource matrix through compiled CLI and S
   expect(JSON.parse(result.stdout)).toEqual(getPolicyVocabulary());
 });
 it('publishes the versioned policy action/resource matrix through the SDK', () => {
-  expect(getPolicyVocabulary().resources.map(r => r.kind)).toEqual(['config', 'decision', 'approval', 'task', 'attempt', 'operation', 'scope', 'pool', 'run', 'service', 'model-activation', 'model-invocation', 'provider-spend-account', 'agent-tool', 'permission-mode', 'agent-tool-call', 'secret', 'work-target']);
+  expect(getPolicyVocabulary().resources.map(r => r.kind)).toEqual(['config', 'decision', 'approval', 'task', 'attempt', 'operation', 'scope', 'pool', 'run', 'service', 'model-activation', 'model-invocation', 'provider-spend-account', 'agent-tool', 'mcp-server', 'permission-mode', 'agent-tool-call', 'secret', 'work-target']);
   expect(getPolicyVocabulary().resources.find(r => r.kind === 'decision')!.actions).toEqual(['prepare','ask','record','outcome','inspect']);
   expect(getPolicyVocabulary().resources.find(r => r.kind === 'attempt')!.actions).toContain('recover-output');
   expect(getPolicyVocabulary().resources.find(r => r.kind === 'service')!.actions).toEqual(['shutdown']);
@@ -20,6 +20,8 @@ it('publishes the versioned policy action/resource matrix through the SDK', () =
   expect(getPolicyVocabulary().resources.find(r => r.kind === 'provider-spend-account')!.actions).toEqual(['inspect', 'audit']);
   // Terminal agent tools (T-L3): the tool name is the resource id; every loop call is authorized with invoke.
   expect(getPolicyVocabulary().resources.find(r => r.kind === 'agent-tool')!.actions).toEqual(['invoke']);
+  // Owner 2026-10-07 (Jev 04f75210): one MCP server, covering its pinned tools.
+  expect(getPolicyVocabulary().resources.find(r => r.kind === 'mcp-server')!.actions).toEqual(['invoke']);
   // T-L4 slice 4c: a person sets their own terminal permission mode; the resource id is the target mode.
   expect(getPolicyVocabulary().resources.find(r => r.kind === 'permission-mode')!.actions).toEqual(['set']);
   // PERSISTENT-APPROVALS G6: a person's standing approval of one call pattern; the resource id is the pattern key.

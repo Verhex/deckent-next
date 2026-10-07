@@ -21,7 +21,7 @@ export { newRunLedgerEntries, runWatchFingerprint } from '#surfaces/core/termina
 export { loadRunViewsForWatch } from '#surfaces/core/terminal-ledger/index.js';
 export type { WorkLedgerEntry, WorkLedgerRunEntry, WorkLedgerWorkerEntry, WorkerAttemptIdentity, WorkerLiveActivity, WorkerLivePhase } from '#surfaces/core/terminal-ledger/index.js';
 export { compactCount, fillTemplate, formatDuration, formatWorkerLine, type LedgerCardLabels, type WorkerLine, type WorkerLineLabels } from '#surfaces/core/terminal-ledger/index.js';
-export { WORKER_PANEL_ROWS, type WorkerPanelLabels } from '#surfaces/core/terminal-work/index.js';
+export { LIVE_WINDOW_MAX_ROWS, type LiveWindowKind, type LiveWindowLabels, type LiveWindowView, type MonitorWindowLoader, type MonitorWindowRender, type WorkerPanelLabels } from '#surfaces/core/terminal-work/index.js';
 export { APPROVAL_SCAN_MAX_PAGES, approvalWatchStep, EMPTY_APPROVAL_WATCH, scanPendingApprovals, type WorklineApproval, type WorklineApprovalPage } from '#surfaces/core/terminal-ledger/index.js';
 export { decisionKey, scopedDecisionKey, type StandingScope } from '#surfaces/core/terminal-kit/index.js';
 export { resolveWorkerRef, type WorkSurfaceLabels } from '#surfaces/core/terminal-work/index.js';

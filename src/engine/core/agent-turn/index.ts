@@ -1,4 +1,4 @@
-export { AGENT_TURN_MECHANICAL_COMPACTION_NOTE, AGENT_TURN_NO_PROGRESS_NOTE, agentTurnTruncatedCallResult, agentTurnTruncatedCallsNote, runAgentTurn,
+export { AGENT_TURN_MECHANICAL_COMPACTION_NOTE, AGENT_TURN_NO_PROGRESS_NOTE, agentTurnNoProgressNote, agentTurnTruncatedCallResult, agentTurnTruncatedCallsNote, runAgentTurn,
   agentToolArgumentsDigest } from './internal/loop.js';
 export { projectModelIngressField } from './internal/model-ingress-project.js';
 export { agentTurnApproverNote, type AgentToolOwnerAnswer } from './internal/approver-note.js';

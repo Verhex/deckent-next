@@ -454,7 +454,7 @@ describe('MCP registry: scopes, precedence, expansion and the trust record', () 
     const secret = async (name: string) => name === 'VAULT_KEY' ? 'from-vault' : undefined;
     const template = { command: '${TOOL_HOME}/bin/server', args: ['--port', '${PORT:-8080}', '--region', '${REGION:-eu}'], env: { TOKEN: '${GITHUB_TOKEN}' } };
     expect(await expandMcpEntry(template, 'local', env, secret)).toEqual({ ok: true, command: '/opt/tool/bin/server', args: ['--port', '9', '--region', 'eu'],
-      env: { TOKEN: 'ghp_realtokenvalue' } });
+      env: { TOKEN: 'ghp_realtokenvalue' }, secrets: [] });
     expect(await expandMcpEntry(template, 'project', env, secret)).toMatchObject({ ok: true, env: { TOKEN: '' } });
     expect(await expandMcpEntry({ command: 'x', env: { KEY: '$DECK:VAULT_KEY' } }, 'user', env, secret)).toMatchObject({ ok: true, env: { KEY: 'from-vault' } });
     expect(await expandMcpEntry({ command: 'x', env: { KEY: '$DECK:VAULT_KEY' } }, 'project', env, secret)).toEqual({ ok: false, reason: 'secret-reference-in-project-file' });

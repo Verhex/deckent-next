@@ -1,12 +1,15 @@
+import { realpath } from 'node:fs/promises';
 import { loadComposedConfig } from '#composition/core/root/index.js';
 import { EffectError, type AgentToolOutcome } from '#domain/index.js';
 import { EffectApplication, OperationPolicyAuthorization, agentToolApprovalFacts, agentToolArgumentsDigest, type EffectApprovalGate } from '#engine/index.js';
 import { configuredSecretResolver, ManagedFileError, resolveLocale, SystemTrustedClock, t, type ConfigLoadOptions, type Locale } from '#platform/index.js';
 import { agentWorkspaceDeny, createLocalPeerSession, createWorkspaceReadTools, describeMcpRefusal, describeMcpResult, isWriteApprovalFloored, MCP_TOOL_CALL_OPERATION, MCP_TOOL_TARGET_KIND, mcpInspectSandboxes,
-  McpToolTarget, mcpSendAuthority, mcpTrustAuditWriter, mcpTurnTools, openSqliteAttemptStore, openTurnMcp, readLocalOsIdentity, runMcpCommand, type LocalPeerIdentity,
+  McpToolTarget, mcpImportEntry, MCP_SERVER_NAME, mcpSendAuthority, mcpTrustAuditWriter, mcpTurnTools, openSqliteAttemptStore, openTurnMcp, readLocalOsIdentity, readMcpImportSources, runMcpCommand,
+  type LocalPeerIdentity, type McpImportFrom,
   type McpCallOutcome, type McpClientPool, type McpCommandContext, type McpCommandRequest, type McpLaunchContext, type McpStartNotice } from '#adapters/index.js';
 import type { loadPeerInvocationContext } from '#composition/core/model-invocation/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
+import { configuredMcpToolGrants } from '#composition/core/approvals/index.js';
 /**
  * The owner-facing text of one MCP start notice (MCP-SANDBOX-PATHS follow-up): the single renderer of the adapter's structured notice, from
  * the catalog (`mcp.start.*`), for the turn's note (the service's locale) and `lastStart.text` of `mcp list|get` and `/mcp` (the caller's).
@@ -16,6 +19,7 @@ export function renderMcpStartNotice(notice: McpStartNotice, locale: Locale): st
   if (notice.kind === 'tools-changed') return t('mcp.start.toolsChanged', { name, count: notice.count }, locale);
   if (notice.kind === 'not-recorded') return t('mcp.start.notRecorded', { name }, locale);
   if (notice.kind === 'not-decided') return t('mcp.start.notDecided', { name, code: notice.code }, locale);
+  if (notice.kind === 'grant-refused') return t('mcp.start.grantRefused', { name, reason: mcpGrantReasonText(notice.reason, locale) }, locale);
   const { failure } = notice, diagnosis = failure.diagnosis;
   const why = diagnosis?.kind === 'path-hidden'
     ? t('mcp.start.failed.pathHidden', { name, path: diagnosis.path, targetSuffix: diagnosis.target ? ` -> ${diagnosis.target}` : '',
@@ -26,18 +30,29 @@ export function renderMcpStartNotice(notice: McpStartNotice, locale: Locale): st
   const next = failure.phase === 'launch' ? t('mcp.start.next.launch', { name }, locale) : t('mcp.start.next.trusted', { name }, locale);
   return `${why} ${next}`;
 }
+/** Why a trusted server's tools got no policy grant (K1), in the owner's words; an unknown code is shown as it is. */
+export function mcpGrantReasonText(reason: string, locale: Locale): string {
+  if (reason === 'delegation') return t('mcp.grant.reason.delegation', {}, locale);
+  if (reason === 'unsupported') return t('mcp.grant.reason.unsupported', {}, locale);
+  if (reason === 'administer') return t('mcp.grant.reason.administer', {}, locale);
+  if (reason === 'principal') return t('mcp.grant.reason.principal', {}, locale);
+  return reason;
+}
 /** One turn's MCP tools (wiring): first-use trust cards, pinned tools; a call is a C11 effect of Core `mcp.tool.call` (policy again, intent first), never sent twice. */
 export async function createAgentMcp(input: { readonly pool: McpClientPool; readonly projectRoot: string; readonly options: ConfigLoadOptions; readonly resultMaxBytes: number;
   readonly peer: LocalPeerIdentity; readonly context: Awaited<ReturnType<typeof loadPeerInvocationContext>>; readonly scopeId: string; readonly turnId: string;
   readonly signal: AbortSignal; readonly emit: Parameters<typeof openTurnMcp>[0]['emit']; readonly sandboxes: McpLaunchContext['sandboxes']; readonly cwd: string;
   /** MCP-SANDBOX-PATHS: what could not be decided or started this turn (display-safe), for the turn's result note — never silent. */
   readonly onNotices?: (notices: readonly string[]) => void }) {
-  const { pool, context, scopeId, turnId } = input, environment = input.options.env ?? process.env, config = context.config;
+  // Security (MCP pool scope isolation): this turn reaches the service's servers only through the view of its scope and project.
+  const { context, scopeId, turnId } = input, pool = input.pool.scoped({ scopeId, cwd: input.cwd }), environment = input.options.env ?? process.env, config = context.config;
   // The note is a string on the wire: rendered here, in the service's locale (its environment, then the configured language).
   const locale = resolveLocale(undefined, environment, config.language);
   // SECRET-K1: personal-file `$DECK:NAME` goes through the installation's one configured resolver, never straight to the environment.
   const resolveSecret = configuredSecretResolver(config, input.options);
-  const registry = { projectRoot: input.projectRoot, layout: context.layout, environment, secret: (name: string) => resolveSecret(name) };
+  // K1: a trust card's yes also writes the answering person's grant for the pinned tools (their own authority; the governed policy chain).
+  const registry = { projectRoot: input.projectRoot, layout: context.layout, environment, secret: (name: string) => resolveSecret(name),
+    grants: configuredMcpToolGrants(input.projectRoot, scopeId, input.options, context.principal) };
   const opened = await openTurnMcp({ registry, pool, cwd: input.cwd, sandboxes: input.sandboxes, principal: context.principal, sqlite: config.storage.sqlite,
   keyFile: config.approvals.keyFile, requestTtlMs: config.approvals.requestTtlMs, inputMaxBytes: config.mcp.inputMaxBytes, resultMaxBytes: input.resultMaxBytes, scopeId, turnId,
   signal: input.signal, emit: input.emit, describeNotice: notice => renderMcpStartNotice(notice, locale), ledgerPath: () => context.path(), requestPolicy: async () => { const policy = await context.policy.load().catch(() => null); return { revision: String((policy as { revision?: unknown } | null)?.revision ?? 'unknown'), trustFacts: agentToolApprovalFacts(policy, scopeId, null) }; } }); // one snapshot (Sol 2237 R2b)
@@ -65,19 +80,37 @@ export async function createAgentMcp(input: { readonly pool: McpClientPool; read
     } finally { store.close(); }
   } };
 }
+/** `deckent mcp import` (L1 item 2): the servers another MCP client declares, each added untrusted through the registry's own `add` (its audited
+ * `reset` included), so an import never carries trust; a name or entry Deckent cannot take is listed with its reason, never renamed. */
+export type McpConfiguredRequest = McpCommandRequest | { readonly verb: 'import'; readonly from: McpImportFrom; readonly scope?: 'local' | 'user' };
+async function importMcpServers(request: Extract<McpConfiguredRequest, { verb: 'import' }>, context: McpCommandContext) {
+  const projectKey = await realpath(context.projectRoot).catch(() => context.projectRoot);
+  const read = await readMcpImportSources({ projectRoot: projectKey, projectKeys: [context.projectRoot, projectKey], from: request.from, environment: context.environment,
+    ...(request.scope ? { scope: request.scope } : {}) });
+  const imported: { name: string; scope: string; file: string }[] = [], skipped: { name: string | null; file: string; reason: string }[] = read.problems.map(problem => ({ name: null, ...problem }));
+  for (const source of read.sources) for (const [name, value] of Object.entries(source.servers)) {
+    const converted = MCP_SERVER_NAME.test(name) ? mcpImportEntry(value) : { ok: false as const, reason: 'invalid-name' };
+    if (!converted.ok) { skipped.push({ name, file: source.file, reason: converted.reason }); continue; }
+    try { await runMcpCommand({ verb: 'add', scope: source.scope, name, entry: converted.entry, approve: false }, context); imported.push({ name, scope: source.scope, file: source.file }); }
+    catch (error) { skipped.push({ name, file: source.file, reason: String((error as { code?: unknown })?.code ?? 'failed') }); }
+  }
+  return { schemaVersion: 1, imported, skipped };
+}
 /** `deckent mcp …` and `/mcp`: the scoped registry files, the trust records (audited, over this project's ledger) and, for `list`/trust decisions, the
  * server started in its realm. `ask` shows a trust card and answers the owner's decision; `locale` is the calling surface's (default: this
  * process's environment, then the configured language). */
-export async function runConfiguredMcpCommand(projectRoot: string, request: McpCommandRequest, options: ConfigLoadOptions, ask: McpCommandContext['ask'], locale?: Locale) {
+export async function runConfiguredMcpCommand(projectRoot: string, request: McpConfiguredRequest, options: ConfigLoadOptions, ask: McpCommandContext['ask'], locale?: Locale) {
   const config = await loadComposedConfig(projectRoot, { ...options, heal: false }), environment = options.env ?? process.env, principal = readLocalOsIdentity();
   const workspace = await createWorkspaceReadTools(projectRoot, { deny: agentWorkspaceDeny(projectRoot, config.productLayout) }),
     scopeId = (config as unknown as { terminal?: { scopeId?: string } }).terminal?.scopeId ?? 'installation';
   const shown = locale ?? resolveLocale(undefined, environment, config.language);
-  // LANG-CRASH: a managed-file refusal on the way (trust audit over the ledger, the trust directory, e.g. a companion another uid owns inside a
-  // sandbox) is the owner's typed, localized error with its diagnosis — never an uncaught exception and crash report. Anything else is unchanged.
-  return runMcpCommand(request, { projectRoot, layout: config.productLayout, environment, sandboxes: mcpInspectSandboxes(workspace.scope, isWriteApprovalFloored), principal, ask,
+  const context: McpCommandContext = { projectRoot, scopeId, layout: config.productLayout, environment, sandboxes: mcpInspectSandboxes(workspace.scope, isWriteApprovalFloored), principal, ask,
+    grants: configuredMcpToolGrants(projectRoot, scopeId, options, principal),
     describeNotice: notice => renderMcpStartNotice(notice, shown),
     secret: configuredSecretResolver(config, options), limits: { inputMaxBytes: config.mcp.inputMaxBytes },
-    audit: mcpTrustAuditWriter({ layout: config.productLayout, sqlite: config.storage.sqlite, keyFile: config.approvals.keyFile, scopeId, principal, policyRevision: 'owner-cli' }) })
+    audit: mcpTrustAuditWriter({ layout: config.productLayout, sqlite: config.storage.sqlite, keyFile: config.approvals.keyFile, scopeId, principal, policyRevision: 'owner-cli' }) };
+  // LANG-CRASH: a managed-file refusal on the way (trust audit over the ledger, the trust directory, e.g. a companion another uid owns inside a
+  // sandbox) is the owner's typed, localized error with its diagnosis — never an uncaught exception and crash report. Anything else is unchanged.
+  return (request.verb === 'import' ? importMcpServers(request, context) : runMcpCommand(request, context))
     .catch((error: unknown) => { throw error instanceof ManagedFileError ? queryFailure(error) : error; });
 }

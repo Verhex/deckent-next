@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { resolvePolicyBindings, STANDING_GRANT_KIND, type ShellRealmContainment } from '#domain/index.js';
-import { classifyShellContainment, decideAgentToolCall, standingWouldLower, type AgentToolCallCell } from '#engine/index.js';
+import { classifyShellContainment, decideAgentToolCall, shellNamedPaths, standingWouldLower, type AgentToolCallCell } from '#engine/index.js';
 
 // SHELL-AUTONOMY (owner 2026-09-28): the one decision function takes the planned realm's containment and the command's containment.
 // Only full-auto ∧ enforced sandbox ∧ contained lowers the shell cells the classifier could not bound; never destructive, never on the
@@ -50,6 +50,9 @@ describe('classifyShellContainment (SHELL-AUTONOMY)', () => {
     'touch /tmp/deckent-policy-test-$$ && ls -la /tmp/deckent-policy-test-$$', 'echo "policy test $(date +%H:%M:%S)"', 'echo "x" && date && whoami',
     'touch /tmp/full-auto-test && echo "ok: $(ls /tmp/full-auto-test)"', 'rm -f auto-edit-test.txt && echo silindi', 'for f in src/*.ts; do wc -l "$f"; done',
     'cd src && ls | sort; echo done > out.txt', 'X=1 printenv X', 'ls src | tee listing.txt', 'test -f a || [ -d b ]', '(cd src && ls)', 'find . -name "*.ts"', 'f=pack; echo x >> ${f}age.json',
+    // B1 (owner test 2026-10-07): a descriptor duplication is part of its redirection, not a background job, so the same `rm` gets one answer.
+    'rm deneme.md && echo x && ls deneme.md 2>&1 || true', 'rm deneme.md && echo "silindi" || echo "silemedi"', 'ls x >&2', 'ls 3>&1 1>&2 2>&3', 'ls &>/dev/null',
+    'ls x 2>&- && cat <&0', 'ls x 2>&1&& echo ok', 'echo x &>> out.log',
   ])('contained: %s', command => { expect(contained(command)).toEqual({ contained: true, reasonCode: 'CONTAINED' }); });
   it.each([
     ['echo "$(python3 -c 1)"', 'PROGRAM_FLOOR', 'python3'], ['npm test && echo ok', 'PROGRAM_FLOOR', 'npm'], ['ls | xargs cat', 'PROGRAM_FLOOR', 'xargs'],
@@ -59,8 +62,19 @@ describe('classifyShellContainment (SHELL-AUTONOMY)', () => {
     ['echo x >> package.json', 'PROTECTED_NAME', 'package.json'], ['echo x >package.json', 'PROTECTED_NAME', 'package.json'],
     ['mkdir -p .github/workflows && touch .github/workflows/ci.yml', 'PROTECTED_NAME', '.github/workflows'], ['sleep 1 &', 'UNPARSEABLE', undefined],
     ['echo "unterminated', 'UNPARSEABLE', undefined], ['case foo in a) python3 x;; esac', 'PROGRAM_UNKNOWN', 'case'],
+    // B1 negatives: a process substitution and real syntax errors still ask; a `>&` into a protected file is still seen by name.
+    ['ls 2>&1 | diff <(ls) -', 'PROCESS_SUBSTITUTION', '<(ls)'], ['ls 2>&1 &', 'UNPARSEABLE', undefined], ['ls >&', 'UNPARSEABLE', undefined],
+    ['cat <&x', 'UNPARSEABLE', undefined], ['ls 2>&1 "unterminated', 'UNPARSEABLE', undefined], ['echo x >&package.json', 'PROTECTED_NAME', 'package.json'],
+    ['echo x &>package.json', 'PROTECTED_NAME', 'package.json'],
   ])('asks: %s → %s', (command, reasonCode, detail) => {
     expect(contained(command)).toEqual({ contained: false, reasonCode, ...(detail === undefined ? {} : { detail }) });
+  });
+  // B3 (owner test 2026-10-07): the same reading names the protected paths a failed sandboxed command touched.
+  it('shellNamedPaths: every part, redirection targets and option values, in order without repeats; never an expansion', () => {
+    expect(shellNamedPaths('rm package.json && echo x >> .github/a.yml 2>&1; cat package.json', floor)).toEqual(['package.json', '.github/a.yml']);
+    expect(shellNamedPaths('echo "$(touch package.json)" --out=package.json', floor)).toEqual(['package.json']);
+    expect(shellNamedPaths('f=pack; echo x >> ${f}age.json; ls src', floor)).toEqual([]);
+    expect(shellNamedPaths('echo "unterminated package.json', floor)).toEqual([]);
   });
   it('refuses PowerShell and empty commands', () => {
     expect(classifyShellContainment('ls', floor, 'powershell')).toMatchObject({ contained: false, reasonCode: 'UNSUPPORTED_DIALECT' });

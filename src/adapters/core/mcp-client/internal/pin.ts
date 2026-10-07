@@ -9,11 +9,18 @@ import { projectModelIngressField } from '#engine/index.js';
  */
 export interface McpClientServerSettings {
   readonly id: string;
+  /** Absent: stdio. `http`: Streamable HTTP to `url` with `headers` (expanded values); no local process, so `command`, `args`, `env` are empty. */
+  readonly transport?: 'http';
+  readonly url?: string;
+  readonly headers?: Readonly<Record<string, string>>;
+  /** The resolved secret values of the entry (`$DECK:`): cut out of every answer before it reaches the model; never shown. */
+  readonly secrets?: readonly string[];
   readonly command: string;
   readonly args: readonly string[];
   /** The expanded `env` of the registry entry (the SDK adds its own safe defaults: HOME, LOGNAME, PATH, SHELL, TERM, USER). */
   readonly env: Readonly<Record<string, string>>;
-  readonly realm: 'require-sandbox' | 'prefer-sandbox' | 'host';
+  /** K4: `sandbox-net` (the default) — a sandbox with network and the server's own persistent HOME; no sandbox → refused. */
+  readonly realm: 'sandbox-net' | 'require-sandbox' | 'prefer-sandbox' | 'host';
   /** Per-server call deadline (`timeoutMs` of the entry); the settings' default otherwise. */
   readonly timeoutMs?: number;
   /** The command line as the registry entry writes it (`${VAR}` unexpanded): what cards show, so an expanded secret never reaches one. */

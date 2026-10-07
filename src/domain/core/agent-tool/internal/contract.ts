@@ -31,11 +31,22 @@ export type AgentToolSpec = z.infer<typeof agentToolSpecSchema>;
 export const agentToolCleanupSchema = z.enum(['clean', 'group-ended', 'unverified']);
 export type AgentToolCleanup = z.infer<typeof agentToolCleanupSchema>;
 
+/**
+ * Where a workspace path failed (B4 diagnosis, owner terminal test 2026-10-07): the step (`realpath`, `open:<segment>`, `verify:<segment>`,
+ * `stat`) and the system error code when one was raised. Short and secret-free: no path, no content. Optional everywhere it travels.
+ */
+export const agentToolDiagnosticSchema = z.object({
+  step: z.string().regex(/^[a-z]+(?::\d{1,3})?$/u).max(16),
+  errno: z.string().regex(/^E[A-Z0-9]{1,15}$/u).optional(),
+}).strict().readonly();
+export type AgentToolDiagnostic = z.infer<typeof agentToolDiagnosticSchema>;
+
 /** What a tool returns to the loop: model-facing text (bounded by the tool) and whether it succeeded. */
 export const agentToolOutcomeSchema = z.object({
   status: z.enum(['ok', 'error']),
   text: z.string(),
   cleanup: agentToolCleanupSchema.optional(),
+  diagnostic: agentToolDiagnosticSchema.optional(),
 }).strict().readonly();
 export type AgentToolOutcome = z.infer<typeof agentToolOutcomeSchema>;
 

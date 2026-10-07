@@ -17,7 +17,8 @@ export type { InstallationRecovery, InstallationConsent } from './internal/recov
 export { InstallationPublicationApplication, InstallationPublicationError, installationPublishTargets } from './internal/publish.js';
 export type { InstallationPublicationPorts, InstallationPublishTarget, InstallationResource } from './internal/publish.js';
 export { FIRST_RUN_EDIT_SHELL_TOOL_NAMES, FIRST_RUN_READ_TOOL_NAMES, FIRST_RUN_SCRATCH_TOOL_NAMES, FIRST_RUN_SCRATCH_WRITE_OPERATION_ID,
-  FIRST_RUN_SHELL_OPERATION_ID, FIRST_RUN_WRITE_OPERATION_ID, inspectFirstRunPolicyTemplate, PolicyTemplateInstallationApplication,
-  preparePolicyTemplateInstallation } from './internal/policy-template.js';
-export type { PolicyTemplateInstallationPorts, PolicyTemplatePreview, PolicyTemplatePublishTarget, PolicyTemplateResource, PolicyTemplateSource,
+  FIRST_RUN_SHELL_OPERATION_ID, FIRST_RUN_WRITE_OPERATION_ID, FIRST_RUN_PROPOSE_MCP_TOOL_NAME, FIRST_RUN_MCP_CALL_OPERATION_ID, FIRST_RUN_POLICY_ADMINISTER_OPERATION_ID,
+  inspectFirstRunPolicyTemplate,
+  PolicyTemplateInstallationApplication, preparePolicyTemplateInstallation, upgradePolicyTemplate } from './internal/policy-template.js';
+export type { FirstRunToolNames, PolicyTemplateDocumentWriter, PolicyTemplateUpgradeResult, PolicyTemplateInstallationPorts, PolicyTemplatePreview, PolicyTemplatePublishTarget, PolicyTemplateResource, PolicyTemplateSource,
   PreparedPolicyTemplateInstallation, PreparePolicyTemplateInput } from './internal/policy-template.js';

@@ -419,6 +419,9 @@ refresh, usage and dogfood closure remain open.
   gains `fullAuto` (a v20 client would reject it), so the single v21 package bumps once; lifecycle window [21,20]; later T2 items add to it until pushed
   (T2-FOLLOWUP: `setPermissionMode` `session` for session-only full access with audit kind `permission-mode-session`; `decideApproval`
   `approverNote: true`, sealed as decision `schemaVersion: 3` (other decisions stay v2; an earlier build refuses only v3 with `APPROVAL_INTEGRITY`), the turn gives that reason to the model; `approval.requested` `undo`, shell `posture`, the card fields `call` and the cut facts `previewCut` — Astra 2431).
+  v21 was pushed with alpha.10 (released). v22 (T3 `wave/tui-3`, 2026-10-07, unpushed): approval records whose subject is `config-change` reach
+  clients (list/inspect/decide); a v21 client still has them hidden (`approvalSubjectsHiddenFromProtocol`). Lifecycle window [22,21]. No other T3
+  wire field (MCP trust and proposal windows reuse `approval.requested`; read-tool `diagnostic` stays in the service).
   v18 was introduced 2026-09-29 (SECRET-WRITE, lead decision under this rule) as the single v18 package: the control operations
   `setSecret` / `deleteSecret`; lifecycle window [18,17]; every other v17 operation is unchanged in v18. It is unreleased until pushed, and
   further v18 items add to it without another bump. Like every bump, the window's older version is lifecycle-only: a v17 client can
@@ -486,6 +489,44 @@ Core contracts and never requires editing Core. Core-memory law 10 records this 
 - **Two lanes.** Lane A (time-boxed dogfood, no new effect types, owner allowed a DOGFOOD trial 2026-09-23) and
   Lane B (the contracts above, company scope, IFS scenario design and sandbox proof moved ahead of M4).
 
+
+### TERMINAL-UX T3 contracts (2026-10-07, `wave/tui-3`, unpushed; owner decisions in owner-decisions "Owner kararları — 2026-10-07")
+
+- **Config change approval (L2, Jev f0214347/9181d2be):** a config write is allowed by the policy `config`/`write` rule for that layer and scope;
+  a `require-approval` rule turns `set`/`unset` into a pending approval with subject `config-change` (command, layer, key, redacted before/after,
+  previewed layer digest, value digest, `ruleId`; ledger v48 widens the `approvals` CHECK). The same command resubmitted after `allow` applies
+  once under the layer lock after re-checking the digest (`CONFIG_APPROVAL_STALE`), the policy and the accept window; the audit `config-change`
+  record names the consumed `approvalId`. `ConfigApplication.permissions` is a read-only per-layer view for the `/config` window; `set`/`unset`
+  stay allow-only for other callers. Policy `approvalAssurance` may name `subject: config-change`. The model has no route to this write.
+- **MCP servers (L1 + owner MCP decisions):** registry entries are stdio or Streamable HTTP (`type: http`, `url`, `headers`; SSE refused; https
+  only, plain http only to loopback; `$DECK:` secret references in headers/env only in local/user files). The policy kind `mcp-server`
+  (id = registry name, action `invoke`, Jev 04f75210) authorizes an MCP tool call instead of its `agent-tool` wire name (an explicit
+  `agent-tool` deny of the wire name still denies), together with the `mcp.tool.call` operation. A trust approval writes the approver's own
+  `mcp-server` grant for that server through `policy.administer@1` inside I2, `require-approval` + `modeEligible` (Jev 71eeb4ab: standart asks,
+  full-auto lowers with an audited relaxation, full access runs; `mcp-floor` always asks); revoke/remove/reset/decline remove it; pin drift
+  needs no policy change (a drifted tool is not offered). The default realm of a stdio entry is `sandbox-net` (K4, Jev 68a10d1a: bubblewrap with
+  network, a private persistent HOME per server, project read-only, user HOME/project secrets/Deckent state hidden, resolver files bound; no
+  sandbox → no start); `host` is explicit and warned. The client pool is keyed by scope view (scope id + project root) and launch identity
+  and bounded by `mcp.maxServers`. `propose_mcp_server` (read tool) opens a human window in every mode, carries no secret or reference
+  (Jev 30efcb91) and adds the server untrusted; `deckent mcp import` brings Claude Code/Desktop entries untrusted.
+- **First-run policy template v5 (Jev 04f75210, d3d1817d; K1 option A Jev 3e7c5b38):** the installing owner holds `mcp-server` for every server in
+  every scope, the `mcp.tool.call` operation, the read tool `propose_mcp_server`, and in the installed scope the `policy.administer` operation
+  and approval inspect/decide (every change still passes card, audit and I2). Existing installations: `deckent init policy --scope <id> --upgrade
+  --preview|--apply [--expect <revision>]` (installer authority: only the installation owner — the caller's uid owns both authority documents —
+  and only when the first-run read rule names the caller explicitly; anyone else uses the governed path) adds the v5 rules that person lacks, removes
+  or replaces nothing (same-id rules with other content are kept and named as conflicts; hand-added MCP wire-name rules are named), writes on the
+  previewed revision through the archived authority writer and the configured layout; a second run is `current`; an untouched v4 becomes
+  exactly v5. `deckent policy upgrade --template v5 [--apply|--rollback]` applies the same plan through `policy.administer@1` (I2) where the
+  person already holds that authority.
+- **Terminal units:** `cli-terminal` (L0: the interactive launch, ledger ports and handler types moved out of `cli` behind ports; lazy
+  `launchTerminal`); `terminal-picker` gains the pure `pickerReduce` core and `ListPicker` (L3); `terminal-panels` (L4: `/mode`, `/config`,
+  `/mcp` bounded windows, presentation only, ports and words from `cli-terminal`); `/monitor`, `/watch-workers`, `/watch-runs`, `/tasks` are
+  bounded modal live windows (L5: `MonitorBody` loaded through a host port; one visible window at a time). Full access shows a standing
+  warning line above the composer. Detail: [terminal-surface](.deckent/docs/architecture/modules/terminal-surface.md).
+- **Shell and identity (L6):** the shell scanner reads a redirection operator whole (`2>&1`, `N>&M`, `&>`); stream silencing/merging to
+  `/dev/null` or a descriptor keeps a read a read, a file target stays a write; a sandboxed write to a protected path explains itself in the
+  tool result (EN/TR); a registry directory that is its own tmpfs mount inside a sandbox is `*_IDENTITY_MASKED`, not a lost identity;
+  read tools record `diagnostic` (`step`, `errno`) on `not-found`/`path-changed` (B4 root cause still open).
 
 ## Packages (current implementation)
 

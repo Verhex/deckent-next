@@ -59,9 +59,32 @@ export function classifyShellContainment(command: string, protectedName: (path: 
       if (name === 'find' && args.some(arg => FIND_ACTIONS.has(arg))) return verdict(false, 'PROGRAM_FLOOR', 'find');
     }
     for (const word of words) {
-      const path = word.replace(REDIRECTION, ''), value = path.startsWith('-') && path.includes('=') ? path.slice(path.indexOf('=') + 1) : path;
-      if (value.length > 0 && !value.includes(SUBSTITUTION) && protectedName(value)) return verdict(false, 'PROTECTED_NAME', value);
+      const value = pathOfWord(word);
+      if (value !== null && protectedName(value)) return verdict(false, 'PROTECTED_NAME', value);
     }
   }
   return verdict(true, 'CONTAINED');
+}
+
+/** The path a word may name, as the containment check reads it: a redirection's target, an option's `=value`, or the word itself; null
+ * when it is empty or holds a command substitution. */
+function pathOfWord(word: string): string | null {
+  const path = word.replace(REDIRECTION, ''), value = path.startsWith('-') && path.includes('=') ? path.slice(path.indexOf('=') + 1) : path;
+  return value.length > 0 && !value.includes(SUBSTITUTION) ? value : null;
+}
+
+/**
+ * The words of a command (every part the lenient scanner exposes) that name a path `matches` accepts, in order and without repeats — the
+ * same reading as the containment check's protected names. B3 (owner test 2026-10-07): a sandboxed command that failed on a read-only
+ * protected path is explained by name. Words only: what a variable or glob expands to is not seen.
+ */
+export function shellNamedPaths(command: string, matches: (path: string) => boolean): readonly string[] {
+  const named: string[] = [];
+  for (const segment of scanShell(command).segments) {
+    for (const word of shellWords(segment) ?? []) {
+      const value = pathOfWord(word);
+      if (value !== null && !named.includes(value) && matches(value)) named.push(value);
+    }
+  }
+  return Object.freeze(named);
 }

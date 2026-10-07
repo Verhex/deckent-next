@@ -6,21 +6,10 @@
 import { useRef, useState, type ReactNode } from 'react';
 import { Box, Text, useInput, useWindowSize } from 'ink';
 import { useWorklinePalette } from '#surfaces/core/terminal-kit/index.js';
+import { pickerChoice, pickerFirstRow, movePicker } from './picker-core.js';
 import { truncateEnd, useRenderGlyphs, SpanText, sliceSpans, span, type Span } from '#surfaces/core/terminal-render/index.js';
 
 export const ARROW_PICKER_ROWS = 6;
-
-/** Index Enter commits. `count <= 0` has no row; a negative modulo wraps to the end. */
-export function pickerChoice(selected: number, count: number): number {
-  if (count <= 0) return 0;
-  const index = selected % count;
-  return index < 0 ? index + count : index;
-}
-
-export function movePicker(selected: number, count: number, direction: 'up' | 'down'): number {
-  if (count <= 0) return 0;
-  return pickerChoice(selected + (direction === 'up' ? -1 : 1), count);
-}
 
 export function ArrowPicker(props: {
   readonly rows: readonly string[];
@@ -62,7 +51,7 @@ export function ArrowPicker(props: {
   }, { isActive: props.active ?? true });
 
   const index = pickerChoice(selectedRef.current, props.rows.length);
-  const first = Math.max(0, Math.min(index - ARROW_PICKER_ROWS + 1, props.rows.length - ARROW_PICKER_ROWS));
+  const first = pickerFirstRow(index, props.rows.length, ARROW_PICKER_ROWS);
   const width = Math.max(1, (columns || 80) - 1);
   void generation;
   return (

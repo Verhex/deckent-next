@@ -13,7 +13,7 @@ export type { ServicePolicyTarget, ServicePolicyGrant } from './internal/service
 export { ModelActivationPolicyAuthorization, ModelCatalogPolicyAuthorization } from './internal/model-activation.js';
 export { ModelInvocationPolicyAuthorization } from './internal/model-invocation.js';
 export { ProviderSpendAccountPolicyAuthorization } from './internal/provider-spend.js';
-export { AgentToolPolicyAuthorization } from './internal/agent-tool.js';
+export { AgentToolPolicyAuthorization, agentToolPolicyResource } from './internal/agent-tool.js';
 export { admitFullAccessTurn, agentCallPermissionMode, agentCallAuditEvent, decideAgentToolCall, isAuditedDecision, standingWouldLower, trackedFilesAuditEvent, type TrackedFilesAuditList } from './internal/permission-mode.js';
 export type { AgentCallAuditInput, AgentToolCallCell, AgentToolCallDecision, AgentToolCallRequest, FullAccessDecision, PermissionModeRelaxation, StandingApproval } from './internal/permission-mode.js';
 export { PermissionModeApplication, PermissionModeError, inspectPermissionMode } from './internal/permission-mode-admin.js';

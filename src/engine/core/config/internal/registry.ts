@@ -63,6 +63,17 @@ export function definitionFor(keyPath: string) {
   }
   return { path, definition, schema, schemaKey: JSON.stringify(schemaPath) };
 }
+/**
+ * T3 L4: the typed value of a person's text for one key (the `/config` panel's free entry and `/config key=value`): the text itself when the
+ * key's schema takes a string, otherwise its JSON; `ok: false` when neither fits. The write still validates the whole layer.
+ */
+export function parseConfigInput(keyPath: string, text: string): { readonly ok: true; readonly value: unknown } | { readonly ok: false } {
+  const { schema } = definitionFor(keyPath);
+  if (schema.safeParse(text).success) return { ok: true, value: text };
+  let parsed: unknown;
+  try { parsed = JSON.parse(text); } catch { return { ok: false }; }
+  return schema.safeParse(parsed).success ? { ok: true, value: parsed } : { ok: false };
+}
 function jsonSchemaView(schema: z.ZodTypeAny, schemaKey: string): unknown {
   const generation = configRegistryGeneration();
   if (schemaGeneration !== generation) { schemaViews.clear(); schemaGeneration = generation; }
@@ -101,6 +112,13 @@ export function configFieldView(snapshot: ConfigSnapshot, keyPath: string): Conf
   return { key: keyPath, value, defaultValue, source, descriptionKey: definition.descriptionKey,
     description: (MESSAGE_REGISTRY.catalogs[resolveLocale(undefined, snapshot.env, snapshot.effective.language)] as Readonly<Record<string, string>>)[definition.descriptionKey] ?? definition.descriptionKey, schema: schemaDisplayView(jsonSchemaView(schema, schemaKey), path, secretPaths),
     binding: definition.binding, apply: definition.apply, redacted: value === '[REDACTED]' };
+}
+/** A card's bounded display copy of a value at `keyPath` (T3 L2): redacted like every field view, JSON text, cut with "…" past `max`. */
+export function configDisplayText(snapshot: ConfigSnapshot, keyPath: string, value: unknown, max: number): string {
+  const provenance = snapshot.effective['secretPaths'];
+  const secretPaths = new Set<string>(Array.isArray(provenance) ? provenance.filter((item): item is string => typeof item === 'string') : []);
+  const text = JSON.stringify(redact(value, configPath(keyPath), secretPaths) ?? null);
+  return text.length > max ? `${text.slice(0, max - 1)}…` : text;
 }
 export function allConfigKeys(snapshot: ConfigSnapshot): string[] {
   const keys: string[] = [];

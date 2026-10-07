@@ -23,7 +23,8 @@ export interface InstallationIdentityStore {
   resolveRelocation(choice: InstallationIdentityChoice, principal: { readonly issuer: string; readonly subject: string }): Promise<InstallationIdentityResolution>;
 }
 export interface InstallationBindingSource { capture(): Promise<InstallationBindingCapability> }
-export type InstallationIdentityErrorCode = 'INSTALLATION_IDENTITY_INVALID' | 'INSTALLATION_IDENTITY_UNAVAILABLE'
+/** `MASKED` (B5): the record is hidden by a Deckent shell sandbox (the command runs inside one), not lost. */
+export type InstallationIdentityErrorCode = 'INSTALLATION_IDENTITY_INVALID' | 'INSTALLATION_IDENTITY_UNAVAILABLE' | 'INSTALLATION_IDENTITY_MASKED'
   | 'INSTALLATION_IDENTITY_LOCKED' | 'INSTALLATION_IDENTITY_UNSUPPORTED' | 'INSTALLATION_IDENTITY_RELOCATED'
   | 'INSTALLATION_IDENTITY_RESOLUTION_INVALID' | 'INSTALLATION_IDENTITY_SOURCE_INVALID' | 'INSTALLATION_IDENTITY_MACHINE_BINDING_REQUIRED';
 export class InstallationIdentityError extends Error {

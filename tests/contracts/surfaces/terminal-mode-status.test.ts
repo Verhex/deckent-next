@@ -19,7 +19,7 @@ describe('permission mode in the status row (T-L4 slice 4c, MODES-3)', () => {
       expect(PERMISSION_MODES as readonly string[]).toContain(segment!.text);
     }
     expect(text({ ...base, mode: 'full-auto' }, 160)).toBe('company-acme/site-istanbul/project-erp · local-qwen · vllm · Ready · full-auto');
-    expect(worklineStatusSegments({ ...base, mode: 'full-access' }).find(item => item.id === 'mode')).toMatchObject({ role: 'error', droppable: false });
+    expect(worklineStatusSegments({ ...base, mode: 'full-access' }).find(item => item.id === 'mode')).toMatchObject({ role: 'warning', bold: true, droppable: false });
   });
 
   it('shows no mode segment for a value outside the catalog or when the mode is unknown (the v2 names are not catalog values)', () => {
@@ -76,7 +76,7 @@ describe('/mode (T-L4 slice 4c, MODES-3)', () => {
         return { ...view, previous: 'standart' as const, changed: false }; } };
     const entered = await runModeCommand('full-access', port, view, undefined, false, { sessionId: 'conversation-1' });
     expect({ fullAccess: entered.fullAccess, texts: texts(entered.entries), level: (entered.entries[0] as { level: string }).level, stored: entered.view?.mode })
-      .toEqual({ fullAccess: true, texts: ['/mode · standart → full-access'], level: 'error', stored: 'standart' });
+      .toEqual({ fullAccess: true, texts: ['/mode · standart → full-access'], level: 'warning', stored: 'standart' });
     expect(calls).toEqual([['full-access', 'p1+b1', undefined, { sessionId: 'conversation-1' }]]);
     const refusing = { async inspect() { return { ...view, fullAccess: false }; }, async set(): Promise<never> { throw new Error('PERMISSION_MODE_DENIED'); } };
     await expect(runModeCommand('full-access', refusing, { ...view, fullAccess: false })).rejects.toThrow('PERMISSION_MODE_DENIED');
@@ -143,6 +143,9 @@ describe('/mode (T-L4 slice 4c, MODES-3)', () => {
     expect(texts(shown.entries)).toEqual(['Mode: standart — standard-effect', 'Try: /mode full-auto (full-effect); /mode full-access (access-effect)']);
     const inAccess = await runModeCommand('', port, null, labels, true);
     expect(texts(inAccess.entries)).toEqual(['Mode: full-access — access-effect', 'Try: /mode standart (standard-effect); /mode full-auto (full-effect)']);
+    // `/mode show` (lead, L4 decision 3): the same text answer the window replaced for a bare `/mode` (no TTY, scripts).
+    expect(texts((await runModeCommand('show', port, null, labels)).entries)).toEqual(texts(shown.entries));
+    expect(texts((await runModeCommand('show extra', port, null, labels)).entries)).toEqual(['usage']);
     const noGrant = { async inspect() { return { ...view, fullAccess: false, fullAuto: false }; }, async set(): Promise<never> { throw new Error('unused'); } };
     expect(texts((await runModeCommand('', noGrant, null, labels)).entries)).toEqual(['Mode: standart — standard-effect', 'grant needed']);
   });
@@ -189,7 +192,7 @@ describe('Shift+Tab permission-mode cycle (T2 T-MODE-CYCLE)', () => {
       known = result.view as typeof view; fullAccess = result.fullAccess; stored.push(current.mode);
       seen.push(...result.entries.map(entry => entry.kind === 'notice' ? `${entry.level}:${entry.text}` : ''));
     }
-    expect(seen).toEqual(['info:Mode: standard → careful', 'info:Mode: careful → full auto', 'error:Mode: full auto → full access — audited', 'info:Mode: full access → standard']);
+    expect(seen).toEqual(['info:Mode: standard → careful', 'info:Mode: careful → full auto', 'warning:Mode: full auto → full access — audited', 'info:Mode: full access → standard']);
     expect(calls).toEqual([['standart', 'r0', true, undefined], ['full-auto', 'r1', false, undefined], ['full-access', 'r2', undefined, { sessionId: null }],
       ['standart', 'r2', false, undefined]]);
     expect(fullAccess).toBe(false);
@@ -215,6 +218,6 @@ describe('Shift+Tab permission-mode cycle (T2 T-MODE-CYCLE)', () => {
     expect(row('standart', 'standart', '⏸')).toMatchObject({ text: '⏸ standart', role: 'muted' });
     expect(row('standart', 'ask-edits', '⏸')).toMatchObject({ text: '⏸ dikkatli', role: 'muted' });
     expect(row('full-auto', 'full-auto', '⏵⏵')).toMatchObject({ text: '⏵⏵ tam otomatik', role: 'modeIndicator' });
-    expect(row('full-access', 'full-access', '!!')).toMatchObject({ text: '!! tam erişim', role: 'error', droppable: false });
+    expect(row('full-access', 'full-access', '!!')).toMatchObject({ text: '!! tam erişim', role: 'warning', bold: true, droppable: false });
   });
 });

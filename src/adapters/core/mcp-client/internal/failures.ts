@@ -77,7 +77,9 @@ export type McpStartNotice =
   | { readonly kind: 'start-failed'; readonly name: string; readonly failure: Pick<McpStartFailure, 'code' | 'detail' | 'diagnosis' | 'phase'> }
   | { readonly kind: 'tools-changed'; readonly name: string; readonly count: number }
   | { readonly kind: 'not-recorded'; readonly name: string }
-  | { readonly kind: 'not-decided'; readonly name: string; readonly code: string };
+  | { readonly kind: 'not-decided'; readonly name: string; readonly code: string }
+  /** K1: trusted, but the approver's grant for its tools was not written (the reason: `delegation`, `unsupported`, …). */
+  | { readonly kind: 'grant-refused'; readonly name: string; readonly reason: string };
 /** Renders one notice as owner-facing text (the host's catalog, in its locale). */
 export type McpStartNoticeRenderer = (notice: McpStartNotice) => string;
 export const mcpStartFailedNotice = (name: string, failure: Pick<McpStartFailure, 'code' | 'detail' | 'diagnosis' | 'phase'>): McpStartNotice =>

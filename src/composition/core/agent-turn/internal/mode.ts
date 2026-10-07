@@ -63,7 +63,10 @@ export function createAgentCallDecisions(input: { readonly context: Context; rea
     operation: { readonly id: string } | null = operationOf(tool), probeSession = false): Promise<AgentToolCallDecision | null> => {
     const policy = snapshot === undefined ? await load() : snapshot;
     const standing = standingOf(tool, cell, args);
-    try { return policy === null ? null : decideAgentToolCall(policy, { principal: context.principal, scopeId, tool, operation, cell, standing: probeSession && standing ? { ...standing, session: true } : standing,
+    // An MCP tool is authorized on its server (`mcp-server`); a tool the turn does not know cannot name one and fails on the `agent-tool` side.
+    const server = mcps(tool) ? mcp?.server(tool.name) ?? undefined : undefined;
+    try { return policy === null ? null : decideAgentToolCall(policy, { principal: context.principal, scopeId, tool, operation, cell, ...(server === undefined ? {} : { mcpServer: server }),
+      standing: probeSession && standing ? { ...standing, session: true } : standing,
       ...(shellInput ? { shell: shellInput } : {}), ...(input.fullAccess ? { fullAccess: true } : {}) }); }
     catch { return null; }
   };

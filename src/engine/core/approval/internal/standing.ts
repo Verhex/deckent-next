@@ -181,24 +181,34 @@ export class PersistentStanding {
     await this.apply({ scopeId: input.scopeId, principal: input.principal, change: standingRevokeChange(input.id), tag: `revoke:${input.id}`, reason: input.reason });
   }
   private async apply(input: { readonly scopeId: string; readonly principal: VerifiedPrincipal; readonly change: PolicyChange; readonly tag: string; readonly reason: string }) {
-    const current = await this.snapshot();
-    // The command names the revision it was made on: a grant added, revoked and added again is a new command each time.
-    const commandId = sha256(`standing-change:1\0${input.scopeId}\0${input.principal.issuer}\0${input.principal.subject}\0${input.tag}\0${current.revision}`);
-    const command: EffectCommand = { schemaVersion: 1, commandId, scopeId: input.scopeId, operation: POLICY_ADMINISTER_OPERATION.operation,
-      target: { kind: AUTHORITY_DOCUMENT_TARGET_KIND, id: 'installation' }, idempotencyKey: commandId, input: input.change, expectedVersion: current.revision };
-    try {
-      let outcome = await this.deps.administration.submit(command);
-      if (outcome.status === 'approval-pending') {
-        await this.deps.approve({ approvalId: outcome.approval.approvalId, revision: outcome.approval.revision }, `${commandId}-approve`, input.reason);
-        outcome = await this.deps.administration.submit(command);
-      }
-      if (outcome.status !== 'settled') throw new StandingApprovalError('STANDING_NOT_SETTLED');
-    } catch (error) {
+    try { await administerOwnPolicyChange(this.deps, { ...input, revision: (await this.snapshot()).revision, kind: 'standing-change' }); }
+    catch (error) {
       // The decider's authority is the bound (I3): a person cannot persist what their own rules do not hold.
       if ((error as { code?: unknown } | null)?.code === 'POLICY_DELEGATION_EXCEEDS') throw new StandingApprovalError('STANDING_DELEGATION', (error as { detail?: string | null }).detail ?? null);
+      if (error instanceof Error && error.message === 'NOT_SETTLED') throw new StandingApprovalError('STANDING_NOT_SETTLED');
       throw error;
     }
   }
+}
+
+/**
+ * One change of a person's OWN rules through `policy.administer@1` (standing approvals; MCP trust grants): the C11 intent, and — the card the
+ * person already answered being the decision — the pending operation approval decided `allow` as that same person, then the same command
+ * again. The command names the revision it was made on, so the same change made again later is a new command. A change that does not settle
+ * throws `NOT_SETTLED`; the delegation bound's refusal (`POLICY_DELEGATION_EXCEEDS`) is thrown as the administration raises it.
+ */
+export async function administerOwnPolicyChange(deps: Pick<PersistentStandingDependencies, 'administration' | 'approve'>, input: { readonly scopeId: string;
+  readonly principal: { readonly issuer: string; readonly subject: string }; readonly change: PolicyChange; readonly tag: string; readonly reason: string; readonly revision: string;
+  readonly kind: string }): Promise<void> {
+  const commandId = sha256(`${input.kind}:1\0${input.scopeId}\0${input.principal.issuer}\0${input.principal.subject}\0${input.tag}\0${input.revision}`);
+  const command: EffectCommand = { schemaVersion: 1, commandId, scopeId: input.scopeId, operation: POLICY_ADMINISTER_OPERATION.operation,
+    target: { kind: AUTHORITY_DOCUMENT_TARGET_KIND, id: 'installation' }, idempotencyKey: commandId, input: input.change, expectedVersion: input.revision };
+  let outcome = await deps.administration.submit(command);
+  if (outcome.status === 'approval-pending') {
+    await deps.approve({ approvalId: outcome.approval.approvalId, revision: outcome.approval.revision }, `${commandId}-approve`, input.reason);
+    outcome = await deps.administration.submit(command);
+  }
+  if (outcome.status !== 'settled') throw new Error('NOT_SETTLED');
 }
 
 type AuditedStanding = { readonly source: 'session' | 'grant'; readonly key: string; readonly grantId: string | null };

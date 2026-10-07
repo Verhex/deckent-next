@@ -9,7 +9,7 @@ describe('/help grouped', () => {
   it('EN', () => {
     expect(slashHelpText(terminalComposerLabels('en').slash).split('\n\n')[0]).toBe([
       'Commands', 'Info', '  /status  Show whether Deckent is running, its version and the model', '  /context  Show how full the model\'s context window is',
-      '  /monitor  Snapshot of stuck runs, workers, approvals, pools and installs', '  /model  Show the current model and the model catalog of this scope',
+      '  /monitor  Monitor window: stuck runs, workers, approvals, pools and installs (--install/--scope: text snapshot)', '  /model  Show the current model and the model catalog of this scope',
       '  /usage  Show this conversation\'s token usage', '  /doctor  Run the installation health report', '  /scope  Show scope, project, mode and surface access',
       '  /help  List the commands by group'].join('\n'));
   });
@@ -19,8 +19,8 @@ describe('/help grouped', () => {
     const sections = text.split('\n').slice(1).join('\n').split('\n\n');
     expect(sections.map(section => section.split('\n')[0])).toEqual(['Bilgi', 'İşler', 'Onaylar', 'Ayar', 'Oturum']);
     // /cancel is the window lane's text and is not pinned here.
-    expect(sections[1]!.split('\n').slice(0, -1).join('\n')).toBe(['İşler', '  /workers  İşçileri kartlar olarak listele', '  /watch-workers  İşçileri canlı izle; yenileri kart olarak eklenir',
-      '  /watch-runs  İşleri canlı izle; değişiklikler kart olarak eklenir', '  /watch-stop  İşçi ve iş izlemeyi durdur', '  /run <run-kimliği>  Bir işi ayrıntılı göster',
+    expect(sections[1]!.split('\n').slice(0, -1).join('\n')).toBe(['İşler', '  /workers  İşçileri kartlar olarak listele', '  /watch-workers  İşçileri yerinde güncellenen bir pencerede canlı izle',
+      '  /watch-runs  İşleri yerinde güncellenen bir pencerede canlı izle', '  /watch-stop  İşçi ve iş izlemeyi durdur', '  /tasks  Arka plan işleri: işçiler ve işler tek canlı pencerede (salt okunur)', '  /run <run-kimliği>  Bir işi ayrıntılı göster',
       '  /runs  Bu kapsamdaki tüm işleri listele', '  /transcript <n|deneme-kimliği> [sayfa]  Bir işçinin mühürlü dökümünü göster'].join('\n'));
   });
   it('puts the window and mode commands under their headings, one short line each (T2 integration)', () => {
@@ -39,8 +39,8 @@ describe('/help grouped', () => {
   it('lists every registry command exactly once, each on a single line', () => {
     for (const locale of ['en', 'tr'] as const) {
       const rows = slashHelpText(terminalComposerLabels(locale).slash).split('\n').filter(line => line.startsWith('  /'));
-      expect(rows).toHaveLength(27);
-      expect(new Set(rows.map(row => row.trim().split(' ')[0])).size).toBe(27);
+      expect(rows).toHaveLength(28);
+      expect(new Set(rows.map(row => row.trim().split(' ')[0])).size).toBe(28);
     }
   });
 });

@@ -12,7 +12,7 @@ it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket] r
  const toolsFile=join(root,'tools.json'), logFile=join(root,'log.jsonl');
  writeFileSync(toolsFile,JSON.stringify([{name:'echo',description:'Echo',inputSchema:{type:'object',properties:{text:{type:'string'}}}}])); appendFileSync(logFile,'');
  const f=await runtime({extraGrants:[
- {id:'mcp-tool',effect:'allow',actions:['invoke'],scopes:['scope'],principals:me,resource:{kind:'agent-tool',ids:['mcp__fx__echo']}},
+ {id:'mcp-tool',effect:'allow',actions:['invoke'],scopes:['scope'],principals:me,resource:{kind:'mcp-server',ids:['fx']}},
  {id:'mcp-op',effect:'allow',actions:['execute'],scopes:['scope'],principals:me,resource:{kind:'operation',ids:['mcp.tool.call']}},
  {id:'decide',effect:'allow',actions:['inspect','decide'],scopes:['scope'],principals:me,resource:{kind:'approval',ids:'all'}}]}); await f.start();
  mkdirSync(join(f.project,'.deckent'),{recursive:true});

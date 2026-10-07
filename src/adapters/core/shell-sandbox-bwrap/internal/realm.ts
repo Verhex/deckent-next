@@ -3,7 +3,7 @@ import { lstat, mkdir, readdir, realpath } from 'node:fs/promises';
 import { basename, dirname, isAbsolute, join, relative } from 'node:path';
 import type { ShellRealm, ShellRealmRequest, ShellRealmResult } from '#domain/index.js';
 import { BASH_LAUNCH, describeShellWritePosture, fsOpsFor, gitWorktreeRepository, longLivedWritePosture, runShellProcess, sandboxWriteView, scanGitDirectory, type FsOps,
-  type ShellCapabilities, type ShellSandbox, type ShellSandboxLayout, type ShellSandboxWriteView } from '#adapters/core/host-shell/index.js';
+  type ShellCapabilities, type ShellSandbox, type ShellSandboxLaunchProfile, type ShellSandboxLayout, type ShellSandboxWriteView } from '#adapters/core/host-shell/index.js';
 import { DECKENT_DIR } from '#platform/index.js';
 import { BASELINE_IGNORED_DIRS } from '#adapters/core/workspace-read/index.js';
 import { BUBBLEWRAP_ANCESTOR_PIN_MAX, BUBBLEWRAP_SYSTEM_PATHS, bubblewrapArguments, ancestorPins, type BubblewrapView } from './arguments.js';
@@ -17,8 +17,22 @@ export const bubblewrapPosture = (view: ShellSandboxWriteView): string => view.o
   + 'system directories and the PATH toolchain are read-only, HOME and everything else are hidden, there is no network, and every process it starts ends with the call.';
 /** A long-lived server's line on its MCP cards (MCP-CLIENT, C5): the write part from the view its launch enforces, the rest as that view
  * is (a scratch area only when the layout binds one; the process ends with the service, not with a call). */
-export const bubblewrapServerPosture = (view: ShellSandboxWriteView, scratch: boolean): string => `bubblewrap (${describeShellWritePosture(view)}; `
-  + `${scratch ? 'the scratch area and a private /tmp are' : 'only a private /tmp is'} writable; HOME and everything else hidden, no network; it ends with the service)`;
+export const bubblewrapServerPosture = (view: ShellSandboxWriteView, scratch: boolean, profile?: ShellSandboxLaunchProfile): string => `bubblewrap (${describeShellWritePosture(view)}; `
+  + `${scratch ? 'the scratch area and a private /tmp are' : 'only a private /tmp is'} writable; ${profile ? 'its own private HOME (a persistent cache) is writable and the network is on; '
+    + 'your HOME, project secrets and Deckent state are hidden' : 'HOME and everything else hidden, no network'}; it ends with the service)`;
+/** K4: the targets of the system resolver files that lie outside the bound system prefixes (a symbolic link the view would otherwise leave
+ * dangling, e.g. WSL's `/etc/resolv.conf` → `/mnt/wsl/resolv.conf`): regular files only, each bound alone and read-only. */
+const RESOLVER_FILES = ['/etc/resolv.conf', '/etc/hosts', '/etc/nsswitch.conf'];
+export function resolverFiles(): string[] {
+  const out: string[] = [];
+  for (const file of RESOLVER_FILES) {
+    try {
+      const target = realpathSync(file);
+      if (target !== file && statSync(target).isFile() && !BUBBLEWRAP_SYSTEM_PATHS.some(prefix => target === prefix || target.startsWith(`${prefix}/`))) out.push(target);
+    } catch { /* absent: nothing to bind */ }
+  }
+  return out;
+}
 /** Bounds of the deny walk over the project (ignored directories excluded): beyond them the sandbox refuses to run, never runs unmasked. */
 export const BUBBLEWRAP_WALK_MAX_ENTRIES = 50_000;
 /** Git metadata (`.git` trees, a worktree's common repository) is walked for the inode floor too, on its own budget (`objects/` is large). */
@@ -391,11 +405,14 @@ export function bubblewrapShellSandbox(layout: ShellSandboxLayout, options: Bubb
       // MCP-CLIENT: the same view for a long-lived server process (`bwrap <view> -- <command>`), resolved when it starts. A server is
       // third-party code no card approves call by call: its view is the unattended posture with the whole project read-only (C5, owner
       // 2026-09-29, until SHELL-OVERLAY; `longLivedWritePosture`), the write floor's matcher still required (fail closed).
-      const launch = async (environment: Readonly<Record<string, string | undefined>>) => {
+      const launch = async (environment: Readonly<Record<string, string | undefined>>, profile?: ShellSandboxLaunchProfile) => {
         const write = sandboxWriteView(layout, longLivedWritePosture());
         const view = await resolveBubblewrapView(layout, environment, options, { floorReadOnly: write.writeFloorReadOnly, projectReadOnly: write.projectReadOnly });
-        return view.ok ? { ok: true as const, file: binary.path, args: bubblewrapArguments(view.view), view: write, posture: bubblewrapServerPosture(write, layout.scratchDir !== null) }
-          : { ok: false as const, reason: view.reason };
+        if (!view.ok) return { ok: false as const, reason: view.reason };
+        // K4: the profile's HOME replaces the empty one at the same path (no HOME to replace: refused, never a server with the user's HOME).
+        if (profile && !view.view.home) return { ok: false as const, reason: 'no HOME to give the server its own' };
+        const shaped = profile ? { ...view.view, homeBind: profile.home, ...(profile.network ? { network: true, networkFiles: resolverFiles() } : {}) } : view.view;
+        return { ok: true as const, file: binary.path, args: bubblewrapArguments(shaped), view: write, posture: bubblewrapServerPosture(write, layout.scratchDir !== null, profile) };
       };
       // SHELL-OVERLAY × BWRAP-SELECT: write sets are offered exactly when the selected launcher's measured version has the overlay options
       // (`launcher.overlay`, ≥ 0.11.0: the bundled 0.13 always, a system ≥ 0.12 too); otherwise a write-set request is refused (nothing runs).
