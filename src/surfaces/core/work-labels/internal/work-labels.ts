@@ -20,6 +20,32 @@ function ledgerCardLabels(locale: Locale): LedgerCardLabels {
 }
 
 /** Catalog-backed labels for the work surface (worker live line, transcript, approvals, run cancel). */
+/** T2-FOLLOWUP: the approval window's undo words (REVERSIBILITY) and its structured sandbox posture words (POSTURE). */
+function approvalWindowFactLabels(locale: Locale): Pick<WorkSurfaceLabels['approvalWindow'], 'undo' | 'posture'> {
+  return {
+    undo: {
+      none: t('terminal.approval.window.undo.none', {}, locale),
+      compensation: t('terminal.approval.window.undo.compensation', {}, locale),
+      unknown: t('terminal.approval.window.undo.unknown', {}, locale),
+      irreversible: t('terminal.approval.window.undo.irreversible', {}, locale),
+      unverified: t('terminal.approval.window.undo.unverified', {}, locale),
+      'may-change': t('terminal.approval.window.undo.may-change', {}, locale),
+      'no-change': t('terminal.approval.window.undo.no-change', {}, locale),
+      'server-read-only': t('terminal.approval.window.undo.server-read-only', {}, locale),
+      'server-additive': t('terminal.approval.window.undo.server-additive', {}, locale),
+      'server-destructive': t('terminal.approval.window.undo.server-destructive', {}, locale),
+      'server-silent': t('terminal.approval.window.undo.server-silent', {}, locale) },
+    posture: {
+      sandbox: t('terminal.approval.window.posture.sandbox', {}, locale), host: t('terminal.approval.window.posture.host', {}, locale),
+      degraded: t('terminal.approval.window.posture.degraded', {}, locale), passedOver: t('terminal.approval.window.posture.passedOver', {}, locale),
+      project: { writable: t('terminal.approval.window.posture.project.writable', {}, locale),
+        'writable-except-floor': t('terminal.approval.window.posture.project.writable-except-floor', {}, locale),
+        'read-only': t('terminal.approval.window.posture.project.read-only', {}, locale), 'write-set': t('terminal.approval.window.posture.project.write-set', {}, locale) },
+      git: { writable: t('terminal.approval.window.posture.git.writable', {}, locale), 'read-only': t('terminal.approval.window.posture.git.read-only', {}, locale) },
+      network: { reachable: t('terminal.approval.window.posture.network.reachable', {}, locale), closed: t('terminal.approval.window.posture.network.closed', {}, locale) } }
+  };
+}
+
 export function workSurfaceLabels(locale: Locale): WorkSurfaceLabels {
   const phases = ['starting', 'thinking', 'reading', 'editing', 'running', 'searching', 'fetching', 'delegating', 'finished', 'failed'] as const;
   return {
@@ -146,26 +172,7 @@ function approvalWindowLabels(locale: Locale): WorkSurfaceLabels['approvalWindow
       'effect-irreversible': t('terminal.approval.window.risk.effect-irreversible', {}, locale),
       authority: t('terminal.approval.window.risk.authority', {}, locale),
       unknown: t('terminal.approval.window.risk.unknown', {}, locale) },
-    undo: {
-      none: t('terminal.approval.window.undo.none', {}, locale),
-      compensation: t('terminal.approval.window.undo.compensation', {}, locale),
-      unknown: t('terminal.approval.window.undo.unknown', {}, locale),
-      irreversible: t('terminal.approval.window.undo.irreversible', {}, locale),
-      unverified: t('terminal.approval.window.undo.unverified', {}, locale),
-      'may-change': t('terminal.approval.window.undo.may-change', {}, locale),
-      'no-change': t('terminal.approval.window.undo.no-change', {}, locale),
-      'server-read-only': t('terminal.approval.window.undo.server-read-only', {}, locale),
-      'server-additive': t('terminal.approval.window.undo.server-additive', {}, locale),
-      'server-destructive': t('terminal.approval.window.undo.server-destructive', {}, locale),
-      'server-silent': t('terminal.approval.window.undo.server-silent', {}, locale) },
-    posture: {
-      sandbox: t('terminal.approval.window.posture.sandbox', {}, locale), host: t('terminal.approval.window.posture.host', {}, locale),
-      degraded: t('terminal.approval.window.posture.degraded', {}, locale), passedOver: t('terminal.approval.window.posture.passedOver', {}, locale),
-      project: { writable: t('terminal.approval.window.posture.project.writable', {}, locale),
-        'writable-except-floor': t('terminal.approval.window.posture.project.writable-except-floor', {}, locale),
-        'read-only': t('terminal.approval.window.posture.project.read-only', {}, locale), 'write-set': t('terminal.approval.window.posture.project.write-set', {}, locale) },
-      git: { writable: t('terminal.approval.window.posture.git.writable', {}, locale), 'read-only': t('terminal.approval.window.posture.git.read-only', {}, locale) },
-      network: { reachable: t('terminal.approval.window.posture.network.reachable', {}, locale), closed: t('terminal.approval.window.posture.network.closed', {}, locale) } },
+    ...approvalWindowFactLabels(locale),
     time: t('terminal.approval.window.time', {}, locale), expired: t('terminal.approval.window.expired', {}, locale), ageUnknown: t('terminal.approval.window.ageUnknown', {}, locale), previewCut: t('terminal.approval.window.previewCut', {}, locale), valueMore: t('terminal.approval.window.valueMore', {}, locale),
     detail: {
       id: t('terminal.approval.window.detail.id', {}, locale),
