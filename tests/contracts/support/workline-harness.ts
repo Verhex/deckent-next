@@ -16,7 +16,7 @@ const work: WorkSurfaceLabels = { workerLine: WORKER_LINE_EN, panel: { title: 'L
   approvalMore: 'A-MORE {count}', approvalNotify: 'A-NOTIFY {count}', approvalPollFailed: 'A-POLLFAIL',
   approvalCard: { risk: 'R-RISK {risk} {undo}', notDeclared: 'R-UNDECLARED', onExpiry: 'R-NOTHING-RUNS', assuranceTurnHere: 'R-TURN-HERE', assuranceTurnElsewhere: 'R-TURN-ELSEWHERE',
     assurancePeer: 'R-PEER', assuranceOther: 'R-OTHER {level}' }, cancelUsage: 'C-USAGE', cancelTitle: 'C-TITLE {run}',
-  cancelDetail: 'C-DETAIL {revision} {phases}', cancelAlreadyRequested: 'C-ALREADY', cancelPrompt: 'C-PROMPT', cancelPending: 'C-PENDING', cancelKept: 'C-KEPT {run}', window: EN_WORK.window, approvalWindow: EN_WORK.approvalWindow };
+  cancelDetail: 'C-DETAIL {revision} {phases}', cancelAlreadyRequested: 'C-ALREADY', cancelPrompt: 'C-PROMPT', cancelPending: 'C-PENDING', cancelKept: 'C-KEPT {run}', live: EN_WORK.live, window: EN_WORK.window, approvalWindow: EN_WORK.approvalWindow };
 
 /** Placeholder labels: tests assert on these tokens, never on catalog text. */
 export const WORKLINE_TEST_LABELS: WorklineLabels = { banner: 'BANNER', prompt: '> ', statusReady: 'READY', statusBusy: 'BUSY', statusCancelling: 'CANCELLING',

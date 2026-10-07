@@ -83,10 +83,9 @@ describe('surface push on the workline', () => {
     const view = mountWorkline({ labels: { ...labels, watchAccessStopped: 'ACCESS-STOPPED {kinds}' }, pollMs: 30, approvalPollMs: 30,
       ledger: { scopeId: 'scope-a', followEvents, followWorkers, followRuns, listWorkers, listRunIds, listApprovalPage, async inspectRun() { return null; } } });
     mounted.push(view.instance);
-    await type(view.stdin, '/watch-workers\r');
-    await until(() => view.stdout.text.includes('WATCH-ON'), 'worker watch');
-    await type(view.stdin, '/watch-runs\r');
-    await until(() => view.stdout.text.includes('RUNS-ON'), 'run watch');
+    // The first watch window owns the keyboard, so both feeds are started by the one command that shows both (`/tasks`).
+    await type(view.stdin, '/tasks\r');
+    await until(() => view.stdout.text.includes('WATCH-ON'), 'worker and run watch');
     expect(listWorkers).not.toHaveBeenCalled();
     expect(listRunIds).not.toHaveBeenCalled();
     expect(listApprovalPage).not.toHaveBeenCalled();

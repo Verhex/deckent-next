@@ -6,6 +6,7 @@ import { createSurfaceFollowSession, type SurfaceFollowEvent, type SurfacePushSt
 import { mountWorkline, settle, until, WORKLINE_TEST_LABELS } from '../support/workline-harness.js';
 import { surfaceSnapshotFixture } from '../support/surface-snapshot-fixture.js';
 
+const ESC = '\u001B';
 const fixtures: Awaited<ReturnType<typeof surfaceSnapshotFixture>>[] = [];
 const mounted: { unmount(): void }[] = [];
 beforeEach(async context => {
@@ -121,7 +122,7 @@ it('serializes a Run invalidation behind a live heartbeat snapshot and stops hea
     release();
     await until(() => read.mock.calls.some(call => call[0].join(',') === 'run,worker') && inFlight === 0, 'queued invalidation settles');
     expect(maximum).toBe(1);
-    await type(view.stdin, '/watch-stop\r'); await settle(150);
+    view.stdin.write(ESC); await until(() => view.stdout.text.includes('Workers window closed'), 'Esc closes the window and stops the watch'); await settle(150);
     const stopped = read.mock.calls.length;
     await settle(350); expect(read).toHaveBeenCalledTimes(stopped);
   } finally { release(); }
@@ -194,7 +195,8 @@ it('refuses foreign principal snapshots, startup and resync before publication S
   await until(() => view.stdout.text.includes('ACCESS-STOPPED'), 'access stopped');
   await type(view.stdin, '/watch-workers\r'); await settle(80);
   expect(read).not.toHaveBeenCalled(); expect(follow).toHaveBeenCalledTimes(1);
-  expect(view.stdout.text).not.toMatch(/snapshot-task|snapshot-run|A-NOTIFY|LIVE-PANEL/);
+  // The window may open (it is the person's own command) but shows nothing: no data port was read and no foreign row reached the screen.
+  expect(view.stdout.text).not.toMatch(/snapshot-task|snapshot-run|A-NOTIFY/);
   expect(sql.mock.calls.map(call => String(call[0])).filter(statement => /SELECT/i.test(statement) && /\b(runs|approvals|approval_outbox|worker_event_logs|dispatches)\b/.test(statement))).toEqual([]);
 });
 

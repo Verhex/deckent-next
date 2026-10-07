@@ -479,5 +479,20 @@
   "terminal.approval.window.keys.scroll": "↑↓ kaydır",
   "terminal.approval.window.reason.label": "Gerekçe:",
   "terminal.approval.window.reason.hint": "Gerekçenizi yazın · Enter ya da Tab bitir · Esc geri · kararınızla kaydedilir ve modele notunuz olarak iletilir",
-  "terminal.approval.window.reason.empty": "(yok)"
+  "terminal.approval.window.reason.empty": "(yok)",
+  "terminal.slash.tasks": "Arka plan işleri: işçiler ve işler tek canlı pencerede (salt okunur)",
+  "terminal.live.monitorTitle": "İzleme",
+  "terminal.live.runsTitle": "İşler (canlı)",
+  "terminal.live.tasksTitle": "Arka plan işleri (canlı)",
+  "terminal.live.hints": "↑↓ PgUp PgDn kaydır · Esc kapatır ve izlemeyi durdurur",
+  "terminal.live.monitorHints": "Esc veya q kapatır · izlemenin kendi tuşları son satırında",
+  "terminal.live.statusWorkers": "{count} işçi",
+  "terminal.live.statusRuns": "{count} iş",
+  "terminal.live.statusTasks": "{workers} işçi · {runs} iş",
+  "terminal.live.empty": "Henüz gözlenen bir şey yok.",
+  "terminal.live.runsMore": "+{count} tane daha (/runs hepsini listeler)",
+  "terminal.live.closedWorkers": "İşçi penceresi kapandı — son okumada {count} işçi; izleme durdu.",
+  "terminal.live.closedRuns": "İş penceresi kapandı — son okumada {count} iş; izleme durdu.",
+  "terminal.live.closedTasks": "Arka plan işleri penceresi kapandı — son okumada {workers} işçi ve {runs} iş; izleme durdu.",
+  "terminal.live.monitorFailed": "İzleme penceresi açılamadı"
 }

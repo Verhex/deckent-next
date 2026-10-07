@@ -1,5 +1,5 @@
 import { type WorkLedgerEntry, type WorkLedgerWorkerEntry, notice, fillTemplate, type WorkerLineLabels, type WorklineLedgerPorts, ledgerEntriesForRuns, ledgerEntriesForWorkers, ledgerEntryForRun } from '#surfaces/core/terminal-ledger/index.js';
-import type { WorkerPanelLabels } from './worker-panel.js';
+import type { LiveWindowKind, LiveWindowLabels, WorkerPanelLabels } from './live-windows.js';
 import type { ApprovalWindowLabels } from './approval-window.js';
 import { transcriptPage, type TranscriptPageLabels } from './transcript-page.js';
 import { shortId } from '#platform/index.js';
@@ -33,6 +33,8 @@ export interface WorklineActionLabels {
 
 /** Catalog strings for the work surface (P4). Templates use `{name}` placeholders. */
 export interface WorkSurfaceLabels {
+  /** Live windows (`/monitor`, `/watch-*`, `/tasks`); absent means those commands are not offered as windows. */
+  readonly live?: LiveWindowLabels;
   readonly workerLine: WorkerLineLabels;
   readonly panel: WorkerPanelLabels;
   readonly unavailable: string;
@@ -118,7 +120,8 @@ export interface WorklineActionContext {
 }
 
 /** Result of one slash command; the view applies it. Entries carry no identity: the ledger buffer assigns sequence ids. */
-export type WorklineActionResult = Readonly<{ entries: readonly WorkLedgerEntry[]; watch?: WatchState; exit?: true }>;
+/** `window`: the live window the command opens (`null` closes the open one). */
+export type WorklineActionResult = Readonly<{ entries: readonly WorkLedgerEntry[]; watch?: WatchState; window?: Exclude<LiveWindowKind, 'monitor'> | null; exit?: true }>;
 
 /** Pure dispatch for immediate commands; `needsLedger` commands return null and run through `runLedgerCommand`. */
 export function immediateSlashAction(command: string, context: WorklineActionContext): WorklineActionResult | null {
@@ -126,17 +129,19 @@ export function immediateSlashAction(command: string, context: WorklineActionCon
   if (command === 'exit' || command === 'quit') return { entries: [], exit: true };
   if (command === 'help') return { entries: [notice('info', slashHelpText(labels.composer?.slash ?? {}, WORKLINE_SLASH_COMMANDS))] };
   if (command === 'status' || command === 'chat-backend') return { entries: [notice('info', labels.statusLine)] };
-  if (command === 'watch-workers' || command === 'watch-runs') {
-    const runs = command === 'watch-runs';
-    if (!ledger || (runs && !ledger.listRunIds)) return { entries: [notice('error', labels.ledgerUnavailable)] };
-    if (runs ? watch.runs : watch.workers) return { entries: [] };
+  if (command === 'watch-workers' || command === 'watch-runs' || command === 'tasks') {
+    const runs = command === 'watch-runs', tasks = command === 'tasks', kind = tasks ? 'tasks' as const : runs ? 'runs' as const : 'workers' as const;
+    if (!ledger || (runs && !ledger.listRunIds) || !labels.work?.live) return { entries: [notice('error', labels.work?.live ? labels.ledgerUnavailable : (labels.work?.unavailable ?? labels.ledgerUnavailable))] };
+    // `/tasks` follows both feeds (runs only where the ledger can list them); a feed already on is not announced again, its window just opens.
+    const next: WatchState = { workers: watch.workers || !runs, runs: watch.runs || runs || (tasks && Boolean(ledger.listRunIds)) };
+    if (next.workers === watch.workers && next.runs === watch.runs) return { entries: [], window: kind };
     const mode = context.followDelivery ?? (ledger.followEvents || (runs ? ledger.followRuns : ledger.followWorkers) ? 'push' as const : 'poll' as const);
     const pace = context.pollMs ?? ledger.workerHeartbeatMs;
     const delivery = labels.watchDelivery && pace !== undefined ? [notice('info', fillTemplate(labels.watchDelivery, surfaceDeliveryValues(mode, pace)))] : [];
-    return { entries: [notice('info', runs ? labels.watchRunsStarted : labels.watchStarted), ...delivery], watch: { ...watch, [runs ? 'runs' : 'workers']: true } };
+    return { entries: [notice('info', runs ? labels.watchRunsStarted : labels.watchStarted), ...delivery], watch: next, window: kind };
   }
   if (command === 'watch-stop') {
-    return watch.workers || watch.runs ? { entries: [notice('info', labels.watchStopped)], watch: { workers: false, runs: false } } : { entries: [] };
+    return watch.workers || watch.runs ? { entries: [notice('info', labels.watchStopped)], watch: { workers: false, runs: false }, window: null } : { entries: [] };
   }
   if (command === 'runs') {
     if (!ledger?.listRunIds) return { entries: [notice('error', labels.ledgerUnavailable)] };

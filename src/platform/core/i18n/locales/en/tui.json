@@ -479,5 +479,20 @@
   "terminal.approval.window.keys.scroll": "↑↓ scroll",
   "terminal.approval.window.reason.label": "Reason:",
   "terminal.approval.window.reason.hint": "Type your reason · Enter or Tab done · Esc back · recorded with your decision and given to the model as your note",
-  "terminal.approval.window.reason.empty": "(none)"
+  "terminal.approval.window.reason.empty": "(none)",
+  "terminal.slash.tasks": "Background work: workers and runs in one live window (read-only)",
+  "terminal.live.monitorTitle": "Monitor",
+  "terminal.live.runsTitle": "Runs (live)",
+  "terminal.live.tasksTitle": "Background work (live)",
+  "terminal.live.hints": "↑↓ PgUp PgDn scroll · Esc close and stop watching",
+  "terminal.live.monitorHints": "Esc or q close · the monitor's own keys are on its last row",
+  "terminal.live.statusWorkers": "{count} workers",
+  "terminal.live.statusRuns": "{count} runs",
+  "terminal.live.statusTasks": "{workers} workers · {runs} runs",
+  "terminal.live.empty": "Nothing observed yet.",
+  "terminal.live.runsMore": "+{count} more (/runs lists all)",
+  "terminal.live.closedWorkers": "Workers window closed — {count} workers at the last read; watch stopped.",
+  "terminal.live.closedRuns": "Runs window closed — {count} runs at the last read; watch stopped.",
+  "terminal.live.closedTasks": "Background work window closed — {workers} workers and {runs} runs at the last read; watch stopped.",
+  "terminal.live.monitorFailed": "The monitor window could not open"
 }
