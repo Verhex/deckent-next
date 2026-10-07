@@ -583,6 +583,7 @@
   "cli.init.policyUpgrade.upgraded": "İlk kurulum policy'sine aşağıdaki v5 kuralları eklendi (önceki belgeler arşivde); diğer her şey korundu.",
   "cli.init.policyUpgrade.current": "Bu ilk kurulum policy'sinde v5 kuralları zaten var; yapılacak bir şey yok.",
   "cli.init.policyUpgrade.unavailable": "Bu policy sizi adlandıran bir ilk kurulum policy'si değil; değiştirilmedi. v5 kurallarını kendi policy yetkinizle ekleyin (deckent policy upgrade --template v5 --preview gösterir).",
+  "cli.init.policyUpgrade.notOwner": "Bunu burada yalnız kurulumun sahibi (policy dosyalarının sahibi kullanıcı) yükseltebilir; hiçbir şey yazılmadı. Yönetilen yolu kullanın: deckent policy upgrade --template v5 --scope {scope} --preview",
   "cli.init.policyUpgrade.conflict": "Önizlemeden sonra policy değişti (şimdi revizyon {revision}); hiçbir şey yazılmadı. Yeniden önizleyin.",
   "cli.init.policyUpgrade.conflicts": "Olduğu gibi korundu (aynı kimlik, farklı içerik; gözden geçirin): {ids}",
   "cli.init.policyUpgrade.wireRules": "Korundu ama artık MCP çağrılarında kullanılmıyor (MCP çağrısı artık sunucu başına, mcp-server ile izinli): {ids}",

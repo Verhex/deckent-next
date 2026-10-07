@@ -199,6 +199,16 @@ describe('first-run v4 → v5 governed additions (deckent policy upgrade --templ
     if (plan.status === 'plan') expect(plan.rules.map(rule => rule.id)).not.toContain('first-run-approvals');
     expect(firstRunTemplateAdditions(v4(), { ...names, person: { issuer: 'os', subject: 'colleague' } })).toEqual({ status: 'unavailable', reason: 'not-this-person' });
   });
+  it('security (lead 2026-10-07): a read rule for `all` principals names no owner (unavailable for everyone); every added rule names only the caller', () => {
+    const open = { ...v4(), grants: v4().grants.map(grant => grant.id === 'first-run-read-tools' ? { ...grant, principals: 'all' } : grant) };
+    expect(firstRunTemplateAdditions(open, names)).toEqual({ status: 'unavailable', reason: 'not-this-person' });
+    expect(firstRunTemplateAdditions(open, { ...names, person: { issuer: 'os', subject: 'anyone' } })).toEqual({ status: 'unavailable', reason: 'not-this-person' });
+    // A read rule naming two people: the plan for one of them grants that one alone, never the other (nor `all`).
+    const shared = { ...v4(), grants: v4().grants.map(grant => grant.id === 'first-run-read-tools' ? { ...grant, principals: [me, { issuer: 'os', subject: 'colleague' }] } : grant) };
+    const plan = firstRunTemplateAdditions(shared, { ...names, person: { issuer: 'os', subject: 'colleague' } });
+    expect(plan.status).toBe('plan');
+    if (plan.status === 'plan') for (const rule of plan.rules) expect(rule.principals).toEqual([{ issuer: 'os', subject: 'colleague' }]);
+  });
   it('a fresh v5 template is current (the proposal tool inside its read rule); a policy without the first-run read rule is not this template', () => {
     expect(firstRunTemplateAdditions(firstRunPolicyTemplate(input).policy, names)).toEqual({ status: 'current', conflicts: [] });
     expect(firstRunTemplateAdditions({ ...v4(), grants: v4().grants.filter(grant => grant.id !== 'first-run-read-tools') }, names)).toEqual({ status: 'unavailable', reason: 'not-first-run' });

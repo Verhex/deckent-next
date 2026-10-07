@@ -23,7 +23,7 @@ export type InstallationResumeHandler = (projectRoot: string, input: Installatio
 export type PolicyTemplatePreviewHandler = (projectRoot: string, scopeId: string) => Promise<unknown>;
 export type PolicyTemplateApplyHandler = (projectRoot: string, scopeId: string) => Promise<unknown>;
 /** Owner 2026-10-07: the first-run v4 → v5 migration (`--upgrade`); `apply: false` reads only. */
-export type PolicyTemplateUpgradeHandler = (projectRoot: string, scopeId: string, apply: boolean, expect?: string) => Promise<{ readonly status: string; readonly revision?: string | null;
+export type PolicyTemplateUpgradeHandler = (projectRoot: string, scopeId: string, apply: boolean, expect?: string) => Promise<{ readonly status: string; readonly reason?: string | null; readonly revision?: string | null;
   readonly rules?: readonly unknown[]; readonly conflicts?: readonly string[]; readonly wireRules?: readonly string[] }>;
 
 /** Preview is deliberately non-mutating. No surface invents profile data or policy grants. */
@@ -133,7 +133,7 @@ function policyUpgradeText(value: Awaited<ReturnType<PolicyTemplateUpgradeHandle
   const revision = value.revision ?? '-';
   const head = value.status === 'preview' ? t('cli.init.policyUpgrade.preview', { scope, revision }, locale) : value.status === 'upgraded' ? t('cli.init.policyUpgrade.upgraded', {}, locale)
     : value.status === 'current' ? t('cli.init.policyUpgrade.current', {}, locale) : value.status === 'conflict' ? t('cli.init.policyUpgrade.conflict', { revision }, locale)
-    : t('cli.init.policyUpgrade.unavailable', {}, locale);
+    : value.reason === 'not-owner' ? t('cli.init.policyUpgrade.notOwner', { scope }, locale) : t('cli.init.policyUpgrade.unavailable', {}, locale);
   const rules = (value.rules ?? []).map(rule => { const grant = rule as { id?: string; resource?: { kind?: string; ids?: unknown } };
     return `  + ${grant.id ?? '-'}: ${grant.resource?.kind ?? '-'} ${Array.isArray(grant.resource?.ids) ? grant.resource!.ids.join(', ') : '*'}`; });
   const kept = (value.conflicts ?? []).length ? [t('cli.init.policyUpgrade.conflicts', { ids: value.conflicts!.join(', ') }, locale)] : [];

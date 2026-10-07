@@ -583,6 +583,7 @@
   "cli.init.policyUpgrade.upgraded": "The first-run policy now has the v5 rules below (the previous documents are archived); everything else was kept.",
   "cli.init.policyUpgrade.current": "This first-run policy already has the v5 rules; nothing to do.",
   "cli.init.policyUpgrade.unavailable": "This policy is not a first-run policy naming you, so it is not changed; add the v5 rules with your own policy authority (deckent policy upgrade --template v5 --preview shows them).",
+  "cli.init.policyUpgrade.notOwner": "Only the installation's owner (the user who owns its policy files) may upgrade it here; nothing was written. Use the governed path: deckent policy upgrade --template v5 --scope {scope} --preview",
   "cli.init.policyUpgrade.conflict": "The policy changed since the preview (now revision {revision}); nothing was written. Preview again.",
   "cli.init.policyUpgrade.conflicts": "Kept as they are (same id, other content; review them): {ids}",
   "cli.init.policyUpgrade.wireRules": "Kept, but no longer used for MCP calls (an MCP call is now allowed per server, mcp-server): {ids}",

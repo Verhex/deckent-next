@@ -68,6 +68,8 @@ describe.skipIf(process.platform !== 'linux')('deckent policy upgrade --template
     // The harness's own approval grant already covers approval inspect/decide, so that rule is not added again.
     expect(preview.rules.map(rule => rule.id)).toEqual(['first-run-mcp-servers', 'first-run-mcp-call-operation', 'first-run-mcp-propose-tool', 'first-run-policy-administer']);
     expect(preview.summary).toContain('+ grant first-run-mcp-servers');
+    // Security: the plan never grants another principal (each added rule names this person alone).
+    for (const rule of preview.rules) expect(rule.principals).toEqual(me);
     expect(grants().map(grant => grant.id)).toEqual(before); // preview writes nothing
     expect(await upgrade('apply', 'stale-revision')).toMatchObject({ status: 'conflict' });
     expect(await upgrade('apply', preview.revision)).toMatchObject({ status: 'upgraded' });
@@ -137,10 +139,12 @@ describe.skipIf(process.platform !== 'linux')('deckent policy upgrade --template
   }, 180_000);
 
   it('(b) a pure first-run v4 policy: the preview names what the person lacks (policy.administer, deciding the card, the authority itself); apply writes nothing', async () => {
-    const { upgrade, bytes } = await project('pure');
+    const { f, upgrade, bytes } = await project('pure');
     const before = bytes();
     expect(await upgrade('preview')).toMatchObject({ status: 'preview', missing: ['policy-administer', 'approval-decide', 'delegation'] });
     expect(await upgrade('apply')).toMatchObject({ status: 'refused', missing: ['policy-administer', 'approval-decide', 'delegation'] });
     expect(bytes()).toBe(before);
+    // Security: the governed path writes nothing and records no authority change for a person without policy.administer.
+    expect(f.audit().filter(entry => entry.event.subject['kind'] === 'authority-change')).toEqual([]);
   }, 120_000);
 });

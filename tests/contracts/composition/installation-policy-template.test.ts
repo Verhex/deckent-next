@@ -99,6 +99,27 @@ it('upgrades a changed v4 policy additively (owner 2026-10-07): hand-added and e
   expect(JSON.parse(await readFile(policyPath, 'utf8'))).toEqual(after);
 });
 
+it('security (lead 2026-10-07): only the installation owner may use the direct upgrade, and a read rule for `all` principals is nobody\'s; nothing is written either way', async () => {
+  const root = await project();
+  await applyPolicyTemplateInstallation(root, 'installation');
+  const policyPath = join(root, '.deckent/policy.json');
+  const v5 = JSON.parse(await readFile(policyPath, 'utf8')) as { grants: { id: string; principals: unknown; resource: { ids: unknown } }[] };
+  const v4 = { ...v5, revision: 'first-run-template-v4', grants: v5.grants.filter(grant => !['first-run-mcp-servers', 'first-run-mcp-call-operation', 'first-run-policy-administer',
+    'first-run-approvals'].includes(grant.id)) };
+  await writeFile(policyPath, `${JSON.stringify(v4)}\n`, { mode: 0o600 });
+  const before = await readFile(policyPath, 'utf8');
+  // Another local user (the files' owner uid is not theirs): refused before anything is read or written; the governed path is named.
+  expect(await upgradePolicyTemplateInstallation(root, 'installation', true, undefined, {}, (process.getuid?.() ?? 0) + 1)).toMatchObject({ status: 'unavailable', reason: 'not-owner' });
+  expect(await upgradePolicyTemplateInstallation(root, 'installation', false, undefined, {}, (process.getuid?.() ?? 0) + 1)).toMatchObject({ status: 'unavailable', reason: 'not-owner' });
+  expect(await readFile(policyPath, 'utf8')).toBe(before);
+  // A first-run read rule for every principal proves no owner: unavailable, bytes unchanged.
+  const open = { ...v4, revision: 'a-open', grants: v4.grants.map(grant => grant.id === 'first-run-read-tools' ? { ...grant, principals: 'all' } : grant) };
+  await writeFile(policyPath, `${JSON.stringify(open)}\n`, { mode: 0o600 });
+  const openBytes = await readFile(policyPath, 'utf8');
+  expect(await upgradePolicyTemplateInstallation(root, 'installation', true)).toMatchObject({ status: 'unavailable', reason: 'not-this-person' });
+  expect(await readFile(policyPath, 'utf8')).toBe(openBytes);
+});
+
 it('never overwrites an existing, different policy.json: apply refuses before any journal entry, the file stays byte-identical, and doctor does not recognize it', async () => {
   const root = await project();
   await mkdir(join(root, '.deckent'), { mode: 0o700, recursive: true });

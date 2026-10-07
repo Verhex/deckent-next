@@ -158,7 +158,7 @@ export interface PolicyTemplateUpgradeResult {
   /** `preview`: would add `rules`; `upgraded`: written now; `current`: nothing to add; `unavailable`: not this person's first-run policy (`reason`);
    * `conflict`: the policy moved since the previewed revision (`expect`). */
   readonly status: 'preview' | 'upgraded' | 'current' | 'unavailable' | 'conflict';
-  readonly reason: 'not-first-run' | 'not-this-person' | 'invalid' | 'revision-changed' | null;
+  readonly reason: 'not-first-run' | 'not-this-person' | 'not-owner' | 'invalid' | 'revision-changed' | null;
   readonly template: { readonly id: string; readonly to: number };
   readonly scopeId: string; readonly principal: { readonly issuer: string; readonly subject: string };
   /** The policy revision read (preview: pass it back as `--expect`); after an upgrade, the new one. */
@@ -181,7 +181,9 @@ const revisionOf = (value: unknown) => typeof (value as { revision?: unknown } |
  * after: the backup and the way back) on exactly the revision read; a second run is `current`. `apply: false` reads only.
  */
 export async function upgradePolicyTemplate(writer: PolicyTemplateDocumentWriter, input: { readonly scopeId: string;
-  readonly principal: { readonly issuer: string; readonly subject: string }; readonly toolNames: FirstRunToolNames; readonly apply: boolean; readonly expect?: string }): Promise<PolicyTemplateUpgradeResult> {
+  readonly principal: { readonly issuer: string; readonly subject: string }; readonly toolNames: FirstRunToolNames; readonly apply: boolean; readonly expect?: string;
+  /** Whether the caller owns the installation's authority documents (the files' owner uid is the caller's): only the owner may write here. */
+  readonly owner: boolean }): Promise<PolicyTemplateUpgradeResult> {
   const scopeId = identitySchema.parse(input.scopeId);
   const principal = { issuer: identitySchema.parse(input.principal.issuer), subject: identitySchema.parse(input.principal.subject) };
   const template = { scopeId, principal, ...input.toolNames };
@@ -211,6 +213,9 @@ export async function upgradePolicyTemplate(writer: PolicyTemplateDocumentWriter
     const next = { ...body, revision: `a-${digestOf(`policy-template-upgrade:1\0${revision ?? ''}\0${JSON.stringify({ ...body, revision: undefined })}`).slice(0, 40)}` };
     return { result: result('preview', { revision, rules: additions.rules, conflicts: additions.conflicts, wireRules }), next };
   };
+  // Security (lead 2026-10-07): this path writes outside the governed chain, so only the installation's owner may use it; anyone else is sent to
+  // `deckent policy upgrade --template v5` (policy.administer@1, card, audit, I2). Fail closed before anything is read.
+  if (!input.owner) return result('unavailable', { reason: 'not-owner' });
   // Read first (no write), then write on exactly that revision under a key of this very change (a crash is looked up, never re-applied blindly).
   const first = await writer.updateAuthority(snapshot => ({ write: null, result: { planned: plan(snapshot.policy), revision: revisionOf(snapshot.policy) } }));
   if (!input.apply || first.planned.result.status !== 'preview') return first.planned.result;

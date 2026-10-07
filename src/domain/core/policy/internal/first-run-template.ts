@@ -143,6 +143,7 @@ const coversAll = (held: Selection, wanted: Selection) => held === 'all' || (wan
 const sameRule = (a: unknown, b: unknown) => JSON.stringify(policyGrantSchema.parse(a)) === JSON.stringify(policyGrantSchema.parse(b));
 /**
  * The first-run v4 → v5 additions (owner 2026-10-07): over any v2 policy that carries the template's `first-run-read-tools` rule naming this person
+ * explicitly (a rule for `all` principals does not count)
  * (its scopes are the installation's), the `grant.add` changes for every v5 rule this person does not hold yet — `mcp-server` over every server in
  * every scope, the `mcp.tool.call` operation, `propose_mcp_server`, the `policy.administer` operation and approval inspect/decide (K1 option A).
  * A rule counts as held when its id exists or another `allow` rule of this person already covers it. Nothing is removed or replaced: hand-added
@@ -156,8 +157,11 @@ export function firstRunTemplateAdditions(current: unknown, input: { readonly pe
   const grants = parsed.data.grants, read = grants.find(grant => grant.id === 'first-run-read-tools');
   if (!read || read.scopes === 'all') return Object.freeze({ status: 'unavailable', reason: 'not-first-run' });
   const person = { issuer: identitySchema.parse(input.person.issuer), subject: identitySchema.parse(input.person.subject) };
-  const mine = (grant: PolicyGrant) => grant.principals === 'all' || grant.principals.some(item => item.issuer === person.issuer && item.subject === person.subject);
-  if (!mine(read)) return Object.freeze({ status: 'unavailable', reason: 'not-this-person' });
+  const named = (grant: PolicyGrant) => grant.principals !== 'all' && grant.principals.some(item => item.issuer === person.issuer && item.subject === person.subject);
+  // Security (lead 2026-10-07): the read rule must NAME this person; a rule for `all` principals proves no installation owner (fail closed).
+  if (!named(read)) return Object.freeze({ status: 'unavailable', reason: 'not-this-person' });
+  // Coverage may count a rule for `all` principals (it only means less is added); every added rule names this person alone (never another one).
+  const mine = (grant: PolicyGrant) => grant.principals === 'all' || named(grant);
   const rule = (id: string, kind: string, actions: readonly string[], ids: Selection, scopes: Selection): PolicyGrant => policyGrantSchema.parse({
     id, effect: 'allow', actions: [...actions], scopes: scopes === 'all' ? 'all' : [...scopes], principals: [person], resource: { kind, ids: ids === 'all' ? 'all' : [...ids] } });
   const ids = FIRST_RUN_UPGRADE_RULE_IDS, scopes = read.scopes;

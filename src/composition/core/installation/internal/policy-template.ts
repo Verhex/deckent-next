@@ -1,4 +1,4 @@
-import { readFile, stat } from 'node:fs/promises';
+import { lstat, readFile, stat } from 'node:fs/promises';
 import { FileInstallationIdentityStore, FileProjectIdentityStore, inspectInstallationFile, publishInstallationFile, readLocalOsIdentity, withInstallationJournal } from '#adapters/index.js';
 import { userInfo } from 'node:os';
 import { FIRST_RUN_EDIT_SHELL_TOOL_NAMES, FIRST_RUN_MCP_CALL_OPERATION_ID, FIRST_RUN_POLICY_ADMINISTER_OPERATION_ID, FIRST_RUN_PROPOSE_MCP_TOOL_NAME, FIRST_RUN_READ_TOOL_NAMES, FIRST_RUN_SCRATCH_TOOL_NAMES,
@@ -37,12 +37,18 @@ export async function applyPolicyTemplateInstallation(projectRoot: string, scope
 }
 /** `deckent init policy --upgrade [--apply]` (owner 2026-10-07): the first-run v4 → v5 migration of this installation's policy, as the local person
  * the template names, through the authority documents' one conditional writer. Without `--apply` it only reads (what would change, or why not). */
-export async function upgradePolicyTemplateInstallation(projectRoot: string, scopeId: string, apply: boolean, expect?: string, options: ConfigLoadOptions = {}) {
+export async function upgradePolicyTemplateInstallation(projectRoot: string, scopeId: string, apply: boolean, expect?: string, options: ConfigLoadOptions = {},
+  callerUid: number | undefined = process.getuid?.()) {
   // An existing installation: its configured layout (a custom data root, as a live installation has), not only the default `.deckent`.
   const config = await loadComposedConfig(projectRoot, { ...options, heal: false }), layout = config.productLayout, identity = readLocalOsIdentity();
   if (apply) await assertConfiguredInstallationIdentity(projectRoot);
-  const writer = createLayoutPolicySource(layout, userInfo().uid, config.inspection.policyMaxBytes);
-  return upgradePolicyTemplate(writer, { scopeId, principal: { issuer: identity.issuer, subject: identity.subject }, toolNames: TOOL_NAMES, apply, ...(expect === undefined ? {} : { expect }) });
+  // Ownership (lead 2026-10-07): the caller's uid owns both authority documents (the same custody the policy source enforces on every read);
+  // missing, foreign or unreadable documents fail closed as `not-owner`.
+  const owns = async (path: string) => { try { const stat = await lstat(path); return callerUid !== undefined && stat.isFile() && !stat.isSymbolicLink() && stat.uid === callerUid; } catch { return false; } };
+  const owner = await owns(productResourcePath(layout, 'policy')) && await owns(productResourcePath(layout, 'bindings'));
+  const writer = createLayoutPolicySource(layout, callerUid ?? userInfo().uid, config.inspection.policyMaxBytes);
+  return upgradePolicyTemplate(writer, { scopeId, principal: { issuer: identity.issuer, subject: identity.subject }, toolNames: TOOL_NAMES, apply, owner,
+    ...(expect === undefined ? {} : { expect }) });
 }
 /** Doctor-only, read-soft: not the trusted gate (that stays FilePolicySource); oversized/missing/unparsable/custom -> null, never a doctor failure. */
 export async function inspectPolicyTemplate(projectRoot: string) {
