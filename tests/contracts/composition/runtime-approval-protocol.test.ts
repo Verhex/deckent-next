@@ -54,7 +54,7 @@ async function fixture() {
 // threshold; v16 and v17 keep it), so a current runtime client receives operation-subject approvals. A released v14 client can no longer reach approval operations at all
 // (every non-lifecycle operation is current-version only, socket.test.ts); the v14 view below is kept as the engine contract.
 it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket] delivers operation-subject approvals to a v15 runtime client in the record shape the terminal parses, as the in-process SDK sees them (C12 G4)', async () => {
-  expect(RUNTIME_SERVICE_SCHEMA_VERSION).toBe(21);
+  expect(RUNTIME_SERVICE_SCHEMA_VERSION).toBe(22);
   // T3 L2: config-change records reach clients from v22 (the integration raises the protocol to it); below, they are hidden like operations below v15.
   expect(approvalSubjectsHiddenFromProtocol(14)).toEqual(['operation', 'config-change']);
   expect(approvalSubjectsHiddenFromProtocol(15)).toEqual(['config-change']);
@@ -127,5 +127,30 @@ it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket] r
     await expect(decide('authority-b', 'deny')).resolves.toMatchObject({ status: 'decided', decision: { decision: 'deny' } });
     // An ordinary operation approval is still decidable on the same surface.
     await expect(decide('operation', 'allow')).resolves.toMatchObject({ status: 'decided' });
+  } finally { await stopTestRuntimeService(service); }
+});
+
+// Protocol v22 (T3 integration): a config-change approval (T3 L2) reaches a current runtime client — list and inspect — in the record shape the
+// terminal parses; the v21 view (alpha.10's client) still hides it, so an older terminal never meets a record it cannot parse.
+it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket] delivers config-change approvals to a v22 client; the v21 view hides them', async () => {
+  const f = await fixture();
+  const layout = (await openConfiguredAttemptStore(f.project, { env: f.env }).then(opened => { opened.store.close(); return opened; }));
+  const integrity = await openLocalIntegrityAuthority(layout.layout, 'authority.key', true);
+  const journal = openSqliteApprovalStore(layout.path, sqlite);
+  const requester = { id: 'owner', issuer: hostname(), subject: String(userInfo().uid) }, now = Date.now();
+  journal.store.create(sealApproval({ request: approvalRequestSchema.parse({ schemaVersion: 2, approvalId: 'config', scopeId: 's',
+    subject: { kind: 'config-change', commandId: 'cmd-config', action: 'set', layer: 'project', keyPath: 'terminal.theme', before: '"auto"', after: '"dark"',
+      expectDigest: null, valueDigest: digest('"dark"'), ruleId: 'company-config-approval' },
+    requester, actionDigest: digest('config'), policyRevision: 'p1', summary: 'Setting will change: terminal.theme auto → dark (project)', createdAt: now, expiresAt: now + 600_000 }),
+  revision: 0, status: 'pending', decision: null }, integrity));
+  journal.close();
+  const service = await startTestRuntimeService(f.project, f.env);
+  try {
+    const client = createConfiguredRuntimeClient(f.project, { env: f.env });
+    const listed = await client.listApprovals({ schemaVersion: 1, scopeId: 's', afterId: null, limit: 10 }) as { request: { approvalId: string } }[];
+    expect(listed.map(record => record.request.approvalId)).toContain('config');
+    expect(() => z.array(approvalRecordSchema).parse(listed)).not.toThrow();
+    expect(await client.inspectApproval({ schemaVersion: 1, scopeId: 's', approvalId: 'config' })).toMatchObject({ request: { subject: { kind: 'config-change', keyPath: 'terminal.theme' } } });
+    expect(approvalSubjectsHiddenFromProtocol(21)).toEqual(['config-change']);
   } finally { await stopTestRuntimeService(service); }
 });
