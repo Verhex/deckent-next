@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { registerProviderConfig } from '#adapters/index.js';
 import { clearConfigCache, ErrorRegistry, PACKAGE_VERSION } from '#platform/index.js';
+import { runKernelCommand } from '#surfaces/core/cli/index.js';
 import { terminalAdminPorts, type TerminalAdminContext } from '#surfaces/core/terminal-admin/index.js';
 import { terminalComposerLabels } from '#surfaces/core/terminal-labels/index.js';
 import { EMPTY_SESSION_USAGE, WORKLINE_SLASH_COMMANDS } from '#surfaces/core/terminal-kit/index.js';
@@ -115,6 +116,15 @@ describe('information windows on the real workline (SW-1)', () => {
     await until(() => view.stdout.frame.includes(`${MARK} · Health: 3 ok · 1 to check · 1 failed`), 'doctor summary');
     const text = (await admin(root, {}).info.ports.doctor!({ usage: EMPTY_SESSION_USAGE })).model;
     expect(infoModelText(text)).toEqual(expect.arrayContaining(['  - DOCTOR-TEXT-1', 'The structured report could not be read; this is the doctor text.']));
+  });
+
+  it('the real `deckent doctor --json` command feeds the structured window (not the text fallback)', async () => {
+    const root = await project(), env = { HOME: join(root, 'h'), USERPROFILE: join(root, 'h') };
+    const ports = admin(root, {}, { doctor: sink => runKernelCommand(['doctor', '--lang', 'en'], { root, env, stdout: sink, stderr: sink }),
+      doctorReport: sink => runKernelCommand(['doctor', '--json', '--lang', 'en'], { root, env, stdout: sink, stderr: sink }) });
+    const text = infoModelText((await ports.info.ports.doctor!({ usage: EMPTY_SESSION_USAGE })).model);
+    expect(text).toEqual(expect.arrayContaining(['> This computer', '> Company and person']));
+    expect(text.join('\n')).not.toContain('could not be read');
   });
 
   it('/scope shows human labels with identities muted after them, and names a part it could not read', async () => {
