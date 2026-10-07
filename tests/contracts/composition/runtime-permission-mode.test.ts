@@ -63,6 +63,13 @@ describe.skipIf(process.platform !== 'linux')('permission mode read and write th
     const cleared = await runtime.setPermissionMode({ schemaVersion: 1, scopeId: 'scope', mode: 'standart', expectedRevision: changed.revision });
     expect(cleared).toMatchObject({ mode: 'standart', previous: 'full-auto', changed: true });
     expect((await bindings(f)).modes).toEqual([theirs, lookalike]);
+    // FA-SESSION through the real client and service: the session switch answers the stored mode unchanged and writes nothing.
+    const stored = JSON.stringify(await bindings(f));
+    const session = await runtime.setPermissionMode({ schemaVersion: 1, scopeId: 'scope', mode: 'full-access', expectedRevision: cleared.revision,
+      session: { sessionId: 'conversation-1' } });
+    expect(session).toMatchObject({ mode: 'standart', fullAccess: true, changed: false, revision: cleared.revision });
+    expect(JSON.stringify(await bindings(f))).toBe(stored);
+    expect(f.audit().at(-1)!.event.subject).toMatchObject({ kind: 'permission-mode-session', requested: 'full-access', stored: 'standart', sessionId: 'conversation-1' });
   }, 90_000);
 
   it('answers a held authority write lock with its own typed refusal (PERMISSION_MODE_LOCKED) that names the lock; nothing is written or audited', async () => {

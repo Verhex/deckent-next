@@ -80,7 +80,9 @@ function permissionModeMethods(call: RuntimeCall) {
         const parsed = permissionModeCommandSchema.safeParse(input);
         if (!parsed.success) throw new PermissionModeError('PERMISSION_MODE_INVALID');
         const result = permissionModeChangeSchema.safeParse(await call('setPermissionMode', parsed.data, undefined, signal));
-        if (!result.success || result.data.scopeId !== parsed.data.scopeId || result.data.mode !== parsed.data.mode) throw ErrorRegistry.createError('RUNTIME_SERVICE_TRANSPORT');
+        // FA-SESSION: a session full-access switch stores nothing, so the answer keeps the stored mode and says nothing changed.
+        const answered = (change: PermissionModeChange) => parsed.data.session ? change.changed === false : change.mode === parsed.data.mode;
+        if (!result.success || result.data.scopeId !== parsed.data.scopeId || !answered(result.data)) throw ErrorRegistry.createError('RUNTIME_SERVICE_TRANSPORT');
         return result.data;
       } catch (error) { throw error instanceof PermissionModeError ? ErrorRegistry.createError(error.code) : queryFailure(error); }
     },
