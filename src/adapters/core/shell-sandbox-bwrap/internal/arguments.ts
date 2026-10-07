@@ -23,6 +23,9 @@ export interface BubblewrapView {
   readonly homeBind?: string;
   /** K4 (`sandbox-net`): keep the host network namespace (the closed view otherwise has none). */
   readonly network?: boolean;
+  /** K4: the resolver files a networked view needs that live outside the system prefixes (WSL: `/etc/resolv.conf` → `/mnt/wsl/resolv.conf`),
+   * each bound read-only at its own path — single files, never their directory. */
+  readonly networkFiles?: readonly string[];
   /** System prefixes bound read-only when present (an allowlist: never the whole root). */
   readonly systemPaths: readonly string[];
   /** PATH entries outside the system prefixes (a toolchain under HOME, e.g. nvm) with their `lib` siblings: read-only when present. */
@@ -75,6 +78,7 @@ function viewMounts(view: BubblewrapView): ViewMount[] {
   const add = (target: string, args: readonly string[], hostWritable: boolean, protective: boolean) => mounts.push({ target, args, hostWritable, protective });
   if (view.home && !view.open) add(view.home, view.homeBind ? ['--bind', view.homeBind, view.home] : ['--size', String(BUBBLEWRAP_TMPFS_BYTES), '--tmpfs', view.home], false, false);
   for (const path of view.systemPaths) add(path, ['--ro-bind-try', path, path], false, false);
+  for (const path of view.network ? view.networkFiles ?? [] : []) add(path, ['--ro-bind-try', path, path], false, false);
   for (const path of view.toolchainPaths) add(path, ['--ro-bind-try', path, path], false, false);
   if (view.overlay) add(view.projectRoot, ['--overlay-src', view.projectRoot, '--overlay', view.overlay.upper, view.overlay.work, view.projectRoot], false, false);
   else add(view.projectRoot, [view.projectReadOnly ? '--ro-bind' : '--bind', view.projectRoot, view.projectRoot], !view.projectReadOnly, false);

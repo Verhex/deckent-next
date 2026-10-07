@@ -52,6 +52,11 @@ describe('sandbox-net arguments (pure)', () => {
     expect(net.slice(0, 2)).toEqual(['--unshare-all', '--share-net']);
     expect(net.join(' ')).toContain('--bind /state/mcp-home/fx /home/u'); expect(net.join(' ')).not.toContain('--tmpfs /home/u');
     expect(net.join(' ')).toContain('--ro-bind /p /p');
+    // A resolver file whose target lies outside the bound system prefixes (WSL: /etc/resolv.conf → /mnt/wsl/resolv.conf) is bound alone,
+    // read-only, and only in a networked view.
+    const wsl = { ...view, networkFiles: ['/mnt/wsl/resolv.conf'] };
+    expect(bubblewrapArguments({ ...wsl, network: true }).join(' ')).toContain('--ro-bind-try /mnt/wsl/resolv.conf /mnt/wsl/resolv.conf');
+    expect(bubblewrapArguments(wsl).join(' ')).not.toContain('/mnt/wsl');
   });
   it('trust binds the effective realm: an entry without a realm changes its digest with the default; one that names its realm does not', () => {
     expect(mcpDefinitionDigest('fx', { command: 'x' })).toBe(mcpDefinitionDigest('fx', { command: 'x', realm: 'sandbox-net' }));

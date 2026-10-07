@@ -20,6 +20,19 @@ export const bubblewrapPosture = (view: ShellSandboxWriteView): string => view.o
 export const bubblewrapServerPosture = (view: ShellSandboxWriteView, scratch: boolean, profile?: ShellSandboxLaunchProfile): string => `bubblewrap (${describeShellWritePosture(view)}; `
   + `${scratch ? 'the scratch area and a private /tmp are' : 'only a private /tmp is'} writable; ${profile ? 'its own private HOME (a persistent cache) is writable and the network is on; '
     + 'your HOME, project secrets and Deckent state are hidden' : 'HOME and everything else hidden, no network'}; it ends with the service)`;
+/** K4: the targets of the system resolver files that lie outside the bound system prefixes (a symbolic link the view would otherwise leave
+ * dangling, e.g. WSL's `/etc/resolv.conf` → `/mnt/wsl/resolv.conf`): regular files only, each bound alone and read-only. */
+const RESOLVER_FILES = ['/etc/resolv.conf', '/etc/hosts', '/etc/nsswitch.conf'];
+export function resolverFiles(): string[] {
+  const out: string[] = [];
+  for (const file of RESOLVER_FILES) {
+    try {
+      const target = realpathSync(file);
+      if (target !== file && statSync(target).isFile() && !BUBBLEWRAP_SYSTEM_PATHS.some(prefix => target === prefix || target.startsWith(`${prefix}/`))) out.push(target);
+    } catch { /* absent: nothing to bind */ }
+  }
+  return out;
+}
 /** Bounds of the deny walk over the project (ignored directories excluded): beyond them the sandbox refuses to run, never runs unmasked. */
 export const BUBBLEWRAP_WALK_MAX_ENTRIES = 50_000;
 /** Git metadata (`.git` trees, a worktree's common repository) is walked for the inode floor too, on its own budget (`objects/` is large). */
@@ -398,7 +411,7 @@ export function bubblewrapShellSandbox(layout: ShellSandboxLayout, options: Bubb
         if (!view.ok) return { ok: false as const, reason: view.reason };
         // K4: the profile's HOME replaces the empty one at the same path (no HOME to replace: refused, never a server with the user's HOME).
         if (profile && !view.view.home) return { ok: false as const, reason: 'no HOME to give the server its own' };
-        const shaped = profile ? { ...view.view, homeBind: profile.home, ...(profile.network ? { network: true } : {}) } : view.view;
+        const shaped = profile ? { ...view.view, homeBind: profile.home, ...(profile.network ? { network: true, networkFiles: resolverFiles() } : {}) } : view.view;
         return { ok: true as const, file: binary.path, args: bubblewrapArguments(shaped), view: write, posture: bubblewrapServerPosture(write, layout.scratchDir !== null, profile) };
       };
       // SHELL-OVERLAY × BWRAP-SELECT: write sets are offered exactly when the selected launcher's measured version has the overlay options
