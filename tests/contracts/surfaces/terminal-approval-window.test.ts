@@ -55,6 +55,21 @@ describe('approval window fields per tool kind (catalog EN and TR)', () => {
     }
   }
 
+  // L1 MCP-CORE item 6 (Astra 2435 P2): a hyphenated server's wire name (`docs-search` → `mcp__docs_search__…`) is an MCP tool, titled with its
+  // real server name; the separator is the first `__` after the server, so a tool name with `_` stays whole.
+  it('titles a hyphenated server\'s MCP tool as MCP with the server name restored (EN and TR)', () => {
+    for (const locale of ['en', 'tr'] as const) {
+      const work = workSurfaceLabels(locale), w = work.approvalWindow;
+      const what = (tool: string) => approvalCardLines(base({ tool, target: null, risk: 'mcp-call', summary: `${tool} · mcp:x · 0123456789ab` }), work, `${tool} {}`, null, {}, NOW)
+        .find(line => line.startsWith(w.field.what))!;
+      const hyphenated = what('mcp__docs_search__query_docs');
+      expect(hyphenated).toContain('query_docs'); expect(hyphenated).toContain('docs-search'); expect(hyphenated).not.toContain('mcp__docs_search__query_docs');
+      expect(hyphenated).toBe(what('mcp__context7__query_docs').replace('context7', 'docs-search'));
+      expect(what('mcp__a__b_c')).toBe(what('mcp__context7__query_docs').replace('context7', 'a').replace('query_docs', 'b_c'));
+      expect(what('mcp__a_b__x')).toBe(what('mcp__context7__query_docs').replace('context7', 'a-b').replace('query_docs', 'x'));
+    }
+  });
+
   it('names the careful mode (the status row\'s ask-edits stop) under why asked, EN and TR (T2 integration)', () => {
     for (const [locale, words] of [['en', 'Mode: careful (edits ask too)'], ['tr', 'Mod: dikkatli (düzenlemeler de sorulur)']] as const) {
       const text = approvalCardLines(KINDS.edit.approval, workSurfaceLabels(locale), KINDS.edit.preview, null, { project: '/home/u/acme', mode: 'ask-edits' }, NOW).join('\n');

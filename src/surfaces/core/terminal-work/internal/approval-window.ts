@@ -67,7 +67,9 @@ export type ApprovalWindowInput = Readonly<{
   call?: AgentToolCardCall | undefined; previewCut?: ApprovalPreviewCutFacts | undefined;
 }>;
 
-const MCP_NAME = /^mcp__([a-z][a-z0-9]*)__(.+)$/u;
+/** A wire name `mcp__<server>__<tool>` (MCP-VISIBILITY name rule: a server name's single hyphens are `_` on the wire and it has no `__`, so the
+ * first `__` after the server is the separator); the server is shown with its hyphens back (Astra 2435 P2: `mcp__docs_search__q` is docs-search). */
+const MCP_NAME = /^mcp__([a-z][a-z0-9]*(?:_[a-z0-9]+)*)__(.+)$/u;
 /** The sealed binding line of a tool-call approval (`agentToolApprovalSummary`: `tool · resource · digest12`, a self-source reason may follow). */
 const BINDING = /^([a-z][a-z0-9_]{1,63}) · ([^\n]*) · [0-9a-f]{12}(?:\n|$)/u;
 /** The call's tool and target: what the client saw (`tool.started`, or the stored subject), else the sealed binding line; null for a task. */
@@ -82,7 +84,7 @@ export function approvalToolKind(name: string | undefined): ApprovalToolKind {
 }
 export function approvalToolParts(name: string | undefined): Readonly<{ tool: string; server: string }> {
   const mcp = name ? MCP_NAME.exec(name) : null;
-  return { tool: mcp ? mcp[2]! : name ?? '', server: mcp ? mcp[1]! : '' };
+  return { tool: mcp ? mcp[2]! : name ?? '', server: mcp ? mcp[1]!.replace(/_/gu, '-') : '' };
 }
 
 /** `m:ss` (or `h:mm:ss`) left; never negative. Digits only, so no catalog text is needed. */
