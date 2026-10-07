@@ -398,6 +398,16 @@ it('writes the no-progress note in the turn language', async () => {
   expect(agentTurnNoProgressNote('en')).toBe(AGENT_TURN_NO_PROGRESS_NOTE); expect(agentTurnNoProgressNote('tr')).not.toBe(AGENT_TURN_NO_PROGRESS_NOTE);
 });
 
+// Owner terminal test 2026-10-07: grep got an unknown `maxMatches` twice; the refusal now names the arguments the tool takes.
+it('names the valid arguments when a call carries an unknown one, and runs nothing', async () => {
+  const p = ports([answer('', [call('c1', 'grep', { pattern: 'x', maxMatches: 5 }), call('c2', 'read_file', { path: 'a', limit: 3 })]), answer('done')]);
+  const { events } = await run(p);
+  const results = events.flatMap(event => event.kind === 'message' && event.message.role === 'tool' ? [event.message.content] : []);
+  expect(results).toEqual(['[deckent] grep: error=invalid-arguments (unknown argument "maxMatches"; valid arguments: pattern)',
+    '[deckent] read_file: error=invalid-arguments (unknown argument "limit"; valid arguments: path, startLine)']);
+  expect(p.executed).toEqual([]);
+});
+
 it('never counts a denied call, a round with text, or a cancelled turn as no progress', async () => {
   const decision: AgentTurnPorts['authorize'] = async tool => tool.name === 'grep' ? 'deny' : 'allow';
   const p = ports([answer('', [call('c1', 'read_file', '{bad')]), answer('', [call('c2', 'grep', { pattern: 'x' })]),

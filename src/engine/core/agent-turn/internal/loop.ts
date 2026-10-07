@@ -162,7 +162,8 @@ function checkArguments(tool: AgentToolSpec, raw: string): { ok: true; args: Rec
   for (const key of tool.inputSchema.required ?? []) if (args[key] === undefined) return { ok: false, detail: `missing required argument "${key}"` };
   for (const [key, value] of Object.entries(args)) {
     const type = Object.hasOwn(properties, key) ? properties[key]?.type : undefined;
-    if (type === undefined) return { ok: false, detail: `unknown argument "${key}"` };
+    // Owner terminal test 2026-10-07: grep got `maxMatches` twice; the refusal names the arguments the tool takes, so the next call can be right.
+    if (type === undefined) return { ok: false, detail: `unknown argument "${key}"; valid arguments: ${Object.keys(properties).join(', ') || 'none'}` };
     const matches = type === 'string' ? typeof value === 'string' : type === 'integer' ? Number.isSafeInteger(value) : type === 'boolean' ? typeof value === 'boolean'
       : type === 'number' ? typeof value === 'number' && Number.isFinite(value) : true;
     if (!matches) return { ok: false, detail: `argument "${key}" must be ${String(type)}` };
