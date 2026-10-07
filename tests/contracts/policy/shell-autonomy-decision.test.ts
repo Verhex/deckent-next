@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { resolvePolicyBindings, STANDING_GRANT_KIND, type ShellRealmContainment } from '#domain/index.js';
-import { classifyShellContainment, decideAgentToolCall, standingWouldLower, type AgentToolCallCell } from '#engine/index.js';
+import { classifyShellContainment, decideAgentToolCall, shellNamedPaths, standingWouldLower, type AgentToolCallCell } from '#engine/index.js';
 
 // SHELL-AUTONOMY (owner 2026-09-28): the one decision function takes the planned realm's containment and the command's containment.
 // Only full-auto ∧ enforced sandbox ∧ contained lowers the shell cells the classifier could not bound; never destructive, never on the
@@ -68,6 +68,13 @@ describe('classifyShellContainment (SHELL-AUTONOMY)', () => {
     ['echo x &>package.json', 'PROTECTED_NAME', 'package.json'],
   ])('asks: %s → %s', (command, reasonCode, detail) => {
     expect(contained(command)).toEqual({ contained: false, reasonCode, ...(detail === undefined ? {} : { detail }) });
+  });
+  // B3 (owner test 2026-10-07): the same reading names the protected paths a failed sandboxed command touched.
+  it('shellNamedPaths: every part, redirection targets and option values, in order without repeats; never an expansion', () => {
+    expect(shellNamedPaths('rm package.json && echo x >> .github/a.yml 2>&1; cat package.json', floor)).toEqual(['package.json', '.github/a.yml']);
+    expect(shellNamedPaths('echo "$(touch package.json)" --out=package.json', floor)).toEqual(['package.json']);
+    expect(shellNamedPaths('f=pack; echo x >> ${f}age.json; ls src', floor)).toEqual([]);
+    expect(shellNamedPaths('echo "unterminated package.json', floor)).toEqual([]);
   });
   it('refuses PowerShell and empty commands', () => {
     expect(classifyShellContainment('ls', floor, 'powershell')).toMatchObject({ contained: false, reasonCode: 'UNSUPPORTED_DIALECT' });

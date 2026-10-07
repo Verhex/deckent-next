@@ -4,6 +4,7 @@
   "agent.context.AGENT_CONTEXT_REQUEST_TOO_LARGE": "Konuşma, istek bayt sınırını aşıyor. Modele yeni istek gönderilmedi; geçmiş kısaltılmadı. /clear ile yeni konuşma açıp daha küçük parçalar gönderin.",
   "agent.context.AGENT_CONTEXT_WINDOW_EXCEEDED": "Konuşma artık modelin bağlam penceresine sığmıyor: {prompt} girdi tokenı ({quality}) + {reserve} ayrılan > {window}. Bu tur için veri gönderilmedi. /clear ile yeni konuşma açıp daha küçük parçalar gönderin.",
   "agent.turn.noProgress": "Son iki turda ilerleme olmadı: her araç çağrısı tekrardı, geçersiz argüman içeriyordu ya da başarısız oldu ve hiç metin yazılmadı. Bu çağrıları tekrarlamayın; şu ana kadar bildiklerinizi yazın, başka bir yol deneyin ya da kullanıcıya sorun.",
+  "agent.shell.protectedPathReadOnly": "{paths}: korunan yol (Deckent'in kendi kaynağı ya da yazma zemini). Bu sandbox'ta kabuk bu yolu salt okunur görür; komut bu yüzden değiştiremedi (\"Read-only file system\"). Yeniden denemek işe yaramaz. Değiştirmek için onay isteyen düzenleme araçlarını (write_file, edit_file) kullanın ya da tam erişimde çalışın.",
   "chat.agentic_no_match": "[agentic] eşleşen niyet yok — sohbete dönülüyor.",
   "chat.audit_not_in_mcp": "\"{sub}\" audit aksiyonu henüz MCP'de yok — CLI ile çalıştırın: deckent audit {sub}",
   "chat.autonomous_id_required": "Kullanım: /autonomous {sub} <id>",
