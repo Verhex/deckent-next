@@ -69,7 +69,7 @@ export interface WorklineProps {
   /** Governed restart of the runtime service onto the current build; returns the line to show. */
   readonly restartService?: () => Promise<string>;
   /** Shown once at the top of the ledger when the view opens (e.g. the runtime service state). */
-  readonly openingNotices?: ReadonlyArray<{ readonly level: 'info' | 'error'; readonly text: string }>;
+  readonly openingNotices?: ReadonlyArray<{ readonly level: 'info' | 'warning' | 'error'; readonly text: string }>;
   /** Composer history persistence and `@` mention candidates; both optional ports (no surface file access). */
   readonly inputHistory?: ComposerHistoryPort;
   readonly mentions?: ComposerMentionPort;
@@ -253,7 +253,8 @@ export function WorklineApp(props: WorklineProps) {
     const lineCommands: Readonly<Record<string, ((args: string) => Promise<readonly string[]>) | undefined>> = { ...bindInspectPorts(props.inspect, () => usage.current), mcp: props.mcp, monitor: props.monitor, config: props.config };
     if (slash.command === 'mcp' || slash.command === 'monitor' || slash.command === 'config' || (isInspectSlashCommand(slash.command) && (slash.command !== 'status' || lineCommands['status']))) {
       const lines = lineCommands[slash.command];
-      try { push((lines ? await lines(slash.args) : [fillTemplate(labels.commandUnavailable, { part: slash.command })]).map(line => notice('info', line))); }
+      // One notice for the whole answer, so its level words (`Info: `) open the answer once instead of every line.
+      try { push([notice('info', (lines ? await lines(slash.args) : [fillTemplate(labels.commandUnavailable, { part: slash.command })]).join('\n'))]); }
       catch (error) { push([notice('error', errorText(error))]); }
       return true;
     }

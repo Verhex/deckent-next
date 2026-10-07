@@ -19,6 +19,8 @@ export interface TerminalAdminInput {
   readonly status: () => Promise<string>;
   /** The host's own `doctor` command, writing to the given sink. */
   readonly doctor: (sink: OutputSink) => Promise<void>;
+  /** The person's display name for `/scope` (the host user the principal is derived from); absent means the line is left out. */
+  readonly principalName?: string | null;
 }
 
 /** The read-only management ports of the interactive terminal (S09); each call asks its typed producers again. */
@@ -29,6 +31,6 @@ export function terminalAdminPorts(input: TerminalAdminInput): Readonly<{ inspec
     model: args => modelLines(call, args),
     usage: (args, view) => usageLines(call, args, view.usage),
     doctor: () => doctorLines(input.doctor),
-    scope: args => scopeLines(call, { installationId: input.installationId, projectId: input.projectId }, args),
+    scope: args => scopeLines(call, { installationId: input.installationId, projectId: input.projectId }, args, input.principalName ?? null),
   } };
 }

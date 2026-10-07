@@ -1,5 +1,6 @@
 import type { WorklineStreamTurn } from '#surfaces/core/terminal-kit/index.js';
 import { configSlash } from '#surfaces/core/config/index.js';
+import { userInfo } from 'node:os';
 import { createInterface } from 'node:readline';
 import { basename } from 'node:path';
 import { mcpSlash } from './mcp.js';
@@ -66,10 +67,13 @@ function ttyState(context: CommandContext) {
 /** Typed errors render through the catalog; untyped failures never echo provider or transport detail. */
 function errorText(error: unknown, locale: Locale): string {
   if (error instanceof DeckentError && ErrorRegistry.has(error.code)) {
-    return `${ErrorRegistry.get(error.code, locale, error.params ?? {})?.message ?? error.code} [${error.code}]`;
+    return `${ErrorRegistry.get(error.code, locale, error.params ?? {})?.message ?? error.code}\n${t('terminal.error.code', { code: error.code }, locale)}`;
   }
   return t('terminal.chat.failed', {}, locale);
 }
+
+/** The host user's name for `/scope`: display only (the principal itself is derived by the runtime service). */
+function hostUserName(): string | null { try { return userInfo().username || null; } catch { return null; } }
 
 function yesNo(value: boolean, locale: Locale): string { return value ? t('terminal.value.yes', {}, locale) : t('terminal.value.no', {}, locale); }
 
@@ -172,7 +176,7 @@ async function runSession(locale: Locale, context: CommandContext, turn: (messag
       if (trimmed === '/exit' || trimmed === '/quit') break;
       if (trimmed === '/status') { emit(await status(), sinks); }
       // Slash input is a local command; an unknown one is reported, never sent to the model as a user message.
-      else if (trimmed.startsWith('/')) emit(`${t('terminal.workline.unknownCommand', {}, locale)}: ${trimmed}`, { ...sinks, level: 'error' });
+      else if (trimmed.startsWith('/')) emit(t('terminal.notice.error', { text: `${t('terminal.workline.unknownCommand', {}, locale)}: ${trimmed}` }, locale), { ...sinks, level: 'error' });
       else if (trimmed.length > 0) {
         if (stream) {
           const messages = boundAgentHistory(system, [...agentHistory, { role: 'user', content: trimmed }], historyMessages);
@@ -186,7 +190,7 @@ async function runSession(locale: Locale, context: CommandContext, turn: (messag
               ? boundAgentHistory(system, [...(turn.compacted ? [system, ...turn.compacted] : messages), ...turn.appended], historyMessages) : messages;
           } catch (error) {
             agentHistory = messages;
-            emit(errorText(error, locale), { ...sinks, level: 'error' });
+            emit(t('terminal.notice.error', { text: errorText(error, locale) }, locale), { ...sinks, level: 'error' });
           }
           if (interactive) rl.prompt();
           continue;
@@ -198,7 +202,7 @@ async function runSession(locale: Locale, context: CommandContext, turn: (messag
           emit(project(reply, 'prose'), sinks);
         } catch (error) {
           history = messages;
-          emit(errorText(error, locale), { ...sinks, level: 'error' });
+          emit(t('terminal.notice.error', { text: errorText(error, locale) }, locale), { ...sinks, level: 'error' });
         }
       }
       if (interactive) rl.prompt();
@@ -250,7 +254,7 @@ export async function terminalCommand(argv: readonly string[], context: CommandC
   if (parsed.action !== 'session' && (!tty.stdin || !tty.stdout)) throw ErrorRegistry.createError('TERMINAL_TTY_REQUIRED');
   // Admit identity before runtime startup or session/history writes. Piped line mode remains read-only until a governed turn writes.
   let installationId: string | undefined, projectId: string | undefined;
-  const accessNotices: { level: 'info' | 'error'; text: string }[] = [];
+  const accessNotices: { level: 'info' | 'warning' | 'error'; text: string }[] = [];
   if (tty.stdin && tty.stdout) {
     if (!context.ensureTerminalIdentity) throw ErrorRegistry.createError('INSTALLATION_IDENTITY_UNAVAILABLE');
     try { ({ installationId, projectId } = await context.ensureTerminalIdentity(root, scopeId, options)); }
@@ -369,7 +373,7 @@ export async function terminalCommand(argv: readonly string[], context: CommandC
       inspect: (sessionId: string, signal?: AbortSignal) => context.inspectScratch!(root, { schemaVersion: 1, scopeId, sessionId }, options, signal),
       clear: (sessionId: string) => context.clearScratch!(root, { schemaVersion: 1, scopeId, sessionId }, options) } } : {}),
     // TERMINAL-CLOSE S09: `/status`, `/model`, `/usage`, `/doctor`, `/scope` re-read their typed producers on every call (this surface keeps no copy).
-    ...terminalAdminPorts({ root, scopeId, installationId, projectId, options, locale, context,
+    ...terminalAdminPorts({ root, scopeId, installationId, projectId, options, locale, context, principalName: hostUserName(),
       status: async () => renderStatus(statusPayload(ttyState(context), await loadConfig(root, options), context.describeTerminalChatPlan ? await context.describeTerminalChatPlan(root, options) : null, await readIdentity()), locale),
       doctor: sink => runKernelCommand(['doctor', '--lang', locale], { ...context, root, env, stdout: sink, stderr: sink }) }),
     ...(context.runMcpCommand ? { mcp: (args: string) => mcpSlash(root, args, context, options, locale) } : {}),
@@ -377,7 +381,7 @@ export async function terminalCommand(argv: readonly string[], context: CommandC
     // MONITOR: `/monitor` prints the monitor's text snapshot as notice lines (the fullscreen view is `deckent monitor`).
     ...(context.inspectMonitor ? { monitor: (args: string) => monitorSlash(root, args, context, options, locale, Math.max(40, (tty.columns ?? 100) - 4)) } : {}),
     ...(serviceLine || accessNotices.length ? { openingNotices: [...accessNotices, ...(serviceLine ? [{ level: serviceFailed ? 'error' as const : 'info' as const, text: serviceLine }] : []),
-      ...(skewLine ? [{ level: 'error' as const, text: skewLine }] : []), ...(configLine ? [{ level: 'error' as const, text: configLine }] : [])] } : {}),
+      ...(skewLine ? [{ level: 'warning' as const, text: skewLine }] : []), ...(configLine ? [{ level: 'error' as const, text: configLine }] : [])] } : {}),
     ...(context.restartRuntimeService ? { restartService: async () => {
       const restarted = await context.restartRuntimeService!(root, options);
       return t('terminal.service.restarted', { pid: restarted.pid ?? '-', instance: restarted.instanceId }, locale);

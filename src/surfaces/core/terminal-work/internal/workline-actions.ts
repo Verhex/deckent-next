@@ -1,7 +1,8 @@
 import { type WorkLedgerEntry, type WorkLedgerWorkerEntry, notice, fillTemplate, type WorkerLineLabels, type WorklineLedgerPorts, ledgerEntriesForRuns, ledgerEntriesForWorkers, ledgerEntryForRun } from '#surfaces/core/terminal-ledger/index.js';
 import type { WorkerPanelLabels } from './worker-panel.js';
 import type { ApprovalWindowLabels } from './approval-window.js';
-import { slashHelpText, surfaceDeliveryValues, WORKLINE_SLASH_COMMANDS, type SurfaceDeliveryMode } from '#surfaces/core/terminal-kit/index.js';
+import { transcriptPage, type TranscriptPageLabels } from './transcript-page.js';
+import { shortId, slashHelpText, surfaceDeliveryValues, WORKLINE_SLASH_COMMANDS, type SurfaceDeliveryMode } from '#surfaces/core/terminal-kit/index.js';
 
 export interface WorklineActionLabels {
   readonly ledgerUnavailable: string;
@@ -38,6 +39,10 @@ export interface WorkSurfaceLabels {
   readonly transcriptNotFound: string;
   readonly transcriptNoAttempt: string;
   readonly transcriptHeader: string;
+  /** Paging of a long transcript; absent means the whole transcript is shown. */
+  readonly transcriptPage?: TranscriptPageLabels;
+  /** `{task}` and `{attempt}` in full: the headline carries their short forms. */
+  readonly transcriptDetail?: string;
   readonly sessionStandingClear?: { readonly cleared: string; readonly unconfirmed: string };
   readonly approvalsNone: string;
   readonly approvalItem: string;
@@ -149,14 +154,17 @@ export function resolveWorkerRef(ref: string, workers: readonly WorkLedgerWorker
 
 /** Read-only: resolves the worker on a fresh observation and shows its sealed transcript; never prompts. */
 async function runTranscript(ref: string, ledger: WorklineLedgerPorts, work: WorkSurfaceLabels): Promise<readonly WorkLedgerEntry[]> {
-  if (!ref || /\s/.test(ref)) return [notice('error', work.transcriptUsage)];
+  const [name, pageText, ...extra] = ref.split(/\s+/u), page = pageText === undefined ? 1 : /^[1-9][0-9]{0,5}$/u.test(pageText) ? Number(pageText) : 0;
+  if (!name || page === 0 || extra.length > 0) return [notice('error', work.transcriptUsage)];
   const workers = (await ledgerEntriesForWorkers(ledger, 'transcript')).filter((entry): entry is WorkLedgerWorkerEntry => entry.kind === 'worker');
-  const target = resolveWorkerRef(ref, workers);
-  if (!target) return [notice('error', fillTemplate(work.transcriptNotFound, { ref }))];
-  if (!target.attempt) return [notice('error', fillTemplate(work.transcriptNoAttempt, { ref }))];
+  const target = resolveWorkerRef(name, workers);
+  if (!target) return [notice('error', fillTemplate(work.transcriptNotFound, { ref: name }))];
+  if (!target.attempt) return [notice('error', fillTemplate(work.transcriptNoAttempt, { ref: name }))];
   const text = await ledger.inspectTranscript!(target.attempt);
-  const header = fillTemplate(work.transcriptHeader, { n: target.ordinal ?? ref, attempt: target.attempt.attemptId, task: target.taskId });
-  return [notice('info', `${header}\n${text}`)];
+  const header = [fillTemplate(work.transcriptHeader, { n: target.ordinal ?? name, attempt: shortId(target.attempt.attemptId), task: shortId(target.taskId) }),
+    ...(work.transcriptDetail ? [fillTemplate(work.transcriptDetail, { attempt: target.attempt.attemptId, task: target.taskId })] : [])].join('\n');
+  const shown = work.transcriptPage ? transcriptPage(text, page, name, work.transcriptPage) : { ok: true as const, text };
+  return [notice(shown.ok ? 'info' : 'error', shown.ok ? `${header}\n${shown.text}` : shown.text)];
 }
 
 export async function runLedgerCommand(command: 'workers' | 'run' | 'runs' | 'transcript', args: string, ledger: WorklineLedgerPorts,

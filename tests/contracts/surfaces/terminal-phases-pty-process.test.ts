@@ -232,7 +232,7 @@ describe.skipIf(process.platform !== 'linux')('turn phases in a real pseudo-term
     const run = await inPty(f.projectRoot, f.env, ['terminal', 'workline', '--scope', 'scope'], [
       ['Deckent workline', 'q1\r'], ['ANSWER-1', '/reasoning off\r'], ['Reasoning', 'q2\r'],
       // The notice texts are catalog strings (lead); the waits use their stable first word, the slash runs at once when idle.
-      ['[AGENT_TURN_REASONING_UNSUPPORTED]', '/reasoning on\r'], ['[AGENT_TURN_REASONING_UNSUPPORTED]', 'q3\r'],
+      ['(code: AGENT_TURN_REASONING_UNSUPPORTED)', '/reasoning on\r'], ['(code: AGENT_TURN_REASONING_UNSUPPORTED)', 'q3\r'],
       ['ANSWER-3', '/exit\r'],
     ]);
     expect(run.timeout, run.output).toBeUndefined();

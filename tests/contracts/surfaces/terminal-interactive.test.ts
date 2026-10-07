@@ -3,7 +3,7 @@ import type { WorklineProps } from '#surfaces/core/terminal/index.js';
 import { mountWorkline, settle, until } from '../support/workline-harness.js';
 
 // Owner report 2026-09-27: "/ shows the commands but Enter does not select one". Keystrokes go through the real Ink WorklineApp.
-const HELP_NOTICE = '/watch-runs\n/watch-stop';
+const HELP_NOTICE = 'info\n  /status';
 const DOWN = '\u001b[B', ESC = '\u001b';
 const views: Array<ReturnType<typeof mountWorkline>> = [];
 afterEach(() => { for (const view of views.splice(0)) view.instance.unmount(); });

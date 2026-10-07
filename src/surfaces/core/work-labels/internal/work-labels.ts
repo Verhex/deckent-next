@@ -1,9 +1,23 @@
 import { t, type Locale } from '#platform/index.js';
-import type { WorkSurfaceLabels } from '#surfaces/core/terminal/index.js';
-import { phaseLabel } from '#surfaces/core/monitor/index.js';
+import type { WorkSurfaceLabels, LedgerCardLabels } from '#surfaces/core/terminal/index.js';
+import { phaseLabel, processLabel } from '#surfaces/core/monitor/index.js';
 
 // Kept apart from `terminal.ts`: that module reaches Ink/React through the terminal barrel and is loaded only when a terminal opens
 // (STARTUP-COST), while these two stay importable from the CLI barrel without it.
+
+/** Words of the run and worker cards: task phase counts, process state and who observed the worker. */
+function ledgerCardLabels(locale: Locale): LedgerCardLabels {
+  const states = ['running', 'paused', 'created', 'exited', 'missing', 'unknown', 'present-unverified', 'absent-unverified', 'denied'] as const;
+  return { runHead: t('terminal.ledger.run.head', {}, locale), runRevision: t('terminal.ledger.run.revision', {}, locale), runCancelRequested: t('terminal.ledger.run.cancelRequested', {}, locale),
+    runPhases: { pending: t('terminal.ledger.run.phase.pending', {}, locale), active: t('terminal.ledger.run.phase.active', {}, locale), evaluating: t('terminal.ledger.run.phase.evaluating', {}, locale),
+      accepted: t('terminal.ledger.run.phase.accepted', {}, locale), failed: t('terminal.ledger.run.phase.failed', {}, locale), cancelled: t('terminal.ledger.run.phase.cancelled', {}, locale),
+      reconciling: t('terminal.ledger.run.phase.reconciling', {}, locale), skipped: t('terminal.ledger.run.phase.skipped', {}, locale),
+      'awaiting-decision': t('terminal.ledger.run.phase.awaitingDecision', {}, locale) },
+    runPhaseOther: t('terminal.ledger.run.phase.other', {}, locale), runNoTasks: t('terminal.ledger.run.noTasks', {}, locale),
+    workerProcess: Object.fromEntries(states.map(state => [state, processLabel(state, locale)])),
+    notice: { info: t('terminal.notice.info', {}, locale), warning: t('terminal.notice.warning', {}, locale), error: t('terminal.notice.error', {}, locale) },
+    workerAuthority: { 'next-ledger': t('terminal.ledger.worker.authorityLedger', {}, locale), 'legacy-activity': t('terminal.ledger.worker.authorityLegacy', {}, locale) } };
+}
 
 /** Catalog-backed labels for the work surface (worker live line, transcript, approvals, run cancel). */
 export function workSurfaceLabels(locale: Locale): WorkSurfaceLabels {
@@ -14,11 +28,13 @@ export function workSurfaceLabels(locale: Locale): WorkSurfaceLabels {
       durationSeconds: t('terminal.duration.seconds', {}, locale), durationMinutes: t('terminal.duration.minutes', {}, locale), durationHours: t('terminal.duration.hours', {}, locale),
       ago: t('terminal.worker.ago', {}, locale), tokens: t('terminal.worker.tokens', {}, locale), tokensCache: t('terminal.worker.tokensCache', {}, locale),
       reported: t('terminal.worker.reported', {}, locale), eventsTruncated: t('terminal.worker.eventsTruncated', {}, locale), dropped: t('terminal.worker.dropped', {}, locale),
-      unmapped: t('terminal.worker.unmapped', {}, locale) },
+      unmapped: t('terminal.worker.unmapped', {}, locale), card: ledgerCardLabels(locale) },
     panel: { title: t('terminal.worker.panelTitle', {}, locale), more: t('terminal.worker.panelMore', {}, locale) },
     unavailable: t('terminal.work.unavailable', {}, locale),
     transcriptUsage: t('terminal.transcript.usage', {}, locale), transcriptNotFound: t('terminal.transcript.notFound', {}, locale),
     transcriptNoAttempt: t('terminal.transcript.noAttempt', {}, locale), transcriptHeader: t('terminal.transcript.header', {}, locale),
+    transcriptDetail: t('terminal.transcript.detail', {}, locale),
+    transcriptPage: { more: t('terminal.transcript.pageMore', {}, locale), end: t('terminal.transcript.pageEnd', {}, locale), range: t('terminal.transcript.pageRange', {}, locale) },
     sessionStandingClear: { cleared: t('terminal.approval.sessionCleared', {}, locale), unconfirmed: t('terminal.approval.sessionClearUnconfirmed', {}, locale) },
     approvalsNone: t('terminal.approval.none', {}, locale), approvalItem: t('terminal.approval.item', {}, locale), approvalsTruncated: t('terminal.approval.truncated', {}, locale),
     approvalNotFound: t('terminal.approval.notFound', {}, locale), approvalTitle: t('terminal.approval.title', {}, locale), approvalSubject: t('terminal.approval.subject', {}, locale),

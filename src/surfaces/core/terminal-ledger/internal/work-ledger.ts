@@ -69,11 +69,16 @@ export type WorkLedgerNoticeEntry = Readonly<{
   readonly schemaVersion: typeof WORK_LEDGER_SCHEMA_VERSION;
   readonly kind: 'notice';
   readonly id: string;
-  readonly level: 'info' | 'error';
+  readonly level: 'info' | 'warning' | 'error';
   readonly text: string;
 }>;
 
 export type WorkLedgerEntry = WorkLedgerChatEntry | WorkLedgerRunEntry | WorkLedgerWorkerEntry | WorkLedgerNoticeEntry;
+
+/** `pending:2 active:1` back to its pairs (the summary's own format; `—` is no tasks). The summary is also the run card's change fingerprint. */
+export function parseTaskPhases(summary: string): readonly (readonly [string, number])[] {
+  return summary.split(' ').flatMap(part => { const at = part.lastIndexOf(':'); const count = Number(part.slice(at + 1)); return at > 0 && Number.isInteger(count) ? [[part.slice(0, at), count] as const] : []; });
+}
 
 function phaseSummary(run: RunView): string {
   const counts = new Map<string, number>();
@@ -147,6 +152,6 @@ export function ledgerEntrySummary(entry: WorkLedgerEntry): string {
   return entry.text.slice(0, 80);
 }
 
-export function notice(level: 'info' | 'error', text: string): WorkLedgerEntry {
+export function notice(level: 'info' | 'warning' | 'error', text: string): WorkLedgerEntry {
   return Object.freeze({ schemaVersion: WORK_LEDGER_SCHEMA_VERSION, kind: 'notice' as const, id: 'notice', level, text });
 }

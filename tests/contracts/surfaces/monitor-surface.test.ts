@@ -294,7 +294,7 @@ describe('monitor v1.1: first failure, timeline, map, diagnostics, order', () =>
     expect(surface.describeDiagnostic('scope-unavailable:s1:LEDGER_LOCKED', 'tr').text).toBe('s1 kapsamı okunamadı (LEDGER_LOCKED)');
     expect(surface.describeDiagnostic('scope-unavailable:s1', 'en').text).toBe('scope s1 could not be read');
     expect(surface.describeDiagnostic('info:workers-finished-capped:5', 'tr')).toEqual({ code: 'workers-finished-capped', note: true,
-      text: "biten worker'ların yalnız en yenileri gösteriliyor; 5 eskisi gizli" });
+      text: "biten işçilerin yalnız en yenileri gösteriliyor; 5 eskisi gizli" });
     expect(surface.describeDiagnostic('brand-new-code:x', 'en')).toEqual({ code: 'brand-new-code', note: false, text: 'brand-new-code:x' });
   });
   it('shows the Map tab in sentences (layers, registry, models, policy, honest memory) and says when no map was read', () => {
@@ -618,14 +618,14 @@ it('H1 missing transcript/title and denied content say what is missing, live usa
     transcript: { state: 'missing' as const, excerpt: [], truncated: false }, finalReport: null } };
   const snapshot = { ...sample, installs: [{ ...base, workers: [worker] }] };
   const text = surface.renderMonitorText(snapshot, { locale: 'tr', width: 80, ascii: true });
-  expect(text).toContain('başlık yok'); expect(text).toContain('Transcript kaydı yok'); expect(text).toContain('canlı worker bildirimi');
+  expect(text).toContain('başlık yok'); expect(text).toContain('Transcript kaydı yok'); expect(text).toContain('canlı işçi bildirimi');
   const root = await project(); const handlers = { async inspectMonitor() { return snapshot; } };
-  expect((await cli(['monitor', '--once', '--lang', 'tr'], handlers, root)).out).toContain('canlı worker bildirimi');
+  expect((await cli(['monitor', '--once', '--lang', 'tr'], handlers, root)).out).toContain('canlı işçi bildirimi');
   expect(JSON.parse((await cli(['monitor', '--json'], handlers, root)).out)).toEqual(snapshot);
   expect((await monitorSlash(root, '', { root, ...handlers }, { env: { HOME: join(root, 'h') } }, 'tr', 80)).join('\n')).toContain('başlık yok');
   const denied = { ...snapshot, installs: [{ ...base, workers: [{ ...worker, human: { ...worker.human, transcript: { state: 'denied' as const, excerpt: [], truncated: false }, patch: { ...worker.human.patch, state: 'denied' as const, files: [], fileCount: null } } }] }] };
   const deniedText = surface.renderMonitorText(denied, { locale: 'tr', width: 80, ascii: true });
-  expect(deniedText).toContain('policy izin vermedi'); expect(deniedText).not.toContain('canlı worker bildirimi');
+  expect(deniedText).toContain('policy izin vermedi'); expect(deniedText).not.toContain('canlı işçi bildirimi');
   expect(deniedText).not.toContain('tests passed');
 });
 

@@ -1,6 +1,6 @@
 Deckent izleyici · gözlem 2026-10-02 09:30:00Z · yalnız gözlem
 ● current · servis çalışıyor (pid 31337) · build kaydı var (2026-10-02 08:00:00…
- 1 Özet   2 Run'lar  [3 Worker'lar]  4 Onaylar   5 Havuzlar   6 Kurulumlar   7 …
+ 1 Özet   2 İşler  [3 İşçiler]  4 Onaylar   5 Havuzlar   6 Kurulumlar   7 Harit…
 Esc: geri · ↑/↓, PgUp/PgDn: ayrıntıyı kaydır
 Beklemede (sen bekleniyor)
 sen bekleniyor · neden: onay bekliyor (appr-0001) · başlangıç: 2026-10-02
@@ -9,12 +9,12 @@ sen bekleniyor · neden: onay bekliyor (appr-0001) · başlangıç: 2026-10-02
 İş: Test sonucunu açıkla (görev metni)
 Değerlendirme: ret
 Boş yama: dosya değişikliği yok
-Kullanım (mühürlü worker bildirimi): 7 tur · token 12000/3400 · $0.4321
+Kullanım (mühürlü işçi bildirimi): 7 tur · token 12000/3400 · $0.4321
 Başlangıç: zaman kaydı yok
 Bitiş: zaman kaydı yok
 İddia — son rapor (kabul kanıtı değildir): tests passed
 İddia — kontrol: npm test → geçti
-Ne yaptı — mühürlü, redakte kesit (worker anlatımı):
+Ne yaptı — mühürlü, redakte kesit (işçi anlatımı):
 message: Dosyayı okudu; testleri çalıştırdı.
 Ayrıntı: build · deneme c76f549a-attempt · nesil 1 · taban SHA
 aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa

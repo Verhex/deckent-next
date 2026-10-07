@@ -5,7 +5,7 @@ export function queryFailureText(error: unknown, locale: Locale): string {
   const code = (error as { code?: unknown } | null)?.code;
   if (typeof code === 'string' && ErrorRegistry.has(code)) {
     const params = (error as { params?: Readonly<Record<string, string | number>> }).params ?? {};
-    return `${ErrorRegistry.get(code, locale, params)?.message ?? code} [${code}]`;
+    return `${ErrorRegistry.get(code, locale, params)?.message ?? code}\n${t('terminal.error.code', { code }, locale)}`;
   }
   return t('terminal.admin.queryFailed', {}, locale);
 }
@@ -15,4 +15,11 @@ export async function part(label: string, locale: Locale, read: (() => Promise<r
   if (!read) return [t('terminal.admin.partUnavailable', { part: label }, locale)];
   try { return await read(); }
   catch (error) { return [t('terminal.admin.partFailed', { part: label, reason: queryFailureText(error, locale) }, locale)]; }
+}
+
+/** Like `part`, but the value stays typed: a read that failed or is not wired comes back as the line that names it (`note`), never as a value. */
+export async function attempt<T>(label: string, locale: Locale, read: (() => Promise<T>) | null): Promise<Readonly<{ value: T }> | Readonly<{ note: string }>> {
+  if (!read) return { note: t('terminal.admin.partUnavailable', { part: label }, locale) };
+  try { return { value: await read() }; }
+  catch (error) { return { note: t('terminal.admin.partFailed', { part: label, reason: queryFailureText(error, locale) }, locale) }; }
 }

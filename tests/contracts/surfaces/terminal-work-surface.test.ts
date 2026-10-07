@@ -107,7 +107,7 @@ describe('work surface: live worker panel', () => {
   it('prints the live line on worker cards from /workers', async () => {
     const view = mount({ ledger: baseLedger });
     await view.type('/workers\r');
-    await until(() => view.stdout.text.includes('t-a2'), 'cards');
+    await until(() => view.stdout.text.includes('worker 2'), 'cards');
     expect(view.stdout.text).toContain('worker 1 · claude claude-model · editing src/x.ts');
   });
 });

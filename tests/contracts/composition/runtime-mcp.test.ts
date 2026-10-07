@@ -382,9 +382,9 @@ describe.skipIf(!sandboxReady)('a server the sandbox cannot start is never silen
     const second = await answered(f, 'turn-hidden-2', 'allow');
     expect(requested(second.events)).toEqual([]);
     expect(second.result.note).toContain(`MCP server fx did not start: the argument ${script}`);
-    expect(await slash(f)).toContainEqual(expect.stringContaining(`! fx: MCP server fx did not start: the argument ${script}`));
+    expect(await slash(f)).toContainEqual(expect.stringContaining(`    MCP server fx did not start: the argument ${script}`));
     // `/mcp` renders the same record in the terminal's own locale.
-    expect(await slash(f, 'tr')).toContainEqual(`  ! fx: MCP sunucusu fx başlamadı: argüman ${script} bu makinede var ama bubblewrap sandbox görünümünde yok `
+    expect(await slash(f, 'tr')).toContainEqual(`    MCP sunucusu fx başlamadı: argüman ${script} bu makinede var ama bubblewrap sandbox görünümünde yok `
       + '(yalnız proje, sistem dizinleri ve PATH araç dizinleri görünür); projeye ya da bir PATH araç dizinine taşıyın veya sunucuyu --realm host ile yeniden ekleyin '
       + '(o zaman sandbox dışında çalışır). İlk kullanım kartı /mcp approve fx çalıştırılana kadar yeniden sorulmaz.');
     await runConfiguredMcpCommand(f.project, { verb: 'reset', name: 'fx' }, { env: f.env }, async () => null);
@@ -411,9 +411,9 @@ describe.skipIf(!sandboxReady)('a server the sandbox cannot start is never silen
     }
     expect(toolNames(f.state.requests.at(-1)!).filter(name => name.startsWith('mcp__'))).toEqual([]);
     const lines = await slash(f);
-    expect(lines).toContainEqual(expect.stringContaining('! fx: MCP server fx did not start: the argument ${MCP_TOOLS_DIR}/server.mjs'));
+    expect(lines).toContainEqual(expect.stringContaining('    MCP server fx did not start: the argument ${MCP_TOOLS_DIR}/server.mjs'));
     expect(lines.join('\n')).not.toContain(dir);
-    expect(await slash(f, 'tr')).toContainEqual(expect.stringContaining('! fx: MCP sunucusu fx başlamadı: argüman ${MCP_TOOLS_DIR}/server.mjs'));
+    expect(await slash(f, 'tr')).toContainEqual(expect.stringContaining('    MCP sunucusu fx başlamadı: argüman ${MCP_TOOLS_DIR}/server.mjs'));
   }, 90_000);
 });
 
