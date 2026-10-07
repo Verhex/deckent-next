@@ -1,4 +1,4 @@
-import type { AgentShellPosture } from '#domain/index.js';
+import type { AgentShellPosture, AgentToolCardCall, ApprovalPreviewCutFacts } from '#domain/index.js';
 import type { SessionStandingResult } from '#engine/index.js';
 import type { StandingScope } from '#surfaces/core/terminal-kit/index.js';
 
@@ -21,6 +21,8 @@ export interface WorklineApproval {
   readonly tool?: string; readonly target?: string | null; readonly createdAt?: number;
   /** v21 (T2-FOLLOWUP POSTURE): a shell call's structured sandbox posture, from the running turn's card only. */
   readonly posture?: AgentShellPosture;
+  /** v21 (Astra 2431): the running turn's card fields as data and its preview cut's facts. */
+  readonly call?: AgentToolCardCall; readonly previewCut?: ApprovalPreviewCutFacts;
 }
 
 /** One page of the scope's approval records (every status; the store orders by id, not by time or state). */

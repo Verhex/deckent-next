@@ -140,7 +140,8 @@ describe('the single approval card', () => {
     const heredoc = ['$ cat > big.sh <<EOF', ...Array.from({ length: 40 }, (_, i) => `line ${i}`), 'EOF', 'risk: destructive (rm)', 'realm: host'].join('\n');
     const streamTurn = async function* () {
       yield { kind: 'approval' as const, phase: 'requested' as const, callId: 'c1', approvalId: 'appr-h', revision: 0, summary: `run_shell · cat > big.sh · ${'0'.repeat(12)}`,
-        preview: heredoc, expiresAt: Date.now() + 600_000, decisionCapability: CAPABILITY, risk: 'shell-destructive', requiredAssurance: 'turn-bound' };
+        preview: heredoc, expiresAt: Date.now() + 600_000, decisionCapability: CAPABILITY, risk: 'shell-destructive', requiredAssurance: 'turn-bound',
+        call: { kind: 'shell' as const, command: heredoc.split('\n').slice(0, 42).join('\n').slice(2), tier: 'destructive', reason: 'rm' } };
       await answered;
       yield { kind: 'approval' as const, phase: 'settled' as const, callId: 'c1', approvalId: 'appr-h', outcome: 'allow' as const };
       yield { kind: 'text' as const, text: 'Ran.' }; yield { kind: 'done' as const, finish: 'stop' as const };

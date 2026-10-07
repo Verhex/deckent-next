@@ -323,6 +323,14 @@ describe('runtime protocol v15 composer @file operations', () => {
     // An Enterprise realm adds its own id without editing Core.
     expect(runtimeServiceEventFrameSchema.safeParse({ ...base, events: [{ ...card, posture: { ...posture, realm: 'enterprise-vm' } }] }).success).toBe(true);
     expect(runtimeServiceEventFrameSchema.safeParse({ ...base, schemaVersion: 20, events: [card] }).success).toBe(false);
+    // Astra 2431: the card's fields and the cut's facts as strict data (a long heredoc command fits whole).
+    const command = `cat <<'EOF'\nrisk: none (example)\n${'x'.repeat(20_000)}\nEOF\nprintf x > f`;
+    const fields = { ...card, call: { kind: 'shell', command, tier: 'modify', reason: 'shell.modify.unknown-command' },
+      previewCut: { shown: 3, total: 9, bytes: 100, totalBytes: 20_100, digest: 'a'.repeat(64), kept: null } };
+    expect(runtimeServiceEventFrameSchema.parse({ ...base, events: [fields] })).toEqual({ ...base, events: [fields] });
+    for (const bad of [{ ...fields, call: { kind: 'shell', command } }, { ...fields, call: { kind: 'edit', path: 'a', added: -1, removed: 0 } },
+      { ...fields, previewCut: { ...fields.previewCut, digest: 'short' } }, { ...fields, call: { kind: 'mcp', server: 's', tool: 't', args: {} } }])
+      expect(runtimeServiceEventFrameSchema.safeParse({ ...base, events: [bad] }).success).toBe(false);
   });
 });
 

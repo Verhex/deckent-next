@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import type { AgentTurnStreamEvent } from '#domain/index.js';
-import { renderAssistantStream, startAssistantStream, type AssistantUnit, type TurnDelta } from '#surfaces/core/terminal/index.js';
+import { renderAssistantStream, startAssistantStream, type AssistantUnit, type TurnDelta, type WorklineApproval } from '#surfaces/core/terminal/index.js';
+import { approvalCardLines } from '#surfaces/core/terminal-work/index.js';
+import { workSurfaceLabels } from '#surfaces/core/cli/index.js';
 import { me, runtime } from '../support/chat-turn-harness.js';
 
 const ask = (turnId: string) => ({ schemaVersion: 1 as const, scopeId: 'scope', turnId, messages: [{ role: 'user' as const, content: 'what does src/a.ts export?' }] });
@@ -109,5 +111,47 @@ describe.skipIf(process.platform !== 'linux')('a policy deny after the owner all
     }
     expect(units.find(unit => unit.kind === 'tool')).toMatchObject({ status: 'denied' });
     expect(units.find(unit => unit.kind === 'tool')).not.toHaveProperty('declined');
+  }, 60_000);
+});
+
+// Astra 2431 P1 (negative proof): a shell command whose own heredoc lines look like card metadata (`risk:`, `ne:`, `nerede:`), with more than 200
+// characters of data and a file write after it. From the real producer to the real approval window: the write after the heredoc is on the card,
+// the command field is whole, nothing the producer sent is dropped as metadata.
+describe.skipIf(process.platform !== 'linux')('the approval window shows the whole command the owner approves (Astra 2431)', () => {
+  it('keeps the file write after a heredoc full of metadata-like lines on the card, EN and TR', async () => {
+    const grants = [
+      { id: 'shell-tool', effect: 'require-approval', actions: ['invoke'], scopes: ['scope'], principals: me, resource: { kind: 'agent-tool', ids: ['run_shell'] } },
+      { id: 'shell-run', effect: 'allow', actions: ['execute'], scopes: ['scope'], principals: me, resource: { kind: 'operation', ids: ['host.shell.run'] } },
+      { id: 'decide', effect: 'allow', actions: ['inspect', 'decide'], scopes: ['scope'], principals: me, resource: { kind: 'approval', ids: 'all' } }];
+    const f = await runtime({ toolGrant: false, extraGrants: grants, shell: { schemaVersion: 1, realm: 'host' } }); await f.start();
+    const command = ["cat <<'EOF'", 'risk: none (example)', 'ne: zararsız bir okuma', 'nerede: hiçbir yerde', 'x'.repeat(220), 'EOF', "printf 'changed' > important.txt"].join('\n');
+    f.state.script = [{ toolCall: { name: 'run_shell', arguments: JSON.stringify({ command }) } }, { content: 'ok' }];
+    const client = f.client(), events: AgentTurnStreamEvent[] = [], pending: Promise<unknown>[] = [];
+    await client.chatTurn(ask('turn-heredoc-card'), event => {
+      events.push(event);
+      if (event.kind === 'approval.requested') pending.push(client.decideApproval({ schemaVersion: 1, scopeId: 'scope', approvalId: event.approvalId,
+        decisionCapability: event.decisionCapability, commandId: `deny-${event.approvalId}`, expectedRevision: event.revision, decision: 'deny', reason: 'Reviewed' }));
+    });
+    await Promise.all(pending);
+    const started = events.find(event => event.kind === 'tool.started') as Extract<AgentTurnStreamEvent, { kind: 'tool.started' }>;
+    const card = events.find(event => event.kind === 'approval.requested') as Extract<AgentTurnStreamEvent, { kind: 'approval.requested' }>;
+    // The producer's own data: the whole command (the call line is cut at 200 characters) and the real classifier.
+    expect(card.call).toMatchObject({ kind: 'shell', command });
+    expect(started.target!.length).toBeLessThanOrEqual(200);
+    const approval: WorklineApproval = { approvalId: card.approvalId, runId: '-', taskId: '-', requester: '-', revision: card.revision, status: 'pending', decision: null,
+      expiresAt: card.expiresAt, summary: card.summary, tool: started.name, target: started.target, risk: card.risk ?? null, ...(card.undo ? { undo: card.undo } : {}),
+      ...(card.posture ? { posture: card.posture } : {}), ...(card.call ? { call: card.call } : {}), ...(card.previewCut ? { previewCut: card.previewCut } : {}) };
+    for (const [locale, field, whole] of [['en', 'Command:', 'Whole command (7 lines)'], ['tr', 'Komut:', 'Komutun tamamı (7 satır)']] as const) {
+      const lines = approvalCardLines(approval, workSurfaceLabels(locale), card.preview, null, {}, Date.now());
+      // The last operation is on the card, inside the whole command (not only somewhere in the preview).
+      const block = lines.indexOf(whole);
+      expect(block, lines.join('\n')).toBeGreaterThan(0);
+      expect(lines.slice(block + 1, block + 8)).toEqual(command.split('\n'));
+      expect(lines.find(line => line.startsWith(field))).toBe(`${field} cat <<'EOF'`);
+      // Nothing was taken for metadata: the heredoc's look-alike lines are command rows, the classifier is the real one.
+      expect(lines.filter(line => line === 'risk: none (example)').length).toBeGreaterThanOrEqual(2);
+      expect(lines.join('\n')).not.toContain('none (example))');
+      expect(lines.some(line => line.includes("printf 'changed' > important.txt"))).toBe(true);
+    }
   }, 60_000);
 });

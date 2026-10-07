@@ -62,6 +62,10 @@ export function createAgentShell(input: { readonly scope: WorkspaceScope; readon
     const write = shellWritePosture('owner-approved', planned.tier, input.fullAccess === true);
     return { planned, view: sandboxWriteView({ repositoryWritable: input.fullAccess === true }, write), realm: callRealm(planned.realm, write.open) };
   };
+  const previewText = (tool: string, args: Record<string, unknown>): string | undefined => {
+    const card = cardView(tool, args);
+    return card ? `$ ${card.planned.command}\nrisk: ${card.planned.risk.risk} (${card.planned.risk.reason})\n${card.realm.posture(card.view)}` : undefined;
+  };
   const plan = async (tool: string, args: Record<string, unknown>): Promise<ShellPlan> => {
     const command = typeof args['command'] === 'string' ? args['command'] : '';
     if (command.trim() === '') return { ok: false, text: '[deckent] run_shell: error=empty-command' };
@@ -114,9 +118,13 @@ export function createAgentShell(input: { readonly scope: WorkspaceScope; readon
      * `owner-approved` (mode.ts) — never `full-access` or the unattended read-only posture, whatever the turn — so the text uses the
      * same authority the effect will use; only `.git` still depends on the turn (MODES-3).
      */
-    preview(tool: string, args: Record<string, unknown>): string | undefined {
-      const card = cardView(tool, args);
-      return card ? boundApprovalPreview(`$ ${card.planned.command}\nrisk: ${card.planned.risk.risk} (${card.planned.risk.reason})\n${card.realm.posture(card.view)}`) : undefined;
+    preview(tool: string, args: Record<string, unknown>): string | undefined { const text = previewText(tool, args); return text === undefined ? undefined : boundApprovalPreview(text); },
+    /** The card's preview text before the preview bound (the turn bounds it once and keeps the cut's facts). */
+    previewText,
+    /** Astra 2431: the card's fields as data — the whole command (never cut) and the classifier's tier and reason. */
+    cardCall(tool: string, args: Record<string, unknown>): { readonly kind: 'shell'; readonly command: string; readonly tier: string; readonly reason: string } | undefined {
+      const planned = plans.get(key(tool, args));
+      return planned?.ok ? { kind: 'shell', command: planned.command, tier: planned.risk.risk, reason: planned.risk.reason } : undefined;
     },
     /** POSTURE (T2-FOLLOWUP): the same card's realm and write view as structured facts (the surface words them); null when not planned. */
     postureFacts(tool: string, args: Record<string, unknown>) { const card = cardView(tool, args); return card ? shellPostureFacts(card.realm, card.view) : null; },

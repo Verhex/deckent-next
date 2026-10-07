@@ -27,8 +27,15 @@ function utf8Prefix(text: string, maxBytes: number): string {
  * marker is always visible — naming what is not shown, the sha256 of the whole text and, when kept, the file holding all of it.
  */
 export function boundApprovalPreview(text: string, fullAt: string | null = null, maxBytes = APPROVAL_PREVIEW_MAX_BYTES): string {
+  return boundApprovalPreviewFacts(text, fullAt, maxBytes).text;
+}
+/** What a cut preview's marker states, as data for a card (Astra 2431: the surface never parses the preview text). */
+export interface ApprovalPreviewCut { readonly shown: number; readonly total: number; readonly bytes: number; readonly totalBytes: number; readonly digest: string; readonly kept: string | null }
+/** `boundApprovalPreview` with the facts of its cut (null: shown whole). */
+export function boundApprovalPreviewFacts(text: string, fullAt: string | null = null, maxBytes = APPROVAL_PREVIEW_MAX_BYTES):
+  { readonly text: string; readonly cut: ApprovalPreviewCut | null } {
   const total = Buffer.byteLength(text, 'utf8');
-  if (total <= maxBytes) return text;
+  if (total <= maxBytes) return { text, cut: null };
   const lines = text.split('\n'), digest = createHash('sha256').update(text).digest('hex');
   const marker = (shown: number, bytes: number) => `[Deckent: preview cut to ${shown} of ${lines.length} lines (${bytes} of ${total} bytes); `
     + `whole text sha256 ${digest}${fullAt ? `; complete at ${fullAt}` : '; not kept'}]`;
@@ -41,5 +48,6 @@ export function boundApprovalPreview(text: string, fullAt: string | null = null,
     if (kept.length === 0) { const part = utf8Prefix(line, Math.max(0, budget - 4)); kept.push(`${part} …`); bytes += Buffer.byteLength(`${part} …`, 'utf8') + 1; }
     break;
   }
-  return [marker(kept.length, bytes), ...kept].join('\n');
+  return { text: [marker(kept.length, bytes), ...kept].join('\n'),
+    cut: Object.freeze({ shown: kept.length, total: lines.length, bytes, totalBytes: total, digest, kept: fullAt }) };
 }

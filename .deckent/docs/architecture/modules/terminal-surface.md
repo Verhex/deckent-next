@@ -142,9 +142,12 @@ Market notes live outside the repo (`/home/alperen/deckent-refactor-work/proof/T
   "reversible" without evidence (only a catalog operation's declared compensation says yes). A stored card without the word gets the same
   classification from its tool and cell (never for MCP: "not declared"). **POSTURE** (L1 D2/D4; v21 `approval.requested.posture`): a shell
   card carries `{realm, containment, project, git, network, passedOver}` from the chosen realm and the call's write view (`shellPostureFacts`,
-  host-shell); the window words it in EN/TR and no longer parses the engine's English sentence (which stays in the preview for the model and
-  the line surface). Command, classifier, edit counts, fetch URL, cut marker and binding line are still read from the preview text (remaining
-  D4, a decision point). **DENY-WORDING** (T2-FOLLOWUP): a call whose card the owner declined
+  host-shell); the window words it in EN/TR. **Card fields as data (Astra 2431, L1 D4 closed; v21 `approval.requested.call` and `previewCut`):** the
+  producer sends the whole shell command with the classifier's tier and reason, an edit's target and line counts, a fetch URL/host/allowlist,
+  an MCP server/tool, and a cut preview's facts; the window parses no preview text. A command longer than three rows shows its first rows,
+  "N more lines — the whole command is below (↑↓ scrolls)" and a "Whole command" block with every row (never cut); the producer's preview
+  follows whole — no line is taken for metadata and dropped. Without producer fields (an older service, a stored card) the window shows the
+  call's own line (which marks its 200-character cut with "…"), says the detailed fields are not available, and shows the preview whole. **DENY-WORDING** (T2-FOLLOWUP): a call whose card the owner declined
   (`approval.settled` deny for that call) prints "you declined" / "sen reddettin" in the muted tone; a policy rule's refusal keeps "denied by
   policy" / "kural izin vermedi". A call the owner allowed but policy denies on re-evaluation (contract §2) settles `allow` and is refused by
   policy (`error=denied-by-policy (approved, …)`), so it reads as the policy's refusal.

@@ -16,15 +16,18 @@ const base = (patch: Partial<WorklineApproval>): WorklineApproval => ({ approval
   status: 'pending', decision: null, expiresAt: NOW + 272_000, summary: 'run_shell · npm test · 0123456789ab', ...patch });
 const KINDS = {
   shell: { approval: base({ tool: 'run_shell', target: 'rm -rf build && npm test', risk: 'shell-destructive', summary: 'run_shell · rm -rf build && npm test · 0123456789ab',
+    call: { kind: 'shell', command: 'rm -rf build && npm test', tier: 'destructive', reason: 'rm -rf' },
     posture: { realm: 'bubblewrap', containment: 'sandbox', project: 'writable', git: 'read-only', network: 'closed', passedOver: [] } }),
     preview: '$ rm -rf build && npm test\nrisk: destructive (rm -rf)\nRuns in the bubblewrap sandbox: the project is writable, .git is read-only, no network.' },
-  edit: { approval: base({ tool: 'edit_file', target: 'src/x.ts', risk: 'edit', summary: 'edit_file · src/x.ts · 0123456789ab' }),
+  edit: { approval: base({ tool: 'edit_file', target: 'src/x.ts', risk: 'edit', summary: 'edit_file · src/x.ts · 0123456789ab', call: { kind: 'edit', path: 'src/x.ts', added: 3, removed: 1 } }),
     preview: '(+3 −1 lines)\n--- a/src/x.ts\n+++ b/src/x.ts\n@@ -1,2 +1,4 @@\n-const limit = 10;\n+const limit = 20;\n+const extra = 1;\n+const more = 2;\n export {};' },
-  write: { approval: base({ tool: 'write_file', target: 'docs/new.md', risk: 'edit-floor', summary: 'write_file · docs/new.md · 0123456789ab' }),
+  write: { approval: base({ tool: 'write_file', target: 'docs/new.md', risk: 'edit-floor', summary: 'write_file · docs/new.md · 0123456789ab', call: { kind: 'edit', path: 'docs/new.md', added: 2, removed: 0 } }),
     preview: '(+2 −0 lines)\n--- /dev/null\n+++ b/docs/new.md\n@@ -0,0 +1,2 @@\n+# New\n+text' },
-  fetch: { approval: base({ tool: 'fetch_url', target: 'https://example.org/page', risk: 'fetch-unlisted', summary: 'fetch_url · https://example.org/page · 0123456789ab' }),
+  fetch: { approval: base({ tool: 'fetch_url', target: 'https://example.org/page', risk: 'fetch-unlisted', summary: 'fetch_url · https://example.org/page · 0123456789ab',
+    call: { kind: 'fetch', url: 'https://example.org/page', host: 'example.org', listed: false } }),
     preview: "GET https://example.org/page\nhost: example.org (not on this installation's allowlist)\nbody: at most 1048576 bytes\nsha256(url): abc" },
-  mcp: { approval: base({ tool: 'mcp__context7__query_docs', target: null, risk: 'mcp-call', summary: 'mcp__context7__query_docs · mcp:context7 · 0123456789ab' }),
+  mcp: { approval: base({ tool: 'mcp__context7__query_docs', target: null, risk: 'mcp-call', summary: 'mcp__context7__query_docs · mcp:context7 · 0123456789ab',
+    call: { kind: 'mcp', server: 'context7', tool: 'query_docs' } }),
     preview: 'mcp__context7__query_docs {\n  "libraryId": "/vadimdemedes/ink"\n}' },
 } as const;
 
@@ -64,8 +67,10 @@ describe('approval window fields per tool kind (catalog EN and TR)', () => {
     const text = approvalCardLines(KINDS.shell.approval, workSurfaceLabels('tr'), KINDS.shell.preview, 'rm -rf build && npm test', {}, NOW).join('\n');
     expect(text).toContain('Kabuk komutu çalıştırılacak'); expect(text).toContain('rm -rf build && npm test');
     expect(text).toContain('bubblewrap sandbox içinde: proje yazılabilir (korunan dosyalar dahil), .git salt okunur, ağ kapalı'); expect(text).toContain('Silme içeriyor (geri alınamaz)');
-    // L1 D4: the engine's English posture sentence is not parsed into the window any more.
-    expect(text).not.toContain('Runs in the bubblewrap sandbox');
+    // The engine's English posture sentence is never parsed into a field; it stays only in the producer's preview, shown whole (Astra 2431).
+    const lines = text.split('\n'), preview = lines.indexOf('Önizleme');
+    expect(lines.findIndex(line => line.includes('Runs in the bubblewrap sandbox'))).toBeGreaterThan(preview);
+    expect(preview).toBeGreaterThan(0);
     expect(text).toContain('Hayır — geri alınamaz');
     expect(text).toContain('Kural: silme içeren kabuk komutları her zaman onay ister · Mod: bilinmiyor');
     expect(text).toContain('4:32 içinde karar verilmezse hiçbir şey çalışmaz');
@@ -75,11 +80,15 @@ describe('approval window fields per tool kind (catalog EN and TR)', () => {
   it('a cut preview says so in the catalog words; the engine marker and sha256 stay out of the primary rows', () => {
     const work = workSurfaceLabels('en'), digest = 'a'.repeat(64);
     const cut = `[Deckent: preview cut to 2 of 900 lines (120 of 90000 bytes); whole text sha256 ${digest}; complete at /data/approval-previews/x.txt]\n(+900 −0 lines)\n+one\n+two`;
-    const lines = approvalCardLines(base({ tool: 'write_file', target: 'big.txt', risk: 'edit' }), work, cut, null, {}, NOW);
+    const lines = approvalCardLines(base({ tool: 'write_file', target: 'big.txt', risk: 'edit', call: { kind: 'edit', path: 'big.txt', added: 900, removed: 0 },
+      previewCut: { shown: 2, total: 900, bytes: 120, totalBytes: 90000, digest, kept: '/data/approval-previews/x.txt' } }), work, cut, null, {}, NOW);
     expect(lines).toContain('Preview shortened: the first 2 of 900 lines (120 of 90000 bytes)');
-    expect(lines.join('\n')).not.toContain('[Deckent:');
+    // The facts come from the event, not from the marker line; the marker stays in the producer's preview, which is shown whole.
+    expect(lines.findIndex(line => line.includes('[Deckent:'))).toBeGreaterThan(lines.indexOf('Preview'));
     const details = lines.indexOf('Details');
-    expect(lines.findIndex(line => line.includes(digest))).toBeGreaterThan(details);
+    // The digest is not in the primary rows; it is named in the details (and stays inside the producer's marker line in the preview).
+    expect(lines.findIndex(line => line.includes(digest))).toBeGreaterThan(lines.indexOf('Preview'));
+    expect(lines.slice(details).some(line => line.includes(digest))).toBe(true);
     expect(lines.join('\n')).toContain('Complete text kept at: /data/approval-previews/x.txt');
   });
 
@@ -291,8 +300,10 @@ describe('approval window: reversibility by call kind and structured posture (T2
     expect(rows(open, 'tr')).toContain('bubblewrap sandbox içinde: proje yazılabilir (korunan dosyalar dahil), .git yazılabilir, ağ açık');
     const overlay = shell({ realm: 'enterprise-vm', containment: 'sandbox', project: 'write-set', git: 'read-only', network: 'closed', passedOver: [] });
     expect(rows(overlay, 'en')).toContain('In the enterprise-vm sandbox: the project\'s writes are kept aside and applied like edits, .git read-only, network off');
-    for (const approval of [host, degraded, open, overlay]) for (const locale of ['en', 'tr'] as const) expect(rows(approval, locale)).not.toContain('ENGINE SENTENCE');
-    // Without structured posture (an older service) nothing is parsed out of the engine text.
-    expect(rows(base({ tool: 'run_shell', target: 'make', risk: 'shell-other-modify' }), 'en')).not.toContain('ENGINE SENTENCE');
+    // The engine sentence is never worded into the posture rows; it stays in the producer's preview below the Preview heading.
+    for (const approval of [host, degraded, open, overlay]) for (const locale of ['en', 'tr'] as const) {
+      const lines = rows(approval, locale).split('\n'), heading = workSurfaceLabels(locale).approvalWindow.field.preview;
+      expect(lines.findIndex(line => line.includes('ENGINE SENTENCE'))).toBeGreaterThan(lines.indexOf(heading));
+    }
   });
 });

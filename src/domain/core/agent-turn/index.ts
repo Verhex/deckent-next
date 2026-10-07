@@ -2,8 +2,8 @@ export { agentTurnMessageSchema, agentTurnStreamEventSchema, chatTurnCommandSche
   chatTurnCancellationSchema, chatTurnCancellationResultSchema, parseChatTurnCancellation } from './internal/contract.js';
 export type { AgentContextQuality, AgentToolApprovalSettlement, AgentTurnMessage, AgentTurnEvent, AgentTurnStreamEvent, AgentToolCallStatus, AgentTurnFinish, ChatTurnCommand, ChatTurnResult,
   ChatTurnCancellation, ChatTurnCancellationResult } from './internal/contract.js';
-export { AGENT_TOOL_UNDO, agentShellPostureSchema, agentToolUndoSchema } from './internal/card-facts.js';
-export type { AgentShellPosture, AgentToolUndo, AgentToolUndoKind, McpToolChangeHints } from './internal/card-facts.js';
+export { AGENT_TOOL_UNDO, agentShellPostureSchema, agentToolCardCallSchema, agentToolUndoSchema, approvalPreviewCutSchema } from './internal/card-facts.js';
+export type { AgentShellPosture, AgentToolCardCall, AgentToolUndo, ApprovalPreviewCutFacts, AgentToolUndoKind, McpToolChangeHints } from './internal/card-facts.js';
 export { WORKSPACE_ATTACHMENT_MAX_BYTES, WORKSPACE_ATTACHMENT_REFUSALS, WORKSPACE_FILE_FIND_MAX_RESULTS, WORKSPACE_FILE_QUERY_MAX_CHARS, parseWorkspaceAttachmentRequest,
   parseWorkspaceFileQuery, workspaceAttachmentRequestSchema, workspaceAttachmentSchema, workspaceFileMatchesSchema, workspaceFileQuerySchema } from './internal/workspace-files.js';
 export type { WorkspaceAttachment, WorkspaceAttachmentRefusal, WorkspaceAttachmentRequest, WorkspaceFileMatches, WorkspaceFileQuery } from './internal/workspace-files.js';

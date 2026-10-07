@@ -3,9 +3,9 @@ import { canonicalTurnRequest as canonical, withMcpNotices, chatTurnRoundFailure
 export { withMcpNotices, chatTurnRoundFailureState } from '#engine/index.js';
 import { createHash, randomUUID } from 'node:crypto';
 import { chatTurnCancellationSchema, chatTurnCommandSchema, modelInvocationProfileSchema, type AgentToolApprovalSettlement, type AgentToolSpec, type AgentTurnMessage,
-  type AgentTurnStreamEvent, type ChatTurnCancellationResult, type ChatTurnResult, type JsonObject, type ModelInvocationCommand } from '#domain/index.js';
+  agentToolCardCallSchema, type AgentToolCardCall, type AgentTurnStreamEvent, type ChatTurnCancellationResult, type ChatTurnResult, type JsonObject, type ModelInvocationCommand } from '#domain/index.js';
 import { SessionStanding, SessionApprovalAnswers, agentCallPermissionMode, agentToolApprovalSummary, agentCompactionInstruction, AGENT_TURN_ANSWER_MAX_BYTES, APPROVAL_PREVIEW_MAX_BYTES, AgentToolPolicyAuthorization, AgentTurnStoreError, admitFullAccessTurn,
-  agentCompactionTranscript, agentToolApprovalFacts, agentToolApprovalNote, agentToolUndo, agentTurnAdmission, awaitAgentToolApproval, boundApprovalPreview, createTurnDecisionCapabilities, parseAgentCompactionSummary,
+  agentCompactionTranscript, agentToolApprovalFacts, agentToolApprovalNote, agentToolUndo, agentTurnAdmission, awaitAgentToolApproval, boundApprovalPreview, boundApprovalPreviewFacts, createTurnDecisionCapabilities, parseAgentCompactionSummary,
   renderAgentTurnSystemPrompt, requestAgentToolApproval, runDurableAgentTurn, withAgentTurnSystemPrompt, projectModelIngressField, type AgentRoundOutcome, type AgentTurnPorts, type TurnDecisionCapabilities,
   type ModelInvocationDelivery } from '#engine/index.js';
 import { t, globalStateRoot, ErrorRegistry, prepareProductDirectory, resolveLocale, SystemTrustedClock, type ConfigLoadOptions } from '#platform/index.js';
@@ -173,6 +173,17 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
       return { ...(kind ? { undo: agentToolUndo(kind, facts.risk?.source === 'cell' ? facts.risk.cell ?? null : null, kind === 'mcp' ? mcp!.hints(tool.name) : null) } : {}),
         ...(posture ? { posture } : {}) };
     };
+    /** Astra 2431: the card's fields as data from the producer that planned the call; every text through the same display projection as the
+     * preview. A field the event bound cannot carry is left out (the card then shows the producer's preview whole, never a cut field). */
+    const cardCall = (tool: AgentToolSpec, args: Record<string, unknown>): { readonly call?: AgentToolCardCall } => {
+      const shown = (text: string) => projectModelIngressField(text).modelText;
+      const raw = tool.toolClass === 'shell' && shell ? shell.cardCall(tool.name, args) : editsOf(tool.name)?.cardCall(tool.name, args) ?? (fetches(tool) ? fetcher!.cardCall(args)
+        : mcps(tool) ? ((entry) => entry ? { kind: 'mcp' as const, server: entry.server, tool: entry.tool } : undefined)(mcp!.entry(tool.name)) : undefined);
+      if (!raw) return {};
+      const projected: AgentToolCardCall = raw.kind === 'shell' ? { ...raw, command: shown(raw.command), reason: shown(raw.reason) } : raw.kind === 'edit' ? { ...raw, path: shown(raw.path) }
+        : raw.kind === 'fetch' ? { ...raw, url: shown(raw.url), host: shown(raw.host) } : { ...raw, server: shown(raw.server), tool: shown(raw.tool) };
+      return agentToolCardCallSchema.safeParse(projected).success ? { call: projected } : {};
+    };
     const approvals = createAgentCallApprovals({ context, clock, scopeId: command.scopeId, turnId: command.turnId, describe });
     // One permission decision per call (T-L4 slice 4a): strict policy, floor raise and permission-mode lowering, again at the effect.
     const decisions = createAgentCallDecisions({ context, clock, scopeId: command.scopeId, turnId: command.turnId, edits: editsOf, shell, approvals, fetch: fetcher, mcp, fullAccess, standing: { memory: host.answers.memory, session: SessionStanding.sessionKey(command.scopeId, context.principal, command.sessionId ?? command.turnId) } });
@@ -243,11 +254,13 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
           if (offer) answer = host.answers.register({ record, principal: context.principal, peerPid: peer.pid,
             session: SessionStanding.sessionKey(command.scopeId, context.principal, command.sessionId ?? command.turnId), key: offer.key, signal: approvalSignal, clock, started,
             remember: (valid, refused) => decisions.remember(tool, args, { round, index }, call.id, record.request.approvalId, { valid, refused }) });
+          // One bound for every kind's preview, with the cut's facts (Astra 2431: the card never parses the text for them).
+          const bounded = boundApprovalPreviewFacts((diff !== undefined ? diff : (tool.toolClass === 'shell' ? shell?.previewText(tool.name, args) : fetches(tool) ? fetcher?.preview(args)
+            : mcps(tool) ? mcp!.preview(tool.name, args) : undefined)) ?? chatTurnApprovalPreview(tool.name, args), diff !== undefined ? kept : null);
           emitApproval({ kind: 'approval.requested', callId: call.id, approvalId: record.request.approvalId, revision: record.revision, risk: facts.risk?.source === 'cell' ? facts.risk.cell : null,
-            requiredAssurance: facts.requiredAssurance, summary: record.request.summary, preview: projectModelIngressField(((diff !== undefined ? boundApprovalPreview(diff, kept)
-              : (tool.toolClass === 'shell' ? shell?.preview(tool.name, args) : fetches(tool) ? fetcher?.preview(args) : mcps(tool) ? boundApprovalPreview(mcp!.preview(tool.name, args)!)
-                : undefined) ?? chatTurnApprovalPreview(tool.name, args)))).modelText,
-            expiresAt: record.request.expiresAt, ...(answer && offer ? { standing: { scopes: ['session'] as const, pattern: offer.pattern } } : {}), ...cardFacts(tool, args, facts) });
+            requiredAssurance: facts.requiredAssurance, summary: record.request.summary, preview: projectModelIngressField(bounded.text).modelText,
+            expiresAt: record.request.expiresAt, ...(answer && offer ? { standing: { scopes: ['session'] as const, pattern: offer.pattern } } : {}), ...cardFacts(tool, args, facts),
+            ...cardCall(tool, args), ...(bounded.cut ? { previewCut: bounded.cut } : {}) });
           requested = { approvalId: record.request.approvalId };
           const decided = await awaitAgentToolApproval(journal.store, integrity, record, clock, approvalSignal, 250, started);
           let outcome = decided;

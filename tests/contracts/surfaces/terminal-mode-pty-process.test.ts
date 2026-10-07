@@ -527,3 +527,31 @@ describe.skipIf(process.platform !== 'linux')('T2 surfaces together in a real ps
     expect(await readFile(join(f.projectRoot, 'src/a.ts'), 'utf8')).toBe('export const a = 1;\n');
   }, 180_000);
 });
+
+// Astra 2431 P1 at the real boundary (compiled product, real service, 100 x 40, VT replay): a heredoc whose lines look like card metadata, more than
+// 200 characters of data and a file write after it — the write is on the approval window the owner answers, inside the whole command.
+describe.skipIf(process.platform !== 'linux')('the approval window shows the whole command in a real pseudo-terminal (Astra 2431)', () => {
+  it('shows the file write after a metadata-like heredoc on the window; nothing ran after n', async () => {
+    const command = ["cat <<'EOF'", 'risk: none (example)', 'ne: zararsız bir okuma', 'nerede: hiçbir yerde', 'x'.repeat(220), 'EOF', "printf 'changed' > important.txt"].join('\n');
+    const f = await modeProject('v2', { call: { name: 'run_shell', arguments: { command } }, shell: true });
+    await startRuntime(f.projectRoot, f.env);
+    // The window is capped to the terminal: the whole command continues below its first page and PgDn scrolls to it.
+    const run = await inPty(f.projectRoot, f.env, ['terminal', 'workline', '--scope', 'scope'], [['Deckent workline', 'go\r'], ['Whole command (7 lines)', '\u001b[6~'],
+      ["│ printf 'changed' > important.txt", 'n'], ['Mode turn done.', '/exit\r']], 100);
+    expect(run.timeout, run.output).toBeUndefined();
+    expect(run.status, run.output).toBe(0);
+    const complete = (end: number) => { const at = run.output.lastIndexOf('\u001b[?2026l', end); return at < 0 ? end : at + '\u001b[?2026l'.length; };
+    const screen = (mark: number) => terminalScreen(run.output.slice(0, complete(run.marks![mark]!)), 100).split('\n').slice(-40).join('\n');
+    const [first, scrolled] = [screen(1), screen(2)];
+    const proof = process.env['DECKENT_T2_FRAME_PROOF'];
+    if (proof) { const { appendFile } = await import('node:fs/promises'); for (const [title, text] of [['first page', first], ['after PgDn', scrolled]] as const)
+      await appendFile(proof, `\n### en · Astra 2431 heredoc window · ${title}\n\n\`\`\`text\n${text}\n\`\`\`\n`); }
+    expect(first).toMatch(/Command: +cat <<'EOF'/u);
+    expect(first).toContain('the whole command is below (↑↓ scrolls)');
+    expect(first).toContain('Whole command (7 lines)');
+    expect(first).toMatch(/rows 1–\d+ of \d+/u);
+    // After one PgDn the write is a row of the window itself (inside the frame), as part of the whole command.
+    expect(scrolled).toMatch(/│ printf 'changed' > important\.txt +│/u);
+    await expect(access(join(f.projectRoot, 'important.txt'))).rejects.toMatchObject({ code: 'ENOENT' });
+  }, 180_000);
+});

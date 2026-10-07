@@ -174,6 +174,7 @@ function approvalWindowLabels(locale: Locale): WorkSurfaceLabels['approvalWindow
       unknown: t('terminal.approval.window.risk.unknown', {}, locale) },
     ...approvalWindowFactLabels(locale),
     time: t('terminal.approval.window.time', {}, locale), expired: t('terminal.approval.window.expired', {}, locale), ageUnknown: t('terminal.approval.window.ageUnknown', {}, locale), previewCut: t('terminal.approval.window.previewCut', {}, locale), valueMore: t('terminal.approval.window.valueMore', {}, locale),
+    fullCommand: t('terminal.approval.window.fullCommand', {}, locale), noStructured: t('terminal.approval.window.noStructured', {}, locale),
     detail: {
       id: t('terminal.approval.window.detail.id', {}, locale),
       binding: t('terminal.approval.window.detail.binding', {}, locale),

@@ -42,6 +42,11 @@ export function createAgentFileEdits(input: { readonly area: WorkspaceEditArea; 
       const planned = plans.get(key(tool, args));
       return planned?.ok ? `(+${planned.added} −${planned.removed} lines)\n${planned.preview}` : undefined;
     },
+    /** Astra 2431: the card's fields as data — the target and the planned line counts (undefined when not planned). */
+    cardCall(tool: string, args: Record<string, unknown>): { readonly kind: 'edit'; readonly path: string; readonly added: number; readonly removed: number } | undefined {
+      const planned = plans.get(key(tool, args));
+      return planned?.ok ? { kind: 'edit', path: planned.rel, added: planned.added, removed: planned.removed } : undefined;
+    },
     async apply(tool: string, args: Record<string, unknown>, execution: { readonly round: number; readonly index: number }, gate: EffectApprovalGate): Promise<AgentToolOutcome> {
       const callKey = key(tool, args);
       const planned = plans.get(callKey) ?? await plan(tool, args);

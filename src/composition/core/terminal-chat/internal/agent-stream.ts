@@ -104,7 +104,8 @@ function toDelta(event: AgentTurnStreamEvent, targets: ReadonlyMap<string, strin
     case 'compacted': return { kind: 'compacted', messages: event.messages, replacedMessages: event.replacedMessages };
     case 'approval.requested': return { kind: 'approval', phase: 'requested', callId: event.callId, approvalId: event.approvalId, revision: event.revision, summary: event.summary, preview: event.preview,
       expiresAt: event.expiresAt, ...(event.standing ? { standing: event.standing } : {}), ...(event.decisionCapability ? { decisionCapability: event.decisionCapability } : {}), ...(event.risk !== undefined ? { risk: event.risk } : {}), ...(event.requiredAssurance ? { requiredAssurance: event.requiredAssurance } : {}),
-      ...(event.undo ? { undo: event.undo } : {}), ...(event.posture ? { posture: event.posture } : {}),
+      ...(event.undo ? { undo: event.undo } : {}), ...(event.posture ? { posture: event.posture } : {}), ...(event.call ? { call: event.call } : {}),
+      ...(event.previewCut ? { previewCut: event.previewCut } : {}),
       // T-APPROVAL-WINDOW: the same call's `tool.started` came first; its name and target name the window (presentation only).
       ...(names.has(event.callId) ? { tool: names.get(event.callId)!, target: targets.get(event.callId) ?? null } : {}) };
     case 'approval.settled': return { kind: 'approval', phase: 'settled', callId: event.callId, approvalId: event.approvalId, outcome: event.outcome };

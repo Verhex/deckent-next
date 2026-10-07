@@ -1,6 +1,6 @@
 import { approvalTemplateLine, projectApprovalDecisionText, type ApprovalDecisionLine, type ApprovalDecisionProjection } from '#surfaces/core/approval-presentation/index.js';
 import type { KnownSecretSnapshot } from '#platform/index.js';
-import { AGENT_TOOL_UNDO, type AgentShellPosture, type AgentToolUndo } from '#domain/index.js';
+import { AGENT_TOOL_UNDO, type AgentShellPosture, type AgentToolCardCall, type AgentToolUndo, type ApprovalPreviewCutFacts } from '#domain/index.js';
 import { agentToolUndo } from '#engine/index.js';
 import type { StandingScope } from '#surfaces/core/terminal-kit/index.js';
 import { fillTemplate, span, sliceSpans, plainText, type Span, type SpanRole } from '#surfaces/core/terminal-render/index.js';
@@ -45,8 +45,10 @@ export interface ApprovalWindowLabels {
   readonly ageUnknown: string;
   /** `{shown}`, `{total}`, `{bytes}`, `{totalBytes}`. */
   readonly previewCut: string;
-  /** `{count}`: rows of a long value (a heredoc command) not shown in its field; the preview shows it whole. */
-  readonly valueMore: string;
+  /** `{count}`: rows of a long value (a heredoc command) not shown in its field; `fullCommand` (`{count}` rows) heads the whole command below. */
+  readonly valueMore: string; readonly fullCommand: string;
+  /** The card has no producer fields (an older service): the preview below is shown whole instead. */
+  readonly noStructured: string;
   readonly detail: Readonly<Record<Details, string>>;
   /** `{pattern}`. */
   readonly sessionCovers: string; readonly alwaysCovers: string;
@@ -61,6 +63,8 @@ export type ApprovalWindowInput = Readonly<{
   requiredAssurance?: string | undefined; assuranceLine?: ApprovalDecisionLine | null;
   standing?: Readonly<{ scopes: readonly StandingScope[]; pattern: string }> | null;
   project?: string | undefined; mode?: string | undefined; posture?: AgentShellPosture | undefined;
+  /** v21 (Astra 2431): the card's fields as producer data and the preview cut's facts; absent (an older service): the preview is shown whole. */
+  call?: AgentToolCardCall | undefined; previewCut?: ApprovalPreviewCutFacts | undefined;
 }>;
 
 const MCP_NAME = /^mcp__([a-z][a-z0-9]*)__(.+)$/u;
@@ -79,34 +83,6 @@ export function approvalToolKind(name: string | undefined): ApprovalToolKind {
 export function approvalToolParts(name: string | undefined): Readonly<{ tool: string; server: string }> {
   const mcp = name ? MCP_NAME.exec(name) : null;
   return { tool: mcp ? mcp[2]! : name ?? '', server: mcp ? mcp[1]! : '' };
-}
-
-/** The engine's first-line marker of a cut preview (`boundApprovalPreview`); anything else is not a marker. */
-const CUT = /^\[Deckent: preview cut to (\d+) of (\d+) lines \((\d+) of (\d+) bytes\); whole text sha256 ([0-9a-f]{64})(?:; complete at (.+)|; not kept)\]$/u;
-export type PreviewCut = Readonly<{ shown: number; total: number; bytes: number; totalBytes: number; digest: string; kept: string | null }>;
-export function splitPreviewCut(preview: string): { readonly cut: PreviewCut | null; readonly body: string } {
-  const newline = preview.indexOf('\n'), first = newline < 0 ? preview : preview.slice(0, newline), match = CUT.exec(first);
-  if (!match) return { cut: null, body: preview };
-  return { cut: { shown: Number(match[1]), total: Number(match[2]), bytes: Number(match[3]), totalBytes: Number(match[4]), digest: match[5]!, kept: match[6] ?? null },
-    body: newline < 0 ? '' : preview.slice(newline + 1) };
-}
-/** Shell card preview (`$ command`, `risk: tier (reason)`; the realm's English posture sentence after it is for the model and the line surface,
- * never read here — the window words the event's structured `posture`): null when the text has another shape. */
-export function parseShellPreview(body: string): Readonly<{ command: string; classifier: string }> | null {
-  if (!body.startsWith('$ ')) return null;
-  const lines = body.split('\n'), at = lines.findIndex((line, index) => index > 0 && /^risk: \S+ \(.*\)$/u.test(line));
-  if (at < 0) return null;
-  return { command: lines.slice(0, at).join('\n').slice(2), classifier: lines[at]!.slice('risk: '.length) };
-}
-/** Edit card preview: `(+A −R lines)` then the diff. */
-export function parseEditPreview(body: string): Readonly<{ added: number; removed: number; diff: string }> | null {
-  const match = /^\(\+(\d+) −(\d+) lines\)(?:\n|$)/u.exec(body);
-  return match ? { added: Number(match[1]), removed: Number(match[2]), diff: body.slice(match[0].length) } : null;
-}
-/** Fetch card preview: `GET url`, `host: name…` (with the allowlist note), then the engine's notes; `rest` keeps every line after the URL. */
-export function parseFetchPreview(body: string): Readonly<{ url: string; host: string; rest: string }> | null {
-  const lines = body.split('\n'), get = /^GET (\S+)$/u.exec(lines[0] ?? ''), host = /^host: (\S+)/u.exec(lines[1] ?? '');
-  return get && host ? { url: get[1]!, host: host[1]!, rest: lines.slice(1).join('\n') } : null;
 }
 
 /** `m:ss` (or `h:mm:ss`) left; never negative. Digits only, so no catalog text is needed. */
@@ -200,23 +176,26 @@ export function approvalWindowTitle(input: ApprovalWindowInput, labels: Approval
 export function approvalWindowLines(input: ApprovalWindowInput, labels: ApprovalWindowLabels, now: number, known?: KnownSecretSnapshot): readonly ApprovalDecisionLine[] {
   const p = (text: string) => projectApprovalDecisionText(text, known), f = labels.field, call = approvalCallOf(input);
   const kind = approvalToolKind(call?.tool), parts = approvalToolParts(call?.tool);
-  const { cut, body } = splitPreviewCut(input.preview ?? '');
-  const shell = kind === 'shell' ? parseShellPreview(body) : null, edit = kind === 'edit' || kind === 'write' ? parseEditPreview(body) : null;
-  const fetch = kind === 'fetch' ? parseFetchPreview(body) : null;
-  const target = call?.target ?? null, path = target ?? '';
-  const changes = edit ? approvalTemplateLine(labels.what.changes, { added: edit.added, removed: edit.removed }).spans : [];
-  const what = approvalTemplateLine(labels.what[kind], { path: p(path), host: p(fetch?.host ?? target ?? ''), tool: p(parts.tool), server: p(parts.server),
-    changes: { spans: changes, hiddenCount: 0, patternMatches: [] } });
+  // Astra 2431 (L1 D4 for good): every field below is the producer's data; the preview text is never parsed, only shown — whole.
+  const card = input.call ?? null, cut = input.previewCut ?? null, preview = input.preview ?? '';
+  const target = call?.target ?? null;
+  const changes = card?.kind === 'edit' ? approvalTemplateLine(labels.what.changes, { added: card.added, removed: card.removed }).spans : [];
+  const what = approvalTemplateLine(labels.what[kind], { path: p(card?.kind === 'edit' ? card.path : target ?? ''), host: p(card?.kind === 'fetch' ? card.host : target ?? ''),
+    tool: p(card?.kind === 'mcp' ? card.tool : parts.tool), server: p(card?.kind === 'mcp' ? card.server : parts.server), changes: { spans: changes, hiddenCount: 0, patternMatches: [] } });
   const rows: ApprovalDecisionLine[] = [];
   // A task or operation (or a producer this window does not know) keeps its own whole summary as the sentence, character for character.
   if (call) rows.push(lineOf(what.spans, what.fields, f.what));
   else projectedRows(p(input.summary)).forEach((row, index) => rows.push({ ...row, label: [span(index === 0 ? f.what : '', { bold: true })] }));
-  // The full value: the command from the card's own `$` line (the call line's target is cut at 200 characters), the path, the URL.
-  const value = shell ? { label: f.command, text: shell.command } : kind === 'edit' || kind === 'write' ? (target ? { label: f.file, text: target } : null)
-    : fetch ? { label: f.address, text: fetch.url } : target ? { label: kind === 'shell' ? f.command : kind === 'fetch' ? f.address : f.target, text: target } : null;
+  // The full value from the producer: the whole command, the path, the URL. Without producer fields (a stored card, an older service) the call's own
+  // line stands in — the call line the client saw or the sealed subject, which marks its own cut with "…" — and the note below says so.
+  const value = card?.kind === 'shell' ? { label: f.command, text: card.command } : card?.kind === 'edit' ? { label: f.file, text: card.path }
+    : card?.kind === 'fetch' ? { label: f.address, text: card.url } : !card && target && kind !== 'mcp'
+      ? { label: kind === 'shell' ? f.command : kind === 'fetch' ? f.address : kind === 'edit' || kind === 'write' ? f.file : f.target, text: target } : null;
+  const fallback = !card && call !== null && kind !== 'other';
   const valueRows = value ? projectedRows(p(value.text)) : [];
   valueRows.slice(0, VALUE_FIELD_ROWS).forEach((row, index) => rows.push({ ...row, label: [span(index === 0 ? value!.label : '', { bold: true })] }));
-  if (valueRows.length > VALUE_FIELD_ROWS) rows.push({ ...lineOf([span(fillTemplate(labels.valueMore, { count: valueRows.length - VALUE_FIELD_ROWS }), { role: 'muted' })]), label: [span('')] });
+  if (valueRows.length > VALUE_FIELD_ROWS) rows.push({ ...lineOf([span(fillTemplate(labels.valueMore, { count: valueRows.length - VALUE_FIELD_ROWS }), { role: 'warning' })]), label: [span('')] });
+  if (fallback) rows.push({ ...lineOf([span(labels.noStructured, { role: 'warning' })]), label: [span('')] });
   const where = input.project ? approvalTemplateLine(labels.where, { path: p(input.project) }) : approvalTemplateLine(labels.whereUnknown, {});
   rows.push(lineOf(where.spans, where.fields, f.where));
   // POSTURE (L1 D2/D4): the event's structured sandbox facts, worded here; nothing is parsed out of the engine's sentence.
@@ -236,12 +215,13 @@ export function approvalWindowLines(input: ApprovalWindowInput, labels: Approval
   if (input.assuranceLine) rows.push(input.assuranceLine);
   if (input.standing?.scopes.includes('session')) rows.push({ ...approvalTemplateLine(labels.sessionCovers, { pattern: p(input.standing.pattern) }), exact: true });
   if (input.standing?.scopes.includes('always')) rows.push({ ...approvalTemplateLine(labels.alwaysCovers, { pattern: p(input.standing.pattern) }), exact: true });
-  // The preview section: the diff (edit), the tool's own text (MCP, other) or a preview whose shape is not the known one.
-  const previewText = shell ? (valueRows.length > VALUE_FIELD_ROWS ? shell.command : '') : fetch ? '' : edit ? edit.diff : body;
-  if (previewText || cut) {
+  // A long command is never cut: its whole text, character for character, under its own heading (the preview text itself may be cut).
+  if (valueRows.length > VALUE_FIELD_ROWS) rows.push(blank, lineOf([span(fillTemplate(labels.fullCommand, { count: valueRows.length }), { bold: true })]), ...valueRows);
+  // The producer's preview, whole: no line is taken for metadata and dropped (in doubt, show). A diff keeps its +/- colour roles.
+  if (preview || cut) {
     rows.push(blank, lineOf([span(f.preview, { bold: true })]));
     if (cut) rows.push(lineOf([span(fillTemplate(labels.previewCut, { shown: cut.shown, total: cut.total, bytes: cut.bytes, totalBytes: cut.totalBytes }), { role: 'warning' })]));
-    if (previewText) rows.push(...diffRows(projectedRows(p(previewText))));
+    if (preview) { const shown = projectedRows(p(preview)); rows.push(...(kind === 'edit' || kind === 'write' ? diffRows(shown) : shown)); }
   }
   rows.push(blank, lineOf([span(f.detail, { bold: true })]));
   const detail = (template: string, values: Parameters<typeof approvalTemplateLine>[1]) => { const line = approvalTemplateLine(template, values); rows.push({ ...line, spans: withRole(line.spans, 'muted') }); };
@@ -250,8 +230,7 @@ export function approvalWindowLines(input: ApprovalWindowInput, labels: Approval
   if (input.runId !== '-') detail(labels.detail.run, { run: p(input.runId), task: p(input.taskId) });
   if (cell) detail(labels.detail.cell, { cell: p(cell) });
   if (input.undo && input.undo !== 'none' && !TOOL_UNDO.has(input.undo)) detail(labels.detail.compensation, { operation: p(input.undo) });
-  if (shell) detail(labels.detail.classifier, { classifier: p(shell.classifier) });
-  if (fetch?.rest) detail(labels.detail.engine, { text: p(fetch.rest.replace(/\n/gu, ' · ')) });
+  if (card?.kind === 'shell') detail(labels.detail.classifier, { classifier: p(`${card.tier} (${card.reason})`) });
   if (cut) { detail(labels.detail.digest, { digest: cut.digest }); detail(cut.kept ? labels.detail.kept : labels.detail.notKept, { path: p(cut.kept ?? '') }); }
   if (input.requiredAssurance) detail(labels.detail.assurance, { level: p(input.requiredAssurance) });
   return rows;

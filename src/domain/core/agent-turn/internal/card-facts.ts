@@ -27,3 +27,22 @@ export const agentShellPostureSchema = z.object({ realm: z.string().regex(/^[a-z
   project: z.enum(['writable', 'writable-except-floor', 'read-only', 'write-set']), git: z.enum(['writable', 'read-only']), network: z.enum(['reachable', 'closed']),
   passedOver: z.array(z.string().regex(/^[a-z][a-z0-9-]{1,63}$/)).max(8).readonly() }).strict().readonly();
 export type AgentShellPosture = z.infer<typeof agentShellPostureSchema>;
+
+const count = z.number().int().nonnegative().safe();
+/**
+ * Astra 2431 (L1 D4 for good): what a tool-call card shows as fields comes from the producer as data, never parsed out of the preview text — a
+ * shell command's own lines may look like any metadata. `shell`: the whole command (never cut; the preview text may be) and the classifier's
+ * tier and reason; `edit`: the target and the planned line counts; `fetch`: the URL, its host and whether the allowlist names it; `mcp`: the
+ * server and tool (the arguments stay in the preview).
+ */
+export const agentToolCardCallSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('shell'), command: z.string().min(1).max(65_536), tier: z.string().regex(/^[a-z][a-z0-9-]{0,63}$/), reason: z.string().max(1_024) }).strict(),
+  z.object({ kind: z.literal('edit'), path: z.string().min(1).max(4_096), added: count, removed: count }).strict(),
+  z.object({ kind: z.literal('fetch'), url: z.string().min(1).max(8_192), host: z.string().min(1).max(253), listed: z.boolean() }).strict(),
+  z.object({ kind: z.literal('mcp'), server: z.string().min(1).max(64), tool: z.string().min(1).max(256) }).strict(),
+]);
+export type AgentToolCardCall = z.infer<typeof agentToolCardCallSchema>;
+/** A cut preview's facts (the marker line states the same): lines and bytes shown of the whole, its sha256 and where the whole is kept. */
+export const approvalPreviewCutSchema = z.object({ shown: count, total: count, bytes: count, totalBytes: count, digest: z.string().regex(/^[0-9a-f]{64}$/),
+  kept: z.string().min(1).max(4_096).nullable() }).strict().readonly();
+export type ApprovalPreviewCutFacts = z.infer<typeof approvalPreviewCutSchema>;
