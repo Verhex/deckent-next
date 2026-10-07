@@ -1485,6 +1485,10 @@
       ],
       "plan": "PROVIDERS"
     },
+    "src/adapters/core/provider-connect": {
+      "dependencies": [],
+      "plan": "PROVIDERS"
+    },
     "src/adapters/core/provider-http-json": {
       "dependencies": [
         "src/domain/core/model-invocation",
