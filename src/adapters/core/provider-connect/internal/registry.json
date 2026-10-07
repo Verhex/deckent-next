@@ -4,18 +4,18 @@
   "limits": { "timeoutMs": 8000, "bodyPrefixBytes": 4096 },
   "note": "Connection kinds of the terminal /provider window (T4 PROVIDER-CONNECT). Each probe is a free read that needs the key: a model list or the key's own record. Sources: platform.claude.com/docs/en/api/models/list; platform.openai.com/docs/api-reference/models/list; openrouter.ai/docs/api/api-reference/api-keys/get-current-key; docs.vllm.ai (--api-key guards /v1/*).",
   "kinds": [
-    { "id": "anthropic-api", "available": true, "endpoint": { "default": "https://api.anthropic.com", "editable": false },
+    { "id": "anthropic-api", "labelKey": "tui.provider.kind.anthropicApi", "available": true, "endpoint": { "default": "https://api.anthropic.com", "editable": false },
       "probe": { "path": "/v1/models?limit=1", "auth": { "type": "header", "name": "x-api-key" }, "headers": { "anthropic-version": "2023-06-01" }, "listsModels": true },
       "key": { "required": true, "secretName": "DECKENT_ANTHROPIC_KEY" } },
-    { "id": "openai-compatible", "available": true, "endpoint": { "default": "https://api.openai.com", "editable": true },
+    { "id": "openai-compatible", "labelKey": "tui.provider.kind.openaiCompatible", "available": true, "endpoint": { "default": "https://api.openai.com", "editable": true },
       "probe": { "path": "/v1/models", "auth": { "type": "bearer" }, "headers": {}, "listsModels": true },
       "key": { "required": true, "secretName": "DECKENT_OPENAI_COMPATIBLE_KEY" } },
-    { "id": "openrouter", "available": true, "endpoint": { "default": "https://openrouter.ai", "editable": false },
+    { "id": "openrouter", "labelKey": "tui.provider.kind.openrouter", "available": true, "endpoint": { "default": "https://openrouter.ai", "editable": false },
       "probe": { "path": "/api/v1/key", "auth": { "type": "bearer" }, "headers": {}, "listsModels": false },
       "key": { "required": true, "secretName": "DECKENT_OPENROUTER_KEY" } },
-    { "id": "local-openai", "available": true, "endpoint": { "default": null, "editable": true },
+    { "id": "local-openai", "labelKey": "tui.provider.kind.localOpenai", "available": true, "endpoint": { "default": null, "editable": true },
       "probe": { "path": "/v1/models", "auth": { "type": "bearer" }, "headers": {}, "listsModels": true },
       "key": { "required": false, "secretName": "DECKENT_LOCAL_ENDPOINT_KEY" } },
-    { "id": "chatgpt-login", "available": false, "endpoint": { "default": null, "editable": false }, "probe": null, "key": null }
+    { "id": "chatgpt-login", "labelKey": "tui.provider.kind.chatgptLogin", "available": false, "endpoint": { "default": null, "editable": false }, "probe": null, "key": null }
   ]
 }

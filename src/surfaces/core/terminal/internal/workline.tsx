@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, createElement, type ComponentProps } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, createElement, type ComponentProps } from 'react';
 import { render, Box, Static, Text, useApp, type Instance } from 'ink';
 import { useWorklinePanel, type LocalExecution, LedgerEntryRow, type LedgerEntryLabels, immediateSlashAction, runLedgerCommand, type WatchState, type MonitorWindowLoader, type WorklineActionLabels, useWorkSurface } from '#surfaces/core/terminal-work/index.js';
 import { WorklinePaletteProvider, useWorklinePalette, parseSlashLine, isInspectSlashCommand, addSessionUsage, bindInspectPorts, EMPTY_SESSION_USAGE, type InspectSlashPorts, type SessionUsageView, useWorklineWatch, surfaceDeliveryValues, surfaceFollowLine, useSurfacePushFeed,
@@ -20,6 +20,7 @@ import { useReasoningPreview, type WorklineReasoningLabels } from './workline-re
 import { useWorklineScratch, type WorklineScratchLabels, type WorklineScratchPort } from './workline-scratch.js';
 import { writeStartup, type WorklineStartup } from './startup-banner.js';
 import { useWorklineSettings, type WorklinePanels } from './workline-settings.js';
+import type { ModelPanelChoice, ModelPanelReference } from '#surfaces/core/terminal-panels/index.js';
 
 export interface WorklineLabels extends WorklineActionLabels {
   readonly banner: string;
@@ -184,10 +185,13 @@ export function WorklineApp(props: WorklineProps) {
   liveRef.current = liveWin;
   const refreshMode = mode.refresh;
   const reasoning = useReasoningPreview(push, labels.reasoning);
+  // T4 MODEL-SWITCH (S19): the model this session pinned with `/model`; read when a turn starts, so the next turn carries it (protocol v23).
+  const pinnedModel = useRef<ModelPanelReference | null>(null);
+  const sessionModel = useMemo(() => ({ pinned: () => pinnedModel.current, pin: (choice: ModelPanelChoice) => { pinnedModel.current = choice.reference; } }), []);
   const scratch = useWorklineScratch(props.scratch, session.id, push, errorText, labels.work?.unavailable ?? labels.ledgerUnavailable, labels.scratch);
   useEffect(() => { void refreshMode(); }, [refreshMode]);
   // T3 L4: `/mode`, `/config`, `/mcp` windows; `/mode`'s port is this view's mode hook (the same service set, grant check and audit as Shift+Tab).
-  const settings = useWorklineSettings({ panels: props.panels, permissionMode: props.permissionMode, mode, panel, state, push, errorText, blocked: work.modalOpen,
+  const settings = useWorklineSettings({ panels: props.panels, permissionMode: props.permissionMode, mode, panel, state, push, errorText, blocked: work.modalOpen, sessionModel,
     openApprovals: (approvalId, execution) => work.run('approvals', approvalId, execution) });
 
   const opening = useRef(props.openingNotices);
@@ -224,7 +228,7 @@ export function WorklineApp(props: WorklineProps) {
         let base: readonly AgentChatMessage[] = messages, appended: AgentChatMessage[] = [];
         // Forward the session and reasoning choices with the composition's generated binding callback.
         for await (const delta of props.streamTurn(messages, signal, { ...(reasoning.current.current ? {} : { reasoning: 'off' as const }), sessionId: execution.input.context.sessionId, onTurnBound: stream.onTurnBound,
-          ...(mode.fullAccess.current ? { fullAccess: true as const } : {}) })) {
+          ...(mode.fullAccess.current ? { fullAccess: true as const } : {}), ...(pinnedModel.current ? { reference: pinnedModel.current } : {}) })) {
           if (delta.kind === 'text') answer += delta.text;
           if (delta.kind === 'message') appended.push(delta.message);
           session.noteContext(delta); if (delta.kind === 'usage') usage.current = addSessionUsage(usage.current, delta);
@@ -271,7 +275,8 @@ export function WorklineApp(props: WorklineProps) {
     const lineCommands: Readonly<Record<string, ((args: string) => Promise<readonly string[]>) | undefined>> = { ...bindInspectPorts(props.inspect, () => usage.current, () => mode.fullAccess.current), mcp: props.mcp, monitor: props.monitor, config: props.config };
     // T3 L5: a bare `/monitor` opens the monitor window; with arguments (`--install`, `--scope`) it stays the text snapshot as notice lines.
     if (slash.command === 'monitor' && !slash.args && liveWin.canOpenMonitor) { await liveWin.openMonitor(); return true; }
-    if (slash.command === 'mcp' || slash.command === 'monitor' || slash.command === 'config' || (isInspectSlashCommand(slash.command) && (slash.command !== 'status' || lineCommands['status']))) {
+    // T4: `/provider` is a window only; without its port (TERM=dumb, no host) or with arguments it says the part is unavailable here.
+    if (slash.command === 'mcp' || slash.command === 'monitor' || slash.command === 'config' || slash.command === 'provider' || (isInspectSlashCommand(slash.command) && (slash.command !== 'status' || lineCommands['status']))) {
       const lines = lineCommands[slash.command];
       // One notice for the whole answer, so its level words (`Info: `) open the answer once instead of every line.
       try { push([notice('info', (lines ? await lines(slash.args) : [fillTemplate(labels.commandUnavailable, { part: slash.command })]).join('\n'))]); }

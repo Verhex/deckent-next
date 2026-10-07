@@ -229,6 +229,7 @@
     },
     "src/composition/core/cli": {
       "dependencies": [
+        "src/adapters/core/provider-connect",
         "src/adapters/core/agent-workspace-floor",
         "src/adapters/core/terminal-history",
         "src/adapters/core/workspace-write",

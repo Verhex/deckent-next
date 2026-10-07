@@ -9,6 +9,8 @@ import asset from './registry.json' with { type: 'json' };
 const header = z.string().regex(/^[a-z][a-z0-9-]{0,63}$/u);
 const kindSchema = z.object({
   id: z.string().regex(/^[a-z][a-z0-9-]{0,31}$/u),
+  /** The catalog key of the kind's name (a surface resolves it in the person's language). */
+  labelKey: z.string().regex(/^tui\.provider\.kind\.[A-Za-z]+$/u),
   available: z.boolean(),
   endpoint: z.object({ default: z.string().url().startsWith('https://').nullable(), editable: z.boolean() }).strict(),
   probe: z.object({ path: z.string().startsWith('/').max(128), auth: z.discriminatedUnion('type', [z.object({ type: z.literal('bearer') }).strict(),

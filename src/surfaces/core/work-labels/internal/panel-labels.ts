@@ -2,7 +2,7 @@ import { t, type Locale } from '#platform/index.js';
 import type { PanelLabels } from '#surfaces/core/terminal-panels/index.js';
 import { pickerLabels } from './work-labels.js';
 
-/** Catalog words of the `/mode`, `/config` and `/mcp` windows (T3 L4), EN and TR; the panels themselves never call the catalog. */
+/** Catalog words of the `/mode`, `/config`, `/mcp` (T3 L4), `/model` and `/provider` (T4) windows, EN and TR; the panels themselves never call the catalog. */
 export function terminalPanelLabels(locale: Locale): PanelLabels {
   return {
     picker: pickerLabels(locale), position: t('terminal.window.position', {}, locale), loading: t('tui.panel.loading', {}, locale),
@@ -27,5 +27,15 @@ export function terminalPanelLabels(locale: Locale): PanelLabels {
       entryHints: { name: t('tui.panel.mcp.entry.name', {}, locale), command: t('tui.panel.mcp.entry.command', {}, locale), url: t('tui.panel.mcp.entry.url', {}, locale),
         args: t('tui.panel.mcp.entry.args', {}, locale), env: t('tui.panel.mcp.entry.env', {}, locale), headers: t('tui.panel.mcp.entry.headers', {}, locale) },
       pairInvalid: t('tui.panel.mcp.pairInvalid', {}, locale), empty: t('tui.panel.mcp.required', {}, locale), trustKeys: t('tui.panel.mcp.trust.keys', {}, locale) },
+    model: { hints: t('tui.panel.model.hints', {}, locale), session: t('tui.panel.model.session', {}, locale), sessionAndDefault: t('tui.panel.model.sessionAndDefault', {}, locale),
+      pinnedMark: t('tui.panel.model.pinnedMark', {}, locale), configuredMark: t('tui.panel.model.configuredMark', {}, locale), pinned: t('tui.panel.model.pinned', {}, locale) },
+    provider: { title: t('tui.panel.provider.title', {}, locale), hints: t('tui.panel.provider.hints', {}, locale),
+      actions: { connect: t('tui.panel.provider.action.connect', {}, locale), replace: t('tui.panel.provider.action.replace', {}, locale),
+        disconnect: t('tui.panel.provider.action.disconnect', {}, locale) },
+      endpointTitle: t('tui.panel.provider.endpointTitle', {}, locale), endpointHint: t('tui.panel.provider.endpointHint', {}, locale),
+      keyTitle: t('tui.panel.provider.keyTitle', {}, locale), keyHint: t('tui.panel.provider.keyHint', {}, locale), keyOptionalHint: t('tui.panel.provider.keyOptionalHint', {}, locale),
+      keyRequired: t('tui.panel.provider.keyRequired', {}, locale), checking: t('tui.panel.provider.checking', {}, locale), resultHints: t('tui.panel.provider.resultHints', {}, locale),
+      disconnectTitle: t('tui.panel.provider.disconnectTitle', {}, locale), disconnectKeys: t('tui.panel.provider.disconnectKeys', {}, locale),
+      empty: t('tui.panel.provider.empty', {}, locale) },
   };
 }
