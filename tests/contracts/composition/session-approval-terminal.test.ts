@@ -120,9 +120,11 @@ it.each(['en', 'tr'] as const)('producer → runtime service → real Workline s
   await settle(60); await f.type('a'); await settle(40);
   expect(f.requests.filter(r => r.operation === 'decideApproval')).toHaveLength(0);
   await f.type('s');
-  const saved = t('terminal.approval.standing.savedSession', { id: first.approvalId }, locale);
+  // T2 integration: notices name the short approval id (first 8 characters of the UUID); the full id is the detail line of the decision notice.
+  const saved = t('terminal.approval.standing.savedSession', { id: first.approvalId.slice(0, 8) }, locale);
   await until(() => f.view.stdout.text.replace(/\s+/g, ' ').includes(saved), 'visible saved notice').catch(error => { throw new Error(String(error) + '\n' + f.view.stdout.frame); });
   await until(() => f.view.stdout.text.includes('Done 1.'), 'first completed turn');
+  expect(f.view.stdout.text.replace(/\s+/g, ' ')).not.toContain(t('terminal.approval.standing.savedSession', { id: first.approvalId }, locale).replace(/\s+/g, ' '));
   expect(await readFile(join(f.project, 'src/a.ts'), 'utf8')).toBe('value-1\n');
   await settle(50); await f.type('second\r'); await until(() => f.view.stdout.text.includes('Done 2.'), 'second completed without asking');
   expect(f.events.filter(e => e.kind === 'approval.requested')).toHaveLength(1);

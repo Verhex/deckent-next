@@ -41,7 +41,7 @@ export function workSurfaceLabels(locale: Locale): WorkSurfaceLabels {
     approvalPreviewMore: t('terminal.approval.previewMore', {}, locale),
     approvalExpires: t('terminal.approval.expires', {}, locale), approvalPrompt: t('terminal.approval.prompt', {}, locale), approvalPending: t('terminal.approval.pending', {}, locale),
     approvalAllowed: t('terminal.approval.allowed', {}, locale), approvalDenied: t('terminal.approval.denied', {}, locale),
-    approvalUnsettled: t('terminal.approval.unsettled', {}, locale), approvalMore: t('terminal.approval.more', {}, locale),
+    approvalUnsettled: t('terminal.approval.unsettled', {}, locale), approvalIdentity: t('terminal.approval.identity', {}, locale), approvalMore: t('terminal.approval.more', {}, locale),
     approvalNotify: t('terminal.approval.notify', {}, locale), approvalPollFailed: t('terminal.approval.pollFailed', {}, locale),
     approvalCard: { risk: t('terminal.approval.card.risk', {}, locale), notDeclared: t('terminal.approval.card.notDeclared', {}, locale),
       onExpiry: t('terminal.approval.card.onExpiry', {}, locale), assuranceTurnHere: t('terminal.approval.card.assuranceTurnHere', {}, locale),

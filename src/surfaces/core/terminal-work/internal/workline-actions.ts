@@ -59,6 +59,8 @@ export interface WorkSurfaceLabels {
   readonly approvalDenied: string;
   /** `{id}`: the service could not confirm closing a tool-call approval request; the call did not run. */
   readonly approvalUnsettled: string;
+  /** `{id}`: the full approval identity on a detail line under a decision notice (whose first line carries the short form). Absent: no line. */
+  readonly approvalIdentity?: string;
   readonly approvalMore: string;
   readonly approvalNotify: string;
   readonly approvalPollFailed: string;

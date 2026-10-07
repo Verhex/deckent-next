@@ -165,6 +165,26 @@ describe('work surface: approvals', () => {
     return { ledger, decisions, records, lists: () => lists };
   }
 
+  it.each([
+    ['en', 'y', 'Approval 7a48a7f0 approved', 'Approval identity: '],
+    ['tr', 'n', '7a48a7f0 onayı reddedildi', 'Onay kimliği: '],
+  ] as const)('%s: the decision notice names the short approval id; the full id is only on its detail line (T2 integration)', async (locale, key, primary, detail) => {
+    const id = '7a48a7f0-1b2c-4d3e-8f90-a1b2c3d4e5f6';
+    const fake = approvals([approval(id)]);
+    const view = mount({ labels: { ...labels, work: workSurfaceLabels(locale) }, ledger: fake.ledger, pollMs: 10_000 });
+    await view.type('/approvals\r');
+    await until(() => fake.lists() > 0 && view.frame().includes('> 1.'), 'picker');
+    await view.instance.waitUntilRenderFlush(); await settle(30);
+    await view.type('\r');
+    await until(() => view.frame().includes(id), 'approval window with the id in its details'); await settle(40);
+    await view.type(key);
+    await until(() => view.stdout.text.includes(primary), 'decision notice');
+    const rows = view.frame().split('\n');
+    const head = rows.findIndex(row => row.includes(primary));
+    expect(rows[head]).not.toContain(id);
+    expect(rows[head + 1]).toContain(`${detail}${id}`);
+  });
+
   it('lists pending approvals and decides one card at a time: y approves, "a" never approves, Enter and Esc deny', async () => {
     const fake = approvals([approval('ap-1'), approval('ap-2'), approval('ap-3'), approval('done', { status: 'decided', revision: 1, decision: 'allow' })]);
     const view = mount({ ledger: fake.ledger, pollMs: 10_000 });

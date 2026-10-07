@@ -111,26 +111,29 @@ export function useWorkSurface({ panel, state, ledger, labels, push, errorText, 
       catch (error) { if (!['APPROVAL_ASSURANCE_INSUFFICIENT', 'APPROVAL_SURFACE_RESTRICTED'].includes(String((error as { code?: unknown }).code))) return; }
     }
   };
+  // T2 integration: a decision notice names the approval by its short id; the full id is a detail line under it (never the primary line).
+  const identified = useCallback((template: string, approvalId: string) => [fillTemplate(template, { id: shortId(approvalId) }),
+    ...(work?.approvalIdentity ? [fillTemplate(work.approvalIdentity, { id: approvalId })] : [])].join('\n'), [work]);
   const decideApproval = useCallback(async (approval: WorklineApproval, remaining: number, yes: boolean, standing?: StandingScope, reason?: string) => {
     try {
       const record = await ledger!.decideApproval!(approval, yes ? 'allow' : 'deny', standing, reason);
       const decision = record.decision ?? (yes ? 'allow' : 'deny');
-      push([notice('info', fillTemplate(decision === 'allow' ? work!.approvalAllowed : work!.approvalDenied, { id: record.approvalId }))]);
+      push([notice('info', identified(decision === 'allow' ? work!.approvalAllowed : work!.approvalDenied, record.approvalId))]);
       // What the service answered about the standing scope is shown as it is: a saved answer, or the reason it was not saved (the call
       // itself was allowed once either way).
       if (standing && work!.approvalStanding) {
-        const answer = standingAnswerNotice(record.approvalId, standing, record.standing, work!.approvalStanding);
+        const answer = standingAnswerNotice(shortId(record.approvalId), standing, record.standing, work!.approvalStanding);
         push([notice(answer.level, answer.text)]);
       }
       if (remaining > 0) push([notice('info', fillTemplate(work!.approvalMore, { count: remaining }))]);
     } catch (error) {
-      if (standing === 'session' && work?.approvalStanding?.unconfirmedSession) push([notice('error', fillTemplate(work.approvalStanding.unconfirmedSession, { id: approval.approvalId, reason: 'transport-unknown' }))]);
+      if (standing === 'session' && work?.approvalStanding?.unconfirmedSession) push([notice('error', fillTemplate(work.approvalStanding.unconfirmedSession, { id: shortId(approval.approvalId), reason: 'transport-unknown' }))]);
       push([notice('error', errorText(error))]);
       if (!['APPROVAL_ASSURANCE_INSUFFICIENT', 'APPROVAL_SURFACE_RESTRICTED'].includes(String((error as { code?: unknown }).code)))
-        push([notice('error', fillTemplate(work!.approvalUnsettled, { id: approval.approvalId }))]);
+        push([notice('error', identified(work!.approvalUnsettled, approval.approvalId))]);
       throw error;
     }
-  }, [errorText, ledger, push, work]);
+  }, [errorText, identified, ledger, push, work]);
   const cancelRun = useCallback(async (view: RunView, yes: boolean) => {
     try {
       if (!yes) { push([notice('info', fillTemplate(work!.cancelKept, { run: shortId(view.runId) }))]); return; }
@@ -138,8 +141,8 @@ export function useWorkSurface({ panel, state, ledger, labels, push, errorText, 
     } catch (error) { push([notice('error', errorText(error))]); }
   }, [errorText, ledger, push, work]);
   const noteUnsettled = useCallback((approvalId: string) => {
-    if (work) push([notice('error', fillTemplate(work.approvalUnsettled, { id: approvalId }))]);
-  }, [push, work]);
+    if (work) push([notice('error', identified(work.approvalUnsettled, approvalId))]);
+  }, [identified, push, work]);
   let card: ReactNode = null;
   if (work && modal?.kind === 'approval') {
     const { approval, preview } = modal;
