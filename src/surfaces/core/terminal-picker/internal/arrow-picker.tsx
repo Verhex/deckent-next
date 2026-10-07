@@ -74,7 +74,7 @@ export function ArrowPicker(props: {
         const projected = props.styledRows?.[at];
         const visible = fitted.endsWith(glyphs.ellipsis) && fitted !== marked ? fitted.length - glyphs.ellipsis.length : fitted.length;
         return (
-          <Text key={at} wrap="truncate" {...(at === index ? palette.accent : {})}>
+          <Text key={at} wrap="truncate" {...(at === index ? palette.selection : {})}>
             {projected ? <SpanText spans={[...sliceSpans([span(`${at === index ? '>' : ' '} `), ...projected], 0, visible),
               ...(visible < fitted.length ? [span(glyphs.ellipsis)] : [])]} /> : fitted}
           </Text>

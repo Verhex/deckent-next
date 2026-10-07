@@ -138,12 +138,12 @@ export function diffRows(rows: readonly ApprovalDecisionLine[]): ApprovalDecisio
       const a = value.slice(1), b = text(index + 1).slice(1);
       let prefix = 0; while (prefix < a.length && prefix < b.length && a[prefix] === b[prefix]) prefix++;
       let suffix = 0; while (suffix < a.length - prefix && suffix < b.length - prefix && a[a.length - 1 - suffix] === b[b.length - 1 - suffix]) suffix++;
-      out[index] = { ...out[index]!, spans: withRole(emphasize(out[index]!.spans, 1 + prefix, 1 + a.length - suffix), 'error') };
-      out[index + 1] = { ...out[index + 1]!, spans: withRole(emphasize(out[index + 1]!.spans, 1 + prefix, 1 + b.length - suffix), 'success') };
+      out[index] = { ...out[index]!, spans: withRole(emphasize(out[index]!.spans, 1 + prefix, 1 + a.length - suffix), 'diffRemoved') };
+      out[index + 1] = { ...out[index + 1]!, spans: withRole(emphasize(out[index + 1]!.spans, 1 + prefix, 1 + b.length - suffix), 'diffAdded') };
       index++; continue;
     }
-    if (added(value)) out[index] = { ...out[index]!, spans: withRole(out[index]!.spans, 'success') };
-    else if (removed(value)) out[index] = { ...out[index]!, spans: withRole(out[index]!.spans, 'error') };
+    if (added(value)) out[index] = { ...out[index]!, spans: withRole(out[index]!.spans, 'diffAdded') };
+    else if (removed(value)) out[index] = { ...out[index]!, spans: withRole(out[index]!.spans, 'diffRemoved') };
     else if (value.startsWith('@@')) out[index] = { ...out[index]!, spans: withRole(out[index]!.spans, 'muted') };
   }
   return out;

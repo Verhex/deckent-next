@@ -109,5 +109,5 @@ export function DecisionCard({ title, projectedLines, decisionLabels = {}, promp
 function ReasonRow({ label, text, editing, empty }: { readonly label: string; readonly text: string; readonly editing: boolean; readonly empty: string }) {
   const palette = useWorklinePalette(), glyphs = useRenderGlyphs();
   return <Text wrap="truncate-start"><Text {...palette.strong}>{`${label} `}</Text>{text ? <Text>{text}</Text> : <Text {...palette.muted}>{empty}</Text>}
-    {editing ? <Text {...palette.accent}>{glyphs.ascii ? '_' : '▏'}</Text> : null}</Text>;
+    {editing ? <Text {...palette.focus}>{glyphs.ascii ? '_' : '▏'}</Text> : null}</Text>;
 }

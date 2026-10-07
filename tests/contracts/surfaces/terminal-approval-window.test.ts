@@ -77,7 +77,7 @@ describe('approval window fields per tool kind (catalog EN and TR)', () => {
     const bold = (index: number) => rows[index]!.spans.filter(part => part.bold).map(part => part.text).join('');
     expect(bold(0)).toBe('1'); expect(bold(1)).toBe('2');
     expect(rows[0]!.spans.map(part => part.text).join('')).toBe('-const limit = 10;');
-    expect(rows[0]!.spans.every(part => part.role === 'error')).toBe(true); expect(rows[1]!.spans.every(part => part.role === 'success')).toBe(true);
+    expect(rows[0]!.spans.every(part => part.role === 'diffRemoved')).toBe(true); expect(rows[1]!.spans.every(part => part.role === 'diffAdded')).toBe(true);
     expect(rows[2]!.spans.every(part => part.role === undefined)).toBe(true);
   });
 });

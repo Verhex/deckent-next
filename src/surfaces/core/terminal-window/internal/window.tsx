@@ -102,9 +102,9 @@ export function Window({ title, status = [], body = [], footer, footerRows = 0, 
   const titleRoom = Math.max(1, width - (statusText ? cells(statusText) + 1 : 0));
   const titleText = plainText(title), titleFits = cells(titleText) <= titleRoom;
   return (
-    <Box flexDirection="column" borderStyle={glyphs.ascii ? 'classic' : 'round'} {...(palette.accent.color ? { borderColor: palette.accent.color } : {})} paddingX={1} flexShrink={0}>
+    <Box flexDirection="column" borderStyle={glyphs.ascii ? 'classic' : 'round'} {...(palette.windowBorder.color ? { borderColor: palette.windowBorder.color } : {})} paddingX={1} flexShrink={0}>
       <Box flexDirection="row" justifyContent="space-between">
-        <Text {...palette.strong} wrap="truncate">{titleFits ? <SpanText spans={title} /> : truncateEnd(titleText, titleRoom, glyphs.ellipsis)}</Text>
+        <Text {...(focused ? palette.windowTitle : palette.muted)} wrap="truncate">{titleFits ? <SpanText spans={title} /> : truncateEnd(titleText, titleRoom, glyphs.ellipsis)}</Text>
         {statusText ? <Text {...palette.muted} wrap="truncate">{statusText}</Text> : null}
       </Box>
       {rows.slice(first, first + visible).map((row, index) => <Text key={first + index} wrap="truncate">{row.length ? <SpanText spans={row} /> : ' '}</Text>)}
