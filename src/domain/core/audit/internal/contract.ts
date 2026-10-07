@@ -61,7 +61,7 @@ export const auditSubjectSchema = z.discriminatedUnion('kind', [
    * trust record is written; no event, no change.
    */
   z.object({ kind: z.literal('mcp-trust'), action: z.enum(['trust', 'decline', 'reset', 'revoke', 'reconnect']), scope: z.enum(MCP_REGISTRY_SCOPES),
-    server: z.string().regex(/^[a-z][a-z0-9]{0,15}$/), definitionDigest: digest, toolsDigest: digest.nullable() }).strict(),
+    server: z.string().regex(/^(?=.{1,32}$)[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/), definitionDigest: digest, toolsDigest: digest.nullable() }).strict(),
   /**
    * A change of one stored secret (SECRET-K1): set or delete, the secret's name (the `$DECK:NAME` grammar) and the backend that holds it
    * (`<namespace>.secret-store.<name>@<version>`), recorded before the store is written — no event, no change. The value, its digest or

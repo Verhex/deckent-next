@@ -3,7 +3,7 @@ import { lstat, open, readFile, rename, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { z } from 'zod';
 import { withConfigWriteLock } from '#platform/index.js';
-import { MCP_SCOPES } from './registry.js';
+import { MCP_SCOPES, MCP_SERVER_NAME } from './registry.js';
 import { modelTextPrefix } from '#domain/index.js';
 
 /**
@@ -22,7 +22,7 @@ const diagnosisSchema = z.union([
     target: text(4_096).optional() }).strict(),
   z.object({ kind: z.enum(['package-runner', 'container-daemon']), runner: text(64) }).strict(),
 ]);
-export const mcpStartFailureSchema = z.object({ scope: z.enum(MCP_SCOPES), name: z.string().regex(/^[a-z][a-z0-9]{0,15}$/u), definitionDigest: digest,
+export const mcpStartFailureSchema = z.object({ scope: z.enum(MCP_SCOPES), name: z.string().regex(MCP_SERVER_NAME), definitionDigest: digest,
   /** `launch`: the first-use card's yes could not start it; `trusted`: a trusted server did not start; `tools` (MCP-VISIBILITY): it started but pinned
    * tools were withheld (drifted, missing or unmappable); `detail` is their count. */
   phase: z.enum(['launch', 'trusted', 'tools']), atMs: z.number().int().nonnegative(), code: text(64), detail: text(200).optional(), diagnosis: diagnosisSchema.optional() }).strict();

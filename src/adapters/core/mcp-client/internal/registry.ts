@@ -19,7 +19,9 @@ export const MCP_REGISTRY_FILE = 'mcp.json';
 /** The project registry, relative to the project root; the agent's read floor protects it (an MCP entry widens authority). */
 export const MCP_PROJECT_REGISTRY_PATH = `${DECKENT_DIR}/${MCP_REGISTRY_FILE}`;
 export const MCP_REGISTRY_MAX_BYTES = 1_048_576;
-export const MCP_SERVER_NAME = /^[a-z][a-z0-9]{0,15}$/u;
+/** 1–32 chars, lower case, digits and single inner hyphens. No `--` and no edge hyphen: the wire name maps `-` to `_`, and the first `__` after `mcp__` must stay the
+ * server/tool separator, so two different names can never share a wire prefix (`mcp__a_b__x` is only `a-b`, never server `a` with tool `b__x`). */
+export const MCP_SERVER_NAME = /^(?=.{1,32}$)[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u;
 const ENV_NAME = /^[A-Za-z_][A-Za-z0-9_]{0,127}$/u;
 
 /** One server as a registry file declares it (Claude-compatible shape; `realm` and `timeoutMs` are Deckent's). Only stdio in this slice. */

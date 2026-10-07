@@ -3,7 +3,7 @@ import { lstat, open, readFile, rename, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { z } from 'zod';
 import { ErrorRegistry, withConfigWriteLock } from '#platform/index.js';
-import { MCP_SCOPES } from './registry.js';
+import { MCP_SCOPES, MCP_SERVER_NAME } from './registry.js';
 
 /**
  * MCP trust and tool pins as product state (MCP-CLIENT): the registry files say which servers exist; this record says which exact server
@@ -16,7 +16,7 @@ export const MCP_TRUST_FILE = 'mcp-trust.json';
 const digest = z.string().regex(/^[a-f0-9]{64}$/u);
 const scope = z.enum(MCP_SCOPES);
 export const mcpTrustRecordSchema = z.object({
-  scope, name: z.string().regex(/^[a-z][a-z0-9]{0,15}$/u), definitionDigest: digest,
+  scope, name: z.string().regex(MCP_SERVER_NAME), definitionDigest: digest,
   tools: z.array(z.object({ name: z.string().min(1).max(128), digest, alwaysAsk: z.boolean() }).strict()).max(512),
   /** `trusted`: offered; `declined`: the owner said no for this definition (not asked again until it changes or is reset). */
   decision: z.enum(['trusted', 'declined']),

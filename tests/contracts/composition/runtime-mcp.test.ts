@@ -91,6 +91,16 @@ describe.skipIf(process.platform !== 'linux')('MCP tools through the runtime ser
     expect(system).toContain('mcp:fx/echo'); expect(system).toContain('untrusted');
   }, 60_000);
 
+  it('MCP-VISIBILITY: a hyphenated server name is added, approved and offered to the model as mcp__<name with _>__<tool>', async () => {
+    const m = mcpFixture();
+    const f = await runtime({ extraGrants: mcpGrants() }); await f.start();
+    registry(f.project, { 'my-fx': m.entry() }); await approve(f.project, f.env, 'my-fx');
+    f.state.script = [{ content: 'Hyphen.' }];
+    await answered(f, 'turn-hyphen', 'allow');
+    expect(toolNames(f.state.requests.at(-1)!).filter(name => name.startsWith('mcp__'))).toEqual(expect.arrayContaining(['mcp__my_fx__echo']));
+    expect(systemOf(f.state.requests.at(-1)!)).toContain('mcp:my-fx/echo');
+  }, 60_000);
+
   // MCP-VISIBILITY K3: a pinned tool whose live definition drifted is withheld from the model AND the owner is told, once, in the turn note;
   // `/mcp` keeps saying it (en and tr) until the owner re-approves.
   it('K3: a drifted pinned tool is not offered and the owner sees it once in the turn note and on /mcp', async () => {
