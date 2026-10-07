@@ -7,6 +7,9 @@ import { appendFileSync } from 'node:fs';
 import { createElement } from 'react';
 import { render } from 'ink';
 import { WorklineApp, WorklinePaletteProvider, resolveWorklinePalette } from '#surfaces/core/terminal/index.js';
+import { workSurfaceLabels } from '#surfaces/core/work-labels/index.js';
+
+const EN_WORK = workSurfaceLabels('en');
 
 const scopes = (process.env.SCOPES ?? 'session,always').split(',');
 const labels = {
@@ -36,7 +39,7 @@ const labels = {
     approvalMore: 'A-MORE', approvalNotify: 'A-NOTIFY {count}', approvalPollFailed: 'A-POLLFAIL', approvalCard: { risk: 'R-RISK {risk} {undo}', notDeclared: 'R-UNDECLARED', onExpiry: 'R-NOTHING-RUNS', assuranceTurnHere: 'R-TURN-HERE',
     assuranceTurnElsewhere: 'R-TURN-ELSEWHERE', assurancePeer: 'R-PEER', assuranceOther: 'R-OTHER {level}' },
     cancelUsage: 'C', cancelTitle: 'C', cancelDetail: 'C', cancelAlreadyRequested: 'C', cancelPrompt: 'C',
-    cancelPending: 'C', cancelKept: 'C',
+    cancelPending: 'C', cancelKept: 'C', window: EN_WORK.window, approvalWindow: EN_WORK.approvalWindow,
     approvalStanding: { covers: 'S-COVERS {pattern}', promptBoth: 'S-PROMPT-BOTH', promptSession: 'S-PROMPT-SESSION', promptAlways: 'S-PROMPT-ALWAYS',
       savedSession: 'S-SAVED-SESSION {id}', savedAlways: 'S-SAVED-ALWAYS {id}', notSavedSession: 'S-NOT-SAVED-SESSION {id} {reason}', notSavedAlways: 'S-NOT-SAVED-ALWAYS {id} {reason}' },
   },

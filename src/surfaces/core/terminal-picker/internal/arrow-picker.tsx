@@ -29,6 +29,8 @@ export function ArrowPicker(props: {
   readonly details?: readonly (string | undefined)[];
   readonly onSelect: (index: number) => void;
   readonly onCancel: () => void;
+  /** False while another window owns the keyboard (the window stack); default true. */
+  readonly active?: boolean;
 }): ReactNode {
   const palette = useWorklinePalette();
   const glyphs = useRenderGlyphs();
@@ -57,7 +59,7 @@ export function ArrowPicker(props: {
       closed.current = true;
       latest.current.onCancel();
     }
-  });
+  }, { isActive: props.active ?? true });
 
   const index = pickerChoice(selectedRef.current, props.rows.length);
   const first = Math.max(0, Math.min(index - ARROW_PICKER_ROWS + 1, props.rows.length - ARROW_PICKER_ROWS));

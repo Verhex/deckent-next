@@ -5,6 +5,9 @@
 import { createElement } from 'react';
 import { render } from 'ink';
 import { WorklineApp, WorklinePaletteProvider, resolveWorklinePalette } from '#surfaces/core/terminal/index.js';
+import { workSurfaceLabels } from '#surfaces/core/work-labels/index.js';
+
+const EN_WORK = workSurfaceLabels('en');
 
 const FIRST = 'aaaaaaaa-1111-4111-8111-111111111111';
 const SECOND = 'bbbbbbbb-2222-4222-8222-222222222222';
@@ -44,7 +47,7 @@ const labels = {
     approvalMore: 'A-MORE', approvalNotify: 'A-NOTIFY {count}', approvalPollFailed: 'A-POLLFAIL', approvalCard: { risk: 'R-RISK {risk} {undo}', notDeclared: 'R-UNDECLARED', onExpiry: 'R-NOTHING-RUNS', assuranceTurnHere: 'R-TURN-HERE',
     assuranceTurnElsewhere: 'R-TURN-ELSEWHERE', assurancePeer: 'R-PEER', assuranceOther: 'R-OTHER {level}' },
     cancelUsage: 'C', cancelTitle: 'C', cancelDetail: 'C', cancelAlreadyRequested: 'C', cancelPrompt: 'C',
-    cancelPending: 'C', cancelKept: 'C',
+    cancelPending: 'C', cancelKept: 'C', window: EN_WORK.window, approvalWindow: EN_WORK.approvalWindow,
   },
 };
 

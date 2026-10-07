@@ -52,7 +52,9 @@ export type TurnDelta =
     /** The standing scopes the service offers on this card (v17; absent on every v16 service) and exactly what they cover. */
     readonly standing?: { readonly scopes: readonly ('session' | 'always')[]; readonly pattern: string };
     /** v19 (B1): the turn's one-time capability (forwarded by the card's y, never shown), the card's risk (null: not declared) and required assurance. */
-    readonly decisionCapability?: string; readonly risk?: string | null; readonly requiredAssurance?: string }
+    readonly decisionCapability?: string; readonly risk?: string | null; readonly requiredAssurance?: string;
+    /** T-APPROVAL-WINDOW: the call's tool name and engine target, taken by the client from the same call's `tool.started` (never a wire field). */
+    readonly tool?: string; readonly target?: string | null }
   | { readonly kind: 'approval'; readonly phase: 'settled'; readonly callId: string; readonly approvalId: string;
     readonly outcome: AgentToolApprovalSettlement }
   /** Streamed output of a running call (shell): presentation only. */

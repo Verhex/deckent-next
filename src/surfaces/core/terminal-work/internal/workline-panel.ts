@@ -10,7 +10,9 @@ import type { TurnApprovalRequest } from './work-surface.js';
 export type LocalExecution = PanelExecution<TerminalLocalContext>;
 export interface ResumePickerItem { readonly sessionId: string; readonly label: string; readonly spans?: readonly Span[]; readonly hiddenNotice?: string }
 type Approval = Readonly<{ kind: 'approval'; approval: WorklineApproval; remaining: number; preview?: string; standing?: TurnApprovalRequest['standing'] }>;
-export type PanelPresentation = Approval | Readonly<{ kind: 'cancel'; run: RunView }>
+/** A generic bounded window (TS-WINDOW): a titled body; `confirm` asks y/N (picker items `allow`/`deny`), otherwise it closes (`close`). */
+export type PanelWindowPresentation = Readonly<{ kind: 'window'; title: string; body: readonly string[]; hints: string; confirm: boolean }>;
+export type PanelPresentation = Approval | Readonly<{ kind: 'cancel'; run: RunView }> | PanelWindowPresentation
   | Readonly<{ kind: 'approvals'; rows: readonly WorklineApproval[] }> | Readonly<{ kind: 'resume'; rows: readonly ResumePickerItem[] }>;
 type PrivateCard = { view: PanelApprovalView<TerminalLocalContext>; presentation: Approval; standing?: StandingScope; unknown: () => void };
 export type WorklinePanel = ReturnType<typeof createWorklinePanel>;
@@ -18,7 +20,7 @@ export type WorklinePanel = ReturnType<typeof createWorklinePanel>;
 /** Private renderer/application adapter. Only opaque presentation addresses enter the shared controller.
  * No capability/display-field getter is exported through the terminal barrel or a bridge. */
 function createWorklinePanel(context: TerminalLocalContext, sessions: ConversationSessionPort | undefined,
-  execute: (execution: LocalExecution) => Promise<void>, decide: (approval: WorklineApproval, remaining: number, yes: boolean, standing?: StandingScope) => Promise<void>) {
+  execute: (execution: LocalExecution) => Promise<void>, decide: (approval: WorklineApproval, remaining: number, yes: boolean, standing?: StandingScope, reason?: string) => Promise<void>) {
   let sequence = 0;
   const cards = new Map<string, PrivateCard>();
   let presentation: { inputId: string; handle: string; value: PanelPresentation } | null = null;
@@ -29,7 +31,7 @@ function createWorklinePanel(context: TerminalLocalContext, sessions: Conversati
       const card = cards.get(view.cardHandle);
       if (!card || card.view.turnId !== view.turnId || card.view.revision !== view.revision || card.view.approvalId !== view.approvalId
         || card.view.context.sessionId !== view.context.sessionId) throw new TypeError();
-      try { await decide(card.presentation.approval, 0, intent.decision === 'allow', card.standing); }
+      try { await decide(card.presentation.approval, 0, intent.decision === 'allow', card.standing, intent.reason || undefined); }
       catch (error) {
         if (!['APPROVAL_ASSURANCE_INSUFFICIENT', 'APPROVAL_SURFACE_RESTRICTED'].includes(String((error as { code?: unknown }).code))) card.unknown();
         throw error;
@@ -57,11 +59,11 @@ function createWorklinePanel(context: TerminalLocalContext, sessions: Conversati
       if (state.approval) return state.approval.phase === 'unknown' ? null : cards.get(state.approval.cardHandle)?.presentation ?? null;
       return presentation && presentation.inputId === state.active?.inputId ? presentation.value : null;
     },
-    decide(cardHandle: string, yes: boolean, standing?: StandingScope) {
+    decide(cardHandle: string, yes: boolean, standing?: StandingScope, reason = '') {
       const state = controller.snapshot(), card = state.approval && cards.get(state.approval.cardHandle);
       if (!card || card.view.cardHandle !== cardHandle || state.approval?.phase !== 'pending' || (standing && (!yes || !card.presentation.standing?.scopes.includes(standing)))) return false;
       if (standing) card.standing = standing; else delete card.standing;
-      return controller.send({ kind: 'decide-approval', context: state.context, cardHandle: card.view.cardHandle, decision: yes ? 'allow' : 'deny', reason: '' });
+      return controller.send({ kind: 'decide-approval', context: state.context, cardHandle: card.view.cardHandle, decision: yes ? 'allow' : 'deny', reason });
     },
     stream(execution: LocalExecution) {
       let turnId: string | null = null;
@@ -83,7 +85,8 @@ function createWorklinePanel(context: TerminalLocalContext, sessions: Conversati
           const approval: WorklineApproval = { approvalId: delta.approvalId, revision: delta.revision, expiresAt: delta.expiresAt, summary: delta.summary,
             runId: '-', taskId: '-', requester: '-', status: 'pending', decision: null,
             ...(delta.decisionCapability ? { decisionCapability: delta.decisionCapability } : {}), ...(delta.risk !== undefined ? { risk: delta.risk } : {}),
-            ...(delta.requiredAssurance ? { requiredAssurance: delta.requiredAssurance } : {}) };
+            ...(delta.requiredAssurance ? { requiredAssurance: delta.requiredAssurance } : {}),
+            ...(delta.tool ? { tool: delta.tool, target: delta.target ?? null } : {}), createdAt: Date.now() };
           cards.set(handle, { view, unknown: () => { execution.onApprovalSettled({ ...view, outcome: 'unsettled' }); }, presentation: { kind: 'approval', approval, remaining: 0, preview: delta.preview, ...(delta.standing ? { standing: delta.standing } : {}) } });
           if (!execution.onApproval(view)) { cards.delete(handle); return false; }
           calls.set(delta.callId, view); return true;
@@ -95,7 +98,7 @@ function createWorklinePanel(context: TerminalLocalContext, sessions: Conversati
 
 export function useWorklinePanel(identity: Omit<TerminalLocalContext, 'kind' | 'sessionId'>, sessions: ConversationSessionPort | undefined) {
   const execute = useRef<(execution: LocalExecution) => Promise<void>>(async () => { throw new TypeError(); });
-  const decide = useRef<(approval: WorklineApproval, remaining: number, yes: boolean, standing?: StandingScope) => Promise<void>>(async () => { throw new TypeError(); });
+  const decide = useRef<(approval: WorklineApproval, remaining: number, yes: boolean, standing?: StandingScope, reason?: string) => Promise<void>>(async () => { throw new TypeError(); });
   const [panel] = useState(() => createWorklinePanel({ kind: 'terminal-local', ...identity, sessionId: randomUUID() }, sessions,
     execution => execute.current(execution), (...args) => decide.current(...args)));
   const captured = panel.controller.snapshot().context;

@@ -165,12 +165,12 @@ describe.skipIf(process.platform !== 'linux')('fetch_url in a real pseudo-termin
     await startRuntime(f.projectRoot, f.env);
     const run = await inPty(f.projectRoot, f.env, ['terminal', 'workline', '--scope', 'scope'], [
       ['Deckent workline', 'check the local status page\r'],
-      ['GET https://localhost/status?probe=1', 'y'],
+      ['https://localhost/status?probe=1', 'y'],
       ['Fetch turn done.', '/exit\r'],
     ]);
     expect(run.timeout, run.output).toBeUndefined();
     expect(run.status, run.output).toBe(0);
-    expect(run.output).toContain('Approval requested'); expect(run.output).toContain('fetch_url');
+    expect(run.output).toContain('Approval needed · web page fetch'); expect(run.output).toContain('fetch_url');
     expect(run.output).toContain('not on this installation');
     // The model was offered the tool and told about the network; it got the typed refusal as the call's result.
     expect(f.seen.tools[0]).toContain('fetch_url'); expect(f.seen.system[0]).toContain('- Network: fetch_url');

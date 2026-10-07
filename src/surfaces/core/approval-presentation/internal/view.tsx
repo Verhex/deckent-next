@@ -24,12 +24,12 @@ function pickerDetails(fields: readonly ApprovalDecisionProjection[], labels: Ap
   return lines.length ? lines.join('\n') : undefined;
 }
 
-export function ApprovalProjectedPicker({ lines, labels, onSelect, onCancel }: {
+export function ApprovalProjectedPicker({ lines, labels, onSelect, onCancel, active }: {
   readonly lines: readonly ApprovalDecisionLine[]; readonly labels: ApprovalDecisionLabels;
-  readonly onSelect: (index: number) => void; readonly onCancel: () => void;
+  readonly onSelect: (index: number) => void; readonly onCancel: () => void; readonly active?: boolean;
 }) {
   return <ArrowPicker rows={lines.map(row => plainText(row.spans))} styledRows={lines.map(row => row.spans)}
-    details={lines.map(row => pickerDetails(row.fields, labels))} onSelect={onSelect} onCancel={onCancel} />;
+    details={lines.map(row => pickerDetails(row.fields, labels))} onSelect={onSelect} onCancel={onCancel} {...(active === undefined ? {} : { active })} />;
 }
 
 /** All interpolated display fields have completed projection before this catalog-only composition. */

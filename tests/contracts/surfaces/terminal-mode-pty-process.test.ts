@@ -188,7 +188,7 @@ describe.skipIf(process.platform !== 'linux')('/mode in a real pseudo-terminal a
     expect(wide.status, wide.output).toBe(0);
     expect(wide.output).not.toContain('Unknown command');
     // No approval card for the eligible edit in full-auto; the file changed and the mode's decision was audited.
-    expect(wide.output).not.toContain('Approval requested');
+    expect(wide.output).not.toContain('Approval needed');
     expect(await readFile(join(f.projectRoot, 'src/a.ts'), 'utf8')).toBe('export const a = 2;\n');
     const file = JSON.parse(await readFile(join(f.data, 'bindings.json'), 'utf8')) as { schemaVersion: number; revision: string; modes: Array<{ principal: unknown; mode: string }> };
     expect((await stat(join(f.data, 'bindings.json'), { bigint: true })).ino).not.toBe(before.ino);
@@ -217,7 +217,7 @@ describe.skipIf(process.platform !== 'linux')('/mode in a real pseudo-terminal a
     const run = await inPty(f.projectRoot, f.env, ['terminal', 'workline', '--scope', 'scope'], [['Deckent workline', 'go\r'], ['Mode turn done.', '/exit\r']]);
     expect(run.timeout, run.output).toBeUndefined();
     expect(run.status, run.output).toBe(0);
-    expect(run.output).not.toContain('Approval requested');
+    expect(run.output).not.toContain('Approval needed');
     expect(run.output).toContain('run_shell');
     const events = f.audit().map(row => JSON.parse(String((row as { record: string }).record)) as { event: { subject: Record<string, unknown> } });
     expect(events.map(record => record.event.subject)).toEqual([expect.objectContaining({ kind: 'permission-mode', mode: 'full-auto', cell: 'shell-modify',
@@ -299,7 +299,7 @@ describe.skipIf(process.platform !== 'linux')('full access in a real pseudo-term
     const text = plain(run.output);
     expect(text).toContain('FULL ACCESS is on');
     expect(text).toContain('full-access');
-    expect(text).not.toContain('Approval requested');
+    expect(text).not.toContain('Approval needed');
     expect(await readFile(join(f.data, 'bindings.json'), 'utf8')).toBe(before);
     expect(await readFile(join(f.projectRoot, 'src/a.ts'), 'utf8')).toBe('export const a = 2;\n');
     expect(kinds(f)).toEqual(['full-access-turn', 'full-access-call']);

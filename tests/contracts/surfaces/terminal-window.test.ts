@@ -84,8 +84,8 @@ describe('terminal window frame', () => {
   const body: WindowLine[] = Array.from({ length: 30 }, (_, index) => ({ spans: [span(`row ${index + 1}`)] }));
 
   it('caps the body to the terminal rows and scrolls with arrows, page keys, Home and End', async () => {
-    // 20 rows: 4 reserved below, 4 frame rows → 12 body rows, one of them the position line.
-    const view = mount(createElement(Window, { title: [span('SCROLL')], hints: 'HINTS', position: 'POS {from}-{to}/{total}', body }), 60, 20);
+    // 24 rows: 8 reserved for the rest of the live area, 4 frame rows → 12 body rows, one of them the position line.
+    const view = mount(createElement(Window, { title: [span('SCROLL')], hints: 'HINTS', position: 'POS {from}-{to}/{total}', body }), 60, 24);
     await settle(60);
     expect(view.frame()).toContain('POS 1-11/30');
     expect(view.frame()).toContain('row 11');
@@ -101,7 +101,7 @@ describe('terminal window frame', () => {
     expect(view.frame()).toContain('POS 20-30/30');
     await view.press(HOME);
     expect(view.frame()).toContain('POS 1-11/30');
-    expect(view.frame().split('\n').length).toBeLessThanOrEqual(20);
+    expect(view.frame().split('\n').length).toBeLessThanOrEqual(24 - 8);
   });
 
   it('a 40-column terminal: every frame row fits, labels move to their own row, long values wrap', async () => {

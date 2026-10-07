@@ -17,6 +17,8 @@ const known = snapshotKnownSecrets([{ name: 'FIXTURE_ONLY', value: SECRET }]);
 const hash = (text: string) => createHash('sha256').update(text, 'utf8').digest('hex');
 const mounted: Array<{ unmount(): void }> = [];
 afterEach(() => { for (const instance of mounted.splice(0)) instance.unmount(); });
+/** The approval window's EN deny key hint (T-APPROVAL-WINDOW): present exactly while a decision window owns the keyboard. */
+const DENY = 'n deny (Enter/Esc too)';
 const frames: Array<{ label: string; frame: string }> = [];
 afterAll(() => { if (process.env.DECKENT_A1_FRAME_PROOF) writeFileSync(process.env.DECKENT_A1_FRAME_PROOF, JSON.stringify({ syntheticFixturesOnly: true, frames }, null, 2) + '\n'); });
 const observe = (label: string, view: ReturnType<typeof mountWorkline>) => { frames.push({ label, frame: view.stdout.frame }); };
@@ -106,7 +108,7 @@ describe('A1 complete-field decision projection and private custody', () => {
     const view = mount({ openingNotices: [{ level: 'info', text: raw }], ledger: ledger([approval('fixture', raw)]) });
     await until(() => view.stdout.frame.includes('[REDACTED]'), 'generic record notice');
     expect(view.stdout.frame).not.toContain('fictitious-record-value');
-    await type(view, '/approvals 1\r'); await until(() => view.stdout.frame.includes('A-PROMPT'), 'decision card');
+    await type(view, '/approvals 1\r'); await until(() => view.stdout.frame.includes(DENY), 'decision card');
     expect(view.stdout.frame).toContain(raw);
   });
 
@@ -115,12 +117,12 @@ describe('A1 complete-field decision projection and private custody', () => {
       errorText: error => `ERR:${(error as Error).message}`, completeTurn: async () => 'unused', pollMs: 10_000, ledger: ledger([item]) };
     // A current dynamic card can reproject; an already printed Static row is historical output and cannot be retracted.
     const view = mount(props); await type(view, '/approvals\r'); await until(() => view.stdout.frame.includes('> A-ITEM 1 snapshot-fixture'), 'snapshot picker');
-    await view.instance.waitUntilRenderFlush(); view.stdin.write('\r'); await until(() => view.stdout.frame.includes('A-PROMPT'), 'snapshot card');
+    await view.instance.waitUntilRenderFlush(); view.stdin.write('\r'); await until(() => view.stdout.frame.includes(DENY), 'snapshot card');
     expect(view.stdout.frame).toContain(SECRET); observe('snapshot-none-initial', view);
     for (const snapshot of [known, snapshotKnownSecrets([{ name: 'OTHER_FIXTURE', value: 'unrelated-known-value' }]), undefined]) {
       view.instance.rerender(createElement(WorklinePaletteProvider, { palette: resolveWorklinePalette('none'), children: createElement(WorklineApp, { ...props, ...panelFixture(props), ...(snapshot ? { knownSecrets: snapshot } : {}) }) }));
       const expected = snapshot === known ? '‹secret:FIXTURE_ONLY›' : SECRET;
-      await until(() => view.stdout.frame.includes('A-PROMPT') && view.stdout.frame.includes(expected), 'same mounted snapshot update');
+      await until(() => view.stdout.frame.includes(DENY) && view.stdout.frame.includes(expected), 'same mounted snapshot update');
       expect(item.summary).toBe(SECRET); if (snapshot === known) expect(view.stdout.frame).not.toContain(SECRET);
       observe(snapshot === known ? 'snapshot-matching' : snapshot ? 'snapshot-unrelated' : 'snapshot-removed', view);
     }
@@ -149,7 +151,7 @@ describe('A1 actual Workline pending ledger -> picker/modal/static fallback', ()
     const raw = 'token=fictitious-untrusted-value; rm -rf ./fixture && echo next', item = approval('real-id', raw);
     const before = hash(item.summary), start = decisions.length, gate = deferred();
     const view = mount({ knownSecrets: known, ledger: ledger([item], async () => { await gate.promise; return { ...item, status: 'decided', decision: 'allow' }; }) });
-    await type(view, '/approvals 1\r'); await until(() => view.stdout.frame.includes('A-PROMPT'), 'numeric card'); await settle(40);
+    await type(view, '/approvals 1\r'); await until(() => view.stdout.frame.includes(DENY), 'numeric card'); await settle(40);
     expect(view.stdout.frame).toContain(raw); expect(view.stdout.text).toContain('A-ITEM 1 real-id');
     expect(view.stdout.frame).toContain('Credential-like matches: 1');
     observe('pending-numeric-unknown-command', view);
@@ -161,9 +163,9 @@ describe('A1 actual Workline pending ledger -> picker/modal/static fallback', ()
   it('fallback_existing_full_id: masks the complete crossing summary before local160cut and preserves whole modal binding/risk/covers', async () => {
     const summary = 'x'.repeat(154) + SECRET + '; echo fixture', item = approval('full-id', summary, { risk: 'fixture-risk', undo: 'fixture-undo' });
     const view = mount({ knownSecrets: known, ledger: ledger([item]) });
-    await type(view, '/approvals full-id\r'); await until(() => view.stdout.frame.includes('A-PROMPT'), 'full-id card');
+    await type(view, '/approvals full-id\r'); await until(() => view.stdout.frame.includes(DENY), 'full-id card');
     expect(view.stdout.frame).not.toContain(SECRET); expect(view.stdout.frame).toContain('‹secret:FIXTURE_ONLY›');
-    expect(view.stdout.text).not.toContain('ficti'); expect(view.stdout.frame).toContain('R-RISK fixture-risk fixture-undo');
+    expect(view.stdout.text).not.toContain('ficti'); expect(view.stdout.frame).toMatch(/Risk: +not classified by the tool/u); expect(view.stdout.frame).toContain('Policy cell: fixture-risk'); expect(view.stdout.frame).toContain('Compensating operation: fixture-undo');
     const covers = 'x'.repeat(220) + ' && echo \u200B' + SECRET;
     const safe = projectApprovalDecisionText(covers, known), line = approvalTemplateLine('COVERS {pattern}', { pattern: safe });
     const lines = assembleApprovalCard({ subject: null, summary: projectApprovalDecisionText(summary, known), risk: approvalTemplateLine('RISK', {}),
@@ -190,11 +192,11 @@ describe('A1 actual Workline pending ledger -> picker/modal/static fallback', ()
       return { ...second, status: 'decided', decision: 'deny' };
     }) });
     await type(view, '/approvals\r'); await until(() => view.stdout.frame.includes('> A-ITEM 1 first'), 'picker'); await settle(40);
-    view.stdin.write('\u001b[B'); view.stdin.write('\r'); await until(() => view.stdout.frame.includes('A-SUBJECT second'), 'selected second card'); await settle(40);
+    view.stdin.write('\u001b[B'); view.stdin.write('\r'); await until(() => view.stdout.frame.includes('Approval: second'), 'selected second card'); await settle(40);
     expect(view.stdout.frame).toContain('second<U+200B> command'); expect(view.stdout.frame).not.toContain('Q'.repeat(43));
     observe('picker-down-enter-original-row', view);
     await duplicateWhilePending(view, () => seen.length === 1, 'A-PENDING'); expect(seen).toEqual([{ item: second, answer: 'allow' }]); observe('approval-refusal-inflight-duplicate', view);
-    gate.release(); await until(() => view.stdout.text.includes('ERR:APPROVAL_ASSURANCE_INSUFFICIENT') && view.stdout.frame.includes('A-PROMPT'), 'typed refusal remount');
+    gate.release(); await until(() => view.stdout.text.includes('ERR:APPROVAL_ASSURANCE_INSUFFICIENT') && view.stdout.frame.includes(DENY), 'typed refusal remount');
     expect(seen).toEqual([{ item: second, answer: 'allow' }]);
     view.stdin.write('\u001b'); await until(() => seen.length === 2, 'deny after refusal');
     expect(seen).toEqual([{ item: second, answer: 'allow' }, { item: second, answer: 'deny' }]);
@@ -210,7 +212,7 @@ describe('A1 actual Workline pending ledger -> picker/modal/static fallback', ()
       const pattern = locale === 'en' ? 'Credential-like matches: 1' : 'Kimlik bilgisi benzeri eşleşme: 1';
       expect(view.stdout.frame).toContain(hidden); expect(view.stdout.frame).toContain(pattern);
       expect(view.stdout.frame).not.toContain('\uFEFF'); expect(view.stdout.frame).not.toContain('\u200B');
-      view.stdin.write('\r'); await until(() => view.stdout.frame.includes('A-PROMPT'), `card ${locale}/${width}`);
+      view.stdin.write('\r'); await until(() => view.stdout.frame.includes(DENY), `card ${locale}/${width}`);
       expect(view.stdout.frame).toContain(hidden); expect(view.stdout.frame).toContain(pattern);
       expect(view.stdout.frame).toContain('<U+FEFF>');
     }

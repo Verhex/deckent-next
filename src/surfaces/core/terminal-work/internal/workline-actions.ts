@@ -1,5 +1,6 @@
 import { type WorkLedgerEntry, type WorkLedgerWorkerEntry, notice, fillTemplate, type WorkerLineLabels, type WorklineLedgerPorts, ledgerEntriesForRuns, ledgerEntriesForWorkers, ledgerEntryForRun } from '#surfaces/core/terminal-ledger/index.js';
 import type { WorkerPanelLabels } from './worker-panel.js';
+import type { ApprovalWindowLabels } from './approval-window.js';
 import { slashHelpText, surfaceDeliveryValues, WORKLINE_SLASH_COMMANDS, type SurfaceDeliveryMode } from '#surfaces/core/terminal-kit/index.js';
 
 export interface WorklineActionLabels {
@@ -72,6 +73,12 @@ export interface WorkSurfaceLabels {
     readonly notSavedSession: string;
     readonly notSavedAlways: string;
   };
+  /** Bounded windows (TS-WINDOW): `position` has `{from}`, `{to}`, `{total}`; `pick` is a list window's key hints; titles of the list
+   * windows; the `/service-restart` confirmation (title, what happens, keys, kept). */
+  readonly window: Readonly<{ position: string; pick: string; approvalsTitle: string; resumeTitle: string;
+    restartTitle: string; restartDetail: string; restartPrompt: string; restartKept: string }>;
+  /** The approval window's labelled fields (T-APPROVAL-WINDOW). */
+  readonly approvalWindow: ApprovalWindowLabels;
   readonly cancelUsage: string;
   readonly cancelTitle: string;
   readonly cancelDetail: string;

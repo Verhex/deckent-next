@@ -36,7 +36,7 @@ async function oneSample(index: number, now: () => number) {
       samples.modelGenerationWall = latencySample(modelStart, stamp());
       streamPaint = arm('streamEventPaint', text => text.includes(streamMarker));
       yield { kind: 'text', text: streamMarker }; await streamPaint;
-      approvalPaint = arm('approvalCard', text => text.includes(approvalMarker) && text.includes('A-TITLE'));
+      approvalPaint = arm('approvalCard', text => text.includes(approvalMarker) && text.includes('Approval needed'));
       yield { kind: 'approval', phase: 'requested', callId: 'c1', approvalId: 'fake-approval', revision: 0,
         summary: approvalMarker, preview: 'fake read_file (no effect)', expiresAt: Date.now() + 60_000 };
       await approvalPaint;

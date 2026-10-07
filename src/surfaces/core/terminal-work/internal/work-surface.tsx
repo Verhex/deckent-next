@@ -7,7 +7,8 @@ import type { WorklinePanel, LocalExecution } from './workline-panel.js';
 import type { PanelSnapshot, TerminalLocalContext, StandingScope } from '#surfaces/core/terminal-kit/index.js';
 import { WorkerPanel } from './worker-panel.js';
 import type { ApprovalDecisionLabels } from '#surfaces/core/approval-presentation/index.js';
-import { ApprovalDecisionCard, ApprovalDecisionPicker, approvalRowPresentation, approvalCardPresentation, approvalDecisionCardLines, CancellationDecisionCard, cancellationCardPresentation } from './approval-decision-view.js';
+import { ApprovalDecisionCard, ApprovalDecisionPicker, approvalRowPresentation, approvalCardPresentation, approvalDecisionCardLines, CancellationDecisionCard, cancellationCardPresentation, PanelWindow,
+  type ApprovalWindowContext } from './approval-decision-view.js';
 import { makeApprovalNotFoundNotice, makeApprovalRowNotice } from './approval-decision-notice.js';
 import { plainText } from '#surfaces/core/terminal-render/index.js';
 import { surfaceDeliveryValues, useSingleFlightPoll } from '#surfaces/core/terminal-kit/index.js';
@@ -26,6 +27,8 @@ export interface WorkSurfaceInput {
   readonly pushLive?: boolean;
   /** Approval notification cadence; defaults to max(pollMs, APPROVAL_NOTIFY_MIN_MS). */
   readonly approvalPollMs?: number;
+  /** What the approval window names besides the approval itself: the project path and the session's mode (display only). */
+  readonly context?: ApprovalWindowContext;
 }
 /** A tool call of the running turn waiting for the owner (T-L4): its preview is shown; the decision goes through `decideApproval`. */
 export type TurnApprovalRequest = Readonly<{ approvalId: string; revision: number; summary: string; preview: string; expiresAt: number;
@@ -36,11 +39,13 @@ export type TurnApprovalRequest = Readonly<{ approvalId: string; revision: numbe
  * through a runtime port; the view never decides, remembers or auto-approves anything. Read-only commands never prompt.
  */
 export const APPROVAL_NOTIFY_MIN_MS = 10_000;
-export function useWorkSurface({ panel, state, ledger, labels, push, errorText, pollMs, watchingWorkers, approvalPollMs, pushLive }: WorkSurfaceInput) {
+export function useWorkSurface({ panel, state, ledger, labels, push, errorText, pollMs, watchingWorkers, approvalPollMs, pushLive, context }: WorkSurfaceInput) {
   const work = labels.work;
   const [workers, setWorkers] = useState<readonly WorkLedgerWorkerEntry[]>([]);
   const presentation = panel.presentation(state);
-  const modal = presentation?.kind === 'approval' || presentation?.kind === 'cancel' ? presentation : null;
+  const modal = presentation?.kind === 'approval' || presentation?.kind === 'cancel' || presentation?.kind === 'window' ? presentation : null;
+  // A list window's decision carries the reason typed on the approval window it opened (the picker answer itself is only allow/deny).
+  const pickedReason = useRef<string | undefined>(undefined);
   const picker = presentation?.kind === 'approvals' && state.picker ? presentation.rows : null;
   const approvalWatch = useRef(EMPTY_APPROVAL_WATCH);
   useEffect(() => { if (!watchingWorkers && !ledger?.readSurfaceSnapshot) setWorkers([]); }, [watchingWorkers, ledger?.readSurfaceSnapshot]);
@@ -99,15 +104,16 @@ export function useWorkSurface({ panel, state, ledger, labels, push, errorText, 
     if (!target) { push([...rows, ...bound, makeApprovalNotFoundNotice(args, work.approvalNotFound, work.approvalTitle)]); return; }
     if (ref) push([...rows, ...bound]);
     while (!execution.signal.aborted) {
+      pickedReason.current = undefined;
       const answer = await panel.pick(execution, { kind: 'approval', approval: target, remaining: pending.length - 1 }, ['allow', 'deny']);
       if (answer === null || execution.signal.aborted) return;
-      try { await decideApproval(target, pending.length - 1, answer === 'allow'); return; }
+      try { await decideApproval(target, pending.length - 1, answer === 'allow', undefined, pickedReason.current); return; }
       catch (error) { if (!['APPROVAL_ASSURANCE_INSUFFICIENT', 'APPROVAL_SURFACE_RESTRICTED'].includes(String((error as { code?: unknown }).code))) return; }
     }
   };
-  const decideApproval = useCallback(async (approval: WorklineApproval, remaining: number, yes: boolean, standing?: StandingScope) => {
+  const decideApproval = useCallback(async (approval: WorklineApproval, remaining: number, yes: boolean, standing?: StandingScope, reason?: string) => {
     try {
-      const record = await ledger!.decideApproval!(approval, yes ? 'allow' : 'deny', standing);
+      const record = await ledger!.decideApproval!(approval, yes ? 'allow' : 'deny', standing, reason);
       const decision = record.decision ?? (yes ? 'allow' : 'deny');
       push([notice('info', fillTemplate(decision === 'allow' ? work!.approvalAllowed : work!.approvalDenied, { id: record.approvalId }))]);
       // What the service answered about the standing scope is shown as it is: a saved answer, or the reason it was not saved (the call
@@ -140,18 +146,24 @@ export function useWorkSurface({ panel, state, ledger, labels, push, errorText, 
     // The scopes are offered only when the service named them AND the labels exist: a card never shows a key it cannot explain.
     const scoped = modal.standing && work.approvalStanding && modal.standing.scopes.length > 0 ? { labels: work.approvalStanding, ...modal.standing } : null;
     card = <ApprovalDecisionCard key={`approval:${state.approval?.cardHandle ?? state.picker?.pickerHandle ?? state.active?.inputId}`} presentation={approvalCardPresentation(approval)} work={work} labels={labels.render ?? {}} preview={preview} scoped={scoped}
-      pending={state.approval ? state.approval.phase !== 'pending' : !state.picker}
-      onDecide={(yes, standing) => { if (state.approval) panel.decide(state.approval.cardHandle, yes, standing); else panel.choose(state.picker?.pickerHandle, yes ? 'allow' : 'deny'); }} />;
+      pending={state.approval ? state.approval.phase !== 'pending' : !state.picker} {...(context ? { context } : {})}
+      onDecide={(yes, standing, reason) => {
+        if (state.approval) panel.decide(state.approval.cardHandle, yes, standing, reason ?? '');
+        else { pickedReason.current = reason; panel.choose(state.picker?.pickerHandle, yes ? 'allow' : 'deny'); }
+      }} />;
   } else if (work && modal?.kind === 'cancel') {
     const view = modal.run;
     card = <CancellationDecisionCard key={`cancel:${view.runId}`} presentation={cancellationCardPresentation(view)} work={work} labels={labels.render ?? {}}
       pending={!state.picker} onDecide={yes => { panel.choose(state.picker?.pickerHandle, yes ? 'allow' : 'deny'); }} />;
+  } else if (modal?.kind === 'window') {
+    card = <PanelWindow key={`window:${state.picker?.pickerHandle}`} window={modal} labels={labels.render ?? {}} pending={!state.picker} position={work?.window.position}
+      onAnswer={answer => { panel.choose(state.picker?.pickerHandle, answer); }} />;
   }
   const pickerOpen = picker !== null && modal === null;
   const region = (
     <>
       {work && watchingWorkers ? <WorkerPanel workers={workers} labels={work.panel} line={work.workerLine} /> : null}
-      {picker && modal === null && work ? <ApprovalDecisionPicker key={state.picker?.pickerHandle} rows={picker.map((item, index) => approvalRowPresentation(item, index + 1, Date.now(), work))} labels={labels.render ?? {}}
+      {picker && modal === null && work ? <ApprovalDecisionPicker key={state.picker?.pickerHandle} rows={picker.map((item, index) => approvalRowPresentation(item, index + 1, Date.now(), work))} labels={labels.render ?? {}} work={work}
         onSelect={index => { panel.choose(state.picker?.pickerHandle, String(index)); }} onCancel={() => { panel.choose(state.picker?.pickerHandle, null); }} /> : null}
       {card}
     </>
@@ -159,6 +171,7 @@ export function useWorkSurface({ panel, state, ledger, labels, push, errorText, 
   return { observeWorkers, observeApprovals, run, decideApproval, noteUnsettled, modalOpen: modal !== null, pickerOpen, region };
 }
 /** Legacy string compatibility; the actual card consumes completed spans/counts in a Provider child. */
-export function approvalCardLines(approval: WorklineApproval, work: WorkSurfaceLabels, preview: string | undefined, covers: string | null): string[] {
-  return approvalDecisionCardLines(approvalCardPresentation(approval), work, preview, covers === null ? null : { template: '{pattern}', pattern: covers }).map(line => plainText(line.spans));
+export function approvalCardLines(approval: WorklineApproval, work: WorkSurfaceLabels, preview: string | undefined, covers: string | null, context: ApprovalWindowContext = {}, now = Date.now()): string[] {
+  return approvalDecisionCardLines(approvalCardPresentation(approval), work, preview, covers === null ? null : { scopes: ['session'], pattern: covers }, undefined, context, now)
+    .map(line => [plainText(line.label ?? []), plainText(line.spans)].filter(Boolean).join(' '));
 }

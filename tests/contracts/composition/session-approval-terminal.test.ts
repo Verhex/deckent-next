@@ -1,3 +1,4 @@
+import { appendFileSync } from 'node:fs';
 import { hostname, tmpdir, userInfo } from 'node:os';
 import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -111,7 +112,11 @@ it.each(['en', 'tr'] as const)('producer → runtime service → real Workline s
   await until(() => f.events.some(e => e.kind === 'approval.requested'), 'first real approval');
   const first = f.events.find(e => e.kind === 'approval.requested')! as Extract<AgentTurnStreamEvent, { kind: 'approval.requested' }>;
   expect(first.standing).toEqual({ scopes: ['session'], pattern: 'src/*' });
-  await until(() => f.view.stdout.frame.includes(t('terminal.approval.standing.promptSession', {}, locale)), 'session key on card');
+  // T-APPROVAL-WINDOW: the offered keys in the window's hint row, and the window names the call from the real producer's own `tool.started`.
+  const keys = [t('terminal.approval.window.keys.once', {}, locale), t('terminal.approval.window.keys.session', {}, locale), t('terminal.approval.window.keys.deny', {}, locale)].join(' · ');
+  await until(() => f.view.stdout.frame.includes(keys), 'session key on card').catch(error => { throw new Error(String(error) + '\n' + f.view.stdout.frame); });
+  expect(f.view.stdout.frame).not.toContain(t('terminal.approval.window.keys.always', {}, locale));
+  if (process.env.DECKENT_L1_FRAME_PROOF) appendFileSync(process.env.DECKENT_L1_FRAME_PROOF, `\n## real producer approval window (${locale})\n${f.view.stdout.frame}\n`);
   await settle(60); await f.type('a'); await settle(40);
   expect(f.requests.filter(r => r.operation === 'decideApproval')).toHaveLength(0);
   await f.type('s');
