@@ -33,14 +33,15 @@ export function useWorklineSettings(input: { readonly panels: WorklinePanels | u
   const { panels, permissionMode, panel, state, push, errorText } = input;
   const modeNow = useRef(input.mode); modeNow.current = input.mode;
   const sessionModel = useRef(input.sessionModel); sessionModel.current = input.sessionModel;
+  const pinnable = Boolean(input.sessionModel);
   const ports = useMemo<PanelPorts | null>(() => {
     if (!panels) return null;
     const { model, ...rest } = panels.ports;
     return { ...rest, ...(permissionMode ? { mode: {
       inspect: () => permissionMode.inspect(), current: () => modeNow.current.stop ?? null, select: (stop: PermissionModeStop) => modeNow.current.select(stop) } } : {}),
-    ...(model ? { model: { inspect: () => model.inspect(), ...(model.makeDefault ? { makeDefault: (choice: ModelPanelChoice) => model.makeDefault!(choice) } : {}),
+    ...(model && pinnable ? { model: { inspect: () => model.inspect(), ...(model.makeDefault ? { makeDefault: (choice: ModelPanelChoice) => model.makeDefault!(choice) } : {}),
       pinned: () => sessionModel.current?.pinned() ?? null, pin: (choice: ModelPanelChoice) => sessionModel.current?.pin(choice) } } : {}) };
-  }, [panels, permissionMode]);
+  }, [panels, permissionMode, pinnable]);
   const approvalAfter = useRef<string | null>(null), openApprovals = useRef(input.openApprovals); openApprovals.current = input.openApprovals;
   const open = useCallback(async (command: string, args: string, execution: LocalExecution): Promise<boolean> => {
     const kind = settingsPanelOf(command, args, ports);

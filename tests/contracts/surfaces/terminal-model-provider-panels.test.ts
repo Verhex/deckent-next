@@ -222,6 +222,16 @@ describe('/model in the workline: the pin rides on the next turn', () => {
     expect(seen).toEqual([null, ref('fast'), ref('fast')]);
   });
 
+  it('without the streamed turn (the only one that carries a pin) /model opens no window', async () => {
+    const { port } = modelPort(MODELS);
+    const view = mountWorkline({ labels: WORKLINE_TEST_LABELS, panels: { ports: { model: { inspect: port.inspect } }, labels: terminalPanelLabels('en') } });
+    mounted.push(view.instance);
+    await settleWorkline(40);
+    view.stdin.write(`/model${ENTER}`);
+    await settleWorkline(150);
+    expect(view.stdout.frame).not.toContain('Models · scope');
+  });
+
   it('/provider without its port says the part is unavailable here (no chat turn)', async () => {
     const view = mountWorkline({ labels: WORKLINE_TEST_LABELS, panels: { ports: {}, labels: terminalPanelLabels('en') } });
     mounted.push(view.instance);

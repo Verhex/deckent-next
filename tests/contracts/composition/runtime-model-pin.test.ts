@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { clearConfigCache } from '#platform/index.js';
+import { assertTerminalChatReady } from '#composition/core/terminal-chat/index.js';
 import { runtime } from '../support/chat-turn-harness.js';
 
 // T4 MODEL-SWITCH (owner 2026-10-08, Jev a172b1ad; S19): `/model` pins a model for this session; the next turn carries the exact reference (protocol
@@ -17,6 +18,8 @@ describe.skipIf(process.platform !== 'linux')('session model pin through the run
     await expect(f.client().chatTurn({ schemaVersion: 1, scopeId: 'scope', turnId: 'turn-pin-gone', messages: [{ role: 'user', content: 'hi' }], reference: undeclared },
       () => undefined)).rejects.toMatchObject({ code: 'TERMINAL_CHAT_MODEL_NOT_DECLARED' });
     expect(f.state.requests).toEqual([]);
+    // The terminal's local preflight checks the pin too: the configured model being fine does not let an undeclared pin through.
+    await expect(assertTerminalChatReady(f.project, { env: f.env }, undeclared)).rejects.toMatchObject({ code: 'TERMINAL_CHAT_MODEL_NOT_DECLARED' });
   }, 30_000);
 
   it('the pinned model is what the turn uses: with the configured model broken, a pinned declared model still answers', async () => {
@@ -30,5 +33,8 @@ describe.skipIf(process.platform !== 'linux')('session model pin through the run
     expect(await f.client().chatTurn({ schemaVersion: 1, scopeId: 'scope', turnId: 'turn-pinned', messages: [{ role: 'user', content: 'hi' }], reference: declared },
       () => undefined)).toMatchObject({ finish: 'stop', answer: 'Pinned.' });
     expect((f.state.requests as Sent[]).map(request => request.model)).toEqual(['native-chat']);
+    // The local preflight agrees: the broken configured model blocks an unpinned turn, never a pinned declared one.
+    await expect(assertTerminalChatReady(f.project, { env: f.env })).rejects.toMatchObject({ code: 'TERMINAL_CHAT_MODEL_NOT_DECLARED' });
+    await expect(assertTerminalChatReady(f.project, { env: f.env }, declared)).resolves.toBeDefined();
   }, 30_000);
 });

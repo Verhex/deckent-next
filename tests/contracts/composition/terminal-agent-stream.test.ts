@@ -212,4 +212,12 @@ describe('T4 MODEL-SWITCH: the session pin rides on the turn command (v23)', () 
     expect(p.commands[0]!.reference).not.toBe(reference);
     expect(p.commands[1]).not.toHaveProperty('reference');
   });
+  it('the local preflight checks the pinned model, not the configured one (no silent fallback before the service)', async () => {
+    const reference = { providerId: 'local-openai', providerVersion: 1, modelId: 'chat', modelVersion: 2 };
+    const asked: unknown[] = [], p = ports(async command => result({ turnId: command.turnId }));
+    const value = { ...p.value, async preflight(_root: string, _options: unknown, pinned?: unknown) { asked.push(pinned ?? null); } };
+    await collect(streamTerminalAgentTurn({ ...input, reference }, value));
+    await collect(streamTerminalAgentTurn(input, value));
+    expect(asked).toEqual([reference, null]);
+  });
 });

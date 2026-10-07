@@ -191,7 +191,9 @@ export function WorklineApp(props: WorklineProps) {
   const scratch = useWorklineScratch(props.scratch, session.id, push, errorText, labels.work?.unavailable ?? labels.ledgerUnavailable, labels.scratch);
   useEffect(() => { void refreshMode(); }, [refreshMode]);
   // T3 L4: `/mode`, `/config`, `/mcp` windows; `/mode`'s port is this view's mode hook (the same service set, grant check and audit as Shift+Tab).
-  const settings = useWorklineSettings({ panels: props.panels, permissionMode: props.permissionMode, mode, panel, state, push, errorText, blocked: work.modalOpen, sessionModel,
+  const settings = useWorklineSettings({ panels: props.panels, permissionMode: props.permissionMode, mode, panel, state, push, errorText, blocked: work.modalOpen,
+    // The pin rides only on the streamed turn (v23); a plain turn could not carry it, so no `/model` window is offered there.
+    ...(props.streamTurn ? { sessionModel } : {}),
     openApprovals: (approvalId, execution) => work.run('approvals', approvalId, execution) });
 
   const opening = useRef(props.openingNotices);
