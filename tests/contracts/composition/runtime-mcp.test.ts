@@ -465,12 +465,12 @@ describe('the MCP start notices and the sandbox refusal come from the catalog (p
     expect(await mcpSlash('/p', 'approve fx', stub, {}, 'tr')).toEqual(['fx için güven sıfırlandı. Onay kartı bir sonraki mesajınızda açılacak.']);
     expect(seen).toEqual([{ verb: 'reset', name: 'fx' }, { verb: 'reset', name: 'fx' }]);
   });
-  // MCP-VISIBILITY: `mcp add` is stdio only and the registry file is `mcp.json` (project: `.deckent/mcp.json`), never `.mcp.json`.
-  it('the mcp add help names only stdio and the real registry file (en and tr)', () => {
+  // MCP-VISIBILITY: the registry file is `mcp.json` (project: `.deckent/mcp.json`), never `.mcp.json`; L1 MCP-CORE: `mcp add` names both transports.
+  it('the mcp add help names stdio and Streamable HTTP and the real registry file (en and tr)', () => {
     for (const locale of ['en', 'tr'] as const) for (const key of ['cli.mcp.add.desc', 'cli.memcat.mcp.help.paths'] as const) {
       const text = t(key, {}, locale);
-      expect(text).not.toMatch(/\bhttp\b/iu); expect(text).not.toContain('.mcp.json');
-      if (key === 'cli.mcp.add.desc') expect(text).toContain('stdio');
+      expect(text).not.toContain('.mcp.json');
+      if (key === 'cli.mcp.add.desc') { expect(text).toContain('stdio'); expect(text).toContain('Streamable HTTP'); expect(text).not.toMatch(/stdio only|yalnız stdio/u); }
       expect(text).toContain('.deckent/mcp.json');
     }
   });

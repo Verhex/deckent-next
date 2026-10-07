@@ -1371,7 +1371,8 @@
         "src/platform/core/i18n",
         "src/adapters/core/agent-workspace-floor",
         "src/platform/core/common",
-        "src/composition/core/root"
+        "src/composition/core/root",
+        "src/adapters/core/mcp-import"
       ],
       "plan": "SURFACES"
     },
@@ -2367,6 +2368,12 @@
         "src/surfaces/core/cli-kit"
       ],
       "plan": "INSTALLATION"
+    },
+    "src/adapters/core/mcp-import": {
+      "dependencies": [
+        "src/adapters/core/mcp-client"
+      ],
+      "plan": "SURFACES"
     }
   },
   "composition": {

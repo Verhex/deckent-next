@@ -1,9 +1,11 @@
+import { realpath } from 'node:fs/promises';
 import { loadComposedConfig } from '#composition/core/root/index.js';
 import { EffectError, type AgentToolOutcome } from '#domain/index.js';
 import { EffectApplication, OperationPolicyAuthorization, agentToolApprovalFacts, agentToolArgumentsDigest, type EffectApprovalGate } from '#engine/index.js';
 import { configuredSecretResolver, ManagedFileError, resolveLocale, SystemTrustedClock, t, type ConfigLoadOptions, type Locale } from '#platform/index.js';
 import { agentWorkspaceDeny, createLocalPeerSession, createWorkspaceReadTools, describeMcpRefusal, describeMcpResult, isWriteApprovalFloored, MCP_TOOL_CALL_OPERATION, MCP_TOOL_TARGET_KIND, mcpInspectSandboxes,
-  McpToolTarget, mcpSendAuthority, mcpTrustAuditWriter, mcpTurnTools, openSqliteAttemptStore, openTurnMcp, readLocalOsIdentity, runMcpCommand, type LocalPeerIdentity,
+  McpToolTarget, mcpImportEntry, MCP_SERVER_NAME, mcpSendAuthority, mcpTrustAuditWriter, mcpTurnTools, openSqliteAttemptStore, openTurnMcp, readLocalOsIdentity, readMcpImportSources, runMcpCommand,
+  type LocalPeerIdentity, type McpImportFrom,
   type McpCallOutcome, type McpClientPool, type McpCommandContext, type McpCommandRequest, type McpLaunchContext, type McpStartNotice } from '#adapters/index.js';
 import type { loadPeerInvocationContext } from '#composition/core/model-invocation/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
@@ -65,19 +67,36 @@ export async function createAgentMcp(input: { readonly pool: McpClientPool; read
     } finally { store.close(); }
   } };
 }
+/** `deckent mcp import` (L1 item 2): the servers another MCP client declares, each added untrusted through the registry's own `add` (its audited
+ * `reset` included), so an import never carries trust; a name or entry Deckent cannot take is listed with its reason, never renamed. */
+export type McpConfiguredRequest = McpCommandRequest | { readonly verb: 'import'; readonly from: McpImportFrom; readonly scope?: 'local' | 'user' };
+async function importMcpServers(request: Extract<McpConfiguredRequest, { verb: 'import' }>, context: McpCommandContext) {
+  const projectKey = await realpath(context.projectRoot).catch(() => context.projectRoot);
+  const read = await readMcpImportSources({ projectRoot: projectKey, projectKeys: [context.projectRoot, projectKey], from: request.from, environment: context.environment,
+    ...(request.scope ? { scope: request.scope } : {}) });
+  const imported: { name: string; scope: string; file: string }[] = [], skipped: { name: string | null; file: string; reason: string }[] = read.problems.map(problem => ({ name: null, ...problem }));
+  for (const source of read.sources) for (const [name, value] of Object.entries(source.servers)) {
+    const converted = MCP_SERVER_NAME.test(name) ? mcpImportEntry(value) : { ok: false as const, reason: 'invalid-name' };
+    if (!converted.ok) { skipped.push({ name, file: source.file, reason: converted.reason }); continue; }
+    try { await runMcpCommand({ verb: 'add', scope: source.scope, name, entry: converted.entry, approve: false }, context); imported.push({ name, scope: source.scope, file: source.file }); }
+    catch (error) { skipped.push({ name, file: source.file, reason: String((error as { code?: unknown })?.code ?? 'failed') }); }
+  }
+  return { schemaVersion: 1, imported, skipped };
+}
 /** `deckent mcp …` and `/mcp`: the scoped registry files, the trust records (audited, over this project's ledger) and, for `list`/trust decisions, the
  * server started in its realm. `ask` shows a trust card and answers the owner's decision; `locale` is the calling surface's (default: this
  * process's environment, then the configured language). */
-export async function runConfiguredMcpCommand(projectRoot: string, request: McpCommandRequest, options: ConfigLoadOptions, ask: McpCommandContext['ask'], locale?: Locale) {
+export async function runConfiguredMcpCommand(projectRoot: string, request: McpConfiguredRequest, options: ConfigLoadOptions, ask: McpCommandContext['ask'], locale?: Locale) {
   const config = await loadComposedConfig(projectRoot, { ...options, heal: false }), environment = options.env ?? process.env, principal = readLocalOsIdentity();
   const workspace = await createWorkspaceReadTools(projectRoot, { deny: agentWorkspaceDeny(projectRoot, config.productLayout) }),
     scopeId = (config as unknown as { terminal?: { scopeId?: string } }).terminal?.scopeId ?? 'installation';
   const shown = locale ?? resolveLocale(undefined, environment, config.language);
-  // LANG-CRASH: a managed-file refusal on the way (trust audit over the ledger, the trust directory, e.g. a companion another uid owns inside a
-  // sandbox) is the owner's typed, localized error with its diagnosis — never an uncaught exception and crash report. Anything else is unchanged.
-  return runMcpCommand(request, { projectRoot, layout: config.productLayout, environment, sandboxes: mcpInspectSandboxes(workspace.scope, isWriteApprovalFloored), principal, ask,
+  const context: McpCommandContext = { projectRoot, layout: config.productLayout, environment, sandboxes: mcpInspectSandboxes(workspace.scope, isWriteApprovalFloored), principal, ask,
     describeNotice: notice => renderMcpStartNotice(notice, shown),
     secret: configuredSecretResolver(config, options), limits: { inputMaxBytes: config.mcp.inputMaxBytes },
-    audit: mcpTrustAuditWriter({ layout: config.productLayout, sqlite: config.storage.sqlite, keyFile: config.approvals.keyFile, scopeId, principal, policyRevision: 'owner-cli' }) })
+    audit: mcpTrustAuditWriter({ layout: config.productLayout, sqlite: config.storage.sqlite, keyFile: config.approvals.keyFile, scopeId, principal, policyRevision: 'owner-cli' }) };
+  // LANG-CRASH: a managed-file refusal on the way (trust audit over the ledger, the trust directory, e.g. a companion another uid owns inside a
+  // sandbox) is the owner's typed, localized error with its diagnosis — never an uncaught exception and crash report. Anything else is unchanged.
+  return (request.verb === 'import' ? importMcpServers(request, context) : runMcpCommand(request, context))
     .catch((error: unknown) => { throw error instanceof ManagedFileError ? queryFailure(error) : error; });
 }
