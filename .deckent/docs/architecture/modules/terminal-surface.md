@@ -121,6 +121,17 @@ Market notes live outside the repo (`/home/alperen/deckent-refactor-work/proof/T
   `terminal-composer`; `terminal-ledger` (pure work-ledger model, `notice()`, run/worker/approval watches, bridge snapshot)
   ← `terminal-work` (work surface, slash dispatch, approval/cancel flow, cards) ← `terminal` (workline root, sessions, mode;
   its barrel re-exports the lower units); split by responsibility to keep each unit within the 2000-line budget.
+- **Bounded windows (TUI2 L1, 2026-10-07, branch `tui2/window-approval`):** unit `terminal-window` (← terminal-kit, terminal-render)
+  owns the `Window` frame (title left, status right, body capped to the terminal rows and scrolled by ↑↓/PgUp/PgDn/Home/End, wrapped key
+  hints, widths in display cells, ASCII frame with ASCII glyphs; `exact` rows keep commands/patterns/previews character for character)
+  and the window stack: one input owner, the top layer (approval priority, then newest); the composer, cards and pickers listen through
+  `useInput` `isActive` only while they own input. Ink `useFocus` is deliberately unused (it takes Tab/Shift+Tab/Esc). The stack is a
+  view concern; which decision is legal stays with the panel controller. `PanelPresentation` has a generic `{kind:'window'}` (y/N or
+  close); `/service-restart` confirms through it. The approval window (`terminal-work/approval-window.ts`) shows nine labelled
+  fields from what the producer already sends (tool/target from the call's own `tool.started`, client-side; the sealed binding line
+  as fallback) and catalog dictionaries keyed by the policy cell; raw ids, digests and cells only in its details; Tab adds a reason
+  that reaches the decision command's `reason`. Structured sandbox posture and turn-card reversibility are not on the wire (L1 review
+  decision points).
 - **Local/free models** use `openai-chat-http` v4 with an operator-declared `operator-static` tariff (v1: zero rates only).
   The quote is reserved against the scope budget and a responded call settles `settled-local 0` in the spend ledger;
   there is no unmetered bypass class. Positive chargeback rates need a separate measurement basis.
