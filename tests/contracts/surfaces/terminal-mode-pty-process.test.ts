@@ -45,6 +45,7 @@ if pid == 0:
     os.execvp(argv[0], argv)
 fcntl.ioctl(fd, termios.TIOCSWINSZ, struct.pack('HHHH', 40, columns, 0, 0))
 out = b''
+marks = []
 def read_for(seconds):
     global out
     end = time.time() + seconds
@@ -62,6 +63,7 @@ for wait, send in steps:
         if time.time() > deadline or not read_for(0.1):
             sys.stdout.write(json.dumps({'timeout': wait, 'output': out.decode('utf8', 'replace')})); sys.exit(3)
     read_for(0.5)
+    marks.append(len(out.decode('utf8', 'replace')))
     for char in send:
         os.write(fd, char.encode()); time.sleep(0.01)
 deadline = time.time() + 25
@@ -73,12 +75,12 @@ while status is None and time.time() < deadline:
 if status is None:
     os.kill(pid, 9); status = 'killed'
 read_for(0.2)
-sys.stdout.write(json.dumps({'status': status, 'output': out.decode('utf8', 'replace')}))
+sys.stdout.write(json.dumps({'status': status, 'output': out.decode('utf8', 'replace'), 'marks': marks}))
 `;
 async function inPty(cwd: string, env: NodeJS.ProcessEnv, args: readonly string[], steps: ReadonlyArray<readonly [string, string]>, columns = 120) {
   const { stdout } = await execute('python3', ['-c', DRIVER, JSON.stringify([process.execPath, cli, ...args]), JSON.stringify(steps), String(columns)],
     { cwd, env, timeout: 120_000, maxBuffer: 16 * 1024 * 1024 }).catch(error => ({ stdout: String(error.stdout ?? '') }));
-  return JSON.parse(stdout) as { status?: number | string; timeout?: string; output: string };
+  return JSON.parse(stdout) as { status?: number | string; timeout?: string; output: string; marks?: number[] };
 }
 
 async function startRuntime(projectRoot: string, env: NodeJS.ProcessEnv): Promise<void> {
@@ -441,5 +443,58 @@ describe.skipIf(process.platform !== 'linux')('opening banner in a real pseudo-t
     expect(run.status, run.output).toBe(0);
     expect(run.output.split('\u001b[H\u001b[2J')).toHaveLength(2);
     expect(stripVTControlCharacters(run.output)).toContain('/help · Shift+Tab mode · ? shortcuts');
+  }, 180_000);
+});
+
+// T2 integration (L1 window x L2 readability/startup x L3 human output) on the compiled product in a real PTY, EN and TR, NO_COLOR: the screen
+// at each step is replayed from the PTY bytes (VT replay, 100 x 40). DECKENT_T2_FRAME_PROOF=<file> appends the replayed screens.
+describe.skipIf(process.platform !== 'linux')('T2 surfaces together in a real pseudo-terminal (wave/tui-2 integration)', () => {
+  it.each([
+    ['en', { help: 'Commands', status: 'Deckent is running', window: 'Approval needed', denied: 'denied', you: 'You', heading: 'Info', careful: '⏸ careful' }],
+    ['tr', { help: 'Komutlar', status: 'Deckent çalışıyor', window: 'Onay gerekiyor', denied: 'reddedildi', you: 'Sen', heading: 'Bilgi', careful: '⏸ dikkatli' }],
+  ] as const)('%s: banner, /help, /status, the approval window and the person/answer rows', async (language, words) => {
+    // The person runs careful (standart + ask for edits too), so the eligible edit opens the approval window; standart alone would run it.
+    const f = await modeProject('v2', { mode: 'standart' });
+    const bindings = join(f.data, 'bindings.json');
+    const document = JSON.parse(await readFile(bindings, 'utf8')) as { modes: Array<Record<string, unknown>> };
+    await writeFile(bindings, JSON.stringify({ ...document, modes: document.modes.map(entry => entry['id'] === 'my-mode' ? { ...entry, askEdits: true } : entry) }), { mode: 0o600 });
+    await startRuntime(f.projectRoot, f.env);
+    const run = await inPty(f.projectRoot, { ...f.env, DECKENT_LANGUAGE: language }, ['terminal', 'workline', '--scope', 'scope'], [
+      ['Deckent workline', '/help\r'], [words.help, '/status\r'], [words.status, 'go\r'], [words.window, 'n'], ['Mode turn done.', '/exit\r']], 100);
+    expect(run.timeout, run.output).toBeUndefined();
+    expect(run.status, run.output).toBe(0);
+    // Each mark is the output length when a step's awaited text had appeared (before its keys were sent).
+    // The last 40 replayed rows at the end of the last complete synchronized frame (Ink wraps each frame in ?2026h … ?2026l; a mark can fall
+    // inside a frame while the spinner redraws); blank rows above the first text (the scrolled-away opening rows) are dropped.
+    const complete = (end: number) => { const at = run.output.lastIndexOf('\u001b[?2026l', end); return at < 0 ? end : at + '\u001b[?2026l'.length; };
+    const screen = (end: number) => terminalScreen(run.output.slice(0, complete(end)), 100).split('\n').slice(-40).join('\n').replace(/^(?:[ \t]*\n)+/u, '');
+    const [banner, , status, window, rows] = run.marks!.map(screen) as [string, string, string, string, string];
+    // /help is taller than the 40-row window: its opening rows are in the scrollback, so it is read from the replay with scrollback.
+    const replayed = terminalScreen(run.output.slice(0, complete(run.marks![1]!)), 100);
+    const help = replayed.slice(replayed.lastIndexOf(`${words.heading}: ${words.help}`));
+    const proof = process.env['DECKENT_T2_FRAME_PROOF'];
+    if (proof) {
+      const { appendFile } = await import('node:fs/promises');
+      for (const [title, text] of [['banner', banner], ['/help', help], ['/status', status], ['approval window', window], ['person and answer rows', rows]] as const)
+        await appendFile(proof, `\n### ${language} · ${title}\n\n\`\`\`text\n${text}\n\`\`\`\n`);
+    }
+    // The banner is on the first row of the cleared screen; the status row names the careful stop.
+    expect(banner.split('\n')[0]).toMatch(/^╭──╮ +Deckent /u);
+    expect(banner).toContain(words.careful);
+    // /help: a title, then the group headings (L3).
+    expect(help).toContain(`${words.heading}: ${words.help}`);
+    // /status: the human summary first.
+    expect(status).toContain(words.status);
+    // The approval window (L1) is framed and titled; the full approval id is not on its title row.
+    expect(window).toContain(words.window);
+    expect(window.split('\n').find(row => row.includes(words.window))).not.toMatch(/[0-9a-f]{8}-[0-9a-f]{4}-/u);
+    // Person and answer rows (L2): the rail with the person's label and the answer heading; the denial notice uses the short id (integration).
+    expect(rows).toMatch(new RegExp(`│ ${words.you}\\n│ go`, 'u'));
+    expect(rows).toContain('● Deckent');
+    const denial = rows.split('\n').find(row => row.includes(words.denied)) ?? '';
+    expect(denial).not.toBe('');
+    expect(denial).not.toMatch(/[0-9a-f]{8}-[0-9a-f]{4}-/u);
+    expect(run.output).not.toContain('\u001b[3J');
+    expect(await readFile(join(f.projectRoot, 'src/a.ts'), 'utf8')).toBe('export const a = 1;\n');
   }, 180_000);
 });
