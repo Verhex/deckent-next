@@ -75,6 +75,11 @@ export type WorkLedgerNoticeEntry = Readonly<{
 
 export type WorkLedgerEntry = WorkLedgerChatEntry | WorkLedgerRunEntry | WorkLedgerWorkerEntry | WorkLedgerNoticeEntry;
 
+/** `pending:2 active:1` back to its pairs (the summary's own format; `—` is no tasks). The summary is also the run card's change fingerprint. */
+export function parseTaskPhases(summary: string): readonly (readonly [string, number])[] {
+  return summary.split(' ').flatMap(part => { const at = part.lastIndexOf(':'); const count = Number(part.slice(at + 1)); return at > 0 && Number.isInteger(count) ? [[part.slice(0, at), count] as const] : []; });
+}
+
 function phaseSummary(run: RunView): string {
   const counts = new Map<string, number>();
   for (const task of run.tasks) counts.set(task.phase, (counts.get(task.phase) ?? 0) + 1);

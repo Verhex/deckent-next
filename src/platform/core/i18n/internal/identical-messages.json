@@ -96,6 +96,7 @@
   "terminal.admin.model.kindNativeCli",
   "terminal.admin.model.named",
   "terminal.admin.status.model",
+  "terminal.ledger.run.phase.other",
   "terminal.render.tool",
   "terminal.scratch.path",
   "terminal.slash.modeArgument",

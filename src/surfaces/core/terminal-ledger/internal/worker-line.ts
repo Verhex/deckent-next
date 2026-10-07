@@ -1,4 +1,5 @@
 import type { WorkerLivePhase, WorkLedgerWorkerEntry } from './work-ledger.js';
+import type { LedgerCardLabels } from './cards.js';
 
 /** Catalog strings for the live worker line; the terminal package never resolves locale text itself. */
 export interface WorkerLineLabels {
@@ -23,6 +24,8 @@ export interface WorkerLineLabels {
   readonly dropped: string;
   /** `{count} provider events not itemized yet` — a provider normalizer gap, not an error. */
   readonly unmapped: string;
+  /** Run and worker card words; absent means the card shows only its data. */
+  readonly card?: LedgerCardLabels;
 }
 
 export type WorkerLineTone = 'normal' | 'muted' | 'error';

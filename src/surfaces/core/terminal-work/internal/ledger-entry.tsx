@@ -1,6 +1,6 @@
 import { Box, Text } from 'ink';
 import { useWorklinePalette } from '#surfaces/core/terminal-kit/index.js';
-import { type WorkLedgerEntry, formatWorkerLine, type WorkerLineLabels } from '#surfaces/core/terminal-ledger/index.js';
+import { type WorkLedgerEntry, formatRunCardLines, formatWorkerCardLines, formatWorkerLine, type WorkerLineLabels } from '#surfaces/core/terminal-ledger/index.js';
 import { AssistantUnitRow, HumanTextRow, type AssistantRenderLabels } from '#surfaces/core/terminal-render/index.js';
 import { readApprovalDecisionNotice } from './approval-decision-notice.js';
 import { ApprovalDecisionNoticeRow } from './approval-decision-view.js';
@@ -30,21 +30,24 @@ export function LedgerEntryRow({ entry, labels }: { readonly entry: WorkLedgerEn
     return <HumanTextRow text={entry.text} style={entry.level === 'error' ? ink.error : ink.muted} hiddenLabel={labels.render.hiddenCount} />;
   }
   if (entry.kind === 'run') {
+    // Words come from the card labels (catalog); without them the card shows its data only.
+    const [head, revision, phases] = labels.workerLine?.card ? formatRunCardLines(entry, labels.workerLine.card) : [`${entry.runId} · ${entry.scopeId}`, `${entry.revision}`, entry.taskPhases];
     return (
       <Box flexDirection="column" borderStyle="single" {...(ink.accent.color ? { borderColor: ink.accent.color } : {})} paddingX={1}>
         <Text {...ink.accent}>{labels.runCard}</Text>
-        <Text {...ink.muted}>{entry.runId} · {entry.scopeId}</Text>
-        <Text>rev {entry.revision}{entry.cancellationRequested ? ' · cancel' : ''}</Text>
-        <Text {...ink.muted}>{entry.taskPhases}</Text>
+        <Text {...ink.muted}>{head}</Text>
+        <Text>{revision}</Text>
+        <Text {...ink.muted}>{phases}</Text>
       </Box>
     );
   }
   const live = entry.live && labels.workerLine ? formatWorkerLine(entry, labels.workerLine) : null;
+  const [who, observed] = labels.workerLine ? formatWorkerCardLines(entry, labels.workerLine) : [`${entry.taskId} · ${entry.process}`, `${entry.provider} · ${entry.authority}`];
   return (
     <Box flexDirection="column" borderStyle="single" {...(ink.user.color ? { borderColor: ink.user.color } : {})} paddingX={1}>
       <Text {...ink.user}>{labels.workerCard}</Text>
-      <Text>{entry.taskId} · {entry.process}</Text>
-      <Text {...ink.muted}>{entry.provider} · {entry.authority}</Text>
+      <Text>{who}</Text>
+      <Text {...ink.muted}>{observed}</Text>
       {live ? <Text {...(live.tone === 'error' ? ink.error : live.tone === 'muted' ? ink.muted : {})}>{live.text}</Text> : null}
     </Box>
   );

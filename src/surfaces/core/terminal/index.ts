@@ -20,7 +20,7 @@ export { newWorkerTaskIds } from '#surfaces/core/terminal-ledger/index.js';
 export { newRunLedgerEntries, runWatchFingerprint } from '#surfaces/core/terminal-ledger/index.js';
 export { loadRunViewsForWatch } from '#surfaces/core/terminal-ledger/index.js';
 export type { WorkLedgerEntry, WorkLedgerRunEntry, WorkLedgerWorkerEntry, WorkerAttemptIdentity, WorkerLiveActivity, WorkerLivePhase } from '#surfaces/core/terminal-ledger/index.js';
-export { compactCount, fillTemplate, formatDuration, formatWorkerLine, type WorkerLine, type WorkerLineLabels } from '#surfaces/core/terminal-ledger/index.js';
+export { compactCount, fillTemplate, formatDuration, formatWorkerLine, type LedgerCardLabels, type WorkerLine, type WorkerLineLabels } from '#surfaces/core/terminal-ledger/index.js';
 export { WORKER_PANEL_ROWS, type WorkerPanelLabels } from '#surfaces/core/terminal-work/index.js';
 export { APPROVAL_SCAN_MAX_PAGES, approvalWatchStep, EMPTY_APPROVAL_WATCH, scanPendingApprovals, type WorklineApproval, type WorklineApprovalPage } from '#surfaces/core/terminal-ledger/index.js';
 export { decisionKey, scopedDecisionKey, type StandingScope } from '#surfaces/core/terminal-kit/index.js';
