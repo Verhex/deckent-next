@@ -63,6 +63,17 @@ export function definitionFor(keyPath: string) {
   }
   return { path, definition, schema, schemaKey: JSON.stringify(schemaPath) };
 }
+/**
+ * T3 L4: the typed value of a person's text for one key (the `/config` panel's free entry and `/config key=value`): the text itself when the
+ * key's schema takes a string, otherwise its JSON; `ok: false` when neither fits. The write still validates the whole layer.
+ */
+export function parseConfigInput(keyPath: string, text: string): { readonly ok: true; readonly value: unknown } | { readonly ok: false } {
+  const { schema } = definitionFor(keyPath);
+  if (schema.safeParse(text).success) return { ok: true, value: text };
+  let parsed: unknown;
+  try { parsed = JSON.parse(text); } catch { return { ok: false }; }
+  return schema.safeParse(parsed).success ? { ok: true, value: parsed } : { ok: false };
+}
 function jsonSchemaView(schema: z.ZodTypeAny, schemaKey: string): unknown {
   const generation = configRegistryGeneration();
   if (schemaGeneration !== generation) { schemaViews.clear(); schemaGeneration = generation; }

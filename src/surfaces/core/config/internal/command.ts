@@ -4,7 +4,7 @@ import { configDisplayView, getConfigValue, loadConfig, type ConfigLoadOptions }
 import { emit, formatValue } from '#platform/index.js';
 import { resolveLocale, t, type Locale } from '#platform/index.js';
 import type { VerifiedPrincipal } from '#domain/index.js';
-import { configServiceState, type ConfigApplication, type ConfigChangeOutcome, type DescribeService } from '#engine/index.js';
+import { configServiceState, parseConfigInput, type ConfigApplication, type ConfigChangeOutcome, type DescribeService } from '#engine/index.js';
 import type { CliBaseContext } from '#surfaces/core/cli-kit/index.js';
 import { applyWord, renderConfigExplanation, renderConfigInspection, sourceWord } from './render.js';
 
@@ -114,30 +114,49 @@ export async function configWrite(root: string, request: ConfigWriteRequest, con
 const pendingWrites = new Map<string, { readonly commandId: string; readonly expect: string | null }>();
 const PENDING_WRITES_KEPT = 32;
 
-/** Terminal `/config [key]` view and `/config set <key> <json>` / `/config unset <key>` through the principal'd write port (project layer). */
+/** One terminal config write (`/config set|unset`, `/config key=value`, the `/config` panel, T3 L4): the principal'd port with the pending-command memory. */
+export async function terminalConfigWrite(root: string, request: Omit<ConfigWriteRequest, 'scopeId' | 'commandId' | 'expect'>, context: ConfigCommandContext, options: ConfigLoadOptions,
+  locale: Locale): Promise<{ readonly status: ConfigChangeOutcome['status']; readonly lines: readonly string[]; readonly approvalId: string | null }> {
+  const scopeId = ((await loadConfig(root, options))['terminal'] as { scopeId?: string } | undefined)?.scopeId;
+  if (!scopeId) throw ErrorRegistry.createError('TERMINAL_SCOPE_REQUIRED');
+  const layer = request.layer ?? 'project';
+  const key = JSON.stringify([root, scopeId, request.action, layer, request.keyPath, request.value ?? null]), pending = pendingWrites.get(key);
+  let outcome: ConfigChangeOutcome;
+  try { outcome = await configWrite(root, { ...request, layer, scopeId, ...(pending ? { commandId: pending.commandId, expect: pending.expect } : {}) }, context, options); }
+  catch (error) { pendingWrites.delete(key); throw error; }
+  if (outcome.status === 'approval-pending') {
+    pendingWrites.delete(key); pendingWrites.set(key, { commandId: outcome.commandId, expect: outcome.expect });
+    while (pendingWrites.size > PENDING_WRITES_KEPT) pendingWrites.delete(pendingWrites.keys().next().value!);
+    return { status: outcome.status, lines: renderConfigPending(outcome, locale, 'terminal'), approvalId: outcome.approval.approvalId };
+  }
+  pendingWrites.delete(key);
+  const field = await context.configApplication!(root, options).explain({ keyPath: request.keyPath });
+  return { status: outcome.status, lines: renderConfigChanged(request.keyPath, layer, field.apply, outcome.result, null, locale), approvalId: outcome.approvalId };
+}
+
+/** `/config key=value` (T3 L4 shortcut): the key's schema reads the text (the text itself, else its JSON); the project layer is written. */
+export function configShortcut(args: string): { readonly keyPath: string; readonly text: string } | null {
+  const match = /^([A-Za-z0-9_.-]+)=(.*)$/su.exec(args.trim());
+  return match ? { keyPath: match[1]!, text: match[2]!.trim() } : null;
+}
+
+/** Terminal `/config [key]` view, `/config set <key> <json>` / `/config unset <key>` and `/config key=value` through the principal'd write port (project layer). */
 export async function configSlash(root: string, args: string, context: ConfigCommandContext, options: ConfigLoadOptions, locale: Locale, width: number): Promise<readonly string[]> {
   const words = args.trim().split(/\s+/).filter(Boolean), [verb, keyPath] = words;
   if (!context.configApplication) return [t('config.surface.slashUsage', {}, locale)];
-  if (verb === 'set' || verb === 'unset') {
+  const shortcut = configShortcut(args);
+  if (verb === 'set' || verb === 'unset' || shortcut) {
     // A surface composed without the principal'd write route (an embedding, a test harness) stays read only, and says so.
     if (!context.resolveConfigPrincipal) return [t('config.surface.slashReadOnly', {}, locale)];
+    if (shortcut) {
+      const parsed = parseConfigInput(shortcut.keyPath, shortcut.text);
+      if (!parsed.ok) return [t('config.surface.shortcutInvalid', { key: shortcut.keyPath }, locale)];
+      return (await terminalConfigWrite(root, { action: 'set', keyPath: shortcut.keyPath, value: parsed.value }, context, options, locale)).lines;
+    }
     if (!keyPath || (verb === 'set' ? words.length < 3 : words.length !== 2)) return [t('config.surface.slashUsage', {}, locale)];
     let value: unknown;
     if (verb === 'set') { try { value = JSON.parse(args.trim().slice(verb.length).trimStart().slice(keyPath.length).trim()); } catch { return [t('config.surface.slashUsage', {}, locale)]; } }
-    const scopeId = ((await loadConfig(root, options))['terminal'] as { scopeId?: string } | undefined)?.scopeId;
-    if (!scopeId) throw ErrorRegistry.createError('TERMINAL_SCOPE_REQUIRED');
-    const key = JSON.stringify([root, scopeId, verb, keyPath, value ?? null]), pending = pendingWrites.get(key);
-    let outcome: ConfigChangeOutcome;
-    try { outcome = await configWrite(root, { action: verb, keyPath, value, scopeId, ...(pending ? { commandId: pending.commandId, expect: pending.expect } : {}) }, context, options); }
-    catch (error) { pendingWrites.delete(key); throw error; }
-    if (outcome.status === 'approval-pending') {
-      pendingWrites.delete(key); pendingWrites.set(key, { commandId: outcome.commandId, expect: outcome.expect });
-      while (pendingWrites.size > PENDING_WRITES_KEPT) pendingWrites.delete(pendingWrites.keys().next().value!);
-      return renderConfigPending(outcome, locale, 'terminal');
-    }
-    pendingWrites.delete(key);
-    const field = await context.configApplication(root, options).explain({ keyPath });
-    return renderConfigChanged(keyPath, 'project', field.apply, outcome.result, null, locale);
+    return (await terminalConfigWrite(root, { action: verb as 'set' | 'unset', keyPath, value }, context, options, locale)).lines;
   }
   if (words.length > 1) return [t('config.surface.slashUsage', {}, locale)];
   const view = await context.configApplication(root, options).inspect(verb ? { keyPath: verb } : {});

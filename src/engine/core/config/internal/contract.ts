@@ -37,6 +37,10 @@ export interface ConfigAuthorityPort {
 }
 /** The policy decision of one config write (`deny` is thrown, never returned); `ruleId` names the rule that decided. */
 export interface ConfigAuthorization { readonly decision: 'allow' | 'require-approval'; readonly revision: string; readonly ruleId: string | null }
+/** A decision read for display (T3 L4 `/config` locks): `deny` included; writes nothing and grants nothing — `submit` decides again. */
+export type ConfigPermissionDecision = Readonly<{ decision: 'allow' | 'require-approval' | 'deny'; ruleId: string | null }>;
+/** One key on one layer as the `/config` panel shows it: what policy says now, or `refused` (a section no write reaches, e.g. `secrets`). */
+export type ConfigWritePermission = Readonly<{ keyPath: string; layer: ConfigLayer; decision: ConfigPermissionDecision['decision'] | 'refused'; ruleId: string | null }>;
 export type ConfigChangeSubject = Extract<ApprovalSubject, { kind: 'config-change' }>;
 export type ConfigApprovalAdmission =
   | { readonly pending: { readonly approvalId: string; readonly revision: number; readonly expiresAt: number; readonly summary: string } }
@@ -47,6 +51,8 @@ export type ConfigApprovalAdmission =
  */
 export interface ConfigApprovalPort {
   evaluate(input: ConfigWriteInput): Promise<ConfigAuthorization>;
+  /** T3 L4: the same decision for many writes of one scope under one policy read (display only: `deny` is returned, not thrown). */
+  evaluateMany?(inputs: readonly ConfigWriteInput[]): Promise<readonly ConfigPermissionDecision[]>;
   admit(input: ConfigWriteInput, subject: ConfigChangeSubject, authorization: ConfigAuthorization): Promise<ConfigApprovalAdmission>;
 }
 /** What `submit` did: applied (with the approval it consumed, if one was needed) or nothing written and an approval pending. */
