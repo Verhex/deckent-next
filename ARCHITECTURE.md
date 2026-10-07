@@ -533,6 +533,21 @@ Core contracts and never requires editing Core. Core-memory law 10 records this 
   tool result (EN/TR); a registry directory that is its own tmpfs mount inside a sandbox is `*_IDENTITY_MASKED`, not a lost identity;
   read tools record `diagnostic` (`step`, `errno`) on `not-found`/`path-changed` (B4 root cause still open).
 
+### TERMINAL-UX T4-A contracts (2026-10-08, `wave/tui-4`, unpushed; owner decisions 2026-10-07/08, Jev a172b1ad)
+
+- **`/model` (MODEL-SWITCH):** lists the declared catalog models by exact reference (provider id@version / model id@version) with the first
+  missing precondition as a locked row's reason (invocation profile in the scope, its `credentialRef` in the secret store, chat activation, with
+  the exact `deckent models activate` command); discovered models are never added or activated. A pick pins the model for this session: the
+  next and later turns carry it as `chatTurn.reference` (protocol v23, lifecycle [23, 22]); the service uses exactly it for binding, profile,
+  prompt, digest and rounds, or refuses typed — the configured `terminal.chat.reference` never answers in its place (S19). "Also make default"
+  is locked until the owner decides where the user default lives (`proof/T4-2026-10-08/DECISIONS.md`); it would use the governed `/config` writer.
+- **`/provider` (PROVIDER-CONNECT):** kinds and endpoints are adapter data (`adapters/core/provider-connect`, registry v1; ChatGPT sign-in listed
+  unavailable). Connect: endpoint (where the kind takes one; https, plain http only to loopback) → masked key under the custody note → one free
+  GET that needs the key (models list / key record, no redirect, bounded), mapped by `classifyProviderRejection` (an unknown 429 is
+  `limit-reached`) → only on success the key goes to `setSecret` (runtime service, policy cell `secret`, audited by name). The key is never in
+  env, files, rows, scrollback, audit or model text; workers never get it. The check runs in the terminal process. Binding models to the key
+  (catalog channel / invocation profile) stays the governed path and is an open owner decision.
+
 ## Packages (current implementation)
 
 Layers: `platform` (config, errors/i18n, identity, paths) → `domain` (pure versioned contracts) → `capabilities` → `engine` (transitions, ports) → `adapters` (SQLite, Git/Docker, sockets, MCP) → `composition` (explicit wiring) → `surfaces` (SDK, CLI, MCP, terminal). Gates: `arch.json` + `scripts/lint-arch.mjs`. Full per-area text:
