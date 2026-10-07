@@ -35,7 +35,7 @@ export const api: readonly string[] = Object.keys(deckent);
 export const version: string = deckent.PACKAGE_VERSION;
 const config: DeckentConfig = createDefaultConfig();
 export const warnings: number = validateConfig(config).warnings.length;
-export const schemaVersion: 3 = getConfigFieldDefault('schema_version');
+export const schemaVersion: 4 = getConfigFieldDefault('schema_version');
 // @ts-expect-error the default is the literal 3; an any from an unresolved zod type would make this line compile
 export const notAny: 'x' = getConfigFieldDefault('schema_version');
 const key: MessageKey = 'cli.agent.desc';
