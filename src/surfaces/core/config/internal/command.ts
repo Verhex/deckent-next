@@ -4,7 +4,7 @@ import { configDisplayView, getConfigValue, loadConfig, type ConfigLoadOptions }
 import { emit, formatValue } from '#platform/index.js';
 import { resolveLocale, t, type Locale } from '#platform/index.js';
 import type { VerifiedPrincipal } from '#domain/index.js';
-import { configServiceState, type ConfigApplication, type DescribeService } from '#engine/index.js';
+import { configServiceState, type ConfigApplication, type ConfigChangeOutcome, type DescribeService } from '#engine/index.js';
 import type { CliBaseContext } from '#surfaces/core/cli-kit/index.js';
 import { applyWord, renderConfigExplanation, renderConfigInspection, sourceWord } from './render.js';
 
@@ -73,18 +73,71 @@ export async function configCommand(argv: readonly string[], context: ConfigComm
   const principal = await context.resolveConfigPrincipal(root, scopeId, options), input = { keyPath, layer, principal, scopeId,
     commandId: parsed.commandId ?? randomUUID(), ...(parsed.expect === undefined ? {} : { expect: parsed.expect === 'absent' ? null : parsed.expect }) };
   const field = await app.explain({ keyPath });
-  const result = action === 'set' ? await app.set({ ...input, value }) : await app.unset(input);
+  // T3 L2: a policy `require-approval` opens a config-change approval and writes nothing; the same command (`--command-id`, `--expect`) applies it once allowed.
+  const outcome = await app.submit(action, action === 'set' ? { ...input, value } : input);
+  if (outcome.status === 'approval-pending') { emit(outcome, { ...sinks, render: () => renderConfigPending(outcome, locale, 'cli').join('\n') }); return; }
+  const { result } = outcome;
   // A restart-apply change is compared with the running service's own fingerprint, so "restart" is a measured state, not a standing hint.
   const service = field.apply === 'restart' ? await configServiceState(root, options, context.describeRuntimeService) : null;
-  emit(service ? { ...result, service } : result, { ...sinks, render: () => [t('config.surface.changed', { key: keyPath, layer: sourceWord(layer, locale), apply: applyWord(field.apply, locale), backup: result.backupPath ?? '-' }, locale),
+  emit({ ...result, ...(outcome.approvalId ? { approvalId: outcome.approvalId } : {}), ...(service ? { service } : {}) }, { ...sinks, render: () => renderConfigChanged(keyPath, layer, field.apply, result, service, locale).join('\n') });
+}
+function renderConfigChanged(keyPath: string, layer: 'project' | 'global', apply: 'live' | 'restart', result: { readonly backupPath: string | null; readonly overridden: boolean },
+  service: Awaited<ReturnType<typeof configServiceState>>, locale: Locale): string[] {
+  return [t('config.surface.changed', { key: keyPath, layer: sourceWord(layer, locale), apply: applyWord(apply, locale), backup: result.backupPath ?? '-' }, locale),
     ...(result.overridden ? [t('config.surface.overridden', {}, locale)] : []),
     ...(service ? [{ current: t('config.surface.service.current', {}, locale), stale: t('config.surface.service.stale', {}, locale),
-      unknown: t('config.surface.service.unknown', {}, locale), stopped: t('config.surface.service.stopped', {}, locale) }[service]] : [])].join('\n') });
+      unknown: t('config.surface.service.unknown', {}, locale), stopped: t('config.surface.service.stopped', {}, locale) }[service]] : [])];
 }
-/** Terminal observation shares the application; this slash view exposes no write route. */
+/** Nothing was written: the card's sentence, where to decide and how the same command applies it (CLI flags or the terminal's own re-run). */
+function renderConfigPending(outcome: Extract<ConfigChangeOutcome, { status: 'approval-pending' }>, locale: Locale, surface: 'cli' | 'terminal'): string[] {
+  const values = { id: outcome.approval.approvalId, summary: outcome.approval.summary, commandId: outcome.commandId, expect: outcome.expect ?? 'absent' };
+  return [t('config.approval.pending', values, locale), surface === 'cli' ? t('config.approval.resubmitCli', values, locale) : t('config.approval.resubmitTerminal', values, locale)];
+}
+
+/** One config write of the terminal (T3 L2 service write port; the `/config` panel of L4 binds it): principal'd through `resolveConfigPrincipal`, approval-aware. */
+export interface ConfigWriteRequest {
+  readonly action: 'set' | 'unset'; readonly keyPath: string; readonly value?: unknown; readonly layer?: 'project' | 'global';
+  readonly scopeId: string; readonly commandId?: string; readonly expect?: string | null;
+}
+export async function configWrite(root: string, request: ConfigWriteRequest, context: ConfigCommandContext, options: ConfigLoadOptions): Promise<ConfigChangeOutcome> {
+  if (!context.configApplication || !context.resolveConfigPrincipal) throw ErrorRegistry.createError('CLI_USAGE');
+  const principal = await context.resolveConfigPrincipal(root, request.scopeId, options);
+  const input = { keyPath: request.keyPath, layer: request.layer ?? 'project' as const, principal, scopeId: request.scopeId, commandId: request.commandId ?? randomUUID(),
+    ...(request.expect === undefined ? {} : { expect: request.expect }) };
+  return context.configApplication(root, options).submit(request.action, request.action === 'set' ? { ...input, value: request.value } : input);
+}
+/**
+ * Pending terminal writes of this process: the same `/config set|unset` typed again resubmits the command whose approval is pending (same command
+ * id and previewed digest), so an allow applies it; a terminal outcome (applied, denied, expired, stale) forgets it and the next attempt is a new
+ * command. Bounded display state, never authority — the engine verifies every resubmission.
+ */
+const pendingWrites = new Map<string, { readonly commandId: string; readonly expect: string | null }>();
+const PENDING_WRITES_KEPT = 32;
+
+/** Terminal `/config [key]` view and `/config set <key> <json>` / `/config unset <key>` through the principal'd write port (project layer). */
 export async function configSlash(root: string, args: string, context: ConfigCommandContext, options: ConfigLoadOptions, locale: Locale, width: number): Promise<readonly string[]> {
-  const keyPath = args.trim();
-  if (!context.configApplication || /\s/.test(keyPath)) return [t('config.surface.slashUsage', {}, locale)];
-  const view = await context.configApplication(root, options).inspect(keyPath ? { keyPath } : {});
+  const words = args.trim().split(/\s+/).filter(Boolean), [verb, keyPath] = words;
+  if (!context.configApplication) return [t('config.surface.slashUsage', {}, locale)];
+  if (verb === 'set' || verb === 'unset') {
+    if (!keyPath || (verb === 'set' ? words.length < 3 : words.length !== 2)) return [t('config.surface.slashUsage', {}, locale)];
+    let value: unknown;
+    if (verb === 'set') { try { value = JSON.parse(args.trim().slice(verb.length).trimStart().slice(keyPath.length).trim()); } catch { return [t('config.surface.slashUsage', {}, locale)]; } }
+    const scopeId = ((await loadConfig(root, options))['terminal'] as { scopeId?: string } | undefined)?.scopeId;
+    if (!scopeId) throw ErrorRegistry.createError('TERMINAL_SCOPE_REQUIRED');
+    const key = JSON.stringify([root, scopeId, verb, keyPath, value ?? null]), pending = pendingWrites.get(key);
+    let outcome: ConfigChangeOutcome;
+    try { outcome = await configWrite(root, { action: verb, keyPath, value, scopeId, ...(pending ? { commandId: pending.commandId, expect: pending.expect } : {}) }, context, options); }
+    catch (error) { pendingWrites.delete(key); throw error; }
+    if (outcome.status === 'approval-pending') {
+      pendingWrites.delete(key); pendingWrites.set(key, { commandId: outcome.commandId, expect: outcome.expect });
+      while (pendingWrites.size > PENDING_WRITES_KEPT) pendingWrites.delete(pendingWrites.keys().next().value!);
+      return renderConfigPending(outcome, locale, 'terminal');
+    }
+    pendingWrites.delete(key);
+    const field = await context.configApplication(root, options).explain({ keyPath });
+    return renderConfigChanged(keyPath, 'project', field.apply, outcome.result, null, locale);
+  }
+  if (words.length > 1) return [t('config.surface.slashUsage', {}, locale)];
+  const view = await context.configApplication(root, options).inspect(verb ? { keyPath: verb } : {});
   return renderConfigInspection(view, locale, width).split('\n');
 }

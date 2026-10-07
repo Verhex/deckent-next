@@ -117,6 +117,8 @@
   "disposition.remediation.provider_adapter_unavailable": "Bu görevi yeniden denemeden önce provider kimlik doğrulamasını veya erişimini geri yükleyin.",
   "error.ACTOR_UNVERIFIED": "Principal assurance yetersiz.",
   "error.CLI_USAGE": "{command} için {flag} geçersiz.\n{usage}",
+  "error.CONFIG_APPROVAL_STALE": "Bu değişiklik önizlendikten sonra yapılandırma değişti; hiçbir şey yazılmadı. Değişikliği güncel yapılandırmaya göre yeniden önizlemek için komutu tekrar çalıştırın (yeni bir onay gerekebilir).",
+  "error.CONFIG_APPROVAL_REQUIRED": "Policy artık bu yapılandırma değişikliği için onay istiyor; hiçbir şey yazılmadı. Onay istemek için değişikliği yeniden çalıştırın.",
   "error.CONFIG_CONCURRENT_REVISION_HOLD": "Config eşzamanlı değişti; yazıcı tamamlandıktan sonra yeniden deneyin.",
   "error.CONFIG_KEY_UNKNOWN": "Bilinmeyen config anahtarı: {key}.",
   "error.CONFIG_BACKUP_PRUNE_FAILED": "Config kaydedildi, ancak yedek temizliği başarısız oldu. Yeniden denemeden önce kayıtlı belgeyi inceleyin.",
