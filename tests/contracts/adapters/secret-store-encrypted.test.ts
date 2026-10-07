@@ -116,3 +116,28 @@ it('encrypted backend: unavailable on native Windows and without an installation
   await expect(createEncryptedFileSecretStore({ root: 'C:\\deckent', platform: 'win32' }).set('A', 'synthetic')).rejects.toMatchObject({ code: 'SECRET_STORE_UNAVAILABLE' });
   await expect(createEncryptedFileSecretStore({ root: null, platform: 'linux' }).get('A')).rejects.toMatchObject({ code: 'SECRET_STORE_UNAVAILABLE' });
 });
+
+it('doctor names who can read the keys for each Core backend, in both languages, and the text survives the record redactor', async () => {
+  const { renderDoctorReport } = await import('#surfaces/core/doctor/index.js');
+  const { redactForRecord } = await import('#platform/index.js');
+  const render = (backend: string, locale: 'tr' | 'en') => renderDoctorReport({ platform: 'linux', host: { cpuCores: 1, totalMemMB: 1, recommendedMaxWorkers: 1 },
+    company: { companyId: 'c' }, principal: { id: 'p' }, secretStore: { backend, status: 'ready', code: null }, imageRefresh: null,
+    installationBinding: null, shellRealm: null }, [], locale);
+  const sealed = render('core.secret-store.encrypted-file@1', 'tr');
+  expect(sealed).toContain('diğer programlar okuyabilir');
+  expect(render('core.secret-store.encrypted-file@1', 'en')).toContain('other programs running as your user can');
+  expect(render('core.secret-store.file@1', 'tr')).toContain('düz metin');
+  expect(render('core.secret-store.env@1', 'en')).toContain('secrets.store = core.secret-store.encrypted-file@1');
+  expect(render('enterprise.secret-store.vault@1', 'en').split('\n').filter(line => line.startsWith('  '))).toEqual([]);
+  for (const backend of ['core.secret-store.env@1', 'core.secret-store.file@1', 'core.secret-store.encrypted-file@1']) {
+    for (const locale of ['tr', 'en'] as const) expect(redactForRecord(render(backend, locale))).toBe(render(backend, locale));
+  }
+});
+
+it('the agent read floor denies both sealed-store files wherever they sit (workers and tools never read them)', async () => {
+  const { createGlobMatcher, DEFAULT_WORKSPACE_READ_DENY } = await import('#adapters/index.js');
+  const denied = (path: string) => DEFAULT_WORKSPACE_READ_DENY.some(pattern => createGlobMatcher(pattern)(path));
+  for (const path of ['secrets.sealed.json', 'secrets.key', 'home/.local/state/deckent/secrets.sealed.json', 'home/.local/state/deckent/secrets.key']) {
+    expect(denied(path), path).toBe(true);
+  }
+});
