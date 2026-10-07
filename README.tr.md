@@ -120,15 +120,20 @@ flowchart LR
 | **Standart** | Okumalar, sıradan dosya düzenlemeleri | Kabuk komutları, korunan yollar, MCP çağrıları |
 | **Dikkatli** | Okumalar | Her düzenleme de |
 | **Tam otomatik** | Düzenlemeler, sandbox içinde kalan kabuk komutları, MCP çağrıları | Yıkıcı komutlar (`rm -r`, …), korunan yollar |
-| **Tam erişim** | Sabit zeminin üstündeki her şey, her çağrı denetime yazılır | Yalnız sabit zemin; şirket izni gerekir ve oturum boyunca geçerlidir |
+| **Tam erişim** | Şirket policy'sinin sabit zeminin üstünde izin verdiği her şey; her etkili çağrı denetime yazılır | Sabit zemin ve şirket policy'sinin hâlâ istediği onaylar (deny her zaman kazanır); şirket izni gerekir ve oturum boyunca geçerlidir |
 
-Sandbox içinde çalışan komutlar projenizi `.git` salt okunur, ağsız ve ev klasörü olmadan görür. Bir makinede sandbox
-kullanılamıyorsa Deckent bunu gizlemez, her onay kartında söyler.
+Standart, dikkatli ve tam otomatik modlarda sandbox'taki kabuk komutu **kapalı bir görünüm** alır: proje yazılabilir,
+`.git` salt okunur, ağ yoktur ve ev klasörünüz gizlidir. **Tam erişim bu görünümü bilerek açar**: host dosya sistemi,
+gerçek ev klasörünüz (sırlar maskeli), ağ ve `.git` yazımı kullanılabilir olur; yalnız sabit zemin maskeli kalır. Bir
+makinede sandbox kullanılamıyorsa `prefer-sandbox` ortamı host'ta çalışır ve bunu her onay kartında söyler,
+`require-sandbox` ortamı ise çalışmayı reddeder.
 
 ## Mimari
 
-Her giriş yolu tek bir çalışma servisine ulaşır. Servis her işlemde kimliği, kapsamı ve policy'yi kontrol eder,
-sonucu deftere yazar ve etkilerin yalnız policy'nin izin verdiği yerde olmasına izin verir.
+Her giriş yolu aynı tipli sözleşmeyi konuşur. Çalışma servisine bağlı işlemler tek bir çalışma servisinden geçer;
+servis her işlemde kimliği, kapsamı ve policy'yi kontrol eder, sonucu deftere yazar ve etkilerin yalnız policy'nin
+izin verdiği yerde olmasına izin verir. Kurulum, gözlem ve bazı yama işlemleri aynı sözleşmeyi servis olmadan yerelde
+kullanır.
 
 ```mermaid
 flowchart LR

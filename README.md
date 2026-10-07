@@ -121,15 +121,20 @@ flowchart LR
 | **Standard** | Reads, ordinary file edits | Shell commands, protected paths, MCP calls |
 | **Careful** | Reads | Every edit as well |
 | **Full auto** | Edits, sandbox-contained shell commands, MCP calls | Destructive commands (`rm -r`, …), protected paths |
-| **Full access** | Everything above the hard floor, each call audited | Only the hard floor; needs a company grant and lasts for the session |
+| **Full access** | Everything company policy allows above the hard floor; every effect call is audited | The hard floor and whatever company policy still requires (a deny always wins); needs a company grant and lasts for the session |
 
-Commands that run in the sandbox see your project with `.git` read-only, no network and no home directory. If no
-sandbox is available on a machine, Deckent says so on every approval card instead of hiding it.
+In standard, careful and full auto, a sandboxed shell command gets a **closed view**: the project is writable, `.git`
+is read-only, there is no network and your home directory is hidden. **Full access opens that view on purpose**: the
+host file system, your real home directory (with credentials masked), the network and `.git` writes become
+available, and only the hard floor stays masked. When no sandbox is usable on a machine, a `prefer-sandbox` realm runs
+on the host and says so on every approval card, while a `require-sandbox` realm refuses to run.
 
 ## Architecture
 
-Every way in reaches one runtime service. It checks identity, scope and policy on each operation, writes the result to
-the ledger, and lets effects happen only inside the place the policy allows.
+Every way in speaks the same typed contract. Runtime-backed operations go through one runtime service, which checks
+identity, scope and policy on each operation, writes the result to the ledger and lets effects happen only inside the
+place the policy allows. Installation, observation and some patch operations use the same contract locally, without
+the service.
 
 ```mermaid
 flowchart LR
