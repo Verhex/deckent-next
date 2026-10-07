@@ -1,0 +1,36 @@
+{
+  "schemaVersion": 1,
+  "version": 1,
+  "profiles": [
+    {
+      "schemaVersion": 1, "id": "core:solo", "version": 1, "labelKey": "identity.profile.solo",
+      "defaults": { "projectSelection": "current-projects", "preserveExisting": true, "showOrganization": false },
+      "roleTemplates": [{ "id": "profile-reader", "permissions": [{ "id": "read-runs", "effect": "allow", "actions": ["inspect"], "resource": { "kind": "run", "ids": "all" } }] }],
+      "approvalPolicyTemplate": { "adminApprovalRequired": true, "secondPerson": "disabled" },
+      "hierarchyOptions": { "nodeKinds": [], "futureProjects": "explicit-draft-only" }, "requires": []
+    },
+    {
+      "schemaVersion": 1, "id": "core:team", "version": 1, "labelKey": "identity.profile.team",
+      "defaults": { "projectSelection": "current-projects", "preserveExisting": true, "showOrganization": false },
+      "roleTemplates": [
+        { "id": "profile-reader", "permissions": [{ "id": "read-runs", "effect": "allow", "actions": ["inspect"], "resource": { "kind": "run", "ids": "all" } }] },
+        { "id": "profile-contributor", "permissions": [{ "id": "create-runs", "effect": "allow", "actions": ["create"], "resource": { "kind": "run", "ids": "all" } }] }
+      ],
+      "approvalPolicyTemplate": { "adminApprovalRequired": true, "secondPerson": "founder-choice" },
+      "hierarchyOptions": { "nodeKinds": ["unit"], "futureProjects": "explicit-draft-only" }, "requires": []
+    },
+    {
+      "schemaVersion": 1, "id": "core:enterprise", "version": 1, "labelKey": "identity.profile.enterprise",
+      "defaults": { "projectSelection": "current-projects", "preserveExisting": true, "showOrganization": true },
+      "roleTemplates": [{ "id": "profile-reader", "permissions": [{ "id": "read-runs", "effect": "allow", "actions": ["inspect"], "resource": { "kind": "run", "ids": "all" } }] }],
+      "approvalPolicyTemplate": { "adminApprovalRequired": true, "secondPerson": "founder-choice" },
+      "hierarchyOptions": { "nodeKinds": ["site", "unit"], "futureProjects": "explicit-draft-only" }, "requires": []
+    },
+    {
+      "schemaVersion": 1, "id": "core:custom", "version": 1, "labelKey": "identity.profile.custom",
+      "defaults": { "projectSelection": "current-projects", "preserveExisting": true, "showOrganization": true },
+      "roleTemplates": [], "approvalPolicyTemplate": { "adminApprovalRequired": true, "secondPerson": "founder-choice" },
+      "hierarchyOptions": { "nodeKinds": ["site", "unit"], "futureProjects": "explicit-draft-only" }, "requires": []
+    }
+  ]
+}

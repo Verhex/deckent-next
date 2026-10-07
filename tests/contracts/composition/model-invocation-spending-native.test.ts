@@ -263,7 +263,7 @@ it('atomically persists exact native charges, aggregates before rounding, and re
   expect(await inspectConfiguredProviderSpendAccount(f.project, accountQuery, { env: f.env })).toEqual(accountView);
   const replay = await invokeConfiguredModel(f.project, f.command, { env: f.env });
   expect(replay).toMatchObject({ replayed: true, response: null, contentStatus: 'purged' });
-  expect([f.metadataGets, f.posts]).toEqual([2, 2]); expect(await inspectAccount(f)).toEqual(account);
+  expect([f.metadataGets, f.posts]).toEqual([1, 2]); expect(await inspectAccount(f)).toEqual(account);
 });
 
 it('keeps a reported overrun and freezes admission instead of capping or discarding the native amount', async () => {

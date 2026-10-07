@@ -5,7 +5,7 @@ import { createServer, type Server } from 'node:https';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, afterEach, beforeAll, expect, it } from 'vitest';
-import { fetchOpenRouterTariff, quoteOpenRouterText, type OpenRouterPricingError } from '#adapters/core/provider-openrouter-pricing/index.js';
+import { createOpenRouterTariffCache, fetchOpenRouterTariff, quoteOpenRouterText, type OpenRouterPricingError } from '#adapters/core/provider-openrouter-pricing/index.js';
 
 const servers: Server[] = [];
 let directory = '', certificate = '', privateKey = '';
@@ -101,4 +101,25 @@ it('bounds timeout and cancellation across streaming and rejects a response comp
   mode = 'complete'; let clock = 10; const finished = new Promise<void>(resolve => { release = resolve; });
   const expiring = fetchOpenRouterTariff(options(endpoint, { maxAgeMs: 1 }), () => clock++);
   await finished; await expect(expiring).rejects.toMatchObject({ code: 'STALE_TARIFF' } satisfies Partial<OpenRouterPricingError>);
+});
+
+// W4 DEFECTS-ADAPTER: the hot path serves the tariff from the cache; the network is touched on first use, expiry and key change only.
+it('serves repeated tariff acquisition from the freshness window without a network request, and re-acquires after expiry or for another key', async () => {
+  let gets = 0;
+  const endpoint = await fixture((_req, res) => { gets++; res.writeHead(200, { 'content-type': 'application/json' }); res.end(JSON.stringify(metadata())); });
+  const cache = createOpenRouterTariffCache(fetchOpenRouterTariff); let clock = 100;
+  const first = await cache.get(options(endpoint), () => clock);
+  expect(gets).toBe(1);
+  for (let i = 0; i < 25; i++) expect(await cache.get(options(endpoint), () => clock + i)).toBe(first);
+  expect(gets).toBe(1);
+  // Concurrent misses of one key share one request.
+  const other = options(endpoint, { endpointTag: 'provider/region' , maxAgeMs: 2000 });
+  const both = await Promise.all([cache.get(other, () => clock), cache.get(other, () => clock)]); expect(both[0]).toBe(both[1]); expect(gets).toBe(2);
+  // Negative: past the window (expiresAt = 100 + 1000) the entry is stale and a fresh GET is made; a clock behind the observation is a miss too.
+  clock = 1100; const renewed = await cache.get(options(endpoint), () => clock); expect(renewed).not.toBe(first); expect(gets).toBe(3);
+  expect(await cache.get(options(endpoint), () => 5)).not.toBe(renewed); expect(gets).toBe(4);
+  // Failures are never cached.
+  const bad = await fixture((_req, res) => { gets++; res.writeHead(500); res.end(); });
+  await expect(cache.get(options(bad), () => 10)).rejects.toMatchObject({ code: 'METADATA_UNAVAILABLE' });
+  await expect(cache.get(options(bad), () => 10)).rejects.toMatchObject({ code: 'METADATA_UNAVAILABLE' }); expect(gets).toBe(6);
 });

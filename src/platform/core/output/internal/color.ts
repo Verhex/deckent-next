@@ -35,3 +35,11 @@ const CONTROL = /[\u0000-\u0008\u000b-\u001f\u007f-\u009f]/gu;
 export function terminalSafeText(text: string): string {
   return text.replace(OSC, '').replace(CSI, '').replace(OTHER_ESCAPE, '').replace(/\r\n?/gu, '\n').replace(CONTROL, '');
 }
+/**
+ * Where untrusted text may be cut before `terminalSafeText` without changing what it shows: just after the last newline that survives it.
+ * A newline inside an OSC (including one still open at the end, which runs to BEL, ST or the next ESC) is removed with it and ends no
+ * line. Text up to this point projects alone exactly as it does inside the whole, so a single-line value is never split between two cuts.
+ */
+export function terminalLineEnd(text: string): number {
+  return text.replace(OSC, match => ' '.repeat(match.length)).lastIndexOf('\n') + 1;
+}

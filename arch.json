@@ -129,7 +129,9 @@
         "src/adapters/core/secret-store",
         "src/adapters/core/native-connection",
         "src/adapters/core/worker-observation",
-        "src/domain/core/decision"
+        "src/domain/core/decision",
+        "src/domain/core/identity-profile",
+        "src/engine/core/identity-profile"
       ],
       "plan": "PROVIDERS"
     },
@@ -260,7 +262,9 @@
         "src/composition/core/monitor",
         "src/composition/core/config",
         "src/composition/core/decision",
-        "src/composition/core/scoped-request"
+        "src/composition/core/scoped-request",
+        "src/composition/core/root",
+        "src/composition/core/identity-profile"
       ],
       "plan": "SURFACES"
     },
@@ -293,7 +297,6 @@
     "src/composition/core/inventory": {
       "dependencies": [
         "src/adapters/core/attempt-store",
-        "src/adapters/core/contract",
         "src/adapters/core/local-principal",
         "src/composition/core/policy",
         "src/composition/core/query-errors",
@@ -302,7 +305,8 @@
         "src/engine/core/dispatch",
         "src/engine/core/policy",
         "src/platform/core/config",
-        "src/platform/core/managed-files"
+        "src/platform/core/managed-files",
+        "src/composition/core/root"
       ],
       "plan": "EXECUTION"
     },
@@ -310,7 +314,6 @@
       "dependencies": [
         "src/composition/core/scoped-request",
         "src/composition/core/runs",
-        "src/adapters/core/contract",
         "src/adapters/core/mcp-transport",
         "src/composition/core/model-activation",
         "src/composition/core/provider-catalog",
@@ -323,7 +326,8 @@
         "src/engine/core/inference-serving",
         "src/platform/core/errors",
         "src/composition/core/operations",
-        "src/composition/core/decision"
+        "src/composition/core/decision",
+        "src/composition/core/root"
       ],
       "plan": "SURFACES"
     },
@@ -383,6 +387,13 @@
       ],
       "plan": "FOUNDATION"
     },
+    "src/composition/core/root": {
+      "dependencies": [
+        "src/adapters/core/contract",
+        "src/platform/core/config"
+      ],
+      "plan": "FOUNDATION"
+    },
     "src/composition/core/terminal-chat": {
       "dependencies": [
         "src/domain/core/agent-turn",
@@ -396,7 +407,8 @@
         "src/platform/core/config",
         "src/platform/core/errors",
         "src/engine/core/agent-turn",
-        "src/adapters/core/provider-openai-chat"
+        "src/adapters/core/provider-openai-chat",
+        "src/composition/core/root"
       ],
       "plan": "SURFACES"
     },
@@ -512,7 +524,8 @@
         "src/adapters/core/host-shell",
         "src/adapters/core/git-workspace",
         "src/composition/core/toolchains",
-        "src/engine/core/config"
+        "src/engine/core/config",
+        "src/composition/core/root"
       ],
       "plan": "EXECUTION"
     },
@@ -672,7 +685,10 @@
         "src/domain/core/effect",
         "src/domain/core/policy",
         "src/engine/core/secret-store",
-        "src/engine/core/approval"
+        "src/engine/core/approval",
+        "src/engine/core/agent-turn",
+        "src/engine/core/effect",
+        "src/platform/core/errors"
       ],
       "plan": "EXECUTION"
     },
@@ -819,7 +835,8 @@
     "src/surfaces/core/terminal-kit": {
       "dependencies": [
         "src/engine/core/monitor",
-        "src/domain/core/agent-turn"
+        "src/domain/core/agent-turn",
+        "src/platform/core/output"
       ],
       "plan": "SURFACES"
     },
@@ -830,6 +847,25 @@
         "src/surfaces/core/terminal",
         "src/surfaces/core/terminal-composer",
         "src/surfaces/core/terminal-render"
+      ],
+      "plan": "SURFACES"
+    },
+    "src/surfaces/core/terminal-admin": {
+      "dependencies": [
+        "src/domain/core/policy",
+        "src/domain/core/provider-spend",
+        "src/domain/core/provider-catalog",
+        "src/platform/core/config",
+        "src/platform/core/errors",
+        "src/platform/core/i18n",
+        "src/platform/core/output",
+        "src/surfaces/core/cli-models",
+        "src/surfaces/core/terminal-kit",
+        "src/engine/core/monitor",
+        "src/engine/core/runs",
+        "src/engine/core/worker-observation",
+        "src/surfaces/core/terminal",
+        "src/surfaces/core/approval-presentation"
       ],
       "plan": "SURFACES"
     },
@@ -961,7 +997,9 @@
         "src/surfaces/core/approval-presentation",
         "src/engine/core/installation",
         "src/engine/core/config",
-        "src/platform/core/utils"
+        "src/platform/core/utils",
+        "src/surfaces/core/terminal-admin",
+        "src/surfaces/core/cli-identity"
       ],
       "plan": "SURFACES"
     },
@@ -1009,7 +1047,6 @@
     "src/composition/core/installation": {
       "dependencies": [
         "src/adapters/core/attempt-store",
-        "src/adapters/core/contract",
         "src/adapters/core/docker-supervisor",
         "src/adapters/core/installation-artifacts",
         "src/adapters/core/installation-files",
@@ -1026,7 +1063,8 @@
         "src/platform/core/host",
         "src/platform/core/managed-files",
         "src/adapters/core/native-coding",
-        "src/composition/core/scoped-request"
+        "src/composition/core/scoped-request",
+        "src/composition/core/root"
       ],
       "plan": "INSTALLATION"
     },
@@ -1075,10 +1113,10 @@
     },
     "src/composition/core/provider-catalog": {
       "dependencies": [
-        "src/adapters/core/contract",
         "src/domain/core/provider-catalog",
         "src/engine/core/provider-catalog",
-        "src/platform/core/config"
+        "src/platform/core/config",
+        "src/composition/core/root"
       ],
       "plan": "PROVIDERS"
     },
@@ -1144,7 +1182,6 @@
     "src/composition/core/scoped-request": {
       "dependencies": [
         "src/domain/core/primitives",
-        "src/adapters/core/contract",
         "src/adapters/core/local-principal",
         "src/adapters/core/local-runtime-socket",
         "src/adapters/core/sqlite-ledger",
@@ -1155,7 +1192,8 @@
         "src/platform/core/managed-files",
         "src/adapters/core/installation-files",
         "src/engine/core/installation",
-        "src/platform/core/errors"
+        "src/platform/core/errors",
+        "src/composition/core/root"
       ],
       "plan": "PROVIDERS"
     },
@@ -1268,7 +1306,8 @@
         "src/adapters/core/provider-anthropic-messages",
         "src/platform/core/i18n",
         "src/adapters/core/agent-workspace-floor",
-        "src/platform/core/common"
+        "src/platform/core/common",
+        "src/composition/core/root"
       ],
       "plan": "SURFACES"
     },
@@ -1799,7 +1838,8 @@
         "src/adapters/core/local-keyring",
         "src/engine/core/approval",
         "src/adapters/core/local-runtime-socket",
-        "src/engine/core/runtime"
+        "src/engine/core/runtime",
+        "src/composition/core/root"
       ],
       "plan": "EXECUTION"
     },
@@ -1955,7 +1995,8 @@
         "src/adapters/core/contract",
         "src/engine/core/secret-store",
         "src/platform/core/config",
-        "src/platform/core/identity"
+        "src/platform/core/identity",
+        "src/composition/core/root"
       ],
       "plan": "SECURITY"
     },
@@ -2009,7 +2050,6 @@
     },
     "src/composition/core/monitor": {
       "dependencies": [
-        "src/adapters/core/contract",
         "src/adapters/core/monitor-ledger",
         "src/composition/core/query-errors",
         "src/composition/core/runtime-service",
@@ -2022,7 +2062,8 @@
         "src/composition/core/policy",
         "src/engine/core/approval",
         "src/composition/core/toolchains",
-        "src/engine/core/config"
+        "src/engine/core/config",
+        "src/composition/core/root"
       ],
       "plan": "MONITOR"
     },
@@ -2079,10 +2120,10 @@
       "dependencies": [
         "src/engine/core/config",
         "src/domain/core/principal",
-        "src/adapters/core/contract",
         "src/adapters/core/config-file",
         "src/platform/core/config",
-        "src/composition/core/scoped-request"
+        "src/composition/core/scoped-request",
+        "src/composition/core/root"
       ],
       "plan": "CONFIG-SURFACE"
     },
@@ -2211,6 +2252,50 @@
         "src/engine/core/approval"
       ],
       "plan": "SURFACES"
+    },
+    "src/domain/core/identity-profile": {
+      "dependencies": [
+        "src/domain/core/primitives",
+        "src/domain/core/policy"
+      ],
+      "plan": "CONTRACT"
+    },
+    "src/engine/core/identity-profile": {
+      "dependencies": [
+        "src/domain/core/identity-profile",
+        "src/domain/core/principal",
+        "src/domain/core/policy",
+        "src/platform/core/integrity"
+      ],
+      "plan": "INSTALLATION"
+    },
+    "src/composition/core/identity-profile": {
+      "dependencies": [
+        "src/domain/core/identity-profile",
+        "src/domain/core/policy",
+        "src/engine/core/identity-profile",
+        "src/adapters/core/local-principal",
+        "src/adapters/core/contract",
+        "src/platform/core/errors",
+        "src/platform/core/config",
+        "src/composition/core/policy",
+        "src/composition/core/scoped-request",
+        "src/composition/core/query-errors",
+        "src/composition/core/root"
+      ],
+      "plan": "INSTALLATION"
+    },
+    "src/surfaces/core/cli-identity": {
+      "dependencies": [
+        "src/domain/core/identity-profile",
+        "src/engine/core/identity-profile",
+        "src/platform/core/errors",
+        "src/platform/core/i18n",
+        "src/platform/core/config",
+        "src/platform/core/output",
+        "src/surfaces/core/cli-kit"
+      ],
+      "plan": "INSTALLATION"
     }
   },
   "composition": {
@@ -3076,6 +3161,46 @@
         "src/engine/core/workspace-patch/internal/delivery.ts",
         "src/surfaces/core/mcp/internal/delivery.ts"
       ]
+    },
+    "publicExtensions": {
+      "note": "G-i/G-j (ENTERPRISE-EXT-1, owner K7 = A): an external package registers through deckent/extensions only, before the composition root seals the registries; an overlay fixture proves it with public imports only.",
+      "entry": "src/extensions.ts",
+      "sdkEntry": "src/index.ts",
+      "packageExport": "./extensions",
+      "packageImport": "./dist/extensions.js",
+      "registrations": [
+        "registerOperationAdapterModule",
+        "registerSecretStoreBackend"
+      ],
+      "compositionOnly": [
+        {
+          "name": "registerProviderConfig",
+          "reason": "Closes and seals the registries; called only by the composition root (composeCore)."
+        },
+        {
+          "name": "registerLedgerScopes",
+          "reason": "Ledger scope registration of an opened installation, not an extension registry."
+        }
+      ],
+      "sdkRegisterAllow": [
+        {
+          "name": "registerConfigSection",
+          "reason": "Pre-existing SDK export (config section registry); moving it to deckent/extensions is a BREAKING SDK change awaiting a decision."
+        }
+      ],
+      "rootOnly": {
+        "registerProviderConfig": "src/composition/core/root"
+      },
+      "unitImports": [
+        "src/composition/core/cli"
+      ],
+      "fixture": {
+        "root": "tests/fixtures/overlay-package",
+        "allowedSpecifiers": [
+          "deckent",
+          "deckent/extensions"
+        ]
+      }
     }
   }
 }

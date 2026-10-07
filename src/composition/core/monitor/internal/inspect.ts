@@ -1,6 +1,7 @@
+import { loadComposedConfig } from '#composition/core/root/index.js';
 import { resolve } from 'node:path';
-import { loadConfig, SystemTrustedClock, type ConfigLoadOptions } from '#platform/index.js';
-import { listSurfaceRunIds, prepareMonitorInstall, registerProviderConfig, followLedgerSurface as readLedgerSurface } from '#adapters/index.js';
+import { SystemTrustedClock, type ConfigLoadOptions } from '#platform/index.js';
+import { listSurfaceRunIds, prepareMonitorInstall, followLedgerSurface as readLedgerSurface } from '#adapters/index.js';
 import { MonitorApplication, authorizeApproval, runtimeConfigFreshness, type SurfaceNotInitialized, type MonitorSnapshot, type WorkerObservation, type WorkerObservationSource } from '#engine/index.js';
 import { inspectConfiguredWorkers } from '#composition/core/worker-observation/index.js';
 import { createConfiguredRuntimeClient } from '#composition/core/runtime-service/index.js';
@@ -21,16 +22,16 @@ export async function* followLedgerSurface(root: string, scopeId: string, option
   if (!initial) { yield { access: 'denied' as const, scopeId, kinds: ['approval', 'run', 'worker'] as const, stopped: true }; return; } if ('access' in initial) { yield initial; return; }
   yield* readLedgerSurface(initial, async () => { const current = await authorize(); return current && !('access' in current) ? current : null; }, signal, onReady); }
 export async function inspectMonitor(root: string, options: ConfigLoadOptions = {}): Promise<MonitorSnapshot> {
-  registerProviderConfig(); const config = await loadConfig(root, { ...options, heal: false }).catch(error => { throw queryFailure(error); });
+  const config = await loadComposedConfig(root, { ...options, heal: false }).catch(error => { throw queryFailure(error); });
   const targets = [{ id: 'current', path: resolve(root) }, ...config.inspection.workers.sources.filter(source => source.kind === 'next-project')
     .map(source => ({ id: source.id, path: resolve(source.path) }))].filter((target, index, all) => all.findIndex(other => other.path === target.path) === index);
   const contexts = new Map<string, ReturnType<typeof loadConfiguredScopeContext>>(), scope = (path: string, scopeId: string) => contexts.get(`${path}\0${scopeId}`)
     ?? contexts.set(`${path}\0${scopeId}`, loadConfiguredScopeContext(path, scopeId, options, 'read')).get(`${path}\0${scopeId}`)!;
   const captures = new Map<string, Awaited<ReturnType<typeof prepareMonitorInstall>>>(); return new MonitorApplication({ now: () => new SystemTrustedClock().sample().wallMs,
-    readConfigFreshness: async (target, descriptor) => runtimeConfigFreshness(descriptor.configDigest, await loadConfig(target.path, { ...options, heal: false }) as unknown as Record<string, unknown>),
+    readConfigFreshness: async (target, descriptor) => runtimeConfigFreshness(descriptor.configDigest, await loadComposedConfig(target.path, { ...options, heal: false }) as unknown as Record<string, unknown>),
     readImageRefresh: target => inspectToolchainRefresh(target.path, options),
     describeService: target => createConfiguredRuntimeClient(target.path, options).describeService(undefined, 'current'),
-    readLedger: async target => { const installed = await loadConfig(target.path, { ...options, heal: false });
+    readLedger: async target => { const installed = await loadComposedConfig(target.path, { ...options, heal: false });
       const captured = await prepareMonitorInstall(installed, options.env, identity => granted(async () => {
         const c = await scope(target.path, identity.scopeId); await contextDispatchAuthorization(c).authorizeIdentity('read-output', identity, c.principal); }));
       const reading = captured.reading; const ceiling = installed.max_workers === 'auto' ? Infinity : installed.max_workers;

@@ -7,3 +7,5 @@ export type { OpenRouterTextReservation } from './internal/quote.js';
 export { fetchOpenRouterTariff, requireOpenRouterMetadataObservation } from './internal/fetch.js';
 export type { OpenRouterMetadataFetchOptions, OpenRouterMetadataObservation } from './internal/fetch.js';
 export { parseOpenRouterReportedCharge, openRouterReportedExactMinorUnits } from './internal/charge.js';
+export { createOpenRouterTariffCache } from './internal/cache.js';
+export type { OpenRouterTariffAcquire } from './internal/cache.js';

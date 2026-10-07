@@ -1,3 +1,4 @@
+import { loadComposedConfig } from '#composition/core/root/index.js';
 import { canonicalTurnRequest as canonical, withMcpNotices, chatTurnRoundFailureState } from '#engine/index.js';
 export { withMcpNotices, chatTurnRoundFailureState } from '#engine/index.js';
 import { createHash, randomUUID } from 'node:crypto';
@@ -7,10 +8,10 @@ import { SessionStanding, SessionApprovalAnswers, agentCallPermissionMode, agent
   agentCompactionTranscript, agentToolApprovalFacts, agentTurnAdmission, awaitAgentToolApproval, boundApprovalPreview, createTurnDecisionCapabilities, parseAgentCompactionSummary,
   renderAgentTurnSystemPrompt, requestAgentToolApproval, runDurableAgentTurn, withAgentTurnSystemPrompt, projectModelIngressField, type AgentRoundOutcome, type AgentTurnPorts, type TurnDecisionCapabilities,
   type ModelInvocationDelivery } from '#engine/index.js';
-import { t, globalStateRoot, ErrorRegistry, loadConfig, prepareProductDirectory, resolveLocale, SystemTrustedClock, type ConfigLoadOptions } from '#platform/index.js';
+import { t, globalStateRoot, ErrorRegistry, prepareProductDirectory, resolveLocale, SystemTrustedClock, type ConfigLoadOptions } from '#platform/index.js';
 import { agentTurnWriteFloor, isSelfSourceProject, agentAuthorityPaths, agentProductStateDeny, agentShellHardFloor, agentDataRootRel, agentWorkspaceDeny, createWorkspaceReadTools, WORKSPACE_EDIT_TOOL_SPECS, openLocalIntegrityAuthority, openSqliteApprovalStore, openSqliteAgentTurnStore, OPENAI_CHAT_COMPLETIONS_FAMILY, ANTHROPIC_MESSAGES_FAMILY,
   OPENAI_CHAT_ENABLE_THINKING_CAPABILITY, OPENAI_CHAT_TOOL_CALLS_CAPABILITY, openScratchSession, projectEditArea, readTerminalChatConfig, readTerminalScratchConfig,
-  readTerminalFetchConfig, FETCH_URL_TOOL_SPEC, SYSTEM_FETCH_TRANSPORT, readTerminalShellConfig, shellSandboxCapabilities, RUN_SHELL_TOOL_SPEC, SCRATCH_TOOL_SPECS, scratchSessionKey, registerProviderConfig, createScratchActivity,
+  readTerminalFetchConfig, FETCH_URL_TOOL_SPEC, SYSTEM_FETCH_TRANSPORT, readTerminalShellConfig, shellSandboxCapabilities, RUN_SHELL_TOOL_SPEC, SCRATCH_TOOL_SPECS, scratchSessionKey, createScratchActivity,
   isWriteApprovalFloored, isSelfSourceWriteFloored, shippedShellSandboxes, McpClientPool, type HttpFetchTransport, type LocalPeerIdentity,
   sandboxWriteSetRoot, dropFullPreview, keepFullPreview, ServiceFrameError, type RuntimeServiceTurnChannel, type ScratchActivity, type ShellSandboxFactory, type WorkspaceEditArea } from '#adapters/index.js';
 import { createAgentShell } from './shell.js';
@@ -76,11 +77,10 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
   if (!parsed.success) throw new AgentTurnStoreError('AGENT_TURN_INVALID');
   const command = parsed.data;
   const clock = new SystemTrustedClock();
-  registerProviderConfig();
   const context = await loadPeerInvocationContext(projectRoot, command.scopeId, options, peer, 'write');
   const fullAccess = command.fullAccess === true;
   if (fullAccess) await admitFullAccess(context, command, clock);
-  const config = await loadConfig(projectRoot, { ...options, heal: false }) as Record<string, unknown>;
+  const config = await loadComposedConfig(projectRoot, { ...options, heal: false }) as Record<string, unknown>;
   const chat = readTerminalChatConfig(config);
   if (!chat) throw ErrorRegistry.createError('TERMINAL_CHAT_NOT_CONFIGURED');
   const binding = await inspectModelBinding(projectRoot, chat.reference, options);

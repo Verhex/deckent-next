@@ -14,7 +14,7 @@ Bu dosya yalnız **devam eden işi** taşır: kısa durum, tek iş tablosu, aç�
 
 | İş | Hedef | Durum | Sıradaki adım | Kanıt |
 |---|---|---|---|---|
-| İLK-20 DALGA 3 | TERMINAL-AÇIKLAR-1, EXEC-RELEASE-C2C3 (owner B: tür kaydında açık 'teslim yok' işareti), HIZ-AÇIKLARI, PARALLEL-S3 (256/1024/64), CONFIG-SURFACE-RESTART (K6=A), karar tarihi düzeltmesi | `wave/3` toplandı; Astra parti incelemesi | Astra PASS → merge; sonra dalga 4 + terminal kapanışı 2 lane paralel (owner 2026-10-06) | `proof/W3-*-2026-10-06/` |
+| İLK-20 DALGA 4 + TERMINAL-CLOSE S05/S09 | DEFECTS-ADAPTER, IDENTITY-I1, S1-KURTARMA (runbook + tatbikat, kod yok), ENTERPRISE-UZANTI-1 (`deckent/extensions`), terminal satır modu redaksiyonu (S05), salt okunur yönetim komutları (S09) | `wave/4` toplandı; Astra parti incelemesi | Astra PASS → merge; owner kararları: rutin yedek, authority.key saklama, satır modu yazma birimi | `proof/W4-*-2026-10-06/` |
 | IDENTITY-BINDING-V2 | Makine kimliği yokken taşınma koruması: yapılandırılabilir kaynak → /etc/machine-id → zayıf yol+cihaz+inode bağı; `installation.requireMachineBinding` (owner 2026-10-06) | `wave/2`'de; inceleme | Astra parti incelemesi; rollback notu owner-decisions'ta | `proof/W2-BINDING-V2-2026-10-06/`; [owner-decisions](.deckent/docs/decisions/owner-decisions.md) |
 | IDENTITY-PROFILES | Solo/ekip/enterprise/özel sürümlü kimlik profilleri (I0–I5), K1–K3 = A | I0 main'de; I1 `a1abf235` rebase bekliyor | I1 rebase + inceleme, sonra I2 | `proof/IDENTITY-PROFILES-DESIGN-2026-10-05/design.md` |
 | MODEL-INGRESS-UNICODE | Gizli Unicode: not/audit/karantina | P1 main'de; P2 `wave/2`'de (inceleme) | Astra parti incelemesi; P3 araç/MCP şema + argüman JSON | [work-list](.deckent/docs/plan/work-list.md) |

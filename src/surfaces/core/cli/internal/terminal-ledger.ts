@@ -9,7 +9,7 @@ import { renderRunCancellation } from './run.js';
 import { renderWorkerTranscript, type WorkerObservationHandler, type InventoryQueryHandler, type WorkerTranscriptHandler } from '#surfaces/core/monitor/index.js';
 import type { WorklineApproval, WorklineLedgerPorts } from '#surfaces/core/terminal/index.js';
 
-import { withSurfaceSnapshot } from './terminal-snapshot.js';
+import { withSurfaceSnapshot } from '#surfaces/core/terminal-admin/index.js';
 
 const approvalPageSchema = z.array(approvalRecordSchema);
 

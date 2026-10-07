@@ -45,3 +45,17 @@ export async function resolveDockerReadOnlyMounts(projectRoot: string, mounts: r
   }
   return Object.freeze(resolved);
 }
+
+/** What the daemon reports for a created container's `.Mounts` (tmpfs lives in HostConfig, not here). */
+export type DockerReportedMount = Readonly<{ Type?: unknown; Source?: unknown; Destination?: unknown; RW?: unknown }>;
+export type DockerExpectedMount = Readonly<{ source: string; target: string; writable: boolean }>;
+const mountKey = (type: unknown, source: unknown, target: unknown, writable: unknown) => [type, source, target, writable].join('\0');
+/** Create-time proof (before start): the mount set the daemon actually realised must equal the requested bind set exactly. A missing,
+ * extra (an image `VOLUME` or any daemon-added mount), re-targeted, re-sourced or read-write-flipped entry is a typed refusal; the
+ * container was never started, so no task code has run with the wrong view. */
+export function assertDockerMountsMatch(reported: unknown, expected: readonly DockerExpectedMount[]): void {
+  if (!Array.isArray(reported)) throw new SupervisorError('SUPERVISOR_IDENTITY_CONFLICT');
+  const actual = (reported as DockerReportedMount[]).map(mount => mountKey(mount?.Type, mount?.Source, mount?.Destination, mount?.RW));
+  const wanted = expected.map(mount => mountKey('bind', mount.source, mount.target, mount.writable));
+  if (actual.length !== wanted.length || new Set(actual).size !== actual.length || !wanted.every(key => actual.includes(key))) throw new SupervisorError('SUPERVISOR_IDENTITY_CONFLICT');
+}

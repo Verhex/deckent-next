@@ -1,5 +1,6 @@
-import { assertActorAssurance, loadConfig, principalToActor, resolveLocalOsPrincipal, type ConfigLoadOptions } from '#platform/index.js';
-import { openConfiguredSecretStore, registerProviderConfig } from '#adapters/index.js';
+import { loadComposedConfig } from '#composition/core/root/index.js';
+import { assertActorAssurance, principalToActor, resolveLocalOsPrincipal, type ConfigLoadOptions } from '#platform/index.js';
+import { openConfiguredSecretStore } from '#adapters/index.js';
 import type { SecretStoreInspection } from '#engine/index.js';
 
 /** `doctor`'s secret store line (SECRET-K1, owner S1): which backend this installation uses and whether it can be read now. */
@@ -10,8 +11,7 @@ export interface SecretNamesView { readonly schemaVersion: 1; readonly backend: 
 
 /** The selection only: the configuration is read without resolving any reference (no value is read for a report about the store itself). */
 async function selectedStore(projectRoot: string, options: ConfigLoadOptions) {
-  registerProviderConfig();
-  const config = await loadConfig(projectRoot, { ...options, heal: false, secretResolver: async () => undefined, onWarning: () => {} });
+  const config = await loadComposedConfig(projectRoot, { ...options, heal: false, secretResolver: async () => undefined, onWarning: () => {} });
   return { config, store: openConfiguredSecretStore(config, options.env ?? process.env, options.platform) };
 }
 /** Never throws for the store's own state: an unsafe, corrupt or unavailable store is reported with its typed code. */

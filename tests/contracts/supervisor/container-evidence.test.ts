@@ -42,7 +42,7 @@ it.for(['complete', 'cancel', 'recovery'] as const)('Docker %s preserves exact b
     if (verb === 'info') return { stdout: 'daemon', stderr: '' };
     if (verb === 'inspect') {
       if (state === 'missing') throw { stderr: 'No such object: ' + args[at + 1] };
-      return { stdout: JSON.stringify([{ Id: container.containerId, Image: container.imageId, Config: { Labels: { 'deckent.request': label }, Env: ['SECRET=never-retain'] },
+      return { stdout: JSON.stringify([{ Id: container.containerId, Image: container.imageId, Config: { Labels: { 'deckent.request': label }, Env: ['SECRET=never-retain'] }, Mounts: [{ Type: 'bind', Source: workspace, Destination: '/workspace', RW: true }],
         State: { Status: state, ExitCode: mode === 'cancel' ? 137 : 0, StartedAt: container.startedAt, FinishedAt: container.finishedAt } }]), stderr: '' };
     }
     if (verb === 'create') { label = args[args.indexOf('--label') + 1]!.slice('deckent.request='.length); state = 'created'; return { stdout: container.containerId, stderr: '' }; }
@@ -114,7 +114,7 @@ it.for([
     if (verb === 'inspect') {
       if (state === 'missing') throw { stderr: 'No such object: ' + args[at + 1] };
       return { stdout: JSON.stringify([{ Id: variant.id ?? container.containerId, Image: variant.image === null ? undefined : container.imageId,
-        Config: { Labels: { 'deckent.request': label }, Env: ['SECRET=never-retain'] }, Args: ['secret-argv'], Mounts: [{ Source: '/secret' }],
+        Config: { Labels: { 'deckent.request': label }, Env: ['SECRET=never-retain'] }, Args: ['secret-argv'], Mounts: [{ Type: 'bind', Source: workspace, Destination: '/workspace', RW: true }],
         HostConfig: { Memory: 0, NanoCpus: 0, PidsLimit: null },
         State: { Status: state, ExitCode: 137, StartedAt: container.startedAt, FinishedAt: container.finishedAt, ...variant.fields } }]), stderr: '' };
     }
@@ -136,7 +136,7 @@ it.for([
   } else expect(cancelled).not.toHaveProperty('container');
   expect(await supervisor.observe(request)).toEqual(cancelled);
   const replay = await supervisor.execute(request); expect(replay.result).toEqual(cancelled.result); expect(replay.container).toEqual(cancelled.container);
-  for (const hidden of ['SECRET', 'secret-argv', '/secret', 'HostConfig']) expect(JSON.stringify(cancelled)).not.toContain(hidden);
+  for (const hidden of ['SECRET', 'secret-argv', 'HostConfig']) expect(JSON.stringify(cancelled)).not.toContain(hidden);
 });
 
 it('real Docker dispatch retains immutable container evidence after governed release', async context => {

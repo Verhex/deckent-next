@@ -1,7 +1,7 @@
 import http, { Agent, createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { afterEach, expect, it } from 'vitest';
 import { OPENAI_CHAT_COMPLETIONS_FAMILY, OPENAI_CHAT_COMPLETIONS_VERSION, OPENAI_CHAT_HTTP_ADAPTER_ID,
-  OPENAI_CHAT_ENABLE_THINKING_CAPABILITY, OPENAI_CHAT_HTTP_ADAPTER_VERSION, OpenAiChatHttpError, createOpenAiChatNativePort, parseOpenAiChatHttpDefinition, prepareOpenAiChatHttpRequest } from '#adapters/core/provider-openai-chat/index.js';
+  OPENAI_CHAT_ENABLE_THINKING_CAPABILITY, OPENAI_CHAT_PREFIX_CACHE_SALT_CAPABILITY, openAiChatCacheSalt, OPENAI_CHAT_HTTP_ADAPTER_VERSION, OpenAiChatHttpError, createOpenAiChatNativePort, parseOpenAiChatHttpDefinition, prepareOpenAiChatHttpRequest } from '#adapters/core/provider-openai-chat/index.js';
 
 const servers: Server[] = [];
 afterEach(async () => Promise.all(servers.splice(0).map(close)));
@@ -175,6 +175,27 @@ it('sends chat_template_kwargs.enable_thinking only to a model whose binding dec
   const plain = await port.prepare(profile(origin), declared('supported'), request); await port.send(plain);
   expect(JSON.parse(bodies[1]!)).toEqual({ ...request, stream: false });
   expect(OPENAI_CHAT_ENABLE_THINKING_CAPABILITY).toBe('chat-template-enable-thinking'); expect(OPENAI_CHAT_HTTP_ADAPTER_VERSION).toBe(4);
+});
+
+// W4 DEFECTS-ADAPTER: vLLM prefix-cache isolation per scope (cache_salt), catalog-gated.
+it('sends a per-scope cache_salt only to a binding that declares prefix-cache-salt; scopes never share a salt', async () => {
+  const bodies: Record<string, unknown>[] = [];
+  const origin = await fixture((req, res) => { const chunks: Buffer[] = []; req.on('data', (chunk: Buffer) => chunks.push(chunk));
+    req.on('end', () => { bodies.push(JSON.parse(Buffer.concat(chunks).toString('utf8'))); res.end(JSON.stringify(response())); }); });
+  const salted = { ...binding, model: { ...binding.model, protocols: [{ family: 'openai-chat-completions', version: 'v1',
+    capabilities: [{ id: OPENAI_CHAT_PREFIX_CACHE_SALT_CAPABILITY, version: 1, state: 'supported' }] }] } };
+  const port = createOpenAiChatNativePort();
+  const send = async (scopeId: string, b: unknown) => { await port.send(await port.prepare({ ...profile(origin), scopeId }, b, request)); return bodies.at(-1)!; };
+  const a = await send('scope-a', salted), a2 = await send('scope-a', salted), b = await send('scope-b', salted);
+  expect(a['cache_salt']).toMatch(/^[A-Za-z0-9_-]{43}$/); expect(a['cache_salt']).toBe(openAiChatCacheSalt('scope-a'));
+  expect(a2['cache_salt']).toBe(a['cache_salt']); expect(b['cache_salt']).not.toBe(a['cache_salt']);
+  expect(JSON.stringify(a)).not.toContain('scope-a');
+  // Negative: a binding that does not declare the capability never receives the field (servers that reject unknown fields stay working).
+  expect(await send('scope-a', binding)).not.toHaveProperty('cache_salt');
+  const unsupported = { ...salted, model: { ...salted.model, protocols: [{ ...salted.model.protocols[0]!, capabilities: [{ id: OPENAI_CHAT_PREFIX_CACHE_SALT_CAPABILITY, version: 1, state: 'unknown' }] }] } };
+  expect(await send('scope-a', unsupported)).not.toHaveProperty('cache_salt');
+  // A caller cannot inject its own salt through the request.
+  await expect(port.prepare(profile(origin), salted, { ...request, cache_salt: 'x' })).rejects.toMatchObject({ code: 'OPENAI_CHAT_REQUEST_INVALID' });
 });
 
 it('reports cancellation and timeout after the owned fixture has observed the request', async () => {

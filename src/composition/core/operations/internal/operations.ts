@@ -1,7 +1,8 @@
+import { loadComposedConfig } from '#composition/core/root/index.js';
 import { userInfo } from 'node:os';
-import { SystemTrustedClock, loadConfig, type ConfigLoadOptions } from '#platform/index.js';
+import { SystemTrustedClock, type ConfigLoadOptions } from '#platform/index.js';
 import { LocalOsSessionAuthority, createLocalPeerSession, openLocalIntegrityAuthority, openSqliteApprovalStore, openSqliteAttemptStore, readOperationsConfig,
-  registerProviderConfig, resolveOperationCatalog, resolveOperationTargets, type LocalPeerIdentity } from '#adapters/index.js';
+  resolveOperationCatalog, resolveOperationTargets, type LocalPeerIdentity } from '#adapters/index.js';
 import { EffectApplication, OperationApprovalBroker, OperationPolicyAuthorization, awaitOperationApproval, runtimeOperationQuerySchema, type EffectOutcome } from '#engine/index.js';
 import { effectCommandSchema, type EffectCommand, type OperationDescriptor } from '#domain/index.js';
 import { createLayoutPolicySource } from '#composition/core/policy/index.js';
@@ -23,7 +24,6 @@ type Wait = (scopeId: string, approvalId: string, wait: NonNullable<OperationSub
 async function withEffects<T>(root: string, scopeId: string, options: ConfigLoadOptions, access: ScopeAccess,
   use: (application: EffectApplication, wait: Wait) => Promise<T>, peer?: LocalPeerIdentity): Promise<T> {
   try {
-    registerProviderConfig();
     const { config, layout, principal, path } = peer ? await loadConfiguredPeerScopeContext(root, scopeId, options, peer, access)
       : await loadConfiguredScopeContext(root, scopeId, options, access);
     const operations = readOperationsConfig(config as unknown as Record<string, unknown>);
@@ -91,8 +91,7 @@ export async function inspectPeerOperation(root: string, input: unknown, peer: L
  * operations have no configurable target). Inspection data for tool hints only: it grants nothing, and each call resolves again. */
 export async function describeConfiguredOperationTools(root: string, options: ConfigLoadOptions = {}): Promise<readonly OperationDescriptor[]> {
   try {
-    registerProviderConfig();
-    const operations = readOperationsConfig(await loadConfig(root, { ...options, heal: false }) as unknown as Record<string, unknown>);
+    const operations = readOperationsConfig(await loadComposedConfig(root, { ...options, heal: false }) as unknown as Record<string, unknown>);
     const configured = resolveOperationTargets(operations);
     return Object.freeze(resolveOperationCatalog(operations).entries().map(entry => entry.descriptor).filter(descriptor => configured.resolve(descriptor.targetKind) !== null));
   } catch (error) { throw queryFailure(error); }

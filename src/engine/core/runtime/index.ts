@@ -30,3 +30,4 @@ export { ModelCancellationRuntimeLoop } from './internal/model-cancellation-loop
 export type { ModelCancellationRuntimeLoopOptions, ModelCancellationRuntimeObserver } from './internal/model-cancellation-loop.js';
 export { RuntimeServiceIdlePolicy, RUNTIME_SERVICE_AUTOSTART_ENV, RUNTIME_SERVICE_HEARTBEAT_MS } from './internal/idle-policy.js';
 export type { RuntimeServiceIdleOptions } from './internal/idle-policy.js';
+export { runtimeWorkspaceFileMethods, runtimeEffectOperationMethods } from './internal/client-validation.js';

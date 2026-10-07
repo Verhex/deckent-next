@@ -1,7 +1,7 @@
 import { SystemTrustedClock, type ConfigLoadOptions } from '#platform/index.js';
 import { ApprovalApplication, AuditApplication, authorizeApproval, approvalCommandSchema, approvalQuerySchema, approvalListSchema, approvalRenewalSchema, RuntimeServiceProtocolError,
   registerApprovalChannel, registeredApprovalChannels, parseApprovalAnswer, SessionApprovalAnswers, type ApprovalSubjectKind, type TurnDecisionCapabilities } from '#engine/index.js';
-import { openSqliteApprovalStore, openSqliteAuditStore, openLocalIntegrityAuthority, readOperationsConfig, registerProviderConfig, resolveOperationCatalog, LocalOsSessionAuthority, createLocalPeerSession, type LocalPeerIdentity } from '#adapters/index.js';
+import { openSqliteApprovalStore, openSqliteAuditStore, openLocalIntegrityAuthority, readOperationsConfig, resolveOperationCatalog, LocalOsSessionAuthority, createLocalPeerSession, type LocalPeerIdentity } from '#adapters/index.js';
 import type { AuditEvent } from '#domain/index.js';
 import { loadConfiguredScopeContext, loadConfiguredPeerScopeContext } from '#composition/core/scoped-request/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
@@ -25,7 +25,6 @@ export async function configuredApproval(projectRoot: string, action: 'list' | '
     try {
       const check = (result: unknown) => { if (Buffer.byteLength(JSON.stringify(result)) > (capacity ?? config.service.responseMaxBytes)) throw new RuntimeServiceProtocolError('RUNTIME_SERVICE_RESPONSE_LIMIT'); };
       // General surfaces cannot decide authority-surface approvals; K3 refusal is audited.
-      registerProviderConfig();
       const restriction = action !== 'decide' ? undefined : { catalog: resolveOperationCatalog(readOperationsConfig(config as unknown as Record<string, unknown>)),
         refused: async (event: AuditEvent) => {
           const store = await openSqliteAuditStore(await context.path(), config.storage.sqlite, 'forbid');

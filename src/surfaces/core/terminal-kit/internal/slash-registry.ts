@@ -32,10 +32,36 @@ export const WORKLINE_SLASH_COMMANDS: readonly SlashCommand[] = Object.freeze([
   // MONITOR: the monitor's text snapshot (Runs, blockers, workers, approvals, pools, installs); `deckent monitor` is the fullscreen view.
   { name: 'config', descriptionKey: 'config.surface.slashDescription' },
   { name: 'monitor', descriptionKey: 'terminal.slash.monitor' },
+  // TERMINAL-CLOSE S09 (read-only management): each runs at once from the palette and reads a typed query on every call.
+  { name: 'model', descriptionKey: 'terminal.slash.model' },
+  { name: 'usage', descriptionKey: 'terminal.slash.usage' },
+  { name: 'doctor', descriptionKey: 'terminal.slash.doctor' },
+  { name: 'scope', descriptionKey: 'terminal.slash.scope' },
   { name: 'exit', descriptionKey: 'terminal.slash.exit' },
   { name: 'quit', descriptionKey: 'terminal.slash.exit' },
   { name: 'help', descriptionKey: 'terminal.slash.help' },
 ]);
+
+/** Read-only inspect commands (S09). Each is answered by an optional port that re-reads a typed query per call; `status` keeps its static line without one. */
+export const INSPECT_SLASH_COMMANDS = Object.freeze(['status', 'model', 'usage', 'doctor', 'scope'] as const);
+export type InspectSlashCommand = typeof INSPECT_SLASH_COMMANDS[number];
+export function isInspectSlashCommand(command: string): command is InspectSlashCommand {
+  return (INSPECT_SLASH_COMMANDS as readonly string[]).includes(command);
+}
+/** What this terminal itself measured for the open conversation (typed `usage` stream events); not a billing statement. */
+export interface SessionUsageView { readonly reports: number; readonly promptTokens: number; readonly completionTokens: number; readonly reasoningTokens: number }
+export const EMPTY_SESSION_USAGE: SessionUsageView = Object.freeze({ reports: 0, promptTokens: 0, completionTokens: 0, reasoningTokens: 0 });
+export function addSessionUsage(total: SessionUsageView, report: Readonly<{ promptTokens: number; completionTokens: number; reasoningTokens: number | null }>): SessionUsageView {
+  return Object.freeze({ reports: total.reports + 1, promptTokens: total.promptTokens + report.promptTokens, completionTokens: total.completionTokens + report.completionTokens,
+    reasoningTokens: total.reasoningTokens + (report.reasoningTokens ?? 0) });
+}
+/** `/status` without a fresh port keeps the launch-time line; with one, a failed read shows its typed error, never that old line. */
+export type InspectSlashPort = (args: string, view: Readonly<{ usage: SessionUsageView }>) => Promise<readonly string[]>;
+export type InspectSlashPorts = Readonly<Partial<Record<InspectSlashCommand, InspectSlashPort>>>;
+/** The ports as plain `(args)` commands, each given the usage the terminal measured at call time. */
+export function bindInspectPorts(ports: InspectSlashPorts | undefined, usage: () => SessionUsageView): Readonly<Record<string, (args: string) => Promise<readonly string[]>>> {
+  return Object.fromEntries(Object.entries(ports ?? {}).map(([name, port]) => [name, (args: string) => port(args, { usage: usage() })]));
+}
 
 /** Display labels only; the original registry name and argument metadata still own completion/dispatch. */
 export function slashCommandRow(command: SlashCommand, labels: Readonly<Record<string, string>>): Readonly<{ name: string; detail: string }> {

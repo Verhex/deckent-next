@@ -20,3 +20,4 @@ export type { PolicyBinding } from './internal/schema.js';
 export { isStandingGrantId, STANDING_GRANT_ACTION, STANDING_GRANT_KIND, STANDING_GRANTS_MAX, STANDING_PATTERN_MAX_CHARS, standingCell, standingCovers, standingGrantChange, standingGrantId,
   sessionPattern, standingPattern, standingRevokeChange } from './internal/standing.js';
 export type { SessionCell, SessionPattern, SessionPatternResult, StandingCell, StandingPattern, StandingPatternResult, StandingRefusal } from './internal/standing.js';
+export { policyRoleSchema, principalGrants } from './internal/schema.js';
