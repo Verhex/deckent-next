@@ -41,7 +41,7 @@ export const mcpServerEntrySchema = (stdio => z.union([stdio, httpEntryFields.ex
   command: z.string().min(1).max(4_096),
   args: z.array(z.string().max(4_096)).max(64).optional(),
   env: z.record(z.string().regex(ENV_NAME), z.string().max(4_096)).refine(env => Object.keys(env).length <= 64, 'MCP_ENV_TOO_MANY').optional(),
-  realm: z.enum(['require-sandbox', 'prefer-sandbox', 'host']).optional(),
+  realm: z.enum(['sandbox-net', 'require-sandbox', 'prefer-sandbox', 'host']).optional(),
   timeoutMs: z.number().int().min(1_000).max(3_600_000).optional(),
 }).strict());
 export type McpServerEntry = z.infer<typeof mcpServerEntrySchema>;
@@ -78,8 +78,10 @@ function canonical(value: unknown): string {
     .map(key => `${JSON.stringify(key)}:${canonical((value as Record<string, unknown>)[key])}`).join(',')}}`;
   return JSON.stringify(value);
 }
+/** The digest trust binds: the entry as written, a stdio entry's realm as it takes effect (K4: an entry that names none runs in the default realm, so a
+ * changed default changes what was trusted and asks again; an entry that names its realm keeps its digest). */
 export const mcpDefinitionDigest = (name: string, entry: McpServerEntry) =>
-  createHash('sha256').update(`mcp-server-definition:1\0${name}\0${canonical(entry)}`).digest('hex');
+  createHash('sha256').update(`mcp-server-definition:1\0${name}\0${canonical(isMcpHttpEntry(entry) ? entry : { ...entry, realm: entry.realm ?? MCP_DEFAULT_REALM })}`).digest('hex');
 
 /** Reads one registry file: absent → empty; unreadable, over the bound, writable by others or not the declared shape → a problem, no servers. */
 export async function readMcpRegistryFile(path: string, kind: 'project' | 'personal', projectKey?: string):
@@ -201,8 +203,9 @@ export async function expandMcpEntry(entry: McpServerEntry, scope: McpScope, env
   if (!command) return { ok: false, reason: 'empty-command' };
   return { ok: true, command, args: Object.freeze(args), env: Object.freeze(env), secrets: Object.freeze(secrets) };
 }
-/** The default realm of a stdio entry that names none. */
-export const MCP_DEFAULT_REALM = 'prefer-sandbox';
+/** The default realm of a stdio entry that names none (K4, Jev 68a10d1a): a sandbox with network and a private, persistent HOME for that server
+ * (npx/uvx caches), the project read-only, the user's HOME, project secrets and Deckent's state hidden; no sandbox → it does not start. */
+export const MCP_DEFAULT_REALM = 'sandbox-net';
 /** The launch values of an expanded entry, as the client pool takes them (an HTTP server has no local process: no realm, command or env). */
 export function mcpLaunchValues(entry: McpServerEntry, expanded: Extract<McpExpandedEntry, { ok: true }>) {
   return 'url' in expanded ? { transport: 'http' as const, url: expanded.url, headers: expanded.headers, command: '', args: [], env: {}, realm: 'host' as const, secrets: expanded.secrets }

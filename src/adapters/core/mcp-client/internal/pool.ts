@@ -1,7 +1,10 @@
 import { createHash } from 'node:crypto';
+import { chmod, mkdir, realpath } from 'node:fs/promises';
+import { join } from 'node:path';
 import type { Client, CallToolResult, Tool, VersionNegotiationMode } from '@modelcontextprotocol/client';
 import { DeckentJsonSchemaValidator, globalStateRoot, PACKAGE_NAME, PACKAGE_VERSION } from '#platform/index.js';
-import { describeSandboxFallback, describeSandboxRejections, describeShellWritePosture, longLivedWritePosture, sandboxWriteView, shellLaunchUsable, type ShellCapabilities, type ShellSandbox } from '#adapters/core/host-shell/index.js';
+import { describeSandboxFallback, describeSandboxRejections, describeShellWritePosture, longLivedWritePosture, sandboxWriteView, shellLaunchUsable, type ShellCapabilities, type ShellSandbox,
+  type ShellSandboxLaunchProfile } from '#adapters/core/host-shell/index.js';
 import { shellSandboxCapabilities } from '#adapters/core/shell-sandbox-bwrap/index.js';
 import { redactText } from '#adapters/core/native-connection/index.js';
 import { diagnoseSandboxedStart, type McpSandboxDiagnosis } from './diagnose.js';
@@ -10,6 +13,8 @@ import { modelTextPrefix } from '#domain/index.js';
 
 /** Protocol revisions this client speaks: the modern era first (probed with `server/discover`), the 2025 `initialize` era as the fallback. */
 export const MCP_CLIENT_PROTOCOL_VERSIONS: readonly string[] = Object.freeze(['2026-07-28', '2025-11-25']);
+/** K4: the directory (under the data root's `integrations`) that holds each `sandbox-net` server's private HOME. */
+export const MCP_SERVER_HOMES_DIR = 'mcp-home';
 /** Bounds of what one server may declare and of the stderr tail kept for `inspect`. */
 export const MCP_CLIENT_TOOLS_MAX = 512;
 /** Pages of one `tools/list` (SDK ≥ 2.2 follows `nextCursor` itself; `listMaxPages` is its hard cap, so a server that never stops paging ends here). */
@@ -23,6 +28,8 @@ export interface McpLaunchContext {
   readonly sandboxes: readonly ShellSandbox[];
   /** Measured host capabilities (defaults to the process-wide probe, the bubblewrap launcher under the global state root). */
   readonly capabilities?: ShellCapabilities;
+  /** K4: where each `sandbox-net` server's private, persistent HOME is made (`<homeRoot>/<server>`, 0700); absent: such a server is refused. */
+  readonly homeRoot?: string;
 }
 /** `sandbox`: the launcher's own arguments before `--` and the server's command line, so a failed start can be diagnosed in the same view.
  * `projectReadOnly`: the write view the launch enforces (false on the host, where no posture has an OS boundary). */
@@ -40,6 +47,8 @@ export const MCP_HOST_REALM_HINT = 'a server that must write the project needs `
  */
 export function mcpRealmPosture(realm: McpClientServerSettings['realm']): string {
   if (realm === 'host') return HOST_POSTURE;
+  if (realm === 'sandbox-net') return `sandbox with network: ${describeShellWritePosture(sandboxWriteView({}, longLivedWritePosture()))}; the server gets its own persistent HOME `
+    + `(for npx/uvx caches) and the network; your HOME, project secrets and Deckent state are hidden; no sandbox, no start; ${MCP_HOST_REALM_HINT}`;
   const write = describeShellWritePosture(sandboxWriteView({}, longLivedWritePosture()));
   return `sandbox${realm === 'prefer-sandbox' ? ' when one is usable (else on the host, said at the start)' : ' required'}: ${write}; ${MCP_HOST_REALM_HINT}`;
 }
@@ -53,12 +62,22 @@ async function launchOf(server: McpClientServerSettings, context: McpLaunchConte
   if (server.realm === 'host') return { ok: true, command: server.command, args: server.args, env, sandboxed: false, projectReadOnly: false, posture: HOST_POSTURE };
   const capabilities = context.capabilities ?? await shellSandboxCapabilities(globalStateRoot()), rejected: { kind: string; reason: string }[] = [];
   if (capabilities.platform !== 'linux') rejected.push({ kind: 'platform', reason: capabilities.platform });
+  // K4: the server's own HOME, made private before anything starts (none can be made: refused, never the user's HOME).
+  let profile: ShellSandboxLaunchProfile | undefined;
+  if (server.realm === 'sandbox-net') {
+    if (!context.homeRoot) return { ok: false, reason: 'sandbox-unavailable', detail: 'no private HOME directory for this server' };
+    const home = join(context.homeRoot, server.id);
+    try { await mkdir(home, { recursive: true, mode: 0o700 }); await chmod(home, 0o700); profile = { network: true, home: await realpath(home) }; }
+    catch { return { ok: false, reason: 'sandbox-unavailable', detail: 'its private HOME directory could not be made' }; }
+    // HOME names the mount point of that directory (the launch's HOME), whatever the entry's env says.
+    if (context.environment['HOME']) env['HOME'] = context.environment['HOME'];
+  }
   // MCP-CLIENT (Astra 2188 R8): the same launch-eligibility rule doctor's `preferSandbox` report walks (`shellLaunchUsable`), so a
   // provider usable for one shell command but with no `.launch` (Landlock) is rejected here exactly as doctor rejects it.
-  else for (const sandbox of context.sandboxes) {
+  if (capabilities.platform === 'linux') for (const sandbox of context.sandboxes) {
     const usable = shellLaunchUsable(sandbox, capabilities);
     if (!usable.ok) { rejected.push({ kind: sandbox.kind, reason: usable.reason }); continue; }
-    const launch = await usable.launch(context.environment);
+    const launch = await usable.launch(context.environment, profile);
     if (!launch.ok) { rejected.push({ kind: sandbox.kind, reason: launch.reason }); continue; }
     // The card's words come from the view this launch enforces (C5: the project read-only), with how to let a server write.
     const fallback = describeSandboxFallback(sandbox.kind, rejected);
@@ -67,7 +86,7 @@ async function launchOf(server: McpClientServerSettings, context: McpLaunchConte
       sandbox: { prefix: launch.args, command: server.command, args: server.args } };
   }
   const why = rejected.length ? describeSandboxRejections(rejected) : 'no sandbox mechanism is available';
-  if (server.realm === 'require-sandbox') return { ok: false, reason: 'sandbox-unavailable', detail: why };
+  if (server.realm !== 'prefer-sandbox') return { ok: false, reason: 'sandbox-unavailable', detail: why };
   return { ok: true, command: server.command, args: server.args, env, sandboxed: false, projectReadOnly: false,
     posture: `sandbox: none; runs on host (${why}). Files, processes and network are reachable.` };
 }

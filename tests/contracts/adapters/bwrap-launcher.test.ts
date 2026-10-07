@@ -239,11 +239,11 @@ describe('a visible fallback after a preferred provider is passed over (REALM-NO
       rejected: [{ kind: 'bubblewrap', restricted: false, reason: expect.stringMatching(/inside the project or scratch area/u) }],
       bubblewrap: { status: 'available', launcher: { source: 'bundled', path: join(stateDir, 'bin', `bwrap-${sha256(f.bundledScript)}`), version: '0.13.0', overlay: true } },
       landlock: { status: 'available', abi: 7 } });
-    // Host mode: the shell runs on the host. The prefer-sandbox view (the MCP default, Astra 2188 R8) is the launch-eligible walk: Landlock
-    // is usable for this one-shot shell call but cannot hold a long-lived MCP launch, so with bubblewrap also unavailable it falls to host
-    // too (never reporting Landlock as the MCP default while the real McpClientPool.open would run on the host).
+    // Host mode: the shell runs on the host. The MCP-default view (Astra 2188 R8; K4: `sandbox-net`, a sandbox or no start) is the
+    // launch-eligible walk: Landlock is usable for this one-shot shell call but cannot hold a long-lived MCP launch, so with bubblewrap also
+    // unavailable the default is refused, every reason named (never reporting Landlock, nor a host fallback, as the MCP default).
     expect(await inspectShellRealmSelection({ mode: 'host', stateDir, project: scope, capabilities })).toMatchObject({ selected: 'host', marker: null, notice: null, rejected: [],
-      preferSandbox: { selected: 'host', marker: 'sandbox: none', notice: expect.stringMatching(/landlock: runs one command at a time/u) } });
+      preferSandbox: { selected: null, code: 'SHELL_SANDBOX_UNAVAILABLE', rejected: [{ kind: 'bubblewrap' }, { kind: 'landlock', reason: 'runs one command at a time' }] } });
     // require-sandbox with nothing usable: refused, typed, every reason named.
     const bare = { ...capabilities, landlock: { status: 'unavailable' as const, abi: null } };
     expect(await inspectShellRealmSelection({ mode: 'require-sandbox', stateDir, project: scope, capabilities: bare })).toMatchObject({ selected: null,

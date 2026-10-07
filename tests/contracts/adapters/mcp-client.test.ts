@@ -203,19 +203,23 @@ describe('MCP client: calls, bounds and failures', () => {
   // time). With bubblewrap unavailable and only Landlock available, doctor used to say `selected: 'landlock'` while `McpClientPool.open`
   // actually ran the server on the host — a false isolation posture. Fixed: both now walk the same launch-eligible provider list
   // (`shellLaunchSandboxes` / `shellLaunchUsable`, host-shell/internal/realm.ts), so they agree.
-  it('doctor\'s prefer-sandbox (MCP default) agrees with the real MCP launch when only Landlock is available (Astra 2188 R8)', async () => {
+  it('doctor\'s MCP-default line agrees with the real MCP launch when only Landlock is available (Astra 2188 R8; K4: the default is sandbox-net, no host fallback)', async () => {
     const f = fixture('modern'), p = pool();
     const project = await createWorkspaceScope(f.root);
     const capabilities = linuxShellHost({ landlock: { status: 'available', abi: 6 } });
     const sandboxes = shippedShellSandboxes({ project, scratchDir: null, writeFloor: () => true });
     const report = await inspectShellRealmSelection({ mode: 'host', stateDir: null, project, capabilities, sandboxes });
-    const server = { ...f.server([pinOf(echo)]), realm: 'prefer-sandbox' as const };
-    const opened = await p.open(server, settings([server]), { cwd: f.root, environment: { PATH: process.env['PATH'] }, sandboxes, capabilities });
-    expect(opened).toMatchObject({ ok: true, sandboxed: false });
-    expect(opened.ok && opened.posture).toMatch(/landlock: runs one command at a time/u);
-    // Doctor's MCP-default field names the same realm the real open actually used, with the same bounded reason.
-    expect(report.preferSandbox).toMatchObject({ selected: 'host', marker: 'sandbox: none' });
-    expect(report.preferSandbox?.notice).toMatch(/landlock: runs one command at a time/u);
+    // An explicit prefer-sandbox server still falls back to the host and says why.
+    const preferring = { ...f.server([pinOf(echo)], 'pre'), realm: 'prefer-sandbox' as const };
+    const fellBack = await p.open(preferring, settings([preferring]), { cwd: f.root, environment: { PATH: process.env['PATH'] }, sandboxes, capabilities });
+    expect(fellBack).toMatchObject({ ok: true, sandboxed: false });
+    expect(fellBack.ok && fellBack.posture).toMatch(/landlock: runs one command at a time/u);
+    // The default realm refuses with the same bounded reason; doctor's MCP-default field names that refusal.
+    const defaulted = { ...f.server([pinOf(echo)], 'def'), realm: 'sandbox-net' as const }, starts = f.events().filter(event => event.event === 'start').length;
+    const refused = await p.open(defaulted, settings([defaulted]), { cwd: f.root, environment: { PATH: process.env['PATH'] }, sandboxes, capabilities, homeRoot: join(f.root, 'homes') });
+    expect(refused).toMatchObject({ ok: false, reason: 'sandbox-unavailable', detail: expect.stringMatching(/landlock: runs one command at a time/u) });
+    expect(report.preferSandbox).toMatchObject({ selected: null, code: 'SHELL_SANDBOX_UNAVAILABLE' });
+    expect(f.events().filter(event => event.event === 'start').length).toBe(starts);
   });
 });
 

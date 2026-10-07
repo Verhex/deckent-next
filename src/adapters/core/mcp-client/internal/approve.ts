@@ -55,6 +55,8 @@ export interface McpTrustContext {
   readonly directory: (scope: McpScope) => Promise<string>;
   readonly inputMaxBytes?: number;
   readonly now?: () => number;
+  /** K4: where a `sandbox-net` server's own HOME is made (absent: such a server is refused). */
+  readonly homeRoot?: string;
 }
 const toolsDigest = (tools: readonly { readonly name: string; readonly digest: string }[]) =>
   createHash('sha256').update(`mcp-tools:1\0${JSON.stringify(tools.map(tool => [tool.name, tool.digest]))}`).digest('hex');
@@ -111,7 +113,7 @@ export async function decideMcpTrust(server: McpTrustServer, context: McpTrustCo
   const controller = new AbortController(), pool = options.pool ?? new McpClientPool(controller.signal);
   try {
     const state = await pool.open(launch, { ...MCP_CLIENT_DEFAULTS, ...(context.inputMaxBytes ? { inputMaxBytes: context.inputMaxBytes } : {}), servers: [launch] },
-      { cwd: context.cwd, environment: context.environment, sandboxes: context.sandboxes });
+      { cwd: context.cwd, environment: context.environment, sandboxes: context.sandboxes, ...(context.homeRoot ? { homeRoot: context.homeRoot } : {}) });
     if (!state.ok && state.reason === 'sandbox-unreachable') {
       // MCP-SANDBOX-PATHS: what the sandbox view hides (or needs from outside it), in the registry's own words for a `${VAR}` path.
       const shown = displayMcpDiagnosis(state.diagnosis, mcpEntryDisplay(server.entry));
