@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { CONFIG_CONTRACT_SINCE, ConfigValidationError, ErrorRegistry, installSecretResolverFactory, normalizeGlobalScopePlatform, registerConfigSection,
   resolveGlobalScopePaths, type Environment } from '#platform/index.js';
 import { SECRET_STORE_ID_PATTERN, SecretStoreRegistry, type SecretStore, type SecretStoreFactory } from '#engine/index.js';
-import { ENV_SECRET_STORE_ID, environmentSecretStoreFactory, fileSecretStoreFactory } from '#adapters/core/secret-store/index.js';
+import { ENV_SECRET_STORE_ID, encryptedFileSecretStoreFactory, environmentSecretStoreFactory, fileSecretStoreFactory } from '#adapters/core/secret-store/index.js';
 
 /**
  * The `secrets` section v1 (SECRET-K1): which registered backend resolves `$DECK:NAME` references. An absent section is the environment
@@ -13,7 +13,7 @@ export const secretsConfigSchema = z.object({ store: z.string().max(128).regex(S
 export type SecretsConfig = z.infer<typeof secretsConfigSchema>;
 
 // Core backends at construction; Enterprise/custom backends register before the section is registered (then the registry is sealed).
-const registry = SecretStoreRegistry.create([environmentSecretStoreFactory, fileSecretStoreFactory]);
+const registry = SecretStoreRegistry.create([environmentSecretStoreFactory, fileSecretStoreFactory, encryptedFileSecretStoreFactory]);
 /** Adds a backend (an Enterprise vault, a customer KMS) without editing Core; refused after `registerProviderConfig()` sealed the registry. */
 export function registerSecretStoreBackend(factory: SecretStoreFactory): void { registry.register(factory); }
 export function readSecretsConfig(config: Readonly<Record<string, unknown>>): SecretsConfig {
