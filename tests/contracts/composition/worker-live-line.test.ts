@@ -59,7 +59,7 @@ describe.skipIf(process.platform !== 'linux')('worker live line from a real work
     const [worker] = await f.inspect();
     expect(worker).toMatchObject({ ordinal: 1, attempt: identity, live: { phase: 'editing', target: 'hello.txt', dropped: 2, eventsTruncated: false } });
     const tr = formatWorkerLine(worker!, workSurfaceLabels('tr').workerLine).text;
-    expect(tr).toMatch(/^worker 1 · claude claude-haiku-4-5-20251001 · düzenliyor hello\.txt · 1[1-4] sn önce · [\d,]+k? token \(önbellek %\d+\) · 2 olay düşürüldü$/);
+    expect(tr).toMatch(/^işçi 1 · claude claude-haiku-4-5-20251001 · düzenliyor hello\.txt · 1[1-4] sn önce · [\d,]+k? token \(önbellek %\d+\) · 2 olay düşürüldü$/);
     expect(formatWorkerLine(worker!, workSurfaceLabels('en').workerLine).text).toMatch(/editing hello\.txt · 1[1-4] s ago · .* tokens \(cache \d+%\) · 2 events dropped$/);
   });
 
@@ -69,7 +69,7 @@ describe.skipIf(process.platform !== 'linux')('worker live line from a real work
     const [worker] = await f.inspect();
     expect(worker?.live).toMatchObject({ phase: 'finished', outcome: 'success', eventsTruncated: true });
     const text = formatWorkerLine(worker!, workSurfaceLabels('tr').workerLine).text;
-    expect(text).toContain('bitti (worker bildirdi)');
+    expect(text).toContain('bitti (işçi bildirdi)');
     expect(text).toContain('olaylar kırpıldı');
   });
 

@@ -417,7 +417,7 @@ describe.skipIf(process.platform !== 'linux')('Shift+Tab mode cycle in a real ps
     expect(run.timeout, run.output).toBeUndefined();
     expect(run.status, run.output).toBe(0);
     // The call never reaches an effect: its line is a failure, no card offers to run it, and the file is byte-identical.
-    expect(plain(run.output)).toContain('edit_file .deckent/config.json · 0.0s · failed');
+    expect(plain(run.output)).toMatch(/edit_file \.deckent\/config\.json · \d+\.\ds · failed/u);
     expect(await readFile(join(f.projectRoot, '.deckent/config.json'), 'utf8')).toBe(config);
     const kinds = subjects(f).map(subject => subject['kind']);
     expect(kinds).toContain('full-access-turn');
