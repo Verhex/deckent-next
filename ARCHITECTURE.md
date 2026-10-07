@@ -454,6 +454,10 @@ Core contracts and never requires editing Core. Core-memory law 10 records this 
   namespaces and surfaces are registered through a versioned registry with module manifests (tier, version,
   required Core API range, capabilities). Composition resolves registered units; a separately distributed Enterprise
   package proves overlay without Core edits before Enterprise features are claimed. Tiers never grant authority.
+  Current state (2026-10-07, wave 4): the package entry `deckent/extensions` registers provider/config units before one
+  composition root seals the registries (late registration is a typed refusal; the SDK root exports no `register*`).
+  It takes effect only in the CLI process; `runtime serve` and `deckent-mcp` still start from the Core entry
+  (EXT-SERVICE-ENTRY open), so overlay is not yet proven on the service or MCP surfaces.
 - **ERP adapter family (Enterprise).** IFS (Cloud via MCP/REST and Applications 10 native), SAP, Oracle, Microsoft,
   Uyumsoft and Logo implement the same operation/effect/approval contracts. Customer ERP development projects are built
   on these adapters; Deckent-Enterprise owns writing and distributing internal packages as each customer's ERP version
