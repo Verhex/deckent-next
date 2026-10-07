@@ -87,7 +87,8 @@ async function policyUpgradeCommand(argv: readonly string[], context: CommandCon
   const result = await context.upgradePolicyTemplate(root, scopeId, { mode: mode ?? 'preview', reason: t('cli.policy.upgrade.reason', {}, locale), ...(expect ? { expect } : {}) }, { env });
   const sinks = { ...(context.stdout ? { stdout: context.stdout } : {}), ...(context.stderr ? { stderr: context.stderr } : {}) };
   const missing = (view: PolicyUpgradeView) => view.missing.map(item => item === 'policy-administer' ? t('cli.policy.upgrade.missing.policyAdminister', {}, locale)
-    : item === 'approval-decide' ? t('cli.policy.upgrade.missing.approvalDecide', {}, locale) : t('cli.policy.upgrade.missing.delegation', {}, locale));
+    : item === 'approval-decide' ? t('cli.policy.upgrade.missing.approvalDecide', {}, locale) : item === 'lockout' ? t('cli.policy.upgrade.missing.lockout', {}, locale)
+    : t('cli.policy.upgrade.missing.delegation', {}, locale));
   emit(result, { ...sinks, json, render: view => {
     const head = view.status === 'preview' ? t('cli.policy.upgrade.preview', { revision: view.revision, scope: scopeId }, locale)
       : view.status === 'upgraded' ? t('cli.policy.upgrade.upgraded', { scope: scopeId }, locale) : view.status === 'current' ? t('cli.policy.upgrade.current', {}, locale)

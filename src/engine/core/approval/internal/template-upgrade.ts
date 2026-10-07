@@ -1,9 +1,9 @@
-import { authorityDocuments, delegationWithin, describePolicyChange, evaluatePolicy, firstRunTemplateAdditions, FIRST_RUN_UPGRADE_RULE_IDS, planPolicyChange, policySchema,
+import { authorityDocuments, delegationWithin, describePolicyChange, evaluatePolicy, resolvePolicyBindings, firstRunTemplateAdditions, FIRST_RUN_UPGRADE_RULE_IDS, planPolicyChange, policySchema,
   type PolicyGrant, type VerifiedPrincipal } from '#domain/index.js';
 import { administerOwnPolicyChange, type PersistentStandingDependencies } from './standing.js';
 
 /** What the person lacks for the governed upgrade, in order: the `policy.administer` operation, the right to decide its card, the cells I2 checks. */
-export type TemplateUpgradeMissing = 'policy-administer' | 'approval-decide' | 'delegation';
+export type TemplateUpgradeMissing = 'policy-administer' | 'approval-decide' | 'delegation' | 'lockout';
 export interface TemplateUpgradeResult {
   readonly schemaVersion: 1;
   /** `preview`: would add `rules`; `upgraded`: added now; `current`: nothing to add; `refused`: `missing` names why (nothing written);
@@ -46,7 +46,12 @@ export class PolicyTemplateUpgrade {
       const held = Object.values(FIRST_RUN_UPGRADE_RULE_IDS).filter(id => policy.grants.some(grant => grant.id === id));
       if (!held.length) return result('nothing-to-roll-back');
       const change = { schemaVersion: 1 as const, changes: held.map(id => ({ kind: 'grant.remove' as const, id })) };
-      const missing = this.missing(policy, input.principal, input.scopeId, planPolicyChange(files.policy, files.bindings, change).touched);
+      const planned = planPolicyChange(files.policy, files.bindings, change);
+      const missing = this.missing(policy, input.principal, input.scopeId, planned.touched);
+      // Never lock the person out: a rollback that would leave them without policy.administer or approval decisions is refused (`lockout`).
+      const after = resolvePolicyBindings({ ...(planned.policy ?? files.policy as object), revision: 'planned' }, files.bindings);
+      if (evaluatePolicy(after, { principal: input.principal, scopeId: input.scopeId, action: 'execute', resource: { kind: 'operation', id: 'policy.administer' } }).decision !== 'allow'
+        || evaluatePolicy(after, { principal: input.principal, scopeId: input.scopeId, action: 'decide', resource: { kind: 'approval', id: 'policy-template-upgrade' } }).decision !== 'allow') missing.push('lockout');
       if (missing.length) return result('refused', { missing });
       await administerOwnPolicyChange(this.deps, { scopeId: input.scopeId, principal: input.principal, change, tag: `template-v5-rollback:${held.join(',')}`,
         reason: input.reason, revision: policy.revision, kind: 'policy-template-upgrade' });

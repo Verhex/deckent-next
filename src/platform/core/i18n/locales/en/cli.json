@@ -980,6 +980,7 @@
   "cli.policy.upgrade.missing.policyAdminister": "  - the policy.administer operation (changing policy rules)",
   "cli.policy.upgrade.missing.approvalDecide": "  - the right to decide approvals (the change asks on its own card)",
   "cli.policy.upgrade.missing.delegation": "  - the authority these rules give (you may grant only what you hold)",
+  "cli.policy.upgrade.missing.lockout": "  - a way back: without these rules you could no longer change policy or decide approvals (rollback refused)",
   "cli.policy.upgrade.unavailable": "This policy is not a first-run policy ({reason}); add the v5 rules with your own policy authority.",
   "cli.policy.upgrade.conflict": "The policy changed since the preview (now revision {revision}); preview again.",
   "cli.policy.upgrade.rolledBack": "The v5 rules were removed ({ids}); the earlier documents stay archived.",

@@ -980,6 +980,7 @@
   "cli.policy.upgrade.missing.policyAdminister": "  - policy.administer işlemi (policy kurallarını değiştirme)",
   "cli.policy.upgrade.missing.approvalDecide": "  - onaylara karar verme hakkı (değişiklik kendi kartında sorar)",
   "cli.policy.upgrade.missing.delegation": "  - bu kuralların verdiği yetki (yalnız sahip olduğunuzu verebilirsiniz)",
+  "cli.policy.upgrade.missing.lockout": "  - geri dönüş yolu: bu kurallar olmadan policy değiştiremez ya da onaylara karar veremezdiniz (geri alma reddedildi)",
   "cli.policy.upgrade.unavailable": "Bu policy bir ilk kurulum policy'si değil ({reason}); v5 kurallarını kendi policy yetkinizle ekleyin.",
   "cli.policy.upgrade.conflict": "Önizlemeden sonra policy değişti (şimdi revizyon {revision}); yeniden önizleyin.",
   "cli.policy.upgrade.rolledBack": "v5 kuralları kaldırıldı ({ids}); önceki belgeler arşivde duruyor.",

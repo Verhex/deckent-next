@@ -138,6 +138,20 @@ describe.skipIf(process.platform !== 'linux')('deckent policy upgrade --template
     expect(bytes()).toBe(kept);
   }, 180_000);
 
+  it('(e) rollback never locks the owner out: on a v5 policy whose only policy.administer and approval rules are the template\'s, it is refused (lockout) and nothing changes', async () => {
+    const { f, upgrade, bytes } = await project('pure');
+    const v5 = firstRunPolicyTemplate({ scopeId: 'scope', principal: me[0]!, readToolNames: FIRST_RUN_READ_TOOL_NAMES, scratchToolNames: FIRST_RUN_SCRATCH_TOOL_NAMES,
+      scratchWriteOperationId: FIRST_RUN_SCRATCH_WRITE_OPERATION_ID, editShellToolNames: FIRST_RUN_EDIT_SHELL_TOOL_NAMES, writeOperationId: FIRST_RUN_WRITE_OPERATION_ID,
+      shellOperationId: FIRST_RUN_SHELL_OPERATION_ID, proposeMcpToolName: FIRST_RUN_PROPOSE_MCP_TOOL_NAME, mcpCallOperationId: FIRST_RUN_MCP_CALL_OPERATION_ID,
+      policyAdministerOperationId: FIRST_RUN_POLICY_ADMINISTER_OPERATION_ID }).policy;
+    writeFileSync(join(f.data, 'policy.json'), JSON.stringify(v5), { mode: 0o600 });
+    const before = bytes();
+    const refused = await upgrade('rollback');
+    expect(refused).toMatchObject({ status: 'refused' });
+    expect(refused.missing).toContain('lockout');
+    expect(bytes()).toBe(before);
+  }, 120_000);
+
   it('(b) a pure first-run v4 policy: the preview names what the person lacks (policy.administer, deciding the card, the authority itself); apply writes nothing', async () => {
     const { f, upgrade, bytes } = await project('pure');
     const before = bytes();
