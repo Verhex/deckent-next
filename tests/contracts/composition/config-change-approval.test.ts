@@ -113,6 +113,20 @@ describe('config-change approval: negative paths (nothing is written)', () => {
     expect(await bytesOf(f.path)).toBe(before);
   });
 
+  it('expiry: a request not decided within approvals.requestTtlMs writes nothing; the resubmission is APPROVAL_EXPIRED', async () => {
+    const f = await setup();
+    await f.app.set({ ...f.command, commandId: 'seed-ttl', keyPath: 'approvals.requestTtlMs', value: 50 }); // an allowed key: a short request lifetime
+    const pending = await f.app.submit('set', { ...f.command, commandId: 'cmd-ttl', keyPath: 'max_workers', value: 2 });
+    if (pending.status !== 'approval-pending') throw new Error('expected pending');
+    expect(pending.approval.expiresAt - Date.now()).toBeLessThanOrEqual(50);
+    const before = await bytesOf(f.path), audits = f.auditCount();
+    await new Promise(resolve => setTimeout(resolve, 120));
+    await expect(f.app.submit('set', { ...f.command, commandId: 'cmd-ttl', keyPath: 'max_workers', value: 2, expect: pending.expect })).rejects.toMatchObject({ code: 'APPROVAL_EXPIRED' });
+    expect(await bytesOf(f.path)).toBe(before); expect(f.auditCount()).toBe(audits);
+    const [record] = (await f.list()).filter(item => approvalSubject(item.request).kind === 'config-change');
+    expect(record!.status).toBe('expired');
+  });
+
   it('digest race: the layer changed after the preview — the allowed change is not applied (CONFIG_APPROVAL_STALE), the other writer’s bytes stay', async () => {
     const f = await setup();
     const pending = await f.app.submit('set', { ...f.command, commandId: 'cmd-race', keyPath: 'max_workers', value: 2 });
