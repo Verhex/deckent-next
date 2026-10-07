@@ -439,6 +439,14 @@
     "cli.memcat.mcp.opt.header": {
       "before": "HTTP header as key=value; repeat for several headers",
       "after": "HTTP header as 'Name: value'; repeat for several headers"
+    },
+    "tui.picker.hint_filter_esc": {
+      "before": "Esc clears the filter · Enter select",
+      "after": "↑↓ move · Backspace edit · Enter select · Esc clears the filter"
+    },
+    "tui.picker.hint_pick": {
+      "before": "↑↓ / j k move · type to filter · Enter select · Esc close",
+      "after": "↑↓ move · type to filter · PgUp/PgDn page · Enter select · Esc back"
     }
   },
   "tr": {
@@ -997,6 +1005,14 @@
     "cli.memcat.mcp.opt.header": {
       "before": "key=value biçiminde HTTP başlığı; birden fazlası için tekrarlayın",
       "after": "'Ad: değer' biçiminde HTTP başlığı; birden fazlası için tekrarlayın"
+    },
+    "tui.picker.hint_filter_esc": {
+      "before": "Esc filtreyi temizler · Enter seç",
+      "after": "↑↓ gez · Backspace düzelt · Enter seç · Esc filtreyi temizler"
+    },
+    "tui.picker.hint_pick": {
+      "before": "↑↓ / j k gez · yazarak filtrele · Enter seç · Esc kapat",
+      "after": "↑↓ gez · yazarak filtrele · PgUp/PgDn sayfa · Enter seç · Esc geri"
     }
   }
 }

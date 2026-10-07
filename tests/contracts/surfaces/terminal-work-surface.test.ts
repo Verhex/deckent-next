@@ -93,6 +93,8 @@ describe('work surface: live worker panel', () => {
     const view = mount({ pollMs: 60, ledger: { ...baseLedger, async listWorkers() { polls.push(performance.now()); return report(Date.now()); } } });
     await view.type('/watch-workers\r');
     await until(() => view.stdout.text.includes('LIVE-PANEL'), 'panel');
+    // The window may open before its first poll answers (an empty list for one frame); the first read fills it in place.
+    await until(() => view.stdout.text.includes('worker 1 · claude'), 'first poll in the window');
     expect(view.stdout.text).toContain('worker 1 · claude claude-model · editing src/x.ts · 12 s ago · 18.4k tokens (cache 50%)');
     expect(view.stdout.text).toContain('worker 2 · codex · starting · 2 s ago · 4 provider events not itemized yet');
     expect(view.stdout.text).toContain('worker 3 · docker · running');
