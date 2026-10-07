@@ -7,6 +7,7 @@ import { appendLedger, boundAgentHistory, boundChatHistory, compactLedger, EMPTY
   type WorklineLabels, type WorklineProps, type WorkLedgerEntry } from '#surfaces/core/terminal/index.js';
 import { WORKLINE_SLASH_COMMANDS } from '#surfaces/core/terminal-kit/index.js';
 import type { WorkerObservationReport } from '#engine/index.js';
+import { workSurfaceLabels } from '#surfaces/core/work-labels/index.js';
 
 const labels: WorklineLabels = { banner: 'BANNER', prompt: '> ', statusReady: 'READY', statusBusy: 'BUSY', statusCancelling: 'CANCELLING',
   hint: 'HINT', roleUser: 'you', roleAssistant: 'bot', runCard: 'Run', workerCard: 'Worker', watchFailed: 'WATCH-FAILED', commandUnavailable: 'NO-PORT {part}',
@@ -21,6 +22,9 @@ const labels: WorklineLabels = { banner: 'BANNER', prompt: '> ', statusReady: 'R
     saveFailed: 'SAVE-FAILED', resumed: 'RESUMED {count} {session}', started: 'NEW-SESSION', context: 'CTX {approx}{prompt}/{window} {percent}% {count}',
     contextNone: 'CTX-NONE {count}' },
   composer: { pasteChip: '[PASTE {lines}]', search: 'SEARCH', exitArmed: 'EXIT-ARMED', shortcuts: 'KEYS\nENTER-SENDS', slash: { 'terminal.slash.run': 'RUN-DESC', 'terminal.slash.runArgument': '<RUN-ID>' } } };
+/** The watch commands open live windows, whose words come from the real EN catalog (the probe tokens stay for the notices). */
+const liveLabels: WorklineLabels = { ...labels, work: workSurfaceLabels('en') };
+const ESC = '\u001B';
 // The palette's rows have selection/alignment prefixes; this unprefixed pair only matches the /help notice.
 const HELP_NOTICE = 'info\n  /status';
 
@@ -223,12 +227,12 @@ describe('ledger buffer (Ink Static contract)', () => {
 });
 
 describe('workline view rendered by Ink', () => {
-  it('renders pushed worker cards and does not poll when a follow port is connected', async () => {
+  it('shows a pushed worker in the live window and does not poll when a follow port is connected', async () => {
     let polls = 0;
     async function* followWorkers() {
       yield [{ schemaVersion: 1 as const, kind: 'worker' as const, id: 'w', scopeId: 'scope-a', taskId: 'pushed-task', process: 'running', provider: 'docker', authority: 'next' }];
     }
-    const view = mount({ completeTurn: async () => 'ok', pollMs: 5, ledger: { scopeId: 'scope-a',
+    const view = mount({ labels: liveLabels, completeTurn: async () => 'ok', pollMs: 5, ledger: { scopeId: 'scope-a',
       async listWorkers() { polls += 1; return workers(1, 0); }, async inspectRun() { return null; }, followWorkers } });
     await view.type('/watch-workers\r');
     await until(() => view.stdout.text.includes('pushed-task'), 'pushed worker');
@@ -345,7 +349,7 @@ describe('workline view rendered by Ink', () => {
 
   it('applies queued watch toggles in order and exits on a queued /exit without running what follows it', async () => {
     const sent: string[] = []; const gates: Array<() => void> = [];
-    const view = mount({ completeTurn: messages => new Promise(resolve => { sent.push(messages.at(-1)!.content); gates.push(() => resolve('ok')); }),
+    const view = mount({ labels: liveLabels, completeTurn: messages => new Promise(resolve => { sent.push(messages.at(-1)!.content); gates.push(() => resolve('ok')); }),
       ledger: { scopeId: 'scope-a', async listWorkers() { return workers(0, 0); }, async inspectRun() { return null; } } });
     let exited = false; void view.instance.waitUntilExit().then(() => { exited = true; });
     await view.type('one\r'); await until(() => sent.length === 1, 'turn busy');
@@ -369,14 +373,15 @@ describe('workline view rendered by Ink', () => {
 
   it('reports a failing watch once per failure streak, never overlaps polls, and stops polling on /watch-stop', async () => {
     let calls = 0, active = 0, overlap = 0, reported = 0;
-    const view = mount({ completeTurn: async () => 'ok', pollMs: 5, errorText: error => { reported++; return `ERR:${(error as Error).message}`; },
+    const view = mount({ labels: liveLabels, completeTurn: async () => 'ok', pollMs: 5, errorText: error => { reported++; return `ERR:${(error as Error).message}`; },
       ledger: { scopeId: 'scope-a', async listWorkers() {
         calls++; active++; if (active > 1) overlap++;
         await settle(15); active--; throw new Error('probe down');
       }, async inspectRun() { return null; } } });
     await view.type('/watch-workers\r'); await until(() => calls >= 5, 'several polls');
     expect(reported).toBe(1); expect(overlap).toBe(0);
-    await view.type('/watch-stop\r'); await until(() => view.stdout.text.includes('WATCH-OFF'), 'stopped');
+    // The window owns the keyboard: Esc closes it and stops the polling.
+    view.stdin.write(ESC); await until(() => view.stdout.text.includes('Workers window closed'), 'stopped');
     const after = calls; await settle(120);
     expect(calls - after).toBeLessThanOrEqual(1);
   });

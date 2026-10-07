@@ -27,6 +27,16 @@ export interface MonitorAppProps {
   /** A fixed screen size (frame dumps); the live view follows the terminal (`useWindowSize`, re-rendered on resize). */
   readonly size?: { readonly columns: number; readonly rows: number };
 }
+/** The body shared by the fullscreen monitor and the terminal's `/monitor` window (T3 L5): who owns the keyboard and what closes it come from the host. */
+export interface MonitorBodyProps extends MonitorAppProps {
+  /** Keys are read only while true (a window below the top layer must not react). Default true. */
+  readonly active?: boolean;
+  /** `q` always closes; Esc closes only with `escapeCloses` and only when it has nothing to back out of first (help, detail, filter). */
+  readonly onClose: () => void;
+  readonly escapeCloses?: boolean;
+  /** Smallest layout height; a window on a short terminal lowers it (default 10, the fullscreen view's floor). */
+  readonly minRows?: number;
+}
 function moveDetail(key: Key, offset: number, max: number, page: number): number | null {
   if (key.upArrow) return Math.max(0, offset - 1);
   if (key.downArrow) return Math.min(max, offset + 1);
@@ -52,15 +62,16 @@ interface Received { readonly snapshot: MonitorSnapshot; readonly at: number; re
  * body and a key hint, refreshed in place every heartbeat. A failed refresh keeps the last good snapshot with a visible warning.
  * Keys: Tab/←→ or tab numbers, ↑↓/PgUp/PgDn select, Enter details, Esc back, / filter, s/S sort, g group, r refresh, p pause, ? help, q quit.
  */
-export function MonitorApp(props: MonitorAppProps) {
+export function MonitorApp(props: MonitorAppProps & Partial<Pick<MonitorBodyProps, 'active' | 'onClose' | 'escapeCloses' | 'minRows'>>) {
   const { load, intervalMs, locale, ascii, palette, filters, errorText } = props;
+  // Fullscreen: `q` leaves the program. A host window passes its own `onClose` (see MonitorBody).
+  const { exit } = useApp(), onClose = props.onClose ?? exit;
   const now = props.now ?? Date.now;
   const tabs = props.loadConfigView ? [...MONITOR_TABS, 'config' as const] : MONITOR_TABS;
   const [configView, setConfigView] = useState<ConfigMonitorInspection | null>(null);
   const [configFailure, setConfigFailure] = useState<string | null>(null);
-  const { exit } = useApp();
   const window = useWindowSize(), { columns, rows } = props.size ?? window;
-  const width = Math.max(20, columns || 80), height = Math.max(10, rows || 24), ellipsis = ascii ? '...' : '…';
+  const width = Math.max(20, columns || 80), height = Math.max(props.minRows ?? 10, rows || 24), ellipsis = ascii ? '...' : '…';
   const [received, setReceived] = useState<Received | null>(() => props.initial
     ? { snapshot: props.initial, at: now(), marks: new Map(), signatures: signatures(buildMonitorView(filterSnapshot(props.initial, filters ?? {}), locale, ascii).tabs) } : null);
   const snapshot = received?.snapshot ?? null;
@@ -147,9 +158,9 @@ export function MonitorApp(props: MonitorAppProps) {
       setSelection(tabs.map(() => 0));
       return;
     }
-    if (input === 'q') { exit(); return; }
+    if (input === 'q') { onClose(); return; }
     if (input === '?') { setHelp(value => !value); return; }
-    if (key.escape) { if (help) setHelp(false); else if (detail !== null) setDetail(null); else if (controls.filter) setControls(value => ({ ...value, filter: '' })); return; }
+    if (key.escape) { if (help) setHelp(false); else if (detail !== null) setDetail(null); else if (controls.filter) setControls(value => ({ ...value, filter: '' })); else if (props.escapeCloses) onClose(); return; }
     if (help) return;
     if (input === '/') { setEditing(true); setDetail(null); return; }
     if (input === 'r') { void refresh(); return; }
@@ -171,7 +182,7 @@ export function MonitorApp(props: MonitorAppProps) {
     else if (key.pageUp) move(-bodyHeight); else if (key.pageDown) move(bodyHeight);
     else if (key.home) move(-items.length); else if (key.end) move(items.length);
     else if (key.return) { const row = items[selected]?.row; if (row) { setDetail(row.key); setDetailOffset(0); } }
-  });
+  }, { isActive: props.active ?? true });
 
   let body: MonitorLine[];
   if (help) body = legendLines(locale, ascii, tabs);
@@ -214,4 +225,9 @@ export function MonitorApp(props: MonitorAppProps) {
       ))}
     </Box>
   );
+}
+
+/** The body for a host's window (the terminal's `/monitor`): the same view and keys, closed by the host instead of ending the program. */
+export function MonitorBody(props: MonitorBodyProps) {
+  return <MonitorApp {...props} />;
 }

@@ -3,7 +3,7 @@ import { configSlash } from '#surfaces/core/config/index.js';
 import { userInfo } from 'node:os';
 import { createInterface } from 'node:readline';
 import { basename } from 'node:path';
-import { monitorSlash } from '#surfaces/core/monitor/index.js';
+import { loadMonitorSurface, monitorSlash } from '#surfaces/core/monitor/index.js';
 import { DeckentError, ErrorRegistry, emit, getConfigKnownSecrets, loadConfig, readBuildIdentity, resolveLocale, t, formatValue, colorCapability, PACKAGE_VERSION, type ConfigLoadOptions, type Locale } from '#platform/index.js';
 import { buildInferenceServingPlan, estimateReplicaCapacity, readInferenceServingProfile, runtimeConfigFreshness, RUNTIME_SERVICE_HEARTBEAT_MS, type IdentityRead, type InstallationIdentityRead } from '#engine/index.js';
 import { prefersAsciiGlyphs, runTerminalWorkline, resolveWorklinePalette, resolveTerminalTheme, permissionModeStop, STARTUP_BANNERS, TERMINAL_THEME_SETTINGS, type TerminalThemeSetting, type WorklineStartup, buildWorklineBridgeSnapshot, streamLineTurn, boundAgentHistory, boundChatHistory, bindSessionScope, type AgentChatMessage, type ChatTurnMessage, type TurnDelta, type WorklineLabels } from '#surfaces/core/terminal/index.js';
@@ -379,6 +379,13 @@ export async function terminalCommand(argv: readonly string[], context: Terminal
     ...(context.configApplication ? { config: (args: string) => configSlash(root, args, context, options, locale, Math.max(40, (tty.columns ?? 100) - 4)) } : {}),
     // MONITOR: `/monitor` prints the monitor's text snapshot as notice lines (the fullscreen view is `deckent monitor`).
     ...(context.inspectMonitor ? { monitor: (args: string) => monitorSlash(root, args, context, options, locale, Math.max(40, (tty.columns ?? 100) - 4)) } : {}),
+    // T3 L5: a bare `/monitor` opens the monitor in a window. The view loads on the first use (like `deckent monitor`); this unit stays free of it until then.
+    ...(context.inspectMonitor ? { monitorWindow: async () => {
+      const surface = await loadMonitorSurface(), inspect = context.inspectMonitor!;
+      return surface.monitorWindowView({ load: () => inspect(root, options), intervalMs: config.inspection.workers.heartbeatMs, locale, ascii,
+        palette: resolveWorklinePalette(theme.tier, theme.theme), errorText: error => surface.monitorFailureText(error, locale),
+        ...(context.configApplication ? { loadConfigView: () => context.configApplication!(root, options).inspect() } : {}) });
+    } } : {}),
     ...(serviceLine || accessNotices.length ? { openingNotices: [...accessNotices, ...(serviceLine ? [{ level: serviceFailed ? 'error' as const : 'info' as const, text: serviceLine }] : []),
       ...(skewLine ? [{ level: 'warning' as const, text: skewLine }] : []), ...(configLine ? [{ level: 'error' as const, text: configLine }] : [])] } : {}),
     ...(context.restartRuntimeService ? { restartService: async () => {

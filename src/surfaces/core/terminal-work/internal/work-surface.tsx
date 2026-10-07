@@ -6,7 +6,6 @@ import { type WorklineActionLabels, type WorkSurfaceLabels } from './workline-ac
 import type { WorklinePanel, LocalExecution } from './workline-panel.js';
 import type { PanelSnapshot, TerminalLocalContext, StandingScope } from '#surfaces/core/terminal-kit/index.js';
 import { shortId } from '#platform/index.js';
-import { WorkerPanel, WORKER_PANEL_ROWS } from './worker-panel.js';
 import type { ApprovalDecisionLabels } from '#surfaces/core/approval-presentation/index.js';
 import { ApprovalDecisionCard, ApprovalDecisionPicker, approvalRowPresentation, approvalCardPresentation, approvalDecisionCardLines, CancellationDecisionCard, cancellationCardPresentation, PanelWindow,
   type ApprovalWindowContext } from './approval-decision-view.js';
@@ -22,7 +21,7 @@ export interface WorkSurfaceInput {
   readonly errorText: (error: unknown) => string;
   /** The worker heartbeat; the approval notification poll never runs faster. */
   readonly pollMs: number;
-  /** The live panel shows only while the worker watch runs; it is cleared when the watch stops. */
+  /** The observed workers are kept only while the worker watch runs (its live window shows them); they are cleared when the watch stops. */
   readonly watchingWorkers: boolean;
   /** False while a bound push stream is down; omitted keeps the port's own presence. */
   readonly pushLive?: boolean;
@@ -36,7 +35,7 @@ export type TurnApprovalRequest = Readonly<{ approvalId: string; revision: numbe
   /** The scopes the service offers beyond "this once" and exactly what they cover (absent: the plain y/N card). */
   standing?: Readonly<{ scopes: readonly StandingScope[]; pattern: string }>; decisionCapability?: string; risk?: string | null; requiredAssurance?: string }>; // v19 (B1)
 /**
- * Worker live panel, approval notifications and the y/N cards for approvals and run cancellation. Every decision goes
+ * Worker observation, approval notifications and the y/N cards for approvals and run cancellation. Every decision goes
  * through a runtime port; the view never decides, remembers or auto-approves anything. Read-only commands never prompt.
  */
 export const APPROVAL_NOTIFY_MIN_MS = 10_000;
@@ -166,15 +165,12 @@ export function useWorkSurface({ panel, state, ledger, labels, push, errorText, 
   const pickerOpen = picker !== null && modal === null;
   const region = (
     <>
-      {work && watchingWorkers ? <WorkerPanel workers={workers} labels={work.panel} line={work.workerLine} /> : null}
       {picker && modal === null && work ? <ApprovalDecisionPicker key={state.picker?.pickerHandle} rows={picker.map((item, index) => approvalRowPresentation(item, index + 1, Date.now(), work))} labels={labels.render ?? {}} work={work}
         onSelect={index => { panel.choose(state.picker?.pickerHandle, String(index)); }} onCancel={() => { panel.choose(state.picker?.pickerHandle, null); }} /> : null}
       {card}
     </>
   );
-  // Rows the live worker panel takes (title, rows, `+N more`): an open window leaves them on screen.
-  const panelRows = work && watchingWorkers && workers.length ? 1 + Math.min(workers.length, WORKER_PANEL_ROWS) + (workers.length > WORKER_PANEL_ROWS ? 1 : 0) : 0;
-  return { observeWorkers, observeApprovals, run, decideApproval, noteUnsettled, modalOpen: modal !== null, pickerOpen, region, panelRows };
+  return { observeWorkers, observeApprovals, run, decideApproval, noteUnsettled, modalOpen: modal !== null, pickerOpen, region, workers };
 }
 /** Legacy string compatibility; the actual card consumes completed spans/counts in a Provider child. */
 export function approvalCardLines(approval: WorklineApproval, work: WorkSurfaceLabels, preview: string | undefined, covers: string | null, context: ApprovalWindowContext = {}, now = Date.now()): string[] {

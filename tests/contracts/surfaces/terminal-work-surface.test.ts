@@ -20,7 +20,7 @@ const work: WorkSurfaceLabels = { workerLine: EN, panel: { title: 'LIVE-PANEL', 
     assuranceTurnElsewhere: 'R-TURN-ELSEWHERE', assurancePeer: 'R-PEER', assuranceOther: 'R-OTHER {level}' },
   approvalStanding: { covers: 'S-COVERS {pattern}', promptBoth: 'S-PROMPT-BOTH', promptSession: 'S-PROMPT-SESSION', promptAlways: 'S-PROMPT-ALWAYS', savedSession: 'S-SAVED-SESSION {id}',
     savedAlways: 'S-SAVED-ALWAYS {id}', unconfirmedSession: 'S-UNCONFIRMED {id} {reason}', notSavedSession: 'S-NOT-SAVED-SESSION {id} {reason}', notSavedAlways: 'S-NOT-SAVED-ALWAYS {id} {reason}' }, cancelUsage: 'C-USAGE', cancelTitle: 'C-TITLE {run}',
-  cancelDetail: 'C-DETAIL {revision} {phases}', cancelAlreadyRequested: 'C-ALREADY', cancelPrompt: 'C-PROMPT', cancelPending: 'C-PENDING', cancelKept: 'C-KEPT {run}', window: EN_WORK.window, approvalWindow: EN_WORK.approvalWindow };
+  cancelDetail: 'C-DETAIL {revision} {phases}', cancelAlreadyRequested: 'C-ALREADY', cancelPrompt: 'C-PROMPT', cancelPending: 'C-PENDING', cancelKept: 'C-KEPT {run}', live: EN_WORK.live, window: EN_WORK.window, approvalWindow: EN_WORK.approvalWindow };
 const labels: WorklineLabels = { banner: 'BANNER', prompt: '> ', statusReady: 'READY', statusBusy: 'BUSY', statusCancelling: 'CANCELLING',
   hint: 'HINT', roleUser: 'you', roleAssistant: 'bot', runCard: 'Run', workerCard: 'Worker', watchFailed: 'WATCH-FAILED', commandUnavailable: 'NO-PORT {part}',
   ledgerUnavailable: 'NO-LEDGER', runNotFound: 'NO-RUN', workersEmpty: 'NO-WORKERS', runsEmpty: 'NO-RUNS', serviceRestartUnavailable: 'NO-RESTART', queued: 'QUEUED', runUsage: 'USAGE',
@@ -88,7 +88,7 @@ function report(now: number): WorkerObservationReport {
 const baseLedger = { scopeId: 'scope-a', async listWorkers() { return report(Date.now()); }, async inspectRun() { return null; } };
 
 describe('work surface: live worker panel', () => {
-  it('shows human-readable worker lines in the dynamic region fed only by the heartbeat poll', async () => {
+  it('shows human-readable worker lines in the live window fed only by the heartbeat poll', async () => {
     const polls: number[] = [];
     const view = mount({ pollMs: 60, ledger: { ...baseLedger, async listWorkers() { polls.push(performance.now()); return report(Date.now()); } } });
     await view.type('/watch-workers\r');
@@ -100,8 +100,9 @@ describe('work surface: live worker panel', () => {
     // Single-flight polls never run faster than the heartbeat: at most one per interval after the first. Intervals use the
     // monotonic clock: the WSL wall clock steps back by seconds (a -2877 ms interval was observed in a full verify).
     for (let index = 1; index < polls.length; index++) expect(polls[index]! - polls[index - 1]!).toBeGreaterThanOrEqual(55);
-    await view.type('/watch-stop\r');
-    await until(() => view.frame().includes('WATCH-OFF') && !view.frame().includes('LIVE-PANEL'), 'panel cleared when the watch stops');
+    // The window owns the keyboard (the composer is idle); Esc closes it and stops the watch, leaving one summary line in the scrollback.
+    view.stdin.write('\u001B');
+    await until(() => view.frame().includes('Workers window closed') && !view.frame().includes('LIVE-PANEL'), 'window closed when the watch stops');
   });
 
   it('prints the live line on worker cards from /workers', async () => {

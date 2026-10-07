@@ -1,13 +1,14 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, createElement, type ComponentProps } from 'react';
 import { render, Box, Static, Text, useApp, type Instance } from 'ink';
-import { useWorklinePanel, type LocalExecution, LedgerEntryRow, type LedgerEntryLabels, immediateSlashAction, runLedgerCommand, type WatchState, type WorklineActionLabels, useWorkSurface } from '#surfaces/core/terminal-work/index.js';
+import { useWorklinePanel, type LocalExecution, LedgerEntryRow, type LedgerEntryLabels, immediateSlashAction, runLedgerCommand, type WatchState, type MonitorWindowLoader, type WorklineActionLabels, useWorkSurface } from '#surfaces/core/terminal-work/index.js';
 import { WorklinePaletteProvider, useWorklinePalette, parseSlashLine, isInspectSlashCommand, addSessionUsage, bindInspectPorts, EMPTY_SESSION_USAGE, type InspectSlashPorts, type SessionUsageView, useWorklineWatch, surfaceDeliveryValues, surfaceFollowLine, useSurfacePushFeed,
   type TerminalLocalContext, type WorklineInkPalette, type WorklineStreamTurn } from '#surfaces/core/terminal-kit/index.js';
 import { StatusStrip } from './status-strip.js';
+import { useLiveWindows } from './workline-live.js';
 import { AssistantLive, openAssistantStream, renderAssistantStream, renderCompleteReply, type AssistantStreamStep, type AssistantRenderLabels } from '#surfaces/core/terminal-render/index.js';
 import { HumanTextContext, humanRecordText, projectHumanPickerText, RenderGlyphsContext, resolveRenderGlyphs } from '#surfaces/core/terminal-render/index.js';
 import type { KnownSecretSnapshot } from '#platform/index.js';
-import { assistantLedgerEntries, streamStepEntries, workerReportToLedgerEntries, WORK_LEDGER_SCHEMA_VERSION, type WorkLedgerEntry, ledgerEntriesForWorkers, ledgerEntriesForRuns, type WorklineLedgerPorts, fillTemplate, newWorkerTaskIds, freshRunCards, newRunLedgerEntries, agentHistory, appendLedger, boundAgentHistory, compactLedger, EMPTY_LEDGER, plainChatHistory, type AgentChatMessage, type ChatTurnMessage, type LedgerBuffer, notice } from '#surfaces/core/terminal-ledger/index.js';
+import { assistantLedgerEntries, streamStepEntries, workerReportToLedgerEntries, WORK_LEDGER_SCHEMA_VERSION, type WorkLedgerEntry, ledgerEntriesForWorkers, ledgerEntriesForRuns, type WorklineLedgerPorts, fillTemplate, newWorkerTaskIds, newRunLedgerEntries, runViewToLedgerEntry, agentHistory, appendLedger, boundAgentHistory, compactLedger, EMPTY_LEDGER, plainChatHistory, type AgentChatMessage, type ChatTurnMessage, type LedgerBuffer, notice } from '#surfaces/core/terminal-ledger/index.js';
 import { useConversationSession, type ConversationSessionLabels, type ConversationSessionPort } from './workline-sessions.js';
 import { ArrowPicker, ARROW_PICKER_ROWS } from '#surfaces/core/terminal-picker/index.js';
 import { Window, WindowStackProvider, WINDOW_RESERVED_ROWS, useFocusOwner } from '#surfaces/core/terminal-window/index.js';
@@ -93,6 +94,8 @@ export interface WorklineProps {
   readonly config?: (args: string) => Promise<readonly string[]>; readonly mcp?: (args: string) => Promise<readonly string[]>; readonly monitor?: (args: string) => Promise<readonly string[]>;
   /** The project root the approval window names under "where" (display only; T-APPROVAL-WINDOW). */
   readonly projectRoot?: string;
+  /** `/monitor` as a window (T3 L5): loads the monitor body from the host, which owns it (this unit never imports the monitor). Without it `/monitor` answers as notice lines. */
+  readonly monitorWindow?: MonitorWindowLoader;
 }
 
 /** The composer listens only while no window is open (TS-WINDOW: one input owner, the window stack's top). */
@@ -137,8 +140,11 @@ export function WorklineApp(props: WorklineProps) {
   const seenWorkers = useRef(new Set<string>()), seenRuns = useRef(new Map<string, string>()), snapshotOpened = useRef(false);
   const pollMs = props.pollMs ?? ledger?.workerHeartbeatMs ?? 5000;
   const workRef = useRef<ReturnType<typeof useWorkSurface> | null>(null), activeWorkers = useRef(false);
+  const liveRef = useRef<ReturnType<typeof useLiveWindows> | null>(null);
   const pushMode = useSurfacePushFeed(ledger?.followEvents, ledger?.scopeId ?? '', pollMs, step => {
     if (step.status === 'denied' || step.status === 'not-initialized') workRef.current?.observeWorkers([]);
+    // A stopped follow leaves nothing to update: the window closes (its summary line and the access notice stay in the scrollback).
+    if (step.status === 'denied' && step.stopped) liveRef.current?.close();
     // With snapshots, publications are invalidations, never a substitute for typed surface state.
     if (ledger?.readSurfaceSnapshot && step.status === 'applied') return;
     const text = surfaceFollowLine(step, watchRef.current, labels.watchStep, step.status === 'denied' && step.stopped ? labels.watchAccessStopped : labels.watchAccessDenied, labels.watchNotInitialized);
@@ -153,9 +159,13 @@ export function WorklineApp(props: WorklineProps) {
         (['running', 'created', 'paused'].includes(worker.process) || (worker.identity !== null && worker.process === 'unknown' && worker.files?.heartbeat.phase !== 'exited'))));
       const workers = workerReportToLedgerEntries(snapshot.workers, 'watch').filter(entry => entry.kind === 'worker');
       workRef.current?.observeWorkers(workers);
-      if (opening || watchRef.current.workers) { const { seen, fresh } = newWorkerTaskIds(seenWorkers.current, workers); seenWorkers.current = seen; push(fresh); }
+      // A watch window shows the workers in place; only the opening read still prints the cards of workers already running at start.
+      if (opening || watchRef.current.workers) { const { seen, fresh } = newWorkerTaskIds(seenWorkers.current, workers); seenWorkers.current = seen; if (opening) push(fresh); }
     }
-    if (snapshot.runs && (opening || watchRef.current.runs)) { const { seen, fresh } = newRunLedgerEntries(seenRuns.current, snapshot.runs, 'watch'); seenRuns.current = seen; push(fresh); }
+    if (snapshot.runs && (opening || watchRef.current.runs)) {
+      const { seen, fresh } = newRunLedgerEntries(seenRuns.current, snapshot.runs, 'watch'); seenRuns.current = seen; if (opening) push(fresh);
+      if (watchRef.current.runs) liveRef.current?.setRuns(snapshot.runs.map((run, index) => runViewToLedgerEntry(run, `watch-run-${index}`)));
+    }
     if (snapshot.approvals) workRef.current?.observeApprovals(snapshot.approvals);
     return snapshot.denied;
   } : undefined, ledger?.readSurfaceSnapshot ? `${watch.workers}:${watch.runs}` : '', { heartbeatMs: ledger?.workerHeartbeatMs ?? pollMs, active: () => watchRef.current.workers && activeWorkers.current });
@@ -167,6 +177,8 @@ export function WorklineApp(props: WorklineProps) {
     context: { ...(props.projectRoot ? { project: props.projectRoot } : {}), ...(mode.stop ? { mode: mode.stop } : {}) },
     ...(props.approvalPollMs === undefined ? {} : { approvalPollMs: props.approvalPollMs }) });
   workRef.current = work; decide.current = work.decideApproval;
+  const liveWin = useLiveWindows({ work: labels.work, workers: work.workers, watch, watchRef, setWatch, push, errorText, monitorWindow: props.monitorWindow, positionLabel: labels.work?.window.position ?? '{from}-{to}/{total}' });
+  liveRef.current = liveWin;
   const refreshMode = mode.refresh;
   const reasoning = useReasoningPreview(push, labels.reasoning);
   const scratch = useWorklineScratch(props.scratch, session.id, push, errorText, labels.work?.unavailable ?? labels.ledgerUnavailable, labels.scratch);
@@ -180,11 +192,10 @@ export function WorklineApp(props: WorklineProps) {
   useWorklineWatch(watch.workers && Boolean(ledger) && !pushLive && !ledger?.readSurfaceSnapshot, followWorkers, pollMs, () => ledgerEntriesForWorkers(ledger!, 'watch'), batch => {
     const workers = batch.filter(entry => entry.kind === 'worker').map(entry => ({ ...entry, observedAtMs: Date.now() }));
     work.observeWorkers(workers);
-    const { seen, fresh } = newWorkerTaskIds(seenWorkers.current, workers); seenWorkers.current = seen; push(fresh);
   }, failed);
   useWorklineWatch(watch.runs && Boolean(ledger) && !pushLive && !ledger?.readSurfaceSnapshot, followRuns, pollMs, () => ledgerEntriesForRuns(ledger!, 'watch'), batch => {
     const runs = batch.filter(entry => entry.kind === 'run').map(entry => ({ ...entry, observedAtMs: Date.now() }));
-    const { seen, fresh } = freshRunCards(seenRuns.current, runs); seenRuns.current = seen; push(fresh);
+    liveRef.current?.setRuns(runs);
   }, failed);
   const runTurn = useCallback(async (text: string, mentioned: readonly string[], execution: LocalExecution) => {
     push([chat('user', text)]);
@@ -251,6 +262,8 @@ export function WorklineApp(props: WorklineProps) {
     if (slash.command === 'reasoning') { reasoning.run(slash.args); return true; }
     if (slash.command === 'mode' || slash.command === 'scratch') { await (slash.command === 'mode' ? mode.run : scratch)(slash.args); return true; }
     const lineCommands: Readonly<Record<string, ((args: string) => Promise<readonly string[]>) | undefined>> = { ...bindInspectPorts(props.inspect, () => usage.current, () => mode.fullAccess.current), mcp: props.mcp, monitor: props.monitor, config: props.config };
+    // T3 L5: a bare `/monitor` opens the monitor window; with arguments (`--install`, `--scope`) it stays the text snapshot as notice lines.
+    if (slash.command === 'monitor' && !slash.args && liveWin.canOpenMonitor) { await liveWin.openMonitor(); return true; }
     if (slash.command === 'mcp' || slash.command === 'monitor' || slash.command === 'config' || (isInspectSlashCommand(slash.command) && (slash.command !== 'status' || lineCommands['status']))) {
       const lines = lineCommands[slash.command];
       // One notice for the whole answer, so its level words (`Info: `) open the answer once instead of every line.
@@ -277,6 +290,7 @@ export function WorklineApp(props: WorklineProps) {
       push(action.entries);
       // Queued watch commands see the transition even before React renders.
       if (action.watch) { watchRef.current = action.watch; setWatch(action.watch); }
+      if (action.window !== undefined) liveWin.show(action.window);
       return true;
     }
     try {
@@ -293,7 +307,7 @@ export function WorklineApp(props: WorklineProps) {
     }
     catch (error) { push([notice('error', errorText(error))]); }
     return true;
-  }, [errorText, exit, labels, ledger, mode.run, props.inspect, props.mcp, props.monitor, props.config, props.restartService, pollMs, pushMode, push, reasoning.run, runTurn, scratch, session, work.run, panel]);
+  }, [errorText, exit, labels, ledger, mode.run, props.inspect, props.mcp, props.monitor, props.config, props.restartService, pollMs, pushMode, push, liveWin, reasoning.run, runTurn, scratch, session, work.run, panel]);
 
   execute.current = async execution => {
     await perform(execution.input.text, execution.input.mentions, execution);
@@ -321,7 +335,7 @@ export function WorklineApp(props: WorklineProps) {
   const finishResume = (choice: number | null) => { panel.choose(state.picker?.pickerHandle, choice === null ? null : String(choice)); };
   return (
     <HumanTextContext.Provider value={props.knownSecrets}>
-    <WindowStackProvider reservedRows={WINDOW_RESERVED_ROWS + work.panelRows}>
+    <WindowStackProvider reservedRows={WINDOW_RESERVED_ROWS}>
     <Box flexDirection="column">
       <PermissionModeKeys active={composing && !busy && Boolean(props.permissionMode)} onCycle={() => void mode.cycle()} />
       <Static key={buffer.epoch} items={[...buffer.pending]}>
@@ -330,6 +344,8 @@ export function WorklineApp(props: WorklineProps) {
       {live ? <AssistantLive tail={live.step.liveTail} narration={live.step.narration} labels={labels.render} lead={live.lead} activeTool={live.step.activeTool}
         waiting={live.step.waiting} reasoningPreview={reasoning.show ? live.step.reasoningPreview : []} /> : null}
       {work.region}
+      {/* One window is visible at a time: a decision card, picker or approval window takes the screen from the live window, which returns when it is answered. */}
+      {work.modalOpen || work.pickerOpen || resumePicker !== null ? null : liveWin.element}
       {resumePicker && !work.modalOpen && !work.pickerOpen
         ? <Window title={[span(labels.work?.window.resumeTitle ?? '/resume')]} status={[span(String(resumePicker.length))]} hints={labels.work?.window.pick ?? ''}
           position={labels.work?.window.position ?? '{from}-{to}/{total}'} footerRows={ARROW_PICKER_ROWS + 2}
