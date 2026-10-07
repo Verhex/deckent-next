@@ -252,8 +252,9 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
           const decided = await awaitAgentToolApproval(journal.store, integrity, record, clock, approvalSignal, 250, started);
           let outcome = decided;
           if (outcome === 'allow') await answer?.wait();
-          // Approved: re-evaluate policy now; a deny since the request wins (contract §2).
-          if (outcome === 'allow' && await toolAuthority.decide(tool, command.scopeId, context.principal) === 'deny') outcome = 'deny';
+          // Approved: re-evaluate policy now; a deny since the request wins (contract §2). The owner's decision stays `allow` (the settlement says
+          // so); the call is refused by policy, never reported as the owner's refusal (DENY-WORDING, lead 2026-10-07).
+          if (outcome === 'allow' && await toolAuthority.decide(tool, command.scopeId, context.principal) === 'deny') { settlement = 'allow'; return 'policy-deny'; }
           // Policy revalidation is asynchronous: it spends the same authorization budget as waiting.
           if (outcome === 'allow') {
             const consumed = clock.sample();

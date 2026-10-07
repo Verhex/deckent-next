@@ -55,10 +55,11 @@ export interface AgentTurnPorts {
    * The owner's decision on one approval-gated call (T-L4, C12): opens a single-use approval bound to exactly this call and waits.
    * `allow` means approved and re-authorized just now (policy re-evaluated); anything else never runs the call. APPROVER-NOTE: a decision
    * the owner explained in their own words comes as `{ outcome, note }`; the note reaches the model with the call's result or refusal.
+   * `policy-deny`: the owner allowed, but policy denies the call now (re-evaluated after the approval) — a policy refusal, not the owner's.
    */
   requestApproval?(input: { readonly round: number; readonly index: number; readonly call: AgentToolCall; readonly tool: AgentToolSpec;
     readonly args: Record<string, unknown>; readonly argsDigest: string; readonly target: string | null }, signal: AbortSignal):
-    Promise<'allow' | 'deny' | 'expired' | 'cancelled' | AgentToolOwnerAnswer>;
+    Promise<'allow' | 'deny' | 'expired' | 'cancelled' | 'policy-deny' | AgentToolOwnerAnswer>;
   /** Durable projection of every settled call (optional for pure tests; the runtime composition always records). */
   settled?(call: { readonly round: number; readonly index: number; readonly call: AgentToolCall; readonly tool: AgentToolSpec | null;
     readonly argsDigest: string | null; readonly target: string | null; readonly status: AgentToolCallStatus; readonly content: string }): Promise<void>;
@@ -176,7 +177,7 @@ async function presentModelIngress(content: string, pause: IngressPause | null, 
   try { await ports.recordIngress?.(projected); } catch { return projected.withheld; }
   if (projected.disposition === 'note') return projected.modelText;
   if (!pause || input.fullAccess || !ports.requestApproval) return projected.withheld;
-  let answer: 'allow' | 'deny' | 'expired' | 'cancelled' | null;
+  let answer: 'allow' | 'deny' | 'expired' | 'cancelled' | 'policy-deny' | null;
   try { answer = ownerOutcome(await ports.requestApproval({ round, index: pause.index, call: pause.call, tool: pause.tool, args: pause.args,
     argsDigest: pause.argsDigest, target: pause.target }, input.signal)).outcome; }
   catch { answer = null; }
@@ -365,13 +366,14 @@ export async function runAgentTurn(input: AgentTurnInput, ports: AgentTurnPorts)
       if (decision === 'require-approval') {
         // No bypass: without an approval port the call stays blocked; with one it runs only on an explicit, call-exact allow.
         if (!ports.requestApproval) { await result('approval-required', `[deckent] ${call.name}: error=approval-required (tool approvals are not available here)`); continue; }
-        let answer: 'allow' | 'deny' | 'expired' | 'cancelled' | null;
+        let answer: 'allow' | 'deny' | 'expired' | 'cancelled' | 'policy-deny' | null;
         try { const owner = ownerOutcome(await ports.requestApproval({ round: rounds, index, call, tool, args: checked.args, argsDigest: digest, target: targetOf }, signal));
           answer = owner.outcome; noteOf = owner.note; }
         catch { answer = null; }
         if (answer === null && !signal.aborted) { await result('approval-required', `[deckent] ${call.name}: error=approval-unavailable (nothing ran)`); continue; }
         if (signal.aborted || answer === 'cancelled') { await result('cancelled', `[deckent] ${call.name}: error=cancelled`); continue; }
         if (answer === 'deny') { await result('denied', `[deckent] ${call.name}: error=denied-by-owner${await approverNoteLine(noteOf, input, ports)}`); continue; }
+        if (answer === 'policy-deny') { await result('denied', `[deckent] ${call.name}: error=denied-by-policy (approved, but policy denies it now; nothing ran)`); continue; }
         if (answer === 'expired') { await result('approval-expired', `[deckent] ${call.name}: error=approval-expired (nothing ran)`); continue; }
       }
       toolCalls++;

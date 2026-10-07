@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { AgentTurnStreamEvent } from '#domain/index.js';
+import { renderAssistantStream, startAssistantStream, type AssistantUnit, type TurnDelta } from '#surfaces/core/terminal/index.js';
 import { me, runtime } from '../support/chat-turn-harness.js';
 
 const ask = (turnId: string) => ({ schemaVersion: 1 as const, scopeId: 'scope', turnId, messages: [{ role: 'user' as const, content: 'what does src/a.ts export?' }] });
@@ -71,5 +72,42 @@ describe.skipIf(process.platform !== 'linux')('approval card facts through the r
     expect(modify.preview).toContain('Runs on this machine as your user');
     const destructive = await requested(f, 'turn-shell-destructive');
     expect(destructive).toMatchObject({ risk: 'shell-destructive', undo: 'irreversible' });
+  }, 60_000);
+});
+
+// Contract §2 (moved from runtime-chat-turn) + DENY-WORDING (lead 2026-10-07): the owner allows, policy denies the call meanwhile. The call never
+// runs, the approval settles as the owner decided (`allow`), the model reads a policy refusal and the terminal line says "denied by policy" —
+// never "you declined" (negative proof of the owner/policy split).
+describe.skipIf(process.platform !== 'linux')('a policy deny after the owner allows (contract §2, DENY-WORDING)', () => {
+  it('never runs the call and reports it as the policy\'s refusal, not the owner\'s', async () => {
+    const f = await runtime({ toolGrant: 'approval' }); await f.start();
+    f.state.script = [{ toolCall: { name: 'read_file', arguments: '{"path":"src/a.ts"}' } }, { content: 'Blocked.' }];
+    const client = f.client(), events: AgentTurnStreamEvent[] = [], pending: Promise<unknown>[] = [];
+    await client.chatTurn(ask('turn-revoked'), event => {
+      events.push(event);
+      if (event.kind !== 'approval.requested') return;
+      pending.push((async () => {
+        // The tool grant is withdrawn while the call waits; approvals stay decidable.
+        await f.writePolicy(f.grants.filter(grant => grant.id !== 'read-needs-approval'));
+        await client.decideApproval({ schemaVersion: 1, scopeId: 'scope', approvalId: event.approvalId, decisionCapability: event.decisionCapability, commandId: 'allow-revoked',
+          expectedRevision: event.revision, decision: 'allow', reason: 'Reviewed' });
+      })());
+    });
+    await Promise.all(pending);
+    expect(events.find(event => event.kind === 'approval.settled')).toMatchObject({ outcome: 'allow' });
+    expect(events.find(event => event.kind === 'tool.finished')).toMatchObject({ status: 'denied' });
+    const result = events.flatMap(event => event.kind === 'message' && event.message.role === 'tool' ? [event.message.content] : [])[0]!;
+    expect(result).toBe('[deckent] read_file: error=denied-by-policy (approved, but policy denies it now; nothing ran)');
+    expect(result).not.toContain('denied-by-owner');
+    // The same events through the terminal's stream state: the line is a policy refusal.
+    let state = startAssistantStream(0); const units: AssistantUnit[] = [];
+    for (const event of events) {
+      const delta: TurnDelta | null = event.kind === 'approval.settled' ? { kind: 'approval', phase: 'settled', callId: event.callId, approvalId: event.approvalId, outcome: event.outcome }
+        : event.kind === 'tool.started' ? { kind: 'tool', phase: 'started', callId: event.callId, name: event.name, target: event.target, status: null, ms: null }
+          : event.kind === 'tool.finished' ? { kind: 'tool', phase: 'finished', callId: event.callId, name: event.name, target: null, status: event.status, ms: event.ms } : null;
+      if (delta) { const step = renderAssistantStream(state, delta, 1); state = step.state; units.push(...step.staticUnits); }
+    }
+    expect(units.find(unit => unit.kind === 'tool')).toMatchObject({ status: 'denied' });
+    expect(units.find(unit => unit.kind === 'tool')).not.toHaveProperty('declined');
   }, 60_000);
 });

@@ -57,3 +57,9 @@ it('without a note (or without a bound) the result is exactly what it was', asyn
   expect((await turn('allow')).content).toBe('[deckent] edit_file: ok');
   expect((await turn({ outcome: 'deny', note: 'why' }, null)).content).toBe('[deckent] edit_file: error=denied-by-owner');
 });
+
+it('a policy deny after the owner\'s allow is the policy\'s refusal: nothing runs, no owner wording, no note', async () => {
+  const policy = await turn('policy-deny');
+  expect(policy.executed).toEqual([]);
+  expect(policy.content).toBe('[deckent] edit_file: error=denied-by-policy (approved, but policy denies it now; nothing ran)');
+});

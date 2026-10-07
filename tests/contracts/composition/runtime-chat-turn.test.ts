@@ -579,25 +579,6 @@ describe.skipIf(process.platform !== 'linux')('agent chat turn through the runti
     expect(toolText(narrowed)).toMatch(/hasMore=true/);
   }, 30_000);
 
-  it('re-evaluates policy after the owner allows: a call the policy denies meanwhile never runs (contract §2)', async () => {
-    const f = await runtime({ toolGrant: 'approval' }); await f.start();
-    f.state.script = [{ toolCall: { name: 'read_file', arguments: '{"path":"src/a.ts"}' } }, { content: 'Blocked.' }];
-    const client = f.client(), events: AgentTurnStreamEvent[] = [], pending: Promise<unknown>[] = [];
-    await client.chatTurn(ask('turn-revoked'), event => {
-      events.push(event);
-      if (event.kind !== 'approval.requested') return;
-      pending.push((async () => {
-        // The tool grant is withdrawn while the call waits; approvals stay decidable.
-        await f.writePolicy(f.grants.filter(grant => grant.id !== 'read-needs-approval'));
-        await client.decideApproval({ schemaVersion: 1, scopeId: 'scope', approvalId: event.approvalId, decisionCapability: event.decisionCapability, commandId: 'allow-revoked',
-          expectedRevision: event.revision, decision: 'allow', reason: 'Reviewed' });
-      })());
-    });
-    await Promise.all(pending);
-    expect(events.find(event => event.kind === 'approval.settled')).toMatchObject({ outcome: 'deny' });
-    expect(events.find(event => event.kind === 'tool.finished')).toMatchObject({ status: 'denied' });
-  }, 60_000);
-
   it('closes an approval that expires or whose turn is cancelled, and never runs the call', async () => {
     const f = await runtime({ toolGrant: 'approval', approvalTtlMs: 400 }); await f.start();
     f.state.script = [{ toolCall: { name: 'read_file', arguments: '{"path":"src/a.ts"}' } }, { content: 'Expired.' }];
