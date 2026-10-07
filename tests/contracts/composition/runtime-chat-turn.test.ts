@@ -1443,7 +1443,7 @@ describe.skipIf(process.platform !== 'linux')('composer @file and slash keys thr
       await typeInto(view, '/hel');
       await until(() => view.stdout.text.includes('> /help'), 'palette');
       await typeInto(view, '\r');
-      await until(() => view.stdout.text.includes('/watch-runs\n/watch-stop\n'), 'help ran');
+      await until(() => view.stdout.text.includes('  /watch-runs\n  /watch-stop\n'), 'help ran (grouped, indented rows: T2 L3)');
       await typeInto(view, '/res');
       await until(() => view.stdout.text.includes('> /resume'), 'palette');
       await typeInto(view, '\r');
