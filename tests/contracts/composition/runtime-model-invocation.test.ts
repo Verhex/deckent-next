@@ -470,7 +470,8 @@ it.skipIf(process.platform !== 'linux')('completes compiled terminal line-mode t
   expect(f.requests).toBe(2); expect(f.totalCount()).toBe(2);
   await f.policy(false);
   const denied = await session('third question\n');
-  expect(denied.code).toBe(0); expect(`${denied.stdout}${denied.stderr}`).toMatch(/\[[A-Z_]+\]/);
+  // T2 L3: the typed failure prints its human message, then the code on its own line (`(code: X)`).
+  expect(denied.code).toBe(0); expect(`${denied.stdout}${denied.stderr}`).toMatch(/^\(code: [A-Z_]+\)$/m);
   expect(denied.stdout).not.toContain('done'); expect(f.requests).toBe(2);
 }, 30_000);
 
