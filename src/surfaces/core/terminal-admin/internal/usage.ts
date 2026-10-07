@@ -4,6 +4,13 @@ import type { SessionUsageView } from '#surfaces/core/terminal-kit/index.js';
 import { queryFailureText } from './failure.js';
 import type { TerminalAdminCall } from './context.js';
 
+/** An unreported reasoning count stays unknown: never a zero, and a partial sum says how many reports it misses. */
+function reasoningText(usage: SessionUsageView, locale: TerminalAdminCall['locale']): string {
+  if (usage.reasoningUnmeasured === 0) return t('terminal.admin.usage.reasoningMeasured', { tokens: usage.reasoningTokens }, locale);
+  if (usage.reasoningUnmeasured >= usage.reports) return t('terminal.admin.usage.reasoningNotMeasured', {}, locale);
+  return t('terminal.admin.usage.reasoningPartial', { tokens: usage.reasoningTokens, unmeasured: usage.reasoningUnmeasured, reports: usage.reports }, locale);
+}
+
 /**
  * `/usage`: what this terminal measured for the open conversation (typed `usage` events; not a bill), or with `<budget-id> <revision>` the
  * provider spend account of that budget through the typed query. A failed spend query shows its typed error, never an earlier figure.
@@ -13,7 +20,7 @@ export async function usageLines(call: TerminalAdminCall, args: string, usage: S
   const words = args.split(/\s+/u).filter(Boolean);
   if (words.length === 0) {
     return usage.reports === 0 ? [t('terminal.admin.usage.none', {}, locale)]
-      : [t('terminal.admin.usage.session', { reports: usage.reports, prompt: usage.promptTokens, completion: usage.completionTokens, reasoning: usage.reasoningTokens }, locale),
+      : [t('terminal.admin.usage.session', { reports: usage.reports, prompt: usage.promptTokens, completion: usage.completionTokens, reasoning: reasoningText(usage, locale) }, locale),
         t('terminal.admin.usage.notBilling', {}, locale)];
   }
   let query;

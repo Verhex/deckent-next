@@ -124,7 +124,7 @@ describe('terminal read-only management (S09)', () => {
     await type(view, 'hi\r');
     await until(() => view.stdout.text.includes('30 in 7 out'), 'turn footer');
     await type(view, '/usage \r');
-    await until(() => view.stdout.text.includes('prompt 30 tokens, completion 7 tokens, reasoning 0 tokens'), 'measured usage');
+    await until(() => view.stdout.text.includes('prompt 30 tokens, completion 7 tokens, reasoning not measured'), 'measured usage');
     await type(view, '/usage b1 2\r');
     await until(() => spend.mock.calls.length === 1, 'spend query');
     expect(spend.mock.calls[0]![1]).toEqual({ schemaVersion: 1, scopeId: 's', budgetId: 'b1', budgetRevision: 2 });
@@ -141,7 +141,21 @@ describe('terminal read-only management (S09)', () => {
 
   it('adds usage reports without losing earlier totals', () => {
     const total = addSessionUsage(addSessionUsage(EMPTY_SESSION_USAGE, { promptTokens: 1, completionTokens: 2, reasoningTokens: 3 }), { promptTokens: 4, completionTokens: 5, reasoningTokens: null });
-    expect(total).toEqual({ reports: 2, promptTokens: 5, completionTokens: 7, reasoningTokens: 3 });
+    expect(total).toEqual({ reports: 2, promptTokens: 5, completionTokens: 7, reasoningTokens: 3, reasoningUnmeasured: 1 });
+  });
+
+  // BATCH-FIX 2026-10-07 USAGE-UNKNOWN (P2-3a): an unreported reasoning count is never summed as 0; a partial sum says what it misses.
+  it.each([
+    ['en', 'reasoning 3 tokens (', 'reasoning at least 3 tokens (not measured in 1 of 2 reports)', 'reasoning not measured'],
+    ['tr', 'akıl yürütme 3 token (', 'akıl yürütme en az 3 token (2 raporun 1 tanesinde ölçülmedi)', 'akıl yürütme ölçülmedi'],
+  ] as const)('/usage keeps an unmeasured reasoning count unknown (%s)', async (locale, measured, partial, none) => {
+    const { inspect } = terminalAdminPorts({ ...base, locale, context: {} });
+    const lines = async (...reasoning: (number | null)[]) => (await inspect.usage!('', { usage: reasoning.reduce((total, value) =>
+      addSessionUsage(total, { promptTokens: 1, completionTokens: 1, reasoningTokens: value }), EMPTY_SESSION_USAGE) })).join('\n');
+    expect(await lines(3)).toContain(measured);
+    expect(await lines(3, null)).toContain(partial);
+    const unknown = await lines(null, null);
+    expect(unknown).toContain(none); expect(unknown).not.toMatch(/(reasoning|akıl yürütme) 0 tok/u);
   });
 
   it('/scope names each part it could not read and still shows the rest', async () => {

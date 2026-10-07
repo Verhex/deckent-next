@@ -48,12 +48,15 @@ export type InspectSlashCommand = typeof INSPECT_SLASH_COMMANDS[number];
 export function isInspectSlashCommand(command: string): command is InspectSlashCommand {
   return (INSPECT_SLASH_COMMANDS as readonly string[]).includes(command);
 }
-/** What this terminal itself measured for the open conversation (typed `usage` stream events); not a billing statement. */
-export interface SessionUsageView { readonly reports: number; readonly promptTokens: number; readonly completionTokens: number; readonly reasoningTokens: number }
-export const EMPTY_SESSION_USAGE: SessionUsageView = Object.freeze({ reports: 0, promptTokens: 0, completionTokens: 0, reasoningTokens: 0 });
+/** What this terminal itself measured for the open conversation (typed `usage` stream events); not a billing statement.
+ * `reasoningTokens` sums only the reports that carried a reasoning count; `reasoningUnmeasured` counts the reports that did not, so an
+ * unreported value stays unknown instead of reading as zero (P2-3a). */
+export interface SessionUsageView { readonly reports: number; readonly promptTokens: number; readonly completionTokens: number; readonly reasoningTokens: number;
+  readonly reasoningUnmeasured: number }
+export const EMPTY_SESSION_USAGE: SessionUsageView = Object.freeze({ reports: 0, promptTokens: 0, completionTokens: 0, reasoningTokens: 0, reasoningUnmeasured: 0 });
 export function addSessionUsage(total: SessionUsageView, report: Readonly<{ promptTokens: number; completionTokens: number; reasoningTokens: number | null }>): SessionUsageView {
   return Object.freeze({ reports: total.reports + 1, promptTokens: total.promptTokens + report.promptTokens, completionTokens: total.completionTokens + report.completionTokens,
-    reasoningTokens: total.reasoningTokens + (report.reasoningTokens ?? 0) });
+    reasoningTokens: total.reasoningTokens + (report.reasoningTokens ?? 0), reasoningUnmeasured: total.reasoningUnmeasured + (report.reasoningTokens === null ? 1 : 0) });
 }
 /** `/status` without a fresh port keeps the launch-time line; with one, a failed read shows its typed error, never that old line. */
 export type InspectSlashPort = (args: string, view: Readonly<{ usage: SessionUsageView }>) => Promise<readonly string[]>;
