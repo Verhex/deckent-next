@@ -27,9 +27,8 @@ directly. There is no HTTP API yet; Dashboard and Desktop are planned observer/o
 
 ## Status
 
-**1.0.0-alpha.9 (release 2026-10-07; the live switch is an owner step, current live state in PLAN.md), clean-room port in progress.** Completed capabilities are recorded in
-[COMPLETED-PLAN.md](COMPLETED-PLAN.md); remaining work is in [PLAN.md](PLAN.md); who holds what and what comes next is on the host
-process board (`node .agents/refactor/board.mjs show`). Live observation: `deckent monitor` (one read-only snapshot of every installation).
+**1.0.0-alpha.10 (live since 2026-10-07; current live state in PLAN.md), clean-room port in progress.** Completed capabilities are recorded in
+[COMPLETED-PLAN.md](COMPLETED-PLAN.md); remaining work is in [PLAN.md](PLAN.md). Live observation: `deckent monitor` (one read-only snapshot of every installation).
 Development dogfood (Deckent workers writing Deckent cards in an isolated installation) runs as bounded trials; DOGFOOD is officially off. Everything else is being ported from the legacy codebase
 one capability at a time, each landing with contract tests and a real-binary proof.
 
@@ -177,7 +176,18 @@ cd deckent-next
 ```sh
 npm ci
 npm run build
-node dist/composition/core/cli/internal/entry.js --version
+npm link            # puts `deckent` and `deckent-mcp` on PATH from this checkout
+```
+
+Then everything runs through `deckent`:
+
+```sh
+deckent --version
+deckent init preview --profile <file>   # preview the installation for this project
+deckent             # open the interactive terminal
+deckent doctor      # installation health
+deckent mcp add context7 -- npx -y @upstash/context7-mcp   # add an MCP server (stdio)
+deckent --help      # all commands; deckent <command> --help for details
 ```
 
 Installation accepts owned group-writable project and bootstrap journal directories (for example,
@@ -189,54 +199,18 @@ a group-writable project does not imply support for a shared writable product-da
 
 ## Development host
 
-This checkout is the execution workspace. `deckent-dev` is a read-only refactor reference;
-its runtime and workers must not be launched. Local development entry points are:
+Maintainers run the same `deckent` command; on the development host it points to the pinned host entry
+(cwd and global state fixed, see [CONTRIBUTING.md](CONTRIBUTING.md#development-host)):
 
 ```sh
-node .agents/refactor/next-entry.mjs cli --version
-node .agents/refactor/next-entry.mjs cli workers watch --scope pilot
-node .agents/refactor/next-entry.mjs mcp
-# For local SDK scripts, use the same environment and cwd:
-node .agents/refactor/next-entry.mjs node /absolute/path/to/script.mjs
+deckent --version
+deckent workers watch --scope pilot
+deckent monitor
+deckent-mcp            # MCP server entry for MCP clients
 ```
 
-The host entry pins cwd to this checkout and `DECKENT_GLOBAL_HOME` to
-`~/.local/state/deckent-next-dev`, outside the checkout (the runtime copies the bundled bubblewrap there,
-and a launcher inside the project is refused). It drops an inherited `DECKENT_HOME` to avoid redirecting project
-runtime data. Each project's `.deckent/config.json` still chooses its own `layout.root`.
-`DECKENT_GLOBAL_HOME` is a shared CLI/MCP/SDK configuration input; it selects the global
-configuration/state directory independently of project data. Without it, installed product
-defaults remain unchanged. It contains no provider credentials and does not migrate legacy state.
-
-The local observer reads only explicitly configured `inspection.workers.sources` and preserves
-source policy checks. Docker workers see their attempt checkout at `/workspace`; host storage
-is `<layout.root>/workspaces/<attempt-hash>/tree`. `worker.hb`, `worker.log` and `worker.result`
-are host-owned observations beside `tree`, outside the worker mount. Log summaries expose
-safe state/diagnostic fields, not arbitrary provider output. `Ctrl+C` stops the view only.
-The `pilot` scope and local source catalog are development fixtures, not an installed default.
-DOGFOOD remains off. Changing MCP configuration requires reconnecting already-open clients.
-
-The process board (`node .agents/refactor/board.mjs show`) owns who holds what and the next step;
-[PLAN.md](PLAN.md) owns admitted work. The board is host coordination data outside Git/npm,
-not authority or liveness proof. `deckent monitor` observes installations without admitting work.
-If a lane lacks the shared host board, leave the lead a handoff instead of creating a competing board.
-
-### Development duration measurement (A02/W0-3)
-
-`node .agents/refactor/effort.mjs` records how long development slices actually take. It is
-host tooling for M1–M5 forecast updates, not a product feature or a second work ledger.
-
-```sh
-node .agents/refactor/effort.mjs start A02-my-slice --milestone M1 --title "…" --actor "…" --kind active
-node .agents/refactor/effort.mjs phase A02-my-slice blocked --reason owner-decision   # active|blocked|verification|rework
-node .agents/refactor/effort.mjs pause A02-my-slice        # time until the next event is unknown, never active
-node .agents/refactor/effort.mjs end A02-my-slice done     # done|canceled|handed-off
-node .agents/refactor/effort.mjs report --format table     # observed hours per kind and milestone
-```
-
-Events are immutable private files under `.deckent/host/effort/<slice>/` (Git-ignored). Time is
-counted only between explicit events; unobserved time is reported as unknown and never estimated.
-`--at <ISO>` records an operator-supplied timestamp and is counted separately in reports.
+Maintainer host tooling (process board, effort log) is described in [CONTRIBUTING.md](CONTRIBUTING.md#development-host);
+it is host coordination, not a product feature.
 
 ### Checks before landing
 

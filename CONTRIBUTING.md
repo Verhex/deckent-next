@@ -145,3 +145,56 @@ node .agents/refactor/pr.mjs open <patch-dir> --card <id> --push
 [PLAN.md](.deckent/docs/plan/workstreams.md#worker-git-pr--host-branch-ve-pr-akışı) carries the script, patch/report contract,
 replay/failure checks and owner test planned for **2026-10-04**. The script is present; owner test and landing remain open.
 Credential plumbing, live GitHub push, live PR creation, main landing and a DOGFOOD/live switch stay outside this script.
+
+## Development host
+
+This checkout is the execution workspace. `deckent-dev` is a read-only refactor reference;
+its runtime and workers must not be launched. Local development entry points are below. On the host, `deckent` is a symlink to
+`.agents/refactor/next-entry.mjs` (for example `ln -s "$PWD/.agents/refactor/next-entry.mjs" ~/.local/bin/deckent`), so the
+product command and the host entry are the same; the explicit forms are:
+
+```sh
+node .agents/refactor/next-entry.mjs cli --version
+node .agents/refactor/next-entry.mjs cli workers watch --scope pilot
+node .agents/refactor/next-entry.mjs mcp
+# For local SDK scripts, use the same environment and cwd:
+node .agents/refactor/next-entry.mjs node /absolute/path/to/script.mjs
+```
+
+The host entry pins cwd to this checkout and `DECKENT_GLOBAL_HOME` to
+`~/.local/state/deckent-next-dev`, outside the checkout (the runtime copies the bundled bubblewrap there,
+and a launcher inside the project is refused). It drops an inherited `DECKENT_HOME` to avoid redirecting project
+runtime data. Each project's `.deckent/config.json` still chooses its own `layout.root`.
+`DECKENT_GLOBAL_HOME` is a shared CLI/MCP/SDK configuration input; it selects the global
+configuration/state directory independently of project data. Without it, installed product
+defaults remain unchanged. It contains no provider credentials and does not migrate legacy state.
+
+The local observer reads only explicitly configured `inspection.workers.sources` and preserves
+source policy checks. Docker workers see their attempt checkout at `/workspace`; host storage
+is `<layout.root>/workspaces/<attempt-hash>/tree`. `worker.hb`, `worker.log` and `worker.result`
+are host-owned observations beside `tree`, outside the worker mount. Log summaries expose
+safe state/diagnostic fields, not arbitrary provider output. `Ctrl+C` stops the view only.
+The `pilot` scope and local source catalog are development fixtures, not an installed default.
+DOGFOOD remains off. Changing MCP configuration requires reconnecting already-open clients.
+
+The process board (`node .agents/refactor/board.mjs show`) owns who holds what and the next step;
+[PLAN.md](PLAN.md) owns admitted work. The board is host coordination data outside Git/npm,
+not authority or liveness proof. `deckent monitor` observes installations without admitting work.
+If a lane lacks the shared host board, leave the lead a handoff instead of creating a competing board.
+
+### Development duration measurement (A02/W0-3)
+
+`node .agents/refactor/effort.mjs` records how long development slices actually take. It is
+host tooling for M1–M5 forecast updates, not a product feature or a second work ledger.
+
+```sh
+node .agents/refactor/effort.mjs start A02-my-slice --milestone M1 --title "…" --actor "…" --kind active
+node .agents/refactor/effort.mjs phase A02-my-slice blocked --reason owner-decision   # active|blocked|verification|rework
+node .agents/refactor/effort.mjs pause A02-my-slice        # time until the next event is unknown, never active
+node .agents/refactor/effort.mjs end A02-my-slice done     # done|canceled|handed-off
+node .agents/refactor/effort.mjs report --format table     # observed hours per kind and milestone
+```
+
+Events are immutable private files under `.deckent/host/effort/<slice>/` (Git-ignored). Time is
+counted only between explicit events; unobserved time is reported as unknown and never estimated.
+`--at <ISO>` records an operator-supplied timestamp and is counted separately in reports.
