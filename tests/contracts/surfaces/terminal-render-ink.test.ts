@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { AssistantLive, AssistantUnitRow, WorklineApp, renderAssistantStream, startAssistantStream, WorklinePaletteProvider, resolveWorklinePalette, type AssistantRenderLabels, type ColorTier,
   type WorklineLabels, type WorklineProps } from '#surfaces/core/terminal/index.js';
 import type { ToolUnit } from '#surfaces/core/terminal-render/index.js';
+import { terminalRenderLabels } from '#surfaces/core/terminal-labels/index.js';
 
 const render_: AssistantRenderLabels = { assistant: 'bot', thinking: 'THINKING {tokens} tok {seconds}s', thought: 'THOUGHT {seconds}s {tokens} tok',
   elapsed: '{seconds}s', tokens: '{prompt} in {completion} out', reasoningTokens: '{count} reasoning', truncated: 'TRUNCATED', cancelled: 'CANCELLED',
@@ -264,4 +265,31 @@ it('S06 R2 actual AssistantUnitRow reports real fence-info FEFF at 60/80/120 col
     } else expect(view.stdout.last).not.toContain('hidden characters');
     expect(view.stdout.last).not.toContain('\ufeff'); expect(unit.markdown).toBe(source);
   }
+});
+
+// DENY-WORDING (T2-FOLLOWUP, owner 2026-10-07): a call the owner declined on its card says so in one language ("you declined" / "sen
+// reddettin"); a policy rule's refusal keeps its own words ("denied by policy" / "kural izin vermedi").
+describe('declined vs policy-denied tool line (T2-FOLLOWUP DENY-WORDING)', () => {
+  const finish = (callId: string, settled: boolean) => {
+    let state = startAssistantStream(0);
+    const units: unknown[] = [];
+    const deltas = [{ kind: 'tool', phase: 'started', callId, name: 'edit_file', target: 'src/a.ts', status: null, ms: null },
+      ...(settled ? [{ kind: 'approval', phase: 'settled', callId, approvalId: 'a1', outcome: 'deny' }] : []),
+      { kind: 'tool', phase: 'finished', callId, name: 'edit_file', target: 'src/a.ts', status: 'denied', ms: 800 }] as const;
+    for (const delta of deltas) { const step = renderAssistantStream(state, delta as never, 1); state = step.state; units.push(...step.staticUnits); }
+    return units.find(unit => (unit as { kind: string }).kind === 'tool') as ToolUnit;
+  };
+  it('marks only the owner-declined call and words both in EN and TR, each line in one language', async () => {
+    expect(finish('c1', true)).toMatchObject({ status: 'denied', declined: true });
+    expect(finish('c2', false)).not.toHaveProperty('declined');
+    for (const [locale, declined, policy] of [['en', 'you declined', 'denied by policy'], ['tr', 'sen reddettin', 'kural izin vermedi']] as const) {
+      const labels = terminalRenderLabels(locale);
+      for (const [unit, word, other] of [[finish('c1', true), declined, policy], [finish('c2', false), policy, declined]] as const) {
+        const view = mountElement(createElement(AssistantUnitRow, { unit, labels }));
+        await until(() => view.stdout.last.includes('edit_file'), 'tool line');
+        expect(view.stdout.last).toContain(word); expect(view.stdout.last).not.toContain(other);
+        if (locale === 'tr') expect(view.stdout.last).not.toContain('policy');
+      }
+    }
+  });
 });

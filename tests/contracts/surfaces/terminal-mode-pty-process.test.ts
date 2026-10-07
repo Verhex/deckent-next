@@ -474,8 +474,10 @@ describe.skipIf(process.platform !== 'linux')('opening banner in a real pseudo-t
 // at each step is replayed from the PTY bytes (VT replay, 100 x 40). DECKENT_T2_FRAME_PROOF=<file> appends the replayed screens.
 describe.skipIf(process.platform !== 'linux')('T2 surfaces together in a real pseudo-terminal (wave/tui-2 integration)', () => {
   it.each([
-    ['en', { help: 'Commands', status: 'Deckent is running', window: 'Approval needed', denied: 'denied', you: 'You', heading: 'Info', careful: '⏸ careful' }],
-    ['tr', { help: 'Komutlar', status: 'Deckent çalışıyor', window: 'Onay gerekiyor', denied: 'reddedildi', you: 'Sen', heading: 'Bilgi', careful: '⏸ dikkatli' }],
+    ['en', { help: 'Commands', status: 'Deckent is running', window: 'Approval needed', denied: 'denied', you: 'You', heading: 'Info', careful: '⏸ careful',
+      declined: 'you declined', policy: 'denied by policy', undo: 'Not checked — Deckent does not keep the earlier content' }],
+    ['tr', { help: 'Komutlar', status: 'Deckent çalışıyor', window: 'Onay gerekiyor', denied: 'reddedildi', you: 'Sen', heading: 'Bilgi', careful: '⏸ dikkatli',
+      declined: 'sen reddettin', policy: 'policy izin vermedi', undo: 'Kontrol edilmedi — Deckent önceki içeriği saklamıyor' }],
   ] as const)('%s: banner, /help, /status, the approval window and the person/answer rows', async (language, words) => {
     // The person runs careful (standart + ask for edits too), so the eligible edit opens the approval window; standart alone would run it.
     const f = await modeProject('v2', { mode: 'standart' });
@@ -518,6 +520,9 @@ describe.skipIf(process.platform !== 'linux')('T2 surfaces together in a real ps
     const denial = rows.split('\n').find(row => row.includes(words.denied)) ?? '';
     expect(denial).not.toBe('');
     expect(denial).not.toMatch(/[0-9a-f]{8}-[0-9a-f]{4}-/u);
+    // T2-FOLLOWUP: the owner's own refusal reads as theirs, in one language; the window says cautiously whether the edit can be undone.
+    expect(rows).toContain(words.declined); expect(rows).not.toContain(words.policy);
+    expect(window).toContain(words.undo);
     expect(run.output).not.toContain('\u001b[3J');
     expect(await readFile(join(f.projectRoot, 'src/a.ts'), 'utf8')).toBe('export const a = 1;\n');
   }, 180_000);

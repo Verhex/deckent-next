@@ -31,6 +31,7 @@ export function terminalRenderLabels(locale: Locale): AssistantRenderLabels {
       'approval-expired': t('terminal.render.toolStatus.approvalExpired', {}, locale),
       'invalid-arguments': t('terminal.render.toolStatus.invalidArguments', {}, locale),
       duplicate: t('terminal.render.toolStatus.duplicate', {}, locale), cancelled: t('terminal.render.toolStatus.cancelled', {}, locale) },
+    toolDeclined: t('terminal.render.toolStatus.declined', {}, locale),
   };
 }
 
