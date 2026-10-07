@@ -261,7 +261,6 @@
   "tui.slash.desc.interrogate": "DIRECTIVES sorgulama sorularını göster (pre-plan PLAN-INT-1)",
   "tui.slash.desc.interrupt": "Aktif turu durdur",
   "tui.slash.desc.kill": "Aktif run/worker durdur (her seferinde onay)",
-  "tui.slash.desc.mcp": "Harici MCP araçları — list · call <tool> [args] (proje .mcp.json)",
   "tui.slash.desc.model": "Modeli değiştir — çıplak /model seçici açar (kimlikler: /models); /model <model-id> doğrudan geçer",
   "tui.slash.desc.models": "Model & provider kayıtlarını listele",
   "tui.slash.desc.nervous": "Bekleyen nervous bildirimleri (örn: /nervous accept <id>)",

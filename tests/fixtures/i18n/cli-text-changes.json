@@ -447,6 +447,10 @@
     "tui.picker.hint_pick": {
       "before": "↑↓ / j k move · type to filter · Enter select · Esc close",
       "after": "↑↓ move · type to filter · PgUp/PgDn page · Enter select · Esc back"
+    },
+    "tui.slash.desc.mcp": {
+      "before": "Use external MCP tools — list · call <tool> [args] (project .mcp.json)",
+      "after": null
     }
   },
   "tr": {
@@ -1013,6 +1017,10 @@
     "tui.picker.hint_pick": {
       "before": "↑↓ / j k gez · yazarak filtrele · Enter seç · Esc kapat",
       "after": "↑↓ gez · yazarak filtrele · PgUp/PgDn sayfa · Enter seç · Esc geri"
+    },
+    "tui.slash.desc.mcp": {
+      "before": "Harici MCP araçları — list · call <tool> [args] (proje .mcp.json)",
+      "after": null
     }
   }
 }

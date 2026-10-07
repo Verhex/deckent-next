@@ -261,7 +261,6 @@
   "tui.slash.desc.interrogate": "Show DIRECTIVES interrogation questions (pre-plan PLAN-INT-1)",
   "tui.slash.desc.interrupt": "Interrupt the active turn",
   "tui.slash.desc.kill": "Stop the active run/worker (confirmation every time)",
-  "tui.slash.desc.mcp": "Use external MCP tools — list · call <tool> [args] (project .mcp.json)",
   "tui.slash.desc.model": "Switch the model — bare /model opens a picker (ids: /models); /model <model-id> switches directly",
   "tui.slash.desc.models": "List model & provider registrations",
   "tui.slash.desc.nervous": "Show pending nervous notifications (e.g. /nervous accept <id>)",

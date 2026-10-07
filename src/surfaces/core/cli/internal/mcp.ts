@@ -1,6 +1,7 @@
 import { createInterface } from 'node:readline';
 import { ErrorRegistry, emit, formatValue, resolveLocale, t } from '#platform/index.js';
 import type { ConfigLoadOptions, Locale } from '#platform/index.js';
+import { mcpTrustQuestion } from '#surfaces/core/cli-terminal/index.js';
 import type { CommandContext } from './kernel-commands.js';
 
 type Scope = 'local' | 'project' | 'user';
@@ -78,14 +79,33 @@ export async function mcpCommand(argv: readonly string[], context: CommandContex
   const ask = async (card: unknown) => {
     if (yes) return true;
     const input = context.stdin!;
-    emit(card, { ...sinks, json: false, render: formatValue });
+    // The same localized fields as the terminal's trust window (one renderer): what runs, where (realm in words), env or header names, tools.
+    const shown = mcpTrustQuestion(card, locale);
+    emit(card, { ...sinks, json: false, render: () => [shown.title, ...shown.lines.map(line => line.label ? `${line.label}: ${line.text}` : `  ${line.text}`)].join('\n') });
     const question = (card as { phase?: unknown }).phase === 'tools' ? t('cli.mcp.toolsPrompt', {}, locale) : t('cli.mcp.launchPrompt', {}, locale);
     const rl = createInterface({ input, output: process.stdout, terminal: true });
     try { return await new Promise<boolean>(resolve => rl.question(question, answer => resolve(/^y(es)?$/iu.test(answer.trim())))); }
     finally { rl.close(); }
   };
   const result = await context.runMcpCommand(context.root ?? process.cwd(), request, { env: environment }, ask, locale);
-  emit(result, { ...sinks, json, render: formatValue });
+  // Human output: the result as before, with the K1 policy grant (written, removed, refused and why) as one sentence instead of a raw object.
+  emit(result, { ...sinks, json, render: value => {
+    const { grant, ...rest } = (value ?? {}) as { grant?: unknown };
+    const line = mcpGrantLine(grant, locale);
+    return line ? `${formatValue(rest)}\n${line}` : formatValue(value);
+  } });
+}
+
+/** The K1 grant outcome of an add, approve, revoke, remove or reset, in the person's words (null: none to say). */
+export function mcpGrantLine(grant: unknown, locale: Locale): string | null {
+  const value = grant as { status?: unknown; reason?: unknown } | null | undefined;
+  if (!value || typeof value !== 'object') return null;
+  if (value.status === 'granted') return t('cli.mcp.grant.granted', {}, locale);
+  if (value.status === 'revoked') return t('cli.mcp.grant.revoked', {}, locale);
+  if (value.status !== 'refused') return null;
+  const reason = value.reason === 'delegation' ? t('mcp.grant.reason.delegation', {}, locale) : value.reason === 'administer' ? t('mcp.grant.reason.administer', {}, locale)
+    : value.reason === 'unsupported' ? t('mcp.grant.reason.unsupported', {}, locale) : value.reason === 'principal' ? t('mcp.grant.reason.principal', {}, locale) : String(value.reason ?? '-');
+  return t('cli.mcp.grant.refused', { reason }, locale);
 }
 
 function mcpStatusText(status: string, locale: Locale): string {
