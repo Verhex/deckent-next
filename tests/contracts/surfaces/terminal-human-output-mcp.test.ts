@@ -37,7 +37,7 @@ describe('/mcp human output', () => {
   it('answers the empty list, the verbs and a bad call in the locale', async () => {
     expect(await run('en', '', { servers: [], problems: [] })).toEqual(['No MCP server is registered for this project. Add one with: deckent mcp add …']);
     expect(await run('tr', '', { servers: [], problems: [] })).toEqual(['Bu proje için kayıtlı MCP sunucusu yok. Eklemek için: deckent mcp add …']);
-    expect(await run('tr', 'approve fx', {})).toEqual(['fx bir sonraki mesajda güven isteyecek']);
+    expect(await run('tr', 'approve fx', {})).toEqual(['fx için güven sıfırlandı. Onay kartı bir sonraki mesajınızda açılacak.']);
     expect(await run('en', 'reconnect fx', {})).toEqual(['fx restarts the next time it is used']);
     expect(await run('tr', 'remove fx', { removed: { scope: 'user' } })).toEqual(['fx kaldırıldı (kullanıcı)']);
     expect(await run('en', 'frobnicate')).toEqual(['Usage: /mcp [list] | /mcp approve|reconnect|remove <name>']);
