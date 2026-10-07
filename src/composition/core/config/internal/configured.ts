@@ -38,6 +38,16 @@ function configChangeSummary(subject: ConfigChangeSubject, locale: Locale) {
 function configuredConfigApprovals(load: (scopeId: string) => ReturnType<typeof loadConfiguredScopeContext>, options: ConfigLoadOptions): ConfigApprovalPort {
   return {
     async evaluate(input) { const context = await load(input.scopeId); return evaluateConfigWrite(context.document, context.principal, input); },
+    // T3 L4 `/config` locks: one scope-context read for every key of the panel; a denied write is a returned `deny` here (display only).
+    async evaluateMany(inputs) {
+      if (!inputs.length) return [];
+      if (inputs.some(input => input.scopeId !== inputs[0]!.scopeId)) throw new TypeError();
+      const context = await load(inputs[0]!.scopeId);
+      return inputs.map(input => {
+        try { const decided = evaluateConfigWrite(context.document, context.principal, input); return { decision: decided.decision, ruleId: decided.ruleId }; }
+        catch (error) { if ((error as { code?: unknown })?.code === 'POLICY_DENIED') return { decision: 'deny' as const, ruleId: null }; throw error; }
+      });
+    },
     async admit(input, subject, authorization) {
       const context = await load(input.scopeId), { config, layout, principal } = context;
       // A producer of approvals (like Run reservation and the agent turn): the integrity key is created on first use.

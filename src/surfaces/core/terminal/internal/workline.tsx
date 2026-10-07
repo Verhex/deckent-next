@@ -6,7 +6,7 @@ import { WorklinePaletteProvider, useWorklinePalette, parseSlashLine, isInspectS
 import { StatusStrip } from './status-strip.js';
 import { useLiveWindows } from './workline-live.js';
 import { AssistantLive, openAssistantStream, renderAssistantStream, renderCompleteReply, type AssistantStreamStep, type AssistantRenderLabels } from '#surfaces/core/terminal-render/index.js';
-import { HumanTextContext, humanRecordText, projectHumanPickerText, RenderGlyphsContext, resolveRenderGlyphs } from '#surfaces/core/terminal-render/index.js';
+import { HumanTextContext, humanRecordText, projectHumanPickerText, RenderGlyphsContext, resolveRenderGlyphs, useRenderGlyphs } from '#surfaces/core/terminal-render/index.js';
 import type { KnownSecretSnapshot } from '#platform/index.js';
 import { assistantLedgerEntries, streamStepEntries, workerReportToLedgerEntries, WORK_LEDGER_SCHEMA_VERSION, type WorkLedgerEntry, ledgerEntriesForWorkers, ledgerEntriesForRuns, type WorklineLedgerPorts, fillTemplate, newWorkerTaskIds, newRunLedgerEntries, runViewToLedgerEntry, agentHistory, appendLedger, boundAgentHistory, compactLedger, EMPTY_LEDGER, plainChatHistory, type AgentChatMessage, type ChatTurnMessage, type LedgerBuffer, notice } from '#surfaces/core/terminal-ledger/index.js';
 import { useConversationSession, type ConversationSessionLabels, type ConversationSessionPort } from './workline-sessions.js';
@@ -19,6 +19,7 @@ import { PermissionModeKeys, useWorklineMode, type WorklineModeLabels, type Work
 import { useReasoningPreview, type WorklineReasoningLabels } from './workline-reasoning.js';
 import { useWorklineScratch, type WorklineScratchLabels, type WorklineScratchPort } from './workline-scratch.js';
 import { writeStartup, type WorklineStartup } from './startup-banner.js';
+import { useWorklineSettings, type WorklinePanels } from './workline-settings.js';
 
 export interface WorklineLabels extends WorklineActionLabels {
   readonly banner: string;
@@ -96,6 +97,8 @@ export interface WorklineProps {
   readonly projectRoot?: string;
   /** `/monitor` as a window (T3 L5): loads the monitor body from the host, which owns it (this unit never imports the monitor). Without it `/monitor` answers as notice lines. */
   readonly monitorWindow?: MonitorWindowLoader;
+  /** T3 L4: the `/config` and `/mcp` window ports and every panel's words; `/mode`'s port is this view's own mode port. Absent: text commands only. */
+  readonly panels?: WorklinePanels;
 }
 
 /** The composer listens only while no window is open (TS-WINDOW: one input owner, the window stack's top). */
@@ -183,6 +186,9 @@ export function WorklineApp(props: WorklineProps) {
   const reasoning = useReasoningPreview(push, labels.reasoning);
   const scratch = useWorklineScratch(props.scratch, session.id, push, errorText, labels.work?.unavailable ?? labels.ledgerUnavailable, labels.scratch);
   useEffect(() => { void refreshMode(); }, [refreshMode]);
+  // T3 L4: `/mode`, `/config`, `/mcp` windows; `/mode`'s port is this view's mode hook (the same service set, grant check and audit as Shift+Tab).
+  const settings = useWorklineSettings({ panels: props.panels, permissionMode: props.permissionMode, mode, panel, state, push, errorText, blocked: work.modalOpen,
+    openApprovals: (approvalId, execution) => work.run('approvals', approvalId, execution) });
 
   const opening = useRef(props.openingNotices);
   useEffect(() => {
@@ -260,6 +266,7 @@ export function WorklineApp(props: WorklineProps) {
     const slash = parseSlashLine(line);
     if (!slash) { await runTurn(line, mentioned, execution); return true; }
     if (slash.command === 'reasoning') { reasoning.run(slash.args); return true; }
+    if (await settings.open(slash.command, slash.args, execution)) return true;
     if (slash.command === 'mode' || slash.command === 'scratch') { await (slash.command === 'mode' ? mode.run : scratch)(slash.args); return true; }
     const lineCommands: Readonly<Record<string, ((args: string) => Promise<readonly string[]>) | undefined>> = { ...bindInspectPorts(props.inspect, () => usage.current, () => mode.fullAccess.current), mcp: props.mcp, monitor: props.monitor, config: props.config };
     // T3 L5: a bare `/monitor` opens the monitor window; with arguments (`--install`, `--scope`) it stays the text snapshot as notice lines.
@@ -307,7 +314,7 @@ export function WorklineApp(props: WorklineProps) {
     }
     catch (error) { push([notice('error', errorText(error))]); }
     return true;
-  }, [errorText, exit, labels, ledger, mode.run, props.inspect, props.mcp, props.monitor, props.config, props.restartService, pollMs, pushMode, push, liveWin, reasoning.run, runTurn, scratch, session, work.run, panel]);
+  }, [errorText, exit, labels, ledger, mode.run, settings, props.inspect, props.mcp, props.monitor, props.config, props.restartService, pollMs, pushMode, push, liveWin, reasoning.run, runTurn, scratch, session, work.run, panel]);
 
   execute.current = async execution => {
     await perform(execution.input.text, execution.input.mentions, execution);
@@ -327,15 +334,16 @@ export function WorklineApp(props: WorklineProps) {
 
   const ledgerLabels: LedgerEntryLabels = { runCard: labels.runCard, workerCard: labels.workerCard, chatUser: labels.roleUser, chatAssistant: labels.roleAssistant,
     render: labels.render, ...(labels.work ? { workerLine: labels.work.workerLine } : {}) };
-  const choosing = resumePicker !== null || work.pickerOpen;
+  const choosing = resumePicker !== null || work.pickerOpen || settings.openKind !== null;
+  const fullAccessLine = mode.mode === 'full-access' ? labels.mode?.fullAccessLine : undefined, glyphs = useRenderGlyphs();
   // T2 T-MODE-CYCLE: Shift+Tab (Alt+M where the console cannot report Shift+Tab, e.g. Windows without VT input) steps the permission mode
   // while the composer owns the keyboard; an open card, picker or any window (stack not idle, `PermissionModeKeys`) owns Shift+Tab then. A running turn owns its
   // mode as `/mode` does (queued until it ends): the step waits for idle, so the status row never shows a mode the running turn is not in.
-  const composing = !work.modalOpen && !work.pickerOpen && resumePicker === null;
+  const composing = !work.modalOpen && !work.pickerOpen && resumePicker === null && settings.openKind === null;
   const finishResume = (choice: number | null) => { panel.choose(state.picker?.pickerHandle, choice === null ? null : String(choice)); };
   return (
     <HumanTextContext.Provider value={props.knownSecrets}>
-    <WindowStackProvider reservedRows={WINDOW_RESERVED_ROWS}>
+    <WindowStackProvider reservedRows={WINDOW_RESERVED_ROWS + (fullAccessLine ? 1 : 0)}>
     <Box flexDirection="column">
       <PermissionModeKeys active={composing && !busy && Boolean(props.permissionMode)} onCycle={() => void mode.cycle()} />
       <Static key={buffer.epoch} items={[...buffer.pending]}>
@@ -344,17 +352,20 @@ export function WorklineApp(props: WorklineProps) {
       {live ? <AssistantLive tail={live.step.liveTail} narration={live.step.narration} labels={labels.render} lead={live.lead} activeTool={live.step.activeTool}
         waiting={live.step.waiting} reasoningPreview={reasoning.show ? live.step.reasoningPreview : []} /> : null}
       {work.region}
-      {/* One window is visible at a time: a decision card, picker or approval window takes the screen from the live window, which returns when it is answered. */}
-      {work.modalOpen || work.pickerOpen || resumePicker !== null ? null : liveWin.element}
+      {/* One window is visible at a time: a decision card, picker, approval or settings window takes the screen from the live window, which returns when it is answered. */}
+      {work.modalOpen || work.pickerOpen || resumePicker !== null || settings.openKind !== null ? null : liveWin.element}
       {resumePicker && !work.modalOpen && !work.pickerOpen
         ? <Window title={[span(labels.work?.window.resumeTitle ?? '/resume')]} status={[span(String(resumePicker.length))]} hints={labels.work?.window.pick ?? ''}
           position={labels.work?.window.position ?? '{from}-{to}/{total}'} footerRows={ARROW_PICKER_ROWS + 2}
           footer={focused => <ArrowPicker rows={resumePicker.map(item => item.label)} styledRows={resumePicker.map(item => item.spans ?? [])} active={focused}
             details={resumePicker.map(item => item.hiddenNotice)} onSelect={finishResume} onCancel={() => finishResume(null)} />} /> : null}
+      {settings.window}
       <Text {...palette.accent}>{labels.banner}</Text>
       <StatusStrip target={target} state={cancelling ? labels.statusCancelling : busy && !choosing ? labels.statusBusy : labels.statusReady} busy={busy && !choosing}
         queued={state.queued.length} labels={{ ...labels.render, selfSourceFloor: labels.selfSourceFloor, modeStops: labels.mode?.stops }} mode={mode.mode} stop={mode.stop}
         selfSource={props.selfSource} cancellable={turnRunning && !cancelling} />
+      {/* T3 L4 (owner 2026-10-07): while the session holds full access one standing line above the composer says so (text and mark; colour is a hint). */}
+      {fullAccessLine ? <Text {...palette.warning} wrap="truncate-end">{`${glyphs.mode['full-access']} ${fullAccessLine}`}</Text> : null}
       {/* The composer owns input: Enter submits (queued FIFO while busy), Esc/Ctrl+C cancel a turn, exit is two Ctrl+C or Ctrl+D.
           An open decision card or arrow picker takes the keyboard away from it. */}
       <StackComposer prompt={labels.prompt} labels={{ ...labels.composer,

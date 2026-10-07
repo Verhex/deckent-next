@@ -134,6 +134,9 @@ function approvalWindowLabels(locale: Locale): WorkSurfaceLabels['approvalWindow
       changes: t('terminal.approval.window.what.changes', {}, locale) },
     where: t('terminal.approval.window.where', {}, locale), whereUnknown: t('terminal.approval.window.whereUnknown', {}, locale), onBehalfSelf: t('terminal.approval.window.onBehalfSelf', {}, locale),
     scope: t('terminal.approval.window.scope', {}, locale), why: t('terminal.approval.window.why', {}, locale),
+    config: { title: t('terminal.approval.window.config.title', {}, locale), scope: t('terminal.approval.window.config.scope', {}, locale),
+      why: t('terminal.approval.window.config.why', {}, locale), undo: t('terminal.approval.window.config.undo', {}, locale),
+      layers: { project: t('config.surface.source.project', {}, locale), global: t('config.surface.source.global', {}, locale) } },
     rule: {
       read: t('terminal.approval.window.rule.read', {}, locale),
       edit: t('terminal.approval.window.rule.edit', {}, locale),

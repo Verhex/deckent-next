@@ -103,6 +103,24 @@ describe('config-change approval: request, decision, apply', () => {
   });
 });
 
+describe('config permissions read for the /config window (T3 L4)', () => {
+  it('one policy read says allow, require-approval (with its rule) and deny per key and layer; secrets are refused; nothing is written or audited', async () => {
+    const f = await setup(principals => [
+      { id: 'company-config-approval', effect: 'require-approval', actions: ['write'], scopes: ['installation'], principals, resource: { kind: 'config', ids: ['project:max_workers'] } },
+      { id: 'company-config-deny', effect: 'deny', actions: ['write'], scopes: ['installation'], principals, resource: { kind: 'config', ids: ['project:language'] } }]);
+    const before = await bytesOf(f.path), audits = f.auditCount();
+    const read = await f.app.permissions({ principal: f.command.principal, scopeId: 'installation', keys: ['max_workers', 'language', 'terminal.theme', 'secrets.token'], layers: ['project'] });
+    expect(read).toEqual([
+      { keyPath: 'max_workers', layer: 'project', decision: 'require-approval', ruleId: 'company-config-approval' },
+      { keyPath: 'language', layer: 'project', decision: 'deny', ruleId: null },
+      { keyPath: 'terminal.theme', layer: 'project', decision: 'allow', ruleId: expect.any(String) },
+      { keyPath: 'secrets.token', layer: 'project', decision: 'refused', ruleId: null }]);
+    // The same decisions the write meets: the denied key is refused, the approval-held one opens a card instead of writing.
+    await expect(f.app.submit('set', { ...f.command, commandId: 'cmd-deny', keyPath: 'language', value: 'tr' })).rejects.toMatchObject({ code: 'POLICY_DENIED' });
+    expect(await bytesOf(f.path)).toBe(before); expect(f.auditCount()).toBe(audits);
+  });
+});
+
 describe('config-change approval: negative paths (nothing is written)', () => {
   it('no policy permission: POLICY_DENIED before any card; the secrets section is refused before policy', async () => {
     const f = await setup(principals => [{ id: 'company-config-deny', effect: 'deny', actions: ['write'], scopes: ['installation'], principals, resource: { kind: 'config', ids: ['project:max_workers'] } }]);

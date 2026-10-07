@@ -23,6 +23,8 @@ export interface WorklineApproval {
   readonly posture?: AgentShellPosture;
   /** v21 (Astra 2431): the running turn's card fields as data and its preview cut's facts. */
   readonly call?: AgentToolCardCall; readonly previewCut?: ApprovalPreviewCutFacts;
+  /** T3 L4: a `config-change` approval's own facts (display copies from the stored subject): the window speaks of a setting, not a tool call. */
+  readonly config?: Readonly<{ action: 'set' | 'unset'; layer: 'project' | 'global'; keyPath: string; ruleId: string }>;
 }
 
 /** One page of the scope's approval records (every status; the store orders by id, not by time or state). */

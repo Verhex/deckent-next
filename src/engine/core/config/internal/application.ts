@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { AUDIT_EVENT_SCHEMA_VERSION, CONFIG_CHANGE_DISPLAY_MAX, encodeCommandProjection, identitySchema, verifiedPrincipalSchema, type AuditEvent } from '#domain/index.js';
 import { digestText, serializeJsonDocument, sha256 } from '#platform/index.js';
 import { ConfigApplicationError, type ConfigApprovalPort, type ConfigAuthorityPort, type ConfigChangeOutcome, type ConfigChangeSubject, type ConfigDocumentPort,
-  type ConfigSnapshot, type ConfigWriteInput } from './contract.js';
+  type ConfigSnapshot, type ConfigWriteInput, type ConfigWritePermission } from './contract.js';
 import { allConfigKeys, atConfigPath, configDisplayText, configFieldView, configPath, definitionFor } from './registry.js';
 import { planConfigChange, validateConfigLayers } from './planner.js';
 /** One configuration application contract shared by every surface; no filesystem or policy document ownership here. */
@@ -15,6 +15,29 @@ export class ConfigApplication {
   }
   async explain(input: { readonly keyPath: string }) { const snapshot = await this.documents.snapshot('project'); return configFieldView(snapshot, input.keyPath); }
   async validate() { validateConfigLayers(await this.documents.snapshot('project')); return { valid: true as const }; }
+  /**
+   * T3 L4 `/config` locks: what the principal's current policy says of a write of each key on each layer — one policy read for all of them
+   * when the approval port can batch. A display read only: nothing is written, planned or admitted, and every `submit` decides again.
+   * `secrets.*` is `refused` (no write reaches it); without an approval port there is no decision to read (null).
+   */
+  async permissions(input: { readonly principal: ConfigWriteInput['principal']; readonly scopeId: string; readonly keys: readonly string[];
+    readonly layers: readonly ('project' | 'global')[] }): Promise<readonly ConfigWritePermission[] | null> {
+    const approvals = this.authority.approvals;
+    if (!approvals) return null;
+    const pairs = input.keys.flatMap(keyPath => input.layers.map(layer => ({ keyPath, layer })));
+    const asked = pairs.filter(pair => configPath(pair.keyPath)[0] !== 'secrets');
+    const writes = asked.map(pair => ({ keyPath: pair.keyPath, layer: pair.layer, principal: input.principal, scopeId: input.scopeId, commandId: randomUUID() }));
+    const decided = approvals.evaluateMany ? await approvals.evaluateMany(writes) : await Promise.all(writes.map(write => approvals.evaluate(write)
+      .then(value => ({ decision: value.decision, ruleId: value.ruleId }), (error: unknown) => {
+        if ((error as { code?: unknown })?.code === 'POLICY_DENIED') return { decision: 'deny' as const, ruleId: null };
+        throw error;
+      })));
+    const byPair = new Map(asked.map((pair, index) => [`${pair.layer}:${pair.keyPath}`, decided[index]!]));
+    return pairs.map(pair => {
+      const found = byPair.get(`${pair.layer}:${pair.keyPath}`);
+      return Object.freeze({ keyPath: pair.keyPath, layer: pair.layer, decision: found?.decision ?? 'refused', ruleId: found?.ruleId ?? null });
+    });
+  }
   /** Allow-only write (unchanged contract): a policy `require-approval` is `POLICY_APPROVAL_UNSUPPORTED`. */
   async set(input: ConfigWriteInput) { return this.change(input, false); }
   async unset(input: ConfigWriteInput) { return this.change(input, true); }

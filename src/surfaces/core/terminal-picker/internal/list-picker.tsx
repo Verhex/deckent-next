@@ -41,18 +41,24 @@ export function ListPicker(props: {
   /** Register as a layer in the window stack: the picker then listens only while it is the top layer. */
   readonly windowed?: boolean;
   readonly priority?: number;
+  /** Where the picker opens (T3 L4: a panel reopened after a write returns to the level it was on); default the root. */
+  readonly initial?: PickerState;
+  /** Every state the picker moves to (T3 L4: a panel whose scope step depends on the chosen row follows it); display only. */
+  readonly onState?: (state: PickerState) => void;
+  /** At most this many list rows (T3 L4: inside a window that also draws a body, the window's own room decides); never below the minimum. */
+  readonly maxRows?: number;
 }): ReactNode {
   const palette = useWorklinePalette(), glyphs = useRenderGlyphs(), size = useWindowSize();
   const columns = size.columns || FALLBACK_COLUMNS, terminalRows = size.rows || FALLBACK_ROWS;
   const reserved = useWindowReserve() ?? 8;
-  const pageSize = listPickerPageSize(terminalRows, reserved);
+  const pageSize = Math.max(LIST_PICKER_MIN_ROWS, Math.min(listPickerPageSize(terminalRows, reserved), props.maxRows ?? Number.MAX_SAFE_INTEGER));
   const id = useId();
   const windowed = props.windowed ?? false;
   const owns = useWindowLayer(id, windowed, props.priority ?? WINDOW_PRIORITY.window);
   const closed = useRef(false);
   const latest = useRef(props);
   latest.current = props;
-  const [state, setState] = useState<PickerState>(PICKER_INITIAL);
+  const [state, setState] = useState<PickerState>(props.initial ?? PICKER_INITIAL);
   const stateRef = useRef(state);
   stateRef.current = state;
 
@@ -60,9 +66,10 @@ export function ListPicker(props: {
     if (closed.current) return;
     const action = pickerActionOf(input, key, stateRef.current.stage);
     if (!action) return;
-    const next = pickerReduce(latest.current.tree, stateRef.current, action, { pageSize });
+    const before = stateRef.current, next = pickerReduce(latest.current.tree, before, action, { pageSize });
     stateRef.current = next.state;
     setState(next.state);
+    if (next.state !== before) latest.current.onState?.(next.state);
     if (next.outcome.kind === 'done') { closed.current = true; latest.current.onResult(next.outcome.result); return; }
     if (next.outcome.kind !== 'continue') latest.current.onOutcome?.(next.outcome);
   }, { isActive: (props.active ?? true) && (!windowed || owns) });

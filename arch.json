@@ -851,7 +851,8 @@
         "src/surfaces/core/terminal-ledger",
         "src/surfaces/core/terminal-work",
         "src/surfaces/core/monitor",
-        "src/surfaces/core/terminal-picker"
+        "src/surfaces/core/terminal-picker",
+        "src/surfaces/core/terminal-panels"
       ],
       "plan": "SURFACES"
     },
@@ -911,6 +912,19 @@
       ],
       "plan": "SURFACES"
     },
+    "src/surfaces/core/terminal-panels": {
+      "dependencies": [
+        "src/surfaces/core/terminal-picker",
+        "src/surfaces/core/terminal-window",
+        "src/surfaces/core/terminal-render",
+        "src/surfaces/core/terminal-kit",
+        "src/surfaces/core/terminal-composer",
+        "src/surfaces/core/approval-presentation",
+        "src/domain/core/policy",
+        "src/platform/core/redaction"
+      ],
+      "plan": "SURFACES"
+    },
     "src/surfaces/core/terminal-composer": {
       "dependencies": [
         "src/surfaces/core/terminal-kit"
@@ -960,7 +974,8 @@
         "src/surfaces/core/terminal-work",
         "src/surfaces/core/terminal-theme",
         "src/surfaces/core/terminal-picker",
-        "src/surfaces/core/terminal-window"
+        "src/surfaces/core/terminal-window",
+        "src/surfaces/core/terminal-panels"
       ],
       "plan": "SURFACES"
     },
@@ -1084,7 +1099,9 @@
         "src/surfaces/core/terminal-render",
         "src/surfaces/core/terminal-theme",
         "src/surfaces/core/terminal-labels",
-        "src/surfaces/core/work-labels"
+        "src/surfaces/core/work-labels",
+        "src/surfaces/core/terminal-panels",
+        "src/surfaces/core/terminal-picker"
       ],
       "plan": "SURFACES"
     },
