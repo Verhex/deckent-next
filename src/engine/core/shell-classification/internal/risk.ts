@@ -7,7 +7,7 @@ export interface ShellRiskClassification { readonly risk: ShellRisk; readonly re
  * Risk tiers of a shell command (legacy `shell-risk.ts` @a8b67e2a1, kept as is): a lenient segment scanner exposes every compound
  * part and command substitution; the worst part wins; the destructive table (rm -r/-f, rmdir, git push --force, reset --hard,
  * clean -f, chmod/chown -R, dd, mkfs, shred, truncate, kill, docker rm/rmi/system prune, deckent kill/cleanup/recover) is the
- * always-ask floor that no mode lowers; output redirection, tee and anything unparseable are `modify`. `safe-read` is owned by the
+ * always-ask floor that no mode lowers; output redirection (to anything but /dev/null or a descriptor), tee and anything unparseable are `modify`. `safe-read` is owned by the
  * read-only classifier alone: the scanner here can never promote a command to it.
  */
 export interface ShellScan {
@@ -46,13 +46,14 @@ function combine(current: ShellRiskClassification, candidate: ShellRiskClassific
   return RISK_WEIGHT[candidate.risk] > RISK_WEIGHT[current.risk] ? candidate : current;
 }
 
+const DEV_NULL = '/dev/null';
 const REDIRECTION_TARGET_STOP = /[\s|;&<>()]/u;
 const DESCRIPTOR = /^(?:\d+|-)$/u;
 /**
  * The redirection operator starting at `index` (unquoted): `>`, `>>`, `>|`, `>&`, `&>`, `&>>` or `<&` (a plain `<` only reads and stays
  * an ordinary character). `end` is just past the operator; its target stays in the segment, where the containment check still reads it
- * as a word. `writes`: an output operator. `malformed`: a duplication without a target, or `<&` to something other than a descriptor
- * (the shell refuses both).
+ * as a word. `writes`: the target may be a file — anything but `/dev/null`, or a descriptor number / `-` after `>&`. `malformed`: a
+ * duplication without a target, or `<&` to something other than a descriptor (the shell refuses both).
  */
 function redirectionAt(command: string, index: number): { readonly end: number; readonly writes: boolean; readonly malformed: boolean } | null {
   const char = command[index], next = command[index + 1];
@@ -71,7 +72,8 @@ function redirectionAt(command: string, index: number): { readonly end: number; 
   let target = '';
   while (at < command.length && !REDIRECTION_TARGET_STOP.test(command[at]!)) target += command[at++];
   if (input) return { end, writes: false, malformed: !DESCRIPTOR.test(target) };
-  return { end, writes: true, malformed: duplication && target === '' };
+  if (duplication && DESCRIPTOR.test(target)) return { end, writes: false, malformed: false };
+  return { end, writes: target !== DEV_NULL, malformed: duplication && target === '' };
 }
 
 /**
@@ -165,7 +167,8 @@ export function scanShell(command: string): ShellScan {
     }
 
     // A redirection operator stays whole in its segment (B1, owner test 2026-10-07): the `&` of `2>&1`, `>&2`, `<&0` or `&>` belongs to
-    // the operator, not a background job, so a descriptor duplication is not unparseable.
+    // the operator, not a background job, so a descriptor duplication is not unparseable, and (B2) a redirection to `/dev/null` or a
+    // descriptor writes no file, so it does not make a read a modification.
     const redirection = quote === null ? redirectionAt(command, index) : null;
     if (redirection) {
       if (redirection.malformed) scan.malformed = true;
