@@ -201,6 +201,7 @@
         "src/surfaces/core/terminal-composer",
         "src/surfaces/core/terminal-render",
         "src/surfaces/core/terminal-picker",
+        "src/surfaces/core/terminal-window",
         "src/surfaces/core/monitor",
         "src/surfaces/core/approval-presentation"
       ],
@@ -247,6 +248,7 @@
         "src/surfaces/core/terminal-kit",
         "src/surfaces/core/terminal-render",
         "src/surfaces/core/terminal-picker",
+        "src/surfaces/core/terminal-window",
         "src/surfaces/core/monitor",
         "src/surfaces/core/approval-presentation"
       ],

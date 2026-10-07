@@ -893,6 +893,13 @@
       ],
       "plan": "SURFACES"
     },
+    "src/surfaces/core/terminal-window": {
+      "dependencies": [
+        "src/surfaces/core/terminal-kit",
+        "src/surfaces/core/terminal-render"
+      ],
+      "plan": "SURFACES"
+    },
     "src/surfaces/core/terminal-picker": {
       "dependencies": [
         "src/surfaces/core/terminal-kit",
