@@ -288,7 +288,7 @@
         "src/engine",
         "src/adapters",
         "src/composition",
-        "src/surfaces/core/cli",
+        "src/surfaces/core/cli-terminal",
         "src/surfaces/core/mcp"
       ],
       "purpose": "Contract language: runtime schemas for domain records, config, ledger rows, provider wire shapes and MCP tool input.",
