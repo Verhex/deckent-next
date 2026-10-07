@@ -203,3 +203,20 @@ characters, attached file bodies not printed, tool results as one count line, su
 equal by a contract test) and the tokens left, a size-estimate split of the visible history (the service's own instructions are not in
 it), the last summary, the three largest items and a `/clear` suggestion at ≥ 60 %. Protocol unchanged (v16). Open: `/compact` (protocol
 decision), redrawing an open suggestion list when the index refreshes.
+
+**Human output (TUI2 L3, T-HUMAN-OUTPUT, 2026-10-07).** The slash answers read as a person's summary first and keep identities under a
+details heading. `/status`: one sentence (running or not read, version, model) then the host report and the service descriptor
+(instance, pid, build) as details. `/scope`: you, project (name and short id), company, mode, rule version, surface access in words,
+full identities in the details. `/model`: catalog display name, channel kind and tool support from the ledger entry (channel evidence,
+not a probe), exact `provider@v/model@v` reference in the details. `/usage`: locale thousands separator and units. `/help`: commands
+under `SLASH_GROUPS` headings (info, jobs, approvals, settings, session; a command without a group falls under "other"), one catalog line
+each; the palette and the help share the row text. `/transcript <n|attemptId> [page]`: page 1 is the newest `TRANSCRIPT_PAGE_LINES` (40)
+lines, a footer names the earlier page; the headline carries short identities, a details line the full ones. `/mcp`: one line per server
+(scope, state in words, tool count, command), the six trust statuses and the recorded start failure in catalog words. Run cards print a
+short run id, the revision with a requested cancellation and the task phases as counts in words; worker cards print the worker number,
+process state and who recorded it. Notices start with Info, Warning or Error (catalog templates `{text}`; the ledger notice type has a
+`warning` level); a typed failure prints its human message and `(code: X)` on its own line. The monitor prints the machine's local time
+with the zone offset (`Z` at UTC); the suite pins `TZ=UTC`. Turkish terms follow `terminology-tr.md` (iş, görev, işçi). Words reach the
+cards through `WorkerLineLabels.card` (`LedgerCardLabels`), so the run/worker/notice rows add no new label path to the window code.
+Open: context percentage in `/status`, a real principal name for `/scope` (the host user name is shown), the monitor and approval
+windows (window lanes), `/cancel`, `/approvals` and `/service-restart` descriptions (window lane), stream-failure footers.
