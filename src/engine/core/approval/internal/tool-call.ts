@@ -87,6 +87,16 @@ export async function awaitAgentToolApproval(store: ApprovalStore, integrity: In
 }
 
 /**
+ * APPROVER-NOTE (owner 2026-10-07): the decider's own words on a decided tool-call approval — its sealed reason when the decision marks it as
+ * theirs (`approverNote`), else null (a surface's default sentence, an expired or undecided record, a record that does not verify).
+ */
+export function agentToolApprovalNote(store: ApprovalStore, integrity: IntegrityAuthority, record: ApprovalRecord): string | null {
+  const loaded = store.load(record.request.scopeId, record.request.approvalId);
+  const current = loaded ? verifyApproval(loaded, integrity) : null;
+  return current?.status === 'decided' && current.decision?.approverNote === true ? current.decision.reason : null;
+}
+
+/**
  * Service-start reconciliation: every agent tool-call approval still pending belongs to a turn that is no longer running (turns are
  * interrupted at start under endpoint custody), so it is closed as expired, one bounded page at a time. Task approvals are untouched.
  * A record that cannot be verified or closed is counted, never guessed.

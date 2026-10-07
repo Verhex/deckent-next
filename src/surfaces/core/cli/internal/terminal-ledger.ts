@@ -85,7 +85,9 @@ export function createWorklineLedgerPorts(input: {
           commandId: `terminal-${randomUUID()}`, expectedRevision: approval.revision, decision, channel: 'local-terminal-card',
           ...(standing === 'session' ? { standing: 'session' } : {}),
           ...(approval.decisionCapability ? { decisionCapability: approval.decisionCapability } : {}),
-          reason: own || (decision === 'allow' ? t('terminal.approval.reasonAllow', {}, locale) : t('terminal.approval.reasonDeny', {}, locale)) });
+          reason: own || (decision === 'allow' ? t('terminal.approval.reasonAllow', {}, locale) : t('terminal.approval.reasonDeny', {}, locale)),
+          // APPROVER-NOTE (v21): the person's own words are marked as theirs, so a turn's call gives them to the model as the approver's note.
+          ...(own ? { approverNote: true } : {}) });
         if (standing === 'session') {
           const answer = sessionApprovalResultSchema.parse(result);
           return { ...approvalView(answer.record), standing: answer.standing };

@@ -5,7 +5,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { chatTurnCancellationSchema, chatTurnCommandSchema, modelInvocationProfileSchema, type AgentToolApprovalSettlement, type AgentToolSpec, type AgentTurnMessage,
   type AgentTurnStreamEvent, type ChatTurnCancellationResult, type ChatTurnResult, type JsonObject, type ModelInvocationCommand } from '#domain/index.js';
 import { SessionStanding, SessionApprovalAnswers, agentCallPermissionMode, agentToolApprovalSummary, agentCompactionInstruction, AGENT_TURN_ANSWER_MAX_BYTES, APPROVAL_PREVIEW_MAX_BYTES, AgentToolPolicyAuthorization, AgentTurnStoreError, admitFullAccessTurn,
-  agentCompactionTranscript, agentToolApprovalFacts, agentTurnAdmission, awaitAgentToolApproval, boundApprovalPreview, createTurnDecisionCapabilities, parseAgentCompactionSummary,
+  agentCompactionTranscript, agentToolApprovalFacts, agentToolApprovalNote, agentTurnAdmission, awaitAgentToolApproval, boundApprovalPreview, createTurnDecisionCapabilities, parseAgentCompactionSummary,
   renderAgentTurnSystemPrompt, requestAgentToolApproval, runDurableAgentTurn, withAgentTurnSystemPrompt, projectModelIngressField, type AgentRoundOutcome, type AgentTurnPorts, type TurnDecisionCapabilities,
   type ModelInvocationDelivery } from '#engine/index.js';
 import { t, globalStateRoot, ErrorRegistry, prepareProductDirectory, resolveLocale, SystemTrustedClock, type ConfigLoadOptions } from '#platform/index.js';
@@ -241,7 +241,8 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
                 : undefined) ?? chatTurnApprovalPreview(tool.name, args)))).modelText,
             expiresAt: record.request.expiresAt, ...(answer && offer ? { standing: { scopes: ['session'] as const, pattern: offer.pattern } } : {}) });
           requested = { approvalId: record.request.approvalId };
-          let outcome = await awaitAgentToolApproval(journal.store, integrity, record, clock, approvalSignal, 250, started);
+          const decided = await awaitAgentToolApproval(journal.store, integrity, record, clock, approvalSignal, 250, started);
+          let outcome = decided;
           if (outcome === 'allow') await answer?.wait();
           // Approved: re-evaluate policy now; a deny since the request wins (contract §2).
           if (outcome === 'allow' && await toolAuthority.decide(tool, command.scopeId, context.principal) === 'deny') outcome = 'deny';
@@ -254,7 +255,9 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
           // The effect gate verifies this stored record (MAC, allow, digest of the executed call, expiry) before anything is written or run.
           if (outcome === 'allow') approvals.allowed({ round, index }, { approvalId: record.request.approvalId, actionDigest: record.request.actionDigest, started });
           settlement = outcome;
-          return outcome;
+          // APPROVER-NOTE: the owner's own words on this very decision travel with it (never when policy or time changed the outcome since).
+          const note = (outcome === 'allow' || outcome === 'deny') && outcome === decided ? agentToolApprovalNote(journal.store, integrity, record) : null;
+          return note !== null && (outcome === 'allow' || outcome === 'deny') ? { outcome, note } : outcome;
         } finally {
           answer?.close(); journal.close();
           if (kept) await dropFullPreview(kept);
@@ -297,7 +300,8 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
     };
     const result = await runDurableAgentTurn({ claim: { scopeId: command.scopeId, turnId: command.turnId, principalKey, requestDigest, claimedAtMs: clock.sample().wallMs },
       messages: command.messages, tools, signal, language, emit: event => { if (event.kind !== 'done') channel.emit(event); },
-      admission: agentTurnAdmission(chat.maxCompletionTokens, context.config.service.inputMaxBytes), fullAccess }, store, ports);
+      admission: agentTurnAdmission(chat.maxCompletionTokens, context.config.service.inputMaxBytes), fullAccess,
+      approverNoteMaxChars: context.config.approvals.approverNoteMaxChars }, store, ports);
     await channel.drained();
     const answer = result.answer;
     const answerBytes = answer === null ? 0 : Buffer.byteLength(answer, 'utf8');

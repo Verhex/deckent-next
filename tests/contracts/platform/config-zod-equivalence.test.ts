@@ -68,7 +68,7 @@ describe('config defaults (zod 4 .default/.prefault guard)', () => {
     expect(d.installation).toEqual({ profileMaxBytes: 1_048_576, writeLockTimeoutMs: 2000, imageProbe: { timeoutMs: 5000, outputBytes: 65_536 },
       identityProbe: { timeoutMs: 2000, outputBytes: 65_536 }, machineIdentity: { source: null }, requireMachineBinding: false,
       packageMeasurement: { maxFiles: 8192, maxFileBytes: 67_108_864, maxTotalBytes: 536_870_912, maxDepth: 32 } });
-    expect(d.approvals).toEqual({ requestTtlMs: 600_000, sessionTtlMs: 60_000, pageSize: 100, keyFile: 'authority.key' });
+    expect(d.approvals).toEqual({ requestTtlMs: 600_000, sessionTtlMs: 60_000, pageSize: 100, keyFile: 'authority.key', approverNoteMaxChars: 500 });
     expect(d.cli).toEqual({ graphInputMaxBytes: 1_048_576, invocationInputMaxBytes: 1_048_576 });
     expect(d.mcp).toEqual({ inputMaxBytes: 1_048_576, responseMaxBytes: 1_048_576, maxConcurrentCalls: 8 });
     expect(d.service).toEqual({ identity: null, inputMaxBytes: 1_048_576, responseMaxBytes: 1_048_576, maxConnections: 32, maxConcurrentRequests: 16,
