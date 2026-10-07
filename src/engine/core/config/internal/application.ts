@@ -64,20 +64,23 @@ export class ConfigApplication {
       if (approved && snapshot.digest !== approved.expectDigest) throw new ConfigApplicationError('CONFIG_APPROVAL_STALE');
       if (input.expect !== undefined && input.expect !== snapshot.digest) throw new ConfigApplicationError('CONFIG_CONCURRENT_REVISION_HOLD');
       const document = planConfigChange(snapshot.document, input.keyPath, input.value, unset); validateConfigLayers(snapshot, document);
-      let revision: string;
+      let revision: string, approvalId: string | null = null;
       if (!approvals) revision = await this.authority.authorize(input);
       else {
         const current = await approvals.evaluate(input);
         if (current.decision === 'require-approval') {
           if (!approved) throw new ConfigApplicationError('CONFIG_APPROVAL_REQUIRED');
-          if (!('approved' in await approvals.admit(input, approved, current))) throw new ConfigApplicationError('CONFIG_APPROVAL_REQUIRED');
+          const admission = await approvals.admit(input, approved, current);
+          if (!('approved' in admission)) throw new ConfigApplicationError('CONFIG_APPROVAL_REQUIRED');
+          approvalId = admission.approved.approvalId;
         }
         revision = current.revision;
       }
       const event: AuditEvent = { schemaVersion: AUDIT_EVENT_SCHEMA_VERSION, eventId: randomUUID(), scopeId: input.scopeId,
         principal: { issuer: input.principal.issuer, subject: input.principal.subject }, policyRevision: revision, atMs: Date.now(),
         subject: { kind: 'config-change' as const, action: unset ? 'unset' as const : 'set' as const, layer: snapshot.layer,
-          keyPath: input.keyPath, commandId: input.commandId, beforeDigest: snapshot.digest, afterDigest: digestText(serializeJsonDocument(document)) } };
+          keyPath: input.keyPath, commandId: input.commandId, beforeDigest: snapshot.digest, afterDigest: digestText(serializeJsonDocument(document)),
+          ...(approvalId === null ? {} : { approvalId }) } };
       await this.authority.audit(event); return { document, event };
     });
   }

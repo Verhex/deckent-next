@@ -39,12 +39,19 @@ async function setup(extra: (principals: unknown) => readonly Grant[] = principa
   };
   await writePolicy(extra);
   const app = createConfiguredConfigApplication(root, options), path = join(root, '.deckent/config.json');
+  const audits = () => { const db = new DatabaseSync(ledger, { readOnly: true }); try { return db.prepare('SELECT record FROM audit_events ORDER BY rowid').all()
+    .map(row => JSON.parse(String(row['record'])) as { event: { subject: Record<string, unknown> } }); } finally { db.close(); } };
+  const assurance = async (rule: Record<string, unknown> | null) => {
+    const policy = JSON.parse(await readFile(policyPath, 'utf8')) as { approvalAssurance?: Record<string, unknown>[] };
+    policy.approvalAssurance = [...(policy.approvalAssurance ?? []).filter(item => item['id'] !== 'company-config-assurance'), ...(rule ? [rule] : [])];
+    await writeFile(policyPath, JSON.stringify(policy), { mode: 0o600 }); clearConfigCache();
+  };
   const auditCount = () => { const db = new DatabaseSync(ledger, { readOnly: true }); try { return Number(db.prepare('SELECT count(*) AS n FROM audit_events').get()!['n']); } finally { db.close(); } };
   const list = async () => await configuredApproval(root, 'list', { schemaVersion: 1, scopeId: 'installation', afterId: null, limit: 50 }, options) as ApprovalRecord[];
   const decide = (approvalId: string, decision: 'allow' | 'deny', commandId: string) => configuredApproval(root, 'decide', { schemaVersion: 1, scopeId: 'installation', approvalId,
     commandId, expectedRevision: 0, decision, reason: decision === 'allow' ? 'Allowed in the terminal' : 'Denied in the terminal', channel: 'local-terminal-card' }, options);
   const command = { principal, scopeId: 'installation', layer: 'project' as const };
-  return { root, options, app, path, command, auditCount, list, decide, writePolicy };
+  return { root, options, app, path, command, auditCount, audits, assurance, list, decide, writePolicy };
 }
 const bytesOf = async (path: string) => { try { return await readFile(path, 'utf8'); } catch { return null; } };
 
@@ -69,6 +76,11 @@ describe('config-change approval: request, decision, apply', () => {
     const applied = await f.app.submit('set', { ...f.command, commandId: 'cmd-1', keyPath: 'max_workers', value: 2, expect: pending.expect });
     expect(applied).toMatchObject({ status: 'applied', approvalId: pending.approval.approvalId, result: { keyPath: 'max_workers', layer: 'project', beforeDigest: pending.expect } });
     expect(JSON.parse((await bytesOf(f.path))!).max_workers).toBe(2); expect(f.auditCount()).toBe(audits + 1);
+    // Lead 2026-10-07 (karar 3): the applied write's audit record names the approval it consumed, next to its command id; a write
+    // that needed no approval keeps the earlier shape (no approvalId member at all).
+    const written = f.audits().map(item => item.event.subject).filter(subject => subject['kind'] === 'config-change');
+    expect(written.at(-1)).toMatchObject({ action: 'set', keyPath: 'max_workers', commandId: 'cmd-1', approvalId: pending.approval.approvalId, beforeDigest: pending.expect });
+    expect(written.find(subject => subject['commandId'] === 'seed')).not.toHaveProperty('approvalId');
     // Single use: the layer moved, so the same command never applies twice (typed, nothing written).
     const after = await bytesOf(f.path);
     await expect(f.app.submit('set', { ...f.command, commandId: 'cmd-1', keyPath: 'max_workers', value: 2, expect: pending.expect })).rejects.toMatchObject({ code: 'CONFIG_APPROVAL_STALE' });
