@@ -241,7 +241,8 @@ export function WorklineApp(props: WorklineProps) {
     const lineCommands: Readonly<Record<string, ((args: string) => Promise<readonly string[]>) | undefined>> = { ...bindInspectPorts(props.inspect, () => usage.current), mcp: props.mcp, monitor: props.monitor, config: props.config };
     if (slash.command === 'mcp' || slash.command === 'monitor' || slash.command === 'config' || (isInspectSlashCommand(slash.command) && (slash.command !== 'status' || lineCommands['status']))) {
       const lines = lineCommands[slash.command];
-      try { push((lines ? await lines(slash.args) : [fillTemplate(labels.commandUnavailable, { part: slash.command })]).map(line => notice('info', line))); }
+      // One notice for the whole answer, so its level words (`Info: `) open the answer once instead of every line.
+      try { push([notice('info', (lines ? await lines(slash.args) : [fillTemplate(labels.commandUnavailable, { part: slash.command })]).join('\n'))]); }
       catch (error) { push([notice('error', errorText(error))]); }
       return true;
     }
