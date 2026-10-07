@@ -19,6 +19,8 @@ export function workSurfaceLabels(locale: Locale): WorkSurfaceLabels {
     unavailable: t('terminal.work.unavailable', {}, locale),
     transcriptUsage: t('terminal.transcript.usage', {}, locale), transcriptNotFound: t('terminal.transcript.notFound', {}, locale),
     transcriptNoAttempt: t('terminal.transcript.noAttempt', {}, locale), transcriptHeader: t('terminal.transcript.header', {}, locale),
+    transcriptDetail: t('terminal.transcript.detail', {}, locale),
+    transcriptPage: { more: t('terminal.transcript.pageMore', {}, locale), end: t('terminal.transcript.pageEnd', {}, locale), range: t('terminal.transcript.pageRange', {}, locale) },
     sessionStandingClear: { cleared: t('terminal.approval.sessionCleared', {}, locale), unconfirmed: t('terminal.approval.sessionClearUnconfirmed', {}, locale) },
     approvalsNone: t('terminal.approval.none', {}, locale), approvalItem: t('terminal.approval.item', {}, locale), approvalsTruncated: t('terminal.approval.truncated', {}, locale),
     approvalNotFound: t('terminal.approval.notFound', {}, locale), approvalTitle: t('terminal.approval.title', {}, locale), approvalSubject: t('terminal.approval.subject', {}, locale),
