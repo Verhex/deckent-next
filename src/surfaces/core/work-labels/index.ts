@@ -1,1 +1,1 @@
-export { runtimeBuildSkew, workSurfaceLabels } from './internal/work-labels.js';
+export { pickerLabels, runtimeBuildSkew, workSurfaceLabels } from './internal/work-labels.js';

@@ -850,7 +850,8 @@
         "src/platform/core/i18n",
         "src/surfaces/core/terminal-ledger",
         "src/surfaces/core/terminal-work",
-        "src/surfaces/core/monitor"
+        "src/surfaces/core/monitor",
+        "src/surfaces/core/terminal-picker"
       ],
       "plan": "SURFACES"
     },
@@ -905,7 +906,8 @@
     "src/surfaces/core/terminal-picker": {
       "dependencies": [
         "src/surfaces/core/terminal-kit",
-        "src/surfaces/core/terminal-render"
+        "src/surfaces/core/terminal-render",
+        "src/surfaces/core/terminal-window"
       ],
       "plan": "SURFACES"
     },
