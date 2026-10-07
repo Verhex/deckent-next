@@ -1,5 +1,6 @@
 import { Box, Text } from 'ink';
-import { ArrowPicker, SpanText, fillTemplate, plainText, sliceSpans } from '#surfaces/core/terminal-render/index.js';
+import { SpanText, fillTemplate, plainText, sliceSpans } from '#surfaces/core/terminal-render/index.js';
+import { ArrowPicker } from '#surfaces/core/terminal-picker/index.js';
 import { useWorklinePalette } from '#surfaces/core/terminal-kit/index.js';
 import { ApprovalDecisionWarnings, approvalRawPatternCount } from './card.js';
 import type { ApprovalDecisionLabels, ApprovalDecisionLine, ApprovalDecisionProjection, ApprovalCardParts } from './types.js';

@@ -885,6 +885,13 @@
       ],
       "plan": "SURFACES"
     },
+    "src/surfaces/core/terminal-picker": {
+      "dependencies": [
+        "src/surfaces/core/terminal-kit",
+        "src/surfaces/core/terminal-render"
+      ],
+      "plan": "SURFACES"
+    },
     "src/surfaces/core/terminal-composer": {
       "dependencies": [
         "src/surfaces/core/terminal-kit"
@@ -926,7 +933,8 @@
         "src/surfaces/core/approval-presentation",
         "src/surfaces/core/terminal-ledger",
         "src/surfaces/core/terminal-work",
-        "src/surfaces/core/terminal-theme"
+        "src/surfaces/core/terminal-theme",
+        "src/surfaces/core/terminal-picker"
       ],
       "plan": "SURFACES"
     },
@@ -2282,7 +2290,8 @@
         "src/platform/core/output",
         "src/surfaces/core/terminal-kit",
         "src/surfaces/core/terminal-render",
-        "src/engine/core/approval"
+        "src/engine/core/approval",
+        "src/surfaces/core/terminal-picker"
       ],
       "plan": "SURFACES"
     },

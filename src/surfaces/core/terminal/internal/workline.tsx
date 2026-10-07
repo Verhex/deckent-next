@@ -9,7 +9,7 @@ import { HumanTextContext, humanRecordText, projectHumanPickerText, RenderGlyphs
 import type { KnownSecretSnapshot } from '#platform/index.js';
 import { assistantLedgerEntries, streamStepEntries, workerReportToLedgerEntries, WORK_LEDGER_SCHEMA_VERSION, type WorkLedgerEntry, ledgerEntriesForWorkers, ledgerEntriesForRuns, type WorklineLedgerPorts, fillTemplate, newWorkerTaskIds, freshRunCards, newRunLedgerEntries, agentHistory, appendLedger, boundAgentHistory, compactLedger, EMPTY_LEDGER, plainChatHistory, type AgentChatMessage, type ChatTurnMessage, type LedgerBuffer, notice } from '#surfaces/core/terminal-ledger/index.js';
 import { useConversationSession, type ConversationSessionLabels, type ConversationSessionPort } from './workline-sessions.js';
-import { ArrowPicker } from '#surfaces/core/terminal-render/index.js';
+import { ArrowPicker } from '#surfaces/core/terminal-picker/index.js';
 import { Composer, type ComposerLabels, type ComposerHistoryPort, type ComposerMentionPort } from '#surfaces/core/terminal-composer/index.js';
 import { messageWithMentions, type WorklineAttachMentions, type WorklineMentionLabels } from './workline-mentions.js';
 import { useWorklineMode, type WorklineModeLabels, type WorklinePermissionModePort } from './workline-mode.js';
