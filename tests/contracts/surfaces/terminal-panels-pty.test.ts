@@ -94,9 +94,9 @@ async function keep(name: string, result: { output: string; frames: [string, str
 const ESC = '\u001b', DOWN = '\u001b[B', ENTER = '\r', SHIFT_TAB = '\u001b[Z';
 const WORDS = {
   en: { mode: 'Permission mode', locked: '[blocked]', grant: "company's grant", denied: 'does not let you change this setting in this layer', approval: 'asks for approval (rule company-config-approval)',
-    mcp: 'MCP servers', http: 'HTTP servers cannot be added in this build yet', line: 'Full access: commands run without asking', general: 'general' },
+    mcp: 'MCP servers', http: "Streamable HTTP, with headers", line: 'Full access: commands run without asking', general: 'general' },
   tr: { mode: 'İzin modu', locked: '[engellendi]', grant: "şirketinizin grant'ı gerekir", denied: 'bu katmanda değiştirmenize izin vermiyor', approval: 'onay ister (kural company-config-approval)',
-    mcp: 'MCP sunucuları', http: 'HTTP sunucular bu sürümde henüz eklenemez', line: 'Tam erişim: komutlar sormadan çalışır', general: 'genel' },
+    mcp: 'MCP sunucuları', http: "Streamable HTTP, başlıklarla", line: 'Tam erişim: komutlar sormadan çalışır', general: 'genel' },
 } as const;
 
 describe('settings windows on a real PTY (T3 L4)', () => {
@@ -117,7 +117,7 @@ describe('settings windows on a real PTY (T3 L4)', () => {
         [words.denied, `${ESC}${ESC}${ESC}${ESC}`, '+/config user layer locked'],
         ['READY', '/mcp\r', '+closed again'],
         ['github', `${ENTER}${DOWN}`, '+/mcp list'],
-        [words.http, `${ESC}${ESC}`, '+/mcp add: HTTP locked'],
+        [words.http, `${ESC}${ESC}`, '+/mcp add: HTTP offered (MCP-CORE wired in the integration)'],
       ], [locale, root, '0', color ? 'ansi256' : 'none'], color);
       await keep(`pty-${locale}-${color ? 'colour' : 'nocolor'}`, result);
       expect(result.timeout, result.output?.slice(-1500)).toBeUndefined();
