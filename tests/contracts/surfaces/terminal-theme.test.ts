@@ -62,6 +62,18 @@ describe('terminal themes (T2 T-READABLE)', () => {
     for (const style of Object.values(resolveWorklinePalette('none', 'light'))) expect(style).toEqual({});
   });
 
+  it('maps the SW-1 legibility roles: bold keys, muted identities, chip states and a system summary that is not the assistant colour', () => {
+    const palette = resolveWorklinePalette('ansi16');
+    expect(palette.keyLabel).toEqual({ bold: true });
+    expect(palette.mutedId.color).toBe('gray');
+    expect(palette.sectionHeader).toEqual({ color: 'cyan', bold: true });
+    expect([palette.chipOk, palette.chipWarn, palette.chipFail]).toEqual([{ color: 'green', bold: true }, { color: 'yellow', bold: true }, { color: 'red', bold: true }]);
+    expect(palette.systemLabel).toEqual({ color: 'magenta', bold: true });
+    expect(palette.systemLabel.color).not.toBe(palette.assistantLabel.color);
+    expect(resolveWorklinePalette('ansi16', 'dark-daltonized').chipFail.color).toBe('yellowBright');
+    expect(resolveWorklinePalette('truecolor', 'light').chipOk.color).toBe('#16774A');
+  });
+
   it('auto follows a reported background and otherwise stays in the terminal\'s own 16 colours', () => {
     expect(resolveTerminalTheme('auto', 'truecolor')).toEqual({ theme: 'dark', tier: 'ansi16', background: 'unknown' });
     expect(resolveTerminalTheme('auto', 'truecolor', '15;0')).toEqual({ theme: 'dark', tier: 'truecolor', background: 'dark' });
