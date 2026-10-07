@@ -1,7 +1,8 @@
 // dist-types (DEPS-TYPES, owner 2026-09-29): the published package's type declarations, self-contained. The zero-dependency package
 // (DEPS-DIST) bundles zod and the MCP SDK into its JavaScript, so a consumer has no `zod` / `@modelcontextprotocol/*` to resolve the types our
-// declarations name. This step ships exactly the declaration closure a consumer's type checker loads from `exports['.'].types`:
-//   - closure: TypeScript's own program over `dist/index.d.ts`, once per supported consumer resolution (NodeNext, Bundler), so conditions,
+// declarations name. This step ships exactly the declaration closure a consumer's type checker loads from every `types` condition of the
+// manifest's `exports` (`.` and `./extensions` today; Astra 2423 P2-1: the extensions entry was declared but not shipped):
+//   - closure: TypeScript's own program over those entries, once per supported consumer resolution (NodeNext, Bundler), so conditions,
 //     nested versions (the MCP SDK's own zod 4 next to our zod 3) and `.d.ts`/`.d.mts`/`.d.cts` formats are resolved as a consumer resolves
 //     them; a specifier that resolves differently in the two modes, or not at all, fails the build;
 //   - own declarations keep the tsc layout (relative and `#` imports unchanged); declarations no consumer can reach are not shipped;
@@ -43,15 +44,33 @@ export function moduleSpecifiers(sourceFile) {
   return found.sort((a, b) => a.node.getStart(sourceFile) - b.node.getStart(sourceFile));
 }
 
-/** The declaration closure of `<root>/<entry>` for every consumer mode, with each specifier's resolved target. */
-export function declarationClosure(root, entry = 'dist/index.d.ts') {
+/** The declaration entries the manifest publishes: every `types` condition anywhere under `exports` (sorted, unique), else its top-level
+ * `types`/`typings`, else `dist/index.d.ts`. One program over all of them is the closure a consumer of any subpath can reach. */
+export function declarationEntries(root) {
+  const manifestPath = join(root, 'package.json');
+  const manifest = existsSync(manifestPath) ? JSON.parse(readFileSync(manifestPath, 'utf8')) : {};
+  const found = new Set();
+  const visit = (value, key) => {
+    if (typeof value === 'string') { if (key === 'types') found.add(value); return; }
+    if (value && typeof value === 'object') for (const [name, inner] of Object.entries(value)) visit(inner, name);
+  };
+  visit(manifest.exports, null);
+  if (!found.size && typeof (manifest.types ?? manifest.typings) === 'string') found.add(manifest.types ?? manifest.typings);
+  if (!found.size) found.add('dist/index.d.ts');
+  return [...found].map(entry => posix(normalize(entry))).sort();
+}
+
+/** The declaration closure of every `<root>/<entry>` for every consumer mode, with each specifier's resolved target. */
+export function declarationClosure(root, entries = declarationEntries(root)) {
   root = realpathSync.native(root);
   const files = new Map(), problems = [];
+  // A declared entry that does not exist would silently drop out of the program (and out of the package): refuse it instead.
+  for (const entry of entries) if (!existsSync(join(root, entry))) problems.push(`${entry}: declared types entry does not exist`);
   for (const [mode, modeOptions] of Object.entries(CONSUMER_MODES)) {
     // resolveJsonModule off and no automatic @types: the strictest consumer setting; Node built-ins stay unresolved (ambient in @types/node).
     const options = { ...modeOptions, target: ts.ScriptTarget.ES2022, strict: true, noEmit: true, skipLibCheck: false, types: [], resolveJsonModule: false };
     const host = ts.createCompilerHost(options), cache = ts.createModuleResolutionCache(root, name => name, options);
-    const program = ts.createProgram({ rootNames: [join(root, entry)], options, host });
+    const program = ts.createProgram({ rootNames: entries.map(entry => join(root, entry)), options, host });
     for (const sourceFile of [...program.getSourceFiles()].sort((a, b) => a.fileName.localeCompare(b.fileName))) {
       if (program.isSourceFileDefaultLibrary(sourceFile)) continue;
       // TypeScript uses forward slashes on Windows; filesystem comparisons use native canonical paths.

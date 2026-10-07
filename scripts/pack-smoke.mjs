@@ -24,9 +24,10 @@ import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
-/** Typical SDK use by a zero-dependency consumer: values, derived zod types (must be real types, not `any`), a hand-written Standard Schema,
+/** Typical SDK use by a zero-dependency consumer: values, derived zod types (must be real types, not `any`), a hand-written Standard Schema, the `deckent/extensions` registration entry,
  * the i18n key union, errors — and the zod schema values removed from the entry (DEPS-SCHEMA C2-b) must stay absent. */
 const TYPES_CONSUMER = `import * as deckent from 'deckent';
+import { CORE_API_VERSION, RegistryError, registerOperationAdapterModule, type AdapterModuleRegistration } from 'deckent/extensions';
 import { createRun, inspectRun, createDefaultConfig, validateConfig, getConfigFieldDefault, t, isStandardSchemaV1, validateStandardSchemaSync, DeckentError,
   type RunAdmission, type RunQuery, type DeckentConfig, type MessageKey, type StandardSchemaV1 } from 'deckent';
 
@@ -52,6 +53,12 @@ export const query = (root: string, input: RunQuery) => inspectRun(root, input);
 export const describe = (error: unknown): string => (error instanceof DeckentError ? error.code : String(error));
 // @ts-expect-error removed from the SDK entry (live zod schema values are Core-internal)
 export const removed = deckent.CORE_SCHEMA;
+// The registration entry (\`exports['./extensions']\`) type-checks from its own shipped declarations (Astra 2423 P2-1).
+export const coreApi: 1 = CORE_API_VERSION;
+export const register: (registration: AdapterModuleRegistration) => void = registerOperationAdapterModule;
+export const isRegistryError = (error: unknown): boolean => error instanceof RegistryError;
+// @ts-expect-error a registration is a typed object, not a string
+registerOperationAdapterModule('not-a-registration');
 `;
 
 const args = process.argv.slice(2);
@@ -269,7 +276,7 @@ if (typescript && report.checks.install?.ok !== false) {
     for (const [mode, resolution] of Object.entries(modes)) {
       const config = join(consumer, `tsconfig.${mode}.json`);
       writeFileSync(config, JSON.stringify({ compilerOptions: { ...resolution, target: 'ES2022', lib: ['ES2022'], strict: true, noEmit: true, skipLibCheck: false,
-        resolveJsonModule: false, types: ['node'], typeRoots: [typesRoot], ...(installDir ? {} : { paths: { deckent: [join(root, 'dist/index.d.ts')] } }) }, files: ['index.mts'] }));
+        resolveJsonModule: false, types: ['node'], typeRoots: [typesRoot], ...(installDir ? {} : { paths: { deckent: [join(root, 'dist/index.d.ts')], 'deckent/extensions': [join(root, 'dist/extensions.d.ts')] } }) }, files: ['index.mts'] }));
       const result = run([node, join(dir, 'bin/tsc'), '-p', config], { cwd: consumer, timeout: 300_000 });
       const errors = [...result.stdout.matchAll(/error (TS\d+): (.*)/g)].map(match => `${match[1]} ${match[2]}`);
       const unresolved = [...new Set(errors.map(text => /Cannot find module '([^']+)'/.exec(text)?.[1]).filter(Boolean))].sort();

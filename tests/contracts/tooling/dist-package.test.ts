@@ -13,7 +13,7 @@ import { ajvGuard, declarationImports, publishedManifest, STANDALONE_ENTRIES, st
 // @ts-expect-error JavaScript build tooling has no declaration file.
 import { sbomComponents } from '../../../scripts/deps-watch.mjs';
 // @ts-expect-error JavaScript build tooling has no declaration file.
-import { vendorDeclarations } from '../../../scripts/dist-types.mjs';
+import { declarationClosure, declarationEntries, vendorDeclarations } from '../../../scripts/dist-types.mjs';
 
 type Component = { name: string; group?: string; purl: string; 'bom-ref': string; licenses: unknown[]; hashes?: { alg: string; content: string }[];
   properties: { name: string; value: string }[]; components?: Component[] };
@@ -245,6 +245,29 @@ describe('published declarations (DEPS-TYPES)', () => {
     expect(notices.text).toContain('## zod@3.0.0 (type declarations only)');
     expect(notices.text).toContain('zod license');
     expect(notices.gaps).toEqual(['lib@1.0.0 (declarations): no license file in the installed package', 'dep@2.0.0 (declarations): no license file in the installed package']);
+  });
+
+  // Astra 2423 P2-1: every `types` condition of `exports` is a closure root, so a subpath entry (`./extensions`) ships with its own closure.
+  it('ships the closure of every exports types entry, not only the root entry', async () => {
+    const root = await tree({
+      'package.json': pkg('app', '1.0.0', { exports: { '.': { import: './dist/index.js', types: './dist/index.d.ts' },
+        './extensions': { types: './dist/extensions.d.ts', import: './dist/extensions.js' } } }),
+      'dist/index.d.ts': 'export type Root = 1;\n',
+      'dist/extensions.d.ts': "export * from './ext-own.js';\nexport type { L } from 'extlib';\n", 'dist/ext-own.d.ts': 'export type ExtOwn = 1;\n',
+      'node_modules/extlib/package.json': pkg('extlib', '1.0.0', { types: './index.d.ts' }), 'node_modules/extlib/index.d.ts': 'export type L = 1;\n',
+    });
+    expect(declarationEntries(root)).toEqual(['dist/extensions.d.ts', 'dist/index.d.ts']);
+    const stage = join(root, 'stage'), result = vendorDeclarations({ root, stage });
+    expect(result.problems).toEqual([]);
+    expect(await files(stage)).toEqual(['dist/ext-own.d.ts', 'dist/extensions.d.ts', 'dist/index.d.ts', 'dist/vendor/types/extlib@1.0.0/index.d.ts',
+      'dist/vendor/types/extlib@1.0.0/package.json']);
+    expect(await readFile(join(stage, 'dist/extensions.d.ts'), 'utf8')).toBe("export * from './ext-own.js';\nexport type { L } from './vendor/types/extlib@1.0.0/index.js';\n");
+    // Negative: the former root-only walk never reaches the extensions entry or what only it imports.
+    const rootOnly = declarationClosure(root, ['dist/index.d.ts']).files.map(file => file.path.replaceAll('\\', '/'));
+    expect(rootOnly.some(path => path.endsWith('/dist/extensions.d.ts') || path.endsWith('/dist/ext-own.d.ts') || path.includes('/extlib/'))).toBe(false);
+    // A declared entry that is missing is a build problem, never a silently smaller package.
+    await rm(join(root, 'dist/extensions.d.ts'));
+    expect(vendorDeclarations({ root, stage: join(root, 'stage-2') }).problems).toContain('dist/extensions.d.ts: declared types entry does not exist');
   });
 
   it('refuses declarations a consumer could not resolve the same way in NodeNext and Bundler, or that a copy cannot relocate', async () => {
