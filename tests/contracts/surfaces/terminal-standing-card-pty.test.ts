@@ -44,7 +44,7 @@ def typed(text):
         time.sleep(0.03)
 wait('READY')
 typed('go\r')
-wait('S-COVERS npm test')
+wait('remembered for npm test')
 read_for(0.4)
 for group in keys.split(';'):
     token, _, expect = group.partition('=')
@@ -81,12 +81,12 @@ async function run(keys: string, env: Record<string, string>) {
 describe.skipIf(process.platform === 'win32')('scoped approval card on a real pseudo-terminal (G6)', () => {
   it('a raw a keystroke decides allow with the always scope and the view prints what the port saved', async () => {
     const result = await run('a=S-SAVED-ALWAYS appr-pty', { SCOPES: 'session,always' });
-    expect(result.output).toContain('S-PROMPT-BOTH');
+    expect(result.output).toContain('y once · s this session · a always in this project · n deny');
     expect(result.decisions).toEqual(['appr-pty allow always']);
   });
   it('a scope the card did not offer is not a key (a does nothing), s is the session scope, and a refused save is shown with its reason', async () => {
     const result = await run('a;s=S-NOT-SAVED-SESSION appr-pty STANDING_DELEGATION', { SCOPES: 'session', SAVED: 'no' });
-    expect(result.output).toContain('S-PROMPT-SESSION');
+    expect(result.output).toContain('y once · s this session · n deny'); expect(result.output).not.toContain('a always in this project');
     expect(result.decisions).toEqual(['appr-pty allow session']);
   });
   it('y stays a single allow without a scope', async () => {

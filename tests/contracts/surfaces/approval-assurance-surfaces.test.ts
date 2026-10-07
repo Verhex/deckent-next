@@ -101,6 +101,9 @@ describe('terminal ports forward the turn capability and the facts', () => {
   });
 });
 
+/** The approval window's EN key hint and field texts (T-APPROVAL-WINDOW); the assurance sentences keep the harness's probe tokens. */
+const DENY = 'n deny (Enter/Esc too)', NOTHING_RUNS = 'if nobody decides, nothing runs';
+
 describe('the single approval card', () => {
   const mounted: Array<{ unmount(): void }> = [];
   afterEach(() => { for (const instance of mounted.splice(0)) instance.unmount(); });
@@ -118,17 +121,17 @@ describe('the single approval card', () => {
       async decideApproval() { throw new Error('unused'); } } as never }, 220);
     mounted.push(view.instance);
     for (const char of '/approvals op-1\r') { view.stdin.write(char); await settle(2); }
-    await until(() => view.stdout.frame.includes('A-PROMPT'), 'operation card');
+    await until(() => view.stdout.frame.includes(DENY), 'operation card');
     const frame = view.stdout.frame;
     const at = (text: string) => frame.indexOf(text);
     expect(at(`erp.post@1 · records/PO-1 · ${'d'.repeat(12)}`)).toBeGreaterThan(-1);
     for (const line of description) expect(frame).toContain(line);
     expect(at(`erp.post@1 · records/PO-1`)).toBeLessThan(at('change 00'));
-    expect(frame.slice(at('A-TITLE'))).not.toContain('…');
-    expect(at('R-RISK irreversible irreversible')).toBeGreaterThan(at('change 12'));
-    expect(frame).toContain('R-NOTHING-RUNS'); expect(frame).toContain('R-PEER');
+    expect(frame.slice(at('Approval needed'))).not.toContain('…');
+    expect(at('Cannot be undone')).toBeGreaterThan(at('change 12')); expect(frame).toContain('No — it cannot be undone');
+    expect(frame).toContain(NOTHING_RUNS); expect(frame).toContain('R-PEER');
     view.stdin.write('\u001b');
-    await until(() => !view.stdout.frame.includes('A-PROMPT'), 'closed');
+    await until(() => !view.stdout.frame.includes(DENY), 'closed');
   });
 
   it('keeps the risk line above a 40-line heredoc preview of a hard-floor shell call, says only this terminal can allow it, and forwards the capability on y', async () => {
@@ -149,11 +152,12 @@ describe('the single approval card', () => {
     const view = mountWorkline({ streamTurn: streamTurn as never, ledger: ledger as never }, 220);
     mounted.push(view.instance);
     await settle(20); for (const char of 'go\r') { view.stdin.write(char); await settle(2); }
-    await until(() => view.stdout.frame.includes('A-PROMPT'), 'turn card'); await settle(40);
+    await until(() => view.stdout.frame.includes(DENY), 'turn card'); await settle(40);
     const frame = view.stdout.frame;
-    expect(frame).toContain('R-RISK shell-destructive R-UNDECLARED');
-    expect(frame.indexOf('R-RISK')).toBeLessThan(frame.indexOf('$ cat > big.sh'));
-    expect(frame).toContain('A-PREVIEW-MORE'); expect(frame).toContain('R-TURN-HERE'); expect(frame).toContain('R-NOTHING-RUNS');
+    // A 40-line heredoc keeps the facts on screen: its field shows three rows, the preview below has the whole command.
+    expect(frame).toMatch(/Risk: +Deletes \(cannot be undone\)/u); expect(frame).toMatch(/Undo: +not declared by the tool/u);
+    expect(frame.indexOf('Deletes (cannot be undone)')).toBeLessThan(frame.indexOf('line 20'));
+    expect(frame).toContain('… 39 more lines'); expect(frame).toMatch(/rows 1–\d+ of \d+/u); expect(frame).toContain('R-TURN-HERE'); expect(frame).toContain(NOTHING_RUNS);
     view.stdin.write('y');
     await until(() => view.stdout.frame.includes('Ran.'), 'turn continues');
     expect(decided).toEqual([expect.objectContaining({ approvalId: 'appr-h', revision: 0, decisionCapability: CAPABILITY, decision: 'allow' })]);
@@ -166,9 +170,9 @@ describe('the single approval card', () => {
       async decideApproval() { throw new Error('unused'); } } as never }, 220);
     mounted.push(view.instance);
     for (const char of '/approvals tool-2\r') { view.stdin.write(char); await settle(2); }
-    await until(() => view.stdout.frame.includes('A-PROMPT'), 'tool card');
+    await until(() => view.stdout.frame.includes(DENY), 'tool card');
     expect(view.stdout.frame).toContain('R-TURN-ELSEWHERE');
-    expect(view.stdout.frame).toContain('R-RISK shell-destructive R-UNDECLARED');
+    expect(view.stdout.frame).toMatch(/Risk: +Deletes \(cannot be undone\)/u); expect(view.stdout.frame).toMatch(/Command: +rm -rf src/u);
     view.stdin.write('\u001b');
   });
 });
@@ -184,7 +188,7 @@ describe('the single approval card after Sol 2234', () => {
     revision: 0, status: 'pending', decision: null, expiresAt: Date.now() + 600_000, risk: 'shell-read-low', undo: null, ...patch }) as WorklineApproval;
   const open = async (view: ReturnType<typeof mountWorkline>, id: string) => {
     for (const char of `/approvals ${id}\r`) { view.stdin.write(char); await settle(2); }
-    await until(() => view.stdout.frame.includes('A-PROMPT'), `card ${id}`); await settle(40);
+    await until(() => view.stdout.frame.includes(DENY), `card ${id}`); await settle(40);
   };
 
   it('R1: names a required level other than peer-session or turn-bound by its id and never says peer-session suffices', async () => {
@@ -195,7 +199,7 @@ describe('the single approval card after Sol 2234', () => {
     await open(view, 'idp-1');
     expect(view.stdout.frame).toContain('R-OTHER step-up-idp');
     expect(view.stdout.frame).not.toContain('R-PEER');
-    view.stdin.write('\u001b'); await until(() => !view.stdout.frame.includes('A-SUBJECT idp-1'), 'closed');
+    view.stdin.write('\u001b'); await until(() => !view.stdout.frame.includes('Approval: idp-1'), 'closed');
     await open(view, 'peer-1');
     expect(view.stdout.frame).toContain('R-PEER'); expect(view.stdout.frame).not.toContain('R-OTHER');
     view.stdin.write('\u001b');
@@ -218,8 +222,8 @@ describe('the single approval card after Sol 2234', () => {
     const view = mountWorkline({ streamTurn: streamTurn as never, ledger: ledger as never }, 220);
     mounted.push(view.instance);
     await settle(20); for (const char of 'go\r') { view.stdin.write(char); await settle(2); }
-    await until(() => view.stdout.frame.includes('A-PROMPT'), 'trust card'); await settle(40);
-    expect(view.stdout.frame).toContain('R-RISK R-UNDECLARED R-UNDECLARED');
+    await until(() => view.stdout.frame.includes(DENY), 'trust card'); await settle(40);
+    expect(view.stdout.frame).toMatch(/Risk: +not classified by the tool/u); expect(view.stdout.frame).toMatch(/Undo: +not declared by the tool/u);
     expect(view.stdout.frame).toContain('R-TURN-HERE');
     view.stdin.write('y');
     await until(() => view.stdout.frame.includes('Trusted.'), 'turn continues');
@@ -242,14 +246,14 @@ describe('the single approval card after Sol 2234', () => {
     view.stdin.write('y');
     await until(() => view.stdout.text.includes('ERR:APPROVAL_ASSURANCE_INSUFFICIENT'), 'typed refusal shown');
     await settle(60);
-    expect(view.stdout.frame).toContain('A-PROMPT'); expect(view.stdout.frame).toContain('A-SUBJECT floor-1');
+    expect(view.stdout.frame).toContain(DENY); expect(view.stdout.frame).toContain('Approval: floor-1');
     expect(view.stdout.text).not.toContain('A-ALLOWED floor-1');
     view.stdin.write('n');
-    await until(() => view.stdout.text.includes('A-DENIED floor-1') && !view.stdout.frame.includes('A-PROMPT'), 'denied after refusal');
+    await until(() => view.stdout.text.includes('A-DENIED floor-1') && !view.stdout.frame.includes(DENY), 'denied after refusal');
     expect(calls).toEqual([{ id: 'floor-1', decision: 'allow' }, { id: 'floor-1', decision: 'deny' }]);
     await open(view, 'floor-2');
     view.stdin.write('y');
-    await until(() => view.stdout.text.includes('ERR:LOCAL_RUNTIME_TRANSPORT') && !view.stdout.frame.includes('A-PROMPT'), 'uncertain result closes, not decided');
+    await until(() => view.stdout.text.includes('ERR:LOCAL_RUNTIME_TRANSPORT') && !view.stdout.frame.includes(DENY), 'uncertain result closes, not decided');
     expect(view.stdout.text).not.toContain('A-ALLOWED floor-2');
   });
 
@@ -279,10 +283,10 @@ describe('the single approval card after Sol 2234', () => {
     await settle(20); for (const char of 'go\r') { view.stdin.write(char); await settle(2); }
     await until(() => view.stdout.frame.includes('package.json'), 'card A'); await settle(40);
     view.stdin.write('y');
-    await until(() => view.stdout.frame.includes('Makefile') && view.stdout.frame.includes('A-PROMPT'), 'card B open');
+    await until(() => view.stdout.frame.includes('Makefile') && view.stdout.frame.includes(DENY), 'card B open');
     await until(() => view.stdout.text.includes('ERR:APPROVAL_ASSURANCE_INSUFFICIENT'), 'late refusal of A');
     await settle(60);
-    expect(view.stdout.frame).toContain('Makefile'); expect(view.stdout.frame).toContain('A-PROMPT'); expect(view.stdout.frame).not.toContain('package.json');
+    expect(view.stdout.frame).toContain('Makefile'); expect(view.stdout.frame).toContain(DENY); expect(view.stdout.frame).not.toContain('package.json');
     view.stdin.write('n');
     await until(() => view.stdout.frame.includes('Done.'), 'turn continues');
     expect(decided).toEqual(['card-a:allow', 'card-b:deny']);

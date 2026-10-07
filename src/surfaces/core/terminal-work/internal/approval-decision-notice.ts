@@ -1,6 +1,8 @@
 import { WORK_LEDGER_SCHEMA_VERSION, type WorkLedgerNoticeEntry } from '#surfaces/core/terminal-ledger/index.js';
 /** Display strings only; approval identity/revision/capability and authority DTOs remain in their original closure. */
-export type ApprovalRowPresentation = Readonly<{ kind: 'approval-row'; rowNumber: number; summary: string; displayId: string; displayRun: string; displayTask: string; itemTemplate: string; durationText: string }>;
+export type ApprovalRowPresentation = Readonly<{ kind: 'approval-row'; rowNumber: number; summary: string; displayId: string; displayRun: string; displayTask: string; itemTemplate: string; durationText: string;
+  /** T-APPROVAL-WINDOW list row: what the call does, who asked, how long it has waited (empty: unknown). */
+  what: string; requester: string; ageText: string }>;
 export type ApprovalDecisionNoticePresentation = ApprovalRowPresentation | Readonly<{ kind: 'approval-not-found'; ref: string; notFoundTemplate: string }>;
 const presentations = new WeakMap<WorkLedgerNoticeEntry, ApprovalDecisionNoticePresentation>();
 function attach(level: 'info' | 'error', fallbackText: string, raw: ApprovalDecisionNoticePresentation): WorkLedgerNoticeEntry {
@@ -11,7 +13,8 @@ function attach(level: 'info' | 'error', fallbackText: string, raw: ApprovalDeci
 /** Internal terminal factories copy only complete presentation fields, never an executable operation or capability. */
 export function makeApprovalRowNotice(raw: Omit<ApprovalRowPresentation, 'kind'>, fallbackText: string): WorkLedgerNoticeEntry {
   return attach('info', fallbackText, { kind: 'approval-row', rowNumber: raw.rowNumber, summary: raw.summary,
-    displayId: raw.displayId, displayRun: raw.displayRun, displayTask: raw.displayTask, itemTemplate: raw.itemTemplate, durationText: raw.durationText });
+    displayId: raw.displayId, displayRun: raw.displayRun, displayTask: raw.displayTask, itemTemplate: raw.itemTemplate, durationText: raw.durationText,
+    what: raw.what, requester: raw.requester, ageText: raw.ageText });
 }
 export function makeApprovalNotFoundNotice(ref: string, notFoundTemplate: string, fallbackText: string): WorkLedgerNoticeEntry { return attach('error', fallbackText, { kind: 'approval-not-found', ref, notFoundTemplate }); }
 /** Internal identity lookup; deliberately absent from public barrels, JSON and persistence contracts. */

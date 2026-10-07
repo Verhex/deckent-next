@@ -893,6 +893,13 @@
       ],
       "plan": "SURFACES"
     },
+    "src/surfaces/core/terminal-window": {
+      "dependencies": [
+        "src/surfaces/core/terminal-kit",
+        "src/surfaces/core/terminal-render"
+      ],
+      "plan": "SURFACES"
+    },
     "src/surfaces/core/terminal-picker": {
       "dependencies": [
         "src/surfaces/core/terminal-kit",
@@ -926,7 +933,9 @@
         "src/surfaces/core/approval-presentation",
         "src/platform/core/redaction",
         "src/engine/core/runs",
-        "src/surfaces/core/terminal-kit"
+        "src/surfaces/core/terminal-kit",
+        "src/surfaces/core/terminal-window",
+        "src/surfaces/core/terminal-picker"
       ],
       "plan": "SURFACES"
     },
@@ -942,7 +951,8 @@
         "src/surfaces/core/terminal-ledger",
         "src/surfaces/core/terminal-work",
         "src/surfaces/core/terminal-theme",
-        "src/surfaces/core/terminal-picker"
+        "src/surfaces/core/terminal-picker",
+        "src/surfaces/core/terminal-window"
       ],
       "plan": "SURFACES"
     },
@@ -2299,7 +2309,8 @@
         "src/surfaces/core/terminal-kit",
         "src/surfaces/core/terminal-render",
         "src/engine/core/approval",
-        "src/surfaces/core/terminal-picker"
+        "src/surfaces/core/terminal-picker",
+        "src/surfaces/core/terminal-window"
       ],
       "plan": "SURFACES"
     },

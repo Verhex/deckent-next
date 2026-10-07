@@ -92,6 +92,7 @@
   "resources.table_header_cpu_pct",
   "terminal.admin.model.channel",
   "terminal.admin.model.entry",
+  "terminal.approval.window.field.risk",
   "terminal.render.tool",
   "terminal.scratch.path",
   "terminal.slash.modeArgument",

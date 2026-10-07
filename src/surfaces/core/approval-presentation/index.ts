@@ -1,5 +1,5 @@
 export { projectApprovalDecisionText, approvalSummarySpans, approvalTemplateSpans } from './internal/text.js';
-export { DecisionCard, type DecisionCardProps } from './internal/card.js';
+export { DecisionCard, decisionWindowLines, type DecisionCardProps, type DecisionReasonLabels } from './internal/card.js';
 export { ApprovalProjectedNotice, ApprovalProjectedPicker, approvalTemplateLine, assembleApprovalCard } from './internal/view.js';
 export type { ApprovalDecisionProjection, ApprovalDecisionLabels, ApprovalDecisionLine, ApprovalCardParts } from './internal/types.js';
 export { standingAnswerNotice, clearStandingNotice } from './internal/standing-notice.js';

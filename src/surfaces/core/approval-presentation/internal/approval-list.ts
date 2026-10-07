@@ -16,6 +16,8 @@ export interface WorklineApproval {
   readonly standing?: SessionStandingResult | { readonly scope: StandingScope; readonly saved: boolean; readonly reason?: string };
   /** B1 single card: risk and undo words (null: not declared), required assurance, and only on the running turn's card the capability its y forwards. */
   readonly risk?: string | null; readonly undo?: string | null; readonly requiredAssurance?: string; readonly decisionCapability?: string;
+  /** T-APPROVAL-WINDOW display copies: a tool call's tool name and target (subject or the call's `tool.started`), and when it was asked. */
+  readonly tool?: string; readonly target?: string | null; readonly createdAt?: number;
 }
 
 /** One page of the scope's approval records (every status; the store orders by id, not by time or state). */

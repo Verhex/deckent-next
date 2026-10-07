@@ -21,7 +21,8 @@ function approvalView(record: ApprovalRecord): WorklineApproval {
   // A tool-call approval (C12) has no run or task: its summary names the tool, resource and argument digest.
   return Object.freeze({ approvalId: request.approvalId, runId: subject.kind === 'task' ? subject.runId : '-', taskId: subject.kind === 'task' ? subject.taskId : '-', summary: request.summary,
     requester: request.requester.id, revision: record.revision, status: record.status, decision: record.decision?.decision ?? null, expiresAt: request.expiresAt,
-    risk: riskWord(facts?.risk ?? null), undo: undoWord(facts?.reversibility ?? null), ...(facts ? { requiredAssurance: facts.requiredAssurance } : {}) });
+    risk: riskWord(facts?.risk ?? null), undo: undoWord(facts?.reversibility ?? null), ...(facts ? { requiredAssurance: facts.requiredAssurance } : {}),
+    createdAt: request.createdAt, ...(subject.kind === 'agent-tool-call' ? { tool: subject.tool, target: subject.resource } : {}) });
 }
 
 /** Terminal ports over the same handlers as the CLI commands (`workers`, `run`, `inventory`, `approvals`, `task transcript`, `run cancel`). */
@@ -77,12 +78,14 @@ export function createWorklineLedgerPorts(input: {
         return Object.freeze({ items: Object.freeze(items), nextAfter: items.length >= pageSize ? items.at(-1)!.approvalId : null });
       },
       // B1: the card declares itself and forwards its turn's one-time capability when it has one (the same single y; nothing else to type).
-      async decideApproval(approval: Pick<WorklineApproval, 'approvalId' | 'revision' | 'decisionCapability'>, decision: 'allow' | 'deny', standing?: StandingScope) {
+      async decideApproval(approval: Pick<WorklineApproval, 'approvalId' | 'revision' | 'decisionCapability'>, decision: 'allow' | 'deny', standing?: StandingScope, typed?: string) {
+        // The person's own reason (Tab on the card, kept within the record's bound there) goes to the decision record trimmed; none: the default.
+        const own = typed?.trim();
         const result = await decideApproval({ schemaVersion: 1, scopeId, approvalId: approval.approvalId,
           commandId: `terminal-${randomUUID()}`, expectedRevision: approval.revision, decision, channel: 'local-terminal-card',
           ...(standing === 'session' ? { standing: 'session' } : {}),
           ...(approval.decisionCapability ? { decisionCapability: approval.decisionCapability } : {}),
-          reason: decision === 'allow' ? t('terminal.approval.reasonAllow', {}, locale) : t('terminal.approval.reasonDeny', {}, locale) });
+          reason: own || (decision === 'allow' ? t('terminal.approval.reasonAllow', {}, locale) : t('terminal.approval.reasonDeny', {}, locale)) });
         if (standing === 'session') {
           const answer = sessionApprovalResultSchema.parse(result);
           return { ...approvalView(answer.record), standing: answer.standing };

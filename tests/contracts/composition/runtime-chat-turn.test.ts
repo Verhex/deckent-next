@@ -682,11 +682,11 @@ describe.skipIf(process.platform !== 'linux')('agent chat turn through the runti
       try {
         await until(() => view.stdout.text.includes('READY'), 'ready');
         view.stdin.write('rewrite it\r');
-        await until(() => view.stdout.text.includes('A-PROMPT'), 'approval card')
+        await until(() => view.stdout.text.includes('n deny (Enter/Esc too)'), 'approval card')
         const preview = previews[0]!;
         expect(Buffer.byteLength(preview, 'utf8')).toBeLessThanOrEqual(16_384);
         expect(preview.split('\n')[0]).toMatch(/^\[Deckent: preview cut to \d+ of \d+ lines \(\d+ of \d+ bytes\); whole text sha256 [0-9a-f]{64}; complete at .*approval-previews\/[0-9a-f]{64}\.txt\]$/);
-        expect(view.stdout.text).toContain('[Deckent: preview cut to');
+        expect(view.stdout.text).toContain('Preview shortened: the first'); // the window says the engine's cut marker in catalog words expect(view.stdout.text).not.toContain('[Deckent: preview cut to');
         const files = await kept(); expect(files).toHaveLength(1);
         const whole = await readFile(join(f.data, files[0]!), 'utf8');
         expect(whole).toContain(`-${before.repeat(count)}`); expect(whole).toContain(`+${after.repeat(count)}`);

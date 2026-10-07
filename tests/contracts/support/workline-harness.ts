@@ -3,8 +3,11 @@ import { PassThrough, Writable } from 'node:stream';
 import { createElement, Fragment, StrictMode } from 'react';
 import { render } from 'ink';
 import { WorklineApp, WorklinePaletteProvider, resolveWorklinePalette, type WorklineLabels, type WorklineProps, type WorkSurfaceLabels } from '#surfaces/core/terminal/index.js';
+import { workSurfaceLabels } from '#surfaces/core/work-labels/index.js';
 import { WORKER_LINE_EN } from './worker-line-labels.js';
 
+/** The real EN window catalog (TS-WINDOW / T-APPROVAL-WINDOW); the older fields keep their probe tokens. */
+const EN_WORK = workSurfaceLabels('en');
 const work: WorkSurfaceLabels = { workerLine: WORKER_LINE_EN, panel: { title: 'LIVE-PANEL', more: '+{count} MORE' }, unavailable: 'UNWIRED',
   transcriptUsage: 'T-USAGE', transcriptNotFound: 'T-NOTFOUND {ref}', transcriptNoAttempt: 'T-NOATTEMPT {ref}', transcriptHeader: 'T-HEADER {n} {attempt}',
   approvalsNone: 'A-NONE', approvalItem: 'A-ITEM {n} {id} {summary}', approvalsTruncated: 'A-TRUNC {pages}', approvalNotFound: 'A-NOTFOUND {ref}',
@@ -13,7 +16,7 @@ const work: WorkSurfaceLabels = { workerLine: WORKER_LINE_EN, panel: { title: 'L
   approvalMore: 'A-MORE {count}', approvalNotify: 'A-NOTIFY {count}', approvalPollFailed: 'A-POLLFAIL',
   approvalCard: { risk: 'R-RISK {risk} {undo}', notDeclared: 'R-UNDECLARED', onExpiry: 'R-NOTHING-RUNS', assuranceTurnHere: 'R-TURN-HERE', assuranceTurnElsewhere: 'R-TURN-ELSEWHERE',
     assurancePeer: 'R-PEER', assuranceOther: 'R-OTHER {level}' }, cancelUsage: 'C-USAGE', cancelTitle: 'C-TITLE {run}',
-  cancelDetail: 'C-DETAIL {revision} {phases}', cancelAlreadyRequested: 'C-ALREADY', cancelPrompt: 'C-PROMPT', cancelPending: 'C-PENDING', cancelKept: 'C-KEPT {run}' };
+  cancelDetail: 'C-DETAIL {revision} {phases}', cancelAlreadyRequested: 'C-ALREADY', cancelPrompt: 'C-PROMPT', cancelPending: 'C-PENDING', cancelKept: 'C-KEPT {run}', window: EN_WORK.window, approvalWindow: EN_WORK.approvalWindow };
 
 /** Placeholder labels: tests assert on these tokens, never on catalog text. */
 export const WORKLINE_TEST_LABELS: WorklineLabels = { banner: 'BANNER', prompt: '> ', statusReady: 'READY', statusBusy: 'BUSY', statusCancelling: 'CANCELLING',
@@ -34,8 +37,8 @@ class Screen extends Writable {
   text = '';
   /** Ink debug mode writes the whole view each time; this is the latest frame, not the scrollback. */
   frame = '';
-  readonly isTTY = true; readonly rows = 60;
-  constructor(readonly columns = 200, private readonly onFrame?: (text: string) => void) { super(); }
+  readonly isTTY = true;
+  constructor(readonly columns = 200, private readonly onFrame?: (text: string) => void, readonly rows = 60) { super(); }
   override _write(chunk: Buffer, _encoding: string, done: () => void) {
     const text = chunk.toString('utf8');
     this.text += text;
@@ -59,8 +62,8 @@ export async function until(check: () => boolean, label: string, attempts = 500)
   throw new Error(`timed out waiting for ${label}`);
 }
 /** Mounts the real interactive workline on an in-memory TTY; the caller unmounts it. */
-export function mountWorkline(props: Partial<WorklineProps>, columns = 200, observation: { onFrame?: (text: string) => void; debug?: boolean; strict?: boolean } = {}) {
-  const stdout = new Screen(columns, observation.onFrame);
+export function mountWorkline(props: Partial<WorklineProps>, columns = 200, observation: { onFrame?: (text: string) => void; debug?: boolean; strict?: boolean; rows?: number } = {}) {
+  const stdout = new Screen(columns, observation.onFrame, observation.rows);
   const stdin = Object.assign(new PassThrough(), { isTTY: true, setRawMode() { return stdin; }, ref() { return stdin; }, unref() { return stdin; } });
   const wrapper = observation.strict ? StrictMode : Fragment;
   const instance = render(createElement(wrapper, null, createElement(WorklinePaletteProvider, { palette: resolveWorklinePalette('none'), children: createElement(WorklineApp, {
