@@ -640,6 +640,7 @@
   "mcp.start.failed.other": "MCP server {name} did not start: {code}{detailSuffix}.",
   "mcp.start.next.launch": "Its first-use card is not asked again until you run /mcp approve {name}.",
   "mcp.start.next.trusted": "Its tools are not offered; /mcp reconnect {name} tries it again.",
+  "mcp.start.toolsChanged": "MCP server {name}: {count} pinned tool(s) changed or went missing since you approved it, so they are not offered to the model; run /mcp approve {name} to review and re-approve them.",
   "mcp.start.notRecorded": "MCP server {name}: this failure could not be recorded; its card may be asked again.",
   "mcp.start.notDecided": "MCP server {name} was not decided: {code}.",
   "error.MCP_TOOL_UNKNOWN": "The server offers no tool named {name}.",

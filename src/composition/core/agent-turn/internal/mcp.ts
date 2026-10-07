@@ -13,6 +13,7 @@ import { queryFailure } from '#composition/core/query-errors/index.js';
  */
 export function renderMcpStartNotice(notice: McpStartNotice, locale: Locale): string {
   const { name } = notice;
+  if (notice.kind === 'tools-changed') return t('mcp.start.toolsChanged', { name, count: notice.count }, locale);
   if (notice.kind === 'not-recorded') return t('mcp.start.notRecorded', { name }, locale);
   if (notice.kind === 'not-decided') return t('mcp.start.notDecided', { name, code: notice.code }, locale);
   const { failure } = notice, diagnosis = failure.diagnosis;

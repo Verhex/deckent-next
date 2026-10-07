@@ -640,6 +640,7 @@
   "mcp.start.failed.other": "MCP sunucusu {name} başlamadı: {code}{detailSuffix}.",
   "mcp.start.next.launch": "İlk kullanım kartı /mcp approve {name} çalıştırılana kadar yeniden sorulmaz.",
   "mcp.start.next.trusted": "Araçları sunulmuyor; /mcp reconnect {name} yeniden dener.",
+  "mcp.start.toolsChanged": "MCP sunucusu {name}: onayladığınızdan beri {count} sabitlenmiş araç değişti ya da kayboldu; bu yüzden modele sunulmuyor. İncelemek ve yeniden onaylamak için /mcp approve {name} çalıştırın.",
   "mcp.start.notRecorded": "MCP sunucusu {name}: bu hata kaydedilemedi; kartı yeniden sorulabilir.",
   "mcp.start.notDecided": "MCP sunucusu {name} için karar verilemedi: {code}.",
   "error.MCP_TOOL_UNKNOWN": "Sunucuda {name} adlı araç yok.",

@@ -23,8 +23,9 @@ const diagnosisSchema = z.union([
   z.object({ kind: z.enum(['package-runner', 'container-daemon']), runner: text(64) }).strict(),
 ]);
 export const mcpStartFailureSchema = z.object({ scope: z.enum(MCP_SCOPES), name: z.string().regex(/^[a-z][a-z0-9]{0,15}$/u), definitionDigest: digest,
-  /** `launch`: the first-use card's yes could not start it; `trusted`: a trusted server did not start. */
-  phase: z.enum(['launch', 'trusted']), atMs: z.number().int().nonnegative(), code: text(64), detail: text(200).optional(), diagnosis: diagnosisSchema.optional() }).strict();
+  /** `launch`: the first-use card's yes could not start it; `trusted`: a trusted server did not start; `tools` (MCP-VISIBILITY): it started but pinned
+   * tools were withheld (drifted, missing or unmappable); `detail` is their count. */
+  phase: z.enum(['launch', 'trusted', 'tools']), atMs: z.number().int().nonnegative(), code: text(64), detail: text(200).optional(), diagnosis: diagnosisSchema.optional() }).strict();
 export type McpStartFailure = z.infer<typeof mcpStartFailureSchema>;
 const fileSchema = z.object({ schemaVersion: z.literal(1), failures: z.array(mcpStartFailureSchema).max(256) }).strict();
 const matches = (failure: McpStartFailure, key: { readonly scope: string; readonly name: string }) => failure.scope === key.scope && failure.name === key.name;
@@ -70,10 +71,11 @@ export function mcpStartFailureOf(error: unknown): Pick<McpStartFailure, 'code' 
  * What a turn or `/mcp` says about one server that could not be decided or started (MCP-SANDBOX-PATHS follow-up): structured and
  * display-safe, never rendered here — the host renders it from the catalog (`mcp.start.*`) in the locale of its surface.
  * `start-failed`: the failure (and its diagnosis) of a start; `not-recorded`: that failure could not be written (its card may be asked
- * again); `not-decided`: the trust decision itself failed (`code`).
+ * again); `tools-changed`: pinned tools are withheld this turn (MCP-VISIBILITY K3); `not-decided`: the trust decision itself failed (`code`).
  */
 export type McpStartNotice =
   | { readonly kind: 'start-failed'; readonly name: string; readonly failure: Pick<McpStartFailure, 'code' | 'detail' | 'diagnosis' | 'phase'> }
+  | { readonly kind: 'tools-changed'; readonly name: string; readonly count: number }
   | { readonly kind: 'not-recorded'; readonly name: string }
   | { readonly kind: 'not-decided'; readonly name: string; readonly code: string };
 /** Renders one notice as owner-facing text (the host's catalog, in its locale). */
@@ -81,3 +83,9 @@ export type McpStartNoticeRenderer = (notice: McpStartNotice) => string;
 export const mcpStartFailedNotice = (name: string, failure: Pick<McpStartFailure, 'code' | 'detail' | 'diagnosis' | 'phase'>): McpStartNotice =>
   ({ kind: 'start-failed', name, failure: { code: failure.code, phase: failure.phase, ...(failure.detail ? { detail: failure.detail } : {}),
     ...(failure.diagnosis ? { diagnosis: failure.diagnosis } : {}) } });
+/** The withheld-tools state of one started server: the pinned tools whose live definition drifted, went missing or cannot be offered. */
+export const mcpWithheldTools = (tools: readonly { readonly status: string }[]) =>
+  tools.filter(tool => tool.status === 'drifted' || tool.status === 'missing' || tool.status === 'unmappable').length;
+/** The record of that state for one server (`detail` is the count). */
+export const mcpToolsChangedRecord = (server: { readonly scope: string; readonly name: string; readonly definitionDigest: string }, count: number, atMs: number): McpStartFailure =>
+  ({ scope: server.scope as McpStartFailure['scope'], name: server.name, definitionDigest: server.definitionDigest, phase: 'tools', atMs, code: 'tools-changed', detail: String(count) });

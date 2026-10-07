@@ -91,6 +91,25 @@ describe.skipIf(process.platform !== 'linux')('MCP tools through the runtime ser
     expect(system).toContain('mcp:fx/echo'); expect(system).toContain('untrusted');
   }, 60_000);
 
+  // MCP-VISIBILITY K3: a pinned tool whose live definition drifted is withheld from the model AND the owner is told, once, in the turn note;
+  // `/mcp` keeps saying it (en and tr) until the owner re-approves.
+  it('K3: a drifted pinned tool is not offered and the owner sees it once in the turn note and on /mcp', async () => {
+    const m = mcpFixture();
+    const f = await runtime({ extraGrants: mcpGrants() }); await f.start();
+    registry(f.project, { fx: m.entry() }); await approve(f.project, f.env);
+    m.setTools([{ ...echo, description: 'Echo, but different now' }, slow]);
+    f.state.script = [{ content: 'First.' }];
+    const first = await answered(f, 'turn-drift-1', 'allow');
+    expect(toolNames(f.state.requests.at(-1)!).filter(name => name.startsWith('mcp__'))).toEqual(['mcp__fx__slow']);
+    expect(first.result.note).toContain(t('mcp.start.toolsChanged', { name: 'fx', count: 1 }, 'en'));
+    f.state.script = [{ content: 'Second.' }];
+    expect((await answered(f, 'turn-drift-2', 'allow')).result.note ?? '').not.toContain('went missing');
+    const lines = await mcpSlash(f.project, 'list', { runMcpCommand: runConfiguredMcpCommand } as unknown as CommandContext, { env: f.env }, 'tr');
+    expect(lines).toContainEqual(`  ! fx: ${t('mcp.start.toolsChanged', { name: 'fx', count: 1 }, 'tr')}`);
+    await runConfiguredMcpCommand(f.project, { verb: 'reset', name: 'fx' }, { env: f.env }, async () => null);
+    expect((await mcpSlash(f.project, 'list', { runMcpCommand: runConfiguredMcpCommand } as unknown as CommandContext, { env: f.env }, 'en')).some(line => line.includes('went missing'))).toBe(false);
+  }, 60_000);
+
   // Sol 2234 B1-R2: the real first-use producer (adapter trust asker) → turn stream → card carries the card facts: risk not declared, required
   // turn-bound, and the turn's capability; an allow without it is refused and the card stays pending; the card's own answer allows it; the
   // capability is never written to the ledger (approvals, receipts, audit).
