@@ -150,7 +150,8 @@ it.skipIf(process.platform !== 'linux')('owns bounded invocation through current
   ]);
   expect([first.replayed, second.replayed].sort()).toEqual([false, true]); expect(first.receipt.claim).toEqual(second.receipt.claim);
   const fresh = first.replayed ? second : first;
-  expect(f.metadataRequests).toBe(1); // DEFECTS-ADAPTER: the verified tariff is cached, both concurrent invocations share one metadata GET expect(f.requests).toBe(1); expect(f.count('shared')).toBe(1);
+  expect(f.metadataRequests).toBe(1); // DEFECTS-ADAPTER: the verified tariff is cached, both concurrent invocations share one metadata GET
+  expect(f.requests).toBe(1); expect(f.count('shared')).toBe(1);
   const sharedQuery = { schemaVersion: 2 as const, scopeId: 'scope', invocationId: first.receipt.claim.invocationId, reference: f.reference };
   const sharedInspection = await firstClient.inspectModelInvocation(sharedQuery, { maxResultBytes: 60_000 });
   expect(sharedInspection.invocation).toEqual(fresh.receipt); expect(sharedInspection.spending).not.toBeNull();

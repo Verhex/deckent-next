@@ -1,3 +1,4 @@
+import { terminalLineEnd } from '#platform/index.js';
 import type { AgentChatMessage, TurnDelta } from './turn-stream.js';
 
 type Sink = { write(text: string): unknown };
@@ -13,19 +14,13 @@ export type LineTurnOutcome = Readonly<{
   approvalRefused: boolean;
 }>;
 
-/** True while an escape sequence (CSI or OSC) has not reached its final byte or terminator. */
-// Matching the control characters is the point of these patterns (untrusted model text).
-/* eslint-disable no-control-regex */
-const unfinishedEscape = (tail: string) => tail.length === 1 || (tail[1] === '[' ? !/^\u001b\[[0-?]*[ -/]*[@-~]/u.test(tail)
-  : tail[1] === ']' ? !/\u0007|\u001b\\/u.test(tail.slice(2)) : false);
-/* eslint-enable no-control-regex */
-
 /**
  * Line mode (pipe, no terminal) writes the answer as it arrives, one complete line at a time: plain text on `out`, no ANSI, the last line
  * ended. Tool results and approval cards are one plain line each on `err`, so a pipe carries the answer alone. Line mode cannot decide an
  * approval card (no owner is at the other end): the first card cancels the turn through `cancel`, and nothing is allowed. A pipe cannot take
- * back what it wrote, so a line is projected only once it is complete (its newline or the turn's end has arrived): a secret or escape
- * split across deltas is redacted or removed whole, the same commit unit as the rich view's scrollback. The held tail is never larger than
+ * back what it wrote, so a line is projected only once it is complete (a newline the projection keeps, or the turn's end): a secret or
+ * escape split across deltas is redacted or removed whole, the same commit unit as the rich view's scrollback. A newline inside an escape
+ * ends no line, so a value around an OSC that swallows its newline is never split between two writes. The held tail is never larger than
  * the turn's own answer text, which the outcome already carries.
  */
 export type LineTurnIo = Readonly<{ out: Sink; err: Sink; cancel: () => void;
@@ -42,9 +37,8 @@ export async function streamLineTurn(stream: AsyncIterable<TurnDelta>, io: LineT
   const note = (line: string) => { io.err.write(`${io.project(line, 'exact').replace(/\s+/gu, ' ').trim()}\n`); };
   const feed = (text: string) => {
     answer += text;
-    // Only complete lines are written. An escape new in this delta and still unfinished waits one more delta only (a malformed one cannot stall the pipe).
-    const buffer = held + text, lineEnd = buffer.lastIndexOf('\n') + 1, escape = buffer.lastIndexOf('\u001b', lineEnd - 1);
-    const cut = escape >= held.length && unfinishedEscape(buffer.slice(escape)) ? escape : lineEnd;
+    // Only complete visible lines are written; an open OSC holds its line (it shows nothing until BEL, ST or the next ESC anyway).
+    const buffer = held + text, cut = terminalLineEnd(buffer);
     held = buffer.slice(cut);
     write(io.project(buffer.slice(0, cut), 'prose'));
   };

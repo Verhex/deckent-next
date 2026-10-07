@@ -280,9 +280,13 @@ it('S05 line mode redacts a known value and a provider token split across deltas
   const f = await fixture(), out = sink(), err = sink(), canary = 'fictitious-line-known-0123456789';
   await writeFile(join(f.project, '.deckent/config.json'), JSON.stringify({ projectName: '$DECK:LINE_TEST' }));
   const code = await main(['terminal', 'session', '--scope', 's', '--lang', 'en'], { root: f.project, env: { ...f.env, LINE_TEST: canary }, stdout: out.output, stderr: err.output,
-    stdin: Object.assign(Readable.from(['go\n', 'ask\n', '/exit\n']), { isTTY: false }), initialize() {},
+    stdin: Object.assign(Readable.from(['go\n', 'osc\n', 'ask\n', '/exit\n']), { isTTY: false }), initialize() {},
     async describeTerminalChatPlan() { return plan; }, async completeTerminalChat() { throw new Error('line mode must stream'); },
     async *streamTerminalChat(_root: string, input: { messages: readonly { role: string; content: string }[] }, _o: unknown, signal?: AbortSignal) {
+      if (input.messages.at(-1)!.content === 'osc') { // An OSC swallows the newline inside the value: the two halves are one visible line.
+        yield { kind: 'text', text: `${canary.slice(0, 16)}\u001b]0;x\n` }; yield { kind: 'text', text: `\u0007${canary.slice(16)}\n` };
+        yield { kind: 'done', finish: 'stop', note: null }; return;
+      }
       if (input.messages.at(-1)!.content === 'ask') {
         yield { kind: 'approval', phase: 'requested', callId: 'c1', approvalId: 'a1', revision: 0, summary: `run_shell · echo \u202e ${canary}`, preview: '', expiresAt: 1 };
         await new Promise<void>(resolve => { if (signal?.aborted) resolve(); else signal?.addEventListener('abort', () => resolve(), { once: true }); });
@@ -293,9 +297,9 @@ it('S05 line mode redacts a known value and a provider token split across deltas
       yield { kind: 'done', finish: 'stop', note: null };
     } });
   expect(code).toBe(0);
-  expect(out.text()).toBe('key \u2039secret:LINE_TEST\u203a token [REDACTED] red <U+202E>END\nnext\n');
-  // Negative: no part of a value split across deltas, no token tail and no escape reaches the pipe.
-  for (const text of [out.text(), err.text()]) for (const leaked of ['fictitious', '0123456789', 'abcdef123456', '\u001b', '\u202e', '\u{E0041}']) expect(text).not.toContain(leaked);
+  expect(out.text()).toBe('key \u2039secret:LINE_TEST\u203a token [REDACTED] red <U+202E>END\nnext\n\u2039secret:LINE_TEST\u203a\n');
+  // Negative: no part of a value split across deltas or around an OSC, no token tail and no escape reaches the pipe.
+  for (const text of [out.text(), err.text()]) for (const leaked of ['fictitious', 'known-0123', '0123456789', 'abcdef123456', '\u001b', '\u202e', '\u{E0041}']) expect(text).not.toContain(leaked);
   expect(err.text()).toContain('tool read_file a<U+E0041>b.ts: ok (1 ms)');
   expect(err.text()).toContain('Approval required: run_shell · echo <U+202E> \u2039secret:LINE_TEST\u203a');
 });

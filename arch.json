@@ -835,7 +835,8 @@
     "src/surfaces/core/terminal-kit": {
       "dependencies": [
         "src/engine/core/monitor",
-        "src/domain/core/agent-turn"
+        "src/domain/core/agent-turn",
+        "src/platform/core/output"
       ],
       "plan": "SURFACES"
     },
