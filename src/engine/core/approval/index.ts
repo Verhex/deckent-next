@@ -10,6 +10,7 @@ export { OperationApprovalBroker, OPERATION_SUBJECT_PROTOCOL_VERSION, approvalRe
   type OperationApprovalBrokerOptions, type OperationApprovalWait } from './internal/operation.js';
 export { AuthorityDocumentTarget, DelegationBoundGate, PolicyAdministrationApplication } from './internal/policy-admin.js';
 export type { AuthorityTargetHooks, PolicyAdministrationDependencies } from './internal/policy-admin.js';
+export { McpToolGrants, type McpToolGrantOutcome, type McpToolGrantTarget } from './internal/mcp-grant.js';
 export { isAuditedStanding, PersistentStanding, SessionStanding, StandingApprovalError, standingApprovalAuditEvent, standingCallKey, rememberSessionStanding } from './internal/standing.js';
 export type { SessionStandingBinding } from './internal/standing.js';
 export type { PersistentStandingDependencies, StandingGrantView, StandingOffer } from './internal/standing.js';

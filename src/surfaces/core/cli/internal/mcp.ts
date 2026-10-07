@@ -9,7 +9,7 @@ export type McpCommandRequest = { readonly verb: 'list'; readonly health?: boole
   | { readonly verb: 'add'; readonly scope: Scope; readonly name: string; readonly entry: unknown; readonly approve?: boolean }
   | { readonly verb: 'remove'; readonly name: string; readonly scope?: Scope }
   | { readonly verb: 'approve'; readonly name: string; readonly alwaysAsk: readonly string[] }
-  | { readonly verb: 'reset' | 'reconnect'; readonly name: string }
+  | { readonly verb: 'reset' | 'reconnect' | 'revoke'; readonly name: string }
   | { readonly verb: 'import'; readonly from: 'claude-code' | 'claude-desktop' | { readonly file: string }; readonly scope?: 'local' | 'user' };
 /** The host's MCP registry command; `ask` shows one trust card (phase `launch`, then `tools`) and answers the owner's decision; `locale` is this
  * surface's (the host renders `lastStart.text` in it). */
@@ -55,6 +55,7 @@ export async function mcpCommand(argv: readonly string[], context: CommandContex
   else if (verb === 'get' && positionals.length === 1 && !scope && !command.length) request = { verb, name: name! };
   else if (verb === 'remove' && positionals.length === 1 && !command.length) request = { verb, name: name!, ...(scope ? { scope } : {}) };
   else if (verb === 'approve' && positionals.length === 1 && !scope && !command.length) request = { verb, name: name!, alwaysAsk };
+  else if (verb === 'revoke' && positionals.length === 1 && !scope && !command.length) request = { verb, name: name! };
   else if (verb === 'add' && positionals.length === 2 && !command.length && transport !== 'stdio' && (transport === 'http' || /^https?:\/\//iu.test(positionals[1]!))
     && !Object.keys(env).length && !realm) request = { verb, scope: scope ?? 'local', name: name!, approve: !noApprove,
     entry: { type: 'http', url: positionals[1], ...(Object.keys(headers).length ? { headers } : {}), ...(timeoutMs ? { timeoutMs } : {}) } };
@@ -107,7 +108,7 @@ function mcpScopeText(scope: string, locale: Locale): string {
 /**
  * `/mcp` in the terminal (MCP-CLIENT, owner 2026-09-28): the servers of this project with their scope and trust state (nothing is started), and
  * `approve <name>` (forget a decline: the next message asks with the trust cards), `reconnect <name>` (the service restarts it on its next use),
- * `remove <name>` (from its registry file; its trust is revoked).
+ * `remove <name>` (from its registry file; its trust is revoked), `revoke <name>` (K1: its trust and the tool grant go; the entry stays).
  */
 export async function mcpSlash(root: string, args: string, context: CommandContext, options: ConfigLoadOptions, locale: Locale): Promise<readonly string[]> {
   const [verb = 'list', name, ...extra] = args.split(/\s+/u).filter(Boolean);
@@ -128,6 +129,7 @@ export async function mcpSlash(root: string, args: string, context: CommandConte
   }
   if (verb === 'approve') { await run({ verb: 'reset', name: name! }); return [t('terminal.mcp.approve', { name: name! }, locale)]; }
   if (verb === 'reconnect') { await run({ verb: 'reconnect', name: name! }); return [t('terminal.mcp.reconnect', { name: name! }, locale)]; }
+  if (verb === 'revoke') { await run({ verb: 'revoke', name: name! }); return [t('terminal.mcp.revoked', { name: name! }, locale)]; }
   if (verb === 'remove') { const removed = await run({ verb: 'remove', name: name! }) as { removed: { scope: string } }; return [t('terminal.mcp.removed', { name: name!, scope: mcpScopeText(removed.removed.scope, locale) }, locale)]; }
   return [t('terminal.mcp.usage', {}, locale)];
 }

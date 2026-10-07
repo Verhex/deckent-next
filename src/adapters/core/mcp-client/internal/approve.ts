@@ -7,7 +7,7 @@ import { openLocalIntegrityAuthority } from '#adapters/core/local-keyring/index.
 import { openSqliteApprovalStore } from '#adapters/core/approval-store/index.js';
 import { displayMcpDiagnosis } from './diagnose.js';
 import { MCP_HTTP_POSTURE, McpClientPool, mcpRealmPosture, type McpLaunchContext } from './pool.js';
-import { MCP_CLIENT_DEFAULTS, type McpClientServerSettings } from './pin.js';
+import { MCP_CLIENT_DEFAULTS, mcpToolWireName, type McpClientServerSettings } from './pin.js';
 import { expandMcpEntry, isMcpHttpEntry, MCP_DEFAULT_REALM, mcpEntryDisplay, mcpLaunchValues, type McpScope, type McpServerEntry } from './registry.js';
 import { readMcpTrust, updateMcpTrust, type McpTrustRecord } from './trust.js';
 
@@ -15,6 +15,13 @@ import { readMcpTrust, updateMcpTrust, type McpTrustRecord } from './trust.js';
 export interface McpTrustChange { readonly action: 'trust' | 'decline' | 'reset' | 'revoke' | 'reconnect'; readonly scope: McpScope; readonly name: string;
   readonly definitionDigest: string; readonly toolsDigest: string | null }
 export type McpTrustAudit = (change: McpTrustChange) => Promise<void>;
+/** What became of the approver's policy grant for a server's tools (K1): written, removed, nothing to do, or refused with its reason. */
+export type McpToolGrantResult = { readonly status: 'granted' | 'revoked' | 'none' } | { readonly status: 'refused'; readonly reason: string };
+/** The host's grant port (K1): the approver's own `policy.administer` grant for exactly the pinned tools' wire names, and its removal. */
+export interface McpToolGrantPort {
+  grant(server: { readonly scope: McpScope; readonly name: string }, tools: readonly string[]): Promise<McpToolGrantResult>;
+  revoke(server: { readonly scope: McpScope; readonly name: string }): Promise<McpToolGrantResult>;
+}
 
 /**
  * The card of a trust decision, in two phases so a command is never run before the owner saw it (owner 2026-09-28): `launch` names the server,
@@ -42,6 +49,8 @@ export interface McpTrustContext {
   readonly sandboxes: McpLaunchContext['sandboxes'];
   readonly principal: { readonly issuer: string; readonly subject: string };
   readonly audit: McpTrustAudit;
+  /** K1: the approver's grant for the trusted tools (absent: trust only, as before — a host without policy administration). */
+  readonly grants?: McpToolGrantPort;
   /** Where the record of this scope lives (user: the global root; project and local: the data root's `integrations`), prepared for writing. */
   readonly directory: (scope: McpScope) => Promise<string>;
   readonly inputMaxBytes?: number;
@@ -51,9 +60,10 @@ const toolsDigest = (tools: readonly { readonly name: string; readonly digest: s
   createHash('sha256').update(`mcp-tools:1\0${JSON.stringify(tools.map(tool => [tool.name, tool.digest]))}`).digest('hex');
 const VARIABLE = /\$\{([A-Za-z_][A-Za-z0-9_]*)/gu;
 
-/** Writes one decision: the audit event first (no event, no change), then the record under the file's write lock (recomputed on what is there). */
+/** Writes one decision: the audit event first (no event, no change), then the record under the file's write lock (recomputed on what is there).
+ * A decline, reset or revoke then removes the approver's tool grant of the server (K1: no grant outlives its trust); its outcome is returned. */
 export async function recordMcpTrust(server: Pick<McpTrustServer, 'name' | 'scope' | 'definitionDigest'>, context: McpTrustContext, action: McpTrustChange['action'],
-  change: (current: McpTrustRecord | null) => McpTrustRecord | null): Promise<void> {
+  change: (current: McpTrustRecord | null) => McpTrustRecord | null): Promise<McpToolGrantResult | null> {
   const directory = await context.directory(server.scope), mine = (record: McpTrustRecord) => record.scope === server.scope && record.name === server.name;
   const before = await readMcpTrust(directory);
   if (!before.ok) throw ErrorRegistry.createError('MCP_TRUST_STORE_UNAVAILABLE', { params: { reason: before.reason } });
@@ -63,6 +73,8 @@ export async function recordMcpTrust(server: Pick<McpTrustServer, 'name' | 'scop
     const current = state.servers.find(mine) ?? null, next = change(current);
     return [...state.servers.filter(record => record !== current), ...(next ? [next] : [])];
   });
+  if (action === 'trust' || action === 'reconnect' || !context.grants) return null;
+  return context.grants.revoke(server).catch(error => ({ status: 'refused' as const, reason: String((error as { code?: unknown })?.code ?? 'failed') }));
 }
 
 /**
@@ -72,7 +84,8 @@ export async function recordMcpTrust(server: Pick<McpTrustServer, 'name' | 'scop
  * for a refused realm or an entry that cannot be expanded.
  */
 export async function decideMcpTrust(server: McpTrustServer, context: McpTrustContext, ask: McpTrustAsk,
-  options: { readonly pool?: McpClientPool; readonly alwaysAsk?: readonly string[] } = {}): Promise<{ readonly decision: 'trusted' | 'declined' | 'unanswered'; readonly pinned: number }> {
+  options: { readonly pool?: McpClientPool; readonly alwaysAsk?: readonly string[] } = {}): Promise<{ readonly decision: 'trusted' | 'declined' | 'unanswered'; readonly pinned: number;
+    readonly grant?: McpToolGrantResult }> {
   const fail = (code: string, reason: string) => ErrorRegistry.createError(code, { params: { name: server.name, reason } });
   const expanded = await expandMcpEntry(server.entry, server.scope, context.environment, context.secret);
   if (!expanded.ok) throw fail('MCP_SERVER_ENTRY_INVALID', expanded.reason);
@@ -115,7 +128,10 @@ export async function decideMcpTrust(server: McpTrustServer, context: McpTrustCo
     if (!pinned) return decline();
     const pins = tools.map(tool => ({ name: tool.name, digest: tool.digest, alwaysAsk: tool.alwaysAsk }));
     await recordMcpTrust(server, context, 'trust', record('trusted', pins));
-    return { decision: 'trusted', pinned: pins.length };
+    // K1: the trust approval also writes the approver's grant for exactly these tools (within their own authority; a refusal keeps the trust).
+    const wires = pins.flatMap(pin => { const wire = mcpToolWireName(server.name, pin.name); return wire ? [wire] : []; });
+    const grant = context.grants ? await context.grants.grant(server, wires).catch(error => ({ status: 'refused' as const, reason: String((error as { code?: unknown })?.code ?? 'failed') })) : undefined;
+    return { decision: 'trusted', pinned: pins.length, ...(grant ? { grant } : {}) };
   } finally { if (!options.pool) { controller.abort(); await pool.close(); } }
 }
 

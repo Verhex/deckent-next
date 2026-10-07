@@ -9,6 +9,7 @@ import { agentWorkspaceDeny, createLocalPeerSession, createWorkspaceReadTools, d
   type McpCallOutcome, type McpClientPool, type McpCommandContext, type McpCommandRequest, type McpLaunchContext, type McpStartNotice } from '#adapters/index.js';
 import type { loadPeerInvocationContext } from '#composition/core/model-invocation/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
+import { configuredMcpToolGrants } from '#composition/core/approvals/index.js';
 /**
  * The owner-facing text of one MCP start notice (MCP-SANDBOX-PATHS follow-up): the single renderer of the adapter's structured notice, from
  * the catalog (`mcp.start.*`), for the turn's note (the service's locale) and `lastStart.text` of `mcp list|get` and `/mcp` (the caller's).
@@ -18,6 +19,7 @@ export function renderMcpStartNotice(notice: McpStartNotice, locale: Locale): st
   if (notice.kind === 'tools-changed') return t('mcp.start.toolsChanged', { name, count: notice.count }, locale);
   if (notice.kind === 'not-recorded') return t('mcp.start.notRecorded', { name }, locale);
   if (notice.kind === 'not-decided') return t('mcp.start.notDecided', { name, code: notice.code }, locale);
+  if (notice.kind === 'grant-refused') return t('mcp.start.grantRefused', { name, reason: mcpGrantReasonText(notice.reason, locale) }, locale);
   const { failure } = notice, diagnosis = failure.diagnosis;
   const why = diagnosis?.kind === 'path-hidden'
     ? t('mcp.start.failed.pathHidden', { name, path: diagnosis.path, targetSuffix: diagnosis.target ? ` -> ${diagnosis.target}` : '',
@@ -27,6 +29,13 @@ export function renderMcpStartNotice(notice: McpStartNotice, locale: Locale): st
     : t('mcp.start.failed.other', { name, code: failure.code, detailSuffix: failure.detail ? `: ${failure.detail}` : '' }, locale);
   const next = failure.phase === 'launch' ? t('mcp.start.next.launch', { name }, locale) : t('mcp.start.next.trusted', { name }, locale);
   return `${why} ${next}`;
+}
+/** Why a trusted server's tools got no policy grant (K1), in the owner's words; an unknown code is shown as it is. */
+export function mcpGrantReasonText(reason: string, locale: Locale): string {
+  if (reason === 'delegation') return t('mcp.grant.reason.delegation', {}, locale);
+  if (reason === 'unsupported') return t('mcp.grant.reason.unsupported', {}, locale);
+  if (reason === 'principal') return t('mcp.grant.reason.principal', {}, locale);
+  return reason;
 }
 /** One turn's MCP tools (wiring): first-use trust cards, pinned tools; a call is a C11 effect of Core `mcp.tool.call` (policy again, intent first), never sent twice. */
 export async function createAgentMcp(input: { readonly pool: McpClientPool; readonly projectRoot: string; readonly options: ConfigLoadOptions; readonly resultMaxBytes: number;
@@ -39,7 +48,9 @@ export async function createAgentMcp(input: { readonly pool: McpClientPool; read
   const locale = resolveLocale(undefined, environment, config.language);
   // SECRET-K1: personal-file `$DECK:NAME` goes through the installation's one configured resolver, never straight to the environment.
   const resolveSecret = configuredSecretResolver(config, input.options);
-  const registry = { projectRoot: input.projectRoot, layout: context.layout, environment, secret: (name: string) => resolveSecret(name) };
+  // K1: a trust card's yes also writes the answering person's grant for the pinned tools (their own authority; the governed policy chain).
+  const registry = { projectRoot: input.projectRoot, layout: context.layout, environment, secret: (name: string) => resolveSecret(name),
+    grants: configuredMcpToolGrants(input.projectRoot, scopeId, input.options, context.principal, MCP_TOOL_CALL_OPERATION.operation.id) };
   const opened = await openTurnMcp({ registry, pool, cwd: input.cwd, sandboxes: input.sandboxes, principal: context.principal, sqlite: config.storage.sqlite,
   keyFile: config.approvals.keyFile, requestTtlMs: config.approvals.requestTtlMs, inputMaxBytes: config.mcp.inputMaxBytes, resultMaxBytes: input.resultMaxBytes, scopeId, turnId,
   signal: input.signal, emit: input.emit, describeNotice: notice => renderMcpStartNotice(notice, locale), ledgerPath: () => context.path(), requestPolicy: async () => { const policy = await context.policy.load().catch(() => null); return { revision: String((policy as { revision?: unknown } | null)?.revision ?? 'unknown'), trustFacts: agentToolApprovalFacts(policy, scopeId, null) }; } }); // one snapshot (Sol 2237 R2b)
@@ -92,6 +103,7 @@ export async function runConfiguredMcpCommand(projectRoot: string, request: McpC
     scopeId = (config as unknown as { terminal?: { scopeId?: string } }).terminal?.scopeId ?? 'installation';
   const shown = locale ?? resolveLocale(undefined, environment, config.language);
   const context: McpCommandContext = { projectRoot, layout: config.productLayout, environment, sandboxes: mcpInspectSandboxes(workspace.scope, isWriteApprovalFloored), principal, ask,
+    grants: configuredMcpToolGrants(projectRoot, scopeId, options, principal, MCP_TOOL_CALL_OPERATION.operation.id),
     describeNotice: notice => renderMcpStartNotice(notice, shown),
     secret: configuredSecretResolver(config, options), limits: { inputMaxBytes: config.mcp.inputMaxBytes },
     audit: mcpTrustAuditWriter({ layout: config.productLayout, sqlite: config.storage.sqlite, keyFile: config.approvals.keyFile, scopeId, principal, policyRevision: 'owner-cli' }) };

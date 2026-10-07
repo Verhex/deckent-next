@@ -1372,7 +1372,8 @@
         "src/adapters/core/agent-workspace-floor",
         "src/platform/core/common",
         "src/composition/core/root",
-        "src/adapters/core/mcp-import"
+        "src/adapters/core/mcp-import",
+        "src/composition/core/approvals"
       ],
       "plan": "SURFACES"
     },
