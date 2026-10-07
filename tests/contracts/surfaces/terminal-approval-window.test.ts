@@ -63,7 +63,7 @@ describe('approval window fields per tool kind (catalog EN and TR)', () => {
     const w = workSurfaceLabels('tr').approvalWindow;
     const text = approvalCardLines(KINDS.shell.approval, workSurfaceLabels('tr'), KINDS.shell.preview, 'rm -rf build && npm test', {}, NOW).join('\n');
     expect(text).toContain('Kabuk komutu çalıştırılacak'); expect(text).toContain('rm -rf build && npm test');
-    expect(text).toContain('bubblewrap sandbox içinde: proje yazılabilir, .git salt okunur, ağ kapalı'); expect(text).toContain('Silme içeriyor (geri alınamaz)');
+    expect(text).toContain('bubblewrap sandbox içinde: proje yazılabilir (korunan dosyalar dahil), .git salt okunur, ağ kapalı'); expect(text).toContain('Silme içeriyor (geri alınamaz)');
     // L1 D4: the engine's English posture sentence is not parsed into the window any more.
     expect(text).not.toContain('Runs in the bubblewrap sandbox');
     expect(text).toContain('Hayır — geri alınamaz');
@@ -288,7 +288,7 @@ describe('approval window: reversibility by call kind and structured posture (T2
     expect(rows(degraded, 'en')).toContain('In the landlock sandbox: the project is read-only, .git read-only, network off');
     expect(rows(degraded, 'tr')).toContain('Sandbox eksik korumalı (degraded)');
     const open = shell({ realm: 'bubblewrap', containment: 'sandbox', project: 'writable', git: 'writable', network: 'reachable', passedOver: [] });
-    expect(rows(open, 'tr')).toContain('bubblewrap sandbox içinde: proje yazılabilir, .git yazılabilir, ağ açık');
+    expect(rows(open, 'tr')).toContain('bubblewrap sandbox içinde: proje yazılabilir (korunan dosyalar dahil), .git yazılabilir, ağ açık');
     const overlay = shell({ realm: 'enterprise-vm', containment: 'sandbox', project: 'write-set', git: 'read-only', network: 'closed', passedOver: [] });
     expect(rows(overlay, 'en')).toContain('In the enterprise-vm sandbox: the project\'s writes are kept aside and applied like edits, .git read-only, network off');
     for (const approval of [host, degraded, open, overlay]) for (const locale of ['en', 'tr'] as const) expect(rows(approval, locale)).not.toContain('ENGINE SENTENCE');

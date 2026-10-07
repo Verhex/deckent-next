@@ -438,7 +438,7 @@
   "terminal.approval.window.undo.server-silent": "Sunucu bildirmiyor",
   "terminal.approval.window.posture.sandbox": "{realm} sandbox içinde: {project}, .git {git}, ağ {network}",
   "terminal.approval.window.posture.host": "Bu makinede senin kullanıcınla — sandbox değil: dosyalar, süreçler ve ağ erişilebilir",
-  "terminal.approval.window.posture.project.writable": "proje yazılabilir",
+  "terminal.approval.window.posture.project.writable": "proje yazılabilir (korunan dosyalar dahil)",
   "terminal.approval.window.posture.project.writable-except-floor": "proje yazılabilir (korunan dosyalar salt okunur)",
   "terminal.approval.window.posture.project.read-only": "proje salt okunur",
   "terminal.approval.window.posture.project.write-set": "projeye yazılanlar kenarda tutulur, düzenleme gibi uygulanır",

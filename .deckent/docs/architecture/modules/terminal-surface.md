@@ -144,7 +144,9 @@ Market notes live outside the repo (`/home/alperen/deckent-refactor-work/proof/T
   card carries `{realm, containment, project, git, network, passedOver}` from the chosen realm and the call's write view (`shellPostureFacts`,
   host-shell); the window words it in EN/TR and no longer parses the engine's English sentence (which stays in the preview for the model and
   the line surface). Command, classifier, edit counts, fetch URL, cut marker and binding line are still read from the preview text (remaining
-  D4, a decision point).
+  D4, a decision point). **DENY-WORDING** (T2-FOLLOWUP): a call whose card the owner declined
+  (`approval.settled` deny for that call) prints "you declined" / "sen reddettin" in the muted tone; a policy rule's refusal keeps "denied by
+  policy" / "kural izin vermedi".
 - **Local/free models** use `openai-chat-http` v4 with an operator-declared `operator-static` tariff (v1: zero rates only).
   The quote is reserved against the scope budget and a responded call settles `settled-local 0` in the spend ledger;
   there is no unmetered bypass class. Positive chargeback rates need a separate measurement basis.
