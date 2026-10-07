@@ -54,6 +54,8 @@ export interface ApprovalWindowLabels {
   readonly sessionCovers: string; readonly alwaysCovers: string;
   readonly keys: Readonly<Record<'once' | 'session' | 'always' | 'deny' | 'reason' | 'scroll', string>>;
   readonly reason: Readonly<{ label: string; hint: string; empty: string }>;
+  /** T3 L4: a config-change approval in the words of a setting — title, scope (`{key}`, `{layer}`), why (`{rule}`), undo, and the layer names. */
+  readonly config?: Readonly<{ title: string; scope: string; why: string; undo: string; layers: Readonly<Record<'project' | 'global', string>> }>;
 }
 
 /** What the window knows of one approval (display copies only; no capability, revision or authority DTO). */
@@ -65,6 +67,8 @@ export type ApprovalWindowInput = Readonly<{
   project?: string | undefined; mode?: string | undefined; posture?: AgentShellPosture | undefined;
   /** v21 (Astra 2431): the card's fields as producer data and the preview cut's facts; absent (an older service): the preview is shown whole. */
   call?: AgentToolCardCall | undefined; previewCut?: ApprovalPreviewCutFacts | undefined;
+  /** T3 L4: a config-change approval's facts; its window speaks of the setting (scope, rule, undo) instead of a tool call. */
+  config?: Readonly<{ action: 'set' | 'unset'; layer: 'project' | 'global'; keyPath: string; ruleId: string }> | undefined;
 }>;
 
 const MCP_NAME = /^mcp__([a-z][a-z0-9]*)__(.+)$/u;
@@ -164,6 +168,7 @@ function postureRows(posture: AgentShellPosture, labels: ApprovalWindowLabels): 
 
 /** The window title (tool's human name) as projected spans. */
 export function approvalWindowTitle(input: ApprovalWindowInput, labels: ApprovalWindowLabels, known?: KnownSecretSnapshot): ApprovalDecisionLine {
+  if (input.config && labels.config) return approvalTemplateLine(labels.config.title, {});
   const call = approvalCallOf(input);
   if (!call) return approvalTemplateLine(labels.titleUnknown, {});
   const kind = approvalToolKind(call.tool), parts = approvalToolParts(call.tool), p = (text: string) => projectApprovalDecisionText(text, known);
@@ -203,12 +208,21 @@ export function approvalWindowLines(input: ApprovalWindowInput, labels: Approval
   const self = input.requester === '-' || !input.requester;
   rows.push(lineOf(self ? [span(labels.onBehalfSelf)] : p(input.requester).spans,
     self ? [] : [p(input.requester)], f.onBehalf));
-  rows.push(lineOf(approvalTemplateLine(labels.scope, { project: p(input.project ?? '') }).spans, [], f.scope));
-  const cell = input.risk ?? null;
-  const rule = (cell && labels.rule[cell]) || labels.rule['unknown']!, mode = (input.mode && labels.mode[input.mode]) || labels.mode['unknown']!;
-  rows.push(lineOf(approvalTemplateLine(labels.why, { rule, mode }).spans, [], f.why));
+  const cell = input.risk ?? null, setting = input.config && labels.config ? { facts: input.config, words: labels.config } : null;
+  // T3 L4: a config-change approval names the setting and its layer, and the company rule that asked (the stored subject's own facts).
+  if (setting) {
+    const scope = approvalTemplateLine(setting.words.scope, { key: p(setting.facts.keyPath), layer: setting.words.layers[setting.facts.layer] });
+    rows.push(lineOf(scope.spans, scope.fields, f.scope));
+    const why = approvalTemplateLine(setting.words.why, { rule: p(setting.facts.ruleId) });
+    rows.push(lineOf(why.spans, why.fields, f.why));
+  } else {
+    rows.push(lineOf(approvalTemplateLine(labels.scope, { project: p(input.project ?? '') }).spans, [], f.scope));
+    const rule = (cell && labels.rule[cell]) || labels.rule['unknown']!, mode = (input.mode && labels.mode[input.mode]) || labels.mode['unknown']!;
+    rows.push(lineOf(approvalTemplateLine(labels.why, { rule, mode }).spans, [], f.why));
+  }
   rows.push(lineOf([span(riskText(cell, labels), { role: cell === 'shell-destructive' || cell === 'edit-authority' || cell === 'mcp-floor' ? 'warning' : 'muted' })], [], f.risk));
-  rows.push(lineOf([span(undoText(input.undo, call ? kind : null, cell, labels))], [], f.undo));
+  // A config write keeps the previous value (the approval record's before copy; the write backs the layer up first): it can be put back.
+  rows.push(lineOf([span(setting ? setting.words.undo : undoText(input.undo, call ? kind : null, cell, labels))], [], f.undo));
   const left = input.expiresAt - now;
   rows.push(lineOf([span(left > 0 ? fillTemplate(labels.time, { clock: countdownClock(left) }) : labels.expired, { role: left > 0 ? 'accent' : 'error' })], [], f.time));
   if (input.assuranceLine || input.standing) rows.push(blank);

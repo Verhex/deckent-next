@@ -1,5 +1,5 @@
 import type { WorklineStreamTurn } from '#surfaces/core/terminal-kit/index.js';
-import { configSlash } from '#surfaces/core/config/index.js';
+import { configPanelPort, configSlash } from '#surfaces/core/config/index.js';
 import { userInfo } from 'node:os';
 import { createInterface } from 'node:readline';
 import { basename } from 'node:path';
@@ -10,7 +10,9 @@ import { prefersAsciiGlyphs, runTerminalWorkline, resolveWorklinePalette, resolv
 import { plainText, projectHumanText } from '#surfaces/core/terminal-render/index.js';
 import { terminalComposerLabels, terminalRenderLabels, terminalSessionLabels, terminalStartupLabels } from '#surfaces/core/terminal-labels/index.js';
 import { createWorklineLedgerPorts } from './terminal-ledger.js';
-import { runtimeBuildSkew, workSurfaceLabels } from '#surfaces/core/work-labels/index.js';
+import { runtimeBuildSkew, terminalPanelLabels, workSurfaceLabels } from '#surfaces/core/work-labels/index.js';
+import { pickerNeedsTextFallback } from '#surfaces/core/terminal-picker/index.js';
+import { mcpPanelPort } from './mcp-panel.js';
 import type { TerminalLaunchContext, TerminalLaunchPorts } from './context.js';
 import { terminalAdminPorts } from '#surfaces/core/terminal-admin/index.js';
 import type { ProjectIdentity, PermissionMode } from '#domain/index.js';
@@ -146,12 +148,22 @@ function worklineLabels(locale: Locale, statusLine: string): WorklineLabels {
         'full-access': t('terminal.mode.effect.full-access', {}, locale) },
       switch: t('terminal.mode.switch', {}, locale), fullAccessGrant: t('terminal.mode.fullAccessGrant', {}, locale), startSaved: t('terminal.mode.startSaved', {}, locale),
       stops: modeStopWords(locale), cycled: t('terminal.mode.cycled', {}, locale), cycledFullAccess: t('terminal.mode.cycledFullAccess', {}, locale),
-      askEditsOn: t('terminal.mode.askEditsOn', {}, locale), askEditsOff: t('terminal.mode.askEditsOff', {}, locale) },
+      askEditsOn: t('terminal.mode.askEditsOn', {}, locale), askEditsOff: t('terminal.mode.askEditsOff', {}, locale), fullAccessLine: t('tui.panel.mode.fullAccessLine', {}, locale) },
     reasoning: { on: t('terminal.reasoning.on', {}, locale), off: t('terminal.reasoning.off', {}, locale), usage: t('terminal.reasoning.usage', {}, locale) },
     scratch: { summary: t('terminal.scratch.summary', {}, locale), empty: t('terminal.scratch.empty', {}, locale), entry: t('terminal.scratch.entry', {}, locale),
       more: t('terminal.scratch.more', {}, locale), path: t('terminal.scratch.path', {}, locale), cleared: t('terminal.scratch.cleared', {}, locale),
       usage: t('terminal.scratch.usage', {}, locale) },
   };
+}
+
+/**
+ * T3 L4: the `/config` and `/mcp` windows' ports and every panel's words (`/mode`'s port is the workline's own). Where the terminal cannot draw
+ * a list (TERM=dumb) there are none and the slash commands stay the text commands.
+ */
+function panelProps(root: string, context: TerminalLaunchContext, ports: TerminalLaunchPorts, options: ConfigLoadOptions, locale: Locale, env: NodeJS.ProcessEnv) {
+  if (pickerNeedsTextFallback(env, true)) return {};
+  return { panels: { labels: terminalPanelLabels(locale), ports: { ...(context.configApplication ? { config: configPanelPort(root, context, options, locale) } : {}),
+    ...(ports.runMcp ? { mcp: mcpPanelPort(root, ports.runMcp, options, locale) } : {}) } } };
 }
 
 /** Line mode is the degraded adapter: it works piped (one turn per input line) and prompts only on a terminal. */
@@ -377,6 +389,7 @@ export async function terminalCommand(argv: readonly string[], context: Terminal
       doctor: sink => ports.runKernelCommand(['doctor', '--lang', locale], { root, env, stdout: sink, stderr: sink }) }),
     ...(ports.mcpSlash ? { mcp: (args: string) => ports.mcpSlash!(root, args, options, locale) } : {}),
     ...(context.configApplication ? { config: (args: string) => configSlash(root, args, context, options, locale, Math.max(40, (tty.columns ?? 100) - 4)) } : {}),
+    ...panelProps(root, context, ports, options, locale, env),
     // MONITOR: `/monitor` prints the monitor's text snapshot as notice lines (the fullscreen view is `deckent monitor`).
     ...(context.inspectMonitor ? { monitor: (args: string) => monitorSlash(root, args, context, options, locale, Math.max(40, (tty.columns ?? 100) - 4)) } : {}),
     ...(serviceLine || accessNotices.length ? { openingNotices: [...accessNotices, ...(serviceLine ? [{ level: serviceFailed ? 'error' as const : 'info' as const, text: serviceLine }] : []),

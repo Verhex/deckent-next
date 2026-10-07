@@ -40,7 +40,7 @@ export function StatusStrip({ target, model, state, busy, queued, notice, labels
   return (
     <Text wrap="truncate-end">
       {layout.segments.map((segment, index) => (
-        <Text key={segment.id}>{index > 0 ? separator : ''}<Text {...(segment.role ? spanStyle({ text: '', role: segment.role }, palette) : {})}>{segment.text}</Text></Text>
+        <Text key={segment.id}>{index > 0 ? separator : ''}<Text {...(segment.role ? spanStyle({ text: '', role: segment.role, ...(segment.bold ? { bold: true } : {}) }, palette) : {})}>{segment.text}</Text></Text>
       ))}
     </Text>
   );

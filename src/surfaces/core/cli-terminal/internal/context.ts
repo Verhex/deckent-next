@@ -1,3 +1,4 @@
+import type { McpPanelRun } from './mcp-panel.js';
 import type { ProjectIdentity } from '#domain/index.js';
 import type { DescribeService, IdentityRead, InstallationIdentityRead, RunCommand, RunCancellationOutcome, RunQuery, RunView, SurfaceSnapshotAccess,
   TaskWorkerModel } from '#engine/index.js';
@@ -71,5 +72,7 @@ export interface TerminalLaunchPorts {
   readonly runKernelCommand: (argv: readonly string[], overrides: { readonly root: string; readonly env: NodeJS.ProcessEnv; readonly stdout: OutputSink; readonly stderr: OutputSink }) => Promise<void>;
   /** `/mcp`: absent when the host wires no MCP command handler (the slash command is then not offered). */
   readonly mcpSlash?: (root: string, args: string, options: ConfigLoadOptions, locale: Locale) => Promise<readonly string[]>;
+  /** The `/mcp` window (T3 L4): the host's registry command itself (`deckent mcp`'s handler), with the window's trust question as `ask`. */
+  readonly runMcp?: McpPanelRun;
   readonly renderRunCancellation: RunCancellationRenderer;
 }

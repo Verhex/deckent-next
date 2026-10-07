@@ -21,10 +21,10 @@ const SECOND = 1000;
 export type ApprovalCardPresentation = Readonly<{ displayId: string; displayRun: string; displayTask: string; displayRequester: string; summary: string;
   risk: string | null | undefined; undo: string | null | undefined; requiredAssurance: string | undefined; expiresAt: number; hasDecisionCapability: boolean;
   tool: string | undefined; target: string | null | undefined; posture: AgentShellPosture | undefined;
-  call: AgentToolCardCall | undefined; previewCut: ApprovalPreviewCutFacts | undefined }>;
+  call: AgentToolCardCall | undefined; previewCut: ApprovalPreviewCutFacts | undefined; config: WorklineApproval['config'] }>;
 export const approvalCardPresentation = (item: WorklineApproval): ApprovalCardPresentation => ({ displayId: item.approvalId, displayRun: item.runId, displayTask: item.taskId,
   displayRequester: item.requester, summary: item.summary, risk: item.risk, undo: item.undo, requiredAssurance: item.requiredAssurance, expiresAt: item.expiresAt, hasDecisionCapability: Boolean(item.decisionCapability),
-  tool: item.tool, target: item.target, posture: item.posture, call: item.call, previewCut: item.previewCut });
+  tool: item.tool, target: item.target, posture: item.posture, call: item.call, previewCut: item.previewCut, config: item.config });
 /** The list row's "what": the tool's sentence with its target (a task approval keeps its summary). */
 function rowWhat(item: WorklineApproval, work: WorkSurfaceLabels): string {
   const call = approvalCallOf(item);
@@ -67,7 +67,7 @@ export function approvalDecisionCardLines(approval: ApprovalCardPresentation, wo
     ? approvalTemplateLine(approval.hasDecisionCapability ? card.assuranceTurnHere : card.assuranceTurnElsewhere, {}) : approvalTemplateLine(card.assuranceOther, { level: p(required) });
   return approvalWindowLines({ approvalId: approval.displayId, summary: approval.summary, requester: approval.displayRequester, runId: approval.displayRun, taskId: approval.displayTask,
     expiresAt: approval.expiresAt, tool: approval.tool, target: approval.target, preview, risk: approval.risk, undo: approval.undo, requiredAssurance: required, assuranceLine: assurance,
-    standing, project: context.project, mode: context.mode, posture: approval.posture, call: approval.call, previewCut: approval.previewCut }, work.approvalWindow, now, known);
+    standing, project: context.project, mode: context.mode, posture: approval.posture, call: approval.call, previewCut: approval.previewCut, config: approval.config }, work.approvalWindow, now, known);
 }
 /** The live clock of a window: re-renders once a second until `until`, then stops. */
 function useNow(until: number): number {
@@ -89,7 +89,7 @@ export function ApprovalDecisionCard({ presentation, work, labels, preview, scop
   const known = useHumanTextSecrets(), now = useNow(presentation.expiresAt), win = work.approvalWindow, left = presentation.expiresAt - now;
   const decide = (yes: boolean, standing?: StandingScope, reason?: string) => { if (Date.now() < presentation.expiresAt) onDecide(yes, standing, reason); };
   return <DecisionCard title={approvalWindowTitle({ approvalId: presentation.displayId, summary: presentation.summary, requester: presentation.displayRequester, runId: presentation.displayRun,
-      taskId: presentation.displayTask, expiresAt: presentation.expiresAt, tool: presentation.tool }, win, known)}
+      taskId: presentation.displayTask, expiresAt: presentation.expiresAt, tool: presentation.tool, config: presentation.config }, win, known)}
     projectedLines={approvalDecisionCardLines(presentation, work, preview, scoped, known, context, now)} decisionLabels={labels}
     status={[span(left > 0 ? countdownClock(left) : win.expired, { role: left > 0 ? 'accent' : 'error' })]} priority={WINDOW_PRIORITY.approval} position={work.window.position}
     reason={win.reason} prompt={approvalWindowHints(win, scoped?.scopes ?? [])} pendingText={work.approvalPending} {...(pending === undefined ? {} : { pending })} scopes={scoped?.scopes ?? []} onDecide={decide} />;
