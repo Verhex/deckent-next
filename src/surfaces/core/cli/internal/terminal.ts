@@ -1,5 +1,6 @@
 import type { WorklineStreamTurn } from '#surfaces/core/terminal-kit/index.js';
 import { configSlash } from '#surfaces/core/config/index.js';
+import { userInfo } from 'node:os';
 import { createInterface } from 'node:readline';
 import { mcpSlash } from './mcp.js';
 import { monitorSlash } from '#surfaces/core/monitor/index.js';
@@ -69,6 +70,9 @@ function errorText(error: unknown, locale: Locale): string {
   }
   return t('terminal.chat.failed', {}, locale);
 }
+
+/** The host user's name for `/scope`: display only (the principal itself is derived by the runtime service). */
+function hostUserName(): string | null { try { return userInfo().username || null; } catch { return null; } }
 
 function yesNo(value: boolean, locale: Locale): string { return value ? t('terminal.value.yes', {}, locale) : t('terminal.value.no', {}, locale); }
 
@@ -353,7 +357,7 @@ export async function terminalCommand(argv: readonly string[], context: CommandC
       inspect: (sessionId: string, signal?: AbortSignal) => context.inspectScratch!(root, { schemaVersion: 1, scopeId, sessionId }, options, signal),
       clear: (sessionId: string) => context.clearScratch!(root, { schemaVersion: 1, scopeId, sessionId }, options) } } : {}),
     // TERMINAL-CLOSE S09: `/status`, `/model`, `/usage`, `/doctor`, `/scope` re-read their typed producers on every call (this surface keeps no copy).
-    ...terminalAdminPorts({ root, scopeId, installationId, projectId, options, locale, context,
+    ...terminalAdminPorts({ root, scopeId, installationId, projectId, options, locale, context, principalName: hostUserName(),
       status: async () => renderStatus(statusPayload(ttyState(context), await loadConfig(root, options), context.describeTerminalChatPlan ? await context.describeTerminalChatPlan(root, options) : null, await readIdentity()), locale),
       doctor: sink => runKernelCommand(['doctor', '--lang', locale], { ...context, root, env, stdout: sink, stderr: sink }) }),
     ...(context.runMcpCommand ? { mcp: (args: string) => mcpSlash(root, args, context, options, locale) } : {}),

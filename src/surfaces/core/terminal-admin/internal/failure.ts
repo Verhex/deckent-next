@@ -16,3 +16,10 @@ export async function part(label: string, locale: Locale, read: (() => Promise<r
   try { return await read(); }
   catch (error) { return [t('terminal.admin.partFailed', { part: label, reason: queryFailureText(error, locale) }, locale)]; }
 }
+
+/** Like `part`, but the value stays typed: a read that failed or is not wired comes back as the line that names it (`note`), never as a value. */
+export async function attempt<T>(label: string, locale: Locale, read: (() => Promise<T>) | null): Promise<Readonly<{ value: T }> | Readonly<{ note: string }>> {
+  if (!read) return { note: t('terminal.admin.partUnavailable', { part: label }, locale) };
+  try { return { value: await read() }; }
+  catch (error) { return { note: t('terminal.admin.partFailed', { part: label, reason: queryFailureText(error, locale) }, locale) }; }
+}

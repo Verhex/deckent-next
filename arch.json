@@ -868,6 +868,7 @@
         "src/domain/core/policy",
         "src/domain/core/provider-spend",
         "src/domain/core/provider-catalog",
+        "src/platform/core/common",
         "src/platform/core/config",
         "src/platform/core/errors",
         "src/platform/core/i18n",

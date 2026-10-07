@@ -2,13 +2,14 @@ import { t } from '#platform/index.js';
 import { parseProviderSpendAccountQuery } from '#domain/index.js';
 import type { SessionUsageView } from '#surfaces/core/terminal-kit/index.js';
 import { queryFailureText } from './failure.js';
+import { count } from './human.js';
 import type { TerminalAdminCall } from './context.js';
 
 /** An unreported reasoning count stays unknown: never a zero, and a partial sum says how many reports it misses. */
 function reasoningText(usage: SessionUsageView, locale: TerminalAdminCall['locale']): string {
-  if (usage.reasoningUnmeasured === 0) return t('terminal.admin.usage.reasoningMeasured', { tokens: usage.reasoningTokens }, locale);
+  if (usage.reasoningUnmeasured === 0) return t('terminal.admin.usage.reasoningMeasured', { tokens: count(usage.reasoningTokens, locale) }, locale);
   if (usage.reasoningUnmeasured >= usage.reports) return t('terminal.admin.usage.reasoningNotMeasured', {}, locale);
-  return t('terminal.admin.usage.reasoningPartial', { tokens: usage.reasoningTokens, unmeasured: usage.reasoningUnmeasured, reports: usage.reports }, locale);
+  return t('terminal.admin.usage.reasoningPartial', { tokens: count(usage.reasoningTokens, locale), unmeasured: usage.reasoningUnmeasured, reports: usage.reports }, locale);
 }
 
 /**
@@ -20,7 +21,8 @@ export async function usageLines(call: TerminalAdminCall, args: string, usage: S
   const words = args.split(/\s+/u).filter(Boolean);
   if (words.length === 0) {
     return usage.reports === 0 ? [t('terminal.admin.usage.none', {}, locale)]
-      : [t('terminal.admin.usage.session', { reports: usage.reports, prompt: usage.promptTokens, completion: usage.completionTokens, reasoning: reasoningText(usage, locale) }, locale),
+      : [t('terminal.admin.usage.heading', { reports: usage.reports }, locale), t('terminal.admin.usage.prompt', { tokens: count(usage.promptTokens, locale) }, locale),
+        t('terminal.admin.usage.completion', { tokens: count(usage.completionTokens, locale) }, locale), t('terminal.admin.usage.reasoning', { reasoning: reasoningText(usage, locale) }, locale),
         t('terminal.admin.usage.notBilling', {}, locale)];
   }
   let query;
@@ -33,9 +35,9 @@ export async function usageLines(call: TerminalAdminCall, args: string, usage: S
     if (result.checkpoint === null) return [t('models.spending.absent', { scope: result.scopeId, budget: result.budgetId, revision: result.budgetRevision }, locale), t('models.spending.historyNotRecorded', {}, locale)];
     const { account } = result.checkpoint;
     return [t('models.spending.account', { scope: result.scopeId, budget: result.budgetId, revision: result.budgetRevision, currency: account.budget.currency,
-      limit: account.budget.limitMinorUnits, checkpoint: result.checkpoint.revision, reservations: result.checkpoint.reservationCount }, locale),
-    t('models.spending.reserved', { amount: account.reservedMinorUnits, currency: account.budget.currency }, locale),
-    t('models.spending.settledExact', { amount: account.settledExactMinorUnits, currency: account.budget.currency }, locale),
+      limit: count(account.budget.limitMinorUnits, locale), checkpoint: result.checkpoint.revision, reservations: count(result.checkpoint.reservationCount, locale) }, locale),
+    t('models.spending.reserved', { amount: count(account.reservedMinorUnits, locale), currency: account.budget.currency }, locale),
+    t('models.spending.settledExact', { amount: count(account.settledExactMinorUnits, locale), currency: account.budget.currency }, locale),
     t('models.spending.frozen', { value: account.frozen ? t('models.spending.frozenYes', {}, locale) : t('models.spending.frozenNo', {}, locale) }, locale),
     t('terminal.admin.usage.notBilling', {}, locale)];
   } catch (error) { return [t('terminal.admin.partFailed', { part: t('terminal.admin.usage.partSpend', {}, locale), reason: queryFailureText(error, locale) }, locale)]; }
