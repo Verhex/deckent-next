@@ -22,7 +22,7 @@ export async function inspectConfiguredShellRealm(projectRoot: string, options: 
 const READ_ONLY_FILE_SYSTEM = /Read-only file system/u;
 const NAMED_PATHS_SHOWN = 5;
 /**
- * B3 (owner terminal test 2026-10-07): a sandboxed command that failed on a protected path (Deckent's own source, the write floor) got only
+ * B3 (owner terminal test 2026-10-07): a sandboxed command whose write failed on a protected path (Deckent's own source, the write floor) got only
  * the raw "Read-only file system". When its output carries that error and it names such a path, the result says, in the person's language,
  * which path, why, and what can change it (the edit tools ask for approval; full access) — the model reads the same text. Authority is
  * unchanged: the sandbox still keeps the path read-only; asking for the shell is the PROTECTED-PATHS card's work.
@@ -222,9 +222,10 @@ export function createAgentShell(input: { readonly scope: WorkspaceScope; readon
         const { text: trackedLine, counts } = await tracked(ran);
         // Astra 2124 durable marker: the same verified cleanup carried in the note also rides the outcome, for `tool.finished`.
         const note = projectReadOnly && ran.exitCode !== 0 && realm.containment !== 'host' ? `\n${HOST_SHELL_NOTES.projectReadOnly}` : '';
-        // B3: the write floor was read-only in this sandbox; a failure on a path it protects is explained by name. Not in a full-access turn: its
-        // sandbox keeps only the configuration file read-only, which is not the floor `writeFloor` names there.
-        const floorNote = input.fullAccess !== true && writeFloorReadOnly && ran.exitCode !== 0 && realm.containment !== 'host' && input.writeFloor
+        // B3: the write floor was read-only in this sandbox; a failure on a path it protects is explained by name. The read-only error in the
+        // output is the evidence, whatever the exit code (`rm src/x || echo failed` exits 0). Not in a full-access turn: its sandbox keeps
+        // only the configuration file read-only, which is not the floor `writeFloor` names there.
+        const floorNote = input.fullAccess !== true && writeFloorReadOnly && realm.containment !== 'host' && input.writeFloor
           ? protectedPathShellNote(planned.command, ran.output, onWriteFloor(input.writeFloor), input.language) : null;
         // SHELL-OVERLAY: the command exited (whatever its code: a direct-write posture keeps its writes too), so its write set is decided
         // and applied now, entry by entry, like edits; the directory is removed afterwards.
