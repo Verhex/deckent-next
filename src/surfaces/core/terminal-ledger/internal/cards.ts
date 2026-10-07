@@ -1,4 +1,4 @@
-import { shortId } from '#surfaces/core/terminal-kit/index.js';
+import { shortId } from '#platform/index.js';
 import { fillTemplate, type WorkerLineLabels } from './worker-line.js';
 import { parseTaskPhases, type WorkLedgerRunEntry, type WorkLedgerWorkerEntry } from './work-ledger.js';
 

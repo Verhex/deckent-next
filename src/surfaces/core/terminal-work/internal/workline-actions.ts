@@ -2,7 +2,8 @@ import { type WorkLedgerEntry, type WorkLedgerWorkerEntry, notice, fillTemplate,
 import type { WorkerPanelLabels } from './worker-panel.js';
 import type { ApprovalWindowLabels } from './approval-window.js';
 import { transcriptPage, type TranscriptPageLabels } from './transcript-page.js';
-import { shortId, slashHelpText, surfaceDeliveryValues, WORKLINE_SLASH_COMMANDS, type SurfaceDeliveryMode } from '#surfaces/core/terminal-kit/index.js';
+import { shortId } from '#platform/index.js';
+import { slashHelpText, surfaceDeliveryValues, WORKLINE_SLASH_COMMANDS, type SurfaceDeliveryMode } from '#surfaces/core/terminal-kit/index.js';
 
 export interface WorklineActionLabels {
   readonly ledgerUnavailable: string;

@@ -924,7 +924,8 @@
         "src/surfaces/core/terminal-render",
         "src/engine/core/runs",
         "src/engine/core/worker-observation",
-        "src/engine/core/monitor"
+        "src/engine/core/monitor",
+        "src/platform/core/common"
       ],
       "plan": "SURFACES"
     },
@@ -937,7 +938,8 @@
         "src/engine/core/runs",
         "src/surfaces/core/terminal-kit",
         "src/surfaces/core/terminal-window",
-        "src/surfaces/core/terminal-picker"
+        "src/surfaces/core/terminal-picker",
+        "src/platform/core/common"
       ],
       "plan": "SURFACES"
     },

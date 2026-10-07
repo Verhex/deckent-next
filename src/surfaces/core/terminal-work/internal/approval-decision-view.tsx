@@ -6,7 +6,8 @@ import { ApprovalProjectedNotice, ApprovalProjectedPicker, DecisionCard, decisio
   type ApprovalDecisionLabels, type ApprovalDecisionLine } from '#surfaces/core/approval-presentation/index.js';
 import type { KnownSecretSnapshot } from '#platform/index.js';
 import type { RunView } from '#engine/index.js';
-import { shortId, type StandingScope } from '#surfaces/core/terminal-kit/index.js';
+import type { StandingScope } from '#surfaces/core/terminal-kit/index.js';
+import { shortId } from '#platform/index.js';
 import type { WorkSurfaceLabels } from './workline-actions.js';
 import { type WorklineApproval, fillTemplate, formatDuration, formatTaskPhases } from '#surfaces/core/terminal-ledger/index.js';
 import type { ApprovalDecisionNoticePresentation, ApprovalRowPresentation } from './approval-decision-notice.js';

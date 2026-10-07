@@ -4,7 +4,8 @@ import type { RunView } from '#engine/index.js';
 import { type WorkLedgerEntry, type WorkLedgerWorkerEntry, type WorklineLedgerPorts, notice, APPROVAL_SCAN_MAX_PAGES, EMPTY_APPROVAL_WATCH, approvalWatchStep, scanPendingApprovals, type WorklineApproval, fillTemplate } from '#surfaces/core/terminal-ledger/index.js';
 import { type WorklineActionLabels, type WorkSurfaceLabels } from './workline-actions.js';
 import type { WorklinePanel, LocalExecution } from './workline-panel.js';
-import { shortId, type PanelSnapshot, type TerminalLocalContext, type StandingScope } from '#surfaces/core/terminal-kit/index.js';
+import type { PanelSnapshot, TerminalLocalContext, StandingScope } from '#surfaces/core/terminal-kit/index.js';
+import { shortId } from '#platform/index.js';
 import { WorkerPanel, WORKER_PANEL_ROWS } from './worker-panel.js';
 import type { ApprovalDecisionLabels } from '#surfaces/core/approval-presentation/index.js';
 import { ApprovalDecisionCard, ApprovalDecisionPicker, approvalRowPresentation, approvalCardPresentation, approvalDecisionCardLines, CancellationDecisionCard, cancellationCardPresentation, PanelWindow,

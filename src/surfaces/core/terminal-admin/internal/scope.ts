@@ -1,7 +1,6 @@
 import { basename } from 'node:path';
-import { loadConfig, t } from '#platform/index.js';
+import { loadConfig, shortId, t } from '#platform/index.js';
 import { attempt } from './failure.js';
-import { shortId } from '#surfaces/core/terminal-kit/index.js';
 import type { TerminalAdminCall } from './context.js';
 
 /**
