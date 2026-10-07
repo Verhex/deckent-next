@@ -139,6 +139,27 @@ describe('config-change approval: negative paths (nothing is written)', () => {
     expect(record!.status).toBe('expired');
   });
 
+  it('a raised assurance (policy approvalAssurance on config-change) must be met: a peer-session allow is refused, the request stays pending, nothing is written', async () => {
+    const f = await setup();
+    await f.assurance({ id: 'company-config-assurance', scopes: 'all', subject: 'config-change', minimum: 'turn-bound' });
+    const before = await bytesOf(f.path), audits = f.auditCount();
+    const pending = await f.app.submit('set', { ...f.command, commandId: 'cmd-assure', keyPath: 'max_workers', value: 2 });
+    if (pending.status !== 'approval-pending') throw new Error('expected pending');
+    const [record] = (await f.list()).filter(item => approvalSubject(item.request).kind === 'config-change');
+    expect(record!.request).toMatchObject({ facts: { requiredAssurance: 'turn-bound' } });
+    // The decider here is a session peer (no turn-bound capability): below the raised minimum, the allow is refused at decision time.
+    await expect(f.decide(pending.approval.approvalId, 'allow', 'decide-assure')).rejects.toMatchObject({ code: 'APPROVAL_ASSURANCE_INSUFFICIENT' });
+    expect((await f.list()).find(item => item.request.approvalId === pending.approval.approvalId)!.status).toBe('pending');
+    expect(await f.app.submit('set', { ...f.command, commandId: 'cmd-assure', keyPath: 'max_workers', value: 2, expect: pending.expect })).toMatchObject({ status: 'approval-pending' });
+    expect(await bytesOf(f.path)).toBe(before); expect(f.auditCount()).toBe(audits);
+    // The same rule on another subject kind leaves config approvals at Core's minimum: a peer-session allow then applies.
+    await f.assurance({ id: 'company-config-assurance', scopes: 'all', subject: 'operation', minimum: 'turn-bound' });
+    const other = await f.app.submit('set', { ...f.command, commandId: 'cmd-peer', keyPath: 'max_workers', value: 3 });
+    if (other.status !== 'approval-pending') throw new Error('expected pending');
+    await f.decide(other.approval.approvalId, 'allow', 'decide-peer');
+    expect(await f.app.submit('set', { ...f.command, commandId: 'cmd-peer', keyPath: 'max_workers', value: 3, expect: other.expect })).toMatchObject({ status: 'applied' });
+  });
+
   it('digest race: the layer changed after the preview — the allowed change is not applied (CONFIG_APPROVAL_STALE), the other writer’s bytes stay', async () => {
     const f = await setup();
     const pending = await f.app.submit('set', { ...f.command, commandId: 'cmd-race', keyPath: 'max_workers', value: 2 });
