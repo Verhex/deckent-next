@@ -1,4 +1,5 @@
 import { cells, plainText, span, type Span, type SpanRole } from '#surfaces/core/terminal-render/index.js';
+import type { SessionUsageView } from '#surfaces/core/terminal-kit/index.js';
 import type { WindowLine } from './window.js';
 
 /**
@@ -54,6 +55,16 @@ export function infoChoices(model: InfoWindowModel): readonly InfoChoice[] {
   return model.sections.flatMap(section => section.choices ?? []);
 }
 
+/** Catalog words of an information window (`terminal.info.*`): key hints without and with a list to pick from, and the scroll position. */
+export interface InfoWindowLabelsShape {
+  /** Hints of a window without choices (Esc, Enter or q closes; arrows scroll). */
+  readonly hints: string;
+  /** Hints of a window with choices (arrows choose, Enter picks, Esc or q closes). */
+  readonly pickHints: string;
+  /** `{from}`, `{to}`, `{total}` when the body does not fit. */
+  readonly position: string;
+}
+
 export type InfoLayout = Readonly<{ lines: readonly WindowLine[]; choiceLines: readonly number[] }>;
 
 /** Lays the model out as window body lines (labels in the key column); `choiceLines[i]` is the body line of the i-th choice. */
@@ -97,4 +108,34 @@ export function infoModelText(model: InfoWindowModel, glyphs: InfoGlyphs = INFO_
   const column = Math.max(0, ...lines.filter(line => line.label?.length).map(line => cells(plainText(line.label!)))) + 1;
   const padded = (label: string) => `${label}${' '.repeat(Math.max(1, column - cells(label)))}`;
   return [model.title, ...lines.map(line => line.label?.length ? `${padded(plainText(line.label))}${plainText(line.spans)}` : plainText(line.spans))];
+}
+
+/** What a surface answers for one information command: the window, and optionally what a picked choice opens next (`null` closes). */
+export type InfoView = Readonly<{ model: InfoWindowModel; pick?: (choice: string) => Promise<InfoView | null> }>;
+/** What the terminal measured at call time (the same view the text ports get). */
+export type InfoViewInput = Readonly<{ usage: SessionUsageView; sessionFullAccess?: boolean }>;
+/** The information commands a host fills with typed producers (`/status`, `/usage`, `/doctor`, `/scope`); each call reads fresh. */
+export type InfoViewCommand = 'status' | 'usage' | 'doctor' | 'scope';
+export type InfoViewPorts = Readonly<Partial<Record<InfoViewCommand, (input: InfoViewInput) => Promise<InfoView>>>>;
+
+/** Words of `/context` as a window (`terminal.info.context.*`); templates use `{name}` placeholders. */
+export interface ContextInfoLabels {
+  readonly title: string;
+  readonly section: Readonly<{ window: string; split: string; summaries: string; suggestion: string }>;
+  readonly key: Readonly<{ fill: string; used: string; auto: string; messages: string; count: string; last: string; largest: string }>;
+  /** `{approx}{prompt}`, `{window}`; `{tokens}`, `{percent}`, `{remaining}`; `{replaced}`, `{when}`. */
+  readonly used: string; readonly auto: string; readonly last: string; readonly notMeasured: string;
+  readonly column: Readonly<{ part: string; share: string }>;
+  readonly part: Readonly<{ system: string; user: string; assistant: string; tools: string; attachments: string }>;
+  readonly splitNote: string;
+  readonly chip: Readonly<{ room: string; filling: string }>;
+  /** `{percent}`, `{count}`; `summaryNone` has `{count}`. */
+  readonly summary: string; readonly summaryNone: string;
+}
+/** Every word the terminal's information windows need beyond what their producers fill: the window chrome, the summary line's label,
+ * `/help` and `/context` (whose models the terminal builds itself). */
+export interface InfoSurfaceLabels extends InfoWindowLabelsShape {
+  readonly systemLabel: string;
+  readonly help: Readonly<{ note: string; summary: string }>;
+  readonly context: ContextInfoLabels;
 }

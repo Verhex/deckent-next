@@ -1,17 +1,9 @@
 import { useRef, useState } from 'react';
 import { span, useRenderGlyphs } from '#surfaces/core/terminal-render/index.js';
 import { Window } from './window.js';
-import { INFO_GLYPHS_ASCII, INFO_GLYPHS_UNICODE, infoChoices, infoWindowLines, type InfoWindowModel } from './info-model.js';
+import { INFO_GLYPHS_ASCII, INFO_GLYPHS_UNICODE, infoChoices, infoWindowLines, type InfoWindowLabelsShape, type InfoWindowModel } from './info-model.js';
 
-/** Catalog words of an information window (`terminal.info.*`): key hints without and with a list to pick from, and the scroll position. */
-export interface InfoWindowLabels {
-  /** Hints of a window without choices (Esc, Enter or q closes; arrows scroll). */
-  readonly hints: string;
-  /** Hints of a window with choices (arrows choose, Enter picks, Esc or q closes). */
-  readonly pickHints: string;
-  /** `{from}`, `{to}`, `{total}` when the body does not fit. */
-  readonly position: string;
-}
+export type InfoWindowLabels = InfoWindowLabelsShape;
 
 /**
  * A legible information window (SW-1): the typed model drawn on the shared `Window` — title, chips, sections of aligned key/value rows with
