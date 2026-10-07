@@ -312,3 +312,14 @@ Owner “Öneriler kabul edildi”: önce Noul kontrollerini tek önerme yapma v
 - **MCP yönlendirmesi** (Jev f46c2279 1,00/0,77, lead; owner sorusu): aynı origin 307/308 takip, diğerleri hedefi adlandıran retle (MCP-REDIRECT).
 - **DOGFOOD:** S1 tamamlanana kadar bekler (owner 2026-10-08).
 
+
+## Owner kararları — 2026-10-08 (API anahtarları)
+Kaynak: dış `proof/DECKENT-API-KEYS-2026-10-08/analysis.md` (yan oturum deckent-next-1b).
+- **Kapsam:** tüm sağlayıcıların API anahtarları. Şirket Console'unda Deckent çalışma ortamı açıldı; şimdilik yalnız terminal anahtarı.
+- **Worker'a anahtar gitmez** (sert kural); worker erişimi ileride egress gateway'in kısa ömürlü token'ıyla.
+- **Saklama:** diskte şifreli, açılışta parola yok (Jev 814be8aa 0,95/0,77); `ANTHROPIC_API_KEY` adı, shell profili, `.env`, `.deck` yasak.
+- **Son kullanma tarihi girdirilmez:** 401/403/limit tipli durum + şeffaf mesaj; Admin anahtarı tutulmaz; limit yönetimi kullanıcıda.
+- **Bitwarden/1Password/Vault zorunlu değil;** varsa yardımcı komut adaptörüyle (SECRET-HELPER). OS anahtarlığı ve WIF ayrıntılı araştırmayla.
+- **Süreklilik (SECRET-CONTINUITY):** tanımlı zincirde görünür ve audit'li otomatik geçiş; tanımsız sağlayıcı/model asla (Jev a47afcc5 0,99/0,66 → owner onayı).
+- **İzolasyon katmanları:** Claude Code kapatılmaz, sandbox'a alınmaz; katı kurulum Deckent içinde (ayrı OS kullanıcısı / OS keychain);
+  kurulum ayarlarında şeffaflık notu ve katı kurulum belgesi (Jev e0fc3229 0,94/0,66 → owner). Native Windows ilk dilimde yok (şeffaflık notu).

@@ -11,6 +11,12 @@ import { fillTemplate } from './status-row.js';
 import { cells, truncateEnd } from './text-width.js';
 
 /** Catalog strings (terminal.render.*) resolved by the surface; placeholders are filled here. */
+/** The human sentence for the provider refusal token in a failed round's note (the engine's `classifyProviderRejection` names), or null. */
+export function providerRejectionHint(note: string | null | undefined, labels: AssistantRenderLabels): string | null {
+  const token = note ? /\(([a-z]+(?:-[a-z]+)*)\)\)/.exec(note)?.[1] : undefined;
+  return token && labels.providerRejection && Object.hasOwn(labels.providerRejection, token) ? labels.providerRejection[token]! : null;
+}
+
 export type AssistantRenderLabels = Readonly<{
   assistant: string; thinking: string; thought: string; elapsed: string; tokens: string; reasoningTokens: string;
   /** Catalog count for the complete transported answer projection, before live line clipping. */
@@ -18,6 +24,8 @@ export type AssistantRenderLabels = Readonly<{
   /** Informational original-field decision pattern signal; never a secret or policy verdict. */
   credentialLikeCount?: string;
   truncated: string; cancelled: string; failed: string; code: string; moreAbove: string; queued: string;
+  /** SECRET-AT-REST: a human sentence per provider refusal token the engine puts in a failed round's note (`(credential-rejected)`, …). */
+  providerRejection?: Readonly<Record<string, string>>;
   /** `{name} {target}` of a tool call; `toolRunning` adds the live seconds; statuses other than ok have their own words. */
   tool: string; toolRunning: string; toolStatus: Readonly<Record<Exclude<ToolUnit['status'], 'ok'>, string>>;
   /** DENY-WORDING: the status word of a call the owner declined on its card (absent: the `denied` word). */
@@ -143,6 +151,7 @@ export function AssistantUnitRow({ unit, labels }: { readonly unit: AssistantUni
     return (
       <Box flexDirection="column" paddingLeft={INDENT} marginBottom={1}>
         {unit.finish === 'length' && <Text {...palette.warning}>{labels.truncated}</Text>}
+        {unit.finish === 'error' && providerRejectionHint(unit.note, labels) ? <Text {...palette.error} wrap="wrap">{providerRejectionHint(unit.note, labels)}</Text> : null}
         {unit.note ? <Text {...(unit.finish === 'error' ? palette.error : palette.muted)} wrap="wrap">{unit.note}</Text> : null}
         {!unit.note && unit.cancelledDuring === 'compaction' ? <Text {...palette.muted} wrap="wrap">{labels.compactionCancelled ?? NEUTRAL_COMPACTION_CANCELLED}</Text> : null}
         <Text {...(unit.finish === 'error' ? palette.error : palette.muted)} wrap="truncate-end">{footerText(unit, labels, glyphs.separator)}</Text>

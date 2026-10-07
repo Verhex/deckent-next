@@ -15,7 +15,7 @@ export const DEFAULT_WORKSPACE_READ_DENY: readonly string[] = Object.freeze(['.e
   '**/*.p12', '**/id_rsa*', '**/id_ed25519*', '**/id_ecdsa*', '**/.credentials.json', '**/.npmrc', '**/.netrc', '.git/**', '**/.git/**',
   '.deckent/host/**', '.deckent/audit-key/**', '.deckent/approvals/**',
   // Credential carriers the legacy shell classifier protected (T-L4 slice 3a): one protected set for read tools, shell and edits.
-  '**/*.pfx', '**/*.keystore', '**/*.jks', '**/.pypirc', '**/credentials', '**/credentials.json', '**/secrets.json', '.brain/memory.db*',
+  '**/*.pfx', '**/*.keystore', '**/*.jks', '**/.pypirc', '**/credentials', '**/credentials.json', '**/secrets.json', '**/secrets.sealed.json', '.brain/memory.db*',
   // The repository directory itself, not only its content: listing `.git` is refused too.
   '.git', '**/.git']);
 /** The repository internals of the default deny (MODES-3): the only entries a full-access turn opens (commit, branch, push); credentials stay. */

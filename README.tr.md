@@ -128,6 +128,31 @@ gerçek ev klasörünüz (sırlar maskeli), ağ ve `.git` yazımı kullanılabil
 makinede sandbox kullanılamıyorsa `prefer-sandbox` ortamı host'ta çalışır ve bunu her onay kartında söyler,
 `require-sandbox` ortamı ise çalışmayı reddeder.
 
+### API anahtarları
+
+Sağlayıcı anahtarını bir kez `deckent secret set AD` ile kaydedersiniz (gizli istem ya da stdin; asla komut argümanı değil);
+model profili ona adıyla başvurur. Anahtarı `ANTHROPIC_API_KEY`, shell profili ya da `.env` dosyasına koymayın: başka araçlar
+oraları okur.
+
+| Depo (`secrets.store`) | Diskte | Anahtarı kim okuyabilir |
+|---|---|---|
+| `core.secret-store.env@1` (varsayılan) | hiçbir şey; ortam değişkeninden okunur | o ortamı devralan her program |
+| `core.secret-store.file@1` | düz metin, 0600 dosya | Deckent ve sizin hesabınızla çalışan diğer programlar |
+| `core.secret-store.encrypted-file@1` (önerilen) | şifreli (AES-256-GCM); açma anahtarı aynı klasörde, parola yok | Deckent; sizin hesabınızla çalışan diğer programlar yine açabilir |
+
+Ajanlar ve worker'lar anahtarı hiç almaz: sandbox depoyu gizler, anahtarı geri yansıtan sağlayıcı yanıtı reddedilir.
+`deckent doctor` hangi deponun etkin olduğunu ve kimin okuyabileceğini gösterir. Sağlayıcı anahtarı reddederse (401/403) ya da
+bir limit dolarsa terminal bunu açık sözlerle söyler; harcama limitleri sağlayıcı hesabınızda kalır.
+
+**Katı kurulum**, anahtarı makinedeki başka hiçbir programın okumaması gerekiyorsa:
+
+1. Şifreli depoyu seçin: `deckent config set secrets '{"store":"core.secret-store.encrypted-file@1"}' --global`.
+2. Diğer yapay zekâ araçlarını Deckent'in durum klasöründen uzak tutun; örneğin Claude Code'un `~/.claude/settings.json`
+   dosyasında depo dosyaları için `Read` yasak kuralları. Bu, dosya araçlarını ve yaygın shell komutlarını durdurur, her betiği değil.
+3. Planlanan: Deckent servisini ayrı bir işletim sistemi kullanıcısında (ya da macOS Keychain ile) çalıştırmak; böylece hesabınızdaki hiçbir program anahtarları okuyamaz.
+
+Dosya depoları native Windows'ta henüz yok.
+
 ## Mimari
 
 Her giriş yolu aynı tipli sözleşmeyi konuşur. Çalışma servisine bağlı işlemler tek bir çalışma servisinden geçer;

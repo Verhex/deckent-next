@@ -2095,6 +2095,7 @@
     },
     "src/adapters/core/secret-store": {
       "dependencies": [
+        "src/adapters/core/local-keyring",
         "src/engine/core/secret-store",
         "src/platform/core/errors",
         "src/platform/core/config",

@@ -35,38 +35,48 @@ export async function ensureLocalPrefixCacheSaltKey(layout: ProductLayout): Prom
 async function withLocalKey<T>(layout: ProductLayout, filename: string, create: boolean, failure: 'INTEGRITY_KEY_UNAVAILABLE' | 'PREFIX_CACHE_SALT_UNAVAILABLE',
   use: (material: Buffer) => T): Promise<T> {
   try {
-    if (!/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$/.test(filename)) throw new Error('name');
     const directory = create ? await prepareProductDirectory(layout, 'approvals') : await inspectProductDirectory(layout, 'approvals');
-    const path = join(directory, filename);
-    // Write mode uses the existing bounded path lock; read mode performs no lock writes.
-    const access = create ? withConfigWriteLock : async <T>(_path: string, work: () => Promise<T>) => work();
-    return await access(path, async () => {
-      let handle; let created = false;
-      try {
-        handle = await open(path, create ? constants.O_CREAT | constants.O_EXCL | constants.O_RDWR | constants.O_NOFOLLOW : constants.O_RDONLY | constants.O_NOFOLLOW, 0o600);
-        created = create;
-      }
-      catch (error) {
-        if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
-        handle = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW);
-      }
-      try {
-        const info = await handle.stat(); const linked = await lstat(path);
-        if (!info.isFile() || info.uid !== process.getuid?.() || info.nlink !== 1 || (info.mode & 0o777) !== 0o600
-          || linked.isSymbolicLink() || linked.ino !== info.ino || linked.dev !== info.dev) throw new Error('custody');
-        if (created) {
-          const material = randomBytes(KEY_LENGTH);
-          try { await handle.writeFile(material); await handle.sync(); } finally { material.fill(0); }
-          const parent = await open(directory, constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW);
-          try { await parent.sync(); } finally { await parent.close(); }
-        }
-        if ((await handle.stat()).size !== KEY_LENGTH) throw new Error('size');
-        const material = Buffer.alloc(KEY_LENGTH);
-        try {
-          if ((await handle.read(material, 0, KEY_LENGTH, 0)).bytesRead !== KEY_LENGTH) throw new Error('read');
-          return use(material);
-        } finally { material.fill(0); }
-      } finally { await handle.close(); }
-    });
+    return await withPrivateKeyFile(directory, filename, create, use);
   } catch { throw ErrorRegistry.createError(failure); }
+}
+
+/**
+ * One 256-bit key file in an existing private directory, under the local-key custody rules: opened without following links, a regular
+ * single-linked file of this user with mode 0600 and exactly 32 bytes. With `create`, an absent file is created exclusively (O_EXCL) from
+ * fresh random bytes, fsynced with its directory, under the bounded path lock; an existing one is only checked, never replaced. Without
+ * `create` no lock is written. The material is zeroed after `use`. Failures are raw (`ENOENT` for an absent key); callers type them.
+ */
+export async function withPrivateKeyFile<T>(directory: string, filename: string, create: boolean, use: (material: Buffer) => T): Promise<T> {
+  if (!/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$/.test(filename)) throw new Error('name');
+  const path = join(directory, filename);
+  // Write mode uses the existing bounded path lock; read mode performs no lock writes.
+  const access = create ? withConfigWriteLock : async <T>(_path: string, work: () => Promise<T>) => work();
+  return access(path, async () => {
+    let handle; let created = false;
+    try {
+      handle = await open(path, create ? constants.O_CREAT | constants.O_EXCL | constants.O_RDWR | constants.O_NOFOLLOW : constants.O_RDONLY | constants.O_NOFOLLOW, 0o600);
+      created = create;
+    }
+    catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
+      handle = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW);
+    }
+    try {
+      const info = await handle.stat(); const linked = await lstat(path);
+      if (!info.isFile() || info.uid !== process.getuid?.() || info.nlink !== 1 || (info.mode & 0o777) !== 0o600
+        || linked.isSymbolicLink() || linked.ino !== info.ino || linked.dev !== info.dev) throw new Error('custody');
+      if (created) {
+        const material = randomBytes(KEY_LENGTH);
+        try { await handle.writeFile(material); await handle.sync(); } finally { material.fill(0); }
+        const parent = await open(directory, constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW);
+        try { await parent.sync(); } finally { await parent.close(); }
+      }
+      if ((await handle.stat()).size !== KEY_LENGTH) throw new Error('size');
+      const material = Buffer.alloc(KEY_LENGTH);
+      try {
+        if ((await handle.read(material, 0, KEY_LENGTH, 0)).bytesRead !== KEY_LENGTH) throw new Error('read');
+        return use(material);
+      } finally { material.fill(0); }
+    } finally { await handle.close(); }
+  });
 }

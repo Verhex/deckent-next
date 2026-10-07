@@ -129,6 +129,30 @@ host file system, your real home directory (with credentials masked), the networ
 available, and only the hard floor stays masked. When no sandbox is usable on a machine, a `prefer-sandbox` realm runs
 on the host and says so on every approval card, while a `require-sandbox` realm refuses to run.
 
+### API keys
+
+You store a provider key once with `deckent secret set NAME` (hidden prompt or piped stdin, never an argument); a model profile
+refers to it by name. Never put it in `ANTHROPIC_API_KEY`, a shell profile or a `.env` file: other tools read those.
+
+| Store (`secrets.store`) | On disk | Who can read the key |
+|---|---|---|
+| `core.secret-store.env@1` (default) | nothing; read from the environment | every program that inherits that environment |
+| `core.secret-store.file@1` | plain text, a 0600 file | Deckent and other programs running as your user |
+| `core.secret-store.encrypted-file@1` (recommended) | encrypted (AES-256-GCM); the unlock key sits in the same folder, no passphrase | Deckent; other programs running as your user can still open it |
+
+Agents and workers never receive a key: the sandbox hides the store and a provider answer that echoes the key is refused.
+`deckent doctor` shows which store is active and who can read it. When a provider refuses a key (401/403) or a limit is
+reached, the terminal says so in plain words; spend limits stay in your provider account.
+
+**Strict install**, for keys no other program on the machine should read:
+
+1. Select the encrypted store: `deckent config set secrets '{"store":"core.secret-store.encrypted-file@1"}' --global`.
+2. Keep other AI tools out of Deckent's state folder, e.g. `Read` deny rules for the store files in Claude Code's
+   `~/.claude/settings.json`. This stops their file tools and common shell commands, not every script.
+3. Planned: run the Deckent service under its own OS user (or the macOS Keychain) so no program of your account can read the keys.
+
+The file stores are not available on native Windows yet.
+
 ## Architecture
 
 Every way in speaks the same typed contract. Runtime-backed operations go through one runtime service, which checks

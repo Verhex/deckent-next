@@ -192,7 +192,15 @@ behaviour) and `core.secret-store.file@1` (`<global root>/secrets.json`, schemaV
 opened with `O_NOFOLLOW`, re-checked by `lstat`; unsafe → `SECRET_STORE_UNSAFE`, nothing read or repaired; writes under the config writer lock
 of that path with atomic 0600 replace + fsync, admitted only when the whole new document (the exact UTF-8 text written, after JSON
 escaping) fits `FILE_SECRET_STORE_MAX_BYTES` (1 MiB), the bound the reader enforces — over it `SECRET_STORE_FULL {backend, maxBytes}`, the old
-file byte-identical (Astra 2185 R5); corrupt or over the bound on read → `SECRET_STORE_CORRUPT` without cause; POSIX only). A v18 secret change
+file byte-identical (Astra 2185 R5); corrupt or over the bound on read → `SECRET_STORE_CORRUPT` without cause; POSIX only) and
+`core.secret-store.encrypted-file@1` (SECRET-AT-REST, owner 2026-10-08: the same custody core — `createFileSecretStore(options, spec)` with a
+codec — sealing the same document v1 as one AES-256-GCM envelope `{schemaVersion 1, algorithm, iv, tag, ciphertext}` in
+`<global root>/secrets.sealed.json`, fresh 12-byte IV per write, AAD = backend id + envelope version, under a 256-bit `secrets.key` in the
+same root with local-key custody (`withPrivateKeyFile`: 0600, owner, one link, `O_NOFOLLOW`, exactly 32 bytes, created `O_EXCL` on the first
+write only). No passphrase: it protects a copied, synced, grepped, printed or git-added store file, not a same-user process that reads both
+files or a backup of the whole root — K2 (OS keyring) wraps the key later. A missing key beside an existing store, a wrong key or any changed
+byte → `SECRET_STORE_CORRUPT`; nothing is re-keyed or repaired; it never reads `secrets.json`. `doctor` prints one transparency line per
+Core backend (who can read the keys); native Windows is `SECRET_STORE_UNAVAILABLE` like the file backend). A v18 secret change
 whose known answer cannot fit the delivery budget is refused (`RUNTIME_SERVICE_RESPONSE_LIMIT`) before the policy decision, audit or write
 (Astra 2185 R6). Enterprise/custom backends
 (vaults, KMS) register through `registerSecretStoreBackend` before `registerProviderConfig()` seals the registry — no Core edit; `core.` is

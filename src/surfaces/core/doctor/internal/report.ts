@@ -41,6 +41,14 @@ function shellRealmLines(report: ShellRealmDoctorView): string[] {
   return [...lines(report, `terminal.shell.realm ${report.mode}`), ...(report.preferSandbox ? lines(report.preferSandbox, 'sandbox-net (MCP default: network, own HOME)') : [])];
 }
 
+/** SECRET-AT-REST transparency (owner 2026-10-08): who can read the keys in each Core backend, in plain words; another backend has its own. */
+function secretStoreCustodyLine(backend: string, locale: Locale): readonly string[] {
+  if (backend === 'core.secret-store.env@1') return [t('doctor.secretStore.custody.env', {}, locale)];
+  if (backend === 'core.secret-store.file@1') return [t('doctor.secretStore.custody.file', {}, locale)];
+  if (backend === 'core.secret-store.encrypted-file@1') return [t('doctor.secretStore.custody.encryptedFile', {}, locale)];
+  return [];
+}
+
 /** The human `doctor` text; `poolLines` are the pool readiness lines the caller (which owns the pool port) already rendered. */
 export function renderDoctorReport(result: DoctorRenderInput, poolLines: readonly string[], locale: Locale): string {
   return [t('doctor.host', { platform: result.platform, cpu: result.host.cpuCores, memory: result.host.totalMemMB,
@@ -50,7 +58,7 @@ export function renderDoctorReport(result: DoctorRenderInput, poolLines: readonl
       admitted: entry.admitted.length ? entry.admitted.map(item => item.version ?? item.cliVersion).join(', ') : '-', latest: entry.latest?.version ?? '-' }, locale))] : []),
   // SECRET-K1: the selected secret store and whether it can be read now (backend id, status and typed code only; never a value).
   ...(result.secretStore ? [t('doctor.secretStore', { backend: result.secretStore.backend, status: result.secretStore.status,
-    codeSuffix: result.secretStore.code ? `, ${result.secretStore.code}` : '' }, locale)] : []),
+    codeSuffix: result.secretStore.code ? `, ${result.secretStore.code}` : '' }, locale), ...secretStoreCustodyLine(result.secretStore.backend, locale)] : []),
   ...(result.imageRefresh && result.imageRefresh.status !== 'unknown' ? [t('doctor.imageRefresh', { status: imageRefreshText(result.imageRefresh, locale) }, locale)] : []),
   ...(result.serviceConfig === 'stale' ? [t('doctor.serviceConfigStale', {}, locale)] : []),
   ...(result.installationBinding ? installationBindingLines(result.installationBinding, result.platform, locale) : []),

@@ -8,7 +8,7 @@ import { SECRET_NAME_PATTERN, SECRET_VALUE_MAX_BYTES, isSecretName, isSecretValu
 
 export const FILE_SECRET_STORE_ID = 'core.secret-store.file@1';
 export const FILE_SECRET_STORE_NAME = 'secrets.json';
-/** The one bound of the store document, in UTF-8 bytes of the file: the reader refuses a larger file and the writer never produces one. */
+/** The one bound of the store document, in UTF-8 bytes of its JSON text: the reader refuses a larger document and the writer never produces one. */
 export const FILE_SECRET_STORE_MAX_BYTES = 1_048_576;
 /** Store document v1: names in the `$DECK` grammar, bounded non-empty values; nothing else. */
 const documentSchema = z.object({ schemaVersion: z.literal(1),
@@ -21,7 +21,22 @@ export interface FileSecretStoreOptions {
   /** Bound on waiting for the store's write lock (the config writer lock, per path); contention is `CONFIG_WRITE_LOCKED`. */
   readonly lockTimeoutMs?: number;
 }
-const fail = (code: SecretStoreErrorCode, params: Record<string, string> = {}) => ErrorRegistry.createError(code, { params: { backend: FILE_SECRET_STORE_ID, ...params } });
+/** How a private-document backend turns its file text into the store document text and back (identity for the plaintext backend). */
+export interface SecretDocumentCodec {
+  /** Bound on the file's bytes, checked before it is read. */
+  readonly maxFileBytes: number;
+  /** File text → document text. Any refusal is typed by the caller as `SECRET_STORE_CORRUPT` unless it is already a `DeckentError`. */
+  decode(fileText: string): Promise<string>;
+  /** Document text → file text; called under the store's write lock after the document passed its bound. */
+  encode(documentText: string): Promise<string>;
+}
+export interface PrivateSecretDocumentSpec {
+  readonly id: string;
+  readonly fileName: string;
+  /** The codec for one opened store; `root` is the private store directory, `fail` types a refusal under this backend's id. */
+  readonly codec?: (root: string, fail: (code: SecretStoreErrorCode) => DeckentError) => SecretDocumentCodec;
+}
+const FILE_DOCUMENT: PrivateSecretDocumentSpec = Object.freeze({ id: FILE_SECRET_STORE_ID, fileName: FILE_SECRET_STORE_NAME });
 const missing = (error: unknown) => (error as NodeJS.ErrnoException | null)?.code === 'ENOENT';
 
 /**
@@ -32,10 +47,16 @@ const missing = (error: unknown) => (error as NodeJS.ErrnoException | null)?.cod
  * file atomically (0600 temporary file, fsync, rename, directory fsync) only when the whole new document fits `FILE_SECRET_STORE_MAX_BYTES`, the
  * bound the reader enforces (else `SECRET_STORE_FULL`, nothing written). Content never enters an error: a JSON parse message can quote the
  * text, so a corrupt store is `SECRET_STORE_CORRUPT` without a cause. POSIX only (Windows is later in the accepted OS order).
- * This is plaintext at rest protected by file ownership — a process of the same user can read it; the OS keyring backend is K2.
+ * This is plaintext at rest protected by file ownership — a process of the same user can read it; `core.secret-store.encrypted-file@1`
+ * keeps the same custody with an encrypted document, and the OS keyring backend is K2.
  */
-export function createFileSecretStore(options: FileSecretStoreOptions): SecretStore {
-  const root = options.root, path = root === null ? null : join(root, FILE_SECRET_STORE_NAME);
+export function createFileSecretStore(options: FileSecretStoreOptions, spec: PrivateSecretDocumentSpec = FILE_DOCUMENT): SecretStore {
+  // `spec` makes this the custody core shared by the private-document backends (one document file in the installation root, read and
+  // written as above); the encrypted backend passes its file name and codec.
+  const fail = (code: SecretStoreErrorCode, params: Record<string, string> = {}) => ErrorRegistry.createError(code, { params: { backend: spec.id, ...params } });
+  const root = options.root, path = root === null ? null : join(root, spec.fileName);
+  const codec = root === null || !spec.codec ? null : spec.codec(root, code => fail(code));
+  const maxFileBytes = codec?.maxFileBytes ?? FILE_SECRET_STORE_MAX_BYTES;
   const uid = (): number => {
     if (options.platform === 'win32' || root === null || typeof process.getuid !== 'function') throw fail('SECRET_STORE_UNAVAILABLE');
     return process.getuid();
@@ -69,9 +90,14 @@ export function createFileSecretStore(options: FileSecretStoreOptions): SecretSt
       const info = await handle.stat(), linked = await lstat(path!);
       if (!info.isFile() || info.uid !== owner || info.nlink !== 1 || (info.mode & 0o077) !== 0
         || linked.isSymbolicLink() || linked.ino !== info.ino || linked.dev !== info.dev) throw unsafe();
-      if (info.size > FILE_SECRET_STORE_MAX_BYTES) throw fail('SECRET_STORE_CORRUPT');
+      if (info.size > maxFileBytes) throw fail('SECRET_STORE_CORRUPT');
+      let text = await handle.readFile('utf8');
+      if (codec) {
+        try { text = await codec.decode(text); } catch (error) { if (error instanceof DeckentError) throw error; throw fail('SECRET_STORE_CORRUPT'); }
+        if (Buffer.byteLength(text, 'utf8') > FILE_SECRET_STORE_MAX_BYTES) throw fail('SECRET_STORE_CORRUPT');
+      }
       let parsed: unknown;
-      try { parsed = JSON.parse(await handle.readFile('utf8')); } catch { throw fail('SECRET_STORE_CORRUPT'); }
+      try { parsed = JSON.parse(text); } catch { throw fail('SECRET_STORE_CORRUPT'); }
       const document = documentSchema.safeParse(parsed);
       if (!document.success) throw fail('SECRET_STORE_CORRUPT');
       return Object.assign(empty, document.data.secrets);
@@ -91,13 +117,17 @@ export function createFileSecretStore(options: FileSecretStoreOptions): SecretSt
         // before anything is written. Over it the change is refused and the old file stays as it was; a delete only shrinks the document.
         const text = serializeJsonDocument({ schemaVersion: 1, secrets: sorted });
         if (Buffer.byteLength(text, 'utf8') > FILE_SECRET_STORE_MAX_BYTES) throw fail('SECRET_STORE_FULL', { maxBytes: String(FILE_SECRET_STORE_MAX_BYTES) });
-        try { await writeTextAtomic(path!, text); } catch { throw fail('SECRET_STORE_UNAVAILABLE'); }
+        let fileText = text;
+        if (codec) {
+          try { fileText = await codec.encode(text); } catch (error) { if (error instanceof DeckentError) throw error; throw fail('SECRET_STORE_UNAVAILABLE'); }
+        }
+        try { await writeTextAtomic(path!, fileText); } catch { throw fail('SECRET_STORE_UNAVAILABLE'); }
       }
       return outcome.result;
     }, options.lockTimeoutMs ?? 2_000);
   }
   return Object.freeze({
-    descriptor: Object.freeze({ id: FILE_SECRET_STORE_ID, writable: true, enumerable: true }),
+    descriptor: Object.freeze({ id: spec.id, writable: true, enumerable: true }),
     async get(name: string) {
       const owner = uid();
       // A name outside the grammar can never have been stored.
