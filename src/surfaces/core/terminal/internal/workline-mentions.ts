@@ -1,6 +1,4 @@
-import type { WorkLedgerEntry } from './work-ledger.js';
-import { notice } from './workline-actions.js';
-import { fillTemplate } from './worker-line.js';
+import { type WorkLedgerEntry, notice, fillTemplate } from '#surfaces/core/terminal-ledger/index.js';
 
 /** What the service did with one `@path` of a submitted line (T-L5 `@file`). */
 export type WorklineMentionNote =

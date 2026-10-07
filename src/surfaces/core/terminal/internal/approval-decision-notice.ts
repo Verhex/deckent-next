@@ -1,4 +1,4 @@
-import { WORK_LEDGER_SCHEMA_VERSION, type WorkLedgerNoticeEntry } from './work-ledger.js';
+import { WORK_LEDGER_SCHEMA_VERSION, type WorkLedgerNoticeEntry } from '#surfaces/core/terminal-ledger/index.js';
 /** Display strings only; approval identity/revision/capability and authority DTOs remain in their original closure. */
 export type ApprovalRowPresentation = Readonly<{ kind: 'approval-row'; rowNumber: number; summary: string; displayId: string; displayRun: string; displayTask: string; itemTemplate: string; durationText: string }>;
 export type ApprovalDecisionNoticePresentation = ApprovalRowPresentation | Readonly<{ kind: 'approval-not-found'; ref: string; notFoundTemplate: string }>;

@@ -1,8 +1,6 @@
 import { useCallback, useRef, useState } from 'react';
 import { PERMISSION_MODES, type PermissionMode, type PermissionModeChange, type PermissionModeView } from '#domain/index.js';
-import type { WorkLedgerEntry } from './work-ledger.js';
-import { notice } from './workline-actions.js';
-import { fillTemplate } from './worker-line.js';
+import { type WorkLedgerEntry, notice, fillTemplate } from '#surfaces/core/terminal-ledger/index.js';
 
 /**
  * The person's permission mode through the runtime service (T-L4 slice 4c, protocol v15; MODES-3 v17). The surface reads and writes no

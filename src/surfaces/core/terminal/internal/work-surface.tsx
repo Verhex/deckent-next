@@ -1,13 +1,10 @@
 import { standingAnswerNotice, clearStandingNotice } from '#surfaces/core/approval-presentation/index.js';
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import type { RunView } from '#engine/index.js';
-import type { WorkLedgerEntry, WorkLedgerWorkerEntry } from './work-ledger.js';
-import type { WorklineLedgerPorts } from './workline-ledger.js';
-import { notice, type WorklineActionLabels, type WorkSurfaceLabels } from './workline-actions.js';
-import { APPROVAL_SCAN_MAX_PAGES, EMPTY_APPROVAL_WATCH, approvalWatchStep, scanPendingApprovals, type WorklineApproval } from './approval-watch.js';
+import { type WorkLedgerEntry, type WorkLedgerWorkerEntry, type WorklineLedgerPorts, notice, APPROVAL_SCAN_MAX_PAGES, EMPTY_APPROVAL_WATCH, approvalWatchStep, scanPendingApprovals, type WorklineApproval, fillTemplate } from '#surfaces/core/terminal-ledger/index.js';
+import { type WorklineActionLabels, type WorkSurfaceLabels } from './workline-actions.js';
 import type { WorklinePanel, LocalExecution } from './workline-panel.js';
 import type { PanelSnapshot, TerminalLocalContext, StandingScope } from '#surfaces/core/terminal-kit/index.js';
-import { fillTemplate } from './worker-line.js';
 import { WorkerPanel } from './worker-panel.js';
 import type { ApprovalDecisionLabels } from '#surfaces/core/approval-presentation/index.js';
 import { ApprovalDecisionCard, ApprovalDecisionPicker, approvalRowPresentation, approvalCardPresentation, approvalDecisionCardLines, CancellationDecisionCard, cancellationCardPresentation } from './approval-decision-view.js';

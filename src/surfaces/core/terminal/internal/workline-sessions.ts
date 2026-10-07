@@ -4,8 +4,7 @@ import { resolveSessionReference, type SessionRefusal, type ConversationSessionP
 import { contextViewLines, fillTemplate, projectHumanPickerText, type Span, type ContextCompaction, type ContextViewLabels } from '#surfaces/core/terminal-render/index.js';
 import type { LocalExecution } from './workline-panel.js';
 import type { KnownSecretSnapshot } from '#platform/index.js';
-import { notice } from './workline-actions.js';
-import type { WorkLedgerEntry } from './work-ledger.js';
+import { notice, type WorkLedgerEntry } from '#surfaces/core/terminal-ledger/index.js';
 import { resumedHistoryEntries, type ResumedHistoryLabels } from './workline-history.js';
 
 export { bindSessionScope } from '#surfaces/core/terminal-kit/index.js';

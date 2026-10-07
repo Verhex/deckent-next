@@ -828,7 +828,7 @@
     },
     "src/surfaces/core/desktop": {
       "dependencies": [
-        "src/surfaces/core/terminal"
+        "src/surfaces/core/terminal-ledger"
       ],
       "plan": "SURFACES"
     },
@@ -864,8 +864,8 @@
         "src/engine/core/monitor",
         "src/engine/core/runs",
         "src/engine/core/worker-observation",
-        "src/surfaces/core/terminal",
-        "src/surfaces/core/approval-presentation"
+        "src/surfaces/core/approval-presentation",
+        "src/surfaces/core/terminal-ledger"
       ],
       "plan": "SURFACES"
     },
@@ -885,20 +885,30 @@
       ],
       "plan": "SURFACES"
     },
+    "src/surfaces/core/terminal-ledger": {
+      "dependencies": [
+        "src/surfaces/core/terminal-kit",
+        "src/surfaces/core/approval-presentation",
+        "src/domain/core/inference-serving",
+        "src/engine/core/inference-serving",
+        "src/surfaces/core/terminal-render",
+        "src/engine/core/runs",
+        "src/engine/core/worker-observation",
+        "src/engine/core/monitor"
+      ],
+      "plan": "SURFACES"
+    },
     "src/surfaces/core/terminal": {
       "dependencies": [
-        "src/engine/core/monitor",
         "src/surfaces/core/terminal-kit",
         "src/surfaces/core/terminal-render",
         "src/surfaces/core/terminal-composer",
         "src/domain/core/agent-turn",
-        "src/domain/core/inference-serving",
-        "src/engine/core/inference-serving",
         "src/engine/core/runs",
-        "src/engine/core/worker-observation",
         "src/domain/core/policy",
         "src/platform/core/redaction",
-        "src/surfaces/core/approval-presentation"
+        "src/surfaces/core/approval-presentation",
+        "src/surfaces/core/terminal-ledger"
       ],
       "plan": "SURFACES"
     },
@@ -999,7 +1009,8 @@
         "src/engine/core/config",
         "src/platform/core/utils",
         "src/surfaces/core/terminal-admin",
-        "src/surfaces/core/cli-identity"
+        "src/surfaces/core/cli-identity",
+        "src/surfaces/core/terminal-ledger"
       ],
       "plan": "SURFACES"
     },

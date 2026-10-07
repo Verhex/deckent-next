@@ -3,7 +3,7 @@ import { useLayoutEffect, useRef, useState } from 'react';
 import { createPanelController, type PanelExecution, type PanelApprovalView, type PanelSnapshot, type TerminalLocalContext,
   type ConversationSessionPort, type TurnDelta, type StandingScope } from '#surfaces/core/terminal-kit/index.js';
 import type { RunView } from '#engine/index.js';
-import type { WorklineApproval } from './approval-watch.js';
+import type { WorklineApproval } from '#surfaces/core/terminal-ledger/index.js';
 import type { ResumePickerItem } from './workline-sessions.js';
 import type { TurnApprovalRequest } from './work-surface.js';
 

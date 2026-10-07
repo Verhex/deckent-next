@@ -1,6 +1,5 @@
 import { useCallback, useRef, useState } from 'react';
-import type { WorkLedgerEntry } from './work-ledger.js';
-import { notice } from './workline-actions.js';
+import { type WorkLedgerEntry, notice } from '#surfaces/core/terminal-ledger/index.js';
 
 /** `/reasoning` notices (TL-A D6); optional until the catalog carries `terminal.reasoning.*` (`i18n-delta.json`). */
 export type WorklineReasoningLabels = Readonly<{ on: string; off: string; usage: string }>;

@@ -1,10 +1,6 @@
-import type { WorkLedgerEntry, WorkLedgerWorkerEntry } from './work-ledger.js';
-import { WORK_LEDGER_SCHEMA_VERSION } from './work-ledger.js';
-import { fillTemplate, type WorkerLineLabels } from './worker-line.js';
+import { type WorkLedgerEntry, type WorkLedgerWorkerEntry, notice, fillTemplate, type WorkerLineLabels, type WorklineLedgerPorts, ledgerEntriesForRuns, ledgerEntriesForWorkers, ledgerEntryForRun } from '#surfaces/core/terminal-ledger/index.js';
 import type { WorkerPanelLabels } from './worker-panel.js';
 import { slashHelpText, surfaceDeliveryValues, WORKLINE_SLASH_COMMANDS, type SurfaceDeliveryMode } from '#surfaces/core/terminal-kit/index.js';
-import type { WorklineLedgerPorts } from './workline-ledger.js';
-import { ledgerEntriesForRuns, ledgerEntriesForWorkers, ledgerEntryForRun } from './workline-ledger.js';
 
 export interface WorklineActionLabels {
   readonly ledgerUnavailable: string;
@@ -106,10 +102,6 @@ export interface WorklineActionContext {
 
 /** Result of one slash command; the view applies it. Entries carry no identity: the ledger buffer assigns sequence ids. */
 export type WorklineActionResult = Readonly<{ entries: readonly WorkLedgerEntry[]; watch?: WatchState; exit?: true }>;
-
-export function notice(level: 'info' | 'error', text: string): WorkLedgerEntry {
-  return Object.freeze({ schemaVersion: WORK_LEDGER_SCHEMA_VERSION, kind: 'notice' as const, id: 'notice', level, text });
-}
 
 /** Pure dispatch for immediate commands; `needsLedger` commands return null and run through `runLedgerCommand`. */
 export function immediateSlashAction(command: string, context: WorklineActionContext): WorklineActionResult | null {

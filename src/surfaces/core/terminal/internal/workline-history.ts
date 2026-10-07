@@ -1,9 +1,7 @@
 import type { AgentChatMessage } from '#surfaces/core/terminal-kit/index.js';
 import { fillTemplate, humanRecordText } from '#surfaces/core/terminal-render/index.js';
 import type { KnownSecretSnapshot } from '#platform/index.js';
-import { notice } from './workline-actions.js';
-import type { WorkLedgerEntry } from './work-ledger.js';
-import { WORK_LEDGER_SCHEMA_VERSION } from './work-ledger.js';
+import { notice, type WorkLedgerEntry, WORK_LEDGER_SCHEMA_VERSION } from '#surfaces/core/terminal-ledger/index.js';
 
 /** Templates: `{count}` earlier messages not shown / tool results folded. */
 export interface ResumedHistoryLabels {
