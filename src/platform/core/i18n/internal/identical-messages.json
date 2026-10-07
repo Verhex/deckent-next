@@ -96,6 +96,7 @@
   "terminal.scratch.path",
   "terminal.slash.modeArgument",
   "terminal.worker.ordinal",
+  "terminal.workline.roleAssistant",
   "tool.confirm_git_commit",
   "tui.bg_turn.completed",
   "tui.bg_turn.failed",

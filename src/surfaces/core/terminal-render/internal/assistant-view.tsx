@@ -149,7 +149,7 @@ export function AssistantUnitRow({ unit, labels }: { readonly unit: AssistantUni
   const projection = renderHumanMarkdown(unit.markdown, { width, glyphs, codeLabel: labels.code }, known);
   return (
     <Box flexDirection="column">
-      {unit.lead && <Text {...palette.assistant} {...palette.strong}>{glyphs.assistant} {labels.assistant}</Text>}
+      {unit.lead && <Text {...palette.assistantLabel}>{glyphs.assistant} {labels.assistant}</Text>}
       <Box flexDirection="column" paddingLeft={INDENT}><RenderedLines lines={projection.lines} /><HiddenTextNotice count={projection.hiddenCount} label={labels.hiddenCount} /></Box>
     </Box>
   );
@@ -195,7 +195,7 @@ export function AssistantLive({ tail, narration, labels, lead, activeTool = null
     <Box flexDirection="column">
       {waiting && <WaitingLine waiting={waiting} labels={labels} />}
       {narration && <ReasoningNarration narration={narration} labels={labels} preview={reasoningPreview} />}
-      {lead && lines.length > 0 && <Text {...palette.assistant} {...palette.strong}>{glyphs.assistant} {labels.assistant}</Text>}
+      {lead && lines.length > 0 && <Text {...palette.assistantLabel}>{glyphs.assistant} {labels.assistant}</Text>}
       {hidden > 0 && <Box paddingLeft={INDENT}><Text {...palette.muted}>{glyphs.ellipsis} {fillTemplate(labels.moreAbove, { count: hidden })}</Text></Box>}
       {lines.length > 0 && <Box paddingLeft={INDENT}><RenderedLines lines={lines.slice(hidden)} /></Box>}
       <Box paddingLeft={INDENT}><HiddenTextNotice count={projection.hiddenCount} label={labels.hiddenCount} /></Box>

@@ -95,7 +95,7 @@ describe('ledger buffer (Ink Static contract)', () => {
     // scrollback: the last frame (every printed row and the live region after the answer) no longer carries it.
     await settle(30);
     expect(view.stdout.text).toContain('SECRET-REASONING');
-    expect(view.stdout.text.slice(view.stdout.text.lastIndexOf('you: hello'))).not.toContain('SECRET-REASONING');
+    expect(view.stdout.text.slice(view.stdout.text.lastIndexOf('hello'))).not.toContain('SECRET-REASONING');
     expect(view.stdout.text).not.toContain('**line**');
     view.stdin.write('again\r');
     await until(() => seen.length === 2, 'second turn');
