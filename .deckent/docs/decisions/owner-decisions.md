@@ -279,6 +279,7 @@ Owner “Öneriler kabul edildi”: önce Noul kontrollerini tek önerme yapma v
     - **Ürün kategorisi** (owner 2026-10-07; Jev 0bd6639e 0,77 / yeterlilik 0,61 → owner; önceki çağrı 73e0dded'de üç seçenek de reddedildi): Deckent'in kategorisi **Agent Control & Execution Plane** olur.
       - Tek satır: "İnsan ve AI ajanlarının her eylemi sizin altyapınızda yetkilendirilir, yalıtılır, çalıştırılır ve kanıtlanır."
       - İmge: kule ile pist bir arada; izin veren de işi yürüten de aynı ürün.
+      - Alt tanıtım etiketleri (owner 2026-10-07): "policy-driven agent runtime", "governed execution", "self-hosted agent control plane". Kategori adının yerine değil, yanında kullanılır.
       - Gerekçe: pazar 2026'da "agent control plane" terimini tanıyor (CSA, Gartner pazarları), ama kontrol düzlemleri başka yerde çalışan ajanları yönetir; Deckent yürütmeyi ve yalıtımı da sahiplenir. Microsoft "Agent OS" adını bir policy motoru bileşenine verdi.
       - "Agent OS" önceki ad olarak anılır. Analiz: `proof/PRODUCT-DEFINITION-ISOLATION-2026-10-07/product-definition.md`.
     - **Firecracker** (owner 2026-10-07): yeni yalıtım katmanı olarak PLAN'a alındı (FIRECRACKER-REALM); gVisor şimdilik dışarıda. Yapı kararı ölçümden sonra (Jev 638c53b9: kendi TS API istemcisi + jailer + blok imaj + write set 0,95 / 0,60).

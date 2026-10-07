@@ -15,7 +15,8 @@ npm badges: enable only after first publish of deckent to npm; verify package id
 -->
 
 Deckent is a customer-installed **Agent Control & Execution Plane**: every action by people, AI agents and tools is
-authorized, isolated, executed and proven inside your own infrastructure, from solo use to enterprise. Core is open source under Apache-2.0 and stands alone;
+authorized, isolated, executed and proven inside your own infrastructure, from solo use to enterprise.
+Sub-labels: *policy-driven agent runtime* · *governed execution* · *self-hosted agent control plane*. Core is open source under Apache-2.0 and stands alone;
 proprietary Enterprise is separately distributed. Provider-neutral, local-first AI agent orchestration runtime.
 One core and one typed application contract,
 used today by the CLI, the interactive terminal (streamed agent turns with approvals, file edits and a shell that

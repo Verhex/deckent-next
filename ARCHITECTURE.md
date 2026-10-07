@@ -15,7 +15,7 @@ This file keeps the current contracts only. Detail moved verbatim (owner request
 
 ## Northstar — owner 2026-09-17
 
-Deckent, müşterinin kendi altyapısına kurulan bir Agent Control & Execution Plane'dir (owner 2026-10-07; önceki adı "Agent OS"): insan ve AI ajanlarının her eylemini yetkilendirir, yalıtır, çalıştırır ve kanıtlar; niyeti güvenli, paralel ve doğrulanmış işe dönüştürür.
+Deckent, müşterinin kendi altyapısına kurulan bir Agent Control & Execution Plane'dir (owner 2026-10-07; önceki adı "Agent OS"): insan ve AI ajanlarının her eylemini yetkilendirir, yalıtır, çalıştırır ve kanıtlar; niyeti güvenli, paralel ve doğrulanmış işe dönüştürür. Alt etiketler: policy-driven agent runtime, governed execution, self-hosted agent control plane.
 - **Ürün:** basit sohbetten solo/team/on-prem/air-gapped kullanıma; güvenli Core, ayrı proprietary Enterprise.
 - **İş:** Task iş, Run yürütme, Mission opsiyonel hedef koordinasyonu; tek uygulama ve durum otoritesi.
 - **AI:** provider-native message/tool/stream/usage/effort yetenekleri sürümlü adapter sözleşmeleriyle korunur;
