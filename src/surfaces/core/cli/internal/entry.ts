@@ -30,7 +30,7 @@ export const CLI_COMMANDS = registerCliCommands<CommandContext>({
   mcp: mcpCommand, secret: secretCommand, toolchains: toolchainsCommand, doctor: runKernelCommand,
   inventory: runInventoryCommand, paths: runKernelCommand, runtime: runtimeCommand, coding: codingCommand,
   inference: inferenceCommand, operation: operationCommand, decide: decisionCommand,
-  policy: (argv, context) => (argv[1] === 'grants' || argv[1] === 'revoke' ? policyGrantsCommand : runKernelCommand)(argv, context),
+  policy: (argv, context) => (argv[1] === 'grants' || argv[1] === 'revoke' || argv[1] === 'upgrade' ? policyGrantsCommand : runKernelCommand)(argv, context),
 });
 
 /** Pure CLI dispatcher: returns the text to print and the exit code; no process side effects (testable). */

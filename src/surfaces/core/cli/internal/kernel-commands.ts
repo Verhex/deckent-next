@@ -54,6 +54,7 @@ export interface CommandContext extends InstallationCommandContext, IdentityComm
   // Doctor-only, read-soft (SCR-B): null on a missing/unsafe/custom policy, never a hard failure of `doctor`.
   listStandingGrants?: import('./policy-grants.js').StandingGrantsHandler;
   revokeStandingGrant?: import('./policy-grants.js').StandingRevokeHandler;
+  upgradePolicyTemplate?: import('./policy-grants.js').PolicyUpgradeHandler;
   inspectPolicyTemplate?: (root: string, options: ConfigLoadOptions) => Promise<{ readonly id: string; readonly version: number } | null>;
   // Doctor-only, read-soft, network-free (SESSION-RESULT-LIMIT-2026-09-28): [] when unwired or nothing is unfit.
   assessModelInvocationDelivery?: (root: string, options: ConfigLoadOptions) => Promise<readonly ModelInvocationDeliveryFinding[]>;

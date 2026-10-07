@@ -1,6 +1,7 @@
 import { userInfo } from 'node:os';
 import { SystemTrustedClock, type ConfigLoadOptions } from '#platform/index.js';
-import { ApprovalApplication, AuditApplication, McpToolGrants, PersistentStanding, PolicyAdministrationApplication, type McpToolGrantOutcome, type McpToolGrantTarget,
+import { ApprovalApplication, AuditApplication, FIRST_RUN_MCP_CALL_OPERATION_ID, FIRST_RUN_PROPOSE_MCP_TOOL_NAME, McpToolGrants, PersistentStanding, PolicyAdministrationApplication,
+  PolicyTemplateUpgrade, type McpToolGrantOutcome, type McpToolGrantTarget, type TemplateUpgradeResult,
   type PersistentStandingDependencies, type StandingGrantView } from '#engine/index.js';
 import { LocalOsSessionAuthority, openLocalIntegrityAuthority, openSqliteApprovalStore, openSqliteAttemptStore, openSqliteAuditStore } from '#adapters/index.js';
 import { createLayoutPolicySource } from '#composition/core/policy/index.js';
@@ -67,4 +68,15 @@ export function configuredMcpToolGrants(root: string, scopeId: string, options: 
     inspect: server => withPolicyAdministration(root, scopeId, options, 'read', (deps, person) => person.issuer === approver.issuer && person.subject === approver.subject
       ? new McpToolGrants(deps).inspect({ scopeId, principal: person, server }) : Promise.resolve({ status: 'none' as const })),
   };
+}
+
+/**
+ * `deckent policy upgrade --template v5` (owner 2026-10-07): the first-run v5 rules for this local person through the governed chain. Preview reads
+ * only (no administration opened); apply and rollback run `policy.administer@1` as this person (its card decided by them, I2, audit, archive).
+ */
+export function configuredPolicyTemplateUpgrade(root: string, scopeId: string, options: ConfigLoadOptions, input: { readonly mode: 'preview' | 'apply' | 'rollback';
+  readonly expect?: string; readonly reason: string }): Promise<TemplateUpgradeResult> {
+  return withPolicyAdministration(root, scopeId, options, input.mode === 'preview' ? 'read' : 'write', (deps, person) =>
+    new PolicyTemplateUpgrade(deps, { proposeMcpToolName: FIRST_RUN_PROPOSE_MCP_TOOL_NAME, mcpCallOperationId: FIRST_RUN_MCP_CALL_OPERATION_ID })
+      .run({ scopeId, principal: person, mode: input.mode, reason: input.reason, ...(input.expect === undefined ? {} : { expect: input.expect }) }));
 }

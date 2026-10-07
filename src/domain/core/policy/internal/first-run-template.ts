@@ -1,5 +1,6 @@
 import { identitySchema } from '#domain/core/primitives/index.js';
-import { bindingsFileSchema, policyFileSchema, type PolicyFile } from './schema.js';
+import { bindingsFileSchema, policyFileSchema, policyGrantSchema, type PolicyFile, type PolicyGrant } from './schema.js';
+import { policyChangeSchema, type PolicyChange } from './administer.js';
 
 /**
  * SCR-B (owner 2026-09-28): the versioned default policy a fresh, terminal-only installation gets when it opts
@@ -124,4 +125,38 @@ export function matchFirstRunPolicyTemplate(policyRevision: string): { readonly 
   const version = Number(match[1]);
   // Every published version is recognized (a v1 installation keeps its name; it lacks the v2 secret grant).
   return version >= 1 && version <= FIRST_RUN_POLICY_TEMPLATE_VERSION ? Object.freeze({ id: FIRST_RUN_POLICY_TEMPLATE_ID, version }) : null;
+}
+
+/** The v5 rule ids a governed upgrade adds (never replaces: the proposal tool gets its own rule so a hand-edited read rule stays as it is). */
+export const FIRST_RUN_UPGRADE_RULE_IDS = Object.freeze({ servers: 'first-run-mcp-servers', operation: 'first-run-mcp-call-operation', propose: 'first-run-mcp-propose-tool' });
+export type FirstRunTemplateAdditions = { readonly status: 'plan'; readonly change: PolicyChange; readonly rules: readonly PolicyGrant[] }
+  | { readonly status: 'current' } | { readonly status: 'unavailable'; readonly reason: 'not-first-run' | 'invalid' };
+/**
+ * The governed v4 → v5 upgrade plan (owner 2026-10-07, `deckent policy upgrade --template v5`): over any v2 policy that carries the first-run
+ * template's `first-run-read-tools` rule (its scopes are the installation's), the `grant.add` changes for whatever v5 rule is missing — the
+ * person's `mcp-server` authority over every server in every scope, the `mcp.tool.call` operation in the template's scopes, and
+ * `propose_mcp_server` as an allowed read tool (unless some rule of this person already allows it). Nothing is removed or replaced, so hand-added
+ * rules stay; an empty plan is `current` (a second run changes nothing). Pure; the caller submits it through `policy.administer@1` (I2, audit).
+ */
+export function firstRunTemplateAdditions(current: unknown, input: { readonly person: { readonly issuer: string; readonly subject: string };
+  readonly proposeMcpToolName: string; readonly mcpCallOperationId: string }): FirstRunTemplateAdditions {
+  const parsed = policyFileSchema.safeParse(current);
+  if (!parsed.success || parsed.data.schemaVersion !== 2) return Object.freeze({ status: 'unavailable', reason: 'invalid' });
+  const grants = parsed.data.grants, read = grants.find(grant => grant.id === 'first-run-read-tools');
+  if (!read || read.scopes === 'all') return Object.freeze({ status: 'unavailable', reason: 'not-first-run' });
+  const person = { issuer: identitySchema.parse(input.person.issuer), subject: identitySchema.parse(input.person.subject) };
+  const mine = (grant: PolicyGrant) => grant.principals === 'all' || grant.principals.some(item => item.issuer === person.issuer && item.subject === person.subject);
+  const has = (id: string) => grants.some(grant => grant.id === id);
+  const proposes = grants.some(grant => grant.effect === 'allow' && mine(grant) && grant.resource.kind === 'agent-tool'
+    && (grant.resource.ids === 'all' || grant.resource.ids.includes(input.proposeMcpToolName)));
+  const rule = (id: string, kind: string, action: string, ids: readonly string[] | 'all', scopes: readonly string[] | 'all'): PolicyGrant => policyGrantSchema.parse({
+    id, effect: 'allow', actions: [action], scopes: scopes === 'all' ? 'all' : [...scopes], principals: [person], resource: { kind, ids: ids === 'all' ? 'all' : [...ids] } });
+  const rules = [
+    ...(has(FIRST_RUN_UPGRADE_RULE_IDS.servers) ? [] : [rule(FIRST_RUN_UPGRADE_RULE_IDS.servers, 'mcp-server', 'invoke', 'all', 'all')]),
+    ...(has(FIRST_RUN_UPGRADE_RULE_IDS.operation) ? [] : [rule(FIRST_RUN_UPGRADE_RULE_IDS.operation, 'operation', 'execute', [input.mcpCallOperationId], read.scopes)]),
+    ...(proposes || has(FIRST_RUN_UPGRADE_RULE_IDS.propose) ? [] : [rule(FIRST_RUN_UPGRADE_RULE_IDS.propose, 'agent-tool', 'invoke', [input.proposeMcpToolName], read.scopes)]),
+  ];
+  if (!rules.length) return Object.freeze({ status: 'current' });
+  return Object.freeze({ status: 'plan', rules: Object.freeze(rules),
+    change: policyChangeSchema.parse({ schemaVersion: 1, changes: rules.map(grant => ({ kind: 'grant.add', grant })) }) });
 }

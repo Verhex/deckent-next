@@ -108,6 +108,7 @@ export const CLI_CATALOG = [
     action('vocabulary', 'approvals', 'cli.help.action.vocabulary', 'cli.help.policy', 'independent'),
     action('grants', 'approvals', 'cli.help.action.grants', 'cli.help.policy'),
     action('revoke', 'approvals', 'cli.help.action.revoke', 'cli.help.policy'),
+    action('upgrade', 'approvals', 'cli.help.action.policyUpgrade', 'cli.help.policy'),
   ] },
   { name: 'config', group: 'setup', summary: 'cli.help.summary.config', detail: 'config.surface.help', installation: 'owned', children: [
     action('get', 'setup', 'cli.help.action.config.get', 'config.surface.help'),

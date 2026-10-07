@@ -116,8 +116,8 @@ describe.skipIf(process.platform !== 'linux')('MCP trust writes the approver\'s 
 describe('the grant-refused notice (en, tr)', () => {
   it('names the server, the reason in words and the consequence', () => {
     expect(renderMcpStartNotice({ kind: 'grant-refused', name: 'fx', reason: 'delegation' }, 'en')).toBe('MCP server fx is trusted, but its tools were not allowed: you may not grant '
-      + 'this server in this scope (your own policy does not hold mcp-server authority); a policy administrator can, and a first-run installation takes it with '
-      + 'deckent init policy --scope <id> --upgrade --preview. Calls to them are denied by policy.');
+      + 'this server in this scope (your own policy does not hold mcp-server authority); a policy administrator can, and '
+      + 'deckent policy upgrade --template v5 --preview shows what a first-run installation still lacks. Calls to them are denied by policy.');
     expect(renderMcpStartNotice({ kind: 'grant-refused', name: 'fx', reason: 'unsupported' }, 'tr')).toBe('MCP sunucusu fx güvenilir, ama araçlarına izin verilmedi: kurulum policy '
       + 'dosyası bu izni taşıyamıyor (policy v1 ya da okunamıyor). Bu araçlara yapılan çağrılar policy tarafından reddedilir.');
     expect(renderMcpStartNotice({ kind: 'grant-refused', name: 'fx', reason: 'POLICY_CHANGE_TOO_LARGE' }, 'en')).toContain('not allowed: POLICY_CHANGE_TOO_LARGE.');

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { bindingsFileSchema, delegationWithin, evaluatePolicy, firstRunPolicyTemplate, FIRST_RUN_POLICY_TEMPLATE_ID, FIRST_RUN_POLICY_TEMPLATE_VERSION,
-  matchFirstRunPolicyTemplate, mcpToolGrantChange, modeEligibleApproval, planPolicyChange, policyFileSchema, resolvePolicyBindings, upgradeFirstRunPolicy } from '#domain/index.js';
+  matchFirstRunPolicyTemplate, firstRunTemplateAdditions, mcpToolGrantChange, modeEligibleApproval, planPolicyChange, policyFileSchema, resolvePolicyBindings, upgradeFirstRunPolicy } from '#domain/index.js';
 import { decideAgentToolCall, type AgentToolCallCell } from '#engine/index.js';
 
 // SCR-B (owner 2026-09-28, checkpoint option B, proof/SCR-B-2026-09-28/review.md): the versioned default policy
@@ -165,5 +165,31 @@ describe('first-run v4 → v5 migration (pure)', () => {
       resource: { kind: 'agent-tool', ids: ['fetch_url'] } }] }, input)).toEqual({ status: 'unavailable', reason: 'not-v4-template' });
     expect(upgradeFirstRunPolicy(v4(), { ...input, scopeId: 'other' })).toEqual({ status: 'unavailable', reason: 'not-v4-template' });
     expect(upgradeFirstRunPolicy({ nope: true }, input)).toEqual({ status: 'unavailable', reason: 'invalid' });
+  });
+});
+
+describe('first-run v4 → v5 governed additions (deckent policy upgrade --template v5, pure plan)', () => {
+  const v4 = () => { const current = firstRunPolicyTemplate(input).policy as unknown as { grants: { id: string; resource: { ids: unknown } }[] };
+    return { ...current, revision: 'first-run-template-v4', grants: current.grants.filter(grant => grant.id !== 'first-run-mcp-servers' && grant.id !== 'first-run-mcp-call-operation')
+      .map(grant => grant.id === 'first-run-read-tools' ? { ...grant, resource: { ...grant.resource, ids: READ_TOOLS } } : grant) }; };
+  const names = { person: me, proposeMcpToolName: 'propose_mcp_server', mcpCallOperationId: 'mcp.tool.call' };
+  it('adds exactly the three missing rules and never replaces or removes one: hand-added rules and an edited read rule stay', () => {
+    const extra = { id: 'hand-added', effect: 'allow', actions: ['invoke'], scopes: ['installation'], principals: [me], resource: { kind: 'agent-tool', ids: ['fetch_url'] } };
+    const edited = v4(); edited.grants = [...edited.grants.map(grant => grant.id === 'first-run-read-tools' ? { ...grant, resource: { ...grant.resource, ids: ['read_file'] } } : grant), extra as never];
+    const plan = firstRunTemplateAdditions(edited, names);
+    expect(plan.status).toBe('plan');
+    if (plan.status !== 'plan') return;
+    expect(plan.change.changes.map(change => change.kind)).toEqual(['grant.add', 'grant.add', 'grant.add']);
+    expect(plan.rules.map(rule => [rule.id, rule.resource.kind, rule.resource.ids, rule.scopes])).toEqual([
+      ['first-run-mcp-servers', 'mcp-server', 'all', 'all'], ['first-run-mcp-call-operation', 'operation', ['mcp.tool.call'], ['installation']],
+      ['first-run-mcp-propose-tool', 'agent-tool', ['propose_mcp_server'], ['installation']]]);
+    // Applied (the plan's documents), a second run has nothing to add.
+    const applied = { ...edited, grants: [...edited.grants, ...plan.rules] };
+    expect(firstRunTemplateAdditions(applied, names)).toEqual({ status: 'current' });
+  });
+  it('a fresh v5 template is current (the proposal tool inside its read rule); a policy without the first-run read rule is not this template', () => {
+    expect(firstRunTemplateAdditions(firstRunPolicyTemplate(input).policy, names)).toEqual({ status: 'current' });
+    expect(firstRunTemplateAdditions({ ...v4(), grants: v4().grants.filter(grant => grant.id !== 'first-run-read-tools') }, names)).toEqual({ status: 'unavailable', reason: 'not-first-run' });
+    expect(firstRunTemplateAdditions({ nope: 1 }, names)).toEqual({ status: 'unavailable', reason: 'invalid' });
   });
 });
