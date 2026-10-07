@@ -195,6 +195,6 @@ describe.skipIf(process.platform !== 'linux')('/scratch in a real pseudo-termina
     expect(run.output.split(area).length - 1).toBeGreaterThanOrEqual(3);
     expect(await readdir(area)).toEqual([]);
     // The only card was the shell command's; a card for the scratch write would show its diff.
-    expect(run.output).toContain('Approval requested'); expect(run.output).not.toContain('+++ b/plan.md');
+    expect(run.output).toContain('Approval needed · shell command'); expect(run.output).not.toContain('+++ b/plan.md');
   }, 180_000);
 });
