@@ -21,10 +21,10 @@ export { newRunLedgerEntries, runWatchFingerprint } from '#surfaces/core/termina
 export { loadRunViewsForWatch } from '#surfaces/core/terminal-ledger/index.js';
 export type { WorkLedgerEntry, WorkLedgerRunEntry, WorkLedgerWorkerEntry, WorkerAttemptIdentity, WorkerLiveActivity, WorkerLivePhase } from '#surfaces/core/terminal-ledger/index.js';
 export { compactCount, fillTemplate, formatDuration, formatWorkerLine, type WorkerLine, type WorkerLineLabels } from '#surfaces/core/terminal-ledger/index.js';
-export { WORKER_PANEL_ROWS, type WorkerPanelLabels } from './internal/worker-panel.js';
+export { WORKER_PANEL_ROWS, type WorkerPanelLabels } from '#surfaces/core/terminal-work/index.js';
 export { APPROVAL_SCAN_MAX_PAGES, approvalWatchStep, EMPTY_APPROVAL_WATCH, scanPendingApprovals, type WorklineApproval, type WorklineApprovalPage } from '#surfaces/core/terminal-ledger/index.js';
 export { decisionKey, scopedDecisionKey, type StandingScope } from '#surfaces/core/terminal-kit/index.js';
-export { resolveWorkerRef, type WorkSurfaceLabels } from './internal/workline-actions.js';
+export { resolveWorkerRef, type WorkSurfaceLabels } from '#surfaces/core/terminal-work/index.js';
 export { WORK_LEDGER_SCHEMA_VERSION, ledgerEntrySummary, runViewToLedgerEntry, workerReportToLedgerEntries } from '#surfaces/core/terminal-ledger/index.js';
 export type { WorklineLedgerPorts, WorklineSurfaceSnapshot } from '#surfaces/core/terminal-ledger/index.js';
 export { collectTurnText, streamLineTurn, type LineTurnIo, type LineTurnOutcome, type ToolResultSummary, type TurnDelta, type WorklineStreamTurn } from '#surfaces/core/terminal-kit/index.js';

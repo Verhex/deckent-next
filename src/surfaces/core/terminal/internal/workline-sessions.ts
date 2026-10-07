@@ -1,8 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { useCallback, useRef } from 'react';
 import { resolveSessionReference, type SessionRefusal, type ConversationSessionPort, type ConversationSessionSummary, type AgentChatMessage, type TurnDelta } from '#surfaces/core/terminal-kit/index.js';
-import { contextViewLines, fillTemplate, projectHumanPickerText, type Span, type ContextCompaction, type ContextViewLabels } from '#surfaces/core/terminal-render/index.js';
-import type { LocalExecution } from './workline-panel.js';
+import { contextViewLines, fillTemplate, projectHumanPickerText, type ContextCompaction, type ContextViewLabels } from '#surfaces/core/terminal-render/index.js';
+import type { LocalExecution, ResumePickerItem } from '#surfaces/core/terminal-work/index.js';
 import type { KnownSecretSnapshot } from '#platform/index.js';
 import { notice, type WorkLedgerEntry } from '#surfaces/core/terminal-ledger/index.js';
 import { resumedHistoryEntries, type ResumedHistoryLabels } from './workline-history.js';
@@ -26,7 +26,6 @@ export interface ConversationSessionLabels {
   readonly history?: ResumedHistoryLabels; readonly view?: ContextViewLabels;
 }
 /** One row of the arg-less `/resume` picker. Enter loads `sessionId` through the same path as `/resume <id>`. */
-export interface ResumePickerItem { readonly sessionId: string; readonly label: string; readonly spans?: readonly Span[]; readonly hiddenNotice?: string }
 export type SessionCommandResult = Readonly<{ entries: readonly WorkLedgerEntry[]; resumePicker?: readonly ResumePickerItem[]; refusal?: SessionRefusal }>;
 type ContextView = Omit<Extract<TurnDelta, { kind: 'context' }>, 'kind'>;
 const LISTED = 10;

@@ -898,17 +898,28 @@
       ],
       "plan": "SURFACES"
     },
+    "src/surfaces/core/terminal-work": {
+      "dependencies": [
+        "src/surfaces/core/terminal-ledger",
+        "src/surfaces/core/terminal-render",
+        "src/surfaces/core/approval-presentation",
+        "src/platform/core/redaction",
+        "src/engine/core/runs",
+        "src/surfaces/core/terminal-kit"
+      ],
+      "plan": "SURFACES"
+    },
     "src/surfaces/core/terminal": {
       "dependencies": [
         "src/surfaces/core/terminal-kit",
         "src/surfaces/core/terminal-render",
         "src/surfaces/core/terminal-composer",
         "src/domain/core/agent-turn",
-        "src/engine/core/runs",
         "src/domain/core/policy",
         "src/platform/core/redaction",
         "src/surfaces/core/approval-presentation",
-        "src/surfaces/core/terminal-ledger"
+        "src/surfaces/core/terminal-ledger",
+        "src/surfaces/core/terminal-work"
       ],
       "plan": "SURFACES"
     },
@@ -1010,7 +1021,8 @@
         "src/platform/core/utils",
         "src/surfaces/core/terminal-admin",
         "src/surfaces/core/cli-identity",
-        "src/surfaces/core/terminal-ledger"
+        "src/surfaces/core/terminal-ledger",
+        "src/surfaces/core/terminal-work"
       ],
       "plan": "SURFACES"
     },

@@ -197,6 +197,7 @@
       "reviewedVersion": "7.1.1",
       "owners": [
         "src/surfaces/core/terminal",
+        "src/surfaces/core/terminal-work",
         "src/surfaces/core/terminal-composer",
         "src/surfaces/core/terminal-render",
         "src/surfaces/core/monitor",
@@ -240,6 +241,7 @@
       "reviewedVersion": "19.2.8",
       "owners": [
         "src/surfaces/core/terminal",
+        "src/surfaces/core/terminal-work",
         "src/surfaces/core/terminal-composer",
         "src/surfaces/core/terminal-kit",
         "src/surfaces/core/terminal-render",

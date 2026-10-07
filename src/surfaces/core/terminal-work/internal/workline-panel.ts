@@ -4,10 +4,11 @@ import { createPanelController, type PanelExecution, type PanelApprovalView, typ
   type ConversationSessionPort, type TurnDelta, type StandingScope } from '#surfaces/core/terminal-kit/index.js';
 import type { RunView } from '#engine/index.js';
 import type { WorklineApproval } from '#surfaces/core/terminal-ledger/index.js';
-import type { ResumePickerItem } from './workline-sessions.js';
+import type { Span } from '#surfaces/core/terminal-render/index.js';
 import type { TurnApprovalRequest } from './work-surface.js';
 
 export type LocalExecution = PanelExecution<TerminalLocalContext>;
+export interface ResumePickerItem { readonly sessionId: string; readonly label: string; readonly spans?: readonly Span[]; readonly hiddenNotice?: string }
 type Approval = Readonly<{ kind: 'approval'; approval: WorklineApproval; remaining: number; preview?: string; standing?: TurnApprovalRequest['standing'] }>;
 export type PanelPresentation = Approval | Readonly<{ kind: 'cancel'; run: RunView }>
   | Readonly<{ kind: 'approvals'; rows: readonly WorklineApproval[] }> | Readonly<{ kind: 'resume'; rows: readonly ResumePickerItem[] }>;
