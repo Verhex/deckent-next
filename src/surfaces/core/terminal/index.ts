@@ -44,3 +44,4 @@ export { COMPOSER_LIMITS, EMPTY_COMPOSER, composerMenu, exitArmed, reduceCompose
 export { composerKey } from '#surfaces/core/terminal-composer/index.js';
 export { PASTE_COLLAPSE, expandChips, mentionAt, pendingArgument, slashMatches, type ComposerMentionPort, type PasteChip, type PastePolicy } from '#surfaces/core/terminal-composer/index.js';
 export { caretRow, displayWidth, graphemes, layoutRows } from '#surfaces/core/terminal-composer/index.js';
+export { CLEAR_VISIBLE_SCREEN, clearVisibleScreen, STARTUP_BANNER_MIN_COLUMNS, StartupBanner, startupFrame, writeStartup, type WorklineStartup } from './internal/startup-banner.js';

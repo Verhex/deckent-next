@@ -15,6 +15,7 @@ import { messageWithMentions, type WorklineAttachMentions, type WorklineMentionL
 import { useWorklineMode, type WorklineModeLabels, type WorklinePermissionModePort } from './workline-mode.js';
 import { useReasoningPreview, type WorklineReasoningLabels } from './workline-reasoning.js';
 import { useWorklineScratch, type WorklineScratchLabels, type WorklineScratchPort } from './workline-scratch.js';
+import { writeStartup, type WorklineStartup } from './startup-banner.js';
 
 export interface WorklineLabels extends WorklineActionLabels {
   readonly banner: string;
@@ -338,11 +339,14 @@ export interface WorklineRunOptions extends Omit<WorklineProps, 'labels'> {
   readonly signal?: AbortSignal;
   /** ASCII decoration for terminals that cannot be assumed to draw Unicode. */
   readonly ascii?: boolean;
+  /** T2 T-STARTUP: clear the visible screen and print the banner before the live view (TTY only; scrollback is never erased). */
+  readonly startup?: WorklineStartup;
 }
 
 /** Ctrl+C is handled by the composer (cancel a running turn, clear a draft, or exit on a second press); the outer signal unmounts the view. */
 export async function runTerminalWorkline(options: WorklineRunOptions): Promise<void> {
-  const { palette, stdin, stdout, signal, ascii, ...props } = options;
+  const { palette, stdin, stdout, signal, ascii, startup, ...props } = options;
+  if (startup) writeStartup(stdout ?? process.stdout, startup, palette);
   const view = createElement(RenderGlyphsContext.Provider, { value: resolveRenderGlyphs(ascii === true) }, createElement(WorklineApp, props));
   // Ink 7 treats CI env as non-interactive even on a TTY (ink.js resolveInteractiveOption); the workline runs on a TTY, so force it there.
   const instance: Instance = render(createElement(WorklinePaletteProvider, { palette, children: view }),

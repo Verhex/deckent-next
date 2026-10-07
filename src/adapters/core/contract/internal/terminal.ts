@@ -3,6 +3,10 @@ import { z } from 'zod';
 import { modelReferenceSchema } from '#domain/index.js';
 import { CONFIG_CONTRACT_SINCE, registerConfigSection } from '#platform/index.js';
 
+/** T2 presentation vocabularies (first entry = default); the workline's own copy (`TERMINAL_THEME_SETTINGS`) is tested equal. */
+export const TERMINAL_THEMES = ['auto', 'dark', 'light', 'dark-daltonized', 'light-daltonized', 'ansi'] as const;
+export const TERMINAL_BANNERS = ['full', 'compact', 'off'] as const;
+
 /**
  * Operator terminal chat is a governed model invocation: the section names a declared catalog model;
  * catalog revision and binding are read fresh per turn and enforced by the model invocation service.
@@ -16,6 +20,13 @@ export const terminalConfigSchema = z.object({
   autostartService: z.boolean().default(true),
   /** Deadline for an automatically started runtime service to answer on its endpoint. */
   serviceStartTimeoutMs: z.number().int().min(1_000).max(120_000).default(20_000),
+  /** T2 (T-READABLE): the workline's colour theme. `auto` follows a background the terminal reports (COLORFGBG) and otherwise keeps the
+   * terminal's own 16 colours; `ansi` always does; the daltonized themes keep success and failure on the blue/orange axis. */
+  theme: z.enum(TERMINAL_THEMES).default(TERMINAL_THEMES[0]),
+  /** T2 (T-STARTUP): the opening banner — the Deckent mark with version, project, model, mode and a hint (`full`), one line (`compact`), or none. */
+  banner: z.enum(TERMINAL_BANNERS).default(TERMINAL_BANNERS[0]),
+  /** T2 (T-STARTUP): clear the visible screen (never the scrollback) when the interactive workline opens on a terminal. */
+  clearOnStart: z.boolean().default(true),
   chat: z.object({
     schemaVersion: z.literal(1),
     reference: modelReferenceSchema,
