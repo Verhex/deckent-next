@@ -130,8 +130,8 @@ Market notes live outside the repo (`/home/alperen/deckent-refactor-work/proof/T
   close); `/service-restart` confirms through it. The approval window (`terminal-work/approval-window.ts`) shows nine labelled
   fields from what the producer already sends (tool/target from the call's own `tool.started`, client-side; the sealed binding line
   as fallback) and catalog dictionaries keyed by the policy cell; raw ids, digests and cells only in its details; Tab adds a reason
-  that reaches the decision command's `reason` with `approverNote: true` (APPROVER-NOTE, owner 2026-10-07, v21): the sealed decision keeps
-  it whole (audit), and the turn gives it to the model on allow (after the call's result) and on deny (after `denied-by-owner`), labelled
+  that reaches the decision command's `reason` with `approverNote: true` (APPROVER-NOTE, owner 2026-10-07, v21): the sealed decision — v3 only
+  for such a note, every other decision stays v2 — keeps it whole (audit), and the turn gives it to the model on allow (after the call's result) and on deny (after `denied-by-owner`), labelled
   as the approver's own words, JSON-quoted, at most `approvals.approverNoteMaxChars` code points (default 500; a cut says so) and through
   the model-ingress projection (hidden code points marked and recorded, a hidden payload withheld). No typed reason: the default sentence,
   unmarked, and the model's text is byte-identical to before. MCP tool calls share the turn's approval port; the MCP trust card has no

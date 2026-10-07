@@ -87,13 +87,15 @@ export async function awaitAgentToolApproval(store: ApprovalStore, integrity: In
 }
 
 /**
- * APPROVER-NOTE (owner 2026-10-07): the decider's own words on a decided tool-call approval — its sealed reason when the decision marks it as
- * theirs (`approverNote`), else null (a surface's default sentence, an expired or undecided record, a record that does not verify).
+ * APPROVER-NOTE (owner 2026-10-07): the decider's own words on a decided tool-call approval — its sealed reason when the decision is a noted
+ * v3 decision (`approverNote`), else null (a surface's default sentence, an expired or undecided record, a record that does not verify).
  */
 export function agentToolApprovalNote(store: ApprovalStore, integrity: IntegrityAuthority, record: ApprovalRecord): string | null {
-  const loaded = store.load(record.request.scopeId, record.request.approvalId);
-  const current = loaded ? verifyApproval(loaded, integrity) : null;
-  return current?.status === 'decided' && current.decision?.approverNote === true ? current.decision.reason : null;
+  let current: ApprovalRecord | null;
+  try { const loaded = store.load(record.request.scopeId, record.request.approvalId); current = loaded ? verifyApproval(loaded, integrity) : null; }
+  catch { return null; }
+  // Decision v3 is exactly a noted decision (APPROVER-NOTE); v1/v2 carry a surface's default sentence or an unmarked reason.
+  return current?.status === 'decided' && current.decision && 'approverNote' in current.decision ? current.decision.reason : null;
 }
 
 /**

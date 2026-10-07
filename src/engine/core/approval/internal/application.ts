@@ -160,11 +160,13 @@ export class ApprovalApplication {
     const attested = registry.derive({ scopeId: command.scopeId, approvalId: command.approvalId, decider: verified.session.principalRef, peerPid: this.assurance.peerPid ?? null,
       capability: command.decisionCapability ?? null, nowMs: now });
     if (command.decision === 'allow' && attested.rank < registry.rank(requiredApprovalAssurance(policy, record.request, registry))) throw new ApprovalError('APPROVAL_ASSURANCE_INSUFFICIENT');
-    const decision = { schemaVersion: 2 as const, commandId: command.commandId, decision: command.decision, actor, sessionId: verified.session.sessionId,
+    const decided = { commandId: command.commandId, decision: command.decision, actor, sessionId: verified.session.sessionId,
       // Another process may have created the request at a later wall time than this host's (stepped-back) clock reports;
       // the decision certainly happened after creation, so it is never recorded earlier than it.
       channel: command.channel ?? this.channel, reason: command.reason, decidedAt: Math.max(now, record.request.createdAt), requestDigest: approvalRequestDigest(record.request),
-      commandDigest: fingerprint, idempotencyKeyHash: sha256(command.commandId), assurance: attested.level, ...(command.approverNote ? { approverNote: true as const } : {}) };
+      commandDigest: fingerprint, idempotencyKeyHash: sha256(command.commandId), assurance: attested.level };
+    // APPROVER-NOTE: only a decision with the decider's own words is v3; every other decision stays v2 (earlier builds keep reading it).
+    const decision = command.approverNote ? { schemaVersion: 3 as const, ...decided, approverNote: true as const } : { schemaVersion: 2 as const, ...decided };
     const next = sealApproval({ request: record.request, revision: 1, status: 'decided', decision }, this.integrity);
     this.beforeCommit(next);
     if ('standing' in command) {

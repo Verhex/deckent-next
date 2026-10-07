@@ -31,9 +31,10 @@ it('gives the model the approver\'s own note through the real service, sealed in
   expect(await run('turn-default', decide('deny', 'Denied in the terminal', false))).toBe('[deckent] read_file: error=denied-by-owner');
   // The note stays in the sealed decision record (audit), marked as the decider's own words.
   const decisions = (f.rows("SELECT snapshot FROM approvals WHERE subject_kind='agent-tool-call' ORDER BY rowid") as { snapshot: string }[])
-    .map(row => (JSON.parse(row.snapshot) as { decision: { reason: string; approverNote?: true } }).decision);
-  expect(decisions.map(decision => [decision.reason, decision.approverNote ?? false])).toEqual([['read b.ts instead', true], ['only this once', true],
-    ['Denied in the terminal', false]]);
+    .map(row => (JSON.parse(row.snapshot) as { decision: { schemaVersion: number; reason: string; approverNote?: true } }).decision);
+  // Decision v3 only with the decider's own words; the default-reason decision stays v2 (readable by earlier builds).
+  expect(decisions.map(decision => [decision.schemaVersion, decision.reason, decision.approverNote ?? false])).toEqual([[3, 'read b.ts instead', true],
+    [3, 'only this once', true], [2, 'Denied in the terminal', false]]);
 }, 60_000);
 });
 
