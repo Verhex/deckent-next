@@ -119,6 +119,8 @@ export async function configSlash(root: string, args: string, context: ConfigCom
   const words = args.trim().split(/\s+/).filter(Boolean), [verb, keyPath] = words;
   if (!context.configApplication) return [t('config.surface.slashUsage', {}, locale)];
   if (verb === 'set' || verb === 'unset') {
+    // A surface composed without the principal'd write route (an embedding, a test harness) stays read only, and says so.
+    if (!context.resolveConfigPrincipal) return [t('config.surface.slashReadOnly', {}, locale)];
     if (!keyPath || (verb === 'set' ? words.length < 3 : words.length !== 2)) return [t('config.surface.slashUsage', {}, locale)];
     let value: unknown;
     if (verb === 'set') { try { value = JSON.parse(args.trim().slice(verb.length).trimStart().slice(keyPath.length).trim()); } catch { return [t('config.surface.slashUsage', {}, locale)]; } }

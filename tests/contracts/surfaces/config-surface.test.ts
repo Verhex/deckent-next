@@ -9,9 +9,11 @@ const field = { key: 'max_workers', value: 2, defaultValue: 'auto', descriptionK
 const snapshot = { schemaVersion: 1 as const, digest: 'digest', layer: 'project' as const, fields: [field] };
 function fixture() {
   const output: string[] = [], inspect = vi.fn(async () => snapshot), explain = vi.fn(async () => field), validate = vi.fn(async () => ({ valid: true as const }));
-  const set = vi.fn(async () => ({ keyPath: 'max_workers', layer: 'project', beforeDigest: 'old', afterDigest: 'new', backupPath: 'backup', overridden: true }));
+  const set = vi.fn<(input: Record<string, unknown>) => Promise<Record<string, unknown>>>(async () => ({ keyPath: 'max_workers', layer: 'project', beforeDigest: 'old', afterDigest: 'new', backupPath: 'backup', overridden: true }));
+  // T3 L2: the CLI writes through the approval-aware submit; an allowed write is the same set (this stub records what reached it).
+  const submit = vi.fn(async (_action: string, input: Record<string, unknown>) => ({ status: 'applied' as const, result: await set(input), approvalId: null }));
   return { output, inspect, explain, set, ctx: { root: '/tmp/config-surface', env: {}, stdout: { write: (s: string) => { output.push(s); } },
-    resolveConfigPrincipal: async () => ({ id: 'p', issuer: 'local', subject: 'p', assurance: 'os-user', scopeIds: ['scope-a'] }), configApplication: () => ({ inspect, explain, validate, set, unset: set }) } };
+    resolveConfigPrincipal: async () => ({ id: 'p', issuer: 'local', subject: 'p', assurance: 'os-user', scopeIds: ['scope-a'] }), configApplication: () => ({ inspect, explain, validate, set, unset: set, submit }) } };
 }
 describe('registry-driven config surface', () => {
   it('renders readable grouped columns at 80 cells with translated binding/source/apply', () => {
@@ -39,9 +41,11 @@ describe('registry-driven config surface', () => {
     await expect(configCommand(['config', 'explain'], f.ctx)).rejects.toBeDefined();
     await expect(configCommand(['config', '--expect', 'd'], f.ctx)).rejects.toBeDefined();
   });
-  it('terminal reads the same inspect and refuses write syntax', async () => {
+  it('terminal reads the same inspect and refuses malformed or unrouted write syntax (T3 L2: the write route needs the principal port)', async () => {
     const f = fixture(); const lines = await configSlash('/tmp/project', '', f.ctx, {}, 'en', 80); expect(lines.join('\n')).toContain('max_workers');
-    await configSlash('/tmp/project', 'set max_workers 2', f.ctx, {}, 'en', 80); expect(f.set).not.toHaveBeenCalled();
+    for (const args of ['set max_workers', 'set max_workers {', 'unset', 'unset max_workers extra']) expect((await configSlash('/tmp/project', args, f.ctx, {}, 'en', 80)).join('\n')).toContain('/config set');
+    expect((await configSlash('/tmp/project', 'set max_workers 2', { ...f.ctx, resolveConfigPrincipal: undefined } as never, {}, 'en', 80)).join('\n')).toContain('read only');
+    expect(f.set).not.toHaveBeenCalled();
   });
   it('redacts secret-like values even when a caller supplies unmasked data', () => {
     const s = { ...snapshot, fields: [{ ...field, key: 'terminal.chat.apiKey', value: 'CANARY_SECRET_VALUE', redacted: true }] };

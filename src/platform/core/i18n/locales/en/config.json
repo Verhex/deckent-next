@@ -5,6 +5,7 @@
   "config.approval.pending": "Nothing was written; approval {id} is pending. What: {summary}",
   "config.approval.resubmitCli": "Decide it with /approvals in the terminal or deckent approvals. After an allow, run the same command again with --command-id {commandId} --expect {expect} to apply it.",
   "config.approval.resubmitTerminal": "Decide it with /approvals. After an allow, type the same /config command again to apply it.",
+  "config.surface.slashReadOnly": "/config is read only here: no write route is connected. Change settings with deckent config set/unset.",
   "config.surface.title": "Configuration · {project}",
   "config.surface.digest": "Write layer: {layer} · document digest: {digest}",
   "config.surface.columns": "Key|Value|Source|Binding|Apply",
