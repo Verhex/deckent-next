@@ -3,11 +3,14 @@ import { fillTemplate, span } from '#surfaces/core/terminal-render/index.js';
 import { ListPicker, pickerView, PICKER_INITIAL, type PickerNode, type PickerResult, type PickerState, type PickerTree } from '#surfaces/core/terminal-picker/index.js';
 import { Window, type WindowLine } from '#surfaces/core/terminal-window/index.js';
 import { EntryWindow } from './entry.js';
+import { usePickerRoom } from './lines.js';
 import type { ConfigPanelField, ConfigPanelLabels, ConfigPanelLayer, ConfigPanelPort, ConfigPanelView, PanelLabels, PanelNotice } from './contract.js';
 
 /** Value-level row ids that are not schema choices (a schema choice id never starts with `:`). */
 const FREE = ':entry', UNSET = ':unset';
 const LAYERS: readonly ConfigPanelLayer[] = ['project', 'global'];
+/** The focused key's rows: description, facts, what it takes. */
+const FOCUS_ROWS = 3;
 
 /** A key row's facts: its value, the layer it comes from and whether it applies live or on restart. */
 const rowFacts = (field: ConfigPanelField) => [field.value, field.source, field.apply].join(' · ');
@@ -53,6 +56,7 @@ export function ConfigPanel({ port, labels, push, openApproval, onError, onClose
   const [state, setState] = useState<PickerState>(PICKER_INITIAL);
   const [generation, setGeneration] = useState(0);
   const [step, setStep] = useState<Step>({ kind: 'pick' });
+  const room = usePickerRoom(FOCUS_ROWS);
   const reload = useCallback(async () => { setView(await port.inspect()); }, [port]);
   const exits = useRef({ onError, onClose });
   exits.current = { onError, onClose };
@@ -94,8 +98,9 @@ export function ConfigPanel({ port, labels, push, openApproval, onError, onClose
         return null;
       }} />;
   }
-  return <Window title={[span(view.title)]} body={[...focusLines(field, words), ...(state.trail.length ? [] : view.notes.map(note => ({ spans: [span(note, { role: 'warning' })] })))]}
-    hints={words.hints} position={labels.position} footerRows={12} onInput={() => true}
-    footer={focusedWindow => <ListPicker key={generation} tree={tree} labels={labels.picker} active={focusedWindow} initial={state} onState={setState}
+  const body = [...focusLines(field, words), ...(state.trail.length ? [] : view.notes.map(note => ({ spans: [span(note, { role: 'warning' })] })))];
+  return <Window title={[span(view.title)]} body={body}
+    hints={words.hints} position={labels.position} footerRows={room.footerRows} onInput={() => true}
+    footer={focusedWindow => <ListPicker key={generation} tree={tree} labels={labels.picker} active={focusedWindow} initial={state} onState={setState} maxRows={room.rows}
       onResult={result => chosen(result, state)} />} />;
 }

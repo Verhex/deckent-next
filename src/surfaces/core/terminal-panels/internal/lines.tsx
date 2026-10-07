@@ -1,7 +1,9 @@
 import { useRef } from 'react';
 import { projectApprovalDecisionText } from '#surfaces/core/approval-presentation/index.js';
 import { span, useHumanTextSecrets } from '#surfaces/core/terminal-render/index.js';
-import { Window, type WindowLine } from '#surfaces/core/terminal-window/index.js';
+import { Window, useWindowReserve, WINDOW_RESERVED_ROWS, type WindowLine } from '#surfaces/core/terminal-window/index.js';
+import { LIST_PICKER_MIN_ROWS } from '#surfaces/core/terminal-picker/index.js';
+import { useWindowSize } from 'ink';
 import type { KnownSecretSnapshot } from '#platform/index.js';
 import type { PanelLine } from './contract.js';
 
@@ -36,4 +38,16 @@ export function QuestionWindow({ title, lines, hints, position, onAnswer }: { re
       if (key.return || (key.ctrl && input === 'c')) { answer(null); return true; }
       return false;
     }} />;
+}
+
+/** Rows of a window's frame, title and key-hint row, and of the list's own chrome (path, position, reason, hints on two rows). */
+const WINDOW_CHROME_ROWS = 4, PICKER_CHROME_ROWS = 5, FALLBACK_ROWS = 24;
+/**
+ * How many list rows fit under a window body of `bodyRows` (owner 2026-10-07: a window's height is capped to the terminal): the terminal's rows
+ * minus what the rest of the live area keeps, the window's chrome, its body and the list's chrome. The list never goes below its minimum.
+ */
+export function usePickerRoom(bodyRows: number): Readonly<{ rows: number; footerRows: number }> {
+  const size = useWindowSize(), reserved = useWindowReserve() ?? WINDOW_RESERVED_ROWS;
+  const rows = Math.max(LIST_PICKER_MIN_ROWS, (size.rows || FALLBACK_ROWS) - reserved - WINDOW_CHROME_ROWS - bodyRows - PICKER_CHROME_ROWS);
+  return { rows, footerRows: rows + PICKER_CHROME_ROWS };
 }

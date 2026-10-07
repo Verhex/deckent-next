@@ -3,7 +3,7 @@ import { fillTemplate, span, useRenderGlyphs } from '#surfaces/core/terminal-ren
 import { ListPicker, PICKER_INITIAL, type PickerNode, type PickerResult, type PickerState, type PickerTree } from '#surfaces/core/terminal-picker/index.js';
 import { Window, type WindowLine } from '#surfaces/core/terminal-window/index.js';
 import { EntryWindow } from './entry.js';
-import { LinesWindow, QuestionWindow } from './lines.js';
+import { LinesWindow, QuestionWindow, usePickerRoom } from './lines.js';
 import type { McpChoice, McpPanelLabels, McpPanelList, McpPanelPort, McpServerDraft, McpTrustQuestion, PanelLabels, PanelLine, PanelNotice } from './contract.js';
 
 const ADD = ':add';
@@ -59,6 +59,7 @@ export function McpPanel({ port, labels, push, onError, errorText, onClose }: { 
   const [generation, setGeneration] = useState(0);
   const draft = useRef<Draft>(emptyDraft());
   const answer = useRef<((value: boolean | null) => void) | null>(null);
+  const room = usePickerRoom(1);
   const reload = useCallback(async () => { setList(await port.list()); }, [port]);
   const exits = useRef({ onError, onClose });
   exits.current = { onError, onClose };
@@ -95,8 +96,8 @@ export function McpPanel({ port, labels, push, onError, errorText, onClose }: { 
   };
   const body: WindowLine[] = list.servers.length ? [] : [{ spans: [span(words.none, { role: 'muted' })] }];
   return <Window title={[span(words.title)]} body={[...body, ...list.problems.map(problem => ({ spans: [span(problem, { role: 'warning' })] }))]} hints={words.hints}
-    position={labels.position} footerRows={12} onInput={() => true}
-    footer={focused => <ListPicker key={generation} tree={mcpPanelTree(list, words)} labels={labels.picker} active={focused} initial={state} onState={setState}
+    position={labels.position} footerRows={room.footerRows} onInput={() => true}
+    footer={focused => <ListPicker key={generation} tree={mcpPanelTree(list, words)} labels={labels.picker} active={focused} initial={state} onState={setState} maxRows={room.rows}
       onResult={result => chosen(result, state)} />} />;
 }
 

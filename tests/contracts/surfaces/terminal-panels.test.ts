@@ -132,6 +132,26 @@ describe('/config window', () => {
   });
 });
 
+describe('window height on a short terminal (owner 2026-10-07: capped to the terminal)', () => {
+  it('80×24: /mode on a locked row and /config with many keys stay within the rows the live area leaves', async () => {
+    const limit = 24 - 8; // WINDOW_RESERVED_ROWS: banner, status, composer and hints keep their rows
+    const mode = panel('mode', { mode: { inspect: async () => VIEW, current: () => 'standart', select: async () => undefined } }, 'tr');
+    const modeView = mount(mode.element, 80, 24);
+    await settle(80);
+    await modeView.press(`${DOWN}${DOWN}${DOWN}`);
+    expect(modeView.frame()).toContain('[engellendi]');
+    expect(modeView.frame().split('\n').length).toBeLessThanOrEqual(limit);
+    const many: ConfigPanelView = { ...CONFIG, fields: Array.from({ length: 20 }, (_, index) => ({ ...CONFIG.fields[1]!, key: `max_workers_${index}`,
+      description: 'A long description of what this setting changes, wrapping across the window when the terminal is narrow enough to need it' })) };
+    const config = panel('config', { config: { ...configPort([]), inspect: async () => many } });
+    const configView = mount(config.element, 80, 24);
+    await settle(80);
+    await configView.press(ENTER);
+    expect(configView.frame()).toMatch(/1-\d+ of 20/u);
+    expect(configView.frame().split('\n').length).toBeLessThanOrEqual(limit);
+  });
+});
+
 function mcpPort(log: unknown[], answers: (boolean | null)[]): McpPanelPort {
   return {
     list: async () => ({ servers: [{ name: 'files', scope: 'local', status: 'trusted', attention: false, tools: '2 tools', realm: 'sandbox', launch: 'npx files', trusted: true }],

@@ -45,11 +45,13 @@ export function ListPicker(props: {
   readonly initial?: PickerState;
   /** Every state the picker moves to (T3 L4: a panel whose scope step depends on the chosen row follows it); display only. */
   readonly onState?: (state: PickerState) => void;
+  /** At most this many list rows (T3 L4: inside a window that also draws a body, the window's own room decides); never below the minimum. */
+  readonly maxRows?: number;
 }): ReactNode {
   const palette = useWorklinePalette(), glyphs = useRenderGlyphs(), size = useWindowSize();
   const columns = size.columns || FALLBACK_COLUMNS, terminalRows = size.rows || FALLBACK_ROWS;
   const reserved = useWindowReserve() ?? 8;
-  const pageSize = listPickerPageSize(terminalRows, reserved);
+  const pageSize = Math.max(LIST_PICKER_MIN_ROWS, Math.min(listPickerPageSize(terminalRows, reserved), props.maxRows ?? Number.MAX_SAFE_INTEGER));
   const id = useId();
   const windowed = props.windowed ?? false;
   const owns = useWindowLayer(id, windowed, props.priority ?? WINDOW_PRIORITY.window);
