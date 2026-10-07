@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import type { Locale } from '#platform/index.js';
 import { terminalAdminPorts } from '#surfaces/core/terminal-admin/index.js';
@@ -6,6 +7,8 @@ import { addSessionUsage, EMPTY_SESSION_USAGE } from '#surfaces/core/terminal-ki
 // TUI2 L3 (T-HUMAN-OUTPUT): /status /scope /model /usage say what a person needs first; identities, pid and build sit under the details.
 // The fixture identities are UUIDs so the "no raw UUID on the primary line" proofs are not vacuous.
 const INSTALLATION = '3f2a9c1e-8b4d-4e7a-9c55-1d2e3f4a5b6c', PROJECT = 'b7d1e2f3-4a5b-4c6d-8e9f-0a1b2c3d4e5f', SERVICE = 'c9e8d7f6-1a2b-4c3d-9e8f-7a6b5c4d3e2f';
+// The running package version (a release bump must not break this proof).
+const VERSION = (JSON.parse(readFileSync(new URL('../../../package.json', import.meta.url), 'utf8')) as { version: string }).version;
 const UUID = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/iu;
 const channel = { channelId: 'local-vllm', access: 'allowed' as const, revision: 3, providerVersion: 1, catalogRevision: 'c1', channel: { kind: 'local-server', cli: null, billing: 'self-hosted' },
   activation: { state: 'active' }, models: [{ modelId: 'qwen3-8b', revision: 1, activation: { state: 'active' },
@@ -23,7 +26,7 @@ const run = (locale: Locale, name: 'status' | 'scope' | 'model' | 'usage', overr
 
 describe.each([
   ['en', {
-    status: ['Deckent is running · version 1.0.0-alpha.9 · model Qwen 3 8B (local server)', 'Details',
+    status: [`Deckent is running · version ${VERSION} · model Qwen 3 8B (local server)`, 'Details',
       `  Installation identity: ${INSTALLATION}`, `  Project identity: ${PROJECT}`, '  REPORT-TAIL', `  Runtime service now: instance ${SERVICE}, pid 4242, build aaaaaaaaaaaa`],
     scope: ['You: alperen · Project: deckent-next (b7d1e2f3) · Company: default · Mode: standard · Rule version: p-7', 'Scope: scope-main', 'Surface access: runs, workers, approvals', 'Details',
       `  Installation identity: ${INSTALLATION}`, `  Project identity: ${PROJECT}`, '  Permission mode: standart (policy revision p-7; modes supported: yes; full access allowed: no)'],
@@ -33,7 +36,7 @@ describe.each([
       '  Reasoning: at least 1,200 tokens (not measured in 1 of 2 reports)', 'A measurement or account snapshot, not an invoice.'],
   }],
   ['tr', {
-    status: ['Deckent çalışıyor · sürüm 1.0.0-alpha.9 · model Qwen 3 8B (yerel sunucu)', 'Ayrıntı',
+    status: [`Deckent çalışıyor · sürüm ${VERSION} · model Qwen 3 8B (yerel sunucu)`, 'Ayrıntı',
       `  Kurulum kimliği: ${INSTALLATION}`, `  Proje kimliği: ${PROJECT}`, '  REPORT-TAIL', `  Çalışma servisi şimdi: örnek ${SERVICE}, pid 4242, sürüm aaaaaaaaaaaa`],
     scope: ['Siz: alperen · Proje: deckent-next (b7d1e2f3) · Şirket: varsayılan · Mod: standart · Kural sürümü: p-7', 'Kapsam: scope-main', 'Yüzey erişimi: işler, işçiler, onaylar', 'Ayrıntı',
       `  Kurulum kimliği: ${INSTALLATION}`, `  Proje kimliği: ${PROJECT}`, '  İzin modu: standart (politika revizyonu p-7; modlar destekleniyor: evet; tam erişim izinli: hayır)'],
