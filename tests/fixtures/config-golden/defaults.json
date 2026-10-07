@@ -121,8 +121,11 @@
   },
   "terminal": {
     "autostartService": true,
+    "banner": "full",
+    "clearOnStart": true,
     "persistHistory": true,
-    "serviceStartTimeoutMs": 20000
+    "serviceStartTimeoutMs": 20000,
+    "theme": "auto"
   },
   "toolchains": {
     "currency": {

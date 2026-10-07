@@ -2,13 +2,13 @@ export { runTerminalWorkline, WorklineApp, type WorklineCompleteTurn, type Workl
 export { resumedHistoryEntries, RESUME_SHOWN_MESSAGES, RESUME_USER_TEXT_CHARS, type ResumedHistoryLabels } from './internal/workline-history.js';
 export type { WorklineReasoningLabels } from './internal/workline-reasoning.js';
 export { mentionNotices, type WorklineAttachMentions, type WorklineMentionAttachment, type WorklineMentionLabels, type WorklineMentionNote } from './internal/workline-mentions.js';
-export { runModeCommand, type WorklineModeLabels, type WorklinePermissionModePort } from './internal/workline-mode.js';
+export { runModeCommand, cyclePermissionMode, permissionModeCycle, permissionModeStop, nextPermissionModeStop, type WorklineModeLabels, type WorklinePermissionModePort } from './internal/workline-mode.js';
 export { bindSessionScope, useConversationSession, type TerminalSessionStoreView, type ConversationSessionLabels, type ConversationSessionPort, type ConversationSessionSummary, type SessionCommandResult, type SessionRefusal } from './internal/workline-sessions.js';
 export { appendLedger, boundAgentHistory, boundChatHistory, compactLedger, EMPTY_LEDGER, LEDGER_COMPACT_AT, LEDGER_TAIL_LIMIT, plainChatHistory, type AgentChatMessage,
   type ChatTurnMessage, type LedgerBuffer } from '#surfaces/core/terminal-ledger/index.js';
 export { WorklinePaletteProvider } from '#surfaces/core/terminal-kit/index.js';
 export { parseSlashLine, WORKLINE_SLASH_COMMANDS } from '#surfaces/core/terminal-kit/index.js';
-export { resolveWorklinePalette, DEFAULT_INK_PALETTE, type WorklineInkPalette, type WorklineInkRole, type ColorTier } from '#surfaces/core/terminal-kit/index.js';
+export { resolveWorklinePalette, resolveTerminalTheme, TERMINAL_THEME_SETTINGS, DEFAULT_INK_PALETTE, type WorklineInkPalette, type WorklineInkRole, type ColorTier, type TerminalThemeSetting } from '#surfaces/core/terminal-kit/index.js';
 export {
   WORKLINE_BRIDGE_SCHEMA_VERSION,
   buildWorklineBridgeSnapshot,
@@ -44,3 +44,4 @@ export { COMPOSER_LIMITS, EMPTY_COMPOSER, composerMenu, exitArmed, reduceCompose
 export { composerKey } from '#surfaces/core/terminal-composer/index.js';
 export { PASTE_COLLAPSE, expandChips, mentionAt, pendingArgument, slashMatches, type ComposerMentionPort, type PasteChip, type PastePolicy } from '#surfaces/core/terminal-composer/index.js';
 export { caretRow, displayWidth, graphemes, layoutRows } from '#surfaces/core/terminal-composer/index.js';
+export { CLEAR_VISIBLE_SCREEN, clearVisibleScreen, STARTUP_BANNERS, STARTUP_BANNER_MIN_COLUMNS, StartupBanner, startupFrame, writeStartup, type WorklineStartup } from './internal/startup-banner.js';

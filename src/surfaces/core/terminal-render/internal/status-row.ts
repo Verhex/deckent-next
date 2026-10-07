@@ -54,7 +54,11 @@ export function fillTemplate(template: string, values: Readonly<Record<string, s
 }
 
 /** `cancelHint` (TL-A D5) is optional until the catalog carries `terminal.render.cancelHint` (`i18n-delta.json`); neutral text meanwhile. */
-export type WorklineStatusLabels = Readonly<{ queued: string; elapsed: string; cancelHint?: string; selfSourceFloor?: string | undefined }>;
+export type WorklineStatusLabels = Readonly<{ queued: string; elapsed: string; cancelHint?: string; selfSourceFloor?: string | undefined;
+  /** T2 T-MODE-CYCLE: the word of each permission-mode stop; without it the segment is the bare catalog mode (the MODES-3 row). */
+  modeStops?: Readonly<Record<PermissionModeStop, string>> | undefined }>;
+/** The stops the status row can show (`ask-edits` is standart with the person's "ask for edits too" preference). */
+export type PermissionModeStop = PermissionMode | 'ask-edits';
 const NEUTRAL_CANCEL_HINT = 'Esc cancels';
 export type WorklineStatusInput = Readonly<{
   scope: string; model?: string | undefined; state: string; busy: boolean; spinner?: string | undefined; elapsedMs?: number | undefined;
@@ -65,7 +69,17 @@ export type WorklineStatusInput = Readonly<{
   selfSource?: boolean | undefined;
   /** A running turn that Esc (or Ctrl+C) cancels now (TL-A D5): the row says so while it runs. */
   cancellable?: boolean | undefined;
+  /** T2: the session's stop (with `labels.modeStops`) and its mark; the text is `mark word`, the word carrying the meaning without colour. */
+  stop?: PermissionModeStop | undefined;
+  modeMark?: string | undefined;
 }>;
+
+/** `mark word` of the session's stop when the labels carry the words; otherwise the catalog mode itself (MODES-3). */
+function modeText(input: WorklineStatusInput, mode: PermissionMode): string {
+  const stop = input.stop === 'ask-edits' && mode === 'standart' ? 'ask-edits' : mode;
+  const word = input.labels.modeStops?.[stop];
+  return word === undefined ? mode : input.modeMark ? `${input.modeMark} ${word}` : word;
+}
 
 /** Display order scope · model · state · cancel · mode · elapsed · queue · notice; drop order notice → cancel → elapsed → mode → model → queue. */
 export function worklineStatusSegments(input: WorklineStatusInput): StatusSegment[] {
@@ -80,7 +94,8 @@ export function worklineStatusSegments(input: WorklineStatusInput): StatusSegmen
     segment('state', state, input.busy ? 'success' : 'muted', 100, false),
     ...(input.busy && input.cancellable ? [segment('cancel', input.labels.cancelHint ?? NEUTRAL_CANCEL_HINT, 'muted', 45)] : []),
     // Full access is a standing warning; a derived source marker also keeps its mode, which names the full-access exception.
-    ...(mode ? [mode === 'full-access' ? segment('mode', mode, 'error', 95, false) : segment('mode', mode, mode === 'standart' ? 'muted' : 'warning', 55, !input.selfSource)] : []),
+    ...(mode ? [mode === 'full-access' ? segment('mode', modeText(input, mode), 'error', 95, false)
+      : segment('mode', modeText(input, mode), mode === 'standart' ? 'muted' : 'modeIndicator', 55, !input.selfSource)] : []),
     ...(input.selfSource && input.labels.selfSourceFloor ? [segment('self-source', input.labels.selfSourceFloor, 'warning', 96, false)] : []),
     ...(input.busy && input.elapsedMs !== undefined ? [segment('elapsed', fillTemplate(input.labels.elapsed, { seconds: Math.floor(input.elapsedMs / 1000) }), 'muted', 50)] : []),
     ...(input.queued ? [segment('queue', fillTemplate(input.labels.queued, { count: input.queued }), 'warning', 70)] : []),

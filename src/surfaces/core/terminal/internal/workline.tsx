@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, createElement, type ComponentProps } from 'react';
-import { render, Box, Static, Text, useApp, type Instance } from 'ink';
+import { render, Box, Static, Text, useApp, useInput, type Instance } from 'ink';
 import { useWorklinePanel, type LocalExecution, LedgerEntryRow, type LedgerEntryLabels, immediateSlashAction, runLedgerCommand, type WatchState, type WorklineActionLabels, useWorkSurface } from '#surfaces/core/terminal-work/index.js';
 import { WorklinePaletteProvider, useWorklinePalette, parseSlashLine, isInspectSlashCommand, addSessionUsage, bindInspectPorts, EMPTY_SESSION_USAGE, type InspectSlashPorts, type SessionUsageView, useWorklineWatch, surfaceDeliveryValues, surfaceFollowLine, useSurfacePushFeed,
   type TerminalLocalContext, type WorklineInkPalette, type WorklineStreamTurn } from '#surfaces/core/terminal-kit/index.js';
@@ -17,6 +17,7 @@ import { messageWithMentions, type WorklineAttachMentions, type WorklineMentionL
 import { useWorklineMode, type WorklineModeLabels, type WorklinePermissionModePort } from './workline-mode.js';
 import { useReasoningPreview, type WorklineReasoningLabels } from './workline-reasoning.js';
 import { useWorklineScratch, type WorklineScratchLabels, type WorklineScratchPort } from './workline-scratch.js';
+import { writeStartup, type WorklineStartup } from './startup-banner.js';
 
 export interface WorklineLabels extends WorklineActionLabels {
   readonly banner: string;
@@ -312,6 +313,12 @@ export function WorklineApp(props: WorklineProps) {
   const ledgerLabels: LedgerEntryLabels = { runCard: labels.runCard, workerCard: labels.workerCard, chatUser: labels.roleUser, chatAssistant: labels.roleAssistant,
     render: labels.render, ...(labels.work ? { workerLine: labels.work.workerLine } : {}) };
   const choosing = resumePicker !== null || work.pickerOpen;
+  // T2 T-MODE-CYCLE: Shift+Tab (Alt+M where the console cannot report Shift+Tab, e.g. Windows without VT input) steps the permission mode
+  // while the composer owns the keyboard; an open card or picker owns Shift+Tab then and the mode does not change. A running turn owns its
+  // mode as `/mode` does (queued until it ends): the step waits for idle, so the status row never shows a mode the running turn is not in.
+  const composing = !work.modalOpen && !work.pickerOpen && resumePicker === null;
+  useInput((input, key) => { if ((key.tab && key.shift) || (key.meta && !key.ctrl && input === 'm')) void mode.cycle(); },
+    { isActive: composing && !busy && Boolean(props.permissionMode) });
   const finishResume = (choice: number | null) => { panel.choose(state.picker?.pickerHandle, choice === null ? null : String(choice)); };
   return (
     <HumanTextContext.Provider value={props.knownSecrets}>
@@ -330,12 +337,13 @@ export function WorklineApp(props: WorklineProps) {
             details={resumePicker.map(item => item.hiddenNotice)} onSelect={finishResume} onCancel={() => finishResume(null)} />} /> : null}
       <Text {...palette.accent}>{labels.banner}</Text>
       <StatusStrip target={target} state={cancelling ? labels.statusCancelling : busy && !choosing ? labels.statusBusy : labels.statusReady} busy={busy && !choosing}
-        queued={state.queued.length} labels={{ ...labels.render, selfSourceFloor: labels.selfSourceFloor }} mode={mode.mode} selfSource={props.selfSource} cancellable={turnRunning && !cancelling} />
+        queued={state.queued.length} labels={{ ...labels.render, selfSourceFloor: labels.selfSourceFloor, modeStops: labels.mode?.stops }} mode={mode.mode} stop={mode.stop}
+        selfSource={props.selfSource} cancellable={turnRunning && !cancelling} />
       {/* The composer owns input: Enter submits (queued FIFO while busy), Esc/Ctrl+C cancel a turn, exit is two Ctrl+C or Ctrl+D.
           An open decision card or arrow picker takes the keyboard away from it. */}
       <StackComposer prompt={labels.prompt} labels={{ ...labels.composer,
         slash: Object.fromEntries(Object.entries(labels.composer.slash).map(([key, text]) => [key, projectHumanPickerText(text, props.knownSecrets).label])) }}
-        busy={busy} active={!work.modalOpen && !work.pickerOpen && resumePicker === null}
+        busy={busy} active={composing}
         onSubmit={(text, mentioned) => void submit(text, mentioned)} onCancel={cancel} onExit={() => { panel.close(); exit(); }}
         {...(props.inputHistory ? { history: props.inputHistory } : {})} {...(props.mentions ? { mentions: props.mentions } : {})}
         {...(props.mentionDelayMs === undefined ? {} : { mentionDelayMs: props.mentionDelayMs })} />
@@ -354,11 +362,14 @@ export interface WorklineRunOptions extends Omit<WorklineProps, 'labels'> {
   readonly signal?: AbortSignal;
   /** ASCII decoration for terminals that cannot be assumed to draw Unicode. */
   readonly ascii?: boolean;
+  /** T2 T-STARTUP: clear the visible screen and print the banner before the live view (TTY only; scrollback is never erased). */
+  readonly startup?: WorklineStartup;
 }
 
 /** Ctrl+C is handled by the composer (cancel a running turn, clear a draft, or exit on a second press); the outer signal unmounts the view. */
 export async function runTerminalWorkline(options: WorklineRunOptions): Promise<void> {
-  const { palette, stdin, stdout, signal, ascii, ...props } = options;
+  const { palette, stdin, stdout, signal, ascii, startup, ...props } = options;
+  if (startup) writeStartup(stdout ?? process.stdout, startup, palette);
   const view = createElement(RenderGlyphsContext.Provider, { value: resolveRenderGlyphs(ascii === true) }, createElement(WorklineApp, props));
   // Ink 7 treats CI env as non-interactive even on a TTY (ink.js resolveInteractiveOption); the workline runs on a TTY, so force it there.
   const instance: Instance = render(createElement(WorklinePaletteProvider, { palette, children: view }),

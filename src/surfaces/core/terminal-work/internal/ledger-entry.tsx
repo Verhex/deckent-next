@@ -1,7 +1,7 @@
 import { Box, Text } from 'ink';
 import { useWorklinePalette } from '#surfaces/core/terminal-kit/index.js';
 import { type WorkLedgerEntry, formatWorkerLine, type WorkerLineLabels } from '#surfaces/core/terminal-ledger/index.js';
-import { AssistantUnitRow, HumanTextRow, type AssistantRenderLabels } from '#surfaces/core/terminal-render/index.js';
+import { AssistantUnitRow, HumanTextRow, useRenderGlyphs, type AssistantRenderLabels } from '#surfaces/core/terminal-render/index.js';
 import { readApprovalDecisionNotice } from './approval-decision-notice.js';
 import { ApprovalDecisionNoticeRow } from './approval-decision-view.js';
 export interface LedgerEntryLabels {
@@ -14,15 +14,24 @@ export interface LedgerEntryLabels {
   readonly render: AssistantRenderLabels;
 }
 export function LedgerEntryRow({ entry, labels }: { readonly entry: WorkLedgerEntry; readonly labels: LedgerEntryLabels }) {
-  const ink = useWorklinePalette();
+  const ink = useWorklinePalette(), glyphs = useRenderGlyphs();
   if (entry.kind === 'chat' && entry.role === 'assistant') {
     // A row without a unit is a complete reply: one lead unit rendered as markdown.
     return <AssistantUnitRow unit={entry.assistant ?? { kind: 'text', markdown: entry.text, lead: true }} labels={labels.render} />;
   }
+  if (entry.kind === 'chat' && entry.role === 'user') {
+    // T2 T-READABLE (owner choice): a thin rail on the left, the person's label on the first line, their text in the terminal's own
+    // foreground. The label carries the meaning without colour (NO_COLOR keeps "You"/"Sen" and the rail).
+    return (
+      <Box flexDirection="column" borderStyle={glyphs.ascii ? 'classic' : 'single'} borderTop={false} borderRight={false} borderBottom={false}
+        {...(ink.userBar.color ? { borderLeftColor: ink.userBar.color } : {})} paddingLeft={1}>
+        <Text {...ink.userLabel}>{labels.chatUser}</Text>
+        <HumanTextRow text={entry.text} style={{}} hiddenLabel={labels.render.hiddenCount} inline />
+      </Box>
+    );
+  }
   if (entry.kind === 'chat') {
-    const palette = entry.role === 'user' ? ink.user : ink.assistant;
-    const prefix = entry.role === 'user' ? labels.chatUser : labels.chatAssistant;
-    return <HumanTextRow text={entry.text} prefix={`${prefix}: `} style={palette} hiddenLabel={labels.render.hiddenCount} inline />;
+    return <HumanTextRow text={entry.text} prefix={`${labels.chatAssistant}: `} style={ink.assistant} hiddenLabel={labels.render.hiddenCount} inline />;
   }
   if (entry.kind === 'notice') {
     const decision = readApprovalDecisionNotice(entry);
@@ -41,8 +50,8 @@ export function LedgerEntryRow({ entry, labels }: { readonly entry: WorkLedgerEn
   }
   const live = entry.live && labels.workerLine ? formatWorkerLine(entry, labels.workerLine) : null;
   return (
-    <Box flexDirection="column" borderStyle="single" {...(ink.user.color ? { borderColor: ink.user.color } : {})} paddingX={1}>
-      <Text {...ink.user}>{labels.workerCard}</Text>
+    <Box flexDirection="column" borderStyle="single" {...(ink.workerCard.color ? { borderColor: ink.workerCard.color } : {})} paddingX={1}>
+      <Text {...ink.workerCard}>{labels.workerCard}</Text>
       <Text>{entry.taskId} · {entry.process}</Text>
       <Text {...ink.muted}>{entry.provider} · {entry.authority}</Text>
       {live ? <Text {...(live.tone === 'error' ? ink.error : live.tone === 'muted' ? ink.muted : {})}>{live.text}</Text> : null}

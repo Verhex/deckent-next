@@ -1,13 +1,14 @@
 import type { WorklineStreamTurn } from '#surfaces/core/terminal-kit/index.js';
 import { configSlash } from '#surfaces/core/config/index.js';
 import { createInterface } from 'node:readline';
+import { basename } from 'node:path';
 import { mcpSlash } from './mcp.js';
 import { monitorSlash } from '#surfaces/core/monitor/index.js';
-import { DeckentError, ErrorRegistry, emit, getConfigKnownSecrets, loadConfig, readBuildIdentity, resolveLocale, t, formatValue, colorTier, type ConfigLoadOptions, type Locale } from '#platform/index.js';
+import { DeckentError, ErrorRegistry, emit, getConfigKnownSecrets, loadConfig, readBuildIdentity, resolveLocale, t, formatValue, colorCapability, PACKAGE_VERSION, type ConfigLoadOptions, type Locale } from '#platform/index.js';
 import { buildInferenceServingPlan, estimateReplicaCapacity, readInferenceServingProfile, runtimeConfigFreshness, RUNTIME_SERVICE_HEARTBEAT_MS, type IdentityRead, type InstallationIdentityRead } from '#engine/index.js';
-import { prefersAsciiGlyphs, runTerminalWorkline, resolveWorklinePalette, buildWorklineBridgeSnapshot, streamLineTurn, boundAgentHistory, boundChatHistory, bindSessionScope, type AgentChatMessage, type ChatTurnMessage, type TurnDelta, type WorklineLabels } from '#surfaces/core/terminal/index.js';
+import { prefersAsciiGlyphs, runTerminalWorkline, resolveWorklinePalette, resolveTerminalTheme, permissionModeStop, STARTUP_BANNERS, TERMINAL_THEME_SETTINGS, type TerminalThemeSetting, type WorklineStartup, buildWorklineBridgeSnapshot, streamLineTurn, boundAgentHistory, boundChatHistory, bindSessionScope, type AgentChatMessage, type ChatTurnMessage, type TurnDelta, type WorklineLabels } from '#surfaces/core/terminal/index.js';
 import { plainText, projectHumanText } from '#surfaces/core/terminal-render/index.js';
-import { terminalComposerLabels, terminalRenderLabels, terminalSessionLabels } from '#surfaces/core/terminal-labels/index.js';
+import { terminalComposerLabels, terminalRenderLabels, terminalSessionLabels, terminalStartupLabels } from '#surfaces/core/terminal-labels/index.js';
 import { createWorklineLedgerPorts } from './terminal-ledger.js';
 import { runtimeBuildSkew, workSurfaceLabels } from '#surfaces/core/work-labels/index.js';
 import { runKernelCommand, type CommandContext } from './kernel-commands.js';
@@ -108,6 +109,11 @@ function statusPayload(tty: ReturnType<typeof ttyState>, config: Record<string, 
   return { schemaVersion: 1 as const, tty, inference, chat, projectId, installationId, identity };
 }
 
+function modeStopWords(locale: Locale) {
+  return { standart: t('terminal.mode.stop.standart', {}, locale), 'ask-edits': t('terminal.mode.stop.ask-edits', {}, locale),
+    'full-auto': t('terminal.mode.stop.full-auto', {}, locale), 'full-access': t('terminal.mode.stop.full-access', {}, locale) } as const;
+}
+
 function worklineLabels(locale: Locale, statusLine: string): WorklineLabels {
   return {
     work: workSurfaceLabels(locale),
@@ -135,7 +141,8 @@ function worklineLabels(locale: Locale, statusLine: string): WorklineLabels {
       unsupported: t('terminal.mode.unsupported', {}, locale), usage: t('terminal.mode.usage', {}, locale),
       effect: { standart: t('terminal.mode.effect.standart', {}, locale), 'full-auto': t('terminal.mode.effect.full-auto', {}, locale),
         'full-access': t('terminal.mode.effect.full-access', {}, locale) },
-      switch: t('terminal.mode.switch', {}, locale), fullAccessLaunch: t('terminal.mode.fullAccessLaunch', {}, locale), startSaved: t('terminal.mode.startSaved', {}, locale),
+      switch: t('terminal.mode.switch', {}, locale), fullAccessGrant: t('terminal.mode.fullAccessGrant', {}, locale), startSaved: t('terminal.mode.startSaved', {}, locale),
+      stops: modeStopWords(locale), cycled: t('terminal.mode.cycled', {}, locale), cycledFullAccess: t('terminal.mode.cycledFullAccess', {}, locale),
       askEditsOn: t('terminal.mode.askEditsOn', {}, locale), askEditsOff: t('terminal.mode.askEditsOff', {}, locale) },
     reasoning: { on: t('terminal.reasoning.on', {}, locale), off: t('terminal.reasoning.off', {}, locale), usage: t('terminal.reasoning.usage', {}, locale) },
     scratch: { summary: t('terminal.scratch.summary', {}, locale), empty: t('terminal.scratch.empty', {}, locale), entry: t('terminal.scratch.entry', {}, locale),
@@ -320,6 +327,15 @@ export async function terminalCommand(argv: readonly string[], context: CommandC
     ...(context.inspectSurfaceRunIds ? { inspectSurfaceRunIds: () => context.inspectSurfaceRunIds!(root, scopeId, options) } : {}),
     ...(context.followSurfaceEvents ? { followEvents: signal => context.followSurfaceEvents!(root, scopeId, options, signal) } : {}) });
   const target = `${scopeId} · ${chatTarget(chat, locale)}`;
+  // T2: theme and tier from what the terminal can draw and the person's setting; the banner and the clear from their settings (TERM=dumb never
+  // clears). A config without a `terminal` section (scope from --scope) keeps every default.
+  const presentation = (config['terminal'] ?? {}) as { readonly theme?: TerminalThemeSetting; readonly banner?: WorklineStartup['banner']; readonly clearOnStart?: boolean };
+  const theme = resolveTerminalTheme(presentation.theme ?? TERMINAL_THEME_SETTINGS[0], colorCapability({ env, isTTY: tty.stdout, argv: process.argv }), env['COLORFGBG']);
+  const ascii = prefersAsciiGlyphs(env), stop = fullAccess ? 'full-access' as const : view?.supported ? permissionModeStop(view, false) : null;
+  const home = env['HOME'] ?? '', where = home && (root === home || root.startsWith(`${home}/`)) ? `~${root.slice(home.length)}` : root;
+  const startup: WorklineStartup = { clear: presentation.clearOnStart !== false && env['TERM']?.trim().toLowerCase() !== 'dumb', banner: presentation.banner ?? STARTUP_BANNERS[0],
+    ...terminalStartupLabels(locale, { version: PACKAGE_VERSION, project: basename(root), path: where, model: chatTarget(chat, locale),
+      mode: stop ? modeStopWords(locale)[stop] : t('terminal.value.unknown', {}, locale) }, ascii) };
   // History is a convenience: an unavailable history file never blocks the terminal.
   const inputHistory = context.openTerminalHistory ? await context.openTerminalHistory(root, options).catch(() => null) : null;
   const sessionStore = context.openTerminalSessions ? await context.openTerminalSessions(root, options).catch(() => null) : null;
@@ -366,7 +382,7 @@ export async function terminalCommand(argv: readonly string[], context: CommandC
       const restarted = await context.restartRuntimeService!(root, options);
       return t('terminal.service.restarted', { pid: restarted.pid ?? '-', instance: restarted.instanceId }, locale);
     } } : {}),
-    palette: resolveWorklinePalette(colorTier({ env, isTTY: tty.stdout, argv: process.argv })), ascii: prefersAsciiGlyphs(env),
+    palette: resolveWorklinePalette(theme.tier, theme.theme), ascii, startup,
     ...(ledger ? { ledger } : {}),
     ...(context.stdin ? { stdin: context.stdin as NodeJS.ReadStream } : {}),
     ...(context.stdout ? { stdout: context.stdout as unknown as NodeJS.WriteStream } : {}),

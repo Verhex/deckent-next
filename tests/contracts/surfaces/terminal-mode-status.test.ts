@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { PERMISSION_MODES } from '#domain/index.js';
-import { fitStatusRow, runModeCommand, worklineStatusSegments, WORKLINE_SLASH_COMMANDS } from '#surfaces/core/terminal/index.js';
+import { cyclePermissionMode, fitStatusRow, nextPermissionModeStop, permissionModeCycle, permissionModeStop, runModeCommand, worklineStatusSegments, WORKLINE_SLASH_COMMANDS } from '#surfaces/core/terminal/index.js';
 
 // T-L4 slice 4c, MODES-3: the status row carries the session's permission mode as a segment whose text only ever comes from the mode
 // catalog (droppable, except full access: a standing warning); `/mode` shows it and sets it through the service port (the surface reads and
-// writes no file); full access is never switched into from inside a session.
+// writes no file). T2 (owner 2026-10-07, corrected): full access is switched into inside a session through the same service set (the
+// service decides the company grant and audits the change); the 2026-09-29 "full access only at launch" rule is withdrawn.
 const labels = { queued: '{count} queued', elapsed: '{seconds}s' };
 const base = { scope: 'company-acme/site-istanbul/project-erp', model: 'local-qwen · vllm', state: 'Ready', busy: false, labels };
 const text = (input: Parameters<typeof worklineStatusSegments>[0], columns: number) =>
@@ -62,23 +63,24 @@ describe('/mode (T-L4 slice 4c, MODES-3)', () => {
     expect(texts(set.entries)).toEqual(['/mode · standart → full-auto']);
     for (const refused of ['yolo', 'ask', 'auto-edit', 'ask-edits', 'start full-auto']) {
       expect((await runModeCommand(refused, port, view)).entries.map(entry => entry.kind === 'notice' ? [entry.level, entry.text] : []))
-        .toEqual([['error', '/mode [standart|full-auto] · /mode ask-edits on|off · /mode start full-access']]);
+        .toEqual([['error', '/mode [standart|full-auto|full-access] · /mode ask-edits on|off · /mode start full-access']]);
     }
     expect(calls).toEqual(['inspect', ['set', 'full-auto', 'p1+b1', undefined]]);
   });
 
-  it('refuses /mode full-access inside a session without asking the service, and says how to start it (owner: start only)', async () => {
+  it('switches into full access inside a session through the service (owner 2026-10-07); the service\'s refusal stays a refusal', async () => {
     const calls: unknown[] = [];
-    const port = { async inspect() { calls.push('inspect'); return view; }, async set(): Promise<never> { calls.push('set'); throw new Error('set must not be called'); } };
-    const labels = { current: 'Mode: {mode}', changed: '{previous} → {mode}', inert: ' (inert)', unsupported: 'v1', usage: 'usage', fullAccessLaunch: 'Relaunch with deckent --full-access' };
-    for (const fullAccess of [false, true]) {
-      const refused = await runModeCommand('full-access', port, view, labels, fullAccess);
-      expect(refused).toEqual({ entries: [expect.objectContaining({ level: 'error', text: 'Relaunch with deckent --full-access' })], view, fullAccess });
-    }
-    expect(calls).toEqual([]);
+    const port = { async inspect() { return view; },
+      async set(mode: Mode, expectedRevision: string, askEdits?: boolean) { calls.push([mode, expectedRevision, askEdits]); return { ...view, mode, revision: 'p1+m-3', previous: 'standart' as const, changed: true }; } };
+    const entered = await runModeCommand('full-access', port, view);
+    expect({ fullAccess: entered.fullAccess, texts: texts(entered.entries), level: (entered.entries[0] as { level: string }).level })
+      .toEqual({ fullAccess: true, texts: ['/mode · standart → full-access'], level: 'error' });
+    expect(calls).toEqual([['full-access', 'p1+b1', undefined]]);
+    const refusing = { async inspect() { return { ...view, fullAccess: false }; }, async set(): Promise<never> { throw new Error('PERMISSION_MODE_DENIED'); } };
+    await expect(runModeCommand('full-access', refusing, { ...view, fullAccess: false })).rejects.toThrow('PERMISSION_MODE_DENIED');
   });
 
-  it('tightens a full-access session with /mode standart|full-auto for the rest of the session; full access does not come back', async () => {
+  it('leaves full access with /mode standart|full-auto, and full access can come back on the grant', async () => {
     const port = { async inspect() { return view; },
       async set(mode: Mode) { return { ...view, mode, revision: 'p1+m-3', previous: 'standart' as const, changed: mode !== 'standart' }; } };
     const shown = await runModeCommand('', port, view, undefined, true);
@@ -86,7 +88,7 @@ describe('/mode (T-L4 slice 4c, MODES-3)', () => {
     const tightened = await runModeCommand('standart', port, view, undefined, true);
     expect(tightened.fullAccess).toBe(false);
     expect(texts(tightened.entries)).toEqual(['/mode · full-access → standart']);
-    expect((await runModeCommand('full-access', port, tightened.view, undefined, tightened.fullAccess)).fullAccess).toBe(false);
+    expect((await runModeCommand('full-access', port, tightened.view, undefined, tightened.fullAccess)).fullAccess).toBe(true);
   });
 
   it('sets the "ask for edits too" preference and saves full access as the next launch\'s start mode, keeping this session\'s mode', async () => {
@@ -130,13 +132,81 @@ describe('/mode (T-L4 slice 4c, MODES-3)', () => {
     expect(calls).toEqual(['inspect']);
   });
 
-  it('shows what each mode changes and which can be tried, from the view alone; full access only as a launch', async () => {
+  it('shows what each mode changes and which can be tried, from the view alone; full access only with the grant', async () => {
     const port = { async inspect() { return view; }, async set(): Promise<never> { throw new Error('unused'); } };
     const labels = { current: 'Mode: {mode}', changed: '{previous} → {mode}', inert: ' (inert)', unsupported: 'v1', usage: 'usage',
-      effect: { standart: 'standard-effect', 'full-auto': 'full-effect', 'full-access': 'access-effect' }, switch: 'Try: {options}', fullAccessLaunch: 'launch' };
+      effect: { standart: 'standard-effect', 'full-auto': 'full-effect', 'full-access': 'access-effect' }, switch: 'Try: {options}', fullAccessGrant: 'grant needed' };
     const shown = await runModeCommand('', port, null, labels);
-    expect(texts(shown.entries)).toEqual(['Mode: standart — standard-effect', 'Try: /mode full-auto (full-effect)', 'launch']);
+    expect(texts(shown.entries)).toEqual(['Mode: standart — standard-effect', 'Try: /mode full-auto (full-effect); /mode full-access (access-effect)']);
     const inAccess = await runModeCommand('', port, null, labels, true);
     expect(texts(inAccess.entries)).toEqual(['Mode: full-access — access-effect', 'Try: /mode standart (standard-effect); /mode full-auto (full-effect)']);
+    const noGrant = { async inspect() { return { ...view, fullAccess: false, fullAuto: false }; }, async set(): Promise<never> { throw new Error('unused'); } };
+    expect(texts((await runModeCommand('', noGrant, null, labels)).entries)).toEqual(['Mode: standart — standard-effect', 'grant needed']);
+  });
+});
+
+// T2 T-MODE-CYCLE (owner 2026-10-07, corrected): Shift+Tab walks every mode the person may take — standart → careful (ask-edits) → full-auto →
+// full-access → standart — full access only on the company grant, full-auto unless the company's set grant leaves it out.
+describe('Shift+Tab permission-mode cycle (T2 T-MODE-CYCLE)', () => {
+  const view = { schemaVersion: 1 as const, scopeId: 'scope', supported: true, mode: 'standart' as const, askEdits: false, revision: 'r0', eligible: true, fullAccess: true, fullAuto: true };
+  type Mode = 'standart' | 'full-auto' | 'full-access';
+  it('has four stops with the full-access grant, three without it, and no full-auto when the company leaves it out', () => {
+    expect(permissionModeCycle(view)).toEqual(['standart', 'ask-edits', 'full-auto', 'full-access']);
+    expect(permissionModeCycle({ ...view, fullAccess: false })).toEqual(['standart', 'ask-edits', 'full-auto']);
+    expect(permissionModeCycle({ ...view, fullAccess: false, fullAuto: false })).toEqual(['standart', 'ask-edits']);
+    expect(permissionModeCycle({ ...view, fullAuto: false })).toEqual(['standart', 'ask-edits', 'full-access']);
+    const older: Omit<typeof view, 'fullAuto'> & { fullAuto?: boolean } = { ...view };
+    delete older.fullAuto;
+    expect(permissionModeCycle(older)).toEqual(['standart', 'ask-edits', 'full-auto', 'full-access']);
+    expect(permissionModeCycle({ ...view, supported: false })).toEqual([]);
+    expect(permissionModeStop({ ...view, askEdits: true }, false)).toBe('ask-edits');
+    expect(permissionModeStop({ ...view, mode: 'full-access' }, false)).toBe('standart');
+    expect(permissionModeStop(view, true)).toBe('full-access');
+    expect(nextPermissionModeStop(['standart', 'ask-edits', 'full-auto'], 'full-access')).toBe('standart');
+  });
+
+  it('walks the whole cycle through the service with each stop\'s explicit askEdits and the revision it last read', async () => {
+    const calls: unknown[] = [];
+    let current: typeof view = view, revision = 0;
+    const port = { async inspect() { return current; },
+      async set(mode: Mode, expectedRevision: string, askEdits?: boolean) {
+        calls.push([mode, expectedRevision, askEdits]);
+        const previous = current.mode;
+        current = { ...current, mode, askEdits: askEdits ?? current.askEdits, revision: `r${++revision}` };
+        return { ...current, previous, changed: true };
+      } };
+    const labels = { current: '', changed: '{previous} → {mode}', inert: '', unsupported: 'v1', usage: '', cycled: 'Mode: {previous} → {mode}', cycledFullAccess: 'Mode: {previous} → {mode} — audited',
+      stops: { standart: 'standard', 'ask-edits': 'careful', 'full-auto': 'full auto', 'full-access': 'full access' } };
+    let known: typeof view | null = null, fullAccess = false;
+    const seen: string[] = [];
+    for (let step = 0; step < 4; step++) {
+      const result = await cyclePermissionMode(port, known, labels, fullAccess);
+      known = result.view as typeof view; fullAccess = result.fullAccess;
+      seen.push(...result.entries.map(entry => entry.kind === 'notice' ? `${entry.level}:${entry.text}` : ''));
+    }
+    expect(seen).toEqual(['info:Mode: standard → careful', 'info:Mode: careful → full auto', 'error:Mode: full auto → full access — audited', 'info:Mode: full access → standard']);
+    expect(calls).toEqual([['standart', 'r0', true], ['full-auto', 'r1', false], ['full-access', 'r2', false], ['standart', 'r3', false]]);
+    expect(fullAccess).toBe(false);
+  });
+
+  it('skips full access without the grant; a refusal of the service propagates and leaves the session as it was', async () => {
+    const port = { async inspect() { return { ...view, mode: 'full-auto' as const, fullAccess: false }; },
+      async set(mode: Mode) { return { ...view, mode, fullAccess: false, previous: 'full-auto' as const, changed: true }; } };
+    const result = await cyclePermissionMode(port, null);
+    expect(result).toMatchObject({ fullAccess: false, view: { mode: 'standart' } });
+    const refusing = { async inspect() { return { ...view, mode: 'full-auto' as const }; }, async set(): Promise<never> { throw new Error('PERMISSION_MODE_DENIED'); } };
+    await expect(cyclePermissionMode(refusing, null)).rejects.toThrow('PERMISSION_MODE_DENIED');
+    const v1 = { async inspect() { return { ...view, supported: false }; }, async set(): Promise<never> { throw new Error('unused'); } };
+    expect((await cyclePermissionMode(v1, null)).entries).toEqual([expect.objectContaining({ level: 'error' })]);
+  });
+
+  it('shows the stop as mark and word in the status row; full access stays a non-droppable warning', () => {
+    const words = { standart: 'standart', 'ask-edits': 'dikkatli', 'full-auto': 'tam otomatik', 'full-access': 'tam erişim' };
+    const row = (mode: Mode, stop: 'standart' | 'ask-edits' | 'full-auto' | 'full-access', mark: string) =>
+      worklineStatusSegments({ ...base, labels: { ...labels, modeStops: words }, mode, stop, modeMark: mark }).find(item => item.id === 'mode');
+    expect(row('standart', 'standart', '⏸')).toMatchObject({ text: '⏸ standart', role: 'muted' });
+    expect(row('standart', 'ask-edits', '⏸')).toMatchObject({ text: '⏸ dikkatli', role: 'muted' });
+    expect(row('full-auto', 'full-auto', '⏵⏵')).toMatchObject({ text: '⏵⏵ tam otomatik', role: 'modeIndicator' });
+    expect(row('full-access', 'full-access', '!!')).toMatchObject({ text: '!! tam erişim', role: 'error', droppable: false });
   });
 });

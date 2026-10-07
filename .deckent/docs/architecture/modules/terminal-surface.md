@@ -214,3 +214,21 @@ characters, attached file bodies not printed, tool results as one count line, su
 equal by a contract test) and the tokens left, a size-estimate split of the visible history (the service's own instructions are not in
 it), the last summary, the three largest items and a `/clear` suggestion at ≥ 60 %. Protocol unchanged (v16). Open: `/compact` (protocol
 decision), redrawing an open suggestion list when the index refreshes.
+
+**Readability, opening banner and theme (TERMINAL-UX T2 L2, owner 2026-10-07; implemented on `tui2/readable-startup-mode`, not landed).**
+Token map `design/tokens/terminal.map.json` adds the roles `userBar`, `userLabel`, `assistantLabel`, `workerCard`, `windowBorder`,
+`windowTitle`, `selection`, `diffAdded`, `diffRemoved`, `modeIndicator` and four themes (`dark`, `light`, `dark-daltonized`,
+`light-daltonized`, each with reference backgrounds); `scripts/build-terminal-palette.mjs` emits per-theme palettes (`THEME_PALETTES`,
+nearest xterm-256 index for new primitives). A contract test measures WCAG 2.2 contrast (text 4.5:1, borders 3:1) of every truecolor value
+on each reference background of its theme; Deckent never sets the terminal background. Colour choice is split: `colorCapability`
+(platform) reads `NO_COLOR`/`--no-color`/`FORCE_COLOR`/`TERM=dumb`/TTY, `COLORTERM` truecolor|24bit and a 256-colour `TERM`;
+`resolveTerminalTheme` (terminal-theme) applies `terminal.theme` (`auto|dark|light|dark-daltonized|light-daltonized|ansi`, default `auto`):
+`auto` uses the dark/light theme only when `COLORFGBG` reports the background and otherwise stays in ansi16 (the terminal's own palette);
+`colorTier` (monitor, crash report) keeps its background guard. The person's row is a left rail with the `You`/`Sen` label and the text in
+the terminal's own foreground; the answer heading is `● Deckent` (`assistantLabel`); worker cards use `workerCard`. Opening: on a TTY the
+workline first scrolls the visible rows into the scrollback (`rows` line feeds), then sends CUP home + ED 2 and prints the banner (catalog
+mark with an ASCII form, version, project and path, model, mode, `/help · Shift+Tab mode · ? shortcuts`), one line below 60 columns or
+with `terminal.banner: compact`, none with `off`; `terminal.clearOnStart: false` and `TERM=dumb` never clear; a pipe receives nothing.
+ED 3 is never sent by Deckent; Ink's own overflow redraw (`clearTerminal` when the live frame reaches the window height) still contains
+ED 3 — an open limit the bounded window (L1) and a decision on Ink's overflow path must close. Proof:
+`/home/alperen/deckent-refactor-work/proof/TUI2-2026-10-07/L2-review.md`.

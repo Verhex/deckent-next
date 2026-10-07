@@ -28,7 +28,7 @@ export { providerSpendingBudgetFor, providerSpendingSchema, registerProviderSpen
 export { providerSpendAuditConfigSchema, validateProviderSpendAuditLayers } from './spend-audit.js';
 export { openConfiguredSecretStore, readSecretsConfig, registerSecretStoreBackend, secretsConfigSchema, type SecretsConfig } from './secrets.js';
 export { readOperationsConfig, operationsConfigSchema, registerOperationAdapterModule, resolveOperationCatalog, resolveOperationTargets, type OperationsConfig } from './operations.js';
-export { readTerminalChatConfig, readTerminalConfig, readTerminalFetchConfig, readTerminalScratchConfig, readTerminalShellConfig, terminalConfigSchema,
+export { readTerminalChatConfig, readTerminalConfig, readTerminalFetchConfig, readTerminalScratchConfig, readTerminalShellConfig, terminalConfigSchema, TERMINAL_BANNERS, TERMINAL_THEMES,
   type TerminalChatConfig, type TerminalFetchConfig, type TerminalScratchConfig, type TerminalShellConfig } from './terminal.js';
 export { readDecisionPolicy, registerDecisionConfig, validateDecisionPolicyLayers } from './decision.js';
 export { readIdentityProfileConfig, registerIdentityProfileConfig } from './identity-profile.js';

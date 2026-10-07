@@ -7,34 +7,78 @@ const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const mapPath = join(root, 'design/tokens/terminal.map.json');
 const outPath = join(root, 'src/surfaces/core/terminal-theme/internal/generated/palette.ts');
 
-/** NOVA primitive hex/256 used when map references a primitive name. */
+/**
+ * NOVA primitive hex/256 per theme. `dark` is the base; the other themes override what differs. An absent `ansi256` is the nearest xterm
+ * 256-colour index (cube + gray ramp). Light values keep WCAG 2.2 4.5:1 on white; the daltonized themes move the success/error pair
+ * to the blue/orange axis of the Okabe–Ito colour-universal palette (red–green deficiencies keep that pair apart).
+ */
 const PRIMITIVES = {
-  novaGo: { hex: '#43E39A', ansi256: 78 },
-  novaAbort: { hex: '#FF6B5E', ansi256: 203 },
-  novaAmber: { hex: '#E8B34C', ansi256: 179 },
-  novaGlow: { hex: '#38D3FF', ansi256: 81 },
-  novaGlowBright: { hex: '#7BE8FF', ansi256: 117 },
-  seaTextMuted: { hex: '#7FA3B2', ansi256: 109 },
+  dark: {
+    novaGo: { hex: '#43E39A', ansi256: 78 },
+    novaAbort: { hex: '#FF6B5E', ansi256: 203 },
+    novaAmber: { hex: '#E8B34C', ansi256: 179 },
+    novaGlow: { hex: '#38D3FF', ansi256: 81 },
+    novaGlowBright: { hex: '#7BE8FF', ansi256: 117 },
+    seaTextMuted: { hex: '#7FA3B2', ansi256: 109 },
+  },
+  light: {
+    novaGo: { hex: '#16774A' }, novaAbort: { hex: '#B3261E' }, novaAmber: { hex: '#8A5A00' },
+    novaGlow: { hex: '#0B6A9E' }, novaGlowBright: { hex: '#075985' }, seaTextMuted: { hex: '#4E6874' },
+  },
+  'dark-daltonized': { novaGo: { hex: '#56B4E9' }, novaAbort: { hex: '#E69F00' }, novaAmber: { hex: '#F0E442' } },
+  'light-daltonized': {
+    novaGo: { hex: '#0072B2' }, novaAbort: { hex: '#B85000' }, novaAmber: { hex: '#8A5A00' },
+    novaGlow: { hex: '#0B6A9E' }, novaGlowBright: { hex: '#075985' }, seaTextMuted: { hex: '#4E6874' },
+  },
 };
 
 const map = JSON.parse(readFileSync(mapPath, 'utf8'));
 const roles = Object.entries(map.roles ?? {});
-if (!roles.length) {
-  console.error('build-terminal-palette: terminal.map.json has no roles');
+const themes = Object.entries(map.themes ?? {});
+if (!roles.length || !themes.length) {
+  console.error('build-terminal-palette: terminal.map.json needs roles and themes');
   process.exit(1);
 }
+for (const [name] of themes) if (!PRIMITIVES[name]) { console.error(`build-terminal-palette: no primitives for theme ${name}`); process.exit(1); }
 
-function entryFor(roleName, spec) {
-  const primitive = spec.primitive ? PRIMITIVES[spec.primitive] : undefined;
+const CUBE = [0, 95, 135, 175, 215, 255];
+/** Nearest xterm 256-colour index of a hex (6×6×6 cube 16–231 and gray ramp 232–255; squared RGB distance). */
+function nearestAnsi256(hex) {
+  const value = Number.parseInt(hex.slice(1), 16), rgb = [value >> 16, (value >> 8) & 255, value & 255];
+  const distance = other => other.reduce((sum, channel, index) => sum + (channel - rgb[index]) ** 2, 0);
+  let best = { index: 16, distance: Infinity };
+  for (let r = 0; r < 6; r++) for (let g = 0; g < 6; g++) for (let b = 0; b < 6; b++) {
+    const candidate = distance([CUBE[r], CUBE[g], CUBE[b]]);
+    if (candidate < best.distance) best = { index: 16 + 36 * r + 6 * g + b, distance: candidate };
+  }
+  for (let step = 0; step < 24; step++) {
+    const level = 8 + 10 * step, candidate = distance([level, level, level]);
+    if (candidate < best.distance) best = { index: 232 + step, distance: candidate };
+  }
+  return best.index;
+}
+
+function primitiveFor(theme, name) {
+  const own = PRIMITIVES[theme][name], base = PRIMITIVES.dark[name];
+  if (!own && !base) { console.error(`build-terminal-palette: unknown primitive ${name}`); process.exit(1); }
+  const value = own ?? base;
+  return { hex: value.hex, ansi256: value.ansi256 ?? nearestAnsi256(value.hex) };
+}
+
+function entryFor(theme, roleName, spec) {
+  const primitive = spec.primitive ? primitiveFor(theme, spec.primitive) : undefined;
   const hex = primitive?.hex ?? null;
   const ansi256 = primitive?.ansi256 ?? null;
-  const ansi16 = typeof spec.ansi16 === 'string' ? spec.ansi16 : '';
+  const override = map.themes[theme]?.ansi16?.[roleName];
+  const ansi16 = typeof override === 'string' ? override : typeof spec.ansi16 === 'string' ? spec.ansi16 : '';
   const attrs = Array.isArray(spec.attrs) ? spec.attrs.map(String) : [];
   const className = spec.class ?? 'primary';
-  return `  ${roleName}: { hex: ${hex ? `'${hex}'` : 'null'}, ansi256: ${ansi256 ?? 'null'}, ansi16: '${ansi16}', attrs: [${attrs.map(a => `'${a}'`).join(', ')}], class: '${className}' },`;
+  const contrast = hex === null ? 'none' : spec.contrast ?? 'text';
+  return `    ${roleName}: { hex: ${hex ? `'${hex}'` : 'null'}, ansi256: ${ansi256 ?? 'null'}, ansi16: '${ansi16}', attrs: [${attrs.map(a => `'${a}'`).join(', ')}], class: '${className}', contrast: '${contrast}' },`;
 }
 
 const roleUnion = roles.map(([name]) => `'${name}'`).join(' | ');
+const themeUnion = themes.map(([name]) => `'${name}'`).join(' | ');
 const body = `/**
  * AUTO-GENERATED by scripts/build-terminal-palette.mjs — DO NOT EDIT.
  * Source: design/tokens/terminal.map.json
@@ -43,18 +87,34 @@ export type PaletteRole = ${roleUnion};
 
 export type PaletteClass = 'primary' | 'supplemental' | 'decorative';
 
+/** WCAG 2.2: \`text\` needs 4.5:1 (1.4.3), \`border\` 3:1 (1.4.11) against each reference background; \`none\` uses the terminal's foreground. */
+export type PaletteContrast = 'text' | 'border' | 'none';
+
+export type PaletteTheme = ${themeUnion};
+
 export interface PaletteEntry {
   readonly hex: string | null;
   readonly ansi256: number | null;
   readonly ansi16: string;
   readonly attrs: readonly string[];
   readonly class: PaletteClass;
+  readonly contrast: PaletteContrast;
 }
 
-export const PALETTE: Record<PaletteRole, PaletteEntry> = {
-${roles.map(([name, spec]) => entryFor(name, spec)).join('\n')}
+export const PALETTE_THEMES: readonly PaletteTheme[] = [${themes.map(([name]) => `'${name}'`).join(', ')}];
+
+export const THEME_PALETTES: Readonly<Record<PaletteTheme, Readonly<Record<PaletteRole, PaletteEntry>>>> = {
+${themes.map(([theme]) => `  '${theme}': {\n${roles.map(([name, spec]) => entryFor(theme, name, spec)).join('\n')}\n  },`).join('\n')}
 };
+
+/** Reference backgrounds each theme's contrast is measured against (Deckent never sets the terminal background). */
+export const THEME_BACKGROUNDS: Readonly<Record<PaletteTheme, readonly string[]>> = {
+${themes.map(([theme, spec]) => `  '${theme}': [${(spec.backgrounds ?? []).map(value => `'${value}'`).join(', ')}],`).join('\n')}
+};
+
+/** The dark theme: the palette before themes existed. */
+export const PALETTE: Readonly<Record<PaletteRole, PaletteEntry>> = THEME_PALETTES.dark;
 `;
 
 writeFileSync(outPath, body);
-console.log(`build-terminal-palette: wrote ${roles.length} roles → ${outPath}`);
+console.log(`build-terminal-palette: wrote ${roles.length} roles x ${themes.length} themes -> ${outPath}`);

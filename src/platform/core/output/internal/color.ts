@@ -1,16 +1,27 @@
 import type { Environment } from '#platform/core/host/index.js';
 export type ColorTier = 'none' | 'ansi16' | 'ansi256' | 'truecolor';
 export interface ColorOptions { noColor?: boolean; env?: Environment; isTTY?: boolean; argv?: readonly string[] }
-export function colorTier(options: ColorOptions = {}): ColorTier {
+/**
+ * What the terminal can draw (T2 T-READABLE): `--no-color`/`FORCE_COLOR=0`/`NO_COLOR`/`TERM=dumb`/non-TTY are none; `FORCE_COLOR=3|2` force
+ * truecolor/256; `COLORTERM` containing `truecolor` or `24bit` is truecolor (termstandard/colors); a `TERM` naming 256 colours is ansi256.
+ * No background guess: a surface that picks its own theme (the terminal workline) decides the background separately.
+ */
+export function colorCapability(options: ColorOptions = {}): ColorTier {
   const env = options.env ?? process.env, force = env['FORCE_COLOR'];
   if (options.noColor || (options.argv ?? process.argv).includes('--no-color') || force === '0') return 'none';
   if (force === undefined && (env['NO_COLOR'] !== undefined || env['TERM']?.trim().toLowerCase() === 'dumb' || !(options.isTTY ?? process.stdout.isTTY))) return 'none';
   if (force === '3') return 'truecolor';
   if (force === '2') return 'ansi256';
-  const bg = Number.parseInt(env['COLORFGBG']?.split(';').at(-1) ?? '', 10);
-  if (!Number.isInteger(bg) || !(bg === 8 || (bg >= 0 && bg <= 6))) return 'ansi16';
   if (/truecolor|24bit/i.test(env['COLORTERM'] ?? '')) return 'truecolor';
   return env['TERM']?.includes('256') ? 'ansi256' : 'ansi16';
+}
+/** The capability, kept at ansi16 (the terminal's own palette) unless `COLORFGBG` says the background is dark; forced tiers stand. */
+export function colorTier(options: ColorOptions = {}): ColorTier {
+  const capability = colorCapability(options), env = options.env ?? process.env, force = env['FORCE_COLOR'];
+  if (capability === 'none' || force === '3' || force === '2') return capability;
+  const bg = Number.parseInt(env['COLORFGBG']?.split(';').at(-1) ?? '', 10);
+  if (!Number.isInteger(bg) || !(bg === 8 || (bg >= 0 && bg <= 6))) return 'ansi16';
+  return capability;
 }
 export function shouldUseColor(options: ColorOptions = {}): boolean { return colorTier(options) !== 'none'; }
 export function stripAnsi(value: string): string {
