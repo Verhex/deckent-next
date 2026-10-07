@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { afterEach, expect, it } from 'vitest';
 import { clearConfigCache, resolveGlobalConfigPaths } from '#platform/index.js';
-import { registerProviderConfig } from '#adapters/index.js';
+import { createEncryptedFileSecretStore, registerProviderConfig } from '#adapters/index.js';
 import { applyPolicyTemplateInstallation } from '#composition/core/installation/index.js';
 import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
 import { cliChildEnv } from '../support/child-env.js';
@@ -43,7 +43,8 @@ function run(args: readonly string[], cwd: string, env: NodeJS.ProcessEnv, input
   });
 }
 
-it.skipIf(process.platform !== 'linux')('compiled CLI + service: secret set/delete over the socket, value from stdin only, never printed, logged or recorded', async () => {
+it.skipIf(process.platform !== 'linux').each(['core.secret-store.file@1', 'core.secret-store.encrypted-file@1'])('compiled CLI + service (%s): secret set/delete over the socket, value from stdin only, never printed, logged or recorded', async backend => {
+  const sealed = backend === 'core.secret-store.encrypted-file@1';
   registerProviderConfig();
   const root = await mkdtemp(join(tmpdir(), 'deckent-secret-process-')); cleanup.push(() => rm(root, { recursive: true, force: true }));
   const project = join(root, 'project'), home = join(root, 'home');
@@ -57,7 +58,7 @@ it.skipIf(process.platform !== 'linux')('compiled CLI + service: secret set/dele
       headerTimeoutMs: 1000, responseTimeoutMs: 5000, shutdownGraceMs: 1000 } }), { mode: 0o600 });
   const globalPath = resolveGlobalConfigPaths(env).platformPath, globalRoot = dirname(globalPath);
   await mkdir(globalRoot, { recursive: true, mode: 0o700 }); await chmod(globalRoot, 0o700);
-  await writeFile(globalPath, JSON.stringify({ secrets: { store: 'core.secret-store.file@1' } }), { mode: 0o600 });
+  await writeFile(globalPath, JSON.stringify({ secrets: { store: backend } }), { mode: 0o600 });
   const opened = await openConfiguredAttemptStore(project, { env }); const ledger = opened.path, dataRoot = opened.layout.root;
   opened.store.close(); clearConfigCache();
 
@@ -68,9 +69,20 @@ it.skipIf(process.platform !== 'linux')('compiled CLI + service: secret set/dele
   const printed: string[] = [];
   const set = await run(['secret', 'set', 'PROVIDER_TOKEN', '--json'], project, env, `${CANARY}\n`); printed.push(set.stdout, set.stderr);
   expect(set.code, set.stderr).toBe(0);
-  expect(JSON.parse(set.stdout)).toEqual({ schemaVersion: 1, scopeId: 'installation', name: 'PROVIDER_TOKEN', action: 'set', backend: 'core.secret-store.file@1', removed: null });
-  const stored = JSON.parse(await readFile(join(globalRoot, 'secrets.json'), 'utf8')) as { secrets: Record<string, string> };
-  expect(stored.secrets).toEqual({ PROVIDER_TOKEN: CANARY });
+  expect(JSON.parse(set.stdout)).toEqual({ schemaVersion: 1, scopeId: 'installation', name: 'PROVIDER_TOKEN', action: 'set', backend, removed: null });
+  if (sealed) {
+    // SECRET-AT-REST: the service wrote a sealed store that opens with the installation key; no file of the root holds the value or the name.
+    expect(await createEncryptedFileSecretStore({ root: globalRoot, platform: 'linux' }).get('PROVIDER_TOKEN')).toBe(CANARY);
+    for (const entry of await readdir(globalRoot, { recursive: true })) {
+      const bytes = await readFile(join(globalRoot, String(entry))).catch(() => null);
+      expect(bytes?.includes(Buffer.from(CANARY)) ?? false, String(entry)).toBe(false);
+      if (String(entry) === 'secrets.sealed.json') expect(bytes!.includes(Buffer.from('PROVIDER_TOKEN'))).toBe(false);
+    }
+    await expect(readFile(join(globalRoot, 'secrets.json'))).rejects.toMatchObject({ code: 'ENOENT' });
+  } else {
+    const stored = JSON.parse(await readFile(join(globalRoot, 'secrets.json'), 'utf8')) as { secrets: Record<string, string> };
+    expect(stored.secrets).toEqual({ PROVIDER_TOKEN: CANARY });
+  }
   const listed = await run(['secret', 'list', '--json'], project, env); printed.push(listed.stdout, listed.stderr);
   expect(JSON.parse(listed.stdout)).toMatchObject({ names: ['PROVIDER_TOKEN'] });
   // A value on argv is a usage refusal before anything is sent.
@@ -78,13 +90,14 @@ it.skipIf(process.platform !== 'linux')('compiled CLI + service: secret set/dele
   expect(argv.code).toBe(2);
   const removed = await run(['secret', 'delete', 'PROVIDER_TOKEN', '--json'], project, env); printed.push(removed.stdout, removed.stderr);
   expect(JSON.parse(removed.stdout)).toMatchObject({ action: 'delete', removed: true });
-  expect(JSON.parse(await readFile(join(globalRoot, 'secrets.json'), 'utf8'))).toEqual({ schemaVersion: 1, secrets: {} });
+  if (sealed) expect(await createEncryptedFileSecretStore({ root: globalRoot, platform: 'linux' }).listNames()).toEqual([]);
+  else expect(JSON.parse(await readFile(join(globalRoot, 'secrets.json'), 'utf8'))).toEqual({ schemaVersion: 1, secrets: {} });
 
   const db = new DatabaseSync(ledger, { readOnly: true });
   let subjects: unknown[];
   try { subjects = db.prepare('SELECT record FROM audit_events ORDER BY sequence').all().map(row => (JSON.parse(String(row['record'])) as { event: { subject: unknown } }).event.subject); }
   finally { db.close(); }
-  expect(subjects).toEqual(['set', 'delete'].map(action => ({ kind: 'secret-change', action, name: 'PROVIDER_TOKEN', backend: 'core.secret-store.file@1',
+  expect(subjects).toEqual(['set', 'delete'].map(action => ({ kind: 'secret-change', action, name: 'PROVIDER_TOKEN', backend,
     decision: { effect: 'allow', ruleId: 'first-run-secret-store' } })));
 
   service.kill('SIGTERM'); await new Promise(done => service.once('close', done));

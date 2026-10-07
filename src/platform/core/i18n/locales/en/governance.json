@@ -717,7 +717,7 @@
   "error.SECRET_VALUE_INVALID": "A secret's value must be non-empty and at most 64 KiB.",
   "error.SECRET_STORE_UNKNOWN": "The configured secret-store {backend} is not installed. Set secrets.store in the installation config to a registered backend (core.secret-store.env@1 or core.secret-store.file@1).",
   "error.SECRET_STORE_UNAVAILABLE": "The secret-store {backend} cannot be used here (no installation directory, an I/O failure, or a platform it does not support yet). Nothing was read or written.",
-  "error.SECRET_STORE_UNSAFE": "The secret-store in {path} is not private: the directory and secrets.json must belong to you, allow no group or other access (0700 / 0600), and must not be links. It was not read or repaired.",
+  "error.SECRET_STORE_UNSAFE": "The secret-store in {path} is not private: the directory and the store files (secrets.json, or secrets.sealed.json with secrets.key) must belong to you, allow no group or other access (0700 / 0600), and must not be links. It was not read or repaired.",
   "error.SECRET_STORE_CORRUPT": "The secret-store {backend} could not be read as a schemaVersion 1 document. Its content is not shown.",
   "error.SECRET_STORE_FULL": "The secret-store {backend} has no room for this change: the stored document would exceed its size bound ({maxBytes} bytes), so nothing was written and every stored entry stays readable. Delete an entry you no longer need, then try again.",
   "error.SECRET_STORE_READ_ONLY": "The secret-store {backend} is read-only; select a writable backend (for example core.secret-store.file@1) in the installation config.",

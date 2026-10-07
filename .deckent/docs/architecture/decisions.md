@@ -6,6 +6,7 @@ Kaynak/Source: ARCHITECTURE.md @58537c7f lines 2158–2564; text below is verbat
 
 | Date | Decision | Why |
 |---|---|---|
+| 2026-10-08 | SECRET-AT-REST: `core.secret-store.encrypted-file@1` (AES-256-GCM document envelope, installation key file, no passphrase) beside env/file; selection stays explicit (`secrets.store`); provider refusals get stable tokens (`credential-rejected`, `access-denied`, `spend-limit`, `rate-limit`, `limit-reached`) via `classifyProviderRejection`; a config-load mask feed of `credentialRef` values was rejected (it resolved the store on every load, breaking the send-time-only lookup contract). | Owner 2026-10-08 key custody decisions (Jev 15413534, 814be8aa); proof `DECKENT-API-KEYS-2026-10-08`. |
 | 2026-10-03 | REPO-STANDARDS: owner admits `README.tr.md` in `markdown.trackedAllow`; no product writer. | Turkish README mirrors current English product facts without widening runtime claims. |
 | 2026-10-03 | REPO-STANDARDS: owner admits `CONTRIBUTING.md` in `markdown.trackedAllow`; no product writer. | Contributor entry, checks, attribution and human/host worker PR boundaries need a public guide. |
 | 2026-10-03 | REPO-STANDARDS: owner admits `CODE_OF_CONDUCT.md` in `markdown.trackedAllow`; no product writer. | Owner-selected Contributor Covenant 2.1 supplies community behavior and enforcement guidance. |

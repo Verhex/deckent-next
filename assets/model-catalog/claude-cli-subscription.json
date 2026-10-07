@@ -1,6 +1,6 @@
 {
   "schemaVersion": 3,
-  "revision": "claude-cli-subscription-2026-10-02",
+  "revision": "claude-cli-subscription-2026-10-08",
   "providers": [
     {
       "id": "claude-cli-subscription",
@@ -256,6 +256,78 @@
           }
         },
         {
+          "id": "haiku-5-5",
+          "version": 1,
+          "nativeId": "claude-haiku-5-5",
+          "protocols": [
+            {
+              "family": "claude-code-stream-json",
+              "version": "v1",
+              "capabilities": []
+            }
+          ],
+          "lifecycle": {
+            "state": "active",
+            "deprecatedOn": null,
+            "retireNotBefore": "2027-10-07",
+            "retiredOn": null,
+            "source": {
+              "url": "https://platform.claude.com/docs/en/about-claude/model-deprecations",
+              "observedOn": "2026-10-08"
+            }
+          },
+          "minCliVersion": "2.1.293",
+          "efforts": [
+            "low",
+            "medium",
+            "high",
+            "xhigh",
+            "max"
+          ],
+          "aliases": [],
+          "channelModelId": "claude-haiku-5-5",
+          "vendorId": "anthropic",
+          "canonicalModelId": "claude-haiku-5-5",
+          "displayName": "Claude Haiku 5.5",
+          "modalities": {
+            "input": [],
+            "output": []
+          },
+          "contextWindow": null,
+          "maxOutputTokens": null,
+          "reasoning": {
+            "supportedEfforts": [
+              "low",
+              "medium",
+              "high",
+              "xhigh",
+              "max"
+            ],
+            "defaultEffort": null
+          },
+          "capabilities": {
+            "tools": "unknown",
+            "vision": "unknown",
+            "pdf": "unknown",
+            "structuredOutput": "unknown",
+            "promptCaching": "unknown",
+            "streaming": "unknown"
+          },
+          "pricing": {
+            "kind": "subscription",
+            "source": {
+              "sourceUrl": "https://code.claude.com/docs/en/model-config",
+              "fetchedOn": "2026-10-08"
+            },
+            "asOf": "2026-10-08"
+          },
+          "minClientVersion": "2.1.293",
+          "provenance": {
+            "sourceUrl": "https://code.claude.com/docs/en/model-config",
+            "fetchedOn": "2026-10-08"
+          }
+        },
+        {
           "id": "haiku-4-5",
           "version": 1,
           "nativeId": "claude-haiku-4-5-20251001",
@@ -326,7 +398,8 @@
       "modelIds": [
         "claude-opus-5-5",
         "claude-sonnet-5-5",
-        "claude-fable-5-1"
+        "claude-fable-5-1",
+        "claude-haiku-5-5"
       ]
     }
   ]

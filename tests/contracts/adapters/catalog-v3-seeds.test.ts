@@ -28,7 +28,8 @@ describe('catalog v3 packaged seeds through ledger and admission', () => {
   });
   it('keeps Claude recommendations passive at register and includes owner retirement', async () => {
     const raw = await seed('claude-cli-subscription'); expect(raw.schemaVersion).toBe(3);
-    expect(raw.recommendedActivations[0].modelIds.sort()).toEqual(['claude-opus-5-5', 'claude-sonnet-5-5', 'claude-fable-5-1'].sort());
+    // HAIKU55-CATALOG (owner 2026-10-08): Claude Haiku 5.5 joins the recommended active set.
+    expect(raw.recommendedActivations[0].modelIds.sort()).toEqual(['claude-opus-5-5', 'claude-sonnet-5-5', 'claude-fable-5-1', 'claude-haiku-5-5'].sort());
     expect(raw.providers[0].models.find((m: { nativeId: string }) => m.nativeId === 'claude-haiku-4-5-20251001').lifecycle.retiredOn).toBe('2026-10-15');
   });
   it('reads and replays a v2 receipt after registering v3 facts without a ledger migration', async () => {

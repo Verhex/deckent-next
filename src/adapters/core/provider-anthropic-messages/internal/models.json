@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "retrievedAt": "2026-10-03",
+  "retrievedAt": "2026-10-08",
   "sources": {
     "thinking": "https://platform.claude.com/docs/en/build-with-claude/thinking",
     "effort": "https://platform.claude.com/docs/en/build-with-claude/effort",
@@ -9,7 +9,7 @@
     "tokenCounting": "https://platform.claude.com/docs/en/build-with-claude/token-counting",
     "toolUse": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/overview"
   },
-  "note": "What the Messages API accepts per model: thinking.type adaptive / enabled (+budget_tokens) / the one off type (disabled or between_tools) and the highest effort that off type allows, output_config.effort levels and default, synchronous max output. Omitting thinking and effort is accepted by every model. Mythos models (access-program only) are not listed. Model capability rows retain the 2026-09-29 snapshot. Effort vocabulary and minimum manual thinking budget verified against official docs 2026-10-03: budget_tokens minimum 1024. Prompt overhead 2048 is the preserved local reservation allowance, not a vendor token-count guarantee; exact count depends on the request and provider counter.",
+  "note": "What the Messages API accepts per model: thinking.type adaptive / enabled (+budget_tokens) / the one off type (disabled or between_tools) and the highest effort that off type allows, output_config.effort levels and default, synchronous max output. Omitting thinking and effort is accepted by every model. Mythos models (access-program only) are not listed. Model capability rows retain the 2026-09-29 snapshot; the claude-haiku-5-5 row was read 2026-10-08 (models/haiku-5-5 overview + whats-new, effort page: all five levels, default medium; thinking disabled only at high effort or below; manual budget_tokens refused). Effort vocabulary and minimum manual thinking budget verified against official docs 2026-10-03: budget_tokens minimum 1024. Prompt overhead 2048 is the preserved local reservation allowance, not a vendor token-count guarantee; exact count depends on the request and provider counter.",
   "effort": { "levels": ["low", "medium", "high", "xhigh", "max"], "order": "ascending" },
   "metering": { "promptOverheadTokens": 2048, "thinkingBudgetMinTokens": 1024 },
   "models": [
@@ -25,6 +25,7 @@
     { "modelId": "claude-sonnet-5", "thinking": { "adaptive": true, "enabled": false, "off": "disabled" }, "effort": { "levels": ["low", "medium", "high", "xhigh", "max"], "default": "high" }, "maxOutputTokens": 128000, "source": "https://platform.claude.com/docs/en/models/sonnet-5/overview" },
     { "modelId": "claude-sonnet-4-6", "thinking": { "adaptive": true, "enabled": true, "off": "disabled" }, "effort": { "levels": ["low", "medium", "high", "max"], "default": "high" }, "maxOutputTokens": 128000, "source": "https://platform.claude.com/docs/en/models/sonnet-4-6/overview" },
     { "modelId": "claude-sonnet-4-5-20250929", "thinking": { "adaptive": false, "enabled": true, "off": "disabled" }, "effort": null, "maxOutputTokens": 64000, "source": "https://platform.claude.com/docs/en/models/sonnet-4-5/overview" },
+    { "modelId": "claude-haiku-5-5", "thinking": { "adaptive": true, "enabled": false, "off": "disabled", "offMaxEffort": "high" }, "effort": { "levels": ["low", "medium", "high", "xhigh", "max"], "default": "medium" }, "maxOutputTokens": 128000, "source": "https://platform.claude.com/docs/en/models/haiku-5-5/overview" },
     { "modelId": "claude-haiku-4-5-20251001", "thinking": { "adaptive": false, "enabled": true, "off": "disabled" }, "effort": null, "maxOutputTokens": 64000, "source": "https://platform.claude.com/docs/en/models/haiku-4-5/overview" }
   ]
 }

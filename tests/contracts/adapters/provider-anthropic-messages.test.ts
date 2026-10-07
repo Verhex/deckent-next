@@ -266,7 +266,7 @@ it('quotes the exact worst case from the profile tariff and refuses a quote for 
   expect(anthropicMaxChargeMinorUnits(anthropicPublishedTariff('claude-opus-5-5')!, '1h', 1_000_000, 128_000)).toBe(1058);
   // The dearest input class governs: Fable 5.1 writes at $20 with the 1h cache, not the $10 input rate.
   expect(anthropicMaxChargeMinorUnits(anthropicPublishedTariff('claude-fable-5-1')!, '1h', 1_000_000, 0)).toBe(Math.ceil((1_002_048 * 20) / 10_000));
-  expect(ANTHROPIC_PUBLISHED_TARIFFS.map(row => row.modelId)).toEqual(['claude-fable-5-1', 'claude-opus-5-5', 'claude-sonnet-5-5', 'claude-haiku-4-5-20251001']);
+  expect(ANTHROPIC_PUBLISHED_TARIFFS.map(row => row.modelId)).toEqual(['claude-fable-5-1', 'claude-opus-5-5', 'claude-sonnet-5-5', 'claude-haiku-5-5', 'claude-haiku-4-5-20251001']);
 
   const priced = createAnthropicMessagesPricedNative({ resolveCredential: credential }), endpoint = 'https://127.0.0.1:9/v1/messages';
   const stored = profile(endpoint, { cache: '5m' }), request = streamed();
@@ -278,6 +278,8 @@ it('quotes the exact worst case from the profile tariff and refuses a quote for 
   expect(quote).toMatchObject({ scopeId: 'scope', currency: 'USD', pricing: { id: 'anthropic-published-tariff', version: 1, definition: { modelId: MODEL } },
     meter: { id: 'anthropic-messages-reservation', evidence: { calculation: { cache: '5m', outputBoundTokens: 64 } } } });
   expect(quote.maxChargeMinorUnits).toBeGreaterThan(0);
+  // A flat tariff keeps the v1 evidence shape: no prompt-length tier field (HAIKU55-CATALOG).
+  expect('promptTier' in (quote.meter.evidence as { calculation: object }).calculation).toBe(false);
   expect(priced.quote({ ...spending, prepared: token } as never)).toEqual(quote);
   expect(() => priced.quote({ ...spending, requestDigest: 'b'.repeat(64), prepared: token } as never)).toThrow();
   expect(() => priced.quote({ ...spending, prepared: {} } as never)).toThrow();
