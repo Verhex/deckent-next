@@ -8,7 +8,7 @@ export { appendLedger, boundAgentHistory, boundChatHistory, compactLedger, EMPTY
   type ChatTurnMessage, type LedgerBuffer } from '#surfaces/core/terminal-ledger/index.js';
 export { WorklinePaletteProvider } from '#surfaces/core/terminal-kit/index.js';
 export { parseSlashLine, WORKLINE_SLASH_COMMANDS } from '#surfaces/core/terminal-kit/index.js';
-export { resolveWorklinePalette, DEFAULT_INK_PALETTE, type WorklineInkPalette, type WorklineInkRole, type ColorTier } from '#surfaces/core/terminal-kit/index.js';
+export { resolveWorklinePalette, resolveTerminalTheme, TERMINAL_THEME_SETTINGS, DEFAULT_INK_PALETTE, type WorklineInkPalette, type WorklineInkRole, type ColorTier, type TerminalThemeSetting } from '#surfaces/core/terminal-kit/index.js';
 export {
   WORKLINE_BRIDGE_SCHEMA_VERSION,
   buildWorklineBridgeSnapshot,

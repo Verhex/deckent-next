@@ -1,9 +1,11 @@
 export type ColorTier = 'none' | 'ansi16' | 'ansi256' | 'truecolor';
-import { PALETTE, type PaletteRole } from './generated/palette.js';
+import { THEME_PALETTES, type PaletteRole, type PaletteTheme } from './generated/palette.js';
 
-/** Workline layout roles projected from semantic palette roles, plus the rendered-answer roles (markdown, status). */
+/** Workline layout roles projected from semantic palette roles, plus the rendered-answer roles (markdown, status). T2 (T-READABLE): the person's
+ * line (`userBar` rail, `userLabel`), the answer heading (`assistantLabel`), worker cards, windows, selection, diff marks and the mode indicator. */
 export type WorklineInkRole = 'accent' | 'muted' | 'user' | 'assistant' | 'error' | 'code' | 'link' | 'info' | 'success' | 'warning'
-  | 'strong' | 'emphasis' | 'strike';
+  | 'userBar' | 'userLabel' | 'assistantLabel' | 'workerCard' | 'windowBorder' | 'windowTitle' | 'focus' | 'selection' | 'diffAdded' | 'diffRemoved'
+  | 'modeIndicator' | 'strong' | 'emphasis' | 'strike';
 
 export type InkRoleStyle = Readonly<{ color?: string; bold?: boolean; italic?: boolean; strikethrough?: boolean; underline?: boolean; inverse?: boolean; dimColor?: boolean }>;
 
@@ -26,12 +28,23 @@ const WORKLINE_ROLE_MAP: Readonly<Record<Exclude<WorklineInkRole, AttributeRole>
   info: 'info',
   success: 'success',
   warning: 'warning',
+  userBar: 'userBar',
+  userLabel: 'userLabel',
+  assistantLabel: 'assistantLabel',
+  workerCard: 'workerCard',
+  windowBorder: 'windowBorder',
+  windowTitle: 'windowTitle',
+  focus: 'focus',
+  selection: 'selection',
+  diffAdded: 'diffAdded',
+  diffRemoved: 'diffRemoved',
+  modeIndicator: 'modeIndicator',
 };
 /** Text attributes carry emphasis on every host theme; the `none` tier (NO_COLOR) drops them with the colours. */
 const ATTRIBUTE_ROLES: Readonly<Record<AttributeRole, InkRoleStyle>> = { strong: { bold: true }, emphasis: { italic: true }, strike: { strikethrough: true } };
 
-function tierColor(role: PaletteRole, tier: ColorTier): string | undefined {
-  const entry = PALETTE[role];
+function tierColor(theme: PaletteTheme, role: PaletteRole, tier: ColorTier): string | undefined {
+  const entry = THEME_PALETTES[theme][role];
   if (tier === 'truecolor' && entry.hex !== null) return entry.hex;
   if (tier === 'ansi256' && entry.ansi256 !== null) return `ansi256(${entry.ansi256})`;
   if (entry.ansi16 === '') return undefined;
@@ -40,11 +53,11 @@ function tierColor(role: PaletteRole, tier: ColorTier): string | undefined {
   return name;
 }
 
-function roleStyle(role: PaletteRole, tier: ColorTier): InkRoleStyle {
+function roleStyle(theme: PaletteTheme, role: PaletteRole, tier: ColorTier): InkRoleStyle {
   if (tier === 'none') return {};
-  const entry = PALETTE[role];
+  const entry = THEME_PALETTES[theme][role];
   const style: { color?: string; bold?: boolean; underline?: boolean; inverse?: boolean } = {};
-  const color = tierColor(role, tier);
+  const color = tierColor(theme, role, tier);
   if (color !== undefined) style.color = color;
   if (entry.attrs.includes('1')) style.bold = true;
   if (entry.attrs.includes('4')) style.underline = true;
@@ -52,10 +65,11 @@ function roleStyle(role: PaletteRole, tier: ColorTier): InkRoleStyle {
   return style;
 }
 
-export function resolveWorklinePalette(tier: ColorTier): WorklineInkPalette {
+/** `theme` picks the truecolor/256 values (and the daltonized ansi16 pair); the dark theme is the palette before themes existed. */
+export function resolveWorklinePalette(tier: ColorTier, theme: PaletteTheme = 'dark'): WorklineInkPalette {
   const out: Partial<Record<WorklineInkRole, InkRoleStyle>> = {};
   for (const [worklineRole, paletteRole] of Object.entries(WORKLINE_ROLE_MAP) as [WorklineInkRole, PaletteRole][]) {
-    out[worklineRole] = Object.freeze(roleStyle(paletteRole, tier));
+    out[worklineRole] = Object.freeze(roleStyle(theme, paletteRole, tier));
   }
   for (const [role, style] of Object.entries(ATTRIBUTE_ROLES) as [AttributeRole, InkRoleStyle][]) out[role] = Object.freeze(tier === 'none' ? {} : style);
   return Object.freeze(out) as WorklineInkPalette;

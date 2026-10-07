@@ -54,7 +54,7 @@ export { getConfigMetadata } from '#platform/core/config/index.js';
 export { getConfigValue } from '#platform/core/config/index.js';
 export { resolveLocalOsActorId, resolveLocalOsPrincipal, principalToActor, assessActorAssurance, assertActorAssurance } from '#platform/core/identity/index.js';
 export type { PrincipalEvidence, ActorContext } from '#platform/core/identity/index.js';
-export { colorTier, shouldUseColor, stripAnsi, terminalLineEnd, terminalSafeText } from '#platform/core/output/index.js';
+export { colorCapability, colorTier, shouldUseColor, stripAnsi, terminalLineEnd, terminalSafeText } from '#platform/core/output/index.js';
 export { formatValue, formatTable, formatStatus, readMemoryKnowledge } from '#platform/core/output/index.js';
 export { emit, createEmitter } from '#platform/core/output/index.js';
 export type { OutputSink, EmitOptions } from '#platform/core/output/index.js';
