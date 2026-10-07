@@ -38,7 +38,7 @@ const installationBindingLines = (r: InstallationBindingReport, platform: string
 function shellRealmLines(report: ShellRealmDoctorView): string[] {
   const lines = (view: ShellRealmSelection, label: string) => [`${view.marker ?? (view.selected === 'host' ? 'sandbox: host' : `sandbox: refused (${view.code ?? '-'})`)} [${label}]`,
     ...(view.notice ? [view.notice] : view.rejected.length ? [view.rejected.map(item => `${item.kind}: ${item.reason}`).join('; ')] : [])];
-  return [...lines(report, `terminal.shell.realm ${report.mode}`), ...(report.preferSandbox ? lines(report.preferSandbox, 'prefer-sandbox (MCP default)') : [])];
+  return [...lines(report, `terminal.shell.realm ${report.mode}`), ...(report.preferSandbox ? lines(report.preferSandbox, 'sandbox-net (MCP default: network, own HOME)') : [])];
 }
 
 /** The human `doctor` text; `poolLines` are the pool readiness lines the caller (which owns the pool port) already rendered. */

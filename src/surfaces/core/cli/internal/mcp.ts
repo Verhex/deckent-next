@@ -9,7 +9,8 @@ export type McpCommandRequest = { readonly verb: 'list'; readonly health?: boole
   | { readonly verb: 'add'; readonly scope: Scope; readonly name: string; readonly entry: unknown; readonly approve?: boolean }
   | { readonly verb: 'remove'; readonly name: string; readonly scope?: Scope }
   | { readonly verb: 'approve'; readonly name: string; readonly alwaysAsk: readonly string[] }
-  | { readonly verb: 'reset' | 'reconnect'; readonly name: string };
+  | { readonly verb: 'reset' | 'reconnect' | 'revoke'; readonly name: string }
+  | { readonly verb: 'import'; readonly from: 'claude-code' | 'claude-desktop' | { readonly file: string }; readonly scope?: 'local' | 'user' };
 /** The host's MCP registry command; `ask` shows one trust card (phase `launch`, then `tools`) and answers the owner's decision; `locale` is this
  * surface's (the host renders `lastStart.text` in it). */
 export type McpCommandHandler = (root: string, request: McpCommandRequest, options: ConfigLoadOptions, ask: (card: unknown) => Promise<boolean | null>,
@@ -18,16 +19,18 @@ export type McpCommandHandler = (root: string, request: McpCommandRequest, optio
 const usage = () => ErrorRegistry.createError('CLI_USAGE');
 const SCOPES: readonly string[] = ['local', 'project', 'user'];
 /**
- * `deckent mcp add [--scope local|project|user] [--transport stdio] [--env KEY=VALUE]… [--realm …] [--timeout-ms n] [--yes|--no-approve] <name> -- <command> [args…]`,
+ * `deckent mcp add [--scope local|project|user] [--transport stdio] [--env KEY=VALUE]… [--realm …] [--timeout-ms n] [--yes|--no-approve] <name> -- <command> [args…]`
+ * or `add [--transport http] [--header 'Key: value']… <name> <url>` (Streamable HTTP; a URL second argument implies http),
  * `add-json [--scope …] [--yes|--no-approve] <name> '<json>'`, `list`, `get <name>`, `remove <name> [--scope …]`, `approve <name> [--always-ask <tool>]… [--yes]`
+ * `import [--from claude-code|claude-desktop|<file>] [--scope local|user]` (servers other clients declare, added untrusted),
  * (MCP-CLIENT, Claude Code's scoped model: default scope local). Adding a local/user server is its trust decision (cards, or --yes); a project
  * entry is asked on first use. Registry files hold servers; trust and pins are product state.
  */
 export async function mcpCommand(argv: readonly string[], context: CommandContext): Promise<void> {
   const verb = argv[1];
   const rest = argv.slice(2), separator = rest.indexOf('--'), flags = separator < 0 ? rest : rest.slice(0, separator), command = separator < 0 ? [] : rest.slice(separator + 1);
-  const positionals: string[] = [], env: Record<string, string> = {}, alwaysAsk: string[] = [];
-  let scope: Scope | undefined, json = false, yes = false, noApprove = false, language: string | undefined, realm: string | undefined, timeoutMs: number | undefined;
+  const positionals: string[] = [], env: Record<string, string> = {}, headers: Record<string, string> = {}, alwaysAsk: string[] = [];
+  let transport: string | undefined, from: string | undefined, scope: Scope | undefined, json = false, yes = false, noApprove = false, language: string | undefined, realm: string | undefined, timeoutMs: number | undefined;
   for (let i = 0; i < flags.length; i++) {
     const flag = flags[i]!, value = () => { const next = flags[++i]; if (next === undefined || next.startsWith('--')) throw usage(); return next; };
     if (flag === '--json') json = true;
@@ -36,11 +39,13 @@ export async function mcpCommand(argv: readonly string[], context: CommandContex
     else if (flag === '--no-approve' && (verb === 'add' || verb === 'add-json')) noApprove = true;
     else if (flag === '--lang' && language === undefined) language = value();
     else if ((flag === '--scope' || flag === '-s') && scope === undefined) { const next = value(); if (!SCOPES.includes(next)) throw usage(); scope = next as Scope; }
-    else if ((flag === '--transport' || flag === '-t') && verb === 'add') { if (value() !== 'stdio') throw usage(); }
+    else if ((flag === '--transport' || flag === '-t') && verb === 'add' && transport === undefined) { transport = value(); if (transport !== 'stdio' && transport !== 'http') throw usage(); }
+    else if ((flag === '--header' || flag === '-H') && verb === 'add') { const pair = value(), at = pair.indexOf(':'); if (at < 1) throw usage(); headers[pair.slice(0, at).trim()] = pair.slice(at + 1).trim(); }
     else if ((flag === '--env' || flag === '-e') && verb === 'add') { const pair = value(), at = pair.indexOf('='); if (at < 1) throw usage(); env[pair.slice(0, at)] = pair.slice(at + 1); }
     else if (flag === '--realm' && verb === 'add' && realm === undefined) realm = value();
     else if (flag === '--timeout-ms' && verb === 'add' && timeoutMs === undefined) { timeoutMs = Number(value()); if (!Number.isSafeInteger(timeoutMs)) throw usage(); }
     else if (flag === '--always-ask' && verb === 'approve') alwaysAsk.push(value());
+    else if (flag === '--from' && verb === 'import' && from === undefined) from = value();
     else if (flag.startsWith('-')) throw usage();
     else positionals.push(flag);
   }
@@ -50,9 +55,15 @@ export async function mcpCommand(argv: readonly string[], context: CommandContex
   else if (verb === 'get' && positionals.length === 1 && !scope && !command.length) request = { verb, name: name! };
   else if (verb === 'remove' && positionals.length === 1 && !command.length) request = { verb, name: name!, ...(scope ? { scope } : {}) };
   else if (verb === 'approve' && positionals.length === 1 && !scope && !command.length) request = { verb, name: name!, alwaysAsk };
-  else if (verb === 'add' && positionals.length === 1 && command.length > 0) request = { verb, scope: scope ?? 'local', name: name!, approve: !noApprove,
+  else if (verb === 'revoke' && positionals.length === 1 && !scope && !command.length) request = { verb, name: name! };
+  else if (verb === 'add' && positionals.length === 2 && !command.length && transport !== 'stdio' && (transport === 'http' || /^https?:\/\//iu.test(positionals[1]!))
+    && !Object.keys(env).length && !realm) request = { verb, scope: scope ?? 'local', name: name!, approve: !noApprove,
+    entry: { type: 'http', url: positionals[1], ...(Object.keys(headers).length ? { headers } : {}), ...(timeoutMs ? { timeoutMs } : {}) } };
+  else if (verb === 'add' && positionals.length === 1 && command.length > 0 && transport !== 'http' && !Object.keys(headers).length) request = { verb, scope: scope ?? 'local', name: name!, approve: !noApprove,
     entry: { type: 'stdio', command: command[0], ...(command.length > 1 ? { args: command.slice(1) } : {}), ...(Object.keys(env).length ? { env } : {}),
       ...(realm ? { realm } : {}), ...(timeoutMs ? { timeoutMs } : {}) } };
+  else if (verb === 'import' && !positionals.length && !command.length && scope !== 'project' && (scope === undefined || (from !== undefined && from !== 'claude-code')))
+    request = { verb, from: from === undefined || from === 'claude-code' ? 'claude-code' : from === 'claude-desktop' ? from : { file: from }, ...(scope ? { scope } : {}) } as McpCommandRequest;
   else if (verb === 'add-json' && positionals.length === 2 && !command.length) {
     let entry: unknown;
     try { entry = JSON.parse(positionals[1]!); } catch { throw usage(); }
@@ -97,7 +108,7 @@ function mcpScopeText(scope: string, locale: Locale): string {
 /**
  * `/mcp` in the terminal (MCP-CLIENT, owner 2026-09-28): the servers of this project with their scope and trust state (nothing is started), and
  * `approve <name>` (forget a decline: the next message asks with the trust cards), `reconnect <name>` (the service restarts it on its next use),
- * `remove <name>` (from its registry file; its trust is revoked).
+ * `remove <name>` (from its registry file; its trust is revoked), `revoke <name>` (K1: its trust and the tool grant go; the entry stays).
  */
 export async function mcpSlash(root: string, args: string, context: CommandContext, options: ConfigLoadOptions, locale: Locale): Promise<readonly string[]> {
   const [verb = 'list', name, ...extra] = args.split(/\s+/u).filter(Boolean);
@@ -118,6 +129,7 @@ export async function mcpSlash(root: string, args: string, context: CommandConte
   }
   if (verb === 'approve') { await run({ verb: 'reset', name: name! }); return [t('terminal.mcp.approve', { name: name! }, locale)]; }
   if (verb === 'reconnect') { await run({ verb: 'reconnect', name: name! }); return [t('terminal.mcp.reconnect', { name: name! }, locale)]; }
+  if (verb === 'revoke') { await run({ verb: 'revoke', name: name! }); return [t('terminal.mcp.revoked', { name: name! }, locale)]; }
   if (verb === 'remove') { const removed = await run({ verb: 'remove', name: name! }) as { removed: { scope: string } }; return [t('terminal.mcp.removed', { name: name!, scope: mcpScopeText(removed.removed.scope, locale) }, locale)]; }
   return [t('terminal.mcp.usage', {}, locale)];
 }

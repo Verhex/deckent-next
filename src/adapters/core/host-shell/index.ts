@@ -4,7 +4,7 @@ export { agentShellEffectCommandId, HOST_SHELL_COMMAND_MAX_CHARS, HOST_SHELL_RUN
 export { bubblewrapObservation, nativeShellKernelProbe, probeShellCapabilities, SHELL_CAPABILITIES_VERSION, type BubblewrapCapability, type BubblewrapLauncher, type BubblewrapRestriction,
   type ShellCapabilities, type ShellCapabilityStatus, type ShellProbeEnvironment } from './internal/probe.js';
 export { boundSandboxReason, describeSandboxFallback, describeSandboxRejections, describeShellWritePosture, HOST_SHELL_POSTURE, shellPostureFacts, SANDBOX_REASON_MAX_CHARS, hostShellRealm, longLivedWritePosture, openShellRealm, resolveShellRealm, sandboxWriteView, shellLaunchSandboxes, shellLaunchUsable, shellWritePosture, unattendedWritePosture, type ShellCallAuthority, type ShellRealmResolution, type ShellSandbox, type ShellSandboxRejection,
-  type ShellSandboxFactory, type ShellSandboxLaunch, type ShellSandboxLayout, type ShellSandboxWriteView } from './internal/realm.js';
+  type ShellSandboxFactory, type ShellSandboxLaunch, type ShellSandboxLaunchProfile, type ShellSandboxLayout, type ShellSandboxWriteView } from './internal/realm.js';
 export { describeHostShellResult, describeShellEffectRefusal, HOST_SHELL_NOTES, hostShellCleanupNote } from './internal/result.js';
 export { buildLandlockRules, gitWorktreeRepository, LANDLOCK_RULE_BOUNDS, landlockShellSandbox, type LandlockRule, type LandlockRuleClass, type LandlockRuleSet } from './internal/landlock.js';
 export { isVerifiedGitObject, scanGitDirectory, type GitDirectoryScan } from './internal/git-objects.js';

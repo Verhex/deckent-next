@@ -19,7 +19,7 @@ export interface ShellRealmSelectionView {
 /**
  * REALM-NOTICE (doctor): what a shell call in this project gets under the configured realm mode, from the same stateDir, providers and
  * resolver the service uses — so a probe that says `available` while the provider refuses (a launcher inside the project) is visible.
- * `preferSandbox` (host mode only): what a `prefer-sandbox` MCP server (the registry default) actually gets from `McpClientPool.open` —
+ * `preferSandbox` (host mode only): whether an MCP server in the registry default realm (`sandbox-net` since K4: a sandbox or no start) gets a sandbox from `McpClientPool.open` —
  * the same launch-eligible walk the pool's own launch uses (`shellLaunchSandboxes`, Astra 2188 R8), so a provider usable for one shell
  * command but not a long-lived launch (Landlock: it runs one command at a time) is never reported as the MCP default here while the
  * real open runs on the host. `bubblewrap`/`landlock` below remain the plain host measurement. The measurement is read-only (`place:
@@ -49,7 +49,8 @@ export async function inspectShellRealmSelection(input: { readonly mode: ShellRe
   const sandboxes = input.sandboxes ?? shippedShellSandboxes({ project: input.project, scratchDir: null, writeFloor: () => true });
   const { status, launcher, rejected, detail } = capabilities.bubblewrap;
   return { schemaVersion: 1, mode: input.mode, stateDir: input.stateDir, ...viewOf(resolveShellRealm(input.mode, capabilities, sandboxes)),
-    preferSandbox: input.mode === 'host' ? viewOf(resolveShellRealm('prefer-sandbox', capabilities, shellLaunchSandboxes(sandboxes))) : null,
+    // K4: the MCP default is `sandbox-net` — a launch-eligible sandbox or no start (never a host fallback); the field keeps its name (doctor's JSON).
+    preferSandbox: input.mode === 'host' ? viewOf(resolveShellRealm('require-sandbox', capabilities, shellLaunchSandboxes(sandboxes))) : null,
     bubblewrap: { status, launcher: launcher && { source: launcher.source, path: launcher.path, version: launcher.version, overlay: launcher.overlay },
       rejected: rejected.map(item => ({ path: item.path, reason: boundSandboxReason(item.reason) })), detail: detail && boundSandboxReason(detail) },
     landlock: capabilities.landlock };

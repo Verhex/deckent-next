@@ -18,6 +18,14 @@ export interface BubblewrapView {
   readonly scratchDir: string | null;
   /** The service user's HOME: an empty tmpfs (never bound — `~/.ssh`, `~/.aws`, tokens and the product ledger stay invisible). */
   readonly home: string | null;
+  /** K4 (`sandbox-net`): a private directory of Deckent's own bound read-write AT `home` instead of the tmpfs (a server's persistent cache); the
+   * user's HOME stays invisible. Absent: the tmpfs. */
+  readonly homeBind?: string;
+  /** K4 (`sandbox-net`): keep the host network namespace (the closed view otherwise has none). */
+  readonly network?: boolean;
+  /** K4: the resolver files a networked view needs that live outside the system prefixes (WSL: `/etc/resolv.conf` → `/mnt/wsl/resolv.conf`),
+   * each bound read-only at its own path — single files, never their directory. */
+  readonly networkFiles?: readonly string[];
   /** System prefixes bound read-only when present (an allowlist: never the whole root). */
   readonly systemPaths: readonly string[];
   /** PATH entries outside the system prefixes (a toolchain under HOME, e.g. nvm) with their `lib` siblings: read-only when present. */
@@ -68,8 +76,9 @@ const within = (path: string, prefix: string) => path === prefix || path.startsW
 function viewMounts(view: BubblewrapView): ViewMount[] {
   const mounts: ViewMount[] = [];
   const add = (target: string, args: readonly string[], hostWritable: boolean, protective: boolean) => mounts.push({ target, args, hostWritable, protective });
-  if (view.home && !view.open) add(view.home, ['--size', String(BUBBLEWRAP_TMPFS_BYTES), '--tmpfs', view.home], false, false);
+  if (view.home && !view.open) add(view.home, view.homeBind ? ['--bind', view.homeBind, view.home] : ['--size', String(BUBBLEWRAP_TMPFS_BYTES), '--tmpfs', view.home], false, false);
   for (const path of view.systemPaths) add(path, ['--ro-bind-try', path, path], false, false);
+  for (const path of view.network ? view.networkFiles ?? [] : []) add(path, ['--ro-bind-try', path, path], false, false);
   for (const path of view.toolchainPaths) add(path, ['--ro-bind-try', path, path], false, false);
   if (view.overlay) add(view.projectRoot, ['--overlay-src', view.projectRoot, '--overlay', view.overlay.upper, view.overlay.work, view.projectRoot], false, false);
   else add(view.projectRoot, [view.projectReadOnly ? '--ro-bind' : '--bind', view.projectRoot, view.projectRoot], !view.projectReadOnly, false);
@@ -136,7 +145,7 @@ export function bubblewrapArguments(view: BubblewrapView): string[] {
   const pins = new Map<number, string[]>();
   for (const pin of placedPins(view)) pins.set(pin.after, [...(pins.get(pin.after) ?? []), '--bind', pin.path, pin.path]);
   const args = view.open ? ['--unshare-all', '--share-net', '--die-with-parent', '--new-session', '--bind', '/', '/', ...pins.get(-1) ?? [], '--proc', '/proc', '--dev', '/dev']
-    : ['--unshare-all', '--die-with-parent', '--new-session', '--proc', '/proc', '--dev', '/dev', '--size', String(BUBBLEWRAP_TMPFS_BYTES), '--tmpfs', '/tmp'];
+    : ['--unshare-all', ...(view.network ? ['--share-net'] : []), '--die-with-parent', '--new-session', '--proc', '/proc', '--dev', '/dev', '--size', String(BUBBLEWRAP_TMPFS_BYTES), '--tmpfs', '/tmp'];
   viewMounts(view).forEach((mount, index) => args.push(...mount.args, ...pins.get(index) ?? []));
   // `--remount-ro` changes only that mount point (man page), so a scratch area bound inside a hidden root stays writable.
   for (const path of view.open?.hidden ?? []) args.push('--remount-ro', path);

@@ -12,6 +12,7 @@ export { ConfigChangeApprovalBroker, CONFIG_CHANGE_SUBJECT_PROTOCOL_VERSION, con
   type ConfigChangeApprovalAdmission, type ConfigChangeApprovalRequest } from './internal/config-change.js';
 export { AuthorityDocumentTarget, DelegationBoundGate, PolicyAdministrationApplication } from './internal/policy-admin.js';
 export type { AuthorityTargetHooks, PolicyAdministrationDependencies } from './internal/policy-admin.js';
+export { McpToolGrants, type McpToolGrantOutcome, type McpToolGrantTarget } from './internal/mcp-grant.js';
 export { isAuditedStanding, PersistentStanding, SessionStanding, StandingApprovalError, standingApprovalAuditEvent, standingCallKey, rememberSessionStanding } from './internal/standing.js';
 export type { SessionStandingBinding } from './internal/standing.js';
 export type { PersistentStandingDependencies, StandingGrantView, StandingOffer } from './internal/standing.js';

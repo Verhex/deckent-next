@@ -1,7 +1,7 @@
 import type { AgentToolSpec, EffectCommand, JsonObject, McpToolChangeHints } from '#domain/index.js';
 import { shippedShellSandboxes } from '#adapters/core/shell-sandbox-bwrap/index.js';
 import type { ShellSandboxLayout } from '#adapters/core/host-shell/index.js';
-import type { McpClientPool, McpLaunchContext, McpServerOpen } from './pool.js';
+import type { McpLaunchContext, McpPoolView, McpServerOpen } from './pool.js';
 import type { McpClientSettings, McpToolCell, McpTrustBinding } from './pin.js';
 import { agentMcpEffectCommandId, describeMcpApproval, MCP_TOOL_CALL_OPERATION, MCP_TOOL_TARGET_KIND } from './target.js';
 
@@ -17,6 +17,8 @@ export interface McpOfferedTool {
   readonly posture: string;
   /** C5: the server's sandbox shows it the project read-only (a failed answer then says so and how to let it write). */
   readonly projectReadOnly: boolean;
+  /** The server's resolved secret values: cut out of its answers before the model sees them (never shown). */
+  readonly secrets: readonly string[];
   readonly timeoutMs: number;
   /** The server's scope and definition as trusted when the turn read them (MCP-REVOKE: the send re-checks them; null: never sent). */
   readonly binding: McpTrustBinding | null;
@@ -28,7 +30,7 @@ const hint = (value: unknown) => typeof value === 'boolean' ? value : undefined;
  * The MCP tools one turn may offer (MCP-CLIENT): every configured server is opened (started, listed, verified) and only its `pinned` tools
  * become agent tools. A server that cannot be opened offers nothing this turn; `onOpened` sees every outcome (the turn's notice, `/mcp`).
  */
-export async function openMcpAgentTools(pool: McpClientPool, settings: McpClientSettings, context: McpLaunchContext,
+export async function openMcpAgentTools(pool: McpPoolView, settings: McpClientSettings, context: McpLaunchContext,
   onOpened?: (server: McpClientSettings['servers'][number], state: McpServerOpen) => void): Promise<ReadonlyMap<string, McpOfferedTool>> {
   const offered = new Map<string, McpOfferedTool>();
   const opened = await Promise.all(settings.servers.map(async server => ({ server, state: await pool.open(server, settings, context) })));
@@ -38,7 +40,7 @@ export async function openMcpAgentTools(pool: McpClientPool, settings: McpClient
     for (const verdict of state.tools) {
       if (verdict.status !== 'pinned' || !verdict.spec || !verdict.digest || !verdict.cell || offered.has(verdict.spec.name)) continue;
       offered.set(verdict.spec.name, Object.freeze({ spec: verdict.spec, server: server.id, tool: verdict.name, display: verdict.display, digest: verdict.digest,
-        cell: verdict.cell, command: server.label ?? [server.command, ...server.args].join(' '), posture: state.posture, projectReadOnly: state.projectReadOnly, timeoutMs: server.timeoutMs ?? settings.callTimeoutMs,
+        cell: verdict.cell, command: server.label ?? [server.command, ...server.args].join(' '), posture: state.posture, projectReadOnly: state.projectReadOnly, secrets: server.secrets ?? [], timeoutMs: server.timeoutMs ?? settings.callTimeoutMs,
         binding: server.binding ?? null, hints: Object.freeze({ readOnly: hint(verdict.annotations?.['readOnlyHint']), destructive: hint(verdict.annotations?.['destructiveHint']) }) }));
     }
   }

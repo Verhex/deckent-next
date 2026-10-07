@@ -119,10 +119,12 @@ export const CLI_CATALOG = [
   { name: 'mcp', group: 'setup', summary: 'cli.help.summary.mcp', detail: 'cli.help.mcp', children: [
     action('add', 'setup', 'cli.help.action.add', 'cli.help.mcp'),
     action('add-json', 'setup', 'cli.help.action.add-json', 'cli.help.mcp'),
+    action('import', 'setup', 'cli.help.action.import', 'cli.help.mcp'),
     action('list', 'setup', 'cli.help.action.mcp.list', 'cli.help.mcp'),
     action('get', 'setup', 'cli.help.action.mcp.get', 'cli.help.mcp'),
     action('remove', 'setup', 'cli.help.action.remove', 'cli.help.mcp'),
     action('approve', 'setup', 'cli.help.action.approve', 'cli.help.mcp'),
+    action('revoke', 'setup', 'cli.help.action.mcp.revoke', 'cli.help.mcp'),
   ] },
   { name: 'secret', group: 'setup', summary: 'cli.help.summary.secret', detail: 'cli.help.secret', children: [
     action('list', 'setup', 'cli.help.action.secret.list', 'cli.help.secret'),

@@ -63,6 +63,8 @@ export const CONFIG_FIELDS = Object.freeze({
     inputMaxBytes: z.number().int().positive().safe().default(1048576),
     responseMaxBytes: z.number().int().positive().safe().default(1048576),
     maxConcurrentCalls: z.number().int().positive().safe().default(8),
+    /** Security (MCP pool scope isolation): the most MCP server processes the runtime service keeps across all scopes and projects. */
+    maxServers: z.number().int().positive().max(256).default(20),
   }).strict().default({}), [], LAYOUT_CONTRACT_SINCE),
   service: field('config.field.service', { state: 'bound', consumers: ['src/composition/core/runtime-service'] }, 'restart', z.object({
     identity: z.object({ scopeId: z.string().min(1), serviceId: z.string().min(1) }).strict().nullable().default(null),
