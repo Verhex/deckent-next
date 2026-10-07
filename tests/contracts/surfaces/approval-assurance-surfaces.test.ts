@@ -155,7 +155,8 @@ describe('the single approval card', () => {
     await until(() => view.stdout.frame.includes(DENY), 'turn card'); await settle(40);
     const frame = view.stdout.frame;
     // A 40-line heredoc keeps the facts on screen: its field shows three rows, the preview below has the whole command.
-    expect(frame).toMatch(/Risk: +Deletes \(cannot be undone\)/u); expect(frame).toMatch(/Undo: +not declared by the tool/u);
+    expect(frame).toMatch(/Risk: +Deletes \(cannot be undone\)/u); // REVERSIBILITY: a destructive shell card without the producer's word is classified by its cell (never "reversible").
+    expect(frame).toMatch(/Undo: +No — it cannot be undone/u);
     expect(frame.indexOf('Deletes (cannot be undone)')).toBeLessThan(frame.indexOf('line 20'));
     expect(frame).toContain('… 39 more lines'); expect(frame).toMatch(/rows 1–\d+ of \d+/u); expect(frame).toContain('R-TURN-HERE'); expect(frame).toContain(NOTHING_RUNS);
     view.stdin.write('y');
