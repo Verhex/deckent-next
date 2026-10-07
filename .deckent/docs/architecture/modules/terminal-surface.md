@@ -121,7 +121,7 @@ Market notes live outside the repo (`/home/alperen/deckent-refactor-work/proof/T
   `terminal-composer`; `terminal-ledger` (pure work-ledger model, `notice()`, run/worker/approval watches, bridge snapshot)
   ← `terminal-work` (work surface, slash dispatch, approval/cancel flow, cards) ← `terminal` (workline root, sessions, mode;
   its barrel re-exports the lower units); split by responsibility to keep each unit within the 2000-line budget.
-- **Bounded windows (TUI2 L1, 2026-10-07, branch `tui2/window-approval`):** unit `terminal-window` (← terminal-kit, terminal-render)
+- **Bounded windows (TUI2 L1, 2026-10-07; integrated on `wave/tui-2`, not landed):** unit `terminal-window` (← terminal-kit, terminal-render)
   owns the `Window` frame (title left, status right, body capped to the terminal rows and scrolled by ↑↓/PgUp/PgDn/Home/End, wrapped key
   hints, widths in display cells, ASCII frame with ASCII glyphs; `exact` rows keep commands/patterns/previews character for character)
   and the window stack: one input owner, the top layer (approval priority, then newest); the composer, cards and pickers listen through
@@ -215,7 +215,7 @@ equal by a contract test) and the tokens left, a size-estimate split of the visi
 it), the last summary, the three largest items and a `/clear` suggestion at ≥ 60 %. Protocol unchanged (v16). Open: `/compact` (protocol
 decision), redrawing an open suggestion list when the index refreshes.
 
-**Readability, opening banner and theme (TERMINAL-UX T2 L2, owner 2026-10-07; implemented on `tui2/readable-startup-mode`, not landed).**
+**Readability, opening banner and theme (TERMINAL-UX T2 L2, owner 2026-10-07; integrated on `wave/tui-2`, not landed).**
 Token map `design/tokens/terminal.map.json` adds the roles `userBar`, `userLabel`, `assistantLabel`, `workerCard`, `windowBorder`,
 `windowTitle`, `selection`, `diffAdded`, `diffRemoved`, `modeIndicator` and four themes (`dark`, `light`, `dark-daltonized`,
 `light-daltonized`, each with reference backgrounds); `scripts/build-terminal-palette.mjs` emits per-theme palettes (`THEME_PALETTES`,
@@ -247,5 +247,17 @@ process state and who recorded it. Notices start with Info, Warning or Error (ca
 `warning` level); a typed failure prints its human message and `(code: X)` on its own line. The monitor prints the machine's local time
 with the zone offset (`Z` at UTC); the suite pins `TZ=UTC`. Turkish terms follow `terminology-tr.md` (iş, görev, işçi). Words reach the
 cards through `WorkerLineLabels.card` (`LedgerCardLabels`), so the run/worker/notice rows add no new label path to the window code.
-Open: context percentage in `/status`, a real principal name for `/scope` (the host user name is shown), the monitor and approval
-windows (window lanes), `/cancel`, `/approvals` and `/service-restart` descriptions (window lane), stream-failure footers.
+Open: context percentage in `/status`, a real principal name for `/scope` (the host user name is shown), the monitor window (T3),
+stream-failure footers.
+
+**T2 integration (`wave/tui-2`, 2026-10-07, not landed).** Shift+Tab/Alt+M step the mode only while the window stack is idle
+(`PermissionModeKeys` inside the `WindowStackProvider`): any open window owns them, not only a card or picker. Windows take the L2 roles
+(`windowBorder` frame, `windowTitle` title while focused, muted otherwise), the picker's selected row `selection`, the reason caret
+`focus`, approval diff rows the span roles `diffAdded`/`diffRemoved`; meaning stays in text (`+`/`-`, `>`, caret glyph). `/approvals`,
+`/cancel`, `/service-restart` and `/mode` sit under Approvals, Jobs and Settings with one short line each. The `/cancel` window prints the
+task phases in card words (`formatTaskPhases`, shared with run cards), the short run id in its title and the full id on its own detail
+line; decision notices name the short approval id and add the full id as a detail line. The careful stop (`standart` + ask-edits) is its
+own word in `/scope` and in the approval window's why-asked field. `shortId` lives in `platform/core/common` so react-free units
+(terminal-admin, terminal-ledger) never pull the terminal kit onto the CLI startup graph. Runtime protocol v21 carries the view field
+`fullAuto` (the strict v20 view would refuse it). The approval window's catalog keys (`terminal.approval.window.*`) live in the `tui`
+family (the merged `cli` family passed the 1500-line gate). Proof: `proof/TUI2-2026-10-07/INTEGRATION-review.md`.
