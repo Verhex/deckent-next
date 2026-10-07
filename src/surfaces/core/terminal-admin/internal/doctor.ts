@@ -85,7 +85,9 @@ export async function doctorView(locale: Locale, report: ((sink: OutputSink) => 
       const status = data.poolReadiness.status;
       const words = status === 'ready' ? t('doctor.poolReadiness.status.ready', {}, locale) : status === 'drift' ? t('doctor.poolReadiness.status.drift', {}, locale)
         : status === 'unavailable' ? t('doctor.poolReadiness.status.unavailable', {}, locale) : status === 'unconfigured' ? t('doctor.poolReadiness.status.unconfigured', {}, locale) : status;
-      sections.push({ title: t('terminal.info.doctor.section.pools', {}, locale), chip: chip(status === 'ready' ? 'ok' : status === 'drift' ? 'warn' : status === 'unavailable' ? 'fail' : 'neutral'),
+      // Not configured is not a failure and not unknown: the chip says so in the readiness word itself.
+      sections.push({ title: t('terminal.info.doctor.section.pools', {}, locale), chip: status === 'ready' ? chip('ok') : status === 'drift' ? chip('warn') : status === 'unavailable' ? chip('fail')
+        : { state: 'neutral', text: words },
         rows: [{ key: t('terminal.info.doctor.key.readiness', {}, locale), value: words,
           ...(data.poolReadiness.code ? { chip: { state: 'neutral' as const, text: data.poolReadiness.code } } : {}) }] });
     }

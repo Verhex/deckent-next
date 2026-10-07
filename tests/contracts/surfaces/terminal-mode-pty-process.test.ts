@@ -478,9 +478,9 @@ describe.skipIf(process.platform !== 'linux')('opening banner in a real pseudo-t
 // at each step is replayed from the PTY bytes (VT replay, 100 x 40). DECKENT_T2_FRAME_PROOF=<file> appends the replayed screens.
 describe.skipIf(process.platform !== 'linux')('T2 surfaces together in a real pseudo-terminal (wave/tui-2 integration)', () => {
   it.each([
-    ['en', { help: 'Commands', status: 'Deckent is running', window: 'Approval needed', denied: 'denied', you: 'You', heading: 'Info', careful: '⏸ careful',
+    ['en', { help: 'Commands', helpSummary: 'Help: ', status: 'Deckent is running', statusSummary: 'Status: Deckent is running', system: '◆ Deckent system', window: 'Approval needed', denied: 'denied', you: 'You', heading: 'Info', careful: '⏸ careful',
       declined: 'you declined', policy: 'denied by policy', undo: 'Not checked — Deckent does not keep the earlier content' }],
-    ['tr', { help: 'Komutlar', status: 'Deckent çalışıyor', window: 'Onay gerekiyor', denied: 'reddedildi', you: 'Sen', heading: 'Bilgi', careful: '⏸ dikkatli',
+    ['tr', { help: 'Komutlar', helpSummary: 'Yardım: ', status: 'Deckent çalışıyor', statusSummary: 'Durum: Deckent çalışıyor', system: '◆ Deckent sistemi', window: 'Onay gerekiyor', denied: 'reddedildi', you: 'Sen', heading: 'Bilgi', careful: '⏸ dikkatli',
       declined: 'sen reddettin', policy: 'policy izin vermedi', undo: 'Kontrol edilmedi — Deckent önceki içeriği saklamıyor' }],
   ] as const)('%s: banner, /help, /status, the approval window and the person/answer rows', async (language, words) => {
     // The person runs careful (standart + ask for edits too), so the eligible edit opens the approval window; standart alone would run it.
@@ -490,7 +490,10 @@ describe.skipIf(process.platform !== 'linux')('T2 surfaces together in a real ps
     await writeFile(bindings, JSON.stringify({ ...document, modes: document.modes.map(entry => entry['id'] === 'my-mode' ? { ...entry, askEdits: true } : entry) }), { mode: 0o600 });
     await startRuntime(f.projectRoot, f.env);
     const run = await inPty(f.projectRoot, { ...f.env, DECKENT_LANGUAGE: language }, ['terminal', 'workline', '--scope', 'scope'], [
-      ['Deckent workline', '/help\r'], [words.help, '/status\r'], [words.status, 'go\r'], [words.window, 'n'], ['Mode turn done.', '/exit\r']], 100);
+      // SW-1: /help and /status open information windows; Esc closes each and leaves one framed system summary line before the next step
+      // (waited on its text alone: the raw bytes carry colour codes between the label and the text).
+      ['Deckent workline', '/help\r'], [words.help, '\u001b'], [words.helpSummary, '/status\r'], [words.status, '\u001b'], [words.statusSummary, 'go\r'],
+      [words.window, 'n'], ['Mode turn done.', '/exit\r']], 100);
     expect(run.timeout, run.output).toBeUndefined();
     expect(run.status, run.output).toBe(0);
     // Each mark is the output length when a step's awaited text had appeared (before its keys were sent).
@@ -498,10 +501,7 @@ describe.skipIf(process.platform !== 'linux')('T2 surfaces together in a real ps
     // inside a frame while the spinner redraws); blank rows above the first text (the scrolled-away opening rows) are dropped.
     const complete = (end: number) => { const at = run.output.lastIndexOf('\u001b[?2026l', end); return at < 0 ? end : at + '\u001b[?2026l'.length; };
     const screen = (end: number) => terminalScreen(run.output.slice(0, complete(end)), 100).split('\n').slice(-40).join('\n').replace(/^(?:[ \t]*\n)+/u, '');
-    const [banner, , status, window, rows] = run.marks!.map(screen) as [string, string, string, string, string];
-    // /help is taller than the 40-row window: its opening rows are in the scrollback, so it is read from the replay with scrollback.
-    const replayed = terminalScreen(run.output.slice(0, complete(run.marks![1]!)), 100);
-    const help = replayed.slice(replayed.lastIndexOf(`${words.heading}: ${words.help}`));
+    const [banner, help, , status, , window, rows] = run.marks!.map(screen) as [string, string, string, string, string, string, string];
     const proof = process.env['DECKENT_T2_FRAME_PROOF'];
     if (proof) {
       const { appendFile } = await import('node:fs/promises');
@@ -511,10 +511,13 @@ describe.skipIf(process.platform !== 'linux')('T2 surfaces together in a real ps
     // The banner is on the first row of the cleared screen; the status row names the careful stop.
     expect(banner.split('\n')[0]).toMatch(/^╭──╮ +Deckent /u);
     expect(banner).toContain(words.careful);
-    // /help: a title, then the group headings (L3).
-    expect(help).toContain(`${words.heading}: ${words.help}`);
-    // /status: the human summary first.
-    expect(status).toContain(words.status);
+    // /help (SW-1 window): the title, then the group headings with the commands to pick (L3).
+    expect(help).toContain(words.help); expect(help).toContain(`▸ ${words.heading}`); expect(help).toContain('› /status');
+    // /status (SW-1 window): the human state first; the full service instance id is never on screen.
+    const chips = status.indexOf('[✓ '), statusWindow = status.slice(status.lastIndexOf('╭', chips), status.indexOf('╰', chips));
+    expect(statusWindow).toContain(words.status); expect(statusWindow).toContain('▸ '); expect(statusWindow).not.toMatch(/[0-9a-f]{8}-[0-9a-f]{4}-/u);
+    // Each closed window left its one framed summary line in the scrollback.
+    expect(rows).toContain(`${words.system} · ${words.statusSummary}`);
     // The approval window (L1) is framed and titled; the full approval id is not on its title row.
     expect(window).toContain(words.window);
     expect(window.split('\n').find(row => row.includes(words.window))).not.toMatch(/[0-9a-f]{8}-[0-9a-f]{4}-/u);

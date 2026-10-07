@@ -1,9 +1,11 @@
 import { basename } from 'node:path';
-import { PACKAGE_VERSION, t } from '#platform/index.js';
+import { PACKAGE_VERSION, shortId, t } from '#platform/index.js';
 import type { InfoChip, InfoRow, InfoSection, InfoView } from '#surfaces/core/terminal-window/index.js';
 import { queryFailureText } from './failure.js';
 import { readCurrentModel } from './current-model.js';
 import type { TerminalAdminCall } from './context.js';
+
+const UUID = /\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/giu;
 
 type ServiceFacts = Readonly<{ instanceId: string; processId?: number | undefined; build?: Readonly<{ sourceCommit: string | null }> | undefined }>;
 /** What `/status` reads on every call: the host report, the runtime service (or the line that names why it was not read) and the model. */
@@ -71,6 +73,8 @@ export async function statusView(call: TerminalAdminCall, report: () => Promise<
       { title: t('terminal.info.status.section.where', {}, locale), rows: [{ key: t('terminal.info.status.key.project', {}, locale), value: basename(root) || root, id: identity.projectId },
         { key: t('terminal.info.status.key.scope', {}, locale), value: scopeId }, { key: t('terminal.info.status.key.installation', {}, locale), value: t('terminal.info.status.installationValue', {}, locale), id: identity.installationId }] },
       serviceSection,
-      { title: t('terminal.info.status.section.details', {}, locale), items: facts.body.split('\n').filter(line => line.trim()).map(text => ({ text, muted: true })) },
+      // The host report repeats identities in prose: the window shows them shortened (the full values are in `/scope` and the text answer).
+      { title: t('terminal.info.status.section.details', {}, locale), items: facts.body.split('\n').filter(line => line.trim())
+        .map(text => ({ text: text.replace(UUID, id => `${shortId(id)}…`), muted: true })) },
     ] } };
 }

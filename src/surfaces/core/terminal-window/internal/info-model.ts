@@ -46,8 +46,10 @@ export function chipSpans(chip: InfoChip, glyphs: InfoGlyphs = INFO_GLYPHS_UNICO
   return [span(`[${glyphs.chip[chip.state]} ${chip.text}]`, { role: CHIP_ROLE[chip.state] })];
 }
 
-function tail(chip: InfoChip | undefined, id: string | undefined, glyphs: InfoGlyphs): Span[] {
-  return [...(chip ? [span(' '), ...chipSpans(chip, glyphs)] : []), ...(id ? [span(' '), span(shortenIdentity(id, glyphs.ellipsis), { role: 'mutedId' })] : [])];
+/** The chip and the muted identity after a value; `lead` is false when nothing stands before them (an empty value). */
+function tail(chip: InfoChip | undefined, id: string | undefined, glyphs: InfoGlyphs, lead = true): Span[] {
+  const parts = [...(chip ? [chipSpans(chip, glyphs)] : []), ...(id ? [[span(shortenIdentity(id, glyphs.ellipsis), { role: 'mutedId' as const })]] : [])];
+  return parts.flatMap((part, index) => [...(index > 0 || lead ? [span(' ')] : []), ...part]);
 }
 
 /** Every choice of the model in display order (the arrow keys move through this list). */
@@ -76,7 +78,7 @@ export function infoWindowLines(model: InfoWindowModel, selected: number | null 
     if (lines.length || index > 0) lines.push({ spans: [] });
     if (section.title) lines.push({ spans: [span(`${glyphs.section} ${section.title}`, { role: 'sectionHeader' }), ...tail(section.chip, undefined, glyphs)] });
     for (const row of section.rows ?? []) {
-      lines.push({ label: [span(row.key, { role: 'keyLabel' })], spans: [span(row.value, row.muted ? { role: 'muted' } : {}), ...tail(row.chip, row.id, glyphs)],
+      lines.push({ label: [span(row.key, { role: 'keyLabel' })], spans: [...(row.value ? [span(row.value, row.muted ? { role: 'muted' } : {})] : []), ...tail(row.chip, row.id, glyphs, row.value !== '')],
         ...(row.exact ? { exact: true } : {}) });
     }
     for (const item of section.items ?? []) {
