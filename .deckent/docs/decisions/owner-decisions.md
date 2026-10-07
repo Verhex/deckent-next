@@ -245,3 +245,21 @@ Owner “Öneriler kabul edildi”: önce Noul kontrollerini tek önerme yapma v
 - **Dalga 3 owner kararları (2026-10-06, kayıt):** EXEC-RELEASE B: workspace teslimi yalnız açıkça `workspaceDelivery: none` işaretli türlerde serbest bırakılır; işaret kabulde Run anlık görüntüsüne dondurulur, işaretten önceki klonlar süpürülmez. PARALLEL-S3 sınırları 256 görev / 1024 kenar / 64 derinlik (`TASK_GRAPH_INVALID`). Satır modu araçlı tur çalıştırır; onay kartı gelirse tur iptal edilir (satır modunda karar veren yok). K6=A boşta durma: yalnız terminalin otomatik başlattığı servis (`DECKENT_RUNTIME_AUTOSTARTED=1`) `service.idleShutdown.afterMs` (varsayılan 900000) sonra durur; park edilmiş Run'lar etkinlik sayılmaz (lead uygulama ayrıntısı, owner'a bildirildi).
 - **vLLM önbellek ayrım anahtarı** (Jev d19835e0 seçim 0,97 / yeterlilik 0,67 → owner): `cache_salt` = HMAC-SHA256(kurulum sırrı, scopeId). 256 bit kurulum sırrı init'te üretilir, secret store'da tutulur, döndürülebilir; kapsam başına durum yok. Dalga 4'teki deterministik sha256(scopeId) gizli değildi (vLLM güvenlik belgesi 2026-10-07; Astra 2423 not 4) ve owner'a sorulmadan girmişti; yan oturum notuyla yakalandı.
 - **Enterprise iddia sınırı** (kontrol oturumu notu, lead kaydı): `deckent/extensions` girişi bugün yalnız CLI sürecinde etkili; `runtime serve` ve `deckent-mcp` Core girişinden açılıyor. EXT-SERVICE-ENTRY kapanana kadar "Enterprise takılabilir" denmez.
+
+- **TERMINAL-UX yönü (owner 2026-10-07, alpha.9 denemesinden sonra; "kritik özellik"):**
+  - Terminal Claude Code sınıfında, insan dostu ve kurumsal düzeyde olacak. Bu her komut ve her ekran için geçerli (izleme, iş takibi, onay, ayar, MCP).
+  - Onay penceresinde neye onay verildiği açıkça okunacak.
+  - Slash komutları etkileşimli panel olacak; kullanıcı yetkisi dahilinde ayarları görerek değiştirebilecek.
+  - Kullanıcı ve AI satırları belirgin biçimde ayrılacak.
+  - Native sağlayıcı ve model geçişi: API anahtarı ya da izinliyse abonelik girişi; bağlantı testi; yalnız erişilebilen modeller listelenecek.
+  - Worker'lar API, abonelik ya da yerel vLLM ile çalışabilecek.
+  - Shift+Tab mod döngüsü olacak.
+  - Açılışta Deckent logosu gösterilecek ve Deckent ekranın en üstünden başlayacak.
+  - MCP eklemek ve yönetmek kolay olacak; model MCP araçlarını doğal biçimde kullanacak.
+  - Sistem istemi ve terminal ayarları kusursuz planlanacak.
+  - Terminal kodu sorumluluğa göre bölünecek.
+  - Program: dış `proof/TERMINAL-INTERACTIVE-PROVIDERS-2026-10-07/PROGRAM.md`.
+  - Kararlar:
+    - **Pencere** (Jev dde3354d 0,98 / yeterlilik 0,62 → owner): sınırlı modal pencereler. Çerçeve, başlık ve tuş ipuçları olacak; yükseklik ekrana göre sınırlı; tek odak sahibi; Esc ile kapanır; biten çıktı scrollback'te kalır. Serbest katmanlı overlay yok. Terminal tasarım kuralı buna göre güncellendi.
+    - **Açılış** (Jev c449d4c8 0,94 / yeterlilik 0,65 → owner): satır içi renderer. Açılışta görünür ekran temizlenip imleç başa alınır, banner ilk satırda çıkar. Önceki çıktı scrollback'e taşınır, silinmez. Tam ekran (alt-screen) renderer sonradan isteğe bağlı bir ayar olarak gelir.
+    - **Satır stili** (owner seçimi, önizlemeli): kullanıcı mesajı okunur ön planda, solda ince dikey çizgi ve "Sen" etiketiyle. AI yanıtı "Deckent" başlığı altında girintili. Anlamı etiket taşır, renk yalnız ipucudur.

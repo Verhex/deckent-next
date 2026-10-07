@@ -31,9 +31,12 @@ dependency. A browser mockup is evidence of hierarchy only.
   color, window chrome, pointer, hover, clipboard or notification system.
 - Inherit the user's monospace font and light/dark background. Prefer the terminal's default
   background; resolve foreground color through the existing ANSI tier and suppression authority.
-- Compose with sequential Ink layout, conditional region replacement and native scrollback. CSS
-  overlays, absolute positioning, floating windows and browser-style clickable buttons are not
-  production interactions.
+- Compose with sequential Ink layout, conditional region replacement and native scrollback.
+  Bounded modal windows (owner 2026-10-07) are the production pattern for monitor, watch, approval
+  and settings screens: a framed region in the live area with a title and key hints, height capped
+  to the terminal, one focus owner (a window stack), Escape closes, and finished output still goes
+  to scrollback. Free-floating layered overlays, absolute positioning and browser-style clickable
+  buttons are not production interactions.
 - Keyboard and slash-command paths are primary. Mouse support may be additive only after an exact
   capability probe and may never be the only path.
 - Admit the rich surface only for an interactive TTY whose required raw-input and rendering
@@ -42,7 +45,9 @@ dependency. A browser mockup is evidence of hierarchy only.
 - Measure widths in terminal display cells and account for rows as well as columns. Provide ASCII
   markers when Unicode/box-drawing width or encoding is not trustworthy.
 - Preserve main-screen native scrollback by default. Alternate-screen behavior is opt-in and can
-  never be required for the primary workflow.
+  never be required for the primary workflow. At launch the rich surface clears the visible screen
+  and homes the cursor so Deckent starts at the top with its banner (owner 2026-10-07); earlier
+  output moves into scrollback and is never erased.
 - Model platform signals explicitly: POSIX SIGINT/SIGTERM and Windows SIGINT/SIGBREAK are different
   adapters. Escape closes focus; it never promises process cancellation without a real abort seam.
 
