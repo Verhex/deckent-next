@@ -92,7 +92,7 @@ function options(view: PermissionModeView, labels: WorklineModeLabels, fullAcces
 }
 
 /**
- * `/mode` shows the mode; `/mode standart|full-auto|full-access` sets it with the revision last read (read first when none is known). Full
+ * `/mode` (and `/mode show`) shows the mode; `/mode standart|full-auto|full-access` sets it with the revision last read (read first when none is known). Full
  * access (T2, owner 2026-10-07) is switched into inside the session through the same service set, for this session only (FA-SESSION): the
  * service decides the company grant and audits the switch (`permission-mode-session`) but stores nothing, so the next launch starts in the last
  * stored mode; every later turn is admitted and audited on the grant again; choosing standart or full-auto leaves it (and stores that mode). `/mode ask-edits on|off` sets the person's preference; `/mode start full-access` saves full access as the start mode of
@@ -102,7 +102,10 @@ export async function runModeCommand(args: string, port: WorklinePermissionModeP
   fullAccess = false, terminal: WorklineModeSession = { sessionId: null }): Promise<{ readonly entries: readonly WorkLedgerEntry[]; readonly view: PermissionModeView | null; readonly fullAccess: boolean }> {
   const words = args.trim().split(/\s+/u).filter(Boolean);
   const done = (entries: readonly WorkLedgerEntry[], view: PermissionModeView | null, session = fullAccess) => ({ entries, view, fullAccess: session });
-  if (words.length === 0) { const view = await port.inspect(); return done([notice('info', line(view, labels, fullAccess)), ...options(view, labels, fullAccess)], view); }
+  // T3 (lead, L4 decision 3): a bare `/mode` opens the window where one can; `/mode show` is the same answer as text (no TTY, scripts, scrollback).
+  if (words.length === 0 || (words.length === 1 && words[0] === 'show')) {
+    const view = await port.inspect(); return done([notice('info', line(view, labels, fullAccess)), ...options(view, labels, fullAccess)], view);
+  }
   const askEdits = words.length === 2 && words[0] === 'ask-edits' && (words[1] === 'on' || words[1] === 'off') ? words[1] === 'on' : undefined;
   const start = words.length === 2 && words[0] === 'start' && words[1] === 'full-access';
   const mode = words.length === 1 ? SWITCHABLE.find(value => value === words[0]) : undefined;

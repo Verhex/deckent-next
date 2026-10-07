@@ -143,6 +143,9 @@ describe('/mode (T-L4 slice 4c, MODES-3)', () => {
     expect(texts(shown.entries)).toEqual(['Mode: standart — standard-effect', 'Try: /mode full-auto (full-effect); /mode full-access (access-effect)']);
     const inAccess = await runModeCommand('', port, null, labels, true);
     expect(texts(inAccess.entries)).toEqual(['Mode: full-access — access-effect', 'Try: /mode standart (standard-effect); /mode full-auto (full-effect)']);
+    // `/mode show` (lead, L4 decision 3): the same text answer the window replaced for a bare `/mode` (no TTY, scripts).
+    expect(texts((await runModeCommand('show', port, null, labels)).entries)).toEqual(texts(shown.entries));
+    expect(texts((await runModeCommand('show extra', port, null, labels)).entries)).toEqual(['usage']);
     const noGrant = { async inspect() { return { ...view, fullAccess: false, fullAuto: false }; }, async set(): Promise<never> { throw new Error('unused'); } };
     expect(texts((await runModeCommand('', noGrant, null, labels)).entries)).toEqual(['Mode: standart — standard-effect', 'grant needed']);
   });

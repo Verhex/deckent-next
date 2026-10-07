@@ -1058,7 +1058,7 @@
   "terminal.mode.changed": "Permission mode: {previous} → {mode}",
   "terminal.mode.inert": " (no rule is mode-eligible in this scope, so the mode changes nothing here)",
   "terminal.mode.unsupported": "Permission modes are off: this policy is v1 ({mode}). /mode needs a v2 policy with a bindings file; see `deckent init policy --help`.",
-  "terminal.mode.usage": "Usage: /mode [standart|full-auto|full-access] · /mode ask-edits on|off · /mode start full-access · Shift+Tab (Alt+M) steps through your modes",
+  "terminal.mode.usage": "Usage: /mode [show|standart|full-auto|full-access] · /mode ask-edits on|off · /mode start full-access · Shift+Tab (Alt+M) steps through your modes",
   "terminal.mode.effect.full-auto": "standart plus narrow mutating shell commands, and any contained shell command inside an enforced sandbox, run without a card; the host shell asks",
   "terminal.mode.switch": "Switch: {options}. Relaxing needs an allow grant from your company, and a mode never overrides a deny.",
   "terminal.mention.attached": "Attached @{path} ({bytes} bytes)",

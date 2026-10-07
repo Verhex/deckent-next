@@ -1058,7 +1058,7 @@
   "terminal.mode.changed": "İzin modu: {previous} → {mode}",
   "terminal.mode.inert": " (bu kapsamda mod-uygun kural yok; mod burada hiçbir şeyi değiştirmez)",
   "terminal.mode.unsupported": "İzin modları kapalı: bu policy v1 ({mode}). /mode, bindings dosyalı bir v2 policy ister; bkz. `deckent init policy --help`.",
-  "terminal.mode.usage": "Kullanım: /mode [standart|full-auto|full-access] · /mode ask-edits on|off · /mode start full-access · Shift+Tab (Alt+M) modlarınız arasında geçer",
+  "terminal.mode.usage": "Kullanım: /mode [show|standart|full-auto|full-access] · /mode ask-edits on|off · /mode start full-access · Shift+Tab (Alt+M) modlarınız arasında geçer",
   "terminal.mode.effect.full-auto": "standart artı dar kapsamlı değiştiren kabuk komutları ve gerçek sandbox içindeki her sınırlı kabuk komutu kartsız çalışır; host kabuğu sorar",
   "terminal.mode.switch": "Geçiş: {options}. Gevşetmek için şirketinizden bir allow grant gerekir; hiçbir mod bir deny'ı aşmaz.",
   "terminal.mention.attached": "@{path} eklendi ({bytes} bayt)",
