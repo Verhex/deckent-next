@@ -116,9 +116,11 @@ Market notes live outside the repo (`/home/alperen/deckent-refactor-work/proof/T
   check moves to the digest; the retained response is then a documented redacted evidence form. PLAN REASONING-RETENTION.)
   A turn footer shows elapsed time, tokens and truncation/cancel/failure. The status row
   is one width-fitted line (scope · model · state · elapsed · queue · notice, dropped by priority, never wrapping).
-- **Units (2026-09-24):** `terminal-kit` (palette, slash registry, `TurnDelta` stream contract) ← `terminal-render` and
-  `terminal-composer` ← `terminal` (workline, ledger, work surface); split by responsibility to keep each unit within the
-  2000-line budget.
+- **Units (2026-09-24; TUI1 split 2026-10-07):** `terminal-theme` (generated palette, colour roles) ← `terminal-kit` (palette
+  context, slash registry, `TurnDelta` stream contract) ← `terminal-render` ← `terminal-picker` (ArrowPicker) and
+  `terminal-composer`; `terminal-ledger` (pure work-ledger model, `notice()`, run/worker/approval watches, bridge snapshot)
+  ← `terminal-work` (work surface, slash dispatch, approval/cancel flow, cards) ← `terminal` (workline root, sessions, mode;
+  its barrel re-exports the lower units); split by responsibility to keep each unit within the 2000-line budget.
 - **Local/free models** use `openai-chat-http` v4 with an operator-declared `operator-static` tariff (v1: zero rates only).
   The quote is reserved against the scope budget and a responded call settles `settled-local 0` in the spend ledger;
   there is no unmetered bypass class. Positive chargeback rates need a separate measurement basis.
