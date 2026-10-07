@@ -25,7 +25,7 @@ describe.each([
   ['en', {
     status: ['Deckent is running · version 1.0.0-alpha.9 · model Qwen 3 8B (local server)', 'Details',
       `  Installation identity: ${INSTALLATION}`, `  Project identity: ${PROJECT}`, '  REPORT-TAIL', `  Runtime service now: instance ${SERVICE}, pid 4242, build aaaaaaaaaaaa`],
-    scope: ['You: alperen · Project: deckent-next (b7d1e2f3) · Company: default · Mode: standart · Rule version: p-7', 'Scope: scope-main', 'Surface access: runs, workers, approvals', 'Details',
+    scope: ['You: alperen · Project: deckent-next (b7d1e2f3) · Company: default · Mode: standard · Rule version: p-7', 'Scope: scope-main', 'Surface access: runs, workers, approvals', 'Details',
       `  Installation identity: ${INSTALLATION}`, `  Project identity: ${PROJECT}`, '  Permission mode: standart (policy revision p-7; modes supported: yes; full access allowed: no)'],
     model: ['Current model: Qwen 3 8B (local server) · tool calls supported', 'Model catalog · scope scope-main · channels: 1', '  local-vllm · local server · enabled',
       '    Qwen 3 8B (qwen3-8b) · available · enabled  <- current', 'Listed from the ledger catalog; availability of a model is not observed here.', 'Details: exact reference local-vllm@1/qwen3-8b@1'],
@@ -52,6 +52,12 @@ describe.each([
       expect(first).not.toMatch(UUID); expect(first).not.toMatch(/pid|build|derleme|sürüm aaaa/iu);
     }
     expect((await run(locale, 'model'))[0]).not.toMatch(/@\d|\//u);
+  });
+  it('names the careful mode (standart with the ask-for-edits preference) with its own word, as the status row does (T2 integration)', async () => {
+    const [first] = await run(locale, 'scope', { inspectPermissionMode: async () => ({ mode: 'standart', askEdits: true, revision: 'p-7', supported: true, fullAccess: false }) as never });
+    expect(first).toContain(locale === 'en' ? 'Mode: careful ·' : 'Mod: dikkatli ·');
+    const [full] = await run(locale, 'scope', { inspectPermissionMode: async () => ({ mode: 'full-access', askEdits: false, revision: 'p-7', supported: true, fullAccess: true }) as never });
+    expect(full).toContain(locale === 'en' ? 'Mode: full access ·' : 'Mod: tam erişim ·');
   });
   it('names a service that could not be read instead of saying it is running', async () => {
     const lines = await run(locale, 'status', { describeRuntimeService: async () => { throw new Error('boom'); } });

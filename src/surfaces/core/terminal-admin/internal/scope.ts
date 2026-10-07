@@ -16,11 +16,15 @@ export async function scopeLines(call: TerminalAdminCall, identity: Readonly<{ i
     ? () => context.inspectPermissionMode!(root, { schemaVersion: 1, scopeId }, options) : null);
   const access = await attempt(t('terminal.admin.scope.partAccess', {}, locale), locale, context.inspectSurfaceAccess ? () => context.inspectSurfaceAccess!(root, scopeId, options) : null);
   const flag = (value: boolean) => value ? t('terminal.value.yes', {}, locale) : t('terminal.value.no', {}, locale);
+  // T2 integration: the mode reads as the status row's stop word, so "careful" (standart with the ask-for-edits preference) is its own word.
+  const stopWord = (view: Readonly<{ mode: string; askEdits: boolean }>) => view.mode === 'standart' && view.askEdits ? t('terminal.mode.stop.ask-edits', {}, locale)
+    : view.mode === 'full-auto' ? t('terminal.mode.stop.full-auto', {}, locale) : view.mode === 'full-access' ? t('terminal.mode.stop.full-access', {}, locale)
+    : view.mode === 'standart' ? t('terminal.mode.stop.standart', {}, locale) : view.mode;
   const summary = [
     ...(principalName ? [t('terminal.admin.scope.you', { name: principalName }, locale)] : []),
     t('terminal.admin.scope.projectNamed', { name: basename(root) || root, id: shortId(identity.projectId) }, locale),
     ...('value' in company ? [t('terminal.admin.scope.company', { id: company.value === 'default' ? t('terminal.admin.scope.companyDefault', {}, locale) : company.value }, locale)] : []),
-    ...('value' in mode ? [t('terminal.admin.scope.modeShort', { mode: mode.value.mode }, locale), t('terminal.admin.scope.rule', { revision: mode.value.revision }, locale)] : []),
+    ...('value' in mode ? [t('terminal.admin.scope.modeShort', { mode: stopWord(mode.value) }, locale), t('terminal.admin.scope.rule', { revision: mode.value.revision }, locale)] : []),
   ].join(' · ');
   const kindWord = (kind: string) => kind === 'run' ? t('terminal.admin.scope.kindRun', {}, locale) : kind === 'worker' ? t('terminal.admin.scope.kindWorker', {}, locale)
     : kind === 'approval' ? t('terminal.admin.scope.kindApproval', {}, locale) : kind;

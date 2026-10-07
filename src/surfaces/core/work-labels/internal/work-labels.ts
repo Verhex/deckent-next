@@ -121,6 +121,7 @@ function approvalWindowLabels(locale: Locale): WorkSurfaceLabels['approvalWindow
       unknown: t('terminal.approval.window.rule.unknown', {}, locale) },
     mode: {
       standart: t('terminal.approval.window.mode.standart', {}, locale),
+      'ask-edits': t('terminal.approval.window.mode.ask-edits', {}, locale),
       'full-auto': t('terminal.approval.window.mode.full-auto', {}, locale),
       'full-access': t('terminal.approval.window.mode.full-access', {}, locale),
       unknown: t('terminal.approval.window.mode.unknown', {}, locale) },

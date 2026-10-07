@@ -401,6 +401,7 @@
   "terminal.approval.window.rule.mcp-floor": "this MCP tool is marked \"always ask\"",
   "terminal.approval.window.rule.unknown": "the tool did not name its rule",
   "terminal.approval.window.mode.standart": "standard",
+  "terminal.approval.window.mode.ask-edits": "careful (edits ask too)",
   "terminal.approval.window.mode.full-auto": "full auto",
   "terminal.approval.window.mode.full-access": "full access",
   "terminal.approval.window.mode.unknown": "unknown",

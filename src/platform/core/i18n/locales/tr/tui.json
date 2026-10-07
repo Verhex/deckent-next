@@ -401,6 +401,7 @@
   "terminal.approval.window.rule.mcp-floor": "bu MCP aracı \"her zaman sor\" olarak işaretli",
   "terminal.approval.window.rule.unknown": "araç kuralını bildirmedi",
   "terminal.approval.window.mode.standart": "standart",
+  "terminal.approval.window.mode.ask-edits": "dikkatli (düzenlemeler de sorulur)",
   "terminal.approval.window.mode.full-auto": "tam otomatik",
   "terminal.approval.window.mode.full-access": "tam erişim",
   "terminal.approval.window.mode.unknown": "bilinmiyor",

@@ -51,6 +51,13 @@ describe('approval window fields per tool kind (catalog EN and TR)', () => {
     }
   }
 
+  it('names the careful mode (the status row\'s ask-edits stop) under why asked, EN and TR (T2 integration)', () => {
+    for (const [locale, words] of [['en', 'Mode: careful (edits ask too)'], ['tr', 'Mod: dikkatli (düzenlemeler de sorulur)']] as const) {
+      const text = approvalCardLines(KINDS.edit.approval, workSurfaceLabels(locale), KINDS.edit.preview, null, { project: '/home/u/acme', mode: 'ask-edits' }, NOW).join('\n');
+      expect(text).toContain(words);
+    }
+  });
+
   it('shell: the full command (not the 200-character call line), the realm sentence under where, the session scope sentence', () => {
     const w = workSurfaceLabels('tr').approvalWindow;
     const text = approvalCardLines(KINDS.shell.approval, workSurfaceLabels('tr'), KINDS.shell.preview, 'rm -rf build && npm test', {}, NOW).join('\n');
