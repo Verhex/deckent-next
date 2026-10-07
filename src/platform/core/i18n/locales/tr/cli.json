@@ -1039,6 +1039,7 @@
   "terminal.mcp.toolOne": "1 araç",
   "terminal.mcp.tools": "{count} araç",
   "terminal.mcp.notStarted": "başlatılamadı",
+  "terminal.mcp.toolsChanged": "araçlar değişti, yeniden onay gerekir",
   "terminal.mcp.problemFile": "{scope} MCP dosyasında sorun: {reason}",
   "terminal.mcp.problemServer": "{name} ({scope}) için sorun: {reason}",
   "terminal.mcp.none": "Bu proje için kayıtlı MCP sunucusu yok. Eklemek için: deckent mcp add …",

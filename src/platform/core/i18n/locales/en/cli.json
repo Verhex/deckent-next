@@ -1039,6 +1039,7 @@
   "terminal.mcp.toolOne": "1 tool",
   "terminal.mcp.tools": "{count} tools",
   "terminal.mcp.notStarted": "did not start",
+  "terminal.mcp.toolsChanged": "tools changed, approve again",
   "terminal.mcp.problemFile": "Problem in the {scope} MCP file: {reason}",
   "terminal.mcp.problemServer": "Problem with {name} ({scope}): {reason}",
   "terminal.mcp.none": "No MCP server is registered for this project. Add one with: deckent mcp add …",

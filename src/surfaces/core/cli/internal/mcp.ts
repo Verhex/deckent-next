@@ -105,12 +105,12 @@ export async function mcpSlash(root: string, args: string, context: CommandConte
   if (extra.length || (verb !== 'list' && !name) || (verb === 'list' && name)) return [t('terminal.mcp.usage', {}, locale)];
   if (verb === 'list') {
     const listed = await run({ verb: 'list', health: false }) as { servers: { name: string; scope: string; status: string; command: string; args: string[]; pinnedTools: number;
-      lastStart?: { text: string } }[];
+      lastStart?: { text: string; phase?: string } }[];
       problems: { name: string | null; scope: string; reason: string }[] };
     if (!listed.servers.length && !listed.problems.length) return [t('terminal.mcp.none', {}, locale)];
     // One line per server (name, scope, state, tools, launch command); a recorded start failure follows as its own indented line, in the words the host wrote it.
     return [t('terminal.mcp.count', { count: listed.servers.length }, locale), ...listed.servers.flatMap(server => [`  ${[server.name, mcpScopeText(server.scope, locale), mcpStatusText(server.status, locale),
-      ...(server.pinnedTools ? [server.pinnedTools === 1 ? t('terminal.mcp.toolOne', {}, locale) : t('terminal.mcp.tools', { count: server.pinnedTools }, locale)] : []), ...(server.lastStart ? [t('terminal.mcp.notStarted', {}, locale)] : []),
+      ...(server.pinnedTools ? [server.pinnedTools === 1 ? t('terminal.mcp.toolOne', {}, locale) : t('terminal.mcp.tools', { count: server.pinnedTools }, locale)] : []), ...(server.lastStart ? [(server.lastStart.phase === 'tools' ? t('terminal.mcp.toolsChanged', {}, locale) : t('terminal.mcp.notStarted', {}, locale))] : []),
       [server.command, ...server.args].join(' ')].join(' · ')}`, ...(server.lastStart ? [`    ${server.lastStart.text}`] : [])]),
     ...listed.problems.map(problem => `  ${problem.name === null ? t('terminal.mcp.problemFile', { scope: mcpScopeText(problem.scope, locale), reason: problem.reason }, locale)
       : t('terminal.mcp.problemServer', { name: problem.name, scope: mcpScopeText(problem.scope, locale), reason: problem.reason }, locale)}`),

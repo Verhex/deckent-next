@@ -115,7 +115,8 @@ describe.skipIf(process.platform !== 'linux')('MCP tools through the runtime ser
     f.state.script = [{ content: 'Second.' }];
     expect((await answered(f, 'turn-drift-2', 'allow')).result.note ?? '').not.toContain('went missing');
     const lines = await mcpSlash(f.project, 'list', { runMcpCommand: runConfiguredMcpCommand } as unknown as CommandContext, { env: f.env }, 'tr');
-    expect(lines).toContainEqual(`  ! fx: ${t('mcp.start.toolsChanged', { name: 'fx', count: 1 }, 'tr')}`);
+    expect(lines).toContainEqual(`    ${t('mcp.start.toolsChanged', { name: 'fx', count: 1 }, 'tr')}`);
+    expect(lines.find(line => line.startsWith('  fx '))).toContain(t('terminal.mcp.toolsChanged', {}, 'tr'));
     await runConfiguredMcpCommand(f.project, { verb: 'reset', name: 'fx' }, { env: f.env }, async () => null);
     expect((await mcpSlash(f.project, 'list', { runMcpCommand: runConfiguredMcpCommand } as unknown as CommandContext, { env: f.env }, 'en')).some(line => line.includes('went missing'))).toBe(false);
   }, 60_000);
@@ -460,8 +461,8 @@ describe('the MCP start notices and the sandbox refusal come from the catalog (p
   // MCP-VISIBILITY: `/mcp approve` resets trust (no card here); the screen says so and when the card comes.
   it('/mcp approve resets and says the approval card opens on the next message (en, tr)', async () => {
     const seen: unknown[] = [], stub = { runMcpCommand: async (_root: string, request: unknown) => { seen.push(request); return {}; } } as unknown as CommandContext;
-    expect(await mcpSlash('/p', 'approve fx', stub, {}, 'en')).toEqual(['mcp: trust for fx was reset. The approval card opens on your next message.']);
-    expect(await mcpSlash('/p', 'approve fx', stub, {}, 'tr')).toEqual(['mcp: fx için güven sıfırlandı. Onay kartı bir sonraki mesajınızda açılacak.']);
+    expect(await mcpSlash('/p', 'approve fx', stub, {}, 'en')).toEqual(['Trust for fx was reset. The approval card opens on your next message.']);
+    expect(await mcpSlash('/p', 'approve fx', stub, {}, 'tr')).toEqual(['fx için güven sıfırlandı. Onay kartı bir sonraki mesajınızda açılacak.']);
     expect(seen).toEqual([{ verb: 'reset', name: 'fx' }, { verb: 'reset', name: 'fx' }]);
   });
   // MCP-VISIBILITY: `mcp add` is stdio only and the registry file is `mcp.json` (project: `.deckent/mcp.json`), never `.mcp.json`.

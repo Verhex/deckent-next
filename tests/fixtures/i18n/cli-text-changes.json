@@ -434,7 +434,7 @@
     },
     "terminal.mcp.approve": {
       "before": "mcp: {name} asks for trust on the next message",
-      "after": "mcp: trust for {name} was reset. The approval card opens on your next message."
+      "after": "Trust for {name} was reset. The approval card opens on your next message."
     }
   },
   "tr": {
@@ -988,7 +988,7 @@
     },
     "terminal.mcp.approve": {
       "before": "mcp: {name} bir sonraki mesajda güven isteyecek",
-      "after": "mcp: {name} için güven sıfırlandı. Onay kartı bir sonraki mesajınızda açılacak."
+      "after": "{name} için güven sıfırlandı. Onay kartı bir sonraki mesajınızda açılacak."
     }
   }
 }
