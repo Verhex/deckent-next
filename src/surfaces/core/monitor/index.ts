@@ -9,4 +9,4 @@ export { phaseLabel, renderWorkerTranscript, type WorkerTranscriptHandler } from
 
 export { renderBriefLines } from './internal/brief.js';
 export { renderGraphSummaryLines } from './internal/graph-summary.js';
-export { processLabel } from './internal/labels.js';
+export { clockText, processLabel } from './internal/labels.js';
