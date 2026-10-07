@@ -1,5 +1,6 @@
 import { t, type Locale } from '#platform/index.js';
 import type { WorkSurfaceLabels, LedgerCardLabels } from '#surfaces/core/terminal/index.js';
+import type { PickerLabels } from '#surfaces/core/terminal-picker/index.js';
 import { phaseLabel, processLabel } from '#surfaces/core/monitor/index.js';
 
 // Kept apart from `terminal.ts`: that module reaches Ink/React through the terminal barrel and is loaded only when a terminal opens
@@ -209,3 +210,10 @@ export function runtimeBuildSkew(own: { readonly sourceTreeSha256: string } | nu
   return { service: service ? service.sourceTreeSha256.slice(0, 12) : null, terminal: own.sourceTreeSha256.slice(0, 12) };
 }
 
+
+/** Catalog words of the list picker (filter, paging, scope step, blocked rows); one set for every picker, EN and TR. */
+export function pickerLabels(locale: Locale): PickerLabels {
+  return { hintList: t('tui.picker.hint_pick', {}, locale), hintFilter: t('tui.picker.hint_filter_esc', {}, locale), hintScope: t('tui.picker.hint_scope', {}, locale),
+    filter: t('tui.picker.hint_filter', {}, locale), noMatches: t('tui.picker.no_matches', {}, locale), empty: t('tui.picker.empty', {}, locale),
+    blocked: t('tui.picker.state.blocked', {}, locale), position: t('tui.picker.position', {}, locale) };
+}
