@@ -41,8 +41,8 @@ async function fixture(grants: readonly Grant[], modes: readonly unknown[] = [],
   await writeFile(bindingsPath, JSON.stringify({ schemaVersion: 2, revision: 'b1', bindings: [], modes }), { mode: 0o600 });
   const source = new FilePolicySource({ path: policyPath, bindingsPath, ownerUid: process.getuid!(), maxBytes: 4096 });
   const app = new PermissionModeApplication(source, event => { audit.record(event); afterAudit(root); }, Date.now);
-  const set = (mode: 'standart' | 'full-auto' | 'full-access', expectedRevision = 'p1+b1', askEdits?: boolean) => app.set(principal, { schemaVersion: 1, scopeId: 'scope', mode, expectedRevision,
-    ...(askEdits === undefined ? {} : { askEdits }) })
+  const set = (mode: 'standart' | 'full-auto' | 'full-access', expectedRevision = 'p1+b1', askEdits?: boolean, session?: { sessionId: string | null }) => app.set(principal,
+    { schemaVersion: 1, scopeId: 'scope', mode, expectedRevision, ...(askEdits === undefined ? {} : { askEdits }), ...(session ? { session } : {}) })
     .then(result => ({ result }), (error: { code?: string; mode?: string }) => ({ code: error.code, ...(error.mode === undefined ? {} : { mode: error.mode }) }));
   const bindings = async () => JSON.parse(await readFile(bindingsPath, 'utf8')) as { schemaVersion: number; revision: string; modes: unknown[] };
   const events = () => {
@@ -105,6 +105,26 @@ describe.skipIf(process.platform === 'win32')('permission mode write authority (
     const g = await fixture([{ id: 'set-access', effect: 'allow', modes: ['full-access'] }]);
     expect(await g.set('full-access')).toMatchObject({ result: { mode: 'full-access', fullAccess: true, changed: true } });
     expect(await g.bindings()).toMatchObject({ schemaVersion: 3, modes: [{ principal: actor, scopes: ['scope'], mode: 'full-access' }] });
+  });
+
+  it('FA-SESSION (owner 2026-10-07): a session full-access switch is decided on its grant and audited as its own kind, and stores nothing', async () => {
+    // The stored mode is the person's last normal one (full-auto): the session switch leaves it, so the next launch opens in full-auto.
+    const f = await fixture([{ id: 'set-access', effect: 'allow', modes: ['full-access'] }], [mine('full-auto')]);
+    const before = await readFile(f.bindingsPath, 'utf8');
+    expect(await f.set('full-access', 'p1+b1', undefined, { sessionId: 'conversation-1' }))
+      .toMatchObject({ result: { mode: 'full-auto', fullAccess: true, previous: 'full-auto', changed: false, revision: 'p1+b1' } });
+    expect(await readFile(f.bindingsPath, 'utf8')).toBe(before);
+    expect(f.events().map(event => event.subject)).toEqual([{ kind: 'permission-mode-session', requested: 'full-access', stored: 'full-auto', sessionId: 'conversation-1',
+      decision: { effect: 'allow', ruleId: 'set-access' }, bindingsRevision: 'b1' }]);
+    // Without the grant the session switch is refused and recorded as refused; still nothing stored.
+    const g = await fixture([{ id: 'set-auto', effect: 'allow', modes: ['full-auto'] }]);
+    expect(await g.set('full-access', 'p1+b1', undefined, { sessionId: null })).toEqual({ code: 'PERMISSION_MODE_DENIED', mode: 'full-access' });
+    expect((await g.bindings()).modes).toEqual([]);
+    expect(g.events().map(event => event.subject)).toEqual([expect.objectContaining({ kind: 'permission-mode-session', stored: 'standart', sessionId: null,
+      decision: { effect: 'deny', ruleId: null } })]);
+    // A session switch is full access only: any other mode with `session` is an invalid command (nothing decided, nothing recorded).
+    expect(await g.set('full-auto', 'p1+b1', undefined, { sessionId: null })).toEqual({ code: 'PERMISSION_MODE_INVALID' });
+    expect(g.events()).toHaveLength(1);
   });
 
   it('R4: a company deny on set does not keep a person in a relaxed mode — standart is still allowed; relaxing stays refused', async () => {

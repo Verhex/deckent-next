@@ -78,6 +78,15 @@ export const auditSubjectSchema = z.discriminatedUnion('kind', [
     /** MODES-3: the person's "ask for edits too" preference requested and before (absent on records written before it existed). */
     askEdits: z.object({ requested: z.boolean(), previous: z.boolean() }).strict().optional() }).strict(),
   /**
+   * Full access switched on for one terminal session (FA-SESSION, owner 2026-10-07): the decision on the person's `permission-mode`/`set`
+   * `full-access` grant, the stored mode the session leaves untouched (the next launch starts in it) and the bindings revision read. Nothing is
+   * written; an allowed switch is recorded before the service answers (no record, no switch), a refusal when possible. Every turn of that session
+   * is admitted and recorded again as `full-access-turn`.
+   */
+  z.object({ kind: z.literal('permission-mode-session'), requested: z.literal('full-access'), stored: permissionMode, sessionId: identitySchema.nullable(),
+    decision: z.object({ effect: z.enum(['allow', 'deny', 'require-approval']), ruleId: identitySchema.nullable() }).strict(),
+    bindingsRevision: identitySchema }).strict(),
+  /**
    * A turn launched in full access (MODES-3, owner 2026-09-29): the decision on the person's `permission-mode`/`set` `full-access` grant at the
    * turn's admission. An allowed turn is recorded before its first round (no record, no turn); a refusal is recorded when possible.
    */

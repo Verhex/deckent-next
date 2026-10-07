@@ -12,8 +12,11 @@ import { useFocusOwner } from '#surfaces/core/terminal-window/index.js';
  */
 export interface WorklinePermissionModePort {
   inspect(signal?: AbortSignal): Promise<PermissionModeView>;
-  set(mode: PermissionMode, expectedRevision: string, askEdits?: boolean): Promise<PermissionModeChange>;
+  /** `session` (v21 FA-SESSION): full access for this terminal session only — decided and audited by the service, never stored. */
+  set(mode: PermissionMode, expectedRevision: string, askEdits?: boolean, session?: WorklineModeSession): Promise<PermissionModeChange>;
 }
+/** The terminal session a session-only full access belongs to (its conversation id; null before the first one). */
+export interface WorklineModeSession { readonly sessionId: string | null }
 /** Templates with `{mode}` and `{previous}`; `inert` is appended when no company rule is mode-eligible here. */
 export interface WorklineModeLabels {
   readonly current: string;
@@ -27,7 +30,7 @@ export interface WorklineModeLabels {
   readonly switch?: string;
   /** T2 (owner 2026-10-07): full access is switched into inside a session only on the company grant; this says which grant is missing. */
   readonly fullAccessGrant?: string;
-  /** MODES-3: the start mode was saved as full access (next launch); this session keeps its mode. */
+  /** MODES-3: the start mode was saved as full access (next launch); this session keeps its mode (`/mode start full-access`, an explicit request). */
   readonly startSaved?: string;
   /** MODES-3: the "ask for edits too" preference is on / off (`/mode ask-edits on|off`). */
   readonly askEditsOn?: string; readonly askEditsOff?: string;
@@ -88,13 +91,13 @@ function options(view: PermissionModeView, labels: WorklineModeLabels, fullAcces
 
 /**
  * `/mode` shows the mode; `/mode standart|full-auto|full-access` sets it with the revision last read (read first when none is known). Full
- * access (T2, owner 2026-10-07) is switched into inside the session through the same service set: the service decides the company grant and
- * audits the change (who, when, previous → requested), and every later turn is admitted and audited on the grant again; choosing standart or
- * full-auto leaves it. `/mode ask-edits on|off` sets the person's preference; `/mode start full-access` saves full access as the start mode of
+ * access (T2, owner 2026-10-07) is switched into inside the session through the same service set, for this session only (FA-SESSION): the
+ * service decides the company grant and audits the switch (`permission-mode-session`) but stores nothing, so the next launch starts in the last
+ * stored mode; every later turn is admitted and audited on the grant again; choosing standart or full-auto leaves it (and stores that mode). `/mode ask-edits on|off` sets the person's preference; `/mode start full-access` saves full access as the start mode of
  * the next launch while this session keeps its mode. Anything else is the usage line and calls nothing. Port failures propagate.
  */
 export async function runModeCommand(args: string, port: WorklinePermissionModePort, known: PermissionModeView | null, labels: WorklineModeLabels = NEUTRAL,
-  fullAccess = false): Promise<{ readonly entries: readonly WorkLedgerEntry[]; readonly view: PermissionModeView | null; readonly fullAccess: boolean }> {
+  fullAccess = false, terminal: WorklineModeSession = { sessionId: null }): Promise<{ readonly entries: readonly WorkLedgerEntry[]; readonly view: PermissionModeView | null; readonly fullAccess: boolean }> {
   const words = args.trim().split(/\s+/u).filter(Boolean);
   const done = (entries: readonly WorkLedgerEntry[], view: PermissionModeView | null, session = fullAccess) => ({ entries, view, fullAccess: session });
   if (words.length === 0) { const view = await port.inspect(); return done([notice('info', line(view, labels, fullAccess)), ...options(view, labels, fullAccess)], view); }
@@ -106,7 +109,7 @@ export async function runModeCommand(args: string, port: WorklinePermissionModeP
   // A v1 policy has no modes: there is nothing to set, so the service is not asked (it would only refuse, and the person needs the way forward).
   if (!base.supported) return done([notice('error', line(base, labels, fullAccess))], base);
   const target = start ? 'full-access' : mode ?? base.mode;
-  const changed = await port.set(target, base.revision, askEdits);
+  const changed = mode === 'full-access' ? await port.set(target, base.revision, undefined, terminal) : await port.set(target, base.revision, askEdits);
   const { previous, changed: wrote, ...view } = changed;
   if (start) return done([notice('info', labels.startSaved ?? line(view, labels, fullAccess))], view);
   // The service set the mode (a refused full access throws): the session follows it; a preference change keeps the session's mode.
@@ -122,12 +125,13 @@ export async function runModeCommand(args: string, port: WorklinePermissionModeP
  * moved revision propagates. Returns the one-line notice, the new view and whether the session now holds full access.
  */
 export async function cyclePermissionMode(port: WorklinePermissionModePort, known: PermissionModeView | null, labels: WorklineModeLabels = NEUTRAL,
-  fullAccess = false): Promise<{ readonly entries: readonly WorkLedgerEntry[]; readonly view: PermissionModeView | null; readonly fullAccess: boolean }> {
+  fullAccess = false, session: WorklineModeSession = { sessionId: null }): Promise<{ readonly entries: readonly WorkLedgerEntry[]; readonly view: PermissionModeView | null; readonly fullAccess: boolean }> {
   const base = known ?? await port.inspect();
   if (!base.supported) return { entries: [notice('error', line(base, labels, fullAccess))], view: base, fullAccess };
   const current = permissionModeStop(base, fullAccess), next = nextPermissionModeStop(permissionModeCycle(base), current) ?? 'standart';
   const target = STOP_TARGET[next];
-  const changed = await port.set(target.mode, base.revision, target.askEdits);
+  // FA-SESSION: the full-access stop is this session's only; every other stop is stored (the next launch's mode).
+  const changed = next === 'full-access' ? await port.set('full-access', base.revision, undefined, session) : await port.set(target.mode, base.revision, target.askEdits);
   const view: PermissionModeView = Object.freeze({ schemaVersion: changed.schemaVersion, scopeId: changed.scopeId, supported: changed.supported, mode: changed.mode,
     askEdits: changed.askEdits, revision: changed.revision, eligible: changed.eligible, fullAccess: changed.fullAccess, ...(changed.fullAuto === undefined ? {} : { fullAuto: changed.fullAuto }) });
   const word = (stop: PermissionModeStop) => labels.stops?.[stop] ?? stop;
@@ -138,7 +142,7 @@ export async function cyclePermissionMode(port: WorklinePermissionModePort, know
 /** The status row's mode stop (null: unknown or unsupported — no segment; full access always shown), `/mode` and the Shift+Tab step. A failure
  * refreshes the view. `launchedFullAccess`: the session was launched in full access (the launch already checked the company grant). */
 export function useWorklineMode(port: WorklinePermissionModePort | undefined, push: (entries: readonly WorkLedgerEntry[]) => void,
-  errorText: (error: unknown) => string, unavailable: string, labels?: WorklineModeLabels, launchedFullAccess = false) {
+  errorText: (error: unknown) => string, unavailable: string, labels?: WorklineModeLabels, launchedFullAccess = false, sessionId: () => string | null = () => null) {
   const [view, setView] = useState<PermissionModeView | null>(null), [fullAccess, setFullAccess] = useState(launchedFullAccess);
   // Read by the turn when it starts (a `/mode` queued before a message holds for it although no render ran between them).
   const current = useRef(launchedFullAccess);
@@ -158,14 +162,14 @@ export function useWorklineMode(port: WorklinePermissionModePort | undefined, pu
   }, [errorText, push, refresh]);
   const run = useCallback(async (args: string) => {
     if (!port) { push([notice('error', unavailable)]); return; }
-    await apply(() => runModeCommand(args, port, view, labels, current.current));
-  }, [apply, labels, port, push, unavailable, view]);
+    await apply(() => runModeCommand(args, port, view, labels, current.current, { sessionId: sessionId() }));
+  }, [apply, labels, port, push, sessionId, unavailable, view]);
   const cycle = useCallback(async () => {
     if (!port) { push([notice('error', unavailable)]); return; }
     if (stepping.current) return;
     stepping.current = true;
-    try { await apply(() => cyclePermissionMode(port, view, labels, current.current)); } finally { stepping.current = false; }
-  }, [apply, labels, port, push, unavailable, view]);
+    try { await apply(() => cyclePermissionMode(port, view, labels, current.current, { sessionId: sessionId() })); } finally { stepping.current = false; }
+  }, [apply, labels, port, push, sessionId, unavailable, view]);
   const stop = fullAccess ? 'full-access' as const : view?.supported ? permissionModeStop(view, false) : undefined;
   return { mode: fullAccess ? 'full-access' as const : view?.supported ? sessionMode(view, false) : undefined, stop, fullAccess: current, refresh, run, cycle };
 }

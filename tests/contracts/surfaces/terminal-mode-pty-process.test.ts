@@ -360,14 +360,38 @@ describe.skipIf(process.platform !== 'linux')('Shift+Tab mode cycle in a real ps
     expect(plain(run.output)).toContain('⚠ full access');
     expect(await readFile(join(f.projectRoot, 'src/a.ts'), 'utf8')).toBe('export const a = 2;\n');
     const events = subjects(f);
-    expect(events.map(subject => subject['kind'])).toEqual(['permission-mode-change', 'permission-mode-change', 'permission-mode-change', 'full-access-turn',
+    // FA-SESSION (owner 2026-10-07): the full-access stop is this session's only — its own audit kind, nothing stored (the stored mode stays full-auto).
+    expect(events.map(subject => subject['kind'])).toEqual(['permission-mode-change', 'permission-mode-change', 'permission-mode-session', 'full-access-turn',
       'full-access-call', 'permission-mode-change']);
     expect(events.filter(subject => subject['kind'] === 'permission-mode-change').map(subject => [subject['previous'], subject['requested'],
       (subject['decision'] as { effect: string }).effect, (subject['askEdits'] as { requested: boolean }).requested])).toEqual([
-      ['standart', 'standart', 'allow', true], ['standart', 'full-auto', 'allow', false], ['full-auto', 'full-access', 'allow', false], ['full-access', 'standart', 'allow', false]]);
+      ['standart', 'standart', 'allow', true], ['standart', 'full-auto', 'allow', false], ['full-auto', 'standart', 'allow', false]]);
+    expect(events.find(subject => subject['kind'] === 'permission-mode-session')).toMatchObject({ requested: 'full-access', stored: 'full-auto',
+      decision: { effect: 'allow', ruleId: 'mode-set' } });
     // Back at the default: the person's own entry is gone again; the other person's entry is untouched.
     const file = JSON.parse(await readFile(join(f.data, 'bindings.json'), 'utf8')) as { modes: unknown[] };
     expect(file.modes).toEqual([f.theirs]);
+  }, 180_000);
+
+  it('FA-SESSION: full access entered with Shift+Tab ends with the session; the next launch opens in the last stored mode, `--full-access` still opens it', async () => {
+    const f = await modeProject();
+    await startRuntime(f.projectRoot, f.env);
+    const first = await inPty(f.projectRoot, f.env, ['terminal', 'workline', '--scope', 'scope'], [['Deckent workline', SHIFT_TAB],
+      ['Mode: standard → careful', SHIFT_TAB], ['Mode: careful → full auto', SHIFT_TAB], ['Mode: full auto → full access', '/exit\r']]);
+    expect(first.timeout, first.output).toBeUndefined();
+    expect(first.status, first.output).toBe(0);
+    expect(plain(first.output)).toContain('for this session only (the next launch opens in full auto)');
+    const stored = JSON.parse(await readFile(join(f.data, 'bindings.json'), 'utf8')) as { modes: Array<{ principal: unknown; mode: string }> };
+    expect(stored.modes).toEqual([f.theirs, expect.objectContaining({ principal: f.me, mode: 'full-auto' })]);
+    const next = await inPty(f.projectRoot, f.env, ['terminal', 'workline', '--scope', 'scope'], [['Deckent workline', '/exit\r']]);
+    expect(next.timeout, next.output).toBeUndefined();
+    expect(plain(next.output)).toContain('Mode full auto');
+    expect(plain(next.output)).not.toContain('full access');
+    expect(plain(next.output)).not.toContain('FULL ACCESS is on');
+    const launched = await inPty(f.projectRoot, f.env, ['terminal', '--full-access'], [['Deckent workline', '/exit\r']]);
+    expect(launched.timeout, launched.output).toBeUndefined();
+    expect(plain(launched.output)).toContain('FULL ACCESS is on');
+    expect(subjects(f).map(subject => subject['kind'])).toEqual(['permission-mode-change', 'permission-mode-change', 'permission-mode-session']);
   }, 180_000);
 
   it('without a set grant the cycle is standard ↔ careful: full auto and full access are skipped, nothing is refused', async () => {

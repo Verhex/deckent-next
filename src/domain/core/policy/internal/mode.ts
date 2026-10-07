@@ -10,11 +10,16 @@ import type { VerifiedPrincipal } from '#domain/core/principal/index.js';
  * principal is never an input field (the transport's verified peer is the principal); setting is conditional on the effective policy
  * revision the caller last read (`policy+bindings`), so a concurrent change answers a typed conflict instead of overwriting it. v17: the
  * modes are `standart | full-auto | full-access` (`full-access` is stored only as the person's start mode), and `askEdits` (absent = keep)
- * sets the person's "ask for edits too" preference.
+ * sets the person's "ask for edits too" preference. v21 (FA-SESSION): `session` switches full access on for the terminal session only.
  */
 export const permissionModeQuerySchema = z.object({ schemaVersion: z.literal(1), scopeId: identitySchema }).strict().readonly();
 export const permissionModeCommandSchema = z.object({ schemaVersion: z.literal(1), scopeId: identitySchema, mode: z.enum(PERMISSION_MODES),
-  askEdits: z.boolean().optional(), expectedRevision: identitySchema }).strict().readonly();
+  askEdits: z.boolean().optional(), expectedRevision: identitySchema,
+  /** v21 FA-SESSION (owner 2026-10-07): full access for this terminal session only — the grant is decided and audited, nothing is stored, so
+   * the next launch starts in the person's last stored mode. `sessionId`: the terminal's conversation (null: none yet). Only with full access. */
+  session: z.object({ sessionId: identitySchema.nullable() }).strict().optional() }).strict()
+  .refine(command => command.session === undefined || (command.mode === 'full-access' && command.askEdits === undefined), { path: ['session'], message: 'PERMISSION_MODE_SESSION_FULL_ACCESS_ONLY' })
+  .readonly();
 const viewShape = { schemaVersion: z.literal(1), scopeId: identitySchema,
   /** false for a v1 policy: bindings are not read, so there are no modes (everyone `standart`) and nothing can be set. */
   supported: z.boolean(), mode: z.enum(PERMISSION_MODES), askEdits: z.boolean(), revision: identitySchema,

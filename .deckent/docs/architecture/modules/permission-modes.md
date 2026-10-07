@@ -292,7 +292,12 @@ cannot report Shift+Tab) walks every stop the person may take here: `standart` �
 says the company's set grant leaves it out (`fullAuto`, a view field of runtime protocol v21 — wave/tui-2 bumps once because the v20 view is
 strict; every v21 service sends it, and a view without it lets the service answer the set itself). Every step, and `/mode full-access`, is the existing `setPermissionMode` with the revision last read and an explicit
 `askEdits`: the engine decides the grant and records `permission-mode-change` (principal, time, previous → requested, rule) before the
-bindings change, so a stored `full-access` also becomes the next launch's start mode (as `full-auto` and `standart` already persist). Every
+bindings change; `standart`, careful and `full-auto` persist as the next launch's mode. **FA-SESSION (owner 2026-10-07, Jev 31ff7659):** the
+full-access stop and `/mode full-access` are this terminal session's only — the command carries `session: { sessionId }` (v21; full access
+only), the engine decides the same grant and records `permission-mode-session` (stored mode left untouched, the conversation id, rule, the
+bindings revision read) before it answers, and writes nothing; the next launch opens in the last stored mode. `--full-access` and the explicit
+`/mode start full-access` (a stored start mode, MODES-3) are unchanged. Leaving full access by Shift+Tab or `/mode standart|full-auto` stores
+that mode as before; a session that simply ends leaves no event (the next turn admission is the evidence). Every
 following full-access turn is admitted on the grant again and audited (`full-access-turn`, `full-access-call`); a grant revoked meanwhile
 reads as standart at the decision and the effect gate. The hard floor holds in every mode (PTY proof: a write of `.deckent/config.json`
 in a full-access session entered with Shift+Tab fails at the workspace floor; nothing changes, no `full-access-call`). The status row shows

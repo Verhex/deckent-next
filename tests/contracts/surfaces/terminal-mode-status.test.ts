@@ -68,14 +68,16 @@ describe('/mode (T-L4 slice 4c, MODES-3)', () => {
     expect(calls).toEqual(['inspect', ['set', 'full-auto', 'p1+b1', undefined]]);
   });
 
-  it('switches into full access inside a session through the service (owner 2026-10-07); the service\'s refusal stays a refusal', async () => {
+  it('switches into full access for this session only through the service (owner 2026-10-07, FA-SESSION); the service\'s refusal stays a refusal', async () => {
     const calls: unknown[] = [];
+    // The service stores nothing for a session switch: the answer keeps the stored mode and revision (changed: false).
     const port = { async inspect() { return view; },
-      async set(mode: Mode, expectedRevision: string, askEdits?: boolean) { calls.push([mode, expectedRevision, askEdits]); return { ...view, mode, revision: 'p1+m-3', previous: 'standart' as const, changed: true }; } };
-    const entered = await runModeCommand('full-access', port, view);
-    expect({ fullAccess: entered.fullAccess, texts: texts(entered.entries), level: (entered.entries[0] as { level: string }).level })
-      .toEqual({ fullAccess: true, texts: ['/mode · standart → full-access'], level: 'error' });
-    expect(calls).toEqual([['full-access', 'p1+b1', undefined]]);
+      async set(mode: Mode, expectedRevision: string, askEdits?: boolean, session?: { sessionId: string | null }) { calls.push([mode, expectedRevision, askEdits, session]);
+        return { ...view, previous: 'standart' as const, changed: false }; } };
+    const entered = await runModeCommand('full-access', port, view, undefined, false, { sessionId: 'conversation-1' });
+    expect({ fullAccess: entered.fullAccess, texts: texts(entered.entries), level: (entered.entries[0] as { level: string }).level, stored: entered.view?.mode })
+      .toEqual({ fullAccess: true, texts: ['/mode · standart → full-access'], level: 'error', stored: 'standart' });
+    expect(calls).toEqual([['full-access', 'p1+b1', undefined, { sessionId: 'conversation-1' }]]);
     const refusing = { async inspect() { return { ...view, fullAccess: false }; }, async set(): Promise<never> { throw new Error('PERMISSION_MODE_DENIED'); } };
     await expect(runModeCommand('full-access', refusing, { ...view, fullAccess: false })).rejects.toThrow('PERMISSION_MODE_DENIED');
   });
@@ -94,7 +96,7 @@ describe('/mode (T-L4 slice 4c, MODES-3)', () => {
   it('sets the "ask for edits too" preference and saves full access as the next launch\'s start mode, keeping this session\'s mode', async () => {
     const calls: unknown[] = [];
     const port = { async inspect() { return view; },
-      async set(mode: Mode, expectedRevision: string, askEdits?: boolean) { calls.push([mode, expectedRevision, askEdits]);
+      async set(mode: Mode, expectedRevision: string, askEdits?: boolean, session?: unknown) { calls.push([mode, expectedRevision, askEdits, session]);
         return { ...view, mode, askEdits: askEdits ?? view.askEdits, revision: 'p1+m-4', previous: 'standart' as const, changed: true }; } };
     const labels = { current: 'Mode: {mode}', changed: '{previous} → {mode}', inert: '', unsupported: 'v1', usage: 'usage', askEditsOn: 'edits ask', askEditsOff: 'edits run',
       startSaved: 'saved for next launch' };
@@ -103,7 +105,8 @@ describe('/mode (T-L4 slice 4c, MODES-3)', () => {
     expect(texts((await runModeCommand('ask-edits off', port, view, labels)).entries)).toEqual(['edits run']);
     const start = await runModeCommand('start full-access', port, view, labels);
     expect({ text: texts(start.entries), fullAccess: start.fullAccess }).toEqual({ text: ['saved for next launch'], fullAccess: false });
-    expect(calls).toEqual([['standart', 'p1+b1', true], ['standart', 'p1+b1', false], ['full-access', 'p1+b1', undefined]]);
+    // `/mode start full-access` is the explicit stored start mode (MODES-3): never a session switch.
+    expect(calls).toEqual([['standart', 'p1+b1', true, undefined], ['standart', 'p1+b1', false, undefined], ['full-access', 'p1+b1', undefined, undefined]]);
   });
 
   it('reads the revision first when none is known and says when the mode changes nothing here', async () => {
@@ -169,24 +172,29 @@ describe('Shift+Tab permission-mode cycle (T2 T-MODE-CYCLE)', () => {
     const calls: unknown[] = [];
     let current: typeof view = view, revision = 0;
     const port = { async inspect() { return current; },
-      async set(mode: Mode, expectedRevision: string, askEdits?: boolean) {
-        calls.push([mode, expectedRevision, askEdits]);
+      async set(mode: Mode, expectedRevision: string, askEdits?: boolean, session?: { sessionId: string | null }) {
+        calls.push([mode, expectedRevision, askEdits, session]);
         const previous = current.mode;
+        // FA-SESSION: a session switch stores nothing (same mode, same revision).
+        if (session) return { ...current, previous, changed: false };
         current = { ...current, mode, askEdits: askEdits ?? current.askEdits, revision: `r${++revision}` };
         return { ...current, previous, changed: true };
       } };
     const labels = { current: '', changed: '{previous} → {mode}', inert: '', unsupported: 'v1', usage: '', cycled: 'Mode: {previous} → {mode}', cycledFullAccess: 'Mode: {previous} → {mode} — audited',
       stops: { standart: 'standard', 'ask-edits': 'careful', 'full-auto': 'full auto', 'full-access': 'full access' } };
     let known: typeof view | null = null, fullAccess = false;
-    const seen: string[] = [];
+    const seen: string[] = [], stored: string[] = [];
     for (let step = 0; step < 4; step++) {
       const result = await cyclePermissionMode(port, known, labels, fullAccess);
-      known = result.view as typeof view; fullAccess = result.fullAccess;
+      known = result.view as typeof view; fullAccess = result.fullAccess; stored.push(current.mode);
       seen.push(...result.entries.map(entry => entry.kind === 'notice' ? `${entry.level}:${entry.text}` : ''));
     }
     expect(seen).toEqual(['info:Mode: standard → careful', 'info:Mode: careful → full auto', 'error:Mode: full auto → full access — audited', 'info:Mode: full access → standard']);
-    expect(calls).toEqual([['standart', 'r0', true], ['full-auto', 'r1', false], ['full-access', 'r2', false], ['standart', 'r3', false]]);
+    expect(calls).toEqual([['standart', 'r0', true, undefined], ['full-auto', 'r1', false, undefined], ['full-access', 'r2', undefined, { sessionId: null }],
+      ['standart', 'r2', false, undefined]]);
     expect(fullAccess).toBe(false);
+    // While the session held full access the stored mode stayed full-auto: a relaunch at that point opens in full auto, never full access.
+    expect(stored).toEqual(['standart', 'full-auto', 'full-auto', 'standart']);
   });
 
   it('skips full access without the grant; a refusal of the service propagates and leaves the session as it was', async () => {

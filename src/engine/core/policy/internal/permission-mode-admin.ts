@@ -37,7 +37,7 @@ export function inspectPermissionMode(policy: unknown, principal: VerifiedPrinci
  * (`policy+bindings`) the caller read, needs a company `permission-mode`/`set` grant for `full-auto` or `full-access` (the latter stored only
  * as the person's start mode; require-approval has no broker here: `POLICY_APPROVAL_UNSUPPORTED`); `standart` — the default — and the
  * "ask for edits too" preference need none (owner R4), and every decision is audited; an allowed change is recorded before the file is
- * replaced (no record, no change). Every write is bindings v3 (a v1/v2 file is upgraded on its first write; the authority writer archives
+ * replaced (no record, no change). A `session` full-access switch (FA-SESSION) is decided and audited the same way but writes nothing. Every write is bindings v3 (a v1/v2 file is upgraded on its first write; the authority writer archives
  * the document before and after). The mode itself grants nothing: lowering stays the decision function's, on company-eligible rules only.
  */
 export class PermissionModeApplication {
@@ -70,11 +70,24 @@ export class PermissionModeApplication {
         principal: actor, policyRevision: policy.revision, atMs: this.now(), subject: { kind: 'permission-mode-change', requested: command.mode, previous: before.mode,
           decision: { effect: decision.decision, ruleId: decision.ruleId ?? null }, bindingsRevision: { before: bindings.revision, after },
           askEdits: { requested: askEdits, previous: before.askEdits } } });
+      // FA-SESSION (owner 2026-10-07): full access for this terminal session only is the same grant decision, recorded as its own kind; nothing
+      // is written, so the stored mode — the next launch's — stays the person's last normal one.
+      const session = command.session ? (() => {
+        const sessionId = command.session.sessionId;
+        return () => this.audit({ schemaVersion: AUDIT_EVENT_SCHEMA_VERSION, eventId: randomUUID(), scopeId: command.scopeId, principal: actor,
+          policyRevision: policy.revision, atMs: this.now(), subject: { kind: 'permission-mode-session', requested: 'full-access', stored: before.mode, sessionId,
+            decision: { effect: decision.decision, ruleId: decision.ruleId ?? null }, bindingsRevision: bindings.revision } });
+      })() : null;
       if (decision.decision !== 'allow') {
         // A refusal is recorded when possible; an unrecordable refusal is still a refusal.
-        try { record(null); } catch { /* refused either way */ }
+        try { if (session) session(); else record(null); } catch { /* refused either way */ }
         // A refused mode is its own typed answer (which mode, which grant is missing), not the generic denial.
         throw decision.decision === 'require-approval' ? new PolicyAuthorizationError('POLICY_APPROVAL_UNSUPPORTED') : new PermissionModeError('PERMISSION_MODE_DENIED', command.mode);
+      }
+      if (session) {
+        // No record, no switch: the event is durable before the service answers.
+        session();
+        return { write: null, result: Object.freeze({ ...before, previous: before.mode, changed: false }) };
       }
       const modes = withPrincipalPermissionMode(bindings, actor, command.scopeId, command.mode, askEdits,
         `m-${createHash('sha256').update(`permission-mode-entry:1\0${actor.issuer}\0${actor.subject}\0${command.mode}`).digest('hex').slice(0, 16)}`);

@@ -306,8 +306,8 @@ export async function terminalCommand(argv: readonly string[], context: CommandC
   // T-L4 slice 4c: the mode is read and set through the runtime service (v15); this surface reads and writes no policy file.
   const modePort = context.inspectPermissionMode && context.setPermissionMode ? {
     inspect: (signal?: AbortSignal) => context.inspectPermissionMode!(root, { schemaVersion: 1, scopeId }, options, signal),
-    set: (mode: PermissionMode, expectedRevision: string, askEdits?: boolean) => context.setPermissionMode!(root, { schemaVersion: 1, scopeId, mode, expectedRevision,
-      ...(askEdits === undefined ? {} : { askEdits }) }, options) } : null;
+    set: (mode: PermissionMode, expectedRevision: string, askEdits?: boolean, session?: { readonly sessionId: string | null }) => context.setPermissionMode!(root,
+      { schemaVersion: 1, scopeId, mode, expectedRevision, ...(askEdits === undefined ? {} : { askEdits }), ...(session ? { session: { sessionId: session.sessionId } } : {}) }, options) } : null;
   // MODES-3: full access starts only here — `--full-access` or the person's stored start mode — and only on the company grant (the service asks
   // it again on every turn and call). An explicit flag without the grant is refused; a stored start mode without it opens a standart session.
   let fullAccess = false;
