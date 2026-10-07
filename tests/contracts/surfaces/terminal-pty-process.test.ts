@@ -204,10 +204,13 @@ describe.skipIf(process.platform === 'win32')('deckent terminal in a real pseudo
       ['Deckent workline', '/workers\r'],
       ['POLICY_UNAVAILABLE', 'hello\r'],
       ['TERMINAL_CHAT_NOT_CONFIGURED', '/nope\r'],
-      ['Unknown command: /nope', '/exit\r'],
+      // SLASH-WINDOWS: an unknown command is a small window naming it (no error line in the chat); Esc closes it.
+      ['is not a Deckent command', '\u001b'],
+      ['Deckent workline', '/exit\r'],
     ]);
     expect(result.timeout, result.output).toBeUndefined();
     expect(result.status).toBe(0);
+    expect(result.output).not.toContain('Unknown command: /nope');
     expect(result.output).toContain('pty-scope');
     const colour = new RegExp(`${String.fromCharCode(27)}\\[(3[0-7]|9[0-7]|38;)`);
     expect(result.output).not.toMatch(colour);

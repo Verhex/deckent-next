@@ -174,11 +174,16 @@ describe.skipIf(process.platform !== 'linux')('/scratch in a real pseudo-termina
     const run = await inPty(f.projectRoot, f.env, ['terminal', 'workline', '--scope', 'scope'], [
       ['Deckent workline', 'keep notes in scratch\r'],
       ['touch "$TMPDIR/from-shell.txt"', 'y'],
+      // SLASH-WINDOWS: `/scratch` is a list window (no `path` / `clear` arguments): the folder and the files show, Enter on a file names its path,
+      // the last row clears after a y.
       ['Scratch turn done.', '/scratch\r'],
-      ['from-shell.txt ·', '/scratch path\r'],
-      ['/scratch · /', '/scratch clear\r'],
+      ['from-shell.txt', '\r'],
+      ['Scratch file path', '\u001b'],
+      ['Scratch files', '\u001b[B\u001b[B\r'],
+      ['Clear the scratch area?', 'y'],
       ['2 files', '/scratch\r'],
-      ['· empty', '/exit\r'],
+      ['is empty', '\u001b'],
+      ['Deckent workline', '/exit\r'],
     ]);
     expect(run.timeout, run.output).toBeUndefined();
     expect(run.status, run.output).toBe(0);
@@ -189,9 +194,9 @@ describe.skipIf(process.platform !== 'linux')('/scratch in a real pseudo-termina
     expect(new Set(f.seen.scratch).size).toBe(1);
     const area = f.seen.scratch[0]!;
     expect(area.startsWith(join(f.data, 'state', 'scratch'))).toBe(true);
-    expect(run.output).toContain('plan.md · 7 bytes'); expect(run.output).toContain('from-shell.txt · 0 bytes');
-    // The terminal wraps long lines: the notice and the path are checked apart.
-    expect(run.output).toContain(`/scratch · ${area}`); expect(run.output).toContain('/scratch clear · 2 files (7 bytes) removed ·');
+    expect(run.output).toContain('plan.md'); expect(run.output).toContain('7 bytes'); expect(run.output).toContain('from-shell.txt');
+    // The terminal wraps long lines: the summary line and the path are checked apart.
+    expect(run.output).toContain(area); expect(run.output).toContain('2 files (7 bytes) removed');
     expect(run.output.split(area).length - 1).toBeGreaterThanOrEqual(3);
     expect(await readdir(area)).toEqual([]);
     // The only card was the shell command's; a card for the scratch write would show its diff.
