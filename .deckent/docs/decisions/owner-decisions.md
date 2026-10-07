@@ -311,6 +311,9 @@ Owner “Öneriler kabul edildi”: önce Noul kontrollerini tek önerme yapma v
 - **`/tasks` satır içi** (Jev 047b44db 0,98/0,75, lead): Enter = döküm, `x` = o Run için mevcut `/cancel` onay penceresi; işçi düzeyinde durdurma yok.
 - **MCP yönlendirmesi** (Jev f46c2279 1,00/0,77, lead; owner sorusu): aynı origin 307/308 takip, diğerleri hedefi adlandıran retle (MCP-REDIRECT).
 - **DOGFOOD:** S1 tamamlanana kadar bekler (owner 2026-10-08).
+- **T4 sırası** (Jev 2a7022ea iki tur 0,95/0,64 → owner): T4 anahtar koruma dilimleriyle yan yana; mevcut anahtar deposu portuna yazılır, dilim 1'den sonra iner; SECRET-CONTINUITY ile MODEL-SWITCH'in model-invocation kısmı birlikte. Lead'in Jev'siz önerisinin yerine geçer.
+- **`/model` kapsamı** (Jev a172b1ad iki tur 0,97/0,63 → owner): seçim oturuma; seçicide "varsayılan da yap" kullanıcı katmanını `/config` yönetilen yolundan yazar.
+- **Haiku 5.5** (owner): `claude-haiku-5-5` etkin katalog modeli (canlı + N1). Fiyat kaydı istem uzunluğu kademeli (Jev 2fc550db 0,96/0,79, lead). N1 kanal kaydı kayıtla güncel biçime geçer (Jev 86370454 iki tur 0,89/0,72 → owner). Haiku 4.5'in 2026-10-15 kesimi owner'ın 10-02 kararı olarak kalır.
 
 
 ## Owner kararları — 2026-10-08 (API anahtarları)
