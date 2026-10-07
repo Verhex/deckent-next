@@ -127,14 +127,16 @@ export interface McpCommandContext extends McpRegistryContext {
   readonly now?: () => number;
   /** Renders a recorded start failure (`lastStart.text`) in the locale of the calling surface. */
   readonly describeNotice: McpStartNoticeRenderer;
+  /** The Deckent scope of the command (the `sandbox-net` HOME is its own per scope; Astra 2444 R2). */
+  readonly scopeId?: string;
 }
 /** K4: where the `sandbox-net` servers' own HOMEs live (the data root's `integrations/mcp-home`, never the user's HOME or the project). */
 export const mcpServerHomes = (layout: ProductLayout) => join(productResourcePath(layout, 'integrations'), MCP_SERVER_HOMES_DIR);
 /** The trust context of a registry context (both trust places prepared for writing on demand). */
 export function mcpTrustContext(context: McpRegistryContext & { readonly sandboxes: McpLaunchContext['sandboxes']; readonly principal: McpTrustContext['principal'];
-  readonly audit: McpTrustAudit; readonly inputMaxBytes?: number; readonly now?: () => number }, cwd: string): McpTrustContext {
+  readonly audit: McpTrustAudit; readonly inputMaxBytes?: number; readonly now?: () => number; readonly scopeId?: string }, cwd: string): McpTrustContext {
   return { environment: context.environment, secret: context.secret, cwd, sandboxes: context.sandboxes, principal: context.principal, audit: context.audit, ...(context.grants ? { grants: context.grants } : {}),
-    homeRoot: mcpServerHomes(context.layout),
+    homeRoot: mcpServerHomes(context.layout), ...(context.scopeId ? { homeScope: context.scopeId } : {}),
     ...(context.inputMaxBytes ? { inputMaxBytes: context.inputMaxBytes } : {}), ...(context.now ? { now: context.now } : {}),
     directory: async scope => { if (scope !== 'user') return prepareProductDirectory(context.layout, 'integrations');
       const root = mcpGlobalRoot(context.environment); await mkdir(root, { recursive: true, mode: 0o700 }); return root; } };
@@ -187,7 +189,8 @@ export async function runMcpCommand(request: McpCommandRequest, context: McpComm
   const forgetFailure = (scope: McpScope, name: string) => updateMcpStartFailure(productResourcePath(context.layout, 'integrations'), { scope, name }, null).catch(() => undefined);
   const settings = { ...MCP_CLIENT_DEFAULTS, ...(context.limits?.resultMaxBytes ? { resultMaxBytes: context.limits.resultMaxBytes } : {}),
     ...(context.limits?.inputMaxBytes ? { inputMaxBytes: context.limits.inputMaxBytes } : {}) };
-  const launchContext = { cwd: view.projectKey, environment: context.environment, sandboxes: context.sandboxes, homeRoot: mcpServerHomes(context.layout) };
+  const launchContext = { cwd: view.projectKey, environment: context.environment, sandboxes: context.sandboxes, homeRoot: mcpServerHomes(context.layout),
+    ...(context.scopeId ? { homeScope: context.scopeId } : {}) };
   const probe = async <T>(work: (pool: McpClientPool) => Promise<T>): Promise<T> => {
     const controller = new AbortController(), pool = new McpClientPool(controller.signal);
     try { return await work(pool); } finally { controller.abort(); await pool.close(); }
@@ -316,7 +319,7 @@ export async function openTurnMcp(input: { readonly registry: McpRegistryContext
   const undecided = view.servers.filter(server => server.status === 'pending-approval' || server.status === 'changed');
   if (undecided.length) {
     const { revision: policyRevision, trustFacts } = await input.requestPolicy(), layout = registry.layout;
-    const trust = mcpTrustContext({ ...registry, sandboxes: input.sandboxes, principal, inputMaxBytes: input.inputMaxBytes, ...(input.grants ? { grants: input.grants } : {}),
+    const trust = mcpTrustContext({ ...registry, scopeId, sandboxes: input.sandboxes, principal, inputMaxBytes: input.inputMaxBytes, ...(input.grants ? { grants: input.grants } : {}),
       audit: mcpTrustAuditWriter({ layout, sqlite: input.sqlite, keyFile: input.keyFile, scopeId, principal, policyRevision }) }, input.cwd);
     const ask = mcpTrustApprovalAsker({ ledgerPath: input.ledgerPath, sqlite: input.sqlite, integrity: () => openLocalIntegrityAuthority(layout, input.keyFile, true),
       clock: new SystemTrustedClock(), scopeId, turnId: input.turnId, requester: { id: principal.id, issuer: principal.issuer, subject: principal.subject }, policyRevision, facts: trustFacts,
@@ -342,7 +345,7 @@ export async function openTurnMcp(input: { readonly registry: McpRegistryContext
   }
   const settings = mcpClientSettings(view, { resultMaxBytes: input.resultMaxBytes, inputMaxBytes: input.inputMaxBytes });
   const byName = new Map(view.servers.map(server => [server.name, server])), outcomes: [McpServerView, McpServerOpen][] = [];
-  const offered = settings ? await openMcpAgentTools(pool, settings, { cwd: input.cwd, environment: registry.environment, sandboxes: input.sandboxes, homeRoot: mcpServerHomes(registry.layout) },
+  const offered = settings ? await openMcpAgentTools(pool, settings, { cwd: input.cwd, environment: registry.environment, sandboxes: input.sandboxes, homeRoot: mcpServerHomes(registry.layout), homeScope: scopeId },
     (launch, state) => { const server = byName.get(launch.id); if (server) outcomes.push([server, state]); }) : new Map<string, McpOfferedTool>();
   for (const [server, state] of outcomes) {
     const known = findMcpStartFailure(failures, server);

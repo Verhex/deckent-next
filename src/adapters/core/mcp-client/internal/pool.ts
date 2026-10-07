@@ -28,9 +28,24 @@ export interface McpLaunchContext {
   readonly sandboxes: readonly ShellSandbox[];
   /** Measured host capabilities (defaults to the process-wide probe, the bubblewrap launcher under the global state root). */
   readonly capabilities?: ShellCapabilities;
-  /** K4: where each `sandbox-net` server's private, persistent HOME is made (`<homeRoot>/<server>`, 0700); absent: such a server is refused. */
+  /** K4: where each `sandbox-net` server's private, persistent HOME is made (`<homeRoot>/<server>-<identity>`, 0700); absent: such a server is refused. */
   readonly homeRoot?: string;
+  /** The Deckent scope the HOME belongs to (Astra 2444 R2); a scoped pool view always sets its own. */
+  readonly homeScope?: string;
 }
+/**
+ * One `sandbox-net` server's HOME (Astra 2444 R2): its own per Deckent scope, project, registry scope and trusted definition, so another
+ * definition or scope of the same name never reads or changes its tokens or cache; the same identity keeps its directory across restarts.
+ */
+export async function mcpServerHomeDirectory(homeRoot: string, server: Pick<McpClientServerSettings, 'id' | 'binding'>, context: Pick<McpLaunchContext, 'cwd' | 'homeScope'>) {
+  const project = await realpath(context.cwd).catch(() => context.cwd);
+  const identity = createHash('sha256').update(JSON.stringify(['mcp-home:2', context.homeScope ?? null, project, server.binding?.scope ?? null,
+    server.binding?.definitionDigest ?? null, server.id])).digest('hex').slice(0, 32);
+  return join(homeRoot, `${server.id}-${identity}`);
+}
+/** Streamable HTTP never follows a redirect (Astra 2444 R1): a 3xx would carry the headers (resolved `$DECK:` secrets) and the call body to a
+ * target nobody approved, also over plain HTTP. Every request of the transport goes through this fetch, so no option or path can turn it back on. */
+const noRedirectFetch: typeof fetch = (input, init) => fetch(input, { ...init, redirect: 'error' });
 /** `sandbox`: the launcher's own arguments before `--` and the server's command line, so a failed start can be diagnosed in the same view.
  * `projectReadOnly`: the write view the launch enforces (false on the host, where no posture has an OS boundary). */
 type Launch = { readonly ok: true; readonly command: string; readonly args: readonly string[]; readonly env: Record<string, string>; readonly sandboxed: boolean;
@@ -66,7 +81,7 @@ async function launchOf(server: McpClientServerSettings, context: McpLaunchConte
   let profile: ShellSandboxLaunchProfile | undefined;
   if (server.realm === 'sandbox-net') {
     if (!context.homeRoot) return { ok: false, reason: 'sandbox-unavailable', detail: 'no private HOME directory for this server' };
-    const home = join(context.homeRoot, server.id);
+    const home = await mcpServerHomeDirectory(context.homeRoot, server, context);
     try { await mkdir(home, { recursive: true, mode: 0o700 }); await chmod(home, 0o700); profile = { network: true, home: await realpath(home) }; }
     catch { return { ok: false, reason: 'sandbox-unavailable', detail: 'its private HOME directory could not be made' }; }
     // HOME names the mount point of that directory (the launch's HOME), whatever the entry's env says.
@@ -188,7 +203,7 @@ export class McpClientPool implements McpPoolView {
    */
   scoped(owner: { readonly scopeId: string; readonly cwd: string }): McpPoolView {
     const namespace = createHash('sha256').update(JSON.stringify(['mcp-pool-view:1', owner.scopeId, owner.cwd])).digest('hex');
-    return { open: (server, settings, context) => this.openIn(namespace, server, settings, context), call: (id, tool, digest, args, options) => this.callIn(namespace, id, tool, digest, args, options),
+    return { open: (server, settings, context) => this.openIn(namespace, server, settings, { ...context, homeScope: owner.scopeId }), call: (id, tool, digest, args, options) => this.callIn(namespace, id, tool, digest, args, options),
       stderr: id => this.stderrIn(namespace, id), retire: id => this.retireIn(namespace, id), retain: trusted => this.retainIn(namespace, trusted) };
   }
   open(server: McpClientServerSettings, settings: McpClientSettings, context: McpLaunchContext): Promise<McpServerOpen> { return this.openIn('', server, settings, context); }
@@ -204,7 +219,7 @@ export class McpClientPool implements McpPoolView {
   private openIn(namespace: string, server: McpClientServerSettings, settings: McpClientSettings, context: McpLaunchContext): Promise<McpServerOpen> {
     const key = createHash('sha256').update(JSON.stringify([server.command, server.args, Object.entries(server.env).sort(), server.realm, server.generation ?? 0,
       server.url ?? null, Object.entries(server.headers ?? {}).sort(), context.cwd, context.sandboxes.map(sandbox => sandbox.kind), context.homeRoot ?? null,
-      server.binding?.scope ?? null])).digest('hex');
+      server.binding?.scope ?? null, context.homeScope ?? null])).digest('hex');
     const name = `${namespace}\0${server.id}`;
     let state = this.states.get(name);
     if (state && state.key !== key) { void state.client?.close().catch(() => undefined); this.states.delete(name); state = undefined; }
@@ -256,7 +271,7 @@ export class McpClientPool implements McpPoolView {
   private async start(state: ServerState, launch: Extract<Launch, { ok: true }>, settings: McpClientSettings, cwd: string, server: McpClientServerSettings): Promise<McpServerOpen> {
     const [{ Client, StreamableHTTPClientTransport }, { StdioClientTransport }] = await loadClientSdk();
     // Streamable HTTP (2026-07-28: no protocol session, every message its own POST): the entry's headers ride on every request; no session id is given.
-    const transport = server.transport === 'http' ? new StreamableHTTPClientTransport(new URL(server.url!), { requestInit: { headers: { ...server.headers } } })
+    const transport = server.transport === 'http' ? new StreamableHTTPClientTransport(new URL(server.url!), { requestInit: { headers: { ...server.headers }, redirect: 'error' }, fetch: noRedirectFetch })
       : new StdioClientTransport({ command: launch.command, args: [...launch.args], env: launch.env, cwd, stderr: 'pipe', maxBufferSize: settings.inputMaxBytes });
     if (transport instanceof StdioClientTransport) transport.stderr?.on('data', (chunk: Buffer) => {
       const next = Buffer.concat([state.stderr, chunk]);

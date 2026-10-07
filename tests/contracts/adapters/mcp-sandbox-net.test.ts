@@ -1,12 +1,13 @@
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { createServer, type Server } from 'node:net';
 import { rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { bubblewrapArguments } from '#adapters/core/shell-sandbox-bwrap/index.js';
-import { bubblewrapShellSandbox, createWorkspaceScope, isWriteApprovalFloored, McpClientPool, mcpDefinitionDigest, mcpToolPinDigest, type McpClientSettings } from '#adapters/index.js';
+import { bubblewrapShellSandbox, createWorkspaceScope, isWriteApprovalFloored, McpClientPool, mcpDefinitionDigest, mcpServerHomeDirectory, mcpToolPinDigest, type McpClientSettings,
+  type McpPoolView, type McpTrustBinding } from '#adapters/index.js';
 import { measureTestShellHost } from '../../fixtures/shell-host.js';
 
 // L1 MCP-CORE K4 (Jev 68a10d1a, TUI3 2026-10-07): the default MCP realm `sandbox-net` — a bubblewrap sandbox with the host network and the
@@ -79,8 +80,8 @@ describe.skipIf(capabilities.bubblewrap.status !== 'available')('sandbox-net in 
     const server = (realm: 'sandbox-net' | 'require-sandbox' | 'host', id = realm.replace('-', '')) => ({ id, command: process.execPath, realm, env: {},
       args: [join(project, 'tools', 'probe.mjs'), join(project, '.env'), join(home, '.ssh', 'id_rsa'), join(home, '.deckent', 'secrets.json'), join(project, 'README.md'),
         String((listener.address() as { port: number }).port)], tools: [{ name: 'probe', digest: mcpToolPinDigest(probeTool), alwaysAsk: false }] });
-    const probe = async (spec: ReturnType<typeof server>, pool = new McpClientPool(new AbortController().signal)) => {
-      pools.push(pool);
+    const probe = async (spec: ReturnType<typeof server> & { binding?: McpTrustBinding }, pool: McpPoolView = new McpClientPool(new AbortController().signal)) => {
+      if (pool instanceof McpClientPool) pools.push(pool);
       const opened = await pool.open(spec, settings([spec]), { cwd: project, environment, sandboxes, homeRoot: homes });
       expect(opened).toMatchObject({ ok: true, sandboxed: spec.realm !== 'host' });
       const answer = await pool.call(spec.id, 'probe', mcpToolPinDigest(probeTool), {}, { timeoutMs: 20_000, signal: new AbortController().signal });
@@ -101,13 +102,32 @@ describe.skipIf(capabilities.bubblewrap.status !== 'available')('sandbox-net in 
     expect(net.result['projectWrite']).toMatch(/^(EROFS|EACCES)$/u);
     expect(readFileSync(join(f.project, 'README.md'), 'utf8')).toBe('readme\n');
     // The cache is the server's own directory under Deckent's state, private, and it survives a restart of the server.
-    expect(statSync(join(f.homes, 'sandboxnet')).mode & 0o777).toBe(0o700);
-    expect(readFileSync(join(f.homes, 'sandboxnet', '.cache', 'probe', 'marker'), 'utf8')).toBe('kept');
+    const own = await mcpServerHomeDirectory(f.homes, f.server('sandbox-net'), { cwd: f.project });
+    expect(statSync(own).mode & 0o777).toBe(0o700);
+    expect(readFileSync(join(own, '.cache', 'probe', 'marker'), 'utf8')).toBe('kept');
     expect((await f.probe(f.server('sandbox-net'))).result['cacheBefore']).toBe('kept');
     // The closed sandbox (require-sandbox) keeps no network and no HOME.
     const closed = await f.probe(f.server('require-sandbox'));
     expect(closed.result['network']).not.toBe('reached'); expect(closed.result['cacheBefore']).toBe('ENOENT');
   }, 120_000);
+
+  it('Astra 2444 R2: the same server name under another trusted definition or another Deckent scope never reads or changes the HOME of the first; the same identity keeps it', async () => {
+    const f = await setup(), base = f.server('sandbox-net', 'docs');
+    const first = { ...base, binding: { scope: 'local' as const, definitionDigest: 'a'.repeat(64) } };
+    expect((await f.probe(first)).result['cacheBefore']).toBe('ENOENT');
+    // The same identity again (a restart): its cache is there.
+    expect((await f.probe(first)).result['cacheBefore']).toBe('kept');
+    // Another definition of the same name (another registry scope, another trusted digest): a fresh HOME, nothing of the first.
+    for (const binding of [{ scope: 'project' as const, definitionDigest: 'a'.repeat(64) }, { scope: 'local' as const, definitionDigest: 'b'.repeat(64) }])
+      expect((await f.probe({ ...base, binding })).result['cacheBefore']).toBe('ENOENT');
+    // Another Deckent scope over the same project (a scoped pool view): its own HOME too; its own restart keeps its own.
+    const pool = new McpClientPool(new AbortController().signal); pools.push(pool);
+    expect((await f.probe(first, pool.scoped({ scopeId: 'other-scope', cwd: f.project }))).result['cacheBefore']).toBe('ENOENT');
+    // The first identity's cache is unchanged by the others (each wrote only into its own directory).
+    const homes = readdirSync(f.homes).filter(name => name.startsWith('docs-'));
+    expect(homes).toHaveLength(4);
+    expect((await f.probe(first)).result['cacheBefore']).toBe('kept');
+  }, 180_000);
 
   it('a real npx server starts in sandbox-net from a packed package (its npm cache in the server\'s own HOME; the project stays read-only)', async () => {
     const f = await setup(), pkg = join(f.project, 'tools', 'probe-pkg');
@@ -120,7 +140,7 @@ describe.skipIf(capabilities.bubblewrap.status !== 'available')('sandbox-net in 
     const spec = { ...f.server('sandbox-net', 'npxprobe'), command: join(dirname(process.execPath), 'npx'), args: ['--yes', '--offline', '--package', tarball, 'deckent-probe-mcp', ...f.server('sandbox-net').args.slice(1)] };
     const started = await f.probe(spec);
     expect(started.result['network']).toBe('reached'); expect(started.result['ssh']).toBe('ENOENT');
-    expect(statSync(join(f.homes, 'npxprobe', '.npm')).isDirectory()).toBe(true);
+    expect(statSync(join(await mcpServerHomeDirectory(f.homes, spec, { cwd: f.project }), '.npm')).isDirectory()).toBe(true);
   }, 180_000);
 
   it('without a usable sandbox the default realm does not start (never on the host); without a HOME root it is refused before anything runs', async () => {

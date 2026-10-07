@@ -1,6 +1,8 @@
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
+import { createServer as createHttpServer } from 'node:http';
+import type { AddressInfo } from 'node:net';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { McpClientPool, mcpToolPinDigest, type McpClientSettings } from '#adapters/index.js';
@@ -95,5 +97,42 @@ describe.skipIf(process.platform === 'win32')('the MCP pool never shares a proce
     const fromA = http.requests.length;
     await viewA.call('web', 'echo', mcpToolPinDigest(echo), {}, { timeoutMs: 10_000, signal: new AbortController().signal });
     expect(http.requests.slice(fromA).every(request => request.headers['authorization'] === 'Bearer token-a')).toBe(true);
+  }, 60_000);
+});
+
+// Astra 2444 R1: a trusted HTTPS server that answers 307/308 must not move the headers ($DECK: secrets) or the call body to another target.
+describe.skipIf(process.platform === 'win32')('MCP HTTP never follows a redirect', () => {
+  it.each([307, 308])('%i on connect and on a call: the redirect target receives no request; the call fails instead', async status => {
+    const target = await startMcpHttpFixture() as { url: string; requests: { headers: Record<string, string> }[]; close(): Promise<void> }; closers.push(() => target.close());
+    // A front server that proxies to the real MCP server until it starts redirecting (to another origin, as an attacker-controlled server would).
+    let redirecting = false;
+    const front = createHttpServer((request, response) => {
+      const chunks: Buffer[] = [];
+      request.on('data', (chunk: Buffer) => chunks.push(chunk)).on('end', () => {
+        if (redirecting) { response.writeHead(status, { location: target.url }).end(); return; }
+        const headers = Object.fromEntries(Object.entries(request.headers).filter(([name]) => !['host', 'content-length', 'connection'].includes(name)).map(([name, value]) => [name, String(value)]));
+        void fetch(target.url, { method: request.method!, headers, ...(chunks.length ? { body: Buffer.concat(chunks) } : {}) }).then(async answer => {
+          response.writeHead(answer.status, Object.fromEntries(answer.headers));
+          if (answer.body) for await (const chunk of answer.body) response.write(chunk);
+          response.end();
+        }, () => response.writeHead(502).end());
+      });
+    });
+    await new Promise<void>(done => front.listen(0, '127.0.0.1', done)); closers.push(() => new Promise<void>(done => front.close(() => done())));
+    const frontUrl = `http://127.0.0.1:${(front.address() as AddressInfo).port}/mcp`, echo = { name: 'echo', description: 'Echo', inputSchema: { type: 'object', properties: {} } };
+    const server = { id: 'web', transport: 'http' as const, url: frontUrl, headers: { 'X-Api-Key': 'SECRET-KEY' }, command: '', args: [], env: {}, realm: 'host' as const,
+      tools: [{ name: 'echo', digest: mcpToolPinDigest(echo), alwaysAsk: false }] };
+    const f = setup(), pool = f.pool(), a = f.project('a'), b = f.project('b'), view = pool.scoped({ scopeId: 'scope', cwd: a });
+    expect(await view.open(server, settings([server]), { cwd: a, environment: {}, sandboxes: [] })).toMatchObject({ ok: true });
+    // On a call: the proxied requests reached the target through the front; after the switch nothing more does.
+    redirecting = true;
+    const proxied = target.requests.length;
+    const answer = await view.call('web', 'echo', mcpToolPinDigest(echo), { secret: 'BODY' }, { timeoutMs: 10_000, signal: new AbortController().signal });
+    expect(answer).not.toMatchObject({ ok: true });
+    expect(target.requests.length).toBe(proxied);
+    // On connect: a fresh view whose first request is redirected never reaches the target either.
+    const fresh = pool.scoped({ scopeId: 'scope', cwd: b });
+    expect(await fresh.open(server, settings([server]), { cwd: b, environment: {}, sandboxes: [] })).toMatchObject({ ok: false });
+    expect(target.requests.length).toBe(proxied);
   }, 60_000);
 });

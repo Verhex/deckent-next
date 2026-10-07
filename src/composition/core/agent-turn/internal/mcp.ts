@@ -104,7 +104,7 @@ export async function runConfiguredMcpCommand(projectRoot: string, request: McpC
   const workspace = await createWorkspaceReadTools(projectRoot, { deny: agentWorkspaceDeny(projectRoot, config.productLayout) }),
     scopeId = (config as unknown as { terminal?: { scopeId?: string } }).terminal?.scopeId ?? 'installation';
   const shown = locale ?? resolveLocale(undefined, environment, config.language);
-  const context: McpCommandContext = { projectRoot, layout: config.productLayout, environment, sandboxes: mcpInspectSandboxes(workspace.scope, isWriteApprovalFloored), principal, ask,
+  const context: McpCommandContext = { projectRoot, scopeId, layout: config.productLayout, environment, sandboxes: mcpInspectSandboxes(workspace.scope, isWriteApprovalFloored), principal, ask,
     grants: configuredMcpToolGrants(projectRoot, scopeId, options, principal),
     describeNotice: notice => renderMcpStartNotice(notice, shown),
     secret: configuredSecretResolver(config, options), limits: { inputMaxBytes: config.mcp.inputMaxBytes },
