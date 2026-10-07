@@ -1,7 +1,7 @@
 # Deckent — product development contract
 
 ## Purpose and authority
-- Build the customer-installed Agent OS for human, AI and tool-driven work, from solo to enterprise.
+- Build the customer-installed Agent Control & Execution Plane for human, AI and tool-driven work, solo to enterprise.
 - Read `.deckent/docs/core-memory/project_product_north_star.md` for the shared product quality bar.
 - Enterprise-grade is the target of every slice; small slices never reduce the product ambition.
 - Live owner instructions take precedence, then `ARCHITECTURE.md` and `PLAN.md`.
