@@ -1,8 +1,8 @@
-import { relative, resolve, sep } from 'node:path';
+import { isAbsolute, relative, resolve, sep } from 'node:path';
 import { EffectError, type AgentToolOutcome, type EffectCommand } from '#domain/index.js';
 import { EffectApplication, OperationPolicyAuthorization, agentToolArgumentsDigest, type AgentTurnShellPosture, boundApprovalPreview, classifyReadOnlyShellCommand, classifyShellContainment, classifyShellMutation,
-  classifyShellRisk, shellPermissionTier, type EffectApprovalGate, type ShellPermissionTier, type ShellRiskClassification } from '#engine/index.js';
-import { globalStateRoot, loadConfig, SystemTrustedClock, type ConfigLoadOptions } from '#platform/index.js';
+  classifyShellRisk, shellNamedPaths, shellPermissionTier, type EffectApprovalGate, type ShellPermissionTier, type ShellRiskClassification } from '#engine/index.js';
+import { globalStateRoot, LOCALES, loadConfig, SystemTrustedClock, t, type ConfigLoadOptions, type Locale } from '#platform/index.js';
 import { agentShellEffectCommandId, createGlobMatcher, createLocalPeerSession, createShellPathContext, createShellProtectedNames, createShellWriteContext, describeHostShellResult,
   describeShellEffectRefusal, hostShellCleanupNote, HOST_SHELL_COMMAND_MAX_CHARS, HOST_SHELL_RUN_OPERATION, HOST_SHELL_TARGET_KIND, HostShellTarget, HOST_SHELL_NOTES, resolveShellRealm,
   describeSandboxWriteSet, openShellRealm, prepareSandboxWriteSetDirectory, removeSandboxWriteSetDirectory, type SandboxWriteDecider, sandboxWriteView, shellPostureFacts, shellSandboxCapabilities, shellWritePosture,
@@ -17,6 +17,28 @@ export async function inspectConfiguredShellRealm(projectRoot: string, options: 
   const config = await loadConfig(projectRoot, { ...options, heal: false }) as Record<string, unknown>;
   return inspectShellRealmSelection({ mode: readTerminalShellConfig(config).realm, stateDir: globalStateRoot(options.env ?? process.env), project: await createWorkspaceScope(projectRoot) });
 }
+/** The kernel's EROFS text as a command prints it (glibc's message; a translated one under another installed locale is not matched, and the
+ * result then stays as it was). Measured 2026-10-07 in bubblewrap: `unlink: cannot unlink 'src/x': Read-only file system`. */
+const READ_ONLY_FILE_SYSTEM = /Read-only file system/u;
+const NAMED_PATHS_SHOWN = 5;
+/**
+ * B3 (owner terminal test 2026-10-07): a sandboxed command whose write failed on a protected path (Deckent's own source, the write floor) got only
+ * the raw "Read-only file system". When its output carries that error and it names such a path, the result says, in the person's language,
+ * which path, why, and what can change it (the edit tools ask for approval; full access) — the model reads the same text. Authority is
+ * unchanged: the sandbox still keeps the path read-only; asking for the shell is the PROTECTED-PATHS card's work.
+ */
+export function protectedPathShellNote(command: string, output: string, isProtected: (path: string) => boolean, language: Locale = LOCALES[0]): string | null {
+  if (!READ_ONLY_FILE_SYSTEM.test(output)) return null;
+  const paths = shellNamedPaths(command, isProtected);
+  if (paths.length === 0) return null;
+  const shown = `${paths.slice(0, NAMED_PATHS_SHOWN).join(', ')}${paths.length > NAMED_PATHS_SHOWN ? ` (+${paths.length - NAMED_PATHS_SHOWN})` : ''}`;
+  return `[deckent] ${t('agent.shell.protectedPathReadOnly', { paths: shown }, language)}`;
+}
+/** A word a command names, as a project-relative path the turn's write floor holds (outside the project: never). */
+const onWriteFloor = (root: string, floor: (rel: string) => boolean) => (text: string) => {
+  const rel = relative(root, resolve(root, text));
+  return rel !== '' && !rel.startsWith('..') && !isAbsolute(rel) && floor(rel.split(sep).join('/'));
+};
 type ShellPlan = { readonly ok: true; readonly command: string; readonly risk: ShellRiskClassification; readonly tier: ShellPermissionTier; readonly realm: Extract<ShellRealmResolution, { ok: true }>;
   readonly contained: boolean }
   | { readonly ok: false; readonly text: string };
@@ -42,7 +64,9 @@ export function createAgentShell(input: { readonly scope: WorkspaceScope; readon
   /** SHELL-OVERLAY: the installation's configuration file inside the project (a write-set entry there is `edit-authority`). */
   readonly authority?: (rel: string) => boolean; readonly selfSource?: boolean; readonly writeFloor?: (rel: string) => boolean;
   /** SHELL-OVERLAY: where this turn's write-set directories live (outside the project), or null when nowhere can (no write sets). */
-  readonly writeSetRoot?: () => Promise<string | null> }) {
+  readonly writeSetRoot?: () => Promise<string | null>;
+  /** The person's locale (the turn's reply language): the language of the notes a result explains itself with (B3). */
+  readonly language?: Locale }) {
   const { scope, context, scopeId, turnId, channel } = input, roots = input.scratch ? [input.scratch.scope] : [];
   const productState = input.productState.map(createGlobMatcher), protectedNames = createShellProtectedNames(scope.root, productState);
   const namesProductState = (detail: string | undefined) => detail !== undefined
@@ -198,11 +222,16 @@ export function createAgentShell(input: { readonly scope: WorkspaceScope; readon
         const { text: trackedLine, counts } = await tracked(ran);
         // Astra 2124 durable marker: the same verified cleanup carried in the note also rides the outcome, for `tool.finished`.
         const note = projectReadOnly && ran.exitCode !== 0 && realm.containment !== 'host' ? `\n${HOST_SHELL_NOTES.projectReadOnly}` : '';
+        // B3: the write floor was read-only in this sandbox; a failure on a path it protects is explained by name. The read-only error in the
+        // output is the evidence, whatever the exit code (`rm src/x || echo failed` exits 0). Not in a full-access turn: its sandbox keeps
+        // only the configuration file read-only, which is not the floor `writeFloor` names there.
+        const floorNote = input.fullAccess !== true && writeFloorReadOnly && realm.containment !== 'host' && input.writeFloor
+          ? protectedPathShellNote(planned.command, ran.output, onWriteFloor(scope.root, input.writeFloor), input.language) : null;
         // SHELL-OVERLAY: the command exited (whatever its code: a direct-write posture keeps its writes too), so its write set is decided
         // and applied now, entry by entry, like edits; the directory is removed afterwards.
         const settled = directory && writes ? describeSandboxWriteSet(await settleSandboxWriteSet({ directory, scope, decider: writes, authority: input.authority ?? (() => false), selfSource: input.selfSource === true,
           context, peer: input.peer, scopeId, shellCommandId: commandId, signal })) : '';
-        return { status: ran.exitCode === 0 ? 'ok' : 'error', text: `${describeHostShellResult(planned.command, ran, realm, counts)}${note}${unavailable}${settled ? `\n${settled}` : ''}${trackedLine}`,
+        return { status: ran.exitCode === 0 ? 'ok' : 'error', text: `${describeHostShellResult(planned.command, ran, realm, counts)}${note}${floorNote ? `\n${floorNote}` : ''}${unavailable}${settled ? `\n${settled}` : ''}${trackedLine}`,
           cleanup: ran.cleanup };
       } catch (error) {
         const code = error instanceof EffectError ? error.code : (error as { code?: unknown })?.code;

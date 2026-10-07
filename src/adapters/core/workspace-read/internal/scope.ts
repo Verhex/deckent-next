@@ -27,8 +27,11 @@ export { createGlobMatcher, globLiteralHead } from '#platform/index.js';
 
 export type WorkspacePathError = 'path-invalid' | 'path-outside-workspace' | 'path-denied' | 'not-found' | 'path-changed' | 'not-a-file'
   | 'not-a-directory' | 'hardlink-refused' | 'platform-unsupported';
-export type ResolvedPath = { readonly ok: true; readonly rel: string } | { readonly ok: false; readonly error: WorkspacePathError };
-export type OpenedPath = { readonly ok: true; readonly handle: FileHandle; readonly rel: string } | { readonly ok: false; readonly error: WorkspacePathError };
+/** B4 diagnosis (owner terminal test 2026-10-07): the step a `not-found` / `path-changed` came from and its system error code — never a path. */
+export interface WorkspacePathDiagnostic { readonly step: string; readonly errno?: string }
+type Refused = { readonly ok: false; readonly error: WorkspacePathError; readonly diagnostic?: WorkspacePathDiagnostic };
+export type ResolvedPath = { readonly ok: true; readonly rel: string } | Refused;
+export type OpenedPath = { readonly ok: true; readonly handle: FileHandle; readonly rel: string } | Refused;
 /** Why a walk did not cover everything: never reported as "not there" (Astra 2072 R4). */
 export interface WalkIncomplete { depthLimited: number; unreadable: number; changed: number; special: number }
 
@@ -49,6 +52,15 @@ export interface WorkspaceScope {
 }
 
 const toPosix = (path: string) => path.split(sep).join('/');
+/** A system error code as raised (`ENOENT`, `EACCES`, …); anything else is left out. */
+const errnoOf = (error: unknown): string | undefined => {
+  const code = (error as NodeJS.ErrnoException | null)?.code;
+  return typeof code === 'string' && /^E[A-Z0-9]{1,15}$/u.test(code) ? code : undefined;
+};
+const diagnosed = (step: string, error?: unknown): WorkspacePathDiagnostic => {
+  const errno = errnoOf(error);
+  return errno === undefined ? { step } : { step, errno };
+};
 const fdPath = (handle: FileHandle) => `/proc/self/fd/${handle.fd}`;
 const DIR_FLAGS = constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW;
 // Non-blocking so a FIFO or device never stalls the service at open; the type is checked on the descriptor before reading.
@@ -97,7 +109,8 @@ export async function createWorkspaceScope(rootInput: string, deny: readonly str
       if (!inside(candidate, allowRoot)) return { ok: false, error: 'path-outside-workspace' };
       if (denied(toPosix(relative(root, candidate)))) return { ok: false, error: 'path-denied' };
       let real: string;
-      try { real = await realpath(candidate); } catch { return { ok: false, error: 'not-found' }; }
+      // Every realpath failure still reads `not-found` (unchanged); the diagnostic keeps which errno it was (B4).
+      try { real = await realpath(candidate); } catch (error) { return { ok: false, error: 'not-found', diagnostic: diagnosed('realpath', error) }; }
       if (!inside(real, allowRoot)) return { ok: false, error: 'path-outside-workspace' };
       const rel = toPosix(relative(root, real));
       if (denied(rel)) return { ok: false, error: 'path-denied' };
@@ -106,24 +119,26 @@ export async function createWorkspaceScope(rootInput: string, deny: readonly str
     async open(rel: string, kind: 'file' | 'dir'): Promise<OpenedPath> {
       if (!supported) return { ok: false, error: 'platform-unsupported' };
       if (denied(rel)) return { ok: false, error: 'path-denied' };
-      let current: FileHandle | undefined;
+      let current: FileHandle | undefined, step = 'open:0';
       try {
         current = await open(root, DIR_FLAGS);
-        if (!await verify(current, '')) { await close(current); return { ok: false, error: 'path-changed' }; }
+        if (!await verify(current, '')) { await close(current); return { ok: false, error: 'path-changed', diagnostic: { step: 'verify:0' } }; }
         const segments = rel === '' ? [] : rel.split('/');
         for (let i = 0; i < segments.length; i++) {
           const last = i === segments.length - 1;
+          step = `open:${i + 1}`;
           const next = await open(`${fdPath(current)}/${segments[i]}`, last && kind === 'file' ? FILE_FLAGS : DIR_FLAGS);
           await close(current); current = next;
         }
-        if (!await verify(current, rel)) { await close(current); return { ok: false, error: 'path-changed' }; }
+        if (!await verify(current, rel)) { await close(current); return { ok: false, error: 'path-changed', diagnostic: { step: `verify:${segments.length}` } }; }
+        step = 'stat';
         const info = await current.stat();
         if (kind === 'dir' ? !info.isDirectory() : !info.isFile()) { await close(current); return { ok: false, error: kind === 'dir' ? 'not-a-directory' : 'not-a-file' }; }
         if (kind === 'file' && info.nlink > 1) { await close(current); return { ok: false, error: 'hardlink-refused' }; }
         return { ok: true, handle: current, rel };
       } catch (error) {
         await close(current);
-        return { ok: false, error: (error as NodeJS.ErrnoException).code === 'ENOENT' ? 'not-found' : 'path-changed' };
+        return { ok: false, error: (error as NodeJS.ErrnoException).code === 'ENOENT' ? 'not-found' : 'path-changed', diagnostic: diagnosed(step, error) };
       }
     },
   });

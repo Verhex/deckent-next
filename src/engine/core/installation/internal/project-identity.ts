@@ -7,7 +7,7 @@ export interface ProjectIdentityStore {
   read(): Promise<IdentityRead<ProjectIdentity>>;
   loadOrCreate(): Promise<ProjectIdentity>;
 }
-export type ProjectIdentityErrorCode = 'PROJECT_IDENTITY_INVALID' | 'PROJECT_IDENTITY_UNAVAILABLE' | 'PROJECT_IDENTITY_LOCKED';
+export type ProjectIdentityErrorCode = 'PROJECT_IDENTITY_INVALID' | 'PROJECT_IDENTITY_UNAVAILABLE' | 'PROJECT_IDENTITY_LOCKED' | 'PROJECT_IDENTITY_MASKED';
 export class ProjectIdentityError extends Error {
   constructor(readonly code: ProjectIdentityErrorCode) { super(code); this.name = 'ProjectIdentityError'; }
 }

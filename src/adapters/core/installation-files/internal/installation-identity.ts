@@ -44,7 +44,7 @@ export class FileInstallationIdentityStore implements InstallationIdentityStore 
       },
       isError: (error: unknown) => error instanceof InstallationIdentityError,
       error: reason => new InstallationIdentityError(({ INVALID: 'INSTALLATION_IDENTITY_INVALID', UNAVAILABLE: 'INSTALLATION_IDENTITY_UNAVAILABLE',
-        LOCKED: 'INSTALLATION_IDENTITY_LOCKED', UNSUPPORTED: 'INSTALLATION_IDENTITY_UNSUPPORTED' } as const)[reason]),
+        LOCKED: 'INSTALLATION_IDENTITY_LOCKED', UNSUPPORTED: 'INSTALLATION_IDENTITY_UNSUPPORTED', MASKED: 'INSTALLATION_IDENTITY_MASKED' } as const)[reason]),
     }, this.lockTimeoutMs);
   }
   /** ID-1D: observes only. No identity, directory, lock or binding upgrade is created here; `pendingWrite` routes the next write. */

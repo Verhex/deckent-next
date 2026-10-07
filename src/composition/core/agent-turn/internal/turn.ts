@@ -126,7 +126,9 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
     const editsIn = (area: WorkspaceEditArea | null | undefined, project = false) => area ? createAgentFileEdits({ area, context, peer, scopeId: command.scopeId, turnId: command.turnId,
       ...(project ? { authority, selfSource: selfSource && !fullAccess ? isSelfSourceWriteFloored : () => false } : {}) }) : null;
     const edits = editsIn(workspace && projectEditArea(workspace.scope), true), scratchEdits = editsIn(scratch?.writes), editsOf = (name: string) => name === 'scratch_write' ? scratchEdits : edits;
-    const shell = workspace ? createAgentShell({ scope: workspace.scope, context, peer, scopeId: command.scopeId, turnId: command.turnId, channel,
+    // LANG-CRASH (prompt v5): the reply language is the person's locale — the service's environment, then the configured language.
+    const language = resolveLocale(undefined, options.env ?? process.env, context.config.language);
+    const shell = workspace ? createAgentShell({ scope: workspace.scope, context, peer, scopeId: command.scopeId, turnId: command.turnId, channel, language,
       config: readTerminalShellConfig(config), scratch, productState: agentProductStateDeny(projectRoot, context.layout), fullAccess, authority, selfSource: selfSource && !fullAccess, writeFloor: fullAccess ? isWriteApprovalFloored : writeFloor, writeSetRoot: () => sandboxWriteSetRoot(projectRoot, context.layout, options.env ?? process.env),
       sandboxes: host.shellSandboxes({ project: workspace.scope, scratchDir: scratch?.dir ?? null, writeFloor, ...(agentDataRootRel(projectRoot, context.layout) ? { dataRoot: agentDataRootRel(projectRoot, context.layout)! } : {}), ...(fullAccess ? { repositoryWritable: true,
         hardFloor: agentShellHardFloor(projectRoot, context.layout, [options.env ?? process.env, process.env]) } : {}) }) }) : null;
@@ -134,8 +136,6 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
     const toolAuthority = new AgentToolPolicyAuthorization(context.policy);
     // The service's model-facing instructions (TL-C D4) join the client's system text in every sent round; the digest binds them, so a
     // turn id replayed after the prompt changed is a conflict, never an answer to another prompt.
-    // LANG-CRASH (prompt v5): the reply language is the person's locale — the service's environment, then the configured language.
-    const language = resolveLocale(undefined, options.env ?? process.env, context.config.language);
     const systemPrompt = renderAgentTurnSystemPrompt({ projectRoot, layout: context.layout, tools, scratch: scratch && { dir: scratch.dir, retentionDays: scratch.limits.retentionDays },
       model: { ...chat.reference, nativeId: binding.definition.model.nativeId }, language, outputLimitTokens: chat.maxCompletionTokens,
       network: fetcher && { allowedHosts: fetchSettings.allowedHosts, others: fetchSettings.egress === 'approval' ? 'ask' : 'refused' }, mcp: mcp?.prompt ?? null,

@@ -1,7 +1,7 @@
 /**
  * POSIX `sh -c` scanner for read-only classification (T-L4 slice 3a; legacy `shell-readonly-classifier.ts` @a8b67e2a1, MASTER 7111).
  * It splits a command into pipelines of stages of words and rejects, with a typed reason, every construct that could run code or
- * write bytes: redirections other than to /dev/null or between stdout/stderr, substitutions, expansions, subshells, braces,
+ * write bytes: redirections other than to /dev/null or a descriptor duplication (`2>&1`, `N>&M`, `>&-`), substitutions, expansions, subshells, braces,
  * heredocs, background jobs. Quoting only affects word splitting: the program receives the resolved text.
  */
 export type ShellReasonCode =
@@ -83,7 +83,16 @@ export function scanPosixCommand(command: string): ShellScan {
       case '&': {
         const next = command[index + 1] ?? '';
         if (next === '&') { endPipeline(); index++; continue; }
-        return next === '>' ? reject('OUTPUT_REDIRECTION', '&>') : reject('BACKGROUND_JOB', '&');
+        if (next !== '>') return reject('BACKGROUND_JOB', '&');
+        // `&>` / `&>>` (stdout and stderr together): read-only only into /dev/null (B2, owner test 2026-10-07).
+        let at = index + 2, operator = '&>';
+        if (command[at] === '>') { operator += '>'; at++; }
+        while (command[at] === ' ' || command[at] === '\t') at++;
+        const target = readToken(command, at, isMeta);
+        if (target.text !== DEV_NULL) return reject('OUTPUT_REDIRECTION', `${operator}${target.text}`);
+        flushWord();
+        index = target.end - 1;
+        continue;
       }
       case '>': {
         const fd = takeFdPrefix();
@@ -91,9 +100,9 @@ export function scanPosixCommand(command: string): ShellScan {
         if (command[cursor] === '>' || command[cursor] === '&' || command[cursor] === '|') operator += command[cursor++];
         while (command[cursor] === ' ' || command[cursor] === '\t') cursor++;
         const target = readToken(command, cursor, isMeta);
-        const stderrToStdout = fd === '2' && operator === '>&' && target.text === '1';
-        const stdoutToStderr = (fd === null || fd === '1') && operator === '>&' && target.text === '2';
-        if (!stderrToStdout && !stdoutToStderr && !(operator === '>' && target.text === DEV_NULL)) return reject('OUTPUT_REDIRECTION', `${fd ?? ''}${operator}${target.text}`);
+        // B2: a descriptor duplication (`N>&M`) or close (`N>&-`) writes no file; any other operator writes no file only into /dev/null.
+        const duplication = operator === '>&' && /^(?:\d+|-)$/u.test(target.text);
+        if (!duplication && !(operator !== '>&' && target.text === DEV_NULL)) return reject('OUTPUT_REDIRECTION', `${fd ?? ''}${operator}${target.text}`);
         flushWord();
         index = target.end - 1;
         continue;

@@ -1,5 +1,6 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { z } from 'zod';
+import { agentToolDiagnosticSchema } from '#domain/index.js';
 import { AgentTurnStoreError, AGENT_TURN_ANSWER_MAX_BYTES, AGENT_TURN_INTERRUPTED_NOTE, type AgentTurnClaim, type AgentTurnOutcome, type AgentTurnStore,
   type AgentTurnToolCallRecord } from '#engine/index.js';
 
@@ -13,7 +14,9 @@ const turnSchema = z.object({ schemaVersion: z.literal(1), scopeId: id, turnId: 
   .refine(turn => (turn.finishedAtMs === null) === (turn.outcome === null));
 const callSchema = z.object({ schemaVersion: z.literal(1), scopeId: id, turnId: id, round: z.number().int().positive().safe(), index: count,
   callId: id, tool: z.string().min(1).max(64), toolVersion: count, argsDigest: digest.nullable(), target: z.string().max(4096).nullable(),
-  status: z.enum(['ok', 'error', 'denied', 'approval-required', 'approval-expired', 'invalid-arguments', 'duplicate', 'cancelled']), bytes: count, resultDigest: digest, atMs: count }).strict();
+  status: z.enum(['ok', 'error', 'denied', 'approval-required', 'approval-expired', 'invalid-arguments', 'duplicate', 'cancelled']), bytes: count, resultDigest: digest, atMs: count,
+  // B4 (additive, optional): the row is JSON and is parsed only when written (reads count rows), so a build without the field is unaffected.
+  diagnostic: agentToolDiagnosticSchema.optional() }).strict();
 type Turn = z.infer<typeof turnSchema>;
 
 /** SQLite agent turn store (ledger v37). Every transition is one transaction; rows are validated when read and written. */

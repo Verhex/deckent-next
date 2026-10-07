@@ -23,6 +23,9 @@ describe('read-only shell classification (T-L4 slice 3a, POSIX)', () => {
     ['echo "> literal"', 'none'], ['cat f # comment', 'none'], ['cat f; echo done', 'none'], ['cat f && cat g || echo x', 'none'], ['ls -la; pwd; whoami', 'none'],
     ['node --version', 'none'], ['npm -v', 'none'], ['env', 'low'], ['printenv PATH', 'low'], ['ps aux', 'low'], ['df -h', 'low'], ['which node', 'none'],
     ['rg needle src', 'low'], ['less README.md', 'none'], ["cat 'file with space.txt'", 'none'], ['cat -- -file', 'none'], ['tr -d "\\n" < f', 'none'],
+    // B2 (owner test 2026-10-07): a redirection into /dev/null or a descriptor duplication / close writes no file.
+    ['ls -la src/deneme.md 2>&1', 'none'], ['cat f >/dev/null', 'none'], ['cat f &>/dev/null', 'none'], ['cat f &>> /dev/null', 'none'], ['cat f >>/dev/null', 'none'],
+    ['cat f >&2', 'none'], ['cat f 1>&2', 'none'], ['cat f 3>&1 1>&2 2>&3', 'none'], ['cat f 2>&-', 'none'], ['cat f 2>/dev/null; echo x 2>&1', 'none'],
   ])('%s → read-only (risk %s)', async (command, risk) => {
     const verdict = await classify(command);
     expect(verdict, command).toMatchObject({ readOnly: true, risk, reasonCode: 'READ_ONLY' });
@@ -48,6 +51,9 @@ describe('read-only shell classification (T-L4 slice 3a, POSIX)', () => {
     ['uniq f out', 'OUTPUT_FILE_POSITIONAL'], ['cat f | sort -o /dev/stdout', 'MUTATING_FLAG'], ['date -s x', 'MUTATING_FLAG'], ['rg --pre cat x', 'MUTATING_FLAG'],
     ['curl http://x', 'PROGRAM_NOT_ALLOWLISTED'], ['yes', 'PROGRAM_NOT_ALLOWLISTED'], ['/usr/bin/cat f', 'PROGRAM_PATH'], ['./cat f', 'PROGRAM_PATH'],
     ['', 'EMPTY_COMMAND'], ['   ', 'EMPTY_COMMAND'], ['echo "unterminated', 'UNPARSEABLE'],
+    // B2 negative: a redirection into a file stays a write, whatever the operator; a quoted or expanded target is not /dev/null.
+    ['ls > x.txt', 'OUTPUT_REDIRECTION'], ['ls 2> err.log', 'OUTPUT_REDIRECTION'], ['ls &> out.txt', 'OUTPUT_REDIRECTION'], ['ls &>> out.txt', 'OUTPUT_REDIRECTION'],
+    ['ls >& out.txt', 'OUTPUT_REDIRECTION'], ['ls 2>&1 > x.txt', 'OUTPUT_REDIRECTION'], ['ls >"/dev/null"', 'OUTPUT_REDIRECTION'], ['ls 2>&1 &', 'BACKGROUND_JOB'],
   ])('%s → not read-only (%s)', async (command, reasonCode) => {
     expect(await classify(command), command).toMatchObject({ readOnly: false, risk: null, reasonCode });
   });
@@ -98,5 +104,9 @@ describe('shell risk tiers (legacy parity)', () => {
     ['ls && npm test || cat error.log', 'modify'], ['pwd; rm -rf /tmp/x', 'destructive'], ['cat file | wc -l', 'safe-read'], ['echo $(rm -rf /tmp/x)', 'destructive'],
     ['echo `npm test`', 'modify'], ['echo hello > file', 'modify'], ['cat input >> output', 'modify'], ['cat input | tee output', 'modify'],
     ['echo "> literal"', 'safe-read'], ["mkdir -p /tmp/deckent-x && printf 'test' > /tmp/deckent-x/file.txt", 'modify'],
+    // B2 (owner test 2026-10-07): reads that only silence or merge their streams stay reads; a file target stays a modification.
+    ['cat f 2>/dev/null', 'safe-read'], ['ls -la src/deneme.md 2>&1', 'safe-read'], ['find . -name x 2>/dev/null', 'safe-read'], ['ls &>/dev/null', 'safe-read'],
+    ['ls >&2', 'safe-read'], ['ls 2>&1 | head', 'safe-read'], ['ls > x.txt', 'modify'], ['ls &> out.txt', 'modify'], ['ls >& out.txt', 'modify'], ['ls 2> err.log', 'modify'],
+    ['ls 2>&1 >> log', 'modify'], ['rm deneme.md && ls deneme.md 2>&1 || true', 'modify'], ['rm -f x 2>/dev/null', 'destructive'],
   ])('%s → %s', async (command, expected) => { expect(await risk(command), command).toBe(expected); });
 });
