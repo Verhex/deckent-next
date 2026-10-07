@@ -21,9 +21,10 @@ Every action by people, AI agents and tools is authorized, isolated, executed an
 
 <!-- Node and pre-release badges read public main package.json, not this local branch.
 Keep package.json version and CHANGELOG.md release line together at each release.
-npm badges: enable only after first publish of deckent to npm; verify package identity first.
-[![npm version](https://img.shields.io/npm/v/deckent)](https://www.npmjs.com/package/deckent)
-[![npm downloads](https://img.shields.io/npm/dm/deckent)](https://www.npmjs.com/package/deckent)
+npm badges: enable only after the first npm publish. The unscoped name `deckent` is not usable (conflicts with an existing
+package); the planned name is the scoped `@verhex/deckent` (owner 2026-10-07, not final). Verify package identity first.
+[![npm version](https://img.shields.io/npm/v/%40verhex%2Fdeckent)](https://www.npmjs.com/package/@verhex/deckent)
+[![npm downloads](https://img.shields.io/npm/dm/%40verhex%2Fdeckent)](https://www.npmjs.com/package/@verhex/deckent)
 -->
 
 > [!NOTE]

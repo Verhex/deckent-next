@@ -21,9 +21,10 @@
 
 <!-- Node ve pre-release rozetleri bu yerel dalı değil, public main package.json'u okur.
 Her sürümde package.json sürümü ile CHANGELOG.md satırını birlikte güncelleyin.
-npm rozetleri: deckent npm'e ilk yayımlandıktan ve paket kimliği doğrulandıktan sonra açılır.
-[![npm version](https://img.shields.io/npm/v/deckent)](https://www.npmjs.com/package/deckent)
-[![npm downloads](https://img.shields.io/npm/dm/deckent)](https://www.npmjs.com/package/deckent)
+npm rozetleri: ilk npm yayınından ve paket kimliği doğrulandıktan sonra açılır. Kapsamsız `deckent` adı kullanılamıyor
+(mevcut bir paketle çakışıyor); planlanan ad kapsamlı `@verhex/deckent` (owner 2026-10-07, kesin değil).
+[![npm version](https://img.shields.io/npm/v/%40verhex%2Fdeckent)](https://www.npmjs.com/package/@verhex/deckent)
+[![npm downloads](https://img.shields.io/npm/dm/%40verhex%2Fdeckent)](https://www.npmjs.com/package/@verhex/deckent)
 -->
 
 > [!NOTE]
