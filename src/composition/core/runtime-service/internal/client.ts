@@ -1,5 +1,5 @@
 import { loadComposedConfig } from '#composition/core/root/index.js';
-import { clearSessionStandingSchema, acceptSessionStandingClearance, approvalCommandSchema, parseApprovalAnswer, type ClearSessionStanding, type SessionStandingClearance, RUNTIME_SERVICE_LIFECYCLE_VERSIONS, RUNTIME_SERVICE_SCHEMA_VERSION, isRuntimeServiceBoundedResultOperation, acceptSecretChangeResult, prepareSecretChange, type RuntimeServiceLifecycleVersion, type RuntimeServiceRequest,
+import { runtimeWorkspaceFileMethods, runtimeEffectOperationMethods, clearSessionStandingSchema, acceptSessionStandingClearance, approvalCommandSchema, parseApprovalAnswer, type ClearSessionStanding, type SessionStandingClearance, RUNTIME_SERVICE_LIFECYCLE_VERSIONS, RUNTIME_SERVICE_SCHEMA_VERSION, isRuntimeServiceBoundedResultOperation, acceptSecretChangeResult, prepareSecretChange, type RuntimeServiceLifecycleVersion, type RuntimeServiceRequest,
   type SecretChangeResult, type SecretDeleteCommand, type SecretSetCommand } from '#engine/index.js';
 import { socketOptions } from './socket-options.js';
 import { randomUUID } from 'node:crypto';
@@ -13,12 +13,11 @@ import { modelInvocationCancellationCommandInputSchema, modelInvocationCommandIn
   type ModelInvocationQuery, type ProviderSpendAccountQuery, type ProviderSpendAuditCommand, type ModelInvocationDeltaSink,
   chatTurnCancellationResultSchema, chatTurnCancellationSchema, chatTurnCommandSchema, chatTurnResultSchema, type AgentTurnStreamEvent,
   type ChatTurnCancellation, type ChatTurnCancellationResult, type ChatTurnCommand, type ChatTurnResult,
-  workspaceAttachmentRequestSchema, workspaceAttachmentSchema, workspaceFileMatchesSchema, workspaceFileQuerySchema,
   type WorkspaceAttachment, type WorkspaceAttachmentRequest, type WorkspaceFileMatches, type WorkspaceFileQuery } from '#domain/index.js';
 import { runtimeServiceResultCapacity, parseModelInvocationCancellationResultForCommand, parseModelInvocationPurgeResultForCommand, type ModelInvocationCancellationResult, type ModelInvocationPurgeResult, parseModelInvocationResultForCommand, parseModelInvocationInspectionForQuery,
   type ModelInvocationDelivery, type ModelInvocationResult, type ModelInvocationInspection, type RuntimeServiceDelivery } from '#engine/index.js';
-import { PermissionModeError, runtimeOperationInspectionSchema, runtimeOperationOutcomeSchema, runtimeOperationQuerySchema, type RuntimeOperationQuery } from '#engine/index.js';
-import { effectCommandSchema, EffectError, scratchClearanceSchema, scratchQuerySchema, scratchViewSchema, type EffectCommand, type EffectRecord, type ScratchClearance,
+import { PermissionModeError, type RuntimeOperationQuery } from '#engine/index.js';
+import { scratchClearanceSchema, scratchQuerySchema, scratchViewSchema, type EffectCommand, type EffectRecord, type ScratchClearance,
   type ScratchQuery, type ScratchView } from '#domain/index.js';
 import { permissionModeChangeSchema, permissionModeCommandSchema, permissionModeQuerySchema, permissionModeViewSchema, type PermissionModeChange,
   type PermissionModeCommand, type PermissionModeQuery, type PermissionModeView } from '#domain/index.js';
@@ -64,59 +63,6 @@ export type ConfiguredRuntimeClient = ConfiguredRuntimeOperations & Readonly<{
   deleteSecret(command: SecretDeleteCommand, signal?: AbortSignal): Promise<SecretChangeResult>;
 }>;
 type RuntimeCall = (operation: RuntimeServiceOperation, input: unknown, delivery?: RuntimeServiceDelivery, signal?: AbortSignal) => Promise<unknown>;
-/** v15 composer `@file` methods: both ends validate; a service that answers more than was asked is not trusted with the turn's context. */
-function workspaceFileMethods(call: RuntimeCall) {
-  return {
-    async findWorkspaceFiles(input: WorkspaceFileQuery, signal?: AbortSignal) {
-      try {
-        const parsed = workspaceFileQuerySchema.safeParse(input);
-        if (!parsed.success) throw new AgentTurnStoreError('AGENT_TURN_INVALID');
-        const result = workspaceFileMatchesSchema.safeParse(await call('findWorkspaceFiles', parsed.data, undefined, signal));
-        if (!result.success || result.data.paths.length > parsed.data.limit) throw ErrorRegistry.createError('RUNTIME_SERVICE_TRANSPORT');
-        return result.data;
-      } catch (error) { throw queryFailure(error); }
-    },
-    async attachWorkspaceFile(input: WorkspaceAttachmentRequest, signal?: AbortSignal) {
-      try {
-        const parsed = workspaceAttachmentRequestSchema.safeParse(input);
-        if (!parsed.success) throw new AgentTurnStoreError('AGENT_TURN_INVALID');
-        const result = workspaceAttachmentSchema.safeParse(await call('attachWorkspaceFile', parsed.data, undefined, signal));
-        if (!result.success || (result.data.status === 'attached' && (result.data.bytes > parsed.data.maxBytes
-          || Buffer.byteLength(result.data.content, 'utf8') !== result.data.bytes))) throw ErrorRegistry.createError('RUNTIME_SERVICE_TRANSPORT');
-        return result.data;
-      } catch (error) { throw queryFailure(error); }
-    },
-  };
-}
-/** v15 catalog operation methods: both ends validate; an answer for another command, scope or operation is not trusted. */
-function effectOperationMethods(call: RuntimeCall) {
-  const submit = async (operation: 'executeOperation' | 'compensateOperation', input: EffectCommand, delivery?: RuntimeServiceDelivery) => {
-    try {
-      const parsed = effectCommandSchema.safeParse(input);
-      if (!parsed.success) throw new EffectError('EFFECT_INVALID');
-      const result = runtimeOperationOutcomeSchema.safeParse(await call(operation, parsed.data, delivery));
-      if (!result.success || result.data.commandId !== parsed.data.commandId || result.data.scopeId !== parsed.data.scopeId
-        || JSON.stringify(result.data.operation) !== JSON.stringify(parsed.data.operation)) throw ErrorRegistry.createError('RUNTIME_SERVICE_TRANSPORT');
-      return result.data as EffectOutcome;
-    } catch (error) { throw queryFailure(error); }
-  };
-  return {
-    executeOperation: (input: EffectCommand, delivery?: RuntimeServiceDelivery) => submit('executeOperation', input, delivery),
-    compensateOperation: (input: EffectCommand, delivery?: RuntimeServiceDelivery) => submit('compensateOperation', input, delivery),
-    async inspectOperation(input: RuntimeOperationQuery, delivery?: RuntimeServiceDelivery) {
-      try {
-        const parsed = runtimeOperationQuerySchema.safeParse(input);
-        if (!parsed.success) throw new EffectError('EFFECT_INVALID');
-        const result = runtimeOperationInspectionSchema.safeParse(await call('inspectOperation', parsed.data, delivery));
-        const command = result.success ? result.data.record?.intent.command : undefined;
-        if (!result.success || (command && (command.scopeId !== parsed.data.scopeId || command.commandId !== parsed.data.commandId))) {
-          throw ErrorRegistry.createError('RUNTIME_SERVICE_TRANSPORT');
-        }
-        return result.data;
-      } catch (error) { throw queryFailure(error); }
-    },
-  };
-}
 /** v15 permission-mode methods: both ends validate; an answer for another scope, or a set answer for another mode, is not trusted. */
 function permissionModeMethods(call: RuntimeCall) {
   return {
@@ -267,8 +213,8 @@ export function createConfiguredRuntimeClient(projectRoot: string, options: Conf
         return result.data;
       } catch (error) { throw queryFailure(error); }
     },
-    ...workspaceFileMethods(call),
-    ...effectOperationMethods(call),
+    ...runtimeWorkspaceFileMethods(call, queryFailure),
+    ...runtimeEffectOperationMethods(call, queryFailure),
     ...permissionModeMethods(call),
     ...scratchMethods(call),
     ...secretMethods(call),

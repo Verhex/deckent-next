@@ -129,7 +129,9 @@
         "src/adapters/core/secret-store",
         "src/adapters/core/native-connection",
         "src/adapters/core/worker-observation",
-        "src/domain/core/decision"
+        "src/domain/core/decision",
+        "src/domain/core/identity-profile",
+        "src/engine/core/identity-profile"
       ],
       "plan": "PROVIDERS"
     },
@@ -261,7 +263,8 @@
         "src/composition/core/config",
         "src/composition/core/decision",
         "src/composition/core/scoped-request",
-        "src/composition/core/root"
+        "src/composition/core/root",
+        "src/composition/core/identity-profile"
       ],
       "plan": "SURFACES"
     },
@@ -682,7 +685,10 @@
         "src/domain/core/effect",
         "src/domain/core/policy",
         "src/engine/core/secret-store",
-        "src/engine/core/approval"
+        "src/engine/core/approval",
+        "src/engine/core/agent-turn",
+        "src/engine/core/effect",
+        "src/platform/core/errors"
       ],
       "plan": "EXECUTION"
     },
@@ -991,7 +997,8 @@
         "src/engine/core/installation",
         "src/engine/core/config",
         "src/platform/core/utils",
-        "src/surfaces/core/terminal-admin"
+        "src/surfaces/core/terminal-admin",
+        "src/surfaces/core/cli-identity"
       ],
       "plan": "SURFACES"
     },
@@ -2244,6 +2251,50 @@
         "src/engine/core/approval"
       ],
       "plan": "SURFACES"
+    },
+    "src/domain/core/identity-profile": {
+      "dependencies": [
+        "src/domain/core/primitives",
+        "src/domain/core/policy"
+      ],
+      "plan": "CONTRACT"
+    },
+    "src/engine/core/identity-profile": {
+      "dependencies": [
+        "src/domain/core/identity-profile",
+        "src/domain/core/principal",
+        "src/domain/core/policy",
+        "src/platform/core/integrity"
+      ],
+      "plan": "INSTALLATION"
+    },
+    "src/composition/core/identity-profile": {
+      "dependencies": [
+        "src/domain/core/identity-profile",
+        "src/domain/core/policy",
+        "src/engine/core/identity-profile",
+        "src/adapters/core/local-principal",
+        "src/adapters/core/contract",
+        "src/platform/core/errors",
+        "src/platform/core/config",
+        "src/composition/core/policy",
+        "src/composition/core/scoped-request",
+        "src/composition/core/query-errors",
+        "src/composition/core/root"
+      ],
+      "plan": "INSTALLATION"
+    },
+    "src/surfaces/core/cli-identity": {
+      "dependencies": [
+        "src/domain/core/identity-profile",
+        "src/engine/core/identity-profile",
+        "src/platform/core/errors",
+        "src/platform/core/i18n",
+        "src/platform/core/config",
+        "src/platform/core/output",
+        "src/surfaces/core/cli-kit"
+      ],
+      "plan": "INSTALLATION"
     }
   },
   "composition": {

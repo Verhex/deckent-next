@@ -1,0 +1,7 @@
+{
+  "maxDepth": 24,
+  "maxNodes": 100000,
+  "maxCodeUnits": 1048576,
+  "maxPreviewCells": 16384,
+  "maxInputBytes": 1048576
+}
