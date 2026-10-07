@@ -45,7 +45,7 @@
   "config.surface.monitorHelp": "{index}                Config: read configuration, source, binding and apply mode",
   "config.surface.shortcutInvalid": "{key} does not take that value; nothing was written. /config {key} shows what it takes.",
   "config.panel.lock.secrets": "Secrets are changed with deckent secret, never from here.",
-  "config.panel.lock.denied": "Your company's policy does not let you change this in the {layer} layer.",
+  "config.panel.lock.denied": "Your company's policy does not let you change this setting in this layer.",
   "config.panel.lock.approval": "asks for approval (rule {rule})",
   "config.panel.permissionsUnread": "Your permissions could not be read ({code}); no lock is shown and each change is checked when you make it.",
   "config.panel.invalid": "That value does not fit; expected: {expected}. Nothing was sent."

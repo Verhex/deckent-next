@@ -45,7 +45,7 @@
   "config.surface.monitorHelp": "{index}                Config: yapılandırma, kaynak, bağlanma ve uygulanma kipini oku",
   "config.surface.shortcutInvalid": "{key} bu değeri almıyor; hiçbir şey yazılmadı. Neler aldığını /config {key} gösterir.",
   "config.panel.lock.secrets": "Sırlar buradan değil, deckent secret ile değiştirilir.",
-  "config.panel.lock.denied": "Şirketinizin policy'si bunu {layer} katmanında değiştirmenize izin vermiyor.",
+  "config.panel.lock.denied": "Şirketinizin policy'si bu ayarı bu katmanda değiştirmenize izin vermiyor.",
   "config.panel.lock.approval": "onay ister (kural {rule})",
   "config.panel.permissionsUnread": "İzinleriniz okunamadı ({code}); kilit gösterilmiyor, her değişiklik yapılırken denetlenir.",
   "config.panel.invalid": "Bu değer uymuyor; beklenen: {expected}. Hiçbir şey gönderilmedi."

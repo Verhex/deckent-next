@@ -38,7 +38,7 @@ afterEach(async () => {
 
 /** python3 `pty` driver (as in terminal-pty-process), with the window width as a parameter. */
 const DRIVER = String.raw`
-import fcntl, json, os, pty, select, struct, sys, termios, time
+import fcntl, json, os, pty, re, select, struct, sys, termios, time
 argv, steps, columns = json.loads(sys.argv[1]), json.loads(sys.argv[2]), int(sys.argv[3])
 pid, fd = pty.fork()
 if pid == 0:
@@ -64,8 +64,9 @@ for wait, send in steps:
             sys.stdout.write(json.dumps({'timeout': wait, 'output': out.decode('utf8', 'replace')})); sys.exit(3)
     read_for(0.5)
     marks.append(len(out.decode('utf8', 'replace')))
-    for char in send:
-        os.write(fd, char.encode()); time.sleep(0.01)
+    # One write per key: an escape sequence (an arrow) stays whole, so the terminal reads it as one key (T3 L4 windows).
+    for key in re.findall(r'\x1b\[[A-Z0-9~]+|.', send, re.S):
+        os.write(fd, key.encode()); time.sleep(0.01)
 deadline = time.time() + 25
 status = None
 while status is None and time.time() < deadline:
@@ -182,9 +183,10 @@ describe.skipIf(process.platform !== 'linux')('/mode in a real pseudo-terminal a
     await startRuntime(f.projectRoot, f.env);
     const before = await stat(join(f.data, 'bindings.json'), { bigint: true });
     const wide = await inPty(f.projectRoot, f.env, ['terminal', 'workline', '--scope', 'scope'], [
+      // T3 L4: a bare /mode is the mode window; choosing full auto there is the same service set as `/mode full-auto` and Shift+Tab.
       ['Deckent workline', '/mode\r'],
-      ['Permission mode: standart', '/mode full-auto\r'],
-      ['Permission mode: standart → full-auto', 'go\r'],
+      ['standard · now', '\u001b[B\u001b[B\r'],
+      ['Mode: standard → full auto', 'go\r'],
       ['Mode turn done.', '/exit\r'],
     ]);
     expect(wide.timeout, wide.output).toBeUndefined();
@@ -200,11 +202,12 @@ describe.skipIf(process.platform !== 'linux')('/mode in a real pseudo-terminal a
     expect(file.modes).toEqual([f.theirs, expect.objectContaining({ principal: f.me, scopes: ['scope'], mode: 'full-auto' })]);
     expect(f.audit().map(row => (row as { kind: string }).kind)).toEqual(['permission-mode-change', 'permission-mode']);
     // After the change the status row carries the mode on a wide terminal as its mark and catalog word (T2).
-    const after = wide.output.slice(wide.output.indexOf('Permission mode: standart → full-auto'));
+    const after = wide.output.slice(wide.output.indexOf('Mode: standard → full auto'));
     expect(after).toContain('⏵⏵ full auto');
     // Narrow: replay cursor movement/erasure. Ink may redraw the same notice in the raw PTY stream;
     // the terminal buffer must still contain exactly one notice and no mode segment in the status row.
-    const narrow = await inPty(f.projectRoot, f.env, ['terminal', 'workline', '--scope', 'scope'], [['Deckent workline', '/mode\r'], ['full-auto', '/exit\r']], 30);
+    // `/mode full-auto` again (the text command; a bare /mode is the window): the service keeps the mode and the notice names it.
+    const narrow = await inPty(f.projectRoot, f.env, ['terminal', 'workline', '--scope', 'scope'], [['Deckent workline', '/mode full-auto\r'], ['full-auto', '/exit\r']], 30);
     expect(narrow.timeout, narrow.output).toBeUndefined();
     expect(narrow.status, narrow.output).toBe(0);
     const screen = terminalScreen(narrow.output, 30);
@@ -238,15 +241,16 @@ describe.skipIf(process.platform !== 'linux')('/mode explains itself in a real p
   it('shows the current mode with what it changes and the modes to try', async () => {
     const f = await modeProject();
     await startRuntime(f.projectRoot, f.env);
-    const run = await inPty(f.projectRoot, f.env, ['terminal', 'workline', '--scope', 'scope'], [['Deckent workline', '/mode\r'], ['Switch:', '/exit\r']]);
+    // T3 L4: a bare /mode is the mode window — every mode, the current one marked, the focused one's effect in words.
+    const run = await inPty(f.projectRoot, f.env, ['terminal', 'workline', '--scope', 'scope'], [['Deckent workline', '/mode\r'], ['standard · now', '\u001b'],
+      ['Deckent workline', '/exit\r']]);
     expect(run.timeout, run.output).toBeUndefined();
     const text = modeLines(run.output);
-    expect(text).toContain('Permission mode: standart — reads, scratch and the in-project edits the company marked mode-eligible run without a card');
-    expect(text).toContain('/mode full-auto (standart plus narrow mutating shell commands');
+    expect(text).toContain('reads, scratch and the in-project edits the company marked mode-eligible run without a card');
+    expect(text).toContain('careful'); expect(text).toContain('full auto');
     // T2: the company grants full access here, so it is offered like any other mode (no launch-only refusal any more).
-    expect(text).toContain('/mode full-access (everything runs without a card');
-    expect(text).not.toContain('Full access needs your company');
-    expect(text).not.toContain('/mode standart (');
+    expect(text).toContain('full access');
+    expect(text).not.toContain('Full access needs your company'); expect(text).not.toContain('[blocked]');
   }, 180_000);
 
   it('a v1 policy: /mode full-auto says modes are off and asks the service for nothing (no file, no audit row)', async () => {

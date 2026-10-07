@@ -164,7 +164,7 @@ describe.skipIf(process.platform !== 'linux')('MCP first-use trust card and /mcp
       ['Deckent workline', 'hello\r'],
       ['mcp_trust · mcp:fx · launch', 'y'],
       ['mcp_trust · mcp:fx · tools', 'y'],
-      ['Trusted turn done.', '/mcp\r'],
+      ['Trusted turn done.', '/mcp list\r'], // T3 L4: a bare /mcp is the window; `list` keeps the text list
       ['fx · project · trusted · 1 tool', '/exit\r'],
     ]);
     expect(run.timeout, run.output).toBeUndefined();

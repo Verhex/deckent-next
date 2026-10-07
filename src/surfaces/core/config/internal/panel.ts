@@ -31,7 +31,7 @@ function layerLock(permission: ConfigWritePermission | undefined, readOnly: bool
   if (readOnly) return { blocked: t('config.surface.slashReadOnly', {}, locale), note: null };
   if (!permission) return { blocked: null, note: null };
   if (permission.decision === 'refused') return { blocked: t('config.panel.lock.secrets', {}, locale), note: null };
-  if (permission.decision === 'deny') return { blocked: t('config.panel.lock.denied', { layer: sourceWord(permission.layer, locale) }, locale), note: null };
+  if (permission.decision === 'deny') return { blocked: t('config.panel.lock.denied', {}, locale), note: null };
   if (permission.decision === 'require-approval') return { blocked: null, note: t('config.panel.lock.approval', { rule: permission.ruleId ?? '-' }, locale) };
   return { blocked: null, note: null };
 }

@@ -61,7 +61,7 @@ describe('/config window port', () => {
     expect(field('terminal.theme')).toMatchObject({ choices: [{ label: 'auto', value: 'auto' }, { label: 'dark', value: 'dark' }, { label: 'light', value: 'light' }], free: false,
       locks: { project: { blocked: null, note: null }, global: { blocked: null, note: null } }, unsettable: false });
     expect(field('max_workers')).toMatchObject({ free: true, unsettable: true, apply: 'yeniden', locks: { project: { blocked: null, note: 'onay ister (kural company-config-approval)' } } });
-    expect(field('max_workers').locks.global.blocked).toContain('genel katmanında');
+    expect(field('max_workers').locks.global.blocked).toContain('bu katmanda değiştirmenize izin vermiyor');
     expect(field('language').locks.project.blocked).toContain('policy');
     expect(field('secrets.token')).toMatchObject({ sensitive: true, locks: { project: { blocked: 'Sırlar buradan değil, deckent secret ile değiştirilir.' } } });
     // The tree: a key every layer refuses is a locked row with its reason; one open layer keeps it open and the scope step locks the other.
@@ -70,7 +70,7 @@ describe('/config window port', () => {
     const general = tree.items.find(item => item.id === labels.general)!;
     expect(general.children!.find(item => item.id === 'language')!.blocked?.reason).toContain('policy');
     expect(general.children!.find(item => item.id === 'max_workers')!.blocked).toBeUndefined();
-    expect(tree.scopes!.find(scope => scope.id === 'global')!.blocked?.reason).toContain('genel katmanında');
+    expect(tree.scopes!.find(scope => scope.id === 'global')!.blocked?.reason).toContain('bu katmanda değiştirmenize izin vermiyor');
     expect(tree.scopes!.find(scope => scope.id === 'project')!.label).toContain('onay ister');
   });
   it('without the principal\'d write route every key is locked read-only; an unreadable policy shows no locks and says why', async () => {
