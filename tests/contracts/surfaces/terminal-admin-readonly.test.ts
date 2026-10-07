@@ -216,7 +216,7 @@ describe('terminal read-only management (S09)', () => {
   it('commands without a wired port answer plainly and are never unknown', async () => {
     const view = await open({});
     await type(view, '/model \r/usage \r/doctor \r/scope \r');
-    await until(() => ['model', 'usage', 'doctor', 'scope'].every(name => view.stdout.text.includes(`${name}: not available in this terminal`)), 'unwired notices');
+    await until(() => ['model', 'usage', 'doctor', 'scope'].every(name => view.stdout.text.includes(`NO-PORT ${name}`)), 'unwired notices');
     expect(view.stdout.text).not.toContain('UNKNOWN');
   });
 });

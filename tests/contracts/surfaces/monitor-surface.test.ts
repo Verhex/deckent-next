@@ -12,7 +12,7 @@ import { loadMonitorSurface, monitorSlash } from '#surfaces/core/monitor/index.j
 import { resolveWorklinePalette } from '#surfaces/core/terminal-kit/index.js';
 import { cells } from '#surfaces/core/terminal-render/index.js';
 import { WORKLINE_SLASH_COMMANDS } from '#surfaces/core/terminal-kit/index.js';
-import { mountWorkline, until as untilWorkline } from '../support/workline-harness.js';
+import { mountWorkline, until as untilWorkline, WORKLINE_TEST_LABELS } from '../support/workline-harness.js';
 import { BLOCKER_CODES, emptySnapshot, fullSnapshot, longIdSnapshot, OBSERVED_AT } from '../../fixtures/monitor/snapshots.js';
 
 /** MONITOR-SURFACE: the text snapshot, `--json`, the typed unavailable error and the fullscreen view, all from fixture MonitorSnapshots. */
@@ -491,11 +491,17 @@ describe('terminal /monitor', () => {
       expect(asked).toEqual(['--scope scope-a']);
       expect(view.stdout.text).toContain('run-blocked-approval');
     } finally { view.instance.unmount(); }
-    const bare = mountWorkline({});
-    try {
-      await settle(20); bare.stdin.write('/monitor\r');
-      await untilWorkline(() => bare.stdout.text.includes('monitor: not available in this terminal'), 'unwired notice');
-    } finally { bare.instance.unmount(); }
+    // BATCH-FIX 2026-10-07 TERMINAL-UNAVAILABLE-I18N: the unwired notice is the catalog text in the session language (the label the
+    // production terminal assembles from `terminal.admin.partUnavailable`), never fixed English.
+    for (const locale of ['en', 'tr'] as const) {
+      const bare = mountWorkline({ labels: { ...WORKLINE_TEST_LABELS, commandUnavailable: t('terminal.admin.partUnavailable', {}, locale) } });
+      const expected = t('terminal.admin.partUnavailable', { part: 'monitor' }, locale);
+      try {
+        await settle(20); bare.stdin.write('/monitor\r');
+        await untilWorkline(() => bare.stdout.text.includes(expected), `unwired notice (${locale})`);
+        if (locale === 'tr') { expect(expected).toBe('monitor: bu terminalde kullanılamıyor.'); expect(bare.stdout.text).not.toContain('not available in this terminal'); }
+      } finally { bare.instance.unmount(); }
+    }
   });
   it('/monitor through the CLI wiring renders the same text and refuses chat-only flags', async () => {
     const { monitorSlash } = await import('#surfaces/core/monitor/index.js');
