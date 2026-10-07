@@ -1,18 +1,20 @@
 import { agentToolApprovalFacts } from '#engine/index.js';
 import { SystemTrustedClock, t, type ConfigLoadOptions, type Locale } from '#platform/index.js';
-import { mcpCardApprovalAsker, openLocalIntegrityAuthority, planMcpProposal, PROPOSE_MCP_SERVER_TOOL, type McpCardAskerInput, type McpProposal } from '#adapters/index.js';
+import { mcpCardApprovalAsker, MCP_PROPOSAL_SECRETS_REFUSED, openLocalIntegrityAuthority, planMcpProposal, PROPOSE_MCP_SERVER_TOOL, type McpCardAskerInput, type McpProposal } from '#adapters/index.js';
 import type { AgentToolOutcome } from '#domain/index.js';
 import type { loadPeerInvocationContext } from '#composition/core/model-invocation/index.js';
 import { runConfiguredMcpCommand } from './mcp.js';
 
-/** The proposal window's text (L1 item 5): who proposes, name, transport, command or URL, arguments, env and header NAMES, realm and the reason. */
+/** The proposal window's text (L1 item 5): who proposes, name, transport, command or URL, arguments, realm (a host realm warned), the setting NAMES
+ * a person binds after adding (no value is ever proposed) and the reason. */
 export function describeMcpProposal(proposal: McpProposal, proposer: string, locale: Locale): string {
-  const none = t('mcp.proposal.none', {}, locale), names = (values: Readonly<Record<string, string>> | undefined) => Object.keys(values ?? {}).join(', ') || none;
+  const none = t('mcp.proposal.none', {}, locale), settings = (proposal.requiredSettings ?? []).join(', ');
   return [t('mcp.proposal.title', {}, locale), t('mcp.proposal.proposer', { proposer }, locale), t('mcp.proposal.name', { name: proposal.name }, locale),
     t('mcp.proposal.transport', { transport: proposal.transport }, locale),
-    ...(proposal.transport === 'http' ? [t('mcp.proposal.url', { url: proposal.url ?? '' }, locale), t('mcp.proposal.headers', { names: names(proposal.headers) }, locale)]
+    ...(proposal.transport === 'http' ? [t('mcp.proposal.url', { url: proposal.url ?? '' }, locale)]
       : [t('mcp.proposal.command', { command: proposal.command ?? '' }, locale), t('mcp.proposal.args', { args: (proposal.args ?? []).join(' ') || none }, locale),
-        t('mcp.proposal.env', { names: names(proposal.env) }, locale), t('mcp.proposal.realm', { realm: proposal.realm ?? 'sandbox-net' }, locale)]),
+        t('mcp.proposal.realm', { realm: proposal.realm ?? 'sandbox-net' }, locale), ...(proposal.realm === 'host' ? [t('mcp.proposal.hostWarning', {}, locale)] : [])]),
+    ...(settings ? [t('mcp.proposal.settings', { names: settings }, locale)] : []),
     t('mcp.proposal.reason', { reason: proposal.reason }, locale), t('mcp.proposal.next', {}, locale)].join('\n');
 }
 
@@ -36,7 +38,8 @@ export function createMcpProposals(input: { readonly projectRoot: string; readon
     owns: (name: string) => name === PROPOSE_MCP_SERVER_TOOL,
     async apply(args: Record<string, unknown>): Promise<AgentToolOutcome> {
       const plan = planMcpProposal(args);
-      if (!plan.ok) return tag(`error=${plan.reason}; nothing was proposed`);
+      if (!plan.ok) return tag(plan.reason === MCP_PROPOSAL_SECRETS_REFUSED ? `error=${plan.reason}: secrets are bound by a person in /mcp; a proposal names the settings it needs `
+        + '(requiredSettings) and carries no value or reference; nothing was proposed' : `error=${plan.reason}; nothing was proposed`);
       const answer = await ask(describeMcpProposal(plan.proposal, input.proposer, input.locale), plan.proposal.name).catch(() => null);
       if (answer === null) return tag('no answer came; nothing was written');
       if (!answer) return tag('the person declined; nothing was written');
