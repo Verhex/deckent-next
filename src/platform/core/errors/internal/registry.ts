@@ -49,6 +49,7 @@ const definitions: Readonly<Record<string, Definition>> = Object.freeze({
   INSTALLATION_IDENTITY_RESOLUTION_INVALID: { category: 'config', render: (p, l) => ({ message: t('error.INSTALLATION_IDENTITY_RESOLUTION_INVALID', p, l) }) },
   INSTALLATION_IDENTITY_INVALID: { category: 'config', render: (p, l) => ({ message: t('error.INSTALLATION_IDENTITY_INVALID', p, l) }) },
   INSTALLATION_IDENTITY_UNAVAILABLE: { category: 'config', render: (p, l) => ({ message: t('error.INSTALLATION_IDENTITY_UNAVAILABLE', p, l) }) },
+  INSTALLATION_IDENTITY_MASKED: { category: 'config', render: (p, l) => ({ message: t('error.INSTALLATION_IDENTITY_MASKED', p, l) }) },
   INSTALLATION_IDENTITY_LOCKED: { category: 'config', render: (p, l) => ({ message: t('error.INSTALLATION_IDENTITY_LOCKED', p, l) }) },
   INSTALLATION_IDENTITY_UNSUPPORTED: { category: 'config', render: (p, l) => ({ message: t('error.INSTALLATION_IDENTITY_UNSUPPORTED', p, l) }) },
   INSTALLATION_IDENTITY_SOURCE_INVALID: { category: 'config', render: (p, l) => ({ message: t('error.INSTALLATION_IDENTITY_SOURCE_INVALID', p, l) }) },
@@ -66,6 +67,7 @@ const definitions: Readonly<Record<string, Definition>> = Object.freeze({
   IDENTITY_PREVIEW_UNAVAILABLE: { category: 'usage', render: (p, l) => ({ message: t('error.IDENTITY_PREVIEW_UNAVAILABLE', p, l) }) },
   PROJECT_IDENTITY_INVALID: { category: 'config', render: (p, l) => ({ message: t('error.PROJECT_IDENTITY_INVALID', p, l) }) },
   PROJECT_IDENTITY_UNAVAILABLE: { category: 'config', render: (p, l) => ({ message: t('error.PROJECT_IDENTITY_UNAVAILABLE', p, l) }) },
+  PROJECT_IDENTITY_MASKED: { category: 'config', render: (p, l) => ({ message: t('error.PROJECT_IDENTITY_MASKED', p, l) }) },
   PROJECT_IDENTITY_LOCKED: { category: 'config', render: (p, l) => ({ message: t('error.PROJECT_IDENTITY_LOCKED', p, l) }) },
 
   CONFIG_SECRET_SECTION_REFUSED: { category: 'config', render: (p, l) => ({ message: t('error.CONFIG_SECRET_SECTION_REFUSED', p, l) }) },

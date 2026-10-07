@@ -5,6 +5,8 @@
   "agent.context.AGENT_CONTEXT_WINDOW_EXCEEDED": "The conversation no longer fits the model context window: {prompt} prompt tokens ({quality}) + {reserve} reserved > {window}. Nothing was sent for this round. Start a new conversation with /clear and send smaller parts.",
   "agent.turn.noProgress": "The last two rounds made no progress: every tool call was a duplicate, had invalid arguments or failed, and no text was written. Do not repeat those calls; write what you know so far, try another approach, or ask the user.",
   "agent.shell.protectedPathReadOnly": "{paths}: protected path (Deckent's own source or the write floor). In this sandbox the shell sees it read-only, so the command could not change it (\"Read-only file system\"); retrying will not help. To change it, use the edit tools (write_file, edit_file), which ask for approval, or work in full access.",
+  "error.INSTALLATION_IDENTITY_MASKED": "This command cannot read the installation identity from inside the sandbox: Deckent hides its own state there. The record is not lost and nothing was changed. Use /doctor in the terminal, or run the command outside the sandbox.",
+  "error.PROJECT_IDENTITY_MASKED": "This command cannot read the project identity from inside the sandbox: Deckent hides its own state there. The record is not lost and nothing was changed. Use /doctor in the terminal, or run the command outside the sandbox.",
   "chat.agentic_no_match": "[agentic] no matching intent — falling back to chat.",
   "chat.audit_not_in_mcp": "Audit action \"{sub}\" is not available over MCP yet — run it via the CLI: deckent audit {sub}",
   "chat.autonomous_id_required": "Usage: /autonomous {sub} <id>",

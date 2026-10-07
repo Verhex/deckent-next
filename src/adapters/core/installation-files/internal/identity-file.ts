@@ -1,12 +1,26 @@
-import { lstat, mkdir } from 'node:fs/promises';
-import { join } from 'node:path';
+import { lstat, mkdir, stat, statfs } from 'node:fs/promises';
+import { dirname, join } from 'node:path';
 import { ManagedFileError, getConfigFieldDefault, inspectProductDirectory, prepareProductCompanionPath, productResourcePath, readJsonFile,
   withConfigWriteLock, writeJsonAtomic, type ProductLayout } from '#platform/index.js';
 
 type IdentityResource = 'projectIdentity' | 'installationIdentity';
 /** The poll step keeps a concurrent first publication cheap to observe; the bound is the writer-lock timeout. */
 const PUBLICATION_POLL_MS = 10;
-type Failure = 'INVALID' | 'UNAVAILABLE' | 'LOCKED' | 'UNSUPPORTED';
+type Failure = 'INVALID' | 'UNAVAILABLE' | 'LOCKED' | 'UNSUPPORTED' | 'MASKED';
+/** Linux `TMPFS_MAGIC` (statfs(2)). */
+const TMPFS_MAGIC = 0x01021994;
+/**
+ * B5 (owner terminal test 2026-10-07): inside a Deckent shell sandbox the product state is hidden by mounting an empty tmpfs over each of its
+ * directories, so a command run there (`deckent doctor`) finds the identity directory present but empty — which read as retained loss
+ * ("restore from backup"). A record directory that is its own tmpfs mount (another device than its parent) is that mask: Deckent never
+ * mounts anything on it. Observed only; any doubt (no statfs, another platform) keeps the loss reading.
+ */
+async function maskedDirectory(directory: string): Promise<boolean> {
+  try {
+    const [own, parent, fs] = await Promise.all([stat(directory), stat(dirname(directory)), statfs(directory)]);
+    return Number(fs.type) === TMPFS_MAGIC && own.dev !== parent.dev;
+  } catch { return false; }
+}
 class IdentityFileError extends Error { constructor(readonly reason: Failure) { super(reason); } }
 /** `prepare` runs under the writer lock before the record directory is created, so its refusal leaves no retained (lost-looking) directory. */
 interface IdentityCodec<T, P = undefined> { parse(value: unknown): T; prepare?(): Promise<P>; create(prepared: P | undefined): T | Promise<T>; error(reason: Failure): Error; isError?(error: unknown): boolean }
@@ -43,7 +57,9 @@ export class IdentityFile<T, P = undefined> {
         if (error instanceof ManagedFileError && error.code === 'MANAGED_FILE_MISSING') return null;
         throw error;
       }
-      const record = await this.read(directory) ?? await this.settled(directory);
+      const first = await this.read(directory);
+      if (!first && await maskedDirectory(directory)) throw new IdentityFileError('MASKED');
+      const record = first ?? await this.settled(directory);
       if (!record) throw new IdentityFileError('INVALID');
       return record;
     } catch (error) { return this.fail(error); }

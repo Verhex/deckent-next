@@ -64,6 +64,21 @@ describe('durable installation identity', () => {
     const other = await fixture(); await mkdir(other.directory, { recursive: true, mode: 0o700 });
     await expect(new FileInstallationIdentityStore(other.layout).loadOrCreate()).rejects.toMatchObject({ code: 'INSTALLATION_IDENTITY_INVALID' });
   });
+  // B5 (owner terminal test 2026-10-07): inside a Deckent sandbox the identity directory is an empty tmpfs mount and reads as MASKED (proof:
+  // the real CLI under the sandbox's own bubblewrap view, L6 review). A real loss stays INVALID — on a disk and on a tmpfs alike, because the
+  // directory is not its own mount there.
+  it('keeps a lost record INVALID when its directory is not a mount of its own, on a disk and on a tmpfs', async () => {
+    const f = await fixture(); await new FileInstallationIdentityStore(f.layout).loadOrCreate();
+    await unlink(f.path);
+    await expect(new FileInstallationIdentityStore(f.layout, 20).read()).rejects.toMatchObject({ code: 'INSTALLATION_IDENTITY_INVALID' });
+    let shm: string;
+    try { shm = await mkdtemp('/dev/shm/deckent-installation-id-'); } catch { return; }
+    roots.push(shm);
+    const layout = resolveProductLayout({ projectRoot: shm, platform: 'posix' });
+    await new FileInstallationIdentityStore(layout).loadOrCreate();
+    await unlink(join(shm, '.deckent/installation-identity/identity.json'));
+    await expect(new FileInstallationIdentityStore(layout, 20).read()).rejects.toMatchObject({ code: 'INSTALLATION_IDENTITY_INVALID' });
+  });
   it('does not follow a substituted identity record', async () => {
     const f = await fixture(); const store = new FileInstallationIdentityStore(f.layout); await store.loadOrCreate();
     const outside = join(f.parent, 'outside'); await rename(f.path, outside); await symlink(outside, f.path);
