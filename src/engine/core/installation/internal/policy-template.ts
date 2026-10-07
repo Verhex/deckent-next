@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { firstRunPolicyTemplate, firstRunTemplateAdditions, FIRST_RUN_POLICY_TEMPLATE_ID, FIRST_RUN_POLICY_TEMPLATE_VERSION, identitySchema, immutableJsonObjectSchema, matchFirstRunPolicyTemplate,
-  policyFileSchema, upgradeFirstRunPolicy, type FirstRunPolicyTemplateInput } from '#domain/index.js';
+  namedPersonPolicyAdditions, policyFileSchema, policyNamedPeople, upgradeFirstRunPolicy, type FirstRunPolicyTemplateInput } from '#domain/index.js';
 import type { BootstrapJournalPayload, BootstrapObservation } from '#platform/index.js';
 import { InstallationPublicationError } from './publish.js';
 
@@ -153,14 +153,24 @@ export interface PolicyTemplateDocumentWriter {
   updateAuthority<T>(work: (snapshot: { readonly policy: unknown; readonly bindings: unknown }) => { readonly write: { readonly policy: unknown | null;
     readonly bindings: unknown | null; readonly order: 'policy-first' | 'bindings-first' } | null; readonly result: T }, key?: string): Promise<T>;
 }
+type Person = { readonly issuer: string; readonly subject: string };
 export interface PolicyTemplateUpgradeResult {
   readonly schemaVersion: 1;
-  /** `preview`: would add `rules`; `upgraded`: written now; `current`: nothing to add; `unavailable`: not this person's first-run policy (`reason`);
+  /** `preview`: would add `rules`; `upgraded`: written now; `current`: nothing to add; `unavailable`: not upgradable here (`reason`);
    * `conflict`: the policy moved since the previewed revision (`expect`). */
   readonly status: 'preview' | 'upgraded' | 'current' | 'unavailable' | 'conflict';
-  readonly reason: 'not-first-run' | 'not-this-person' | 'not-owner' | 'invalid' | 'revision-changed' | null;
+  /** `not-first-run`: no template read rule (a hand-built policy: name its person with `person`); `not-this-person`: the template's read rule does
+   * not name the person; `person-not-named`: the named person is on no explicit allow rule of this scope; `invalid`: unreadable policy or person. */
+  readonly reason: 'not-first-run' | 'not-this-person' | 'person-not-named' | 'not-owner' | 'invalid' | 'revision-changed' | null;
   readonly template: { readonly id: string; readonly to: number };
-  readonly scopeId: string; readonly principal: { readonly issuer: string; readonly subject: string };
+  /** The person the added rules name (the OS identity, or the explicitly named `person`). */
+  readonly scopeId: string; readonly principal: Person;
+  /** The explicitly named person (`--person`), repeated in the next command; null when the OS identity was used. */
+  readonly person: Person | null;
+  /** Which plan applies: the first-run template's read rule (`first-run`) or a hand-built policy's named person (`named-person`); null when refused early. */
+  readonly basis: 'first-run' | 'named-person' | null;
+  /** On a `not-first-run`/`person-not-named` refusal: the people this policy already names on an allow rule of the scope (a display hint, capped). */
+  readonly people: readonly Person[];
   /** The policy revision read (preview: pass it back as `--expect`); after an upgrade, the new one. */
   readonly revision: string | null;
   /** The v5 rules this upgrade adds (nothing is replaced or removed). */
@@ -172,27 +182,41 @@ export interface PolicyTemplateUpgradeResult {
 }
 const revisionOf = (value: unknown) => typeof (value as { revision?: unknown } | null)?.revision === 'string' ? (value as { revision: string }).revision : null;
 /**
- * The first-run v4 → v5 migration (owner 2026-10-07; `deckent init policy --scope <id> --upgrade --preview|--apply [--expect <revision>]`), under the
- * template installation's authority: the local person the first-run rules name, who could install v5 on a fresh installation today. It adds every
- * v5 rule that person does not hold yet (`firstRunTemplateAdditions`: MCP server authority, the MCP call operation, the proposal tool, the
- * `policy.administer` operation and approval decisions — K1 option A) and keeps everything else: hand-added rules, edited first-run rules, modes
- * and bindings; a rule id that exists with other content is kept and named as a conflict. An untouched v4 template becomes exactly the v5
- * template. The write goes through the authority documents' one conditional, archived writer (the archive holds the documents before and
- * after: the backup and the way back) on exactly the revision read; a second run is `current`. `apply: false` reads only.
+ * The first-run v4 → v5 migration (owner 2026-10-07; `deckent init policy --scope <id> --upgrade --preview|--apply [--expect <revision>]
+ * [--person <issuer>/<subject>]`), under the template installation's authority: the local person the first-run rules name, who could install v5
+ * on a fresh installation today. It adds every v5 rule that person does not hold yet (`firstRunTemplateAdditions`: MCP server authority, the MCP
+ * call operation, the proposal tool, the `policy.administer` operation and approval decisions — K1 option A) and keeps everything else:
+ * hand-added rules, edited first-run rules, modes and bindings; a rule id that exists with other content is kept and named as a conflict. An
+ * untouched v4 template becomes exactly the v5 template. A hand-built policy (no template read rule; POLICY-UPGRADE-HANDBUILT, lead 2026-10-08)
+ * takes the same additions only for a person the file owner names explicitly (`person`), who must already be named on an allow rule of this
+ * scope (`namedPersonPolicyAdditions`); without `person` the refusal lists the people the policy names. On a template policy `person` replaces
+ * the OS identity and the template's read rule must name it. The write goes through the authority documents' one conditional, archived writer
+ * (the archive holds the documents before and after: the backup and the way back) on exactly the revision read; a second run is `current`.
+ * `apply: false` reads only.
  */
 export async function upgradePolicyTemplate(writer: PolicyTemplateDocumentWriter, input: { readonly scopeId: string;
-  readonly principal: { readonly issuer: string; readonly subject: string }; readonly toolNames: FirstRunToolNames; readonly apply: boolean; readonly expect?: string;
+  readonly principal: Person; readonly toolNames: FirstRunToolNames; readonly apply: boolean; readonly expect?: string;
   /** Whether the caller owns the installation's authority documents (the files' owner uid is the caller's): only the owner may write here. */
-  readonly owner: boolean }): Promise<PolicyTemplateUpgradeResult> {
+  readonly owner: boolean;
+  /** The explicitly named person (`--person`): required for a hand-built policy; on a template policy it must be the person the template names. */
+  readonly person?: Person;
+  /** At most this many named people in a refusal hint (display only; the policy may name more): the installation's inspection page size. */
+  readonly peopleLimit: number }): Promise<PolicyTemplateUpgradeResult> {
   const scopeId = identitySchema.parse(input.scopeId);
-  const principal = { issuer: identitySchema.parse(input.principal.issuer), subject: identitySchema.parse(input.principal.subject) };
+  const named = input.person === undefined ? null : { issuer: identitySchema.safeParse(input.person.issuer), subject: identitySchema.safeParse(input.person.subject) };
+  const person = named === null ? null : named.issuer.success && named.subject.success ? { issuer: named.issuer.data, subject: named.subject.data } : undefined;
+  const principal = person ?? { issuer: identitySchema.parse(input.principal.issuer), subject: identitySchema.parse(input.principal.subject) };
   const template = { scopeId, principal, ...input.toolNames };
   const names = { person: principal, proposeMcpToolName: input.toolNames.proposeMcpToolName, mcpCallOperationId: input.toolNames.mcpCallOperationId,
     policyAdministerOperationId: input.toolNames.policyAdministerOperationId };
   const result = (status: PolicyTemplateUpgradeResult['status'], extra: Partial<PolicyTemplateUpgradeResult> = {}): PolicyTemplateUpgradeResult => Object.freeze({ schemaVersion: 1,
-    status, reason: null, template: Object.freeze({ id: FIRST_RUN_POLICY_TEMPLATE_ID, to: FIRST_RUN_POLICY_TEMPLATE_VERSION }), scopeId, principal, revision: null, rules: [], conflicts: [],
-    wireRules: [], ...extra });
+    status, reason: null, template: Object.freeze({ id: FIRST_RUN_POLICY_TEMPLATE_ID, to: FIRST_RUN_POLICY_TEMPLATE_VERSION }), scopeId, principal, person: person ?? null, basis: null,
+    people: [], revision: null, rules: [], conflicts: [], wireRules: [], ...extra });
   type Planned = { readonly result: PolicyTemplateUpgradeResult; readonly next: unknown | null };
+  const nextWith = (current: unknown, revision: string | null, rules: readonly unknown[]) => {
+    const body = { ...(current as Record<string, unknown>), grants: [...(current as { grants: readonly unknown[] }).grants, ...rules] };
+    return { ...body, revision: `a-${digestOf(`policy-template-upgrade:1\0${revision ?? ''}\0${JSON.stringify({ ...body, revision: undefined })}`).slice(0, 40)}` };
+  };
   const plan = (current: unknown): Planned => {
     const revision = revisionOf(current);
     if (input.expect !== undefined && input.expect !== revision) return { result: result('conflict', { reason: 'revision-changed', revision }), next: null };
@@ -203,19 +227,27 @@ export async function upgradePolicyTemplate(writer: PolicyTemplateDocumentWriter
     const exact = upgradeFirstRunPolicy(current, template);
     if (exact.status === 'upgrade') {
       const rules = (exact.policy.schemaVersion === 2 ? exact.policy.grants : []).filter(rule => !((current as { grants: { id: string }[] }).grants.some(held => JSON.stringify(held) === JSON.stringify(rule))));
-      return { result: result('preview', { revision, rules, wireRules }), next: exact.policy };
+      return { result: result('preview', { basis: 'first-run', revision, rules, wireRules }), next: exact.policy };
     }
     const additions = firstRunTemplateAdditions(current, names);
+    if (additions.status === 'unavailable' && additions.reason === 'not-first-run') {
+      // A hand-built policy: only for an explicitly named person (never the OS identity implicitly); refusals carry the people it names.
+      const people = policyNamedPeople(current, scopeId, input.peopleLimit);
+      if (person === null) return { result: result('unavailable', { reason: 'not-first-run', revision, people }), next: null };
+      const mine = namedPersonPolicyAdditions(current, { ...names, scopeId });
+      if (mine.status === 'unavailable') return { result: result('unavailable', { reason: mine.reason, revision, people }), next: null };
+      if (mine.status === 'current') return { result: result('current', { basis: 'named-person', revision, conflicts: mine.conflicts, wireRules }), next: null };
+      return { result: result('preview', { basis: 'named-person', revision, rules: mine.rules, conflicts: mine.conflicts, wireRules }), next: nextWith(current, revision, mine.rules) };
+    }
     if (additions.status === 'unavailable') return { result: result('unavailable', { reason: additions.reason, revision }), next: null };
-    if (additions.status === 'current') return { result: result('current', { revision, conflicts: additions.conflicts, wireRules }), next: null };
-    const grants = [...(current as { grants: readonly unknown[] }).grants, ...additions.rules];
-    const body = { ...(current as Record<string, unknown>), grants };
-    const next = { ...body, revision: `a-${digestOf(`policy-template-upgrade:1\0${revision ?? ''}\0${JSON.stringify({ ...body, revision: undefined })}`).slice(0, 40)}` };
-    return { result: result('preview', { revision, rules: additions.rules, conflicts: additions.conflicts, wireRules }), next };
+    if (additions.status === 'current') return { result: result('current', { basis: 'first-run', revision, conflicts: additions.conflicts, wireRules }), next: null };
+    return { result: result('preview', { basis: 'first-run', revision, rules: additions.rules, conflicts: additions.conflicts, wireRules }), next: nextWith(current, revision, additions.rules) };
   };
   // Security (lead 2026-10-07): this path writes outside the governed chain, so only the installation's owner may use it; anyone else is sent to
   // `deckent policy upgrade --template v5` (policy.administer@1, card, audit, I2). Fail closed before anything is read.
   if (!input.owner) return result('unavailable', { reason: 'not-owner' });
+  // An unusable named person (control characters, too long) is refused as such, before anything is read.
+  if (person === undefined) return result('unavailable', { reason: 'invalid' });
   // Read first (no write), then write on exactly that revision under a key of this very change (a crash is looked up, never re-applied blindly).
   const first = await writer.updateAuthority(snapshot => ({ write: null, result: { planned: plan(snapshot.policy), revision: revisionOf(snapshot.policy) } }));
   if (!input.apply || first.planned.result.status !== 'preview') return first.planned.result;

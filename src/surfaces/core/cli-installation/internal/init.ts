@@ -1,6 +1,6 @@
 import { identityCommand } from './identity.js';
 import { isAbsolute } from 'node:path';
-import { ErrorRegistry, emit, formatValue, resolveLocale, t, type Locale } from '#platform/index.js';
+import { ErrorRegistry, emit, formatValue, resolveLocale, t, terminalSafeText, type Locale } from '#platform/index.js';
 import type { InstallationPreview, InstallationEvidencePreview, InstallationPublicationApplication } from '#engine/index.js';
 import type { InstallationCommandContext } from './context.js';
 
@@ -22,16 +22,25 @@ export type InstallationResumeHandler = (projectRoot: string, input: Installatio
 // it is granted for.
 export type PolicyTemplatePreviewHandler = (projectRoot: string, scopeId: string) => Promise<unknown>;
 export type PolicyTemplateApplyHandler = (projectRoot: string, scopeId: string) => Promise<unknown>;
-/** Owner 2026-10-07: the first-run v4 → v5 migration (`--upgrade`); `apply: false` reads only. */
-export type PolicyTemplateUpgradeHandler = (projectRoot: string, scopeId: string, apply: boolean, expect?: string) => Promise<{ readonly status: string; readonly reason?: string | null; readonly revision?: string | null;
-  readonly rules?: readonly unknown[]; readonly conflicts?: readonly string[]; readonly wireRules?: readonly string[] }>;
+type Person = { readonly issuer: string; readonly subject: string };
+/** Owner 2026-10-07: the first-run v4 → v5 migration (`--upgrade`); `apply: false` reads only. `person` (lead 2026-10-08): the person a hand-built
+ * policy's file owner names (`--person <issuer>/<subject>`). */
+export type PolicyTemplateUpgradeHandler = (projectRoot: string, scopeId: string, apply: boolean, expect?: string, person?: Person) => Promise<{ readonly status: string;
+  readonly reason?: string | null; readonly revision?: string | null; readonly rules?: readonly unknown[]; readonly conflicts?: readonly string[]; readonly wireRules?: readonly string[];
+  readonly basis?: string | null; readonly person?: Person | null; readonly people?: readonly Person[] }>;
+/** `<issuer>/<subject>`, split at the last `/` (an issuer may itself contain one); both parts non-empty. Identity rules are the engine's. */
+function parsePerson(value: string | undefined): Person {
+  const at = value?.lastIndexOf('/') ?? -1;
+  if (!value || value.startsWith('-') || at <= 0 || at === value.length - 1) throw ErrorRegistry.createError('CLI_USAGE');
+  return { issuer: value.slice(0, at), subject: value.slice(at + 1) };
+}
 
 /** Preview is deliberately non-mutating. No surface invents profile data or policy grants. */
 export async function initCommand(argv: readonly string[], context: InstallationCommandContext): Promise<void> {
   if (argv[1] === 'identity') return identityCommand(argv, context);
   const action = argv[1]; let profilePath: string | undefined, language: string | undefined, dockerExecutable: string | undefined;
   let proposalDigest: string | undefined, json = false, allowShutdown = false, acceptCustom = false;
-  let scopeId: string | undefined, policyPreview = false, policyApply = false, policyUpgrade = false, expect: string | undefined;
+  let scopeId: string | undefined, policyPreview = false, policyApply = false, policyUpgrade = false, expect: string | undefined, person: Person | undefined;
   if (!['preview', 'inspect', 'apply', 'resume', 'policy', '--help', '-h'].includes(action ?? '')) throw ErrorRegistry.createError('CLI_USAGE');
   for (let i = 2; i < argv.length; i++) {
     const flag = argv[i];
@@ -46,6 +55,7 @@ export async function initCommand(argv: readonly string[], context: Installation
       if (!expect || expect.startsWith('-')) throw ErrorRegistry.createError('CLI_USAGE');
       continue;
     }
+    if (flag === '--person' && action === 'policy' && person === undefined) { person = parsePerson(argv[++i]); continue; }
     if (flag === '--scope' && action === 'policy' && scopeId === undefined) {
       scopeId = argv[++i];
       if (!scopeId || scopeId.startsWith('-')) throw ErrorRegistry.createError('CLI_USAGE');
@@ -88,13 +98,13 @@ export async function initCommand(argv: readonly string[], context: Installation
     return;
   }
   if (action === 'policy') {
-    if (expect !== undefined && !policyUpgrade) throw ErrorRegistry.createError('CLI_USAGE');
+    if ((expect !== undefined || person !== undefined) && !policyUpgrade) throw ErrorRegistry.createError('CLI_USAGE');
     if (!scopeId || policyPreview === policyApply || profilePath || dockerExecutable || proposalDigest || acceptCustom || allowShutdown) {
       throw ErrorRegistry.createError('CLI_USAGE');
     }
     if (policyUpgrade) {
       if (!context.upgradePolicyTemplateInstallation || (expect !== undefined && !policyApply)) throw ErrorRegistry.createError('CLI_USAGE');
-      const result = await context.upgradePolicyTemplateInstallation(root, scopeId, policyApply, expect);
+      const result = await context.upgradePolicyTemplateInstallation(root, scopeId, policyApply, expect, ...(person === undefined ? [] : [person]));
       emit(result, { ...sinks, json, render: value => policyUpgradeText(value, scopeId!, locale) });
       return;
     }
@@ -130,10 +140,18 @@ export async function initCommand(argv: readonly string[], context: Installation
 
 /** `init policy --upgrade` in the person's words: what happened, the exact next command, the rules added, and what is kept as it is. */
 function policyUpgradeText(value: Awaited<ReturnType<PolicyTemplateUpgradeHandler>>, scope: string, locale: Locale): string {
-  const revision = value.revision ?? '-';
-  const head = value.status === 'preview' ? t('cli.init.policyUpgrade.preview', { scope, revision }, locale) : value.status === 'upgraded' ? t('cli.init.policyUpgrade.upgraded', {}, locale)
-    : value.status === 'current' ? t('cli.init.policyUpgrade.current', {}, locale) : value.status === 'conflict' ? t('cli.init.policyUpgrade.conflict', { revision }, locale)
-    : value.reason === 'not-owner' ? t('cli.init.policyUpgrade.notOwner', { scope }, locale) : t('cli.init.policyUpgrade.unavailable', {}, locale);
+  const revision = value.revision ?? '-', who = (item: Person) => terminalSafeText(`${item.issuer}/${item.subject}`), named = value.person ? who(value.person) : '-';
+  // The next command repeats `--person` whenever it was given: without it the apply could be refused or name another person.
+  const person = value.person ? ` --person ${named}` : '', handBuilt = value.basis === 'named-person';
+  const people = (value.people ?? []).map(who).join(', ') || '-';
+  const head = value.status === 'preview' ? handBuilt ? t('cli.init.policyUpgrade.previewPerson', { scope, revision, person }, locale) : t('cli.init.policyUpgrade.preview', { scope, revision, person }, locale)
+    : value.status === 'upgraded' ? handBuilt ? t('cli.init.policyUpgrade.upgradedPerson', {}, locale) : t('cli.init.policyUpgrade.upgraded', {}, locale)
+    : value.status === 'current' ? handBuilt ? t('cli.init.policyUpgrade.currentPerson', {}, locale) : t('cli.init.policyUpgrade.current', {}, locale)
+    : value.status === 'conflict' ? t('cli.init.policyUpgrade.conflict', { revision }, locale)
+    : value.reason === 'not-owner' ? t('cli.init.policyUpgrade.notOwner', { scope }, locale)
+    : value.reason === 'not-first-run' ? t('cli.init.policyUpgrade.handBuilt', { scope, people }, locale)
+    : value.reason === 'person-not-named' ? t('cli.init.policyUpgrade.personNotNamed', { scope, person: named, people }, locale)
+    : t('cli.init.policyUpgrade.unavailable', {}, locale);
   const rules = (value.rules ?? []).map(rule => { const grant = rule as { id?: string; resource?: { kind?: string; ids?: unknown } };
     return `  + ${grant.id ?? '-'}: ${grant.resource?.kind ?? '-'} ${Array.isArray(grant.resource?.ids) ? grant.resource!.ids.join(', ') : '*'}`; });
   const kept = (value.conflicts ?? []).length ? [t('cli.init.policyUpgrade.conflicts', { ids: value.conflicts!.join(', ') }, locale)] : [];

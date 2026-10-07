@@ -141,6 +141,10 @@ export type FirstRunTemplateAdditions = { readonly status: 'plan'; readonly chan
 type Selection = 'all' | readonly string[];
 const coversAll = (held: Selection, wanted: Selection) => held === 'all' || (wanted !== 'all' && wanted.every(item => held.includes(item)));
 const sameRule = (a: unknown, b: unknown) => JSON.stringify(policyGrantSchema.parse(a)) === JSON.stringify(policyGrantSchema.parse(b));
+type Person = { readonly issuer: string; readonly subject: string };
+type AdditionNames = { readonly proposeMcpToolName: string; readonly mcpCallOperationId: string; readonly policyAdministerOperationId: string };
+/** Whether a rule NAMES this person: a rule for `all` principals names nobody (security, lead 2026-10-07: never proof of an owner). */
+const namesPerson = (grant: PolicyGrant, person: Person) => grant.principals !== 'all' && grant.principals.some(item => item.issuer === person.issuer && item.subject === person.subject);
 /**
  * The first-run v4 → v5 additions (owner 2026-10-07): over any v2 policy that carries the template's `first-run-read-tools` rule naming this person
  * explicitly (a rule for `all` principals does not count)
@@ -150,21 +154,23 @@ const sameRule = (a: unknown, b: unknown) => JSON.stringify(policyGrantSchema.pa
  * rules stay, and a rule whose id exists with other content is kept and named in `conflicts`. An empty plan is `current` (a second run changes
  * nothing). Pure; the caller writes it (installer upgrade) or submits it through `policy.administer@1` (governed upgrade).
  */
-export function firstRunTemplateAdditions(current: unknown, input: { readonly person: { readonly issuer: string; readonly subject: string };
-  readonly proposeMcpToolName: string; readonly mcpCallOperationId: string; readonly policyAdministerOperationId: string }): FirstRunTemplateAdditions {
+export function firstRunTemplateAdditions(current: unknown, input: { readonly person: Person } & AdditionNames): FirstRunTemplateAdditions {
   const parsed = policyFileSchema.safeParse(current);
   if (!parsed.success || parsed.data.schemaVersion !== 2) return Object.freeze({ status: 'unavailable', reason: 'invalid' });
   const grants = parsed.data.grants, read = grants.find(grant => grant.id === 'first-run-read-tools');
   if (!read || read.scopes === 'all') return Object.freeze({ status: 'unavailable', reason: 'not-first-run' });
   const person = { issuer: identitySchema.parse(input.person.issuer), subject: identitySchema.parse(input.person.subject) };
-  const named = (grant: PolicyGrant) => grant.principals !== 'all' && grant.principals.some(item => item.issuer === person.issuer && item.subject === person.subject);
   // Security (lead 2026-10-07): the read rule must NAME this person; a rule for `all` principals proves no installation owner (fail closed).
-  if (!named(read)) return Object.freeze({ status: 'unavailable', reason: 'not-this-person' });
+  if (!namesPerson(read, person)) return Object.freeze({ status: 'unavailable', reason: 'not-this-person' });
+  return plannedAdditions(grants, person, read.scopes, input);
+}
+/** The v5 rules this person lacks over `grants` (shared by the first-run and the named-person upgrade, so both add exactly the same rules). */
+function plannedAdditions(grants: readonly PolicyGrant[], person: Person, scopes: readonly string[], input: AdditionNames) {
   // Coverage may count a rule for `all` principals (it only means less is added); every added rule names this person alone (never another one).
-  const mine = (grant: PolicyGrant) => grant.principals === 'all' || named(grant);
-  const rule = (id: string, kind: string, actions: readonly string[], ids: Selection, scopes: Selection): PolicyGrant => policyGrantSchema.parse({
-    id, effect: 'allow', actions: [...actions], scopes: scopes === 'all' ? 'all' : [...scopes], principals: [person], resource: { kind, ids: ids === 'all' ? 'all' : [...ids] } });
-  const ids = FIRST_RUN_UPGRADE_RULE_IDS, scopes = read.scopes;
+  const mine = (grant: PolicyGrant) => grant.principals === 'all' || namesPerson(grant, person);
+  const rule = (id: string, kind: string, actions: readonly string[], ids: Selection, ruleScopes: Selection): PolicyGrant => policyGrantSchema.parse({
+    id, effect: 'allow', actions: [...actions], scopes: ruleScopes === 'all' ? 'all' : [...ruleScopes], principals: [person], resource: { kind, ids: ids === 'all' ? 'all' : [...ids] } });
+  const ids = FIRST_RUN_UPGRADE_RULE_IDS;
   const wanted = [rule(ids.servers, 'mcp-server', ['invoke'], 'all', 'all'), rule(ids.operation, 'operation', ['execute'], [input.mcpCallOperationId], scopes),
     rule(ids.propose, 'agent-tool', ['invoke'], [input.proposeMcpToolName], scopes), rule(ids.administer, 'operation', ['execute'], [input.policyAdministerOperationId], scopes),
     rule(ids.approvals, 'approval', ['inspect', 'decide'], 'all', scopes)];
@@ -176,7 +182,45 @@ export function firstRunTemplateAdditions(current: unknown, input: { readonly pe
       && coversAll(grant.resource.ids, want.resource.ids) && coversAll(grant.scopes, want.scopes));
     if (!covered) rules.push(want);
   }
-  if (!rules.length) return Object.freeze({ status: 'current', conflicts: Object.freeze(conflicts) });
-  return Object.freeze({ status: 'plan', rules: Object.freeze(rules), conflicts: Object.freeze(conflicts),
+  if (!rules.length) return Object.freeze({ status: 'current' as const, conflicts: Object.freeze(conflicts) });
+  return Object.freeze({ status: 'plan' as const, rules: Object.freeze(rules), conflicts: Object.freeze(conflicts),
     change: policyChangeSchema.parse({ schemaVersion: 1, changes: rules.map(grant => ({ kind: 'grant.add', grant })) }) });
+}
+
+/** An allow rule that names this person explicitly in exactly this scope (its scopes list it; `all` scopes or `all` principals never count). */
+const anchorsPerson = (grant: PolicyGrant, person: Person, scopeId: string) => grant.effect === 'allow' && namesPerson(grant, person)
+  && grant.scopes !== 'all' && grant.scopes.includes(scopeId);
+/**
+ * The people a v2 policy explicitly names on an allow rule of this scope (first appearance order, distinct, at most `limit`): the display hint
+ * the installer's refusal gives its file owner, who may read these files anyway. Nothing here grants anything; `all` principals are skipped.
+ */
+export function policyNamedPeople(current: unknown, scopeId: string, limit: number): readonly Person[] {
+  const parsed = policyFileSchema.safeParse(current);
+  if (!parsed.success || parsed.data.schemaVersion !== 2) return Object.freeze([]);
+  const people: Person[] = [];
+  for (const grant of parsed.data.grants) {
+    if (grant.effect !== 'allow' || grant.principals === 'all' || grant.scopes === 'all' || !grant.scopes.includes(scopeId)) continue;
+    for (const item of grant.principals) {
+      if (people.length >= limit) return Object.freeze(people);
+      if (!people.some(held => held.issuer === item.issuer && held.subject === item.subject)) people.push(Object.freeze({ issuer: item.issuer, subject: item.subject }));
+    }
+  }
+  return Object.freeze(people);
+}
+export type NamedPersonAdditions = Extract<FirstRunTemplateAdditions, { readonly status: 'plan' | 'current' }>
+  | { readonly status: 'unavailable'; readonly reason: 'person-not-named' | 'invalid' };
+/**
+ * The v4 → v5 additions for a hand-built policy (POLICY-UPGRADE-HANDBUILT, lead 2026-10-08, Jev b6dba079): a v2 policy without the template's
+ * read rule, for a person its file owner names explicitly. That person must already be named (never through `all` principals) on at least one
+ * `allow` rule listing this scope; otherwise nothing is planned (`person-not-named`). The plan is exactly the first-run one, in this scope:
+ * only the v5 rules the person lacks, each naming the person alone; nothing is removed or replaced, a same-id rule with other content is
+ * a named conflict, and an empty plan is `current`. Pure; the installer's file-owner gate and conditional writer decide whether it is written.
+ */
+export function namedPersonPolicyAdditions(current: unknown, input: { readonly person: Person; readonly scopeId: string } & AdditionNames): NamedPersonAdditions {
+  const parsed = policyFileSchema.safeParse(current), person = { issuer: identitySchema.safeParse(input.person.issuer), subject: identitySchema.safeParse(input.person.subject) };
+  const scopeId = identitySchema.safeParse(input.scopeId);
+  if (!parsed.success || parsed.data.schemaVersion !== 2 || !person.issuer.success || !person.subject.success || !scopeId.success) return Object.freeze({ status: 'unavailable', reason: 'invalid' });
+  const who = { issuer: person.issuer.data, subject: person.subject.data };
+  if (!parsed.data.grants.some(grant => anchorsPerson(grant, who, scopeId.data))) return Object.freeze({ status: 'unavailable', reason: 'person-not-named' });
+  return plannedAdditions(parsed.data.grants, who, [scopeId.data], input);
 }

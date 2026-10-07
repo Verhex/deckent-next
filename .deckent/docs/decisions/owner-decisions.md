@@ -304,3 +304,11 @@ Owner “Öneriler kabul edildi”: önce Noul kontrollerini tek önerme yapma v
       - **MCP sicili:** `type: http` ya da `realm: sandbox-net` içeren kayıt alpha.10'da `invalid-entry` görünür (kapalı başarısızlık). Realm yazmayan kayıtların güven digest'i değişti: yükseltmede bir kez yeniden onay; geri dönüşte "changed" görünür ve yine sorar. `mcp.maxServers` config'e elle yazılırsa alpha.10'un katı şeması yapılandırmayı reddeder. `integrations/mcp-home/` klasörleri kalır; öneriyle eklenen sunucular sırsızdır.
       - **Protokol v22:** alpha.10 terminali (v21) v22 servisiyle yalnız tanıma/durdurma yapar (yaşam döngüsü penceresi [22,21]); v21 görünümünde config-change kayıtları gizlidir.
       - **L6:** `agent_turn_tool_calls` satırlarındaki isteğe bağlı `diagnostic` alanı alpha.10'u etkilemez (okuma yolu satır sayar). `*_IDENTITY_MASKED` kodları alpha.10'da bilinmeyen kod olarak görünür.
+
+## Owner kararı — 2026-10-08
+- **Policy yükseltmesi, elle yazılmış policy** (Jev b6dba079 `installer_named_person_upgrade` 0,99/0,76, lead): canlı ve N1 policy'leri şablondan kurulmadığı için iki yükseltme komutu reddetti; `deckent init policy --upgrade --person <issuer>/<subject>` yalnız eksik v5 kurallarını ekler. Owner açık noktaları (Jev iki tur eşik altı → owner): (a) arşivle iner, mühürlü audit ayrı kart INSTALLER-POLICY-AUDIT (1a1d6d0a 0,83/0,64); (b) `all` izin kuralı kapsama sayılır (cd738345 0,79/0,59); (c) şablonda `--person` okuma kuralındaki kişiyle eşleşir, OS kimliği ayrıca aranmaz (3a46ebcb 0,94/0,56).
+- **İzleme penceresi** (Jev 901e9761 iki tur 0,41/0,61 → owner): odak almayan çerçeve kartı; klavye sohbette, bir tuşla çerçeveye geçilir, onaylar önce odak alır.
+- **`/tasks` satır içi** (Jev 047b44db 0,98/0,75, lead): Enter = döküm, `x` = o Run için mevcut `/cancel` onay penceresi; işçi düzeyinde durdurma yok.
+- **MCP yönlendirmesi** (Jev f46c2279 1,00/0,77, lead; owner sorusu): aynı origin 307/308 takip, diğerleri hedefi adlandıran retle (MCP-REDIRECT).
+- **DOGFOOD:** S1 tamamlanana kadar bekler (owner 2026-10-08).
+
