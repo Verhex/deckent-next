@@ -27,12 +27,14 @@ function rowWhat(item: WorklineApproval, work: WorkSurfaceLabels): string {
   const call = approvalCallOf(item);
   if (!call) return item.summary;
   const kind = approvalToolKind(call.tool), parts = approvalToolParts(call.tool), target = call.target ?? '';
-  return fillTemplate(work.approvalWindow.what[kind], { path: target, host: target, tool: parts.tool, server: parts.server, changes: '' });
+  const said = fillTemplate(work.approvalWindow.what[kind], { path: target, host: target, tool: parts.tool, server: parts.server, changes: '' });
+  // The shell sentence names no target of its own: the row adds the command so the list says what would run.
+  return kind === 'shell' && target ? `${said}: ${target}` : said;
 }
 export const approvalRowPresentation = (item: WorklineApproval, rowNumber: number, now: number, work: WorkSurfaceLabels): Omit<ApprovalRowPresentation, 'kind'> => ({
   rowNumber, summary: item.summary, displayId: item.approvalId, displayRun: item.runId, displayTask: item.taskId, itemTemplate: work.approvalItem, durationText: formatDuration(item.expiresAt - now, work.workerLine),
   what: rowWhat(item, work), requester: item.requester === '-' ? work.approvalWindow.onBehalfSelf : item.requester,
-  ageText: item.createdAt === undefined ? '' : formatDuration(now - item.createdAt, work.workerLine) });
+  ageText: item.createdAt === undefined ? work.approvalWindow.ageUnknown : formatDuration(now - item.createdAt, work.workerLine) });
 function projectRow(raw: Omit<ApprovalRowPresentation, 'kind'>, known?: KnownSecretSnapshot): ApprovalDecisionLine {
   const p = (text: string) => projectApprovalDecisionText(text, known);
   const summary = p(raw.summary), id = p(raw.displayId), run = p(raw.displayRun), task = p(raw.displayTask), what = p(raw.what), requester = p(raw.requester);

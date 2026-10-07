@@ -34,6 +34,8 @@ export interface ApprovalWindowLabels {
   readonly undo: Readonly<Record<'irreversible' | 'none' | 'compensation' | 'unknown', string>>;
   /** `{clock}` m:ss left. */
   readonly time: string; readonly expired: string;
+  /** An `/approvals` row whose request time is not known. */
+  readonly ageUnknown: string;
   /** `{shown}`, `{total}`, `{bytes}`, `{totalBytes}`. */
   readonly previewCut: string;
   /** `{count}`: rows of a long value (a heredoc command) not shown in its field; the preview shows it whole. */

@@ -5,7 +5,7 @@ import { type WorkLedgerEntry, type WorkLedgerWorkerEntry, type WorklineLedgerPo
 import { type WorklineActionLabels, type WorkSurfaceLabels } from './workline-actions.js';
 import type { WorklinePanel, LocalExecution } from './workline-panel.js';
 import type { PanelSnapshot, TerminalLocalContext, StandingScope } from '#surfaces/core/terminal-kit/index.js';
-import { WorkerPanel } from './worker-panel.js';
+import { WorkerPanel, WORKER_PANEL_ROWS } from './worker-panel.js';
 import type { ApprovalDecisionLabels } from '#surfaces/core/approval-presentation/index.js';
 import { ApprovalDecisionCard, ApprovalDecisionPicker, approvalRowPresentation, approvalCardPresentation, approvalDecisionCardLines, CancellationDecisionCard, cancellationCardPresentation, PanelWindow,
   type ApprovalWindowContext } from './approval-decision-view.js';
@@ -168,7 +168,9 @@ export function useWorkSurface({ panel, state, ledger, labels, push, errorText, 
       {card}
     </>
   );
-  return { observeWorkers, observeApprovals, run, decideApproval, noteUnsettled, modalOpen: modal !== null, pickerOpen, region };
+  // Rows the live worker panel takes (title, rows, `+N more`): an open window leaves them on screen.
+  const panelRows = work && watchingWorkers && workers.length ? 1 + Math.min(workers.length, WORKER_PANEL_ROWS) + (workers.length > WORKER_PANEL_ROWS ? 1 : 0) : 0;
+  return { observeWorkers, observeApprovals, run, decideApproval, noteUnsettled, modalOpen: modal !== null, pickerOpen, region, panelRows };
 }
 /** Legacy string compatibility; the actual card consumes completed spans/counts in a Provider child. */
 export function approvalCardLines(approval: WorklineApproval, work: WorkSurfaceLabels, preview: string | undefined, covers: string | null, context: ApprovalWindowContext = {}, now = Date.now()): string[] {

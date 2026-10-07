@@ -1060,6 +1060,7 @@
   "terminal.approval.window.undo.unknown": "araç bildirmedi",
   "terminal.approval.window.time": "{clock} içinde karar verilmezse hiçbir şey çalışmaz",
   "terminal.approval.window.expired": "Süre doldu — hiçbir şey çalışmadı",
+  "terminal.approval.window.ageUnknown": "bilinmeyen bir süredir",
   "terminal.approval.window.previewCut": "Önizleme kısaltıldı: {total} satırın ilk {shown} satırı ({totalBytes} baytın {bytes} baytı)",
   "terminal.approval.window.valueMore": "… {count} satır daha — komutun tamamı aşağıda Önizleme'de",
   "terminal.approval.window.detail.id": "Onay: {id}",

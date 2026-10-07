@@ -1060,6 +1060,7 @@
   "terminal.approval.window.undo.unknown": "not declared by the tool",
   "terminal.approval.window.time": "{clock} left — if nobody decides, nothing runs",
   "terminal.approval.window.expired": "Time is up — nothing ran",
+  "terminal.approval.window.ageUnknown": "an unknown time",
   "terminal.approval.window.previewCut": "Preview shortened: the first {shown} of {total} lines ({bytes} of {totalBytes} bytes)",
   "terminal.approval.window.valueMore": "… {count} more lines — the whole command is in the preview below",
   "terminal.approval.window.detail.id": "Approval: {id}",

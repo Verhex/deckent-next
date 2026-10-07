@@ -10,7 +10,7 @@ import { createContext, useCallback, useContext, useLayoutEffect, useMemo, useRe
 export const WINDOW_PRIORITY = Object.freeze({ window: 0, approval: 100 } as const);
 
 type Layer = Readonly<{ id: string; priority: number; sequence: number }>;
-type Stack = Readonly<{ register: (id: string, priority: number) => () => void; top: string | null; open: number }>;
+type Stack = Readonly<{ register: (id: string, priority: number) => () => void; top: string | null; open: number; reservedRows: number | undefined }>;
 
 const WindowStackContext = createContext<Stack | null>(null);
 
@@ -21,7 +21,8 @@ export function topWindowLayer(layers: readonly Layer[]): Layer | null {
   return top;
 }
 
-export function WindowStackProvider({ children }: { readonly children: ReactNode }) {
+/** `reservedRows`: rows the rest of the live area takes now (status, composer, a visible worker panel); windows cap their height to leave them. */
+export function WindowStackProvider({ children, reservedRows }: { readonly children: ReactNode; readonly reservedRows?: number }) {
   const [layers, setLayers] = useState<readonly Layer[]>([]);
   const sequence = useRef(0);
   const register = useCallback((id: string, priority: number) => {
@@ -31,7 +32,7 @@ export function WindowStackProvider({ children }: { readonly children: ReactNode
     return () => setLayers(current => current.filter(item => item !== layer));
   }, []);
   const top = topWindowLayer(layers)?.id ?? null;
-  const value = useMemo<Stack>(() => ({ register, top, open: layers.length }), [register, top, layers.length]);
+  const value = useMemo<Stack>(() => ({ register, top, open: layers.length, reservedRows }), [register, top, layers.length, reservedRows]);
   return <WindowStackContext.Provider value={value}>{children}</WindowStackContext.Provider>;
 }
 
@@ -45,6 +46,11 @@ export function useWindowLayer(id: string, open = true, priority: number = WINDO
   useLayoutEffect(() => (open && register ? register(id, priority) : undefined), [id, open, priority, register]);
   if (!stack) return open;
   return open && stack.top === id;
+}
+
+/** Rows the live area outside the window needs (the provider's measure, or none given). */
+export function useWindowReserve(): number | undefined {
+  return useContext(WindowStackContext)?.reservedRows;
 }
 
 /** Whether no window is open: the composer (and any other base-layer input) listens only then. Without a provider nothing is open. */

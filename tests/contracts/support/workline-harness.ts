@@ -37,8 +37,8 @@ class Screen extends Writable {
   text = '';
   /** Ink debug mode writes the whole view each time; this is the latest frame, not the scrollback. */
   frame = '';
-  readonly isTTY = true; readonly rows = 60;
-  constructor(readonly columns = 200, private readonly onFrame?: (text: string) => void) { super(); }
+  readonly isTTY = true;
+  constructor(readonly columns = 200, private readonly onFrame?: (text: string) => void, readonly rows = 60) { super(); }
   override _write(chunk: Buffer, _encoding: string, done: () => void) {
     const text = chunk.toString('utf8');
     this.text += text;
@@ -62,8 +62,8 @@ export async function until(check: () => boolean, label: string, attempts = 500)
   throw new Error(`timed out waiting for ${label}`);
 }
 /** Mounts the real interactive workline on an in-memory TTY; the caller unmounts it. */
-export function mountWorkline(props: Partial<WorklineProps>, columns = 200, observation: { onFrame?: (text: string) => void; debug?: boolean; strict?: boolean } = {}) {
-  const stdout = new Screen(columns, observation.onFrame);
+export function mountWorkline(props: Partial<WorklineProps>, columns = 200, observation: { onFrame?: (text: string) => void; debug?: boolean; strict?: boolean; rows?: number } = {}) {
+  const stdout = new Screen(columns, observation.onFrame, observation.rows);
   const stdin = Object.assign(new PassThrough(), { isTTY: true, setRawMode() { return stdin; }, ref() { return stdin; }, unref() { return stdin; } });
   const wrapper = observation.strict ? StrictMode : Fragment;
   const instance = render(createElement(wrapper, null, createElement(WorklinePaletteProvider, { palette: resolveWorklinePalette('none'), children: createElement(WorklineApp, {
