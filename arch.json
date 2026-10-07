@@ -845,6 +845,14 @@
       ],
       "plan": "SURFACES"
     },
+    "src/surfaces/core/work-labels": {
+      "dependencies": [
+        "src/platform/core/i18n",
+        "src/surfaces/core/terminal-work",
+        "src/surfaces/core/monitor"
+      ],
+      "plan": "SURFACES"
+    },
     "src/surfaces/core/terminal-labels": {
       "dependencies": [
         "src/platform/core/i18n",
@@ -1037,8 +1045,8 @@
         "src/surfaces/core/terminal-admin",
         "src/surfaces/core/cli-identity",
         "src/surfaces/core/terminal-ledger",
-        "src/surfaces/core/terminal-work",
-        "src/surfaces/core/terminal-theme"
+        "src/surfaces/core/terminal-theme",
+        "src/surfaces/core/work-labels"
       ],
       "plan": "SURFACES"
     },

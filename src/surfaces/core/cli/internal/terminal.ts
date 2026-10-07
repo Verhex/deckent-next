@@ -9,7 +9,7 @@ import { prefersAsciiGlyphs, runTerminalWorkline, resolveWorklinePalette, buildW
 import { plainText, projectHumanText } from '#surfaces/core/terminal-render/index.js';
 import { terminalComposerLabels, terminalRenderLabels, terminalSessionLabels } from '#surfaces/core/terminal-labels/index.js';
 import { createWorklineLedgerPorts } from './terminal-ledger.js';
-import { runtimeBuildSkew, workSurfaceLabels } from './work-labels.js';
+import { runtimeBuildSkew, workSurfaceLabels } from '#surfaces/core/work-labels/index.js';
 import { runKernelCommand, type CommandContext } from './kernel-commands.js';
 import { terminalAdminPorts } from '#surfaces/core/terminal-admin/index.js';
 import type { ProjectIdentity, PermissionMode } from '#domain/index.js';
