@@ -490,7 +490,7 @@ Core contracts and never requires editing Core. Core-memory law 10 records this 
   Lane B (the contracts above, company scope, IFS scenario design and sandbox proof moved ahead of M4).
 
 
-### TERMINAL-UX T3 contracts (2026-10-07, `wave/tui-3`, unpushed; owner decisions in owner-decisions "Owner kararları — 2026-10-07")
+### TERMINAL-UX T3 contracts (2026-10-07, on main via PR #42; owner decisions in owner-decisions "Owner kararları — 2026-10-07")
 
 - **Config change approval (L2, Jev f0214347/9181d2be):** a config write is allowed by the policy `config`/`write` rule for that layer and scope;
   a `require-approval` rule turns `set`/`unset` into a pending approval with subject `config-change` (command, layer, key, redacted before/after,
@@ -540,13 +540,16 @@ Core contracts and never requires editing Core. Core-memory law 10 records this 
   the exact `deckent models activate` command); discovered models are never added or activated. A pick pins the model for this session: the
   next and later turns carry it as `chatTurn.reference` (protocol v23, lifecycle [23, 22]); the service uses exactly it for binding, profile,
   prompt, digest and rounds, or refuses typed — the configured `terminal.chat.reference` never answers in its place (S19). "Also make default"
-  is locked until the owner decides where the user default lives (`proof/T4-2026-10-08/DECISIONS.md`); it would use the governed `/config` writer.
+  is locked ("coming soon"): owner 2026-10-08 moved it to T4-B (a new `terminal.defaultModel`, Jev d84b248d). Rows show human words; the exact
+  reference and the fixing command appear dimmed for the focused row only.
 - **`/provider` (PROVIDER-CONNECT):** kinds and endpoints are adapter data (`adapters/core/provider-connect`, registry v1; ChatGPT sign-in listed
-  unavailable). Connect: endpoint (where the kind takes one; https, plain http only to loopback) → masked key under the custody note → one free
+  unavailable). Connect: the address, where the kind takes one, is chosen from a list (owner 2026-10-08 D3: the configured `inference_serving`
+  server, the registry's known local servers, the provider default; a typed "new address…" is the last row only, checked by the endpoint rule —
+  https, plain http only to loopback — and previewed) → masked key (the one permitted typed value) under the custody note → one free
   GET that needs the key (models list / key record, no redirect, bounded), mapped by `classifyProviderRejection` (an unknown 429 is
   `limit-reached`) → only on success the key goes to `setSecret` (runtime service, policy cell `secret`, audited by name). The key is never in
-  env, files, rows, scrollback, audit or model text; workers never get it. The check runs in the terminal process. Binding models to the key
-  (catalog channel / invocation profile) stays the governed path and is an open owner decision.
+  env, files, rows, scrollback, audit or model text; workers never get it. The check runs in the terminal process. Results stay in the window
+  (owner 2026-10-08: slash output only in a window). Binding models to the key is T4-B (`models.connect` operation, owner 2026-10-08).
 
 ## Packages (current implementation)
 

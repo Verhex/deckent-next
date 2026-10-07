@@ -51,10 +51,10 @@ function panel(kind: 'model' | 'provider', ports: Parameters<typeof SettingsPane
 
 const ref = (modelId: string, providerId = 'local-openai') => ({ providerId, providerVersion: 1, modelId, modelVersion: 1 });
 const MODELS: ModelPanelView = { title: 'Models · scope', notes: [], defaultBlocked: null, choices: [
-  { reference: ref('chat'), label: 'chat', detail: 'native-chat · local-openai@1/chat@1 · ready', group: 'local-openai', blocked: null, configured: true },
-  { reference: ref('coder'), label: 'coder', detail: 'native-coder · local-openai@1/coder@1 · cannot be chosen now', group: 'local-openai',
+  { reference: ref('chat'), label: 'chat', detail: 'ready', group: 'local-openai', blocked: null, configured: true, exact: 'EXACT-chat', command: null },
+  { reference: ref('coder'), label: 'coder', detail: 'cannot be chosen now', group: 'local-openai', exact: 'EXACT-coder', command: 'deckent models activate --model coder',
     blocked: 'NOT-ACTIVE deckent models activate --scope scope', configured: false },
-  { reference: ref('fast'), label: 'fast', detail: 'native-fast · local-openai@1/fast@1 · ready', group: 'local-openai', blocked: null, configured: false }] };
+  { reference: ref('fast'), label: 'fast', detail: 'ready', group: 'local-openai', blocked: null, configured: false, exact: 'EXACT-fast', command: null }] };
 function modelPort(view: ModelPanelView, makeDefault?: (choice: ModelPanelChoice) => Promise<ConfigPanelOutcome>) {
   const pins: string[] = [];
   let pinned: ModelPanelChoice['reference'] | null = null;
@@ -73,6 +73,8 @@ describe('/model window', () => {
     expect(view.frame()).toContain('chat · default');
     await view.press(DOWN);
     expect(view.frame()).toMatch(/x coder/u); expect(view.frame()).toContain('NOT-ACTIVE');
+    // The exact reference and the fixing command are shown only for the focused row (dimmed), never in the row itself.
+    expect(view.frame()).toContain('EXACT-coder'); expect(view.frame()).toContain('deckent models activate --model coder'); expect(view.frame()).not.toContain('EXACT-chat');
     await view.press(ENTER);
     expect(pins).toEqual([]); expect(calls.closed).toBe(0);
     await view.press(`${DOWN}${ENTER}`);
@@ -111,16 +113,18 @@ describe('/model window', () => {
 
 const KINDS: ProviderPanelView = { title: 'Providers', notes: [], kinds: [
   { id: 'anthropic-api', label: 'Anthropic API', detail: 'not connected', blocked: null, keyName: 'DECKENT_ANTHROPIC_KEY', keyStored: false, endpointEditable: false,
-    endpointDefault: 'https://api.anthropic.com', keyRequired: true },
+    endpointDefault: 'https://api.anthropic.com', keyRequired: true, endpointChoices: [] },
   { id: 'local-openai', label: 'Local server', detail: 'key DECKENT_LOCAL_ENDPOINT_KEY stored · 1 model profile(s) use it', blocked: null, keyName: 'DECKENT_LOCAL_ENDPOINT_KEY',
-    keyStored: true, endpointEditable: true, endpointDefault: null, keyRequired: false },
+    keyStored: true, endpointEditable: true, endpointDefault: null, keyRequired: false,
+    endpointChoices: [{ id: 'vllm', label: 'vLLM on this machine', url: 'http://127.0.0.1:8000' }, { id: 'ollama', label: 'Ollama on this machine', url: 'http://127.0.0.1:11434' }] },
   { id: 'chatgpt-login', label: 'ChatGPT sign-in', detail: '', blocked: 'Not available yet.', keyName: null, keyStored: false, endpointEditable: false,
-    endpointDefault: null, keyRequired: false }] };
+    endpointDefault: null, keyRequired: false, endpointChoices: [] }] };
 function providerPort(outcome: { stored: boolean; check: string } = { stored: true, check: 'The provider accepted the key.' }) {
   const requests: ProviderConnectRequest[] = [], removed: string[] = [];
   const port: ProviderPanelPort = {
     inspect: async () => KINDS,
-    endpoint: (_kind, text) => text.startsWith('http://10.') ? 'Plain http is allowed only on this machine; use https.' : null,
+    endpoint: (_kind, text) => text.startsWith('http://10.') ? { ok: false as const, reason: 'Plain http is allowed only on this machine; use https.' }
+      : { ok: true as const, base: text.trim().replace(/\/v1\/?$/u, ''), check: `${text.trim().replace(/\/v1\/?$/u, '')}/v1/models` },
     connect: async request => { requests.push(request); return { stored: outcome.stored, title: outcome.stored ? 'Connected: X' : 'Not connected: X',
       lines: [{ label: 'Check', text: outcome.check }, { label: 'Key', text: outcome.stored ? 'stored as DECKENT_ANTHROPIC_KEY' : 'not stored.' }] }; },
     disconnect: async kind => { removed.push(kind); return [`removed ${kind}`]; },
@@ -158,27 +162,39 @@ describe('/provider window', () => {
     expect(view.frame()).toContain('Connected: X'); expect(view.frame()).toContain('The provider accepted the key.');
     expect(view.all()).not.toContain(CANARY);
     expect(JSON.stringify(calls)).not.toContain(CANARY);
-    expect(calls.notices).toEqual([{ level: 'info', text: 'Connected: X\nCheck: The provider accepted the key.\nKey: stored as DECKENT_ANTHROPIC_KEY' }]);
+    // Owner 2026-10-08: slash output only in a window; the result leaves no scrollback line.
+    expect(calls.notices).toEqual([]);
     await view.press(ENTER, 60);
     expect(view.frame()).toContain('Providers');
   });
 
-  it('a local server: the endpoint step refuses plain http to another machine, then an empty key is allowed; a refused check is a warning, nothing stored', async () => {
+  it('a local server: the address is chosen from the list; a new address is checked, previewed and only then used; nothing goes to scrollback', async () => {
     const { port, requests } = providerPort({ stored: false, check: 'The key was rejected: it is invalid or expired.' });
     const { element, calls } = panel('provider', { provider: port });
     const view = mount(element, 100, 40);
     await settle(80);
     await view.press(`${DOWN}${ENTER}${ENTER}`, 60);
-    expect(view.frame()).toContain('Local server · Endpoint');
+    expect(view.frame()).toContain('Local server · Address');
+    expect(view.frame()).toContain('vLLM on this machine'); expect(view.frame()).toContain('A new address…');
+    // A listed address goes straight to the key step.
+    await view.press(ENTER, 60);
+    expect(view.frame()).toContain('empty Enter: this server takes no key');
+    await view.press(ENTER, 120);
+    expect(requests).toEqual([{ kind: 'local-openai', endpoint: 'http://127.0.0.1:8000', key: null }]);
+    expect(view.frame()).toContain('Not connected: X');
+    await view.press(ENTER, 60);
+    // The last row is the narrow typed exception: refused in place, then previewed before use.
+    await view.press(`${ENTER}${ENTER}${DOWN}${DOWN}${ENTER}`, 60); // the list kept its place on the local server
     await view.press(`http://10.0.0.2:8000${ENTER}`, 60);
     expect(view.frame()).toContain('Plain http is allowed only on this machine');
     for (let index = 0; index < 20; index++) await view.press('\u007f');
-    await view.press(`http://127.0.0.1:8000/v1${ENTER}`, 60);
-    expect(view.frame()).toContain('empty Enter: this server takes no key');
-    await view.press(ENTER, 120);
-    expect(requests).toEqual([{ kind: 'local-openai', endpoint: 'http://127.0.0.1:8000/v1', key: null }]);
-    expect(view.frame()).toContain('Not connected: X');
-    expect(calls.notices[0]!.level).toBe('warning');
+    await view.press(`http://127.0.0.1:9000/v1${ENTER}`, 60);
+    expect(view.frame()).toContain('Use this address?'); expect(view.frame()).toContain('GET http://127.0.0.1:9000/v1/models');
+    await view.press('n', 60);
+    expect(view.frame()).toContain('http://127.0.0.1:9000/v1'); // back in the entry with the text kept
+    await view.press(ENTER, 60); await view.press('y', 60); await view.press(ENTER, 120);
+    expect(requests.at(-1)).toEqual({ kind: 'local-openai', endpoint: 'http://127.0.0.1:9000', key: null });
+    expect(calls.notices).toEqual([]);
   });
 
   it('disconnect asks first; y removes through the port, n keeps', async () => {
@@ -193,7 +209,8 @@ describe('/provider window', () => {
     await view.press(`${ENTER}${DOWN}${ENTER}`, 60); // back on the same kind
     await view.press('y', 100);
     expect(removed).toEqual(['local-openai']);
-    expect(calls.notices.map(notice => notice.text)).toEqual(['removed local-openai']);
+    // The answer is shown in the window, not in scrollback.
+    expect(view.frame()).toContain('removed local-openai'); expect(calls.notices).toEqual([]);
   });
 });
 

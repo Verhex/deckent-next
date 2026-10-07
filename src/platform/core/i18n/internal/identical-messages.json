@@ -113,7 +113,6 @@
   "tui.confirm_progress",
   "tui.help.tier.mcp",
   "tui.inbox_detail_id",
-  "tui.model.detail",
   "tui.native_reference_active_compact",
   "tui.picker.title.action",
   "tui.provider.kind.anthropicApi",

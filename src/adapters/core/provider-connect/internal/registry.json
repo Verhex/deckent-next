@@ -7,13 +7,16 @@
     { "id": "anthropic-api", "labelKey": "tui.provider.kind.anthropicApi", "available": true, "endpoint": { "default": "https://api.anthropic.com", "editable": false },
       "probe": { "path": "/v1/models?limit=1", "auth": { "type": "header", "name": "x-api-key" }, "headers": { "anthropic-version": "2023-06-01" }, "listsModels": true },
       "key": { "required": true, "secretName": "DECKENT_ANTHROPIC_KEY" } },
-    { "id": "openai-compatible", "labelKey": "tui.provider.kind.openaiCompatible", "available": true, "endpoint": { "default": "https://api.openai.com", "editable": true },
+    { "id": "openai-compatible", "labelKey": "tui.provider.kind.openaiCompatible", "available": true, "endpoint": { "default": "https://api.openai.com", "editable": true, "choices": [] },
       "probe": { "path": "/v1/models", "auth": { "type": "bearer" }, "headers": {}, "listsModels": true },
       "key": { "required": true, "secretName": "DECKENT_OPENAI_COMPATIBLE_KEY" } },
     { "id": "openrouter", "labelKey": "tui.provider.kind.openrouter", "available": true, "endpoint": { "default": "https://openrouter.ai", "editable": false },
       "probe": { "path": "/api/v1/key", "auth": { "type": "bearer" }, "headers": {}, "listsModels": false },
       "key": { "required": true, "secretName": "DECKENT_OPENROUTER_KEY" } },
-    { "id": "local-openai", "labelKey": "tui.provider.kind.localOpenai", "available": true, "endpoint": { "default": null, "editable": true },
+    { "id": "local-openai", "labelKey": "tui.provider.kind.localOpenai", "available": true, "endpoint": { "default": null, "editable": true, "choices": [
+      { "id": "vllm", "labelKey": "tui.provider.endpoint.choice.vllm", "url": "http://127.0.0.1:8000" },
+      { "id": "ollama", "labelKey": "tui.provider.endpoint.choice.ollama", "url": "http://127.0.0.1:11434" },
+      { "id": "lm-studio", "labelKey": "tui.provider.endpoint.choice.lmStudio", "url": "http://127.0.0.1:1234" }] },
       "probe": { "path": "/v1/models", "auth": { "type": "bearer" }, "headers": {}, "listsModels": true },
       "key": { "required": false, "secretName": "DECKENT_LOCAL_ENDPOINT_KEY" } },
     { "id": "chatgpt-login", "labelKey": "tui.provider.kind.chatgptLogin", "available": false, "endpoint": { "default": null, "editable": false }, "probe": null, "key": null }

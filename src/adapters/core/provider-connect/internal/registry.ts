@@ -6,13 +6,18 @@ import asset from './registry.json' with { type: 'json' };
  * a key (a model list or the key's own record — never a billed call), how the key is sent, and the secret-store name it is kept under. Vendor
  * endpoints are versioned data here, not code (ARCHITECTURE literal rule); a kind with `available: false` is listed with its reason only.
  */
+const LOOPBACK = new Set(['localhost', '127.0.0.1', '[::1]']);
 const header = z.string().regex(/^[a-z][a-z0-9-]{0,63}$/u);
 const kindSchema = z.object({
   id: z.string().regex(/^[a-z][a-z0-9-]{0,31}$/u),
   /** The catalog key of the kind's name (a surface resolves it in the person's language). */
   labelKey: z.string().regex(/^tui\.provider\.kind\.[A-Za-z]+$/u),
   available: z.boolean(),
-  endpoint: z.object({ default: z.string().url().startsWith('https://').nullable(), editable: z.boolean() }).strict(),
+  /** `choices`: known addresses offered as a list (owner 2026-10-08: values are chosen; a typed address is the last row's narrow exception). */
+  endpoint: z.object({ default: z.string().url().startsWith('https://').nullable(), editable: z.boolean(),
+    choices: z.array(z.object({ id: z.string().regex(/^[a-z][a-z0-9-]{0,31}$/u), labelKey: z.string().regex(/^tui\.provider\.endpoint\.choice\.[A-Za-z]+$/u),
+      // Every listed address passes the same rule as a typed one (https, or plain http only to this machine).
+      url: z.string().url().refine(url => providerEndpoint(url).ok) }).strict().readonly()).readonly().default([]) }).strict(),
   probe: z.object({ path: z.string().startsWith('/').max(128), auth: z.discriminatedUnion('type', [z.object({ type: z.literal('bearer') }).strict(),
     z.object({ type: z.literal('header'), name: header }).strict()]), headers: z.record(header, z.string().max(128)), listsModels: z.boolean() }).strict().nullable(),
   key: z.object({ required: z.boolean(), secretName: z.string().regex(/^[A-Z_][A-Z0-9_]{0,127}$/u) }).strict().nullable(),
@@ -33,7 +38,6 @@ export function providerConnectKind(id: string): ProviderConnectKind | null {
   return PROVIDER_CONNECT_KINDS.find(kind => kind.id === id) ?? null;
 }
 
-const LOOPBACK = new Set(['localhost', '127.0.0.1', '[::1]']);
 export type ProviderEndpointRefusal = 'url-invalid' | 'url-credentials' | 'url-query' | 'url-insecure-remote' | 'url-scheme-refused';
 /**
  * The endpoint rule of a typed base URL (the same rule as MCP HTTP entries): https anywhere, plain http only to this machine (a local server);
@@ -50,3 +54,4 @@ export function providerEndpoint(text: string): Readonly<{ ok: true; base: strin
   // An OpenAI-compatible base is often given with its `/v1`; the probe path already carries it.
   return { ok: true, base: `${parsed.origin}${path.endsWith('/v1') ? path.slice(0, -3) : path}` };
 }
+

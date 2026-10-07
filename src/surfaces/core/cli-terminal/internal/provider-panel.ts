@@ -1,4 +1,5 @@
 import { loadConfig, MESSAGE_REGISTRY, t, type ConfigLoadOptions, type Locale } from '#platform/index.js';
+import { buildInferenceServingPlan, readInferenceServingProfile } from '#engine/index.js';
 import type { PanelLine, ProviderConnectOutcome, ProviderConnectRequest, ProviderPanelKind, ProviderPanelPort } from '#surfaces/core/terminal-panels/index.js';
 import type { ProviderConnectKindView, ProviderConnectProbeView, TerminalLaunchContext } from './context.js';
 
@@ -71,21 +72,41 @@ export function providerPanelPort(root: string, scopeId: string, host: Host & { 
         try { const listed = await host.listSecretNames(root, options); names = listed.names; backend = listed.backend; }
         catch (error) { notes.push(t('tui.provider.note.storeUnlisted', { reason: errorText(error) }, locale)); }
       }
-      let named: readonly string[] = [];
-      try { named = await refs(); } catch (error) { notes.push(t('tui.provider.note.profilesUnread', { reason: errorText(error) }, locale)); }
+      let named: readonly string[] = [], served: string | null = null;
+      try {
+        const config = await loadConfig(root, options) as Record<string, unknown>;
+        named = credentialRefs(config, scopeId);
+        // The installation's own inference server (inference_serving), when configured: the first address offered (owner 2026-10-08, D3).
+        try { const profile = readInferenceServingProfile(config); served = profile ? buildInferenceServingPlan(profile).openaiBaseUrl : null; } catch { served = null; }
+      } catch (error) { notes.push(t('tui.provider.note.profilesUnread', { reason: errorText(error) }, locale)); }
+      const catalog = MESSAGE_REGISTRY.catalogs[locale] as Readonly<Record<string, string>>;
+      /** The kind's address list: the configured server, the kind's known addresses (adapter data), the provider's default; one row per base. */
+      const choicesOf = (kind: ProviderConnectKindView) => {
+        if (!kind.endpointEditable) return [];
+        const rows = [...(served ? [{ id: 'configured', label: t('tui.provider.endpoint.choice.configured', {}, locale), url: served }] : []),
+          ...kind.endpointChoices.map(choice => ({ id: choice.id, label: catalog[choice.labelKey] ?? choice.id, url: choice.url })),
+          ...(kind.endpointDefault ? [{ id: 'default', label: t('tui.provider.endpoint.choice.default', {}, locale), url: kind.endpointDefault }] : [])];
+        const seen = new Set<string>();
+        return rows.flatMap(row => {
+          const checked = connect.endpoint(row.url);
+          if (!checked.ok || seen.has(checked.base)) return [];
+          seen.add(checked.base);
+          return [{ ...row, url: checked.base }];
+        });
+      };
       const kinds: ProviderPanelKind[] = connect.kinds.map(kind => {
         const keyName = kind.secretName, stored = keyName !== null && names !== null && names.includes(keyName), using = keyName ? named.filter(ref => ref === keyName).length : 0;
         const detail = !kind.available ? '' : keyName === null ? '-' : names === null ? t('tui.provider.state.unknown', { name: keyName }, locale)
           : stored ? t('tui.provider.state.stored', { name: keyName, count: using }, locale) : t('tui.provider.state.notConnected', {}, locale);
         return { id: kind.id, label: kindLabel(kind, kind.id, locale), detail, blocked: kind.available ? null : t('tui.provider.unavailable', {}, locale), keyName, keyStored: stored,
-          endpointEditable: kind.endpointEditable, endpointDefault: kind.endpointDefault, keyRequired: kind.keyRequired };
+          endpointEditable: kind.endpointEditable, endpointDefault: kind.endpointDefault, keyRequired: kind.keyRequired, endpointChoices: choicesOf(kind) };
       });
       if (!host.setSecret) notes.push(t('tui.provider.note.noStore', {}, locale));
       return { title: t('tui.panel.provider.title', {}, locale), kinds, notes };
     },
-    endpoint(_kind, text) {
+    endpoint(kind, text) {
       const checked = connect.endpoint(text);
-      return checked.ok ? null : endpointWord(checked.reason, locale);
+      return checked.ok ? { ok: true, base: checked.base, check: `${checked.base}${kindOf(kind)?.probePath ?? ''}` } : { ok: false, reason: endpointWord(checked.reason, locale) };
     },
     async connect(request: ProviderConnectRequest): Promise<ProviderConnectOutcome> {
       const kind = kindOf(request.kind), label = kindLabel(kind, request.kind, locale);
@@ -98,7 +119,7 @@ export function providerPanelPort(root: string, scopeId: string, host: Host & { 
         return refused([{ label: t('tui.provider.field.check', {}, locale), text: code === 'PROVIDER_ENDPOINT_INVALID' ? endpointWord(reason, locale)
           : code === 'PROVIDER_KEY_REQUIRED' ? t('tui.panel.provider.keyRequired', {}, locale) : t('tui.provider.unavailable', {}, locale), tone: 'warning' }]);
       }
-      const check: PanelLine = { label: t('tui.provider.field.check', {}, locale), text: providerOutcomeWord(probe, locale), ...(probe.outcome === 'ok' ? {} : { tone: 'warning' as const }) };
+      const check: PanelLine = { label: t('tui.provider.field.check', {}, locale), text: providerOutcomeWord(probe, locale), tone: probe.outcome === 'ok' ? 'success' : 'warning' };
       const where: PanelLine[] = request.endpoint ? [{ label: t('tui.provider.field.endpoint', {}, locale), text: request.endpoint }] : [];
       if (probe.outcome !== 'ok') return refused([check, ...where, { label: t('tui.provider.field.key', {}, locale), text: t('tui.provider.key.notStored', {}, locale) }]);
       const name = kind.secretName;
@@ -110,7 +131,7 @@ export function providerPanelPort(root: string, scopeId: string, host: Host & { 
         try {
           const change = await host.setSecret(root, { schemaVersion: 1, scopeId, name, value: request.key }, options);
           stored = true; backend = change.backend;
-          keyLine = { label: t('tui.provider.field.key', {}, locale), text: t('tui.provider.key.stored', { name, backend: change.backend }, locale) };
+          keyLine = { label: t('tui.provider.field.key', {}, locale), text: t('tui.provider.key.stored', { name, backend: change.backend }, locale), tone: 'success' };
         } catch (error) {
           // A store that cannot write (the environment backend), a policy refusal: the typed reason; nothing else was kept.
           keyLine = { label: t('tui.provider.field.key', {}, locale), text: `${t('tui.provider.key.notStored', {}, locale)} ${errorText(error)}`, tone: 'warning' };

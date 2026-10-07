@@ -65,7 +65,8 @@ export async function main(argv: readonly string[] = process.argv.slice(2)) {
     // T4 PROVIDER-CONNECT: the /provider kinds (adapter data) and the free check, run in this terminal process with the key the person typed;
     // the key then goes only to `setSecret` above (runtime service, audited by name). No environment variable, file or worker sees it.
     providerConnect: { kinds: PROVIDER_CONNECT_KINDS.map(kind => ({ id: kind.id, labelKey: kind.labelKey, available: kind.available, endpointDefault: kind.endpoint.default,
-      endpointEditable: kind.endpoint.editable, keyRequired: kind.key?.required ?? false, secretName: kind.key?.secretName ?? null })),
+      endpointEditable: kind.endpoint.editable, keyRequired: kind.key?.required ?? false, secretName: kind.key?.secretName ?? null, probePath: kind.probe?.path ?? null,
+      endpointChoices: kind.endpoint.choices })),
     endpoint: providerEndpoint, probe: (input, signal) => probeProviderConnection(input, signal ? { signal } : {}) },
     deleteSecret: (projectRoot, input, options) => createConfiguredRuntimeClient(projectRoot, options).deleteSecret(input),
     inspectDeclaredModels, inspectModelBinding, prepareCodingProfile: prepareNativeCodingProfile,

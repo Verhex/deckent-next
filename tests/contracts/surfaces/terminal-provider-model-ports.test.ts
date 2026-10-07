@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { clearConfigCache } from '#platform/index.js';
 import { registerProviderConfig } from '#adapters/index.js';
+import { providerEndpoint } from '#adapters/core/provider-connect/index.js';
 import { modelPanelSource, providerPanelPort, type ProviderConnectHost, type TerminalLaunchContext } from '#surfaces/core/cli-terminal/index.js';
 
 // T4-A ports over the host's handlers (no runtime, no network): `/provider` runs the free check and sends the key only to the secret store
@@ -32,9 +33,13 @@ function connectHost(outcome: string, httpStatus: number | null = 200): Provider
   const probes: unknown[] = [];
   return { probes, kinds: [
     { id: 'anthropic-api', labelKey: 'tui.provider.kind.anthropicApi', available: true, endpointDefault: 'https://api.anthropic.com', endpointEditable: false, keyRequired: true,
-      secretName: 'DECKENT_ANTHROPIC_KEY' },
-    { id: 'chatgpt-login', labelKey: 'tui.provider.kind.chatgptLogin', available: false, endpointDefault: null, endpointEditable: false, keyRequired: false, secretName: null }],
-  endpoint: text => text.startsWith('https://') ? { ok: true, base: text } : { ok: false, reason: 'url-insecure-remote' },
+      secretName: 'DECKENT_ANTHROPIC_KEY', probePath: '/v1/models?limit=1', endpointChoices: [] },
+    { id: 'local-openai', labelKey: 'tui.provider.kind.localOpenai', available: true, endpointDefault: null, endpointEditable: true, keyRequired: false,
+      secretName: 'DECKENT_LOCAL_ENDPOINT_KEY', probePath: '/v1/models', endpointChoices: [{ id: 'vllm', labelKey: 'tui.provider.endpoint.choice.vllm', url: 'http://127.0.0.1:8000' },
+        { id: 'ollama', labelKey: 'tui.provider.endpoint.choice.ollama', url: 'http://127.0.0.1:11434' }] },
+    { id: 'chatgpt-login', labelKey: 'tui.provider.kind.chatgptLogin', available: false, endpointDefault: null, endpointEditable: false, keyRequired: false, secretName: null,
+      probePath: null, endpointChoices: [] }],
+  endpoint: providerEndpoint,
   probe: async input => { probes.push(input); return { outcome, httpStatus, key: outcome === 'ok' ? 'verified' : 'unverified' }; } };
 }
 function secrets(names: string[] = []) {
@@ -54,11 +59,13 @@ describe('/provider port', () => {
     const connect = connectHost('ok'), store = secrets();
     const port = providerPanelPort(root, 'scope', { ...store.host, providerConnect: connect }, options, 'en', errorText);
     const view = await port.inspect();
-    expect(view.kinds.map(kind => [kind.label, kind.detail, kind.blocked])).toEqual([['Anthropic API', 'not connected', null], ['ChatGPT sign-in', '', 'Not available yet.']]);
+    expect(view.kinds.map(kind => [kind.label, kind.detail, kind.blocked])).toEqual([['Anthropic API', 'not connected', null],
+      ['Local server (vLLM / OpenAI-compatible)', 'not connected', null], ['ChatGPT sign-in', '', 'Not available yet.']]);
     const outcome = await port.connect({ kind: 'anthropic-api', endpoint: null, key: CANARY });
     expect(connect.probes).toEqual([{ kind: 'anthropic-api', endpoint: null, key: CANARY }]);
     expect(store.sets).toEqual([{ schemaVersion: 1, scopeId: 'scope', name: 'DECKENT_ANTHROPIC_KEY', value: CANARY }]);
     expect(outcome.stored).toBe(true); expect(outcome.title).toBe('Connected: Anthropic API');
+    expect(outcome.lines.map(line => line.tone ?? '')).toEqual(['success', 'success', 'muted']);
     expect(outcome.lines.map(line => `${line.label}|${line.text}`)).toEqual(['Check|The provider accepted the key.',
       'Key|stored as DECKENT_ANTHROPIC_KEY in the secret store (core.secret-store.file@1); the value is never shown',
       'Next|No model uses DECKENT_ANTHROPIC_KEY yet. Binding models to it is a governed catalog step; see: deckent models catalog list --scope scope']);
@@ -101,6 +108,25 @@ describe('/provider port', () => {
   });
 });
 
+describe('/provider addresses (owner 2026-10-08, D3: chosen from a list; a typed address is the narrow exception)', () => {
+  it('lists the configured inference server first, then the known local servers; a fixed-endpoint kind lists none; a typed address is checked and previewed', async () => {
+    const serving = { schemaVersion: 1, activeProfileId: 'dev', profiles: [{ schemaVersion: 1, id: 'dev', scopeId: 'scope',
+      hardware: { gpus: 1, vramGbPerGpu: 32, arch: 'blackwell_consumer', topology: 'single' },
+      model: { modelId: 'local/chat', weightGb: 17.5, kvBytesPerTokenBf16: 65536, kvBytesPerTokenFp8: 32768, deltaNetStateGbPerSeq: 0.1 },
+      serving: { backend: 'vllm', openaiBaseUrl: 'http://127.0.0.1:8000/v1', weightQuant: 'nvfp4', kvDtype: 'fp8', gpuMemUtil: 0.92, overheadGb: 3 },
+      workload: { maxCtx: 163840, avgActiveCtx: 32768, roleMaxCtx: { brain: 163840, worker: 65536, auditor: 32768 } }, calibration: { computeCap: 8 } }] };
+    const { root, options } = await project({ inference_serving: serving });
+    const port = providerPanelPort(root, 'scope', { ...secrets().host, providerConnect: connectHost('ok') }, options, 'tr', errorText);
+    const kinds = (await port.inspect()).kinds;
+    // The configured server and the vLLM default are the same base: one row, the configured one.
+    expect(kinds.find(kind => kind.id === 'local-openai')!.endpointChoices).toEqual([
+      { id: 'configured', label: 'Bu kurulumun çıkarım sunucusu', url: 'http://127.0.0.1:8000' }, { id: 'ollama', label: 'Bu makinedeki Ollama', url: 'http://127.0.0.1:11434' }]);
+    expect(kinds.find(kind => kind.id === 'anthropic-api')!.endpointChoices).toEqual([]);
+    expect(port.endpoint('local-openai', 'http://localhost:9000/v1/')).toEqual({ ok: true, base: 'http://localhost:9000', check: 'http://localhost:9000/v1/models' });
+    expect(port.endpoint('local-openai', 'http://10.0.0.2:8000')).toEqual({ ok: false, reason: 'Düz http yalnız bu makinede kullanılabilir; https kullanın.' });
+  });
+});
+
 describe('/model source', () => {
   const catalog = { schemaVersion: 1, revision: 'catalog-1', providers: [{ id: 'local-openai', version: 1, models: ['chat', 'coder', 'fast', 'keyless'].map(id => ({ id, version: 1,
     nativeId: `native-${id}`, protocols: [{ family: 'openai-chat-completions', version: 'v1', capabilities: [] }] })) }] };
@@ -121,11 +147,16 @@ describe('/model source', () => {
     const view = await modelPanelSource(root, 'scope', host, options, 'en').inspect();
     expect(view.choices.map(choice => [choice.reference.modelId, choice.configured, choice.blocked])).toEqual([
       ['chat', true, null],
-      ['coder', false, 'Not activated in this scope. Activate it with: deckent models activate --scope scope --provider local-openai --provider-version 1 --model coder --model-version 1 --command-id <new id> --expected-revision 3 --binding-digest ' + 'd'.repeat(64) + ' --catalog-revision catalog-1'],
+      ['coder', false, 'Not activated in this scope.'],
       ['fast', false, 'Not connected in this scope: no invocation profile names this model. Connect the provider with /provider; binding a model to that connection is a governed configuration step.'],
       ['keyless', false, 'Its key DECKENT_MISSING_KEY is not in the secret store. Connect the provider with /provider.']]);
-    expect(view.choices[0]!.detail).toBe('native-chat · local-openai@1/chat@1 · ready (connection not probed)');
-    expect(view.defaultBlocked).toContain('open decision');
+    // Human words in the row; the exact reference and the fixing command only as dimmed lines of the focused row.
+    expect(view.choices.map(choice => choice.detail)).toEqual(['ready (connection not probed)', 'cannot be chosen now', 'cannot be chosen now', 'cannot be chosen now']);
+    expect(view.choices[0]!.exact).toBe('local-openai@1/chat@1 · native native-chat');
+    expect(view.choices[1]!.command).toBe('deckent models activate --scope scope --provider local-openai --provider-version 1 --model coder --model-version 1 --command-id <new id> '
+      + `--expected-revision 3 --binding-digest ${'d'.repeat(64)} --catalog-revision catalog-1`);
+    expect(view.choices[0]!.command).toBeNull();
+    expect(view.defaultBlocked).toBe('Coming soon.');
   });
   it('an empty catalog says models are never added from here', async () => {
     const { root, options } = await project({});

@@ -55,7 +55,7 @@ export function modelPanelSource(root: string, scopeId: string, host: Host, opti
         const reference: ModelReference = { providerId: provider.id, providerVersion: provider.version, modelId: model.id, modelVersion: model.version };
         const exact = `${provider.id}@${provider.version}/${model.id}@${model.version}`;
         const profile = profiles.find(item => sameReference(item.reference, reference));
-        let blocked: string | null = null, state = t('tui.model.state.ready', {}, locale);
+        let blocked: string | null = null, command: string | null = null;
         if (!profile) blocked = t('tui.model.reason.noProfile', {}, locale);
         else if (profile.credentialRef && names !== null && !names.includes(profile.credentialRef)) blocked = t('tui.model.reason.keyMissing', { name: profile.credentialRef }, locale);
         else if (host.inspectModelActivation) {
@@ -63,14 +63,15 @@ export function modelPanelSource(root: string, scopeId: string, host: Host, opti
             const activation = (await host.inspectModelActivation(root, { schemaVersion: 1, scopeId, reference }, options)).activation;
             if (activation?.state !== 'active') {
               const binding = host.inspectModelBinding ? await host.inspectModelBinding(root, reference, options).catch(() => null) : null;
-              blocked = t('tui.model.reason.inactive', { scope: scopeId, provider: provider.id, providerVersion: provider.version, model: model.id, modelVersion: model.version,
+              blocked = t('tui.model.reason.inactive', {}, locale);
+              command = t('tui.model.command.activate', { scope: scopeId, provider: provider.id, providerVersion: provider.version, model: model.id, modelVersion: model.version,
                 revision: activation?.revision ?? 0, digest: binding?.binding?.digest ?? '<digest>', catalog: binding?.catalogRevision ?? '<revision>' }, locale);
             }
           } catch (error) { blocked = t('tui.model.reason.activationUnread', { code: errorCode(error) }, locale); }
         }
-        if (blocked) state = t('tui.model.state.blocked', {}, locale);
-        return { reference, label: display.get(exact) ?? model.id, detail: t('tui.model.detail', { native: model.nativeId, reference: exact, state }, locale), group: provider.id,
-          blocked, configured: plan?.reference ? sameReference(plan.reference, reference) : false };
+        return { reference, label: display.get(exact) ?? model.id, detail: blocked ? t('tui.model.state.blocked', {}, locale) : t('tui.model.state.ready', {}, locale),
+          group: provider.id, blocked, exact: t('tui.model.exact', { reference: exact, native: model.nativeId }, locale), command,
+          configured: plan?.reference ? sameReference(plan.reference, reference) : false };
       })));
       return { title, choices, notes, defaultBlocked: t('tui.model.defaultPending', {}, locale) };
     },

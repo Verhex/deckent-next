@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { fillTemplate, span } from '#surfaces/core/terminal-render/index.js';
-import { ListPicker, PICKER_INITIAL, type PickerNode, type PickerResult, type PickerState, type PickerTree } from '#surfaces/core/terminal-picker/index.js';
+import { ListPicker, PICKER_INITIAL, pickerView, type PickerNode, type PickerResult, type PickerState, type PickerTree } from '#surfaces/core/terminal-picker/index.js';
 import { Window } from '#surfaces/core/terminal-window/index.js';
 import { usePickerRoom } from './lines.js';
 import type { ModelPanelChoice, ModelPanelLabels, ModelPanelPort, ModelPanelReference, ModelPanelView, PanelLabels, PanelNotice } from './contract.js';
@@ -37,6 +37,7 @@ export function ModelPanel({ port, labels, push, openApproval, onError, onClose 
   const [state, setState] = useState<PickerState>(PICKER_INITIAL);
   const exits = useRef({ onError, onClose });
   exits.current = { onError, onClose };
+  // Body: the focused model's exact reference and, for a locked one, the command that fixes it (both dimmed).
   const room = usePickerRoom(2);
   useEffect(() => {
     let live = true;
@@ -58,7 +59,10 @@ export function ModelPanel({ port, labels, push, openApproval, onError, onClose 
       if (outcome.status === 'approval-pending' && outcome.approvalId) openApproval(outcome.approvalId);
     }, error => { onError(error); onClose(); });
   };
-  return <Window title={[span(view.title)]} body={view.notes.map(note => ({ spans: [span(note, { role: 'warning' })] }))} hints={words.hints} position={labels.position}
+  const shown = pickerView(tree, state), focused = shown.stage === 'list' ? view.choices.find(item => keyOf(item.reference) === shown.rows[shown.pos]?.id) : undefined;
+  const body = [...view.notes.map(note => ({ spans: [span(note, { role: 'warning' as const })] })),
+    ...(focused ? [{ spans: [span(focused.exact, { role: 'muted' as const })] }, ...(focused.command ? [{ spans: [span(focused.command, { role: 'muted' as const })] }] : [])] : [])];
+  return <Window title={[span(view.title, { bold: true })]} body={body} hints={words.hints} position={labels.position}
     footerRows={room.footerRows} onInput={() => true}
     footer={focused => <ListPicker tree={tree} labels={labels.picker} active={focused} initial={state} onState={setState} maxRows={room.rows} onResult={chosen} />} />;
 }

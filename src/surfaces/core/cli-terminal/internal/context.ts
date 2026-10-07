@@ -33,7 +33,7 @@ type ServiceDescription = Awaited<ReturnType<DescribeService>> & Awaited<ReturnT
  */
 /** T4 PROVIDER-CONNECT: one `/provider` kind as the host's adapter data gives it (this unit never imports the adapter). */
 export type ProviderConnectKindView = Readonly<{ id: string; labelKey: string; available: boolean; endpointDefault: string | null; endpointEditable: boolean; keyRequired: boolean;
-  secretName: string | null }>;
+  secretName: string | null; probePath: string | null; endpointChoices: readonly Readonly<{ id: string; labelKey: string; url: string }>[] }>;
 /** The free check's typed outcome (no body, no key). `outcome` is one of the adapter's `PROVIDER_PROBE_OUTCOMES`. */
 export type ProviderConnectProbeView = Readonly<{ outcome: string; httpStatus: number | null; key: 'verified' | 'none' | 'unverified' }>;
 /** What the host binds for `/provider`: the kinds, the endpoint rule and the free check (a refusal before any request is a typed error with `code`). */
