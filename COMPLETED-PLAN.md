@@ -3,8 +3,8 @@
 ## TERMINAL-UX T3 — 2026-10-07 (wave/tui-3 entegrasyonu; bağımsız inceleme ve iniş bekliyor)
 
 - L0 TERMINAL-LAUNCH main'de (PR #40, Astra 2438). wave/tui-3'te birleşti: L3 picker çekirdeği, L2 onaylı config yazımı (ledger v48), L6 terminal test düzeltmeleri (B1/B2/B3/B5, B4 tanı eki), L1 MCP-CORE (HTTP, import, revoke, sandbox-net, öneri, havuz izolasyonu), L5 izleme pencereleri, L4 `/mode` `/config` `/mcp` pencereleri.
-- Entegrasyonda: `mcp-server` policy türü, first-run şablon v5 ve v4 göçü (`deckent init policy --upgrade`), güven grant'i `require-approval`+`modeEligible`, `/mcp` HTTP/revoke/grant/realm bağlantısı, `/mode show`, protokol v22, i18n oracle onarımı ve L1 CLI metinleri, alpha.11.
-- Açık: K1 tam kapanışı için `policy.administer` karar noktası, L5 kararları, B4 kök nedeni, PTY'de yeni pencerelerin kanıtı. Kanıt: dış `proof/TUI3-2026-10-07/INTEGRATION-review.md`.
+- Entegrasyonda: `mcp-server` policy türü, first-run şablon v5 (K1 seçenek A dahil) ve v4 göçü (`deckent init policy --upgrade`, ekleyerek; yönetilen eşi `deckent policy upgrade --template v5`), güven grant'i `require-approval`+`modeEligible`, `/mcp` HTTP/revoke/grant/realm bağlantısı, `/mode show`, protokol v22, i18n oracle onarımı ve L1 CLI metinleri, alpha.11.
+- Açık: L5 kararları, B4 kök nedeni, PTY'de yeni pencerelerin kanıtı. Kanıt: dış `proof/TUI3-2026-10-07/INTEGRATION-review.md`.
 
 ## Jev host soru/sonuç hijyeni — 2026-10-06 (owner kabulüyle uygulandı)
 

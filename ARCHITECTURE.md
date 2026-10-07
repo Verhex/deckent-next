@@ -509,11 +509,14 @@ Core contracts and never requires editing Core. Core-memory law 10 records this 
   sandbox → no start); `host` is explicit and warned. The client pool is keyed by scope view (scope id + project root) and launch identity
   and bounded by `mcp.maxServers`. `propose_mcp_server` (read tool) opens a human window in every mode, carries no secret or reference
   (Jev 30efcb91) and adds the server untrusted; `deckent mcp import` brings Claude Code/Desktop entries untrusted.
-- **First-run policy template v5 (Jev 04f75210, d3d1817d):** the installing owner holds `mcp-server` for every server in every scope, the
-  `mcp.tool.call` operation and the read tool `propose_mcp_server`. `deckent init policy --scope <id> --upgrade --preview|--apply` migrates only
-  an untouched v4 template of this (scope, person) through the authority documents' conditional writer; anything else is not rewritten and
-  the v5 rules are listed as the explicit step. Open decision (lead/owner): the trust grant needs `policy.administer` (and approval decide),
-  which the template does not grant, so on a pure v5 install the grant is refused (`administer`) and full-auto does not lower MCP calls yet.
+- **First-run policy template v5 (Jev 04f75210, d3d1817d; K1 option A Jev 3e7c5b38):** the installing owner holds `mcp-server` for every server in
+  every scope, the `mcp.tool.call` operation, the read tool `propose_mcp_server`, and in the installed scope the `policy.administer` operation
+  and approval inspect/decide (every change still passes card, audit and I2). Existing installations: `deckent init policy --scope <id> --upgrade
+  --preview|--apply [--expect <revision>]` (installer authority: the person the first-run rules name) adds the v5 rules that person lacks, removes
+  or replaces nothing (same-id rules with other content are kept and named as conflicts; hand-added MCP wire-name rules are named), writes on the
+  previewed revision through the archived authority writer and the configured layout; a second run is `current`; an untouched v4 becomes
+  exactly v5. `deckent policy upgrade --template v5 [--apply|--rollback]` applies the same plan through `policy.administer@1` (I2) where the
+  person already holds that authority.
 - **Terminal units:** `cli-terminal` (L0: the interactive launch, ledger ports and handler types moved out of `cli` behind ports; lazy
   `launchTerminal`); `terminal-picker` gains the pure `pickerReduce` core and `ListPicker` (L3); `terminal-panels` (L4: `/mode`, `/config`,
   `/mcp` bounded windows, presentation only, ports and words from `cli-terminal`); `/monitor`, `/watch-workers`, `/watch-runs`, `/tasks` are
