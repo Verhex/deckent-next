@@ -34,6 +34,7 @@ export function renderMcpStartNotice(notice: McpStartNotice, locale: Locale): st
 export function mcpGrantReasonText(reason: string, locale: Locale): string {
   if (reason === 'delegation') return t('mcp.grant.reason.delegation', {}, locale);
   if (reason === 'unsupported') return t('mcp.grant.reason.unsupported', {}, locale);
+  if (reason === 'administer') return t('mcp.grant.reason.administer', {}, locale);
   if (reason === 'principal') return t('mcp.grant.reason.principal', {}, locale);
   return reason;
 }

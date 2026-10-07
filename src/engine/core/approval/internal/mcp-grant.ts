@@ -2,8 +2,9 @@ import { authorityDocuments, delegationWithin, mcpGrantRuleIds, mcpToolGrantChan
 import { sha256 } from '#platform/index.js';
 import { administerOwnPolicyChange, type PersistentStandingDependencies } from './standing.js';
 
-/** Why a trusted server's tools got no grant: the approver does not hold this authority in that scope (`delegation`), the policy cannot
- * carry it (`unsupported`: v1 or unreadable), the change did not settle, or another refusal (its code). Trust itself is recorded either way. */
+/** Why a trusted server's tools got no grant: the approver does not hold this authority in that scope (`delegation`), may not change policy
+ * through the governed chain at all (`administer`), the policy cannot carry it (`unsupported`: v1 or unreadable), the change did not settle, or
+ * another refusal (its code). Trust itself is recorded either way. */
 export type McpToolGrantOutcome = { readonly status: 'granted' | 'revoked' | 'none' } | { readonly status: 'refused'; readonly reason: string };
 export interface McpToolGrantTarget { readonly scope: 'managed' | 'local' | 'project' | 'user'; readonly name: string }
 
@@ -56,5 +57,7 @@ export class McpToolGrants {
 }
 const refusal = (error: unknown) => {
   const code = (error as { code?: unknown } | null)?.code;
+  // The governed chain itself refused this person: no `policy.administer` operation, or no right to decide its own card (`administer`).
+  if (code === 'POLICY_DENIED' || code === 'APPROVAL_DENIED') return 'administer';
   return code === 'POLICY_DELEGATION_EXCEEDS' ? 'delegation' : error instanceof Error && error.message === 'NOT_SETTLED' ? 'not-settled' : typeof code === 'string' ? code : 'failed';
 };
