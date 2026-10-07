@@ -47,21 +47,16 @@ describe('slash palette keys through the real workline', () => {
     expect(view.stdout.text).not.toContain('UNKNOWN');
   });
 
-  it('a command that takes an argument completes to "/cmd " and waits; the next Enter runs it with the argument', async () => {
+  it('Enter on a command that has a registry argument runs it at once; the palette never waits for typed text (SLASH-WINDOWS)', async () => {
     const inspected: string[] = [];
     const view = await open({ ledger: { workerHeartbeatMs: 60_000, inspectWorkers: async () => ({ schemaVersion: 1, scopeId: 's', sources: [] }) as never,
       inspectRun: async runId => { inspected.push(runId); return null; } } as never });
     await view.type('/ru');
     await until(() => view.stdout.text.includes('RUN-DESC') || view.stdout.text.includes('> /run'), 'palette');
     await view.type('\r');
-    await until(() => view.stdout.text.includes('> /run |'), 'completed, waiting');
-    await settle(30);
-    expect(view.stdout.text).not.toContain('UNKNOWN');
-    expect(view.stdout.text).not.toContain('USAGE');
+    await until(() => view.stdout.text.includes('USAGE'), 'bare /run answered at once');
+    expect(view.stdout.text).not.toContain('> /run |');
     expect(inspected).toEqual([]);
-    await view.type('r-1\r');
-    await until(() => inspected.length === 1, 'run inspected');
-    expect(inspected).toEqual(['r-1']);
   });
 
   it('Tab completes, Esc closes the palette, and Enter without suggestions sends the text as typed', async () => {

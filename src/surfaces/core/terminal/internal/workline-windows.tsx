@@ -1,0 +1,118 @@
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import { ListPicker, pickerView, PICKER_INITIAL, type PickerLabels, type PickerState, type PickerTree } from '#surfaces/core/terminal-picker/index.js';
+import { Window, type WindowLine } from '#surfaces/core/terminal-window/index.js';
+import { usePickerRoom } from '#surfaces/core/terminal-panels/index.js';
+import { fillTemplate, span } from '#surfaces/core/terminal-render/index.js';
+import type { ScratchView } from '#domain/index.js';
+import type { SlashCommand } from '#surfaces/core/terminal-kit/index.js';
+
+/**
+ * SLASH-WINDOWS (owner 2026-10-08): the small windows of the session and palette commands (`/reasoning`, `/scratch`, an unknown command).
+ * Their presence in `WorklineLabels.windows` is what turns the typed forms off in the rich terminal; without it the commands keep their
+ * text form (TERM=dumb, line mode). Every word is catalog text the composition resolved.
+ */
+export interface SlashWindowLabels {
+  readonly picker: PickerLabels;
+  /** `{from}`, `{to}`, `{total}` */
+  readonly position: string;
+  /** Key hints under a list window and under an information window. */
+  readonly hints: string; readonly infoHints: string;
+  readonly reasoning: { readonly title: string; readonly thinkingOn: string; readonly thinkingOff: string; readonly previewOn: string; readonly previewOff: string;
+    readonly current: string; readonly thinkingOnDetail: string; readonly thinkingOffDetail: string; readonly previewOnDetail: string; readonly previewOffDetail: string;
+    /** Status strip words. */
+    readonly statusOn: string; readonly statusOnHidden: string; readonly statusOff: string };
+  readonly scratch: { readonly title: string; /** `{count}` `{bytes}` `{limit}` */ readonly status: string; readonly folder: string;
+    /** `{count}` more files than are listed */ readonly more: string; readonly empty: string; /** `{bytes}` */ readonly fileDetail: string;
+    readonly clear: string; readonly clearDetail: string; readonly clearTitle: string; /** `{count}` `{bytes}` `{path}` */ readonly clearBody: string;
+    readonly clearPrompt: string; readonly pathTitle: string };
+  readonly unknown: { readonly title: string; /** `{command}` */ readonly body: string; readonly closest: string; readonly none: string };
+}
+
+/** Neutral English tests and a missing catalog fall back to; the composition always passes the catalog's words. */
+export const NEUTRAL_PICKER_LABELS: PickerLabels = { hintList: '↑↓ choose · Enter select · Esc close', hintFilter: 'Enter select · Esc clear filter', hintScope: 'Enter select · Esc back',
+  filter: 'Filter: {query}', noMatches: 'No match', empty: 'Nothing to choose', blocked: 'locked', position: '{from}-{to}/{total}' };
+
+export type SlashPickSpec = Readonly<{
+  title: string; status?: string; tree: PickerTree;
+  /** Header rows; the focused row's id is passed so a window can show a detail of it. */
+  body?: (focused: string | null) => readonly WindowLine[]; bodyRows?: number; hints: string;
+  /** A read-only window: no list, Esc, Enter or `q` close it. */
+  info?: true;
+}>;
+
+function SlashPickWindow({ spec, labels, onAnswer }: { readonly spec: SlashPickSpec; readonly labels: SlashWindowLabels; readonly onAnswer: (id: string | null) => void }): ReactNode {
+  const [state, setState] = useState<PickerState>(PICKER_INITIAL);
+  const room = usePickerRoom(spec.bodyRows ?? 2);
+  const shown = pickerView(spec.tree, state), focused = shown.rows[shown.pos]?.id ?? null;
+  const answered = useRef(false);
+  const answer = (id: string | null) => { if (answered.current) return; answered.current = true; onAnswer(id); };
+  if (spec.info) return <Window title={[span(spec.title)]} body={[...(spec.body?.(null) ?? [])]} hints={spec.hints} position={labels.position} onClose={() => answer(null)}
+    onInput={(input, key) => { if (key.return || input === 'q') { answer(null); return true; } return false; }} />;
+  return <Window title={[span(spec.title)]} {...(spec.status ? { status: [span(spec.status)] } : {})} body={[...(spec.body?.(focused) ?? [])]} hints={spec.hints}
+    position={labels.position} footerRows={room.footerRows} onClose={() => answer(null)} onInput={() => true}
+    footer={focusedWindow => <ListPicker tree={spec.tree} labels={labels.picker} active={focusedWindow} initial={state} onState={setState} maxRows={room.rows}
+      onResult={result => answer(result.kind === 'selected' ? result.id : null)} />} />;
+}
+
+/**
+ * One list window at a time, asked from inside a slash command: `ask` resolves the chosen row id (null: Esc), so the command keeps the
+ * input line (queued lines wait) exactly as a panel-controller picker does. `open` is true while the window is on screen.
+ */
+export function useSlashWindow(labels: SlashWindowLabels | undefined) {
+  const [open, setOpen] = useState<{ readonly spec: SlashPickSpec; readonly resolve: (id: string | null) => void } | null>(null);
+  const pending = useRef<((id: string | null) => void) | null>(null);
+  useEffect(() => () => { pending.current?.(null); pending.current = null; }, []);
+  const ask = useCallback((spec: SlashPickSpec) => new Promise<string | null>(resolve => {
+    const settle = (id: string | null) => { pending.current = null; setOpen(null); resolve(id); };
+    pending.current = settle; setOpen({ spec, resolve: settle });
+  }), []);
+  const element = open && labels ? <SlashPickWindow key={open.spec.title} spec={open.spec} labels={labels} onAnswer={open.resolve} /> : null;
+  return { ask, element, open: open !== null };
+}
+
+const mark = (text: string, current: boolean, label: string) => current ? `${text} · ${label}` : text;
+
+/** `/reasoning`: model thinking on / off and the live preview shown / hidden; the row of each state in force is marked. */
+export function reasoningSpec(words: SlashWindowLabels, state: Readonly<{ thinking: boolean; preview: boolean }>): SlashPickSpec {
+  const r = words.reasoning;
+  return { title: r.title, hints: words.hints, bodyRows: 0, tree: { title: r.title, items: [
+    { id: 'thinking-on', label: mark(r.thinkingOn, state.thinking, r.current), detail: r.thinkingOnDetail },
+    { id: 'thinking-off', label: mark(r.thinkingOff, !state.thinking, r.current), detail: r.thinkingOffDetail },
+    { id: 'preview-on', label: mark(r.previewOn, state.preview, r.current), detail: r.previewOnDetail },
+    { id: 'preview-off', label: mark(r.previewOff, !state.preview, r.current), detail: r.previewOffDetail },
+  ] } };
+}
+export type ReasoningChoice = 'thinking-on' | 'thinking-off' | 'preview-on' | 'preview-off';
+export function isReasoningChoice(id: string | null): id is ReasoningChoice {
+  return id === 'thinking-on' || id === 'thinking-off' || id === 'preview-on' || id === 'preview-off';
+}
+/** The status strip's reasoning words (always shown, droppable on a narrow terminal). */
+export function reasoningStatus(words: SlashWindowLabels | undefined, state: Readonly<{ thinking: boolean; preview: boolean }>): string | undefined {
+  if (!words) return undefined;
+  return !state.thinking ? words.reasoning.statusOff : state.preview ? words.reasoning.statusOn : words.reasoning.statusOnHidden;
+}
+
+export const SCRATCH_LISTED = 20;
+/** `/scratch`: the area's files (newest first); Enter on a file names its path, the last row clears the area after a confirmation. */
+export function scratchSpec(words: SlashWindowLabels, view: ScratchView): SlashPickSpec {
+  const s = words.scratch, shown = view.files.slice(0, SCRATCH_LISTED);
+  const files = shown.map((file, index) => ({ id: `file:${index}`, label: file.path, detail: fillTemplate(s.fileDetail, { bytes: file.bytes }) }));
+  const more = view.files.length > shown.length ? [{ id: 'more', label: fillTemplate(s.more, { count: view.files.length - shown.length }) }] : [];
+  const clear = view.files.length > 0 ? [{ id: 'clear', label: s.clear, detail: s.clearDetail }] : [];
+  return { title: s.title, status: fillTemplate(s.status, { count: view.files.length, bytes: view.bytes, limit: view.limits.sessionMaxBytes }), hints: words.hints, bodyRows: 2,
+    body: () => [{ label: [span(s.folder, { bold: true })], spans: [span(view.path)], exact: true }, ...(view.files.length ? [] : [{ spans: [span(s.empty)] }])],
+    tree: { title: s.title, items: [...files, ...more, ...clear] } };
+}
+
+/** A read-only window naming one file's full path (`/scratch`, Enter on a file). */
+export function pathSpec(words: SlashWindowLabels, path: string): SlashPickSpec {
+  return { title: words.scratch.pathTitle, hints: words.infoHints, info: true, tree: { title: words.scratch.pathTitle, items: [] }, body: () => [{ spans: [span(path)], exact: true }] };
+}
+
+/** The unknown-command window: the commands closest to what was typed (prefix, then subsequence) to pick one. */
+export function unknownCommandSpec(words: SlashWindowLabels, command: string, matches: readonly SlashCommand[], describe: (command: SlashCommand) => string): SlashPickSpec {
+  const u = words.unknown;
+  return { title: u.title, hints: matches.length ? words.hints : words.infoHints, bodyRows: 2,
+    body: () => [{ spans: [span(fillTemplate(u.body, { command: `/${command}` }), { bold: true })] }, { spans: [span(matches.length ? u.closest : u.none)] }],
+    tree: { title: u.title, items: matches.map(match => ({ id: match.name, label: `/${match.name}`, detail: describe(match) })) } };
+}

@@ -28,6 +28,8 @@ export interface ModePanelLabels {
   readonly current: string;
   /** Why a row cannot be chosen: no company grant for full access; the company left full-auto out; a v1 policy has no modes (`{mode}`). */
   readonly fullAccessGrant: string; readonly fullAutoOff: string; readonly unsupported: string;
+  /** SLASH-WINDOWS: the header row of the window (`/mode show` moved here): `now` has `{mode}`; `inert` says no rule is mode-eligible in this scope. */
+  readonly now?: string; readonly inert?: string;
 }
 
 export type ConfigPanelLayer = 'project' | 'global';

@@ -1413,7 +1413,7 @@ describe.skipIf(process.platform !== 'linux')('composer @file and slash keys thr
     } finally { view.instance.unmount(); }
   }, 30_000);
 
-  it('runs /help on Enter and completes a command that takes an argument, then runs it with the argument', async () => {
+  it('runs /help on Enter and /resume on Enter (its picker opens at once), then resumes the chosen conversation', async () => {
     const { f, props } = await workspace();
     await mkdir(join(f.data, 'sessions'), { mode: 0o700 });
     const sessions = bindSessionScope(openTerminalSessionStore(join(f.data, 'sessions')), 'scope');
@@ -1428,10 +1428,10 @@ describe.skipIf(process.platform !== 'linux')('composer @file and slash keys thr
       await typeInto(view, '/res');
       await until(() => view.stdout.text.includes('> /resume'), 'palette');
       await typeInto(view, '\r');
-      await until(() => view.stdout.text.includes('> /resume |'), 'completed and waiting');
-      await typeInto(view, '11111111-2222-4333-8444-555555555555\r');
-      await until(() => view.stdout.text.includes('RESUMED 2 11111111'), 'resumed with the argument');
-      // A fully typed name runs as typed: /resume alone lists the sessions.
+      // SLASH-WINDOWS: Enter on the palette row runs `/resume` at once (no completion that waits); the picker lists the conversations.
+      await until(() => view.stdout.text.includes('SESSION 1 11111111 2 earlier'), 'picker opened by the first Enter');
+      await typeInto(view, '\r');
+      await until(() => view.stdout.text.includes('RESUMED 2 11111111'), 'resumed from the picker');
       await typeInto(view, '/clear\r');
       await until(() => view.stdout.text.includes('NEW-SESSION'), 'new session');
       await typeInto(view, '/resume\r');
