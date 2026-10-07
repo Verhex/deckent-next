@@ -939,7 +939,9 @@
         "src/surfaces/core/terminal-kit",
         "src/surfaces/core/terminal-window",
         "src/surfaces/core/terminal-picker",
-        "src/platform/core/common"
+        "src/platform/core/common",
+        "src/domain/core/agent-turn",
+        "src/engine/core/approval"
       ],
       "plan": "SURFACES"
     },
@@ -1744,7 +1746,8 @@
         "src/domain/core/effect",
         "src/engine/core/effect",
         "src/domain/core/audit",
-        "src/platform/core/redaction"
+        "src/platform/core/redaction",
+        "src/domain/core/agent-turn"
       ],
       "plan": "SECURITY"
     },
@@ -2014,7 +2017,8 @@
         "src/engine/core/approval",
         "src/engine/core/audit",
         "src/platform/core/clock",
-        "src/platform/core/config"
+        "src/platform/core/config",
+        "src/domain/core/agent-turn"
       ],
       "plan": "SURFACES"
     },

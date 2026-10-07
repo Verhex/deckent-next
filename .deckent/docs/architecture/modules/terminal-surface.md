@@ -135,8 +135,12 @@ Market notes live outside the repo (`/home/alperen/deckent-refactor-work/proof/T
   as the approver's own words, JSON-quoted, at most `approvals.approverNoteMaxChars` code points (default 500; a cut says so) and through
   the model-ingress projection (hidden code points marked and recorded, a hidden payload withheld). No typed reason: the default sentence,
   unmarked, and the model's text is byte-identical to before. MCP tool calls share the turn's approval port; the MCP trust card has no
-  model-facing result, so its note stays in the record only. Structured sandbox posture and turn-card reversibility are not on the wire (L1 review
-  decision points).
+  model-facing result, so its note stays in the record only. **REVERSIBILITY** (owner 2026-10-07, Jev 8cc5e230; v21 `approval.requested.undo`):
+  the producer names the card's undo word by what the call is (`agentToolUndo`, engine approval; vocabulary `AGENT_TOOL_UNDO`, domain):
+  edit/write `unverified` (no Core tool keeps the earlier content), shell `may-change`, destructive shell `irreversible`, fetch/read
+  `no-change`, MCP from the pinned definition's `readOnlyHint`/`destructiveHint` ("the server says …", `server-silent` without one); never
+  "reversible" without evidence (only a catalog operation's declared compensation says yes). A stored card without the word gets the same
+  classification from its tool and cell (never for MCP: "not declared"). Structured sandbox posture is not on the wire yet (L1 D2).
 - **Local/free models** use `openai-chat-http` v4 with an operator-declared `operator-static` tariff (v1: zero rates only).
   The quote is reserved against the scope budget and a responded call settles `settled-local 0` in the spend ledger;
   there is no unmetered bypass class. Positive chargeback rates need a separate measurement basis.

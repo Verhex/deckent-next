@@ -1,4 +1,4 @@
-import { APPROVAL_ASSURANCE, HARD_FLOOR_CARD_CELLS, approvalFacts, approvalSubject, identitySchema, policySchema, type ApprovalFacts, type ApprovalRequest,
+import { APPROVAL_ASSURANCE, HARD_FLOOR_CARD_CELLS, type AgentToolUndo, type AgentToolUndoKind, type McpToolChangeHints, approvalFacts, approvalSubject, identitySchema, policySchema, type ApprovalFacts, type ApprovalRequest,
   type ApprovalSubject, type OperationDescriptor } from '#domain/index.js';
 import { ApprovalAssuranceRegistry, DecisionCapabilityRing, type ApprovalAssuranceProducer } from '#engine/core/authentication/index.js';
 import type { AgentToolCallCell } from '#engine/core/policy/index.js';
@@ -49,6 +49,17 @@ export function agentToolApprovalFacts(policy: unknown, scopeId: string, cell: s
   return Object.freeze({ risk, reversibility: null, onExpiry: 'nothing-runs' as const, requiredAssurance: minimumApprovalAssurance(policy, scopeId, 'agent-tool-call', risk) });
 }
 export type AgentToolApprovalFacts = ReturnType<typeof agentToolApprovalFacts>;
+/** REVERSIBILITY (owner 2026-10-07): the card's undo word for a tool call by what it is (vocabulary and evidence rule: `AGENT_TOOL_UNDO`). */
+export function agentToolUndo(kind: AgentToolUndoKind, cell: string | null, hints: McpToolChangeHints | null = null): AgentToolUndo {
+  switch (kind) {
+    case 'edit': return 'unverified';
+    case 'shell': return cell === 'shell-destructive' ? 'irreversible' : 'may-change';
+    case 'read': case 'fetch': return 'no-change';
+    case 'mcp': return hints?.readOnly === true ? 'server-read-only' : hints?.destructive === true ? 'server-destructive'
+      : hints?.destructive === false ? 'server-additive' : 'server-silent';
+  }
+}
+
 /** Facts of a tool-call card whose producer cannot name the cell (an MCP trust card): the one source of both its record and its stream event. */
 export const undeclaredAgentToolApprovalFacts = (scopeId: string) => agentToolApprovalFacts(null, scopeId, null);
 /** Facts of one catalog operation card, from its descriptor: effect class and authority surface, compensation or none/irreversible. */

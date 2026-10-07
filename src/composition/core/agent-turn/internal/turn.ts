@@ -5,7 +5,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { chatTurnCancellationSchema, chatTurnCommandSchema, modelInvocationProfileSchema, type AgentToolApprovalSettlement, type AgentToolSpec, type AgentTurnMessage,
   type AgentTurnStreamEvent, type ChatTurnCancellationResult, type ChatTurnResult, type JsonObject, type ModelInvocationCommand } from '#domain/index.js';
 import { SessionStanding, SessionApprovalAnswers, agentCallPermissionMode, agentToolApprovalSummary, agentCompactionInstruction, AGENT_TURN_ANSWER_MAX_BYTES, APPROVAL_PREVIEW_MAX_BYTES, AgentToolPolicyAuthorization, AgentTurnStoreError, admitFullAccessTurn,
-  agentCompactionTranscript, agentToolApprovalFacts, agentToolApprovalNote, agentTurnAdmission, awaitAgentToolApproval, boundApprovalPreview, createTurnDecisionCapabilities, parseAgentCompactionSummary,
+  agentCompactionTranscript, agentToolApprovalFacts, agentToolApprovalNote, agentToolUndo, agentTurnAdmission, awaitAgentToolApproval, boundApprovalPreview, createTurnDecisionCapabilities, parseAgentCompactionSummary,
   renderAgentTurnSystemPrompt, requestAgentToolApproval, runDurableAgentTurn, withAgentTurnSystemPrompt, projectModelIngressField, type AgentRoundOutcome, type AgentTurnPorts, type TurnDecisionCapabilities,
   type ModelInvocationDelivery } from '#engine/index.js';
 import { t, globalStateRoot, ErrorRegistry, prepareProductDirectory, resolveLocale, SystemTrustedClock, type ConfigLoadOptions } from '#platform/index.js';
@@ -165,6 +165,12 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
 
     const mcps = (tool: AgentToolSpec) => mcp !== null && tool.toolClass === 'mcp' && mcp.owns(tool.name);
     const describe = (tool: AgentToolSpec, args: Record<string, unknown>) => mcps(tool) ? mcp!.display(tool.name) : describeAgentCall(tool, args);
+    /** T2-FOLLOWUP REVERSIBILITY: what the card may say about undoing the call, by what it is. */
+    const cardFacts = (tool: AgentToolSpec, facts: { readonly risk: { readonly source: string; readonly cell?: string } | null }) => {
+      const kind = tool.toolClass === 'shell' && shell ? 'shell' as const : tool.toolClass === 'edit' ? 'edit' as const : fetches(tool) ? 'fetch' as const : mcps(tool) ? 'mcp' as const
+        : tool.toolClass === 'read' ? 'read' as const : null;
+      return kind ? { undo: agentToolUndo(kind, facts.risk?.source === 'cell' ? facts.risk.cell ?? null : null, kind === 'mcp' ? mcp!.hints(tool.name) : null) } : {};
+    };
     const approvals = createAgentCallApprovals({ context, clock, scopeId: command.scopeId, turnId: command.turnId, describe });
     // One permission decision per call (T-L4 slice 4a): strict policy, floor raise and permission-mode lowering, again at the effect.
     const decisions = createAgentCallDecisions({ context, clock, scopeId: command.scopeId, turnId: command.turnId, edits: editsOf, shell, approvals, fetch: fetcher, mcp, fullAccess, standing: { memory: host.answers.memory, session: SessionStanding.sessionKey(command.scopeId, context.principal, command.sessionId ?? command.turnId) } });
@@ -239,7 +245,7 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
             requiredAssurance: facts.requiredAssurance, summary: record.request.summary, preview: projectModelIngressField(((diff !== undefined ? boundApprovalPreview(diff, kept)
               : (tool.toolClass === 'shell' ? shell?.preview(tool.name, args) : fetches(tool) ? fetcher?.preview(args) : mcps(tool) ? boundApprovalPreview(mcp!.preview(tool.name, args)!)
                 : undefined) ?? chatTurnApprovalPreview(tool.name, args)))).modelText,
-            expiresAt: record.request.expiresAt, ...(answer && offer ? { standing: { scopes: ['session'] as const, pattern: offer.pattern } } : {}) });
+            expiresAt: record.request.expiresAt, ...(answer && offer ? { standing: { scopes: ['session'] as const, pattern: offer.pattern } } : {}), ...cardFacts(tool, facts) });
           requested = { approvalId: record.request.approvalId };
           const decided = await awaitAgentToolApproval(journal.store, integrity, record, clock, approvalSignal, 250, started);
           let outcome = decided;

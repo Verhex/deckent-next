@@ -302,6 +302,23 @@ describe('runtime protocol v15 composer @file operations', () => {
     expect(runtimeServiceRequestSchema.safeParse({ ...inspect, schemaVersion: 21 }).success).toBe(true);
     expect(runtimeServiceLifecycleRequestSchema.safeParse({ schemaVersion: 20, requestId: 'r', operation: 'describeService', input: {} }).success).toBe(true);
   });
+
+  it('T2-FOLLOWUP in v21: session full access, the approver-note mark, and the card undo word as a strict typed field; none before v21', () => {
+    const set = { schemaVersion: 21, requestId: 'request-1', operation: 'setPermissionMode', delivery: { maxResultBytes: 4096 },
+      input: { schemaVersion: 1, scopeId: 'scope-1', mode: 'full-access', expectedRevision: 'p1+b1', session: { sessionId: 'conversation-1' } } };
+    expect(runtimeServiceRequestSchema.parse(set)).toEqual(set);
+    for (const bad of [{ ...set.input, mode: 'full-auto' }, { ...set.input, session: { sessionId: 'conversation-1', persist: true } }, { ...set.input, askEdits: true }])
+      expect(runtimeServiceRequestSchema.safeParse({ ...set, input: bad }).success).toBe(false);
+    expect(runtimeServiceRequestSchema.safeParse({ ...set, schemaVersion: 20 }).success).toBe(false);
+    const decide = { schemaVersion: 1, scopeId: 's', approvalId: 'a1', commandId: 'c1', expectedRevision: 0, decision: 'deny', reason: 'use b.ts', approverNote: true };
+    expect(approvalCommandSchema.parse(decide)).toEqual(decide);
+    expect(approvalCommandSchema.safeParse({ ...decide, approverNote: false }).success).toBe(false);
+    const base = { schemaVersion: 21, requestId: 'request-1', kind: 'event', sequence: 0 } as const;
+    const card = { kind: 'approval.requested', callId: 'c1', approvalId: 'a1', revision: 0, summary: 'run_shell · make', preview: 'p', expiresAt: 10, undo: 'may-change' } as const;
+    expect(runtimeServiceEventFrameSchema.parse({ ...base, events: [card] })).toEqual({ ...base, events: [card] });
+    expect(runtimeServiceEventFrameSchema.safeParse({ ...base, events: [{ ...card, undo: 'reversible' }] }).success).toBe(false);
+    expect(runtimeServiceEventFrameSchema.safeParse({ ...base, schemaVersion: 20, events: [card] }).success).toBe(false);
+  });
 });
 
 describe('runtime protocol v16: a chat turn may ask for model thinking off (OPEN-REASONING-FILE)', () => {

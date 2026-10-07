@@ -429,6 +429,13 @@
   "terminal.approval.window.undo.none": "Geri alma işlemi tanımlı değil",
   "terminal.approval.window.undo.compensation": "Evet — telafi işlemi var (Ayrıntı'da)",
   "terminal.approval.window.undo.unknown": "araç bildirmedi",
+  "terminal.approval.window.undo.unverified": "Kontrol edilmedi — Deckent önceki içeriği saklamıyor",
+  "terminal.approval.window.undo.may-change": "Bilinmiyor (sistemi değiştirebilir)",
+  "terminal.approval.window.undo.no-change": "Geri alınacak bir şey yok — değişiklik yapmaz",
+  "terminal.approval.window.undo.server-read-only": "Sunucu bildiriyor: değişiklik yapmaz (salt okuma)",
+  "terminal.approval.window.undo.server-additive": "Sunucu bildiriyor: yalnız ekler, silmez ya da üzerine yazmaz",
+  "terminal.approval.window.undo.server-destructive": "Sunucu bildiriyor: silebilir ya da üzerine yazabilir (yıkıcı)",
+  "terminal.approval.window.undo.server-silent": "Sunucu bildirmiyor",
   "terminal.approval.window.time": "{clock} içinde karar verilmezse hiçbir şey çalışmaz",
   "terminal.approval.window.expired": "Süre doldu — hiçbir şey çalışmadı",
   "terminal.approval.window.ageUnknown": "bilinmeyen bir süredir",
@@ -455,6 +462,6 @@
   "terminal.approval.window.keys.reason": "Tab gerekçe",
   "terminal.approval.window.keys.scroll": "↑↓ kaydır",
   "terminal.approval.window.reason.label": "Gerekçe:",
-  "terminal.approval.window.reason.hint": "Gerekçenizi yazın · Enter ya da Tab bitir · Esc geri · kararınızla birlikte kaydedilir",
+  "terminal.approval.window.reason.hint": "Gerekçenizi yazın · Enter ya da Tab bitir · Esc geri · kararınızla kaydedilir ve modele notunuz olarak iletilir",
   "terminal.approval.window.reason.empty": "(yok)"
 }

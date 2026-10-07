@@ -15,7 +15,7 @@ const NOW = 1_800_000_000_000;
 const base = (patch: Partial<WorklineApproval>): WorklineApproval => ({ approvalId: '7a48a7f0-164d-4a2f-9353-3c3079009bec', runId: '-', taskId: '-', requester: '-', revision: 0,
   status: 'pending', decision: null, expiresAt: NOW + 272_000, summary: 'run_shell · npm test · 0123456789ab', ...patch });
 const KINDS = {
-  shell: { approval: base({ tool: 'run_shell', target: 'rm -rf build && npm test', risk: 'shell-destructive', summary: 'run_shell · rm -rf build && npm test · 0123456789ab' }),
+  shell: { approval: base({ tool: 'run_shell', target: 'rm -rf build && npm test', risk: 'shell-destructive', summary: 'run_shell · rm -rf build && npm test · 0123456789ab'}),
     preview: '$ rm -rf build && npm test\nrisk: destructive (rm -rf)\nRuns in the bubblewrap sandbox: the project is writable, .git is read-only, no network.' },
   edit: { approval: base({ tool: 'edit_file', target: 'src/x.ts', risk: 'edit', summary: 'edit_file · src/x.ts · 0123456789ab' }),
     preview: '(+3 −1 lines)\n--- a/src/x.ts\n+++ b/src/x.ts\n@@ -1,2 +1,4 @@\n-const limit = 10;\n+const limit = 20;\n+const extra = 1;\n+const more = 2;\n export {};' },
@@ -63,6 +63,7 @@ describe('approval window fields per tool kind (catalog EN and TR)', () => {
     const text = approvalCardLines(KINDS.shell.approval, workSurfaceLabels('tr'), KINDS.shell.preview, 'rm -rf build && npm test', {}, NOW).join('\n');
     expect(text).toContain('Kabuk komutu çalıştırılacak'); expect(text).toContain('rm -rf build && npm test');
     expect(text).toContain('bubblewrap'); expect(text).toContain('Silme içeriyor (geri alınamaz)');
+    expect(text).toContain('Hayır — geri alınamaz');
     expect(text).toContain('Kural: silme içeren kabuk komutları her zaman onay ister · Mod: bilinmiyor');
     expect(text).toContain('4:32 içinde karar verilmezse hiçbir şey çalışmaz');
     expect(text).toContain(w.whereUnknown);
@@ -231,5 +232,45 @@ describe('the decision reason reaches the decision command', () => {
     await ports.decideApproval!({ approvalId: 'a', revision: 0 }, 'deny', undefined, '  stale build  ').catch(() => undefined);
     await ports.decideApproval!({ approvalId: 'a', revision: 0 }, 'deny').catch(() => undefined);
     expect(sent.map(item => item['reason'])).toEqual(['stale build', 'Denied by the operator in the Deckent terminal.']);
+  });
+});
+
+// T2-FOLLOWUP REVERSIBILITY (owner 2026-10-07, Jev 8cc5e230): the "can it be undone" field is filled by what the call is, cautiously and never
+// "reversible" without evidence, EN and TR.
+describe('approval window: reversibility by call kind (T2-FOLLOWUP)', () => {
+  const undoOf = (approval: WorklineApproval, locale: 'en' | 'tr') => {
+    const w = workSurfaceLabels(locale).approvalWindow;
+    const row = approvalCardLines(approval, workSurfaceLabels(locale), undefined, null, {}, NOW).find(line => line.startsWith(w.field.undo))!;
+    return row.slice(w.field.undo.length).trim();
+  };
+  it('words every kind in EN and TR: edit unverified, shell unknown, destructive shell irreversible, fetch no change, MCP as its server declares', () => {
+    const cases: [Partial<WorklineApproval>, string, string][] = [
+      [{ tool: 'edit_file', target: 'a', risk: 'edit', undo: 'unverified' }, 'Not checked — Deckent does not keep the earlier content', 'Kontrol edilmedi — Deckent önceki içeriği saklamıyor'],
+      [{ tool: 'write_file', target: 'a', risk: 'edit-floor' }, 'Not checked — Deckent does not keep the earlier content', 'Kontrol edilmedi — Deckent önceki içeriği saklamıyor'],
+      [{ tool: 'run_shell', target: 'npm test', risk: 'shell-other-modify', undo: 'may-change' }, 'Unknown (it can change the system)', 'Bilinmiyor (sistemi değiştirebilir)'],
+      [{ tool: 'run_shell', target: 'rm -rf b', risk: 'shell-destructive', undo: 'irreversible' }, 'No — it cannot be undone', 'Hayır — geri alınamaz'],
+      [{ tool: 'fetch_url', target: 'https://x.org', risk: 'fetch-unlisted', undo: 'no-change' }, 'Nothing to undo — it changes nothing', 'Geri alınacak bir şey yok — değişiklik yapmaz'],
+      [{ tool: 'mcp__docs__query', target: null, risk: 'mcp-call', undo: 'server-read-only' }, 'The server says it changes nothing (read-only)', 'Sunucu bildiriyor: değişiklik yapmaz (salt okuma)'],
+      [{ tool: 'mcp__fs__append', target: null, risk: 'mcp-call', undo: 'server-additive' }, 'The server says it only adds, never deletes or overwrites', 'Sunucu bildiriyor: yalnız ekler, silmez ya da üzerine yazmaz'],
+      [{ tool: 'mcp__fs__rm', target: null, risk: 'mcp-floor', undo: 'server-destructive' }, 'The server says it can delete or overwrite (destructive)', 'Sunucu bildiriyor: silebilir ya da üzerine yazabilir (yıkıcı)'],
+      [{ tool: 'mcp__x__y', target: null, risk: 'mcp-call', undo: 'server-silent' }, 'The server does not say', 'Sunucu bildirmiyor'],
+      // A stored MCP card (no producer word): the server's declaration is not known here, so it is "not declared", never guessed.
+      [{ tool: 'mcp__x__y', target: null, risk: 'mcp-call' }, 'not declared by the tool', 'araç bildirmedi'],
+      // A catalog operation keeps its sealed facts.
+      [{ undo: 'ops.rollback@1' }, 'Yes — a compensating operation exists (see Details)', 'Evet — telafi işlemi var (Ayrıntı\'da)'],
+    ];
+    for (const [patch, en, tr] of cases) {
+      expect(undoOf(base(patch), 'en'), JSON.stringify(patch)).toBe(en);
+      expect(undoOf(base(patch), 'tr'), JSON.stringify(patch)).toBe(tr);
+    }
+    // Never "reversible" for a tool call: no tool-call word in either catalog claims it.
+    for (const locale of ['en', 'tr'] as const) {
+      const words = workSurfaceLabels(locale).approvalWindow.undo;
+      for (const key of ['unverified', 'may-change', 'irreversible', 'no-change', 'server-read-only', 'server-additive', 'server-destructive', 'server-silent'] as const) {
+        expect(words[key]).not.toMatch(/^(Yes|Evet)\b/u);
+      }
+    }
+    // A tool-call word never adds a compensation detail line.
+    expect(approvalCardLines(base(cases[0]![0]), workSurfaceLabels('en'), undefined, null, {}, NOW).join('\n')).not.toContain(workSurfaceLabels('en').approvalWindow.detail.compensation.split('{')[0]!);
   });
 });

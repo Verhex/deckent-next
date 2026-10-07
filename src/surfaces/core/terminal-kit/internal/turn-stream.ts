@@ -1,5 +1,5 @@
 import type { PanelTurnBinding } from './panel-contract.js';
-import type { AgentContextQuality, AgentToolApprovalSettlement, AgentToolCallStatus, AgentTurnMessage, AgentTurnStreamEvent } from '#domain/index.js';
+import type { AgentContextQuality, AgentToolApprovalSettlement, AgentToolUndo, AgentToolCallStatus, AgentTurnMessage, AgentTurnStreamEvent } from '#domain/index.js';
 
 /** `tool.finished`'s optional `cleanup` (Astra 2124), derived from the agent-turn event rather than importing the agent-tool
  * module directly (`terminal-kit`'s declared dependency is `agent-turn`; `AgentToolCleanup` itself is declared in `agent-tool`). */
@@ -53,6 +53,8 @@ export type TurnDelta =
     readonly standing?: { readonly scopes: readonly ('session' | 'always')[]; readonly pattern: string };
     /** v19 (B1): the turn's one-time capability (forwarded by the card's y, never shown), the card's risk (null: not declared) and required assurance. */
     readonly decisionCapability?: string; readonly risk?: string | null; readonly requiredAssurance?: string;
+    /** v21 (T2-FOLLOWUP REVERSIBILITY): what the card may say about undoing the call. */
+    readonly undo?: AgentToolUndo;
     /** T-APPROVAL-WINDOW: the call's tool name and engine target, taken by the client from the same call's `tool.started` (never a wire field). */
     readonly tool?: string; readonly target?: string | null }
   | { readonly kind: 'approval'; readonly phase: 'settled'; readonly callId: string; readonly approvalId: string;

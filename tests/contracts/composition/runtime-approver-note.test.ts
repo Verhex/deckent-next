@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { AgentTurnStreamEvent } from '#domain/index.js';
-import { runtime } from '../support/chat-turn-harness.js';
+import { me, runtime } from '../support/chat-turn-harness.js';
 
 const ask = (turnId: string) => ({ schemaVersion: 1 as const, scopeId: 'scope', turnId, messages: [{ role: 'user' as const, content: 'what does src/a.ts export?' }] });
 
@@ -35,4 +35,36 @@ it('gives the model the approver\'s own note through the real service, sealed in
   expect(decisions.map(decision => [decision.reason, decision.approverNote ?? false])).toEqual([['read b.ts instead', true], ['only this once', true],
     ['Denied in the terminal', false]]);
 }, 60_000);
+});
+
+// T2-FOLLOWUP REVERSIBILITY at the producer: the real service's approval event carries the card's undo word by what the call is.
+describe.skipIf(process.platform !== 'linux')('approval card facts through the runtime service (REVERSIBILITY)', () => {
+  const shellGrants = [
+    { id: 'shell-tool', effect: 'require-approval', actions: ['invoke'], scopes: ['scope'], principals: me, resource: { kind: 'agent-tool', ids: ['run_shell'] } },
+    { id: 'shell-run', effect: 'allow', actions: ['execute'], scopes: ['scope'], principals: me, resource: { kind: 'operation', ids: ['host.shell.run'] } },
+    { id: 'decide', effect: 'allow', actions: ['inspect', 'decide'], scopes: ['scope'], principals: me, resource: { kind: 'approval', ids: 'all' } }];
+  const requested = async (f: Awaited<ReturnType<typeof runtime>>, turnId: string) => {
+    const client = f.client(), events: AgentTurnStreamEvent[] = [], pending: Promise<unknown>[] = [];
+    await client.chatTurn(ask(turnId), event => {
+      events.push(event);
+      if (event.kind === 'approval.requested') pending.push(client.decideApproval({ schemaVersion: 1, scopeId: 'scope', approvalId: event.approvalId,
+        decisionCapability: event.decisionCapability, commandId: `deny-${event.approvalId}`, expectedRevision: event.revision, decision: 'deny', reason: 'Reviewed' }));
+    });
+    await Promise.all(pending);
+    return events.find(event => event.kind === 'approval.requested') as Extract<AgentTurnStreamEvent, { kind: 'approval.requested' }>;
+  };
+  it('a read tool card says it changes nothing', async () => {
+    const f = await runtime({ toolGrant: 'approval' }); await f.start();
+    f.state.script = [{ toolCall: { name: 'read_file', arguments: '{"path":"src/a.ts"}' } }, { content: 'ok' }];
+    const event = await requested(f, 'turn-read-card');
+    expect(event.undo).toBe('no-change');
+  }, 60_000);
+  it('a shell card names its undo word by the classifier\'s tier', async () => {
+    const f = await runtime({ toolGrant: false, extraGrants: shellGrants, shell: { schemaVersion: 1, realm: 'host' } }); await f.start();
+    f.state.script = [{ toolCall: { name: 'run_shell', arguments: '{"command":"touch b.txt"}' } }, { content: 'ok' }, { toolCall: { name: 'run_shell', arguments: '{"command":"rm -rf src"}' } }, { content: 'ok' }];
+    const modify = await requested(f, 'turn-shell-card');
+    expect(modify.undo).toBe('may-change');
+    const destructive = await requested(f, 'turn-shell-destructive');
+    expect(destructive).toMatchObject({ risk: 'shell-destructive', undo: 'irreversible' });
+  }, 60_000);
 });

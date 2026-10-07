@@ -1,5 +1,7 @@
 import { approvalTemplateLine, projectApprovalDecisionText, type ApprovalDecisionLine, type ApprovalDecisionProjection } from '#surfaces/core/approval-presentation/index.js';
 import type { KnownSecretSnapshot } from '#platform/index.js';
+import { AGENT_TOOL_UNDO, type AgentToolUndo } from '#domain/index.js';
+import { agentToolUndo } from '#engine/index.js';
 import type { StandingScope } from '#surfaces/core/terminal-kit/index.js';
 import { fillTemplate, span, sliceSpans, plainText, type Span, type SpanRole } from '#surfaces/core/terminal-render/index.js';
 
@@ -31,7 +33,8 @@ export interface ApprovalWindowLabels {
   readonly mode: Readonly<Record<string, string>>;
   /** Keyed by permission cell, `effect-read|write|irreversible`, plus `unknown`; `authority` is appended for an authority surface. */
   readonly risk: Readonly<Record<string, string>>;
-  readonly undo: Readonly<Record<'irreversible' | 'none' | 'compensation' | 'unknown', string>>;
+  /** Catalog-operation facts (`irreversible`, `none`, `compensation`), the tool-call vocabulary (REVERSIBILITY) and `unknown` (not declared). */
+  readonly undo: Readonly<Record<'none' | 'compensation' | 'unknown' | AgentToolUndo, string>>;
   /** `{clock}` m:ss left. */
   readonly time: string; readonly expired: string;
   /** An `/approvals` row whose request time is not known. */
@@ -156,10 +159,19 @@ function riskText(risk: string | null | undefined, labels: ApprovalWindowLabels)
   if (!known) return labels.risk['unknown']!;
   return authority && labels.risk['authority'] ? `${known} · ${labels.risk['authority']}` : known;
 }
-function undoText(undo: string | null | undefined, labels: ApprovalWindowLabels): string {
-  return !undo ? labels.undo.unknown : undo === 'irreversible' ? labels.undo.irreversible : undo === 'none' ? labels.undo.none : labels.undo.compensation;
+const TOOL_UNDO: ReadonlySet<string> = new Set(AGENT_TOOL_UNDO);
+const UNDO_KIND: Readonly<Partial<Record<ApprovalToolKind, Parameters<typeof agentToolUndo>[0]>>> = { shell: 'shell', edit: 'edit', write: 'edit', fetch: 'fetch' };
+/**
+ * REVERSIBILITY: the producer's word (a tool-call card's `undo`, a catalog operation's sealed facts) when it sent one; otherwise, for a call whose
+ * kind the window knows (a stored card, an older service), the same domain classification from its tool and cell — never for an MCP tool,
+ * whose server's declaration only the producer holds. Anything else is "not declared".
+ */
+function undoText(undo: string | null | undefined, kind: ApprovalToolKind | null, cell: string | null, labels: ApprovalWindowLabels): string {
+  if (undo && TOOL_UNDO.has(undo)) return labels.undo[undo as AgentToolUndo];
+  if (undo) return undo === 'none' ? labels.undo.none : labels.undo.compensation;
+  const known = kind ? UNDO_KIND[kind] : undefined;
+  return known ? labels.undo[agentToolUndo(known, cell)] : labels.undo.unknown;
 }
-
 /** The window title (tool's human name) as projected spans. */
 export function approvalWindowTitle(input: ApprovalWindowInput, labels: ApprovalWindowLabels, known?: KnownSecretSnapshot): ApprovalDecisionLine {
   const call = approvalCallOf(input);
@@ -203,7 +215,7 @@ export function approvalWindowLines(input: ApprovalWindowInput, labels: Approval
   const rule = (cell && labels.rule[cell]) || labels.rule['unknown']!, mode = (input.mode && labels.mode[input.mode]) || labels.mode['unknown']!;
   rows.push(lineOf(approvalTemplateLine(labels.why, { rule, mode }).spans, [], f.why));
   rows.push(lineOf([span(riskText(cell, labels), { role: cell === 'shell-destructive' || cell === 'edit-authority' || cell === 'mcp-floor' ? 'warning' : 'muted' })], [], f.risk));
-  rows.push(lineOf([span(undoText(input.undo, labels))], [], f.undo));
+  rows.push(lineOf([span(undoText(input.undo, call ? kind : null, cell, labels))], [], f.undo));
   const left = input.expiresAt - now;
   rows.push(lineOf([span(left > 0 ? fillTemplate(labels.time, { clock: countdownClock(left) }) : labels.expired, { role: left > 0 ? 'accent' : 'error' })], [], f.time));
   if (input.assuranceLine || input.standing) rows.push(blank);
@@ -223,7 +235,7 @@ export function approvalWindowLines(input: ApprovalWindowInput, labels: Approval
   if (call) detail(labels.detail.binding, { summary: p(input.summary) });
   if (input.runId !== '-') detail(labels.detail.run, { run: p(input.runId), task: p(input.taskId) });
   if (cell) detail(labels.detail.cell, { cell: p(cell) });
-  if (input.undo && !['irreversible', 'none'].includes(input.undo)) detail(labels.detail.compensation, { operation: p(input.undo) });
+  if (input.undo && input.undo !== 'none' && !TOOL_UNDO.has(input.undo)) detail(labels.detail.compensation, { operation: p(input.undo) });
   if (shell) detail(labels.detail.classifier, { classifier: p(shell.classifier) });
   if (fetch?.rest) detail(labels.detail.engine, { text: p(fetch.rest.replace(/\n/gu, ' · ')) });
   if (cut) { detail(labels.detail.digest, { digest: cut.digest }); detail(cut.kept ? labels.detail.kept : labels.detail.notKept, { path: p(cut.kept ?? '') }); }

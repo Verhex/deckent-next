@@ -429,6 +429,13 @@
   "terminal.approval.window.undo.none": "No undo operation is declared",
   "terminal.approval.window.undo.compensation": "Yes — a compensating operation exists (see Details)",
   "terminal.approval.window.undo.unknown": "not declared by the tool",
+  "terminal.approval.window.undo.unverified": "Not checked — Deckent does not keep the earlier content",
+  "terminal.approval.window.undo.may-change": "Unknown (it can change the system)",
+  "terminal.approval.window.undo.no-change": "Nothing to undo — it changes nothing",
+  "terminal.approval.window.undo.server-read-only": "The server says it changes nothing (read-only)",
+  "terminal.approval.window.undo.server-additive": "The server says it only adds, never deletes or overwrites",
+  "terminal.approval.window.undo.server-destructive": "The server says it can delete or overwrite (destructive)",
+  "terminal.approval.window.undo.server-silent": "The server does not say",
   "terminal.approval.window.time": "{clock} left — if nobody decides, nothing runs",
   "terminal.approval.window.expired": "Time is up — nothing ran",
   "terminal.approval.window.ageUnknown": "an unknown time",
@@ -455,6 +462,6 @@
   "terminal.approval.window.keys.reason": "Tab reason",
   "terminal.approval.window.keys.scroll": "↑↓ scroll",
   "terminal.approval.window.reason.label": "Reason:",
-  "terminal.approval.window.reason.hint": "Type your reason · Enter or Tab done · Esc back · it is recorded with your decision",
+  "terminal.approval.window.reason.hint": "Type your reason · Enter or Tab done · Esc back · recorded with your decision and given to the model as your note",
   "terminal.approval.window.reason.empty": "(none)"
 }
