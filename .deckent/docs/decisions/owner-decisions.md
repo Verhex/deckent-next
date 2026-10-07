@@ -283,6 +283,12 @@ Owner “Öneriler kabul edildi”: önce Noul kontrollerini tek önerme yapma v
       - Gerekçe: pazar 2026'da "agent control plane" terimini tanıyor (CSA, Gartner pazarları), ama kontrol düzlemleri başka yerde çalışan ajanları yönetir; Deckent yürütmeyi ve yalıtımı da sahiplenir. Microsoft "Agent OS" adını bir policy motoru bileşenine verdi.
       - "Agent OS" önceki ad olarak anılır. Analiz: `proof/PRODUCT-DEFINITION-ISOLATION-2026-10-07/product-definition.md`.
     - **Firecracker** (owner 2026-10-07): yeni yalıtım katmanı olarak PLAN'a alındı (FIRECRACKER-REALM); gVisor şimdilik dışarıda. Yapı kararı ölçümden sonra (Jev 638c53b9: kendi TS API istemcisi + jailer + blok imaj + write set 0,95 / 0,60).
+    - **MCP yetki ve davranış kararları** (owner 2026-10-07, T3 L1 sonrası; hepsinde Jev yeterliliği eşiğin altında → owner):
+      - **Güven → izin yetki kaynağı** (Jev 04f75210 0,99 / 0,70): policy'ye sunucu adıyla tanımlanan `mcp-server` yetki türü eklenir. Bu yetki sunucunun pinlenmiş araçlarını kapsar. İlk kurulum şablonu v5'te kurulum sahibi bu yetkiye sahiptir ve devredebilir. Güven onayı sunucu başına grant'i I2 devretme sınırı içinde yazar; şirketler daraltabilir. Tek yetki kaynağı ve I2 korunur.
+      - **Grant etkisi** (Jev 71eeb4ab 0,85 / 0,66): `require-approval` + `modeEligible`. Standart her çağrıda sorar, tam otomatik indirir (MODES-3), tam erişim çalıştırır.
+      - **HTTP kuralı** (Jev 20fec15a 0,96 / 0,59): uzak sunucular yalnız https; düz http yalnız loopback. `$DECK:` başlıkları ağa asla şifresiz çıkmaz.
+      - **Öneri aracı** (Jev d3d1817d 0,73 / 0,54): ilk kurulum şablonu v5 `propose_mcp_server`'ı verir. Öneri her modda insan penceresi açar ve sır taşımaz.
+      - **Öneride sır yok** (Jev 30efcb91 1,00 / 0,72, güvenlik bulgusu): model önerisi sır ya da ortam referansı ve env/header değeri taşıyamaz. Sırları insan `/mcp` akışında bağlar.
     - **Terminal testi kararları** (owner 2026-10-07, alpha.10 canlı testinden sonra; analiz: `proof/TERMINAL-TEST-ANALYSIS-2026-10-07/analysis.md`):
       - **Tam otomatikte kabukla silme** (Jev 93a09258: 'her silme sorsun' 0,94 / yeterlilik 0,56 → owner, Jev'in aksine): bugünkü gibi kalır. Sandbox içindeki sıradan `rm` kartsız çalışır ve write set ile uygulanır; yalnız yıkıcı tablo (`rm -r/-f` vb.) sorar. SHELL-AUTONOMY (2026-09-28) korunur.
       - **Korunan yollar** (Jev c21ab011: kart seçeneği 0,73 / 0,52 → owner, lead'in yeniden ifadesi owner onayıyla):
