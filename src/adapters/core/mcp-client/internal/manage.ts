@@ -207,7 +207,9 @@ export async function runMcpCommand(request: McpCommandRequest, context: McpComm
   if (request.verb === 'get') {
     const server = find(request.name);
     if (!server) throw fail('MCP_SERVER_UNKNOWN', { name: request.name });
-    return { schemaVersion: 1, server: { ...summary(server), entry: mcpEntryRedacted(server.entry), trust: server.trust } };
+    // T3 (L4 ↔ L1): the person's grant for this server, read only; an unreadable policy shows no grant line rather than failing `get`.
+    const grant = context.grants?.inspect ? await context.grants.inspect({ scope: server.scope, name: server.name }).catch(() => null) : null;
+    return { schemaVersion: 1, server: { ...summary(server), entry: mcpEntryRedacted(server.entry), trust: server.trust, ...(grant ? { grant } : {}) } };
   }
   const trustContext = mcpTrustContext({ ...context, ...(context.limits?.inputMaxBytes ? { inputMaxBytes: context.limits.inputMaxBytes } : {}) }, view.projectKey);
   if (request.verb === 'add') {

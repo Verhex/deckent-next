@@ -41,6 +41,13 @@ export class McpToolGrants {
       return { status: 'granted' };
     } catch (error) { return { status: 'refused', reason: refusal(error) }; }
   }
+  /** Reads this person's grant of the server (never writes): its scopes, or `none`. */
+  async inspect(input: { readonly scopeId: string; readonly principal: { readonly issuer: string; readonly subject: string }; readonly server: McpToolGrantTarget }):
+    Promise<{ readonly status: 'granted'; readonly scopes: 'all' | readonly string[] } | { readonly status: 'none' }> {
+    const policy = await this.snapshot().catch(() => null), [id] = mcpGrantRuleIds(this.digest(input.scopeId, input.principal, input.server));
+    const held = policy?.grants.find(grant => grant.id === id);
+    return held ? { status: 'granted', scopes: held.scopes } : { status: 'none' };
+  }
   /** Removes this person's grant of the server (trust revoked, reset, declined or the entry removed); nothing to remove is `none`. */
   async revoke(input: { readonly scopeId: string; readonly principal: { readonly issuer: string; readonly subject: string }; readonly server: McpToolGrantTarget;
     readonly reason: string }): Promise<McpToolGrantOutcome> {

@@ -21,7 +21,10 @@ export type McpToolGrantResult = { readonly status: 'granted' | 'revoked' | 'non
 export interface McpToolGrantPort {
   grant(server: { readonly scope: McpScope; readonly name: string }, tools: readonly string[]): Promise<McpToolGrantResult>;
   revoke(server: { readonly scope: McpScope; readonly name: string }): Promise<McpToolGrantResult>;
+  /** Reads (never writes) whether this person holds the server's trust grant, and in which scopes (`all`: a user-scope server). */
+  inspect?(server: { readonly scope: McpScope; readonly name: string }): Promise<McpToolGrantView>;
 }
+export type McpToolGrantView = { readonly status: 'granted'; readonly scopes: 'all' | readonly string[] } | { readonly status: 'none' };
 
 /**
  * The card of a trust decision, in two phases so a command is never run before the owner saw it (owner 2026-09-28): `launch` names the server,

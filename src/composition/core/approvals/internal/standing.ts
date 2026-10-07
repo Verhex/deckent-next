@@ -54,7 +54,8 @@ export function revokeConfiguredStandingGrant(root: string, input: { readonly sc
  * grant in someone else's name. Every refusal is a typed outcome; trust stays recorded by its own path.
  */
 export function configuredMcpToolGrants(root: string, scopeId: string, options: ConfigLoadOptions, approver: { readonly issuer: string; readonly subject: string }):
-  { grant(server: McpToolGrantTarget, tools: readonly string[]): Promise<McpToolGrantOutcome>; revoke(server: McpToolGrantTarget): Promise<McpToolGrantOutcome> } {
+  { grant(server: McpToolGrantTarget, tools: readonly string[]): Promise<McpToolGrantOutcome>; revoke(server: McpToolGrantTarget): Promise<McpToolGrantOutcome>;
+    inspect(server: McpToolGrantTarget): Promise<{ readonly status: 'granted'; readonly scopes: 'all' | readonly string[] } | { readonly status: 'none' }> } {
   const run = (work: (grants: McpToolGrants, person: Person) => Promise<McpToolGrantOutcome>) => withPolicyAdministration(root, scopeId, options, 'write', (deps, person) =>
     person.issuer === approver.issuer && person.subject === approver.subject ? work(new McpToolGrants(deps), person) : Promise.resolve({ status: 'refused' as const, reason: 'principal' }))
     // A person refused write access to this scope holds no authority to grant there either (the same reason as the delegation bound's).
@@ -62,5 +63,8 @@ export function configuredMcpToolGrants(root: string, scopeId: string, options: 
   return {
     grant: (server, tools) => run((grants, person) => grants.grant({ scopeId, principal: person, server, tools, reason: `MCP trust approval of ${server.name}` })),
     revoke: server => run((grants, person) => grants.revoke({ scopeId, principal: person, server, reason: `MCP trust of ${server.name} withdrawn` })),
+    // Read only (no administration opened): the same person's grant of the server, for `/mcp` detail and `deckent mcp get`.
+    inspect: server => withPolicyAdministration(root, scopeId, options, 'read', (deps, person) => person.issuer === approver.issuer && person.subject === approver.subject
+      ? new McpToolGrants(deps).inspect({ scopeId, principal: person, server }) : Promise.resolve({ status: 'none' as const })),
   };
 }

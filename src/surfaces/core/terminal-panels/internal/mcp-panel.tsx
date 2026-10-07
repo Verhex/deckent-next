@@ -82,7 +82,10 @@ export function McpPanel({ port, labels, push, onError, errorText, onClose }: { 
     onStep={step => setView({ kind: 'wizard', step })} onCancel={() => back()}
     onDone={finished => { setView({ kind: 'busy' }); port.add(finished, ask).then(async lines => { push([{ level: 'info', text: lines.join('\n') }]);
       try { await reload(); } catch (error) { onError(error); } back(); }, error => {
-      if (NAME_REFUSALS.has(String((error as { code?: unknown })?.code))) { setView({ kind: 'wizard', step: 'name', problem: errorText(error) }); return; }
+      const code = String((error as { code?: unknown })?.code);
+      if (NAME_REFUSALS.has(code)) { setView({ kind: 'wizard', step: 'name', problem: errorText(error) }); return; }
+      // The registry refused the entry itself (e.g. plain http to another machine): back to its URL or command step, the other values kept.
+      if (code === 'MCP_SERVER_ENTRY_INVALID') { setView({ kind: 'wizard', step: draft.current.transport === 'http' ? 'url' : 'command', problem: errorText(error) }); return; }
       onError(error); back();
     }); }} />;
   const chosen = (result: PickerResult, at: PickerState) => {

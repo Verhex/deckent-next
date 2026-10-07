@@ -69,9 +69,12 @@ describe.skipIf(process.platform !== 'linux')('MCP trust writes the approver\'s 
     // Standart asks every call (the grant's require-approval; full-auto lowers it — the policy and runtime tests prove the modes).
     expect(await f.decide('mcp__fx__echo')).toBe('require-approval');
     expect(f.authorityChanges()).toHaveLength(1);
+    // `get` (and the /mcp detail) reads the person's grant without writing anything.
+    expect(await f.run({ verb: 'get', name: 'fx' })).toMatchObject({ server: { grant: { status: 'granted', scopes: ['proj'] } } });
+    expect(f.authorityChanges()).toHaveLength(1);
     expect(await f.run({ verb: 'revoke', name: 'fx' })).toMatchObject({ revoked: { name: 'fx', scope: 'local' }, grant: { status: 'revoked' } });
     expect(f.mcpGrants()).toEqual([]);
-    expect(await f.run({ verb: 'get', name: 'fx' })).toMatchObject({ server: { status: 'pending-approval', pinnedTools: 0 } });
+    expect(await f.run({ verb: 'get', name: 'fx' })).toMatchObject({ server: { status: 'pending-approval', pinnedTools: 0, grant: { status: 'none' } } });
     expect(f.authorityChanges()).toHaveLength(2);
   }, 90_000);
 
