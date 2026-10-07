@@ -1,7 +1,9 @@
 import { useCallback, useRef, useState } from 'react';
+import { useInput } from 'ink';
 import { PERMISSION_MODES, type PermissionMode, type PermissionModeChange, type PermissionModeView } from '#domain/index.js';
 import { type WorkLedgerEntry, notice, fillTemplate } from '#surfaces/core/terminal-ledger/index.js';
 import type { PermissionModeStop } from '#surfaces/core/terminal-render/index.js';
+import { useFocusOwner } from '#surfaces/core/terminal-window/index.js';
 
 /**
  * The person's permission mode through the runtime service (T-L4 slice 4c, protocol v15; MODES-3 v17). The surface reads and writes no
@@ -166,4 +168,15 @@ export function useWorklineMode(port: WorklinePermissionModePort | undefined, pu
   }, [apply, labels, port, push, unavailable, view]);
   const stop = fullAccess ? 'full-access' as const : view?.supported ? permissionModeStop(view, false) : undefined;
   return { mode: fullAccess ? 'full-access' as const : view?.supported ? sessionMode(view, false) : undefined, stop, fullAccess: current, refresh, run, cycle };
+}
+
+/**
+ * T2 T-MODE-CYCLE + TS-WINDOW: Shift+Tab (Alt+M where the console cannot report Shift+Tab) steps the mode only while the base layer owns the
+ * keyboard — `active` (no card, picker or running turn) and the window stack idle. Any open window, including one that is neither a card
+ * nor a picker, owns Shift+Tab, so the mode never changes behind a window. Rendered inside the `WindowStackProvider`.
+ */
+export function PermissionModeKeys({ active, onCycle }: { readonly active: boolean; readonly onCycle: () => void }): null {
+  const owner = useFocusOwner();
+  useInput((input, key) => { if ((key.tab && key.shift) || (key.meta && !key.ctrl && input === 'm')) onCycle(); }, { isActive: active && owner.idle });
+  return null;
 }
