@@ -296,10 +296,11 @@ export function WorklineApp(props: WorklineProps) {
     render: labels.render, ...(labels.work ? { workerLine: labels.work.workerLine } : {}) };
   const choosing = resumePicker !== null || work.pickerOpen;
   // T2 T-MODE-CYCLE: Shift+Tab (Alt+M where the console cannot report Shift+Tab, e.g. Windows without VT input) steps the permission mode
-  // while the composer owns the keyboard; an open card or picker owns Shift+Tab then and the mode does not change.
+  // while the composer owns the keyboard; an open card or picker owns Shift+Tab then and the mode does not change. A running turn owns its
+  // mode as `/mode` does (queued until it ends): the step waits for idle, so the status row never shows a mode the running turn is not in.
   const composing = !work.modalOpen && !work.pickerOpen && resumePicker === null;
   useInput((input, key) => { if ((key.tab && key.shift) || (key.meta && !key.ctrl && input === 'm')) void mode.cycle(); },
-    { isActive: composing && Boolean(props.permissionMode) });
+    { isActive: composing && !busy && Boolean(props.permissionMode) });
   const finishResume = (choice: number | null) => { panel.choose(state.picker?.pickerHandle, choice === null ? null : String(choice)); };
   return (
     <HumanTextContext.Provider value={props.knownSecrets}>

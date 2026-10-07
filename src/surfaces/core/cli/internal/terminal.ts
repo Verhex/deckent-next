@@ -6,7 +6,7 @@ import { mcpSlash } from './mcp.js';
 import { monitorSlash } from '#surfaces/core/monitor/index.js';
 import { DeckentError, ErrorRegistry, emit, getConfigKnownSecrets, loadConfig, readBuildIdentity, resolveLocale, t, formatValue, colorCapability, PACKAGE_VERSION, type ConfigLoadOptions, type Locale } from '#platform/index.js';
 import { buildInferenceServingPlan, estimateReplicaCapacity, readInferenceServingProfile, runtimeConfigFreshness, RUNTIME_SERVICE_HEARTBEAT_MS, type IdentityRead, type InstallationIdentityRead } from '#engine/index.js';
-import { prefersAsciiGlyphs, runTerminalWorkline, resolveWorklinePalette, resolveTerminalTheme, permissionModeStop, type TerminalThemeSetting, type WorklineStartup, buildWorklineBridgeSnapshot, streamLineTurn, boundAgentHistory, boundChatHistory, bindSessionScope, type AgentChatMessage, type ChatTurnMessage, type TurnDelta, type WorklineLabels } from '#surfaces/core/terminal/index.js';
+import { prefersAsciiGlyphs, runTerminalWorkline, resolveWorklinePalette, resolveTerminalTheme, permissionModeStop, STARTUP_BANNERS, TERMINAL_THEME_SETTINGS, type TerminalThemeSetting, type WorklineStartup, buildWorklineBridgeSnapshot, streamLineTurn, boundAgentHistory, boundChatHistory, bindSessionScope, type AgentChatMessage, type ChatTurnMessage, type TurnDelta, type WorklineLabels } from '#surfaces/core/terminal/index.js';
 import { plainText, projectHumanText } from '#surfaces/core/terminal-render/index.js';
 import { terminalComposerLabels, terminalRenderLabels, terminalSessionLabels, terminalStartupLabels } from '#surfaces/core/terminal-labels/index.js';
 import { createWorklineLedgerPorts } from './terminal-ledger.js';
@@ -328,12 +328,12 @@ export async function terminalCommand(argv: readonly string[], context: CommandC
     ...(context.followSurfaceEvents ? { followEvents: signal => context.followSurfaceEvents!(root, scopeId, options, signal) } : {}) });
   const target = `${scopeId} · ${chatTarget(chat, locale)}`;
   // T2: theme and tier from what the terminal can draw and the person's setting; the banner and the clear from their settings (TERM=dumb never
-  // clears). The loaded config carries the section's defaults.
-  const presentation = config['terminal'] as { readonly theme: TerminalThemeSetting; readonly banner: WorklineStartup['banner']; readonly clearOnStart: boolean };
-  const theme = resolveTerminalTheme(presentation.theme, colorCapability({ env, isTTY: tty.stdout, argv: process.argv }), env['COLORFGBG']);
+  // clears). A config without a `terminal` section (scope from --scope) keeps every default.
+  const presentation = (config['terminal'] ?? {}) as { readonly theme?: TerminalThemeSetting; readonly banner?: WorklineStartup['banner']; readonly clearOnStart?: boolean };
+  const theme = resolveTerminalTheme(presentation.theme ?? TERMINAL_THEME_SETTINGS[0], colorCapability({ env, isTTY: tty.stdout, argv: process.argv }), env['COLORFGBG']);
   const ascii = prefersAsciiGlyphs(env), stop = fullAccess ? 'full-access' as const : view?.supported ? permissionModeStop(view, false) : null;
   const home = env['HOME'] ?? '', where = home && (root === home || root.startsWith(`${home}/`)) ? `~${root.slice(home.length)}` : root;
-  const startup: WorklineStartup = { clear: presentation.clearOnStart && env['TERM']?.trim().toLowerCase() !== 'dumb', banner: presentation.banner,
+  const startup: WorklineStartup = { clear: presentation.clearOnStart !== false && env['TERM']?.trim().toLowerCase() !== 'dumb', banner: presentation.banner ?? STARTUP_BANNERS[0],
     ...terminalStartupLabels(locale, { version: PACKAGE_VERSION, project: basename(root), path: where, model: chatTarget(chat, locale),
       mode: stop ? modeStopWords(locale)[stop] : t('terminal.value.unknown', {}, locale) }, ascii) };
   // History is a convenience: an unavailable history file never blocks the terminal.

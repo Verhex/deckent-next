@@ -427,4 +427,18 @@ describe.skipIf(process.platform !== 'linux')('opening banner in a real pseudo-t
       for (const word of words) expect(stripVTControlCharacters(banner).replace(/\s+/gu, ' ')).toContain(word);
     }
   }, 180_000);
+
+  it('opens with the default banner and theme when the configuration has no terminal section (scope from --scope)', async () => {
+    const f = await modeProject();
+    await startRuntime(f.projectRoot, f.env);
+    const path = join(f.projectRoot, '.deckent/config.json');
+    const document = JSON.parse(await readFile(path, 'utf8')) as Record<string, unknown>;
+    delete document['terminal'];
+    await writeFile(path, JSON.stringify(document), { mode: 0o600 });
+    const run = await inPty(f.projectRoot, f.env, ['terminal', 'workline', '--scope', 'scope'], [['Deckent workline', '/exit\r']]);
+    expect(run.timeout, run.output).toBeUndefined();
+    expect(run.status, run.output).toBe(0);
+    expect(run.output.split('\u001b[H\u001b[2J')).toHaveLength(2);
+    expect(stripVTControlCharacters(run.output)).toContain('/help · Shift+Tab mode · ? shortcuts');
+  }, 180_000);
 });

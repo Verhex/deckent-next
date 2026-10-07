@@ -7,10 +7,12 @@ import { useWorklinePalette, WorklinePaletteProvider, type WorklineInkPalette } 
  * top with its banner; earlier output moves into scrollback and is never erased. Every text is catalog text the caller resolved (the mark
  * already chosen as Unicode or ASCII); this unit translates nothing.
  */
+/** `terminal.banner` values; the first is the default (the registry's `TERMINAL_BANNERS`, tested equal). */
+export const STARTUP_BANNERS = ['full', 'compact', 'off'] as const;
 export interface WorklineStartup {
   /** Clear the visible screen first (the caller already excluded TERM=dumb and the setting; this side still requires a TTY). */
   readonly clear: boolean;
-  readonly banner: 'full' | 'compact' | 'off';
+  readonly banner: typeof STARTUP_BANNERS[number];
   /** The Deckent mark, one string per row (3–5 rows). */
   readonly logo: readonly string[];
   /** Beside the mark: the title row, then the facts (project, model and mode) and the hint. */

@@ -1,8 +1,8 @@
 import { stripVTControlCharacters } from 'node:util';
 import { describe, expect, it } from 'vitest';
-import { CLEAR_VISIBLE_SCREEN, clearVisibleScreen, resolveWorklinePalette, startupFrame, TERMINAL_THEME_SETTINGS, writeStartup, type WorklineStartup } from '#surfaces/core/terminal/index.js';
+import { CLEAR_VISIBLE_SCREEN, clearVisibleScreen, resolveWorklinePalette, startupFrame, STARTUP_BANNERS, TERMINAL_THEME_SETTINGS, writeStartup, type WorklineStartup } from '#surfaces/core/terminal/index.js';
 import { terminalStartupLabels } from '#surfaces/core/terminal-labels/index.js';
-import { terminalConfigSchema } from '#adapters/index.js';
+import { terminalConfigSchema, TERMINAL_BANNERS, TERMINAL_THEMES } from '#adapters/index.js';
 import { terminalScreen } from '../../fixtures/terminal-screen.js';
 
 // T2 T-STARTUP (owner 2026-10-07): the rich surface clears the visible screen (never the scrollback) and starts with its banner at the top.
@@ -69,6 +69,8 @@ describe('opening frame (T2 T-STARTUP)', () => {
   });
 
   it('registers theme, banner and clearOnStart in the terminal section with the workline\'s own vocabulary', () => {
+    expect([...TERMINAL_THEMES]).toEqual([...TERMINAL_THEME_SETTINGS]);
+    expect([...TERMINAL_BANNERS]).toEqual([...STARTUP_BANNERS]);
     for (const theme of TERMINAL_THEME_SETTINGS) expect(terminalConfigSchema.parse({ theme }).theme).toBe(theme);
     expect(terminalConfigSchema.parse({})).toMatchObject({ theme: 'auto', banner: 'full', clearOnStart: true });
     expect(terminalConfigSchema.safeParse({ banner: 'loud' }).success).toBe(false);
