@@ -34,8 +34,8 @@ export class SqliteApprovalStore implements ApprovalStore {
     }
     return record;
   }
-  /** The current record of a digest-keyed subject (tool call or operation): one current row per (scope, kind, digest) by the v38/v40 indexes. */
-  private findByDigest(kind: 'agent-tool-call' | 'operation', scopeId: string, actionDigest: string) {
+  /** The current record of a digest-keyed subject (tool call or operation): one current row per (scope, kind, digest) by the v38/v40/v48 indexes. */
+  private findByDigest(kind: 'agent-tool-call' | 'operation' | 'config-change', scopeId: string, actionDigest: string) {
     const row = this.db.prepare('SELECT approval_id FROM approvals WHERE scope_id=? AND subject_kind=? AND action_digest=? AND current=1')
       .get(scopeId, kind, actionDigest);
     if (!row) return null;
@@ -45,6 +45,7 @@ export class SqliteApprovalStore implements ApprovalStore {
   }
   findToolCall(scopeId: string, actionDigest: string) { return this.findByDigest('agent-tool-call', scopeId, actionDigest); }
   findOperation(scopeId: string, actionDigest: string) { return this.findByDigest('operation', scopeId, actionDigest); }
+  findConfigChange(scopeId: string, actionDigest: string) { return this.findByDigest('config-change', scopeId, actionDigest); }
   /** Row columns of a request: the subject kind and, for a task, its run and task. */
   private columns(record: ApprovalRecord) {
     const subject = approvalSubject(record.request);

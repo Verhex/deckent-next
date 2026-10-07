@@ -10,12 +10,27 @@ const taskApprovalRequestSchema = z.object({ schemaVersion: z.literal(1), approv
   actionDigest: digest, policyRevision: identitySchema, summary: z.string().min(1).max(2048),
   createdAt: counterSchema, expiresAt: counterSchema, renewal: renewalSchema.optional(),
 }).strict().refine(r => r.expiresAt > r.createdAt).readonly();
+/** A bounded display copy of a config value on a card: the redacted JSON text (never a secret value); the exact value is bound by `valueDigest`. */
+const configDisplay = z.string().max(256);
+export const CONFIG_CHANGE_DISPLAY_MAX = configDisplay.maxLength!;
+/**
+ * One config write a policy `require-approval` holds (T3 L2 CONFIG-APPROVAL, Jev 9181d2be): this command, layer and key, the value before
+ * (effective, redacted) and after (redacted; null for `unset`), the layer digest the change was previewed against (`expectDigest`, null: the
+ * layer file was absent), the exact value's digest (null for `unset`) and why (the policy rule that asked). Apply re-checks the digest and the policy.
+ */
+const configChangeSubjectSchema = z.object({ kind: z.literal('config-change'), commandId: identitySchema, action: z.enum(['set', 'unset']),
+  layer: z.enum(['project', 'global']), keyPath: z.string().min(1).max(512), before: configDisplay, after: configDisplay.nullable(),
+  expectDigest: digest.nullable(), valueDigest: digest.nullable(), ruleId: identitySchema }).strict();
+/** The `unset` ⇔ no value invariant of a config-change subject (a discriminated union member cannot carry a refinement). */
+export const configChangeSubjectConsistent = (subject: z.infer<typeof configChangeSubjectSchema>) =>
+  (subject.action === 'unset') === (subject.after === null && subject.valueDigest === null);
 /**
  * What an approval authorizes (C12, operation-keyed): a task admission; one agent tool call — exactly this turn, round, call index,
  * tool version, canonical resource and argument digest (T-L4); or one catalog operation command — exactly this command id, operation
  * id@version, target record, canonical input digest, descriptor + endpoint binding, expected version and compensation reference (G1).
  * The action digest binds the same fields (plus scope and requester), so an approval is call-exact and command-exact: another command,
- * another input or a changed catalog/endpoint is another subject, never covered by an earlier allow.
+ * another input or a changed catalog/endpoint is another subject, never covered by an earlier allow. A config change (T3 L2) binds its command,
+ * layer, key, value digest and previewed layer digest the same way.
  */
 export const approvalSubjectSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('task'), runId: identitySchema, taskId: identitySchema }).strict(),
@@ -25,6 +40,7 @@ export const approvalSubjectSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('operation'), operation: z.object({ id: identitySchema, version: z.number().int().positive().safe() }).strict(),
     target: z.object({ kind: identitySchema, id: z.string().min(1).max(512) }).strict(), commandId: identitySchema, inputDigest: digest,
     targetBinding: digest, expectedVersion: z.string().min(1).max(256).nullable(), compensates: identitySchema.nullable() }).strict(),
+  configChangeSubjectSchema,
 ]);
 /**
  * B1 (owner 2026-10-01 `attested_assurance`): how strongly the service attests that a decision passed a human ceremony — never what a client
@@ -87,7 +103,8 @@ export const approvalRecordSchema = z.object({ request: approvalRequestSchema, r
   if ((v.status === 'pending' && (v.revision !== 0 || v.decision !== null))
     || (v.status !== 'pending' && v.revision !== 1)
     || (v.status === 'expired' && v.decision !== null)
-    || (v.status === 'decided' && (!v.decision || v.decision.decidedAt < v.request.createdAt || (approvalSubject(v.request).kind !== 'agent-tool-call' && v.decision.decidedAt >= v.request.expiresAt)))) {
+    || (v.status === 'decided' && (!v.decision || v.decision.decidedAt < v.request.createdAt || (approvalSubject(v.request).kind !== 'agent-tool-call' && v.decision.decidedAt >= v.request.expiresAt)))
+    || (v.request.schemaVersion !== 1 && v.request.subject.kind === 'config-change' && !configChangeSubjectConsistent(v.request.subject))) {
     c.addIssue({ code: z.ZodIssueCode.custom, message: 'APPROVAL_CORRUPT' });
   }
 }).readonly();
