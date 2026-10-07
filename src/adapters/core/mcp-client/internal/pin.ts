@@ -58,9 +58,10 @@ export function mcpToolPinDigest(tool: McpLiveTool): string {
   const { name, title, description, inputSchema, outputSchema, annotations } = tool;
   return createHash('sha256').update(`mcp-tool-pin:1\0${canonical({ name, title, description, inputSchema, outputSchema, annotations })}`).digest('hex');
 }
-/** The provider-safe name the model calls (`mcp__<server>__<tool>`, lower case, `[^a-z0-9_]` → `_`, ≤ 64); null when it cannot be formed. */
+/** The provider-safe name the model calls (`mcp__<server>__<tool>`, lower case, `[^a-z0-9_]` → `_` in both parts, ≤ 64); null when it cannot be formed.
+ * A server name's single hyphens become `_`; the name rule (no `--`) keeps the server/tool separator the first `__`, so distinct servers never collide. */
 export function mcpToolWireName(serverId: string, toolName: string): string | null {
-  const tool = toolName.toLowerCase().replace(/[^a-z0-9_]/gu, '_'), wire = `mcp__${serverId}__${tool}`;
+  const tool = toolName.toLowerCase().replace(/[^a-z0-9_]/gu, '_'), wire = `mcp__${serverId.replace(/-/gu, '_')}__${tool}`;
   return tool.length > 0 && /^[a-z][a-z0-9_]{1,63}$/u.test(wire) ? wire : null;
 }
 /** How the owner and the audit name a tool: `mcp:<server>/<tool>`. */

@@ -4,7 +4,7 @@ import { dirname, join } from 'node:path';
 import { ErrorRegistry, normalizeGlobalScopePlatform, prepareProductDirectory, productResourcePath, resolveGlobalScopePaths, withConfigWriteLock,
   SystemTrustedClock, type ProductLayout } from '#platform/index.js';
 import { displayMcpDiagnosis } from './diagnose.js';
-import { findMcpStartFailure, mcpStartFailedNotice, mcpStartFailureOf, readMcpStartFailures, updateMcpStartFailure, type McpStartFailure, type McpStartNotice,
+import { findMcpStartFailure, mcpStartFailedNotice, mcpStartFailureOf, mcpToolsChangedRecord, mcpWithheldTools, readMcpStartFailures, updateMcpStartFailure, type McpStartFailure, type McpStartNotice,
   type McpStartNoticeRenderer } from './failures.js';
 import { McpClientPool, type McpLaunchContext, type McpSendRefusal, type McpServerOpen } from './pool.js';
 import { MCP_CLIENT_DEFAULTS, type McpClientServerSettings, type McpClientSettings, type McpTrustBinding } from './pin.js';
@@ -173,7 +173,8 @@ export async function runMcpCommand(request: McpCommandRequest, context: McpComm
   const failures = await readMcpStartFailures(productResourcePath(context.layout, 'integrations'));
   const lastStartOf = (server: McpServerView) => { const failure = findMcpStartFailure(failures, server);
     return failure ? { lastStart: { phase: failure.phase, atMs: failure.atMs, code: failure.code, ...(failure.detail ? { detail: failure.detail } : {}),
-      ...(failure.diagnosis ? { diagnosis: failure.diagnosis } : {}), text: context.describeNotice(mcpStartFailedNotice(server.name, failure)) } } : {}; };
+      ...(failure.diagnosis ? { diagnosis: failure.diagnosis } : {}), text: context.describeNotice(failure.phase === 'tools' ? { kind: 'tools-changed', name: server.name, count: Number(failure.detail) || 0 }
+      : mcpStartFailedNotice(server.name, failure)) } } : {}; };
   const summary = (server: McpServerView) => ({ name: server.name, scope: server.scope, file: server.file, status: server.status, ...(server.reason ? { reason: server.reason } : {}),
     shadows: server.shadows, realm: server.entry.realm ?? 'prefer-sandbox', command: server.entry.command, args: server.entry.args ?? [], envNames: Object.keys(server.entry.env ?? {}),
     definitionDigest: server.definitionDigest, pinnedTools: server.trust?.tools.length ?? 0, ...lastStartOf(server) });
@@ -332,9 +333,16 @@ export async function openTurnMcp(input: { readonly registry: McpRegistryContext
     (launch, state) => { const server = byName.get(launch.id); if (server) outcomes.push([server, state]); }) : new Map<string, McpOfferedTool>();
   for (const [server, state] of outcomes) {
     const known = findMcpStartFailure(failures, server);
-    if (state.ok) { if (known) await remember(server, null); continue; }
+    if (state.ok) {
+      // MCP-VISIBILITY K3: pinned tools that are withheld (drifted, missing, unmappable) are said once per count and stay on `/mcp` until fixed.
+      const withheld = mcpWithheldTools(state.tools);
+      if (withheld && !(known?.phase === 'tools' && known.detail === String(withheld))) { notices.push({ kind: 'tools-changed', name: server.name, count: withheld });
+        await remember(server, mcpToolsChangedRecord(server, withheld, now())); }
+      else if (!withheld && known) await remember(server, null);
+      continue;
+    }
     // A server over its restart bound keeps the diagnosis of its last real start failure.
-    if (state.reason === 'restart-limit' && known) { notices.push(mcpStartFailedNotice(server.name, { ...known, phase: 'trusted' })); continue; }
+    if (state.reason === 'restart-limit' && known && known.phase !== 'tools') { notices.push(mcpStartFailedNotice(server.name, { ...known, phase: 'trusted' })); continue; }
     const record: McpStartFailure = { scope: server.scope as McpStartFailure['scope'], name: server.name, definitionDigest: server.definitionDigest, phase: 'trusted', atMs: now(),
       code: state.reason, ...(state.detail ? { detail: modelTextPrefix(state.detail, 200) } : {}),
       ...(state.reason === 'sandbox-unreachable' ? { diagnosis: displayMcpDiagnosis(state.diagnosis, server.entry) } : {}) };
