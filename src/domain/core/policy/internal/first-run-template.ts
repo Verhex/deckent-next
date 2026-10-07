@@ -23,9 +23,12 @@ export const FIRST_RUN_POLICY_TEMPLATE_ID = 'first-run-template';
 /** v2 (SECRET-WRITE, owner 2026-09-29 option A): the installing owner may set and delete every secret of the installation's store in the
  * installed scope (`secret`/`set|delete`, all names). v1 had no secret grant. v3 (B1, owner 2026-10-01): Core's own minimum assurance
  * for hard-floor tool-call cards is written out as visible `approvalAssurance` data (the owner may raise it; Core never goes below it).
- * v4 (CONFIG-SURFACE): the explicitly named installing owner may write configuration; the installation grant covers global writes. */
-// No template bump: Core's assurance minimum is a code constant; policy data can only raise it.
-export const FIRST_RUN_POLICY_TEMPLATE_VERSION = 4;
+ * v4 (CONFIG-SURFACE): the explicitly named installing owner may write configuration; the installation grant covers global writes.
+ * v5 (owner 2026-10-07, MCP decisions: Jev 04f75210, d3d1817d): the installing owner holds `mcp-server` for every server in every scope — the
+ * authority a trust approval delegates per server inside I2 (the owner's own call still asks: `mcp-call` raises an allow) — plus the
+ * `mcp.tool.call` operation side, and the read tool `propose_mcp_server` (a proposal opens a human window in every mode and carries no secret). */
+// No template bump for assurance: Core's assurance minimum is a code constant; policy data can only raise it.
+export const FIRST_RUN_POLICY_TEMPLATE_VERSION = 5;
 /** The hard-floor tool-call cells (write floor and configuration file, destructive and always-ask shell, every fetch, every MCP call): only the
  * terminal of the turn that asked may allow them. The same set is Core's default in the approval engine (a test keeps the two equal). */
 export const HARD_FLOOR_CARD_CELLS = Object.freeze(['edit-floor', 'edit-self-source', 'edit-authority', 'shell-destructive', 'shell-always-ask', 'fetch-listed', 'fetch-unlisted', 'mcp-call', 'mcp-floor'] as const);
@@ -40,6 +43,9 @@ export interface FirstRunPolicyTemplateInput {
   readonly editShellToolNames: readonly string[];
   readonly writeOperationId: string;
   readonly shellOperationId: string;
+  /** v5: the model's MCP proposal tool (a read tool) and the Core MCP call operation. */
+  readonly proposeMcpToolName: string;
+  readonly mcpCallOperationId: string;
 }
 export interface FirstRunPolicyTemplate {
   readonly id: typeof FIRST_RUN_POLICY_TEMPLATE_ID;
@@ -51,18 +57,23 @@ export interface FirstRunPolicyTemplate {
 /** The exact v2 policy + v1 bindings pair the template installs; deterministic in its (scopeId, principal) input, so two
  * `--preview` calls, or a `--preview` followed by `--apply`, produce byte-identical content. */
 export function firstRunPolicyTemplate(input: FirstRunPolicyTemplateInput): FirstRunPolicyTemplate {
+  const built = buildTemplate(input, FIRST_RUN_POLICY_TEMPLATE_VERSION);
+  return Object.freeze({ id: FIRST_RUN_POLICY_TEMPLATE_ID, version: FIRST_RUN_POLICY_TEMPLATE_VERSION, policy: built.policy, bindings: built.bindings });
+}
+function buildTemplate(input: FirstRunPolicyTemplateInput, version: 4 | 5) {
   const scopeId = identitySchema.parse(input.scopeId);
   const principal = { issuer: identitySchema.parse(input.principal.issuer), subject: identitySchema.parse(input.principal.subject) };
-  const revision = `${FIRST_RUN_POLICY_TEMPLATE_ID}-v${FIRST_RUN_POLICY_TEMPLATE_VERSION}`;
-  const actionsOf = { 'agent-tool': ['invoke'], operation: ['execute'], secret: ['set', 'delete'], config: ['write'] } as const;
+  const revision = `${FIRST_RUN_POLICY_TEMPLATE_ID}-v${version}`;
+  const actionsOf = { 'agent-tool': ['invoke'], operation: ['execute'], secret: ['set', 'delete'], config: ['write'], 'mcp-server': ['invoke'] } as const;
   const grant = (id: string, effect: 'allow' | 'require-approval', kind: keyof typeof actionsOf, ids: readonly string[] | 'all', modeEligible?: boolean) =>
     Object.freeze({ id, effect, actions: [...actionsOf[kind]], scopes: [scopeId], principals: [principal],
       resource: { kind, ids: ids === 'all' ? ids : [...ids] }, ...(modeEligible === undefined ? {} : { modeEligible }) });
+  const v5 = version === 5;
   const policy = policyFileSchema.parse({
     schemaVersion: 2, revision, roles: [], separationOfDuties: [], restrictions: [],
     approvalAssurance: [{ id: 'first-run-hard-floor-cards', scopes: [scopeId], subject: 'agent-tool-call', cells: [...HARD_FLOOR_CARD_CELLS], minimum: 'turn-bound' }],
     grants: [
-      grant('first-run-read-tools', 'allow', 'agent-tool', input.readToolNames),
+      grant('first-run-read-tools', 'allow', 'agent-tool', v5 ? [...input.readToolNames, input.proposeMcpToolName] : input.readToolNames),
       grant('first-run-scratch-tools', 'allow', 'agent-tool', input.scratchToolNames),
       grant('first-run-edit-shell-tools', 'require-approval', 'agent-tool', input.editShellToolNames, true),
       grant('first-run-write-operation', 'allow', 'operation', [input.writeOperationId]),
@@ -71,11 +82,34 @@ export function firstRunPolicyTemplate(input: FirstRunPolicyTemplateInput): Firs
       // v2: the owner manages their own installation's secrets (every name; still decided per call and audited as `secret-change`).
       grant('first-run-secret-store', 'allow', 'secret', 'all'),
       { ...grant('first-run-config', 'allow', 'config', 'all'), scopes: 'all' },
+      // v5: every MCP server in every scope (a user-scope server's trust grant covers all of this person's scopes), and the call operation.
+      ...(v5 ? [{ ...grant('first-run-mcp-servers', 'allow', 'mcp-server', 'all'), scopes: 'all' }, grant('first-run-mcp-call-operation', 'allow', 'operation', [input.mcpCallOperationId])] : []),
     ],
   });
   const bindings = bindingsFileSchema.parse({ schemaVersion: 1, revision: `${revision}-bindings`, bindings: [] });
-  return Object.freeze({ id: FIRST_RUN_POLICY_TEMPLATE_ID, version: FIRST_RUN_POLICY_TEMPLATE_VERSION, policy, bindings });
+  return { policy, bindings };
 }
+
+/** Why an installation's policy cannot take the v4 → v5 upgrade in place: it already is v5, it is not exactly the v4 template this
+ * installation's (scope, person) would get (hand-edited, administered since, another person's, or another version), or it is unreadable. */
+export type FirstRunTemplateUpgrade = { readonly status: 'upgrade'; readonly from: 4; readonly policy: PolicyFile }
+  | { readonly status: 'current' } | { readonly status: 'unavailable'; readonly reason: 'not-v4-template' | 'invalid' };
+/**
+ * The first-run v4 → v5 migration (owner 2026-10-07): only a policy document that is exactly the v4 template of this (scope, person) — the
+ * bytes `init policy` wrote, never touched since — is replaced by the v5 template, as `init policy` would install it today. Anything else is
+ * not changed here: the caller shows the explicit step (the v5 rules to add) instead. Pure; the caller pins the bytes it read.
+ */
+export function upgradeFirstRunPolicy(current: unknown, input: FirstRunPolicyTemplateInput): FirstRunTemplateUpgrade {
+  const parsed = policyFileSchema.safeParse(current);
+  if (!parsed.success) return Object.freeze({ status: 'unavailable', reason: 'invalid' });
+  const target = buildTemplate(input, FIRST_RUN_POLICY_TEMPLATE_VERSION).policy;
+  if (canonicalJson(parsed.data) === canonicalJson(target)) return Object.freeze({ status: 'current' });
+  if (canonicalJson(parsed.data) !== canonicalJson(buildTemplate(input, 4).policy)) return Object.freeze({ status: 'unavailable', reason: 'not-v4-template' });
+  return Object.freeze({ status: 'upgrade', from: 4, policy: target });
+}
+/** Key-order independent JSON of a parsed document (both sides went through the same schema). */
+const canonicalJson = (value: unknown): string => JSON.stringify(value, (_key, item: unknown) => item && typeof item === 'object' && !Array.isArray(item)
+  ? Object.fromEntries(Object.entries(item as Record<string, unknown>).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0)) : item);
 
 /**
  * Doctor's recognition (never authority): whether a v2 policy document's own revision (its `revision` when read

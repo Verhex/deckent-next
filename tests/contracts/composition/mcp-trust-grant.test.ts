@@ -11,10 +11,10 @@ import { getPolicyVocabulary, installationOwnerPermissions, INSTALLATION_OWNER_R
 import { decideAgentToolCall } from '#engine/index.js';
 import { clearConfigCache } from '#platform/index.js';
 
-// L1 MCP-CORE K1 (Jev 8e908338, TUI3 2026-10-07): the trust approval writes the approver's OWN grant for exactly the pinned tools through
-// `policy.administer@1` (delegation bound, `authority-change` audit, archive); revoke, remove and reset take it away; a person without that authority
-// keeps the trust and gets the reason; pin drift offers nothing until re-approval replaces the grant. The delegation bound (I2) admits only what the
-// approver already holds, so the grant never changes the approver's own decision: K1 stays open — the L1 review's decision point.
+// L1 MCP-CORE K1 (Jev 8e908338, TUI3 2026-10-07) with the owner's MCP decisions (2026-10-07: `mcp-server` kind Jev 04f75210, effect Jev 71eeb4ab):
+// the trust approval writes the approver's OWN `mcp-server` grant for the server (require-approval, mode-eligible) through `policy.administer@1`
+// (delegation bound, `authority-change` audit, archive); revoke, remove and reset take it away; a person without that authority keeps the trust and
+// gets the reason; pin drift offers nothing until re-approval re-pins the tools (the one grant is replaced, never doubled).
 const FIXTURE = resolve('tests/fixtures/mcp-stdio-server.mjs');
 registerProviderConfig();
 const roots: string[] = [];
@@ -48,7 +48,8 @@ async function fixture(options: { owner?: boolean } = {}) {
   const mcpGrants = () => policy().grants.filter(grant => grant.id.startsWith('mcp-'));
   const source = new FilePolicySource({ path: join(data, 'policy.json'), bindingsPath: join(data, 'bindings.json'), archivePath: join(data, 'audit', 'authority-revisions'),
     ownerUid: userInfo().uid, maxBytes: 65_536 });
-  const decide = async (tool: string) => decideAgentToolCall(await source.load(), { principal, scopeId: 'proj', tool: { name: tool }, operation: { id: 'mcp.tool.call' }, cell: 'mcp-call' }).decision;
+  const decide = async (tool: string) => decideAgentToolCall(await source.load(), { principal, scopeId: 'proj', tool: { name: tool }, operation: { id: 'mcp.tool.call' }, cell: 'mcp-call',
+    mcpServer: tool.split('__')[1]! }).decision;
   const authorityChanges = () => {
     const ledger = new DatabaseSync(opened.path, { readOnly: true });
     try { return ledger.prepare('SELECT record FROM audit_events ORDER BY sequence').all().map(row => (JSON.parse(String(row['record'])) as { event: { subject: { kind: string } } }).event.subject)
@@ -59,13 +60,13 @@ async function fixture(options: { owner?: boolean } = {}) {
 }
 
 describe.skipIf(process.platform !== 'linux')('MCP trust writes the approver\'s tool grant (K1)', () => {
-  it('approve → grant for exactly the pinned tools (both policy sides, this scope, this person), audited; revoke takes trust and grant together', async () => {
+  it('approve → the server\'s mcp-server grant (require-approval, mode-eligible; this scope, this person), audited; revoke takes trust and grant together', async () => {
     const f = await fixture();
     expect(await f.run({ verb: 'add', scope: 'local', name: 'fx', entry: f.entry })).toMatchObject({ trust: 'trusted', pinnedTools: 1, grant: { status: 'granted' } });
     const grants = f.mcpGrants();
-    expect(grants.map(grant => [grant.resource.kind, grant.resource.ids, grant.scopes, grant.principals])).toEqual([['agent-tool', ['mcp__fx__echo'], ['proj'], [me]],
-      ['operation', ['mcp.tool.call'], ['proj'], [me]]]);
-    // `mcp-call` is a raising cell: an allowed call still asks per call (standart). The owner role already allowed it before the grant (I2).
+    expect(grants.map(grant => [grant.resource.kind, grant.resource.ids, grant.scopes, grant.principals])).toEqual([['mcp-server', ['fx'], ['proj'], [me]]]);
+    expect(grants[0]).toMatchObject({ effect: 'require-approval', modeEligible: true, actions: ['invoke'] });
+    // Standart asks every call (the grant's require-approval; full-auto lowers it — the policy and runtime tests prove the modes).
     expect(await f.decide('mcp__fx__echo')).toBe('require-approval');
     expect(f.authorityChanges()).toHaveLength(1);
     expect(await f.run({ verb: 'revoke', name: 'fx' })).toMatchObject({ revoked: { name: 'fx', scope: 'local' }, grant: { status: 'revoked' } });
@@ -81,10 +82,10 @@ describe.skipIf(process.platform !== 'linux')('MCP trust writes the approver\'s 
     const listed = await f.run({ verb: 'list' }) as { servers: { health: string; tools: { name: string; status: string }[] }[] };
     expect(listed.servers[0]).toMatchObject({ health: 'tools-changed' });
     expect(listed.servers[0]!.tools.map(tool => [tool.name, tool.status])).toEqual([['echo', 'drifted'], ['other', 'unpinned']]);
-    // The grant names `other` nowhere: the drift added nothing to policy.
-    expect(f.mcpGrants()[0]!.resource.ids).toEqual(['mcp__fx__echo']);
+    // The grant names the server only; the drift changed nothing in policy (a drifted or new tool is simply not offered until re-pinned).
+    expect(f.mcpGrants().map(grant => grant.resource.ids)).toEqual([['fx']]);
     expect(await f.run({ verb: 'approve', name: 'fx', alwaysAsk: [] })).toMatchObject({ approved: true, pinnedTools: 2, grant: { status: 'granted' } });
-    expect(f.mcpGrants().map(grant => grant.resource.ids)).toEqual([['mcp__fx__echo', 'mcp__fx__other'], ['mcp.tool.call']]);
+    expect(f.mcpGrants().map(grant => grant.resource.ids)).toEqual([['fx']]);
     expect(await f.run({ verb: 'remove', name: 'fx' })).toMatchObject({ grant: { status: 'revoked' } });
     expect(f.mcpGrants()).toEqual([]);
     expect(await f.run({ verb: 'add', scope: 'local', name: 'fx', entry: f.entry, approve: false })).toMatchObject({ trust: 'pending' });
@@ -96,14 +97,14 @@ describe.skipIf(process.platform !== 'linux')('MCP trust writes the approver\'s 
   it('a user-scope server\'s grant covers every scope of this person', async () => {
     const f = await fixture();
     expect(await f.run({ verb: 'add', scope: 'user', name: 'fx', entry: f.entry })).toMatchObject({ grant: { status: 'granted' } });
-    expect(f.mcpGrants().map(grant => grant.scopes)).toEqual(['all', 'all']);
+    expect(f.mcpGrants().map(grant => grant.scopes)).toEqual(['all']);
   }, 90_000);
 
   it('a person without that authority keeps the trust and is told why; nothing is written to policy', async () => {
     const f = await fixture({ owner: false });
     expect(await f.run({ verb: 'add', scope: 'local', name: 'fx', entry: f.entry })).toMatchObject({ trust: 'trusted', grant: { status: 'refused', reason: 'delegation' } });
     expect(f.mcpGrants()).toEqual([]); expect(f.authorityChanges()).toEqual([]);
-    // Without any authority the call is denied by policy: K1 is not closed by the grant (L1 decision point).
+    // Without any authority the call is denied by policy (no mcp-server rule for this person).
     expect(await f.decide('mcp__fx__echo')).toBe('deny');
     expect(await f.run({ verb: 'list', health: false })).toMatchObject({ servers: [{ name: 'fx', status: 'trusted' }] });
   }, 90_000);
@@ -112,7 +113,8 @@ describe.skipIf(process.platform !== 'linux')('MCP trust writes the approver\'s 
 describe('the grant-refused notice (en, tr)', () => {
   it('names the server, the reason in words and the consequence', () => {
     expect(renderMcpStartNotice({ kind: 'grant-refused', name: 'fx', reason: 'delegation' }, 'en')).toBe('MCP server fx is trusted, but its tools were not allowed: you may not grant '
-      + 'these tools in this scope (your own policy does not hold them); a policy administrator can. Calls to them are denied by policy.');
+      + 'this server in this scope (your own policy does not hold mcp-server authority); a policy administrator can, and a first-run installation takes it with '
+      + 'deckent init policy --scope <id> --upgrade --preview. Calls to them are denied by policy.');
     expect(renderMcpStartNotice({ kind: 'grant-refused', name: 'fx', reason: 'unsupported' }, 'tr')).toBe('MCP sunucusu fx güvenilir, ama araçlarına izin verilmedi: kurulum policy '
       + 'dosyası bu izni taşıyamıyor (policy v1 ya da okunamıyor). Bu araçlara yapılan çağrılar policy tarafından reddedilir.');
     expect(renderMcpStartNotice({ kind: 'grant-refused', name: 'fx', reason: 'POLICY_CHANGE_TOO_LARGE' }, 'en')).toContain('not allowed: POLICY_CHANGE_TOO_LARGE.');

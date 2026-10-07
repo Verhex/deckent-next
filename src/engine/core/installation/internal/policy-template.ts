@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
-import { firstRunPolicyTemplate, identitySchema, immutableJsonObjectSchema, matchFirstRunPolicyTemplate, policyFileSchema,
-  type FirstRunPolicyTemplateInput } from '#domain/index.js';
+import { firstRunPolicyTemplate, FIRST_RUN_POLICY_TEMPLATE_ID, FIRST_RUN_POLICY_TEMPLATE_VERSION, identitySchema, immutableJsonObjectSchema, matchFirstRunPolicyTemplate,
+  policyFileSchema, upgradeFirstRunPolicy, type FirstRunPolicyTemplateInput } from '#domain/index.js';
 import type { BootstrapJournalPayload, BootstrapObservation } from '#platform/index.js';
 import { InstallationPublicationError } from './publish.js';
 
@@ -8,6 +8,9 @@ import { InstallationPublicationError } from './publish.js';
 // Core operation descriptors by tests/contracts/installation/first-run-template-catalog.test.ts. Product-fixed template content,
 // not an adapter choice, so it lives here rather than composition.
 export const FIRST_RUN_READ_TOOL_NAMES = Object.freeze(['read_file', 'list_dir', 'grep', 'glob']);
+/** v5 (owner 2026-10-07): the model's MCP proposal tool (read class: it writes nothing; a yes in its human window adds the server untrusted). */
+export const FIRST_RUN_PROPOSE_MCP_TOOL_NAME = 'propose_mcp_server';
+export const FIRST_RUN_MCP_CALL_OPERATION_ID = 'mcp.tool.call';
 export const FIRST_RUN_SCRATCH_TOOL_NAMES = Object.freeze(['scratch_write', 'scratch_read', 'scratch_list']);
 export const FIRST_RUN_EDIT_SHELL_TOOL_NAMES = Object.freeze(['edit_file', 'write_file', 'run_shell']);
 export const FIRST_RUN_SCRATCH_WRITE_OPERATION_ID = 'workspace.scratch.write';
@@ -53,8 +56,10 @@ const digestOf = (text: string) => createHash('sha256').update(text, 'utf8').dig
 export interface PreparePolicyTemplateInput {
   readonly scopeId: string; readonly principal: { readonly issuer: string; readonly subject: string };
   readonly paths: { readonly policy: string; readonly bindings: string };
-  readonly toolNames: Pick<FirstRunPolicyTemplateInput, 'readToolNames' | 'scratchToolNames' | 'scratchWriteOperationId' | 'editShellToolNames' | 'writeOperationId' | 'shellOperationId'>;
+  readonly toolNames: FirstRunToolNames;
 }
+export type FirstRunToolNames = Pick<FirstRunPolicyTemplateInput, 'readToolNames' | 'scratchToolNames' | 'scratchWriteOperationId' | 'editShellToolNames' | 'writeOperationId'
+  | 'shellOperationId' | 'proposeMcpToolName' | 'mcpCallOperationId'>;
 /**
  * Pure preparation (SCR-B, owner 2026-09-28 option B): no I/O, deterministic in `(scopeId, principal)`, so
  * `init policy --preview` and a later `init policy --apply` for the same scope always agree on exactly what
@@ -139,4 +144,45 @@ export class PolicyTemplateInstallationApplication {
     return Object.freeze({ schemaVersion: 1 as const, status, transactionId: preview.transactionId, planDigest: preview.planDigest,
       template: preview.template, scopeId: preview.scopeId, paths: preview.paths });
   }
+}
+
+/** The single conditional writer of policy.json/bindings.json (structurally the policy unit's `AuthorityDocumentStore`; archived, keyed). */
+export interface PolicyTemplateDocumentWriter {
+  updateAuthority<T>(work: (snapshot: { readonly policy: unknown; readonly bindings: unknown }) => { readonly write: { readonly policy: unknown | null;
+    readonly bindings: unknown | null; readonly order: 'policy-first' | 'bindings-first' } | null; readonly result: T }, key?: string): Promise<T>;
+}
+export interface PolicyTemplateUpgradeResult {
+  readonly schemaVersion: 1;
+  /** `preview`: would upgrade; `upgraded`: written now; `current`: already the v5 template; `unavailable`: not exactly this installation's v4 template. */
+  readonly status: 'preview' | 'upgraded' | 'current' | 'unavailable';
+  readonly reason: 'not-v4-template' | 'invalid' | null;
+  readonly template: { readonly id: string; readonly from: 4 | null; readonly to: number };
+  readonly scopeId: string; readonly principal: { readonly issuer: string; readonly subject: string };
+  /** The rules v5 adds or changes, exactly as the v5 template writes them: what the upgrade writes, or the explicit step to take by hand. */
+  readonly rules: readonly unknown[];
+}
+/**
+ * The first-run v4 → v5 migration (owner 2026-10-07): `deckent init policy --upgrade`. Only a policy that is exactly the v4 template of this
+ * installation's (scope, person) — the bytes `init policy` wrote, untouched since — is replaced by the v5 template, through the one conditional,
+ * archived writer of the authority documents (a concurrent change of either file writes nothing). The authority is the template installation's:
+ * the local person the template names, who could install v5 on a fresh installation today; nothing else is touched (bindings, modes stay).
+ * Anything else is `unavailable`, never rewritten: the result lists the v5 rules as the explicit step (a company or hand-edited policy adds them
+ * itself, inside its own authority). `apply: false` reads only.
+ */
+export async function upgradePolicyTemplate(writer: PolicyTemplateDocumentWriter, input: { readonly scopeId: string;
+  readonly principal: { readonly issuer: string; readonly subject: string }; readonly toolNames: FirstRunToolNames; readonly apply: boolean }): Promise<PolicyTemplateUpgradeResult> {
+  const scopeId = identitySchema.parse(input.scopeId);
+  const principal = { issuer: identitySchema.parse(input.principal.issuer), subject: identitySchema.parse(input.principal.subject) };
+  const template = { scopeId, principal, ...input.toolNames }, target = firstRunPolicyTemplate(template);
+  const v4 = new Set(['first-run-read-tools', 'first-run-mcp-servers', 'first-run-mcp-call-operation']);
+  const rules = Object.freeze((target.policy.schemaVersion === 2 ? target.policy.grants : []).filter(rule => v4.has(rule.id)));
+  const result = (status: PolicyTemplateUpgradeResult['status'], reason: PolicyTemplateUpgradeResult['reason'] = null, from: 4 | null = null): PolicyTemplateUpgradeResult =>
+    Object.freeze({ schemaVersion: 1, status, reason, template: Object.freeze({ id: FIRST_RUN_POLICY_TEMPLATE_ID, from, to: FIRST_RUN_POLICY_TEMPLATE_VERSION }), scopeId, principal, rules });
+  const key = `policy-template-upgrade-v${FIRST_RUN_POLICY_TEMPLATE_VERSION}-${digestOf(canonical(target.policy)).slice(0, 64)}`;
+  return writer.updateAuthority(snapshot => {
+    const plan = upgradeFirstRunPolicy(snapshot.policy, template);
+    if (plan.status !== 'upgrade') return { write: null, result: plan.status === 'current' ? result('current') : result('unavailable', plan.reason) };
+    if (!input.apply) return { write: null, result: result('preview', null, plan.from) };
+    return { write: { policy: plan.policy, bindings: null, order: 'policy-first' }, result: result('upgraded', null, plan.from) };
+  }, input.apply ? key : undefined);
 }

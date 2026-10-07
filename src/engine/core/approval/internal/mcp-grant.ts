@@ -8,14 +8,15 @@ export type McpToolGrantOutcome = { readonly status: 'granted' | 'revoked' | 'no
 export interface McpToolGrantTarget { readonly scope: 'managed' | 'local' | 'project' | 'user'; readonly name: string }
 
 /**
- * MCP trust → permission (L1 K1, Jev 8e908338): the approver's own grant for exactly a server's pinned tools, written and removed only through
+ * MCP trust → permission (L1 K1, Jev 8e908338; owner 2026-10-07 `mcp-server` kind, Jev 04f75210): the approver's own `mcp-server` grant for
+ * exactly this server (it covers the server's pinned tools; `require-approval` + `modeEligible`, Jev 71eeb4ab), written and removed only through
  * `policy.administer@1` (the same chain, delegation bound, `authority-change` audit and archive as every governed policy change). It is probed
  * first with the delegation bound, so a person without that authority gets their trust recorded and a typed reason, never a half-written
  * policy. A user-scope server's grant covers every scope of this person; any other, the request's scope. Pin drift needs no policy change:
  * a drifted tool is never offered and its send is refused (`pin-revoked`) until re-approval re-pins it and replaces this grant.
  */
 export class McpToolGrants {
-  constructor(private readonly deps: Pick<PersistentStandingDependencies, 'administration' | 'approve' | 'policy'>, private readonly operationId: string) {}
+  constructor(private readonly deps: Pick<PersistentStandingDependencies, 'administration' | 'approve' | 'policy'>) {}
   private digest(scopeId: string, principal: { readonly issuer: string; readonly subject: string }, server: McpToolGrantTarget) {
     return sha256(`mcp-tool-grant:1\0${server.scope}\0${server.name}\0${principal.issuer}\0${principal.subject}\0${server.scope === 'user' ? '*' : scopeId}`).slice(0, 24);
   }
@@ -29,8 +30,8 @@ export class McpToolGrants {
     if (!policy) return { status: 'refused', reason: 'unsupported' };
     const digest = this.digest(input.scopeId, input.principal, input.server), ids = mcpGrantRuleIds(digest), held = ids.filter(id => policy.grants.some(grant => grant.id === id));
     if (!input.tools.length) return held.length ? this.revoke(input) : { status: 'none' };
-    const change = mcpToolGrantChange({ digest, principal: input.principal, scopes: input.server.scope === 'user' ? 'all' : [input.scopeId], tools: input.tools,
-      operationId: this.operationId, replaces: held });
+    const change = mcpToolGrantChange({ digest, principal: input.principal, scopes: input.server.scope === 'user' ? 'all' : [input.scopeId], server: input.server.name,
+      replaces: held });
     try {
       const files = authorityDocuments(policy);
       if (!delegationWithin(policy, input.principal, planPolicyChange(files.policy, files.bindings, change).touched).ok) return { status: 'refused', reason: 'delegation' };

@@ -40,3 +40,18 @@ it('is refused (exit 2, never silently ignored) when the composition root did no
   expect(await main(['init', 'policy', '--scope', 'x', '--preview'], context({ previewPolicyTemplateInstallation: undefined }))).toBe(2);
   expect(await main(['init', 'policy', '--scope', 'x', '--apply'], context({ applyPolicyTemplateInstallation: undefined }))).toBe(2);
 });
+it('--upgrade (owner 2026-10-07: first-run v4 → v5) reads with --preview, writes only with --apply, and says in words what happened', async () => {
+  const calls: [string, string, boolean][] = [], output: string[] = [];
+  let status = 'preview';
+  const ctx = context({ async upgradePolicyTemplateInstallation(root: string, scopeId: string, apply: boolean) { calls.push([root, scopeId, apply]); return { status }; },
+    stdout: { write(value: string) { output.push(value); } } });
+  expect(await main(['init', 'policy', '--scope', 'installation', '--upgrade', '--preview', '--lang', 'en'], ctx)).toBe(0);
+  expect(output.join('')).toContain('Nothing was written; run it again with --apply.');
+  output.length = 0; status = 'unavailable';
+  expect(await main(['init', 'policy', '--scope', 'installation', '--upgrade', '--apply', '--lang', 'tr'], ctx)).toBe(0);
+  expect(output.join('')).toContain('yeniden yazılmadı');
+  expect(calls).toEqual([['/project', 'installation', false], ['/project', 'installation', true]]);
+  // Exactly one of --preview/--apply, and the handler must be wired.
+  expect(await main(['init', 'policy', '--scope', 'installation', '--upgrade'], ctx)).toBe(2);
+  expect(await main(['init', 'policy', '--scope', 'installation', '--upgrade', '--apply'], context())).toBe(2);
+});

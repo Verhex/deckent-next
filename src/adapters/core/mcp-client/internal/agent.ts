@@ -59,6 +59,8 @@ export function mcpTurnTools(offered: ReadonlyMap<string, McpOfferedTool>) {
     entry: of,
     owns: (name: string) => offered.has(name),
     display: (name: string) => of(name)?.display ?? null,
+    /** The registry name of the server a tool belongs to (its `mcp-server` policy resource). */
+    server: (name: string) => of(name)?.server ?? null,
     cell: (name: string): McpToolCell | null => of(name)?.cell ?? null,
     hints: (name: string): McpToolChangeHints | null => of(name)?.hints ?? null,
     plan: (name: string, args: Record<string, unknown>): string | null => !of(name) ? `[deckent] ${name}: error=unknown-tool`

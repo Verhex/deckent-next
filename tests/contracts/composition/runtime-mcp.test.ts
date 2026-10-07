@@ -45,7 +45,7 @@ const approveWithout = (f: { project: string; data: string; env: Record<string, 
     principal: { issuer: 'test', subject: '1' }, ask: async () => true, audit: async () => undefined, describeNotice: notice => renderMcpStartNotice(notice, 'en') });
 type Effect = 'allow' | 'require-approval' | 'deny';
 const mcpGrants = (tool: Effect = 'allow', operation: Effect = 'allow') => [
-  { id: 'mcp-tool', effect: tool, actions: ['invoke'], scopes: ['scope'], principals: me, resource: { kind: 'agent-tool', ids: ['mcp__fx__echo', 'mcp__fx__slow'] } },
+  { id: 'mcp-tool', effect: tool, actions: ['invoke'], scopes: ['scope'], principals: me, resource: { kind: 'mcp-server', ids: ['fx'] } },
   { id: 'mcp-operation', effect: operation, actions: ['execute'], scopes: ['scope'], principals: me, resource: { kind: 'operation', ids: ['mcp.tool.call'] } },
   { id: 'decide', effect: 'allow', actions: ['inspect', 'decide'], scopes: ['scope'], principals: me, resource: { kind: 'approval', ids: 'all' } }];
 const call = (name: string, args: Record<string, unknown>) => ({ toolCall: { name, arguments: JSON.stringify(args) } });
@@ -357,7 +357,7 @@ describe.skipIf(process.platform !== 'linux')('MCP server lifecycle and the prot
 });
 
 describe.skipIf(process.platform !== 'linux')('MCP tools under the permission modes (MCP-CLIENT)', () => {
-  const both = (effect: Effect, eligible: boolean) => [rule('mcp-tools', 'agent-tool', ['mcp__fx__echo', 'mcp__fx__drop'], effect, eligible),
+  const both = (effect: Effect, eligible: boolean) => [rule('mcp-tools', 'mcp-server', ['fx'], effect, eligible),
     rule('mcp-op', 'operation', ['mcp.tool.call'], effect, eligible)];
   const drop = { name: 'drop', description: 'Drop things', inputSchema: { type: 'object', properties: {} } };
 

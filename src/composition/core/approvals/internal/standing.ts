@@ -53,10 +53,10 @@ export function revokeConfiguredStandingGrant(root: string, input: { readonly sc
  * process (the same person the CLI and the local service run for); an approver who is not that person gets no grant (`principal`), never a
  * grant in someone else's name. Every refusal is a typed outcome; trust stays recorded by its own path.
  */
-export function configuredMcpToolGrants(root: string, scopeId: string, options: ConfigLoadOptions, approver: { readonly issuer: string; readonly subject: string },
-  operationId: string): { grant(server: McpToolGrantTarget, tools: readonly string[]): Promise<McpToolGrantOutcome>; revoke(server: McpToolGrantTarget): Promise<McpToolGrantOutcome> } {
+export function configuredMcpToolGrants(root: string, scopeId: string, options: ConfigLoadOptions, approver: { readonly issuer: string; readonly subject: string }):
+  { grant(server: McpToolGrantTarget, tools: readonly string[]): Promise<McpToolGrantOutcome>; revoke(server: McpToolGrantTarget): Promise<McpToolGrantOutcome> } {
   const run = (work: (grants: McpToolGrants, person: Person) => Promise<McpToolGrantOutcome>) => withPolicyAdministration(root, scopeId, options, 'write', (deps, person) =>
-    person.issuer === approver.issuer && person.subject === approver.subject ? work(new McpToolGrants(deps, operationId), person) : Promise.resolve({ status: 'refused' as const, reason: 'principal' }))
+    person.issuer === approver.issuer && person.subject === approver.subject ? work(new McpToolGrants(deps), person) : Promise.resolve({ status: 'refused' as const, reason: 'principal' }))
     // A person refused write access to this scope holds no authority to grant there either (the same reason as the delegation bound's).
     .catch((error: unknown) => { const code = (error as { code?: unknown })?.code; return { status: 'refused' as const, reason: code === 'POLICY_DENIED' ? 'delegation' : String(code ?? 'failed') }; });
   return {

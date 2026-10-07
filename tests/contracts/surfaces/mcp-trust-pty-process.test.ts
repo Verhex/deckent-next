@@ -149,7 +149,7 @@ async function mcpProject() {
   await writeFile(join(data, 'policy.json'), JSON.stringify({ schemaVersion: 1, revision: 'p1', restrictions: [], grants: [
     grant('invoke', 'allow', ['invoke', 'inspect', 'inspect-content', 'cancel-invocation'], 'model-invocation', [modelInvocationTargetId(reference)]),
     grant('scope', 'allow', ['inspect'], 'scope', ['scope']), grant('decide', 'allow', ['inspect', 'decide'], 'approval', 'all'),
-    grant('mcp-tool', 'allow', ['invoke'], 'agent-tool', ['mcp__fx__echo']), grant('mcp-run', 'allow', ['execute'], 'operation', ['mcp.tool.call'])] }), { mode: 0o600 });
+    grant('mcp-tool', 'allow', ['invoke'], 'mcp-server', ['fx']), grant('mcp-run', 'allow', ['execute'], 'operation', ['mcp.tool.call'])] }), { mode: 0o600 });
   const env = { PATH: process.env['PATH'] ?? '', HOME: home, XDG_CONFIG_HOME: join(home, '.config'), DECKENT_GLOBAL_HOME: join(home, 'global'),
     DECKENT_LANGUAGE: 'en', TERM: 'xterm-256color', NO_COLOR: '1' };
   const started = () => readFileSync(log, 'utf8').split('\n').filter(line => line.includes('"start"')).length;

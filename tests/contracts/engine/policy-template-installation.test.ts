@@ -6,7 +6,8 @@ import { encodeBootstrapJournal, type BootstrapJournalPayload, type BootstrapObs
 // SCR-B (owner 2026-09-28, checkpoint option B): a journaled, Docker/pool-free "policy only" installation. Same
 // custody discipline as installation-publication.test.ts (fake in-memory journal + effects), narrower resources.
 const toolNames = { readToolNames: ['read_file'], scratchToolNames: ['scratch_write'], scratchWriteOperationId: 'workspace.scratch.write',
-  editShellToolNames: ['edit_file'], writeOperationId: 'workspace.file.write', shellOperationId: 'host.shell.run' };
+  editShellToolNames: ['edit_file'], writeOperationId: 'workspace.file.write', shellOperationId: 'host.shell.run', proposeMcpToolName: 'propose_mcp_server',
+  mcpCallOperationId: 'mcp.tool.call' };
 function prepared(scopeId = 'installation'): PreparedPolicyTemplateInstallation {
   return preparePolicyTemplateInstallation({ scopeId, principal: { issuer: 'host', subject: '1000' },
     paths: { policy: '/project/.deckent/policy.json', bindings: '/project/.deckent/bindings.json' }, toolNames });
@@ -52,7 +53,7 @@ it('is deterministic: the same scope/principal always yields the same plan and t
 it('writes a complete pending journal before any effect, then commits after both targets publish', async () => {
   const source = prepared(), memory = memoryPorts();
   const result = await new PolicyTemplateInstallationApplication(memory.ports).apply(source);
-  expect(result).toMatchObject({ status: 'installed', template: { id: 'first-run-template', version: 4 }, scopeId: 'installation' });
+  expect(result).toMatchObject({ status: 'installed', template: { id: 'first-run-template', version: 5 }, scopeId: 'installation' });
   expect(memory.writes[0]).toMatchObject({ phase: 'pending', transactionId: source.preview.transactionId, planDigest: source.preview.planDigest,
     resources: [{ resource: 'policy', state: 'pending' }, { resource: 'bindings', state: 'pending' }] });
   expect(memory.state.record).toMatchObject({ phase: 'committed', blockers: [], resources: [{ state: 'published' }, { state: 'published' }] });

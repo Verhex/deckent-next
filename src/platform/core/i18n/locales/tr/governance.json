@@ -646,7 +646,7 @@
   "mcp.start.notRecorded": "MCP sunucusu {name}: bu hata kaydedilemedi; kartı yeniden sorulabilir.",
   "mcp.start.notDecided": "MCP sunucusu {name} için karar verilemedi: {code}.",
   "mcp.start.grantRefused": "MCP sunucusu {name} güvenilir, ama araçlarına izin verilmedi: {reason}. Bu araçlara yapılan çağrılar policy tarafından reddedilir.",
-  "mcp.grant.reason.delegation": "bu araçlar için bu kapsamda izin veremezsiniz (kendi policy kurallarınız bu yetkiyi içermiyor); bir policy yöneticisi verebilir",
+  "mcp.grant.reason.delegation": "bu sunucu için bu kapsamda izin veremezsiniz (kendi policy kurallarınız mcp-server yetkisini içermiyor); bir policy yöneticisi verebilir, ilk kurulum ise bu yetkiyi deckent init policy --scope <id> --upgrade --preview ile alır",
   "mcp.grant.reason.unsupported": "kurulum policy dosyası bu izni taşıyamıyor (policy v1 ya da okunamıyor)",
   "mcp.grant.reason.principal": "onay, bu servisin çalıştığı kişiden başka birinden geldi",
   "mcp.proposal.title": "Model bir MCP sunucusu eklemeyi öneriyor. Onaylamazsanız hiçbir şey yazılmaz.",

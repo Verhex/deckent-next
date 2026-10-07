@@ -19,7 +19,7 @@ import { applyConfiguredPoolCapacity, inspectConfiguredPoolCapacity, applyConfig
 import { ensureConfiguredRuntimeService, openConfiguredTerminalHistory, openConfiguredTerminalSessions, restartConfiguredRuntimeService, stopConfiguredRuntimeService } from './runtime-autostart.js';
 import { main as runCli } from '#surfaces/index.js';
 import { previewSuppliedInstallation, inspectSuppliedInstallation, applySuppliedInstallation, resumeInstallation,
-  applyPolicyTemplateInstallation, inspectPolicyTemplate, previewPolicyTemplateInstallation } from '#composition/core/installation/index.js';
+  applyPolicyTemplateInstallation, inspectPolicyTemplate, previewPolicyTemplateInstallation, upgradePolicyTemplateInstallation } from '#composition/core/installation/index.js';
 import { inspectConfiguredShellRealm, runConfiguredMcpCommand } from '#composition/core/agent-turn/index.js';
 import { getConfigFieldDefault, isMainModule } from '#platform/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
@@ -108,6 +108,7 @@ export async function main(argv: readonly string[] = process.argv.slice(2)) {
     },
     previewPolicyTemplateInstallation: (projectRoot, scopeId) => previewPolicyTemplateInstallation(projectRoot, scopeId).catch(error => { throw queryFailure(error); }),
     applyPolicyTemplateInstallation: (projectRoot, scopeId) => applyPolicyTemplateInstallation(projectRoot, scopeId).catch(error => { throw queryFailure(error); }),
+    upgradePolicyTemplateInstallation: (projectRoot, scopeId, apply) => upgradePolicyTemplateInstallation(projectRoot, scopeId, apply).catch(error => { throw queryFailure(error); }),
     inspectPolicyTemplate: projectRoot => inspectPolicyTemplate(projectRoot),
     assessModelInvocationDelivery: (projectRoot, options) => assessConfiguredModelInvocationDelivery(projectRoot, options),
     listStandingGrants: listConfiguredStandingGrants, revokeStandingGrant: revokeConfiguredStandingGrant,

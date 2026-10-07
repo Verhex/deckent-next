@@ -1148,6 +1148,7 @@
     },
     "src/composition/core/installation": {
       "dependencies": [
+        "src/composition/core/policy",
         "src/adapters/core/local-keyring",
         "src/adapters/core/attempt-store",
         "src/adapters/core/docker-supervisor",

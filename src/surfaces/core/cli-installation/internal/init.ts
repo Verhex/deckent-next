@@ -22,13 +22,15 @@ export type InstallationResumeHandler = (projectRoot: string, input: Installatio
 // it is granted for.
 export type PolicyTemplatePreviewHandler = (projectRoot: string, scopeId: string) => Promise<unknown>;
 export type PolicyTemplateApplyHandler = (projectRoot: string, scopeId: string) => Promise<unknown>;
+/** Owner 2026-10-07: the first-run v4 → v5 migration (`--upgrade`); `apply: false` reads only. */
+export type PolicyTemplateUpgradeHandler = (projectRoot: string, scopeId: string, apply: boolean) => Promise<{ readonly status: string }>;
 
 /** Preview is deliberately non-mutating. No surface invents profile data or policy grants. */
 export async function initCommand(argv: readonly string[], context: InstallationCommandContext): Promise<void> {
   if (argv[1] === 'identity') return identityCommand(argv, context);
   const action = argv[1]; let profilePath: string | undefined, language: string | undefined, dockerExecutable: string | undefined;
   let proposalDigest: string | undefined, json = false, allowShutdown = false, acceptCustom = false;
-  let scopeId: string | undefined, policyPreview = false, policyApply = false;
+  let scopeId: string | undefined, policyPreview = false, policyApply = false, policyUpgrade = false;
   if (!['preview', 'inspect', 'apply', 'resume', 'policy', '--help', '-h'].includes(action ?? '')) throw ErrorRegistry.createError('CLI_USAGE');
   for (let i = 2; i < argv.length; i++) {
     const flag = argv[i];
@@ -37,6 +39,7 @@ export async function initCommand(argv: readonly string[], context: Installation
     if (flag === '--no-color') continue;
     if (flag === '--preview' && action === 'policy' && !policyPreview && !policyApply) { policyPreview = true; continue; }
     if (flag === '--apply' && action === 'policy' && !policyApply && !policyPreview) { policyApply = true; continue; }
+    if (flag === '--upgrade' && action === 'policy' && !policyUpgrade) { policyUpgrade = true; continue; }
     if (flag === '--scope' && action === 'policy' && scopeId === undefined) {
       scopeId = argv[++i];
       if (!scopeId || scopeId.startsWith('-')) throw ErrorRegistry.createError('CLI_USAGE');
@@ -81,6 +84,14 @@ export async function initCommand(argv: readonly string[], context: Installation
   if (action === 'policy') {
     if (!scopeId || policyPreview === policyApply || profilePath || dockerExecutable || proposalDigest || acceptCustom || allowShutdown) {
       throw ErrorRegistry.createError('CLI_USAGE');
+    }
+    if (policyUpgrade) {
+      if (!context.upgradePolicyTemplateInstallation) throw ErrorRegistry.createError('CLI_USAGE');
+      const result = await context.upgradePolicyTemplateInstallation(root, scopeId, policyApply);
+      const line = result.status === 'preview' ? t('cli.init.policyUpgrade.preview', {}, locale) : result.status === 'upgraded' ? t('cli.init.policyUpgrade.upgraded', {}, locale)
+        : result.status === 'current' ? t('cli.init.policyUpgrade.current', {}, locale) : t('cli.init.policyUpgrade.unavailable', {}, locale);
+      emit(result, { ...sinks, json, render: value => `${line}\n${formatValue(value)}` });
+      return;
     }
     if (policyApply) {
       if (!context.applyPolicyTemplateInstallation) throw ErrorRegistry.createError('CLI_USAGE');

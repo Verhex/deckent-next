@@ -26,7 +26,7 @@ function fixture() {
     setTools: (tools: unknown[]) => writeFileSync(toolsFile, JSON.stringify(tools)) };
 }
 const grants = [
-  { id: 'mcp-tool', effect: 'allow', actions: ['invoke'], scopes: ['scope'], principals: me, resource: { kind: 'agent-tool', ids: ['mcp__fx__echo'] } },
+  { id: 'mcp-tool', effect: 'allow', actions: ['invoke'], scopes: ['scope'], principals: me, resource: { kind: 'mcp-server', ids: ['fx'] } },
   { id: 'mcp-op', effect: 'allow', actions: ['execute'], scopes: ['scope'], principals: me, resource: { kind: 'operation', ids: ['mcp.tool.call'] } },
   { id: 'decide', effect: 'allow', actions: ['inspect', 'decide'], scopes: ['scope'], principals: me, resource: { kind: 'approval', ids: 'all' } }];
 const writeRegistry = (project: string, entry: unknown) => {

@@ -51,7 +51,7 @@ export async function createAgentMcp(input: { readonly pool: McpClientPool; read
   const resolveSecret = configuredSecretResolver(config, input.options);
   // K1: a trust card's yes also writes the answering person's grant for the pinned tools (their own authority; the governed policy chain).
   const registry = { projectRoot: input.projectRoot, layout: context.layout, environment, secret: (name: string) => resolveSecret(name),
-    grants: configuredMcpToolGrants(input.projectRoot, scopeId, input.options, context.principal, MCP_TOOL_CALL_OPERATION.operation.id) };
+    grants: configuredMcpToolGrants(input.projectRoot, scopeId, input.options, context.principal) };
   const opened = await openTurnMcp({ registry, pool, cwd: input.cwd, sandboxes: input.sandboxes, principal: context.principal, sqlite: config.storage.sqlite,
   keyFile: config.approvals.keyFile, requestTtlMs: config.approvals.requestTtlMs, inputMaxBytes: config.mcp.inputMaxBytes, resultMaxBytes: input.resultMaxBytes, scopeId, turnId,
   signal: input.signal, emit: input.emit, describeNotice: notice => renderMcpStartNotice(notice, locale), ledgerPath: () => context.path(), requestPolicy: async () => { const policy = await context.policy.load().catch(() => null); return { revision: String((policy as { revision?: unknown } | null)?.revision ?? 'unknown'), trustFacts: agentToolApprovalFacts(policy, scopeId, null) }; } }); // one snapshot (Sol 2237 R2b)
@@ -104,7 +104,7 @@ export async function runConfiguredMcpCommand(projectRoot: string, request: McpC
     scopeId = (config as unknown as { terminal?: { scopeId?: string } }).terminal?.scopeId ?? 'installation';
   const shown = locale ?? resolveLocale(undefined, environment, config.language);
   const context: McpCommandContext = { projectRoot, layout: config.productLayout, environment, sandboxes: mcpInspectSandboxes(workspace.scope, isWriteApprovalFloored), principal, ask,
-    grants: configuredMcpToolGrants(projectRoot, scopeId, options, principal, MCP_TOOL_CALL_OPERATION.operation.id),
+    grants: configuredMcpToolGrants(projectRoot, scopeId, options, principal),
     describeNotice: notice => renderMcpStartNotice(notice, shown),
     secret: configuredSecretResolver(config, options), limits: { inputMaxBytes: config.mcp.inputMaxBytes },
     audit: mcpTrustAuditWriter({ layout: config.productLayout, sqlite: config.storage.sqlite, keyFile: config.approvals.keyFile, scopeId, principal, policyRevision: 'owner-cli' }) };
