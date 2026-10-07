@@ -6,9 +6,9 @@ import { openSqliteAuditStore } from '#adapters/core/audit-store/index.js';
 import { openLocalIntegrityAuthority } from '#adapters/core/local-keyring/index.js';
 import { openSqliteApprovalStore } from '#adapters/core/approval-store/index.js';
 import { displayMcpDiagnosis } from './diagnose.js';
-import { McpClientPool, mcpRealmPosture, type McpLaunchContext } from './pool.js';
+import { MCP_HTTP_POSTURE, McpClientPool, mcpRealmPosture, type McpLaunchContext } from './pool.js';
 import { MCP_CLIENT_DEFAULTS, type McpClientServerSettings } from './pin.js';
-import { expandMcpEntry, type McpScope, type McpServerEntry } from './registry.js';
+import { expandMcpEntry, isMcpHttpEntry, MCP_DEFAULT_REALM, mcpEntryDisplay, mcpLaunchValues, type McpScope, type McpServerEntry } from './registry.js';
 import { readMcpTrust, updateMcpTrust, type McpTrustRecord } from './trust.js';
 
 /** One trust change as the audit port records it (subject `mcp-trust`): never the command's values, only the definition and tool digests. */
@@ -23,8 +23,9 @@ export type McpTrustAudit = (change: McpTrustChange) => Promise<void>;
  */
 export interface McpTrustCard {
   readonly phase: 'launch' | 'tools'; readonly name: string; readonly scope: McpScope; readonly file: string; readonly definitionDigest: string;
-  readonly command: string; readonly args: readonly string[]; readonly variables: readonly { readonly name: string; readonly set: boolean }[];
-  readonly envNames: readonly string[]; readonly realm: string; readonly note: string | null;
+  /** `command` is the endpoint URL template of an HTTP server (it has no arguments, env or realm: `realm` is `none`). */
+  readonly transport: 'stdio' | 'http'; readonly command: string; readonly args: readonly string[]; readonly variables: readonly { readonly name: string; readonly set: boolean }[];
+  readonly envNames: readonly string[]; readonly headerNames: readonly string[]; readonly realm: string; readonly note: string | null;
   /** Where it runs and what it may write (C5: a sandboxed server sees the project read-only): the realm's meaning on the launch card, the view
    * it started in on the tools card. */
   readonly posture?: string; readonly era?: string; readonly protocolVersion?: string | null;
@@ -75,11 +76,13 @@ export async function decideMcpTrust(server: McpTrustServer, context: McpTrustCo
   const fail = (code: string, reason: string) => ErrorRegistry.createError(code, { params: { name: server.name, reason } });
   const expanded = await expandMcpEntry(server.entry, server.scope, context.environment, context.secret);
   if (!expanded.ok) throw fail('MCP_SERVER_ENTRY_INVALID', expanded.reason);
-  const template = [server.entry.command, ...(server.entry.args ?? []), ...Object.values(server.entry.env ?? {})];
+  const shown = mcpEntryDisplay(server.entry), realm = isMcpHttpEntry(server.entry) ? null : server.entry.realm ?? MCP_DEFAULT_REALM;
+  const template = isMcpHttpEntry(server.entry) ? [server.entry.url, ...Object.values(server.entry.headers ?? {})]
+    : [server.entry.command, ...(server.entry.args ?? []), ...Object.values(server.entry.env ?? {})];
   const launchCard: McpTrustCard = { phase: 'launch', name: server.name, scope: server.scope, file: server.file, definitionDigest: server.definitionDigest,
-    command: server.entry.command, args: server.entry.args ?? [], envNames: Object.keys(expanded.env), realm: server.entry.realm ?? 'prefer-sandbox',
+    transport: shown.transport, command: shown.command, args: shown.args, envNames: shown.envNames, headerNames: shown.headerNames, realm: realm ?? 'none',
     // C5: the launch card already says what the realm means for the server's writes (the tools card then names the actual view).
-    posture: mcpRealmPosture(server.entry.realm ?? 'prefer-sandbox'),
+    posture: realm ? mcpRealmPosture(realm) : MCP_HTTP_POSTURE,
     variables: [...new Set(template.flatMap(text => [...text.matchAll(VARIABLE)].map(match => match[1]!)))].map(name => ({ name,
       set: context.environment[name] !== undefined && context.environment[name] !== '' })),
     note: server.scope === 'project' ? 'project file: credential-shaped variables read as empty; secret references are refused' : null };
@@ -91,14 +94,14 @@ export async function decideMcpTrust(server: McpTrustServer, context: McpTrustCo
   const started = await ask(launchCard);
   if (started === null) return { decision: 'unanswered', pinned: 0 };
   if (!started) return decline();
-  const launch: McpClientServerSettings = { id: server.name, command: expanded.command, args: expanded.args, env: expanded.env, realm: server.entry.realm ?? 'prefer-sandbox', tools: [] };
+  const launch: McpClientServerSettings = { id: server.name, ...mcpLaunchValues(server.entry, expanded), tools: [] };
   const controller = new AbortController(), pool = options.pool ?? new McpClientPool(controller.signal);
   try {
     const state = await pool.open(launch, { ...MCP_CLIENT_DEFAULTS, ...(context.inputMaxBytes ? { inputMaxBytes: context.inputMaxBytes } : {}), servers: [launch] },
       { cwd: context.cwd, environment: context.environment, sandboxes: context.sandboxes });
     if (!state.ok && state.reason === 'sandbox-unreachable') {
       // MCP-SANDBOX-PATHS: what the sandbox view hides (or needs from outside it), in the registry's own words for a `${VAR}` path.
-      const shown = displayMcpDiagnosis(state.diagnosis, server.entry);
+      const shown = displayMcpDiagnosis(state.diagnosis, mcpEntryDisplay(server.entry));
       throw ErrorRegistry.createError('MCP_SANDBOX_COMMAND_UNREACHABLE', { cause: shown, params: { name: server.name, kind: shown.kind,
         ...(shown.kind === 'path-hidden' ? { role: shown.role, path: shown.path, target: shown.target ?? '' } : { runner: shown.runner }) } });
     }
@@ -133,8 +136,9 @@ export function mcpTrustAuditWriter(input: { readonly layout: ProductLayout; rea
 /** The card as text (approval preview and CLI): what runs, where, with which variables (set or not) and, in the tools phase, what gets pinned. */
 export function describeMcpTrustCard(card: McpTrustCard): string {
   const lines = [`MCP server ${card.name} (${card.scope} scope, ${card.file}) — ${card.phase === 'launch' ? 'start it?' : 'trust it and pin these tools?'}`,
-    `command: ${[card.command, ...card.args].join(' ')}`, `variables: ${card.variables.map(variable => `${variable.name}${variable.set ? '' : ' (unset)'}`).join(', ') || 'none'}`,
-    `env: ${card.envNames.join(', ') || 'none'}`, `realm: ${card.realm}${card.posture ? ` — ${card.posture}` : ''}`, `definition: ${card.definitionDigest}`,
+    card.transport === 'http' ? `url: ${card.command}` : `command: ${[card.command, ...card.args].join(' ')}`,
+    `variables: ${card.variables.map(variable => `${variable.name}${variable.set ? '' : ' (unset)'}`).join(', ') || 'none'}`,
+    card.transport === 'http' ? `headers: ${card.headerNames.join(', ') || 'none'}` : `env: ${card.envNames.join(', ') || 'none'}`, `realm: ${card.realm}${card.posture ? ` — ${card.posture}` : ''}`, `definition: ${card.definitionDigest}`,
     ...(card.note ? [`note: ${card.note}`] : []),
     ...(card.tools ? [`tools (${card.tools.length}; ${card.era ?? ''} ${card.protocolVersion ?? ''}):`, ...card.tools.map(tool => `  ${tool.name} ${tool.digest.slice(0, 12)}${
       tool.alwaysAsk ? ' always-ask' : ''}${tool.description ? ` — ${modelTextPrefix(tool.description, 160)}` : ''}`)] : [])];

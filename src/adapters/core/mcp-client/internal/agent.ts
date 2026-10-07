@@ -17,6 +17,8 @@ export interface McpOfferedTool {
   readonly posture: string;
   /** C5: the server's sandbox shows it the project read-only (a failed answer then says so and how to let it write). */
   readonly projectReadOnly: boolean;
+  /** The server's resolved secret values: cut out of its answers before the model sees them (never shown). */
+  readonly secrets: readonly string[];
   readonly timeoutMs: number;
   /** The server's scope and definition as trusted when the turn read them (MCP-REVOKE: the send re-checks them; null: never sent). */
   readonly binding: McpTrustBinding | null;
@@ -38,7 +40,7 @@ export async function openMcpAgentTools(pool: McpClientPool, settings: McpClient
     for (const verdict of state.tools) {
       if (verdict.status !== 'pinned' || !verdict.spec || !verdict.digest || !verdict.cell || offered.has(verdict.spec.name)) continue;
       offered.set(verdict.spec.name, Object.freeze({ spec: verdict.spec, server: server.id, tool: verdict.name, display: verdict.display, digest: verdict.digest,
-        cell: verdict.cell, command: server.label ?? [server.command, ...server.args].join(' '), posture: state.posture, projectReadOnly: state.projectReadOnly, timeoutMs: server.timeoutMs ?? settings.callTimeoutMs,
+        cell: verdict.cell, command: server.label ?? [server.command, ...server.args].join(' '), posture: state.posture, projectReadOnly: state.projectReadOnly, secrets: server.secrets ?? [], timeoutMs: server.timeoutMs ?? settings.callTimeoutMs,
         binding: server.binding ?? null, hints: Object.freeze({ readOnly: hint(verdict.annotations?.['readOnlyHint']), destructive: hint(verdict.annotations?.['destructiveHint']) }) }));
     }
   }

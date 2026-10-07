@@ -7,7 +7,7 @@ export { agentMcpEffectCommandId, describeMcpApproval, describeMcpRefusal, descr
 export { mcpInspectSandboxes, mcpTurnTools, openMcpAgentTools, type McpOfferedTool } from './internal/agent.js';
 export type { McpSandboxDiagnosis } from './internal/diagnose.js';
 export type { McpStartNotice, McpStartNoticeRenderer } from './internal/failures.js';
-export { expandMcpEntry, MCP_PROJECT_REGISTRY_PATH, MCP_REGISTRY_FILE, MCP_SCOPE_PRECEDENCE, mcpDefinitionDigest, mcpRegistryPaths, mcpServerEntrySchema,
+export { expandMcpEntry, isMcpHttpEntry, mcpEndpointRefusal, mcpEntryDisplay, MCP_PROJECT_REGISTRY_PATH, MCP_REGISTRY_FILE, MCP_SCOPE_PRECEDENCE, mcpDefinitionDigest, mcpRegistryPaths, mcpServerEntrySchema,
   readMcpRegistryFile, resolveMcpRegistry, type ManagedMcpPolicy, type McpRegistry, type McpRegistryEntry, type McpRegistryProblem, type McpScope,
   type McpServerEntry } from './internal/registry.js';
 export { findMcpTrust, MCP_TRUST_FILE, readMcpTrust, updateMcpTrust, type McpTrustRecord, type McpTrustState } from './internal/trust.js';

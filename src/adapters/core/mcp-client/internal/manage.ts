@@ -11,8 +11,8 @@ import { MCP_CLIENT_DEFAULTS, type McpClientServerSettings, type McpClientSettin
 import { decideMcpTrust, mcpTrustApprovalAsker, mcpTrustAuditWriter, recordMcpTrust, type McpTrustAsk, type McpTrustAudit, type McpTrustContext } from './approve.js';
 import { openMcpAgentTools, type McpOfferedTool } from './agent.js';
 import { openLocalIntegrityAuthority } from '#adapters/core/local-keyring/index.js';
-import { expandMcpEntry, mcpDefinitionDigest, MCP_SCOPE_PRECEDENCE, mcpRegistryPaths, mcpServerEntrySchema, MCP_SERVER_NAME, readMcpRegistryFile, resolveMcpRegistry, type ManagedMcpPolicy,
-  type McpRegistryProblem, type McpScope, type McpServerEntry } from './registry.js';
+import { expandMcpEntry, isMcpHttpEntry, mcpDefinitionDigest, mcpEntryDisplay, mcpLaunchValues, mcpEndpointRefusal, mcpEntryRedacted, MCP_DEFAULT_REALM, MCP_SCOPE_PRECEDENCE, mcpRegistryPaths, mcpServerEntrySchema, MCP_SERVER_NAME, readMcpRegistryFile,
+  resolveMcpRegistry, type ManagedMcpPolicy, type McpRegistryProblem, type McpScope, type McpServerEntry } from './registry.js';
 import { findMcpTrust, MCP_TRUST_FILE, readMcpTrust, type McpTrustRecord } from './trust.js';
 import { modelTextPrefix } from '#domain/index.js';
 import type { AgentToolApprovalFacts } from '#engine/index.js';
@@ -65,9 +65,9 @@ export async function loadMcpRegistry(context: McpRegistryContext): Promise<McpR
     const decided: McpServerStatus = !trust.ok ? 'trust-store-unavailable' : !record ? 'pending-approval' : record.definitionDigest !== server.definitionDigest ? 'changed'
       : record.decision === 'declined' ? 'declined' : expanded.ok ? 'trusted' : 'invalid-launch';
     const reason = !trust.ok ? trust.reason : !expanded.ok ? expanded.reason : undefined;
-    const launch = decided === 'trusted' && expanded.ok && record ? Object.freeze({ id: server.name, command: expanded.command, args: expanded.args, env: expanded.env,
-      realm: server.entry.realm ?? 'prefer-sandbox', ...(server.entry.timeoutMs ? { timeoutMs: server.entry.timeoutMs } : {}), tools: record.tools,
-      label: [server.entry.command, ...(server.entry.args ?? [])].join(' '), generation: record.reconnect,
+    const shown = mcpEntryDisplay(server.entry);
+    const launch = decided === 'trusted' && expanded.ok && record ? Object.freeze({ id: server.name, ...mcpLaunchValues(server.entry, expanded),
+      ...(server.entry.timeoutMs ? { timeoutMs: server.entry.timeoutMs } : {}), tools: record.tools, label: [shown.command, ...shown.args].join(' '), generation: record.reconnect,
       binding: Object.freeze({ scope: server.scope, definitionDigest: server.definitionDigest }) }) : null;
     return Object.freeze({ name: server.name, scope: server.scope, file: server.file, shadows: server.shadows, definitionDigest: server.definitionDigest, entry: server.entry,
       status: decided, ...(reason ? { reason } : {}), trust: record, launch });
@@ -176,7 +176,7 @@ export async function runMcpCommand(request: McpCommandRequest, context: McpComm
       ...(failure.diagnosis ? { diagnosis: failure.diagnosis } : {}), text: context.describeNotice(failure.phase === 'tools' ? { kind: 'tools-changed', name: server.name, count: Number(failure.detail) || 0 }
       : mcpStartFailedNotice(server.name, failure)) } } : {}; };
   const summary = (server: McpServerView) => ({ name: server.name, scope: server.scope, file: server.file, status: server.status, ...(server.reason ? { reason: server.reason } : {}),
-    shadows: server.shadows, realm: server.entry.realm ?? 'prefer-sandbox', command: server.entry.command, args: server.entry.args ?? [], envNames: Object.keys(server.entry.env ?? {}),
+    shadows: server.shadows, realm: isMcpHttpEntry(server.entry) ? null : server.entry.realm ?? MCP_DEFAULT_REALM, ...mcpEntryDisplay(server.entry),
     definitionDigest: server.definitionDigest, pinnedTools: server.trust?.tools.length ?? 0, ...lastStartOf(server) });
   /** `/mcp approve|reconnect|remove` and a successful approval are the owner's explicit retry: the recorded failure goes. */
   const forgetFailure = (scope: McpScope, name: string) => updateMcpStartFailure(productResourcePath(context.layout, 'integrations'), { scope, name }, null).catch(() => undefined);
@@ -195,20 +195,22 @@ export async function runMcpCommand(request: McpCommandRequest, context: McpComm
       return { ...summary(server), health: state.ok ? (state.tools.every(tool => tool.status !== 'drifted' && tool.status !== 'missing') ? 'connected' : 'tools-changed') : 'failed',
         ...(state.ok ? { era: state.era, tools: state.tools.map(verdict => Object.fromEntries(Object.entries(verdict).filter(([key]) => key !== 'spec'))) }
           : { failure: state.reason, ...(state.detail ? { detail: state.detail } : {}),
-            ...(state.reason === 'sandbox-unreachable' ? { diagnosis: displayMcpDiagnosis(state.diagnosis, server.entry) } : {}) }) };
+            ...(state.reason === 'sandbox-unreachable' ? { diagnosis: displayMcpDiagnosis(state.diagnosis, mcpEntryDisplay(server.entry)) } : {}) }) };
     }));
     return { schemaVersion: 1, servers, problems: view.problems };
   }
   if (request.verb === 'get') {
     const server = find(request.name);
     if (!server) throw fail('MCP_SERVER_UNKNOWN', { name: request.name });
-    return { schemaVersion: 1, server: { ...summary(server), entry: server.entry, trust: server.trust } };
+    return { schemaVersion: 1, server: { ...summary(server), entry: mcpEntryRedacted(server.entry), trust: server.trust } };
   }
   const trustContext = mcpTrustContext({ ...context, ...(context.limits?.inputMaxBytes ? { inputMaxBytes: context.limits.inputMaxBytes } : {}) }, view.projectKey);
   if (request.verb === 'add') {
     if (!MCP_SERVER_NAME.test(request.name)) throw fail('MCP_SERVER_NAME_INVALID', { name: request.name });
     const entry = mcpServerEntrySchema.safeParse(request.entry);
     if (!entry.success) throw fail('MCP_SERVER_ENTRY_INVALID', { name: request.name, reason: modelTextPrefix(entry.error.issues[0]?.message ?? 'schema', 200) });
+    const refused = isMcpHttpEntry(entry.data) && !entry.data.url.includes('${') ? mcpEndpointRefusal(entry.data.url) : null;
+    if (refused) throw fail('MCP_SERVER_ENTRY_INVALID', { name: request.name, reason: refused });
     const path = fileOf(view, request.scope), mode = request.scope === 'project' ? 0o644 : 0o600;
     const target = { name: request.name, scope: request.scope, definitionDigest: mcpDefinitionDigest(request.name, entry.data) };
     const exists = async () => { const servers = serversOf(await rawFile(path), request.scope, view.projectKey, false); return !!servers && Object.hasOwn(servers, request.name); };
@@ -345,7 +347,7 @@ export async function openTurnMcp(input: { readonly registry: McpRegistryContext
     if (state.reason === 'restart-limit' && known && known.phase !== 'tools') { notices.push(mcpStartFailedNotice(server.name, { ...known, phase: 'trusted' })); continue; }
     const record: McpStartFailure = { scope: server.scope as McpStartFailure['scope'], name: server.name, definitionDigest: server.definitionDigest, phase: 'trusted', atMs: now(),
       code: state.reason, ...(state.detail ? { detail: modelTextPrefix(state.detail, 200) } : {}),
-      ...(state.reason === 'sandbox-unreachable' ? { diagnosis: displayMcpDiagnosis(state.diagnosis, server.entry) } : {}) };
+      ...(state.reason === 'sandbox-unreachable' ? { diagnosis: displayMcpDiagnosis(state.diagnosis, mcpEntryDisplay(server.entry)) } : {}) };
     notices.push(mcpStartFailedNotice(server.name, record));
     await remember(server, record);
   }

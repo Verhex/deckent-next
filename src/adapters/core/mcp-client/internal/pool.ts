@@ -30,6 +30,8 @@ type Launch = { readonly ok: true; readonly command: string; readonly args: read
   readonly projectReadOnly: boolean; readonly posture: string; readonly sandbox?: { readonly prefix: readonly string[]; readonly command: string; readonly args: readonly string[] } }
   | { readonly ok: false; readonly reason: 'sandbox-unavailable'; readonly detail: string };
 const HOST_POSTURE = 'host: runs on this machine as your user (not a sandbox: files, processes and network are reachable)';
+/** A remote server's line: nothing runs here; what it does with a call happens on its own machine, reached over the network. */
+export const MCP_HTTP_POSTURE = 'remote: an HTTP server on another machine (nothing runs here; its headers go to that endpoint with every request)';
 /** C5 (owner 2026-09-29): how an owner lets a sandboxed server write the project — the explicit host realm, shown on every card. */
 export const MCP_HOST_REALM_HINT = 'a server that must write the project needs `realm: host` in its registry entry (it then runs unsandboxed)';
 /**
@@ -47,6 +49,7 @@ export function mcpRealmPosture(realm: McpClientServerSettings['realm']): string
  * preferred one was passed over names that fallback on the cards (REALM-NOTICE, the shell's own line). */
 async function launchOf(server: McpClientServerSettings, context: McpLaunchContext): Promise<Launch> {
   const env = { ...server.env };
+  if (server.transport === 'http') return { ok: true, command: '', args: [], env, sandboxed: false, projectReadOnly: false, posture: MCP_HTTP_POSTURE };
   if (server.realm === 'host') return { ok: true, command: server.command, args: server.args, env, sandboxed: false, projectReadOnly: false, posture: HOST_POSTURE };
   const capabilities = context.capabilities ?? await shellSandboxCapabilities(globalStateRoot()), rejected: { kind: string; reason: string }[] = [];
   if (capabilities.platform !== 'linux') rejected.push({ kind: 'platform', reason: capabilities.platform });
@@ -144,7 +147,8 @@ export class McpClientPool {
   }
   /** Starts (when needed), lists and verifies one server; serialized per server. */
   open(server: McpClientServerSettings, settings: McpClientSettings, context: McpLaunchContext): Promise<McpServerOpen> {
-    const key = createHash('sha256').update(JSON.stringify([server.command, server.args, Object.entries(server.env).sort(), server.realm, server.generation ?? 0])).digest('hex');
+    const key = createHash('sha256').update(JSON.stringify([server.command, server.args, Object.entries(server.env).sort(), server.realm, server.generation ?? 0,
+      server.url ?? null, Object.entries(server.headers ?? {}).sort()])).digest('hex');
     let state = this.states.get(server.id);
     if (state && state.key !== key) { void state.client?.close().catch(() => undefined); state = undefined; }
     if (!state) { state = { key, client: null, generation: 0, starts: 0, failed: null, stderr: Buffer.alloc(0), listing: null, last: null, validator: null,
@@ -162,7 +166,7 @@ export class McpClientPool {
       if (!launch.ok) return { ok: false, reason: launch.reason, detail: launch.detail };
       if (state.starts > settings.maxRestarts) { state.failed = `more than ${settings.maxRestarts} restart(s)`; return { ok: false, reason: 'restart-limit', detail: state.failed }; }
       state.starts++;
-      const started = await this.start(state, launch, settings, context.cwd);
+      const started = await this.start(state, launch, settings, context.cwd, server);
       if (!started.ok) return started;
     }
     const client = state.client!;
@@ -180,10 +184,12 @@ export class McpClientPool {
       projectReadOnly: state.last?.projectReadOnly ?? false, posture: state.last?.posture ?? '', tools: verifyMcpTools(server, tools) };
     return state.last;
   }
-  private async start(state: ServerState, launch: Extract<Launch, { ok: true }>, settings: McpClientSettings, cwd: string): Promise<McpServerOpen> {
-    const [{ Client }, { StdioClientTransport }] = await loadClientSdk();
-    const transport = new StdioClientTransport({ command: launch.command, args: [...launch.args], env: launch.env, cwd, stderr: 'pipe', maxBufferSize: settings.inputMaxBytes });
-    transport.stderr?.on('data', (chunk: Buffer) => {
+  private async start(state: ServerState, launch: Extract<Launch, { ok: true }>, settings: McpClientSettings, cwd: string, server: McpClientServerSettings): Promise<McpServerOpen> {
+    const [{ Client, StreamableHTTPClientTransport }, { StdioClientTransport }] = await loadClientSdk();
+    // Streamable HTTP (2026-07-28: no protocol session, every message its own POST): the entry's headers ride on every request; no session id is given.
+    const transport = server.transport === 'http' ? new StreamableHTTPClientTransport(new URL(server.url!), { requestInit: { headers: { ...server.headers } } })
+      : new StdioClientTransport({ command: launch.command, args: [...launch.args], env: launch.env, cwd, stderr: 'pipe', maxBufferSize: settings.inputMaxBytes });
+    if (transport instanceof StdioClientTransport) transport.stderr?.on('data', (chunk: Buffer) => {
       const next = Buffer.concat([state.stderr, chunk]);
       state.stderr = next.length > MCP_CLIENT_STDERR_TAIL_BYTES ? next.subarray(next.length - MCP_CLIENT_STDERR_TAIL_BYTES) : next;
     });
@@ -196,7 +202,10 @@ export class McpClientPool {
     try { await client.connect(transport, { timeout: settings.connectTimeoutMs }); }
     catch (error) {
       await client.close().catch(() => undefined); await transport.close().catch(() => undefined);
-      const failed = { ok: false as const, reason: 'start-failed' as const, detail: modelTextPrefix(String(errorCode(error) ?? (error as Error)?.message ?? 'failed'), 200) };
+      // A failed HTTP start may name the expanded endpoint or a header value: every resolved value is cut out before anything shows it.
+      const detail = String(errorCode(error) ?? (error as Error)?.message ?? 'failed');
+      const failed = { ok: false as const, reason: 'start-failed' as const, detail: modelTextPrefix(server.transport === 'http'
+        ? redactText(detail, [server.url!, ...Object.values(server.headers ?? {}), ...(server.secrets ?? [])], 400) : detail, 200) };
       if (!launch.sandbox) return failed;
       // MCP-SANDBOX-PATHS: a sandboxed start that failed is explained by probing the same view (what it hides, or what the command needs
       // from outside it); the outcome stays a failure — never a start on the host instead.
