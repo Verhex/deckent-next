@@ -2,7 +2,7 @@ import { MESSAGE_REGISTRY, t, type Locale } from '#platform/index.js';
 import type { AssistantRenderLabels } from '#surfaces/core/terminal-render/index.js';
 import type { ComposerLabels } from '#surfaces/core/terminal-composer/index.js';
 import type { ConversationSessionLabels } from '#surfaces/core/terminal/index.js';
-import { SLASH_GROUPS, WORKLINE_SLASH_COMMANDS } from '#surfaces/core/terminal-kit/index.js';
+import { SLASH_GROUPS, SLASH_HELP_TITLE_KEY, WORKLINE_SLASH_COMMANDS } from '#surfaces/core/terminal-kit/index.js';
 
 /** Catalog strings of the rendered answer (terminal.render.*): narration, footer, tool lines, context, compaction. */
 export function terminalRenderLabels(locale: Locale): AssistantRenderLabels {
@@ -41,7 +41,7 @@ export function terminalComposerLabels(locale: Locale): ComposerLabels {
   return { pasteChip: t('terminal.composer.pasteChip', {}, locale), search: t('terminal.composer.search', {}, locale),
     exitArmed: t('terminal.composer.exitArmed', {}, locale), shortcuts: t('terminal.composer.shortcuts', {}, locale),
     placeholder: t('terminal.workline.placeholder', {}, locale),
-    slash: Object.fromEntries([...WORKLINE_SLASH_COMMANDS.flatMap(command => [command.descriptionKey, ...(command.argumentKey ? [command.argumentKey] : [])]), ...SLASH_GROUPS.map(group => group.labelKey)]
+    slash: Object.fromEntries([...WORKLINE_SLASH_COMMANDS.flatMap(command => [command.descriptionKey, ...(command.argumentKey ? [command.argumentKey] : [])]), ...SLASH_GROUPS.map(group => group.labelKey), SLASH_HELP_TITLE_KEY]
       .map(key => [key, catalog[key] ?? key])) };
 }
 

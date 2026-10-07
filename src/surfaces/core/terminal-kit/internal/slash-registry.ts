@@ -81,14 +81,18 @@ export function slashCommandRow(command: SlashCommand, labels: Readonly<Record<s
   return { name: `/${command.name}${argument ? ` ${argument}` : ''}`, detail: labels[command.descriptionKey] ?? '' };
 }
 
-/** `/help`: the registry rows under their group headings (one line per command), so the palette and the help share the same row text. */
+/** The catalog key of the first `/help` line (a title, so a level word such as `Info:` never sits in front of a group heading). */
+export const SLASH_HELP_TITLE_KEY = 'terminal.slash.helpTitle';
+
+/** `/help`: a title, then the registry rows under their group headings (one line per command), so the palette and the help share the same row text. */
 export function slashHelpText(labels: Readonly<Record<string, string>>, commands: readonly SlashCommand[] = WORKLINE_SLASH_COMMANDS): string {
-  return SLASH_GROUPS.flatMap(group => {
+  const groups = SLASH_GROUPS.flatMap(group => {
     const members = commands.filter(command => (command.group ?? 'other') === group.id);
     if (members.length === 0) return [];
     const rows = members.map(command => { const row = slashCommandRow(command, labels); return `  ${row.name}${row.detail ? `  ${row.detail}` : ''}`; });
     return [[labels[group.labelKey] ?? group.id, ...rows].join('\n')];
   }).join('\n\n');
+  return labels[SLASH_HELP_TITLE_KEY] ? `${labels[SLASH_HELP_TITLE_KEY]}\n${groups}` : groups;
 }
 
 export function parseSlashLine(line: string): { command: string; args: string } | null {

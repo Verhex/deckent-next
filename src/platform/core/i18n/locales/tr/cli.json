@@ -779,6 +779,7 @@
   "terminal.workline.watchStopped": "İşçi ve iş izleme durdu.",
   "terminal.slash.watchWorkers": "İşçileri canlı izle; yenileri kart olarak eklenir",
   "terminal.slash.group.info": "Bilgi",
+  "terminal.slash.helpTitle": "Komutlar",
   "terminal.slash.group.work": "İşler",
   "terminal.slash.group.approvals": "Onaylar",
   "terminal.slash.group.settings": "Ayar",

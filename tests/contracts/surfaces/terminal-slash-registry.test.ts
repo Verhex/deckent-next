@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { parseSlashLine, WORKLINE_SLASH_COMMANDS, type WorklineProps } from '#surfaces/core/terminal/index.js';
-import { slashCommandRow, slashHelpText, SLASH_GROUPS } from '#surfaces/core/terminal-kit/index.js';
+import { slashCommandRow, slashHelpText, SLASH_GROUPS, SLASH_HELP_TITLE_KEY } from '#surfaces/core/terminal-kit/index.js';
 import { terminalComposerLabels } from '#surfaces/core/terminal-labels/index.js';
 import { snapshotKnownSecrets, t } from '#platform/index.js';
 import { mountWorkline, settle, until as harnessUntil, WORKLINE_TEST_LABELS } from '../support/workline-harness.js';
@@ -44,7 +44,7 @@ describe('terminal slash registry', () => {
 
   it.each(['en', 'tr'] as const)('%s labels cover exactly the registry description and argument keys, including mcp/config', locale => {
     const labels = terminalComposerLabels(locale).slash;
-    const keys = [...new Set([...WORKLINE_SLASH_COMMANDS.flatMap(command => [command.descriptionKey, ...(command.argumentKey ? [command.argumentKey] : [])]), ...SLASH_GROUPS.map(group => group.labelKey)])];
+    const keys = [...new Set([...WORKLINE_SLASH_COMMANDS.flatMap(command => [command.descriptionKey, ...(command.argumentKey ? [command.argumentKey] : [])]), ...SLASH_GROUPS.map(group => group.labelKey), SLASH_HELP_TITLE_KEY])];
     expect(Object.keys(labels).sort()).toEqual(keys.sort());
     for (const key of keys) {
       expect(labels[key]).toBe(t(key, {}, locale));
@@ -93,9 +93,10 @@ describe('terminal slash registry', () => {
       expect(view.stdout.text.slice(mark)).toContain(`${row.name}  ${row.detail}`);
     }
     const help = slashHelpText(composer.slash, WORKLINE_SLASH_COMMANDS);
+    expect(help.split('\n')[0]).toBe(composer.slash['terminal.slash.helpTitle']);
     const listed = help.split('\n').filter(line => line.startsWith('  /')).map(line => line.trim().split(' ')[0]);
     expect([...listed].sort()).toEqual(WORKLINE_SLASH_COMMANDS.map(command => `/${command.name}`).sort());
-    expect(help.split('\n\n').map(section => section.split('\n')[0])).toEqual(['group.info', 'group.work', 'group.approvals', 'group.settings', 'group.session', 'group.other'].map(key => composer.slash[`terminal.slash.${key}`]));
+    expect(help.split('\n').slice(1).join('\n').split('\n\n').map(section => section.split('\n')[0])).toEqual(['group.info', 'group.work', 'group.approvals', 'group.settings', 'group.session', 'group.other'].map(key => composer.slash[`terminal.slash.${key}`]));
   });
 
   it('a registered but unhandled command remains unknown and never reaches the chat producer', async () => {

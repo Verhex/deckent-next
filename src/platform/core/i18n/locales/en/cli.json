@@ -779,6 +779,7 @@
   "terminal.workline.watchStopped": "Worker and run watch stopped.",
   "terminal.slash.watchWorkers": "Follow workers live; new ones appear as cards",
   "terminal.slash.group.info": "Info",
+  "terminal.slash.helpTitle": "Commands",
   "terminal.slash.group.work": "Jobs",
   "terminal.slash.group.approvals": "Approvals",
   "terminal.slash.group.settings": "Settings",
