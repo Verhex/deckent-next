@@ -4,7 +4,7 @@ import { render, type Key } from 'ink';
 import { terminalComposerLabels } from '#surfaces/core/terminal-labels/index.js';
 import { afterEach, describe, expect, it } from 'vitest';
 import { COMPOSER_LIMITS, Composer, EMPTY_COMPOSER, WorklinePaletteProvider, caretRow, composerKey, composerMenu, displayWidth, exitArmed,
-  layoutRows, mentionAt, pendingArgument, reduceComposer, resolveWorklinePalette, searchMatches,
+  layoutRows, mentionAt, reduceComposer, resolveWorklinePalette, searchMatches,
   type ComposerContext, type ComposerHistoryEntry, type ComposerKey, type ComposerLabels, type ComposerProps, type ComposerState } from '#surfaces/core/terminal/index.js';
 
 const FAMILY = '👨‍👩‍👧';
@@ -192,15 +192,14 @@ describe('composer completion, shortcuts panel and mentions', () => {
     state = run([K.down, K.tab], state).state;
     expect(state.text).toBe('/watch-runs ');
     expect(composerMenu(state)).toBeNull();
-    // Owner 2026-09-27: Enter selects. A command without an argument runs; one with an argument completes and waits.
+    // SLASH-WINDOWS (owner 2026-10-08): Enter on a palette row always runs `/name`; no command completes and waits for typed text.
     expect(submitted(run([...typed('/wa'), K.down, K.submit]).intents)).toEqual(['/watch-runs']);
-    const waiting = run([...typed('/ru'), K.submit]);
-    expect([submitted(waiting.intents), waiting.state.text, pendingArgument(waiting.state.text)?.name]).toEqual([[], '/run ', 'run']);
-    expect(submitted(run([...typed('r-1'), K.submit], waiting.state).intents)).toEqual(['/run r-1']);
+    const ran = run([...typed('/ru'), K.submit]);
+    expect([submitted(ran.intents), ran.state.text]).toEqual([['/run'], '']);
+    for (const name of ['run', 'transcript', 'approvals', 'cancel', 'resume', 'mode']) expect(submitted(run([...typed(`/${name}`), K.submit]).intents)).toEqual([`/${name}`]);
     expect(submitted(run([text('/sta\r')]).intents)).toEqual(['/status']);
     expect(composerMenu(run(typed('/wwk')).state)!.items.map(command => command.name)).toEqual(['watch-workers']);
     expect(submitted(run([...typed('/zz'), K.submit]).intents)).toEqual(['/zz']);
-    expect(pendingArgument(run([...typed('/ru'), K.tab]).state.text)?.name).toBe('run');
     const dismissed = run([...typed('/wa'), K.esc]).state;
     expect(composerMenu(dismissed)).toBeNull();
     expect(composerMenu(run(typed('tch-w'), dismissed).state)!.items.map(command => command.name)).toEqual(['watch-workers']);
@@ -350,15 +349,14 @@ describe('composer rendered by Ink (no colour tier)', () => {
     expect(view.sent[0]).toBe('l1\nl2\nl3\nl4');
   });
 
-  it('lists slash commands with descriptions and argument hints, and Tab completes the selection', async () => {
+  it('lists slash commands with descriptions but no argument hint, and Enter runs the selection at once', async () => {
     const view = mount();
     await view.type('/ru');
-    await until(() => view.stdout.text.includes('> /run <RUN-ID>') && view.stdout.text.includes('RUN-DESC'), 'popup with argument hint');
-    await view.keys('\t');
-    await until(() => view.stdout.text.includes('> /run |<RUN-ID>'), 'completed with argument hint');
-    await view.type('r-1\r');
+    await until(() => view.stdout.text.includes('> /run ') && view.stdout.text.includes('RUN-DESC'), 'popup');
+    expect(view.stdout.text).not.toContain('<RUN-ID>');
+    await view.keys('\r');
     await until(() => view.sent.length === 1, 'submit');
-    expect(view.sent[0]).toBe('/run r-1');
+    expect(view.sent[0]).toBe('/run');
   });
 
   it('recalls history with Up, searches with Ctrl+R and wires the history port', async () => {
