@@ -987,7 +987,7 @@
   "terminal.mcp.count": "mcp: {count} sunucu",
   "terminal.mcp.none": "mcp: bu proje için kayıtlı MCP sunucusu yok (deckent mcp add …)",
   "terminal.mcp.pendingHint": "bekleyen sunucular bir mesajdaki ilk kullanımlarında güven ister",
-  "terminal.mcp.approve": "mcp: {name} bir sonraki mesajda güven isteyecek",
+  "terminal.mcp.approve": "mcp: {name} için güven sıfırlandı. Onay kartı bir sonraki mesajınızda açılacak.",
   "terminal.mcp.reconnect": "mcp: {name} bir sonraki kullanımında yeniden başlar",
   "terminal.mcp.removed": "mcp: {name} kaldırıldı ({scope})",
   "terminal.mcp.usage": "mcp: kullanım /mcp [list] | /mcp approve|reconnect|remove <ad>",

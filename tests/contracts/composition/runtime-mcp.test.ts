@@ -457,6 +457,13 @@ describe('the MCP notices in the turn note (pure)', () => {
 });
 
 describe('the MCP start notices and the sandbox refusal come from the catalog (pure, en and tr)', () => {
+  // MCP-VISIBILITY: `/mcp approve` resets trust (no card here); the screen says so and when the card comes.
+  it('/mcp approve resets and says the approval card opens on the next message (en, tr)', async () => {
+    const seen: unknown[] = [], stub = { runMcpCommand: async (_root: string, request: unknown) => { seen.push(request); return {}; } } as unknown as CommandContext;
+    expect(await mcpSlash('/p', 'approve fx', stub, {}, 'en')).toEqual(['mcp: trust for fx was reset. The approval card opens on your next message.']);
+    expect(await mcpSlash('/p', 'approve fx', stub, {}, 'tr')).toEqual(['mcp: fx için güven sıfırlandı. Onay kartı bir sonraki mesajınızda açılacak.']);
+    expect(seen).toEqual([{ verb: 'reset', name: 'fx' }, { verb: 'reset', name: 'fx' }]);
+  });
   // MCP-VISIBILITY: `mcp add` is stdio only and the registry file is `mcp.json` (project: `.deckent/mcp.json`), never `.mcp.json`.
   it('the mcp add help names only stdio and the real registry file (en and tr)', () => {
     for (const locale of ['en', 'tr'] as const) for (const key of ['cli.mcp.add.desc', 'cli.memcat.mcp.help.paths'] as const) {

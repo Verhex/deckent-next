@@ -987,7 +987,7 @@
   "terminal.mcp.count": "mcp: {count} server(s)",
   "terminal.mcp.none": "mcp: no MCP server is registered for this project (deckent mcp add …)",
   "terminal.mcp.pendingHint": "pending servers ask for trust on their first use in a message",
-  "terminal.mcp.approve": "mcp: {name} asks for trust on the next message",
+  "terminal.mcp.approve": "mcp: trust for {name} was reset. The approval card opens on your next message.",
   "terminal.mcp.reconnect": "mcp: {name} restarts on its next use",
   "terminal.mcp.removed": "mcp: removed {name} ({scope})",
   "terminal.mcp.usage": "mcp: usage /mcp [list] | /mcp approve|reconnect|remove <name>",
