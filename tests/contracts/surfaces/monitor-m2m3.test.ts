@@ -18,7 +18,7 @@ describe('M2 delivery outlook of an accepted Run', () => {
     const en = summaryText(snapshotWith(patchless), 'en'), tr = summaryText(snapshotWith(patchless), 'tr');
     expect(en).toContain('patch not prepared'); expect(tr).toContain('yama hazırlanamadı');
     expect(detail(snapshotWith(patchless), 'en')).toContain("Accepted · patch not prepared: no retained patch exists for this Run's accepted work");
-    expect(detail(snapshotWith(patchless), 'tr')).toContain('Kabul edildi · yama hazırlanamadı: bu Run');
+    expect(detail(snapshotWith(patchless), 'tr')).toContain('Kabul edildi · yama hazırlanamadı: bu iş');
     expect(detail(snapshotWith(patchless), 'en')).toContain('does not record why'); expect(detail(snapshotWith(patchless), 'en')).not.toMatch(/PATCH_LIMIT|artifacts\.maxBytes/);
     const summary = surface.buildMonitorView(snapshotWith(patchless), 'en', true).tabs.summary.filter(block => block.kind === 'line').map(block => block.line.map(item => item.text).join(''));
     expect(summary).toContain('! run-dt · accepted · patch not prepared');
@@ -54,7 +54,7 @@ describe('M2 worker narrative', () => {
   it('tells provider/model, start, finish with duration, turns and close reason in EN and TR', () => {
     const closed = run({ provider: 'cli-a', model: 'model-q', exitCode: 0, closeReason: 'exit-ok', turns: 8, sessionOutcome: 'success', endedAtSource: 'sealed' });
     expect(detail(snapshotWith(closed), 'en')).toMatch(/worker cli-a\/model-q \| started \d\d:\d\d:\d\dZ \| finished \d\d:\d\d:\d\dZ \(1 min 0 s\) \| 8 turns \| closed: exited normally \| session: completed/);
-    expect(detail(snapshotWith(closed), 'tr')).toMatch(/worker: cli-a\/model-q \| başladı \d\d:\d\d:\d\dZ \| bitti \d\d:\d\d:\d\dZ \(1 dk 0 sn\) \| 8 tur \| kapanış: normal çıkış \| oturum: tamamlandı/);
+    expect(detail(snapshotWith(closed), 'tr')).toMatch(/işçi: cli-a\/model-q \| başladı \d\d:\d\d:\d\dZ \| bitti \d\d:\d\d:\d\dZ \(1 dk 0 sn\) \| 8 tur \| kapanış: normal çıkış \| oturum: tamamlandı/);
     expect(detail(snapshotWith(run({ closeReason: 'exit-error', exitCode: 2 })), 'en')).toContain('closed: exited with code 2');
     expect(detail(snapshotWith(run({ closeReason: 'cancelled' })), 'en')).toContain('closed: cancelled');
   });

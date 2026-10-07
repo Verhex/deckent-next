@@ -2,12 +2,12 @@ Deckent izleyici · gözlem 2026-10-02 09:30:00Z · yalnız gözlem
 ● current · servis çalışıyor (pid 31337) · build kaydı var (2026-10-02 08:00:00Z) · ledger sürüm 44 · ⚠ 1 uyarı · /home…
 ● dogfood · servis çalışıyor (pid 2001) · build kaydı var (2026-10-01 22:15:00Z) · ledger sürüm 43 · ⚠ 3 uyarı · /home/…
 ○ remote-lab · erişilemiyor · build bilinmiyor · ledger sürümü bilinmiyor · ⚠ 2 uyarı · /mnt/lab/deckent
-[1 Özet]  2 Run'lar   3 Worker'lar   4 Onaylar   5 Havuzlar   6 Kurulumlar   7 Harita
-Run: 3 sırada · 2 çalışıyor · 2 kontrolde · 8 beklemede · 1 tamam · 3 durdu
+[1 Özet]  2 İşler   3 İşçiler   4 Onaylar   5 Havuzlar   6 Kurulumlar   7 Harita
+İş: 3 sırada · 2 çalışıyor · 2 kontrolde · 8 beklemede · 1 tamam · 3 durdu
 ⚠ current sorunları: scope-x kapsamı okunamadı (LEDGER_LOCKED)
 ⚠ dogfood sorunları: ledger sürüm 43, bu derlemeden eski: yeni alanlar boş görünebilir; future-code:abc; scope-dog kaps…
 ⚠ remote-lab erişilemiyor: ledger okunamadı (LEDGER_LOCKED); servis durumu okunamadı (LOCAL_RUNTIME_DENIED)
-dogfood notu: biten worker'ların yalnız en yenileri gösteriliyor; 5 eskisi gizli
+dogfood notu: biten işçilerin yalnız en yenileri gösteriliyor; 5 eskisi gizli
 
 Sizi bekleyen (3)
   Konu                                           Bekliyor    Süre sonu             Kurulum
@@ -16,22 +16,22 @@ Sizi bekleyen (3)
   effect: Delete stale preview environment       4 dk 0 sn   2 dk 0 sn önce doldu  current
 
 Takılı ya da bekleyen, en eskisi önce (12)
-  Run kimliği                    Görev  Neden                              Ne zamandır  Kapsam   Kurulum
-  run-blocked-approval           build  ~ onay bekliyor (appr-0001)        3 sa 12 dk   scope-a  current
-  run-not-admitted               build  ~ henüz kabul edilmedi             1 sa 33 dk   scope-a  current
-  run-cancellation-pending       build  ! iptal bekleniyor                 1 sa 26 dk   scope-a  current
-  run-unresolved-effect          build  ! etki sonucu belirsiz             1 sa 19 dk   scope-a  current
-  run-evaluation-unknown         build  ! değerlendirme sonucu belirsiz    1 sa 11 dk   scope-a  current
-  run-evaluation-not-ready       build  ! değerlendirme hazır değil        1 sa 4 dk    scope-a  current
-  run-worker-exited-unevaluated  build  ! worker bitti, değerlendirilmedi  57 dk        scope-a  current
-  run-worker-stale-heartbeat     build  ! worker sessiz (heartbeat eski)   50 dk        scope-a  current
-  run-waiting-dependency         build  ~ bağımlılığını bekliyor           28 dk        scope-a  current
-  run-pool-held                  build  ~ havuz bekletiliyor               21 dk        scope-a  current
-  run-waiting-pool-slot          build  ~ havuzda yer bekliyor             14 dk        scope-a  current
-  run-unknown                    build  ! neden bilinmiyor                 bilinmiyor   scope-a  current
+  İş kimliği                     Görev  Neden                            Ne zamandır  Kapsam   Kurulum
+  run-blocked-approval           build  ~ onay bekliyor (appr-0001)      3 sa 12 dk   scope-a  current
+  run-not-admitted               build  ~ henüz kabul edilmedi           1 sa 33 dk   scope-a  current
+  run-cancellation-pending       build  ! iptal bekleniyor               1 sa 26 dk   scope-a  current
+  run-unresolved-effect          build  ! etki sonucu belirsiz           1 sa 19 dk   scope-a  current
+  run-evaluation-unknown         build  ! değerlendirme sonucu belirsiz  1 sa 11 dk   scope-a  current
+  run-evaluation-not-ready       build  ! değerlendirme hazır değil      1 sa 4 dk    scope-a  current
+  run-worker-exited-unevaluated  build  ! işçi bitti, değerlendirilmedi  57 dk        scope-a  current
+  run-worker-stale-heartbeat     build  ! işçi sessiz (heartbeat eski)   50 dk        scope-a  current
+  run-waiting-dependency         build  ~ bağımlılığını bekliyor         28 dk        scope-a  current
+  run-pool-held                  build  ~ havuz bekletiliyor             21 dk        scope-a  current
+  run-waiting-pool-slot          build  ~ havuzda yer bekliyor           14 dk        scope-a  current
+  run-unknown                    build  ! neden bilinmiyor               bilinmiyor   scope-a  current
 
-Başarısız Run'lar ve ilk hata yeri (2)
-  Run kimliği       İlk hata                                                              Son etkinlik  Kapsam   Kurulum
+Başarısız işler ve ilk hata yeri (2)
+  İş kimliği        İlk hata                                                              Son etkinlik  Kapsam   Kurulum
   run-broken        ✗ build: ✗ [unit-budget] src/surfaces/core/cli — 2001 lines > unit …  25 dk önce    scope-a  current
   run-broken-quiet  ✗ build: ilk hata satırı kayıtta yok                                  35 dk önce    scope-a  current
 ↓ 7 satır daha
