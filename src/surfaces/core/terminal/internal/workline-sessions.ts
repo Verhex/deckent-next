@@ -1,7 +1,9 @@
 import { randomUUID } from 'node:crypto';
 import { useCallback, useRef } from 'react';
 import { resolveSessionReference, type SessionRefusal, type ConversationSessionPort, type ConversationSessionSummary, type AgentChatMessage, type TurnDelta } from '#surfaces/core/terminal-kit/index.js';
-import { contextViewLines, fillTemplate, projectHumanPickerText, type ContextCompaction, type ContextViewLabels } from '#surfaces/core/terminal-render/index.js';
+import { CONTEXT_AUTO_SUMMARY_SHARE, CONTEXT_SUGGEST_SHARE, contextBreakdown, contextViewLines, fillTemplate, projectHumanPickerText, type ContextCompaction, type ContextMeasure,
+  type ContextViewLabels } from '#surfaces/core/terminal-render/index.js';
+import type { ContextInfoLabels, InfoSection, InfoWindowModel } from '#surfaces/core/terminal-window/index.js';
 import type { LocalExecution, ResumePickerItem } from '#surfaces/core/terminal-work/index.js';
 import type { KnownSecretSnapshot } from '#platform/index.js';
 import { notice, type WorkLedgerEntry } from '#surfaces/core/terminal-ledger/index.js';
@@ -33,6 +35,43 @@ function done(entries: readonly WorkLedgerEntry[], resumePicker?: readonly Resum
   return resumePicker && resumePicker.length > 0 ? { entries, resumePicker } : { entries };
 }
 const when = (ms: number) => new Date(ms).toISOString().slice(0, 16).replace('T', ' ');
+const BAR_CELLS = 20;
+
+/**
+ * `/context` as a window (SW-1): the window fill with a bar and a chip, where the runtime summarizes by itself, what fills it (a size
+ * estimate of the client-visible history, as a table), the summaries so far and the suggestion — the same facts as the text view.
+ */
+export function contextInfoModel(input: Readonly<{ measured: ContextMeasure | null; history: readonly AgentChatMessage[]; compaction: ContextCompaction | null }>,
+  labels: ContextInfoLabels, view: ContextViewLabels | undefined, ascii = false): InfoWindowModel {
+  const { measured, compaction } = input, parts = contextBreakdown(input.history);
+  const count = input.history.filter(message => message.role !== 'system').length;
+  const percent = measured?.windowTokens ? Math.ceil(measured.promptTokens * 100 / measured.windowTokens) : null;
+  const filling = percent !== null && percent >= CONTEXT_SUGGEST_SHARE * 100;
+  const chip = percent === null ? { state: 'neutral' as const, text: labels.notMeasured } : filling ? { state: 'warn' as const, text: labels.chip.filling }
+    : { state: 'ok' as const, text: labels.chip.room };
+  const filled = percent === null ? 0 : Math.min(BAR_CELLS, Math.round(percent * BAR_CELLS / 100));
+  const bar = `${(ascii ? '#' : '█').repeat(filled)}${(ascii ? '.' : '░').repeat(BAR_CELLS - filled)}`;
+  const limit = measured?.windowTokens ? Math.floor(measured.windowTokens * CONTEXT_AUTO_SUMMARY_SHARE) : null;
+  const share = (part: number) => `${parts.total ? Math.round(part * 100 / parts.total) : 0}%`;
+  const sections: InfoSection[] = [
+    { title: labels.section.window, chip, rows: [
+      ...(percent === null ? [{ key: labels.key.fill, value: labels.notMeasured }] : [{ key: labels.key.fill, value: `${bar} ${percent}%` },
+        { key: labels.key.used, value: fillTemplate(labels.used, { approx: measured!.quality === 'upper-bound' ? '~' : '', prompt: measured!.promptTokens, window: measured!.windowTokens ?? '?' }) }]),
+      ...(limit !== null ? [{ key: labels.key.auto, value: fillTemplate(labels.auto, { tokens: limit, percent: Math.round(CONTEXT_AUTO_SUMMARY_SHARE * 100),
+        remaining: Math.max(0, limit - measured!.promptTokens) }) }] : []),
+      { key: labels.key.messages, value: String(count) }] },
+    ...(parts.total > 0 ? [{ title: labels.section.split, table: { columns: [labels.column.part, labels.column.share], rows: [[labels.part.system, share(parts.system)],
+      [labels.part.user, share(parts.user)], [labels.part.assistant, share(parts.assistant)], [labels.part.tools, share(parts.tools)], [labels.part.attachments, share(parts.attachments)]] },
+    ...(parts.largest.length ? { rows: [{ key: labels.key.largest, value: parts.largest.map(item => `${item.name} (${share(item.size)})`).join(' · ') }] } : {}),
+    notes: [labels.splitNote] }] : []),
+    { title: labels.section.summaries, ...(compaction ? { rows: [{ key: labels.key.count, value: String(compaction.count) },
+      { key: labels.key.last, value: fillTemplate(labels.last, { replaced: compaction.replacedMessages, when: when(compaction.atMs) }) }] }
+      : { notes: [view?.compactedNone ?? '-'] }) },
+    ...(filling && view ? [{ title: labels.section.suggestion, notes: [fillTemplate(parts.tools * 2 > parts.total ? view.suggestTools : view.suggestNew, { command: '/clear' })] }] : []),
+  ];
+  return { title: labels.title, chips: [chip], sections,
+    summary: percent === null ? fillTemplate(labels.summaryNone, { count }) : fillTemplate(labels.summary, { percent, count }) };
+}
 
 /**
  * The workline's conversation session (T-L5c): a fresh id per view (or per `/clear`), the whole history saved after every turn,
@@ -95,5 +134,8 @@ export function useConversationSession(port: ConversationSessionPort | undefined
     context.current = null; compaction.current = null; listed.current = [];
     return done([notice('info', fillTemplate(labels.resumed, { count: messages.length, session: target.slice(0, 8) })), ...resumedHistoryEntries(messages, labels.history, known)]);
   }, [labels, port, known, id]);
-  return { noteContext, save, run, id };
+  /** SW-1: `/context` as a window model from the same measured state the text view reads. */
+  const contextView = useCallback((history: readonly AgentChatMessage[], info: ContextInfoLabels, ascii: boolean): InfoWindowModel =>
+    contextInfoModel({ measured: context.current, history, compaction: compaction.current }, info, labels?.view, ascii), [labels]);
+  return { noteContext, save, run, id, contextView };
 }

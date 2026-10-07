@@ -11,7 +11,8 @@ import type { KnownSecretSnapshot } from '#platform/index.js';
 import { assistantLedgerEntries, streamStepEntries, workerReportToLedgerEntries, WORK_LEDGER_SCHEMA_VERSION, type WorkLedgerEntry, ledgerEntriesForWorkers, ledgerEntriesForRuns, type WorklineLedgerPorts, fillTemplate, newWorkerTaskIds, newRunLedgerEntries, runViewToLedgerEntry, agentHistory, appendLedger, boundAgentHistory, compactLedger, EMPTY_LEDGER, plainChatHistory, type AgentChatMessage, type ChatTurnMessage, type LedgerBuffer, notice } from '#surfaces/core/terminal-ledger/index.js';
 import { useConversationSession, type ConversationSessionLabels, type ConversationSessionPort } from './workline-sessions.js';
 import { ArrowPicker, ARROW_PICKER_ROWS } from '#surfaces/core/terminal-picker/index.js';
-import { Window, WindowStackProvider, WINDOW_RESERVED_ROWS, useFocusOwner } from '#surfaces/core/terminal-window/index.js';
+import { Window, WindowStackProvider, WINDOW_RESERVED_ROWS, useFocusOwner, SystemSummaryLine, SYSTEM_SUMMARY_ENTRY_ID } from '#surfaces/core/terminal-window/index.js';
+import { INFO_WINDOW_COMMANDS, useInfoWindow, type WorklineInfo } from './workline-info.js';
 import { span } from '#surfaces/core/terminal-render/index.js';
 import { Composer, type ComposerLabels, type ComposerHistoryPort, type ComposerMentionPort } from '#surfaces/core/terminal-composer/index.js';
 import { messageWithMentions, type WorklineAttachMentions, type WorklineMentionLabels } from './workline-mentions.js';
@@ -99,7 +100,11 @@ export interface WorklineProps {
   readonly monitorWindow?: MonitorWindowLoader;
   /** T3 L4: the `/config` and `/mcp` window ports and every panel's words; `/mode`'s port is this view's own mode port. Absent: text commands only. */
   readonly panels?: WorklinePanels;
+  /** SW-1: bare `/help`, `/status`, `/usage`, `/doctor`, `/scope`, `/context` open information windows (typed models; one summary line on close). Absent: text. */
+  readonly info?: WorklineInfo;
 }
+
+
 
 /** The composer listens only while no window is open (TS-WINDOW: one input owner, the window stack's top). */
 function StackComposer(props: ComponentProps<typeof Composer>) {
@@ -190,6 +195,10 @@ export function WorklineApp(props: WorklineProps) {
   const settings = useWorklineSettings({ panels: props.panels, permissionMode: props.permissionMode, mode, panel, state, push, errorText, blocked: work.modalOpen,
     openApprovals: (approvalId, execution) => work.run('approvals', approvalId, execution) });
 
+  // SW-1: bare information commands answer in a window; `/help` answers the command picked in it, which then runs here.
+  const infoWindow = useInfoWindow({ info: props.info, push, errorText, slash: labels.composer.slash, ascii: useRenderGlyphs().ascii,
+    context: (info, ascii) => session.contextView(history.current, info, ascii), input: () => ({ usage: usage.current, sessionFullAccess: mode.fullAccess.current }) });
+  const performRef = useRef<(line: string, mentioned: readonly string[], execution: LocalExecution) => Promise<boolean>>(async () => true);
   const opening = useRef(props.openingNotices);
   useEffect(() => {
     const notices = opening.current;
@@ -265,6 +274,11 @@ export function WorklineApp(props: WorklineProps) {
   const perform = useCallback(async (line: string, mentioned: readonly string[], execution: LocalExecution): Promise<boolean> => {
     const slash = parseSlashLine(line);
     if (!slash) { await runTurn(line, mentioned, execution); return true; }
+    // SW-1: a bare information command answers in its window; typed arguments keep the text command (as `/mode` and `/config` do).
+    if (props.info && !slash.args && INFO_WINDOW_COMMANDS.has(slash.command)) {
+      const shown = await infoWindow.run(slash.command, execution);
+      if (shown.handled) return shown.picked === null ? true : performRef.current(`/${shown.picked}`, [], execution);
+    }
     if (slash.command === 'reasoning') { reasoning.run(slash.args); return true; }
     if (await settings.open(slash.command, slash.args, execution)) return true;
     if (slash.command === 'mode' || slash.command === 'scratch') { await (slash.command === 'mode' ? mode.run : scratch)(slash.args); return true; }
@@ -314,7 +328,8 @@ export function WorklineApp(props: WorklineProps) {
     }
     catch (error) { push([notice('error', errorText(error))]); }
     return true;
-  }, [errorText, exit, labels, ledger, mode.run, settings, props.inspect, props.mcp, props.monitor, props.config, props.restartService, pollMs, pushMode, push, liveWin, reasoning.run, runTurn, scratch, session, work.run, panel]);
+  }, [errorText, exit, labels, ledger, mode.run, settings, props.inspect, props.info, props.mcp, props.monitor, props.config, props.restartService, pollMs, pushMode, push, liveWin, reasoning.run, runTurn, scratch, session, infoWindow, work.run, panel]);
+  performRef.current = perform;
 
   execute.current = async execution => {
     await perform(execution.input.text, execution.input.mentions, execution);
@@ -334,12 +349,12 @@ export function WorklineApp(props: WorklineProps) {
 
   const ledgerLabels: LedgerEntryLabels = { runCard: labels.runCard, workerCard: labels.workerCard, chatUser: labels.roleUser, chatAssistant: labels.roleAssistant,
     render: labels.render, ...(labels.work ? { workerLine: labels.work.workerLine } : {}) };
-  const choosing = resumePicker !== null || work.pickerOpen || settings.openKind !== null;
+  const choosing = resumePicker !== null || work.pickerOpen || settings.openKind !== null || infoWindow.isOpen;
   const fullAccessLine = mode.mode === 'full-access' ? labels.mode?.fullAccessLine : undefined, glyphs = useRenderGlyphs();
   // T2 T-MODE-CYCLE: Shift+Tab (Alt+M where the console cannot report Shift+Tab, e.g. Windows without VT input) steps the permission mode
   // while the composer owns the keyboard; an open card, picker or any window (stack not idle, `PermissionModeKeys`) owns Shift+Tab then. A running turn owns its
   // mode as `/mode` does (queued until it ends): the step waits for idle, so the status row never shows a mode the running turn is not in.
-  const composing = !work.modalOpen && !work.pickerOpen && resumePicker === null && settings.openKind === null;
+  const composing = !work.modalOpen && !work.pickerOpen && resumePicker === null && settings.openKind === null && !infoWindow.isOpen;
   const finishResume = (choice: number | null) => { panel.choose(state.picker?.pickerHandle, choice === null ? null : String(choice)); };
   return (
     <HumanTextContext.Provider value={props.knownSecrets}>
@@ -347,13 +362,16 @@ export function WorklineApp(props: WorklineProps) {
     <Box flexDirection="column">
       <PermissionModeKeys active={composing && !busy && Boolean(props.permissionMode)} onCycle={() => void mode.cycle()} />
       <Static key={buffer.epoch} items={[...buffer.pending]}>
-        {row => <LedgerEntryRow key={row.seq} entry={row.entry} labels={ledgerLabels} />}
+        {row => row.entry.kind === 'notice' && row.entry.id === SYSTEM_SUMMARY_ENTRY_ID
+          ? <SystemSummaryLine key={row.seq} text={row.entry.text} label={props.info?.labels.systemLabel ?? 'Deckent'} tone={row.entry.level} />
+          : <LedgerEntryRow key={row.seq} entry={row.entry} labels={ledgerLabels} />}
       </Static>
       {live ? <AssistantLive tail={live.step.liveTail} narration={live.step.narration} labels={labels.render} lead={live.lead} activeTool={live.step.activeTool}
         waiting={live.step.waiting} reasoningPreview={reasoning.show ? live.step.reasoningPreview : []} /> : null}
       {work.region}
       {/* One window is visible at a time: a decision card, picker, approval or settings window takes the screen from the live window, which returns when it is answered. */}
-      {work.modalOpen || work.pickerOpen || resumePicker !== null || settings.openKind !== null ? null : liveWin.element}
+      {work.modalOpen || work.pickerOpen || resumePicker !== null || settings.openKind !== null || infoWindow.isOpen ? null : liveWin.element}
+      {work.modalOpen || work.pickerOpen ? null : infoWindow.element}
       {resumePicker && !work.modalOpen && !work.pickerOpen
         ? <Window title={[span(labels.work?.window.resumeTitle ?? '/resume')]} status={[span(String(resumePicker.length))]} hints={labels.work?.window.pick ?? ''}
           position={labels.work?.window.position ?? '{from}-{to}/{total}'} footerRows={ARROW_PICKER_ROWS + 2}
