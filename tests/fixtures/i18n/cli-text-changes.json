@@ -423,6 +423,18 @@
     "mcp.sync.detail": {
       "before": "Ensures the AI adapter files (CLAUDE.md, AGENTS.md) import DECKENT.md as the single source of truth. Additive only — prepends the @DECKENT.md reference when missing and never overwrites existing content. Use it when an adapter file loses its Deckent reference after a manual edit or a merge conflict. Requires DECKENT.md to exist (run deckent_init first).",
       "after": null
+    },
+    "cli.mcp.add.desc": {
+      "before": "Add an MCP server (stdio or http) — writes to .mcp.json by scope",
+      "after": "Add an MCP server (stdio only) — writes the scope's mcp.json (project: .deckent/mcp.json)"
+    },
+    "cli.memcat.mcp.help.paths": {
+      "before": "\nMCP is a host-neutral standard: a server registered here is described by the protocol,\nnot by any single client, and the same entry can be consumed by any MCP-capable host.\nRead paths: `mcp list` and `mcp get` project the merged view (local > project > user).\nMutation paths: `mcp add` and `mcp remove` rewrite the .mcp.json of the selected scope.\n",
+      "after": "\nMCP is a host-neutral standard: a server registered here is described by the protocol,\nnot by any single client, and the same entry can be consumed by any MCP-capable host.\nRead paths: `mcp list` and `mcp get` project the merged view (local > project > user).\nMutation paths: `mcp add` and `mcp remove` rewrite the mcp.json of the selected scope (project: .deckent/mcp.json).\n"
+    },
+    "terminal.mcp.approve": {
+      "before": "mcp: {name} asks for trust on the next message",
+      "after": "Trust for {name} was reset. The approval card opens on your next message."
     }
   },
   "tr": {
@@ -965,6 +977,18 @@
     "mcp.sync.detail": {
       "before": "AI adapter dosyalarının (CLAUDE.md, AGENTS.md) tek doğruluk kaynağı olarak DECKENT.md'yi içe aktarmasını sağlar. Yalnızca eklemeli — @DECKENT.md referansı eksikse başa ekler, mevcut içeriğin üzerine asla yazmaz. Bir adapter dosyası elle düzenleme veya merge çakışması sonrası Deckent referansını kaybettiğinde kullanın. DECKENT.md'nin var olmasını gerektirir (önce deckent_init).",
       "after": null
+    },
+    "cli.mcp.add.desc": {
+      "before": "Bir MCP sunucusu ekleyin (stdio veya http) — scope'a göre .mcp.json dosyasına yazar",
+      "after": "Bir MCP sunucusu ekleyin (yalnız stdio) — scope'un mcp.json dosyasına yazar (project: .deckent/mcp.json)"
+    },
+    "cli.memcat.mcp.help.paths": {
+      "before": "\nMCP host’tan bağımsız bir standarttır: burada kayıtlı bir sunucu tek bir istemciye göre değil,\nprotokole göre tanımlanır ve aynı entry MCP destekleyen her host tarafından tüketilebilir.\nOkuma yolları: `mcp list` ve `mcp get` birleşik görünümü projekte eder (local > project > user).\nMutasyon yolları: `mcp add` ve `mcp remove` seçilen scope’un .mcp.json dosyasını yeniden yazar.\n",
+      "after": "\nMCP host’tan bağımsız bir standarttır: burada kayıtlı bir sunucu tek bir istemciye göre değil,\nprotokole göre tanımlanır ve aynı entry MCP destekleyen her host tarafından tüketilebilir.\nOkuma yolları: `mcp list` ve `mcp get` birleşik görünümü projekte eder (local > project > user).\nMutasyon yolları: `mcp add` ve `mcp remove` seçilen scope’un mcp.json dosyasını yeniden yazar (project: .deckent/mcp.json).\n"
+    },
+    "terminal.mcp.approve": {
+      "before": "mcp: {name} bir sonraki mesajda güven isteyecek",
+      "after": "{name} için güven sıfırlandı. Onay kartı bir sonraki mesajınızda açılacak."
     }
   }
 }

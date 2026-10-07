@@ -91,6 +91,36 @@ describe.skipIf(process.platform !== 'linux')('MCP tools through the runtime ser
     expect(system).toContain('mcp:fx/echo'); expect(system).toContain('untrusted');
   }, 60_000);
 
+  it('MCP-VISIBILITY: a hyphenated server name is added, approved and offered to the model as mcp__<name with _>__<tool>', async () => {
+    const m = mcpFixture();
+    const f = await runtime({ extraGrants: mcpGrants() }); await f.start();
+    registry(f.project, { 'my-fx': m.entry() }); await approve(f.project, f.env, 'my-fx');
+    f.state.script = [{ content: 'Hyphen.' }];
+    await answered(f, 'turn-hyphen', 'allow');
+    expect(toolNames(f.state.requests.at(-1)!).filter(name => name.startsWith('mcp__'))).toEqual(expect.arrayContaining(['mcp__my_fx__echo']));
+    expect(systemOf(f.state.requests.at(-1)!)).toContain('mcp:my-fx/echo');
+  }, 60_000);
+
+  // MCP-VISIBILITY K3: a pinned tool whose live definition drifted is withheld from the model AND the owner is told, once, in the turn note;
+  // `/mcp` keeps saying it (en and tr) until the owner re-approves.
+  it('K3: a drifted pinned tool is not offered and the owner sees it once in the turn note and on /mcp', async () => {
+    const m = mcpFixture();
+    const f = await runtime({ extraGrants: mcpGrants() }); await f.start();
+    registry(f.project, { fx: m.entry() }); await approve(f.project, f.env);
+    m.setTools([{ ...echo, description: 'Echo, but different now' }, slow]);
+    f.state.script = [{ content: 'First.' }];
+    const first = await answered(f, 'turn-drift-1', 'allow');
+    expect(toolNames(f.state.requests.at(-1)!).filter(name => name.startsWith('mcp__'))).toEqual(['mcp__fx__slow']);
+    expect(first.result.note).toContain(t('mcp.start.toolsChanged', { name: 'fx', count: 1 }, 'en'));
+    f.state.script = [{ content: 'Second.' }];
+    expect((await answered(f, 'turn-drift-2', 'allow')).result.note ?? '').not.toContain('went missing');
+    const lines = await mcpSlash(f.project, 'list', { runMcpCommand: runConfiguredMcpCommand } as unknown as CommandContext, { env: f.env }, 'tr');
+    expect(lines).toContainEqual(`    ${t('mcp.start.toolsChanged', { name: 'fx', count: 1 }, 'tr')}`);
+    expect(lines.find(line => line.startsWith('  fx '))).toContain(t('terminal.mcp.toolsChanged', {}, 'tr'));
+    await runConfiguredMcpCommand(f.project, { verb: 'reset', name: 'fx' }, { env: f.env }, async () => null);
+    expect((await mcpSlash(f.project, 'list', { runMcpCommand: runConfiguredMcpCommand } as unknown as CommandContext, { env: f.env }, 'en')).some(line => line.includes('went missing'))).toBe(false);
+  }, 60_000);
+
   // Sol 2234 B1-R2: the real first-use producer (adapter trust asker) → turn stream → card carries the card facts: risk not declared, required
   // turn-bound, and the turn's capability; an allow without it is refused and the card stays pending; the card's own answer allows it; the
   // capability is never written to the ledger (approvals, receipts, audit).
@@ -428,6 +458,22 @@ describe('the MCP notices in the turn note (pure)', () => {
 });
 
 describe('the MCP start notices and the sandbox refusal come from the catalog (pure, en and tr)', () => {
+  // MCP-VISIBILITY: `/mcp approve` resets trust (no card here); the screen says so and when the card comes.
+  it('/mcp approve resets and says the approval card opens on the next message (en, tr)', async () => {
+    const seen: unknown[] = [], stub = { runMcpCommand: async (_root: string, request: unknown) => { seen.push(request); return {}; } } as unknown as CommandContext;
+    expect(await mcpSlash('/p', 'approve fx', stub, {}, 'en')).toEqual(['Trust for fx was reset. The approval card opens on your next message.']);
+    expect(await mcpSlash('/p', 'approve fx', stub, {}, 'tr')).toEqual(['fx için güven sıfırlandı. Onay kartı bir sonraki mesajınızda açılacak.']);
+    expect(seen).toEqual([{ verb: 'reset', name: 'fx' }, { verb: 'reset', name: 'fx' }]);
+  });
+  // MCP-VISIBILITY: `mcp add` is stdio only and the registry file is `mcp.json` (project: `.deckent/mcp.json`), never `.mcp.json`.
+  it('the mcp add help names only stdio and the real registry file (en and tr)', () => {
+    for (const locale of ['en', 'tr'] as const) for (const key of ['cli.mcp.add.desc', 'cli.memcat.mcp.help.paths'] as const) {
+      const text = t(key, {}, locale);
+      expect(text).not.toMatch(/\bhttp\b/iu); expect(text).not.toContain('.mcp.json');
+      if (key === 'cli.mcp.add.desc') expect(text).toContain('stdio');
+      expect(text).toContain('.deckent/mcp.json');
+    }
+  });
   const hidden = { kind: 'path-hidden' as const, role: 'command' as const, index: -1, path: '/home/o/bin/srv', target: '/opt/srv' };
   it('renders every notice kind with its next step by phase', () => {
     const notice = (diagnosis: unknown, phase: 'launch' | 'trusted', extra: Record<string, unknown> = {}) =>

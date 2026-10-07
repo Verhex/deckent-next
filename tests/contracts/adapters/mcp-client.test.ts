@@ -53,6 +53,23 @@ describe('MCP client: pin and names (pure)', () => {
     expect(mcpToolWireName('files', 'x'.repeat(60))).toBeNull();
     expect(mcpToolWireName('files', '')).toBeNull();
   });
+  it('MCP-VISIBILITY: server names take single inner hyphens; the wire maps them to `_` and two names never share a wire prefix', () => {
+    const problems = (names: string[]) => resolveMcpRegistry([{ scope: 'project', file: 'f', servers: Object.fromEntries(names.map(name => [name, { command: 'x' }])) }], null).problems.map(entry => entry.name);
+    expect(problems(['a', 'my-server', 'a1-b2-c3', 'x'.repeat(32)])).toEqual([]);
+    expect(problems(['a--b', '-a', 'a-', 'A-b', '1a', 'a_b', 'x'.repeat(33), ''])).toEqual(['a--b', '-a', 'a-', 'A-b', '1a', 'a_b', 'x'.repeat(33), '']);
+    expect(mcpToolWireName('my-server', 'read')).toBe('mcp__my_server__read');
+    // Every name of the small alphabet that the rule accepts, crossed with tools that try to forge a prefix, yields distinct wire names.
+    const alphabet = ['a', 'b', '-', '1'], names: string[] = [''];
+    for (let round = 0; round < 4; round++) for (const base of [...names]) for (const letter of alphabet) names.push(base + letter);
+    const valid = [...new Set(names)].filter(name => resolveMcpRegistry([{ scope: 'project', file: 'f', servers: { [name]: { command: 'x' } } }], null).problems.length === 0 && name);
+    const wires = new Map<string, string>();
+    for (const name of valid) for (const tool of ['x', 'b__x', '_b__x', 'b_', 'a_b']) {
+      const wire = mcpToolWireName(name, tool); if (!wire) continue;
+      const key = `${name}/${tool}`, other = wires.get(wire);
+      expect(other, `${key} collides with ${other}`).toBeUndefined(); wires.set(wire, key);
+    }
+    expect(wires.size).toBeGreaterThan(100);
+  });
   it('verification offers only pinned, matching, mappable tools; the floor comes from the pin or an explicit destructive hint', () => {
     const destructive = tool('drop', 'echo', { annotations: { destructiveHint: true } }), plain = tool('plain', 'echo'), odd = { name: 'odd', inputSchema: { type: 'string' } };
     const verdicts = verifyMcpTools({ id: 'fx', command: 'x', args: [], env: {}, realm: 'host', tools: [
