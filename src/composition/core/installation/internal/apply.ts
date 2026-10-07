@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { isAbsolute } from 'node:path';
 import { z } from 'zod';
-import { FileInstallationIdentityStore, FileProjectIdentityStore, withInstallationJournal } from '#adapters/index.js';
+import { ensureLocalPrefixCacheSaltKey, FileInstallationIdentityStore, FileProjectIdentityStore, withInstallationJournal } from '#adapters/index.js';
 import { immutableJsonObjectSchema } from '#domain/index.js';
 import { InstallationPublicationApplication, InstallationPublicationError, validateInstallationRecovery, type InstallationConsent, type InstallationRecovery, type PreparedInstallation } from '#engine/index.js';
 import { bootstrapPublishesConfig, getConfigFieldDefault, loadConfig, observeBootstrapState, SystemTrustedClock, validateConfig, versionedConfig, resolveProductLayout, type BootstrapObservation } from '#platform/index.js';
@@ -60,7 +60,7 @@ async function preflightEvidence(prepared: PreparedInstallation, operator: Insta
 function identityStores(projectRoot: string, prepared: PreparedInstallation, timeoutMs: number) {
   const config = validateConfig(versionedConfig(prepared.material.configuration)).config;
   const layout = resolveProductLayout({ projectRoot, root: prepared.material.layout.root, resources: config.layout.resources });
-  return { installation: new FileInstallationIdentityStore(layout, timeoutMs, undefined, config.installation), project: new FileProjectIdentityStore(projectRoot, timeoutMs) };
+  return { layout, installation: new FileInstallationIdentityStore(layout, timeoutMs, undefined, config.installation), project: new FileProjectIdentityStore(projectRoot, timeoutMs) };
 }
 function lockTimeout(prepared: PreparedInstallation) {
   return Math.min(getConfigFieldDefault('installation').writeLockTimeoutMs, validateConfig(versionedConfig(prepared.material.configuration)).config.installation.writeLockTimeoutMs);
@@ -74,12 +74,14 @@ async function executeInstallation(projectRoot: string, operator: InstallationAp
     if (recovery) validateInstallationRecovery(recovery, prepared);
     const evidence = await inspectPreparedInstallation(prepared, operator.dockerExecutable);
     if (evidence.proposalDigest !== operator.proposalDigest) throw new InstallationPublicationError('INSTALLATION_PUBLICATION_CHANGED');
-    const { installation: installationIdentity, project: projectIdentity } = identityStores(projectRoot, prepared, timeoutMs);
+    const { layout, installation: installationIdentity, project: projectIdentity } = identityStores(projectRoot, prepared, timeoutMs);
     await installationIdentity.admitWrite(); await projectIdentity.read(); // re-admitted under the journal lock, before any target is published
     const consent: InstallationConsent = recovery?.consent ?? Object.freeze({ schemaVersion: 1, mode: 'operator-custom',
       id: randomUUID(), atMs: Date.now(), proposalDigest: operator.proposalDigest, principal: prepared.preview.principal });
     const result = await new InstallationPublicationApplication({ journal, ...installationPublicationPorts(projectRoot, prepared),
       revalidateEvidence: () => inspectPreparedInstallation(prepared, operator.dockerExecutable), now: () => clock.sample().wallMs }).apply(prepared, evidence, consent);
-    await installationIdentity.loadOrCreate(); await projectIdentity.loadOrCreate(); return result;
+    await installationIdentity.loadOrCreate(); await projectIdentity.loadOrCreate();
+    await ensureLocalPrefixCacheSaltKey(layout); // VLLM-CACHE-SALT: the installation's salt secret exists from init (older installations: first use)
+    return result;
   });
 }

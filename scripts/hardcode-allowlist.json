@@ -55,8 +55,6 @@
   {"file":"src/adapters/core/http-fetch/internal/target.ts","fingerprint":"fae5f8813c7f57ecc287c28f6e2e83533383cadcef55e06e98c22153903149e4","rule":"G2"},
   {"file":"src/adapters/core/inference-metrics/internal/fetch.ts","fingerprint":"05ef7bf109c2c0f4abf583afe9f289764060c8a70fa77212ee2fb60c2c340fa4","rule":"G2"},
   {"file":"src/adapters/core/installation-files/internal/publication.ts","fingerprint":"38e083b5ac3edb4288039b90a1951531b0dbfdea093c09da73bb25beee033f95","rule":"G1"},
-  {"file":"src/adapters/core/local-keyring/internal/keyring.ts","fingerprint":"1fd26da82bc1ed7179e0dd04c4a739c63934647c14bef1d0149ce040bd306b3f","rule":"G2"},
-  {"file":"src/adapters/core/local-keyring/internal/keyring.ts","fingerprint":"35f7487afc6fc379ca928a96892d1cc88f5ff54beb3f97e05cf9bf43f510c2ee","rule":"G2"},
   {"file":"src/adapters/core/local-runtime-socket/internal/authentication.ts","fingerprint":"fc4ee73f0fb144cca3d60d5833fec020559069248a47c63fe48ca9780b5d380b","rule":"G3"},
   {"file":"src/adapters/core/local-runtime-socket/internal/client.ts","fingerprint":"cd16ae80137faf68db9373c3cf53c8fa3024eadd92947725284d8fd2614a6835","rule":"G2"},
   {"file":"src/adapters/core/local-runtime-socket/internal/endpoint.ts","fingerprint":"13972187cf40f69e1f77b6ca5f06e5ef1952668c411d9f3d5256de399b2467c2","rule":"G2"},

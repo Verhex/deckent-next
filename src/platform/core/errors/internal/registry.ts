@@ -87,6 +87,7 @@ const definitions: Readonly<Record<string, Definition>> = Object.freeze({
   SESSION_EXPIRED: { category: 'error', render: (p, l) => ({ message: t('error.SESSION_EXPIRED', p, l) }) },
   SESSION_INACTIVE: { category: 'error', render: (p, l) => ({ message: t('error.SESSION_INACTIVE', p, l) }) },
   INTEGRITY_KEY_UNAVAILABLE: { category: 'error', render: (p, l) => ({ message: t('error.INTEGRITY_KEY_UNAVAILABLE', p, l) }) },
+  PREFIX_CACHE_SALT_UNAVAILABLE: { category: 'error', render: (p, l) => ({ message: t('error.PREFIX_CACHE_SALT_UNAVAILABLE', p, l) }) },
 
   CLI_INVOCATION_INPUT_LIMIT: { category: 'usage', render: (p, l) => ({ message: t('error.CLI_INVOCATION_INPUT_LIMIT', p, l) }) },
   CLI_INVOCATION_INPUT_INVALID: { category: 'usage', render: (p, l) => ({ message: t('error.CLI_INVOCATION_INPUT_INVALID', p, l) }) },
@@ -155,6 +156,7 @@ const definitions: Readonly<Record<string, Definition>> = Object.freeze({
   OPENAI_CHAT_CANCELLED: { category: 'error', render: (p, l) => ({ message: t('error.OPENAI_CHAT_CANCELLED', p, l) }) },
   OPENAI_CHAT_TRANSPORT_UNKNOWN: { category: 'error', render: (p, l) => ({ message: t('error.OPENAI_CHAT_TRANSPORT_UNKNOWN', p, l) }) },
   OPENAI_CHAT_MODEL_MISMATCH: { category: 'error', render: (p, l) => ({ message: t('error.OPENAI_CHAT_MODEL_MISMATCH', p, l) }) },
+  OPENAI_CHAT_CACHE_SALT_UNAVAILABLE: { category: 'error', render: (p, l) => ({ message: t('error.OPENAI_CHAT_CACHE_SALT_UNAVAILABLE', p, l) }) },
   MODEL_ACTIVATION_INVALID: { category: 'error', render: (p, l) => ({ message: t('error.MODEL_ACTIVATION_INVALID', p, l) }) },
   MODEL_ACTIVATION_REVISION_CONFLICT: { category: 'error', render: (p, l) => ({ message: t('error.MODEL_ACTIVATION_REVISION_CONFLICT', p, l) }) },
   MODEL_ACTIVATION_NOT_FOUND: { category: 'error', render: (p, l) => ({ message: t('error.MODEL_ACTIVATION_NOT_FOUND', p, l) }) },

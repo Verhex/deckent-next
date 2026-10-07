@@ -1,4 +1,3 @@
-import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import { modelInvocationNativeResponseUpperBound, type ModelInvocationNativePort } from '#engine/index.js';
 import { modelInvocationProfileSchema, parseModelBindingDefinition, type ModelInvocationDeltaSink, type ModelInvocationNativeResult } from '#domain/index.js';
@@ -15,6 +14,9 @@ export type PreparedOpenAiChatRequest = Readonly<{ definition: OpenAiChatHttpDef
   request: OpenAiChatTextRequest; body: string }>;
 export interface OpenAiChatNativePortOptions {
   readonly resolveCredential?: (reference: string, signal?: AbortSignal) => Promise<string | undefined>;
+  /** The scope's secret prefix-cache salt (composition: HMAC under the installation's salt secret). Required by a binding that declares
+   * prefix-cache-salt: without it, or when it fails, nothing is sent (fail closed, never a derivable salt). */
+  readonly cacheSalt?: (scopeId: string) => Promise<string>;
 }
 const finishReason = openAiChatFinishReasonSchema, usageSchema = openAiChatUsageSchema;
 const messageSchema = z.object({ role: z.literal('assistant'), content: z.string().nullable(), refusal: z.string().nullable().optional() }).passthrough();
@@ -59,10 +61,13 @@ async function countPreparedOpenAiChatRequest(prepared: PreparedOpenAiChatReques
   } catch { return null; }
 }
 
-/** 43-character base64url (256 bit, within vLLM's 1..1024 bound) salt, one per scope: stable across calls of a scope (its own prefix
- * cache keeps hitting), distinct across scopes, never the raw scope id. */
-export function openAiChatCacheSalt(scopeId: string): string {
-  return createHash('sha256').update('deckent.prefix-cache-salt.v1\0' + scopeId).digest('base64url');
+/** The salt of one scope from the composition port: 43-character base64url (256 bit, within vLLM's 1..1024 bound), stable per scope and
+ * installation secret. vLLM: "treat the salt as a secret" — a public formula of the scope id is refused by construction (no fallback). */
+async function secretCacheSalt(options: OpenAiChatNativePortOptions, scopeId: string): Promise<string> {
+  if (!options.cacheSalt) throw new OpenAiChatHttpError('OPENAI_CHAT_CACHE_SALT_UNAVAILABLE');
+  const salt = await options.cacheSalt(scopeId);
+  if (typeof salt !== 'string' || !/^[A-Za-z0-9_-]{43}$/u.test(salt)) throw new OpenAiChatHttpError('OPENAI_CHAT_CACHE_SALT_UNAVAILABLE');
+  return salt;
 }
 
 /** Pure preparation: it has no network, credential, or profile-resolution effect. */
@@ -109,12 +114,14 @@ async function sendPreparedOpenAiChatHttpRequest(prepared: PreparedOpenAiChatReq
   try {
     const definition = { endpoint: prepared.definition.endpoint, authentication: prepared.definition.authentication,
       ...(prepared.definition.tls ? { tls: prepared.definition.tls } : {}) };
+    // Only the transport's own options cross into it (the salt port is a preparation input, not a transport option).
+    const transport = options.resolveCredential ? { resolveCredential: options.resolveCredential } : {};
     return await sendNativeJsonHttp({ definition, limits: prepared.limits, body: prepared.body,
       adapter: { id: OPENAI_CHAT_HTTP_ADAPTER_ID, version: OPENAI_CHAT_HTTP_ADAPTER_VERSION } },
     // A streamed request is parsed incrementally whether or not a caller observes its deltas.
     prepared.request.stream === true
-      ? { ...options, stream: createOpenAiChatStream(prepared.request, prepared.limits), ...(onDelta ? { onDelta } : {}) }
-      : { ...options, parseResponse: body => parseResponse(body, prepared) }, signal);
+      ? { ...transport, stream: createOpenAiChatStream(prepared.request, prepared.limits), ...(onDelta ? { onDelta } : {}) }
+      : { ...transport, parseResponse: body => parseResponse(body, prepared) }, signal);
   } catch (error) {
     if (!(error instanceof NativeJsonHttpError)) throw error;
     const code = error.code.replace('NATIVE_JSON_HTTP_', 'OPENAI_CHAT_') as OpenAiChatHttpErrorCode;
@@ -158,7 +165,7 @@ export function createOpenAiChatNativePort(options: OpenAiChatNativePortOptions 
       if ((request.tools && !declares(OPENAI_CHAT_TOOL_CALLS_CAPABILITY))
         || (request.chat_template_kwargs && !declares(OPENAI_CHAT_ENABLE_THINKING_CAPABILITY))) throw new OpenAiChatHttpError('OPENAI_CHAT_REQUEST_INVALID');
       const prepared = prepareOpenAiChatHttpRequest(adapterDefinition, parsedProfile.data.limits, request,
-        declares(OPENAI_CHAT_PREFIX_CACHE_SALT_CAPABILITY) ? openAiChatCacheSalt(parsedProfile.data.scopeId) : undefined);
+        declares(OPENAI_CHAT_PREFIX_CACHE_SALT_CAPABILITY) ? await secretCacheSalt(options, parsedProfile.data.scopeId) : undefined);
       preparedTokens.add(prepared);
       // A counter is used only for a model whose binding declares it (catalog data) and a profile that names its endpoint.
       if (adapterDefinition.tokenizeEndpoint && declares(OPENAI_CHAT_TOKEN_COUNT_CAPABILITY)) countable.add(prepared);
