@@ -84,7 +84,10 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
   const config = await loadComposedConfig(projectRoot, { ...options, heal: false }) as Record<string, unknown>;
   const chat = readTerminalChatConfig(config);
   if (!chat) throw ErrorRegistry.createError('TERMINAL_CHAT_NOT_CONFIGURED');
-  const binding = await inspectModelBinding(projectRoot, chat.reference, options);
+  // v23 (T4 MODEL-SWITCH, S19): the session's pinned model, else the configured one. A pinned model that is not declared, has no profile or is
+  // not active is refused typed by the same checks below; the configured model is never used in its place (no silent fallback).
+  const reference = command.reference ?? chat.reference;
+  const binding = await inspectModelBinding(projectRoot, reference, options);
   if (binding.status !== 'declared') throw ErrorRegistry.createError('TERMINAL_CHAT_MODEL_NOT_DECLARED');
   const declares = (id: string) => binding.definition.model.protocols.some(protocol => (protocol.family === OPENAI_CHAT_COMPLETIONS_FAMILY || protocol.family === ANTHROPIC_MESSAGES_FAMILY)
     && protocol.capabilities.some(capability => capability.id === id && capability.version === 1 && capability.state === 'supported'));
@@ -126,7 +129,7 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
     const language = resolveLocale(undefined, options.env ?? process.env, context.config.language);
     // L1 item 5: the model may propose an MCP server; its own window asks the person in every mode, and only a yes adds it (untrusted).
     const proposals = workspace ? createMcpProposals({ projectRoot, options, context, scopeId: command.scopeId, turnId: command.turnId, signal, emit: emitApproval,
-      proposer: `model ${chat.reference.modelId}`, locale: language }) : null;
+      proposer: `model ${reference.modelId}`, locale: language }) : null;
     const tools: readonly AgentToolSpec[] = workspace ? [...workspace.specs, ...WORKSPACE_EDIT_TOOL_SPECS, RUN_SHELL_TOOL_SPEC, ...SCRATCH_TOOL_SPECS,
       ...(fetcher ? [FETCH_URL_TOOL_SPEC] : []), ...(mcp?.specs ?? []), PROPOSE_MCP_SERVER_TOOL_SPEC] : [];
     const editsIn = (area: WorkspaceEditArea | null | undefined, project = false) => area ? createAgentFileEdits({ area, context, peer, scopeId: command.scopeId, turnId: command.turnId,
@@ -141,18 +144,18 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
     // The service's model-facing instructions (TL-C D4) join the client's system text in every sent round; the digest binds them, so a
     // turn id replayed after the prompt changed is a conflict, never an answer to another prompt.
     const systemPrompt = renderAgentTurnSystemPrompt({ projectRoot, layout: context.layout, tools, scratch: scratch && { dir: scratch.dir, retentionDays: scratch.limits.retentionDays },
-      model: { ...chat.reference, nativeId: binding.definition.model.nativeId }, language, outputLimitTokens: chat.maxCompletionTokens,
+      model: { ...reference, nativeId: binding.definition.model.nativeId }, language, outputLimitTokens: chat.maxCompletionTokens,
       network: fetcher && { allowedHosts: fetchSettings.allowedHosts, others: fetchSettings.egress === 'approval' ? 'ask' : 'refused' }, mcp: mcp?.prompt ?? null,
       // v6 PROMPT-POSTURE: the shell's posture from the realm its calls resolve (the shell owns it), apart from fetch_url.
       shell: shell ? await shell.posture() : null });
-    const requestDigest = sha256(`chat-turn-request:1\0${canonical({ messages: command.messages, reference: chat.reference, catalogRevision: binding.catalogRevision,
+    const requestDigest = sha256(`chat-turn-request:1\0${canonical({ messages: command.messages, reference, catalogRevision: binding.catalogRevision,
       binding: binding.binding, maxCompletionTokens: chat.maxCompletionTokens, tools: tools.map(tool => `${tool.name}@${tool.version}`), systemPrompt: sha256(systemPrompt),
       ...(command.reasoning ? { reasoning: command.reasoning } : {}), ...(command.sessionId ? { sessionId: command.sessionId } : {}), ...(fullAccess ? { fullAccess } : {}) })}`);
 
     // The deployment's served window (profile data, T-L5); the provider's own report narrows it further.
     const profile = ((config['provider_invocation_profiles'] as { profiles?: unknown[] } | undefined)?.profiles ?? [])
       .map(value => modelInvocationProfileSchema.safeParse(value)).flatMap(parsed => parsed.success ? [parsed.data] : [])
-      .find(profile => profile.scopeId === command.scopeId && JSON.stringify(profile.reference) === JSON.stringify(chat.reference));
+      .find(profile => profile.scopeId === command.scopeId && JSON.stringify(profile.reference) === JSON.stringify(reference));
     const profileWindow = profile?.contextWindowTokens ?? null;
     // W3-CI-FIX: only the streaming adapters (OpenAI chat, Anthropic messages) take a streamed round; another family (the priced
     // OpenRouter adapter accepts `stream: false` only) gets one non-streamed round, and the answer arrives with the governed result.
@@ -161,7 +164,7 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
     /** The one governed command of a round: measured and sent identically (the count is of exactly what is sent). */
     const roundCommand = (round: number, messages: readonly AgentTurnMessage[], declared: readonly AgentToolSpec[]): ModelInvocationCommand => ({
       schemaVersion: 1, commandId: chatTurnRoundCommandId(command.scopeId, command.turnId, round),
-      scopeId: command.scopeId, reference: chat.reference, catalogRevision: binding.catalogRevision, expectedBinding: binding.binding,
+      scopeId: command.scopeId, reference, catalogRevision: binding.catalogRevision, expectedBinding: binding.binding,
       nativeRequest: { model: binding.definition.model.nativeId, messages: openAiChatNativeMessages(withAgentTurnSystemPrompt(messages, systemPrompt)), max_completion_tokens: chat.maxCompletionTokens,
         ...roundStream, ...roundThinking,
         ...(declared.length ? { tools: declared.map(tool => ({ type: 'function', function: { name: tool.name, description: tool.description,
@@ -294,7 +297,7 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
         // Summary input is bounded in bytes (a UTF-8 byte is never fewer than one token): 40% of the known window, else 32k.
         const transcript = agentCompactionTranscript(older, Math.floor(0.4 * (profileWindow ?? 32_768)));
         const invocation: ModelInvocationCommand = { schemaVersion: 1, commandId: chatTurnCompactionCommandId(command.scopeId, command.turnId, sequence),
-          scopeId: command.scopeId, reference: chat.reference, catalogRevision: binding.catalogRevision, expectedBinding: binding.binding,
+          scopeId: command.scopeId, reference, catalogRevision: binding.catalogRevision, expectedBinding: binding.binding,
           nativeRequest: { model: binding.definition.model.nativeId, messages: [{ role: 'system', content: agentCompactionInstruction(language) },
             { role: 'user', content: transcript }], max_completion_tokens: chat.maxCompletionTokens, stream: false,
           ...(thinkingSwitch ? { chat_template_kwargs: { enable_thinking: false } } : {}) } as unknown as JsonObject };

@@ -1961,7 +1961,8 @@
     "src/domain/core/agent-turn": {
       "dependencies": [
         "src/domain/core/agent-tool",
-        "src/domain/core/primitives"
+        "src/domain/core/primitives",
+        "src/domain/core/provider-catalog"
       ],
       "plan": "CONTRACT"
     },

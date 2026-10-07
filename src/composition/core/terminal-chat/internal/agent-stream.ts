@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import type { AgentTurnMessage, AgentTurnStreamEvent, ChatTurnCancellation, ChatTurnCommand, ChatTurnResult } from '#domain/index.js';
+import type { AgentTurnMessage, AgentTurnStreamEvent, ChatTurnCancellation, ChatTurnCommand, ChatTurnResult, ModelReference } from '#domain/index.js';
 import { createAgentCompactionGuard, type AgentTurnAdmission } from '#engine/index.js';
 import { ErrorRegistry, type ConfigLoadOptions } from '#platform/index.js';
 import type { PanelTurnBinding, TurnDelta } from '#surfaces/index.js';
@@ -25,6 +25,8 @@ export interface TerminalAgentTurnInput {
   readonly sessionId?: string;
   /** MODES-3 (v17): the terminal was launched in full access; the service admits it only on the company grant. */
   readonly fullAccess?: true;
+  /** T4 MODEL-SWITCH (v23): the session's pinned model; the service uses exactly it or refuses typed. */
+  readonly reference?: ModelReference;
   readonly onTurnBound?: (binding: PanelTurnBinding) => void;
 }
 type Outcome = { readonly result: ChatTurnResult } | { readonly error: unknown };
@@ -36,7 +38,7 @@ export async function* streamTerminalAgentTurn(input: TerminalAgentTurnInput, po
   input.signal?.throwIfAborted();
   const command: ChatTurnCommand = { schemaVersion: 1, scopeId: input.scopeId, turnId: randomUUID(), messages: [...input.messages],
     ...(input.reasoning === 'off' ? { reasoning: 'off' as const } : {}), ...(input.sessionId ? { sessionId: input.sessionId } : {}),
-    ...(input.fullAccess === true ? { fullAccess: true as const } : {}) };
+    ...(input.fullAccess === true ? { fullAccess: true as const } : {}), ...(input.reference ? { reference: { ...input.reference } } : {}) };
   let cancellation: Promise<unknown> | undefined;
   const cancel = () => cancellation ??= ports.cancelChatTurn(input.projectRoot, { schemaVersion: 1, scopeId: command.scopeId, turnId: command.turnId }, input.options)
     .catch(() => undefined);
