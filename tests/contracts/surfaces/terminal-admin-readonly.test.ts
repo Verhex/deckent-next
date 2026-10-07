@@ -53,12 +53,14 @@ describe('terminal read-only management (S09)', () => {
     it.each(['en', 'tr'] as const)('lists the ledger catalog with activation state and marks the current model (%s)', async locale => {
       const { project, options } = await catalogFixture();
       await applyModelCatalog(project, { schemaVersion: 1, commandId: 'seed', scopeId: 's', action: 'register', catalog: await seedCatalog() }, options);
-      const reference = { providerId: 'p', providerVersion: 1, modelId: 'claude-opus-5-5', modelVersion: 1 };
+      // A real chat reference names the provider (= ledger channel) and the catalog model id; the ledger lists the native id.
+      const reference = { providerId: SEED_CHANNEL, providerVersion: 1, modelId: 'opus-5-5', modelVersion: 1 };
       const ports = terminalAdminPorts({ ...base, root: project, options, locale, context: { inspectModelCatalog: inspectModelCatalog as never,
         describeTerminalChatPlan: async () => ({ status: 'ready', reference }) } }).inspect;
       const first = (await ports.model!('', { usage: EMPTY_SESSION_USAGE })).join('\n');
-      expect(first).toContain(SEED_CHANNEL); expect(first).toContain('claude-opus-5-5'); expect(first).toContain('p@1/claude-opus-5-5@1');
-      expect(first).toContain(locale === 'en' ? '<- current' : '<- geçerli'); expect(first).toContain(locale === 'en' ? 'inactive' : 'etkin değil');
+      expect(first).toContain(SEED_CHANNEL); expect(first).toContain('claude-opus-5-5'); expect(first).toContain(`${SEED_CHANNEL}@1/opus-5-5@1`);
+      const mark = locale === 'en' ? '<- current' : '<- geçerli';
+      expect(first.split('\n').filter(line => line.includes(mark)).map(line => line.trim().split(/\s+/u)[0])).toEqual(['claude-opus-5-5']); expect(first).toContain(locale === 'en' ? 'inactive' : 'etkin değil');
       // Activation changes what the very next call shows: nothing is remembered between calls.
       await applyModelCatalog(project, { schemaVersion: 1, commandId: 'on', scopeId: 's', action: 'activate', channelId: SEED_CHANNEL, modelId: 'claude-opus-5-5', expectedRevision: 0 }, options);
       const second = (await ports.model!('', { usage: EMPTY_SESSION_USAGE })).join('\n');
@@ -77,6 +79,28 @@ describe('terminal read-only management (S09)', () => {
       await type(view, '/model claude-opus-5-5\r');
       await until(() => view.stdout.text.slice(mark).includes('Usage: /model'), 'argument refused');
     });
+  });
+
+  // BATCH-FIX 2026-10-07 MODEL-CURRENT (P2-3b): the mark follows the exact reference; the same model id under another provider channel or
+  // another provider/model version is not the current model.
+  it('/model marks only the entry of the exact provider, provider version and model version', async () => {
+    // Codex-style rows: the native id equals the catalog id, so a bare model-id comparison matched every provider's row.
+    const entry = (id: string, version: number) => ({ modelId: id, revision: 1, model: { id, version, lifecycle: { state: 'active' } }, activation: null });
+    const channel = (channelId: string, providerVersion: number, models: unknown[]) => ({ channelId, access: 'allowed' as const, revision: 1, providerVersion,
+      catalogRevision: 'c', channel: { kind: 'native-cli' }, activation: null, models });
+    const catalog = { schemaVersion: 1, scopeId: 's', channels: [channel('provider-a', 1, [entry('m', 1), entry('m', 2)]), channel('provider-b', 1, [entry('m', 1)]),
+      channel('provider-c', 2, [entry('m', 1)])] };
+    const marked = async (reference: { providerId: string; providerVersion: number; modelId: string; modelVersion: number }) => {
+      const { inspect } = terminalAdminPorts({ ...base, locale: 'en', context: { inspectModelCatalog: async () => catalog as never,
+        describeTerminalChatPlan: async () => ({ status: 'ready', reference }) } });
+      const lines = (await inspect.model!('', { usage: EMPTY_SESSION_USAGE }));
+      let channelId = '';
+      return lines.flatMap(line => { const head = /^(provider-\w)\b/u.exec(line.trim()); if (head) channelId = head[1]!; return line.includes('<- current') ? [`${channelId}:${line.trim().split(/\s+/u)[0]}`] : []; });
+    };
+    expect(await marked({ providerId: 'provider-b', providerVersion: 1, modelId: 'm', modelVersion: 1 })).toEqual(['provider-b:m']);
+    expect(await marked({ providerId: 'provider-a', providerVersion: 1, modelId: 'm', modelVersion: 2 })).toEqual(['provider-a:m']);
+    expect(await marked({ providerId: 'provider-c', providerVersion: 1, modelId: 'm', modelVersion: 1 })).toEqual([]);
+    expect(await marked({ providerId: 'provider-z', providerVersion: 1, modelId: 'm', modelVersion: 1 })).toEqual([]);
   });
 
   it('a failed query is a typed error and never an earlier value (/model, /status)', async () => {
