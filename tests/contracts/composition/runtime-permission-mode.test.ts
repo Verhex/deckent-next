@@ -37,7 +37,7 @@ describe.skipIf(process.platform !== 'linux')('permission mode read and write th
     const runtime = client(f);
     const before = await stat(join(f.data, 'bindings.json'), { bigint: true });
     const shown = await runtime.inspectPermissionMode({ schemaVersion: 1, scopeId: 'scope' });
-    expect(shown).toEqual({ schemaVersion: 1, scopeId: 'scope', supported: true, mode: 'standart', askEdits: false, revision: 'p1+b1', eligible: true, fullAccess: true });
+    expect(shown).toEqual({ schemaVersion: 1, scopeId: 'scope', supported: true, mode: 'standart', askEdits: false, revision: 'p1+b1', eligible: true, fullAccess: true, fullAuto: true });
     const changed = await runtime.setPermissionMode({ schemaVersion: 1, scopeId: 'scope', mode: 'full-auto', expectedRevision: shown.revision });
     expect(changed).toMatchObject({ scopeId: 'scope', supported: true, mode: 'full-auto', previous: 'standart', changed: true, eligible: true });
     expect(changed.revision).toMatch(/^p1\+m-[0-9a-f]{40}$/u);
@@ -149,7 +149,7 @@ describe.skipIf(process.platform !== 'linux')('permission mode read and write th
     await authority(f, [setGrant()], 1);
     const text = await readFile(join(f.data, 'bindings.json'), 'utf8');
     expect(await runtime.inspectPermissionMode({ schemaVersion: 1, scopeId: 'scope' })).toEqual({ schemaVersion: 1, scopeId: 'scope', supported: false, mode: 'standart', askEdits: false,
-      revision: 'p1', eligible: false, fullAccess: false });
+      revision: 'p1', eligible: false, fullAccess: false, fullAuto: false });
     await expect(runtime.setPermissionMode({ schemaVersion: 1, scopeId: 'scope', mode: 'full-auto', expectedRevision: 'p1' })).rejects.toMatchObject({ code: 'PERMISSION_MODE_UNSUPPORTED' });
     expect(await readFile(join(f.data, 'bindings.json'), 'utf8')).toBe(text);
   }, 90_000);
