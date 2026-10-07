@@ -1,274 +1,214 @@
+<div align="center">
+
 # Deckent
 
-English: [README.md](README.md)
+**Agent Control & Execution Plane**
+
+İnsanların, yapay zekâ ajanlarının ve araçların her eylemi sizin altyapınızda yetkilendirilir, yalıtılır, çalıştırılır ve kanıtlanır.
+
+*policy-driven agent runtime · governed execution · self-hosted agent control plane*
 
 [![CI](https://img.shields.io/github/actions/workflow/status/Verhex/deckent-next/ci.yml?branch=main&label=CI)](https://github.com/Verhex/deckent-next/actions/workflows/ci.yml)
 [![License](https://img.shields.io/github/license/Verhex/deckent-next)](LICENSE)
 [![Node engines](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2FVerhex%2Fdeckent-next%2Fmain%2Fpackage.json&query=%24.engines.node&label=Node&color=43853d)](package.json)
 [![Pre-release](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2FVerhex%2Fdeckent-next%2Fmain%2Fpackage.json&query=%24.version&label=pre-release&color=orange)](CHANGELOG.md)
 
-<!-- Node and pre-release badges read public main package.json, not this local branch.
-Keep package.json version and CHANGELOG.md release line together at each release.
-npm badges: enable only after first publish of deckent to npm; verify package identity first.
-[![npm version](https://img.shields.io/npm/v/deckent)](https://www.npmjs.com/package/deckent)
-[![npm downloads](https://img.shields.io/npm/dm/deckent)](https://www.npmjs.com/package/deckent)
+[English](README.md) · [Deckent nedir](#deckent-nedir) · [Bir istek nasıl akar](#bir-istek-nasıl-akar) · [Terminalde](#terminalde) · [Güvenlik](#güvenlik-modeli) · [Başlarken](#başlarken)
+
+<img src=".github/assets/screenshots/tr/01-acilis.png" alt="Açılıştaki Deckent terminali: logo, sürüm, proje, model ve mod" width="880">
+
+</div>
+
+<!-- Node ve pre-release rozetleri bu yerel dalı değil, public main package.json'u okur.
+Her sürümde package.json sürümü ile CHANGELOG.md satırını birlikte güncelleyin.
+npm rozetleri: ilk npm yayınından ve paket kimliği doğrulandıktan sonra açılır. Kapsamsız `deckent` adı kullanılamıyor
+(mevcut bir paketle çakışıyor); planlanan ad kapsamlı `@verhex/deckent` (owner 2026-10-07, kesin değil).
+[![npm version](https://img.shields.io/npm/v/%40verhex%2Fdeckent)](https://www.npmjs.com/package/@verhex/deckent)
+[![npm downloads](https://img.shields.io/npm/dm/%40verhex%2Fdeckent)](https://www.npmjs.com/package/@verhex/deckent)
 -->
 
-Deckent, insan, yapay zekâ ve araçların solo kullanımdan kurumsal çalışmaya kadar yetkilendirilmiş,
-koordine edilmiş ve doğrulanabilir işler yapmasını sağlayan, müşterinin kendi ortamına kurduğu bir
-Agent OS ürünüdür. Core, Apache-2.0 lisanslı açık kaynaktır ve tek başına çalışır; proprietary Enterprise
-ayrı dağıtılır. Sağlayıcıdan bağımsız, yerel çalışmayı esas alan yapay zekâ ajan orkestrasyon runtime'ıdır.
-Tek çekirdek ve tek tipli uygulama sözleşmesini bugün CLI, etkileşimli terminal (akışlı ajan turları,
-onaylar, dosya düzenleme ve sandbox olmayan host shell), MCP sunucusu ve SDK
-(`import … from 'deckent'`) kullanır. Runtime'a bağlı işlemler kurulu runtime servisine gider;
-kurulum, gözlem ve bazı SDK/patch işlemleri doğrudan composition katmanına bağlanır.
-Henüz HTTP API yoktur; Dashboard ve Desktop aynı servislerin gözlem/operatör uygulamaları olarak
-planlanmıştır. Bugün yalnız sürümlü terminal–desktop köprü sözleşmesi vardır.
+> [!NOTE]
+> **Ön sürüm `1.0.0-alpha.10`**, 2026-10-07'den beri canlı. Deckent henüz npm'de yok; [Başlarken](#başlarken)
+> bölümündeki gibi kaynaktan kurun. Her sürümün içeriği [CHANGELOG.md](CHANGELOG.md) içinde.
 
-## Durum
+## Deckent nedir
 
-**1.0.0-alpha.4 (2026-10-03'te canlı), clean-room port sürüyor.** Tamamlanan yetenekler
-[COMPLETED-PLAN.md](COMPLETED-PLAN.md), kalan işler [PLAN.md](PLAN.md) içindedir. Kimde-ne-var ve sıradaki
-adım host süreç panosundadır (`node .agents/refactor/board.mjs show`). Canlı gözlem için `deckent monitor`
-her kurulumu tek salt-okunur görünümde gösterir. Geliştirme dogfood'u (Deckent işçilerinin izole bir
-kurulumda Deckent kartlarını yazması) sınırlı denemelerle yürütülür; DOGFOOD resmen kapalıdır.
-Legacy kod tabanının kalan yetenekleri tek tek taşınır; her landing sözleşme testleri ve gerçek binary
-kanıtıyla gelir.
+Yapay zekâ ajanları artık kendi başına kod yazıyor, komut çalıştırıyor ve araç çağırıyor. Zor soru artık *ajan bunu
+yapabilir mi* değil; *yapmalı mı, nerede, kimin yetkisiyle ve ne olduğunu nasıl bileceğiz*. Çoğu ürün bu sorunun
+yalnız yarısını cevaplar: kimisi ajanları çalıştırır, kimisi başka yerde çalışan ajanları yönetir.
 
-`deckent` npm'de yayımlanmamıştır (2026-10-03 registry sorgusu E404); aşağıdaki kaynak kurulumunu kullanın.
-Canlı alpha.4 bilgisi kayıtlı sürüm durumudur; bu dokümantasyon şeridinde yeni runtime gözlemi yapılmadı.
-CI'ın altı hücresinin hepsi (Linux, macOS, Windows × Node 24/26) zorunludur (owner 2026-10-03). Bu yüzden açık
-macOS/Windows platform borçları kapanana kadar CI rozeti kırmızı kalır; kırmızı rozet gürültü değil, gerçekten kırılan bir hücredir.
+Deckent iki yarıyı tek üründe, sizin makinelerinize kurulu olarak birleştirir. Bir havalimanı düşünün: **kule** kimin
+kalkacağına karar verir ve her uçuşu kaydeder, **pist** ise uçuşun gerçekten yapıldığı yerdir. Deckent kule ile
+pisttir. Bir insanın ya da ajanın neyi yapabileceğine karar verir, o işi yalıtılmış bir ortamda çalıştırır ve sonradan
+kontrol edebileceğiniz kalıcı bir kayıt tutar.
 
-## Bugün mevcut özellikler
+Deckent'le terminali, `deckent` komutu, MCP sunucusu ya da SDK üzerinden konuşursunuz. Hepsi aynı tipli sözleşmeyi
+kullanır; bir insanın tıklaması ile bir ajanın araç çağrısı aynı kimlik, policy ve onay kontrollerinden geçer. Açık
+kaynak Core (Apache-2.0) tek başına çalışır; proprietary Enterprise sürümü Core'u değiştirmeden üstüne eklenir.
 
-Aşağıdaki kapsam [yetenek haritası](.deckent/docs/plan/capability-map.md#bugün-ne-var-ne-eksik) ve
-[alpha.3 sürüm kaydına](CHANGELOG.md) dayanır. Her yeteneğin kullanımı kurulu profil ve policy ile sınırlıdır.
+| | |
+|---|---|
+| 🗼 **Yönetir** | İnsanlar ve yapay zekâ ajanları için tek kimlik, kapsam ve policy modeli. Bir iş onay isterse pencere neyin onaylandığını tam gösterir: tam komut, nerede çalışacağı, kimin adına, risk, geri alınıp alınamayacağı ve süre. Persona ya da model tavsiyesi asla yetki vermez. |
+| 🛫 **Yürütür** | İşler (Run), görevler ve işçiler sizin makinelerinizde kabul edilir, sıralanır ve kurtarılır. Ajanın kabuk komutları ve MCP sunucuları sandbox içinde (bubblewrap, Landlock), işçiler Docker'da çalışır. Anthropic, OpenAI uyumlu uç noktalar, OpenRouter ve yerel vLLM modelleriyle; Claude Code, Codex ve Cursor işçileriyle çalışır. |
+| 📜 **Kanıtlar** | Her karar ve etki kalıcı bir defter ve denetim izine yazılır. Onaylar mühürlenir, yamalar saklanır ve değişiklikler teslimden önce yalıtılmış bir adayda birleştirilir. |
 
-- Run/Task/Attempt kabulü, bağımlılık sıralaması, rezervasyon ve kalıcı SQLite ledger;
-  yönetilen yerel runtime servisi, iptal ve kurtarma.
-- Git tabanlı attempt çalışma alanları, native Claude/Codex profilleri ve paketli bootstrap dahil
-  Docker işçileri; saklanan patch, ayrı integration adayı, teslim, adoption ve release.
-- Yerel OS kimliği, company kapsamlı policy, audit ve ortak onay broker'ı; kanıtlanabilir insan
-  onayı, zaman aşımıyla park edilen Run'lar ve doğrulanmamış kanıtın insan tarafından kabul/reddi.
-  MCP onayları gözlemler; onay kararı vermez.
-- İstemci × faturalama kanallı model kataloğu v3, tam model aktivasyonu, sağlayıcı çağrısı,
-  harcama/kota audit'i ve yerel vLLM sohbeti. Katalog kaydı native destek kanıtı değildir.
-- Akışlı turlar, araçlar, izin modları, MCP istemcisi ve bağlam sıkıştırmalı etkileşimli terminal;
-  salt-okunur kurulum monitörü, registry'den türetilen ayarlar ve iki dilli CLI yardımı.
-- Danışma amaçlı `deckent decide` portu; tavsiye yürütme yetkisi vermez. Mimari bütçeler,
-  bağımlılık/i18n kapıları ve yalnız küçülebilen hardcode ratchet geliştirme sözleşmesini korur.
+## Bir istek nasıl akar
 
-Mission/`do`/otonom iş süreci koordinasyonu, tam Brain/Auditor/Nervous döngüleri, Enterprise
-SSO/fleet/HA, uzak HTTP API, Desktop ve Dashboard açık iştir. Host kernel'ini paylaşan Docker işçisi
-VM garantisi vermez; etkileşimli terminalin host shell'i sandbox değildir.
+İsteğinizi düz bir cümleyle söylersiniz. Deckent bunu kontrol edilmiş, yalıtılmış adımlara çevirir; policy ve izin
+modunuz izin vermedikçe hiçbir şey çalışmaz.
 
-### Worker araç sürümlerinin güncelliği
-
-`deckent doctor --toolchains`, hazırlanmış native profillere sabitlenmiş CLI sürümlerini
-`@openai/codex` ve `@anthropic-ai/claude-code` paketlerinin npm `latest` etiketiyle karşılaştırır
-(paket başına tek sınırlı okuma, kimlik bilgisi olmadan). Yalnız bu bayrakla ve
-`toolchains.currency.mode: report` seçiliyken çalışır. `registryEndpoint` özel registry'ye işaret
-edebilir; erişilemeyen registry `unknown-offline` üretir. Cursor'ın belgelenmiş sürüm endpoint'i
-olmadığından `unsupported` raporlanır. Rapor hiçbir işçiyi güncellemez, yeniden derlemez veya
-etkinleştirmez. Aynı rapor MCP `inspect_toolchain_currency` aracı ve SDK
-`inspectToolchainCurrency` fonksiyonuyla alınabilir.
-
-`deckent toolchains update [--apply]`, eski sürüm raporundan bir sonraki worker image sürümünü
-hazırlar. `toolchains.update.mode` değerleri `off | propose | auto`, varsayılan `propose`'dur.
-Tipli plan `<data root>/workspaces/toolchains/plans/` altına yazılır. `auto` ya da `--apply` ile paketli
-builder `workspaces/toolchains/builds/<version>/` altına kopyalanır ve sınırlı sürede derlenir;
-makbuzundan uygulanmamış (`not-applied`) profil revizyon önerisi (`proposals/<version>.json`) oluşur.
-Kurulu config yeniden yazılmaz; öneri yeni kurulum profil revizyonu olarak uygulanır. Çalışan iş
-kendi image'ını korur; önceki sürümler geri dönüş için tutulur. `toolchains.update.atStartup`,
-`runtime serve` açılışında yalnız güncellik raporunu üretir.
-
-### Worker image sürümleri
-
-`npm run worker:image -- /abs/path/worker-images/<version>.json`, `assets/worker-image` içindeki
-üç sağlayıcılı `deckent/worker` image'ını derler. `recipe.json` (şema 2), `imageVersion`
-(`r<N>-<YYYYMMDD>`) ve `previousVersion` alanlarını taşır. Dockerfile'daki en yeni sürüm başta olacak
-şekilde `# version …` yorum geçmişi recipe ile eşleşmeli; bu dosya image'a
-`/opt/deckent-worker/Dockerfile` olarak kopyalanır. Her sürüm, OCI etiketleriyle birlikte
-`deckent/worker:<version>` olarak işaretlenen tek değişmez imageId'ye bağlanır. Aynı sürüm etiketi
-başka bir image'ı gösteriyorsa işlem reddedilir. Güncelleme için geçmişe yeni satır ekleyin,
-`imageVersion`/`previousVersion` değerlerini artırın, yeniden derleyin ve makbuzun `imageId` değerini
-yeni execution profil revizyonunda kullanın. Eski image, etiket ve arşiv makbuzlarını
-(`worker-images/archive/`) çalışan Run'lar ve geri dönüş için koruyun. Ürün yalnız `imageId` ile
-bağlanır; image çekmez, etiketlemez veya silmez.
-
-### Native coding profilleri
-
-`coding prepare --input <file|-> --json` ve SDK `prepareNativeCodingProfile` profil hazırlar;
-hazırlamak profili etkinleştirmez veya yürütme izni vermez. Dış istek şekli
-`{schemaVersion: 1, template, invocation}` olarak kalır. Yeni `invocation` verisi `schemaVersion: 2`,
-`provider`, `cliVersion`, `permissionMode: "unattended"`, `model` ve `prompt` ya da `composition`
-alanlarından birini ister. Host CLI sürümünü değil, seçilen image'ın preflight makbuzunda ölçülen
-birebir CLI sürümünü kullanın.
-
-Yapılandırılmış `composition` v1; `task`, `scope`, `acceptance` metinlerini zorunlu tutar.
-Opsiyonel `core`, `persona` ve `skills`/`context` dizilerini kabul eder; seçilen her parça
-`{id, version, text}` taşır. `core` verilmezse paketli, sürümlü ortak worker talimatları seçilir.
-Seçim açıktır: persona/skill kataloğu veya host dosyası aranmaz. Yinelenen persona/skill kimlikleri
-reddedilir. Her metin en fazla 16 KiB, serialize edilmiş composition 32 KiB; en fazla 16 skill ve
-8 context parçası olabilir. Prompt'lar görev verisi olarak saklanır; hiçbir girdi biçimine kimlik
-bilgisi koymayın.
-
-Compiler; içeriği, seçilen parça hash'lerini ve komut argümanlarını hazırlanmış profile bağlar.
-Worker bağı doğrular; Claude'a core'u `--system-prompt`, Codex'e private tmpfs'te talimat dosyası,
-Cursor'a görevle birlikte inline olarak verir. Codex ayrıca otomatik proje dokümanı yüklemeyi kapatır;
-bu, tüm keşif davranışının engellendiğini kanıtlamaz. Docker komut argümanlarında composition prompt
-metinleri yerine placeholder bulunur. Sınırlı `native-prompt-delivery` çıktısı native süreç
-başlarken hash ve seçim metadata'sını kaydeder; prompt veya kimlik bilgisi içermez. Bu kayıt süreç
-girdisinin teslimini kanıtlar, modelin talimata uyduğunu değil; kabul için gözlenen görev sonucu
-gerekir. Persona ve skill içeriği yetki vermez.
-
-`discovery` sürümlü veridir: varsayılan `{schemaVersion: 1, mode: "disabled"}` olur.
-Claude bunu abonelikle uyumlu `--safe-mode` bayrağına çevirir. Codex ve Cursor adapter'larında tam
-keşif engelleme henüz kanıtlanmadığından bu mod reddedilir. Açıkça yetkilendirilmiş repo keşif
-profili için `{schemaVersion: 1, mode: "repository"}` seçin; repo talimat/config yüklemesine izin
-verir, repo hook veya MCP süreçlerini başlatabilir. Ek host/ağ erişim yetkisi vermez. Keşif engelleme
-otomatik yüklemeyi kontrol eder; native araçlar çalışma alanındaki dosyaları yine okuyabilir.
-
-Şu an yalnız Claude repository modu, tipli `disableAllHooks: boolean` alanını içeren
-`discovery.settings` kabul eder. Bu alan açık `--settings` JSON'una dönüşür; keyfî settings dosyası,
-yardımcı program, ortam değişkeni ve kimlik bilgisi reddedilir. Hook'ları kapatmak tek başına repo
-MCP veya talimatlarını engellemez. Discovery-disabled modunda settings reddedilir.
-
-Worker, kimlik dosyasını yazıp görevi başlatmadan önce boş geçici dizinde CLI sürümünü ve gerekli
-bayrakları kontrol eder. Uyumsuzluk temizlenmiş `preflight` hatasıyla çıkar; API/authentication
-fallback yoktur. Mevcut image yeniden incelendiğinde de güncel inspector kullanılır ve hash'leri
-kaydedilir. Capability yardım çıktısı authenticated kanıt değildir. Eski invocation-v1 hazırlama
-istekleri anlamları sessizce değiştirilmek yerine reddedilir. Kalıcı execution profilleri birebir
-davranışlarını ve replay'lerini korur; migration yeni profil revizyonunun açıkça hazırlanıp kabul
-edilmesidir.
-
-### Patch muhafazası ve integration
-
-Patch capture çalışma alanını base tree ile Git object id üzerinden karşılaştırır ve yalnız değişen
-base blob'ları okur. Git çıktı/süre veya tarama bütçesi tükenirse `PATCH_LIMIT` ve `detail` parametresi
-(`git-output`, `git-timeout`, `time`, `bytes`, `entries`, `depth`, `path`) ile kapanır.
-`execution.git.outputBytes` varsayılanı 4 MiB'dir.
-
-Saklanan workspace patch'i için `deckent task integration-check`, kayıtlı base'i HEAD ve etkilenen
-index/worktree dosyalarıyla karşılaştırır. `task patch-preview` ile aynı kimlik bayraklarını kullanın.
-`task integration-prepare` ayrıca `--command-id <id>` ve check'in `--proposal <code>` değerini ister;
-`prepare-integration` policy izni gerekir. Her iki komut `--json` destekler ve runtime servisi
-olmadan yerel depolama kullanır.
-
-Hazırlama, yapılandırılmış workspaces kaynağının `integrations` dizininde ayrı Git adayı oluşturur.
-Aday kayıtlı base ve patch'i içerir; kaynak dosya, HEAD ve index değişmez. Hazırlanmış aday Task kabulü
-veya canlı teslim değildir. Tamamlanmış komut tekrarlandığında aday doğrulanır; kesilmiş komut
-`PATCH_INTEGRATION_PENDING` döndürür ve dosyalarını otomatik onarım/devralma olmadan korur.
-Mevcut ledger'lar prepare öncesi açık installation/storage migration ile sürüm 30'a yükseltilmelidir;
-salt-okunur check ve olağan hazırlama depolamayı sessizce migrate etmez.
-
-`task integration-inspect`, aynı kimlik bayraklarıyla `--command-id <id>` alır ve yalnız `read-output`
-izni ister. Mevcut ledger ve değişmez manifest'ten `absent`, `pending` veya `manifest-recorded`
-raporlar. Execution config olmadan çalışır; depolamayı migrate etmez, adayı onarmaz ve mevcut aday
-dosyalarını yeniden kontrol etmez.
-
-## Gereksinimler
-
-- Linux veya Windows WSL2 üzerinde Node.js ≥ 24.15.0 (SQLite ≥ 3.51.3 içerir; Node 24 ve 26 desteklenir).
-- Docker (exact-docker worker yürütmesi; image tarifi `assets/worker-image/` içinde).
-
-## Kurulum ve çalıştırma
-
-Kaynak kodu indirin:
-
-```sh
-git clone https://github.com/Verhex/deckent-next.git
-cd deckent-next
+```mermaid
+sequenceDiagram
+  autonumber
+  actor Siz
+  participant T as Deckent terminali
+  participant R as Çalışma servisi
+  participant P as Policy ve onaylar
+  participant B as Sandbox
+  participant L as Defter
+  Siz->>T: "Testleri çalıştır, kırılanı düzelt"
+  T->>R: ajan turu (model + araçlar)
+  R->>P: bu araç çağrısı burada, bu kişi için çalışabilir mi?
+  alt onay gerekiyor
+    P-->>Siz: onay penceresi (ne, nerede, kim, risk, süre)
+    Siz->>P: bu sefer evet · hayır · not
+  end
+  P-->>R: izin verildi
+  R->>B: komutu sandbox içinde çalıştır
+  B-->>R: çıktı + değişiklik seti
+  R->>L: çağrıyı, kararı ve etkiyi kaydet
+  R-->>T: akışlı yanıt
+  T-->>Siz: sonuç, her adım görünür
 ```
 
-```sh
-npm ci
-npm run build
-node dist/composition/core/cli/internal/entry.js --version
+## Terminalde
+
+Bu ekranlar gerçek Deckent terminalinden (alpha.10, 110×32), yerel bir deneme modeliyle geçici bir örnek projede
+çekildi.
+
+<table>
+  <tr>
+    <td width="50%"><img src=".github/assets/screenshots/tr/02-sohbet.png" alt="Sohbet turu: sizin satırınız Sen, yanıt Deckent başlığı altında"><br><sub><b>Sohbet.</b> Sizin satırlarınız ve Deckent'in yanıtları belirgin biçimde ayrışır.</sub></td>
+    <td width="50%"><img src=".github/assets/screenshots/tr/05-onay.png" alt="Kabuk komutu için onay penceresi"><br><sub><b>Onay penceresi.</b> Ne, nerede (sandbox), kimin adına, kapsam, neden, risk, geri alınabilirlik ve canlı süre. <code>y</code> bu sefer · <code>n</code> reddet · <kbd>Tab</kbd> not.</sub></td>
+  </tr>
+  <tr>
+    <td width="50%"><img src=".github/assets/screenshots/tr/04-durum.png" alt="/status çıktısı"><br><sub><b>/status.</b> Önce insan dilinde özet; kimlikler, süreç ve build ayrıntıda.</sub></td>
+    <td width="50%"><img src=".github/assets/screenshots/tr/06-tam-erisim.png" alt="Tam erişim modu göstergesi"><br><sub><b>Modlar.</b> <kbd>Shift</kbd>+<kbd>Tab</kbd> yetkili olduğunuz modlar arasında döner; tam erişim açıkça işaretlenir.</sub></td>
+  </tr>
+  <tr>
+    <td width="50%"><img src=".github/assets/screenshots/tr/03-yardim.png" alt="Amaca göre gruplu /help"><br><sub><b>/help.</b> Komutlar amaca göre gruplu, her biri tek satır.</sub></td>
+    <td width="50%"><img src=".github/assets/screenshots/tr/07-mcp.png" alt="/mcp sunucu listesi"><br><sub><b>/mcp.</b> Yapılandırılmış MCP sunucuları, güven ve sağlık durumları.</sub></td>
+  </tr>
+</table>
+
+## Güvenlik modeli
+
+Ajanın yaptığı her araç çağrısına iki şey birlikte karar verir: kurumunuzun policy'si ve seçtiğiniz izin modu.
+Yetkili olduğunuz modlar arasında <kbd>Shift</kbd>+<kbd>Tab</kbd> ya da `/mode` ile geçersiniz.
+
+```mermaid
+flowchart LR
+  S["Standart<br/><sub>düzenlemeler çalışır · kabuk ve MCP sorar</sub>"] -->|Shift+Tab| C["Dikkatli<br/><sub>düzenlemeler de sorar</sub>"]
+  C -->|Shift+Tab| A["Tam otomatik<br/><sub>sandbox'lı kabuk ve MCP çalışır</sub>"]
+  A -->|Shift+Tab| F["Tam erişim<br/><sub>şirket izni · bu oturum · her çağrı denetimde</sub>"]
+  F -->|Shift+Tab| S
+  H[["Sabit zemin · her modda kapalı<br/>Deckent ayarları, policy, onaylar, sırlar, MCP kayıt defteri"]]
 ```
 
-Kurulum, mevcut kullanıcıya ait ve grupça yazılabilir proje/bootstrap journal dizinlerini
-(örneğin `0775`) kabul eder; diğer kullanıcılara yazma izni veren dizinleri reddeder.
-Grup üyeleri dizin girdilerini değiştirebilir; journal namespace muhafazası o grupla paylaşılır.
-Journal dosyaları yine mevcut kullanıcıya ait, tek hard link'li ve private `0400`/`0600` izinli
-olmalıdır. Yeni dizinlerin varsayılanı `0700`'dür. Config yayımı, policy, artifact ve worker
-kaynakları daha sıkı, ayrı kontrollerini korur. Grupça yazılabilir proje, ortak yazılabilir ürün
-veri kökünün desteklendiği anlamına gelmez.
+| Mod | Sormadan çalışır | Önce sorar |
+|---|---|---|
+| **Standart** | Okumalar, sıradan dosya düzenlemeleri | Kabuk komutları, korunan yollar, MCP çağrıları |
+| **Dikkatli** | Okumalar | Her düzenleme de |
+| **Tam otomatik** | Düzenlemeler, sandbox içinde kalan kabuk komutları, MCP çağrıları | Yıkıcı komutlar (`rm -r`, …), korunan yollar |
+| **Tam erişim** | Şirket policy'sinin sabit zeminin üstünde izin verdiği her şey; her etkili çağrı denetime yazılır | Sabit zemin ve şirket policy'sinin hâlâ istediği onaylar (deny her zaman kazanır); şirket izni gerekir ve oturum boyunca geçerlidir |
 
-## Geliştirme host'u
+Standart, dikkatli ve tam otomatik modlarda sandbox'taki kabuk komutu **kapalı bir görünüm** alır: proje yazılabilir,
+`.git` salt okunur, ağ yoktur ve ev klasörünüz gizlidir. **Tam erişim bu görünümü bilerek açar**: host dosya sistemi,
+gerçek ev klasörünüz (sırlar maskeli), ağ ve `.git` yazımı kullanılabilir olur; yalnız sabit zemin maskeli kalır. Bir
+makinede sandbox kullanılamıyorsa `prefer-sandbox` ortamı host'ta çalışır ve bunu her onay kartında söyler,
+`require-sandbox` ortamı ise çalışmayı reddeder.
 
-Bu checkout yürütme çalışma alanıdır. `deckent-dev` salt-okunur refaktör referansıdır;
-runtime ve worker'ları başlatılmaz. Yerel geliştirme girişleri:
+## Mimari
 
-```sh
-node .agents/refactor/next-entry.mjs cli --version
-node .agents/refactor/next-entry.mjs cli workers watch --scope pilot
-node .agents/refactor/next-entry.mjs mcp
-# Yerel SDK betikleri aynı ortamı ve cwd'yi kullanır:
-node .agents/refactor/next-entry.mjs node /absolute/path/to/script.mjs
+Her giriş yolu aynı tipli sözleşmeyi konuşur. Çalışma servisine bağlı işlemler tek bir çalışma servisinden geçer;
+servis her işlemde kimliği, kapsamı ve policy'yi kontrol eder, sonucu deftere yazar ve etkilerin yalnız policy'nin
+izin verdiği yerde olmasına izin verir. Kurulum, gözlem ve bazı yama işlemleri aynı sözleşmeyi servis olmadan yerelde
+kullanır.
+
+```mermaid
+flowchart LR
+  subgraph Giriş yolları
+    T[Terminal]
+    C["deckent komutu"]
+    M[MCP sunucusu]
+    S[SDK]
+  end
+  T & C & M & S --> R["Çalışma servisi<br/>tek tipli sözleşme"]
+  R --> P["Policy · onaylar<br/>kimlik · kapsam"]
+  R --> L[("Defter · denetim")]
+  R --> X["İşler · görevler · işçiler"]
+  X --> B["Sandbox'lar<br/>bubblewrap · Landlock · Docker"]
+  R --> G["Model sağlayıcıları<br/>Anthropic · OpenAI uyumlu · vLLM"]
+  R --> N["MCP sunucuları<br/>sandbox'lı · güven sabitli"]
 ```
 
-Host girişi cwd'yi bu checkout'a, `DECKENT_GLOBAL_HOME` değerini checkout dışındaki
-`~/.local/state/deckent-next-dev` konumuna sabitler (runtime paketli bubblewrap'i oraya kopyalar; proje
-içindeki bir başlatıcı reddedilir). Proje runtime verisinin başka yere yönlenmesini önlemek için miras alınan `DECKENT_HOME`
-değerini kaldırır. Her projenin `.deckent/config.json` dosyası kendi `layout.root` değerini seçmeye
-devam eder. `DECKENT_GLOBAL_HOME`, CLI/MCP/SDK'nın ortak config girdisidir; global config/state dizinini
-proje verisinden bağımsız seçer. Verilmezse kurulu ürünün varsayılanları değişmez. Sağlayıcı kimlik
-bilgisi taşımaz, legacy state'i migrate etmez.
+## Bugün neler yapabilirsiniz
 
-Yerel gözlemci yalnız açıkça yapılandırılmış `inspection.workers.sources` kaynaklarını okur ve
-kaynak policy kontrollerini korur. Docker worker'ı attempt checkout'unu `/workspace` olarak görür;
-host depolaması `<layout.root>/workspaces/<attempt-hash>/tree` altındadır. `worker.hb`, `worker.log`,
-`worker.result`, `tree` yanında ve worker mount'unun dışında host'a ait gözlemlerdir. Log özetleri
-güvenli durum/diagnostic alanlarını gösterir; keyfî sağlayıcı çıktısını açmaz. `Ctrl+C` yalnız görünümü
-durdurur. `pilot` kapsamı ve yerel kaynak kataloğu geliştirme fixture'larıdır, kurulu ürünün
-varsayılanı değildir. DOGFOOD kapalı kalır. MCP config değiştiğinde açık istemciler yeniden bağlanmalıdır.
+- **Terminalde ajanla çalışın**: akışlı turlar, dosya düzenleme ve sandbox'lı kabuk, onay ve izleme pencereleri,
+  izin modları, MCP araçları, konuşma sıkıştırma, Türkçe ve İngilizce.
+- **İşleri yönetin**: Run, Task ve Attempt kabul edin, bağımlılıkları sıralayın, kapasite ayırın, iptal edin ve
+  kurtarın; hepsi kalıcı bir SQLite defterine yazılır.
+- **Kodlama işçileri kullanın**: Git tabanlı çalışma kopyaları ve Claude Code, Codex, Cursor ile Docker işçileri;
+  yamalar saklanır, yalıtılmış bir adayda birleştirilir, sonra teslim edilir ya da yayınlanır.
+- **Yönetişim**: yerel kimlik, şirket kapsamlı policy, denetim ve her yüzey için tek onay aracısı; doğrulanmamış
+  kanıt için insan kabulü ya da reddi.
+- **Model seçin**: istemci ve faturalama kanalına göre model kataloğu, birebir etkinleştirme, harcama ve ayırma
+  denetimi, yerel vLLM sohbeti.
+- **İşletin**: tüm kurulumlar için salt okunur `deckent monitor`, sağlık için `deckent doctor`, ayarlar için
+  `deckent config`, her yerde iki dilli yardım.
 
-Kimde-ne-var ve sıradaki adım süreç panosundadır (`node .agents/refactor/board.mjs show`);
-kabul edilmiş iş [PLAN.md](PLAN.md) içindedir. Pano Git/npm dışında host koordinasyon verisidir;
-yetki veya canlılık kanıtı değildir. `deckent monitor` iş kabul etmeden kurulumları gözlemler.
-Bir şeritte ortak host panosu yoksa rakip pano oluşturmak yerine lead'e devir bilgisi bırakın.
+Henüz yok: otonom iş süreci koordinasyonu (Mission/`do`), Enterprise SSO ve filo yönetimi, uzak HTTP API, masaüstü ve
+web paneli. Docker işçisi host çekirdeğini paylaşır; sanal makine değildir.
 
-### Geliştirme süresi ölçümü (A02/W0-3)
+## Yol haritası
 
-`node .agents/refactor/effort.mjs`, geliştirme dilimlerinin gerçek süresini kaydeder.
-M1–M5 tahminlerinin güncellenmesi için host aracıdır; ürün özelliği veya ikinci iş ledger'ı değildir.
-
-```sh
-node .agents/refactor/effort.mjs start A02-my-slice --milestone M1 --title "…" --actor "…" --kind active
-node .agents/refactor/effort.mjs phase A02-my-slice blocked --reason owner-decision   # active|blocked|verification|rework
-node .agents/refactor/effort.mjs pause A02-my-slice        # sonraki olaya kadar geçen süre bilinmez, aktif sayılmaz
-node .agents/refactor/effort.mjs end A02-my-slice done     # done|canceled|handed-off
-node .agents/refactor/effort.mjs report --format table     # tür ve milestone bazında gözlenen saatler
+```mermaid
+flowchart LR
+  L["Canlı · alpha.10<br/>terminal pencereleri · onay penceresi<br/>mod döngüsü · açılış ekranı"] --> P["Sürüyor · T3<br/>/config · /mode · /mcp panelleri<br/>kolay MCP (HTTP, içe aktarma, güven → araç izni)<br/>canlı izleme pencereleri"]
+  P --> N["Sırada · T4–T5<br/>sağlayıcı ve model geçişi<br/>API anahtarı · abonelik · yerel vLLM<br/>sistem istemi ve ayarlar"]
+  N --> F["Planlı<br/>Firecracker mikro VM sandbox'ı<br/>HTTP API · web paneli · masaüstü"]
 ```
 
-Olaylar `.deckent/host/effort/<slice>/` altında değişmez private dosyalardır; Git'e girmez.
-Süre yalnız açık olaylar arasında sayılır; gözlenmemiş süre bilinmiyor olarak raporlanır, tahmin edilmez.
-`--at <ISO>`, operatörün sağladığı zaman bilgisidir ve raporlarda ayrı sayılır.
+## Başlarken
 
-### Landing öncesi kontroller
+Deckent, Linux ya da Windows WSL2 üzerinde Node.js ≥ 24.15.0 ile çalışır (Node 24 ve 26 desteklenir); kodlama
+işçileri için Docker gerekir. npm paketi yayımlanana kadar bir kez kaynaktan derleyin:
 
-Değişiklikten önce [ARCHITECTURE.md](ARCHITECTURE.md) okuyun. Paket yönü, boyut sınırları, i18n ve
-Markdown policy'si `scripts/lint-arch.mjs` ile denetlenir; ihlal build'i durdurur.
+```sh
+git clone https://github.com/Verhex/deckent-next.git && cd deckent-next
+npm ci && npm run build && npm link
+```
 
-Her dilimde ilgili hedefli kontrolleri çalıştırın: typecheck, değişen kaynaklarda ESLint, `lint-arch`,
-core-memory doğrulaması ve dokunulan testler (bkz. [CONTRIBUTING.md](CONTRIBUTING.md)).
-Tam `npm run verify`, yalnız geniş özellik ekleyen partilerde ve owner istediğinde çalışır
-(owner 2026-10-03); her dilimde tekrarlanan kapı değildir. Toplu lint komutu `npm run lint`'tir.
-Hedefli/şerit Vitest koşuları `VITEST_MAX_FORKS=2`, tam verify varsayılan dört worker kullanır;
-yerel testler 16 GB içinde kalır. Aktif test suite sırasında build alınmaz. Yazar kontrolleri,
-bağımsız inceleme ve lead'in landing kapısından ayrı kanıttır.
+Bundan sonra her şey `deckent` ile yapılır:
 
-## Katkı
+```sh
+deckent --version
+deckent                                   # etkileşimli terminali aç
+deckent doctor                            # kurulum sağlığı
+deckent init preview --profile <dosya>    # bir proje için kurulumu önizle
+deckent mcp add context7 -- npx -y @upstash/context7-mcp   # MCP sunucusu ekle
+deckent monitor                           # kurulumları ve işleri izle
+deckent --help                            # tüm komutlar; ayrıntı için deckent <komut> --help
+```
 
-Owner tarafından kabul edilmiş kartlar, insan ve worker branch/PR akışı, kontroller ve bağımsız
-inceleme için [CONTRIBUTING.md](CONTRIBUTING.md) okuyun. [Davranış Kuralları](CODE_OF_CONDUCT.md) geçerlidir.
+## Daha fazlası
 
-## Güvenlik
-
-Core güvenlik açıklarını [SECURITY.md](SECURITY.md) üzerinden özel olarak bildirin.
+- [ARCHITECTURE.md](ARCHITECTURE.md): sözleşmeler, katmanlar ve değişmezler
+- [İşletim başvurusu](.deckent/docs/architecture/operator-reference.tr.md): işçi araç sürümleri, işçi imajları, kodlama
+  profilleri, yama muhafazası ve kurulum muhafaza kuralları
+- [CHANGELOG.md](CHANGELOG.md): her sürümün getirdikleri
+- [CONTRIBUTING.md](CONTRIBUTING.md) · [Davranış kuralları](CODE_OF_CONDUCT.md) · [Güvenlik](SECURITY.md)
 
 ## Lisans
 
-Apache-2.0 (bkz. [LICENSE](LICENSE); DEPS-P0, owner 2026-09-29).
+Apache-2.0 (bkz. [LICENSE](LICENSE)).

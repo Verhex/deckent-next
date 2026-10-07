@@ -3,8 +3,10 @@
 Owner direction, 2026-09-21. This is the shared product and development decision context.
 It describes the target and evaluation criteria, not proof that all capabilities exist.
 
-Deckent is a customer-installed Agent OS that turns human or AI intent into authorized,
-coordinated, verifiable work and durable business processes. Humans, AI agents and tools
+Deckent is a customer-installed Agent Control & Execution Plane (owner 2026-10-07; formerly "Agent OS"):
+it governs and executes, turning human or AI intent into authorized, isolated, coordinated,
+verifiable work and durable business processes inside the customer's own infrastructure.
+Sub-labels (descriptors, not the category): policy-driven agent runtime, governed execution, self-hosted agent control plane. Humans, AI agents and tools
 use one typed application contract across SDK, MCP, CLI and other product surfaces.
 A single person must be able to manage substantial work; teams and 10,000-person enterprises
 must have the same quality foundations. Millions of users are design context, not measured capacity.
