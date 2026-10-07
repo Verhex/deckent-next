@@ -19,9 +19,13 @@ it.skipIf(unsupported).each([0o700])('publishes a relocated installation in proj
 
   expect((await lstat(f.project)).mode & 0o777).toBe(mode);
   expect((await lstat(join(f.project, '.deckent/installation/journal.json'))).mode & 0o777).toBe(0o600);
+  // VLLM-CACHE-SALT: init creates the installation's own 256-bit prefix-cache salt secret (0600), never in config.
+  const saltSecret = await lstat(join(f.data, 'approvals', 'prefix-cache-salt.key'));
+  expect(saltSecret.mode & 0o777).toBe(0o600); expect(saltSecret.size).toBe(32);
   const config = JSON.parse(await readFile(join(f.project, '.deckent/config.json'), 'utf8'));
   const journal = JSON.parse(await readFile(join(f.project, '.deckent/installation/journal.json'), 'utf8'));
   expect(config.layout.root).toBe(f.data);
+  expect(JSON.stringify(config)).not.toContain('prefix-cache-salt');
   expect(JSON.parse(await readFile(join(f.data, 'policy.json'), 'utf8'))).toEqual(f.profile.policy);
   expect(journal).toMatchObject({ schemaVersion: 2, transactionId: installed.transactionId, phase: 'committed', blockers: [],
     resources: expect.arrayContaining(['config', 'policy', 'ledger'].map(resource => expect.objectContaining({ resource, state: 'published' }))) });

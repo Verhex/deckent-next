@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { createServer, type Server } from 'node:https';
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -8,7 +8,7 @@ import { invokeConfiguredModel, inspectConfiguredModelInvocation, invokePeerConf
   inspectPeerConfiguredModelInvocation } from '#composition/core/model-invocation/index.js';
 import { encodeModelBindingDefinition } from '#domain/core/provider-catalog/index.js';
 import { openSqliteModelInvocationStore, openSqliteModelActivationStore, openSqliteModelActivationReader, createOpenRouterPricedNative,
-  fetchOpenRouterTariff, readLocalOsIdentity } from '#adapters/index.js';
+  fetchOpenRouterTariff, readLocalOsIdentity, derivePrefixCacheSalt, PREFIX_CACHE_SALT_KEY_FILE } from '#adapters/index.js';
 import { ModelInvocationApplication, ModelInvocationCancellationApplication, ModelActivationApplication, modelInvocationRequestDigest, modelInvocationProfileDigest, modelInvocationTargetId,
   verifyModelInvocationReceipt } from '#engine/index.js';
 import { ModelBindingApplication } from '#engine/core/provider-catalog/index.js';
@@ -20,11 +20,13 @@ afterEach(async () => { clearConfigCache(); await Promise.all(servers.splice(0).
   await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 const sqlite = { busyTimeoutMs: 1_000, journalMode: 'delete' as const, durability: 'full' as const };
 const reference = { providerId: 'openrouter', providerVersion: 1, modelId: 'model', modelVersion: 1 };
-const catalog = { schemaVersion: 1 as const, revision: 'catalog-1', providers: [{ id: 'openrouter', version: 1, models: [{ id: 'model',
-  version: 1, nativeId: 'vendor/model', protocols: [{ family: 'openrouter-chat-completions', version: 'v1', capabilities: [] },
-    { family: 'openai-chat-completions', version: 'v1', capabilities: [] }] }] }] };
+const catalogWith = (openAiCapabilities: readonly { id: string; version: 1; state: 'supported' }[]) => ({ schemaVersion: 1 as const, revision: 'catalog-1',
+  providers: [{ id: 'openrouter', version: 1, models: [{ id: 'model', version: 1, nativeId: 'vendor/model', protocols: [
+    { family: 'openrouter-chat-completions', version: 'v1', capabilities: [] }, { family: 'openai-chat-completions', version: 'v1', capabilities: [...openAiCapabilities] }] }] }] });
+const catalog = catalogWith([]);
 
-async function fixture(options: { maxCalls?: number; maxInFlight?: number; responseMaxBytes?: number; response?: 'ok' | 'large' | 'reset' } = {}) {
+async function fixture(options: { maxCalls?: number; maxInFlight?: number; responseMaxBytes?: number; response?: 'ok' | 'large' | 'reset'; catalog?: typeof catalog } = {}) {
+  const catalog = options.catalog ?? catalogWith([]);
   const root = await mkdtemp(join(tmpdir(), 'deckent-model-invocation-')); roots.push(root);
   const project = join(root, 'project'), data = join(root, 'data'), home = join(root, 'home');
   await Promise.all([mkdir(join(project, '.deckent'), { recursive: true, mode: 0o700 }), mkdir(data, { mode: 0o700 }), mkdir(home, { mode: 0o700 })]);
@@ -72,7 +74,7 @@ async function fixture(options: { maxCalls?: number; maxInFlight?: number; respo
   const command = (commandId: string) => ({ schemaVersion: 1 as const, commandId, scopeId: 'scope', reference,
     catalogRevision: catalog.revision, expectedBinding: binding,
     nativeRequest: { model: 'vendor/model', messages: [{ role: 'user', content: 'prompt-must-not-persist' }], max_completion_tokens: 4 } });
-  return { project, env, ledger, binding, command, policy, activation, activate, writeConfig,
+  return { project, data, env, ledger, binding, command, policy, activation, activate, writeConfig,
     setProfile(value: typeof profile) { profile = value; }, get profile() { return profile; },
     setResponse(value: typeof response) { response = value; }, get requests() { return requests; }, get metadataGets() { return metadataGets; },
     bodies, paths, definition, origin, caPem: tls.caPem };
@@ -176,6 +178,31 @@ describe('native endpoint version and historical receipt boundaries', () => {
     expect(f.requests).toBe(0);
     const reader = await openSqliteModelInvocationStore(f.ledger, sqlite);
     try { expect(await reader.loadReceipt('scope', 'unpriced-openai')).toBeNull(); } finally { reader.close(); }
+  });
+
+  // VLLM-CACHE-SALT (owner 2026-10-07): through the real composition the salt is HMAC-SHA256 under the installation's own salt secret
+  // (created on first use, 0600, next to but never derived from the integrity key); an unsafe secret sends nothing.
+  it('sends the secret per-scope cache_salt from the installation salt secret and fails closed when that secret is unsafe', async () => {
+    const f = await fixture({ catalog: catalogWith([{ id: 'prefix-cache-salt', version: 1, state: 'supported' }]) });
+    const zero = { kind: 'operator-static' as const, version: 1 as const, currency: 'USD', inputMinorUnitsPerMillionTokens: 0 as const, outputMinorUnitsPerMillionTokens: 0 as const };
+    f.setProfile({ ...f.profile, protocol: { family: 'openai-chat-completions', version: 'v1' }, adapter: { id: 'openai-chat-http', version: 4,
+      definition: { endpoint: `${f.origin}/chat`, maxOutputTokens: 8, authentication: { type: 'none' as const }, tls: { caPem: f.caPem }, tariff: zero } } });
+    await f.writeConfig();
+    await invokeConfiguredModel(f.project, f.command('salted'), { env: f.env });
+    const secretPath = join(f.data, 'approvals', PREFIX_CACHE_SALT_KEY_FILE), secret = await readFile(secretPath);
+    expect(secret).toHaveLength(32); expect((await stat(secretPath)).mode & 0o777).toBe(0o600);
+    const salt = JSON.parse(f.bodies[0]!).cache_salt as string;
+    expect(salt).toBe(derivePrefixCacheSalt(secret, 'scope'));
+    expect(salt).not.toBe(createHash('sha256').update('deckent.prefix-cache-salt.v1\0scope').digest('base64url'));
+    await invokeConfiguredModel(f.project, f.command('salted-again'), { env: f.env });
+    expect(JSON.parse(f.bodies[1]!).cache_salt).toBe(salt); expect(f.requests).toBe(2);
+    await chmod(secretPath, 0o644);
+    await expect(invokeConfiguredModel(f.project, f.command('unsafe-secret'), { env: f.env })).rejects.toMatchObject({ code: 'PREFIX_CACHE_SALT_UNAVAILABLE' });
+    expect(f.requests).toBe(2);
+    const reader = await openSqliteModelInvocationStore(f.ledger, sqlite);
+    try { expect(await reader.loadReceipt('scope', 'unsafe-secret')).toBeNull(); } finally { reader.close(); } // no durable claim either
+    expect((await readFile(f.ledger)).includes(Buffer.from(salt))).toBe(false); // the salt is sent, never recorded
+    expect((await readFile(f.ledger)).includes(secret)).toBe(false);
   });
 
   it('reserves and settles an operator zero tariff at zero in the scope ledger, and rejects a currency mismatch before HTTP', async () => {

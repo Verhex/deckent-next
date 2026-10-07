@@ -93,7 +93,9 @@ async function startService(projectRoot: string, observer: ConfiguredRuntimeServ
   options: ConfigLoadOptions = {}, ports: RuntimeServicePorts = {}) {
   await loadConfiguredInstallationIdentity(projectRoot, options);
   const config = await loadComposedConfig(projectRoot, { ...options, heal: false });
-  if (!config.cancellationRuntime || !config.cancellation) throw ErrorRegistry.createError('CANCELLATION_NOT_CONFIGURED');
+  // Name every missing section: an absent config.json lacks both, and the catalog text interpolates `{missing}`.
+  const missingCancellation = [...(config.cancellation ? [] : ['cancellation']), ...(config.cancellationRuntime ? [] : ['cancellationRuntime'])];
+  if (missingCancellation.length) throw ErrorRegistry.createError('CANCELLATION_NOT_CONFIGURED', { params: { missing: missingCancellation.join(', ') } });
   await resolveGitWorkTarget(projectRoot, config.execution, config.productLayout); // WORK-TARGETS: typed refusal before any custody or write
   const endpoint = await prepareProductSocket(config.productLayout, 'runtimeSocket');
   // LEDGER-SINGLETON (Astra 2054 R1): acquire ledger then endpoint custody before upgrade; hold through listener start.

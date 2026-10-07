@@ -117,7 +117,7 @@ function worklineLabels(locale: Locale, statusLine: string): WorklineLabels {
     selfSourceFloor: t('terminal.mode.selfSourceFloor', {}, locale),
     roleUser: t('terminal.workline.roleUser', {}, locale), roleAssistant: t('terminal.workline.roleAssistant', {}, locale),
     runCard: t('terminal.ledger.runCard', {}, locale), workerCard: t('terminal.ledger.workerCard', {}, locale),
-    watchFailed: t('terminal.workline.watchFailed', {}, locale),
+    watchFailed: t('terminal.workline.watchFailed', {}, locale), commandUnavailable: t('terminal.admin.partUnavailable', {}, locale), // `{part}` stays a template
     watchDelivery: t('terminal.workline.watchDelivery', {}, locale), watchStep: t('terminal.workline.watchStep', {}, locale),
     watchNotInitialized: t('terminal.workline.watchNotInitialized', {}, locale),
     watchAccessDenied: t('terminal.workline.watchAccessDenied', {}, locale), watchAccessStopped: t('terminal.workline.watchAccessStopped', {}, locale),

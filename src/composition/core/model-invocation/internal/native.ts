@@ -1,7 +1,7 @@
 import { isDeepStrictEqual } from 'node:util';
 import { modelInvocationProfileSchema, type ModelBindingDefinition, type ModelInvocationProfile } from '#domain/index.js';
 import { ProviderSpendError, type ModelInvocationNativePort, type ModelInvocationSpendingAuthority, type ModelInvocationSpendingInput } from '#engine/index.js';
-import { createOpenAiChatNativePort, OPENAI_CHAT_HTTP_ADAPTER_ID, OPENAI_CHAT_HTTP_ADAPTER_VERSION, parseOpenAiChatHttpDefinition, createOpenRouterPricedNative, OPENROUTER_CHAT_HTTP_ADAPTER_ID, OPENROUTER_CHAT_HTTP_ADAPTER_VERSION, parseOpenRouterChatDefinition, type OpenRouterPricedNative, fetchOpenRouterTariff, createOpenRouterTariffCache, type OpenRouterMetadataObservation, providerSpendingBudgetFor, quoteOpenAiChatOperatorTariff, createAnthropicMessagesPricedNative, parseAnthropicMessagesDefinition, createDecisionHttpNativePort, decisionHttpAdapter, parseDecisionHttpDefinition, quoteDecisionHttpOperatorTariff, ANTHROPIC_MESSAGES_HTTP_ADAPTER_ID, ANTHROPIC_MESSAGES_HTTP_ADAPTER_VERSION, type AnthropicMessagesPricedNative } from '#adapters/index.js';
+import { createOpenAiChatNativePort, OPENAI_CHAT_HTTP_ADAPTER_ID, OPENAI_CHAT_HTTP_ADAPTER_VERSION, parseOpenAiChatHttpDefinition, createOpenRouterPricedNative, OPENROUTER_CHAT_HTTP_ADAPTER_ID, OPENROUTER_CHAT_HTTP_ADAPTER_VERSION, parseOpenRouterChatDefinition, type OpenRouterPricedNative, fetchOpenRouterTariff, createOpenRouterTariffCache, type OpenRouterMetadataObservation, providerSpendingBudgetFor, quoteOpenAiChatOperatorTariff, createAnthropicMessagesPricedNative, parseAnthropicMessagesDefinition, createDecisionHttpNativePort, decisionHttpAdapter, parseDecisionHttpDefinition, quoteDecisionHttpOperatorTariff, ANTHROPIC_MESSAGES_HTTP_ADAPTER_ID, ANTHROPIC_MESSAGES_HTTP_ADAPTER_VERSION, type AnthropicMessagesPricedNative, localPrefixCacheSalt } from '#adapters/index.js';
 import type { ConfigLoadOptions, TrustedClock } from '#platform/index.js';
 import { scopedInvocationCredentialResolver } from './credential.js';
 import type { loadInvocationContext } from './context.js';
@@ -9,6 +9,8 @@ import { invocationEffectAuthority } from './authority.js';
 /** One tariff per (endpoint, model, tag, CA) for the process lifetime of the freshness window: calls inside it make no metadata request. The fetcher is resolved per miss. */
 const tariffCache = createOpenRouterTariffCache((options, now, signal) => fetchOpenRouterTariff(options, now, signal));
 type InvocationNativeContext = Awaited<ReturnType<typeof loadInvocationContext>>;
+/** VLLM-CACHE-SALT: the installation's own salt secret (created on first use in an older installation), never the integrity key. */
+const installationCacheSalt = (context: InvocationNativeContext, scopeId: string) => localPrefixCacheSalt(context.layout, scopeId, context.config.approvals.keyFile, true);
 /** One invocation-scoped registry owns the exact OpenRouter native/quote pair. Metadata acquisition is unauthenticated and completes before pure preparation; credential resolution remains send-only. Tariff acquisition, preparation, quote and send read one trusted clock: the host wall may step backwards between them (I40), and the platform floor, not raw Date.now, keeps them ordered within this process. */
 export function createConfiguredModelInvocationNative(context: InvocationNativeContext, options: ConfigLoadOptions, clock: TrustedClock) {
   const now = () => clock.sample().wallMs;
@@ -26,7 +28,8 @@ export function createConfiguredModelInvocationNative(context: InvocationNativeC
         anthropic = { profile, priced }; return priced.native;
       }
       if (profile.adapter.id === OPENAI_CHAT_HTTP_ADAPTER_ID && profile.adapter.version === OPENAI_CHAT_HTTP_ADAPTER_VERSION) {
-        const definition = parseOpenAiChatHttpDefinition(profile.adapter.definition); return createOpenAiChatNativePort({ resolveCredential: scopedInvocationCredentialResolver(context, profile, definition.authentication, options) });
+        const definition = parseOpenAiChatHttpDefinition(profile.adapter.definition); return createOpenAiChatNativePort({ resolveCredential: scopedInvocationCredentialResolver(context, profile, definition.authentication, options),
+          cacheSalt: scopeId => installationCacheSalt(context, scopeId) });
       }
       if (profile.adapter.id !== OPENROUTER_CHAT_HTTP_ADAPTER_ID || profile.adapter.version !== OPENROUTER_CHAT_HTTP_ADAPTER_VERSION) return null;
       const definition = parseOpenRouterChatDefinition(profile.adapter.definition); const cell: { observation?: OpenRouterMetadataObservation } = {};

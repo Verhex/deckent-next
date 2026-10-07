@@ -18,24 +18,24 @@ Deckent is a customer-installed Agent OS for authorized, coordinated and verifia
 tool-driven work, from solo use to enterprise. Core is open source under Apache-2.0 and stands alone;
 proprietary Enterprise is separately distributed. Provider-neutral, local-first AI agent orchestration runtime.
 One core and one typed application contract,
-used today by the CLI, the interactive terminal (streamed agent turns with approvals, file edits and a host shell
-that is not a sandbox), the MCP server and the SDK (`import … from 'deckent'`). Runtime-backed operations
+used today by the CLI, the interactive terminal (streamed agent turns with approvals, file edits and a shell that
+runs in bubblewrap or Landlock when available, with a visible host fallback), the MCP server and the SDK (`import … from 'deckent'`). Runtime-backed operations
 use the installed runtime service; installation, observation and some SDK/patch operations call composition
 directly. There is no HTTP API yet; Dashboard and Desktop are planned observer/operator apps on the same services
 (only a versioned terminal–desktop bridge contract exists).
 
 ## Status
 
-**1.0.0-alpha.4 (live 2026-10-03), clean-room port in progress.** Completed capabilities are recorded in
+**1.0.0-alpha.9 (release 2026-10-07; the live switch is an owner step, current live state in PLAN.md), clean-room port in progress.** Completed capabilities are recorded in
 [COMPLETED-PLAN.md](COMPLETED-PLAN.md); remaining work is in [PLAN.md](PLAN.md); who holds what and what comes next is on the host
 process board (`node .agents/refactor/board.mjs show`). Live observation: `deckent monitor` (one read-only snapshot of every installation).
 Development dogfood (Deckent workers writing Deckent cards in an isolated installation) runs as bounded trials; DOGFOOD is officially off. Everything else is being ported from the legacy codebase
 one capability at a time, each landing with contract tests and a real-binary proof.
 
 The `deckent` package is not published on npm (registry E404 verified 2026-10-03); use the source
-checkout below. The live alpha.4 status is the recorded release state, not a fresh runtime check
-from this documentation lane. All six CI cells (Linux, macOS, Windows × Node 24/26) are required (owner 2026-10-03), so the CI badge stays red
-until the open macOS/Windows platform debts close; a red badge means a real failing cell, not noise.
+checkout below. The release line is the recorded release state, not a fresh runtime check
+from this documentation lane. Required CI cells are Ubuntu × Node 24/26 (owner ruleset 2026-10-06); macOS/Windows cells
+are tracked as platform debt (CI-DEBT) and may be red.
 
 ## Features that exist today
 
@@ -58,7 +58,7 @@ The current scope below comes from the [capability map](.deckent/docs/plan/capab
 
 Mission/`do`/autonomous business-process coordination, complete Brain/Auditor/Nervous loops,
 Enterprise SSO/fleet/HA, remote HTTP API, Desktop and Dashboard remain open work. A shared-kernel
-Docker worker is not a VM guarantee; the interactive terminal's host shell is not a sandbox.
+Docker worker is not a VM guarantee; the terminal shell falls back to the host (visibly) when no sandbox is available.
 
 ### Worker toolchain currency
 

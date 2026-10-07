@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { afterEach, expect, it } from 'vitest';
 import { createConfiguredRuntimeClient, startConfiguredRuntimeService } from '../../../src/index.js';
 import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
-import { clearConfigCache, productResourcePath } from '#platform/index.js';
+import { clearConfigCache, ErrorRegistry, formatHumanError, productResourcePath } from '#platform/index.js';
 import { fixtureDockerRegistry } from '../support/execution-registry.js';
 
 const roots: string[] = [];
@@ -14,15 +14,17 @@ afterEach(async () => { clearConfigCache(); await Promise.all(roots.splice(0).ma
 const graph = { schemaVersion: 2 as const, revision: 1, tasks: [{ id: 't', kind: 'selected', dependencies: [], acceptanceCriteria: ['exit'] }],
   criterionDefinitions: [{ id: 'exit', version: 1, description: 'Accept zero exit', evaluator: { id: 'process-exit', version: 1 }, parameters: { acceptedExitCodes: [0] } }] };
 
-async function fixture(allow = true, shutdownGraceMs = 1000, headerTimeoutMs = 1000) {
+async function fixture(allow = true, shutdownGraceMs = 1000, headerTimeoutMs = 1000, omit: readonly ('cancellation' | 'cancellationRuntime')[] = []) {
   const project = await mkdtemp(join(tmpdir(), 'dk-svc-')); roots.push(project); const data = join(project, 'd');
   await mkdir(join(project, '.deckent'), { recursive: true }); const env = { HOME: join(project, 'h'), USERPROFILE: join(project, 'h') };
-  await writeFile(join(project, '.deckent/config.json'), JSON.stringify({ layout: { root: data }, admission: {
+  const config: Record<string, unknown> = { layout: { root: data }, admission: {
     poolId: 'p', executionSlots: 1, inFlightSlots: 1, ordering: 'input-order', registry: fixtureDockerRegistry(['selected']),
   }, cancellation: { maxConcurrentDeliveries: 1, recoveryPageSize: 1, maxAttempts: 1, retryDelayMs: 1, claimTtlMs: 10 },
   cancellationRuntime: { scopeIds: ['s'], pollIntervalMs: 1000, failureBackoffMs: 1000 }, service: {
     inputMaxBytes: 65536, responseMaxBytes: 65536, maxConnections: 4, maxConcurrentRequests: 2, maxConcurrentExecutions: 1, headerTimeoutMs, shutdownGraceMs,
-  } }));
+  } };
+  for (const section of omit) delete config[section];
+  await writeFile(join(project, '.deckent/config.json'), JSON.stringify(config));
   const opened = await openConfiguredAttemptStore(project, { env }); await opened.store.createExecutionPool({ schemaVersion: 1, poolId: 'p', capacity: { executionSlots: 1, inFlightSlots: 1 } });
   const principals = [{ issuer: hostname(), subject: String(userInfo().uid) }];
   await writeFile(productResourcePath(opened.layout, 'policy'), JSON.stringify({ schemaVersion: 1, revision: allow ? 'allow' : 'deny', restrictions: [], grants: [
@@ -38,6 +40,23 @@ async function admit(client: ReturnType<typeof createConfiguredRuntimeClient>) {
   const created = await client.createRun(command); const reserved = await client.reserveRunTasks({ schemaVersion: 1, commandId: 'reserve', scopeId: 's', runId: 'r', expectedRevision: 0 });
   return { command, created, reserved };
 }
+
+// BATCH-FIX 2026-10-07 CANCEL-PLACEHOLDER: `runtime serve` without cancellation limits names each missing section; the rendered text
+// never shows the raw `{missing}` placeholder in either locale (S1 drill: config.json absent printed `Missing: {missing}.`).
+it.skipIf(process.platform === 'win32')('requires POSIX managed storage: refuses to start without cancellation limits and names every missing section (en, tr)', async () => {
+  for (const [omit, missing] of [[['cancellation', 'cancellationRuntime'], 'cancellation, cancellationRuntime'], [['cancellation'], 'cancellation'],
+    [['cancellationRuntime'], 'cancellationRuntime']] as const) {
+    const f = await fixture(true, 1000, 1000, omit); clearConfigCache();
+    const error = await startConfiguredRuntimeService(f.project, { async onPage() {}, async onError() {} }, { env: f.env }).then(() => null, (thrown: unknown) => thrown);
+    expect(error).toMatchObject({ code: 'CANCELLATION_NOT_CONFIGURED', params: { missing } });
+    for (const locale of ['en', 'tr'] as const) {
+      const text = formatHumanError(error as Error, { noColor: true, locale });
+      expect(text).toContain(missing); expect(text).not.toContain('{');
+    }
+  }
+  // Negative proof: the same code without params renders the raw placeholder (what the service threw before this fix).
+  for (const locale of ['en', 'tr'] as const) expect(formatHumanError(ErrorRegistry.createError('CANCELLATION_NOT_CONFIGURED'), { noColor: true, locale })).toContain('{missing}');
+});
 
 it.skipIf(process.platform === 'win32')('requires POSIX managed storage: rejects an invalid spending account query before connecting to an absent runtime', async () => {
   const f = await fixture(), before = await readFile(f.ledgerPath);

@@ -53,12 +53,14 @@ describe('terminal read-only management (S09)', () => {
     it.each(['en', 'tr'] as const)('lists the ledger catalog with activation state and marks the current model (%s)', async locale => {
       const { project, options } = await catalogFixture();
       await applyModelCatalog(project, { schemaVersion: 1, commandId: 'seed', scopeId: 's', action: 'register', catalog: await seedCatalog() }, options);
-      const reference = { providerId: 'p', providerVersion: 1, modelId: 'claude-opus-5-5', modelVersion: 1 };
+      // A real chat reference names the provider (= ledger channel) and the catalog model id; the ledger lists the native id.
+      const reference = { providerId: SEED_CHANNEL, providerVersion: 1, modelId: 'opus-5-5', modelVersion: 1 };
       const ports = terminalAdminPorts({ ...base, root: project, options, locale, context: { inspectModelCatalog: inspectModelCatalog as never,
         describeTerminalChatPlan: async () => ({ status: 'ready', reference }) } }).inspect;
       const first = (await ports.model!('', { usage: EMPTY_SESSION_USAGE })).join('\n');
-      expect(first).toContain(SEED_CHANNEL); expect(first).toContain('claude-opus-5-5'); expect(first).toContain('p@1/claude-opus-5-5@1');
-      expect(first).toContain(locale === 'en' ? '<- current' : '<- geçerli'); expect(first).toContain(locale === 'en' ? 'inactive' : 'etkin değil');
+      expect(first).toContain(SEED_CHANNEL); expect(first).toContain('claude-opus-5-5'); expect(first).toContain(`${SEED_CHANNEL}@1/opus-5-5@1`);
+      const mark = locale === 'en' ? '<- current' : '<- geçerli';
+      expect(first.split('\n').filter(line => line.includes(mark)).map(line => line.trim().split(/\s+/u)[0])).toEqual(['claude-opus-5-5']); expect(first).toContain(locale === 'en' ? 'inactive' : 'etkin değil');
       // Activation changes what the very next call shows: nothing is remembered between calls.
       await applyModelCatalog(project, { schemaVersion: 1, commandId: 'on', scopeId: 's', action: 'activate', channelId: SEED_CHANNEL, modelId: 'claude-opus-5-5', expectedRevision: 0 }, options);
       const second = (await ports.model!('', { usage: EMPTY_SESSION_USAGE })).join('\n');
@@ -77,6 +79,28 @@ describe('terminal read-only management (S09)', () => {
       await type(view, '/model claude-opus-5-5\r');
       await until(() => view.stdout.text.slice(mark).includes('Usage: /model'), 'argument refused');
     });
+  });
+
+  // BATCH-FIX 2026-10-07 MODEL-CURRENT (P2-3b): the mark follows the exact reference; the same model id under another provider channel or
+  // another provider/model version is not the current model.
+  it('/model marks only the entry of the exact provider, provider version and model version', async () => {
+    // Codex-style rows: the native id equals the catalog id, so a bare model-id comparison matched every provider's row.
+    const entry = (id: string, version: number) => ({ modelId: id, revision: 1, model: { id, version, lifecycle: { state: 'active' } }, activation: null });
+    const channel = (channelId: string, providerVersion: number, models: unknown[]) => ({ channelId, access: 'allowed' as const, revision: 1, providerVersion,
+      catalogRevision: 'c', channel: { kind: 'native-cli' }, activation: null, models });
+    const catalog = { schemaVersion: 1, scopeId: 's', channels: [channel('provider-a', 1, [entry('m', 1), entry('m', 2)]), channel('provider-b', 1, [entry('m', 1)]),
+      channel('provider-c', 2, [entry('m', 1)])] };
+    const marked = async (reference: { providerId: string; providerVersion: number; modelId: string; modelVersion: number }) => {
+      const { inspect } = terminalAdminPorts({ ...base, locale: 'en', context: { inspectModelCatalog: async () => catalog as never,
+        describeTerminalChatPlan: async () => ({ status: 'ready', reference }) } });
+      const lines = (await inspect.model!('', { usage: EMPTY_SESSION_USAGE }));
+      let channelId = '';
+      return lines.flatMap(line => { const head = /^(provider-\w)\b/u.exec(line.trim()); if (head) channelId = head[1]!; return line.includes('<- current') ? [`${channelId}:${line.trim().split(/\s+/u)[0]}`] : []; });
+    };
+    expect(await marked({ providerId: 'provider-b', providerVersion: 1, modelId: 'm', modelVersion: 1 })).toEqual(['provider-b:m']);
+    expect(await marked({ providerId: 'provider-a', providerVersion: 1, modelId: 'm', modelVersion: 2 })).toEqual(['provider-a:m']);
+    expect(await marked({ providerId: 'provider-c', providerVersion: 1, modelId: 'm', modelVersion: 1 })).toEqual([]);
+    expect(await marked({ providerId: 'provider-z', providerVersion: 1, modelId: 'm', modelVersion: 1 })).toEqual([]);
   });
 
   it('a failed query is a typed error and never an earlier value (/model, /status)', async () => {
@@ -124,7 +148,7 @@ describe('terminal read-only management (S09)', () => {
     await type(view, 'hi\r');
     await until(() => view.stdout.text.includes('30 in 7 out'), 'turn footer');
     await type(view, '/usage \r');
-    await until(() => view.stdout.text.includes('prompt 30 tokens, completion 7 tokens, reasoning 0 tokens'), 'measured usage');
+    await until(() => view.stdout.text.includes('prompt 30 tokens, completion 7 tokens, reasoning not measured'), 'measured usage');
     await type(view, '/usage b1 2\r');
     await until(() => spend.mock.calls.length === 1, 'spend query');
     expect(spend.mock.calls[0]![1]).toEqual({ schemaVersion: 1, scopeId: 's', budgetId: 'b1', budgetRevision: 2 });
@@ -141,7 +165,21 @@ describe('terminal read-only management (S09)', () => {
 
   it('adds usage reports without losing earlier totals', () => {
     const total = addSessionUsage(addSessionUsage(EMPTY_SESSION_USAGE, { promptTokens: 1, completionTokens: 2, reasoningTokens: 3 }), { promptTokens: 4, completionTokens: 5, reasoningTokens: null });
-    expect(total).toEqual({ reports: 2, promptTokens: 5, completionTokens: 7, reasoningTokens: 3 });
+    expect(total).toEqual({ reports: 2, promptTokens: 5, completionTokens: 7, reasoningTokens: 3, reasoningUnmeasured: 1 });
+  });
+
+  // BATCH-FIX 2026-10-07 USAGE-UNKNOWN (P2-3a): an unreported reasoning count is never summed as 0; a partial sum says what it misses.
+  it.each([
+    ['en', 'reasoning 3 tokens (', 'reasoning at least 3 tokens (not measured in 1 of 2 reports)', 'reasoning not measured'],
+    ['tr', 'akıl yürütme 3 token (', 'akıl yürütme en az 3 token (2 raporun 1 tanesinde ölçülmedi)', 'akıl yürütme ölçülmedi'],
+  ] as const)('/usage keeps an unmeasured reasoning count unknown (%s)', async (locale, measured, partial, none) => {
+    const { inspect } = terminalAdminPorts({ ...base, locale, context: {} });
+    const lines = async (...reasoning: (number | null)[]) => (await inspect.usage!('', { usage: reasoning.reduce((total, value) =>
+      addSessionUsage(total, { promptTokens: 1, completionTokens: 1, reasoningTokens: value }), EMPTY_SESSION_USAGE) })).join('\n');
+    expect(await lines(3)).toContain(measured);
+    expect(await lines(3, null)).toContain(partial);
+    const unknown = await lines(null, null);
+    expect(unknown).toContain(none); expect(unknown).not.toMatch(/(reasoning|akıl yürütme) 0 tok/u);
   });
 
   it('/scope names each part it could not read and still shows the rest', async () => {
@@ -178,7 +216,7 @@ describe('terminal read-only management (S09)', () => {
   it('commands without a wired port answer plainly and are never unknown', async () => {
     const view = await open({});
     await type(view, '/model \r/usage \r/doctor \r/scope \r');
-    await until(() => ['model', 'usage', 'doctor', 'scope'].every(name => view.stdout.text.includes(`${name}: not available in this terminal`)), 'unwired notices');
+    await until(() => ['model', 'usage', 'doctor', 'scope'].every(name => view.stdout.text.includes(`NO-PORT ${name}`)), 'unwired notices');
     expect(view.stdout.text).not.toContain('UNKNOWN');
   });
 });

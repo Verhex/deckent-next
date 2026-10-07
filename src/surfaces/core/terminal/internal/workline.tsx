@@ -37,7 +37,7 @@ export interface WorklineLabels extends WorklineActionLabels {
   readonly roleAssistant: string;
   readonly runCard: string;
   readonly workerCard: string;
-  readonly watchFailed: string;
+  readonly watchFailed: string; readonly commandUnavailable: string; // a slash command without a port here; `{part}` = command (terminal.admin.partUnavailable)
   /** Rendered-answer strings (terminal.render.*): narration, footer, code label, status facts. */
   readonly render: AssistantRenderLabels;
   readonly composer: ComposerLabels;
@@ -250,7 +250,7 @@ export function WorklineApp(props: WorklineProps) {
     const lineCommands: Readonly<Record<string, ((args: string) => Promise<readonly string[]>) | undefined>> = { ...bindInspectPorts(props.inspect, () => usage.current), mcp: props.mcp, monitor: props.monitor, config: props.config };
     if (slash.command === 'mcp' || slash.command === 'monitor' || slash.command === 'config' || (isInspectSlashCommand(slash.command) && (slash.command !== 'status' || lineCommands['status']))) {
       const lines = lineCommands[slash.command];
-      try { push((lines ? await lines(slash.args) : [`${slash.command}: not available in this terminal`]).map(line => notice('info', line))); }
+      try { push((lines ? await lines(slash.args) : [fillTemplate(labels.commandUnavailable, { part: slash.command })]).map(line => notice('info', line))); }
       catch (error) { push([notice('error', errorText(error))]); }
       return true;
     }
