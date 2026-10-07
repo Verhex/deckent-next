@@ -2021,7 +2021,8 @@
         "src/engine/core/audit",
         "src/platform/core/clock",
         "src/platform/core/config",
-        "src/domain/core/agent-turn"
+        "src/domain/core/agent-turn",
+        "src/platform/core/config-fields"
       ],
       "plan": "SURFACES"
     },

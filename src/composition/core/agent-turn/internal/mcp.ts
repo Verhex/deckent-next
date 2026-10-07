@@ -43,7 +43,8 @@ export async function createAgentMcp(input: { readonly pool: McpClientPool; read
   readonly signal: AbortSignal; readonly emit: Parameters<typeof openTurnMcp>[0]['emit']; readonly sandboxes: McpLaunchContext['sandboxes']; readonly cwd: string;
   /** MCP-SANDBOX-PATHS: what could not be decided or started this turn (display-safe), for the turn's result note — never silent. */
   readonly onNotices?: (notices: readonly string[]) => void }) {
-  const { pool, context, scopeId, turnId } = input, environment = input.options.env ?? process.env, config = context.config;
+  // Security (MCP pool scope isolation): this turn reaches the service's servers only through the view of its scope and project.
+  const { context, scopeId, turnId } = input, pool = input.pool.scoped({ scopeId, cwd: input.cwd }), environment = input.options.env ?? process.env, config = context.config;
   // The note is a string on the wire: rendered here, in the service's locale (its environment, then the configured language).
   const locale = resolveLocale(undefined, environment, config.language);
   // SECRET-K1: personal-file `$DECK:NAME` goes through the installation's one configured resolver, never straight to the environment.

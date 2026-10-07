@@ -1,7 +1,7 @@
 import type { AgentToolSpec, EffectCommand, JsonObject, McpToolChangeHints } from '#domain/index.js';
 import { shippedShellSandboxes } from '#adapters/core/shell-sandbox-bwrap/index.js';
 import type { ShellSandboxLayout } from '#adapters/core/host-shell/index.js';
-import type { McpClientPool, McpLaunchContext, McpServerOpen } from './pool.js';
+import type { McpLaunchContext, McpPoolView, McpServerOpen } from './pool.js';
 import type { McpClientSettings, McpToolCell, McpTrustBinding } from './pin.js';
 import { agentMcpEffectCommandId, describeMcpApproval, MCP_TOOL_CALL_OPERATION, MCP_TOOL_TARGET_KIND } from './target.js';
 
@@ -30,7 +30,7 @@ const hint = (value: unknown) => typeof value === 'boolean' ? value : undefined;
  * The MCP tools one turn may offer (MCP-CLIENT): every configured server is opened (started, listed, verified) and only its `pinned` tools
  * become agent tools. A server that cannot be opened offers nothing this turn; `onOpened` sees every outcome (the turn's notice, `/mcp`).
  */
-export async function openMcpAgentTools(pool: McpClientPool, settings: McpClientSettings, context: McpLaunchContext,
+export async function openMcpAgentTools(pool: McpPoolView, settings: McpClientSettings, context: McpLaunchContext,
   onOpened?: (server: McpClientSettings['servers'][number], state: McpServerOpen) => void): Promise<ReadonlyMap<string, McpOfferedTool>> {
   const offered = new Map<string, McpOfferedTool>();
   const opened = await Promise.all(settings.servers.map(async server => ({ server, state: await pool.open(server, settings, context) })));

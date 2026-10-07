@@ -1,6 +1,6 @@
 export { MCP_CLIENT_DEFAULTS, mcpToolDisplay, mcpToolPinDigest, mcpToolWireName, verifyMcpTools, type McpClientServerSettings, type McpClientSettings,
   type McpLiveTool, type McpToolCell, type McpToolStatus, type McpToolVerdict, type McpTrustBinding } from './internal/pin.js';
-export { MCP_CLIENT_LIST_PAGES_MAX, MCP_CLIENT_PROTOCOL_VERSIONS, MCP_CLIENT_STDERR_TAIL_BYTES, MCP_CLIENT_TOOLS_MAX, McpClientPool, type McpCallOutcome, type McpLaunchContext,
+export { MCP_CLIENT_LIST_PAGES_MAX, MCP_CLIENT_PROTOCOL_VERSIONS, MCP_CLIENT_STDERR_TAIL_BYTES, MCP_CLIENT_TOOLS_MAX, McpClientPool, type McpCallOutcome, type McpLaunchContext, type McpPoolView,
   type McpSendAdmission, type McpSendRefusal, type McpServerOpen } from './internal/pool.js';
 export { agentMcpEffectCommandId, describeMcpApproval, describeMcpRefusal, describeMcpResult, MCP_TOOL_CALL_OPERATION, MCP_TOOL_TARGET_KIND,
   McpToolTarget } from './internal/target.js';

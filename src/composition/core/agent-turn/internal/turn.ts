@@ -43,9 +43,9 @@ export interface RuntimeChatTurnHost {
   /** B1: one-time decision capabilities of the running turns' cards (service memory; every decision of this service reads them). */ readonly decisions: TurnDecisionCapabilities; readonly answers: SessionApprovalAnswers;
 }
 export function createRuntimeChatTurnHost(model: RuntimeModelInvocationHost, signal: AbortSignal, scratch = createScratchActivity(),
-  fetchTransport: HttpFetchTransport = SYSTEM_FETCH_TRANSPORT, shellSandboxes: ShellSandboxFactory = shippedShellSandboxes): RuntimeChatTurnHost {
+  fetchTransport: HttpFetchTransport = SYSTEM_FETCH_TRANSPORT, shellSandboxes: ShellSandboxFactory = shippedShellSandboxes, mcpMaxServers?: number): RuntimeChatTurnHost {
   void shellSandboxCapabilities(globalStateRoot()); // Start once with the service; turns await the same bounded observation (BWRAP-SELECT: launcher under the global state root).
-  return Object.freeze({ model, signal, running: new Map(), scratch, fetchTransport, shellSandboxes, mcp: new McpClientPool(signal), decisions: createTurnDecisionCapabilities(), answers: new SessionApprovalAnswers(signal) });
+  return Object.freeze({ model, signal, running: new Map(), scratch, fetchTransport, shellSandboxes, mcp: new McpClientPool(signal, mcpMaxServers ? { maxServers: mcpMaxServers } : {}), decisions: createTurnDecisionCapabilities(), answers: new SessionApprovalAnswers(signal) });
 }
 
 const sha256 = (text: string) => createHash('sha256').update(text).digest('hex');

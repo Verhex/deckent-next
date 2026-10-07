@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { chmod, mkdir, realpath } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { Client, CallToolResult, Tool, VersionNegotiationMode } from '@modelcontextprotocol/client';
-import { DeckentJsonSchemaValidator, globalStateRoot, PACKAGE_NAME, PACKAGE_VERSION } from '#platform/index.js';
+import { DeckentJsonSchemaValidator, getConfigFieldDefault, globalStateRoot, PACKAGE_NAME, PACKAGE_VERSION } from '#platform/index.js';
 import { describeSandboxFallback, describeSandboxRejections, describeShellWritePosture, longLivedWritePosture, sandboxWriteView, shellLaunchUsable, type ShellCapabilities, type ShellSandbox,
   type ShellSandboxLaunchProfile } from '#adapters/core/host-shell/index.js';
 import { shellSandboxCapabilities } from '#adapters/core/shell-sandbox-bwrap/index.js';
@@ -112,6 +112,9 @@ export type McpCallOutcome = { readonly outcome: 'answered'; readonly result: Ca
 
 interface ServerState {
   readonly key: string;
+  /** The view this process belongs to (`scoped`: the scope and project; '' for the pool's own default view): never shared across views. */
+  readonly namespace: string;
+  readonly id: string;
   client: Client | null;
   generation: number;
   starts: number;
@@ -122,6 +125,18 @@ interface ServerState {
   /** The validator this process's client compiles with (the pool's pre-send compile uses the same one). */
   validator: DeckentJsonSchemaValidator | null;
   lock: Promise<unknown>;
+  /** Bounded processes: the last open or call (the idle one longest unused goes first) and the calls in flight (never closed under one). */
+  usedAtMs: number;
+  inFlight: number;
+}
+/** One view of the pool's servers (security, lead 2026-10-07: MCP pool scope isolation): its servers are named by id within the view only. */
+export interface McpPoolView {
+  open(server: McpClientServerSettings, settings: McpClientSettings, context: McpLaunchContext): Promise<McpServerOpen>;
+  call(serverId: string, tool: string, digest: string, args: Record<string, unknown>, options: { readonly timeoutMs: number; readonly signal: AbortSignal;
+    readonly admit?: McpSendAdmission }): Promise<McpCallOutcome>;
+  stderr(serverId: string): string;
+  retire(serverId: string): Promise<void>;
+  retain(trusted: ReadonlySet<string>): void;
 }
 /** The client SDK loads with the first server start, not with every CLI/MCP/service process that merely composes the pool (≈45 ms each).
  * A server's `outputSchema` is untrusted: it is compiled by Deckent's own validator (MCP-SCHEMA-VALIDATOR: bounded, linear-time `pattern`,
@@ -157,25 +172,60 @@ const OUTPUT_SCHEMA_FAILURE = /^(?:Tool .+ has an output schema but did not retu
  * times, then the server stays failed until the service restarts. Stopping the service (its signal) closes every server (the SDK closes stdin,
  * then SIGTERM, then SIGKILL). A call is sent only on the process whose listing matched the pin.
  */
-export class McpClientPool {
+export class McpClientPool implements McpPoolView {
   private readonly states = new Map<string, ServerState>();
   private closed = false;
-  constructor(signal: AbortSignal) {
+  /** `maxServers`: the most processes this pool keeps (every view together; the config's `mcp.maxServers`); a new one closes the idle one
+   * longest unused first, and none idle refuses the start. */
+  constructor(signal: AbortSignal, private readonly options: { readonly maxServers?: number; readonly now?: () => number } = {}) {
     if (signal.aborted) this.closed = true;
     else signal.addEventListener('abort', () => { void this.close(); }, { once: true });
   }
-  /** Starts (when needed), lists and verifies one server; serialized per server. */
-  open(server: McpClientServerSettings, settings: McpClientSettings, context: McpLaunchContext): Promise<McpServerOpen> {
+  /**
+   * The servers of one scope and project (security, lead 2026-10-07): a process started for one view is never reached from another — not by
+   * the same id, command or URL — so a call never runs in another project's working directory, sandbox binds, HOME or headers. The service
+   * keeps one pool; every turn reaches it only through its own view.
+   */
+  scoped(owner: { readonly scopeId: string; readonly cwd: string }): McpPoolView {
+    const namespace = createHash('sha256').update(JSON.stringify(['mcp-pool-view:1', owner.scopeId, owner.cwd])).digest('hex');
+    return { open: (server, settings, context) => this.openIn(namespace, server, settings, context), call: (id, tool, digest, args, options) => this.callIn(namespace, id, tool, digest, args, options),
+      stderr: id => this.stderrIn(namespace, id), retire: id => this.retireIn(namespace, id), retain: trusted => this.retainIn(namespace, trusted) };
+  }
+  open(server: McpClientServerSettings, settings: McpClientSettings, context: McpLaunchContext): Promise<McpServerOpen> { return this.openIn('', server, settings, context); }
+  call(serverId: string, tool: string, digest: string, args: Record<string, unknown>, options: { readonly timeoutMs: number; readonly signal: AbortSignal; readonly admit?: McpSendAdmission }) {
+    return this.callIn('', serverId, tool, digest, args, options);
+  }
+  stderr(serverId: string): string { return this.stderrIn('', serverId); }
+  retire(serverId: string): Promise<void> { return this.retireIn('', serverId); }
+  retain(trusted: ReadonlySet<string>): void { this.retainIn('', trusted); }
+  private now() { return (this.options.now ?? Date.now)(); }
+  /** Starts (when needed), lists and verifies one server; serialized per server. The change key is the launch's whole view: command, arguments,
+   * env, realm, generation, endpoint and headers, the working directory, the sandbox providers, the HOME root and the registry scope. */
+  private openIn(namespace: string, server: McpClientServerSettings, settings: McpClientSettings, context: McpLaunchContext): Promise<McpServerOpen> {
     const key = createHash('sha256').update(JSON.stringify([server.command, server.args, Object.entries(server.env).sort(), server.realm, server.generation ?? 0,
-      server.url ?? null, Object.entries(server.headers ?? {}).sort()])).digest('hex');
-    let state = this.states.get(server.id);
-    if (state && state.key !== key) { void state.client?.close().catch(() => undefined); state = undefined; }
-    if (!state) { state = { key, client: null, generation: 0, starts: 0, failed: null, stderr: Buffer.alloc(0), listing: null, last: null, validator: null,
-      lock: Promise.resolve() };
-      this.states.set(server.id, state); }
-    const current = state, run = current.lock.then(() => this.openLocked(current, server, settings, context));
+      server.url ?? null, Object.entries(server.headers ?? {}).sort(), context.cwd, context.sandboxes.map(sandbox => sandbox.kind), context.homeRoot ?? null,
+      server.binding?.scope ?? null])).digest('hex');
+    const name = `${namespace}\0${server.id}`;
+    let state = this.states.get(name);
+    if (state && state.key !== key) { void state.client?.close().catch(() => undefined); this.states.delete(name); state = undefined; }
+    if (!state) {
+      if (!this.makeRoom()) return Promise.resolve({ ok: false, reason: 'start-failed', detail: 'too many MCP servers are running (mcp.maxServers); none is idle' });
+      state = { key, namespace, id: server.id, client: null, generation: 0, starts: 0, failed: null, stderr: Buffer.alloc(0), listing: null, last: null, validator: null,
+        lock: Promise.resolve(), usedAtMs: this.now(), inFlight: 0 };
+      this.states.set(name, state);
+    }
+    const current = state, run = current.lock.then(() => { current.usedAtMs = this.now(); return this.openLocked(current, server, settings, context); });
     current.lock = run.catch(() => undefined);
     return run;
+  }
+  /** Room for one more server: under the bound, or the idle one longest unused is closed (in flight: never). */
+  private makeRoom(): boolean {
+    const bound = this.options.maxServers ?? getConfigFieldDefault('mcp').maxServers;
+    if (this.states.size < bound) return true;
+    const idle = [...this.states.entries()].filter(([, state]) => state.inFlight === 0).sort(([, a], [, b]) => a.usedAtMs - b.usedAtMs)[0];
+    if (!idle) return false;
+    void this.retireIn(idle[1].namespace, idle[1].id);
+    return true;
   }
   private async openLocked(state: ServerState, server: McpClientServerSettings, settings: McpClientSettings, context: McpLaunchContext): Promise<McpServerOpen> {
     if (this.closed) return { ok: false, reason: 'start-failed', detail: 'the service is stopping' };
@@ -250,10 +300,17 @@ export class McpClientPool {
    * structured result included) is `answered`; a timeout, a cancellation or a closed connection is `unknown` — it is never sent again here.
    * `admit` (MCP-REVOKE) is the caller's send authority, asked last, right before the request is handed to the SDK: a refusal sends nothing.
    */
-  async call(serverId: string, tool: string, digest: string, args: Record<string, unknown>, options: { readonly timeoutMs: number; readonly signal: AbortSignal;
+  private async callIn(namespace: string, serverId: string, tool: string, digest: string, args: Record<string, unknown>, options: { readonly timeoutMs: number; readonly signal: AbortSignal;
     readonly admit?: McpSendAdmission }): Promise<McpCallOutcome> {
-    const state = this.states.get(serverId), client = state?.client;
-    if (!state || !client || this.closed) return { outcome: 'refused', reason: 'not-connected' };
+    const state = this.states.get(`${namespace}\0${serverId}`);
+    if (!state) return { outcome: 'refused', reason: 'not-connected' };
+    state.inFlight++; state.usedAtMs = this.now();
+    try { return await this.callLocked(state, tool, digest, args, options); } finally { state.inFlight--; state.usedAtMs = this.now(); }
+  }
+  private async callLocked(state: ServerState, tool: string, digest: string, args: Record<string, unknown>, options: { readonly timeoutMs: number; readonly signal: AbortSignal;
+    readonly admit?: McpSendAdmission }): Promise<McpCallOutcome> {
+    const client = state.client;
+    if (!client || this.closed) return { outcome: 'refused', reason: 'not-connected' };
     if (state.listing?.generation !== state.generation) {
       try { state.listing = { generation: state.generation, tools: pinnedTools(await listAllTools(client, options.timeoutMs)) }; }
       catch { return { outcome: 'refused', reason: 'not-connected' }; }
@@ -291,25 +348,25 @@ export class McpClientPool {
     }
   }
   /** The server's last stderr bytes, redacted (for `inspect`; never streamed into the service's own stderr). */
-  stderr(serverId: string): string {
-    const tail = this.states.get(serverId)?.stderr;
+  private stderrIn(namespace: string, serverId: string): string {
+    const tail = this.states.get(`${namespace}\0${serverId}`)?.stderr;
     return tail ? redactText(tail.toString('utf8'), [], MCP_CLIENT_STDERR_TAIL_BYTES) : '';
   }
   /**
    * Stops one server's process (MCP-REVOKE: its trust is gone, so an untrusted process does not keep running or serving): forgotten at once
    * (a later `open` starts it again, after its cards), closed after any open already queued on it, so nothing started is left behind.
    */
-  retire(serverId: string): Promise<void> {
-    const state = this.states.get(serverId);
+  private retireIn(namespace: string, serverId: string): Promise<void> {
+    const state = this.states.get(`${namespace}\0${serverId}`);
     if (!state) return Promise.resolve();
-    this.states.delete(serverId);
+    this.states.delete(`${namespace}\0${serverId}`);
     const run = state.lock.then(async () => { const client = state.client; state.client = null; state.listing = null; await client?.close().catch(() => undefined); });
     state.lock = run.catch(() => undefined);
     return run.catch(() => undefined);
   }
-  /** Stops every server process whose id is not in `trusted` (a turn's current registry view). */
-  retain(trusted: ReadonlySet<string>): void {
-    for (const id of [...this.states.keys()]) if (!trusted.has(id)) void this.retire(id);
+  /** Stops every server process of this view whose id is not in `trusted` (a turn's current registry view); other views are untouched. */
+  private retainIn(namespace: string, trusted: ReadonlySet<string>): void {
+    for (const state of [...this.states.values()]) if (state.namespace === namespace && !trusted.has(state.id)) void this.retireIn(namespace, state.id);
   }
   async close(): Promise<void> {
     this.closed = true;

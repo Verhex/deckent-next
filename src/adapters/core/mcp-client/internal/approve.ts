@@ -6,7 +6,7 @@ import { openSqliteAuditStore } from '#adapters/core/audit-store/index.js';
 import { openLocalIntegrityAuthority } from '#adapters/core/local-keyring/index.js';
 import { openSqliteApprovalStore } from '#adapters/core/approval-store/index.js';
 import { displayMcpDiagnosis } from './diagnose.js';
-import { MCP_HTTP_POSTURE, McpClientPool, mcpRealmPosture, type McpLaunchContext } from './pool.js';
+import { MCP_HTTP_POSTURE, McpClientPool, mcpRealmPosture, type McpLaunchContext, type McpPoolView } from './pool.js';
 import { MCP_CLIENT_DEFAULTS, mcpToolWireName, type McpClientServerSettings } from './pin.js';
 import { expandMcpEntry, isMcpHttpEntry, MCP_DEFAULT_REALM, mcpEntryDisplay, mcpLaunchValues, type McpScope, type McpServerEntry } from './registry.js';
 import { readMcpTrust, updateMcpTrust, type McpTrustRecord } from './trust.js';
@@ -86,7 +86,7 @@ export async function recordMcpTrust(server: Pick<McpTrustServer, 'name' | 'scop
  * for a refused realm or an entry that cannot be expanded.
  */
 export async function decideMcpTrust(server: McpTrustServer, context: McpTrustContext, ask: McpTrustAsk,
-  options: { readonly pool?: McpClientPool; readonly alwaysAsk?: readonly string[] } = {}): Promise<{ readonly decision: 'trusted' | 'declined' | 'unanswered'; readonly pinned: number;
+  options: { readonly pool?: McpPoolView; readonly alwaysAsk?: readonly string[] } = {}): Promise<{ readonly decision: 'trusted' | 'declined' | 'unanswered'; readonly pinned: number;
     readonly grant?: McpToolGrantResult }> {
   const fail = (code: string, reason: string) => ErrorRegistry.createError(code, { params: { name: server.name, reason } });
   const expanded = await expandMcpEntry(server.entry, server.scope, context.environment, context.secret);
@@ -109,8 +109,9 @@ export async function decideMcpTrust(server: McpTrustServer, context: McpTrustCo
   const started = await ask(launchCard);
   if (started === null) return { decision: 'unanswered', pinned: 0 };
   if (!started) return decline();
-  const launch: McpClientServerSettings = { id: server.name, ...mcpLaunchValues(server.entry, expanded), tools: [] };
-  const controller = new AbortController(), pool = options.pool ?? new McpClientPool(controller.signal);
+  // The registry scope it was decided in: the turn's launch of the trusted server (same view, same scope) reuses this process.
+  const launch: McpClientServerSettings = { id: server.name, ...mcpLaunchValues(server.entry, expanded), tools: [], binding: { scope: server.scope, definitionDigest: server.definitionDigest } };
+  const controller = new AbortController(), probe = options.pool ? null : new McpClientPool(controller.signal), pool: McpPoolView = options.pool ?? probe!;
   try {
     const state = await pool.open(launch, { ...MCP_CLIENT_DEFAULTS, ...(context.inputMaxBytes ? { inputMaxBytes: context.inputMaxBytes } : {}), servers: [launch] },
       { cwd: context.cwd, environment: context.environment, sandboxes: context.sandboxes, ...(context.homeRoot ? { homeRoot: context.homeRoot } : {}) });
@@ -134,7 +135,7 @@ export async function decideMcpTrust(server: McpTrustServer, context: McpTrustCo
     const wires = pins.flatMap(pin => { const wire = mcpToolWireName(server.name, pin.name); return wire ? [wire] : []; });
     const grant = context.grants ? await context.grants.grant(server, wires).catch(error => ({ status: 'refused' as const, reason: String((error as { code?: unknown })?.code ?? 'failed') })) : undefined;
     return { decision: 'trusted', pinned: pins.length, ...(grant ? { grant } : {}) };
-  } finally { if (!options.pool) { controller.abort(); await pool.close(); } }
+  } finally { if (probe) { controller.abort(); await probe.close(); } }
 }
 
 /** The audit port of trust changes over the project's ledger (the same sealed audit application as permission-mode events). */

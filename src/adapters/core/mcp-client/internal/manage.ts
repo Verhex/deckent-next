@@ -6,7 +6,7 @@ import { ErrorRegistry, normalizeGlobalScopePlatform, prepareProductDirectory, p
 import { displayMcpDiagnosis } from './diagnose.js';
 import { findMcpStartFailure, mcpStartFailedNotice, mcpStartFailureOf, mcpToolsChangedRecord, mcpWithheldTools, readMcpStartFailures, updateMcpStartFailure, type McpStartFailure, type McpStartNotice,
   type McpStartNoticeRenderer } from './failures.js';
-import { MCP_SERVER_HOMES_DIR, McpClientPool, type McpLaunchContext, type McpSendRefusal, type McpServerOpen } from './pool.js';
+import { MCP_SERVER_HOMES_DIR, McpClientPool, type McpLaunchContext, type McpPoolView, type McpSendRefusal, type McpServerOpen } from './pool.js';
 import { MCP_CLIENT_DEFAULTS, type McpClientServerSettings, type McpClientSettings, type McpTrustBinding } from './pin.js';
 import { decideMcpTrust, mcpTrustApprovalAsker, mcpTrustAuditWriter, recordMcpTrust, type McpToolGrantPort, type McpTrustAsk, type McpTrustAudit, type McpTrustContext } from './approve.js';
 import { openMcpAgentTools, type McpOfferedTool } from './agent.js';
@@ -288,7 +288,7 @@ export async function runMcpCommand(request: McpCommandRequest, context: McpComm
  * started is named in `notices` (the turn's result note) with its display-safe diagnosis; a start failure is recorded for its exact
  * definition, so its first-use card is not asked again every turn until `/mcp approve` (or a changed entry) retries it.
  */
-export async function openTurnMcp(input: { readonly registry: McpRegistryContext; readonly pool: McpClientPool; readonly cwd: string; readonly sandboxes: McpLaunchContext['sandboxes'];
+export async function openTurnMcp(input: { readonly registry: McpRegistryContext; readonly pool: McpPoolView; readonly cwd: string; readonly sandboxes: McpLaunchContext['sandboxes'];
   readonly principal: { readonly id: string; readonly issuer: string; readonly subject: string }; readonly sqlite: Parameters<typeof mcpTrustAuditWriter>[0]['sqlite'];
   readonly keyFile: string; readonly requestTtlMs: number; readonly inputMaxBytes: number; readonly resultMaxBytes: number; readonly scopeId: string; readonly turnId: string;
   readonly signal: AbortSignal; readonly emit: Parameters<typeof mcpTrustApprovalAsker>[0]['emit']; readonly ledgerPath: () => Promise<string>;

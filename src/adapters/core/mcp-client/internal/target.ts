@@ -3,7 +3,7 @@ import { z } from 'zod';
 import type { AgentToolOutcome } from '#domain/index.js';
 import { EffectTargetError, type EffectApplyRequest, type EffectTarget } from '#engine/index.js';
 import { redactText } from '#adapters/core/native-connection/index.js';
-import { MCP_HOST_REALM_HINT, type McpCallOutcome, type McpClientPool, type McpSendRefusal } from './pool.js';
+import { MCP_HOST_REALM_HINT, type McpCallOutcome, type McpPoolView, type McpSendRefusal } from './pool.js';
 
 export const MCP_TOOL_TARGET_KIND = 'mcp-tool';
 /** Core operation of one MCP tool call (MCP-CLIENT, owner 2026-09-28): the `mcp` namespace is Core's. An external process acts on the call
@@ -28,7 +28,7 @@ const inputSchema = z.object({ server: z.string().min(1), tool: z.string().min(1
  */
 export class McpToolTarget implements EffectTarget {
   readonly kind = MCP_TOOL_TARGET_KIND;
-  constructor(private readonly run: { readonly pool: McpClientPool; readonly timeoutMs: number; readonly signal: AbortSignal;
+  constructor(private readonly run: { readonly pool: McpPoolView; readonly timeoutMs: number; readonly signal: AbortSignal;
     readonly onResult: (outcome: McpCallOutcome) => void;
     /** The send authority (MCP-REVOKE): a one-shot approval of this call never stands in for the server's trust, re-read at the send. */
     readonly admit: (call: { readonly server: string; readonly tool: string; readonly digest: string }) => Promise<McpSendRefusal | null> }) {}
