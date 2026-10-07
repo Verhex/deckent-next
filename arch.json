@@ -832,11 +832,16 @@
       ],
       "plan": "SURFACES"
     },
+    "src/surfaces/core/terminal-theme": {
+      "dependencies": [],
+      "plan": "SURFACES"
+    },
     "src/surfaces/core/terminal-kit": {
       "dependencies": [
         "src/engine/core/monitor",
         "src/domain/core/agent-turn",
-        "src/platform/core/output"
+        "src/platform/core/output",
+        "src/surfaces/core/terminal-theme"
       ],
       "plan": "SURFACES"
     },
@@ -875,7 +880,8 @@
         "src/domain/core/policy",
         "src/platform/core/output",
         "src/domain/core/text",
-        "src/platform/core/redaction"
+        "src/platform/core/redaction",
+        "src/surfaces/core/terminal-theme"
       ],
       "plan": "SURFACES"
     },
@@ -919,7 +925,8 @@
         "src/platform/core/redaction",
         "src/surfaces/core/approval-presentation",
         "src/surfaces/core/terminal-ledger",
-        "src/surfaces/core/terminal-work"
+        "src/surfaces/core/terminal-work",
+        "src/surfaces/core/terminal-theme"
       ],
       "plan": "SURFACES"
     },
@@ -1022,7 +1029,8 @@
         "src/surfaces/core/terminal-admin",
         "src/surfaces/core/cli-identity",
         "src/surfaces/core/terminal-ledger",
-        "src/surfaces/core/terminal-work"
+        "src/surfaces/core/terminal-work",
+        "src/surfaces/core/terminal-theme"
       ],
       "plan": "SURFACES"
     },
@@ -2105,11 +2113,11 @@
         "src/domain/core/attempt",
         "src/domain/core/worker-event",
         "src/engine/core/worker-observation",
-        "src/surfaces/core/terminal-kit",
         "src/surfaces/core/terminal-render",
         "src/surfaces/core/config",
         "src/engine/core/config",
-        "src/engine/core/runs"
+        "src/engine/core/runs",
+        "src/surfaces/core/terminal-theme"
       ],
       "plan": "MONITOR"
     },

@@ -1,5 +1,5 @@
 import { createContext, useContext, createElement, type ReactElement, type ReactNode } from 'react';
-import { DEFAULT_INK_PALETTE, type WorklineInkPalette } from './ink-palette.js';
+import { DEFAULT_INK_PALETTE, type WorklineInkPalette } from '#surfaces/core/terminal-theme/index.js';
 
 const WorklinePaletteContext = createContext<WorklineInkPalette>(DEFAULT_INK_PALETTE);
 

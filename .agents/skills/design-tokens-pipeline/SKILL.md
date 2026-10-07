@@ -13,7 +13,7 @@ for an absent surface. At the 2026-10-02 inventory:
 
 - Terminal role map: `design/tokens/terminal.map.json`.
 - Builder: `scripts/build-terminal-palette.mjs`; primitive values also live in its `PRIMITIVES`.
-- Generated output: `src/surfaces/core/terminal-kit/internal/generated/palette.ts`.
+- Generated output: `src/surfaces/core/terminal-theme/internal/generated/palette.ts`.
 - The current token directory contains the Terminal map; broader primitive/semantic documents
   and cross-surface outputs must be verified before claiming they exist or are consumed.
 - Former Dashboard/Desktop generators and `scripts/build-design-tokens.mjs` are absent in Next.

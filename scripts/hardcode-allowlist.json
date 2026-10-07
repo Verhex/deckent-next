@@ -439,7 +439,7 @@
   {"file":"src/surfaces/core/terminal-composer/internal/reducer.ts","fingerprint":"cce4bb6885077290a918026fc90483043b502131b610965f726171d18d165d1e","rule":"G2"},
   {"file":"src/surfaces/core/terminal-composer/internal/reducer.ts","fingerprint":"f27c94e4491fe1c847de7292c84aeb0bb036ea96a9ac8c86ed3df13f0bb1b8b6","rule":"G1"},
   {"file":"src/surfaces/core/terminal-composer/internal/reducer.ts","fingerprint":"fc429d8d3eceb63694c9caf4cc6b16297ea6b49e4b3d991e75e922d8d9f1941e","rule":"G1"},
-  {"file":"src/surfaces/core/terminal-kit/internal/ink-palette.ts","fingerprint":"74602b21710defef1ba7a15558b4c4603c50c5dfb14b73b6fc0b943ad7fcb414","rule":"G3"},
+  {"file":"src/surfaces/core/terminal-theme/internal/ink-palette.ts","fingerprint":"74602b21710defef1ba7a15558b4c4603c50c5dfb14b73b6fc0b943ad7fcb414","rule":"G3","origin":"src/surfaces/core/terminal-kit/internal/ink-palette.ts"},
   {"file":"src/surfaces/core/terminal-render/internal/assistant-view.tsx","fingerprint":"2b8967b3ad92d75b96e118f289056160e6b198152835659bb28f25f8b21f3e7d","rule":"G2"},
   {"file":"src/surfaces/core/terminal-render/internal/assistant-view.tsx","fingerprint":"51cd5334a90d360c31d93eda8508ff49bf732b701002d5f65ecbfdf533587764","rule":"G2"},
   {"file":"src/surfaces/core/terminal-render/internal/assistant-view.tsx","fingerprint":"941ef100c78e3e1e3d737d696fd547f301f6618bfb699be5da1d142f80b1426b","rule":"G2"},
