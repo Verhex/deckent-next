@@ -297,6 +297,6 @@ following full-access turn is admitted on the grant again and audited (`full-acc
 reads as standart at the decision and the effect gate. The hard floor holds in every mode (PTY proof: a write of `.deckent/config.json`
 in a full-access session entered with Shift+Tab fails at the workspace floor; nothing changes, no `full-access-call`). The status row shows
 the stop as mark and catalog word (`⏸ standart`, `⏸ dikkatli`, `⏵⏵ tam otomatik`, `⚠ tam erişim`; ASCII `||`, `>>`, `!!`); full access stays
-non-droppable in the error role. While a card or picker owns the keyboard, Shift+Tab is theirs and the mode does not change. The
-`--full-access` launch flag still works.
+non-droppable in the error role. While a card or picker owns the keyboard, Shift+Tab is theirs and the mode does not change; while a turn runs the step is not taken (the
+turn keeps the mode it was admitted with, as a queued `/mode` does). The `--full-access` launch flag still works.
 
