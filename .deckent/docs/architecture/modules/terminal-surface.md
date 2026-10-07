@@ -121,6 +121,19 @@ Market notes live outside the repo (`/home/alperen/deckent-refactor-work/proof/T
   `terminal-composer`; `terminal-ledger` (pure work-ledger model, `notice()`, run/worker/approval watches, bridge snapshot)
   ← `terminal-work` (work surface, slash dispatch, approval/cancel flow, cards) ← `terminal` (workline root, sessions, mode;
   its barrel re-exports the lower units); split by responsibility to keep each unit within the 2000-line budget.
+- **Units (T3, 2026-10-07; `wave/tui-3`, not landed):** `cli-terminal` (TERMINAL-LAUNCH, L0): the interactive terminal launch, ledger ports
+  and terminal handler types, moved out of `cli`. Its own `TerminalLaunchContext` (the CLI `CommandContext` extends it). CLI commands arrive as
+  ports (`runKernelCommand`, `mcpSlash`, `renderRunCancellation`, `runMcp`), so the unit never imports `cli`. The launch loads lazily
+  (`launchTerminal`), which keeps the barrel off the Ink graph. Named `cli-*` because it calls `t()`; it also binds the panel ports
+  (`configPanelPort`, `mcpPanelPort` with the localized trust question the CLI reuses) and the monitor window loader. `terminal-picker` adds
+  the pure `pickerReduce` core (filter, paging, levels, scope step, blocked rows with a reason, numbered text fallback) and `ListPicker`
+  (`windowed`, `initial`, `onState`, `maxRows`). `terminal-panels` (L4): presentation-only `/mode`, `/config`, `/mcp` windows (ports and words
+  from outside; the settings picker of the panel controller; any argument keeps the text command; no window on TERM=dumb; `/mode show` is the
+  text answer). `/mcp` adds stdio and HTTP servers (URL + masked headers; the registry validates), revokes trust with the grant, shows the
+  person's `mcp-server` grant and offers `sandbox-net` first. `terminal-work/live-windows.tsx` + `terminal/workline-live.tsx` (L5): `/monitor`
+  (the monitor's `MonitorBody` through `monitorWindow`, the terminal never imports the monitor), `/watch-workers`, `/watch-runs`, `/tasks` as
+  modal live windows updated in place (Esc closes and stops the watch, one summary line stays); a card, picker, `/resume` or settings window
+  takes the screen and the live window returns after it. Config-change approvals speak in setting words in the approval window.
 - **Bounded windows (TUI2 L1, 2026-10-07; integrated on `wave/tui-2`, not landed):** unit `terminal-window` (← terminal-kit, terminal-render)
   owns the `Window` frame (title left, status right, body capped to the terminal rows and scrolled by ↑↓/PgUp/PgDn/Home/End, wrapped key
   hints, widths in display cells, ASCII frame with ASCII glyphs; `exact` rows keep commands/patterns/previews character for character)
