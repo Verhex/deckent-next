@@ -165,11 +165,13 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
 
     const mcps = (tool: AgentToolSpec) => mcp !== null && tool.toolClass === 'mcp' && mcp.owns(tool.name);
     const describe = (tool: AgentToolSpec, args: Record<string, unknown>) => mcps(tool) ? mcp!.display(tool.name) : describeAgentCall(tool, args);
-    /** T2-FOLLOWUP REVERSIBILITY: what the card may say about undoing the call, by what it is. */
-    const cardFacts = (tool: AgentToolSpec, facts: { readonly risk: { readonly source: string; readonly cell?: string } | null }) => {
+    /** T2-FOLLOWUP: what the card may say about undoing the call (by what it is) and, for a shell call, its structured posture. */
+    const cardFacts = (tool: AgentToolSpec, args: Record<string, unknown>, facts: { readonly risk: { readonly source: string; readonly cell?: string } | null }) => {
       const kind = tool.toolClass === 'shell' && shell ? 'shell' as const : tool.toolClass === 'edit' ? 'edit' as const : fetches(tool) ? 'fetch' as const : mcps(tool) ? 'mcp' as const
         : tool.toolClass === 'read' ? 'read' as const : null;
-      return kind ? { undo: agentToolUndo(kind, facts.risk?.source === 'cell' ? facts.risk.cell ?? null : null, kind === 'mcp' ? mcp!.hints(tool.name) : null) } : {};
+      const posture = kind === 'shell' ? shell!.postureFacts(tool.name, args) : null;
+      return { ...(kind ? { undo: agentToolUndo(kind, facts.risk?.source === 'cell' ? facts.risk.cell ?? null : null, kind === 'mcp' ? mcp!.hints(tool.name) : null) } : {}),
+        ...(posture ? { posture } : {}) };
     };
     const approvals = createAgentCallApprovals({ context, clock, scopeId: command.scopeId, turnId: command.turnId, describe });
     // One permission decision per call (T-L4 slice 4a): strict policy, floor raise and permission-mode lowering, again at the effect.
@@ -245,7 +247,7 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
             requiredAssurance: facts.requiredAssurance, summary: record.request.summary, preview: projectModelIngressField(((diff !== undefined ? boundApprovalPreview(diff, kept)
               : (tool.toolClass === 'shell' ? shell?.preview(tool.name, args) : fetches(tool) ? fetcher?.preview(args) : mcps(tool) ? boundApprovalPreview(mcp!.preview(tool.name, args)!)
                 : undefined) ?? chatTurnApprovalPreview(tool.name, args)))).modelText,
-            expiresAt: record.request.expiresAt, ...(answer && offer ? { standing: { scopes: ['session'] as const, pattern: offer.pattern } } : {}), ...cardFacts(tool, facts) });
+            expiresAt: record.request.expiresAt, ...(answer && offer ? { standing: { scopes: ['session'] as const, pattern: offer.pattern } } : {}), ...cardFacts(tool, args, facts) });
           requested = { approvalId: record.request.approvalId };
           const decided = await awaitAgentToolApproval(journal.store, integrity, record, clock, approvalSignal, 250, started);
           let outcome = decided;

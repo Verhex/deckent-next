@@ -16,3 +16,14 @@ export const agentToolUndoSchema = z.enum(AGENT_TOOL_UNDO);
 export type AgentToolUndoKind = 'read' | 'edit' | 'shell' | 'fetch' | 'mcp';
 /** An MCP server's own declaration (pinned): only the two hints that speak about change. */
 export interface McpToolChangeHints { readonly readOnly?: boolean | undefined; readonly destructive?: boolean | undefined }
+
+/**
+ * POSTURE (L1 D2/D4): where a shell call on an approval card runs, as structured facts the surface words in its own language (the engine's
+ * English sentence stays in the preview for the model and the line surface). `realm` is the realm's own id (open vocabulary: an Enterprise
+ * realm adds its id without editing Core; a surface without a name for it shows the id). `project`/`git` mirror the realm's write view;
+ * `network` says whether the call can reach a network; `passedOver` names preferred realms that could not be used.
+ */
+export const agentShellPostureSchema = z.object({ realm: z.string().regex(/^[a-z][a-z0-9-]{1,63}$/), containment: z.enum(['sandbox', 'degraded', 'host']),
+  project: z.enum(['writable', 'writable-except-floor', 'read-only', 'write-set']), git: z.enum(['writable', 'read-only']), network: z.enum(['reachable', 'closed']),
+  passedOver: z.array(z.string().regex(/^[a-z][a-z0-9-]{1,63}$/)).max(8).readonly() }).strict().readonly();
+export type AgentShellPosture = z.infer<typeof agentShellPostureSchema>;

@@ -37,8 +37,9 @@ it('gives the model the approver\'s own note through the real service, sealed in
 }, 60_000);
 });
 
-// T2-FOLLOWUP REVERSIBILITY at the producer: the real service's approval event carries the card's undo word by what the call is.
-describe.skipIf(process.platform !== 'linux')('approval card facts through the runtime service (REVERSIBILITY)', () => {
+// T2-FOLLOWUP REVERSIBILITY + POSTURE at the producer: the real service's approval event carries the card's undo word and, for a shell call, the
+// structured posture of the realm the call will run in (here the explicit host realm: network reachable, not a sandbox).
+describe.skipIf(process.platform !== 'linux')('approval card facts through the runtime service (REVERSIBILITY, POSTURE)', () => {
   const shellGrants = [
     { id: 'shell-tool', effect: 'require-approval', actions: ['invoke'], scopes: ['scope'], principals: me, resource: { kind: 'agent-tool', ids: ['run_shell'] } },
     { id: 'shell-run', effect: 'allow', actions: ['execute'], scopes: ['scope'], principals: me, resource: { kind: 'operation', ids: ['host.shell.run'] } },
@@ -53,17 +54,20 @@ describe.skipIf(process.platform !== 'linux')('approval card facts through the r
     await Promise.all(pending);
     return events.find(event => event.kind === 'approval.requested') as Extract<AgentTurnStreamEvent, { kind: 'approval.requested' }>;
   };
-  it('a read tool card says it changes nothing', async () => {
+  it('a read tool card says it changes nothing and carries no posture', async () => {
     const f = await runtime({ toolGrant: 'approval' }); await f.start();
     f.state.script = [{ toolCall: { name: 'read_file', arguments: '{"path":"src/a.ts"}' } }, { content: 'ok' }];
     const event = await requested(f, 'turn-read-card');
     expect(event.undo).toBe('no-change');
+    expect(event.posture).toBeUndefined();
   }, 60_000);
-  it('a shell card names its undo word by the classifier\'s tier', async () => {
+  it('a shell card names its undo word by the classifier\'s tier and the host realm\'s posture as data', async () => {
     const f = await runtime({ toolGrant: false, extraGrants: shellGrants, shell: { schemaVersion: 1, realm: 'host' } }); await f.start();
     f.state.script = [{ toolCall: { name: 'run_shell', arguments: '{"command":"touch b.txt"}' } }, { content: 'ok' }, { toolCall: { name: 'run_shell', arguments: '{"command":"rm -rf src"}' } }, { content: 'ok' }];
     const modify = await requested(f, 'turn-shell-card');
     expect(modify.undo).toBe('may-change');
+    expect(modify.posture).toEqual({ realm: 'host', containment: 'host', project: 'writable', git: 'writable', network: 'reachable', passedOver: [] });
+    expect(modify.preview).toContain('Runs on this machine as your user');
     const destructive = await requested(f, 'turn-shell-destructive');
     expect(destructive).toMatchObject({ risk: 'shell-destructive', undo: 'irreversible' });
   }, 60_000);

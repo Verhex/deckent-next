@@ -5,6 +5,7 @@ import { ARROW_PICKER_ROWS } from '#surfaces/core/terminal-picker/index.js';
 import { ApprovalProjectedNotice, ApprovalProjectedPicker, DecisionCard, decisionWindowLines, projectApprovalDecisionText, approvalSummarySpans, approvalTemplateSpans, approvalTemplateLine,
   type ApprovalDecisionLabels, type ApprovalDecisionLine } from '#surfaces/core/approval-presentation/index.js';
 import type { KnownSecretSnapshot } from '#platform/index.js';
+import type { AgentShellPosture } from '#domain/index.js';
 import type { RunView } from '#engine/index.js';
 import type { StandingScope } from '#surfaces/core/terminal-kit/index.js';
 import { shortId } from '#platform/index.js';
@@ -19,10 +20,10 @@ const SECOND = 1000;
 /** Private copy of display fields only. The original authority DTO never crosses the public renderer boundary. */
 export type ApprovalCardPresentation = Readonly<{ displayId: string; displayRun: string; displayTask: string; displayRequester: string; summary: string;
   risk: string | null | undefined; undo: string | null | undefined; requiredAssurance: string | undefined; expiresAt: number; hasDecisionCapability: boolean;
-  tool: string | undefined; target: string | null | undefined }>;
+  tool: string | undefined; target: string | null | undefined; posture: AgentShellPosture | undefined }>;
 export const approvalCardPresentation = (item: WorklineApproval): ApprovalCardPresentation => ({ displayId: item.approvalId, displayRun: item.runId, displayTask: item.taskId,
   displayRequester: item.requester, summary: item.summary, risk: item.risk, undo: item.undo, requiredAssurance: item.requiredAssurance, expiresAt: item.expiresAt, hasDecisionCapability: Boolean(item.decisionCapability),
-  tool: item.tool, target: item.target });
+  tool: item.tool, target: item.target, posture: item.posture });
 /** The list row's "what": the tool's sentence with its target (a task approval keeps its summary). */
 function rowWhat(item: WorklineApproval, work: WorkSurfaceLabels): string {
   const call = approvalCallOf(item);
@@ -65,7 +66,7 @@ export function approvalDecisionCardLines(approval: ApprovalCardPresentation, wo
     ? approvalTemplateLine(approval.hasDecisionCapability ? card.assuranceTurnHere : card.assuranceTurnElsewhere, {}) : approvalTemplateLine(card.assuranceOther, { level: p(required) });
   return approvalWindowLines({ approvalId: approval.displayId, summary: approval.summary, requester: approval.displayRequester, runId: approval.displayRun, taskId: approval.displayTask,
     expiresAt: approval.expiresAt, tool: approval.tool, target: approval.target, preview, risk: approval.risk, undo: approval.undo, requiredAssurance: required, assuranceLine: assurance,
-    standing, project: context.project, mode: context.mode }, work.approvalWindow, now, known);
+    standing, project: context.project, mode: context.mode, posture: approval.posture }, work.approvalWindow, now, known);
 }
 /** The live clock of a window: re-renders once a second until `until`, then stops. */
 function useNow(until: number): number {

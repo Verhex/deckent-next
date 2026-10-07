@@ -158,6 +158,14 @@ function approvalWindowLabels(locale: Locale): WorkSurfaceLabels['approvalWindow
       'server-additive': t('terminal.approval.window.undo.server-additive', {}, locale),
       'server-destructive': t('terminal.approval.window.undo.server-destructive', {}, locale),
       'server-silent': t('terminal.approval.window.undo.server-silent', {}, locale) },
+    posture: {
+      sandbox: t('terminal.approval.window.posture.sandbox', {}, locale), host: t('terminal.approval.window.posture.host', {}, locale),
+      degraded: t('terminal.approval.window.posture.degraded', {}, locale), passedOver: t('terminal.approval.window.posture.passedOver', {}, locale),
+      project: { writable: t('terminal.approval.window.posture.project.writable', {}, locale),
+        'writable-except-floor': t('terminal.approval.window.posture.project.writable-except-floor', {}, locale),
+        'read-only': t('terminal.approval.window.posture.project.read-only', {}, locale), 'write-set': t('terminal.approval.window.posture.project.write-set', {}, locale) },
+      git: { writable: t('terminal.approval.window.posture.git.writable', {}, locale), 'read-only': t('terminal.approval.window.posture.git.read-only', {}, locale) },
+      network: { reachable: t('terminal.approval.window.posture.network.reachable', {}, locale), closed: t('terminal.approval.window.posture.network.closed', {}, locale) } },
     time: t('terminal.approval.window.time', {}, locale), expired: t('terminal.approval.window.expired', {}, locale), ageUnknown: t('terminal.approval.window.ageUnknown', {}, locale), previewCut: t('terminal.approval.window.previewCut', {}, locale), valueMore: t('terminal.approval.window.valueMore', {}, locale),
     detail: {
       id: t('terminal.approval.window.detail.id', {}, locale),

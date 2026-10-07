@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { agentToolCallSchema, agentToolCleanupSchema, type AgentToolCleanup } from '#domain/core/agent-tool/index.js';
 import { identitySchema } from '#domain/core/primitives/index.js';
-import { agentToolUndoSchema, type AgentToolUndo } from './card-facts.js';
+import { agentShellPostureSchema, agentToolUndoSchema, type AgentShellPosture, type AgentToolUndo } from './card-facts.js';
 
 /**
  * Provider-neutral conversation of one agent turn (T-L3). Messages that come from the client — history, earlier tool results,
@@ -39,8 +39,8 @@ export type AgentTurnEvent =
   | { readonly kind: 'approval.requested'; readonly callId: string; readonly approvalId: string; readonly revision: number; readonly summary: string;
     readonly standing?: { readonly scopes: readonly ['session']; readonly pattern: string };
     readonly preview: string; readonly expiresAt: number; readonly decisionCapability?: string; readonly risk?: string | null; readonly requiredAssurance?: string;
-    /** v21 (T2-FOLLOWUP REVERSIBILITY): what the card may say about undoing the call (absent: not known here). */
-    readonly undo?: AgentToolUndo }
+    /** v21 (T2-FOLLOWUP): what the card may say about undoing the call, and a shell call's structured posture (absent: not known here). */
+    readonly undo?: AgentToolUndo; readonly posture?: AgentShellPosture }
   | { readonly kind: 'approval.settled'; readonly callId: string; readonly approvalId: string; readonly outcome: AgentToolApprovalSettlement }
   /** Streamed output of a running call (T-L4 shell): presentation; the call's result stays the only history. */
   | { readonly kind: 'tool.output'; readonly callId: string; readonly stream: 'stdout' | 'stderr'; readonly text: string }
@@ -78,7 +78,7 @@ export const agentTurnStreamEventSchema = z.discriminatedUnion('kind', [
     summary: z.string().min(1).max(2048), preview: z.string().max(65_536), expiresAt: count, decisionCapability: z.string().regex(/^[A-Za-z0-9_-]{43}$/).optional(),
     standing: z.object({ scopes: z.tuple([z.literal('session')]).readonly(), pattern: z.string().min(1).max(2048) }).strict().optional(),
     risk: z.string().regex(/^[a-z][a-z0-9-]{1,63}$/).nullable().optional(), requiredAssurance: z.string().regex(/^[a-z][a-z0-9-]{1,63}$/).optional(),
-    undo: agentToolUndoSchema.optional() }).strict(),
+    undo: agentToolUndoSchema.optional(), posture: agentShellPostureSchema.optional() }).strict(),
   z.object({ kind: z.literal('approval.settled'), callId: z.string().min(1).max(256), approvalId: z.string().min(1).max(256),
     outcome: z.enum(['allow', 'deny', 'expired', 'cancelled', 'unsettled']) }).strict(),
   z.object({ kind: z.literal('tool.output'), callId: z.string().min(1).max(256), stream: z.enum(['stdout', 'stderr']), text: z.string().min(1) }).strict(),

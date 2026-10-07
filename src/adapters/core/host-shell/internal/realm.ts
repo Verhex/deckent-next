@@ -1,4 +1,4 @@
-import { modelTextPrefix, type ShellRealm, type ShellRealmContainment, type ShellRealmMode } from '#domain/index.js';
+import { modelTextPrefix, type AgentShellPosture, type ShellRealm, type ShellRealmContainment, type ShellRealmMode } from '#domain/index.js';
 import type { ShellPermissionTier } from '#engine/index.js';
 import type { ShellCapabilities } from './probe.js';
 import { runHostShell } from './run.js';
@@ -94,6 +94,17 @@ export function describeShellWritePosture(view: ShellSandboxWriteView): string {
   // floor means the owner approves, not never") — the one case that unlocks it is the one the card should say so about out loud.
   return view.writeFloorReadOnly ? `the project is writable except its write floor's existing paths, which stay read-only; ${git}`
     : `the project is writable, its write floor included, ${git}`;
+}
+/**
+ * POSTURE (T2-FOLLOWUP, L1 D2): the same facts `describeShellWritePosture` and a realm's own sentence put in words, as data for a card that
+ * words them in the person's language. From the chosen resolution and the call's write view only — no second decision: the project and
+ * `.git` mirror the view; the network is reachable on the host and in a view the realm actually opened (OPEN-SANDBOX), closed otherwise.
+ */
+export function shellPostureFacts(resolution: Extract<ShellRealmResolution, { ok: true }>, view: ShellSandboxWriteView): AgentShellPosture {
+  const host = resolution.containment === 'host';
+  const project = host ? 'writable' : view.projectReadOnly ? 'read-only' : view.writeSet ? 'write-set' : view.writeFloorReadOnly ? 'writable-except-floor' : 'writable';
+  return Object.freeze({ realm: resolution.realm.kind, containment: resolution.containment, project, git: host || view.repositoryWritable ? 'writable' : 'read-only',
+    network: host || (view.open === true && resolution.opens === true) ? 'reachable' : 'closed', passedOver: Object.freeze((resolution.rejected ?? []).map(item => item.kind).slice(0, 8)) });
 }
 /** A provider the resolver passed over, and why (its own `usable()` reason; `restricted` when the host restricts it, S3). */
 export interface ShellSandboxRejection { readonly kind: string; readonly reason: string; readonly restricted?: boolean }

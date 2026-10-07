@@ -15,7 +15,8 @@ const NOW = 1_800_000_000_000;
 const base = (patch: Partial<WorklineApproval>): WorklineApproval => ({ approvalId: '7a48a7f0-164d-4a2f-9353-3c3079009bec', runId: '-', taskId: '-', requester: '-', revision: 0,
   status: 'pending', decision: null, expiresAt: NOW + 272_000, summary: 'run_shell · npm test · 0123456789ab', ...patch });
 const KINDS = {
-  shell: { approval: base({ tool: 'run_shell', target: 'rm -rf build && npm test', risk: 'shell-destructive', summary: 'run_shell · rm -rf build && npm test · 0123456789ab'}),
+  shell: { approval: base({ tool: 'run_shell', target: 'rm -rf build && npm test', risk: 'shell-destructive', summary: 'run_shell · rm -rf build && npm test · 0123456789ab',
+    posture: { realm: 'bubblewrap', containment: 'sandbox', project: 'writable', git: 'read-only', network: 'closed', passedOver: [] } }),
     preview: '$ rm -rf build && npm test\nrisk: destructive (rm -rf)\nRuns in the bubblewrap sandbox: the project is writable, .git is read-only, no network.' },
   edit: { approval: base({ tool: 'edit_file', target: 'src/x.ts', risk: 'edit', summary: 'edit_file · src/x.ts · 0123456789ab' }),
     preview: '(+3 −1 lines)\n--- a/src/x.ts\n+++ b/src/x.ts\n@@ -1,2 +1,4 @@\n-const limit = 10;\n+const limit = 20;\n+const extra = 1;\n+const more = 2;\n export {};' },
@@ -58,11 +59,13 @@ describe('approval window fields per tool kind (catalog EN and TR)', () => {
     }
   });
 
-  it('shell: the full command (not the 200-character call line), the realm sentence under where, the session scope sentence', () => {
+  it('shell: the full command (not the 200-character call line), the structured posture under where (never the engine sentence), the session scope sentence', () => {
     const w = workSurfaceLabels('tr').approvalWindow;
     const text = approvalCardLines(KINDS.shell.approval, workSurfaceLabels('tr'), KINDS.shell.preview, 'rm -rf build && npm test', {}, NOW).join('\n');
     expect(text).toContain('Kabuk komutu çalıştırılacak'); expect(text).toContain('rm -rf build && npm test');
-    expect(text).toContain('bubblewrap'); expect(text).toContain('Silme içeriyor (geri alınamaz)');
+    expect(text).toContain('bubblewrap sandbox içinde: proje yazılabilir, .git salt okunur, ağ kapalı'); expect(text).toContain('Silme içeriyor (geri alınamaz)');
+    // L1 D4: the engine's English posture sentence is not parsed into the window any more.
+    expect(text).not.toContain('Runs in the bubblewrap sandbox');
     expect(text).toContain('Hayır — geri alınamaz');
     expect(text).toContain('Kural: silme içeren kabuk komutları her zaman onay ister · Mod: bilinmiyor');
     expect(text).toContain('4:32 içinde karar verilmezse hiçbir şey çalışmaz');
@@ -235,9 +238,9 @@ describe('the decision reason reaches the decision command', () => {
   });
 });
 
-// T2-FOLLOWUP REVERSIBILITY (owner 2026-10-07, Jev 8cc5e230): the "can it be undone" field is filled by what the call is, cautiously and never
-// "reversible" without evidence, EN and TR.
-describe('approval window: reversibility by call kind (T2-FOLLOWUP)', () => {
+// T2-FOLLOWUP REVERSIBILITY (owner 2026-10-07, Jev 8cc5e230) and POSTURE (L1 D2/D4): the "can it be undone" field is filled by what the call
+// is, cautiously and never "reversible" without evidence; a shell call's posture is worded from structured facts, EN and TR.
+describe('approval window: reversibility by call kind and structured posture (T2-FOLLOWUP)', () => {
   const undoOf = (approval: WorklineApproval, locale: 'en' | 'tr') => {
     const w = workSurfaceLabels(locale).approvalWindow;
     const row = approvalCardLines(approval, workSurfaceLabels(locale), undefined, null, {}, NOW).find(line => line.startsWith(w.field.undo))!;
@@ -272,5 +275,24 @@ describe('approval window: reversibility by call kind (T2-FOLLOWUP)', () => {
     }
     // A tool-call word never adds a compensation detail line.
     expect(approvalCardLines(base(cases[0]![0]), workSurfaceLabels('en'), undefined, null, {}, NOW).join('\n')).not.toContain(workSurfaceLabels('en').approvalWindow.detail.compensation.split('{')[0]!);
+  });
+
+  it('words the posture: host, a degraded sandbox, a passed-over realm, an open view and an unknown realm id', () => {
+    const shell = (posture: NonNullable<WorklineApproval['posture']>) => base({ tool: 'run_shell', target: 'make', risk: 'shell-other-modify', posture });
+    const rows = (approval: WorklineApproval, locale: 'en' | 'tr') => approvalCardLines(approval, workSurfaceLabels(locale), '$ make\nrisk: modify (x)\nENGINE SENTENCE', 'make', {}, NOW).join('\n');
+    const host = shell({ realm: 'host', containment: 'host', project: 'writable', git: 'writable', network: 'reachable', passedOver: ['bubblewrap', 'landlock'] });
+    expect(rows(host, 'en')).toContain('On this machine as your user — not a sandbox: files, processes and the network are reachable');
+    expect(rows(host, 'tr')).toContain('Bu makinede senin kullanıcınla — sandbox değil: dosyalar, süreçler ve ağ erişilebilir');
+    expect(rows(host, 'tr')).toContain('Tercih edilen sandbox kullanılamadı: bubblewrap, landlock');
+    const degraded = shell({ realm: 'landlock', containment: 'degraded', project: 'read-only', git: 'read-only', network: 'closed', passedOver: [] });
+    expect(rows(degraded, 'en')).toContain('In the landlock sandbox: the project is read-only, .git read-only, network off');
+    expect(rows(degraded, 'tr')).toContain('Sandbox eksik korumalı (degraded)');
+    const open = shell({ realm: 'bubblewrap', containment: 'sandbox', project: 'writable', git: 'writable', network: 'reachable', passedOver: [] });
+    expect(rows(open, 'tr')).toContain('bubblewrap sandbox içinde: proje yazılabilir, .git yazılabilir, ağ açık');
+    const overlay = shell({ realm: 'enterprise-vm', containment: 'sandbox', project: 'write-set', git: 'read-only', network: 'closed', passedOver: [] });
+    expect(rows(overlay, 'en')).toContain('In the enterprise-vm sandbox: the project\'s writes are kept aside and applied like edits, .git read-only, network off');
+    for (const approval of [host, degraded, open, overlay]) for (const locale of ['en', 'tr'] as const) expect(rows(approval, locale)).not.toContain('ENGINE SENTENCE');
+    // Without structured posture (an older service) nothing is parsed out of the engine text.
+    expect(rows(base({ tool: 'run_shell', target: 'make', risk: 'shell-other-modify' }), 'en')).not.toContain('ENGINE SENTENCE');
   });
 });

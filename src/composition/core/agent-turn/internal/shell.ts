@@ -5,7 +5,7 @@ import { EffectApplication, OperationPolicyAuthorization, agentToolArgumentsDige
 import { globalStateRoot, loadConfig, SystemTrustedClock, type ConfigLoadOptions } from '#platform/index.js';
 import { agentShellEffectCommandId, createGlobMatcher, createLocalPeerSession, createShellPathContext, createShellProtectedNames, createShellWriteContext, describeHostShellResult,
   describeShellEffectRefusal, hostShellCleanupNote, HOST_SHELL_COMMAND_MAX_CHARS, HOST_SHELL_RUN_OPERATION, HOST_SHELL_TARGET_KIND, HostShellTarget, HOST_SHELL_NOTES, resolveShellRealm,
-  describeSandboxWriteSet, openShellRealm, prepareSandboxWriteSetDirectory, removeSandboxWriteSetDirectory, type SandboxWriteDecider, sandboxWriteView, shellSandboxCapabilities, shellWritePosture,
+  describeSandboxWriteSet, openShellRealm, prepareSandboxWriteSetDirectory, removeSandboxWriteSetDirectory, type SandboxWriteDecider, sandboxWriteView, shellPostureFacts, shellSandboxCapabilities, shellWritePosture,
   type ShellCallAuthority, type ShellRealmResolution, openSqliteAttemptStore, type HostShellResult, type LocalPeerIdentity, type ShellSandbox,
   type RuntimeServiceTurnChannel, type TerminalShellConfig, type WorkspaceScope, createWorkspaceScope, inspectShellRealmSelection, readTerminalShellConfig,
   compareTrackedFiles, describeTrackedFilesChange, describeTrackedFilesUnchecked, snapshotTrackedFiles, type TrackedFilesChange } from '#adapters/index.js';
@@ -54,6 +54,14 @@ export function createAgentShell(input: { readonly scope: WorkspaceScope; readon
   /** OPEN-SANDBOX: the realm a call runs in — an open write posture on a realm that cannot open moves or says so (`openShellRealm`). One rule
    * for the card, the effect and the prompt's posture. */
   const callRealm = (realm: Extract<ShellRealmResolution, { ok: true }>, open: boolean) => open ? openShellRealm(realm, input.config.realm) : realm;
+  /** The approval card's view of a planned call: `.execute` runs a carded call as `owner-approved` (mode.ts), so the card uses that authority;
+   * only `.git` depends on the turn (MODES-3). OPEN-SANDBOX: the realm the call will actually run in. */
+  const cardView = (tool: string, args: Record<string, unknown>) => {
+    const planned = plans.get(key(tool, args));
+    if (!planned?.ok) return null;
+    const write = shellWritePosture('owner-approved', planned.tier, input.fullAccess === true);
+    return { planned, view: sandboxWriteView({ repositoryWritable: input.fullAccess === true }, write), realm: callRealm(planned.realm, write.open) };
+  };
   const plan = async (tool: string, args: Record<string, unknown>): Promise<ShellPlan> => {
     const command = typeof args['command'] === 'string' ? args['command'] : '';
     if (command.trim() === '') return { ok: false, text: '[deckent] run_shell: error=empty-command' };
@@ -107,14 +115,11 @@ export function createAgentShell(input: { readonly scope: WorkspaceScope; readon
      * same authority the effect will use; only `.git` still depends on the turn (MODES-3).
      */
     preview(tool: string, args: Record<string, unknown>): string | undefined {
-      const planned = plans.get(key(tool, args));
-      if (!planned?.ok) return undefined;
-      const write = shellWritePosture('owner-approved', planned.tier, input.fullAccess === true);
-      const view = sandboxWriteView({ repositoryWritable: input.fullAccess === true }, write);
-      // OPEN-SANDBOX: the card names the realm the call will actually run in (an open posture on a realm that cannot open moves or says so).
-      const realm = callRealm(planned.realm, write.open);
-      return boundApprovalPreview(`$ ${planned.command}\nrisk: ${planned.risk.risk} (${planned.risk.reason})\n${realm.posture(view)}`);
+      const card = cardView(tool, args);
+      return card ? boundApprovalPreview(`$ ${card.planned.command}\nrisk: ${card.planned.risk.risk} (${card.planned.risk.reason})\n${card.realm.posture(card.view)}`) : undefined;
     },
+    /** POSTURE (T2-FOLLOWUP): the same card's realm and write view as structured facts (the surface words them); null when not planned. */
+    postureFacts(tool: string, args: Record<string, unknown>) { const card = cardView(tool, args); return card ? shellPostureFacts(card.realm, card.view) : null; },
     /** Runs the call as a C11 effect; `gate` is the caller's durable-record approval gate for exactly this call (C12 G3). */
     async apply(tool: string, args: Record<string, unknown>, signal: AbortSignal, callId: string,
       execution: { readonly round: number; readonly index: number }, gate: EffectApprovalGate, authority: ShellCallAuthority = 'unattended',

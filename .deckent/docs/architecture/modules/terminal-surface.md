@@ -140,7 +140,11 @@ Market notes live outside the repo (`/home/alperen/deckent-refactor-work/proof/T
   edit/write `unverified` (no Core tool keeps the earlier content), shell `may-change`, destructive shell `irreversible`, fetch/read
   `no-change`, MCP from the pinned definition's `readOnlyHint`/`destructiveHint` ("the server says …", `server-silent` without one); never
   "reversible" without evidence (only a catalog operation's declared compensation says yes). A stored card without the word gets the same
-  classification from its tool and cell (never for MCP: "not declared"). Structured sandbox posture is not on the wire yet (L1 D2).
+  classification from its tool and cell (never for MCP: "not declared"). **POSTURE** (L1 D2/D4; v21 `approval.requested.posture`): a shell
+  card carries `{realm, containment, project, git, network, passedOver}` from the chosen realm and the call's write view (`shellPostureFacts`,
+  host-shell); the window words it in EN/TR and no longer parses the engine's English sentence (which stays in the preview for the model and
+  the line surface). Command, classifier, edit counts, fetch URL, cut marker and binding line are still read from the preview text (remaining
+  D4, a decision point).
 - **Local/free models** use `openai-chat-http` v4 with an operator-declared `operator-static` tariff (v1: zero rates only).
   The quote is reserved against the scope budget and a responded call settles `settled-local 0` in the spend ledger;
   there is no unmetered bypass class. Positive chargeback rates need a separate measurement basis.

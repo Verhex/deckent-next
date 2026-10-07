@@ -1,3 +1,4 @@
+import type { AgentShellPosture } from '#domain/index.js';
 import type { SessionStandingResult } from '#engine/index.js';
 import type { StandingScope } from '#surfaces/core/terminal-kit/index.js';
 
@@ -18,6 +19,8 @@ export interface WorklineApproval {
   readonly risk?: string | null; readonly undo?: string | null; readonly requiredAssurance?: string; readonly decisionCapability?: string;
   /** T-APPROVAL-WINDOW display copies: a tool call's tool name and target (subject or the call's `tool.started`), and when it was asked. */
   readonly tool?: string; readonly target?: string | null; readonly createdAt?: number;
+  /** v21 (T2-FOLLOWUP POSTURE): a shell call's structured sandbox posture, from the running turn's card only. */
+  readonly posture?: AgentShellPosture;
 }
 
 /** One page of the scope's approval records (every status; the store orders by id, not by time or state). */

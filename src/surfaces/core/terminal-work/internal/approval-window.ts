@@ -1,6 +1,6 @@
 import { approvalTemplateLine, projectApprovalDecisionText, type ApprovalDecisionLine, type ApprovalDecisionProjection } from '#surfaces/core/approval-presentation/index.js';
 import type { KnownSecretSnapshot } from '#platform/index.js';
-import { AGENT_TOOL_UNDO, type AgentToolUndo } from '#domain/index.js';
+import { AGENT_TOOL_UNDO, type AgentShellPosture, type AgentToolUndo } from '#domain/index.js';
 import { agentToolUndo } from '#engine/index.js';
 import type { StandingScope } from '#surfaces/core/terminal-kit/index.js';
 import { fillTemplate, span, sliceSpans, plainText, type Span, type SpanRole } from '#surfaces/core/terminal-render/index.js';
@@ -35,6 +35,10 @@ export interface ApprovalWindowLabels {
   readonly risk: Readonly<Record<string, string>>;
   /** Catalog-operation facts (`irreversible`, `none`, `compensation`), the tool-call vocabulary (REVERSIBILITY) and `unknown` (not declared). */
   readonly undo: Readonly<Record<'none' | 'compensation' | 'unknown' | AgentToolUndo, string>>;
+  /** POSTURE: a shell call's structured sandbox facts in words (`sandbox` has `{realm}`, `{project}`, `{git}`, `{network}`; `passedOver` `{realms}`). */
+  readonly posture: Readonly<{ sandbox: string; host: string; degraded: string; passedOver: string;
+    project: Readonly<Record<AgentShellPosture['project'], string>>; git: Readonly<Record<AgentShellPosture['git'], string>>;
+    network: Readonly<Record<AgentShellPosture['network'], string>> }>;
   /** `{clock}` m:ss left. */
   readonly time: string; readonly expired: string;
   /** An `/approvals` row whose request time is not known. */
@@ -56,7 +60,7 @@ export type ApprovalWindowInput = Readonly<{
   tool?: string | undefined; target?: string | null | undefined; preview?: string | undefined; risk?: string | null | undefined; undo?: string | null | undefined;
   requiredAssurance?: string | undefined; assuranceLine?: ApprovalDecisionLine | null;
   standing?: Readonly<{ scopes: readonly StandingScope[]; pattern: string }> | null;
-  project?: string | undefined; mode?: string | undefined;
+  project?: string | undefined; mode?: string | undefined; posture?: AgentShellPosture | undefined;
 }>;
 
 const MCP_NAME = /^mcp__([a-z][a-z0-9]*)__(.+)$/u;
@@ -86,12 +90,13 @@ export function splitPreviewCut(preview: string): { readonly cut: PreviewCut | n
   return { cut: { shown: Number(match[1]), total: Number(match[2]), bytes: Number(match[3]), totalBytes: Number(match[4]), digest: match[5]!, kept: match[6] ?? null },
     body: newline < 0 ? '' : preview.slice(newline + 1) };
 }
-/** Shell card preview (`$ command`, `risk: tier (reason)`, then the realm's posture): null when the text has another shape. */
-export function parseShellPreview(body: string): Readonly<{ command: string; classifier: string; posture: string }> | null {
+/** Shell card preview (`$ command`, `risk: tier (reason)`; the realm's English posture sentence after it is for the model and the line surface,
+ * never read here — the window words the event's structured `posture`): null when the text has another shape. */
+export function parseShellPreview(body: string): Readonly<{ command: string; classifier: string }> | null {
   if (!body.startsWith('$ ')) return null;
   const lines = body.split('\n'), at = lines.findIndex((line, index) => index > 0 && /^risk: \S+ \(.*\)$/u.test(line));
   if (at < 0) return null;
-  return { command: lines.slice(0, at).join('\n').slice(2), classifier: lines[at]!.slice('risk: '.length), posture: lines.slice(at + 1).join('\n') };
+  return { command: lines.slice(0, at).join('\n').slice(2), classifier: lines[at]!.slice('risk: '.length) };
 }
 /** Edit card preview: `(+A −R lines)` then the diff. */
 export function parseEditPreview(body: string): Readonly<{ added: number; removed: number; diff: string }> | null {
@@ -172,6 +177,15 @@ function undoText(undo: string | null | undefined, kind: ApprovalToolKind | null
   const known = kind ? UNDO_KIND[kind] : undefined;
   return known ? labels.undo[agentToolUndo(known, cell)] : labels.undo.unknown;
 }
+/** POSTURE: where a shell call runs, in the person's language, from the event's structured facts (the realm id is its own name). */
+function postureRows(posture: AgentShellPosture, labels: ApprovalWindowLabels): string[] {
+  const words = labels.posture;
+  const head = posture.containment === 'host' ? words.host : fillTemplate(words.sandbox, { realm: posture.realm, project: words.project[posture.project],
+    git: words.git[posture.git], network: words.network[posture.network] });
+  return [head, ...(posture.containment === 'degraded' ? [words.degraded] : []),
+    ...(posture.passedOver.length ? [fillTemplate(words.passedOver, { realms: posture.passedOver.join(', ') })] : [])];
+}
+
 /** The window title (tool's human name) as projected spans. */
 export function approvalWindowTitle(input: ApprovalWindowInput, labels: ApprovalWindowLabels, known?: KnownSecretSnapshot): ApprovalDecisionLine {
   const call = approvalCallOf(input);
@@ -205,8 +219,8 @@ export function approvalWindowLines(input: ApprovalWindowInput, labels: Approval
   if (valueRows.length > VALUE_FIELD_ROWS) rows.push({ ...lineOf([span(fillTemplate(labels.valueMore, { count: valueRows.length - VALUE_FIELD_ROWS }), { role: 'muted' })]), label: [span('')] });
   const where = input.project ? approvalTemplateLine(labels.where, { path: p(input.project) }) : approvalTemplateLine(labels.whereUnknown, {});
   rows.push(lineOf(where.spans, where.fields, f.where));
-  // The realm's own posture sentence (engine text) stays under "where" until the event carries it structured (L1 decision point D2).
-  if (shell?.posture) rows.push(...projectedRows(p(shell.posture)).map(row => ({ ...lineOf(withRole(row.spans, 'muted'), row.fields), label: [span('')], exact: false })));
+  // POSTURE (L1 D2/D4): the event's structured sandbox facts, worded here; nothing is parsed out of the engine's sentence.
+  if (kind === 'shell' && input.posture) rows.push(...postureRows(input.posture, labels).map(text => ({ ...lineOf([span(text, { role: 'muted' })]), label: [span('')] })));
   const self = input.requester === '-' || !input.requester;
   rows.push(lineOf(self ? [span(labels.onBehalfSelf)] : p(input.requester).spans,
     self ? [] : [p(input.requester)], f.onBehalf));

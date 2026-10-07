@@ -85,7 +85,7 @@ function createWorklinePanel(context: TerminalLocalContext, sessions: Conversati
           const approval: WorklineApproval = { approvalId: delta.approvalId, revision: delta.revision, expiresAt: delta.expiresAt, summary: delta.summary,
             runId: '-', taskId: '-', requester: '-', status: 'pending', decision: null,
             ...(delta.decisionCapability ? { decisionCapability: delta.decisionCapability } : {}), ...(delta.risk !== undefined ? { risk: delta.risk } : {}),
-            ...(delta.requiredAssurance ? { requiredAssurance: delta.requiredAssurance } : {}), ...(delta.undo ? { undo: delta.undo } : {}),
+            ...(delta.requiredAssurance ? { requiredAssurance: delta.requiredAssurance } : {}), ...(delta.undo ? { undo: delta.undo } : {}), ...(delta.posture ? { posture: delta.posture } : {}),
             ...(delta.tool ? { tool: delta.tool, target: delta.target ?? null } : {}), createdAt: Date.now() };
           cards.set(handle, { view, unknown: () => { execution.onApprovalSettled({ ...view, outcome: 'unsettled' }); }, presentation: { kind: 'approval', approval, remaining: 0, preview: delta.preview, ...(delta.standing ? { standing: delta.standing } : {}) } });
           if (!execution.onApproval(view)) { cards.delete(handle); return false; }

@@ -1625,7 +1625,8 @@
         "src/engine/core/effect",
         "src/engine/core/shell-classification",
         "src/platform/core/host",
-        "src/platform/core/managed-files"
+        "src/platform/core/managed-files",
+        "src/domain/core/agent-turn"
       ],
       "plan": "SURFACES"
     },
@@ -2318,7 +2319,8 @@
         "src/surfaces/core/terminal-render",
         "src/engine/core/approval",
         "src/surfaces/core/terminal-picker",
-        "src/surfaces/core/terminal-window"
+        "src/surfaces/core/terminal-window",
+        "src/domain/core/agent-turn"
       ],
       "plan": "SURFACES"
     },

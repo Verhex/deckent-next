@@ -303,7 +303,7 @@ describe('runtime protocol v15 composer @file operations', () => {
     expect(runtimeServiceLifecycleRequestSchema.safeParse({ schemaVersion: 20, requestId: 'r', operation: 'describeService', input: {} }).success).toBe(true);
   });
 
-  it('T2-FOLLOWUP in v21: session full access, the approver-note mark, and the card undo word as a strict typed field; none before v21', () => {
+  it('T2-FOLLOWUP in v21: session full access, the approver-note mark, and the card undo word and posture as strict typed fields; none before v21', () => {
     const set = { schemaVersion: 21, requestId: 'request-1', operation: 'setPermissionMode', delivery: { maxResultBytes: 4096 },
       input: { schemaVersion: 1, scopeId: 'scope-1', mode: 'full-access', expectedRevision: 'p1+b1', session: { sessionId: 'conversation-1' } } };
     expect(runtimeServiceRequestSchema.parse(set)).toEqual(set);
@@ -314,9 +314,14 @@ describe('runtime protocol v15 composer @file operations', () => {
     expect(approvalCommandSchema.parse(decide)).toEqual(decide);
     expect(approvalCommandSchema.safeParse({ ...decide, approverNote: false }).success).toBe(false);
     const base = { schemaVersion: 21, requestId: 'request-1', kind: 'event', sequence: 0 } as const;
-    const card = { kind: 'approval.requested', callId: 'c1', approvalId: 'a1', revision: 0, summary: 'run_shell · make', preview: 'p', expiresAt: 10, undo: 'may-change' } as const;
+    const posture = { realm: 'bubblewrap', containment: 'sandbox', project: 'writable', git: 'read-only', network: 'closed', passedOver: [] };
+    const card = { kind: 'approval.requested', callId: 'c1', approvalId: 'a1', revision: 0, summary: 'run_shell · make', preview: 'p', expiresAt: 10, undo: 'may-change', posture } as const;
     expect(runtimeServiceEventFrameSchema.parse({ ...base, events: [card] })).toEqual({ ...base, events: [card] });
-    expect(runtimeServiceEventFrameSchema.safeParse({ ...base, events: [{ ...card, undo: 'reversible' }] }).success).toBe(false);
+    for (const bad of [{ ...card, undo: 'reversible' }, { ...card, posture: { ...posture, network: 'on' } }, { ...card, posture: { ...posture, realm: 'Bubble Wrap' } },
+      { ...card, posture: { ...posture, extra: 1 } }])
+      expect(runtimeServiceEventFrameSchema.safeParse({ ...base, events: [bad] }).success).toBe(false);
+    // An Enterprise realm adds its own id without editing Core.
+    expect(runtimeServiceEventFrameSchema.safeParse({ ...base, events: [{ ...card, posture: { ...posture, realm: 'enterprise-vm' } }] }).success).toBe(true);
     expect(runtimeServiceEventFrameSchema.safeParse({ ...base, schemaVersion: 20, events: [card] }).success).toBe(false);
   });
 });
