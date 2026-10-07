@@ -1,6 +1,6 @@
 import { Box, Text } from 'ink';
 import { useWorklinePalette } from '#surfaces/core/terminal-kit/index.js';
-import { type WorkLedgerEntry, formatRunCardLines, formatWorkerCardLines, formatWorkerLine, type WorkerLineLabels } from '#surfaces/core/terminal-ledger/index.js';
+import { type WorkLedgerEntry, fillTemplate, formatRunCardLines, formatWorkerCardLines, formatWorkerLine, type WorkerLineLabels } from '#surfaces/core/terminal-ledger/index.js';
 import { AssistantUnitRow, HumanTextRow, type AssistantRenderLabels } from '#surfaces/core/terminal-render/index.js';
 import { readApprovalDecisionNotice } from './approval-decision-notice.js';
 import { ApprovalDecisionNoticeRow } from './approval-decision-view.js';
@@ -27,7 +27,9 @@ export function LedgerEntryRow({ entry, labels }: { readonly entry: WorkLedgerEn
   if (entry.kind === 'notice') {
     const decision = readApprovalDecisionNotice(entry);
     if (decision) return <ApprovalDecisionNoticeRow raw={decision} labels={labels.render} error={entry.level === 'error'} />;
-    return <HumanTextRow text={entry.text} style={entry.level === 'error' ? ink.error : ink.muted} hiddenLabel={labels.render.hiddenCount} />;
+    const levelWords = labels.workerLine?.card?.notice?.[entry.level];
+    return <HumanTextRow text={levelWords ? fillTemplate(levelWords, { text: entry.text }) : entry.text} style={entry.level === 'error' ? ink.error : entry.level === 'warning' ? ink.warning : ink.muted}
+      hiddenLabel={labels.render.hiddenCount} />;
   }
   if (entry.kind === 'run') {
     // Words come from the card labels (catalog); without them the card shows its data only.

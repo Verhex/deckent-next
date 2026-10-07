@@ -242,10 +242,10 @@ describe.skipIf(process.platform === 'win32')('deckent terminal in a real pseudo
     try {
       await chmod(endpoint, 0o755);
       const result = await inPty(f.projectRoot, f.env, ['terminal', 'workline', '--scope', 'scope'],
-        [['[MANAGED_FILE_UNSAFE]', '/exit\r']]);
+        [['(code: MANAGED_FILE_UNSAFE)', '/exit\r']]);
       expect(result.timeout, result.output).toBeUndefined();
       expect(result.status, result.output).toBe(0);
-      expect(result.output).toContain('[MANAGED_FILE_UNSAFE]');
+      expect(result.output).toContain('(code: MANAGED_FILE_UNSAFE)');
       expect(result.output).not.toContain('started in the background');
       expect((await lstat(endpoint)).mode & 0o777).toBe(0o755);
     } finally { await new Promise<void>(resolve => listener.close(() => resolve())); }
@@ -260,7 +260,7 @@ describe.skipIf(process.platform === 'win32')('deckent terminal in a real pseudo
       ['Deckent workline', '/hel'],
       ['/help', '\r'],
       // S08: /help lists registry rows (name, two spaces, detail); the palette pads names to a column, so this row only matches the notice.
-      ['/watch-stop  Stop worker and run watch polling.', 'see @READ'],
+      ['/watch-stop  Stop following workers and runs', 'see @READ'],
       ['> @README.md', '\r'],
       ['see @README.md |', '\r'],
       ['pty-ok', '/exit\r'],

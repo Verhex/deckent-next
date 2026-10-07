@@ -15,6 +15,7 @@ function ledgerCardLabels(locale: Locale): LedgerCardLabels {
       'awaiting-decision': t('terminal.ledger.run.phase.awaitingDecision', {}, locale) },
     runPhaseOther: t('terminal.ledger.run.phase.other', {}, locale), runNoTasks: t('terminal.ledger.run.noTasks', {}, locale),
     workerProcess: Object.fromEntries(states.map(state => [state, processLabel(state, locale)])),
+    notice: { info: t('terminal.notice.info', {}, locale), warning: t('terminal.notice.warning', {}, locale), error: t('terminal.notice.error', {}, locale) },
     workerAuthority: { 'next-ledger': t('terminal.ledger.worker.authorityLedger', {}, locale), 'legacy-activity': t('terminal.ledger.worker.authorityLegacy', {}, locale) } };
 }
 

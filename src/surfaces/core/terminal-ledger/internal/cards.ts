@@ -17,6 +17,8 @@ export interface LedgerCardLabels {
   /** Worker process state and observation authority in words, keyed by the state / authority name. */
   readonly workerProcess: Readonly<Record<string, string>>;
   readonly workerAuthority: Readonly<Record<string, string>>;
+  /** Notice rows: the level in words, as a `{text}` template (`Error: {text}`), so a notice never differs from its neighbours by colour alone. */
+  readonly notice?: Readonly<Record<'info' | 'warning' | 'error', string>>;
 }
 
 /** Run card body: where it is, the revision with a requested cancellation, and the task phases as counts in words (`2 waiting, 1 running`). */

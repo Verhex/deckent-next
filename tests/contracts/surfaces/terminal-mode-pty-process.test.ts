@@ -205,7 +205,8 @@ describe.skipIf(process.platform !== 'linux')('/mode in a real pseudo-terminal a
     expect(narrow.timeout, narrow.output).toBeUndefined();
     expect(narrow.status, narrow.output).toBe(0);
     const screen = terminalScreen(narrow.output, 30);
-    expect(screen, narrow.output).toContain('Permission mode: full-auto');
+    // The notice now starts with its level in words ("Info: "), so at 30 columns it wraps inside the phrase: compare it unwrapped.
+    expect(screen.replace(/\s+/gu, ' '), narrow.output).toContain('Permission mode: full-auto');
     expect(screen.split('full-auto').length - 1, screen).toBe(1);
   }, 180_000);
   // SHELL-AUTONOMY (owner 2026-09-28): the owner's own full-auto command, through the compiled CLI and a real service process whose shell
