@@ -20,6 +20,8 @@ export type AssistantRenderLabels = Readonly<{
   truncated: string; cancelled: string; failed: string; code: string; moreAbove: string; queued: string;
   /** `{name} {target}` of a tool call; `toolRunning` adds the live seconds; statuses other than ok have their own words. */
   tool: string; toolRunning: string; toolStatus: Readonly<Record<Exclude<ToolUnit['status'], 'ok'>, string>>;
+  /** DENY-WORDING: the status word of a call the owner declined on its card (absent: the `denied` word). */
+  toolDeclined?: string;
   /** Suffix word for a finished host shell call whose `cleanup` (Astra 2124) was `group-ended` or `unverified`; `clean` or an
    * absent field show nothing. Optional until the catalog carries `terminal.render.toolCleanup.*` (see `i18n-delta.json`); the
    * row falls back to short, language-neutral text meanwhile (the TERM-INTERACTIVE `@file` pattern). */
@@ -112,12 +114,13 @@ export function AssistantUnitRow({ unit, labels }: { readonly unit: AssistantUni
     return <Box paddingLeft={INDENT}><Text {...palette.muted} wrap="wrap">{glyphs.separator} {fillTemplate(labels.compacted, { count: unit.replacedMessages })}</Text></Box>;
   }
   if (unit.kind === 'tool') {
-    const failed = unit.status !== 'ok' && unit.status !== 'duplicate';
+    // The owner's own decline is not a failure: it reads in the muted tone with its own word.
+    const failed = unit.status !== 'ok' && unit.status !== 'duplicate' && !unit.declined;
     // Astra 2124: a durable suffix for a shell call whose cleanup was not `clean`; `clean` or no field shows nothing.
     const cleanupWord = unit.cleanup && unit.cleanup !== 'clean' ? (labels.toolCleanup ?? NEUTRAL_TOOL_CLEANUP)[unit.cleanup] : null;
     // TL-B D2: the result summary ("12 matches", "243/269 lines") sits right after the elapsed time, before any status word.
     const tail = [fillTemplate(labels.elapsed, { seconds: seconds(unit.ms) }), ...(unit.summary ? [toolSummaryText(unit.summary, labels)] : []),
-      ...(unit.status === 'ok' ? [] : [labels.toolStatus[unit.status]]), ...(cleanupWord ? [cleanupWord] : [])].join(` ${glyphs.separator} `);
+      ...(unit.status === 'ok' ? [] : [unit.declined ? labels.toolDeclined ?? labels.toolStatus.denied : labels.toolStatus[unit.status]]), ...(cleanupWord ? [cleanupWord] : [])].join(` ${glyphs.separator} `);
     // Astra 2139 R3: the tail (elapsed, status, cleanup) keeps its place; a long command is shortened instead. When not even the tool
     // name fits beside the tail, the tail takes its own wrapped line under the (truncated) command.
     const tone = failed ? palette.error : palette.muted;
@@ -149,7 +152,7 @@ export function AssistantUnitRow({ unit, labels }: { readonly unit: AssistantUni
   const projection = renderHumanMarkdown(unit.markdown, { width, glyphs, codeLabel: labels.code }, known);
   return (
     <Box flexDirection="column">
-      {unit.lead && <Text {...palette.assistant} {...palette.strong}>{glyphs.assistant} {labels.assistant}</Text>}
+      {unit.lead && <Text {...palette.assistantLabel}>{glyphs.assistant} {labels.assistant}</Text>}
       <Box flexDirection="column" paddingLeft={INDENT}><RenderedLines lines={projection.lines} /><HiddenTextNotice count={projection.hiddenCount} label={labels.hiddenCount} /></Box>
     </Box>
   );
@@ -195,7 +198,7 @@ export function AssistantLive({ tail, narration, labels, lead, activeTool = null
     <Box flexDirection="column">
       {waiting && <WaitingLine waiting={waiting} labels={labels} />}
       {narration && <ReasoningNarration narration={narration} labels={labels} preview={reasoningPreview} />}
-      {lead && lines.length > 0 && <Text {...palette.assistant} {...palette.strong}>{glyphs.assistant} {labels.assistant}</Text>}
+      {lead && lines.length > 0 && <Text {...palette.assistantLabel}>{glyphs.assistant} {labels.assistant}</Text>}
       {hidden > 0 && <Box paddingLeft={INDENT}><Text {...palette.muted}>{glyphs.ellipsis} {fillTemplate(labels.moreAbove, { count: hidden })}</Text></Box>}
       {lines.length > 0 && <Box paddingLeft={INDENT}><RenderedLines lines={lines.slice(hidden)} /></Box>}
       <Box paddingLeft={INDENT}><HiddenTextNotice count={projection.hiddenCount} label={labels.hiddenCount} /></Box>

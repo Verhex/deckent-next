@@ -72,7 +72,7 @@ mark = len(out)
 put(b'\x1b[B')
 wait('> A-ITEM 2', after=mark)
 put(b'\r')
-wait('A-SUBJECT ap-2')
+wait('Approval: ap-2')
 put(b'\x1b')
 time.sleep(0.3)
 put(b'\x03')
@@ -168,8 +168,8 @@ describe('arrow pickers on a real PTY', () => {
     const resumed = out.indexOf('RESUMED 3');
     expect(closed).toBeGreaterThan(-1);
     expect(resumed).toBeGreaterThan(closed);
-    expect(out).toContain('A-SUBJECT ap-2');
-    expect(out).not.toContain('A-SUBJECT ap-1');
+    expect(out).toContain('Approval: ap-2');
+    expect(out).not.toContain('Approval: ap-1');
     expect(out).not.toContain('RESUMED 1 aaaaaaaa');
   });
 

@@ -1,5 +1,8 @@
 import { type WorkLedgerEntry, type WorkLedgerWorkerEntry, notice, fillTemplate, type WorkerLineLabels, type WorklineLedgerPorts, ledgerEntriesForRuns, ledgerEntriesForWorkers, ledgerEntryForRun } from '#surfaces/core/terminal-ledger/index.js';
 import type { WorkerPanelLabels } from './worker-panel.js';
+import type { ApprovalWindowLabels } from './approval-window.js';
+import { transcriptPage, type TranscriptPageLabels } from './transcript-page.js';
+import { shortId } from '#platform/index.js';
 import { slashHelpText, surfaceDeliveryValues, WORKLINE_SLASH_COMMANDS, type SurfaceDeliveryMode } from '#surfaces/core/terminal-kit/index.js';
 
 export interface WorklineActionLabels {
@@ -37,6 +40,10 @@ export interface WorkSurfaceLabels {
   readonly transcriptNotFound: string;
   readonly transcriptNoAttempt: string;
   readonly transcriptHeader: string;
+  /** Paging of a long transcript; absent means the whole transcript is shown. */
+  readonly transcriptPage?: TranscriptPageLabels;
+  /** `{task}` and `{attempt}` in full: the headline carries their short forms. */
+  readonly transcriptDetail?: string;
   readonly sessionStandingClear?: { readonly cleared: string; readonly unconfirmed: string };
   readonly approvalsNone: string;
   readonly approvalItem: string;
@@ -53,6 +60,8 @@ export interface WorkSurfaceLabels {
   readonly approvalDenied: string;
   /** `{id}`: the service could not confirm closing a tool-call approval request; the call did not run. */
   readonly approvalUnsettled: string;
+  /** `{id}`: the full approval identity on a detail line under a decision notice (whose first line carries the short form). Absent: no line. */
+  readonly approvalIdentity?: string;
   readonly approvalMore: string;
   readonly approvalNotify: string;
   readonly approvalPollFailed: string;
@@ -72,6 +81,12 @@ export interface WorkSurfaceLabels {
     readonly notSavedSession: string;
     readonly notSavedAlways: string;
   };
+  /** Bounded windows (TS-WINDOW): `position` has `{from}`, `{to}`, `{total}`; `pick` is a list window's key hints; titles of the list
+   * windows; the `/service-restart` confirmation (title, what happens, keys, kept). */
+  readonly window: Readonly<{ position: string; pick: string; approvalsTitle: string; resumeTitle: string;
+    restartTitle: string; restartDetail: string; restartPrompt: string; restartKept: string }>;
+  /** The approval window's labelled fields (T-APPROVAL-WINDOW). */
+  readonly approvalWindow: ApprovalWindowLabels;
   readonly cancelUsage: string;
   readonly cancelTitle: string;
   readonly cancelDetail: string;
@@ -79,6 +94,8 @@ export interface WorkSurfaceLabels {
   readonly cancelPrompt: string;
   readonly cancelPending: string;
   readonly cancelKept: string;
+  /** `{run}`: the full run identity on its own detail line (the title carries the short form). Absent: no identity line. */
+  readonly cancelIdentity?: string;
 }
 
 /** Commands owned by the work surface; they need its labels and their port. */
@@ -142,14 +159,17 @@ export function resolveWorkerRef(ref: string, workers: readonly WorkLedgerWorker
 
 /** Read-only: resolves the worker on a fresh observation and shows its sealed transcript; never prompts. */
 async function runTranscript(ref: string, ledger: WorklineLedgerPorts, work: WorkSurfaceLabels): Promise<readonly WorkLedgerEntry[]> {
-  if (!ref || /\s/.test(ref)) return [notice('error', work.transcriptUsage)];
+  const [name, pageText, ...extra] = ref.split(/\s+/u), page = pageText === undefined ? 1 : /^[1-9][0-9]{0,5}$/u.test(pageText) ? Number(pageText) : 0;
+  if (!name || page === 0 || extra.length > 0) return [notice('error', work.transcriptUsage)];
   const workers = (await ledgerEntriesForWorkers(ledger, 'transcript')).filter((entry): entry is WorkLedgerWorkerEntry => entry.kind === 'worker');
-  const target = resolveWorkerRef(ref, workers);
-  if (!target) return [notice('error', fillTemplate(work.transcriptNotFound, { ref }))];
-  if (!target.attempt) return [notice('error', fillTemplate(work.transcriptNoAttempt, { ref }))];
+  const target = resolveWorkerRef(name, workers);
+  if (!target) return [notice('error', fillTemplate(work.transcriptNotFound, { ref: name }))];
+  if (!target.attempt) return [notice('error', fillTemplate(work.transcriptNoAttempt, { ref: name }))];
   const text = await ledger.inspectTranscript!(target.attempt);
-  const header = fillTemplate(work.transcriptHeader, { n: target.ordinal ?? ref, attempt: target.attempt.attemptId, task: target.taskId });
-  return [notice('info', `${header}\n${text}`)];
+  const header = [fillTemplate(work.transcriptHeader, { n: target.ordinal ?? name, attempt: shortId(target.attempt.attemptId), task: shortId(target.taskId) }),
+    ...(work.transcriptDetail ? [fillTemplate(work.transcriptDetail, { attempt: target.attempt.attemptId, task: target.taskId })] : [])].join('\n');
+  const shown = work.transcriptPage ? transcriptPage(text, page, name, work.transcriptPage) : { ok: true as const, text };
+  return [notice(shown.ok ? 'info' : 'error', shown.ok ? `${header}\n${shown.text}` : shown.text)];
 }
 
 export async function runLedgerCommand(command: 'workers' | 'run' | 'runs' | 'transcript', args: string, ledger: WorklineLedgerPorts,

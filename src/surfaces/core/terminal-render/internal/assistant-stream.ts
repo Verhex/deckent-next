@@ -26,7 +26,10 @@ export type ToolUnit = Readonly<{ kind: 'tool'; name: string; target: string | n
   cleanup?: ToolDelta['cleanup']; summary?: ToolResultSummary;
   /** FA-TRACKED-WARN: a full-access shell call deleted or overwrote git-tracked files (counts from its result's trusted leading metadata;
    * the result text names them). */
-  trackedChanges?: ToolTrackedChanges }>;
+  trackedChanges?: ToolTrackedChanges;
+  /** DENY-WORDING (T2-FOLLOWUP): a `denied` call whose approval the owner declined on the card (`approval.settled` deny for this call), not a
+   * policy rule's refusal. */
+  declined?: true }>;
 /** The running call; `output` is the sanitized tail of its streamed output (T-L4 slice 3c-ii), shown live and never printed after. */
 export type ActiveTool = Readonly<{ callId: string; name: string; target: string | null; startedAtMs: number; output: string }>;
 /** Characters of a running call's streamed output kept for the live region. */
@@ -70,6 +73,8 @@ export type AssistantStreamState = Readonly<{
   toolLineSummaries: ReadonlyMap<string, ToolResultSummary | null>;
   /** FA-TRACKED-WARN: a finished shell call's tracked-file counts, read from the same result message (only calls that have them). */
   toolLineTracked: ReadonlyMap<string, ToolTrackedChanges>;
+  /** Calls whose approval the owner declined this turn (settled `deny`), until their line is printed. */
+  toolLineDeclined: ReadonlySet<string>;
 }>;
 export type AssistantStreamStep = Readonly<{
   state: AssistantStreamState;
@@ -92,7 +97,7 @@ const approxTokens = (chars: number): number => Math.ceil(chars / 4);
 export function startAssistantStream(nowMs: number): AssistantStreamState {
   return Object.freeze({ startedAtMs: nowMs, phase: 'waiting', segmenter: EMPTY_SEGMENTER, reasoningChars: 0, reasoningStartedAtMs: null, answered: false, usage: null,
     earlierCompletionTokens: 0, activeTool: null, context: null, waitingFor: 'model', waitingSinceMs: nowMs, reasoningTail: '', toolLineTargets: new Map(),
-    toolLineSummaries: new Map(), toolLineTracked: new Map() });
+    toolLineSummaries: new Map(), toolLineTracked: new Map(), toolLineDeclined: new Set<string>() });
 }
 
 /** The first step of a turn, before any delta: the model is being prepared (TL-A D1). */
@@ -166,7 +171,9 @@ export function renderAssistantStream(state: AssistantStreamState, delta: TurnDe
     return step(Object.freeze({ ...state, activeTool: Object.freeze({ ...active, output }) }), []);
   }
   if (delta.kind === 'message') return step(noteToolLine(state, delta.message), []);
-  if (delta.kind === 'approval') return step(state, []);
+  // DENY-WORDING: the card's settlement says who refused a call; the line then says "you declined", not a policy refusal.
+  if (delta.kind === 'approval') return step(delta.phase === 'settled' && delta.outcome === 'deny'
+    ? Object.freeze({ ...state, toolLineDeclined: new Set(state.toolLineDeclined).add(delta.callId) }) : state, []);
   // The summary landed: the round is prepared again, counted from now.
   if (delta.kind === 'compacted') {
     return step(Object.freeze({ ...state, waitingFor: 'model' as const, waitingSinceMs: nowMs }), [Object.freeze({ kind: 'compaction' as const, replacedMessages: delta.replacedMessages })]);
@@ -199,10 +206,11 @@ export function renderAssistantStream(state: AssistantStreamState, delta: TurnDe
     const unit: ToolUnit = Object.freeze({ kind: 'tool', name: delta.name, target, status: delta.status ?? 'error',
       ms: delta.ms ?? Math.max(0, nowMs - (state.activeTool?.startedAtMs ?? nowMs)),
       ...(delta.cleanup !== undefined ? { cleanup: delta.cleanup } : {}), ...(summary !== null ? { summary } : {}),
-      ...(tracked ? { trackedChanges: tracked } : {}) });
-    const targets = new Map(state.toolLineTargets), summaries = new Map(state.toolLineSummaries), trackedLines = new Map(state.toolLineTracked);
-    targets.delete(delta.callId); summaries.delete(delta.callId); trackedLines.delete(delta.callId);
-    return step(Object.freeze({ ...base, activeTool: null, toolLineTargets: targets, toolLineSummaries: summaries, toolLineTracked: trackedLines }), [...pending, ...text, unit]);
+      ...(tracked ? { trackedChanges: tracked } : {}), ...(delta.status === 'denied' && state.toolLineDeclined.has(delta.callId) ? { declined: true as const } : {}) });
+    const targets = new Map(state.toolLineTargets), summaries = new Map(state.toolLineSummaries), trackedLines = new Map(state.toolLineTracked), declined = new Set(state.toolLineDeclined);
+    targets.delete(delta.callId); summaries.delete(delta.callId); trackedLines.delete(delta.callId); declined.delete(delta.callId);
+    return step(Object.freeze({ ...base, activeTool: null, toolLineTargets: targets, toolLineSummaries: summaries, toolLineTracked: trackedLines, toolLineDeclined: declined }),
+      [...pending, ...text, unit]);
   }
   if (delta.kind === 'reasoning') {
     const reasoning = state.phase === 'answering' ? {} : { phase: 'reasoning' as const, reasoningStartedAtMs: state.reasoningStartedAtMs ?? nowMs };

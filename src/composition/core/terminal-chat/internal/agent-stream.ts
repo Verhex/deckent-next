@@ -42,7 +42,7 @@ export async function* streamTerminalAgentTurn(input: TerminalAgentTurnInput, po
     .catch(() => undefined);
   const local = new AbortController(), signal = input.signal ? AbortSignal.any([input.signal, local.signal]) : local.signal;
   // Preserve engine targets; the renderer derives display targets from message events.
-  const queue: TurnDelta[] = [], targets = new Map<string, string | null>();
+  const queue: TurnDelta[] = [], targets = new Map<string, string | null>(), names = new Map<string, string>();
   let outcome: Outcome | null = null, wake: (() => void) | null = null, roundText = '';
   // Follow measured history and mark at most one compaction per round using the service admission.
   const history: AgentTurnMessage[] = [...input.messages];
@@ -51,7 +51,7 @@ export async function* streamTerminalAgentTurn(input: TerminalAgentTurnInput, po
   const notify = () => { const resume = wake; wake = null; resume?.(); };
   const onEvent = (event: AgentTurnStreamEvent) => {
     if (event.kind === 'text') roundText += event.text;
-    if (event.kind === 'tool.started') { roundText = ''; targets.set(event.callId, event.target); }
+    if (event.kind === 'tool.started') { roundText = ''; targets.set(event.callId, event.target); names.set(event.callId, event.name); }
     if (event.kind === 'message') history.push(event.message);
     if (event.kind === 'compacted') {
       const next = [...(history[0]?.role === 'system' ? [history[0]] : []), ...event.messages];
@@ -59,7 +59,7 @@ export async function* streamTerminalAgentTurn(input: TerminalAgentTurnInput, po
     }
     if (event.kind === 'context') round = event.round;
     const compacting = event.kind === 'context' && admission !== null && event.round !== compactedRound && terminalCompactionExpected(history, event, admission) && compactionGuard.plan(history) !== null;
-    queue.push(toDelta(event, targets, compacting)); notify();
+    queue.push(toDelta(event, targets, compacting, names)); notify();
   };
   // Cancel at once when the caller aborts; the transport disconnect alone is only seen at the service's next write.
   const onAbort = () => { void cancel(); };
@@ -94,7 +94,7 @@ export async function* streamTerminalAgentTurn(input: TerminalAgentTurnInput, po
   }
 }
 
-function toDelta(event: AgentTurnStreamEvent, targets: ReadonlyMap<string, string | null>, compacting: boolean): TurnDelta {
+function toDelta(event: AgentTurnStreamEvent, targets: ReadonlyMap<string, string | null>, compacting: boolean, names: ReadonlyMap<string, string> = new Map()): TurnDelta {
   switch (event.kind) {
     case 'text': case 'reasoning': return { kind: event.kind, text: event.text };
     case 'usage': return { kind: 'usage', promptTokens: event.promptTokens, completionTokens: event.completionTokens, reasoningTokens: null };
@@ -103,7 +103,11 @@ function toDelta(event: AgentTurnStreamEvent, targets: ReadonlyMap<string, strin
       ...(compacting ? { compacting } : {}) };
     case 'compacted': return { kind: 'compacted', messages: event.messages, replacedMessages: event.replacedMessages };
     case 'approval.requested': return { kind: 'approval', phase: 'requested', callId: event.callId, approvalId: event.approvalId, revision: event.revision, summary: event.summary, preview: event.preview,
-      expiresAt: event.expiresAt, ...(event.standing ? { standing: event.standing } : {}), ...(event.decisionCapability ? { decisionCapability: event.decisionCapability } : {}), ...(event.risk !== undefined ? { risk: event.risk } : {}), ...(event.requiredAssurance ? { requiredAssurance: event.requiredAssurance } : {}) };
+      expiresAt: event.expiresAt, ...(event.standing ? { standing: event.standing } : {}), ...(event.decisionCapability ? { decisionCapability: event.decisionCapability } : {}), ...(event.risk !== undefined ? { risk: event.risk } : {}), ...(event.requiredAssurance ? { requiredAssurance: event.requiredAssurance } : {}),
+      ...(event.undo ? { undo: event.undo } : {}), ...(event.posture ? { posture: event.posture } : {}), ...(event.call ? { call: event.call } : {}),
+      ...(event.previewCut ? { previewCut: event.previewCut } : {}),
+      // T-APPROVAL-WINDOW: the same call's `tool.started` came first; its name and target name the window (presentation only).
+      ...(names.has(event.callId) ? { tool: names.get(event.callId)!, target: targets.get(event.callId) ?? null } : {}) };
     case 'approval.settled': return { kind: 'approval', phase: 'settled', callId: event.callId, approvalId: event.approvalId, outcome: event.outcome };
     case 'tool.output': return { kind: 'output', callId: event.callId, stream: event.stream, text: event.text };
     case 'tool.started': return { kind: 'tool', phase: 'started', callId: event.callId, name: event.name, target: event.target, status: null, ms: null };

@@ -60,11 +60,11 @@ describe('terminal read-only management (S09)', () => {
       const first = (await ports.model!('', { usage: EMPTY_SESSION_USAGE })).join('\n');
       expect(first).toContain(SEED_CHANNEL); expect(first).toContain('claude-opus-5-5'); expect(first).toContain(`${SEED_CHANNEL}@1/opus-5-5@1`);
       const mark = locale === 'en' ? '<- current' : '<- geçerli';
-      expect(first.split('\n').filter(line => line.includes(mark)).map(line => line.trim().split(/\s+/u)[0])).toEqual(['claude-opus-5-5']); expect(first).toContain(locale === 'en' ? 'inactive' : 'etkin değil');
+      expect(first.split('\n').filter(line => line.includes(mark)).map(line => /\(([^)]+)\)/u.exec(line)?.[1])).toEqual(['claude-opus-5-5']); expect(first).toContain(locale === 'en' ? 'not enabled' : 'etkin değil');
       // Activation changes what the very next call shows: nothing is remembered between calls.
       await applyModelCatalog(project, { schemaVersion: 1, commandId: 'on', scopeId: 's', action: 'activate', channelId: SEED_CHANNEL, modelId: 'claude-opus-5-5', expectedRevision: 0 }, options);
       const second = (await ports.model!('', { usage: EMPTY_SESSION_USAGE })).join('\n');
-      expect(second).toMatch(/claude-opus-5-5 +\S+ +(active|etkin)\b/u);
+      expect(second).toMatch(/claude-opus-5-5\) · \S+( \S+)* · (enabled|etkin)\b/u);
     });
 
     it('shows the catalog inside the real workline and refuses arguments (selection is a later governed step)', async () => {
@@ -111,7 +111,7 @@ describe('terminal read-only management (S09)', () => {
     } };
     let statusCalls = 0;
     const { inspect } = terminalAdminPorts({ ...base, locale: 'en', context, status: async () => { if (++statusCalls === 3) throw typed('SERVICE_UNAVAILABLE'); return `STATUS-READ-${statusCalls}`; } });
-    expect((await inspect.model!('', { usage: EMPTY_SESSION_USAGE })).join('\n')).toContain('ch-1  access denied');
+    expect((await inspect.model!('', { usage: EMPTY_SESSION_USAGE })).join('\n')).toContain('ch-1 · access denied');
     failing = true;
     const failed = (await inspect.model!('', { usage: EMPTY_SESSION_USAGE })).join('\n');
     expect(failed).toContain('MODEL_CATALOG_UNAVAILABLE'); expect(failed).not.toContain('ch-1'); expect(failed).toContain('Model catalog: not read');
@@ -148,7 +148,7 @@ describe('terminal read-only management (S09)', () => {
     await type(view, 'hi\r');
     await until(() => view.stdout.text.includes('30 in 7 out'), 'turn footer');
     await type(view, '/usage \r');
-    await until(() => view.stdout.text.includes('prompt 30 tokens, completion 7 tokens, reasoning not measured'), 'measured usage');
+    await until(() => view.stdout.text.includes('Reasoning: not measured'), 'measured usage');
     await type(view, '/usage b1 2\r');
     await until(() => spend.mock.calls.length === 1, 'spend query');
     expect(spend.mock.calls[0]![1]).toEqual({ schemaVersion: 1, scopeId: 's', budgetId: 'b1', budgetRevision: 2 });
@@ -170,8 +170,8 @@ describe('terminal read-only management (S09)', () => {
 
   // BATCH-FIX 2026-10-07 USAGE-UNKNOWN (P2-3a): an unreported reasoning count is never summed as 0; a partial sum says what it misses.
   it.each([
-    ['en', 'reasoning 3 tokens (', 'reasoning at least 3 tokens (not measured in 1 of 2 reports)', 'reasoning not measured'],
-    ['tr', 'akıl yürütme 3 token (', 'akıl yürütme en az 3 token (2 raporun 1 tanesinde ölçülmedi)', 'akıl yürütme ölçülmedi'],
+    ['en', 'Reasoning: 3 tokens', 'Reasoning: at least 3 tokens (not measured in 1 of 2 reports)', 'Reasoning: not measured'],
+    ['tr', 'Akıl yürütme: 3 token', 'Akıl yürütme: en az 3 token (2 raporun 1 tanesinde ölçülmedi)', 'Akıl yürütme: ölçülmedi'],
   ] as const)('/usage keeps an unmeasured reasoning count unknown (%s)', async (locale, measured, partial, none) => {
     const { inspect } = terminalAdminPorts({ ...base, locale, context: {} });
     const lines = async (...reasoning: (number | null)[]) => (await inspect.usage!('', { usage: reasoning.reduce((total, value) =>
@@ -179,7 +179,7 @@ describe('terminal read-only management (S09)', () => {
     expect(await lines(3)).toContain(measured);
     expect(await lines(3, null)).toContain(partial);
     const unknown = await lines(null, null);
-    expect(unknown).toContain(none); expect(unknown).not.toMatch(/(reasoning|akıl yürütme) 0 tok/u);
+    expect(unknown).toContain(none); expect(unknown).not.toMatch(/(Reasoning|Akıl yürütme): 0 tok/u);
   });
 
   it('/scope names each part it could not read and still shows the rest', async () => {
@@ -189,9 +189,9 @@ describe('terminal read-only management (S09)', () => {
     };
     const { inspect } = terminalAdminPorts({ ...base, root: '/nonexistent-root-for-scope-test', locale: 'en', context });
     const text = (await inspect.scope!('', { usage: EMPTY_SESSION_USAGE })).join('\n');
-    expect(text).toContain('Scope: s'); expect(text).toContain('Installation: inst-1'); expect(text).toContain('Project: proj-1');
+    expect(text).toContain('Scope: s'); expect(text).toContain('Installation identity: inst-1'); expect(text).toContain('Project identity: proj-1');
     expect(text).toContain('Permission mode: not read'); expect(text).toContain('POLICY_DENIED');
-    expect(text).toContain('Surface access: bind-1 (run, worker)');
+    expect(text).toContain('Surface access: runs, workers');
     expect((await inspect.scope!('x', { usage: EMPTY_SESSION_USAGE }))[0]).toContain('Usage: /scope');
     const none = terminalAdminPorts({ ...base, locale: 'tr', context: { inspectSurfaceAccess: async () => null } }).inspect;
     expect((await none.scope!('', { usage: EMPTY_SESSION_USAGE })).join('\n')).toContain('Yüzey erişimi: henüz yok');

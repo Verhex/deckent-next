@@ -78,12 +78,18 @@ describe('withPrincipalPermissionMode (T-L4 slice 4c, MODES-3)', () => {
       resource: { kind: 'agent-tool', ids: ['edit_file'] }, modeEligible: true }] }], grants: [grant], restrictions: [], separationOfDuties: [] };
     const resolved = resolvePolicyBindings(policy, v3([{ id: 'mine', principal: me, scopes: ['scope'], mode: 'full-access', askEdits: true }]));
     expect(permissionModeView(resolved, principalOf(me), 'scope')).toEqual({ schemaVersion: 1, scopeId: 'scope', supported: true, mode: 'full-access', askEdits: true,
-      revision: 'p1+b1', eligible: true, fullAccess: true });
+      revision: 'p1+b1', eligible: true, fullAccess: true, fullAuto: false });
     expect(permissionModeView(resolved, principalOf(me), 'elsewhere')).toMatchObject({ mode: 'standart', askEdits: false, eligible: false, fullAccess: false });
     expect(permissionModeView(resolved, principalOf(sameSubject), 'scope')).toMatchObject({ mode: 'standart', eligible: false, fullAccess: false });
     const v1 = resolvePolicyBindings({ schemaVersion: 1, revision: 'v1', grants: [], restrictions: [] }, null);
     expect(permissionModeView(v1, principalOf(me), 'scope')).toEqual({ schemaVersion: 1, scopeId: 'scope', supported: false, mode: 'standart', askEdits: false,
-      revision: 'v1', eligible: false, fullAccess: false });
+      revision: 'v1', eligible: false, fullAccess: false, fullAuto: false });
+    // T2 T-MODE-CYCLE: the full-auto set grant is reported the same way (the cycle leaves full-auto out without it); only an allow counts.
+    const autoGrant = { ...grant, id: 'fa-auto', resource: { kind: 'permission-mode', ids: ['full-auto'] } };
+    const withAuto = resolvePolicyBindings({ ...policy, grants: [grant, autoGrant] }, v3([]));
+    expect(permissionModeView(withAuto, principalOf(me), 'scope')).toMatchObject({ fullAccess: true, fullAuto: true });
+    const asking = resolvePolicyBindings({ ...policy, grants: [grant, { ...autoGrant, effect: 'require-approval' }] }, v3([]));
+    expect(permissionModeView(asking, principalOf(me), 'scope')).toMatchObject({ fullAccess: true, fullAuto: false });
   });
 
   it('accepts only a catalog mode, an optional boolean askEdits and never a principal field in the command', () => {

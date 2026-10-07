@@ -165,13 +165,13 @@ describe.skipIf(process.platform !== 'linux')('MCP first-use trust card and /mcp
       ['mcp_trust · mcp:fx · launch', 'y'],
       ['mcp_trust · mcp:fx · tools', 'y'],
       ['Trusted turn done.', '/mcp\r'],
-      ['(1 tools pinned)', '/exit\r'],
+      ['fx · project · trusted · 1 tool', '/exit\r'],
     ]);
     expect(run.timeout, run.output).toBeUndefined();
     expect(run.status, run.output).toBe(0);
     expect(run.output).toContain('MCP server fx (project scope'); expect(run.output).toContain('start it?');
     expect(run.output).toContain('trust it and pin these tools?'); expect(run.output).toContain('echo');
-    expect(run.output).toMatch(/fx {2}project {2}trusted/u);
+    expect(run.output).toMatch(/fx · project · trusted/u);
     expect(f.seen.tools[0]).toContain('mcp__fx__echo');
     expect(f.started()).toBeGreaterThan(0);
     const db = new DatabaseSync(f.ledger, { readOnly: true });

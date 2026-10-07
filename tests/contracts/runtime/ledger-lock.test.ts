@@ -25,7 +25,7 @@ async function code(work: Promise<unknown>): Promise<string> {
   try { await work; return 'resolved'; }
   catch (error) { expect(error).toBeInstanceOf(LocalRuntimeSocketError); return (error as LocalRuntimeSocketError).code; }
 }
-const handler = async (request: { requestId: string }) => ({ schemaVersion: 20 as const, requestId: request.requestId, ok: true as const, result: null });
+const handler = async (request: { requestId: string }) => ({ schemaVersion: 21 as const, requestId: request.requestId, ok: true as const, result: null });
 /** Descriptors of this process open on `path`, with their open flags from /proc. */
 async function descriptors(path: string) {
   const found: { fd: string; flags: number }[] = [];

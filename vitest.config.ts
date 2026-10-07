@@ -13,6 +13,9 @@ const alias = Object.fromEntries(pkgs.map(p => [`#${p}`, fileURLToPath(new URL(`
 // Keep strict product symlink/realpath checks; do not resolve user-supplied product roots.
 const temporaryEnv = canonicalTemporaryEnvironment();
 Object.assign(process.env, temporaryEnv);
+// The monitor prints moments in the machine's local time zone; the suite pins UTC so its expectations hold on every developer machine and CI cell.
+// A test that exercises another zone sets `process.env.TZ` itself and restores it.
+process.env['TZ'] = 'UTC';
 // Tests never write into the owner's global state root (~/.deckent: the bundled bubblewrap's verified copy under bin/, secret-store files,
 // the personal MCP registry, global config; BWRAP-SELECT): every worker gets one temporary root for this run, removed by the teardown.
 // A test that needs its own root still sets DECKENT_GLOBAL_HOME for its child process or passes an explicit environment.

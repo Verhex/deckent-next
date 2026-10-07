@@ -28,7 +28,7 @@ async function snapshotDone(read: { mock: { results: { value: unknown }[] } }, c
 it('loads pending approval, Run (including never dispatched) and worker at open into the real surface and fills /watch-workers', async () => {
   const f = await fixture(), read = vi.fn(f.ports.readSurfaceSnapshot!);
   const view = mountWorkline({ labels, pollMs: 20, ledger: { ...f.ports, readSurfaceSnapshot: read } }); mounted.push(view.instance);
-  await until(() => view.stdout.text.includes('A-NOTIFY 1') && view.stdout.text.includes('never-dispatched-run') && view.stdout.text.includes('snapshot-task'), 'opening snapshot');
+  await until(() => view.stdout.text.includes('A-NOTIFY 1') && view.stdout.text.includes('never-dispatched-run') && view.stdout.text.includes('worker 1 · '), 'opening snapshot');
   expect(read.mock.calls.map(call => call[0])).toEqual([['approval', 'run', 'worker']]);
   expect(view.stdout.text).not.toContain('foreign-run'); expect(view.stdout.text).not.toContain('foreign-approval');
   await type(view.stdin, '/watch-workers\r');

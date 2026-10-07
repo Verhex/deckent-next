@@ -77,6 +77,23 @@ export async function mcpCommand(argv: readonly string[], context: CommandContex
   emit(result, { ...sinks, json, render: formatValue });
 }
 
+function mcpStatusText(status: string, locale: Locale): string {
+  switch (status) {
+    case 'trusted': return t('terminal.mcp.status.trusted', {}, locale);
+    case 'pending-approval': return t('terminal.mcp.status.pending', {}, locale);
+    case 'changed': return t('terminal.mcp.status.changed', {}, locale);
+    case 'declined': return t('terminal.mcp.status.declined', {}, locale);
+    case 'invalid-launch': return t('terminal.mcp.status.invalidLaunch', {}, locale);
+    case 'trust-store-unavailable': return t('terminal.mcp.status.trustUnreadable', {}, locale);
+    default: return status;
+  }
+}
+function mcpScopeText(scope: string, locale: Locale): string {
+  if (scope === 'local') return t('terminal.mcp.scope.local', {}, locale);
+  if (scope === 'project') return t('terminal.mcp.scope.project', {}, locale);
+  return scope === 'user' ? t('terminal.mcp.scope.user', {}, locale) : scope;
+}
+
 /**
  * `/mcp` in the terminal (MCP-CLIENT, owner 2026-09-28): the servers of this project with their scope and trust state (nothing is started), and
  * `approve <name>` (forget a decline: the next message asks with the trust cards), `reconnect <name>` (the service restarts it on its next use),
@@ -91,14 +108,16 @@ export async function mcpSlash(root: string, args: string, context: CommandConte
       lastStart?: { text: string } }[];
       problems: { name: string | null; scope: string; reason: string }[] };
     if (!listed.servers.length && !listed.problems.length) return [t('terminal.mcp.none', {}, locale)];
-    return [t('terminal.mcp.count', { count: listed.servers.length }, locale), ...listed.servers.map(server => `  ${server.name}  ${server.scope}  ${server.status}${server.pinnedTools ? ` (${server.pinnedTools} tools pinned)` : ''}  ${
-      [server.command, ...server.args].join(' ')}`), ...listed.problems.map(problem => `  ! ${problem.scope} ${problem.name ?? '(file)'}: ${problem.reason}`),
-    // MCP-SANDBOX-PATHS: the last start failure a turn recorded (display-safe, rendered by the host in this locale, like a problem's reason).
-    ...listed.servers.flatMap(server => server.lastStart ? [`  ! ${server.name}: ${server.lastStart.text}`] : []),
+    // One line per server (name, scope, state, tools, launch command); a recorded start failure follows as its own indented line, in the words the host wrote it.
+    return [t('terminal.mcp.count', { count: listed.servers.length }, locale), ...listed.servers.flatMap(server => [`  ${[server.name, mcpScopeText(server.scope, locale), mcpStatusText(server.status, locale),
+      ...(server.pinnedTools ? [server.pinnedTools === 1 ? t('terminal.mcp.toolOne', {}, locale) : t('terminal.mcp.tools', { count: server.pinnedTools }, locale)] : []), ...(server.lastStart ? [t('terminal.mcp.notStarted', {}, locale)] : []),
+      [server.command, ...server.args].join(' ')].join(' · ')}`, ...(server.lastStart ? [`    ${server.lastStart.text}`] : [])]),
+    ...listed.problems.map(problem => `  ${problem.name === null ? t('terminal.mcp.problemFile', { scope: mcpScopeText(problem.scope, locale), reason: problem.reason }, locale)
+      : t('terminal.mcp.problemServer', { name: problem.name, scope: mcpScopeText(problem.scope, locale), reason: problem.reason }, locale)}`),
     ...(listed.servers.some(server => server.status === 'pending-approval' || server.status === 'changed') ? [`  ${t('terminal.mcp.pendingHint', {}, locale)}`] : [])];
   }
   if (verb === 'approve') { await run({ verb: 'reset', name: name! }); return [t('terminal.mcp.approve', { name: name! }, locale)]; }
   if (verb === 'reconnect') { await run({ verb: 'reconnect', name: name! }); return [t('terminal.mcp.reconnect', { name: name! }, locale)]; }
-  if (verb === 'remove') { const removed = await run({ verb: 'remove', name: name! }) as { removed: { scope: string } }; return [t('terminal.mcp.removed', { name: name!, scope: removed.removed.scope }, locale)]; }
+  if (verb === 'remove') { const removed = await run({ verb: 'remove', name: name! }) as { removed: { scope: string } }; return [t('terminal.mcp.removed', { name: name!, scope: mcpScopeText(removed.removed.scope, locale) }, locale)]; }
   return [t('terminal.mcp.usage', {}, locale)];
 }

@@ -21,6 +21,10 @@ export function createAgentFetch(input: { readonly settings: TerminalFetchConfig
     plan,
     cell(args: Record<string, unknown>): AgentToolCallCell | null { const planned = plans.get(key(args)); return planned?.ok ? planned.listed ? 'fetch-listed' : 'fetch-unlisted' : null; },
     preview(args: Record<string, unknown>): string | undefined { const planned = plans.get(key(args)); return planned?.ok ? describeFetchApproval(planned) : undefined; },
+    /** Astra 2431: the card's fields as data — the URL, its host and whether the allowlist names it. */
+    cardCall(args: Record<string, unknown>): { readonly kind: 'fetch'; readonly url: string; readonly host: string; readonly listed: boolean } | undefined {
+      const planned = plans.get(key(args)); return planned?.ok ? { kind: 'fetch', url: planned.url, host: planned.host, listed: planned.listed } : undefined;
+    },
     async apply(args: Record<string, unknown>, signal: AbortSignal, execution: { readonly round: number; readonly index: number }, gate: EffectApprovalGate): Promise<AgentToolOutcome> {
       const planned = plans.get(key(args)) ?? plan(args);
       if (!planned.ok) return { status: 'error', text: `[deckent] fetch_url: error=${planned.error}` };

@@ -55,6 +55,8 @@ export const CONFIG_FIELDS = Object.freeze({
     sessionTtlMs: z.number().int().positive().safe().default(60000),
     pageSize: z.number().int().positive().safe().default(100),
     keyFile: z.string().regex(/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$/).default('authority.key'),
+    /** APPROVER-NOTE: the most characters (code points) of an approver's own note a tool-call turn gives the model; the record keeps it whole. */
+    approverNoteMaxChars: z.number().int().positive().max(2048).safe().default(500),
   }).strict().default({}), [], LAYOUT_CONTRACT_SINCE),
   cli: field('config.field.cli', { state: 'bound', consumers: ['src/surfaces/core/cli'] }, 'live', z.object({ graphInputMaxBytes: z.number().int().positive().safe().default(1048576), invocationInputMaxBytes: z.number().int().positive().safe().default(1048576) }).strict().default({}), [], LAYOUT_CONTRACT_SINCE),
   mcp: field('config.field.mcp', { state: 'bound', consumers: ['src/composition/core/agent-turn'] }, 'restart', z.object({

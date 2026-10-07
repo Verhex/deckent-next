@@ -22,7 +22,7 @@ const labels: WorklineLabels = { banner: 'BANNER', prompt: '> ', statusReady: 'R
     contextNone: 'CTX-NONE {count}' },
   composer: { pasteChip: '[PASTE {lines}]', search: 'SEARCH', exitArmed: 'EXIT-ARMED', shortcuts: 'KEYS\nENTER-SENDS', slash: { 'terminal.slash.run': 'RUN-DESC', 'terminal.slash.runArgument': '<RUN-ID>' } } };
 // The palette's rows have selection/alignment prefixes; this unprefixed pair only matches the /help notice.
-const HELP_NOTICE = '/watch-runs\n/watch-stop';
+const HELP_NOTICE = 'info\n  /status';
 
 class Screen extends Writable {
   text = '';
@@ -95,7 +95,7 @@ describe('ledger buffer (Ink Static contract)', () => {
     // scrollback: the last frame (every printed row and the live region after the answer) no longer carries it.
     await settle(30);
     expect(view.stdout.text).toContain('SECRET-REASONING');
-    expect(view.stdout.text.slice(view.stdout.text.lastIndexOf('you: hello'))).not.toContain('SECRET-REASONING');
+    expect(view.stdout.text.slice(view.stdout.text.lastIndexOf('hello'))).not.toContain('SECRET-REASONING');
     expect(view.stdout.text).not.toContain('**line**');
     view.stdin.write('again\r');
     await until(() => seen.length === 2, 'second turn');

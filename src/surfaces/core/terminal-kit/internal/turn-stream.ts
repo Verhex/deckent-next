@@ -1,5 +1,5 @@
 import type { PanelTurnBinding } from './panel-contract.js';
-import type { AgentContextQuality, AgentToolApprovalSettlement, AgentToolCallStatus, AgentTurnMessage, AgentTurnStreamEvent } from '#domain/index.js';
+import type { AgentContextQuality, AgentShellPosture, AgentToolApprovalSettlement, AgentToolCardCall, AgentToolUndo, ApprovalPreviewCutFacts, AgentToolCallStatus, AgentTurnMessage, AgentTurnStreamEvent } from '#domain/index.js';
 
 /** `tool.finished`'s optional `cleanup` (Astra 2124), derived from the agent-turn event rather than importing the agent-tool
  * module directly (`terminal-kit`'s declared dependency is `agent-turn`; `AgentToolCleanup` itself is declared in `agent-tool`). */
@@ -52,7 +52,13 @@ export type TurnDelta =
     /** The standing scopes the service offers on this card (v17; absent on every v16 service) and exactly what they cover. */
     readonly standing?: { readonly scopes: readonly ('session' | 'always')[]; readonly pattern: string };
     /** v19 (B1): the turn's one-time capability (forwarded by the card's y, never shown), the card's risk (null: not declared) and required assurance. */
-    readonly decisionCapability?: string; readonly risk?: string | null; readonly requiredAssurance?: string }
+    readonly decisionCapability?: string; readonly risk?: string | null; readonly requiredAssurance?: string;
+    /** v21 (T2-FOLLOWUP): what the card may say about undoing the call, and a shell call's structured posture. */
+    readonly undo?: AgentToolUndo; readonly posture?: AgentShellPosture;
+    /** v21 (Astra 2431): the card's fields as data and the preview cut's facts (the window never parses the preview). */
+    readonly call?: AgentToolCardCall; readonly previewCut?: ApprovalPreviewCutFacts;
+    /** T-APPROVAL-WINDOW: the call's tool name and engine target, taken by the client from the same call's `tool.started` (never a wire field). */
+    readonly tool?: string; readonly target?: string | null }
   | { readonly kind: 'approval'; readonly phase: 'settled'; readonly callId: string; readonly approvalId: string;
     readonly outcome: AgentToolApprovalSettlement }
   /** Streamed output of a running call (shell): presentation only. */

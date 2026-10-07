@@ -848,6 +848,7 @@
     "src/surfaces/core/work-labels": {
       "dependencies": [
         "src/platform/core/i18n",
+        "src/surfaces/core/terminal-ledger",
         "src/surfaces/core/terminal-work",
         "src/surfaces/core/monitor"
       ],
@@ -868,6 +869,7 @@
         "src/domain/core/policy",
         "src/domain/core/provider-spend",
         "src/domain/core/provider-catalog",
+        "src/platform/core/common",
         "src/platform/core/config",
         "src/platform/core/errors",
         "src/platform/core/i18n",
@@ -893,6 +895,13 @@
       ],
       "plan": "SURFACES"
     },
+    "src/surfaces/core/terminal-window": {
+      "dependencies": [
+        "src/surfaces/core/terminal-kit",
+        "src/surfaces/core/terminal-render"
+      ],
+      "plan": "SURFACES"
+    },
     "src/surfaces/core/terminal-picker": {
       "dependencies": [
         "src/surfaces/core/terminal-kit",
@@ -915,7 +924,8 @@
         "src/surfaces/core/terminal-render",
         "src/engine/core/runs",
         "src/engine/core/worker-observation",
-        "src/engine/core/monitor"
+        "src/engine/core/monitor",
+        "src/platform/core/common"
       ],
       "plan": "SURFACES"
     },
@@ -926,7 +936,12 @@
         "src/surfaces/core/approval-presentation",
         "src/platform/core/redaction",
         "src/engine/core/runs",
-        "src/surfaces/core/terminal-kit"
+        "src/surfaces/core/terminal-kit",
+        "src/surfaces/core/terminal-window",
+        "src/surfaces/core/terminal-picker",
+        "src/platform/core/common",
+        "src/domain/core/agent-turn",
+        "src/engine/core/approval"
       ],
       "plan": "SURFACES"
     },
@@ -942,7 +957,8 @@
         "src/surfaces/core/terminal-ledger",
         "src/surfaces/core/terminal-work",
         "src/surfaces/core/terminal-theme",
-        "src/surfaces/core/terminal-picker"
+        "src/surfaces/core/terminal-picker",
+        "src/surfaces/core/terminal-window"
       ],
       "plan": "SURFACES"
     },
@@ -1609,7 +1625,8 @@
         "src/engine/core/effect",
         "src/engine/core/shell-classification",
         "src/platform/core/host",
-        "src/platform/core/managed-files"
+        "src/platform/core/managed-files",
+        "src/domain/core/agent-turn"
       ],
       "plan": "SURFACES"
     },
@@ -1730,7 +1747,8 @@
         "src/domain/core/effect",
         "src/engine/core/effect",
         "src/domain/core/audit",
-        "src/platform/core/redaction"
+        "src/platform/core/redaction",
+        "src/domain/core/agent-turn"
       ],
       "plan": "SECURITY"
     },
@@ -2000,7 +2018,8 @@
         "src/engine/core/approval",
         "src/engine/core/audit",
         "src/platform/core/clock",
-        "src/platform/core/config"
+        "src/platform/core/config",
+        "src/domain/core/agent-turn"
       ],
       "plan": "SURFACES"
     },
@@ -2299,7 +2318,9 @@
         "src/surfaces/core/terminal-kit",
         "src/surfaces/core/terminal-render",
         "src/engine/core/approval",
-        "src/surfaces/core/terminal-picker"
+        "src/surfaces/core/terminal-picker",
+        "src/surfaces/core/terminal-window",
+        "src/domain/core/agent-turn"
       ],
       "plan": "SURFACES"
     },

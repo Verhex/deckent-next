@@ -38,6 +38,10 @@ describe('terminal work ports over the CLI handlers', () => {
     expect(commands.map(command => command['decision'])).toEqual(['deny', 'allow']);
     expect(commands[0]!['reason']).toBe('Operatör Deckent terminalinde reddetti.');
     expect(commands[0]!['commandId']).not.toBe(commands[1]!['commandId']);
+    // APPROVER-NOTE: only the person's own words (Tab on the card) are marked as their note; the default sentence never is.
+    expect(commands.map(command => command['approverNote'])).toEqual([undefined, undefined]);
+    await ports.decideApproval!({ approvalId: 'a1', revision: 0 }, 'deny', undefined, '  keep the old API  ');
+    expect(approvalCommandSchema.parse(commands[2])).toMatchObject({ reason: 'keep the old API', approverNote: true, decision: 'deny' });
   });
 
   it('renders the transcript with the CLI renderer, keeps unsealed attempts visible and lets policy denial surface as an error', async () => {

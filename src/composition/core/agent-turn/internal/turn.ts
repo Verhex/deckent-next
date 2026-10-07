@@ -3,9 +3,9 @@ import { canonicalTurnRequest as canonical, withMcpNotices, chatTurnRoundFailure
 export { withMcpNotices, chatTurnRoundFailureState } from '#engine/index.js';
 import { createHash, randomUUID } from 'node:crypto';
 import { chatTurnCancellationSchema, chatTurnCommandSchema, modelInvocationProfileSchema, type AgentToolApprovalSettlement, type AgentToolSpec, type AgentTurnMessage,
-  type AgentTurnStreamEvent, type ChatTurnCancellationResult, type ChatTurnResult, type JsonObject, type ModelInvocationCommand } from '#domain/index.js';
+  agentToolCardCallSchema, type AgentToolCardCall, type AgentTurnStreamEvent, type ChatTurnCancellationResult, type ChatTurnResult, type JsonObject, type ModelInvocationCommand } from '#domain/index.js';
 import { SessionStanding, SessionApprovalAnswers, agentCallPermissionMode, agentToolApprovalSummary, agentCompactionInstruction, AGENT_TURN_ANSWER_MAX_BYTES, APPROVAL_PREVIEW_MAX_BYTES, AgentToolPolicyAuthorization, AgentTurnStoreError, admitFullAccessTurn,
-  agentCompactionTranscript, agentToolApprovalFacts, agentTurnAdmission, awaitAgentToolApproval, boundApprovalPreview, createTurnDecisionCapabilities, parseAgentCompactionSummary,
+  agentCompactionTranscript, agentToolApprovalFacts, agentToolApprovalNote, agentToolUndo, agentTurnAdmission, awaitAgentToolApproval, boundApprovalPreview, boundApprovalPreviewFacts, createTurnDecisionCapabilities, parseAgentCompactionSummary,
   renderAgentTurnSystemPrompt, requestAgentToolApproval, runDurableAgentTurn, withAgentTurnSystemPrompt, projectModelIngressField, type AgentRoundOutcome, type AgentTurnPorts, type TurnDecisionCapabilities,
   type ModelInvocationDelivery } from '#engine/index.js';
 import { t, globalStateRoot, ErrorRegistry, prepareProductDirectory, resolveLocale, SystemTrustedClock, type ConfigLoadOptions } from '#platform/index.js';
@@ -165,6 +165,25 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
 
     const mcps = (tool: AgentToolSpec) => mcp !== null && tool.toolClass === 'mcp' && mcp.owns(tool.name);
     const describe = (tool: AgentToolSpec, args: Record<string, unknown>) => mcps(tool) ? mcp!.display(tool.name) : describeAgentCall(tool, args);
+    /** T2-FOLLOWUP: what the card may say about undoing the call (by what it is) and, for a shell call, its structured posture. */
+    const cardFacts = (tool: AgentToolSpec, args: Record<string, unknown>, facts: { readonly risk: { readonly source: string; readonly cell?: string } | null }) => {
+      const kind = tool.toolClass === 'shell' && shell ? 'shell' as const : tool.toolClass === 'edit' ? 'edit' as const : fetches(tool) ? 'fetch' as const : mcps(tool) ? 'mcp' as const
+        : tool.toolClass === 'read' ? 'read' as const : null;
+      const posture = kind === 'shell' ? shell!.postureFacts(tool.name, args) : null;
+      return { ...(kind ? { undo: agentToolUndo(kind, facts.risk?.source === 'cell' ? facts.risk.cell ?? null : null, kind === 'mcp' ? mcp!.hints(tool.name) : null) } : {}),
+        ...(posture ? { posture } : {}) };
+    };
+    /** Astra 2431: the card's fields as data from the producer that planned the call; every text through the same display projection as the
+     * preview. A field the event bound cannot carry is left out (the card then shows the producer's preview whole, never a cut field). */
+    const cardCall = (tool: AgentToolSpec, args: Record<string, unknown>): { readonly call?: AgentToolCardCall } => {
+      const shown = (text: string) => projectModelIngressField(text).modelText;
+      const raw = tool.toolClass === 'shell' && shell ? shell.cardCall(tool.name, args) : editsOf(tool.name)?.cardCall(tool.name, args) ?? (fetches(tool) ? fetcher!.cardCall(args)
+        : mcps(tool) ? ((entry) => entry ? { kind: 'mcp' as const, server: entry.server, tool: entry.tool } : undefined)(mcp!.entry(tool.name)) : undefined);
+      if (!raw) return {};
+      const projected: AgentToolCardCall = raw.kind === 'shell' ? { ...raw, command: shown(raw.command), reason: shown(raw.reason) } : raw.kind === 'edit' ? { ...raw, path: shown(raw.path) }
+        : raw.kind === 'fetch' ? { ...raw, url: shown(raw.url), host: shown(raw.host) } : { ...raw, server: shown(raw.server), tool: shown(raw.tool) };
+      return agentToolCardCallSchema.safeParse(projected).success ? { call: projected } : {};
+    };
     const approvals = createAgentCallApprovals({ context, clock, scopeId: command.scopeId, turnId: command.turnId, describe });
     // One permission decision per call (T-L4 slice 4a): strict policy, floor raise and permission-mode lowering, again at the effect.
     const decisions = createAgentCallDecisions({ context, clock, scopeId: command.scopeId, turnId: command.turnId, edits: editsOf, shell, approvals, fetch: fetcher, mcp, fullAccess, standing: { memory: host.answers.memory, session: SessionStanding.sessionKey(command.scopeId, context.principal, command.sessionId ?? command.turnId) } });
@@ -235,16 +254,20 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
           if (offer) answer = host.answers.register({ record, principal: context.principal, peerPid: peer.pid,
             session: SessionStanding.sessionKey(command.scopeId, context.principal, command.sessionId ?? command.turnId), key: offer.key, signal: approvalSignal, clock, started,
             remember: (valid, refused) => decisions.remember(tool, args, { round, index }, call.id, record.request.approvalId, { valid, refused }) });
+          // One bound for every kind's preview, with the cut's facts (Astra 2431: the card never parses the text for them).
+          const bounded = boundApprovalPreviewFacts((diff !== undefined ? diff : (tool.toolClass === 'shell' ? shell?.previewText(tool.name, args) : fetches(tool) ? fetcher?.preview(args)
+            : mcps(tool) ? mcp!.preview(tool.name, args) : undefined)) ?? chatTurnApprovalPreview(tool.name, args), diff !== undefined ? kept : null);
           emitApproval({ kind: 'approval.requested', callId: call.id, approvalId: record.request.approvalId, revision: record.revision, risk: facts.risk?.source === 'cell' ? facts.risk.cell : null,
-            requiredAssurance: facts.requiredAssurance, summary: record.request.summary, preview: projectModelIngressField(((diff !== undefined ? boundApprovalPreview(diff, kept)
-              : (tool.toolClass === 'shell' ? shell?.preview(tool.name, args) : fetches(tool) ? fetcher?.preview(args) : mcps(tool) ? boundApprovalPreview(mcp!.preview(tool.name, args)!)
-                : undefined) ?? chatTurnApprovalPreview(tool.name, args)))).modelText,
-            expiresAt: record.request.expiresAt, ...(answer && offer ? { standing: { scopes: ['session'] as const, pattern: offer.pattern } } : {}) });
+            requiredAssurance: facts.requiredAssurance, summary: record.request.summary, preview: projectModelIngressField(bounded.text).modelText,
+            expiresAt: record.request.expiresAt, ...(answer && offer ? { standing: { scopes: ['session'] as const, pattern: offer.pattern } } : {}), ...cardFacts(tool, args, facts),
+            ...cardCall(tool, args), ...(bounded.cut ? { previewCut: bounded.cut } : {}) });
           requested = { approvalId: record.request.approvalId };
-          let outcome = await awaitAgentToolApproval(journal.store, integrity, record, clock, approvalSignal, 250, started);
+          const decided = await awaitAgentToolApproval(journal.store, integrity, record, clock, approvalSignal, 250, started);
+          let outcome = decided;
           if (outcome === 'allow') await answer?.wait();
-          // Approved: re-evaluate policy now; a deny since the request wins (contract §2).
-          if (outcome === 'allow' && await toolAuthority.decide(tool, command.scopeId, context.principal) === 'deny') outcome = 'deny';
+          // Approved: re-evaluate policy now; a deny since the request wins (contract §2). The owner's decision stays `allow` (the settlement says
+          // so); the call is refused by policy, never reported as the owner's refusal (DENY-WORDING, lead 2026-10-07).
+          if (outcome === 'allow' && await toolAuthority.decide(tool, command.scopeId, context.principal) === 'deny') { settlement = 'allow'; return 'policy-deny'; }
           // Policy revalidation is asynchronous: it spends the same authorization budget as waiting.
           if (outcome === 'allow') {
             const consumed = clock.sample();
@@ -254,7 +277,9 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
           // The effect gate verifies this stored record (MAC, allow, digest of the executed call, expiry) before anything is written or run.
           if (outcome === 'allow') approvals.allowed({ round, index }, { approvalId: record.request.approvalId, actionDigest: record.request.actionDigest, started });
           settlement = outcome;
-          return outcome;
+          // APPROVER-NOTE: the owner's own words on this very decision travel with it (never when policy or time changed the outcome since).
+          const note = (outcome === 'allow' || outcome === 'deny') && outcome === decided ? agentToolApprovalNote(journal.store, integrity, record) : null;
+          return note !== null && (outcome === 'allow' || outcome === 'deny') ? { outcome, note } : outcome;
         } finally {
           answer?.close(); journal.close();
           if (kept) await dropFullPreview(kept);
@@ -297,7 +322,8 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
     };
     const result = await runDurableAgentTurn({ claim: { scopeId: command.scopeId, turnId: command.turnId, principalKey, requestDigest, claimedAtMs: clock.sample().wallMs },
       messages: command.messages, tools, signal, language, emit: event => { if (event.kind !== 'done') channel.emit(event); },
-      admission: agentTurnAdmission(chat.maxCompletionTokens, context.config.service.inputMaxBytes), fullAccess }, store, ports);
+      admission: agentTurnAdmission(chat.maxCompletionTokens, context.config.service.inputMaxBytes), fullAccess,
+      approverNoteMaxChars: context.config.approvals.approverNoteMaxChars }, store, ports);
     await channel.drained();
     const answer = result.answer;
     const answerBytes = answer === null ? 0 : Buffer.byteLength(answer, 'utf8');

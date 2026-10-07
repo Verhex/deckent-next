@@ -19,7 +19,8 @@ import { terminalScreen } from '../../fixtures/terminal-screen.js';
 // T-L4 slice 4c (MODES-3: v17, three modes) at the real boundary: compiled CLI in a real pseudo-terminal, a real runtime service process,
 // the company policy (v2) and the person's bindings as real layout files. `/mode` shows the mode, `/mode full-auto` changes it through the
 // service (the terminal touches no file), the next turn's eligible edit runs without a card and is audited, and a narrow terminal drops the
-// mode segment from the status row. Full access opens only at launch, on the company grant, with a standing warning.
+// mode segment from the status row. Full access opens at launch on the company grant, with a standing warning; T2 (owner 2026-10-07,
+// corrected) also lets Shift+Tab or `/mode full-access` switch into it inside a session through the same service set and grant.
 const execute = promisify(execFile);
 const measured = await measureTestShellHost();
 const bwrapReady = measured.bubblewrap.status === 'available';
@@ -44,6 +45,7 @@ if pid == 0:
     os.execvp(argv[0], argv)
 fcntl.ioctl(fd, termios.TIOCSWINSZ, struct.pack('HHHH', 40, columns, 0, 0))
 out = b''
+marks = []
 def read_for(seconds):
     global out
     end = time.time() + seconds
@@ -61,6 +63,7 @@ for wait, send in steps:
         if time.time() > deadline or not read_for(0.1):
             sys.stdout.write(json.dumps({'timeout': wait, 'output': out.decode('utf8', 'replace')})); sys.exit(3)
     read_for(0.5)
+    marks.append(len(out.decode('utf8', 'replace')))
     for char in send:
         os.write(fd, char.encode()); time.sleep(0.01)
 deadline = time.time() + 25
@@ -72,12 +75,12 @@ while status is None and time.time() < deadline:
 if status is None:
     os.kill(pid, 9); status = 'killed'
 read_for(0.2)
-sys.stdout.write(json.dumps({'status': status, 'output': out.decode('utf8', 'replace')}))
+sys.stdout.write(json.dumps({'status': status, 'output': out.decode('utf8', 'replace'), 'marks': marks}))
 `;
 async function inPty(cwd: string, env: NodeJS.ProcessEnv, args: readonly string[], steps: ReadonlyArray<readonly [string, string]>, columns = 120) {
   const { stdout } = await execute('python3', ['-c', DRIVER, JSON.stringify([process.execPath, cli, ...args]), JSON.stringify(steps), String(columns)],
     { cwd, env, timeout: 120_000, maxBuffer: 16 * 1024 * 1024 }).catch(error => ({ stdout: String(error.stdout ?? '') }));
-  return JSON.parse(stdout) as { status?: number | string; timeout?: string; output: string };
+  return JSON.parse(stdout) as { status?: number | string; timeout?: string; output: string; marks?: number[] };
 }
 
 async function startRuntime(projectRoot: string, env: NodeJS.ProcessEnv): Promise<void> {
@@ -188,7 +191,7 @@ describe.skipIf(process.platform !== 'linux')('/mode in a real pseudo-terminal a
     expect(wide.status, wide.output).toBe(0);
     expect(wide.output).not.toContain('Unknown command');
     // No approval card for the eligible edit in full-auto; the file changed and the mode's decision was audited.
-    expect(wide.output).not.toContain('Approval requested');
+    expect(wide.output).not.toContain('Approval needed');
     expect(await readFile(join(f.projectRoot, 'src/a.ts'), 'utf8')).toBe('export const a = 2;\n');
     const file = JSON.parse(await readFile(join(f.data, 'bindings.json'), 'utf8')) as { schemaVersion: number; revision: string; modes: Array<{ principal: unknown; mode: string }> };
     expect((await stat(join(f.data, 'bindings.json'), { bigint: true })).ino).not.toBe(before.ino);
@@ -196,16 +199,17 @@ describe.skipIf(process.platform !== 'linux')('/mode in a real pseudo-terminal a
     expect(file.schemaVersion).toBe(3);
     expect(file.modes).toEqual([f.theirs, expect.objectContaining({ principal: f.me, scopes: ['scope'], mode: 'full-auto' })]);
     expect(f.audit().map(row => (row as { kind: string }).kind)).toEqual(['permission-mode-change', 'permission-mode']);
-    // After the change the status row carries the mode on a wide terminal: more occurrences than the one notice line.
+    // After the change the status row carries the mode on a wide terminal as its mark and catalog word (T2).
     const after = wide.output.slice(wide.output.indexOf('Permission mode: standart → full-auto'));
-    expect(after.split('full-auto').length - 1).toBeGreaterThan(1);
+    expect(after).toContain('⏵⏵ full auto');
     // Narrow: replay cursor movement/erasure. Ink may redraw the same notice in the raw PTY stream;
     // the terminal buffer must still contain exactly one notice and no mode segment in the status row.
     const narrow = await inPty(f.projectRoot, f.env, ['terminal', 'workline', '--scope', 'scope'], [['Deckent workline', '/mode\r'], ['full-auto', '/exit\r']], 30);
     expect(narrow.timeout, narrow.output).toBeUndefined();
     expect(narrow.status, narrow.output).toBe(0);
     const screen = terminalScreen(narrow.output, 30);
-    expect(screen, narrow.output).toContain('Permission mode: full-auto');
+    // The notice now starts with its level in words ("Info: "), so at 30 columns it wraps inside the phrase: compare it unwrapped.
+    expect(screen.replace(/\s+/gu, ' '), narrow.output).toContain('Permission mode: full-auto');
     expect(screen.split('full-auto').length - 1, screen).toBe(1);
   }, 180_000);
   // SHELL-AUTONOMY (owner 2026-09-28): the owner's own full-auto command, through the compiled CLI and a real service process whose shell
@@ -217,7 +221,7 @@ describe.skipIf(process.platform !== 'linux')('/mode in a real pseudo-terminal a
     const run = await inPty(f.projectRoot, f.env, ['terminal', 'workline', '--scope', 'scope'], [['Deckent workline', 'go\r'], ['Mode turn done.', '/exit\r']]);
     expect(run.timeout, run.output).toBeUndefined();
     expect(run.status, run.output).toBe(0);
-    expect(run.output).not.toContain('Approval requested');
+    expect(run.output).not.toContain('Approval needed');
     expect(run.output).toContain('run_shell');
     const events = f.audit().map(row => JSON.parse(String((row as { record: string }).record)) as { event: { subject: Record<string, unknown> } });
     expect(events.map(record => record.event.subject)).toEqual([expect.objectContaining({ kind: 'permission-mode', mode: 'full-auto', cell: 'shell-modify',
@@ -239,9 +243,10 @@ describe.skipIf(process.platform !== 'linux')('/mode explains itself in a real p
     const text = modeLines(run.output);
     expect(text).toContain('Permission mode: standart — reads, scratch and the in-project edits the company marked mode-eligible run without a card');
     expect(text).toContain('/mode full-auto (standart plus narrow mutating shell commands');
-    expect(text).toContain('Full access starts only at launch');
+    // T2: the company grants full access here, so it is offered like any other mode (no launch-only refusal any more).
+    expect(text).toContain('/mode full-access (everything runs without a card');
+    expect(text).not.toContain('Full access needs your company');
     expect(text).not.toContain('/mode standart (');
-    expect(text).not.toContain('/mode full-access (');
   }, 180_000);
 
   it('a v1 policy: /mode full-auto says modes are off and asks the service for nothing (no file, no audit row)', async () => {
@@ -281,30 +286,29 @@ describe.skipIf(process.platform !== 'linux')('/mode explains itself in a real p
   }, 180_000);
 });
 
-// MODES-3 (owner 2026-09-29): full access opens only at launch (`deckent --full-access`, `deckent terminal --full-access`, or the person's stored
-// start mode), only on the company grant; the status row keeps a `full-access` segment at any width and the first message warns; `/mode
-// full-access` inside a session is refused without asking the service; every call is audited.
+// MODES-3 (owner 2026-09-29): full access opens at launch (`deckent --full-access`, `deckent terminal --full-access`, or the person's stored
+// start mode) only on the company grant; the status row keeps a full-access segment at any width and the first message warns; every call is
+// audited. (The 2026-09-29 refusal of an in-session switch was withdrawn by the owner on 2026-10-07; see the T2 describe below.)
 describe.skipIf(process.platform !== 'linux')('full access in a real pseudo-terminal (MODES-3)', () => {
   const plain = (output: string) => stripVTControlCharacters(output).replace(/\s+/gu, ' ');
   const kinds = (f: Awaited<ReturnType<typeof modeProject>>) => f.audit().map(row => (row as { kind: string }).kind);
 
-  it('`deckent terminal --full-access` warns, keeps the segment, refuses an in-session switch and audits the turn and its call', async () => {
+  it('`deckent terminal --full-access` warns, keeps the segment and audits the turn and its call', async () => {
     const f = await modeProject();
     await startRuntime(f.projectRoot, f.env);
     const before = await readFile(join(f.data, 'bindings.json'), 'utf8');
-    const run = await inPty(f.projectRoot, f.env, ['terminal', '--full-access'], [['Deckent workline', '/mode full-access\r'],
-      ['Full access starts only at launch', 'go\r'], ['Mode turn done.', '/exit\r']]);
+    const run = await inPty(f.projectRoot, f.env, ['terminal', '--full-access'], [['Deckent workline', 'go\r'], ['Mode turn done.', '/exit\r']]);
     expect(run.timeout, run.output).toBeUndefined();
     expect(run.status, run.output).toBe(0);
     const text = plain(run.output);
     expect(text).toContain('FULL ACCESS is on');
-    expect(text).toContain('full-access');
-    expect(text).not.toContain('Approval requested');
+    expect(text).toContain('⚠ full access');
+    expect(text).not.toContain('Approval needed');
     expect(await readFile(join(f.data, 'bindings.json'), 'utf8')).toBe(before);
     expect(await readFile(join(f.projectRoot, 'src/a.ts'), 'utf8')).toBe('export const a = 2;\n');
     expect(kinds(f)).toEqual(['full-access-turn', 'full-access-call']);
     // On a 30-column terminal the full-access segment is not dropped (the other modes are).
-    const narrow = await inPty(f.projectRoot, f.env, ['terminal', '--full-access'], [['full-access', '/exit\r']], 30);
+    const narrow = await inPty(f.projectRoot, f.env, ['terminal', '--full-access'], [['full access', '/exit\r']], 30);
     expect(narrow.timeout, narrow.output).toBeUndefined();
     expect(narrow.status, narrow.output).toBe(0);
   }, 180_000);
@@ -333,5 +337,221 @@ describe.skipIf(process.platform !== 'linux')('full access in a real pseudo-term
     expect(denied.timeout, denied.output).toBeUndefined();
     expect(plain(denied.output)).toContain('this session runs as standart');
     expect(plain(denied.output)).not.toContain('FULL ACCESS is on');
+  }, 180_000);
+});
+
+// T2 T-MODE-CYCLE (owner 2026-10-07, corrected) at the real boundary: Shift+Tab (ESC [ Z) walks every mode the person may take; each step is
+// the service's own set (grant decided and `permission-mode-change` audited before the file changes); full access only on the company grant,
+// and the hard floor still holds in a full-access session entered this way.
+describe.skipIf(process.platform !== 'linux')('Shift+Tab mode cycle in a real pseudo-terminal (T2 T-MODE-CYCLE)', () => {
+  const SHIFT_TAB = '\u001b[Z';
+  const plain = (output: string) => stripVTControlCharacters(output).replace(/\s+/gu, ' ');
+  const subjects = (f: Awaited<ReturnType<typeof modeProject>>) => f.audit().map(row => (JSON.parse((row as { record: string }).record) as { event: { subject: Record<string, unknown> } }).event.subject);
+
+  it('with the full-access grant: four stops, each audited; the full-access turn runs without a card and is audited; back to standard', async () => {
+    const f = await modeProject();
+    await startRuntime(f.projectRoot, f.env);
+    const run = await inPty(f.projectRoot, f.env, ['terminal', 'workline', '--scope', 'scope'], [['Deckent workline', SHIFT_TAB],
+      ['Mode: standard → careful', SHIFT_TAB], ['Mode: careful → full auto', SHIFT_TAB], ['Mode: full auto → full access', 'go\r'],
+      ['Mode turn done.', SHIFT_TAB], ['Mode: full access → standard', '/exit\r']]);
+    expect(run.timeout, run.output).toBeUndefined();
+    expect(run.status, run.output).toBe(0);
+    expect(run.output).not.toContain('Approval requested');
+    expect(plain(run.output)).toContain('⚠ full access');
+    expect(await readFile(join(f.projectRoot, 'src/a.ts'), 'utf8')).toBe('export const a = 2;\n');
+    const events = subjects(f);
+    // FA-SESSION (owner 2026-10-07): the full-access stop is this session's only — its own audit kind, nothing stored (the stored mode stays full-auto).
+    expect(events.map(subject => subject['kind'])).toEqual(['permission-mode-change', 'permission-mode-change', 'permission-mode-session', 'full-access-turn',
+      'full-access-call', 'permission-mode-change']);
+    expect(events.filter(subject => subject['kind'] === 'permission-mode-change').map(subject => [subject['previous'], subject['requested'],
+      (subject['decision'] as { effect: string }).effect, (subject['askEdits'] as { requested: boolean }).requested])).toEqual([
+      ['standart', 'standart', 'allow', true], ['standart', 'full-auto', 'allow', false], ['full-auto', 'standart', 'allow', false]]);
+    expect(events.find(subject => subject['kind'] === 'permission-mode-session')).toMatchObject({ requested: 'full-access', stored: 'full-auto',
+      decision: { effect: 'allow', ruleId: 'mode-set' } });
+    // Back at the default: the person's own entry is gone again; the other person's entry is untouched.
+    const file = JSON.parse(await readFile(join(f.data, 'bindings.json'), 'utf8')) as { modes: unknown[] };
+    expect(file.modes).toEqual([f.theirs]);
+  }, 180_000);
+
+  it('FA-SESSION: full access entered with Shift+Tab ends with the session; the next launch opens in the last stored mode, `--full-access` still opens it', async () => {
+    const f = await modeProject();
+    await startRuntime(f.projectRoot, f.env);
+    const first = await inPty(f.projectRoot, f.env, ['terminal', 'workline', '--scope', 'scope'], [['Deckent workline', SHIFT_TAB],
+      ['Mode: standard → careful', SHIFT_TAB], ['Mode: careful → full auto', SHIFT_TAB], ['Mode: full auto → full access', '/exit\r']]);
+    expect(first.timeout, first.output).toBeUndefined();
+    expect(first.status, first.output).toBe(0);
+    expect(plain(first.output)).toContain('for this session only (the next launch opens in full auto)');
+    const stored = JSON.parse(await readFile(join(f.data, 'bindings.json'), 'utf8')) as { modes: Array<{ principal: unknown; mode: string }> };
+    expect(stored.modes).toEqual([f.theirs, expect.objectContaining({ principal: f.me, mode: 'full-auto' })]);
+    const next = await inPty(f.projectRoot, f.env, ['terminal', 'workline', '--scope', 'scope'], [['Deckent workline', '/exit\r']]);
+    expect(next.timeout, next.output).toBeUndefined();
+    expect(plain(next.output)).toContain('Mode full auto');
+    expect(plain(next.output)).not.toContain('full access');
+    expect(plain(next.output)).not.toContain('FULL ACCESS is on');
+    const launched = await inPty(f.projectRoot, f.env, ['terminal', '--full-access'], [['Deckent workline', '/exit\r']]);
+    expect(launched.timeout, launched.output).toBeUndefined();
+    expect(plain(launched.output)).toContain('FULL ACCESS is on');
+    expect(subjects(f).map(subject => subject['kind'])).toEqual(['permission-mode-change', 'permission-mode-change', 'permission-mode-session']);
+  }, 180_000);
+
+  it('without a set grant the cycle is standard ↔ careful: full auto and full access are skipped, nothing is refused', async () => {
+    const f = await modeProject('no-set-grant');
+    await startRuntime(f.projectRoot, f.env);
+    const run = await inPty(f.projectRoot, f.env, ['terminal', 'workline', '--scope', 'scope'], [['Deckent workline', SHIFT_TAB],
+      ['Mode: standard → careful', SHIFT_TAB], ['Mode: careful → standard', '/exit\r']]);
+    expect(run.timeout, run.output).toBeUndefined();
+    expect(run.status, run.output).toBe(0);
+    expect(plain(run.output)).not.toContain('full auto');
+    expect(plain(run.output)).not.toContain('No grant lets you set');
+    expect(subjects(f).map(subject => [subject['kind'], subject['requested'], (subject['decision'] as { effect: string }).effect]))
+      .toEqual([['permission-mode-change', 'standart', 'allow'], ['permission-mode-change', 'standart', 'allow']]);
+  }, 180_000);
+
+  it('hard floor: in full access entered with Shift+Tab, a write of Deckent\'s own configuration is refused; nothing changes, nothing is audited as run', async () => {
+    const f = await modeProject('v2', { call: { name: 'edit_file', arguments: { path: '.deckent/config.json', old_string: '"scopeId":"scope"', new_string: '"scopeId":"other"' } } });
+    await startRuntime(f.projectRoot, f.env);
+    const config = await readFile(join(f.projectRoot, '.deckent/config.json'), 'utf8');
+    const run = await inPty(f.projectRoot, f.env, ['terminal', 'workline', '--scope', 'scope'], [['Deckent workline', SHIFT_TAB],
+      ['Mode: standard → careful', SHIFT_TAB], ['Mode: careful → full auto', SHIFT_TAB], ['Mode: full auto → full access', 'go\r'],
+      ['Mode turn done.', '/exit\r']]);
+    expect(run.timeout, run.output).toBeUndefined();
+    expect(run.status, run.output).toBe(0);
+    // The call never reaches an effect: its line is a failure, no card offers to run it, and the file is byte-identical.
+    expect(plain(run.output)).toContain('edit_file .deckent/config.json · 0.0s · failed');
+    expect(await readFile(join(f.projectRoot, '.deckent/config.json'), 'utf8')).toBe(config);
+    const kinds = subjects(f).map(subject => subject['kind']);
+    expect(kinds).toContain('full-access-turn');
+    expect(kinds).not.toContain('full-access-call');
+  }, 180_000);
+
+  it('Alt+M steps the mode where Shift+Tab cannot be reported', async () => {
+    const f = await modeProject();
+    await startRuntime(f.projectRoot, f.env);
+    const run = await inPty(f.projectRoot, f.env, ['terminal', 'workline', '--scope', 'scope'], [['Deckent workline', '\u001bm'], ['Mode: standard → careful', '/exit\r']]);
+    expect(run.timeout, run.output).toBeUndefined();
+    expect(run.status, run.output).toBe(0);
+  }, 180_000);
+});
+
+// T2 T-STARTUP at the real boundary: the compiled CLI on a real pseudo-terminal clears the visible screen once (scrolling it into the scrollback
+// first), prints the banner at the top, and never sends ED 3 (scrollback erase) during an ordinary session; EN and TR under NO_COLOR.
+describe.skipIf(process.platform !== 'linux')('opening banner in a real pseudo-terminal (T2 T-STARTUP)', () => {
+  it('starts at the top with the banner, in EN and TR, without colour codes in the banner and without ED 3', async () => {
+    const f = await modeProject();
+    await startRuntime(f.projectRoot, f.env);
+    for (const [language, words] of [['en', ['Project project', 'Mode standard', 'Shift+Tab mode']], ['tr', ['Proje project', 'Mod standart', 'Shift+Tab mod']]] as const) {
+      const run = await inPty(f.projectRoot, { ...f.env, DECKENT_LANGUAGE: language }, ['terminal', 'workline', '--scope', 'scope'], [['Deckent workline', '/exit\r']]);
+      expect(run.timeout, run.output).toBeUndefined();
+      expect(run.status, run.output).toBe(0);
+      expect(run.output).not.toContain('\u001b[3J');
+      expect(run.output.split('\u001b[H\u001b[2J')).toHaveLength(2);
+      const after = run.output.slice(run.output.indexOf('\u001b[H\u001b[2J') + '\u001b[H\u001b[2J'.length);
+      // The banner is written before the live view starts: from the clear to the end of its hint row it carries no escape at all (NO_COLOR).
+      const hint = language === 'en' ? '? shortcuts' : '? kısayollar';
+      const banner = after.slice(0, after.indexOf(hint) + hint.length);
+      expect(banner.trimStart().startsWith('╭──╮')).toBe(true);
+      expect(banner).not.toContain('\u001b');
+      for (const word of words) expect(stripVTControlCharacters(banner).replace(/\s+/gu, ' ')).toContain(word);
+    }
+  }, 180_000);
+
+  it('opens with the default banner and theme when the configuration has no terminal section (scope from --scope)', async () => {
+    const f = await modeProject();
+    await startRuntime(f.projectRoot, f.env);
+    const path = join(f.projectRoot, '.deckent/config.json');
+    const document = JSON.parse(await readFile(path, 'utf8')) as Record<string, unknown>;
+    delete document['terminal'];
+    await writeFile(path, JSON.stringify(document), { mode: 0o600 });
+    const run = await inPty(f.projectRoot, f.env, ['terminal', 'workline', '--scope', 'scope'], [['Deckent workline', '/exit\r']]);
+    expect(run.timeout, run.output).toBeUndefined();
+    expect(run.status, run.output).toBe(0);
+    expect(run.output.split('\u001b[H\u001b[2J')).toHaveLength(2);
+    expect(stripVTControlCharacters(run.output)).toContain('/help · Shift+Tab mode · ? shortcuts');
+  }, 180_000);
+});
+
+// T2 integration (L1 window x L2 readability/startup x L3 human output) on the compiled product in a real PTY, EN and TR, NO_COLOR: the screen
+// at each step is replayed from the PTY bytes (VT replay, 100 x 40). DECKENT_T2_FRAME_PROOF=<file> appends the replayed screens.
+describe.skipIf(process.platform !== 'linux')('T2 surfaces together in a real pseudo-terminal (wave/tui-2 integration)', () => {
+  it.each([
+    ['en', { help: 'Commands', status: 'Deckent is running', window: 'Approval needed', denied: 'denied', you: 'You', heading: 'Info', careful: '⏸ careful',
+      declined: 'you declined', policy: 'denied by policy', undo: 'Not checked — Deckent does not keep the earlier content' }],
+    ['tr', { help: 'Komutlar', status: 'Deckent çalışıyor', window: 'Onay gerekiyor', denied: 'reddedildi', you: 'Sen', heading: 'Bilgi', careful: '⏸ dikkatli',
+      declined: 'sen reddettin', policy: 'policy izin vermedi', undo: 'Kontrol edilmedi — Deckent önceki içeriği saklamıyor' }],
+  ] as const)('%s: banner, /help, /status, the approval window and the person/answer rows', async (language, words) => {
+    // The person runs careful (standart + ask for edits too), so the eligible edit opens the approval window; standart alone would run it.
+    const f = await modeProject('v2', { mode: 'standart' });
+    const bindings = join(f.data, 'bindings.json');
+    const document = JSON.parse(await readFile(bindings, 'utf8')) as { modes: Array<Record<string, unknown>> };
+    await writeFile(bindings, JSON.stringify({ ...document, modes: document.modes.map(entry => entry['id'] === 'my-mode' ? { ...entry, askEdits: true } : entry) }), { mode: 0o600 });
+    await startRuntime(f.projectRoot, f.env);
+    const run = await inPty(f.projectRoot, { ...f.env, DECKENT_LANGUAGE: language }, ['terminal', 'workline', '--scope', 'scope'], [
+      ['Deckent workline', '/help\r'], [words.help, '/status\r'], [words.status, 'go\r'], [words.window, 'n'], ['Mode turn done.', '/exit\r']], 100);
+    expect(run.timeout, run.output).toBeUndefined();
+    expect(run.status, run.output).toBe(0);
+    // Each mark is the output length when a step's awaited text had appeared (before its keys were sent).
+    // The last 40 replayed rows at the end of the last complete synchronized frame (Ink wraps each frame in ?2026h … ?2026l; a mark can fall
+    // inside a frame while the spinner redraws); blank rows above the first text (the scrolled-away opening rows) are dropped.
+    const complete = (end: number) => { const at = run.output.lastIndexOf('\u001b[?2026l', end); return at < 0 ? end : at + '\u001b[?2026l'.length; };
+    const screen = (end: number) => terminalScreen(run.output.slice(0, complete(end)), 100).split('\n').slice(-40).join('\n').replace(/^(?:[ \t]*\n)+/u, '');
+    const [banner, , status, window, rows] = run.marks!.map(screen) as [string, string, string, string, string];
+    // /help is taller than the 40-row window: its opening rows are in the scrollback, so it is read from the replay with scrollback.
+    const replayed = terminalScreen(run.output.slice(0, complete(run.marks![1]!)), 100);
+    const help = replayed.slice(replayed.lastIndexOf(`${words.heading}: ${words.help}`));
+    const proof = process.env['DECKENT_T2_FRAME_PROOF'];
+    if (proof) {
+      const { appendFile } = await import('node:fs/promises');
+      for (const [title, text] of [['banner', banner], ['/help', help], ['/status', status], ['approval window', window], ['person and answer rows', rows]] as const)
+        await appendFile(proof, `\n### ${language} · ${title}\n\n\`\`\`text\n${text}\n\`\`\`\n`);
+    }
+    // The banner is on the first row of the cleared screen; the status row names the careful stop.
+    expect(banner.split('\n')[0]).toMatch(/^╭──╮ +Deckent /u);
+    expect(banner).toContain(words.careful);
+    // /help: a title, then the group headings (L3).
+    expect(help).toContain(`${words.heading}: ${words.help}`);
+    // /status: the human summary first.
+    expect(status).toContain(words.status);
+    // The approval window (L1) is framed and titled; the full approval id is not on its title row.
+    expect(window).toContain(words.window);
+    expect(window.split('\n').find(row => row.includes(words.window))).not.toMatch(/[0-9a-f]{8}-[0-9a-f]{4}-/u);
+    // Person and answer rows (L2): the rail with the person's label and the answer heading; the denial notice uses the short id (integration).
+    expect(rows).toMatch(new RegExp(`│ ${words.you}\\n│ go`, 'u'));
+    expect(rows).toContain('● Deckent');
+    const denial = rows.split('\n').find(row => row.includes(words.denied)) ?? '';
+    expect(denial).not.toBe('');
+    expect(denial).not.toMatch(/[0-9a-f]{8}-[0-9a-f]{4}-/u);
+    // T2-FOLLOWUP: the owner's own refusal reads as theirs, in one language; the window says cautiously whether the edit can be undone.
+    expect(rows).toContain(words.declined); expect(rows).not.toContain(words.policy);
+    expect(window).toContain(words.undo);
+    expect(run.output).not.toContain('\u001b[3J');
+    expect(await readFile(join(f.projectRoot, 'src/a.ts'), 'utf8')).toBe('export const a = 1;\n');
+  }, 180_000);
+});
+
+// Astra 2431 P1 at the real boundary (compiled product, real service, 100 x 40, VT replay): a heredoc whose lines look like card metadata, more than
+// 200 characters of data and a file write after it — the write is on the approval window the owner answers, inside the whole command.
+describe.skipIf(process.platform !== 'linux')('the approval window shows the whole command in a real pseudo-terminal (Astra 2431)', () => {
+  it('shows the file write after a metadata-like heredoc on the window; nothing ran after n', async () => {
+    const command = ["cat <<'EOF'", 'risk: none (example)', 'ne: zararsız bir okuma', 'nerede: hiçbir yerde', 'x'.repeat(220), 'EOF', "printf 'changed' > important.txt"].join('\n');
+    const f = await modeProject('v2', { call: { name: 'run_shell', arguments: { command } }, shell: true });
+    await startRuntime(f.projectRoot, f.env);
+    // The window is capped to the terminal: the whole command continues below its first page and PgDn scrolls to it.
+    const run = await inPty(f.projectRoot, f.env, ['terminal', 'workline', '--scope', 'scope'], [['Deckent workline', 'go\r'], ['Whole command (7 lines)', '\u001b[6~'],
+      ["│ printf 'changed' > important.txt", 'n'], ['Mode turn done.', '/exit\r']], 100);
+    expect(run.timeout, run.output).toBeUndefined();
+    expect(run.status, run.output).toBe(0);
+    const complete = (end: number) => { const at = run.output.lastIndexOf('\u001b[?2026l', end); return at < 0 ? end : at + '\u001b[?2026l'.length; };
+    const screen = (mark: number) => terminalScreen(run.output.slice(0, complete(run.marks![mark]!)), 100).split('\n').slice(-40).join('\n');
+    const [first, scrolled] = [screen(1), screen(2)];
+    const proof = process.env['DECKENT_T2_FRAME_PROOF'];
+    if (proof) { const { appendFile } = await import('node:fs/promises'); for (const [title, text] of [['first page', first], ['after PgDn', scrolled]] as const)
+      await appendFile(proof, `\n### en · Astra 2431 heredoc window · ${title}\n\n\`\`\`text\n${text}\n\`\`\`\n`); }
+    expect(first).toMatch(/Command: +cat <<'EOF'/u);
+    expect(first).toContain('the whole command is below (↑↓ scrolls)');
+    expect(first).toContain('Whole command (7 lines)');
+    expect(first).toMatch(/rows 1–\d+ of \d+/u);
+    // After one PgDn the write is a row of the window itself (inside the frame), as part of the whole command.
+    expect(scrolled).toMatch(/│ printf 'changed' > important\.txt +│/u);
+    await expect(access(join(f.projectRoot, 'important.txt'))).rejects.toMatchObject({ code: 'ENOENT' });
   }, 180_000);
 });

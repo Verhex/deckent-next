@@ -284,3 +284,24 @@ for edits too (`askEdits`) or where the mode does not lower. CLI:
 the vocabulary gains `agent-tool-call`. Not yet: the card scopes + decision field on protocol v17 (introduced by MODES-3; MCP has no approval decision tool), the
 service wiring from the turn's `requestApproval` to `offer`/`remember`/`persist`, the installation root (P4; a v1 live policy cannot offer
 "always"), `/policy`, listing this session's memory.
+
+**Shift+Tab cycle and in-session full access (TERMINAL-UX T2 T-MODE-CYCLE, owner 2026-10-07, corrected; supersedes "launched only" and the
+surface refusal of `/mode full-access` above; integrated on `wave/tui-2`, not landed).** Shift+Tab (Alt+M where the console
+cannot report Shift+Tab) walks every stop the person may take here: `standart` → careful (`standart` + `askEdits`) → `full-auto` →
+`full-access` → `standart`; no plan mode. `full-access` is a stop only when the view's `fullAccess` grant holds; `full-auto` unless the view
+says the company's set grant leaves it out (`fullAuto`, a view field of runtime protocol v21 — wave/tui-2 bumps once because the v20 view is
+strict; every v21 service sends it, and a view without it lets the service answer the set itself). Every step, and `/mode full-access`, is the existing `setPermissionMode` with the revision last read and an explicit
+`askEdits`: the engine decides the grant and records `permission-mode-change` (principal, time, previous → requested, rule) before the
+bindings change; `standart`, careful and `full-auto` persist as the next launch's mode. **FA-SESSION (owner 2026-10-07, Jev 31ff7659):** the
+full-access stop and `/mode full-access` are this terminal session's only — the command carries `session: { sessionId }` (v21; full access
+only), the engine decides the same grant and records `permission-mode-session` (stored mode left untouched, the conversation id, rule, the
+bindings revision read) before it answers, and writes nothing; the next launch opens in the last stored mode. `--full-access` and the explicit
+`/mode start full-access` (a stored start mode, MODES-3) are unchanged. Leaving full access by Shift+Tab or `/mode standart|full-auto` stores
+that mode as before; a session that simply ends leaves no event (the next turn admission is the evidence). Every
+following full-access turn is admitted on the grant again and audited (`full-access-turn`, `full-access-call`); a grant revoked meanwhile
+reads as standart at the decision and the effect gate. The hard floor holds in every mode (PTY proof: a write of `.deckent/config.json`
+in a full-access session entered with Shift+Tab fails at the workspace floor; nothing changes, no `full-access-call`). The status row shows
+the stop as mark and catalog word (`⏸ standart`, `⏸ dikkatli`, `⏵⏵ tam otomatik`, `⚠ tam erişim`; ASCII `||`, `>>`, `!!`); full access stays
+non-droppable in the error role. While a card or picker owns the keyboard, Shift+Tab is theirs and the mode does not change; while a turn runs the step is not taken (the
+turn keeps the mode it was admitted with, as a queued `/mode` does). The `--full-access` launch flag still works.
+

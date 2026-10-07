@@ -50,7 +50,7 @@ describe('config defaults (zod 4 .default/.prefault guard)', () => {
     expect(outcome).toEqual({ provider_catalog: false, provider_invocation_profiles: false, provider_spending: false, provider_spend_audit: false,
       inference_serving: false, terminal: true, operations: true, secrets: false, decision: false, identity: false });
     const defaults = createDefaultConfig();
-    expect(defaults['terminal']).toEqual({ persistHistory: true, autostartService: true, serviceStartTimeoutMs: 20_000 });
+    expect(defaults['terminal']).toEqual({ persistHistory: true, autostartService: true, serviceStartTimeoutMs: 20_000, theme: 'auto', banner: 'full', clearOnStart: true });
     expect(defaults['operations']).toEqual({ catalog: [], targets: [] });
     // SECRET-K1: `secrets` stays absent from the defaults, so a healed or default-filled project file never carries a backend selection.
     // AOF-DECISION-PORT: no universal decision threshold is synthesized; a missing `decision` section means unavailable.
@@ -68,7 +68,7 @@ describe('config defaults (zod 4 .default/.prefault guard)', () => {
     expect(d.installation).toEqual({ profileMaxBytes: 1_048_576, writeLockTimeoutMs: 2000, imageProbe: { timeoutMs: 5000, outputBytes: 65_536 },
       identityProbe: { timeoutMs: 2000, outputBytes: 65_536 }, machineIdentity: { source: null }, requireMachineBinding: false,
       packageMeasurement: { maxFiles: 8192, maxFileBytes: 67_108_864, maxTotalBytes: 536_870_912, maxDepth: 32 } });
-    expect(d.approvals).toEqual({ requestTtlMs: 600_000, sessionTtlMs: 60_000, pageSize: 100, keyFile: 'authority.key' });
+    expect(d.approvals).toEqual({ requestTtlMs: 600_000, sessionTtlMs: 60_000, pageSize: 100, keyFile: 'authority.key', approverNoteMaxChars: 500 });
     expect(d.cli).toEqual({ graphInputMaxBytes: 1_048_576, invocationInputMaxBytes: 1_048_576 });
     expect(d.mcp).toEqual({ inputMaxBytes: 1_048_576, responseMaxBytes: 1_048_576, maxConcurrentCalls: 8 });
     expect(d.service).toEqual({ identity: null, inputMaxBytes: 1_048_576, responseMaxBytes: 1_048_576, maxConnections: 32, maxConcurrentRequests: 16,
@@ -127,7 +127,7 @@ describe('config defaults (zod 4 .default/.prefault guard)', () => {
   });
 
   it('terminal: optional sub-objects stay absent; their readers fill documented defaults', () => {
-    expect(terminalConfigSchema.parse({})).toEqual({ persistHistory: true, autostartService: true, serviceStartTimeoutMs: 20_000 });
+    expect(terminalConfigSchema.parse({})).toEqual({ persistHistory: true, autostartService: true, serviceStartTimeoutMs: 20_000, theme: 'auto', banner: 'full', clearOnStart: true });
     expect(terminalConfigSchema.parse({ shell: { schemaVersion: 1 } }).shell).toEqual({ schemaVersion: 1, timeoutMs: 300_000, realm: 'prefer-sandbox', environment: [] });
     expect(readTerminalShellConfig({})).toEqual({ realm: 'prefer-sandbox', timeoutMs: 300_000, environment: [] });
     expect(readTerminalScratchConfig({})).toEqual({ writeMaxBytes: 1_048_576, sessionMaxBytes: 67_108_864, installationMaxBytes: 536_870_912, retentionDays: 7, sweepIntervalMs: 3_600_000 });

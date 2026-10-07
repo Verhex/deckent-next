@@ -70,7 +70,13 @@ const decisionShape = { commandId: identitySchema, decision: z.enum(['allow', 'd
 const sessionDecisionSchema = z.object(decisionShape).strict().readonly();
 /** Decision v2 (B1): the service-derived `assurance` is part of the sealed record. */
 const attestedDecisionSchema = z.object({ schemaVersion: z.literal(2), ...decisionShape, assurance: approvalAssuranceSchema }).strict().readonly();
-export const approvalDecisionSchema = z.union([attestedDecisionSchema, sessionDecisionSchema]);
+/**
+ * Decision v3 (APPROVER-NOTE, owner 2026-10-07; lead decision 2026-10-07): a v2 decision whose `reason` is the decider's own words (typed on the
+ * card), so a tool-call turn gives it to the model as the approver's note. Only a noted decision is written as v3 — every other decision stays
+ * v2, readable by earlier builds; an earlier build refuses a v3 record with its typed `APPROVAL_INTEGRITY` (strict schema, store decode).
+ */
+const notedDecisionSchema = z.object({ schemaVersion: z.literal(3), ...decisionShape, assurance: approvalAssuranceSchema, approverNote: z.literal(true) }).strict().readonly();
+export const approvalDecisionSchema = z.union([notedDecisionSchema, attestedDecisionSchema, sessionDecisionSchema]);
 /** The dual reader: a decision's assurance, `peer-session` for a decision sealed before B1. */
 export const approvalDecisionAssurance = (decision: z.infer<typeof approvalDecisionSchema>): string =>
   'assurance' in decision ? decision.assurance : APPROVAL_ASSURANCE.peerSession;

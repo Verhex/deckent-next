@@ -121,6 +121,36 @@ Market notes live outside the repo (`/home/alperen/deckent-refactor-work/proof/T
   `terminal-composer`; `terminal-ledger` (pure work-ledger model, `notice()`, run/worker/approval watches, bridge snapshot)
   ← `terminal-work` (work surface, slash dispatch, approval/cancel flow, cards) ← `terminal` (workline root, sessions, mode;
   its barrel re-exports the lower units); split by responsibility to keep each unit within the 2000-line budget.
+- **Bounded windows (TUI2 L1, 2026-10-07; integrated on `wave/tui-2`, not landed):** unit `terminal-window` (← terminal-kit, terminal-render)
+  owns the `Window` frame (title left, status right, body capped to the terminal rows and scrolled by ↑↓/PgUp/PgDn/Home/End, wrapped key
+  hints, widths in display cells, ASCII frame with ASCII glyphs; `exact` rows keep commands/patterns/previews character for character)
+  and the window stack: one input owner, the top layer (approval priority, then newest); the composer, cards and pickers listen through
+  `useInput` `isActive` only while they own input. Ink `useFocus` is deliberately unused (it takes Tab/Shift+Tab/Esc). The stack is a
+  view concern; which decision is legal stays with the panel controller. `PanelPresentation` has a generic `{kind:'window'}` (y/N or
+  close); `/service-restart` confirms through it. The approval window (`terminal-work/approval-window.ts`) shows nine labelled
+  fields from what the producer already sends (tool/target from the call's own `tool.started`, client-side; the sealed binding line
+  as fallback) and catalog dictionaries keyed by the policy cell; raw ids, digests and cells only in its details; Tab adds a reason
+  that reaches the decision command's `reason` with `approverNote: true` (APPROVER-NOTE, owner 2026-10-07, v21): the sealed decision — v3 only
+  for such a note, every other decision stays v2 — keeps it whole (audit), and the turn gives it to the model on allow (after the call's result) and on deny (after `denied-by-owner`), labelled
+  as the approver's own words, JSON-quoted, at most `approvals.approverNoteMaxChars` code points (default 500; a cut says so) and through
+  the model-ingress projection (hidden code points marked and recorded, a hidden payload withheld). No typed reason: the default sentence,
+  unmarked, and the model's text is byte-identical to before. MCP tool calls share the turn's approval port; the MCP trust card has no
+  model-facing result, so its note stays in the record only. **REVERSIBILITY** (owner 2026-10-07, Jev 8cc5e230; v21 `approval.requested.undo`):
+  the producer names the card's undo word by what the call is (`agentToolUndo`, engine approval; vocabulary `AGENT_TOOL_UNDO`, domain):
+  edit/write `unverified` (no Core tool keeps the earlier content), shell `may-change`, destructive shell `irreversible`, fetch/read
+  `no-change`, MCP from the pinned definition's `readOnlyHint`/`destructiveHint` ("the server says …", `server-silent` without one); never
+  "reversible" without evidence (only a catalog operation's declared compensation says yes). A stored card without the word gets the same
+  classification from its tool and cell (never for MCP: "not declared"). **POSTURE** (L1 D2/D4; v21 `approval.requested.posture`): a shell
+  card carries `{realm, containment, project, git, network, passedOver}` from the chosen realm and the call's write view (`shellPostureFacts`,
+  host-shell); the window words it in EN/TR. **Card fields as data (Astra 2431, L1 D4 closed; v21 `approval.requested.call` and `previewCut`):** the
+  producer sends the whole shell command with the classifier's tier and reason, an edit's target and line counts, a fetch URL/host/allowlist,
+  an MCP server/tool, and a cut preview's facts; the window parses no preview text. A command longer than three rows shows its first rows,
+  "N more lines — the whole command is below (↑↓ scrolls)" and a "Whole command" block with every row (never cut); the producer's preview
+  follows whole — no line is taken for metadata and dropped. Without producer fields (an older service, a stored card) the window shows the
+  call's own line (which marks its 200-character cut with "…"), says the detailed fields are not available, and shows the preview whole. **DENY-WORDING** (T2-FOLLOWUP): a call whose card the owner declined
+  (`approval.settled` deny for that call) prints "you declined" / "sen reddettin" in the muted tone; a policy rule's refusal keeps "denied by
+  policy" / "kural izin vermedi". A call the owner allowed but policy denies on re-evaluation (contract §2) settles `allow` and is refused by
+  policy (`error=denied-by-policy (approved, …)`), so it reads as the policy's refusal.
 - **Local/free models** use `openai-chat-http` v4 with an operator-declared `operator-static` tariff (v1: zero rates only).
   The quote is reserved against the scope budget and a responded call settles `settled-local 0` in the spend ledger;
   there is no unmetered bypass class. Positive chargeback rates need a separate measurement basis.
@@ -203,3 +233,50 @@ characters, attached file bodies not printed, tool results as one count line, su
 equal by a contract test) and the tokens left, a size-estimate split of the visible history (the service's own instructions are not in
 it), the last summary, the three largest items and a `/clear` suggestion at ≥ 60 %. Protocol unchanged (v16). Open: `/compact` (protocol
 decision), redrawing an open suggestion list when the index refreshes.
+
+**Readability, opening banner and theme (TERMINAL-UX T2 L2, owner 2026-10-07; integrated on `wave/tui-2`, not landed).**
+Token map `design/tokens/terminal.map.json` adds the roles `userBar`, `userLabel`, `assistantLabel`, `workerCard`, `windowBorder`,
+`windowTitle`, `selection`, `diffAdded`, `diffRemoved`, `modeIndicator` and four themes (`dark`, `light`, `dark-daltonized`,
+`light-daltonized`, each with reference backgrounds); `scripts/build-terminal-palette.mjs` emits per-theme palettes (`THEME_PALETTES`,
+nearest xterm-256 index for new primitives). A contract test measures WCAG 2.2 contrast (text 4.5:1, borders 3:1) of every truecolor value
+on each reference background of its theme; Deckent never sets the terminal background. Colour choice is split: `colorCapability`
+(platform) reads `NO_COLOR`/`--no-color`/`FORCE_COLOR`/`TERM=dumb`/TTY, `COLORTERM` truecolor|24bit and a 256-colour `TERM`;
+`resolveTerminalTheme` (terminal-theme) applies `terminal.theme` (`auto|dark|light|dark-daltonized|light-daltonized|ansi`, default `auto`):
+`auto` uses the dark/light theme only when `COLORFGBG` reports the background and otherwise stays in ansi16 (the terminal's own palette);
+`colorTier` (monitor, crash report) keeps its background guard. The person's row is a left rail with the `You`/`Sen` label and the text in
+the terminal's own foreground; the answer heading is `● Deckent` (`assistantLabel`); worker cards use `workerCard`. Opening: on a TTY the
+workline first scrolls the visible rows into the scrollback (`rows` line feeds), then sends CUP home + ED 2 and prints the banner (catalog
+mark with an ASCII form, version, project and path, model, mode, `/help · Shift+Tab mode · ? shortcuts`), one line below 60 columns or
+with `terminal.banner: compact`, none with `off`; `terminal.clearOnStart: false` and `TERM=dumb` never clear; a pipe receives nothing.
+ED 3 is never sent by Deckent; Ink's own overflow redraw (`clearTerminal` when the live frame reaches the window height) still contains
+ED 3 — an open limit the bounded window (L1) and a decision on Ink's overflow path must close. Proof:
+`/home/alperen/deckent-refactor-work/proof/TUI2-2026-10-07/L2-review.md`.
+
+**Human output (TUI2 L3, T-HUMAN-OUTPUT, 2026-10-07).** The slash answers read as a person's summary first and keep identities under a
+details heading. `/status`: one sentence (running or not read, version, model) then the host report and the service descriptor
+(instance, pid, build) as details. `/scope`: you, project (name and short id), company, mode, rule version, surface access in words,
+full identities in the details. `/model`: catalog display name, channel kind and tool support from the ledger entry (channel evidence,
+not a probe), exact `provider@v/model@v` reference in the details. `/usage`: locale thousands separator and units. `/help`: commands
+under `SLASH_GROUPS` headings (info, jobs, approvals, settings, session; a command without a group falls under "other"), one catalog line
+each; the palette and the help share the row text. `/transcript <n|attemptId> [page]`: page 1 is the newest `TRANSCRIPT_PAGE_LINES` (40)
+lines, a footer names the earlier page; the headline carries short identities, a details line the full ones. `/mcp`: one line per server
+(scope, state in words, tool count, command), the six trust statuses and the recorded start failure in catalog words. Run cards print a
+short run id, the revision with a requested cancellation and the task phases as counts in words; worker cards print the worker number,
+process state and who recorded it. Notices start with Info, Warning or Error (catalog templates `{text}`; the ledger notice type has a
+`warning` level); a typed failure prints its human message and `(code: X)` on its own line. The monitor prints the machine's local time
+with the zone offset (`Z` at UTC); the suite pins `TZ=UTC`. Turkish terms follow `terminology-tr.md` (iş, görev, işçi). Words reach the
+cards through `WorkerLineLabels.card` (`LedgerCardLabels`), so the run/worker/notice rows add no new label path to the window code.
+Open: context percentage in `/status`, a real principal name for `/scope` (the host user name is shown), the monitor window (T3),
+stream-failure footers.
+
+**T2 integration (`wave/tui-2`, 2026-10-07, not landed).** Shift+Tab/Alt+M step the mode only while the window stack is idle
+(`PermissionModeKeys` inside the `WindowStackProvider`): any open window owns them, not only a card or picker. Windows take the L2 roles
+(`windowBorder` frame, `windowTitle` title while focused, muted otherwise), the picker's selected row `selection`, the reason caret
+`focus`, approval diff rows the span roles `diffAdded`/`diffRemoved`; meaning stays in text (`+`/`-`, `>`, caret glyph). `/approvals`,
+`/cancel`, `/service-restart` and `/mode` sit under Approvals, Jobs and Settings with one short line each. The `/cancel` window prints the
+task phases in card words (`formatTaskPhases`, shared with run cards), the short run id in its title and the full id on its own detail
+line; decision notices name the short approval id and add the full id as a detail line. The careful stop (`standart` + ask-edits) is its
+own word in `/scope` and in the approval window's why-asked field. `shortId` lives in `platform/core/common` so react-free units
+(terminal-admin, terminal-ledger) never pull the terminal kit onto the CLI startup graph. Runtime protocol v21 carries the view field
+`fullAuto` (the strict v20 view would refuse it). The approval window's catalog keys (`terminal.approval.window.*`) live in the `tui`
+family (the merged `cli` family passed the 1500-line gate). Proof: `proof/TUI2-2026-10-07/INTEGRATION-review.md`.

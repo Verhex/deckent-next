@@ -1,24 +1,44 @@
-import { loadConfig, t } from '#platform/index.js';
-import { part } from './failure.js';
+import { basename } from 'node:path';
+import { loadConfig, shortId, t } from '#platform/index.js';
+import { attempt } from './failure.js';
 import type { TerminalAdminCall } from './context.js';
 
-/** `/scope`: the scope this terminal acts in and what the service says about the person's access to it, read fresh on every call. */
-export async function scopeLines(call: TerminalAdminCall, identity: Readonly<{ installationId: string; projectId: string }>, args: string): Promise<readonly string[]> {
+/**
+ * `/scope`: who acts where on one line (you, project, company, mode, rule version, short identities), the surface access in words, then the details
+ * with the full identities and the full permission-mode record. Read fresh on every call; a part that could not be read is named, not guessed.
+ */
+export async function scopeLines(call: TerminalAdminCall, identity: Readonly<{ installationId: string; projectId: string }>, args: string, principalName: string | null,
+  sessionFullAccess = false): Promise<readonly string[]> {
   const { root, scopeId, options, locale, context } = call;
   if (args.trim()) return [t('terminal.admin.scope.usage', {}, locale)];
-  const own = [t('terminal.admin.scope.scope', { scope: scopeId }, locale), t('terminal.admin.scope.installation', { id: identity.installationId }, locale),
-    t('terminal.admin.scope.project', { id: identity.projectId }, locale)];
-  const company = await part(t('terminal.admin.scope.partCompany', {}, locale), locale, async () =>
-    [t('terminal.admin.scope.company', { id: (await loadConfig(root, options)).company.id }, locale)]);
-  const mode = await part(t('terminal.admin.scope.partMode', {}, locale), locale, context.inspectPermissionMode ? async () => {
-    const view = await context.inspectPermissionMode!(root, { schemaVersion: 1, scopeId }, options);
-    const flag = (value: boolean) => value ? t('terminal.value.yes', {}, locale) : t('terminal.value.no', {}, locale);
-    return [t('terminal.admin.scope.mode', { mode: view.mode, revision: view.revision, supported: flag(view.supported), fullAccess: flag(view.fullAccess) }, locale)];
-  } : null);
-  const access = await part(t('terminal.admin.scope.partAccess', {}, locale), locale, context.inspectSurfaceAccess ? async () => {
-    const found = await context.inspectSurfaceAccess!(root, scopeId, options);
-    return [found ? t('terminal.admin.scope.access', { binding: found.binding, kinds: found.kinds.join(', ') || t('terminal.value.none', {}, locale) }, locale)
-      : t('terminal.admin.scope.accessNone', {}, locale)];
-  } : null);
-  return [...own, ...company, ...mode, ...access];
+  const company = await attempt(t('terminal.admin.scope.partCompany', {}, locale), locale, async () => (await loadConfig(root, options)).company.id);
+  const mode = await attempt(t('terminal.admin.scope.partMode', {}, locale), locale, context.inspectPermissionMode
+    ? () => context.inspectPermissionMode!(root, { schemaVersion: 1, scopeId }, options) : null);
+  const access = await attempt(t('terminal.admin.scope.partAccess', {}, locale), locale, context.inspectSurfaceAccess ? () => context.inspectSurfaceAccess!(root, scopeId, options) : null);
+  const flag = (value: boolean) => value ? t('terminal.value.yes', {}, locale) : t('terminal.value.no', {}, locale);
+  // T2 integration: the mode reads as the status row's stop word, so "careful" (standart with the ask-for-edits preference) is its own word.
+  const stopWord = (view: Readonly<{ mode: string; askEdits: boolean }>) => view.mode === 'standart' && view.askEdits ? t('terminal.mode.stop.ask-edits', {}, locale)
+    : view.mode === 'full-auto' ? t('terminal.mode.stop.full-auto', {}, locale) : view.mode === 'full-access' ? t('terminal.mode.stop.full-access', {}, locale)
+    : view.mode === 'standart' ? t('terminal.mode.stop.standart', {}, locale) : view.mode;
+  const summary = [
+    ...(principalName ? [t('terminal.admin.scope.you', { name: principalName }, locale)] : []),
+    t('terminal.admin.scope.projectNamed', { name: basename(root) || root, id: shortId(identity.projectId) }, locale),
+    ...('value' in company ? [t('terminal.admin.scope.company', { id: company.value === 'default' ? t('terminal.admin.scope.companyDefault', {}, locale) : company.value }, locale)] : []),
+    // Astra 2431 P2: the mode this session runs in — full access held by the session reads as such, with the stored mode the next launch takes.
+    // A stored full-access start mode without the session holding it runs as standart (the decision's own reading).
+    ...('value' in mode ? [sessionFullAccess ? t('terminal.admin.scope.modeSession', { mode: t('terminal.mode.stop.full-access', {}, locale), stored: stopWord(mode.value) }, locale)
+      : mode.value.mode === 'full-access' ? t('terminal.admin.scope.modeStored', { mode: t('terminal.mode.stop.standart', {}, locale), stored: stopWord(mode.value) }, locale)
+        : t('terminal.admin.scope.modeShort', { mode: stopWord(mode.value) }, locale), t('terminal.admin.scope.rule', { revision: mode.value.revision }, locale)] : []),
+  ].join(' · ');
+  const kindWord = (kind: string) => kind === 'run' ? t('terminal.admin.scope.kindRun', {}, locale) : kind === 'worker' ? t('terminal.admin.scope.kindWorker', {}, locale)
+    : kind === 'approval' ? t('terminal.admin.scope.kindApproval', {}, locale) : kind;
+  const accessLine = 'note' in access ? access.note : access.value
+    ? t('terminal.admin.scope.access', { kinds: access.value.kinds.map(kindWord).join(', ') || t('terminal.value.none', {}, locale) }, locale)
+    : t('terminal.admin.scope.accessNone', {}, locale);
+  return [summary, t('terminal.admin.scope.scope', { scope: scopeId }, locale), accessLine,
+    ...('note' in company ? [company.note] : []), ...('note' in mode ? [mode.note] : []),
+    t('terminal.admin.scope.details', {}, locale),
+    ...[t('terminal.admin.scope.installation', { id: identity.installationId }, locale), t('terminal.admin.scope.project', { id: identity.projectId }, locale),
+      ...('value' in mode ? [t('terminal.admin.scope.mode', { mode: mode.value.mode, revision: mode.value.revision, supported: flag(mode.value.supported), fullAccess: flag(mode.value.fullAccess) }, locale)] : [])]
+      .map(line => `  ${line}`)];
 }

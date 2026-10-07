@@ -2,44 +2,53 @@
 export interface SlashCommand {
   readonly name: string;
   readonly descriptionKey: string;
+  /** Help group (`SLASH_GROUPS`); a command without one is listed last under the "other" heading. */
+  readonly group?: SlashGroupId;
   /** Catalog key of the argument hint; set only for commands that take an argument. Enter on such a palette row completes
    * `/name ` and waits for the argument; a command without one runs at once. */
   readonly argumentKey?: string;
 }
 
+/** The groups `/help` lists commands under, in display order; each heading is a catalog text (`labelKey`). */
+export const SLASH_GROUPS = Object.freeze([
+  { id: 'info', labelKey: 'terminal.slash.group.info' }, { id: 'work', labelKey: 'terminal.slash.group.work' }, { id: 'approvals', labelKey: 'terminal.slash.group.approvals' },
+  { id: 'settings', labelKey: 'terminal.slash.group.settings' }, { id: 'session', labelKey: 'terminal.slash.group.session' }, { id: 'other', labelKey: 'terminal.slash.group.other' },
+] as const);
+export type SlashGroupId = typeof SLASH_GROUPS[number]['id'];
+
 export const WORKLINE_SLASH_COMMANDS: readonly SlashCommand[] = Object.freeze([
-  { name: 'status', descriptionKey: 'terminal.slash.status' },
-  { name: 'workers', descriptionKey: 'terminal.slash.workers' },
-  { name: 'watch-workers', descriptionKey: 'terminal.slash.watchWorkers' },
-  { name: 'watch-runs', descriptionKey: 'terminal.slash.watchRuns' },
-  { name: 'watch-stop', descriptionKey: 'terminal.slash.watchStop' },
-  { name: 'run', descriptionKey: 'terminal.slash.run', argumentKey: 'terminal.slash.runArgument' },
-  { name: 'runs', descriptionKey: 'terminal.slash.runs' },
-  { name: 'transcript', descriptionKey: 'terminal.slash.transcript', argumentKey: 'terminal.slash.transcriptArgument' },
-  { name: 'approvals', descriptionKey: 'terminal.slash.approvals', argumentKey: 'terminal.slash.approvalsArgument' },
-  { name: 'cancel', descriptionKey: 'terminal.slash.cancel', argumentKey: 'terminal.slash.cancelArgument' },
-  { name: 'service-restart', descriptionKey: 'terminal.slash.serviceRestart' },
-  { name: 'context', descriptionKey: 'terminal.slash.context' },
-  { name: 'resume', descriptionKey: 'terminal.slash.resume', argumentKey: 'terminal.slash.resumeArgument' },
-  { name: 'clear', descriptionKey: 'terminal.slash.clear' },
-  { name: 'mode', descriptionKey: 'terminal.slash.mode', argumentKey: 'terminal.slash.modeArgument' },
+  { name: 'status', group: 'info', descriptionKey: 'terminal.slash.status' },
+  { name: 'workers', group: 'work', descriptionKey: 'terminal.slash.workers' },
+  { name: 'watch-workers', group: 'work', descriptionKey: 'terminal.slash.watchWorkers' },
+  { name: 'watch-runs', group: 'work', descriptionKey: 'terminal.slash.watchRuns' },
+  { name: 'watch-stop', group: 'work', descriptionKey: 'terminal.slash.watchStop' },
+  { name: 'run', group: 'work', descriptionKey: 'terminal.slash.run', argumentKey: 'terminal.slash.runArgument' },
+  { name: 'runs', group: 'work', descriptionKey: 'terminal.slash.runs' },
+  { name: 'transcript', group: 'work', descriptionKey: 'terminal.slash.transcript', argumentKey: 'terminal.slash.transcriptArgument' },
+  { name: 'approvals', group: 'approvals', descriptionKey: 'terminal.slash.approvals', argumentKey: 'terminal.slash.approvalsArgument' },
+  { name: 'cancel', group: 'work', descriptionKey: 'terminal.slash.cancel', argumentKey: 'terminal.slash.cancelArgument' },
+  { name: 'service-restart', group: 'settings', descriptionKey: 'terminal.slash.serviceRestart' },
+  { name: 'context', group: 'info', descriptionKey: 'terminal.slash.context' },
+  { name: 'resume', group: 'session', descriptionKey: 'terminal.slash.resume', argumentKey: 'terminal.slash.resumeArgument' },
+  { name: 'clear', group: 'session', descriptionKey: 'terminal.slash.clear' },
+  { name: 'mode', group: 'settings', descriptionKey: 'terminal.slash.mode', argumentKey: 'terminal.slash.modeArgument' },
   // TL-A D6: shows or hides the reasoning preview (toggle, or `on`/`off`); runs at once from the palette.
-  { name: 'reasoning', descriptionKey: 'terminal.slash.reasoning' },
+  { name: 'reasoning', group: 'settings', descriptionKey: 'terminal.slash.reasoning' },
   // SCR-A: lists the conversation's scratch area (`/scratch path`, `/scratch clear` typed); runs at once from the palette.
-  { name: 'scratch', descriptionKey: 'terminal.slash.scratch' },
+  { name: 'scratch', group: 'session', descriptionKey: 'terminal.slash.scratch' },
   // MCP-CLIENT: the project's MCP servers (`/mcp approve|reconnect|remove <name>` typed); runs at once from the palette.
-  { name: 'mcp', descriptionKey: 'terminal.slash.mcp' },
+  { name: 'mcp', group: 'settings', descriptionKey: 'terminal.slash.mcp' },
   // MONITOR: the monitor's text snapshot (Runs, blockers, workers, approvals, pools, installs); `deckent monitor` is the fullscreen view.
-  { name: 'config', descriptionKey: 'config.surface.slashDescription' },
-  { name: 'monitor', descriptionKey: 'terminal.slash.monitor' },
+  { name: 'config', group: 'settings', descriptionKey: 'config.surface.slashDescription' },
+  { name: 'monitor', group: 'info', descriptionKey: 'terminal.slash.monitor' },
   // TERMINAL-CLOSE S09 (read-only management): each runs at once from the palette and reads a typed query on every call.
-  { name: 'model', descriptionKey: 'terminal.slash.model' },
-  { name: 'usage', descriptionKey: 'terminal.slash.usage' },
-  { name: 'doctor', descriptionKey: 'terminal.slash.doctor' },
-  { name: 'scope', descriptionKey: 'terminal.slash.scope' },
-  { name: 'exit', descriptionKey: 'terminal.slash.exit' },
-  { name: 'quit', descriptionKey: 'terminal.slash.exit' },
-  { name: 'help', descriptionKey: 'terminal.slash.help' },
+  { name: 'model', group: 'info', descriptionKey: 'terminal.slash.model' },
+  { name: 'usage', group: 'info', descriptionKey: 'terminal.slash.usage' },
+  { name: 'doctor', group: 'info', descriptionKey: 'terminal.slash.doctor' },
+  { name: 'scope', group: 'info', descriptionKey: 'terminal.slash.scope' },
+  { name: 'exit', group: 'session', descriptionKey: 'terminal.slash.exit' },
+  { name: 'quit', group: 'session', descriptionKey: 'terminal.slash.exit' },
+  { name: 'help', group: 'info', descriptionKey: 'terminal.slash.help' },
 ]);
 
 /** Read-only inspect commands (S09). Each is answered by an optional port that re-reads a typed query per call; `status` keeps its static line without one. */
@@ -59,11 +68,13 @@ export function addSessionUsage(total: SessionUsageView, report: Readonly<{ prom
     reasoningTokens: total.reasoningTokens + (report.reasoningTokens ?? 0), reasoningUnmeasured: total.reasoningUnmeasured + (report.reasoningTokens === null ? 1 : 0) });
 }
 /** `/status` without a fresh port keeps the launch-time line; with one, a failed read shows its typed error, never that old line. */
-export type InspectSlashPort = (args: string, view: Readonly<{ usage: SessionUsageView }>) => Promise<readonly string[]>;
+/** `sessionFullAccess` (Astra 2431 P2): this session holds full access (launched so, or switched into for this session only). */
+export type InspectSlashPort = (args: string, view: Readonly<{ usage: SessionUsageView; sessionFullAccess?: boolean }>) => Promise<readonly string[]>;
 export type InspectSlashPorts = Readonly<Partial<Record<InspectSlashCommand, InspectSlashPort>>>;
 /** The ports as plain `(args)` commands, each given the usage the terminal measured at call time. */
-export function bindInspectPorts(ports: InspectSlashPorts | undefined, usage: () => SessionUsageView): Readonly<Record<string, (args: string) => Promise<readonly string[]>>> {
-  return Object.fromEntries(Object.entries(ports ?? {}).map(([name, port]) => [name, (args: string) => port(args, { usage: usage() })]));
+export function bindInspectPorts(ports: InspectSlashPorts | undefined, usage: () => SessionUsageView, sessionFullAccess: () => boolean = () => false):
+  Readonly<Record<string, (args: string) => Promise<readonly string[]>>> {
+  return Object.fromEntries(Object.entries(ports ?? {}).map(([name, port]) => [name, (args: string) => port(args, { usage: usage(), sessionFullAccess: sessionFullAccess() })]));
 }
 
 /** Display labels only; the original registry name and argument metadata still own completion/dispatch. */
@@ -72,11 +83,18 @@ export function slashCommandRow(command: SlashCommand, labels: Readonly<Record<s
   return { name: `/${command.name}${argument ? ` ${argument}` : ''}`, detail: labels[command.descriptionKey] ?? '' };
 }
 
+/** The catalog key of the first `/help` line (a title, so a level word such as `Info:` never sits in front of a group heading). */
+export const SLASH_HELP_TITLE_KEY = 'terminal.slash.helpTitle';
+
+/** `/help`: a title, then the registry rows under their group headings (one line per command), so the palette and the help share the same row text. */
 export function slashHelpText(labels: Readonly<Record<string, string>>, commands: readonly SlashCommand[] = WORKLINE_SLASH_COMMANDS): string {
-  return commands.map(command => {
-    const row = slashCommandRow(command, labels);
-    return `${row.name}${row.detail ? `  ${row.detail}` : ''}`;
-  }).join('\n');
+  const groups = SLASH_GROUPS.flatMap(group => {
+    const members = commands.filter(command => (command.group ?? 'other') === group.id);
+    if (members.length === 0) return [];
+    const rows = members.map(command => { const row = slashCommandRow(command, labels); return `  ${row.name}${row.detail ? `  ${row.detail}` : ''}`; });
+    return [[labels[group.labelKey] ?? group.id, ...rows].join('\n')];
+  }).join('\n\n');
+  return labels[SLASH_HELP_TITLE_KEY] ? `${labels[SLASH_HELP_TITLE_KEY]}\n${groups}` : groups;
 }
 
 export function parseSlashLine(line: string): { command: string; args: string } | null {

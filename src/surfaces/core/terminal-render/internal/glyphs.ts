@@ -5,18 +5,22 @@ export type RenderGlyphs = Readonly<{
   ascii: boolean; assistant: string; bullet: string; quote: string; horizontal: string; separator: string; ellipsis: string;
   codeTop: string; codeRail: string; codeBottom: string; spinner: readonly string[];
   table: Readonly<{ top: readonly [string, string, string]; mid: readonly [string, string, string]; bottom: readonly [string, string, string]; edge: string }>;
+  /** T2 T-MODE-CYCLE: the mark before each permission-mode stop in the status row (the word carries the meaning). */
+  mode: Readonly<{ standart: string; 'ask-edits': string; 'full-auto': string; 'full-access': string }>;
 }>;
 
 const UNICODE: RenderGlyphs = Object.freeze({
   ascii: false, assistant: '●', bullet: '•', quote: '▌', horizontal: '─', separator: '·', ellipsis: '…',
   codeTop: '╭─', codeRail: '│', codeBottom: '╰─', spinner: Object.freeze(['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏']),
   table: Object.freeze({ top: ['┌', '┬', '┐'] as const, mid: ['├', '┼', '┤'] as const, bottom: ['└', '┴', '┘'] as const, edge: '│' }),
+  mode: Object.freeze({ standart: '⏸', 'ask-edits': '⏸', 'full-auto': '⏵⏵', 'full-access': '⚠' }),
 });
 
 const ASCII: RenderGlyphs = Object.freeze({
   ascii: true, assistant: '*', bullet: '-', quote: '|', horizontal: '-', separator: '|', ellipsis: '...',
   codeTop: '+-', codeRail: '|', codeBottom: '+-', spinner: Object.freeze(['|', '/', '-', '\\']),
   table: Object.freeze({ top: ['+', '+', '+'] as const, mid: ['+', '+', '+'] as const, bottom: ['+', '+', '+'] as const, edge: '|' }),
+  mode: Object.freeze({ standart: '||', 'ask-edits': '||', 'full-auto': '>>', 'full-access': '!!' }),
 });
 
 export function resolveRenderGlyphs(ascii: boolean): RenderGlyphs {

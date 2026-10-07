@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, createElement } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, createElement, type ComponentProps } from 'react';
 import { render, Box, Static, Text, useApp, type Instance } from 'ink';
 import { useWorklinePanel, type LocalExecution, LedgerEntryRow, type LedgerEntryLabels, immediateSlashAction, runLedgerCommand, type WatchState, type WorklineActionLabels, useWorkSurface } from '#surfaces/core/terminal-work/index.js';
 import { WorklinePaletteProvider, useWorklinePalette, parseSlashLine, isInspectSlashCommand, addSessionUsage, bindInspectPorts, EMPTY_SESSION_USAGE, type InspectSlashPorts, type SessionUsageView, useWorklineWatch, surfaceDeliveryValues, surfaceFollowLine, useSurfacePushFeed,
@@ -9,12 +9,15 @@ import { HumanTextContext, humanRecordText, projectHumanPickerText, RenderGlyphs
 import type { KnownSecretSnapshot } from '#platform/index.js';
 import { assistantLedgerEntries, streamStepEntries, workerReportToLedgerEntries, WORK_LEDGER_SCHEMA_VERSION, type WorkLedgerEntry, ledgerEntriesForWorkers, ledgerEntriesForRuns, type WorklineLedgerPorts, fillTemplate, newWorkerTaskIds, freshRunCards, newRunLedgerEntries, agentHistory, appendLedger, boundAgentHistory, compactLedger, EMPTY_LEDGER, plainChatHistory, type AgentChatMessage, type ChatTurnMessage, type LedgerBuffer, notice } from '#surfaces/core/terminal-ledger/index.js';
 import { useConversationSession, type ConversationSessionLabels, type ConversationSessionPort } from './workline-sessions.js';
-import { ArrowPicker } from '#surfaces/core/terminal-picker/index.js';
+import { ArrowPicker, ARROW_PICKER_ROWS } from '#surfaces/core/terminal-picker/index.js';
+import { Window, WindowStackProvider, WINDOW_RESERVED_ROWS, useFocusOwner } from '#surfaces/core/terminal-window/index.js';
+import { span } from '#surfaces/core/terminal-render/index.js';
 import { Composer, type ComposerLabels, type ComposerHistoryPort, type ComposerMentionPort } from '#surfaces/core/terminal-composer/index.js';
 import { messageWithMentions, type WorklineAttachMentions, type WorklineMentionLabels } from './workline-mentions.js';
-import { useWorklineMode, type WorklineModeLabels, type WorklinePermissionModePort } from './workline-mode.js';
+import { PermissionModeKeys, useWorklineMode, type WorklineModeLabels, type WorklinePermissionModePort } from './workline-mode.js';
 import { useReasoningPreview, type WorklineReasoningLabels } from './workline-reasoning.js';
 import { useWorklineScratch, type WorklineScratchLabels, type WorklineScratchPort } from './workline-scratch.js';
+import { writeStartup, type WorklineStartup } from './startup-banner.js';
 
 export interface WorklineLabels extends WorklineActionLabels {
   readonly banner: string;
@@ -66,7 +69,7 @@ export interface WorklineProps {
   /** Governed restart of the runtime service onto the current build; returns the line to show. */
   readonly restartService?: () => Promise<string>;
   /** Shown once at the top of the ledger when the view opens (e.g. the runtime service state). */
-  readonly openingNotices?: ReadonlyArray<{ readonly level: 'info' | 'error'; readonly text: string }>;
+  readonly openingNotices?: ReadonlyArray<{ readonly level: 'info' | 'warning' | 'error'; readonly text: string }>;
   /** Composer history persistence and `@` mention candidates; both optional ports (no surface file access). */
   readonly inputHistory?: ComposerHistoryPort;
   readonly mentions?: ComposerMentionPort;
@@ -88,6 +91,14 @@ export interface WorklineProps {
   /** Notice-line commands: `/mcp` (MCP-CLIENT: servers and trust — list, approve, reconnect, remove); `/monitor` (MONITOR: text snapshot). */
   /** Read-only management (S09): `/status` (fresh), `/model`, `/usage`, `/doctor`, `/scope`; each port re-reads its typed query per call. */ readonly inspect?: InspectSlashPorts;
   readonly config?: (args: string) => Promise<readonly string[]>; readonly mcp?: (args: string) => Promise<readonly string[]>; readonly monitor?: (args: string) => Promise<readonly string[]>;
+  /** The project root the approval window names under "where" (display only; T-APPROVAL-WINDOW). */
+  readonly projectRoot?: string;
+}
+
+/** The composer listens only while no window is open (TS-WINDOW: one input owner, the window stack's top). */
+function StackComposer(props: ComponentProps<typeof Composer>) {
+  const owner = useFocusOwner();
+  return <Composer {...props} active={(props.active ?? true) && owner.idle} />;
 }
 
 function chat(role: 'user' | 'assistant', text: string): WorkLedgerEntry {
@@ -151,10 +162,11 @@ export function WorklineApp(props: WorklineProps) {
   const pushLive = pushMode !== 'poll'; // A refused feed must not restart through fallback polling.
   const followWorkers = ledger?.followEvents ? undefined : ledger?.followWorkers, followRuns = ledger?.followEvents ? undefined : ledger?.followRuns;
   const failed = useCallback((error: unknown) => push([notice('error', `${labels.watchFailed}: ${errorText(error)}`)]), [errorText, labels.watchFailed, push]);
+  const mode = useWorklineMode(props.permissionMode, push, errorText, labels.work?.unavailable ?? labels.ledgerUnavailable, labels.mode, props.fullAccess === true, sessionId);
   const work = useWorkSurface({ panel, state, ledger, labels, push, errorText, pollMs, pushLive, watchingWorkers: watch.workers,
+    context: { ...(props.projectRoot ? { project: props.projectRoot } : {}), ...(mode.stop ? { mode: mode.stop } : {}) },
     ...(props.approvalPollMs === undefined ? {} : { approvalPollMs: props.approvalPollMs }) });
   workRef.current = work; decide.current = work.decideApproval;
-  const mode = useWorklineMode(props.permissionMode, push, errorText, labels.work?.unavailable ?? labels.ledgerUnavailable, labels.mode, props.fullAccess === true);
   const refreshMode = mode.refresh;
   const reasoning = useReasoningPreview(push, labels.reasoning);
   const scratch = useWorklineScratch(props.scratch, session.id, push, errorText, labels.work?.unavailable ?? labels.ledgerUnavailable, labels.scratch);
@@ -238,10 +250,11 @@ export function WorklineApp(props: WorklineProps) {
     if (!slash) { await runTurn(line, mentioned, execution); return true; }
     if (slash.command === 'reasoning') { reasoning.run(slash.args); return true; }
     if (slash.command === 'mode' || slash.command === 'scratch') { await (slash.command === 'mode' ? mode.run : scratch)(slash.args); return true; }
-    const lineCommands: Readonly<Record<string, ((args: string) => Promise<readonly string[]>) | undefined>> = { ...bindInspectPorts(props.inspect, () => usage.current), mcp: props.mcp, monitor: props.monitor, config: props.config };
+    const lineCommands: Readonly<Record<string, ((args: string) => Promise<readonly string[]>) | undefined>> = { ...bindInspectPorts(props.inspect, () => usage.current, () => mode.fullAccess.current), mcp: props.mcp, monitor: props.monitor, config: props.config };
     if (slash.command === 'mcp' || slash.command === 'monitor' || slash.command === 'config' || (isInspectSlashCommand(slash.command) && (slash.command !== 'status' || lineCommands['status']))) {
       const lines = lineCommands[slash.command];
-      try { push((lines ? await lines(slash.args) : [fillTemplate(labels.commandUnavailable, { part: slash.command })]).map(line => notice('info', line))); }
+      // One notice for the whole answer, so its level words (`Info: `) open the answer once instead of every line.
+      try { push([notice('info', (lines ? await lines(slash.args) : [fillTemplate(labels.commandUnavailable, { part: slash.command })]).join('\n'))]); }
       catch (error) { push([notice('error', errorText(error))]); }
       return true;
     }
@@ -267,7 +280,14 @@ export function WorklineApp(props: WorklineProps) {
       return true;
     }
     try {
-      if (slash.command === 'service-restart') push([notice('info', await props.restartService!())]);
+      if (slash.command === 'service-restart') {
+        // TS-WINDOW: a restart interrupts the service's running work, so it asks first (y; n, Enter and Esc keep it running).
+        const window = labels.work?.window;
+        if (!window) { push([notice('error', labels.serviceRestartUnavailable)]); return true; }
+        const answer = await panel.pick(execution, { kind: 'window', title: window.restartTitle, body: [window.restartDetail], hints: window.restartPrompt, confirm: true }, ['allow', 'deny']);
+        if (execution.signal.aborted || answer === null) return true;
+        push([notice('info', answer === 'allow' ? await props.restartService!() : window.restartKept)]);
+      }
       else if (slash.command === 'approvals' || slash.command === 'cancel') await work.run(slash.command, slash.args, execution);
       else push(await runLedgerCommand(slash.command as 'workers' | 'run' | 'runs' | 'transcript', slash.args, ledger!, labels));
     }
@@ -294,10 +314,16 @@ export function WorklineApp(props: WorklineProps) {
   const ledgerLabels: LedgerEntryLabels = { runCard: labels.runCard, workerCard: labels.workerCard, chatUser: labels.roleUser, chatAssistant: labels.roleAssistant,
     render: labels.render, ...(labels.work ? { workerLine: labels.work.workerLine } : {}) };
   const choosing = resumePicker !== null || work.pickerOpen;
+  // T2 T-MODE-CYCLE: Shift+Tab (Alt+M where the console cannot report Shift+Tab, e.g. Windows without VT input) steps the permission mode
+  // while the composer owns the keyboard; an open card, picker or any window (stack not idle, `PermissionModeKeys`) owns Shift+Tab then. A running turn owns its
+  // mode as `/mode` does (queued until it ends): the step waits for idle, so the status row never shows a mode the running turn is not in.
+  const composing = !work.modalOpen && !work.pickerOpen && resumePicker === null;
   const finishResume = (choice: number | null) => { panel.choose(state.picker?.pickerHandle, choice === null ? null : String(choice)); };
   return (
     <HumanTextContext.Provider value={props.knownSecrets}>
+    <WindowStackProvider reservedRows={WINDOW_RESERVED_ROWS + work.panelRows}>
     <Box flexDirection="column">
+      <PermissionModeKeys active={composing && !busy && Boolean(props.permissionMode)} onCycle={() => void mode.cycle()} />
       <Static key={buffer.epoch} items={[...buffer.pending]}>
         {row => <LedgerEntryRow key={row.seq} entry={row.entry} labels={ledgerLabels} />}
       </Static>
@@ -305,21 +331,25 @@ export function WorklineApp(props: WorklineProps) {
         waiting={live.step.waiting} reasoningPreview={reasoning.show ? live.step.reasoningPreview : []} /> : null}
       {work.region}
       {resumePicker && !work.modalOpen && !work.pickerOpen
-        ? <ArrowPicker rows={resumePicker.map(item => item.label)} styledRows={resumePicker.map(item => item.spans ?? [])}
-          details={resumePicker.map(item => item.hiddenNotice)} onSelect={finishResume} onCancel={() => finishResume(null)} /> : null}
+        ? <Window title={[span(labels.work?.window.resumeTitle ?? '/resume')]} status={[span(String(resumePicker.length))]} hints={labels.work?.window.pick ?? ''}
+          position={labels.work?.window.position ?? '{from}-{to}/{total}'} footerRows={ARROW_PICKER_ROWS + 2}
+          footer={focused => <ArrowPicker rows={resumePicker.map(item => item.label)} styledRows={resumePicker.map(item => item.spans ?? [])} active={focused}
+            details={resumePicker.map(item => item.hiddenNotice)} onSelect={finishResume} onCancel={() => finishResume(null)} />} /> : null}
       <Text {...palette.accent}>{labels.banner}</Text>
       <StatusStrip target={target} state={cancelling ? labels.statusCancelling : busy && !choosing ? labels.statusBusy : labels.statusReady} busy={busy && !choosing}
-        queued={state.queued.length} labels={{ ...labels.render, selfSourceFloor: labels.selfSourceFloor }} mode={mode.mode} selfSource={props.selfSource} cancellable={turnRunning && !cancelling} />
+        queued={state.queued.length} labels={{ ...labels.render, selfSourceFloor: labels.selfSourceFloor, modeStops: labels.mode?.stops }} mode={mode.mode} stop={mode.stop}
+        selfSource={props.selfSource} cancellable={turnRunning && !cancelling} />
       {/* The composer owns input: Enter submits (queued FIFO while busy), Esc/Ctrl+C cancel a turn, exit is two Ctrl+C or Ctrl+D.
           An open decision card or arrow picker takes the keyboard away from it. */}
-      <Composer prompt={labels.prompt} labels={{ ...labels.composer,
+      <StackComposer prompt={labels.prompt} labels={{ ...labels.composer,
         slash: Object.fromEntries(Object.entries(labels.composer.slash).map(([key, text]) => [key, projectHumanPickerText(text, props.knownSecrets).label])) }}
-        busy={busy} active={!work.modalOpen && !work.pickerOpen && resumePicker === null}
+        busy={busy} active={composing}
         onSubmit={(text, mentioned) => void submit(text, mentioned)} onCancel={cancel} onExit={() => { panel.close(); exit(); }}
         {...(props.inputHistory ? { history: props.inputHistory } : {})} {...(props.mentions ? { mentions: props.mentions } : {})}
         {...(props.mentionDelayMs === undefined ? {} : { mentionDelayMs: props.mentionDelayMs })} />
       <Text {...palette.muted}>{labels.hint}</Text>
     </Box>
+    </WindowStackProvider>
     </HumanTextContext.Provider>
   );
 }
@@ -332,11 +362,14 @@ export interface WorklineRunOptions extends Omit<WorklineProps, 'labels'> {
   readonly signal?: AbortSignal;
   /** ASCII decoration for terminals that cannot be assumed to draw Unicode. */
   readonly ascii?: boolean;
+  /** T2 T-STARTUP: clear the visible screen and print the banner before the live view (TTY only; scrollback is never erased). */
+  readonly startup?: WorklineStartup;
 }
 
 /** Ctrl+C is handled by the composer (cancel a running turn, clear a draft, or exit on a second press); the outer signal unmounts the view. */
 export async function runTerminalWorkline(options: WorklineRunOptions): Promise<void> {
-  const { palette, stdin, stdout, signal, ascii, ...props } = options;
+  const { palette, stdin, stdout, signal, ascii, startup, ...props } = options;
+  if (startup) writeStartup(stdout ?? process.stdout, startup, palette);
   const view = createElement(RenderGlyphsContext.Provider, { value: resolveRenderGlyphs(ascii === true) }, createElement(WorklineApp, props));
   // Ink 7 treats CI env as non-interactive even on a TTY (ink.js resolveInteractiveOption); the workline runs on a TTY, so force it there.
   const instance: Instance = render(createElement(WorklinePaletteProvider, { palette, children: view }),

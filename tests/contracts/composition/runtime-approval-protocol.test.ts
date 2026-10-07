@@ -54,7 +54,7 @@ async function fixture() {
 // threshold; v16 and v17 keep it), so a current runtime client receives operation-subject approvals. A released v14 client can no longer reach approval operations at all
 // (every non-lifecycle operation is current-version only, socket.test.ts); the v14 view below is kept as the engine contract.
 it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket] delivers operation-subject approvals to a v15 runtime client in the record shape the terminal parses, as the in-process SDK sees them (C12 G4)', async () => {
-  expect(RUNTIME_SERVICE_SCHEMA_VERSION).toBe(20);
+  expect(RUNTIME_SERVICE_SCHEMA_VERSION).toBe(21);
   expect(approvalSubjectsHiddenFromProtocol(14)).toEqual(['operation']);
   expect(approvalSubjectsHiddenFromProtocol(15)).toEqual([]);
   const f = await fixture();

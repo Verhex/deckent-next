@@ -6,8 +6,11 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { WorklineApp, WorklinePaletteProvider, resolveWorklinePalette, type WorklineLabels, type WorklineProps, type WorklineApproval,
   type WorkSurfaceLabels } from '#surfaces/core/terminal/index.js';
 import type { RunView, WorkerObservationReport } from '#engine/index.js';
+import { workSurfaceLabels } from '#surfaces/core/work-labels/index.js';
 import { WORKER_LINE_EN as EN } from '../support/worker-line-labels.js';
 
+/** The real EN window catalog (TS-WINDOW / T-APPROVAL-WINDOW); the older fields keep their probe tokens. */
+const EN_WORK = workSurfaceLabels('en');
 const work: WorkSurfaceLabels = { workerLine: EN, panel: { title: 'LIVE-PANEL', more: '+{count} MORE' }, unavailable: 'UNWIRED',
   transcriptUsage: 'T-USAGE', transcriptNotFound: 'T-NOTFOUND {ref}', transcriptNoAttempt: 'T-NOATTEMPT {ref}', transcriptHeader: 'T-HEADER {n} {attempt}',
   approvalsNone: 'A-NONE', approvalItem: 'A-ITEM {n} {id} {summary}', approvalsTruncated: 'A-TRUNC {pages}', approvalNotFound: 'A-NOTFOUND {ref}',
@@ -17,7 +20,7 @@ const work: WorkSurfaceLabels = { workerLine: EN, panel: { title: 'LIVE-PANEL', 
     assuranceTurnElsewhere: 'R-TURN-ELSEWHERE', assurancePeer: 'R-PEER', assuranceOther: 'R-OTHER {level}' },
   approvalStanding: { covers: 'S-COVERS {pattern}', promptBoth: 'S-PROMPT-BOTH', promptSession: 'S-PROMPT-SESSION', promptAlways: 'S-PROMPT-ALWAYS', savedSession: 'S-SAVED-SESSION {id}',
     savedAlways: 'S-SAVED-ALWAYS {id}', unconfirmedSession: 'S-UNCONFIRMED {id} {reason}', notSavedSession: 'S-NOT-SAVED-SESSION {id} {reason}', notSavedAlways: 'S-NOT-SAVED-ALWAYS {id} {reason}' }, cancelUsage: 'C-USAGE', cancelTitle: 'C-TITLE {run}',
-  cancelDetail: 'C-DETAIL {revision} {phases}', cancelAlreadyRequested: 'C-ALREADY', cancelPrompt: 'C-PROMPT', cancelPending: 'C-PENDING', cancelKept: 'C-KEPT {run}' };
+  cancelDetail: 'C-DETAIL {revision} {phases}', cancelAlreadyRequested: 'C-ALREADY', cancelPrompt: 'C-PROMPT', cancelPending: 'C-PENDING', cancelKept: 'C-KEPT {run}', window: EN_WORK.window, approvalWindow: EN_WORK.approvalWindow };
 const labels: WorklineLabels = { banner: 'BANNER', prompt: '> ', statusReady: 'READY', statusBusy: 'BUSY', statusCancelling: 'CANCELLING',
   hint: 'HINT', roleUser: 'you', roleAssistant: 'bot', runCard: 'Run', workerCard: 'Worker', watchFailed: 'WATCH-FAILED', commandUnavailable: 'NO-PORT {part}',
   ledgerUnavailable: 'NO-LEDGER', runNotFound: 'NO-RUN', workersEmpty: 'NO-WORKERS', runsEmpty: 'NO-RUNS', serviceRestartUnavailable: 'NO-RESTART', queued: 'QUEUED', runUsage: 'USAGE',
@@ -32,12 +35,20 @@ class Screen extends Writable {
   /** Ink debug mode writes every frame whole (all static rows + the dynamic region) in one write. */
   frame = '';
   readonly isTTY = true; readonly columns = 220; readonly rows = 60;
-  override _write(chunk: Buffer, _encoding: string, done: () => void) { this.frame = chunk.toString('utf8'); this.text += this.frame; done(); }
+  override _write(chunk: Buffer, _encoding: string, done: () => void) {
+    const text = chunk.toString('utf8'); this.text += text;
+    // A bare mode toggle (bracketed paste on/off when input ownership moves between a window and the composer) is not a frame.
+    if (text.replaceAll('\u001B[?2004h', '').replaceAll('\u001B[?2004l', '') !== '') this.frame = text;
+    done();
+  }
 }
 function keyboard() {
   const stdin = Object.assign(new PassThrough(), { isTTY: true, setRawMode() { return stdin; }, ref() { return stdin; }, unref() { return stdin; } });
   return stdin;
 }
+/** The approval window's EN catalog strings these tests look for (T-APPROVAL-WINDOW). */
+const W = { title: 'Approval needed ·', once: 'y once', deny: 'n deny (Enter/Esc too)', session: 's this session', always: 'a always in this project',
+  covers: 's: your answer is remembered for' } as const;
 const settle = (ms = 30) => new Promise(resolve => setTimeout(resolve, ms));
 async function until(check: () => boolean, label: string) {
   for (let attempt = 0; attempt < 300; attempt++) { if (check()) return; await settle(10); }
@@ -96,7 +107,7 @@ describe('work surface: live worker panel', () => {
   it('prints the live line on worker cards from /workers', async () => {
     const view = mount({ ledger: baseLedger });
     await view.type('/workers\r');
-    await until(() => view.stdout.text.includes('t-a2'), 'cards');
+    await until(() => view.stdout.text.includes('worker 2'), 'cards');
     expect(view.stdout.text).toContain('worker 1 · claude claude-model · editing src/x.ts');
   });
 });
@@ -154,34 +165,54 @@ describe('work surface: approvals', () => {
     return { ledger, decisions, records, lists: () => lists };
   }
 
+  it.each([
+    ['en', 'y', 'Approval 7a48a7f0 approved', 'Approval identity: '],
+    ['tr', 'n', '7a48a7f0 onayı reddedildi', 'Onay kimliği: '],
+  ] as const)('%s: the decision notice names the short approval id; the full id is only on its detail line (T2 integration)', async (locale, key, primary, detail) => {
+    const id = '7a48a7f0-1b2c-4d3e-8f90-a1b2c3d4e5f6';
+    const fake = approvals([approval(id)]);
+    const view = mount({ labels: { ...labels, work: workSurfaceLabels(locale) }, ledger: fake.ledger, pollMs: 10_000 });
+    await view.type('/approvals\r');
+    await until(() => fake.lists() > 0 && view.frame().includes('> 1.'), 'picker');
+    await view.instance.waitUntilRenderFlush(); await settle(30);
+    await view.type('\r');
+    await until(() => view.frame().includes(id), 'approval window with the id in its details'); await settle(40);
+    await view.type(key);
+    await until(() => view.stdout.text.includes(primary), 'decision notice');
+    const rows = view.frame().split('\n');
+    const head = rows.findIndex(row => row.includes(primary));
+    expect(rows[head]).not.toContain(id);
+    expect(rows[head + 1]).toContain(`${detail}${id}`);
+  });
+
   it('lists pending approvals and decides one card at a time: y approves, "a" never approves, Enter and Esc deny', async () => {
     const fake = approvals([approval('ap-1'), approval('ap-2'), approval('ap-3'), approval('done', { status: 'decided', revision: 1, decision: 'allow' })]);
     const view = mount({ ledger: fake.ledger, pollMs: 10_000 });
     await view.type('/approvals\r');
     await until(() => view.frame().includes('> A-ITEM 1 ap-1 summary ap-1') && view.frame().includes('A-ITEM 2 ap-2'), 'picker');
     expect(view.frame()).not.toContain('A-ITEM 4');
-    expect(view.frame()).not.toContain('A-PROMPT');
+    expect(view.frame()).not.toContain(W.deny);
     await view.type('\r');
-    await view.card('A-SUBJECT ap-1', 'card');
-    expect(view.frame()).toContain('A-SUBJECT ap-1 run-1 task-1 svc');
+    await view.card('Approval: ap-1', 'card');
+    expect(view.frame()).toContain('Run run-1 · task task-1'); expect(view.frame()).toContain('On behalf of: svc'); expect(view.frame()).toMatch(/What: +summary ap-1/u);
     // Keys that are not y/n/Enter/Esc (legacy "always" key, stray text, a paste) leave the card waiting and never reach the composer.
     await view.type('a'); view.stdin.write('yes'); await settle(60);
     expect(fake.decisions).toEqual([]);
-    expect(view.frame()).toContain('A-PROMPT');
+    expect(view.frame()).toContain(W.deny);
     expect(view.stdout.text).not.toContain('> a');
     await view.type('y');
-    await until(() => view.frame().includes('A-ALLOWED ap-1') && !view.frame().includes('A-PROMPT'), 'approved');
+    await until(() => view.frame().includes('A-ALLOWED ap-1') && !view.frame().includes(W.deny), 'approved');
     expect(view.frame()).toContain('A-MORE 2');
     await view.type('/approvals\r');
     await until(() => view.frame().includes('> A-ITEM 1 ap-2'), 'second picker'); await view.instance.waitUntilRenderFlush(); await settle(30);
     await view.type('\r');
-    await view.card('A-SUBJECT ap-2', 'second card');
+    await view.card('Approval: ap-2', 'second card');
     view.stdin.write('\r');
     await until(() => view.frame().includes('A-DENIED ap-2'), 'enter denies');
     await view.type('/approvals\r');
     await until(() => view.frame().includes('> A-ITEM 1 ap-3'), 'third picker'); await view.instance.waitUntilRenderFlush(); await settle(30);
     await view.type('\r');
-    await view.card('A-SUBJECT ap-3', 'third card');
+    await view.card('Approval: ap-3', 'third card');
     view.stdin.write('\u001b');
     await until(() => view.frame().includes('A-DENIED ap-3'), 'esc denies');
     expect(fake.decisions).toEqual([{ id: 'ap-1', revision: 0, decision: 'allow' }, { id: 'ap-2', revision: 0, decision: 'deny' }, { id: 'ap-3', revision: 0, decision: 'deny' }]);
@@ -195,11 +226,11 @@ describe('work surface: approvals', () => {
     await view.type('/approvals nope\r');
     await until(() => view.stdout.text.includes('A-NOTFOUND nope'), 'unknown approval');
     await view.type('/approvals ap-2\r');
-    await view.card('A-SUBJECT ap-2', 'selected by id');
+    await view.card('Approval: ap-2', 'selected by id');
     await view.type('y');
-    await until(() => view.frame().includes('ERR:APPROVAL_CONFLICT') && !view.frame().includes('A-PROMPT'), 'failed decision visible');
+    await until(() => view.frame().includes('ERR:APPROVAL_CONFLICT') && !view.frame().includes(W.deny), 'failed decision visible');
     await view.type('/approvals 2\r');
-    await view.card('A-SUBJECT ap-2', 'selected by number');
+    await view.card('Approval: ap-2', 'selected by number');
   });
 
   it('does not list approvals more often than every 10 s by default, even with a fast worker heartbeat', async () => {
@@ -255,13 +286,35 @@ describe('work surface: /cancel', () => {
   });
 });
 
+describe('work surface: /cancel window in human words (T2 integration: L1 window x L3 card words)', () => {
+  const runId = '3f2a9c1e-8b4d-4e7a-9c55-1d2e3f4a5b6c';
+  const run = { runId, scopeId: 'scope-a', revision: 4, cancellationRequested: false, tasks: [{ phase: 'pending' }, { phase: 'pending' }, { phase: 'active' }] } as unknown as RunView;
+  it.each([
+    ['en', 'Cancel run 3f2a9c1e?', '2 waiting, 1 running', `Run identity: ${runId}`, 'Run 3f2a9c1e was not cancelled.'],
+    ['tr', '3f2a9c1e işi iptal edilsin mi?', '2 bekliyor, 1 çalışıyor', `İş kimliği: ${runId}`, '3f2a9c1e işi iptal edilmedi.'],
+  ] as const)('%s: short run id in the title, phases as counts in words, the full id only on its detail line', async (locale, title, phases, identityLine, kept) => {
+    const view = mount({ labels: { ...labels, work: workSurfaceLabels(locale) }, ledger: { ...baseLedger, async inspectRun(id: string) { return id === runId ? run : null; },
+      async cancelRun() { return 'unused'; } } });
+    await view.type(`/cancel ${runId}\r`);
+    await view.card(title, 'cancel window');
+    const frame = view.frame();
+    expect(frame).toContain(phases); expect(frame).toContain(identityLine);
+    expect(frame).not.toContain('pending:2'); expect(frame).not.toContain('active:1');
+    // The full identity appears once: on its detail line, never in the title row.
+    expect(frame.split(runId).length - 1).toBe(1);
+    expect(frame.split('\n').find(row => row.includes(title))).not.toContain(runId);
+    await view.type('n');
+    await until(() => view.stdout.text.includes(kept), 'kept notice with the short id');
+  });
+});
+
 describe('work surface: approval of a running turn\'s tool call (T-L4)', () => {
   it('shows the call preview on a decision card, sends a single y as allow for exactly that approval, and continues the turn', async () => {
     const decided: { approvalId: string; revision: number; decision: string }[] = [];
     let release!: () => void; const answered = new Promise<void>(resolve => { release = resolve; });
     const streamTurn = async function* () {
       yield { kind: 'approval' as const, phase: 'requested' as const, callId: 'c1', approvalId: 'appr-1', revision: 0,
-        summary: 'edit_file · src/a.ts · 0123456789ab', preview: ['--- src/a.ts', '+++ src/a.ts', '-old line', '+new line', ...Array.from({ length: 30 }, (_, i) => `ctx ${i}`)].join('\n'),
+        summary: 'edit_file · src/a.ts · 0123456789ab', preview: ['--- src/a.ts', '+++ src/a.ts', '-old line', '+new line', ...Array.from({ length: 60 }, (_, i) => `ctx ${i}`)].join('\n'),
         expiresAt: Date.now() + 600_000 };
       await answered;
       yield { kind: 'approval' as const, phase: 'settled' as const, callId: 'c1', approvalId: 'appr-1', outcome: 'allow' as const };
@@ -274,11 +327,16 @@ describe('work surface: approval of a running turn\'s tool call (T-L4)', () => {
       } };
     const view = mount({ streamTurn, ledger: ledger as never });
     await settle(20); await view.type('edit it\r');
-    await view.card('A-TITLE', 'turn approval card');
-    expect(view.stdout.text).toContain('edit_file · src/a.ts · 0123456789ab'); expect(view.stdout.text).toContain('+new line');
-    expect(view.stdout.text).toContain('A-PREVIEW-MORE 10'); expect(view.stdout.text).not.toContain('ctx 29');
+    await view.card(W.title, 'turn approval card');
+    // The sealed binding (with its argument digest) is not on the primary rows; it is in the details at the end of the body.
+    expect(view.frame()).not.toContain('0123456789ab'); expect(view.stdout.text).toContain('+new line');
+    // The whole preview is in the window; it is longer than the capped body, so it scrolls (End shows the last row).
+    expect(view.frame()).toMatch(/rows 1–\d+ of \d+/u); expect(view.frame()).not.toContain('ctx 59');
+    expect(view.frame()).toMatch(/What: +A file will be edited: src\/a\.ts/u); expect(view.frame()).toMatch(/File: +src\/a\.ts/u);
+    view.stdin.write('\u001B[F'); await until(() => view.frame().includes('ctx 59'), 'scrolled to the end');
+    expect(view.frame()).toContain('Bound call: edit_file · src/a.ts · 0123456789ab');
     await view.type('y');
-    await until(() => view.frame().includes('Edited.') && !view.frame().includes('A-TITLE'), 'turn continues with the card closed');
+    await until(() => view.frame().includes('Edited.') && !view.frame().includes(W.title), 'turn continues with the card closed');
     expect(decided).toEqual([{ approvalId: 'appr-1', revision: 0, decision: 'allow' }]);
   });
 
@@ -295,8 +353,8 @@ describe('work surface: approval of a running turn\'s tool call (T-L4)', () => {
       async decideApproval(...args: unknown[]) { decided.push(args); throw new Error('must not decide'); } };
     const view = mount({ streamTurn, ledger: ledger as never });
     await settle(20); await view.type('go\r');
-    await view.card('A-TITLE', 'card');
-    await until(() => view.frame().includes('Gave up.') && !view.frame().includes('A-TITLE'), 'turn ends with the card closed');
+    await view.card(W.title, 'card');
+    await until(() => view.frame().includes('Gave up.') && !view.frame().includes(W.title), 'turn ends with the card closed');
     expect(decided).toEqual([]);
   });
 
@@ -334,9 +392,9 @@ describe('work surface: approval of a running turn\'s tool call (T-L4)', () => {
       await view.card('SECOND-CARD', 'second card'); finishDecision();
       await until(() => view.stdout.text.includes(late === 'answers' ? 'A-ALLOWED approval-a' : 'ERR:late failure'), 'late answer shown');
       await settle(40);
-      expect(view.frame()).toContain('SECOND-CARD'); expect(view.frame()).toContain('A-PROMPT');
+      expect(view.frame()).toContain('SECOND-CARD'); expect(view.frame()).toContain(W.deny);
       await view.type('y');
-      await until(() => view.frame().includes('Both done.') && !view.frame().includes('A-TITLE'), 'second decided, turn ends');
+      await until(() => view.frame().includes('Both done.') && !view.frame().includes(W.title), 'second decided, turn ends');
       expect(decided).toEqual(['approval-a:allow', 'approval-b:allow']);
     });
   }
@@ -353,8 +411,8 @@ describe('work surface: approval of a running turn\'s tool call (T-L4)', () => {
       async decideApproval() { throw new Error('must not decide'); } };
     const view = mount({ streamTurn, ledger: ledger as never });
     await settle(20); await view.type('go\r');
-    await view.card('A-TITLE', 'card');
-    await until(() => view.stdout.text.includes('A-UNSETTLED appr-3') && !view.frame().includes('A-TITLE'), 'card closed with the unsettled notice');
+    await view.card(W.title, 'card');
+    await until(() => view.stdout.text.includes('A-UNSETTLED appr-3') && !view.frame().includes(W.title), 'card closed with the unsettled notice');
   });
 });
 
@@ -376,14 +434,14 @@ describe('work surface: approval card with standing scopes (G6)', () => {
   const open = async (scopes: readonly ('session' | 'always')[], calls: unknown[][], answer?: (standing: string | undefined) => unknown) => {
     const view = mount({ streamTurn: scoped(scopes, 'appr-s') as never, ledger: port(calls, answer) as never });
     await settle(20); await view.type('run it\r');
-    await view.card('A-TITLE', 'scoped card');
+    await view.card(W.title, 'scoped card');
     return view;
   };
 
   it('shows what a standing answer covers and the offered keys; s and a decide allow with that scope and report what the service saved', async () => {
     const calls: unknown[][] = [];
     const view = await open(['session', 'always'], calls, standing => ({ standing: { scope: standing, saved: true } }));
-    expect(view.stdout.text).toContain('S-COVERS npm test'); expect(view.stdout.text).toContain('S-PROMPT-BOTH');
+    expect(view.stdout.text).toContain(`${W.covers} npm test in this session`); expect(view.frame()).toContain(`${W.once} · ${W.session} · ${W.always} · ${W.deny}`);
     await view.type('a');
     await until(() => view.stdout.text.includes('S-SAVED-ALWAYS appr-s'), 'always saved shown');
     expect(calls).toEqual([['appr-s', 'allow', 'always']]);
@@ -397,7 +455,7 @@ describe('work surface: approval card with standing scopes (G6)', () => {
   it('a scope the service did not offer is not a key; y stays once, n and Enter deny; a not-saved answer is shown with its reason', async () => {
     const onlySession: unknown[][] = [];
     const view = await open(['session'], onlySession);
-    expect(view.stdout.text).toContain('S-PROMPT-SESSION'); expect(view.stdout.text).not.toContain('S-PROMPT-BOTH');
+    expect(view.frame()).toContain(`${W.once} · ${W.session} · ${W.deny}`); expect(view.frame()).not.toContain(W.always);
     await view.type('a'); await settle(60);
     expect(onlySession).toEqual([]);
     await view.type('y');
@@ -422,7 +480,8 @@ describe('work surface: approval card with standing scopes (G6)', () => {
       yield { kind: 'done' as const, finish: 'stop' as const };
     }) as never, ledger: port(calls) as never });
     await settle(20); await view.type('go\r');
-    await view.card('A-PROMPT', 'plain card');
+    await view.card(W.deny, 'plain card');
+    expect(view.frame()).toContain(`${W.once} · ${W.deny}`); expect(view.frame()).not.toContain(W.session);
     await view.type('sa'); await settle(60);
     expect(calls).toEqual([]);
     await view.type('n');
@@ -438,8 +497,10 @@ describe('work surface: approval card with standing scopes (G6)', () => {
       yield { kind: 'done' as const, finish: 'stop' as const };
     }) as never, ledger: port([]) as never });
     await settle(20); await view.type('go\r');
-    await view.card('S-COVERS', 'covers line');
-    expect(view.stdout.text).toContain(`S-COVERS ${pattern}`);
+    await view.card(W.covers, 'covers line');
+    // Exact rows break at the cell limit and keep every character: the inner rows joined give the pattern back whole.
+    const inner = view.frame().split('\n').filter(row => row.startsWith('│ ')).map(row => row.slice(2, 2 + 220 - 4)).join('');
+    expect(inner).toContain(`${W.covers} ${pattern} in this session`);
     await view.type('n');
   });
 });

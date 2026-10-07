@@ -54,7 +54,7 @@ export { getConfigMetadata } from '#platform/core/config/index.js';
 export { getConfigValue } from '#platform/core/config/index.js';
 export { resolveLocalOsActorId, resolveLocalOsPrincipal, principalToActor, assessActorAssurance, assertActorAssurance } from '#platform/core/identity/index.js';
 export type { PrincipalEvidence, ActorContext } from '#platform/core/identity/index.js';
-export { colorTier, shouldUseColor, stripAnsi, terminalLineEnd, terminalSafeText } from '#platform/core/output/index.js';
+export { colorCapability, colorTier, shouldUseColor, stripAnsi, terminalLineEnd, terminalSafeText } from '#platform/core/output/index.js';
 export { formatValue, formatTable, formatStatus, readMemoryKnowledge } from '#platform/core/output/index.js';
 export { emit, createEmitter } from '#platform/core/output/index.js';
 export type { OutputSink, EmitOptions } from '#platform/core/output/index.js';
@@ -76,6 +76,7 @@ export type { TrustedClock, ClockSample } from '#platform/core/clock/index.js';
 export { sha256, constantTimeDigestEqual, createHmacIntegrity } from '#platform/core/integrity/index.js';
 export type { IntegrityAuthority } from '#platform/core/integrity/index.js';
 export { GLOB_WILDCARD, globLiteralHead, hasGlobWildcard, createGlobMatcher } from '#platform/core/common/index.js';
+export { shortId } from '#platform/core/common/index.js';
 
 export { isRecord, assertSafeKeys, digestText } from '#platform/core/utils/index.js';
 export { configSections, configRegistryGeneration, applyConfigEnvironment, assertConfigPreimage, backupConfig } from '#platform/core/config/index.js';

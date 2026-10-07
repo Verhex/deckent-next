@@ -1,6 +1,7 @@
 {
   "admission": null,
   "approvals": {
+    "approverNoteMaxChars": 500,
     "keyFile": "authority.key",
     "pageSize": 100,
     "requestTtlMs": 600000,
@@ -121,8 +122,11 @@
   },
   "terminal": {
     "autostartService": true,
+    "banner": "full",
+    "clearOnStart": true,
     "persistHistory": true,
-    "serviceStartTimeoutMs": 20000
+    "serviceStartTimeoutMs": 20000,
+    "theme": "auto"
   },
   "toolchains": {
     "currency": {

@@ -5,6 +5,7 @@ import { useRenderGlyphs } from '#surfaces/core/terminal-render/index.js';
 import { spanStyle } from '#surfaces/core/terminal-render/index.js';
 import { fitStatusRow, worklineStatusSegments, type WorklineStatusLabels } from '#surfaces/core/terminal-render/index.js';
 import type { PermissionMode } from '#domain/index.js';
+import type { PermissionModeStop } from '#surfaces/core/terminal-render/index.js';
 
 export interface StatusStripProps {
   /** Scope (or the pre-joined `scope · model` target); shrinks from the start before anything wraps. */
@@ -18,20 +19,22 @@ export interface StatusStripProps {
   readonly labels: WorklineStatusLabels;
   /** The person's permission mode (catalog text, droppable); absent when unknown. */
   readonly mode?: PermissionMode | undefined;
+  /** T2: the session's cycle stop (`ask-edits` is standart with the preference); the row shows its mark and word. */
+  readonly stop?: PermissionModeStop | undefined;
   readonly selfSource?: boolean | undefined;
   /** A chat turn runs and Esc cancels it now (TL-A D5). */
   readonly cancellable?: boolean | undefined;
 }
 
 /** One inline text node measured against live terminal width; no wrapping or stale lines on resize (legacy f18d53fb8, row 7143). */
-export function StatusStrip({ target, model, state, busy, queued, notice, labels, mode, selfSource, cancellable }: StatusStripProps) {
+export function StatusStrip({ target, model, state, busy, queued, notice, labels, mode, stop, selfSource, cancellable }: StatusStripProps) {
   const palette = useWorklinePalette(), glyphs = useRenderGlyphs();
   const { columns } = useWindowSize();
   const { frame } = useAnimation({ interval: 120, isActive: busy });
   const [since, setSince] = useState<number | null>(null);
   useEffect(() => { setSince(busy ? Date.now() : null); }, [busy]);
   const segments = worklineStatusSegments({ scope: target, model, state, busy, spinner: glyphs.spinner[frame % glyphs.spinner.length],
-    elapsedMs: since === null ? undefined : Date.now() - since, queued, notice, labels, mode, selfSource, cancellable });
+    elapsedMs: since === null ? undefined : Date.now() - since, queued, notice, labels, mode, selfSource, cancellable, stop, modeMark: stop ? glyphs.mode[stop] : undefined });
   const separator = ` ${glyphs.separator} `;
   const layout = fitStatusRow(segments, columns || 80, separator, glyphs.ellipsis);
   return (

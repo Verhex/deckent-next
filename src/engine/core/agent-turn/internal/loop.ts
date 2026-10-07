@@ -3,6 +3,7 @@ import { AGENT_COMPACTION_HIGH_WATER, renderAgentCompaction, type AgentCompactio
 import { createAgentContextCarry } from './carry.js';
 import { agentContextFailureNote, agentHistoryBytes, createAgentCompactionGuard, type AgentContextFailure } from './pressure.js';
 import { projectModelIngressField, type ModelIngressProjection } from './model-ingress-project.js';
+import { agentTurnApproverNote, type AgentToolOwnerAnswer } from './approver-note.js';
 import type { Locale } from '#platform/index.js';
 import type { AgentContextQuality, AgentToolCall, AgentToolCleanup, AgentToolOutcome, AgentToolSpec, AgentToolCallStatus, AgentTurnEvent, AgentTurnFinish,
   AgentTurnMessage } from '#domain/index.js';
@@ -52,11 +53,13 @@ export interface AgentTurnPorts {
     Promise<AgentCompactionSummary | 'unreadable' | null>;
   /**
    * The owner's decision on one approval-gated call (T-L4, C12): opens a single-use approval bound to exactly this call and waits.
-   * `allow` means approved and re-authorized just now (policy re-evaluated); anything else never runs the call.
+   * `allow` means approved and re-authorized just now (policy re-evaluated); anything else never runs the call. APPROVER-NOTE: a decision
+   * the owner explained in their own words comes as `{ outcome, note }`; the note reaches the model with the call's result or refusal.
+   * `policy-deny`: the owner allowed, but policy denies the call now (re-evaluated after the approval) — a policy refusal, not the owner's.
    */
   requestApproval?(input: { readonly round: number; readonly index: number; readonly call: AgentToolCall; readonly tool: AgentToolSpec;
     readonly args: Record<string, unknown>; readonly argsDigest: string; readonly target: string | null }, signal: AbortSignal):
-    Promise<'allow' | 'deny' | 'expired' | 'cancelled'>;
+    Promise<'allow' | 'deny' | 'expired' | 'cancelled' | 'policy-deny' | AgentToolOwnerAnswer>;
   /** Durable projection of every settled call (optional for pure tests; the runtime composition always records). */
   settled?(call: { readonly round: number; readonly index: number; readonly call: AgentToolCall; readonly tool: AgentToolSpec | null;
     readonly argsDigest: string | null; readonly target: string | null; readonly status: AgentToolCallStatus; readonly content: string }): Promise<void>;
@@ -122,6 +125,8 @@ export interface AgentTurnInput {
     readonly completionLimitTokens?: number };
   /** MODES-3: a quarantined tool result does not wait. The model still receives only the withheld sentence. */
   readonly fullAccess?: boolean;
+  /** APPROVER-NOTE: the most code points of an approver's note the model receives (`approvals.approverNoteMaxChars`). Absent: no note is sent. */
+  readonly approverNoteMaxChars?: number;
 }
 
 export interface AgentTurnResult {
@@ -172,12 +177,24 @@ async function presentModelIngress(content: string, pause: IngressPause | null, 
   try { await ports.recordIngress?.(projected); } catch { return projected.withheld; }
   if (projected.disposition === 'note') return projected.modelText;
   if (!pause || input.fullAccess || !ports.requestApproval) return projected.withheld;
-  let answer: 'allow' | 'deny' | 'expired' | 'cancelled' | null;
-  try { answer = await ports.requestApproval({ round, index: pause.index, call: pause.call, tool: pause.tool, args: pause.args,
-    argsDigest: pause.argsDigest, target: pause.target }, input.signal); }
+  let answer: 'allow' | 'deny' | 'expired' | 'cancelled' | 'policy-deny' | null;
+  try { answer = ownerOutcome(await ports.requestApproval({ round, index: pause.index, call: pause.call, tool: pause.tool, args: pause.args,
+    argsDigest: pause.argsDigest, target: pause.target }, input.signal)).outcome; }
   catch { answer = null; }
   if (answer === 'allow') return projected.modelText;
   return projected.withheld;
+}
+
+type ApprovalAnswer = Awaited<ReturnType<NonNullable<AgentTurnPorts['requestApproval']>>>;
+const ownerOutcome = (answer: ApprovalAnswer) => typeof answer === 'string' ? { outcome: answer, note: null } : answer;
+/** The approver's note line (empty without one or without a bound), its ingress recorded like any marked field; an unrecordable mark withholds it. */
+async function approverNoteLine(note: string | null, input: AgentTurnInput, ports: AgentTurnPorts): Promise<string> {
+  if (note === null || input.approverNoteMaxChars === undefined) return '';
+  const { text, ingress } = agentTurnApproverNote(note, input.approverNoteMaxChars);
+  if (ingress.disposition !== 'unchanged') {
+    try { await ports.recordIngress?.(ingress); } catch { return `\n${ingress.withheld}`; }
+  }
+  return `\n${text}`;
 }
 
 /**
@@ -312,7 +329,7 @@ export async function runAgentTurn(input: AgentTurnInput, ports: AgentTurnPorts)
     const truncated = outcome.finish === 'length' || (limitTokens !== null && outcome.usage !== null && outcome.usage.completionTokens >= limitTokens);
     for (const [index, call] of outcome.toolCalls.entries()) {
       const tool = byName.get(call.name), started = ports.now();
-      let digestOf: string | null = null, targetOf: string | null = null, invoked = false, pauseArgs: Record<string, unknown> = {};
+      let digestOf: string | null = null, targetOf: string | null = null, invoked = false, pauseArgs: Record<string, unknown> = {}, noteOf: string | null = null;
       // `cleanup` (Astra 2124): only the host shell tool's outcome ever carries it; the event omits the field otherwise.
       const result = async (status: AgentToolCallStatus, content: string, cleanup?: AgentToolCleanup) => {
         if (!NO_PROGRESS_STATUSES.has(status)) progressed = true;
@@ -349,12 +366,14 @@ export async function runAgentTurn(input: AgentTurnInput, ports: AgentTurnPorts)
       if (decision === 'require-approval') {
         // No bypass: without an approval port the call stays blocked; with one it runs only on an explicit, call-exact allow.
         if (!ports.requestApproval) { await result('approval-required', `[deckent] ${call.name}: error=approval-required (tool approvals are not available here)`); continue; }
-        let answer: 'allow' | 'deny' | 'expired' | 'cancelled' | null;
-        try { answer = await ports.requestApproval({ round: rounds, index, call, tool, args: checked.args, argsDigest: digest, target: targetOf }, signal); }
+        let answer: 'allow' | 'deny' | 'expired' | 'cancelled' | 'policy-deny' | null;
+        try { const owner = ownerOutcome(await ports.requestApproval({ round: rounds, index, call, tool, args: checked.args, argsDigest: digest, target: targetOf }, signal));
+          answer = owner.outcome; noteOf = owner.note; }
         catch { answer = null; }
         if (answer === null && !signal.aborted) { await result('approval-required', `[deckent] ${call.name}: error=approval-unavailable (nothing ran)`); continue; }
         if (signal.aborted || answer === 'cancelled') { await result('cancelled', `[deckent] ${call.name}: error=cancelled`); continue; }
-        if (answer === 'deny') { await result('denied', `[deckent] ${call.name}: error=denied-by-owner`); continue; }
+        if (answer === 'deny') { await result('denied', `[deckent] ${call.name}: error=denied-by-owner${await approverNoteLine(noteOf, input, ports)}`); continue; }
+        if (answer === 'policy-deny') { await result('denied', `[deckent] ${call.name}: error=denied-by-policy (approved, but policy denies it now; nothing ran)`); continue; }
         if (answer === 'expired') { await result('approval-expired', `[deckent] ${call.name}: error=approval-expired (nothing ran)`); continue; }
       }
       toolCalls++;
@@ -363,7 +382,9 @@ export async function runAgentTurn(input: AgentTurnInput, ports: AgentTurnPorts)
       try { outcomeText = await ports.execute(tool, checked.args, signal, call.id, { round: rounds, index }); } catch { outcomeText = { status: 'error', text: `[deckent] ${call.name}: error=failed` }; }
       // An executed non-read call may have changed files even when it ended in error (e.g. a non-zero exit after `sed -i`): earlier reads run again.
       if (tool.toolClass !== 'read') seenReads.clear();
-      const resultMessage = await result(signal.aborted ? 'cancelled' : outcomeText.status, outcomeText.text, tool.toolClass === 'shell' ? outcomeText.cleanup : undefined);
+      // APPROVER-NOTE: an allowed call's note follows its result (bound to this call, never a separate instruction message).
+      const resultMessage = await result(signal.aborted ? 'cancelled' : outcomeText.status, `${outcomeText.text}${await approverNoteLine(noteOf, input, ports)}`,
+        tool.toolClass === 'shell' ? outcomeText.cleanup : undefined);
       if (tool.toolClass === 'read' && outcomeText.status === 'ok' && !signal.aborted) seenReads.set(digest, { callId: call.id, message: resultMessage });
     }
     stalled = progressed ? 0 : stalled + 1;

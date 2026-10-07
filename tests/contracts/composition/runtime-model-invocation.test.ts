@@ -163,7 +163,7 @@ it.skipIf(process.platform !== 'linux')('owns bounded invocation through current
   const held = f.command('disconnect'), observed = f.holdResponse();
   const raw = createConnection(service.endpoint); raw.on('error', () => undefined);
   await new Promise<void>((resolve, reject) => { raw.once('connect', resolve); raw.once('error', reject); });
-  raw.end(encodeServiceFrame({ schemaVersion: 20, requestId: randomUUID(), operation: 'invokeModel', input: held,
+  raw.end(encodeServiceFrame({ schemaVersion: 21, requestId: randomUUID(), operation: 'invokeModel', input: held,
     delivery: { maxResultBytes: 60_000 } }, 65536));
   await within(observed, 'DISCONNECT_HTTP_NOT_OBSERVED'); raw.destroy();
   let drained = false; const stopping = service.stop().then(value => { drained = true; return value; });
@@ -183,7 +183,7 @@ it.skipIf(process.platform !== 'linux')('owns bounded invocation through current
   service = await startConfiguredRuntimeService(f.project, observer, { env: f.env }); services.push(service);
   const forged = f.command('forged-cap');
   const forgedResponse = await requestLocalRuntime({ endpoint: service.endpoint, ...f.serviceOptions }, {
-    schemaVersion: 20, requestId: randomUUID(), operation: 'invokeModel', input: forged,
+    schemaVersion: 21, requestId: randomUUID(), operation: 'invokeModel', input: forged,
     delivery: { maxResultBytes: Number.MAX_SAFE_INTEGER },
   });
   expect(forgedResponse).toMatchObject({ ok: false, error: { code: 'MODEL_INVOCATION_RESULT_LIMIT' } });
@@ -195,7 +195,7 @@ it.skipIf(process.platform !== 'linux')('owns bounded invocation through current
   const expiring = f.command('grace-expiry'), expiryObserved = f.holdResponse();
   const expirySocket = createConnection(service.endpoint); expirySocket.on('error', () => undefined);
   await new Promise<void>((resolve, reject) => { expirySocket.once('connect', resolve); expirySocket.once('error', reject); });
-  expirySocket.end(encodeServiceFrame({ schemaVersion: 20, requestId: randomUUID(), operation: 'invokeModel', input: expiring,
+  expirySocket.end(encodeServiceFrame({ schemaVersion: 21, requestId: randomUUID(), operation: 'invokeModel', input: expiring,
     delivery: { maxResultBytes: 60_000 } }, 65536));
   await within(expiryObserved, 'GRACE_EXPIRY_HTTP_NOT_OBSERVED'); expirySocket.destroy();
   expect(await service.stop()).toMatchObject({ state: 'incomplete', remainingRequests: 1 });
@@ -470,7 +470,8 @@ it.skipIf(process.platform !== 'linux')('completes compiled terminal line-mode t
   expect(f.requests).toBe(2); expect(f.totalCount()).toBe(2);
   await f.policy(false);
   const denied = await session('third question\n');
-  expect(denied.code).toBe(0); expect(`${denied.stdout}${denied.stderr}`).toMatch(/\[[A-Z_]+\]/);
+  // T2 L3: the typed failure prints its human message, then the code on its own line (`(code: X)`).
+  expect(denied.code).toBe(0); expect(`${denied.stdout}${denied.stderr}`).toMatch(/^\(code: [A-Z_]+\)$/m);
   expect(denied.stdout).not.toContain('done'); expect(f.requests).toBe(2);
 }, 30_000);
 

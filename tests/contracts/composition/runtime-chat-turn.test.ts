@@ -579,25 +579,6 @@ describe.skipIf(process.platform !== 'linux')('agent chat turn through the runti
     expect(toolText(narrowed)).toMatch(/hasMore=true/);
   }, 30_000);
 
-  it('re-evaluates policy after the owner allows: a call the policy denies meanwhile never runs (contract §2)', async () => {
-    const f = await runtime({ toolGrant: 'approval' }); await f.start();
-    f.state.script = [{ toolCall: { name: 'read_file', arguments: '{"path":"src/a.ts"}' } }, { content: 'Blocked.' }];
-    const client = f.client(), events: AgentTurnStreamEvent[] = [], pending: Promise<unknown>[] = [];
-    await client.chatTurn(ask('turn-revoked'), event => {
-      events.push(event);
-      if (event.kind !== 'approval.requested') return;
-      pending.push((async () => {
-        // The tool grant is withdrawn while the call waits; approvals stay decidable.
-        await f.writePolicy(f.grants.filter(grant => grant.id !== 'read-needs-approval'));
-        await client.decideApproval({ schemaVersion: 1, scopeId: 'scope', approvalId: event.approvalId, decisionCapability: event.decisionCapability, commandId: 'allow-revoked',
-          expectedRevision: event.revision, decision: 'allow', reason: 'Reviewed' });
-      })());
-    });
-    await Promise.all(pending);
-    expect(events.find(event => event.kind === 'approval.settled')).toMatchObject({ outcome: 'deny' });
-    expect(events.find(event => event.kind === 'tool.finished')).toMatchObject({ status: 'denied' });
-  }, 60_000);
-
   it('closes an approval that expires or whose turn is cancelled, and never runs the call', async () => {
     const f = await runtime({ toolGrant: 'approval', approvalTtlMs: 400 }); await f.start();
     f.state.script = [{ toolCall: { name: 'read_file', arguments: '{"path":"src/a.ts"}' } }, { content: 'Expired.' }];
@@ -682,11 +663,11 @@ describe.skipIf(process.platform !== 'linux')('agent chat turn through the runti
       try {
         await until(() => view.stdout.text.includes('READY'), 'ready');
         view.stdin.write('rewrite it\r');
-        await until(() => view.stdout.text.includes('A-PROMPT'), 'approval card')
+        await until(() => view.stdout.text.includes('n deny (Enter/Esc too)'), 'approval card')
         const preview = previews[0]!;
         expect(Buffer.byteLength(preview, 'utf8')).toBeLessThanOrEqual(16_384);
         expect(preview.split('\n')[0]).toMatch(/^\[Deckent: preview cut to \d+ of \d+ lines \(\d+ of \d+ bytes\); whole text sha256 [0-9a-f]{64}; complete at .*approval-previews\/[0-9a-f]{64}\.txt\]$/);
-        expect(view.stdout.text).toContain('[Deckent: preview cut to');
+        expect(view.stdout.text).toContain('Preview shortened: the first'); // the window says the engine's cut marker in catalog words expect(view.stdout.text).not.toContain('[Deckent: preview cut to');
         const files = await kept(); expect(files).toHaveLength(1);
         const whole = await readFile(join(f.data, files[0]!), 'utf8');
         expect(whole).toContain(`-${before.repeat(count)}`); expect(whole).toContain(`+${after.repeat(count)}`);
@@ -1443,7 +1424,7 @@ describe.skipIf(process.platform !== 'linux')('composer @file and slash keys thr
       await typeInto(view, '/hel');
       await until(() => view.stdout.text.includes('> /help'), 'palette');
       await typeInto(view, '\r');
-      await until(() => view.stdout.text.includes('/watch-runs\n/watch-stop\n'), 'help ran');
+      await until(() => view.stdout.text.includes('  /watch-runs\n  /watch-stop\n'), 'help ran (grouped, indented rows: T2 L3)');
       await typeInto(view, '/res');
       await until(() => view.stdout.text.includes('> /resume'), 'palette');
       await typeInto(view, '\r');

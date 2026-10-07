@@ -1,13 +1,15 @@
 import type { WorklineStreamTurn } from '#surfaces/core/terminal-kit/index.js';
 import { configSlash } from '#surfaces/core/config/index.js';
+import { userInfo } from 'node:os';
 import { createInterface } from 'node:readline';
+import { basename } from 'node:path';
 import { mcpSlash } from './mcp.js';
 import { monitorSlash } from '#surfaces/core/monitor/index.js';
-import { DeckentError, ErrorRegistry, emit, getConfigKnownSecrets, loadConfig, readBuildIdentity, resolveLocale, t, formatValue, colorTier, type ConfigLoadOptions, type Locale } from '#platform/index.js';
+import { DeckentError, ErrorRegistry, emit, getConfigKnownSecrets, loadConfig, readBuildIdentity, resolveLocale, t, formatValue, colorCapability, PACKAGE_VERSION, type ConfigLoadOptions, type Locale } from '#platform/index.js';
 import { buildInferenceServingPlan, estimateReplicaCapacity, readInferenceServingProfile, runtimeConfigFreshness, RUNTIME_SERVICE_HEARTBEAT_MS, type IdentityRead, type InstallationIdentityRead } from '#engine/index.js';
-import { prefersAsciiGlyphs, runTerminalWorkline, resolveWorklinePalette, buildWorklineBridgeSnapshot, streamLineTurn, boundAgentHistory, boundChatHistory, bindSessionScope, type AgentChatMessage, type ChatTurnMessage, type TurnDelta, type WorklineLabels } from '#surfaces/core/terminal/index.js';
+import { prefersAsciiGlyphs, runTerminalWorkline, resolveWorklinePalette, resolveTerminalTheme, permissionModeStop, STARTUP_BANNERS, TERMINAL_THEME_SETTINGS, type TerminalThemeSetting, type WorklineStartup, buildWorklineBridgeSnapshot, streamLineTurn, boundAgentHistory, boundChatHistory, bindSessionScope, type AgentChatMessage, type ChatTurnMessage, type TurnDelta, type WorklineLabels } from '#surfaces/core/terminal/index.js';
 import { plainText, projectHumanText } from '#surfaces/core/terminal-render/index.js';
-import { terminalComposerLabels, terminalRenderLabels, terminalSessionLabels } from '#surfaces/core/terminal-labels/index.js';
+import { terminalComposerLabels, terminalRenderLabels, terminalSessionLabels, terminalStartupLabels } from '#surfaces/core/terminal-labels/index.js';
 import { createWorklineLedgerPorts } from './terminal-ledger.js';
 import { runtimeBuildSkew, workSurfaceLabels } from '#surfaces/core/work-labels/index.js';
 import { runKernelCommand, type CommandContext } from './kernel-commands.js';
@@ -65,10 +67,13 @@ function ttyState(context: CommandContext) {
 /** Typed errors render through the catalog; untyped failures never echo provider or transport detail. */
 function errorText(error: unknown, locale: Locale): string {
   if (error instanceof DeckentError && ErrorRegistry.has(error.code)) {
-    return `${ErrorRegistry.get(error.code, locale, error.params ?? {})?.message ?? error.code} [${error.code}]`;
+    return `${ErrorRegistry.get(error.code, locale, error.params ?? {})?.message ?? error.code}\n${t('terminal.error.code', { code: error.code }, locale)}`;
   }
   return t('terminal.chat.failed', {}, locale);
 }
+
+/** The host user's name for `/scope`: display only (the principal itself is derived by the runtime service). */
+function hostUserName(): string | null { try { return userInfo().username || null; } catch { return null; } }
 
 function yesNo(value: boolean, locale: Locale): string { return value ? t('terminal.value.yes', {}, locale) : t('terminal.value.no', {}, locale); }
 
@@ -108,6 +113,11 @@ function statusPayload(tty: ReturnType<typeof ttyState>, config: Record<string, 
   return { schemaVersion: 1 as const, tty, inference, chat, projectId, installationId, identity };
 }
 
+function modeStopWords(locale: Locale) {
+  return { standart: t('terminal.mode.stop.standart', {}, locale), 'ask-edits': t('terminal.mode.stop.ask-edits', {}, locale),
+    'full-auto': t('terminal.mode.stop.full-auto', {}, locale), 'full-access': t('terminal.mode.stop.full-access', {}, locale) } as const;
+}
+
 function worklineLabels(locale: Locale, statusLine: string): WorklineLabels {
   return {
     work: workSurfaceLabels(locale),
@@ -135,7 +145,8 @@ function worklineLabels(locale: Locale, statusLine: string): WorklineLabels {
       unsupported: t('terminal.mode.unsupported', {}, locale), usage: t('terminal.mode.usage', {}, locale),
       effect: { standart: t('terminal.mode.effect.standart', {}, locale), 'full-auto': t('terminal.mode.effect.full-auto', {}, locale),
         'full-access': t('terminal.mode.effect.full-access', {}, locale) },
-      switch: t('terminal.mode.switch', {}, locale), fullAccessLaunch: t('terminal.mode.fullAccessLaunch', {}, locale), startSaved: t('terminal.mode.startSaved', {}, locale),
+      switch: t('terminal.mode.switch', {}, locale), fullAccessGrant: t('terminal.mode.fullAccessGrant', {}, locale), startSaved: t('terminal.mode.startSaved', {}, locale),
+      stops: modeStopWords(locale), cycled: t('terminal.mode.cycled', {}, locale), cycledFullAccess: t('terminal.mode.cycledFullAccess', {}, locale),
       askEditsOn: t('terminal.mode.askEditsOn', {}, locale), askEditsOff: t('terminal.mode.askEditsOff', {}, locale) },
     reasoning: { on: t('terminal.reasoning.on', {}, locale), off: t('terminal.reasoning.off', {}, locale), usage: t('terminal.reasoning.usage', {}, locale) },
     scratch: { summary: t('terminal.scratch.summary', {}, locale), empty: t('terminal.scratch.empty', {}, locale), entry: t('terminal.scratch.entry', {}, locale),
@@ -165,7 +176,7 @@ async function runSession(locale: Locale, context: CommandContext, turn: (messag
       if (trimmed === '/exit' || trimmed === '/quit') break;
       if (trimmed === '/status') { emit(await status(), sinks); }
       // Slash input is a local command; an unknown one is reported, never sent to the model as a user message.
-      else if (trimmed.startsWith('/')) emit(`${t('terminal.workline.unknownCommand', {}, locale)}: ${trimmed}`, { ...sinks, level: 'error' });
+      else if (trimmed.startsWith('/')) emit(t('terminal.notice.error', { text: `${t('terminal.workline.unknownCommand', {}, locale)}: ${trimmed}` }, locale), { ...sinks, level: 'error' });
       else if (trimmed.length > 0) {
         if (stream) {
           const messages = boundAgentHistory(system, [...agentHistory, { role: 'user', content: trimmed }], historyMessages);
@@ -179,7 +190,7 @@ async function runSession(locale: Locale, context: CommandContext, turn: (messag
               ? boundAgentHistory(system, [...(turn.compacted ? [system, ...turn.compacted] : messages), ...turn.appended], historyMessages) : messages;
           } catch (error) {
             agentHistory = messages;
-            emit(errorText(error, locale), { ...sinks, level: 'error' });
+            emit(t('terminal.notice.error', { text: errorText(error, locale) }, locale), { ...sinks, level: 'error' });
           }
           if (interactive) rl.prompt();
           continue;
@@ -191,7 +202,7 @@ async function runSession(locale: Locale, context: CommandContext, turn: (messag
           emit(project(reply, 'prose'), sinks);
         } catch (error) {
           history = messages;
-          emit(errorText(error, locale), { ...sinks, level: 'error' });
+          emit(t('terminal.notice.error', { text: errorText(error, locale) }, locale), { ...sinks, level: 'error' });
         }
       }
       if (interactive) rl.prompt();
@@ -243,7 +254,7 @@ export async function terminalCommand(argv: readonly string[], context: CommandC
   if (parsed.action !== 'session' && (!tty.stdin || !tty.stdout)) throw ErrorRegistry.createError('TERMINAL_TTY_REQUIRED');
   // Admit identity before runtime startup or session/history writes. Piped line mode remains read-only until a governed turn writes.
   let installationId: string | undefined, projectId: string | undefined;
-  const accessNotices: { level: 'info' | 'error'; text: string }[] = [];
+  const accessNotices: { level: 'info' | 'warning' | 'error'; text: string }[] = [];
   if (tty.stdin && tty.stdout) {
     if (!context.ensureTerminalIdentity) throw ErrorRegistry.createError('INSTALLATION_IDENTITY_UNAVAILABLE');
     try { ({ installationId, projectId } = await context.ensureTerminalIdentity(root, scopeId, options)); }
@@ -295,8 +306,8 @@ export async function terminalCommand(argv: readonly string[], context: CommandC
   // T-L4 slice 4c: the mode is read and set through the runtime service (v15); this surface reads and writes no policy file.
   const modePort = context.inspectPermissionMode && context.setPermissionMode ? {
     inspect: (signal?: AbortSignal) => context.inspectPermissionMode!(root, { schemaVersion: 1, scopeId }, options, signal),
-    set: (mode: PermissionMode, expectedRevision: string, askEdits?: boolean) => context.setPermissionMode!(root, { schemaVersion: 1, scopeId, mode, expectedRevision,
-      ...(askEdits === undefined ? {} : { askEdits }) }, options) } : null;
+    set: (mode: PermissionMode, expectedRevision: string, askEdits?: boolean, session?: { readonly sessionId: string | null }) => context.setPermissionMode!(root,
+      { schemaVersion: 1, scopeId, mode, expectedRevision, ...(askEdits === undefined ? {} : { askEdits }), ...(session ? { session: { sessionId: session.sessionId } } : {}) }, options) } : null;
   // MODES-3: full access starts only here — `--full-access` or the person's stored start mode — and only on the company grant (the service asks
   // it again on every turn and call). An explicit flag without the grant is refused; a stored start mode without it opens a standart session.
   let fullAccess = false;
@@ -320,6 +331,15 @@ export async function terminalCommand(argv: readonly string[], context: CommandC
     ...(context.inspectSurfaceRunIds ? { inspectSurfaceRunIds: () => context.inspectSurfaceRunIds!(root, scopeId, options) } : {}),
     ...(context.followSurfaceEvents ? { followEvents: signal => context.followSurfaceEvents!(root, scopeId, options, signal) } : {}) });
   const target = `${scopeId} · ${chatTarget(chat, locale)}`;
+  // T2: theme and tier from what the terminal can draw and the person's setting; the banner and the clear from their settings (TERM=dumb never
+  // clears). A config without a `terminal` section (scope from --scope) keeps every default.
+  const presentation = (config['terminal'] ?? {}) as { readonly theme?: TerminalThemeSetting; readonly banner?: WorklineStartup['banner']; readonly clearOnStart?: boolean };
+  const theme = resolveTerminalTheme(presentation.theme ?? TERMINAL_THEME_SETTINGS[0], colorCapability({ env, isTTY: tty.stdout, argv: process.argv }), env['COLORFGBG']);
+  const ascii = prefersAsciiGlyphs(env), stop = fullAccess ? 'full-access' as const : view?.supported ? permissionModeStop(view, false) : null;
+  const home = env['HOME'] ?? '', where = home && (root === home || root.startsWith(`${home}/`)) ? `~${root.slice(home.length)}` : root;
+  const startup: WorklineStartup = { clear: presentation.clearOnStart !== false && env['TERM']?.trim().toLowerCase() !== 'dumb', banner: presentation.banner ?? STARTUP_BANNERS[0],
+    ...terminalStartupLabels(locale, { version: PACKAGE_VERSION, project: basename(root), path: where, model: chatTarget(chat, locale),
+      mode: stop ? modeStopWords(locale)[stop] : t('terminal.value.unknown', {}, locale) }, ascii) };
   // History is a convenience: an unavailable history file never blocks the terminal.
   const inputHistory = context.openTerminalHistory ? await context.openTerminalHistory(root, options).catch(() => null) : null;
   const sessionStore = context.openTerminalSessions ? await context.openTerminalSessions(root, options).catch(() => null) : null;
@@ -336,7 +356,7 @@ export async function terminalCommand(argv: readonly string[], context: CommandC
     knownSecrets: getConfigKnownSecrets(config),
     selfSource: await context.selfSourceProject?.(root) ?? false,
     labels: worklineLabels(locale, [t('terminal.status.chat', { target: chatTarget(chat, locale) }, locale), ...(serviceLine ? [serviceLine] : [])].join(' · ')),
-    target, systemPrompt: t('terminal.chat.systemPrompt', {}, locale), historyMessages,
+    target, systemPrompt: t('terminal.chat.systemPrompt', {}, locale), historyMessages, projectRoot: root,
     completeTurn: turn, errorText: error => errorText(error, locale),
     ...(inputHistory ? { inputHistory } : {}),
     // T-L5 `@file`: candidates and content come from the runtime service's scoped read port; this surface reads no file.
@@ -353,7 +373,7 @@ export async function terminalCommand(argv: readonly string[], context: CommandC
       inspect: (sessionId: string, signal?: AbortSignal) => context.inspectScratch!(root, { schemaVersion: 1, scopeId, sessionId }, options, signal),
       clear: (sessionId: string) => context.clearScratch!(root, { schemaVersion: 1, scopeId, sessionId }, options) } } : {}),
     // TERMINAL-CLOSE S09: `/status`, `/model`, `/usage`, `/doctor`, `/scope` re-read their typed producers on every call (this surface keeps no copy).
-    ...terminalAdminPorts({ root, scopeId, installationId, projectId, options, locale, context,
+    ...terminalAdminPorts({ root, scopeId, installationId, projectId, options, locale, context, principalName: hostUserName(),
       status: async () => renderStatus(statusPayload(ttyState(context), await loadConfig(root, options), context.describeTerminalChatPlan ? await context.describeTerminalChatPlan(root, options) : null, await readIdentity()), locale),
       doctor: sink => runKernelCommand(['doctor', '--lang', locale], { ...context, root, env, stdout: sink, stderr: sink }) }),
     ...(context.runMcpCommand ? { mcp: (args: string) => mcpSlash(root, args, context, options, locale) } : {}),
@@ -361,12 +381,12 @@ export async function terminalCommand(argv: readonly string[], context: CommandC
     // MONITOR: `/monitor` prints the monitor's text snapshot as notice lines (the fullscreen view is `deckent monitor`).
     ...(context.inspectMonitor ? { monitor: (args: string) => monitorSlash(root, args, context, options, locale, Math.max(40, (tty.columns ?? 100) - 4)) } : {}),
     ...(serviceLine || accessNotices.length ? { openingNotices: [...accessNotices, ...(serviceLine ? [{ level: serviceFailed ? 'error' as const : 'info' as const, text: serviceLine }] : []),
-      ...(skewLine ? [{ level: 'error' as const, text: skewLine }] : []), ...(configLine ? [{ level: 'error' as const, text: configLine }] : [])] } : {}),
+      ...(skewLine ? [{ level: 'warning' as const, text: skewLine }] : []), ...(configLine ? [{ level: 'error' as const, text: configLine }] : [])] } : {}),
     ...(context.restartRuntimeService ? { restartService: async () => {
       const restarted = await context.restartRuntimeService!(root, options);
       return t('terminal.service.restarted', { pid: restarted.pid ?? '-', instance: restarted.instanceId }, locale);
     } } : {}),
-    palette: resolveWorklinePalette(colorTier({ env, isTTY: tty.stdout, argv: process.argv })), ascii: prefersAsciiGlyphs(env),
+    palette: resolveWorklinePalette(theme.tier, theme.theme), ascii, startup,
     ...(ledger ? { ledger } : {}),
     ...(context.stdin ? { stdin: context.stdin as NodeJS.ReadStream } : {}),
     ...(context.stdout ? { stdout: context.stdout as unknown as NodeJS.WriteStream } : {}),

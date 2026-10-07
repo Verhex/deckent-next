@@ -415,7 +415,10 @@ refresh, usage and dogfood closure remain open.
   `askEdits`/`fullAccess`, command `askEdits?`, `chatTurn.fullAccess?: true`; lifecycle window [17,16]. The owner-approved v17 items
   (question cards, Agent OS catalog, card standing scopes) add to it without a further bump until it is pushed. With it: bindings v3;
   audit event schema 1 (additive kinds `full-access-turn`, `full-access-call`, `tracked-files-changed`, summary `fetch`; old mode names stay readable); ledger
-  unchanged. v17 was pushed with `7fbe476c` (released; further changes bump).
+  unchanged. v17 was pushed with `7fbe476c` (released; further changes bump). v21 (T2 wave/tui-2, 2026-10-07, unpushed): the strict permission-mode view
+  gains `fullAuto` (a v20 client would reject it), so the single v21 package bumps once; lifecycle window [21,20]; later T2 items add to it until pushed
+  (T2-FOLLOWUP: `setPermissionMode` `session` for session-only full access with audit kind `permission-mode-session`; `decideApproval`
+  `approverNote: true`, sealed as decision `schemaVersion: 3` (other decisions stay v2; an earlier build refuses only v3 with `APPROVAL_INTEGRITY`), the turn gives that reason to the model; `approval.requested` `undo`, shell `posture`, the card fields `call` and the cut facts `previewCut` — Astra 2431).
   v18 was introduced 2026-09-29 (SECRET-WRITE, lead decision under this rule) as the single v18 package: the control operations
   `setSecret` / `deleteSecret`; lifecycle window [18,17]; every other v17 operation is unchanged in v18. It is unreleased until pushed, and
   further v18 items add to it without another bump. Like every bump, the window's older version is lifecycle-only: a v17 client can
