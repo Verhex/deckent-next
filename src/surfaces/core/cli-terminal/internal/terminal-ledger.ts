@@ -4,8 +4,7 @@ import { z } from 'zod';
 import { t, type ConfigLoadOptions, type Locale } from '#platform/index.js';
 import { approvalFacts, approvalRecordSchema, approvalSubject, type ApprovalFacts, type ApprovalRecord } from '#domain/index.js';
 import type { StandingScope } from '#surfaces/core/terminal/index.js';
-import type { RunCancellationDeliveryHandler, RunQueryHandler } from './run.js';
-import { renderRunCancellation } from './run.js';
+import type { RunCancellationDeliveryHandler, RunCancellationRenderer, RunQueryHandler } from './context.js';
 import { renderWorkerTranscript, type WorkerObservationHandler, type InventoryQueryHandler, type WorkerTranscriptHandler } from '#surfaces/core/monitor/index.js';
 import type { WorklineApproval, WorklineLedgerPorts } from '#surfaces/core/terminal-ledger/index.js';
 
@@ -40,10 +39,12 @@ export function createWorklineLedgerPorts(input: {
   readonly inspectSurfaceAccess?: () => Promise<SurfaceSnapshotAccess | null>;
   readonly inspectSurfaceRunIds?: () => Promise<readonly string[]>;
   readonly deliverRunCancellation?: RunCancellationDeliveryHandler;
+  /** The host's cancellation text (CLI `run cancel`), given as a port. */
+  readonly renderRunCancellation: RunCancellationRenderer;
 }): WorklineLedgerPorts | undefined {
   if (!input.inspectWorkers || !input.inspectRun) return undefined;
   const { root, scopeId, options, inspectWorkers, inspectRun, inspectInventory, workerHeartbeatMs, inspectWorkerTranscript, listApprovals, decideApproval,
-    deliverRunCancellation, followEvents } = input;
+    deliverRunCancellation, renderRunCancellation, followEvents } = input;
   const locale = input.locale ?? 'en', pageSize = input.approvalPageSize ?? 100;
   return withSurfaceSnapshot({
     scopeId,

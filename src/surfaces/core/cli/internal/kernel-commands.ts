@@ -1,13 +1,10 @@
 import type { IdentityCommandContext } from '#surfaces/core/cli-identity/index.js';
-import type { ProjectIdentity } from '#domain/index.js';
 import { assessPoolReadiness, poolReadinessLines } from './pool.js';
-import type { ConfigCommandContext } from '#surfaces/core/config/index.js';
-import type { MonitorCommandContext, WorkerTranscriptHandler } from '#surfaces/core/monitor/index.js';
-import type { RunAdmissionHandler, RunDeliveryAdmissionHandler, RunCancellationDeliveryHandler, RunQueryHandler, RunReservationHandler } from './run.js';
+import type { RunAdmissionHandler, RunDeliveryAdmissionHandler, RunReservationHandler } from './run.js';
 import type { CodingProfilePreparationHandler } from './coding.js';
 import type { Readable } from 'node:stream';
 import type { TaskIntegrationDeliverHandler, TaskIntegrationInspectHandler, TaskIntegrationCheckHandler, TaskIntegrationPrepareHandler, TaskPatchHandler, TaskEvaluationHandler, TaskExecutionHandler } from './task.js';
-import { getPolicyVocabulary, type IdentityRead, type InstallationIdentityRead } from '#engine/index.js';
+import { getPolicyVocabulary } from '#engine/index.js';
 import type { RuntimeServiceDescribeHandler, RuntimeServiceShutdownHandler, RuntimeServiceStartHandler } from './runtime.js';
 import type { InstallationCommandContext } from '#surfaces/core/cli-installation/index.js';
 import type { ToolchainCurrencyReport, ModelInvocationDeliveryFinding } from '#engine/index.js';
@@ -19,8 +16,8 @@ import {
   type ConfigLoadOptions, type OutputMode, type OutputSink, type Locale,
 } from '#platform/index.js';
 
-import type { TerminalChatPlanHandler, TerminalChatStreamHandler, TerminalChatTurnHandler, TerminalMentionAttachHandler, TerminalMentionFindHandler,
-  TerminalPermissionModeInspectHandler, TerminalPermissionModeSetHandler, TerminalScratchClearHandler, TerminalScratchInspectHandler } from './terminal-chat.js';
+import type { TerminalLaunchContext } from '#surfaces/core/cli-terminal/index.js';
+export type { RuntimeServiceReadinessView } from '#surfaces/core/cli-terminal/index.js';
 
 import { renderDoctorReport, type InstallationBindingReport, type ShellRealmDoctorView } from '#surfaces/core/doctor/index.js';
 export type { InstallationBindingReport, ShellRealmDoctorView } from '#surfaces/core/doctor/index.js';
@@ -29,33 +26,16 @@ import type { DecisionCommandContext } from '#surfaces/core/cli-decision/index.j
 export type { InferenceMetricsReading } from '#surfaces/core/cli-models/index.js';
 
 import { configServiceState, type ShutdownCommand, type ServiceShutdownAdmissionResult } from '#engine/index.js';
-import type { ComposerHistoryPort } from '#surfaces/core/terminal-composer/index.js';
-import type { SurfaceFollowEvent } from '#surfaces/core/terminal-kit/index.js';
-import type { TerminalSessionStoreView } from '#surfaces/core/terminal/index.js';
-
-export interface RuntimeServiceReadinessView {
-  readonly mode: 'connected' | 'started'; readonly instanceId: string; readonly pid: number | null; readonly logPath: string | null;
-  readonly shutdownAvailable: boolean; readonly build: { readonly sourceTreeSha256: string; readonly sourceCommit: string | null } | null;
-  /** Restart-apply configuration fingerprint the service started with (undefined from an older service) and its idle stop period (null: never). */
-  readonly configDigest?: string | undefined; readonly idleStopMs?: number | null;
-}
 
 /** Every host operation a CLI command may use; the model commands' narrower context is part of it. */
 export type RunLifecycleHandler = (root: string, input: import('#engine/index.js').RunLifecycleCommand, options: ConfigLoadOptions) => Promise<{ readonly schemaVersion: 1; readonly layout: import('#platform/index.js').ProductLayout; readonly lifecycle: { readonly schemaVersion: 1; readonly commandId: string; readonly run: import('#engine/index.js').RunView } } | null>;
-export interface CommandContext extends InstallationCommandContext, IdentityCommandContext, ModelCommandContext, MonitorCommandContext, ConfigCommandContext, DecisionCommandContext {
+/** The terminal's slice (TERMINAL-LAUNCH) carries the monitor and config command contexts. */
+export interface CommandContext extends InstallationCommandContext, IdentityCommandContext, ModelCommandContext, DecisionCommandContext, TerminalLaunchContext {
   applyRunLifecycle?: RunLifecycleHandler;
   renewApproval?: (input: unknown) => Promise<unknown>;
-  listApprovals?: (input: unknown) => Promise<unknown>;
-  /** Approval, run and worker publications already written by the runtime service. */
-  inspectSurfaceAccess?: (root: string, scopeId: string, options: ConfigLoadOptions) => Promise<import('#engine/index.js').SurfaceSnapshotAccess | null>;
-  inspectSurfaceRunIds?: (root: string, scopeId: string, options: ConfigLoadOptions) => Promise<readonly string[]>;
-  followSurfaceEvents?: (root: string, scopeId: string, options: ConfigLoadOptions, signal: AbortSignal) => AsyncIterable<SurfaceFollowEvent>;
   inspectApproval?: (input: unknown) => Promise<unknown>;
-  clearSessionStanding?: (input: { schemaVersion: 1; scopeId: string; sessionId: string }) => Promise<unknown>;
-  decideApproval?: (input: unknown) => Promise<unknown>;
   deliverWorkspaceIntegration?: TaskIntegrationDeliverHandler;
   executeOperation?: import('./operation.js').OperationEffectHandler;
-  inspectWorkerTranscript?: WorkerTranscriptHandler;
   compensateOperation?: import('./operation.js').OperationEffectHandler;
   inspectOperation?: import('./operation.js').OperationInspectHandler;
   adoptWorkspaceIntegration?: import('./task.js').TaskIntegrationAdoptHandler;
@@ -64,15 +44,6 @@ export interface CommandContext extends InstallationCommandContext, IdentityComm
   checkWorkspaceIntegration?: TaskIntegrationCheckHandler;
   prepareWorkspaceIntegration?: TaskIntegrationPrepareHandler;
   inspectToolchainCurrency?: (root: string, options: ConfigLoadOptions) => Promise<ToolchainCurrencyReport>;
-  ensureRuntimeService?: (root: string, options: ConfigLoadOptions) => Promise<RuntimeServiceReadinessView>;
-  restartRuntimeService?: (root: string, options: ConfigLoadOptions) => Promise<RuntimeServiceReadinessView>;
-  openTerminalHistory?: (root: string, options: ConfigLoadOptions) => Promise<ComposerHistoryPort | null>;
-  openTerminalSessions?: (root: string, options: ConfigLoadOptions) => Promise<TerminalSessionStoreView | null>;
-  loadInstallationIdentity?: (root: string, options: ConfigLoadOptions) => Promise<InstallationIdentityRead>;
-  loadProjectIdentity?: (root: string, options: ConfigLoadOptions) => Promise<IdentityRead<ProjectIdentity>>;
-  /** Managed interactive startup only; status and piped observation never call this write port. */
-  ensureTerminalIdentity?: (root: string, scopeId: string, options: ConfigLoadOptions) => Promise<{ readonly installationId: string; readonly projectId: string }>;
-  selfSourceProject?: (root: string) => Promise<boolean>;
   stopRuntimeService?: (root: string, options: ConfigLoadOptions) => Promise<{ readonly command: ShutdownCommand; readonly result: ServiceShutdownAdmissionResult }>;
   updateToolchains?: import('./toolchains.js').ToolchainUpdateHandler;
   runMcpCommand?: import('./mcp.js').McpCommandHandler;
@@ -80,15 +51,6 @@ export interface CommandContext extends InstallationCommandContext, IdentityComm
   previewWorkspacePatch?: TaskPatchHandler;
   renderUnifiedDiff?: (path: string, before: string | null, after: string | null) => string;
   prepareCodingProfile?: CodingProfilePreparationHandler;
-  completeTerminalChat?: TerminalChatTurnHandler;
-  streamTerminalChat?: TerminalChatStreamHandler;
-  findTerminalMentions?: TerminalMentionFindHandler;
-  attachTerminalMentions?: TerminalMentionAttachHandler;
-  inspectPermissionMode?: TerminalPermissionModeInspectHandler;
-  setPermissionMode?: TerminalPermissionModeSetHandler;
-  inspectScratch?: TerminalScratchInspectHandler;
-  clearScratch?: TerminalScratchClearHandler;
-  describeTerminalChatPlan?: TerminalChatPlanHandler;
   // Doctor-only, read-soft (SCR-B): null on a missing/unsafe/custom policy, never a hard failure of `doctor`.
   listStandingGrants?: import('./policy-grants.js').StandingGrantsHandler;
   revokeStandingGrant?: import('./policy-grants.js').StandingRevokeHandler;
@@ -115,8 +77,6 @@ export interface CommandContext extends InstallationCommandContext, IdentityComm
   createRun?: RunAdmissionHandler;
   createDeliveryRun?: RunDeliveryAdmissionHandler;
   stdin?: Readable & { isTTY?: boolean };
-  inspectRun?: RunQueryHandler;
-  deliverRunCancellation?: RunCancellationDeliveryHandler;
   reserveRunTasks?: RunReservationHandler;
   executeTask?: TaskExecutionHandler;
   evaluateTask?: TaskEvaluationHandler;
