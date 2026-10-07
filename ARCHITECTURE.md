@@ -518,6 +518,11 @@ Core contracts and never requires editing Core. Core-memory law 10 records this 
   previewed revision through the archived authority writer and the configured layout; a second run is `current`; an untouched v4 becomes
   exactly v5. `deckent policy upgrade --template v5 [--apply|--rollback]` applies the same plan through `policy.administer@1` (I2) where the
   person already holds that authority.
+  A hand-built policy (no first-run read rule; POLICY-UPGRADE-HANDBUILT, lead 2026-10-08, Jev b6dba079) takes the installer plan only with
+  `--person <issuer>/<subject>`: the same owner gate, and the person must already be named explicitly (never `all`) on an allow rule listing the
+  scope; added rules are in that scope (`mcp-server` stays every scope) and name that person alone. Without `--person` the refusal names
+  `--person` and the people the policy names there; on a template policy `--person` must be the person the read rule names. The installer
+  path records the archive entry, not a sealed `authority-change` event (that event needs the governed chain's command, approval and decider).
 - **Terminal units:** `cli-terminal` (L0: the interactive launch, ledger ports and handler types moved out of `cli` behind ports; lazy
   `launchTerminal`); `terminal-picker` gains the pure `pickerReduce` core and `ListPicker` (L3); `terminal-panels` (L4: `/mode`, `/config`,
   `/mcp` bounded windows, presentation only, ports and words from `cli-terminal`); `/monitor`, `/watch-workers`, `/watch-runs`, `/tasks` are

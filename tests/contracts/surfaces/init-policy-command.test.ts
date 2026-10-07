@@ -62,3 +62,34 @@ it('--upgrade (owner 2026-10-07: first-run v4 → v5) reads with --preview, writ
   expect(await main(['init', 'policy', '--scope', 'installation', '--apply', '--expect', 'x'], ctx)).toBe(2);
   expect(await main(['init', 'policy', '--scope', 'installation', '--upgrade', '--apply'], context())).toBe(2);
 });
+it('--person <issuer>/<subject> (lead 2026-10-08, hand-built policy): only with --upgrade, split at the last slash, repeated in the next command; refusals name --person and the people', async () => {
+  const calls: unknown[][] = [], output: string[] = [];
+  const person = { issuer: 'DESKTOP-7NLBLGA', subject: '1000' };
+  let result: Record<string, unknown> = { status: 'preview', basis: 'named-person', person, revision: 'a-419c', rules: [{ id: 'first-run-mcp-servers', resource: { kind: 'mcp-server', ids: 'all' } }],
+    conflicts: [], wireRules: [] };
+  const ctx = context({ async upgradePolicyTemplateInstallation(...args: unknown[]) { calls.push(args); return result; }, stdout: { write(value: string) { output.push(value); } } });
+  expect(await main(['init', 'policy', '--scope', 'live', '--upgrade', '--preview', '--person', 'DESKTOP-7NLBLGA/1000', '--lang', 'en'], ctx)).toBe(0);
+  expect(calls.at(-1)).toEqual(['/project', 'live', false, undefined, person]);
+  expect(output.join('')).toContain('deckent init policy --scope live --upgrade --apply --expect a-419c --person DESKTOP-7NLBLGA/1000');
+  expect(output.join('')).toContain('hand-built policy');
+  output.length = 0;
+  expect(await main(['init', 'policy', '--scope', 'live', '--upgrade', '--apply', '--expect', 'a-419c', '--person', 'https://idp.example/realm/42'], ctx)).toBe(0);
+  expect(calls.at(-1)).toEqual(['/project', 'live', true, 'a-419c', { issuer: 'https://idp.example/realm', subject: '42' }]);
+  // A hand-built policy without --person: the refusal points to --person and names the people it already names (terminal-safe).
+  output.length = 0; result = { status: 'unavailable', reason: 'not-first-run', people: [person, { issuer: 'evil\u001b[2J', subject: '7' }] };
+  expect(await main(['init', 'policy', '--scope', 'live', '--upgrade', '--preview', '--lang', 'en'], ctx)).toBe(0);
+  const refusal = output.join('');
+  expect(refusal).toContain('deckent init policy --scope live --upgrade --preview --person <issuer>/<subject>');
+  expect(refusal).toContain('DESKTOP-7NLBLGA/1000, evil/7');
+  expect(refusal).not.toContain('\u001b');
+  output.length = 0; result = { status: 'unavailable', reason: 'person-not-named', person: { issuer: 'x', subject: 'y' }, people: [person] };
+  expect(await main(['init', 'policy', '--scope', 'live', '--upgrade', '--preview', '--person', 'x/y', '--lang', 'tr'], ctx)).toBe(0);
+  expect(output.join('')).toContain('x/y, live kapsamındaki hiçbir izin kuralında adı geçmiyor');
+  // Usage: --person needs --upgrade, a value with both parts, and only once.
+  for (const argv of [['init', 'policy', '--scope', 'live', '--preview', '--person', 'a/b'], ['init', 'policy', '--scope', 'live', '--upgrade', '--preview', '--person'],
+    ['init', 'policy', '--scope', 'live', '--upgrade', '--preview', '--person', 'ab'], ['init', 'policy', '--scope', 'live', '--upgrade', '--preview', '--person', '/b'],
+    ['init', 'policy', '--scope', 'live', '--upgrade', '--preview', '--person', 'a/'], ['init', 'policy', '--scope', 'live', '--upgrade', '--preview', '--person', '-a/b'],
+    ['init', 'policy', '--scope', 'live', '--upgrade', '--preview', '--person', 'a/b', '--person', 'a/b']]) {
+    expect(await main(argv, ctx)).toBe(2);
+  }
+});

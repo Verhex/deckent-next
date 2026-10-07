@@ -35,10 +35,11 @@ export async function applyPolicyTemplateInstallation(projectRoot: string, scope
   }).apply(prepared));
   await installationIdentity.loadOrCreate(); await projectIdentity.loadOrCreate(); return result;
 }
-/** `deckent init policy --upgrade [--apply]` (owner 2026-10-07): the first-run v4 → v5 migration of this installation's policy, as the local person
- * the template names, through the authority documents' one conditional writer. Without `--apply` it only reads (what would change, or why not). */
+/** `deckent init policy --upgrade [--apply] [--person <issuer>/<subject>]` (owner 2026-10-07): the first-run v4 → v5 migration of this installation's
+ * policy, as the local person the template names (or, for a hand-built policy, the person its file owner names: lead 2026-10-08), through the
+ * authority documents' one conditional writer. Without `--apply` it only reads (what would change, or why not). */
 export async function upgradePolicyTemplateInstallation(projectRoot: string, scopeId: string, apply: boolean, expect?: string, options: ConfigLoadOptions = {},
-  callerUid: number | undefined = process.getuid?.()) {
+  callerUid: number | undefined = process.getuid?.(), person?: { readonly issuer: string; readonly subject: string }) {
   // An existing installation: its configured layout (a custom data root, as a live installation has), not only the default `.deckent`.
   const config = await loadComposedConfig(projectRoot, { ...options, heal: false }), layout = config.productLayout, identity = readLocalOsIdentity();
   if (apply) await assertConfiguredInstallationIdentity(projectRoot);
@@ -48,7 +49,7 @@ export async function upgradePolicyTemplateInstallation(projectRoot: string, sco
   const owner = await owns(productResourcePath(layout, 'policy')) && await owns(productResourcePath(layout, 'bindings'));
   const writer = createLayoutPolicySource(layout, callerUid ?? userInfo().uid, config.inspection.policyMaxBytes);
   return upgradePolicyTemplate(writer, { scopeId, principal: { issuer: identity.issuer, subject: identity.subject }, toolNames: TOOL_NAMES, apply, owner,
-    ...(expect === undefined ? {} : { expect }) });
+    peopleLimit: config.inspection.maxPageSize, ...(expect === undefined ? {} : { expect }), ...(person === undefined ? {} : { person }) });
 }
 /** Doctor-only, read-soft: not the trusted gate (that stays FilePolicySource); oversized/missing/unparsable/custom -> null, never a doctor failure. */
 export async function inspectPolicyTemplate(projectRoot: string) {
