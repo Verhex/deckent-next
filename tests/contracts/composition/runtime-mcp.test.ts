@@ -447,6 +447,15 @@ describe('the MCP notices in the turn note (pure)', () => {
 });
 
 describe('the MCP start notices and the sandbox refusal come from the catalog (pure, en and tr)', () => {
+  // MCP-VISIBILITY: `mcp add` is stdio only and the registry file is `mcp.json` (project: `.deckent/mcp.json`), never `.mcp.json`.
+  it('the mcp add help names only stdio and the real registry file (en and tr)', () => {
+    for (const locale of ['en', 'tr'] as const) for (const key of ['cli.mcp.add.desc', 'cli.memcat.mcp.help.paths'] as const) {
+      const text = t(key, {}, locale);
+      expect(text).not.toMatch(/\bhttp\b/iu); expect(text).not.toContain('.mcp.json');
+      if (key === 'cli.mcp.add.desc') expect(text).toContain('stdio');
+      expect(text).toContain('.deckent/mcp.json');
+    }
+  });
   const hidden = { kind: 'path-hidden' as const, role: 'command' as const, index: -1, path: '/home/o/bin/srv', target: '/opt/srv' };
   it('renders every notice kind with its next step by phase', () => {
     const notice = (diagnosis: unknown, phase: 'launch' | 'trusted', extra: Record<string, unknown> = {}) =>
