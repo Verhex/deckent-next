@@ -415,8 +415,8 @@ refresh, usage and dogfood closure remain open.
   `askEdits`/`fullAccess`, command `askEdits?`, `chatTurn.fullAccess?: true`; lifecycle window [17,16]. The owner-approved v17 items
   (question cards, Agent OS catalog, card standing scopes) add to it without a further bump until it is pushed. With it: bindings v3;
   audit event schema 1 (additive kinds `full-access-turn`, `full-access-call`, `tracked-files-changed`, summary `fetch`; old mode names stay readable); ledger
-  unchanged. v17 was pushed with `7fbe476c` (released; further changes bump). T2 T-MODE-CYCLE (2026-10-07, unlanded) adds an optional view
-  field `fullAuto` without a bump (an older service omits it; an older strict client rejects it — open decision in the T2 L2 review).
+  unchanged. v17 was pushed with `7fbe476c` (released; further changes bump). v21 (T2 wave/tui-2, 2026-10-07, unpushed): the strict permission-mode view
+  gains `fullAuto` (a v20 client would reject it), so the single v21 package bumps once; lifecycle window [21,20]; later T2 items add to it until pushed.
   v18 was introduced 2026-09-29 (SECRET-WRITE, lead decision under this rule) as the single v18 package: the control operations
   `setSecret` / `deleteSecret`; lifecycle window [18,17]; every other v17 operation is unchanged in v18. It is unreleased until pushed, and
   further v18 items add to it without another bump. Like every bump, the window's older version is lifecycle-only: a v17 client can

@@ -289,8 +289,8 @@ service wiring from the turn's `requestApproval` to `offer`/`remember`/`persist`
 surface refusal of `/mode full-access` above; implemented on `tui2/readable-startup-mode`, not landed).** Shift+Tab (Alt+M where the console
 cannot report Shift+Tab) walks every stop the person may take here: `standart` → careful (`standart` + `askEdits`) → `full-auto` →
 `full-access` → `standart`; no plan mode. `full-access` is a stop only when the view's `fullAccess` grant holds; `full-auto` unless the view
-says the company's set grant leaves it out (`fullAuto`, an optional view field — a service built before it does not send it and then answers
-the set itself). Every step, and `/mode full-access`, is the existing `setPermissionMode` with the revision last read and an explicit
+says the company's set grant leaves it out (`fullAuto`, a view field of runtime protocol v21 — wave/tui-2 bumps once because the v20 view is
+strict; every v21 service sends it, and a view without it lets the service answer the set itself). Every step, and `/mode full-access`, is the existing `setPermissionMode` with the revision last read and an explicit
 `askEdits`: the engine decides the grant and records `permission-mode-change` (principal, time, previous → requested, rule) before the
 bindings change, so a stored `full-access` also becomes the next launch's start mode (as `full-auto` and `standart` already persist). Every
 following full-access turn is admitted on the grant again and audited (`full-access-turn`, `full-access-call`); a grant revoked meanwhile

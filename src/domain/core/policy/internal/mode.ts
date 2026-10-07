@@ -23,9 +23,9 @@ const viewShape = { schemaVersion: z.literal(1), scopeId: identitySchema,
   eligible: z.boolean(),
   /** Whether a company `permission-mode`/`set` grant allows full access for this person here now (a launch without it is refused). */
   fullAccess: z.boolean(),
-  /** T2 T-MODE-CYCLE: whether a company `permission-mode`/`set` grant allows full-auto here now (the Shift+Tab cycle skips it otherwise; the
-   * service still decides every set). Optional: a service built before T2 does not send it, and the cycle then offers full-auto and lets the
-   * service answer. */
+  /** T2 T-MODE-CYCLE (runtime protocol v21): whether a company `permission-mode`/`set` grant allows full-auto here now (the Shift+Tab cycle
+   * skips it otherwise; the service still decides every set). Every v21 service sends it; optional in the schema, and a view without it
+   * offers full-auto and lets the service answer. */
   fullAuto: z.boolean().optional() };
 export const permissionModeViewSchema = z.object(viewShape).strict().readonly();
 export const permissionModeChangeSchema = z.object({ ...viewShape, previous: z.enum(PERMISSION_MODES), changed: z.boolean() }).strict().readonly();
