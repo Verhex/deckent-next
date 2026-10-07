@@ -5,7 +5,7 @@ import { agentContextFailureNote, agentHistoryBytes, createAgentCompactionGuard,
 import { projectModelIngressField, type ModelIngressProjection } from './model-ingress-project.js';
 import { agentTurnApproverNote, type AgentToolOwnerAnswer } from './approver-note.js';
 import { LOCALES, t, type Locale } from '#platform/index.js';
-import type { AgentContextQuality, AgentToolCall, AgentToolCleanup, AgentToolOutcome, AgentToolSpec, AgentToolCallStatus, AgentTurnEvent, AgentTurnFinish,
+import type { AgentContextQuality, AgentToolCall, AgentToolCleanup, AgentToolDiagnostic, AgentToolOutcome, AgentToolSpec, AgentToolCallStatus, AgentTurnEvent, AgentTurnFinish,
   AgentTurnMessage } from '#domain/index.js';
 
 /** One governed model round as the loop sees it: the provider-neutral answer, or why there is none. */
@@ -62,7 +62,9 @@ export interface AgentTurnPorts {
     Promise<'allow' | 'deny' | 'expired' | 'cancelled' | 'policy-deny' | AgentToolOwnerAnswer>;
   /** Durable projection of every settled call (optional for pure tests; the runtime composition always records). */
   settled?(call: { readonly round: number; readonly index: number; readonly call: AgentToolCall; readonly tool: AgentToolSpec | null;
-    readonly argsDigest: string | null; readonly target: string | null; readonly status: AgentToolCallStatus; readonly content: string }): Promise<void>;
+    readonly argsDigest: string | null; readonly target: string | null; readonly status: AgentToolCallStatus; readonly content: string;
+    /** B4: where a workspace path failed (step, errno), when the tool said so; kept on the durable tool-call record. */
+    readonly diagnostic?: AgentToolDiagnostic }): Promise<void>;
   /** Sealed digests of a marked field. A failure withholds the field; the decoded payload is not an argument. */
   recordIngress?(notice: ModelIngressProjection): Promise<void>;
 }
@@ -334,14 +336,14 @@ export async function runAgentTurn(input: AgentTurnInput, ports: AgentTurnPorts)
       const tool = byName.get(call.name), started = ports.now();
       let digestOf: string | null = null, targetOf: string | null = null, invoked = false, pauseArgs: Record<string, unknown> = {}, noteOf: string | null = null;
       // `cleanup` (Astra 2124): only the host shell tool's outcome ever carries it; the event omits the field otherwise.
-      const result = async (status: AgentToolCallStatus, content: string, cleanup?: AgentToolCleanup) => {
+      const result = async (status: AgentToolCallStatus, content: string, cleanup?: AgentToolCleanup, diagnostic?: AgentToolDiagnostic) => {
         if (!NO_PROGRESS_STATUSES.has(status)) progressed = true;
         const shown = tool && digestOf !== null ? await presentModelIngress(content, { call, tool, index, args: pauseArgs, argsDigest: digestOf, target: targetOf }, input, ports, rounds) : content;
         const message = push({ role: 'tool', toolCallId: call.id, name: call.name, content: shown });
         carry.observed(message, call, rounds, index, invoked, status, cleanup);
         emit({ kind: 'tool.finished', callId: call.id, name: call.name, status, ms: Math.max(0, ports.now() - started), bytes: Buffer.byteLength(shown, 'utf8'),
           ...(cleanup !== undefined ? { cleanup } : {}) });
-        await ports.settled?.({ round: rounds, index, call, tool: tool ?? null, argsDigest: digestOf, target: targetOf, status, content: shown });
+        await ports.settled?.({ round: rounds, index, call, tool: tool ?? null, argsDigest: digestOf, target: targetOf, status, content: shown, ...(diagnostic ? { diagnostic } : {}) });
         return message;
       };
       if (signal.aborted) { emit({ kind: 'tool.started', callId: call.id, name: call.name, target: null }); await result('cancelled', `[deckent] ${call.name}: error=cancelled`); continue; }
@@ -387,7 +389,7 @@ export async function runAgentTurn(input: AgentTurnInput, ports: AgentTurnPorts)
       if (tool.toolClass !== 'read') seenReads.clear();
       // APPROVER-NOTE: an allowed call's note follows its result (bound to this call, never a separate instruction message).
       const resultMessage = await result(signal.aborted ? 'cancelled' : outcomeText.status, `${outcomeText.text}${await approverNoteLine(noteOf, input, ports)}`,
-        tool.toolClass === 'shell' ? outcomeText.cleanup : undefined);
+        tool.toolClass === 'shell' ? outcomeText.cleanup : undefined, outcomeText.diagnostic);
       if (tool.toolClass === 'read' && outcomeText.status === 'ok' && !signal.aborted) seenReads.set(digest, { callId: call.id, message: resultMessage });
     }
     stalled = progressed ? 0 : stalled + 1;

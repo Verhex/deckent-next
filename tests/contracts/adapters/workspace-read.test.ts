@@ -93,7 +93,10 @@ custodyIt('[requires Linux /proc/self/fd custody] keeps the boundary under races
   expect(resolved).toMatchObject({ ok: true, rel: 'dir/a.txt' });
   // The parent is replaced by a symlink to an outside directory between the check and the open.
   await rename(join(root, 'dir'), join(root, 'dir-old')); await symlink(join(base, 'out'), join(root, 'dir'));
-  expect(await scope.open('dir/a.txt', 'file')).toEqual({ ok: false, error: 'path-changed' });
+  // B4 diagnosis: the refusal says where (the swapped first segment, not followed) and the errno; never the outside path.
+  const swappedParent = await scope.open('dir/a.txt', 'file');
+  expect(swappedParent).toMatchObject({ ok: false, error: 'path-changed', diagnostic: { step: 'open:1' } });
+  expect(!swappedParent.ok && ['ELOOP', 'ENOTDIR'].includes(swappedParent.diagnostic?.errno ?? '')).toBe(true);
   await link(join(root, '.env'), join(root, 'alias.txt'));
   const tools = await createWorkspaceReadTools(root);
   const alias = await tools.execute('read_file', { path: 'alias.txt' });
@@ -320,4 +323,34 @@ it('shows no grep summary when the producer\'s exact count is absent or not the 
   expect(summarizeAgentToolResult('grep', '[deckent] grep: no matches in 3 scanned file(s)')).toEqual({ kind: 'matches', count: 0, more: false });
   expect(summarizeAgentToolResult('grep', '[deckent] grep: no matches in 3 scanned file(s); the search was not complete\n[deckent] grep: skipped a.bin (binary)'))
     .toEqual({ kind: 'matches', count: 0, more: true });
+});
+
+// B4 (owner terminal test 2026-10-07): read_file said `not-found` and glob "no matches" for a file on disk, and neither said why. A refused
+// path now names its step and errno (text and outcome), and a literal glob that matched nothing says which walk filter drops the path.
+custodyIt('[requires Linux /proc/self/fd custody] a refused path names its step and errno; a literal glob without matches names the filter', async () => {
+  const { base, root } = await workspace({ 'src/a.ts': 'x\n', '.env': 'TOKEN=secret\n', 'node_modules/p/i.js': 'x\n', 'deep/x.md': 'x\n', '.gitignore': 'vendor\n', 'vendor/v.md': 'v\n' });
+  await symlink(join(root, 'src/a.ts'), join(root, 'alias.ts'));
+  execFileSync('mkfifo', [join(root, 'pipe.md')]);
+  const tools = await createWorkspaceReadTools(root);
+  const missing = await tools.execute('read_file', { path: 'src/deneme.md' });
+  expect(missing).toEqual({ status: 'error', text: '[deckent] read_file: error=not-found step=realpath errno=ENOENT path="src/deneme.md"', diagnostic: { step: 'realpath', errno: 'ENOENT' } });
+  // The open walk's own step: a segment that vanished between resolve and open.
+  const scope = await createWorkspaceScope(root);
+  expect(await scope.open('src/gone.ts', 'file')).toEqual({ ok: false, error: 'not-found', diagnostic: { step: 'open:2', errno: 'ENOENT' } });
+  // Other refusals keep their text (no diagnostic): denied paths are decided by name.
+  const denied = await tools.execute('read_file', { path: '.env' });
+  expect(denied).toEqual({ status: 'error', text: '[deckent] read_file: error=path-denied path=".env"' });
+  // The FIFO makes every walk report a special file, so the note is the result's last line.
+  const notes = async (pattern: string, path?: string) => (await tools.execute('glob', { pattern, ...(path ? { path } : {}) })).text;
+  const note = async (pattern: string, path?: string) => (await notes(pattern, path)).split('\n').at(-1);
+  expect(await note('src/deneme.md')).toBe('[deckent] glob: path="src/deneme.md" not there (error=not-found step=realpath errno=ENOENT)');
+  expect(await note('.env')).toBe('[deckent] glob: path=".env" filter=deny (a protected path is never listed)');
+  expect(await note('alias.ts')).toBe('[deckent] glob: path="alias.ts" filter=symlink (the walk does not follow links)');
+  expect(await note('node_modules/p/i.js')).toBe('[deckent] glob: path="node_modules/p/i.js" filter=ignored name="node_modules" (.gitignore or baseline name)');
+  expect(await note('vendor/v.md')).toBe('[deckent] glob: path="vendor/v.md" filter=ignored name="vendor" (.gitignore or baseline name)');
+  expect(await note('pipe.md')).toBe('[deckent] glob: path="pipe.md" filter=none open=not-a-file');
+  // A wildcard pattern gets no note; a match gets none either; nothing outside the workspace is named.
+  for (const pattern of ['src/*.md', '../x.md']) expect(await notes(pattern)).not.toContain('glob: path=');
+  expect((await notes('src/a.ts')).split('\n')[0]).toBe('src/a.ts'); expect(await notes('src/a.ts')).not.toContain('glob: path=');
+  for (const text of [missing.text, await notes('src/deneme.md')]) { expect(text).not.toContain(base); expect(text).not.toContain('secret'); }
 });

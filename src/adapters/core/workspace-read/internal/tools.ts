@@ -2,8 +2,8 @@ import { readdir } from 'node:fs/promises';
 import type { AgentToolOutcome, AgentToolSpec } from '#domain/index.js';
 import { boundLine, readBoundedTextFile, sliceUtf8, splitLines } from './bounded.js';
 import { compileSearchPattern, metaPattern, renderReadFileView, resolveReadFileBudget, resolveReadFileViewRequest } from './views.js';
-import { createGlobMatcher, createWorkspaceScope, DEFAULT_WORKSPACE_READ_DENY, describeIncomplete, openWalkedFile, walkWorkspaceFiles,
-  type WorkspaceScope } from './scope.js';
+import { createGlobMatcher, createWorkspaceScope, DEFAULT_WORKSPACE_READ_DENY, describeIncomplete, MAX_WALK_DEPTH, openWalkedFile, walkWorkspaceFiles,
+  type WorkspacePathDiagnostic, type WorkspacePathError, type WorkspaceScope } from './scope.js';
 import { createRegexRunner, RegexCancelled } from './regex-runner.js';
 
 /** Read/search tools of the terminal tool loop (T-L1), ported from the legacy native tools minus their defects. Every result, on
@@ -49,6 +49,16 @@ export const WORKSPACE_READ_TOOL_SPECS: readonly AgentToolSpec[] = Object.freeze
 
 const quote = (value: unknown) => metaPattern(String(value ?? ''));
 const fail = (tool: string, detail: string): AgentToolOutcome => ({ status: 'error', text: `[deckent] ${tool}: error=${detail}` });
+/**
+ * A refused workspace path (B4 diagnosis, owner terminal test 2026-10-07): `not-found` and `path-changed` also say at which step they fell
+ * (`realpath`, `open:<segment>`, `verify:<segment>`, `stat`) and the errno, in the text (`error=not-found step=open:2 errno=ENOENT path=…`)
+ * and as the outcome's `diagnostic` (the turn's tool-call record keeps it). No path or content beyond the requested one is added.
+ */
+function pathFail(tool: string, refused: { readonly error: WorkspacePathError; readonly diagnostic?: WorkspacePathDiagnostic }, path: string): AgentToolOutcome {
+  const diagnostic = refused.error === 'not-found' || refused.error === 'path-changed' ? refused.diagnostic : undefined;
+  const detail = diagnostic ? ` step=${diagnostic.step}${diagnostic.errno ? ` errno=${diagnostic.errno}` : ''}` : '';
+  return { status: 'error', text: `[deckent] ${tool}: error=${refused.error}${detail} path=${path}`, ...(diagnostic ? { diagnostic } : {}) };
+}
 /** The last line of defence for every branch: a result never exceeds the cap, and a cut always says so (Astra 2072 R3). */
 function capped(outcome: AgentToolOutcome, maxBytes: number): AgentToolOutcome {
   const bytes = Buffer.byteLength(outcome.text, 'utf8');
@@ -90,6 +100,33 @@ function validLimits(limits: WorkspaceReadLimits): WorkspaceReadLimits {
   return limits;
 }
 
+/**
+ * B4 diagnosis (owner terminal test 2026-10-07: `glob src/deneme.md` said "no matches" for a file on disk). For a pattern without wildcards
+ * that matched nothing, one line says which filter of the walk drops that path: `deny` (decided by name only: a protected path's existence is
+ * never probed), `symlink` (the walk does not follow links), `ignored` (a `.gitignore` or baseline name on its path), `depth`, or `none` (it
+ * exists, nothing filters it, and how it opens), else that it is not there with the failing step and errno. No content, no absolute path.
+ */
+async function literalGlobNote(scope: WorkspaceScope, prefix: string, pattern: string): Promise<string | null> {
+  if (/[*?[\]{}]/u.test(pattern)) return null;
+  const rel = `${prefix}${pattern}`.replace(/^(?:\.\/)+/u, '').replace(/\/+$/u, '');
+  if (rel === '' || rel.split('/').some(segment => segment === '' || segment === '.' || segment === '..')) return null;
+  const segments = rel.split('/'), named = `[deckent] glob: path=${quote(rel)}`;
+  if (segments.some((_, i) => scope.denied(segments.slice(0, i + 1).join('/')))) return `${named} filter=deny (a protected path is never listed)`;
+  const resolved = await scope.resolve(rel);
+  if (!resolved.ok) {
+    const d = resolved.diagnostic;
+    return `${named} not there (error=${resolved.error}${d ? ` step=${d.step}${d.errno ? ` errno=${d.errno}` : ''}` : ''})`;
+  }
+  if (resolved.rel !== rel) return `${named} filter=symlink (the walk does not follow links)`;
+  const ignored = segments.find(segment => scope.ignoredDirs.has(segment));
+  if (ignored !== undefined) return `${named} filter=ignored name=${quote(ignored)} (.gitignore or baseline name)`;
+  if (segments.length - 1 > MAX_WALK_DEPTH) return `${named} filter=depth (beyond ${MAX_WALK_DEPTH} directories)`;
+  const opened = await scope.open(rel, 'file');
+  if (opened.ok) { await opened.handle.close().catch(() => undefined); return `${named} filter=none open=ok (it exists and no filter drops it)`; }
+  const d = opened.diagnostic;
+  return `${named} filter=none open=${opened.error}${d ? ` step=${d.step}${d.errno ? ` errno=${d.errno}` : ''}` : ''}`;
+}
+
 export interface WorkspaceReadTools {
   readonly specs: readonly AgentToolSpec[];
   readonly scope: WorkspaceScope;
@@ -103,9 +140,9 @@ export async function createWorkspaceReadTools(root: string, options: { deny?: r
 
   const readFileTool = async (args: Record<string, unknown>, signal?: AbortSignal): Promise<AgentToolOutcome> => {
     const target = await scope.resolve(args['path']);
-    if (!target.ok) return fail('read_file', `${target.error} path=${quote(args['path'])}`);
+    if (!target.ok) return pathFail('read_file', target, quote(args['path']));
     const opened = await scope.open(target.rel, 'file');
-    if (!opened.ok) return fail('read_file', `${opened.error} path=${quote(target.rel)}`);
+    if (!opened.ok) return pathFail('read_file', opened, quote(target.rel));
     const read = await readBoundedTextFile(opened.handle, limits.maxFileBytes, signal);
     if (!read.ok) return read.kind === 'cancelled' ? cancelled('read_file') : fail('read_file', `${read.kind} (${read.detail}) path=${quote(target.rel)}`);
     const request = resolveReadFileViewRequest(args);
@@ -122,9 +159,9 @@ export async function createWorkspaceReadTools(root: string, options: { deny?: r
 
   const listDir = async (args: Record<string, unknown>): Promise<AgentToolOutcome> => {
     const target = await scope.resolve(args['path'], true);
-    if (!target.ok) return fail('list_dir', `${target.error} path=${quote(args['path'] ?? '.')}`);
+    if (!target.ok) return pathFail('list_dir', target, quote(args['path'] ?? '.'));
     const opened = await scope.open(target.rel, 'dir');
-    if (!opened.ok) return fail('list_dir', `${opened.error} path=${quote(target.rel || '.')}`);
+    if (!opened.ok) return pathFail('list_dir', opened, quote(target.rel || '.'));
     let entries;
     try { entries = await readdir(`/proc/self/fd/${opened.handle.fd}`, { withFileTypes: true }); }
     catch { return fail('list_dir', `unreadable path=${quote(target.rel || '.')}`); }
@@ -144,7 +181,7 @@ export async function createWorkspaceReadTools(root: string, options: { deny?: r
     const re = compileSearchPattern(pattern, false, args['ignoreCase'] === true);
     if (!re) return fail('grep', `invalid-pattern pattern=${quote(pattern)}`);
     const target = await scope.resolve(args['path'], true);
-    if (!target.ok) return fail('grep', `${target.error} path=${quote(args['path'] ?? '.')}`);
+    if (!target.ok) return pathFail('grep', target, quote(args['path'] ?? '.'));
     const only = typeof args['glob'] === 'string' && args['glob'] ? createGlobMatcher(args['glob']) : null;
     // D3 (owner): grep gains read_file's `context`/cap naming; context=0 (the default) keeps the exact old one-line-per-hit
     // shape (no separators), so every existing caller and result is unaffected.
@@ -224,7 +261,7 @@ export async function createWorkspaceReadTools(root: string, options: { deny?: r
     if (!pattern) return fail('glob', 'empty-pattern');
     if (Buffer.byteLength(pattern, 'utf8') > MAX_GLOB_ARG_BYTES) return fail('glob', `argument-too-long name=pattern limit=${MAX_GLOB_ARG_BYTES}`);
     const target = await scope.resolve(args['path'], true);
-    if (!target.ok) return fail('glob', `${target.error} path=${quote(args['path'] ?? '.')}`);
+    if (!target.ok) return pathFail('glob', target, quote(args['path'] ?? '.'));
     const matches = createGlobMatcher(pattern), matched: string[] = [];
     const prefix = target.rel === '' ? '' : `${target.rel}/`;
     let hitCapped = false;
@@ -236,7 +273,10 @@ export async function createWorkspaceReadTools(root: string, options: { deny?: r
     }, signal));
     if (signal?.aborted) return cancelled('glob');
     const trailer = [...(hitCapped ? [`[deckent] glob: truncated (${MAX_GLOB_MATCHES} matches cap); narrow the pattern`] : []), ...(incomplete ? [`[deckent] glob: ${incomplete}`] : [])];
-    if (matched.length === 0) return { status: 'ok', text: [incomplete ? '[deckent] glob: no matches in the scanned part' : '[deckent] glob: no matches', ...trailer].join('\n') };
+    if (matched.length === 0) {
+      const note = await literalGlobNote(scope, prefix, pattern);
+      return { status: 'ok', text: [incomplete ? '[deckent] glob: no matches in the scanned part' : '[deckent] glob: no matches', ...trailer, ...(note ? [note] : [])].join('\n') };
+    }
     return { status: 'ok', text: rowsWithin(matched, trailer, limits.maxResultBytes, 'narrow the pattern') };
   };
 

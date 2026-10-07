@@ -1209,6 +1209,7 @@
     "src/adapters/core/sqlite-agent-turn": {
       "dependencies": [
         "src/adapters/core/sqlite-ledger",
+        "src/domain/core/agent-tool",
         "src/engine/core/agent-turn"
       ],
       "plan": "SURFACES"

@@ -27,7 +27,8 @@ export async function runDurableAgentTurn(input: AgentTurnInput & { readonly cla
       await ports.settled?.(settled);
       await store.recordToolCall({ scopeId: claim.scopeId, turnId: claim.turnId, round: settled.round, index: settled.index, callId: settled.call.id,
         tool: settled.call.name, toolVersion: settled.tool?.version ?? 0, argsDigest: settled.argsDigest, target: settled.target, status: settled.status,
-        bytes: Buffer.byteLength(settled.content, 'utf8'), resultDigest: agentTurnResultDigest(settled.content), atMs: ports.now() });
+        bytes: Buffer.byteLength(settled.content, 'utf8'), resultDigest: agentTurnResultDigest(settled.content), atMs: ports.now(),
+        ...(settled.diagnostic ? { diagnostic: settled.diagnostic } : {}) });
     } });
   } catch (error) {
     await store.finish(claim.scopeId, claim.turnId, failed, ports.now()).catch(() => undefined);

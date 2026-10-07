@@ -161,3 +161,38 @@ it('keeps an answer larger than the replay bound by size only, and a replay then
     expect(await code(store.finish('scope', 'other', { ...outcome, answerBytes: 3 }, 1))).toBe('AGENT_TURN_INVALID');
   } finally { store.close(); }
 });
+
+// B4 diagnosis (owner terminal test 2026-10-07): the tool-call record keeps where a workspace path failed (step, errno) — optional and additive.
+it('keeps a tool outcome diagnostic on its call record; records without one, and rows of other shapes, stay valid (rollback-safe)', async () => {
+  const path = await file(), store = await openSqliteAgentTurnStore(path, options);
+  try {
+    const failing = ports(rounds);
+    failing.value.execute = async () => ({ status: 'error', text: '[deckent] read_file: error=not-found step=open:2 errno=ENOENT path="src/a.ts"',
+      diagnostic: { step: 'open:2', errno: 'ENOENT' } });
+    await runDurableAgentTurn({ claim: claim('diag'), messages: [{ role: 'user', content: 'what?' }], tools: [readFile],
+      signal: new AbortController().signal, emit: () => undefined }, store, failing.value);
+    await runDurableAgentTurn({ claim: claim('plain'), messages: [{ role: 'user', content: 'what?' }], tools: [readFile],
+      signal: new AbortController().signal, emit: () => undefined }, store, ports(rounds).value);
+    // A pre-L6 caller's record (no field) is still accepted; a diagnostic that could carry a path or text is refused.
+    await store.claim(claim('open'));
+    const base = { scopeId: 'scope', turnId: 'open', round: 1, callId: 'c', tool: 'read_file', toolVersion: 1, argsDigest: null, target: null, status: 'error' as const,
+      bytes: 1, resultDigest: agentTurnResultDigest('x'), atMs: 30 };
+    expect(await code(store.recordToolCall({ ...base, index: 0 }))).toBe('ok');
+    for (const diagnostic of [{ step: 'open:/home/x' }, { step: 'realpath', errno: 'no such file' }, { step: 'realpath', errno: 'ENOENT', path: 'src/a.ts' }]) {
+      expect(await code(store.recordToolCall({ ...base, index: 1, diagnostic } as never))).toBe('AGENT_TURN_INVALID');
+    }
+    const db = new DatabaseSync(path);
+    try {
+      const record = (turnId: string) => JSON.parse((db.prepare('SELECT record FROM agent_turn_tool_calls WHERE turn_id=?').get(turnId) as { record: string }).record);
+      expect(record('diag')).toMatchObject({ status: 'error', diagnostic: { step: 'open:2', errno: 'ENOENT' } });
+      expect(record('plain')).not.toHaveProperty('diagnostic');
+      // Tool-call rows are parsed only when written: a row of another shape (an older or newer build's) never breaks the store's reads.
+      db.prepare('INSERT INTO agent_turn_tool_calls(scope_id,turn_id,round,call_index,record) VALUES(?,?,?,?,?)')
+        .run('scope', 'open', 1, 5, JSON.stringify({ ...base, index: 5, schemaVersion: 1, diagnostic: { step: 'stat' }, futureField: true }));
+    } finally { db.close(); }
+    expect(await store.interruptRunning(40)).toEqual({ interrupted: 1, corrupt: [] });
+    const reread = new DatabaseSync(path, { readOnly: true });
+    try { expect(JSON.parse((reread.prepare("SELECT record FROM agent_turns WHERE turn_id='open'").get() as { record: string }).record).outcome).toMatchObject({ toolCalls: 2 }); }
+    finally { reread.close(); }
+  } finally { store.close(); }
+});
