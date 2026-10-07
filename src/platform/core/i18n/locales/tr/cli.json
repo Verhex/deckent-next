@@ -1426,6 +1426,8 @@
   "terminal.admin.scope.projectNamed": "Proje: {name} ({id})",
   "terminal.admin.scope.companyDefault": "varsayılan",
   "terminal.admin.scope.modeShort": "Mod: {mode}",
+  "terminal.admin.scope.modeSession": "Mod: {mode} (yalnız bu oturum; kayıtlı mod {stored})",
+  "terminal.admin.scope.modeStored": "Mod: {mode} (kayıtlı başlangıç modu {stored}, bu oturumda etkin değil)",
   "terminal.admin.scope.rule": "Kural sürümü: {revision}",
   "terminal.admin.scope.kindRun": "işler",
   "terminal.admin.scope.kindWorker": "işçiler",

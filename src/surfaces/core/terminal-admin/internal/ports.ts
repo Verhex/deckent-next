@@ -31,6 +31,6 @@ export function terminalAdminPorts(input: TerminalAdminInput): Readonly<{ inspec
     model: args => modelLines(call, args),
     usage: (args, view) => usageLines(call, args, view.usage),
     doctor: () => doctorLines(input.doctor),
-    scope: args => scopeLines(call, { installationId: input.installationId, projectId: input.projectId }, args, input.principalName ?? null),
+    scope: (args, view) => scopeLines(call, { installationId: input.installationId, projectId: input.projectId }, args, input.principalName ?? null, view.sessionFullAccess === true),
   } };
 }

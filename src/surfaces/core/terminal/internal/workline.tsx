@@ -250,7 +250,7 @@ export function WorklineApp(props: WorklineProps) {
     if (!slash) { await runTurn(line, mentioned, execution); return true; }
     if (slash.command === 'reasoning') { reasoning.run(slash.args); return true; }
     if (slash.command === 'mode' || slash.command === 'scratch') { await (slash.command === 'mode' ? mode.run : scratch)(slash.args); return true; }
-    const lineCommands: Readonly<Record<string, ((args: string) => Promise<readonly string[]>) | undefined>> = { ...bindInspectPorts(props.inspect, () => usage.current), mcp: props.mcp, monitor: props.monitor, config: props.config };
+    const lineCommands: Readonly<Record<string, ((args: string) => Promise<readonly string[]>) | undefined>> = { ...bindInspectPorts(props.inspect, () => usage.current, () => mode.fullAccess.current), mcp: props.mcp, monitor: props.monitor, config: props.config };
     if (slash.command === 'mcp' || slash.command === 'monitor' || slash.command === 'config' || (isInspectSlashCommand(slash.command) && (slash.command !== 'status' || lineCommands['status']))) {
       const lines = lineCommands[slash.command];
       // One notice for the whole answer, so its level words (`Info: `) open the answer once instead of every line.

@@ -57,7 +57,14 @@ describe.each([
     const [first] = await run(locale, 'scope', { inspectPermissionMode: async () => ({ mode: 'standart', askEdits: true, revision: 'p-7', supported: true, fullAccess: false }) as never });
     expect(first).toContain(locale === 'en' ? 'Mode: careful ·' : 'Mod: dikkatli ·');
     const [full] = await run(locale, 'scope', { inspectPermissionMode: async () => ({ mode: 'full-access', askEdits: false, revision: 'p-7', supported: true, fullAccess: true }) as never });
-    expect(full).toContain(locale === 'en' ? 'Mode: full access ·' : 'Mod: tam erişim ·');
+    // Astra 2431 P2: a stored full-access start mode the session does not hold runs as standart, and /scope says so.
+    expect(full).toContain(locale === 'en' ? 'Mode: standard (stored start mode full access, not held by this session) ·' : 'Mod: standart (kayıtlı başlangıç modu tam erişim, bu oturumda etkin değil) ·');
+  });
+  it('Astra 2431 P2: during session-only full access /scope names the mode this session runs in, with the stored mode the next launch takes', async () => {
+    const stored = { inspectPermissionMode: async () => ({ mode: 'full-auto', askEdits: false, revision: 'p-7', supported: true, fullAccess: true }) as never };
+    const [first] = await ports(locale, stored).scope!('', { usage, sessionFullAccess: true });
+    expect(first).toContain(locale === 'en' ? 'Mode: full access (this session only; stored mode full auto) ·' : 'Mod: tam erişim (yalnız bu oturum; kayıtlı mod tam otomatik) ·');
+    expect((await ports(locale, stored).scope!('', { usage, sessionFullAccess: false }))[0]).toContain(locale === 'en' ? 'Mode: full auto ·' : 'Mod: tam otomatik ·');
   });
   it('names a service that could not be read instead of saying it is running', async () => {
     const lines = await run(locale, 'status', { describeRuntimeService: async () => { throw new Error('boom'); } });

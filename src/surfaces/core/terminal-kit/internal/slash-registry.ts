@@ -68,11 +68,13 @@ export function addSessionUsage(total: SessionUsageView, report: Readonly<{ prom
     reasoningTokens: total.reasoningTokens + (report.reasoningTokens ?? 0), reasoningUnmeasured: total.reasoningUnmeasured + (report.reasoningTokens === null ? 1 : 0) });
 }
 /** `/status` without a fresh port keeps the launch-time line; with one, a failed read shows its typed error, never that old line. */
-export type InspectSlashPort = (args: string, view: Readonly<{ usage: SessionUsageView }>) => Promise<readonly string[]>;
+/** `sessionFullAccess` (Astra 2431 P2): this session holds full access (launched so, or switched into for this session only). */
+export type InspectSlashPort = (args: string, view: Readonly<{ usage: SessionUsageView; sessionFullAccess?: boolean }>) => Promise<readonly string[]>;
 export type InspectSlashPorts = Readonly<Partial<Record<InspectSlashCommand, InspectSlashPort>>>;
 /** The ports as plain `(args)` commands, each given the usage the terminal measured at call time. */
-export function bindInspectPorts(ports: InspectSlashPorts | undefined, usage: () => SessionUsageView): Readonly<Record<string, (args: string) => Promise<readonly string[]>>> {
-  return Object.fromEntries(Object.entries(ports ?? {}).map(([name, port]) => [name, (args: string) => port(args, { usage: usage() })]));
+export function bindInspectPorts(ports: InspectSlashPorts | undefined, usage: () => SessionUsageView, sessionFullAccess: () => boolean = () => false):
+  Readonly<Record<string, (args: string) => Promise<readonly string[]>>> {
+  return Object.fromEntries(Object.entries(ports ?? {}).map(([name, port]) => [name, (args: string) => port(args, { usage: usage(), sessionFullAccess: sessionFullAccess() })]));
 }
 
 /** Display labels only; the original registry name and argument metadata still own completion/dispatch. */

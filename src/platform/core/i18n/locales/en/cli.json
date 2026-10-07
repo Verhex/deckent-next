@@ -1426,6 +1426,8 @@
   "terminal.admin.scope.projectNamed": "Project: {name} ({id})",
   "terminal.admin.scope.companyDefault": "default",
   "terminal.admin.scope.modeShort": "Mode: {mode}",
+  "terminal.admin.scope.modeSession": "Mode: {mode} (this session only; stored mode {stored})",
+  "terminal.admin.scope.modeStored": "Mode: {mode} (stored start mode {stored}, not held by this session)",
   "terminal.admin.scope.rule": "Rule version: {revision}",
   "terminal.admin.scope.kindRun": "runs",
   "terminal.admin.scope.kindWorker": "workers",
