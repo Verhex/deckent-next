@@ -21,10 +21,12 @@ describe('pricing registry v2', () => {
     // The v1 objects (key order included) as they were before the registry moved to v2: same digest, so copied profiles stay equal.
     const before = { 'claude-fable-5-1': { input: '10', cacheWrite5m: '12.5', cacheWrite1h: '20', cacheRead: '0.25', output: '50' },
       'claude-opus-5-5': { input: '4', cacheWrite5m: '5', cacheWrite1h: '8', cacheRead: '0.2', output: '20' },
-      'claude-sonnet-5-5': { input: '2', cacheWrite5m: '2.5', cacheWrite1h: '4', cacheRead: '0.2', output: '10' },
+      'claude-sonnet-5-5': { input: '2', cacheWrite5m: '2.5', cacheWrite1h: '4', cacheRead: '0.1', output: '10' },
       'claude-haiku-4-5-20251001': { input: '1', cacheWrite5m: '1.25', cacheWrite1h: '2', cacheRead: '0.1', output: '5' } };
     for (const [modelId, usdPerMTok] of Object.entries(before)) {
-      const v1 = { kind: 'anthropic-published', version: 1, currency: 'USD', modelId, usdPerMTok, source: SOURCE };
+      // Sonnet 5.5's cache read was corrected to 0.05x of input from the pricing page read 2026-10-08 (its own source date).
+      const source = modelId === 'claude-sonnet-5-5' ? { ...SOURCE, retrievedAt: '2026-10-08' } : SOURCE;
+      const v1 = { kind: 'anthropic-published', version: 1, currency: 'USD', modelId, usdPerMTok, source };
       expect(JSON.stringify(anthropicPublishedTariff(modelId)), modelId).toBe(JSON.stringify(v1));
       expect(providerSpendEvidenceDigest(anthropicPublishedTariff(modelId)), modelId).toBe(providerSpendEvidenceDigest(v1));
     }
