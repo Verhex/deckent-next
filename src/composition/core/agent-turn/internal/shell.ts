@@ -34,6 +34,11 @@ export function protectedPathShellNote(command: string, output: string, isProtec
   const shown = `${paths.slice(0, NAMED_PATHS_SHOWN).join(', ')}${paths.length > NAMED_PATHS_SHOWN ? ` (+${paths.length - NAMED_PATHS_SHOWN})` : ''}`;
   return `[deckent] ${t('agent.shell.protectedPathReadOnly', { paths: shown }, language)}`;
 }
+/** A word a command names, as a project-relative path the turn's write floor holds (outside the project: never). */
+const onWriteFloor = (root: string, floor: (rel: string) => boolean) => (text: string) => {
+  const rel = relative(root, resolve(root, text));
+  return rel !== '' && !rel.startsWith('..') && !isAbsolute(rel) && floor(rel.split(sep).join('/'));
+};
 type ShellPlan = { readonly ok: true; readonly command: string; readonly risk: ShellRiskClassification; readonly tier: ShellPermissionTier; readonly realm: Extract<ShellRealmResolution, { ok: true }>;
   readonly contained: boolean }
   | { readonly ok: false; readonly text: string };
@@ -66,11 +71,6 @@ export function createAgentShell(input: { readonly scope: WorkspaceScope; readon
   const productState = input.productState.map(createGlobMatcher), protectedNames = createShellProtectedNames(scope.root, productState);
   const namesProductState = (detail: string | undefined) => detail !== undefined
     && productState.some(match => match(relative(scope.root, resolve(scope.root, detail)).split(sep).join('/')));
-  /** A word the command names, as a project-relative path the turn's write floor holds (outside the project: never). */
-  const onWriteFloor = (floor: (rel: string) => boolean) => (text: string) => {
-    const rel = relative(scope.root, resolve(scope.root, text));
-    return rel !== '' && !rel.startsWith('..') && !isAbsolute(rel) && floor(rel.split(sep).join('/'));
-  };
   const plans = new Map<string, ShellPlan>();
   const key = (tool: string, args: Record<string, unknown>) => agentToolArgumentsDigest(tool, args);
   /** The realm a call of this turn resolves: the configured mode against the service's (memoized) host measurement and the turn's providers. */
@@ -226,7 +226,7 @@ export function createAgentShell(input: { readonly scope: WorkspaceScope; readon
         // output is the evidence, whatever the exit code (`rm src/x || echo failed` exits 0). Not in a full-access turn: its sandbox keeps
         // only the configuration file read-only, which is not the floor `writeFloor` names there.
         const floorNote = input.fullAccess !== true && writeFloorReadOnly && realm.containment !== 'host' && input.writeFloor
-          ? protectedPathShellNote(planned.command, ran.output, onWriteFloor(input.writeFloor), input.language) : null;
+          ? protectedPathShellNote(planned.command, ran.output, onWriteFloor(scope.root, input.writeFloor), input.language) : null;
         // SHELL-OVERLAY: the command exited (whatever its code: a direct-write posture keeps its writes too), so its write set is decided
         // and applied now, entry by entry, like edits; the directory is removed afterwards.
         const settled = directory && writes ? describeSandboxWriteSet(await settleSandboxWriteSet({ directory, scope, decider: writes, authority: input.authority ?? (() => false), selfSource: input.selfSource === true,
