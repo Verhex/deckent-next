@@ -5,8 +5,7 @@ import type { KnownSecretSnapshot } from '#platform/index.js';
 import type { RunView } from '#engine/index.js';
 import type { StandingScope } from '#surfaces/core/terminal-kit/index.js';
 import type { WorkSurfaceLabels } from './workline-actions.js';
-import type { WorklineApproval } from './approval-watch.js';
-import { fillTemplate, formatDuration } from './worker-line.js';
+import { type WorklineApproval, fillTemplate, formatDuration } from '#surfaces/core/terminal-ledger/index.js';
 import type { ApprovalDecisionNoticePresentation, ApprovalRowPresentation } from './approval-decision-notice.js';
 /** Private copy of display fields only. The original authority DTO never crosses the public renderer boundary. */
 export type ApprovalCardPresentation = Readonly<{ displayId: string; displayRun: string; displayTask: string; displayRequester: string; summary: string;

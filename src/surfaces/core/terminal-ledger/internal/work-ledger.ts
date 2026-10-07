@@ -146,3 +146,7 @@ export function ledgerEntrySummary(entry: WorkLedgerEntry): string {
   }
   return entry.text.slice(0, 80);
 }
+
+export function notice(level: 'info' | 'error', text: string): WorkLedgerEntry {
+  return Object.freeze({ schemaVersion: WORK_LEDGER_SCHEMA_VERSION, kind: 'notice' as const, id: 'notice', level, text });
+}

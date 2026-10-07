@@ -1,7 +1,6 @@
 import { Box, Text } from 'ink';
 import { useWorklinePalette } from '#surfaces/core/terminal-kit/index.js';
-import type { WorkLedgerWorkerEntry } from './work-ledger.js';
-import { fillTemplate, formatWorkerLine, type WorkerLineLabels } from './worker-line.js';
+import { type WorkLedgerWorkerEntry, fillTemplate, formatWorkerLine, type WorkerLineLabels } from '#surfaces/core/terminal-ledger/index.js';
 
 /** Rows the live panel shows; the rest is summarized as a count (the ledger and `/workers` keep every worker). */
 export const WORKER_PANEL_ROWS = 8;

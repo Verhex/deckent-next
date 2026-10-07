@@ -1,4 +1,3 @@
-export * from './internal/arrow-picker.js';
 export * from './internal/assistant-stream.js';
 export * from './internal/assistant-view.js';
 export * from './internal/context-view.js';

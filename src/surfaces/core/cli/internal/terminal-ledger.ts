@@ -7,7 +7,7 @@ import type { StandingScope } from '#surfaces/core/terminal/index.js';
 import type { RunCancellationDeliveryHandler, RunQueryHandler } from './run.js';
 import { renderRunCancellation } from './run.js';
 import { renderWorkerTranscript, type WorkerObservationHandler, type InventoryQueryHandler, type WorkerTranscriptHandler } from '#surfaces/core/monitor/index.js';
-import type { WorklineApproval, WorklineLedgerPorts } from '#surfaces/core/terminal/index.js';
+import type { WorklineApproval, WorklineLedgerPorts } from '#surfaces/core/terminal-ledger/index.js';
 
 import { withSurfaceSnapshot } from '#surfaces/core/terminal-admin/index.js';
 

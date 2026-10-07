@@ -1,7 +1,6 @@
 import { Box, Text } from 'ink';
 import { useWorklinePalette } from '#surfaces/core/terminal-kit/index.js';
-import type { WorkLedgerEntry } from './work-ledger.js';
-import { formatWorkerLine, type WorkerLineLabels } from './worker-line.js';
+import { type WorkLedgerEntry, formatWorkerLine, type WorkerLineLabels } from '#surfaces/core/terminal-ledger/index.js';
 import { AssistantUnitRow, HumanTextRow, type AssistantRenderLabels } from '#surfaces/core/terminal-render/index.js';
 import { readApprovalDecisionNotice } from './approval-decision-notice.js';
 import { ApprovalDecisionNoticeRow } from './approval-decision-view.js';

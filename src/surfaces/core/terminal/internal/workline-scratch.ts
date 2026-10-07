@@ -1,8 +1,6 @@
 import { useCallback } from 'react';
 import type { ScratchClearance, ScratchView } from '#domain/index.js';
-import type { WorkLedgerEntry } from './work-ledger.js';
-import { notice } from './workline-actions.js';
-import { fillTemplate } from './worker-line.js';
+import { type WorkLedgerEntry, notice, fillTemplate } from '#surfaces/core/terminal-ledger/index.js';
 
 /**
  * The conversation's scratch area through the runtime service (SCR-A, protocol v16): the surface reads and deletes no file. The area

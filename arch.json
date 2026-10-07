@@ -828,15 +828,28 @@
     },
     "src/surfaces/core/desktop": {
       "dependencies": [
-        "src/surfaces/core/terminal"
+        "src/surfaces/core/terminal-ledger"
       ],
+      "plan": "SURFACES"
+    },
+    "src/surfaces/core/terminal-theme": {
+      "dependencies": [],
       "plan": "SURFACES"
     },
     "src/surfaces/core/terminal-kit": {
       "dependencies": [
         "src/engine/core/monitor",
         "src/domain/core/agent-turn",
-        "src/platform/core/output"
+        "src/platform/core/output",
+        "src/surfaces/core/terminal-theme"
+      ],
+      "plan": "SURFACES"
+    },
+    "src/surfaces/core/work-labels": {
+      "dependencies": [
+        "src/platform/core/i18n",
+        "src/surfaces/core/terminal-work",
+        "src/surfaces/core/monitor"
       ],
       "plan": "SURFACES"
     },
@@ -864,8 +877,8 @@
         "src/engine/core/monitor",
         "src/engine/core/runs",
         "src/engine/core/worker-observation",
-        "src/surfaces/core/terminal",
-        "src/surfaces/core/approval-presentation"
+        "src/surfaces/core/approval-presentation",
+        "src/surfaces/core/terminal-ledger"
       ],
       "plan": "SURFACES"
     },
@@ -875,7 +888,15 @@
         "src/domain/core/policy",
         "src/platform/core/output",
         "src/domain/core/text",
-        "src/platform/core/redaction"
+        "src/platform/core/redaction",
+        "src/surfaces/core/terminal-theme"
+      ],
+      "plan": "SURFACES"
+    },
+    "src/surfaces/core/terminal-picker": {
+      "dependencies": [
+        "src/surfaces/core/terminal-kit",
+        "src/surfaces/core/terminal-render"
       ],
       "plan": "SURFACES"
     },
@@ -885,20 +906,43 @@
       ],
       "plan": "SURFACES"
     },
+    "src/surfaces/core/terminal-ledger": {
+      "dependencies": [
+        "src/surfaces/core/terminal-kit",
+        "src/surfaces/core/approval-presentation",
+        "src/domain/core/inference-serving",
+        "src/engine/core/inference-serving",
+        "src/surfaces/core/terminal-render",
+        "src/engine/core/runs",
+        "src/engine/core/worker-observation",
+        "src/engine/core/monitor"
+      ],
+      "plan": "SURFACES"
+    },
+    "src/surfaces/core/terminal-work": {
+      "dependencies": [
+        "src/surfaces/core/terminal-ledger",
+        "src/surfaces/core/terminal-render",
+        "src/surfaces/core/approval-presentation",
+        "src/platform/core/redaction",
+        "src/engine/core/runs",
+        "src/surfaces/core/terminal-kit"
+      ],
+      "plan": "SURFACES"
+    },
     "src/surfaces/core/terminal": {
       "dependencies": [
-        "src/engine/core/monitor",
         "src/surfaces/core/terminal-kit",
         "src/surfaces/core/terminal-render",
         "src/surfaces/core/terminal-composer",
         "src/domain/core/agent-turn",
-        "src/domain/core/inference-serving",
-        "src/engine/core/inference-serving",
-        "src/engine/core/runs",
-        "src/engine/core/worker-observation",
         "src/domain/core/policy",
         "src/platform/core/redaction",
-        "src/surfaces/core/approval-presentation"
+        "src/surfaces/core/approval-presentation",
+        "src/surfaces/core/terminal-ledger",
+        "src/surfaces/core/terminal-work",
+        "src/surfaces/core/terminal-theme",
+        "src/surfaces/core/terminal-picker"
       ],
       "plan": "SURFACES"
     },
@@ -999,7 +1043,10 @@
         "src/engine/core/config",
         "src/platform/core/utils",
         "src/surfaces/core/terminal-admin",
-        "src/surfaces/core/cli-identity"
+        "src/surfaces/core/cli-identity",
+        "src/surfaces/core/terminal-ledger",
+        "src/surfaces/core/terminal-theme",
+        "src/surfaces/core/work-labels"
       ],
       "plan": "SURFACES"
     },
@@ -2082,11 +2129,11 @@
         "src/domain/core/attempt",
         "src/domain/core/worker-event",
         "src/engine/core/worker-observation",
-        "src/surfaces/core/terminal-kit",
         "src/surfaces/core/terminal-render",
         "src/surfaces/core/config",
         "src/engine/core/config",
-        "src/engine/core/runs"
+        "src/engine/core/runs",
+        "src/surfaces/core/terminal-theme"
       ],
       "plan": "MONITOR"
     },
@@ -2251,7 +2298,8 @@
         "src/platform/core/output",
         "src/surfaces/core/terminal-kit",
         "src/surfaces/core/terminal-render",
-        "src/engine/core/approval"
+        "src/engine/core/approval",
+        "src/surfaces/core/terminal-picker"
       ],
       "plan": "SURFACES"
     },

@@ -1,5 +1,5 @@
 {
-  "$description": "Terminal semantic roles for Ink workline — values mirrored in src/surfaces/core/terminal/internal/generated/palette.ts until DESIGN-SYSTEM token build lands in Next.",
+  "$description": "Terminal semantic roles for Ink workline — values mirrored in src/surfaces/core/terminal-theme/internal/generated/palette.ts until DESIGN-SYSTEM token build lands in Next.",
   "roles": {
     "success": { "primitive": "novaGo", "ansi16": "32", "class": "supplemental" },
     "error": { "primitive": "novaAbort", "ansi16": "31", "class": "supplemental" },

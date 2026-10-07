@@ -6,10 +6,7 @@
 import { useRef, useState, type ReactNode } from 'react';
 import { Box, Text, useInput, useWindowSize } from 'ink';
 import { useWorklinePalette } from '#surfaces/core/terminal-kit/index.js';
-import { truncateEnd } from './text-width.js';
-import { useRenderGlyphs } from './glyphs.js';
-import { SpanText } from './lines-view.js';
-import { sliceSpans, span, type Span } from './spans.js';
+import { truncateEnd, useRenderGlyphs, SpanText, sliceSpans, span, type Span } from '#surfaces/core/terminal-render/index.js';
 
 export const ARROW_PICKER_ROWS = 6;
 
