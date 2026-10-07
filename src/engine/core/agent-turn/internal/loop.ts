@@ -4,7 +4,7 @@ import { createAgentContextCarry } from './carry.js';
 import { agentContextFailureNote, agentHistoryBytes, createAgentCompactionGuard, type AgentContextFailure } from './pressure.js';
 import { projectModelIngressField, type ModelIngressProjection } from './model-ingress-project.js';
 import { agentTurnApproverNote, type AgentToolOwnerAnswer } from './approver-note.js';
-import type { Locale } from '#platform/index.js';
+import { LOCALES, t, type Locale } from '#platform/index.js';
 import type { AgentContextQuality, AgentToolCall, AgentToolCleanup, AgentToolOutcome, AgentToolSpec, AgentToolCallStatus, AgentTurnEvent, AgentTurnFinish,
   AgentTurnMessage } from '#domain/index.js';
 
@@ -69,10 +69,12 @@ export interface AgentTurnPorts {
 
 /**
  * Engine note after the second consecutive round that made no progress (TL-C D7): every call of the round was a duplicate, had
- * invalid arguments or failed, and the model wrote no text. Once per such streak; the turn goes on (no counter, no limit).
+ * invalid arguments or failed, and the model wrote no text. Once per such streak; the turn goes on (no counter, no limit). In the turn's
+ * language (the service-resolved locale), like the context notes: the user reads it in the conversation too.
  */
-export const AGENT_TURN_NO_PROGRESS_NOTE = '[deckent] The last two rounds made no progress: every tool call was a duplicate, had invalid'
-  + ' arguments or failed, and no text was written. Do not repeat those calls; write what you know so far, try another approach, or ask the user.';
+export const agentTurnNoProgressNote = (language: Locale = LOCALES[0]): string => `[deckent] ${t('agent.turn.noProgress', {}, language)}`;
+/** The English note (the catalog's default locale); the loop sends the turn's own language (owner terminal test 2026-10-07). */
+export const AGENT_TURN_NO_PROGRESS_NOTE = agentTurnNoProgressNote();
 /**
  * Closure-note sentence of a turn that compacted without a model summary (TERM-FEEDBACK-1): the model answered the summary call with
  * nothing readable, so the older messages became Deckent's labelled mechanical excerpt.
@@ -388,6 +390,6 @@ export async function runAgentTurn(input: AgentTurnInput, ports: AgentTurnPorts)
       if (tool.toolClass === 'read' && outcomeText.status === 'ok' && !signal.aborted) seenReads.set(digest, { callId: call.id, message: resultMessage });
     }
     stalled = progressed ? 0 : stalled + 1;
-    if (stalled === 2 && !signal.aborted) push({ role: 'user', content: AGENT_TURN_NO_PROGRESS_NOTE });
+    if (stalled === 2 && !signal.aborted) push({ role: 'user', content: agentTurnNoProgressNote(input.language) });
   }
 }
