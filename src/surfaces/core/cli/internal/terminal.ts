@@ -108,6 +108,11 @@ function statusPayload(tty: ReturnType<typeof ttyState>, config: Record<string, 
   return { schemaVersion: 1 as const, tty, inference, chat, projectId, installationId, identity };
 }
 
+function modeStopWords(locale: Locale) {
+  return { standart: t('terminal.mode.stop.standart', {}, locale), 'ask-edits': t('terminal.mode.stop.ask-edits', {}, locale),
+    'full-auto': t('terminal.mode.stop.full-auto', {}, locale), 'full-access': t('terminal.mode.stop.full-access', {}, locale) } as const;
+}
+
 function worklineLabels(locale: Locale, statusLine: string): WorklineLabels {
   return {
     work: workSurfaceLabels(locale),
@@ -135,7 +140,8 @@ function worklineLabels(locale: Locale, statusLine: string): WorklineLabels {
       unsupported: t('terminal.mode.unsupported', {}, locale), usage: t('terminal.mode.usage', {}, locale),
       effect: { standart: t('terminal.mode.effect.standart', {}, locale), 'full-auto': t('terminal.mode.effect.full-auto', {}, locale),
         'full-access': t('terminal.mode.effect.full-access', {}, locale) },
-      switch: t('terminal.mode.switch', {}, locale), fullAccessLaunch: t('terminal.mode.fullAccessLaunch', {}, locale), startSaved: t('terminal.mode.startSaved', {}, locale),
+      switch: t('terminal.mode.switch', {}, locale), fullAccessGrant: t('terminal.mode.fullAccessGrant', {}, locale), startSaved: t('terminal.mode.startSaved', {}, locale),
+      stops: modeStopWords(locale), cycled: t('terminal.mode.cycled', {}, locale), cycledFullAccess: t('terminal.mode.cycledFullAccess', {}, locale),
       askEditsOn: t('terminal.mode.askEditsOn', {}, locale), askEditsOff: t('terminal.mode.askEditsOff', {}, locale) },
     reasoning: { on: t('terminal.reasoning.on', {}, locale), off: t('terminal.reasoning.off', {}, locale), usage: t('terminal.reasoning.usage', {}, locale) },
     scratch: { summary: t('terminal.scratch.summary', {}, locale), empty: t('terminal.scratch.empty', {}, locale), entry: t('terminal.scratch.entry', {}, locale),

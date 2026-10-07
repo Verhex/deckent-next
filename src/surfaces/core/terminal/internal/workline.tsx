@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, createElement } from 'react';
-import { render, Box, Static, Text, useApp, type Instance } from 'ink';
+import { render, Box, Static, Text, useApp, useInput, type Instance } from 'ink';
 import { useWorklinePanel, type LocalExecution, LedgerEntryRow, type LedgerEntryLabels, immediateSlashAction, runLedgerCommand, type WatchState, type WorklineActionLabels, useWorkSurface } from '#surfaces/core/terminal-work/index.js';
 import { WorklinePaletteProvider, useWorklinePalette, parseSlashLine, isInspectSlashCommand, addSessionUsage, bindInspectPorts, EMPTY_SESSION_USAGE, type InspectSlashPorts, type SessionUsageView, useWorklineWatch, surfaceDeliveryValues, surfaceFollowLine, useSurfacePushFeed,
   type TerminalLocalContext, type WorklineInkPalette, type WorklineStreamTurn } from '#surfaces/core/terminal-kit/index.js';
@@ -294,6 +294,11 @@ export function WorklineApp(props: WorklineProps) {
   const ledgerLabels: LedgerEntryLabels = { runCard: labels.runCard, workerCard: labels.workerCard, chatUser: labels.roleUser, chatAssistant: labels.roleAssistant,
     render: labels.render, ...(labels.work ? { workerLine: labels.work.workerLine } : {}) };
   const choosing = resumePicker !== null || work.pickerOpen;
+  // T2 T-MODE-CYCLE: Shift+Tab (Alt+M where the console cannot report Shift+Tab, e.g. Windows without VT input) steps the permission mode
+  // while the composer owns the keyboard; an open card or picker owns Shift+Tab then and the mode does not change.
+  const composing = !work.modalOpen && !work.pickerOpen && resumePicker === null;
+  useInput((input, key) => { if ((key.tab && key.shift) || (key.meta && !key.ctrl && input === 'm')) void mode.cycle(); },
+    { isActive: composing && Boolean(props.permissionMode) });
   const finishResume = (choice: number | null) => { panel.choose(state.picker?.pickerHandle, choice === null ? null : String(choice)); };
   return (
     <HumanTextContext.Provider value={props.knownSecrets}>
@@ -309,12 +314,13 @@ export function WorklineApp(props: WorklineProps) {
           details={resumePicker.map(item => item.hiddenNotice)} onSelect={finishResume} onCancel={() => finishResume(null)} /> : null}
       <Text {...palette.accent}>{labels.banner}</Text>
       <StatusStrip target={target} state={cancelling ? labels.statusCancelling : busy && !choosing ? labels.statusBusy : labels.statusReady} busy={busy && !choosing}
-        queued={state.queued.length} labels={{ ...labels.render, selfSourceFloor: labels.selfSourceFloor }} mode={mode.mode} selfSource={props.selfSource} cancellable={turnRunning && !cancelling} />
+        queued={state.queued.length} labels={{ ...labels.render, selfSourceFloor: labels.selfSourceFloor, modeStops: labels.mode?.stops }} mode={mode.mode} stop={mode.stop}
+        selfSource={props.selfSource} cancellable={turnRunning && !cancelling} />
       {/* The composer owns input: Enter submits (queued FIFO while busy), Esc/Ctrl+C cancel a turn, exit is two Ctrl+C or Ctrl+D.
           An open decision card or arrow picker takes the keyboard away from it. */}
       <Composer prompt={labels.prompt} labels={{ ...labels.composer,
         slash: Object.fromEntries(Object.entries(labels.composer.slash).map(([key, text]) => [key, projectHumanPickerText(text, props.knownSecrets).label])) }}
-        busy={busy} active={!work.modalOpen && !work.pickerOpen && resumePicker === null}
+        busy={busy} active={composing}
         onSubmit={(text, mentioned) => void submit(text, mentioned)} onCancel={cancel} onExit={() => { panel.close(); exit(); }}
         {...(props.inputHistory ? { history: props.inputHistory } : {})} {...(props.mentions ? { mentions: props.mentions } : {})}
         {...(props.mentionDelayMs === undefined ? {} : { mentionDelayMs: props.mentionDelayMs })} />

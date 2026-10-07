@@ -43,7 +43,8 @@ export function isRuntimeServiceEffectOperation(operation: RuntimeServiceOperati
 }
 /** v15 (T-L4 slice 4c): the caller's own terminal permission mode — read, and set conditionally on the revision read. No actor field:
  * the socket peer is the principal; single bounded answers; current version only. v17 (MODES-3): the modes are `standart | full-auto |
- * full-access`, the view carries `askEdits` and `fullAccess`, the command an optional `askEdits`; `chatTurn` gains `fullAccess?: true`. */
+ * full-access`, the view carries `askEdits` and `fullAccess`, the command an optional `askEdits`; `chatTurn` gains `fullAccess?: true`. T2 (T-MODE-CYCLE): the
+ * view may carry `fullAuto` (whether the company's set grant allows full-auto), optional so a service built before it still answers. */
 export function isRuntimeServicePermissionModeOperation(operation: RuntimeServiceOperation): operation is 'inspectPermissionMode' | 'setPermissionMode' {
   return operation === 'inspectPermissionMode' || operation === 'setPermissionMode';
 }
