@@ -176,7 +176,7 @@ Market notes live outside the repo (`/home/alperen/deckent-refactor-work/proof/T
   (the MCP capacity comes from `adapters/core/mcp-transport`, never from the surface layer). A profile declared later, or a
   `service.responseMaxBytes` lowered after activation, is reported by doctor only (the one ongoing authority).
 - **Ledger:** run/worker rows come from the same inspection handlers as `run inspect`/`workers list`.
-  `/runs` reads that same inventory page and appends one inspection card per id; it does not create or cancel a run.
+  TTY `/runs` reads the same inventory into a scrollable list window (SW-2, 2026-10-08 candidate); it does not create or cancel a run. Line/CLI text producers are unchanged.
   Chat text is not run truth. **S18/S18B/S18B-AUTH (batch 36):** üretim yolu runtime SQLite ledger’ına salt okunur `fs.watch` + heartbeat takibidir; servis tek yazardır, okuyucu outbox silmez/etki açmaz. `inspectMonitor` ile ortak principal/scope/policy kapısı okuma öncesi ve takip boyunca yeniden değerlendirilir; ret/veri bağlamı değişimi takibi durdurur. R4 yetkili açılış snapshot’ı, sıra boşluğunda resync ve reconnect başlangıç cursor’ını; R5 çalışan worker’ın canlı panel gözlemini korur. Takip portu olmayan tüketici bounded single-flight poll kullanır. The Ink `Static`
   printer only appends; compaction starts a new epoch so rows past any count keep printing.
 - **Work surface (P4, 2026-09-24):** worker cards and a bounded live panel (dynamic region, shown while `/watch-workers`
@@ -184,14 +184,16 @@ Market notes live outside the repo (`/home/alperen/deckent-refactor-work/proof/T
   of `inspectWorkers` (`worker 2 · claude <model> · editing src/x.ts · 12 s ago · 18.4k tokens (cache 83%)`): phase text
   from `cli.worker.phase.*`, age = observation time − host `receivedAt` (never `atMs`), truncated/dropped markers, a
   finished/failed session labelled "worker reported"; `starting` with unmapped events is muted progress, not an error.
-  `/transcript <n|attempt>` reads the sealed transcript through the `task transcript` producer (`read-output`; denial
-  and unsealed attempts are visible). `/approvals` opens an arrow-key picker of pending items (runtime `listApprovals`; Enter opens
-  the highlighted item's y/N card, Esc closes) and `/approvals <n|id>` lists them and opens that card; the decision goes through the runtime `decideApproval` (same peer-authenticated live-session path as
+  TTY `/transcript` picks a worker with an attempt, then reads the sealed transcript through the `task transcript` producer (`read-output`; denial
+  and unsealed attempts are visible in a window). The complete body pages by keys; typed identity/page arguments are refused in TTY. `/approvals` opens an arrow-key picker of pending items (runtime `listApprovals`; Enter opens
+  the highlighted item's y/N card, Esc closes); TTY typed selection is refused. A clear-session row opens an explicit confirmation before clearing this session's standing answers. The decision goes through runtime `decideApproval` (same peer-authenticated live-session path as
   `approval decide`). Only a single typed `y` approves; `n`, Enter, Esc and Ctrl+C deny; an `/approvals` card has no remember/always key
   (the standing-scope keys `s`/`a` exist only on in-turn tool-call cards the service marks, PERSISTENT-APPROVALS G6 below) and there is no auto-approval. Pending approvals are announced on the heartbeat (one bounded page per tick, rotating), on by
   default whenever approvals are wired, never more often than every 10 s (lead integration decision; tests may override).
-  `/cancel <runId>` inspects the run, asks y/N and calls the `run cancel`
-  handler against the inspected revision. Read-only commands never prompt; an open card owns the keys.
+  TTY `/cancel` picks only non-terminal runs without a pending cancellation, refreshes the selected run, then asks through the existing card and calls `run cancel`
+  against that refreshed revision. `/run` picks a human-titled run and opens state/tasks/attempts/delivery sections with muted short identities. `/workers` opens the same rows as the watch body, with the complete list scrollable.
+  SW-2 leaves one labelled, framed `systemSummaryLine` per closed command flow; cards, results, watch startup/delivery and background approval notifications no longer append ordinary notices or cards to chat. Watch delivery appears in its status row, approval notifications in the status strip; `/monitor` leaves a close summary, `/watch-stop` calls the same close path as Esc.
+  These are source-candidate contracts, not independent review, main landing, binary or live acceptance. Proof: external `proof/SLASH-WINDOWS-2026-10-08/SW2-WORKER.md`. SW-1 system-line unification and SW-3 bare-command palette/help integration remain lead-owned; no line-mode source changed. Total runtime is not present in these query DTOs: existing age means last worker event age, never invented elapsed runtime.
 - **Local inference serving** (`inference_serving`, `deckent inference plan|budget`) is a separate
   configuration card: pure capacity/launch estimates with loopback-only publish. `loopbackMetricsUrl` only
   derives a loopback `/metrics` URL. `deckent inference metrics` reads that URL through the bounded

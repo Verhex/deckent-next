@@ -8,7 +8,7 @@ import { WORKER_LINE_EN } from './worker-line-labels.js';
 
 /** The real EN window catalog (TS-WINDOW / T-APPROVAL-WINDOW); the older fields keep their probe tokens. */
 const EN_WORK = workSurfaceLabels('en');
-const work: WorkSurfaceLabels = { workerLine: WORKER_LINE_EN, panel: { title: 'LIVE-PANEL', more: '+{count} MORE' }, unavailable: 'UNWIRED',
+const work: WorkSurfaceLabels = { jobs: EN_WORK.jobs, workerLine: WORKER_LINE_EN, panel: { title: 'LIVE-PANEL', more: '+{count} MORE' }, unavailable: 'UNWIRED',
   transcriptUsage: 'T-USAGE', transcriptNotFound: 'T-NOTFOUND {ref}', transcriptNoAttempt: 'T-NOATTEMPT {ref}', transcriptHeader: 'T-HEADER {n} {attempt}',
   approvalsNone: 'A-NONE', approvalItem: 'A-ITEM {n} {id} {summary}', approvalsTruncated: 'A-TRUNC {pages}', approvalNotFound: 'A-NOTFOUND {ref}',
   approvalTitle: 'A-TITLE', approvalSubject: 'A-SUBJECT {id} {run} {task} {requester}', approvalPreviewMore: 'A-PREVIEW-MORE {count}', approvalExpires: 'A-EXPIRES {duration}',

@@ -1,3 +1,6 @@
+import type { RunView } from '#engine/index.js';
+import type { JobWindowLabels } from './job-windows.js';
+import { runViewToLedgerEntry } from '#surfaces/core/terminal-ledger/index.js';
 import type { ReactElement } from 'react';
 import { useWindowSize } from 'ink';
 import { shortId } from '#platform/index.js';
@@ -24,7 +27,7 @@ export interface LiveWindowLabels {
   readonly runsMore: string;
   /** Scrollback line when a window closes: what it last showed (the finished output stays in the scrollback). */
   readonly closedWorkers: string; readonly closedRuns: string; readonly closedTasks: string;
-  readonly monitorFailed: string;
+  readonly monitorFailed: string; readonly closedMonitor?: string;
 }
 
 /** The monitor body is rendered by the host that owns it; this unit never imports the monitor (T3 L5, split step 7). */
@@ -40,34 +43,48 @@ export interface LiveWindowData {
   readonly runs: readonly WorkLedgerRunEntry[];
 }
 export interface LiveWindowRenderLabels {
-  readonly live: LiveWindowLabels; readonly panel: WorkerPanelLabels; readonly workerLine: WorkerLineLabels;
+  readonly live: LiveWindowLabels; readonly panel: WorkerPanelLabels; readonly workerLine: WorkerLineLabels; readonly jobs?: JobWindowLabels | undefined;
 }
 
-function workerLines(workers: readonly WorkLedgerWorkerEntry[], labels: LiveWindowRenderLabels): WindowLine[] {
-  const rows: WindowLine[] = workers.slice(0, LIVE_WINDOW_MAX_ROWS).map(worker => {
+type LiveRunEntry = WorkLedgerRunEntry & Readonly<{ title?: string; state?: string }>;
+/** Display facts stay private to this unit; canonical ledger DTOs and bridge contracts are unchanged. */
+export function liveRunEntry(run: RunView, id: string): LiveRunEntry {
+  const title = run.tasks.find(task => task.taskBrief?.task)?.taskBrief?.task;
+  const state = run.state?.kind === 'terminal' ? run.state.outcome : run.state?.kind;
+  return { ...runViewToLedgerEntry(run, id), ...(title ? { title } : {}), ...(state ? { state } : {}) };
+}
+
+function workerLines(workers: readonly WorkLedgerWorkerEntry[], labels: LiveWindowRenderLabels, limit: number): WindowLine[] {
+  const rows: WindowLine[] = workers.slice(0, limit).map((entry, index) => {
+    const worker = entry.ordinal === undefined ? { ...entry, ordinal: index + 1 } : entry;
     const row = formatWorkerLine(worker, labels.workerLine);
-    return { spans: [span(row.text, row.tone === 'error' ? { role: 'error' } : row.tone === 'muted' ? { role: 'muted' } : {})] };
+    return { spans: [span(`[${labels.workerLine.card?.workerProcess[worker.process] ?? worker.process}] `, { role: worker.process === 'running' ? 'accent' : 'muted' }), span(row.text, row.tone === 'error' ? { role: 'error' } : row.tone === 'muted' ? { role: 'muted' } : {})] };
   });
-  if (workers.length > LIVE_WINDOW_MAX_ROWS) rows.push({ spans: [span(fillTemplate(labels.panel.more, { count: workers.length - LIVE_WINDOW_MAX_ROWS }), { role: 'muted' })] });
+  if (workers.length > limit) rows.push({ spans: [span(fillTemplate(labels.panel.more, { count: workers.length - limit }), { role: 'muted' })] });
   return rows;
 }
 
-function runLines(runs: readonly WorkLedgerRunEntry[], labels: LiveWindowRenderLabels): WindowLine[] {
+function runLines(runs: readonly WorkLedgerRunEntry[], labels: LiveWindowRenderLabels, limit: number): WindowLine[] {
   const card: LedgerCardLabels | undefined = labels.workerLine.card;
-  const rows: WindowLine[] = runs.slice(0, LIVE_WINDOW_MAX_ROWS).map(run => ({ spans: [span(card ? formatRunCardLines(run, card).join(' · ')
-    : `${shortId(run.runId)} · ${run.revision} · ${run.taskPhases}`, run.cancellationRequested ? { role: 'warning' } : {})] }));
-  if (runs.length > LIVE_WINDOW_MAX_ROWS) rows.push({ spans: [span(fillTemplate(labels.live.runsMore, { count: runs.length - LIVE_WINDOW_MAX_ROWS }), { role: 'muted' })] });
+  const rows: WindowLine[] = runs.slice(0, limit).map((entry, index) => {
+    const run = entry as LiveRunEntry;
+    const text = card ? formatRunCardLines(run, card).slice(1).join(' · ') : `${run.revision} · ${run.taskPhases}`;
+    return { spans: [span(run.title ?? `${labels.live.runsTitle} ${index + 1}`, { bold: true }),
+      ...(run.state ? [span(` [${labels.jobs?.runStates[run.state] ?? run.state}]`, { role: run.cancellationRequested ? 'warning' : 'accent' })] : []),
+      span(` · ${text}`), span(` · ${shortId(run.runId)}`, { role: 'muted' })] };
+  });
+  if (runs.length > limit) rows.push({ spans: [span(fillTemplate(labels.live.runsMore, { count: runs.length - limit }), { role: 'muted' })] });
   return rows;
 }
 
 /** Pure body of a watch window: one line per worker and/or run (the sections of `tasks` carry their own heading); nothing observed yet reads as one muted line. */
-export function liveWindowLines(kind: Exclude<LiveWindowKind, 'monitor'>, data: LiveWindowData, labels: LiveWindowRenderLabels): readonly WindowLine[] {
+export function liveWindowLines(kind: Exclude<LiveWindowKind, 'monitor'>, data: LiveWindowData, labels: LiveWindowRenderLabels, limit = LIVE_WINDOW_MAX_ROWS): readonly WindowLine[] {
   const heading = (text: string): WindowLine => ({ spans: [span(text, { bold: true })] });
   const none: WindowLine = { spans: [span(labels.live.empty, { role: 'muted' })] };
-  if (kind === 'workers') return data.workers.length ? workerLines(data.workers, labels) : [none];
-  if (kind === 'runs') return data.runs.length ? runLines(data.runs, labels) : [none];
-  return [heading(labels.panel.title), ...(data.workers.length ? workerLines(data.workers, labels) : [none]), { spans: [] },
-    heading(labels.live.runsTitle), ...(data.runs.length ? runLines(data.runs, labels) : [none])];
+  if (kind === 'workers') return data.workers.length ? workerLines(data.workers, labels, limit) : [none];
+  if (kind === 'runs') return data.runs.length ? runLines(data.runs, labels, limit) : [none];
+  return [heading(labels.panel.title), ...(data.workers.length ? workerLines(data.workers, labels, limit) : [none]), { spans: [] },
+    heading(labels.live.runsTitle), ...(data.runs.length ? runLines(data.runs, labels, limit) : [none])];
 }
 
 export function liveWindowTitle(kind: Exclude<LiveWindowKind, 'monitor'>, labels: LiveWindowRenderLabels): string {
@@ -91,11 +108,11 @@ const FRAME_ROWS = 4, FRAME_COLUMNS = 4, MONITOR_MIN_ROWS = 6, FALLBACK_COLUMNS 
  * A watch window (`/watch-workers`, `/watch-runs`, `/tasks`): the observation updates in place instead of appending cards. Modal like every
  * window: it owns the keyboard, scrolls by keyboard, and Esc closes it (the host then stops the watch).
  */
-export function LiveWatchWindow({ kind, data, labels, position, onClose }: {
-  readonly kind: Exclude<LiveWindowKind, 'monitor'>; readonly data: LiveWindowData; readonly labels: LiveWindowRenderLabels; readonly position: string; readonly onClose: () => void;
+export function LiveWatchWindow({ kind, data, labels, position, statusText, statusLines, onClose }: {
+  readonly kind: Exclude<LiveWindowKind, 'monitor'>; readonly data: LiveWindowData; readonly labels: LiveWindowRenderLabels; readonly position: string; readonly statusText?: string | undefined; readonly statusLines?: readonly string[] | undefined; readonly onClose: () => void;
 }) {
-  const status: readonly Span[] = [span(liveWindowStatus(kind, data, labels))];
-  return <Window title={[span(liveWindowTitle(kind, labels))]} status={status} body={liveWindowLines(kind, data, labels)} hints={labels.live.hints} position={position} onClose={onClose} />;
+  const status: readonly Span[] = [span([liveWindowStatus(kind, data, labels), statusText].filter(Boolean).join(' · '))];
+  return <Window title={[span(liveWindowTitle(kind, labels))]} status={status} body={[...(statusLines ?? []).map(text => ({ spans: [span(text, { role: 'muted' })] })), ...liveWindowLines(kind, data, labels)]} hints={labels.live.hints} position={position} onClose={onClose} />;
 }
 
 /**
@@ -106,6 +123,6 @@ export function MonitorWindow({ render, labels, onClose }: { readonly render: Mo
   const size = useWindowSize(), reserved = useWindowReserve() ?? WINDOW_RESERVED_ROWS;
   const columns = size.columns || FALLBACK_COLUMNS, terminalRows = size.rows || FALLBACK_ROWS, width = Math.max(1, columns - FRAME_COLUMNS);
   const rows = Math.max(MONITOR_MIN_ROWS, terminalRows - reserved - FRAME_ROWS - (wrapCells(labels.monitorHints, width).length - 1));
-  return <Window title={[span(labels.monitorTitle)]} hints={labels.monitorHints} position="" footerRows={rows}
+  return <Window title={[span(labels.monitorTitle)]} hints={labels.monitorHints} position="" footerRows={rows} onClose={onClose}
     footer={focused => render({ active: focused, onClose, size: { columns: width, rows } })} />;
 }

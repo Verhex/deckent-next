@@ -42,12 +42,12 @@ describe('slash palette keys through the real workline', () => {
     await view.type('/wa', DOWN);
     await until(() => view.stdout.text.includes('> /watch-runs'), 'second row highlighted');
     await view.type('\r');
-    await until(() => view.stdout.text.includes('RUNS-ON'), 'watch-runs executed');
+    await until(() => view.stdout.text.includes('Watching · polling'), 'watch-runs executed');
     expect(view.stdout.text).not.toContain('WATCH-ON');
     expect(view.stdout.text).not.toContain('UNKNOWN');
   });
 
-  it('a command that takes an argument completes to "/cmd " and waits; the next Enter runs it with the argument', async () => {
+  it('the existing palette completion waits, but TTY typed job arguments open a refusal window', async () => {
     const inspected: string[] = [];
     const view = await open({ ledger: { workerHeartbeatMs: 60_000, inspectWorkers: async () => ({ schemaVersion: 1, scopeId: 's', sources: [] }) as never,
       inspectRun: async runId => { inspected.push(runId); return null; } } as never });
@@ -60,8 +60,8 @@ describe('slash palette keys through the real workline', () => {
     expect(view.stdout.text).not.toContain('USAGE');
     expect(inspected).toEqual([]);
     await view.type('r-1\r');
-    await until(() => inspected.length === 1, 'run inspected');
-    expect(inspected).toEqual(['r-1']);
+    await until(() => view.stdout.frame.includes('without arguments'), 'typed run argument refused');
+    expect(inspected).toEqual([]);
   });
 
   it('Tab completes, Esc closes the palette, and Enter without suggestions sends the text as typed', async () => {
@@ -81,7 +81,7 @@ describe('slash palette keys through the real workline', () => {
     await view.type('/wwk');
     await until(() => view.stdout.text.includes('> /watch-workers'), 'fuzzy match offered');
     await view.type('\r');
-    await until(() => view.stdout.text.includes('NO-LEDGER'), 'watch-workers ran (no ledger wired)');
+    await until(() => view.stdout.text.includes('UNWIRED'), 'watch-workers ran (no ledger wired)');
     expect(view.stdout.text).not.toContain('UNKNOWN');
   });
 });
