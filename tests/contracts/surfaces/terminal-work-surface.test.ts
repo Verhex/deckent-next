@@ -266,6 +266,28 @@ describe('work surface: /cancel', () => {
   });
 });
 
+describe('work surface: /cancel window in human words (T2 integration: L1 window x L3 card words)', () => {
+  const runId = '3f2a9c1e-8b4d-4e7a-9c55-1d2e3f4a5b6c';
+  const run = { runId, scopeId: 'scope-a', revision: 4, cancellationRequested: false, tasks: [{ phase: 'pending' }, { phase: 'pending' }, { phase: 'active' }] } as unknown as RunView;
+  it.each([
+    ['en', 'Cancel run 3f2a9c1e?', '2 waiting, 1 running', `Run identity: ${runId}`, 'Run 3f2a9c1e was not cancelled.'],
+    ['tr', '3f2a9c1e işi iptal edilsin mi?', '2 bekliyor, 1 çalışıyor', `İş kimliği: ${runId}`, '3f2a9c1e işi iptal edilmedi.'],
+  ] as const)('%s: short run id in the title, phases as counts in words, the full id only on its detail line', async (locale, title, phases, identityLine, kept) => {
+    const view = mount({ labels: { ...labels, work: workSurfaceLabels(locale) }, ledger: { ...baseLedger, async inspectRun(id: string) { return id === runId ? run : null; },
+      async cancelRun() { return 'unused'; } } });
+    await view.type(`/cancel ${runId}\r`);
+    await view.card(title, 'cancel window');
+    const frame = view.frame();
+    expect(frame).toContain(phases); expect(frame).toContain(identityLine);
+    expect(frame).not.toContain('pending:2'); expect(frame).not.toContain('active:1');
+    // The full identity appears once: on its detail line, never in the title row.
+    expect(frame.split(runId).length - 1).toBe(1);
+    expect(frame.split('\n').find(row => row.includes(title))).not.toContain(runId);
+    await view.type('n');
+    await until(() => view.stdout.text.includes(kept), 'kept notice with the short id');
+  });
+});
+
 describe('work surface: approval of a running turn\'s tool call (T-L4)', () => {
   it('shows the call preview on a decision card, sends a single y as allow for exactly that approval, and continues the turn', async () => {
     const decided: { approvalId: string; revision: number; decision: string }[] = [];

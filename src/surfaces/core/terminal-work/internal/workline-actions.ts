@@ -91,6 +91,8 @@ export interface WorkSurfaceLabels {
   readonly cancelPrompt: string;
   readonly cancelPending: string;
   readonly cancelKept: string;
+  /** `{run}`: the full run identity on its own detail line (the title carries the short form). Absent: no identity line. */
+  readonly cancelIdentity?: string;
 }
 
 /** Commands owned by the work surface; they need its labels and their port. */

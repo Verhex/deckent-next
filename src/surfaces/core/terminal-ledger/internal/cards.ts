@@ -21,12 +21,17 @@ export interface LedgerCardLabels {
   readonly notice?: Readonly<Record<'info' | 'warning' | 'error', string>>;
 }
 
+/** Task phases (`pending:2 active:1`) as counts in words (`2 waiting, 1 running`); none reads as the no-tasks words. Run cards and the /cancel window share it. */
+export function formatTaskPhases(summary: string, labels: LedgerCardLabels): string {
+  const phases = parseTaskPhases(summary).map(([phase, count]) => fillTemplate(labels.runPhases[phase] ?? labels.runPhaseOther, { count, phase }));
+  return phases.length ? phases.join(', ') : labels.runNoTasks;
+}
+
 /** Run card body: where it is, the revision with a requested cancellation, and the task phases as counts in words (`2 waiting, 1 running`). */
 export function formatRunCardLines(entry: WorkLedgerRunEntry, labels: LedgerCardLabels): readonly string[] {
-  const phases = parseTaskPhases(entry.taskPhases).map(([phase, count]) => fillTemplate(labels.runPhases[phase] ?? labels.runPhaseOther, { count, phase }));
   return Object.freeze([fillTemplate(labels.runHead, { run: shortId(entry.runId), scope: entry.scopeId }),
     [fillTemplate(labels.runRevision, { revision: entry.revision }), ...(entry.cancellationRequested ? [labels.runCancelRequested] : [])].join(' · '),
-    phases.length ? phases.join(', ') : labels.runNoTasks]);
+    formatTaskPhases(entry.taskPhases, labels)]);
 }
 
 /** Worker card head: the worker's number (or a short task identity for a source without one) and its process state; second line: provider and who observed it. */

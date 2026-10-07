@@ -4,7 +4,7 @@ import type { RunView } from '#engine/index.js';
 import { type WorkLedgerEntry, type WorkLedgerWorkerEntry, type WorklineLedgerPorts, notice, APPROVAL_SCAN_MAX_PAGES, EMPTY_APPROVAL_WATCH, approvalWatchStep, scanPendingApprovals, type WorklineApproval, fillTemplate } from '#surfaces/core/terminal-ledger/index.js';
 import { type WorklineActionLabels, type WorkSurfaceLabels } from './workline-actions.js';
 import type { WorklinePanel, LocalExecution } from './workline-panel.js';
-import type { PanelSnapshot, TerminalLocalContext, StandingScope } from '#surfaces/core/terminal-kit/index.js';
+import { shortId, type PanelSnapshot, type TerminalLocalContext, type StandingScope } from '#surfaces/core/terminal-kit/index.js';
 import { WorkerPanel, WORKER_PANEL_ROWS } from './worker-panel.js';
 import type { ApprovalDecisionLabels } from '#surfaces/core/approval-presentation/index.js';
 import { ApprovalDecisionCard, ApprovalDecisionPicker, approvalRowPresentation, approvalCardPresentation, approvalDecisionCardLines, CancellationDecisionCard, cancellationCardPresentation, PanelWindow,
@@ -133,7 +133,7 @@ export function useWorkSurface({ panel, state, ledger, labels, push, errorText, 
   }, [errorText, ledger, push, work]);
   const cancelRun = useCallback(async (view: RunView, yes: boolean) => {
     try {
-      if (!yes) { push([notice('info', fillTemplate(work!.cancelKept, { run: view.runId }))]); return; }
+      if (!yes) { push([notice('info', fillTemplate(work!.cancelKept, { run: shortId(view.runId) }))]); return; }
       push([notice('info', await ledger!.cancelRun!(view.runId, view.revision))]);
     } catch (error) { push([notice('error', errorText(error))]); }
   }, [errorText, ledger, push, work]);

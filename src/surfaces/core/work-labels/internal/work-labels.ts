@@ -63,7 +63,7 @@ export function workSurfaceLabels(locale: Locale): WorkSurfaceLabels {
     approvalWindow: approvalWindowLabels(locale),
     cancelUsage: t('terminal.cancel.usage', {}, locale), cancelTitle: t('terminal.cancel.title', {}, locale), cancelDetail: t('terminal.cancel.detail', {}, locale),
     cancelAlreadyRequested: t('terminal.cancel.alreadyRequested', {}, locale), cancelPrompt: t('terminal.cancel.prompt', {}, locale), cancelPending: t('terminal.cancel.pending', {}, locale),
-    cancelKept: t('terminal.cancel.kept', {}, locale),
+    cancelKept: t('terminal.cancel.kept', {}, locale), cancelIdentity: t('terminal.cancel.identity', {}, locale),
   };
 }
 

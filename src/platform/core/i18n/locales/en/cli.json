@@ -1003,6 +1003,7 @@
   "terminal.cancel.prompt": "y request cancellation · n keep running · Enter/Esc keep running (default)",
   "terminal.cancel.pending": "Requesting cancellation…",
   "terminal.cancel.kept": "Run {run} was not cancelled.",
+  "terminal.cancel.identity": "Run identity: {run}",
   "terminal.window.position": "rows {from}–{to} of {total}",
   "terminal.window.pick": "↑↓ choose · Enter open · Esc close",
   "terminal.window.approvalsTitle": "Pending approvals",

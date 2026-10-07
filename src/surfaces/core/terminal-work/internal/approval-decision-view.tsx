@@ -6,9 +6,9 @@ import { ApprovalProjectedNotice, ApprovalProjectedPicker, DecisionCard, decisio
   type ApprovalDecisionLabels, type ApprovalDecisionLine } from '#surfaces/core/approval-presentation/index.js';
 import type { KnownSecretSnapshot } from '#platform/index.js';
 import type { RunView } from '#engine/index.js';
-import type { StandingScope } from '#surfaces/core/terminal-kit/index.js';
+import { shortId, type StandingScope } from '#surfaces/core/terminal-kit/index.js';
 import type { WorkSurfaceLabels } from './workline-actions.js';
-import { type WorklineApproval, fillTemplate, formatDuration } from '#surfaces/core/terminal-ledger/index.js';
+import { type WorklineApproval, fillTemplate, formatDuration, formatTaskPhases } from '#surfaces/core/terminal-ledger/index.js';
 import type { ApprovalDecisionNoticePresentation, ApprovalRowPresentation } from './approval-decision-notice.js';
 import type { PanelWindowPresentation } from './workline-panel.js';
 import { approvalCallOf, approvalToolKind, approvalToolParts, approvalWindowHints, approvalWindowLines, approvalWindowTitle, countdownClock } from './approval-window.js';
@@ -99,7 +99,10 @@ export function cancellationCardPresentation(run: RunView): CancellationCardPres
 /** Cancellation shares the private Provider boundary; the public card receives no transported strings or Run DTO. */
 export function CancellationDecisionCard({ presentation: raw, work, labels, pending, onDecide }: { readonly presentation: CancellationCardPresentation; readonly pending?: boolean; readonly work: WorkSurfaceLabels; readonly labels: ApprovalDecisionLabels; readonly onDecide: (yes: boolean) => void }) {
   const known = useHumanTextSecrets(), p = (text: string) => projectApprovalDecisionText(text, known);
-  return <DecisionCard title={approvalTemplateLine(work.cancelTitle, { run: p(raw.displayRun) })} projectedLines={[approvalTemplateLine(work.cancelDetail, { revision: p(String(raw.displayRevision)), scope: p(raw.displayScope), phases: p(raw.displayPhases) }), ...(raw.cancellationRequested ? [approvalTemplateLine(work.cancelAlreadyRequested, {})] : [])]}
+  // T2 integration: the phases read as counts in words (L3 card words) and the title carries the short run id; the full id is a detail line.
+  const card = work.workerLine.card, phases = card ? formatTaskPhases(raw.displayPhases, card) : raw.displayPhases;
+  return <DecisionCard title={approvalTemplateLine(work.cancelTitle, { run: p(shortId(raw.displayRun)) })} projectedLines={[approvalTemplateLine(work.cancelDetail, { revision: p(String(raw.displayRevision)), scope: p(raw.displayScope), phases: p(phases) }),
+    ...(raw.cancellationRequested ? [approvalTemplateLine(work.cancelAlreadyRequested, {})] : []), ...(work.cancelIdentity ? [approvalTemplateLine(work.cancelIdentity, { run: p(raw.displayRun) })] : [])]}
     decisionLabels={labels} prompt={work.cancelPrompt} pendingText={work.cancelPending} position={work.window.position} {...(pending === undefined ? {} : { pending })} onDecide={yes => onDecide(yes)} />;
 }
 /**

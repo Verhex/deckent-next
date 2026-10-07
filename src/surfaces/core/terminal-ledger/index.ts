@@ -1,6 +1,6 @@
 export { WORK_LEDGER_SCHEMA_VERSION, ledgerEntrySummary, notice, parseTaskPhases, runViewToLedgerEntry, workerReportToLedgerEntries, type WorkLedgerEntry, type WorkLedgerNoticeEntry,
   type WorkLedgerRunEntry, type WorkLedgerWorkerEntry, type WorkerAttemptIdentity, type WorkerLiveActivity, type WorkerLivePhase } from './internal/work-ledger.js';
-export { formatRunCardLines, formatWorkerCardLines, type LedgerCardLabels } from './internal/cards.js';
+export { formatRunCardLines, formatTaskPhases, formatWorkerCardLines, type LedgerCardLabels } from './internal/cards.js';
 export { compactCount, fillTemplate, formatDuration, formatWorkerLine, type WorkerLine, type WorkerLineLabels } from './internal/worker-line.js';
 export { agentHistory, appendLedger, boundAgentHistory, boundChatHistory, compactLedger, EMPTY_LEDGER, LEDGER_COMPACT_AT, LEDGER_TAIL_LIMIT, plainChatHistory,
   type AgentChatMessage, type ChatTurnMessage, type LedgerBuffer } from './internal/ledger-buffer.js';
