@@ -32,7 +32,9 @@ export const terminalConfigSchema = z.object({
   defaultModel: modelReferenceSchema.optional(),
   chat: z.object({
     schemaVersion: z.literal(1),
-    reference: modelReferenceSchema,
+    /** Optional since T4-B (owner 2026-10-08, Jev 77898686): a project may drop its own model so the user's `terminal.defaultModel` applies; the
+     * chat settings around it stay. With no model anywhere the terminal reports `TERMINAL_CHAT_NOT_CONFIGURED`. */
+    reference: modelReferenceSchema.optional(),
     maxCompletionTokens: z.number().int().positive().safe(),
     /** Message window of the plain line mode only; the agent conversation is measured and compacted by the runtime (T-L5). */
     historyMessages: z.number().int().min(2).max(1_000).default(40),

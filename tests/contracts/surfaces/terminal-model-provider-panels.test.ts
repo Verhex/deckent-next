@@ -109,6 +109,29 @@ describe('/model window', () => {
     expect(calls.approvals).toEqual(['approval-7']); expect(calls.closed).toBe(1);
     expect(calls.notices.map(notice => notice.level)).toEqual(['info', 'warning']);
   });
+
+  it('T4-B: a project model that keeps winning — the same window offers remove / align / keep; each answer goes through the governed port', async () => {
+    for (const [keys, expected, outcome] of [[ENTER, 'remove', 'applied'], [`${DOWN}${ENTER}`, 'align', 'approval-pending'], [`${DOWN}${DOWN}${ENTER}`, null, null]] as const) {
+      const asked: string[] = [];
+      const { port } = modelPort(MODELS, async () => ({ status: 'applied', lines: ['Default saved'], approvalId: null, shadow: { projectModel: 'team-model' } }));
+      const shadowPort = { ...port, resolveShadow: async (_choice: ModelPanelChoice, action: 'remove' | 'align') => { asked.push(action);
+        return outcome === 'applied' ? { status: 'applied' as const, lines: ['PROJECT-MODEL-REMOVED'], approvalId: null }
+          : { status: 'approval-pending' as const, lines: ['held'], approvalId: 'approval-9' }; } };
+      const { element, calls } = panel('model', { model: shadowPort });
+      const view = mount(element, 100, 40);
+      await settle(80);
+      await view.press(`${DOWN}${DOWN}${ENTER}`);
+      await view.press(`${DOWN}${ENTER}`, 80);
+      expect(view.frame()).toContain('This project names its own model (team-model); it wins over your default here.');
+      expect(view.frame()).toContain("Remove the project's model (your default applies)"); expect(view.frame()).toContain("Make the project's model this one too");
+      await view.press(keys, 80);
+      expect(asked).toEqual(expected ? [expected] : []);
+      expect(calls.closed).toBe(1);
+      // One summary line for the answer (after the pin's own), and the approval card when the write is held.
+      expect(calls.notices.at(-1)!.text).toBe(expected === 'remove' ? 'PROJECT-MODEL-REMOVED' : expected === 'align' ? 'held' : 'Default saved');
+      expect(calls.approvals).toEqual(expected === 'align' ? ['approval-9'] : []);
+    }
+  });
 });
 
 const KINDS: ProviderPanelView = { title: 'Providers', notes: [], kinds: [

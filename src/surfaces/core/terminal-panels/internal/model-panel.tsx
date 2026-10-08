@@ -35,6 +35,7 @@ export function ModelPanel({ port, labels, push, openApproval, onError, onClose 
   const words = labels.model;
   const [view, setView] = useState<ModelPanelView | null>(null);
   const [state, setState] = useState<PickerState>(PICKER_INITIAL);
+  const [shadow, setShadow] = useState<Readonly<{ choice: ModelPanelChoice; projectModel: string; first: readonly string[] }> | null>(null);
   const exits = useRef({ onError, onClose });
   exits.current = { onError, onClose };
   // Body: the focused model's exact reference and, for a locked one, the command that fixes it (both dimmed).
@@ -54,11 +55,28 @@ export function ModelPanel({ port, labels, push, openApproval, onError, onClose 
     push([{ level: 'info', text: fillTemplate(words.pinned, { model: choice.label }) }]);
     if (result.kind !== 'selected' || result.scope !== DEFAULT || !port.makeDefault) { onClose(); return; }
     port.makeDefault(choice).then(outcome => {
+      // A project model that keeps winning: the same window asks how to resolve it (two governed writes, or keep it) before the one summary line.
+      if (outcome.status === 'applied' && outcome.shadow && port.resolveShadow) { setShadow({ choice, projectModel: outcome.shadow.projectModel, first: outcome.lines }); return; }
       push([{ level: outcome.status === 'applied' ? 'info' : 'warning', text: outcome.lines.join('\n') }]);
       onClose();
       if (outcome.status === 'approval-pending' && outcome.approvalId) openApproval(outcome.approvalId);
     }, error => { onError(error); onClose(); });
   };
+  if (shadow) {
+    const tree: PickerTree = { title: fillTemplate(words.shadowTitle, { model: shadow.projectModel }), items: [{ id: 'remove', label: words.shadowRemove },
+      { id: 'align', label: words.shadowAlign }, { id: 'keep', label: words.shadowKeep }] };
+    const answer = (result: PickerResult) => {
+      const action = result.kind === 'selected' ? result.id : 'keep';
+      if (action !== 'remove' && action !== 'align') { push([{ level: 'info', text: shadow.first.join('\n') }]); onClose(); return; }
+      port.resolveShadow!(shadow.choice, action).then(outcome => {
+        push([{ level: outcome.status === 'applied' ? 'info' : 'warning', text: outcome.lines.join('\n') }]);
+        onClose();
+        if (outcome.status === 'approval-pending' && outcome.approvalId) openApproval(outcome.approvalId);
+      }, error => { onError(error); onClose(); });
+    };
+    return <Window title={[span(tree.title, { bold: true })]} hints={words.hints} position={labels.position} footerRows={room.footerRows} onInput={() => true}
+      footer={focused => <ListPicker key="shadow" tree={tree} labels={labels.picker} active={focused} maxRows={room.rows} onResult={answer} />} />;
+  }
   const shown = pickerView(tree, state), focused = shown.stage === 'list' ? view.choices.find(item => keyOf(item.reference) === shown.rows[shown.pos]?.id) : undefined;
   const body = [...view.notes.map(note => ({ spans: [span(note, { role: 'warning' as const })] })),
     ...(focused ? [{ spans: [span(focused.exact, { role: 'muted' as const })] }, ...(focused.command ? [{ spans: [span(focused.command, { role: 'muted' as const })] }] : [])] : [])];

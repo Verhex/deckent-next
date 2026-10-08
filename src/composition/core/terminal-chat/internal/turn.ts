@@ -39,6 +39,7 @@ export async function describeTerminalChat(projectRoot: string, options: ConfigL
   if (!chat) return Object.freeze({ schemaVersion: 1, status: 'not-configured', reference: null, source: null, catalogRevision: null, maxCompletionTokens: null, historyMessages: null });
   // T4-B D1: the same precedence the service applies (a project's model, else the user's default, else the user's configured model).
   const choice = await configuredTerminalModel(projectRoot, options), reference = choice?.reference ?? chat.reference;
+  if (!reference) return Object.freeze({ schemaVersion: 1, status: 'not-configured', reference: null, source: null, catalogRevision: null, maxCompletionTokens: null, historyMessages: null });
   const binding = await inspectModelBinding(projectRoot, reference, options);
   return Object.freeze({ schemaVersion: 1, status: binding.status === 'declared' ? 'ready' : 'model-not-declared', reference, source: choice?.source ?? 'user',
     catalogRevision: binding.catalogRevision, maxCompletionTokens: chat.maxCompletionTokens, historyMessages: chat.historyMessages });
@@ -53,6 +54,7 @@ export async function prepareTerminalChatCommand(input: TerminalChatTurnInput, s
   const chat = readTerminalChatConfig(await loadComposedConfig(input.projectRoot, input.options) as Record<string, unknown>);
   if (!chat) throw ErrorRegistry.createError('TERMINAL_CHAT_NOT_CONFIGURED');
   const reference = (await configuredTerminalModel(input.projectRoot, input.options))?.reference ?? chat.reference;
+  if (!reference) throw ErrorRegistry.createError('TERMINAL_CHAT_NOT_CONFIGURED');
   const binding = await inspectModelBinding(input.projectRoot, reference, input.options);
   if (binding.status !== 'declared') throw ErrorRegistry.createError('TERMINAL_CHAT_MODEL_NOT_DECLARED');
   const nativeRequest = {

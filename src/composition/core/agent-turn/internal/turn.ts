@@ -89,6 +89,7 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
   // not active is refused typed by the same checks below; the configured model is never used in its place (no silent fallback).
   // T4-B D1: without a pin the one precedence decides (project model > the user's default > the user's configured model).
   const reference = command.reference ?? (await configuredTerminalModel(projectRoot, options))?.reference ?? chat.reference;
+  if (!reference) throw ErrorRegistry.createError('TERMINAL_CHAT_NOT_CONFIGURED');
   const binding = await inspectModelBinding(projectRoot, reference, options);
   if (binding.status !== 'declared') throw ErrorRegistry.createError('TERMINAL_CHAT_MODEL_NOT_DECLARED');
   const declares = (id: string) => binding.definition.model.protocols.some(protocol => (protocol.family === OPENAI_CHAT_COMPLETIONS_FAMILY || protocol.family === ANTHROPIC_MESSAGES_FAMILY)

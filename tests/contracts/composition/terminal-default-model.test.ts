@@ -8,6 +8,7 @@ import { configuredTerminalModel, createConfiguredConfigApplication, resolveConf
 import { configuredApproval } from '#composition/core/approvals/index.js';
 import { applyPolicyTemplateInstallation } from '#composition/core/installation/index.js';
 import { describeTerminalChat } from '#composition/core/terminal-chat/index.js';
+import { modelPanelSource } from '#surfaces/core/cli-terminal/index.js';
 import { openSqliteLedger } from '#adapters/core/sqlite-ledger/index.js';
 import { openLocalIntegrityAuthority } from '#adapters/index.js';
 import { clearConfigCache, getConfigFieldDefault, loadConfig, prepareProductFile, productResourcePath, resolveProductLayout } from '#platform/index.js';
@@ -112,5 +113,53 @@ describe('terminal.defaultModel through the governed writer', () => {
     await writeFile(join(root, '.deckent/config.json'), JSON.stringify({}));
     clearConfigCache();
     expect(await describeTerminalChat(root, options)).toMatchObject({ status: 'ready', reference: ref('mine'), source: 'user-default', maxCompletionTokens: 64 });
+  });
+});
+
+describe('a project model that shadows the user default (owner 2026-10-08, Jev 77898686)', () => {
+  const catalog = { schemaVersion: 1, revision: 'c1', providers: [{ id: 'p', version: 1, models: ['team', 'mine'].map(id => ({ id, version: 1, nativeId: `n-${id}`,
+    protocols: [{ family: 'openai-chat-completions', version: 'v1', capabilities: [] }] })) }] };
+  async function shadowed(grants: (principals: unknown) => readonly Grant[]) {
+    const f = await setup(grants);
+    const globalPath = await findGlobalFile(f.globalHome); await mkdir(join(globalPath, '..'), { recursive: true });
+    await writeFile(globalPath, JSON.stringify({ terminal: { defaultModel: ref('mine') }, provider_catalog: catalog }));
+    const projectPath = join(f.root, '.deckent/config.json');
+    await writeFile(projectPath, JSON.stringify({ terminal: { scopeId: 'installation', chat: { ...chat('team'), historyMessages: 12 } } }));
+    clearConfigCache();
+    const source = modelPanelSource(f.root, 'installation', { configApplication: (root, options) => createConfiguredConfigApplication(root, options),
+      resolveConfigPrincipal: resolveConfiguredConfigPrincipal, describeTerminalChatPlan: (root, options) => describeTerminalChat(root, options) }, f.options, 'en');
+    const choice = { reference: ref('mine'), label: 'mine', detail: '', group: 'p', blocked: null, exact: '', command: null, configured: false };
+    return { ...f, projectPath, source, choice };
+  }
+  const allow = (principals: unknown) => [{ id: 'allow-config', effect: 'allow', actions: ['write'], scopes: 'all', principals, resource: { kind: 'config', ids: 'all' } }];
+
+  it('"also make default" reports the shadow; "remove" drops only the project reference and new conversations use the default', async () => {
+    const f = await shadowed(allow);
+    expect(await describeTerminalChat(f.root, f.options)).toMatchObject({ reference: ref('team'), source: 'project' });
+    const made = await f.source.makeDefault!(f.choice);
+    expect(made).toMatchObject({ status: 'applied', shadow: { projectModel: 'team' } });
+    const removed = await f.source.resolveShadow!(f.choice, 'remove');
+    expect(removed.status).toBe('applied'); expect(removed.lines[0]).toBe("The project's model was removed; new conversations use your default.");
+    // The chat siblings stay; only the reference is gone.
+    expect(JSON.parse(await readFile(f.projectPath, 'utf8')).terminal.chat).toEqual({ schemaVersion: 1, maxCompletionTokens: 64, historyMessages: 12 });
+    clearConfigCache();
+    expect(await describeTerminalChat(f.root, f.options)).toMatchObject({ reference: ref('mine'), source: 'user-default', maxCompletionTokens: 64, historyMessages: 12 });
+    expect(f.audits().filter(subject => subject['kind'] === 'config-change').map(subject => [subject['layer'], subject['keyPath'], subject['action']]))
+      .toEqual([['global', 'terminal.defaultModel', 'set'], ['project', 'terminal.chat.reference', 'unset']]);
+  });
+
+  it('"align" writes the same reference into the project; a require-approval rule opens the card first', async () => {
+    const f = await shadowed(principals => [...allow(principals).map(rule => ({ ...rule, resource: { kind: 'config', ids: ['global:terminal.defaultModel'] } })),
+      { id: 'ask-project-model', effect: 'require-approval', actions: ['write'], scopes: 'all', principals, resource: { kind: 'config', ids: ['project:terminal.chat.reference'] } }]);
+    await f.source.makeDefault!(f.choice);
+    const pending = await f.source.resolveShadow!(f.choice, 'align');
+    expect(pending.status).toBe('approval-pending'); expect(pending.approvalId).toEqual(expect.any(String));
+    await configuredApproval(f.root, 'decide', { schemaVersion: 1, scopeId: 'installation', approvalId: pending.approvalId!, commandId: 'decide-align', expectedRevision: 0,
+      decision: 'allow', reason: 'Allowed in the terminal', channel: 'local-terminal-card' }, f.options);
+    const applied = await f.source.resolveShadow!(f.choice, 'align');
+    expect(applied.status).toBe('applied'); expect(applied.lines[0]).toBe("The project's model is now mine.");
+    expect(JSON.parse(await readFile(f.projectPath, 'utf8')).terminal.chat).toEqual({ schemaVersion: 1, reference: ref('mine'), maxCompletionTokens: 64, historyMessages: 12 });
+    clearConfigCache();
+    expect(await describeTerminalChat(f.root, f.options)).toMatchObject({ reference: ref('mine'), source: 'project' });
   });
 });

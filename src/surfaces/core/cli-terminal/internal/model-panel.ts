@@ -93,9 +93,17 @@ export function modelPanelSource(root: string, scopeId: string, host: Host, opti
     ...(host.configApplication && host.resolveConfigPrincipal ? { async makeDefault(choice: { reference: ModelReference }) {
       const outcome = await terminalConfigWrite(root, { action: 'set', keyPath: 'terminal.defaultModel', value: { ...choice.reference }, layer: 'global' }, host, options, locale);
       const plan = host.describeTerminalChatPlan ? await host.describeTerminalChatPlan(root, options).catch(() => null) : null;
-      // A project that names its own model keeps it: the person is told, the project file is not touched.
-      const shadowed = outcome.status === 'applied' && plan?.source === 'project' ? [t('tui.model.defaultShadowed', {}, locale)] : [];
-      return { ...outcome, lines: [...outcome.lines, ...shadowed] };
+      // A project that names its own model keeps winning: the window then offers the two governed answers (owner 2026-10-08, Jev 77898686).
+      const shadowed = outcome.status === 'applied' && plan?.source === 'project' && plan.reference;
+      return { ...outcome, lines: [...outcome.lines, ...(shadowed ? [t('tui.model.defaultShadowed', {}, locale)] : [])],
+        shadow: shadowed ? { projectModel: plan.reference!.modelId } : null };
+    },
+    // Only the project's `terminal.chat.reference` is written or removed (its chat siblings stay), through the same governed writer.
+    async resolveShadow(choice: { reference: ModelReference; label: string }, action: 'remove' | 'align') {
+      const outcome = await terminalConfigWrite(root, action === 'remove' ? { action: 'unset', keyPath: 'terminal.chat.reference', layer: 'project' }
+        : { action: 'set', keyPath: 'terminal.chat.reference', value: { ...choice.reference }, layer: 'project' }, host, options, locale);
+      return outcome.status !== 'applied' ? outcome : { ...outcome, lines: [action === 'remove' ? t('tui.model.shadow.removed', {}, locale)
+        : t('tui.model.shadow.aligned', { model: choice.label }, locale), ...outcome.lines] };
     } } : {}),
   };
 }

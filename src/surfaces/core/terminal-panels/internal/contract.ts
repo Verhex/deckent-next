@@ -128,9 +128,14 @@ export type ModelPanelView = Readonly<{ title: string; choices: readonly ModelPa
   /** Why "also make default" cannot be offered (null: it can). */
   defaultBlocked: string | null }>;
 /** What the host binds for `/model`: the models and, when decided, the governed default write (the `/config` writer, approval-aware). */
+/** T4-B (owner 2026-10-08, Jev 77898686): the default was written but this project names its own model, which keeps winning here. */
+export type ModelDefaultOutcome = ConfigPanelOutcome & Readonly<{ shadow?: Readonly<{ projectModel: string }> | null }>;
 export interface ModelPanelSource {
   inspect(): Promise<ModelPanelView>;
-  makeDefault?(choice: ModelPanelChoice): Promise<ConfigPanelOutcome>;
+  makeDefault?(choice: ModelPanelChoice): Promise<ModelDefaultOutcome>;
+  /** The two governed answers to a shadowing project model (the `/config` writer on the project layer, `terminal.chat.reference` only): `remove`
+   * drops the project's model so the user default applies; `align` makes the project's model this one. */
+  resolveShadow?(choice: ModelPanelChoice, action: 'remove' | 'align'): Promise<ConfigPanelOutcome>;
 }
 /** `/model`'s full port: the host's source plus the session's own pin (the workline holds it; the next turn carries it, protocol v23). */
 export interface ModelPanelPort extends ModelPanelSource {
@@ -145,6 +150,8 @@ export interface ModelPanelLabels {
   readonly pinnedMark: string; readonly configuredMark: string;
   /** `{model}`: the notice after a pin. */
   readonly pinned: string;
+  /** T4-B shadow window: `{model}` the project's model; its two governed choices and "keep as it is". */
+  readonly shadowTitle: string; readonly shadowRemove: string; readonly shadowAlign: string; readonly shadowKeep: string;
 }
 
 /** One `/provider` kind (T4 PROVIDER-CONNECT): its state in words, the key's store name (never a value) and what the connect flow asks. */
