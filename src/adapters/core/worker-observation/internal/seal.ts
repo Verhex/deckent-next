@@ -1,5 +1,7 @@
 import type { AttemptIdentity } from '#domain/index.js';
-import { sealWorkerEventLog, type FileArtifactStore, type SqliteAttemptStore } from '#adapters/index.js';
+import type { FileArtifactStore } from '#adapters/core/file-artifacts/index.js';
+import type { SqliteAttemptStore } from '#adapters/core/attempt-store/index.js';
+import { sealWorkerEventLog } from './events.js';
 
 /** EXEC-RELEASE C3: outcome of sealing the worker event log after the gateway closed. Observation only (never the execution outcome), but
  * a failure is typed and returned, never swallowed: the live sidecar stays the only copy and custody release holds as `events-unsealed`. */

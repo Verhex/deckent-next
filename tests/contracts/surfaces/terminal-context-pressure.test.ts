@@ -1,7 +1,7 @@
 import { afterEach, expect, it, vi } from 'vitest';
 import { runAgentTurn, type AgentRoundOutcome } from '#engine/index.js';
 import type { AgentTurnMessage, AgentTurnStreamEvent } from '#domain/index.js';
-import { streamTerminalAgentTurn } from '#composition/core/terminal-chat/index.js';
+import { streamTerminalAgentTurn } from '#surfaces/core/terminal-turn/index.js';
 import { mountWorkline, settle, until } from '../support/workline-harness.js';
 
 const mounted: ReturnType<typeof mountWorkline>[] = [];

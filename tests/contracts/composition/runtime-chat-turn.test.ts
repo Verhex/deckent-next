@@ -14,7 +14,7 @@ import { AGENT_TURN_INTERRUPTED_NOTE, ModelActivationApplication, ModelBindingAp
 import * as engine from '#engine/index.js';
 import { attachRuntimeWorkspaceFile, cancelRuntimeChatTurn, createConfiguredRuntimeClient, findRuntimeWorkspaceFiles, runRuntimeChatTurn,
   startConfiguredRuntimeService } from '#composition/core/runtime-service/index.js';
-import { attachTerminalMentions, findTerminalMentions, streamTerminalAgentTurn } from '#composition/core/terminal-chat/index.js';
+import { attachTerminalMentions, findTerminalMentions, streamTerminalAgentTurn } from '#surfaces/core/terminal-turn/index.js';
 import { renderAssistantStream, startAssistantStream, type AssistantUnit } from '#surfaces/core/terminal-render/index.js';
 import type { TurnDelta } from '#surfaces/index.js';
 import { chatTurnCompactionCommandId, chatTurnRoundCommandId } from '#composition/core/agent-turn/index.js';

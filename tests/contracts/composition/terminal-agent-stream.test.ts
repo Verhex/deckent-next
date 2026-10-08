@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { AgentTurnStreamEvent, ChatTurnCancellation, ChatTurnCommand, ChatTurnResult } from '#domain/index.js';
-import { streamTerminalAgentTurn, type TerminalAgentTurnPorts } from '#composition/core/terminal-chat/index.js';
+import { streamTerminalAgentTurn, type TerminalAgentTurnPorts } from '#surfaces/core/terminal-turn/index.js';
 import type { TurnDelta } from '#surfaces/index.js';
 import { renderAssistantStream, startAssistantStream, type ToolUnit } from '#surfaces/core/terminal-render/index.js';
 

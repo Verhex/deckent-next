@@ -1,8 +1,10 @@
-import { providerSpendManagementCommandInputSchema, type ProviderSpendManagementCommand } from '#domain/index.js';
-import { parseProviderSpendManagementResultForCommand, type ProviderSpendManagementResult } from '#engine/index.js';
+import type { ProviderSpendManagementCommand } from '#domain/index.js';
+import type { ProviderSpendManagementResult } from '#engine/index.js';
 import { loadComposedConfig } from '#composition/core/root/index.js';
-import { runtimeWorkspaceFileMethods, runtimeEffectOperationMethods, clearSessionStandingSchema, acceptSessionStandingClearance, approvalCommandSchema, parseApprovalAnswer, type ClearSessionStanding, type SessionStandingClearance, RUNTIME_SERVICE_LIFECYCLE_VERSIONS, RUNTIME_SERVICE_SCHEMA_VERSION, isRuntimeServiceBoundedResultOperation, acceptSecretChangeResult, prepareSecretChange, type RuntimeServiceLifecycleVersion, type RuntimeServiceRequest,
-  type SecretChangeResult, type SecretDeleteCommand, type SecretSetCommand, type SecretStoreSwitchCommand, secretStoreSwitchCommandSchema, acceptSecretStoreSwitchResult } from '#engine/index.js';
+import { runtimeWorkspaceFileMethods, runtimeEffectOperationMethods, runtimeApprovalMethods, runtimeChatTurnMethods, runtimeModelInvocationMethods, runtimePermissionModeMethods,
+  runtimeProviderSpendMethods, runtimeScratchMethods, runtimeSecretMethods, type ClearSessionStanding, type SessionStandingClearance, RUNTIME_SERVICE_LIFECYCLE_VERSIONS,
+  RUNTIME_SERVICE_SCHEMA_VERSION, isRuntimeServiceBoundedResultOperation, type RuntimeServiceLifecycleVersion, type RuntimeServiceRequest,
+  type SecretChangeResult, type SecretDeleteCommand, type SecretSetCommand, type SecretStoreSwitchCommand } from '#engine/index.js';
 import { socketOptions } from './socket-options.js';
 import { randomUUID } from 'node:crypto';
 import { setTimeout as sleep } from 'node:timers/promises';
@@ -10,22 +12,12 @@ import { DeckentError, ErrorRegistry, ManagedFileError, prepareProductSocket, ty
 import { LocalRuntimeSocketError, requestLocalRuntime, streamLocalRuntime, turnLocalRuntime } from '#adapters/index.js';
 import { runtimeServiceOperationSchema, runtimeServiceDescriptorSchema, shutdownCommandSchema, shutdownAdmissionSchema, type RuntimeServiceOperation, type ShutdownCommand, type RuntimeServiceDescriptor, type ServiceShutdownAdmissionResult } from '#engine/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
-import { modelInvocationCancellationCommandInputSchema, modelInvocationCommandInputSchema, modelInvocationQueryInputSchema, modelInvocationPurgeCommandInputSchema, ModelInvocationError,
-  providerSpendAccountQueryInputSchema, providerSpendAuditCommandInputSchema, type ModelInvocationCancellationCommand, type ModelInvocationPurgeCommand, type ModelInvocationCommand,
-  type ModelInvocationQuery, type ProviderSpendAccountQuery, type ProviderSpendAuditCommand, type ModelInvocationDeltaSink,
-  chatTurnCancellationResultSchema, chatTurnCancellationSchema, chatTurnCommandSchema, chatTurnResultSchema, type AgentTurnStreamEvent,
-  type ChatTurnCancellation, type ChatTurnCancellationResult, type ChatTurnCommand, type ChatTurnResult,
-  type WorkspaceAttachment, type WorkspaceAttachmentRequest, type WorkspaceFileMatches, type WorkspaceFileQuery } from '#domain/index.js';
-import { runtimeServiceResultCapacity, parseModelInvocationCancellationResultForCommand, parseModelInvocationPurgeResultForCommand, type ModelInvocationCancellationResult, type ModelInvocationPurgeResult, parseModelInvocationResultForCommand, parseModelInvocationInspectionForQuery,
-  type ModelInvocationDelivery, type ModelInvocationResult, type ModelInvocationInspection, type RuntimeServiceDelivery } from '#engine/index.js';
-import { PermissionModeError, type RuntimeOperationQuery } from '#engine/index.js';
-import { scratchClearanceSchema, scratchQuerySchema, scratchViewSchema, type EffectCommand, type EffectRecord, type ScratchClearance,
-  type ScratchQuery, type ScratchView } from '#domain/index.js';
-import { permissionModeChangeSchema, permissionModeCommandSchema, permissionModeQuerySchema, permissionModeViewSchema, type PermissionModeChange,
-  type PermissionModeCommand, type PermissionModeQuery, type PermissionModeView } from '#domain/index.js';
-import type { EffectOutcome } from '#engine/index.js';
-import { AgentTurnStoreError, parseProviderSpendAccountInspectionForQuery, parseProviderSpendAuditResultForCommand, ProviderSpendError,
-  type ProviderSpendAccountInspection, type ProviderSpendAuditResult } from '#engine/index.js';
+import type { ModelInvocationCancellationCommand, ModelInvocationPurgeCommand, ModelInvocationCommand, ModelInvocationQuery, ProviderSpendAccountQuery, ProviderSpendAuditCommand,
+  ModelInvocationDeltaSink, AgentTurnStreamEvent, ChatTurnCancellation, ChatTurnCancellationResult, ChatTurnCommand, ChatTurnResult,
+  WorkspaceAttachment, WorkspaceAttachmentRequest, WorkspaceFileMatches, WorkspaceFileQuery, EffectCommand, EffectRecord, ScratchClearance, ScratchQuery, ScratchView,
+  PermissionModeChange, PermissionModeCommand, PermissionModeQuery, PermissionModeView } from '#domain/index.js';
+import { runtimeServiceResultCapacity, type ModelInvocationCancellationResult, type ModelInvocationPurgeResult, type ModelInvocationDelivery, type ModelInvocationResult,
+  type ModelInvocationInspection, type RuntimeServiceDelivery, type RuntimeOperationQuery, type EffectOutcome, type ProviderSpendAccountInspection, type ProviderSpendAuditResult } from '#engine/index.js';
 import type { ConfiguredRuntimeOperations } from './operations.js';
 export type ConfiguredRuntimeClient = ConfiguredRuntimeOperations & Readonly<{
   cancelModelInvocation(command: ModelInvocationCancellationCommand, delivery?: ModelInvocationDelivery): Promise<ModelInvocationCancellationResult>;
@@ -67,69 +59,6 @@ export type ConfiguredRuntimeClient = ConfiguredRuntimeOperations & Readonly<{
   /** v24 (SECRET-STORE-SWITCH): every secret moved into another registered store and selected, under the `secret`/`switch` cell. */
   switchSecretStore(command: SecretStoreSwitchCommand, signal?: AbortSignal): Promise<import('#engine/index.js').SecretStoreSwitchResult>;
 }>;
-type RuntimeCall = (operation: RuntimeServiceOperation, input: unknown, delivery?: RuntimeServiceDelivery, signal?: AbortSignal) => Promise<unknown>;
-/** v15 permission-mode methods: both ends validate; an answer for another scope, or a set answer for another mode, is not trusted. */
-function permissionModeMethods(call: RuntimeCall) {
-  return {
-    async inspectPermissionMode(input: PermissionModeQuery, signal?: AbortSignal) {
-      try {
-        const parsed = permissionModeQuerySchema.safeParse(input);
-        if (!parsed.success) throw new PermissionModeError('PERMISSION_MODE_INVALID');
-        const result = permissionModeViewSchema.safeParse(await call('inspectPermissionMode', parsed.data, undefined, signal));
-        if (!result.success || result.data.scopeId !== parsed.data.scopeId) throw ErrorRegistry.createError('RUNTIME_SERVICE_TRANSPORT');
-        return result.data;
-      } catch (error) { throw error instanceof PermissionModeError ? ErrorRegistry.createError(error.code) : queryFailure(error); }
-    },
-    async setPermissionMode(input: PermissionModeCommand, signal?: AbortSignal) {
-      try {
-        const parsed = permissionModeCommandSchema.safeParse(input);
-        if (!parsed.success) throw new PermissionModeError('PERMISSION_MODE_INVALID');
-        const result = permissionModeChangeSchema.safeParse(await call('setPermissionMode', parsed.data, undefined, signal));
-        // FA-SESSION: a session full-access switch stores nothing, so the answer keeps the stored mode and says nothing changed.
-        const answered = (change: PermissionModeChange) => parsed.data.session ? change.changed === false : change.mode === parsed.data.mode;
-        if (!result.success || result.data.scopeId !== parsed.data.scopeId || !answered(result.data)) throw ErrorRegistry.createError('RUNTIME_SERVICE_TRANSPORT');
-        return result.data;
-      } catch (error) { throw error instanceof PermissionModeError ? ErrorRegistry.createError(error.code) : queryFailure(error); }
-    },
-  };
-}
-/** v16 `/scratch` methods: both ends validate the shapes. */
-function scratchMethods(call: RuntimeCall) {
-  const scratch = async <T>(operation: 'inspectScratch' | 'clearScratch', schema: { safeParse(value: unknown): { success: true; data: T } | { success: false } },
-    input: ScratchQuery, signal?: AbortSignal): Promise<T> => {
-    try {
-      const parsed = scratchQuerySchema.safeParse(input);
-      if (!parsed.success) throw new AgentTurnStoreError('AGENT_TURN_INVALID');
-      const result = schema.safeParse(await call(operation, parsed.data, undefined, signal));
-      if (!result.success) throw ErrorRegistry.createError('RUNTIME_SERVICE_TRANSPORT');
-      return result.data;
-    } catch (error) { throw queryFailure(error); }
-  };
-  return { inspectScratch: (input: ScratchQuery, signal?: AbortSignal) => scratch<ScratchView>('inspectScratch', scratchViewSchema, input, signal),
-    clearScratch: (input: ScratchQuery, signal?: AbortSignal) => scratch<ScratchClearance>('clearScratch', scratchClearanceSchema, input, signal) };
-}
-/** v18 secret methods: name and value are checked before anything is sent (typed, never echoed); an answer for another change is not trusted. */
-function secretMethods(call: RuntimeCall) {
-  const change = async (operation: 'setSecret' | 'deleteSecret', input: SecretSetCommand | SecretDeleteCommand, signal?: AbortSignal) => {
-    try {
-      const command = prepareSecretChange(operation, input), result = acceptSecretChangeResult(operation, command, await call(operation, command, undefined, signal));
-      if (!result) throw ErrorRegistry.createError('RUNTIME_SERVICE_TRANSPORT');
-      return result;
-    } catch (error) { throw queryFailure(error); }
-  };
-  // v24 SECRET-STORE-SWITCH: the target is checked against the wire shape first; an answer for another switch is not trusted.
-  const switchSecretStore = async (input: SecretStoreSwitchCommand, signal?: AbortSignal) => {
-    try {
-      const parsed = secretStoreSwitchCommandSchema.safeParse(input);
-      if (!parsed.success) throw ErrorRegistry.createError('CLI_USAGE');
-      const result = acceptSecretStoreSwitchResult(parsed.data, await call('switchSecretStore', parsed.data, undefined, signal));
-      if (!result) throw ErrorRegistry.createError('RUNTIME_SERVICE_TRANSPORT');
-      return result;
-    } catch (error) { throw queryFailure(error); }
-  };
-  return { setSecret: (input: SecretSetCommand, signal?: AbortSignal) => change('setSecret', input, signal),
-    deleteSecret: (input: SecretDeleteCommand, signal?: AbortSignal) => change('deleteSecret', input, signal), switchSecretStore };
-}
 type RuntimeCallRest = [onDelta?: ModelInvocationDeltaSink, version?: RuntimeServiceLifecycleVersion, onEvent?: (event: AgentTurnStreamEvent) => void];
 /** BUSY is refused before anything was admitted, so a retry cannot repeat an effect. Bounded: at most `service.busyRetryLimit` more
  * attempts, each after the service's `retryAfterMs` (never beyond this installation's own `service.admissionWaitMs`), ended by the
@@ -204,94 +133,15 @@ export function createConfiguredRuntimeClient(projectRoot: string, options: Conf
     && (!isRuntimeServiceBoundedResultOperation(operation) || operation === 'renewApproval' || operation === 'listApprovals' || operation === 'inspectApproval' || operation === 'decideApproval')).map(operation =>
     [operation, (input: unknown, delivery?: RuntimeServiceDelivery) => call(operation, input, delivery)])) as ConfiguredRuntimeOperations;
   return Object.freeze({ ...operations,
-    async decideApproval(input: unknown, delivery?: RuntimeServiceDelivery) {
-      const command = approvalCommandSchema.parse(input);
-      return parseApprovalAnswer('standing' in command, await call('decideApproval', command, delivery));
-    },
-    async clearSessionStanding(input: ClearSessionStanding, signal?: AbortSignal) {
-      const command = clearSessionStandingSchema.parse(input);
-      return acceptSessionStandingClearance(command, await call('clearSessionStanding', command, undefined, signal));
-    },
-    async chatTurn(input: ChatTurnCommand, onEvent: (event: AgentTurnStreamEvent) => void, signal?: AbortSignal) {
-      try {
-        const parsed = chatTurnCommandSchema.safeParse(input);
-        if (!parsed.success || typeof onEvent !== 'function') throw new AgentTurnStoreError('AGENT_TURN_INVALID');
-        const result = chatTurnResultSchema.safeParse(await call('chatTurn', parsed.data, undefined, signal, undefined, RUNTIME_SERVICE_SCHEMA_VERSION, onEvent));
-        if (!result.success || result.data.turnId !== parsed.data.turnId) throw ErrorRegistry.createError('RUNTIME_SERVICE_TRANSPORT');
-        return result.data;
-      } catch (error) { throw queryFailure(error); }
-    },
-    async cancelChatTurn(input: ChatTurnCancellation) {
-      try {
-        const parsed = chatTurnCancellationSchema.safeParse(input);
-        if (!parsed.success) throw new AgentTurnStoreError('AGENT_TURN_INVALID');
-        const result = chatTurnCancellationResultSchema.safeParse(await call('cancelChatTurn', parsed.data));
-        if (!result.success || result.data.turnId !== parsed.data.turnId) throw ErrorRegistry.createError('RUNTIME_SERVICE_TRANSPORT');
-        return result.data;
-      } catch (error) { throw queryFailure(error); }
-    },
+    ...runtimeApprovalMethods(call),
+    ...runtimeChatTurnMethods(call, queryFailure),
     ...runtimeWorkspaceFileMethods(call, queryFailure),
     ...runtimeEffectOperationMethods(call, queryFailure),
-    ...permissionModeMethods(call),
-    ...scratchMethods(call),
-    ...secretMethods(call),
-    async cancelModelInvocation(input: ModelInvocationCancellationCommand, delivery?: ModelInvocationDelivery) {
-      try {
-        const parsed = modelInvocationCancellationCommandInputSchema.safeParse(input);
-        if (!parsed.success) throw new ModelInvocationError('MODEL_INVOCATION_INVALID');
-        const command = parsed.data as ModelInvocationCancellationCommand;
-        return parseModelInvocationCancellationResultForCommand(command, await call('cancelModelInvocation', command, delivery));
-      } catch (error) { throw queryFailure(error); }
-    },
-    async purgeModelInvocationContent(input: ModelInvocationPurgeCommand, delivery?: ModelInvocationDelivery) {
-      try {
-        const parsed = modelInvocationPurgeCommandInputSchema.safeParse(input);
-        if (!parsed.success) throw new ModelInvocationError('MODEL_INVOCATION_INVALID');
-        const command = parsed.data as ModelInvocationPurgeCommand;
-        return parseModelInvocationPurgeResultForCommand(command, await call('purgeModelInvocationContent', command, delivery));
-      } catch (error) { throw queryFailure(error); }
-    },
-    async invokeModel(input: ModelInvocationCommand, delivery?: ModelInvocationDelivery, signal?: AbortSignal) {
-      try {
-        const parsed = modelInvocationCommandInputSchema.safeParse(input);
-        if (!parsed.success) throw new ModelInvocationError('MODEL_INVOCATION_INVALID');
-        const command = parsed.data as ModelInvocationCommand;
-        return parseModelInvocationResultForCommand(command, await call('invokeModel', command, delivery, signal));
-      } catch (error) { throw queryFailure(error); }
-    },
-    async invokeModelStream(input: ModelInvocationCommand, onDelta: ModelInvocationDeltaSink, delivery?: ModelInvocationDelivery, signal?: AbortSignal) {
-      try {
-        const parsed = modelInvocationCommandInputSchema.safeParse(input);
-        if (!parsed.success || typeof onDelta !== 'function') throw new ModelInvocationError('MODEL_INVOCATION_INVALID');
-        const command = parsed.data as ModelInvocationCommand;
-        return parseModelInvocationResultForCommand(command, await call('invokeModelStream', command, delivery, signal, onDelta));
-      } catch (error) { throw queryFailure(error); }
-    },
-    async inspectModelInvocation(input: ModelInvocationQuery, delivery?: ModelInvocationDelivery) {
-      try {
-        const parsed = modelInvocationQueryInputSchema.safeParse(input);
-        if (!parsed.success) throw new ModelInvocationError('MODEL_INVOCATION_INVALID');
-        const query = parsed.data as ModelInvocationQuery;
-        return parseModelInvocationInspectionForQuery(query, await call('inspectModelInvocation', query, delivery));
-      } catch (error) { throw queryFailure(error); }
-    },
-    async inspectProviderSpendAccount(input: ProviderSpendAccountQuery, delivery?: RuntimeServiceDelivery) {
-      try {
-        let query: ProviderSpendAccountQuery;
-        try { query = providerSpendAccountQueryInputSchema.parse(input); }
-        catch { throw new ProviderSpendError('PROVIDER_SPEND_INVALID'); }
-        return parseProviderSpendAccountInspectionForQuery(query, await call('inspectProviderSpendAccount', query, delivery));
-      } catch (error) { throw queryFailure(error); }
-    },
-    async manageProviderSpend(input: ProviderSpendManagementCommand, delivery?: RuntimeServiceDelivery) { return manageSpending(input, command => call('manageProviderSpend', command, delivery)); },
-    async auditProviderSpendAccount(input: ProviderSpendAuditCommand, delivery?: RuntimeServiceDelivery) {
-      try {
-        let command: ProviderSpendAuditCommand;
-        try { command = providerSpendAuditCommandInputSchema.parse(input); }
-        catch { throw new ProviderSpendError('PROVIDER_SPEND_INVALID'); }
-        return parseProviderSpendAuditResultForCommand(command, await call('auditProviderSpendAccount', command, delivery));
-      } catch (error) { throw queryFailure(error); }
-    },
+    ...runtimePermissionModeMethods(call, queryFailure),
+    ...runtimeScratchMethods(call, queryFailure),
+    ...runtimeSecretMethods(call, queryFailure),
+    ...runtimeModelInvocationMethods(call, queryFailure),
+    ...runtimeProviderSpendMethods(call, queryFailure),
     async describeService(signal?: AbortSignal, versions: 'window' | 'current' = 'window') {
       const parsed = runtimeServiceDescriptorSchema.safeParse(await lifecycle('describeService', {}, signal, versions));
       if (!parsed.success) throw ErrorRegistry.createError('RUNTIME_SERVICE_TRANSPORT');
@@ -306,12 +156,4 @@ export function createConfiguredRuntimeClient(projectRoot: string, options: Conf
       return Object.freeze({ replayed: value.replayed, admission: parsed.data });
     },
   });
-}
-
-async function manageSpending(input: ProviderSpendManagementCommand, call: (command: ProviderSpendManagementCommand) => Promise<unknown>) {
-  try {
-    const parsed = providerSpendManagementCommandInputSchema.safeParse(input);
-    if (!parsed.success) throw new ProviderSpendError('PROVIDER_SPEND_INVALID');
-    return parseProviderSpendManagementResultForCommand(parsed.data, await call(parsed.data));
-  } catch (error) { throw queryFailure(error); }
 }

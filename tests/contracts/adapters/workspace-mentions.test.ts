@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { createWorkspaceScope, indexWorkspaceFiles, rankWorkspacePaths, readWorkspaceAttachment } from '#adapters/index.js';
-import { attachTerminalMentions, TERMINAL_MENTION_MAX_FILES } from '#composition/core/terminal-chat/index.js';
+import { attachTerminalMentions, TERMINAL_MENTION_MAX_FILES } from '#surfaces/core/terminal-turn/index.js';
 
 import { WORKSPACE_DESCRIPTOR_CUSTODY_AVAILABLE } from '../../fixtures/workspace-descriptor-custody.js';
 

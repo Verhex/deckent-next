@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { protectedPathShellNote } from '#composition/core/agent-turn/index.js';
+import { protectedPathShellNote } from '#adapters/index.js';
 
 // B3 (owner terminal test 2026-10-07): `rm src/deneme.md` ran without a card in full-auto and failed in the sandbox with a bare
 // "Read-only file system". The result now explains the protected path in the person's language; the model reads the same text.

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { sealAttemptWorkerEvents } from '../../../src/composition/core/execution/index.js';
+import { sealAttemptWorkerEvents } from '#adapters/index.js';
 import { ErrorRegistry } from '#platform/index.js';
 
 const identity = { runId: 'r', taskId: 't', attemptId: 'a', scopeId: 's', generation: 1, layoutRevision: 'l' };

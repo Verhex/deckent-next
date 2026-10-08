@@ -267,7 +267,8 @@
         "src/composition/core/scoped-request",
         "src/composition/core/root",
         "src/composition/core/identity-profile",
-        "src/composition/core/model-connect"
+        "src/composition/core/model-connect",
+        "src/surfaces/core/terminal-turn"
       ],
       "plan": "SURFACES"
     },
@@ -401,7 +402,6 @@
     },
     "src/composition/core/terminal-chat": {
       "dependencies": [
-        "src/domain/core/agent-turn",
         "src/surfaces/core/terminal-kit",
         "src/adapters/core/contract",
         "src/composition/core/provider-catalog",
@@ -503,7 +503,6 @@
         "src/domain/core/model-invocation",
         "src/domain/core/policy",
         "src/domain/core/provider-spend",
-        "src/engine/core/agent-turn",
         "src/engine/core/approval",
         "src/engine/core/dispatch",
         "src/engine/core/model-invocation",
@@ -694,7 +693,8 @@
         "src/engine/core/approval",
         "src/engine/core/agent-turn",
         "src/engine/core/effect",
-        "src/platform/core/errors"
+        "src/platform/core/errors",
+        "src/engine/core/provider-spend"
       ],
       "plan": "EXECUTION"
     },
@@ -848,6 +848,17 @@
         "src/domain/core/agent-turn",
         "src/platform/core/output",
         "src/surfaces/core/terminal-theme"
+      ],
+      "plan": "SURFACES"
+    },
+    "src/surfaces/core/terminal-turn": {
+      "dependencies": [
+        "src/domain/core/agent-turn",
+        "src/domain/core/provider-catalog",
+        "src/engine/core/agent-turn",
+        "src/platform/core/config",
+        "src/platform/core/errors",
+        "src/surfaces/core/terminal-kit"
       ],
       "plan": "SURFACES"
     },
@@ -1717,7 +1728,8 @@
         "src/engine/core/shell-classification",
         "src/platform/core/host",
         "src/platform/core/managed-files",
-        "src/domain/core/agent-turn"
+        "src/domain/core/agent-turn",
+        "src/platform/core/i18n"
       ],
       "plan": "SURFACES"
     },
@@ -1762,7 +1774,9 @@
         "src/domain/core/attempt",
         "src/domain/core/worker-event",
         "src/engine/core/worker-observation",
-        "src/platform/core/clock"
+        "src/platform/core/clock",
+        "src/adapters/core/file-artifacts",
+        "src/adapters/core/attempt-store"
       ],
       "plan": "EXECUTION"
     },

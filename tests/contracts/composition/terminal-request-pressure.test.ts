@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { afterEach, expect, it } from 'vitest';
 import { createConfiguredRuntimeClient } from '#composition/core/runtime-service/index.js';
-import { streamTerminalAgentTurn } from '#composition/core/terminal-chat/index.js';
+import { streamTerminalAgentTurn } from '#surfaces/core/terminal-turn/index.js';
 import { clearConfigCache, DeckentError, ErrorRegistry, loadConfig, prepareProductSocket } from '#platform/index.js';
 import { mountWorkline, settle, until } from '../support/workline-harness.js';
 
