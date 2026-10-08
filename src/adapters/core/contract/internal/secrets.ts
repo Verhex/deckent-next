@@ -1,7 +1,7 @@
 import { z } from 'zod';
-import { CONFIG_CONTRACT_SINCE, ConfigValidationError, ErrorRegistry, installSecretResolverFactory, normalizeGlobalScopePlatform, registerConfigSection,
-  resolveGlobalScopePaths, type Environment } from '#platform/index.js';
-import { SECRET_STORE_ID_PATTERN, SecretStoreRegistry, type SecretStore, type SecretStoreFactory } from '#engine/index.js';
+import { CONFIG_CONTRACT_SINCE, ConfigValidationError, ErrorRegistry, installSecretResolverFactory, isRecord, normalizeGlobalScopePlatform, readJsonFile,
+  registerConfigSection, resolveGlobalConfigPaths, resolveGlobalScopePaths, writeConfig, type Environment } from '#platform/index.js';
+import { SECRET_STORE_ID_PATTERN, SecretStoreRegistry, type SecretStore, type SecretStoreFactory, type SecretStoreSelectionPort } from '#engine/index.js';
 import { ENV_SECRET_STORE_ID, encryptedFileSecretStoreFactory, environmentSecretStoreFactory, fileSecretStoreFactory } from '#adapters/core/secret-store/index.js';
 
 /**
@@ -22,6 +22,43 @@ export function readSecretsConfig(config: Readonly<Record<string, unknown>>): Se
 /** The installation root the file backend lives in, from the caller's environment (null when none resolves). */
 function installationRoot(env: Environment, platform: string): string | null {
   try { return resolveGlobalScopePaths(normalizeGlobalScopePlatform(platform, env), env).stateDir; } catch { return null; }
+}
+/** Whether a backend id is registered (Core or added before the registry sealed). */
+export function isRegisteredSecretStore(id: string): boolean { return registry.has(id); }
+/** The registered backend ids, Core first, for a picker; never a value. */
+export function registeredSecretStores(): readonly string[] { return registry.ids(); }
+/** Opens one registered backend by id in the caller's environment (the store switch's source and target). */
+export function openRegisteredSecretStore(id: string, env: Environment, platform: string = process.platform): SecretStore {
+  return registry.open(id, { env, platform, root: installationRoot(env, platform) });
+}
+/**
+ * SECRET-STORE-SWITCH (owner 2026-10-08): the installation's store selection, `secrets.store` of the installation (global) config. Only the
+ * governed store switch publishes it — the config engine keeps refusing the secrets section (CONFIG-SURFACE) — and it publishes only on the
+ * exact document it read (`expectDigest`, re-checked under the config writer lock: `CONFIG_CONCURRENT_REVISION_HOLD` otherwise). Every other
+ * key of the document is kept as it was.
+ */
+export function createInstallationSecretStoreSelection(env: Environment, platform: string = process.platform): SecretStoreSelectionPort {
+  const path = resolveGlobalConfigPaths(env, platform).platformPath;
+  const read = async () => {
+    const current = await readJsonFile(path);
+    if (current.kind === 'io') throw ErrorRegistry.createError('CONFIG_READ_IO_HOLD', { cause: current.error });
+    if (current.kind === 'absent') return { document: {} as Record<string, unknown>, digest: null };
+    if (current.kind === 'corrupt' || !isRecord(current.value)) throw ErrorRegistry.createError('CONFIG_CONCURRENT_REVISION_HOLD');
+    return { document: current.value, digest: current.digest };
+  };
+  return Object.freeze({
+    async read() {
+      const { document, digest } = await read();
+      const secrets = document['secrets'];
+      return Object.freeze({ store: isRecord(secrets) && typeof secrets['store'] === 'string' ? secrets['store'] : null, digest });
+    },
+    async publish(store: string, expectDigest: string | null) {
+      if (!registry.has(store)) throw ErrorRegistry.createError('SECRET_STORE_UNKNOWN', { params: { backend: store } });
+      const { document, digest } = await read();
+      if (digest !== expectDigest) throw ErrorRegistry.createError('CONFIG_CONCURRENT_REVISION_HOLD');
+      await writeConfig(path, { ...document, secrets: secretsConfigSchema.parse({ store }) }, expectDigest);
+    },
+  });
 }
 /** Opens the backend the (validated, unresolved) configuration selects; opening reads nothing yet. */
 export function openConfiguredSecretStore(config: Readonly<Record<string, unknown>>, env: Environment, platform: string = process.platform): SecretStore {

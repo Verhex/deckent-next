@@ -200,7 +200,22 @@ same root with local-key custody (`withPrivateKeyFile`: 0600, owner, one link, `
 write only). No passphrase: it protects a copied, synced, grepped, printed or git-added store file, not a same-user process that reads both
 files or a backup of the whole root — K2 (OS keyring) wraps the key later. A missing key beside an existing store, a wrong key or any changed
 byte → `SECRET_STORE_CORRUPT`; nothing is re-keyed or repaired; it never reads `secrets.json`. `doctor` prints one transparency line per
-Core backend (who can read the keys); native Windows is `SECRET_STORE_UNAVAILABLE` like the file backend). A v18 secret change
+Core backend (who can read the keys); native Windows is `SECRET_STORE_UNAVAILABLE` like the file backend). **Store switch
+(SECRET-STORE-SWITCH, owner 2026-10-08 option B, Jev a0284b73; protocol v24 `switchSecretStore`):** the selection is secret custody, not
+configuration — the config engine keeps refusing the `secrets` section; one governed operation (`SecretStoreSwitch`, engine) moves every
+name of the selected store into another registered store and selects it: input checks (known target, a weaker target only with
+`confirmDowngrade` — Core ranks env < file < encrypted-file, an unranked store always asks — and a writable target when something moves) →
+the `secret`/`switch` decision (resource id `secret-store`; template v6 `first-run-secret-switch`, v4/v5 and hand-built policies gain it
+through `init policy --upgrade [--person]`) → a `secret-store-switch` audit event `{from, to, entries, downgrade, decision}` → copy → read every
+copy back (`SECRET_STORE_SWITCH_UNVERIFIED`, selection untouched) → publish `secrets.store` on the exact installation-config document read
+(`createInstallationSecretStoreSelection`, digest re-checked under the config writer lock) → delete each moved name from the old store.
+Publication before deletion is the crash-safe order (the owner's stated order deleted first; intent kept): a crash afterwards leaves the keys
+reachable and `cleaned: false`; the same switch again (`status: current`) deletes copies elsewhere that are identical to the selected ones.
+The running service resolves through the new selection without a restart. `deckent secret store` picks from the registered stores on a
+terminal (numbered list, y/N for a downgrade) or takes `--to <store>` / `--confirm-downgrade` / `--list`; `doctor` names leftover entries in a
+non-selected Core store (counts only). Fresh installs on Linux/WSL/macOS through `init policy --apply` (no policy before) run the same switch with
+zero entries (the Docker `init apply` path does not yet: its installations keep the environment store until switched); with no ledger yet its record is the command result (owner 2026-10-08, Jev 0950f08e). Open limit: a secret set on the old
+store between the copy and the publication is not moved (secret changes are not serialized against a switch). A v18 secret change
 whose known answer cannot fit the delivery budget is refused (`RUNTIME_SERVICE_RESPONSE_LIMIT`) before the policy decision, audit or write
 (Astra 2185 R6). Enterprise/custom backends
 (vaults, KMS) register through `registerSecretStoreBackend` before `registerProviderConfig()` seals the registry — no Core edit; `core.` is

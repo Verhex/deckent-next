@@ -49,7 +49,7 @@ export async function executeConfiguredRuntimeOperation(projectRoot: string, req
   } satisfies Record<Exclude<RuntimeServiceOperation, 'clearSessionStanding' | 'renewApproval' | 'listApprovals' | 'inspectApproval' | 'decideApproval' | 'describeService' | 'shutdownService' | 'invokeModel' | 'invokeModelStream' | 'inspectModelInvocation'
     | 'purgeModelInvocationContent' | 'cancelModelInvocation' | 'inspectProviderSpendAccount' | 'auditProviderSpendAccount' | 'chatTurn' | 'cancelChatTurn'
     | 'findWorkspaceFiles' | 'attachWorkspaceFile' | 'executeOperation' | 'compensateOperation' | 'inspectOperation' | 'inspectPermissionMode' | 'setPermissionMode'
-    | 'inspectScratch' | 'clearScratch' | 'setSecret' | 'deleteSecret'>, RuntimeOperationHandler>;
+    | 'inspectScratch' | 'clearScratch' | 'setSecret' | 'deleteSecret' | 'switchSecretStore'>, RuntimeOperationHandler>;
   if (!(request.operation in handlers)) throw new Error('RUNTIME_SERVICE_HOST_OPERATION');
   return handlers[request.operation as keyof typeof handlers](request.input);
 }

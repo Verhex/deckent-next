@@ -146,8 +146,9 @@ bir limit dolarsa terminal bunu açık sözlerle söyler; harcama limitleri sağ
 
 **Katı kurulum**, anahtarı makinedeki başka hiçbir programın okumaması gerekiyorsa:
 
-1. Şifreli depoyu seçin: `deckent config set secrets '{"store":"core.secret-store.encrypted-file@1"}' --global`, ardından Deckent
-   servisini yeniden başlatın (ayar yeniden başlatmada geçerli olur; `deckent doctor` etkin depoyu gösterir).
+1. Anahtarlarınızı şifreli depoya taşıyın: `deckent secret store` kayıtlı depoları seçmeniz için listeler; her anahtarı kopyalar,
+   doğrular, yeni depoyu seçer ve ardından eski kopyayı siler (daha zayıf bir depoya geçiş önce sorar). Linux, WSL ve macOS'ta
+   `deckent init policy` ile kurulanlar zaten şifreli depoyla başlar.
 2. Diğer yapay zekâ araçlarını Deckent'in durum klasöründen uzak tutun; örneğin Claude Code'un `~/.claude/settings.json`
    dosyasında depo dosyaları için `Read` yasak kuralları. Bu, dosya araçlarını ve yaygın shell komutlarını durdurur, her betiği değil.
 3. Planlanan: Deckent servisini ayrı bir işletim sistemi kullanıcısında (ya da macOS Keychain ile) çalıştırmak; böylece hesabınızdaki hiçbir program anahtarları okuyamaz.

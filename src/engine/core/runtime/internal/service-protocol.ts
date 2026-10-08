@@ -3,9 +3,9 @@ import { agentTurnStreamEventSchema, effectCommandSchema, effectRecordSchema, ef
   parseModelInvocationPurgeCommand, parsePermissionModeCommand, parsePermissionModeQuery, parseProviderSpendAccountQuery, parseProviderSpendAuditCommand, parseScratchQuery,
   parseWorkspaceAttachmentRequest, parseWorkspaceFileQuery } from '#domain/index.js';
 import { clearSessionStandingSchema } from '#engine/core/approval/index.js';
-import { secretDeleteCommandSchema, secretSetCommandSchema } from '#engine/core/secret-store/index.js';
+import { secretDeleteCommandSchema, secretSetCommandSchema, secretStoreSwitchCommandSchema } from '#engine/core/secret-store/index.js';
 
-export const RUNTIME_SERVICE_SCHEMA_VERSION = 23 as const;
+export const RUNTIME_SERVICE_SCHEMA_VERSION = 24 as const;
 export const RUNTIME_SERVICE_ERROR_PARAMS = 8;
 export const RUNTIME_SERVICE_ERROR_PARAM_CHARS = 512;
 /** Bounded, serializable message parameters for a typed error response (strings truncated, other values dropped). */
@@ -21,7 +21,7 @@ export const runtimeServiceOperationSchema = z.enum(['renewApproval', 'listAppro
   'inspectInventory', 'requestRunCancellation', 'deliverRunCancellation', 'reconcileAttempt', 'recoverCancellations', 'describeService', 'shutdownService',
   'invokeModel', 'inspectModelInvocation', 'purgeModelInvocationContent', 'cancelModelInvocation', 'inspectProviderSpendAccount', 'auditProviderSpendAccount',
   'invokeModelStream', 'chatTurn', 'cancelChatTurn', 'findWorkspaceFiles', 'attachWorkspaceFile', 'executeOperation', 'compensateOperation', 'inspectOperation',
-  'inspectPermissionMode', 'setPermissionMode', 'inspectScratch', 'clearScratch', 'clearSessionStanding', 'setSecret', 'deleteSecret']);
+  'inspectPermissionMode', 'setPermissionMode', 'inspectScratch', 'clearScratch', 'clearSessionStanding', 'setSecret', 'deleteSecret', 'switchSecretStore']);
 export const runtimeServiceDescriptionInputSchema = z.object({}).strict().readonly();
 export const runtimeServiceDeliverySchema = z.object({ maxResultBytes: z.number().int().positive().safe() }).strict().readonly();
 const invocationOperation = (operation: RuntimeServiceOperation): boolean => operation === 'invokeModel' || operation === 'invokeModelStream' || operation === 'inspectModelInvocation'
@@ -64,8 +64,10 @@ export function isRuntimeServiceScratchOperation(operation: RuntimeServiceOperat
  * required assurance. A v18 client is outside the window: its decision is closed unanswered, never silently recorded as peer-session. */
 /** v18 (SECRET-WRITE; v17 was already pushed, so the operations start a new version): a change of one stored secret of the installation's store. No actor field: the
  * socket peer is the principal; the `secret`/`set|delete` policy cell decides; single bounded answers; current version only. */
-export function isRuntimeServiceSecretOperation(operation: RuntimeServiceOperation): operation is 'setSecret' | 'deleteSecret' {
-  return operation === 'setSecret' || operation === 'deleteSecret';
+/** SECRET-STORE-SWITCH (owner 2026-10-08): `switchSecretStore` (v24, after T4-A's v23; a v23 client cannot reach it) moves every secret into
+ * another registered store and selects it under the `secret`/`switch` cell, audited as `secret-store-switch`; a single bounded answer of store ids and counts; current version only. */
+export function isRuntimeServiceSecretOperation(operation: RuntimeServiceOperation): operation is 'setSecret' | 'deleteSecret' | 'switchSecretStore' {
+  return operation === 'setSecret' || operation === 'deleteSecret' || operation === 'switchSecretStore';
 }
 export const runtimeOperationQuerySchema = z.object({ schemaVersion: z.literal(1), scopeId: identitySchema, commandId: identitySchema }).strict().readonly();
 export type RuntimeOperationQuery = z.infer<typeof runtimeOperationQuerySchema>;
@@ -106,6 +108,7 @@ export const runtimeServiceRequestSchema = z.object({ schemaVersion: z.literal(R
       else if (value.operation === 'inspectScratch' || value.operation === 'clearScratch') parseScratchQuery(value.input);
       else if (value.operation === 'setSecret') secretSetCommandSchema.parse(value.input);
       else if (value.operation === 'deleteSecret') secretDeleteCommandSchema.parse(value.input);
+      else if (value.operation === 'switchSecretStore') secretStoreSwitchCommandSchema.parse(value.input);
       // Approval input is validated by its shared application before I/O, like the existing Run operations.
     } catch { context.addIssue({ code: z.ZodIssueCode.custom, path: ['input'], message: 'RUNTIME_SERVICE_INPUT_INVALID' }); }
   } else if (Object.hasOwn(value, 'delivery')) {
@@ -160,11 +163,12 @@ export class RuntimeServiceProtocolError extends Error {
  * The server accepts them in these versions and answers in the request's version; every other operation is current-only.
  * A mismatched non-lifecycle envelope is closed unanswered (the client's typed `LOCAL_RUNTIME_TRANSPORT`); a v18 client's describe of a v17
  * service retries at v17 and the terminal shows the build skew. v18 (SECRET-WRITE) kept [18, 17]; v20 (S02) kept [20, 19]; v21 (T2) kept [21, 20]; v22 (T3) kept
- * [22, 21]; v23 (T4 MODEL-SWITCH: `chatTurn` carries the session's pinned `reference`) keeps [23, 22]: a v21 service is outside.
+ * [22, 21]; v23 (T4 MODEL-SWITCH: `chatTurn` carries the session's pinned `reference`) kept [23, 22]; v24 (SECRET-STORE-SWITCH: `switchSecretStore`)
+ * keeps [24, 23]: a v22 service is outside.
  */
-export const RUNTIME_SERVICE_LIFECYCLE_VERSIONS = Object.freeze([RUNTIME_SERVICE_SCHEMA_VERSION, 22] as const);
+export const RUNTIME_SERVICE_LIFECYCLE_VERSIONS = Object.freeze([RUNTIME_SERVICE_SCHEMA_VERSION, 23] as const);
 export type RuntimeServiceLifecycleVersion = typeof RUNTIME_SERVICE_LIFECYCLE_VERSIONS[number];
-const lifecycleVersionSchema = z.union([z.literal(RUNTIME_SERVICE_SCHEMA_VERSION), z.literal(22)]);
+const lifecycleVersionSchema = z.union([z.literal(RUNTIME_SERVICE_SCHEMA_VERSION), z.literal(23)]);
 export const runtimeServiceLifecycleRequestSchema = z.object({ schemaVersion: lifecycleVersionSchema, requestId: identitySchema,
   operation: z.enum(['describeService', 'shutdownService']), input: z.unknown() }).strict()
   .refine(value => Object.hasOwn(value, 'input'), { path: ['input'], message: 'RUNTIME_SERVICE_INPUT_REQUIRED' }).readonly();

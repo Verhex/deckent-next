@@ -58,7 +58,11 @@ export function classifyProviderRejection(evidence: { readonly reason: ModelInvo
   if (data === undefined) return status === 429 ? 'limit-reached' : null;
   const error = providerError(data);
   // Anthropic: the tier cap is a 429 with `enforced_spend_limit_reached` (no retry-after); OpenAI: `insufficient_quota`.
-  if (status === 429) return error.code === 'enforced_spend_limit_reached' || error.code === 'insufficient_quota' ? 'spend-limit' : 'rate-limit';
+  if (status === 429) {
+    if (error.code === 'enforced_spend_limit_reached' || error.code === 'insufficient_quota') return 'spend-limit';
+    // Only a provider error that names a rate limit is one (Astra 2450 a); an unreadable or unrecognized body stays limit-reached.
+    return error.type === 'rate_limit_error' || /^rate_limit/.test(error.code) ? 'rate-limit' : 'limit-reached';
+  }
   // Anthropic: a limit the user set (organization or workspace) is a 400 `invalid_request_error` with this message.
   if (status === 400 && error.type === 'invalid_request_error' && /^You have reached your specified (?:workspace )?API usage limits/.test(error.message)) return 'spend-limit';
   return null;

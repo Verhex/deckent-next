@@ -422,6 +422,8 @@ refresh, usage and dogfood closure remain open.
   v21 was pushed with alpha.10 (released). v22 (T3 `wave/tui-3`, 2026-10-07, unpushed): approval records whose subject is `config-change` reach
   clients (list/inspect/decide); a v21 client still has them hidden (`approvalSubjectsHiddenFromProtocol`). Lifecycle window [22,21]. No other T3
   wire field (MCP trust and proposal windows reuse `approval.requested`; read-tool `diagnostic` stays in the service).
+  v23 (T4 MODEL-SWITCH) was pushed with alpha.14. v24 (SECRET-STORE-SWITCH, owner 2026-10-08, unpushed): one operation `switchSecretStore`;
+  lifecycle window [24,23] (a v22 service is outside; a v23 client cannot reach the switch).
   v18 was introduced 2026-09-29 (SECRET-WRITE, lead decision under this rule) as the single v18 package: the control operations
   `setSecret` / `deleteSecret`; lifecycle window [18,17]; every other v17 operation is unchanged in v18. It is unreleased until pushed, and
   further v18 items add to it without another bump. Like every bump, the window's older version is lifecycle-only: a v17 client can

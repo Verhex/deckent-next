@@ -146,8 +146,9 @@ reached, the terminal says so in plain words; spend limits stay in your provider
 
 **Strict install**, for keys no other program on the machine should read:
 
-1. Select the encrypted store: `deckent config set secrets '{"store":"core.secret-store.encrypted-file@1"}' --global`, then restart the
-   Deckent service (the setting applies at restart; `deckent doctor` shows the active store).
+1. Move your keys into the encrypted store: `deckent secret store` lists the registered stores to pick from; it copies every key,
+   checks it, selects the new store and then removes the old copy (a move to a weaker store asks first). Installations set up
+   with `deckent init policy` on Linux, WSL and macOS start on the encrypted store already.
 2. Keep other AI tools out of Deckent's state folder, e.g. `Read` deny rules for the store files in Claude Code's
    `~/.claude/settings.json`. This stops their file tools and common shell commands, not every script.
 3. Planned: run the Deckent service under its own OS user (or the macOS Keychain) so no program of your account can read the keys.

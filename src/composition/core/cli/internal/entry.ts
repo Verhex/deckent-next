@@ -19,7 +19,7 @@ import { applyConfiguredPoolCapacity, inspectConfiguredPoolCapacity, applyConfig
 import { ensureConfiguredRuntimeService, openConfiguredTerminalHistory, openConfiguredTerminalSessions, restartConfiguredRuntimeService, stopConfiguredRuntimeService } from './runtime-autostart.js';
 import { main as runCli } from '#surfaces/index.js';
 import { previewSuppliedInstallation, inspectSuppliedInstallation, applySuppliedInstallation, resumeInstallation,
-  applyPolicyTemplateInstallation, inspectPolicyTemplate, previewPolicyTemplateInstallation, upgradePolicyTemplateInstallation } from '#composition/core/installation/index.js';
+  applyPolicyTemplateInstallationWithSecretDefault, inspectPolicyTemplate, previewPolicyTemplateInstallation, upgradePolicyTemplateInstallation } from '#composition/core/installation/index.js';
 import { inspectConfiguredShellRealm, runConfiguredMcpCommand } from '#composition/core/agent-turn/index.js';
 import { getConfigFieldDefault, isMainModule } from '#platform/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
@@ -27,7 +27,7 @@ import { inspectDeclaredModels, inspectModelBinding } from '#composition/core/pr
 import { prepareNativeCodingProfile } from '#composition/core/native-coding/index.js';
 import { assertTerminalChatReady, attachTerminalMentions, completeTerminalChatTurn, describeTerminalChat, findTerminalMentions, streamTerminalAgentTurn } from '#composition/core/terminal-chat/index.js';
 import { assessConfiguredModelInvocationDelivery } from '#composition/core/model-invocation/index.js';
-import { inspectConfiguredSecretStore, listConfiguredSecretNames } from '#composition/core/secrets/index.js';
+import { inspectConfiguredSecretStore, listConfiguredSecretNames, listConfiguredSecretStores } from '#composition/core/secrets/index.js';
 export async function main(argv: readonly string[] = process.argv.slice(2)) {
   const root = process.cwd(), runtime = createConfiguredRuntimeClient(root);
   const isRuntimeServe = argv[0] === 'runtime' && argv[1] === 'serve';
@@ -69,6 +69,8 @@ export async function main(argv: readonly string[] = process.argv.slice(2)) {
       endpointChoices: kind.endpoint.choices })),
     endpoint: providerEndpoint, probe: (input, signal) => probeProviderConnection(input, signal ? { signal } : {}) },
     deleteSecret: (projectRoot, input, options) => createConfiguredRuntimeClient(projectRoot, options).deleteSecret(input),
+    listSecretStores: listConfiguredSecretStores,
+    switchSecretStore: (projectRoot, input, options) => createConfiguredRuntimeClient(projectRoot, options).switchSecretStore(input),
     inspectDeclaredModels, inspectModelBinding, prepareCodingProfile: prepareNativeCodingProfile,
     clearSessionStanding: input => runtime.clearSessionStanding(input), renewApproval: input => runtime.renewApproval(input), listApprovals: input => runtime.listApprovals(input), inspectApproval: input => runtime.inspectApproval(input), decideApproval: input => runtime.decideApproval(input),
     invokeModel: invokeRuntimeModel,
@@ -113,7 +115,7 @@ export async function main(argv: readonly string[] = process.argv.slice(2)) {
       catch (error) { throw queryFailure(error); }
     },
     previewPolicyTemplateInstallation: (projectRoot, scopeId) => previewPolicyTemplateInstallation(projectRoot, scopeId).catch(error => { throw queryFailure(error); }),
-    applyPolicyTemplateInstallation: (projectRoot, scopeId) => applyPolicyTemplateInstallation(projectRoot, scopeId).catch(error => { throw queryFailure(error); }),
+    applyPolicyTemplateInstallation: (projectRoot, scopeId) => applyPolicyTemplateInstallationWithSecretDefault(projectRoot, scopeId).catch(error => { throw queryFailure(error); }),
     upgradePolicyTemplateInstallation: (projectRoot, scopeId, apply, expect, person) => upgradePolicyTemplateInstallation(projectRoot, scopeId, apply, expect, {}, process.getuid?.(), person)
       .catch(error => { throw queryFailure(error); }),
     inspectPolicyTemplate: projectRoot => inspectPolicyTemplate(projectRoot),

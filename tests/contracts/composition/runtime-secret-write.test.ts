@@ -115,7 +115,7 @@ describe.skipIf(process.platform !== 'linux')('secret set/delete through the run
     expect(changes(events)).toEqual(['set', 'delete', 'delete'].map(action => ({ kind: 'secret-change', action, name: 'PROVIDER_TOKEN',
       backend: 'core.secret-store.file@1', decision: { effect: 'allow', ruleId: 'first-run-secret-store' } })));
     // The principal is the socket peer (never a request field); the policy revision is the template's.
-    expect(events[0]).toMatchObject({ scopeId: 'installation', principal: me, policyRevision: expect.stringContaining('first-run-template-v5') });
+    expect(events[0]).toMatchObject({ scopeId: 'installation', principal: me, policyRevision: expect.stringContaining('first-run-template-v6') });
     expect(await f.scanForCanary()).toEqual([]);
   }, 60_000);
 
@@ -182,7 +182,7 @@ describe.skipIf(process.platform !== 'linux')('secret set/delete through the run
     await new Promise<void>((resolve, reject) => { socket.once('connect', resolve); socket.once('error', reject); });
     const chunks: Buffer[] = []; socket.on('data', chunk => { chunks.push(chunk as Buffer); });
     const closed = new Promise<void>(resolve => socket.once('close', () => resolve()));
-    socket.end(encodeServiceFrame({ schemaVersion: 23, requestId: `budget-${maxResultBytes}`, operation, delivery: { maxResultBytes },
+    socket.end(encodeServiceFrame({ schemaVersion: 24, requestId: `budget-${maxResultBytes}`, operation, delivery: { maxResultBytes },
       input: { schemaVersion: 1, scopeId: 'installation', ...input } }, 262144));
     await closed;
     return JSON.parse(Buffer.concat(chunks).subarray(4).toString('utf8')) as { ok: boolean; result?: unknown; error?: { code: string } };

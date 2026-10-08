@@ -81,6 +81,8 @@ describe.skipIf(process.platform !== 'linux')('deckent init policy --upgrade --p
       { id: 'first-run-mcp-servers', effect: 'allow', actions: ['invoke'], scopes: 'all', principals: [PERSON], resource: { kind: 'mcp-server', ids: 'all' } },
       { id: 'first-run-mcp-propose-tool', effect: 'allow', actions: ['invoke'], scopes: [SCOPE], principals: [PERSON], resource: { kind: 'agent-tool', ids: ['propose_mcp_server'] } },
       { id: 'first-run-policy-administer', effect: 'allow', actions: ['execute'], scopes: [SCOPE], principals: [PERSON], resource: { kind: 'operation', ids: ['policy.administer'] } },
+      // v6 (owner 2026-10-08): a hand-built secret rule of set/delete does not cover the store switch; the named person gets it here.
+      { id: 'first-run-secret-switch', effect: 'allow', actions: ['switch'], scopes: [SCOPE], principals: [PERSON], resource: { kind: 'secret', ids: 'all' } },
     ]);
     expect(await f.bytes()).toBe(before);
     expect(await f.archive()).toEqual([]);
@@ -97,7 +99,7 @@ describe.skipIf(process.platform !== 'linux')('deckent init policy --upgrade --p
     expect(entries).toHaveLength(1);
     const record = JSON.parse(await readFile(join(f.root, '.deckent', 'audit', 'authority-revisions', entries[0]!), 'utf8')) as Record<string, unknown> & {
       before: { policy: unknown }; after: { policy: unknown } };
-    expect(record).toMatchObject({ state: 'committed', key: expect.stringMatching(/^policy-template-upgrade-v5-/) });
+    expect(record).toMatchObject({ state: 'committed', key: expect.stringMatching(/^policy-template-upgrade-v6-/) });
     expect(record.before.policy).toEqual(handBuilt());
     expect(record.after.policy).toEqual(after);
 
@@ -146,7 +148,7 @@ describe.skipIf(process.platform !== 'linux')('deckent init policy --upgrade --p
     const v5 = JSON.parse(await readFile(policyPath, 'utf8')) as { grants: { id: string; principals: { issuer: string; subject: string }[]; resource: { ids: unknown } }[] };
     const owner = v5.grants[0]!.principals[0]!;
     const v4 = { ...v5, revision: 'first-run-template-v4', grants: v5.grants.filter(rule => !['first-run-mcp-servers', 'first-run-mcp-call-operation', 'first-run-policy-administer',
-      'first-run-approvals'].includes(rule.id)).map(rule => rule.id === 'first-run-read-tools' ? { ...rule, resource: { ...rule.resource,
+      'first-run-approvals', 'first-run-secret-switch'].includes(rule.id)).map(rule => rule.id === 'first-run-read-tools' ? { ...rule, resource: { ...rule.resource,
       ids: (rule.resource.ids as string[]).filter(name => name !== 'propose_mcp_server') } } : rule) };
     await writeFile(policyPath, `${JSON.stringify(v4)}\n`, { mode: 0o600 });
     const v4Bytes = await readFile(policyPath, 'utf8');
