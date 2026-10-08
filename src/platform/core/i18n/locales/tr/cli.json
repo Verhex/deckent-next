@@ -804,7 +804,7 @@
   "terminal.slash.watchRuns": "İşleri yerinde güncellenen bir pencerede canlı izle",
   "terminal.slash.watchStop": "İşçi ve iş izlemeyi durdur",
   "terminal.slash.status": "Deckent'in çalışıp çalışmadığını, sürümü ve modeli göster",
-  "terminal.slash.workers": "İşçileri kartlar olarak listele",
+  "terminal.slash.workers": "İşçileri ve her birinin ne yaptığını listele",
   "terminal.slash.run": "Bir işi ayrıntılı göster",
   "terminal.slash.runs": "Bu kapsamdaki tüm işleri listele",
   "terminal.slash.runUsage": "Kullanım: /run <runId>",

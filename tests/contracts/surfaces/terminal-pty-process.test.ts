@@ -202,7 +202,9 @@ describe.skipIf(process.platform === 'win32')('deckent terminal in a real pseudo
     const f = await project();
     const result = await inPty(f.projectRoot, f.env, ['terminal', 'workline', '--scope', 'pty-scope'], [
       ['Deckent workline', '/workers\r'],
-      ['POLICY_UNAVAILABLE', 'hello\r'],
+      // SLASH-WINDOWS (SW-2): the policy refusal is shown in the /workers window; Esc closes it and leaves the one system line.
+      ['POLICY_UNAVAILABLE', '\u001b'],
+      ['◆ Deckent system · The trusted policy', 'hello\r'],
       ['TERMINAL_CHAT_NOT_CONFIGURED', '/nope\r'],
       // SLASH-WINDOWS: an unknown command is a small window naming it (no error line in the chat); Esc closes it.
       ['is not a Deckent command', '\u001b'],

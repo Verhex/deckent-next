@@ -386,7 +386,8 @@ export function WorklineApp(props: WorklineProps) {
   const localWindowOpen = slot.open;
   const ledgerLabels: LedgerEntryLabels = { system: labels.work?.jobs?.system ?? props.info?.labels.systemLabel, runCard: labels.runCard, workerCard: labels.workerCard, chatUser: labels.roleUser, chatAssistant: labels.roleAssistant,
     render: labels.render, ...(labels.work ? { workerLine: labels.work.workerLine } : {}) };
-  const choosing = resumePicker !== null || work.pickerOpen || settings.openKind !== null || localWindowOpen;
+  // A window a slash command opened waits for the person, so the status row says Ready, not Working (an approval card during a turn keeps Working).
+  const choosing = resumePicker !== null || work.pickerOpen || (work.modalOpen && !turnRunning) || settings.openKind !== null || localWindowOpen;
   const fullAccessLine = mode.mode === 'full-access' ? labels.mode?.fullAccessLine : undefined, glyphs = useRenderGlyphs();
   // T2 T-MODE-CYCLE: Shift+Tab (Alt+M where the console cannot report Shift+Tab, e.g. Windows without VT input) steps the permission mode
   // while the composer owns the keyboard; an open card, picker or any window (stack not idle, `PermissionModeKeys`) owns Shift+Tab then. A running turn owns its

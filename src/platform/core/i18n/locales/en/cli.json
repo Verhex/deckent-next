@@ -804,7 +804,7 @@
   "terminal.slash.watchRuns": "Follow runs live in a window that updates in place",
   "terminal.slash.watchStop": "Stop following workers and runs",
   "terminal.slash.status": "Show whether Deckent is running, its version and the model",
-  "terminal.slash.workers": "List the workers as cards",
+  "terminal.slash.workers": "List the workers and what each is doing",
   "terminal.slash.run": "Show one run in detail",
   "terminal.slash.runs": "List every run of this scope",
   "terminal.slash.runUsage": "Usage: /run <runId>",
