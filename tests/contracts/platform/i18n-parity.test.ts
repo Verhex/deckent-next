@@ -12,6 +12,8 @@ describe('K2 intentional reconciliation and unchanged-template evidence', () => 
       const expected = oracle.locales[locale], keys = expected.groups.flat();
       expect(keys).toHaveLength(expected.count);
       const changes = JSON.parse(await readFile(new URL('cli-text-changes.json', fixtures), 'utf8')) as Record<Locale, Record<string, { before: string; after: string | null }>>;
+      const docsChanges = JSON.parse(await readFile(new URL('docs-guard-changes.json', fixtures), 'utf8')) as typeof changes;
+      Object.assign(changes[locale], docsChanges[locale]);
       for (const [key, change] of Object.entries(changes[locale])) expect(MESSAGE_REGISTRY.catalogs[locale][key]).toBe(change.after ?? undefined);
       const actual = keys.map(key => [key, changes[locale][key]?.before ?? MESSAGE_REGISTRY.catalogs[locale][key]]);
       expect(createHash('sha256').update(JSON.stringify(actual)).digest('hex')).toBe(expected.sha256);

@@ -135,6 +135,7 @@ export const CLI_CATALOG = [
     action('list', 'setup', 'cli.help.action.secret.list', 'cli.help.secret'),
     action('set', 'setup', 'cli.help.action.secret.set', 'cli.help.secret'),
     action('delete', 'setup', 'cli.help.action.delete', 'cli.help.secret'),
+    action('store', 'setup', 'cli.help.action.secret.store', 'cli.help.secret'),
   ] },
   { name: 'toolchains', group: 'setup', summary: 'cli.help.summary.toolchains', detail: 'cli.help.toolchains', children: [
     action('update', 'setup', 'cli.help.action.update', 'cli.help.toolchains'),
