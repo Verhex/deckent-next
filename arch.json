@@ -1109,7 +1109,8 @@
         "src/surfaces/core/terminal-labels",
         "src/surfaces/core/work-labels",
         "src/surfaces/core/terminal-panels",
-        "src/surfaces/core/terminal-picker"
+        "src/surfaces/core/terminal-picker",
+        "src/domain/core/model-activation"
       ],
       "plan": "SURFACES"
     },

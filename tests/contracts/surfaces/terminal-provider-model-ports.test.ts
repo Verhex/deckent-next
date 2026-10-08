@@ -6,6 +6,7 @@ import { clearConfigCache } from '#platform/index.js';
 import { registerProviderConfig } from '#adapters/index.js';
 import { providerEndpoint } from '#adapters/core/provider-connect/index.js';
 import { modelPanelSource, providerPanelPort, type ProviderConnectHost, type TerminalLaunchContext } from '#surfaces/core/cli-terminal/index.js';
+import type { ModelConnectCommand, ModelConnectResult } from '#domain/index.js';
 
 // T4-A ports over the host's handlers (no runtime, no network): `/provider` runs the free check and sends the key only to the secret store
 // handler, and only when the check passes; `/model` lists declared models with the first missing precondition as the reason.
@@ -68,7 +69,7 @@ describe('/provider port', () => {
     expect(outcome.lines.map(line => line.tone ?? '')).toEqual(['success', 'success', 'muted']);
     expect(outcome.lines.map(line => `${line.label}|${line.text}`)).toEqual(['Check|The provider accepted the key.',
       'Key|stored as DECKENT_ANTHROPIC_KEY in the secret store (core.secret-store.file@1); the value is never shown',
-      'Next|No model uses DECKENT_ANTHROPIC_KEY yet. Binding models to it is a governed catalog step; see: deckent models catalog list --scope scope']);
+      'Next|No model uses DECKENT_ANTHROPIC_KEY yet: choose "Connect a model" on this provider.']);
     expect(JSON.stringify(outcome)).not.toContain(CANARY);
     // The custody words `doctor` uses for the backend the key went to (SECRET-AT-REST 1c).
     expect(port.transparency[0]!.text).toBe('Keys are plain text on disk (a 0600 file only you can read). The encrypted store is recommended: deckent secret store moves the keys and removes the plain text.');
@@ -127,6 +128,70 @@ describe('/provider addresses (owner 2026-10-08, D3: chosen from a list; a typed
   });
 });
 
+describe('/provider port: connect a model (T4-B)', () => {
+  const generic = { id: 'openai-compatible', labelKey: 'tui.provider.kind.openaiCompatible', available: true, endpointDefault: null, endpointEditable: true, keyRequired: true,
+    secretName: null, probePath: '/v1/models', endpointChoices: [], connectFamily: 'openai-chat-completions', seeded: false };
+  const openai = { id: 'openai-api', labelKey: 'tui.provider.kind.openaiApi', available: true, endpointDefault: 'https://api.openai.com/v1', endpointEditable: false, keyRequired: true,
+    secretName: 'DECKENT_OPENAI_KEY', probePath: '/v1/models', endpointChoices: [], connectFamily: 'openai-chat-completions', seeded: true };
+  const host = (results: ModelConnectResult[]) => {
+    const commands: ModelConnectCommand[] = [];
+    const connect: ProviderConnectHost = { kinds: [openai, generic], endpoint: providerEndpoint, probe: async () => ({ outcome: 'ok', httpStatus: 200, key: 'verified' }),
+      secretName: (kind, endpoint) => kind === 'openai-compatible' ? (endpoint ? `DECKENT_OAICOMPAT_${new URL(endpoint).hostname.toUpperCase().replace(/[^A-Z0-9]+/gu, '_')}` : null)
+        : kind === 'openai-api' ? 'DECKENT_OPENAI_KEY' : null,
+      seedModels: async kind => kind === 'openai-api' ? [{ nativeId: 'gpt-6-luna', displayName: 'GPT-6 Luna' }] : [] };
+    return { commands, connect, extra: {
+      connectModel: async (_root: string, command: ModelConnectCommand) => { commands.push(command); return results.shift()!; },
+      inspectDeclaredModels: async () => ({ schemaVersion: 1, status: 'declared', availability: 'not-observed', catalog: { schemaVersion: 1, revision: 'c', providers: [
+        { id: 'vendor-a', version: 1, models: [{ id: 'a', version: 1, nativeId: 'native-a', protocols: [{ family: 'openai-chat-completions', version: 'v1', capabilities: [] }] }] },
+        { id: 'claude', version: 1, models: [{ id: 'c', version: 1, nativeId: 'native-c', protocols: [{ family: 'anthropic-messages', version: '2023-06-01', capabilities: [] }] }] }] } }) as never } };
+  };
+  const result = (status: 'connected' | 'approval-pending'): ModelConnectResult => ({ schemaVersion: 1, operation: 'models.connect', commandId: 'x', scopeId: 'scope',
+    connection: 'openai-api', status, reference: { providerId: 'openai-api', providerVersion: 1, modelId: 'gpt-6-luna', modelVersion: 1 }, credentialRef: 'DECKENT_OPENAI_KEY',
+    keyStored: true, steps: { catalog: 'written', declaration: 'written', profile: status === 'connected' ? 'written' : 'present', activation: status === 'connected' ? 'written' : 'present', carried: 0 },
+    tariff: 'unmetered', approval: status === 'connected' ? null : { approvalId: 'appr-1', keyPath: 'provider_invocation_profiles', layer: 'project' }, service: 'stale' });
+
+  it('lists each kind\'s models (seed or declared in its protocol family), locks the action until the vendor key is stored, and names the derived key before saving', async () => {
+    const { root, options } = await project({});
+    const { connect, extra } = host([]);
+    let port = providerPanelPort(root, 'scope', { ...secrets([]).host, ...extra, providerConnect: connect }, options, 'en', errorText);
+    let kinds = (await port.inspect()).kinds;
+    expect(kinds.map(kind => [kind.id, kind.models, kind.modelBlocked])).toEqual([
+      ['openai-api', [{ id: 'seed:gpt-6-luna', label: 'GPT-6 Luna', detail: 'gpt-6-luna' }], 'Store its key first (Connect).'],
+      // The generic row lists only declared models speaking its family (never the Anthropic one); its key name depends on the address chosen next.
+      ['openai-compatible', [{ id: 'ref:vendor-a@1/a@1', label: 'a', detail: 'vendor-a@1/a@1' }], null]]);
+    expect(port.keyName!('openai-compatible', 'https://llm.example.com')).toBe('DECKENT_OAICOMPAT_LLM_EXAMPLE_COM');
+    port = providerPanelPort(root, 'scope', { ...secrets(['DECKENT_OPENAI_KEY']).host, ...extra, providerConnect: connect }, options, 'en', errorText);
+    kinds = (await port.inspect()).kinds;
+    expect(kinds[0]!.modelBlocked).toBeNull();
+    // A generic connect stores the key under the derived name of the chosen address.
+    const store = secrets([]);
+    port = providerPanelPort(root, 'scope', { ...store.host, ...extra, providerConnect: connect }, options, 'en', errorText);
+    await port.connect({ kind: 'openai-compatible', endpoint: 'https://llm.example.com', key: CANARY });
+    expect(store.sets).toEqual([{ schemaVersion: 1, scopeId: 'scope', name: 'DECKENT_OAICOMPAT_LLM_EXAMPLE_COM', value: CANARY }]);
+  });
+
+  it('connects through models.connect: rows and one summary; a pending approval keeps its command id for the retry; never a key value', async () => {
+    const { root, options } = await project({});
+    const { connect, extra, commands } = host([result('approval-pending'), result('connected')]);
+    const port = providerPanelPort(root, 'scope', { ...secrets(['DECKENT_OPENAI_KEY']).host, ...extra, providerConnect: connect }, options, 'en', errorText);
+    const pending = await port.connectModel!({ kind: 'openai-api', endpoint: null, model: 'seed:gpt-6-luna' });
+    expect(pending).toMatchObject({ connected: false, title: 'Waiting for approval: gpt-6-luna', approvalId: 'appr-1',
+      summary: 'gpt-6-luna waits for your approval; answer the card, then connect it again.' });
+    const done = await port.connectModel!({ kind: 'openai-api', endpoint: null, model: 'seed:gpt-6-luna' });
+    expect(commands.map(command => command.commandId)).toEqual([commands[0]!.commandId, commands[0]!.commandId]);
+    expect(commands[0]).toMatchObject({ schemaVersion: 1, scopeId: 'scope', connection: 'openai-api', endpoint: null, model: { nativeId: 'gpt-6-luna' } });
+    expect(done.title).toBe('Model connected: gpt-6-luna'); expect(done.summary).toBe('gpt-6-luna is connected; choose it with /model.');
+    expect(done.lines.map(line => line.label)).toEqual(['Model', 'Steps', 'Key', 'Spending', 'Service', 'Next']);
+    expect(done.lines.find(line => line.label === 'Spending')!.tone).toBe('warning');
+    expect(JSON.stringify([pending, done, commands])).not.toContain(CANARY);
+    // A typed refusal stays in the window as its reason.
+    const refused = await providerPanelPort(root, 'scope', { ...secrets([]).host, connectModel: async () => { throw Object.assign(new Error('x'), { code: 'MODEL_CONNECT_MODEL_UNKNOWN' }); },
+      providerConnect: connect }, options, 'en', errorText).connectModel!({ kind: 'openai-api', endpoint: null, model: 'seed:nope' });
+    expect(refused).toMatchObject({ connected: false, title: 'Model not connected: nope', approvalId: null });
+    expect(refused.lines.at(-1)!.text).toBe('ERR:MODEL_CONNECT_MODEL_UNKNOWN');
+  });
+});
+
 describe('/model source', () => {
   const catalog = { schemaVersion: 1, revision: 'catalog-1', providers: [{ id: 'local-openai', version: 1, models: ['chat', 'coder', 'fast', 'keyless'].map(id => ({ id, version: 1,
     nativeId: `native-${id}`, protocols: [{ family: 'openai-chat-completions', version: 'v1', capabilities: [] }] })) }] };
@@ -148,7 +213,7 @@ describe('/model source', () => {
     expect(view.choices.map(choice => [choice.reference.modelId, choice.configured, choice.blocked])).toEqual([
       ['chat', true, null],
       ['coder', false, 'Not activated in this scope.'],
-      ['fast', false, 'Not connected in this scope: no invocation profile names this model. Connect the provider with /provider; binding a model to that connection is a governed configuration step.'],
+      ['fast', false, 'Not connected in this scope: no invocation profile names this model. In /provider choose its provider, then "Connect a model".'],
       ['keyless', false, 'Its key DECKENT_MISSING_KEY is not in the secret store. Connect the provider with /provider.']]);
     // Human words in the row; the exact reference and the fixing command only as dimmed lines of the focused row.
     expect(view.choices.map(choice => choice.detail)).toEqual(['ready (connection not probed)', 'cannot be chosen now', 'cannot be chosen now', 'cannot be chosen now']);

@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 import { previewConfiguredIdentityProfile, listIdentityProfiles } from '#composition/core/identity-profile/index.js';
 import { ensureConfiguredTerminalIdentity, inspectConfiguredInstallationBinding, resolveConfiguredInstallationIdentity, loadConfiguredInstallationIdentity, loadConfiguredProjectIdentity } from '#composition/core/scoped-request/index.js';
-import { unifiedDiff, readInstallationProfileFile, isSelfSourceProject, PROVIDER_CONNECT_KINDS, probeProviderConnection, providerEndpoint } from '#adapters/index.js';
+import { unifiedDiff, readInstallationProfileFile, isSelfSourceProject, PROVIDER_CONNECT_KINDS, probeProviderConnection, providerEndpoint, providerConnectFamily, providerConnectKind,
+  providerConnectSecretName, readProviderConnectSeed } from '#adapters/index.js';
 import { composeCore } from '#composition/core/root/index.js';
 import { createConfiguredConfigApplication, resolveConfiguredConfigPrincipal, configuredConfigChoiceSources } from '#composition/core/config/index.js';
 import { inspectConfiguredWorkerTranscript, inspectConfiguredWorkers } from '#composition/core/worker-observation/index.js';
@@ -67,8 +68,14 @@ export async function main(argv: readonly string[] = process.argv.slice(2)) {
     // the key then goes only to `setSecret` above (runtime service, audited by name). No environment variable, file or worker sees it.
     providerConnect: { kinds: PROVIDER_CONNECT_KINDS.map(kind => ({ id: kind.id, labelKey: kind.labelKey, available: kind.available, endpointDefault: kind.endpoint.default,
       endpointEditable: kind.endpoint.editable, keyRequired: kind.key?.required ?? false, secretName: kind.key?.secretName ?? null, probePath: kind.probe?.path ?? null,
-      endpointChoices: kind.endpoint.choices })),
-    endpoint: providerEndpoint, probe: (input, signal) => probeProviderConnection(input, signal ? { signal } : {}) },
+      endpointChoices: kind.endpoint.choices, connectFamily: providerConnectFamily(kind), seeded: Boolean(kind.connect?.seed) })),
+    endpoint: providerEndpoint, probe: (input, signal) => probeProviderConnection(input, signal ? { signal } : {}),
+    // T4-B: the per-connection key name (the generic row derives it from the host) and a seeded kind's models (exact ids from its packaged seed).
+    secretName: (id, endpoint) => { const kind = providerConnectKind(id); if (!kind) return null; const base = endpoint === null ? null : providerEndpoint(endpoint);
+      return providerConnectSecretName(kind, base?.ok ? base.base : null); },
+    seedModels: async id => { const seed = providerConnectKind(id)?.connect?.seed; if (!seed) return [];
+      return (await readProviderConnectSeed(seed)).providers.flatMap(provider => provider.models.map(model => ({ nativeId: model.nativeId,
+        displayName: (model as { displayName?: string }).displayName ?? model.nativeId }))); } },
     deleteSecret: (projectRoot, input, options) => createConfiguredRuntimeClient(projectRoot, options).deleteSecret(input),
     listSecretStores: listConfiguredSecretStores,
     switchSecretStore: (projectRoot, input, options) => createConfiguredRuntimeClient(projectRoot, options).switchSecretStore(input),

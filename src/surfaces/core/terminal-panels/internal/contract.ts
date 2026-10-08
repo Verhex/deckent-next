@@ -152,11 +152,18 @@ export type ProviderPanelKind = Readonly<{ id: string; label: string; detail: st
   endpointEditable: boolean; endpointDefault: string | null; keyRequired: boolean;
   /** Owner 2026-10-08 (D3): where the kind takes an address it is chosen from this list (configured server, known local servers, the provider's
    * default); a typed address is only the list's last row, checked and previewed. A kind with a fixed endpoint has none. */
-  endpointChoices: readonly Readonly<{ id: string; label: string; url: string }>[] }>;
+  endpointChoices: readonly Readonly<{ id: string; label: string; url: string }>[];
+  /** T4-B: the models this kind can connect (its catalog seed, or the provider catalog's declared models), chosen from the list; empty: none.
+   * `modelBlocked`: why "connect a model" cannot be offered now (e.g. no key stored yet), null when it can. */
+  models: readonly Readonly<{ id: string; label: string; detail: string }>[]; modelBlocked: string | null }>;
 export type ProviderPanelView = Readonly<{ title: string; kinds: readonly ProviderPanelKind[]; notes: readonly string[] }>;
 export type ProviderConnectRequest = Readonly<{ kind: string; endpoint: string | null; key: string | null }>;
 /** A connect's typed result as labelled rows (no key, no answer body); `stored`: the key went to the secret store. */
 export type ProviderConnectOutcome = Readonly<{ stored: boolean; title: string; lines: readonly PanelLine[] }>;
+/** T4-B `models.connect` from the window: the model chosen from the kind's list (and the address, where the kind takes one). */
+export type ProviderModelRequest = Readonly<{ kind: string; endpoint: string | null; model: string }>;
+/** Its typed result as labelled rows, the one system summary line it leaves, and the approval to answer when policy asked for one. */
+export type ProviderModelOutcome = Readonly<{ connected: boolean; title: string; lines: readonly PanelLine[]; summary: string; approvalId: string | null }>;
 export interface ProviderPanelPort {
   inspect(): Promise<ProviderPanelView>;
   /** A typed address checked by the endpoint rule (https anywhere, plain http only on this machine): the base it becomes and the URL the free
@@ -166,12 +173,18 @@ export interface ProviderPanelPort {
   connect(request: ProviderConnectRequest): Promise<ProviderConnectOutcome>;
   /** Removes the kind's stored key through the runtime service. */
   disconnect(kind: string): Promise<readonly string[]>;
+  /** T4-B: the key's store name for this kind at this address (the generic row derives it from the host), shown before anything is saved. */
+  keyName?(kind: string, endpoint: string | null): string | null;
+  /** T4-B: connects the chosen model through the governed `models.connect` operation (absent: the action is not offered). */
+  connectModel?(request: ProviderModelRequest): Promise<ProviderModelOutcome>;
   /** The transparency rows the key step shows: how the key is kept and who else can read it. */
   readonly transparency: readonly PanelLine[];
 }
 export interface ProviderPanelLabels {
   readonly title: string; readonly hints: string;
-  readonly actions: Readonly<Record<'connect' | 'replace' | 'disconnect', string>>;
+  readonly actions: Readonly<Record<'connect' | 'replace' | 'disconnect' | 'model', string>>;
+  /** T4-B: the model list's title (`{kind}`), its empty note, and the key-name row the key step shows. */
+  readonly modelTitle: string; readonly modelEmpty: string; readonly keyName: string;
   readonly endpointTitle: string; readonly endpointHint: string;
   /** The list's last row (a typed address) and its preview question: title, the two rows' labels, the key row. */
   readonly endpointOther: string; readonly previewTitle: string; readonly previewAddress: string; readonly previewCheck: string; readonly previewKeys: string;

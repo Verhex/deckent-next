@@ -52,3 +52,9 @@ export function connectionAdapter(kind: ProviderConnectKind, input: Readonly<{ e
   return Object.freeze({ adapter: { id: OPENAI_CHAT_HTTP_ADAPTER_ID, version: OPENAI_CHAT_HTTP_ADAPTER_VERSION, definition: definition as unknown as JsonObject },
     protocol: { family: OPENAI_CHAT_COMPLETIONS_FAMILY, version: OPENAI_CHAT_COMPLETIONS_VERSION }, tariff: 'unmetered' });
 }
+
+/** The protocol family a model connected to this kind must speak (its adapter's), or null when the kind connects no model. */
+export function providerConnectFamily(kind: ProviderConnectKind): string | null {
+  if (!kind.connect) return null;
+  return kind.connect.adapter === ANTHROPIC_MESSAGES_HTTP_ADAPTER_ID ? anthropicMessagesProtocol.family : OPENAI_CHAT_COMPLETIONS_FAMILY;
+}

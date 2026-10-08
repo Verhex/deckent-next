@@ -145,5 +145,6 @@
   "workspace.tools.header.script",
   "tui.provider.kind.openaiApi",
   "tui.provider.kind.deepseekApi",
-  "tui.provider.kind.zaiApi"
+  "tui.provider.kind.zaiApi",
+  "tui.provider.model.field.model"
 ]

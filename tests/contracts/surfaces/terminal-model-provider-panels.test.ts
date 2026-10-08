@@ -113,14 +113,22 @@ describe('/model window', () => {
 
 const KINDS: ProviderPanelView = { title: 'Providers', notes: [], kinds: [
   { id: 'anthropic-api', label: 'Anthropic API', detail: 'not connected', blocked: null, keyName: 'DECKENT_ANTHROPIC_KEY', keyStored: false, endpointEditable: false,
-    endpointDefault: 'https://api.anthropic.com', keyRequired: true, endpointChoices: [] },
+    endpointDefault: 'https://api.anthropic.com', keyRequired: true, endpointChoices: [], models: [], modelBlocked: null },
   { id: 'local-openai', label: 'Local server', detail: 'key DECKENT_LOCAL_ENDPOINT_KEY stored · 1 model profile(s) use it', blocked: null, keyName: 'DECKENT_LOCAL_ENDPOINT_KEY',
     keyStored: true, endpointEditable: true, endpointDefault: null, keyRequired: false,
-    endpointChoices: [{ id: 'vllm', label: 'vLLM on this machine', url: 'http://127.0.0.1:8000' }, { id: 'ollama', label: 'Ollama on this machine', url: 'http://127.0.0.1:11434' }] },
+    endpointChoices: [{ id: 'vllm', label: 'vLLM on this machine', url: 'http://127.0.0.1:8000' }, { id: 'ollama', label: 'Ollama on this machine', url: 'http://127.0.0.1:11434' }],
+    models: [], modelBlocked: null },
   { id: 'chatgpt-login', label: 'ChatGPT sign-in', detail: '', blocked: 'Not available yet.', keyName: null, keyStored: false, endpointEditable: false,
-    endpointDefault: null, keyRequired: false, endpointChoices: [] }] };
-function providerPort(outcome: { stored: boolean; check: string } = { stored: true, check: 'The provider accepted the key.' }) {
-  const requests: ProviderConnectRequest[] = [], removed: string[] = [];
+    endpointDefault: null, keyRequired: false, endpointChoices: [], models: [], modelBlocked: null },
+  // T4-B: a vendor row with its seed models, key stored; DeepSeek's key is not stored yet, so its model action is locked with the reason.
+  { id: 'openai-api', label: 'OpenAI API', detail: 'key DECKENT_OPENAI_KEY stored', blocked: null, keyName: 'DECKENT_OPENAI_KEY', keyStored: true, endpointEditable: false,
+    endpointDefault: 'https://api.openai.com/v1', keyRequired: true, endpointChoices: [], modelBlocked: null,
+    models: [{ id: 'seed:gpt-6-luna', label: 'GPT-6 Luna', detail: 'gpt-6-luna' }, { id: 'seed:gpt-6.1-sol', label: 'GPT-6.1 Sol', detail: 'gpt-6.1-sol' }] },
+  { id: 'deepseek-api', label: 'DeepSeek API', detail: 'not connected', blocked: null, keyName: 'DECKENT_DEEPSEEK_KEY', keyStored: false, endpointEditable: false,
+    endpointDefault: 'https://api.deepseek.com', keyRequired: true, endpointChoices: [], modelBlocked: 'Store its key first (Connect).',
+    models: [{ id: 'seed:deepseek-flash', label: 'DeepSeek V4.1 Flash', detail: 'deepseek-flash' }] }] };
+function providerPort(outcome: { stored: boolean; check: string } = { stored: true, check: 'The provider accepted the key.' }, pending = false) {
+  const requests: ProviderConnectRequest[] = [], removed: string[] = [], models: unknown[] = [];
   const port: ProviderPanelPort = {
     inspect: async () => KINDS,
     endpoint: (_kind, text) => text.startsWith('http://10.') ? { ok: false as const, reason: 'Plain http is allowed only on this machine; use https.' }
@@ -129,15 +137,25 @@ function providerPort(outcome: { stored: boolean; check: string } = { stored: tr
       lines: [{ label: 'Check', text: outcome.check }, { label: 'Key', text: outcome.stored ? 'stored as DECKENT_ANTHROPIC_KEY' : 'not stored.' }] }; },
     disconnect: async kind => { removed.push(kind); return [`removed ${kind}`]; },
     transparency: [{ label: 'Storage', text: 'TRANSPARENCY-NOTE same OS user can read it' }],
+    keyName: kind => KINDS.kinds.find(item => item.id === kind)?.keyName ?? null,
+    connectModel: async request => { models.push(request); return pending
+      ? { connected: false, title: 'Waiting for approval: gpt-6-luna', lines: [{ label: 'Model', text: 'OpenAI API · gpt-6-luna' }], summary: 'gpt-6-luna waits for your approval', approvalId: 'approval-7' }
+      : { connected: true, title: 'Model connected: gpt-6-luna', lines: [{ label: 'Model', text: 'OpenAI API · gpt-6-luna' }, { label: 'Spending', text: 'not metered yet', tone: 'warning' }],
+        summary: 'gpt-6-luna is connected; choose it with /model.', approvalId: null }; },
   };
-  return { port, requests, removed };
+  return { port, requests, removed, models };
 }
 
 describe('/provider window', () => {
   it('lists the kinds with state and key names only; ChatGPT sign-in is shown locked with its reason', async () => {
     const tree = providerPanelTree(KINDS, terminalPanelLabels('en').provider);
     expect(tree.items.map(item => [item.id, item.blocked?.reason ?? null, item.children?.map(child => child.id) ?? null])).toEqual([
-      ['anthropic-api', null, ['connect']], ['local-openai', null, ['connect', 'disconnect']], ['chatgpt-login', 'Not available yet.', null]]);
+      ['anthropic-api', null, ['connect']], ['local-openai', null, ['connect', 'disconnect']], ['chatgpt-login', 'Not available yet.', null],
+      ['openai-api', null, ['connect', 'disconnect']], ['deepseek-api', null, ['connect']]]);
+    // T4-B: where the host binds models.connect, a kind that lists models offers "connect a model" (locked with its reason until the key is stored).
+    const withModels = providerPanelTree(KINDS, terminalPanelLabels('en').provider, true);
+    expect(withModels.items.slice(3).map(item => item.children?.map(child => [child.id, child.blocked?.reason ?? null]))).toEqual([
+      [['connect', null], ['model', null], ['disconnect', null]], [['connect', null], ['model', 'Store its key first (Connect).']]]);
     const { port } = providerPort();
     const { element } = panel('provider', { provider: port }, 'tr');
     const view = mount(element, 80, 40, true);
@@ -195,6 +213,37 @@ describe('/provider window', () => {
     await view.press(ENTER, 60); await view.press('y', 60); await view.press(ENTER, 120);
     expect(requests.at(-1)).toEqual({ kind: 'local-openai', endpoint: 'http://127.0.0.1:9000', key: null });
     expect(calls.notices).toEqual([]);
+  });
+
+  it('T4-B: connect a model — chosen from the kind\'s catalog list, connected through the port, its result in the window and one summary line on close', async () => {
+    const { port, models } = providerPort();
+    const { element, calls } = panel('provider', { provider: port });
+    const view = mount(element, 100, 40);
+    await settle(80);
+    await view.press(`${DOWN}${DOWN}${DOWN}${ENTER}`, 60);
+    expect(view.frame()).toContain('Connect a model (choose from its catalog)');
+    await view.press(`${DOWN}${ENTER}`, 60);
+    expect(view.frame()).toContain('OpenAI API · model to connect'); expect(view.frame()).toContain('GPT-6 Luna'); expect(view.frame()).toContain('gpt-6.1-sol');
+    await view.press(ENTER, 120);
+    expect(models).toEqual([{ kind: 'openai-api', endpoint: null, model: 'seed:gpt-6-luna' }]);
+    expect(view.frame()).toContain('Model connected: gpt-6-luna'); expect(view.frame()).toContain('not metered yet');
+    // Nothing reaches scrollback until the window closes; then exactly one system summary line.
+    expect(calls.notices).toEqual([]);
+    await view.press(ENTER, 60);
+    expect(calls.notices).toEqual([{ level: 'info', text: 'gpt-6-luna is connected; choose it with /model.' }]);
+    expect(view.frame()).toContain('Providers');
+  });
+
+  it('T4-B: a connection that waits for approval opens the approval card after its window closes', async () => {
+    const { port } = providerPort(undefined, true);
+    const { element, calls } = panel('provider', { provider: port });
+    const view = mount(element, 100, 40);
+    await settle(80);
+    await view.press(`${DOWN}${DOWN}${DOWN}${ENTER}${DOWN}${ENTER}${ENTER}`, 120);
+    expect(view.frame()).toContain('Waiting for approval: gpt-6-luna');
+    await view.press(ENTER, 60);
+    expect(calls.notices).toEqual([{ level: 'warning', text: 'gpt-6-luna waits for your approval' }]);
+    expect(calls.approvals).toEqual(['approval-7']); expect(calls.closed).toBe(1);
   });
 
   it('disconnect asks first; y removes through the port, n keeps', async () => {
