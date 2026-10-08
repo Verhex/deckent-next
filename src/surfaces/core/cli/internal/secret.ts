@@ -30,7 +30,7 @@ type Sink = { write(text: string): unknown };
  * Piped stdin: the bytes as given, bounded, with exactly one trailing line ending (`\n` or `\r\n`) dropped — the `echo value |` form and a
  * file saved by an editor keep working; `printf %s` stays byte-exact. Anything else (inner or repeated newlines, spaces) is the value.
  */
-async function readPiped(stdin: Input): Promise<string> {
+export async function readPiped(stdin: Input): Promise<string> {
   const chunks: Buffer[] = []; let bytes = 0;
   for await (const chunk of stdin as AsyncIterable<Uint8Array | string>) {
     const buffer = Buffer.from(chunk); bytes += buffer.byteLength;
@@ -48,7 +48,7 @@ async function readPiped(stdin: Input): Promise<string> {
  * Enter (end), Backspace/Delete (erase one character), Ctrl-C (cancel, nothing sent) and Ctrl-D on an empty line (end); raw mode is always
  * restored. The typed characters are never written anywhere.
  */
-function readHidden(stdin: Input, stderr: Sink, name: string): Promise<string> {
+export function readHidden(stdin: Input, stderr: Sink, name: string): Promise<string> {
   return new Promise((resolve, reject) => {
     // A multi-byte character split across two reads stays one character.
     let value = ''; const decoder = new StringDecoder('utf8');

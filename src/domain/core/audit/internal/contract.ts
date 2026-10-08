@@ -78,6 +78,10 @@ export const auditSubjectSchema = z.discriminatedUnion('kind', [
    * selected store to another registered one and select it — recorded before anything moves (a refusal too). `entries` is how many names
    * move (never a name list or value); `downgrade` marks a move toward a weaker store, made only with an explicit confirmation.
    */
+  z.object({ kind: z.literal('backup-operation'), operationId: identitySchema, action: z.enum(['create', 'verify', 'restore']),
+    installationId: identitySchema, setPathDigest: digest, targetPathDigest: digest.nullable(), ledgerDigest: digest.nullable(),
+    phase: z.enum(['intent', 'succeeded', 'refused', 'failed', 'uncertain']), code: identitySchema.nullable(),
+    decision: z.object({ effect: z.enum(['allow', 'deny', 'require-approval']), ruleId: identitySchema.nullable() }).strict() }).strict(),
   z.object({ kind: z.literal('secret-store-switch'),
     from: z.string().max(128).regex(/^[a-z][a-z0-9-]*(?:\.[a-z][a-z0-9-]*)*\.secret-store\.[a-z][a-z0-9-]*@[1-9][0-9]{0,5}$/),
     to: z.string().max(128).regex(/^[a-z][a-z0-9-]*(?:\.[a-z][a-z0-9-]*)*\.secret-store\.[a-z][a-z0-9-]*@[1-9][0-9]{0,5}$/),

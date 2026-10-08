@@ -1,7 +1,7 @@
 import { ErrorRegistry, emit, formatDuration, loadConfig, resolveLocale, t, type ConfigLoadOptions, type ProductLayout } from '#platform/index.js';
 import { shutdownCommandSchema, type CancellationRecoveryCommand, type CancellationRecoveryPageResult, type RuntimeServiceDescriptor,
   type RuntimeServiceDrainResult, type RunView, type ProgressionCursor, type ReconciliationRecoveryCommand, type ReconciliationRecoveryPage,
-  type ServiceShutdownAdmissionResult, type ShutdownCommand } from '#engine/index.js';
+  type ServiceShutdownAdmissionResult, type ShutdownCommand, type BackupScheduleObserver } from '#engine/index.js';
 import type { CommandContext } from './kernel-commands.js';
 
 export interface RuntimeServiceHost {
@@ -10,7 +10,7 @@ export interface RuntimeServiceHost {
   readonly done: Promise<void>;
   stop(): Promise<RuntimeServiceDrainResult>;
 }
-export interface RuntimeServiceObserver {
+export interface RuntimeServiceObserver extends BackupScheduleObserver {
   onRunProgression?(query: ProgressionCursor, result: Readonly<{ run: RunView; attempted: number; stopped: boolean; waitedForSlotMs?: number }>): void | Promise<void>;
   onRunProgressionError?(query: ProgressionCursor | null, error: { readonly code: string }): void | Promise<void>;
   onReconciliationPage?(command: ReconciliationRecoveryCommand, result: ReconciliationRecoveryPage): void | Promise<void>;
@@ -114,6 +114,11 @@ export async function runtimeCommand(argv: readonly string[], context: CommandCo
         () => t('cli.runtime.recovery', { count: outcomes.length }, locale)); },
     onError: async (_command, error) => { output({ schemaVersion: 1, event: 'recovery-failed', code: error.code },
       () => t('cli.runtime.recoveryFailed', { code: error.code }, locale), 'error'); },
+    onBackup: async event => {
+      const trigger = event.trigger === 'daily' ? t('cli.backup.trigger.daily', {}, locale) : t('cli.backup.trigger.before-upgrade', {}, locale);
+      output({ schemaVersion: 1, event: 'backup-schedule', ...event },
+        () => event.status === 'created' ? t('cli.backup.scheduled', { trigger }, locale)
+          : t('cli.backup.scheduleFailed', { trigger, code: event.code ?? '-' }, locale), event.status === 'failed' ? 'error' : 'info'); },
     onIdleShutdown: async event => { output({ schemaVersion: 1, event: 'idle-shutdown', ...event },
       () => t('cli.runtime.idleShutdown', { duration: formatDuration(event.afterMs) }, locale)); },
     onLedgerUpgraded: async upgrade => { output({ schemaVersion: 1, event: 'ledger-upgraded', ...upgrade },

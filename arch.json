@@ -266,7 +266,8 @@
         "src/composition/core/decision",
         "src/composition/core/scoped-request",
         "src/composition/core/root",
-        "src/composition/core/identity-profile"
+        "src/composition/core/identity-profile",
+        "src/composition/core/backup"
       ],
       "plan": "SURFACES"
     },
@@ -527,7 +528,9 @@
         "src/adapters/core/git-workspace",
         "src/composition/core/toolchains",
         "src/engine/core/config",
-        "src/composition/core/root"
+        "src/composition/core/root",
+        "src/composition/core/backup",
+        "src/engine/core/backup"
       ],
       "plan": "EXECUTION"
     },
@@ -1066,7 +1069,8 @@
         "src/platform/core/utils",
         "src/surfaces/core/cli-identity",
         "src/surfaces/core/work-labels",
-        "src/surfaces/core/cli-terminal"
+        "src/surfaces/core/cli-terminal",
+        "src/engine/core/backup"
       ],
       "plan": "SURFACES"
     },
@@ -2453,6 +2457,52 @@
         "src/adapters/core/mcp-client"
       ],
       "plan": "SURFACES"
+    },
+    "src/engine/core/backup": {
+      "dependencies": [
+        "src/domain/core/audit",
+        "src/domain/core/policy",
+        "src/platform/core/errors",
+        "src/domain/core/principal",
+        "src/platform/core/integrity"
+      ],
+      "plan": "BACKUP-COMMAND"
+    },
+    "src/adapters/core/backup-store": {
+      "dependencies": [
+        "src/platform/core/host",
+        "src/engine/core/audit",
+        "src/domain/core/audit",
+        "src/platform/core/integrity",
+        "src/platform/core/errors",
+        "src/engine/core/backup",
+        "src/adapters/core/installation-files",
+        "src/adapters/core/local-runtime-socket",
+        "src/platform/core/config-fields",
+        "src/platform/core/utils",
+        "src/platform/core/config"
+      ],
+      "plan": "BACKUP-COMMAND"
+    },
+    "src/composition/core/backup": {
+      "dependencies": [
+        "src/domain/core/policy",
+        "src/domain/core/principal",
+        "src/engine/core/backup",
+        "src/adapters/core/backup-store",
+        "src/adapters/core/local-principal",
+        "src/adapters/core/local-keyring",
+        "src/adapters/core/installation-files",
+        "src/platform/core/errors",
+        "src/platform/core/host",
+        "src/platform/core/config",
+        "src/composition/core/root",
+        "src/composition/core/policy",
+        "src/adapters/core/sqlite-ledger",
+        "src/adapters/core/contract",
+        "src/platform/core/managed-files"
+      ],
+      "plan": "BACKUP-COMMAND"
     }
   },
   "composition": {

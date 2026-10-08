@@ -2,6 +2,7 @@
  * Extensions may use other identifiers in generic policy documents; this catalog advertises only implemented core operations.
  */
 export const policyResources = Object.freeze({
+  backup: Object.freeze({ kind: 'backup' as const, actions: Object.freeze(['create', 'verify', 'restore'] as const) }),
   config: Object.freeze({ kind: 'config' as const, actions: Object.freeze(['write'] as const) }),
   decision: Object.freeze({kind:'decision' as const, actions:Object.freeze(['prepare','ask','record','outcome','inspect'] as const)}),
   approval: Object.freeze({ kind: 'approval' as const, actions: Object.freeze(['inspect', 'decide', 'renew'] as const) }),

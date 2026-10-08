@@ -48,5 +48,6 @@
   "config.panel.lock.denied": "Şirketinizin policy'si bu ayarı bu katmanda değiştirmenize izin vermiyor.",
   "config.panel.lock.approval": "onay ister (kural {rule})",
   "config.panel.permissionsUnread": "İzinleriniz okunamadı ({code}); kilit gösterilmiyor, her değişiklik yapılırken denetlenir.",
-  "config.panel.invalid": "Bu değer uymuyor; beklenen: {expected}. Hiçbir şey gönderilmedi."
+  "config.panel.invalid": "Bu değer uymuyor; beklenen: {expected}. Hiçbir şey gönderilmedi.",
+  "config.field.backup": "Yedekleme sıklığı ve kurtarma seti saklama sayısı"
 }

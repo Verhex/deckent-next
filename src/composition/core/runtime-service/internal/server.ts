@@ -1,3 +1,4 @@
+import { prepareScheduledBackup, startBackupSchedule, type BackupScheduleObserver } from '#composition/core/backup/index.js';
 import { loadComposedConfig } from '#composition/core/root/index.js';
 import { executeRuntimeApproval } from './approvals.js';
 import { prepareConfiguredRunRuntime, type RunProgressionObserver } from '#composition/core/run-progression/index.js';
@@ -28,7 +29,7 @@ import { executeConfiguredRuntimeWorkspaceFileOperation } from './workspace-file
 import { executeConfiguredRuntimeEffectOperation } from './effect-operations.js';
 import { executeConfiguredRuntimePermissionModeOperation } from './permission-mode.js';
 import { executeConfiguredRuntimeSecretOperation } from './secret.js';
-export interface ConfiguredRuntimeServiceObserver extends ConfiguredCancellationRuntimeObserver, ToolchainRefreshObserver {
+export interface ConfiguredRuntimeServiceObserver extends ConfiguredCancellationRuntimeObserver, ToolchainRefreshObserver, BackupScheduleObserver {
   onRunProgression?: RunProgressionObserver['onRun'];
   onRunProgressionError?: RunProgressionObserver['onError'];
   onReconciliationPage?: ConfiguredReconciliationRuntimeObserver['onPage'];
@@ -106,6 +107,7 @@ async function startService(projectRoot: string, observer: ConfiguredRuntimeServ
 
 async function startUnderCustody(projectRoot: string, observer: ConfiguredRuntimeServiceObserver, options: ConfigLoadOptions,
   config: Awaited<ReturnType<typeof loadComposedConfig>>, guard: LocalRuntimeSocketGuard, ports: RuntimeServicePorts) {
+  await prepareScheduledBackup(projectRoot, options, observer);
   await upgradeLedgerAtStart(config, observer);
   // H34 S1: the configured company and the installation's own scopes are registered under the same custody (first start).
   const scopes = await registerConfiguredScopesAtStart(config);
@@ -150,11 +152,12 @@ async function startUnderCustody(projectRoot: string, observer: ConfiguredRuntim
   // WORKER-AUTO-REFRESH: the background refresh started below; a stop waits for it (its build is ended by the controller's signal) so no
   // refresh write lands after this service released its custody.
   let toolchainRefresh: Promise<void> = Promise.resolve();
+  let backupSchedule: Promise<void> = Promise.resolve();
   const lifecycle = new RuntimeServiceLifecycle({ maxConcurrentRequests: config.service.maxConcurrentRequests, maxConcurrentExecutions: config.service.maxConcurrentExecutions, admissionWaitMs: config.service.admissionWaitMs }, () => {
     // A scratch removal in flight, every MCP server the turns started (stdin closed, then SIGTERM/SIGKILL) and a toolchain refresh in flight
     // end before the endpoint and ledger custody are released (finalize runs after this settles).
     controller.abort(); turnStop.abort();
-    return Promise.allSettled([recovery, scratchActivity.close(), chatTurnHost.mcp.close(), toolchainRefresh]).then(([settled]) => { if (settled.status === 'rejected') throw settled.reason; });
+    return Promise.allSettled([recovery, scratchActivity.close(), chatTurnHost.mcp.close(), toolchainRefresh, backupSchedule]).then(([settled]) => { if (settled.status === 'rejected') throw settled.reason; });
   }, {
     async wait(milliseconds, signal) { try { await wait(milliseconds, undefined, { signal }); } catch (error) { if (!signal.aborted) throw error; } },
   });
@@ -204,6 +207,7 @@ async function startUnderCustody(projectRoot: string, observer: ConfiguredRuntim
     onSweep: result => { void observer.onScratchSwept?.(result); } });
   // WORKER-AUTO-REFRESH: never awaited by readiness; the controller's signal ends its interval timer and a running build when the service
   // stops, and the stop waits for what is left (above).
+  backupSchedule = startBackupSchedule(projectRoot, options, controller.signal, observer);
   toolchainRefresh = startToolchainRefresh(projectRoot, options, observer, controller.signal, ports.toolchainRefresh).done;
   let resolveDone!: () => void; let rejectDone!: (error: unknown) => void;
   const done = new Promise<void>((resolve, reject) => { resolveDone = resolve; rejectDone = reject; });

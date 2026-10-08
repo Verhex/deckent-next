@@ -102,3 +102,6 @@ export { prepareConfiguredDecision as prepareDecision, askConfiguredDecision as 
 export type { DecisionCase, DecisionAdvice, DecisionRecord, DecisionPolicy } from '#domain/index.js';
 export type { DecisionPrepareInput, DecisionPrepareResult, DecisionAskCommand, DecisionAskResult, DecisionQuery, DecisionInspection,
   DecisionRecordCommand, DecisionRecordResult, DecisionOutcomeCommand, DecisionOutcomeResult } from '#engine/index.js';
+
+export { executeConfiguredBackup as executeBackup } from '#composition/index.js';
+export type { BackupCommand, BackupResult } from '#engine/index.js';

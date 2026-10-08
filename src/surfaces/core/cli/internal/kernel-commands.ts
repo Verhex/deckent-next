@@ -31,6 +31,7 @@ import { configServiceState, type ShutdownCommand, type ServiceShutdownAdmission
 export type RunLifecycleHandler = (root: string, input: import('#engine/index.js').RunLifecycleCommand, options: ConfigLoadOptions) => Promise<{ readonly schemaVersion: 1; readonly layout: import('#platform/index.js').ProductLayout; readonly lifecycle: { readonly schemaVersion: 1; readonly commandId: string; readonly run: import('#engine/index.js').RunView } } | null>;
 /** The terminal's slice (TERMINAL-LAUNCH) carries the monitor and config command contexts. */
 export interface CommandContext extends InstallationCommandContext, IdentityCommandContext, ModelCommandContext, DecisionCommandContext, TerminalLaunchContext {
+  executeBackup?: import('./backup.js').BackupHandler;
   applyRunLifecycle?: RunLifecycleHandler;
   renewApproval?: (input: unknown) => Promise<unknown>;
   inspectApproval?: (input: unknown) => Promise<unknown>;

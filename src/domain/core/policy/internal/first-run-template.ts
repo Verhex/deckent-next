@@ -31,7 +31,7 @@ export const FIRST_RUN_POLICY_TEMPLATE_ID = 'first-run-template';
  * With it (owner 2026-10-07, K1 option A, Jev 3e7c5b38) the owner may run the governed `policy.administer@1` operation and inspect/decide approvals in
  * the installed scope: the trust grant and every other policy change still pass the card, the audit and the delegation bound (I2). */
 // No template bump for assurance: Core's assurance minimum is a code constant; policy data can only raise it.
-export const FIRST_RUN_POLICY_TEMPLATE_VERSION = 6;
+export const FIRST_RUN_POLICY_TEMPLATE_VERSION = 7;
 /** The hard-floor tool-call cells (write floor and configuration file, destructive and always-ask shell, every fetch, every MCP call): only the
  * terminal of the turn that asked may allow them. The same set is Core's default in the approval engine (a test keeps the two equal). */
 export const HARD_FLOOR_CARD_CELLS = Object.freeze(['edit-floor', 'edit-self-source', 'edit-authority', 'shell-destructive', 'shell-always-ask', 'fetch-listed', 'fetch-unlisted', 'mcp-call', 'mcp-floor'] as const);
@@ -65,11 +65,11 @@ export function firstRunPolicyTemplate(input: FirstRunPolicyTemplateInput): Firs
   const built = buildTemplate(input, FIRST_RUN_POLICY_TEMPLATE_VERSION);
   return Object.freeze({ id: FIRST_RUN_POLICY_TEMPLATE_ID, version: FIRST_RUN_POLICY_TEMPLATE_VERSION, policy: built.policy, bindings: built.bindings });
 }
-function buildTemplate(input: FirstRunPolicyTemplateInput, version: 4 | 5 | 6) {
+function buildTemplate(input: FirstRunPolicyTemplateInput, version: 4 | 5 | 6 | 7) {
   const scopeId = identitySchema.parse(input.scopeId);
   const principal = { issuer: identitySchema.parse(input.principal.issuer), subject: identitySchema.parse(input.principal.subject) };
   const revision = `${FIRST_RUN_POLICY_TEMPLATE_ID}-v${version}`;
-  const actionsOf = { 'agent-tool': ['invoke'], operation: ['execute'], secret: ['set', 'delete'], 'secret-switch': ['switch'], config: ['write'], 'mcp-server': ['invoke'], approval: ['inspect', 'decide'] } as const;
+  const actionsOf = { 'agent-tool': ['invoke'], operation: ['execute'], secret: ['set', 'delete'], 'secret-switch': ['switch'], backup: ['create', 'verify', 'restore'], config: ['write'], 'mcp-server': ['invoke'], approval: ['inspect', 'decide'] } as const;
   const grant = (id: string, effect: 'allow' | 'require-approval', kind: keyof typeof actionsOf, ids: readonly string[] | 'all', modeEligible?: boolean) =>
     Object.freeze({ id, effect, actions: [...actionsOf[kind]], scopes: [scopeId], principals: [principal],
       resource: { kind: kind === 'secret-switch' ? 'secret' : kind, ids: ids === 'all' ? ids : [...ids] }, ...(modeEligible === undefined ? {} : { modeEligible }) });
@@ -93,18 +93,19 @@ function buildTemplate(input: FirstRunPolicyTemplateInput, version: 4 | 5 | 6) {
         grant('first-run-policy-administer', 'allow', 'operation', [input.policyAdministerOperationId]), grant('first-run-approvals', 'allow', 'approval', 'all')] : []),
       // v6: switching the store moves every secret, so the rule covers every name (its own rule: v4/v5 additions add exactly this one).
       ...(v6 ? [grant(FIRST_RUN_UPGRADE_RULE_IDS.secretSwitch, 'allow', 'secret-switch', 'all')] : []),
+      ...(version >= 7 ? [{ ...grant(FIRST_RUN_UPGRADE_RULE_IDS.backup, 'allow', 'backup', 'all'), scopes: 'all' as const }] : []),
     ],
   });
   const bindings = bindingsFileSchema.parse({ schemaVersion: 1, revision: `${revision}-bindings`, bindings: [] });
   return { policy, bindings };
 }
 
-/** Why an installation's policy cannot take the v4 → v5 upgrade in place: it already is v5, it is not exactly the v4 template this
+/** Why an installation's policy cannot take the current template upgrade in place: it already is current, it is not exactly the v4 template this
  * installation's (scope, person) would get (hand-edited, administered since, another person's, or another version), or it is unreadable. */
-export type FirstRunTemplateUpgrade = { readonly status: 'upgrade'; readonly from: 4 | 5; readonly policy: PolicyFile }
+export type FirstRunTemplateUpgrade = { readonly status: 'upgrade'; readonly from: 4 | 5 | 6; readonly policy: PolicyFile }
   | { readonly status: 'current' } | { readonly status: 'unavailable'; readonly reason: 'not-v4-template' | 'invalid' };
 /**
- * The first-run v4 → v5 migration (owner 2026-10-07): only a policy document that is exactly the v4 template of this (scope, person) — the
+ * The first-run exact-template migration (v5 owner decision 2026-10-07): only a policy document that is exactly an older template of this (scope, person) — the
  * bytes `init policy` wrote, never touched since — is replaced by the v5 template, as `init policy` would install it today. Anything else is
  * not changed here: the caller shows the explicit step (the v5 rules to add) instead. Pure; the caller pins the bytes it read.
  */
@@ -113,8 +114,8 @@ export function upgradeFirstRunPolicy(current: unknown, input: FirstRunPolicyTem
   if (!parsed.success) return Object.freeze({ status: 'unavailable', reason: 'invalid' });
   const target = buildTemplate(input, FIRST_RUN_POLICY_TEMPLATE_VERSION).policy;
   if (canonicalJson(parsed.data) === canonicalJson(target)) return Object.freeze({ status: 'current' });
-  // v6: an exact v4 or v5 template (never touched since) is replaced by the current one; anything else takes the explicit additions.
-  for (const from of [5, 4] as const) {
+  // v7: an exact v4, v5 or v6 template (never touched since) is replaced by the current one; anything else takes the explicit additions.
+  for (const from of [6, 5, 4] as const) {
     if (canonicalJson(parsed.data) === canonicalJson(buildTemplate(input, from).policy)) return Object.freeze({ status: 'upgrade', from, policy: target });
   }
   return Object.freeze({ status: 'unavailable', reason: 'not-v4-template' });
@@ -138,9 +139,9 @@ export function matchFirstRunPolicyTemplate(policyRevision: string): { readonly 
   return version >= 1 && version <= FIRST_RUN_POLICY_TEMPLATE_VERSION ? Object.freeze({ id: FIRST_RUN_POLICY_TEMPLATE_ID, version }) : null;
 }
 
-/** The v5 rule ids an upgrade adds (never replaces: the proposal tool gets its own rule so a hand-edited read rule stays as it is). */
+/** The current rule ids an upgrade adds (never replaces: the proposal tool gets its own rule so a hand-edited read rule stays as it is). */
 export const FIRST_RUN_UPGRADE_RULE_IDS = Object.freeze({ servers: 'first-run-mcp-servers', operation: 'first-run-mcp-call-operation', propose: 'first-run-mcp-propose-tool',
-  administer: 'first-run-policy-administer', approvals: 'first-run-approvals', secretSwitch: 'first-run-secret-switch' });
+  administer: 'first-run-policy-administer', approvals: 'first-run-approvals', backup: 'first-run-backup', secretSwitch: 'first-run-secret-switch' });
 export type FirstRunTemplateAdditions = { readonly status: 'plan'; readonly change: PolicyChange; readonly rules: readonly PolicyGrant[]; readonly conflicts: readonly string[] }
   | { readonly status: 'current'; readonly conflicts: readonly string[] } | { readonly status: 'unavailable'; readonly reason: 'not-first-run' | 'not-this-person' | 'invalid' };
 type Selection = 'all' | readonly string[];
@@ -180,7 +181,8 @@ function plannedAdditions(grants: readonly PolicyGrant[], person: Person, scopes
     rule(ids.propose, 'agent-tool', ['invoke'], [input.proposeMcpToolName], scopes), rule(ids.administer, 'operation', ['execute'], [input.policyAdministerOperationId], scopes),
     rule(ids.approvals, 'approval', ['inspect', 'decide'], 'all', scopes),
     // v6 (owner 2026-10-08): the secret store switch, over every name (a switch moves them all); hand-built policies get it through the named-person upgrade.
-    rule(ids.secretSwitch, 'secret', ['switch'], 'all', scopes)];
+    rule(ids.secretSwitch, 'secret', ['switch'], 'all', scopes),
+    rule(ids.backup, 'backup', ['create', 'verify', 'restore'], 'all', 'all')];
   const conflicts: string[] = [], rules: PolicyGrant[] = [];
   for (const want of wanted) {
     const same = grants.find(grant => grant.id === want.id);
