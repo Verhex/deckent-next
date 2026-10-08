@@ -1,9 +1,10 @@
 import { type WorkLedgerEntry, type WorkLedgerWorkerEntry, notice, fillTemplate, type WorkerLineLabels, type WorklineLedgerPorts, ledgerEntriesForRuns, ledgerEntriesForWorkers, ledgerEntryForRun } from '#surfaces/core/terminal-ledger/index.js';
+import type { JobWindowLabels } from './job-windows.js';
 import type { LiveWindowKind, LiveWindowLabels, WorkerPanelLabels } from './live-windows.js';
 import type { ApprovalWindowLabels } from './approval-window.js';
 import { transcriptPage, type TranscriptPageLabels } from './transcript-page.js';
 import { shortId } from '#platform/index.js';
-import { slashHelpText, surfaceDeliveryValues, WORKLINE_SLASH_COMMANDS, type SurfaceDeliveryMode } from '#surfaces/core/terminal-kit/index.js';
+import { slashHelpText, WORKLINE_SLASH_COMMANDS, type SurfaceDeliveryMode } from '#surfaces/core/terminal-kit/index.js';
 
 export interface WorklineActionLabels {
   readonly ledgerUnavailable: string;
@@ -33,6 +34,7 @@ export interface WorklineActionLabels {
 
 /** Catalog strings for the work surface (P4). Templates use `{name}` placeholders. */
 export interface WorkSurfaceLabels {
+  readonly jobs?: JobWindowLabels;
   /** Live windows (`/monitor`, `/watch-*`, `/tasks`); absent means those commands are not offered as windows. */
   readonly live?: LiveWindowLabels;
   readonly workerLine: WorkerLineLabels;
@@ -135,13 +137,10 @@ export function immediateSlashAction(command: string, context: WorklineActionCon
     // `/tasks` follows both feeds (runs only where the ledger can list them); a feed already on is not announced again, its window just opens.
     const next: WatchState = { workers: watch.workers || !runs, runs: watch.runs || runs || (tasks && Boolean(ledger.listRunIds)) };
     if (next.workers === watch.workers && next.runs === watch.runs) return { entries: [], window: kind };
-    const mode = context.followDelivery ?? (ledger.followEvents || (runs ? ledger.followRuns : ledger.followWorkers) ? 'push' as const : 'poll' as const);
-    const pace = context.pollMs ?? ledger.workerHeartbeatMs;
-    const delivery = labels.watchDelivery && pace !== undefined ? [notice('info', fillTemplate(labels.watchDelivery, surfaceDeliveryValues(mode, pace)))] : [];
-    return { entries: [notice('info', runs ? labels.watchRunsStarted : labels.watchStarted), ...delivery], watch: next, window: kind };
+    return { entries: [], watch: next, window: kind };
   }
   if (command === 'watch-stop') {
-    return watch.workers || watch.runs ? { entries: [notice('info', labels.watchStopped)], watch: { workers: false, runs: false }, window: null } : { entries: [] };
+    return watch.workers || watch.runs ? { entries: [], watch: { workers: false, runs: false }, window: null } : { entries: [] };
   }
   if (command === 'runs') {
     if (!ledger?.listRunIds) return { entries: [notice('error', labels.ledgerUnavailable)] };

@@ -40,7 +40,7 @@ export const approvalRowPresentation = (item: WorklineApproval, rowNumber: numbe
   ageText: item.createdAt === undefined ? work.approvalWindow.ageUnknown : formatDuration(now - item.createdAt, work.workerLine) });
 function projectRow(raw: Omit<ApprovalRowPresentation, 'kind'>, known?: KnownSecretSnapshot): ApprovalDecisionLine {
   const p = (text: string) => projectApprovalDecisionText(text, known);
-  const summary = p(raw.summary), id = p(raw.displayId), run = p(raw.displayRun), task = p(raw.displayTask), what = p(raw.what), requester = p(raw.requester);
+  const summary = p(raw.summary), id = p(shortId(raw.displayId)), run = p(shortId(raw.displayRun)), task = p(shortId(raw.displayTask)), what = p(raw.what), requester = p(raw.requester);
   return { spans: approvalTemplateSpans(raw.itemTemplate, { n: raw.rowNumber, id: id.spans, run: run.spans, task: task.spans, summary: approvalSummarySpans(summary), duration: raw.durationText,
     what: approvalSummarySpans(what), requester: requester.spans, age: raw.ageText }), fields: [id, run, task, summary, what, requester] };
 }
@@ -50,11 +50,11 @@ export function ApprovalDecisionNoticeRow({ raw, labels, error }: { readonly raw
   return <ApprovalProjectedNotice line={line} labels={labels} error={error} />;
 }
 /** `/approvals` as a list window; choosing a row opens the same approval window. */
-export function ApprovalDecisionPicker({ rows, labels, work, onSelect, onCancel }: { readonly rows: readonly Omit<ApprovalRowPresentation, 'kind'>[]; readonly labels: ApprovalDecisionLabels;
-  readonly work: WorkSurfaceLabels; readonly onSelect: (index: number) => void; readonly onCancel: () => void }) {
+export function ApprovalDecisionPicker({ rows, labels, work, clearSession, status, onSelect, onCancel }: { readonly rows: readonly Omit<ApprovalRowPresentation, 'kind'>[]; readonly labels: ApprovalDecisionLabels;
+  readonly work: WorkSurfaceLabels; readonly clearSession?: string | undefined; readonly status?: string | undefined; readonly onSelect: (index: number) => void; readonly onCancel: () => void }) {
   const known = useHumanTextSecrets();
-  return <Window title={[span(work.window.approvalsTitle)]} status={[span(String(rows.length))]} hints={work.window.pick} position={work.window.position} footerRows={ARROW_PICKER_ROWS + 2}
-    footer={focused => <ApprovalProjectedPicker lines={rows.map(raw => projectRow(raw, known))} labels={labels} active={focused} onSelect={onSelect} onCancel={onCancel} />} />;
+  return <Window title={[span(work.window.approvalsTitle)]} status={[span(status || String(rows.length))]} hints={work.window.pick} position={work.window.position} footerRows={ARROW_PICKER_ROWS + 2}
+    footer={focused => <ApprovalProjectedPicker lines={[...rows.map(raw => projectRow(raw, known)), ...(clearSession ? [approvalTemplateLine('{text}', { text: projectApprovalDecisionText(clearSession, known) })] : [])]} labels={labels} active={focused} onSelect={onSelect} onCancel={onCancel} />} />;
 }
 /** The terminal's own context an approval window names: the project path and the session's permission mode (display only). */
 export type ApprovalWindowContext = Readonly<{ project?: string | undefined; mode?: string | undefined }>;

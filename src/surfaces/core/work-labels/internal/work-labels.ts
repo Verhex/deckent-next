@@ -50,6 +50,14 @@ function approvalWindowFactLabels(locale: Locale): Pick<WorkSurfaceLabels['appro
 export function workSurfaceLabels(locale: Locale): WorkSurfaceLabels {
   const phases = ['starting', 'thinking', 'reading', 'editing', 'running', 'searching', 'fetching', 'delegating', 'finished', 'failed'] as const;
   return {
+    jobs: {
+      hints: t('terminal.jobs.hints', {}, locale), watchStatus: t('terminal.jobs.watchStatus', {}, locale), push: t('terminal.jobs.push', {}, locale), poll: t('terminal.jobs.poll', {}, locale),
+      system: t('terminal.jobs.system', {}, locale), cancelPickerTitle: t('terminal.jobs.cancelPickerTitle', {}, locale), runTitle: t('terminal.jobs.runTitle', {}, locale), runFallback: t('terminal.jobs.runFallback', {}, locale),
+      transcriptTitle: t('terminal.jobs.transcriptTitle', {}, locale), state: t('terminal.jobs.state', {}, locale), tasks: t('terminal.jobs.tasks', {}, locale),
+      attempts: t('terminal.jobs.attempts', {}, locale), delivery: t('terminal.jobs.delivery', {}, locale), unknown: t('terminal.jobs.unknown', {}, locale),
+      clearSession: t('terminal.jobs.clearSession', {}, locale), clearDetail: t('terminal.jobs.clearDetail', {}, locale), kept: t('terminal.jobs.kept', {}, locale),
+      closed: t('terminal.jobs.closed', {}, locale), bareOnly: t('terminal.jobs.bareOnly', {}, locale),
+      runStates: { 'running': t('terminal.jobs.state.running', {}, locale), 'parked': t('terminal.jobs.state.parked', {}, locale), 'completed': t('terminal.jobs.state.completed', {}, locale), 'incomplete': t('terminal.jobs.state.incomplete', {}, locale), 'failed': t('terminal.jobs.state.failed', {}, locale), 'cancelled': t('terminal.jobs.state.cancelled', {}, locale), 'unknown': t('terminal.jobs.state.unknown', {}, locale), 'integrating': t('terminal.jobs.state.integrating', {}, locale), 'integrated': t('terminal.jobs.state.integrated', {}, locale), 'delivering': t('terminal.jobs.state.delivering', {}, locale), 'delivered': t('terminal.jobs.state.delivered', {}, locale), 'adopting': t('terminal.jobs.state.adopting', {}, locale), 'adopted': t('terminal.jobs.state.adopted', {}, locale), 'rolling-back': t('terminal.jobs.state.rolling-back', {}, locale), 'rolled-back': t('terminal.jobs.state.rolled-back', {}, locale) } },
     workerLine: { numberLocale: locale, ordinal: t('terminal.worker.ordinal', {}, locale),
       phases: Object.fromEntries(phases.map(phase => [phase, phaseLabel(phase, locale)])) as WorkSurfaceLabels['workerLine']['phases'],
       durationSeconds: t('terminal.duration.seconds', {}, locale), durationMinutes: t('terminal.duration.minutes', {}, locale), durationHours: t('terminal.duration.hours', {}, locale),
@@ -91,7 +99,7 @@ export function workSurfaceLabels(locale: Locale): WorkSurfaceLabels {
       hints: t('terminal.live.hints', {}, locale), monitorHints: t('terminal.live.monitorHints', {}, locale), statusWorkers: t('terminal.live.statusWorkers', {}, locale),
       statusRuns: t('terminal.live.statusRuns', {}, locale), statusTasks: t('terminal.live.statusTasks', {}, locale), empty: t('terminal.live.empty', {}, locale),
       runsMore: t('terminal.live.runsMore', {}, locale), closedWorkers: t('terminal.live.closedWorkers', {}, locale), closedRuns: t('terminal.live.closedRuns', {}, locale),
-      closedTasks: t('terminal.live.closedTasks', {}, locale), monitorFailed: t('terminal.live.monitorFailed', {}, locale) },
+      closedTasks: t('terminal.live.closedTasks', {}, locale), closedMonitor: t('terminal.live.closedMonitor', {}, locale), monitorFailed: t('terminal.live.monitorFailed', {}, locale) },
     approvalWindow: approvalWindowLabels(locale),
     cancelUsage: t('terminal.cancel.usage', {}, locale), cancelTitle: t('terminal.cancel.title', {}, locale), cancelDetail: t('terminal.cancel.detail', {}, locale),
     cancelAlreadyRequested: t('terminal.cancel.alreadyRequested', {}, locale), cancelPrompt: t('terminal.cancel.prompt', {}, locale), cancelPending: t('terminal.cancel.pending', {}, locale),

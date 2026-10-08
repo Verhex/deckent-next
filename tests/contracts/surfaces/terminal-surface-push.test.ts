@@ -85,7 +85,7 @@ describe('surface push on the workline', () => {
     mounted.push(view.instance);
     // The first watch window owns the keyboard, so both feeds are started by the one command that shows both (`/tasks`).
     await type(view.stdin, '/tasks\r');
-    await until(() => view.stdout.text.includes('WATCH-ON'), 'worker and run watch');
+    await until(() => view.stdout.text.includes('Watching · live feed'), 'worker and run watch');
     expect(listWorkers).not.toHaveBeenCalled();
     expect(listRunIds).not.toHaveBeenCalled();
     expect(listApprovalPage).not.toHaveBeenCalled();
@@ -108,7 +108,7 @@ describe('surface push on the workline', () => {
       async inspectRun() { return null; } } });
     mounted.push(view.instance);
     await type(view.stdin, '/watch-workers\r');
-    await until(() => view.stdout.text.includes('DELIVERY poll timeout 5 owner terminal-watch action poll-scope'), 'poll mark');
+    await until(() => view.stdout.text.includes('Watching · polling'), 'poll mark');
     await until(() => polls > 0, 'poll ran');
     expect(view.stdout.text).not.toContain('DELIVERY push');
   });
@@ -129,7 +129,7 @@ describe('surface push on the workline', () => {
       async inspectRun() { return null; } } });
     mounted.push(view.instance);
     await type(view.stdin, '/watch-workers\r');
-    await until(() => view.stdout.text.includes('DELIVERY push timeout 5 owner terminal-watch action read-next'), 'push mark');
+    await until(() => view.stdout.text.includes('Watching · live feed'), 'push mark');
     release();
     await until(() => view.stdout.text.includes('pushed-worker-1') && view.stdout.text.includes('STEP gap') && view.stdout.text.includes('pushed-approval-1'), 'push surface');
     await settle(30);
@@ -163,12 +163,12 @@ describe('surface push on the workline', () => {
       async inspectRun() { return null; } } });
     mounted.push(view.instance);
     await type(view.stdin, '/watch-workers\r');
-    await until(() => view.stdout.text.includes('DELIVERY push'), 'push mark');
+    await until(() => view.stdout.text.includes('Watching · live feed'), 'push mark');
     releaseYield();
     await until(() => view.stdout.text.includes('pushed-worker-1'), 'first push');
     expect(polls).toBe(0);
     releaseCut();
-    await until(() => view.stdout.text.includes('DELIVERY poll') && view.stdout.text.includes('STEP gap') && polls > 0, 'poll fallback');
+    await until(() => view.stdout.text.includes('Watching · polling') && view.stdout.text.includes('STEP gap') && polls > 0, 'poll fallback');
     await settle(40);
     expect(view.stdout.text).not.toContain('skipped-worker-3');
     expect(view.stdout.text).not.toContain('foreign-worker');
@@ -196,14 +196,12 @@ describe('surface push on the workline', () => {
         async listWorkers() { return emptyWorkers; }, async inspectRun() { return null; } } });
       mounted.push(view.instance);
       await type(view.stdin, '/watch-workers\r');
-      const started = t('terminal.workline.watchDelivery', { mode: 'push', timeoutMs: 5, owner: 'terminal-watch', action: 'read-next' }, locale);
-      await until(() => view.stdout.text.includes(started), `${locale} push mark`);
+      await until(() => view.stdout.text.includes('Watching · live feed'), `${locale} push mark`);
       releaseYield();
       await until(() => view.stdout.text.includes('pushed-worker-1'), `${locale} push`);
       releaseCut();
-      const poll = t('terminal.workline.watchDelivery', { mode: 'poll', timeoutMs: 5, owner: 'terminal-watch', action: 'poll-scope' }, locale);
       const gap = t('terminal.workline.watchStep', { status: 'gap', timeoutMs: 5, owner: 'terminal-watch', action: 'report-gap' }, locale);
-      await until(() => view.stdout.text.includes(poll) && view.stdout.text.includes(gap), `${locale} fallback`);
+      await until(() => view.stdout.text.includes('Watching · polling') && view.stdout.text.includes(gap), `${locale} fallback`);
       view.instance.unmount();
       mounted.pop();
     }

@@ -1,10 +1,11 @@
 import { Box, Text } from 'ink';
 import { useWorklinePalette } from '#surfaces/core/terminal-kit/index.js';
 import { type WorkLedgerEntry, fillTemplate, formatRunCardLines, formatWorkerCardLines, formatWorkerLine, type WorkerLineLabels } from '#surfaces/core/terminal-ledger/index.js';
-import { AssistantUnitRow, HumanTextRow, useRenderGlyphs, type AssistantRenderLabels } from '#surfaces/core/terminal-render/index.js';
+import { AssistantUnitRow, HumanTextRow, SpanText, projectHumanPickerText, useHumanTextSecrets, useRenderGlyphs, type AssistantRenderLabels } from '#surfaces/core/terminal-render/index.js';
 import { readApprovalDecisionNotice } from './approval-decision-notice.js';
 import { ApprovalDecisionNoticeRow } from './approval-decision-view.js';
 export interface LedgerEntryLabels {
+  readonly system?: string | undefined;
   readonly runCard: string;
   readonly workerCard: string;
   readonly chatUser: string;
@@ -14,7 +15,7 @@ export interface LedgerEntryLabels {
   readonly render: AssistantRenderLabels;
 }
 export function LedgerEntryRow({ entry, labels }: { readonly entry: WorkLedgerEntry; readonly labels: LedgerEntryLabels }) {
-  const ink = useWorklinePalette(), glyphs = useRenderGlyphs();
+  const ink = useWorklinePalette(), glyphs = useRenderGlyphs(), known = useHumanTextSecrets();
   if (entry.kind === 'chat' && entry.role === 'assistant') {
     // A row without a unit is a complete reply: one lead unit rendered as markdown.
     return <AssistantUnitRow unit={entry.assistant ?? { kind: 'text', markdown: entry.text, lead: true }} labels={labels.render} />;
@@ -32,6 +33,12 @@ export function LedgerEntryRow({ entry, labels }: { readonly entry: WorkLedgerEn
   }
   if (entry.kind === 'chat') {
     return <HumanTextRow text={entry.text} prefix={`${labels.chatAssistant}: `} style={ink.assistant} hiddenLabel={labels.render.hiddenCount} inline />;
+  }
+  if (entry.kind === 'notice' && entry.id === 'system-summary') {
+    return <Box borderStyle={glyphs.ascii ? 'classic' : 'single'} borderTop={false} borderBottom={false} paddingX={1}
+      {...(ink.windowBorder.color ? { borderColor: ink.windowBorder.color } : {})}>
+      <Text {...ink.muted} wrap="truncate-end"><Text bold>{`${labels.system ?? '/'}: `}</Text><SpanText spans={projectHumanPickerText(entry.text, known).spans} /></Text>
+    </Box>;
   }
   if (entry.kind === 'notice') {
     const decision = readApprovalDecisionNotice(entry);
