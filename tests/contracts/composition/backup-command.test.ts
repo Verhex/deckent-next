@@ -5,8 +5,9 @@ import { tmpdir } from 'node:os';
 import { Readable } from 'node:stream';
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, expect, it } from 'vitest';
-import { executeBackup, clearConfigCache, loadConfig, resolveProductLayout, productResourcePath, startConfiguredRuntimeService } from '../../../src/index.js';
-import { FileInstallationIdentityStore } from '#adapters/core/installation-files/index.js';
+import { readFileSync } from 'node:fs';
+import { executeBackup, clearConfigCache, configuredApproval, loadConfig, resolveProductLayout, productResourcePath, startConfiguredRuntimeService } from '../../../src/index.js';
+import { FileInstallationIdentityStore, FileProjectIdentityStore } from '#adapters/core/installation-files/index.js';
 import { openLocalIntegrityAuthority } from '#adapters/core/local-keyring/index.js';
 import { openSqliteLedger, CURRENT_LEDGER_VERSION } from '#adapters/core/sqlite-ledger/index.js';
 import { readLocalOsIdentity } from '#adapters/core/local-principal/index.js';
@@ -308,4 +309,55 @@ it('backup reports a restore hold in the installation\'s saved language without 
   expect(await main(['backup','create','--scope','scope','--set',f.set,'--json'],{root:f.root,env:f.env,initialize:composeCore,executeBackup,
     stdin:Readable.from([phrase+'\n']),stdout:{write:()=>{}},stderr:{write:text=>{errors+=text;}}})).not.toBe(0);
   expect(JSON.parse(errors)).toMatchObject({code:'BACKUP_RESTORE_HOLD'});expect(errors).toContain('Tamamlanmamış bir yedek geri yüklemesi');
+});
+/** Astra 2475 R1: audit records sealed before the backup, read back through the restored effective config, exactly as approvals/audit consumers open it. */
+async function sealedThroughConfig(root: string, env: Record<string, string>) {
+  clearConfigCache();const config=await loadConfig(root,{env}),dir=join(productResourcePath(config.productLayout,'audit'),'backup-operations');
+  const integrity=await openLocalIntegrityAuthority(config.productLayout,config.approvals.keyFile),names=await readdir(dir);
+  return { keyFile: config.approvals.keyFile, records: await Promise.all(names.map(async name=>verifyAuditRecord(JSON.parse(await readFile(join(dir,name),'utf8')),integrity))) };
+}
+async function recoveryKeyed(f: Awaited<ReturnType<typeof fixture>>) {
+  const globalPath=join(f.env.DECKENT_GLOBAL_HOME,'config.json');await mkdir(f.env.DECKENT_GLOBAL_HOME,{recursive:true,mode:0o700});
+  await writeFile(globalPath,JSON.stringify({approvals:{keyFile:'recovery.key'}}),{mode:0o600});await openLocalIntegrityAuthority(f.layout,'recovery.key',true);clearConfigCache();
+  await new FileProjectIdentityStore(f.root,2000).loadOrCreate();
+  // The first set's audit records (sealed with recovery.key) are archived by the second create.
+  await executeBackup(f.root,{schemaVersion:1,scopeId:'scope',action:'create',set:join(f.base,'set0')},phrase,{env:f.env});await call(f,'create');
+  return globalPath;
+}
+it('restore binds the set key to the name the target effective config opens; the kept global preference is untouched (Astra 2475 R1)',async()=>{
+  const f=await fixture();const globalPath=await recoveryKeyed(f);
+  // Recovery time: the user's global now names authority.key (a different key of this machine); the project config is damaged.
+  await writeFile(globalPath,JSON.stringify({approvals:{keyFile:'authority.key'}}),{mode:0o600});const globalBefore=await readFile(globalPath);
+  await writeFile(join(f.root,'.deckent/config.json'),'{broken');clearConfigCache();
+  const result=await call(f,'restore',phrase,{target:f.root,confirmTarget:f.root});
+  // Real readers first: the restored effective config's key verifies the pre-backup seals; the approval surface opens the same configured key.
+  const read=await sealedThroughConfig(f.root,f.env);expect(read.keyFile).toBe('recovery.key');expect(read.records.length).toBeGreaterThan(0);
+  await expect(configuredApproval(f.root,'list',{schemaVersion:1,scopeId:'scope',afterId:null,limit:10},{env:f.env})).resolves.toBeDefined();
+  expect(result.globalConfig).toEqual({path:globalPath,added:[],kept:['approvals']});expect(await readFile(globalPath)).toEqual(globalBefore);
+  expect(result.relocation?.changedPaths).toContain('/approvals/keyFile');
+  expect(JSON.parse(await readFile(join(f.root,'.deckent/config.json'),'utf8')).approvals).toEqual({keyFile:'recovery.key'});
+  await expect(stat(restoreHoldPath(f.root))).rejects.toMatchObject({code:'ENOENT'});
+  // Negative control: the key the kept global names cannot verify the restored seals.
+  const decoy=await openLocalIntegrityAuthority(f.layout,'authority.key'),dir=join(productResourcePath(f.layout,'audit'),'backup-operations'),name=(await readdir(dir))[0]!;
+  expect(()=>verifyAuditRecord(JSON.parse(readFileSync(join(dir,name),'utf8')),decoy)).toThrow(expect.objectContaining({code:'AUDIT_INTEGRITY'}));
+});
+it('empty global at recovery: the archived approvals selection is added there and no project pin is needed (Astra 2475 R1)',async()=>{
+  const f=await fixture();await recoveryKeyed(f);await rm(f.env.DECKENT_GLOBAL_HOME,{recursive:true,force:true});clearConfigCache();
+  const result=await call(f,'restore');
+  expect(result.globalConfig?.added).toEqual(['approvals']);expect(result.relocation?.changedPaths).not.toContain('/approvals/keyFile');
+  expect(JSON.parse(await readFile(join(f.target,'.deckent/config.json'),'utf8')).approvals).toBeUndefined();
+  const read=await sealedThroughConfig(f.target,f.env);expect(read.keyFile).toBe('recovery.key');expect(read.records.length).toBeGreaterThan(0);
+});
+it('a target global the restored project config cannot load with is refused before any write (Astra 2475 R1)',async()=>{
+  const f=await fixture(),projectPath=join(f.root,'.deckent/config.json'),project=JSON.parse(await readFile(projectPath,'utf8'));
+  const policy=(choice: number)=>({schemaVersion:1,limits:{maxCaseBytes:65536,maxEvidence:16,maxOptions:8,maxChecks:8,maxTextBytes:4096},thresholds:{choice,sufficiency:0.7}});
+  await writeFile(projectPath,JSON.stringify({...project,decision:policy(0.8)}));clearConfigCache();await call(f,'create');
+  const globalPath=join(f.env.DECKENT_GLOBAL_HOME,'config.json');await mkdir(f.env.DECKENT_GLOBAL_HOME,{recursive:true,mode:0o700});
+  await writeFile(globalPath,JSON.stringify({approvals:{keyFile:'authority.key'},decision:policy(0.95)}),{mode:0o600});
+  await writeFile(projectPath,'{broken');clearConfigCache();
+  const snapshot=async()=>Promise.all([globalPath,projectPath,join(f.layout.root,'approvals/authority.key'),f.ledger,productResourcePath(f.layout,'policy')].map(path=>readFile(path)));
+  const before=await snapshot(),entries=(await readdir(join(f.root,'.deckent'))).sort(),data=(await readdir(f.layout.root)).sort();
+  await expect(call(f,'restore',phrase,{target:f.root,confirmTarget:f.root})).rejects.toMatchObject({code:'BACKUP_TARGET_CONFIG_CONFLICT',params:{path:globalPath,section:'decision'}});
+  expect(await snapshot()).toEqual(before);expect((await readdir(join(f.root,'.deckent'))).sort()).toEqual(entries);expect((await readdir(f.layout.root)).sort()).toEqual(data);
+  await expect(stat(restoreHoldPath(f.root))).rejects.toMatchObject({code:'ENOENT'});
 });

@@ -456,6 +456,7 @@
   "error.BACKUP_PATH_UNSAFE": "Kurtarma yolunda güvenli olmayan sahiplik, izin, bağlantı veya uyumsuz yerleşim var.",
   "error.BACKUP_DIRECTORY_UNSAFE": "{path} dizini size ait değil veya başka kullanıcılar ona yazabiliyor; hiçbir şey değiştirilmedi. Sahibi olarak chmod 700 {path} çalıştırın, sonra aynı komutu yeniden çalıştırın.",
   "error.BACKUP_POLICY_UNREADABLE": "Kurulum policy dosyası {path} kullanılamıyor ({reason}); hiçbir şey değiştirilmedi. Hasarlı policy asla sessizce değiştirilmez: setten kurtarmak için dosyayı kenara taşıyın (mv {path} {path}.damaged) ve aynı deckent backup restore komutunu yeniden çalıştırın; o zaman setin doğrulanmış policy'si kullanılır. Create ve verify için önce dosya onarılmalıdır.",
+  "error.BACKUP_TARGET_CONFIG_CONFLICT": "Kullanıcı başına global config {path} içindeki {section} ayarı geri yüklenecek proje config'iyle birlikte kullanılamıyor, bu yüzden geri yüklenen kurulum açılamazdı; hiçbir şey değiştirilmedi. {path} içindeki {section} bölümünü uyumlu hâle getirin veya kaldırın (diğer kurulumlarınız da onu kullanır), sonra aynı deckent backup restore komutunu yeniden çalıştırın.",
   "error.BACKUP_LIMIT": "Kurtarma seti yapılandırılmış boyut veya kayıt sınırını aşıyor.",
   "error.BACKUP_KEY_INVALID": "Kurulum yetki anahtarı eksik veya geçersiz.",
   "error.BACKUP_SET_INVALID": "Kurtarma setinin biçimi geçersiz.",

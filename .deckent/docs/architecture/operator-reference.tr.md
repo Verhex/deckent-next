@@ -150,6 +150,11 @@ Servisi açmadan dışarıda kalan kimlik bilgilerini yeniden sağlayın.
 Proje katmanı proje yapılandırması olur. Genel yapılandırma (`$DECKENT_GLOBAL_HOME/config.json`)
 kurulumlarınızca paylaşılır: restore yalnız onda olmayan arşiv bölümlerini ekler (ör. makine
 kaybından sonra `secrets` depo seçimi), var olanları korur (sonuçta `globalConfig.added` / `kept`).
+Korunan genel katman başka bir onay anahtarı dosyası gösteriyorsa geri yüklenen proje yapılandırması
+setin anahtarını gösterir (`changedPaths` içinde `/approvals/keyFile`); genel dosyanız değişmez.
+Korunan bir genel bölüm geri yüklenen proje yapılandırmasıyla kullanılamıyorsa restore hiçbir iş
+yapmadan dosyayı ve bölümü adıyla `BACKUP_TARGET_CONFIG_CONFLICT` ile durur: o bölümü uyumlu hâle
+getirin veya kaldırın, sonra yeniden çalıştırın.
 alpha.18 ile alınmış set tek birleşik belge taşır; onun `secrets` seçimi proje yapılandırmasına
 değil genel katmana gider.
 Restore var olan bir dizine yalnız sizinse ve başkaları yazamıyorsa yazar (0755 `.deckent`

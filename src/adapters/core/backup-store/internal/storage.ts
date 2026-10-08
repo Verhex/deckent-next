@@ -3,7 +3,7 @@ import { basename, dirname, join, resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { FileInstallationIdentityStore } from '#adapters/core/installation-files/index.js';
 import { acquireLedgerLock } from '#adapters/core/local-runtime-socket/index.js';
-import { configSections, deepMerge, getConfigFieldDefault, isRecord, readJsonFile, validateConfig, productResourcePath, resolveProductLayout, restoreHoldPath, writeConfig, type ProductLayout } from '#platform/index.js';
+import { ConfigValidationError, configSections, deepMerge, getConfigFieldDefault, isRecord, readJsonFile, sha256, validateConfig, versionedConfig, productResourcePath, resolveProductLayout, restoreHoldPath, writeConfig, type ProductLayout } from '#platform/index.js';
 import type { BackupCommand, BackupResult, BackupStoragePort } from '#engine/index.js';
 import { ledgerFingerprint, openSetLedger } from './fingerprint.js';
 import { createBackupSet, verifyBackupSet, type VerifiedBackup } from './set.js';
@@ -96,7 +96,7 @@ export class FileBackupStorage implements BackupStoragePort {
     try { lock = acquireLedgerLock(productResourcePath(layout, 'ledger') + '-lock'); }
     catch (error) { if (error && typeof error === 'object' && 'code' in error && error.code === 'LOCAL_RUNTIME_ALREADY_RUNNING') return refuse('BACKUP_SERVICE_RUNNING'); return refuse('BACKUP_CUSTODY_UNAVAILABLE'); }
     let published = false, holdCreated = false;
-    let restoredConfig: ReturnType<typeof validateConfig>['config'] | undefined, globalLayer: Record<string, unknown> = {}, globalConfig: BackupResult['globalConfig'] = null;
+    let restoredConfig: ReturnType<typeof validateConfig>['config'] | undefined, globalPlan: Awaited<ReturnType<typeof planGlobalLayer>> | null = null, globalConfig: BackupResult['globalConfig'] = null;
     const token = randomUUID(), preserved: string[] = [], changed = new Set<string>();
     try {
       // Recheck under the same kernel custody the service must acquire before any migration or startup.
@@ -123,10 +123,17 @@ export class FileBackupStorage implements BackupStoragePort {
           config['layout'] = { ...(config['layout'] as Record<string, unknown> | undefined), root: layout.root, resources: targetResources };
           // A restored scheduler must be re-enabled deliberately after identity keep and credential provisioning.
           config['backup'] = { ...(config['backup'] as Record<string, unknown> | undefined), schedule: getConfigFieldDefault('backup').schedule };
+          // Astra 2475 R1: before any write, check the TARGET's effective config (its loaded global layer under this project layer, normalized like loading); bind the published key to the name it opens (project layer; the global stays).
+          globalPlan = this.source.globalConfigPath ? await planGlobalLayer(this.source.globalConfigPath, layers.global) : null;
+          const targetGlobal = globalPlan?.effective ?? {}, conflict = (section: string) => refuse('BACKUP_TARGET_CONFIG_CONFLICT', { path: globalPlan?.path ?? '', section });
           for (const [name, section] of configSections()) {
             try { section.options.validateLayers?.(layers.global[name], config[name]); } catch { return refuse('BACKUP_SET_INVALID'); }
+            try { section.options.validateLayers?.(targetGlobal[name], config[name]); } catch { return conflict(name); }
           }
-          globalLayer = layers.global; restoredConfig = validateConfig(deepMerge(layers.global, config)).config;
+          const effective = () => { try { return validateConfig(deepMerge(versionedConfig(targetGlobal), versionedConfig(config))).config; }
+            catch (error) { return conflict(error instanceof ConfigValidationError ? String(error.issues[0]?.path ?? '').split('.')[0] || 'config' : 'config'); } };
+          if (effective().approvals.keyFile !== state.keyFile) { config['approvals'] = { ...(config['approvals'] as Record<string, unknown> | undefined), keyFile: state.keyFile }; changed.add('/approvals/keyFile'); }
+          restoredConfig = effective();
           changed.add('/backup/schedule'); content = Buffer.from(JSON.stringify(config, null, 2) + '\n');
         }
         await writePrivate(join(productResourcePath(staged, item.resource), ...(item.path ? item.path.split('/') : [])), content);
@@ -149,9 +156,7 @@ export class FileBackupStorage implements BackupStoragePort {
         }
         await rename(from, to); published = true; await syncDirectory(dirname(to));
       };
-      if (this.source.globalConfigPath && Object.keys(globalLayer).length) {
-        globalConfig = await restoreGlobalLayer(this.source.globalConfigPath, globalLayer, token, preserved, () => { published = true; });
-      }
+      if (globalPlan) globalConfig = await globalPlan.apply(token, preserved, () => { published = true; });
       // Preserve the whole old directory, including stale files absent from the recovery set. Keep ledger-lock's inode throughout.
       for (const resource of BACKUP_RESOURCES) {
         const from = productResourcePath(staged, resource);
@@ -168,6 +173,8 @@ export class FileBackupStorage implements BackupStoragePort {
         if (await lstat(path).catch(() => null)) { await safePath(path); const saved = `${path}.damaged-${token}`; await rename(path, saved); preserved.push(saved); }
       }
       await publish(ledger, productResourcePath(layout, 'ledger'));
+      // Astra 2475 R1: the hold stays unless the key the effective config opens is the set's key (same derivation as the keyring's key id).
+      if (sha256((await readPrivate(join(approvals, restoredConfig!.approvals.keyFile), 32)).toString('hex')) !== verified.integrity().keyId) return refuse('BACKUP_RESTORE_INCOMPLETE');
       let required = false;
       try { await new FileInstallationIdentityStore(layout, restoredConfig!.configFile.writeLockTimeoutMs, undefined, restoredConfig!.installation).read(); }
       catch (error) { if (error && typeof error === 'object' && 'code' in error && error.code === 'INSTALLATION_IDENTITY_RELOCATED') required = true; else throw error; }
@@ -186,22 +193,17 @@ export class FileBackupStorage implements BackupStoragePort {
   }
 }
 
-/**
- * S1 D1: the per-user global config is shared by every installation of this user, so restore fills only the archived sections it lacks and
- * never replaces a present one (`kept` reports a differing value). An unreadable global file — which config loading ignores — is preserved as
- * `.damaged-<token>` and replaced by the archived layer. The product's config writer applies its lock, digest precondition and atomic 0600 write.
- */
-async function restoreGlobalLayer(path: string, archived: Record<string, unknown>, token: string, preserved: string[], effect: () => void): Promise<NonNullable<BackupResult['globalConfig']>> {
-  const current = await readJsonFile(path);
-  if (current.kind === 'io') throw current.error;
-  let present: Record<string, unknown> = {}, digest: string | null = null;
-  if (current.kind !== 'absent') {
-    if (current.kind === 'ready' && isRecord(current.value)) { present = current.value; digest = current.digest; }
-    else { const saved = `${path}.damaged-${token}`; effect(); await rename(path, saved); preserved.push(saved); }
-  }
-  const added = Object.keys(archived).filter(name => !Object.hasOwn(present, name)).sort();
+/** S1 D1: the per-user global config is shared by this user's installations: restore adds only archived sections it lacks, never replaces a present
+ * one (`kept`), keeps an unreadable file (ignored by config loading) as `.damaged-<token>` and writes with the config writer (lock, read digest
+ * precondition, atomic 0600). Astra 2475 R1: read before any write; `effective` is the layer loaded after restore; no archived layer, no write. */
+async function planGlobalLayer(path: string, archived: Record<string, unknown>) {
+  const current = await readJsonFile(path); if (current.kind === 'io') throw current.error;
+  const ready = current.kind === 'ready' && isRecord(current.value) ? current : null, present = ready ? ready.value as Record<string, unknown> : {};
+  const added = Object.keys(archived).filter(name => !Object.hasOwn(present, name)).sort(), effective = { ...present, ...Object.fromEntries(added.map(name => [name, archived[name]])) };
   const kept = Object.keys(archived).filter(name => Object.hasOwn(present, name) && JSON.stringify(present[name]) !== JSON.stringify(archived[name])).sort();
-  if (added.length) effect();
-  if (added.length) await writeConfig(path, { ...present, ...Object.fromEntries(added.map(name => [name, archived[name]])) }, digest);
-  return { path, added, kept };
+  return { path, effective, apply: async (token: string, preserved: string[], effect: () => void): Promise<BackupResult['globalConfig']> => {
+    if (!Object.keys(archived).length) return null;
+    if (current.kind !== 'absent' && !ready) { const saved = `${path}.damaged-${token}`; effect(); await rename(path, saved); preserved.push(saved); }
+    if (added.length) { effect(); await writeConfig(path, effective, ready ? ready.digest : null); }
+    return { path, added, kept }; } };
 }

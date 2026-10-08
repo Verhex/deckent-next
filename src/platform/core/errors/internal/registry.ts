@@ -54,6 +54,7 @@ const definitions: Readonly<Record<string, Definition>> = Object.freeze({
   BACKUP_PASSPHRASE_INVALID: { category: 'config', render: (p, l) => ({ message: t('error.BACKUP_PASSPHRASE_INVALID', p, l) }) },
   BACKUP_PATH_UNSAFE: { category: 'config', render: (p, l) => ({ message: t('error.BACKUP_PATH_UNSAFE', p, l) }) },
   BACKUP_POLICY_UNREADABLE: { category: 'config', render: (p, l) => ({ message: t('error.BACKUP_POLICY_UNREADABLE', p, l) }) },
+  BACKUP_TARGET_CONFIG_CONFLICT: { category: 'config', render: (p, l) => ({ message: t('error.BACKUP_TARGET_CONFIG_CONFLICT', p, l) }) },
   BACKUP_DIRECTORY_UNSAFE: { category: 'config', render: (p, l) => ({ message: t('error.BACKUP_DIRECTORY_UNSAFE', p, l) }) },
   BACKUP_LIMIT: { category: 'config', render: (p, l) => ({ message: t('error.BACKUP_LIMIT', p, l) }) },
   BACKUP_KEY_INVALID: { category: 'config', render: (p, l) => ({ message: t('error.BACKUP_KEY_INVALID', p, l) }) },

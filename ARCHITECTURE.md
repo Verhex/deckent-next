@@ -349,7 +349,10 @@ refresh, usage and dogfood closure remain open.
   apart, without resolving secret references; v1 (alpha.18, one merged document) stays readable and its project-forbidden sections (those a
   registered `validateLayers` refuses in a project layer, e.g. `secrets`) move to the global layer. Restore publishes the project layer as
   the project config and only fills archived global sections the per-user global config lacks (present ones are kept and reported as
-  `globalConfig.kept`; an unreadable file is kept as `.damaged-<uuid>`). The ledger snapshot uses the rollback journal and every set ledger
+  `globalConfig.kept`; an unreadable file is kept as `.damaged-<uuid>`). Astra 2475: before any write restore computes the target's effective
+  config (that global layer under the restored project layer); a pair the loader would refuse is `BACKUP_TARGET_CONFIG_CONFLICT {path, section}`,
+  and when it names another `approvals.keyFile` the project layer pins the set's key name (`/approvals/keyFile` in `changedPaths`); the hold
+  is removed only after the key that name opens has the set's key id. The ledger snapshot uses the rollback journal and every set ledger
   read is immutable, so no `-wal/-shm` appears in a set. Worker clones, provider login caches and secret-store credentials are excluded.
   Files are 0600 and created directories 0700; an existing directory restore writes into must be this user's and not group/other-writable
   (the policy/artifact/installation-file rule), checked before staging as `BACKUP_DIRECTORY_UNSAFE {path}` with `chmod 700`; links refused.

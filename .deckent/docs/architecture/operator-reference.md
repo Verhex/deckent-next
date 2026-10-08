@@ -142,7 +142,11 @@ Restore resets scheduling to off. Re-provision excluded credentials before enabl
 The project layer becomes the project configuration. The global configuration
 (`$DECKENT_GLOBAL_HOME/config.json`) is shared by your installations: restore adds only the archived
 sections it lacks (for example the `secrets` store selection after a machine loss) and keeps present
-ones (`globalConfig.added` / `kept` in the result). A set made by alpha.18 holds one merged document;
+ones (`globalConfig.added` / `kept` in the result). If the kept global layer names another approvals key
+file, the restored project configuration names the set's key (`/approvals/keyFile` in `changedPaths`);
+your global file is not changed. If a kept global section cannot be used with the restored project
+configuration, restore stops before any work with `BACKUP_TARGET_CONFIG_CONFLICT`, naming the file and
+section: align or remove that section, then rerun. A set made by alpha.18 holds one merged document;
 its `secrets` selection goes to the global layer, never into the project configuration.
 Restore writes into an existing directory only if it is yours and others cannot write to it (a
 `.deckent` at 0755 is fine; `doctor` still shows its mode). Otherwise it stops before any work
