@@ -147,6 +147,25 @@ it.each([
     checkpoint: { account: { reservedMinorUnits: maximum, settledMinorUnits: 0, settledExactMinorUnits: '0', frozen: false } } });
 });
 
+// Astra 2462 R1: the final message_delta must carry its own output_tokens. Without it, message_start's output_tokens=1 is never inherited
+// as the final count: a cut stream is unknown and a completed one an invalid response, both with the whole reservation held.
+const ownless = (usage: Record<string, unknown>) => sse('content_block_stop', { index: 0 }) + sse('message_delta', { delta: { stop_reason: 'end_turn', stop_sequence: null }, usage });
+it.each([
+  ['empty usage, then EOF', opening + ownless({}), 'unknown'],
+  ['usage without output_tokens, then EOF', opening + ownless({ input_tokens: 9 }), 'unknown'],
+  ['empty usage, then message_stop', opening + ownless({}) + sse('message_stop'), 'rejected'],
+] as const)('keeps the whole reservation held when the final message_delta carries %s', async (_name, wire, state) => {
+  const f = await fixture(1000, true, response => { sseHead(response); response.end(wire); });
+  const result = await invokeConfiguredModel(f.project, f.streamed, { env: f.env, secretResolver: f.secretResolver });
+  expect(result.receipt.outcome).toMatchObject(state === 'unknown' ? { state, reason: 'transport-error' } : { state, evidence: { reason: 'invalid-response' } });
+  const { inspection, integrity } = await spendOf(f, result.receipt.claim.invocationId);
+  const maximum = inspection!.spending!.descriptor.quote.maxChargeMinorUnits;
+  expect(maximum).toBeGreaterThan(0);
+  expect(inspection?.spending).toMatchObject({ disposition: { state: 'held', reason: 'unknown', observedMinorUnits: null }, measurement: null });
+  expect(integrity).toMatchObject({ reservationCount: 1, reservedMinorUnits: maximum, settledMinorUnits: 0,
+    checkpoint: { account: { reservedMinorUnits: maximum, settledMinorUnits: 0, settledExactMinorUnits: '0', frozen: false } } });
+});
+
 it('keeps the whole reservation held when the caller aborts the stream before the final message_delta usage', async () => {
   let written!: () => void;
   const sent = new Promise<void>(resolve => { written = resolve; });

@@ -87,17 +87,21 @@ it('accepts exact fractional-cent operator rates and reserves the dearest cache 
   expect(() => quoteOpenAiChatOperatorTariff(fixture('https://operator.example/chat', { ...tariff, inputMinorUnitsPerMillionTokens: 0.1 }))).toThrow('OPENAI_CHAT_DEFINITION_INVALID');
 });
 
-// Astra 2459 R1: a cut stream settles only from the provider's final usage. A usage chunk before any finish reason (continuous usage
-// stats) is interim and never backs a measurement; usage with (DeepSeek/Z.ai) or after (OpenAI include_usage) the finish chunk is final.
+// Astra 2459 R1 + 2462 R1: a stream settles only from the provider's final usage, the usage carried by the finish chunk itself (DeepSeek/Z.ai)
+// or by a later usage-only chunk (OpenAI include_usage). A usage chunk before the finish reason is interim: a later finish marker never
+// promotes it to a final count, whether the stream is cut (unknown, held) or reaches [DONE] (invalid response, held).
+const interimThenFinish = [{ delta: { role: 'assistant', content: 'par' }, usage: true }, { delta: { content: 'tial' } }, { delta: {}, finish: 'stop', usage: null }];
 it.each([
-  ['interim usage before any finish reason', [{ delta: { role: 'assistant', content: 'par' } }, { usage: true, delta: { content: 'tial' } }], false],
-  ['usage in the finish chunk', [{ delta: { role: 'assistant', content: 'partial' } }, { usage: true, delta: {}, finish: 'stop' }], true],
-  ['usage-only chunk after the finish chunk', [{ delta: { role: 'assistant', content: 'partial' } }, { delta: {}, finish: 'stop' }, { usage: true }], true],
-] as const)('a stream cut before [DONE] with %s', async (_name, chunks, final) => {
+  ['interim usage before any finish reason', [{ delta: { role: 'assistant', content: 'par' } }, { usage: true, delta: { content: 'tial' } }], '', 'interrupted', false],
+  ['interim usage, more content, then a finish chunk with usage null', interimThenFinish, '', 'interrupted', false],
+  ['interim usage, then finish and [DONE] without a final usage', interimThenFinish, 'data: [DONE]\n\n', 'invalid-response', false],
+  ['usage in the finish chunk', [{ delta: { role: 'assistant', content: 'partial' } }, { usage: true, delta: {}, finish: 'stop' }], '', 'interrupted', true],
+  ['usage-only chunk after the finish chunk', [{ delta: { role: 'assistant', content: 'partial' } }, { delta: {}, finish: 'stop' }, { usage: true }], '', 'interrupted', true],
+] as const)('a stream with %s', async (_name, chunks, tail, reason, final) => {
   const usage = { prompt_tokens: 100, completion_tokens: 10, total_tokens: 110 };
-  const wire = chunks.map(chunk => `data: ${JSON.stringify({ id: 'chunk', object: 'chat.completion.chunk', created: 1, model: 'chat-latest',
-    choices: 'delta' in chunk ? [{ index: 0, delta: chunk.delta, finish_reason: 'finish' in chunk ? chunk.finish : null }] : [],
-    ...('usage' in chunk ? { usage } : {}) })}\n\n`).join('');
+  const wire = (chunks as readonly { delta?: object; finish?: string; usage?: true | null }[]).map(chunk => `data: ${JSON.stringify({ id: 'chunk', object: 'chat.completion.chunk', created: 1, model: 'chat-latest',
+    choices: chunk.delta ? [{ index: 0, delta: chunk.delta, finish_reason: chunk.finish ?? null }] : [],
+    ...(chunk.usage === undefined ? {} : { usage: chunk.usage === null ? null : usage }) })}\n\n`).join('') + tail;
   const server = createServer((request, response) => { request.resume(); response.writeHead(200, { 'content-type': 'text/event-stream' }); response.end(wire); });
   servers.push(server); await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
   const address = server.address(); if (!address || typeof address === 'string') throw new Error('address');
@@ -108,8 +112,8 @@ it.each([
   const priced = createOpenAiChatPricedNative(), prepared = await priced.native.prepare(f.profile, f.definition, f.request);
   priced.quote({ ...f, prepared });
   const result = await priced.native.send(prepared);
-  expect(result).toMatchObject({ kind: 'rejected', evidence: { reason: 'interrupted', body: { complete: false } } });
-  if (!('kind' in result)) throw new Error('expected interrupted stream');
+  expect(result).toMatchObject({ kind: 'rejected', evidence: { reason, body: { complete: reason !== 'interrupted' } } });
+  if (!('kind' in result)) throw new Error('expected a rejected stream');
   const measured = priced.native.observePartialSpending!(prepared, result.evidence.body.digest);
   if (final) expect(measured).toMatchObject({ basis: 'measured-tariff', exactMinorUnits: '0.03' });
   else expect(measured).toBeNull();

@@ -172,6 +172,9 @@ it('rejects protocol defects without trusting usage: mid-stream error, missing s
     ['pause_turn is not accepted', textStream().replace('end_turn', 'pause_turn'), 'invalid-response'],
     ['output beyond the requested budget', startEvent() + blockStart(0, { type: 'text', text: '' }) + blockStop(0) + endEvents('end_turn', { output_tokens: 999 }), 'invalid-response'],
     ['unknown event type', startEvent() + sse('mystery'), 'invalid-response'],
+    // Astra 2462 R1: a complete stream whose final delta lacks its own output count never assembles message_start's output_tokens=1.
+    ['final message_delta with empty usage', startEvent() + blockStart(0, { type: 'text', text: '' }) + blockStop(0) + endEvents('end_turn', {}), 'invalid-response'],
+    ['final message_delta without output_tokens', startEvent() + blockStart(0, { type: 'text', text: '' }) + blockStop(0) + endEvents('end_turn', { input_tokens: 25 }), 'invalid-response'],
   ];
   for (const [label, wire, reason] of cases) {
     const endpoint = await fixture(okSse(wire));
@@ -295,6 +298,9 @@ it('quotes the exact worst case from the profile tariff and refuses a quote for 
 it.each([
   ['before the final message_delta: interim message_start usage is never measured', '', null],
   ['after the final message_delta: its cumulative usage is measured', blockStop(0) + sse('message_delta', { delta: { stop_reason: 'end_turn', stop_sequence: null }, usage: { output_tokens: 7 } }), 7],
+  // Astra 2462 R1: the final delta must carry its own output count; message_start's output_tokens=1 is never inherited as final.
+  ['after a final message_delta with empty usage: nothing is measured', blockStop(0) + sse('message_delta', { delta: { stop_reason: 'end_turn', stop_sequence: null }, usage: {} }), null],
+  ['after a final message_delta without output_tokens: nothing is measured', blockStop(0) + sse('message_delta', { delta: { stop_reason: 'end_turn', stop_sequence: null }, usage: { input_tokens: 25 } }), null],
 ] as const)('an interrupted stream cut %s', async (_name, tail, output) => {
   const endpoint = await fixture(okSse(startEvent() + blockStart(0, { type: 'text', text: '' }) + blockDelta(0, { type: 'text_delta', text: 'par' })
     + blockDelta(0, { type: 'text_delta', text: 'tial' }) + tail));
