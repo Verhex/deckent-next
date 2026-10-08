@@ -768,7 +768,6 @@
   "terminal.window.unknown.body": "{command} bir Deckent komutu değil.",
   "terminal.window.unknown.closest": "En yakın komutlar · çalıştırmak için birini seç",
   "terminal.window.unknown.none": "Yakın bir eşleşme yok. /help tüm komutları listeler.",
-  "terminal.jobs.system": "Sistem",
   "terminal.jobs.runTitle": "İş ayrıntıları",
   "terminal.jobs.runFallback": "Başlıksız iş",
   "terminal.jobs.transcriptTitle": "İşçi kaydı",

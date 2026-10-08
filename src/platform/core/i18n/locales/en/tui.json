@@ -768,7 +768,6 @@
   "terminal.window.unknown.body": "{command} is not a Deckent command.",
   "terminal.window.unknown.closest": "Closest commands · pick one to run it",
   "terminal.window.unknown.none": "No close match. /help lists every command.",
-  "terminal.jobs.system": "System",
   "terminal.jobs.runTitle": "Run details",
   "terminal.jobs.runFallback": "Untitled run",
   "terminal.jobs.transcriptTitle": "Transcript",

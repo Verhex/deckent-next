@@ -29,8 +29,11 @@ async function snapshotDone(read: { mock: { results: { value: unknown }[] } }, c
 it('loads pending approval, Run (including never dispatched) and worker at open into the real surface and fills /watch-workers', async () => {
   const f = await fixture(), read = vi.fn(f.ports.readSurfaceSnapshot!);
   const view = mountWorkline({ labels, pollMs: 20, ledger: { ...f.ports, readSurfaceSnapshot: read } }); mounted.push(view.instance);
-  await until(() => view.stdout.text.includes('A-NOTIFY 1') && view.stdout.text.includes('never-dispatched-run') && view.stdout.text.includes('worker 1 · '), 'opening snapshot');
+  // SLASH-WINDOWS (SW-2): the opening snapshot names the pending approval in the status row; runs and workers are never pushed as chat cards at
+  // open, they show in their windows (the runs at the end of this test).
+  await until(() => view.stdout.text.includes('A-NOTIFY 1'), 'opening snapshot'); await snapshotDone(read, 1);
   expect(read.mock.calls.map(call => call[0])).toEqual([['approval', 'run', 'worker']]);
+  expect(view.stdout.text).not.toContain('worker 1 · ');
   expect(view.stdout.text).not.toContain('foreign-run'); expect(view.stdout.text).not.toContain('foreign-approval');
   await type(view.stdin, '/watch-workers\r');
   await until(() => view.stdout.frame.includes('LIVE-PANEL') && view.stdout.frame.includes('worker 1'), 'actual WorkerPanel');
@@ -42,6 +45,10 @@ it('loads pending approval, Run (including never dispatched) and worker at open 
   f.addApproval('new-pending');
   await until(() => read.mock.calls.some(call => call[0].length === 1 && call[0][0] === 'approval'), 'approval invalidation snapshot');
   expect(view.stdout.text).not.toContain('approval:'); // Payload is an invalidation, not surface data.
+  view.stdin.write(ESC); await settle(80);
+  await type(view.stdin, '/watch-runs\r');
+  await until(() => view.stdout.frame.includes('never-dispatched-run') && view.stdout.frame.includes('snapshot-run'), 'the never dispatched Run in the run window');
+  expect(view.stdout.text).not.toContain('foreign-run');
 });
 
 it.each(['finished', 'denied'] as const)('refreshes unsealed live sidecars through composition into Ink and stops when %s', async ending => {
@@ -131,8 +138,8 @@ it('serializes a Run invalidation behind a live heartbeat snapshot and stops hea
 it('resynchronizes a real two-revision Run gap once, then renders subsequent revisions normally', async () => {
   const f = await fixture(), read = vi.fn(f.ports.readSurfaceSnapshot!);
   const view = mountWorkline({ labels, pollMs: 20, ledger: { ...f.ports, readSurfaceSnapshot: read } }); mounted.push(view.instance);
-  await until(() => view.stdout.text.includes('rev 1'), 'initial Run snapshot');
-  await type(view.stdin, '/watch-runs\r'); await snapshotDone(read, 2);
+  await snapshotDone(read, 1);
+  await type(view.stdin, '/watch-runs\r'); await snapshotDone(read, 2); await until(() => view.stdout.text.includes('rev 1'), 'initial Run snapshot in the run window');
   f.advanceRun(2); await until(() => view.stdout.text.includes('rev 2'), 'first Run publication');
   f.advanceRun(4); await until(() => view.stdout.text.includes('STEP gap') && view.stdout.text.includes('rev 4'), 'gap snapshot');
   f.advanceRun(5); await until(() => view.stdout.text.includes('rev 5'), 'post-gap publication');
@@ -176,13 +183,13 @@ it('reconnects the mounted workline through a new production baseline and shows 
   }
   const read = vi.fn(f.ports.readSurfaceSnapshot!);
   const view = mountWorkline({ labels, pollMs: 20, ledger: { ...f.ports, followEvents, readSurfaceSnapshot: read } }); mounted.push(view.instance);
-  await until(() => view.stdout.text.includes('rev 1'), 'initial');
-  await type(view.stdin, '/watch-runs\r'); await snapshotDone(read, 2);
+  await snapshotDone(read, 1);
+  await type(view.stdin, '/watch-runs\r'); await snapshotDone(read, 2); await until(() => view.stdout.text.includes('rev 1'), 'initial');
   f.advanceRun(2); await until(() => view.stdout.text.includes('rev 2'), 'old stream cursor one');
   const beforeReconnect = calls, beforeReads = read.mock.calls.length;
   connection!.abort(); await until(() => calls === beforeReconnect + 1 && read.mock.calls.length >= beforeReads + 2, 'new baseline and fallback snapshots'); await snapshotDone(read, beforeReads + 2);
   f.advanceRun(3); await until(() => view.stdout.text.includes('rev 3'), 'first event in new stream');
-  expect(view.stdout.text).toContain('DELIVERY poll');
+  expect(view.stdout.text).toContain('Watching · polling'); // SW-2: the delivery mode is the run window's status
 });
 
 it('refuses foreign principal snapshots, startup and resync before publication SQL or any data port', async () => {
@@ -208,8 +215,8 @@ it('stops on a denied gap resync without falling back into unguarded data ports'
   });
   const follow = vi.fn(f.follow);
   const view = mountWorkline({ labels, pollMs: 20, ledger: { ...f.ports, followEvents: follow, readSurfaceSnapshot: read } }); mounted.push(view.instance);
-  await until(() => view.stdout.text.includes('rev 1'), 'initial');
-  await type(view.stdin, '/watch-runs\r'); await snapshotDone(read, 2);
+  await snapshotDone(read, 1);
+  await type(view.stdin, '/watch-runs\r'); await snapshotDone(read, 2); await until(() => view.stdout.text.includes('rev 1'), 'initial');
   f.advanceRun(2); await until(() => view.stdout.text.includes('rev 2'), 'first');
   f.advanceRun(4); await until(() => view.stdout.text.includes('ACCESS-STOPPED'), 'resync denied');
   await settle(80);
@@ -228,8 +235,8 @@ it('keeps partially admitted observations scoped across startup and reconnect', 
   }
   const read = vi.fn(f.ports.readSurfaceSnapshot!);
   const view = mountWorkline({ labels, pollMs: 20, ledger: { ...f.ports, followEvents, readSurfaceSnapshot: read } }); mounted.push(view.instance);
-  await until(() => view.stdout.text.includes('rev 1') && view.stdout.text.includes('ACCESS-DENIED approval'), 'partial startup');
-  await type(view.stdin, '/watch-runs\r'); await snapshotDone(read, 2); const beforeReconnect = calls, beforeReads = read.mock.calls.length;
+  await until(() => view.stdout.text.includes('ACCESS-DENIED approval'), 'partial startup'); await snapshotDone(read, 1);
+  await type(view.stdin, '/watch-runs\r'); await snapshotDone(read, 2); await until(() => view.stdout.text.includes('rev 1'), 'authorized run'); const beforeReconnect = calls, beforeReads = read.mock.calls.length;
   connection!.abort(); await until(() => calls === beforeReconnect + 1 && read.mock.calls.length >= beforeReads + 2, 'partial reconnect'); await snapshotDone(read, beforeReads + 2);
   f.advanceRun(2); await until(() => view.stdout.text.includes('rev 2'), 'authorized run after reconnect');
   expect(read.mock.calls.every(call => !call[0].includes('approval'))).toBe(true);
@@ -239,10 +246,11 @@ it('keeps partially admitted observations scoped across startup and reconnect', 
 it('stops watched cards without stopping approval observation and refreshes when the watch reopens', async () => {
   const f = await fixture(), read = vi.fn(f.ports.readSurfaceSnapshot!);
   const view = mountWorkline({ labels, pollMs: 20, ledger: { ...f.ports, readSurfaceSnapshot: read } }); mounted.push(view.instance);
-  await until(() => view.stdout.text.includes('rev 1'), 'initial');
-  await type(view.stdin, '/watch-runs\r'); await snapshotDone(read, 2);
+  await snapshotDone(read, 1);
+  await type(view.stdin, '/watch-runs\r'); await snapshotDone(read, 2); await until(() => view.stdout.text.includes('rev 1'), 'initial');
   f.advanceRun(2); await until(() => view.stdout.text.includes('rev 2'), 'watched revision');
-  await type(view.stdin, '/watch-stop\r'); await settle(100);
+  // The run window owns the keyboard while open (SLASH-WINDOWS): Esc closes it and stops the watch, the same close path as `/watch-stop`.
+  view.stdin.write(ESC); await settle(100);
   f.advanceRun(3); f.addApproval('still-observed'); await settle(180);
   expect(view.stdout.text).not.toContain('rev 3');
   await type(view.stdin, '/watch-runs\r'); await until(() => view.stdout.text.includes('rev 3'), 'fresh watch activation');

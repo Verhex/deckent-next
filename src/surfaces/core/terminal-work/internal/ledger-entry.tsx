@@ -1,10 +1,12 @@
 import { Box, Text } from 'ink';
 import { useWorklinePalette } from '#surfaces/core/terminal-kit/index.js';
 import { type WorkLedgerEntry, fillTemplate, formatRunCardLines, formatWorkerCardLines, formatWorkerLine, type WorkerLineLabels } from '#surfaces/core/terminal-ledger/index.js';
-import { AssistantUnitRow, HumanTextRow, SpanText, projectHumanPickerText, useHumanTextSecrets, useRenderGlyphs, type AssistantRenderLabels } from '#surfaces/core/terminal-render/index.js';
+import { AssistantUnitRow, HumanTextRow, projectHumanPickerText, useHumanTextSecrets, useRenderGlyphs, type AssistantRenderLabels } from '#surfaces/core/terminal-render/index.js';
+import { SYSTEM_SUMMARY_ENTRY_ID, SystemSummaryLine } from '#surfaces/core/terminal-window/index.js';
 import { readApprovalDecisionNotice } from './approval-decision-notice.js';
 import { ApprovalDecisionNoticeRow } from './approval-decision-view.js';
 export interface LedgerEntryLabels {
+  /** The system summary line's label (`terminal.info.systemLabel`). */
   readonly system?: string | undefined;
   readonly runCard: string;
   readonly workerCard: string;
@@ -34,11 +36,9 @@ export function LedgerEntryRow({ entry, labels }: { readonly entry: WorkLedgerEn
   if (entry.kind === 'chat') {
     return <HumanTextRow text={entry.text} prefix={`${labels.chatAssistant}: `} style={ink.assistant} hiddenLabel={labels.render.hiddenCount} inline />;
   }
-  if (entry.kind === 'notice' && entry.id === 'system-summary') {
-    return <Box borderStyle={glyphs.ascii ? 'classic' : 'single'} borderTop={false} borderBottom={false} paddingX={1}
-      {...(ink.windowBorder.color ? { borderColor: ink.windowBorder.color } : {})}>
-      <Text {...ink.muted} wrap="truncate-end"><Text bold>{`${labels.system ?? '/'}: `}</Text><SpanText spans={projectHumanPickerText(entry.text, known).spans} /></Text>
-    </Box>;
+  // SLASH-WINDOWS: the one render point of the system summary line (secret-projected like every human text row).
+  if (entry.kind === 'notice' && entry.id === SYSTEM_SUMMARY_ENTRY_ID) {
+    return <SystemSummaryLine text={projectHumanPickerText(entry.text, known).label} label={labels.system ?? 'Deckent'} tone={entry.level} />;
   }
   if (entry.kind === 'notice') {
     const decision = readApprovalDecisionNotice(entry);

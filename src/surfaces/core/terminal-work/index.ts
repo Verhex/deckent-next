@@ -7,6 +7,6 @@ export { liveRunEntry, LIVE_WINDOW_MAX_ROWS, LiveWatchWindow, MonitorWindow, liv
   type LiveWindowLabels, type LiveWindowRenderLabels, type LiveWindowView, type MonitorWindowLoader, type MonitorWindowRender, type WorkerPanelLabels } from './internal/live-windows.js';
 export { TRANSCRIPT_PAGE_LINES, type TranscriptPageLabels } from './internal/transcript-page.js';
 
-export { systemSummaryLine } from './internal/system-summary.js';
+export { systemSummaryEntry } from './internal/system-summary.js';
 export { JobWindow, runDetailLines, runJobWindow, type JobWindowLabels } from './internal/job-windows.js';
 export { dispatchWorkCommand } from './internal/job-command.js';

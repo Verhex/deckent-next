@@ -7,7 +7,7 @@ import type { ContextInfoLabels, InfoSection, InfoWindowModel } from '#surfaces/
 import type { LocalExecution, ResumePickerItem } from '#surfaces/core/terminal-work/index.js';
 import type { KnownSecretSnapshot } from '#platform/index.js';
 import { notice, type WorkLedgerEntry } from '#surfaces/core/terminal-ledger/index.js';
-import { systemSummaryLine } from './workline-summary.js';
+import { systemSummaryEntry } from '#surfaces/core/terminal-work/index.js';
 import { resumedHistoryEntries, type ResumedHistoryLabels } from './workline-history.js';
 
 export { bindSessionScope } from '#surfaces/core/terminal-kit/index.js';
@@ -102,7 +102,7 @@ export function useConversationSession(port: ConversationSessionPort | undefined
       if (!execution.selectSession({ ...execution.input.context, sessionId: randomUUID() })) return done([]);
       history.current = history.current.slice(0, 1); context.current = null; compaction.current = null; listed.current = [];
       // The single summary line of a cleared screen (SLASH-WINDOWS); the caller wipes the screen when this is non-empty.
-      return done([systemSummaryLine(labels.started)]);
+      return done([systemSummaryEntry(labels.started)]);
     }
     if (command === 'context') {
       const measured = context.current;
@@ -117,7 +117,7 @@ export function useConversationSession(port: ConversationSessionPort | undefined
     const refuse = (refusal: SessionRefusal, text: string): SessionCommandResult => ({ refusal, entries: [notice('error', text)] });
     if (!args) {
       listed.current = (await freshList()).map(summary => ({ ...summary }));
-      if (!listed.current.length) return done([systemSummaryLine(labels.none)]);
+      if (!listed.current.length) return done([systemSummaryEntry(labels.none)]);
       // The index stays filled so a later typed `/resume 2` still resolves. The rows are the picker, not ledger lines.
       return done([], listed.current.map((summary, index) => ({ sessionId: summary.sessionId,
         ...projectHumanPickerText(fillTemplate(labels.entry, { index: index + 1, session: summary.sessionId.slice(0, 8), when: when(summary.updatedAtMs),
@@ -134,7 +134,7 @@ export function useConversationSession(port: ConversationSessionPort | undefined
     if (!execution.selectSession({ ...execution.input.context, sessionId: target })) return done([]);
     history.current = [history.current[0]!, ...messages.filter(message => message.role !== 'system')];
     context.current = null; compaction.current = null; listed.current = [];
-    return done([systemSummaryLine(fillTemplate(labels.resumed, { count: messages.length, session: target.slice(0, 8) })), ...resumedHistoryEntries(messages, labels.history, known)]);
+    return done([systemSummaryEntry(fillTemplate(labels.resumed, { count: messages.length, session: target.slice(0, 8) })), ...resumedHistoryEntries(messages, labels.history, known)]);
   }, [labels, port, known, id]);
   /** SW-1: `/context` as a window model from the same measured state the text view reads. */
   const contextView = useCallback((history: readonly AgentChatMessage[], info: ContextInfoLabels, ascii: boolean): InfoWindowModel =>

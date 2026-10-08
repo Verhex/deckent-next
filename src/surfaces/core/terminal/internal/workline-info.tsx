@@ -1,20 +1,15 @@
 import { useCallback, useRef, useState } from 'react';
 import { SLASH_GROUPS, SLASH_HELP_TITLE_KEY, WORKLINE_SLASH_COMMANDS, type SlashCommand } from '#surfaces/core/terminal-kit/index.js';
 import { fillTemplate } from '#surfaces/core/terminal-render/index.js';
-import { InfoWindow, SYSTEM_SUMMARY_ENTRY_ID, systemSummaryText, type ContextInfoLabels, type InfoSurfaceLabels, type InfoView, type InfoViewCommand, type InfoViewInput, type InfoViewPorts,
+import { InfoWindow, type ContextInfoLabels, type InfoSurfaceLabels, type InfoView, type InfoViewCommand, type InfoViewInput, type InfoViewPorts,
   type InfoWindowModel } from '#surfaces/core/terminal-window/index.js';
-import { notice, WORK_LEDGER_SCHEMA_VERSION, type WorkLedgerEntry } from '#surfaces/core/terminal-ledger/index.js';
-import type { LocalExecution } from '#surfaces/core/terminal-work/index.js';
+import { notice, type WorkLedgerEntry } from '#surfaces/core/terminal-ledger/index.js';
+import { systemSummaryEntry, type LocalExecution } from '#surfaces/core/terminal-work/index.js';
 
 /** SW-1: the typed information-window ports and their words (`terminalAdminPorts(...).info`). */
 export type WorklineInfo = Readonly<{ ports: InfoViewPorts; labels: InfoSurfaceLabels }>;
 /** The bare commands that answer in an information window; `chat-backend` is the hidden alias of `/status`. */
 export const INFO_WINDOW_COMMANDS: ReadonlySet<string> = new Set(['help', 'status', 'chat-backend', 'usage', 'doctor', 'scope', 'context']);
-
-/** The scrollback entry of the ONE system summary line a closed window leaves (rendered by `SystemSummaryLine`, never as the assistant). */
-export function systemSummaryEntry(text: string): WorkLedgerEntry {
-  return Object.freeze({ schemaVersion: WORK_LEDGER_SCHEMA_VERSION, kind: 'notice' as const, id: SYSTEM_SUMMARY_ENTRY_ID, level: 'info' as const, text: systemSummaryText(text) });
-}
 
 /** `/help` as a window: the registry's commands under their group headings, each a row to pick (picking runs it; no typed argument). */
 export function helpInfoModel(slash: Readonly<Record<string, string>>, labels: InfoSurfaceLabels, commands: readonly SlashCommand[] = WORKLINE_SLASH_COMMANDS): InfoWindowModel {

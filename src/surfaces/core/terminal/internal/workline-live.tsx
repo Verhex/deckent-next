@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type MutableRefObject } from 'react';
-import { systemSummaryLine, LiveWatchWindow, MonitorWindow, liveWindowClosedText, type LiveWindowKind, type MonitorWindowLoader, type MonitorWindowRender, type WatchState,
+import { systemSummaryEntry, LiveWatchWindow, MonitorWindow, liveWindowClosedText, type LiveWindowKind, type MonitorWindowLoader, type MonitorWindowRender, type WatchState,
   type WorkSurfaceLabels } from '#surfaces/core/terminal-work/index.js';
 import { span } from '#surfaces/core/terminal-render/index.js';
 import { Window } from '#surfaces/core/terminal-window/index.js';
@@ -33,10 +33,10 @@ export function useLiveWindows({ work, workers, watch, watchRef, setWatch, push,
     const current = latest.current;
     if (!current.kind) return;
     latest.current = { ...current, kind: null }; setKind(null);
-    if (current.kind === 'monitor') { if (current.work?.live) push([systemSummaryLine(current.work.live.closedMonitor ?? current.work.live.monitorTitle)]); return; }
+    if (current.kind === 'monitor') { if (current.work?.live) push([systemSummaryEntry(current.work.live.closedMonitor ?? current.work.live.monitorTitle)]); return; }
     const off: WatchState = { workers: false, runs: false };
     watchRef.current = off; setWatch(off);
-    if (current.work?.live) push([systemSummaryLine([reason, liveWindowClosedText(current.kind, { workers: current.workers, runs: current.runs }, current.work.live)].filter(Boolean).join(' · '))]);
+    if (current.work?.live) push([systemSummaryEntry([reason, liveWindowClosedText(current.kind, { workers: current.workers, runs: current.runs }, current.work.live)].filter(Boolean).join(' · '))]);
   }, [push, setWatch, watchRef]);
   /** Opens (or, with `null`, drops) a watch window; the watch flags are the caller's (`immediateSlashAction`). */
   const show = useCallback((next: Exclude<LiveWindowKind, 'monitor'> | null) => { if (next === null) { close(); return; } setFailure(null); latest.current = { ...latest.current, kind: next }; setKind(next); }, [close]);
@@ -44,5 +44,6 @@ export function useLiveWindows({ work, workers, watch, watchRef, setWatch, push,
   const element = !live || !work || kind === null ? null : kind === 'monitor'
     ? (failure ? <Window title={[span(live.monitorTitle)]} body={[{ spans: [span(failure, { role: 'error' })] }]} hints={live.monitorHints} position={positionLabel} onClose={close} /> : monitor ? <MonitorWindow render={monitor} labels={live} onClose={close} /> : null)
     : <LiveWatchWindow kind={kind} data={{ workers, runs }} labels={{ live, panel: work.panel, workerLine: work.workerLine, jobs: work.jobs }} position={positionLabel} statusText={status} statusLines={statusLines} onClose={close} />;
-  return { show, openMonitor, close, setRuns, element, canOpenMonitor: Boolean(monitorWindow && live) };
+  const isOpen = useCallback(() => latest.current.kind !== null, []);
+  return { show, openMonitor, close, isOpen, setRuns, element, canOpenMonitor: Boolean(monitorWindow && live) };
 }

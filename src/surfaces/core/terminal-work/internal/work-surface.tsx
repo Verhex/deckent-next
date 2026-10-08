@@ -10,7 +10,7 @@ import type { ApprovalDecisionLabels } from '#surfaces/core/approval-presentatio
 import { ApprovalDecisionCard, ApprovalDecisionPicker, approvalRowPresentation, approvalCardPresentation, approvalDecisionCardLines, CancellationDecisionCard, cancellationCardPresentation, PanelWindow,
   type ApprovalWindowContext } from './approval-decision-view.js';
 import { JobWindow, pickRun } from './job-windows.js';
-import { systemSummaryLine } from './system-summary.js';
+import { systemSummaryEntry } from './system-summary.js';
 import { plainText } from '#surfaces/core/terminal-render/index.js';
 import { useSingleFlightPoll } from '#surfaces/core/terminal-kit/index.js';
 export interface WorkSurfaceInput {
@@ -49,7 +49,7 @@ export function useWorkSurface({ panel, state, ledger, labels, push, errorText, 
   const pickedReason = useRef<string | undefined>(undefined);
   const picker = presentation?.kind === 'approvals' && state.picker ? presentation.rows : null;
   const slashSummary = useRef<string[] | null>(null);
-  const output = useCallback((text: string) => { if (slashSummary.current) slashSummary.current.push(text); else push([systemSummaryLine(text)]); }, [push]);
+  const output = useCallback((text: string) => { if (slashSummary.current) slashSummary.current.push(text); else push([systemSummaryEntry(text)]); }, [push]);
   const [approvalStatus, setApprovalStatus] = useState('');
   const approvalWatch = useRef(EMPTY_APPROVAL_WATCH);
   useEffect(() => { if (!watchingWorkers && !ledger?.readSurfaceSnapshot) setWorkers([]); }, [watchingWorkers, ledger?.readSurfaceSnapshot]);
@@ -123,7 +123,7 @@ export function useWorkSurface({ panel, state, ledger, labels, push, errorText, 
       if (!slashSummary.current?.some(text => text.includes(errorText(error)))) output(errorText(error));
     } finally {
       const summary = slashSummary.current; slashSummary.current = null;
-      if (!execution.signal.aborted) push([systemSummaryLine(summary?.length ? summary.join(' · ') : fillTemplate(work.jobs!.closed, { title }))]);
+      if (!execution.signal.aborted) push([systemSummaryEntry(summary?.length ? summary.join(' · ') : fillTemplate(work.jobs!.closed, { title }))]);
     }
   };
   // T2 integration: a decision notice names the approval by its short id; the full id is a detail line under it (never the primary line).

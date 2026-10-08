@@ -203,7 +203,7 @@ describe('/monitor window', () => {
     await settle(20); view.stdin.write('/monitor\r');
     await until(() => view.stdout.frame.includes('ERR:load-failed'), 'failure window');
     expect(view.stdout.frame).toContain(EN.live!.monitorTitle);
-    view.stdin.write(ESC); await until(() => view.stdout.frame.includes('System: Monitor closed'), 'summary');
+    view.stdin.write(ESC); await until(() => view.stdout.frame.includes('◆ Deckent system · Monitor closed'), 'summary');
   });
 
   it('an inactive monitor body ignores keys (a window below the top layer must not react)', async () => {

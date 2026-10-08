@@ -112,8 +112,11 @@ describe('terminal slash registry', () => {
   it.each(WORKLINE_SLASH_COMMANDS.filter(command => !['exit', 'quit', 'registered-unhandled'].includes(command.name)))('existing /$name dispatch remains handled, even with unavailable ports', async command => {
     const completeTurn = vi.fn(async () => 'unexpected');
     const view = await open({ completeTurn });
-    // A trailing space closes the palette, so arg-less commands submit literally rather than selecting a different row.
-    await type(view, `/${command.name}${command.argumentKey ? ' fixture-id' : ' '}\r/status \r`);
+    // A trailing space closes the palette, so arg-less commands submit literally rather than selecting a different row. A command that answers in
+    // a window (SLASH-WINDOWS) holds the input line until Esc closes it; Esc on an empty composer changes nothing.
+    await type(view, `/${command.name}${command.argumentKey ? ' fixture-id' : ' '}\r`);
+    await settle(60); view.stdin.write('\u001B'); await settle(60);
+    await type(view, '/status \r');
     await until(() => view.stdout.text.includes('STATUS-LINE'), `dispatch ${command.name} then status`);
     expect(view.stdout.text).not.toContain('UNKNOWN');
     expect(completeTurn).not.toHaveBeenCalled();
@@ -133,9 +136,11 @@ describe('terminal slash registry', () => {
     const view = await open({ config, mcp, labels: { ...WORKLINE_TEST_LABELS, composer: terminalComposerLabels('tr') },
       ledger: { scopeId: 's', async listWorkers() { return { schemaVersion: 1, scopeId: 's', sources: [] } as never; }, inspectRun } });
     await type(view, '/ru\r');
-    await until(() => view.stdout.text.includes('USAGE'), 'bare /run runs at once and answers its usage');
+    // SW-2: the bare command answers at once in its window (here "not wired": this ledger cannot list runs); Esc closes it.
+    await until(() => view.stdout.frame.includes('UNWIRED'), 'bare /run runs at once and answers in its window');
     expect(view.stdout.frame).not.toContain('<run-kimliği>');
     expect(inspectRun).not.toHaveBeenCalled();
+    await settle(40); view.stdin.write('\u001B'); await settle(60);
     await type(view, '/config terminal.chat\r/mcp reconnect server-1\r');
     await until(() => config.mock.calls.length === 1 && mcp.mock.calls.length === 1, 'config/mcp args');
     expect(config.mock.calls[0]).toEqual(['terminal.chat']);

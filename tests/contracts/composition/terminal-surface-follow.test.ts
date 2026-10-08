@@ -261,7 +261,8 @@ it.each(['en', 'tr'] as const)('renders a real producer denial in %s without rec
     for (const char of '/watch-workers\r') { view.stdin.write(char); await settle(2); }
     await settle(50);
     expect(calls).toBe(1); expect(polls).toBe(0);
-    expect(view.stdout.text).toContain(t('terminal.workline.watchDelivery', { mode: 'denied', timeoutMs: 5, owner: 'terminal-watch', action: 'refuse-scope' }, locale));
+    // SLASH-WINDOWS (SW-2): the delivery mode is the watch window's status, never a chat line; a refused feed names no live or polling delivery.
+    expect(view.stdout.text).not.toContain(t('terminal.jobs.push', {}, locale)); expect(view.stdout.text).not.toContain(t('terminal.jobs.poll', {}, locale));
     expect(view.stdout.text).not.toContain('poll-scope');
     expect(view.stdout.text).not.toMatch(/\{(?:kinds|mode|status)\}/);
   } finally { view.instance.unmount(); }
@@ -339,7 +340,8 @@ it.each(['en', 'tr'] as const)('renders missing identity in %s and stops without
     }
     await settle(50);
     expect(follow).toHaveBeenCalledOnce(); expect(read).not.toHaveBeenCalled(); expect(poll).not.toHaveBeenCalled();
-    expect(view.stdout.text).toContain(t('terminal.workline.watchDelivery', { mode: 'not-initialized', timeoutMs: 5, owner: 'terminal-watch', action: 'refuse-scope' }, locale));
+    // SLASH-WINDOWS (SW-2): the delivery mode is the watch window's status, never a chat line; a refused feed names no live or polling delivery.
+    expect(view.stdout.text).not.toContain(t('terminal.jobs.push', {}, locale)); expect(view.stdout.text).not.toContain(t('terminal.jobs.poll', {}, locale));
     expect(view.stdout.text).not.toContain('poll-scope');
     expect(view.stdout.text).not.toContain(t('terminal.workline.watchAccessStopped', { kinds: 'approval, run, worker' }, locale));
   } finally { view.instance.unmount(); }

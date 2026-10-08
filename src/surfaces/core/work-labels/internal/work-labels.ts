@@ -52,7 +52,7 @@ export function workSurfaceLabels(locale: Locale): WorkSurfaceLabels {
   return {
     jobs: {
       hints: t('terminal.jobs.hints', {}, locale), watchStatus: t('terminal.jobs.watchStatus', {}, locale), push: t('terminal.jobs.push', {}, locale), poll: t('terminal.jobs.poll', {}, locale),
-      system: t('terminal.jobs.system', {}, locale), cancelPickerTitle: t('terminal.jobs.cancelPickerTitle', {}, locale), runTitle: t('terminal.jobs.runTitle', {}, locale), runFallback: t('terminal.jobs.runFallback', {}, locale),
+      system: t('terminal.info.systemLabel', {}, locale), cancelPickerTitle: t('terminal.jobs.cancelPickerTitle', {}, locale), runTitle: t('terminal.jobs.runTitle', {}, locale), runFallback: t('terminal.jobs.runFallback', {}, locale),
       transcriptTitle: t('terminal.jobs.transcriptTitle', {}, locale), state: t('terminal.jobs.state', {}, locale), tasks: t('terminal.jobs.tasks', {}, locale),
       attempts: t('terminal.jobs.attempts', {}, locale), delivery: t('terminal.jobs.delivery', {}, locale), unknown: t('terminal.jobs.unknown', {}, locale),
       clearSession: t('terminal.jobs.clearSession', {}, locale), clearDetail: t('terminal.jobs.clearDetail', {}, locale), kept: t('terminal.jobs.kept', {}, locale),

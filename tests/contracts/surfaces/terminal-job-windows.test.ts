@@ -53,7 +53,7 @@ describe('SW-2 job windows', () => {
     await until(() => view.stdout.frame.includes(command === '/workers' ? 'worker 1' : 'Fix checkout'), 'list');
     expect(captured.entries).toEqual([]); expect(view.stdout.frame).not.toContain('Info:');
     await snapshot(command.slice(1), view);
-    await close(view); onlySummary(); await snapshot(`${command.slice(1)}-summary`, view); expect(view.stdout.frame).toContain('System:'); expect(view.stdout.frame).not.toContain('rows 1');
+    await close(view); onlySummary(); await snapshot(`${command.slice(1)}-summary`, view); expect(view.stdout.frame).toContain('◆ Deckent system ·'); expect(view.stdout.frame).not.toContain('rows 1');
   });
   it.each(['en', 'tr'] as const)('%s: run picker opens sections with human titles and muted short IDs', async locale => {
     const work = workSurfaceLabels(locale), view = await open('/run', ports(), locale);

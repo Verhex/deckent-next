@@ -486,9 +486,11 @@ describe('terminal /monitor', () => {
     const asked: string[] = [];
     const view = mountWorkline({ monitor: async (args: string) => { asked.push(args); return surface.renderMonitorText(fullSnapshot, { locale: 'en', width: 100, ascii: false }).split('\n'); } });
     try {
-      await settle(20); view.stdin.write('/monitor --scope scope-a\r');
-      await untilWorkline(() => view.stdout.text.includes('Stuck or waiting, oldest first (12)'), 'monitor notice lines');
-      expect(asked).toEqual(['--scope scope-a']);
+      // SLASH-WINDOWS (SW-2): the terminal takes no typed `/monitor` argument (the CLI keeps `--scope`, below); without a monitor window loader the
+      // bare command shows the text snapshot in a window, never as chat notices.
+      await settle(20); view.stdin.write('/monitor\r');
+      await untilWorkline(() => view.stdout.frame.includes('Stuck or waiting, oldest first (12)'), 'monitor text in its window');
+      expect(asked).toEqual(['']);
       expect(view.stdout.text).toContain('run-blocked-approval');
     } finally { view.instance.unmount(); }
     // BATCH-FIX 2026-10-07 TERMINAL-UNAVAILABLE-I18N: the unwired notice is the catalog text in the session language (the label the
@@ -498,7 +500,7 @@ describe('terminal /monitor', () => {
       const expected = t('terminal.admin.partUnavailable', { part: 'monitor' }, locale);
       try {
         await settle(20); bare.stdin.write('/monitor\r');
-        await untilWorkline(() => bare.stdout.text.includes(expected), `unwired notice (${locale})`);
+        await untilWorkline(() => bare.stdout.frame.includes(expected), `unwired notice (${locale})`);
         if (locale === 'tr') { expect(expected).toBe('monitor: bu terminalde kullanılamıyor.'); expect(bare.stdout.text).not.toContain('not available in this terminal'); }
       } finally { bare.instance.unmount(); }
     }

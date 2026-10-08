@@ -2,7 +2,7 @@ import { useCallback } from 'react';
 import type { ScratchClearance, ScratchView } from '#domain/index.js';
 import { type WorkLedgerEntry, notice, fillTemplate } from '#surfaces/core/terminal-ledger/index.js';
 import { pathSpec, scratchSpec, type SlashPickSpec, type SlashWindowLabels } from './workline-windows.js';
-import { systemSummaryLine } from './workline-summary.js';
+import { systemSummaryEntry } from '#surfaces/core/terminal-work/index.js';
 
 /**
  * The conversation's scratch area through the runtime service (SCR-A, protocol v16): the surface reads and deletes no file. The area
@@ -74,7 +74,7 @@ export async function runScratchWindow(input: { readonly port: WorklineScratchPo
     // The confirmation card is the command's last window (a panel card stays up until its command ends): keeping the files closes the list too.
     if (!await input.confirm({ count: view.files.length, bytes: view.bytes, path: view.path }) || input.signal.aborted) return;
     const done = await input.port.clear(input.sessionId);
-    input.push([systemSummaryLine(fillTemplate(input.clearedText ?? NEUTRAL.cleared, { count: done.removedFiles, bytes: done.removedBytes, path: done.path }))]);
+    input.push([systemSummaryEntry(fillTemplate(input.clearedText ?? NEUTRAL.cleared, { count: done.removedFiles, bytes: done.removedBytes, path: done.path }))]);
     return;
   }
 }

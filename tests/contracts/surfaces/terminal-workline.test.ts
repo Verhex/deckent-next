@@ -244,7 +244,7 @@ describe('workline view rendered by Ink', () => {
     const view = mount({ completeTurn: async () => 'unused', ledger: { scopeId: 'scope-a', async listWorkers() { return workers(300, 0); }, async inspectRun() { return null; } } });
     await view.type('/workers\r'); await until(() => view.stdout.frame.includes('worker 1'), 'list'); await settle(40);
     view.stdin.write('\u001B[F'); await until(() => view.stdout.frame.includes('worker 300'), 'last row');
-    view.stdin.write(ESC); await until(() => view.stdout.frame.includes('System:') && view.stdout.frame.includes(': 300'), 'list summary');
+    view.stdin.write(ESC); await until(() => view.stdout.frame.includes('◆ Deckent system ·') && view.stdout.frame.includes(': 300'), 'list summary');
     expect(view.stdout.frame).not.toContain('task-299');
   });
 

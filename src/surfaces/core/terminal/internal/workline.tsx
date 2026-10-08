@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, createElement, type ComponentProps } from 'react';
 import { render, Box, Static, Text, useApp, useStdout, type Instance } from 'ink';
-import { useWorklinePanel, type LocalExecution, LedgerEntryRow, liveRunEntry, dispatchWorkCommand, type LedgerEntryLabels, immediateSlashAction, type WatchState, type MonitorWindowLoader, type WorklineActionLabels, useWorkSurface } from '#surfaces/core/terminal-work/index.js';
+import { useWorklinePanel, type LocalExecution, LedgerEntryRow, liveRunEntry, dispatchWorkCommand, systemSummaryEntry, type LedgerEntryLabels, immediateSlashAction, type WatchState, type MonitorWindowLoader, type WorklineActionLabels, useWorkSurface } from '#surfaces/core/terminal-work/index.js';
 import { WorklinePaletteProvider, useWorklinePalette, parseSlashLine, WORKLINE_SLASH_COMMANDS, isInspectSlashCommand, addSessionUsage, bindInspectPorts, EMPTY_SESSION_USAGE, type InspectSlashPorts, type SessionUsageView, useWorklineWatch, surfaceFollowLine, useSurfacePushFeed,
   type TerminalLocalContext, type WorklineInkPalette, type WorklineStreamTurn } from '#surfaces/core/terminal-kit/index.js';
 import { StatusStrip } from './status-strip.js';
@@ -11,7 +11,7 @@ import type { KnownSecretSnapshot } from '#platform/index.js';
 import { assistantLedgerEntries, streamStepEntries, workerReportToLedgerEntries, WORK_LEDGER_SCHEMA_VERSION, type WorkLedgerEntry, ledgerEntriesForWorkers, loadRunViewsForWatch, type WorklineLedgerPorts, fillTemplate, agentHistory, appendLedger, boundAgentHistory, compactLedger, EMPTY_LEDGER, plainChatHistory, type AgentChatMessage, type ChatTurnMessage, type LedgerBuffer, notice } from '#surfaces/core/terminal-ledger/index.js';
 import { useConversationSession, type ConversationSessionLabels, type ConversationSessionPort } from './workline-sessions.js';
 import { ArrowPicker, ARROW_PICKER_ROWS } from '#surfaces/core/terminal-picker/index.js';
-import { Window, WindowStackProvider, WINDOW_RESERVED_ROWS, useFocusOwner, SystemSummaryLine, SYSTEM_SUMMARY_ENTRY_ID } from '#surfaces/core/terminal-window/index.js';
+import { Window, WindowStackProvider, WINDOW_RESERVED_ROWS, useFocusOwner } from '#surfaces/core/terminal-window/index.js';
 import { INFO_WINDOW_COMMANDS, useInfoWindow, type WorklineInfo } from './workline-info.js';
 import { span } from '#surfaces/core/terminal-render/index.js';
 import { Composer, slashMatches, type ComposerLabels, type ComposerHistoryPort, type ComposerMentionPort } from '#surfaces/core/terminal-composer/index.js';
@@ -156,6 +156,7 @@ export function WorklineApp(props: WorklineProps) {
   const [watchStatus, setWatchStatus] = useState('');
   const [watchStatusLines, setWatchStatusLines] = useState<readonly string[]>([]);
   const liveRef = useRef<ReturnType<typeof useLiveWindows> | null>(null);
+  const announced = useRef(new Set<string>());
   const pushMode = useSurfacePushFeed(ledger?.followEvents, ledger?.scopeId ?? '', pollMs, step => {
     if (step.status === 'denied' || step.status === 'not-initialized') workRef.current?.observeWorkers([]);
     // A stopped follow leaves nothing to update: the window closes (its single summary line records the access refusal).
@@ -163,8 +164,17 @@ export function WorklineApp(props: WorklineProps) {
     if (ledger?.readSurfaceSnapshot && step.status === 'applied') return;
     const text = surfaceFollowLine(step, watchRef.current, labels.watchStep, step.status === 'denied' && step.stopped ? labels.watchAccessStopped : labels.watchAccessDenied, labels.watchNotInitialized);
     if (text) setWatchStatusLines(lines => [...lines.filter(line => line !== text), text].slice(-4));
+    // SLASH-WINDOWS (integration): an access refusal or a missing identity is a system event the person must see even with no watch window open:
+    // one system line in the error tone, once per distinct text. A stopped follow with an open window says it in that window's closing line instead.
+    if (text && (step.status === 'denied' || step.status === 'not-initialized') && !announced.current.has(text)) {
+      announced.current.add(text);
+      if (!(step.status === 'denied' && step.stopped && liveRef.current?.isOpen())) push([systemSummaryEntry(text, 'error')]);
+    }
     if (step.status === 'denied' && step.stopped) liveRef.current?.close(text ?? undefined);
-  }, delivery => { if (labels.work?.jobs) setWatchStatus(fillTemplate(labels.work.jobs.watchStatus, { mode: delivery === 'poll' ? labels.work.jobs.poll : labels.work.jobs.push })); },
+  }, delivery => {
+    // A refused or uninitialized feed delivers nothing: the window names no delivery mode then (its status lines carry the refusal).
+    if (labels.work?.jobs) setWatchStatus(delivery === 'push' || delivery === 'poll' ? fillTemplate(labels.work.jobs.watchStatus, { mode: delivery === 'poll' ? labels.work.jobs.poll : labels.work.jobs.push }) : '');
+  },
   ledger?.readSurfaceSnapshot ? async (kinds, signal) => {
     const snapshot = await ledger.readSurfaceSnapshot!(kinds, signal);
     if (signal.aborted) return [];
@@ -308,7 +318,7 @@ export function WorklineApp(props: WorklineProps) {
     }
     if (slash.command === 'mode' || slash.command === 'scratch') { await (slash.command === 'mode' ? mode.run : scratch)(slash.args); return true; }
     const lineCommands: Readonly<Record<string, ((args: string) => Promise<readonly string[]>) | undefined>> = { ...bindInspectPorts(props.inspect, () => usage.current, () => mode.fullAccess.current), mcp: props.mcp, monitor: props.monitor, config: props.config };
-    if (await dispatchWorkCommand(slash, { execution, panel, labels, ledger, push, errorText, pushMode, live: liveWin, monitor: props.monitor, watchRef, setWatch, setWatchStatus, runDecision: work.run })) return true;
+    if (await dispatchWorkCommand(slash, { execution, panel, labels, ledger, push, errorText, pushMode, live: liveWin, monitor: props.monitor, watchRef, setWatch, setWatchStatus, runDecision: work.run, commandUnavailable: labels.commandUnavailable })) return true;
     if (slash.command === 'mcp' || slash.command === 'monitor' || slash.command === 'config' || (isInspectSlashCommand(slash.command) && (slash.command !== 'status' || lineCommands['status']))) {
       const lines = lineCommands[slash.command];
       // One notice for the whole answer, so its level words (`Info: `) open the answer once instead of every line.
@@ -373,7 +383,7 @@ export function WorklineApp(props: WorklineProps) {
 
   // The two local slash-window hosts (information windows, list windows) share the gates: one window, one focus owner.
   const localWindowOpen = infoWindow.isOpen || windows.open;
-  const ledgerLabels: LedgerEntryLabels = { system: labels.work?.jobs?.system, runCard: labels.runCard, workerCard: labels.workerCard, chatUser: labels.roleUser, chatAssistant: labels.roleAssistant,
+  const ledgerLabels: LedgerEntryLabels = { system: labels.work?.jobs?.system ?? props.info?.labels.systemLabel, runCard: labels.runCard, workerCard: labels.workerCard, chatUser: labels.roleUser, chatAssistant: labels.roleAssistant,
     render: labels.render, ...(labels.work ? { workerLine: labels.work.workerLine } : {}) };
   const choosing = resumePicker !== null || work.pickerOpen || settings.openKind !== null || localWindowOpen;
   const fullAccessLine = mode.mode === 'full-access' ? labels.mode?.fullAccessLine : undefined, glyphs = useRenderGlyphs();
@@ -388,9 +398,7 @@ export function WorklineApp(props: WorklineProps) {
     <Box flexDirection="column">
       <PermissionModeKeys active={composing && !busy && Boolean(props.permissionMode)} onCycle={() => void mode.cycle()} />
       <Static key={buffer.epoch} items={[...buffer.pending]}>
-        {row => row.entry.kind === 'notice' && row.entry.id === SYSTEM_SUMMARY_ENTRY_ID
-          ? <SystemSummaryLine key={row.seq} text={row.entry.text} label={props.info?.labels.systemLabel ?? 'Deckent'} tone={row.entry.level} />
-          : <LedgerEntryRow key={row.seq} entry={row.entry} labels={ledgerLabels} />}
+        {row => <LedgerEntryRow key={row.seq} entry={row.entry} labels={ledgerLabels} />}
       </Static>
       {live ? <AssistantLive tail={live.step.liveTail} narration={live.step.narration} labels={labels.render} lead={live.lead} activeTool={live.step.activeTool}
         waiting={live.step.waiting} reasoningPreview={reasoning.show ? live.step.reasoningPreview : []} /> : null}
