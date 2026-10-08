@@ -25,7 +25,8 @@ export interface SlashWindowLabels {
     /** `{count}` more files than are listed */ readonly more: string; readonly empty: string; /** `{bytes}` */ readonly fileDetail: string;
     readonly clear: string; readonly clearDetail: string; readonly clearTitle: string; /** `{count}` `{bytes}` `{path}` */ readonly clearBody: string;
     readonly clearPrompt: string; readonly pathTitle: string };
-  readonly unknown: { readonly title: string; /** `{command}` */ readonly body: string; readonly closest: string; readonly none: string };
+  readonly unknown: { readonly title: string; /** `{command}` */ readonly body: string; readonly closest: string; readonly none: string;
+    /** The last row: every command (opens `/help`). */ readonly all: string; readonly allDetail: string };
 }
 
 /** Neutral English tests and a missing catalog fall back to; the composition always passes the catalog's words. */
@@ -122,10 +123,14 @@ export function pathSpec(words: SlashWindowLabels, path: string): SlashPickSpec 
   return { title: words.scratch.pathTitle, hints: words.infoHints, info: true, tree: { title: words.scratch.pathTitle, items: [] }, body: () => [{ spans: [span(path)], exact: true }] };
 }
 
-/** The unknown-command window: the commands closest to what was typed (prefix, then subsequence) to pick one. */
+/**
+ * The unknown-command window: the commands closest to what was typed (prefix, then subsequence) to pick one, and always a last row with every
+ * command (its id `help` opens the `/help` window).
+ */
 export function unknownCommandSpec(words: SlashWindowLabels, command: string, matches: readonly SlashCommand[], describe: (command: SlashCommand) => string): SlashPickSpec {
   const u = words.unknown;
-  return { title: u.title, hints: matches.length ? words.hints : words.infoHints, bodyRows: 2,
+  const all = matches.some(match => match.name === 'help') ? [] : [{ id: 'help', label: u.all, detail: u.allDetail }];
+  return { title: u.title, hints: words.hints, bodyRows: 2,
     body: () => [{ spans: [span(fillTemplate(u.body, { command: `/${command}` }), { bold: true })] }, { spans: [span(matches.length ? u.closest : u.none)] }],
-    tree: { title: u.title, items: matches.map(match => ({ id: match.name, label: `/${match.name}`, detail: describe(match) })) } };
+    tree: { title: u.title, items: [...matches.map(match => ({ id: match.name, label: `/${match.name}`, detail: describe(match) })), ...all] } };
 }

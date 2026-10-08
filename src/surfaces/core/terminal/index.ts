@@ -2,6 +2,7 @@ export { runTerminalWorkline, WorklineApp, type WorklineCompleteTurn, type Workl
 export { resumedHistoryEntries, RESUME_SHOWN_MESSAGES, RESUME_USER_TEXT_CHARS, type ResumedHistoryLabels } from './internal/workline-history.js';
 export type { WorklineReasoningLabels } from './internal/workline-reasoning.js';
 export type { SlashWindowLabels } from './internal/workline-windows.js';
+export { helpInfoModel } from './internal/workline-info.js';
 export { mentionNotices, type WorklineAttachMentions, type WorklineMentionAttachment, type WorklineMentionLabels, type WorklineMentionNote } from './internal/workline-mentions.js';
 export { PermissionModeKeys, runModeCommand, cyclePermissionMode, permissionModeCycle, permissionModeStop, nextPermissionModeStop, type WorklineModeLabels, type WorklinePermissionModePort } from './internal/workline-mode.js';
 export { bindSessionScope, useConversationSession, type TerminalSessionStoreView, type ConversationSessionLabels, type ConversationSessionPort, type ConversationSessionSummary, type SessionCommandResult, type SessionRefusal } from './internal/workline-sessions.js';

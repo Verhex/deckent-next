@@ -129,7 +129,8 @@ function slashWindowLabels(locale: Locale): SlashWindowLabels {
     scratch: { title: t('terminal.window.scratch.title', {}, locale), status: t('terminal.window.scratch.status', {}, locale), folder: t('terminal.window.scratch.folder', {}, locale), more: t('terminal.window.scratch.more', {}, locale), empty: t('terminal.window.scratch.empty', {}, locale), fileDetail: t('terminal.window.scratch.fileDetail', {}, locale),
       clear: t('terminal.window.scratch.clear', {}, locale), clearDetail: t('terminal.window.scratch.clearDetail', {}, locale), clearTitle: t('terminal.window.scratch.clearTitle', {}, locale), clearBody: t('terminal.window.scratch.clearBody', {}, locale), clearPrompt: t('terminal.window.scratch.clearPrompt', {}, locale),
       pathTitle: t('terminal.window.scratch.pathTitle', {}, locale) },
-    unknown: { title: t('terminal.window.unknown.title', {}, locale), body: t('terminal.window.unknown.body', {}, locale), closest: t('terminal.window.unknown.closest', {}, locale), none: t('terminal.window.unknown.none', {}, locale) } };
+    unknown: { title: t('terminal.window.unknown.title', {}, locale), body: t('terminal.window.unknown.body', {}, locale), closest: t('terminal.window.unknown.closest', {}, locale), none: t('terminal.window.unknown.none', {}, locale),
+      all: t('terminal.window.unknown.all', {}, locale), allDetail: t('terminal.window.unknown.allDetail', {}, locale) } };
 }
 
 function worklineLabels(locale: Locale, statusLine: string): WorklineLabels {
