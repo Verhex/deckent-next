@@ -8,6 +8,8 @@ import { AuditApplication, SECRET_STORE_PORT_VERSION, SecretStoreAdministration,
   type SecretStoreFactory } from '#engine/index.js';
 import { createFileSecretStore, openSqliteAuditStore } from '#adapters/index.js';
 import { createHmacIntegrity } from '#platform/index.js';
+/** The custody section as one process sees it when nothing else changes secrets: run now, the opened store is the selected one. */
+const custodyOf = (store: SecretStore) => ({ exclusive: <T>(work: () => Promise<T>) => work(), selected: async () => store.descriptor.id });
 
 const CANARY = 'synthetic-canary-2d9e4b-not-a-real-key';
 const cleanups: (() => Promise<void>)[] = [];
@@ -60,7 +62,7 @@ const allow = (policyRevision = 'rev-1', ruleId = 'secret-rule') => ({ policyRev
 it.skipIf(process.platform === 'win32')('requires POSIX private audit keyring — administration: authorize, then a sealed secret-change audit (name + backend + principal + decision, never the value), then the write', async () => {
   const f = await ledger(), order: string[] = [];
   const admin = new SecretStoreAdministration(f.file, async request => { order.push(`authorize:${request.action}:${request.name}`); return allow(); },
-    event => { order.push(`audit:${event.subject.kind}`); f.audit.record(event); }, () => 42);
+    event => { order.push(`audit:${event.subject.kind}`); f.audit.record(event); }, () => 42, custodyOf(f.file));
   await admin.set({ principal, scopeId: 'installation', name: 'PROVIDER_TOKEN' }, CANARY);
   expect(await f.file.get('PROVIDER_TOKEN')).toBe(CANARY);
   expect(await admin.delete({ principal, scopeId: 'installation', name: 'PROVIDER_TOKEN' })).toBe(true);
@@ -83,30 +85,30 @@ it.skipIf(process.platform === 'win32')('requires POSIX private audit keyring �
 
 it.skipIf(process.platform === 'win32')('requires POSIX private audit keyring — administration: no audit record, no change; an authorization that fails writes and audits nothing', async () => {
   const f = await ledger(); let audited = 0;
-  const failingAudit = new SecretStoreAdministration(f.file, async () => allow('rev'), () => { throw new Error('AUDIT_UNAVAILABLE'); }, () => 1);
+  const failingAudit = new SecretStoreAdministration(f.file, async () => allow('rev'), () => { throw new Error('AUDIT_UNAVAILABLE'); }, () => 1, custodyOf(f.file));
   await expect(failingAudit.set({ principal, scopeId: 'installation', name: 'A' }, CANARY)).rejects.toThrow('AUDIT_UNAVAILABLE');
   expect(await f.file.listNames()).toEqual([]);
   const unavailable = new SecretStoreAdministration(f.file, async () => { throw Object.assign(new Error('POLICY_UNAVAILABLE'), { code: 'POLICY_UNAVAILABLE' }); },
-    () => { audited++; }, () => 1);
+    () => { audited++; }, () => 1, custodyOf(f.file));
   await expect(unavailable.set({ principal, scopeId: 'installation', name: 'A' }, CANARY)).rejects.toMatchObject({ code: 'POLICY_UNAVAILABLE' });
   expect(audited).toBe(0); expect(await f.file.listNames()).toEqual([]);
 });
 
 it.skipIf(process.platform === 'win32')('requires POSIX private audit keyring — administration: a refusal is audited with its decision and nothing is written; an unrecordable refusal is still a refusal', async () => {
   const f = await ledger();
-  const deny = new SecretStoreAdministration(f.file, async () => ({ policyRevision: 'rev-2', effect: 'deny', ruleId: null }), event => { f.audit.record(event); }, () => 7);
+  const deny = new SecretStoreAdministration(f.file, async () => ({ policyRevision: 'rev-2', effect: 'deny', ruleId: null }), event => { f.audit.record(event); }, () => 7, custodyOf(f.file));
   const error = await deny.set({ principal, scopeId: 'installation', name: 'OPENAI_API_KEY' }, CANARY).then(() => null, (caught: unknown) => caught);
   expect(error).toMatchObject({ code: 'SECRET_CHANGE_DENIED', params: { action: 'set', name: 'OPENAI_API_KEY' } });
   expect(JSON.stringify(error)).not.toContain(CANARY); expect(String((error as Error).message)).not.toContain(CANARY);
   await expect(deny.delete({ principal, scopeId: 'installation', name: 'OPENAI_API_KEY' })).rejects.toMatchObject({ code: 'SECRET_CHANGE_DENIED', params: { action: 'delete' } });
-  const approval = new SecretStoreAdministration(f.file, async () => ({ policyRevision: 'rev-2', effect: 'require-approval', ruleId: 'ask' }), event => { f.audit.record(event); }, () => 8);
+  const approval = new SecretStoreAdministration(f.file, async () => ({ policyRevision: 'rev-2', effect: 'require-approval', ruleId: 'ask' }), event => { f.audit.record(event); }, () => 8, custodyOf(f.file));
   await expect(approval.set({ principal, scopeId: 'installation', name: 'A' }, CANARY)).rejects.toMatchObject({ code: 'POLICY_APPROVAL_UNSUPPORTED' });
   expect(await f.file.listNames()).toEqual([]);
   expect(f.audit.list('installation', 0, 10).map(record => record.event.subject)).toEqual([
     { kind: 'secret-change', action: 'set', name: 'OPENAI_API_KEY', backend: 'core.secret-store.file@1', decision: { effect: 'deny', ruleId: null } },
     { kind: 'secret-change', action: 'delete', name: 'OPENAI_API_KEY', backend: 'core.secret-store.file@1', decision: { effect: 'deny', ruleId: null } },
     { kind: 'secret-change', action: 'set', name: 'A', backend: 'core.secret-store.file@1', decision: { effect: 'require-approval', ruleId: 'ask' } }]);
-  const unrecordable = new SecretStoreAdministration(f.file, async () => ({ policyRevision: 'rev-2', effect: 'deny', ruleId: null }), () => { throw new Error('AUDIT_UNAVAILABLE'); }, () => 9);
+  const unrecordable = new SecretStoreAdministration(f.file, async () => ({ policyRevision: 'rev-2', effect: 'deny', ruleId: null }), () => { throw new Error('AUDIT_UNAVAILABLE'); }, () => 9, custodyOf(f.file));
   await expect(unrecordable.set({ principal, scopeId: 'installation', name: 'A' }, CANARY)).rejects.toMatchObject({ code: 'SECRET_CHANGE_DENIED' });
   expect(await f.file.listNames()).toEqual([]);
 });
@@ -128,12 +130,12 @@ it('policySecretChangeAuthorization: the policy cell is resource kind secret, ac
 
 it('administration: input is checked before authority is asked; a read-only backend is refused before any audit', async () => {
   const f = await ledger(); const asked: string[] = [];
-  const admin = new SecretStoreAdministration(f.file, async request => { asked.push(request.name); return allow('r'); }, () => { asked.push('audit'); }, () => 1);
+  const admin = new SecretStoreAdministration(f.file, async request => { asked.push(request.name); return allow('r'); }, () => { asked.push('audit'); }, () => 1, custodyOf(f.file));
   await expect(admin.set({ principal, scopeId: 'installation', name: 'bad-name' }, 'x')).rejects.toMatchObject({ code: 'SECRET_NAME_INVALID' });
   await expect(admin.set({ principal, scopeId: 'installation', name: 'A' }, '')).rejects.toMatchObject({ code: 'SECRET_VALUE_INVALID' });
   await expect(admin.set({ principal, scopeId: 'installation', name: 'A' }, 'x'.repeat(65_537))).rejects.toMatchObject({ code: 'SECRET_VALUE_INVALID' });
   const readOnly: SecretStore = { ...memoryFactory('core.secret-store.env@1').create(context), descriptor: { id: 'core.secret-store.env@1', writable: false, enumerable: false } };
-  await expect(new SecretStoreAdministration(readOnly, async () => allow('r'), () => { asked.push('audit'); }, () => 1)
+  await expect(new SecretStoreAdministration(readOnly, async () => allow('r'), () => { asked.push('audit'); }, () => 1, custodyOf(readOnly))
     .set({ principal, scopeId: 'installation', name: 'A' }, 'x')).rejects.toMatchObject({ code: 'SECRET_STORE_READ_ONLY' });
   expect(asked).toEqual([]);
 });

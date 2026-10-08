@@ -1,5 +1,5 @@
 import { lstat } from 'node:fs/promises';
-import { createInstallationSecretStoreSelection, ENCRYPTED_FILE_SECRET_STORE_ID, isRegisteredSecretStore, openRegisteredSecretStore } from '#adapters/index.js';
+import { createInstallationSecretCustody, createInstallationSecretStoreSelection, ENCRYPTED_FILE_SECRET_STORE_ID, isRegisteredSecretStore, openRegisteredSecretStore } from '#adapters/index.js';
 import { policySecretStoreSwitchAuthorization, SecretStoreSwitch } from '#engine/index.js';
 import type { AuditEvent } from '#domain/index.js';
 import { normalizeGlobalScopePlatform, productResourcePath, resolveProductLayout, SystemTrustedClock, type ConfigLoadOptions } from '#platform/index.js';
@@ -27,22 +27,29 @@ export async function applyPolicyTemplateInstallationWithSecretDefault(projectRo
   return Object.freeze({ ...result, secretStore: await defaultSecretStore(projectRoot, scopeId, options) });
 }
 
+/** The selection the switch found inside the custody section when one was already made (the default then keeps it). */
+class KeptSelection { constructor(readonly store: string) {} }
+
 async function defaultSecretStore(projectRoot: string, scopeId: string, options: ConfigLoadOptions): Promise<InstallationSecretStoreDefault> {
   const env = options.env ?? process.env, platform = options.platform ?? process.platform;
   try {
     if (normalizeGlobalScopePlatform(platform, env) === 'win32') return Object.freeze({ status: 'platform', backend: null });
-    const selection = createInstallationSecretStoreSelection(env, platform), selected = (await selection.read()).store;
+    const installation = createInstallationSecretStoreSelection(env, platform), selected = (await installation.read()).store;
     if (selected !== null) return Object.freeze({ status: 'kept', backend: selected });
     const context = await loadConfiguredScopeContext(projectRoot, scopeId, options, 'write'), clock = new SystemTrustedClock();
     const records: AuditEvent[] = [];
+    // The switch reads the selection again inside the custody section: a store chosen meanwhile is kept, never moved by this default.
+    const selection = { read: async () => { const current = await installation.read(); if (current.store !== null) throw new KeptSelection(current.store); return current; },
+      publish: installation.publish };
     await new SecretStoreSwitch({ has: isRegisteredSecretStore, open: id => openRegisteredSecretStore(id, env, platform), selection,
       authorize: policySecretStoreSwitchAuthorization(context.document, context.principal), audit: event => { records.push(event); },
-      now: () => clock.sample().wallMs })
+      now: () => clock.sample().wallMs, custody: createInstallationSecretCustody(env, platform) })
       .switch({ principal: { issuer: context.principal.issuer, subject: context.principal.subject }, scopeId, to: ENCRYPTED_FILE_SECRET_STORE_ID, confirmDowngrade: false });
     const record = records[0]!;
     return Object.freeze({ status: 'set', backend: ENCRYPTED_FILE_SECRET_STORE_ID,
       record: Object.freeze({ policyRevision: record.policyRevision, atMs: record.atMs, subject: record.subject }) });
   } catch (error) {
+    if (error instanceof KeptSelection) return Object.freeze({ status: 'kept', backend: error.store });
     const code = (error as { code?: unknown } | null)?.code;
     return Object.freeze({ status: 'not-set', backend: null, ...(typeof code === 'string' ? { code } : {}) });
   }

@@ -52,7 +52,8 @@ it.skipIf(process.platform !== 'linux')('a fresh `init policy --apply` selects t
   expect(JSON.parse(again.stdout)).not.toHaveProperty('secretStore');
   expect(await readFile(f.globalPath, 'utf8')).toBe(before);
   const doctor = await f.run(['doctor']);
-  expect(doctor.stdout).toContain(`Secret store: ${SEALED}`);
+  // The installation directory the switch created is owner-only, so the selected store is usable right away (not refused as not private).
+  expect(doctor.stdout).toContain(`Secret store: ${SEALED} (ready)`);
   expect(doctor.stdout).toContain('other programs running as your user can');
 }, 60_000);
 
