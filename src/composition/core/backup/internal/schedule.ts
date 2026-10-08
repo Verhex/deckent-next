@@ -3,7 +3,7 @@ import { setTimeout as wait } from 'node:timers/promises';
 import { lstat } from 'node:fs/promises';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { DatabaseSync } from 'node:sqlite';
+import { createRequire } from 'node:module';
 import { openConfiguredSecretStore, inspectScheduledSets, pruneScheduledSets } from '#adapters/index.js';
 import { loadComposedConfig } from '#composition/core/root/index.js';
 import { ErrorRegistry, productResourcePath, prepareProductDirectory, type ConfigLoadOptions } from '#platform/index.js';
@@ -35,12 +35,14 @@ async function runScheduledBackup(root: string, options: ConfigLoadOptions, trig
   await report(observer, { trigger, status: 'created', code: null });
 }
 /** Called under service ledger custody before schema migration; failure prevents the upgrade. Fresh installs have nothing to back up. */
+/** node:sqlite loads only when a ledger is actually opened, so importing the SDK never loads the native module (sqlite-ledger-lazy). */
+const nativeSqlite = () => createRequire(import.meta.url)('node:sqlite') as typeof import('node:sqlite');
 export async function prepareScheduledBackup(root: string, options: ConfigLoadOptions, observer: BackupScheduleObserver = {}) {
   const config = await loadComposedConfig(root, { ...options, heal: false });
   if (config.backup.schedule !== 'before-upgrade') return;
   const ledger = productResourcePath(config.productLayout, 'ledger');
   if (!await lstat(ledger).catch(error => { if (error.code === 'ENOENT') return null; throw error; })) return;
-  const db = new DatabaseSync(ledger, { readOnly: true });
+  const db = new (nativeSqlite().DatabaseSync)(ledger, { readOnly: true });
   let version;
   try { version = Number(db.prepare('PRAGMA user_version').get()?.['user_version']); } finally { db.close(); }
   if (version >= CURRENT_LEDGER_VERSION) return;

@@ -1,4 +1,4 @@
-import { backup, DatabaseSync } from 'node:sqlite';
+import { createRequire } from 'node:module';
 import { chmod, lstat, mkdir, rename, rm } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
@@ -8,6 +8,8 @@ import { BACKUP_RESOURCES, archiveState, unpackState, type BackupLimits, type Ba
 import { decryptKey, encryptKey } from './crypto.js';
 import { ledgerFingerprint } from './fingerprint.js';
 import { digestFile, inside, privateDirectory, readPrivate, refuse, safePath, syncDirectory, writePrivate } from './files.js';
+/** node:sqlite loads only when a recovery set is made, so importing the SDK never loads the native module (sqlite-ledger-lazy). */
+const nativeSqlite = () => createRequire(import.meta.url)('node:sqlite') as typeof import('node:sqlite');
 const SOURCE_BUSY_BUDGET = 1000;
 const PAYLOAD = ['ledger.db', 'ledger.fingerprint.json', 'state.archive.json.gz'] as const;
 const FILES = [...PAYLOAD, 'authority.key.enc'] as const;
@@ -76,6 +78,7 @@ export async function createBackupSet(layout: ProductLayout, projectRoot: string
     const sourcePath = await safePath(productResourcePath(layout, 'ledger'));
     const info = await lstat(sourcePath);
     if (!info.isFile() || info.nlink !== 1 || info.uid !== process.getuid?.() || (info.mode & 0o077)) return refuse('BACKUP_PATH_UNSAFE');
+    const { backup, DatabaseSync } = nativeSqlite();
     const db = new DatabaseSync(sourcePath, { readOnly: true, timeout: SOURCE_BUSY_BUDGET });
     const ledger = join(staging, 'ledger.db');
     await writePrivate(ledger, new Uint8Array()); // 0600 before the backup API opens its output.

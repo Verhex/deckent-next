@@ -1,9 +1,11 @@
-import { DatabaseSync } from 'node:sqlite';
+import { createRequire } from 'node:module';
 import { createHash } from 'node:crypto';
 import { refuse } from './files.js';
+/** node:sqlite loads only when a ledger is actually opened, so importing the SDK never loads the native module (sqlite-ledger-lazy). */
+const nativeSqlite = () => createRequire(import.meta.url)('node:sqlite') as typeof import('node:sqlite');
 /** Stable table content fingerprint of the immutable online snapshot; identifiers are quoted, all integers read as bigint. */
 export function ledgerFingerprint(path: string): string {
-  const db = new DatabaseSync(path, { readOnly: true });
+  const db = new (nativeSqlite().DatabaseSync)(path, { readOnly: true });
   try {
     db.exec('BEGIN');
     const integrity = db.prepare('PRAGMA integrity_check').all().map(row => row['integrity_check']);
