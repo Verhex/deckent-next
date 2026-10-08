@@ -128,6 +128,7 @@ test('CLI set-own-row takes over a closed main through an isolated workspace and
   setOwnRow(file, 'main', { status: 'closed', focus: 'old' }, { session: 'old-main', revision: 0 });
   const script = path.join(dir, 'board.mjs');
   fs.copyFileSync(new URL('./board.mjs', import.meta.url), script);
+  for (const sibling of ['board-render.mjs', 'channel.mjs']) fs.copyFileSync(new URL('./' + sibling, import.meta.url), path.join(path.dirname(script), sibling));
   fs.writeFileSync(path.join(dir, 'workspace.json'), JSON.stringify({ version: 1, board: 'process-board.json' }));
   const run = session => spawnSync(process.execPath, [script, 'set-own-row', 'main', '-', '--session', session, '--revision', String(readBoard(file).revision)],
     { cwd: dir, input: JSON.stringify({ name: 'New' }), encoding: 'utf8', timeout: 10_000 });
