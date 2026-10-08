@@ -201,15 +201,20 @@ Market notes live outside the repo (`/home/alperen/deckent-refactor-work/proof/T
   (`terminalAdminPorts(...).info`, `/doctor` from `deckent doctor --json`, `/usage` budgets picked from `provider_spending`); `/help` lists the
   whole registry under its groups and runs the picked command. `/reasoning`, `/scratch` and an unknown command (SW-3) open list windows; the
   unknown window always ends with "All commands…", which opens `/help`. `/mode` opens the mode panel with a "Now:" header; `/resume` is a
-  picker; `/clear` wipes the visible screen (no ED 3) and starts a new `<Static>` epoch. Hosts: the panel controller keeps the job, approval,
+  picker; `/clear` erases the visible screen and the terminal's scrollback (home + ED 2 + ED 3, owner 2026-10-08; only on a TTY, never on TERM=dumb,
+  with NO_COLOR or to a non-TTY: the composition's `clearScreen`) and starts a new `<Static>` epoch. Hosts: the panel controller keeps the job, approval,
   resume and settings windows; `useWindowSlot` (terminal) is the one local slot for information and list windows. Every window is a `Window`
   in the one stack (single focus owner); the controller's modal card or picker hides the slot until answered (approval priority). The status
   row reads Ready while a slash window waits. **System summary line:** `systemSummaryEntry(text, level)` (terminal-work) is the only factory
   and `LedgerEntryRow` the only render point; the `/mode` change line (window and Shift+Tab) and a feed access refusal / missing identity
-  (error tone, once per text, even with no watch window open) use it. **Typed arguments:** with window words (`WorklineLabels.windows`, absent
-  on TERM=dumb) SW-1/SW-3 ignore a typed argument and open the window, SW-2 job/approval commands refuse it in a window that never echoes it
-  (open owner decision: one rule). Without window words SW-1/SW-3 keep the text command; SW-2 refuses in every TTY. Line mode and the CLI keep
-  arguments. Proof: external `proof/SLASH-WINDOWS-2026-10-08/` (`SW1/2/3-WORKER.md`, `INTEGRATION-WORKER.md`, `INTEGRATION-DECISIONS.md`).
+  (error tone, once per text, even with no watch window open) use it. **Typed arguments (owner I-1, Jev b1e8286f):** with window words (`WorklineLabels.windows`, absent on TERM=dumb) a slash command typed
+  with an argument runs bare in every host (slot, panel controller, watch windows, `/config` included); the window it opens shows once "Typed
+  arguments are not used in the terminal; choose in the window." (`WindowNoteContext`, consumed when that window closes, never on an approval
+  card); the typed text is never shown. Without window words SW-1/SW-3 keep the text command, SW-2 job windows open bare and `/monitor <args>`
+  stays the text command. Line mode and the CLI keep arguments. **Opening (owner I-5, Jev 59f75361):** the first surface snapshot leaves one
+  system line when runs or workers are active ("Work running: N runs, M workers · /runs /workers"), nothing when idle; the approval count
+  stays in the status row. Settings windows (`/model` pin, `/config`, `/mcp`, `/provider`) report through the same system line.
+  Proof: external `proof/SLASH-WINDOWS-2026-10-08/` (`SW1/2/3-WORKER.md`, `INTEGRATION-WORKER.md`, `INTEGRATION-DECISIONS.md`).
 - **Local inference serving** (`inference_serving`, `deckent inference plan|budget`) is a separate
   configuration card: pure capacity/launch estimates with loopback-only publish. `loopbackMetricsUrl` only
   derives a loopback `/metrics` URL. `deckent inference metrics` reads that URL through the bounded
@@ -279,7 +284,7 @@ the terminal's own foreground; the answer heading is `● Deckent` (`assistantLa
 workline first scrolls the visible rows into the scrollback (`rows` line feeds), then sends CUP home + ED 2 and prints the banner (catalog
 mark with an ASCII form, version, project and path, model, mode, `/help · Shift+Tab mode · ? shortcuts`), one line below 60 columns or
 with `terminal.banner: compact`, none with `off`; `terminal.clearOnStart: false` and `TERM=dumb` never clear; a pipe receives nothing.
-ED 3 is never sent by Deckent; Ink's own overflow redraw (`clearTerminal` when the live frame reaches the window height) still contains
+The opening never sends ED 3 (only `/clear` does, by owner decision 2026-10-08); Ink's own overflow redraw (`clearTerminal` when the live frame reaches the window height) still contains
 ED 3 — an open limit the bounded window (L1) and a decision on Ink's overflow path must close. Proof:
 `/home/alperen/deckent-refactor-work/proof/TUI2-2026-10-07/L2-review.md`.
 

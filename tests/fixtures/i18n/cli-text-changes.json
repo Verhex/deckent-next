@@ -451,6 +451,10 @@
     "tui.slash.desc.mcp": {
       "before": "Use external MCP tools — list · call <tool> [args] (project .mcp.json)",
       "after": null
+    },
+    "tui.slash.desc.config": {
+      "before": "Settings — bare /config opens a menu; /config set <key> <value> writes directly",
+      "after": "Settings — choose values in the /config window"
     }
   },
   "tr": {
@@ -1021,6 +1025,10 @@
     "tui.slash.desc.mcp": {
       "before": "Harici MCP araçları — list · call <tool> [args] (proje .mcp.json)",
       "after": null
+    },
+    "tui.slash.desc.config": {
+      "before": "Ayarlar — çıplak /config menü açar; /config set <anahtar> <değer> doğrudan yazar",
+      "after": "Ayarlar — /config penceresinde değer seçin"
     }
   }
 }

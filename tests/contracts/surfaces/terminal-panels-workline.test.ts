@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import type { PanelPorts } from '#surfaces/core/terminal-panels/index.js';
 import { terminalPanelLabels } from '#surfaces/core/work-labels/index.js';
 import { mountWorkline, settle, until, WORKLINE_TEST_LABELS } from '../support/workline-harness.js';
+import { SLASH_WINDOW_TEST_LABELS, TYPED_ARGUMENT_NOTE } from '../support/slash-window-labels.js';
 
 // T3 L4 PANELS on the real interactive workline (in-memory TTY): a bare `/mode`, `/config` or `/mcp` opens its window (one input owner: the
 // composer and Shift+Tab wait), typed config arguments remain in the picker, a held write opens approval in the same command, and
@@ -48,6 +49,22 @@ describe('settings windows in the workline', () => {
     await until(() => !frameOf(view).includes('Permission mode'), 'window closed');
     expect(view.stdout.text).toContain('CYCLED std->auto');
   });
+  it('rich terminal (I-1): a typed /config argument opens the config window with the one-time note and never shows the typed text', async () => {
+    const texts: string[] = [], modelInputs: unknown[] = [];
+    const ports: PanelPorts = { config: { inspect: async () => ({ title: 'CONFIG-WINDOW', notes: [], fields: [] }), parse: () => ({ ok: false, reason: '-' }),
+      write: async () => { throw new Error('no write'); } } };
+    const view = mountWorkline({ labels: { ...labels, windows: SLASH_WINDOW_TEST_LABELS }, panels: { ports, labels: terminalPanelLabels('en') },
+      config: async args => { texts.push(args); return ['TEXT-CONFIG']; }, completeTurn: async messages => { modelInputs.push(messages); return 'MODEL-OUTPUT'; } });
+    mounted.push(view.instance);
+    await settle(40);
+    view.stdin.write(`/config set max_workers 7${ENTER}`);
+    await until(() => frameOf(view).includes('CONFIG-WINDOW') && frameOf(view).includes(TYPED_ARGUMENT_NOTE), 'config window with the note');
+    expect(texts).toEqual([]); expect(modelInputs).toEqual([]); expect(frameOf(view)).not.toContain('max_workers 7');
+    view.stdin.write(ESC);
+    await until(() => !frameOf(view).includes('CONFIG-WINDOW'), 'closed');
+    expect(frameOf(view)).not.toContain(TYPED_ARGUMENT_NOTE);
+  });
+
   it('typed config arguments still open selection;  Esc at the window\'s first level closes it and the composer takes keys again', async () => {
     const texts: string[] = [], modelInputs: unknown[] = [];
     const ports: PanelPorts = { config: { inspect: async () => ({ title: 'CONFIG-WINDOW', notes: [], fields: [] }), parse: () => ({ ok: false, reason: '-' }),
