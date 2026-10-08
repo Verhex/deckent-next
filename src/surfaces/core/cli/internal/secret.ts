@@ -3,6 +3,7 @@ import { StringDecoder } from 'node:string_decoder';
 import { ErrorRegistry, emit, formatValue, loadConfig, resolveLocale, type ConfigLoadOptions } from '#platform/index.js';
 import { isSecretName } from '#engine/index.js';
 import type { CommandContext } from './kernel-commands.js';
+import { secretStoreCommand } from './secret-store.js';
 
 /** The installation's secret store as `doctor` shows it (SECRET-K1, owner S1): the active backend and whether it can be read now. */
 export interface SecretStoreDoctorView {
@@ -79,6 +80,7 @@ function readHidden(stdin: Input, stderr: Sink, name: string): Promise<string> {
  */
 export async function secretCommand(argv: readonly string[], context: CommandContext): Promise<void> {
   const action = argv[1];
+  if (action === 'store') { await secretStoreCommand(argv, context); return; }
   if (action !== 'list' && action !== 'set' && action !== 'delete') throw ErrorRegistry.createError('CLI_USAGE');
   const name = action === 'list' ? undefined : argv[2];
   if (action !== 'list' && (!name || name.startsWith('-'))) throw ErrorRegistry.createError('CLI_USAGE');

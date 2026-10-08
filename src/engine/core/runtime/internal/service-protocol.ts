@@ -3,7 +3,7 @@ import { agentTurnStreamEventSchema, effectCommandSchema, effectRecordSchema, ef
   parseModelInvocationPurgeCommand, parsePermissionModeCommand, parsePermissionModeQuery, parseProviderSpendAccountQuery, parseProviderSpendAuditCommand, parseScratchQuery,
   parseWorkspaceAttachmentRequest, parseWorkspaceFileQuery } from '#domain/index.js';
 import { clearSessionStandingSchema } from '#engine/core/approval/index.js';
-import { secretDeleteCommandSchema, secretSetCommandSchema } from '#engine/core/secret-store/index.js';
+import { secretDeleteCommandSchema, secretSetCommandSchema, secretStoreSwitchCommandSchema } from '#engine/core/secret-store/index.js';
 
 export const RUNTIME_SERVICE_SCHEMA_VERSION = 23 as const;
 export const RUNTIME_SERVICE_ERROR_PARAMS = 8;
@@ -21,7 +21,7 @@ export const runtimeServiceOperationSchema = z.enum(['renewApproval', 'listAppro
   'inspectInventory', 'requestRunCancellation', 'deliverRunCancellation', 'reconcileAttempt', 'recoverCancellations', 'describeService', 'shutdownService',
   'invokeModel', 'inspectModelInvocation', 'purgeModelInvocationContent', 'cancelModelInvocation', 'inspectProviderSpendAccount', 'auditProviderSpendAccount',
   'invokeModelStream', 'chatTurn', 'cancelChatTurn', 'findWorkspaceFiles', 'attachWorkspaceFile', 'executeOperation', 'compensateOperation', 'inspectOperation',
-  'inspectPermissionMode', 'setPermissionMode', 'inspectScratch', 'clearScratch', 'clearSessionStanding', 'setSecret', 'deleteSecret']);
+  'inspectPermissionMode', 'setPermissionMode', 'inspectScratch', 'clearScratch', 'clearSessionStanding', 'setSecret', 'deleteSecret', 'switchSecretStore']);
 export const runtimeServiceDescriptionInputSchema = z.object({}).strict().readonly();
 export const runtimeServiceDeliverySchema = z.object({ maxResultBytes: z.number().int().positive().safe() }).strict().readonly();
 const invocationOperation = (operation: RuntimeServiceOperation): boolean => operation === 'invokeModel' || operation === 'invokeModelStream' || operation === 'inspectModelInvocation'
@@ -64,8 +64,11 @@ export function isRuntimeServiceScratchOperation(operation: RuntimeServiceOperat
  * required assurance. A v18 client is outside the window: its decision is closed unanswered, never silently recorded as peer-session. */
 /** v18 (SECRET-WRITE; v17 was already pushed, so the operations start a new version): a change of one stored secret of the installation's store. No actor field: the
  * socket peer is the principal; the `secret`/`set|delete` policy cell decides; single bounded answers; current version only. */
-export function isRuntimeServiceSecretOperation(operation: RuntimeServiceOperation): operation is 'setSecret' | 'deleteSecret' {
-  return operation === 'setSecret' || operation === 'deleteSecret';
+/** SECRET-STORE-SWITCH (owner 2026-10-08): `switchSecretStore` — the version bump (v24, after T4-A's v23) is applied when this lands on T4-A;
+ * until then the operation rides in the current version. It moves every secret into another registered store and selects it
+ * under the `secret`/`switch` cell, audited as `secret-store-switch`; a single bounded answer of store ids and counts; current version only. */
+export function isRuntimeServiceSecretOperation(operation: RuntimeServiceOperation): operation is 'setSecret' | 'deleteSecret' | 'switchSecretStore' {
+  return operation === 'setSecret' || operation === 'deleteSecret' || operation === 'switchSecretStore';
 }
 export const runtimeOperationQuerySchema = z.object({ schemaVersion: z.literal(1), scopeId: identitySchema, commandId: identitySchema }).strict().readonly();
 export type RuntimeOperationQuery = z.infer<typeof runtimeOperationQuerySchema>;
@@ -106,6 +109,7 @@ export const runtimeServiceRequestSchema = z.object({ schemaVersion: z.literal(R
       else if (value.operation === 'inspectScratch' || value.operation === 'clearScratch') parseScratchQuery(value.input);
       else if (value.operation === 'setSecret') secretSetCommandSchema.parse(value.input);
       else if (value.operation === 'deleteSecret') secretDeleteCommandSchema.parse(value.input);
+      else if (value.operation === 'switchSecretStore') secretStoreSwitchCommandSchema.parse(value.input);
       // Approval input is validated by its shared application before I/O, like the existing Run operations.
     } catch { context.addIssue({ code: z.ZodIssueCode.custom, path: ['input'], message: 'RUNTIME_SERVICE_INPUT_INVALID' }); }
   } else if (Object.hasOwn(value, 'delivery')) {

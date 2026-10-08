@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { identitySchema } from '#domain/index.js';
 import { ErrorRegistry } from '#platform/index.js';
-import { SECRET_NAME_PATTERN, SECRET_VALUE_MAX_BYTES, isSecretName, isSecretValue } from './port.js';
+import { SECRET_NAME_PATTERN, SECRET_STORE_ID_PATTERN, SECRET_VALUE_MAX_BYTES, isSecretName, isSecretValue } from './port.js';
 
 /**
  * Runtime service wire shapes of a secret change (SECRET-WRITE, protocol v18 `setSecret` / `deleteSecret`). No actor field: the socket peer
@@ -32,4 +32,18 @@ export function acceptSecretChangeResult(operation: 'setSecret' | 'deleteSecret'
   const result = secretChangeResultSchema.safeParse(answer);
   return result.success && result.data.scopeId === command.scopeId && result.data.name === command.name
     && result.data.action === (operation === 'setSecret' ? 'set' : 'delete') ? result.data : null;
+}
+
+/** v24 (SECRET-STORE-SWITCH, owner 2026-10-08): move every secret into another registered store and select it; no actor field. */
+const storeId = z.string().max(128).regex(SECRET_STORE_ID_PATTERN);
+export const secretStoreSwitchCommandSchema = z.object({ schemaVersion: z.literal(1), scopeId: identitySchema, to: storeId,
+  confirmDowngrade: z.boolean() }).strict().readonly();
+/** The answer names stores and counts only: never a secret name or value. */
+export const secretStoreSwitchResultSchema = z.object({ schemaVersion: z.literal(1), scopeId: identitySchema, status: z.enum(['switched', 'current']),
+  from: storeId, to: storeId, entries: z.number().int().nonnegative().safe(), downgrade: z.boolean(), cleaned: z.boolean() }).strict().readonly();
+export type SecretStoreSwitchCommand = z.infer<typeof secretStoreSwitchCommandSchema>;
+/** An answer is trusted only for the switch that was asked (same scope and target); anything else is null (a transport fault). */
+export function acceptSecretStoreSwitchResult(command: SecretStoreSwitchCommand, answer: unknown) {
+  const result = secretStoreSwitchResultSchema.safeParse(answer);
+  return result.success && result.data.scopeId === command.scopeId && result.data.to === command.to ? result.data : null;
 }

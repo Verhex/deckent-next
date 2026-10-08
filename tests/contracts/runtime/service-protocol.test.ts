@@ -9,7 +9,7 @@ const operations = ['renewApproval', 'listApprovals', 'inspectApproval', 'decide
   'requestRunCancellation', 'deliverRunCancellation', 'reconcileAttempt', 'recoverCancellations', 'describeService', 'shutdownService',
   'invokeModel', 'inspectModelInvocation', 'purgeModelInvocationContent', 'cancelModelInvocation', 'inspectProviderSpendAccount', 'auditProviderSpendAccount',
   'invokeModelStream', 'chatTurn', 'cancelChatTurn', 'findWorkspaceFiles', 'attachWorkspaceFile', 'executeOperation', 'compensateOperation', 'inspectOperation',
-  'inspectPermissionMode', 'setPermissionMode', 'inspectScratch', 'clearScratch', 'clearSessionStanding', 'setSecret', 'deleteSecret'] as const;
+  'inspectPermissionMode', 'setPermissionMode', 'inspectScratch', 'clearScratch', 'clearSessionStanding', 'setSecret', 'deleteSecret', 'switchSecretStore'] as const;
 const reference = { providerId: 'provider', providerVersion: 1, modelId: 'model', modelVersion: 1 };
 const binding = { encodingVersion: 1, algorithm: 'sha256', digest: 'a'.repeat(64) };
 const invocation = {
@@ -54,6 +54,18 @@ describe('runtime service protocol', () => {
         { ...request, input: { ...query, principal: 'someone' } }, { ...request, input: { schemaVersion: 1, scopeId: 'scope-1' } }]) {
         expect(runtimeServiceRequestSchema.safeParse(invalid).success).toBe(false);
       }
+    }
+  });
+
+  it('carries the store switch (SECRET-STORE-SWITCH): bounded delivery, no actor field, a registered-store id grammar and an explicit downgrade flag', () => {
+    const request = { schemaVersion: 22, requestId: 'request-1', operation: 'switchSecretStore', delivery: { maxResultBytes: 4096 },
+      input: { schemaVersion: 1, scopeId: 'scope-1', to: 'core.secret-store.encrypted-file@1', confirmDowngrade: false } };
+    expect(runtimeServiceRequestSchema.parse(request)).toEqual(request);
+    expect(classifyRuntimeServiceOperation('switchSecretStore')).toBe('control');
+    for (const invalid of [{ ...request, delivery: undefined }, { ...request, input: { ...request.input, principal: 'someone' } },
+      { ...request, input: { ...request.input, to: 'secrets.json' } }, { ...request, input: { ...request.input, confirmDowngrade: 'yes' } },
+      { ...request, input: { schemaVersion: 1, scopeId: 'scope-1', to: 'core.secret-store.file@1' } }]) {
+      expect(runtimeServiceRequestSchema.safeParse(invalid).success).toBe(false);
     }
   });
 

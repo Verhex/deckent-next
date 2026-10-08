@@ -70,6 +70,9 @@ export interface CommandContext extends InstallationCommandContext, IdentityComm
   // SECRET-WRITE: `secret set|delete` through the runtime service (the socket peer is the principal; the `secret` policy cell decides).
   setSecret?: import('./secret.js').SecretSetHandler;
   deleteSecret?: import('./secret.js').SecretDeleteHandler;
+  // SECRET-STORE-SWITCH (v24): the stores for the picker and the governed switch through the runtime service (`secret`/`switch`).
+  listSecretStores?: import('./secret-store.js').SecretStoresHandler;
+  switchSecretStore?: import('./secret-store.js').SecretStoreSwitchHandler;
   // K5 typed pool hold: `pool hold|resume|status` (local application, no runtime service needed).
   applyPoolCapacity?: import('./pool.js').PoolCapacityApplyHandler;
   inspectPoolCapacity?: import('./pool.js').PoolCapacityInspectHandler;

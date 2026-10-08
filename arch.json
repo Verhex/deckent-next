@@ -105,6 +105,7 @@
     },
     "src/adapters/core/contract": {
       "dependencies": [
+        "src/platform/core/utils",
         "src/adapters/core/host-shell",
         "src/adapters/core/http-conditional-effect",
         "src/adapters/core/workspace-write",
@@ -1149,6 +1150,10 @@
     },
     "src/composition/core/installation": {
       "dependencies": [
+        "src/adapters/core/contract",
+        "src/adapters/core/secret-store",
+        "src/engine/core/secret-store",
+        "src/domain/core/audit",
         "src/composition/core/policy",
         "src/adapters/core/local-keyring",
         "src/adapters/core/attempt-store",

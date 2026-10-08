@@ -3,5 +3,8 @@ export type { SecretStore, SecretStoreContext, SecretStoreDescriptor, SecretStor
 export { SecretStoreRegistry } from './internal/registry.js';
 export { SecretStoreAdministration, policySecretChangeAuthorization } from './internal/administration.js';
 export type { SecretChangeAudit, SecretChangeAuthorization, SecretChangeDecision, SecretChangeRequest } from './internal/administration.js';
-export { acceptSecretChangeResult, prepareSecretChange, secretChangeResultSchema, secretDeleteCommandSchema, secretSetCommandSchema } from './internal/wire.js';
-export type { SecretChangeResult, SecretDeleteCommand, SecretSetCommand } from './internal/wire.js';
+export { acceptSecretChangeResult, acceptSecretStoreSwitchResult, prepareSecretChange, secretChangeResultSchema, secretDeleteCommandSchema, secretSetCommandSchema,
+  secretStoreSwitchCommandSchema, secretStoreSwitchResultSchema } from './internal/wire.js';
+export type { SecretChangeResult, SecretDeleteCommand, SecretSetCommand, SecretStoreSwitchCommand } from './internal/wire.js';
+export { SECRET_STORE_SWITCH_RESOURCE_ID, SecretStoreSwitch, isSecretStoreDowngrade, policySecretStoreSwitchAuthorization } from './internal/switch.js';
+export type { SecretStoreSelectionPort, SecretStoreSwitchPorts, SecretStoreSwitchRequest, SecretStoreSwitchResult } from './internal/switch.js';
