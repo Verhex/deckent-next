@@ -10,7 +10,7 @@ Owner 2026-09-21: dar dilimler ürün hedefini küçültmez; mevcut kararlar yen
 
 ## Spend settlement — owner 2026-10-08, lane implementation in progress
 
-Accepted: `measured-tariff` records provider usage × a pinned published/operator tariff with exact bigint arithmetic, usage dimensions, tier and tariff digest; it never means provider-reported money. Reservation v3 / ledger49 migration follows the existing service-start backup contract. Unknown/cancelled calls with retained usage settle; otherwise a held reservation remains reconcilable. Governed, policy-checked `spend reconcile` records a settle/release/write-off receipt, preserves original hold evidence and cannot alter settled charges. Governed budget revision preserves history, increments the scope budget revision, permits lowering below outstanding spending (new sends refuse), and explicitly unfreezes. Paid OpenAI-compatible endpoints require verified vendor or declared versioned tariffs; legacy zero applies only to loopback. Account folds exact charges once; a correction above the reserved maximum freezes admission. Management receipts are immutable and capacity is checked before their transaction commits. CLI `models reconcile-spending` / `models revise-budget`, SDK `manageProviderSpend`, MCP `manage_provider_spending` share one command and policy cells `provider-spend-account/reconcile|budget-revision`; template v7 upgrades the installing owner only. DeepSeek peak/off-peak rows reserve peak but hold when authoritative billing tier is absent. T4-B consumes `lookupOpenAiCompatibleTariff(endpoint, modelId)` from `provider-openai-chat`. Independent review, combined protocol integration and landing remain open; proof: `proof/SPEND-SETTLEMENT-2026-10-08/`.
+Accepted: `measured-tariff` records provider usage × a pinned published/operator tariff with exact bigint arithmetic, usage dimensions, tier and tariff digest; it never means provider-reported money. Reservation v3 / ledger49 migration follows the existing service-start backup contract. Unknown/cancelled calls with retained usage settle; otherwise a held reservation remains reconcilable. Governed, policy-checked `spend reconcile` records a settle/release/write-off receipt, preserves original hold evidence and cannot alter settled charges. Governed budget revision preserves history, increments the scope budget revision, permits lowering below outstanding spending (new sends refuse), and explicitly unfreezes. Paid OpenAI-compatible endpoints require verified vendor or declared versioned tariffs; legacy zero applies only to loopback. Account folds exact charges once; a correction above the reserved maximum freezes admission. Management receipts are immutable and capacity is checked before their transaction commits. CLI `models reconcile-spending` / `models revise-budget`, SDK `manageProviderSpend`, MCP `manage_provider_spending` share one command and policy cells `provider-spend-account/reconcile|budget-revision`; template v7 upgrades the installing owner only. DeepSeek peak/off-peak rows reserve peak but hold when authoritative billing tier is absent. T4-B consumes `lookupOpenAiCompatibleTariff(endpoint, modelId)` from `provider-openai-chat`. **Stage 1 (owner 2026-10-08, Jev 459611ed, `wave/stage1`):** `budget-create` writes a scope's first ledger account at revision 1 (one shared USD limit across every API provider; CLI/terminal use budget id `scope-budget`) under the same policy cell `provider-spend-account/budget-revision`; its receipt has no prior checkpoint and the account carries the command digest/id. A second create, or one beside a configured `provider_spending` budget, is `PROVIDER_SPEND_BUDGET_EXISTS` (next: revise). Admission resolves the budget ledger-first: the scope's account wins, a configured budget alone still opens the first account, neither is `PROVIDER_SPEND_UNAVAILABLE`. The account query's `current` form returns the scope's account whatever id/revision it holds (none: `scope-budget`/1 without checkpoint); MCP `inspect_provider_spending` keeps the exact form. CLI `models create-budget|revise-budget --scope --usd [--unfreeze]` and the `/model`·`/provider` budget window (presets 5/10/25/50/100, bounded stepper 1–1000, confirm, one system line; data `cli-models/internal/budget-choices.json`) build the same command. Independent review and landing remain open; proof: `proof/SPEND-SETTLEMENT-2026-10-08/`, `proof/STAGE1-2026-10-08/`.
 
 ## Document map (2026-10-05 simplification)
 
@@ -427,7 +427,7 @@ refresh, usage and dogfood closure remain open.
   clients (list/inspect/decide); a v21 client still has them hidden (`approvalSubjectsHiddenFromProtocol`). Lifecycle window [22,21]. No other T3
   wire field (MCP trust and proposal windows reuse `approval.requested`; read-tool `diagnostic` stays in the service).
   v23 (T4 MODEL-SWITCH) was pushed with alpha.14. v24 (SECRET-STORE-SWITCH, owner 2026-10-08, unpushed): one operation `switchSecretStore`;
-  lifecycle window [24,23] (a v22 service is outside; a v23 client cannot reach the switch). SPEND-SETTLEMENT lane adds bounded `manageProviderSpend` in v25/window [25,24]; T4-B may also take v25, so lead must combine both operation sets before landing. Package version stays unchanged.
+  lifecycle window [24,23] (a v22 service is outside; a v23 client cannot reach the switch). v25 (SPEND-SETTLEMENT, combined on `wave/stage1` 2026-10-08): bounded `manageProviderSpend` (reconcile, budget revision, stage 1 `budget-create`); lifecycle window [25,24]. T4-B adds no operation (`models.connect` runs in the CLI/SDK/MCP/terminal process). Stage 1 widened one input inside the unreleased 25: the account query also takes `{scopeId, current: true}`. Package version stays unchanged.
   v18 was introduced 2026-09-29 (SECRET-WRITE, lead decision under this rule) as the single v18 package: the control operations
   `setSecret` / `deleteSecret`; lifecycle window [18,17]; every other v17 operation is unchanged in v18. It is unreleased until pushed, and
   further v18 items add to it without another bump. Like every bump, the window's older version is lifecycle-only: a v17 client can
@@ -585,14 +585,17 @@ Core contracts and never requires editing Core. Core-memory law 10 records this 
   channel/model is missing → declaration in `provider_catalog` on the layer that authors it (a new content-named revision) → this scope's
   activations still valid under the new revision are re-admitted (a catalog revision change otherwise breaks every activation) → the invocation
   profile on every layer that authors profiles (user first: a project snapshot stays a subset) with endpoint preset, the connection's secret NAME
-  as `credentialRef` (https only; plain-http local servers get none), published tariff (Anthropic) or the OpenAI chat adapter's zero-rate tariff
-  (reported `unmetered`), registry limits with the response limit narrowed to what the installation's result frames deliver → chat activation →
+  as `credentialRef` (https only; plain-http local servers get none), published tariff (Anthropic) or, for the OpenAI chat adapter (stage 1), the
+  exact verified row of `lookupOpenAiCompatibleTariff(endpoint, nativeId)` (`published`); a remote model without one is refused before any
+  catalog/config write (`MODEL_CONNECT_TARIFF_UNVERIFIED`; the adapter step runs first), only loopback keeps the zero tariff (`unmetered`), registry limits with the response limit narrowed to what the installation's result frames deliver → chat activation →
   one `model-connect` audit subject. A config approval stops the run (`approval-pending`); the same command id continues. No key value is taken.
 - **Provider rows (Jev da5312fb):** OpenAI, DeepSeek, Z.ai GLM (global) and Zhipu GLM (China) each keep their own secret name; the generic
   OpenAI-compatible row derives `DECKENT_OAICOMPAT_<HOST[_PORT]>` from the chosen address and shows it before saving. Z.ai documents no free
   read: its rows have no probe (the key is kept unverified). Owner 2026-10-08: no paid call to a remote endpoint without a verified price — the
-  generic row's remote address is refused (`MODEL_CONNECT_PRICE_REQUIRED`, its window row locked) until SPEND-SETTLEMENT brings the declared
-  price; the verified OpenAI/DeepSeek/GLM price records replace the zero-rate tariff at one point (`connectionAdapter`, provider-connect).
+  generic row's remote address is refused (`MODEL_CONNECT_PRICE_REQUIRED`, its window row locked) until a declared-price picker exists (the
+  operator tariff v2 data path is in SPEND-SETTLEMENT); vendor rows take the verified price at one point (`connectionAdapter`, provider-connect)
+  and the `/provider` model list locks an unpriced seed model ("Price not verified — paid calls are refused"). Snapshot 2026-10-08: among the
+  OpenAI-compatible seeds only DeepSeek `deepseek-flash`/`deepseek-v4-pro` are priced (their peak/off-peak rows settle held until reconciled).
   Seeds exist for Anthropic, OpenAI, DeepSeek and Z.ai global; not for Zhipu China or
   OpenRouter (ids/endpoint tag unverified). Open decisions (DeepSeek/Z.ai wire parameters, metered OpenAI-chat tariff) are in external
   `proof/T4B-2026-10-08/DECISIONS.md`.
@@ -601,12 +604,14 @@ Core contracts and never requires editing Core. Core-memory law 10 records this 
   data per row: `tokenLimitField` max_tokens | max_completion_tokens, `streamUsage` include | omit, allowed `tool_choice`; DeepSeek max_tokens with
   stream_options, Z.ai/Zhipu max_tokens without stream_options and tool_choice auto only); v4 profiles keep the OpenAI wire and are still served;
   the evidence records the served version (Jev d69089cf). First-run policy template **v7** adds `model-activation` activate/inspect (every scope)
-  and `model-invocation` invoke/inspect/inspect-content/cancel-invocation (installed scope); `init policy --upgrade [--person]` adds only the
+  and `model-invocation` invoke/inspect/inspect-content/cancel-invocation (installed scope), and (combined with SPEND-SETTLEMENT in the same v7)
+  `provider-spend-account` inspect/audit/reconcile/budget-revision (installed scope); `init policy --upgrade [--person]` adds only the
   missing rules (Jev 125e4435). Seeds `zai-cn-api` (docs.bigmodel.cn) and `openrouter-api` (exact ids + first-party endpoint tags; catalog
   registration only: the OpenRouter adapter takes no tools/streaming and its quote needs max_completion_tokens) (Jev bca0e8c6). The connect
   result lists kept (`carriedModels`) and not-carried models; the summary line only counts (Jev e3dcf2eb). `terminal.chat.reference` is
   optional: a shadowing project model gets two governed answers in `/model` (remove it / make it this one; project layer, reference only)
-  (Jev 77898686). `/model` and `/provider` lock on a missing scope budget (`PROVIDER_SPEND_UNAVAILABLE`); an old shared key name
+  (Jev 77898686). `/model` and `/provider` lock on a missing scope budget (`PROVIDER_SPEND_UNAVAILABLE`; stage 1: a ledger account counts, and the lock offers
+  "Create budget"); an old shared key name
   (`legacyKeys`) is warned and removable.
 
 ## Packages (current implementation)
