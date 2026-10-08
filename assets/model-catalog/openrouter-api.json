@@ -1,6 +1,6 @@
 {
   "schemaVersion": 3,
-  "revision": "openrouter-api-2026-10-08",
+  "revision": "openrouter-api-v5-2026-10-08",
   "providers": [
     {
       "id": "openrouter-api",
@@ -11,7 +11,7 @@
         "aliases": [],
         "client": null,
         "billing": "per-token",
-        "protocolFamily": "openrouter-chat-completions",
+        "protocolFamily": "openai-chat-completions",
         "aliasesRefused": [],
         "provenance": {
           "sourceUrl": "https://openrouter.ai/docs/quickstart",
@@ -26,6 +26,17 @@
           "protocols": [
             {
               "family": "openrouter-chat-completions",
+              "version": "v1",
+              "capabilities": [
+                {
+                  "id": "tool-calls",
+                  "version": 1,
+                  "state": "supported"
+                }
+              ]
+            },
+            {
+              "family": "openai-chat-completions",
               "version": "v1",
               "capabilities": [
                 {
@@ -107,6 +118,17 @@
                   "state": "supported"
                 }
               ]
+            },
+            {
+              "family": "openai-chat-completions",
+              "version": "v1",
+              "capabilities": [
+                {
+                  "id": "tool-calls",
+                  "version": 1,
+                  "state": "supported"
+                }
+              ]
             }
           ],
           "lifecycle": {
@@ -172,6 +194,17 @@
           "protocols": [
             {
               "family": "openrouter-chat-completions",
+              "version": "v1",
+              "capabilities": [
+                {
+                  "id": "tool-calls",
+                  "version": 1,
+                  "state": "supported"
+                }
+              ]
+            },
+            {
+              "family": "openai-chat-completions",
               "version": "v1",
               "capabilities": [
                 {
@@ -253,6 +286,17 @@
                   "state": "supported"
                 }
               ]
+            },
+            {
+              "family": "openai-chat-completions",
+              "version": "v1",
+              "capabilities": [
+                {
+                  "id": "tool-calls",
+                  "version": 1,
+                  "state": "supported"
+                }
+              ]
             }
           ],
           "lifecycle": {
@@ -318,6 +362,17 @@
           "protocols": [
             {
               "family": "openrouter-chat-completions",
+              "version": "v1",
+              "capabilities": [
+                {
+                  "id": "tool-calls",
+                  "version": 1,
+                  "state": "supported"
+                }
+              ]
+            },
+            {
+              "family": "openai-chat-completions",
               "version": "v1",
               "capabilities": [
                 {
@@ -399,6 +454,17 @@
                   "state": "supported"
                 }
               ]
+            },
+            {
+              "family": "openai-chat-completions",
+              "version": "v1",
+              "capabilities": [
+                {
+                  "id": "tool-calls",
+                  "version": 1,
+                  "state": "supported"
+                }
+              ]
             }
           ],
           "lifecycle": {
@@ -464,6 +530,17 @@
           "protocols": [
             {
               "family": "openrouter-chat-completions",
+              "version": "v1",
+              "capabilities": [
+                {
+                  "id": "tool-calls",
+                  "version": 1,
+                  "state": "supported"
+                }
+              ]
+            },
+            {
+              "family": "openai-chat-completions",
               "version": "v1",
               "capabilities": [
                 {
@@ -545,6 +622,17 @@
                   "state": "supported"
                 }
               ]
+            },
+            {
+              "family": "openai-chat-completions",
+              "version": "v1",
+              "capabilities": [
+                {
+                  "id": "tool-calls",
+                  "version": 1,
+                  "state": "supported"
+                }
+              ]
             }
           ],
           "lifecycle": {
@@ -611,6 +699,17 @@
           "protocols": [
             {
               "family": "openrouter-chat-completions",
+              "version": "v1",
+              "capabilities": [
+                {
+                  "id": "tool-calls",
+                  "version": 1,
+                  "state": "supported"
+                }
+              ]
+            },
+            {
+              "family": "openai-chat-completions",
               "version": "v1",
               "capabilities": [
                 {

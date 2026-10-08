@@ -24,7 +24,7 @@ afterEach(async () => { vi.restoreAllMocks(); clearConfigCache(); await Promise.
   server.closeAllConnections(); server.close(() => resolve());
 }))); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 
-async function fixture(withBudget = true, allow = true, completePricing = true) {
+async function fixture(withBudget = true, allow = true, completePricing = true, v5 = false) {
   const root = await mkdtemp(join(tmpdir(), 'deckent-openrouter-composition-')); roots.push(root);
   const project = join(root, 'project'), data = join(root, 'data'), home = join(root, 'home');
   await Promise.all([mkdir(join(project, '.deckent'), { recursive: true }), mkdir(data), mkdir(home)]);
@@ -35,7 +35,7 @@ async function fixture(withBudget = true, allow = true, completePricing = true) 
     if (request.url === '/api/v1/models/vendor/model/endpoints') {
       metadataGets++; response.writeHead(200, { 'content-type': 'application/json' }); response.end(JSON.stringify({ data: { id: 'vendor/model', endpoints: [{
         model_id: 'vendor/model', tag: 'provider/region', provider_name: 'Fixture', context_length: 4096, max_prompt_tokens: 1000,
-        max_completion_tokens: 32, status: 0, supported_parameters: ['max_completion_tokens'],
+        max_completion_tokens: 32, status: 0, supported_parameters: v5 ? ['max_tokens', 'tools', 'tool_choice'] : ['max_completion_tokens'],
         pricing: { prompt: '0.000001', completion: '0.000002', ...(completePricing ? { request: '0' } : {}),
           input_cache_read: '0', input_cache_write: '0', internal_reasoning: '0' },
       }] } })); return;
@@ -52,14 +52,20 @@ async function fixture(withBudget = true, allow = true, completePricing = true) 
   servers.push(server); await new Promise<void>((resolve, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', resolve); });
   const address = server.address(); if (!address || typeof address === 'string') throw new Error('FIXTURE');
   const origin = `https://127.0.0.1:${address.port}`, reference = { providerId: 'openrouter', providerVersion: 1, modelId: 'model', modelVersion: 1 };
-  const model = { id: 'model', version: 1, nativeId: 'vendor/model', protocols: [{ family: 'openrouter-chat-completions', version: 'v1', capabilities: [] }] };
+  const family = v5 ? 'openai-chat-completions' : 'openrouter-chat-completions';
+  const model = { id: 'model', version: 1, nativeId: 'vendor/model', protocols: [{ family, version: 'v1',
+    capabilities: v5 ? [{ id: 'tool-calls', version: 1, state: 'supported' }] : [] }] };
   const catalog = { schemaVersion: 1 as const, revision: 'catalog', providers: [{ id: 'openrouter', version: 1, models: [model] }] };
   const definition = { encodingVersion: 1 as const, provider: { id: 'openrouter', version: 1 }, model };
   const binding = { encodingVersion: 1 as const, algorithm: 'sha256' as const,
     digest: createHash('sha256').update(encodeModelBindingDefinition(definition)).digest('hex') };
   const profile = { schemaVersion: 1 as const, id: 'profile', version: 1, scopeId: 'scope', reference, bindingDigest: binding.digest,
-    protocol: { family: 'openrouter-chat-completions', version: 'v1' }, adapter: { id: 'openrouter-chat-http', version: 1,
-      definition: { endpoint: `${origin}/chat`, authentication: { type: 'none' }, tls: { caPem }, maxOutputTokens: 32,
+    protocol: { family, version: 'v1' }, adapter: { id: v5 ? 'openai-chat-http' : 'openrouter-chat-http', version: v5 ? 5 : 1,
+      definition: v5 ? { endpoint: `${origin}/chat`, authentication: { type: 'none' }, tls: { caPem }, maxOutputTokens: 32,
+        dialect: { tokenLimitField: 'max_tokens', streamUsage: 'omit', toolChoice: ['auto', 'none', 'required'], finalUsageChoice: 'repeat-finish' },
+        tariff: { kind: 'openrouter-endpoint', version: 1, currency: 'USD', metadataEndpoint: `${origin}/api/v1/models/vendor/model/endpoints`,
+          endpointTag: 'provider/region', metadataLimits: { maxAgeMs: 60_000, maxResponseBytes: 64_000, timeoutMs: 1000 } } }
+      : { endpoint: `${origin}/chat`, authentication: { type: 'none' }, tls: { caPem }, maxOutputTokens: 32,
         metadataEndpoint: `${origin}/api/v1/models/vendor/model/endpoints`, endpointTag: 'provider/region',
         metadataLimits: { maxAgeMs: 60_000, maxResponseBytes: 64_000, timeoutMs: 1000 } } },
     allocation: { id: 'allocation', maxCalls: 3, maxInFlight: 2 }, limits: { requestMaxBytes: 4096, responseMaxBytes: 8192, timeoutMs: 2000 } };
@@ -112,6 +118,25 @@ it('acquires one native tariff, persists one reservation, and replays without re
   const replayReader = await openSqliteProviderSpendIntegrityReader(f.ledger, { busyTimeoutMs: 1000 });
   try { await expect(verifyProviderSpendIntegrity(replayReader, 'scope', 10)).resolves.toEqual(beforeReplay); }
   finally { replayReader.close(); }
+});
+
+it.each([true, false])('v5 configured OpenRouter uses governed acquisition and durable reported settlement, budget=%s', async budget => {
+  const f = await fixture(budget, true, true, true);
+  f.setUsage({ prompt_tokens: 10, completion_tokens: 2, total_tokens: 12, cost: 0.0002 });
+  const command = { ...f.command, nativeRequest: { ...f.command.nativeRequest, tools: [{ type: 'function', function: { name: 'read_file', parameters: { type: 'object' } } }] } };
+  if (!budget) {
+    await expect(invokeConfiguredModel(f.project, command, { env: f.env })).rejects.toThrow();
+    expect([f.metadataGets, f.posts]).toEqual([0, 0]); return;
+  }
+  const result = await invokeConfiguredModel(f.project, command, { env: f.env });
+  expect(result.receipt.outcome?.state).toBe('responded'); expect([f.metadataGets, f.posts]).toEqual([1, 1]);
+  const reader = await openSqliteModelInvocationReader(f.ledger, { busyTimeoutMs: 1000 });
+  try { expect((await reader.loadInspection('scope', result.receipt.claim.invocationId))?.spending).toMatchObject({
+    descriptor: { quote: { meter: { id: 'openrouter-chat-reservation' } } },
+    disposition: { state: 'settled-provider-reported', amountMinorUnits: 1 }, measurement: { basis: 'provider-reported', exactMinorUnits: '0.02' },
+  }); } finally { reader.close(); }
+  expect((await invokeConfiguredModel(f.project, command, { env: f.env })).replayed).toBe(true);
+  expect([f.metadataGets, f.posts]).toEqual([1, 1]);
 });
 
 it.each([[false, true], [true, false]] as const)('denies missing budget or policy before metadata acquisition', async (budget, policy) => {

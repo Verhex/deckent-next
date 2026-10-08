@@ -1,4 +1,5 @@
 import { isDeepStrictEqual } from 'node:util';
+import { createOpenRouterOpenAiPricedNative } from '#adapters/index.js';
 import { modelInvocationProfileSchema, PROVIDER_SPEND_SCOPE_BUDGET_ID, type ModelBindingDefinition, type ModelInvocationProfile } from '#domain/index.js';
 import { ProviderSpendError, type ModelInvocationNativePort, type ModelInvocationSpendingAuthority, type ModelInvocationSpendingInput } from '#engine/index.js';
 import { createOpenAiChatPricedNative, isOpenAiChatHttpAdapter, parseOpenAiChatHttpDefinition, createOpenRouterPricedNative, OPENROUTER_CHAT_HTTP_ADAPTER_ID, OPENROUTER_CHAT_HTTP_ADAPTER_VERSION, parseOpenRouterChatDefinition, type OpenRouterPricedNative, fetchOpenRouterTariff, createOpenRouterTariffCache, type OpenRouterMetadataObservation, providerSpendingBudgetFor, providerSpendingConfiguredBudget, openSqliteProviderSpendAccountReader, createAnthropicMessagesPricedNative, parseAnthropicMessagesDefinition, createDecisionHttpNativePort, decisionHttpAdapter, parseDecisionHttpDefinition, quoteDecisionHttpOperatorTariff, ANTHROPIC_MESSAGES_HTTP_ADAPTER_ID, ANTHROPIC_MESSAGES_HTTP_ADAPTER_VERSION, type AnthropicMessagesPricedNative, localPrefixCacheSalt } from '#adapters/index.js';
@@ -28,7 +29,7 @@ export function createConfiguredModelInvocationNative(context: InvocationNativeC
       return current;
     } finally { reader.close(); }
   };
-  let selected: { profile: ModelInvocationProfile; priced: OpenRouterPricedNative; cell: { observation?: OpenRouterMetadataObservation } } | undefined;
+  let selected: { profile: ModelInvocationProfile; priced: OpenRouterPricedNative | ReturnType<typeof createOpenRouterOpenAiPricedNative>; cell: { observation?: OpenRouterMetadataObservation } } | undefined;
   let anthropic: { profile: ModelInvocationProfile; priced: AnthropicMessagesPricedNative } | undefined;
   let openai: ReturnType<typeof createOpenAiChatPricedNative> | undefined;
   const natives = Object.freeze({
@@ -43,7 +44,14 @@ export function createConfiguredModelInvocationNative(context: InvocationNativeC
         anthropic = { profile, priced }; return priced.native;
       }
       if (isOpenAiChatHttpAdapter(profile.adapter)) {
-        const definition = parseOpenAiChatHttpDefinition(profile.adapter.definition); openai = createOpenAiChatPricedNative({ resolveCredential: scopedInvocationCredentialResolver(context, profile, definition.authentication, options),
+        const definition = parseOpenAiChatHttpDefinition(profile.adapter.definition);
+        if (definition.tariff.kind === 'openrouter-endpoint') {
+          const cell: { observation?: OpenRouterMetadataObservation } = {}, priced = createOpenRouterOpenAiPricedNative({
+            currentObservation: () => { if (!cell.observation) throw new ProviderSpendError('PROVIDER_SPEND_UNAVAILABLE'); return cell.observation; },
+            now, resolveCredential: scopedInvocationCredentialResolver(context, profile, definition.authentication, options) });
+          selected = { profile, priced, cell }; return priced.native;
+        }
+        openai = createOpenAiChatPricedNative({ resolveCredential: scopedInvocationCredentialResolver(context, profile, definition.authentication, options),
           cacheSalt: scopeId => installationCacheSalt(context, scopeId) }); return openai.native;
       }
       if (profile.adapter.id !== OPENROUTER_CHAT_HTTP_ADAPTER_ID || profile.adapter.version !== OPENROUTER_CHAT_HTTP_ADAPTER_VERSION) return null;
@@ -55,12 +63,14 @@ export function createConfiguredModelInvocationNative(context: InvocationNativeC
       selected = { profile, priced, cell }; return priced.native;
     },
     async acquire(input: { readonly profile: ModelInvocationProfile; readonly definition: ModelBindingDefinition; readonly native: ModelInvocationNativePort }, signal?: AbortSignal): Promise<void> {
-      if (input.profile.adapter.id !== OPENROUTER_CHAT_HTTP_ADAPTER_ID) return;
+      const openaiDefinition = isOpenAiChatHttpAdapter(input.profile.adapter) ? parseOpenAiChatHttpDefinition(input.profile.adapter.definition) : null;
+      const metadataTariff = openaiDefinition?.tariff.kind === 'openrouter-endpoint' ? openaiDefinition.tariff : null;
+      if (input.profile.adapter.id !== OPENROUTER_CHAT_HTTP_ADAPTER_ID && !metadataTariff) return;
       const current = selected;
       if (!current || input.native !== current.priced.native || !isDeepStrictEqual(input.profile, current.profile)) throw new ProviderSpendError('PROVIDER_SPEND_CONFLICT');
       // Reject absent/revoked scope authority before the metadata network effect.
       providerSpendingBudgetFor(await invocationEffectAuthority(context, input.profile)(signal), input.profile.scopeId);
-      const definition = parseOpenRouterChatDefinition(input.profile.adapter.definition);
+      const definition = metadataTariff ? { ...metadataTariff, transport: openaiDefinition! } : parseOpenRouterChatDefinition(input.profile.adapter.definition);
       current.cell.observation = await tariffCache.get({ endpoint: definition.metadataEndpoint, modelId: input.definition.model.nativeId, endpointTag: definition.endpointTag,
         ...definition.metadataLimits, ...(definition.transport.tls ? { caPem: definition.transport.tls.caPem } : {}) }, now, signal);
     },
@@ -71,6 +81,10 @@ export function createConfiguredModelInvocationNative(context: InvocationNativeC
         const budget=await budgetFor(input.command.scopeId); return Object.freeze({budget,quote:quoteDecisionHttpOperatorTariff(input)});
       }
       if (isOpenAiChatHttpAdapter(input.profile.adapter)) {
+        if (parseOpenAiChatHttpDefinition(input.profile.adapter.definition).tariff.kind === 'openrouter-endpoint') {
+          if (!selected || !isDeepStrictEqual(input.profile, selected.profile)) throw new ProviderSpendError('PROVIDER_SPEND_UNAVAILABLE');
+          const budget = await budgetFor(input.command.scopeId); return Object.freeze({ budget, quote: selected.priced.quote(input) });
+        }
         // Operator-declared tariff: the same scope budget, reservation and ledger settlement as priced providers.
         const budget = await budgetFor(input.command.scopeId); return Object.freeze({ budget, quote: (() => { if (!openai) throw new ProviderSpendError('PROVIDER_SPEND_UNAVAILABLE'); return openai.quote(input); })() });
       }

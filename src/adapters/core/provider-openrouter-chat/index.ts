@@ -3,3 +3,4 @@ export { OPENROUTER_CHAT_HTTP_ADAPTER_ID, OPENROUTER_CHAT_HTTP_ADAPTER_VERSION, 
 export { createOpenRouterPricedNative } from './internal/native.js';
 export type { OpenRouterNativeOptions, OpenRouterPricedNative } from './internal/native.js';
 export type { OpenRouterUsageObservation } from './internal/usage.js';
+export { createOpenRouterOpenAiPricedNative } from './internal/openai-native.js';

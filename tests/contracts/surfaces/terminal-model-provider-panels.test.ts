@@ -269,19 +269,19 @@ describe('/provider window', () => {
     expect(calls.approvals).toEqual(['approval-7']); expect(calls.closed).toBe(1);
   });
 
-  it('K6 (Jev 7e0348c4): OpenRouter keeps its key and says on its row that model binding comes in the next slice; no model action is offered', async () => {
+  it('OpenRouter offers seeded model binding without the next-slice note', async () => {
     const openrouter = { id: 'openrouter', label: 'OpenRouter', detail: 'key DECKENT_OPENROUTER_KEY stored · 0 model profile(s) use it', blocked: null,
-      keyName: 'DECKENT_OPENROUTER_KEY', keyStored: true, endpointEditable: false, endpointDefault: 'https://openrouter.ai', keyRequired: true, endpointChoices: [], models: [],
-      modelBlocked: null, pendingNote: 'model bağlama bir sonraki dilimde gelecek' } as const;
+      keyName: 'DECKENT_OPENROUTER_KEY', keyStored: true, endpointEditable: false, endpointDefault: 'https://openrouter.ai', keyRequired: true, endpointChoices: [], models: [{ id: 'seed:anthropic/claude-sonnet-5.5', label: 'Claude Sonnet 5.5', detail: 'anthropic/claude-sonnet-5.5', blocked: null }],
+      modelBlocked: null, pendingNote: null } as const;
     const view: ProviderPanelView = { title: 'Sağlayıcılar', notes: [], kinds: [openrouter] };
-    expect(providerPanelTree(view, terminalPanelLabels('tr').provider, true).items[0]!.children!.map(child => child.id)).toEqual(['connect', 'disconnect']);
+    expect(providerPanelTree(view, terminalPanelLabels('tr').provider, true).items[0]!.children!.map(child => child.id)).toEqual(['connect', 'model', 'disconnect']);
     const { port } = providerPort();
     const { element } = panel('provider', { provider: { ...port, inspect: async () => view } }, 'tr');
     const screen = mount(element, 120, 30);
     await settle(80);
-    expect(screen.frame()).toContain('OpenRouter: model bağlama bir sonraki dilimde gelecek');
+    expect(screen.frame()).not.toContain('model bağlama bir sonraki dilimde gelecek');
     await screen.press(ENTER, 60);
-    expect(screen.frame()).not.toContain('Model bağla (kataloğundan seç)');
+    expect(screen.frame()).toContain('Model bağla (kataloğundan seç)');
   });
 
   it('disconnect asks first; y removes through the port, n keeps', async () => {

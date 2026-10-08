@@ -43,6 +43,8 @@ export function quoteOpenAiChatOperatorTariff(input: ModelInvocationSpendingInpu
 
 /** A zero-rate legacy tariff is admitted only for a loopback endpoint. Remote paid calls require verified or explicitly declared rates. */
 export function openAiCompatibleTariffRates(tariff: ReturnType<typeof parseOpenAiChatHttpDefinition>['tariff'], endpoint: string, modelId: string) {
+  // Metadata-priced OpenRouter calls have a separate priced wrapper; they never reach a static/zero tariff.
+  if (tariff.kind === 'openrouter-endpoint') throw new ProviderSpendError('PROVIDER_SPEND_TARIFF_UNVERIFIED');
   if (tariff.kind === 'vendor-published') {
     if (!verifiedOpenAiCompatibleTariff(tariff, endpoint, modelId)) throw new ProviderSpendError('PROVIDER_SPEND_TARIFF_UNVERIFIED');
     if (tariff.version === 1) return tariff.usdPerMTok;

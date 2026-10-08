@@ -124,3 +124,15 @@ it('copies selection identity and does not let later caller mutation alter a tar
   expect(parsed.selection).toEqual(selection); expect(Object.isFrozen(parsed.selection)).toBe(true);
   expect(quoteOpenRouterText(parsed, quoteRequest(), 150).provider.only).toEqual(['provider/region']);
 });
+
+it('reserves the full published prompt bound for tool definitions, tool history and stream framing', () => {
+  const parsed = tariff({ supported: ['max_tokens', 'tools', 'tool_choice'] });
+  const baseline = quoteOpenRouterText(parsed, quoteRequest(), 150);
+  const tools = [{ type: 'function', function: { name: 'read_file', description: 'x'.repeat(4096), parameters: { type: 'object' } } }];
+  const request = quoteRequest({ tools, tool_choice: 'auto', stream: true, stream_options: { include_usage: true }, messages: [
+    { role: 'user', content: 'hi' }, { role: 'assistant', content: null, tool_calls: [{ id: 't1', type: 'function', function: { name: 'read_file', arguments: '{}' } }] },
+    { role: 'tool', tool_call_id: 't1', content: 'data' },
+  ] });
+  expect(quoteOpenRouterText(parsed, request, 150)).toEqual(baseline);
+  expect(() => quoteOpenRouterText(tariff(), request, 150)).toThrow(error('INVALID_REQUEST'));
+});

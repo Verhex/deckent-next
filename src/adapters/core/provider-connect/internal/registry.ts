@@ -37,9 +37,16 @@ const kindSchema = z.object({
      * declared price, which the SPEND-SETTLEMENT lane brings; until then such a connection is refused (`MODEL_CONNECT_PRICE_REQUIRED`). */
     priceRequired: z.boolean().default(false),
     /** K1: the provider's documented request dialect (OpenAI chat adapter v5; required for that adapter, refused for the Anthropic one). */
-    dialect: openAiChatDialectSchema.optional() }).strict()
+    dialect: openAiChatDialectSchema.optional(),
+    /** Verified first-party endpoint tags and token fields for metadata-priced chat; no provider/model guessing in code. */
+    metadataPricing: z.object({ maxAgeMs: positiveLimit(), maxResponseBytes: positiveLimit(), timeoutMs: positiveLimit(),
+      routes: z.array(z.object({ modelId: z.string().min(1), endpointTag: z.string().min(1),
+        tokenLimitField: z.enum(['max_tokens', 'max_completion_tokens']), sourceUrl: z.string().url().startsWith('https:'),
+        observedOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/u) }).strict()).min(1)
+        .refine(routes => new Set(routes.map(route => route.modelId)).size === routes.length).readonly() }).strict().optional() }).strict()
     .refine(connect => (connect.adapter === 'openai-chat-http') === (connect.dialect !== undefined)).nullable().default(null),
 }).strict().readonly();
+function positiveLimit() { return z.number().int().positive().safe(); }
 const positive = z.number().int().positive().safe();
 const registrySchema = z.object({ schemaVersion: z.literal(2), retrievedAt: z.string().regex(/^\d{4}-\d{2}-\d{2}$/u), note: z.string(),
   limits: z.object({ timeoutMs: positive, bodyPrefixBytes: positive }).strict(),
@@ -102,4 +109,3 @@ export function providerEndpoint(text: string): Readonly<{ ok: true; base: strin
   // An OpenAI-compatible base is often given with its `/v1`; the probe path already carries it.
   return { ok: true, base: `${parsed.origin}${path.endsWith('/v1') ? path.slice(0, -3) : path}` };
 }
-
