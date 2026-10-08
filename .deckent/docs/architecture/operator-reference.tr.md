@@ -133,10 +133,12 @@ deckent backup restore --scope <id> --set /private/recovery/set-1 --target /priv
 
 Parola maskeli terminal isteminden veya stdin'den okunur; komut argümanına yazılmaz.
 Parolayı setten ayrı saklayın. Set; çevrimiçi ledger kopyasını, parmak izini, manifest'i,
-küçük durum arşivini ve şifreli yetki anahtarını içerir. Worker klonları, provider oturumları
-ve secret-store kimlik bilgileri dışarıda kalır. Dosyalar 0600, dizinler 0700 olmalıdır.
+küçük durum arşivini ve şifreli yetki anahtarını içerir. Proje ve genel yapılandırma katmanları
+ayrı arşivlenir. Worker klonları, provider oturumları ve secret-store kimlik bilgileri dışarıda
+kalır. Set dosyaları 0700 dizinde 0600'dür; sette `ledger.db-wal/-shm` kalmaz.
 Değiştirilmiş bir setin SHA değerlerini yeniden yazmak yeterli değildir; verify şifreli
-zarfın doğrulamasını da yapar.
+zarfın doğrulamasını da yapar; bu yüzden `BACKUP_PASSPHRASE_INVALID` yanlış parola ya da
+değiştirilmiş set demektir.
 
 Önce hedef servisi durdurun. Boş hedef doğrudan kullanılabilir; dolu hedef için
 `--confirm-target /tam/mutlak/hedef` ekleyin. Başka kurulum kimliğine bağlı hedef reddedilir.
@@ -145,14 +147,26 @@ yapılandırılmış yerleşimi uyumsuzsa ret verilir. Eski durum `.damaged-<uui
 installationId korunur; `deckent init identity --keep` operatörün açık onayını ister.
 Kurulum içindeki config yolları taşınır; dış yollar korunur. Restore zamanlamayı off yapar.
 Servisi açmadan dışarıda kalan kimlik bilgilerini yeniden sağlayın.
+Proje katmanı proje yapılandırması olur. Genel yapılandırma (`$DECKENT_GLOBAL_HOME/config.json`)
+kurulumlarınızca paylaşılır: restore yalnız onda olmayan arşiv bölümlerini ekler (ör. makine
+kaybından sonra `secrets` depo seçimi), var olanları korur (sonuçta `globalConfig.added` / `kept`).
+alpha.18 ile alınmış set tek birleşik belge taşır; onun `secrets` seçimi proje yapılandırmasına
+değil genel katmana gider.
+Restore var olan bir dizine yalnız sizinse ve başkaları yazamıyorsa yazar (0755 `.deckent`
+uygundur; `doctor` modunu yine gösterir). Aksi halde hiçbir iş yapmadan dizini adıyla
+`BACKUP_DIRECTORY_UNSAFE` ile durur: `chmod 700 <yol>` çalıştırıp yeniden deneyin. Hasarlı policy
+dosyası restore'u `BACKUP_POLICY_UNREADABLE` ile durdurur: adı verilen dosyayı kenara taşıyın
+(`mv <yol> <yol>.damaged`) ve yeniden çalıştırın; restore o zaman setin doğrulanmış policy'sini kullanır.
 Aynı projeye restore mevcut kaynak yerleşimini korur: her kaynak güncel yapılandırmanın
 gösterdiği yere yayınlanır ve geri yüklenen yapılandırma aynı yerleşimi gösterir.
 İlk değiştirmeden önce restore hedefte `.deckent/restore-hold.json` bekletmesini yazar; yalnız
 sonuncusundan sonra kaldırılır. Bu dosya varken servis başlatma ve proje yapılandırmasını yükleyen
 her komut `BACKUP_RESTORE_HOLD` ile reddedilir. `BACKUP_RESTORE_INCOMPLETE` (veya süreç kaybı)
-halinde ara dizini, eski kopyaları ve dış audit kayıtlarını teşhis için koruyun, sonra aynı
-restore'u `--confirm-target` ile yeniden çalıştırın; setteki policy yalnız bekletme varken
-kullanılır. Kaynakların tamamı tek atomik işlemle yayınlanmaz.
+halinde ara dizini (`.deckent/.backup-restore-<uuid>`, özel, yetki anahtarı içermez), eski
+kopyaları ve dış audit kayıtlarını teşhis için koruyun, sonra aynı restore'u `--confirm-target`
+ile yeniden çalıştırın; setteki policy yalnız bekletme varken kullanılır. Kaynakların tamamı tek
+atomik işlemle yayınlanmaz. Başarılı restore önceki yarım ara dizinleri (proje kökündeki alpha.18
+`.backup-restore-<uuid>` dahil) siler; kalanları `doctor` listeler.
 
 Etkileşimli config seçicisinden `backup.schedule` için off, daily veya before-upgrade;
 `backup.retention` için 3, 7, 14 veya 30 seçin. Daily servis açıkken çalışır;

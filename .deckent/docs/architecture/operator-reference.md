@@ -126,9 +126,11 @@ deckent backup restore --scope <id> --set /private/recovery/set-1 --target /priv
 
 The passphrase is read by a masked terminal prompt or stdin; there is no passphrase argument.
 Keep it separately from the set. The set contains the online ledger snapshot, fingerprint,
-manifest, small state archive and encrypted authority key. Worker clones, provider logins and
-secret-store credentials are excluded. Files and directories must be private (0600/0700).
-SHA hashes alone do not authenticate a changed set: verification also opens the AEAD envelope.
+manifest, small state archive and encrypted authority key. The project and global configuration
+layers are archived apart. Worker clones, provider logins and secret-store credentials are
+excluded. Set files are 0600 in a 0700 directory and no `ledger.db-wal/-shm` is left in a set.
+SHA hashes alone do not authenticate a changed set: verification also opens the AEAD envelope, so
+`BACKUP_PASSPHRASE_INVALID` means a wrong passphrase or a modified set.
 
 Stop the target service first. An empty target needs no replacement confirmation; for an
 existing target add `--confirm-target /exact/absolute/target`. A target bound to another
@@ -137,14 +139,26 @@ a different target with an incompatible configured layout is refused. Old state 
 reported, its installationId is kept, and `deckent init identity --keep` requires explicit
 operator consent. Internal configuration paths are rewritten; external paths stay external.
 Restore resets scheduling to off. Re-provision excluded credentials before enabling service.
+The project layer becomes the project configuration. The global configuration
+(`$DECKENT_GLOBAL_HOME/config.json`) is shared by your installations: restore adds only the archived
+sections it lacks (for example the `secrets` store selection after a machine loss) and keeps present
+ones (`globalConfig.added` / `kept` in the result). A set made by alpha.18 holds one merged document;
+its `secrets` selection goes to the global layer, never into the project configuration.
+Restore writes into an existing directory only if it is yours and others cannot write to it (a
+`.deckent` at 0755 is fine; `doctor` still shows its mode). Otherwise it stops before any work
+with `BACKUP_DIRECTORY_UNSAFE`, naming the directory: run `chmod 700 <path>` and rerun. A damaged
+policy file stops restore with `BACKUP_POLICY_UNREADABLE`: move the named file aside
+(`mv <path> <path>.damaged`) and rerun; restore then uses the set's authenticated policy.
 Restoring into the same project keeps its current resource layout: every resource is published
 where the current configuration places it and the restored configuration names that layout.
 Before the first replacement restore writes `.deckent/restore-hold.json` in the target; it is
 removed only after the last one. While it exists, service start and every command that loads the
 project configuration refuse with `BACKUP_RESTORE_HOLD`. If `BACKUP_RESTORE_INCOMPLETE` occurs (or
-the process dies), keep the staging directory, damaged copies and external audit receipts for
-diagnosis, then rerun the same restore with `--confirm-target`; it uses the retained set's policy
-only while the hold exists. Publication across resources is not atomic.
+the process dies), keep the stage (`.deckent/.backup-restore-<uuid>`, private, without the
+authority key), damaged copies and external audit receipts for diagnosis, then rerun the same
+restore with `--confirm-target`; it uses the retained set's policy only while the hold exists.
+Publication across resources is not atomic. A successful restore removes earlier interrupted
+stages (also an alpha.18 `.backup-restore-<uuid>` in the project root); `doctor` lists any left.
 
 In the interactive configuration picker select `backup.schedule`: off, daily, or
 before-upgrade; select `backup.retention`: 3, 7, 14, or 30. Daily backups run while the service

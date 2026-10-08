@@ -345,8 +345,14 @@ refresh, usage and dogfood closure remain open.
   absent from commands, policy decisions, receipts and errors. No MCP/model passphrase input is exposed.
 - Sets contain a read-only-source SQLite online snapshot, `ledger.fingerprint.json` (integrity, schema version, ordered table counts/digests),
   a bounded gzip JSON archive of logical config/installation/project identity/policy/bindings/audit/artifact resources, encrypted
-  `authority.key.enc` and `MANIFEST.sha256`. Authored global and project configuration are merged without resolving secret references.
-  Worker clones, provider login caches and secret-store credentials are excluded. Directories/files are private (0700/0600), links refused.
+  `authority.key.enc` and `MANIFEST.sha256`. State v2 (S1 D1, 2026-10-09) archives the authored project and global configuration layers
+  apart, without resolving secret references; v1 (alpha.18, one merged document) stays readable and its project-forbidden sections (those a
+  registered `validateLayers` refuses in a project layer, e.g. `secrets`) move to the global layer. Restore publishes the project layer as
+  the project config and only fills archived global sections the per-user global config lacks (present ones are kept and reported as
+  `globalConfig.kept`; an unreadable file is kept as `.damaged-<uuid>`). The ledger snapshot uses the rollback journal and every set ledger
+  read is immutable, so no `-wal/-shm` appears in a set. Worker clones, provider login caches and secret-store credentials are excluded.
+  Files are 0600 and created directories 0700; an existing directory restore writes into must be this user's and not group/other-writable
+  (the policy/artifact/installation-file rule), checked before staging as `BACKUP_DIRECTORY_UNSAFE {path}` with `chmod 700`; links refused.
 - Envelope v1 uses async scrypt (N=65536,r=8,p=1) + AES-256-GCM with fresh salt/nonce; AAD binds all payload hashes. Verification checks
   manifest, authenticated key, ledger fingerprint and archive bounds. Regenerating SHA hashes alone cannot authenticate modified contents.
 - Whole-installation `backup/create|verify|restore` requires an all-scopes policy grant for the verified principal. Template v8 adds the
@@ -361,12 +367,16 @@ refresh, usage and dogfood closure remain open.
   present service socket and acquires the service's same kernel ledger custody until publication finishes. Old resources/ledger sidecars
   are preserved as `.damaged-<uuid>`; the ledger lock inode stays. Relocation rewrites internal config paths, preserves installationId,
   reports the existing identity check and leaves `init identity --keep` to the operator. Scheduling resets to off. Publication spans
-  several files: `BACKUP_RESTORE_INCOMPLETE` records uncertainty and retains the staging directory and damaged copies after partial
+  several files: `BACKUP_RESTORE_INCOMPLETE` records uncertainty and retains the stage (`<target>/.deckent/.backup-restore-<uuid>`, 0700,
+  never the decrypted key: it is decrypted at publication next to its final name) and damaged copies after partial
   publication. A confirmed target with a different retained installationId is refused. No cross-file atomicity claim. Astra 2471:
   a durable, fsync'd `.deckent/restore-hold.json` precedes the first replacement and is removed only after the last; config admission
   (`inspectInstallationBootstrap`, before the config cache) refuses it as `BACKUP_RESTORE_HOLD`, so service start and every configured
   command stay closed after a failure or process loss; only restore (`restoreHold: 'admit'`) proceeds and, while held, may fall back to
   the authenticated set's policy. Same-root restore keeps the current resource map: config and publication use one target layout (R2).
+  A damaged existing policy is `BACKUP_POLICY_UNREADABLE {path, reason}` (move it aside, rerun restore); it never falls back silently.
+  A successful restore removes earlier interrupted stages (also alpha.18's project-root location) and pending hold/key files; doctor lists
+  them and shows an installation directory mode open to group/other. Evidence: external `proof/BACKUP-FIXES-2026-10-09/`.
 - Config `backup.schedule` selects off/daily/before-upgrade; retention selects 3/7/14/30 sets. The service uses its configured scope and
   its verified hosting OS principal, the same policy and `BACKUP_PASSPHRASE` from the selected secret store. Daily due state survives
   restart in authenticated set timestamps; before-upgrade runs under service custody before schema migration. Stop waits in-flight work.
