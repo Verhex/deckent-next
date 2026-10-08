@@ -1,7 +1,7 @@
 import { execFile, spawn } from 'node:child_process';
 import { once } from 'node:events';
 import { promisify } from 'node:util';
-import { mkdtemp, mkdir, readFile, writeFile, readdir, rm } from 'node:fs/promises';
+import { chmod, mkdtemp, mkdir, readFile, writeFile, readdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -57,6 +57,9 @@ describe('K1 real binary journeys', () => {
   });
   it('wires company-only doctor JSON v2 through the real binary', async () => {
     const f = await fixture('project-override');
+    // The fixture's installation directory (~/.deckent) is not owner-only, as a hand-made or pre-0da9f0d6 directory can be: pinned here so the
+    // leftover report below does not depend on the umask.
+    await chmod(dirname(resolveGlobalConfigPaths(f.env).platformPath), 0o755);
     const result = JSON.parse((await f.run(['doctor', '--json'])).stdout);
     expect(result).toMatchObject({ schemaVersion: 2, principal: { assurance: 'os-user', provenance: 'cli' }, company: { companyId: 'default' }, status: 'ready', policyTemplate: null, modelInvocationDelivery: [] });
     // Doctor JSON 2 grows only by additive fields (shellRealm, poolReadiness before; wave 1: imageRefresh for WORKER-AUTO-REFRESH and
@@ -71,7 +74,10 @@ describe('K1 real binary journeys', () => {
       : strength === 'weak' ? { capability: 'supported', strength: 'weak', source: 'location', required: false }
         : strength === 'unsupported' ? { capability: 'unsupported', strength: null, source: null, required: false } : null);
     // SECRET-K1: the selected store (default: the environment) is reported without resolving any reference, in JSON and as a human line.
-    expect(result.secretStore).toEqual({ schemaVersion: 1, backend: 'core.secret-store.env@1', writable: false, enumerable: false, status: 'ready', code: null });
+    // SECRET-STORE-SWITCH (Astra 2456 N2): the other Core stores that cannot be listed now (here: the installation directory is not private,
+    // so the file stores refuse it as unsafe) are `unverified`, never counted as empty; names are never read or shown.
+    expect(result.secretStore).toEqual({ schemaVersion: 1, backend: 'core.secret-store.env@1', writable: false, enumerable: false, status: 'ready', code: null,
+      leftover: { backends: [], entries: 0, unverified: ['core.secret-store.file@1', 'core.secret-store.encrypted-file@1'] } });
     expect(result.shellRealm).toMatchObject({ schemaVersion: 1 });
     expect(result.poolReadiness).toEqual({ status: 'unconfigured', drift: null });
     expect(Object.keys(result.principal).sort()).toEqual(['assurance', 'id', 'identityClass', 'provenance', 'verifiedBy']);

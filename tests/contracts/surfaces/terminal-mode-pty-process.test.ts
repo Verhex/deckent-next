@@ -389,7 +389,8 @@ describe.skipIf(process.platform !== 'linux')('Shift+Tab mode cycle in a real ps
     expect(stored.modes).toEqual([f.theirs, expect.objectContaining({ principal: f.me, mode: 'full-auto' })]);
     const next = await inPty(f.projectRoot, f.env, ['terminal', 'workline', '--scope', 'scope'], [['Deckent workline', '/exit\r']]);
     expect(next.timeout, next.output).toBeUndefined();
-    expect(plain(next.output)).toContain('Mode full auto');
+    // The banner no longer names the mode (it can change in the session); the status line shows the stored mode the launch opened in.
+    expect(plain(next.output)).toContain('· ⏵⏵ full auto ·');
     expect(plain(next.output)).not.toContain('full access');
     expect(plain(next.output)).not.toContain('FULL ACCESS is on');
     const launched = await inPty(f.projectRoot, f.env, ['terminal', '--full-access'], [['Deckent workline', '/exit\r']]);
@@ -443,7 +444,7 @@ describe.skipIf(process.platform !== 'linux')('opening banner in a real pseudo-t
   it('starts at the top with the banner, in EN and TR, without colour codes in the banner and without ED 3', async () => {
     const f = await modeProject();
     await startRuntime(f.projectRoot, f.env);
-    for (const [language, words] of [['en', ['Project project', 'Mode standard', 'Shift+Tab mode']], ['tr', ['Proje project', 'Mod standart', 'Shift+Tab mod']]] as const) {
+    for (const [language, words, mode] of [['en', ['Project project', 'Shift+Tab mode'], 'standard'], ['tr', ['Proje project', 'Shift+Tab mod'], 'standart']] as const) {
       const run = await inPty(f.projectRoot, { ...f.env, DECKENT_LANGUAGE: language }, ['terminal', 'workline', '--scope', 'scope'], [['Deckent workline', '/exit\r']]);
       expect(run.timeout, run.output).toBeUndefined();
       expect(run.status, run.output).toBe(0);
@@ -456,6 +457,8 @@ describe.skipIf(process.platform !== 'linux')('opening banner in a real pseudo-t
       expect(banner.trimStart().startsWith('╭──╮')).toBe(true);
       expect(banner).not.toContain('\u001b');
       for (const word of words) expect(stripVTControlCharacters(banner).replace(/\s+/gu, ' ')).toContain(word);
+      // The static banner carries no mutable mode (it would go stale after Shift+Tab).
+      expect(stripVTControlCharacters(banner)).not.toContain(mode);
     }
   }, 180_000);
 

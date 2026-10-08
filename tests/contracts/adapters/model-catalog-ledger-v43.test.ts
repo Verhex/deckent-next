@@ -33,7 +33,7 @@ const channel = 'claude-cli-subscription';
 
 describe.skipIf(process.platform === 'win32')('ledger v43 model catalog', () => {
   it('upgrades a v42 ledger losslessly: 0600 backup at v42, every existing table byte-equal, four empty catalog tables', async () => {
-    expect(CURRENT_LEDGER_VERSION).toBe(48); expect(MODEL_CATALOG_LEDGER_VERSION).toBe(43); expect(PREVIOUS_LEDGER_VERSION).toBe(47);
+    expect(CURRENT_LEDGER_VERSION).toBe(49); expect(MODEL_CATALOG_LEDGER_VERSION).toBe(43); expect(PREVIOUS_LEDGER_VERSION).toBe(48);
     const { root, path } = await ledger(); const backups = join(root, 'backups'); await mkdir(backups, { mode: 0o700 });
     const db = new DatabaseSync(path); db.exec(DOWNGRADE_TO_V42_LEDGER_SQL);
     // An existing chat activation row and receipt must survive untouched.
