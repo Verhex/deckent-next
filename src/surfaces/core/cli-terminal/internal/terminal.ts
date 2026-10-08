@@ -1,3 +1,4 @@
+import { lineInstructionContext, instructionModelContext, instructionSourceLine, projectInstructionLabels } from '#surfaces/core/project-instructions/index.js';
 import type { WorklineStreamTurn } from '#surfaces/core/terminal-kit/index.js';
 import { configPanelPort, configTtySlash } from '#surfaces/core/config/index.js';
 import { userInfo } from 'node:os';
@@ -7,7 +8,7 @@ import { loadMonitorSurface, monitorSlash } from '#surfaces/core/monitor/index.j
 import { DeckentError, ErrorRegistry, emit, getConfigKnownSecrets, loadConfig, readBuildIdentity, resolveLocale, t, formatValue, colorCapability, PACKAGE_VERSION, type ConfigLoadOptions, type Locale } from '#platform/index.js';
 import { buildInferenceServingPlan, estimateReplicaCapacity, readInferenceServingProfile, runtimeConfigFreshness, RUNTIME_SERVICE_HEARTBEAT_MS, type IdentityRead, type InstallationIdentityRead } from '#engine/index.js';
 import { prefersAsciiGlyphs, runTerminalWorkline, resolveWorklinePalette, resolveTerminalTheme, STARTUP_BANNERS, TERMINAL_THEME_SETTINGS, type TerminalThemeSetting, type WorklineStartup, buildWorklineBridgeSnapshot, streamLineTurn, boundAgentHistory, boundChatHistory, bindSessionScope, type AgentChatMessage, type ChatTurnMessage, type TurnDelta, type WorklineLabels, type SlashWindowLabels } from '#surfaces/core/terminal/index.js';
-import { plainText, projectHumanText, shortenHomePath } from '#surfaces/core/terminal-render/index.js';
+import { fillTemplate, plainText, projectHumanText, shortenHomePath } from '#surfaces/core/terminal-render/index.js';
 import { terminalComposerLabels, terminalRenderLabels, terminalSessionLabels, terminalStartupLabels } from '#surfaces/core/terminal-labels/index.js';
 import { createWorklineLedgerPorts } from './terminal-ledger.js';
 import { pickerLabels, runtimeBuildSkew, terminalPanelLabels, workSurfaceLabels } from '#surfaces/core/work-labels/index.js';
@@ -22,7 +23,7 @@ import type { ProjectIdentity, PermissionMode } from '#domain/index.js';
 import type { TerminalChatPlanView } from './terminal-chat.js';
 
 type Action = 'status' | 'session' | 'workline' | 'snapshot' | 'chat-plan';
-interface Parsed { action: Action; json: boolean; help: boolean; fullAccess: boolean; language?: string; scopeId?: string }
+interface Parsed { action: Action; json: boolean; help: boolean; fullAccess: boolean; trustDigest?: string; language?: string; scopeId?: string }
 const ACTIONS: readonly Action[] = ['status', 'session', 'workline', 'snapshot', 'chat-plan'];
 const DEFAULT_HISTORY_MESSAGES = 40;
 /** Refusals of the identity write admission that leave the interactive view usable (nothing was created; no authority is implied). */
@@ -44,6 +45,9 @@ function parse(argv: readonly string[]): Parsed {
     const key = argv[index] === '-h' ? '--help' : argv[index]!;
     if (key === '--help') parsed.help = true;
     else if (key === '--full-access') parsed.fullAccess = true;
+    else if (key === '--trust-instructions' && parsed.trustDigest === undefined) {
+      const digest = argv[++index]; if (!digest || !/^[a-f0-9]{64}$/.test(digest)) throw ErrorRegistry.createError('CLI_USAGE'); parsed.trustDigest = digest;
+    }
     else if (key === '--json') parsed.json = true;
     else if (key === '--no-color') continue;
     else if (key === '--lang' || key === '--scope') {
@@ -56,6 +60,7 @@ function parse(argv: readonly string[]): Parsed {
   if (parsed.json && (parsed.action === 'session' || parsed.action === 'workline')) throw ErrorRegistry.createError('CLI_USAGE');
   // Full access is a launch of the interactive terminal only (MODES-3); no other action runs agent tools.
   if (parsed.fullAccess && parsed.action !== 'workline') throw ErrorRegistry.createError('CLI_USAGE');
+  if (parsed.trustDigest && parsed.action !== 'session') throw ErrorRegistry.createError('CLI_USAGE');
   return parsed;
 }
 
@@ -194,7 +199,7 @@ function panelProps(root: string, scopeId: string, context: TerminalLaunchContex
 /** Line mode is the degraded adapter: it works piped (one turn per input line) and prompts only on a terminal. */
 async function runSession(locale: Locale, context: TerminalLaunchContext, turn: (messages: readonly ChatTurnMessage[], signal?: AbortSignal) => Promise<string>,
   historyMessages: number, interactive: boolean, status: () => Promise<string>, known: Parameters<typeof projectHumanText>[2],
-  stream?: (messages: readonly AgentChatMessage[], signal: AbortSignal | undefined) => AsyncIterable<TurnDelta>): Promise<void> {
+  stream?: (messages: readonly AgentChatMessage[], signal: AbortSignal | undefined) => AsyncIterable<TurnDelta>, instructionSources?: () => readonly string[]): Promise<void> {
   // The rich view's one projection (B7 record redaction, controls removed, B8 hidden marks) on every model-written line.
   const project = (text: string, kind: 'exact' | 'prose') => plainText(projectHumanText(text, kind, known).spans);
   const stdin = context.stdin ?? process.stdin;
@@ -210,7 +215,8 @@ async function runSession(locale: Locale, context: TerminalLaunchContext, turn: 
     for await (const line of rl) {
       const trimmed = line.trim();
       if (trimmed === '/exit' || trimmed === '/quit') break;
-      if (trimmed === '/status') { emit(await status(), sinks); }
+      if (trimmed === '/context') { for (const line of instructionSources?.() ?? []) emit(line, sinks); }
+      else if (trimmed === '/status') { emit(await status(), sinks); }
       // Slash input is a local command; an unknown one is reported, never sent to the model as a user message.
       else if (trimmed.startsWith('/')) emit(t('terminal.notice.error', { text: `${t('terminal.workline.unknownCommand', {}, locale)}: ${trimmed}` }, locale), { ...sinks, level: 'error' });
       else if (trimmed.length > 0) {
@@ -327,15 +333,27 @@ export async function terminalCommand(argv: readonly string[], context: Terminal
     } catch (error) { serviceLine = errorText(error, locale); serviceFailed = true; }
   }
   const historyMessages = chat?.historyMessages ?? DEFAULT_HISTORY_MESSAGES;
-  const turn = (messages: readonly ChatTurnMessage[], signal?: AbortSignal) =>
-    completeTerminalChat(root, { scopeId, messages }, options, signal);
+  const instructionPort = context.openProjectInstructions ? await context.openProjectInstructions(root, options) : undefined;
+  const instructionLabels = projectInstructionLabels(locale);
+  let lineSources: readonly string[] = [];
+  const withInstructions = async <T extends { readonly role: string }>(messages: readonly T[]) => {
+    const view = await lineInstructionContext(instructionPort, parsed.trustDigest);
+    lineSources = view.status === 'ready' ? [instructionSourceLine(view.source, instructionLabels)] : [];
+    if (view.status === 'trust-required' || view.status === 'ready') emit(instructionSourceLine(view.source, instructionLabels), sinks);
+    if (view.status === 'trust-required') emit(fillTemplate(instructionLabels.lineTrustRequired, { digest: view.source.digest }), sinks);
+    if (view.status === 'blocked') emit(fillTemplate(instructionLabels.blocked, { reason: view.reason }), sinks);
+    const system = { role: 'system' as const, content: t('terminal.chat.systemPrompt', {}, locale) + instructionModelContext(view) };
+    return [system, ...messages.filter(message => message.role !== 'system')];
+  };
+  const turn = async (messages: readonly ChatTurnMessage[], signal?: AbortSignal) =>
+    completeTerminalChat(root, { scopeId, messages: parsed.action === 'session' ? await withInstructions(messages) : messages }, options, signal);
   if (parsed.action === 'session') {
     for (const notice of accessNotices) emit(notice.text, sinks);
     if (serviceLine && tty.stdin && tty.stdout) emit(serviceLine, sinks);
     const lineStream = context.streamTerminalChat ? (messages: readonly AgentChatMessage[], signal: AbortSignal | undefined) =>
-      context.streamTerminalChat!(root, { scopeId, messages }, options, signal) : undefined;
+      (async function* () { yield* context.streamTerminalChat!(root, { scopeId, messages: await withInstructions(messages) }, options, signal); })() : undefined;
     await runSession(locale, context, turn, historyMessages, tty.stdin && tty.stdout,
-      async () => [renderStatus(statusPayload(tty, config, chat, await readIdentity()), locale), ...(serviceLine ? [serviceLine] : [])].join('\n'), getConfigKnownSecrets(config), lineStream);
+      async () => [renderStatus(statusPayload(tty, config, chat, await readIdentity()), locale), ...(serviceLine ? [serviceLine] : [])].join('\n'), getConfigKnownSecrets(config), lineStream, () => lineSources);
     return;
   }
   if (!tty.stdin || !tty.stdout) throw ErrorRegistry.createError('TERMINAL_TTY_REQUIRED');
@@ -392,6 +410,7 @@ export async function terminalCommand(argv: readonly string[], context: Terminal
     selfSource: await context.selfSourceProject?.(root) ?? false,
     labels: { ...worklineLabels(locale, [t('terminal.status.chat', { target: chatTarget(chat, locale) }, locale), ...(serviceLine ? [serviceLine] : [])].join(' · ')),
       ...(pickerNeedsTextFallback(env, true) ? {} : { windows: slashWindowLabels(locale) }) },
+    ...(instructionPort && !pickerNeedsTextFallback(env, true) ? { projectInstructions: { port: instructionPort, labels: instructionLabels } } : {}),
     target, systemPrompt: t('terminal.chat.systemPrompt', {}, locale), historyMessages, projectRoot: root, ...(home ? { homeDirectory: home } : {}),
     // Owner 2026-10-08: `/clear` clears screen and scrollback; no escape sequence on TERM=dumb (and never to a non-TTY).
     // NO_COLOR concerns colour only, so it does not stop the clear.

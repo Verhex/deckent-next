@@ -799,7 +799,7 @@ The Markdown gate admits the five product/roadmap documents `README.md`, `ARCHIT
 and the explicit refactor host-kit globs in `arch.json`: the remaining 20 `.agents/skills/<skill>`
 directories/references plus `.claude/agents`, `.claude/rules`, `.codex/rules`.
 The host kit is excluded from product distribution (`package.json files`: dist/native/assets/README/LICENSE).
-Product code still writes no Markdown; owner-maintained host instructions are a development-only exception.
+Product Markdown generation is limited to owner-admitted `deckent init` project instructions (DECKENT-MD, 2026-10-08): detected project facts, preview and explicit consent, plus selected append-only bridges. Owner-maintained host instructions remain a development-only exception.
 Repository standards are human/host-maintained files; Markdown admission does not extend product write authority.
 The existing `markdown.writerModule` gate is unchanged. `.github/CODEOWNERS` and issue `config.yml` are
 non-Markdown community configuration; GitHub settings, actual review and private reporting availability
@@ -866,3 +866,13 @@ Contract summary (full text: [approval-and-delivery.md](.deckent/docs/architectu
 - Toolchain/model currency, work targets, typed work input, pool hold/capacity and patch scope classification are specified in the full document.
 
 CI-SPEED author candidate (owner-approved CI stability, 2026-10-06): local integrity custody write-mode opens reuse the existing bounded per-path config lock through creation/flush/close; read mode stays read-only. Strict owner/mode/link/inode/32-byte validation is unchanged; an existing partial key is not repaired. The real first-creation race and exact author proof/open limits live in the ci-and-verification module note and external `proof/CI-SPEED-2026-10-06/`; this is not independent or hosted acceptance.
+
+### Project instructions (DECKENT-MD, owner 2026-10-08)
+
+The v1 reader loads workspace-root `DECKENT.md`, falling back to `AGENTS.md` only on absence; Deckent never loads `CLAUDE.md` as model context. Context grants no authority. The adapter registry bounds raw and masked content to 32 KiB; canonical secret masking precedes the trust preview and model delivery. Special files, symlinks and hardlinks fail closed; an invalid primary never falls back. The terminal re-reads before each turn, opens a bounded Ink trust window for an unseen digest, and Escape continues with the file withheld. Line mode requires `--trust-instructions <sha256>` for an unseen digest. `/context` reports the loaded source path, original byte size and SHA-256.
+
+Consent is bound to canonical workspace root + device/inode + content digest in the owner-private user-global `instructionTrust` resource, outside the workspace. Project `DECKENT_HOME` cannot relocate this cache; an explicit global root inside the workspace is not trusted. A cloned/replaced root cannot inherit consent. Unsupported or unsafe persistent storage uses session-only consent and asks again after restart; native Windows persistence remains open. `DECKENT.md` joins the workspace write approval floor.
+
+Bare `deckent init` selects detected/chosen bridge rows, previews the derived project name/npm script names, then confirms. `init --preview` is read-only. Existing DECKENT content is preserved; selected bridges append `@DECKENT.md` to `CLAUDE.md` or `Read DECKENT.md` to `AGENTS.md`. No unselected file is created, no script is executed and raced/forged previews are refused. Application uses the configured `terminal.scopeId`, local OS principal, fresh policy, required operation approval and existing `workspace.file.write@1` target/C11 settlement. Missing scope/policy refuses writing; this slice creates no policy grant. Changes settle per file; a later failure can leave earlier files settled and their durable receipts retained.
+
+Worker context is deferred under the owner's terminal-first allowance: `compileNativeCodingWorkInput` consumes explicit template `composition.context`, then `composeNativePrompt` delivers it through the existing native prompt channel. Its 16 KiB part/32 KiB total bounds and missing digest-trust custody need an admitted snapshot before worker dispatch. Terminal author verification is in external `proof/DECKENT-MD-2026-10-08/WORKER.md`; independent batch review, packaged/native platforms and live acceptance remain separate.
