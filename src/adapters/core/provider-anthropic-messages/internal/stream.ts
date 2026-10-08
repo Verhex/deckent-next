@@ -37,12 +37,16 @@ type Open = { type: string; index: number; text: string; signature: string; json
  * block stop (a provider defect if malformed: unlike OpenAI's raw arguments it is never model-authored text), and usage is
  * cumulative. A mid-stream `error` event (HTTP 200 already sent, for example `overloaded_error`) ends the read as `interrupted`,
  * an uncertain outcome that is never retried; usage past it is not trusted. Without `message_stop` the stream is interrupted.
+ * `onFinalUsage` receives only the cumulative usage of the final `message_delta`, and only when that delta carries its own
+ * `output_tokens`: the `message_start` count (output_tokens=1) is interim and never inherited as the final count. A stream cut before
+ * such a delta reports nothing (unknown, reservation held); a completed stream whose final delta lacks its own output count is an
+ * invalid response (Astra 2459 R1, 2462 R1).
  */
-export function createAnthropicMessagesStream(request: OpenAiChatTextRequest, limits: OpenAiChatHttpLimits, memory: AnthropicContinuationScope, onUsage?: (usage: AnthropicUsage) => void): NativeJsonHttpStream {
+export function createAnthropicMessagesStream(request: OpenAiChatTextRequest, limits: OpenAiChatHttpLimits, memory: AnthropicContinuationScope, onFinalUsage?: (usage: AnthropicUsage) => void): NativeJsonHttpStream {
   const hash = createHash('sha256'), decoder = new TextDecoder('utf-8', { fatal: true });
   let wireBytes = 0, events = 0, lineBytes = 0, eventBytes = 0, assembledBytes = 0;
   let line: Buffer[] = [], data: string[] = [], eventName: string | null = null;
-  let invalid: Reject | null = null, stopped = false, errored = false;
+  let invalid: Reject | null = null, stopped = false, errored = false, finalOutput = false;
   let head: { id: string; model: string } | null = null, usage: AnthropicUsage | null = null, stopReason: string | null = null;
   const blocks: AnthropicContentBlock[] = [];
   let current: Open | null = null, toolBlocks = 0;
@@ -64,7 +68,7 @@ export function createAnthropicMessagesStream(request: OpenAiChatTextRequest, li
       const parsed = start.safeParse(copied.data);
       if (!parsed.success || head) return fail('invalid-response');
       if (parsed.data.message.model !== request.model) return fail('model-mismatch');
-      head = { id: parsed.data.message.id, model: parsed.data.message.model }; usage = mergeUsage(null, parsed.data.message.usage); onUsage?.(usage); return false;
+      head = { id: parsed.data.message.id, model: parsed.data.message.model }; usage = mergeUsage(null, parsed.data.message.usage); return false;
     }
     if (!head) return fail('invalid-response');
     if (type === 'content_block_start') {
@@ -108,7 +112,11 @@ export function createAnthropicMessagesStream(request: OpenAiChatTextRequest, li
     if (type === 'message_delta') {
       const parsed = messageDelta.safeParse(copied.data);
       if (!parsed.success || current || stopReason !== null || parsed.data.delta.stop_reason === null) return fail('invalid-response');
-      stopReason = parsed.data.delta.stop_reason; usage = mergeUsage(usage, parsed.data.usage); onUsage?.(usage); return false;
+      // The input side may be restated or inherited from message_start; the output count must be the final delta's own.
+      finalOutput = parsed.data.usage.output_tokens !== undefined;
+      stopReason = parsed.data.delta.stop_reason; usage = mergeUsage(usage, parsed.data.usage);
+      if (finalOutput) onFinalUsage?.(usage);
+      return false;
     }
     if (type === 'message_stop' && simple.safeParse(copied.data).success && !current && stopReason !== null) { stopped = true; return false; }
     return fail('invalid-response'); // unknown event types (server tools, future kinds) are never assembled silently.
@@ -159,6 +167,7 @@ export function createAnthropicMessagesStream(request: OpenAiChatTextRequest, li
       if (errored) return { reason: 'interrupted' };
       if (lineBytes > 0 || data.length > 0 || current) return { reason: stopped ? 'invalid-response' : 'interrupted' };
       if (!stopped || !head || stopReason === null) return { reason: 'interrupted' };
+      if (!finalOutput) return { reason: 'invalid-response' };
       return assembleAnthropicMessage({ id: head.id, model: head.model, blocks, stopReason, usage,
         deckent: { stream: { schemaVersion: 1, events, wireBytes, wireSha256: hash.digest('hex') } } }, request, limits, memory);
     },

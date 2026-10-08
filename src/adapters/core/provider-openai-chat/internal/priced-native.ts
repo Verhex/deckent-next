@@ -8,7 +8,8 @@ import { quoteOpenAiChatOperatorTariff, openAiCompatibleTariffRates } from './ta
 export function createOpenAiChatPricedNative(options: OpenAiChatNativePortOptions = {}) {
   const responses = new WeakMap<object, string>();
   const partialUsage = new WeakMap<object, { usage: unknown; serviceTier: unknown }>();
-  const delegate = createOpenAiChatNativePort({ ...options, onUsage: (prepared, usage, serviceTier) => { partialUsage.set(prepared, { usage, serviceTier }); } }), quotes = new WeakMap<object, ProviderSpendQuote>();
+  // Filled only by the final-usage callback (Astra 2459/2462 R1): partial settlement never reads an interim count or tier.
+  const delegate = createOpenAiChatNativePort({ ...options, onFinalUsage: (prepared, usage, serviceTier) => { partialUsage.set(prepared, { usage, serviceTier }); } }), quotes = new WeakMap<object, ProviderSpendQuote>();
   const profiles = new WeakMap<object, string>();
   const measure = (token: unknown, usageInput: unknown, contentDigest: string, serviceTier?: unknown) => {
       const quote = quotes.get(token as object), prepared = token as PreparedOpenAiChatRequest;

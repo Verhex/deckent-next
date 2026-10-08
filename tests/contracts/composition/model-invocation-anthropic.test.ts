@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
 import { createServer, type Server } from 'node:https';
+import type { ServerResponse } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, afterEach, expect, it } from 'vitest';
@@ -22,7 +23,8 @@ afterEach(async () => {
   await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true })));
 });
 
-async function fixture(limitMinorUnits = 1000, allow = true) {
+type Reply = (response: ServerResponse) => void;
+async function fixture(limitMinorUnits = 1000, allow = true, reply?: Reply) {
   const root = await mkdtemp(join(tmpdir(), 'deckent-anthropic-composition-')); roots.push(root);
   const project = join(root, 'project'), data = join(root, 'data'), home = join(root, 'home');
   await Promise.all([mkdir(join(project, '.deckent'), { recursive: true }), mkdir(data), mkdir(home)]);
@@ -32,6 +34,7 @@ async function fixture(limitMinorUnits = 1000, allow = true) {
     const chunks: Buffer[] = []; request.on('data', (part: Buffer) => chunks.push(part));
     request.on('end', () => {
       seen.push({ headers: request.headers, body: Buffer.concat(chunks).toString('utf8') });
+      if (reply) { reply(response); return; }
       response.writeHead(200, { 'content-type': 'application/json' });
       response.end(JSON.stringify({ id: 'msg_1', type: 'message', role: 'assistant', model: MODEL, content: [{ type: 'text', text: 'ok' }], stop_reason: 'end_turn', stop_sequence: null,
         usage: { input_tokens: 9, cache_creation_input_tokens: 0, cache_read_input_tokens: 0, output_tokens: 2 } }));
@@ -63,7 +66,8 @@ async function fixture(limitMinorUnits = 1000, allow = true) {
   const command = { schemaVersion: 1 as const, commandId: 'command', scopeId: 'scope', reference, catalogRevision: 'catalog', expectedBinding: binding,
     nativeRequest: { model: MODEL, messages: [{ role: 'user' as const, content: 'private prompt' }], max_completion_tokens: 8 } };
   const env = { HOME: home, USERPROFILE: home, PATH: process.env.PATH ?? '/usr/bin:/bin' };
-  return { project, ledger, command, env, seen, secretResolver: async (reference: string) => reference === 'ANTHROPIC_API_KEY' ? SECRET : undefined };
+  const streamed = { ...command, commandId: 'streamed', nativeRequest: { ...command.nativeRequest, stream: true, stream_options: { include_usage: true as const } } };
+  return { project, ledger, command, streamed, env, seen, secretResolver: async (reference: string) => reference === 'ANTHROPIC_API_KEY' ? SECRET : undefined };
 }
 
 describe.skipIf(process.platform === 'win32')('requires POSIX local principal; AUTHENTICATION_REQUIRED on Windows UID -1', () => {
@@ -107,6 +111,94 @@ it('refuses before any request when the budget cannot hold the bound, the policy
   const viaEnv = await fixture();
   const result = await invokeConfiguredModel(viaEnv.project, viaEnv.command, { env: { ...viaEnv.env, ANTHROPIC_API_KEY: SECRET } });
   expect(result.receipt.outcome?.state).toBe('responded');
+});
+
+
+// Astra 2459 R1: Anthropic `message_start` carries a non-final usage (output_tokens=1); only the cumulative final `message_delta`
+// usage may settle money. A stream cut before it (EOF, abort, provider error) is an unknown outcome whose reservation stays held.
+const sse = (type: string, payload: Record<string, unknown> = {}) => `event: ${type}\ndata: ${JSON.stringify({ type, ...payload })}\n\n`;
+const opening = sse('message_start', { message: { id: 'msg_1', type: 'message', role: 'assistant', model: MODEL, content: [], stop_reason: null, stop_sequence: null,
+  usage: { input_tokens: 9, cache_creation_input_tokens: 0, cache_read_input_tokens: 0, output_tokens: 1 } } })
+  + sse('content_block_start', { index: 0, content_block: { type: 'text', text: '' } })
+  + ['par', 'tial ', 'answer'].map(text => sse('content_block_delta', { index: 0, delta: { type: 'text_delta', text } })).join('');
+const finalUsage = sse('content_block_stop', { index: 0 }) + sse('message_delta', { delta: { stop_reason: 'end_turn', stop_sequence: null }, usage: { output_tokens: 2 } });
+const sseHead = (response: ServerResponse) => response.writeHead(200, { 'content-type': 'text/event-stream' });
+
+async function spendOf(f: Awaited<ReturnType<typeof fixture>>, invocationId: string) {
+  const reader = await openSqliteModelInvocationReader(f.ledger, { busyTimeoutMs: 1000 });
+  let inspection;
+  try { inspection = await reader.loadInspection('scope', invocationId); } finally { reader.close(); }
+  const spend = await openSqliteProviderSpendIntegrityReader(f.ledger, { busyTimeoutMs: 1000 });
+  try { return { inspection, integrity: await verifyProviderSpendIntegrity(spend, 'scope', 10) }; } finally { spend.close(); }
+}
+
+it.each([
+  ['EOF', (response: ServerResponse) => { sseHead(response); response.end(opening); }],
+  ['provider error', (response: ServerResponse) => { sseHead(response); response.end(opening + sse('error', { error: { type: 'overloaded_error', message: 'Overloaded' } })); }],
+])('keeps the whole reservation held when the stream ends by %s before the final message_delta usage', async (_name, reply) => {
+  const f = await fixture(1000, true, reply);
+  const result = await invokeConfiguredModel(f.project, f.streamed, { env: f.env, secretResolver: f.secretResolver });
+  expect(result.receipt.outcome).toMatchObject({ state: 'unknown', reason: 'transport-error' });
+  const { inspection, integrity } = await spendOf(f, result.receipt.claim.invocationId);
+  const maximum = inspection!.spending!.descriptor.quote.maxChargeMinorUnits;
+  expect(maximum).toBeGreaterThan(0);
+  expect(inspection?.spending).toMatchObject({ disposition: { state: 'held', reason: 'unknown', observedMinorUnits: null }, measurement: null });
+  expect(integrity).toMatchObject({ reservationCount: 1, reservedMinorUnits: maximum, settledMinorUnits: 0,
+    checkpoint: { account: { reservedMinorUnits: maximum, settledMinorUnits: 0, settledExactMinorUnits: '0', frozen: false } } });
+});
+
+// Astra 2462 R1: the final message_delta must carry its own output_tokens. Without it, message_start's output_tokens=1 is never inherited
+// as the final count: a cut stream is unknown and a completed one an invalid response, both with the whole reservation held.
+const ownless = (usage: Record<string, unknown>) => sse('content_block_stop', { index: 0 }) + sse('message_delta', { delta: { stop_reason: 'end_turn', stop_sequence: null }, usage });
+it.each([
+  ['empty usage, then EOF', opening + ownless({}), 'unknown'],
+  ['usage without output_tokens, then EOF', opening + ownless({ input_tokens: 9 }), 'unknown'],
+  ['empty usage, then message_stop', opening + ownless({}) + sse('message_stop'), 'rejected'],
+] as const)('keeps the whole reservation held when the final message_delta carries %s', async (_name, wire, state) => {
+  const f = await fixture(1000, true, response => { sseHead(response); response.end(wire); });
+  const result = await invokeConfiguredModel(f.project, f.streamed, { env: f.env, secretResolver: f.secretResolver });
+  expect(result.receipt.outcome).toMatchObject(state === 'unknown' ? { state, reason: 'transport-error' } : { state, evidence: { reason: 'invalid-response' } });
+  const { inspection, integrity } = await spendOf(f, result.receipt.claim.invocationId);
+  const maximum = inspection!.spending!.descriptor.quote.maxChargeMinorUnits;
+  expect(maximum).toBeGreaterThan(0);
+  expect(inspection?.spending).toMatchObject({ disposition: { state: 'held', reason: 'unknown', observedMinorUnits: null }, measurement: null });
+  expect(integrity).toMatchObject({ reservationCount: 1, reservedMinorUnits: maximum, settledMinorUnits: 0,
+    checkpoint: { account: { reservedMinorUnits: maximum, settledMinorUnits: 0, settledExactMinorUnits: '0', frozen: false } } });
+});
+
+it('keeps the whole reservation held when the caller aborts the stream before the final message_delta usage', async () => {
+  let written!: () => void;
+  const sent = new Promise<void>(resolve => { written = resolve; });
+  const f = await fixture(1000, true, response => { sseHead(response); response.write(opening, () => written()); });
+  const controller = new AbortController();
+  const pending = invokeConfiguredModel(f.project, f.streamed, { env: f.env, secretResolver: f.secretResolver }, controller.signal);
+  await sent; await new Promise(resolve => setTimeout(resolve, 150)); controller.abort();
+  const result = await pending;
+  expect(result.receipt.outcome).toMatchObject({ state: 'unknown', reason: 'transport-error' });
+  const { inspection, integrity } = await spendOf(f, result.receipt.claim.invocationId);
+  const maximum = inspection!.spending!.descriptor.quote.maxChargeMinorUnits;
+  expect(inspection?.spending).toMatchObject({ disposition: { state: 'held', reason: 'unknown', observedMinorUnits: null }, measurement: null });
+  expect(integrity).toMatchObject({ reservationCount: 1, reservedMinorUnits: maximum, settledMinorUnits: 0,
+    checkpoint: { account: { reservedMinorUnits: maximum, settledMinorUnits: 0, settledExactMinorUnits: '0', frozen: false } } });
+});
+
+it('settles a complete stream from its final usage exactly like the non-streamed call, and a stream cut after that final usage the same', async () => {
+  const exact = async (f: Awaited<ReturnType<typeof fixture>>, command: typeof f.command, state: string) => {
+    const result = await invokeConfiguredModel(f.project, command, { env: f.env, secretResolver: f.secretResolver });
+    expect(result.receipt.outcome?.state).toBe(state);
+    const { inspection, integrity } = await spendOf(f, result.receipt.claim.invocationId);
+    expect(inspection?.spending).toMatchObject({ disposition: { state: 'settled-measured-tariff' }, measurement: { basis: 'measured-tariff' } });
+    expect(integrity).toMatchObject({ reservationCount: 1, reservedMinorUnits: 0 });
+    return { exact: inspection!.spending!.measurement!.exactMinorUnits, account: integrity.checkpoint.account.settledExactMinorUnits };
+  };
+  const json = await fixture();
+  const reference = await exact(json, json.command, 'responded');
+  const complete = await fixture(1000, true, response => { sseHead(response); response.end(opening + finalUsage + sse('message_stop')); });
+  const cut = await fixture(1000, true, response => { sseHead(response); response.end(opening + finalUsage); });
+  // Usage 9 input / 2 output on the same pinned tariff: the same exact bigint charge as the non-streamed response.
+  expect(await exact(complete, complete.streamed, 'responded')).toEqual(reference);
+  expect(await exact(cut, cut.streamed, 'unknown')).toEqual(reference);
+  expect(reference.exact).not.toBe('0');
 });
 
 });
