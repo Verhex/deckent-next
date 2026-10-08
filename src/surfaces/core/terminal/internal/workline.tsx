@@ -393,9 +393,9 @@ export function WorklineApp(props: WorklineProps) {
   // (information/list slot, panel controller) opens its window as usual — and that window says once that the terminal takes no typed
   // argument. The typed text is never shown. Without window words (TERM=dumb) the line goes as typed; line mode and the CLI are elsewhere.
   const [argumentNote, setArgumentNote] = useState<WindowNote | null>(null);
-  const perform = useCallback(async (line: string, mentioned: readonly string[], execution: LocalExecution): Promise<boolean> => {
+  const perform = useCallback(async (line: string, mentioned: readonly string[], execution: LocalExecution, typedArgument = false): Promise<boolean> => {
     const slash = parseSlashLine(line), words = labels.windows;
-    if (!slash || !slash.args || !words) return performLine(line, mentioned, execution);
+    if (!slash || !words || (!slash.args && !typedArgument)) return performLine(line, mentioned, execution);
     const note: WindowNote = { text: words.typedArgument, consume: () => setArgumentNote(current => current === note ? null : current) };
     setArgumentNote(note);
     try { return await performLine(`/${slash.command}`, mentioned, execution); }
@@ -405,12 +405,16 @@ export function WorklineApp(props: WorklineProps) {
   performRef.current = perform;
 
   execute.current = async execution => {
-    await perform(execution.input.text, execution.input.mentions, execution);
+    await perform(execution.input.text, execution.input.mentions, execution, typedArgumentInputs.current.delete(execution.input.inputId));
   };
-  const inputSequence = useRef(0);
-  const submit = (text: string, mentions: readonly string[] = []) => {
-    const before = panel.controller.snapshot();
-    if (panel.controller.send({ kind: 'submit', context: before.context, inputId: `input-${++inputSequence.current}`, text, mentions }) && before.active)
+  const inputSequence = useRef(0), typedArgumentInputs = useRef(new Set<string>());
+  // I-1 (Astra 2456): in the rich terminal a slash argument is dropped before the line is queued, shown as queued or remembered in the
+  // input history; only `/command` travels on, and the input id carries the fact that an argument was typed (for the window's one-time note).
+  const bareSlash = (text: string): string => { const slash = labels.windows ? parseSlashLine(text) : null; return slash?.args ? `/${slash.command}` : text; };
+  const submit = (typed: string, mentions: readonly string[] = []) => {
+    const before = panel.controller.snapshot(), text = bareSlash(typed), inputId = `input-${++inputSequence.current}`;
+    if (text !== typed) typedArgumentInputs.current.add(inputId);
+    if (panel.controller.send({ kind: 'submit', context: before.context, inputId, text, mentions }) && before.active)
       push([notice('info', `${labels.queued}: ${text.trim()}`)]);
   };
   const cancel = () => {
@@ -463,7 +467,7 @@ export function WorklineApp(props: WorklineProps) {
           An open decision card or arrow picker takes the keyboard away from it. */}
       <StackComposer prompt={labels.prompt} labels={{ ...labels.composer,
         slash: Object.fromEntries(Object.entries(labels.composer.slash).map(([key, text]) => [key, projectHumanPickerText(text, props.knownSecrets).label])) }}
-        busy={busy} active={composing}
+        busy={busy} active={composing} {...(labels.windows ? { historyText: bareSlash } : {})}
         onSubmit={(text, mentioned) => void submit(text, mentioned)} onCancel={cancel} onExit={() => { panel.close(); exit(); }}
         {...(props.inputHistory ? { history: props.inputHistory } : {})} {...(props.mentions ? { mentions: props.mentions } : {})}
         {...(props.mentionDelayMs === undefined ? {} : { mentionDelayMs: props.mentionDelayMs })} />

@@ -106,4 +106,31 @@ describe('slash windows integrated on one workline', () => {
     expect([...listed].sort()).toEqual(WORKLINE_SLASH_COMMANDS.map(command => command.name).sort());
     for (const name of ['clear', 'reasoning', 'mode', 'resume', 'scratch']) expect(listed, name).toContain(name);
   });
+
+  // Astra 2456 N1: in the rich terminal a slash argument never reaches the queue notice or the input history (recall and the persistent port).
+  it('a typed slash argument queued behind a running turn is queued, shown and remembered as the bare command only', async () => {
+    let release!: () => void; const gate = new Promise<void>(resolve => { release = resolve; });
+    const appended: string[] = [];
+    const streamTurn = async function* () { await gate; yield { kind: 'text' as const, text: 'turn done' }; yield { kind: 'done' as const, finish: 'stop' as const }; };
+    const { view } = await open({ streamTurn: streamTurn as never, inputHistory: { async load() { return []; }, append(entry) { appended.push(entry.text); } } });
+    await type(view, 'first\r'); await settle(60);
+    await type(view, '/status SECRET-ARG-77\r');
+    await until(() => captured.entries.some(entry => entry.kind === 'notice' && entry.text.startsWith('QUEUED')), 'queued notice');
+    const queued = captured.entries.find(entry => entry.kind === 'notice' && entry.text.startsWith('QUEUED'))!;
+    expect(queued).toMatchObject({ text: 'QUEUED: /status' });
+    expect(appended).toEqual(['first', '/status']);
+    release();
+    await until(() => view.stdout.frame.includes('▸ Runtime service') && view.stdout.frame.includes(WINDOWS.typedArgument), 'queued command opens its window with the note');
+    view.stdin.write(ESC); await until(() => summaries().length === 1, 'summary');
+    await settle(40); view.stdin.write('\u001B[A'); await settle(60);
+    expect(view.stdout.frame).toContain('/status');
+    expect(JSON.stringify(captured.entries)).not.toContain('SECRET-ARG-77'); expect(view.stdout.frame).not.toContain('SECRET-ARG-77');
+  });
+
+  it('without window words (TERM=dumb) the typed line is queued and remembered as typed (line-style behaviour kept)', async () => {
+    const appended: string[] = [];
+    const { view } = await open({ labels: { ...WORKLINE_TEST_LABELS, work: workSurfaceLabels('en'), sessions: SESSIONS }, inputHistory: { async load() { return []; }, append(entry) { appended.push(entry.text); } } });
+    await type(view, '/usage b1 2\r'); await settle(80);
+    expect(appended).toEqual(['/usage b1 2']);
+  });
 });
