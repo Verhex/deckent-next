@@ -45,7 +45,10 @@ export function useWorklineSettings(input: { readonly panels: WorklinePanels | u
     const { model, ...rest } = panels.ports;
     return { ...rest, ...(permissionMode ? { mode: {
       inspect: () => permissionMode.inspect(), current: () => modeNow.current.stop ?? null, select: (stop: PermissionModeStop) => modeNow.current.select(stop) } } : {}),
+    // The host's whole `/model` source (budget window, shadow answers) plus the session pin; dropping an optional port hides its rows.
     ...(model && pinnable ? { model: { inspect: () => model.inspect(), ...(model.makeDefault ? { makeDefault: (choice: ModelPanelChoice) => model.makeDefault!(choice) } : {}),
+      ...(model.budget ? { budget: model.budget } : {}),
+      ...(model.resolveShadow ? { resolveShadow: (choice: ModelPanelChoice, action: 'remove' | 'align') => model.resolveShadow!(choice, action) } : {}),
       pinned: () => sessionModel.current?.pinned() ?? null, pin: (choice: ModelPanelChoice) => sessionModel.current?.pin(choice) } } : {}) };
   }, [panels, permissionMode, pinnable]);
   const approvalAfter = useRef<string | null>(null), openApprovals = useRef(input.openApprovals); openApprovals.current = input.openApprovals;
