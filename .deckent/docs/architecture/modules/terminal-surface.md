@@ -192,8 +192,24 @@ Market notes live outside the repo (`/home/alperen/deckent-refactor-work/proof/T
   default whenever approvals are wired, never more often than every 10 s (lead integration decision; tests may override).
   TTY `/cancel` picks only non-terminal runs without a pending cancellation, refreshes the selected run, then asks through the existing card and calls `run cancel`
   against that refreshed revision. `/run` picks a human-titled run and opens state/tasks/attempts/delivery sections with muted short identities. `/workers` opens the same rows as the watch body, with the complete list scrollable.
-  SW-2 leaves one labelled, framed `systemSummaryLine` per closed command flow; cards, results, watch startup/delivery and background approval notifications no longer append ordinary notices or cards to chat. Watch delivery appears in its status row, approval notifications in the status strip; `/monitor` leaves a close summary, `/watch-stop` calls the same close path as Esc.
-  These are source-candidate contracts, not independent review, main landing, binary or live acceptance. Proof: external `proof/SLASH-WINDOWS-2026-10-08/SW2-WORKER.md`. SW-1 system-line unification and SW-3 bare-command palette/help integration remain lead-owned; no line-mode source changed. Total runtime is not present in these query DTOs: existing age means last worker event age, never invented elapsed runtime.
+  Every closed job/approval command flow leaves the one system summary line (below); cards, results, watch startup/delivery and background approval notifications no longer append ordinary notices or cards to chat. Watch delivery appears in its status row (none for a refused feed), approval notifications in the status strip; `/monitor` leaves a close summary, `/watch-stop` calls the same close path as Esc.
+  Total runtime is not present in these query DTOs: existing age means last worker event age, never invented elapsed runtime.
+- **Slash windows (SLASH-WINDOWS, owner 2026-10-08; SW-1/SW-2/SW-3 integrated on `wave/slash-windows`, not landed):** `terminal-window` owns
+  `InfoWindow` (typed `InfoWindowModel`: sections of bold-key rows, chips with shape and word, muted shortened identities, lists, tables,
+  choices; Esc/Enter/q close) and `SystemSummaryLine` (`◆ Deckent system` / `# ` in ASCII, `systemRail`/`systemLabel` roles, wraps rather than
+  truncates). Bare `/help` `/status` `/usage` `/doctor` `/scope` `/context` (SW-1) answer in information windows filled by terminal-admin
+  (`terminalAdminPorts(...).info`, `/doctor` from `deckent doctor --json`, `/usage` budgets picked from `provider_spending`); `/help` lists the
+  whole registry under its groups and runs the picked command. `/reasoning`, `/scratch` and an unknown command (SW-3) open list windows; the
+  unknown window always ends with "All commands…", which opens `/help`. `/mode` opens the mode panel with a "Now:" header; `/resume` is a
+  picker; `/clear` wipes the visible screen (no ED 3) and starts a new `<Static>` epoch. Hosts: the panel controller keeps the job, approval,
+  resume and settings windows; `useWindowSlot` (terminal) is the one local slot for information and list windows. Every window is a `Window`
+  in the one stack (single focus owner); the controller's modal card or picker hides the slot until answered (approval priority). The status
+  row reads Ready while a slash window waits. **System summary line:** `systemSummaryEntry(text, level)` (terminal-work) is the only factory
+  and `LedgerEntryRow` the only render point; the `/mode` change line (window and Shift+Tab) and a feed access refusal / missing identity
+  (error tone, once per text, even with no watch window open) use it. **Typed arguments:** with window words (`WorklineLabels.windows`, absent
+  on TERM=dumb) SW-1/SW-3 ignore a typed argument and open the window, SW-2 job/approval commands refuse it in a window that never echoes it
+  (open owner decision: one rule). Without window words SW-1/SW-3 keep the text command; SW-2 refuses in every TTY. Line mode and the CLI keep
+  arguments. Proof: external `proof/SLASH-WINDOWS-2026-10-08/` (`SW1/2/3-WORKER.md`, `INTEGRATION-WORKER.md`, `INTEGRATION-DECISIONS.md`).
 - **Local inference serving** (`inference_serving`, `deckent inference plan|budget`) is a separate
   configuration card: pure capacity/launch estimates with loopback-only publish. `loopbackMetricsUrl` only
   derives a loopback `/metrics` URL. `deckent inference metrics` reads that URL through the bounded

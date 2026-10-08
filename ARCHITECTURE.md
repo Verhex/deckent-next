@@ -528,6 +528,14 @@ Core contracts and never requires editing Core. Core-memory law 10 records this 
   `/mcp` bounded windows, presentation only, ports and words from `cli-terminal`); `/monitor`, `/watch-workers`, `/watch-runs`, `/tasks` are
   bounded modal live windows (L5: `MonitorBody` loaded through a host port; one visible window at a time). Full access shows a standing
   warning line above the composer. Detail: [terminal-surface](.deckent/docs/architecture/modules/terminal-surface.md).
+- **Slash windows and system summary line (SLASH-WINDOWS, owner 2026-10-08; `wave/slash-windows`, not landed):** in the TTY terminal every
+  informing slash command answers in a bounded `Window` (Esc closes), never in the chat stream; `/clear` wipes the screen and starts a new
+  conversation, `/exit` exits. A closed window leaves at most ONE system line: `systemSummaryEntry` (terminal-work) is the only factory, a
+  `notice` with `SYSTEM_SUMMARY_ENTRY_ID`; `LedgerEntryRow` is the only render point, through `SystemSummaryLine` (terminal-window: own rail,
+  `◆ Deckent system` label, tone from the level, secret-projected). The `/mode` change (window and Shift+Tab) and a feed access refusal use it
+  too. Hosts: the panel controller (job, approval, resume, settings windows) and one local window slot (`useWindowSlot`: information and list
+  windows); all are `Window`s in one stack, which owns focus, and an approval card hides the slot until answered. With window words the terminal
+  takes no typed slash argument (SW-1/SW-3 ignore it, SW-2 refuses it); line mode and the CLI keep arguments.
 - **Shell and identity (L6):** the shell scanner reads a redirection operator whole (`2>&1`, `N>&M`, `&>`); stream silencing/merging to
   `/dev/null` or a descriptor keeps a read a read, a file target stays a write; a sandboxed write to a protected path explains itself in the
   tool result (EN/TR); a registry directory that is its own tmpfs mount inside a sandbox is `*_IDENTITY_MASKED`, not a lost identity;
