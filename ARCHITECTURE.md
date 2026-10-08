@@ -505,8 +505,17 @@ Core contracts and never requires editing Core. Core-memory law 10 records this 
   package proves overlay without Core edits before Enterprise features are claimed. Tiers never grant authority.
   Current state (2026-10-07, wave 4): the package entry `deckent/extensions` registers provider/config units before one
   composition root seals the registries (late registration is a typed refusal; the SDK root exports no `register*`).
-  It takes effect only in the CLI process; `runtime serve` and `deckent-mcp` still start from the Core entry
-  (EXT-SERVICE-ENTRY open), so overlay is not yet proven on the service or MCP surfaces.
+  EXT-SERVICE-ENTRY candidate (2026-10-08, W2; not landed): a distribution registers its modules, then calls
+  `runCli(argv, { serviceEntry? })` or lazy `runMcp(argv)` from `deckent/extensions`. `runCli` carries the
+  distribution executable (`serviceEntry`, default `process.argv[1]`) through automatic service start and managed
+  restart, replaying registrations in the new process; direct `runtime serve` retains the same-process registry.
+  `runMcp` accepts the Core `--project` contract, resolves catalog hints from its registered modules and delegates
+  execution to the governed service. Both processes must use the same distribution; bare Core bins discover no
+  modules. SDK root exports no new entry or registration. Public entry imports no heavy package until called.
+  Until batch review and landing, Enterprise pluggability beyond the CLI remains unclaimed; candidate proof is
+  `proof/EXT-SERVICE-ENTRY-2026-10-08/` (17 targeted tests; offline tarball service/MCP, unregistered refusal,
+  detached restart, lazy graph and zero-dependency NodeNext/Bundler consumer types). These are author checks,
+  not independent acceptance; the fixture seeds its ledger via existing storage composition before public requests.
 - **ERP adapter family (Enterprise).** IFS (Cloud via MCP/REST and Applications 10 native), SAP, Oracle, Microsoft,
   Uyumsoft and Logo implement the same operation/effect/approval contracts. Customer ERP development projects are built
   on these adapters; Deckent-Enterprise owns writing and distributing internal packages as each customer's ERP version

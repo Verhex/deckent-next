@@ -3476,7 +3476,7 @@
       ]
     },
     "publicExtensions": {
-      "note": "G-i/G-j (ENTERPRISE-EXT-1, owner K7 = A): an external package registers through deckent/extensions only, before the composition root seals the registries; an overlay fixture proves it with public imports only.",
+      "note": "G-i/G-j (ENTERPRISE-EXT-1, owner K7 = A; EXT-SERVICE-ENTRY): an external package registers through deckent/extensions only, before the composition root seals the registries; lazy CLI and MCP runners reach only their listed unit indexes; an overlay fixture proves it with public imports only.",
       "entry": "src/extensions.ts",
       "sdkEntry": "src/index.ts",
       "packageExport": "./extensions",
@@ -3505,7 +3505,8 @@
         "registerProviderConfig": "src/composition/core/root"
       },
       "unitImports": [
-        "src/composition/core/cli"
+        "src/composition/core/cli",
+        "src/composition/core/mcp"
       ],
       "fixture": {
         "root": "tests/fixtures/overlay-package",
