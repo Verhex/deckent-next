@@ -154,3 +154,22 @@ receipts live under `audit/backup-operations`; restore receipts live beside the 
 A failure before trusted authority exists cannot be sealed, and performs no storage effect.
 Linux kernel custody is verified here; other hosts refuse unsupported custody. KMS, independent
 review, packaged acceptance and owner DOGFOOD admission remain separate gates.
+
+## Provider keys, models and spending
+
+Keys: `deckent secret set NAME` (hidden prompt or piped stdin) writes to the store selected by `secrets.store`
+(`core.secret-store.env@1`, `core.secret-store.file@1`, `core.secret-store.encrypted-file@1`); `deckent secret store`
+copies every key to another registered store, verifies it, publishes the selection and then deletes the old copy (a move
+to a weaker store asks for approval; set, delete and switch share one installation-wide custody section). Workers never
+receive a key. `deckent doctor` names the active store and reports `unverified` when a store listing fails.
+
+Models: `deckent models connect --scope <id> --connection <kind> --command-id <id> (--model <id> | --reference <ref>)`
+declares a model from the kind's packaged catalog, writes the scope's invocation profile with the key name and activates
+it (kinds: anthropic-api, openai-api, deepseek-api, zai-api, zai-cn-api, openai-compatible, local-openai). A remote model
+without a verified published tariff is refused and shown locked with the reason. `terminal.defaultModel` (user layer) is
+the terminal's default; the session pin from `/model` wins, then a project-authored reference.
+
+Spending: paid calls reserve the dearest applicable published tier and settle from the provider's returned usage times
+the pinned tariff (`measured-tariff`). The scope's first budget is created with `deckent models create-budget --scope <id>
+--usd <n>` (or the `/model` budget window), changed with `revise-budget [--unfreeze]`; a held call that never received
+final usage is resolved with `reconcile-spending`. Details: ARCHITECTURE "Spend settlement".

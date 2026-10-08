@@ -105,8 +105,9 @@ add broad features and only on owner request (2026-10-03); ordinary slices use t
 
 Open a PR from the admitted branch, filling card id, scope, checks, independent review status,
 risks/limits and whether DOGFOOD/live remained untouched. CI already runs on `pull_request` via
-[ci.yml](.github/workflows/ci.yml). All six cells (Linux, macOS, Windows × Node 24/26) are required
-(owner 2026-10-03); a red cell is a real failure, not noise. A CI badge or author checks do not replace independent review of the exact candidate.
+[ci.yml](.github/workflows/ci.yml). The required cells are Ubuntu on Node 24 and Node 26
+(owner 2026-10-06 ruleset; the earlier six-cell rule of 2026-10-03 is superseded). macOS and Windows run separately in the nightly
+[platform-verification.yml](.github/workflows/platform-verification.yml) and are not merge gates; a red required cell is a real failure, not noise. A CI badge or author checks do not replace independent review of the exact candidate.
 The implementer cannot award their own work independent PASS. In the host review arrangement,
 Sol's channel address remains `astra`; use the assigned independent reviewer, not the author.
 

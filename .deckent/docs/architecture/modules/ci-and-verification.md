@@ -64,8 +64,8 @@ The test harness canonicalizes only the OS temporary parent before fixture alloc
 explicit test global homes and product roots are unchanged. Successful descriptor-relative workspace read/edit cases run only
 when the existing Linux `/proc/self/fd` capability is available. Portable policy/grammar and typed unsupported-refusal tests
 remain active; this partition does not implement macOS/Windows custody or grant platform acceptance.
-**CI-FIX signal (owner 2026-10-03; source candidate, hosted acceptance pending).** All six matrix cells
-are required workflow failures, named `required verify (<os>, node <24|26>)`; `continue-on-error` is absent.
+**CI-FIX signal (owner 2026-10-03; superseded 2026-10-06).** The six-cell requirement was narrowed by the owner's ubuntu-only ruleset: the required
+cells are `required verify (ubuntu-latest, node <24|26>)`; macOS and Windows run in the nightly `platform-verification.yml` and are not merge gates. `continue-on-error` is absent.
 Workflow YAML does not implement branch protection; the owner reports the main ruleset active (2026-10-03).
 Same-ref concurrency cancels superseded runs. Existing pull_request remains secret-free with read-only contents
 and no persisted checkout credential. Full history prevents source-history ratchets from silently losing CI coverage;
@@ -99,12 +99,12 @@ ends in CONFIG_WRITE_LOCKED. Tracked-file unavailability carries a typed executi
 changing its measurement/security bounds. Build/declaration/CI temp identities use native canonical paths;
 the fast architecture scanner waits for stdout delivery before exiting, including large inventories.
 R2 implementation/verification evidence: external `proof/CI-FIX-R2-2026-10-03/`.
-CI-FIX-R3 (owner 2026-10-03, source candidate on `9740baae`) extends the same unreadability rule to
+CI-FIX-R3 (owner 2026-10-03; landed, `9a6490c0`) extends the same unreadability rule to
 `readdir(lock)`: no empty/stale-owner claim, no entry/reclaim, bounded retry; other IO failures propagate.
 Injected EPERM/EACCES → typed lock timeout and unchanged owner metadata is the RED/green contract;
 real Windows contention and the separate duplicate-reclaim warning still require native evidence.
 External exact candidate/checks/open limits: `proof/CI-FIX-R3-2026-10-03/review.md`.
-**SOCKET-PUBLICATION (owner 2026-10-03; source candidate).** The Linux native runtime listener binds inside a pinned
+**SOCKET-PUBLICATION (owner 2026-10-03; landed, `d7e584c3`).** The Linux native runtime listener binds inside a pinned
 0700 staging directory in the final parent, pins the socket inode, chmods that inode through `/proc/self/fd` and fstats
 0600, listens, then publishes with descriptor-relative `renameat2(RENAME_NOREPLACE)`. The final name is absent until
 a private listening socket is ready; existing files/symlinks/sockets are never overwritten. No process-wide umask

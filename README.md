@@ -28,7 +28,7 @@ package); the planned name is the scoped `@verhex/deckent` (owner 2026-10-07, no
 -->
 
 > [!NOTE]
-> **Pre-release `1.0.0-alpha.10`**, live since 2026-10-07. Deckent is not on npm yet; install it from source
+> **Pre-release `1.0.0-alpha.17`**, live since 2026-10-08. Deckent is not on npm yet; install it from source
 > as shown in [Get started](#get-started). Every release is listed in [CHANGELOG.md](CHANGELOG.md).
 
 ## What is Deckent
@@ -50,7 +50,7 @@ without changing Core.
 | | |
 |---|---|
 | 🗼 **Govern** | One identity, scope and policy model for people and AI agents. When something needs approval, the window shows exactly what: the full command, where it runs, on whose behalf, the risk, whether it can be undone, and a deadline. A persona or a model's advice never grants authority. |
-| 🛫 **Execute** | Runs, tasks and workers are admitted, scheduled and recovered on your machines. Agent shell commands and MCP servers run in sandboxes (bubblewrap, Landlock); workers run in Docker. Works with Anthropic, OpenAI-compatible endpoints, OpenRouter and local vLLM models, and with Claude Code, Codex and Cursor workers. |
+| 🛫 **Execute** | Runs, tasks and workers are admitted, scheduled and recovered on your machines. Agent shell commands and MCP servers run in sandboxes (bubblewrap, Landlock); workers run in Docker. Works with Anthropic, OpenAI, DeepSeek, Z.ai (GLM), OpenAI-compatible endpoints, OpenRouter (key only so far) and local vLLM models, and with Claude Code, Codex and Cursor workers. |
 | 📜 **Prove** | Every decision and effect lands in a durable ledger and audit trail. Approvals are sealed, patches are retained, and changes are integrated in an isolated candidate before anything is delivered. |
 
 ## How a request flows
@@ -84,7 +84,7 @@ sequenceDiagram
 
 ## In the terminal
 
-These screens come from the real Deckent terminal (alpha.10, 110×32), recorded in a throwaway sample project with a
+These screens come from the real Deckent terminal (alpha.10, 110×32; the `/provider`, `/model` and slash-command windows added since are not pictured yet), recorded in a throwaway sample project with a
 local test model.
 
 <table>
@@ -189,8 +189,10 @@ flowchart LR
   retained, integrated in an isolated candidate, then delivered or released.
 - **Govern**: local identity, company-scoped policy, audit and one approval broker for every surface; human
   acceptance or rejection of unverified evidence.
-- **Choose models**: a model catalog by client and billing channel, exact activation, spending and allocation audit,
-  local vLLM chat.
+- **Choose models**: a model catalog by client and billing channel, exact activation, local vLLM chat; `/provider` and
+  `/model` connect a provider with your own key and pin a model for the session; paid calls settle from the provider's
+  usage times a verified published tariff under a budget you set (an unpriced remote model is refused and locked with
+  the reason); spending and allocation audit.
 - **Operate**: `deckent monitor` for a read-only view of every installation, `deckent doctor` for health, `deckent
   config` for settings, bilingual help everywhere.
 
@@ -201,8 +203,8 @@ a remote HTTP API, Desktop and Dashboard. A Docker worker shares the host kernel
 
 ```mermaid
 flowchart LR
-  L["Live · alpha.10<br/>terminal windows · approval window<br/>mode cycling · startup screen"] --> P["In progress · T3<br/>/config · /mode · /mcp panels<br/>easy MCP (HTTP, import, trust → tool use)<br/>live monitor windows"]
-  P --> N["Next · T4–T5<br/>provider and model switching<br/>API key · subscriptions · local vLLM<br/>system prompt and settings"]
+  L["Live · alpha.17<br/>terminal windows · approval window · slash-command windows<br/>/config · /mode · /mcp · /provider · /model<br/>easy MCP (HTTP, import, trust) · encrypted key store<br/>spend settlement and budgets"] --> P["In progress<br/>OpenRouter models in the terminal<br/>cost guards · per-provider spend limits<br/>first-use fixes (cache, usage line)"]
+  P --> N["Next<br/>subscriptions · worker credential modes<br/>system prompt and settings<br/>project instruction file"]
   N --> F["Planned<br/>Firecracker microVM sandbox<br/>HTTP API · Dashboard · Desktop"]
 ```
 

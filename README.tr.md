@@ -28,7 +28,7 @@ npm rozetleri: ilk npm yayınından ve paket kimliği doğrulandıktan sonra aç
 -->
 
 > [!NOTE]
-> **Ön sürüm `1.0.0-alpha.10`**, 2026-10-07'den beri canlı. Deckent henüz npm'de yok; [Başlarken](#başlarken)
+> **Ön sürüm `1.0.0-alpha.17`**, 2026-10-08'den beri canlı. Deckent henüz npm'de yok; [Başlarken](#başlarken)
 > bölümündeki gibi kaynaktan kurun. Her sürümün içeriği [CHANGELOG.md](CHANGELOG.md) içinde.
 
 ## Deckent nedir
@@ -49,7 +49,7 @@ kaynak Core (Apache-2.0) tek başına çalışır; proprietary Enterprise sürü
 | | |
 |---|---|
 | 🗼 **Yönetir** | İnsanlar ve yapay zekâ ajanları için tek kimlik, kapsam ve policy modeli. Bir iş onay isterse pencere neyin onaylandığını tam gösterir: tam komut, nerede çalışacağı, kimin adına, risk, geri alınıp alınamayacağı ve süre. Persona ya da model tavsiyesi asla yetki vermez. |
-| 🛫 **Yürütür** | İşler (Run), görevler ve işçiler sizin makinelerinizde kabul edilir, sıralanır ve kurtarılır. Ajanın kabuk komutları ve MCP sunucuları sandbox içinde (bubblewrap, Landlock), işçiler Docker'da çalışır. Anthropic, OpenAI uyumlu uç noktalar, OpenRouter ve yerel vLLM modelleriyle; Claude Code, Codex ve Cursor işçileriyle çalışır. |
+| 🛫 **Yürütür** | İşler (Run), görevler ve işçiler sizin makinelerinizde kabul edilir, sıralanır ve kurtarılır. Ajanın kabuk komutları ve MCP sunucuları sandbox içinde (bubblewrap, Landlock), işçiler Docker'da çalışır. Anthropic, OpenAI, DeepSeek, Z.ai (GLM), OpenAI uyumlu uç noktalar, OpenRouter (şimdilik yalnız anahtar) ve yerel vLLM modelleriyle; Claude Code, Codex ve Cursor işçileriyle çalışır. |
 | 📜 **Kanıtlar** | Her karar ve etki kalıcı bir defter ve denetim izine yazılır. Onaylar mühürlenir, yamalar saklanır ve değişiklikler teslimden önce yalıtılmış bir adayda birleştirilir. |
 
 ## Bir istek nasıl akar
@@ -83,7 +83,7 @@ sequenceDiagram
 
 ## Terminalde
 
-Bu ekranlar gerçek Deckent terminalinden (alpha.10, 110×32), yerel bir deneme modeliyle geçici bir örnek projede
+Bu ekranlar gerçek Deckent terminalinden (alpha.10, 110×32; sonradan eklenen `/provider`, `/model` ve slash komut pencereleri henüz görselde yok), yerel bir deneme modeliyle geçici bir örnek projede
 çekildi.
 
 <table>
@@ -189,8 +189,10 @@ flowchart LR
   yamalar saklanır, yalıtılmış bir adayda birleştirilir, sonra teslim edilir ya da yayınlanır.
 - **Yönetişim**: yerel kimlik, şirket kapsamlı policy, denetim ve her yüzey için tek onay aracısı; doğrulanmamış
   kanıt için insan kabulü ya da reddi.
-- **Model seçin**: istemci ve faturalama kanalına göre model kataloğu, birebir etkinleştirme, harcama ve ayırma
-  denetimi, yerel vLLM sohbeti.
+- **Model seçin**: istemci ve faturalama kanalına göre model kataloğu, birebir etkinleştirme, yerel vLLM sohbeti;
+  `/provider` ve `/model` kendi anahtarınızla sağlayıcı bağlar ve oturum için modeli sabitler; ücretli çağrılar,
+  sağlayıcının kullanım verisi ile doğrulanmış yayımlanmış tarifenin çarpımından, belirlediğiniz bütçe altında
+  kesinleşir (fiyatı bilinmeyen uzak model reddedilir ve nedeniyle kilitlenir); harcama ve ayırma denetimi.
 - **İşletin**: tüm kurulumlar için salt okunur `deckent monitor`, sağlık için `deckent doctor`, ayarlar için
   `deckent config`, her yerde iki dilli yardım.
 
@@ -201,8 +203,8 @@ web paneli. Docker işçisi host çekirdeğini paylaşır; sanal makine değildi
 
 ```mermaid
 flowchart LR
-  L["Canlı · alpha.10<br/>terminal pencereleri · onay penceresi<br/>mod döngüsü · açılış ekranı"] --> P["Sürüyor · T3<br/>/config · /mode · /mcp panelleri<br/>kolay MCP (HTTP, içe aktarma, güven → araç izni)<br/>canlı izleme pencereleri"]
-  P --> N["Sırada · T4–T5<br/>sağlayıcı ve model geçişi<br/>API anahtarı · abonelik · yerel vLLM<br/>sistem istemi ve ayarlar"]
+  L["Canlı · alpha.17<br/>terminal pencereleri · onay penceresi · slash komut pencereleri<br/>/config · /mode · /mcp · /provider · /model<br/>kolay MCP (HTTP, içe aktarma, güven) · şifreli anahtar deposu<br/>harcama kesinleştirme ve bütçeler"] --> P["Sürüyor<br/>terminalde OpenRouter modelleri<br/>maliyet korumaları · sağlayıcı başına harcama sınırı<br/>ilk kullanım düzeltmeleri (önbellek, kullanım satırı)"]
+  P --> N["Sırada<br/>abonelikler · işçi kimlik bilgisi kipleri<br/>sistem istemi ve ayarlar<br/>proje talimat dosyası"]
   N --> F["Planlı<br/>Firecracker mikro VM sandbox'ı<br/>HTTP API · web paneli · masaüstü"]
 ```
 

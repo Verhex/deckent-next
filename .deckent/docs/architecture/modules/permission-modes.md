@@ -286,7 +286,7 @@ service wiring from the turn's `requestApproval` to `offer`/`remember`/`persist`
 "always"), `/policy`, listing this session's memory.
 
 **Shift+Tab cycle and in-session full access (TERMINAL-UX T2 T-MODE-CYCLE, owner 2026-10-07, corrected; supersedes "launched only" and the
-surface refusal of `/mode full-access` above; integrated on `wave/tui-2`, not landed).** Shift+Tab (Alt+M where the console
+surface refusal of `/mode full-access` above; `wave/tui-2`; released with alpha.10, PR #37).** Shift+Tab (Alt+M where the console
 cannot report Shift+Tab) walks every stop the person may take here: `standart` → careful (`standart` + `askEdits`) → `full-auto` →
 `full-access` → `standart`; no plan mode. `full-access` is a stop only when the view's `fullAccess` grant holds; `full-auto` unless the view
 says the company's set grant leaves it out (`fullAuto`, a view field of runtime protocol v21 — wave/tui-2 bumps once because the v20 view is

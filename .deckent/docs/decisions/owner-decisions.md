@@ -346,3 +346,11 @@ Kaynak: dış `proof/DECKENT-API-KEYS-2026-10-08/analysis.md`.
 - **Kurulum kaydı:** ilk kurulumda ledger yok; aynı işlem 0 kayıtla, yeni policy ile yetkili, kaydı komut sonucunda; sonraki geçişler
   ledger'da (Jev 0950f08e 0,83/0,66 → owner).
 - **Yüzey kuralı:** ayarlar elle yazılmaz, seçilir; elle giriş yalnız maskeli sır ve yeni dış URL/host. Depo, kayıtlı depolardan seçilir.
+
+## Owner kararları — 2026-10-08 (harcama kesinleştirme, fiyat, sağlayıcılar, beta)
+Ayrıntı ve kanıt ilgili PLAN satırlarında (iş kimliği) ve ARCHITECTURE "Spend settlement" bölümünde; bu bölüm yalnız dizin.
+- **SPEND-SETTLEMENT / STAGE1** (alpha.16, PR #47/#48): `measured-tariff` yalnız son olayın kendi kullanımından kesinleşir; fiyatı doğrulanmamış uzak model reddedilir ve kilitlenir; ilk bütçe `models create-budget` / `/model` bütçe penceresi (Jev 459611ed).
+- **PRICING** (alpha.17, PR #49): DeepSeek peak oranı `upper-bound` etiketiyle ve bir kez azaltılabilir şekilde; OpenAI kademeleri; Z.ai küresel satırlar, Zhipu Çin CNY nedeniyle kilitli.
+- **OPENROUTER-TERMINAL** (Jev 7e0348c4 `c_now_b_after_spend` 0,96/0,76, K6): T4-B OpenRouter'ı yalnız anahtarla indirir; model eylemi sonraki dilim. **LLMTR:** yerel pazar sağlayıcısı, hedef haftaya (owner). **DECKENT-MD:** satıcıdan bağımsız proje talimat dosyası, CLAUDE.md okunmaz (Jev 6d5c040d 0,97/0,72 → owner).
+- **PROVIDER-SPEND-LIMITS** (Jev 8884c07b 0,99/0,80): A sağlayıcı/anahtar/ortam başına Deckent bütçeleri + B normal anahtarla okunan bakiye/limit; C (yönetici anahtarı gerektiren sınırlar) ayrı karar. **INSTALLER-POLICY-AUDIT** ayrı kart (Jev 1a1d6d0a 0,83/0,64 → owner). **CONFIG-RECORD-EDITORS** (owner).
+- **BETA-LAUNCH:** sürüm pazar 2026-10-11'de alfadan betaya geçer; 2026-10-12'den itibaren tanıtım ve dış katkı (owner).
