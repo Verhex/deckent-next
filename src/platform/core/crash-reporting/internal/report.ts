@@ -61,7 +61,7 @@ export async function writeCrashArtifact(error: unknown, root: string, argv: rea
   try {
     const layout = resolveProductPaths(root, { env });
     const directory = productResourcePath(layout, 'crashes');
-    await mkdir(directory, { recursive: true });
+    await mkdir(directory, { recursive: true, mode: 0o700 });
     if ((await lstat(directory)).isSymbolicLink()) return null;
     const target = join(directory, `crash-${Date.now()}-${process.pid}-${randomUUID()}.json`);
     temp = `${target}.tmp`;

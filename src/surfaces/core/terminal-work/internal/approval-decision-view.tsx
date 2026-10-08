@@ -57,7 +57,7 @@ export function ApprovalDecisionPicker({ rows, labels, work, clearSession, statu
     footer={focused => <ApprovalProjectedPicker lines={[...rows.map(raw => projectRow(raw, known)), ...(clearSession ? [approvalTemplateLine('{text}', { text: projectApprovalDecisionText(clearSession, known) })] : [])]} labels={labels} active={focused} onSelect={onSelect} onCancel={onCancel} />} />;
 }
 /** The terminal's own context an approval window names: the project path and the session's permission mode (display only). */
-export type ApprovalWindowContext = Readonly<{ project?: string | undefined; mode?: string | undefined }>;
+export type ApprovalWindowContext = Readonly<{ project?: string | undefined; home?: string | undefined; mode?: string | undefined }>;
 type Scoped = Readonly<{ scopes: readonly StandingScope[]; pattern: string; labels: NonNullable<WorkSurfaceLabels['approvalStanding']> }>;
 /** The approval window's rows at `now` (T-APPROVAL-WINDOW): nine labelled fields, assurance and scope sentences, the preview, the details. */
 export function approvalDecisionCardLines(approval: ApprovalCardPresentation, work: WorkSurfaceLabels, preview: string | undefined, standing: Readonly<{ scopes: readonly StandingScope[]; pattern: string }> | null,
@@ -67,7 +67,7 @@ export function approvalDecisionCardLines(approval: ApprovalCardPresentation, wo
     ? approvalTemplateLine(approval.hasDecisionCapability ? card.assuranceTurnHere : card.assuranceTurnElsewhere, {}) : approvalTemplateLine(card.assuranceOther, { level: p(required) });
   return approvalWindowLines({ approvalId: approval.displayId, summary: approval.summary, requester: approval.displayRequester, runId: approval.displayRun, taskId: approval.displayTask,
     expiresAt: approval.expiresAt, tool: approval.tool, target: approval.target, preview, risk: approval.risk, undo: approval.undo, requiredAssurance: required, assuranceLine: assurance,
-    standing, project: context.project, mode: context.mode, posture: approval.posture, call: approval.call, previewCut: approval.previewCut, config: approval.config }, work.approvalWindow, now, known);
+    standing, project: context.project, home: context.home, mode: context.mode, posture: approval.posture, call: approval.call, previewCut: approval.previewCut, config: approval.config }, work.approvalWindow, now, known);
 }
 /** The live clock of a window: re-renders once a second until `until`, then stops. */
 function useNow(until: number): number {

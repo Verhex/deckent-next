@@ -7,6 +7,7 @@ import { createConfiguredRuntimeClient, startConfiguredRuntimeService } from '..
 import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
 import { clearConfigCache, ErrorRegistry, formatHumanError, productResourcePath } from '#platform/index.js';
 import { fixtureDockerRegistry } from '../support/execution-registry.js';
+import { main } from '#surfaces/core/cli/index.js';
 
 const roots: string[] = [];
 afterEach(async () => { clearConfigCache(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
@@ -51,11 +52,32 @@ it.skipIf(process.platform === 'win32')('requires POSIX managed storage: refuses
     expect(error).toMatchObject({ code: 'CANCELLATION_NOT_CONFIGURED', params: { missing } });
     for (const locale of ['en', 'tr'] as const) {
       const text = formatHumanError(error as Error, { noColor: true, locale });
-      expect(text).toContain(missing); expect(text).not.toContain('{');
+      expect(text).toContain(missing); expect(text).not.toContain('{'); expect(text).toContain('deckent init --help');
     }
   }
-  // Negative proof: the same code without params renders the raw placeholder (what the service threw before this fix).
-  for (const locale of ['en', 'tr'] as const) expect(formatHumanError(ErrorRegistry.createError('CANCELLATION_NOT_CONFIGURED'), { noColor: true, locale })).toContain('{missing}');
+  // Even a producer without details shows a localized unknown rather than an uninterpolated placeholder.
+  for (const locale of ['en', 'tr'] as const) {
+    const text = formatHumanError(ErrorRegistry.createError('CANCELLATION_NOT_CONFIGURED'), { noColor: true, locale });
+    expect(text).not.toContain('{missing}'); expect(text).toContain(locale === 'tr' ? 'bilinmiyor' : 'unknown');
+    expect(text).toContain('deckent init --help');
+  }
+});
+
+it.skipIf(process.platform === 'win32')('runtime serve on a fresh install without config.json names missing sections and gives the localized init next step', async () => {
+  const project = await mkdtemp(join(tmpdir(), 'deckent-serve-no-config-')); roots.push(project);
+  const env = { HOME: join(project, 'home'), USERPROFILE: join(project, 'home') };
+  for (const locale of ['en', 'tr'] as const) {
+    const output: string[] = [], errors: string[] = [];
+    const code = await main(['runtime', 'serve', '--lang', locale, '--no-color'], { root: project, env, signal: new AbortController().signal,
+      stdout: { write: text => { output.push(text); return true; } }, stderr: { write: text => { errors.push(text); return true; } },
+      startRuntimeService: (root, observer, options) => startConfiguredRuntimeService(root, observer, options) });
+    expect(code).not.toBe(0); expect(output).toEqual([]);
+    const text = errors.join('');
+    expect(text).toContain('CANCELLATION_NOT_CONFIGURED'); expect(text).toContain('cancellation, cancellationRuntime');
+    expect(text).toContain('deckent init --help'); expect(text).not.toContain('{missing}');
+    expect(text).toContain(locale === 'tr' ? 'Kurulumu tamamladıktan sonra' : 'Complete the installation');
+  }
+  await expect(readFile(join(project, '.deckent/config.json'))).rejects.toMatchObject({ code: 'ENOENT' });
 });
 
 it.skipIf(process.platform === 'win32')('requires POSIX managed storage: rejects an invalid spending account query before connecting to an absent runtime', async () => {

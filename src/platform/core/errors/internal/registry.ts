@@ -284,7 +284,10 @@ const definitions: Readonly<Record<string, Definition>> = Object.freeze({
   WORKSPACE_ALLOCATION_INCOMPLETE: { category: 'error', render: (p, l) => ({ message: t('error.WORKSPACE_ALLOCATION_INCOMPLETE', p, l) }) },
   WORKSPACE_GIT_FAILED: { category: 'error', render: (p, l) => ({ message: t('error.WORKSPACE_GIT_FAILED', p, l) }) },
   CANCELLATION_DELIVERY_CORRUPT: { category: 'error', render: (p, l) => ({ message: t('error.CANCELLATION_DELIVERY_CORRUPT', p, l) }) },
-  CANCELLATION_NOT_CONFIGURED: { category: 'error', render: (p, l) => ({ message: t('error.CANCELLATION_NOT_CONFIGURED', p, l) }) },
+  CANCELLATION_NOT_CONFIGURED: { category: 'error', render: (p, l) => ({
+    message: t('error.CANCELLATION_NOT_CONFIGURED', { ...p, missing: p['missing'] ?? t('output.unknown', {}, l) }, l),
+    suggestion: t('error.CANCELLATION_NOT_CONFIGURED.init', {}, l),
+  }) },
   EXECUTION_PROFILE_INVALID: { category: 'error', render: (p, l) => ({ message: t('error.EXECUTION_PROFILE_INVALID', p, l) }) },
   EXECUTION_RESOURCE_CEILING: { category: 'config', render: (p, l) => ({ message: t('error.EXECUTION_RESOURCE_CEILING', p, l) }) },
   TASK_GRAPH_LIMIT: { category: 'config', render: (p, l) => ({ message: taskGraphLimit(p, l) }) },

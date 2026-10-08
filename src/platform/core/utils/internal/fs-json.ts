@@ -56,7 +56,7 @@ export async function writeJsonAtomic(path: string, value: unknown): Promise<voi
 /** Atomic replace: a 0600 temporary file in the same directory, fsync, rename, directory fsync; the temporary file never survives. */
 export async function writeTextAtomic(path: string, text: string): Promise<void> {
   const directory = dirname(path);
-  await mkdir(directory, { recursive: true });
+  await mkdir(directory, { recursive: true, mode: 0o700 });
   const temp = join(directory, `.${basename(path)}.${randomUUID()}.tmp`);
   let handle;
   try {

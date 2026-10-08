@@ -3,7 +3,8 @@ import { afterEach, describe, expect, it } from 'vitest';
 import type { WorklineApproval, TurnDelta } from '#surfaces/core/terminal/index.js';
 import { approvalCardLines, diffRows } from '#surfaces/core/terminal-work/index.js';
 import { workSurfaceLabels, createWorklineLedgerPorts } from '#surfaces/core/cli/index.js';
-import { span } from '#surfaces/core/terminal-render/index.js';
+import { plainText, shortenHomePath, span } from '#surfaces/core/terminal-render/index.js';
+import { layoutWindowLines } from '#surfaces/core/terminal-window/index.js';
 import { mountWorkline, settle, until, WORKLINE_TEST_LABELS } from '../support/workline-harness.js';
 
 /**
@@ -63,10 +64,17 @@ describe('approval window fields per tool kind (catalog EN and TR)', () => {
       const what = (tool: string) => approvalCardLines(base({ tool, target: null, risk: 'mcp-call', summary: `${tool} · mcp:x · 0123456789ab` }), work, `${tool} {}`, null, {}, NOW)
         .find(line => line.startsWith(w.field.what))!;
       const hyphenated = what('mcp__docs_search__query_docs');
+      expect(what('mcp__docs-search__query_docs')).toBe(hyphenated);
       expect(hyphenated).toContain('query_docs'); expect(hyphenated).toContain('docs-search'); expect(hyphenated).not.toContain('mcp__docs_search__query_docs');
       expect(hyphenated).toBe(what('mcp__context7__query_docs').replace('context7', 'docs-search'));
       expect(what('mcp__a__b_c')).toBe(what('mcp__context7__query_docs').replace('context7', 'a').replace('query_docs', 'b_c'));
       expect(what('mcp__a_b__x')).toBe(what('mcp__context7__query_docs').replace('context7', 'a-b').replace('query_docs', 'x'));
+      const stored = approvalCardLines(base({ tool: undefined, summary: 'mcp__docs-search__query_docs · mcp:docs-search · 0123456789ab' }), work, '', null, {}, NOW);
+      expect(stored.find(line => line.startsWith(w.field.what))).toBe(hyphenated);
+      expect(what(`mcp__${'a'.repeat(32)}__x`)).toBe(what('mcp__context7__query_docs').replace('context7', 'a'.repeat(32)).replace('query_docs', 'x'));
+      for (const name of ['-docs', 'docs-', 'docs--search', 'Docs', '1docs', 'a'.repeat(33)]) {
+        expect(what(`mcp__${name}__x`)).not.toContain(w.what.mcp.split('{')[0]!);
+      }
     }
   });
 
@@ -74,6 +82,19 @@ describe('approval window fields per tool kind (catalog EN and TR)', () => {
     for (const [locale, words] of [['en', 'Mode: careful (edits ask too)'], ['tr', 'Mod: dikkatli (düzenlemeler de sorulur)']] as const) {
       const text = approvalCardLines(KINDS.edit.approval, workSurfaceLabels(locale), KINDS.edit.preview, null, { project: '/home/u/acme', mode: 'ask-edits' }, NOW).join('\n');
       expect(text).toContain(words);
+    }
+  });
+
+  it('shortens only the complete home prefix in the where field, retaining non-home paths and the source project', () => {
+    for (const locale of ['en', 'tr'] as const) for (const [project, home, shown] of [
+      ['/home/u/acme', '/home/u', '~/acme'], ['/home/u', '/home/u/', '~'], ['/home/user/acme', '/home/u', '/home/user/acme'],
+      ['/srv/acme', '/home/u', '/srv/acme'], ['/home/u/acme', undefined, '/home/u/acme'], ['C:\\Users\\u\\acme', 'C:\\Users\\u', '~\\acme'],
+    ] as const) {
+      const work = workSurfaceLabels(locale), context = { project, home };
+      const lines = approvalCardLines(KINDS.shell.approval, work, '', null, context, NOW);
+      const where = lines.find(line => line.startsWith(work.approvalWindow.field.where))!;
+      expect(where).toContain(work.approvalWindow.where.replace('{path}', shown));
+      expect(context.project).toBe(project); expect(shortenHomePath(project, home)).toBe(shown);
     }
   });
 
@@ -117,22 +138,58 @@ describe('approval window fields per tool kind (catalog EN and TR)', () => {
   });
 });
 
+const mounted: Array<{ unmount(): void }> = [];
+afterEach(() => { for (const instance of mounted.splice(0)) instance.unmount(); });
+const turn = (patch: Partial<Extract<TurnDelta, { kind: 'approval'; phase: 'requested' }>>, hold: Promise<void>) => async function* () {
+  yield { kind: 'tool' as const, phase: 'started' as const, callId: 'c1', name: 'run_shell', target: 'rm -rf build', status: null, ms: null };
+  yield { kind: 'approval' as const, phase: 'requested' as const, callId: 'c1', approvalId: 'appr-w', revision: 0, summary: 'run_shell · rm -rf build · 0123456789ab',
+    preview: '$ rm -rf build\nrisk: destructive (rm)\nRuns on this machine as your user.', expiresAt: Date.now() + 600_000, risk: 'shell-destructive',
+    tool: 'run_shell', target: 'rm -rf build', ...patch };
+  await hold;
+  yield { kind: 'done' as const, finish: 'stop' as const };
+};
+const port = (calls: unknown[][]) => ({ scopeId: 'scope-a', async listWorkers() { return { schemaVersion: 1, scopeId: 'scope-a', sources: [] } as never; }, async inspectRun() { return null; },
+  async decideApproval(approval: { approvalId: string }, decision: string, standing?: string, reason?: string) {
+    calls.push([approval.approvalId, decision, standing, reason]);
+    return { approvalId: approval.approvalId, runId: '-', taskId: '-', summary: '', requester: '-', revision: 1, status: 'decided' as const, decision, expiresAt: 0 };
+  } });
+
+
 describe('approval window in the real Workline', () => {
-  const mounted: Array<{ unmount(): void }> = [];
-  afterEach(() => { for (const instance of mounted.splice(0)) instance.unmount(); });
-  const turn = (patch: Partial<Extract<TurnDelta, { kind: 'approval'; phase: 'requested' }>>, hold: Promise<void>) => async function* () {
-    yield { kind: 'tool' as const, phase: 'started' as const, callId: 'c1', name: 'run_shell', target: 'rm -rf build', status: null, ms: null };
-    yield { kind: 'approval' as const, phase: 'requested' as const, callId: 'c1', approvalId: 'appr-w', revision: 0, summary: 'run_shell · rm -rf build · 0123456789ab',
-      preview: '$ rm -rf build\nrisk: destructive (rm)\nRuns on this machine as your user.', expiresAt: Date.now() + 600_000, risk: 'shell-destructive',
-      tool: 'run_shell', target: 'rm -rf build', ...patch };
-    await hold;
-    yield { kind: 'done' as const, finish: 'stop' as const };
-  };
-  const port = (calls: unknown[][]) => ({ scopeId: 'scope-a', async listWorkers() { return { schemaVersion: 1, scopeId: 'scope-a', sources: [] } as never; }, async inspectRun() { return null; },
-    async decideApproval(approval: { approvalId: string }, decision: string, standing?: string, reason?: string) {
-      calls.push([approval.approvalId, decision, standing, reason]);
-      return { approvalId: approval.approvalId, runId: '-', taskId: '-', summary: '', requester: '-', revision: 1, status: 'decided' as const, decision, expiresAt: 0 };
-    } });
+  it('the real approval window shortens home and wraps preview words while keeping a command character-exact', async () => {
+    let release!: () => void; const hold = new Promise<void>(resolve => { release = resolve; });
+    const labels = { ...WORKLINE_TEST_LABELS, work: workSurfaceLabels('tr') };
+    const view = mountWorkline({ labels, ledger: port([]) as never, projectRoot: '/home/u/acme', homeDirectory: '/home/u',
+      streamTurn: turn({ preview: 'Firstword Secondword Thirdword Fourthword', call: { kind: 'shell', command: 'echo  keep  spaces', tier: 'read-only', reason: 'read-only' } }, hold) as never }, 40); mounted.push(view.instance);
+    try {
+      await settle(20); view.stdin.write('go\r');
+      await until(() => view.stdout.frame.includes('Firstword'), 'word-wrapped preview');
+      const rows = view.stdout.frame.split('\n').map(row => row.trim());
+      expect(view.stdout.frame).toContain('~/acme'); expect(view.stdout.frame).not.toContain('/home/u/acme');
+      expect(rows.some(row => row.includes('Firstword Secondword Thirdword'))).toBe(true);
+      expect(rows.some(row => row.includes('Fourthword'))).toBe(true);
+      expect(view.stdout.frame).toContain('echo  keep  spaces');
+      proof('home and word wrap TR 40', view.stdout.frame);
+    } finally { release(); }
+    // Exact wrapping remains available for command/pattern rows: it retains repeated whitespace.
+    const exact = layoutWindowLines([{ spans: [span('echo  keep  spaces')], exact: true }], 7).map(plainText);
+    expect(exact.join('')).toBe('echo  keep  spaces');
+  });
+
+  for (const locale of ['en', 'tr'] as const) it(`${locale}: literal hyphenated MCP server has an MCP approval window title`, async () => {
+    let release!: () => void; const hold = new Promise<void>(resolve => { release = resolve; });
+    const labels = { ...WORKLINE_TEST_LABELS, work: workSurfaceLabels(locale) }, w = labels.work.approvalWindow;
+    const view = mountWorkline({ labels, ledger: port([]) as never, streamTurn: turn({ tool: 'mcp__docs-search__query_docs', target: null,
+      summary: 'mcp__docs-search__query_docs · mcp:docs-search · 0123456789ab', risk: 'mcp-call', preview: '',
+      call: { kind: 'mcp', server: 'docs-search', tool: 'query_docs' } }, hold) as never }, 100); mounted.push(view.instance);
+    try {
+      await settle(20); view.stdin.write('go\r');
+      const toolTitle = w.tool.mcp.replace('{tool}', 'query_docs').replace('{server}', 'docs-search');
+      const title = w.title.replace('{tool}', toolTitle);
+      await until(() => view.stdout.frame.includes(title), 'MCP approval title');
+      proof(`MCP hyphen title ${locale}`, view.stdout.frame);
+    } finally { release(); }
+  });
 
   for (const locale of ['en', 'tr'] as const) {
     it(`${locale}, NO_COLOR, 40 columns: every row fits, labels carry the meaning without colour, no escape colour codes`, async () => {

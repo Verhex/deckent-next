@@ -77,3 +77,10 @@ export function wrapCells(text: string, width: number): string[] {
   if (line !== '' || lines.length === 0) lines.push(line);
   return lines;
 }
+
+/** Display only: replace the complete home directory prefix, never a similarly named sibling. No filesystem resolution. */
+export function shortenHomePath(path: string, home: string | undefined): string {
+  if (!home) return path;
+  const prefix = home.replace(/[\\/]+$/u, '');
+  return path === prefix ? '~' : path.startsWith(`${prefix}/`) || path.startsWith(`${prefix}\\`) ? `~${path.slice(prefix.length)}` : path;
+}

@@ -1,6 +1,6 @@
 import { identityCommand } from './identity.js';
 import { isAbsolute } from 'node:path';
-import { ErrorRegistry, emit, formatValue, resolveLocale, t, terminalSafeText, type Locale } from '#platform/index.js';
+import { ErrorRegistry, emit, formatValue, loadConfigLanguage, resolveLocale, t, terminalSafeText, type Locale } from '#platform/index.js';
 import type { InstallationPreview, InstallationEvidencePreview, InstallationPublicationApplication } from '#engine/index.js';
 import type { InstallationCommandContext } from './context.js';
 
@@ -84,7 +84,8 @@ export async function initCommand(argv: readonly string[], context: Installation
     }
     throw ErrorRegistry.createError('CLI_USAGE');
   }
-  const locale = resolveLocale(language, context.env); context.onLocale?.(locale);
+  const locale = resolveLocale(language, context.env, policyUpgrade && language === undefined
+    ? await loadConfigLanguage(context.root, { ...(context.env ? { env: context.env } : {}) }) : undefined); context.onLocale?.(locale);
   const sinks = { ...(context.stdout ? { stdout: context.stdout } : {}), ...(context.stderr ? { stderr: context.stderr } : {}) };
   if (action === '--help' || action === '-h') {
     if (profilePath || dockerExecutable || proposalDigest || acceptCustom || allowShutdown || json) throw ErrorRegistry.createError('CLI_USAGE');
