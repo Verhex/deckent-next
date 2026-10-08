@@ -137,8 +137,14 @@ a different target with an incompatible configured layout is refused. Old state 
 reported, its installationId is kept, and `deckent init identity --keep` requires explicit
 operator consent. Internal configuration paths are rewritten; external paths stay external.
 Restore resets scheduling to off. Re-provision excluded credentials before enabling service.
-If `BACKUP_RESTORE_INCOMPLETE` occurs, keep the staging directory, damaged copies and external
-audit receipts for diagnosis; publication across resources is not atomic.
+Restoring into the same project keeps its current resource layout: every resource is published
+where the current configuration places it and the restored configuration names that layout.
+Before the first replacement restore writes `.deckent/restore-hold.json` in the target; it is
+removed only after the last one. While it exists, service start and every command that loads the
+project configuration refuse with `BACKUP_RESTORE_HOLD`. If `BACKUP_RESTORE_INCOMPLETE` occurs (or
+the process dies), keep the staging directory, damaged copies and external audit receipts for
+diagnosis, then rerun the same restore with `--confirm-target`; it uses the retained set's policy
+only while the hold exists. Publication across resources is not atomic.
 
 In the interactive configuration picker select `backup.schedule`: off, daily, or
 before-upgrade; select `backup.retention`: 3, 7, 14, or 30. Daily backups run while the service

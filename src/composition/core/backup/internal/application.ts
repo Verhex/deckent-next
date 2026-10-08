@@ -4,7 +4,7 @@ import { policySchema, policyFileSchema, bindingsFileSchema, verifiedPrincipalSc
 import { BackupApplication, policyBackupAuthorization, resolveBackupPolicyDocuments, backupCommandSchema, type BackupCommand, type BackupAuthority } from '#engine/index.js';
 import { FileBackupStorage, readBackupConfig, verifyBackupSet, recordBackupAudit, type VerifiedBackup } from '#adapters/index.js';
 import { readLocalOsIdentity, openLocalIntegrityAuthority, FileInstallationIdentityStore } from '#adapters/index.js';
-import { ErrorRegistry, resolveGlobalConfigReadPath, productResourcePath, validateConfig, resolveProductLayout, type ResolvedConfig, type ConfigLoadOptions } from '#platform/index.js';
+import { ErrorRegistry, resolveGlobalConfigReadPath, productResourcePath, validateConfig, resolveProductLayout, restoreHoldPath, type ResolvedConfig, type ConfigLoadOptions } from '#platform/index.js';
 import { loadComposedConfig } from '#composition/core/root/index.js';
 import { createLayoutPolicySource } from '#composition/core/policy/index.js';
 import { userInfo } from 'node:os';
@@ -19,7 +19,8 @@ export async function executeConfiguredBackup(projectRoot: string, input: Backup
     let config: ResolvedConfig;
     try {
       if (command.action === 'restore' && !await lstat(join(resolve(projectRoot), '.deckent/config.json')).catch(error => { if (error.code === 'ENOENT') return null; throw error; })) throw ErrorRegistry.createError('BACKUP_STATE_MISSING');
-      config = await loadComposedConfig(projectRoot, { ...options, heal: false, secretResolver: async () => undefined, onWarning() {} }); }
+      // Astra 2471 R1: only restore may complete an installation held by an unfinished restore; create/verify refuse the hold.
+      config = await loadComposedConfig(projectRoot, { ...options, heal: false, secretResolver: async () => undefined, onWarning() {}, ...(command.action === 'restore' ? { restoreHold: 'admit' as const } : {}) }); }
     catch (error) {
       if (command.action !== 'restore') throw error;
       const limits = validateConfig({}).config.installation.packageMeasurement;
@@ -35,8 +36,11 @@ export async function executeConfiguredBackup(projectRoot: string, input: Backup
     const existingPolicy = await lstat(productResourcePath(layout, 'policy')).catch(error => { if (error.code === 'ENOENT') return null; throw error; });
     const identity = readLocalOsIdentity();
     let document, authority: BackupAuthority;
-    if (existingPolicy) {
-      document = policySchema.parse(await createLayoutPolicySource(layout, userInfo().uid, config.inspection.policyMaxBytes).load());
+    // Astra 2471 R1: a held installation's policy pair is what the interrupted restore left; only then may restore fall back to the set's policy.
+    const current = existingPolicy && await createLayoutPolicySource(layout, userInfo().uid, config.inspection.policyMaxBytes).load().catch(async error => {
+      if (command.action === 'restore' && await lstat(restoreHoldPath(projectRoot)).then(() => true, () => false)) return null; throw error; });
+    if (current) {
+      document = policySchema.parse(current);
       // Restore owns recovery and can read a moved identity from the authenticated set; every other command keeps the normal preflight.
       let installation;
       try { installation = await new FileInstallationIdentityStore(layout, config.configFile.writeLockTimeoutMs, undefined, config.installation).read(); }

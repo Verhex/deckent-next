@@ -16,3 +16,4 @@ export * from './internal/write.js';
 export { inspectProductPaths } from './internal/paths.js';
 export { assertConfigSecretPolicies } from './internal/validate/secret-policy.js';
 export { getConfigKnownSecrets } from './internal/redaction-context.js';
+export { restoreHoldPath, type RestoreHoldAdmission } from './internal/bootstrap.js';

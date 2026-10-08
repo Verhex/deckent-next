@@ -145,8 +145,14 @@ yapılandırılmış yerleşimi uyumsuzsa ret verilir. Eski durum `.damaged-<uui
 installationId korunur; `deckent init identity --keep` operatörün açık onayını ister.
 Kurulum içindeki config yolları taşınır; dış yollar korunur. Restore zamanlamayı off yapar.
 Servisi açmadan dışarıda kalan kimlik bilgilerini yeniden sağlayın.
-`BACKUP_RESTORE_INCOMPLETE` halinde ara dizini, eski kopyaları ve dış audit kayıtlarını
-teşhis için koruyun; kaynakların tamamı tek atomik işlemle yayınlanmaz.
+Aynı projeye restore mevcut kaynak yerleşimini korur: her kaynak güncel yapılandırmanın
+gösterdiği yere yayınlanır ve geri yüklenen yapılandırma aynı yerleşimi gösterir.
+İlk değiştirmeden önce restore hedefte `.deckent/restore-hold.json` bekletmesini yazar; yalnız
+sonuncusundan sonra kaldırılır. Bu dosya varken servis başlatma ve proje yapılandırmasını yükleyen
+her komut `BACKUP_RESTORE_HOLD` ile reddedilir. `BACKUP_RESTORE_INCOMPLETE` (veya süreç kaybı)
+halinde ara dizini, eski kopyaları ve dış audit kayıtlarını teşhis için koruyun, sonra aynı
+restore'u `--confirm-target` ile yeniden çalıştırın; setteki policy yalnız bekletme varken
+kullanılır. Kaynakların tamamı tek atomik işlemle yayınlanmaz.
 
 Etkileşimli config seçicisinden `backup.schedule` için off, daily veya before-upgrade;
 `backup.retention` için 3, 7, 14 veya 30 seçin. Daily servis açıkken çalışır;

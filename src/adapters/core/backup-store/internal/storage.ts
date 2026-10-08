@@ -3,7 +3,7 @@ import { dirname, join, resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { FileInstallationIdentityStore } from '#adapters/core/installation-files/index.js';
 import { acquireLedgerLock } from '#adapters/core/local-runtime-socket/index.js';
-import { getConfigFieldDefault, validateConfig, productResourcePath, resolveProductLayout, type ProductLayout } from '#platform/index.js';
+import { getConfigFieldDefault, validateConfig, productResourcePath, resolveProductLayout, restoreHoldPath, type ProductLayout } from '#platform/index.js';
 import type { BackupCommand, BackupResult, BackupStoragePort } from '#engine/index.js';
 import { ledgerFingerprint } from './fingerprint.js';
 import { createBackupSet, verifyBackupSet, type VerifiedBackup } from './set.js';
@@ -52,7 +52,8 @@ export class FileBackupStorage implements BackupStoragePort {
       catch (error) { if (!(error instanceof SyntaxError)) throw error; }
       if (identity && typeof identity === 'object' && 'installationId' in identity && identity.installationId !== state.installationId) return refuse('BACKUP_TARGET_IDENTITY_MISMATCH');
     }
-    const paths = [...BACKUP_RESOURCES, 'ledger' as const, 'approvals' as const].map(resource => productResourcePath(layout, resource));
+    const hold = restoreHoldPath(target), paths = [...BACKUP_RESOURCES, 'ledger' as const, 'approvals' as const].map(resource => productResourcePath(layout, resource));
+    if (paths.some(path => inside(path, hold) || inside(hold, path))) return refuse('BACKUP_PATH_UNSAFE');
     // A nested/aliased resource cannot be published atomically as independent state. Refuse before any target write.
     for (let i = 0; i < paths.length; i++) for (let j = i + 1; j < paths.length; j++)
       if (inside(paths[i]!, paths[j]!) || inside(paths[j]!, paths[i]!)) return refuse('BACKUP_PATH_UNSAFE');
@@ -64,7 +65,7 @@ export class FileBackupStorage implements BackupStoragePort {
     let lock;
     try { lock = acquireLedgerLock(productResourcePath(layout, 'ledger') + '-lock'); }
     catch (error) { if (error && typeof error === 'object' && 'code' in error && error.code === 'LOCAL_RUNTIME_ALREADY_RUNNING') return refuse('BACKUP_SERVICE_RUNNING'); return refuse('BACKUP_CUSTODY_UNAVAILABLE'); }
-    let published = false;
+    let published = false, holdCreated = false;
     let restoredConfig: ReturnType<typeof validateConfig>['config'] | undefined;
     const stage = join(target, `.backup-restore-${randomUUID()}`), token = randomUUID(), preserved: string[] = [], changed = new Set<string>();
     try {
@@ -104,6 +105,11 @@ export class FileBackupStorage implements BackupStoragePort {
       const db = new DatabaseSync(join(verified.set, 'ledger.db'), { readOnly: true });
       try { await backup(db, ledger); } finally { db.close(); }
       if (ledgerFingerprint(ledger) !== ledgerFingerprint(join(verified.set, 'ledger.db'))) return refuse('BACKUP_FINGERPRINT_INVALID');
+      // Astra 2471 R1: a durable hold precedes the first publication; config admission refuses it until the last one completed.
+      if (!await lstat(hold).catch(error => { if (error.code === 'ENOENT') return null; throw error; })) {
+        const pending = `${hold}.${token}`; await writePrivate(pending, JSON.stringify({ schemaVersion: 1, kind: 'backup-restore', operation: token, target, startedAt: new Date().toISOString() }) + '\n');
+        holdCreated = true; await rename(pending, hold); await syncDirectory(dirname(hold));
+      }
       const publish = async (from: string, to: string) => {
         await privateDirectory(dirname(to));
         if (await lstat(to).catch(error => { if (error.code === 'ENOENT') return null; throw error; })) {
@@ -129,8 +135,14 @@ export class FileBackupStorage implements BackupStoragePort {
       try { await new FileInstallationIdentityStore(layout, restoredConfig!.configFile.writeLockTimeoutMs, undefined, restoredConfig!.installation).read(); }
       catch (error) { if (error && typeof error === 'object' && 'code' in error && error.code === 'INSTALLATION_IDENTITY_RELOCATED') required = true; else throw error; }
       await rm(stage, { recursive: true, force: true });
+      await rm(hold); await syncDirectory(dirname(hold));
       return { ...verified.result('restore'), relocation: { required, target, changedPaths: [...changed].sort() }, preserved };
-    } catch (error) { if (published) return refuse('BACKUP_RESTORE_INCOMPLETE'); throw error; }
+    } catch (error) {
+      if (published) return refuse('BACKUP_RESTORE_INCOMPLETE');
+      // Nothing was published: a hold this attempt created is withdrawn; an earlier attempt's hold stays.
+      if (holdCreated) { await rm(hold, { force: true }); await rm(`${hold}.${token}`, { force: true }); await syncDirectory(dirname(hold)); }
+      throw error;
+    }
     finally { try { if (!published || await lstat(stage).then(() => false, () => true)) await rm(stage, { recursive: true, force: true }); } finally { lock.release(); } }
   }
 }

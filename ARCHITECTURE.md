@@ -362,7 +362,11 @@ refresh, usage and dogfood closure remain open.
   are preserved as `.damaged-<uuid>`; the ledger lock inode stays. Relocation rewrites internal config paths, preserves installationId,
   reports the existing identity check and leaves `init identity --keep` to the operator. Scheduling resets to off. Publication spans
   several files: `BACKUP_RESTORE_INCOMPLETE` records uncertainty and retains the staging directory and damaged copies after partial
-  publication. A confirmed target with a different retained installationId is refused. No cross-file atomicity claim.
+  publication. A confirmed target with a different retained installationId is refused. No cross-file atomicity claim. Astra 2471:
+  a durable, fsync'd `.deckent/restore-hold.json` precedes the first replacement and is removed only after the last; config admission
+  (`inspectInstallationBootstrap`, before the config cache) refuses it as `BACKUP_RESTORE_HOLD`, so service start and every configured
+  command stay closed after a failure or process loss; only restore (`restoreHold: 'admit'`) proceeds and, while held, may fall back to
+  the authenticated set's policy. Same-root restore keeps the current resource map: config and publication use one target layout (R2).
 - Config `backup.schedule` selects off/daily/before-upgrade; retention selects 3/7/14/30 sets. The service uses its configured scope and
   its verified hosting OS principal, the same policy and `BACKUP_PASSPHRASE` from the selected secret store. Daily due state survives
   restart in authenticated set timestamps; before-upgrade runs under service custody before schema migration. Stop waits in-flight work.
