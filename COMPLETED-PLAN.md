@@ -1,5 +1,13 @@
 # Deckent Next — tamamlanan plan
 
+## alpha.16 — 2026-10-08 (PR #47 + #48)
+
+- **İnen iş (PR #47, merge `4a6856db`; STAGE1 = T4-B + SPEND-SETTLEMENT + ilk bütçe):** `models connect` doğrulanmış tarifeyi profile yazar, fiyatsız uzak model reddedilir ve kilitlenir; `terminal.defaultModel`; satıcı satırları OpenAI, DeepSeek, Z.ai global/Çin (OpenRouter yalnız anahtar); openai-chat v5 lehçeleri; şablon v7; `measured-tariff` settlement (Anthropic cache 5m/1h, Haiku 5.5 100k kademesi); reservation v3 ve ledger 49 (yedekli geçiş); governed reconcile, bütçe revizyonu ve `models create-budget` (`/model` bütçe penceresi). Settlement yalnız son olayın kendi usage'ından; diğer durumda çağrı held kalır. Protokol 25, pencere [25,24].
+- **İnceleme zinciri:** Astra 2459 (toplu REVISE, R1); Astra 2461 (düzeltme REVISE: R1 kenar sıraları); logged Jev ddf11d1a (0,93 / 0,78); ardından exact head `a3a55c73` üzerinde dar Astra 2463 PASS.
+- **Hotfix (PR #48, merge `313b256a`):** config writer model panelinden tembel yüklenir. Olmadan startup-graph ve release pack-smoke 'lazy' kontrolü düşüyordu; Astra 2465 PASS (`dd078590`).
+- **Açık sınırlar:** gerçek ücretli çağrı henüz kanıtlanmadı (owner'ın ilk Anthropic testi sürüyor); iptal edilen veya kesilen yanıt, governed reconcile gelene kadar held kalır; yapılandırılmış bütçe ile governed create birlikte bulunamaz (canlıda `local-free` 0 USD, owner "Bütçeyi değiştir" ile yükseltir); DeepSeek fiyatlı ama peak/off-peak kademesi nedeniyle held; OpenAI gpt-6.x ve GLM, PRICING inene kadar kilitli.
+- **Kanıt:** `proof/STAGE1-2026-10-08/`, `proof/T4B-2026-10-08/`, `proof/SPEND-SETTLEMENT-2026-10-08/`, `proof/ALPHA16-LIVE-2026-10-08/`.
+
 ## alpha.15 — 2026-10-08 (PR #46, Astra 2457 PASS)
 
 - **İnen iş (`4d6f1582`, bağımsız inceleme Astra 2457 PASS, exact head `41a7a590`):** SLASH-WINDOWS (SW-1/2/3: her slash çıktısı kendi penceresinde, kapanışta tek çerçeveli sistem satırı; argümanlı komut pencereyi açar ve durum notu verir; süren iş için açılış satırı; `/clear` ekranı ve kaydırma geçmişini temizler), CONFIG-SELECT (CS-1: ayarlar yalnız seçimle değişir) ve SECRET-STORE-SWITCH / DEFAULT (`deckent secret store`: kopyala → doğrula → yayımla → sil; zayıf depoya açık onay; yetki `secret`/`switch`, policy şablonu v6; yeni kurulumda şifreli depo varsayılanı). Protokol 24, ledger 48, pencere [24,23].
