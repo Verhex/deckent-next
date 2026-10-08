@@ -553,7 +553,7 @@ Core contracts and never requires editing Core. Core-memory law 10 records this 
   the exact `deckent models activate` command); discovered models are never added or activated. A pick pins the model for this session: the
   next and later turns carry it as `chatTurn.reference` (protocol v23, lifecycle [23, 22]); the service uses exactly it for binding, profile,
   prompt, digest and rounds, or refuses typed — the configured `terminal.chat.reference` never answers in its place (S19). "Also make default"
-  is locked ("coming soon"): owner 2026-10-08 moved it to T4-B (a new `terminal.defaultModel`, Jev d84b248d). Rows show human words; the exact
+  writes `terminal.defaultModel` (T4-B below). Rows show human words; the exact
   reference and the fixing command appear dimmed for the focused row only.
 - **`/provider` (PROVIDER-CONNECT):** kinds and endpoints are adapter data (`adapters/core/provider-connect`, registry v1; ChatGPT sign-in listed
   unavailable). Connect: the address, where the kind takes one, is chosen from a list (owner 2026-10-08 D3: the configured `inference_serving`
@@ -563,6 +563,30 @@ Core contracts and never requires editing Core. Core-memory law 10 records this 
   `limit-reached`) → only on success the key goes to `setSecret` (runtime service, policy cell `secret`, audited by name). The key is never in
   env, files, rows, scrollback, audit or model text; workers never get it. The check runs in the terminal process. Results stay in the window
   (owner 2026-10-08: slash output only in a window). Binding models to the key is T4-B (`models.connect` operation, owner 2026-10-08).
+
+### TERMINAL-UX T4-B contracts (2026-10-08, `wave/tui-4b`, unpushed; owner D1/D2 2026-10-08, Jev d84b248d, da5312fb)
+
+- **`terminal.defaultModel` (D1):** an additive optional key (exact catalog reference only; no config version bump, the `readResultMaxBytes`
+  precedent); the project layer is refused (`TERMINAL_DEFAULT_MODEL_PROJECT_LAYER`). One pure precedence, `resolveTerminalModel` over the two
+  authored layer documents (never the merged config): session pin > project-authored `terminal.chat.reference` > user `terminal.defaultModel` >
+  user `terminal.chat.reference`. The service turn, the line-mode command, the plan (`source`) and the preflight use it; `terminal.chat` stays
+  required (its `maxCompletionTokens`). `/model` "also make default" writes the key on the global layer through the governed `/config` writer
+  (policy, approval card, audit; the user file is created when missing) and the window names the setting in effect (a project's own model wins).
+- **`models.connect` (D2):** one operation, one contract (`modelConnectCommandSchema` → `ModelConnectResult`) on CLI `deckent models connect`,
+  MCP `connect_model`, SDK `connectModel` and the terminal (`/provider` → "Connect a model"). Engine `ModelConnectApplication` over ports,
+  composition unit `model-connect`: the provider-connect registry (v2) names each kind's adapter, chat path and packaged seed
+  (`assets/model-catalog/<seed>.json`, v3, exact vendor ids). Steps, each on its owner's governed path: ledger catalog register when the
+  channel/model is missing → declaration in `provider_catalog` on the layer that authors it (a new content-named revision) → this scope's
+  activations still valid under the new revision are re-admitted (a catalog revision change otherwise breaks every activation) → the invocation
+  profile on every layer that authors profiles (user first: a project snapshot stays a subset) with endpoint preset, the connection's secret NAME
+  as `credentialRef` (https only; plain-http local servers get none), published tariff (Anthropic) or the OpenAI chat adapter's zero-rate tariff
+  (reported `unmetered`), registry limits with the response limit narrowed to what the installation's result frames deliver → chat activation →
+  one `model-connect` audit subject. A config approval stops the run (`approval-pending`); the same command id continues. No key value is taken.
+- **Provider rows (Jev da5312fb):** OpenAI, DeepSeek, Z.ai GLM (global) and Zhipu GLM (China) each keep their own secret name; the generic
+  OpenAI-compatible row derives `DECKENT_OAICOMPAT_<HOST[_PORT]>` from the chosen address and shows it before saving. Z.ai documents no free
+  read: its rows have no probe (the key is kept unverified). Seeds exist for Anthropic, OpenAI, DeepSeek and Z.ai global; not for Zhipu China or
+  OpenRouter (ids/endpoint tag unverified). Open decisions (DeepSeek/Z.ai wire parameters, metered OpenAI-chat tariff) are in external
+  `proof/T4B-2026-10-08/DECISIONS.md`.
 
 ## Packages (current implementation)
 
