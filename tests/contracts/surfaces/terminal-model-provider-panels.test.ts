@@ -249,6 +249,53 @@ describe('/model in the workline: the pin rides on the next turn', () => {
     expect(view.stdout.frame).not.toContain('Models · scope');
   });
 
+  it('Astra 2452 P1: a pin belongs to its conversation — /clear starts unpinned, /resume brings back that conversation\'s own pin, never another\'s', async () => {
+    const { port } = modelPort(MODELS);
+    const turns: { sessionId: string; reference: unknown }[] = [];
+    const saved = new Map<string, readonly { role: 'user' | 'assistant'; content: string }[]>();
+    const streamTurn = async function* (_messages: unknown, _signal: AbortSignal, turn?: { sessionId?: string; reference?: unknown }) {
+      turns.push({ sessionId: turn?.sessionId ?? '-', reference: turn?.reference ?? null }); yield { kind: 'text' as const, text: 'ok' }; yield { kind: 'done' as const, finish: 'stop' as const };
+    };
+    const sessions = { async save(input: { sessionId: string; messages: readonly { role: 'user' | 'assistant'; content: string }[] }) { saved.set(input.sessionId, input.messages); },
+      async list() { return [...saved.entries()].map(([sessionId, messages]) => ({ sessionId, updatedAtMs: 1, messages: messages.length, preview: 'p' })); },
+      async load(id: string) { return saved.get(id) ?? null; } };
+    const view = mountWorkline({ labels: WORKLINE_TEST_LABELS, streamTurn, sessions: sessions as never, panels: { ports: { model: { inspect: port.inspect } }, labels: terminalPanelLabels('en') } });
+    mounted.push(view.instance);
+    await settleWorkline(40);
+    const pick = async (keys: string[], model: string) => {
+      view.stdin.write(`/model${ENTER}`);
+      await until(() => view.stdout.frame.includes('Models · scope'), 'model window');
+      await settleWorkline(60);
+      for (const key of [...keys, ENTER]) { view.stdin.write(key); await settleWorkline(30); }
+      view.stdin.write(ENTER);
+      await until(() => view.stdout.text.includes(`This session uses ${model} from the next turn`), `pinned ${model}`);
+      await until(() => !view.stdout.frame.includes('Models · scope'), 'window closed');
+    };
+    const say = async (text: string, count: number) => { view.stdin.write(`${text}${ENTER}`); await until(() => turns.length === count, text); await settleWorkline(40); };
+    // Conversation A pins L (fast).
+    await pick([DOWN, DOWN], 'fast');
+    await say('a1', 1);
+    const a = turns[0]!.sessionId;
+    expect(turns[0]).toEqual({ sessionId: a, reference: ref('fast') });
+    // /clear: conversation B starts without a pin (the configured model), then pins R (chat).
+    view.stdin.write(`/clear${ENTER}`); await until(() => view.stdout.text.includes('NEW-SESSION'), 'new session'); await settleWorkline(40);
+    await say('b0', 2);
+    const b = turns[1]!.sessionId;
+    expect(b).not.toBe(a); expect(turns[1]!.reference).toBeNull();
+    await pick([], 'chat');
+    await say('b1', 3);
+    expect(turns[2]).toEqual({ sessionId: b, reference: ref('chat') });
+    // /resume A: A's own pin (L) again; nothing of A goes to R.
+    view.stdin.write(`/resume ${a}${ENTER}`); await until(() => view.stdout.text.includes(`RESUMED`), 'resumed'); await settleWorkline(40);
+    await say('a2', 4);
+    expect(turns[3]).toEqual({ sessionId: a, reference: ref('fast') });
+    expect(turns.filter(turn => turn.sessionId === a).map(turn => turn.reference)).toEqual([ref('fast'), ref('fast')]);
+    // The window shows the resumed conversation's own pin.
+    view.stdin.write(`/model${ENTER}`);
+    await until(() => view.stdout.frame.includes('Models · scope'), 'model window again'); await settleWorkline(60);
+    expect(view.stdout.frame).toContain('fast · this session'); expect(view.stdout.frame).not.toContain('chat · default · this session');
+  });
+
   it('/provider without its port says the part is unavailable here (no chat turn)', async () => {
     const view = mountWorkline({ labels: WORKLINE_TEST_LABELS, panels: { ports: {}, labels: terminalPanelLabels('en') } });
     mounted.push(view.instance);

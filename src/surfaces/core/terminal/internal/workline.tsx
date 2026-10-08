@@ -186,8 +186,11 @@ export function WorklineApp(props: WorklineProps) {
   const refreshMode = mode.refresh;
   const reasoning = useReasoningPreview(push, labels.reasoning);
   // T4 MODEL-SWITCH (S19): the model this session pinned with `/model`; read when a turn starts, so the next turn carries it (protocol v23).
-  const pinnedModel = useRef<ModelPanelReference | null>(null);
-  const sessionModel = useMemo(() => ({ pinned: () => pinnedModel.current, pin: (choice: ModelPanelChoice) => { pinnedModel.current = choice.reference; } }), []);
+  // Astra 2452 P1: the pin belongs to one conversation (sessionId → pin). `/clear` starts a conversation without one; `/resume` finds the resumed
+  // conversation's own pin, or none (the configured model) — never another conversation's.
+  const pinnedModels = useRef(new Map<string, ModelPanelReference>());
+  const sessionModel = useMemo(() => ({ pinned: () => pinnedModels.current.get(sessionId()) ?? null,
+    pin: (choice: ModelPanelChoice) => { pinnedModels.current.set(sessionId(), choice.reference); } }), [sessionId]);
   const scratch = useWorklineScratch(props.scratch, session.id, push, errorText, labels.work?.unavailable ?? labels.ledgerUnavailable, labels.scratch);
   useEffect(() => { void refreshMode(); }, [refreshMode]);
   // T3 L4: `/mode`, `/config`, `/mcp` windows; `/mode`'s port is this view's mode hook (the same service set, grant check and audit as Shift+Tab).
@@ -209,6 +212,8 @@ export function WorklineApp(props: WorklineProps) {
     const runs = batch.filter(entry => entry.kind === 'run').map(entry => ({ ...entry, observedAtMs: Date.now() }));
     liveRef.current?.setRuns(runs);
   }, failed);
+  /** The turn's conversation's own pin (the session the turn is sent under), or nothing: the configured model. */
+  const pinnedFor = (id: string | undefined) => { const reference = id ? pinnedModels.current.get(id) : undefined; return reference ? { reference } : {}; };
   const runTurn = useCallback(async (text: string, mentioned: readonly string[], execution: LocalExecution) => {
     push([chat('user', text)]);
     const startedAtMs = Date.now();
@@ -230,7 +235,7 @@ export function WorklineApp(props: WorklineProps) {
         let base: readonly AgentChatMessage[] = messages, appended: AgentChatMessage[] = [];
         // Forward the session and reasoning choices with the composition's generated binding callback.
         for await (const delta of props.streamTurn(messages, signal, { ...(reasoning.current.current ? {} : { reasoning: 'off' as const }), sessionId: execution.input.context.sessionId, onTurnBound: stream.onTurnBound,
-          ...(mode.fullAccess.current ? { fullAccess: true as const } : {}), ...(pinnedModel.current ? { reference: pinnedModel.current } : {}) })) {
+          ...(mode.fullAccess.current ? { fullAccess: true as const } : {}), ...pinnedFor(execution.input.context.sessionId) })) {
           if (delta.kind === 'text') answer += delta.text;
           if (delta.kind === 'message') appended.push(delta.message);
           session.noteContext(delta); if (delta.kind === 'usage') usage.current = addSessionUsage(usage.current, delta);
