@@ -97,7 +97,7 @@ describe.skipIf(process.platform !== 'linux')('deckent policy upgrade --template
   it('(c) rollback before any server is trusted removes exactly the v5 rules it added (hand-added rules stay); a second rollback has nothing to remove', async () => {
     const { upgrade, grants } = await project('owner-role');
     expect(await upgrade('apply')).toMatchObject({ status: 'upgraded' });
-    expect(await upgrade('rollback')).toMatchObject({ status: 'rolled-back', reason: 'first-run-mcp-servers,first-run-mcp-call-operation,first-run-mcp-propose-tool,first-run-policy-administer,first-run-secret-switch,first-run-model-activation,first-run-model-invocation' });
+    expect(await upgrade('rollback')).toMatchObject({ status: 'rolled-back', reason: 'first-run-mcp-servers,first-run-mcp-call-operation,first-run-mcp-propose-tool,first-run-policy-administer,first-run-secret-switch,first-run-model-activation,first-run-model-invocation,first-run-provider-spending' });
     expect(grants().map(grant => grant.id).filter(id => id.startsWith('first-run-mcp'))).toEqual([]);
     expect(grants().some(grant => grant.id === HAND_ADDED.id)).toBe(true);
     expect(await upgrade('rollback')).toMatchObject({ status: 'nothing-to-roll-back' });

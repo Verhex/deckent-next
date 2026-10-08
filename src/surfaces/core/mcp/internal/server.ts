@@ -3,7 +3,7 @@ import type { ProviderSpendManagementResult } from '#engine/index.js';
 import { approvalListSchema, approvalQuerySchema, approvalRenewalSchema } from '#engine/index.js';
 import { boundedToolDelivery, completeToolResult, jsonToolResult, modelToolDelivery, toolResultFits } from './delivery.js';
 import { operationToolDefinitions } from './operation-tools.js';
-import { modelActivationQuerySchema, modelActivationCommandSchema, modelCatalogCommandSchema, modelCatalogQuerySchema, modelInvocationCancellationCommandSchema, modelInvocationCommandSchema, modelInvocationPurgeCommandSchema, modelInvocationQuerySchema, providerSpendAccountQuerySchema, providerSpendAuditCommandInputSchema, providerSpendAuditCommandSchema,
+import { modelActivationQuerySchema, modelActivationCommandSchema, modelCatalogCommandSchema, modelCatalogQuerySchema, modelInvocationCancellationCommandSchema, modelInvocationCommandSchema, modelInvocationPurgeCommandSchema, modelInvocationQuerySchema, providerSpendExactAccountQuerySchema, providerSpendAuditCommandInputSchema, providerSpendAuditCommandSchema,
   type ModelActivationQuery, type ModelActivationCommand, type ModelCatalogCommand, type ModelCatalogQuery, type ModelInvocationCancellationCommand, type ModelInvocationCommand, type ModelInvocationPurgeCommand, type ModelInvocationQuery, type ProviderSpendAccountQuery, type ProviderSpendAuditCommand } from '#domain/index.js';
 import type { ModelActivationInspection, ModelActivationResult, ModelCatalogInspection, ModelCatalogResult, ModelInvocationCancellationResult, ModelInvocationInspection, ModelInvocationPurgeResult, ModelInvocationResult, ModelInvocationDelivery, ProviderSpendAccountInspection, ProviderSpendAuditResult, RuntimeServiceDelivery } from '#engine/index.js';
 import { attemptIdentitySchema, modelConnectCommandSchema, modelReferenceSchema, type ModelConnectCommand, type ModelConnectResult, type AttemptIdentity, type ModelReference, type EffectCommand, type OperationDescriptor } from '#domain/index.js';
@@ -188,8 +188,9 @@ export function createMcpServer(applications: McpApplications, limits: McpLimits
     invoke: (input, delivery) => inspectInvocation.call(applications, modelInvocationQuerySchema.parse(input), delivery) });
   const inspectProviderSpendAccount = applications.inspectProviderSpendAccount;
   if (inspectProviderSpendAccount) definitions.push({ readOnly: true, destructive: false, idempotent: true, openWorld: false, name: 'inspect_provider_spending',
-    description: t('mcp.tool.inspectProviderSpending', {}, locale), schema: providerSpendAccountQuerySchema, boundedDelivery: true,
-    invoke: (input, delivery) => inspectProviderSpendAccount.call(applications, providerSpendAccountQuerySchema.parse(input), delivery) });
+    // The exact account revision (the stage 1 `current` form serves the terminal and CLI budget windows, not this tool's published schema).
+    description: t('mcp.tool.inspectProviderSpending', {}, locale), schema: providerSpendExactAccountQuerySchema, boundedDelivery: true,
+    invoke: (input, delivery) => inspectProviderSpendAccount.call(applications, providerSpendExactAccountQuerySchema.parse(input), delivery) });
   const manageProviderSpend = applications.manageProviderSpend;
   if (manageProviderSpend) definitions.push({ readOnly: false, destructive: false, idempotent: true, openWorld: false, name: 'manage_provider_spending',
     description: t('mcp.tool.manageProviderSpending', {}, locale), schema: providerSpendManagementCommandSchema, boundedDelivery: true,

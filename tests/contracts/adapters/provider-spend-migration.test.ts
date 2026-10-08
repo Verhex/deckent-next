@@ -50,7 +50,7 @@ async function seedLedger18(file: string) {
   try {
     db.exec(`DROP TABLE model_invocation_allocation_checkpoints; DROP INDEX model_invocations_allocation_identity;
       DROP TABLE model_invocation_spend_reservations; DROP TABLE provider_spend_accounts;
-      DROP TABLE provider_spend_audits; DROP TABLE IF EXISTS run_execution_intents; DROP TABLE IF EXISTS task_evaluation_observations; DROP TABLE IF EXISTS workspace_integrations; DROP TABLE IF EXISTS workspace_deliveries; DROP TABLE IF EXISTS workspace_adoptions; DROP TABLE IF EXISTS effect_intents; DROP TABLE IF EXISTS agent_turn_tool_calls; DROP TABLE IF EXISTS agent_turns; DROP TABLE IF EXISTS worker_event_logs; DROP TABLE IF EXISTS approval_outbox; DROP TABLE IF EXISTS approval_receipts; DROP TABLE IF EXISTS approvals; PRAGMA user_version=18;`);
+      DROP TABLE IF EXISTS provider_spend_management; DROP TABLE provider_spend_audits; DROP TABLE IF EXISTS run_execution_intents; DROP TABLE IF EXISTS task_evaluation_observations; DROP TABLE IF EXISTS workspace_integrations; DROP TABLE IF EXISTS workspace_deliveries; DROP TABLE IF EXISTS workspace_adoptions; DROP TABLE IF EXISTS effect_intents; DROP TABLE IF EXISTS agent_turn_tool_calls; DROP TABLE IF EXISTS agent_turns; DROP TABLE IF EXISTS worker_event_logs; DROP TABLE IF EXISTS approval_outbox; DROP TABLE IF EXISTS approval_receipts; DROP TABLE IF EXISTS approvals; PRAGMA user_version=18;`);
   } finally { db.close(); }
 }
 function historicalHash(prefix: string, value: unknown) {
@@ -135,7 +135,7 @@ async function seedLedger20(file: string) {
     const reservation = { ...withoutMeasurement, schemaVersion: 1 };
     db.prepare('UPDATE model_invocation_spend_reservations SET record=?,digest=? WHERE scope_id=? AND invocation_id=?')
       .run(JSON.stringify(reservation), historicalHash('deckent.provider-spend-reservation.v1', reservation), reservationRow.scope_id, reservationRow.invocation_id);
-    db.exec('DROP TABLE provider_spend_audits; DROP TABLE IF EXISTS run_execution_intents; DROP TABLE IF EXISTS task_evaluation_observations; DROP TABLE IF EXISTS workspace_integrations; DROP TABLE IF EXISTS workspace_deliveries; DROP TABLE IF EXISTS workspace_adoptions; DROP TABLE IF EXISTS effect_intents; DROP TABLE IF EXISTS agent_turn_tool_calls; DROP TABLE IF EXISTS agent_turns; DROP TABLE IF EXISTS worker_event_logs; DROP TABLE IF EXISTS approval_outbox; DROP TABLE IF EXISTS approval_receipts; DROP TABLE IF EXISTS approvals; PRAGMA user_version=20');
+    db.exec('DROP TABLE IF EXISTS provider_spend_management; DROP TABLE provider_spend_audits; DROP TABLE IF EXISTS run_execution_intents; DROP TABLE IF EXISTS task_evaluation_observations; DROP TABLE IF EXISTS workspace_integrations; DROP TABLE IF EXISTS workspace_deliveries; DROP TABLE IF EXISTS workspace_adoptions; DROP TABLE IF EXISTS effect_intents; DROP TABLE IF EXISTS agent_turn_tool_calls; DROP TABLE IF EXISTS agent_turns; DROP TABLE IF EXISTS worker_event_logs; DROP TABLE IF EXISTS approval_outbox; DROP TABLE IF EXISTS approval_receipts; DROP TABLE IF EXISTS approvals; PRAGMA user_version=20');
   } finally { db.close(); }
 }
 async function seedLedger19(file: string) {
@@ -145,7 +145,7 @@ async function seedLedger19(file: string) {
   try {
     db.exec(`DROP TABLE model_invocation_spend_reservations;
       DROP TABLE provider_spend_accounts;
-      DROP TABLE provider_spend_audits;
+      DROP TABLE IF EXISTS provider_spend_management; DROP TABLE provider_spend_audits;
       DROP TABLE IF EXISTS run_execution_intents; DROP TABLE IF EXISTS task_evaluation_observations; DROP TABLE IF EXISTS workspace_integrations; DROP TABLE IF EXISTS workspace_deliveries; DROP TABLE IF EXISTS workspace_adoptions; DROP TABLE IF EXISTS effect_intents; DROP TABLE IF EXISTS agent_turn_tool_calls; DROP TABLE IF EXISTS agent_turns; DROP TABLE IF EXISTS worker_event_logs; DROP TABLE IF EXISTS approval_outbox; DROP TABLE IF EXISTS approval_receipts; DROP TABLE IF EXISTS approvals; PRAGMA user_version=19;`);
   } finally { db.close(); }
 }
@@ -247,7 +247,8 @@ it('validates and translates a genuine ledger20 reservation without inferring a 
   const after = inventory(file); expect(after.version).toBe(CURRENT_LEDGER_VERSION);
   expect(JSON.parse(String(after.accounts[0]!.record))).toMatchObject({ schemaVersion: 2, settledMinorUnits: 0,
     settledExactMinorUnits: '0', reservedMinorUnits: 4 });
-  expect(JSON.parse(String(after.reservations[0]!.record))).toMatchObject({ schemaVersion: 2, measurement: null,
+  // SPEND-SETTLEMENT v49: proven v2 reservations are rewritten as reservation v3 (same disposition and evidence, no fabricated measurement).
+  expect(JSON.parse(String(after.reservations[0]!.record))).toMatchObject({ schemaVersion: 3, measurement: null,
     disposition: { state: 'reserved' } });
 });
 
@@ -269,7 +270,7 @@ it.each(['settled-local', 'released-not-sent', 'held-unknown', 'held-overrun'] a
     }[state];
     expect(after.version).toBe(CURRENT_LEDGER_VERSION);
     expect(account).toMatchObject({ schemaVersion: 2, ...expected.account });
-    expect(reservation).toMatchObject({ schemaVersion: 2, measurement: null, disposition: expected.disposition });
+    expect(reservation).toMatchObject({ schemaVersion: 3, measurement: null, disposition: expected.disposition });
   });
 
 it('rolls back an earlier translated account when a later account update fails', async () => {

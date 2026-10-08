@@ -201,7 +201,8 @@ describe.skipIf(process.platform !== 'linux')('streamed terminal chat through th
     const replay = await client.invokeModelStream(command, delta => again.push(delta.text));
     expect(replay).toMatchObject({ replayed: true, receipt: fresh.receipt }); expect(again).toEqual([]); expect(f.state.requests).toBe(2);
     const inspected = await client.inspectModelInvocation({ schemaVersion: 2, scopeId: 'scope', invocationId: fresh.receipt.claim.invocationId, reference });
-    expect(inspected.spending).toMatchObject({ disposition: { state: 'settled-local', amountMinorUnits: 0 } });
+    // SPEND-SETTLEMENT: the streamed usage is measured against the zero loopback tariff (exactly zero), not settled as an unmeasured local charge.
+    expect(inspected.spending).toMatchObject({ disposition: { state: 'settled-measured-tariff', amountMinorUnits: 0 }, measurement: { exactMinorUnits: '0' } });
   }, 20_000);
 
   it('aborting mid-stream disconnects, records the governed cancellation and aborts the provider request', async () => {

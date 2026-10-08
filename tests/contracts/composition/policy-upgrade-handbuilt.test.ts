@@ -86,6 +86,9 @@ describe.skipIf(process.platform !== 'linux')('deckent init policy --upgrade --p
       // v7 (K3, owner 2026-10-08): activation is covered (owner-model-catalog, all/all); the live rule names one model, so model calls are added.
       { id: 'first-run-model-invocation', effect: 'allow', actions: ['invoke', 'inspect', 'inspect-content', 'cancel-invocation'], scopes: [SCOPE], principals: [PERSON],
         resource: { kind: 'model-invocation', ids: 'all' } },
+      // v7 (SPEND-SETTLEMENT + stage 1): the person's spend account rule (inspect, audit, held reconcile, budget create/revision).
+      { id: 'first-run-provider-spending', effect: 'allow', actions: ['inspect', 'audit', 'reconcile', 'budget-revision'], scopes: [SCOPE], principals: [PERSON],
+        resource: { kind: 'provider-spend-account', ids: 'all' } },
     ]);
     expect(await f.bytes()).toBe(before);
     expect(await f.archive()).toEqual([]);
@@ -151,7 +154,7 @@ describe.skipIf(process.platform !== 'linux')('deckent init policy --upgrade --p
     const v5 = JSON.parse(await readFile(policyPath, 'utf8')) as { grants: { id: string; principals: { issuer: string; subject: string }[]; resource: { ids: unknown } }[] };
     const owner = v5.grants[0]!.principals[0]!;
     const v4 = { ...v5, revision: 'first-run-template-v4', grants: v5.grants.filter(rule => !['first-run-mcp-servers', 'first-run-mcp-call-operation', 'first-run-policy-administer',
-      'first-run-approvals', 'first-run-secret-switch', 'first-run-model-activation', 'first-run-model-invocation'].includes(rule.id)).map(rule => rule.id === 'first-run-read-tools' ? { ...rule, resource: { ...rule.resource,
+      'first-run-approvals', 'first-run-secret-switch', 'first-run-model-activation', 'first-run-model-invocation', 'first-run-provider-spending'].includes(rule.id)).map(rule => rule.id === 'first-run-read-tools' ? { ...rule, resource: { ...rule.resource,
       ids: (rule.resource.ids as string[]).filter(name => name !== 'propose_mcp_server') } } : rule) };
     await writeFile(policyPath, `${JSON.stringify(v4)}\n`, { mode: 0o600 });
     const v4Bytes = await readFile(policyPath, 'utf8');

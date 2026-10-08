@@ -303,10 +303,21 @@ describe('/model source', () => {
       inspectDeclaredModels: async () => ({ schemaVersion: 1, status: 'declared', availability: 'not-observed', catalog }) as never,
       inspectModelActivation: async (_root, query) => ({ schemaVersion: 1, scopeId: 'scope', reference: query.reference, availability: 'not-observed', activation: { state: 'active', revision: 1 } }) as never,
     }, options, 'en').inspect();
-    expect(view.choices.every(choice => choice.blocked === 'No spending budget for this scope (PROVIDER_SPEND_UNAVAILABLE).')).toBe(true);
-    expect(view.notes[0]).toContain('No spending budget is set for scope scope'); expect(view.notes[0]).toContain('provider_spending.budgets');
+    expect(view.choices.every(choice => choice.blocked === 'No spending budget for this scope (PROVIDER_SPEND_UNAVAILABLE): Create budget first.')).toBe(true);
+    // Stage 1: the next step is the window's own "Create budget" row, or the governed CLI command (never hand-written JSON).
+    expect(view.notes[0]).toContain('No spending budget is set for scope scope'); expect(view.notes[0]).toContain('Create budget');
+    expect(view.notes[0]).toContain('deckent models create-budget --scope scope --usd <amount>');
     const provider = await providerPanelPort(root, 'scope', { ...secrets([]).host, providerConnect: connectHost('ok') }, options, 'en', errorText).inspect();
     expect(provider.notes).toContain(view.notes[0]);
+    // A ledger account (governed create) counts as the scope's budget: the rows unlock and the note is gone.
+    const inspectProviderSpendAccount = async (_root: string, query: unknown) => { expect(query).toEqual({ schemaVersion: 1, scopeId: 'scope', current: true });
+      return { checkpoint: { account: {} } } as never; };
+    const opened = await modelPanelSource(root, 'scope', { inspectDeclaredModels: async () => ({ schemaVersion: 1, status: 'declared', availability: 'not-observed', catalog }) as never,
+      inspectModelActivation: async (_root, query) => ({ schemaVersion: 1, scopeId: 'scope', reference: query.reference, availability: 'not-observed', activation: { state: 'active', revision: 1 } }) as never,
+      inspectProviderSpendAccount }, options, 'en').inspect();
+    // The connected model is ready; the others keep their own (non-budget) reasons.
+    expect(opened.choices.find(choice => choice.reference.modelId === 'chat')!.blocked).toBeNull();
+    expect(opened.choices.some(choice => choice.blocked?.includes('PROVIDER_SPEND_UNAVAILABLE'))).toBe(false); expect(opened.notes.join('\n')).not.toContain('No spending budget');
   });
   it('an empty catalog says models are never added from here', async () => {
     const { root, options } = await project({});

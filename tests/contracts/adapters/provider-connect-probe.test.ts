@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { createServer, type Server } from 'node:http';
 import { PROVIDER_CONNECT_KINDS, ProviderProbeError, probeProviderConnection, providerConnectKind, providerConnectSecretName, providerEndpoint, providerProbeRejection,
-  connectionAdapter, readProviderConnectSeed, type ProviderProbeFetch } from '#adapters/core/provider-connect/index.js';
+  connectionAdapter, providerConnectModelPriced, readProviderConnectSeed, type ProviderProbeFetch } from '#adapters/core/provider-connect/index.js';
 
 // T4 PROVIDER-CONNECT: the connection check is one free request that needs the key, mapped to the secret lane's rejection kinds. The key is a
 // canary: it may reach only the request header, never a result, an error or anything the caller could print.
@@ -43,14 +43,17 @@ describe('provider connection check', () => {
     expect(providerConnectSecretName(providerConnectKind('deepseek-api')!, 'https://anything.example')).toBe('DECKENT_DEEPSEEK_KEY');
   });
 
-  it('every packaged seed parses, and each of its models builds a valid profile adapter for its row (published tariff for Anthropic, unmetered otherwise)', async () => {
+  it('every packaged seed parses; each model builds a valid profile adapter with its published tariff, or is refused when no verified price exists', async () => {
     for (const kind of PROVIDER_CONNECT_KINDS.filter(item => item.connect?.seed)) {
       const seed = await readProviderConnectSeed(kind.connect!.seed!), checked = providerEndpoint(kind.endpoint.default!);
       if (!checked.ok) throw new Error(kind.id);
       for (const model of seed.providers.flatMap(provider => provider.models)) {
-        const built = connectionAdapter(kind, { endpoint: `${checked.base}${kind.connect!.chatPath}`, credentialRef: kind.key!.secretName, nativeId: model.nativeId,
+        const build = () => connectionAdapter(kind, { endpoint: `${checked.base}${kind.connect!.chatPath}`, credentialRef: kind.key!.secretName, nativeId: model.nativeId,
           maxOutputTokens: (model as { maxOutputTokens?: number | null }).maxOutputTokens ?? 32768, currency: 'USD' });
-        expect(built.tariff).toBe(kind.id === 'anthropic-api' ? 'published' : 'unmetered');
+        // Stage 1: a remote model is connected only with a verified published price (the table is pinned in provider-connect-tariff.test.ts).
+        if (!providerConnectModelPriced(kind, model.nativeId)) { expect(build).toThrow('MODEL_CONNECT_TARIFF_UNVERIFIED'); continue; }
+        const built = build();
+        expect(built.tariff).toBe('published');
         expect(JSON.stringify(built.adapter.definition)).toContain(kind.key!.secretName!);
       }
     }

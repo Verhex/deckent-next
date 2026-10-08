@@ -13,11 +13,12 @@ const limits = { requestMaxBytes: 65536, responseMaxBytes: 65536, timeoutMs: 500
 const tool = { type: 'function', function: { name: 'read_file', description: 'read', parameters: { type: 'object' } } };
 const request = (extra: Record<string, unknown> = {}) => Object.fromEntries(Object.entries({ model: 'm', messages: [{ role: 'user', content: 'hi' }], max_completion_tokens: 128,
   stream: true, stream_options: { include_usage: true }, tools: [tool], tool_choice: 'auto', ...extra }).filter(([, value]) => value !== undefined));
-/** The definition `models connect` writes for a registry kind (its endpoint preset and documented dialect). */
+/** The definition `models connect` writes for a registry kind (its documented dialect). Stage 1: a remote preset now needs a verified price for
+ * the exact model, so the wire dialect is built at a loopback address (zero tariff, same kind and dialect); the priced remote path is
+ * covered in provider-connect-tariff.test.ts. */
 const definitionOf = (kindId: string) => {
   const kind = providerConnectKind(kindId)!;
-  return connectionAdapter(kind, { endpoint: `${kind.endpoint.default!.replace(/\/$/u, '')}${kind.connect!.chatPath}`, credentialRef: kind.key!.secretName, nativeId: 'm',
-    maxOutputTokens: 4096, currency: 'USD' }).adapter;
+  return connectionAdapter(kind, { endpoint: `http://127.0.0.1:9${kind.connect!.chatPath}`, credentialRef: null, nativeId: 'm', maxOutputTokens: 4096, currency: 'USD' }).adapter;
 };
 const bodyOf = (definition: unknown, extra: Record<string, unknown> = {}) => JSON.parse(prepareOpenAiChatHttpRequest(definition, limits, request(extra)).body) as Record<string, unknown>;
 

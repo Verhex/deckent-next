@@ -64,20 +64,27 @@ export class ProviderSpendAccountInspectionApplication {
     try { query = parseProviderSpendAccountQuery(input); }
     catch { throw new ProviderSpendError('PROVIDER_SPEND_INVALID'); }
     const principal = await authenticate(this.verifier, credential, query.scopeId);
+    const authorize = (exact: ProviderSpendExactAccountQuery) => this.authorization.authorize('inspect', { scopeId: exact.scopeId, budgetId: exact.budgetId,
+      budgetRevision: exact.budgetRevision }, principal);
+    // An exact query is authorized before storage opens (unchanged).
+    if (!('current' in query)) await authorize(query);
     let reader: ProviderSpendAccountReader;
     try { reader = await this.openReader(); }
     catch { throw new ProviderSpendError('PROVIDER_SPEND_UNAVAILABLE'); }
-    let snapshot: Awaited<ReturnType<ProviderSpendAccountReader['loadSnapshot']>>, exact: ProviderSpendExactAccountQuery;
+    let snapshot: Awaited<ReturnType<ProviderSpendAccountReader['loadSnapshot']>>, exact: ProviderSpendExactAccountQuery, authorizing = false;
     try {
       // Stage 1 current query: the checkpoint is scope-keyed, so a first read names the account; it is authorized and read again exactly.
-      exact = 'current' in query ? await reader.loadSnapshot({ schemaVersion: 1, scopeId: query.scopeId, budgetId: PROVIDER_SPEND_SCOPE_BUDGET_ID, budgetRevision: 1 })
-        .then(first => ({ schemaVersion: 1 as const, scopeId: query.scopeId, budgetId: first.checkpoint?.account.budget.budgetId ?? PROVIDER_SPEND_SCOPE_BUDGET_ID,
-          budgetRevision: first.checkpoint?.account.budget.revision ?? 1 })) : query;
-      await this.authorization.authorize('inspect', { scopeId: exact.scopeId, budgetId: exact.budgetId, budgetRevision: exact.budgetRevision }, principal);
+      if ('current' in query) {
+        const first = await reader.loadSnapshot({ schemaVersion: 1, scopeId: query.scopeId, budgetId: PROVIDER_SPEND_SCOPE_BUDGET_ID, budgetRevision: 1 });
+        exact = { schemaVersion: 1, scopeId: query.scopeId, budgetId: first.checkpoint?.account.budget.budgetId ?? PROVIDER_SPEND_SCOPE_BUDGET_ID,
+          budgetRevision: first.checkpoint?.account.budget.revision ?? 1 };
+        authorizing = true; await authorize(exact); authorizing = false;
+      } else exact = query;
       snapshot = await reader.loadSnapshot(exact);
     } catch (error) {
       try { reader.close(); } catch { /* preserve the read failure */ }
-      if (error instanceof ProviderSpendError) throw error;
+      // A policy refusal of the resolved account stays the policy's own error.
+      if (authorizing || error instanceof ProviderSpendError) throw error;
       throw new ProviderSpendError('PROVIDER_SPEND_UNAVAILABLE');
     }
     try { reader.close(); }
