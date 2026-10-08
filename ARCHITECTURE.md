@@ -804,7 +804,7 @@ Repository standards are human/host-maintained files; Markdown admission does no
 The existing `markdown.writerModule` gate is unchanged. `.github/CODEOWNERS` and issue `config.yml` are
 non-Markdown community configuration; GitHub settings, actual review and private reporting availability
 remain separate proof. Node/pre-release badges read public main package metadata; npm badges stay commented
-until the first verified publish. The alpha.4 status remains the recorded release, not a fresh live check.
+until the first verified publish. README and SECURITY name the recorded release (alpha.17, 2026-10-08), not a fresh live check.
 Owner 2026-10-02: `deckent-next-refactor` retains its name as the shared entry guide for owner-admitted
 Next development, fixes, refactoring, reviews and handoffs. Codex, Claude and Cursor resolve this skill
 to the same `.agents/skills/deckent-next-refactor` source; specialist skills supply task-specific methods.
