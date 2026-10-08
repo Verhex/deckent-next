@@ -206,14 +206,12 @@ describe.skipIf(process.platform !== 'linux')('/mode in a real pseudo-terminal a
     expect(after).toContain('⏵⏵ full auto');
     // Narrow: replay cursor movement/erasure. Ink may redraw the same notice in the raw PTY stream;
     // the terminal buffer must still contain exactly one notice and no mode segment in the status row.
-    // `/mode full-auto` again (the text command; a bare /mode is the window): the service keeps the mode and the notice names it.
-    const narrow = await inPty(f.projectRoot, f.env, ['terminal', 'workline', '--scope', 'scope'], [['Deckent workline', '/mode full-auto\r'], ['full-auto', '/exit\r']], 30);
+    // SLASH-WINDOWS: the typed `/mode full-auto` is gone from the rich terminal; a bare /mode opens the window whose header names the mode in force
+    // (what `/mode show` used to print), at 30 columns too.
+    const narrow = await inPty(f.projectRoot, f.env, ['terminal', 'workline', '--scope', 'scope'], [['Deckent workline', '/mode\r'], ['Now:', '\u001b'], ['Deckent workline', '/exit\r']], 30);
     expect(narrow.timeout, narrow.output).toBeUndefined();
     expect(narrow.status, narrow.output).toBe(0);
-    const screen = terminalScreen(narrow.output, 30);
-    // The notice now starts with its level in words ("Info: "), so at 30 columns it wraps inside the phrase: compare it unwrapped.
-    expect(screen.replace(/\s+/gu, ' '), narrow.output).toContain('Permission mode: full-auto');
-    expect(screen.split('full-auto').length - 1, screen).toBe(1);
+    expect(stripVTControlCharacters(narrow.output).replace(/\s+/gu, ' '), narrow.output).toContain('Now:');
   }, 180_000);
   // SHELL-AUTONOMY (owner 2026-09-28): the owner's own full-auto command, through the compiled CLI and a real service process whose shell
   // realm is the default `prefer-sandbox` (bubblewrap here): no approval card, the command ran in the sandbox, one audit event.
@@ -234,6 +232,7 @@ describe.skipIf(process.platform !== 'linux')('/mode in a real pseudo-terminal a
 
 // MODE-UX (G3): what the person needs to do next is on the screen — never a bare "denied", never a call the service can only refuse.
 describe.skipIf(process.platform !== 'linux')('/mode explains itself in a real pseudo-terminal (MODE-UX G3)', () => {
+  // SLASH-WINDOWS (2026-10-08): the rich terminal takes no typed `/mode <mode>`; the window's row is the same service set.
   // The terminal wraps long notices at the window width: compare on the text with whitespace runs collapsed.
   const modeLines = (output: string) => stripVTControlCharacters(output).replace(/\s+/gu, ' ');
   const changes = (f: Awaited<ReturnType<typeof modeProject>>) => f.audit().filter(row => (row as { kind: string }).kind === 'permission-mode-change');
@@ -253,27 +252,28 @@ describe.skipIf(process.platform !== 'linux')('/mode explains itself in a real p
     expect(text).not.toContain('Full access needs your company'); expect(text).not.toContain('[blocked]');
   }, 180_000);
 
-  it('a v1 policy: /mode full-auto says modes are off and asks the service for nothing (no file, no audit row)', async () => {
+  it('a v1 policy: /mode says modes are off and asks the service for nothing (no file, no audit row)', async () => {
     const f = await modeProject('v1');
     await startRuntime(f.projectRoot, f.env);
-    const run = await inPty(f.projectRoot, f.env, ['terminal', 'workline', '--scope', 'scope'], [['Deckent workline', '/mode full-auto\r'], ['Permission modes are off', '/exit\r']]);
+    const run = await inPty(f.projectRoot, f.env, ['terminal', 'workline', '--scope', 'scope'], [['Deckent workline', '/mode\r'], ['Permission modes are off', '\u001b'], ['Deckent workline', '/exit\r']]);
     expect(run.timeout, run.output).toBeUndefined();
     expect(modeLines(run.output)).toContain('this policy is v1');
     await expect(access(join(f.data, 'bindings.json'))).rejects.toMatchObject({ code: 'ENOENT' });
     expect(changes(f)).toEqual([]);
   }, 180_000);
 
-  it('without a set grant the refusal names the mode and the missing grant; the file is untouched and the refusal is audited', async () => {
+  it('without a set grant the window shows full auto locked with the reason; nothing is sent, the file is untouched and no audit row is written', async () => {
     const f = await modeProject('no-set-grant');
     await startRuntime(f.projectRoot, f.env);
     const before = await readFile(join(f.data, 'bindings.json'), 'utf8');
-    const run = await inPty(f.projectRoot, f.env, ['terminal', 'workline', '--scope', 'scope'], [['Deckent workline', '/mode full-auto\r'], ['No grant lets you set full-auto', '/exit\r']]);
+    // SLASH-WINDOWS: the typed refusal is replaced by the window itself: a mode the person may not take is a locked row with its reason.
+    const run = await inPty(f.projectRoot, f.env, ['terminal', 'workline', '--scope', 'scope'], [['Deckent workline', '/mode\r'], ['standard · now', '\u001b[B\u001b[B'],
+      ['leaves full-auto out', '\r'], ['leaves full-auto out', '\u001b'], ['Deckent workline', '/exit\r']]);
     expect(run.timeout, run.output).toBeUndefined();
-    expect(modeLines(run.output)).toContain('Add an allow grant (resource `permission-mode`, action `set`, id full-auto)');
+    expect(modeLines(run.output)).toContain('Your company leaves full-auto out of the modes you may take in this scope');
     expect(modeLines(run.output)).not.toContain('Policy does not permit');
     expect(await readFile(join(f.data, 'bindings.json'), 'utf8')).toBe(before);
-    expect(changes(f).map(row => JSON.parse((row as { record: string }).record) as { event?: { subject?: { decision?: unknown } } })
-      .map(record => JSON.stringify(record).includes('"effect":"deny"'))).toEqual([true]);
+    expect(changes(f)).toEqual([]);
   }, 180_000);
 
   it('a held authority write lock is explained as another process at work with a retry instruction; nothing is written', async () => {
@@ -281,7 +281,7 @@ describe.skipIf(process.platform !== 'linux')('/mode explains itself in a real p
     await startRuntime(f.projectRoot, f.env);
     const before = await readFile(join(f.data, 'bindings.json'), 'utf8');
     const run = await withConfigWriteLock(join(f.data, 'policy.json'), () => inPty(f.projectRoot, f.env, ['terminal', 'workline', '--scope', 'scope'],
-      [['Deckent workline', '/mode full-auto\r'], ['Another Deckent process is changing the policy files', '/exit\r']]), 2_000);
+      [['Deckent workline', '/mode\r'], ['standard · now', '\u001b[B\u001b[B\r'], ['Another Deckent process is changing the policy files', '/exit\r']]), 2_000);
     expect(run.timeout, run.output).toBeUndefined();
     expect(modeLines(run.output)).toContain('run /mode again');
     expect(modeLines(run.output)).not.toContain('Configuration lock');

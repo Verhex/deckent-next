@@ -234,12 +234,11 @@ function menuKey(state: ComposerState, key: ComposerKey, menu: ComposerMenu): Co
 }
 
 /**
- * Enter on a palette row. A fully typed name runs as typed (the user already chose; a missing argument gets the command's usage
- * line). Otherwise a command that takes an argument completes to `/name ` and waits, and any other runs as `/name`.
+ * Enter on a palette row (SLASH-WINDOWS, owner 2026-10-08): every command runs at once as `/name` and opens its own window or picker.
+ * The palette never completes to `/name ` and waits for typed text, whatever `argumentKey` the registry keeps for line mode and the CLI.
  */
 function runSlash(state: ComposerState, command: SlashCommand): ComposerStep {
   if (state.text.toLowerCase() === `/${command.name}`) return submit(state);
-  if (command.argumentKey !== undefined) return step(edit(state, 0, state.text.length, `/${command.name} `));
   return submit(edit(state, 0, state.text.length, `/${command.name}`));
 }
 

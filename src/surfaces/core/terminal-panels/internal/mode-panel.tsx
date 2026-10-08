@@ -2,13 +2,13 @@ import { useEffect, useRef, useState } from 'react';
 import { PERMISSION_MODES, type PermissionModeView } from '#domain/index.js';
 import { fillTemplate, span, type PermissionModeStop } from '#surfaces/core/terminal-render/index.js';
 import { ListPicker, pickerView, PICKER_INITIAL, type PickerState, type PickerTree } from '#surfaces/core/terminal-picker/index.js';
-import { Window } from '#surfaces/core/terminal-window/index.js';
+import { Window, type WindowLine } from '#surfaces/core/terminal-window/index.js';
 import type { ModePanelLabels, ModePanelPort, PanelLabels } from './contract.js';
 import { usePickerRoom } from './lines.js';
 
 const STOPS: readonly PermissionModeStop[] = ['standart', 'ask-edits', 'full-auto', 'full-access'];
 /** The focused mode's sentence: the body rows the window keeps for it (a longer one scrolls). */
-const MODE_BODY_ROWS = 2;
+const MODE_BODY_ROWS = 3;
 
 /** Why a stop cannot be taken here, from the service's own view (the service decides again on the set). */
 function blockedReason(stop: PermissionModeStop, view: PermissionModeView, current: PermissionModeStop | null, labels: ModePanelLabels): string | null {
@@ -44,7 +44,10 @@ export function ModePanel({ port, labels, onError, onClose }: { readonly port: M
   const shown = pickerView(tree, state), focused = shown.rows[shown.pos];
   // A locked row's reason stands under the list; its effect sentence would only push the window past a short terminal.
   const stop = focused?.blocked ? undefined : STOPS.find(item => item === focused?.id);
-  return <Window title={[span(words.title)]} body={stop ? [{ spans: [span(words.effect[stop])] }] : []} hints={words.hints} position={labels.position}
+  // The header (what `/mode show` used to print as text): the stop this session runs in, and when no company rule makes a mode matter here.
+  const header: WindowLine[] = words.now && current ? [{ spans: [span(fillTemplate(words.now, { mode: words.stops[current] }), { bold: true }),
+    ...(!view.eligible && current !== 'full-access' && words.inert ? [span(` · ${words.inert}`)] : [])] }] : [];
+  return <Window title={[span(words.title)]} body={[...header, ...(stop ? [{ spans: [span(words.effect[stop])] }] : [])]} hints={words.hints} position={labels.position}
     footerRows={room.footerRows} onInput={() => true}
     footer={focusedWindow => <ListPicker tree={tree} labels={labels.picker} active={focusedWindow} initial={state} onState={setState} maxRows={room.rows}
       onResult={result => {

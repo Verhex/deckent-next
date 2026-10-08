@@ -5,7 +5,7 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { Box, Text, useInput, usePaste, useWindowSize } from 'ink';
 import { slashCommandRow, useWorklinePalette } from '#surfaces/core/terminal-kit/index.js';
-import { mentionText, pendingArgument, type ComposerMentionPort, type PastePolicy } from './assist.js';
+import { mentionText, paletteCommand, type ComposerMentionPort, type PastePolicy } from './assist.js';
 import { composerKey } from './keys.js';
 import { COMPOSER_LIMITS, composerMenu, EMPTY_COMPOSER, exitArmed, reduceComposer, searchMatches, type ComposerHistoryPort, type ComposerKey, type ComposerMenu } from './reducer.js';
 import { caretRow, displayWidth, graphemes, layoutRows } from './text.js';
@@ -58,7 +58,7 @@ function MenuRows({ menu, labels }: { readonly menu: ComposerMenu; readonly labe
   const palette = useWorklinePalette();
   const first = Math.max(0, Math.min(menu.selected - MENU_ROWS + 1, menu.items.length - MENU_ROWS));
   const rows = menu.kind === 'slash'
-    ? menu.items.map(command => slashCommandRow(command, labels.slash))
+    ? menu.items.map(command => slashCommandRow(paletteCommand(command), labels.slash))
     : menu.items.map(path => ({ name: mentionText(path), detail: '' }));
   const width = Math.max(...rows.map(row => displayWidth(row.name)));
   return (
@@ -140,7 +140,6 @@ export function Composer(props: ComposerProps): ReactNode {
 
   const marker = (props.caret ?? (Object.keys(palette.accent).length === 0 ? 'marker' : 'inverse')) === 'marker';
   const menu = composerMenu(state);
-  const argument = pendingArgument(state.text);
   const indent = ' '.repeat(displayWidth(prompt));
   // Border (2) and padding (2) plus one cell so the caret after a full row never wraps.
   const rows = layoutRows(state.text.replace(/\t/gu, ' '), (columns || 80) - 5 - displayWidth(prompt));
@@ -160,7 +159,6 @@ export function Composer(props: ComposerProps): ReactNode {
             {index ? indent : prompt}
             {index === caretAt ? <CaretRow text={row.text} at={state.cursor - row.start} marker={marker} /> : row.text}
             {placeholder && index === 0 ? <Text {...(dimmable ? { dimColor: true } : {})}>{marker ? ` ${placeholder}` : placeholder}</Text> : null}
-            {argument && index === rows.length - 1 ? <Text {...palette.muted}>{labels.slash[argument.argumentKey!] ?? ''}</Text> : null}
           </Text>
         ))}
       </Box>
