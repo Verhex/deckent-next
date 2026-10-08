@@ -73,6 +73,16 @@ export const auditSubjectSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('secret-change'), action: z.enum(['set', 'delete']), name: z.string().regex(/^[A-Z_][A-Z0-9_]{0,127}$/),
     backend: z.string().max(128).regex(/^[a-z][a-z0-9-]*(?:\.[a-z][a-z0-9-]*)*\.secret-store\.[a-z][a-z0-9-]*@[1-9][0-9]{0,5}$/),
     decision: z.object({ effect: z.enum(['allow', 'deny', 'require-approval']), ruleId: identitySchema.nullable() }).strict() }).strict(),
+  /**
+   * SECRET-STORE-SWITCH (owner 2026-10-08, union extension only): the decision on the `secret`/`switch` cell to move every secret from the
+   * selected store to another registered one and select it — recorded before anything moves (a refusal too). `entries` is how many names
+   * move (never a name list or value); `downgrade` marks a move toward a weaker store, made only with an explicit confirmation.
+   */
+  z.object({ kind: z.literal('secret-store-switch'),
+    from: z.string().max(128).regex(/^[a-z][a-z0-9-]*(?:\.[a-z][a-z0-9-]*)*\.secret-store\.[a-z][a-z0-9-]*@[1-9][0-9]{0,5}$/),
+    to: z.string().max(128).regex(/^[a-z][a-z0-9-]*(?:\.[a-z][a-z0-9-]*)*\.secret-store\.[a-z][a-z0-9-]*@[1-9][0-9]{0,5}$/),
+    entries: z.number().int().nonnegative().safe(), downgrade: z.boolean(),
+    decision: z.object({ effect: z.enum(['allow', 'deny', 'require-approval']), ruleId: identitySchema.nullable() }).strict() }).strict(),
   z.object({ kind: z.literal('permission-mode-change'), requested: permissionMode, previous: permissionMode,
     decision: z.object({ effect: z.enum(['allow', 'deny', 'require-approval']), ruleId: identitySchema.nullable() }).strict(),
     bindingsRevision: z.object({ before: identitySchema, after: identitySchema.nullable() }).strict(),
