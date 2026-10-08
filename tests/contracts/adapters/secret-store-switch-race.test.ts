@@ -51,7 +51,7 @@ async function fixture() {
       set: async (name: string, value: string) => { if (role === 'target') await pause('copy'); return store.set(name, value); },
       delete: async (name: string) => { if (role === 'source') await pause('delete'); return store.delete(name); },
       listNames: () => store.listNames(), inspect: () => store.inspect() });
-    const ports: SecretStoreSwitchPorts = { has: isRegisteredSecretStore,
+    const ports: SecretStoreSwitchPorts = { environmentReferences: async () => [], has: isRegisteredSecretStore,
       open: id => id === to ? wrap(open(id), 'target') : wrap(open(id), 'source'),
       selection: { read: () => selection.read(), publish: async (store, digest) => { await pause('publish'); return selection.publish(store, digest); } },
       authorize: allow, audit: () => undefined, now: () => 1, custody: createInstallationSecretCustody(env, 'linux') };
@@ -113,7 +113,7 @@ describe.skipIf(process.platform !== 'linux')('secret changes against a running 
     await run.arrived;
     // Parked between "identical" and the removal of the old copies: a change of the selected store and a confirmed switch back to the file store.
     const onSelected = code(f.change(SEALED, 10_000).set('A_KEY', 'new-a'));
-    const back = new SecretStoreSwitch({ has: isRegisteredSecretStore, open: f.open, selection: f.selection, authorize: allow, audit: () => undefined,
+    const back = new SecretStoreSwitch({ environmentReferences: async () => [], has: isRegisteredSecretStore, open: f.open, selection: f.selection, authorize: allow, audit: () => undefined,
       now: () => 1, custody: createInstallationSecretCustody(f.env, 'linux', 10_000) })
       .switch({ principal: me, scopeId: 'installation', to: FILE, confirmDowngrade: true });
     run.release();
@@ -143,7 +143,7 @@ describe.skipIf(process.platform !== 'linux')('secret changes against a running 
         holder.once('exit', () => { clearTimeout(timer); reject(new Error(`HOLDER_EXIT:${stderr}`)); });
       });
       expect(await code(f.change(FILE, 300).set('A_KEY', 'new-a'))).toBe('SECRET_STORE_BUSY');
-      const blocked = new SecretStoreSwitch({ has: isRegisteredSecretStore, open: f.open, selection: f.selection, authorize: allow, audit: () => undefined,
+      const blocked = new SecretStoreSwitch({ environmentReferences: async () => [], has: isRegisteredSecretStore, open: f.open, selection: f.selection, authorize: allow, audit: () => undefined,
         now: () => 1, custody: createInstallationSecretCustody(f.env, 'linux', 300) });
       expect(await code(blocked.switch({ principal: me, scopeId: 'installation', to: SEALED, confirmDowngrade: false }))).toBe('SECRET_STORE_BUSY');
       expect(await f.contents(FILE)).toEqual({ A_KEY: 'old-a', B_KEY: 'old-b' }); expect((await f.selection.read()).store).toBe(FILE);

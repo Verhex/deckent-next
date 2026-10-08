@@ -738,6 +738,7 @@
   "error.SECRET_STORE_DOWNGRADE_UNCONFIRMED": "Anahtarları {from} deposundan {to} deposuna taşımak diskteki korumalarını azaltır. Hiçbir şey taşınmadı; bunu istiyorsanız korumanın azalmasını onaylayarak yeniden çalıştırın.",
   "error.SECRET_STORE_SWITCH_UNVERIFIED": "{to} deposuna kopyalanan anahtarlar değişmeden geri okunamadı. Seçim değiştirilmedi; anahtarlar eski depoda duruyor.",
   "error.SECRET_STORE_SWITCH_DENIED": "Policy'niz anahtar deposunu {to} olarak değiştirmenize izin vermiyor. Hiçbir şey taşınmadı.",
+  "error.SECRET_STORE_ENV_UNCONFIRMED": "Config’teki bu referanslar ortamdan çözümleniyor ama {to} deposunda yok: {names}. Hiçbir şey değiştirilmedi. Devam etmek için --confirm-env-missing ile onaylayın.",
   "error.SECRET_STORE_BUSY": "Bu kurulumda şu an başka bir anahtar değişikliği ya da depo geçişi sürüyor. Hiçbir şey değiştirilmedi; biraz sonra yeniden deneyin.",
   "error.SECRET_STORE_CHANGED": "Bu değişiklik hazırlanırken anahtar deposu değiştirildi ({backend} artık seçili değil). Hiçbir şey yazılmadı; komutu yeniden çalıştırın.",
   "error.SECRET_STORE_READ_ONLY": "{backend} secret'lar deposu salt okunur; kurulum config'inde yazılabilir bir arka uç seçin (örneğin core.secret-store.file@1).",

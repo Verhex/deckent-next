@@ -78,3 +78,11 @@ it('native Windows keeps the environment store until the OS keyring backend: the
   const result = await applyPolicyTemplateInstallationWithSecretDefault(root, 'installation', { platform: 'win32', env: { USERPROFILE: root } });
   expect(result).toMatchObject({ status: 'installed', secretStore: { status: 'platform', backend: null } });
 });
+
+it.skipIf(process.platform === 'win32').each(['linux', 'wsl', 'darwin'])('platform selection %s uses the encrypted default (simulated platform, real temp store)', async platform => {
+  const root = await mkdtemp(join(tmpdir(), 'deckent-secret-platform-')); roots.push(root);
+  const global = join(root, 'global'); await mkdir(global, { mode: 0o700 });
+  const env = { HOME: root, DECKENT_GLOBAL_HOME: global, ...(platform === 'wsl' ? { WSL_DISTRO_NAME: 'test-wsl' } : {}) };
+  const result = await applyPolicyTemplateInstallationWithSecretDefault(root, 'installation', { platform: platform === 'wsl' ? 'linux' : platform, env });
+  expect(result).toMatchObject({ status: 'installed', secretStore: { status: 'set', backend: SEALED } });
+});

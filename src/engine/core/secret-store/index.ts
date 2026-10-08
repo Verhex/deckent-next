@@ -8,3 +8,5 @@ export { acceptSecretChangeResult, acceptSecretStoreSwitchResult, prepareSecretC
 export type { SecretChangeResult, SecretDeleteCommand, SecretSetCommand, SecretStoreSwitchCommand } from './internal/wire.js';
 export { SECRET_STORE_SWITCH_RESOURCE_ID, SecretStoreSwitch, isSecretStoreDowngrade, policySecretStoreSwitchAuthorization } from './internal/switch.js';
 export type { SecretStoreSelectionPort, SecretStoreSwitchPorts, SecretStoreSwitchRequest, SecretStoreSwitchResult } from './internal/switch.js';
+export { missingSecretReferenceNames, inspectSecretEnvironmentGuard } from './internal/env-guard.js';
+export type { SecretEnvironmentGuard } from './internal/env-guard.js';

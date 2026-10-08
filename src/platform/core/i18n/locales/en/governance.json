@@ -738,6 +738,7 @@
   "error.SECRET_STORE_DOWNGRADE_UNCONFIRMED": "Moving keys from {from} to {to} lowers how they are protected on disk. Nothing was moved; run it again with the downgrade confirmed if that is what you want.",
   "error.SECRET_STORE_SWITCH_UNVERIFIED": "The keys copied into {to} could not be read back unchanged. The selection was not changed and the old store still holds them.",
   "error.SECRET_STORE_SWITCH_DENIED": "Your policy does not allow switching the key store to {to}. Nothing was moved.",
+  "error.SECRET_STORE_ENV_UNCONFIRMED": "These config references resolve from env but are missing in {to}: {names}. Nothing was changed. Confirm with --confirm-env-missing to continue.",
   "error.SECRET_STORE_BUSY": "Another key change or key store switch is in progress on this installation. Nothing was changed; try again in a moment.",
   "error.SECRET_STORE_CHANGED": "The key store was switched while this change was being prepared ({backend} is no longer selected). Nothing was written; run the command again.",
   "error.SECRET_STORE_READ_ONLY": "The secret-store {backend} is read-only; select a writable backend (for example core.secret-store.file@1) in the installation config.",

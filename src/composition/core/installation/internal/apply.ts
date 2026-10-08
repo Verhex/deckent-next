@@ -1,10 +1,12 @@
+import { lstat } from 'node:fs/promises';
+import { defaultSecretStore } from './secret-default.js';
 import { randomUUID } from 'node:crypto';
 import { isAbsolute } from 'node:path';
 import { z } from 'zod';
 import { ensureLocalPrefixCacheSaltKey, FileInstallationIdentityStore, FileProjectIdentityStore, withInstallationJournal } from '#adapters/index.js';
 import { immutableJsonObjectSchema } from '#domain/index.js';
 import { InstallationPublicationApplication, InstallationPublicationError, validateInstallationRecovery, type InstallationConsent, type InstallationRecovery, type PreparedInstallation } from '#engine/index.js';
-import { bootstrapPublishesConfig, getConfigFieldDefault, loadConfig, observeBootstrapState, SystemTrustedClock, validateConfig, versionedConfig, resolveProductLayout, type BootstrapObservation } from '#platform/index.js';
+import { bootstrapPublishesConfig, getConfigFieldDefault, loadConfig, observeBootstrapState, SystemTrustedClock, productResourcePath, validateConfig, versionedConfig, resolveProductLayout, type BootstrapObservation } from '#platform/index.js';
 import { prepareSuppliedInstallation } from './preview.js';
 import { inspectPreparedInstallation } from './evidence.js';
 import { installationPublicationPorts } from './publication.js';
@@ -78,10 +80,12 @@ async function executeInstallation(projectRoot: string, operator: InstallationAp
     await installationIdentity.admitWrite(); await projectIdentity.read(); // re-admitted under the journal lock, before any target is published
     const consent: InstallationConsent = recovery?.consent ?? Object.freeze({ schemaVersion: 1, mode: 'operator-custom',
       id: randomUUID(), atMs: Date.now(), proposalDigest: operator.proposalDigest, principal: prepared.preview.principal });
+    const fresh = await lstat(productResourcePath(layout, 'policy')).then(() => false, (error: NodeJS.ErrnoException) => error.code === 'ENOENT');
     const result = await new InstallationPublicationApplication({ journal, ...installationPublicationPorts(projectRoot, prepared),
       revalidateEvidence: () => inspectPreparedInstallation(prepared, operator.dockerExecutable), now: () => clock.sample().wallMs }).apply(prepared, evidence, consent);
     await installationIdentity.loadOrCreate(); await projectIdentity.loadOrCreate();
     await ensureLocalPrefixCacheSaltKey(layout); // VLLM-CACHE-SALT: the installation's salt secret exists from init (older installations: first use)
-    return result;
-  });
+    return { result, fresh, scopeId: prepared.preview.scopeId };
+  }).then(async ({ result, fresh, scopeId }) => fresh && result.status === 'installed'
+    ? Object.freeze({ ...result, secretStore: await defaultSecretStore(projectRoot, scopeId, {}) }) : result);
 }

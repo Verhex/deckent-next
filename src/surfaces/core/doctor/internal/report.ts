@@ -11,6 +11,7 @@ export interface ImageRefreshDoctorView { readonly status: string; readonly reas
 export interface InstallationBindingReport { readonly capability: 'supported' | 'unsupported' | 'source-invalid'; readonly strength?: 'machine' | 'weak' | null; readonly source?: string | null; readonly required?: boolean }
 /** The installation's secret store as doctor shows it (SECRET-K1): backend id, status and typed code only; never a value. */
 export interface SecretStoreDoctorLine { readonly backend: string; readonly status: string; readonly code?: string | null;
+  readonly envGuard?: Readonly<Record<string, Readonly<{ names: readonly string[]; code: string | null }>>>;
   readonly leftover?: { readonly backends: readonly string[]; readonly entries: number; readonly unverified?: readonly string[] } }
 
 /** What the human rendering reads from the collected doctor report; the pool readiness lines arrive already rendered. */
@@ -60,6 +61,9 @@ export function renderDoctorReport(result: DoctorRenderInput, poolLines: readonl
   // SECRET-K1: the selected secret store and whether it can be read now (backend id, status and typed code only; never a value).
   ...(result.secretStore ? [t('doctor.secretStore', { backend: result.secretStore.backend, status: result.secretStore.status,
     codeSuffix: result.secretStore.code ? `, ${result.secretStore.code}` : '' }, locale), ...secretStoreCustodyLine(result.secretStore.backend, locale),
+    ...Object.entries(result.secretStore.envGuard ?? {}).flatMap(([to, guard]) => guard.code
+      ? [t('doctor.secretStore.envUnverified', { to, code: guard.code }, locale)]
+      : guard.names.length ? [t('doctor.secretStore.envMissing', { to, names: guard.names.join(', ') }, locale)] : []),
     ...(result.secretStore.leftover?.entries ? [t('doctor.secretStore.leftover', { entries: result.secretStore.leftover.entries, backends: result.secretStore.leftover.backends.join(', ') }, locale)] : []),
     ...(result.secretStore.leftover?.unverified?.length ? [t('doctor.secretStore.leftoverUnverified', { backends: result.secretStore.leftover.unverified.join(', ') }, locale)] : [])] : []),
   ...(result.imageRefresh && result.imageRefresh.status !== 'unknown' ? [t('doctor.imageRefresh', { status: imageRefreshText(result.imageRefresh, locale) }, locale)] : []),
