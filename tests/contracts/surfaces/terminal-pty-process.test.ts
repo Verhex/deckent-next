@@ -259,8 +259,10 @@ describe.skipIf(process.platform === 'win32')('deckent terminal in a real pseudo
     const result = await inPty(f.projectRoot, f.env, ['terminal', 'workline', '--scope', 'scope'], [
       ['Deckent workline', '/hel'],
       ['/help', '\r'],
-      // S08: /help lists registry rows (name, two spaces, detail); the palette pads names to a column, so this row only matches the notice.
-      ['/watch-stop  Stop following workers and runs', 'see @READ'],
+      // SW-1: /help opens its window (registry rows: name, two spaces, detail; the palette pads names to a column); Esc closes it and leaves
+      // the one framed system summary line, then the composer owns the keyboard again.
+      ['Stop following workers and runs', '\u001b'],
+      ['Help: ', 'see @READ'],
       ['> @README.md', '\r'],
       ['see @README.md |', '\r'],
       ['pty-ok', '/exit\r'],

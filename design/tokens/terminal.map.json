@@ -19,14 +19,22 @@
     "selection": { "primitive": "novaGlowBright", "ansi16": "96", "attrs": ["1"], "class": "primary" },
     "diffAdded": { "primitive": "novaGo", "ansi16": "32", "class": "supplemental" },
     "diffRemoved": { "primitive": "novaAbort", "ansi16": "31", "class": "supplemental" },
-    "modeIndicator": { "primitive": "novaAmber", "ansi16": "33", "class": "supplemental" }
+    "modeIndicator": { "primitive": "novaAmber", "ansi16": "33", "class": "supplemental" },
+    "sectionHeader": { "primitive": "novaGlow", "ansi16": "36", "attrs": ["1"], "class": "primary" },
+    "keyLabel": { "ansi16": "", "attrs": ["1"], "class": "primary" },
+    "mutedId": { "primitive": "seaTextMuted", "ansi16": "90", "class": "supplemental" },
+    "chipOk": { "primitive": "novaGo", "ansi16": "32", "attrs": ["1"], "class": "supplemental" },
+    "chipWarn": { "primitive": "novaAmber", "ansi16": "33", "attrs": ["1"], "class": "supplemental" },
+    "chipFail": { "primitive": "novaAbort", "ansi16": "31", "attrs": ["1"], "class": "supplemental" },
+    "systemLabel": { "ansi16": "35", "attrs": ["1"], "class": "primary" },
+    "systemRail": { "ansi16": "35", "class": "decorative", "contrast": "border" }
   },
   "themes": {
     "dark": { "backgrounds": ["#000000", "#1E1E1E", "#282C34"] },
     "light": { "backgrounds": ["#FFFFFF", "#F5F5F5"] },
     "dark-daltonized": { "backgrounds": ["#000000", "#1E1E1E", "#282C34"],
-      "ansi16": { "success": "94", "error": "93", "diffAdded": "94", "diffRemoved": "93", "workerCard": "94" } },
+      "ansi16": { "success": "94", "error": "93", "diffAdded": "94", "diffRemoved": "93", "workerCard": "94", "chipOk": "94", "chipFail": "93" } },
     "light-daltonized": { "backgrounds": ["#FFFFFF", "#F5F5F5"],
-      "ansi16": { "success": "34", "error": "33", "diffAdded": "34", "diffRemoved": "33", "workerCard": "34" } }
+      "ansi16": { "success": "34", "error": "33", "diffAdded": "34", "diffRemoved": "33", "workerCard": "34", "chipOk": "34", "chipFail": "33" } }
   }
 }

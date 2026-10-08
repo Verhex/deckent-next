@@ -882,7 +882,8 @@
         "src/engine/core/runs",
         "src/engine/core/worker-observation",
         "src/surfaces/core/approval-presentation",
-        "src/surfaces/core/terminal-ledger"
+        "src/surfaces/core/terminal-ledger",
+        "src/surfaces/core/terminal-window"
       ],
       "plan": "SURFACES"
     },
