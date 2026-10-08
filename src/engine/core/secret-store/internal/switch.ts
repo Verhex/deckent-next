@@ -92,6 +92,9 @@ export class SecretStoreSwitch {
     const downgrade = isSecretStoreDowngrade(from, request.to);
     if (downgrade && !request.confirmDowngrade) throw ErrorRegistry.createError('SECRET_STORE_DOWNGRADE_UNCONFIRMED', { params: { from, to: request.to } });
     if (names.length && !target.descriptor.writable) throw ErrorRegistry.createError('SECRET_STORE_READ_ONLY', { params: { backend: request.to } });
+    // S1 O1: a target that cannot be read now (not private, corrupt, unavailable) is refused typed before anything is recorded or selected,
+    // even when nothing moves; a missing store root is created owner-only by its first write, an existing one is never chmod'ed.
+    if (target.descriptor.enumerable) await target.listNames();
     await this.record(request, from, names.length, downgrade);
     const values = new Map<string, string>();
     for (const name of names) {
