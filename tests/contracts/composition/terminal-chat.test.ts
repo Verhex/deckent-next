@@ -48,7 +48,7 @@ describe('terminal chat configuration through the real config loader', () => {
     await expect(describeTerminalChat(empty.projectRoot, empty.options)).resolves.toMatchObject({ status: 'not-configured', reference: null });
     const ready = await project({ provider_catalog: catalog, terminal: { chat: { schemaVersion: 1, reference, maxCompletionTokens: 512 } } });
     await expect(describeTerminalChat(ready.projectRoot, ready.options)).resolves.toEqual({ schemaVersion: 1, status: 'ready', reference,
-      catalogRevision: 'catalog-7', maxCompletionTokens: 512, historyMessages: 40 });
+      catalogRevision: 'catalog-7', source: 'project', maxCompletionTokens: 512, historyMessages: 40 });
   });
 
   it('reports an undeclared model and rejects the removed unmanaged HTTP backend key', async () => {

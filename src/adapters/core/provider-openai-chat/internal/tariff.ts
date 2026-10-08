@@ -3,7 +3,7 @@ import { isDeepStrictEqual } from 'node:util';
 import { modelInvocationProfileSchema, parseModelBindingDefinition, parseProviderSpendQuote, type ProviderSpendQuote } from '#domain/index.js';
 import { modelInvocationProfileDigest, modelInvocationRequestDigest, OPERATOR_TARIFF_PRICING_ID, providerSpendEvidenceDigest,
   type ModelInvocationSpendingInput } from '#engine/index.js';
-import { OPENAI_CHAT_HTTP_ADAPTER_ID, OPENAI_CHAT_HTTP_ADAPTER_VERSION, OpenAiChatHttpError, parseOpenAiChatHttpDefinition,
+import { isOpenAiChatHttpAdapter, OpenAiChatHttpError, parseOpenAiChatHttpDefinition,
   parseOpenAiChatTextRequest } from './contract.js';
 import { prepareOpenAiChatHttpRequest } from './transport.js';
 
@@ -15,7 +15,7 @@ export const OPENAI_CHAT_OPERATOR_TARIFF_METER_ID = 'openai-chat-operator-reserv
  */
 export function quoteOpenAiChatOperatorTariff(input: ModelInvocationSpendingInput): ProviderSpendQuote {
   const profile = modelInvocationProfileSchema.parse(input.profile);
-  if (profile.adapter.id !== OPENAI_CHAT_HTTP_ADAPTER_ID || profile.adapter.version !== OPENAI_CHAT_HTTP_ADAPTER_VERSION) {
+  if (!isOpenAiChatHttpAdapter(profile.adapter)) {
     throw new OpenAiChatHttpError('OPENAI_CHAT_DEFINITION_INVALID');
   }
   const definition = parseOpenAiChatHttpDefinition(profile.adapter.definition), binding = parseModelBindingDefinition(input.definition);

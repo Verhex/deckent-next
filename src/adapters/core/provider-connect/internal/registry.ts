@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import asset from './registry.json' with { type: 'json' };
+import { openAiChatDialectSchema } from '#adapters/core/provider-openai-chat/index.js';
 
 /**
  * The connection kinds the terminal `/provider` window offers (T4 PROVIDER-CONNECT): where each kind is reached, which free request proves
@@ -34,7 +35,10 @@ const kindSchema = z.object({
     seed: z.string().regex(/^[a-z0-9][a-z0-9-]{0,63}$/u).nullable(),
     /** Owner 2026-10-08: no paid call to a remote endpoint without a verified price. `true`: a remote (non-loopback) address needs the operator's
      * declared price, which the SPEND-SETTLEMENT lane brings; until then such a connection is refused (`MODEL_CONNECT_PRICE_REQUIRED`). */
-    priceRequired: z.boolean().default(false) }).strict().nullable().default(null),
+    priceRequired: z.boolean().default(false),
+    /** K1: the provider's documented request dialect (OpenAI chat adapter v5; required for that adapter, refused for the Anthropic one). */
+    dialect: openAiChatDialectSchema.optional() }).strict()
+    .refine(connect => (connect.adapter === 'openai-chat-http') === (connect.dialect !== undefined)).nullable().default(null),
 }).strict().readonly();
 const positive = z.number().int().positive().safe();
 const registrySchema = z.object({ schemaVersion: z.literal(2), retrievedAt: z.string().regex(/^\d{4}-\d{2}-\d{2}$/u), note: z.string(),

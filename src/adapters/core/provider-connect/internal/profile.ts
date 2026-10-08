@@ -47,7 +47,7 @@ export function connectionAdapter(kind: ProviderConnectKind, input: Readonly<{ e
   }
   // SPEND-SETTLEMENT integration point (owner 2026-10-08): the verified OpenAI/DeepSeek/GLM price records replace this zero-rate operator tariff
   // through that lane's typed lookup, here and only here; until it lands the connection is reported `unmetered`.
-  const definition = { endpoint: input.endpoint, maxOutputTokens: input.maxOutputTokens,
+  const definition = { endpoint: input.endpoint, maxOutputTokens: input.maxOutputTokens, dialect: connect.dialect,
     authentication: secure && input.credentialRef !== null ? { type: 'bearer', credentialRef: input.credentialRef } : { type: 'none' },
     tariff: { kind: 'operator-static', version: 1, currency: input.currency, inputMinorUnitsPerMillionTokens: 0, outputMinorUnitsPerMillionTokens: 0 } };
   try { parseOpenAiChatHttpDefinition(definition); } catch { throw new ProviderConnectError('MODEL_CONNECT_DEFINITION_INVALID'); }

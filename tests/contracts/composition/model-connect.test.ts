@@ -21,9 +21,11 @@ const grants = (extra: Record<string, unknown>[] = []) => [
 /** A registry like the shipped one whose two seeded rows take a typed (local) address: the scripted server stands in for both vendors. */
 const localRegistry = parseProviderConnectRegistry({ ...PROVIDER_CONNECT_REGISTRY, kinds: [
   { id: 'vendor-one', labelKey: 'tui.provider.kind.openaiApi', available: true, endpoint: { default: null, editable: true }, probe: null,
-    key: { required: true, secretName: 'DECKENT_OPENAI_KEY' }, connect: { adapter: 'openai-chat-http', chatPath: '/v1/chat/completions', seed: 'openai-api' } },
+    key: { required: true, secretName: 'DECKENT_OPENAI_KEY' }, connect: { adapter: 'openai-chat-http', chatPath: '/v1/chat/completions', seed: 'openai-api',
+      dialect: { tokenLimitField: 'max_completion_tokens', streamUsage: 'include', toolChoice: ['auto', 'none', 'required'] } } },
   { id: 'vendor-two', labelKey: 'tui.provider.kind.deepseekApi', available: true, endpoint: { default: null, editable: true }, probe: null,
-    key: { required: true, secretName: 'DECKENT_DEEPSEEK_KEY' }, connect: { adapter: 'openai-chat-http', chatPath: '/v1/chat/completions', seed: 'deepseek-api' } }] });
+    key: { required: true, secretName: 'DECKENT_DEEPSEEK_KEY' }, connect: { adapter: 'openai-chat-http', chatPath: '/v1/chat/completions', seed: 'deepseek-api',
+      dialect: { tokenLimitField: 'max_tokens', streamUsage: 'include', toolChoice: ['auto', 'none', 'required'] } } }] });
 type Config = Record<string, unknown> & { service: Record<string, unknown>; provider_catalog: { providers: { id: string }[] } & Record<string, unknown>;
   provider_invocation_profiles: { profiles: (Record<string, unknown> & { reference: unknown; adapter: { definition: { endpoint: string } } })[] } };
 async function harness(extra: Record<string, unknown>[] = []) {
@@ -58,7 +60,7 @@ describe.skipIf(process.platform !== 'linux')('models.connect', () => {
     expect(config['provider_catalog'].providers.map((provider: { id: string }) => provider.id)).toEqual(['local-openai', 'openai-api']);
     const profile = config['provider_invocation_profiles'].profiles.find((item: { reference: unknown }) => JSON.stringify(item.reference) === JSON.stringify(reference));
     expect(profile).toMatchObject({ id: 'vendor-one.openai-api.gpt-6-luna.1', scopeId: 'scope', protocol: { family: 'openai-chat-completions', version: 'v1' },
-      adapter: { id: 'openai-chat-http', version: 4, definition: { endpoint: `${f.base}/v1/chat/completions`, maxOutputTokens: 128000, authentication: { type: 'none' } } },
+      adapter: { id: 'openai-chat-http', version: 5, definition: { endpoint: `${f.base}/v1/chat/completions`, maxOutputTokens: 128000, authentication: { type: 'none' } } },
       contextWindowTokens: 1050000 });
     // The ledger has the seed's channel; every step wrote its own record and the connection one more.
     expect(f.rows("SELECT channel_id FROM model_catalog_channels").map(row => row['channel_id'])).toContain('openai-api');
@@ -113,6 +115,9 @@ describe.skipIf(process.platform !== 'linux')('models.connect', () => {
     expect(await f.client().chatTurn(ask('t-one', one), () => undefined)).toMatchObject({ answer: 'one' });
     expect(await f.client().chatTurn(ask('t-two', two), () => undefined)).toMatchObject({ answer: 'two' });
     expect((f.state.requests as { model: string }[]).map(request => request.model)).toEqual(['gpt-6-luna', 'deepseek-flash']);
+    // K1: each vendor gets its documented dialect on the wire (OpenAI max_completion_tokens, DeepSeek max_tokens).
+    expect(f.state.requests[0]).toHaveProperty('max_completion_tokens'); expect(f.state.requests[0]).not.toHaveProperty('max_tokens');
+    expect(f.state.requests[1]).toHaveProperty('max_tokens'); expect(f.state.requests[1]).not.toHaveProperty('max_completion_tokens');
   }, 60_000);
 
   it('two OpenAI-compatible vendors connect at the same time, each under its own key name; a remote generic address waits for a declared price', async () => {

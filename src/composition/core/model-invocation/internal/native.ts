@@ -1,7 +1,7 @@
 import { isDeepStrictEqual } from 'node:util';
 import { modelInvocationProfileSchema, type ModelBindingDefinition, type ModelInvocationProfile } from '#domain/index.js';
 import { ProviderSpendError, type ModelInvocationNativePort, type ModelInvocationSpendingAuthority, type ModelInvocationSpendingInput } from '#engine/index.js';
-import { createOpenAiChatNativePort, OPENAI_CHAT_HTTP_ADAPTER_ID, OPENAI_CHAT_HTTP_ADAPTER_VERSION, parseOpenAiChatHttpDefinition, createOpenRouterPricedNative, OPENROUTER_CHAT_HTTP_ADAPTER_ID, OPENROUTER_CHAT_HTTP_ADAPTER_VERSION, parseOpenRouterChatDefinition, type OpenRouterPricedNative, fetchOpenRouterTariff, createOpenRouterTariffCache, type OpenRouterMetadataObservation, providerSpendingBudgetFor, quoteOpenAiChatOperatorTariff, createAnthropicMessagesPricedNative, parseAnthropicMessagesDefinition, createDecisionHttpNativePort, decisionHttpAdapter, parseDecisionHttpDefinition, quoteDecisionHttpOperatorTariff, ANTHROPIC_MESSAGES_HTTP_ADAPTER_ID, ANTHROPIC_MESSAGES_HTTP_ADAPTER_VERSION, type AnthropicMessagesPricedNative, localPrefixCacheSalt } from '#adapters/index.js';
+import { createOpenAiChatNativePort, isOpenAiChatHttpAdapter, parseOpenAiChatHttpDefinition, createOpenRouterPricedNative, OPENROUTER_CHAT_HTTP_ADAPTER_ID, OPENROUTER_CHAT_HTTP_ADAPTER_VERSION, parseOpenRouterChatDefinition, type OpenRouterPricedNative, fetchOpenRouterTariff, createOpenRouterTariffCache, type OpenRouterMetadataObservation, providerSpendingBudgetFor, quoteOpenAiChatOperatorTariff, createAnthropicMessagesPricedNative, parseAnthropicMessagesDefinition, createDecisionHttpNativePort, decisionHttpAdapter, parseDecisionHttpDefinition, quoteDecisionHttpOperatorTariff, ANTHROPIC_MESSAGES_HTTP_ADAPTER_ID, ANTHROPIC_MESSAGES_HTTP_ADAPTER_VERSION, type AnthropicMessagesPricedNative, localPrefixCacheSalt } from '#adapters/index.js';
 import type { ConfigLoadOptions, TrustedClock } from '#platform/index.js';
 import { scopedInvocationCredentialResolver } from './credential.js';
 import type { loadInvocationContext } from './context.js';
@@ -27,7 +27,7 @@ export function createConfiguredModelInvocationNative(context: InvocationNativeC
         const priced = createAnthropicMessagesPricedNative({ resolveCredential: scopedInvocationCredentialResolver(context, profile, definition.authentication, options) });
         anthropic = { profile, priced }; return priced.native;
       }
-      if (profile.adapter.id === OPENAI_CHAT_HTTP_ADAPTER_ID && profile.adapter.version === OPENAI_CHAT_HTTP_ADAPTER_VERSION) {
+      if (isOpenAiChatHttpAdapter(profile.adapter)) {
         const definition = parseOpenAiChatHttpDefinition(profile.adapter.definition); return createOpenAiChatNativePort({ resolveCredential: scopedInvocationCredentialResolver(context, profile, definition.authentication, options),
           cacheSalt: scopeId => installationCacheSalt(context, scopeId) });
       }
@@ -55,7 +55,7 @@ export function createConfiguredModelInvocationNative(context: InvocationNativeC
       if(input.profile.adapter.id===decisionHttpAdapter.id&&input.profile.adapter.version===decisionHttpAdapter.version){
         const budget=providerSpendingBudgetFor(await context.freshConfig(),input.command.scopeId); return Object.freeze({budget,quote:quoteDecisionHttpOperatorTariff(input)});
       }
-      if (input.profile.adapter.id === OPENAI_CHAT_HTTP_ADAPTER_ID && input.profile.adapter.version === OPENAI_CHAT_HTTP_ADAPTER_VERSION) {
+      if (isOpenAiChatHttpAdapter(input.profile.adapter)) {
         // Operator-declared tariff: the same scope budget, reservation and ledger settlement as priced providers.
         const budget = providerSpendingBudgetFor(await context.freshConfig(), input.command.scopeId); return Object.freeze({ budget, quote: quoteOpenAiChatOperatorTariff(input) });
       }
