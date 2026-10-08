@@ -8,7 +8,7 @@ import { ConfigApplication, configChangeApprovalFacts, parseConfigInput, sealApp
 import { createHmacIntegrity } from '#platform/index.js';
 import { approvalCardLines } from '#surfaces/core/terminal-work/index.js';
 import { createWorklineLedgerPorts, workSurfaceLabels } from '#surfaces/core/cli/index.js';
-import { configPanelPort, configSchemaChoices, configShortcut, configSlash, type ConfigCommandContext } from '#surfaces/core/config/index.js';
+import { configPanelPort, configSchemaChoices, configShortcut, configSlash, configTtySlash, type ConfigCommandContext } from '#surfaces/core/config/index.js';
 import { configPanelTree } from '#surfaces/core/terminal-panels/index.js';
 import { terminalPanelLabels } from '#surfaces/core/work-labels/index.js';
 import { composeCore } from '#composition/core/root/index.js';
@@ -60,7 +60,7 @@ describe('/config window port', () => {
     const field = (key: string) => view.fields.find(item => item.key === key)!;
     expect(field('terminal.theme')).toMatchObject({ choices: [{ label: 'auto', value: 'auto' }, { label: 'dark', value: 'dark' }, { label: 'light', value: 'light' }], free: false,
       locks: { project: { blocked: null, note: null }, global: { blocked: null, note: null } }, unsettable: false });
-    expect(field('max_workers')).toMatchObject({ free: true, unsettable: true, apply: 'yeniden', locks: { project: { blocked: null, note: 'onay ister (kural company-config-approval)' } } });
+    expect(field('max_workers')).toMatchObject({ free: false, unsettable: true, apply: 'yeniden', locks: { project: { blocked: null, note: 'onay ister (kural company-config-approval)' } } });
     expect(field('max_workers').locks.global.blocked).toContain('bu katmanda değiştirmenize izin vermiyor');
     expect(field('language').locks.project.blocked).toContain('policy');
     expect(field('secrets.token')).toMatchObject({ sensitive: true, locks: { project: { blocked: 'Sırlar buradan değil, deckent secret ile değiştirilir.' } } });
@@ -104,9 +104,9 @@ describe('/config window port', () => {
     const { root, options } = await terminalRoot();
     const port = configPanelPort(root, context([], []), options, 'tr');
     await port.inspect();
-    expect(port.parse('max_workers', 'two')).toEqual({ ok: false, reason: expect.stringContaining('integer') });
+    expect(port.parse('max_workers', 'two')).toEqual({ ok: false, reason: expect.stringContaining('seçin') });
     expect(configSchemaChoices({ type: 'boolean' })).toEqual([true, false]);
-    expect(configSchemaChoices({ anyOf: [{ const: 'a' }, { type: 'string' }] })).toEqual([]);
+    expect(configSchemaChoices({ anyOf: [{ const: 'a' }, { type: 'string' }] })).toEqual(['a']);
   });
 });
 
@@ -124,6 +124,31 @@ describe('/config key=value', () => {
     expect(seen).toHaveLength(1);
     expect(await configSlash(root, 'max_workers=2', context([], seen, undefined, false), options, 'en', 80)).toEqual([expect.stringContaining('read only')]);
     expect(seen).toHaveLength(1);
+  });
+});
+
+describe('CS-1 typed entry boundary', () => {
+  it('TTY fallback ignores every typed config argument; line-mode writes keep the governed path', async () => {
+    const { root, options } = await terminalRoot(); const seen: { action: string; input: Record<string, unknown> }[] = [];
+    for (const args of ['max_workers=2', 'set max_workers 2', 'unset max_workers']) {
+      await configTtySlash(root, args, context([], seen), { ...options, env: { ...options.env, TERM: 'dumb' } }, 'en', 80);
+      expect(seen).toEqual([]);
+    }
+    await configSlash(root, 'max_workers=2', context([], seen), options, 'en', 80); expect(seen).toHaveLength(1);
+  });
+  it('new host input preserves the selected list, previews a validated value, and rejects URL/credential input', async () => {
+    const { root, options } = await terminalRoot();
+    const ctx = context([], []), inspect = ctx.configApplication!(root, options).inspect;
+    const application = ctx.configApplication!(root, options);
+    application.inspect = async () => ({ ...await inspect({}), fields: [{ ...FIELDS[0]!, key: 'terminal.fetch.allowedHosts', value: ['github.com'], schema: { type: 'array' } },
+      { ...FIELDS[0]!, key: 'toolchains.currency.registryEndpoint', value: 'https://registry.npmjs.org', schema: { type: 'string' } }] });
+    ctx.configApplication = () => application;
+    const port = configPanelPort(root, ctx, options, 'en'); await port.inspect();
+    expect(port.parse('terminal.fetch.allowedHosts', 'EXAMPLE.COM')).toEqual({ ok: true, value: ['github.com', 'example.com'] });
+    expect(port.parse('terminal.fetch.allowedHosts', 'https://example.com').ok).toBe(false);
+    expect(port.parse('toolchains.currency.registryEndpoint', 'https://user:secret@example.com').ok).toBe(false);
+    expect(port.parse('toolchains.currency.registryEndpoint', 'https://registry.example.com')).toEqual({ ok: true, value: 'https://registry.example.com' });
+    expect(port.parse('projectName', 'hand typed').ok).toBe(false);
   });
 });
 

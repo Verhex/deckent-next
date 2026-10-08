@@ -10,9 +10,11 @@ import type { WorklinePermissionModePort } from './workline-mode.js';
 export type WorklinePanels = Readonly<{ ports: Omit<PanelPorts, 'mode'>; labels: PanelLabels }>;
 type Mode = Readonly<{ stop: PermissionModeStop | undefined; select: (stop: PermissionModeStop) => Promise<void> }>;
 
-/** The settings window a bare `/mode`, `/config` or `/mcp` opens, when its port is here (any argument keeps the text command). */
+/** The config window also intercepts typed arguments. Other settings retain their bare-command routing. */
 function settingsPanelOf(command: string, args: string, ports: PanelPorts | null): PanelKind | null {
-  if (!ports || args.trim()) return null;
+  if (!ports) return null;
+  if (command === 'config' && ports.config) return 'config';
+  if (args.trim()) return null;
   return command === 'mode' && ports.mode ? 'mode' : command === 'config' && ports.config ? 'config' : command === 'mcp' && ports.mcp ? 'mcp' : null;
 }
 

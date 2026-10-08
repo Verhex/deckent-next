@@ -1,5 +1,5 @@
 import type { WorklineStreamTurn } from '#surfaces/core/terminal-kit/index.js';
-import { configPanelPort, configSlash } from '#surfaces/core/config/index.js';
+import { configPanelPort, configTtySlash } from '#surfaces/core/config/index.js';
 import { userInfo } from 'node:os';
 import { createInterface } from 'node:readline';
 import { basename } from 'node:path';
@@ -388,7 +388,7 @@ export async function terminalCommand(argv: readonly string[], context: Terminal
       status: async () => renderStatus(statusPayload(ttyState(context), await loadConfig(root, options), context.describeTerminalChatPlan ? await context.describeTerminalChatPlan(root, options) : null, await readIdentity()), locale),
       doctor: sink => ports.runKernelCommand(['doctor', '--lang', locale], { root, env, stdout: sink, stderr: sink }) }),
     ...(ports.mcpSlash ? { mcp: (args: string) => ports.mcpSlash!(root, args, options, locale) } : {}),
-    ...(context.configApplication ? { config: (args: string) => configSlash(root, args, context, options, locale, Math.max(40, (tty.columns ?? 100) - 4)) } : {}),
+    ...(context.configApplication ? { config: (args: string) => configTtySlash(root, args, context, options, locale, Math.max(40, (tty.columns ?? 100) - 4)) } : {}),
     ...panelProps(root, context, ports, options, locale, env),
     // MONITOR: `/monitor` prints the monitor's text snapshot as notice lines (the fullscreen view is `deckent monitor`).
     ...(context.inspectMonitor ? { monitor: (args: string) => monitorSlash(root, args, context, options, locale, Math.max(40, (tty.columns ?? 100) - 4)) } : {}),

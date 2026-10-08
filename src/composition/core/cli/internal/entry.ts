@@ -3,7 +3,7 @@ import { previewConfiguredIdentityProfile, listIdentityProfiles } from '#composi
 import { ensureConfiguredTerminalIdentity, inspectConfiguredInstallationBinding, resolveConfiguredInstallationIdentity, loadConfiguredInstallationIdentity, loadConfiguredProjectIdentity } from '#composition/core/scoped-request/index.js';
 import { unifiedDiff, readInstallationProfileFile, isSelfSourceProject } from '#adapters/index.js';
 import { composeCore } from '#composition/core/root/index.js';
-import { createConfiguredConfigApplication, resolveConfiguredConfigPrincipal } from '#composition/core/config/index.js';
+import { createConfiguredConfigApplication, resolveConfiguredConfigPrincipal, configuredConfigChoiceSources } from '#composition/core/config/index.js';
 import { inspectConfiguredWorkerTranscript, inspectConfiguredWorkers } from '#composition/core/worker-observation/index.js';
 import { prepareConfiguredDecision, askConfiguredDecision, recordConfiguredDecision, outcomeConfiguredDecision, inspectConfiguredDecision } from '#composition/core/decision/index.js';
 import { inspectMonitor, inspectSurfaceAccess, inspectSurfaceRunIds, followLedgerSurface } from '#composition/core/monitor/index.js';
@@ -44,7 +44,7 @@ export async function main(argv: readonly string[] = process.argv.slice(2)) {
     inspectWorkspaceIntegration: inspectConfiguredWorkspaceIntegration,
     checkWorkspaceIntegration: checkConfiguredWorkspaceIntegration, prepareWorkspaceIntegration: prepareConfiguredWorkspaceIntegration,
     prepareWorkspacePatch: prepareConfiguredWorkspacePatch, previewWorkspacePatch: previewConfiguredWorkspacePatch, renderUnifiedDiff: unifiedDiff,
-    configApplication: createConfiguredConfigApplication, resolveConfigPrincipal: resolveConfiguredConfigPrincipal,
+    configChoiceSources: configuredConfigChoiceSources, configApplication: createConfiguredConfigApplication, resolveConfigPrincipal: resolveConfiguredConfigPrincipal,
     inspectToolchainRefresh,
     inspectWorkers: inspectConfiguredWorkers, inspectMonitor, inspectToolchainCurrency: (projectRoot, options) => inspectConfiguredToolchainCurrency(projectRoot, options), inspectSurfaceAccess, inspectSurfaceRunIds, followSurfaceEvents: followLedgerSurface,
     ensureRuntimeService: (projectRoot, options) => ensureConfiguredRuntimeService(projectRoot, options),

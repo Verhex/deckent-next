@@ -608,5 +608,22 @@
   "mcp.tool.renewApproval": "Kapanmış onay isteğini açıkça yenile.",
   "mcp.tool.executeOperation": "Katalog operasyonunu çalışma zamanı servisi üzerinden tanımlı hedefinde yürüt. Onay gerekiyorsa approval-pending döner ve hiçbir şey gönderilmez; karardan sonra aynı komutu yeniden gönder.",
   "mcp.tool.compensateOperation": "Sonuçlanmış bir katalog operasyonunu katalogdaki telafisiyle yeni bir operasyon olarak telafi et (aynı onay kuralları).",
-  "mcp.tool.inspectOperation": "Bir kapsamdaki katalog operasyon komutunun kalıcı kaydını incele."
+  "mcp.tool.inspectOperation": "Bir kapsamdaki katalog operasyon komutunun kalıcı kaydını incele.",
+  "config.select.document": "Salt okunur · kayıt düzenleyicisi (yakında) veya içe aktarım",
+  "config.select.never": "Hiçbir zaman",
+  "config.select.none": "Yok",
+  "config.select.generated": "Üretilen değeri kullan",
+  "config.select.add": "{label} ekle",
+  "config.select.remove": "{label} kaldır",
+  "config.select.selectionOnly": "Listeden bir değer seçin.",
+  "config.select.stepper": "Oklarla ayarla…",
+  "config.select.stepperHint": "←/→ veya +/− ayarla · Enter seç · Esc vazgeç",
+  "config.select.regenerate": "Yeniden üret",
+  "config.select.preview": "Değişiklik önizlemesi",
+  "config.select.previewHint": "Enter onayla · Esc vazgeç",
+  "config.select.unavailable": "Seçenek kaynağına ulaşılamıyor",
+  "config.select.empty": "Kullanılabilir seçenek yok",
+  "config.select.invalidHost": "URL veya yol içermeyen tek bir alan adı girin.",
+  "config.select.invalidUrl": "Kimlik bilgisi içermeyen bir HTTP(S) URL girin.",
+  "config.select.summary": "[Sistem · Ayarlar] {text}"
 }

@@ -4,7 +4,7 @@
   "config.approval.summary.unset": "ayar kaldırılacak: {key} {before} → bir alt katmandaki değer ({layer})",
   "config.approval.pending": "Hiçbir şey yazılmadı; {id} onayı bekliyor. Ne: {summary}",
   "config.approval.resubmitCli": "Terminalde /approvals ya da deckent approvals ile karar verin. Onaydan sonra uygulamak için aynı komutu --command-id {commandId} --expect {expect} ile yeniden çalıştırın.",
-  "config.approval.resubmitTerminal": "/approvals ile karar verin. Onaydan sonra uygulamak için aynı /config komutunu yeniden yazın.",
+  "config.approval.resubmitTerminal": "/approvals ile karar verin. Onaydan sonra /config içinde aynı değeri ve katmanı yeniden seçin (satır kipinde: komutu yineleyin).",
   "config.surface.slashReadOnly": "/config burada salt okunur (read only): yazma yolu bağlı değil. Ayarları deckent config set/unset ile değiştirin.",
   "config.surface.title": "Yapılandırma · {project}",
   "config.surface.digest": "Yazım katmanı: {layer} · belge özeti: {digest}",
