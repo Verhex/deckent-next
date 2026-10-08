@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, createElement, type ComponentProps } from 'react';
 import { render, Box, Static, Text, useApp, useStdout, type Instance } from 'ink';
-import { useWorklinePanel, type LocalExecution, LedgerEntryRow, liveRunEntry, dispatchWorkCommand, systemSummaryEntry, type LedgerEntryLabels, immediateSlashAction, type WatchState, type MonitorWindowLoader, type WorklineActionLabels, useWorkSurface } from '#surfaces/core/terminal-work/index.js';
+import { useWorklinePanel, type LocalExecution, LedgerEntryRow, liveRunEntry, dispatchWorkCommand, openingWorkText, systemSummaryEntry, type LedgerEntryLabels, immediateSlashAction, type WatchState, type MonitorWindowLoader, type WorklineActionLabels, useWorkSurface } from '#surfaces/core/terminal-work/index.js';
 import { WorklinePaletteProvider, useWorklinePalette, parseSlashLine, WORKLINE_SLASH_COMMANDS, isInspectSlashCommand, addSessionUsage, bindInspectPorts, EMPTY_SESSION_USAGE, type InspectSlashPorts, type SessionUsageView, useWorklineWatch, surfaceFollowLine, useSurfacePushFeed,
   type TerminalLocalContext, type WorklineInkPalette, type WorklineStreamTurn } from '#surfaces/core/terminal-kit/index.js';
 import { StatusStrip } from './status-strip.js';
@@ -11,7 +11,7 @@ import type { KnownSecretSnapshot } from '#platform/index.js';
 import { assistantLedgerEntries, streamStepEntries, workerReportToLedgerEntries, WORK_LEDGER_SCHEMA_VERSION, type WorkLedgerEntry, ledgerEntriesForWorkers, loadRunViewsForWatch, type WorklineLedgerPorts, fillTemplate, agentHistory, appendLedger, boundAgentHistory, compactLedger, EMPTY_LEDGER, plainChatHistory, type AgentChatMessage, type ChatTurnMessage, type LedgerBuffer, notice } from '#surfaces/core/terminal-ledger/index.js';
 import { useConversationSession, type ConversationSessionLabels, type ConversationSessionPort } from './workline-sessions.js';
 import { ArrowPicker, ARROW_PICKER_ROWS } from '#surfaces/core/terminal-picker/index.js';
-import { Window, WindowStackProvider, WINDOW_RESERVED_ROWS, useFocusOwner } from '#surfaces/core/terminal-window/index.js';
+import { Window, WindowNoteContext, WindowStackProvider, WINDOW_RESERVED_ROWS, useFocusOwner, type WindowNote } from '#surfaces/core/terminal-window/index.js';
 import { INFO_WINDOW_COMMANDS, useInfoWindow, type WorklineInfo } from './workline-info.js';
 import { span } from '#surfaces/core/terminal-render/index.js';
 import { Composer, slashMatches, type ComposerLabels, type ComposerHistoryPort, type ComposerMentionPort } from '#surfaces/core/terminal-composer/index.js';
@@ -20,7 +20,7 @@ import { PermissionModeKeys, useWorklineMode, type WorklineModeLabels, type Work
 import { useReasoningPreview, type WorklineReasoningLabels } from './workline-reasoning.js';
 import { runScratchWindow, useWorklineScratch, type WorklineScratchLabels, type WorklineScratchPort } from './workline-scratch.js';
 import { askSlashWindow, isReasoningChoice, reasoningSpec, reasoningStatus, unknownCommandSpec, useWindowSlot, type SlashPickSpec, type SlashWindowLabels } from './workline-windows.js';
-import { CLEAR_VISIBLE_SCREEN, writeStartup, type WorklineStartup } from './startup-banner.js';
+import { CLEAR_SCREEN_AND_SCROLLBACK, writeStartup, type WorklineStartup } from './startup-banner.js';
 import { useWorklineSettings, type WorklinePanels } from './workline-settings.js';
 import type { ModelPanelChoice, ModelPanelReference } from '#surfaces/core/terminal-panels/index.js';
 
@@ -106,6 +106,9 @@ export interface WorklineProps {
   readonly panels?: WorklinePanels;
   /** SW-1: bare `/help`, `/status`, `/usage`, `/doctor`, `/scope`, `/context` open information windows (typed models; one summary line on close). Absent: text. */
   readonly info?: WorklineInfo;
+  /** `/clear` erases the screen and the terminal's scrollback; false where escape sequences must not be sent (TERM=dumb, NO_COLOR — owner
+   *  2026-10-08). A non-TTY output is never cleared. */
+  readonly clearScreen?: boolean;
 }
 
 
@@ -157,7 +160,7 @@ export function WorklineApp(props: WorklineProps) {
   const [watchStatus, setWatchStatus] = useState('');
   const [watchStatusLines, setWatchStatusLines] = useState<readonly string[]>([]);
   const liveRef = useRef<ReturnType<typeof useLiveWindows> | null>(null);
-  const announced = useRef(new Set<string>());
+  const announced = useRef(new Set<string>()), openingTold = useRef(false);
   const pushMode = useSurfacePushFeed(ledger?.followEvents, ledger?.scopeId ?? '', pollMs, step => {
     if (step.status === 'denied' || step.status === 'not-initialized') workRef.current?.observeWorkers([]);
     // A stopped follow leaves nothing to update: the window closes (its single summary line records the access refusal).
@@ -180,14 +183,22 @@ export function WorklineApp(props: WorklineProps) {
     const snapshot = await ledger.readSurfaceSnapshot!(kinds, signal);
     if (signal.aborted) return [];
     if (snapshot.scopeId !== ledger.scopeId) return kinds;
+    let active = 0;
     if (snapshot.workers) {
-      activeWorkers.current = snapshot.workers.sources.some(source => source.workers.some(worker => !worker.terminal &&
-        (['running', 'created', 'paused'].includes(worker.process) || (worker.identity !== null && worker.process === 'unknown' && worker.files?.heartbeat.phase !== 'exited'))));
+      active = snapshot.workers.sources.reduce((sum, source) => sum + source.workers.filter(worker => !worker.terminal &&
+        (['running', 'created', 'paused'].includes(worker.process) || (worker.identity !== null && worker.process === 'unknown' && worker.files?.heartbeat.phase !== 'exited'))).length, 0);
+      activeWorkers.current = active > 0;
       const workers = workerReportToLedgerEntries(snapshot.workers, 'watch').filter(entry => entry.kind === 'worker');
       workRef.current?.observeWorkers(workers);
     }
     if (snapshot.runs && watchRef.current.runs) liveRef.current?.setRuns(snapshot.runs.map((run, index) => liveRunEntry(run, `watch-run-${index}`)));
     if (snapshot.approvals) workRef.current?.observeApprovals(snapshot.approvals);
+    // I-5: the opening snapshot says once whether work is running (one system line from what it was allowed to read; nothing when idle).
+    if (!openingTold.current) {
+      openingTold.current = true;
+      const text = labels.work?.jobs ? openingWorkText(snapshot.runs, active, labels.work.jobs) : null;
+      if (text) push([systemSummaryEntry(text)]);
+    }
     return snapshot.denied;
   } : undefined, ledger?.readSurfaceSnapshot ? `${watch.workers}:${watch.runs}` : '', { heartbeatMs: ledger?.workerHeartbeatMs ?? pollMs, active: () => watchRef.current.workers && activeWorkers.current });
   const pushLive = pushMode !== 'poll'; // A refused feed must not restart through fallback polling.
@@ -297,7 +308,7 @@ export function WorklineApp(props: WorklineProps) {
   }, [completeTurn, errorText, historyMessages, labels.mentions, mode.fullAccess, props.attachMentions, props.streamTurn, push, refreshMode, session, systemPrompt, work, panel]);
 
   // Runs exactly one line: a chat turn, an immediate slash command or an awaited slash operation. `false` means the view is closing.
-  const perform = useCallback(async (line: string, mentioned: readonly string[], execution: LocalExecution): Promise<boolean> => {
+  const performLine = useCallback(async (line: string, mentioned: readonly string[], execution: LocalExecution): Promise<boolean> => {
     const slash = parseSlashLine(line);
     if (!slash) { await runTurn(line, mentioned, execution); return true; }
     // SLASH-WINDOWS (owner 2026-10-08): with window words the rich terminal takes no typed arguments; a bare command opens its window or picker.
@@ -344,7 +355,8 @@ export function WorklineApp(props: WorklineProps) {
       try {
         const result = await session.run(slash.command, rich && slash.command === 'resume' ? '' : slash.args, history, execution);
         // `/clear` really clears: the visible screen is wiped and Ink forgets the earlier conversation; only the summary line follows.
-        if (slash.command === 'clear' && result.entries.length) { stdout.write(CLEAR_VISIBLE_SCREEN); reset(); usage.current = EMPTY_SESSION_USAGE; }
+        // Owner 2026-10-08: the terminal's scrollback goes too (ED 3); only on a TTY that takes escape sequences (`clearScreen`, see the prop).
+        if (slash.command === 'clear' && result.entries.length) { if (props.clearScreen !== false && stdout.stdout.isTTY) stdout.write(CLEAR_SCREEN_AND_SCROLLBACK); reset(); usage.current = EMPTY_SESSION_USAGE; }
         if (result.resumePicker) {
           // The drain stays inside this call, so a line queued while the list loads cannot run under the picker.
           const choice = await panel.pick(execution, { kind: 'resume', rows: result.resumePicker }, result.resumePicker.map((_, index) => String(index)));
@@ -377,6 +389,19 @@ export function WorklineApp(props: WorklineProps) {
     catch (error) { push([notice('error', errorText(error))]); }
     return true;
   }, [errorText, exit, labels, ledger, mode.run, settings, windows, stdout, reset, props.inspect, props.info, props.mcp, props.monitor, props.config, props.restartService, pollMs, pushMode, push, liveWin, reasoning.run, runTurn, scratch, session, infoWindow, work.run, panel]);
+  // SLASH-WINDOWS I-1 (owner 2026-10-08, Jev b1e8286f): with window words a slash command typed with an argument runs bare — every host
+  // (information/list slot, panel controller) opens its window as usual — and that window says once that the terminal takes no typed
+  // argument. The typed text is never shown. Without window words (TERM=dumb) the line goes as typed; line mode and the CLI are elsewhere.
+  const [argumentNote, setArgumentNote] = useState<WindowNote | null>(null);
+  const perform = useCallback(async (line: string, mentioned: readonly string[], execution: LocalExecution): Promise<boolean> => {
+    const slash = parseSlashLine(line), words = labels.windows;
+    if (!slash || !slash.args || !words) return performLine(line, mentioned, execution);
+    const note: WindowNote = { text: words.typedArgument, consume: () => setArgumentNote(current => current === note ? null : current) };
+    setArgumentNote(note);
+    try { return await performLine(`/${slash.command}`, mentioned, execution); }
+    // A watch window outlives its command (it is not awaited): it keeps the note until it closes; otherwise the note ends with the command.
+    finally { if (!liveRef.current?.isOpen()) note.consume(); }
+  }, [labels.windows, performLine]);
   performRef.current = perform;
 
   execute.current = async execution => {
@@ -409,6 +434,7 @@ export function WorklineApp(props: WorklineProps) {
   return (
     <HumanTextContext.Provider value={props.knownSecrets}>
     <WindowStackProvider reservedRows={WINDOW_RESERVED_ROWS + (fullAccessLine ? 1 : 0)}>
+    <WindowNoteContext.Provider value={argumentNote}>
     <Box flexDirection="column">
       <PermissionModeKeys active={composing && !busy && Boolean(props.permissionMode)} onCycle={() => void mode.cycle()} />
       <Static key={buffer.epoch} items={[...buffer.pending]}>
@@ -443,6 +469,7 @@ export function WorklineApp(props: WorklineProps) {
         {...(props.mentionDelayMs === undefined ? {} : { mentionDelayMs: props.mentionDelayMs })} />
       <Text {...palette.muted}>{labels.hint}</Text>
     </Box>
+    </WindowNoteContext.Provider>
     </WindowStackProvider>
     </HumanTextContext.Provider>
   );

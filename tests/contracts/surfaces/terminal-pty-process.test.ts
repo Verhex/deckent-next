@@ -8,6 +8,7 @@ import { join, resolve } from 'node:path';
 import { promisify } from 'node:util';
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, describe, expect, it } from 'vitest';
+import { terminalScreen } from '../../fixtures/terminal-screen.js';
 import { CURRENT_LEDGER_VERSION } from '#adapters/core/sqlite-ledger/index.js';
 import { encodeModelBindingDefinition } from '#domain/core/provider-catalog/index.js';
 import { openSqliteModelActivationStore, readLocalOsIdentity } from '#adapters/index.js';
@@ -216,6 +217,27 @@ describe.skipIf(process.platform === 'win32')('deckent terminal in a real pseudo
     expect(result.output).toContain('pty-scope');
     const colour = new RegExp(`${String.fromCharCode(27)}\\[(3[0-7]|9[0-7]|38;)`);
     expect(result.output).not.toMatch(colour);
+  });
+
+  // Owner 2026-10-08: /clear erases the visible screen AND the terminal's scrollback (ED 2 + ED 3); afterwards only its one system line remains.
+  // Colour stays on here: with NO_COLOR (or TERM=dumb) /clear sends no escape sequence at all (owner rule), shown by the second run.
+  it('/clear erases the screen and the scrollback in a real terminal; with NO_COLOR it sends nothing', async () => {
+    const f = await project();
+    const colour = Object.fromEntries(Object.entries(f.env).filter(([key]) => key !== 'NO_COLOR'));
+    const steps: ReadonlyArray<readonly [string, string]> = [['Deckent workline', 'hello\r'], ['TERMINAL_CHAT_NOT_CONFIGURED', '/clear\r'], ['New conversation started.', '/exit\r']];
+    const result = await inPty(f.projectRoot, colour, ['terminal', 'workline', '--scope', 'pty-scope'], steps);
+    expect(result.timeout, result.output).toBeUndefined();
+    expect(result.status).toBe(0);
+    const at = result.output.lastIndexOf('\u001b[3J');
+    expect(at, 'ED 3 sent').toBeGreaterThan(-1);
+    expect(result.output.lastIndexOf('\u001b[2J', at)).toBeGreaterThan(result.output.indexOf('TERMINAL_CHAT_NOT_CONFIGURED'));
+    // The replayed terminal, scrollback included: the earlier conversation is gone; the new conversation's one system line is there.
+    const screen = terminalScreen(result.output, 120);
+    expect(screen).not.toContain('TERMINAL_CHAT_NOT_CONFIGURED'); expect(screen).not.toMatch(/│ hello/u);
+    expect(screen).toContain('◆ Deckent system · New conversation started.');
+    const plain = await inPty(f.projectRoot, f.env, ['terminal', 'workline', '--scope', 'pty-scope'], steps);
+    expect(plain.timeout, plain.output).toBeUndefined();
+    expect(plain.output.slice(plain.output.indexOf('TERMINAL_CHAT_NOT_CONFIGURED'))).not.toContain('\u001b[3J');
   });
 
   it('arms exit on the first idle Ctrl+C and exits on the second in a real terminal', async () => {

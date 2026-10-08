@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useRef } from 'react';
 import { notice, type WorkLedgerEntry } from '#surfaces/core/terminal-ledger/index.js';
-import type { LocalExecution, WorklinePanel } from '#surfaces/core/terminal-work/index.js';
+import { systemSummaryEntry, type LocalExecution, type WorklinePanel } from '#surfaces/core/terminal-work/index.js';
 import type { PanelSnapshot, TerminalLocalContext } from '#surfaces/core/terminal-kit/index.js';
 import { SettingsPanel, type ModelPanelChoice, type ModelPanelReference, type ModelPanelSource, type PanelKind, type PanelLabels, type PanelPorts } from '#surfaces/core/terminal-panels/index.js';
 import type { PermissionModeStop } from '#surfaces/core/terminal-render/index.js';
@@ -57,8 +57,10 @@ export function useWorklineSettings(input: { readonly panels: WorklinePanels | u
   const presentation = panel.presentation(state), kind = presentation?.kind === 'settings' && state.picker ? presentation.panel : null;
   const handle = useRef<string | undefined>(undefined); handle.current = kind ? state.picker?.pickerHandle : undefined;
   const window = kind && ports && panels && !input.blocked
-    ? <SettingsPanel kind={kind} ports={ports} labels={panels.labels} push={notices => push(notices.map(item => notice(item.level, item.text)))}
-      onError={error => push([notice('error', errorText(error))])} errorText={errorText} openApproval={approvalId => { approvalAfter.current = approvalId; }}
+    // SLASH-WINDOWS: what a settings window reports when it closes (a `/model` pin, a `/config` or `/mcp` outcome, a `/provider` result) is the
+    // one system summary line, never a chat notice.
+    ? <SettingsPanel kind={kind} ports={ports} labels={panels.labels} push={notices => push(notices.map(item => systemSummaryEntry(item.text, item.level)))}
+      onError={error => push([systemSummaryEntry(errorText(error), 'error')])} errorText={errorText} openApproval={approvalId => { approvalAfter.current = approvalId; }}
       onClose={() => { panel.choose(handle.current, 'close'); }} /> : null;
   return { open, openKind: kind, window };
 }

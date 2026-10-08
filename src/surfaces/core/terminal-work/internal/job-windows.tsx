@@ -12,7 +12,9 @@ export interface JobWindowLabels {
   readonly hints: string; readonly watchStatus: string; readonly push: string; readonly poll: string;
   readonly cancelPickerTitle: string; readonly system: string; readonly runTitle: string; readonly runFallback: string; readonly transcriptTitle: string;
   readonly state: string; readonly tasks: string; readonly attempts: string; readonly delivery: string; readonly unknown: string;
-  readonly clearSession: string; readonly clearDetail: string; readonly kept: string; readonly closed: string; readonly bareOnly: string;
+  readonly clearSession: string; readonly clearDetail: string; readonly kept: string; readonly closed: string;
+  /** I-5: the opening line when work is running: `{runs}`, `{workers}`. */
+  readonly opening: string;
   readonly runStates: Readonly<Record<string, string>>;
 }
 export type JobWindowPresentation = Readonly<{ kind: 'job-window'; title: string; lines: readonly WindowLine[] }>
@@ -27,6 +29,14 @@ export function runTitle(run: RunView, labels: JobWindowLabels): string {
 export function runStateText(run: RunView, labels: JobWindowLabels): string {
   const value = run.state?.kind === 'terminal' ? run.state.outcome : run.state?.kind ?? 'unknown';
   return labels.runStates[value] ?? labels.unknown;
+}
+/**
+ * SLASH-WINDOWS I-5 (owner 2026-10-08, Jev 59f75361): the one opening system line when the start snapshot shows running work — runs that
+ * are not finished and workers still active — or null when nothing runs (then nothing is printed; the status row keeps the approval count).
+ */
+export function openingWorkText(runs: readonly RunView[] | undefined, activeWorkers: number, labels: JobWindowLabels): string | null {
+  const running = (runs ?? []).filter(run => run.state?.kind !== 'terminal').length;
+  return running + activeWorkers > 0 ? fillTemplate(labels.opening, { runs: running, workers: activeWorkers }) : null;
 }
 export function runDetailLines(run: RunView, work: WorkSurfaceLabels): WindowLine[] {
   const labels = work.jobs!;

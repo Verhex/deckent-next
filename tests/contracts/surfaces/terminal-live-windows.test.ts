@@ -187,15 +187,14 @@ describe('/monitor window', () => {
     view.stdin.write('q'); await until(() => !view.stdout.frame.includes(EN.live!.monitorHints), 'q closes');
   });
 
-  it('refuses typed /monitor arguments in a window and uses a window for the text port fallback', async () => {
+  it('without window words a typed /monitor argument keeps the text command; the bare command uses a window for the text port fallback', async () => {
     const calls: string[] = [];
     const view = mountWorkline({ monitor: async args => { calls.push(args); return ['TEXT-MONITOR']; } }); mountedViews.push(view.instance);
     await settle(20); view.stdin.write('/monitor --scope x\r');
-    await until(() => view.stdout.frame.includes('without arguments'), 'argument refusal window');
-    expect(calls).toEqual([]); expect(view.stdout.frame).not.toContain('TEXT-MONITOR');
-    view.stdin.write(ESC); await until(() => view.stdout.frame.includes('Monitor closed'), 'summary'); await settle(30);
-    view.stdin.write('/monitor\r'); await until(() => view.stdout.frame.includes('TEXT-MONITOR'), 'fallback window');
-    expect(calls).toEqual(['']); view.stdin.write(ESC);
+    await until(() => calls.length === 1 && view.stdout.text.includes('TEXT-MONITOR'), 'typed text command (TERM=dumb style)');
+    expect(calls).toEqual(['--scope x']); await settle(30);
+    view.stdin.write('/monitor\r'); await until(() => view.stdout.frame.includes(EN.live!.monitorTitle) && calls.length === 2, 'fallback window');
+    expect(calls).toEqual(['--scope x', '']); view.stdin.write(ESC); await until(() => view.stdout.frame.includes('Monitor closed'), 'summary');
   });
 
   it('keeps a monitor load failure in its window, then leaves one labelled summary', async () => {

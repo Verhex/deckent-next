@@ -17,6 +17,8 @@ export interface SlashWindowLabels {
   readonly position: string;
   /** Key hints under a list window and under an information window. */
   readonly hints: string; readonly infoHints: string;
+  /** I-1: the one-time window note for a slash command typed with an argument (the typed text is never shown). */
+  readonly typedArgument: string;
   readonly reasoning: { readonly title: string; readonly thinkingOn: string; readonly thinkingOff: string; readonly previewOn: string; readonly previewOff: string;
     readonly current: string; readonly thinkingOnDetail: string; readonly thinkingOffDetail: string; readonly previewOnDetail: string; readonly previewOffDetail: string;
     /** Status strip words. */

@@ -9,6 +9,7 @@ import type { WorkLedgerEntry, WorklineLedgerPorts, WorklineApproval } from '#su
 import { workSurfaceLabels } from '#surfaces/core/work-labels/index.js';
 import { runDetailLines } from '#surfaces/core/terminal-work/index.js';
 import { mountWorkline, settle, until, WORKLINE_TEST_LABELS } from '../support/workline-harness.js';
+import { SLASH_WINDOW_TEST_LABELS, TYPED_ARGUMENT_NOTE } from '../support/slash-window-labels.js';
 
 const captured = vi.hoisted(() => ({ entries: [] as WorkLedgerEntry[], seen: new WeakSet<object>() }));
 vi.mock('#surfaces/core/terminal-work/index.js', async importOriginal => {
@@ -34,8 +35,8 @@ const mounted: ReturnType<typeof mountWorkline>[] = [];
 let renderDir: string;
 beforeEach(async () => { captured.entries = []; captured.seen = new WeakSet(); renderDir = await mkdtemp(join(tmpdir(), 'sw2-window-render-')); });
 afterEach(async () => { for (const view of mounted.splice(0)) view.instance.unmount(); await rm(renderDir, { recursive: true, force: true }); });
-const open = async (command: string, ledger = ports(), locale: 'en' | 'tr' = 'en', rows = 60) => {
-  const view = mountWorkline({ labels: { ...WORKLINE_TEST_LABELS, work: workSurfaceLabels(locale) }, ledger, pollMs: 60_000 }, 100, { rows }); mounted.push(view);
+const open = async (command: string, ledger = ports(), locale: 'en' | 'tr' = 'en', rows = 60, rich = false) => {
+  const view = mountWorkline({ labels: { ...WORKLINE_TEST_LABELS, work: workSurfaceLabels(locale), ...(rich ? { windows: SLASH_WINDOW_TEST_LABELS } : {}) }, ledger, pollMs: 60_000 }, 100, { rows }); mounted.push(view);
   await settle(30); view.stdin.write(`${command}\r`); return view;
 };
 const choose = async (view: ReturnType<typeof mountWorkline>) => { await settle(40); view.stdin.write('\r'); };
@@ -99,10 +100,14 @@ describe('SW-2 job windows', () => {
     await until(() => view.stdout.frame.includes(EN.jobs!.clearDetail), 'confirm window'); await snapshot('clear-session', view); expect(clear).not.toHaveBeenCalled(); await settle(40); view.stdin.write(key);
     await until(() => captured.entries.length > 0, 'summary'); onlySummary(); expect(clear).toHaveBeenCalledTimes(key === 'y' ? 1 : 0);
   });
-  it.each(['/run id', '/transcript 1 2', '/cancel id', '/approvals 1', '/approvals clear-session', '/workers extra', '/watch-runs extra', '/monitor --scope x'])('%s rejects typed arguments without invoking the port or chat', async command => {
-    const read = vi.fn(ports().listRunIds!), decide = vi.fn(), inspect = vi.fn(), view = await open(command, ports({ listRunIds: read, decideApproval: decide, inspectTranscript: inspect }));
-    await until(() => view.stdout.frame.includes('without arguments'), 'argument refusal'); expect(captured.entries).toEqual([]);
-    expect(read).not.toHaveBeenCalled(); expect(decide).not.toHaveBeenCalled(); expect(inspect).not.toHaveBeenCalled(); await close(view); onlySummary();
+  // SLASH-WINDOWS I-1 (owner 2026-10-08): in the rich terminal a typed argument opens the same window as the bare command; that window notes once
+  // that the terminal takes no typed argument, and the typed text is never shown or used.
+  it.each(['/run ARG-TYPED', '/transcript ARG-TYPED 2', '/cancel ARG-TYPED', '/approvals ARG-TYPED', '/approvals clear-session', '/workers ARG-TYPED', '/watch-runs ARG-TYPED', '/monitor --scope ARG-TYPED'])('%s opens the bare window with the one-time note, never the typed text', async command => {
+    const decide = vi.fn(), inspect = vi.fn(), view = await open(command, ports({ decideApproval: decide, inspectTranscript: inspect }), 'en', 60, true);
+    await until(() => view.stdout.frame.includes(TYPED_ARGUMENT_NOTE), 'window with the note'); expect(captured.entries).toEqual([]);
+    expect(view.stdout.frame).not.toContain('ARG-TYPED'); expect(decide).not.toHaveBeenCalled(); expect(inspect).not.toHaveBeenCalled();
+    await close(view); onlySummary(); await settle(40);
+    expect(view.stdout.frame).not.toContain(TYPED_ARGUMENT_NOTE);
   });
   it.each(['/watch-workers', '/watch-runs', '/tasks'] as const)('%s keeps started/delivery words inside the window and leaves one summary on Esc', async command => {
     const view = await open(command);
@@ -114,14 +119,16 @@ describe('SW-2 job windows', () => {
     await settle(30); view.stdin.write('/monitor\r'); await until(() => view.stdout.frame.includes('MONITOR-BODY'), 'monitor'); await snapshot('monitor', view);
     expect(captured.entries).toEqual([]); await close(view); onlySummary(); expect(view.stdout.frame).not.toContain('MONITOR-BODY');
   });
-  it('keeps opening snapshot runs and workers out of the chat ledger', async () => {
+  it('the opening snapshot leaves one system line for running work (I-5), never cards, and the window shows the rows', async () => {
     const ledger = ports({ followEvents: async function* (signal) {
       yield { control: 'start', scopeId: 'scope-a', cursors: { worker: 0, run: 0, approval: 0 } };
       await new Promise<void>(resolve => { if (signal.aborted) resolve(); else signal.addEventListener('abort', () => resolve(), { once: true }); });
     }, readSurfaceSnapshot: async () => ({ scopeId: 'scope-a', denied: [], runs: [run], workers: await ports().listWorkers(), approvals: [] }) });
     const view = await open('/tasks', ledger);
     await until(() => view.stdout.frame.includes('Fix checkout') && view.stdout.frame.includes('worker 1'), 'snapshot window');
-    expect(captured.entries).toEqual([]); await close(view); onlySummary();
+    expect(captured.entries).toHaveLength(1); expect(captured.entries[0]).toMatchObject({ kind: 'notice', id: 'system-summary', text: 'Work running: 1 runs, 1 workers · /runs /workers' });
+    view.stdin.write(ESC); await until(() => captured.entries.length === 2, 'close summary');
+    expect(captured.entries.every(entry => entry.kind === 'notice' && entry.id === 'system-summary')).toBe(true);
   });
   it('keeps policy refusal inside a transcript window and leaves only one summary after close', async () => {
     const view = await open('/transcript', ports({ inspectTranscript: async () => { throw new Error('POLICY_DENIED'); } }));

@@ -18,16 +18,21 @@ interface WorkCommandContext {
   /** `{part}`: a slash command without its port in this terminal (`terminal.admin.partUnavailable`, the session language). */
   readonly commandUnavailable?: string | undefined;
 }
-/** Rich-only dispatch. Line/CLI producers retain their text commands and typed arguments. */
+/**
+ * The job and approval windows (SW-2). SLASH-WINDOWS I-1 (owner 2026-10-08): a typed argument never selects anything here — the rich
+ * workline strips it (and notes it once in the window), and a terminal without window words still opens the same window. Only `/monitor
+ * <args>` without window words is left to the text command (returns false). Line/CLI producers keep their typed arguments.
+ */
 export async function dispatchWorkCommand(slash: { readonly command: string; readonly args: string }, context: WorkCommandContext): Promise<boolean> {
   const { execution, panel, labels, ledger, push, errorText, pushMode, live, monitor, watchRef, setWatch, setWatchStatus, runDecision } = context;
   if (slash.command === 'monitor') {
-    if (live.canOpenMonitor && !slash.args) await live.openMonitor();
+    if (slash.args) return false;
+    if (live.canOpenMonitor) await live.openMonitor();
     else {
       const title = labels.work?.live?.monitorTitle ?? '/monitor';
       let lines: readonly string[];
       const unwired = context.commandUnavailable ? fillTemplate(context.commandUnavailable, { part: 'monitor' }) : labels.work?.unavailable ?? labels.ledgerUnavailable;
-      try { lines = slash.args ? [fillTemplate(labels.work?.jobs?.bareOnly ?? labels.work?.unavailable ?? labels.ledgerUnavailable, { command: 'monitor' })] : monitor ? await monitor('') : [unwired]; }
+      try { lines = monitor ? await monitor('') : [unwired]; }
       catch (error) { lines = [errorText(error)]; }
       await panel.pick(execution, { kind: 'window', title, body: lines, hints: labels.work?.jobs?.hints ?? '', confirm: false }, ['close']);
       push([systemSummaryEntry(labels.work?.live?.closedMonitor ?? title)]);
@@ -41,8 +46,8 @@ export async function dispatchWorkCommand(slash: { readonly command: string; rea
       const unavailable = !ledger || !workLabels?.jobs || !workLabels.live || (['runs', 'run', 'cancel', 'watch-runs'].includes(slash.command) && !ledger.listRunIds)
         || (slash.command === 'transcript' && !ledger.inspectTranscript) || (slash.command === 'cancel' && !ledger.cancelRun)
         || (slash.command === 'approvals' && (!ledger.listApprovalPage || !ledger.decideApproval));
-      if (slash.args || unavailable) {
-        const title = `/${slash.command}`, text = slash.args && workLabels?.jobs ? fillTemplate(workLabels.jobs.bareOnly, { command: slash.command }) : workLabels?.unavailable ?? labels.ledgerUnavailable;
+      if (unavailable) {
+        const title = `/${slash.command}`, text = workLabels?.unavailable ?? labels.ledgerUnavailable;
         await panel.pick(execution, { kind: 'window', title, body: [text], hints: workLabels?.jobs?.hints ?? '', confirm: false }, ['close']);
         push([systemSummaryEntry(text)]); return true;
       }

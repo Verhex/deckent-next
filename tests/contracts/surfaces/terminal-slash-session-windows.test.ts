@@ -10,7 +10,7 @@ import { mountWorkline, settle, until, WORKLINE_TEST_LABELS } from '../support/w
 const mounted: Array<{ unmount(): void }> = [];
 afterEach(() => { for (const view of mounted.splice(0)) view.unmount(); });
 const ESC = '\u001B', DOWN = '\u001B[B', ENTER = '\r';
-const WIN: SlashWindowLabels = { picker: pickerLabels('en'), position: '{from}-{to}/{total}', hints: 'WIN-HINTS', infoHints: 'WIN-INFO-HINTS',
+const WIN: SlashWindowLabels = { picker: pickerLabels('en'), position: '{from}-{to}/{total}', hints: 'WIN-HINTS', infoHints: 'WIN-INFO-HINTS', typedArgument: 'WIN-TYPED-ARG',
   reasoning: { title: 'RZ-TITLE', thinkingOn: 'RZ-THINK-ON', thinkingOff: 'RZ-THINK-OFF', previewOn: 'RZ-PREVIEW-ON', previewOff: 'RZ-PREVIEW-OFF', current: 'RZ-CURRENT',
     thinkingOnDetail: 'rz-d1', thinkingOffDetail: 'rz-d2', previewOnDetail: 'rz-d3', previewOffDetail: 'rz-d4', statusOn: 'RZ-STATUS-ON', statusOnHidden: 'RZ-STATUS-HIDDEN', statusOff: 'RZ-STATUS-OFF' },
   scratch: { title: 'SC-TITLE', status: 'SC-STATUS {count} {bytes} {limit}', folder: 'SC-FOLDER', more: 'SC-MORE {count}', empty: 'SC-EMPTY', fileDetail: 'SC-BYTES {bytes}',
@@ -44,8 +44,8 @@ describe('/clear really clears', () => {
     const before = view.stdout.text.length;
     await send(view, '/clear\r');
     await until(() => frameOf(view).includes('NEW-SESSION'), 'summary line');
-    // The visible screen was erased (cursor home + ED 2) and the earlier conversation is no longer in the frame Ink would replay.
-    expect(view.stdout.text.slice(before)).toContain('\u001b[H\u001b[2J');
+    // Owner 2026-10-08: the visible screen AND the terminal's scrollback are erased (home + ED 2 + ED 3); Ink's replay frame is new too.
+    expect(view.stdout.text.slice(before)).toContain('\u001b[H\u001b[2J\u001b[3J');
     expect(frameOf(view)).not.toContain('first question');
     expect(frameOf(view)).not.toContain('ANSWER-1');
     expect(frameOf(view).match(/NEW-SESSION/gu)).toHaveLength(1);
@@ -54,6 +54,17 @@ describe('/clear really clears', () => {
     expect(seen[1]).toEqual([{ role: 'system', content: 'SYSTEM' }, { role: 'user', content: 'fresh' }]);
     await until(() => saved.length === 2, 'saved');
     expect(saved[1]).not.toBe(saved[0]);
+  });
+
+  it.each(['non-TTY output', 'clearScreen off (TERM=dumb, NO_COLOR)'] as const)('with %s /clear sends no escape sequence and still starts a new conversation', async mode => {
+    const port = { async save() { /* unused */ }, async list() { return []; }, async load() { return null; } };
+    const view = mountWorkline({ labels: withWindows, sessions: port, ...(mode === 'non-TTY output' ? {} : { clearScreen: false }) });
+    if (mode === 'non-TTY output') Object.defineProperty(view.stdout, 'isTTY', { value: false });
+    await ready(view);
+    const before = view.stdout.text.length;
+    await send(view, '/clear\r');
+    await until(() => frameOf(view).includes('NEW-SESSION'), 'summary line');
+    expect(view.stdout.text.slice(before)).not.toContain('\u001b[3J'); expect(view.stdout.text.slice(before)).not.toContain('\u001b[2J');
   });
 
   it('/exit leaves at once without a window or a line', async () => {

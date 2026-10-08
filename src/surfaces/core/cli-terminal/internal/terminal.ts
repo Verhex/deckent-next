@@ -123,7 +123,7 @@ function modeStopWords(locale: Locale) {
 
 /** SLASH-WINDOWS (owner 2026-10-08): the words of the `/reasoning`, `/scratch` and unknown-command windows; absent where the terminal cannot draw a list. */
 function slashWindowLabels(locale: Locale): SlashWindowLabels {
-  return { picker: pickerLabels(locale), position: t('terminal.window.position', {}, locale), hints: t('terminal.window.hints', {}, locale), infoHints: t('terminal.window.infoHints', {}, locale),
+  return { picker: pickerLabels(locale), position: t('terminal.window.position', {}, locale), hints: t('terminal.window.hints', {}, locale), infoHints: t('terminal.window.infoHints', {}, locale), typedArgument: t('terminal.window.typedArgument', {}, locale),
     reasoning: { title: t('terminal.window.reasoning.title', {}, locale), thinkingOn: t('terminal.window.reasoning.thinkingOn', {}, locale), thinkingOnDetail: t('terminal.window.reasoning.thinkingOnDetail', {}, locale), thinkingOff: t('terminal.window.reasoning.thinkingOff', {}, locale),
       thinkingOffDetail: t('terminal.window.reasoning.thinkingOffDetail', {}, locale), previewOn: t('terminal.window.reasoning.previewOn', {}, locale), previewOnDetail: t('terminal.window.reasoning.previewOnDetail', {}, locale), previewOff: t('terminal.window.reasoning.previewOff', {}, locale),
       previewOffDetail: t('terminal.window.reasoning.previewOffDetail', {}, locale), current: t('terminal.window.reasoning.current', {}, locale), statusOn: t('terminal.window.reasoning.statusOn', {}, locale), statusOnHidden: t('terminal.window.reasoning.statusOnHidden', {}, locale),
@@ -390,6 +390,8 @@ export async function terminalCommand(argv: readonly string[], context: Terminal
     labels: { ...worklineLabels(locale, [t('terminal.status.chat', { target: chatTarget(chat, locale) }, locale), ...(serviceLine ? [serviceLine] : [])].join(' · ')),
       ...(pickerNeedsTextFallback(env, true) ? {} : { windows: slashWindowLabels(locale) }) },
     target, systemPrompt: t('terminal.chat.systemPrompt', {}, locale), historyMessages, projectRoot: root,
+    // Owner 2026-10-08: `/clear` sends no escape sequence on TERM=dumb or with NO_COLOR (and never to a non-TTY).
+    clearScreen: env['TERM']?.trim().toLowerCase() !== 'dumb' && !env['NO_COLOR'],
     completeTurn: turn, errorText: error => errorText(error, locale),
     ...(inputHistory ? { inputHistory } : {}),
     // T-L5 `@file`: candidates and content come from the runtime service's scoped read port; this surface reads no file.

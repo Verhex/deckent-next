@@ -68,15 +68,11 @@ export function useWorkSurface({ panel, state, ledger, labels, push, errorText, 
     approvalWatch.current = state;
     if (fresh.length) setApprovalStatus(fillTemplate(work!.approvalNotify, { count: fresh.length }));
   }, error => setApprovalStatus(`${work!.approvalPollFailed}: ${errorText(error)}`));
-  const run = async (command: 'approvals' | 'cancel', args: string, execution: LocalExecution, selectedApprovalId?: string): Promise<void> => {
+  const run = async (command: 'approvals' | 'cancel', _args: string, execution: LocalExecution, selectedApprovalId?: string): Promise<void> => {
     if (!work || !ledger) return;
     const title = command === 'approvals' ? work.window.approvalsTitle : work.jobs!.runTitle;
     slashSummary.current = [];
     try {
-      if (args.trim()) {
-        await panel.pick(execution, { kind: 'window', title, body: [fillTemplate(work.jobs!.bareOnly, { command })], hints: work.jobs!.hints, confirm: false }, ['close']);
-        output(fillTemplate(work.jobs!.closed, { title })); return;
-      }
       if (command === 'cancel') {
         const view = await pickRun(panel, execution, ledger, work, true);
         if (!view || execution.signal.aborted) { output(fillTemplate(work.jobs!.closed, { title })); return; }

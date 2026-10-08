@@ -21,8 +21,13 @@ export interface WorklineStartup {
   readonly compact: string;
 }
 
-/** CUP home + ED 2 (erase the visible display). ED 3 — erase the scrollback — is never sent. */
+/** CUP home + ED 2 (erase the visible display). The opening frame never sends ED 3 (the person's shell history above Deckent stays). */
 export const CLEAR_VISIBLE_SCREEN = '\u001b[H\u001b[2J';
+/**
+ * `/clear` (owner 2026-10-08, reverses SW-3 D2): home + ED 2 + ED 3 — the visible screen AND the terminal's own scrollback, so the earlier
+ * conversation cannot be scrolled back to. ED 3 follows ED 2 because some terminals (VTE) push the erased screen into the scrollback first.
+ */
+export const CLEAR_SCREEN_AND_SCROLLBACK = '\u001b[H\u001b[2J\u001b[3J';
 /**
  * The clear of the opening frame: `rows` line feeds first scroll every visible row into the scrollback from wherever the cursor is (xterm's
  * ED 2 erases the visible rows without keeping them; some terminals keep them), then home + ED 2 leaves an empty screen with the cursor at the top.

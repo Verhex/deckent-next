@@ -144,12 +144,12 @@ describe('A1 complete-field decision projection and private custody', () => {
     const view = mount({ knownSecrets: known, ledger: ledger([approval('fixture', SECRET)]),
       sessions: { async save(value) { saved.push(value); }, async list() { return []; }, async load() { return null; } },
       async completeTurn(messages) { model.push(messages); return 'fixture answer'; } });
-    // SW-2: a typed reference is refused in a window that never echoes it; Esc closes it into one system line.
-    await type(view, '/approvals missing\r'); await until(() => view.stdout.frame.includes('without arguments'), 'typed reference refused');
+    // SLASH-WINDOWS I-1: a typed reference selects nothing and is never echoed; the picker opens as for the bare command; Esc closes it.
+    await type(view, '/approvals missing\r'); await until(() => view.stdout.frame.includes('> A-ITEM 1'), 'picker despite the typed reference');
     expect(view.stdout.frame).not.toContain('missing'); await settle(40); view.stdin.write('\u001b'); await settle(60);
     await type(view, 'hello\r'); await until(() => saved.length === 1, 'saved ordinary conversation');
     expect(JSON.stringify(saved)).not.toContain(SECRET); expect(JSON.stringify(model)).not.toContain(SECRET);
-    expect(JSON.stringify(saved)).not.toContain('without arguments');
+    expect(JSON.stringify(saved)).not.toContain('missing');
   });
 });
 
@@ -182,9 +182,9 @@ describe('A1 actual Workline pending ledger -> picker/modal/static fallback', ()
     expect(item.summary).toBe(summary);
   });
 
-  it('fallback_notfound: a typed reference with hidden characters is refused in a window that never shows it, and decides nothing (SW-2)', async () => {
+  it('fallback_notfound: a typed reference with hidden characters selects nothing and is never shown; the picker opens (I-1)', async () => {
     const ref = 'missing\u200B\u{E0061}<U+200B>', start = decisions.length, view = mount({ ledger: ledger([approval('one', 'fixture command')]) });
-    await type(view, `/approvals ${ref}\r`); await until(() => view.stdout.frame.includes('without arguments'), 'typed reference refused');
+    await type(view, `/approvals ${ref}\r`); await until(() => view.stdout.frame.includes('> A-ITEM 1'), 'picker despite the typed reference');
     // The window and the screen under it (the composer was emptied on Enter) never show the typed reference or its hidden characters.
     expect(view.stdout.frame).not.toContain('missing'); expect(view.stdout.frame).not.toContain('\u200B'); expect(view.stdout.text).not.toContain('A-NOTFOUND');
     expect(decisions.length).toBe(start);

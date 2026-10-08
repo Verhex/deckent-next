@@ -215,12 +215,12 @@ describe('work surface: approvals', () => {
     await until(() => view.frame().includes('A-NONE'), 'nothing pending');
   });
 
-  it('refuses typed selection and shows a failed decision in a window', async () => {
+  it('a typed selection opens the picker and a failed decision shows in a window', async () => {
     const fake = approvals([approval('ap-1'), approval('ap-2')]);
     const view = mount({ ledger: { ...fake.ledger, async decideApproval() { throw new Error('APPROVAL_CONFLICT'); } }, pollMs: 10_000 });
-    await view.type('/approvals ap-2\r'); await view.card('without arguments', 'typed selection refusal');
-    expect(fake.decisions).toEqual([]); view.stdin.write('\u001B'); await settle(60);
-    await view.type('/approvals\r'); await view.card('> A-ITEM 1 ap-1', 'picker'); await view.type('\r'); await view.card('Approval: ap-1', 'card');
+    // SLASH-WINDOWS I-1: a typed reference selects nothing; the picker opens as for the bare command.
+    await view.type('/approvals ap-2\r'); await view.card('> A-ITEM 1 ap-1', 'picker');
+    expect(fake.decisions).toEqual([]); await view.type('\r'); await view.card('Approval: ap-1', 'card');
     await view.type('y'); await view.card('ERR:APPROVAL_CONFLICT', 'failed decision window'); view.stdin.write('\u001B');
     await until(() => view.frame().includes('◆ Deckent system') && !view.frame().includes(work.live!.hints), 'one system result');
   });

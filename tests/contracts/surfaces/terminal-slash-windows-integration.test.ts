@@ -25,7 +25,7 @@ vi.mock('#surfaces/core/terminal-work/index.js', async importOriginal => {
 
 const ESC = '\u001B', MARK = '◆ Deckent system';
 const words = (key: string) => t(key, {}, 'en');
-const WINDOWS: SlashWindowLabels = { picker: pickerLabels('en'), position: '{from}-{to}/{total}', hints: words('terminal.window.hints'), infoHints: words('terminal.window.infoHints'),
+const WINDOWS: SlashWindowLabels = { picker: pickerLabels('en'), position: '{from}-{to}/{total}', hints: words('terminal.window.hints'), infoHints: words('terminal.window.infoHints'), typedArgument: words('terminal.window.typedArgument'),
   reasoning: { title: 'Reasoning', thinkingOn: 'on', thinkingOff: 'off', previewOn: 'shown', previewOff: 'hidden', current: 'current', thinkingOnDetail: '', thinkingOffDetail: '',
     previewOnDetail: '', previewOffDetail: '', statusOn: 'reasoning on', statusOnHidden: 'reasoning on · preview hidden', statusOff: 'reasoning off' },
   scratch: { title: 'Scratch', status: '{count} {bytes} {limit}', folder: 'Folder', more: '+{count}', empty: 'empty', fileDetail: '{bytes}', clear: 'Clear', clearDetail: '',
@@ -81,12 +81,15 @@ describe('slash windows integrated on one workline', () => {
     expect(completeTurn).not.toHaveBeenCalled();
   });
 
-  it('a typed argument is ignored in the rich terminal: /status extra opens the same window (integration D1)', async () => {
+  it('a typed argument opens the same window with a one-time note and is never shown (owner I-1)', async () => {
     const { view } = await open();
     await type(view, '/status extra words\r');
-    await until(() => view.stdout.frame.includes('▸ Runtime service'), 'status window despite the argument');
-    expect(view.stdout.text).not.toContain('Terminal: stdin yes\n');
+    await until(() => view.stdout.frame.includes('▸ Runtime service') && view.stdout.frame.includes(WINDOWS.typedArgument), 'status window with the one-time note');
+    expect(view.stdout.frame).not.toContain('extra words'); expect(view.stdout.text).not.toContain('Info:');
     view.stdin.write(ESC); await until(() => summaries().length === 1, 'one summary');
+    // The note is the typed command's only: the next bare window does not repeat it.
+    await settle(40); await type(view, '/status\r'); await until(() => view.stdout.frame.includes('▸ Runtime service'), 'bare status window');
+    expect(view.stdout.frame).not.toContain(WINDOWS.typedArgument);
   });
 
   it('an unknown command offers every command; picking it opens the /help window, which lists the whole registry', async () => {
