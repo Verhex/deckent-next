@@ -11,7 +11,7 @@ import * as sdk from '../../../src/index.js';
 // the same result shape (the terminal's /provider model step calls the CLI context's handler, see terminal-provider-model-ports).
 const result: ModelConnectResult = { schemaVersion: 1, operation: 'models.connect', commandId: 'c-1', scopeId: 'scope', connection: 'openai-api', status: 'connected',
   reference: { providerId: 'openai-api', providerVersion: 1, modelId: 'gpt-6-luna', modelVersion: 1 }, credentialRef: 'DECKENT_OPENAI_KEY', keyStored: true,
-  steps: { catalog: 'written', declaration: 'written', profile: 'written', activation: 'written', carried: 0 }, notCarried: [], tariff: 'unmetered', approval: null, service: 'current' };
+  steps: { catalog: 'written', declaration: 'written', profile: 'written', activation: 'written', carried: 0 }, notCarried: [], carriedModels: [], tariff: 'unmetered', approval: null, service: 'current' };
 const command: ModelConnectCommand = { schemaVersion: 1, commandId: 'c-1', scopeId: 'scope', connection: 'openai-api', endpoint: null, model: { nativeId: 'gpt-6-luna' } };
 
 describe('models.connect surface parity', () => {

@@ -148,7 +148,7 @@ describe('/provider port: connect a model (T4-B)', () => {
   const result = (status: 'connected' | 'approval-pending'): ModelConnectResult => ({ schemaVersion: 1, operation: 'models.connect', commandId: 'x', scopeId: 'scope',
     connection: 'openai-api', status, reference: { providerId: 'openai-api', providerVersion: 1, modelId: 'gpt-6-luna', modelVersion: 1 }, credentialRef: 'DECKENT_OPENAI_KEY',
     keyStored: true, steps: { catalog: 'written', declaration: 'written', profile: status === 'connected' ? 'written' : 'present', activation: status === 'connected' ? 'written' : 'present', carried: 0 },
-    notCarried: [], tariff: 'unmetered', approval: status === 'connected' ? null : { approvalId: 'appr-1', keyPath: 'provider_invocation_profiles', layer: 'project' }, service: 'stale' });
+    notCarried: [], carriedModels: [], tariff: 'unmetered', approval: status === 'connected' ? null : { approvalId: 'appr-1', keyPath: 'provider_invocation_profiles', layer: 'project' }, service: 'stale' });
 
   it('a provider without a free read says nothing was sent', () => {
     expect(providerOutcomeWord({ outcome: 'ok', httpStatus: null, key: 'unverified' }, 'en'))
@@ -189,6 +189,14 @@ describe('/provider port: connect a model (T4-B)', () => {
     expect(done.lines.map(line => line.label)).toEqual(['Model', 'Steps', 'Key', 'Spending', 'Service', 'Next']);
     expect(done.lines.find(line => line.label === 'Spending')!.tone).toBe('warning');
     expect(JSON.stringify([pending, done, commands])).not.toContain(CANARY);
+    // K5: carried and not-carried models are rows of the window; the summary line only counts them.
+    const local = { providerId: 'local-openai', providerVersion: 1, modelId: 'chat', modelVersion: 1 }, coder = { ...local, modelId: 'coder' };
+    const { connect: c2, extra: e2 } = host([{ ...result('connected'), carriedModels: [local], notCarried: [{ reference: coder, code: 'POLICY_DENIED' }] }]);
+    const mixed = await providerPanelPort(root, 'scope', { ...secrets(['DECKENT_OPENAI_KEY']).host, ...e2, providerConnect: c2 }, options, 'en', errorText)
+      .connectModel!({ kind: 'openai-api', endpoint: null, model: 'seed:gpt-6-luna' });
+    expect(mixed.lines.filter(line => ['Kept active', 'Needs activation'].includes(line.label)).map(line => `${line.label}|${line.text}`)).toEqual(['Kept active|chat',
+      'Needs activation|Lost its activation with the catalog change (activate it again with deckent models activate): coder (POLICY_DENIED)']);
+    expect(mixed.summary).toBe('gpt-6-luna is connected; 1 other model(s) need activation again (see the window).');
     // A typed refusal stays in the window as its reason.
     const refused = await providerPanelPort(root, 'scope', { ...secrets([]).host, connectModel: async () => { throw Object.assign(new Error('x'), { code: 'MODEL_CONNECT_MODEL_UNKNOWN' }); },
       providerConnect: connect }, options, 'en', errorText).connectModel!({ kind: 'openai-api', endpoint: null, model: 'seed:nope' });

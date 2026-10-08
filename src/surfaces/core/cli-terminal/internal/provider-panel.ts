@@ -66,7 +66,10 @@ function modelLines(result: ModelConnectResult, label: string, locale: Locale): 
     { label: t('tui.provider.field.key', {}, locale), text: result.credentialRef === null ? t('models.connect.keyNone', {}, locale) : result.keyStored === false
       ? t('models.connect.keyMissing', { name: result.credentialRef }, locale) : t('models.connect.key', { name: result.credentialRef }, locale),
     tone: result.keyStored === false ? 'warning' : 'muted' },
-    ...(result.notCarried.length ? [{ label: t('tui.provider.model.field.steps', {}, locale), tone: 'warning' as const, text: t('models.connect.notCarried', {
+    // K5: which other models were carried to the new catalog revision, and which were not (with the typed reason); the system line stays a summary.
+    ...(result.carriedModels.length ? [{ label: t('tui.provider.model.field.carried', {}, locale), tone: 'muted' as const,
+      text: result.carriedModels.map(reference => reference.modelId).join(', ') }] : []),
+    ...(result.notCarried.length ? [{ label: t('tui.provider.model.field.notCarried', {}, locale), tone: 'warning' as const, text: t('models.connect.notCarried', {
       models: result.notCarried.map(item => `${item.reference.modelId} (${item.code})`).join(', ') }, locale) }] : []),
     ...(result.tariff === 'unmetered' ? [{ label: t('tui.provider.model.field.spend', {}, locale), text: t('models.connect.unmetered', {}, locale), tone: 'warning' as const }] : []),
     ...(result.service === 'stale' ? [{ label: t('tui.provider.model.field.service', {}, locale), text: t('models.connect.restart', {}, locale), tone: 'warning' as const }] : []),
@@ -217,7 +220,9 @@ export function providerPanelPort(root: string, scopeId: string, host: Host & { 
       while (pendingConnections.size > PENDING_CONNECTIONS_KEPT) pendingConnections.delete(pendingConnections.keys().next().value!);
       const lines = modelLines(result, `${label} · ${shown}`, locale);
       return result.status === 'connected'
-        ? { connected: true, title: t('tui.provider.model.connected', { model: shown }, locale), lines, summary: t('tui.provider.model.summary', { model: shown }, locale), approvalId: null }
+        ? { connected: true, title: t('tui.provider.model.connected', { model: shown }, locale), lines, approvalId: null,
+          summary: result.notCarried.length ? t('tui.provider.model.summaryNotCarried', { model: shown, count: result.notCarried.length }, locale)
+            : t('tui.provider.model.summary', { model: shown }, locale) }
         : { connected: false, title: t('tui.provider.model.pending', { model: shown }, locale), lines, summary: t('tui.provider.model.summaryPending', { model: shown }, locale),
           approvalId: result.approval?.approvalId ?? null };
     } } : {}),

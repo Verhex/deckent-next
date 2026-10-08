@@ -96,10 +96,10 @@ export class ModelConnectApplication {
     const steps: { catalog: ModelConnectStepState; declaration: ModelConnectStepState; profile: ModelConnectStepState; activation: ModelConnectStepState; carried: number } =
       { catalog: 'skipped', declaration: 'skipped', profile: 'present', activation: 'present', carried: 0 };
     let tariff: ModelConnectResult['tariff'] = 'unmetered';
-    const notCarried: { reference: ModelReference; code: string }[] = [];
+    const notCarried: { reference: ModelReference; code: string }[] = [], carriedModels: ModelReference[] = [];
     const result = (status: ModelConnectResult['status'], approval: ModelConnectResult['approval'] = null, keyStored: boolean | null = null,
       service: ModelConnectResult['service'] = null): ModelConnectResult => Object.freeze({ schemaVersion: 1, operation: MODEL_CONNECT_OPERATION_ID, commandId: command.commandId,
-      scopeId, connection: command.connection, status, reference: target.reference, credentialRef, keyStored, steps: Object.freeze({ ...steps }), notCarried: Object.freeze([...notCarried]), tariff, approval, service });
+      scopeId, connection: command.connection, status, reference: target.reference, credentialRef, keyStored, steps: Object.freeze({ ...steps }), notCarried: Object.freeze([...notCarried]), carriedModels: Object.freeze([...carriedModels]), tariff, approval, service });
     const write = async (keyPath: string, value: unknown, layer: ModelConnectLayer, id: string) => {
       const pending = await ports.write({ keyPath, value, layer, commandId: id });
       layers = await ports.layers();
@@ -129,7 +129,7 @@ export class ModelConnectApplication {
             if (binding.status !== 'declared' || binding.binding.digest !== item.digest) { notCarried.push({ reference: item.reference, code: 'MODEL_ACTIVATION_CATALOG_CONFLICT' }); continue; }
             await ports.activate({ commandId: step(command.commandId, 'carry', String(index)), reference: item.reference, expectedRevision: item.revision,
               catalogRevision: binding.catalogRevision, digest: binding.binding.digest });
-            steps.carried++;
+            steps.carried++; carriedModels.push(item.reference);
           } catch (error) { notCarried.push({ reference: item.reference, code: String((error as { code?: unknown })?.code ?? 'MODEL_ACTIVATION_FAILED') }); }
         }
       }

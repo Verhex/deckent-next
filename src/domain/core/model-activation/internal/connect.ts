@@ -42,6 +42,8 @@ export type ModelConnectResult = Readonly<{
   /** Models of this scope that were active under the replaced catalog revision and could NOT be carried (with the typed reason): they need a
    * fresh activation (`deckent models activate`); every other step still completed. */
   notCarried: readonly Readonly<{ reference: z.infer<typeof modelReferenceSchema>; code: string }>[];
+  /** K5 (owner 2026-10-08, Jev e3dcf2eb): the models whose activation was carried (`steps.carried` of them), shown in the result window. */
+  carriedModels: readonly z.infer<typeof modelReferenceSchema>[];
   /** `published`: the profile carries the vendor's published tariff; `unmetered`: the adapter takes only a zero-rate tariff, spend is not metered. */
   tariff: 'published' | 'unmetered';
   /** The pending approval that stopped the run (the same command continues after it is allowed). */

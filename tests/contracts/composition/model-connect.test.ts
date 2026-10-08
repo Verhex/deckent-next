@@ -93,7 +93,7 @@ describe.skipIf(process.platform !== 'linux')('models.connect', () => {
     const result = await connectConfiguredModel(f.project, { schemaVersion: 1, commandId: 'c-deny', scopeId: 'scope', connection: 'vendor-one', endpoint: f.base,
       model: { nativeId: 'gpt-6-luna' } }, f.options, { registry: localRegistry });
     expect(result).toMatchObject({ status: 'connected', steps: { declaration: 'written', profile: 'written', activation: 'written', carried: 0 },
-      notCarried: [{ reference: local, code: 'POLICY_DENIED' }] });
+      notCarried: [{ reference: local, code: 'POLICY_DENIED' }], carriedModels: [] });
     const subject = f.rows('SELECT record FROM audit_events ORDER BY rowid').map(row => (JSON.parse(String(row['record'])) as { event: { subject: Record<string, unknown> } }).event.subject)
       .find(item => item['kind'] === 'model-connect');
     expect(subject?.['notCarried']).toEqual([local]);
@@ -111,6 +111,8 @@ describe.skipIf(process.platform !== 'linux')('models.connect', () => {
       model: { nativeId: 'deepseek-flash' } }, f.options, { registry: localRegistry });
     // Both the configured model and the first vendor's model were active under the old revision.
     expect(second.steps).toMatchObject({ declaration: 'written', carried: 2 });
+    // K5: the carried models are named (the result window lists them).
+    expect(second.carriedModels.map(reference => reference.modelId).sort()).toEqual(['chat', 'gpt-6-luna']); expect(second.notCarried).toEqual([]);
     f.state.script = [{ content: 'one' }, { content: 'two' }];
     expect(await f.client().chatTurn(ask('t-one', one), () => undefined)).toMatchObject({ answer: 'one' });
     expect(await f.client().chatTurn(ask('t-two', two), () => undefined)).toMatchObject({ answer: 'two' });
