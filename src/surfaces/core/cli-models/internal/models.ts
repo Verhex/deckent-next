@@ -61,7 +61,7 @@ function renderBinding(result: import('#engine/index.js').ModelBindingInspection
 }
 
 export async function modelsCommand(argv: readonly string[], context: ModelCommandContext): Promise<void> {
-  if (argv[1] === 'spending' || argv[1] === 'audit-spending') return modelSpendingCommand(argv, context);
+  if (argv[1] === 'spending' || argv[1] === 'audit-spending' || argv[1] === 'reconcile-spending' || argv[1] === 'revise-budget') return modelSpendingCommand(argv, context);
   if (argv[1] === 'invoke' || argv[1] === 'invocation' || argv[1] === 'purge-content' || argv[1] === 'cancel') return modelInvocationCommand(argv, context);
   if (argv[1] === 'activation' || argv[1] === 'activate' || argv[1] === 'deactivate') return modelActivationCommand(argv, context);
   // WORKER-CURRENCY-2: the ledger model catalog; `models catalog activate` never reaches the chat activation command above.

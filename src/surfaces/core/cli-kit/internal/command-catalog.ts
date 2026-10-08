@@ -86,6 +86,8 @@ export const CLI_CATALOG = [
     action('purge-content', 'models', 'cli.help.action.purge-content', 'cli.help.modelsPurgeContent'),
     action('cancel', 'models', 'cli.help.action.models.cancel', 'cli.help.modelsCancelInvocation'),
     action('spending', 'models', 'cli.help.action.spending', 'cli.help.modelsSpending'),
+    action('reconcile-spending', 'models', 'cli.help.action.reconcile-spending', 'cli.help.modelsManageSpending'),
+    action('revise-budget', 'models', 'cli.help.action.revise-budget', 'cli.help.modelsManageSpending'),
     action('audit-spending', 'models', 'cli.help.action.audit-spending', 'cli.help.modelsAuditSpending'),
     { name: 'catalog', group: 'models', summary: 'cli.help.action.catalog', detail: 'cli.help.modelsCatalog', children: [
       action('list', 'models', 'cli.help.action.models.catalog.list', 'cli.help.modelsCatalog'),

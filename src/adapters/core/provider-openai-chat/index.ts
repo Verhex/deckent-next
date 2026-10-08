@@ -11,3 +11,7 @@ export { OPENAI_CHAT_OPERATOR_TARIFF_METER_ID, quoteOpenAiChatOperatorTariff } f
 export { createOpenAiChatStream, OPENAI_CHAT_STREAM_TOKEN_WIRE_BYTES, OPENAI_CHAT_STREAM_WIRE_FACTOR } from './internal/stream.js';
 export { extractOpenAiChatTextFromInvocation, openAiChatMessageFromInvocation, openAiChatNativeMessages, openAiChatPromptUpperBound, openAiChatStoppedAtLength,
   openAiChatUsageFromInvocation } from './internal/invocation.js';
+
+export { lookupOpenAiCompatibleTariff } from './internal/pricing-catalog.js';
+export type { OpenAiCompatiblePublishedTariff } from './internal/pricing-catalog.js';
+export { createOpenAiChatPricedNative } from './internal/priced-native.js';

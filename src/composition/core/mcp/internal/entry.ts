@@ -32,6 +32,7 @@ export async function main(root = process.cwd()) {
     cancelModelInvocation: (command, delivery) => runtime.cancelModelInvocation(command, delivery),
     invokeModel: (command, delivery) => runtime.invokeModel(command, delivery),
     inspectProviderSpendAccount: (query, delivery) => runtime.inspectProviderSpendAccount(query, delivery),
+    manageProviderSpend: (command, delivery) => runtime.manageProviderSpend(command, delivery),
     auditProviderSpendAccount: (command, delivery) => runtime.auditProviderSpendAccount(command, delivery),
     inspectModelActivation: query => inspectConfiguredModelActivation(root, query),
     admitModelActivation: command => admitConfiguredModelActivation(root, command), inspectModelCatalog: query => inspectConfiguredModelCatalog(root, query), applyModelCatalog: command => applyConfiguredModelCatalog(root, command),

@@ -66,3 +66,18 @@ it('advertises bounded durable account auditing with strict input and no open-wo
   expect(calls.command).toEqual(audit); expect(calls.delivery?.maxResultBytes).toBeGreaterThan(0);
   expect(JSON.stringify(await client.callTool({ name: tool.name, arguments: { ...audit, forged: true } }))).toContain('MCP_INPUT_INVALID');
 });
+
+it('exports governed management with strict variants and forwards the shared command and result bound', async () => {
+  const command = { ...audit, kind: 'reconcile', invocationId: 'invocation', resolution: 'release', exactMinorUnits: '0', evidence: { kind: 'console-figure', digest: 'b'.repeat(64) } };
+  let calls = 0;
+  const server = createMcpServer({ async inspectRun() { return {}; }, async inspectInventory() { return {}; },
+    async manageProviderSpend(input, delivery) { calls++; expect(input).toEqual(command); expect(delivery?.maxResultBytes).toBeGreaterThan(0);
+      return { replayed: false, receipt: { command: input } } as import('#engine/index.js').ProviderSpendManagementResult; },
+  }, { maxConcurrentCalls: 2, responseMaxBytes: 65536 }, 'en');
+  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair(); await server.connect(serverTransport);
+  const client = new Client({ name: 'spending-management-test', version: '1' }); await client.connect(clientTransport); connections.push({ client, server });
+  const tool = (await client.listTools()).tools.find(value => value.name === 'manage_provider_spending')!;
+  expect(tool.annotations).toMatchObject({ readOnlyHint: false, idempotentHint: true, openWorldHint: false });
+  expect(JSON.stringify(await client.callTool({ name: tool.name, arguments: command }))).toContain('replayed');
+  expect(JSON.stringify(await client.callTool({ name: tool.name, arguments: { ...command, actor: 'forged' } }))).toContain('MCP_INPUT_INVALID'); expect(calls).toBe(1);
+});

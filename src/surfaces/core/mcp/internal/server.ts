@@ -1,3 +1,5 @@
+import { providerSpendManagementCommandSchema, parseProviderSpendManagementCommand, type ProviderSpendManagementCommand } from '#domain/index.js';
+import type { ProviderSpendManagementResult } from '#engine/index.js';
 import { approvalListSchema, approvalQuerySchema, approvalRenewalSchema } from '#engine/index.js';
 import { boundedToolDelivery, completeToolResult, jsonToolResult, modelToolDelivery, toolResultFits } from './delivery.js';
 import { operationToolDefinitions } from './operation-tools.js';
@@ -34,6 +36,7 @@ export interface McpApplications {
   purgeModelInvocationContent?(command: ModelInvocationPurgeCommand, delivery?: ModelInvocationDelivery): Promise<ModelInvocationPurgeResult>;
   cancelModelInvocation?(command: ModelInvocationCancellationCommand, delivery?: ModelInvocationDelivery): Promise<ModelInvocationCancellationResult>;
   inspectProviderSpendAccount?(query: ProviderSpendAccountQuery, delivery?: RuntimeServiceDelivery): Promise<ProviderSpendAccountInspection>;
+  manageProviderSpend?(command: ProviderSpendManagementCommand, delivery?: RuntimeServiceDelivery): Promise<ProviderSpendManagementResult>;
   auditProviderSpendAccount?(command: ProviderSpendAuditCommand, delivery?: RuntimeServiceDelivery): Promise<ProviderSpendAuditResult>;
   inspectDeclaredModels?(): Promise<DeclaredModelsInspection>;
   inspectModelBinding?(reference: ModelReference): Promise<ModelBindingInspection>;
@@ -180,6 +183,10 @@ export function createMcpServer(applications: McpApplications, limits: McpLimits
   if (inspectProviderSpendAccount) definitions.push({ readOnly: true, destructive: false, idempotent: true, openWorld: false, name: 'inspect_provider_spending',
     description: t('mcp.tool.inspectProviderSpending', {}, locale), schema: providerSpendAccountQuerySchema, boundedDelivery: true,
     invoke: (input, delivery) => inspectProviderSpendAccount.call(applications, providerSpendAccountQuerySchema.parse(input), delivery) });
+  const manageProviderSpend = applications.manageProviderSpend;
+  if (manageProviderSpend) definitions.push({ readOnly: false, destructive: false, idempotent: true, openWorld: false, name: 'manage_provider_spending',
+    description: t('mcp.tool.manageProviderSpending', {}, locale), schema: providerSpendManagementCommandSchema, boundedDelivery: true,
+    invoke: (input, delivery) => manageProviderSpend.call(applications, parseProviderSpendManagementCommand(input), delivery) });
   const auditProviderSpendAccount = applications.auditProviderSpendAccount;
   if (auditProviderSpendAccount) definitions.push({ readOnly: false, destructive: false, idempotent: true, openWorld: false, name: 'audit_provider_spending',
     description: t('mcp.tool.auditProviderSpending', {}, locale), schema: providerSpendAuditCommandSchema, boundedDelivery: true,

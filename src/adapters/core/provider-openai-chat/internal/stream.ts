@@ -33,7 +33,7 @@ const chunkSchema = z.object({ id: z.string().min(1), object: z.literal('chat.co
  * is assembled provenance, never the provider's verbatim body). A stream that ends without `[DONE]`, a finish
  * reason and usage is interrupted, which the invocation records as an uncertain outcome; it is never retried.
  */
-export function createOpenAiChatStream(request: OpenAiChatTextRequest, limits: OpenAiChatHttpLimits): NativeJsonHttpStream {
+export function createOpenAiChatStream(request: OpenAiChatTextRequest, limits: OpenAiChatHttpLimits, onUsage?: (usage: JsonObject) => void): NativeJsonHttpStream {
   const hash = createHash('sha256'), decoder = new TextDecoder('utf-8', { fatal: true });
   let wireBytes = 0, chunks = 0, lineBytes = 0, eventBytes = 0, assembledBytes = 0;
   let line: Buffer[] = [], data: string[] = [];
@@ -59,7 +59,7 @@ export function createOpenAiChatStream(request: OpenAiChatTextRequest, limits: O
     if (chunk.usage !== undefined && chunk.usage !== null) {
       const checked = openAiChatUsageSchema.safeParse(chunk.usage);
       if (usage || !checked.success || checked.data.completion_tokens > request.max_completion_tokens) { fail('invalid-response'); return false; }
-      usage = (copied.data as Record<string, unknown>)['usage'] as JsonObject;
+      usage = (copied.data as Record<string, unknown>)['usage'] as JsonObject; onUsage?.(usage);
     }
     const choice = chunk.choices[0];
     if (!choice) return false;

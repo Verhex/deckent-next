@@ -610,5 +610,6 @@
   "monitor.narrative.outcome.success": "oturum: tamamlandı",
   "monitor.narrative.outcome.error": "oturum: hatayla bitti",
   "monitor.narrative.outcome.limit": "oturum: sınıra ulaştı",
-  "monitor.blocker.patchMissing": "yama henüz hazırlanmadı"
+  "monitor.blocker.patchMissing": "yama henüz hazırlanmadı",
+  "mcp.tool.manageProviderSpending": "Hesap politikasıyla bekleyen harcamayı uzlaştır veya kapsam bütçesini güncelle."
 }

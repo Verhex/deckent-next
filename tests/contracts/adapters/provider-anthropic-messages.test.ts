@@ -289,3 +289,23 @@ it('quotes the exact worst case from the profile tariff and refuses a quote for 
   expect(() => priced.quote({ ...spending, prepared: sibling } as never)).toThrow();
   expect(priced.native.responseBytesUpperBound!(token)).toBeGreaterThan(BigInt(limits.responseMaxBytes));
 });
+
+it('retains only returned usage for an interrupted stream and correlates it with the prepared quote', async () => {
+  const endpoint = await fixture(okSse(startEvent() + blockStart(0, { type: 'text', text: '' }) + blockDelta(0, { type: 'text_delta', text: 'partial' })));
+  const priced = createAnthropicMessagesPricedNative({ resolveCredential: credential }), stored = profile(endpoint), request = streamed();
+  const prepared = await priced.native.prepare(stored, binding(), request);
+  const command = { schemaVersion: 1 as const, commandId: 'cancel-usage', scopeId: 'scope', reference, catalogRevision: 'catalog',
+    expectedBinding: { encodingVersion: 1 as const, algorithm: 'sha256' as const, digest: stored.bindingDigest }, nativeRequest: request };
+  const quote = priced.quote({ command, requestDigest: modelInvocationRequestDigest(command), profile: stored,
+    profileDigest: modelInvocationProfileDigest(stored), definition: binding(), prepared } as never);
+  const controller = new AbortController();
+  const result = await priced.native.send(prepared, controller.signal, () => controller.abort());
+  expect(result).toMatchObject({ kind: 'rejected', evidence: { body: { complete: false } } });
+  if (!('kind' in result)) throw new Error('expected interrupted stream');
+  const measured = priced.native.observePartialSpending!(prepared, result.evidence.body.digest)!;
+  expect(measured).toMatchObject({ basis: 'measured-tariff', source: { tariffDigest: quote.pricing.digest,
+    dimensions: [{ field: 'input', tokens: 25 }, { field: 'cache-read', tokens: 0 }, { field: 'cache-write-5m', tokens: 0 },
+      { field: 'cache-write-1h', tokens: 0 }, { field: 'output', tokens: 1 }] } });
+  expect(JSON.stringify(measured)).not.toContain(SECRET);
+  expect(priced.native.observePartialSpending!({}, result.evidence.body.digest)).toBeNull();
+});

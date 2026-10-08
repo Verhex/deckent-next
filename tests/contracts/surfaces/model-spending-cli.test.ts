@@ -73,3 +73,28 @@ it('routes a strict audit command and presents its durable receipt without a bil
     expect(output).toContain(language === 'en' ? 'provider invoice' : 'sağlayıcı faturasını');
   }
 });
+
+it('routes reconcile and budget revision as strict commands, including JSON evidence and Turkish receipt text', async () => {
+  const f = await fixture(), current = inspection().checkpoint!;
+  const common = { schemaVersion: 1, scopeId: 'scope', budgetId: 'budget', budgetRevision: 1, commandId: 'manage', expectedCheckpointDigest: current.digest };
+  const commands = [
+    { ...common, kind: 'reconcile', invocationId: 'invocation', resolution: 'write-off', exactMinorUnits: '0', evidence: { kind: 'write-off', digest: 'a'.repeat(64) } },
+    { ...common, kind: 'budget-revision', budget: { ...current.account.budget, revision: 2, limitMinorUnits: 200 }, unfreeze: true, evidenceDigest: 'b'.repeat(64) },
+  ];
+  for (const [index, command] of commands.entries()) {
+    const action = index === 0 ? 'reconcile-spending' : 'revise-budget', path = join(f.root, `${action}.json`); await writeFile(path, JSON.stringify(command));
+    let output = '', calls = 0;
+    const context = { ...f, stdout: { write(value: string) { output += value; } }, manageProviderSpend: async (_root: string, received: unknown) => {
+      calls++; expect(received).toEqual(command);
+      return { replayed: false, receipt: { command: received } } as import('#engine/index.js').ProviderSpendManagementResult;
+    } };
+    expect(await main(['models', action, '--input', path, '--json'], context)).toBe(0);
+    expect(JSON.parse(output).receipt.command).toEqual(command);
+    output = '';
+    expect(await main(['models', action, '--input', path, '--lang', 'tr'], context)).toBe(0);
+    expect(output).toContain('manage'); expect(calls).toBe(2);
+    expect(await main(['models', index === 0 ? 'revise-budget' : 'reconcile-spending', '--input', path], context)).toBe(2);
+    await writeFile(path, JSON.stringify({ ...command, actor: 'forged' }));
+    expect(await main(['models', action, '--input', path], context)).toBe(2); expect(calls).toBe(2);
+  }
+});

@@ -1,4 +1,4 @@
-import type { ProviderSpendAccountQuery, ProviderSpendAuditCommand } from '#domain/index.js';
+import type { ProviderSpendManagementCommand, ProviderSpendAccountQuery, ProviderSpendAuditCommand } from '#domain/index.js';
 import type { ConfigLoadOptions } from '#platform/index.js';
 import { createConfiguredRuntimeClient } from './client.js';
 
@@ -14,4 +14,8 @@ export function inspectRuntimeProviderSpendAccount(projectRoot: string, query: P
 export function auditRuntimeProviderSpendAccount(projectRoot: string, command: ProviderSpendAuditCommand,
   options: ConfigLoadOptions = {}) {
   return createConfiguredRuntimeClient(projectRoot, options).auditProviderSpendAccount(command);
+}
+
+export function manageRuntimeProviderSpend(projectRoot: string, command: ProviderSpendManagementCommand, options: ConfigLoadOptions = {}) {
+  return createConfiguredRuntimeClient(projectRoot, options).manageProviderSpend(command);
 }

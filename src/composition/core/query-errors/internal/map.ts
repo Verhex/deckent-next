@@ -22,7 +22,7 @@ export function queryFailure(error: unknown): DeckentError {
   if (error instanceof DeckentError) return error;
   if (error instanceof HandoffError) return ErrorRegistry.createError(error.code);
   if (error instanceof NativeConnectionError) return ErrorRegistry.createError(error.code);
-  if (error instanceof ProviderSpendError) return ErrorRegistry.createError(error.code);
+  if (error instanceof ProviderSpendError) return ErrorRegistry.createError(error.code, error.nextAction ? { params: { nextAction: error.nextAction } } : {});
   if (error instanceof OpenRouterPricingError) return ErrorRegistry.createError(error.code === 'INVALID_REQUEST'
     ? 'MODEL_INVOCATION_INVALID' : 'PROVIDER_SPEND_UNAVAILABLE');
   if (error instanceof OpenRouterChatError) return ErrorRegistry.createError(error.code === 'INVALID_PROFILE'
