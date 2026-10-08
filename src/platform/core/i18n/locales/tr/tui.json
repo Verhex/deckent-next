@@ -860,6 +860,7 @@
   "tui.provider.kind.chatgptLogin": "ChatGPT ile giriş",
   "tui.provider.unavailable": "Henüz kullanılamıyor.",
   "tui.provider.state.stored": "anahtar {name} saklı · {count} model profili kullanıyor",
+  "tui.provider.state.modelsNextSlice": "model bağlama bir sonraki dilimde gelecek",
   "tui.provider.state.notConnected": "bağlı değil",
   "tui.provider.state.unknown": "anahtar {name}: depo adları listeleyemiyor",
   "tui.provider.note.storeUnlisted": "Gizli depo anahtar adlarını listeleyemedi: {reason}",

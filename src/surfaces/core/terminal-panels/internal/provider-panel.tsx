@@ -8,7 +8,7 @@ import type { PanelLabels, PanelNotice, ProviderConnectOutcome, ProviderModelOut
 
 /** `/provider` as a list (T4 PROVIDER-CONNECT): each kind with its state and stored key name; connect (or replace the key) and disconnect. */
 export function providerPanelTree(view: ProviderPanelView, labels: ProviderPanelLabels, models = false): PickerTree {
-  return { title: view.title, items: view.kinds.map((kind): PickerNode => ({ id: kind.id, label: kind.label, detail: kind.detail, keywords: [kind.id, ...(kind.keyName ? [kind.keyName] : [])],
+  return { title: view.title, items: view.kinds.map((kind): PickerNode => ({ id: kind.id, label: kind.label, detail: kind.pendingNote ? `${kind.pendingNote} · ${kind.detail}` : kind.detail, keywords: [kind.id, ...(kind.keyName ? [kind.keyName] : [])],
     ...(kind.blocked ? { blocked: { reason: kind.blocked } } : kind.legacy ? { childTitle: kind.label, children: [{ id: 'disconnect', label: labels.actions.disconnect }] }
       : { childTitle: kind.label, children: [{ id: 'connect', label: kind.keyStored ? labels.actions.replace : labels.actions.connect },
       // T4-B: connect one of the kind's models (governed models.connect), offered where the host binds it and the kind lists models.
@@ -128,7 +128,9 @@ export function ProviderPanel({ port, labels, push, openApproval, onError, onClo
     setStep(target.endpointEditable ? { kind: 'endpoint', target } : { kind: 'key', target, endpoint: null });
   };
   const body = [...(view.kinds.length ? [] : [{ spans: [span(words.empty, { role: 'muted' as const })] }]),
-    ...view.notes.map(note => ({ spans: [span(note, { role: 'warning' as const })] }))];
+    ...view.notes.map(note => ({ spans: [span(note, { role: 'warning' as const })] })),
+    // K6: a key-only kind says so in the window body too (a narrow terminal may cut the row's detail).
+    ...view.kinds.filter(kind => kind.pendingNote).map(kind => ({ spans: [span(`${kind.label}: `, { bold: true }), span(kind.pendingNote!, { role: 'muted' as const })] }))];
   return <Window title={title(view.title)} body={body} hints={words.hints} position={labels.position} footerRows={room.footerRows} onInput={() => true}
     footer={focused => <ListPicker key={generation} tree={providerPanelTree(view, words, Boolean(port.connectModel))} labels={labels.picker} active={focused} initial={state} onState={setState}
       maxRows={room.rows} onResult={result => chosen(result, state)} />} />;

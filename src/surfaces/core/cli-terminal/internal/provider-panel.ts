@@ -142,9 +142,11 @@ export function providerPanelPort(root: string, scopeId: string, host: Host & { 
         const keyName = kind.secretName, stored = keyName !== null && names !== null && names.includes(keyName), using = keyName ? named.filter(ref => ref === keyName).length : 0;
         const detail = !kind.available ? '' : keyName === null ? '-' : names === null ? t('tui.provider.state.unknown', { name: keyName }, locale)
           : stored ? t('tui.provider.state.stored', { name: keyName, count: using }, locale) : t('tui.provider.state.notConnected', {}, locale);
+        // K6 (Jev 7e0348c4): a kind that stores a key but connects no model yet (OpenRouter) says so on its row; no model action is offered.
+        const pending = kind.available && kind.connectFamily === null && keyName !== null ? t('tui.provider.state.modelsNextSlice', {}, locale) : null;
         return { id: kind.id, label: kindLabel(kind, kind.id, locale), detail, blocked: kind.available ? null : t('tui.provider.unavailable', {}, locale), keyName, keyStored: stored,
           endpointEditable: kind.endpointEditable, endpointDefault: kind.endpointDefault, keyRequired: kind.keyRequired, endpointChoices: choicesOf(kind),
-          models: models.get(kind.id) ?? [],
+          models: models.get(kind.id) ?? [], ...(pending ? { pendingNote: pending } : {}),
           // A vendor key must be stored before a model is bound to it (the generic row's name depends on the address chosen next: checked on connect).
           modelBlocked: kind.priceRequired ? t('tui.provider.model.priceRequired', {}, locale)
             : kind.keyRequired && keyName !== null && names !== null && !stored ? t('tui.provider.model.needsKey', {}, locale) : null };
@@ -198,7 +200,8 @@ export function providerPanelPort(root: string, scopeId: string, host: Host & { 
         }
       }
       const using = name ? (await refs().catch(() => [] as readonly string[])).filter(ref => ref === name).length : 0;
-      const next: PanelLine = { label: t('tui.provider.field.next', {}, locale), text: using > 0 ? t('tui.provider.next.bound', { count: using }, locale)
+      const next: PanelLine = kind.connectFamily === null ? { label: t('tui.provider.field.next', {}, locale), text: t('tui.provider.state.modelsNextSlice', {}, locale), tone: 'muted' }
+        : { label: t('tui.provider.field.next', {}, locale), text: using > 0 ? t('tui.provider.next.bound', { count: using }, locale)
         : t('tui.provider.next.unbound', { name: name ?? '-', scope: scopeId }, locale), tone: 'muted' };
       const ok = stored || request.key === null;
       return { stored, title: ok ? t('tui.provider.result.ok', { kind: label }, locale) : t('tui.provider.result.refused', { kind: label }, locale), lines: [check, ...where, keyLine, next] };

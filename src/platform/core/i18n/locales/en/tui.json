@@ -860,6 +860,7 @@
   "tui.provider.kind.chatgptLogin": "ChatGPT sign-in",
   "tui.provider.unavailable": "Not available yet.",
   "tui.provider.state.stored": "key {name} stored · {count} model profile(s) use it",
+  "tui.provider.state.modelsNextSlice": "model binding comes in the next slice",
   "tui.provider.state.notConnected": "not connected",
   "tui.provider.state.unknown": "key {name}: the store cannot list names",
   "tui.provider.note.storeUnlisted": "The secret store could not list key names: {reason}",

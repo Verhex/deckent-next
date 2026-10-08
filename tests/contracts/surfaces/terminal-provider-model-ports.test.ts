@@ -266,6 +266,17 @@ describe('/model source', () => {
     source = 'user-default';
     expect((await source0.inspect()).notes).toContain('In use: chat (your default model).');
   });
+  it('K6: a key-only kind (OpenRouter) carries the next-slice note on its row and in the connect result', async () => {
+    const { root, options } = await project({});
+    const base = connectHost('ok');
+    const connect = { ...base, kinds: [{ id: 'openrouter', labelKey: 'tui.provider.kind.openrouter', available: true, endpointDefault: 'https://openrouter.ai', endpointEditable: false,
+      keyRequired: true, secretName: 'DECKENT_OPENROUTER_KEY', probePath: '/api/v1/key', endpointChoices: [], connectFamily: null, seeded: false }] };
+    const port = providerPanelPort(root, 'scope', { ...secrets([]).host, providerConnect: connect }, options, 'en', errorText);
+    expect((await port.inspect()).kinds[0]).toMatchObject({ id: 'openrouter', models: [], pendingNote: 'model binding comes in the next slice' });
+    const outcome = await port.connect({ kind: 'openrouter', endpoint: null, key: CANARY });
+    expect(outcome.lines.at(-1)).toEqual({ label: 'Next', text: 'model binding comes in the next slice', tone: 'muted' });
+  });
+
   it('(c) an old key name is warned, listed with removal as its only action, and removed through the store', async () => {
     const { root, options } = await project({});
     const store = secrets(['DECKENT_OPENAI_COMPATIBLE_KEY']);
