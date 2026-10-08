@@ -126,5 +126,5 @@ the terminal's default; the session pin from `/model` wins, then a project-autho
 
 Spending: paid calls reserve the dearest applicable published tier and settle from the provider's returned usage times
 the pinned tariff (`measured-tariff`). The scope's first budget is created with `deckent models create-budget --scope <id>
---usd <n>` (or the `/model` budget window), changed with `revise-budget [--unfreeze]`; a held call that never received
+--usd <n>` (or the budget window, the first row of `/provider`), changed with `revise-budget [--unfreeze]`; a held call that never received
 final usage is resolved with `reconcile-spending`. Details: ARCHITECTURE "Spend settlement".

@@ -13,7 +13,7 @@
 [![Node engines](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2FVerhex%2Fdeckent-next%2Fmain%2Fpackage.json&query=%24.engines.node&label=Node&color=43853d)](package.json)
 [![Pre-release](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2FVerhex%2Fdeckent-next%2Fmain%2Fpackage.json&query=%24.version&label=pre-release&color=orange)](CHANGELOG.md)
 
-[English](README.md) · [Deckent nedir](#deckent-nedir) · [Bir istek nasıl akar](#bir-istek-nasıl-akar) · [Terminalde](#terminalde) · [Güvenlik](#güvenlik-modeli) · [Başlarken](#başlarken)
+[English](README.md) · [Deckent nedir](#deckent-nedir) · [Bir istek nasıl akar](#bir-istek-nasıl-akar) · [İlk oturum](#adım-adım-ilk-oturum) · [Terminalde](#terminalde) · [Güvenlik](#güvenlik-modeli) · [Başlarken](#başlarken)
 
 <img src=".github/assets/screenshots/tr/01-acilis.png" alt="Açılıştaki Deckent terminali: logo, sürüm, proje, model ve mod" width="880">
 
@@ -81,23 +81,94 @@ sequenceDiagram
   T-->>Siz: sonuç, her adım görünür
 ```
 
-## Terminalde
+## Adım adım ilk oturum
 
-Bu ekranlar gerçek Deckent terminalinden (alpha.10, 110×32; sonradan eklenen `/provider`, `/model` ve slash komut pencereleri henüz görselde yok), yerel bir deneme modeliyle geçici bir örnek projede
-çekildi.
+Boş bir projeden yönetilen bir ajan turuna ve onun maliyetine kadar, Deckent'ten çıkmadan:
+
+```mermaid
+flowchart LR
+  I["1 · Kurulum<br/><sub>deckent init policy</sub>"] --> O["2 · Açın<br/><sub>deckent</sub>"]
+  O --> P["3 · Sağlayıcı bağlayın<br/><sub>/provider · anahtar · ücretsiz deneme</sub>"]
+  P --> B["4 · Bütçe belirleyin<br/><sub>Bütçe oluştur · USD</sub>"]
+  B --> M["5 · Model seçin<br/><sub>/model · oturum ya da varsayılan</sub>"]
+  M --> W["6 · Çalışın<br/><sub>onaylar · modlar</sub>"]
+  W --> U["7 · Kullanıma bakın<br/><sub>/usage · harcama hesabı</sub>"]
+```
+
+1. **Kurulum**, proje başına bir kez: `deckent init policy --scope <id> --preview` ilk kurulum policy'sini gösterir,
+   `deckent init policy --scope <id> --apply` onu kurar. Bu policy o kapsamda model bağlamanıza ve çağırmanıza,
+   anahtar saklamanıza ve bütçe belirlemenize izin verir; bu eylemlerin her biri yine kontrol edilir ve kaydedilir.
+   Linux, WSL ve macOS'ta yeni bir kurulum şifreli anahtar deposuyla başlar.
+2. **Terminali açın**: `deckent`.
+3. **Sağlayıcı bağlayın**: `/provider` ile Anthropic API, OpenAI API, DeepSeek API, Z.ai GLM, herhangi bir OpenAI uyumlu
+   adres ya da vLLM gibi yerel bir sunucu. Anahtarı gizlenen bir alana yazarsınız; Deckent onu ücretsiz bir istekle
+   dener ve gizli depoya adıyla saklar; denemenin reddettiği anahtar asla saklanmaz. Ücretsiz denemesi olmayan bir
+   sağlayıcıda anahtar doğrulanmadan saklanır ve olası reddi ilk tur gösterir. Değer bir daha gösterilmez ve hiçbir
+   ajan ya da işçi onu almaz. Ardından o sağlayıcının kataloğundan **Model bağla**'yı seçin. Yayımlanmış fiyatı
+   doğrulanmamış bir model listede görünür ama nedeniyle kilitlidir (Zhipu GLM Çin, fiyatları CNY olduğu için kilitli
+   kalır). OpenRouter şimdilik yalnız anahtar saklar. Aynısı komut satırından: `deckent secret set <AD>` ve
+   `deckent models connect --scope <id> --connection <tür> --command-id <id> --model <birebir kimlik>`.
+4. **Bütçe belirleyin.** Her model turu, kapsamın tek ve ortak USD bütçesinden pay ayırır; bütçe yoksa her tur
+   reddedilir ve pencereler bunu söyler. `/provider`'ın ilk satırı **Bütçe oluştur** bütçe penceresini açar: 5, 10, 25,
+   50 ya da 100 USD veya ok tuşlarıyla 1 ile 1000 arasında başka bir tam dolar tutarı, ardından bir onay adımı. Sonra
+   aynı satır **Bütçeyi değiştir** olur. Komut satırından: `deckent models create-budget --scope <id> --usd <n>` ve
+   `deckent models revise-budget --scope <id> --usd <n>`.
+5. **Model seçin**: `/model` katalogdaki modelleri listeler; henüz kullanamayacağınız bir model nedeniyle (bütçe yok,
+   bağlı değil, anahtar eksik, etkin değil) ve onu neyin düzelteceğiyle kilitlidir. **Yalnız bu oturum** ya da **Bu
+   oturum ve varsayılanım olsun** (sizin `terminal.defaultModel` ayarınız) seçin. Proje kendi modelini belirtiyorsa
+   pencere kullanılan modeli hangi ayarın seçtiğini söyler.
+6. **Çalışın.** İsteğinizi düz cümleyle söyleyin. Araç çağrıları şirket policy'nize ve izin modunuza uyar; size
+   danışılması gereken her şey onay penceresini açar (bkz. [Güvenlik modeli](#güvenlik-modeli)).
+7. **Kullanıma bakın**: `/usage` bu konuşmanın ölçtüğü token'ları (sağlayıcı bildirmediyse akıl yürütme *ölçülmedi*
+   görünür) ve kapsamın bütçelerini gösterir; harcama hesabını okumak için bir bütçe açın: üst sınır, ayrılan ve
+   kesinleşen.
 
 <table>
   <tr>
-    <td width="50%"><img src=".github/assets/screenshots/tr/02-sohbet.png" alt="Sohbet turu: sizin satırınız Sen, yanıt Deckent başlığı altında"><br><sub><b>Sohbet.</b> Sizin satırlarınız ve Deckent'in yanıtları belirgin biçimde ayrışır.</sub></td>
+    <td width="50%"><img src=".github/assets/screenshots/tr/09-model.png" alt="Bütçe yokken /model: iki model de nedeniyle kilitli"><br><sub><b>Bütçeden önce.</b> <code>/model</code> her modeli kilitler; nedeni ve sonraki adımı söyler.</sub></td>
+    <td width="50%"><img src=".github/assets/screenshots/tr/08b-saglayici-butce-satiri.png" alt="İlk satırı Bütçe oluştur olan /provider ve sağlayıcı listesi"><br><sub><b>/provider.</b> Önce <b>Bütçe oluştur</b>, sonra her sağlayıcı bağlantı durumuyla.</sub></td>
+  </tr>
+  <tr>
+    <td width="50%"><img src=".github/assets/screenshots/tr/10-butce.png" alt="Hazır tutarlarla bütçe penceresi"><br><sub><b>Bütçe penceresi.</b> Hazır tutarlar ya da ok tuşlarıyla başka bir tutar.</sub></td>
+    <td width="50%"><img src=".github/assets/screenshots/tr/11-butce-adim.png" alt="20 USD'ye ayarlanmış bütçe adımlayıcısı"><br><sub><b>Başka tutar.</b> Tam dolar, 1 ile 1000 arası; hiçbir şey yazılmaz, onaylamadan hiçbir şey gönderilmez.</sub></td>
+  </tr>
+  <tr>
+    <td width="50%"><img src=".github/assets/screenshots/tr/12-model-hazir.png" alt="Bütçeden sonra /model: bir model hazır, diğeri bağlı değil diye kilitli"><br><sub><b>Bütçeden sonra.</b> Bağlı model hazır; diğeri bağlanana kadar kilitli kalır. Üstteki çerçeveli satır bütçeyi kaydeder.</sub></td>
+    <td width="50%"><img src=".github/assets/screenshots/tr/13-kullanim.png" alt="Bir sohbet turundan sonra /usage penceresi"><br><sub><b>/usage.</b> Bu konuşmanın ölçtüğü token'lar ve kapsamın bütçeleri. Fatura değil, ölçümdür.</sub></td>
+  </tr>
+</table>
+
+## Terminalde
+
+Bu ekranlar gerçek Deckent terminalinden (alpha.17, 120×36), geçici bir örnek projede çekildi. Model, aynı makinedeki
+küçük bir deneme sunucusudur: hiçbir sağlayıcı çağrılmadı ve gerçek bir anahtar kullanılmadı.
+
+Her slash komutu kendi penceresinde yanıt verir. <kbd>Esc</kbd> pencereyi kapatır ve konuşmada metin yığını yerine
+tek bir çerçeveli `Deckent sistemi` satırı bırakır. Ayarlar yazarak değil seçerek değişir: `/config` bölümden anahtara,
+oradan izin verilen değerlere ilerler; sayılar sınırlı bir ok tuşu adımlayıcısıyla değişir ve yalnız birkaç alan
+(izinli bir fetch adresi ya da bir kayıt defteri adresi gibi) yazılan metin alır, o da önce kontrol edilir. Her
+değişiklik policy'den geçer ve bir onaya dönüşebilir.
+
+<table>
+  <tr>
+    <td width="50%"><img src=".github/assets/screenshots/tr/02-sohbet.png" alt="Sohbet turu: sizin satırınız Sen, yanıt Deckent başlığı altında"><br><sub><b>Sohbet.</b> Sizin satırlarınız ve Deckent'in yanıtları belirgin biçimde ayrışır; her turda süre ve token.</sub></td>
     <td width="50%"><img src=".github/assets/screenshots/tr/05-onay.png" alt="Kabuk komutu için onay penceresi"><br><sub><b>Onay penceresi.</b> Ne, nerede (sandbox), kimin adına, kapsam, neden, risk, geri alınabilirlik ve canlı süre. <code>y</code> bu sefer · <code>n</code> reddet · <kbd>Tab</kbd> not.</sub></td>
   </tr>
   <tr>
-    <td width="50%"><img src=".github/assets/screenshots/tr/04-durum.png" alt="/status çıktısı"><br><sub><b>/status.</b> Önce insan dilinde özet; kimlikler, süreç ve build ayrıntıda.</sub></td>
+    <td width="50%"><img src=".github/assets/screenshots/tr/04-durum.png" alt="/status penceresi"><br><sub><b>/status.</b> Önce insan dilinde özet; kimlikler, süreç ve build ayrıntıda.</sub></td>
     <td width="50%"><img src=".github/assets/screenshots/tr/06-tam-erisim.png" alt="Tam erişim modu göstergesi"><br><sub><b>Modlar.</b> <kbd>Shift</kbd>+<kbd>Tab</kbd> yetkili olduğunuz modlar arasında döner; tam erişim açıkça işaretlenir.</sub></td>
   </tr>
   <tr>
-    <td width="50%"><img src=".github/assets/screenshots/tr/03-yardim.png" alt="Amaca göre gruplu /help"><br><sub><b>/help.</b> Komutlar amaca göre gruplu, her biri tek satır.</sub></td>
-    <td width="50%"><img src=".github/assets/screenshots/tr/07-mcp.png" alt="/mcp sunucu listesi"><br><sub><b>/mcp.</b> Yapılandırılmış MCP sunucuları, güven ve sağlık durumları.</sub></td>
+    <td width="50%"><img src=".github/assets/screenshots/tr/03-yardim.png" alt="Amaca göre gruplu /help penceresi"><br><sub><b>/help.</b> Komutlar amaca göre gruplu, her biri tek satır.</sub></td>
+    <td width="50%"><img src=".github/assets/screenshots/tr/07-mcp.png" alt="/mcp penceresi"><br><sub><b>/mcp.</b> Adım adım sunucu ekleme; yapılandırılmış sunucular güven durumlarıyla.</sub></td>
+  </tr>
+  <tr>
+    <td width="50%"><img src=".github/assets/screenshots/tr/08-saglayici.png" alt="Sağlayıcı türlerini listeleyen /provider penceresi"><br><sub><b>/provider.</b> Her sağlayıcının durumu; OpenRouter satırı şimdilik yalnız anahtar tuttuğunu söyler.</sub></td>
+    <td width="50%"><img src=".github/assets/screenshots/tr/14-ayarlar.png" alt="Terminal temasını seçen /config penceresi"><br><sub><b>/config.</b> Bölüm, anahtar, sonra izin verilen değerlerden biri; geçerli olan işaretli.</sub></td>
+  </tr>
+  <tr>
+    <td width="50%"><img src=".github/assets/screenshots/tr/15-sistem-satiri.png" alt="Kapanan pencerelerin bıraktığı çerçeveli sistem satırları"><br><sub><b>Sistem satırları.</b> Kapanan her pencere tek bir çerçeveli özet satırı bırakır.</sub></td>
+    <td width="50%"><img src=".github/assets/screenshots/tr/16-gorevler.png" alt="Henüz iş olmayan canlı /tasks penceresi"><br><sub><b>/tasks.</b> İşçiler ve işler tek bir canlı, salt okunur pencerede (burada boş: henüz arka plan işi yok).</sub></td>
   </tr>
 </table>
 
@@ -130,15 +201,15 @@ makinede sandbox kullanılamıyorsa `prefer-sandbox` ortamı host'ta çalışır
 
 ### API anahtarları
 
-Sağlayıcı anahtarını bir kez `deckent secret set AD` ile kaydedersiniz (gizli istem ya da stdin; asla komut argümanı değil);
-model profili ona adıyla başvurur. Anahtarı `ANTHROPIC_API_KEY`, shell profili ya da `.env` dosyasına koymayın: başka araçlar
-oraları okur.
+Sağlayıcı anahtarını bir kez, `/provider`'ın gizlenen alanına ya da `deckent secret set AD` ile kaydedersiniz (gizli
+istem ya da stdin; asla komut argümanı değil); model profili ona adıyla başvurur. Anahtarı `ANTHROPIC_API_KEY`, shell
+profili ya da `.env` dosyasına koymayın: başka araçlar oraları okur.
 
 | Depo (`secrets.store`) | Diskte | Anahtarı kim okuyabilir |
 |---|---|---|
-| `core.secret-store.env@1` (varsayılan) | hiçbir şey; ortam değişkeninden okunur | o ortamı devralan her program |
+| `core.secret-store.env@1` (hiçbir depo seçilmemişse) | hiçbir şey; ortam değişkeninden okunur | o ortamı devralan her program |
 | `core.secret-store.file@1` | düz metin, 0600 dosya | Deckent ve sizin hesabınızla çalışan diğer programlar |
-| `core.secret-store.encrypted-file@1` (önerilen) | şifreli (AES-256-GCM); açma anahtarı aynı klasörde, parola yok | Deckent; sizin hesabınızla çalışan diğer programlar yine açabilir |
+| `core.secret-store.encrypted-file@1` (önerilen; yeni kurulumlar bununla başlar) | şifreli (AES-256-GCM); açma anahtarı aynı klasörde, parola yok | Deckent; sizin hesabınızla çalışan diğer programlar yine açabilir |
 
 Ajanlar ve worker'lar anahtarı hiç almaz: sandbox depoyu gizler, anahtarı geri yansıtan sağlayıcı yanıtı reddedilir.
 `deckent doctor` hangi deponun etkin olduğunu ve kimin okuyabileceğini gösterir. Sağlayıcı anahtarı reddederse (401/403) ya da
@@ -154,6 +225,17 @@ bir limit dolarsa terminal bunu açık sözlerle söyler; harcama limitleri sağ
 3. Planlanan: Deckent servisini ayrı bir işletim sistemi kullanıcısında (ya da macOS Keychain ile) çalıştırmak; böylece hesabınızdaki hiçbir program anahtarları okuyamaz.
 
 Dosya depoları native Windows'ta henüz yok.
+
+### Harcama
+
+Her kapsamın, tüm API sağlayıcıları için ortak tek bir USD bütçesi vardır. Ücretli bir çağrıdan önce Deckent, geçerli
+olabilecek en pahalı fiyat kademesinde çağrının tutabileceği en yüksek tutarı ayırır; sonra çağrıyı sağlayıcının kendi
+son yanıtında bildirdiği kullanım ile doğrulanmış yayımlanmış fiyatın çarpımından kesinleştirir. Kesinleşen tutar
+Deckent'in kendi hesabıdır, sağlayıcının faturası değildir. Fiyatı doğrulanmamış uzak bir model reddedilir ve nedeniyle
+kilitli görünür. Sağlayıcı hangi fiyat kademesini kullandığını söylemiyorsa (DeepSeek) çağrı yayımlanmış en yüksek
+fiyattan kesinleşir ve üst sınır olarak işaretlenir. Son kullanımını hiç almamış bir çağrı, `deckent models
+reconcile-spending` ile çözene kadar ayrılmış kalır. Kesinleşen bir tutar ayrılandan fazla çıkarsa kapsam yeni
+çağrıları kabul etmez; dondurmayı `deckent models revise-budget --scope <id> --usd <n> --unfreeze` ile kaldırırsınız.
 
 ## Mimari
 
@@ -190,9 +272,10 @@ flowchart LR
 - **Yönetişim**: yerel kimlik, şirket kapsamlı policy, denetim ve her yüzey için tek onay aracısı; doğrulanmamış
   kanıt için insan kabulü ya da reddi.
 - **Model seçin**: istemci ve faturalama kanalına göre model kataloğu, birebir etkinleştirme, yerel vLLM sohbeti;
-  `/provider` ve `/model` kendi anahtarınızla sağlayıcı bağlar ve oturum için modeli sabitler; ücretli çağrılar,
-  sağlayıcının kullanım verisi ile doğrulanmış yayımlanmış tarifenin çarpımından, belirlediğiniz bütçe altında
-  kesinleşir (fiyatı bilinmeyen uzak model reddedilir ve nedeniyle kilitlenir); harcama ve ayırma denetimi.
+  `/provider` ve `/model` kendi anahtarınızla sağlayıcı bağlar, modeli oturum için sabitler ya da varsayılanınız yapar;
+  ücretli çağrılar, sağlayıcının kullanım verisi ile doğrulanmış yayımlanmış tarifenin çarpımından, bütçe penceresinde
+  ya da `deckent models create-budget` ile belirlediğiniz bütçe altında kesinleşir (fiyatı bilinmeyen uzak model
+  reddedilir ve nedeniyle kilitlenir); harcama ve ayırma denetimi.
 - **İşletin**: tüm kurulumlar için salt okunur `deckent monitor`, sağlık için `deckent doctor`, ayarlar için
   `deckent config`, her yerde iki dilli yardım.
 
@@ -224,6 +307,7 @@ Bundan sonra her şey `deckent` ile yapılır:
 deckent --version
 deckent                                   # etkileşimli terminali aç
 deckent doctor                            # kurulum sağlığı
+deckent init policy --scope <id> --apply  # bir proje için ilk kurulum policy'si (bkz. Adım adım ilk oturum)
 deckent init preview --profile <dosya>    # bir proje için kurulumu önizle
 deckent mcp add context7 -- npx -y @upstash/context7-mcp   # MCP sunucusu ekle
 deckent monitor                           # kurulumları ve işleri izle

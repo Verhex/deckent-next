@@ -133,5 +133,5 @@ terminalin varsayılanıdır; `/model` oturum sabitlemesi önce gelir, sonra pro
 
 Harcama: ücretli çağrılar uygulanabilir en pahalı yayımlanmış kademeyi rezerve eder ve sağlayıcının döndürdüğü kullanım ile
 sabitlenmiş tarifenin çarpımından kesinleşir (`measured-tariff`). Kapsamın ilk bütçesi `deckent models create-budget
---scope <id> --usd <n>` (ya da `/model` bütçe penceresi) ile açılır, `revise-budget [--unfreeze]` ile değişir; son kullanımı
+--scope <id> --usd <n>` (ya da bütçe penceresi: `/provider`'ın ilk satırı) ile açılır, `revise-budget [--unfreeze]` ile değişir; son kullanımı
 hiç gelmemiş askıdaki çağrı `reconcile-spending` ile çözülür. Ayrıntı: ARCHITECTURE "Spend settlement".
