@@ -314,6 +314,10 @@ Owner “Öneriler kabul edildi”: önce Noul kontrollerini tek önerme yapma v
 - **T4 sırası** (Jev 2a7022ea iki tur 0,95/0,64 → owner): T4 anahtar koruma dilimleriyle yan yana; mevcut anahtar deposu portuna yazılır, dilim 1'den sonra iner; SECRET-CONTINUITY ile MODEL-SWITCH'in model-invocation kısmı birlikte. Lead'in Jev'siz önerisinin yerine geçer.
 - **`/model` kapsamı** (Jev a172b1ad iki tur 0,97/0,63 → owner): seçim oturuma; seçicide "varsayılan da yap" kullanıcı katmanını `/config` yönetilen yolundan yazar.
 - **Haiku 5.5** (owner): `claude-haiku-5-5` etkin katalog modeli (canlı + N1). Fiyat kaydı istem uzunluğu kademeli (Jev 2fc550db 0,96/0,79, lead). N1 kanal kaydı kayıtla güncel biçime geçer (Jev 86370454 iki tur 0,89/0,72 → owner). Haiku 4.5'in 2026-10-15 kesimi owner'ın 10-02 kararı olarak kalır.
+- **Slash pencereleri ve yalnız seçimle ayar** (owner yönergesi; her biri Jev iki tur eşik altı → owner): slash çıktıları her zaman kendi penceresinde, model çıktısıyla karışmaz; sayılar hazır değer + ok tuşu (Jev 2335c69d); serbest metin türet/seç, elle giriş yalnız maskeli sır ve yeni dış adres/host (e8fe1d18); yapılı belgeler kayıt düzenleyici + yönetilen içe aktarma (e81f7bc7); `/clear` doğrudan temizler, `/exit` doğrudan çıkar, bilgi veren yüzeyler ayrı ve okunaklı pencere (renk, kalın, ölçek, vurgu; SHA anahtarları öne çıkmaz) (66217c41). Codex işçileri gpt-6.1-sol high; paralel hat sınırı genişletilebilir.
+- **T4 açık noktaları:** kullanıcı varsayılan modeli yeni `terminal.defaultModel` (Jev d84b248d 0,98/0,75, lead); sağlayıcı bağlama tek yönetilen işlem `models connect` (Jev 96303af3 iki tur 0,99/0,74 → owner).
+- **Anahtar deposu seçimi** (yan oturum araştırması; Jev a0284b73 1,00/0,82 + owner): `secrets.store` config değil, anahtar taşıma işlemi: kopyala → doğrula → eskiyi sil → seçimi yayımla; daha zayıf depoya geçiş açık onay; audit `secret-change`; config motorunun `secrets` reddi kalır. Yeni kurulumlarda şifreli depo varsayılanı (SECRET-DEFAULT, Jev 60bdc5e6 0,93/0,67 + owner).
+- **Model eşitleme** (owner): Opus 5.5 N1'de de etkin; Haiku 4.5 her yerde pasif.
 
 
 ## Owner kararları — 2026-10-08 (API anahtarları)

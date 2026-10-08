@@ -93,10 +93,12 @@ export async function completeTerminalChatTurn(input: TerminalChatTurnInput, por
  * The same configuration check the plain turn makes, before an agent turn contacts the service; returns the service's admission from
  * that configuration, so the stream can name the summarizing phase (TL-A).
  */
-export async function assertTerminalChatReady(projectRoot: string, options: ConfigLoadOptions = {}): Promise<AgentTurnAdmission> {
+export async function assertTerminalChatReady(projectRoot: string, options: ConfigLoadOptions = {}, reference?: ModelReference): Promise<AgentTurnAdmission> {
   const plan = await describeTerminalChat(projectRoot, options);
   if (plan.status === 'not-configured') throw ErrorRegistry.createError('TERMINAL_CHAT_NOT_CONFIGURED');
-  if (plan.status === 'model-not-declared') throw ErrorRegistry.createError('TERMINAL_CHAT_MODEL_NOT_DECLARED');
+  // T4 MODEL-SWITCH (S19): a session pin is checked as itself; the configured model's state neither blocks nor stands in for it.
+  const declared = reference ? (await inspectModelBinding(projectRoot, reference, options)).status === 'declared' : plan.status !== 'model-not-declared';
+  if (!declared) throw ErrorRegistry.createError('TERMINAL_CHAT_MODEL_NOT_DECLARED');
   const config = await loadComposedConfig(projectRoot, options) as { service: { inputMaxBytes: number } };
   return agentTurnAdmission(plan.maxCompletionTokens!, config.service.inputMaxBytes);
 }

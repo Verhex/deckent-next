@@ -1414,7 +1414,7 @@
   "monitor.brief.deliveryNone": "Teslim: teslim edilecek bir şey yok; bu işin kabul edilen hiçbir görevi yama taşımıyor.",
   "monitor.brief.deliveryPatchNotPrepared": "Kabul edildi · yama hazırlanamadı: bu iş için saklanmış yama yok, bu yüzden teslim edilecek bir şey yok. Nedeni ledger'da kayıtlı değil; tam sınırı ve yapılandırma alanını `task patch-prepare` söyler.",
   "monitor.brief.deliveryAwaiting": "Kabul edildi · yama hazır, teslim bekliyor: henüz hiçbir şey teslim edilmedi.",
-  "terminal.slash.model": "Geçerli modeli ve bu kapsamın model kataloğunu göster",
+  "terminal.slash.model": "Bu oturumun modelini seç; kullanılamayan modeller nedenini gösterir",
   "terminal.slash.usage": "Bu konuşmanın token kullanımını göster",
   "terminal.slash.doctor": "Kurulum sağlık raporunu çalıştır",
   "terminal.slash.scope": "Kapsamı, projeyi, modu ve yüzey erişimini göster",
@@ -1489,5 +1489,6 @@
   "terminal.admin.usage.prompt": "  İstem: {tokens} token",
   "terminal.admin.usage.completion": "  Yanıt: {tokens} token",
   "terminal.admin.usage.reasoning": "  Akıl yürütme: {reasoning}",
-  "terminal.admin.status.service": "Çalışma servisi şimdi: örnek {instance}, pid {pid}, sürüm {build}"
+  "terminal.admin.status.service": "Çalışma servisi şimdi: örnek {instance}, pid {pid}, sürüm {build}",
+  "terminal.slash.provider": "Sağlayıcı bağla (gizli anahtar, ücretsiz deneme) ya da bağlantıyı kaldır"
 }

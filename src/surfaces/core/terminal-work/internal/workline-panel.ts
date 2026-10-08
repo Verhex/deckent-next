@@ -13,7 +13,7 @@ type Approval = Readonly<{ kind: 'approval'; approval: WorklineApproval; remaini
 /** A generic bounded window (TS-WINDOW): a titled body; `confirm` asks y/N (picker items `allow`/`deny`), otherwise it closes (`close`). */
 export type PanelWindowPresentation = Readonly<{ kind: 'window'; title: string; body: readonly string[]; hints: string; confirm: boolean }>;
 /** T3 L4: an open `/mode`, `/config` or `/mcp` window; it holds the command (queued lines wait) until it closes (item `close`). */
-export type SettingsPanelPresentation = Readonly<{ kind: 'settings'; panel: 'mode' | 'config' | 'mcp' }>;
+export type SettingsPanelPresentation = Readonly<{ kind: 'settings'; panel: 'mode' | 'config' | 'mcp' | 'model' | 'provider' }>;
 export type PanelPresentation = Approval | Readonly<{ kind: 'cancel'; run: RunView }> | PanelWindowPresentation | SettingsPanelPresentation
   | Readonly<{ kind: 'approvals'; rows: readonly WorklineApproval[] }> | Readonly<{ kind: 'resume'; rows: readonly ResumePickerItem[] }>;
 type PrivateCard = { view: PanelApprovalView<TerminalLocalContext>; presentation: Approval; standing?: StandingScope; unknown: () => void };

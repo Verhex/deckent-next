@@ -112,7 +112,7 @@ describe('ConfigChangeApprovalBroker', () => {
 
 describe('protocol: released clients never receive a config-change record', () => {
   it('hides config-change below v22 (alpha.10 speaks v21) and operations below v15; v22 sees every kind', () => {
-    expect(CONFIG_CHANGE_SUBJECT_PROTOCOL_VERSION).toBe(22); expect(RUNTIME_SERVICE_SCHEMA_VERSION).toBeLessThanOrEqual(CONFIG_CHANGE_SUBJECT_PROTOCOL_VERSION);
+    expect(CONFIG_CHANGE_SUBJECT_PROTOCOL_VERSION).toBe(22); expect(RUNTIME_SERVICE_SCHEMA_VERSION).toBeGreaterThanOrEqual(CONFIG_CHANGE_SUBJECT_PROTOCOL_VERSION);
     expect(approvalSubjectsHiddenFromProtocol(21)).toEqual(['config-change']);
     expect(approvalSubjectsHiddenFromProtocol(14)).toEqual(['operation', 'config-change']);
     expect(approvalSubjectsHiddenFromProtocol(22)).toEqual([]);

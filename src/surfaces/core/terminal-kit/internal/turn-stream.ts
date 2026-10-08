@@ -69,7 +69,10 @@ export type TurnDelta =
 /** `reasoning: 'off'` (`/reasoning off`, protocol v16): the turn asks the model to run without thinking; absent otherwise. */
 /** `turn.sessionId` (v16, SCR-A) names the conversation: the service keeps its scratch area across the conversation's turns. */
 /** `turn.fullAccess` (v17, MODES-3): the session was launched in full access; absent otherwise. */
-export type WorklineStreamTurn = (messages: readonly AgentChatMessage[], signal: AbortSignal, turn?: Readonly<{ reasoning?: 'off'; sessionId?: string; fullAccess?: true; onTurnBound?: (binding: PanelTurnBinding) => void }>) => AsyncIterable<TurnDelta>;
+/** `turn.reference` (v23, T4 MODEL-SWITCH): the model this session pinned with `/model`; the service uses exactly it or refuses. */
+export type WorklineModelReference = Readonly<{ providerId: string; providerVersion: number; modelId: string; modelVersion: number }>;
+export type WorklineStreamTurn = (messages: readonly AgentChatMessage[], signal: AbortSignal, turn?: Readonly<{ reasoning?: 'off'; sessionId?: string; fullAccess?: true;
+  reference?: WorklineModelReference; onTurnBound?: (binding: PanelTurnBinding) => void }>) => AsyncIterable<TurnDelta>;
 
 /** Collects a stream into the final answer text (for line mode and tests); reasoning is excluded. */
 export async function collectTurnText(stream: AsyncIterable<TurnDelta>): Promise<{ readonly text: string; readonly finish: Extract<TurnDelta, { kind: 'done' }>['finish'] | null }> {

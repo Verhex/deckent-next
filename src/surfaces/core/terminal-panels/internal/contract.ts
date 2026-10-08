@@ -3,14 +3,14 @@ import type { PermissionModeStop } from '#surfaces/core/terminal-render/index.js
 import type { PickerLabels } from '#surfaces/core/terminal-picker/index.js';
 
 /**
- * T3 L4 PANELS: the ports and words of the interactive `/mode`, `/config` and `/mcp` windows. This unit only presents and collects a choice;
+ * T3 L4 PANELS: the ports and words of the interactive `/mode`, `/config` and `/mcp` windows (T4: `/model` and `/provider`). This unit only presents and collects a choice;
  * every read, write, policy decision and trust record stays behind the port the trusted composition binds (the same paths as the text
  * commands and `deckent config|mcp`). All words come in already localized; nothing here calls the catalog.
  */
-export type PanelKind = 'mode' | 'config' | 'mcp';
+export type PanelKind = 'mode' | 'config' | 'mcp' | 'model' | 'provider';
 export type PanelNotice = Readonly<{ level: 'info' | 'warning' | 'error'; text: string }>;
 /** A labelled body row of a panel window (detail views, trust questions). Values from a producer go through the decision projection. */
-export type PanelLine = Readonly<{ label: string; text: string; tone?: 'warning' | 'muted' }>;
+export type PanelLine = Readonly<{ label: string; text: string; tone?: 'warning' | 'muted' | 'success' }>;
 
 /** `/mode`: the person's permission mode through the runtime service (the same port and audit as `/mode <mode>` and Shift+Tab). */
 export interface ModePanelPort {
@@ -104,6 +104,77 @@ export interface McpPanelLabels {
   readonly trustKeys: string;
 }
 
+/** An exact catalog model reference (provider id and version, catalog model id and version): never a bare or native model id. */
+export type ModelPanelReference = Readonly<{ providerId: string; providerVersion: number; modelId: string; modelVersion: number }>;
+/**
+ * One model of `/model` (T4 MODEL-SWITCH): its words, the provider group it is listed under, and why it cannot be chosen now (not connected in
+ * this scope, its key missing, not activated, not readable) — such a row is listed with its reason and is never pickable.
+ */
+export type ModelPanelChoice = Readonly<{ reference: ModelPanelReference; label: string; detail: string; group: string; blocked: string | null;
+  /** Shown dimmed under the list for the focused row only (owner 2026-10-08: human labels first, exact ids and digests never in front): the exact
+   * reference, and for a locked row the governed command that would fix it. */
+  exact: string; command: string | null;
+  /** The configured default (`terminal.chat.reference`). */
+  configured: boolean }>;
+export type ModelPanelView = Readonly<{ title: string; choices: readonly ModelPanelChoice[]; notes: readonly string[];
+  /** Why "also make default" cannot be offered (null: it can). */
+  defaultBlocked: string | null }>;
+/** What the host binds for `/model`: the models and, when decided, the governed default write (the `/config` writer, approval-aware). */
+export interface ModelPanelSource {
+  inspect(): Promise<ModelPanelView>;
+  makeDefault?(choice: ModelPanelChoice): Promise<ConfigPanelOutcome>;
+}
+/** `/model`'s full port: the host's source plus the session's own pin (the workline holds it; the next turn carries it, protocol v23). */
+export interface ModelPanelPort extends ModelPanelSource {
+  pinned(): ModelPanelReference | null;
+  pin(choice: ModelPanelChoice): void;
+}
+export interface ModelPanelLabels {
+  readonly hints: string;
+  /** Scope step: this session only; this session and the user default. */
+  readonly session: string; readonly sessionAndDefault: string;
+  /** Row marks: pinned for this session; the configured default. */
+  readonly pinnedMark: string; readonly configuredMark: string;
+  /** `{model}`: the notice after a pin. */
+  readonly pinned: string;
+}
+
+/** One `/provider` kind (T4 PROVIDER-CONNECT): its state in words, the key's store name (never a value) and what the connect flow asks. */
+export type ProviderPanelKind = Readonly<{ id: string; label: string; detail: string; blocked: string | null; keyName: string | null; keyStored: boolean;
+  endpointEditable: boolean; endpointDefault: string | null; keyRequired: boolean;
+  /** Owner 2026-10-08 (D3): where the kind takes an address it is chosen from this list (configured server, known local servers, the provider's
+   * default); a typed address is only the list's last row, checked and previewed. A kind with a fixed endpoint has none. */
+  endpointChoices: readonly Readonly<{ id: string; label: string; url: string }>[] }>;
+export type ProviderPanelView = Readonly<{ title: string; kinds: readonly ProviderPanelKind[]; notes: readonly string[] }>;
+export type ProviderConnectRequest = Readonly<{ kind: string; endpoint: string | null; key: string | null }>;
+/** A connect's typed result as labelled rows (no key, no answer body); `stored`: the key went to the secret store. */
+export type ProviderConnectOutcome = Readonly<{ stored: boolean; title: string; lines: readonly PanelLine[] }>;
+export interface ProviderPanelPort {
+  inspect(): Promise<ProviderPanelView>;
+  /** A typed address checked by the endpoint rule (https anywhere, plain http only on this machine): the base it becomes and the URL the free
+   * check will call (the preview), or the localized reason it is refused. */
+  endpoint(kind: string, text: string): Readonly<{ ok: true; base: string; check: string }> | Readonly<{ ok: false; reason: string }>;
+  /** The free check, then (only on success) the key into the secret store through the runtime service. */
+  connect(request: ProviderConnectRequest): Promise<ProviderConnectOutcome>;
+  /** Removes the kind's stored key through the runtime service. */
+  disconnect(kind: string): Promise<readonly string[]>;
+  /** The transparency rows the key step shows: how the key is kept and who else can read it. */
+  readonly transparency: readonly PanelLine[];
+}
+export interface ProviderPanelLabels {
+  readonly title: string; readonly hints: string;
+  readonly actions: Readonly<Record<'connect' | 'replace' | 'disconnect', string>>;
+  readonly endpointTitle: string; readonly endpointHint: string;
+  /** The list's last row (a typed address) and its preview question: title, the two rows' labels, the key row. */
+  readonly endpointOther: string; readonly previewTitle: string; readonly previewAddress: string; readonly previewCheck: string; readonly previewKeys: string;
+  /** `{kind}`: the key step's title; its hints (required key / optional key). */
+  readonly keyTitle: string; readonly keyHint: string; readonly keyOptionalHint: string; readonly keyRequired: string;
+  readonly checking: string; readonly resultHints: string;
+  /** `{kind}`: the question before a disconnect; its key row. */
+  readonly disconnectTitle: string; readonly disconnectKeys: string;
+  readonly empty: string;
+}
+
 /** Shared words of every panel window. */
 export interface PanelLabels {
   readonly picker: PickerLabels;
@@ -112,9 +183,13 @@ export interface PanelLabels {
   readonly mode: ModePanelLabels;
   readonly config: ConfigPanelLabels;
   readonly mcp: McpPanelLabels;
+  readonly model: ModelPanelLabels;
+  readonly provider: ProviderPanelLabels;
 }
 export interface PanelPorts {
   readonly mode?: ModePanelPort;
   readonly config?: ConfigPanelPort;
   readonly mcp?: McpPanelPort;
+  readonly model?: ModelPanelPort;
+  readonly provider?: ProviderPanelPort;
 }

@@ -9,7 +9,7 @@ describe('/help grouped', () => {
   it('EN', () => {
     expect(slashHelpText(terminalComposerLabels('en').slash).split('\n\n')[0]).toBe([
       'Commands', 'Info', '  /status  Show whether Deckent is running, its version and the model', '  /context  Show how full the model\'s context window is',
-      '  /monitor  Monitor window: stuck runs, workers, approvals, pools and installs (--install/--scope: text snapshot)', '  /model  Show the current model and the model catalog of this scope',
+      '  /monitor  Monitor window: stuck runs, workers, approvals, pools and installs (--install/--scope: text snapshot)', '  /model  Choose this session\'s model; models that cannot be used show why',
       '  /usage  Show this conversation\'s token usage', '  /doctor  Run the installation health report', '  /scope  Show scope, project, mode and surface access',
       '  /help  List the commands by group'].join('\n'));
   });
@@ -39,8 +39,8 @@ describe('/help grouped', () => {
   it('lists every registry command exactly once, each on a single line', () => {
     for (const locale of ['en', 'tr'] as const) {
       const rows = slashHelpText(terminalComposerLabels(locale).slash).split('\n').filter(line => line.startsWith('  /'));
-      expect(rows).toHaveLength(28);
-      expect(new Set(rows.map(row => row.trim().split(' ')[0])).size).toBe(28);
+      expect(rows).toHaveLength(29);
+      expect(new Set(rows.map(row => row.trim().split(' ')[0])).size).toBe(29);
     }
   });
 });
