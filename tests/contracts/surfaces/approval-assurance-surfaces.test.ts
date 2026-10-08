@@ -103,6 +103,14 @@ describe('terminal ports forward the turn capability and the facts', () => {
 
 /** The approval window's EN key hint and field texts (T-APPROVAL-WINDOW); the assurance sentences keep the harness's probe tokens. */
 const DENY = 'n deny (Enter/Esc too)', NOTHING_RUNS = 'if nobody decides, nothing runs';
+/** SLASH-WINDOWS (SW-2): `/approvals` takes no typed reference; the card opens from the picker (`index`: its 0-based row). */
+async function pickApproval(view: ReturnType<typeof mountWorkline>, index: number, label: string) {
+  for (const char of '/approvals\r') { view.stdin.write(char); await settle(2); }
+  await until(() => view.stdout.frame.includes('> A-ITEM 1'), `${label} picker`).catch(error => { throw new Error(`${String(error)}\n${view.stdout.frame}`); }); await settle(40);
+  for (let step = 0; step < index; step++) { view.stdin.write('\u001b[B'); await settle(20); }
+  view.stdin.write('\r');
+  await until(() => view.stdout.frame.includes(DENY), label); await settle(40);
+}
 
 describe('the single approval card', () => {
   const mounted: Array<{ unmount(): void }> = [];
@@ -120,8 +128,7 @@ describe('the single approval card', () => {
     const view = mountWorkline({ pollMs: 10_000, ledger: { ...baseLedger, async listApprovalPage() { return { items: [item, hardFloor], nextAfter: null }; },
       async decideApproval() { throw new Error('unused'); } } as never }, 220);
     mounted.push(view.instance);
-    for (const char of '/approvals op-1\r') { view.stdin.write(char); await settle(2); }
-    await until(() => view.stdout.frame.includes(DENY), 'operation card');
+    await pickApproval(view, 0, 'operation card');
     const frame = view.stdout.frame;
     const at = (text: string) => frame.indexOf(text);
     expect(at(`erp.post@1 · records/PO-1 · ${'d'.repeat(12)}`)).toBeGreaterThan(-1);
@@ -171,8 +178,7 @@ describe('the single approval card', () => {
     const view = mountWorkline({ pollMs: 10_000, ledger: { ...baseLedger, async listApprovalPage() { return { items: [item], nextAfter: null }; },
       async decideApproval() { throw new Error('unused'); } } as never }, 220);
     mounted.push(view.instance);
-    for (const char of '/approvals tool-2\r') { view.stdin.write(char); await settle(2); }
-    await until(() => view.stdout.frame.includes(DENY), 'tool card');
+    await pickApproval(view, 0, 'tool card');
     expect(view.stdout.frame).toContain('R-TURN-ELSEWHERE');
     expect(view.stdout.frame).toMatch(/Risk: +Deletes \(cannot be undone\)/u); expect(view.stdout.frame).toMatch(/Command: +rm -rf src/u);
     view.stdin.write('\u001b');
@@ -188,10 +194,7 @@ describe('the single approval card after Sol 2234', () => {
   const typed = (code: string) => Object.assign(new Error(code), { code });
   const card = (id: string, patch: Partial<WorklineApproval> = {}) => ({ approvalId: id, runId: '-', taskId: '-', summary: `run_shell · ls · ${'c'.repeat(12)}`, requester: 'svc',
     revision: 0, status: 'pending', decision: null, expiresAt: Date.now() + 600_000, risk: 'shell-read-low', undo: null, ...patch }) as WorklineApproval;
-  const open = async (view: ReturnType<typeof mountWorkline>, id: string) => {
-    for (const char of `/approvals ${id}\r`) { view.stdin.write(char); await settle(2); }
-    await until(() => view.stdout.frame.includes(DENY), `card ${id}`); await settle(40);
-  };
+  const open = (view: ReturnType<typeof mountWorkline>, id: string) => pickApproval(view, Number(id.slice(-1)) - 1, `card ${id}`);
 
   it('R1: names a required level other than peer-session or turn-bound by its id and never says peer-session suffices', async () => {
     const items = [card('idp-1', { requiredAssurance: 'step-up-idp' }), card('peer-1', { requiredAssurance: 'peer-session' })];
@@ -201,8 +204,10 @@ describe('the single approval card after Sol 2234', () => {
     await open(view, 'idp-1');
     expect(view.stdout.frame).toContain('R-OTHER step-up-idp');
     expect(view.stdout.frame).not.toContain('R-PEER');
-    view.stdin.write('\u001b'); await until(() => !view.stdout.frame.includes('Approval: idp-1'), 'closed');
-    await open(view, 'peer-1');
+    // Esc denies; this fixture's decide port throws, so the failure shows in its own window (SW-2), which Esc closes into the one system line.
+    view.stdin.write('\u001b'); await until(() => view.stdout.frame.includes('ERR:unused') && !view.stdout.frame.includes(DENY), 'deny failure window'); await settle(40);
+    view.stdin.write('\u001b'); await until(() => view.stdout.frame.includes('◆ Deckent system · ERR:unused'), 'closed'); await settle(60);
+    await pickApproval(view, 1, 'card peer-1');
     expect(view.stdout.frame).toContain('R-PEER'); expect(view.stdout.frame).not.toContain('R-OTHER');
     view.stdin.write('\u001b');
   });
@@ -247,11 +252,12 @@ describe('the single approval card after Sol 2234', () => {
     await open(view, 'floor-1');
     view.stdin.write('y');
     await until(() => view.stdout.text.includes('ERR:APPROVAL_ASSURANCE_INSUFFICIENT'), 'typed refusal shown');
-    await settle(60);
-    expect(view.stdout.frame).toContain(DENY); expect(view.stdout.frame).toContain('Approval: floor-1');
+    // SW-2: the refusal is its own window; Esc returns to the same pending card, which the owner can still deny.
+    await settle(60); view.stdin.write('\u001b');
+    await until(() => view.stdout.frame.includes(DENY) && view.stdout.frame.includes('Approval: floor-1'), 'same card after the refusal');
     expect(view.stdout.text).not.toContain('A-ALLOWED floor-1');
     view.stdin.write('n');
-    await until(() => view.stdout.text.includes('A-DENIED floor-1') && !view.stdout.frame.includes(DENY), 'denied after refusal');
+    await until(() => view.stdout.text.includes('A-DENIED floor-1') && !view.stdout.frame.includes(DENY), 'denied after refusal'); await settle(60);
     expect(calls).toEqual([{ id: 'floor-1', decision: 'allow' }, { id: 'floor-1', decision: 'deny' }]);
     await open(view, 'floor-2');
     view.stdin.write('y');
