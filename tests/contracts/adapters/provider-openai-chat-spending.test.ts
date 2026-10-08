@@ -93,12 +93,12 @@ it.each([
 ] as const)('prices %s cache writes exclusively and reserves dearest Chat processing/context rates', async (model, exact) => {
   const endpoint = 'https://api.openai.com/v1/chat/completions';
   const f = fixture(endpoint, lookupOpenAiCompatibleTariff(endpoint, model), model), priced = createOpenAiChatPricedNative();
-  let serviceTier = 'default', written: unknown = 20, prompt = 100;
+  let serviceTier = 'default', written: unknown = 20, prompt = 100, cachedTokens: unknown = 40;
   vi.spyOn(http, 'sendNativeJsonHttp').mockImplementation(async (_request, options) => {
     const parsed = options!.parseResponse!(Buffer.from(JSON.stringify({ id: 'c', object: 'chat.completion', created: 1, model, service_tier: serviceTier,
       choices: [{ index: 0, finish_reason: 'stop', message: { role: 'assistant', content: 'ok' } }],
       usage: { prompt_tokens: prompt, completion_tokens: 10, total_tokens: prompt + 10,
-        prompt_tokens_details: { cached_tokens: 40, cache_write_tokens: written }, completion_tokens_details: { reasoning_tokens: 5 } } })));
+        prompt_tokens_details: { cached_tokens: cachedTokens, cache_write_tokens: written }, completion_tokens_details: { reasoning_tokens: 5 } } })));
     if (!('response' in parsed)) throw new Error('fixture'); return parsed.response;
   });
   const observe = async () => {
@@ -121,6 +121,10 @@ it.each([
     expect((await observe()).measurement).toMatchObject({ source: { serviceTier: serviceTier === 'fast' ? 'priority' : serviceTier } });
   }
   for (written of [undefined, -1, 61, 0.5, '20']) expect((await observe()).measurement).toBeNull();
+  written = 20;
+  // Astra 2467 P2: a null or missing raw cached_tokens is an unreported cache split, never a reported zero.
+  for (cachedTokens of [null, undefined, '40']) expect((await observe()).measurement).toBeNull();
+  cachedTokens = 40;
   written = 20; serviceTier = 'unknown'; expect((await observe()).measurement).toBeNull();
   serviceTier = 'default'; prompt = 272000; expect((await observe()).measurement).toMatchObject({ source: { tier: 0 } });
   prompt = 272001; expect((await observe()).measurement).toMatchObject({ source: { tier: 1 } });
@@ -155,13 +159,18 @@ it.each([
     prompt_tokens_details: { cached_tokens: 40, cache_write_tokens: 20 } } });
   // none: cut before any usage; final: finish then usage-only chunk (OpenAI include_usage), cut before [DONE];
   // interim: the same usage before the finish chunk is never final (Astra 2459/2462 R1), so the tiered/upper-bound path holds.
-  let shape: 'none' | 'final' | 'interim' = 'none';
+  // conflict: a later chunk contradicts the final usage's service tier; done-trailer: an invalid completed stream after [DONE].
+  // Both withdraw the final usage (Astra 2467): a contradicted measurement never settles, whichever tier it named.
+  let shape: 'none' | 'final' | 'interim' | 'conflict' | 'done-trailer' = 'none';
   vi.spyOn(http, 'sendNativeJsonHttp').mockImplementation(async (_request, options) => {
-    if (shape === 'final') { options!.stream!.push(finishChunk); options!.stream!.push(usageChunk); }
-    if (shape === 'interim') { options!.stream!.push(usageChunk); options!.stream!.push(finishChunk); }
+    const stream = options!.stream!;
+    if (shape === 'final' || shape === 'conflict' || shape === 'done-trailer') { stream.push(finishChunk); stream.push(usageChunk); }
+    if (shape === 'interim') { stream.push(usageChunk); stream.push(finishChunk); }
+    if (shape === 'conflict') expect(stream.push(chunk({ choices: [], service_tier: 'priority' }))).toMatchObject({ rejected: 'invalid-response' });
+    if (shape === 'done-trailer') { stream.push(Buffer.from('data: [DONE]\n\ndata: {')); expect(stream.finish()).toEqual({ reason: 'invalid-response' }); }
     throw new Error('fixture-interrupted');
   });
-  for (shape of ['none', 'final', 'interim'] as const) {
+  for (shape of ['none', 'final', 'interim', 'conflict', 'done-trailer'] as const) {
     const prepared = await priced.native.prepare(f.profile, f.definition, f.request); priced.quote({ ...f, prepared });
     await expect(priced.native.send(prepared)).rejects.toThrow('fixture-interrupted');
     const measurement = priced.native.observePartialSpending!(prepared, 'c'.repeat(64));

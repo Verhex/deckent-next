@@ -14,7 +14,8 @@ import { createLocalTls } from '../../fixtures/local-tls.js';
 
 // Astra 2462 R1 through the governed invocation path (policy, activation, budget reservation, receipt, SQLite spend ledger) over a real
 // https OpenAI-compatible server with a non-zero operator-static v2 tariff: only the final event's own usage settles money. An interim usage
-// chunk before the finish reason is never promoted to the final count by a later finish marker; the reservation stays held.
+// chunk before the finish reason is never promoted to the final count by a later finish marker; the reservation stays held. Astra 2467:
+// a contradiction after the final usage withdraws it, so a bounded (retention-capped) refusal also holds instead of settling.
 const roots: string[] = [], servers: Server[] = [];
 const sqlite = { busyTimeoutMs: 1000, journalMode: 'delete' as const, durability: 'full' as const };
 const MODEL = 'operator-chat';
@@ -98,6 +99,38 @@ it.each([
     disposition: { state: 'held', reason: 'unknown', observedMinorUnits: null }, measurement: null });
   expect(integrity).toMatchObject({ reservationCount: 1, reservedMinorUnits: maximum, settledMinorUnits: 0,
     checkpoint: { account: { reservedMinorUnits: maximum, settledMinorUnits: 0, settledExactMinorUnits: '0', frozen: false } } });
+});
+
+// Astra 2467: SSE comment padding pushes the observed wire past the 8192-byte retention cap (the evidence is then bounded, not complete,
+// so a refusal is recorded as unknown/response-limit with the partial measurement), while the assembled answer stays small.
+const padding = `: ${'x'.repeat(1000)}\n`.repeat(10);
+const tier = (value: string) => ({ service_tier: value });
+const finalDefault = padding + chunk({ delta: { role: 'assistant', content: 'partial ' } }, tier('default')) + chunk({ delta: { content: 'answer' } }, tier('default'))
+  + chunk({ delta: {}, finish_reason: 'stop' }, { usage: null, ...tier('default') }) + chunk(null, { usage, ...tier('default') });
+it.each([
+  ['a later chunk names a conflicting service tier', finalDefault + chunk(null, tier('priority')) + 'data: [DONE]\n\n'],
+  ['the completed stream is invalid after [DONE]', finalDefault + 'data: [DONE]\n\ndata: {'],
+] as const)('a contradiction after the final usage keeps the reservation held past the retention cap: %s', async (_name, wire) => {
+  const f = await fixture(sseReply(wire));
+  const result = await invokeConfiguredModel(f.project, f.streamed, { env: f.env });
+  expect(result.receipt.outcome).toMatchObject({ state: 'unknown', reason: 'transport-error' });
+  const { inspection, integrity } = await spendOf(f, result.receipt.claim.invocationId);
+  expect(inspection?.record.receipt.outcome).toMatchObject({ state: 'unknown', evidence: { reason: 'response-limit', body: { complete: false } } });
+  const maximum = inspection!.spending!.descriptor.quote.maxChargeMinorUnits;
+  expect(maximum).toBeGreaterThan(0);
+  expect(inspection?.spending).toMatchObject({ disposition: { state: 'held', reason: 'unknown', observedMinorUnits: null }, measurement: null });
+  expect(integrity).toMatchObject({ reservationCount: 1, reservedMinorUnits: maximum, settledMinorUnits: 0,
+    checkpoint: { account: { reservedMinorUnits: maximum, settledMinorUnits: 0, settledExactMinorUnits: '0', frozen: false } } });
+});
+
+it('still settles the exact final usage when the same padded stream is cut cleanly after it', async () => {
+  const f = await fixture(sseReply(finalDefault));
+  const result = await invokeConfiguredModel(f.project, f.streamed, { env: f.env });
+  expect(result.receipt.outcome).toMatchObject({ state: 'unknown', reason: 'transport-error' });
+  const { inspection, integrity } = await spendOf(f, result.receipt.claim.invocationId);
+  expect(inspection?.record.receipt.outcome).toMatchObject({ state: 'unknown', evidence: { reason: 'interrupted', body: { complete: false } } });
+  expect(inspection?.spending).toMatchObject({ disposition: { state: 'settled-measured-tariff' }, measurement: { basis: 'measured-tariff', exactMinorUnits: '0.03' } });
+  expect(integrity).toMatchObject({ reservationCount: 1, reservedMinorUnits: 0, checkpoint: { account: { settledExactMinorUnits: '0.03' } } });
 });
 
 it('settles the final usage (finish chunk itself, or a later usage-only chunk) at the exact charge of the non-streamed call, complete or cut after it', async () => {

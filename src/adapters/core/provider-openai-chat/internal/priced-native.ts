@@ -9,7 +9,9 @@ export function createOpenAiChatPricedNative(options: OpenAiChatNativePortOption
   const responses = new WeakMap<object, string>();
   const partialUsage = new WeakMap<object, { usage: unknown; serviceTier: unknown }>();
   // Filled only by the final-usage callback (Astra 2459/2462 R1): partial settlement never reads an interim count or tier.
-  const delegate = createOpenAiChatNativePort({ ...options, onFinalUsage: (prepared, usage, serviceTier) => { partialUsage.set(prepared, { usage, serviceTier }); } }), quotes = new WeakMap<object, ProviderSpendQuote>();
+  // A contradiction after it withdraws the entry, so a bounded refusal holds the reservation instead of settling (Astra 2467).
+  const delegate = createOpenAiChatNativePort({ ...options, onFinalUsage: (prepared, usage, serviceTier) => { partialUsage.set(prepared, { usage, serviceTier }); },
+    onFinalUsageWithdrawn: prepared => { partialUsage.delete(prepared); } }), quotes = new WeakMap<object, ProviderSpendQuote>();
   const profiles = new WeakMap<object, string>();
   const measure = (token: unknown, usageInput: unknown, contentDigest: string, serviceTier?: unknown) => {
       const quote = quotes.get(token as object), prepared = token as PreparedOpenAiChatRequest;
@@ -28,9 +30,9 @@ export function createOpenAiChatPricedNative(options: OpenAiChatNativePortOption
       let written = 0, tier: number | 'upper-bound' | null = upperBound ? 'upper-bound' : null;
       const tiered = tariff.kind === 'vendor-published' && tariff.version === 2;
       if (tiered) {
-        // An absent count is unknown, not a cache-write count of zero.
+        // An absent or null count is unknown, not a cache count of zero: the raw reported fields decide (Astra 2467 P2).
         const count = details?.['cache_write_tokens'];
-        if (details?.['cached_tokens'] === undefined || typeof count !== 'number' || !Number.isSafeInteger(count) || count < 0 || count > usage.data.prompt_tokens - cached) return null;
+        if (typeof details?.['cached_tokens'] !== 'number' || typeof count !== 'number' || !Number.isSafeInteger(count) || count < 0 || count > usage.data.prompt_tokens - cached) return null;
         written = count;
         const published = tariff.processingTiers.find(row => row.serviceTier === (serviceTier === 'fast' ? 'priority' : serviceTier));
         if (!published) return null;
