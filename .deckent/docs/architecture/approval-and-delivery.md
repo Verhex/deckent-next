@@ -509,7 +509,7 @@ profile revision, in-flight Runs keep their imageId) and API capability snapshot
 `toolchains.update` is policy data: `mode off | propose | auto` (default propose), `buildTimeoutMs`, `outputBytes`, `atStartup`.
 `toolchains update [--apply]` (CLI), `update_toolchains` (MCP) and `updateToolchains` (SDK) run the currency report and, when an
 npm provider is stale, plan exactly one next image version (`r<N+1>-<day>`, newest-first history line, recipe delta) as a typed plan
-under `<workspaces>/toolchains/plans/`. WORKER-IMAGE-R5 (owner 2026-10-03; source candidate): the packaged lineage is reconciled
+under `<workspaces>/toolchains/plans/`. WORKER-IMAGE-R5 (owner 2026-10-03; landed, `97590485`): the packaged lineage is reconciled
 to r4-20260930 using the retained recipe/Dockerfile hashes in its build receipt. In `auto` mode or with explicit apply,
 before writing a plan artifact or creating a build context, the installed builder runs its read-only `--check-version` mode
 against the exact repository on the selected daemon. The shared `assertVersionAdvances` history guard refuses a counter
@@ -649,7 +649,7 @@ onto the ledger catalog; Codex/Cursor output-side model evidence (none documente
   sessions; never `/service-restart` from an old terminal; old processes fail on a protocol bump); the manifest is checked only before `switch`,
   not at every start; the install root must join the sealed set in U2-1. Evidence `proof/DEV-U2-0-2026-09-30/`.
 
-### ACCEPT-EVIDENCE source candidate (2026-10-03; lane/accept-evidence, base 9740baae)
+### ACCEPT-EVIDENCE (2026-10-03; lane/accept-evidence, base 9740baae; landed in batch 32, alpha.4 line)
 
 Coding `workInput` adds optional `noChangeAllowed`; only explicit `true` allows an empty verified workspace patch.
 This is task policy frozen in the existing graph contract; registry-selected process-exit criteria remain pure and unchanged.
@@ -750,9 +750,9 @@ lead real-Docker rerun are tracked in `proof/BATCH32-2026-10-03/accept-r.md`; in
   audit 1 (additive); runtime protocol 18, config 3, Run snapshot 1, graph 3 unchanged; error registry +1 (`RUN_POOL_HELD`).
 - **Open.** First v44 switch cannot drain (the v43 build has no hold); `drained` never becomes true while a pinned Claude attempt waits for
   an operator evaluation (use `occupancy.execution === 0` to see "nothing running"); no per-scope hold; no terminal `/pause`, no
-  dev-release drain integration not implemented. Pool wait inspection is added by the POOL-CAPACITY source candidate below. CLI-HELP exposes `pool` in the top-level work group.
+  dev-release drain integration not implemented. Pool wait inspection is added by POOL-CAPACITY below (landed). CLI-HELP exposes `pool` in the top-level work group.
 
-### Execution pool capacity and waiting observation (POOL-CAPACITY; owner 2026-10-03, source candidate)
+### Execution pool capacity and waiting observation (POOL-CAPACITY; owner 2026-10-03; landed in batch 30, `1a5b3c4f`)
 
 - **Operation and authority.** One `ExecutionPoolCapacityApplication` behind CLI `pool set-capacity --execution-slots <n> --in-flight-slots <n>`,
   MCP `apply_pool_capacity` / `inspect_pool_capacity`, SDK `applyPoolCapacity` / `inspectPoolCapacity`. Catalogs expose the same typed

@@ -20,7 +20,7 @@ stdin veya POSIX pozitif kanıt ayrı aktif kalır. JS timeout ya da koşullu as
 Owner 2026-10-03: tam `npm run verify` her dilimde/partide koşulmaz; dilimler hedefli kontrollerle (typecheck, değişen dosyalarda eslint, lint-arch, dokunulan test dosyaları, gerekirse pano/host testleri) kapanır; tam verify yalnız geniş özellik ekleyen partilerde ve owner istediğinde koşulur (gece 2026-10-03: erken ve yanlış etiketli koşumlar zaman, token ve makine kaybı). Kaynak → neden → düzeltme → kanıt: tekrar eden tam koşumlar (≈10 dk, 4 worker, 16 GB) → kapı değeri düşük, maliyet yüksek → hedefli kapı + owner kararıyla tam verify → `proof/BATCH28-2026-10-03/README.md`.
 
 CI-FIX-R2 dersi (owner 2026-10-03; hosted `37111243380`): her yeni veya yeteneği değişen test dosyası
-altı OS×Node hücresinde taşınabilir davranışı doğrular ya da mevcut tipli platform yeteneğini açıklar;
+altı OS×Node hücresinde (owner 2026-10-06'dan beri zorunlu hücreler yalnız ubuntu node24+26; macOS/Windows gece `platform-verification.yml`) taşınabilir davranışı doğrular ya da mevcut tipli platform yeteneğini açıklar;
 desteklenmeyen pozitif varyant `verify-not-run` kaydı taşır ve erişim/etki öncesi tipli ret aktif testte doğrulanır.
 Linux pozitifleri korunur. Yerel Linux PASS başka OS kabulü değildir; fixture güncel arch registry'sinin zorunlu
 dosyalarını üretir. Bağımsız inceleme, yazar kontrolü ve hosted sonuç ayrı tutulur.

@@ -69,7 +69,7 @@ Current compiled entries include the CLI and MCP composition binaries; the CLI s
 MCP share the implemented inspection, activation, installation and runtime-control contracts; capability-specific
 linked execution evidence defines where parity is complete. New package names have no compatibility import aliases.
 
-HARDCODE-P1-B (source candidate; owner order Jev e2b81339 2026-10-02, built in the D4 night 2026-10-03): `models.json` schema 2 owns the top-level effort vocabulary
+HARDCODE-P1-B (landed, `e3dc5ff2`; owner order Jev e2b81339 2026-10-02, built in the D4 night 2026-10-03): `models.json` schema 2 owns the top-level effort vocabulary
 in declared ascending order and Anthropic `metering.promptOverheadTokens` / `thinkingBudgetMinTokens`.
 The adapter derives its runtime enum/rank from this vocabulary; model levels must be a strictly ascending subset,
 with a declared default and any off ceiling in the vocabulary. Runtime admission still checks the pinned row;

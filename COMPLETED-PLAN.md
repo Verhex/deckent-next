@@ -23,6 +23,12 @@
 - **Açık sınırlar (Astra 2457, bloke etmeyen):** N1 tüm komutun paste-chip geçmişi; N3 opendir/read I/O için katı timeout genelleştirmesi; kanıt staging/sandbox kabulü değildir (BUBBLEWRAP NOT STAGED). Ayrı önceden var olan boşluk: genel config yazımının kurulum dizinini 0755 ile oluşturması → PLAN `SECRET-DIR-MODE`.
 - **Kanıt ve canlı adım:** `proof/SLASH-WINDOWS-2026-10-08/` (bağımsız inceleme `independent-review-2457/`). Staged switch id `4d6f15824cc7-fa96266d6537`; owner 2026-10-08'de `proof/ALPHA15-LIVE-2026-10-08/alpha15-owner.sh` ile geçirdi; canlı secret store şifreli (`core.secret-store.encrypted-file@1`).
 
+## TERMINAL-UX T4-A — alpha.14 (2026-10-08, PR #45, `6d6d0860`)
+
+- `/provider` penceresi: Anthropic API, OpenAI uyumlu, OpenRouter ve yerel sunucu bağlama akışı; maskeli anahtar girişi, adresler registry listesinden (açık doğrulanmış "yeni adres" satırı), ücretsiz ön doğrulama ve tipli ret (`classifyProviderRejection`), anahtar yalnız secret store portundan, kaydırma geçmişine asla.
+- `/model` penceresi: katalog modelleri insan etiketleri ve kilit nedenleriyle; oturum sabitlemesi her turda taşınır (protokol v23, pencere [23,22]; `chatTurn.reference`), sessiz geri düşüş yok. Astra 2452 P1: `/model` seçimi kendi konuşmasına aittir.
+- Açık: T4-B (`models connect`, varsayılan model, harcama kesinleştirme) alpha.16'da indi; kanıt `proof/T4-2026-10-08/`.
+
 ## HAIKU55-CATALOG — alpha.13 (2026-10-08, PR #44, `16df3564`)
 
 - Claude Haiku 5.5 (`claude-haiku-5-5`) etkin model: `models.json` satırı (adaptive, beş effort düzeyi, varsayılan medium, `disabled` yalnız ≤ high), pricing şema 2 + tariff v2 istem uzunluğu kademesi (100.000 token üstü üst fiyat), claude seed ve önerilen etkinler.
@@ -40,6 +46,21 @@
 - L0 TERMINAL-LAUNCH main'de (PR #40, Astra 2438). wave/tui-3'te birleşti: L3 picker çekirdeği, L2 onaylı config yazımı (ledger v48), L6 terminal test düzeltmeleri (B1/B2/B3/B5, B4 tanı eki), L1 MCP-CORE (HTTP, import, revoke, sandbox-net, öneri, havuz izolasyonu), L5 izleme pencereleri, L4 `/mode` `/config` `/mcp` pencereleri.
 - Entegrasyonda: `mcp-server` policy türü, first-run şablon v5 (K1 seçenek A dahil) ve v4 göçü (`deckent init policy --upgrade`, ekleyerek; yönetilen eşi `deckent policy upgrade --template v5`), güven grant'i `require-approval`+`modeEligible`, `/mcp` HTTP/revoke/grant/realm bağlantısı, `/mode show`, protokol v22, i18n oracle onarımı ve L1 CLI metinleri, alpha.11.
 - Açık: L5 kararları, B4 kök nedeni, PTY'de yeni pencerelerin kanıtı. Kanıt: dış `proof/TUI3-2026-10-07/INTEGRATION-review.md`.
+
+## IDENTITY-BINDING-V2 — alpha.7 (2026-10-06, `wave/2`, PR #22)
+
+- Makine kimliği yokken taşınma koruması: yapılandırılabilir kaynak → `/etc/machine-id` → zayıf yol+cihaz+inode bağı; `installation.requireMachineBinding` (owner 2026-10-06). Canlıda alpha.7'den beri. Rollback notu owner-decisions'ta; kanıt `proof/W2-BINDING-V2-2026-10-06/`, sözleşme ARCHITECTURE "Kurulum bağı v2".
+
+## TERMINAL-UX T1+T2 — 2026-10-07 (alpha.10, `36c3f65f` + `32d49912`, PRs #36/#37, toplu düzeltme #38; MCP-VISIBILITY)
+
+- Terminal birimlere bölündü (ledger/work/theme/picker/window/work-labels); sınırlı modal pencereler tek odak sahibiyle; dokuz alanlı onay penceresi (ne, kesilmeyen komut, nerede + yapılandırılmış sandbox duruşu, kimin adına, kapsam, neden, risk, ihtiyatlı geri alma, canlı geri sayım) ve Tab notu modele ve audit'e gider (karar v3).
+- `│ Sen` / `● Deckent` satırları, WCAG denetimli 4 tema ve COLORTERM kademeleri; açılışta görünür ekran temizlenir (kaydırma geçmişi korunur) ve Deckent başlığı basılır; Shift+Tab/Alt+M yetkili her modu döndürür (tam erişim şirket grant'iyle, yalnız oturum, audit'li); her slash komutu sade dille yanıtlar, gruplu `/help` ve sayfalı `/transcript`; runtime protokol v21 (pencere [21,20]); `/mcp` sabitlenmiş araçların değiştiğini söyler, tireli sunucu adları, düzeltilmiş MCP yardımı.
+- Kanıt: dış `proof/TUI2-2026-10-07/` ve `proof/TERMINAL-TEST-ANALYSIS-2026-10-07/`; bulgular TERM-TEST-FIXES'e (B1/B2/B3/B5 alpha.11'de kapandı).
+
+## PATCH-BUDGET + CI-DEBT — 2026-10-06 (alpha.6, PR #17 `bacbd434`, release PR #18 `9e01322c`)
+
+- Workspace patch bayt bütçesi yalnız taşınan (değişen/eklenen/korunan) içeriği sayar: dogfood kartları depo `artifacts.maxBytes`'ı aşınca `patch-prepare`'de düşmez; `PATCH_LIMIT` limit, gözlenen değer ve config alanını söyler. Kilitli bubblewrap indirmeleri ve platform test fikstürleri için CI önbelleği (CI-DEBT).
+- Açık: reddin tipli makbuzu (`attempt_receipts`) PLAN "Dalga 2 takipleri" altında.
 
 ## TOPLU-DÜZELTME 2026-10-07 — alpha.9 (PR #35, `8a940418`, `fix/batch-2026-10-07`)
 
@@ -731,7 +752,7 @@ Owner 2026-10-05: önceki CI-first/current-closure iniş sırası tamamlandı; m
 
 | İş | Hedef | Durum | Sıradaki adım | Kanıt |
 |---|---|---|---|---|
-| IDENTITY-UX | Temiz kurulumda salt-okunur follow `not-initialized`; `ADMISSION_DEFERRED` bilgi notu | Lane çalışıyor | Lane teslimi + parti incelemesi | [work-list](.deckent/docs/plan/work-list.md) |
+| IDENTITY-UX | Temiz kurulumda salt-okunur follow `not-initialized`; `ADMISSION_DEFERRED` bilgi notu | İndi (PR #8, alpha.5) | — | [work-list](.deckent/docs/plan/work-list.md) |
 | BOARD-DASHBOARD | Process board HTML paneli | PR #14 indi | Canlı kullanımda ölçüm | PR #14 |
 | B36-REGRESSIONS (PR #12) | Batch-36 gerilemelerinin düzeltmesi | İndi; Astra 2365 PASS, main `0e773b3b` | Tam verify sonucu | Astra 2365 |
 
