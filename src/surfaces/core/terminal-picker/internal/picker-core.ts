@@ -27,6 +27,18 @@ export type PickerTree = Readonly<{
   scopes?: readonly PickerScope[];
 }>;
 
+/**
+ * Every visible word of a tree through `project` (the host's known-secret / human-text projection), whole, before the picker filters, cuts
+ * or wraps it (Astra 2456 P1-2). Ids, scopes' ids and the tree shape stay as they are, so what a pick answers never changes.
+ */
+export function projectPickerTree(tree: PickerTree, project: (text: string) => string): PickerTree {
+  const node = (item: PickerNode): PickerNode => ({ ...item, label: project(item.label), ...(item.detail === undefined ? {} : { detail: project(item.detail) }),
+    ...(item.keywords ? { keywords: item.keywords.map(project) } : {}), ...(item.blocked ? { blocked: { reason: project(item.blocked.reason) } } : {}),
+    ...(item.childTitle === undefined ? {} : { childTitle: project(item.childTitle) }), ...(item.children ? { children: item.children.map(node) } : {}) });
+  return { ...tree, title: project(tree.title), items: tree.items.map(node),
+    ...(tree.scopes ? { scopes: tree.scopes.map(scope => ({ ...scope, label: project(scope.label), ...(scope.blocked ? { blocked: { reason: project(scope.blocked.reason) } } : {}) })) } : {}) };
+}
+
 export type PickerResult =
   | Readonly<{ kind: 'selected'; /** Ids from the first level down to the chosen leaf. */ path: readonly string[]; id: string; scope?: string }>
   | Readonly<{ kind: 'cancelled' }>;
