@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { configuredProjectInstructions } from '#composition/core/project-instructions/index.js';
-import { executeConfiguredBackup } from '#composition/core/backup/index.js';
+import { executeConfiguredBackup, inspectConfiguredRecoveryFiles } from '#composition/core/backup/index.js';
 import { previewConfiguredIdentityProfile, listIdentityProfiles } from '#composition/core/identity-profile/index.js';
 import { ensureConfiguredTerminalIdentity, inspectConfiguredInstallationBinding, resolveConfiguredInstallationIdentity, loadConfiguredInstallationIdentity, loadConfiguredProjectIdentity } from '#composition/core/scoped-request/index.js';
 import { unifiedDiff, readInstallationProfileFile, isSelfSourceProject, PROVIDER_CONNECT_KINDS, PROVIDER_CONNECT_LEGACY_KEYS, probeProviderConnection, providerEndpoint, providerConnectFamily, providerConnectKind, providerConnectModelPriced,
@@ -63,7 +63,7 @@ export async function main(argv: readonly string[] = process.argv.slice(2)) {
     readInferenceMetrics: (projectRoot, input, options) => readConfiguredInferenceMetrics(projectRoot, input, options),
     updateToolchains: (projectRoot, input, options) => updateConfiguredToolchains(projectRoot, input, options),
     runMcpCommand: runConfiguredMcpCommand,
-    inspectSecretStore: inspectConfiguredSecretStore, listSecretNames: listConfiguredSecretNames,
+    inspectSecretStore: inspectConfiguredSecretStore, listSecretNames: listConfiguredSecretNames, inspectRecoveryFiles: inspectConfiguredRecoveryFiles,
     inspectInstallationBinding: inspectConfiguredInstallationBinding,
     inspectShellRealm: inspectConfiguredShellRealm, // REALM-NOTICE: doctor's selected shell realm and every provider passed over.
     setSecret: (projectRoot, input, options) => createConfiguredRuntimeClient(projectRoot, options).setSecret(input),

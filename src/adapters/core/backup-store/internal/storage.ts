@@ -1,5 +1,5 @@
 import { lstat, mkdir, readdir, rename, rm } from 'node:fs/promises';
-import { dirname, join, resolve } from 'node:path';
+import { basename, dirname, join, resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { FileInstallationIdentityStore } from '#adapters/core/installation-files/index.js';
 import { acquireLedgerLock } from '#adapters/core/local-runtime-socket/index.js';
@@ -10,6 +10,28 @@ import { createBackupSet, verifyBackupSet, type VerifiedBackup } from './set.js'
 import { BACKUP_RESOURCES, directoryResources, splitArchivedConfig, type BackupConfigLayers, type BackupLimits } from './archive.js';
 import { inside, privateDirectory, readPrivate, refuse, safePath, syncDirectory, writePrivate } from './files.js';
 const FIXED = ['config', 'projectIdentity', 'installationJournal'];
+const STAGE_PREFIX = '.backup-restore-', KEY_TEMP_INFIX = '.restore-', UUID = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}';
+const escape = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+/**
+ * S1 D4: what an interrupted restore can leave behind: its stage (plaintext ledger and state; alpha.18 staged it in the project root and
+ * staged the decrypted authority key too), a pending hold file and a decrypted key that was not yet renamed into place. Read-only; only
+ * entries of this user with the exact generated names are listed. Doctor shows them; the next successful restore removes them.
+ */
+export async function restoreLeftovers(projectRoot: string, approvals: string, keyFile: string): Promise<string[]> {
+  const area = dirname(restoreHoldPath(projectRoot)), found: string[] = [];
+  const stagePattern = new RegExp(`^${escape(STAGE_PREFIX)}${UUID}$`);
+  const scan = async (directory: string, pattern: RegExp, kind: 'directory' | 'file') => {
+    const names = await readdir(directory).catch(error => { if (error.code === 'ENOENT' || error.code === 'ENOTDIR') return [] as string[]; throw error; });
+    for (const name of names.filter(item => pattern.test(item)).sort()) {
+      const info = await lstat(join(directory, name)).catch(() => null);
+      if (info && info.uid === process.getuid?.() && (kind === 'directory' ? info.isDirectory() : info.isFile())) found.push(join(directory, name));
+    }
+  };
+  await scan(area, stagePattern, 'directory'); await scan(resolve(projectRoot), stagePattern, 'directory');
+  await scan(area, new RegExp(`^${escape(basename(restoreHoldPath(projectRoot)))}\\.${UUID}$`), 'file');
+  await scan(approvals, new RegExp(`^\\.${escape(keyFile)}${escape(KEY_TEMP_INFIX)}${UUID}$`), 'file');
+  return found;
+}
 
 export interface BackupSource { readonly layout: ProductLayout; readonly projectRoot: string; readonly installationId: string; readonly keyFile: string;
   readonly configDocument?: () => Promise<BackupConfigLayers>;
@@ -56,7 +78,9 @@ export class FileBackupStorage implements BackupStoragePort {
       if (identity && typeof identity === 'object' && 'installationId' in identity && identity.installationId !== state.installationId) return refuse('BACKUP_TARGET_IDENTITY_MISMATCH');
     }
     const hold = restoreHoldPath(target), paths = [...BACKUP_RESOURCES, 'ledger' as const, 'approvals' as const].map(resource => productResourcePath(layout, resource));
-    if (paths.some(path => inside(path, hold) || inside(hold, path))) return refuse('BACKUP_PATH_UNSAFE');
+    // S1 D4: the stage lives in the installation's private area beside the hold (never the project root) and holds no plaintext key.
+    const stage = join(dirname(hold), `${STAGE_PREFIX}${randomUUID()}`);
+    if (paths.some(path => inside(path, hold) || inside(hold, path) || inside(path, stage) || inside(stage, path))) return refuse('BACKUP_PATH_UNSAFE');
     // A nested/aliased resource cannot be published atomically as independent state. Refuse before any target write.
     for (let i = 0; i < paths.length; i++) for (let j = i + 1; j < paths.length; j++)
       if (inside(paths[i]!, paths[j]!) || inside(paths[j]!, paths[i]!)) return refuse('BACKUP_PATH_UNSAFE');
@@ -70,11 +94,11 @@ export class FileBackupStorage implements BackupStoragePort {
     catch (error) { if (error && typeof error === 'object' && 'code' in error && error.code === 'LOCAL_RUNTIME_ALREADY_RUNNING') return refuse('BACKUP_SERVICE_RUNNING'); return refuse('BACKUP_CUSTODY_UNAVAILABLE'); }
     let published = false, holdCreated = false;
     let restoredConfig: ReturnType<typeof validateConfig>['config'] | undefined, globalLayer: Record<string, unknown> = {}, globalConfig: BackupResult['globalConfig'] = null;
-    const stage = join(target, `.backup-restore-${randomUUID()}`), token = randomUUID(), preserved: string[] = [], changed = new Set<string>();
+    const token = randomUUID(), preserved: string[] = [], changed = new Set<string>();
     try {
       // Recheck under the same kernel custody the service must acquire before any migration or startup.
       if (await lstat(socket).catch(error => { if (error.code === 'ENOENT') return null; throw error; })) return refuse('BACKUP_SERVICE_RUNNING');
-      await privateDirectory(stage);
+      await privateDirectory(stage); await writePrivate(join(stage, '.gitignore'), '*\n');
       const staged = resolveProductLayout({ projectRoot: stage, resources: customResources });
       for (const item of state.entries) {
         const isDir = directoryResources.has(item.resource);
@@ -104,7 +128,6 @@ export class FileBackupStorage implements BackupStoragePort {
         }
         await writePrivate(join(productResourcePath(staged, item.resource), ...(item.path ? item.path.split('/') : [])), content);
       }
-      await verified.restoreKey(join(productResourcePath(staged, 'approvals'), state.keyFile));
       // Snapshot ledger uses online backup again; never copy a live WAL-ledger or share verification sidecars.
       const { backup, DatabaseSync } = await import('node:sqlite');
       const ledger = productResourcePath(staged, 'ledger'); await writePrivate(ledger, new Uint8Array());
@@ -134,7 +157,9 @@ export class FileBackupStorage implements BackupStoragePort {
         }
         await publish(from, productResourcePath(layout, resource));
       }
-      await publish(join(productResourcePath(staged, 'approvals'), state.keyFile), join(productResourcePath(layout, 'approvals'), state.keyFile));
+      // The authority key is decrypted only now, next to its final name in the approvals directory, and renamed into place.
+      const approvals = productResourcePath(layout, 'approvals'), keyTemp = join(approvals, `.${state.keyFile}${KEY_TEMP_INFIX}${token}`);
+      await verified.restoreKey(keyTemp); await publish(keyTemp, join(approvals, state.keyFile));
       for (const suffix of ['-wal', '-shm', '-journal']) {
         const path = productResourcePath(layout, 'ledger') + suffix;
         if (await lstat(path).catch(() => null)) { await safePath(path); const saved = `${path}.damaged-${token}`; await rename(path, saved); preserved.push(saved); }
@@ -144,6 +169,8 @@ export class FileBackupStorage implements BackupStoragePort {
       try { await new FileInstallationIdentityStore(layout, restoredConfig!.configFile.writeLockTimeoutMs, undefined, restoredConfig!.installation).read(); }
       catch (error) { if (error && typeof error === 'object' && 'code' in error && error.code === 'INSTALLATION_IDENTITY_RELOCATED') required = true; else throw error; }
       await rm(stage, { recursive: true, force: true });
+      // S1 D4: an earlier interrupted attempt's stage (also alpha.18's project-root location) and pending key/hold files go with this success.
+      for (const leftover of await restoreLeftovers(target, productResourcePath(layout, 'approvals'), state.keyFile)) await rm(leftover, { recursive: true, force: true });
       await rm(hold); await syncDirectory(dirname(hold));
       return { ...verified.result('restore'), relocation: { required, target, changedPaths: [...changed].sort() }, globalConfig, preserved };
     } catch (error) {

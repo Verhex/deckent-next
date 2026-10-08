@@ -149,6 +149,7 @@
   "doctor.secretStore.custody.env": "  Anahtarlar yalnız ortam değişkenlerinden okunur; Deckent'e yazılamaz. Şifreli depoya geçmek için: deckent secret store.",
   "doctor.secretStore.custody.file": "  Anahtarlar diskte düz metin durur (yalnız sizin okuyabildiğiniz 0600 dosya). Şifreli depo önerilir: deckent secret store anahtarları taşır ve düz metni siler.",
   "doctor.secretStore.custody.encryptedFile": "  Anahtarlar diskte şifreli; açma anahtarı aynı klasörde durur ve parola istenmez. Deckent'in işçileri ve sandbox'ı okuyamaz; sizin hesabınızla çalışan diğer programlar okuyabilir. Katı kurulum: README › API anahtarları.",
+  "doctor.recoveryLeftovers": "Yarım kalan yedek geri yüklemesinin dosyaları duruyor (düz metin ledger veya yetki anahtarı içerebilir): {paths}. Bitirip temizlemek için aynı deckent backup restore komutunu yeniden çalıştırın ya da inceledikten sonra silin.",
   "doctor.secretStore.leftover": "  Seçili olmayan depoda {entries} anahtar duruyor ({backends}). Yarım kalan bir geçişse deckent secret store ile aynı depoyu yeniden seçmek eşleşen kopyaları temizler.",
   "doctor.secretStore.leftoverUnverified": "  Seçili olmayan bir depo şu an okunamadı ({backends}): eski anahtar kopyaları tutup tutmadığı bilinmiyor. Erişimi düzelttikten sonra deckent doctor ile bakın ya da seçili depoyu deckent secret store ile yeniden seçin.",
   "health.auth": "kimlik doğrulama",

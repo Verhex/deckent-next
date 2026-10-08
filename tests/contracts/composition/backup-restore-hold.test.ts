@@ -1,5 +1,6 @@
 import { execFile } from 'node:child_process';
-import { chmod, lstat, mkdir, mkdtemp, readFile, rename, rm, writeFile } from 'node:fs/promises';
+import { chmod, lstat, mkdir, mkdtemp, readFile, readdir, rename, rm, writeFile } from 'node:fs/promises';
+import crypto from 'node:crypto';
 import { join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import { pathToFileURL } from 'node:url';
@@ -13,6 +14,8 @@ import { readLocalOsIdentity } from '#adapters/core/local-principal/index.js';
 import { firstRunPolicyTemplate } from '#domain/index.js';
 import { restoreHoldPath } from '#platform/index.js';
 import { openConfiguredArtifactStore } from '#composition/core/artifacts/index.js';
+import { inspectConfiguredRecoveryFiles } from '#composition/core/backup/index.js';
+import { runKernelCommand } from '#surfaces/core/cli/index.js';
 
 /** Astra 2471 R1: every publication rename of a restore can fail (or the process can die); the installation then stays held. */
 const gate = vi.hoisted(() => ({ failAt: 0, seen: 0, under: [] as string[] }));
@@ -119,3 +122,42 @@ it.skipIf(process.platform !== 'linux')('a process killed between publications l
   await restore(f); expect(await present(f.hold)).toBe(false);
   await startsAndStops(f);
 }, 120_000);
+
+async function walkFiles(directory: string): Promise<string[]> {
+  const out: string[] = [];
+  for (const item of await readdir(directory, { withFileTypes: true })) {
+    const path = join(directory, item.name);
+    if (item.isDirectory()) out.push(...await walkFiles(path)); else out.push(path);
+  }
+  return out;
+}
+const stagesIn = async (directory: string) => (await readdir(directory)).filter(name => name.startsWith('.backup-restore-'));
+it('an interrupted restore stages in the private .deckent area without the decrypted key; doctor names leftovers and the next restore removes them (S1 D4)', async () => {
+  const f = await fixture(), key = await readFile(join(f.data, 'approvals/authority.key')), area = join(f.root, '.deckent');
+  gate.under = [f.root, f.data]; gate.failAt = 2; gate.seen = 0;
+  await expect(restore(f)).rejects.toMatchObject({ code: 'BACKUP_RESTORE_INCOMPLETE' }); gate.failAt = 0;
+  expect(await stagesIn(f.root)).toEqual([]);
+  const [stage] = await stagesIn(area); expect(stage).toMatch(/^\.backup-restore-[0-9a-f-]{36}$/);
+  expect((await lstat(join(area, stage!))).mode & 0o777).toBe(0o700);
+  expect(await readFile(join(area, stage!, '.gitignore'), 'utf8')).toBe('*\n');
+  const staged = await walkFiles(join(area, stage!)); expect(staged.length).toBeGreaterThan(0);
+  for (const file of staged) expect((await readFile(file)).equals(key)).toBe(false);
+  await restore(f); expect(await stagesIn(area)).toEqual([]);
+  // Process loss during staging leaves a stage without a hold; alpha.18 staged in the project root and also left a pending key.
+  const uuid = () => crypto.randomUUID(), planted = [join(area, `.backup-restore-${uuid()}`), join(f.root, `.backup-restore-${uuid()}`)];
+  for (const dir of planted) { await mkdir(dir, { mode: 0o700 }); await writeFile(join(dir, 'ledger.db'), 'plain', { mode: 0o600 }); }
+  const keyTemp = join(f.data, `approvals/.authority.key.restore-${uuid()}`), pendingHold = `${f.hold}.${uuid()}`;
+  await writeFile(keyTemp, key, { mode: 0o600 }); await writeFile(pendingHold, '{}', { mode: 0o600 });
+  await mkdir(join(area, '.backup-restore-not-a-uuid'), { mode: 0o700 });
+  const doctor = async (args: string[]) => { let text = ''; clearConfigCache();
+    await runKernelCommand(['doctor', ...args], { root: f.root, env: f.env, stdout: { write: (chunk: string) => { text += chunk; return true; } }, inspectRecoveryFiles: inspectConfiguredRecoveryFiles });
+    return text; };
+  expect(JSON.parse(await doctor(['--json'])).recoveryFiles.leftovers.sort()).toEqual([...planted, keyTemp, pendingHold].sort());
+  expect(await doctor(['--lang', 'en'])).toContain('Interrupted backup restore files remain');
+  expect(await doctor(['--lang', 'tr'])).toContain('Yarım kalan yedek geri yüklemesinin dosyaları duruyor');
+  await restore(f);
+  for (const path of [...planted, keyTemp, pendingHold]) expect(await present(path)).toBe(false);
+  expect(await present(join(area, '.backup-restore-not-a-uuid'))).toBe(true);
+  expect(JSON.parse(await doctor(['--json'])).recoveryFiles).toEqual({ leftovers: [] });
+  await startsAndStops(f);
+}, 60_000);

@@ -13,6 +13,9 @@ export interface InstallationBindingReport { readonly capability: 'supported' | 
 export interface SecretStoreDoctorLine { readonly backend: string; readonly status: string; readonly code?: string | null;
   readonly leftover?: { readonly backends: readonly string[]; readonly entries: number; readonly unverified?: readonly string[] } }
 
+/** Recovery files an interrupted backup restore left behind (S1 D4); absolute paths of this user's own installation. */
+export interface RecoveryFilesDoctorView { readonly leftovers: readonly string[] }
+
 /** What the human rendering reads from the collected doctor report; the pool readiness lines arrive already rendered. */
 export interface DoctorRenderInput {
   readonly platform: string;
@@ -24,6 +27,7 @@ export interface DoctorRenderInput {
   readonly imageRefresh: ImageRefreshDoctorView | null;
   readonly installationBinding: InstallationBindingReport | null;
   readonly shellRealm: ShellRealmDoctorView | null;
+  readonly recoveryFiles?: RecoveryFilesDoctorView | null;
   /** Running service vs. the restart-apply configuration now in effect; absent/null when not asked. */
   readonly serviceConfig?: 'current' | 'stale' | 'unknown' | 'stopped' | null;
 }
@@ -62,6 +66,7 @@ export function renderDoctorReport(result: DoctorRenderInput, poolLines: readonl
     codeSuffix: result.secretStore.code ? `, ${result.secretStore.code}` : '' }, locale), ...secretStoreCustodyLine(result.secretStore.backend, locale),
     ...(result.secretStore.leftover?.entries ? [t('doctor.secretStore.leftover', { entries: result.secretStore.leftover.entries, backends: result.secretStore.leftover.backends.join(', ') }, locale)] : []),
     ...(result.secretStore.leftover?.unverified?.length ? [t('doctor.secretStore.leftoverUnverified', { backends: result.secretStore.leftover.unverified.join(', ') }, locale)] : [])] : []),
+  ...(result.recoveryFiles?.leftovers.length ? [t('doctor.recoveryLeftovers', { paths: result.recoveryFiles.leftovers.join(', ') }, locale)] : []),
   ...(result.imageRefresh && result.imageRefresh.status !== 'unknown' ? [t('doctor.imageRefresh', { status: imageRefreshText(result.imageRefresh, locale) }, locale)] : []),
   ...(result.serviceConfig === 'stale' ? [t('doctor.serviceConfigStale', {}, locale)] : []),
   ...(result.installationBinding ? installationBindingLines(result.installationBinding, result.platform, locale) : []),

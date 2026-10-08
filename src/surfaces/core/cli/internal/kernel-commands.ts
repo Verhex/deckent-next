@@ -61,6 +61,8 @@ export interface CommandContext extends InstallationCommandContext, IdentityComm
   assessModelInvocationDelivery?: (root: string, options: ConfigLoadOptions) => Promise<readonly ModelInvocationDeliveryFinding[]>;
   // SECRET-K1 (owner S1): the active secret backend and its state; doctor-only, never a hard failure of doctor. `secret list` names only.
   inspectSecretStore?: import('./secret.js').SecretStoreInspectHandler;
+  // S1 D4: files an interrupted backup restore left behind; doctor-only, read-soft (null when unwired or unreadable).
+  inspectRecoveryFiles?: (root: string, options: ConfigLoadOptions) => Promise<import('#surfaces/core/doctor/index.js').RecoveryFilesDoctorView>;
   // REALM-NOTICE: the shell realm a call here gets and every sandbox provider passed over (read-only measurement); doctor-only.
   inspectShellRealm?: (root: string, options: ConfigLoadOptions) => Promise<ShellRealmDoctorView>;
   // WORKER-AUTO-REFRESH: the worker image refresh status (updating / current / failed with a typed reason); doctor-only, local file read, null when unwired or never run.
@@ -158,10 +160,11 @@ export async function runKernelCommand(argv: readonly string[], context: Command
   // Read-soft: whether the running service still uses the restart-apply configuration now on disk (null when it cannot be asked).
   const serviceConfig = await configServiceState(root, options, context.describeRuntimeService);
   const installationBinding = context.inspectInstallationBinding ? await context.inspectInstallationBinding(root, options) : null;
+  const recoveryFiles = context.inspectRecoveryFiles ? await context.inspectRecoveryFiles(root, options).catch(() => null) : null;
   const poolReadiness = await assessPoolReadiness(root, context, options, config.admission, (config.terminal as { scopeId?: string } | undefined)?.scopeId);
   const data = { schemaVersion: 2, scope: 'kernel', platform, host, hostMemory: detectHostMemory(), environment: detectEnvironment(env),
     paths: resolveGlobalScopePaths(platform, env), principal,
-    company: { companyId: config.company.id }, status: poolReadiness.status === 'drift' || poolReadiness.status === 'unavailable' ? 'degraded' : 'ready', poolReadiness, policyTemplate, modelInvocationDelivery, secretStore, shellRealm, imageRefresh, installationBinding, serviceConfig,
+    company: { companyId: config.company.id }, status: poolReadiness.status === 'drift' || poolReadiness.status === 'unavailable' ? 'degraded' : 'ready', poolReadiness, policyTemplate, modelInvocationDelivery, secretStore, shellRealm, imageRefresh, installationBinding, serviceConfig, recoveryFiles,
     ...(toolchains ? { toolchains } : {}) };
   output(data, result => renderDoctorReport(result, result.poolReadiness ? poolReadinessLines(result.poolReadiness, locale) : [], locale));
   // modelInvocationDelivery is JSON-only for now, like policyTemplate: no human-text rendering yet.
