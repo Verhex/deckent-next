@@ -31,5 +31,7 @@ export async function backupCommand(argv: readonly string[], context: CommandCon
       : data.action === 'verify' ? t('cli.backup.verified', {}, locale) : t('cli.backup.restored', {}, locale);
     return t('cli.backup.result', { action, set: data.set }, locale)
     + (data.relocation?.required ? '\n' + t('cli.backup.relocated', { target: data.relocation.target }, locale) : '')
+    + (data.globalConfig?.added.length ? '\n' + t('cli.backup.globalAdded', { path: data.globalConfig.path, sections: data.globalConfig.added.join(', ') }, locale) : '')
+    + (data.globalConfig?.kept.length ? '\n' + t('cli.backup.globalKept', { path: data.globalConfig.path, sections: data.globalConfig.kept.join(', ') }, locale) : '')
     + '\n' + formatValue(data); }, ...(context.stdout ? { stdout: context.stdout } : {}), ...(context.stderr ? { stderr: context.stderr } : {}) });
 }

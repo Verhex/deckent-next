@@ -2,7 +2,7 @@ import { lstat } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { policySchema, policyFileSchema, bindingsFileSchema, verifiedPrincipalSchema } from '#domain/index.js';
 import { BackupApplication, policyBackupAuthorization, resolveBackupPolicyDocuments, backupCommandSchema, type BackupCommand, type BackupAuthority } from '#engine/index.js';
-import { FileBackupStorage, readBackupConfig, verifyBackupSet, recordBackupAudit, type VerifiedBackup } from '#adapters/index.js';
+import { FileBackupStorage, archivedConfigDocument, readBackupConfig, verifyBackupSet, recordBackupAudit, type VerifiedBackup } from '#adapters/index.js';
 import { readLocalOsIdentity, openLocalIntegrityAuthority, FileInstallationIdentityStore } from '#adapters/index.js';
 import { ErrorRegistry, resolveGlobalConfigReadPath, productResourcePath, validateConfig, resolveProductLayout, restoreHoldPath, type ResolvedConfig, type ConfigLoadOptions } from '#platform/index.js';
 import { loadComposedConfig } from '#composition/core/root/index.js';
@@ -25,8 +25,7 @@ export async function executeConfiguredBackup(projectRoot: string, input: Backup
       if (command.action !== 'restore') throw error;
       const limits = validateConfig({}).config.installation.packageMeasurement;
       recovered ??= await verifyBackupSet(command.set, passphrase, limits);
-      const entry = recovered.state.entries.find(item => item.resource === 'config' && item.path === '');
-      const document = validateConfig(JSON.parse(Buffer.from(entry!.content, 'base64').toString('utf8'))).config;
+      const document = validateConfig(archivedConfigDocument(recovered.state)).config;
       const current = resolve(projectRoot) === recovered.state.projectRoot;
       const resources = Object.fromEntries(Object.entries(recovered.state.resources).filter(([key]) => !['config', 'projectIdentity', 'installationJournal'].includes(key)));
       const productLayout = resolveProductLayout({ projectRoot: resolve(projectRoot), ...(current ? { root: recovered.state.layoutRoot } : {}), resources });
@@ -74,8 +73,9 @@ export async function executeConfiguredBackup(projectRoot: string, input: Backup
     }
     const auditDirectory = command.action === 'restore' || !existingPolicy ? join(dirname(resolve(command.set)), '.deckent-backup-audit')
       : join(productResourcePath(layout, 'audit'), 'backup-operations');
-    const configDocument = command.action === 'create' ? async () => readBackupConfig(layout.bootstrapConfigPath, await resolveGlobalConfigReadPath(options.env, options.platform), limits) : undefined;
-    const source = { layout, projectRoot: resolve(projectRoot), installationId: authority.installationId, keyFile: config.approvals.keyFile, ...(configDocument ? { configDocument } : {}) };
+    const globalConfigPath = await resolveGlobalConfigReadPath(options.env, options.platform);
+    const configDocument = command.action === 'create' ? async () => readBackupConfig(layout.bootstrapConfigPath, globalConfigPath, limits) : undefined;
+    const source = { layout, projectRoot: resolve(projectRoot), installationId: authority.installationId, keyFile: config.approvals.keyFile, globalConfigPath, ...(configDocument ? { configDocument } : {}) };
     const app = new BackupApplication(new FileBackupStorage(source, limits), policyBackupAuthorization(document), (event, integrity) => recordBackupAudit(auditDirectory, event, integrity), authority);
     return await app.execute(command, passphrase);
   } finally { recovered?.close(); }

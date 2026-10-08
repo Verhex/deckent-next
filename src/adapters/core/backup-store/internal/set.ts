@@ -4,7 +4,7 @@ import { dirname, join, resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { createHmacIntegrity, resolveProductLayout, productResourcePath, sha256, type ProductLayout } from '#platform/index.js';
 import { type BackupResult } from '#engine/index.js';
-import { BACKUP_RESOURCES, archiveState, unpackState, type BackupLimits, type BackupState } from './archive.js';
+import { BACKUP_RESOURCES, archiveState, unpackState, type BackupConfigLayers, type BackupLimits, type BackupState } from './archive.js';
 import { decryptKey, encryptKey } from './crypto.js';
 import { ledgerFingerprint } from './fingerprint.js';
 import { digestFile, inside, privateDirectory, readPrivate, refuse, safePath, syncDirectory, writePrivate } from './files.js';
@@ -19,7 +19,7 @@ export class VerifiedBackup {
   async restoreKey(path: string) { await writePrivate(path, this.#key); }
   close() { this.#key.fill(0); }
   result(action: BackupResult['action']): BackupResult { return { schemaVersion: 1, action, set: this.set, ledgerDigest: this.ledgerDigest,
-    files: this.state.entries.length, createdAt: this.state.createdAt, relocation: null, preserved: [] }; }
+    files: this.state.entries.length, createdAt: this.state.createdAt, relocation: null, globalConfig: null, preserved: [] }; }
 }
 export async function verifyBackupSet(set: string, passphrase: string, limits: BackupLimits): Promise<VerifiedBackup> {
   await safePath(set); await privateDirectoryExisting(set);
@@ -64,7 +64,7 @@ async function privateDirectoryExisting(path: string) {
   if (!info.isDirectory() || info.isSymbolicLink() || info.uid !== process.getuid?.() || (info.mode & 0o077)) return refuse('BACKUP_PATH_UNSAFE');
 }
 export async function createBackupSet(layout: ProductLayout, projectRoot: string, installationId: string, keyFile: string,
-  destination: string, passphrase: string, limits: BackupLimits, configDocument?: Buffer): Promise<BackupResult> {
+  destination: string, passphrase: string, limits: BackupLimits, config?: BackupConfigLayers): Promise<BackupResult> {
   const set = await safePath(destination);
   for (const resource of BACKUP_RESOURCES) if (inside(productResourcePath(layout, resource), set)) return refuse('BACKUP_PATH_UNSAFE');
   if ((inside(layout.root, set) && !inside(productResourcePath(layout, 'ledgerBackups'), set)) || (inside(join(projectRoot, '.deckent'), set) && !inside(productResourcePath(layout, 'ledgerBackups'), set))) return refuse('BACKUP_PATH_UNSAFE');
@@ -85,7 +85,7 @@ export async function createBackupSet(layout: ProductLayout, projectRoot: string
     await chmod(ledger, 0o600);
     const ledgerHandle = await import('node:fs/promises').then(fs => fs.open(ledger, 'r')); try { await ledgerHandle.sync(); } finally { await ledgerHandle.close(); }
     await writePrivate(join(staging, 'ledger.fingerprint.json'), ledgerFingerprint(ledger));
-    await writePrivate(join(staging, 'state.archive.json.gz'), await archiveState(layout, projectRoot, installationId, keyFile, limits, createdAt, configDocument));
+    await writePrivate(join(staging, 'state.archive.json.gz'), await archiveState(layout, projectRoot, installationId, keyFile, limits, createdAt, config));
     const payload: string[] = [];
     for (const name of PAYLOAD) payload.push(manifestLine(await digestFile(join(staging, name)), name));
     const material = await readPrivate(join(productResourcePath(layout, 'approvals'), keyFile), 32);

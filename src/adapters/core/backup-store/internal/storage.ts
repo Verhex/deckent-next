@@ -3,15 +3,18 @@ import { dirname, join, resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { FileInstallationIdentityStore } from '#adapters/core/installation-files/index.js';
 import { acquireLedgerLock } from '#adapters/core/local-runtime-socket/index.js';
-import { getConfigFieldDefault, validateConfig, productResourcePath, resolveProductLayout, restoreHoldPath, type ProductLayout } from '#platform/index.js';
+import { configSections, deepMerge, getConfigFieldDefault, isRecord, readJsonFile, validateConfig, productResourcePath, resolveProductLayout, restoreHoldPath, writeConfig, type ProductLayout } from '#platform/index.js';
 import type { BackupCommand, BackupResult, BackupStoragePort } from '#engine/index.js';
 import { ledgerFingerprint } from './fingerprint.js';
 import { createBackupSet, verifyBackupSet, type VerifiedBackup } from './set.js';
-import { BACKUP_RESOURCES, directoryResources, type BackupLimits } from './archive.js';
+import { BACKUP_RESOURCES, directoryResources, splitArchivedConfig, type BackupConfigLayers, type BackupLimits } from './archive.js';
 import { inside, privateDirectory, readPrivate, refuse, safePath, syncDirectory, writePrivate } from './files.js';
 const FIXED = ['config', 'projectIdentity', 'installationJournal'];
 
-export interface BackupSource { readonly layout: ProductLayout; readonly projectRoot: string; readonly installationId: string; readonly keyFile: string; readonly configDocument?: () => Promise<Buffer> }
+export interface BackupSource { readonly layout: ProductLayout; readonly projectRoot: string; readonly installationId: string; readonly keyFile: string;
+  readonly configDocument?: () => Promise<BackupConfigLayers>;
+  /** The per-user global config file of the restoring environment (S1 D1); absent: the global layer is not restored. */
+  readonly globalConfigPath?: string }
 export class FileBackupStorage implements BackupStoragePort {
   constructor(private readonly source: BackupSource, private readonly limits: BackupLimits) {}
   async execute(command: BackupCommand, passphrase: string): Promise<BackupResult> {
@@ -66,7 +69,7 @@ export class FileBackupStorage implements BackupStoragePort {
     try { lock = acquireLedgerLock(productResourcePath(layout, 'ledger') + '-lock'); }
     catch (error) { if (error && typeof error === 'object' && 'code' in error && error.code === 'LOCAL_RUNTIME_ALREADY_RUNNING') return refuse('BACKUP_SERVICE_RUNNING'); return refuse('BACKUP_CUSTODY_UNAVAILABLE'); }
     let published = false, holdCreated = false;
-    let restoredConfig: ReturnType<typeof validateConfig>['config'] | undefined;
+    let restoredConfig: ReturnType<typeof validateConfig>['config'] | undefined, globalLayer: Record<string, unknown> = {}, globalConfig: BackupResult['globalConfig'] = null;
     const stage = join(target, `.backup-restore-${randomUUID()}`), token = randomUUID(), preserved: string[] = [], changed = new Set<string>();
     try {
       // Recheck under the same kernel custody the service must acquire before any migration or startup.
@@ -78,7 +81,6 @@ export class FileBackupStorage implements BackupStoragePort {
         if ((!isDir && item.path !== '') || (isDir && item.path === '')) return refuse('BACKUP_SET_INVALID');
         let content = Buffer.from(item.content, 'base64');
         if (item.resource === 'config') {
-          const raw: unknown = JSON.parse(content.toString('utf8'));
           const relocate = (value: unknown, pointer: string): unknown => {
             if (typeof value === 'string') {
               const mapping = [[state.layoutRoot, layout.root], [state.projectRoot, target]] as const;
@@ -89,11 +91,15 @@ export class FileBackupStorage implements BackupStoragePort {
             if (value && typeof value === 'object') return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, relocate(item, `${pointer}/${key}`)]));
             return value;
           };
-          const config = relocate(raw, '') as Record<string, unknown>;
+          // S1 D1: the project layer is published as the project config; the global layer only fills the per-user global config below.
+          const layers = splitArchivedConfig(state), config = relocate(layers.project, '') as Record<string, unknown>;
           config['layout'] = { ...(config['layout'] as Record<string, unknown> | undefined), root: layout.root, resources: targetResources };
           // A restored scheduler must be re-enabled deliberately after identity keep and credential provisioning.
           config['backup'] = { ...(config['backup'] as Record<string, unknown> | undefined), schedule: getConfigFieldDefault('backup').schedule };
-          restoredConfig = validateConfig(config).config;
+          for (const [name, section] of configSections()) {
+            try { section.options.validateLayers?.(layers.global[name], config[name]); } catch { return refuse('BACKUP_SET_INVALID'); }
+          }
+          globalLayer = layers.global; restoredConfig = validateConfig(deepMerge(layers.global, config)).config;
           changed.add('/backup/schedule'); content = Buffer.from(JSON.stringify(config, null, 2) + '\n');
         }
         await writePrivate(join(productResourcePath(staged, item.resource), ...(item.path ? item.path.split('/') : [])), content);
@@ -117,6 +123,9 @@ export class FileBackupStorage implements BackupStoragePort {
         }
         await rename(from, to); published = true; await syncDirectory(dirname(to));
       };
+      if (this.source.globalConfigPath && Object.keys(globalLayer).length) {
+        globalConfig = await restoreGlobalLayer(this.source.globalConfigPath, globalLayer, token, preserved, () => { published = true; });
+      }
       // Preserve the whole old directory, including stale files absent from the recovery set. Keep ledger-lock's inode throughout.
       for (const resource of BACKUP_RESOURCES) {
         const from = productResourcePath(staged, resource);
@@ -136,7 +145,7 @@ export class FileBackupStorage implements BackupStoragePort {
       catch (error) { if (error && typeof error === 'object' && 'code' in error && error.code === 'INSTALLATION_IDENTITY_RELOCATED') required = true; else throw error; }
       await rm(stage, { recursive: true, force: true });
       await rm(hold); await syncDirectory(dirname(hold));
-      return { ...verified.result('restore'), relocation: { required, target, changedPaths: [...changed].sort() }, preserved };
+      return { ...verified.result('restore'), relocation: { required, target, changedPaths: [...changed].sort() }, globalConfig, preserved };
     } catch (error) {
       if (published) return refuse('BACKUP_RESTORE_INCOMPLETE');
       // Nothing was published: a hold this attempt created is withdrawn; an earlier attempt's hold stays.
@@ -145,4 +154,24 @@ export class FileBackupStorage implements BackupStoragePort {
     }
     finally { try { if (!published || await lstat(stage).then(() => false, () => true)) await rm(stage, { recursive: true, force: true }); } finally { lock.release(); } }
   }
+}
+
+/**
+ * S1 D1: the per-user global config is shared by every installation of this user, so restore fills only the archived sections it lacks and
+ * never replaces a present one (`kept` reports a differing value). An unreadable global file — which config loading ignores — is preserved as
+ * `.damaged-<token>` and replaced by the archived layer. The product's config writer applies its lock, digest precondition and atomic 0600 write.
+ */
+async function restoreGlobalLayer(path: string, archived: Record<string, unknown>, token: string, preserved: string[], effect: () => void): Promise<NonNullable<BackupResult['globalConfig']>> {
+  const current = await readJsonFile(path);
+  if (current.kind === 'io') throw current.error;
+  let present: Record<string, unknown> = {}, digest: string | null = null;
+  if (current.kind !== 'absent') {
+    if (current.kind === 'ready' && isRecord(current.value)) { present = current.value; digest = current.digest; }
+    else { const saved = `${path}.damaged-${token}`; effect(); await rename(path, saved); preserved.push(saved); }
+  }
+  const added = Object.keys(archived).filter(name => !Object.hasOwn(present, name)).sort();
+  const kept = Object.keys(archived).filter(name => Object.hasOwn(present, name) && JSON.stringify(present[name]) !== JSON.stringify(archived[name])).sort();
+  if (added.length) effect();
+  if (added.length) await writeConfig(path, { ...present, ...Object.fromEntries(added.map(name => [name, archived[name]])) }, digest);
+  return { path, added, kept };
 }

@@ -473,6 +473,8 @@
   "cli.backup.passphrase": "Operator passphrase (hidden)",
   "cli.backup.result": "{action}. Recovery set: {set}",
   "cli.backup.relocated": "Identity relocated. In {target}, run deckent init identity --keep.",
+  "cli.backup.globalAdded": "Restored into the global configuration {path}: {sections}.",
+  "cli.backup.globalKept": "The global configuration {path} keeps its own value for: {sections}.",
   "cli.help.backup": "Usage: deckent backup <create|verify|restore> --scope <id> --set <path>\n  restore: --target <project> [--confirm-target <absolute-project>]\n  [--json] [--lang en|tr]\nPassphrase: hidden prompt or stdin; never an argument.\nStop the target service first. Existing files are preserved beside replacements.\nA relocated identity needs deckent init identity --keep.",
   "error.BACKUP_STATE_CHANGED": "Recovery state changed while it was read; retry after writers settle.",
   "error.BACKUP_TARGET_IDENTITY_MISMATCH": "The set belongs to a different installation; restore to a separate empty target.",

@@ -473,6 +473,8 @@
   "cli.backup.passphrase": "Operatör parolası (gizli)",
   "cli.backup.result": "{action}. Kurtarma seti: {set}",
   "cli.backup.relocated": "Kimlik taşındı. {target} içinde deckent init identity --keep çalıştırın.",
+  "cli.backup.globalAdded": "Genel yapılandırmaya ({path}) geri yüklendi: {sections}.",
+  "cli.backup.globalKept": "Genel yapılandırma ({path}) şu bölümlerde kendi değerini korudu: {sections}.",
   "cli.help.backup": "Kullanım: deckent backup <create|verify|restore> --scope <id> --set <yol>\n  restore: --target <proje> [--confirm-target <mutlak-proje-yolu>]\n  [--json] [--lang en|tr]\nParola: gizli istem veya stdin; komut argümanı olamaz.\nÖnce hedef servisi durdurun. Eski dosyalar yeni dosyaların yanında korunur.\nTaşınan kimlik için deckent init identity --keep gerekir.",
   "error.BACKUP_STATE_CHANGED": "Kurtarma durumu okunurken değişti; yazıcılar durulduktan sonra yeniden deneyin.",
   "error.BACKUP_TARGET_IDENTITY_MISMATCH": "Set başka bir kuruluma ait; ayrı ve boş bir hedefe geri yükleyin.",

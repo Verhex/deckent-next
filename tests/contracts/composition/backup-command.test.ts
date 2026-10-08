@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { Readable } from 'node:stream';
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, expect, it } from 'vitest';
-import { executeBackup, clearConfigCache, resolveProductLayout, productResourcePath, startConfiguredRuntimeService } from '../../../src/index.js';
+import { executeBackup, clearConfigCache, loadConfig, resolveProductLayout, productResourcePath, startConfiguredRuntimeService } from '../../../src/index.js';
 import { FileInstallationIdentityStore } from '#adapters/core/installation-files/index.js';
 import { openLocalIntegrityAuthority } from '#adapters/core/local-keyring/index.js';
 import { openSqliteLedger, CURRENT_LEDGER_VERSION } from '#adapters/core/sqlite-ledger/index.js';
@@ -171,10 +171,72 @@ it('recovers damaged configuration and a lost key in place without inventing an 
   const identity=await new FileInstallationIdentityStore(f.layout,2000).read();expect(identity).toMatchObject({value:{installationId:f.installationId}});
   expect(JSON.parse(await readFile(join(f.root,'.deckent/config.json'),'utf8')).layout.root).toBe(f.layout.root);
 });
-it('archives authored global settings into the recovered project configuration',async()=>{
+it('archives the global layer apart: a restore on the same machine keeps it in the global file, never in the project config (S1 D1)',async()=>{
   const f=await fixture();await mkdir(f.env.DECKENT_GLOBAL_HOME,{recursive:true,mode:0o700});
   await writeFile(join(f.env.DECKENT_GLOBAL_HOME,'config.json'),JSON.stringify({language:'tr'}),{mode:0o600});clearConfigCache();
-  await call(f,'create');await call(f,'restore');expect(JSON.parse(await readFile(join(f.target,'.deckent/config.json'),'utf8')).language).toBe('tr');
+  await call(f,'create');const result=await call(f,'restore');
+  expect(JSON.parse(await readFile(join(f.target,'.deckent/config.json'),'utf8')).language).toBeUndefined();
+  expect(result.globalConfig).toEqual({path:join(f.env.DECKENT_GLOBAL_HOME,'config.json'),added:[],kept:[]});
+  expect((await loadConfig(f.target,{env:f.env})).language).toBe('tr');
+});
+const SELECTED_STORE='core.secret-store.encrypted-file@1';
+async function selectStore(f: Awaited<ReturnType<typeof fixture>>) {
+  await mkdir(f.env.DECKENT_GLOBAL_HOME,{recursive:true,mode:0o700});
+  await writeFile(join(f.env.DECKENT_GLOBAL_HOME,'config.json'),JSON.stringify({language:'tr',secrets:{store:SELECTED_STORE}}),{mode:0o600});clearConfigCache();
+}
+it('store selected → backup → ledger and config lost → in-place restore → config admitted and the service starts, no manual step (S1 D1)',async()=>{
+  const f=await fixture();await selectStore(f);await call(f,'create');
+  await rm(f.ledger);await writeFile(join(f.root,'.deckent/config.json'),'{broken');clearConfigCache();
+  const result=await call(f,'restore',phrase,{target:f.root,confirmTarget:f.root});
+  expect(result.globalConfig).toMatchObject({added:[],kept:[]});
+  const project=JSON.parse(await readFile(join(f.root,'.deckent/config.json'),'utf8'));expect(project.secrets).toBeUndefined();expect(project.language).toBeUndefined();
+  clearConfigCache();const config=await loadConfig(f.root,{env:f.env});expect((config as unknown as Record<string, unknown>).secrets).toEqual({store:SELECTED_STORE});expect(config.language).toBe('tr');
+  if(process.platform==='linux'){const service=await startConfiguredRuntimeService(f.root,{async onPage(){},async onError(){}},{env:f.env});await service.stop();await service.done;}
+});
+it('whole machine lost: the empty global home receives the archived global layer, the project config stays project-only (S1 D1)',async()=>{
+  const f=await fixture();await selectStore(f);await call(f,'create');
+  await rm(f.root,{recursive:true,force:true});await rm(f.layout.root,{recursive:true,force:true});await rm(f.env.DECKENT_GLOBAL_HOME,{recursive:true,force:true});clearConfigCache();
+  const lost=join(f.base,'lost');await mkdir(lost,{mode:0o700});
+  const result=await executeBackup(lost,{schemaVersion:1,scopeId:'scope',action:'restore',set:f.set,target:lost},phrase,{env:f.env});
+  const globalPath=join(f.env.DECKENT_GLOBAL_HOME,'config.json');
+  expect(result.globalConfig).toEqual({path:globalPath,added:['language','secrets'],kept:[]});
+  expect(JSON.parse(await readFile(globalPath,'utf8'))).toMatchObject({language:'tr',secrets:{store:SELECTED_STORE}});
+  expect((await stat(f.env.DECKENT_GLOBAL_HOME)).mode&0o777).toBe(0o700);expect((await stat(globalPath)).mode&0o777).toBe(0o600);
+  expect(JSON.parse(await readFile(join(lost,'.deckent/config.json'),'utf8')).secrets).toBeUndefined();
+  clearConfigCache();expect(((await loadConfig(lost,{env:f.env})) as unknown as Record<string, unknown>).secrets).toEqual({store:SELECTED_STORE});
+});
+/** Recovery envelope v1 as documented (scrypt N=65536,r=8,p=1 + AES-256-GCM, AAD = payload manifest lines), written independently here. */
+async function sealKeyV1(material: Buffer, passphrase: string, aad: string) {
+  const { createCipheriv, randomBytes, scrypt } = await import('node:crypto');
+  const salt = randomBytes(16), iv = randomBytes(12);
+  const key = await new Promise<Buffer>((resolve, reject) => scrypt(passphrase, salt, 32, { N: 65536, r: 8, p: 1, maxmem: 100663296 }, (error, out) => error ? reject(error) : resolve(out)));
+  const cipher = createCipheriv('aes-256-gcm', key, iv); cipher.setAAD(Buffer.from(aad));
+  const ciphertext = Buffer.concat([cipher.update(material), cipher.final()]);
+  return JSON.stringify({ schemaVersion: 1, kdf: 'scrypt', cipher: 'aes-256-gcm', salt: salt.toString('hex'), iv: iv.toString('hex'), tag: cipher.getAuthTag().toString('hex'), ciphertext: ciphertext.toString('hex') });
+}
+/** An alpha.18 (v1) set: one merged global+project config document. Produced from a v2 set and re-sealed with the set's own passphrase. */
+async function downgradeToV1(f: Awaited<ReturnType<typeof fixture>>) {
+  const { gunzipSync, gzipSync } = await import('node:zlib'); const { createHash } = await import('node:crypto');
+  const archive = join(f.set, 'state.archive.json.gz'), state = JSON.parse(gunzipSync(await readFile(archive)).toString());
+  const entry = state.entries.find((item: { resource: string; path: string }) => item.resource === 'config' && item.path === '');
+  const global = state.globalConfig ? JSON.parse(Buffer.from(state.globalConfig, 'base64').toString()) : {};
+  entry.content = Buffer.from(JSON.stringify({ ...global, ...JSON.parse(Buffer.from(entry.content, 'base64').toString()) })).toString('base64');
+  state.schemaVersion = 1; delete state.globalConfig;
+  await writeFile(archive, gzipSync(JSON.stringify(state)), { mode: 0o600 });
+  const digest = async (name: string) => createHash('sha256').update(await readFile(join(f.set, name))).digest('hex');
+  const payload = (await Promise.all(['ledger.db', 'ledger.fingerprint.json', 'state.archive.json.gz'].map(async name => `${await digest(name)}  ${name}\n`))).join('');
+  await writeFile(join(f.set, 'authority.key.enc'), await sealKeyV1(await readFile(join(f.layout.root, 'approvals/authority.key')), phrase, payload), { mode: 0o600 });
+  await writeFile(join(f.set, 'MANIFEST.sha256'), payload + `${await digest('authority.key.enc')}  authority.key.enc\n`, { mode: 0o600 });
+}
+it('an alpha.18 merged (v1) set restores without moving the secrets selection into the project layer (S1 D1)',async()=>{
+  const f=await fixture();await selectStore(f);await call(f,'create');await downgradeToV1(f);await call(f,'verify');
+  await rm(f.env.DECKENT_GLOBAL_HOME,{recursive:true,force:true});await writeFile(join(f.root,'.deckent/config.json'),'{broken');clearConfigCache();
+  const result=await call(f,'restore',phrase,{target:f.root,confirmTarget:f.root});
+  expect(result.globalConfig?.added).toEqual(['secrets']);
+  const project=JSON.parse(await readFile(join(f.root,'.deckent/config.json'),'utf8'));
+  expect(project.secrets).toBeUndefined();expect(project.language).toBe('tr');
+  clearConfigCache();expect(((await loadConfig(f.root,{env:f.env})) as unknown as Record<string, unknown>).secrets).toEqual({store:SELECTED_STORE});
+  if(process.platform==='linux'){const service=await startConfiguredRuntimeService(f.root,{async onPage(){},async onError(){}},{env:f.env});await service.stop();await service.done;}
 });
 it.skipIf(process.platform !== 'linux')('scheduled retention keeps the three newest authenticated sets and preserves foreign names',async()=>{
   const f=await fixture(),path=join(f.root,'.deckent/config.json'),config=JSON.parse(await readFile(path,'utf8'));
