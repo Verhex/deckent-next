@@ -2,8 +2,8 @@ import { isDeepStrictEqual } from 'node:util';
 import { parseProviderSpendManagementCommand, parseProviderSpendBudget, modelActivationActorSchema, modelActivationAuthorizationSchema,
   type ProviderSpendManagementCommand, type ModelInvocationActor, type ModelInvocationAuthorization, type VerifiedPrincipal, immutableJsonObjectSchema } from '#domain/index.js';
 import { authenticate, type PrincipalVerifier } from '#engine/core/authentication/index.js';
-import { createProviderSpendAccount, parseProviderSpendAccount, parseProviderSpendReservation, providerSpendEvidenceDigest, type ProviderSpendAccount } from './account.js';
-import { canonicalProviderSpendExactMinorUnits, ceilProviderSpendExactMinorUnits, addProviderSpendExactMinorUnits } from './exact.js';
+import { createProviderSpendAccount, parseProviderSpendAccount, parseProviderSpendReservation, providerSpendEvidenceDigest, type ProviderSpendAccount, isProviderSpendUpperBound } from './account.js';
+import { canonicalProviderSpendExactMinorUnits, ceilProviderSpendExactMinorUnits, addProviderSpendExactMinorUnits, subtractProviderSpendExactMinorUnits, compareProviderSpendExactMinorUnits } from './exact.js';
 import { parseProviderSpendCheckpoint, type ProviderSpendCheckpoint } from './checkpoint.js';
 import { ProviderSpendError } from './error.js';
 export interface ProviderSpendManagementAuthorization {
@@ -14,6 +14,7 @@ export interface ProviderSpendManagementReceipt {
   readonly schemaVersion: 1; readonly command: ProviderSpendManagementCommand; readonly actor: ModelInvocationActor;
   readonly authorization: ModelInvocationAuthorization; readonly recordedAtMs: number;
   /** Null only for `budget-create` (the scope had no account). */
+  readonly replacedUpperBoundExactMinorUnits?: string;
   readonly before: ProviderSpendCheckpoint | null; readonly after: ProviderSpendAccount; readonly digest: string;
 }
 export interface ProviderSpendManagementResult { readonly receipt: ProviderSpendManagementReceipt; readonly replayed: boolean }
@@ -23,43 +24,54 @@ export interface ProviderSpendManagementStore {
   close(): void;
 }
 export function parseProviderSpendManagementReceipt(input: ProviderSpendManagementReceipt): ProviderSpendManagementReceipt {
-  if (!input || typeof input !== 'object' || Object.keys(input).length !== 8 || !['schemaVersion', 'command', 'actor', 'authorization', 'recordedAtMs', 'before', 'after', 'digest'].every(key => Object.hasOwn(input, key))
+  if (!input || typeof input !== 'object' || Object.keys(input).length !== (input.replacedUpperBoundExactMinorUnits === undefined ? 8 : 9)
+    || Object.keys(input).some(key => !['schemaVersion', 'command', 'actor', 'authorization', 'recordedAtMs', 'before', 'after', 'digest', 'replacedUpperBoundExactMinorUnits'].includes(key)) || !['schemaVersion', 'command', 'actor', 'authorization', 'recordedAtMs', 'before', 'after', 'digest'].every(key => Object.hasOwn(input, key))
     || !immutableJsonObjectSchema.safeParse(input).success) throw new ProviderSpendError('PROVIDER_SPEND_INVALID');
   const command = parseProviderSpendManagementCommand(input.command), actor = modelActivationActorSchema.parse(input.actor),
     authorization = modelActivationAuthorizationSchema.parse(input.authorization), after = parseProviderSpendAccount(input.after);
   const { digest, ...body } = input;
   if (input.schemaVersion !== 1 || !Number.isSafeInteger(input.recordedAtMs) || input.recordedAtMs < 0) throw new ProviderSpendError('PROVIDER_SPEND_INVALID');
   if (command.kind === 'budget-create') {
-    if (input.before !== null || !isDeepStrictEqual(after, createGovernedProviderSpendAccount(command)) || providerSpendEvidenceDigest(body) !== digest
+    if (input.replacedUpperBoundExactMinorUnits !== undefined || input.before !== null || !isDeepStrictEqual(after, createGovernedProviderSpendAccount(command)) || providerSpendEvidenceDigest(body) !== digest
       || !isDeepStrictEqual(command, input.command) || !isDeepStrictEqual(actor, input.actor) || !isDeepStrictEqual(authorization, input.authorization)) {
       throw new ProviderSpendError('PROVIDER_SPEND_INVALID');
     }
     return Object.freeze({ ...input, command, actor, authorization, before: null, after });
   }
+  const replaced = input.replacedUpperBoundExactMinorUnits;
+  if (replaced !== undefined && (command.kind !== 'reconcile' || command.resolution !== 'settle' || command.evidence.kind === 'write-off'
+    || canonicalProviderSpendExactMinorUnits(replaced) !== replaced || compareProviderSpendExactMinorUnits(command.exactMinorUnits, replaced) > 0)) {
+    throw new ProviderSpendError('PROVIDER_SPEND_INVALID');
+  }
   const before = parseProviderSpendCheckpoint(input.before);
+  const priorExact = replaced === undefined ? before.account.settledExactMinorUnits : subtractProviderSpendExactMinorUnits(before.account.settledExactMinorUnits, replaced);
   if (command.expectedCheckpointDigest !== before.digest || command.scopeId !== before.account.budget.scopeId
     || command.budgetId !== before.account.budget.budgetId || command.budgetRevision !== before.account.budget.revision
     || after.budget.scopeId !== command.scopeId || after.budget.budgetId !== command.budgetId
     || (command.kind === 'budget-revision' ? !isDeepStrictEqual(after, reviseProviderSpendBudget(before.account, command))
       : !isDeepStrictEqual(after.budget, before.account.budget) || after.reservedMinorUnits > before.account.reservedMinorUnits
-        || after.settledExactMinorUnits !== addProviderSpendExactMinorUnits(before.account.settledExactMinorUnits, command.exactMinorUnits)
+        || (replaced !== undefined && after.reservedMinorUnits !== before.account.reservedMinorUnits)
+        || after.settledExactMinorUnits !== addProviderSpendExactMinorUnits(priorExact, command.exactMinorUnits)
         || (before.account.frozen && !after.frozen))
     || providerSpendEvidenceDigest(body) !== digest
     || !isDeepStrictEqual(command, input.command) || !isDeepStrictEqual(actor, input.actor)
     || !isDeepStrictEqual(authorization, input.authorization)) throw new ProviderSpendError('PROVIDER_SPEND_INVALID');
   return Object.freeze({ ...input, command, actor, authorization, before, after });
 }
-/** Held money has one governed exit. Settled reservations cannot be changed by any correction. */
+/** Held money has one governed exit. Only explicitly labelled DeepSeek upper-bound settlements may be lowered once, preserving original evidence. */
 export function reconcileProviderSpend(accountInput: unknown, reservationInput: unknown, command: Extract<ProviderSpendManagementCommand, { kind: 'reconcile' }>, receiptDigest: string) {
   const account = parseProviderSpendAccount(accountInput), reservation = parseProviderSpendReservation(reservationInput), d = reservation.descriptor;
   const exact = canonicalProviderSpendExactMinorUnits(command.exactMinorUnits);
-  if (reservation.disposition.state !== 'held' || reservation.reconciliation || command.invocationId !== d.invocationId
+  const upperBound = isProviderSpendUpperBound(reservation);
+  if ((!upperBound && reservation.disposition.state !== 'held') || reservation.reconciliation || command.invocationId !== d.invocationId
     || command.scopeId !== d.scopeId || d.budgetId !== account.budget.budgetId || d.currency !== account.budget.currency
-    || d.budgetRevision > account.budget.revision || account.reservedMinorUnits < d.quote.maxChargeMinorUnits
+    || d.budgetRevision > account.budget.revision || (!upperBound && account.reservedMinorUnits < d.quote.maxChargeMinorUnits)
+    || (upperBound && (command.resolution !== 'settle' || command.evidence.kind === 'write-off'
+      || compareProviderSpendExactMinorUnits(exact, reservation.measurement!.exactMinorUnits) > 0))
     || (command.resolution !== 'settle' && exact !== '0')
     || (command.resolution === 'write-off') !== (command.evidence.kind === 'write-off')) throw new ProviderSpendError('PROVIDER_SPEND_CONFLICT');
-  const settled = addProviderSpendExactMinorUnits(account.settledExactMinorUnits, exact);
-  return Object.freeze({ account: parseProviderSpendAccount({ ...account, reservedMinorUnits: account.reservedMinorUnits - d.quote.maxChargeMinorUnits,
+  const settled = addProviderSpendExactMinorUnits(upperBound ? subtractProviderSpendExactMinorUnits(account.settledExactMinorUnits, reservation.measurement!.exactMinorUnits) : account.settledExactMinorUnits, exact);
+  return Object.freeze({ account: parseProviderSpendAccount({ ...account, reservedMinorUnits: account.reservedMinorUnits - (upperBound ? 0 : d.quote.maxChargeMinorUnits),
     settledExactMinorUnits: settled, settledMinorUnits: ceilProviderSpendExactMinorUnits(settled),
     frozen: account.frozen || ceilProviderSpendExactMinorUnits(exact) > d.quote.maxChargeMinorUnits }),
     reservation: parseProviderSpendReservation({ ...reservation, schemaVersion: 3, reconciliation: { commandId: command.commandId,

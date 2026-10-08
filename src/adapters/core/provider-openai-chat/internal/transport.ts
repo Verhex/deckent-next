@@ -15,8 +15,10 @@ const adapterOf = (definition: OpenAiChatHttpDefinition) => ({ id: OPENAI_CHAT_H
 export type PreparedOpenAiChatRequest = Readonly<{ definition: OpenAiChatHttpDefinition; limits: OpenAiChatHttpLimits;
   request: OpenAiChatTextRequest; body: string }>;
 export interface OpenAiChatNativePortOptions {
-  /** A streamed send's final usage only (seen with or after its finish reason); an interim usage never reaches it. */
-  readonly onFinalUsage?: (prepared: PreparedOpenAiChatRequest, usage: JsonObject) => void;
+  /** A streamed send's final usage only (seen with or after its finish reason) with the stream's authoritative service tier; an interim usage never reaches it. */
+  readonly onFinalUsage?: (prepared: PreparedOpenAiChatRequest, usage: JsonObject, serviceTier?: unknown) => void;
+  /** A contradiction after that final usage (e.g. a later conflicting service tier) withdraws it: it no longer settles money (Astra 2467). */
+  readonly onFinalUsageWithdrawn?: (prepared: PreparedOpenAiChatRequest) => void;
   readonly resolveCredential?: (reference: string, signal?: AbortSignal) => Promise<string | undefined>;
   /** The scope's secret prefix-cache salt (composition: HMAC under the installation's salt secret). Required by a binding that declares
    * prefix-cache-salt: without it, or when it fails, nothing is sent (fail closed, never a derivable salt). */
@@ -126,7 +128,8 @@ async function sendPreparedOpenAiChatHttpRequest(prepared: PreparedOpenAiChatReq
       adapter: adapterOf(prepared.definition) },
     // A streamed request is parsed incrementally whether or not a caller observes its deltas.
     prepared.request.stream === true
-      ? { ...transport, stream: createOpenAiChatStream(prepared.request, prepared.limits, usage => options.onFinalUsage?.(prepared, usage)), ...(onDelta ? { onDelta } : {}) }
+      ? { ...transport, stream: createOpenAiChatStream(prepared.request, prepared.limits, (usage, serviceTier) => options.onFinalUsage?.(prepared, usage, serviceTier),
+        () => options.onFinalUsageWithdrawn?.(prepared)), ...(onDelta ? { onDelta } : {}) }
       : { ...transport, parseResponse: body => parseResponse(body, prepared) }, signal);
   } catch (error) {
     if (!(error instanceof NativeJsonHttpError)) throw error;

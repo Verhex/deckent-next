@@ -36,24 +36,34 @@ const chunkSchema = z.object({ id: z.string().min(1), object: z.literal('chat.co
  * chunk (OpenAI `include_usage`). `onFinalUsage` receives only that usage. A usage before the finish reason is interim: a later
  * finish marker never promotes it, so a cut stream reports nothing (unknown, reservation held) and a stream that reaches `[DONE]`
  * without a final usage is an invalid response, never assembled with the stale count (Astra 2459 R1, 2462 R1).
+ * A contradiction found after the final usage was reported (a conflicting service tier, any invalid chunk, or an invalid completed
+ * stream) calls `onFinalUsageWithdrawn` once: the reported usage and tier are no longer a measurement, so the reservation stays held
+ * even when the transport records the refusal as a bounded, incomplete response (Astra 2467). A clean cut or a size limit withdraws nothing.
  */
-export function createOpenAiChatStream(request: OpenAiChatTextRequest, limits: OpenAiChatHttpLimits, onFinalUsage?: (usage: JsonObject) => void): NativeJsonHttpStream {
+export function createOpenAiChatStream(request: OpenAiChatTextRequest, limits: OpenAiChatHttpLimits, onFinalUsage?: (usage: JsonObject, serviceTier?: unknown) => void,
+  onFinalUsageWithdrawn?: () => void): NativeJsonHttpStream {
   const hash = createHash('sha256'), decoder = new TextDecoder('utf-8', { fatal: true });
   let wireBytes = 0, chunks = 0, lineBytes = 0, eventBytes = 0, assembledBytes = 0;
   let line: Buffer[] = [], data: string[] = [];
   let invalid: ModelInvocationRejectionReason | null = null, doneSeen = false;
   let head: { id: string; created: number; model: string } | null = null, fingerprint: string | null = null;
+  // The stream's one authoritative service tier: any chunk may carry it, a conflicting value is an invalid response (PRICING).
+  let serviceTier: unknown = undefined;
   let content = '', reasoning = '', refusal = '', finish: string | null = null, usage: JsonObject | null = null, usageReported = false;
   // Chunk positions of the usage and the finish reason: the usage is final only when it arrives with or after the finish chunk.
   let usageChunk = 0, finishChunk = 0;
   const finalUsage = () => usage !== null && finish !== null && usageChunk >= finishChunk;
   // Tool-call deltas assembled by index: the id is fixed once, name and arguments arrive in pieces (T-L2).
   const calls = new Map<number, { id: string | null; name: string; arguments: string }>();
-  const fail = (reason: ModelInvocationRejectionReason) => { invalid ??= reason; };
+  let withdrawn = false;
+  const withdraw = () => { if (usageReported && !withdrawn) { withdrawn = true; onFinalUsageWithdrawn?.(); } };
+  const fail = (reason: ModelInvocationRejectionReason) => { withdraw(); invalid ??= reason; };
+  // A completed stream refused for its own content after the final usage: the usage is withdrawn like a parse-time contradiction.
+  const refuse = (reason: 'invalid-response') => { withdraw(); return { reason }; };
 
   function event(text: string, out: ModelInvocationDelta[]): boolean {
     const limit = parse(text, out);
-    if (!usageReported && !invalid && finalUsage()) { usageReported = true; onFinalUsage?.(usage!); }
+    if (!usageReported && !invalid && finalUsage()) { usageReported = true; onFinalUsage?.(usage!, serviceTier); }
     return limit;
   }
 
@@ -68,6 +78,10 @@ export function createOpenAiChatStream(request: OpenAiChatTextRequest, limits: O
     if (chunk.model !== request.model) { fail('model-mismatch'); return false; }
     if (!head) head = { id: chunk.id, created: chunk.created, model: chunk.model };
     else if (chunk.id !== head.id) { fail('invalid-response'); return false; }
+    if (chunk['service_tier'] !== undefined && chunk['service_tier'] !== null) {
+      if (serviceTier !== undefined && serviceTier !== chunk['service_tier']) { fail('invalid-response'); return false; }
+      serviceTier = chunk['service_tier'];
+    }
     if (typeof chunk.system_fingerprint === 'string') fingerprint ??= chunk.system_fingerprint;
     if (chunk.usage !== undefined && chunk.usage !== null) {
       const checked = openAiChatUsageSchema.safeParse(chunk.usage);
@@ -156,23 +170,24 @@ export function createOpenAiChatStream(request: OpenAiChatTextRequest, limits: O
     },
     finish(): NativeJsonHttpParsed {
       if (invalid) return { reason: invalid };
-      if (lineBytes > 0 || data.length > 0) return { reason: doneSeen ? 'invalid-response' : 'interrupted' };
+      if (lineBytes > 0 || data.length > 0) return doneSeen ? refuse('invalid-response') : { reason: 'interrupted' };
       if (!doneSeen || !head || finish === null || usage === null) return { reason: 'interrupted' };
-      if (!finalUsage()) return { reason: 'invalid-response' };
+      if (!finalUsage()) return refuse('invalid-response');
       // Assembled calls go through the same check as a non-streamed response: declared names, unique ids, contiguous indexes.
       const ordered = [...calls.entries()].sort((a, b) => a[0] - b[0]);
-      if (ordered.some(([index], position) => index !== position)) return { reason: 'invalid-response' };
+      if (ordered.some(([index], position) => index !== position)) return refuse('invalid-response');
       const toolCalls = ordered.length ? ordered.map(([, call]) => ({ id: call.id, type: 'function', function: { name: call.name, arguments: call.arguments } })) : null;
       const checked = checkedToolCalls(toolCalls, request);
-      if (checked === 'invalid' || (finish === 'tool_calls') !== (checked !== null)) return { reason: 'invalid-response' };
+      if (checked === 'invalid' || (finish === 'tool_calls') !== (checked !== null)) return refuse('invalid-response');
       const message = { role: 'assistant', content: content || null, ...(reasoning ? { reasoning } : {}), ...(refusal ? { refusal } : {}),
         ...(checked ? { tool_calls: checked.map(call => ({ id: call.id, type: 'function', function: { name: call.name, arguments: call.arguments } })) } : {}) };
       const native = { id: head.id, object: 'chat.completion', created: head.created, model: head.model,
+        ...(serviceTier === undefined ? {} : { service_tier: serviceTier }),
         ...(fingerprint === null ? {} : { system_fingerprint: fingerprint }),
         choices: [{ index: 0, finish_reason: finish, message }], usage,
         deckent_stream: { schemaVersion: 1, chunks, wireBytes, wireSha256: hash.digest('hex') } };
       const copied = openAiChatWireObjectSchema.safeParse(native);
-      if (!copied.success) return { reason: 'invalid-response' };
+      if (!copied.success) return refuse('invalid-response');
       if (Buffer.byteLength(JSON.stringify(copied.data), 'utf8') > limits.responseMaxBytes) return { reason: 'response-limit' };
       return { response: Object.freeze({ schemaVersion: 1 as const, native: copied.data, usage: copied.data['usage'] as JsonObject }) };
     },

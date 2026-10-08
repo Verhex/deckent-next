@@ -1,9 +1,317 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "rows": [
-    { "kind": "vendor-published", "version": 1, "vendor": "openai", "currency": "USD", "modelId": "chat-latest", "endpoint": "https://api.openai.com/v1/chat/completions", "usdPerMTok": { "input": "5", "cachedInput": "0.5", "output": "30" }, "source": { "url": "https://platform.openai.com/pricing", "retrievedAt": "2026-10-08" } },
-    { "kind": "vendor-published", "version": 1, "vendor": "zai", "currency": "USD", "modelId": "glm-4.7", "endpoint": "https://api.z.ai/api/paas/v4/chat/completions", "usdPerMTok": { "input": "0.6", "cachedInput": "0.11", "output": "2.2" }, "source": { "url": "https://docs.z.ai/guides/overview/pricing", "retrievedAt": "2026-10-08" } },
-    { "kind": "vendor-published", "version": 1, "vendor": "deepseek", "currency": "USD", "modelId": "deepseek-flash", "endpoint": "https://api.deepseek.com/chat/completions", "usdPerMTok": { "input": "0.3", "cachedInput": "0.006", "output": "1.2" }, "offPeakUsdPerMTok": { "input": "0.15", "cachedInput": "0.003", "output": "0.6" }, "schedule": "provider-tier-required", "source": { "url": "https://api-docs.deepseek.com/quick_start/pricing/", "retrievedAt": "2026-10-08" } },
-    { "kind": "vendor-published", "version": 1, "vendor": "deepseek", "currency": "USD", "modelId": "deepseek-v4-pro", "endpoint": "https://api.deepseek.com/chat/completions", "usdPerMTok": { "input": "1.32", "cachedInput": "0.044", "output": "3.96" }, "offPeakUsdPerMTok": { "input": "0.66", "cachedInput": "0.022", "output": "1.98" }, "schedule": "provider-tier-required", "source": { "url": "https://api-docs.deepseek.com/quick_start/pricing/", "retrievedAt": "2026-10-08" } }
+    {
+      "kind": "vendor-published",
+      "version": 1,
+      "vendor": "openai",
+      "currency": "USD",
+      "modelId": "chat-latest",
+      "endpoint": "https://api.openai.com/v1/chat/completions",
+      "usdPerMTok": {
+        "input": "5",
+        "cachedInput": "0.5",
+        "output": "30"
+      },
+      "source": {
+        "url": "https://platform.openai.com/pricing",
+        "retrievedAt": "2026-10-08"
+      }
+    },
+    {
+      "kind": "vendor-published",
+      "version": 1,
+      "vendor": "zai",
+      "currency": "USD",
+      "modelId": "glm-4.7",
+      "endpoint": "https://api.z.ai/api/paas/v4/chat/completions",
+      "usdPerMTok": {
+        "input": "0.6",
+        "cachedInput": "0.11",
+        "output": "2.2"
+      },
+      "source": {
+        "url": "https://docs.z.ai/guides/overview/pricing",
+        "retrievedAt": "2026-10-08"
+      }
+    },
+    {
+      "kind": "vendor-published",
+      "version": 1,
+      "vendor": "deepseek",
+      "currency": "USD",
+      "modelId": "deepseek-flash",
+      "endpoint": "https://api.deepseek.com/chat/completions",
+      "usdPerMTok": {
+        "input": "0.3",
+        "cachedInput": "0.006",
+        "output": "1.2"
+      },
+      "offPeakUsdPerMTok": {
+        "input": "0.15",
+        "cachedInput": "0.003",
+        "output": "0.6"
+      },
+      "schedule": "provider-tier-required",
+      "source": {
+        "url": "https://api-docs.deepseek.com/quick_start/pricing/",
+        "retrievedAt": "2026-10-08"
+      }
+    },
+    {
+      "kind": "vendor-published",
+      "version": 1,
+      "vendor": "deepseek",
+      "currency": "USD",
+      "modelId": "deepseek-v4-pro",
+      "endpoint": "https://api.deepseek.com/chat/completions",
+      "usdPerMTok": {
+        "input": "1.32",
+        "cachedInput": "0.044",
+        "output": "3.96"
+      },
+      "offPeakUsdPerMTok": {
+        "input": "0.66",
+        "cachedInput": "0.022",
+        "output": "1.98"
+      },
+      "schedule": "provider-tier-required",
+      "source": {
+        "url": "https://api-docs.deepseek.com/quick_start/pricing/",
+        "retrievedAt": "2026-10-08"
+      }
+    },
+    {
+      "kind": "vendor-published",
+      "version": 2,
+      "vendor": "openai",
+      "currency": "USD",
+      "modelId": "gpt-6-astra",
+      "endpoint": "https://api.openai.com/v1/chat/completions",
+      "usdPerMTok": {
+        "input": "10",
+        "cachedInput": "1",
+        "cacheWrite": "12.5",
+        "output": "50"
+      },
+      "longContextAboveInputTokens": 272000,
+      "processingTiers": [
+        {
+          "serviceTier": "default",
+          "usdPerMTok": {
+            "input": "10",
+            "cachedInput": "1",
+            "cacheWrite": "12.5",
+            "output": "50"
+          },
+          "longContextUsdPerMTok": {
+            "input": "20",
+            "cachedInput": "2",
+            "cacheWrite": "25",
+            "output": "75"
+          }
+        },
+        {
+          "serviceTier": "flex",
+          "usdPerMTok": {
+            "input": "5",
+            "cachedInput": "0.5",
+            "cacheWrite": "6.25",
+            "output": "25"
+          },
+          "longContextUsdPerMTok": {
+            "input": "10",
+            "cachedInput": "1",
+            "cacheWrite": "12.5",
+            "output": "37.5"
+          }
+        },
+        {
+          "serviceTier": "priority",
+          "usdPerMTok": {
+            "input": "20",
+            "cachedInput": "2",
+            "cacheWrite": "25",
+            "output": "100"
+          },
+          "longContextUsdPerMTok": {
+            "input": "40",
+            "cachedInput": "4",
+            "cacheWrite": "50",
+            "output": "150"
+          }
+        }
+      ],
+      "source": {
+        "url": "https://developers.openai.com/api/docs/pricing",
+        "retrievedAt": "2026-10-08"
+      }
+    },
+    {
+      "kind": "vendor-published",
+      "version": 2,
+      "vendor": "openai",
+      "currency": "USD",
+      "modelId": "gpt-6.1-sol",
+      "endpoint": "https://api.openai.com/v1/chat/completions",
+      "usdPerMTok": {
+        "input": "2",
+        "cachedInput": "0.1",
+        "cacheWrite": "2.5",
+        "output": "10"
+      },
+      "longContextAboveInputTokens": 272000,
+      "processingTiers": [
+        {
+          "serviceTier": "default",
+          "usdPerMTok": {
+            "input": "2",
+            "cachedInput": "0.1",
+            "cacheWrite": "2.5",
+            "output": "10"
+          },
+          "longContextUsdPerMTok": {
+            "input": "4",
+            "cachedInput": "0.2",
+            "cacheWrite": "5",
+            "output": "15"
+          }
+        },
+        {
+          "serviceTier": "flex",
+          "usdPerMTok": {
+            "input": "1",
+            "cachedInput": "0.05",
+            "cacheWrite": "1.25",
+            "output": "5"
+          },
+          "longContextUsdPerMTok": {
+            "input": "2",
+            "cachedInput": "0.1",
+            "cacheWrite": "2.5",
+            "output": "7.5"
+          }
+        },
+        {
+          "serviceTier": "priority",
+          "usdPerMTok": {
+            "input": "4",
+            "cachedInput": "0.2",
+            "cacheWrite": "5",
+            "output": "20"
+          },
+          "longContextUsdPerMTok": {
+            "input": "8",
+            "cachedInput": "0.4",
+            "cacheWrite": "10",
+            "output": "30"
+          }
+        }
+      ],
+      "source": {
+        "url": "https://developers.openai.com/api/docs/pricing",
+        "retrievedAt": "2026-10-08"
+      }
+    },
+    {
+      "kind": "vendor-published",
+      "version": 2,
+      "vendor": "openai",
+      "currency": "USD",
+      "modelId": "gpt-6-luna",
+      "endpoint": "https://api.openai.com/v1/chat/completions",
+      "usdPerMTok": {
+        "input": "0.1",
+        "cachedInput": "0.01",
+        "cacheWrite": "0.125",
+        "output": "0.5"
+      },
+      "longContextAboveInputTokens": 272000,
+      "processingTiers": [
+        {
+          "serviceTier": "default",
+          "usdPerMTok": {
+            "input": "0.1",
+            "cachedInput": "0.01",
+            "cacheWrite": "0.125",
+            "output": "0.5"
+          },
+          "longContextUsdPerMTok": {
+            "input": "0.2",
+            "cachedInput": "0.02",
+            "cacheWrite": "0.25",
+            "output": "0.75"
+          }
+        },
+        {
+          "serviceTier": "flex",
+          "usdPerMTok": {
+            "input": "0.05",
+            "cachedInput": "0.005",
+            "cacheWrite": "0.0625",
+            "output": "0.25"
+          },
+          "longContextUsdPerMTok": {
+            "input": "0.1",
+            "cachedInput": "0.01",
+            "cacheWrite": "0.125",
+            "output": "0.375"
+          }
+        },
+        {
+          "serviceTier": "priority",
+          "usdPerMTok": {
+            "input": "0.2",
+            "cachedInput": "0.02",
+            "cacheWrite": "0.25",
+            "output": "1"
+          },
+          "longContextUsdPerMTok": {
+            "input": "0.4",
+            "cachedInput": "0.04",
+            "cacheWrite": "0.5",
+            "output": "1.5"
+          }
+        }
+      ],
+      "source": {
+        "url": "https://developers.openai.com/api/docs/pricing",
+        "retrievedAt": "2026-10-08"
+      }
+    },
+    {
+      "kind": "vendor-published",
+      "version": 1,
+      "vendor": "zai",
+      "currency": "USD",
+      "modelId": "glm-5.3",
+      "endpoint": "https://api.z.ai/api/paas/v4/chat/completions",
+      "usdPerMTok": {
+        "input": "1.4",
+        "cachedInput": "0.26",
+        "output": "4.4"
+      },
+      "source": {
+        "url": "https://docs.z.ai/guides/overview/pricing",
+        "retrievedAt": "2026-10-08"
+      }
+    },
+    {
+      "kind": "vendor-published",
+      "version": 1,
+      "vendor": "zai",
+      "currency": "USD",
+      "modelId": "glm-4.7-flash",
+      "endpoint": "https://api.z.ai/api/paas/v4/chat/completions",
+      "usdPerMTok": {
+        "input": "0",
+        "cachedInput": "0",
+        "output": "0"
+      },
+      "source": {
+        "url": "https://docs.z.ai/guides/overview/pricing",
+        "retrievedAt": "2026-10-08"
+      }
+    }
   ]
 }

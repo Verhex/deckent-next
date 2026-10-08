@@ -71,3 +71,10 @@ export function compareProviderSpendExactMinorUnits(leftInput: unknown, rightInp
   const scale = Math.max(left.scale, right.scale), a = left.coefficient * 10n ** BigInt(scale - left.scale), b = right.coefficient * 10n ** BigInt(scale - right.scale);
   return a === b ? 0 : a < b ? -1 : 1;
 }
+
+/** Nonnegative exact difference; a correction cannot manufacture a negative account. */
+export function subtractProviderSpendExactMinorUnits(leftInput: unknown, rightInput: unknown): string {
+  const left = parseFixed(canonicalProviderSpendExactMinorUnits(leftInput)), right = parseFixed(canonicalProviderSpendExactMinorUnits(rightInput));
+  const scale = Math.max(left.scale, right.scale);
+  return fixed(normalize(left.coefficient * 10n ** BigInt(scale - left.scale) - right.coefficient * 10n ** BigInt(scale - right.scale), scale));
+}

@@ -12,7 +12,7 @@ const schema = z.object({ schemaVersion: z.literal(1), basis: z.literal('measure
   currency: z.string().regex(/^[A-Z]{3}$/), exactMinorUnits: z.string(), roundedMinorUnits: counterSchema,
   quoteDigest: digest, requestDigest: digest, profileDigest: digest, responseContentDigest: digest,
   source: z.object({ id: identitySchema, version: counterSchema.positive(), modelId: identitySchema, tariffDigest: digest,
-    tier: counterSchema.nullable(), cacheSplit: z.enum(['reported', 'dearest', 'none']),
+    tier: counterSchema.or(z.literal('upper-bound')).nullable(), serviceTier: z.union([z.literal('default'), z.literal('flex'), z.literal('priority')]).optional(), cacheSplit: z.enum(['reported', 'dearest', 'none']),
     dimensions: dimensionsSchema,
   }).strict().readonly(),
 }).strict().readonly();

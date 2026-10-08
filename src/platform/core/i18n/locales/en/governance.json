@@ -854,6 +854,7 @@
   "cli.help.action.revise-budget": "Revise a scope budget",
   "cli.help.modelsManageSpending": "Usage: deckent models reconcile-spending|revise-budget --input <file|-> [--json]",
   "models.spending.managementRecorded": "Spending governance receipt recorded: {command}.",
+  "models.invocation.spendingUpperBound": "Upper bound (upper-bound): {exactAmount} minor units ({currency}), provider usage × peak tariff {tariff}; this is not the actual provider charge.",
   "models.invocation.spendingSettledMeasuredTariff": "Measured tariff charge: {exactAmount} minor units ({currency}); tier {tier}, tariff {tariff}. Provider usage × pinned tariff.",
   "models.invocation.spendingReconciled": "Reconciled: {resolution}, {exactAmount} minor units ({currency}); receipt {command}.",
   "cli.help.action.create-budget": "Create the scope's first spending budget",

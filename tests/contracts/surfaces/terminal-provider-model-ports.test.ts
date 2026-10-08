@@ -156,6 +156,19 @@ describe('/provider port: connect a model (T4-B)', () => {
     keyStored: true, steps: { catalog: 'written', declaration: 'written', profile: status === 'connected' ? 'written' : 'present', activation: status === 'connected' ? 'written' : 'present', carried: 0 },
     notCarried: [], carriedModels: [], tariff: 'unmetered', approval: status === 'connected' ? null : { approvalId: 'appr-1', keyPath: 'provider_invocation_profiles', layer: 'project' }, service: 'stale' });
 
+  it('shows the CNY/USD reason on locked China seed models in the provider port', async () => {
+    const { root, options } = await project({});
+    const { connect, extra } = host([]);
+    const china = { ...connect.kinds[0]!, id: 'zai-cn-api', labelKey: 'tui.provider.kind.zaiCnApi', secretName: 'DECKENT_ZAI_CN_KEY' };
+    connect.kinds = [china];
+    connect.seedModels = async () => [{ nativeId: 'glm-5.3', displayName: 'GLM-5.3', priced: false }];
+    for (const locale of ['en', 'tr'] as const) {
+      const kinds = (await providerPanelPort(root, 'scope', { ...secrets(['DECKENT_ZAI_CN_KEY']).host, ...extra, providerConnect: connect }, options, locale, errorText).inspect()).kinds;
+      expect(kinds[0]!.models[0]!.blocked).toContain('CNY');
+      expect(kinds[0]!.models[0]!.blocked).toContain('USD');
+    }
+  });
+
   it('a provider without a free read says nothing was sent', () => {
     expect(providerOutcomeWord({ outcome: 'ok', httpStatus: null, key: 'unverified' }, 'en'))
       .toBe('No free check exists for this provider: nothing was sent and the key is kept unverified; the first turn shows any rejection.');

@@ -48,7 +48,7 @@ it('a priced model connects with the verified row; the profile reserves and sett
 });
 
 it('an unpriced remote model is refused (MODEL_CONNECT_TARIFF_UNVERIFIED); a loopback server keeps the zero tariff (negative)', () => {
-  expect(() => connectionAdapter(openai, input('https://api.openai.com/v1/chat/completions', 'gpt-6-luna'))).toThrow('MODEL_CONNECT_TARIFF_UNVERIFIED');
+  expect(() => connectionAdapter(openai, input('https://api.openai.com/v1/chat/completions', 'unpriced-model'))).toThrow('MODEL_CONNECT_TARIFF_UNVERIFIED');
   // An exact match only: the same model id at another remote address has no row.
   expect(() => connectionAdapter(openai, input('https://proxy.example.com/v1/chat/completions', 'chat-latest'))).toThrow('MODEL_CONNECT_TARIFF_UNVERIFIED');
   const local = connectionAdapter(providerConnectKind('local-openai')!, { ...input('http://127.0.0.1:8000/v1/chat/completions', 'qwen'), credentialRef: null });
@@ -63,10 +63,10 @@ it('the shipped seeds: exactly the models with a verified row (or a published An
     const seed = await readProviderConnectSeed(kind.connect.seed);
     table[kind.id] = Object.fromEntries(seed.providers.flatMap(provider => provider.models.map(model => [model.nativeId, providerConnectModelPriced(kind, model.nativeId)])));
   }
-  // Dated snapshot (pricing.json, 2026-10-08): OpenAI flagships, Z.ai glm-5.3/glm-4.7-flash and every Zhipu China model have no verified row.
-  expect(table['openai-api']).toEqual({ 'gpt-6-astra': false, 'gpt-6.1-sol': false, 'gpt-6-luna': false });
+  // Verified pricing snapshot (2026-10-08); CNY-only China rows remain locked.
+  expect(table['openai-api']).toEqual({ 'gpt-6-astra': true, 'gpt-6.1-sol': true, 'gpt-6-luna': true });
   expect(table['deepseek-api']).toEqual({ 'deepseek-flash': true, 'deepseek-v4-pro': true });
-  expect(table['zai-api']).toEqual({ 'glm-5.3': false, 'glm-4.7-flash': false });
+  expect(table['zai-api']).toEqual({ 'glm-5.3': true, 'glm-4.7-flash': true });
   expect(table['zai-cn-api']).toEqual({ 'glm-5.3': false, 'glm-4.7-flash': false, 'glm-4.6': false });
   expect(Object.values(table['anthropic-api']!).every(Boolean)).toBe(true);
 });

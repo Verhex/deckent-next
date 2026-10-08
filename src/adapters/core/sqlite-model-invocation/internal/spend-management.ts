@@ -33,7 +33,9 @@ class SqliteProviderSpendManagementStore implements ProviderSpendManagementStore
       const reservation = row ? decodeSpendReservation(row, verifyModelInvocationReceipt(JSON.parse(row.invocation_record as string)), before, this.db) : null;
       const after = command.kind === 'budget-revision' ? reviseProviderSpendBudget(before.account, command)
         : reconcileProviderSpend(before.account, reservation, command, '0'.repeat(64)).account;
-      const body = { schemaVersion: 1 as const, command, actor, authorization, recordedAtMs, before, after };
+      const body = { schemaVersion: 1 as const, command, actor, authorization, recordedAtMs, before, after,
+        ...(command.kind === 'reconcile' && reservation?.disposition.state === 'settled-measured-tariff'
+          ? { replacedUpperBoundExactMinorUnits: reservation.measurement!.exactMinorUnits } : {}) };
       const receipt = parseProviderSpendManagementReceipt({ ...body, digest: providerSpendEvidenceDigest(body) });
       if (Buffer.byteLength(JSON.stringify({ receipt, replayed: false })) > maxResultBytes) throw new ProviderSpendError('PROVIDER_SPEND_RESULT_LIMIT');
       if (command.kind === 'reconcile' && row) {

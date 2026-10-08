@@ -58,7 +58,7 @@ export async function verifyProviderSpendIntegrity(reader: ProviderSpendIntegrit
       if (reservation.reconciliation) settledExact = addProviderSpendExactMinorUnits(settledExact, reservation.reconciliation.exactMinorUnits);
       if (state.state === 'reserved' || (state.state === 'held' && !reservation.reconciliation)) reserved += BigInt(d.quote.maxChargeMinorUnits);
       if (state.state === 'settled-local') settledExact = addProviderSpendExactMinorUnits(settledExact, String(state.amountMinorUnits));
-      if ((state.state === 'settled-provider-reported' || state.state === 'settled-measured-tariff')) settledExact = addProviderSpendExactMinorUnits(settledExact, reservation.measurement!.exactMinorUnits);
+      if (!reservation.reconciliation && (state.state === 'settled-provider-reported' || state.state === 'settled-measured-tariff')) settledExact = addProviderSpendExactMinorUnits(settledExact, reservation.measurement!.exactMinorUnits);
       const floor = current.account.unfrozenAtBudgetRevision ?? 0, correction = reservation.reconciliation;
       if (state.state === 'held' && ((state.reason === 'overrun' && d.budgetRevision >= floor)
         || (correction && ceilProviderSpendExactMinorUnits(correction.exactMinorUnits) > d.quote.maxChargeMinorUnits

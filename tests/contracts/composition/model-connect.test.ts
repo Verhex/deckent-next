@@ -126,10 +126,16 @@ describe.skipIf(process.platform !== 'linux')('models.connect', () => {
     const f = await harness();
     const connect = (commandId: string, connection: string, nativeId: string) => connectConfiguredModel(f.project, { schemaVersion: 1, commandId, scopeId: 'scope',
       connection, endpoint: null, model: { nativeId } }, f.options, { listSecretNames: async () => ({ names: ['DECKENT_OPENAI_KEY'] }) });
-    // Stage 1: no verified OpenAI row for gpt-6-luna (pricing.json has chat-latest only): refused typed, the configuration file is untouched.
+    // PRICING: every verified USD seed connects through the governed producer.
     const untouched = await readFile(f.path, 'utf8');
-    await expect(connect('c-a', 'openai-api', 'gpt-6-luna')).rejects.toMatchObject({ code: 'MODEL_CONNECT_TARIFF_UNVERIFIED' });
+    await expect(connect('c-cn', 'zai-cn-api', 'glm-5.3')).rejects.toMatchObject({ code: 'MODEL_CONNECT_TARIFF_UNVERIFIED' });
     expect(await readFile(f.path, 'utf8')).toBe(untouched);
+    for (const model of ['gpt-6-astra', 'gpt-6.1-sol', 'gpt-6-luna']) {
+      expect(await connect(`c-${model}`, 'openai-api', model)).toMatchObject({ status: 'connected', tariff: 'published' });
+    }
+    for (const model of ['glm-5.3', 'glm-4.7-flash']) {
+      expect(await connect(`c-${model}`, 'zai-api', model)).toMatchObject({ status: 'connected', tariff: 'published' });
+    }
     const b = await connect('c-b', 'deepseek-api', 'deepseek-flash');
     // The DeepSeek key is not stored yet: the result says so (the profile names it; turns are refused until it is stored).
     expect([b.credentialRef, b.keyStored, b.status, b.tariff]).toEqual(['DECKENT_DEEPSEEK_KEY', false, 'connected', 'published']);
@@ -138,7 +144,7 @@ describe.skipIf(process.platform !== 'linux')('models.connect', () => {
     const byVendor = Object.fromEntries(profiles.map(profile => [profile.reference.providerId, profile.adapter.definition]));
     expect(byVendor['deepseek-api']).toMatchObject({ endpoint: 'https://api.deepseek.com/chat/completions', authentication: { type: 'bearer', credentialRef: 'DECKENT_DEEPSEEK_KEY' } });
     expect(byVendor['deepseek-api']!.tariff).toEqual(lookupOpenAiCompatibleTariff('https://api.deepseek.com/chat/completions', 'deepseek-flash'));
-    expect(profiles.map(profile => profile.reference.providerId).sort()).toEqual(['deepseek-api', 'local-openai']);
+    expect(profiles.map(profile => profile.reference.providerId).sort()).toEqual(['deepseek-api', 'local-openai', 'openai-api', 'openai-api', 'openai-api', 'zai-api', 'zai-api']);
     // Owner 2026-10-08: the generic row's remote address needs a declared price (SPEND-SETTLEMENT) before any paid call; nothing is written.
     const before = await readFile(f.path, 'utf8');
     await expect(connectConfiguredModel(f.project, { schemaVersion: 1, commandId: 'c-g', scopeId: 'scope', connection: 'openai-compatible', endpoint: 'https://llm.example.com/v1',
