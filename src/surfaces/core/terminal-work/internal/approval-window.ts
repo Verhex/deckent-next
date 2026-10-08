@@ -71,11 +71,11 @@ export type ApprovalWindowInput = Readonly<{
   config?: Readonly<{ action: 'set' | 'unset'; layer: 'project' | 'global'; keyPath: string; ruleId: string }> | undefined;
 }>;
 
-/** A wire name `mcp__<server>__<tool>` (MCP-VISIBILITY name rule: a server name's single hyphens are `_` on the wire and it has no `__`, so the
- * first `__` after the server is the separator); the server is shown with its hyphens back (Astra 2435 P2: `mcp__docs_search__q` is docs-search). */
-const MCP_NAME = /^mcp__([a-z][a-z0-9]*(?:_[a-z0-9]+)*)__(.+)$/u;
+/** A server follows the registry rule: 1–32 lower-case chars, starts with a letter, single inner hyphens. Accept both the literal name
+ * and its `_` wire encoding; the first `__` is the separator. Show the server with its hyphens restored. */
+const MCP_NAME = /^mcp__(?=[a-z0-9_-]{1,32}__)([a-z][a-z0-9]*(?:[-_][a-z0-9]+)*)__(.+)$/u;
 /** The sealed binding line of a tool-call approval (`agentToolApprovalSummary`: `tool · resource · digest12`, a self-source reason may follow). */
-const BINDING = /^([a-z][a-z0-9_]{1,63}) · ([^\n]*) · [0-9a-f]{12}(?:\n|$)/u;
+const BINDING = /^([a-z][a-z0-9_-]{1,63}) · ([^\n]*) · [0-9a-f]{12}(?:\n|$)/u;
 /** The call's tool and target: what the client saw (`tool.started`, or the stored subject), else the sealed binding line; null for a task. */
 export function approvalCallOf(input: Pick<ApprovalWindowInput, 'tool' | 'target' | 'summary'>): Readonly<{ tool: string; target: string | null }> | null {
   if (input.tool) return { tool: input.tool, target: input.target ?? null };

@@ -63,10 +63,17 @@ describe('approval window fields per tool kind (catalog EN and TR)', () => {
       const what = (tool: string) => approvalCardLines(base({ tool, target: null, risk: 'mcp-call', summary: `${tool} · mcp:x · 0123456789ab` }), work, `${tool} {}`, null, {}, NOW)
         .find(line => line.startsWith(w.field.what))!;
       const hyphenated = what('mcp__docs_search__query_docs');
+      expect(what('mcp__docs-search__query_docs')).toBe(hyphenated);
       expect(hyphenated).toContain('query_docs'); expect(hyphenated).toContain('docs-search'); expect(hyphenated).not.toContain('mcp__docs_search__query_docs');
       expect(hyphenated).toBe(what('mcp__context7__query_docs').replace('context7', 'docs-search'));
       expect(what('mcp__a__b_c')).toBe(what('mcp__context7__query_docs').replace('context7', 'a').replace('query_docs', 'b_c'));
       expect(what('mcp__a_b__x')).toBe(what('mcp__context7__query_docs').replace('context7', 'a-b').replace('query_docs', 'x'));
+      const stored = approvalCardLines(base({ tool: undefined, summary: 'mcp__docs-search__query_docs · mcp:docs-search · 0123456789ab' }), work, '', null, {}, NOW);
+      expect(stored.find(line => line.startsWith(w.field.what))).toBe(hyphenated);
+      expect(what(`mcp__${'a'.repeat(32)}__x`)).toBe(what('mcp__context7__query_docs').replace('context7', 'a'.repeat(32)).replace('query_docs', 'x'));
+      for (const name of ['-docs', 'docs-', 'docs--search', 'Docs', '1docs', 'a'.repeat(33)]) {
+        expect(what(`mcp__${name}__x`)).not.toContain(w.what.mcp.split('{')[0]!);
+      }
     }
   });
 
@@ -133,6 +140,22 @@ describe('approval window in the real Workline', () => {
       calls.push([approval.approvalId, decision, standing, reason]);
       return { approvalId: approval.approvalId, runId: '-', taskId: '-', summary: '', requester: '-', revision: 1, status: 'decided' as const, decision, expiresAt: 0 };
     } });
+
+  for (const locale of ['en', 'tr'] as const) it(`${locale}: literal hyphenated MCP server has an MCP approval window title`, async () => {
+    let release!: () => void; const hold = new Promise<void>(resolve => { release = resolve; });
+    const labels = { ...WORKLINE_TEST_LABELS, work: workSurfaceLabels(locale) }, w = labels.work.approvalWindow;
+    const view = mountWorkline({ labels, ledger: port([]) as never, streamTurn: turn({ tool: 'mcp__docs-search__query_docs', target: null,
+      summary: 'mcp__docs-search__query_docs · mcp:docs-search · 0123456789ab', risk: 'mcp-call', preview: '',
+      call: { kind: 'mcp', server: 'docs-search', tool: 'query_docs' } }, hold) as never }, 100);
+    mounted.push(view.instance);
+    try {
+      await settle(20); view.stdin.write('go\r');
+      const toolTitle = w.tool.mcp.replace('{tool}', 'query_docs').replace('{server}', 'docs-search');
+      const title = w.title.replace('{tool}', toolTitle);
+      await until(() => view.stdout.frame.includes(title), 'MCP approval title');
+      proof(`MCP hyphen title ${locale}`, view.stdout.frame);
+    } finally { release(); }
+  });
 
   for (const locale of ['en', 'tr'] as const) {
     it(`${locale}, NO_COLOR, 40 columns: every row fits, labels carry the meaning without colour, no escape colour codes`, async () => {
