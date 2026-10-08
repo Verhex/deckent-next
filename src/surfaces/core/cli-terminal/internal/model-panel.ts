@@ -1,8 +1,12 @@
 import { loadConfig, t, type ConfigLoadOptions, type Locale } from '#platform/index.js';
 import type { ModelReference } from '#domain/index.js';
 import type { ModelPanelChoice, ModelPanelSource, ModelPanelView } from '#surfaces/core/terminal-panels/index.js';
-import { terminalConfigWrite, type ConfigCommandContext } from '#surfaces/core/config/index.js';
+import type { ConfigCommandContext } from '#surfaces/core/config/index.js';
 import type { TerminalLaunchContext } from './context.js';
+
+// The config surface reaches the terminal renderer; load it only when a default-model write happens (startup graph stays light).
+const terminalConfigWrite = async (...args: Parameters<typeof import('#surfaces/core/config/index.js').terminalConfigWrite>) =>
+  (await import('#surfaces/core/config/index.js')).terminalConfigWrite(...args);
 
 type Host = Pick<TerminalLaunchContext, 'inspectDeclaredModels' | 'inspectModelActivation' | 'inspectModelBinding' | 'inspectModelCatalog' | 'describeTerminalChatPlan'
   | 'listSecretNames' | 'inspectProviderSpendAccount'> & Pick<ConfigCommandContext, 'configApplication' | 'resolveConfigPrincipal' | 'describeRuntimeService'>;
