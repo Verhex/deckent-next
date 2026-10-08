@@ -9,6 +9,7 @@ import { ledgerFingerprint } from './fingerprint.js';
 import { createBackupSet, verifyBackupSet, type VerifiedBackup } from './set.js';
 import { BACKUP_RESOURCES, directoryResources, type BackupLimits } from './archive.js';
 import { inside, privateDirectory, readPrivate, refuse, safePath, syncDirectory, writePrivate } from './files.js';
+const FIXED = ['config', 'projectIdentity', 'installationJournal'];
 
 export interface BackupSource { readonly layout: ProductLayout; readonly projectRoot: string; readonly installationId: string; readonly keyFile: string; readonly configDocument?: () => Promise<Buffer> }
 export class FileBackupStorage implements BackupStoragePort {
@@ -28,8 +29,10 @@ export class FileBackupStorage implements BackupStoragePort {
     if (exists && (!exists.isDirectory() || exists.uid !== process.getuid?.())) return refuse('BACKUP_PATH_UNSAFE');
     if (exists && (await readdir(target)).length && command.confirmTarget !== target) return refuse('BACKUP_TARGET_NOT_EMPTY');
     const same = target === resolve(this.source.projectRoot);
-    const customResources = Object.fromEntries(Object.entries(state.resources).filter(([key]) => !['config', 'projectIdentity', 'installationJournal'].includes(key)));
+    const customResources = Object.fromEntries(Object.entries(state.resources).filter(([key]) => !FIXED.includes(key)));
     const layout = same ? this.source.layout : resolveProductLayout({ projectRoot: target, resources: customResources });
+    // Astra 2471 R2: the restored config names exactly the layout every resource is published into (same root keeps the current map).
+    const targetResources = Object.fromEntries(Object.entries(layout.resources).filter(([key]) => !FIXED.includes(key)));
     const archivedLayout = resolveProductLayout({ projectRoot: state.projectRoot, root: state.layoutRoot, resources: customResources });
     if (target === state.projectRoot && productResourcePath(layout, 'ledger') !== productResourcePath(archivedLayout, 'ledger')) return refuse('BACKUP_PATH_UNSAFE');
     const targetConfig = join(target, '.deckent/config.json');
@@ -86,7 +89,7 @@ export class FileBackupStorage implements BackupStoragePort {
             return value;
           };
           const config = relocate(raw, '') as Record<string, unknown>;
-          config['layout'] = { ...(config['layout'] as Record<string, unknown> | undefined), root: layout.root, resources: customResources };
+          config['layout'] = { ...(config['layout'] as Record<string, unknown> | undefined), root: layout.root, resources: targetResources };
           // A restored scheduler must be re-enabled deliberately after identity keep and credential provisioning.
           config['backup'] = { ...(config['backup'] as Record<string, unknown> | undefined), schedule: getConfigFieldDefault('backup').schedule };
           restoredConfig = validateConfig(config).config;

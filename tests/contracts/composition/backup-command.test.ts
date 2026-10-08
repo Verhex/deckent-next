@@ -1,5 +1,5 @@
 import { Worker } from 'node:worker_threads';
-import { chmod, mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, mkdtemp, readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { Readable } from 'node:stream';
@@ -15,6 +15,7 @@ import { main } from '#surfaces/core/cli/index.js';
 import { verifyAuditRecord } from '#engine/index.js';
 import { DOWNGRADE_TO_PREVIOUS_LEDGER_SQL } from '../../fixtures/ledger-previous.js';
 import { composeCore } from '#composition/core/root/index.js';
+import { openConfiguredArtifactStore } from '#composition/core/artifacts/index.js';
 const roots: string[] = [], workers: Worker[] = [], services: Awaited<ReturnType<typeof startConfiguredRuntimeService>>[] = [];
 const phrase = 'CANARY-backup-operator-secret-🐦';
 afterEach(async () => {
@@ -203,4 +204,18 @@ it.skipIf(process.platform !== 'linux')('refuses a confirmed target whose existi
   const service=await startConfiguredRuntimeService(other.root,{async onPage(){},async onError(){}},{env:other.env});services.push(service);
   await expect(call(f,'restore',phrase,{target:other.root,confirmTarget:other.root})).rejects.toMatchObject({code:'BACKUP_PATH_UNSAFE'});
   expect(await readFile(path)).toEqual(before);
+});
+
+it('same-root restore after a layout move publishes into the layout its restored config names; the real artifact reader opens the content (Astra 2471 R2)',async()=>{
+  const f=await fixture();const opened=await openConfiguredArtifactStore(f.root,{env:f.env});
+  const receipt=await opened.store.put('scope',Buffer.from('retained by the reader'));await call(f,'create');
+  const path=join(f.root,'.deckent/config.json'),config=JSON.parse(await readFile(path,'utf8'));
+  config.layout.resources={artifacts:'artifacts-v2'};await writeFile(path,JSON.stringify(config));
+  await rename(join(f.layout.root,'artifacts'),join(f.layout.root,'artifacts-v2'));await writeFile(join(f.layout.root,'artifacts-v2/result.txt'),'changed after backup');clearConfigCache();
+  await call(f,'restore',phrase,{target:f.root,confirmTarget:f.root});
+  expect(JSON.parse(await readFile(path,'utf8')).layout.resources.artifacts).toBe('artifacts-v2');clearConfigCache();
+  const reopened=await openConfiguredArtifactStore(f.root,{env:f.env});expect(reopened.path).toBe(join(f.layout.root,'artifacts-v2'));
+  expect(Buffer.from(await reopened.store.read('scope',receipt)).toString()).toBe('retained by the reader');
+  expect(await readFile(join(reopened.path,'result.txt'),'utf8')).toBe('retained artifact');
+  expect(await readdir(f.layout.root)).toContainEqual(expect.stringMatching(/^artifacts-v2\.damaged-/));
 });
