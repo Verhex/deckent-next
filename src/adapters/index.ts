@@ -85,3 +85,5 @@ export { readDecisionPolicy } from '#adapters/core/contract/index.js';
 export * from '#adapters/core/provider-connect/index.js';
 
 export * from '#adapters/core/project-instructions/index.js';
+export * from '#adapters/core/backup-store/index.js';
+export { CURRENT_LEDGER_VERSION } from '#adapters/core/sqlite-ledger/index.js';

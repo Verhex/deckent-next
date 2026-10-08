@@ -66,7 +66,7 @@ async function installation(policy: unknown = handBuilt()) {
 }
 
 describe.skipIf(process.platform !== 'linux')('deckent init policy --upgrade --person (hand-built policy, POLICY-UPGRADE-HANDBUILT)', () => {
-  it('previews exactly the missing v5 rules for the named person, applies them on the previewed revision (archived; hand-built rules byte-identical), a second apply is current, and the MCP call is then authorized on mcp-server', async () => {
+  it('previews exactly the missing current template rules for the named person, applies them on the previewed revision (archived; hand-built rules byte-identical), a second apply is current, and the MCP call is then authorized on mcp-server', async () => {
     const f = await installation();
     const before = await f.bytes();
     // Before: the MCP call is refused (no mcp-server grant; the old wire-name rule no longer decides it).
@@ -89,6 +89,8 @@ describe.skipIf(process.platform !== 'linux')('deckent init policy --upgrade --p
       // v7 (SPEND-SETTLEMENT + stage 1): the person's spend account rule (inspect, audit, held reconcile, budget create/revision).
       { id: 'first-run-provider-spending', effect: 'allow', actions: ['inspect', 'audit', 'reconcile', 'budget-revision'], scopes: [SCOPE], principals: [PERSON],
         resource: { kind: 'provider-spend-account', ids: 'all' } },
+      // v8 (BACKUP-COMMAND): installation-wide backup for the named person.
+      { id: 'first-run-backup', effect: 'allow', actions: ['create', 'verify', 'restore'], scopes: 'all', principals: [PERSON], resource: { kind: 'backup', ids: 'all' } },
     ]);
     expect(await f.bytes()).toBe(before);
     expect(await f.archive()).toEqual([]);
@@ -105,7 +107,7 @@ describe.skipIf(process.platform !== 'linux')('deckent init policy --upgrade --p
     expect(entries).toHaveLength(1);
     const record = JSON.parse(await readFile(join(f.root, '.deckent', 'audit', 'authority-revisions', entries[0]!), 'utf8')) as Record<string, unknown> & {
       before: { policy: unknown }; after: { policy: unknown } };
-    expect(record).toMatchObject({ state: 'committed', key: expect.stringMatching(/^policy-template-upgrade-v7-/) });
+    expect(record).toMatchObject({ state: 'committed', key: expect.stringMatching(/^policy-template-upgrade-v8-/) });
     expect(record.before.policy).toEqual(handBuilt());
     expect(record.after.policy).toEqual(after);
 
@@ -154,7 +156,7 @@ describe.skipIf(process.platform !== 'linux')('deckent init policy --upgrade --p
     const v5 = JSON.parse(await readFile(policyPath, 'utf8')) as { grants: { id: string; principals: { issuer: string; subject: string }[]; resource: { ids: unknown } }[] };
     const owner = v5.grants[0]!.principals[0]!;
     const v4 = { ...v5, revision: 'first-run-template-v4', grants: v5.grants.filter(rule => !['first-run-mcp-servers', 'first-run-mcp-call-operation', 'first-run-policy-administer',
-      'first-run-approvals', 'first-run-secret-switch', 'first-run-model-activation', 'first-run-model-invocation', 'first-run-provider-spending'].includes(rule.id)).map(rule => rule.id === 'first-run-read-tools' ? { ...rule, resource: { ...rule.resource,
+      'first-run-approvals', 'first-run-secret-switch', 'first-run-model-activation', 'first-run-model-invocation', 'first-run-provider-spending', 'first-run-backup'].includes(rule.id)).map(rule => rule.id === 'first-run-read-tools' ? { ...rule, resource: { ...rule.resource,
       ids: (rule.resource.ids as string[]).filter(name => name !== 'propose_mcp_server') } } : rule) };
     await writeFile(policyPath, `${JSON.stringify(v4)}\n`, { mode: 0o600 });
     const v4Bytes = await readFile(policyPath, 'utf8');

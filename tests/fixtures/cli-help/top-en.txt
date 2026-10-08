@@ -16,6 +16,7 @@ Approvals:
   approval    Inspect and decide approval requests
   policy      Inspect policy and standing grants
 Setup / Maintenance:
+  backup      Create, verify and restore recovery sets
   identity    Identity profiles and draft previews
   config      Inspect and change configuration
   mcp         Manage MCP servers

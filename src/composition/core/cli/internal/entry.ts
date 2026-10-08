@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { configuredProjectInstructions } from '#composition/core/project-instructions/index.js';
+import { executeConfiguredBackup } from '#composition/core/backup/index.js';
 import { previewConfiguredIdentityProfile, listIdentityProfiles } from '#composition/core/identity-profile/index.js';
 import { ensureConfiguredTerminalIdentity, inspectConfiguredInstallationBinding, resolveConfiguredInstallationIdentity, loadConfiguredInstallationIdentity, loadConfiguredProjectIdentity } from '#composition/core/scoped-request/index.js';
 import { unifiedDiff, readInstallationProfileFile, isSelfSourceProject, PROVIDER_CONNECT_KINDS, PROVIDER_CONNECT_LEGACY_KEYS, probeProviderConnection, providerEndpoint, providerConnectFamily, providerConnectKind, providerConnectModelPriced,
@@ -39,7 +40,7 @@ export async function main(argv: readonly string[] = process.argv.slice(2)) {
   const stop = () => controller.abort();
   if (handlesSignals) { process.once('SIGINT', stop); process.once('SIGTERM', stop); }
   try { return await runCli(argv, { initialize: composeCore, root, signal: controller.signal, startRuntimeService: startConfiguredCliRuntimeService,
-    previewIdentityProfile: previewConfiguredIdentityProfile, listIdentityProfiles,
+    executeBackup: executeConfiguredBackup, previewIdentityProfile: previewConfiguredIdentityProfile, listIdentityProfiles,
     prepareDecision: prepareConfiguredDecision, askDecision: askConfiguredDecision, recordDecision: recordConfiguredDecision, outcomeDecision: outcomeConfiguredDecision, inspectDecision: inspectConfiguredDecision,
     deliverWorkspaceIntegration: deliverConfiguredWorkspaceIntegration,
     adoptWorkspaceIntegration: adoptConfiguredWorkspaceIntegration, rollbackWorkspaceIntegration: rollbackConfiguredWorkspaceIntegration,
