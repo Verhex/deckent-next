@@ -474,6 +474,7 @@ const definitions: Readonly<Record<string, Definition>> = Object.freeze({
   CONFIG_WRITE_LOCKED: { category: 'config', render: (p, l) => ({ message: t('error.CONFIG_WRITE_LOCKED', p, l) }) },
   CONFIG_VERSION_UNSUPPORTED: { category: 'config', render: (p, l) => ({ message: t('error.CONFIG_VERSION_UNSUPPORTED', p, l) }) },
   CONFIG_SECTION_DUPLICATE: { category: 'config', render: (p, l) => ({ message: t('error.CONFIG_SECTION_DUPLICATE', p, l) }) },
+  CONFIG_RECORD_INVALID: { category: 'config', render: (p, l) => ({ message: t('error.CONFIG_RECORD_INVALID', p, l) }) },
   CONFIG_SECTION_INVALID: { category: 'config', render: (p, l) => ({ message: t('error.CONFIG_SECTION_INVALID', p, l) }) },
   CONFIG_KEY_UNKNOWN: { category: 'usage', render: (p, l) => ({ message: t('error.CONFIG_KEY_UNKNOWN', p, l) }) },
   LAYOUT_VERSION_UNSUPPORTED: { category: 'config', render: (p, l) => ({ message: t('error.LAYOUT_VERSION_UNSUPPORTED', p, l) }) },
