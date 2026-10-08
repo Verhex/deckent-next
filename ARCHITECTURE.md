@@ -8,6 +8,10 @@ Owner 2026-09-21: dar dilimler ürün hedefini küçültmez; mevcut kararlar yen
 **Owner 2026-10-05 — rol uzlaştırması:** Main Opus (`opus`), bağımsız inceleyen Astra (`gpt-6-astra`, `01a10b4c-23ad-7730-b492-9c81e1eeab98`, `astra`); Sol yalnız analiz, Codex lane’leri `gpt-6-astra`. 2026-10-04 Sol-main devri tarihseldir (COMPLETED-PLAN 2026-10-05); pano kaydı tek başına yetki/liveness kanıtı değildir. Uygulayıcı kendi değişikliğine bağımsız PASS vermez; commit, push ve canlı geçiş ayrı yetki sınırlarıdır.
 
 
+## Spend settlement — owner 2026-10-08, lane implementation in progress
+
+Accepted: `measured-tariff` records provider usage × a pinned published/operator tariff with exact bigint arithmetic, usage dimensions, tier and tariff digest; it never means provider-reported money. Reservation v3 / ledger49 migration follows the existing service-start backup contract. Unknown/cancelled calls with retained usage settle; otherwise a held reservation remains reconcilable. Governed, policy-checked `spend reconcile` records a settle/release/write-off receipt, preserves original hold evidence and cannot alter settled charges. Governed budget revision preserves history, increments the scope budget revision, permits lowering below outstanding spending (new sends refuse), and explicitly unfreezes. Paid OpenAI-compatible endpoints require verified vendor or declared versioned tariffs; legacy zero applies only to loopback. Account folds exact charges once; a correction above the reserved maximum freezes admission. Management receipts are immutable and capacity is checked before their transaction commits. CLI `models reconcile-spending` / `models revise-budget`, SDK `manageProviderSpend`, MCP `manage_provider_spending` share one command and policy cells `provider-spend-account/reconcile|budget-revision`; template v7 upgrades the installing owner only. DeepSeek peak/off-peak rows reserve peak but hold when authoritative billing tier is absent. T4-B consumes `lookupOpenAiCompatibleTariff(endpoint, modelId)` from `provider-openai-chat`. Independent review, combined protocol integration and landing remain open; proof: `proof/SPEND-SETTLEMENT-2026-10-08/`.
+
 ## Document map (2026-10-05 simplification)
 
 This file keeps the current contracts only. Detail moved verbatim (owner request 2026-10-05; `scripts/check-doc-preservation.mjs` proves no line was lost):
@@ -423,7 +427,7 @@ refresh, usage and dogfood closure remain open.
   clients (list/inspect/decide); a v21 client still has them hidden (`approvalSubjectsHiddenFromProtocol`). Lifecycle window [22,21]. No other T3
   wire field (MCP trust and proposal windows reuse `approval.requested`; read-tool `diagnostic` stays in the service).
   v23 (T4 MODEL-SWITCH) was pushed with alpha.14. v24 (SECRET-STORE-SWITCH, owner 2026-10-08, unpushed): one operation `switchSecretStore`;
-  lifecycle window [24,23] (a v22 service is outside; a v23 client cannot reach the switch).
+  lifecycle window [24,23] (a v22 service is outside; a v23 client cannot reach the switch). SPEND-SETTLEMENT lane adds bounded `manageProviderSpend` in v25/window [25,24]; T4-B may also take v25, so lead must combine both operation sets before landing. Package version stays unchanged.
   v18 was introduced 2026-09-29 (SECRET-WRITE, lead decision under this rule) as the single v18 package: the control operations
   `setSecret` / `deleteSecret`; lifecycle window [18,17]; every other v17 operation is unchanged in v18. It is unreleased until pushed, and
   further v18 items add to it without another bump. Like every bump, the window's older version is lifecycle-only: a v17 client can
