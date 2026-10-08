@@ -98,26 +98,26 @@ describe.skipIf(process.platform !== 'linux')('models.connect', () => {
     expect((f.state.requests as { model: string }[]).map(request => request.model)).toEqual(['gpt-6-luna', 'deepseek-flash']);
   }, 60_000);
 
-  it('two OpenAI-compatible endpoints connect at the same time, each with its own key name derived from its host', async () => {
+  it('two OpenAI-compatible vendors connect at the same time, each under its own key name; a remote generic address waits for a declared price', async () => {
     const f = await harness();
-    const config = await f.config();
-    // Two vendors the catalog already declares (the generic row has no seed: only declared models connect to it).
-    const model = (id: string) => ({ id, version: 1, nativeId: `native-${id}`, protocols: [{ family: 'openai-chat-completions', version: 'v1', capabilities: [] }] });
-    config['provider_catalog'] = { ...config['provider_catalog'], providers: [...config['provider_catalog'].providers,
-      { id: 'vendor-a', version: 1, models: [model('a')] }, { id: 'vendor-b', version: 1, models: [model('b')] }] };
-    await writeFile(f.path, JSON.stringify(config), { mode: 0o600 }); clearConfigCache();
-    const connect = (commandId: string, endpoint: string, providerId: string, modelId: string) => connectConfiguredModel(f.project, { schemaVersion: 1, commandId, scopeId: 'scope',
-      connection: 'openai-compatible', endpoint, model: { reference: { providerId, providerVersion: 1, modelId, modelVersion: 1 } } }, f.options);
-    const a = await connect('c-a', 'https://llm-a.example.com/v1', 'vendor-a', 'a'), b = await connect('c-b', 'https://llm-b.example.com:8443', 'vendor-b', 'b');
-    expect([a.credentialRef, b.credentialRef]).toEqual(['DECKENT_OAICOMPAT_LLM_A_EXAMPLE_COM', 'DECKENT_OAICOMPAT_LLM_B_EXAMPLE_COM_8443']);
-    expect([a.steps.declaration, a.steps.profile, a.steps.activation]).toEqual(['skipped', 'written', 'written']);
+    const connect = (commandId: string, connection: string, nativeId: string) => connectConfiguredModel(f.project, { schemaVersion: 1, commandId, scopeId: 'scope',
+      connection, endpoint: null, model: { nativeId } }, f.options, { listSecretNames: async () => ({ names: ['DECKENT_OPENAI_KEY'] }) });
+    const a = await connect('c-a', 'openai-api', 'gpt-6-luna'), b = await connect('c-b', 'deepseek-api', 'deepseek-flash');
+    expect([a.credentialRef, b.credentialRef]).toEqual(['DECKENT_OPENAI_KEY', 'DECKENT_DEEPSEEK_KEY']);
+    // The second key is not stored yet: the result says so (the profile names it; turns are refused until it is stored).
+    expect([a.keyStored, b.keyStored]).toEqual([true, false]);
+    expect([a.status, b.status, a.tariff, b.tariff]).toEqual(['connected', 'connected', 'unmetered', 'unmetered']);
     const profiles = (await f.config())['provider_invocation_profiles'].profiles as { reference: { providerId: string }; adapter: { definition: { endpoint: string;
       authentication: unknown } } }[];
     const byVendor = Object.fromEntries(profiles.map(profile => [profile.reference.providerId, profile.adapter.definition]));
-    expect(byVendor['vendor-a']).toMatchObject({ endpoint: 'https://llm-a.example.com/v1/chat/completions', authentication: { type: 'bearer', credentialRef: 'DECKENT_OAICOMPAT_LLM_A_EXAMPLE_COM' } });
-    expect(byVendor['vendor-b']).toMatchObject({ endpoint: 'https://llm-b.example.com:8443/v1/chat/completions', authentication: { type: 'bearer', credentialRef: 'DECKENT_OAICOMPAT_LLM_B_EXAMPLE_COM_8443' } });
-    // The harness's own model keeps its profile next to both.
-    expect(profiles.map(profile => profile.reference.providerId).sort()).toEqual(['local-openai', 'vendor-a', 'vendor-b']);
+    expect(byVendor['openai-api']).toMatchObject({ endpoint: 'https://api.openai.com/v1/chat/completions', authentication: { type: 'bearer', credentialRef: 'DECKENT_OPENAI_KEY' } });
+    expect(byVendor['deepseek-api']).toMatchObject({ endpoint: 'https://api.deepseek.com/chat/completions', authentication: { type: 'bearer', credentialRef: 'DECKENT_DEEPSEEK_KEY' } });
+    expect(profiles.map(profile => profile.reference.providerId).sort()).toEqual(['deepseek-api', 'local-openai', 'openai-api']);
+    // Owner 2026-10-08: the generic row's remote address needs a declared price (SPEND-SETTLEMENT) before any paid call; nothing is written.
+    const before = await readFile(f.path, 'utf8');
+    await expect(connectConfiguredModel(f.project, { schemaVersion: 1, commandId: 'c-g', scopeId: 'scope', connection: 'openai-compatible', endpoint: 'https://llm.example.com/v1',
+      model: { reference: { providerId: 'local-openai', providerVersion: 1, modelId: 'chat', modelVersion: 1 } } }, f.options)).rejects.toMatchObject({ code: 'MODEL_CONNECT_PRICE_REQUIRED' });
+    expect(await readFile(f.path, 'utf8')).toBe(before);
   }, 60_000);
 
   it('a require-approval config rule stops the run with the pending card; after allow the same command finishes', async () => {

@@ -7,7 +7,7 @@ import { AUDIT_EVENT_SCHEMA_VERSION, MODEL_CONNECT_OPERATION_ID, modelConnectCom
 export type ModelConnectLayer = 'project' | 'global';
 /** What `models.connect` needs of one registry kind (the adapter's data, read through the port: engine never imports an adapter). */
 export type ModelConnectKind = Readonly<{ id: string; available: boolean; endpoint: Readonly<{ default: string | null; editable: boolean }>;
-  keyRequired: boolean; connect: Readonly<{ chatPath: string; seed: string | null }> | null }>;
+  keyRequired: boolean; connect: Readonly<{ chatPath: string; seed: string | null; priceRequired?: boolean }> | null }>;
 export type ModelConnectDefaults = Readonly<{ requestMaxBytes: number; responseMaxBytes: number; timeoutMs: number; maxInFlight: number; maxOutputTokens: number; currency: string }>;
 export type ModelConnectBinding = Readonly<{ status: 'declared'; catalogRevision: string; definition: ModelBindingDefinition;
   binding: Readonly<{ encodingVersion: 1; algorithm: 'sha256'; digest: string }> }> | Readonly<{ status: 'not-configured' | 'not-declared' }>;
@@ -41,7 +41,7 @@ export interface ModelConnectPorts {
 }
 export class ModelConnectError extends Error {
   constructor(readonly code: 'MODEL_CONNECT_INVALID' | 'MODEL_CONNECT_NOT_CONNECTABLE' | 'MODEL_CONNECT_ENDPOINT_FIXED' | 'MODEL_CONNECT_ENDPOINT_INVALID'
-    | 'MODEL_CONNECT_MODEL_UNKNOWN' | 'MODEL_CONNECT_DECLARATION_CONFLICT' | 'MODEL_CONNECT_KEY_NAME_UNAVAILABLE') { super(code); this.name = 'ModelConnectError'; }
+    | 'MODEL_CONNECT_MODEL_UNKNOWN' | 'MODEL_CONNECT_DECLARATION_CONFLICT' | 'MODEL_CONNECT_KEY_NAME_UNAVAILABLE' | 'MODEL_CONNECT_PRICE_REQUIRED') { super(code); this.name = 'ModelConnectError'; }
 }
 
 const sameReference = (left: ModelReference, right: ModelReference) => left.providerId === right.providerId && left.providerVersion === right.providerVersion
@@ -84,6 +84,8 @@ export class ModelConnectApplication {
     const address = command.endpoint ?? kind.endpoint.default, base = address === null ? null : ports.endpoint(address);
     if (base === null) throw new ModelConnectError('MODEL_CONNECT_ENDPOINT_INVALID');
     const endpoint = `${base}${kind.connect.chatPath}`, secure = new URL(endpoint).protocol === 'https:', keyName = ports.secretName(kind.id, base);
+    // Owner 2026-10-08: no paid call to a remote endpoint whose price is not verified; the declared price comes with SPEND-SETTLEMENT.
+    if (kind.connect.priceRequired && secure) throw new ModelConnectError('MODEL_CONNECT_PRICE_REQUIRED');
     if (kind.keyRequired && secure && keyName === null) throw new ModelConnectError('MODEL_CONNECT_KEY_NAME_UNAVAILABLE');
     // A key is only ever named over https; a plain-http local server is reached without one (the adapters refuse a cleartext credential).
     const credentialRef = secure ? keyName : null, { scopeId } = command;

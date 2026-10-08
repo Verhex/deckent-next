@@ -139,7 +139,8 @@ export function providerPanelPort(root: string, scopeId: string, host: Host & { 
           endpointEditable: kind.endpointEditable, endpointDefault: kind.endpointDefault, keyRequired: kind.keyRequired, endpointChoices: choicesOf(kind),
           models: models.get(kind.id) ?? [],
           // A vendor key must be stored before a model is bound to it (the generic row's name depends on the address chosen next: checked on connect).
-          modelBlocked: kind.keyRequired && keyName !== null && names !== null && !stored ? t('tui.provider.model.needsKey', {}, locale) : null };
+          modelBlocked: kind.priceRequired ? t('tui.provider.model.priceRequired', {}, locale)
+            : kind.keyRequired && keyName !== null && names !== null && !stored ? t('tui.provider.model.needsKey', {}, locale) : null };
       });
       if (!host.setSecret) notes.push(t('tui.provider.note.noStore', {}, locale));
       return { title: t('tui.panel.provider.title', {}, locale), kinds, notes };

@@ -45,6 +45,8 @@ export function connectionAdapter(kind: ProviderConnectKind, input: Readonly<{ e
     return Object.freeze({ adapter: { id: ANTHROPIC_MESSAGES_HTTP_ADAPTER_ID, version: ANTHROPIC_MESSAGES_HTTP_ADAPTER_VERSION, definition: definition as unknown as JsonObject },
       protocol: { family: anthropicMessagesProtocol.family, version: anthropicMessagesProtocol.version }, tariff: 'published' });
   }
+  // SPEND-SETTLEMENT integration point (owner 2026-10-08): the verified OpenAI/DeepSeek/GLM price records replace this zero-rate operator tariff
+  // through that lane's typed lookup, here and only here; until it lands the connection is reported `unmetered`.
   const definition = { endpoint: input.endpoint, maxOutputTokens: input.maxOutputTokens,
     authentication: secure && input.credentialRef !== null ? { type: 'bearer', credentialRef: input.credentialRef } : { type: 'none' },
     tariff: { kind: 'operator-static', version: 1, currency: input.currency, inputMinorUnitsPerMillionTokens: 0, outputMinorUnitsPerMillionTokens: 0 } };

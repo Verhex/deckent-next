@@ -900,6 +900,7 @@
   "tui.panel.provider.modelTitle": "{kind} · model to connect",
   "tui.panel.provider.modelEmpty": "This provider lists no model to connect yet.",
   "tui.panel.provider.keyName": "Key name",
+  "tui.provider.model.priceRequired": "Price must be declared first (coming with the pricing record).",
   "tui.provider.model.needsKey": "Store its key first (Connect).",
   "tui.provider.model.connected": "Model connected: {model}",
   "tui.provider.model.pending": "Waiting for approval: {model}",

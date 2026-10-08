@@ -550,6 +550,7 @@
   "error.AGENT_TURN_UNAVAILABLE": "Tur kaydı kullanılamıyor; bu tur için hiçbir şey çalıştırılmadı.",
   "error.AGENT_TURN_REASONING_UNSUPPORTED": "Bu model düşünmeyi kapatabildiğini bildirmiyor (katalog yeteneği chat-template-enable-thinking); tur gönderilmedi. Devam etmek için /reasoning on yazın ya da yeteneği kataloğa ekleyin.",
   "error.TERMINAL_CHAT_NOT_CONFIGURED": "Terminal sohbeti yapılandırılmamış: katalogda tanımlı bir modeli gösteren `terminal.chat` bölümü ekleyin.",
+  "error.MODEL_CONNECT_PRICE_REQUIRED": "Bu adres için ücretli çağrıdan önce fiyat bildirilmeli (fiyat kaydıyla gelecek); bu makinedeki bir sunucu yerel sunucu olarak bağlanabilir.",
   "error.MODEL_CONNECT_INVALID": "Model bağlama isteği geçerli değil.",
   "error.MODEL_CONNECT_NOT_CONNECTABLE": "Bu bağlantı türüne henüz model bağlanamıyor.",
   "error.MODEL_CONNECT_ENDPOINT_FIXED": "Bu sağlayıcının adresi sabittir; adres verilemez.",

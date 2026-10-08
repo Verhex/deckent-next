@@ -31,7 +31,10 @@ const kindSchema = z.object({
   /** T4-B `models connect`: the invocation adapter, the chat path under the endpoint base and the packaged catalog seed (null: only models already
    * declared in the provider catalog). Null: the kind stores a key but no model can be connected to it yet. */
   connect: z.object({ adapter: z.enum(PROVIDER_CONNECT_ADAPTERS), chatPath: z.string().regex(/^\/[A-Za-z0-9/._-]{1,127}$/u),
-    seed: z.string().regex(/^[a-z0-9][a-z0-9-]{0,63}$/u).nullable() }).strict().nullable().default(null),
+    seed: z.string().regex(/^[a-z0-9][a-z0-9-]{0,63}$/u).nullable(),
+    /** Owner 2026-10-08: no paid call to a remote endpoint without a verified price. `true`: a remote (non-loopback) address needs the operator's
+     * declared price, which the SPEND-SETTLEMENT lane brings; until then such a connection is refused (`MODEL_CONNECT_PRICE_REQUIRED`). */
+    priceRequired: z.boolean().default(false) }).strict().nullable().default(null),
 }).strict().readonly();
 const positive = z.number().int().positive().safe();
 const registrySchema = z.object({ schemaVersion: z.literal(2), retrievedAt: z.string().regex(/^\d{4}-\d{2}-\d{2}$/u), note: z.string(),

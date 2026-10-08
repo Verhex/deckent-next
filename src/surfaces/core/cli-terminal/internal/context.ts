@@ -35,7 +35,9 @@ type ServiceDescription = Awaited<ReturnType<DescribeService>> & Awaited<ReturnT
 export type ProviderConnectKindView = Readonly<{ id: string; labelKey: string; available: boolean; endpointDefault: string | null; endpointEditable: boolean; keyRequired: boolean;
   secretName: string | null; probePath: string | null; endpointChoices: readonly Readonly<{ id: string; labelKey: string; url: string }>[];
   /** T4-B: the protocol family a connected model must speak (null: no model can be connected to this kind); `seeded`: its models come from its catalog seed. */
-  connectFamily?: string | null; seeded?: boolean }>;
+  connectFamily?: string | null; seeded?: boolean;
+  /** Owner 2026-10-08: a remote address of this kind needs a declared price first (SPEND-SETTLEMENT); its model action is locked until then. */
+  priceRequired?: boolean }>;
 /** The free check's typed outcome (no body, no key). `outcome` is one of the adapter's `PROVIDER_PROBE_OUTCOMES`. */
 export type ProviderConnectProbeView = Readonly<{ outcome: string; httpStatus: number | null; key: 'verified' | 'none' | 'unverified' }>;
 /** What the host binds for `/provider`: the kinds, the endpoint rule and the free check (a refusal before any request is a typed error with `code`). */

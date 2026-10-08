@@ -130,7 +130,7 @@ describe('/provider addresses (owner 2026-10-08, D3: chosen from a list; a typed
 
 describe('/provider port: connect a model (T4-B)', () => {
   const generic = { id: 'openai-compatible', labelKey: 'tui.provider.kind.openaiCompatible', available: true, endpointDefault: null, endpointEditable: true, keyRequired: true,
-    secretName: null, probePath: '/v1/models', endpointChoices: [], connectFamily: 'openai-chat-completions', seeded: false };
+    secretName: null, probePath: '/v1/models', endpointChoices: [], connectFamily: 'openai-chat-completions', seeded: false, priceRequired: true };
   const openai = { id: 'openai-api', labelKey: 'tui.provider.kind.openaiApi', available: true, endpointDefault: 'https://api.openai.com/v1', endpointEditable: false, keyRequired: true,
     secretName: 'DECKENT_OPENAI_KEY', probePath: '/v1/models', endpointChoices: [], connectFamily: 'openai-chat-completions', seeded: true };
   const host = (results: ModelConnectResult[]) => {
@@ -157,8 +157,8 @@ describe('/provider port: connect a model (T4-B)', () => {
     let kinds = (await port.inspect()).kinds;
     expect(kinds.map(kind => [kind.id, kind.models, kind.modelBlocked])).toEqual([
       ['openai-api', [{ id: 'seed:gpt-6-luna', label: 'GPT-6 Luna', detail: 'gpt-6-luna' }], 'Store its key first (Connect).'],
-      // The generic row lists only declared models speaking its family (never the Anthropic one); its key name depends on the address chosen next.
-      ['openai-compatible', [{ id: 'ref:vendor-a@1/a@1', label: 'a', detail: 'vendor-a@1/a@1' }], null]]);
+      // The generic row lists only declared models speaking its family (never the Anthropic one); owner 2026-10-08: it waits for a declared price.
+      ['openai-compatible', [{ id: 'ref:vendor-a@1/a@1', label: 'a', detail: 'vendor-a@1/a@1' }], 'Price must be declared first (coming with the pricing record).']]);
     expect(port.keyName!('openai-compatible', 'https://llm.example.com')).toBe('DECKENT_OAICOMPAT_LLM_EXAMPLE_COM');
     port = providerPanelPort(root, 'scope', { ...secrets(['DECKENT_OPENAI_KEY']).host, ...extra, providerConnect: connect }, options, 'en', errorText);
     kinds = (await port.inspect()).kinds;

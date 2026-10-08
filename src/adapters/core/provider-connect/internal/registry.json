@@ -32,7 +32,7 @@
     { "id": "openai-compatible", "labelKey": "tui.provider.kind.openaiCompatible", "available": true, "endpoint": { "default": null, "editable": true, "choices": [] },
       "probe": { "path": "/v1/models", "auth": { "type": "bearer" }, "headers": {}, "listsModels": true },
       "key": { "required": true, "secretName": null, "derive": { "from": "endpoint-host", "prefix": "DECKENT_OAICOMPAT_" } },
-      "connect": { "adapter": "openai-chat-http", "chatPath": "/v1/chat/completions", "seed": null } },
+      "connect": { "adapter": "openai-chat-http", "chatPath": "/v1/chat/completions", "seed": null, "priceRequired": true } },
     { "id": "local-openai", "labelKey": "tui.provider.kind.localOpenai", "available": true, "endpoint": { "default": null, "editable": true, "choices": [
       { "id": "vllm", "labelKey": "tui.provider.endpoint.choice.vllm", "url": "http://127.0.0.1:8000" },
       { "id": "ollama", "labelKey": "tui.provider.endpoint.choice.ollama", "url": "http://127.0.0.1:11434" },
