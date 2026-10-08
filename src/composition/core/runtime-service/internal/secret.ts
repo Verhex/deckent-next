@@ -1,7 +1,7 @@
 import { AuditError, PolicyError } from '#domain/index.js';
 import { AuditApplication, policySecretChangeAuthorization, policySecretStoreSwitchAuthorization, RuntimeServiceProtocolError, runtimeServiceResultCapacity,
   secretDeleteCommandSchema, secretSetCommandSchema, secretStoreSwitchCommandSchema, SecretStoreAdministration, SecretStoreSwitch, type RuntimeServiceRequest } from '#engine/index.js';
-import { createInstallationSecretStoreSelection, isRegisteredSecretStore, openConfiguredSecretStore, openLocalIntegrityAuthority, openRegisteredSecretStore,
+import { createInstallationSecretCustody, createInstallationSecretStoreSelection, isRegisteredSecretStore, openConfiguredSecretStore, openLocalIntegrityAuthority, openRegisteredSecretStore,
   openSqliteAuditStore, PolicyFileError, type LocalPeerIdentity } from '#adapters/index.js';
 import { ErrorRegistry, SystemTrustedClock, type ConfigLoadOptions } from '#platform/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
@@ -21,7 +21,7 @@ export async function executeConfiguredRuntimeSecretOperation(projectRoot: strin
   let result: unknown;
   try {
     const context = await loadConfiguredPeerScopeContext(projectRoot, command.scopeId, options, peer, 'write');
-    const secrets = openConfiguredSecretStore(context.config, options.env ?? process.env, options.platform);
+    const env = options.env ?? process.env, platform = options.platform ?? process.platform, secrets = openConfiguredSecretStore(context.config, env, platform);
     const answer = (removed: boolean | null) => ({ schemaVersion: 1, scopeId: command.scopeId, name: command.name, action: set ? 'set' : 'delete',
       backend: secrets.descriptor.id, removed });
     if (Buffer.byteLength(JSON.stringify(answer(set ? null : false)), 'utf8') > capacity) throw new RuntimeServiceProtocolError('RUNTIME_SERVICE_RESPONSE_LIMIT');
@@ -29,7 +29,7 @@ export async function executeConfiguredRuntimeSecretOperation(projectRoot: strin
     try {
       const audit = new AuditApplication(store, await openLocalIntegrityAuthority(context.layout, context.config.approvals.keyFile, true)), clock = new SystemTrustedClock();
       const administration = new SecretStoreAdministration(secrets, policySecretChangeAuthorization(context.document, context.principal),
-        event => { audit.record(event); }, () => clock.sample().wallMs);
+        event => { audit.record(event); }, () => clock.sample().wallMs, createInstallationSecretCustody(env, platform));
       const change = { principal: { issuer: context.principal.issuer, subject: context.principal.subject }, scopeId: command.scopeId, name: command.name };
       result = answer(set ? (await administration.set(change, set.value), null) : await administration.delete(change));
     } finally { store.close(); }
@@ -56,7 +56,7 @@ async function switchStore(projectRoot: string, request: RuntimeServiceRequest, 
       const audit = new AuditApplication(store, await openLocalIntegrityAuthority(context.layout, context.config.approvals.keyFile, true)), clock = new SystemTrustedClock();
       return await new SecretStoreSwitch({ has: isRegisteredSecretStore, open: id => openRegisteredSecretStore(id, env, platform),
         selection: createInstallationSecretStoreSelection(env, platform), authorize: policySecretStoreSwitchAuthorization(context.document, context.principal),
-        audit: event => { audit.record(event); }, now: () => clock.sample().wallMs })
+        audit: event => { audit.record(event); }, now: () => clock.sample().wallMs, custody: createInstallationSecretCustody(env, platform) })
         .switch({ principal: { issuer: context.principal.issuer, subject: context.principal.subject }, scopeId: command.scopeId, to: command.to,
           confirmDowngrade: command.confirmDowngrade });
     } finally { store.close(); }
