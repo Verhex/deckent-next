@@ -318,6 +318,10 @@ Owner “Öneriler kabul edildi”: önce Noul kontrollerini tek önerme yapma v
 - **T4 açık noktaları:** kullanıcı varsayılan modeli yeni `terminal.defaultModel` (Jev d84b248d 0,98/0,75, lead); sağlayıcı bağlama tek yönetilen işlem `models connect` (Jev 96303af3 iki tur 0,99/0,74 → owner).
 - **Anahtar deposu seçimi** (yan oturum araştırması; Jev a0284b73 1,00/0,82 + owner): `secrets.store` config değil, anahtar taşıma işlemi: kopyala → doğrula → eskiyi sil → seçimi yayımla; daha zayıf depoya geçiş açık onay; audit `secret-change`; config motorunun `secrets` reddi kalır. Yeni kurulumlarda şifreli depo varsayılanı (SECRET-DEFAULT, Jev 60bdc5e6 0,93/0,67 + owner).
 - **Model eşitleme** (owner): Opus 5.5 N1'de de etkin; Haiku 4.5 her yerde pasif.
+- **Slash entegrasyonu** (her biri Jev iki tur eşik altı → owner): argümanlı slash komutu penceresini açar, pencerenin durum satırında bir kez "terminalde argüman kullanılmaz" notu (Jev b1e8286f); açılışta süren iş varsa tek sistem satırı (59f75361); `/clear` ekranı ve terminal kaydırma geçmişini siler (ED 2 + ED 3; NO_COLOR'da da; TERM=dumb ve TTY olmayanda dizi yok), kayıtlı geçmiş `/resume` için kalır (owner doğrudan).
+- **Çoklu sağlayıcı anahtarı** (Jev da5312fb 0,99/0,75, lead): sağlayıcı kaydında OpenAI, DeepSeek, Z.ai GLM satırları kendi anahtar adlarıyla; genel OpenAI-uyumlu satır host'tan türeyen ad (T4-B).
+- **Hedefler** (owner): Aşama 1 native terminalde 5 sağlayıcı (Anthropic, OpenAI, OpenRouter, DeepSeek, GLM) API anahtarıyla; Aşama 2 terminal başarılı olunca worker/Brain/Auditor, abonelik önce/API yedek, maliyet sınırı takılmadan, prompt, skill + persona öğrenme döngüleri, değerlendirme. "Doğru işe doğru efor, doğru maliyet; sorunsuz evrimleşen Deckent."
+- **SECRET-SWITCH-ENV-GUARD** (owner onayı, yan oturum aktardı): env deposundan geçişte çözülemeyecek `$DECK:` referansları listelenir ve onay istenir.
 
 
 ## Owner kararları — 2026-10-08 (API anahtarları)
