@@ -13,7 +13,7 @@ Every action by people, AI agents and tools is authorized, isolated, executed an
 [![Node engines](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2FVerhex%2Fdeckent-next%2Fmain%2Fpackage.json&query=%24.engines.node&label=Node&color=43853d)](package.json)
 [![Pre-release](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2FVerhex%2Fdeckent-next%2Fmain%2Fpackage.json&query=%24.version&label=pre-release&color=orange)](CHANGELOG.md)
 
-[Türkçe](README.tr.md) · [What it is](#what-is-deckent) · [How a request flows](#how-a-request-flows) · [In the terminal](#in-the-terminal) · [Safety](#safety-model) · [Get started](#get-started)
+[Türkçe](README.tr.md) · [What it is](#what-is-deckent) · [How a request flows](#how-a-request-flows) · [First session](#your-first-session) · [In the terminal](#in-the-terminal) · [Safety](#safety-model) · [Get started](#get-started)
 
 <img src=".github/assets/screenshots/en/01-startup.png" alt="Deckent terminal right after start: logo, version, project, model and mode" width="880">
 
@@ -82,23 +82,94 @@ sequenceDiagram
   T-->>You: result, with every step visible
 ```
 
-## In the terminal
+## Your first session
 
-These screens come from the real Deckent terminal (alpha.10, 110×32; the `/provider`, `/model` and slash-command windows added since are not pictured yet), recorded in a throwaway sample project with a
-local test model.
+From an empty project to a governed agent turn and what it cost, without leaving Deckent:
+
+```mermaid
+flowchart LR
+  I["1 · Set up<br/><sub>deckent init policy</sub>"] --> O["2 · Open<br/><sub>deckent</sub>"]
+  O --> P["3 · Connect a provider<br/><sub>/provider · key · free check</sub>"]
+  P --> B["4 · Set a budget<br/><sub>Create budget · USD</sub>"]
+  B --> M["5 · Choose a model<br/><sub>/model · session or default</sub>"]
+  M --> W["6 · Work<br/><sub>approvals · modes</sub>"]
+  W --> U["7 · Check usage<br/><sub>/usage · spend account</sub>"]
+```
+
+1. **Set up** once per project: `deckent init policy --scope <id> --preview` shows the first-run policy and
+   `deckent init policy --scope <id> --apply` installs it. It lets you connect and call models, keep keys and set
+   budgets in that scope; every one of those actions is still checked and recorded. On Linux, WSL and macOS a fresh
+   installation starts on the encrypted key store.
+2. **Open the terminal** with `deckent`.
+3. **Connect a provider** with `/provider`: Anthropic API, OpenAI API, DeepSeek API, Z.ai GLM, any OpenAI-compatible
+   address or a local server such as vLLM. You type the key into a masked field; Deckent checks it with a free request
+   and stores it in the secret store under its name; a key the check rejects is never stored. Where a provider has no
+   free check, the key is kept unverified and the first turn shows any rejection. The value is never shown again and
+   no agent or worker ever receives it. Then choose **Connect a model** from that provider's catalog. A model
+   without a verified published price is listed but locked, with the reason (Zhipu GLM China stays locked because its
+   prices are in CNY). OpenRouter stores a key only for now. The same from the command line: `deckent secret set <NAME>`
+   and `deckent models connect --scope <id> --connection <kind> --command-id <id> --model <exact id>`.
+4. **Set a budget.** Every model turn reserves against one shared USD budget of the scope; without one, every turn is
+   refused and the windows say so. The first row of `/provider`, **Create budget**, opens the budget window: 5, 10, 25,
+   50 or 100 USD, or another whole-dollar amount from 1 to 1000 with the arrow keys, then a confirm step. Later the
+   same row reads **Change budget**. From the command line: `deckent models create-budget --scope <id> --usd <n>` and
+   `deckent models revise-budget --scope <id> --usd <n>`.
+5. **Choose a model** with `/model`. It lists the catalog's models; one you cannot use yet is locked with the reason
+   (no budget, not connected, key missing, not activated) and what fixes it. Pick **This session only** or **This
+   session, and make it my default** (your `terminal.defaultModel`). When the project names its own model, the window
+   says which setting chose the model in use.
+6. **Work.** Ask in plain words. Tool calls follow your company policy and your permission mode; anything that needs
+   you opens the approval window (see [Safety model](#safety-model)).
+7. **Check usage** with `/usage`: the tokens this conversation measured (reasoning shows *not measured* when the
+   provider did not report it) and the scope's budgets; open a budget to read its spend account: limit, reserved and
+   settled.
 
 <table>
   <tr>
-    <td width="50%"><img src=".github/assets/screenshots/en/02-chat.png" alt="A chat turn: your line marked You, the answer under Deckent"><br><sub><b>Chat.</b> Your lines and Deckent's answers are visibly distinct.</sub></td>
+    <td width="50%"><img src=".github/assets/screenshots/en/09-model.png" alt="/model with no budget: both models locked with the reason"><br><sub><b>Before a budget.</b> <code>/model</code> locks every model and names the reason and the next step.</sub></td>
+    <td width="50%"><img src=".github/assets/screenshots/en/08b-provider-budget-row.png" alt="/provider with Create budget as its first row and the provider list"><br><sub><b>/provider.</b> <b>Create budget</b> first, then each provider with its connection state.</sub></td>
+  </tr>
+  <tr>
+    <td width="50%"><img src=".github/assets/screenshots/en/10-budget.png" alt="Budget window with preset amounts"><br><sub><b>Budget window.</b> Preset amounts, or another amount with the arrow keys.</sub></td>
+    <td width="50%"><img src=".github/assets/screenshots/en/11-budget-stepper.png" alt="Budget stepper set to 20 USD"><br><sub><b>Another amount.</b> Whole dollars, 1 to 1000; nothing is typed and nothing is sent before you confirm.</sub></td>
+  </tr>
+  <tr>
+    <td width="50%"><img src=".github/assets/screenshots/en/12-model-ready.png" alt="/model after the budget: one model ready, one locked as not connected"><br><sub><b>After the budget.</b> The connected model is ready; the other stays locked until it is connected. The framed line above records the budget.</sub></td>
+    <td width="50%"><img src=".github/assets/screenshots/en/13-usage.png" alt="/usage window after one chat turn"><br><sub><b>/usage.</b> Tokens this conversation measured and the scope's budgets. A measurement, not an invoice.</sub></td>
+  </tr>
+</table>
+
+## In the terminal
+
+These screens come from the real Deckent terminal (alpha.17, 120×36), recorded in a throwaway sample project. The
+model is a small test server on the same machine: no provider was called and no real key was used.
+
+Every slash command answers in its own window. <kbd>Esc</kbd> closes it and leaves one framed `Deckent system` line in
+the conversation instead of a wall of text. Settings are changed by choosing, not by typing: `/config` walks from
+section to key to the allowed values, numbers move with a bounded arrow-key stepper, and only a few fields (such as an
+allowed fetch host or a registry address) take typed text, which is checked first. Each change goes through policy and
+may become an approval.
+
+<table>
+  <tr>
+    <td width="50%"><img src=".github/assets/screenshots/en/02-chat.png" alt="A chat turn: your line marked You, the answer under Deckent"><br><sub><b>Chat.</b> Your lines and Deckent's answers are visibly distinct, with time and tokens per turn.</sub></td>
     <td width="50%"><img src=".github/assets/screenshots/en/05-approval.png" alt="Approval window for a shell command"><br><sub><b>Approval window.</b> What, where (sandbox), on whose behalf, scope, why, risk, reversibility and a live deadline. <code>y</code> once · <code>n</code> decline · <kbd>Tab</kbd> note.</sub></td>
   </tr>
   <tr>
-    <td width="50%"><img src=".github/assets/screenshots/en/04-status.png" alt="/status output"><br><sub><b>/status.</b> A human summary first; identities, process and build under the details.</sub></td>
+    <td width="50%"><img src=".github/assets/screenshots/en/04-status.png" alt="/status window"><br><sub><b>/status.</b> A human summary first; identities, process and build under the details.</sub></td>
     <td width="50%"><img src=".github/assets/screenshots/en/06-full-access.png" alt="Full access mode indicator"><br><sub><b>Modes.</b> <kbd>Shift</kbd>+<kbd>Tab</kbd> cycles the modes you are allowed; full access is clearly marked.</sub></td>
   </tr>
   <tr>
-    <td width="50%"><img src=".github/assets/screenshots/en/03-help.png" alt="/help grouped by purpose"><br><sub><b>/help.</b> Commands grouped by purpose, one line each.</sub></td>
-    <td width="50%"><img src=".github/assets/screenshots/en/07-mcp.png" alt="/mcp server list"><br><sub><b>/mcp.</b> Configured MCP servers, their trust and health.</sub></td>
+    <td width="50%"><img src=".github/assets/screenshots/en/03-help.png" alt="/help window grouped by purpose"><br><sub><b>/help.</b> Commands grouped by purpose, one line each.</sub></td>
+    <td width="50%"><img src=".github/assets/screenshots/en/07-mcp.png" alt="/mcp window"><br><sub><b>/mcp.</b> Add a server step by step; configured servers with their trust state.</sub></td>
+  </tr>
+  <tr>
+    <td width="50%"><img src=".github/assets/screenshots/en/08-provider.png" alt="/provider window listing provider kinds"><br><sub><b>/provider.</b> Each provider's state; the OpenRouter row says it holds a key only for now.</sub></td>
+    <td width="50%"><img src=".github/assets/screenshots/en/14-config.png" alt="/config window choosing the terminal theme"><br><sub><b>/config.</b> Section, key, then one of the allowed values; the current one is marked.</sub></td>
+  </tr>
+  <tr>
+    <td width="50%"><img src=".github/assets/screenshots/en/15-system-line.png" alt="Framed system lines left by closed windows"><br><sub><b>System lines.</b> Each closed window leaves one framed summary line.</sub></td>
+    <td width="50%"><img src=".github/assets/screenshots/en/16-tasks.png" alt="/tasks live window with no work yet"><br><sub><b>/tasks.</b> Workers and runs in one live, read-only window (empty here: no background work yet).</sub></td>
   </tr>
 </table>
 
@@ -131,14 +202,15 @@ on the host and says so on every approval card, while a `require-sandbox` realm 
 
 ### API keys
 
-You store a provider key once with `deckent secret set NAME` (hidden prompt or piped stdin, never an argument); a model profile
-refers to it by name. Never put it in `ANTHROPIC_API_KEY`, a shell profile or a `.env` file: other tools read those.
+You store a provider key once, in the masked field of `/provider` or with `deckent secret set NAME` (hidden prompt or
+piped stdin, never an argument); a model profile refers to it by name. Never put it in `ANTHROPIC_API_KEY`, a shell
+profile or a `.env` file: other tools read those.
 
 | Store (`secrets.store`) | On disk | Who can read the key |
 |---|---|---|
-| `core.secret-store.env@1` (default) | nothing; read from the environment | every program that inherits that environment |
+| `core.secret-store.env@1` (when no store is selected) | nothing; read from the environment | every program that inherits that environment |
 | `core.secret-store.file@1` | plain text, a 0600 file | Deckent and other programs running as your user |
-| `core.secret-store.encrypted-file@1` (recommended) | encrypted (AES-256-GCM); the unlock key sits in the same folder, no passphrase | Deckent; other programs running as your user can still open it |
+| `core.secret-store.encrypted-file@1` (recommended; fresh installs start here) | encrypted (AES-256-GCM); the unlock key sits in the same folder, no passphrase | Deckent; other programs running as your user can still open it |
 
 Agents and workers never receive a key: the sandbox hides the store and a provider answer that echoes the key is refused.
 `deckent doctor` shows which store is active and who can read it. When a provider refuses a key (401/403) or a limit is
@@ -154,6 +226,17 @@ reached, the terminal says so in plain words; spend limits stay in your provider
 3. Planned: run the Deckent service under its own OS user (or the macOS Keychain) so no program of your account can read the keys.
 
 The file stores are not available on native Windows yet.
+
+### Spending
+
+Each scope has one shared budget in USD for every API provider. Before a paid call, Deckent reserves the most it could
+cost at the dearest price tier that can apply; afterwards it settles the call from the usage the provider itself
+reported in its final answer, multiplied by the verified published price. That settled amount is Deckent's own
+calculation, not the provider's invoice. A remote model without a verified price is refused and shown locked with
+the reason. Where a provider does not say which price tier it used (DeepSeek), the call settles at the published peak
+price and is labelled an upper bound. A call that never received its final usage stays held until you resolve it with
+`deckent models reconcile-spending`. If a settled charge ever exceeds what was reserved, the scope stops admitting new
+calls until you lift the freeze with `deckent models revise-budget --scope <id> --usd <n> --unfreeze`.
 
 ## Architecture
 
@@ -190,9 +273,10 @@ flowchart LR
 - **Govern**: local identity, company-scoped policy, audit and one approval broker for every surface; human
   acceptance or rejection of unverified evidence.
 - **Choose models**: a model catalog by client and billing channel, exact activation, local vLLM chat; `/provider` and
-  `/model` connect a provider with your own key and pin a model for the session; paid calls settle from the provider's
-  usage times a verified published tariff under a budget you set (an unpriced remote model is refused and locked with
-  the reason); spending and allocation audit.
+  `/model` connect a provider with your own key and pin a model for the session or make it your default; paid calls
+  settle from the provider's usage times a verified published tariff under a budget you set in the budget window or
+  with `deckent models create-budget` (an unpriced remote model is refused and locked with the reason); spending and
+  allocation audit.
 - **Operate**: `deckent monitor` for a read-only view of every installation, `deckent doctor` for health, `deckent
   config` for settings, bilingual help everywhere.
 
@@ -224,6 +308,7 @@ From then on, everything is `deckent`:
 deckent --version
 deckent                                   # open the interactive terminal
 deckent doctor                            # installation health
+deckent init policy --scope <id> --apply  # first-run policy for a project (see Your first session)
 deckent init preview --profile <file>     # preview the installation for a project
 deckent mcp add context7 -- npx -y @upstash/context7-mcp   # add an MCP server
 deckent monitor                           # watch installations and work
