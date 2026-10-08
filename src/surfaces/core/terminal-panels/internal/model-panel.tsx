@@ -3,9 +3,10 @@ import { fillTemplate, span } from '#surfaces/core/terminal-render/index.js';
 import { ListPicker, PICKER_INITIAL, pickerView, type PickerNode, type PickerResult, type PickerState, type PickerTree } from '#surfaces/core/terminal-picker/index.js';
 import { Window } from '#surfaces/core/terminal-window/index.js';
 import { usePickerRoom } from './lines.js';
-import type { ModelPanelChoice, ModelPanelLabels, ModelPanelPort, ModelPanelReference, ModelPanelView, PanelLabels, PanelNotice } from './contract.js';
+import { BudgetWindow, budgetEntry } from './budget-panel.js';
+import type { BudgetPanelView, ModelPanelChoice, ModelPanelLabels, ModelPanelPort, ModelPanelReference, ModelPanelView, PanelLabels, PanelNotice } from './contract.js';
 
-const SESSION = 'session', DEFAULT = 'default';
+const SESSION = 'session', DEFAULT = 'default', BUDGET = ':budget';
 const keyOf = (reference: ModelPanelReference) => `${reference.providerId}@${reference.providerVersion}/${reference.modelId}@${reference.modelVersion}`;
 const same = (left: ModelPanelReference | null, right: ModelPanelReference) => left !== null && keyOf(left) === keyOf(right);
 
@@ -36,6 +37,8 @@ export function ModelPanel({ port, labels, push, openApproval, onError, onClose 
   const [view, setView] = useState<ModelPanelView | null>(null);
   const [state, setState] = useState<PickerState>(PICKER_INITIAL);
   const [shadow, setShadow] = useState<Readonly<{ choice: ModelPanelChoice; projectModel: string; first: readonly string[] }> | null>(null);
+  // Stage 1: the scope budget row (create / change) and its window; a budget read failure only hides the row.
+  const [budget, setBudget] = useState<BudgetPanelView | null>(null), [budgetOpen, setBudgetOpen] = useState(false);
   const exits = useRef({ onError, onClose });
   exits.current = { onError, onClose };
   // Body: the focused model's exact reference and, for a locked one, the command that fixes it (both dimmed).
@@ -43,11 +46,15 @@ export function ModelPanel({ port, labels, push, openApproval, onError, onClose 
   useEffect(() => {
     let live = true;
     port.inspect().then(value => { if (live) setView(value); }, error => { if (live) { exits.current.onError(error); exits.current.onClose(); } });
+    port.budget?.inspect().then(value => { if (live) setBudget(value); }, () => undefined);
     return () => { live = false; };
   }, [port]);
   if (!view) return <Window title={[span(labels.loading)]} hints={words.hints} position={labels.position} onClose={onClose} />;
-  const tree = modelPanelTree(view, port.pinned(), words, view.title, Boolean(port.makeDefault));
+  if (budgetOpen && budget && port.budget) return <BudgetWindow port={port.budget} view={budget} labels={labels} push={push} onDone={onClose} />;
+  const entry = budgetEntry(budget, labels.budget), listed = modelPanelTree(view, port.pinned(), words, view.title, Boolean(port.makeDefault));
+  const tree: PickerTree = entry ? { ...listed, items: [{ id: BUDGET, label: entry.label, detail: entry.detail, unscoped: true }, ...listed.items] } : listed;
   const chosen = (result: PickerResult) => {
+    if (result.kind === 'selected' && result.id === BUDGET) { setBudgetOpen(true); return; }
     const choice = result.kind === 'selected' ? view.choices.find(item => keyOf(item.reference) === result.id && item.blocked === null) : undefined;
     if (!choice) { onClose(); return; }
     // The session pin first: the next turn carries it whatever the default write answers (the service uses it exactly or refuses).

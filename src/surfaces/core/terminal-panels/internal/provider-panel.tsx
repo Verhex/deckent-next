@@ -4,7 +4,8 @@ import { ListPicker, PICKER_INITIAL, type PickerNode, type PickerResult, type Pi
 import { Window } from '#surfaces/core/terminal-window/index.js';
 import { EntryWindow } from './entry.js';
 import { LinesWindow, QuestionWindow, panelWindowLines, usePickerRoom } from './lines.js';
-import type { PanelLabels, PanelNotice, ProviderConnectOutcome, ProviderModelOutcome, ProviderPanelKind, ProviderPanelLabels, ProviderPanelPort, ProviderPanelView } from './contract.js';
+import { BudgetWindow, budgetEntry } from './budget-panel.js';
+import type { BudgetPanelView, PanelLabels, PanelNotice, ProviderConnectOutcome, ProviderModelOutcome, ProviderPanelKind, ProviderPanelLabels, ProviderPanelPort, ProviderPanelView } from './contract.js';
 
 /** `/provider` as a list (T4 PROVIDER-CONNECT): each kind with its state and stored key name; connect (or replace the key) and disconnect. */
 export function providerPanelTree(view: ProviderPanelView, labels: ProviderPanelLabels, models = false): PickerTree {
@@ -32,7 +33,8 @@ export function providerEndpointTree(kind: ProviderPanelKind, labels: ProviderPa
 type Step = Readonly<{ kind: 'list' } | { kind: 'endpoint'; target: ProviderPanelKind; forModel?: true } | { kind: 'address'; target: ProviderPanelKind; text: string; problem: string | null; forModel?: true }
   | { kind: 'preview'; target: ProviderPanelKind; text: string; base: string; check: string; forModel?: true } | { kind: 'key'; target: ProviderPanelKind; endpoint: string | null }
   | { kind: 'busy' } | { kind: 'result'; outcome: ProviderConnectOutcome } | { kind: 'confirm'; target: ProviderPanelKind }
-  | { kind: 'model'; target: ProviderPanelKind; endpoint: string | null } | { kind: 'connected'; outcome: ProviderModelOutcome }>;
+  | { kind: 'model'; target: ProviderPanelKind; endpoint: string | null } | { kind: 'connected'; outcome: ProviderModelOutcome } | { kind: 'budget' }>;
+const BUDGET = ':budget';
 
 /**
  * `/provider` as a window: connect a kind (its address chosen from a list when it takes one — a typed address only as the list's last row,
@@ -49,13 +51,16 @@ export function ProviderPanel({ port, labels, push, openApproval, onError, onClo
   const [state, setState] = useState<PickerState>(PICKER_INITIAL);
   const [generation, setGeneration] = useState(0);
   const room = usePickerRoom(1);
-  const reload = useCallback(async () => { setView(await port.inspect()); }, [port]);
+  // Stage 1: the scope budget row (create / change) above the kinds; a budget read failure only hides the row.
+  const [budget, setBudget] = useState<BudgetPanelView | null>(null);
+  const reload = useCallback(async () => { setView(await port.inspect()); setBudget(port.budget ? await port.budget.inspect().catch(() => null) : null); }, [port]);
   const exits = useRef({ onError, onClose });
   exits.current = { onError, onClose };
   useEffect(() => { reload().catch(error => { exits.current.onError(error); exits.current.onClose(); }); }, [reload]);
   const back = () => { setGeneration(value => value + 1); setStep({ kind: 'list' }); reload().catch(error => onError(error)); };
   const title = (text: string) => [span(text, { bold: true })];
   if (!view || step.kind === 'busy') return <Window title={title(words.title)} body={[{ spans: [span(view ? words.checking : labels.loading)] }]} hints={words.hints} position={labels.position} />;
+  if (step.kind === 'budget' && budget && port.budget) return <BudgetWindow port={port.budget} view={budget} labels={labels} push={push} onDone={back} />;
   if (step.kind === 'result') return <LinesWindow title={step.outcome.title} lines={step.outcome.lines} hints={words.resultHints} position={labels.position} onClose={back} />;
   // T4-B: a model connection's result; closing it leaves its one system summary line (and opens the approval card policy asked for).
   if (step.kind === 'connected') return <LinesWindow title={step.outcome.title} lines={step.outcome.lines} hints={words.resultHints} position={labels.position} onClose={() => {
@@ -121,6 +126,7 @@ export function ProviderPanel({ port, labels, push, openApproval, onError, onClo
   }
   const chosen = (result: PickerResult, at: PickerState) => {
     if (result.kind !== 'selected') { onClose(); return; }
+    if (result.id === BUDGET) { setState(at); setStep({ kind: 'budget' }); return; }
     const [id, action] = result.path, target = view.kinds.find(kind => kind.id === id);
     if (!target || !action) { setState(at); back(); return; }
     setState({ ...PICKER_INITIAL, pos: at.trail[0]?.pos ?? 0 });
@@ -133,6 +139,10 @@ export function ProviderPanel({ port, labels, push, openApproval, onError, onClo
     // K6: a key-only kind says so in the window body too (a narrow terminal may cut the row's detail).
     ...view.kinds.filter(kind => kind.pendingNote).map(kind => ({ spans: [span(`${kind.label}: `, { bold: true }), span(kind.pendingNote!, { role: 'muted' as const })] }))];
   return <Window title={title(view.title)} body={body} hints={words.hints} position={labels.position} footerRows={room.footerRows} onInput={() => true}
-    footer={focused => <ListPicker key={generation} tree={providerPanelTree(view, words, Boolean(port.connectModel))} labels={labels.picker} active={focused} initial={state} onState={setState}
+    footer={focused => <ListPicker key={generation} tree={withBudgetRow(providerPanelTree(view, words, Boolean(port.connectModel)), budgetEntry(budget, labels.budget))} labels={labels.picker} active={focused} initial={state} onState={setState}
       maxRows={room.rows} onResult={result => chosen(result, state)} />} />;
+}
+/** Stage 1: the budget row first, when the window offers a budget action. */
+function withBudgetRow(tree: PickerTree, entry: ReturnType<typeof budgetEntry>): PickerTree {
+  return entry ? { ...tree, items: [{ id: BUDGET, label: entry.label, detail: entry.detail }, ...tree.items] } : tree;
 }

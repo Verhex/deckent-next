@@ -46,5 +46,9 @@ export function terminalPanelLabels(locale: Locale): PanelLabels {
       keyRequired: t('tui.panel.provider.keyRequired', {}, locale), checking: t('tui.panel.provider.checking', {}, locale), resultHints: t('tui.panel.provider.resultHints', {}, locale),
       disconnectTitle: t('tui.panel.provider.disconnectTitle', {}, locale), disconnectKeys: t('tui.panel.provider.disconnectKeys', {}, locale),
       empty: t('tui.panel.provider.empty', {}, locale) },
+    budget: { create: t('tui.panel.budget.create', {}, locale), change: t('tui.panel.budget.change', {}, locale), changeDetail: t('tui.panel.budget.changeDetail', {}, locale),
+      preset: t('tui.panel.budget.preset', {}, locale), other: t('tui.panel.budget.other', {}, locale), stepperTitle: t('tui.panel.budget.stepperTitle', {}, locale),
+      hints: t('tui.panel.budget.hints', {}, locale), confirmTitle: t('tui.panel.budget.confirmTitle', {}, locale), confirm: t('tui.panel.budget.confirm', {}, locale),
+      confirmUnfreeze: t('tui.panel.budget.confirmUnfreeze', {}, locale), cancel: t('tui.panel.budget.cancel', {}, locale) },
   };
 }

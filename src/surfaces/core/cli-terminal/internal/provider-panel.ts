@@ -54,7 +54,7 @@ function custodyText(backend: string, locale: Locale): string {
   return t('tui.panel.provider.transparency', { backend }, locale);
 }
 
-type Host = Pick<TerminalLaunchContext, 'providerConnect' | 'listSecretNames' | 'setSecret' | 'deleteSecret' | 'connectModel' | 'inspectDeclaredModels'>;
+type Host = Pick<TerminalLaunchContext, 'providerConnect' | 'listSecretNames' | 'setSecret' | 'deleteSecret' | 'connectModel' | 'inspectDeclaredModels' | 'inspectProviderSpendAccount'>;
 const SEED = 'seed:', DECLARED = 'ref:', LEGACY = 'legacy:';
 const referenceKey = (reference: ModelReference) => `${reference.providerId}@${reference.providerVersion}/${reference.modelId}@${reference.modelVersion}`;
 /** The connection's result as the window's rows: the model, what each governed step did, the key's name, spending and the service. */
@@ -164,7 +164,7 @@ export function providerPanelPort(root: string, scopeId: string, host: Host & { 
       }
       if (!host.setSecret) notes.push(t('tui.provider.note.noStore', {}, locale));
       // (a): a connected model cannot answer without this scope's budget; the window says so before anything is connected.
-      try { if (!scopeBudgeted(await loadConfig(root, options) as Record<string, unknown>, scopeId)) notes.push(t('tui.budget.missing', { scope: scopeId }, locale)); }
+      try { if (!await scopeBudgeted(await loadConfig(root, options) as Record<string, unknown>, scopeId, { root, options, inspect: host.inspectProviderSpendAccount })) notes.push(t('tui.budget.missing', { scope: scopeId }, locale)); }
       catch { /* the profiles note above already names an unreadable configuration */ }
       return { title: t('tui.panel.provider.title', {}, locale), kinds, notes };
     },

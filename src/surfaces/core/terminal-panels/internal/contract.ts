@@ -132,6 +132,8 @@ export type ModelPanelView = Readonly<{ title: string; choices: readonly ModelPa
 export type ModelDefaultOutcome = ConfigPanelOutcome & Readonly<{ shadow?: Readonly<{ projectModel: string }> | null }>;
 export interface ModelPanelSource {
   inspect(): Promise<ModelPanelView>;
+  /** Stage 1: create or change the scope budget from this window (absent: not offered). */
+  readonly budget?: BudgetPanelPort;
   makeDefault?(choice: ModelPanelChoice): Promise<ModelDefaultOutcome>;
   /** The two governed answers to a shadowing project model (the `/config` writer on the project layer, `terminal.chat.reference` only): `remove`
    * drops the project's model so the user default applies; `align` makes the project's model this one. */
@@ -191,6 +193,8 @@ export interface ProviderPanelPort {
   connectModel?(request: ProviderModelRequest): Promise<ProviderModelOutcome>;
   /** The transparency rows the key step shows: how the key is kept and who else can read it. */
   readonly transparency: readonly PanelLine[];
+  /** Stage 1: create or change the scope budget from this window (absent: not offered). */
+  readonly budget?: BudgetPanelPort;
 }
 export interface ProviderPanelLabels {
   readonly title: string; readonly hints: string;
@@ -209,6 +213,26 @@ export interface ProviderPanelLabels {
 }
 
 /** Shared words of every panel window. */
+/**
+ * Stage 1 (owner 2026-10-08): the scope's one shared USD budget, created or changed from `/model` and `/provider` through the governed spend
+ * command. The amount comes from presets or a bounded arrow-key step, never typed; a confirm step comes before anything is sent.
+ * `action` null: no action here (`note` says why, e.g. a budget declared in configuration whose account opens at the first call).
+ */
+export type BudgetPanelView = Readonly<{ action: 'create' | 'change' | null; current: string | null; note: string | null; frozen: boolean;
+  presets: readonly number[]; min: number; max: number; step: number; start: number }>;
+export type BudgetPanelOutcome = Readonly<{ ok: boolean; line: string }>;
+export interface BudgetPanelPort {
+  inspect(): Promise<BudgetPanelView>;
+  apply(request: Readonly<{ action: 'create' | 'change'; usd: number; unfreeze: boolean }>): Promise<BudgetPanelOutcome>;
+}
+export interface BudgetPanelLabels {
+  /** The list rows that open the window; `{current}` is the budget in effect. */
+  readonly create: string; readonly change: string; readonly changeDetail: string;
+  /** `{usd}` of a preset row; the bounded-step row; the stepper title and its key hint. */
+  readonly preset: string; readonly other: string; readonly stepperTitle: string; readonly hints: string;
+  /** `{usd}`: the confirm window's title; its two (three when frozen) answers. */
+  readonly confirmTitle: string; readonly confirm: string; readonly confirmUnfreeze: string; readonly cancel: string;
+}
 export interface PanelLabels {
   readonly picker: PickerLabels;
   readonly position: string;
@@ -218,6 +242,7 @@ export interface PanelLabels {
   readonly mcp: McpPanelLabels;
   readonly model: ModelPanelLabels;
   readonly provider: ProviderPanelLabels;
+  readonly budget: BudgetPanelLabels;
 }
 export interface PanelPorts {
   readonly mode?: ModePanelPort;

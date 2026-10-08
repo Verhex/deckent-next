@@ -5,7 +5,7 @@ import { terminalConfigWrite, type ConfigCommandContext } from '#surfaces/core/c
 import type { TerminalLaunchContext } from './context.js';
 
 type Host = Pick<TerminalLaunchContext, 'inspectDeclaredModels' | 'inspectModelActivation' | 'inspectModelBinding' | 'inspectModelCatalog' | 'describeTerminalChatPlan'
-  | 'listSecretNames'> & Pick<ConfigCommandContext, 'configApplication' | 'resolveConfigPrincipal' | 'describeRuntimeService'>;
+  | 'listSecretNames' | 'inspectProviderSpendAccount'> & Pick<ConfigCommandContext, 'configApplication' | 'resolveConfigPrincipal' | 'describeRuntimeService'>;
 /** T4-B D1: the words of the setting that chose the model in effect (the `/model` window shows which layer wins). */
 function winnerNote(source: string | null | undefined, model: string, locale: Locale): string | null {
   switch (source) {
@@ -27,9 +27,13 @@ function profilesOf(config: Record<string, unknown>, scopeId: string): readonly 
     return value.scopeId === scopeId && value.reference ? [{ reference: value.reference, credentialRef: typeof ref === 'string' ? ref : null }] : [];
   });
 }
-/** Whether this scope has a provider spending budget (the typed refusal without one: PROVIDER_SPEND_UNAVAILABLE). */
-export const scopeBudgeted = (config: Record<string, unknown>, scopeId: string) =>
-  ((config['provider_spending'] as { budgets?: readonly { scopeId?: unknown }[] } | undefined)?.budgets ?? []).some(budget => budget.scopeId === scopeId);
+/** Whether this scope has a provider spending budget (the typed refusal without one: PROVIDER_SPEND_UNAVAILABLE): one declared in configuration,
+ * or (stage 1) the scope's ledger account a governed create or an earlier call opened, read through the service. An unreadable account counts as none. */
+export async function scopeBudgeted(config: Record<string, unknown>, scopeId: string, read: { root: string; options: ConfigLoadOptions;
+  inspect?: TerminalLaunchContext['inspectProviderSpendAccount'] }): Promise<boolean> {
+  if (((config['provider_spending'] as { budgets?: readonly { scopeId?: unknown }[] } | undefined)?.budgets ?? []).some(budget => budget.scopeId === scopeId)) return true;
+  return read.inspect ? (await read.inspect(read.root, { schemaVersion: 1, scopeId, current: true }, read.options).catch(() => null))?.checkpoint != null : false;
+}
 const errorCode = (error: unknown) => String((error as { code?: unknown })?.code ?? 'failed');
 
 /**
@@ -50,7 +54,7 @@ export function modelPanelSource(root: string, scopeId: string, host: Host, opti
       }
       const config = await loadConfig(root, options) as Record<string, unknown>, profiles = profilesOf(config, scopeId);
       // (a) owner 2026-10-08: every model call reserves against this scope's budget; without one each turn is refused PROVIDER_SPEND_UNAVAILABLE.
-      const budgeted = scopeBudgeted(config, scopeId);
+      const budgeted = await scopeBudgeted(config, scopeId, { root, options, inspect: host.inspectProviderSpendAccount });
       if (!budgeted) notes.push(t('tui.budget.missing', { scope: scopeId }, locale));
       let names: readonly string[] | null = null;
       if (host.listSecretNames) { try { names = (await host.listSecretNames(root, options)).names; } catch { names = null; } }

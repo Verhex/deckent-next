@@ -146,5 +146,6 @@
   "tui.provider.kind.openaiApi",
   "tui.provider.kind.deepseekApi",
   "tui.provider.kind.zaiApi",
-  "tui.provider.model.field.model"
+  "tui.provider.model.field.model",
+  "tui.panel.budget.preset"
 ]

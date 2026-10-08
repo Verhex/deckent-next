@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { WorklinePaletteProvider, resolveWorklinePalette } from '#surfaces/core/terminal-kit/index.js';
 import { RenderGlyphsContext, cells, resolveRenderGlyphs } from '#surfaces/core/terminal-render/index.js';
 import { WindowStackProvider } from '#surfaces/core/terminal-window/index.js';
-import { SettingsPanel, modelPanelTree, providerPanelTree, type ConfigPanelOutcome, type ModelPanelChoice, type ModelPanelPort, type ModelPanelView, type PanelNotice,
+import { SettingsPanel, modelPanelTree, providerPanelTree, type BudgetPanelPort, type BudgetPanelView, type ConfigPanelOutcome, type ModelPanelChoice, type ModelPanelPort, type ModelPanelView, type PanelNotice,
   type ProviderConnectRequest, type ProviderPanelPort, type ProviderPanelView } from '#surfaces/core/terminal-panels/index.js';
 import { terminalPanelLabels } from '#surfaces/core/work-labels/index.js';
 import { mountWorkline, settle as settleWorkline, until, WORKLINE_TEST_LABELS } from '../support/workline-harness.js';
@@ -390,5 +390,68 @@ describe('/model in the workline: the pin rides on the next turn', () => {
     view.stdin.write(`/provider${ENTER}`);
     await until(() => view.stdout.text.includes('provider'), 'unavailable notice');
     expect(view.stdout.text).not.toContain('UNKNOWN');
+  });
+});
+
+describe('stage 1 budget window (/model and /provider)', () => {
+  const UP = '\u001B[A', RIGHT = '\u001B[C';
+  const view = (overrides: Partial<BudgetPanelView> = {}): BudgetPanelView => ({ action: 'create', current: null, note: null, frozen: false, presets: [5, 10, 25, 50, 100],
+    min: 1, max: 1000, step: 1, start: 5, ...overrides });
+  const budgetPort = (value: BudgetPanelView) => {
+    const applied: unknown[] = [];
+    const port: BudgetPanelPort = { inspect: async () => value, apply: async request => { applied.push(request);
+      return { ok: true, line: `Budget set: ${request.usd} USD` }; } };
+    return { port, applied };
+  };
+
+  it('/model offers "Create budget" first (no scope step); presets, confirm, one system line; nothing is sent before the confirm', async () => {
+    const budget = budgetPort(view()), { port, pins } = modelPort(MODELS);
+    const { element, calls } = panel('model', { model: { ...port, budget: budget.port } });
+    const screen = mount(element, 100, 40);
+    await settle(80);
+    expect(screen.frame()).toContain('Create budget');
+    await screen.press(ENTER);
+    for (const preset of ['5 USD', '10 USD', '25 USD', '50 USD', '100 USD', 'Another amount (arrow keys)']) expect(screen.frame()).toContain(preset);
+    expect(screen.frame()).not.toContain('This session only');
+    await screen.press(`${DOWN}${DOWN}${ENTER}`);
+    expect(screen.frame()).toContain("Set this scope's shared budget to 25 USD?");
+    expect(budget.applied).toEqual([]);
+    await screen.press(ENTER, 80);
+    expect(budget.applied).toEqual([{ action: 'create', usd: 25, unfreeze: false }]);
+    expect(calls.notices).toEqual([{ level: 'info', text: 'Budget set: 25 USD' }]); expect(calls.closed).toBe(1); expect(pins).toEqual([]);
+  });
+
+  it('another amount is stepped with the arrow keys within bounds; digits never type an amount', async () => {
+    const budget = budgetPort(view({ max: 7 })), { port } = modelPort(MODELS);
+    const { element, calls } = panel('model', { model: { ...port, budget: budget.port } });
+    const screen = mount(element, 100, 40);
+    await settle(80);
+    await screen.press(ENTER); await screen.press(`${UP}${ENTER}`);
+    expect(screen.frame()).toContain('Budget in USD (whole dollars)');
+    await screen.press(`99${RIGHT}${RIGHT}${RIGHT}${RIGHT}`);
+    // 5 → 7: the bound stops the step; the typed 9s changed nothing.
+    expect(screen.frame()).toContain('7'); expect(screen.frame()).not.toContain('99');
+    await screen.press(ENTER);
+    expect(screen.frame()).toContain("Set this scope's shared budget to 7 USD?");
+    await screen.press(ENTER, 80);
+    expect(budget.applied).toEqual([{ action: 'create', usd: 7, unfreeze: false }]); expect(calls.closed).toBe(1);
+  });
+
+  it('/provider: "Change budget" for a frozen account offers to lift the freeze; cancel sends nothing (Turkish)', async () => {
+    const budget = budgetPort(view({ action: 'change', current: '25 USD (revizyon 2) · aşım sonrası donduruldu', frozen: true, start: 25 }));
+    const provider: ProviderPanelPort = { inspect: async () => ({ title: 'Sağlayıcılar', kinds: [], notes: [] }), endpoint: () => ({ ok: false, reason: '-' }),
+      connect: async () => { throw new Error('unreached'); }, disconnect: async () => [], transparency: [], budget: budget.port } as never;
+    const { element, calls } = panel('provider', { provider }, 'tr');
+    const screen = mount(element, 100, 40);
+    await settle(80);
+    expect(screen.frame()).toContain('Bütçeyi değiştir'); expect(screen.frame()).toContain('Şu anki bütçe: 25 USD (revizyon 2)');
+    await screen.press(`${ENTER}${DOWN}${DOWN}${DOWN}${ENTER}`);
+    expect(screen.frame()).toContain('Bu kapsamın ortak bütçesi 50 USD olsun mu?');
+    expect(screen.frame()).toContain('Evet, ayarla ve aşım dondurmasını kaldır');
+    await screen.press(`${DOWN}${DOWN}${ENTER}`);
+    expect(budget.applied).toEqual([]);
+    await screen.press(`${DOWN}${DOWN}${DOWN}${ENTER}`); await screen.press(`${DOWN}${ENTER}`, 80);
+    expect(budget.applied).toEqual([{ action: 'change', usd: 50, unfreeze: true }]);
+    expect(calls.notices).toEqual([{ level: 'info', text: 'Budget set: 50 USD' }]);
   });
 });

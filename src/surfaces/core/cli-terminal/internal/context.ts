@@ -58,7 +58,7 @@ export type TerminalSecretSetHandler = (root: string, input: Readonly<{ schemaVe
 export type TerminalSecretDeleteHandler = (root: string, input: Readonly<{ schemaVersion: 1; scopeId: string; name: string }>, options: ConfigLoadOptions) => Promise<TerminalSecretChange>;
 
 export interface TerminalLaunchContext extends MonitorCommandContext, Pick<ModelCommandContext, 'inspectModelCatalog' | 'inspectProviderSpendAccount' | 'inspectDeclaredModels'
-  | 'inspectModelBinding' | 'inspectModelActivation' | 'connectModel'> {
+  | 'inspectModelBinding' | 'inspectModelActivation' | 'connectModel' | 'manageProviderSpend'> {
   /** T4 `/provider`: the connect kinds and free check, and the secret store handlers (the key goes only to `setSecret`). */
   providerConnect?: ProviderConnectHost;
   listSecretNames?: TerminalSecretNamesHandler;
