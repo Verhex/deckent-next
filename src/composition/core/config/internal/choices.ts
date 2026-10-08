@@ -7,14 +7,26 @@ import { inspectConfiguredModelCatalog } from '#composition/core/model-activatio
 import { IdentityProfileRegistry, installationOwnScopes, PoolControlPolicyAuthorization } from '#engine/index.js';
 import { executionRegistrySchema, policySchema } from '#domain/index.js';
 import { readLocalOsIdentity } from '#adapters/index.js';
-import { discoverConfigExecutables, discoverConfigBranches, discoverConfigImages, discoverConfigFiles, discoverConfigPools } from '#adapters/index.js';
-import { inspectProductDirectory, type ConfigLoadOptions } from '#platform/index.js';
+import { discoverConfigRecordFiles, readConfigRecordFile, discoverConfigExecutables, discoverConfigBranches, discoverConfigImages, discoverConfigFiles, discoverConfigPools } from '#adapters/index.js';
+import { ErrorRegistry, inspectProductDirectory, type ConfigLoadOptions } from '#platform/index.js';
 import type { ConfigChoiceSourcePort, ConfigValueChoice } from '#surfaces/index.js';
 /** Each inspection gets a fresh snapshot. No source grants write authority; ConfigApplication still admits the chosen value. */
 export function configuredConfigChoiceSources(root: string, options: ConfigLoadOptions): ConfigChoiceSourcePort {
   const reading = loadComposedConfig(root, { ...options, heal: false });
   const values = (entries: readonly string[], label: (value: string) => string = value => value): readonly ConfigValueChoice[] => entries.map((value, i) => ({ id: `r${i}`, label: label(value), value, detail: value }));
-  return { async list(source, keyPath) {
+  const files = new Set<string>();
+  return {
+    async browse(directory) {
+      const config = await reading;
+      const entries = await discoverConfigRecordFiles(directory, { timeoutMs: config.toolchains.currency.timeoutMs, outputBytes: config.toolchains.currency.responseMaxBytes, maxEntries: config.inspection.maxPageSize });
+      files.clear(); for (const entry of entries) if (entry.kind === 'file') files.add(entry.path);
+      return entries;
+    },
+    async readDocument(path) {
+      if (!files.has(path)) throw ErrorRegistry.createError('CONFIG_RECORD_INVALID');
+      const config = await reading; return readConfigRecordFile(path, config.cli.graphInputMaxBytes);
+    },
+    async list(source, keyPath, selection) {
     const config = await reading, env = options.env ?? process.env;
     const limits = { timeoutMs: config.toolchains.currency.timeoutMs, outputBytes: config.toolchains.currency.responseMaxBytes, maxEntries: config.inspection.maxPageSize };
     const scopeId = (config['terminal'] as { scopeId?: string } | undefined)?.scopeId;
@@ -26,7 +38,7 @@ export function configuredConfigChoiceSources(root: string, options: ConfigLoadO
     if (source === 'branches') {
       const git = (await discoverConfigExecutables('git', env, limits))[0]; if (!git) return [];
       const index = /\.targets\.(\d+)\.baseRef$/u.exec(keyPath)?.[1];
-      const target = index === undefined ? root : config.execution?.workTargets?.targets[Number(index)]?.path;
+      const target = selection?.path ?? (index === undefined ? root : config.execution?.workTargets?.targets[Number(index)]?.path);
       return target ? values(await discoverConfigBranches(git, target, env, limits), value => value.replace(/^refs\/heads\//u, '')) : [];
     }
     if (source === 'images') { const docker = (await discoverConfigExecutables('docker', env, limits))[0]; return docker ? values(await discoverConfigImages(docker, limits), id => `Docker · ${id.slice(7, 19)}`) : []; }

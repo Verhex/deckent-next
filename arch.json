@@ -944,7 +944,8 @@
         "src/surfaces/core/approval-presentation",
         "src/domain/core/policy",
         "src/platform/core/redaction",
-        "src/platform/core/config-fields"
+        "src/platform/core/config-fields",
+        "src/surfaces/core/config"
       ],
       "plan": "SURFACES"
     },
@@ -2285,7 +2286,11 @@
         "src/domain/core/principal",
         "src/surfaces/core/cli-kit",
         "src/surfaces/core/terminal-render",
-        "src/platform/core/config-fields"
+        "src/platform/core/config-fields",
+        "src/surfaces/core/cli-models",
+        "src/platform/core/host",
+        "src/platform/core/common",
+        "src/domain/core/provider-spend"
       ],
       "plan": "CONFIG-SURFACE"
     },
@@ -2330,7 +2335,8 @@
         "src/surfaces/core/config",
         "src/platform/core/managed-files",
         "src/domain/core/provider-catalog",
-        "src/adapters/core/contract"
+        "src/adapters/core/contract",
+        "src/platform/core/errors"
       ],
       "plan": "CONFIG-SURFACE"
     },
