@@ -505,7 +505,7 @@ Core contracts and never requires editing Core. Core-memory law 10 records this 
   package proves overlay without Core edits before Enterprise features are claimed. Tiers never grant authority.
   Current state (2026-10-07, wave 4): the package entry `deckent/extensions` registers provider/config units before one
   composition root seals the registries (late registration is a typed refusal; the SDK root exports no `register*`).
-  EXT-SERVICE-ENTRY candidate (2026-10-08, W2; not landed): a distribution registers its modules, then calls
+  EXT-SERVICE-ENTRY (2026-10-08, W2): a distribution registers its modules, then calls
   `runCli(argv, { serviceEntry? })` or lazy `runMcp(argv)` from `deckent/extensions`. `runCli` carries the
   distribution executable (`serviceEntry`, default `process.argv[1]`) through automatic service start and managed
   restart, replaying registrations in the new process; direct `runtime serve` retains the same-process registry.
