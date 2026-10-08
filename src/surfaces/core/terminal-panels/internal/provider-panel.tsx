@@ -9,7 +9,8 @@ import type { PanelLabels, PanelNotice, ProviderConnectOutcome, ProviderModelOut
 /** `/provider` as a list (T4 PROVIDER-CONNECT): each kind with its state and stored key name; connect (or replace the key) and disconnect. */
 export function providerPanelTree(view: ProviderPanelView, labels: ProviderPanelLabels, models = false): PickerTree {
   return { title: view.title, items: view.kinds.map((kind): PickerNode => ({ id: kind.id, label: kind.label, detail: kind.detail, keywords: [kind.id, ...(kind.keyName ? [kind.keyName] : [])],
-    ...(kind.blocked ? { blocked: { reason: kind.blocked } } : { childTitle: kind.label, children: [{ id: 'connect', label: kind.keyStored ? labels.actions.replace : labels.actions.connect },
+    ...(kind.blocked ? { blocked: { reason: kind.blocked } } : kind.legacy ? { childTitle: kind.label, children: [{ id: 'disconnect', label: labels.actions.disconnect }] }
+      : { childTitle: kind.label, children: [{ id: 'connect', label: kind.keyStored ? labels.actions.replace : labels.actions.connect },
       // T4-B: connect one of the kind's models (governed models.connect), offered where the host binds it and the kind lists models.
       ...(models && kind.models.length ? [{ id: 'model', label: labels.actions.model, ...(kind.modelBlocked ? { blocked: { reason: kind.modelBlocked } } : {}) }] : []),
       ...(kind.keyStored ? [{ id: 'disconnect', label: labels.actions.disconnect }] : [])] }) })) };

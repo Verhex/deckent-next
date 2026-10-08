@@ -43,6 +43,8 @@ const kindSchema = z.object({
 const positive = z.number().int().positive().safe();
 const registrySchema = z.object({ schemaVersion: z.literal(2), retrievedAt: z.string().regex(/^\d{4}-\d{2}-\d{2}$/u), note: z.string(),
   limits: z.object({ timeoutMs: positive, bodyPrefixBytes: positive }).strict(),
+  /** Key names an earlier release stored that no row uses any more (T4-A's shared OpenAI-compatible slot): `/provider` warns and offers removal. */
+  legacyKeys: z.array(z.object({ secretName: secretNameSchema, moveTo: z.string().regex(/^[a-z][a-z0-9-]{0,31}$/u) }).strict()).max(16).readonly().default([]),
   /** What a connected model's invocation profile starts with (data; the person can change the written profile on the governed config path). */
   profileDefaults: z.object({ requestMaxBytes: positive, responseMaxBytes: positive, timeoutMs: positive, maxInFlight: positive,
     maxOutputTokens: positive, currency: z.string().regex(/^[A-Z]{3}$/u) }).strict(),
@@ -56,6 +58,7 @@ const registry = registrySchema.parse(asset);
 export const PROVIDER_CONNECT_KINDS: readonly ProviderConnectKind[] = Object.freeze(registry.kinds);
 /** The check's time bound and how much of a refusal body is read to classify it (data, not code). */
 export const PROVIDER_CONNECT_LIMITS = Object.freeze({ ...registry.limits });
+export const PROVIDER_CONNECT_LEGACY_KEYS = registry.legacyKeys;
 /** The shipped registry (T4-B `models connect` reads kinds and profile defaults from it; a test may hand its own through the composition port). */
 export const PROVIDER_CONNECT_REGISTRY: ProviderConnectRegistry = registry;
 /** A registry document parsed by the same schema (test and Enterprise overlays use it; a malformed one throws). */

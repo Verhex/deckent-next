@@ -162,7 +162,9 @@ export type ProviderPanelKind = Readonly<{ id: string; label: string; detail: st
   endpointChoices: readonly Readonly<{ id: string; label: string; url: string }>[];
   /** T4-B: the models this kind can connect (its catalog seed, or the provider catalog's declared models), chosen from the list; empty: none.
    * `modelBlocked`: why "connect a model" cannot be offered now (e.g. no key stored yet), null when it can. */
-  models: readonly Readonly<{ id: string; label: string; detail: string }>[]; modelBlocked: string | null }>;
+  models: readonly Readonly<{ id: string; label: string; detail: string }>[]; modelBlocked: string | null;
+  /** (c) A key under a name no row uses any more: listed with a warning, its only action is removal. */
+  legacy?: true }>;
 export type ProviderPanelView = Readonly<{ title: string; kinds: readonly ProviderPanelKind[]; notes: readonly string[] }>;
 export type ProviderConnectRequest = Readonly<{ kind: string; endpoint: string | null; key: string | null }>;
 /** A connect's typed result as labelled rows (no key, no answer body); `stored`: the key went to the secret store. */

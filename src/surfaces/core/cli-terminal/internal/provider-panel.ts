@@ -4,6 +4,7 @@ import type { ModelConnectCommand, ModelConnectResult, ModelReference } from '#d
 import { buildInferenceServingPlan, readInferenceServingProfile } from '#engine/index.js';
 import type { PanelLine, ProviderConnectOutcome, ProviderConnectRequest, ProviderModelOutcome, ProviderModelRequest, ProviderPanelKind, ProviderPanelPort } from '#surfaces/core/terminal-panels/index.js';
 import type { ProviderConnectKindView, ProviderConnectProbeView, TerminalLaunchContext } from './context.js';
+import { scopeBudgeted } from './model-panel.js';
 
 /** The words of a kind: its catalog key comes with the adapter's data (an unknown key from newer data keeps the kind's id). */
 function kindLabel(kind: ProviderConnectKindView | undefined, id: string, locale: Locale): string {
@@ -54,7 +55,7 @@ function custodyText(backend: string, locale: Locale): string {
 }
 
 type Host = Pick<TerminalLaunchContext, 'providerConnect' | 'listSecretNames' | 'setSecret' | 'deleteSecret' | 'connectModel' | 'inspectDeclaredModels'>;
-const SEED = 'seed:', DECLARED = 'ref:';
+const SEED = 'seed:', DECLARED = 'ref:', LEGACY = 'legacy:';
 const referenceKey = (reference: ModelReference) => `${reference.providerId}@${reference.providerVersion}/${reference.modelId}@${reference.modelVersion}`;
 /** The connection's result as the window's rows: the model, what each governed step did, the key's name, spending and the service. */
 function modelLines(result: ModelConnectResult, label: string, locale: Locale): PanelLine[] {
@@ -148,7 +149,19 @@ export function providerPanelPort(root: string, scopeId: string, host: Host & { 
           modelBlocked: kind.priceRequired ? t('tui.provider.model.priceRequired', {}, locale)
             : kind.keyRequired && keyName !== null && names !== null && !stored ? t('tui.provider.model.needsKey', {}, locale) : null };
       });
+      // (c) A key kept under a name no row uses any more (T4-A's shared OpenAI-compatible slot): warned, removable, never used.
+      for (const legacy of connect.legacyKeys ?? []) {
+        if (names === null || !names.includes(legacy.secretName)) continue;
+        const target = kindLabel(kindOf(legacy.moveTo), legacy.moveTo, locale);
+        notes.push(t('tui.provider.legacy.note', { name: legacy.secretName, kind: target }, locale));
+        kinds.push({ id: `${LEGACY}${legacy.secretName}`, label: t('tui.provider.legacy.label', { name: legacy.secretName }, locale), detail: t('tui.provider.legacy.detail', { kind: target }, locale),
+          blocked: null, keyName: legacy.secretName, keyStored: true, endpointEditable: false, endpointDefault: null, keyRequired: true, endpointChoices: [], models: [], modelBlocked: null,
+          legacy: true });
+      }
       if (!host.setSecret) notes.push(t('tui.provider.note.noStore', {}, locale));
+      // (a): a connected model cannot answer without this scope's budget; the window says so before anything is connected.
+      try { if (!scopeBudgeted(await loadConfig(root, options) as Record<string, unknown>, scopeId)) notes.push(t('tui.budget.missing', { scope: scopeId }, locale)); }
+      catch { /* the profiles note above already names an unreadable configuration */ }
       return { title: t('tui.panel.provider.title', {}, locale), kinds, notes };
     },
     endpoint(kind, text) {
@@ -191,8 +204,9 @@ export function providerPanelPort(root: string, scopeId: string, host: Host & { 
       return { stored, title: ok ? t('tui.provider.result.ok', { kind: label }, locale) : t('tui.provider.result.refused', { kind: label }, locale), lines: [check, ...where, keyLine, next] };
     },
     async disconnect(id) {
-      const kind = kindOf(id), name = kind?.secretName;
-      if (!kind || !name || !host.deleteSecret) return [t('tui.provider.note.noStore', {}, locale)];
+      const legacy = id.startsWith(LEGACY) ? (connect.legacyKeys ?? []).find(item => `${LEGACY}${item.secretName}` === id) : undefined;
+      const kind = kindOf(id), name = legacy?.secretName ?? kind?.secretName;
+      if ((!kind && !legacy) || !name || !host.deleteSecret) return [t('tui.provider.note.noStore', {}, locale)];
       const change = await host.deleteSecret(root, { schemaVersion: 1, scopeId, name }, options);
       const using = (await refs().catch(() => [] as readonly string[])).filter(ref => ref === name).length;
       return [change.removed ? t('tui.provider.disconnected', { name }, locale) : t('tui.provider.notStored', { name }, locale),

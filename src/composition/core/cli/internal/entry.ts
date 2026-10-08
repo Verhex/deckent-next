@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { previewConfiguredIdentityProfile, listIdentityProfiles } from '#composition/core/identity-profile/index.js';
 import { ensureConfiguredTerminalIdentity, inspectConfiguredInstallationBinding, resolveConfiguredInstallationIdentity, loadConfiguredInstallationIdentity, loadConfiguredProjectIdentity } from '#composition/core/scoped-request/index.js';
-import { unifiedDiff, readInstallationProfileFile, isSelfSourceProject, PROVIDER_CONNECT_KINDS, probeProviderConnection, providerEndpoint, providerConnectFamily, providerConnectKind,
+import { unifiedDiff, readInstallationProfileFile, isSelfSourceProject, PROVIDER_CONNECT_KINDS, PROVIDER_CONNECT_LEGACY_KEYS, probeProviderConnection, providerEndpoint, providerConnectFamily, providerConnectKind,
   providerConnectSecretName, readProviderConnectSeed } from '#adapters/index.js';
 import { composeCore } from '#composition/core/root/index.js';
 import { createConfiguredConfigApplication, resolveConfiguredConfigPrincipal, configuredConfigChoiceSources } from '#composition/core/config/index.js';
@@ -71,6 +71,7 @@ export async function main(argv: readonly string[] = process.argv.slice(2)) {
       endpointChoices: kind.endpoint.choices, connectFamily: providerConnectFamily(kind), seeded: Boolean(kind.connect?.seed),
       priceRequired: kind.connect?.priceRequired ?? false })),
     endpoint: providerEndpoint, probe: (input, signal) => probeProviderConnection(input, signal ? { signal } : {}),
+    legacyKeys: PROVIDER_CONNECT_LEGACY_KEYS,
     // T4-B: the per-connection key name (the generic row derives it from the host) and a seeded kind's models (exact ids from its packaged seed).
     secretName: (id, endpoint) => { const kind = providerConnectKind(id); if (!kind) return null; const base = endpoint === null ? null : providerEndpoint(endpoint);
       return providerConnectSecretName(kind, base?.ok ? base.base : null); },

@@ -7,6 +7,8 @@ import { registerProviderConfig } from '#adapters/index.js';
 import { providerEndpoint } from '#adapters/core/provider-connect/index.js';
 import { modelPanelSource, providerOutcomeWord, providerPanelPort, type ProviderConnectHost, type TerminalLaunchContext } from '#surfaces/core/cli-terminal/index.js';
 import type { ModelConnectCommand, ModelConnectResult } from '#domain/index.js';
+import { providerPanelTree } from '#surfaces/core/terminal-panels/index.js';
+import { terminalPanelLabels } from '#surfaces/core/work-labels/index.js';
 
 // T4-A ports over the host's handlers (no runtime, no network): `/provider` runs the free check and sends the key only to the secret store
 // handler, and only when the check passes; `/model` lists declared models with the first missing precondition as the reason.
@@ -18,7 +20,10 @@ afterEach(async () => { clearConfigCache(); await Promise.all(roots.splice(0).ma
 async function project(config: Record<string, unknown>) {
   const root = await mkdtemp(join(tmpdir(), 'deckent-t4-ports-')); roots.push(root);
   await mkdir(join(root, '.deckent'), { recursive: true });
-  await writeFile(join(root, '.deckent/config.json'), JSON.stringify(config), { mode: 0o600 });
+  // Scope 'scope' has a spending budget unless the test removes it (T4-B (a): without one every model row is locked).
+  const budget = { provider_spending: { schemaVersion: 1, budgets: [{ schemaVersion: 1, scopeId: 'scope', budgetId: 'b', revision: 1, currency: 'USD', limitMinorUnits: 100 }] } };
+  await writeFile(join(root, '.deckent/config.json'), JSON.stringify(config['provider_spending'] === null ? Object.fromEntries(Object.entries(config).filter(([key]) => key !== 'provider_spending'))
+    : { ...budget, ...config }), { mode: 0o600 });
   return { root, options: { env: { DECKENT_GLOBAL_HOME: join(root, 'global'), HOME: join(root, 'home') } } };
 }
 const reference = { providerId: 'local-openai', providerVersion: 1, modelId: 'chat', modelVersion: 1 };
@@ -260,6 +265,31 @@ describe('/model source', () => {
     expect(outcome.lines.at(-1)).toBe('This project names its own model, so the project setting still wins here.');
     source = 'user-default';
     expect((await source0.inspect()).notes).toContain('In use: chat (your default model).');
+  });
+  it('(c) an old key name is warned, listed with removal as its only action, and removed through the store', async () => {
+    const { root, options } = await project({});
+    const store = secrets(['DECKENT_OPENAI_COMPATIBLE_KEY']);
+    const connect = { ...connectHost('ok'), legacyKeys: [{ secretName: 'DECKENT_OPENAI_COMPATIBLE_KEY', moveTo: 'anthropic-api' }] };
+    const port = providerPanelPort(root, 'scope', { ...store.host, providerConnect: connect }, options, 'en', errorText);
+    const view = await port.inspect();
+    expect(view.notes).toContain('An old key name was found: DECKENT_OPENAI_COMPATIBLE_KEY. No connection uses it any more; store the key again on Anthropic API, then remove the old one.');
+    const legacy = view.kinds.at(-1)!;
+    expect(legacy).toMatchObject({ id: 'legacy:DECKENT_OPENAI_COMPATIBLE_KEY', label: 'Old key name DECKENT_OPENAI_COMPATIBLE_KEY', legacy: true });
+    expect(providerPanelTree(view, terminalPanelLabels('en').provider, true).items.at(-1)!.children!.map(child => child.id)).toEqual(['disconnect']);
+    expect(await port.disconnect(legacy.id)).toEqual(['The stored key DECKENT_OPENAI_COMPATIBLE_KEY was removed.']);
+    expect(store.deletes).toEqual([{ schemaVersion: 1, scopeId: 'scope', name: 'DECKENT_OPENAI_COMPATIBLE_KEY' }]);
+  });
+
+  it('(a) without a spending budget for the scope every model row is locked with the typed reason and the window names the next step', async () => {
+    const { root, options } = await project({ provider_spending: null, provider_invocation_profiles: { schemaVersion: 1, profiles: [profile(ref('chat'), null)] } });
+    const view = await modelPanelSource(root, 'scope', {
+      inspectDeclaredModels: async () => ({ schemaVersion: 1, status: 'declared', availability: 'not-observed', catalog }) as never,
+      inspectModelActivation: async (_root, query) => ({ schemaVersion: 1, scopeId: 'scope', reference: query.reference, availability: 'not-observed', activation: { state: 'active', revision: 1 } }) as never,
+    }, options, 'en').inspect();
+    expect(view.choices.every(choice => choice.blocked === 'No spending budget for this scope (PROVIDER_SPEND_UNAVAILABLE).')).toBe(true);
+    expect(view.notes[0]).toContain('No spending budget is set for scope scope'); expect(view.notes[0]).toContain('provider_spending.budgets');
+    const provider = await providerPanelPort(root, 'scope', { ...secrets([]).host, providerConnect: connectHost('ok') }, options, 'en', errorText).inspect();
+    expect(provider.notes).toContain(view.notes[0]);
   });
   it('an empty catalog says models are never added from here', async () => {
     const { root, options } = await project({});

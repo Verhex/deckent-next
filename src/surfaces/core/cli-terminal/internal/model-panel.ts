@@ -27,6 +27,9 @@ function profilesOf(config: Record<string, unknown>, scopeId: string): readonly 
     return value.scopeId === scopeId && value.reference ? [{ reference: value.reference, credentialRef: typeof ref === 'string' ? ref : null }] : [];
   });
 }
+/** Whether this scope has a provider spending budget (the typed refusal without one: PROVIDER_SPEND_UNAVAILABLE). */
+export const scopeBudgeted = (config: Record<string, unknown>, scopeId: string) =>
+  ((config['provider_spending'] as { budgets?: readonly { scopeId?: unknown }[] } | undefined)?.budgets ?? []).some(budget => budget.scopeId === scopeId);
 const errorCode = (error: unknown) => String((error as { code?: unknown })?.code ?? 'failed');
 
 /**
@@ -45,7 +48,10 @@ export function modelPanelSource(root: string, scopeId: string, host: Host, opti
       if (!declared || declared.status !== 'declared' || declared.catalog.providers.every(provider => provider.models.length === 0)) {
         return { title, choices: [], notes: [t('tui.model.noneDeclared', {}, locale)], defaultBlocked: defaultBlocked() };
       }
-      const profiles = profilesOf(await loadConfig(root, options) as Record<string, unknown>, scopeId);
+      const config = await loadConfig(root, options) as Record<string, unknown>, profiles = profilesOf(config, scopeId);
+      // (a) owner 2026-10-08: every model call reserves against this scope's budget; without one each turn is refused PROVIDER_SPEND_UNAVAILABLE.
+      const budgeted = scopeBudgeted(config, scopeId);
+      if (!budgeted) notes.push(t('tui.budget.missing', { scope: scopeId }, locale));
       let names: readonly string[] | null = null;
       if (host.listSecretNames) { try { names = (await host.listSecretNames(root, options)).names; } catch { names = null; } }
       const plan = host.describeTerminalChatPlan ? await host.describeTerminalChatPlan(root, options).catch(() => null) : null;
@@ -67,7 +73,8 @@ export function modelPanelSource(root: string, scopeId: string, host: Host, opti
         const exact = `${provider.id}@${provider.version}/${model.id}@${model.version}`;
         const profile = profiles.find(item => sameReference(item.reference, reference));
         let blocked: string | null = null, command: string | null = null;
-        if (!profile) blocked = t('tui.model.reason.noProfile', {}, locale);
+        if (!budgeted) blocked = t('tui.model.reason.noBudget', {}, locale);
+        else if (!profile) blocked = t('tui.model.reason.noProfile', {}, locale);
         else if (profile.credentialRef && names !== null && !names.includes(profile.credentialRef)) blocked = t('tui.model.reason.keyMissing', { name: profile.credentialRef }, locale);
         else if (host.inspectModelActivation) {
           try {

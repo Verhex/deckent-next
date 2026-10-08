@@ -46,6 +46,8 @@ export interface ProviderConnectHost {
   endpoint(text: string): Readonly<{ ok: true; base: string }> | Readonly<{ ok: false; reason: string }>;
   probe(input: Readonly<{ kind: string; endpoint: string | null; key: string | null }>, signal?: AbortSignal): Promise<ProviderConnectProbeView>;
   /** T4-B: the key's store name at an address (the generic row derives it from the host); the seed models of a seeded kind (exact ids, names). */
+  /** Key names an earlier release stored that no row uses any more, and the row to store the key under instead (registry data). */
+  readonly legacyKeys?: readonly Readonly<{ secretName: string; moveTo: string }>[];
   secretName?(kind: string, endpoint: string | null): string | null;
   seedModels?(kind: string): Promise<readonly Readonly<{ nativeId: string; displayName: string }>[]>;
 }
