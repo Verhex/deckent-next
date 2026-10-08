@@ -5,7 +5,7 @@ import { createGlobMatcher } from '#adapters/core/workspace-read/index.js';
  * CI, package manifests, Deckent and agent configuration. Reads of secret paths are already denied by the workspace scope.
  */
 export const WORKSPACE_WRITE_APPROVAL_FLOOR: readonly string[] = Object.freeze(['.github/**', '.gitlab-ci.yml', '.circleci/**', '.husky/**', '**/.husky/**',
-  'package.json', '**/package.json', 'package-lock.json', '.deckent/**', '.claude/**', '.cursor/**', '.agents/**', 'AGENTS.md', 'CLAUDE.md', 'Makefile', 'Dockerfile']);
+  'package.json', '**/package.json', 'package-lock.json', '.deckent/**', '.claude/**', '.cursor/**', '.agents/**', 'DECKENT.md', 'AGENTS.md', 'CLAUDE.md', 'Makefile', 'Dockerfile']);
 const floorMatchers = WORKSPACE_WRITE_APPROVAL_FLOOR.map(createGlobMatcher);
 /** True when a resolved workspace-relative path is on the approval floor. */
 export const isWriteApprovalFloored = (rel: string) => floorMatchers.some(match => match(rel));

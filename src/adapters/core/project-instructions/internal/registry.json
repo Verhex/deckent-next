@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "files": ["DECKENT.md", "AGENTS.md"],
+  "maxBytes": 32768,
+  "projectFactsMaxBytes": 65536,
+  "bridges": [
+    { "id": "claude-code", "path": "CLAUDE.md", "line": "@DECKENT.md", "marker": ".claude" },
+    { "id": "agents-md", "path": "AGENTS.md", "line": "Read DECKENT.md", "marker": ".codex" }
+  ]
+}

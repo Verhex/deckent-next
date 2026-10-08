@@ -266,7 +266,8 @@
         "src/composition/core/decision",
         "src/composition/core/scoped-request",
         "src/composition/core/root",
-        "src/composition/core/identity-profile"
+        "src/composition/core/identity-profile",
+        "src/composition/core/project-instructions"
       ],
       "plan": "SURFACES"
     },
@@ -979,7 +980,9 @@
         "src/surfaces/core/terminal-theme",
         "src/surfaces/core/terminal-picker",
         "src/surfaces/core/terminal-window",
-        "src/surfaces/core/terminal-panels"
+        "src/surfaces/core/terminal-panels",
+        "src/surfaces/core/project-instructions",
+        "src/engine/core/project-instructions"
       ],
       "plan": "SURFACES"
     },
@@ -1024,7 +1027,8 @@
         "src/platform/core/config",
         "src/platform/core/errors",
         "src/platform/core/i18n",
-        "src/platform/core/output"
+        "src/platform/core/output",
+        "src/engine/core/project-instructions"
       ],
       "plan": "SURFACES"
     },
@@ -1105,7 +1109,9 @@
         "src/surfaces/core/terminal-labels",
         "src/surfaces/core/work-labels",
         "src/surfaces/core/terminal-panels",
-        "src/surfaces/core/terminal-picker"
+        "src/surfaces/core/terminal-picker",
+        "src/engine/core/project-instructions",
+        "src/surfaces/core/project-instructions"
       ],
       "plan": "SURFACES"
     },
@@ -2451,6 +2457,56 @@
     "src/adapters/core/mcp-import": {
       "dependencies": [
         "src/adapters/core/mcp-client"
+      ],
+      "plan": "SURFACES"
+    },
+    "src/engine/core/project-instructions": {
+      "dependencies": [],
+      "plan": "SURFACES"
+    },
+    "src/adapters/core/project-instructions": {
+      "dependencies": [
+        "src/engine/core/project-instructions",
+        "src/platform/core/redaction"
+      ],
+      "plan": "SURFACES"
+    },
+    "src/composition/core/project-instructions": {
+      "dependencies": [
+        "src/platform/core/config",
+        "src/platform/core/host",
+        "src/platform/core/managed-files",
+        "src/platform/core/clock",
+        "src/composition/core/root",
+        "src/composition/core/scoped-request",
+        "src/composition/core/policy",
+        "src/composition/core/approvals",
+        "src/adapters/core/project-instructions",
+        "src/adapters/core/workspace-read",
+        "src/adapters/core/workspace-write",
+        "src/adapters/core/local-principal",
+        "src/adapters/core/local-keyring",
+        "src/adapters/core/attempt-store",
+        "src/adapters/core/approval-store",
+        "src/engine/core/project-instructions",
+        "src/engine/core/effect",
+        "src/engine/core/approval",
+        "src/domain/core/effect",
+        "src/platform/core/redaction"
+      ],
+      "plan": "SURFACES"
+    },
+    "src/surfaces/core/project-instructions": {
+      "dependencies": [
+        "src/engine/core/project-instructions",
+        "src/platform/core/i18n",
+        "src/platform/core/errors",
+        "src/platform/core/output",
+        "src/platform/core/config",
+        "src/surfaces/core/terminal-render",
+        "src/surfaces/core/terminal-window",
+        "src/surfaces/core/terminal-kit",
+        "src/surfaces/core/terminal-theme"
       ],
       "plan": "SURFACES"
     }

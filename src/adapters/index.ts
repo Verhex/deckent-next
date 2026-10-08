@@ -83,3 +83,5 @@ export * from '#adapters/core/provider-decision-http/index.js';
 export * from '#adapters/core/decision-store/index.js';
 export { readDecisionPolicy } from '#adapters/core/contract/index.js';
 export * from '#adapters/core/provider-connect/index.js';
+
+export * from '#adapters/core/project-instructions/index.js';

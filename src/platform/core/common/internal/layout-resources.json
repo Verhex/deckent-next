@@ -27,7 +27,8 @@
     "terminalSessions": "state/terminal-sessions",
     "fileEffects": "state/file-effects",
     "approvalPreviews": "state/approval-previews",
-    "scratch": "state/scratch"
+    "scratch": "state/scratch",
+    "instructionTrust": "state/instruction-trust"
   },
   "bootstrapResource": "config",
   "fixedResources": ["config", "installationJournal", "projectIdentity"],
