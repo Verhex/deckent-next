@@ -33,12 +33,15 @@ const kindSchema = z.object({
    * declared in the provider catalog). Null: the kind stores a key but no model can be connected to it yet. */
   connect: z.object({ adapter: z.enum(PROVIDER_CONNECT_ADAPTERS), chatPath: z.string().regex(/^\/[A-Za-z0-9/._-]{1,127}$/u),
     seed: z.string().regex(/^[a-z0-9][a-z0-9-]{0,63}$/u).nullable(),
+    /** Optional provider counter on the same endpoint origin; only Anthropic exposes this connection path here. */
+    tokenCountPath: z.string().regex(/^\/[A-Za-z0-9/._-]{1,127}$/u).optional(),
     /** Owner 2026-10-08: no paid call to a remote endpoint without a verified price. `true`: a remote (non-loopback) address needs the operator's
      * declared price, which the SPEND-SETTLEMENT lane brings; until then such a connection is refused (`MODEL_CONNECT_PRICE_REQUIRED`). */
     priceRequired: z.boolean().default(false),
     /** K1: the provider's documented request dialect (OpenAI chat adapter v5; required for that adapter, refused for the Anthropic one). */
     dialect: openAiChatDialectSchema.optional() }).strict()
-    .refine(connect => (connect.adapter === 'openai-chat-http') === (connect.dialect !== undefined)).nullable().default(null),
+    .refine(connect => (connect.adapter === 'openai-chat-http') === (connect.dialect !== undefined))
+    .refine(connect => connect.tokenCountPath === undefined || connect.adapter === 'anthropic-messages-http').nullable().default(null),
 }).strict().readonly();
 const positive = z.number().int().positive().safe();
 const registrySchema = z.object({ schemaVersion: z.literal(2), retrievedAt: z.string().regex(/^\d{4}-\d{2}-\d{2}$/u), note: z.string(),

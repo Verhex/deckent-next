@@ -30,7 +30,7 @@ export interface ModelInvocationProfileSource {
 }
 export interface ModelInvocationNativePort {
   /** Pure validation/serialization only: no network, credential lookup or other external effect. */
-  prepare(profile: ModelInvocationProfile, definition: ModelBindingDefinition, nativeRequest: JsonObject): Promise<unknown>;
+  prepare(profile: ModelInvocationProfile, definition: ModelBindingDefinition, nativeRequest: JsonObject, signal?: AbortSignal): Promise<unknown>;
   /** Pure upper bound for serialized {schemaVersion,native,usage}; required by bounded result callers. */
   responseBytesUpperBound?(prepared: unknown): bigint;
   /** The model execution transport operation; authorized metadata acquisition is separate. A streaming adapter may
@@ -156,7 +156,7 @@ export class ModelInvocationApplication {
       { scopeId: command.scopeId, reference: command.reference }, principal));
     const { binding, profile, native } = await this.admittedTarget(command);
     if (!native.measure) return null;
-    const prepared = await native.prepare(profile, binding.definition, command.nativeRequest);
+    const prepared = await native.prepare(profile, binding.definition, command.nativeRequest, signal);
     if (signal?.aborted) throw new ModelInvocationStoreError('MODEL_INVOCATION_UNAVAILABLE');
     const counted = await native.measure(prepared, signal);
     if (!counted || !Number.isSafeInteger(counted.promptTokens) || counted.promptTokens < 0
@@ -186,7 +186,7 @@ export class ModelInvocationApplication {
       const { binding, activation, profile, native } = await this.admittedTarget(command);
       if (!this.spending) throw new ProviderSpendError('PROVIDER_SPEND_UNAVAILABLE');
       await acquireModelInvocationEvidence(this.natives, { profile, definition: binding.definition, native }, signal);
-      const prepared = await native.prepare(profile, binding.definition, command.nativeRequest);
+      const prepared = await native.prepare(profile, binding.definition, command.nativeRequest, signal);
       if (signal?.aborted) throw new ModelInvocationStoreError('MODEL_INVOCATION_UNAVAILABLE');
       // New claims require spending authority. Historical replay above never requotes or reserves again.
       // Preparation/quote precede fresh policy + binding/profile checks, then evidence/delivery admission.
