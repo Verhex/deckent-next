@@ -1,3 +1,6 @@
+import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { expect, it } from 'vitest';
 import { main } from '#surfaces/index.js';
 
@@ -5,11 +8,34 @@ import { main } from '#surfaces/index.js';
 // from the real composition wiring (fake context handlers), mirroring installation-apply-cli.test.ts's style
 // for the heavy install (through the public `main` entry, exit codes rather than thrown errors).
 function context(overrides: Record<string, unknown> = {}) {
-  return { root: '/project', env: {},
+  return { root: '/project', env: { HOME: '/tmp/deckent-init-policy-surface-home' },
     async previewPolicyTemplateInstallation(root: string, scopeId: string) { return { status: 'preview', root, scopeId }; },
     async applyPolicyTemplateInstallation(root: string, scopeId: string) { return { status: 'installed', root, scopeId }; },
     ...overrides };
 }
+
+it('upgrade uses the saved session language and names current rules without a stale version; explicit language and environment still win', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'deckent-init-language-'));
+  try {
+    await mkdir(join(root, '.deckent'));
+    await writeFile(join(root, '.deckent/config.json'), JSON.stringify({ schema_version: 4, language: 'tr' }));
+    for (const basis of ['first-run', 'named-person']) for (const status of ['preview', 'upgraded', 'current']) {
+      const output: string[] = [];
+      const ctx = context({ root, env: { HOME: join(root, 'home') },
+        async upgradePolicyTemplateInstallation() { return { status, basis, revision: 'r', rules: [] }; },
+        stdout: { write: (text: string) => { output.push(text); return true; } } });
+      const argv = ['init', 'policy', '--scope', 'installation', '--upgrade', status === 'preview' ? '--preview' : '--apply'];
+      expect(await main(argv, ctx)).toBe(0);
+      expect(output.join('')).toContain('güncel şablon kurallar'); expect(output.join('')).not.toContain('v5');
+      output.length = 0;
+      expect(await main([...argv, '--lang', 'en'], ctx)).toBe(0);
+      expect(output.join('')).toContain('current template rules'); expect(output.join('')).not.toContain('v5');
+      output.length = 0;
+      expect(await main(argv, { ...ctx, env: { ...ctx.env, DECKENT_LANGUAGE: 'en' } })).toBe(0);
+      expect(output.join('')).toContain('current template rules');
+    }
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
 
 it('requires exactly one of --preview/--apply and an explicit --scope', async () => {
   for (const argv of [['init', 'policy'], ['init', 'policy', '--scope', 'x'], ['init', 'policy', '--preview'],
