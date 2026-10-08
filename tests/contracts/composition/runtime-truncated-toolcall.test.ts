@@ -5,7 +5,7 @@ import { AGENT_TURN_SYSTEM_PROMPT_VERSION } from '#engine/index.js';
 import type { AgentTurnMessage, AgentTurnStreamEvent } from '#domain/index.js';
 import type { TurnDelta } from '#surfaces/index.js';
 import { cancelRuntimeChatTurn, runRuntimeChatTurn } from '#composition/core/runtime-service/index.js';
-import { streamTerminalAgentTurn } from '#composition/core/terminal-chat/index.js';
+import { streamTerminalAgentTurn } from '#surfaces/core/terminal-turn/index.js';
 import { me, runtime } from '../support/chat-turn-harness.js';
 
 // TRUNCATED-TOOLCALL (live 2026-09-30, 18:12–18:18 UTC): vLLM v0.30.0 streams a tool call cut at max_completion_tokens with finish_reason

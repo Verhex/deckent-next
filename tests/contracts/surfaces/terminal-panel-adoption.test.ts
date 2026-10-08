@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { readLocalOsIdentity, openTerminalSessionStore } from '#adapters/index.js';
 import { clearConfigCache, snapshotKnownSecrets } from '#platform/index.js';
 import { ensureConfiguredTerminalIdentity, loadConfiguredInstallationIdentity, loadConfiguredProjectIdentity, loadConfiguredPeerScopeContext } from '#composition/core/scoped-request/index.js';
-import { streamTerminalAgentTurn, type TerminalAgentTurnPorts } from '#composition/core/terminal-chat/index.js';
+import { streamTerminalAgentTurn, type TerminalAgentTurnPorts } from '#surfaces/core/terminal-turn/index.js';
 import { main } from '#surfaces/index.js';
 import * as kit from '#surfaces/core/terminal-kit/index.js';
 import type { ChatTurnCommand, ChatTurnCancellation, ChatTurnResult } from '#domain/index.js';

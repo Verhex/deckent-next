@@ -267,7 +267,10 @@
         "src/composition/core/scoped-request",
         "src/composition/core/root",
         "src/composition/core/identity-profile",
-        "src/composition/core/model-connect"
+        "src/composition/core/model-connect",
+        "src/surfaces/core/terminal-turn",
+        "src/composition/core/project-instructions",
+        "src/composition/core/backup"
       ],
       "plan": "SURFACES"
     },
@@ -401,7 +404,6 @@
     },
     "src/composition/core/terminal-chat": {
       "dependencies": [
-        "src/domain/core/agent-turn",
         "src/surfaces/core/terminal-kit",
         "src/adapters/core/contract",
         "src/composition/core/provider-catalog",
@@ -503,7 +505,6 @@
         "src/domain/core/model-invocation",
         "src/domain/core/policy",
         "src/domain/core/provider-spend",
-        "src/engine/core/agent-turn",
         "src/engine/core/approval",
         "src/engine/core/dispatch",
         "src/engine/core/model-invocation",
@@ -531,7 +532,9 @@
         "src/adapters/core/git-workspace",
         "src/composition/core/toolchains",
         "src/engine/core/config",
-        "src/composition/core/root"
+        "src/composition/core/root",
+        "src/composition/core/backup",
+        "src/engine/core/backup"
       ],
       "plan": "EXECUTION"
     },
@@ -694,7 +697,8 @@
         "src/engine/core/approval",
         "src/engine/core/agent-turn",
         "src/engine/core/effect",
-        "src/platform/core/errors"
+        "src/platform/core/errors",
+        "src/engine/core/provider-spend"
       ],
       "plan": "EXECUTION"
     },
@@ -851,6 +855,17 @@
       ],
       "plan": "SURFACES"
     },
+    "src/surfaces/core/terminal-turn": {
+      "dependencies": [
+        "src/domain/core/agent-turn",
+        "src/domain/core/provider-catalog",
+        "src/engine/core/agent-turn",
+        "src/platform/core/config",
+        "src/platform/core/errors",
+        "src/surfaces/core/terminal-kit"
+      ],
+      "plan": "SURFACES"
+    },
     "src/surfaces/core/work-labels": {
       "dependencies": [
         "src/platform/core/i18n",
@@ -983,7 +998,9 @@
         "src/surfaces/core/terminal-theme",
         "src/surfaces/core/terminal-picker",
         "src/surfaces/core/terminal-window",
-        "src/surfaces/core/terminal-panels"
+        "src/surfaces/core/terminal-panels",
+        "src/surfaces/core/project-instructions",
+        "src/engine/core/project-instructions"
       ],
       "plan": "SURFACES"
     },
@@ -1028,7 +1045,8 @@
         "src/platform/core/config",
         "src/platform/core/errors",
         "src/platform/core/i18n",
-        "src/platform/core/output"
+        "src/platform/core/output",
+        "src/engine/core/project-instructions"
       ],
       "plan": "SURFACES"
     },
@@ -1070,7 +1088,8 @@
         "src/platform/core/utils",
         "src/surfaces/core/cli-identity",
         "src/surfaces/core/work-labels",
-        "src/surfaces/core/cli-terminal"
+        "src/surfaces/core/cli-terminal",
+        "src/engine/core/backup"
       ],
       "plan": "SURFACES"
     },
@@ -1110,7 +1129,9 @@
         "src/surfaces/core/work-labels",
         "src/surfaces/core/terminal-panels",
         "src/surfaces/core/terminal-picker",
-        "src/domain/core/model-activation"
+        "src/domain/core/model-activation",
+        "src/engine/core/project-instructions",
+        "src/surfaces/core/project-instructions"
       ],
       "plan": "SURFACES"
     },
@@ -1717,7 +1738,8 @@
         "src/engine/core/shell-classification",
         "src/platform/core/host",
         "src/platform/core/managed-files",
-        "src/domain/core/agent-turn"
+        "src/domain/core/agent-turn",
+        "src/platform/core/i18n"
       ],
       "plan": "SURFACES"
     },
@@ -1762,7 +1784,9 @@
         "src/domain/core/attempt",
         "src/domain/core/worker-event",
         "src/engine/core/worker-observation",
-        "src/platform/core/clock"
+        "src/platform/core/clock",
+        "src/adapters/core/file-artifacts",
+        "src/adapters/core/attempt-store"
       ],
       "plan": "EXECUTION"
     },
@@ -2489,6 +2513,102 @@
         "src/adapters/core/mcp-client"
       ],
       "plan": "SURFACES"
+    },
+    "src/engine/core/project-instructions": {
+      "dependencies": [],
+      "plan": "SURFACES"
+    },
+    "src/adapters/core/project-instructions": {
+      "dependencies": [
+        "src/engine/core/project-instructions",
+        "src/platform/core/redaction"
+      ],
+      "plan": "SURFACES"
+    },
+    "src/composition/core/project-instructions": {
+      "dependencies": [
+        "src/platform/core/config",
+        "src/platform/core/host",
+        "src/platform/core/managed-files",
+        "src/platform/core/clock",
+        "src/composition/core/root",
+        "src/composition/core/scoped-request",
+        "src/composition/core/policy",
+        "src/composition/core/approvals",
+        "src/adapters/core/project-instructions",
+        "src/adapters/core/workspace-read",
+        "src/adapters/core/workspace-write",
+        "src/adapters/core/local-principal",
+        "src/adapters/core/local-keyring",
+        "src/adapters/core/attempt-store",
+        "src/adapters/core/approval-store",
+        "src/engine/core/project-instructions",
+        "src/engine/core/effect",
+        "src/engine/core/approval",
+        "src/domain/core/effect",
+        "src/platform/core/redaction"
+      ],
+      "plan": "SURFACES"
+    },
+    "src/surfaces/core/project-instructions": {
+      "dependencies": [
+        "src/engine/core/project-instructions",
+        "src/platform/core/i18n",
+        "src/platform/core/errors",
+        "src/platform/core/output",
+        "src/platform/core/config",
+        "src/surfaces/core/terminal-render",
+        "src/surfaces/core/terminal-window",
+        "src/surfaces/core/terminal-kit",
+        "src/surfaces/core/terminal-theme"
+      ],
+      "plan": "SURFACES"
+    },
+    "src/engine/core/backup": {
+      "dependencies": [
+        "src/domain/core/audit",
+        "src/domain/core/policy",
+        "src/platform/core/errors",
+        "src/domain/core/principal",
+        "src/platform/core/integrity"
+      ],
+      "plan": "BACKUP-COMMAND"
+    },
+    "src/adapters/core/backup-store": {
+      "dependencies": [
+        "src/platform/core/host",
+        "src/engine/core/audit",
+        "src/domain/core/audit",
+        "src/platform/core/integrity",
+        "src/platform/core/errors",
+        "src/engine/core/backup",
+        "src/adapters/core/installation-files",
+        "src/adapters/core/local-runtime-socket",
+        "src/platform/core/config-fields",
+        "src/platform/core/utils",
+        "src/platform/core/config"
+      ],
+      "plan": "BACKUP-COMMAND"
+    },
+    "src/composition/core/backup": {
+      "dependencies": [
+        "src/domain/core/policy",
+        "src/domain/core/principal",
+        "src/engine/core/backup",
+        "src/adapters/core/backup-store",
+        "src/adapters/core/local-principal",
+        "src/adapters/core/local-keyring",
+        "src/adapters/core/installation-files",
+        "src/platform/core/errors",
+        "src/platform/core/host",
+        "src/platform/core/config",
+        "src/composition/core/root",
+        "src/composition/core/policy",
+        "src/adapters/core/sqlite-ledger",
+        "src/adapters/core/contract",
+        "src/platform/core/managed-files"
+      ],
+      "plan": "BACKUP-COMMAND"
     }
   },
   "composition": {

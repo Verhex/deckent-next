@@ -53,7 +53,7 @@ it('is deterministic: the same scope/principal always yields the same plan and t
 it('writes a complete pending journal before any effect, then commits after both targets publish', async () => {
   const source = prepared(), memory = memoryPorts();
   const result = await new PolicyTemplateInstallationApplication(memory.ports).apply(source);
-  expect(result).toMatchObject({ status: 'installed', template: { id: 'first-run-template', version: 7 }, scopeId: 'installation' });
+  expect(result).toMatchObject({ status: 'installed', template: { id: 'first-run-template', version: 8 }, scopeId: 'installation' });
   expect(memory.writes[0]).toMatchObject({ phase: 'pending', transactionId: source.preview.transactionId, planDigest: source.preview.planDigest,
     resources: [{ resource: 'policy', state: 'pending' }, { resource: 'bindings', state: 'pending' }] });
   expect(memory.state.record).toMatchObject({ phase: 'committed', blockers: [], resources: [{ state: 'published' }, { state: 'published' }] });

@@ -36,7 +36,9 @@ export const FIRST_RUN_POLICY_TEMPLATE_ID = 'first-run-template';
  * and inspect, audit, reconcile and revise the provider spend accounts of the installed scope (`provider-spend-account`), so `models connect`,
  * terminal turns and the governed budget revision work on a fresh installation; every activation, call and spend is still decided, budgeted and
  * recorded per call. */
-export const FIRST_RUN_POLICY_TEMPLATE_VERSION = 7;
+/** v8 (BACKUP-COMMAND, owner 2026-10-08): the installing owner may create, verify and restore recovery sets (`backup`, every scope: a
+ * recovery set is installation-wide); restore still needs the service stopped and every operation is audited. */
+export const FIRST_RUN_POLICY_TEMPLATE_VERSION = 8;
 /** The hard-floor tool-call cells (write floor and configuration file, destructive and always-ask shell, every fetch, every MCP call): only the
  * terminal of the turn that asked may allow them. The same set is Core's default in the approval engine (a test keeps the two equal). */
 export const HARD_FLOOR_CARD_CELLS = Object.freeze(['edit-floor', 'edit-self-source', 'edit-authority', 'shell-destructive', 'shell-always-ask', 'fetch-listed', 'fetch-unlisted', 'mcp-call', 'mcp-floor'] as const);
@@ -70,16 +72,16 @@ export function firstRunPolicyTemplate(input: FirstRunPolicyTemplateInput): Firs
   const built = buildTemplate(input, FIRST_RUN_POLICY_TEMPLATE_VERSION);
   return Object.freeze({ id: FIRST_RUN_POLICY_TEMPLATE_ID, version: FIRST_RUN_POLICY_TEMPLATE_VERSION, policy: built.policy, bindings: built.bindings });
 }
-function buildTemplate(input: FirstRunPolicyTemplateInput, version: 4 | 5 | 6 | 7) {
+function buildTemplate(input: FirstRunPolicyTemplateInput, version: 4 | 5 | 6 | 7 | 8) {
   const scopeId = identitySchema.parse(input.scopeId);
   const principal = { issuer: identitySchema.parse(input.principal.issuer), subject: identitySchema.parse(input.principal.subject) };
   const revision = `${FIRST_RUN_POLICY_TEMPLATE_ID}-v${version}`;
   const actionsOf = { 'agent-tool': ['invoke'], operation: ['execute'], secret: ['set', 'delete'], 'secret-switch': ['switch'], 'provider-spend-account': [...PROVIDER_SPEND_ACCOUNT_ACTIONS], config: ['write'], 'mcp-server': ['invoke'], approval: ['inspect', 'decide'],
-    'model-activation': [...MODEL_ACTIVATION_ACTIONS], 'model-invocation': [...MODEL_INVOCATION_ACTIONS] } as const;
+    'model-activation': [...MODEL_ACTIVATION_ACTIONS], 'model-invocation': [...MODEL_INVOCATION_ACTIONS], backup: ['create', 'verify', 'restore'] } as const;
   const grant = (id: string, effect: 'allow' | 'require-approval', kind: keyof typeof actionsOf, ids: readonly string[] | 'all', modeEligible?: boolean) =>
     Object.freeze({ id, effect, actions: [...actionsOf[kind]], scopes: [scopeId], principals: [principal],
       resource: { kind: kind === 'secret-switch' ? 'secret' : kind, ids: ids === 'all' ? ids : [...ids] }, ...(modeEligible === undefined ? {} : { modeEligible }) });
-  const v5 = version >= 5, v6 = version >= 6, v7 = version >= 7;
+  const v5 = version >= 5, v6 = version >= 6, v7 = version >= 7, v8 = version >= 8;
   const policy = policyFileSchema.parse({
     schemaVersion: 2, revision, roles: [], separationOfDuties: [], restrictions: [],
     approvalAssurance: [{ id: 'first-run-hard-floor-cards', scopes: [scopeId], subject: 'agent-tool-call', cells: [...HARD_FLOOR_CARD_CELLS], minimum: 'turn-bound' }],
@@ -103,18 +105,20 @@ function buildTemplate(input: FirstRunPolicyTemplateInput, version: 4 | 5 | 6 | 
       ...(v7 ? [{ ...grant(FIRST_RUN_UPGRADE_RULE_IDS.modelActivation, 'allow', 'model-activation', 'all'), scopes: 'all' },
         grant(FIRST_RUN_UPGRADE_RULE_IDS.modelInvocation, 'allow', 'model-invocation', 'all'),
         grant(FIRST_RUN_UPGRADE_RULE_IDS.spending, 'allow', 'provider-spend-account', 'all')] : []),
+      // v8: backup over every scope (a recovery set covers the whole installation).
+      ...(v8 ? [{ ...grant(FIRST_RUN_UPGRADE_RULE_IDS.backup, 'allow', 'backup', 'all'), scopes: 'all' as const }] : []),
     ],
   });
   const bindings = bindingsFileSchema.parse({ schemaVersion: 1, revision: `${revision}-bindings`, bindings: [] });
   return { policy, bindings };
 }
 
-/** Why an installation's policy cannot take the v4 → v5 upgrade in place: it already is v5, it is not exactly the v4 template this
+/** Why an installation's policy cannot take the current template upgrade in place: it already is current, it is not exactly the v4 template this
  * installation's (scope, person) would get (hand-edited, administered since, another person's, or another version), or it is unreadable. */
-export type FirstRunTemplateUpgrade = { readonly status: 'upgrade'; readonly from: 4 | 5 | 6; readonly policy: PolicyFile }
+export type FirstRunTemplateUpgrade = { readonly status: 'upgrade'; readonly from: 4 | 5 | 6 | 7; readonly policy: PolicyFile }
   | { readonly status: 'current' } | { readonly status: 'unavailable'; readonly reason: 'not-v4-template' | 'invalid' };
 /**
- * The first-run v4 → v5 migration (owner 2026-10-07): only a policy document that is exactly the v4 template of this (scope, person) — the
+ * The first-run exact-template migration (v5 owner decision 2026-10-07): only a policy document that is exactly an older template of this (scope, person) — the
  * bytes `init policy` wrote, never touched since — is replaced by the v5 template, as `init policy` would install it today. Anything else is
  * not changed here: the caller shows the explicit step (the v5 rules to add) instead. Pure; the caller pins the bytes it read.
  */
@@ -123,8 +127,8 @@ export function upgradeFirstRunPolicy(current: unknown, input: FirstRunPolicyTem
   if (!parsed.success) return Object.freeze({ status: 'unavailable', reason: 'invalid' });
   const target = buildTemplate(input, FIRST_RUN_POLICY_TEMPLATE_VERSION).policy;
   if (canonicalJson(parsed.data) === canonicalJson(target)) return Object.freeze({ status: 'current' });
-  // v6: an exact v4 or v5 template (never touched since) is replaced by the current one; anything else takes the explicit additions.
-  for (const from of [6, 5, 4] as const) {
+  // v8: an exact v4, v5, v6 or v7 template (never touched since) is replaced by the current one; anything else takes the explicit additions.
+  for (const from of [7, 6, 5, 4] as const) {
     if (canonicalJson(parsed.data) === canonicalJson(buildTemplate(input, from).policy)) return Object.freeze({ status: 'upgrade', from, policy: target });
   }
   return Object.freeze({ status: 'unavailable', reason: 'not-v4-template' });
@@ -148,10 +152,10 @@ export function matchFirstRunPolicyTemplate(policyRevision: string): { readonly 
   return version >= 1 && version <= FIRST_RUN_POLICY_TEMPLATE_VERSION ? Object.freeze({ id: FIRST_RUN_POLICY_TEMPLATE_ID, version }) : null;
 }
 
-/** The v5 rule ids an upgrade adds (never replaces: the proposal tool gets its own rule so a hand-edited read rule stays as it is). */
+/** The current rule ids an upgrade adds (never replaces: the proposal tool gets its own rule so a hand-edited read rule stays as it is). */
 export const FIRST_RUN_UPGRADE_RULE_IDS = Object.freeze({ servers: 'first-run-mcp-servers', operation: 'first-run-mcp-call-operation', propose: 'first-run-mcp-propose-tool',
   administer: 'first-run-policy-administer', approvals: 'first-run-approvals', secretSwitch: 'first-run-secret-switch',
-  modelActivation: 'first-run-model-activation', modelInvocation: 'first-run-model-invocation', spending: 'first-run-provider-spending' });
+  modelActivation: 'first-run-model-activation', modelInvocation: 'first-run-model-invocation', spending: 'first-run-provider-spending', backup: 'first-run-backup' });
 /** v7 actions (K3): activation and its read; the model call and everything a terminal turn needs around it (inspect, content, cancel). */
 const MODEL_ACTIVATION_ACTIONS = ['activate', 'inspect'] as const;
 const MODEL_INVOCATION_ACTIONS = ['invoke', 'inspect', 'inspect-content', 'cancel-invocation'] as const;
@@ -199,7 +203,9 @@ function plannedAdditions(grants: readonly PolicyGrant[], person: Person, scopes
     rule(ids.secretSwitch, 'secret', ['switch'], 'all', scopes),
     // v7 (owner 2026-10-08, K3 + SPEND-SETTLEMENT): models connect, terminal turns and spend management on a hand-built or older policy, through the same add-only plan.
     rule(ids.modelActivation, 'model-activation', MODEL_ACTIVATION_ACTIONS, 'all', 'all'), rule(ids.modelInvocation, 'model-invocation', MODEL_INVOCATION_ACTIONS, 'all', scopes),
-    rule(ids.spending, 'provider-spend-account', PROVIDER_SPEND_ACCOUNT_ACTIONS, 'all', scopes)];
+    rule(ids.spending, 'provider-spend-account', PROVIDER_SPEND_ACCOUNT_ACTIONS, 'all', scopes),
+    // v8 (BACKUP-COMMAND): installation-wide backup authority, added the same add-only way.
+    rule(ids.backup, 'backup', ['create', 'verify', 'restore'], 'all', 'all')];
   const conflicts: string[] = [], rules: PolicyGrant[] = [];
   for (const want of wanted) {
     const same = grants.find(grant => grant.id === want.id);

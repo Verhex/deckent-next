@@ -15,7 +15,7 @@ export interface WorklineStartup {
   readonly banner: typeof STARTUP_BANNERS[number];
   /** The Deckent mark, one string per row (3–5 rows). */
   readonly logo: readonly string[];
-  /** Beside the mark: the title row, then the facts (project, model and mode) and the hint. */
+  /** Beside the mark: the title row, then the static facts (project and model) and the hint. Current mode lives in the status strip. */
   readonly lines: readonly string[];
   /** The one-line form: narrow terminals and `banner: compact`. */
   readonly compact: string;

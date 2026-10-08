@@ -16,6 +16,7 @@ Onaylar:
   approval    Onay isteklerini incele ve karara bağla
   policy      Politikayı ve kalıcı izinleri incele
 Kurulum/Bakım:
+  backup      Kurtarma seti oluştur, doğrula ve geri yükle
   identity    Kimlik profilleri ve taslak önizlemeleri
   config      Yapılandırmayı incele ve değiştir
   mcp         MCP sunucularını yönet

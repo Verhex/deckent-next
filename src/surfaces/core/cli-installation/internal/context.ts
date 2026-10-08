@@ -1,3 +1,4 @@
+import type { ProjectInstructionPort } from '#engine/index.js';
 import type { InstallationIdentityChoice, InstallationIdentityResolution } from '#domain/index.js';
 import type { ConfigLoadOptions, Locale, OutputSink } from '#platform/index.js';
 import type { InstallationPreviewHandler, InstallationInspectionHandler, InstallationApplyHandler, InstallationResumeHandler,
@@ -5,6 +6,7 @@ import type { InstallationPreviewHandler, InstallationInspectionHandler, Install
 
 /** Installation commands receive only their local bootstrap ports. */
 export interface InstallationCommandContext {
+  openProjectInstructions?: (root: string, options: ConfigLoadOptions) => Promise<ProjectInstructionPort>;
   root?: string; env?: NodeJS.ProcessEnv; stdout?: OutputSink; stderr?: OutputSink;
   onLocale?: (locale: Locale) => void;
   resolveInstallationIdentity?: (root: string, choice: InstallationIdentityChoice, options: ConfigLoadOptions) => Promise<InstallationIdentityResolution>;

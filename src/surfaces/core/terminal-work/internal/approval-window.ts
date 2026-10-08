@@ -3,7 +3,7 @@ import type { KnownSecretSnapshot } from '#platform/index.js';
 import { AGENT_TOOL_UNDO, type AgentShellPosture, type AgentToolCardCall, type AgentToolUndo, type ApprovalPreviewCutFacts } from '#domain/index.js';
 import { agentToolUndo } from '#engine/index.js';
 import type { StandingScope } from '#surfaces/core/terminal-kit/index.js';
-import { fillTemplate, span, sliceSpans, plainText, type Span, type SpanRole } from '#surfaces/core/terminal-render/index.js';
+import { fillTemplate, span, sliceSpans, plainText, shortenHomePath, type Span, type SpanRole } from '#surfaces/core/terminal-render/index.js';
 
 /**
  * T-APPROVAL-WINDOW: the labelled fields of one approval, built only from what the producer already sent (the sealed summary, the call's
@@ -64,18 +64,18 @@ export type ApprovalWindowInput = Readonly<{
   tool?: string | undefined; target?: string | null | undefined; preview?: string | undefined; risk?: string | null | undefined; undo?: string | null | undefined;
   requiredAssurance?: string | undefined; assuranceLine?: ApprovalDecisionLine | null;
   standing?: Readonly<{ scopes: readonly StandingScope[]; pattern: string }> | null;
-  project?: string | undefined; mode?: string | undefined; posture?: AgentShellPosture | undefined;
+  project?: string | undefined; home?: string | undefined; mode?: string | undefined; posture?: AgentShellPosture | undefined;
   /** v21 (Astra 2431): the card's fields as producer data and the preview cut's facts; absent (an older service): the preview is shown whole. */
   call?: AgentToolCardCall | undefined; previewCut?: ApprovalPreviewCutFacts | undefined;
   /** T3 L4: a config-change approval's facts; its window speaks of the setting (scope, rule, undo) instead of a tool call. */
   config?: Readonly<{ action: 'set' | 'unset'; layer: 'project' | 'global'; keyPath: string; ruleId: string }> | undefined;
 }>;
 
-/** A wire name `mcp__<server>__<tool>` (MCP-VISIBILITY name rule: a server name's single hyphens are `_` on the wire and it has no `__`, so the
- * first `__` after the server is the separator); the server is shown with its hyphens back (Astra 2435 P2: `mcp__docs_search__q` is docs-search). */
-const MCP_NAME = /^mcp__([a-z][a-z0-9]*(?:_[a-z0-9]+)*)__(.+)$/u;
+/** A server follows the registry rule: 1–32 lower-case chars, starts with a letter, single inner hyphens. Accept both the literal name
+ * and its `_` wire encoding; the first `__` is the separator. Show the server with its hyphens restored. */
+const MCP_NAME = /^mcp__(?=[a-z0-9_-]{1,32}__)([a-z][a-z0-9]*(?:[-_][a-z0-9]+)*)__(.+)$/u;
 /** The sealed binding line of a tool-call approval (`agentToolApprovalSummary`: `tool · resource · digest12`, a self-source reason may follow). */
-const BINDING = /^([a-z][a-z0-9_]{1,63}) · ([^\n]*) · [0-9a-f]{12}(?:\n|$)/u;
+const BINDING = /^([a-z][a-z0-9_-]{1,63}) · ([^\n]*) · [0-9a-f]{12}(?:\n|$)/u;
 /** The call's tool and target: what the client saw (`tool.started`, or the stored subject), else the sealed binding line; null for a task. */
 export function approvalCallOf(input: Pick<ApprovalWindowInput, 'tool' | 'target' | 'summary'>): Readonly<{ tool: string; target: string | null }> | null {
   if (input.tool) return { tool: input.tool, target: input.target ?? null };
@@ -203,7 +203,10 @@ export function approvalWindowLines(input: ApprovalWindowInput, labels: Approval
   valueRows.slice(0, VALUE_FIELD_ROWS).forEach((row, index) => rows.push({ ...row, label: [span(index === 0 ? value!.label : '', { bold: true })] }));
   if (valueRows.length > VALUE_FIELD_ROWS) rows.push({ ...lineOf([span(fillTemplate(labels.valueMore, { count: valueRows.length - VALUE_FIELD_ROWS }), { role: 'warning' })]), label: [span('')] });
   if (fallback) rows.push({ ...lineOf([span(labels.noStructured, { role: 'warning' })]), label: [span('')] });
-  const where = input.project ? approvalTemplateLine(labels.where, { path: p(input.project) }) : approvalTemplateLine(labels.whereUnknown, {});
+  // Project the whole path before shortening it: hidden-character warnings and redaction remain attached to the original field.
+  const path = input.project ? p(input.project) : null, text = path ? plainText(path.spans) : '', shown = shortenHomePath(text, input.home);
+  const where = path ? approvalTemplateLine(labels.where, { path: shown === text ? path
+    : { ...path, spans: [span('~'), ...sliceSpans(path.spans, text.length - shown.length + 1, text.length)] } }) : approvalTemplateLine(labels.whereUnknown, {});
   rows.push(lineOf(where.spans, where.fields, f.where));
   // POSTURE (L1 D2/D4): the event's structured sandbox facts, worded here; nothing is parsed out of the engine's sentence.
   if (kind === 'shell' && input.posture) rows.push(...postureRows(input.posture, labels).map(text => ({ ...lineOf([span(text, { role: 'muted' })]), label: [span('')] })));
@@ -237,7 +240,7 @@ export function approvalWindowLines(input: ApprovalWindowInput, labels: Approval
   if (preview || cut) {
     rows.push(blank, lineOf([span(f.preview, { bold: true })]));
     if (cut) rows.push(lineOf([span(fillTemplate(labels.previewCut, { shown: cut.shown, total: cut.total, bytes: cut.bytes, totalBytes: cut.totalBytes }), { role: 'warning' })]));
-    if (preview) { const shown = projectedRows(p(preview)); rows.push(...(kind === 'edit' || kind === 'write' ? diffRows(shown) : shown)); }
+    if (preview) { const shown = projectedRows(p(preview)).map(row => ({ ...row, exact: false })); rows.push(...(kind === 'edit' || kind === 'write' ? diffRows(shown) : shown)); }
   }
   rows.push(blank, lineOf([span(f.detail, { bold: true })]));
   const detail = (template: string, values: Parameters<typeof approvalTemplateLine>[1]) => { const line = approvalTemplateLine(template, values); rows.push({ ...line, spans: withRole(line.spans, 'muted') }); };

@@ -21,7 +21,7 @@ export function normalizeGlobalScopePlatform(platform: string, env: Environment)
 }
 // Explicit return type: an inferred one is emitted as `import("path").PlatformPath`, a bare specifier the published declarations refuse.
 export function pathApi(platform: string): PlatformPath { return platform === 'win32' ? win32 : posix; }
-export function resolveGlobalScopePaths(platform: GlobalScopePlatform, env: Environment): GlobalScopePaths {
+export function resolveGlobalScopePaths(platform: GlobalScopePlatform, env: Environment, options: { readonly ignoreProjectOverride?: boolean } = {}): GlobalScopePaths {
   platform = normalizeGlobalScopePlatform(platform, env);
   const drive = envValue(env, 'HOMEDRIVE');
   const homePath = envValue(env, 'HOMEPATH');
@@ -29,7 +29,7 @@ export function resolveGlobalScopePaths(platform: GlobalScopePlatform, env: Envi
     ? envValue(env, 'USERPROFILE') ?? (drive && homePath ? win32.join(drive, homePath) : null)
     : envValue(env, 'HOME') ?? null;
   // Global installation state can be isolated without relocating every project workspace.
-  const override = envValue(env, PRODUCT_LAYOUT_REGISTRY.globalRootEnvironmentKey) ?? productRootOverride(env);
+  const override = envValue(env, PRODUCT_LAYOUT_REGISTRY.globalRootEnvironmentKey) ?? (options.ignoreProjectOverride ? undefined : productRootOverride(env));
   if (!home && !override) throw ErrorRegistry.createError('HOME_NOT_RESOLVED');
   const layout = resolveProductLayout({ projectRoot: home ?? override!, ...(override ? { root: override } : {}), platform: platform === 'win32' ? 'win32' : 'posix' });
   // No host home means no implicit scratch location: callers must supply a platform-local location.

@@ -495,13 +495,13 @@ describe('terminal /monitor', () => {
     } finally { view.instance.unmount(); }
     // BATCH-FIX 2026-10-07 TERMINAL-UNAVAILABLE-I18N: the unwired notice is the catalog text in the session language (the label the
     // production terminal assembles from `terminal.admin.partUnavailable`), never fixed English.
-    for (const locale of ['en', 'tr'] as const) {
+    for (const locale of ['en', 'tr'] as const) for (const command of ['monitor', 'mcp', 'config', 'model', 'usage', 'doctor', 'scope']) {
       const bare = mountWorkline({ labels: { ...WORKLINE_TEST_LABELS, commandUnavailable: t('terminal.admin.partUnavailable', {}, locale) } });
-      const expected = t('terminal.admin.partUnavailable', { part: 'monitor' }, locale);
+      const expected = t('terminal.admin.partUnavailable', { part: command }, locale);
       try {
-        await settle(20); bare.stdin.write('/monitor\r');
-        await untilWorkline(() => bare.stdout.frame.includes(expected), `unwired notice (${locale})`);
-        if (locale === 'tr') { expect(expected).toBe('monitor: bu terminalde kullanılamıyor.'); expect(bare.stdout.text).not.toContain('not available in this terminal'); }
+        await settle(20); bare.stdin.write(`/${command}\r`);
+        await untilWorkline(() => bare.stdout.frame.includes(expected), `unwired /${command} notice (${locale})`);
+        if (locale === 'tr') { expect(expected).toBe(`${command}: bu terminalde kullanılamıyor.`); expect(bare.stdout.text).not.toContain('not available in this terminal'); }
       } finally { bare.instance.unmount(); }
     }
   });

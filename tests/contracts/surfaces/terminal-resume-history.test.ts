@@ -69,7 +69,7 @@ describe('/resume through the real workline (TERM-UX-1 b)', () => {
 describe('markers shared with the engine and the mention composition', () => {
   it('a real compaction message replays as one marker and a real attached-file block is neither replayed nor counted as typed text', async () => {
     const { planAgentCompaction, renderAgentCompaction } = await import('#engine/index.js');
-    const { attachTerminalMentions } = await import('#composition/core/terminal-chat/index.js');
+    const { attachTerminalMentions } = await import('#surfaces/core/terminal-turn/index.js');
     const { contextBreakdown } = await import('#surfaces/core/terminal-render/index.js');
     const older = Array.from({ length: 14 }, (_, index) => index % 2 ? assistant(`a${index}`) : user(`u${index}`));
     const plan = planAgentCompaction(older)!;

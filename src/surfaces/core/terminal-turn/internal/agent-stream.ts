@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { AgentTurnMessage, AgentTurnStreamEvent, ChatTurnCancellation, ChatTurnCommand, ChatTurnResult, ModelReference } from '#domain/index.js';
 import { createAgentCompactionGuard, type AgentTurnAdmission } from '#engine/index.js';
 import { ErrorRegistry, type ConfigLoadOptions } from '#platform/index.js';
-import type { PanelTurnBinding, TurnDelta } from '#surfaces/index.js';
+import type { PanelTurnBinding, TurnDelta } from '#surfaces/core/terminal-kit/index.js';
 import { terminalCompactionExpected } from './turn-phase.js';
 
 /** Runtime `chatTurn` / `cancelChatTurn` (v12); the shipped executable wires the local runtime client. */

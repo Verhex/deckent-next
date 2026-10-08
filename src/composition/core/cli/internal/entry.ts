@@ -1,4 +1,6 @@
 #!/usr/bin/env node
+import { configuredProjectInstructions } from '#composition/core/project-instructions/index.js';
+import { executeConfiguredBackup } from '#composition/core/backup/index.js';
 import { previewConfiguredIdentityProfile, listIdentityProfiles } from '#composition/core/identity-profile/index.js';
 import { ensureConfiguredTerminalIdentity, inspectConfiguredInstallationBinding, resolveConfiguredInstallationIdentity, loadConfiguredInstallationIdentity, loadConfiguredProjectIdentity } from '#composition/core/scoped-request/index.js';
 import { unifiedDiff, readInstallationProfileFile, isSelfSourceProject, PROVIDER_CONNECT_KINDS, PROVIDER_CONNECT_LEGACY_KEYS, probeProviderConnection, providerEndpoint, providerConnectFamily, providerConnectKind, providerConnectModelPriced,
@@ -19,7 +21,7 @@ import { createConfiguredRuntimeClient, invokeRuntimeModel, runRuntimeChatTurn, 
 import { startConfiguredCliRuntimeService } from './runtime-host.js';
 import { applyConfiguredPoolCapacity, inspectConfiguredPoolCapacity, applyConfiguredRunLifecycle, applyConfiguredPoolHold, createConfiguredDeliveryRun, inspectConfiguredPoolHold } from '#composition/core/runs/index.js';
 import { ensureConfiguredRuntimeService, openConfiguredTerminalHistory, openConfiguredTerminalSessions, restartConfiguredRuntimeService, stopConfiguredRuntimeService } from './runtime-autostart.js';
-import { main as runCli } from '#surfaces/index.js';
+import { main as runCli, attachTerminalMentions, findTerminalMentions, streamTerminalAgentTurn } from '#surfaces/index.js';
 import { previewSuppliedInstallation, inspectSuppliedInstallation, applySuppliedInstallation, resumeInstallation,
   applyPolicyTemplateInstallationWithSecretDefault, inspectPolicyTemplate, previewPolicyTemplateInstallation, upgradePolicyTemplateInstallation } from '#composition/core/installation/index.js';
 import { inspectConfiguredShellRealm, runConfiguredMcpCommand } from '#composition/core/agent-turn/index.js';
@@ -27,7 +29,7 @@ import { getConfigFieldDefault, isMainModule } from '#platform/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 import { inspectDeclaredModels, inspectModelBinding } from '#composition/core/provider-catalog/index.js';
 import { prepareNativeCodingProfile } from '#composition/core/native-coding/index.js';
-import { assertTerminalChatReady, attachTerminalMentions, completeTerminalChatTurn, describeTerminalChat, findTerminalMentions, streamTerminalAgentTurn } from '#composition/core/terminal-chat/index.js';
+import { assertTerminalChatReady, completeTerminalChatTurn, describeTerminalChat } from '#composition/core/terminal-chat/index.js';
 import { assessConfiguredModelInvocationDelivery } from '#composition/core/model-invocation/index.js';
 import { inspectConfiguredSecretStore, listConfiguredSecretNames, listConfiguredSecretStores } from '#composition/core/secrets/index.js';
 export async function main(argv: readonly string[] = process.argv.slice(2)) {
@@ -38,7 +40,7 @@ export async function main(argv: readonly string[] = process.argv.slice(2)) {
   const stop = () => controller.abort();
   if (handlesSignals) { process.once('SIGINT', stop); process.once('SIGTERM', stop); }
   try { return await runCli(argv, { initialize: composeCore, root, signal: controller.signal, startRuntimeService: startConfiguredCliRuntimeService,
-    previewIdentityProfile: previewConfiguredIdentityProfile, listIdentityProfiles,
+    executeBackup: executeConfiguredBackup, previewIdentityProfile: previewConfiguredIdentityProfile, listIdentityProfiles,
     prepareDecision: prepareConfiguredDecision, askDecision: askConfiguredDecision, recordDecision: recordConfiguredDecision, outcomeDecision: outcomeConfiguredDecision, inspectDecision: inspectConfiguredDecision,
     deliverWorkspaceIntegration: deliverConfiguredWorkspaceIntegration,
     adoptWorkspaceIntegration: adoptConfiguredWorkspaceIntegration, rollbackWorkspaceIntegration: rollbackConfiguredWorkspaceIntegration,
@@ -51,6 +53,7 @@ export async function main(argv: readonly string[] = process.argv.slice(2)) {
     inspectWorkers: inspectConfiguredWorkers, inspectMonitor, inspectToolchainCurrency: (projectRoot, options) => inspectConfiguredToolchainCurrency(projectRoot, options), inspectSurfaceAccess, inspectSurfaceRunIds, followSurfaceEvents: followLedgerSurface,
     ensureRuntimeService: (projectRoot, options) => ensureConfiguredRuntimeService(projectRoot, options),
     restartRuntimeService: (projectRoot, options) => restartConfiguredRuntimeService(projectRoot, options),
+    openProjectInstructions: configuredProjectInstructions,
     openTerminalHistory: (projectRoot, options) => openConfiguredTerminalHistory(projectRoot, options),
     openTerminalSessions: (projectRoot, options) => openConfiguredTerminalSessions(projectRoot, options),
     selfSourceProject: isSelfSourceProject,

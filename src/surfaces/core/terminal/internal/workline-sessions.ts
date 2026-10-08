@@ -137,7 +137,9 @@ export function useConversationSession(port: ConversationSessionPort | undefined
     return done([systemSummaryEntry(fillTemplate(labels.resumed, { count: messages.length, session: target.slice(0, 8) })), ...resumedHistoryEntries(messages, labels.history, known)]);
   }, [labels, port, known, id]);
   /** SW-1: `/context` as a window model from the same measured state the text view reads. */
-  const contextView = useCallback((history: readonly AgentChatMessage[], info: ContextInfoLabels, ascii: boolean): InfoWindowModel =>
-    contextInfoModel({ measured: context.current, history, compaction: compaction.current }, info, labels?.view, ascii), [labels]);
+  const contextView = useCallback((history: readonly AgentChatMessage[], info: ContextInfoLabels, ascii: boolean, sources: readonly string[] = []): InfoWindowModel => {
+    const model = contextInfoModel({ measured: context.current, history, compaction: compaction.current }, info, labels?.view, ascii);
+    return { ...model, sections: model.sections.map((section, index) => index === 0 ? { ...section, notes: [...(section.notes ?? []), ...sources] } : section) };
+  }, [labels]);
   return { noteContext, save, run, id, contextView };
 }

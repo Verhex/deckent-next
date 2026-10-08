@@ -1,14 +1,14 @@
-import { isAbsolute, relative, resolve, sep } from 'node:path';
+import { relative, resolve, sep } from 'node:path';
 import { EffectError, type AgentToolOutcome, type EffectCommand } from '#domain/index.js';
 import { EffectApplication, OperationPolicyAuthorization, agentToolArgumentsDigest, type AgentTurnShellPosture, boundApprovalPreview, classifyReadOnlyShellCommand, classifyShellContainment, classifyShellMutation,
-  classifyShellRisk, shellNamedPaths, shellPermissionTier, type EffectApprovalGate, type ShellPermissionTier, type ShellRiskClassification } from '#engine/index.js';
-import { globalStateRoot, LOCALES, loadConfig, SystemTrustedClock, t, type ConfigLoadOptions, type Locale } from '#platform/index.js';
+  classifyShellRisk, shellPermissionTier, type EffectApprovalGate, type ShellPermissionTier, type ShellRiskClassification } from '#engine/index.js';
+import { globalStateRoot, loadConfig, SystemTrustedClock, type ConfigLoadOptions, type Locale } from '#platform/index.js';
 import { agentShellEffectCommandId, createGlobMatcher, createLocalPeerSession, createShellPathContext, createShellProtectedNames, createShellWriteContext, describeHostShellResult,
   describeShellEffectRefusal, hostShellCleanupNote, HOST_SHELL_COMMAND_MAX_CHARS, HOST_SHELL_RUN_OPERATION, HOST_SHELL_TARGET_KIND, HostShellTarget, HOST_SHELL_NOTES, resolveShellRealm,
   describeSandboxWriteSet, openShellRealm, prepareSandboxWriteSetDirectory, removeSandboxWriteSetDirectory, type SandboxWriteDecider, sandboxWriteView, shellPostureFacts, shellSandboxCapabilities, shellWritePosture,
   type ShellCallAuthority, type ShellRealmResolution, openSqliteAttemptStore, type HostShellResult, type LocalPeerIdentity, type ShellSandbox,
   type RuntimeServiceTurnChannel, type TerminalShellConfig, type WorkspaceScope, createWorkspaceScope, inspectShellRealmSelection, readTerminalShellConfig,
-  compareTrackedFiles, describeTrackedFilesChange, describeTrackedFilesUnchecked, snapshotTrackedFiles, type TrackedFilesChange } from '#adapters/index.js';
+  compareTrackedFiles, describeTrackedFilesChange, describeTrackedFilesUnchecked, snapshotTrackedFiles, type TrackedFilesChange, protectedPathShellNote, onWriteFloor } from '#adapters/index.js';
 import type { loadPeerInvocationContext } from '#composition/core/model-invocation/index.js';
 import { settleSandboxWriteSet } from './sandbox-writes.js';
 
@@ -17,28 +17,6 @@ export async function inspectConfiguredShellRealm(projectRoot: string, options: 
   const config = await loadConfig(projectRoot, { ...options, heal: false }) as Record<string, unknown>;
   return inspectShellRealmSelection({ mode: readTerminalShellConfig(config).realm, stateDir: globalStateRoot(options.env ?? process.env), project: await createWorkspaceScope(projectRoot) });
 }
-/** The kernel's EROFS text as a command prints it (glibc's message; a translated one under another installed locale is not matched, and the
- * result then stays as it was). Measured 2026-10-07 in bubblewrap: `unlink: cannot unlink 'src/x': Read-only file system`. */
-const READ_ONLY_FILE_SYSTEM = /Read-only file system/u;
-const NAMED_PATHS_SHOWN = 5;
-/**
- * B3 (owner terminal test 2026-10-07): a sandboxed command whose write failed on a protected path (Deckent's own source, the write floor) got only
- * the raw "Read-only file system". When its output carries that error and it names such a path, the result says, in the person's language,
- * which path, why, and what can change it (the edit tools ask for approval; full access) — the model reads the same text. Authority is
- * unchanged: the sandbox still keeps the path read-only; asking for the shell is the PROTECTED-PATHS card's work.
- */
-export function protectedPathShellNote(command: string, output: string, isProtected: (path: string) => boolean, language: Locale = LOCALES[0]): string | null {
-  if (!READ_ONLY_FILE_SYSTEM.test(output)) return null;
-  const paths = shellNamedPaths(command, isProtected);
-  if (paths.length === 0) return null;
-  const shown = `${paths.slice(0, NAMED_PATHS_SHOWN).join(', ')}${paths.length > NAMED_PATHS_SHOWN ? ` (+${paths.length - NAMED_PATHS_SHOWN})` : ''}`;
-  return `[deckent] ${t('agent.shell.protectedPathReadOnly', { paths: shown }, language)}`;
-}
-/** A word a command names, as a project-relative path the turn's write floor holds (outside the project: never). */
-const onWriteFloor = (root: string, floor: (rel: string) => boolean) => (text: string) => {
-  const rel = relative(root, resolve(root, text));
-  return rel !== '' && !rel.startsWith('..') && !isAbsolute(rel) && floor(rel.split(sep).join('/'));
-};
 type ShellPlan = { readonly ok: true; readonly command: string; readonly risk: ShellRiskClassification; readonly tier: ShellPermissionTier; readonly realm: Extract<ShellRealmResolution, { ok: true }>;
   readonly contained: boolean }
   | { readonly ok: false; readonly text: string };

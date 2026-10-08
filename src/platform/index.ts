@@ -46,7 +46,7 @@ export { resolveConfigSecrets } from '#platform/core/config/index.js';
 export { configuredSecretResolver, environmentSecretResolver, installSecretResolverFactory } from '#platform/core/config/index.js';
 export type { SecretResolverContext, SecretResolverFactory } from '#platform/core/config/index.js';
 export { configDisplayView, isSensitiveConfigKey } from '#platform/core/config/index.js';
-export { loadConfig, loadGlobalConfig, loadConfigLanguage, clearConfigCache } from '#platform/core/config/index.js';
+export { loadConfig, loadGlobalConfig, loadConfigLanguage, clearConfigCache, restoreHoldPath } from '#platform/core/config/index.js';
 export type { ResolvedConfig, ConfigLoadOptions } from '#platform/core/config/index.js';
 export { saveGlobalConfig, writeConfig, withConfigWriteLock, pruneConfigBackups } from '#platform/core/config/index.js';
 export { healCorruptProjectConfig } from '#platform/core/config/index.js';

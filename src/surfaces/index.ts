@@ -6,4 +6,5 @@ export type { McpApplications, McpLimits } from '#surfaces/core/mcp/index.js';
 export function loadMcpSurface(): Promise<typeof import('#surfaces/core/mcp/index.js')> { return import('#surfaces/core/mcp/index.js'); }
 export type { ToolResultSummary, TurnDelta, WorklineStreamTurn } from '#surfaces/core/terminal/index.js';
 export type { PanelTurnBinding } from '#surfaces/core/terminal-kit/index.js';
+export { attachTerminalMentions, findTerminalMentions, streamTerminalAgentTurn } from '#surfaces/core/terminal-turn/index.js';
 export type { ConfigChoiceSourcePort, ConfigValueChoice } from '#surfaces/core/config/index.js';

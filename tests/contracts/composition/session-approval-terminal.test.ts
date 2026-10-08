@@ -11,7 +11,7 @@ import { createRuntimeChatTurnHost, runPeerConfiguredChatTurn } from '#compositi
 import { createConfiguredRuntimeClient } from '#composition/core/runtime-service/index.js';
 import { executeRuntimeApproval } from '#composition/core/runtime-service/index.js';
 import { openConfiguredAttemptStore } from '#composition/core/storage/index.js';
-import { streamTerminalAgentTurn } from '#composition/core/terminal-chat/index.js';
+import { streamTerminalAgentTurn } from '#surfaces/core/terminal-turn/index.js';
 import { createWorklineLedgerPorts, workSurfaceLabels } from '#surfaces/core/cli/index.js';
 import { SessionStanding, RUNTIME_SERVICE_SCHEMA_VERSION, runtimeServiceRequestSchema, type RuntimeServiceRequest } from '#engine/index.js';
 import { clearConfigCache, t, type Locale } from '#platform/index.js';

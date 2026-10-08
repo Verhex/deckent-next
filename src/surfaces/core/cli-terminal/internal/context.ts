@@ -1,3 +1,4 @@
+import type { ProjectInstructionPort } from '#engine/index.js';
 import type { McpPanelRun } from './mcp-panel.js';
 import type { ProjectIdentity } from '#domain/index.js';
 import type { DescribeService, IdentityRead, InstallationIdentityRead, RunCommand, RunCancellationOutcome, RunQuery, RunView, SurfaceSnapshotAccess,
@@ -60,6 +61,7 @@ export type TerminalSecretDeleteHandler = (root: string, input: Readonly<{ schem
 export interface TerminalLaunchContext extends MonitorCommandContext, Pick<ModelCommandContext, 'inspectModelCatalog' | 'inspectProviderSpendAccount' | 'inspectDeclaredModels'
   | 'inspectModelBinding' | 'inspectModelActivation' | 'connectModel' | 'manageProviderSpend'> {
   /** T4 `/provider`: the connect kinds and free check, and the secret store handlers (the key goes only to `setSecret`). */
+  openProjectInstructions?: (root: string, options: ConfigLoadOptions) => Promise<ProjectInstructionPort>;
   providerConnect?: ProviderConnectHost;
   listSecretNames?: TerminalSecretNamesHandler;
   setSecret?: TerminalSecretSetHandler;

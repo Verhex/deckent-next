@@ -57,10 +57,10 @@ describe('derived self-source floor', () => {
   });
   it('keeps the static hard floor distinct in self-source repositories, including overlapping paths and directories', async () => {
     const scope = await createWorkspaceScope(await repository()), authority = (rel: string) => rel === '.deckent/config.json';
-    for (const path of ['package.json', '.deckent/config.json', '.agents/refactor/x.mjs', '.github/w.yml', 'AGENTS.md', 'src/package.json']) {
+    for (const path of ['package.json', '.deckent/config.json', '.agents/refactor/x.mjs', '.github/w.yml', 'DECKENT.md', 'AGENTS.md', 'src/package.json']) {
       expect(classifySandboxWritePath(scope, () => false, path, 'write', true), path).toBe('edit-floor');
     }
-    for (const path of ['package.json', '.deckent/config.json', '.agents/refactor/x.mjs', '.github/w.yml', 'AGENTS.md']) {
+    for (const path of ['package.json', '.deckent/config.json', '.agents/refactor/x.mjs', '.github/w.yml', 'DECKENT.md', 'AGENTS.md']) {
       expect(isSelfSourceWriteFloored(path), path).toBe(false);
       expect(agentTurnWriteFloor(() => false, false, true)(path), path).toBe(true);
     }

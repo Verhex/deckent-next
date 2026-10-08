@@ -1,3 +1,5 @@
+import { useInstructionContext, type ProjectInstructionLabels } from '#surfaces/core/project-instructions/index.js';
+import type { ProjectInstructionPort } from '#engine/index.js';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, createElement, type ComponentProps } from 'react';
 import { render, Box, Static, Text, useApp, useStdout, type Instance } from 'ink';
 import { useWorklinePanel, type LocalExecution, LedgerEntryRow, liveRunEntry, dispatchWorkCommand, openingWorkText, systemSummaryEntry, type LedgerEntryLabels, immediateSlashAction, type WatchState, type MonitorWindowLoader, type WorklineActionLabels, useWorkSurface } from '#surfaces/core/terminal-work/index.js';
@@ -63,6 +65,7 @@ export interface WorklineProps {
   readonly context: Omit<TerminalLocalContext, 'kind' | 'sessionId'>;
   readonly target: string;
   readonly systemPrompt: string;
+  readonly projectInstructions?: { readonly port: ProjectInstructionPort; readonly labels: ProjectInstructionLabels };
   /** Window of the plain (non-streaming) path only; the agent path sends the whole conversation (T-L5, Astra 2091 R1). */
   readonly historyMessages: number;
   readonly completeTurn: WorklineCompleteTurn;
@@ -100,6 +103,8 @@ export interface WorklineProps {
   readonly config?: (args: string) => Promise<readonly string[]>; readonly mcp?: (args: string) => Promise<readonly string[]>; readonly monitor?: (args: string) => Promise<readonly string[]>;
   /** The project root the approval window names under "where" (display only; T-APPROVAL-WINDOW). */
   readonly projectRoot?: string;
+  /** Display-only home prefix for approval paths; the real project root remains the operation context. */
+  readonly homeDirectory?: string;
   /** `/monitor` as a window (T3 L5): loads the monitor body from the host, which owns it (this unit never imports the monitor). Without it `/monitor` answers as notice lines. */
   readonly monitorWindow?: MonitorWindowLoader;
   /** T3 L4: the `/config` and `/mcp` window ports and every panel's words; `/mode`'s port is this view's own mode port. Absent: text commands only. */
@@ -150,6 +155,7 @@ export function WorklineApp(props: WorklineProps) {
   const usage = useRef<SessionUsageView>(EMPTY_SESSION_USAGE);
   const [watch, setWatch] = useState<WatchState>({ workers: false, runs: false });
   const watchRef = useRef(watch);
+  const instructions = useInstructionContext(props.projectInstructions?.port, props.projectInstructions?.labels);
   const history = useRef<readonly AgentChatMessage[]>([{ role: 'system', content: systemPrompt }]);
   const sessionId = useCallback(() => panel.controller.snapshot().context.sessionId, [panel]);
   const session = useConversationSession(props.sessions, labels.sessions, sessionId, props.knownSecrets);
@@ -206,7 +212,7 @@ export function WorklineApp(props: WorklineProps) {
   const failed = useCallback((error: unknown) => setWatchStatusLines([`${labels.watchFailed}: ${errorText(error)}`]), [errorText, labels.watchFailed]);
   const mode = useWorklineMode(props.permissionMode, push, errorText, labels.work?.unavailable ?? labels.ledgerUnavailable, labels.mode, props.fullAccess === true, sessionId);
   const work = useWorkSurface({ panel, state, ledger, labels, push, errorText, pollMs, pushLive, watchingWorkers: watch.workers,
-    context: { ...(props.projectRoot ? { project: props.projectRoot } : {}), ...(mode.stop ? { mode: mode.stop } : {}) },
+    context: { ...(props.projectRoot ? { project: props.projectRoot } : {}), ...(props.homeDirectory ? { home: props.homeDirectory } : {}), ...(mode.stop ? { mode: mode.stop } : {}) },
     ...(props.approvalPollMs === undefined ? {} : { approvalPollMs: props.approvalPollMs }) });
   workRef.current = work; decide.current = work.decideApproval;
   const liveWin = useLiveWindows({ work: labels.work, workers: work.workers, watch, watchRef, setWatch, push, errorText, monitorWindow: props.monitorWindow, status: humanRecordText(watchStatus, props.knownSecrets), statusLines: watchStatusLines.map(text => humanRecordText(text, props.knownSecrets)), positionLabel: labels.work?.window.position ?? '{from}-{to}/{total}' });
@@ -232,7 +238,7 @@ export function WorklineApp(props: WorklineProps) {
 
   // SW-1: bare information commands answer in a window; `/help` answers the command picked in it, which then runs here.
   const infoWindow = useInfoWindow({ info: props.info, slot, push, errorText, slash: labels.composer.slash, ascii: useRenderGlyphs().ascii,
-    context: (info, ascii) => session.contextView(history.current, info, ascii), input: () => ({ usage: usage.current, sessionFullAccess: mode.fullAccess.current }) });
+    context: (info, ascii) => session.contextView(history.current, info, ascii, instructions.sourceLines()), input: () => ({ usage: usage.current, sessionFullAccess: mode.fullAccess.current }) });
   const performRef = useRef<(line: string, mentioned: readonly string[], execution: LocalExecution) => Promise<boolean>>(async () => true);
   const opening = useRef(props.openingNotices);
   useEffect(() => {
@@ -257,7 +263,7 @@ export function WorklineApp(props: WorklineProps) {
     // T-L5 `@file`: the service attaches the mentioned files (bounded, labelled) to this message; a failure leaves the text as typed.
     const content = await messageWithMentions(text, mentioned, props.attachMentions, signal, push, errorText, labels.mentions);
     // Agent history stays whole for runtime compaction; only plain turns use the message window.
-    const system: AgentChatMessage = { role: 'system', content: systemPrompt }, asked = [...history.current, { role: 'user' as const, content }];
+    const system: AgentChatMessage = { role: 'system', content: systemPrompt + await instructions.prepare(signal) }, asked = [...history.current, { role: 'user' as const, content }];
     const messages = props.streamTurn ? agentHistory(system, asked) : boundAgentHistory(system, asked, historyMessages);
     try {
       // Cancelled while the files were being attached: nothing is sent.
@@ -353,7 +359,8 @@ export function WorklineApp(props: WorklineProps) {
     }
     if (slash.command === 'resume' || slash.command === 'context' || slash.command === 'clear') {
       try {
-        const result = await session.run(slash.command, rich && slash.command === 'resume' ? '' : slash.args, history, execution);
+        const sessionResult = await session.run(slash.command, rich && slash.command === 'resume' ? '' : slash.args, history, execution);
+        const result = slash.command === 'context' ? { ...sessionResult, entries: [...sessionResult.entries, ...instructions.sourceLines().map(line => notice('info', line))] } : sessionResult;
         // `/clear` really clears: the visible screen is wiped and Ink forgets the earlier conversation; only the summary line follows.
         // Owner 2026-10-08: the terminal's scrollback goes too (ED 3); only on a TTY that takes escape sequences (`clearScreen`, see the prop).
         if (slash.command === 'clear' && result.entries.length) { if (props.clearScreen !== false && stdout.stdout.isTTY) stdout.write(CLEAR_SCREEN_AND_SCROLLBACK); reset(); usage.current = EMPTY_SESSION_USAGE; }
@@ -428,17 +435,18 @@ export function WorklineApp(props: WorklineProps) {
   const ledgerLabels: LedgerEntryLabels = { system: labels.work?.jobs?.system ?? props.info?.labels.systemLabel, runCard: labels.runCard, workerCard: labels.workerCard, chatUser: labels.roleUser, chatAssistant: labels.roleAssistant,
     render: labels.render, ...(labels.work ? { workerLine: labels.work.workerLine } : {}) };
   // A window a slash command opened waits for the person, so the status row says Ready, not Working (an approval card during a turn keeps Working).
-  const choosing = resumePicker !== null || work.pickerOpen || (work.modalOpen && !turnRunning) || settings.openKind !== null || localWindowOpen;
+  const choosing = resumePicker !== null || work.pickerOpen || (work.modalOpen && !turnRunning) || settings.openKind !== null || localWindowOpen || instructions.open;
   const fullAccessLine = mode.mode === 'full-access' ? labels.mode?.fullAccessLine : undefined, glyphs = useRenderGlyphs();
   // T2 T-MODE-CYCLE: Shift+Tab (Alt+M where the console cannot report Shift+Tab, e.g. Windows without VT input) steps the permission mode
   // while the composer owns the keyboard; an open card, picker or any window (stack not idle, `PermissionModeKeys`) owns Shift+Tab then. A running turn owns its
   // mode as `/mode` does (queued until it ends): the step waits for idle, so the status row never shows a mode the running turn is not in.
-  const composing = !work.modalOpen && !work.pickerOpen && resumePicker === null && settings.openKind === null && !localWindowOpen;
+  const composing = !work.modalOpen && !work.pickerOpen && resumePicker === null && settings.openKind === null && !localWindowOpen && !instructions.open;
   const finishResume = (choice: number | null) => { panel.choose(state.picker?.pickerHandle, choice === null ? null : String(choice)); };
   return (
     <HumanTextContext.Provider value={props.knownSecrets}>
     <WindowStackProvider reservedRows={WINDOW_RESERVED_ROWS + (fullAccessLine ? 1 : 0)}>
     <WindowNoteContext.Provider value={argumentNote}>
+    {instructions.window}
     <Box flexDirection="column">
       <PermissionModeKeys active={composing && !busy && Boolean(props.permissionMode)} onCycle={() => void mode.cycle()} />
       <Static key={buffer.epoch} items={[...buffer.pending]}>

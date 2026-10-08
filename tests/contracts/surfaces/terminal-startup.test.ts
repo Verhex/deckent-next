@@ -7,8 +7,8 @@ import { terminalScreen } from '../../fixtures/terminal-screen.js';
 
 // T2 T-STARTUP (owner 2026-10-07): the rich surface clears the visible screen (never the scrollback) and starts with its banner at the top.
 const facts = { version: '1.0.0-alpha.9', project: 'deckent-next', path: '~/deckent-next', model: 'local-openai/chat@1' };
-const startup = (locale: 'en' | 'tr', options: Partial<WorklineStartup> = {}, ascii = false, mode = locale === 'en' ? 'standard' : 'standart'): WorklineStartup =>
-  ({ clear: true, banner: 'full', ...terminalStartupLabels(locale, { ...facts, mode }, ascii), ...options });
+const startup = (locale: 'en' | 'tr', options: Partial<WorklineStartup> = {}, ascii = false): WorklineStartup =>
+  ({ clear: true, banner: 'full', ...terminalStartupLabels(locale, facts, ascii), ...options });
 const plain = resolveWorklinePalette('none');
 
 describe('opening frame (T2 T-STARTUP)', () => {
@@ -29,18 +29,19 @@ describe('opening frame (T2 T-STARTUP)', () => {
     expect(screen.indexOf('old line 2')).toBeLessThan(screen.indexOf('╭──╮'));
   });
 
-  it('prints the mark beside version, project, model, mode and the hint — EN, TR, NO_COLOR and ASCII', () => {
+  it('prints the mark beside version, project, model and the hint without stale mode — EN, TR, NO_COLOR and ASCII', () => {
     const en = stripVTControlCharacters(startupFrame(startup('en', { clear: false }), plain, 100, 30));
     expect(en.split('\n').slice(0, 4).map(line => line.trimEnd())).toEqual([
       '╭──╮   Deckent 1.0.0-alpha.9',
       '│  ╰╮  Project deckent-next · ~/deckent-next',
-      '│  ╭╯  Model local-openai/chat@1 · Mode standard',
+      '│  ╭╯  Model local-openai/chat@1',
       '╰──╯   /help · Shift+Tab mode · ? shortcuts',
     ]);
     const tr = stripVTControlCharacters(startupFrame(startup('tr', { clear: false }), plain, 100, 30));
     expect(tr).toContain('Proje deckent-next · ~/deckent-next');
-    expect(tr).toContain('Model local-openai/chat@1 · Mod standart');
+    expect(tr).toContain('Model: local-openai/chat@1');
     expect(tr).toContain('/help · Shift+Tab mod · ? kısayollar');
+    expect(en).not.toContain('standard'); expect(tr).not.toContain('standart');
     // NO_COLOR: the `none` palette leaves no escape at all in the banner.
     expect(startupFrame(startup('tr', { clear: false }), plain, 100, 30)).not.toContain('\u001b');
     const ascii = stripVTControlCharacters(startupFrame(startup('en', { clear: false }, true), plain, 100, 30));
@@ -50,10 +51,10 @@ describe('opening frame (T2 T-STARTUP)', () => {
 
   it('is one line below 60 columns or when compact, and nothing but the clear when off', () => {
     const narrow = stripVTControlCharacters(startupFrame(startup('en', { clear: false }), plain, 59, 30));
-    // One row, cut at the window width so the facts that matter (version, project, mode) stay first.
-    expect(narrow.trimEnd().split('\n')).toEqual(['Deckent 1.0.0-alpha.9 · deckent-next · standard · /help · …']);
+    // One row, cut at the window width so the facts that matter (version and project) stay first.
+    expect(narrow.trimEnd().split('\n')).toEqual(['Deckent 1.0.0-alpha.9 · deckent-next · /help · ? shortcuts']);
     expect(stripVTControlCharacters(startupFrame(startup('tr', { clear: false, banner: 'compact' }), plain, 120, 30)).trimEnd())
-      .toBe('Deckent 1.0.0-alpha.9 · deckent-next · standart · /help · ? kısayollar');
+      .toBe('Deckent 1.0.0-alpha.9 · deckent-next · /help · ? kısayollar');
     expect(startupFrame(startup('en', { banner: 'off' }), plain, 100, 3)).toBe(`\n\n\n${CLEAR_VISIBLE_SCREEN}`);
     expect(startupFrame(startup('en', { banner: 'off', clear: false }), plain, 100, 3)).toBe('');
   });

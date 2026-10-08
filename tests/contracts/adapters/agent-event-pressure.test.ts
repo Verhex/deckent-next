@@ -8,7 +8,7 @@ import { createServerTurnChannel } from '#adapters/core/local-runtime-socket/ind
 import { openSqliteAgentTurnStore, ServiceFrameError, ServiceFrameStreamDecoder } from '#adapters/index.js';
 import { runAgentTurn, runDurableAgentTurn, type AgentRoundOutcome } from '#engine/index.js';
 import type { AgentTurnEvent, AgentTurnMessage } from '#domain/index.js';
-import { streamTerminalAgentTurn } from '#composition/core/terminal-chat/index.js';
+import { streamTerminalAgentTurn } from '#surfaces/core/terminal-turn/index.js';
 import { mountWorkline, settle, until } from '../support/workline-harness.js';
 
 const roots: string[] = [], mounted: ReturnType<typeof mountWorkline>[] = [];
