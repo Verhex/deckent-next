@@ -333,7 +333,7 @@ Kaynak: dış `proof/DECKENT-API-KEYS-2026-10-08/analysis.md` (yan oturum decken
 
 ## Owner kararları — 2026-10-08 (anahtar deposu geçişi)
 Kaynak: dış `proof/DECKENT-API-KEYS-2026-10-08/analysis.md`.
-- **Varsayılan depo:** yeni kurulumlarda Linux/WSL/macOS şifreli depo; native Windows ortam değişkeni (OS anahtarlığına kadar); mevcut
+- **Varsayılan depo:** yeni kurulumlarda Linux/WSL/macOS şifreli depo (bugün `init policy --apply` yolunda; Docker'lı `init apply` yolu henüz değil); native Windows ortam değişkeni (OS anahtarlığına kadar); mevcut
   kurulumlar sessizce değişmez, doctor yalnız önerir (Jev 60bdc5e6 0,93/0,67 → owner).
 - **Depo seçimi secret verisidir (B):** tek yönetilen işlem `deckent secret store` — kopyala, doğrula, seçimi yayımla, eskiyi sil; daha zayıf
   depoya geçiş açık onay ister; audit `secret-store-switch`; config motorunun secrets reddi kalır (Jev a0284b73 1,00/0,82 → owner).

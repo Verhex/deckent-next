@@ -213,8 +213,8 @@ Publication before deletion is the crash-safe order (the owner's stated order de
 reachable and `cleaned: false`; the same switch again (`status: current`) deletes copies elsewhere that are identical to the selected ones.
 The running service resolves through the new selection without a restart. `deckent secret store` picks from the registered stores on a
 terminal (numbered list, y/N for a downgrade) or takes `--to <store>` / `--confirm-downgrade` / `--list`; `doctor` names leftover entries in a
-non-selected Core store (counts only). Fresh installs on Linux/WSL/macOS (`init policy --apply`, no policy before) run the same switch with
-zero entries; with no ledger yet its record is the command result (owner 2026-10-08, Jev 0950f08e). Open limit: a secret set on the old
+non-selected Core store (counts only). Fresh installs on Linux/WSL/macOS through `init policy --apply` (no policy before) run the same switch with
+zero entries (the Docker `init apply` path does not yet: its installations keep the environment store until switched); with no ledger yet its record is the command result (owner 2026-10-08, Jev 0950f08e). Open limit: a secret set on the old
 store between the copy and the publication is not moved (secret changes are not serialized against a switch). A v18 secret change
 whose known answer cannot fit the delivery budget is refused (`RUNTIME_SERVICE_RESPONSE_LIMIT`) before the policy decision, audit or write
 (Astra 2185 R6). Enterprise/custom backends
