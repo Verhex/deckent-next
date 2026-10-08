@@ -116,3 +116,22 @@ salt-okunur check ve olağan hazırlama depolamayı sessizce migrate etmez.
 izni ister. Mevcut ledger ve değişmez manifest'ten `absent`, `pending` veya `manifest-recorded`
 raporlar. Execution config olmadan çalışır; depolamayı migrate etmez, adayı onarmaz ve mevcut aday
 dosyalarını yeniden kontrol etmez.
+
+## Sağlayıcı anahtarları, modeller ve harcama
+
+Anahtarlar: `deckent secret set AD` (gizli istem ya da stdin) anahtarı `secrets.store` ile seçilen depoya yazar
+(`core.secret-store.env@1`, `core.secret-store.file@1`, `core.secret-store.encrypted-file@1`); `deckent secret store`
+tüm anahtarları kayıtlı başka bir depoya kopyalar, doğrular, seçimi yayımlar ve eski kopyayı siler (daha zayıf depoya
+geçiş onay ister; set, delete ve geçiş tek kurulum geneli muhafaza bölümünü paylaşır). Worker'lar anahtar almaz.
+`deckent doctor` etkin depoyu adlandırır ve depo listesi başarısız olursa `unverified` gösterir.
+
+Modeller: `deckent models connect --scope <id> --connection <tür> --command-id <id> (--model <id> | --reference <ref>)`
+modeli türün paketli kataloğundan bildirir, kapsamın çağrı profilini anahtar adıyla yazar ve etkinleştirir (türler:
+anthropic-api, openai-api, deepseek-api, zai-api, zai-cn-api, openai-compatible, local-openai). Doğrulanmış yayımlanmış
+tarifesi olmayan uzak model reddedilir ve nedeniyle kilitli görünür. `terminal.defaultModel` (kullanıcı katmanı)
+terminalin varsayılanıdır; `/model` oturum sabitlemesi önce gelir, sonra projede yazılmış referans.
+
+Harcama: ücretli çağrılar uygulanabilir en pahalı yayımlanmış kademeyi rezerve eder ve sağlayıcının döndürdüğü kullanım ile
+sabitlenmiş tarifenin çarpımından kesinleşir (`measured-tariff`). Kapsamın ilk bütçesi `deckent models create-budget
+--scope <id> --usd <n>` (ya da `/model` bütçe penceresi) ile açılır, `revise-budget [--unfreeze]` ile değişir; son kullanımı
+hiç gelmemiş askıdaki çağrı `reconcile-spending` ile çözülür. Ayrıntı: ARCHITECTURE "Spend settlement".
