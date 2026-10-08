@@ -201,8 +201,8 @@ Market notes live outside the repo (`/home/alperen/deckent-refactor-work/proof/T
   (`terminalAdminPorts(...).info`, `/doctor` from `deckent doctor --json`, `/usage` budgets picked from `provider_spending`); `/help` lists the
   whole registry under its groups and runs the picked command. `/reasoning`, `/scratch` and an unknown command (SW-3) open list windows; the
   unknown window always ends with "All commands…", which opens `/help`. `/mode` opens the mode panel with a "Now:" header; `/resume` is a
-  picker; `/clear` erases the visible screen and the terminal's scrollback (home + ED 2 + ED 3, owner 2026-10-08; only on a TTY, never on TERM=dumb,
-  with NO_COLOR or to a non-TTY: the composition's `clearScreen`) and starts a new `<Static>` epoch. Hosts: the panel controller keeps the job, approval,
+  picker; `/clear` erases the visible screen and the terminal's scrollback (home + ED 2 + ED 3, owner 2026-10-08; only on a TTY, never on TERM=dumb
+  or to a non-TTY; NO_COLOR does not stop it: the composition's `clearScreen`) and starts a new `<Static>` epoch. Hosts: the panel controller keeps the job, approval,
   resume and settings windows; `useWindowSlot` (terminal) is the one local slot for information and list windows. Every window is a `Window`
   in the one stack (single focus owner); the controller's modal card or picker hides the slot until answered (approval priority). The status
   row reads Ready while a slash window waits. **System summary line:** `systemSummaryEntry(text, level)` (terminal-work) is the only factory

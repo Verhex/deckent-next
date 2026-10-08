@@ -56,7 +56,7 @@ describe('/clear really clears', () => {
     expect(saved[1]).not.toBe(saved[0]);
   });
 
-  it.each(['non-TTY output', 'clearScreen off (TERM=dumb, NO_COLOR)'] as const)('with %s /clear sends no escape sequence and still starts a new conversation', async mode => {
+  it.each(['non-TTY output', 'clearScreen off (TERM=dumb)'] as const)('with %s /clear sends no escape sequence and still starts a new conversation', async mode => {
     const port = { async save() { /* unused */ }, async list() { return []; }, async load() { return null; } };
     const view = mountWorkline({ labels: withWindows, sessions: port, ...(mode === 'non-TTY output' ? {} : { clearScreen: false }) });
     if (mode === 'non-TTY output') Object.defineProperty(view.stdout, 'isTTY', { value: false });

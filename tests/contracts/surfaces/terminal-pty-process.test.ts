@@ -220,8 +220,8 @@ describe.skipIf(process.platform === 'win32')('deckent terminal in a real pseudo
   });
 
   // Owner 2026-10-08: /clear erases the visible screen AND the terminal's scrollback (ED 2 + ED 3); afterwards only its one system line remains.
-  // Colour stays on here: with NO_COLOR (or TERM=dumb) /clear sends no escape sequence at all (owner rule), shown by the second run.
-  it('/clear erases the screen and the scrollback in a real terminal; with NO_COLOR it sends nothing', async () => {
+  // NO_COLOR concerns colour only, so /clear still clears with it; on TERM=dumb it sends no escape sequence at all (second run).
+  it('/clear erases the screen and the scrollback in a real terminal (also with NO_COLOR); on TERM=dumb it sends nothing', async () => {
     const f = await project();
     const colour = Object.fromEntries(Object.entries(f.env).filter(([key]) => key !== 'NO_COLOR'));
     const steps: ReadonlyArray<readonly [string, string]> = [['Deckent workline', 'hello\r'], ['TERMINAL_CHAT_NOT_CONFIGURED', '/clear\r'], ['New conversation started.', '/exit\r']];
@@ -235,9 +235,12 @@ describe.skipIf(process.platform === 'win32')('deckent terminal in a real pseudo
     const screen = terminalScreen(result.output, 120);
     expect(screen).not.toContain('TERMINAL_CHAT_NOT_CONFIGURED'); expect(screen).not.toMatch(/│ hello/u);
     expect(screen).toContain('◆ Deckent system · New conversation started.');
-    const plain = await inPty(f.projectRoot, f.env, ['terminal', 'workline', '--scope', 'pty-scope'], steps);
-    expect(plain.timeout, plain.output).toBeUndefined();
-    expect(plain.output.slice(plain.output.indexOf('TERMINAL_CHAT_NOT_CONFIGURED'))).not.toContain('\u001b[3J');
+    const noColour = await inPty(f.projectRoot, f.env, ['terminal', 'workline', '--scope', 'pty-scope'], steps);
+    expect(noColour.timeout, noColour.output).toBeUndefined();
+    expect(noColour.output.slice(noColour.output.indexOf('TERMINAL_CHAT_NOT_CONFIGURED'))).toContain('\u001b[3J');
+    const dumb = await inPty(f.projectRoot, { ...f.env, TERM: 'dumb' }, ['terminal', 'workline', '--scope', 'pty-scope'], steps);
+    expect(dumb.timeout, dumb.output).toBeUndefined();
+    expect(dumb.output.slice(Math.max(0, dumb.output.indexOf('TERMINAL_CHAT_NOT_CONFIGURED')))).not.toContain('\u001b[3J');
   });
 
   it('arms exit on the first idle Ctrl+C and exits on the second in a real terminal', async () => {

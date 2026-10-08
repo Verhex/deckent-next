@@ -531,7 +531,7 @@ Core contracts and never requires editing Core. Core-memory law 10 records this 
   warning line above the composer. Detail: [terminal-surface](.deckent/docs/architecture/modules/terminal-surface.md).
 - **Slash windows and system summary line (SLASH-WINDOWS, owner 2026-10-08; `wave/slash-windows`, not landed):** in the TTY terminal every
   informing slash command answers in a bounded `Window` (Esc closes), never in the chat stream; `/clear` erases the screen and the terminal's
-  scrollback (ED 2 + ED 3, TTY only; nothing on TERM=dumb, NO_COLOR or a non-TTY) and starts a new conversation (saved history stays for
+  scrollback (ED 2 + ED 3, TTY only, also with NO_COLOR; nothing on TERM=dumb or a non-TTY) and starts a new conversation (saved history stays for
   `/resume`), `/exit` exits. A closed window leaves at most ONE system line: `systemSummaryEntry` (terminal-work) is the only factory, a
   `notice` with `SYSTEM_SUMMARY_ENTRY_ID`; `LedgerEntryRow` is the only render point, through `SystemSummaryLine` (terminal-window: own rail,
   `◆ Deckent system` label, tone from the level, secret-projected). The `/mode` change (window and Shift+Tab), settings window results (`/model`

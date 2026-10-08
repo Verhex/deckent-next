@@ -390,8 +390,9 @@ export async function terminalCommand(argv: readonly string[], context: Terminal
     labels: { ...worklineLabels(locale, [t('terminal.status.chat', { target: chatTarget(chat, locale) }, locale), ...(serviceLine ? [serviceLine] : [])].join(' · ')),
       ...(pickerNeedsTextFallback(env, true) ? {} : { windows: slashWindowLabels(locale) }) },
     target, systemPrompt: t('terminal.chat.systemPrompt', {}, locale), historyMessages, projectRoot: root,
-    // Owner 2026-10-08: `/clear` sends no escape sequence on TERM=dumb or with NO_COLOR (and never to a non-TTY).
-    clearScreen: env['TERM']?.trim().toLowerCase() !== 'dumb' && !env['NO_COLOR'],
+    // Owner 2026-10-08: `/clear` clears screen and scrollback; no escape sequence on TERM=dumb (and never to a non-TTY).
+    // NO_COLOR concerns colour only, so it does not stop the clear.
+    clearScreen: env['TERM']?.trim().toLowerCase() !== 'dumb',
     completeTurn: turn, errorText: error => errorText(error, locale),
     ...(inputHistory ? { inputHistory } : {}),
     // T-L5 `@file`: candidates and content come from the runtime service's scoped read port; this surface reads no file.
