@@ -450,7 +450,7 @@
   "models.connect.notCarried": "Katalog değişince etkinleştirmesi düştü (deckent models activate ile yeniden etkinleştirin): {models}",
   "error.BACKUP_INPUT_INVALID": "Yedekleme komutu geçersiz.",
   "error.BACKUP_POLICY_DENIED": "Kurulumun tümünü kapsayan yedekleme yetkisi gerekiyor.",
-  "error.BACKUP_PASSPHRASE_INVALID": "Parola geçersiz veya bu kurtarma setini açmıyor.",
+  "error.BACKUP_PASSPHRASE_INVALID": "Parola yanlış ya da kurtarma seti değiştirilmiş: set açılamıyor. Parolayı kontrol edin; doğruysa set özgün değildir, başka bir set kullanın.",
   "error.BACKUP_PATH_UNSAFE": "Kurtarma yolunda güvenli olmayan sahiplik, izin, bağlantı veya uyumsuz yerleşim var.",
   "error.BACKUP_DIRECTORY_UNSAFE": "{path} dizini size ait değil veya başka kullanıcılar ona yazabiliyor; hiçbir şey değiştirilmedi. Sahibi olarak chmod 700 {path} çalıştırın, sonra aynı komutu yeniden çalıştırın.",
   "error.BACKUP_POLICY_UNREADABLE": "Kurulum policy dosyası {path} kullanılamıyor ({reason}); hiçbir şey değiştirilmedi. Hasarlı policy asla sessizce değiştirilmez: setten kurtarmak için dosyayı kenara taşıyın (mv {path} {path}.damaged) ve aynı deckent backup restore komutunu yeniden çalıştırın; o zaman setin doğrulanmış policy'si kullanılır. Create ve verify için önce dosya onarılmalıdır.",

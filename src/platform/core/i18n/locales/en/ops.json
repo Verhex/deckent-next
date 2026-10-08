@@ -450,7 +450,7 @@
   "models.connect.notCarried": "Lost its activation with the catalog change (activate it again with deckent models activate): {models}",
   "error.BACKUP_INPUT_INVALID": "The backup command is invalid.",
   "error.BACKUP_POLICY_DENIED": "Installation-wide backup authority is required.",
-  "error.BACKUP_PASSPHRASE_INVALID": "The passphrase is invalid or does not open this recovery set.",
+  "error.BACKUP_PASSPHRASE_INVALID": "The passphrase is wrong or the recovery set was modified: the set cannot be opened. Check the passphrase; if it is right, the set is not authentic, so use another set.",
   "error.BACKUP_PATH_UNSAFE": "The recovery path has unsafe ownership, permissions, links or an incompatible layout.",
   "error.BACKUP_DIRECTORY_UNSAFE": "The directory {path} is not yours or other users can write to it; nothing was changed. Run chmod 700 {path} as its owner, then rerun the same command.",
   "error.BACKUP_POLICY_UNREADABLE": "The installation policy file {path} cannot be used ({reason}); nothing was changed. A damaged policy is never replaced silently: to recover it from the set, move it aside (mv {path} {path}.damaged) and rerun the same deckent backup restore, which then uses the set's authenticated policy. Create and verify need the file repaired first.",

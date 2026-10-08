@@ -16,6 +16,7 @@ import { verifyAuditRecord } from '#engine/index.js';
 import { DOWNGRADE_TO_PREVIOUS_LEDGER_SQL } from '../../fixtures/ledger-previous.js';
 import { composeCore } from '#composition/core/root/index.js';
 import { openConfiguredArtifactStore } from '#composition/core/artifacts/index.js';
+import { restoreHoldPath } from '#platform/index.js';
 const roots: string[] = [], workers: Worker[] = [], services: Awaited<ReturnType<typeof startConfiguredRuntimeService>>[] = [];
 const phrase = 'CANARY-backup-operator-secret-🐦';
 afterEach(async () => {
@@ -81,6 +82,8 @@ it('CLI → application → online WAL backup under concurrent writes → verify
   await new FileInstallationIdentityStore(restored, 2000).resolveRelocation('keep', { issuer: readLocalOsIdentity().issuer, subject: readLocalOsIdentity().subject });
   expect((await new FileInstallationIdentityStore(restored, 2000).read())).toMatchObject({ value: { installationId: f.installationId } });
   for (const name of ['MANIFEST.sha256','ledger.db','ledger.fingerprint.json','state.archive.json.gz','authority.key.enc']) expect((await stat(join(f.set,name))).mode & 0o777).toBe(0o600);
+  // S1 O6: create, verify and restore leave no SQLite sidecar in the set.
+  expect((await readdir(f.set)).sort()).toEqual(['MANIFEST.sha256','authority.key.enc','ledger.db','ledger.fingerprint.json','state.archive.json.gz']);
   expect((await stat(f.set)).mode & 0o777).toBe(0o700);
   const integrity = await openLocalIntegrityAuthority(f.layout, 'authority.key');
   const recoveryAudit = join(f.base, '.deckent-backup-audit');
@@ -159,8 +162,8 @@ it('a rewritten payload plus a recomputed manifest still cannot bypass AEAD, and
   const path=join(f.set,'ledger.fingerprint.json');await writeFile(path,'forged');
   const manifest=join(f.set,'MANIFEST.sha256'),text=await readFile(manifest,'utf8');
   const digest=createHash('sha256').update('forged').digest('hex');await writeFile(manifest,text.replace(/^[a-f0-9]{64} {2}ledger.fingerprint.json$/m,digest+'  ledger.fingerprint.json'));
-  await expect(call(f,'verify')).rejects.toMatchObject({code:'BACKUP_PASSPHRASE_INVALID'});
-
+  const refused=await call(f,'verify').then(()=>null,(error:{code?:string;message?:string})=>error);
+  expect(refused?.code).toBe('BACKUP_PASSPHRASE_INVALID');expect(refused?.message).toContain('the recovery set was modified');
 });
 
 it('recovers damaged configuration and a lost key in place without inventing an installation identity',async()=>{
@@ -180,6 +183,7 @@ it('archives the global layer apart: a restore on the same machine keeps it in t
   expect((await loadConfig(f.target,{env:f.env})).language).toBe('tr');
 });
 const SELECTED_STORE='core.secret-store.encrypted-file@1';
+const SET_FILES=['MANIFEST.sha256','authority.key.enc','ledger.db','ledger.fingerprint.json','state.archive.json.gz'];
 async function selectStore(f: Awaited<ReturnType<typeof fixture>>) {
   await mkdir(f.env.DECKENT_GLOBAL_HOME,{recursive:true,mode:0o700});
   await writeFile(join(f.env.DECKENT_GLOBAL_HOME,'config.json'),JSON.stringify({language:'tr',secrets:{store:SELECTED_STORE}}),{mode:0o600});clearConfigCache();
@@ -222,6 +226,8 @@ async function downgradeToV1(f: Awaited<ReturnType<typeof fixture>>) {
   const global = state.globalConfig ? JSON.parse(Buffer.from(state.globalConfig, 'base64').toString()) : {};
   entry.content = Buffer.from(JSON.stringify({ ...global, ...JSON.parse(Buffer.from(entry.content, 'base64').toString()) })).toString('base64');
   state.schemaVersion = 1; delete state.globalConfig;
+  // alpha.18 also kept the source's WAL header in the snapshot (a read-only open then left -wal/-shm in the set).
+  const snapshot = new DatabaseSync(join(f.set, 'ledger.db')); snapshot.exec('PRAGMA journal_mode=WAL'); snapshot.close();
   await writeFile(archive, gzipSync(JSON.stringify(state)), { mode: 0o600 });
   const digest = async (name: string) => createHash('sha256').update(await readFile(join(f.set, name))).digest('hex');
   const payload = (await Promise.all(['ledger.db', 'ledger.fingerprint.json', 'state.archive.json.gz'].map(async name => `${await digest(name)}  ${name}\n`))).join('');
@@ -233,6 +239,7 @@ it('an alpha.18 merged (v1) set restores without moving the secrets selection in
   await rm(f.env.DECKENT_GLOBAL_HOME,{recursive:true,force:true});await writeFile(join(f.root,'.deckent/config.json'),'{broken');clearConfigCache();
   const result=await call(f,'restore',phrase,{target:f.root,confirmTarget:f.root});
   expect(result.globalConfig?.added).toEqual(['secrets']);
+  expect((await readdir(f.set)).sort()).toEqual(SET_FILES);
   const project=JSON.parse(await readFile(join(f.root,'.deckent/config.json'),'utf8'));
   expect(project.secrets).toBeUndefined();expect(project.language).toBe('tr');
   clearConfigCache();expect(((await loadConfig(f.root,{env:f.env})) as unknown as Record<string, unknown>).secrets).toEqual({store:SELECTED_STORE});
@@ -292,4 +299,13 @@ it('a damaged installation policy refuses restore with a typed code naming the f
   await rename(policyPath,`${policyPath}.damaged`);clearConfigCache();
   await call(f,'restore',phrase,{target:f.root,confirmTarget:f.root});
   expect(await readFile(policyPath,'utf8')).toBe(before);
+});
+it('backup reports a restore hold in the installation\'s saved language without --lang (S1 O5)',async()=>{
+  const f=await fixture();await mkdir(f.env.DECKENT_GLOBAL_HOME,{recursive:true,mode:0o700});
+  await writeFile(join(f.env.DECKENT_GLOBAL_HOME,'config.json'),JSON.stringify({language:'tr'}),{mode:0o600});
+  await writeFile(restoreHoldPath(f.root),'{}',{mode:0o600});clearConfigCache();
+  let errors='';
+  expect(await main(['backup','create','--scope','scope','--set',f.set,'--json'],{root:f.root,env:f.env,initialize:composeCore,executeBackup,
+    stdin:Readable.from([phrase+'\n']),stdout:{write:()=>{}},stderr:{write:text=>{errors+=text;}}})).not.toBe(0);
+  expect(JSON.parse(errors)).toMatchObject({code:'BACKUP_RESTORE_HOLD'});expect(errors).toContain('Tamamlanmamış bir yedek geri yüklemesi');
 });

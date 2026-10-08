@@ -5,7 +5,7 @@ import { FileInstallationIdentityStore } from '#adapters/core/installation-files
 import { acquireLedgerLock } from '#adapters/core/local-runtime-socket/index.js';
 import { configSections, deepMerge, getConfigFieldDefault, isRecord, readJsonFile, validateConfig, productResourcePath, resolveProductLayout, restoreHoldPath, writeConfig, type ProductLayout } from '#platform/index.js';
 import type { BackupCommand, BackupResult, BackupStoragePort } from '#engine/index.js';
-import { ledgerFingerprint } from './fingerprint.js';
+import { ledgerFingerprint, openSetLedger } from './fingerprint.js';
 import { createBackupSet, verifyBackupSet, type VerifiedBackup } from './set.js';
 import { BACKUP_RESOURCES, directoryResources, splitArchivedConfig, type BackupConfigLayers, type BackupLimits } from './archive.js';
 import { inside, ownerOnlyWritable, privateDirectory, readPrivate, refuse, safePath, syncDirectory, writePrivate } from './files.js';
@@ -132,9 +132,9 @@ export class FileBackupStorage implements BackupStoragePort {
         await writePrivate(join(productResourcePath(staged, item.resource), ...(item.path ? item.path.split('/') : [])), content);
       }
       // Snapshot ledger uses online backup again; never copy a live WAL-ledger or share verification sidecars.
-      const { backup, DatabaseSync } = await import('node:sqlite');
+      const { backup } = await import('node:sqlite');
       const ledger = productResourcePath(staged, 'ledger'); await writePrivate(ledger, new Uint8Array());
-      const db = new DatabaseSync(join(verified.set, 'ledger.db'), { readOnly: true });
+      const db = openSetLedger(join(verified.set, 'ledger.db'));
       try { await backup(db, ledger); } finally { db.close(); }
       if (ledgerFingerprint(ledger) !== ledgerFingerprint(join(verified.set, 'ledger.db'))) return refuse('BACKUP_FINGERPRINT_INVALID');
       // Astra 2471 R1: a durable hold precedes the first publication; config admission refuses it until the last one completed.

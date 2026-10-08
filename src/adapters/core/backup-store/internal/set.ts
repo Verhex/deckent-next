@@ -83,6 +83,8 @@ export async function createBackupSet(layout: ProductLayout, projectRoot: string
     try { await backup(db, ledger, { rate: 1000, progress({ totalPages }) { if (totalPages * Number(db.prepare('PRAGMA page_size').get()?.['page_size']) > limits.maxTotalBytes) return refuse('BACKUP_LIMIT'); if (Date.now() > deadline) return refuse('BACKUP_TIMEOUT'); return 1000; } }); }
     finally { db.close(); }
     await chmod(ledger, 0o600);
+    // S1 O6: the snapshot keeps the source's WAL header; as rollback-journal file it is self-contained and no reader creates sidecars.
+    const snapshot = new DatabaseSync(ledger); try { snapshot.exec('PRAGMA journal_mode=DELETE'); } finally { snapshot.close(); }
     const ledgerHandle = await import('node:fs/promises').then(fs => fs.open(ledger, 'r')); try { await ledgerHandle.sync(); } finally { await ledgerHandle.close(); }
     await writePrivate(join(staging, 'ledger.fingerprint.json'), ledgerFingerprint(ledger));
     await writePrivate(join(staging, 'state.archive.json.gz'), await archiveState(layout, projectRoot, installationId, keyFile, limits, createdAt, config));
