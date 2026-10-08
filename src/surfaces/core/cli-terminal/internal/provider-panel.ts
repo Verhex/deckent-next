@@ -12,7 +12,8 @@ function kindLabel(kind: ProviderConnectKindView | undefined, id: string, locale
 /** The check's typed outcome in words (the secret lane's rejection kinds, then unreachable / unexpected). */
 export function providerOutcomeWord(probe: ProviderConnectProbeView, locale: Locale): string {
   switch (probe.outcome) {
-    case 'ok': return probe.key === 'verified' ? t('tui.provider.outcome.ok', {}, locale) : probe.key === 'none' ? t('tui.provider.outcome.okNoKey', {}, locale)
+    // A provider without a free read (T4-B: Z.ai): nothing was sent.
+    case 'ok': return probe.httpStatus === null && probe.key === 'unverified' ? t('tui.provider.outcome.okNoCheck', {}, locale) : probe.key === 'verified' ? t('tui.provider.outcome.ok', {}, locale) : probe.key === 'none' ? t('tui.provider.outcome.okNoKey', {}, locale)
       : t('tui.provider.outcome.okUnverified', {}, locale);
     case 'credential-rejected': return t('tui.provider.outcome.credentialRejected', {}, locale);
     case 'access-denied': return t('tui.provider.outcome.accessDenied', {}, locale);
@@ -65,6 +66,8 @@ function modelLines(result: ModelConnectResult, label: string, locale: Locale): 
     { label: t('tui.provider.field.key', {}, locale), text: result.credentialRef === null ? t('models.connect.keyNone', {}, locale) : result.keyStored === false
       ? t('models.connect.keyMissing', { name: result.credentialRef }, locale) : t('models.connect.key', { name: result.credentialRef }, locale),
     tone: result.keyStored === false ? 'warning' : 'muted' },
+    ...(result.notCarried.length ? [{ label: t('tui.provider.model.field.steps', {}, locale), tone: 'warning' as const, text: t('models.connect.notCarried', {
+      models: result.notCarried.map(item => `${item.reference.modelId} (${item.code})`).join(', ') }, locale) }] : []),
     ...(result.tariff === 'unmetered' ? [{ label: t('tui.provider.model.field.spend', {}, locale), text: t('models.connect.unmetered', {}, locale), tone: 'warning' as const }] : []),
     ...(result.service === 'stale' ? [{ label: t('tui.provider.model.field.service', {}, locale), text: t('models.connect.restart', {}, locale), tone: 'warning' as const }] : []),
     ...(result.status === 'connected' ? [{ label: t('tui.provider.field.next', {}, locale), text: t('tui.provider.model.next', {}, locale), tone: 'success' as const }] : [])];

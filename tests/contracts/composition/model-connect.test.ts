@@ -5,6 +5,7 @@ import { PROVIDER_CONNECT_REGISTRY, parseProviderConnectRegistry } from '#adapte
 import { connectConfiguredModel } from '#composition/core/model-connect/index.js';
 import { configuredApproval } from '#composition/core/approvals/index.js';
 import { clearConfigCache } from '#platform/index.js';
+import { modelActivationTargetId } from '#engine/index.js';
 import { me, runtime } from '../support/chat-turn-harness.js';
 
 // T4-B models.connect (owner 2026-10-08 D2) through the real configured paths: the governed config writer (policy, approval, audit), the ledger
@@ -64,7 +65,7 @@ describe.skipIf(process.platform !== 'linux')('models.connect', () => {
     const subjects = f.rows('SELECT record FROM audit_events ORDER BY rowid').map(row => (JSON.parse(String(row['record'])) as { event: { subject: Record<string, unknown> } }).event.subject);
     expect(subjects.filter(subject => subject['kind'] === 'config-change').map(subject => subject['keyPath'])).toEqual(['provider_catalog', 'provider_invocation_profiles']);
     expect(subjects.filter(subject => subject['kind'] === 'model-connect')).toEqual([{ kind: 'model-connect', commandId: 'connect-1', connection: 'vendor-one', reference,
-      credentialRef: null, steps: { catalog: 'written', declaration: 'written', profile: 'written', activation: 'written', carried: 1 } }]);
+      credentialRef: null, steps: { catalog: 'written', declaration: 'written', profile: 'written', activation: 'written', carried: 1 }, notCarried: [] }]);
     // The terminal can pick and pin it: the next turn carries the reference and the scripted server receives the exact model id.
     f.state.script = [{ content: 'Luna here.' }, { content: 'Still local.' }];
     const luna = await f.client().chatTurn(ask('turn-luna', reference), () => undefined);
@@ -80,6 +81,22 @@ describe.skipIf(process.platform !== 'linux')('models.connect', () => {
     expect(await allText(f.project)).not.toContain(CANARY);
     expect(await allText(f.data)).not.toContain(CANARY);
     expect(f.state.raw.join('')).not.toContain(CANARY);
+  }, 60_000);
+
+  it('a model that cannot be carried to the new catalog revision does not stop the connection: the result and the audit name it', async () => {
+    const local = { providerId: 'local-openai', providerVersion: 1, modelId: 'chat', modelVersion: 1 };
+    const f = await harness([{ id: 'deny-local-activation', effect: 'deny', actions: ['activate'], scopes: ['scope'], principals: me,
+      resource: { kind: 'model-activation', ids: [modelActivationTargetId(local)] } }]);
+    await f.start();
+    const result = await connectConfiguredModel(f.project, { schemaVersion: 1, commandId: 'c-deny', scopeId: 'scope', connection: 'vendor-one', endpoint: f.base,
+      model: { nativeId: 'gpt-6-luna' } }, f.options, { registry: localRegistry });
+    expect(result).toMatchObject({ status: 'connected', steps: { declaration: 'written', profile: 'written', activation: 'written', carried: 0 },
+      notCarried: [{ reference: local, code: 'POLICY_DENIED' }] });
+    const subject = f.rows('SELECT record FROM audit_events ORDER BY rowid').map(row => (JSON.parse(String(row['record'])) as { event: { subject: Record<string, unknown> } }).event.subject)
+      .find(item => item['kind'] === 'model-connect');
+    expect(subject?.['notCarried']).toEqual([local]);
+    f.state.script = [{ content: 'Luna.' }];
+    expect(await f.client().chatTurn(ask('t-luna', { providerId: 'openai-api', providerVersion: 1, modelId: 'gpt-6-luna', modelVersion: 1 }), () => undefined)).toMatchObject({ answer: 'Luna.' });
   }, 60_000);
 
   it('a second vendor changes the catalog revision; the first one keeps working (carried) and both answer pinned', async () => {

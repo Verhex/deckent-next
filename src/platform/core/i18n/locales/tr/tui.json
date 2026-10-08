@@ -863,6 +863,7 @@
   "tui.provider.field.storage": "Saklama",
   "tui.provider.outcome.ok": "Sağlayıcı anahtarı kabul etti.",
   "tui.provider.outcome.okNoKey": "Sunucu anahtarsız yanıt verdi.",
+  "tui.provider.outcome.okNoCheck": "Bu sağlayıcının ücretsiz denemesi yok: hiçbir şey gönderilmedi, anahtar doğrulanmadan saklanır; ilk tur olası reddi gösterir.",
   "tui.provider.outcome.okUnverified": "Sunucu yanıt verdi; anahtarları hiç denetlemiyor olabilir.",
   "tui.provider.outcome.credentialRejected": "Anahtar reddedildi: geçersiz ya da süresi dolmuş.",
   "tui.provider.outcome.accessDenied": "Anahtar geçerli ama bu API'ye erişimi yok.",

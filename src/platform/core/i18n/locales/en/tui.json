@@ -863,6 +863,7 @@
   "tui.provider.field.storage": "Storage",
   "tui.provider.outcome.ok": "The provider accepted the key.",
   "tui.provider.outcome.okNoKey": "The server answered without a key.",
+  "tui.provider.outcome.okNoCheck": "No free check exists for this provider: nothing was sent and the key is kept unverified; the first turn shows any rejection.",
   "tui.provider.outcome.okUnverified": "The server answered; it may not check keys at all.",
   "tui.provider.outcome.credentialRejected": "The key was rejected: it is invalid or expired.",
   "tui.provider.outcome.accessDenied": "The key is valid but has no access to this API.",

@@ -39,6 +39,9 @@ export type ModelConnectResult = Readonly<{
   steps: Readonly<{ catalog: ModelConnectStepState; declaration: ModelConnectStepState; profile: ModelConnectStepState; activation: ModelConnectStepState;
     /** Models of this scope whose activation was carried to the new catalog revision (their bindings unchanged). */
     carried: number }>;
+  /** Models of this scope that were active under the replaced catalog revision and could NOT be carried (with the typed reason): they need a
+   * fresh activation (`deckent models activate`); every other step still completed. */
+  notCarried: readonly Readonly<{ reference: z.infer<typeof modelReferenceSchema>; code: string }>[];
   /** `published`: the profile carries the vendor's published tariff; `unmetered`: the adapter takes only a zero-rate tariff, spend is not metered. */
   tariff: 'published' | 'unmetered';
   /** The pending approval that stopped the run (the same command continues after it is allowed). */

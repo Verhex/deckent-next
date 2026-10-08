@@ -34,6 +34,8 @@ export function renderModelConnect(result: ModelConnectResult, locale: Locale): 
     profile: stepWord(result.steps.profile, locale), activation: stepWord(result.steps.activation, locale), carried: result.steps.carried }, locale),
   result.credentialRef === null ? t('models.connect.keyNone', {}, locale) : result.keyStored === false ? t('models.connect.keyMissing', { name: result.credentialRef }, locale)
     : t('models.connect.key', { name: result.credentialRef }, locale)];
+  if (result.notCarried.length) lines.push(t('models.connect.notCarried', { models: result.notCarried.map(item => `${item.reference.providerId}@${item.reference.providerVersion}/`
+    + `${item.reference.modelId}@${item.reference.modelVersion} (${item.code})`).join(', ') }, locale));
   if (result.tariff === 'unmetered') lines.push(t('models.connect.unmetered', {}, locale));
   if (result.service === 'stale') lines.push(t('models.connect.restart', {}, locale));
   return lines.join('\n');
