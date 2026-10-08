@@ -570,9 +570,10 @@ Core contracts and never requires editing Core. Core-memory law 10 records this 
   --preview|--apply [--expect <revision>]` (installer authority: only the installation owner — the caller's uid owns both authority documents —
   and only when the first-run read rule names the caller explicitly; anyone else uses the governed path) adds the current template rules that person lacks, removes
   or replaces nothing (same-id rules with other content are kept and named as conflicts; hand-added MCP wire-name rules are named), writes on the
-  previewed revision through the archived authority writer and the configured layout; a second run is `current`; an untouched v4 becomes
-  exactly v8 (v6 secret-store switch, v7 model activation/invocation and provider spend accounts, v8 installation-wide backup). `deckent policy upgrade --template v5 [--apply|--rollback]` applies the same plan through `policy.administer@1` (I2) where the
-  person already holds that authority.
+  previewed revision through the archived authority writer and the configured layout; a second run is `current`; an older policy receives
+  only missing rules (an untouched v4 becomes exactly v8: v6 secret-store switch, v7 model activation/invocation and provider spend accounts,
+  v8 installation-wide backup). `deckent policy upgrade --template current [--apply|--rollback]` applies the same plan through `policy.administer@1` (I2) where the
+  person already holds that authority. The deprecated `--template v5` selector uses the same current add-only plan and emits an EN/TR warning.
   A hand-built policy (no first-run read rule; POLICY-UPGRADE-HANDBUILT, lead 2026-10-08, Jev b6dba079) takes the installer plan only with
   `--person <issuer>/<subject>`: the same owner gate, and the person must already be named explicitly (never `all`) on an allow rule listing the
   scope; added rules are in that scope (`mcp-server` and installation-wide `backup` stay every scope) and name that person alone. Without `--person` the refusal names
@@ -585,7 +586,7 @@ Core contracts and never requires editing Core. Core-memory law 10 records this 
   `/mcp` bounded windows, presentation only, ports and words from `cli-terminal`); `/monitor`, `/watch-workers`, `/watch-runs`, `/tasks` are
   bounded modal live windows (L5: `MonitorBody` loaded through a host port; one visible window at a time). Full access shows a standing
   warning line above the composer. Detail: [terminal-surface](.deckent/docs/architecture/modules/terminal-surface.md).
-- **Slash windows and system summary line (SLASH-WINDOWS, owner 2026-10-08; `wave/slash-windows`, not landed):** in the TTY terminal every
+- **Slash windows and system summary line (SLASH-WINDOWS, owner 2026-10-08; alpha.15 `4d6f1582`, PR #46):** in the TTY terminal every
   informing slash command answers in a bounded `Window` (Esc closes), never in the chat stream; `/clear` erases the screen and the terminal's
   scrollback (ED 2 + ED 3, TTY only, also with NO_COLOR; nothing on TERM=dumb or a non-TTY) and starts a new conversation (saved history stays for
   `/resume`), `/exit` exits. A closed window leaves at most ONE system line: `systemSummaryEntry` (terminal-work) is the only factory, a
@@ -896,7 +897,7 @@ and closed findings move to COMPLETED-PLAN.md (read only when history is needed)
 lives in the external refactor proof area (kept until the batch lands and its review closes), not an append-only product plan.
 
 
-Owner 2026-10-05 (SSOT simplification): detail documents under `.deckent/docs/decisions/`, `.deckent/docs/architecture/` (including `modules/`) and `.deckent/docs/plan/` are tracked, admitted by `arch.json` `markdown.trackedAllowGlobs` and written by humans/hosts only. `scripts/lint-docs.mjs` bounds PLAN.md (≤ 60 KB, no line > 800 chars) and this file (≤ 1200 lines); `scripts/check-doc-preservation.mjs` proves that text moved out of PLAN/ARCHITECTURE still exists verbatim.
+Owner 2026-10-05 (SSOT simplification): detail documents under `.deckent/docs/decisions/`, `.deckent/docs/architecture/` (including `modules/`) and `.deckent/docs/plan/` are tracked, admitted by `arch.json` `markdown.trackedAllowGlobs` and written by humans/hosts only. `scripts/lint-docs.mjs` bounds PLAN.md (≤ 60 KB, no line > 800 chars) and this file (≤ 1200 lines); it also binds the first CHANGELOG release and the highest README/README.tr/SECURITY alpha claim to package.json, requires commit-SHA + PR receipts for landed releases (alpha.1–4 predate PR-based landing, PR #1 opened 2026-10-04, and carry the SHA only), and rejects stale landing phrases in architecture documents (only a line prefixed `historical:` is exempt). A top release explicitly marked `Unreleased` alone may omit its landing receipt; `scripts/check-doc-preservation.mjs` proves that text moved out of PLAN/ARCHITECTURE still exists verbatim.
 Design reasoning goes into [decisions.md](.deckent/docs/architecture/decisions.md).
 
 ## Decision log

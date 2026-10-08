@@ -637,7 +637,8 @@ onto the ledger catalog; Codex/Cursor output-side model evidence (none documente
   `realpath(current)` (a process loads lazily from its own version directory for life); an invalid `current` is the typed
   `NEXT_ENTRY_CURRENT_INVALID` refusal, never a silent fall-back to the checkout `dist`; cwd is the project root. `stage` clones the live repo
   with `git clone --local --no-hardlinks` (Jev 2b6f9f73; the live `.git` is not written), builds, runs `build-dist --pack --bwrap` and pack-smoke
-  (tarball and `--root`) and installs atomically; unknown, dirty-symbolic, unpushed, unpublishable or smoke-failing sources are refused
+  (tarball and `--root`) and installs atomically; unknown or dirty-symbolic sources, sources missing from the remote,
+  and sources that cannot be published or fail smoke tests are refused
   (`--waive-smoke <check>` is recorded in `release.json` and is an emergency option only: pack-smoke now passes the terminal check).
   `switch` stops the old service through its own CLI (governed shutdown), flips the pointer, starts the new service detached and verifies
   describe `build.sourceCommit`; a mismatch restores the pointer and the old service, or, when the ledger already advanced,
