@@ -593,6 +593,18 @@ Core contracts and never requires editing Core. Core-memory law 10 records this 
   OpenRouter (ids/endpoint tag unverified). Open decisions (DeepSeek/Z.ai wire parameters, metered OpenAI-chat tariff) are in external
   `proof/T4B-2026-10-08/DECISIONS.md`.
 
+- **Round 2 (owner K1–K5, 2026-10-08):** OpenAI chat adapter **v5** carries the provider's documented request dialect on the definition (registry
+  data per row: `tokenLimitField` max_tokens | max_completion_tokens, `streamUsage` include | omit, allowed `tool_choice`; DeepSeek max_tokens with
+  stream_options, Z.ai/Zhipu max_tokens without stream_options and tool_choice auto only); v4 profiles keep the OpenAI wire and are still served;
+  the evidence records the served version (Jev d69089cf). First-run policy template **v7** adds `model-activation` activate/inspect (every scope)
+  and `model-invocation` invoke/inspect/inspect-content/cancel-invocation (installed scope); `init policy --upgrade [--person]` adds only the
+  missing rules (Jev 125e4435). Seeds `zai-cn-api` (docs.bigmodel.cn) and `openrouter-api` (exact ids + first-party endpoint tags; catalog
+  registration only: the OpenRouter adapter takes no tools/streaming and its quote needs max_completion_tokens) (Jev bca0e8c6). The connect
+  result lists kept (`carriedModels`) and not-carried models; the summary line only counts (Jev e3dcf2eb). `terminal.chat.reference` is
+  optional: a shadowing project model gets two governed answers in `/model` (remove it / make it this one; project layer, reference only)
+  (Jev 77898686). `/model` and `/provider` lock on a missing scope budget (`PROVIDER_SPEND_UNAVAILABLE`); an old shared key name
+  (`legacyKeys`) is warned and removable.
+
 ## Packages (current implementation)
 
 Layers: `platform` (config, errors/i18n, identity, paths) → `domain` (pure versioned contracts) → `capabilities` → `engine` (transitions, ports) → `adapters` (SQLite, Git/Docker, sockets, MCP) → `composition` (explicit wiring) → `surfaces` (SDK, CLI, MCP, terminal). Gates: `arch.json` + `scripts/lint-arch.mjs`. Full per-area text:
