@@ -1,5 +1,12 @@
 # Deckent Next — tamamlanan plan
 
+## alpha.18 — 2026-10-09 (PR #53)
+
+- **İnen işler (PR #53, merge `94a8d089`; parti `wave/batch-1008b`):** BACKUP-COMMAND (`deckent backup create|verify|restore`; kimlik doğrulamalı şifreli kurtarma kümeleri, işlem başına denetim, yalnız servis durmuşken geri yükleme ve dayanıklı `BACKUP_RESTORE_HOLD` ile geri yükleme bitene kadar normal kabul tutulur, geri yüklenen config ve yayın için tek hedef düzeni, zamanlama ve saklama seçimle; ilk çalıştırma policy şablonu v8 `first-run-backup` kuralı); DECKENT-MD (native terminalde `DECKENT.md` (yedek `AGENTS.md`), `deckent init` önizleme/onay, digest bağlı onay, write floor; worker bağlantısı ertelendi, PLAN `DECKENT-MD-WORKERS`); SECRET-DIR-MODE (kurulum dizinleri 0700 yaratılır, mevcut dizine sessiz chmod yok) ve küçük düzeltmeler; kompozisyon rahatlatması 6332/6500 satır.
+- **İnceleme zinciri:** Astra 2471 REVISE (iki yedek geri yükleme P1'i) → düzeltmeler `062e7943` ve `c4ccc31f` → Astra 2473 PASS, exact head `2589d5a7`.
+- **Açık sınırlar:** canlı hâlâ alpha.17 `8cc60c2d`; staged switch `94a8d0898d82-8b1f2f861e2d` owner betiğini bekliyor; DOGFOOD OFF ve S1 kurtarma tatbikatı ürün komutuyla henüz koşulmadı; yedek bootstrap denetimi ve kesinti atomikliği sınırları açık; DECKENT-MD worker bağlantısı ve native Windows kalıcı güven açık.
+- **Kanıt:** `proof/BATCH-1008B-2026-10-08/` (dış proof klasörü).
+
 ## alpha.17 — 2026-10-08 (PR #49)
 
 - **İnen iş (PR #49, merge `8cc60c2d`; PRICING):** sürümlü yayımlanmış tarife şeması; OpenAI amiral gemisi kademeleri (standart/flex/priority/fast servis kademesi, önbellekli girdi, önbellek yazma, uzun bağlam; en pahalı uygulanabilir kademe rezerve edilir, dönen kademe ve önbellek ayrımıyla kesinleşir); `gpt-6-astra`, `gpt-6.1-sol`, `gpt-6-luna`, Z.ai `glm-5.3` ve `glm-4.7-flash` için doğrulanmış satırlar; DeepSeek yayımlanmış peak fiyatından kesinleşir, `upper-bound` etiketli (sağlayıcı ücreti olarak asla gösterilmez); Zhipu Çin (CNY) kilitli kalır. Protokol 25, ledger 49, switch `8cc60c2d3610-e1fa0203b60c`.

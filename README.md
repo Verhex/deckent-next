@@ -277,6 +277,8 @@ flowchart LR
   settle from the provider's usage times a verified published tariff under a budget you set in the budget window or
   with `deckent models create-budget` (an unpriced remote model is refused and locked with the reason); spending and
   allocation audit.
+- **Back up and restore**: `deckent backup create|verify|restore` writes encrypted, verifiable recovery sets, on a schedule
+  if you choose, with retention; a restore runs only while the service is stopped.
 - **Operate**: `deckent monitor` for a read-only view of every installation, `deckent doctor` for health, `deckent
   config` for settings, bilingual help everywhere.
 
