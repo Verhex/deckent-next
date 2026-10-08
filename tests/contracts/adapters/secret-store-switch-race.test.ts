@@ -162,14 +162,14 @@ describe.skipIf(process.platform !== 'linux')('store switch target privacy (S1 O
     const { chmod, lstat } = await import('node:fs/promises'); await chmod(global, 0o755);
     const env = { HOME: home, USERPROFILE: home, DECKENT_GLOBAL_HOME: global }, selection = createInstallationSecretStoreSelection(env, 'linux');
     const audits: unknown[] = [];
-    const run = () => new SecretStoreSwitch({ has: isRegisteredSecretStore, open: id => openRegisteredSecretStore(id, env, 'linux'), selection, authorize: allow,
+    const run = () => new SecretStoreSwitch({ environmentReferences: async () => [], has: isRegisteredSecretStore, open: id => openRegisteredSecretStore(id, env, 'linux'), selection, authorize: allow,
       audit: event => { audits.push(event); }, now: () => 1, custody: createInstallationSecretCustody(env, 'linux') })
       .switch({ principal: me, scopeId: 'installation', to: SEALED, confirmDowngrade: false });
     await expect(run()).rejects.toMatchObject({ code: 'SECRET_STORE_UNSAFE', params: { path: global } });
     expect(audits).toEqual([]); expect((await selection.read()).store).toBeNull(); expect((await lstat(global)).mode & 0o777).toBe(0o755);
     // A fresh global home is created owner-only and the same switch is admitted; the store then accepts a secret.
     const fresh = join(root, 'fresh'), freshEnv = { HOME: home, USERPROFILE: home, DECKENT_GLOBAL_HOME: fresh };
-    await new SecretStoreSwitch({ has: isRegisteredSecretStore, open: id => openRegisteredSecretStore(id, freshEnv, 'linux'), selection: createInstallationSecretStoreSelection(freshEnv, 'linux'),
+    await new SecretStoreSwitch({ environmentReferences: async () => [], has: isRegisteredSecretStore, open: id => openRegisteredSecretStore(id, freshEnv, 'linux'), selection: createInstallationSecretStoreSelection(freshEnv, 'linux'),
       authorize: allow, audit: () => undefined, now: () => 1, custody: createInstallationSecretCustody(freshEnv, 'linux') })
       .switch({ principal: me, scopeId: 'installation', to: SEALED, confirmDowngrade: false });
     expect((await lstat(fresh)).mode & 0o777).toBe(0o700);
