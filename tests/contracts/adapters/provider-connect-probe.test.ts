@@ -25,7 +25,7 @@ describe('provider connection check', () => {
     expect(PROVIDER_CONNECT_KINDS.filter(kind => kind.available && kind.probe === null).map(kind => kind.id)).toEqual(['zai-api', 'zai-cn-api']);
     for (const kind of PROVIDER_CONNECT_KINDS.filter(item => item.available && item.probe)) expect(kind.probe!.path).toMatch(/^\/(v1\/models|models|api\/v1\/key)/u);
     expect(PROVIDER_CONNECT_KINDS.filter(kind => kind.connect?.seed).map(kind => [kind.id, kind.connect!.seed]))
-      .toEqual([['anthropic-api', 'anthropic-api'], ['openai-api', 'openai-api'], ['deepseek-api', 'deepseek-api'], ['zai-api', 'zai-api']]);
+      .toEqual([['anthropic-api', 'anthropic-api'], ['openai-api', 'openai-api'], ['deepseek-api', 'deepseek-api'], ['zai-api', 'zai-api'], ['zai-cn-api', 'zai-cn-api']]);
   });
 
   it('the generic row derives one key name per endpoint host, shown before saving; vendor rows keep their fixed name', () => {
@@ -55,6 +55,10 @@ describe('provider connection check', () => {
       }
     }
     await expect(readProviderConnectSeed('../policy')).rejects.toMatchObject({ code: 'MODEL_CONNECT_SEED_UNAVAILABLE' });
+    // K4: the OpenRouter seed (verified exact ids) parses as a catalog document; it is for catalog registration, no row connects it yet.
+    const openrouter = await readProviderConnectSeed('openrouter-api');
+    expect(openrouter.providers[0]!.models.map(model => model.nativeId)).toEqual(['anthropic/claude-fable-5.1', 'anthropic/claude-haiku-5.5', 'anthropic/claude-opus-5.5',
+      'anthropic/claude-sonnet-5.5', 'deepseek/deepseek-v4.1-flash', 'openai/gpt-6-astra', 'openai/gpt-6-luna', 'openai/gpt-6.1-sol', 'z-ai/glm-5.3']);
   });
 
   it('a provider without a free read sends nothing: the key is kept unverified', async () => {
