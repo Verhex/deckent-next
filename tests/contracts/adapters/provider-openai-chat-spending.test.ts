@@ -86,3 +86,31 @@ it('accepts exact fractional-cent operator rates and reserves the dearest cache 
   expect(quote.meter.evidence).toMatchObject({ calculation: { usdPerMTok: { input: '0.005', cachedInput: '0.1025', output: '0' } } });
   expect(() => quoteOpenAiChatOperatorTariff(fixture('https://operator.example/chat', { ...tariff, inputMinorUnitsPerMillionTokens: 0.1 }))).toThrow('OPENAI_CHAT_DEFINITION_INVALID');
 });
+
+// Astra 2459 R1: a cut stream settles only from the provider's final usage. A usage chunk before any finish reason (continuous usage
+// stats) is interim and never backs a measurement; usage with (DeepSeek/Z.ai) or after (OpenAI include_usage) the finish chunk is final.
+it.each([
+  ['interim usage before any finish reason', [{ delta: { role: 'assistant', content: 'par' } }, { usage: true, delta: { content: 'tial' } }], false],
+  ['usage in the finish chunk', [{ delta: { role: 'assistant', content: 'partial' } }, { usage: true, delta: {}, finish: 'stop' }], true],
+  ['usage-only chunk after the finish chunk', [{ delta: { role: 'assistant', content: 'partial' } }, { delta: {}, finish: 'stop' }, { usage: true }], true],
+] as const)('a stream cut before [DONE] with %s', async (_name, chunks, final) => {
+  const usage = { prompt_tokens: 100, completion_tokens: 10, total_tokens: 110 };
+  const wire = chunks.map(chunk => `data: ${JSON.stringify({ id: 'chunk', object: 'chat.completion.chunk', created: 1, model: 'chat-latest',
+    choices: 'delta' in chunk ? [{ index: 0, delta: chunk.delta, finish_reason: 'finish' in chunk ? chunk.finish : null }] : [],
+    ...('usage' in chunk ? { usage } : {}) })}\n\n`).join('');
+  const server = createServer((request, response) => { request.resume(); response.writeHead(200, { 'content-type': 'text/event-stream' }); response.end(wire); });
+  servers.push(server); await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
+  const address = server.address(); if (!address || typeof address === 'string') throw new Error('address');
+  const base = fixture(`http://127.0.0.1:${address.port}/chat`, { kind: 'operator-static', version: 2, currency: 'USD', inputMinorUnitsPerMillionTokens: 200,
+    cachedInputMinorUnitsPerMillionTokens: 50, outputMinorUnitsPerMillionTokens: 1000 });
+  const request = { ...base.request, stream: true, stream_options: { include_usage: true as const } }, command = { ...base.command, nativeRequest: request };
+  const f = { ...base, request, command, requestDigest: modelInvocationRequestDigest(command) };
+  const priced = createOpenAiChatPricedNative(), prepared = await priced.native.prepare(f.profile, f.definition, f.request);
+  priced.quote({ ...f, prepared });
+  const result = await priced.native.send(prepared);
+  expect(result).toMatchObject({ kind: 'rejected', evidence: { reason: 'interrupted', body: { complete: false } } });
+  if (!('kind' in result)) throw new Error('expected interrupted stream');
+  const measured = priced.native.observePartialSpending!(prepared, result.evidence.body.digest);
+  if (final) expect(measured).toMatchObject({ basis: 'measured-tariff', exactMinorUnits: '0.03' });
+  else expect(measured).toBeNull();
+});

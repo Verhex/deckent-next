@@ -47,13 +47,13 @@ async function countPrepared(prepared: PreparedAnthropicRequest, options: Anthro
   } catch { return null; }
 }
 
-async function sendPrepared(prepared: PreparedAnthropicRequest, options: AnthropicMessagesNativeOptions, signal?: AbortSignal, onDelta?: ModelInvocationDeltaSink, onUsage?: (usage: AnthropicUsage) => void) {
+async function sendPrepared(prepared: PreparedAnthropicRequest, options: AnthropicMessagesNativeOptions, signal?: AbortSignal, onDelta?: ModelInvocationDeltaSink, onFinalUsage?: (usage: AnthropicUsage) => void) {
   try {
     const definition = { endpoint: prepared.definition.endpoint, authentication: prepared.definition.authentication,
       ...(prepared.definition.tls ? { tls: prepared.definition.tls } : {}) };
     return await sendNativeJsonHttp({ definition, limits: prepared.limits, body: prepared.body, adapter, headers: VERSION_HEADERS },
       prepared.request.stream === true
-        ? { ...options, stream: createAnthropicMessagesStream(prepared.request, prepared.limits, { scopeId: prepared.scopeId, prefixDigest: prepared.prefixDigest }, onUsage), ...(onDelta ? { onDelta } : {}) }
+        ? { ...options, stream: createAnthropicMessagesStream(prepared.request, prepared.limits, { scopeId: prepared.scopeId, prefixDigest: prepared.prefixDigest }, onFinalUsage), ...(onDelta ? { onDelta } : {}) }
         : { ...options, parseResponse: body => parseAnthropicMessageResponse(body, prepared.request, prepared.limits, { scopeId: prepared.scopeId, prefixDigest: prepared.prefixDigest }) }, signal);
   } catch (error) {
     if (!(error instanceof NativeJsonHttpError)) throw error;
@@ -70,6 +70,7 @@ export interface AnthropicMessagesPricedNative {
 /** The native port and its quote resolver share one registry of prepared tokens, so a quote is always of the request that is sent. */
 export function createAnthropicMessagesPricedNative(options: AnthropicMessagesNativeOptions = {}): AnthropicMessagesPricedNative {
   const responses = new WeakMap<object, string>();
+  /** Only the final cumulative usage of a send (never the interim `message_start` count) backs a cut stream's settlement. */
   const usage = new WeakMap<object, unknown>();
   const quotes = new WeakMap<object, ProviderSpendQuote>();
   const tokens = new WeakMap<object, PreparedAnthropicRequest>(), countable = new WeakSet<object>();

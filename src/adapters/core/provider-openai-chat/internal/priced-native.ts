@@ -8,7 +8,7 @@ import { quoteOpenAiChatOperatorTariff, openAiCompatibleTariffRates } from './ta
 export function createOpenAiChatPricedNative(options: OpenAiChatNativePortOptions = {}) {
   const responses = new WeakMap<object, string>();
   const partialUsage = new WeakMap<object, unknown>();
-  const delegate = createOpenAiChatNativePort({ ...options, onUsage: (prepared, usage) => { partialUsage.set(prepared, usage); } }), quotes = new WeakMap<object, ProviderSpendQuote>();
+  const delegate = createOpenAiChatNativePort({ ...options, onFinalUsage: (prepared, usage) => { partialUsage.set(prepared, usage); } }), quotes = new WeakMap<object, ProviderSpendQuote>();
   const profiles = new WeakMap<object, string>();
   const measure = (token: unknown, usageInput: unknown, contentDigest: string) => {
       const quote = quotes.get(token as object), prepared = token as PreparedOpenAiChatRequest;

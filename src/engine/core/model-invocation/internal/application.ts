@@ -37,7 +37,8 @@ export interface ModelInvocationNativePort {
    * report presentation-only deltas to `onDelta`; the returned result remains the only governed outcome. It settles (resolves or
    * rejects) only after its transport request is closed locally: the store then releases the call's concurrency slot, `unknown` included. */
   send(prepared: unknown, signal?: AbortSignal, onDelta?: ModelInvocationDeltaSink): Promise<ModelInvocationNativeResult>;
-  /** Pure observation captured by this exact send; never an operator/model supplied settlement amount. */
+  /** Pure observation captured by this exact send; never an operator/model supplied settlement amount. Only the provider's final
+   * usage of the send may back it (an interim count is never a settlement basis): without it, return null and the reservation stays held. */
   observePartialSpending?(prepared: unknown, contentDigest: string): ProviderSpendMeasurement | null;
   observeSpending?(prepared: unknown, response: ModelInvocationNativeResponse): ProviderSpendMeasurement | null;
   /** Context measurement (T-L5): the provider's own token count of exactly the prepared request and, when reported, the served

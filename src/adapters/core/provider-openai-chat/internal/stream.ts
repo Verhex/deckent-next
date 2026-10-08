@@ -32,19 +32,27 @@ const chunkSchema = z.object({ id: z.string().min(1), object: z.literal('chat.co
  * assembled `chat.completion` plus a digest of the exact wire bytes (`deckent_stream`: the native object of a streamed call
  * is assembled provenance, never the provider's verbatim body). A stream that ends without `[DONE]`, a finish
  * reason and usage is interrupted, which the invocation records as an uncertain outcome; it is never retried.
+ * `onFinalUsage` receives the usage only once a finish reason has also been seen (OpenAI `include_usage` sends it after the
+ * finish chunk, DeepSeek/Z.ai with it): a usage before any finish reason is interim and never settles a cut stream (Astra 2459 R1).
  */
-export function createOpenAiChatStream(request: OpenAiChatTextRequest, limits: OpenAiChatHttpLimits, onUsage?: (usage: JsonObject) => void): NativeJsonHttpStream {
+export function createOpenAiChatStream(request: OpenAiChatTextRequest, limits: OpenAiChatHttpLimits, onFinalUsage?: (usage: JsonObject) => void): NativeJsonHttpStream {
   const hash = createHash('sha256'), decoder = new TextDecoder('utf-8', { fatal: true });
   let wireBytes = 0, chunks = 0, lineBytes = 0, eventBytes = 0, assembledBytes = 0;
   let line: Buffer[] = [], data: string[] = [];
   let invalid: ModelInvocationRejectionReason | null = null, doneSeen = false;
   let head: { id: string; created: number; model: string } | null = null, fingerprint: string | null = null;
-  let content = '', reasoning = '', refusal = '', finish: string | null = null, usage: JsonObject | null = null;
+  let content = '', reasoning = '', refusal = '', finish: string | null = null, usage: JsonObject | null = null, usageReported = false;
   // Tool-call deltas assembled by index: the id is fixed once, name and arguments arrive in pieces (T-L2).
   const calls = new Map<number, { id: string | null; name: string; arguments: string }>();
   const fail = (reason: ModelInvocationRejectionReason) => { invalid ??= reason; };
 
   function event(text: string, out: ModelInvocationDelta[]): boolean {
+    const limit = parse(text, out);
+    if (!usageReported && !invalid && usage !== null && finish !== null) { usageReported = true; onFinalUsage?.(usage); }
+    return limit;
+  }
+
+  function parse(text: string, out: ModelInvocationDelta[]): boolean {
     if (doneSeen) { fail('invalid-response'); return false; }
     if (text === '[DONE]') { doneSeen = true; return false; }
     let raw: unknown;
@@ -59,7 +67,7 @@ export function createOpenAiChatStream(request: OpenAiChatTextRequest, limits: O
     if (chunk.usage !== undefined && chunk.usage !== null) {
       const checked = openAiChatUsageSchema.safeParse(chunk.usage);
       if (usage || !checked.success || checked.data.completion_tokens > request.max_completion_tokens) { fail('invalid-response'); return false; }
-      usage = (copied.data as Record<string, unknown>)['usage'] as JsonObject; onUsage?.(usage);
+      usage = (copied.data as Record<string, unknown>)['usage'] as JsonObject;
     }
     const choice = chunk.choices[0];
     if (!choice) return false;

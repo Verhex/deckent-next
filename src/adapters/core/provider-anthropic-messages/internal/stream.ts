@@ -37,8 +37,10 @@ type Open = { type: string; index: number; text: string; signature: string; json
  * block stop (a provider defect if malformed: unlike OpenAI's raw arguments it is never model-authored text), and usage is
  * cumulative. A mid-stream `error` event (HTTP 200 already sent, for example `overloaded_error`) ends the read as `interrupted`,
  * an uncertain outcome that is never retried; usage past it is not trusted. Without `message_stop` the stream is interrupted.
+ * `onFinalUsage` receives only the cumulative usage of the final `message_delta`: the `message_start` count (output_tokens=1)
+ * is interim and never a settlement basis, so a stream cut before that delta reports nothing and its reservation stays held (Astra 2459 R1).
  */
-export function createAnthropicMessagesStream(request: OpenAiChatTextRequest, limits: OpenAiChatHttpLimits, memory: AnthropicContinuationScope, onUsage?: (usage: AnthropicUsage) => void): NativeJsonHttpStream {
+export function createAnthropicMessagesStream(request: OpenAiChatTextRequest, limits: OpenAiChatHttpLimits, memory: AnthropicContinuationScope, onFinalUsage?: (usage: AnthropicUsage) => void): NativeJsonHttpStream {
   const hash = createHash('sha256'), decoder = new TextDecoder('utf-8', { fatal: true });
   let wireBytes = 0, events = 0, lineBytes = 0, eventBytes = 0, assembledBytes = 0;
   let line: Buffer[] = [], data: string[] = [], eventName: string | null = null;
@@ -64,7 +66,7 @@ export function createAnthropicMessagesStream(request: OpenAiChatTextRequest, li
       const parsed = start.safeParse(copied.data);
       if (!parsed.success || head) return fail('invalid-response');
       if (parsed.data.message.model !== request.model) return fail('model-mismatch');
-      head = { id: parsed.data.message.id, model: parsed.data.message.model }; usage = mergeUsage(null, parsed.data.message.usage); onUsage?.(usage); return false;
+      head = { id: parsed.data.message.id, model: parsed.data.message.model }; usage = mergeUsage(null, parsed.data.message.usage); return false;
     }
     if (!head) return fail('invalid-response');
     if (type === 'content_block_start') {
@@ -108,7 +110,7 @@ export function createAnthropicMessagesStream(request: OpenAiChatTextRequest, li
     if (type === 'message_delta') {
       const parsed = messageDelta.safeParse(copied.data);
       if (!parsed.success || current || stopReason !== null || parsed.data.delta.stop_reason === null) return fail('invalid-response');
-      stopReason = parsed.data.delta.stop_reason; usage = mergeUsage(usage, parsed.data.usage); onUsage?.(usage); return false;
+      stopReason = parsed.data.delta.stop_reason; usage = mergeUsage(usage, parsed.data.usage); onFinalUsage?.(usage); return false;
     }
     if (type === 'message_stop' && simple.safeParse(copied.data).success && !current && stopReason !== null) { stopped = true; return false; }
     return fail('invalid-response'); // unknown event types (server tools, future kinds) are never assembled silently.
