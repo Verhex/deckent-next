@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { modelInvocationNativeResponseUpperBound, type ModelInvocationNativePort } from '#engine/index.js';
-import { modelInvocationProfileSchema, parseModelBindingDefinition, type ModelInvocationDeltaSink, type ModelInvocationNativeResult } from '#domain/index.js';
+import { modelInvocationProfileSchema, parseModelBindingDefinition, type ModelInvocationDeltaSink, type ModelInvocationNativeResult, type JsonObject } from '#domain/index.js';
 import { NativeJsonHttpError, sendNativeJsonHttp } from '#adapters/core/provider-http-json/index.js';
 import { OPENAI_CHAT_DEFAULT_DIALECT, isOpenAiChatHttpAdapter, OPENAI_CHAT_HTTP_ADAPTER_ID, OPENAI_CHAT_HTTP_ADAPTER_VERSION, OPENAI_CHAT_COMPLETIONS_FAMILY, OPENAI_CHAT_COMPLETIONS_VERSION, OpenAiChatHttpError,
   OPENAI_CHAT_ENABLE_THINKING_CAPABILITY, OPENAI_CHAT_TOOL_CALLS_CAPABILITY, OPENAI_CHAT_TOKEN_COUNT_CAPABILITY, OPENAI_CHAT_PREFIX_CACHE_SALT_CAPABILITY,
@@ -15,6 +15,7 @@ const adapterOf = (definition: OpenAiChatHttpDefinition) => ({ id: OPENAI_CHAT_H
 export type PreparedOpenAiChatRequest = Readonly<{ definition: OpenAiChatHttpDefinition; limits: OpenAiChatHttpLimits;
   request: OpenAiChatTextRequest; body: string }>;
 export interface OpenAiChatNativePortOptions {
+  readonly onUsage?: (prepared: PreparedOpenAiChatRequest, usage: JsonObject) => void;
   readonly resolveCredential?: (reference: string, signal?: AbortSignal) => Promise<string | undefined>;
   /** The scope's secret prefix-cache salt (composition: HMAC under the installation's salt secret). Required by a binding that declares
    * prefix-cache-salt: without it, or when it fails, nothing is sent (fail closed, never a derivable salt). */
@@ -124,7 +125,7 @@ async function sendPreparedOpenAiChatHttpRequest(prepared: PreparedOpenAiChatReq
       adapter: adapterOf(prepared.definition) },
     // A streamed request is parsed incrementally whether or not a caller observes its deltas.
     prepared.request.stream === true
-      ? { ...transport, stream: createOpenAiChatStream(prepared.request, prepared.limits), ...(onDelta ? { onDelta } : {}) }
+      ? { ...transport, stream: createOpenAiChatStream(prepared.request, prepared.limits, usage => options.onUsage?.(prepared, usage)), ...(onDelta ? { onDelta } : {}) }
       : { ...transport, parseResponse: body => parseResponse(body, prepared) }, signal);
   } catch (error) {
     if (!(error instanceof NativeJsonHttpError)) throw error;

@@ -81,12 +81,12 @@ it('runs the governed invocation with the key resolved by reference only, reserv
   expect(persisted?.spending).toMatchObject({ descriptor: { budgetId: 'budget', currency: 'USD', quote: { maxChargeMinorUnits: expect.any(Number),
     pricing: { id: 'anthropic-published-tariff', version: 1, definition: { modelId: MODEL, kind: 'anthropic-published' } },
     meter: { id: 'anthropic-messages-reservation', version: 1 } } },
-  // Checkpoint A (review.md): usage x tariff settlement is not an engine contract yet, so the reservation stays held.
-  disposition: { state: 'held', reason: 'missing-usage' } });
+  // Checkpoint A: the exact reported usage is priced against this pinned published tariff.
+  disposition: { state: 'settled-measured-tariff' }, measurement: { basis: 'measured-tariff' } });
   expect(persisted?.spending?.descriptor.quote.maxChargeMinorUnits).toBeGreaterThan(0);
   expect(JSON.stringify(persisted)).not.toContain(SECRET);
   const spend = await openSqliteProviderSpendIntegrityReader(f.ledger, { busyTimeoutMs: 1000 });
-  try { await expect(verifyProviderSpendIntegrity(spend, 'scope', 10)).resolves.toMatchObject({ reservationCount: 1, settledMinorUnits: 0 }); } finally { spend.close(); }
+  try { await expect(verifyProviderSpendIntegrity(spend, 'scope', 10)).resolves.toMatchObject({ reservationCount: 1, settledMinorUnits: 1 }); } finally { spend.close(); }
   expect((await invokeConfiguredModel(f.project, f.command, { env: f.env, secretResolver: f.secretResolver })).replayed).toBe(true);
   expect(f.seen).toHaveLength(1);
 });

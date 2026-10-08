@@ -1,3 +1,5 @@
+import { providerSpendManagementCommandInputSchema, type ProviderSpendManagementCommand } from '#domain/index.js';
+import { parseProviderSpendManagementResultForCommand, type ProviderSpendManagementResult } from '#engine/index.js';
 import { loadComposedConfig } from '#composition/core/root/index.js';
 import { runtimeWorkspaceFileMethods, runtimeEffectOperationMethods, clearSessionStandingSchema, acceptSessionStandingClearance, approvalCommandSchema, parseApprovalAnswer, type ClearSessionStanding, type SessionStandingClearance, RUNTIME_SERVICE_LIFECYCLE_VERSIONS, RUNTIME_SERVICE_SCHEMA_VERSION, isRuntimeServiceBoundedResultOperation, acceptSecretChangeResult, prepareSecretChange, type RuntimeServiceLifecycleVersion, type RuntimeServiceRequest,
   type SecretChangeResult, type SecretDeleteCommand, type SecretSetCommand, type SecretStoreSwitchCommand, secretStoreSwitchCommandSchema, acceptSecretStoreSwitchResult } from '#engine/index.js';
@@ -37,6 +39,7 @@ export type ConfiguredRuntimeClient = ConfiguredRuntimeOperations & Readonly<{
     signal?: AbortSignal): Promise<ModelInvocationResult>;
   inspectModelInvocation(query: ModelInvocationQuery, delivery?: ModelInvocationDelivery): Promise<ModelInvocationInspection>;
   inspectProviderSpendAccount(query: ProviderSpendAccountQuery, delivery?: RuntimeServiceDelivery): Promise<ProviderSpendAccountInspection>;
+  manageProviderSpend(command: ProviderSpendManagementCommand, delivery?: RuntimeServiceDelivery): Promise<ProviderSpendManagementResult>;
   auditProviderSpendAccount(command: ProviderSpendAuditCommand, delivery?: RuntimeServiceDelivery): Promise<ProviderSpendAuditResult>;
   /** v12 agent turn: required turn events (the history continues from its `message` events), then the bounded turn result.
    * Aborting disconnects, which cancels the turn at its next write; `cancelChatTurn` cancels at once. */
@@ -280,6 +283,7 @@ export function createConfiguredRuntimeClient(projectRoot: string, options: Conf
         return parseProviderSpendAccountInspectionForQuery(query, await call('inspectProviderSpendAccount', query, delivery));
       } catch (error) { throw queryFailure(error); }
     },
+    async manageProviderSpend(input: ProviderSpendManagementCommand, delivery?: RuntimeServiceDelivery) { return manageSpending(input, command => call('manageProviderSpend', command, delivery)); },
     async auditProviderSpendAccount(input: ProviderSpendAuditCommand, delivery?: RuntimeServiceDelivery) {
       try {
         let command: ProviderSpendAuditCommand;
@@ -302,4 +306,12 @@ export function createConfiguredRuntimeClient(projectRoot: string, options: Conf
       return Object.freeze({ replayed: value.replayed, admission: parsed.data });
     },
   });
+}
+
+async function manageSpending(input: ProviderSpendManagementCommand, call: (command: ProviderSpendManagementCommand) => Promise<unknown>) {
+  try {
+    const parsed = providerSpendManagementCommandInputSchema.safeParse(input);
+    if (!parsed.success) throw new ProviderSpendError('PROVIDER_SPEND_INVALID');
+    return parseProviderSpendManagementResultForCommand(parsed.data, await call(parsed.data));
+  } catch (error) { throw queryFailure(error); }
 }

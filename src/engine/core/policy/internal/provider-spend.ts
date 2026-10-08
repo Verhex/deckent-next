@@ -5,7 +5,7 @@ import { PolicyAuthorizationError, type PolicySource } from './authorize.js';
 /** A model-invocation grant never implies access to the shared account of its scope. */
 export class ProviderSpendAccountPolicyAuthorization implements ProviderSpendAccountAuthorizer, ProviderSpendAuditAuthorization {
   constructor(private readonly source: PolicySource) {}
-  async authorize(action: 'inspect' | 'audit',
+  async authorize(action: 'inspect' | 'audit' | 'reconcile' | 'budget-revision',
     target: Parameters<ProviderSpendAccountAuthorizer['authorize']>[1], principal: VerifiedPrincipal) {
     let decision;
     try {

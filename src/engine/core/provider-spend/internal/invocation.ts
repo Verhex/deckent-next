@@ -15,12 +15,12 @@ export function verifyInvocationSpendReservation(input: unknown, receipt: ModelI
   if (state.state === 'reserved' ? outcome !== null : outcome === null
     || state.evidenceDigest !== providerSpendOutcomeDigest(receipt)
     || (state.state === 'released-not-sent' ? outcome.state !== 'not-sent' : outcome.state === 'not-sent')
-    || ((state.state === 'settled-local' || state.state === 'settled-provider-reported') && outcome.state === 'unknown')
-    || (state.state === 'settled-provider-reported' && (outcome.state !== 'responded'
+    || (state.state === 'settled-local' && outcome.state === 'unknown')
+    || ((state.state === 'settled-provider-reported' || state.state === 'settled-measured-tariff') && ((outcome.state !== 'responded' && outcome.state !== 'unknown')
       || state.amountMinorUnits !== reservation.measurement?.roundedMinorUnits
-      || outcome.content.digest !== reservation.measurement.responseContentDigest))
+      || outcome.content?.digest !== reservation.measurement.responseContentDigest))
     || (state.state === 'held' && state.reason === 'overrun' && reservation.measurement !== null
-      && (outcome.state !== 'responded' || outcome.content.digest !== reservation.measurement.responseContentDigest))) {
+      && ((outcome.state !== 'responded' && outcome.state !== 'unknown') || outcome.content?.digest !== reservation.measurement.responseContentDigest))) {
     throw new ProviderSpendError('PROVIDER_SPEND_INVALID');
   }
   return reservation;

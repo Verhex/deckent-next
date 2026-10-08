@@ -16,7 +16,7 @@ export const policyResources = Object.freeze({
   service: Object.freeze({ kind: 'service' as const, actions: Object.freeze(['shutdown'] as const) }),
   modelActivation: Object.freeze({ kind: 'model-activation' as const, actions: Object.freeze(['activate', 'deactivate', 'inspect'] as const) }),
   modelInvocation: Object.freeze({ kind: 'model-invocation' as const, actions: Object.freeze(['invoke', 'inspect', 'inspect-content', 'purge-content', 'cancel-invocation'] as const) }),
-  providerSpendAccount: Object.freeze({ kind: 'provider-spend-account' as const, actions: Object.freeze(['inspect', 'audit'] as const) }),
+  providerSpendAccount: Object.freeze({ kind: 'provider-spend-account' as const, actions: Object.freeze(['inspect', 'audit', 'reconcile', 'budget-revision'] as const) }),
   // Terminal agent tools (T-L3): the resource id is the tool name; every call of the loop is authorized with action invoke.
   agentTool: Object.freeze({ kind: 'agent-tool' as const, actions: Object.freeze(['invoke'] as const) }),
   // An MCP server (owner 2026-10-07, Jev 04f75210): the resource id is the server's registry name and `invoke` covers exactly that server's pinned

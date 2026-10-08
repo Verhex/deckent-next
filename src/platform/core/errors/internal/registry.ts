@@ -160,6 +160,7 @@ const definitions: Readonly<Record<string, Definition>> = Object.freeze({
   PROVIDER_SPEND_UNAVAILABLE: { category: 'error', render: (p, l) => ({ message: t('error.PROVIDER_SPEND_UNAVAILABLE', p, l) }) },
   PROVIDER_SPEND_CONFLICT: { category: 'error', render: (p, l) => ({ message: t('error.PROVIDER_SPEND_CONFLICT', p, l) }) },
   PROVIDER_SPEND_EXHAUSTED: { category: 'error', render: (p, l) => ({ message: t('error.PROVIDER_SPEND_EXHAUSTED', p, l) }) },
+  PROVIDER_SPEND_TARIFF_UNVERIFIED: { category: 'error', render: (p, l) => ({ message: t('error.PROVIDER_SPEND_TARIFF_UNVERIFIED', p, l) }) },
   PROVIDER_SPEND_FROZEN: { category: 'error', render: (p, l) => ({ message: t('error.PROVIDER_SPEND_FROZEN', p, l) }) },
   MODEL_INVOCATION_QUOTA_EXHAUSTED: { category: 'error', render: (p, l) => ({ message: t('error.MODEL_INVOCATION_QUOTA_EXHAUSTED', p, l) }) },
   MODEL_INVOCATION_CAPACITY_EXHAUSTED: { category: 'error', render: (p, l) => ({ message: t('error.MODEL_INVOCATION_CAPACITY_EXHAUSTED', p, l) }) },

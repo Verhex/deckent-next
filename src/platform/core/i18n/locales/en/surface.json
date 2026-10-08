@@ -610,5 +610,6 @@
   "monitor.narrative.outcome.success": "session: completed",
   "monitor.narrative.outcome.error": "session: ended in error",
   "monitor.narrative.outcome.limit": "session: hit a limit",
-  "monitor.blocker.patchMissing": "no patch prepared yet"
+  "monitor.blocker.patchMissing": "no patch prepared yet",
+  "mcp.tool.manageProviderSpending": "Reconcile held spending or revise a scope budget under account policy."
 }

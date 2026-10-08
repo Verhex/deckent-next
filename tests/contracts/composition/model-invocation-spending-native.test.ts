@@ -1,3 +1,5 @@
+import { startTestRuntimeService, stopTestRuntimeService } from '../support/runtime-service.js';
+import { createConfiguredRuntimeClient } from '#composition/core/runtime-service/index.js';
 import { createLocalTls } from '../../fixtures/local-tls.js';
 import { createHash } from 'node:crypto';
 import { writeFileSync } from 'node:fs';
@@ -94,7 +96,7 @@ it('acquires one native tariff, persists one reservation, and replays without re
   let persisted;
   try { persisted = await invocationReader.loadInspection('scope', first.receipt.claim.invocationId); }
   finally { invocationReader.close(); }
-  expect(persisted?.spending).toMatchObject({ schemaVersion: 2, descriptor: { scopeId: 'scope', invocationId: first.receipt.claim.invocationId,
+  expect(persisted?.spending).toMatchObject({ schemaVersion: 3, descriptor: { scopeId: 'scope', invocationId: first.receipt.claim.invocationId,
     budgetId: 'budget', budgetRevision: 1, currency: 'USD', quote: { maxChargeMinorUnits: 2,
       pricing: { id: 'openrouter-endpoint-tariff', version: 1, definition: expect.objectContaining({ modelId: 'vendor/model', endpointTag: 'provider/region' }) },
       meter: { id: 'openrouter-text-reservation', version: 1, evidence: expect.objectContaining({ tariffDigest: expect.stringMatching(/^[a-f0-9]{64}$/) }) } } },
@@ -229,7 +231,7 @@ it('atomically persists exact native charges, aggregates before rounding, and re
   expect(second.receipt.outcome?.state, JSON.stringify({ failures })).toBe('responded');
   const query = { schemaVersion: 2 as const, scopeId: 'scope', invocationId: first.receipt.claim.invocationId, reference: f.command.reference };
   const inspected = await inspectConfiguredModelInvocation(f.project, query, { env: f.env });
-  expect(inspected).toMatchObject({ schemaVersion: 7, spending: { schemaVersion: 2,
+  expect(inspected).toMatchObject({ schemaVersion: 7, spending: { schemaVersion: 3,
     disposition: { state: 'settled-provider-reported', amountMinorUnits: 1 },
     measurement: { basis: 'provider-reported', exactMinorUnits: '0.02', roundedMinorUnits: 1, currency: 'USD',
       source: { id: 'openrouter-account-charge', field: 'usage.cost', numericSource: '0.0002', minorUnitsPerCurrencyUnit: 100 } } } });
@@ -409,4 +411,30 @@ it('I40: expiry reached at send stays a durable unknown with zero POST, never su
   expect([f.metadataGets, f.posts]).toEqual([1, 0]);
 });
 
+});
+
+it.skipIf(process.platform !== 'linux')('governed runtime SDK revisions reach real subsequent invocation admission and reconcile historical holds', async () => {
+  const f = await fixture(), initialPolicy = f.policy(true);
+  await writeFile(f.policyPath, JSON.stringify({ ...initialPolicy, grants: [...initialPolicy.grants, {
+    id: 'spend-management', effect: 'allow', actions: ['inspect', 'reconcile', 'budget-revision'], scopes: ['scope'],
+    principals: [{ issuer: f.principal.issuer, subject: f.principal.subject }], resource: { kind: 'provider-spend-account', ids: ['budget'] },
+  }] }), { mode: 0o600 });
+  const service = await startTestRuntimeService(f.project, f.env);
+  try {
+    const client = createConfiguredRuntimeClient(f.project, { env: f.env }), first = await client.invokeModel(f.command);
+    const current = (await client.inspectProviderSpendAccount({ schemaVersion: 1, scopeId: 'scope', budgetId: 'budget', budgetRevision: 1 })).checkpoint!;
+    const revision = await client.manageProviderSpend({ schemaVersion: 1, kind: 'budget-revision', commandId: 'raise', scopeId: 'scope', budgetId: 'budget',
+      budgetRevision: 1, expectedCheckpointDigest: current.digest, budget: { ...current.account.budget, revision: 2, limitMinorUnits: 2000 },
+      unfreeze: true, evidenceDigest: 'a'.repeat(64) });
+    expect(revision.receipt.actor.id).toBe(f.principal.id); expect(revision.receipt.authorization.ruleId).toBe('spend-management');
+    const second = await client.invokeModel({ ...f.command, commandId: 'after-revision' });
+    const after = (await client.inspectProviderSpendAccount({ schemaVersion: 1, scopeId: 'scope', budgetId: 'budget', budgetRevision: 2 })).checkpoint!;
+    expect(after.account.budget).toMatchObject({ revision: 2, limitMinorUnits: 2000 }); expect(after.reservationCount).toBe(2);
+    const reader = await openSqliteModelInvocationReader(f.ledger, { busyTimeoutMs: 1000 });
+    try { expect((await reader.loadInspection('scope', second.receipt.claim.invocationId))?.spending?.descriptor.budgetRevision).toBe(2); } finally { reader.close(); }
+    const result = await client.manageProviderSpend({ schemaVersion: 1, kind: 'reconcile', commandId: 'release-old', scopeId: 'scope', budgetId: 'budget',
+      budgetRevision: 2, expectedCheckpointDigest: after.digest, invocationId: first.receipt.claim.invocationId, resolution: 'write-off', exactMinorUnits: '0',
+      evidence: { kind: 'write-off', digest: 'b'.repeat(64) } });
+    expect(result.receipt.after.reservedMinorUnits).toBeLessThan(after.account.reservedMinorUnits);
+  } finally { await stopTestRuntimeService(service); }
 });

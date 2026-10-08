@@ -17,8 +17,8 @@ import { createModelInvocationPreventedRecord, createModelInvocationEvidenceReco
 import { assertInvocationDeliveryFit, assertInvocationEvidenceStorageFit, checkInvocationResultDelivery, validateInvocationDelivery, type ModelInvocationDelivery } from './delivery.js';
 import { ModelInvocationStoreError, type ModelInvocationAdmission, type ModelInvocationClaimResult,
   type ModelInvocationRecord, type ModelInvocationStore } from './port.js';
-import type { ProviderSpendReportedMeasurement } from '#engine/core/provider-spend/index.js';
-import { observeModelInvocationSpending } from './measurement.js';
+import type { ProviderSpendMeasurement } from '#engine/core/provider-spend/index.js';
+import { observeModelInvocationSpending, observeModelInvocationPartialSpending } from './measurement.js';
 import type { ModelInvocationPurgeResult, ModelInvocationPurgeStore } from './port.js';
 
 export interface ModelInvocationAuthorizer {
@@ -38,7 +38,8 @@ export interface ModelInvocationNativePort {
    * rejects) only after its transport request is closed locally: the store then releases the call's concurrency slot, `unknown` included. */
   send(prepared: unknown, signal?: AbortSignal, onDelta?: ModelInvocationDeltaSink): Promise<ModelInvocationNativeResult>;
   /** Pure observation captured by this exact send; never an operator/model supplied settlement amount. */
-  observeSpending?(prepared: unknown, response: ModelInvocationNativeResponse): ProviderSpendReportedMeasurement | null;
+  observePartialSpending?(prepared: unknown, contentDigest: string): ProviderSpendMeasurement | null;
+  observeSpending?(prepared: unknown, response: ModelInvocationNativeResponse): ProviderSpendMeasurement | null;
   /** Context measurement (T-L5): the provider's own token count of exactly the prepared request and, when reported, the served
    * window. Null when this model or server has no counter or the count failed; never a model execution, receipt or spend. */
   measure?(prepared: unknown, signal?: AbortSignal): Promise<{ readonly promptTokens: number; readonly windowTokens: number | null } | null>;
@@ -254,11 +255,11 @@ export class ModelInvocationApplication {
         }
         try {
           const observedAtMs = this.runtime.now();
-          const measurement = 'kind' in response ? null : observeModelInvocationSpending(native, prepared, response, spending.quote);
+          const measurement = 'kind' in response ? observeModelInvocationPartialSpending(native, prepared, response.evidence.body.digest, spending.quote) : observeModelInvocationSpending(native, prepared, response, spending.quote);
           const record = verifyModelInvocationRecord('kind' in response
             ? response.evidence.body.complete
               ? await store.recordRejected(claimReceipt.claim, response.evidence, observedAtMs)
-              : await store.recordUnknown(claimReceipt.claim, 'transport-error', observedAtMs, response.evidence)
+              : await store.recordUnknown(claimReceipt.claim, 'transport-error', observedAtMs, response.evidence, measurement)
             : await store.recordResponse(claimReceipt.claim, response, observedAtMs, measurement));
           const expected = 'kind' in response
             ? createModelInvocationEvidenceRecord(claimReceipt, response.evidence, observedAtMs)

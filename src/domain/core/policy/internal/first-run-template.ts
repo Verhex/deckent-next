@@ -31,9 +31,11 @@ export const FIRST_RUN_POLICY_TEMPLATE_ID = 'first-run-template';
  * With it (owner 2026-10-07, K1 option A, Jev 3e7c5b38) the owner may run the governed `policy.administer@1` operation and inspect/decide approvals in
  * the installed scope: the trust grant and every other policy change still pass the card, the audit and the delegation bound (I2). */
 // No template bump for assurance: Core's assurance minimum is a code constant; policy data can only raise it.
-/** v7 (T4-B K3, owner 2026-10-08, Jev 125e4435): the installing owner may activate and inspect models (`model-activation`, every scope: the ledger
- * catalog register is installation-wide) and invoke, inspect and cancel model calls in the installed scope (`model-invocation`), so `models connect`
- * and terminal turns work on a fresh installation; every activation, call and spend is still decided, budgeted and recorded per call. */
+/** v7 (T4-B K3 + SPEND-SETTLEMENT, owner 2026-10-08, Jev 125e4435): the installing owner may activate and inspect models (`model-activation`,
+ * every scope: the ledger catalog register is installation-wide), invoke, inspect and cancel model calls in the installed scope (`model-invocation`),
+ * and inspect, audit, reconcile and revise the provider spend accounts of the installed scope (`provider-spend-account`), so `models connect`,
+ * terminal turns and the governed budget revision work on a fresh installation; every activation, call and spend is still decided, budgeted and
+ * recorded per call. */
 export const FIRST_RUN_POLICY_TEMPLATE_VERSION = 7;
 /** The hard-floor tool-call cells (write floor and configuration file, destructive and always-ask shell, every fetch, every MCP call): only the
  * terminal of the turn that asked may allow them. The same set is Core's default in the approval engine (a test keeps the two equal). */
@@ -72,7 +74,7 @@ function buildTemplate(input: FirstRunPolicyTemplateInput, version: 4 | 5 | 6 | 
   const scopeId = identitySchema.parse(input.scopeId);
   const principal = { issuer: identitySchema.parse(input.principal.issuer), subject: identitySchema.parse(input.principal.subject) };
   const revision = `${FIRST_RUN_POLICY_TEMPLATE_ID}-v${version}`;
-  const actionsOf = { 'agent-tool': ['invoke'], operation: ['execute'], secret: ['set', 'delete'], 'secret-switch': ['switch'], config: ['write'], 'mcp-server': ['invoke'], approval: ['inspect', 'decide'],
+  const actionsOf = { 'agent-tool': ['invoke'], operation: ['execute'], secret: ['set', 'delete'], 'secret-switch': ['switch'], 'provider-spend-account': [...PROVIDER_SPEND_ACCOUNT_ACTIONS], config: ['write'], 'mcp-server': ['invoke'], approval: ['inspect', 'decide'],
     'model-activation': [...MODEL_ACTIVATION_ACTIONS], 'model-invocation': [...MODEL_INVOCATION_ACTIONS] } as const;
   const grant = (id: string, effect: 'allow' | 'require-approval', kind: keyof typeof actionsOf, ids: readonly string[] | 'all', modeEligible?: boolean) =>
     Object.freeze({ id, effect, actions: [...actionsOf[kind]], scopes: [scopeId], principals: [principal],
@@ -97,9 +99,10 @@ function buildTemplate(input: FirstRunPolicyTemplateInput, version: 4 | 5 | 6 | 
         grant('first-run-policy-administer', 'allow', 'operation', [input.policyAdministerOperationId]), grant('first-run-approvals', 'allow', 'approval', 'all')] : []),
       // v6: switching the store moves every secret, so the rule covers every name (its own rule: v4/v5 additions add exactly this one).
       ...(v6 ? [grant(FIRST_RUN_UPGRADE_RULE_IDS.secretSwitch, 'allow', 'secret-switch', 'all')] : []),
-      // v7: model activation over every scope (catalog facts are installation-wide) and model calls in the installed scope.
+      // v7: model activation over every scope (catalog facts are installation-wide), model calls and provider spend accounts in the installed scope.
       ...(v7 ? [{ ...grant(FIRST_RUN_UPGRADE_RULE_IDS.modelActivation, 'allow', 'model-activation', 'all'), scopes: 'all' },
-        grant(FIRST_RUN_UPGRADE_RULE_IDS.modelInvocation, 'allow', 'model-invocation', 'all')] : []),
+        grant(FIRST_RUN_UPGRADE_RULE_IDS.modelInvocation, 'allow', 'model-invocation', 'all'),
+        grant(FIRST_RUN_UPGRADE_RULE_IDS.spending, 'allow', 'provider-spend-account', 'all')] : []),
     ],
   });
   const bindings = bindingsFileSchema.parse({ schemaVersion: 1, revision: `${revision}-bindings`, bindings: [] });
@@ -148,10 +151,12 @@ export function matchFirstRunPolicyTemplate(policyRevision: string): { readonly 
 /** The v5 rule ids an upgrade adds (never replaces: the proposal tool gets its own rule so a hand-edited read rule stays as it is). */
 export const FIRST_RUN_UPGRADE_RULE_IDS = Object.freeze({ servers: 'first-run-mcp-servers', operation: 'first-run-mcp-call-operation', propose: 'first-run-mcp-propose-tool',
   administer: 'first-run-policy-administer', approvals: 'first-run-approvals', secretSwitch: 'first-run-secret-switch',
-  modelActivation: 'first-run-model-activation', modelInvocation: 'first-run-model-invocation' });
+  modelActivation: 'first-run-model-activation', modelInvocation: 'first-run-model-invocation', spending: 'first-run-provider-spending' });
 /** v7 actions (K3): activation and its read; the model call and everything a terminal turn needs around it (inspect, content, cancel). */
 const MODEL_ACTIVATION_ACTIONS = ['activate', 'inspect'] as const;
 const MODEL_INVOCATION_ACTIONS = ['invoke', 'inspect', 'inspect-content', 'cancel-invocation'] as const;
+/** v7 actions (SPEND-SETTLEMENT): read, audit and the two governed management commands (held reconcile, budget revision). */
+const PROVIDER_SPEND_ACCOUNT_ACTIONS = ['inspect', 'audit', 'reconcile', 'budget-revision'] as const;
 export type FirstRunTemplateAdditions = { readonly status: 'plan'; readonly change: PolicyChange; readonly rules: readonly PolicyGrant[]; readonly conflicts: readonly string[] }
   | { readonly status: 'current'; readonly conflicts: readonly string[] } | { readonly status: 'unavailable'; readonly reason: 'not-first-run' | 'not-this-person' | 'invalid' };
 type Selection = 'all' | readonly string[];
@@ -192,8 +197,9 @@ function plannedAdditions(grants: readonly PolicyGrant[], person: Person, scopes
     rule(ids.approvals, 'approval', ['inspect', 'decide'], 'all', scopes),
     // v6 (owner 2026-10-08): the secret store switch, over every name (a switch moves them all); hand-built policies get it through the named-person upgrade.
     rule(ids.secretSwitch, 'secret', ['switch'], 'all', scopes),
-    // v7 (owner 2026-10-08, K3): models connect and terminal turns on a hand-built or older policy, through the same add-only plan.
-    rule(ids.modelActivation, 'model-activation', MODEL_ACTIVATION_ACTIONS, 'all', 'all'), rule(ids.modelInvocation, 'model-invocation', MODEL_INVOCATION_ACTIONS, 'all', scopes)];
+    // v7 (owner 2026-10-08, K3 + SPEND-SETTLEMENT): models connect, terminal turns and spend management on a hand-built or older policy, through the same add-only plan.
+    rule(ids.modelActivation, 'model-activation', MODEL_ACTIVATION_ACTIONS, 'all', 'all'), rule(ids.modelInvocation, 'model-invocation', MODEL_INVOCATION_ACTIONS, 'all', scopes),
+    rule(ids.spending, 'provider-spend-account', PROVIDER_SPEND_ACCOUNT_ACTIONS, 'all', scopes)];
   const conflicts: string[] = [], rules: PolicyGrant[] = [];
   for (const want of wanted) {
     const same = grants.find(grant => grant.id === want.id);

@@ -8,3 +8,5 @@ export { parseProviderSpendAuditCommand, providerSpendAuditCommandInputSchema,
   providerSpendAuditCommandSchema } from './internal/audit.js';
 export type { ProviderSpendAuditCommand } from './internal/audit.js';
 export { providerSpendAccountQueryInputSchema } from './internal/contract.js';
+export { providerSpendManagementCommandInputSchema, providerSpendManagementCommandSchema, parseProviderSpendManagementCommand } from './internal/management.js';
+export type { ProviderSpendManagementCommand } from './internal/management.js';

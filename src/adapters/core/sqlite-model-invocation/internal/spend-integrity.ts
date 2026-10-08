@@ -32,7 +32,7 @@ class SqliteProviderSpendIntegrityReader implements ProviderSpendIntegrityReader
         if (typeof row.invocation_record !== 'string') throw new ProviderSpendError('PROVIDER_SPEND_INVALID');
         const receipt = verifyModelInvocationReceipt(JSON.parse(row.invocation_record));
         if (receipt.claim.invocationId !== row.invocation_id) throw new ProviderSpendError('PROVIDER_SPEND_INVALID');
-        decoded.push(decodeSpendReservation(row, receipt, checkpoint));
+        decoded.push(decodeSpendReservation(row, receipt, checkpoint, this.db));
       }
       const reservations = Object.freeze(decoded.slice(0, query.limit));
       this.db.exec('COMMIT');

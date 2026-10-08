@@ -278,13 +278,21 @@ no new blocker in them.
 (v1) and `anthropic-messages-http` (v2, family `anthropic-messages`, API version `2023-06-01`; unit `adapters/core/provider-anthropic-messages`).
 The adapter takes the provider-neutral (OpenAI-shaped) local request and returns an assembled neutral `chat.completion` evidence; consumers
 do not know the family (one exception: the capability check knows both). `provider-http-json` credential kinds are `none | bearer |
-header(x-api-key)` with bounded static headers; `header` only over https. Spend: price id `anthropic-published-tariff` v1 (published rates
-are profile data; the quote ceiling is integer arithmetic); settlement of usage × tariff does not exist yet, so a responded call stays
-`held` (checkpoint A, blocks real Anthropic use). HAIKU55-CATALOG (2026-10-08): `pricing.json` schema 2 and tariff v2 add prompt-length
-tiers (Claude Haiku 5.5: more than 100,000 prompt tokens pays the upper rates, output included; basis input + cache write + cache read, the
-docs do not define it); flat models keep byte-identical v1 tariffs. The reservation prices the tier of its byte-based prompt bound (a real
-prompt is never larger, so it never under-reserves) and records `promptTier` in the evidence; the pricing version is the tariff version.
-`anthropicTariffRates` / `anthropicReportedPromptTokens` give the settlement-side tier of reported usage, unused until checkpoint A exists. Thinking continuity: a process-local bounded cache inside the adapter, bound to the
+header(x-api-key)` with bounded static headers; `header` only over https. SPEND-SETTLEMENT (owner 2026-10-08): checkpoint A
+is implemented in this lane candidate. Usage × pinned published tariff settles as `measured-tariff` (never provider-reported money),
+with exact bigint amount, input/cache read/cache write5m/cache write1h/output counts, tier and tariff digest. Missing positive cache-write
+split uses the dearest write rate, visibly recorded. Haiku5.5 total input = input + cache read + cache creation; more than100000 uses
+the upper rates for all dimensions. Quote/prepared-request correlation uses WeakMaps. An interrupted/unknown call with returned usage
+settles from that evidence; absent usage stays held. Overrun keeps held/overrun and freezes. Reservation v3 / ledger49 has a versioned
+service-start backup migration; inspection, CLI and integrity fold the new basis and append-only governed corrections. The checkpoint's
+source test proof is `proof/SPEND-SETTLEMENT-2026-10-08/`; independent review, landing and the first real billed call remain open.
+Paid OpenAI-compatible profiles use adapter-owned, dated published rows or an explicit operator-static v2 tariff. Exact typed lookup
+`lookupOpenAiCompatibleTariff(endpoint, modelId)` is exported for T4-B. Remote legacy zero refuses with a typed next action; local legacy
+zero remains supported. DeepSeek peak/off-peak rows reserve peak; missing authoritative tier remains held/reconcilable, never billed as
+peak by assumption. Governed CLI `models reconcile-spending` / `models revise-budget`, runtime SDK `manageProviderSpend` and MCP
+`manage_provider_spending` share one strict command, account policy and immutable receipt. Policy template v7 adds owner-only account
+rules through the existing upgrade path. Lowering a budget preserves outstanding charges; unfreeze requires an explicit revision.
+Thinking continuity: a process-local bounded cache inside the adapter, bound to the
 unchanged request prefix (checkpoint B: `providerContinuation`, v17). Error codes reuse `OPENAI_CHAT_*`. Per-model request contract
 (ANTHROPIC-PROFILE, adapter v2): an adapter-owned, dated and sourced capability registry (`internal/models.json`, docs read 2026-09-29;
 owner 2026-10-01 D6: becomes a dated seed of the ledger v43 model catalog, PLAN CATALOG-SEED)

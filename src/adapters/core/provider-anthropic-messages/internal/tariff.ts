@@ -1,8 +1,9 @@
+import { anthropicUsageSchema } from './assemble.js';
 import { createHash } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import { modelInvocationProfileSchema, parseModelBindingDefinition, parseProviderSpendQuote, type ProviderSpendQuote } from '#domain/index.js';
-import { modelInvocationProfileDigest, modelInvocationRequestDigest, providerSpendEvidenceDigest, type ModelInvocationSpendingInput } from '#engine/index.js';
-import { OpenAiChatHttpError, parseOpenAiChatTextRequest } from '#adapters/core/provider-openai-chat/index.js';
+import { modelInvocationProfileDigest, modelInvocationRequestDigest, providerSpendEvidenceDigest, ProviderSpendError, measuredTariffExactMinorUnits, ceilProviderSpendExactMinorUnits, type ModelInvocationSpendingInput } from '#engine/index.js';
+import { openAiChatUsageSchema, OpenAiChatHttpError, parseOpenAiChatTextRequest } from '#adapters/core/provider-openai-chat/index.js';
 import { ANTHROPIC_MESSAGES_HTTP_ADAPTER_ID, ANTHROPIC_MESSAGES_HTTP_ADAPTER_VERSION, ANTHROPIC_MESSAGES_METER_ID, ANTHROPIC_MESSAGES_PRICING_ID,
   ANTHROPIC_PROMPT_OVERHEAD_TOKENS, parseAnthropicMessagesDefinition, type AnthropicPublishedTariff, type AnthropicTariffRates } from './contract.js';
 
@@ -75,4 +76,30 @@ export function quoteAnthropicPublishedTariff(input: ModelInvocationSpendingInpu
     pricing: { id: ANTHROPIC_MESSAGES_PRICING_ID, version: tariff.version, digest: tariffDigest, definition: tariff },
     meter: { id: ANTHROPIC_MESSAGES_METER_ID, version: 1, evidenceDigest: providerSpendEvidenceDigest(evidence), evidence },
     currency: tariff.currency, maxChargeMinorUnits });
+}
+
+/** Reported cache dimensions are disjoint. A missing split pays the dearest write rate. */
+export function anthropicSettledCharge(tariff: AnthropicPublishedTariff, input: unknown) {
+  const usage = openAiChatUsageSchema.safeParse(input);
+  if (!usage.success) throw new ProviderSpendError('PROVIDER_SPEND_INVALID');
+  const fields = anthropicUsageSchema.parse(usage.data['anthropic']);
+  if (fields.input_tokens == null) throw new ProviderSpendError('PROVIDER_SPEND_INVALID');
+  const total = anthropicReportedPromptTokens({ input_tokens: fields.input_tokens, cache_creation_input_tokens: fields.cache_creation_input_tokens ?? 0, cache_read_input_tokens: fields.cache_read_input_tokens ?? 0 });
+  const selected = anthropicTariffRates(tariff, total), rates = selected.rates;
+  const write = fields.cache_creation_input_tokens ?? 0, read = fields.cache_read_input_tokens ?? 0;
+  if (total !== usage.data.prompt_tokens || (fields.cache_creation
+    && BigInt(fields.cache_creation.ephemeral_5m_input_tokens) + BigInt(fields.cache_creation.ephemeral_1h_input_tokens) !== BigInt(write))) {
+    throw new ProviderSpendError('PROVIDER_SPEND_INVALID');
+  }
+  const dimensions = [
+    { field: 'input', tokens: fields.input_tokens, usdPerMillionTokens: rates.input },
+    { field: 'cache-read', tokens: read, usdPerMillionTokens: rates.cacheRead },
+    { field: 'cache-write-5m', tokens: fields.cache_creation?.ephemeral_5m_input_tokens ?? 0, usdPerMillionTokens: rates.cacheWrite5m },
+    { field: !fields.cache_creation && write > 0 ? 'cache-write-unsplit' : 'cache-write-1h', tokens: fields.cache_creation?.ephemeral_1h_input_tokens ?? (write > 0 ? write : 0),
+      usdPerMillionTokens: fields.cache_creation ? rates.cacheWrite1h : units(rates.cacheWrite5m) > units(rates.cacheWrite1h) ? rates.cacheWrite5m : rates.cacheWrite1h },
+    { field: 'output', tokens: usage.data.completion_tokens, usdPerMillionTokens: rates.output },
+  ];
+  const exactMinorUnits = measuredTariffExactMinorUnits(dimensions);
+  return { exactMinorUnits, roundedMinorUnits: ceilProviderSpendExactMinorUnits(exactMinorUnits),
+    tier: selected.aboveTokens, dimensions, cacheSplit: fields.cache_creation ? 'reported' as const : write > 0 ? 'dearest' as const : 'none' as const };
 }

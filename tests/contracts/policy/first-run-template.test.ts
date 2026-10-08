@@ -163,12 +163,13 @@ describe('first-run v5: MCP server authority, trust grant and the proposal tool'
 describe('first-run v4 → v5 migration (pure)', () => {
   const v4 = () => { const { proposeMcpToolName: _p, mcpCallOperationId: _o, ...rest } = input; void _p; void _o;
     const current = firstRunPolicyTemplate(input).policy as { grants: { id: string; resource: { ids: unknown } }[] };
-    return { ...current, revision: 'first-run-template-v4', grants: current.grants.filter(grant => !['first-run-mcp-servers', 'first-run-mcp-call-operation', 'first-run-policy-administer', 'first-run-approvals', 'first-run-secret-switch', 'first-run-model-activation', 'first-run-model-invocation'].includes(grant.id))
+    return { ...current, revision: 'first-run-template-v4', grants: current.grants.filter(grant => !['first-run-mcp-servers', 'first-run-mcp-call-operation', 'first-run-policy-administer', 'first-run-approvals', 'first-run-secret-switch', 'first-run-model-activation', 'first-run-model-invocation', 'first-run-provider-spending'].includes(grant.id))
       .map(grant => grant.id === 'first-run-read-tools' ? { ...grant, resource: { ...grant.resource, ids: rest.readToolNames } } : grant) }; };
   it('exactly this installation\'s v4, v5 or v6 template upgrades to exactly the current (v7) template; v7 is current', () => {
     expect(upgradeFirstRunPolicy(v4(), input)).toEqual({ status: 'upgrade', from: 4, policy: firstRunPolicyTemplate(input).policy });
     const current = firstRunPolicyTemplate(input).policy as { grants: { id: string }[] };
-    const v6 = { ...current, revision: 'first-run-template-v6', grants: current.grants.filter(grant => !['first-run-model-activation', 'first-run-model-invocation'].includes(grant.id)) };
+    // v7 = T4-B K3 (model activation + invocation) and SPEND-SETTLEMENT (provider spend accounts) in one template version.
+    const v6 = { ...current, revision: 'first-run-template-v6', grants: current.grants.filter(grant => !['first-run-model-activation', 'first-run-model-invocation', 'first-run-provider-spending'].includes(grant.id)) };
     expect(upgradeFirstRunPolicy(v6, input)).toEqual({ status: 'upgrade', from: 6, policy: firstRunPolicyTemplate(input).policy });
     const v5 = { ...v6, revision: 'first-run-template-v5', grants: v6.grants.filter(grant => grant.id !== 'first-run-secret-switch') };
     expect(upgradeFirstRunPolicy(v5, input)).toEqual({ status: 'upgrade', from: 5, policy: firstRunPolicyTemplate(input).policy });
@@ -186,7 +187,7 @@ describe('first-run v4 → v5 migration (pure)', () => {
 
 describe('first-run v4 → v5 governed additions (deckent policy upgrade --template v5, pure plan)', () => {
   const v4 = () => { const current = firstRunPolicyTemplate(input).policy as unknown as { grants: { id: string; resource: { ids: unknown } }[] };
-    return { ...current, revision: 'first-run-template-v4', grants: current.grants.filter(grant => !['first-run-mcp-servers', 'first-run-mcp-call-operation', 'first-run-policy-administer', 'first-run-approvals', 'first-run-secret-switch', 'first-run-model-activation', 'first-run-model-invocation'].includes(grant.id))
+    return { ...current, revision: 'first-run-template-v4', grants: current.grants.filter(grant => !['first-run-mcp-servers', 'first-run-mcp-call-operation', 'first-run-policy-administer', 'first-run-approvals', 'first-run-secret-switch', 'first-run-model-activation', 'first-run-model-invocation', 'first-run-provider-spending'].includes(grant.id))
       .map(grant => grant.id === 'first-run-read-tools' ? { ...grant, resource: { ...grant.resource, ids: READ_TOOLS } } : grant) }; };
   const names = { person: me, proposeMcpToolName: 'propose_mcp_server', mcpCallOperationId: 'mcp.tool.call', policyAdministerOperationId: 'policy.administer' };
   it('adds exactly the three missing rules and never replaces or removes one: hand-added rules and an edited read rule stay', () => {
@@ -200,8 +201,9 @@ describe('first-run v4 → v5 governed additions (deckent policy upgrade --templ
       ['first-run-mcp-servers', 'mcp-server', 'all', 'all'], ['first-run-mcp-call-operation', 'operation', ['mcp.tool.call'], ['installation']],
       ['first-run-mcp-propose-tool', 'agent-tool', ['propose_mcp_server'], ['installation']], ['first-run-policy-administer', 'operation', ['policy.administer'], ['installation']],
       ['first-run-approvals', 'approval', 'all', ['installation']], ['first-run-secret-switch', 'secret', 'all', ['installation']],
-      // v7 (K3): model activation over every scope, model calls in the installed scope.
-      ['first-run-model-activation', 'model-activation', 'all', 'all'], ['first-run-model-invocation', 'model-invocation', 'all', ['installation']]]);
+      // v7 (K3 + SPEND-SETTLEMENT): model activation over every scope, model calls and spend accounts in the installed scope.
+      ['first-run-model-activation', 'model-activation', 'all', 'all'], ['first-run-model-invocation', 'model-invocation', 'all', ['installation']],
+      ['first-run-provider-spending', 'provider-spend-account', 'all', ['installation']]]);
     expect(plan.conflicts).toEqual([]);
     // Applied (the plan's documents), a second run has nothing to add.
     const applied = { ...edited, grants: [...edited.grants, ...plan.rules] };

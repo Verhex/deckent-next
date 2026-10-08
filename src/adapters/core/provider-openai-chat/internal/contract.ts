@@ -1,3 +1,4 @@
+import { openAiCompatiblePublishedTariffSchema, type OpenAiCompatiblePublishedTariff } from './pricing-catalog.js';
 import { X509Certificate } from 'node:crypto';
 import { z } from 'zod';
 import { createImmutableJsonObjectSchema, MODEL_INVOCATION_NATIVE_JSON_LIMITS, wellFormedModelJson, type JsonObject } from '#domain/index.js';
@@ -26,9 +27,10 @@ export class OpenAiChatHttpError extends Error {
 }
 
 export type OpenAiChatHttpAuthentication = Readonly<{ type: 'none' } | { type: 'bearer'; credentialRef: string }>;
-/** Operator-declared tariff for servers without a provider price feed. v1 admits only zero rates (free/local models). */
-export type OpenAiChatOperatorTariff = Readonly<{ kind: 'operator-static'; version: 1; currency: string;
-  inputMinorUnitsPerMillionTokens: 0; outputMinorUnitsPerMillionTokens: 0 }>;
+/** Operator-declared tariff for servers without a provider price feed. v1: zero rates only (free/local models); v2 (SPEND-SETTLEMENT):
+ * non-zero USD cents/MTok, fractional cents as exact decimal strings. */
+export type OpenAiChatOperatorTariff = Readonly<{ kind: 'operator-static'; version: 1 | 2; currency: string;
+  inputMinorUnitsPerMillionTokens: number | string; outputMinorUnitsPerMillionTokens: number | string; cachedInputMinorUnitsPerMillionTokens?: number | string }>;
 /**
  * A provider's documented request dialect (registry data, carried on the v5 profile): which field bounds the completion (`max_tokens` for
  * DeepSeek and Z.ai GLM, `max_completion_tokens` for OpenAI), whether a streamed request asks for usage with `stream_options.include_usage`
@@ -40,7 +42,7 @@ export type OpenAiChatDialect = Readonly<{ tokenLimitField: 'max_tokens' | 'max_
 export const OPENAI_CHAT_DEFAULT_DIALECT: OpenAiChatDialect = Object.freeze({ tokenLimitField: 'max_completion_tokens', streamUsage: 'include',
   toolChoice: Object.freeze(['auto', 'none', 'required'] as const) });
 export type OpenAiChatHttpDefinition = Readonly<{ endpoint: string; maxOutputTokens: number; dialect?: OpenAiChatDialect;
-  authentication: OpenAiChatHttpAuthentication; tls?: Readonly<{ caPem: string }>; tariff: OpenAiChatOperatorTariff;
+  authentication: OpenAiChatHttpAuthentication; tls?: Readonly<{ caPem: string }>; tariff: OpenAiChatOperatorTariff | OpenAiCompatiblePublishedTariff;
   /** vLLM-style `POST /tokenize` of the same origin (T-L5); used only when the binding declares `token-count`. */
   tokenizeEndpoint?: string }>;
 export type OpenAiChatHttpLimits = Readonly<{ requestMaxBytes: number; responseMaxBytes: number; timeoutMs: number }>;
@@ -87,8 +89,13 @@ const certificate = z.string().min(1).max(65_536).refine(value => {
     return canonical(value) === canonical(parsed.toString());
   } catch { return false; }
 });
-const tariffSchema = z.object({ kind: z.literal('operator-static'), version: z.literal(1), currency: z.string().regex(/^[A-Z]{3}$/),
-  inputMinorUnitsPerMillionTokens: z.literal(0), outputMinorUnitsPerMillionTokens: z.literal(0) }).strict();
+// Whole cents stay numeric; fractional cents are decimal strings, never binary floating point.
+const operatorRate = positive.or(z.literal(0)).or(z.string().max(32).regex(/^(0|[1-9]\d*)(\.\d{1,2})?$/));
+const tariffSchema = z.union([z.object({ kind: z.literal('operator-static'), version: z.literal(1), currency: z.string().regex(/^[A-Z]{3}$/),
+  inputMinorUnitsPerMillionTokens: z.literal(0), outputMinorUnitsPerMillionTokens: z.literal(0) }).strict(),
+  z.object({ kind: z.literal('operator-static'), version: z.literal(2), currency: z.literal('USD'),
+    inputMinorUnitsPerMillionTokens: operatorRate, outputMinorUnitsPerMillionTokens: operatorRate,
+    cachedInputMinorUnitsPerMillionTokens: operatorRate }).strict(), openAiCompatiblePublishedTariffSchema]);
 export const openAiChatDialectSchema = z.object({ tokenLimitField: z.enum(['max_tokens', 'max_completion_tokens']), streamUsage: z.enum(['include', 'omit']),
   // OpenAI wire vocabulary for tool_choice (protocol literals, not Deckent configuration values).
   toolChoice: z.array(z.union([z.literal('auto'), z.literal('none'), z.literal('required')])).min(1).max(3)

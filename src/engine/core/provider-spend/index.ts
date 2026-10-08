@@ -2,10 +2,10 @@ export { createProviderSpendAccount, parseProviderSpendAccount, parseProviderSpe
   reserveProviderSpend, settleProviderSpend, providerSpendQuoteDigest, providerSpendEvidenceDigest } from './internal/account.js';
 export type { ProviderSpendAccount, ProviderSpendReservation, ProviderSpendSettlement } from './internal/account.js';
 export { ProviderSpendError } from './internal/error.js';
-export type { ProviderSpendErrorCode } from './internal/error.js';
+export type { ProviderSpendErrorCode, ProviderSpendNextAction } from './internal/error.js';
 export { parseProviderSpendReportedMeasurement } from './internal/reported.js';
 export type { ProviderSpendReportedMeasurement } from './internal/reported.js';
-export { addProviderSpendExactMinorUnits, canonicalProviderSpendExactMinorUnits,
+export { addProviderSpendExactMinorUnits, canonicalProviderSpendExactMinorUnits, compareProviderSpendExactMinorUnits,
   ceilProviderSpendExactMinorUnits, providerSpendExactFromNumericSource } from './internal/exact.js';
 export { createProviderSpendCheckpoint, parseProviderSpendCheckpoint, providerSpendReservationDigest } from './internal/checkpoint.js';
 export type { ProviderSpendCheckpoint } from './internal/checkpoint.js';
@@ -23,3 +23,8 @@ export type { ProviderSpendAuditResult } from './internal/audit-result.js';
 export type { ProviderSpendAuditAuthorization, ProviderSpendAuditLimits,
   ProviderSpendAuditStore } from './internal/audit-application.js';
 export { OPERATOR_TARIFF_PRICING_ID, operatorTariffLocalSettlement } from './internal/operator-tariff.js';
+
+export { parseProviderSpendMeasurement, parseProviderSpendTariffMeasurement, measuredTariffExactMinorUnits } from './internal/measured.js';
+export type { ProviderSpendMeasurement, ProviderSpendTariffMeasurement } from './internal/measured.js';
+export { ProviderSpendManagementApplication, parseProviderSpendManagementReceipt, parseProviderSpendManagementResultForCommand, reconcileProviderSpend, reviseProviderSpendBudget } from './internal/management.js';
+export type { ProviderSpendManagementAuthorization, ProviderSpendManagementReceipt, ProviderSpendManagementResult, ProviderSpendManagementStore } from './internal/management.js';
