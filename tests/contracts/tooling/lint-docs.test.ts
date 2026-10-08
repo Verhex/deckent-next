@@ -55,6 +55,15 @@ describe('documentation release drift gate', () => {
     expect(result.status).toBe(1); expect(result.output).toContain('contains PR pending');
     expect(lint(await fixture({ 'CHANGELOG.md': release(17, 'abcdef12', 'PR pending') + ' · Unreleased feature' })).status).toBe(1);
   });
+  it('waives only the PR number for releases before PR-based landing (below alpha.5); SHA and PR-pending rules stay', async () => {
+    const changelog = (...lines: string[]) => ({ 'CHANGELOG.md': [release(17), ...lines].join('\n') });
+    expect(lint(await fixture(changelog(release(4, 'de7d2469', 'batch 28'), release(1, '037cab0d', 'K0')))).status).toBe(0);
+    for (const [line, error] of [[release(5, 'abcdef12', 'batch 36'), 'must name a PR number'],
+      [release(4, 'lane/release', 'batch 28'), 'must be a commit SHA'], [release(4, 'abcdef12', 'PR pending'), 'contains PR pending']]) {
+      const result = lint(await fixture(changelog(line)));
+      expect(result.status).toBe(1); expect(result.output).toContain(error);
+    }
+  });
   it('ignores receipt requirements only for versions above the package version (SemVer numeric order)', async () => {
     const result = lint(await fixture({ 'CHANGELOG.md': release(17) + '\n' + release(100, 'branch', 'PR pending') }));
     expect(result.status).toBe(0);

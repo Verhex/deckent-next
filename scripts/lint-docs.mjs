@@ -29,6 +29,10 @@ function compare(a, b) {
   }
   return 0;
 }
+// PR-based landing began with PR #1 (opened 2026-10-04T19:21Z). alpha.1–4 (2026-09-16..2026-10-03) landed as direct main
+// commits whose GitHub associated-PR lists are empty, so no PR number exists to cite. Only for versions below this fixed
+// cutoff is the PR-number receipt waived; their SHA ref and the PR-pending rejection still apply. Never move the cutoff.
+const FIRST_PR_RELEASE = version('1.0.0-alpha.5');
 function architectureFiles(dir) {
   return readdirSync(join(ROOT, dir), { withFileTypes: true }).flatMap(entry => {
     const path = join(dir, entry.name);
@@ -56,7 +60,7 @@ try {
     // Explicit Unreleased is the only exemption; a prerelease version alone is not an unlanded release.
     if (index === 0 && release.value === packageVersion && /^\s*-\s+\*\*[^*]+\*\*\s*—\s*Unreleased\b/iu.test(release.line)) continue;
     if (/\bPR\s+pending\b/iu.test(release.line)) fail(where, 'landed release contains PR pending');
-    if (!/\bPRs?\s+#[1-9]\d*\b/iu.test(release.line)) fail(where, 'landed release must name a PR number (PR #N)');
+    if (compare(version(release.value), FIRST_PR_RELEASE) >= 0 && !/\bPRs?\s+#[1-9]\d*\b/iu.test(release.line)) fail(where, 'landed release must name a PR number (PR #N)');
     // The first ref after the date must be a SHA, not a branch followed by a SHA elsewhere in the prose.
     if (!/\*\*\s*—\s*\d{4}-\d{2}-\d{2}\s*·\s*`[0-9a-f]{7,40}`(?:\s|$)/iu.test(release.line)) fail(where, 'landed ref after the date must be a commit SHA, not a branch');
   }
