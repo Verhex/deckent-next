@@ -16,3 +16,4 @@ export { extractOpenAiChatTextFromInvocation, openAiChatMessageFromInvocation, o
 export { lookupOpenAiCompatibleTariff } from './internal/pricing-catalog.js';
 export type { OpenAiCompatiblePublishedTariff } from './internal/pricing-catalog.js';
 export { createOpenAiChatPricedNative } from './internal/priced-native.js';
+export { settledProviderCacheUsage } from './internal/cache-usage.js';
