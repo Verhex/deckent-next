@@ -40,22 +40,31 @@ export function readDecisions(journalRoot, limit = 6) {
       title: req?.case?.objective ?? req?.case?.scope ?? d.selectedOption, choice: num(na?.probabilities?.[d.selectedOption]) ?? num(na?.confidence), sufficiency: num(res?.answers?.sufficiency?.noul) };
   });
 }
+/** Owner protocol (Astra 2475 N1): a body may open with a routing line, `TO: reviewer <session>` or `TO: main opus`; the kind line
+ * (REQUEST_REVIEW / REVIEW) follows it. The routing text is kept as the shown recipient; pairing still uses the channel's from/to fields. */
+export function splitRouting(body) {
+  const lines = String(body ?? '').split('\n'), m = /^TO:\s*(.*)$/.exec((lines[0] ?? '').trim());
+  return m ? { recipient: m[1].trim() || null, rest: lines.slice(1).join('\n') } : { recipient: null, rest: String(body ?? '') };
+}
 export function readReviews(channelFile, cutoff = 2000, limit = 5) {
-  let entries; try { entries = parseChannel(readChannelFile(channelFile), cutoff); } catch { return null; }
+  let entries; try { entries = parseChannel(readChannelFile(channelFile), cutoff).map(e => ({ ...e, ...splitRouting(e.body) })); } catch { return null; }
   const firstLines = body => body.split('\n').map(l => l.trim()).filter(Boolean);
-  const requests = entries.filter(e => e.to === 'astra' && /^REQUEST_REVIEW(\s|$)/.test(e.body));
-  const reviews = entries.filter(e => e.from === 'astra' && /^REVIEW(\s|$)/.test(e.body));
-  const replyFor = req => reviews.find(r => r.seq > req.seq && new RegExp(`\\bre=${req.seq}(:|\\b)`).test(r.body.split('\n')[0]));
-  const verdictOf = body => { const lines = firstLines(body); const m = /^(PASS|REVISE)\b/.exec(lines[1] ?? ''); return { verdict: m?.[1] ?? null, headline: (lines[1] ?? '').replace(/^(PASS|REVISE)\s*[—:-]?\s*/, '') };
+  const requests = entries.filter(e => e.to === 'astra' && /^\s*REQUEST_REVIEW(\s|$)/.test(e.rest));
+  const reviews = entries.filter(e => e.from === 'astra' && /^\s*REVIEW(\s|$)/.test(e.rest));
+  const replyFor = req => reviews.find(r => r.seq > req.seq && new RegExp(`\\bre=${req.seq}(:|\\b)`).test(firstLines(r.rest)[0] ?? ''));
+  // Two reply shapes: "REVIEW re=…" with the verdict on the next line, or "REVIEW — REVISE re=…" with it on the REVIEW line.
+  const verdictOf = body => { const lines = firstLines(body), inline = /^REVIEW\s*[—:-]?\s*(PASS|REVISE)\b/.exec(lines[0] ?? '');
+    if (inline) return { verdict: inline[1], headline: (lines[0] ?? '').replace(/^REVIEW\s*[—:-]?\s*(PASS|REVISE)\s*(re=\S+)?\s*[;:—-]?\s*/, '') || (lines[1] ?? '') };
+    const m = /^(PASS|REVISE)\b/.exec(lines[1] ?? ''); return { verdict: m?.[1] ?? null, headline: (lines[1] ?? '').replace(/^(PASS|REVISE)\s*[—:-]?\s*/, '') };
   };
   const counts = body => { const c = { P0: 0, P1: 0, P2: 0 }; for (const m of body.matchAll(/^\s*\d+\.\s*(P[012])\b/gm)) c[m[1]]++; return c; };
   const items = [], used = new Set();
   for (const req of requests) {
     const rep = replyFor(req); if (rep) used.add(rep.seq);
-    const lines = firstLines(req.body), head = lines[0].replace(/^REQUEST_REVIEW\s*/, '').trim() || lines[1] || '';
-    items.push({ seq: req.seq, at: req.at, title: head, pending: !rep, verdict: rep ? verdictOf(rep.body).verdict : null, findings: rep ? counts(rep.body) : null, replyAt: rep?.at ?? null });
+    const lines = firstLines(req.rest), head = lines[0].replace(/^REQUEST_REVIEW\s*[—:-]?\s*/, '').trim() || lines[1] || '';
+    items.push({ seq: req.seq, at: req.at, title: head, recipient: req.recipient, pending: !rep, verdict: rep ? verdictOf(rep.rest).verdict : null, findings: rep ? counts(rep.rest) : null, replyAt: rep?.at ?? null });
   }
-  for (const rep of reviews) if (!used.has(rep.seq)) { const v = verdictOf(rep.body); items.push({ seq: rep.seq, at: rep.at, title: v.headline || `İnceleme yanıtı ${rep.seq}`, pending: false, verdict: v.verdict, findings: counts(rep.body), replyAt: rep.at, orphan: true }); }
+  for (const rep of reviews) if (!used.has(rep.seq)) { const v = verdictOf(rep.rest); items.push({ seq: rep.seq, at: rep.at, title: v.headline || `İnceleme yanıtı ${rep.seq}`, recipient: rep.recipient, pending: false, verdict: v.verdict, findings: counts(rep.rest), replyAt: rep.at, orphan: true }); }
   return items.sort((a, b) => Date.parse(b.at) - Date.parse(a.at)).slice(0, limit);
 }
 /** Runs the project's own `dev-release.mjs status` (read-only) and keeps only the fields shown. Any failure gives null. */
@@ -138,7 +147,7 @@ const VERDICT = { PASS: ['ok', '✓', 'PASS'], REVISE: ['warn', '↻', 'REVISE']
 function reviewQueue(items, now) {
   const body = items === null ? `<p>${NODATA} <span class="m">(kanal dosyası okunamadı)</span></p>` : !items.length ? '<p class="m">Kuyruk boş: Astra için bekleyen veya kayıtlı inceleme yok.</p>'
     : `<ul class="rows">${items.map(i => { const f = i.findings;
-      return `<li><div class="line"><strong>${compact(clip(i.title, 120))}</strong>${i.verdict ? chip(VERDICT[i.verdict]) : i.pending ? chip(['warn', '◔', 'Bekliyor']) : ''}</div><small>#${i.seq} · <time datetime="${esc(i.at)}">${esc(clock(i.at))}</time> (${esc(ageText(i.at, now))})`
+      return `<li><div class="line"><strong>${compact(clip(i.title, 120))}</strong>${i.verdict ? chip(VERDICT[i.verdict]) : i.pending ? chip(['warn', '◔', 'Bekliyor']) : ''}</div><small>#${i.seq}${i.recipient ? ` · → ${compact(clip(i.recipient, 60))}` : ''} · <time datetime="${esc(i.at)}">${esc(clock(i.at))}</time> (${esc(ageText(i.at, now))})`
         + `${f ? ` · Bulgu: P0 ${f.P0} · P1 ${f.P1} · P2 ${f.P2}` : ''}</small></li>`; }).join('')}</ul>`;
   return section('inceleme', 'İnceleme kuyruğu (Astra)', items ? `son ${items.length} kayıt` : '', body);
 }

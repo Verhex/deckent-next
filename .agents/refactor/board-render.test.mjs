@@ -103,6 +103,24 @@ test('review queue pairs REQUEST_REVIEW with its REVIEW, shows verdict and P-cou
   assert.equal(readReviews(file, 2000), null);
 });
 
+test('current routed bodies ("TO: reviewer …" / "TO: main opus") pair, show verdict and recipient; both reply shapes (Astra 2475 N1)', t => {
+  const d = tmp(t), file = path.join(d, 'c.md'), hash = body => crypto.createHash('sha256').update(body).digest('hex').slice(0, 12);
+  const req = 'TO: reviewer 01a10b4c-23ad-7730-b492-9c81e1eeab98\nREQUEST_REVIEW — batch B (1.0.0-alpha.20 candidate)\nExact head: …\n';
+  const rev = `TO: main opus\nREVIEW re=2475:${hash(req)}\nREVISE — tek landing engeli\n1. P1: storage.ts:122 x\n`;
+  const req2 = 'TO: reviewer 01a10b4c-23ad-7730-b492-9c81e1eeab98\nREQUEST_REVIEW — CI-green PR\n';
+  const rev2 = `TO: main opus\nREVIEW — PASS re=2473:${hash(req2)}; tek tur\n`;
+  const misrouted = 'TO: main opus\nREQUEST_REVIEW — opus kendine yazmış\n'; // channel to=opus: never an Astra queue item
+  fs.writeFileSync(file, '# c\n<!-- channel next-seq=2478 -->\n' + entry(2473, 'opus', 'astra', req2, '2026-10-09T08:00:00.000Z') + entry(2474, 'astra', 'opus', rev2, '2026-10-09T08:30:00.000Z')
+    + entry(2475, 'opus', 'astra', req, '2026-10-09T10:00:00.000Z') + entry(2476, 'astra', 'opus', rev, '2026-10-09T10:30:00.000Z') + entry(2477, 'astra', 'opus', misrouted, '2026-10-09T11:00:00.000Z'));
+  const items = readReviews(file, 2000);
+  assert.deepEqual(items.map(i => [i.seq, i.pending, i.verdict, i.title]), [[2475, false, 'REVISE', 'batch B (1.0.0-alpha.20 candidate)'], [2473, false, 'PASS', 'CI-green PR']]);
+  assert.deepEqual(items[0].findings, { P0: 0, P1: 1, P2: 0 }); assert.equal(items[0].recipient, 'reviewer 01a10b4c-23ad-7730-b492-9c81e1eeab98');
+  const html = renderBoardPage(board(), { reviews: items }, { now });
+  assert.match(html, /batch B/); assert.match(html, /→ reviewer 01a10b4c/); assert.doesNotMatch(html, /Kuyruk boş/);
+  fs.writeFileSync(file, '# c\n<!-- channel next-seq=2476 -->\n' + entry(2475, 'opus', 'astra', req, '2026-10-09T10:00:00.000Z'));
+  assert.deepEqual(readReviews(file, 2000).map(i => [i.seq, i.pending]), [[2475, true]]);
+});
+
 test('decision feed reads the Jev journal newest first with scores and actor kind; malformed records are skipped', t => {
   const root = tmp(t), id = n => `0000000${n}-0000-4000-8000-000000000000`;
   const put = (n, at, actor, selected, p, suff) => { const dir = path.join(root, id(n)); fs.mkdirSync(dir);
