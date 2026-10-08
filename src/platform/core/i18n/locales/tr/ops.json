@@ -439,7 +439,7 @@
   "models.connect.key": "Anahtar: gizli depodan {name} adıyla okunur (değer hiç gösterilmez).",
   "models.connect.keyMissing": "Anahtar: {name} henüz gizli depoda değil; /provider ya da `deckent secret set {name}` ile saklayın.",
   "models.connect.keyNone": "Anahtar: gönderilmez (düz http üzerinden yerel sunucu).",
-  "models.connect.unmetered": "Harcama: bu sağlayıcının çağrıları henüz ölçülmüyor (adaptör yalnız sıfır tarife alıyor); sağlayıcının kendi panelini izleyin.",
+  "models.connect.unmetered": "Harcama: yerel sunucu sıfır tarifeyle kaydedilir (kendi sunucunuz, sağlayıcı ücreti yok).",
   "models.connect.restart": "Çalışan servis eski ayarlarla başladı: uygulamak için yeniden başlatın (`deckent runtime restart`).",
   "mcp.tool.connectModel": "Bir modeli kapsama bağlar: sağlayıcının paketli kataloğundan tanımlar, çağrı profilini yazar (yalnız anahtarın adı) ve etkinleştirir; her adım yönetilen yolunda. Yinelenen komut kimliği yerinde olanı değiştirmez.",
   "cli.help.action.models.connect": "Sağlayıcının bir modelini kapsama bağla",

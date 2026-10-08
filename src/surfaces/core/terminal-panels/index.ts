@@ -6,5 +6,5 @@ export { mcpPanelTree, mcpWizardSteps, mcpPair, mcpArgs } from './internal/mcp-p
 export { editEntry, maskEntry, EntryWindow, type EntryState } from './internal/entry.js';
 export { panelWindowLines, usePickerRoom, LinesWindow, QuestionWindow } from './internal/lines.js';
 export { modelPanelTree } from './internal/model-panel.js';
-export { providerPanelTree, providerEndpointTree } from './internal/provider-panel.js';
+export { providerPanelTree, providerEndpointTree, providerModelTree } from './internal/provider-panel.js';
 export { ConfigNumberWindow } from './internal/config-stepper.js';

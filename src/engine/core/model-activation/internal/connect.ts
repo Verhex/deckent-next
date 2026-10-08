@@ -105,6 +105,9 @@ export class ModelConnectApplication {
       layers = await ports.layers();
       return pending ? result('approval-pending', { approvalId: pending.approvalId, keyPath, layer }) : null;
     };
+    // The profile's adapter part first (stage 1): an unpriced remote model or a malformed definition is refused before any catalog or config write.
+    const adapter = ports.adapter(kind.id, { endpoint, credentialRef, nativeId: target.nativeId, maxOutputTokens: target.maxOutputTokens, currency: ports.defaults.currency });
+    tariff = adapter.tariff;
     // 1. Ledger catalog facts (installation-wide, no restart).
     if (target.seed && target.declare) {
       if (await ports.catalogHas(target.declare.provider.id, target.nativeId)) steps.catalog = 'present';
@@ -137,8 +140,6 @@ export class ModelConnectApplication {
     const binding = await ports.binding(target.reference);
     if (binding.status !== 'declared') throw new ModelConnectError('MODEL_CONNECT_MODEL_UNKNOWN');
     // 3. The scope's invocation profile: endpoint preset, the key NAME, tariff, limits, binding digest.
-    const adapter = ports.adapter(kind.id, { endpoint, credentialRef, nativeId: target.nativeId, maxOutputTokens: target.maxOutputTokens, currency: ports.defaults.currency });
-    tariff = adapter.tariff;
     const profileId = [command.connection, target.reference.providerId, target.reference.modelId, String(target.reference.modelVersion)].join('.');
     const build = (version: number, responseMaxBytes: number) => ({ schemaVersion: 1, id: profileId, version, scopeId, reference: target.reference,
       bindingDigest: binding.binding.digest, protocol: adapter.protocol, adapter: adapter.adapter, allocation: { id: profileId, maxCalls: null, maxInFlight: ports.defaults.maxInFlight },

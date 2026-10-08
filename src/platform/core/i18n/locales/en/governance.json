@@ -560,6 +560,7 @@
   "error.MODEL_CONNECT_KEY_NAME_UNAVAILABLE": "No key name can be made from this address.",
   "error.MODEL_CONNECT_SEED_UNAVAILABLE": "The packaged model catalog of this provider cannot be read.",
   "error.MODEL_CONNECT_TARIFF_UNKNOWN": "No published price is known for this model, so it cannot be connected with a spending limit.",
+  "error.MODEL_CONNECT_TARIFF_UNVERIFIED": "Price not verified — paid calls are refused. No verified published price exists for this model at this address, so nothing was connected.",
   "error.MODEL_CONNECT_KEY_INSECURE": "This provider needs its key, and a key is only sent over https.",
   "error.MODEL_CONNECT_DEFINITION_INVALID": "The connection settings this provider would get are not valid for its adapter.",
   "error.TERMINAL_DEFAULT_MODEL_PROJECT_LAYER": "`terminal.defaultModel` is your own default model: only your user settings can hold it, not the project file.",

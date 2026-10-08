@@ -7,7 +7,7 @@ import { registerProviderConfig } from '#adapters/index.js';
 import { providerEndpoint } from '#adapters/core/provider-connect/index.js';
 import { modelPanelSource, providerOutcomeWord, providerPanelPort, type ProviderConnectHost, type TerminalLaunchContext } from '#surfaces/core/cli-terminal/index.js';
 import type { ModelConnectCommand, ModelConnectResult } from '#domain/index.js';
-import { providerPanelTree } from '#surfaces/core/terminal-panels/index.js';
+import { providerModelTree, providerPanelTree } from '#surfaces/core/terminal-panels/index.js';
 import { terminalPanelLabels } from '#surfaces/core/work-labels/index.js';
 
 // T4-A ports over the host's handlers (no runtime, no network): `/provider` runs the free check and sends the key only to the secret store
@@ -143,7 +143,8 @@ describe('/provider port: connect a model (T4-B)', () => {
     const connect: ProviderConnectHost = { kinds: [openai, generic], endpoint: providerEndpoint, probe: async () => ({ outcome: 'ok', httpStatus: 200, key: 'verified' }),
       secretName: (kind, endpoint) => kind === 'openai-compatible' ? (endpoint ? `DECKENT_OAICOMPAT_${new URL(endpoint).hostname.toUpperCase().replace(/[^A-Z0-9]+/gu, '_')}` : null)
         : kind === 'openai-api' ? 'DECKENT_OPENAI_KEY' : null,
-      seedModels: async kind => kind === 'openai-api' ? [{ nativeId: 'gpt-6-luna', displayName: 'GPT-6 Luna' }] : [] };
+      // Stage 1: the host says which seed models carry a verified price; an unpriced one is listed but locked.
+      seedModels: async kind => kind === 'openai-api' ? [{ nativeId: 'gpt-6-luna', displayName: 'GPT-6 Luna' }, { nativeId: 'gpt-6-astra', displayName: 'GPT-6 Astra', priced: false }] : [] };
     return { commands, connect, extra: {
       connectModel: async (_root: string, command: ModelConnectCommand) => { commands.push(command); return results.shift()!; },
       inspectDeclaredModels: async () => ({ schemaVersion: 1, status: 'declared', availability: 'not-observed', catalog: { schemaVersion: 1, revision: 'c', providers: [
@@ -166,9 +167,14 @@ describe('/provider port: connect a model (T4-B)', () => {
     let port = providerPanelPort(root, 'scope', { ...secrets([]).host, ...extra, providerConnect: connect }, options, 'en', errorText);
     let kinds = (await port.inspect()).kinds;
     expect(kinds.map(kind => [kind.id, kind.models, kind.modelBlocked])).toEqual([
-      ['openai-api', [{ id: 'seed:gpt-6-luna', label: 'GPT-6 Luna', detail: 'gpt-6-luna' }], 'Store its key first (Connect).'],
-      // The generic row lists only declared models speaking its family (never the Anthropic one); owner 2026-10-08: it waits for a declared price.
-      ['openai-compatible', [{ id: 'ref:vendor-a@1/a@1', label: 'a', detail: 'vendor-a@1/a@1' }], 'Price must be declared first (coming with the pricing record).']]);
+      ['openai-api', [{ id: 'seed:gpt-6-luna', label: 'GPT-6 Luna', detail: 'gpt-6-luna' },
+        { id: 'seed:gpt-6-astra', label: 'GPT-6 Astra', detail: 'gpt-6-astra', blocked: 'Price not verified — paid calls are refused.' }], 'Store its key first (Connect).'],
+      // The generic row lists only declared models speaking its family (never the Anthropic one); owner 2026-10-08: it waits for a verified price.
+      ['openai-compatible', [{ id: 'ref:vendor-a@1/a@1', label: 'a', detail: 'vendor-a@1/a@1' }],
+        'A remote address needs a verified price first; declaring one here is not available yet (paid calls are refused).']]);
+    // The model list locks the unpriced row with the same words (picker `blocked`).
+    expect(providerModelTree(kinds[0]!, { modelTitle: '{kind}' } as never).items.map(item => [item.id, 'blocked' in item ? item.blocked : null])).toEqual([
+      ['seed:gpt-6-luna', null], ['seed:gpt-6-astra', { reason: 'Price not verified — paid calls are refused.' }]]);
     expect(port.keyName!('openai-compatible', 'https://llm.example.com')).toBe('DECKENT_OAICOMPAT_LLM_EXAMPLE_COM');
     port = providerPanelPort(root, 'scope', { ...secrets(['DECKENT_OPENAI_KEY']).host, ...extra, providerConnect: connect }, options, 'en', errorText);
     kinds = (await port.inspect()).kinds;

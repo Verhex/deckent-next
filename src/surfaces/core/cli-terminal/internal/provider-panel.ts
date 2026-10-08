@@ -134,7 +134,9 @@ export function providerPanelPort(root: string, scopeId: string, host: Host & { 
       }
       const modelsOf = async (kind: ProviderConnectKindView) => {
         if (!host.connectModel || !kind.connectFamily) return [];
-        if (kind.seeded && connect.seedModels) return (await connect.seedModels(kind.id).catch(() => [])).map(model => ({ id: `${SEED}${model.nativeId}`, label: model.displayName, detail: model.nativeId }));
+        // Stage 1: a seed model without a verified price is listed but locked (connecting it is refused before anything is written).
+        if (kind.seeded && connect.seedModels) return (await connect.seedModels(kind.id).catch(() => [])).map(model => ({ id: `${SEED}${model.nativeId}`, label: model.displayName, detail: model.nativeId,
+          ...(model.priced === false ? { blocked: t('tui.provider.model.priceUnverified', {}, locale) } : {}) }));
         return declared.filter(model => model.family.includes(kind.connectFamily!)).map(({ id, label, detail }) => ({ id, label, detail }));
       };
       const models = new Map(await Promise.all(connect.kinds.map(async kind => [kind.id, await modelsOf(kind)] as const)));

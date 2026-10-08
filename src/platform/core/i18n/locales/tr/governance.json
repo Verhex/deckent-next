@@ -560,6 +560,7 @@
   "error.MODEL_CONNECT_KEY_NAME_UNAVAILABLE": "Bu adresten anahtar adı türetilemiyor.",
   "error.MODEL_CONNECT_SEED_UNAVAILABLE": "Bu sağlayıcının paketle gelen model kataloğu okunamıyor.",
   "error.MODEL_CONNECT_TARIFF_UNKNOWN": "Bu modelin yayımlanmış fiyatı bilinmiyor; harcama sınırıyla bağlanamaz.",
+  "error.MODEL_CONNECT_TARIFF_UNVERIFIED": "Fiyat doğrulanmadı — ücretli çağrı reddedilir. Bu adreste bu model için doğrulanmış yayımlanmış fiyat yok; hiçbir şey bağlanmadı.",
   "error.MODEL_CONNECT_KEY_INSECURE": "Bu sağlayıcı anahtar ister; anahtar yalnız https üzerinden gönderilir.",
   "error.MODEL_CONNECT_DEFINITION_INVALID": "Bu sağlayıcı için oluşacak bağlantı ayarları adaptörüne uygun değil.",
   "error.TERMINAL_DEFAULT_MODEL_PROJECT_LAYER": "`terminal.defaultModel` kişinin kendi varsayılan modelidir: yalnız kullanıcı ayarlarında durabilir, proje dosyasında duramaz.",

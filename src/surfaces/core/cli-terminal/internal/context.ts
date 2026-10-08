@@ -49,7 +49,7 @@ export interface ProviderConnectHost {
   /** Key names an earlier release stored that no row uses any more, and the row to store the key under instead (registry data). */
   readonly legacyKeys?: readonly Readonly<{ secretName: string; moveTo: string }>[];
   secretName?(kind: string, endpoint: string | null): string | null;
-  seedModels?(kind: string): Promise<readonly Readonly<{ nativeId: string; displayName: string }>[]>;
+  seedModels?(kind: string): Promise<readonly Readonly<{ nativeId: string; displayName: string; priced?: boolean }>[]>;
 }
 /** The installation secret store through the runtime service (SECRET-WRITE): the same handlers as `deckent secret` — names only, never values back. */
 export type TerminalSecretNamesHandler = (root: string, options: ConfigLoadOptions) => Promise<Readonly<{ schemaVersion: 1; backend: string; names: readonly string[] }>>;

@@ -111,6 +111,7 @@ const definitions: Readonly<Record<string, Definition>> = Object.freeze({
   MODEL_CONNECT_KEY_NAME_UNAVAILABLE: { category: 'usage', render: (p, l) => ({ message: t('error.MODEL_CONNECT_KEY_NAME_UNAVAILABLE', p, l) }) },
   MODEL_CONNECT_SEED_UNAVAILABLE: { category: 'error', render: (p, l) => ({ message: t('error.MODEL_CONNECT_SEED_UNAVAILABLE', p, l) }) },
   MODEL_CONNECT_TARIFF_UNKNOWN: { category: 'error', render: (p, l) => ({ message: t('error.MODEL_CONNECT_TARIFF_UNKNOWN', p, l) }) },
+  MODEL_CONNECT_TARIFF_UNVERIFIED: { category: 'error', render: (p, l) => ({ message: t('error.MODEL_CONNECT_TARIFF_UNVERIFIED', p, l) }) },
   MODEL_CONNECT_KEY_INSECURE: { category: 'usage', render: (p, l) => ({ message: t('error.MODEL_CONNECT_KEY_INSECURE', p, l) }) },
   MODEL_CONNECT_DEFINITION_INVALID: { category: 'error', render: (p, l) => ({ message: t('error.MODEL_CONNECT_DEFINITION_INVALID', p, l) }) },
   TERMINAL_DEFAULT_MODEL_PROJECT_LAYER: { category: 'config', render: (p, l) => ({ message: t('error.TERMINAL_DEFAULT_MODEL_PROJECT_LAYER', p, l) }) },

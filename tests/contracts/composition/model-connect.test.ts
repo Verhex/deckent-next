@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { readFile, readdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { PROVIDER_CONNECT_REGISTRY, parseProviderConnectRegistry } from '#adapters/index.js';
+import { PROVIDER_CONNECT_REGISTRY, lookupOpenAiCompatibleTariff, parseProviderConnectRegistry } from '#adapters/index.js';
 import { connectConfiguredModel } from '#composition/core/model-connect/index.js';
 import { configuredApproval } from '#composition/core/approvals/index.js';
 import { clearConfigCache } from '#platform/index.js';
@@ -122,21 +122,23 @@ describe.skipIf(process.platform !== 'linux')('models.connect', () => {
     expect(f.state.requests[1]).toHaveProperty('max_tokens'); expect(f.state.requests[1]).not.toHaveProperty('max_completion_tokens');
   }, 60_000);
 
-  it('two OpenAI-compatible vendors connect at the same time, each under its own key name; a remote generic address waits for a declared price', async () => {
+  it('a priced vendor model connects with its verified published row; an unpriced one is refused before any write; a remote generic address waits for a declared price', async () => {
     const f = await harness();
     const connect = (commandId: string, connection: string, nativeId: string) => connectConfiguredModel(f.project, { schemaVersion: 1, commandId, scopeId: 'scope',
       connection, endpoint: null, model: { nativeId } }, f.options, { listSecretNames: async () => ({ names: ['DECKENT_OPENAI_KEY'] }) });
-    const a = await connect('c-a', 'openai-api', 'gpt-6-luna'), b = await connect('c-b', 'deepseek-api', 'deepseek-flash');
-    expect([a.credentialRef, b.credentialRef]).toEqual(['DECKENT_OPENAI_KEY', 'DECKENT_DEEPSEEK_KEY']);
-    // The second key is not stored yet: the result says so (the profile names it; turns are refused until it is stored).
-    expect([a.keyStored, b.keyStored]).toEqual([true, false]);
-    expect([a.status, b.status, a.tariff, b.tariff]).toEqual(['connected', 'connected', 'unmetered', 'unmetered']);
+    // Stage 1: no verified OpenAI row for gpt-6-luna (pricing.json has chat-latest only): refused typed, the configuration file is untouched.
+    const untouched = await readFile(f.path, 'utf8');
+    await expect(connect('c-a', 'openai-api', 'gpt-6-luna')).rejects.toMatchObject({ code: 'MODEL_CONNECT_TARIFF_UNVERIFIED' });
+    expect(await readFile(f.path, 'utf8')).toBe(untouched);
+    const b = await connect('c-b', 'deepseek-api', 'deepseek-flash');
+    // The DeepSeek key is not stored yet: the result says so (the profile names it; turns are refused until it is stored).
+    expect([b.credentialRef, b.keyStored, b.status, b.tariff]).toEqual(['DECKENT_DEEPSEEK_KEY', false, 'connected', 'published']);
     const profiles = (await f.config())['provider_invocation_profiles'].profiles as { reference: { providerId: string }; adapter: { definition: { endpoint: string;
-      authentication: unknown } } }[];
+      authentication: unknown; tariff: unknown } } }[];
     const byVendor = Object.fromEntries(profiles.map(profile => [profile.reference.providerId, profile.adapter.definition]));
-    expect(byVendor['openai-api']).toMatchObject({ endpoint: 'https://api.openai.com/v1/chat/completions', authentication: { type: 'bearer', credentialRef: 'DECKENT_OPENAI_KEY' } });
     expect(byVendor['deepseek-api']).toMatchObject({ endpoint: 'https://api.deepseek.com/chat/completions', authentication: { type: 'bearer', credentialRef: 'DECKENT_DEEPSEEK_KEY' } });
-    expect(profiles.map(profile => profile.reference.providerId).sort()).toEqual(['deepseek-api', 'local-openai', 'openai-api']);
+    expect(byVendor['deepseek-api']!.tariff).toEqual(lookupOpenAiCompatibleTariff('https://api.deepseek.com/chat/completions', 'deepseek-flash'));
+    expect(profiles.map(profile => profile.reference.providerId).sort()).toEqual(['deepseek-api', 'local-openai']);
     // Owner 2026-10-08: the generic row's remote address needs a declared price (SPEND-SETTLEMENT) before any paid call; nothing is written.
     const before = await readFile(f.path, 'utf8');
     await expect(connectConfiguredModel(f.project, { schemaVersion: 1, commandId: 'c-g', scopeId: 'scope', connection: 'openai-compatible', endpoint: 'https://llm.example.com/v1',

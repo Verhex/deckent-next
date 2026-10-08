@@ -17,7 +17,8 @@ export function providerPanelTree(view: ProviderPanelView, labels: ProviderPanel
 }
 /** T4-B: the kind's models as a list (labels first; the exact id is the dimmed detail). */
 export function providerModelTree(kind: ProviderPanelKind, labels: ProviderPanelLabels): PickerTree {
-  return { title: fillTemplate(labels.modelTitle, { kind: kind.label }), items: kind.models.map(model => ({ id: model.id, label: model.label, detail: model.detail, keywords: [model.detail] })) };
+  return { title: fillTemplate(labels.modelTitle, { kind: kind.label }), items: kind.models.map(model => ({ id: model.id, label: model.label, detail: model.detail, keywords: [model.detail],
+    ...(model.blocked ? { blocked: { reason: model.blocked } } : {}) })) };
 }
 
 const OTHER = ':other';

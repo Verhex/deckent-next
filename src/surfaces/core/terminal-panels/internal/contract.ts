@@ -161,8 +161,9 @@ export type ProviderPanelKind = Readonly<{ id: string; label: string; detail: st
    * default); a typed address is only the list's last row, checked and previewed. A kind with a fixed endpoint has none. */
   endpointChoices: readonly Readonly<{ id: string; label: string; url: string }>[];
   /** T4-B: the models this kind can connect (its catalog seed, or the provider catalog's declared models), chosen from the list; empty: none.
-   * `modelBlocked`: why "connect a model" cannot be offered now (e.g. no key stored yet), null when it can. */
-  models: readonly Readonly<{ id: string; label: string; detail: string }>[]; modelBlocked: string | null;
+   * `modelBlocked`: why "connect a model" cannot be offered now (e.g. no key stored yet), null when it can; a model's own `blocked` (stage 1:
+   * no verified price) locks that row only. */
+  models: readonly Readonly<{ id: string; label: string; detail: string; blocked?: string }>[]; modelBlocked: string | null;
   /** K6: shown on the row (muted) when the kind stores a key but no model can be connected to it yet. */
   pendingNote?: string;
   /** (c) A key under a name no row uses any more: listed with a warning, its only action is removal. */
