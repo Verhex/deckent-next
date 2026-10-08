@@ -330,3 +330,15 @@ Kaynak: dış `proof/DECKENT-API-KEYS-2026-10-08/analysis.md` (yan oturum decken
 - **Süreklilik (SECRET-CONTINUITY):** tanımlı zincirde görünür ve audit'li otomatik geçiş; tanımsız sağlayıcı/model asla (Jev a47afcc5 0,99/0,66 → owner onayı).
 - **İzolasyon katmanları:** Claude Code kapatılmaz, sandbox'a alınmaz; katı kurulum Deckent içinde (ayrı OS kullanıcısı / OS keychain);
   kurulum ayarlarında şeffaflık notu ve katı kurulum belgesi (Jev e0fc3229 0,94/0,66 → owner). Native Windows ilk dilimde yok (şeffaflık notu).
+
+## Owner kararları — 2026-10-08 (anahtar deposu geçişi)
+Kaynak: dış `proof/DECKENT-API-KEYS-2026-10-08/analysis.md`.
+- **Varsayılan depo:** yeni kurulumlarda Linux/WSL/macOS şifreli depo; native Windows ortam değişkeni (OS anahtarlığına kadar); mevcut
+  kurulumlar sessizce değişmez, doctor yalnız önerir (Jev 60bdc5e6 0,93/0,67 → owner).
+- **Depo seçimi secret verisidir (B):** tek yönetilen işlem `deckent secret store` — kopyala, doğrula, seçimi yayımla, eskiyi sil; daha zayıf
+  depoya geçiş açık onay ister; audit `secret-store-switch`; config motorunun secrets reddi kalır (Jev a0284b73 1,00/0,82 → owner).
+  Sıra çökme güvenliği için yayımla → sil (owner'ın yazdığı sırada sil → yayımla çökmede anahtarları erişilemez bırakırdı).
+- **Yetki:** yeni `secret`/`switch` eylemi, first-run şablonu v6, `init policy --upgrade` listesine tek kural (Jev 47dbd9a9 0,89/0,68 → owner).
+- **Kurulum kaydı:** ilk kurulumda ledger yok; aynı işlem 0 kayıtla, yeni policy ile yetkili, kaydı komut sonucunda; sonraki geçişler
+  ledger'da (Jev 0950f08e 0,83/0,66 → owner).
+- **Yüzey kuralı:** ayarlar elle yazılmaz, seçilir; elle giriş yalnız maskeli sır ve yeni dış URL/host. Depo, kayıtlı depolardan seçilir.
