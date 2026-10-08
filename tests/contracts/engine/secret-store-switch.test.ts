@@ -22,10 +22,10 @@ function memoryStore(id: string, entries: Record<string, string> = {}, options: 
   };
   return { store, data, failures };
 }
-function harness(selected: string | null, stores: Record<string, ReturnType<typeof memoryStore>>, effect: 'allow' | 'deny' | 'require-approval' = 'allow') {
+function harness(selected: string | null, stores: Record<string, ReturnType<typeof memoryStore>>, effect: 'allow' | 'deny' | 'require-approval' = 'allow', missing: readonly string[] = []) {
   const log: string[] = [], audits: AuditEvent[] = []; let selection = selected, digest = 'digest-0'; shared.log = log;
   const ports: SecretStoreSwitchPorts = {
-    has: id => Object.hasOwn(stores, id), open: id => stores[id]!.store,
+    environmentReferences: async () => missing, has: id => Object.hasOwn(stores, id), open: id => stores[id]!.store,
     selection: {
       async read() { return { store: selection, digest }; },
       async publish(store, expect) { if (expect !== digest) throw new Error('raced'); log.push(`publish ${store}`); selection = store; digest = `digest-${store}`; },
@@ -59,6 +59,19 @@ describe('secret store switch', () => {
     const h = harness(null, { [ENV]: memoryStore(ENV, {}, { writable: false, enumerable: false }), [SEALED]: memoryStore(SEALED) });
     expect(await h.application.switch(request(SEALED))).toMatchObject({ status: 'switched', from: ENV, to: SEALED, entries: 0, cleaned: true });
     expect(h.log).toEqual(['enter', 'audit', `publish ${SEALED}`, 'leave']);
+  });
+
+  it('env config names missing in the target block before audit/publication; explicit confirmation changes selection without copying values', async () => {
+    const env = memoryStore(ENV, { A_KEY: 'W2_CANARY_ENV_VALUE' }, { enumerable: false, writable: false });
+    env.store.get = async () => { throw new Error('ENV_VALUE_READ_FORBIDDEN'); };
+    const target = memoryStore(SEALED);
+    const h = harness(null, { [ENV]: env, [SEALED]: target }, 'allow', ['A_KEY']);
+    const refused = await h.application.switch(request(SEALED)).catch(error => error);
+    expect(refused).toMatchObject({ code: 'SECRET_STORE_ENV_UNCONFIRMED', params: { names: 'A_KEY', to: SEALED } });
+    expect(h.selection()).toBeNull(); expect(h.audits).toEqual([]); expect(h.log).toEqual(['enter', 'leave']);
+    expect(JSON.stringify(refused)).not.toContain('W2_CANARY_ENV_VALUE');
+    expect(await h.application.switch({ ...request(SEALED), confirmEnvMissing: true })).toMatchObject({ status: 'switched', entries: 0 });
+    expect(target.data.size).toBe(0); expect(JSON.stringify(h.audits)).not.toContain('W2_CANARY_ENV_VALUE');
   });
 
   it('a downgrade runs only with an explicit confirmation; refused, nothing is audited, moved or selected', async () => {

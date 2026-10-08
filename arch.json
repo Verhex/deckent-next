@@ -534,7 +534,8 @@
         "src/engine/core/config",
         "src/composition/core/root",
         "src/composition/core/backup",
-        "src/engine/core/backup"
+        "src/engine/core/backup",
+        "src/composition/core/secrets"
       ],
       "plan": "EXECUTION"
     },
@@ -1173,7 +1174,8 @@
         "src/domain/core/policy",
         "src/domain/core/run",
         "src/engine/core/runs",
-        "src/platform/core/bootstrap-state"
+        "src/platform/core/bootstrap-state",
+        "src/domain/core/audit"
       ],
       "plan": "INSTALLATION"
     },
@@ -1203,7 +1205,10 @@
         "src/platform/core/managed-files",
         "src/adapters/core/native-coding",
         "src/composition/core/scoped-request",
-        "src/composition/core/root"
+        "src/composition/core/root",
+        "src/adapters/core/audit-store",
+        "src/engine/core/audit",
+        "src/composition/core/secrets"
       ],
       "plan": "INSTALLATION"
     },

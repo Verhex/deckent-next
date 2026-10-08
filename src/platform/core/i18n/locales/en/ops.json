@@ -145,6 +145,8 @@
   "doctor.tmux_not_required_subprocess": "not required (subprocess backend)",
   "doctor.tmux_not_required_win32": "not required (Windows — tmux not supported natively)",
   "doctor.installationBinding.unsupported": "Installation binding: not supported on this host ({platform}) - relocation and copy detection is off",
+  "doctor.secretStore.envMissing": "  Env references missing in {to}: {names}.",
+  "doctor.secretStore.envUnverified": "  Env references could not be checked against {to}: {code}.",
   "doctor.secretStore": "Secret store: {backend} ({status}{codeSuffix})",
   "doctor.secretStore.custody.env": "  Keys are read only from environment variables; Deckent cannot store them. To move to the encrypted store: deckent secret store.",
   "doctor.secretStore.custody.file": "  Keys are plain text on disk (a 0600 file only you can read). The encrypted store is recommended: deckent secret store moves the keys and removes the plain text.",

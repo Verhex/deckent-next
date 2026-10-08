@@ -218,7 +218,9 @@ reached, the terminal says so in plain words; spend limits stay in your provider
 
 **Strict install**, for keys no other program on the machine should read:
 
-1. Move your keys into the encrypted store: `deckent secret store` lists the registered stores to pick from; it copies every key,
+Fresh Linux/WSL/macOS installations select the encrypted store through `init policy --apply` and Docker `init apply` when the installed policy permits the switch; existing installations keep their selection.
+
+1. Move your keys into the encrypted store: `deckent secret store` lists the registered stores to pick from; leaving env lists config reference names missing in the target and asks yes/no (scripts require `--confirm-env-missing`); `doctor` shows the same names; it copies every key,
    checks it, selects the new store and then removes the old copy (a move to a weaker store asks first). Installations set up
    with `deckent init policy` on Linux, WSL and macOS start on the encrypted store already.
 2. Keep other AI tools out of Deckent's state folder, e.g. `Read` deny rules for the store files in Claude Code's

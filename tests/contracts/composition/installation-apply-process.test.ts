@@ -4,7 +4,8 @@ import { chmod, lstat, readFile, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { expect, it } from 'vitest';
 import { applyInstallation, inspectInstallation } from '../../../src/index.js';
-import { fixture, unsupported } from './installation-apply-process.fixture.js';
+import { fixture, rehash, unsupported } from './installation-apply-process.fixture.js';
+import { writeFile } from 'node:fs/promises';
 
 
 it.skipIf(unsupported).each([0o700])('publishes a relocated installation in project mode %s through SDK and replays through compiled CLI', async mode => {
@@ -42,4 +43,22 @@ it.skipIf(unsupported).each([0o700])('publishes a relocated installation in proj
   expect(replayed).toMatchObject({ status: 'replayed', transactionId: installed.transactionId, proposalDigest: evidence.proposalDigest,
     trust: { mode: 'operator-custom', publisherVerification: 'unverified' } });
 // Inspect + apply + a compiled-CLI replay measured 27.5-28.1 s on this host and 30.4 s under a running local model server.
+}, 90_000);
+
+it.skipIf(unsupported)('fresh Docker init apply selects the encrypted default through secret/switch policy; replay preserves it', async () => {
+  const f = await fixture();
+  const principal = f.profile.policy.grants[0]!.principals;
+  f.profile.policy.grants.push({ id: 'installer-secret-switch', effect: 'allow', actions: ['switch'], scopes: ['scope-1'], principals: principal,
+    resource: { kind: 'secret', ids: 'all' } });
+  await writeFile(f.profilePath, JSON.stringify(rehash(f.profile)), { mode: 0o600 });
+  const evidence = await inspectInstallation(f.project, f.profile, { allowShutdown: false, dockerExecutable: '/usr/bin/docker' });
+  const args = ['init', 'apply', '--profile', f.profilePath, '--docker-executable', '/usr/bin/docker', '--proposal', evidence.proposalDigest, '--accept-custom', '--json'];
+  const applied = JSON.parse((await f.run(args)).stdout);
+  expect(applied).toMatchObject({ status: 'installed', secretStore: { status: 'set', backend: 'core.secret-store.encrypted-file@1', record: {
+    subject: { kind: 'secret-store-switch', from: 'core.secret-store.env@1', entries: 0, decision: { effect: 'allow', ruleId: 'installer-secret-switch' } } } } });
+  const selected = JSON.parse(await readFile(join(f.root, 'home', '.deckent', 'config.json'), 'utf8'));
+  expect(selected.secrets.store).toBe('core.secret-store.encrypted-file@1');
+  const replay = JSON.parse((await f.run(args)).stdout);
+  expect(replay.status).toBe('replayed'); expect(replay).not.toHaveProperty('secretStore');
+  expect(JSON.parse(await readFile(join(f.root, 'home', '.deckent', 'config.json'), 'utf8'))).toEqual(selected);
 }, 90_000);
