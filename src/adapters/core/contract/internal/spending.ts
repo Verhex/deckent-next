@@ -46,9 +46,14 @@ export function registerProviderSpendingConfig(): void {
 /** The scope's budget in a loaded configuration's `provider_spending`; an absent or unreadable section, or no budget for the scope, is
  * `PROVIDER_SPEND_UNAVAILABLE` (a model call is never priced without one). */
 export function providerSpendingBudgetFor(config: Record<string, unknown>, scopeId: string) {
-  const parsed = providerSpendingSchema.safeParse(config['provider_spending']);
-  if (!parsed.success) throw new ProviderSpendError('PROVIDER_SPEND_UNAVAILABLE');
-  const value = parsed.data.budgets.find(candidate => candidate.scopeId === scopeId);
+  const value = providerSpendingConfiguredBudget(config, scopeId);
   if (!value) throw new ProviderSpendError('PROVIDER_SPEND_UNAVAILABLE');
   return value;
+}
+/** Stage 1: the scope's configured budget, or null when the section is absent or names no budget for it; an unreadable section still refuses. */
+export function providerSpendingConfiguredBudget(config: Record<string, unknown>, scopeId: string) {
+  if (config['provider_spending'] === undefined) return null;
+  const parsed = providerSpendingSchema.safeParse(config['provider_spending']);
+  if (!parsed.success) throw new ProviderSpendError('PROVIDER_SPEND_UNAVAILABLE');
+  return parsed.data.budgets.find(candidate => candidate.scopeId === scopeId) ?? null;
 }

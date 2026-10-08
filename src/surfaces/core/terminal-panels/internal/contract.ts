@@ -128,9 +128,16 @@ export type ModelPanelView = Readonly<{ title: string; choices: readonly ModelPa
   /** Why "also make default" cannot be offered (null: it can). */
   defaultBlocked: string | null }>;
 /** What the host binds for `/model`: the models and, when decided, the governed default write (the `/config` writer, approval-aware). */
+/** T4-B (owner 2026-10-08, Jev 77898686): the default was written but this project names its own model, which keeps winning here. */
+export type ModelDefaultOutcome = ConfigPanelOutcome & Readonly<{ shadow?: Readonly<{ projectModel: string }> | null }>;
 export interface ModelPanelSource {
   inspect(): Promise<ModelPanelView>;
-  makeDefault?(choice: ModelPanelChoice): Promise<ConfigPanelOutcome>;
+  /** Stage 1: create or change the scope budget from this window (absent: not offered). */
+  readonly budget?: BudgetPanelPort;
+  makeDefault?(choice: ModelPanelChoice): Promise<ModelDefaultOutcome>;
+  /** The two governed answers to a shadowing project model (the `/config` writer on the project layer, `terminal.chat.reference` only): `remove`
+   * drops the project's model so the user default applies; `align` makes the project's model this one. */
+  resolveShadow?(choice: ModelPanelChoice, action: 'remove' | 'align'): Promise<ConfigPanelOutcome>;
 }
 /** `/model`'s full port: the host's source plus the session's own pin (the workline holds it; the next turn carries it, protocol v23). */
 export interface ModelPanelPort extends ModelPanelSource {
@@ -145,6 +152,8 @@ export interface ModelPanelLabels {
   readonly pinnedMark: string; readonly configuredMark: string;
   /** `{model}`: the notice after a pin. */
   readonly pinned: string;
+  /** T4-B shadow window: `{model}` the project's model; its two governed choices and "keep as it is". */
+  readonly shadowTitle: string; readonly shadowRemove: string; readonly shadowAlign: string; readonly shadowKeep: string;
 }
 
 /** One `/provider` kind (T4 PROVIDER-CONNECT): its state in words, the key's store name (never a value) and what the connect flow asks. */
@@ -152,11 +161,23 @@ export type ProviderPanelKind = Readonly<{ id: string; label: string; detail: st
   endpointEditable: boolean; endpointDefault: string | null; keyRequired: boolean;
   /** Owner 2026-10-08 (D3): where the kind takes an address it is chosen from this list (configured server, known local servers, the provider's
    * default); a typed address is only the list's last row, checked and previewed. A kind with a fixed endpoint has none. */
-  endpointChoices: readonly Readonly<{ id: string; label: string; url: string }>[] }>;
+  endpointChoices: readonly Readonly<{ id: string; label: string; url: string }>[];
+  /** T4-B: the models this kind can connect (its catalog seed, or the provider catalog's declared models), chosen from the list; empty: none.
+   * `modelBlocked`: why "connect a model" cannot be offered now (e.g. no key stored yet), null when it can; a model's own `blocked` (stage 1:
+   * no verified price) locks that row only. */
+  models: readonly Readonly<{ id: string; label: string; detail: string; blocked?: string }>[]; modelBlocked: string | null;
+  /** K6: shown on the row (muted) when the kind stores a key but no model can be connected to it yet. */
+  pendingNote?: string;
+  /** (c) A key under a name no row uses any more: listed with a warning, its only action is removal. */
+  legacy?: true }>;
 export type ProviderPanelView = Readonly<{ title: string; kinds: readonly ProviderPanelKind[]; notes: readonly string[] }>;
 export type ProviderConnectRequest = Readonly<{ kind: string; endpoint: string | null; key: string | null }>;
 /** A connect's typed result as labelled rows (no key, no answer body); `stored`: the key went to the secret store. */
 export type ProviderConnectOutcome = Readonly<{ stored: boolean; title: string; lines: readonly PanelLine[] }>;
+/** T4-B `models.connect` from the window: the model chosen from the kind's list (and the address, where the kind takes one). */
+export type ProviderModelRequest = Readonly<{ kind: string; endpoint: string | null; model: string }>;
+/** Its typed result as labelled rows, the one system summary line it leaves, and the approval to answer when policy asked for one. */
+export type ProviderModelOutcome = Readonly<{ connected: boolean; title: string; lines: readonly PanelLine[]; summary: string; approvalId: string | null }>;
 export interface ProviderPanelPort {
   inspect(): Promise<ProviderPanelView>;
   /** A typed address checked by the endpoint rule (https anywhere, plain http only on this machine): the base it becomes and the URL the free
@@ -166,12 +187,20 @@ export interface ProviderPanelPort {
   connect(request: ProviderConnectRequest): Promise<ProviderConnectOutcome>;
   /** Removes the kind's stored key through the runtime service. */
   disconnect(kind: string): Promise<readonly string[]>;
+  /** T4-B: the key's store name for this kind at this address (the generic row derives it from the host), shown before anything is saved. */
+  keyName?(kind: string, endpoint: string | null): string | null;
+  /** T4-B: connects the chosen model through the governed `models.connect` operation (absent: the action is not offered). */
+  connectModel?(request: ProviderModelRequest): Promise<ProviderModelOutcome>;
   /** The transparency rows the key step shows: how the key is kept and who else can read it. */
   readonly transparency: readonly PanelLine[];
+  /** Stage 1: create or change the scope budget from this window (absent: not offered). */
+  readonly budget?: BudgetPanelPort;
 }
 export interface ProviderPanelLabels {
   readonly title: string; readonly hints: string;
-  readonly actions: Readonly<Record<'connect' | 'replace' | 'disconnect', string>>;
+  readonly actions: Readonly<Record<'connect' | 'replace' | 'disconnect' | 'model', string>>;
+  /** T4-B: the model list's title (`{kind}`), its empty note, and the key-name row the key step shows. */
+  readonly modelTitle: string; readonly modelEmpty: string; readonly keyName: string;
   readonly endpointTitle: string; readonly endpointHint: string;
   /** The list's last row (a typed address) and its preview question: title, the two rows' labels, the key row. */
   readonly endpointOther: string; readonly previewTitle: string; readonly previewAddress: string; readonly previewCheck: string; readonly previewKeys: string;
@@ -184,6 +213,26 @@ export interface ProviderPanelLabels {
 }
 
 /** Shared words of every panel window. */
+/**
+ * Stage 1 (owner 2026-10-08): the scope's one shared USD budget, created or changed from `/model` and `/provider` through the governed spend
+ * command. The amount comes from presets or a bounded arrow-key step, never typed; a confirm step comes before anything is sent.
+ * `action` null: no action here (`note` says why, e.g. a budget declared in configuration whose account opens at the first call).
+ */
+export type BudgetPanelView = Readonly<{ action: 'create' | 'change' | null; current: string | null; note: string | null; frozen: boolean;
+  presets: readonly number[]; min: number; max: number; step: number; start: number }>;
+export type BudgetPanelOutcome = Readonly<{ ok: boolean; line: string }>;
+export interface BudgetPanelPort {
+  inspect(): Promise<BudgetPanelView>;
+  apply(request: Readonly<{ action: 'create' | 'change'; usd: number; unfreeze: boolean }>): Promise<BudgetPanelOutcome>;
+}
+export interface BudgetPanelLabels {
+  /** The list rows that open the window; `{current}` is the budget in effect. */
+  readonly create: string; readonly change: string; readonly changeDetail: string;
+  /** `{usd}` of a preset row; the bounded-step row; the stepper title and its key hint. */
+  readonly preset: string; readonly other: string; readonly stepperTitle: string; readonly hints: string;
+  /** `{usd}`: the confirm window's title; its two (three when frozen) answers. */
+  readonly confirmTitle: string; readonly confirm: string; readonly confirmUnfreeze: string; readonly cancel: string;
+}
 export interface PanelLabels {
   readonly picker: PickerLabels;
   readonly position: string;
@@ -193,6 +242,7 @@ export interface PanelLabels {
   readonly mcp: McpPanelLabels;
   readonly model: ModelPanelLabels;
   readonly provider: ProviderPanelLabels;
+  readonly budget: BudgetPanelLabels;
 }
 export interface PanelPorts {
   readonly mode?: ModePanelPort;

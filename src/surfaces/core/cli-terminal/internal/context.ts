@@ -33,7 +33,11 @@ type ServiceDescription = Awaited<ReturnType<DescribeService>> & Awaited<ReturnT
  */
 /** T4 PROVIDER-CONNECT: one `/provider` kind as the host's adapter data gives it (this unit never imports the adapter). */
 export type ProviderConnectKindView = Readonly<{ id: string; labelKey: string; available: boolean; endpointDefault: string | null; endpointEditable: boolean; keyRequired: boolean;
-  secretName: string | null; probePath: string | null; endpointChoices: readonly Readonly<{ id: string; labelKey: string; url: string }>[] }>;
+  secretName: string | null; probePath: string | null; endpointChoices: readonly Readonly<{ id: string; labelKey: string; url: string }>[];
+  /** T4-B: the protocol family a connected model must speak (null: no model can be connected to this kind); `seeded`: its models come from its catalog seed. */
+  connectFamily?: string | null; seeded?: boolean;
+  /** Owner 2026-10-08: a remote address of this kind needs a declared price first (SPEND-SETTLEMENT); its model action is locked until then. */
+  priceRequired?: boolean }>;
 /** The free check's typed outcome (no body, no key). `outcome` is one of the adapter's `PROVIDER_PROBE_OUTCOMES`. */
 export type ProviderConnectProbeView = Readonly<{ outcome: string; httpStatus: number | null; key: 'verified' | 'none' | 'unverified' }>;
 /** What the host binds for `/provider`: the kinds, the endpoint rule and the free check (a refusal before any request is a typed error with `code`). */
@@ -41,6 +45,11 @@ export interface ProviderConnectHost {
   readonly kinds: readonly ProviderConnectKindView[];
   endpoint(text: string): Readonly<{ ok: true; base: string }> | Readonly<{ ok: false; reason: string }>;
   probe(input: Readonly<{ kind: string; endpoint: string | null; key: string | null }>, signal?: AbortSignal): Promise<ProviderConnectProbeView>;
+  /** T4-B: the key's store name at an address (the generic row derives it from the host); the seed models of a seeded kind (exact ids, names). */
+  /** Key names an earlier release stored that no row uses any more, and the row to store the key under instead (registry data). */
+  readonly legacyKeys?: readonly Readonly<{ secretName: string; moveTo: string }>[];
+  secretName?(kind: string, endpoint: string | null): string | null;
+  seedModels?(kind: string): Promise<readonly Readonly<{ nativeId: string; displayName: string; priced?: boolean }>[]>;
 }
 /** The installation secret store through the runtime service (SECRET-WRITE): the same handlers as `deckent secret` — names only, never values back. */
 export type TerminalSecretNamesHandler = (root: string, options: ConfigLoadOptions) => Promise<Readonly<{ schemaVersion: 1; backend: string; names: readonly string[] }>>;
@@ -49,7 +58,7 @@ export type TerminalSecretSetHandler = (root: string, input: Readonly<{ schemaVe
 export type TerminalSecretDeleteHandler = (root: string, input: Readonly<{ schemaVersion: 1; scopeId: string; name: string }>, options: ConfigLoadOptions) => Promise<TerminalSecretChange>;
 
 export interface TerminalLaunchContext extends MonitorCommandContext, Pick<ModelCommandContext, 'inspectModelCatalog' | 'inspectProviderSpendAccount' | 'inspectDeclaredModels'
-  | 'inspectModelBinding' | 'inspectModelActivation'> {
+  | 'inspectModelBinding' | 'inspectModelActivation' | 'connectModel' | 'manageProviderSpend'> {
   /** T4 `/provider`: the connect kinds and free check, and the secret store handlers (the key goes only to `setSecret`). */
   providerConnect?: ProviderConnectHost;
   listSecretNames?: TerminalSecretNamesHandler;

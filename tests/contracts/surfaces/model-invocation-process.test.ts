@@ -136,7 +136,7 @@ type A5ProofInput = Readonly<{ root: string; project: string; env: Record<string
   setResponse: (value: 'malformed' | 'status') => void; setContentPolicy: (allowed: boolean) => Promise<void>;
   large: ModelInvocationResult }>;
 function heldOpenRouterSpend(receipt: ModelInvocationResult['receipt']) {
-  return expect.objectContaining({ schemaVersion: 2, measurement: null, descriptor: expect.objectContaining({ scopeId: receipt.claim.scopeId,
+  return expect.objectContaining({ schemaVersion: 3, measurement: null, descriptor: expect.objectContaining({ scopeId: receipt.claim.scopeId,
     invocationId: receipt.claim.invocationId, quote: expect.objectContaining({ currency: 'USD', maxChargeMinorUnits: 2,
       pricing: expect.objectContaining({ id: 'openrouter-endpoint-tariff', version: 1 }),
       meter: expect.objectContaining({ id: 'openrouter-text-reservation', version: 1 }) }) }),

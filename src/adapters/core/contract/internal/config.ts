@@ -24,12 +24,12 @@ export function registerProviderConfig(): void {
   registerIdentityProfileConfig();
   registered = true;
 }
-export { providerSpendingBudgetFor, providerSpendingSchema, registerProviderSpendingConfig, validateProviderSpendingLayers } from './spending.js';
+export { providerSpendingBudgetFor, providerSpendingConfiguredBudget, providerSpendingSchema, registerProviderSpendingConfig, validateProviderSpendingLayers } from './spending.js';
 export { providerSpendAuditConfigSchema, validateProviderSpendAuditLayers } from './spend-audit.js';
 export { openConfiguredSecretStore, readSecretsConfig, registerSecretStoreBackend, secretsConfigSchema, type SecretsConfig, createInstallationSecretStoreSelection, createInstallationSecretCustody, SECRET_CUSTODY_WAIT_MS,
   isRegisteredSecretStore, openRegisteredSecretStore, registeredSecretStores } from './secrets.js';
 export { readOperationsConfig, operationsConfigSchema, registerOperationAdapterModule, resolveOperationCatalog, resolveOperationTargets, type OperationsConfig } from './operations.js';
-export { readTerminalChatConfig, readTerminalConfig, readTerminalFetchConfig, readTerminalScratchConfig, readTerminalShellConfig, terminalConfigSchema, TERMINAL_BANNERS, TERMINAL_THEMES,
+export { readTerminalChatConfig, resolveTerminalModel, type TerminalModelChoice, type TerminalModelSource, readTerminalConfig, readTerminalFetchConfig, readTerminalScratchConfig, readTerminalShellConfig, terminalConfigSchema, TERMINAL_BANNERS, TERMINAL_THEMES,
   type TerminalChatConfig, type TerminalFetchConfig, type TerminalScratchConfig, type TerminalShellConfig } from './terminal.js';
 export { readDecisionPolicy, registerDecisionConfig, validateDecisionPolicyLayers } from './decision.js';
 export { readIdentityProfileConfig, registerIdentityProfileConfig } from './identity-profile.js';

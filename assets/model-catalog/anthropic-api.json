@@ -1,0 +1,315 @@
+{
+  "schemaVersion": 3,
+  "revision": "anthropic-api-2026-10-08",
+  "providers": [
+    {
+      "id": "anthropic-api",
+      "version": 1,
+      "channel": {
+        "kind": "http-api",
+        "cli": null,
+        "aliases": [],
+        "client": null,
+        "billing": "per-token",
+        "protocolFamily": "anthropic-messages",
+        "aliasesRefused": [],
+        "provenance": {
+          "sourceUrl": "https://platform.claude.com/docs/en/about-claude/models/overview",
+          "fetchedOn": "2026-10-08"
+        }
+      },
+      "models": [
+        {
+          "id": "claude-fable-5-1",
+          "version": 1,
+          "nativeId": "claude-fable-5-1",
+          "protocols": [
+            {
+              "family": "anthropic-messages",
+              "version": "2023-06-01",
+              "capabilities": [
+                {
+                  "id": "tool-calls",
+                  "version": 1,
+                  "state": "supported"
+                }
+              ]
+            }
+          ],
+          "lifecycle": {
+            "state": "active",
+            "deprecatedOn": null,
+            "retireNotBefore": null,
+            "retiredOn": null,
+            "source": {
+              "url": "https://platform.claude.com/docs/en/about-claude/models/overview",
+              "observedOn": "2026-10-08"
+            }
+          },
+          "minCliVersion": null,
+          "efforts": [],
+          "aliases": [],
+          "channelModelId": "claude-fable-5-1",
+          "vendorId": "anthropic",
+          "canonicalModelId": "claude-fable-5-1",
+          "displayName": "Claude Fable 5.1",
+          "modalities": {
+            "input": [
+              "text"
+            ],
+            "output": [
+              "text"
+            ]
+          },
+          "contextWindow": 1000000,
+          "maxOutputTokens": 128000,
+          "reasoning": {
+            "supportedEfforts": [],
+            "defaultEffort": null
+          },
+          "capabilities": {
+            "tools": "supported",
+            "vision": "unknown",
+            "pdf": "unknown",
+            "structuredOutput": "unknown",
+            "promptCaching": "unknown",
+            "streaming": "supported"
+          },
+          "pricing": {
+            "kind": "per-token",
+            "source": {
+              "sourceUrl": "https://platform.claude.com/docs/en/about-claude/pricing",
+              "fetchedOn": "2026-10-08"
+            },
+            "asOf": "2026-10-08",
+            "inputPerMTok": "10",
+            "outputPerMTok": "50",
+            "cacheReadPerMTok": "0.25"
+          },
+          "minClientVersion": null,
+          "provenance": {
+            "sourceUrl": "https://platform.claude.com/docs/en/about-claude/models/overview",
+            "fetchedOn": "2026-10-08"
+          }
+        },
+        {
+          "id": "claude-opus-5-5",
+          "version": 1,
+          "nativeId": "claude-opus-5-5",
+          "protocols": [
+            {
+              "family": "anthropic-messages",
+              "version": "2023-06-01",
+              "capabilities": [
+                {
+                  "id": "tool-calls",
+                  "version": 1,
+                  "state": "supported"
+                }
+              ]
+            }
+          ],
+          "lifecycle": {
+            "state": "active",
+            "deprecatedOn": null,
+            "retireNotBefore": null,
+            "retiredOn": null,
+            "source": {
+              "url": "https://platform.claude.com/docs/en/about-claude/models/overview",
+              "observedOn": "2026-10-08"
+            }
+          },
+          "minCliVersion": null,
+          "efforts": [],
+          "aliases": [],
+          "channelModelId": "claude-opus-5-5",
+          "vendorId": "anthropic",
+          "canonicalModelId": "claude-opus-5-5",
+          "displayName": "Claude Opus 5.5",
+          "modalities": {
+            "input": [
+              "text"
+            ],
+            "output": [
+              "text"
+            ]
+          },
+          "contextWindow": 1000000,
+          "maxOutputTokens": 128000,
+          "reasoning": {
+            "supportedEfforts": [],
+            "defaultEffort": null
+          },
+          "capabilities": {
+            "tools": "supported",
+            "vision": "unknown",
+            "pdf": "unknown",
+            "structuredOutput": "unknown",
+            "promptCaching": "unknown",
+            "streaming": "supported"
+          },
+          "pricing": {
+            "kind": "per-token",
+            "source": {
+              "sourceUrl": "https://platform.claude.com/docs/en/about-claude/pricing",
+              "fetchedOn": "2026-10-08"
+            },
+            "asOf": "2026-10-08",
+            "inputPerMTok": "4",
+            "outputPerMTok": "20",
+            "cacheReadPerMTok": "0.2"
+          },
+          "minClientVersion": null,
+          "provenance": {
+            "sourceUrl": "https://platform.claude.com/docs/en/about-claude/models/overview",
+            "fetchedOn": "2026-10-08"
+          }
+        },
+        {
+          "id": "claude-sonnet-5-5",
+          "version": 1,
+          "nativeId": "claude-sonnet-5-5",
+          "protocols": [
+            {
+              "family": "anthropic-messages",
+              "version": "2023-06-01",
+              "capabilities": [
+                {
+                  "id": "tool-calls",
+                  "version": 1,
+                  "state": "supported"
+                }
+              ]
+            }
+          ],
+          "lifecycle": {
+            "state": "active",
+            "deprecatedOn": null,
+            "retireNotBefore": null,
+            "retiredOn": null,
+            "source": {
+              "url": "https://platform.claude.com/docs/en/about-claude/models/overview",
+              "observedOn": "2026-10-08"
+            }
+          },
+          "minCliVersion": null,
+          "efforts": [],
+          "aliases": [],
+          "channelModelId": "claude-sonnet-5-5",
+          "vendorId": "anthropic",
+          "canonicalModelId": "claude-sonnet-5-5",
+          "displayName": "Claude Sonnet 5.5",
+          "modalities": {
+            "input": [
+              "text"
+            ],
+            "output": [
+              "text"
+            ]
+          },
+          "contextWindow": 1000000,
+          "maxOutputTokens": 128000,
+          "reasoning": {
+            "supportedEfforts": [],
+            "defaultEffort": null
+          },
+          "capabilities": {
+            "tools": "supported",
+            "vision": "unknown",
+            "pdf": "unknown",
+            "structuredOutput": "unknown",
+            "promptCaching": "unknown",
+            "streaming": "supported"
+          },
+          "pricing": {
+            "kind": "per-token",
+            "source": {
+              "sourceUrl": "https://platform.claude.com/docs/en/about-claude/pricing",
+              "fetchedOn": "2026-10-08"
+            },
+            "asOf": "2026-10-08",
+            "inputPerMTok": "2",
+            "outputPerMTok": "10",
+            "cacheReadPerMTok": "0.1"
+          },
+          "minClientVersion": null,
+          "provenance": {
+            "sourceUrl": "https://platform.claude.com/docs/en/about-claude/models/overview",
+            "fetchedOn": "2026-10-08"
+          }
+        },
+        {
+          "id": "claude-haiku-5-5",
+          "version": 1,
+          "nativeId": "claude-haiku-5-5",
+          "protocols": [
+            {
+              "family": "anthropic-messages",
+              "version": "2023-06-01",
+              "capabilities": [
+                {
+                  "id": "tool-calls",
+                  "version": 1,
+                  "state": "supported"
+                }
+              ]
+            }
+          ],
+          "lifecycle": {
+            "state": "active",
+            "deprecatedOn": null,
+            "retireNotBefore": null,
+            "retiredOn": null,
+            "source": {
+              "url": "https://platform.claude.com/docs/en/about-claude/models/overview",
+              "observedOn": "2026-10-08"
+            }
+          },
+          "minCliVersion": null,
+          "efforts": [],
+          "aliases": [],
+          "channelModelId": "claude-haiku-5-5",
+          "vendorId": "anthropic",
+          "canonicalModelId": "claude-haiku-5-5",
+          "displayName": "Claude Haiku 5.5",
+          "modalities": {
+            "input": [
+              "text"
+            ],
+            "output": [
+              "text"
+            ]
+          },
+          "contextWindow": 1000000,
+          "maxOutputTokens": 128000,
+          "reasoning": {
+            "supportedEfforts": [],
+            "defaultEffort": null
+          },
+          "capabilities": {
+            "tools": "supported",
+            "vision": "unknown",
+            "pdf": "unknown",
+            "structuredOutput": "unknown",
+            "promptCaching": "unknown",
+            "streaming": "supported"
+          },
+          "pricing": {
+            "kind": "per-token",
+            "source": {
+              "sourceUrl": "https://platform.claude.com/docs/en/about-claude/pricing",
+              "fetchedOn": "2026-10-08"
+            },
+            "asOf": "2026-10-08"
+          },
+          "minClientVersion": null,
+          "provenance": {
+            "sourceUrl": "https://platform.claude.com/docs/en/about-claude/models/overview",
+            "fetchedOn": "2026-10-08"
+          }
+        }
+      ]
+    }
+  ],
+  "recommendedActivations": []
+}

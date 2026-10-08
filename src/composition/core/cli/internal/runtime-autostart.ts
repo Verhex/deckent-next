@@ -7,7 +7,6 @@ import { launchDetachedRuntimeService, openTerminalHistoryFile, openTerminalSess
 import { randomUUID } from 'node:crypto';
 import { createConfiguredRuntimeClient } from '#composition/core/runtime-service/index.js';
 import { RUNTIME_SERVICE_AUTOSTART_ENV, type RuntimeServiceDescriptor } from '#engine/index.js';
-
 export interface RuntimeServiceReadiness {
   readonly mode: 'connected' | 'started';
   readonly instanceId: string;
@@ -28,7 +27,6 @@ const readiness = (mode: 'connected' | 'started', descriptor: RuntimeServiceDesc
 const ABSENT = new Set(['LOCAL_RUNTIME_UNAVAILABLE']);
 const POLL_MS = 150;
 const ENTRY = fileURLToPath(new URL('./entry.js', import.meta.url));
-
 /** One monotonic deadline bounds every describe, including an accepting-but-silent peer (wall clock can step back). */
 function monotonicDeadline(timeoutMs: number) {
   const until = performance.now() + timeoutMs;
@@ -48,7 +46,6 @@ async function describeWithin(client: ReturnType<typeof createConfiguredRuntimeC
     throw error;
   }
 }
-
 /**
  * Owner 2026-09-23: the interactive terminal starts the local runtime service when none is running, as a detached
  * `runtime serve` of the same executable that keeps running after the terminal exits. An existing service is reused.
@@ -84,7 +81,6 @@ export async function ensureConfiguredRuntimeService(projectRoot: string, option
   }
   throw ErrorRegistry.createError('RUNTIME_AUTOSTART_FAILED', { params: { log: logPath } });
 }
-
 /** Governed stop of this project's service without hand-written command fields: the durable command is built from the
  * live descriptor with a fresh command id. A service without a configured identity cannot be stopped this way. Describe and
  * the shutdown answer share one monotonic budget; running out is an unknown outcome (the command may still be admitted),
@@ -99,7 +95,6 @@ export async function stopConfiguredRuntimeService(projectRoot: string, options:
     instanceId: descriptor.instanceId, reason };
   return { command, autoStarted: descriptor.autoStarted === true, result: await client.shutdownService(command, within(deadline)) };
 }
-
 /** Stop the running service through governed shutdown, wait until its endpoint no longer answers, then start the current
  * build — all within one monotonic budget. A new service is launched only after absence is observed. */
 export async function restartConfiguredRuntimeService(projectRoot: string, options: ConfigLoadOptions = {},
@@ -118,7 +113,6 @@ export async function restartConfiguredRuntimeService(projectRoot: string, optio
   }
   throw ErrorRegistry.createError('RUNTIME_AUTOSTART_FAILED', { params: { log: '-' } });
 }
-
 /** The interactive terminal's composer history for this project, or null when disabled in `terminal.persistHistory`.
  * Entries that carried pasted content are not stored (only the visible line would survive, as a chip label). */
 export async function openConfiguredTerminalHistory(projectRoot: string, options: ConfigLoadOptions = {}) {
@@ -130,7 +124,6 @@ export async function openConfiguredTerminalHistory(projectRoot: string, options
     append: async (entry: { readonly text: string; readonly pastes: readonly unknown[] }) => { if (entry.pastes.length === 0) await file.append(entry); },
   });
 }
-
 /** Conversation snapshots for `/resume` (T-L5c): the same owner switch as the composer history; null when it is off. */
 export async function openConfiguredTerminalSessions(projectRoot: string, options: ConfigLoadOptions = {}) {
   const config = await loadComposedConfig(projectRoot, { ...options, heal: false });

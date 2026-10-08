@@ -32,19 +32,32 @@ const chunkSchema = z.object({ id: z.string().min(1), object: z.literal('chat.co
  * assembled `chat.completion` plus a digest of the exact wire bytes (`deckent_stream`: the native object of a streamed call
  * is assembled provenance, never the provider's verbatim body). A stream that ends without `[DONE]`, a finish
  * reason and usage is interrupted, which the invocation records as an uncertain outcome; it is never retried.
+ * Only the final event's own usage is final: the usage carried by the finish chunk itself (DeepSeek/Z.ai) or by a later usage-only
+ * chunk (OpenAI `include_usage`). `onFinalUsage` receives only that usage. A usage before the finish reason is interim: a later
+ * finish marker never promotes it, so a cut stream reports nothing (unknown, reservation held) and a stream that reaches `[DONE]`
+ * without a final usage is an invalid response, never assembled with the stale count (Astra 2459 R1, 2462 R1).
  */
-export function createOpenAiChatStream(request: OpenAiChatTextRequest, limits: OpenAiChatHttpLimits): NativeJsonHttpStream {
+export function createOpenAiChatStream(request: OpenAiChatTextRequest, limits: OpenAiChatHttpLimits, onFinalUsage?: (usage: JsonObject) => void): NativeJsonHttpStream {
   const hash = createHash('sha256'), decoder = new TextDecoder('utf-8', { fatal: true });
   let wireBytes = 0, chunks = 0, lineBytes = 0, eventBytes = 0, assembledBytes = 0;
   let line: Buffer[] = [], data: string[] = [];
   let invalid: ModelInvocationRejectionReason | null = null, doneSeen = false;
   let head: { id: string; created: number; model: string } | null = null, fingerprint: string | null = null;
-  let content = '', reasoning = '', refusal = '', finish: string | null = null, usage: JsonObject | null = null;
+  let content = '', reasoning = '', refusal = '', finish: string | null = null, usage: JsonObject | null = null, usageReported = false;
+  // Chunk positions of the usage and the finish reason: the usage is final only when it arrives with or after the finish chunk.
+  let usageChunk = 0, finishChunk = 0;
+  const finalUsage = () => usage !== null && finish !== null && usageChunk >= finishChunk;
   // Tool-call deltas assembled by index: the id is fixed once, name and arguments arrive in pieces (T-L2).
   const calls = new Map<number, { id: string | null; name: string; arguments: string }>();
   const fail = (reason: ModelInvocationRejectionReason) => { invalid ??= reason; };
 
   function event(text: string, out: ModelInvocationDelta[]): boolean {
+    const limit = parse(text, out);
+    if (!usageReported && !invalid && finalUsage()) { usageReported = true; onFinalUsage?.(usage!); }
+    return limit;
+  }
+
+  function parse(text: string, out: ModelInvocationDelta[]): boolean {
     if (doneSeen) { fail('invalid-response'); return false; }
     if (text === '[DONE]') { doneSeen = true; return false; }
     let raw: unknown;
@@ -59,7 +72,7 @@ export function createOpenAiChatStream(request: OpenAiChatTextRequest, limits: O
     if (chunk.usage !== undefined && chunk.usage !== null) {
       const checked = openAiChatUsageSchema.safeParse(chunk.usage);
       if (usage || !checked.success || checked.data.completion_tokens > request.max_completion_tokens) { fail('invalid-response'); return false; }
-      usage = (copied.data as Record<string, unknown>)['usage'] as JsonObject;
+      usage = (copied.data as Record<string, unknown>)['usage'] as JsonObject; usageChunk = chunks;
     }
     const choice = chunk.choices[0];
     if (!choice) return false;
@@ -96,7 +109,7 @@ export function createOpenAiChatStream(request: OpenAiChatTextRequest, limits: O
     if (thinking) { reasoning += thinking; out.push({ kind: 'reasoning', text: thinking }); }
     if (delta.content) { content += delta.content; out.push({ kind: 'text', text: delta.content }); }
     if (delta.refusal) refusal += delta.refusal;
-    if (choice.finish_reason) finish = choice.finish_reason;
+    if (choice.finish_reason) { finish = choice.finish_reason; finishChunk = chunks; }
     assembledBytes += Buffer.byteLength(thinking, 'utf8') + Buffer.byteLength(delta.content ?? '', 'utf8') + Buffer.byteLength(delta.refusal ?? '', 'utf8');
     return assembledBytes > limits.responseMaxBytes;
   }
@@ -145,6 +158,7 @@ export function createOpenAiChatStream(request: OpenAiChatTextRequest, limits: O
       if (invalid) return { reason: invalid };
       if (lineBytes > 0 || data.length > 0) return { reason: doneSeen ? 'invalid-response' : 'interrupted' };
       if (!doneSeen || !head || finish === null || usage === null) return { reason: 'interrupted' };
+      if (!finalUsage()) return { reason: 'invalid-response' };
       // Assembled calls go through the same check as a non-streamed response: declared names, unique ids, contiguous indexes.
       const ordered = [...calls.entries()].sort((a, b) => a[0] - b[0]);
       if (ordered.some(([index], position) => index !== position)) return { reason: 'invalid-response' };

@@ -142,5 +142,10 @@
   "usage.lineage_col_ref_usd",
   "workspace.tools.header.idempotent",
   "workspace.tools.header.risk",
-  "workspace.tools.header.script"
+  "workspace.tools.header.script",
+  "tui.provider.kind.openaiApi",
+  "tui.provider.kind.deepseekApi",
+  "tui.provider.kind.zaiApi",
+  "tui.provider.model.field.model",
+  "tui.panel.budget.preset"
 ]

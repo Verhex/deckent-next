@@ -430,5 +430,20 @@
   "doctor.installationBinding.source.configured": "yapılandırılmış kaynak installation.machineIdentity.source",
   "doctor.installationBinding.weak": "Kurulum bağı: zayıf (yol, cihaz ve inode; makine kimliği yok) - taşıma, kopya, geri yükleme ve yeni konteyner yine tespit edilir; makine bağı için installation.machineIdentity.source alanını kalıcı bir kimlik dosyasına ayarlayın",
   "doctor.installationBinding.sourceInvalid": "Kurulum bağı: yapılandırılmış makine kimliği kaynağı (installation.machineIdentity.source) yok, okunamıyor veya biçimi geçersiz - kurulum komutları INSTALLATION_IDENTITY_SOURCE_INVALID ile durur; daha zayıf bağa düşülmez",
-  "doctor.installationBinding.required": "installation.requireMachineBinding açık ve makine kimliği yok: kuruluma bağlı yazmalar reddedilir (INSTALLATION_IDENTITY_MACHINE_BINDING_REQUIRED)"
+  "doctor.installationBinding.required": "installation.requireMachineBinding açık ve makine kimliği yok: kuruluma bağlı yazmalar reddedilir (INSTALLATION_IDENTITY_MACHINE_BINDING_REQUIRED)",
+  "models.connect.connected": "{reference}, {scope} kapsamına bağlandı.",
+  "models.connect.pending": "{reference}: {approval} onayı bekleniyor ({key}). İzin verildikten sonra aynı komutu yeniden çalıştırın.",
+  "models.connect.steps": "Katalog: {catalog} · tanım: {declaration} · profil: {profile} · etkinleştirme: {activation} · taşınan etkinleştirme: {carried}",
+  "models.connect.step.written": "yazıldı",
+  "models.connect.step.present": "zaten var",
+  "models.connect.step.skipped": "gerekmedi",
+  "models.connect.key": "Anahtar: gizli depodan {name} adıyla okunur (değer hiç gösterilmez).",
+  "models.connect.keyMissing": "Anahtar: {name} henüz gizli depoda değil; /provider ya da `deckent secret set {name}` ile saklayın.",
+  "models.connect.keyNone": "Anahtar: gönderilmez (düz http üzerinden yerel sunucu).",
+  "models.connect.unmetered": "Harcama: yerel sunucu sıfır tarifeyle kaydedilir (kendi sunucunuz, sağlayıcı ücreti yok).",
+  "models.connect.restart": "Çalışan servis eski ayarlarla başladı: uygulamak için yeniden başlatın (`deckent runtime restart`).",
+  "mcp.tool.connectModel": "Bir modeli kapsama bağlar: sağlayıcının paketli kataloğundan tanımlar, çağrı profilini yazar (yalnız anahtarın adı) ve etkinleştirir; her adım yönetilen yolunda. Yinelenen komut kimliği yerinde olanı değiştirmez.",
+  "cli.help.action.models.connect": "Sağlayıcının bir modelini kapsama bağla",
+  "cli.help.modelsConnect": "Kullanım: deckent models connect --scope <id> --connection <tür>\n         --command-id <id>\n         (--model <tam_api_kimliği> | --reference <sağlayıcı@v/model@v>)\n         [--endpoint <url>] [--json] [--lang <dil>]\nBir modeli bağlar: türün paketli kataloğundan tanımlar (ya da zaten tanımlı\nmodeli kullanır), kapsamın çağrı profilini bağlantının anahtar ADIYLA yazar\nve etkinleştirir. Her yazım yönetilir: policy, policy isterse onay, audit.\nTürler: anthropic-api, openai-api, deepseek-api, zai-api, zai-cn-api,\nopenai-compatible, local-openai. --endpoint yalnız openai-compatible ve\nlocal-openai için. Aynı komut kimliği onaydan sonra devam eder; yerinde olan\nyeniden yazılmaz.",
+  "models.connect.notCarried": "Katalog değişince etkinleştirmesi düştü (deckent models activate ile yeniden etkinleştirin): {models}"
 }

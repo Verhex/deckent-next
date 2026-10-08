@@ -51,3 +51,14 @@ it('requires a separate audit action and rechecks revocation without changing in
   grants = [];
   await expect(authorization.authorize('audit', target, principal)).rejects.toMatchObject({ code: 'POLICY_DENIED' });
 });
+it.each(['reconcile', 'budget-revision'] as const)('requires the separate %s action and refuses scope or account escalation', async action => {
+  let grants = [grant];
+  const authorization = new ProviderSpendAccountPolicyAuthorization({ async load() { return { schemaVersion: 1, revision: 'policy', restrictions: [], grants }; } });
+  await expect(authorization.authorize(action, target, principal)).rejects.toMatchObject({ code: 'POLICY_DENIED' });
+  grants = [{ ...grant, actions: [action] }];
+  await expect(authorization.authorize(action, target, principal)).resolves.toMatchObject({ ruleId: grant.id });
+  await expect(authorization.authorize(action, { ...target, scopeId: 'other' }, principal)).rejects.toMatchObject({ code: 'POLICY_DENIED' });
+  await expect(authorization.authorize(action, { ...target, budgetId: 'other' }, principal)).rejects.toMatchObject({ code: 'POLICY_DENIED' });
+  grants = [{ ...grant, actions: [action], effect: 'require-approval' }];
+  await expect(authorization.authorize(action, target, principal)).rejects.toMatchObject({ code: 'POLICY_APPROVAL_UNSUPPORTED' });
+});

@@ -4,8 +4,9 @@ import type { ConfigLoadOptions } from '#platform/index.js';
 import type { CliBaseContext } from '#surfaces/core/cli-kit/index.js';
 import type { ModelActivationAdmissionHandler, ModelActivationInspectionHandler } from './model-activation.js';
 import type { ModelInvocationCancellationHandler, ModelInvocationHandler, ModelInvocationInspectionHandler, ModelInvocationPurgeHandler } from './model-invocation.js';
-import type { ProviderSpendAccountInspectionHandler, ProviderSpendAuditHandler } from './model-spending.js';
+import type { ProviderSpendManagementHandler, ProviderSpendAccountInspectionHandler, ProviderSpendAuditHandler } from './model-spending.js';
 import type { ModelCatalogApplyHandler, ModelCatalogInspectionHandler } from './model-catalog.js';
+import type { ModelConnectHandler } from './model-connect.js';
 
 export type InferenceMetricsReading =
   | { readonly ok: true; readonly url: string; readonly body: string }
@@ -19,6 +20,7 @@ export interface ModelCommandContext extends CliBaseContext {
   purgeModelInvocationContent?: ModelInvocationPurgeHandler;
   cancelModelInvocation?: ModelInvocationCancellationHandler;
   inspectProviderSpendAccount?: ProviderSpendAccountInspectionHandler;
+  manageProviderSpend?: ProviderSpendManagementHandler;
   auditProviderSpendAccount?: ProviderSpendAuditHandler;
   inspectDeclaredModels?: (root: string, options: ConfigLoadOptions) => Promise<DeclaredModelsInspection>;
   inspectModelBinding?: (root: string, reference: ModelReference, options: ConfigLoadOptions) => Promise<ModelBindingInspection>;
@@ -26,4 +28,6 @@ export interface ModelCommandContext extends CliBaseContext {
   admitModelActivation?: ModelActivationAdmissionHandler;
   inspectModelCatalog?: ModelCatalogInspectionHandler;
   applyModelCatalog?: ModelCatalogApplyHandler;
+  /** T4-B `models.connect` (CLI `models connect`, the terminal's /provider model step). */
+  connectModel?: ModelConnectHandler;
 }

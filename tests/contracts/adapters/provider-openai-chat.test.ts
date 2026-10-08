@@ -47,7 +47,8 @@ it('uses exact native nonstream bytes and preserves full native completion evide
   const { port, prepared } = await token(origin), result = await port.send(prepared);
   expect({ id: OPENAI_CHAT_HTTP_ADAPTER_ID, version: OPENAI_CHAT_HTTP_ADAPTER_VERSION,
     family: OPENAI_CHAT_COMPLETIONS_FAMILY, protocol: OPENAI_CHAT_COMPLETIONS_VERSION }).toEqual({
-    id: 'openai-chat-http', version: 4, family: 'openai-chat-completions', protocol: 'v1' });
+    // K1 (2026-10-08): v5 is current (provider dialects); this fixture's v4 profile is still served with the OpenAI wire.
+    id: 'openai-chat-http', version: 5, family: 'openai-chat-completions', protocol: 'v1' });
   expect(seen.method).toBe('POST'); expect(seen.url).toBe('/'); expect(JSON.parse(seen.body ?? '')).toEqual({ ...request, stream: false });
   expect(seen.headers?.authorization).toBeUndefined(); expect(seen.headers?.['proxy-authorization']).toBeUndefined();
   expect(result).toEqual({ schemaVersion: 1, native: response(), usage: { prompt_tokens: 3, completion_tokens: 2, total_tokens: 5 } });
@@ -176,7 +177,7 @@ it('sends chat_template_kwargs.enable_thinking only to a model whose binding dec
   // A request without the switch is byte-identical to before, with or without the capability.
   const plain = await port.prepare(profile(origin), declared('supported'), request); await port.send(plain);
   expect(JSON.parse(bodies[1]!)).toEqual({ ...request, stream: false });
-  expect(OPENAI_CHAT_ENABLE_THINKING_CAPABILITY).toBe('chat-template-enable-thinking'); expect(OPENAI_CHAT_HTTP_ADAPTER_VERSION).toBe(4);
+  expect(OPENAI_CHAT_ENABLE_THINKING_CAPABILITY).toBe('chat-template-enable-thinking'); expect(OPENAI_CHAT_HTTP_ADAPTER_VERSION).toBe(5);
 });
 
 // W4 DEFECTS-ADAPTER: vLLM prefix-cache isolation per scope (cache_salt), catalog-gated. VLLM-CACHE-SALT (owner 2026-10-07): the salt is

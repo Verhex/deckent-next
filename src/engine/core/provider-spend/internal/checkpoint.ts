@@ -33,5 +33,6 @@ export function parseProviderSpendCheckpoint(input: unknown): ProviderSpendCheck
   return expected;
 }
 export function providerSpendReservationDigest(input: unknown): string {
-  return createHash('sha256').update(`deckent.provider-spend-reservation.v2\n${JSON.stringify(parseProviderSpendReservation(input))}`).digest('hex');
+  const value = parseProviderSpendReservation(input);
+  return createHash('sha256').update(`deckent.provider-spend-reservation.v${value.schemaVersion}\n${JSON.stringify(value)}`).digest('hex');
 }

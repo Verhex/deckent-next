@@ -33,7 +33,7 @@ class SqliteModelInvocationReader implements ModelInvocationReader {
         if (reservation) {
           const checkpoint = readSpendCheckpoint(this.db, scopeId);
           if (!checkpoint) throw new ProviderSpendError('PROVIDER_SPEND_INVALID');
-          spending = decodeSpendReservation(reservation, record.receipt, checkpoint);
+          spending = decodeSpendReservation(reservation, record.receipt, checkpoint, this.db);
         }
       }
       const result = Object.freeze({ record, control: decodeInvocationControl(row, record), spending });

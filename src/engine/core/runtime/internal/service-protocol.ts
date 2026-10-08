@@ -1,11 +1,11 @@
 import { z } from 'zod';
 import { agentTurnStreamEventSchema, effectCommandSchema, effectRecordSchema, effectTargetRefSchema, identitySchema, modelInvocationDeltaSchema, operationRefSchema, parseChatTurnCancellation, parseChatTurnCommand, parseModelInvocationCancellationCommand, parseModelInvocationCommand, parseModelInvocationQuery,
-  parseModelInvocationPurgeCommand, parsePermissionModeCommand, parsePermissionModeQuery, parseProviderSpendAccountQuery, parseProviderSpendAuditCommand, parseScratchQuery,
+  parseModelInvocationPurgeCommand, parsePermissionModeCommand, parsePermissionModeQuery, parseProviderSpendAccountQuery, parseProviderSpendAuditCommand, parseProviderSpendManagementCommand, parseScratchQuery,
   parseWorkspaceAttachmentRequest, parseWorkspaceFileQuery } from '#domain/index.js';
 import { clearSessionStandingSchema } from '#engine/core/approval/index.js';
 import { secretDeleteCommandSchema, secretSetCommandSchema, secretStoreSwitchCommandSchema } from '#engine/core/secret-store/index.js';
 
-export const RUNTIME_SERVICE_SCHEMA_VERSION = 24 as const;
+export const RUNTIME_SERVICE_SCHEMA_VERSION = 25 as const;
 export const RUNTIME_SERVICE_ERROR_PARAMS = 8;
 export const RUNTIME_SERVICE_ERROR_PARAM_CHARS = 512;
 /** Bounded, serializable message parameters for a typed error response (strings truncated, other values dropped). */
@@ -19,7 +19,7 @@ export function runtimeServiceErrorParams(params: Readonly<Record<string, unknow
 
 export const runtimeServiceOperationSchema = z.enum(['renewApproval', 'listApprovals', 'inspectApproval', 'decideApproval', 'createRun', 'reserveRunTasks', 'executeTask', 'evaluateTask', 'inspectRun',
   'inspectInventory', 'requestRunCancellation', 'deliverRunCancellation', 'reconcileAttempt', 'recoverCancellations', 'describeService', 'shutdownService',
-  'invokeModel', 'inspectModelInvocation', 'purgeModelInvocationContent', 'cancelModelInvocation', 'inspectProviderSpendAccount', 'auditProviderSpendAccount',
+  'invokeModel', 'inspectModelInvocation', 'purgeModelInvocationContent', 'cancelModelInvocation', 'inspectProviderSpendAccount', 'auditProviderSpendAccount', 'manageProviderSpend',
   'invokeModelStream', 'chatTurn', 'cancelChatTurn', 'findWorkspaceFiles', 'attachWorkspaceFile', 'executeOperation', 'compensateOperation', 'inspectOperation',
   'inspectPermissionMode', 'setPermissionMode', 'inspectScratch', 'clearScratch', 'clearSessionStanding', 'setSecret', 'deleteSecret', 'switchSecretStore']);
 export const runtimeServiceDescriptionInputSchema = z.object({}).strict().readonly();
@@ -29,7 +29,7 @@ const invocationOperation = (operation: RuntimeServiceOperation): boolean => ope
 /** Operations whose request carries a `delivery` result bound (the server requires it; the client always sends one). */
 export const isRuntimeServiceBoundedResultOperation = (operation: RuntimeServiceOperation): boolean => invocationOperation(operation)
   || operation === 'renewApproval' || operation === 'listApprovals' || operation === 'inspectApproval' || operation === 'decideApproval'
-  || operation === 'inspectProviderSpendAccount' || operation === 'auditProviderSpendAccount' || operation === 'chatTurn' || operation === 'cancelChatTurn'
+  || operation === 'inspectProviderSpendAccount' || operation === 'auditProviderSpendAccount' || operation === 'manageProviderSpend' || operation === 'chatTurn' || operation === 'cancelChatTurn'
   || isRuntimeServiceWorkspaceFileOperation(operation) || isRuntimeServiceEffectOperation(operation) || isRuntimeServicePermissionModeOperation(operation)
   || operation === 'clearSessionStanding' || isRuntimeServiceScratchOperation(operation) || isRuntimeServiceSecretOperation(operation);
 /** v15 (T-L5 `@file`): candidate files and one file's bounded content for the composer, through the service's scoped read port. */
@@ -92,6 +92,7 @@ export const runtimeServiceRequestSchema = z.object({ schemaVersion: z.literal(R
     try {
       if (value.operation === 'clearSessionStanding') clearSessionStandingSchema.parse(value.input);
       else if (value.operation === 'inspectProviderSpendAccount') parseProviderSpendAccountQuery(value.input);
+      else if (value.operation === 'manageProviderSpend') parseProviderSpendManagementCommand(value.input);
       else if (value.operation === 'auditProviderSpendAccount') parseProviderSpendAuditCommand(value.input);
       else if (value.operation === 'invokeModel' || value.operation === 'invokeModelStream') parseModelInvocationCommand(value.input);
       else if (value.operation === 'inspectModelInvocation') parseModelInvocationQuery(value.input);
@@ -164,11 +165,11 @@ export class RuntimeServiceProtocolError extends Error {
  * A mismatched non-lifecycle envelope is closed unanswered (the client's typed `LOCAL_RUNTIME_TRANSPORT`); a v18 client's describe of a v17
  * service retries at v17 and the terminal shows the build skew. v18 (SECRET-WRITE) kept [18, 17]; v20 (S02) kept [20, 19]; v21 (T2) kept [21, 20]; v22 (T3) kept
  * [22, 21]; v23 (T4 MODEL-SWITCH: `chatTurn` carries the session's pinned `reference`) kept [23, 22]; v24 (SECRET-STORE-SWITCH: `switchSecretStore`)
- * keeps [24, 23]: a v22 service is outside.
+ * kept [24, 23]; v25 (SPEND-SETTLEMENT: `manageProviderSpend`) keeps [25, 24]: a v23 service is outside.
  */
-export const RUNTIME_SERVICE_LIFECYCLE_VERSIONS = Object.freeze([RUNTIME_SERVICE_SCHEMA_VERSION, 23] as const);
+export const RUNTIME_SERVICE_LIFECYCLE_VERSIONS = Object.freeze([RUNTIME_SERVICE_SCHEMA_VERSION, 24] as const);
 export type RuntimeServiceLifecycleVersion = typeof RUNTIME_SERVICE_LIFECYCLE_VERSIONS[number];
-const lifecycleVersionSchema = z.union([z.literal(RUNTIME_SERVICE_SCHEMA_VERSION), z.literal(23)]);
+const lifecycleVersionSchema = z.union([z.literal(RUNTIME_SERVICE_SCHEMA_VERSION), z.literal(24)]);
 export const runtimeServiceLifecycleRequestSchema = z.object({ schemaVersion: lifecycleVersionSchema, requestId: identitySchema,
   operation: z.enum(['describeService', 'shutdownService']), input: z.unknown() }).strict()
   .refine(value => Object.hasOwn(value, 'input'), { path: ['input'], message: 'RUNTIME_SERVICE_INPUT_REQUIRED' }).readonly();

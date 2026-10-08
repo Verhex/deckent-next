@@ -48,17 +48,21 @@ export async function verifyProviderSpendIntegrity(reader: ProviderSpendIntegrit
       || (cursor !== null && page.reservations.length === 0)) throw new ProviderSpendError('PROVIDER_SPEND_INVALID');
     for (const raw of page.reservations) {
       const reservation = parseProviderSpendReservation(raw), d = reservation.descriptor, budget = current.account.budget;
-      if (d.scopeId !== scopeId || d.budgetId !== budget.budgetId || d.budgetRevision !== budget.revision || d.currency !== budget.currency
+      if (d.scopeId !== scopeId || d.budgetId !== budget.budgetId || d.budgetRevision > budget.revision || d.currency !== budget.currency
         || (cursor !== null && Buffer.compare(Buffer.from(d.invocationId), Buffer.from(cursor)) <= 0)) {
         throw new ProviderSpendError('PROVIDER_SPEND_INVALID');
       }
       cursor = d.invocationId; count++;
       if (count > current.reservationCount) throw new ProviderSpendError('PROVIDER_SPEND_INVALID');
       const state = reservation.disposition;
-      if (state.state === 'reserved' || state.state === 'held') reserved += BigInt(d.quote.maxChargeMinorUnits);
+      if (reservation.reconciliation) settledExact = addProviderSpendExactMinorUnits(settledExact, reservation.reconciliation.exactMinorUnits);
+      if (state.state === 'reserved' || (state.state === 'held' && !reservation.reconciliation)) reserved += BigInt(d.quote.maxChargeMinorUnits);
       if (state.state === 'settled-local') settledExact = addProviderSpendExactMinorUnits(settledExact, String(state.amountMinorUnits));
-      if (state.state === 'settled-provider-reported') settledExact = addProviderSpendExactMinorUnits(settledExact, reservation.measurement!.exactMinorUnits);
-      if (state.state === 'held' && state.reason === 'overrun') overrun = true;
+      if ((state.state === 'settled-provider-reported' || state.state === 'settled-measured-tariff')) settledExact = addProviderSpendExactMinorUnits(settledExact, reservation.measurement!.exactMinorUnits);
+      const floor = current.account.unfrozenAtBudgetRevision ?? 0, correction = reservation.reconciliation;
+      if (state.state === 'held' && ((state.reason === 'overrun' && d.budgetRevision >= floor)
+        || (correction && ceilProviderSpendExactMinorUnits(correction.exactMinorUnits) > d.quote.maxChargeMinorUnits
+          && correction.budgetRevision >= floor))) overrun = true;
     }
     if (page.nextInvocationId !== null) {
       if (page.reservations.length !== pageSize || page.nextInvocationId !== cursor) throw new ProviderSpendError('PROVIDER_SPEND_INVALID');

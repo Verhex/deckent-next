@@ -1,0 +1,685 @@
+{
+  "schemaVersion": 3,
+  "revision": "openrouter-api-2026-10-08",
+  "providers": [
+    {
+      "id": "openrouter-api",
+      "version": 1,
+      "channel": {
+        "kind": "http-api",
+        "cli": null,
+        "aliases": [],
+        "client": null,
+        "billing": "per-token",
+        "protocolFamily": "openrouter-chat-completions",
+        "aliasesRefused": [],
+        "provenance": {
+          "sourceUrl": "https://openrouter.ai/docs/quickstart",
+          "fetchedOn": "2026-10-08"
+        }
+      },
+      "models": [
+        {
+          "id": "anthropic/claude-sonnet-5.5",
+          "version": 1,
+          "nativeId": "anthropic/claude-sonnet-5.5",
+          "protocols": [
+            {
+              "family": "openrouter-chat-completions",
+              "version": "v1",
+              "capabilities": [
+                {
+                  "id": "tool-calls",
+                  "version": 1,
+                  "state": "supported"
+                }
+              ]
+            }
+          ],
+          "lifecycle": {
+            "state": "active",
+            "deprecatedOn": null,
+            "retireNotBefore": null,
+            "retiredOn": null,
+            "source": {
+              "url": "https://openrouter.ai/api/v1/models/anthropic/claude-sonnet-5.5/endpoints",
+              "observedOn": "2026-10-08"
+            }
+          },
+          "minCliVersion": null,
+          "efforts": [],
+          "aliases": [],
+          "channelModelId": "anthropic/claude-sonnet-5.5",
+          "vendorId": "anthropic",
+          "canonicalModelId": "anthropic/claude-sonnet-5.5",
+          "displayName": "Claude Sonnet 5.5 (OpenRouter)",
+          "modalities": {
+            "input": [
+              "text"
+            ],
+            "output": [
+              "text"
+            ]
+          },
+          "contextWindow": 1000000,
+          "maxOutputTokens": 128000,
+          "reasoning": {
+            "supportedEfforts": [],
+            "defaultEffort": null
+          },
+          "capabilities": {
+            "tools": "supported",
+            "vision": "unknown",
+            "pdf": "unknown",
+            "structuredOutput": "unknown",
+            "promptCaching": "unknown",
+            "streaming": "unknown"
+          },
+          "pricing": {
+            "kind": "per-token",
+            "source": {
+              "sourceUrl": "https://openrouter.ai/api/v1/models/anthropic/claude-sonnet-5.5/endpoints",
+              "fetchedOn": "2026-10-08"
+            },
+            "asOf": "2026-10-08",
+            "inputPerMTok": "2",
+            "outputPerMTok": "10"
+          },
+          "minClientVersion": null,
+          "provenance": {
+            "sourceUrl": "https://openrouter.ai/api/v1/models/anthropic/claude-sonnet-5.5/endpoints",
+            "fetchedOn": "2026-10-08"
+          },
+          "description": "OpenRouter endpoint tag of the vendor's own provider: anthropic (read 2026-10-08)."
+        },
+        {
+          "id": "anthropic/claude-opus-5.5",
+          "version": 1,
+          "nativeId": "anthropic/claude-opus-5.5",
+          "protocols": [
+            {
+              "family": "openrouter-chat-completions",
+              "version": "v1",
+              "capabilities": [
+                {
+                  "id": "tool-calls",
+                  "version": 1,
+                  "state": "supported"
+                }
+              ]
+            }
+          ],
+          "lifecycle": {
+            "state": "active",
+            "deprecatedOn": null,
+            "retireNotBefore": null,
+            "retiredOn": null,
+            "source": {
+              "url": "https://openrouter.ai/api/v1/models/anthropic/claude-opus-5.5/endpoints",
+              "observedOn": "2026-10-08"
+            }
+          },
+          "minCliVersion": null,
+          "efforts": [],
+          "aliases": [],
+          "channelModelId": "anthropic/claude-opus-5.5",
+          "vendorId": "anthropic",
+          "canonicalModelId": "anthropic/claude-opus-5.5",
+          "displayName": "Claude Opus 5.5 (OpenRouter)",
+          "modalities": {
+            "input": [
+              "text"
+            ],
+            "output": [
+              "text"
+            ]
+          },
+          "contextWindow": 1000000,
+          "maxOutputTokens": 128000,
+          "reasoning": {
+            "supportedEfforts": [],
+            "defaultEffort": null
+          },
+          "capabilities": {
+            "tools": "supported",
+            "vision": "unknown",
+            "pdf": "unknown",
+            "structuredOutput": "unknown",
+            "promptCaching": "unknown",
+            "streaming": "unknown"
+          },
+          "pricing": {
+            "kind": "per-token",
+            "source": {
+              "sourceUrl": "https://openrouter.ai/api/v1/models/anthropic/claude-opus-5.5/endpoints",
+              "fetchedOn": "2026-10-08"
+            },
+            "asOf": "2026-10-08",
+            "inputPerMTok": "4",
+            "outputPerMTok": "20"
+          },
+          "minClientVersion": null,
+          "provenance": {
+            "sourceUrl": "https://openrouter.ai/api/v1/models/anthropic/claude-opus-5.5/endpoints",
+            "fetchedOn": "2026-10-08"
+          },
+          "description": "OpenRouter endpoint tag of the vendor's own provider: anthropic (read 2026-10-08)."
+        },
+        {
+          "id": "anthropic/claude-haiku-5.5",
+          "version": 1,
+          "nativeId": "anthropic/claude-haiku-5.5",
+          "protocols": [
+            {
+              "family": "openrouter-chat-completions",
+              "version": "v1",
+              "capabilities": [
+                {
+                  "id": "tool-calls",
+                  "version": 1,
+                  "state": "supported"
+                }
+              ]
+            }
+          ],
+          "lifecycle": {
+            "state": "active",
+            "deprecatedOn": null,
+            "retireNotBefore": null,
+            "retiredOn": null,
+            "source": {
+              "url": "https://openrouter.ai/api/v1/models/anthropic/claude-haiku-5.5/endpoints",
+              "observedOn": "2026-10-08"
+            }
+          },
+          "minCliVersion": null,
+          "efforts": [],
+          "aliases": [],
+          "channelModelId": "anthropic/claude-haiku-5.5",
+          "vendorId": "anthropic",
+          "canonicalModelId": "anthropic/claude-haiku-5.5",
+          "displayName": "Claude Haiku 5.5 (OpenRouter)",
+          "modalities": {
+            "input": [
+              "text"
+            ],
+            "output": [
+              "text"
+            ]
+          },
+          "contextWindow": 1000000,
+          "maxOutputTokens": 128000,
+          "reasoning": {
+            "supportedEfforts": [],
+            "defaultEffort": null
+          },
+          "capabilities": {
+            "tools": "supported",
+            "vision": "unknown",
+            "pdf": "unknown",
+            "structuredOutput": "unknown",
+            "promptCaching": "unknown",
+            "streaming": "unknown"
+          },
+          "pricing": {
+            "kind": "per-token",
+            "source": {
+              "sourceUrl": "https://openrouter.ai/api/v1/models/anthropic/claude-haiku-5.5/endpoints",
+              "fetchedOn": "2026-10-08"
+            },
+            "asOf": "2026-10-08",
+            "inputPerMTok": "0.1",
+            "outputPerMTok": "0.5"
+          },
+          "minClientVersion": null,
+          "provenance": {
+            "sourceUrl": "https://openrouter.ai/api/v1/models/anthropic/claude-haiku-5.5/endpoints",
+            "fetchedOn": "2026-10-08"
+          },
+          "description": "OpenRouter endpoint tag of the vendor's own provider: anthropic (read 2026-10-08)."
+        },
+        {
+          "id": "anthropic/claude-fable-5.1",
+          "version": 1,
+          "nativeId": "anthropic/claude-fable-5.1",
+          "protocols": [
+            {
+              "family": "openrouter-chat-completions",
+              "version": "v1",
+              "capabilities": [
+                {
+                  "id": "tool-calls",
+                  "version": 1,
+                  "state": "supported"
+                }
+              ]
+            }
+          ],
+          "lifecycle": {
+            "state": "active",
+            "deprecatedOn": null,
+            "retireNotBefore": null,
+            "retiredOn": null,
+            "source": {
+              "url": "https://openrouter.ai/api/v1/models/anthropic/claude-fable-5.1/endpoints",
+              "observedOn": "2026-10-08"
+            }
+          },
+          "minCliVersion": null,
+          "efforts": [],
+          "aliases": [],
+          "channelModelId": "anthropic/claude-fable-5.1",
+          "vendorId": "anthropic",
+          "canonicalModelId": "anthropic/claude-fable-5.1",
+          "displayName": "Claude Fable 5.1 (OpenRouter)",
+          "modalities": {
+            "input": [
+              "text"
+            ],
+            "output": [
+              "text"
+            ]
+          },
+          "contextWindow": 1000000,
+          "maxOutputTokens": 128000,
+          "reasoning": {
+            "supportedEfforts": [],
+            "defaultEffort": null
+          },
+          "capabilities": {
+            "tools": "supported",
+            "vision": "unknown",
+            "pdf": "unknown",
+            "structuredOutput": "unknown",
+            "promptCaching": "unknown",
+            "streaming": "unknown"
+          },
+          "pricing": {
+            "kind": "per-token",
+            "source": {
+              "sourceUrl": "https://openrouter.ai/api/v1/models/anthropic/claude-fable-5.1/endpoints",
+              "fetchedOn": "2026-10-08"
+            },
+            "asOf": "2026-10-08",
+            "inputPerMTok": "10",
+            "outputPerMTok": "50"
+          },
+          "minClientVersion": null,
+          "provenance": {
+            "sourceUrl": "https://openrouter.ai/api/v1/models/anthropic/claude-fable-5.1/endpoints",
+            "fetchedOn": "2026-10-08"
+          },
+          "description": "OpenRouter endpoint tag of the vendor's own provider: anthropic (read 2026-10-08)."
+        },
+        {
+          "id": "openai/gpt-6.1-sol",
+          "version": 1,
+          "nativeId": "openai/gpt-6.1-sol",
+          "protocols": [
+            {
+              "family": "openrouter-chat-completions",
+              "version": "v1",
+              "capabilities": [
+                {
+                  "id": "tool-calls",
+                  "version": 1,
+                  "state": "supported"
+                }
+              ]
+            }
+          ],
+          "lifecycle": {
+            "state": "active",
+            "deprecatedOn": null,
+            "retireNotBefore": null,
+            "retiredOn": null,
+            "source": {
+              "url": "https://openrouter.ai/api/v1/models/openai/gpt-6.1-sol/endpoints",
+              "observedOn": "2026-10-08"
+            }
+          },
+          "minCliVersion": null,
+          "efforts": [],
+          "aliases": [],
+          "channelModelId": "openai/gpt-6.1-sol",
+          "vendorId": "openai",
+          "canonicalModelId": "openai/gpt-6.1-sol",
+          "displayName": "GPT-6.1 Sol (OpenRouter)",
+          "modalities": {
+            "input": [
+              "text"
+            ],
+            "output": [
+              "text"
+            ]
+          },
+          "contextWindow": 1050000,
+          "maxOutputTokens": 128000,
+          "reasoning": {
+            "supportedEfforts": [],
+            "defaultEffort": null
+          },
+          "capabilities": {
+            "tools": "supported",
+            "vision": "unknown",
+            "pdf": "unknown",
+            "structuredOutput": "unknown",
+            "promptCaching": "unknown",
+            "streaming": "unknown"
+          },
+          "pricing": {
+            "kind": "per-token",
+            "source": {
+              "sourceUrl": "https://openrouter.ai/api/v1/models/openai/gpt-6.1-sol/endpoints",
+              "fetchedOn": "2026-10-08"
+            },
+            "asOf": "2026-10-08",
+            "inputPerMTok": "2",
+            "outputPerMTok": "10"
+          },
+          "minClientVersion": null,
+          "provenance": {
+            "sourceUrl": "https://openrouter.ai/api/v1/models/openai/gpt-6.1-sol/endpoints",
+            "fetchedOn": "2026-10-08"
+          },
+          "description": "OpenRouter endpoint tag of the vendor's own provider: openai (read 2026-10-08)."
+        },
+        {
+          "id": "openai/gpt-6-astra",
+          "version": 1,
+          "nativeId": "openai/gpt-6-astra",
+          "protocols": [
+            {
+              "family": "openrouter-chat-completions",
+              "version": "v1",
+              "capabilities": [
+                {
+                  "id": "tool-calls",
+                  "version": 1,
+                  "state": "supported"
+                }
+              ]
+            }
+          ],
+          "lifecycle": {
+            "state": "active",
+            "deprecatedOn": null,
+            "retireNotBefore": null,
+            "retiredOn": null,
+            "source": {
+              "url": "https://openrouter.ai/api/v1/models/openai/gpt-6-astra/endpoints",
+              "observedOn": "2026-10-08"
+            }
+          },
+          "minCliVersion": null,
+          "efforts": [],
+          "aliases": [],
+          "channelModelId": "openai/gpt-6-astra",
+          "vendorId": "openai",
+          "canonicalModelId": "openai/gpt-6-astra",
+          "displayName": "GPT-6 Astra (OpenRouter)",
+          "modalities": {
+            "input": [
+              "text"
+            ],
+            "output": [
+              "text"
+            ]
+          },
+          "contextWindow": 1050000,
+          "maxOutputTokens": 128000,
+          "reasoning": {
+            "supportedEfforts": [],
+            "defaultEffort": null
+          },
+          "capabilities": {
+            "tools": "supported",
+            "vision": "unknown",
+            "pdf": "unknown",
+            "structuredOutput": "unknown",
+            "promptCaching": "unknown",
+            "streaming": "unknown"
+          },
+          "pricing": {
+            "kind": "per-token",
+            "source": {
+              "sourceUrl": "https://openrouter.ai/api/v1/models/openai/gpt-6-astra/endpoints",
+              "fetchedOn": "2026-10-08"
+            },
+            "asOf": "2026-10-08",
+            "inputPerMTok": "10",
+            "outputPerMTok": "50"
+          },
+          "minClientVersion": null,
+          "provenance": {
+            "sourceUrl": "https://openrouter.ai/api/v1/models/openai/gpt-6-astra/endpoints",
+            "fetchedOn": "2026-10-08"
+          },
+          "description": "OpenRouter endpoint tag of the vendor's own provider: openai (read 2026-10-08)."
+        },
+        {
+          "id": "openai/gpt-6-luna",
+          "version": 1,
+          "nativeId": "openai/gpt-6-luna",
+          "protocols": [
+            {
+              "family": "openrouter-chat-completions",
+              "version": "v1",
+              "capabilities": [
+                {
+                  "id": "tool-calls",
+                  "version": 1,
+                  "state": "supported"
+                }
+              ]
+            }
+          ],
+          "lifecycle": {
+            "state": "active",
+            "deprecatedOn": null,
+            "retireNotBefore": null,
+            "retiredOn": null,
+            "source": {
+              "url": "https://openrouter.ai/api/v1/models/openai/gpt-6-luna/endpoints",
+              "observedOn": "2026-10-08"
+            }
+          },
+          "minCliVersion": null,
+          "efforts": [],
+          "aliases": [],
+          "channelModelId": "openai/gpt-6-luna",
+          "vendorId": "openai",
+          "canonicalModelId": "openai/gpt-6-luna",
+          "displayName": "GPT-6 Luna (OpenRouter)",
+          "modalities": {
+            "input": [
+              "text"
+            ],
+            "output": [
+              "text"
+            ]
+          },
+          "contextWindow": 1050000,
+          "maxOutputTokens": 128000,
+          "reasoning": {
+            "supportedEfforts": [],
+            "defaultEffort": null
+          },
+          "capabilities": {
+            "tools": "supported",
+            "vision": "unknown",
+            "pdf": "unknown",
+            "structuredOutput": "unknown",
+            "promptCaching": "unknown",
+            "streaming": "unknown"
+          },
+          "pricing": {
+            "kind": "per-token",
+            "source": {
+              "sourceUrl": "https://openrouter.ai/api/v1/models/openai/gpt-6-luna/endpoints",
+              "fetchedOn": "2026-10-08"
+            },
+            "asOf": "2026-10-08",
+            "inputPerMTok": "0.1",
+            "outputPerMTok": "0.5"
+          },
+          "minClientVersion": null,
+          "provenance": {
+            "sourceUrl": "https://openrouter.ai/api/v1/models/openai/gpt-6-luna/endpoints",
+            "fetchedOn": "2026-10-08"
+          },
+          "description": "OpenRouter endpoint tag of the vendor's own provider: openai (read 2026-10-08)."
+        },
+        {
+          "id": "deepseek/deepseek-v4.1-flash",
+          "version": 1,
+          "nativeId": "deepseek/deepseek-v4.1-flash",
+          "protocols": [
+            {
+              "family": "openrouter-chat-completions",
+              "version": "v1",
+              "capabilities": [
+                {
+                  "id": "tool-calls",
+                  "version": 1,
+                  "state": "supported"
+                }
+              ]
+            }
+          ],
+          "lifecycle": {
+            "state": "active",
+            "deprecatedOn": null,
+            "retireNotBefore": null,
+            "retiredOn": null,
+            "source": {
+              "url": "https://openrouter.ai/api/v1/models/deepseek/deepseek-v4.1-flash/endpoints",
+              "observedOn": "2026-10-08"
+            }
+          },
+          "minCliVersion": null,
+          "efforts": [],
+          "aliases": [],
+          "channelModelId": "deepseek/deepseek-v4.1-flash",
+          "vendorId": "deepseek",
+          "canonicalModelId": "deepseek/deepseek-v4.1-flash",
+          "displayName": "DeepSeek V4.1 Flash (OpenRouter)",
+          "modalities": {
+            "input": [
+              "text"
+            ],
+            "output": [
+              "text"
+            ]
+          },
+          "contextWindow": 1048576,
+          "maxOutputTokens": 393216,
+          "reasoning": {
+            "supportedEfforts": [],
+            "defaultEffort": null
+          },
+          "capabilities": {
+            "tools": "supported",
+            "vision": "unknown",
+            "pdf": "unknown",
+            "structuredOutput": "unknown",
+            "promptCaching": "unknown",
+            "streaming": "unknown"
+          },
+          "pricing": {
+            "kind": "per-token",
+            "source": {
+              "sourceUrl": "https://openrouter.ai/api/v1/models/deepseek/deepseek-v4.1-flash/endpoints",
+              "fetchedOn": "2026-10-08"
+            },
+            "asOf": "2026-10-08",
+            "inputPerMTok": "0.3",
+            "outputPerMTok": "1.2",
+            "cacheReadPerMTok": "0.006"
+          },
+          "minClientVersion": null,
+          "provenance": {
+            "sourceUrl": "https://openrouter.ai/api/v1/models/deepseek/deepseek-v4.1-flash/endpoints",
+            "fetchedOn": "2026-10-08"
+          },
+          "description": "OpenRouter endpoint tag of the vendor's own provider: deepseek (read 2026-10-08)."
+        },
+        {
+          "id": "z-ai/glm-5.3",
+          "version": 1,
+          "nativeId": "z-ai/glm-5.3",
+          "protocols": [
+            {
+              "family": "openrouter-chat-completions",
+              "version": "v1",
+              "capabilities": [
+                {
+                  "id": "tool-calls",
+                  "version": 1,
+                  "state": "supported"
+                }
+              ]
+            }
+          ],
+          "lifecycle": {
+            "state": "active",
+            "deprecatedOn": null,
+            "retireNotBefore": null,
+            "retiredOn": null,
+            "source": {
+              "url": "https://openrouter.ai/api/v1/models/z-ai/glm-5.3/endpoints",
+              "observedOn": "2026-10-08"
+            }
+          },
+          "minCliVersion": null,
+          "efforts": [],
+          "aliases": [],
+          "channelModelId": "z-ai/glm-5.3",
+          "vendorId": "zai",
+          "canonicalModelId": "z-ai/glm-5.3",
+          "displayName": "GLM-5.3 (OpenRouter)",
+          "modalities": {
+            "input": [
+              "text"
+            ],
+            "output": [
+              "text"
+            ]
+          },
+          "contextWindow": 1048576,
+          "maxOutputTokens": 131072,
+          "reasoning": {
+            "supportedEfforts": [],
+            "defaultEffort": null
+          },
+          "capabilities": {
+            "tools": "supported",
+            "vision": "unknown",
+            "pdf": "unknown",
+            "structuredOutput": "unknown",
+            "promptCaching": "unknown",
+            "streaming": "unknown"
+          },
+          "pricing": {
+            "kind": "per-token",
+            "source": {
+              "sourceUrl": "https://openrouter.ai/api/v1/models/z-ai/glm-5.3/endpoints",
+              "fetchedOn": "2026-10-08"
+            },
+            "asOf": "2026-10-08",
+            "inputPerMTok": "1.4",
+            "outputPerMTok": "4.4",
+            "cacheReadPerMTok": "0.26"
+          },
+          "minClientVersion": null,
+          "provenance": {
+            "sourceUrl": "https://openrouter.ai/api/v1/models/z-ai/glm-5.3/endpoints",
+            "fetchedOn": "2026-10-08"
+          },
+          "description": "OpenRouter endpoint tag of the vendor's own provider: z-ai/fp8 (read 2026-10-08)."
+        }
+      ]
+    }
+  ],
+  "recommendedActivations": []
+}

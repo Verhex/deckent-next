@@ -17,7 +17,7 @@ it('publishes the versioned policy action/resource matrix through the SDK', () =
   expect(getPolicyVocabulary().resources.find(r => r.kind === 'service')!.actions).toEqual(['shutdown']);
   expect(getPolicyVocabulary().resources.find(r => r.kind === 'operation')!.actions).toEqual(['execute', 'compensate', 'inspect']);
   expect(getPolicyVocabulary().resources.find(r => r.kind === 'model-activation')!.actions).toEqual(['activate', 'deactivate', 'inspect']);
-  expect(getPolicyVocabulary().resources.find(r => r.kind === 'provider-spend-account')!.actions).toEqual(['inspect', 'audit']);
+  expect(getPolicyVocabulary().resources.find(r => r.kind === 'provider-spend-account')!.actions).toEqual(['inspect', 'audit', 'reconcile', 'budget-revision']);
   // Terminal agent tools (T-L3): the tool name is the resource id; every loop call is authorized with invoke.
   expect(getPolicyVocabulary().resources.find(r => r.kind === 'agent-tool')!.actions).toEqual(['invoke']);
   // Owner 2026-10-07 (Jev 04f75210): one MCP server, covering its pinned tools.

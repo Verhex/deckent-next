@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { WorklinePaletteProvider, resolveWorklinePalette } from '#surfaces/core/terminal-kit/index.js';
 import { RenderGlyphsContext, cells, resolveRenderGlyphs } from '#surfaces/core/terminal-render/index.js';
 import { WindowStackProvider } from '#surfaces/core/terminal-window/index.js';
-import { SettingsPanel, modelPanelTree, providerPanelTree, type ConfigPanelOutcome, type ModelPanelChoice, type ModelPanelPort, type ModelPanelView, type PanelNotice,
+import { SettingsPanel, modelPanelTree, providerPanelTree, type BudgetPanelPort, type BudgetPanelView, type ConfigPanelOutcome, type ModelPanelChoice, type ModelPanelPort, type ModelPanelView, type PanelNotice,
   type ProviderConnectRequest, type ProviderPanelPort, type ProviderPanelView } from '#surfaces/core/terminal-panels/index.js';
 import { terminalPanelLabels } from '#surfaces/core/work-labels/index.js';
 import { mountWorkline, settle as settleWorkline, until, WORKLINE_TEST_LABELS } from '../support/workline-harness.js';
@@ -109,18 +109,49 @@ describe('/model window', () => {
     expect(calls.approvals).toEqual(['approval-7']); expect(calls.closed).toBe(1);
     expect(calls.notices.map(notice => notice.level)).toEqual(['info', 'warning']);
   });
+
+  it('T4-B: a project model that keeps winning — the same window offers remove / align / keep; each answer goes through the governed port', async () => {
+    for (const [keys, expected, outcome] of [[ENTER, 'remove', 'applied'], [`${DOWN}${ENTER}`, 'align', 'approval-pending'], [`${DOWN}${DOWN}${ENTER}`, null, null]] as const) {
+      const asked: string[] = [];
+      const { port } = modelPort(MODELS, async () => ({ status: 'applied', lines: ['Default saved'], approvalId: null, shadow: { projectModel: 'team-model' } }));
+      const shadowPort = { ...port, resolveShadow: async (_choice: ModelPanelChoice, action: 'remove' | 'align') => { asked.push(action);
+        return outcome === 'applied' ? { status: 'applied' as const, lines: ['PROJECT-MODEL-REMOVED'], approvalId: null }
+          : { status: 'approval-pending' as const, lines: ['held'], approvalId: 'approval-9' }; } };
+      const { element, calls } = panel('model', { model: shadowPort });
+      const view = mount(element, 100, 40);
+      await settle(80);
+      await view.press(`${DOWN}${DOWN}${ENTER}`);
+      await view.press(`${DOWN}${ENTER}`, 80);
+      expect(view.frame()).toContain('This project names its own model (team-model); it wins over your default here.');
+      expect(view.frame()).toContain("Remove the project's model (your default applies)"); expect(view.frame()).toContain("Make the project's model this one too");
+      await view.press(keys, 80);
+      expect(asked).toEqual(expected ? [expected] : []);
+      expect(calls.closed).toBe(1);
+      // One summary line for the answer (after the pin's own), and the approval card when the write is held.
+      expect(calls.notices.at(-1)!.text).toBe(expected === 'remove' ? 'PROJECT-MODEL-REMOVED' : expected === 'align' ? 'held' : 'Default saved');
+      expect(calls.approvals).toEqual(expected === 'align' ? ['approval-9'] : []);
+    }
+  });
 });
 
 const KINDS: ProviderPanelView = { title: 'Providers', notes: [], kinds: [
   { id: 'anthropic-api', label: 'Anthropic API', detail: 'not connected', blocked: null, keyName: 'DECKENT_ANTHROPIC_KEY', keyStored: false, endpointEditable: false,
-    endpointDefault: 'https://api.anthropic.com', keyRequired: true, endpointChoices: [] },
+    endpointDefault: 'https://api.anthropic.com', keyRequired: true, endpointChoices: [], models: [], modelBlocked: null },
   { id: 'local-openai', label: 'Local server', detail: 'key DECKENT_LOCAL_ENDPOINT_KEY stored · 1 model profile(s) use it', blocked: null, keyName: 'DECKENT_LOCAL_ENDPOINT_KEY',
     keyStored: true, endpointEditable: true, endpointDefault: null, keyRequired: false,
-    endpointChoices: [{ id: 'vllm', label: 'vLLM on this machine', url: 'http://127.0.0.1:8000' }, { id: 'ollama', label: 'Ollama on this machine', url: 'http://127.0.0.1:11434' }] },
+    endpointChoices: [{ id: 'vllm', label: 'vLLM on this machine', url: 'http://127.0.0.1:8000' }, { id: 'ollama', label: 'Ollama on this machine', url: 'http://127.0.0.1:11434' }],
+    models: [], modelBlocked: null },
   { id: 'chatgpt-login', label: 'ChatGPT sign-in', detail: '', blocked: 'Not available yet.', keyName: null, keyStored: false, endpointEditable: false,
-    endpointDefault: null, keyRequired: false, endpointChoices: [] }] };
-function providerPort(outcome: { stored: boolean; check: string } = { stored: true, check: 'The provider accepted the key.' }) {
-  const requests: ProviderConnectRequest[] = [], removed: string[] = [];
+    endpointDefault: null, keyRequired: false, endpointChoices: [], models: [], modelBlocked: null },
+  // T4-B: a vendor row with its seed models, key stored; DeepSeek's key is not stored yet, so its model action is locked with the reason.
+  { id: 'openai-api', label: 'OpenAI API', detail: 'key DECKENT_OPENAI_KEY stored', blocked: null, keyName: 'DECKENT_OPENAI_KEY', keyStored: true, endpointEditable: false,
+    endpointDefault: 'https://api.openai.com/v1', keyRequired: true, endpointChoices: [], modelBlocked: null,
+    models: [{ id: 'seed:gpt-6-luna', label: 'GPT-6 Luna', detail: 'gpt-6-luna' }, { id: 'seed:gpt-6.1-sol', label: 'GPT-6.1 Sol', detail: 'gpt-6.1-sol' }] },
+  { id: 'deepseek-api', label: 'DeepSeek API', detail: 'not connected', blocked: null, keyName: 'DECKENT_DEEPSEEK_KEY', keyStored: false, endpointEditable: false,
+    endpointDefault: 'https://api.deepseek.com', keyRequired: true, endpointChoices: [], modelBlocked: 'Store its key first (Connect).',
+    models: [{ id: 'seed:deepseek-flash', label: 'DeepSeek V4.1 Flash', detail: 'deepseek-flash' }] }] };
+function providerPort(outcome: { stored: boolean; check: string } = { stored: true, check: 'The provider accepted the key.' }, pending = false) {
+  const requests: ProviderConnectRequest[] = [], removed: string[] = [], models: unknown[] = [];
   const port: ProviderPanelPort = {
     inspect: async () => KINDS,
     endpoint: (_kind, text) => text.startsWith('http://10.') ? { ok: false as const, reason: 'Plain http is allowed only on this machine; use https.' }
@@ -129,15 +160,25 @@ function providerPort(outcome: { stored: boolean; check: string } = { stored: tr
       lines: [{ label: 'Check', text: outcome.check }, { label: 'Key', text: outcome.stored ? 'stored as DECKENT_ANTHROPIC_KEY' : 'not stored.' }] }; },
     disconnect: async kind => { removed.push(kind); return [`removed ${kind}`]; },
     transparency: [{ label: 'Storage', text: 'TRANSPARENCY-NOTE same OS user can read it' }],
+    keyName: kind => KINDS.kinds.find(item => item.id === kind)?.keyName ?? null,
+    connectModel: async request => { models.push(request); return pending
+      ? { connected: false, title: 'Waiting for approval: gpt-6-luna', lines: [{ label: 'Model', text: 'OpenAI API · gpt-6-luna' }], summary: 'gpt-6-luna waits for your approval', approvalId: 'approval-7' }
+      : { connected: true, title: 'Model connected: gpt-6-luna', lines: [{ label: 'Model', text: 'OpenAI API · gpt-6-luna' }, { label: 'Spending', text: 'not metered yet', tone: 'warning' }],
+        summary: 'gpt-6-luna is connected; choose it with /model.', approvalId: null }; },
   };
-  return { port, requests, removed };
+  return { port, requests, removed, models };
 }
 
 describe('/provider window', () => {
   it('lists the kinds with state and key names only; ChatGPT sign-in is shown locked with its reason', async () => {
     const tree = providerPanelTree(KINDS, terminalPanelLabels('en').provider);
     expect(tree.items.map(item => [item.id, item.blocked?.reason ?? null, item.children?.map(child => child.id) ?? null])).toEqual([
-      ['anthropic-api', null, ['connect']], ['local-openai', null, ['connect', 'disconnect']], ['chatgpt-login', 'Not available yet.', null]]);
+      ['anthropic-api', null, ['connect']], ['local-openai', null, ['connect', 'disconnect']], ['chatgpt-login', 'Not available yet.', null],
+      ['openai-api', null, ['connect', 'disconnect']], ['deepseek-api', null, ['connect']]]);
+    // T4-B: where the host binds models.connect, a kind that lists models offers "connect a model" (locked with its reason until the key is stored).
+    const withModels = providerPanelTree(KINDS, terminalPanelLabels('en').provider, true);
+    expect(withModels.items.slice(3).map(item => item.children?.map(child => [child.id, child.blocked?.reason ?? null]))).toEqual([
+      [['connect', null], ['model', null], ['disconnect', null]], [['connect', null], ['model', 'Store its key first (Connect).']]]);
     const { port } = providerPort();
     const { element } = panel('provider', { provider: port }, 'tr');
     const view = mount(element, 80, 40, true);
@@ -195,6 +236,52 @@ describe('/provider window', () => {
     await view.press(ENTER, 60); await view.press('y', 60); await view.press(ENTER, 120);
     expect(requests.at(-1)).toEqual({ kind: 'local-openai', endpoint: 'http://127.0.0.1:9000', key: null });
     expect(calls.notices).toEqual([]);
+  });
+
+  it('T4-B: connect a model — chosen from the kind\'s catalog list, connected through the port, its result in the window and one summary line on close', async () => {
+    const { port, models } = providerPort();
+    const { element, calls } = panel('provider', { provider: port });
+    const view = mount(element, 100, 40);
+    await settle(80);
+    await view.press(`${DOWN}${DOWN}${DOWN}${ENTER}`, 60);
+    expect(view.frame()).toContain('Connect a model (choose from its catalog)');
+    await view.press(`${DOWN}${ENTER}`, 60);
+    expect(view.frame()).toContain('OpenAI API · model to connect'); expect(view.frame()).toContain('GPT-6 Luna'); expect(view.frame()).toContain('gpt-6.1-sol');
+    await view.press(ENTER, 120);
+    expect(models).toEqual([{ kind: 'openai-api', endpoint: null, model: 'seed:gpt-6-luna' }]);
+    expect(view.frame()).toContain('Model connected: gpt-6-luna'); expect(view.frame()).toContain('not metered yet');
+    // Nothing reaches scrollback until the window closes; then exactly one system summary line.
+    expect(calls.notices).toEqual([]);
+    await view.press(ENTER, 60);
+    expect(calls.notices).toEqual([{ level: 'info', text: 'gpt-6-luna is connected; choose it with /model.' }]);
+    expect(view.frame()).toContain('Providers');
+  });
+
+  it('T4-B: a connection that waits for approval opens the approval card after its window closes', async () => {
+    const { port } = providerPort(undefined, true);
+    const { element, calls } = panel('provider', { provider: port });
+    const view = mount(element, 100, 40);
+    await settle(80);
+    await view.press(`${DOWN}${DOWN}${DOWN}${ENTER}${DOWN}${ENTER}${ENTER}`, 120);
+    expect(view.frame()).toContain('Waiting for approval: gpt-6-luna');
+    await view.press(ENTER, 60);
+    expect(calls.notices).toEqual([{ level: 'warning', text: 'gpt-6-luna waits for your approval' }]);
+    expect(calls.approvals).toEqual(['approval-7']); expect(calls.closed).toBe(1);
+  });
+
+  it('K6 (Jev 7e0348c4): OpenRouter keeps its key and says on its row that model binding comes in the next slice; no model action is offered', async () => {
+    const openrouter = { id: 'openrouter', label: 'OpenRouter', detail: 'key DECKENT_OPENROUTER_KEY stored · 0 model profile(s) use it', blocked: null,
+      keyName: 'DECKENT_OPENROUTER_KEY', keyStored: true, endpointEditable: false, endpointDefault: 'https://openrouter.ai', keyRequired: true, endpointChoices: [], models: [],
+      modelBlocked: null, pendingNote: 'model bağlama bir sonraki dilimde gelecek' } as const;
+    const view: ProviderPanelView = { title: 'Sağlayıcılar', notes: [], kinds: [openrouter] };
+    expect(providerPanelTree(view, terminalPanelLabels('tr').provider, true).items[0]!.children!.map(child => child.id)).toEqual(['connect', 'disconnect']);
+    const { port } = providerPort();
+    const { element } = panel('provider', { provider: { ...port, inspect: async () => view } }, 'tr');
+    const screen = mount(element, 120, 30);
+    await settle(80);
+    expect(screen.frame()).toContain('OpenRouter: model bağlama bir sonraki dilimde gelecek');
+    await screen.press(ENTER, 60);
+    expect(screen.frame()).not.toContain('Model bağla (kataloğundan seç)');
   });
 
   it('disconnect asks first; y removes through the port, n keeps', async () => {
@@ -303,5 +390,68 @@ describe('/model in the workline: the pin rides on the next turn', () => {
     view.stdin.write(`/provider${ENTER}`);
     await until(() => view.stdout.text.includes('provider'), 'unavailable notice');
     expect(view.stdout.text).not.toContain('UNKNOWN');
+  });
+});
+
+describe('stage 1 budget window (/model and /provider)', () => {
+  const UP = '\u001B[A', RIGHT = '\u001B[C';
+  const view = (overrides: Partial<BudgetPanelView> = {}): BudgetPanelView => ({ action: 'create', current: null, note: null, frozen: false, presets: [5, 10, 25, 50, 100],
+    min: 1, max: 1000, step: 1, start: 5, ...overrides });
+  const budgetPort = (value: BudgetPanelView) => {
+    const applied: unknown[] = [];
+    const port: BudgetPanelPort = { inspect: async () => value, apply: async request => { applied.push(request);
+      return { ok: true, line: `Budget set: ${request.usd} USD` }; } };
+    return { port, applied };
+  };
+
+  it('/model offers "Create budget" first (no scope step); presets, confirm, one system line; nothing is sent before the confirm', async () => {
+    const budget = budgetPort(view()), { port, pins } = modelPort(MODELS);
+    const { element, calls } = panel('model', { model: { ...port, budget: budget.port } });
+    const screen = mount(element, 100, 40);
+    await settle(80);
+    expect(screen.frame()).toContain('Create budget');
+    await screen.press(ENTER);
+    for (const preset of ['5 USD', '10 USD', '25 USD', '50 USD', '100 USD', 'Another amount (arrow keys)']) expect(screen.frame()).toContain(preset);
+    expect(screen.frame()).not.toContain('This session only');
+    await screen.press(`${DOWN}${DOWN}${ENTER}`);
+    expect(screen.frame()).toContain("Set this scope's shared budget to 25 USD?");
+    expect(budget.applied).toEqual([]);
+    await screen.press(ENTER, 80);
+    expect(budget.applied).toEqual([{ action: 'create', usd: 25, unfreeze: false }]);
+    expect(calls.notices).toEqual([{ level: 'info', text: 'Budget set: 25 USD' }]); expect(calls.closed).toBe(1); expect(pins).toEqual([]);
+  });
+
+  it('another amount is stepped with the arrow keys within bounds; digits never type an amount', async () => {
+    const budget = budgetPort(view({ max: 7 })), { port } = modelPort(MODELS);
+    const { element, calls } = panel('model', { model: { ...port, budget: budget.port } });
+    const screen = mount(element, 100, 40);
+    await settle(80);
+    await screen.press(ENTER); await screen.press(`${UP}${ENTER}`);
+    expect(screen.frame()).toContain('Budget in USD (whole dollars)');
+    await screen.press(`99${RIGHT}${RIGHT}${RIGHT}${RIGHT}`);
+    // 5 → 7: the bound stops the step; the typed 9s changed nothing.
+    expect(screen.frame()).toContain('7'); expect(screen.frame()).not.toContain('99');
+    await screen.press(ENTER);
+    expect(screen.frame()).toContain("Set this scope's shared budget to 7 USD?");
+    await screen.press(ENTER, 80);
+    expect(budget.applied).toEqual([{ action: 'create', usd: 7, unfreeze: false }]); expect(calls.closed).toBe(1);
+  });
+
+  it('/provider: "Change budget" for a frozen account offers to lift the freeze; cancel sends nothing (Turkish)', async () => {
+    const budget = budgetPort(view({ action: 'change', current: '25 USD (revizyon 2) · aşım sonrası donduruldu', frozen: true, start: 25 }));
+    const provider: ProviderPanelPort = { inspect: async () => ({ title: 'Sağlayıcılar', kinds: [], notes: [] }), endpoint: () => ({ ok: false, reason: '-' }),
+      connect: async () => { throw new Error('unreached'); }, disconnect: async () => [], transparency: [], budget: budget.port } as never;
+    const { element, calls } = panel('provider', { provider }, 'tr');
+    const screen = mount(element, 100, 40);
+    await settle(80);
+    expect(screen.frame()).toContain('Bütçeyi değiştir'); expect(screen.frame()).toContain('Şu anki bütçe: 25 USD (revizyon 2)');
+    await screen.press(`${ENTER}${DOWN}${DOWN}${DOWN}${ENTER}`);
+    expect(screen.frame()).toContain('Bu kapsamın ortak bütçesi 50 USD olsun mu?');
+    expect(screen.frame()).toContain('Evet, ayarla ve aşım dondurmasını kaldır');
+    await screen.press(`${DOWN}${DOWN}${ENTER}`);
+    expect(budget.applied).toEqual([]);
+    await screen.press(`${DOWN}${DOWN}${DOWN}${ENTER}`); await screen.press(`${DOWN}${ENTER}`, 80);
+    expect(budget.applied).toEqual([{ action: 'change', usd: 50, unfreeze: true }]);
+    expect(calls.notices).toEqual([{ level: 'info', text: 'Budget set: 50 USD' }]);
   });
 });

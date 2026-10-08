@@ -11,8 +11,14 @@ const versionedPricingSchema = z.object({ id: identitySchema, version: counterSc
 export const providerSpendBudgetSchema = z.object({ schemaVersion: z.literal(1), scopeId: identitySchema,
   budgetId: identitySchema, revision: counterSchema.positive(), currency: currencySchema, limitMinorUnits: counterSchema }).strict().readonly();
 
-export const providerSpendAccountQuerySchema = z.object({ schemaVersion: z.literal(1), scopeId: identitySchema,
+/** Stage 1: the budget id a governed `budget-create` gets from the CLI and the terminal (one shared limit per scope across every API provider). */
+export const PROVIDER_SPEND_SCOPE_BUDGET_ID = 'scope-budget' as const;
+/** An exact account revision, or (stage 1) `current: true`: the scope's account whatever budget id and revision it holds — when none exists, the
+ * result names `PROVIDER_SPEND_SCOPE_BUDGET_ID` revision 1 with no checkpoint (what a create would write). */
+export const providerSpendExactAccountQuerySchema = z.object({ schemaVersion: z.literal(1), scopeId: identitySchema,
   budgetId: identitySchema, budgetRevision: counterSchema.positive() }).strict().readonly();
+export const providerSpendAccountQuerySchema = z.union([providerSpendExactAccountQuerySchema,
+  z.object({ schemaVersion: z.literal(1), scopeId: identitySchema, current: z.literal(true) }).strict().readonly()]);
 
 export const providerSpendQuoteSchema = z.object({ schemaVersion: z.literal(1), scopeId: identitySchema,
   requestDigest: digestSchema, profileDigest: digestSchema, pricing: versionedPricingSchema,
@@ -41,5 +47,6 @@ export function parseProviderSpendReservationDescriptor(input: unknown): Provide
 
 export type ProviderSpendBudget = z.infer<typeof providerSpendBudgetSchema>;
 export type ProviderSpendAccountQuery = z.infer<typeof providerSpendAccountQuerySchema>;
+export type ProviderSpendExactAccountQuery = Extract<ProviderSpendAccountQuery, { budgetId: string }>;
 export type ProviderSpendQuote = z.infer<typeof providerSpendQuoteSchema>;
 export type ProviderSpendReservationDescriptor = z.infer<typeof providerSpendReservationDescriptorSchema>;

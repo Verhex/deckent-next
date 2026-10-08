@@ -26,7 +26,7 @@ function v4Grants() {
     scratchWriteOperationId: FIRST_RUN_SCRATCH_WRITE_OPERATION_ID, editShellToolNames: FIRST_RUN_EDIT_SHELL_TOOL_NAMES, writeOperationId: FIRST_RUN_WRITE_OPERATION_ID,
     shellOperationId: FIRST_RUN_SHELL_OPERATION_ID, proposeMcpToolName: FIRST_RUN_PROPOSE_MCP_TOOL_NAME, mcpCallOperationId: FIRST_RUN_MCP_CALL_OPERATION_ID, policyAdministerOperationId: FIRST_RUN_POLICY_ADMINISTER_OPERATION_ID }).policy as
     unknown as { grants: { id: string; resource: { kind: string; ids: unknown } }[] };
-  return v5.grants.filter(grant => !['first-run-mcp-servers', 'first-run-mcp-call-operation', 'first-run-policy-administer', 'first-run-approvals', 'first-run-secret-switch'].includes(grant.id))
+  return v5.grants.filter(grant => !['first-run-mcp-servers', 'first-run-mcp-call-operation', 'first-run-policy-administer', 'first-run-approvals', 'first-run-secret-switch', 'first-run-model-activation', 'first-run-model-invocation'].includes(grant.id))
     .map(grant => grant.id === 'first-run-read-tools' ? { ...grant, resource: { ...grant.resource, ids: FIRST_RUN_READ_TOOL_NAMES } } : grant);
 }
 const HAND_ADDED = { id: 'hand-added-fetch', effect: 'require-approval', actions: ['invoke'], scopes: ['scope'], principals: me, resource: { kind: 'agent-tool', ids: ['fetch_url'] } };
@@ -66,14 +66,14 @@ describe.skipIf(process.platform !== 'linux')('deckent policy upgrade --template
     const preview = await upgrade('preview');
     expect(preview).toMatchObject({ status: 'preview', missing: [] });
     // The harness's own approval grant already covers approval inspect/decide, so that rule is not added again.
-    expect(preview.rules.map(rule => rule.id)).toEqual(['first-run-mcp-servers', 'first-run-mcp-call-operation', 'first-run-mcp-propose-tool', 'first-run-policy-administer', 'first-run-secret-switch']);
+    expect(preview.rules.map(rule => rule.id)).toEqual(['first-run-mcp-servers', 'first-run-mcp-call-operation', 'first-run-mcp-propose-tool', 'first-run-policy-administer', 'first-run-secret-switch', 'first-run-model-activation', 'first-run-model-invocation']);
     expect(preview.summary).toContain('+ grant first-run-mcp-servers');
     // Security: the plan never grants another principal (each added rule names this person alone).
     for (const rule of preview.rules) expect(rule.principals).toEqual(me);
     expect(grants().map(grant => grant.id)).toEqual(before); // preview writes nothing
     expect(await upgrade('apply', 'stale-revision')).toMatchObject({ status: 'conflict' });
     expect(await upgrade('apply', preview.revision)).toMatchObject({ status: 'upgraded' });
-    expect(grants().map(grant => grant.id)).toEqual([...before, ...['first-run-mcp-servers', 'first-run-mcp-call-operation', 'first-run-mcp-propose-tool', 'first-run-policy-administer', 'first-run-secret-switch']]);
+    expect(grants().map(grant => grant.id)).toEqual([...before, ...['first-run-mcp-servers', 'first-run-mcp-call-operation', 'first-run-mcp-propose-tool', 'first-run-policy-administer', 'first-run-secret-switch', 'first-run-model-activation', 'first-run-model-invocation']]);
     expect(grants().find(grant => grant.id === HAND_ADDED.id)).toEqual(HAND_ADDED);
     expect(await upgrade('apply')).toMatchObject({ status: 'current' });
     expect(f.audit().filter(entry => entry.event.subject['kind'] === 'authority-change')).toHaveLength(1);
@@ -97,7 +97,7 @@ describe.skipIf(process.platform !== 'linux')('deckent policy upgrade --template
   it('(c) rollback before any server is trusted removes exactly the v5 rules it added (hand-added rules stay); a second rollback has nothing to remove', async () => {
     const { upgrade, grants } = await project('owner-role');
     expect(await upgrade('apply')).toMatchObject({ status: 'upgraded' });
-    expect(await upgrade('rollback')).toMatchObject({ status: 'rolled-back', reason: 'first-run-mcp-servers,first-run-mcp-call-operation,first-run-mcp-propose-tool,first-run-policy-administer,first-run-secret-switch' });
+    expect(await upgrade('rollback')).toMatchObject({ status: 'rolled-back', reason: 'first-run-mcp-servers,first-run-mcp-call-operation,first-run-mcp-propose-tool,first-run-policy-administer,first-run-secret-switch,first-run-model-activation,first-run-model-invocation,first-run-provider-spending' });
     expect(grants().map(grant => grant.id).filter(id => id.startsWith('first-run-mcp'))).toEqual([]);
     expect(grants().some(grant => grant.id === HAND_ADDED.id)).toBe(true);
     expect(await upgrade('rollback')).toMatchObject({ status: 'nothing-to-roll-back' });
@@ -115,10 +115,11 @@ describe.skipIf(process.platform !== 'linux')('deckent policy upgrade --template
     const before = grants().map(grant => grant.id);
     const preview = await upgradePolicyTemplateInstallation(f.project, 'scope', false, undefined, { env: f.env });
     expect(preview).toMatchObject({ status: 'preview', revision: 'first-run-template-v4', wireRules: ['hand-mcp-files'], conflicts: [] });
-    expect(preview.rules.map(rule => (rule as { id: string }).id)).toEqual(['first-run-mcp-servers', 'first-run-mcp-call-operation', 'first-run-mcp-propose-tool', 'first-run-policy-administer', 'first-run-approvals', 'first-run-secret-switch']);
+    // v7: the harness's own model-invocation rule (ids all, this scope) covers the invocation rule; only activation is added.
+    expect(preview.rules.map(rule => (rule as { id: string }).id)).toEqual(['first-run-mcp-servers', 'first-run-mcp-call-operation', 'first-run-mcp-propose-tool', 'first-run-policy-administer', 'first-run-approvals', 'first-run-secret-switch', 'first-run-model-activation']);
     expect(grants().map(grant => grant.id)).toEqual(before);
     expect(await upgradePolicyTemplateInstallation(f.project, 'scope', true, 'first-run-template-v4', { env: f.env })).toMatchObject({ status: 'upgraded' });
-    expect(grants().map(grant => grant.id)).toEqual([...before, ...['first-run-mcp-servers', 'first-run-mcp-call-operation', 'first-run-mcp-propose-tool', 'first-run-policy-administer', 'first-run-approvals', 'first-run-secret-switch']]);
+    expect(grants().map(grant => grant.id)).toEqual([...before, ...['first-run-mcp-servers', 'first-run-mcp-call-operation', 'first-run-mcp-propose-tool', 'first-run-policy-administer', 'first-run-approvals', 'first-run-secret-switch', 'first-run-model-activation']]);
     const upgraded = bytes();
     expect(await upgradePolicyTemplateInstallation(f.project, 'scope', true, undefined, { env: f.env })).toMatchObject({ status: 'current' });
     expect(bytes()).toBe(upgraded);

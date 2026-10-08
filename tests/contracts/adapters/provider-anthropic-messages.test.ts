@@ -172,6 +172,9 @@ it('rejects protocol defects without trusting usage: mid-stream error, missing s
     ['pause_turn is not accepted', textStream().replace('end_turn', 'pause_turn'), 'invalid-response'],
     ['output beyond the requested budget', startEvent() + blockStart(0, { type: 'text', text: '' }) + blockStop(0) + endEvents('end_turn', { output_tokens: 999 }), 'invalid-response'],
     ['unknown event type', startEvent() + sse('mystery'), 'invalid-response'],
+    // Astra 2462 R1: a complete stream whose final delta lacks its own output count never assembles message_start's output_tokens=1.
+    ['final message_delta with empty usage', startEvent() + blockStart(0, { type: 'text', text: '' }) + blockStop(0) + endEvents('end_turn', {}), 'invalid-response'],
+    ['final message_delta without output_tokens', startEvent() + blockStart(0, { type: 'text', text: '' }) + blockStop(0) + endEvents('end_turn', { input_tokens: 25 }), 'invalid-response'],
   ];
   for (const [label, wire, reason] of cases) {
     const endpoint = await fixture(okSse(wire));
@@ -288,4 +291,33 @@ it('quotes the exact worst case from the profile tariff and refuses a quote for 
   const sibling = await priced.native.prepare(profile(endpoint, { cache: '1h' }), binding(), request);
   expect(() => priced.quote({ ...spending, prepared: sibling } as never)).toThrow();
   expect(priced.native.responseBytesUpperBound!(token)).toBeGreaterThan(BigInt(limits.responseMaxBytes));
+});
+
+// Astra 2459 R1: the `message_start` usage (output_tokens=1) is interim and never a settlement basis; only the cumulative final
+// `message_delta` usage backs a measurement of a cut stream. Partial counts stay in the evidence body, never in the money path.
+it.each([
+  ['before the final message_delta: interim message_start usage is never measured', '', null],
+  ['after the final message_delta: its cumulative usage is measured', blockStop(0) + sse('message_delta', { delta: { stop_reason: 'end_turn', stop_sequence: null }, usage: { output_tokens: 7 } }), 7],
+  // Astra 2462 R1: the final delta must carry its own output count; message_start's output_tokens=1 is never inherited as final.
+  ['after a final message_delta with empty usage: nothing is measured', blockStop(0) + sse('message_delta', { delta: { stop_reason: 'end_turn', stop_sequence: null }, usage: {} }), null],
+  ['after a final message_delta without output_tokens: nothing is measured', blockStop(0) + sse('message_delta', { delta: { stop_reason: 'end_turn', stop_sequence: null }, usage: { input_tokens: 25 } }), null],
+] as const)('an interrupted stream cut %s', async (_name, tail, output) => {
+  const endpoint = await fixture(okSse(startEvent() + blockStart(0, { type: 'text', text: '' }) + blockDelta(0, { type: 'text_delta', text: 'par' })
+    + blockDelta(0, { type: 'text_delta', text: 'tial' }) + tail));
+  const priced = createAnthropicMessagesPricedNative({ resolveCredential: credential }), stored = profile(endpoint), request = streamed();
+  const prepared = await priced.native.prepare(stored, binding(), request);
+  const command = { schemaVersion: 1 as const, commandId: 'cancel-usage', scopeId: 'scope', reference, catalogRevision: 'catalog',
+    expectedBinding: { encodingVersion: 1 as const, algorithm: 'sha256' as const, digest: stored.bindingDigest }, nativeRequest: request };
+  const quote = priced.quote({ command, requestDigest: modelInvocationRequestDigest(command), profile: stored,
+    profileDigest: modelInvocationProfileDigest(stored), definition: binding(), prepared } as never);
+  const result = await priced.native.send(prepared);
+  expect(result).toMatchObject({ kind: 'rejected', evidence: { reason: 'interrupted', body: { complete: false } } });
+  if (!('kind' in result)) throw new Error('expected interrupted stream');
+  const measured = priced.native.observePartialSpending!(prepared, result.evidence.body.digest);
+  if (output === null) { expect(measured).toBeNull(); return; }
+  expect(measured).toMatchObject({ basis: 'measured-tariff', source: { tariffDigest: quote.pricing.digest,
+    dimensions: [{ field: 'input', tokens: 25 }, { field: 'cache-read', tokens: 0 }, { field: 'cache-write-5m', tokens: 0 },
+      { field: 'cache-write-1h', tokens: 0 }, { field: 'output', tokens: output }] } });
+  expect(JSON.stringify(measured)).not.toContain(SECRET);
+  expect(priced.native.observePartialSpending!({}, result.evidence.body.digest)).toBeNull();
 });

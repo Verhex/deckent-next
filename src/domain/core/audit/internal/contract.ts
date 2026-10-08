@@ -27,6 +27,7 @@ export const auditSummarySchema = z.discriminatedUnion('kind', [
  * The person's terminal permission modes (domain policy catalog; the audit contract keeps its own copy to stay dependency-free). Sealed
  * records keep the names they were written with: `ask`/`auto-edit` (bindings v2) stay readable next to `standart`/`full-access` (MODES-3).
  */
+const connectStep = z.enum(['written', 'present', 'skipped']);
 const permissionMode = z.enum(['ask', 'auto-edit', 'full-auto', 'standart', 'full-access']);
 /** An agent tool call's position in its turn (the same identity every call event carries). */
 const callRef = z.object({ turnId: identitySchema, round: counterSchema.positive(), index: counterSchema, callId: identitySchema }).strict();
@@ -78,6 +79,15 @@ export const auditSubjectSchema = z.discriminatedUnion('kind', [
    * selected store to another registered one and select it — recorded before anything moves (a refusal too). `entries` is how many names
    * move (never a name list or value); `downgrade` marks a move toward a weaker store, made only with an explicit confirmation.
    */
+  /**
+   * T4-B `models.connect`: one connection of a model to a scope — the registry kind, the exact reference, the secret NAME the profile reads (never
+   * a value) and what each governed step did (each step also wrote its own record: config change, catalog receipt, activation receipt).
+   */
+  z.object({ kind: z.literal('model-connect'), commandId: identitySchema, connection: z.string().regex(/^[a-z][a-z0-9-]{0,31}$/),
+    reference: z.object({ providerId: identitySchema, providerVersion: counterSchema, modelId: identitySchema, modelVersion: counterSchema }).strict(),
+    credentialRef: z.string().regex(/^[A-Z_][A-Z0-9_]{0,127}$/).nullable(),
+    steps: z.object({ catalog: connectStep, declaration: connectStep, profile: connectStep, activation: connectStep, carried: counterSchema }).strict(),
+    notCarried: z.array(z.object({ providerId: identitySchema, providerVersion: counterSchema, modelId: identitySchema, modelVersion: counterSchema }).strict()).max(1024) }).strict(),
   z.object({ kind: z.literal('secret-store-switch'),
     from: z.string().max(128).regex(/^[a-z][a-z0-9-]*(?:\.[a-z][a-z0-9-]*)*\.secret-store\.[a-z][a-z0-9-]*@[1-9][0-9]{0,5}$/),
     to: z.string().max(128).regex(/^[a-z][a-z0-9-]*(?:\.[a-z][a-z0-9-]*)*\.secret-store\.[a-z][a-z0-9-]*@[1-9][0-9]{0,5}$/),

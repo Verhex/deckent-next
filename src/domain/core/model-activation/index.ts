@@ -14,3 +14,5 @@ export { MODEL_CATALOG_SCHEMA_VERSION, MODEL_CATALOG_TARGET_PREFIX, ModelCatalog
   transitionModelCatalogActivation } from './internal/catalog.js';
 export type { ModelCatalogErrorCode, ModelCatalogCommand, ModelCatalogTarget, ModelCatalogChannelRecord, ModelCatalogModelRecord,
   ModelCatalogActivationRecord, ModelCatalogReceipt, ModelCatalogChange, ModelCatalogQuery } from './internal/catalog.js';
+export { MODEL_CONNECT_OPERATION_ID, MODEL_CONNECT_SCHEMA_VERSION, modelConnectCommandSchema } from './internal/connect.js';
+export type { ModelConnectCommand, ModelConnectResult, ModelConnectStepState } from './internal/connect.js';

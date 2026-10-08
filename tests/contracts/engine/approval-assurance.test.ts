@@ -196,7 +196,7 @@ describe('B1 attested assurance on the one approval decision path', () => {
     const template = firstRunPolicyTemplate({ scopeId: 'scope', principal: { issuer: 'host', subject: '1000' }, readToolNames: ['read_file'], scratchToolNames: ['scratch_read'],
       scratchWriteOperationId: 'workspace.scratch.write', editShellToolNames: ['write_file'], writeOperationId: 'workspace.file.write', shellOperationId: 'host.shell.run',
       proposeMcpToolName: 'propose_mcp_server', mcpCallOperationId: 'mcp.tool.call', policyAdministerOperationId: 'policy.administer' });
-    expect(template.version).toBe(6); // v4 (CONFIG-SURFACE), v5 (MCP) and v6 (store switch) keep the v3 (B1) assurance rule below unchanged
+    expect(template.version).toBe(7); // v4 (CONFIG-SURFACE), v5 (MCP), v6 (store switch) and v7 (models) keep the v3 (B1) assurance rule below unchanged
     const rules = (template.policy as { approvalAssurance?: { subject: string; cells?: string[]; minimum: string }[] }).approvalAssurance ?? [];
     expect(rules).toHaveLength(1);
     expect(rules[0]).toMatchObject({ subject: 'agent-tool-call', minimum: 'turn-bound' });

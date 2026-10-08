@@ -430,5 +430,20 @@
   "doctor.installationBinding.source.configured": "configured source installation.machineIdentity.source",
   "doctor.installationBinding.weak": "Installation binding: weak (path, device and inode; no machine identity) - moves, copies, restores and new containers are still detected; set installation.machineIdentity.source to a stable identity file for machine binding",
   "doctor.installationBinding.sourceInvalid": "Installation binding: the configured machine identity source (installation.machineIdentity.source) is missing, unreadable or malformed - installation commands stop with INSTALLATION_IDENTITY_SOURCE_INVALID; no fallback to a weaker binding",
-  "doctor.installationBinding.required": "installation.requireMachineBinding is on and no machine identity is available: installation-bound writes are refused (INSTALLATION_IDENTITY_MACHINE_BINDING_REQUIRED)"
+  "doctor.installationBinding.required": "installation.requireMachineBinding is on and no machine identity is available: installation-bound writes are refused (INSTALLATION_IDENTITY_MACHINE_BINDING_REQUIRED)",
+  "models.connect.connected": "Connected {reference} in scope {scope}.",
+  "models.connect.pending": "{reference}: waiting for approval {approval} ({key}). Run the same command again after it is allowed.",
+  "models.connect.steps": "Catalog: {catalog} · declaration: {declaration} · profile: {profile} · activation: {activation} · carried activations: {carried}",
+  "models.connect.step.written": "written",
+  "models.connect.step.present": "already in place",
+  "models.connect.step.skipped": "not needed",
+  "models.connect.key": "Key: read from the secret store as {name} (the value is never shown).",
+  "models.connect.keyMissing": "Key: {name} is not in the secret store yet; store it with /provider or `deckent secret set {name}`.",
+  "models.connect.keyNone": "Key: none is sent (a local server over plain http).",
+  "models.connect.unmetered": "Spending: a local server is recorded at a zero tariff (self-hosted, no provider charge).",
+  "models.connect.restart": "The running service started with older settings: restart it to apply them (`deckent runtime restart`).",
+  "mcp.tool.connectModel": "Connect a model to a scope: declare it from the provider's packaged catalog, write its invocation profile (the key's name only) and activate it, each on its governed path. A replayed command id changes nothing already in place.",
+  "cli.help.action.models.connect": "Connect a provider's model to a scope",
+  "cli.help.modelsConnect": "Usage: deckent models connect --scope <id> --connection <kind> --command-id <id>\n         (--model <exact_api_id> | --reference <provider@v/model@v>)\n         [--endpoint <url>] [--json] [--lang <locale>]\nConnects one model: declares it from the kind's packaged catalog (or uses a\nmodel already declared), writes the scope's invocation profile with the\nconnection's key NAME, and activates it. Each write is governed: policy,\napproval where policy asks, audit. Kinds: anthropic-api, openai-api,\ndeepseek-api, zai-api, zai-cn-api, openai-compatible, local-openai.\n--endpoint only for openai-compatible and local-openai. The same command id\ncontinues after an approval; nothing already in place is written again.",
+  "models.connect.notCarried": "Lost its activation with the catalog change (activate it again with deckent models activate): {models}"
 }

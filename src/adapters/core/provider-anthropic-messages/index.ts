@@ -11,3 +11,5 @@ export { anthropicMaxChargeMinorUnits, anthropicReportedPromptTokens, anthropicT
 export { createAnthropicMessagesPricedNative } from './internal/transport.js';
 export type { AnthropicMessagesNativeOptions, AnthropicMessagesPricedNative, PreparedAnthropicRequest } from './internal/transport.js';
 export { forgetAnthropicContentForTests } from './internal/continuation.js';
+
+export { anthropicSettledCharge } from './internal/tariff.js';

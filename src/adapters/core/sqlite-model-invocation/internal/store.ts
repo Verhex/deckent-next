@@ -11,7 +11,7 @@ import { counterSchema, modelInvocationClaimSchema, parseModelInvocationControlR
 import { parseModelAllocation, type ModelAllocationCheckpoint, ProviderSpendError, parseModelInvocationCancellationAdmission, createModelInvocationPreventedRecord, type ModelInvocationCancellationAdmission, ModelInvocationStoreError, parseModelInvocationAdmission, sameModelInvocationRequest,
   verifyModelInvocationRecord, createModelInvocationClaimReceipt,
   createModelInvocationResponseRecord, createModelInvocationEvidenceRecord, createModelInvocationUnknownRecord, type ModelInvocationRecord, parseModelInvocationPurgeAdmission, type ModelInvocationPurgeAdmission, type ModelInvocationAdmission, type ModelInvocationClaimResult,
-  type ModelInvocationStore, type ProviderSpendReportedMeasurement, verifyModelActivationRecord,
+  type ModelInvocationStore, type ProviderSpendMeasurement, verifyModelActivationRecord,
   planModelAllocationSlotRelease, type ModelAllocationSlotRelease, type ModelAllocationSlotReleaseStore, type ModelAllocationStartCustody } from '#engine/index.js';
 import { sqliteFailure } from '#adapters/core/sqlite-ledger/index.js';
 import { decodeInvocationRecord, invocationCommandRow, invocationIdentity, invocationRow, loadInvocationRecord, visitAllocationInvocations } from './read.js';
@@ -102,7 +102,7 @@ export class SqliteModelInvocationStore implements ModelInvocationStore, ModelAl
     } catch (error) { return this.fail(error); }
   }
   private settle(claimInput: ModelInvocationClaim, build: (record: ModelInvocationRecord) => ModelInvocationRecord,
-    measurement: ProviderSpendReportedMeasurement | null | undefined = null): ModelInvocationRecord {
+    measurement: ProviderSpendMeasurement | null | undefined = null): ModelInvocationRecord {
     const parsed = modelInvocationClaimSchema.parse(claimInput);
     return this.transaction(() => {
       const current = decodeInvocationRecord(invocationRow(this.db, parsed.scopeId, parsed.invocationId), parsed.scopeId, parsed.invocationId, 'invocation_id');
@@ -123,7 +123,7 @@ export class SqliteModelInvocationStore implements ModelInvocationStore, ModelAl
     });
   }
   private persistOutcome(current: ModelInvocationRecord, next: ModelInvocationRecord, checkpoint: ModelAllocationCheckpoint | null,
-    measurement: ProviderSpendReportedMeasurement | null | undefined = null): void {
+    measurement: ProviderSpendMeasurement | null | undefined = null): void {
     if (!next.receipt.outcome || !same({ ...next.receipt, outcome: null }, current.receipt)) {
       throw new ModelInvocationStoreError('MODEL_INVOCATION_CORRUPT');
     }
@@ -193,7 +193,7 @@ export class SqliteModelInvocationStore implements ModelInvocationStore, ModelAl
     } catch (error) { return this.fail(error); }
   }
   async recordResponse(claim: ModelInvocationClaim, response: ModelInvocationNativeResponse, observedAtMs: number,
-    measurement?: ProviderSpendReportedMeasurement | null) {
+    measurement?: ProviderSpendMeasurement | null) {
     try { return this.settle(claim,
       record => createModelInvocationResponseRecord({ ...record.receipt, outcome: null }, response, observedAtMs), measurement); }
     catch (error) { return this.fail(error); }
@@ -205,12 +205,12 @@ export class SqliteModelInvocationStore implements ModelInvocationStore, ModelAl
     } catch (error) { return this.fail(error); }
   }
   async recordUnknown(claim: ModelInvocationClaim, reason: ModelInvocationUnknownReason, observedAtMs: number,
-    evidence: ModelInvocationResponseEvidence | null = null) {
+    evidence: ModelInvocationResponseEvidence | null = null, measurement: ProviderSpendMeasurement | null = null) {
     try {
       if (reason !== 'transport-error' || evidence?.body.complete) throw new ModelInvocationStoreError('MODEL_INVOCATION_CORRUPT');
       return this.settle(claim, record => evidence === null
         ? createModelInvocationUnknownRecord({ ...record.receipt, outcome: null }, observedAtMs)
-        : createModelInvocationEvidenceRecord({ ...record.receipt, outcome: null }, evidence, observedAtMs));
+        : createModelInvocationEvidenceRecord({ ...record.receipt, outcome: null }, evidence, observedAtMs), measurement);
     } catch (error) { return this.fail(error); }
   }
   /** Start reconciliation (INFLIGHT-FIX, Astra 2143 R1, FIX-2143-SLOTS): one transaction per allocation, through the same checkpointed

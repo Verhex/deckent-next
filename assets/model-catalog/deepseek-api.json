@@ -1,0 +1,172 @@
+{
+  "schemaVersion": 3,
+  "revision": "deepseek-api-2026-10-08",
+  "providers": [
+    {
+      "id": "deepseek-api",
+      "version": 1,
+      "channel": {
+        "kind": "http-api",
+        "cli": null,
+        "aliases": [],
+        "client": null,
+        "billing": "per-token",
+        "protocolFamily": "openai-chat-completions",
+        "aliasesRefused": [],
+        "provenance": {
+          "sourceUrl": "https://api-docs.deepseek.com/api/list-models",
+          "fetchedOn": "2026-10-08"
+        }
+      },
+      "models": [
+        {
+          "id": "deepseek-flash",
+          "version": 1,
+          "nativeId": "deepseek-flash",
+          "protocols": [
+            {
+              "family": "openai-chat-completions",
+              "version": "v1",
+              "capabilities": [
+                {
+                  "id": "tool-calls",
+                  "version": 1,
+                  "state": "supported"
+                }
+              ]
+            }
+          ],
+          "lifecycle": {
+            "state": "active",
+            "deprecatedOn": null,
+            "retireNotBefore": null,
+            "retiredOn": null,
+            "source": {
+              "url": "https://api-docs.deepseek.com/quick_start/pricing",
+              "observedOn": "2026-10-08"
+            }
+          },
+          "minCliVersion": null,
+          "efforts": [],
+          "aliases": [],
+          "channelModelId": "deepseek-flash",
+          "vendorId": "deepseek",
+          "canonicalModelId": "deepseek-flash",
+          "displayName": "DeepSeek V4.1 Flash",
+          "modalities": {
+            "input": [
+              "text"
+            ],
+            "output": [
+              "text"
+            ]
+          },
+          "contextWindow": 1000000,
+          "maxOutputTokens": 393216,
+          "reasoning": {
+            "supportedEfforts": [],
+            "defaultEffort": null
+          },
+          "capabilities": {
+            "tools": "supported",
+            "vision": "unknown",
+            "pdf": "unknown",
+            "structuredOutput": "unknown",
+            "promptCaching": "unknown",
+            "streaming": "supported"
+          },
+          "pricing": {
+            "kind": "per-token",
+            "source": {
+              "sourceUrl": "https://api-docs.deepseek.com/quick_start/pricing",
+              "fetchedOn": "2026-10-08"
+            },
+            "asOf": "2026-10-08",
+            "inputPerMTok": "0.3",
+            "outputPerMTok": "1.2",
+            "cacheReadPerMTok": "0.006"
+          },
+          "minClientVersion": null,
+          "provenance": {
+            "sourceUrl": "https://api-docs.deepseek.com/quick_start/pricing",
+            "fetchedOn": "2026-10-08"
+          }
+        },
+        {
+          "id": "deepseek-v4-pro",
+          "version": 1,
+          "nativeId": "deepseek-v4-pro",
+          "protocols": [
+            {
+              "family": "openai-chat-completions",
+              "version": "v1",
+              "capabilities": [
+                {
+                  "id": "tool-calls",
+                  "version": 1,
+                  "state": "supported"
+                }
+              ]
+            }
+          ],
+          "lifecycle": {
+            "state": "active",
+            "deprecatedOn": null,
+            "retireNotBefore": null,
+            "retiredOn": null,
+            "source": {
+              "url": "https://api-docs.deepseek.com/quick_start/pricing",
+              "observedOn": "2026-10-08"
+            }
+          },
+          "minCliVersion": null,
+          "efforts": [],
+          "aliases": [],
+          "channelModelId": "deepseek-v4-pro",
+          "vendorId": "deepseek",
+          "canonicalModelId": "deepseek-v4-pro",
+          "displayName": "DeepSeek V4 Pro",
+          "modalities": {
+            "input": [
+              "text"
+            ],
+            "output": [
+              "text"
+            ]
+          },
+          "contextWindow": 1000000,
+          "maxOutputTokens": 393216,
+          "reasoning": {
+            "supportedEfforts": [],
+            "defaultEffort": null
+          },
+          "capabilities": {
+            "tools": "supported",
+            "vision": "unknown",
+            "pdf": "unknown",
+            "structuredOutput": "unknown",
+            "promptCaching": "unknown",
+            "streaming": "supported"
+          },
+          "pricing": {
+            "kind": "per-token",
+            "source": {
+              "sourceUrl": "https://api-docs.deepseek.com/quick_start/pricing",
+              "fetchedOn": "2026-10-08"
+            },
+            "asOf": "2026-10-08",
+            "inputPerMTok": "1.32",
+            "outputPerMTok": "3.96",
+            "cacheReadPerMTok": "0.044"
+          },
+          "minClientVersion": null,
+          "provenance": {
+            "sourceUrl": "https://api-docs.deepseek.com/quick_start/pricing",
+            "fetchedOn": "2026-10-08"
+          }
+        }
+      ]
+    }
+  ],
+  "recommendedActivations": []
+}

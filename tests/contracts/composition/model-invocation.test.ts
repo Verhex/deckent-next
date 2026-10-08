@@ -221,7 +221,8 @@ describe('native endpoint version and historical receipt boundaries', () => {
       { schemaVersion: 2, scopeId: 'scope', invocationId: result.receipt.claim.invocationId, reference }, { env: f.env });
     expect(inspected.spending).toMatchObject({ descriptor: { budgetId: 'budget', currency: 'USD',
       quote: { pricing: { id: 'operator-static-tariff', version: 1, definition: zero }, maxChargeMinorUnits: 0 } },
-    disposition: { state: 'settled-local', amountMinorUnits: 0 }, measurement: null });
+    // SPEND-SETTLEMENT: reported usage is measured against the (zero) tariff, so the charge settles as measured-tariff at exactly zero.
+    disposition: { state: 'settled-measured-tariff', amountMinorUnits: 0 }, measurement: { basis: 'measured-tariff', exactMinorUnits: '0' } });
     expect(JSON.parse(f.bodies[0]!)).toEqual({ model: 'vendor/model', messages: [{ role: 'user', content: 'prompt-must-not-persist' }], max_completion_tokens: 4, stream: false });
   });
 

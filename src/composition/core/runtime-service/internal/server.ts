@@ -176,7 +176,7 @@ async function startUnderCustody(projectRoot: string, observer: ConfiguredRuntim
       }
       const result = await lifecycle.admitBounded(() => request.operation === 'renewApproval' || request.operation === 'listApprovals' || request.operation === 'inspectApproval' || request.operation === 'decideApproval' || request.operation === 'clearSessionStanding'
         ? executeRuntimeApproval(projectRoot, request, peer, config.service.responseMaxBytes, options, chatTurnHost.decisions, chatTurnHost.answers)
-        : request.operation === 'inspectProviderSpendAccount' || request.operation === 'auditProviderSpendAccount'
+        : request.operation === 'inspectProviderSpendAccount' || request.operation === 'auditProviderSpendAccount' || request.operation === 'manageProviderSpend'
         ? executeConfiguredRuntimeProviderSpendOperation(projectRoot, request, peer, config.service.responseMaxBytes, options)
         : request.operation === 'invokeModel' || request.operation === 'invokeModelStream' || request.operation === 'inspectModelInvocation' || request.operation === 'purgeModelInvocationContent' || request.operation === 'cancelModelInvocation'
           ? executeConfiguredRuntimeModelOperation(projectRoot, request, peer, config.service.responseMaxBytes, options, modelHost, stream)

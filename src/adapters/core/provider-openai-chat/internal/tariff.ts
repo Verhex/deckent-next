@@ -1,21 +1,23 @@
+import { verifiedOpenAiCompatibleTariff } from './pricing-catalog.js';
+import { openAiChatPromptUpperBound } from './invocation.js';
 import { createHash } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import { modelInvocationProfileSchema, parseModelBindingDefinition, parseProviderSpendQuote, type ProviderSpendQuote } from '#domain/index.js';
 import { modelInvocationProfileDigest, modelInvocationRequestDigest, OPERATOR_TARIFF_PRICING_ID, providerSpendEvidenceDigest,
-  type ModelInvocationSpendingInput } from '#engine/index.js';
-import { OPENAI_CHAT_HTTP_ADAPTER_ID, OPENAI_CHAT_HTTP_ADAPTER_VERSION, OpenAiChatHttpError, parseOpenAiChatHttpDefinition,
+  ProviderSpendError, measuredTariffExactMinorUnits, ceilProviderSpendExactMinorUnits, providerSpendExactFromNumericSource, compareProviderSpendExactMinorUnits, type ModelInvocationSpendingInput } from '#engine/index.js';
+import { isOpenAiChatHttpAdapter, OpenAiChatHttpError, parseOpenAiChatHttpDefinition,
   parseOpenAiChatTextRequest } from './contract.js';
 import { prepareOpenAiChatHttpRequest } from './transport.js';
 
 export const OPENAI_CHAT_OPERATOR_TARIFF_METER_ID = 'openai-chat-operator-reservation' as const;
 
 /**
- * Pure, repeatable quote from the operator-declared tariff in the profile. v1 tariffs are zero-rate, so the
- * verified maximum is zero; it is still reserved against the scope budget and settled in the spend ledger.
+ * Pure maximum quote from a verified published tariff or an explicit operator tariff.
+ * The input bound uses the dearest input rate; loopback legacy zero tariffs remain supported.
  */
 export function quoteOpenAiChatOperatorTariff(input: ModelInvocationSpendingInput): ProviderSpendQuote {
   const profile = modelInvocationProfileSchema.parse(input.profile);
-  if (profile.adapter.id !== OPENAI_CHAT_HTTP_ADAPTER_ID || profile.adapter.version !== OPENAI_CHAT_HTTP_ADAPTER_VERSION) {
+  if (!isOpenAiChatHttpAdapter(profile.adapter)) {
     throw new OpenAiChatHttpError('OPENAI_CHAT_DEFINITION_INVALID');
   }
   const definition = parseOpenAiChatHttpDefinition(profile.adapter.definition), binding = parseModelBindingDefinition(input.definition);
@@ -25,13 +27,29 @@ export function quoteOpenAiChatOperatorTariff(input: ModelInvocationSpendingInpu
     || modelInvocationRequestDigest(input.command) !== input.requestDigest || modelInvocationProfileDigest(profile) !== input.profileDigest) {
     throw new OpenAiChatHttpError('OPENAI_CHAT_REQUEST_INVALID');
   }
-  const tariff = definition.tariff, tariffDigest = providerSpendEvidenceDigest(tariff);
+  const tariff = definition.tariff;
+  const rates = openAiCompatibleTariffRates(tariff, definition.endpoint, request.model);
+  const tariffDigest = providerSpendEvidenceDigest(tariff);
   const body = prepareOpenAiChatHttpRequest(definition, profile.limits, request).body;
   const evidence = { schemaVersion: 1, tariffDigest, bodyDigest: createHash('sha256').update(body).digest('hex'),
-    calculation: { schemaVersion: 1, currency: tariff.currency, inputMinorUnitsPerMillionTokens: tariff.inputMinorUnitsPerMillionTokens,
-      outputMinorUnitsPerMillionTokens: tariff.outputMinorUnitsPerMillionTokens, outputBound: request.max_completion_tokens, requestCount: 1 } };
+    calculation: { schemaVersion: 1, currency: tariff.currency, usdPerMTok: rates, inputBound: openAiChatPromptUpperBound(input.command.nativeRequest), outputBound: request.max_completion_tokens, requestCount: 1 } };
   return parseProviderSpendQuote({ schemaVersion: 1, scopeId: input.command.scopeId, requestDigest: input.requestDigest,
-    profileDigest: input.profileDigest, pricing: { id: OPERATOR_TARIFF_PRICING_ID, version: 1, digest: tariffDigest, definition: tariff },
+    profileDigest: input.profileDigest, pricing: { id: tariff.kind === 'operator-static' ? OPERATOR_TARIFF_PRICING_ID : 'openai-compatible-published-tariff', version: tariff.version, digest: tariffDigest, definition: tariff },
     meter: { id: OPENAI_CHAT_OPERATOR_TARIFF_METER_ID, version: 1, evidenceDigest: providerSpendEvidenceDigest(evidence), evidence },
-    currency: tariff.currency, maxChargeMinorUnits: 0 });
+    currency: tariff.currency, maxChargeMinorUnits: ceilProviderSpendExactMinorUnits(measuredTariffExactMinorUnits([
+      { field: 'input', tokens: openAiChatPromptUpperBound(input.command.nativeRequest), usdPerMillionTokens: compareProviderSpendExactMinorUnits(rates.input, rates.cachedInput) >= 0 ? rates.input : rates.cachedInput },
+      { field: 'output', tokens: request.max_completion_tokens, usdPerMillionTokens: rates.output }])) });
+}
+
+/** A zero-rate legacy tariff is admitted only for a loopback endpoint. Remote paid calls require verified or explicitly declared rates. */
+export function openAiCompatibleTariffRates(tariff: ReturnType<typeof parseOpenAiChatHttpDefinition>['tariff'], endpoint: string, modelId: string) {
+  if (tariff.kind === 'vendor-published') {
+    if (!verifiedOpenAiCompatibleTariff(tariff, endpoint, modelId)) throw new ProviderSpendError('PROVIDER_SPEND_TARIFF_UNVERIFIED');
+    return tariff.usdPerMTok;
+  }
+  const url = new URL(endpoint), loopback = ['127.0.0.1', '[::1]', 'localhost'].includes(url.hostname);
+  if (!loopback && tariff.version !== 2) throw new ProviderSpendError('PROVIDER_SPEND_TARIFF_UNVERIFIED');
+  return { input: providerSpendExactFromNumericSource(`${tariff.inputMinorUnitsPerMillionTokens}e-2`, 1),
+    cachedInput: providerSpendExactFromNumericSource(`${tariff.cachedInputMinorUnitsPerMillionTokens ?? tariff.inputMinorUnitsPerMillionTokens}e-2`, 1),
+    output: providerSpendExactFromNumericSource(`${tariff.outputMinorUnitsPerMillionTokens}e-2`, 1) };
 }

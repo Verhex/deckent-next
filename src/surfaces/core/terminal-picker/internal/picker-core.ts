@@ -13,6 +13,8 @@ export type PickerNode = Readonly<{
   /** Extra words the filter also matches (aliases, ids). */
   keywords?: readonly string[];
   blocked?: Readonly<{ reason: string }>;
+  /** An action row of a scoped tree (stage 1: the budget row of `/model`): chosen directly, without the scope step. */
+  unscoped?: boolean;
   /** Title of the level below, when this row is a section. */
   childTitle?: string;
   children?: readonly PickerNode[];
@@ -205,7 +207,7 @@ export function pickerReduce(tree: PickerTree, state: PickerState, action: Picke
       }
       if (row.section) return step({ ...state, trail: [...state.trail, { id: row.id, pos: view.pos }], filter: '', pos: 0 });
       const path = [...state.trail.map(item => item.id), row.id];
-      if (tree.scopes?.length) {
+      if (tree.scopes?.length && !pickerLevel(tree, state.trail).nodes.find(node => node.id === row.id)?.unscoped) {
         const first = tree.scopes.findIndex(scope => !scope.blocked);
         return step({ ...state, stage: 'scope', pending: row.id, scopePos: Math.max(0, first) });
       }
