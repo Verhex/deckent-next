@@ -63,6 +63,8 @@ export function layoutWindowRows(lines: readonly WindowLine[], width: number): R
 }
 
 export interface WindowProps {
+  /** Observation frames register no input owner; the composer keeps the keyboard. */
+  readonly interactive?: boolean;
   readonly title: readonly Span[];
   /** Right side of the title row (a countdown, a count); shortened before the title is. */
   readonly status?: readonly Span[];
@@ -86,10 +88,10 @@ export interface WindowProps {
  * A bounded modal window in the live area (owner 2026-10-07): frame, title left and status right, a body capped to the terminal's rows
  * that scrolls by keyboard, a key-hint row, widths measured in display cells. It owns input only while it is the top layer.
  */
-export function Window({ title, status = [], body = [], footer, footerRows = 0, hints, position, priority = WINDOW_PRIORITY.window, onInput, onClose, reveal }: WindowProps) {
+export function Window({ title, status = [], body = [], footer, footerRows = 0, hints, position, priority = WINDOW_PRIORITY.window, onInput, onClose, reveal, interactive = true }: WindowProps) {
   const palette = useWorklinePalette(), glyphs = useRenderGlyphs(), size = useWindowSize();
   const columns = size.columns || FALLBACK_COLUMNS, terminalRows = size.rows || FALLBACK_ROWS;
-  const id = useId(), focused = useWindowLayer(id, true, priority), reserved = useWindowReserve() ?? WINDOW_RESERVED_ROWS;
+  const id = useId(), focused = useWindowLayer(id, interactive, priority), reserved = useWindowReserve() ?? WINDOW_RESERVED_ROWS;
   // I-1: the slash command's one-time note sits in this window's status area while it is the focused (non-approval) window; closing it consumes the note.
   const note = useWindowNote(), noteText = note && focused && priority !== WINDOW_PRIORITY.approval ? note.text : null;
   useEffect(() => { if (noteText === null || !note) return undefined; return () => note.consume(); }, [noteText, note]);

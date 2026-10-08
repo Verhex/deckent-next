@@ -9,6 +9,10 @@ import type { AgentTurnStreamEvent } from '#domain/index.js';
 import { anthropicPublishedTariff, openSqliteModelActivationStore } from '#adapters/index.js';
 import { ModelActivationApplication, ModelBindingApplication, modelInvocationTargetId } from '#engine/index.js';
 import { createConfiguredRuntimeClient, startConfiguredRuntimeService } from '#composition/core/runtime-service/index.js';
+import { streamTerminalAgentTurn } from '#composition/core/terminal-chat/index.js';
+import { inspectConfiguredModelInvocationCommand } from '#composition/core/model-invocation/index.js';
+import { settledProviderCacheUsage } from '#adapters/index.js';
+import { chatTurnRoundCommandId } from '#composition/core/agent-turn/index.js';
 import { clearConfigCache, prepareProductFile, resolveProductLayout } from '#platform/index.js';
 import { createLocalTls } from '../../fixtures/local-tls.js';
 
@@ -27,7 +31,7 @@ const me = [{ issuer: principal.issuer, subject: principal.subject }];
 const sqlite = { busyTimeoutMs: 1_000, journalMode: 'delete' as const, durability: 'full' as const };
 const sse = (type: string, payload: Record<string, unknown> = {}) => `event: ${type}\ndata: ${JSON.stringify({ type, ...payload })}\n\n`;
 const head = () => sse('message_start', { message: { id: 'msg_t', type: 'message', role: 'assistant', model: MODEL, content: [], stop_reason: null, stop_sequence: null,
-  usage: { input_tokens: 30, cache_creation_input_tokens: 0, cache_read_input_tokens: 0, output_tokens: 1 } } });
+  usage: { input_tokens: 30, cache_creation_input_tokens: 10, cache_read_input_tokens: 60, output_tokens: 1 } } });
 const tail = (stop: string) => sse('message_delta', { delta: { stop_reason: stop, stop_sequence: null }, usage: { output_tokens: 9 } }) + sse('message_stop');
 const round1 = head() + sse('content_block_start', { index: 0, content_block: { type: 'thinking', thinking: '' } })
   + sse('content_block_delta', { index: 0, delta: { type: 'thinking_delta', thinking: 'need the file' } }) + sse('content_block_delta', { index: 0, delta: { type: 'signature_delta', signature: 'SIG-TURN' } })
@@ -81,7 +85,7 @@ async function runtime(capabilities: readonly string[] = ['tool-calls', 'chat-te
   const env = { HOME: home, PATH: process.env.PATH ?? '/usr/bin:/bin', ANTHROPIC_API_KEY: SECRET };
   const service = await startConfiguredRuntimeService(project, { async onPage() {}, async onError() {} }, { env }, {});
   services.push(service);
-  return { requests, client: () => createConfiguredRuntimeClient(project, { env }) };
+  return { project, env, requests, client: () => createConfiguredRuntimeClient(project, { env }) };
 }
 
 describe.skipIf(process.platform !== 'linux')('agent chat turn with Claude through the runtime service', () => {
@@ -115,4 +119,23 @@ describe.skipIf(process.platform !== 'linux')('agent chat turn with Claude throu
     await expect(missing.client().chatTurn(ask('turn-refused', { reasoning: 'off' }), () => undefined)).rejects.toMatchObject({ code: 'AGENT_TURN_REASONING_UNSUPPORTED' });
     expect(missing.requests).toHaveLength(0);
   }, 30_000);
+});
+
+it.skipIf(process.platform !== 'linux')('projects real settled Anthropic round dimensions through the unchanged runtime protocol', async () => {
+  const f = await runtime();
+  const deltas = [];
+  for await (const delta of streamTerminalAgentTurn({ projectRoot: f.project, scopeId: 'scope', reference, messages: ask('unused').messages, options: {} }, {
+    chatTurn: (_root, command, onEvent) => f.client().chatTurn(command, onEvent),
+    cancelChatTurn: (_root, command) => f.client().cancelChatTurn(command),
+    settledUsage: async (root, command, round) => {
+      const inspection = await inspectConfiguredModelInvocationCommand(root, { schemaVersion: 1, scopeId: command.scopeId,
+        commandId: chatTurnRoundCommandId(command.scopeId, command.turnId, round), reference }, { env: f.env });
+      expect(inspection?.invocationId).not.toBe(chatTurnRoundCommandId(command.scopeId, command.turnId, round));
+      return settledProviderCacheUsage(inspection?.spending ?? null);
+    },
+  })) deltas.push(delta);
+  const usages = deltas.filter(delta => delta.kind === 'usage');
+  expect(usages).toHaveLength(2);
+  for (const usage of usages) expect(usage).toMatchObject({ cache: { readTokens: 60, writeTokens: 10, promptTokens: 100 } });
+  expect(deltas.at(-1)).toMatchObject({ kind: 'done', finish: 'stop' });
 });

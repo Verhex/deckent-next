@@ -267,7 +267,8 @@
         "src/composition/core/scoped-request",
         "src/composition/core/root",
         "src/composition/core/identity-profile",
-        "src/composition/core/model-connect"
+        "src/composition/core/model-connect",
+        "src/adapters/core/provider-openai-chat"
       ],
       "plan": "SURFACES"
     },
@@ -1952,7 +1953,8 @@
         "src/domain/core/agent-turn",
         "src/platform/core/host",
         "src/domain/core/model-invocation",
-        "src/platform/core/i18n"
+        "src/platform/core/i18n",
+        "src/platform/core/common"
       ],
       "plan": "SURFACES"
     },

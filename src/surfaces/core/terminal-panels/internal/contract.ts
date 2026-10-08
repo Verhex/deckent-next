@@ -219,6 +219,7 @@ export interface ProviderPanelLabels {
  * `action` null: no action here (`note` says why, e.g. a budget declared in configuration whose account opens at the first call).
  */
 export type BudgetPanelView = Readonly<{ action: 'create' | 'change' | null; current: string | null; note: string | null; frozen: boolean;
+  settledUsd?: number;
   presets: readonly number[]; min: number; max: number; step: number; start: number }>;
 export type BudgetPanelOutcome = Readonly<{ ok: boolean; line: string }>;
 export interface BudgetPanelPort {
@@ -232,6 +233,7 @@ export interface BudgetPanelLabels {
   readonly preset: string; readonly other: string; readonly stepperTitle: string; readonly hints: string;
   /** `{usd}`: the confirm window's title; its two (three when frozen) answers. */
   readonly confirmTitle: string; readonly confirm: string; readonly confirmUnfreeze: string; readonly cancel: string;
+  readonly belowSettled?: string;
 }
 export interface PanelLabels {
   readonly picker: PickerLabels;

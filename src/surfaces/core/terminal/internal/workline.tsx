@@ -8,7 +8,7 @@ import { useLiveWindows } from './workline-live.js';
 import { AssistantLive, openAssistantStream, renderAssistantStream, renderCompleteReply, type AssistantStreamStep, type AssistantRenderLabels } from '#surfaces/core/terminal-render/index.js';
 import { HumanTextContext, humanRecordText, projectHumanPickerText, RenderGlyphsContext, resolveRenderGlyphs, useRenderGlyphs } from '#surfaces/core/terminal-render/index.js';
 import type { KnownSecretSnapshot } from '#platform/index.js';
-import { assistantLedgerEntries, streamStepEntries, workerReportToLedgerEntries, WORK_LEDGER_SCHEMA_VERSION, type WorkLedgerEntry, ledgerEntriesForWorkers, loadRunViewsForWatch, type WorklineLedgerPorts, fillTemplate, agentHistory, appendLedger, boundAgentHistory, compactLedger, EMPTY_LEDGER, plainChatHistory, type AgentChatMessage, type ChatTurnMessage, type LedgerBuffer, notice } from '#surfaces/core/terminal-ledger/index.js';
+import { assistantLedgerEntries, streamStepEntries, workerReportToLedgerEntries, WORK_LEDGER_SCHEMA_VERSION, type WorkLedgerEntry, ledgerEntriesForWorkers, loadRunViewsForWatch, type WorklineLedgerPorts, fillTemplate, appendLedger, boundAgentHistory, compactLedger, EMPTY_LEDGER, plainChatHistory, type AgentChatMessage, type ChatTurnMessage, type LedgerBuffer, notice } from '#surfaces/core/terminal-ledger/index.js';
 import { useConversationSession, type ConversationSessionLabels, type ConversationSessionPort } from './workline-sessions.js';
 import { ArrowPicker, ARROW_PICKER_ROWS } from '#surfaces/core/terminal-picker/index.js';
 import { Window, WindowNoteContext, WindowStackProvider, WINDOW_RESERVED_ROWS, useFocusOwner, type WindowNote } from '#surfaces/core/terminal-window/index.js';
@@ -23,6 +23,7 @@ import { askSlashWindow, isReasoningChoice, reasoningSpec, reasoningStatus, unkn
 import { CLEAR_SCREEN_AND_SCROLLBACK, writeStartup, type WorklineStartup } from './startup-banner.js';
 import { useWorklineSettings, type WorklinePanels } from './workline-settings.js';
 import type { ModelPanelChoice, ModelPanelReference } from '#surfaces/core/terminal-panels/index.js';
+import { openTaskAction, type TaskWindowAction } from '#surfaces/core/terminal-work/index.js';
 
 export interface WorklineLabels extends WorklineActionLabels {
   readonly banner: string;
@@ -63,8 +64,9 @@ export interface WorklineProps {
   readonly context: Omit<TerminalLocalContext, 'kind' | 'sessionId'>;
   readonly target: string;
   readonly systemPrompt: string;
-  /** Window of the plain (non-streaming) path only; the agent path sends the whole conversation (T-L5, Astra 2091 R1). */
+  /** Configured message window; complete tool-call groups stay together in both paths. */
   readonly historyMessages: number;
+  readonly model?: string;
   readonly completeTurn: WorklineCompleteTurn;
   readonly errorText: WorklineErrorText;
   readonly ledger?: WorklineLedgerPorts;
@@ -147,11 +149,12 @@ export function WorklineApp(props: WorklineProps) {
   // A chat turn is running: Esc cancels it now (TL-A D5).
   const [turnRunning, setTurnRunning] = useState(false);
   const [live, setLive] = useState<{ readonly step: AssistantStreamStep; readonly lead: boolean } | null>(null);
-  const usage = useRef<SessionUsageView>(EMPTY_SESSION_USAGE);
+  const usages = useRef(new Map<string, SessionUsageView>());
   const [watch, setWatch] = useState<WatchState>({ workers: false, runs: false });
   const watchRef = useRef(watch);
   const history = useRef<readonly AgentChatMessage[]>([{ role: 'system', content: systemPrompt }]);
   const sessionId = useCallback(() => panel.controller.snapshot().context.sessionId, [panel]);
+  const usage = () => usages.current.get(sessionId()) ?? EMPTY_SESSION_USAGE;
   const session = useConversationSession(props.sessions, labels.sessions, sessionId, props.knownSecrets);
   const presentation = panel.presentation(state);
   const resumePicker = presentation?.kind === 'resume' && state.picker ? presentation.rows : null;
@@ -160,6 +163,7 @@ export function WorklineApp(props: WorklineProps) {
   const [watchStatus, setWatchStatus] = useState('');
   const [watchStatusLines, setWatchStatusLines] = useState<readonly string[]>([]);
   const liveRef = useRef<ReturnType<typeof useLiveWindows> | null>(null);
+  const taskActionRef = useRef<(action: TaskWindowAction) => void>(() => undefined), taskActions = useRef(new Map<string, TaskWindowAction>());
   const announced = useRef(new Set<string>()), openingTold = useRef(false);
   const pushMode = useSurfacePushFeed(ledger?.followEvents, ledger?.scopeId ?? '', pollMs, step => {
     if (step.status === 'denied' || step.status === 'not-initialized') workRef.current?.observeWorkers([]);
@@ -209,7 +213,7 @@ export function WorklineApp(props: WorklineProps) {
     context: { ...(props.projectRoot ? { project: props.projectRoot } : {}), ...(mode.stop ? { mode: mode.stop } : {}) },
     ...(props.approvalPollMs === undefined ? {} : { approvalPollMs: props.approvalPollMs }) });
   workRef.current = work; decide.current = work.decideApproval;
-  const liveWin = useLiveWindows({ work: labels.work, workers: work.workers, watch, watchRef, setWatch, push, errorText, monitorWindow: props.monitorWindow, status: humanRecordText(watchStatus, props.knownSecrets), statusLines: watchStatusLines.map(text => humanRecordText(text, props.knownSecrets)), positionLabel: labels.work?.window.position ?? '{from}-{to}/{total}' });
+  const liveWin = useLiveWindows({ work: labels.work, workers: work.workers, watch, watchRef, setWatch, push, errorText, monitorWindow: props.monitorWindow, status: humanRecordText(watchStatus, props.knownSecrets), statusLines: watchStatusLines.map(text => humanRecordText(text, props.knownSecrets)), positionLabel: labels.work?.window.position ?? '{from}-{to}/{total}', onTaskAction: action => taskActionRef.current(action) });
   liveRef.current = liveWin;
   const refreshMode = mode.refresh;
   const reasoning = useReasoningPreview(push, labels.reasoning);
@@ -219,9 +223,10 @@ export function WorklineApp(props: WorklineProps) {
   // T4 MODEL-SWITCH (S19): the model this session pinned with `/model`; read when a turn starts, so the next turn carries it (protocol v23).
   // Astra 2452 P1: the pin belongs to one conversation (sessionId → pin). `/clear` starts a conversation without one; `/resume` finds the resumed
   // conversation's own pin, or none (the configured model) — never another conversation's.
+  const [, setModelGeneration] = useState(0);
   const pinnedModels = useRef(new Map<string, ModelPanelReference>());
   const sessionModel = useMemo(() => ({ pinned: () => pinnedModels.current.get(sessionId()) ?? null,
-    pin: (choice: ModelPanelChoice) => { pinnedModels.current.set(sessionId(), choice.reference); } }), [sessionId]);
+    pin: (choice: ModelPanelChoice) => { pinnedModels.current.set(sessionId(), choice.reference); setModelGeneration(value => value + 1); } }), [sessionId]);
   const scratch = useWorklineScratch(props.scratch, session.id, push, errorText, labels.work?.unavailable ?? labels.ledgerUnavailable, labels.scratch);
   useEffect(() => { void refreshMode(); }, [refreshMode]);
   // T3 L4: `/mode`, `/config`, `/mcp` windows; `/mode`'s port is this view's mode hook (the same service set, grant check and audit as Shift+Tab).
@@ -232,7 +237,7 @@ export function WorklineApp(props: WorklineProps) {
 
   // SW-1: bare information commands answer in a window; `/help` answers the command picked in it, which then runs here.
   const infoWindow = useInfoWindow({ info: props.info, slot, push, errorText, slash: labels.composer.slash, ascii: useRenderGlyphs().ascii,
-    context: (info, ascii) => session.contextView(history.current, info, ascii), input: () => ({ usage: usage.current, sessionFullAccess: mode.fullAccess.current }) });
+    context: (info, ascii) => session.contextView(history.current, info, ascii), input: () => ({ usage: usage(), sessionFullAccess: mode.fullAccess.current }) });
   const performRef = useRef<(line: string, mentioned: readonly string[], execution: LocalExecution) => Promise<boolean>>(async () => true);
   const opening = useRef(props.openingNotices);
   useEffect(() => {
@@ -256,9 +261,9 @@ export function WorklineApp(props: WorklineProps) {
     const stream = panel.stream(execution);
     // T-L5 `@file`: the service attaches the mentioned files (bounded, labelled) to this message; a failure leaves the text as typed.
     const content = await messageWithMentions(text, mentioned, props.attachMentions, signal, push, errorText, labels.mentions);
-    // Agent history stays whole for runtime compaction; only plain turns use the message window.
+    // Both paths apply the configured history window; complete tool exchanges stay together.
     const system: AgentChatMessage = { role: 'system', content: systemPrompt }, asked = [...history.current, { role: 'user' as const, content }];
-    const messages = props.streamTurn ? agentHistory(system, asked) : boundAgentHistory(system, asked, historyMessages);
+    const messages = boundAgentHistory(system, asked, historyMessages);
     try {
       // Cancelled while the files were being attached: nothing is sent.
       if (signal.aborted) return;
@@ -273,7 +278,7 @@ export function WorklineApp(props: WorklineProps) {
           ...(mode.fullAccess.current ? { fullAccess: true as const } : {}), ...pinnedFor(execution.input.context.sessionId) })) {
           if (delta.kind === 'text') answer += delta.text;
           if (delta.kind === 'message') appended.push(delta.message);
-          session.noteContext(delta); if (delta.kind === 'usage') usage.current = addSessionUsage(usage.current, delta);
+          session.noteContext(delta); if (delta.kind === 'usage') { const id = execution.input.context.sessionId; usages.current.set(id, addSessionUsage(usages.current.get(id) ?? EMPTY_SESSION_USAGE, delta)); }
           if (delta.kind === 'approval') {
             stream.approval(delta);
             if (delta.phase === 'settled' && delta.outcome === 'unsettled') work.noteUnsettled(delta.approvalId);
@@ -288,7 +293,7 @@ export function WorklineApp(props: WorklineProps) {
         }
         // An agent turn's history is exactly its message events (tool calls and results included); a plain stream adds its answer.
         const next = appended.length ? appended : answer ? [{ role: 'assistant' as const, content: answer, toolCalls: [] }] : [];
-        history.current = next.length || base !== messages ? agentHistory(base[0]!, [...base, ...next]) : messages;
+        history.current = next.length || base !== messages ? boundAgentHistory(base[0]!, [...base, ...next], historyMessages) : messages;
         push(await session.save(history.current));
       } else {
         const reply = await completeTurn(plainChatHistory(messages), signal);
@@ -341,7 +346,7 @@ export function WorklineApp(props: WorklineProps) {
       return true;
     }
     if (slash.command === 'mode' || slash.command === 'scratch') { await (slash.command === 'mode' ? mode.run : scratch)(slash.args); return true; }
-    const lineCommands: Readonly<Record<string, ((args: string) => Promise<readonly string[]>) | undefined>> = { ...bindInspectPorts(props.inspect, () => usage.current, () => mode.fullAccess.current), mcp: props.mcp, monitor: props.monitor, config: props.config };
+    const lineCommands: Readonly<Record<string, ((args: string) => Promise<readonly string[]>) | undefined>> = { ...bindInspectPorts(props.inspect, usage, () => mode.fullAccess.current), mcp: props.mcp, monitor: props.monitor, config: props.config };
     if (await dispatchWorkCommand(slash, { execution, panel, labels, ledger, push, errorText, pushMode, live: liveWin, monitor: props.monitor, watchRef, setWatch, setWatchStatus, runDecision: work.run, commandUnavailable: labels.commandUnavailable })) return true;
     // T4: `/provider` is a window only; without its port (TERM=dumb, no host) or with arguments it says the part is unavailable here.
     if (slash.command === 'mcp' || slash.command === 'monitor' || slash.command === 'config' || slash.command === 'provider' || (isInspectSlashCommand(slash.command) && (slash.command !== 'status' || lineCommands['status']))) {
@@ -356,7 +361,7 @@ export function WorklineApp(props: WorklineProps) {
         const result = await session.run(slash.command, rich && slash.command === 'resume' ? '' : slash.args, history, execution);
         // `/clear` really clears: the visible screen is wiped and Ink forgets the earlier conversation; only the summary line follows.
         // Owner 2026-10-08: the terminal's scrollback goes too (ED 3); only on a TTY that takes escape sequences (`clearScreen`, see the prop).
-        if (slash.command === 'clear' && result.entries.length) { if (props.clearScreen !== false && stdout.stdout.isTTY) stdout.write(CLEAR_SCREEN_AND_SCROLLBACK); reset(); usage.current = EMPTY_SESSION_USAGE; }
+        if (slash.command === 'clear' && result.entries.length) { if (props.clearScreen !== false && stdout.stdout.isTTY) stdout.write(CLEAR_SCREEN_AND_SCROLLBACK); reset(); }
         if (result.resumePicker) {
           // The drain stays inside this call, so a line queued while the list loads cannot run under the picker.
           const choice = await panel.pick(execution, { kind: 'resume', rows: result.resumePicker }, result.resumePicker.map((_, index) => String(index)));
@@ -405,9 +410,22 @@ export function WorklineApp(props: WorklineProps) {
   performRef.current = perform;
 
   execute.current = async execution => {
+    const action = taskActions.current.get(execution.input.inputId);
+    taskActions.current.delete(execution.input.inputId);
+    if (action && ledger && labels.work) {
+      try { await openTaskAction(action, panel, execution, ledger, labels.work,
+        runId => work.run('cancel', '', execution, undefined, runId)); }
+      catch (error) { push([notice('error', errorText(error))]); }
+      return;
+    }
     await perform(execution.input.text, execution.input.mentions, execution, typedArgumentInputs.current.delete(execution.input.inputId));
   };
   const inputSequence = useRef(0), typedArgumentInputs = useRef(new Set<string>());
+  taskActionRef.current = action => {
+    const inputId = `input-${++inputSequence.current}`, snapshot = panel.controller.snapshot();
+    taskActions.current.set(inputId, action);
+    if (!panel.controller.send({ kind: 'submit', context: snapshot.context, inputId, text: `/${action.action}`, mentions: [] })) taskActions.current.delete(inputId);
+  };
   // I-1 (Astra 2456): in the rich terminal a slash argument is dropped before the line is queued, shown as queued or remembered in the
   // input history; only `/command` travels on, and the input id carries the fact that an argument was typed (for the window's one-time note).
   const bareSlash = (text: string): string => { const slash = labels.windows ? parseSlashLine(text) : null; return slash?.args ? `/${slash.command}` : text; };
@@ -458,7 +476,7 @@ export function WorklineApp(props: WorklineProps) {
       {/* The local window slot gives way to a decision card, picker, approval or settings window (approvals keep priority) and returns after it. */}
       {work.modalOpen || work.pickerOpen || resumePicker !== null || settings.openKind !== null ? null : slot.element}
       <Text {...palette.accent}>{labels.banner}</Text>
-      <StatusStrip target={target} state={cancelling ? labels.statusCancelling : busy && !choosing ? labels.statusBusy : [labels.statusReady, work.approvalStatus].filter(Boolean).join(' · ')} busy={busy && !choosing}
+      <StatusStrip target={target} model={pinnedModels.current.get(sessionId())?.modelId ?? props.model} state={cancelling ? labels.statusCancelling : busy && !choosing ? labels.statusBusy : [labels.statusReady, work.approvalStatus].filter(Boolean).join(' · ')} busy={busy && !choosing}
         queued={state.queued.length} labels={{ ...labels.render, selfSourceFloor: labels.selfSourceFloor, modeStops: labels.mode?.stops }} mode={mode.mode} stop={mode.stop}
         selfSource={props.selfSource} cancellable={turnRunning && !cancelling} reasoning={reasoningStatus(labels.windows, reasoning)} />
       {/* T3 L4 (owner 2026-10-07): while the session holds full access one standing line above the composer says so (text and mark; colour is a hint). */}

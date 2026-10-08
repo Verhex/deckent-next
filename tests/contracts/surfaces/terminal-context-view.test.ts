@@ -57,3 +57,15 @@ describe('/context management view (TERM-UX-1 d)', () => {
     expect(view.stdout.text).toContain('/clear');
   });
 });
+
+it.each([1_000_000, null])('renders the configured 100k compaction trigger in the actual /context window (window %s)', async windowTokens => {
+  const view = mountWorkline({ streamTurn: async function* () {
+    yield { kind: 'context', promptTokens: 80_000, windowTokens, quality: 'provider-count', compactionThresholdTokens: 100_000 };
+    yield { kind: 'text', text: 'done-context' }; yield { kind: 'done', finish: 'stop' };
+  } }); views.push(view);
+  await until(() => view.stdout.frame.includes('READY'), 'ready'); view.stdin.write('go\r');
+  await until(() => view.stdout.text.includes('done-context'), 'turn completed'); await settle(); view.stdin.write('/context\r');
+  await until(() => view.stdout.text.includes('auto 100000'), 'configured absolute threshold');
+  expect(view.stdout.text).toContain(windowTokens === null ? 'auto 100000 (?%)' : 'auto 100000 (10%)');
+  expect(view.stdout.text).not.toContain('auto 750000');
+});

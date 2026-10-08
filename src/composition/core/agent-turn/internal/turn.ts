@@ -329,7 +329,7 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
     };
     const result = await runDurableAgentTurn({ claim: { scopeId: command.scopeId, turnId: command.turnId, principalKey, requestDigest, claimedAtMs: clock.sample().wallMs },
       messages: command.messages, tools, signal, language, emit: event => { if (event.kind !== 'done') channel.emit(event); },
-      admission: agentTurnAdmission(chat.maxCompletionTokens, context.config.service.inputMaxBytes), fullAccess,
+      admission: agentTurnAdmission(chat.maxCompletionTokens, context.config.service.inputMaxBytes, chat.compactionThresholdTokens), fullAccess,
       approverNoteMaxChars: context.config.approvals.approverNoteMaxChars }, store, ports);
     await channel.drained();
     const answer = result.answer;

@@ -93,7 +93,7 @@ describe('information windows on the real workline (SW-1)', () => {
     expect(view.stdout.frame).toContain('No token usage reported yet');
     await type(view, '\r');
     await until(() => view.stdout.frame.includes('▸ Spend account · team-budget [! no snapshot]'), 'account section');
-    expect(calls).toEqual([{ schemaVersion: 1, scopeId: 's', budgetId: 'team-budget', budgetRevision: 3 }]);
+    expect(calls).toEqual([{ schemaVersion: 1, scopeId: 's', current: true }, { schemaVersion: 1, scopeId: 's', budgetId: 'team-budget', budgetRevision: 3 }]);
     await type(view, ESC);
     await until(() => view.stdout.frame.includes(`${MARK} · Usage: nothing reported yet in this conversation`), 'usage summary');
     expect(count(view.stdout.frame, MARK)).toBe(1);

@@ -339,14 +339,16 @@ describe('/model in the workline: the pin rides on the next turn', () => {
   it('Astra 2452 P1: a pin belongs to its conversation — /clear starts unpinned, /resume brings back that conversation\'s own pin, never another\'s', async () => {
     const { port } = modelPort(MODELS);
     const turns: { sessionId: string; reference: unknown }[] = [];
+    const usageTotals: unknown[] = [];
     const saved = new Map<string, readonly { role: 'user' | 'assistant'; content: string }[]>();
     const streamTurn = async function* (_messages: unknown, _signal: AbortSignal, turn?: { sessionId?: string; reference?: unknown }) {
-      turns.push({ sessionId: turn?.sessionId ?? '-', reference: turn?.reference ?? null }); yield { kind: 'text' as const, text: 'ok' }; yield { kind: 'done' as const, finish: 'stop' as const };
+      turns.push({ sessionId: turn?.sessionId ?? '-', reference: turn?.reference ?? null });
+      yield { kind: 'usage' as const, promptTokens: 100, completionTokens: 1, reasoningTokens: null, cache: { promptTokens: 100, writeTokens: 10, readTokens: JSON.stringify(turn?.reference) === JSON.stringify(ref('fast')) ? 60 : 20 } }; yield { kind: 'text' as const, text: 'ok' }; yield { kind: 'done' as const, finish: 'stop' as const };
     };
     const sessions = { async save(input: { sessionId: string; messages: readonly { role: 'user' | 'assistant'; content: string }[] }) { saved.set(input.sessionId, input.messages); },
       async list() { return [...saved.entries()].map(([sessionId, messages]) => ({ sessionId, updatedAtMs: 1, messages: messages.length, preview: 'p' })); },
       async load(id: string) { return saved.get(id) ?? null; } };
-    const view = mountWorkline({ labels: WORKLINE_TEST_LABELS, streamTurn, sessions: sessions as never, panels: { ports: { model: { inspect: port.inspect } }, labels: terminalPanelLabels('en') } });
+    const view = mountWorkline({ labels: WORKLINE_TEST_LABELS, streamTurn, sessions: sessions as never, inspect: { usage: async (_args, view) => { usageTotals.push(view.usage); return ['SESSION-USAGE']; } }, target: 'scope', model: 'configured-model', panels: { ports: { model: { inspect: port.inspect } }, labels: terminalPanelLabels('en') } });
     mounted.push(view.instance);
     await settleWorkline(40);
     const pick = async (keys: string[], model: string) => {
@@ -359,8 +361,9 @@ describe('/model in the workline: the pin rides on the next turn', () => {
       await until(() => !view.stdout.frame.includes('Models · scope'), 'window closed');
     };
     const say = async (text: string, count: number) => { view.stdin.write(`${text}${ENTER}`); await until(() => turns.length === count, text); await settleWorkline(40); };
-    // Conversation A pins L (fast).
+    // Conversation A pins L (fast). The status is a separate live model segment.
     await pick([DOWN, DOWN], 'fast');
+    expect(view.stdout.frame).toMatch(/scope.*fast.*READY/u);
     await say('a1', 1);
     const a = turns[0]!.sessionId;
     expect(turns[0]).toEqual({ sessionId: a, reference: ref('fast') });
@@ -369,13 +372,19 @@ describe('/model in the workline: the pin rides on the next turn', () => {
     await say('b0', 2);
     const b = turns[1]!.sessionId;
     expect(b).not.toBe(a); expect(turns[1]!.reference).toBeNull();
+    expect(view.stdout.frame).not.toMatch(/scope.*fast.*READY/u);
     await pick([], 'chat');
     await say('b1', 3);
     expect(turns[2]).toEqual({ sessionId: b, reference: ref('chat') });
+    view.stdin.write(`/usage${ENTER}`); await until(() => usageTotals.length === 1, 'B usage');
+    expect(usageTotals[0]).toMatchObject({ reports: 2, cache: { readTokens: 40, writeTokens: 20, promptTokens: 200 } });
     // /resume A: A's own pin (L) again; nothing of A goes to R.
     view.stdin.write(`/resume ${a}${ENTER}`); await until(() => view.stdout.text.includes(`RESUMED`), 'resumed'); await settleWorkline(40);
     await say('a2', 4);
+    expect(view.stdout.frame).toMatch(/scope.*fast.*READY/u);
     expect(turns[3]).toEqual({ sessionId: a, reference: ref('fast') });
+    view.stdin.write(`/usage${ENTER}`); await until(() => usageTotals.length === 2, 'A usage restored');
+    expect(usageTotals[1]).toMatchObject({ reports: 2, cache: { readTokens: 120, writeTokens: 20, promptTokens: 200 } });
     expect(turns.filter(turn => turn.sessionId === a).map(turn => turn.reference)).toEqual([ref('fast'), ref('fast')]);
     // The window shows the resumed conversation's own pin.
     view.stdin.write(`/model${ENTER}`);
@@ -403,6 +412,22 @@ describe('stage 1 budget window (/model and /provider)', () => {
       return { ok: true, line: `Budget set: ${request.usd} USD` }; } };
     return { port, applied };
   };
+
+  it.each([5, 8.63, 10])('warns only when the selected 5 USD limit is at or below settled spending %s, before any write', async settledUsd => {
+    const budget = budgetPort(view({ action: 'change', current: '15 USD (revision 4)', settledUsd })), { port } = modelPort(MODELS);
+    const { element } = panel('model', { model: { ...port, budget: budget.port } }, 'tr');
+    const screen = mount(element, 100, 40, true); await settle(80);
+    await screen.press(`${ENTER}${ENTER}`);
+    expect(screen.frame()).toContain('Seçilen limit (5 USD)'); expect(screen.frame()).toContain('Yeni çağrılar'); expect(screen.frame()).toContain('reddedilir');
+    expect(screen.frame()).not.toContain('\u001b['); expect(budget.applied).toEqual([]);
+  });
+
+  it('does not warn for a selected amount above the settled total', async () => {
+    const budget = budgetPort(view({ action: 'change', current: '15 USD (revision 4)', settledUsd: 4.99 })), { port } = modelPort(MODELS);
+    const { element } = panel('model', { model: { ...port, budget: budget.port } }, 'tr');
+    const screen = mount(element); await settle(80); await screen.press(`${ENTER}${ENTER}`);
+    expect(screen.frame()).not.toContain('Yeni çağrılar reddedilir'); expect(budget.applied).toEqual([]);
+  });
 
   it('/model offers "Create budget" first (no scope step); presets, confirm, one system line; nothing is sent before the confirm', async () => {
     const budget = budgetPort(view()), { port, pins } = modelPort(MODELS);

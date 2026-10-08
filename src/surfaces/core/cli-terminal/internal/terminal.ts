@@ -366,7 +366,7 @@ export async function terminalCommand(argv: readonly string[], context: Terminal
     ...(context.inspectSurfaceAccess ? { inspectSurfaceAccess: () => context.inspectSurfaceAccess!(root, scopeId, options) } : {}),
     ...(context.inspectSurfaceRunIds ? { inspectSurfaceRunIds: () => context.inspectSurfaceRunIds!(root, scopeId, options) } : {}),
     ...(context.followSurfaceEvents ? { followEvents: signal => context.followSurfaceEvents!(root, scopeId, options, signal) } : {}) });
-  const target = `${scopeId} · ${chatTarget(chat, locale)}`;
+  const target = scopeId;
   // T2: theme and tier from what the terminal can draw and the person's setting; the banner and the clear from their settings (TERM=dumb never
   // clears). A config without a `terminal` section (scope from --scope) keeps every default.
   const presentation = (config['terminal'] ?? {}) as { readonly theme?: TerminalThemeSetting; readonly banner?: WorklineStartup['banner']; readonly clearOnStart?: boolean };
@@ -393,7 +393,7 @@ export async function terminalCommand(argv: readonly string[], context: Terminal
     selfSource: await context.selfSourceProject?.(root) ?? false,
     labels: { ...worklineLabels(locale, [t('terminal.status.chat', { target: chatTarget(chat, locale) }, locale), ...(serviceLine ? [serviceLine] : [])].join(' · ')),
       ...(pickerNeedsTextFallback(env, true) ? {} : { windows: slashWindowLabels(locale) }) },
-    target, systemPrompt: t('terminal.chat.systemPrompt', {}, locale), historyMessages, projectRoot: root,
+    target, model: chatTarget(chat, locale), systemPrompt: t('terminal.chat.systemPrompt', {}, locale), historyMessages, projectRoot: root,
     // Owner 2026-10-08: `/clear` clears screen and scrollback; no escape sequence on TERM=dumb (and never to a non-TTY).
     // NO_COLOR concerns colour only, so it does not stop the clear.
     clearScreen: env['TERM']?.trim().toLowerCase() !== 'dumb',
