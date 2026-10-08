@@ -26,7 +26,7 @@ export async function archiveState(layout: ProductLayout, projectRoot: string, i
     const info = await lstat(file).catch(error => { if (error.code === 'ENOENT') return null; throw error; });
     if (!info) return;
     if (info.isDirectory()) {
-      if (info.uid !== process.getuid?.() || (info.mode & 0o077)) return refuse('BACKUP_PATH_UNSAFE');
+      if (info.uid !== process.getuid?.() || (info.mode & 0o022)) return refuse('BACKUP_DIRECTORY_UNSAFE', { path: file });
       const names: string[] = [];
       for await (const item of await opendir(file)) { if (names.length >= limits.maxFiles) return refuse('BACKUP_LIMIT'); names.push(item.name); }
       for (const name of names.sort()) await collect(resource, join(file, name), path ? path + '/' + name : name, depth + 1);

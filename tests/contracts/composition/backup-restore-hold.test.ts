@@ -18,10 +18,11 @@ import { inspectConfiguredRecoveryFiles } from '#composition/core/backup/index.j
 import { runKernelCommand } from '#surfaces/core/cli/index.js';
 
 /** Astra 2471 R1: every publication rename of a restore can fail (or the process can die); the installation then stays held. */
-const gate = vi.hoisted(() => ({ failAt: 0, seen: 0, under: [] as string[] }));
+const gate = vi.hoisted(() => ({ failAt: 0, seen: 0, under: [] as string[], mkdirs: [] as string[] }));
 vi.mock('node:fs/promises', async importOriginal => {
   const real = await importOriginal<typeof import('node:fs/promises')>();
-  return { ...real, rename: async (from: Parameters<typeof real.rename>[0], to: Parameters<typeof real.rename>[1]) => {
+  return { ...real, mkdir: (async (path: Parameters<typeof real.mkdir>[0], options?: Parameters<typeof real.mkdir>[1]) => { gate.mkdirs.push(String(path)); return real.mkdir(path, options); }) as typeof real.mkdir,
+    rename: async (from: Parameters<typeof real.rename>[0], to: Parameters<typeof real.rename>[1]) => {
     const path = String(to);
     if (gate.failAt && gate.under.some(root => path.startsWith(root + '/')) && !path.endsWith('restore-hold.json') && ++gate.seen === gate.failAt)
       throw Object.assign(new Error('injected publication failure'), { code: 'EIO' });
@@ -158,6 +159,23 @@ it('an interrupted restore stages in the private .deckent area without the decry
   await restore(f);
   for (const path of [...planted, keyTemp, pendingHold]) expect(await present(path)).toBe(false);
   expect(await present(join(area, '.backup-restore-not-a-uuid'))).toBe(true);
-  expect(JSON.parse(await doctor(['--json'])).recoveryFiles).toEqual({ leftovers: [] });
+  expect(JSON.parse(await doctor(['--json'])).recoveryFiles).toEqual({ leftovers: [], installationDirectory: { path: area, mode: '0700' } });
   await startsAndStops(f);
+}, 60_000);
+
+it('a .deckent readable by others (0755) restores in place without a manual step; one others can write is refused before staging with the path and chmod 700 (S1 D2)', async () => {
+  const f = await fixture(), area = join(f.root, '.deckent');
+  await chmod(area, 0o755); await writeFile(join(f.root, '.deckent/config.json'), '{broken'); clearConfigCache();
+  await restore(f); expect((await lstat(area)).mode & 0o777).toBe(0o755); clearConfigCache();
+  await expect(loadConfig(f.root, { env: f.env })).resolves.toMatchObject({ projectRoot: resolve(f.root) });
+  let text = ''; await runKernelCommand(['doctor', '--json'], { root: f.root, env: f.env, stdout: { write: (chunk: string) => { text += chunk; return true; } }, inspectRecoveryFiles: inspectConfiguredRecoveryFiles });
+  expect(JSON.parse(text).recoveryFiles.installationDirectory).toEqual({ path: area, mode: '0755' });
+  text = ''; await runKernelCommand(['doctor', '--lang', 'en'], { root: f.root, env: f.env, stdout: { write: (chunk: string) => { text += chunk; return true; } }, inspectRecoveryFiles: inspectConfiguredRecoveryFiles });
+  expect(text).toContain(`The installation directory ${area} has mode 0755`); expect(text).toContain(`chmod 700 ${area}`);
+  await chmod(area, 0o775); gate.mkdirs = [];
+  const refused = await restore(f).then(() => null, (error: { code?: string; params?: Record<string, string>; message?: string }) => error);
+  expect(refused).toMatchObject({ code: 'BACKUP_DIRECTORY_UNSAFE', params: { path: area } }); expect(refused?.message).toContain(`chmod 700 ${area}`);
+  expect(gate.mkdirs.filter(path => path.includes('.backup-restore-'))).toEqual([]);
+  expect(await present(f.hold)).toBe(false); expect((await lstat(area)).mode & 0o777).toBe(0o775);
+  await chmod(area, 0o700); await restore(f); await startsAndStops(f);
 }, 60_000);

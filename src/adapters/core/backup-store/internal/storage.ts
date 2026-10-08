@@ -8,7 +8,7 @@ import type { BackupCommand, BackupResult, BackupStoragePort } from '#engine/ind
 import { ledgerFingerprint } from './fingerprint.js';
 import { createBackupSet, verifyBackupSet, type VerifiedBackup } from './set.js';
 import { BACKUP_RESOURCES, directoryResources, splitArchivedConfig, type BackupConfigLayers, type BackupLimits } from './archive.js';
-import { inside, privateDirectory, readPrivate, refuse, safePath, syncDirectory, writePrivate } from './files.js';
+import { inside, ownerOnlyWritable, privateDirectory, readPrivate, refuse, safePath, syncDirectory, writePrivate } from './files.js';
 const FIXED = ['config', 'projectIdentity', 'installationJournal'];
 const STAGE_PREFIX = '.backup-restore-', KEY_TEMP_INFIX = '.restore-', UUID = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}';
 const escape = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -85,6 +85,9 @@ export class FileBackupStorage implements BackupStoragePort {
     for (let i = 0; i < paths.length; i++) for (let j = i + 1; j < paths.length; j++)
       if (inside(paths[i]!, paths[j]!) || inside(paths[j]!, paths[i]!)) return refuse('BACKUP_PATH_UNSAFE');
     for (const path of [...paths, productResourcePath(layout, 'ledger'), productResourcePath(layout, 'approvals')]) await safePath(path);
+    // S1 D2: every existing directory this restore writes into is checked before staging, custody or any write.
+    for (const directory of new Set([dirname(hold), ...paths.map(path => dirname(path)), productResourcePath(layout, 'approvals'), ...(exists ? [] : [dirname(target)])]))
+      await ownerOnlyWritable(directory);
     const socket = productResourcePath(layout, 'runtimeSocket');
     if (await lstat(socket).catch(error => { if (error.code === 'ENOENT') return null; throw error; })) return refuse('BACKUP_SERVICE_RUNNING');
     if (!exists) { await privateDirectory(dirname(target)); await mkdir(target, { mode: 0o700 }); }
