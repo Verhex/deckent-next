@@ -2572,7 +2572,7 @@
         "src/domain/core/principal",
         "src/platform/core/integrity"
       ],
-      "plan": "BACKUP-COMMAND"
+      "plan": "INSTALLATION"
     },
     "src/adapters/core/backup-store": {
       "dependencies": [
@@ -2588,7 +2588,7 @@
         "src/platform/core/utils",
         "src/platform/core/config"
       ],
-      "plan": "BACKUP-COMMAND"
+      "plan": "INSTALLATION"
     },
     "src/composition/core/backup": {
       "dependencies": [
@@ -2608,7 +2608,7 @@
         "src/adapters/core/contract",
         "src/platform/core/managed-files"
       ],
-      "plan": "BACKUP-COMMAND"
+      "plan": "INSTALLATION"
     }
   },
   "composition": {
