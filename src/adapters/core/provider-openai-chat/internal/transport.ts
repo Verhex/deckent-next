@@ -15,7 +15,7 @@ const adapterOf = (definition: OpenAiChatHttpDefinition) => ({ id: OPENAI_CHAT_H
 export type PreparedOpenAiChatRequest = Readonly<{ definition: OpenAiChatHttpDefinition; limits: OpenAiChatHttpLimits;
   request: OpenAiChatTextRequest; body: string }>;
 export interface OpenAiChatNativePortOptions {
-  readonly onUsage?: (prepared: PreparedOpenAiChatRequest, usage: JsonObject) => void;
+  readonly onUsage?: (prepared: PreparedOpenAiChatRequest, usage: JsonObject, serviceTier?: unknown) => void;
   readonly resolveCredential?: (reference: string, signal?: AbortSignal) => Promise<string | undefined>;
   /** The scope's secret prefix-cache salt (composition: HMAC under the installation's salt secret). Required by a binding that declares
    * prefix-cache-salt: without it, or when it fails, nothing is sent (fail closed, never a derivable salt). */
@@ -125,7 +125,7 @@ async function sendPreparedOpenAiChatHttpRequest(prepared: PreparedOpenAiChatReq
       adapter: adapterOf(prepared.definition) },
     // A streamed request is parsed incrementally whether or not a caller observes its deltas.
     prepared.request.stream === true
-      ? { ...transport, stream: createOpenAiChatStream(prepared.request, prepared.limits, usage => options.onUsage?.(prepared, usage)), ...(onDelta ? { onDelta } : {}) }
+      ? { ...transport, stream: createOpenAiChatStream(prepared.request, prepared.limits, (usage, serviceTier) => options.onUsage?.(prepared, usage, serviceTier)), ...(onDelta ? { onDelta } : {}) }
       : { ...transport, parseResponse: body => parseResponse(body, prepared) }, signal);
   } catch (error) {
     if (!(error instanceof NativeJsonHttpError)) throw error;

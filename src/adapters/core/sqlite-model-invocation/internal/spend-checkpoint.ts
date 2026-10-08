@@ -58,6 +58,7 @@ export function decodeSpendReservation(row: { record?: unknown; digest?: unknown
     if (!row || typeof row.record !== 'string') throw new ProviderSpendError('PROVIDER_SPEND_INVALID');
     const receipt = parseProviderSpendManagementReceipt(JSON.parse(row.record) as ProviderSpendManagementReceipt), command = receipt.command;
     if (receipt.digest !== row.digest || receipt.digest !== correction.receiptDigest || command.kind !== 'reconcile'
+      || receipt.replacedUpperBoundExactMinorUnits !== (reservation.disposition.state === 'settled-measured-tariff' ? reservation.measurement!.exactMinorUnits : undefined)
       || command.invocationId !== d.invocationId || command.scopeId !== d.scopeId || command.budgetRevision !== correction.budgetRevision || command.resolution !== correction.resolution
       || command.exactMinorUnits !== correction.exactMinorUnits || command.evidence.kind !== correction.evidenceKind
       || command.evidence.digest !== correction.evidenceDigest) throw new ProviderSpendError('PROVIDER_SPEND_INVALID');

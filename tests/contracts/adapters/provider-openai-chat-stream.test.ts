@@ -250,3 +250,22 @@ it('accepts a long legitimate answer whose SSE framing exceeds the evidence mult
   const result = await port.send(prepared);
   expect(result).toMatchObject({ native: { choices: [{ message: { content: 'x'.repeat(130) }, finish_reason: 'stop' }] } });
 });
+
+it('preserves authoritative service_tier alongside streamed and interrupted usage and refuses a conflicting tier', () => {
+  const event = (tier: string, withUsage = false) => `data: ${JSON.stringify({ id: 's', object: 'chat.completion.chunk', created: 1,
+    model: 'configured-model', service_tier: tier, choices: withUsage ? [] : [{ index: 0, delta: { content: 'ok' }, finish_reason: 'stop' }],
+    ...(withUsage ? { usage: { prompt_tokens: 100, completion_tokens: 3, total_tokens: 103,
+      prompt_tokens_details: { cached_tokens: 40, cache_write_tokens: 20 } } } : {}) })}\n\n`;
+  const observed: unknown[] = [];
+  const parser = createOpenAiChatStream(streamed(), limits, (usage, serviceTier) => observed.push({ usage, serviceTier }));
+  parser.push(Buffer.from(event('priority') + event('priority', true) + DONE));
+  expect(parser.finish()).toMatchObject({ response: { native: { service_tier: 'priority' }, usage: { prompt_tokens_details: { cache_write_tokens: 20 } } } });
+  expect(observed).toMatchObject([{ serviceTier: 'priority', usage: { prompt_tokens: 100 } }]);
+  const interrupted = createOpenAiChatStream(streamed(), limits, (usage, serviceTier) => observed.push({ usage, serviceTier }));
+  interrupted.push(Buffer.from(event('default') + event('default', true)));
+  expect(interrupted.finish()).toMatchObject({ reason: 'interrupted' });
+  expect(observed[1]).toMatchObject({ serviceTier: 'default' });
+  const conflict = createOpenAiChatStream(streamed(), limits);
+  conflict.push(Buffer.from(event('default') + event('priority', true) + DONE));
+  expect(conflict.finish()).toMatchObject({ reason: 'invalid-response' });
+});

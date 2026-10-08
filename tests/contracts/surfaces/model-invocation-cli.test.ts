@@ -5,7 +5,8 @@ import { Readable } from 'node:stream';
 import { afterEach, expect, it } from 'vitest';
 import { main } from '../../fixtures/cli-input.js';
 import { parseModelInvocationCancellationReceipt } from '#domain/core/model-invocation/index.js';
-import { parseProviderSpendReservation, providerSpendQuoteDigest } from '#engine/index.js';
+import { providerSpendEvidenceDigest, parseProviderSpendReservation, providerSpendQuoteDigest } from '#engine/index.js';
+import { lookupOpenAiCompatibleTariff } from '#adapters/core/provider-openai-chat/index.js';
 import { clearConfigCache } from '#platform/index.js';
 const roots: string[] = [];
 afterEach(async () => { clearConfigCache(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
@@ -240,5 +241,32 @@ it('renders each parsed cancellation disposition with its actor in EN/TR and pre
         expect(input).toEqual(cancel); return result; },
     });
     expect(jsonCode).toBe(0); expect(json).toBe(`${JSON.stringify(result)}\n`); expect(json).not.toContain(`${ansi}[`);
+  }
+});
+
+it('renders measured-tariff upper-bound in EN/TR inspection without claiming the real provider charge', async () => {
+  const f = await fixture(), original = spending('settled-local');
+  const tariff = lookupOpenAiCompatibleTariff('https://api.deepseek.com/chat/completions', 'deepseek-flash')!;
+  const quote = { ...original.descriptor.quote, pricing: { id: 'openai-compatible-published-tariff', version: 1,
+    digest: providerSpendEvidenceDigest(tariff), definition: tariff } };
+  const quoteDigest = providerSpendQuoteDigest(quote);
+  const upper = parseProviderSpendReservation({ ...original, schemaVersion: 3, descriptor: { ...original.descriptor, quote, quoteDigest },
+    disposition: { state: 'settled-measured-tariff', amountMinorUnits: 3, evidenceDigest: 'e'.repeat(64) },
+    measurement: { schemaVersion: 1, basis: 'measured-tariff', currency: 'USD', exactMinorUnits: '3', roundedMinorUnits: 3,
+      quoteDigest, requestDigest: quote.requestDigest, profileDigest: quote.profileDigest,
+      responseContentDigest: 'c'.repeat(64), source: { id: 'openai-compatible-usage-tariff', version: 1, modelId: 'deepseek-flash',
+        tariffDigest: quote.pricing.digest, tier: 'upper-bound', cacheSplit: 'none', dimensions: [{ field: 'input', tokens: 100000, usdPerMillionTokens: '0.3' }] } } });
+  const corrected = parseProviderSpendReservation({ ...upper, reconciliation: { commandId: 'lower', budgetRevision: 1, resolution: 'settle',
+    exactMinorUnits: '1.5', evidenceKind: 'console-figure', evidenceDigest: 'a'.repeat(64), receiptDigest: 'b'.repeat(64) } });
+  for (const spending of [upper, corrected]) for (const language of ['en', 'tr']) {
+    let output = '';
+    expect(await main(['models', 'invocation', '--input', '-', '--lang', language], {
+      ...f, stdin: Readable.from([JSON.stringify(query)]), stdout: { write(text) { output += text; } },
+      inspectModelInvocation: async () => ({ ...query, schemaVersion: 7, invocation: purgedReceipt, purge: purgeReceipt,
+        control: null, spending, spendingHistoryIntegrity: 'not-recorded' }) as never,
+    })).toBe(0);
+    expect(output).toContain('upper-bound'); expect(output).toContain('3');
+    if (spending.reconciliation) expect(output).toContain('1.5');
+    expect(output).toContain(language === 'en' ? 'not the actual provider charge' : 'sağlayıcının gerçek ücreti değildir');
   }
 });

@@ -854,6 +854,7 @@
   "cli.help.action.revise-budget": "Kapsam bütçesini güncelle",
   "cli.help.modelsManageSpending": "Kullanım: deckent models reconcile-spending|revise-budget --input <dosya|-> [--json]",
   "models.spending.managementRecorded": "Harcama yönetimi makbuzu kaydedildi: {command}.",
+  "models.invocation.spendingUpperBound": "Üst sınır (upper-bound): {exactAmount} alt birim ({currency}); kullanım × peak tarife {tariff}. Bu sağlayıcının gerçek ücreti değildir.",
   "models.invocation.spendingSettledMeasuredTariff": "Kullanım × sabitlenmiş tarife: {exactAmount} alt birim ({currency}); kademe {tier}, tarife {tariff}.",
   "models.invocation.spendingReconciled": "Uzlaştırıldı: {resolution}, {exactAmount} alt birim ({currency}); makbuz {command}.",
   "cli.help.action.create-budget": "Kapsamın ilk harcama bütçesini oluştur",

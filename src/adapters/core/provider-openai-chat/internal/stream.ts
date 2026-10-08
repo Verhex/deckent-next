@@ -33,12 +33,13 @@ const chunkSchema = z.object({ id: z.string().min(1), object: z.literal('chat.co
  * is assembled provenance, never the provider's verbatim body). A stream that ends without `[DONE]`, a finish
  * reason and usage is interrupted, which the invocation records as an uncertain outcome; it is never retried.
  */
-export function createOpenAiChatStream(request: OpenAiChatTextRequest, limits: OpenAiChatHttpLimits, onUsage?: (usage: JsonObject) => void): NativeJsonHttpStream {
+export function createOpenAiChatStream(request: OpenAiChatTextRequest, limits: OpenAiChatHttpLimits, onUsage?: (usage: JsonObject, serviceTier?: unknown) => void): NativeJsonHttpStream {
   const hash = createHash('sha256'), decoder = new TextDecoder('utf-8', { fatal: true });
   let wireBytes = 0, chunks = 0, lineBytes = 0, eventBytes = 0, assembledBytes = 0;
   let line: Buffer[] = [], data: string[] = [];
   let invalid: ModelInvocationRejectionReason | null = null, doneSeen = false;
   let head: { id: string; created: number; model: string } | null = null, fingerprint: string | null = null;
+  let serviceTier: unknown = undefined;
   let content = '', reasoning = '', refusal = '', finish: string | null = null, usage: JsonObject | null = null;
   // Tool-call deltas assembled by index: the id is fixed once, name and arguments arrive in pieces (T-L2).
   const calls = new Map<number, { id: string | null; name: string; arguments: string }>();
@@ -55,11 +56,15 @@ export function createOpenAiChatStream(request: OpenAiChatTextRequest, limits: O
     if (chunk.model !== request.model) { fail('model-mismatch'); return false; }
     if (!head) head = { id: chunk.id, created: chunk.created, model: chunk.model };
     else if (chunk.id !== head.id) { fail('invalid-response'); return false; }
+    if (chunk['service_tier'] !== undefined && chunk['service_tier'] !== null) {
+      if (serviceTier !== undefined && serviceTier !== chunk['service_tier']) { fail('invalid-response'); return false; }
+      serviceTier = chunk['service_tier'];
+    }
     if (typeof chunk.system_fingerprint === 'string') fingerprint ??= chunk.system_fingerprint;
     if (chunk.usage !== undefined && chunk.usage !== null) {
       const checked = openAiChatUsageSchema.safeParse(chunk.usage);
       if (usage || !checked.success || checked.data.completion_tokens > request.max_completion_tokens) { fail('invalid-response'); return false; }
-      usage = (copied.data as Record<string, unknown>)['usage'] as JsonObject; onUsage?.(usage);
+      usage = (copied.data as Record<string, unknown>)['usage'] as JsonObject; onUsage?.(usage, serviceTier);
     }
     const choice = chunk.choices[0];
     if (!choice) return false;
@@ -154,6 +159,7 @@ export function createOpenAiChatStream(request: OpenAiChatTextRequest, limits: O
       const message = { role: 'assistant', content: content || null, ...(reasoning ? { reasoning } : {}), ...(refusal ? { refusal } : {}),
         ...(checked ? { tool_calls: checked.map(call => ({ id: call.id, type: 'function', function: { name: call.name, arguments: call.arguments } })) } : {}) };
       const native = { id: head.id, object: 'chat.completion', created: head.created, model: head.model,
+        ...(serviceTier === undefined ? {} : { service_tier: serviceTier }),
         ...(fingerprint === null ? {} : { system_fingerprint: fingerprint }),
         choices: [{ index: 0, finish_reason: finish, message }], usage,
         deckent_stream: { schemaVersion: 1, chunks, wireBytes, wireSha256: hash.digest('hex') } };

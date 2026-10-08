@@ -49,12 +49,16 @@ function renderSpending(spending: ProviderSpendReservation | null, locale: Local
   if (spending === null) return t('models.invocation.spendingAbsent', {}, locale);
   const quote = spending.descriptor.quote, parameters = { maximum: quote.maxChargeMinorUnits, currency: quote.currency,
     tariffId: quote.pricing.id, tariffVersion: quote.pricing.version };
-  if (spending.reconciliation) return t('models.invocation.spendingReconciled', { resolution: spending.reconciliation.resolution, exactAmount: spending.reconciliation.exactMinorUnits, currency: quote.currency, command: spending.reconciliation.commandId }, locale);
+  const measurement = spending.measurement;
+  const upperBoundLine = measurement?.basis === 'measured-tariff' && measurement.source.tier === 'upper-bound'
+    ? t('models.invocation.spendingUpperBound', { ...parameters, exactAmount: measurement.exactMinorUnits, tariff: measurement.source.tariffDigest }, locale) : null;
+  if (spending.reconciliation) return [t('models.invocation.spendingReconciled', { resolution: spending.reconciliation.resolution, exactAmount: spending.reconciliation.exactMinorUnits, currency: quote.currency, command: spending.reconciliation.commandId }, locale), ...(upperBoundLine ? [upperBoundLine] : [])].join('\n');
   if (spending.disposition.state === 'reserved') return t('models.invocation.spendingReserved', parameters, locale);
   if (spending.disposition.state === 'held') return t('models.invocation.spendingHeld', { ...parameters, reason: renderSpendingReason(spending.disposition.reason, locale) }, locale);
   if (spending.disposition.state === 'released-not-sent') return t('models.invocation.spendingReleasedNotSent', parameters, locale);
   if (spending.disposition.state === 'settled-measured-tariff') {
     if (!spending.measurement || spending.measurement.basis !== 'measured-tariff') throw new Error('PROVIDER_SPEND_INVALID');
+    if (upperBoundLine) return upperBoundLine;
     return t('models.invocation.spendingSettledMeasuredTariff', { ...parameters, exactAmount: spending.measurement.exactMinorUnits, tariff: spending.measurement.source.tariffDigest, tier: spending.measurement.source.tier ?? 'base' }, locale);
   }
   if (spending.disposition.state === 'settled-provider-reported') {

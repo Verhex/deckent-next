@@ -5,7 +5,7 @@ export { ProviderSpendError } from './internal/error.js';
 export type { ProviderSpendErrorCode, ProviderSpendNextAction } from './internal/error.js';
 export { parseProviderSpendReportedMeasurement } from './internal/reported.js';
 export type { ProviderSpendReportedMeasurement } from './internal/reported.js';
-export { addProviderSpendExactMinorUnits, canonicalProviderSpendExactMinorUnits, compareProviderSpendExactMinorUnits,
+export { subtractProviderSpendExactMinorUnits, addProviderSpendExactMinorUnits, canonicalProviderSpendExactMinorUnits, compareProviderSpendExactMinorUnits,
   ceilProviderSpendExactMinorUnits, providerSpendExactFromNumericSource } from './internal/exact.js';
 export { createProviderSpendCheckpoint, parseProviderSpendCheckpoint, providerSpendReservationDigest } from './internal/checkpoint.js';
 export type { ProviderSpendCheckpoint } from './internal/checkpoint.js';

@@ -56,8 +56,9 @@ it('settles actual usage including cached tokens at a declared non-zero tariff w
 it.each([
   ['https://api.openai.com/v1/chat/completions', 'chat-latest', '0.062'],
   ['https://api.z.ai/api/paas/v4/chat/completions', 'glm-4.7', '0.00624'],
-  ['https://api.deepseek.com/chat/completions', 'deepseek-flash', null],
-] as const)('matches verified tariff usage for %s; ambiguous scheduled rates remain held', async (endpoint, model, exact) => {
+  ['https://api.deepseek.com/chat/completions', 'deepseek-flash', '0.003024'],
+  ['https://api.deepseek.com/chat/completions', 'deepseek-v4-pro', '0.012056'],
+] as const)('matches verified tariff usage for %s; scheduled rates carry upper-bound', async (endpoint, model, exact) => {
   vi.spyOn(http, 'sendNativeJsonHttp').mockImplementation(async (_request, options) => {
     const parsed = options!.parseResponse!(Buffer.from(JSON.stringify({ id: 'completion', object: 'chat.completion', created: 1, model,
       choices: [{ index: 0, finish_reason: 'stop', message: { role: 'assistant', content: 'ok' } }],
@@ -68,7 +69,7 @@ it.each([
   const prepared = await priced.native.prepare(f.profile, f.definition, f.request), quote = priced.quote({ ...f, prepared });
   const response = await priced.native.send(prepared); if ('kind' in response) throw new Error('fixture');
   const measurement = priced.native.observeSpending!(prepared, response);
-  if (exact === null) { expect(measurement).toBeNull(); return; }
+  if (model.startsWith('deepseek-')) expect(measurement?.basis === 'measured-tariff' && measurement.source.tier).toBe('upper-bound');
   expect(measurement).toMatchObject({ basis: 'measured-tariff', exactMinorUnits: exact, source: { tariffDigest: quote.pricing.digest,
     dimensions: [{ field: 'input', tokens: 60 }, { field: 'cached-input', tokens: 40 }, { field: 'output', tokens: 10 }] } });
   const budget = { schemaVersion: 1, scopeId: 'scope', budgetId: 'budget', revision: 1, currency: 'USD', limitMinorUnits: 1000 };
@@ -85,4 +86,81 @@ it('accepts exact fractional-cent operator rates and reserves the dearest cache 
   expect(quote.maxChargeMinorUnits).toBeGreaterThan(0);
   expect(quote.meter.evidence).toMatchObject({ calculation: { usdPerMTok: { input: '0.005', cachedInput: '0.1025', output: '0' } } });
   expect(() => quoteOpenAiChatOperatorTariff(fixture('https://operator.example/chat', { ...tariff, inputMinorUnitsPerMillionTokens: 0.1 }))).toThrow('OPENAI_CHAT_DEFINITION_INVALID');
+});
+
+it.each([
+  ['gpt-6-astra', '0.119'], ['gpt-6.1-sol', '0.0234'], ['gpt-6-luna', '0.00119'],
+] as const)('prices %s cache writes exclusively and reserves dearest Chat processing/context rates', async (model, exact) => {
+  const endpoint = 'https://api.openai.com/v1/chat/completions';
+  const f = fixture(endpoint, lookupOpenAiCompatibleTariff(endpoint, model), model), priced = createOpenAiChatPricedNative();
+  let serviceTier = 'default', written: unknown = 20, prompt = 100;
+  vi.spyOn(http, 'sendNativeJsonHttp').mockImplementation(async (_request, options) => {
+    const parsed = options!.parseResponse!(Buffer.from(JSON.stringify({ id: 'c', object: 'chat.completion', created: 1, model, service_tier: serviceTier,
+      choices: [{ index: 0, finish_reason: 'stop', message: { role: 'assistant', content: 'ok' } }],
+      usage: { prompt_tokens: prompt, completion_tokens: 10, total_tokens: prompt + 10,
+        prompt_tokens_details: { cached_tokens: 40, cache_write_tokens: written }, completion_tokens_details: { reasoning_tokens: 5 } } })));
+    if (!('response' in parsed)) throw new Error('fixture'); return parsed.response;
+  });
+  const observe = async () => {
+    const prepared = await priced.native.prepare(f.profile, f.definition, f.request), quote = priced.quote({ ...f, prepared });
+    const response = await priced.native.send(prepared); if ('kind' in response) throw new Error('fixture');
+    return { measurement: priced.native.observeSpending!(prepared, response), quote };
+  };
+  const first = await observe();
+  expect(first.measurement).toMatchObject({ exactMinorUnits: exact, source: { tier: 0, serviceTier: 'default', cacheSplit: 'reported',
+    dimensions: [{ field: 'input', tokens: 40 }, { field: 'cached-input', tokens: 40 }, { field: 'cache-write', tokens: 20 }, { field: 'output', tokens: 10 }] } });
+  const budget = { schemaVersion: 1, scopeId: 'scope', budgetId: 'budget', revision: 1, currency: 'USD', limitMinorUnits: 1000 };
+  const reserved = reserveProviderSpend(createProviderSpendAccount(budget), budget, { schemaVersion: 1, scopeId: 'scope', budgetId: 'budget', budgetRevision: 1,
+    invocationId: 'tiered', currency: 'USD', quote: first.quote, quoteDigest: providerSpendQuoteDigest(first.quote) });
+  expect(settleProviderSpend(reserved.account, reserved.reservation, { kind: 'measured-tariff', measurement: first.measurement, evidenceDigest: 'b'.repeat(64) }).account)
+    .toMatchObject({ reservedMinorUnits: 0, settledExactMinorUnits: exact, frozen: false });
+  const tariff = lookupOpenAiCompatibleTariff(endpoint, model)!;
+  if (tariff.version !== 2) throw new Error('fixture');
+  expect(first.quote.meter.evidence).toMatchObject({ calculation: { usdPerMTok: tariff.processingTiers.find(t => t.serviceTier === 'priority')!.longContextUsdPerMTok } });
+  for (serviceTier of ['flex', 'priority', 'fast']) {
+    expect((await observe()).measurement).toMatchObject({ source: { serviceTier: serviceTier === 'fast' ? 'priority' : serviceTier } });
+  }
+  for (written of [undefined, -1, 61, 0.5, '20']) expect((await observe()).measurement).toBeNull();
+  written = 20; serviceTier = 'unknown'; expect((await observe()).measurement).toBeNull();
+  serviceTier = 'default'; prompt = 272000; expect((await observe()).measurement).toMatchObject({ source: { tier: 0 } });
+  prompt = 272001; expect((await observe()).measurement).toMatchObject({ source: { tier: 1 } });
+});
+
+it('records a verified remote free GLM tariff as measured-tariff zero, never as legacy zero', async () => {
+  const endpoint = 'https://api.z.ai/api/paas/v4/chat/completions', model = 'glm-4.7-flash';
+  const tariff = lookupOpenAiCompatibleTariff(endpoint, model)!;
+  const f = fixture(endpoint, tariff, model), priced = createOpenAiChatPricedNative();
+  vi.spyOn(http, 'sendNativeJsonHttp').mockImplementation(async (_request, options) => {
+    const parsed = options!.parseResponse!(Buffer.from(JSON.stringify({ id: 'c', object: 'chat.completion', created: 1, model,
+      choices: [{ index: 0, finish_reason: 'stop', message: { role: 'assistant', content: 'ok' } }],
+      usage: { prompt_tokens: 100, completion_tokens: 10, total_tokens: 110 } })));
+    if (!('response' in parsed)) throw new Error('fixture'); return parsed.response;
+  });
+  const prepared = await priced.native.prepare(f.profile, f.definition, f.request), quote = priced.quote({ ...f, prepared });
+  const response = await priced.native.send(prepared); if ('kind' in response) throw new Error('fixture');
+  expect(quote).toMatchObject({ maxChargeMinorUnits: 0, pricing: { id: 'openai-compatible-published-tariff', definition: { kind: 'vendor-published' } } });
+  expect(priced.native.observeSpending!(prepared, response)).toMatchObject({ basis: 'measured-tariff', exactMinorUnits: '0', source: { tariffDigest: quote.pricing.digest } });
+});
+
+it.each([
+  ['https://api.openai.com/v1/chat/completions', 'gpt-6.1-sol', '0.0234', 0],
+  ['https://api.deepseek.com/chat/completions', 'deepseek-flash', '0.003024', 'upper-bound'],
+] as const)('retains interrupted stream usage for %s without fabricating missing usage', async (endpoint, model, exact, tier) => {
+  const f = fixture(endpoint, lookupOpenAiCompatibleTariff(endpoint, model), model), priced = createOpenAiChatPricedNative();
+  Object.assign(f.request, { stream: true, stream_options: { include_usage: true } });
+  f.requestDigest = modelInvocationRequestDigest(f.command);
+  let withUsage = false;
+  vi.spyOn(http, 'sendNativeJsonHttp').mockImplementation(async (_request, options) => {
+    if (withUsage) options!.stream!.push(Buffer.from(`data: ${JSON.stringify({ id: 's', object: 'chat.completion.chunk', created: 1, model,
+      service_tier: 'default', choices: [], usage: { prompt_tokens: 100, completion_tokens: 10, total_tokens: 110,
+        prompt_tokens_details: { cached_tokens: 40, cache_write_tokens: 20 } } })}\n\n`));
+    throw new Error('fixture-interrupted');
+  });
+  for (withUsage of [false, true]) {
+    const prepared = await priced.native.prepare(f.profile, f.definition, f.request); priced.quote({ ...f, prepared });
+    await expect(priced.native.send(prepared)).rejects.toThrow('fixture-interrupted');
+    const measurement = priced.native.observePartialSpending!(prepared, 'c'.repeat(64));
+    if (!withUsage) expect(measurement).toBeNull();
+    else expect(measurement).toMatchObject({ basis: 'measured-tariff', exactMinorUnits: exact, source: { tier } });
+  }
 });

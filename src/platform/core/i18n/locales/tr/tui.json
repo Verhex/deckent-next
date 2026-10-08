@@ -911,6 +911,7 @@
   "tui.panel.provider.modelEmpty": "Bu sağlayıcı henüz bağlanacak model listelemiyor.",
   "tui.panel.provider.keyName": "Anahtar adı",
   "tui.provider.model.priceRequired": "Uzak adres için önce doğrulanmış fiyat gerekir; burada fiyat bildirmek henüz yok (ücretli çağrı reddedilir).",
+  "tui.provider.model.currencyUnsupported": "Fiyatlar CNY; kapsam bütçeleri yalnız USD destekler. Model bağlantısı kilitli.",
   "tui.provider.model.priceUnverified": "Fiyat doğrulanmadı — ücretli çağrı reddedilir.",
   "tui.provider.model.field.carried": "Etkin kaldı",
   "tui.provider.model.field.notCarried": "Etkinleştirme gerekli",

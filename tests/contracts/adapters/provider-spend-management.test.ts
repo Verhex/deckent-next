@@ -5,9 +5,10 @@ import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, expect, it } from 'vitest';
 import { openSqliteModelActivationStore, openSqliteModelInvocationStore, openSqliteProviderSpendManagementStore, openSqliteProviderSpendIntegrityReader, upgradeExistingProductLedger } from '#adapters/index.js';
+import { lookupOpenAiCompatibleTariff } from '#adapters/core/provider-openai-chat/index.js';
 import { encodeModelBindingDefinition, parseProviderCatalog, resolveModelBindingDefinition } from '#domain/index.js';
 import { createModelInvocationResponseEvidence, ProviderSpendManagementApplication, parseProviderSpendCheckpoint, verifyProviderSpendIntegrity, providerSpendReservationDigest, modelInvocationProfileDigest, modelInvocationRequestDigest, modelInvocationResponseContentDescriptor,
-  providerSpendQuoteDigest, type ProviderSpendTariffMeasurement } from '#engine/index.js';
+  providerSpendEvidenceDigest, providerSpendQuoteDigest, type ProviderSpendTariffMeasurement } from '#engine/index.js';
 
 const roots: string[] = [];
 afterEach(async () => Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))));
@@ -171,4 +172,41 @@ it('records a console correction over the budget, freezes new spending and still
   expect(checkpoint(f.path).account).toMatchObject({ reservedMinorUnits: 0, settledExactMinorUnits: '25.1', frozen: true });
   const reader = await openSqliteProviderSpendIntegrityReader(f.path, { busyTimeoutMs: 20 });
   try { expect(await verifyProviderSpendIntegrity(reader, 'scope', 2)).toMatchObject({ settledExactMinorUnits: '25.1' }); } finally { reader.close(); }
+});
+
+it('governs one DeepSeek upper-bound reduction, retains original inspection evidence, and audits the corrected fold once', async () => {
+  const base = await fixture(), store = await openSqliteModelInvocationStore(base.path, options, 'forbid'), f = admission(base, 'upper-bound');
+  const tariff = lookupOpenAiCompatibleTariff('https://api.deepseek.com/chat/completions', 'deepseek-flash')!;
+  f.quote.pricing = { ...f.quote.pricing, id: 'openai-compatible-published-tariff', definition: tariff as never, digest: providerSpendEvidenceDigest(tariff) };
+  const claim = (await store.claim(f.input)).record.receipt.claim; await store.permitSend(claim, 'owner', 3);
+  const measurement: ProviderSpendTariffMeasurement = { schemaVersion: 1, basis: 'measured-tariff', currency: 'USD', exactMinorUnits: '3', roundedMinorUnits: 3,
+    quoteDigest: providerSpendQuoteDigest(f.quote), requestDigest: f.quote.requestDigest, profileDigest: f.quote.profileDigest,
+    responseContentDigest: modelInvocationResponseContentDescriptor(response).digest,
+    source: { id: 'openai-compatible-usage-tariff', version: 1, modelId: 'deepseek-flash', tariffDigest: f.quote.pricing.digest, tier: 'upper-bound', cacheSplit: 'none',
+      dimensions: [{ field: 'input', tokens: 100000, usdPerMillionTokens: '0.3' }] } };
+  await store.recordResponse(claim, response, 5, measurement); store.close();
+  const original = checkpoint(base.path);
+  expect(original.account).toMatchObject({ reservedMinorUnits: 0, settledExactMinorUnits: '3' });
+  const f2 = { ...base, invocationId: f.input.invocationId }, command = { ...reconcile(f2, 'settle'), exactMinorUnits: '1.5' };
+  const app = application(base.path);
+  await expect(application(base.path, false).execute(command)).rejects.toThrow('POLICY_DENIED');
+  for (const changed of [{ exactMinorUnits: '3.01' }, { resolution: 'release', exactMinorUnits: '0' }, { budgetRevision: 2 }]) {
+    await expect(app.execute({ ...command, ...changed })).rejects.toThrow('PROVIDER_SPEND_CONFLICT');
+    expect(checkpoint(base.path)).toEqual(original);
+  }
+  await expect(app.execute(command, undefined, 1)).rejects.toThrow('PROVIDER_SPEND_RESULT_LIMIT');
+  expect(checkpoint(base.path)).toEqual(original);
+  const result = await app.execute(command);
+  expect(result.receipt).toMatchObject({ replacedUpperBoundExactMinorUnits: '3', after: { reservedMinorUnits: 0, settledExactMinorUnits: '1.5' } });
+  expect(await app.execute(command)).toMatchObject({ replayed: true, receipt: result.receipt });
+  await expect(app.execute({ ...command, commandId: 'again', expectedCheckpointDigest: checkpoint(base.path).digest })).rejects.toThrow('PROVIDER_SPEND_CONFLICT');
+  const reader = await openSqliteProviderSpendIntegrityReader(base.path, { busyTimeoutMs: 20 });
+  try {
+    const page = await reader.readPage({ scopeId: 'scope', checkpoint: null, afterInvocationId: null, limit: 2 });
+    expect(page!.reservations[0]).toMatchObject({ disposition: { state: 'settled-measured-tariff', amountMinorUnits: 3 },
+      measurement: { exactMinorUnits: '3', source: { tier: 'upper-bound' } }, reconciliation: { exactMinorUnits: '1.5', evidenceDigest: command.evidence.digest } });
+    expect(await verifyProviderSpendIntegrity(reader, 'scope', 2)).toMatchObject({ settledExactMinorUnits: '1.5' });
+  } finally { reader.close(); }
+  const db = new DatabaseSync(base.path);
+  try { expect(() => db.exec('DELETE FROM provider_spend_management')).toThrow('PROVIDER_SPEND_APPEND_ONLY'); } finally { db.close(); }
 });

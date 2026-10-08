@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import { counterSchema, identitySchema, immutableJsonObjectSchema, providerSpendBudgetSchema, providerSpendReservationDescriptorSchema,
   parseProviderSpendBudget, parseProviderSpendQuote, parseProviderSpendReservationDescriptor, type ProviderSpendBudget } from '#domain/index.js';
-import { addProviderSpendExactMinorUnits, canonicalProviderSpendExactMinorUnits, ceilProviderSpendExactMinorUnits } from './exact.js';
+import { addProviderSpendExactMinorUnits, canonicalProviderSpendExactMinorUnits, ceilProviderSpendExactMinorUnits, compareProviderSpendExactMinorUnits } from './exact.js';
 import { ProviderSpendError } from './error.js';
 import { parseProviderSpendMeasurement, type ProviderSpendMeasurement } from './measured.js';
 
@@ -85,7 +85,9 @@ export function parseProviderSpendReservation(input: unknown): ProviderSpendRese
       ? state.observedMinorUnits === null || state.observedMinorUnits <= cap
         || (measurement !== null && state.observedMinorUnits !== measurement.roundedMinorUnits)
       : state.observedMinorUnits !== null))) throw new ProviderSpendError('PROVIDER_SPEND_INVALID');
-  if (value.reconciliation && (value.schemaVersion !== 3 || state.state !== 'held'
+  if (value.reconciliation && (value.schemaVersion !== 3 || (state.state !== 'held' && !isProviderSpendUpperBound(value))
+    || (isProviderSpendUpperBound(value) && (value.reconciliation.resolution !== 'settle' || value.reconciliation.evidenceKind === 'write-off'
+      || compareProviderSpendExactMinorUnits(value.reconciliation.exactMinorUnits, measurement!.exactMinorUnits) > 0))
     || canonicalProviderSpendExactMinorUnits(value.reconciliation.exactMinorUnits) !== value.reconciliation.exactMinorUnits
     || (value.reconciliation.resolution !== 'settle' && value.reconciliation.exactMinorUnits !== '0'))) throw new ProviderSpendError('PROVIDER_SPEND_INVALID');
   return Object.freeze(value);
@@ -134,4 +136,14 @@ export function settleProviderSpend(accountInput: unknown, reservationInput: unk
       ? { state: 'released-not-sent', evidenceDigest: settlement.evidenceDigest }
       : settlement.kind === 'measured-local' ? { state: 'settled-local', amountMinorUnits: settlement.amountMinorUnits, evidenceDigest: settlement.evidenceDigest }
       : { state: measurement!.basis === 'measured-tariff' ? 'settled-measured-tariff' : 'settled-provider-reported', amountMinorUnits: measurement!.roundedMinorUnits, evidenceDigest: settlement.evidenceDigest } }) });
+}
+
+/** Only the owner-admitted scheduled DeepSeek measured upper bound is eligible for a governed reduction. */
+export function isProviderSpendUpperBound(reservation: ProviderSpendReservation): boolean {
+  const price = reservation.descriptor.quote.pricing.definition;
+  return reservation.disposition.state === 'settled-measured-tariff' && reservation.measurement?.basis === 'measured-tariff'
+    && reservation.measurement.source.tier === 'upper-bound' && reservation.measurement.source.id === 'openai-compatible-usage-tariff'
+    && reservation.descriptor.quote.pricing.id === 'openai-compatible-published-tariff'
+    && price['modelId'] === reservation.measurement.source.modelId && price['version'] === 1
+    && price['kind'] === 'vendor-published' && price['vendor'] === 'deepseek' && price['schedule'] === 'provider-tier-required';
 }

@@ -37,7 +37,7 @@ export function quoteOpenAiChatOperatorTariff(input: ModelInvocationSpendingInpu
     profileDigest: input.profileDigest, pricing: { id: tariff.kind === 'operator-static' ? OPERATOR_TARIFF_PRICING_ID : 'openai-compatible-published-tariff', version: tariff.version, digest: tariffDigest, definition: tariff },
     meter: { id: OPENAI_CHAT_OPERATOR_TARIFF_METER_ID, version: 1, evidenceDigest: providerSpendEvidenceDigest(evidence), evidence },
     currency: tariff.currency, maxChargeMinorUnits: ceilProviderSpendExactMinorUnits(measuredTariffExactMinorUnits([
-      { field: 'input', tokens: openAiChatPromptUpperBound(input.command.nativeRequest), usdPerMillionTokens: compareProviderSpendExactMinorUnits(rates.input, rates.cachedInput) >= 0 ? rates.input : rates.cachedInput },
+      { field: 'input', tokens: openAiChatPromptUpperBound(input.command.nativeRequest), usdPerMillionTokens: [rates.input, rates.cachedInput, 'cacheWrite' in rates ? rates.cacheWrite! : rates.input].reduce((a, b) => compareProviderSpendExactMinorUnits(a, b) >= 0 ? a : b) },
       { field: 'output', tokens: request.max_completion_tokens, usdPerMillionTokens: rates.output }])) });
 }
 
@@ -45,7 +45,12 @@ export function quoteOpenAiChatOperatorTariff(input: ModelInvocationSpendingInpu
 export function openAiCompatibleTariffRates(tariff: ReturnType<typeof parseOpenAiChatHttpDefinition>['tariff'], endpoint: string, modelId: string) {
   if (tariff.kind === 'vendor-published') {
     if (!verifiedOpenAiCompatibleTariff(tariff, endpoint, modelId)) throw new ProviderSpendError('PROVIDER_SPEND_TARIFF_UNVERIFIED');
-    return tariff.usdPerMTok;
+    if (tariff.version === 1) return tariff.usdPerMTok;
+    // Auto project processing can select Fast. Bound each class over every published applicable Chat tier/context.
+    const tiers = tariff.processingTiers.flatMap(tier => [tier.usdPerMTok, tier.longContextUsdPerMTok]);
+    const maximum = (field: 'input' | 'cachedInput' | 'cacheWrite' | 'output') => tiers.map(tier => providerSpendExactFromNumericSource(tier[field], 1))
+      .reduce((a, b) => compareProviderSpendExactMinorUnits(a, b) >= 0 ? a : b);
+    return { input: maximum('input'), cachedInput: maximum('cachedInput'), cacheWrite: maximum('cacheWrite'), output: maximum('output') };
   }
   const url = new URL(endpoint), loopback = ['127.0.0.1', '[::1]', 'localhost'].includes(url.hostname);
   if (!loopback && tariff.version !== 2) throw new ProviderSpendError('PROVIDER_SPEND_TARIFF_UNVERIFIED');
