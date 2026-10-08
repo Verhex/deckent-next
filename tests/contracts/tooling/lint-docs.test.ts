@@ -74,6 +74,18 @@ describe('documentation release drift gate', () => {
       expect(result.status).toBe(1); expect(result.output).toContain(`${name}: highest alpha.`);
     }
   });
+  it('while the top line is Unreleased, public docs may claim the last released alpha (live) but nothing older or newer', async () => {
+    const changelog = '- **1.0.0-alpha.18** — Unreleased · (BATCH) · features\n' + release(17) + '\n' + release(9);
+    const base = { 'package.json': '{"version":"1.0.0-alpha.18"}', 'CHANGELOG.md': changelog };
+    expect(lint(await fixture(base)).status).toBe(0);
+    expect(lint(await fixture({ ...base, 'README.md': 'Live alpha.18.' })).status).toBe(0);
+    for (const claim of ['alpha.16', 'alpha.19']) {
+      const result = lint(await fixture({ ...base, 'SECURITY.md': `Supports ${claim}.` }));
+      expect(result.status).toBe(1); expect(result.output).toContain('SECURITY.md: highest alpha.');
+    }
+    const landed = lint(await fixture({ 'package.json': '{"version":"1.0.0-alpha.18"}', 'CHANGELOG.md': release(18) + '\n' + release(17) }));
+    expect(landed.status).toBe(1); expect(landed.output).toContain('README.md: highest alpha.17 must equal package.json 1.0.0-alpha.18');
+  });
   it.each(['unpushed', 'not landed', 'review open', 'PR pending'])('rejects %s in root and recursively nested architecture docs', async phrase => {
     for (const name of ['ARCHITECTURE.md', '.deckent/docs/architecture/nested/contract.md']) {
       const result = lint(await fixture({ [name]: `# Contract\nCandidate ${phrase}` }));
