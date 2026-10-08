@@ -30,7 +30,8 @@ async function staticReach(entry: string) {
 
 // Packages whose import cost is large enough that a process must opt in (dynamic import) rather than inherit them.
 const HEAVY = ['ink', 'react', '@modelcontextprotocol/server', '@modelcontextprotocol/client'];
-const entries = { 'SDK entry': 'index.js', 'CLI entry (`--version`, `runtime serve`, every subcommand)': 'composition/core/cli/internal/entry.js' };
+const entries = { 'SDK entry': 'index.js', 'extensions entry (before runCli/runMcp)': 'extensions.js',
+  'CLI entry (`--version`, `runtime serve`, every subcommand)': 'composition/core/cli/internal/entry.js' };
 
 for (const [label, entry] of Object.entries(entries)) {
   it(`${label} statically reaches none of the heavy packages`, async () => {
