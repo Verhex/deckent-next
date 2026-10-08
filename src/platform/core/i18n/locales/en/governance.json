@@ -358,6 +358,7 @@
   "error.RUN_CAPACITY_OR_ORDER": "The requested tasks exceed available capacity or scheduling order.",
   "error.RUN_CAPACITY_OR_ORDER.detail": "Task reservation refused ({site}/{reason}): ready {readyCount}, delayed {delayedCount}, occupied execution slots {executionOccupied}/{executionSlots}.",
   "error.CANCELLATION_NOT_CONFIGURED": "Cancellation delivery limits are not configured. Missing: {missing}.",
+  "error.CANCELLATION_NOT_CONFIGURED.init": "Run deckent init --help for the setup steps. Complete the installation, then retry deckent runtime serve.",
   "remedy.RUN_STORE_CONFLICT": "Read state with run inspect --scope <id> --id <run>. For a changed cancellation command, use a new --command-id and the current --expected-revision. If the previous response was uncertain, retry the unchanged command ID and input first.",
   "error.EXECUTION_NOT_CONFIGURED": "An explicit execution profile is required to manage the recorded worker.",
   "error.EXECUTION_HOST_UNSUPPORTED": "Task execution requires a non-root host user with a valid primary group.",
