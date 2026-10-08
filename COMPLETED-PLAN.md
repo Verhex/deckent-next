@@ -1,10 +1,34 @@
 # Deckent Next — tamamlanan plan
 
-## TERMINAL-UX T3 — 2026-10-07 (wave/tui-3 entegrasyonu; bağımsız inceleme ve iniş bekliyor)
+## alpha.15 — 2026-10-08 (PR #46, Astra 2457 PASS)
+
+- **İnen iş (`4d6f1582`, bağımsız inceleme Astra 2457 PASS, exact head `41a7a590`):** SLASH-WINDOWS (SW-1/2/3: her slash çıktısı kendi penceresinde, kapanışta tek çerçeveli sistem satırı; argümanlı komut pencereyi açar ve durum notu verir; süren iş için açılış satırı; `/clear` ekranı ve kaydırma geçmişini temizler), CONFIG-SELECT (CS-1: ayarlar yalnız seçimle değişir) ve SECRET-STORE-SWITCH / DEFAULT (`deckent secret store`: kopyala → doğrula → yayımla → sil; zayıf depoya açık onay; yetki `secret`/`switch`, policy şablonu v6; yeni kurulumda şifreli depo varsayılanı). Protokol 24, ledger 48, pencere [24,23].
+- **Astra 2456 düzeltmeleri (hepsi alpha.15 içinde):** P1-1 tek kurulum custody bölümü (set/delete/switch; `SECRET_STORE_CHANGED`, `SECRET_STORE_BUSY`); P1-2 info ve scratch pencereleri secret değerlerini maskeler; N1 slash argümanı ne kuyruk notuna ne geçmişe gider; N2 liste hatası `cleaned=false` döner ve doctor `unverified` gösterir; N3 PATH ve dizin taramaları sınırlıdır.
+- **Açık sınırlar (Astra 2457, bloke etmeyen):** N1 tüm komutun paste-chip geçmişi; N3 opendir/read I/O için katı timeout genelleştirmesi; kanıt staging/sandbox kabulü değildir (BUBBLEWRAP NOT STAGED). Ayrı önceden var olan boşluk: genel config yazımının kurulum dizinini 0755 ile oluşturması → PLAN `SECRET-DIR-MODE`.
+- **Kanıt ve canlı adım:** `proof/SLASH-WINDOWS-2026-10-08/` (bağımsız inceleme `independent-review-2457/`). Staged switch id `4d6f15824cc7-fa96266d6537`; owner 2026-10-08'de `proof/ALPHA15-LIVE-2026-10-08/alpha15-owner.sh` ile geçirdi; canlı secret store şifreli (`core.secret-store.encrypted-file@1`).
+
+## HAIKU55-CATALOG — alpha.13 (2026-10-08, PR #44, `16df3564`)
+
+- Claude Haiku 5.5 (`claude-haiku-5-5`) etkin model: `models.json` satırı (adaptive, beş effort düzeyi, varsayılan medium, `disabled` yalnız ≤ high), pricing şema 2 + tariff v2 istem uzunluğu kademesi (100.000 token üstü üst fiyat), claude seed ve önerilen etkinler.
+- Owner katalog komutlarıyla canlı ve N1'de etkinleştirdi (`proof/HAIKU55-2026-10-08/owner-commands.sh`, `align-n1.sh`).
+- Açık: Anthropic API kullanım mutabakatı → ANTHROPIC-SETTLEMENT (kanıt `proof/HAIKU55-2026-10-08/WORKER.md`).
+
+## POLICY-UPGRADE-HANDBUILT — alpha.12 (2026-10-08, PR #43, `f89f1481`)
+
+- `deckent init policy --upgrade --person <issuer>/<subject>`: dosya sahibi, kapsamdaki bir izin kuralında adı geçen kişiye (`all` sayılmaz) yalnız eksik v5 kurallarını ekler; önizleme, `--expect` ve arşiv korunur. Elle yazılmış policy'de MCP `mcp-server` kuralı eksikse eklenir.
+- Owner canlı ve N1 için uygulamayı 2026-10-08'de çalıştırdı (`proof/ALPHA11-LIVE-2026-10-08/alpha13-owner.sh`).
+- Açık: mühürlü `authority-change` audit olayı → INSTALLER-POLICY-AUDIT (kanıt `proof/ALPHA11-LIVE-2026-10-08/WORKER.md`).
+
+## TERMINAL-UX T3 — 2026-10-07 (alpha.11, `2bcbede1`, PR #42)
 
 - L0 TERMINAL-LAUNCH main'de (PR #40, Astra 2438). wave/tui-3'te birleşti: L3 picker çekirdeği, L2 onaylı config yazımı (ledger v48), L6 terminal test düzeltmeleri (B1/B2/B3/B5, B4 tanı eki), L1 MCP-CORE (HTTP, import, revoke, sandbox-net, öneri, havuz izolasyonu), L5 izleme pencereleri, L4 `/mode` `/config` `/mcp` pencereleri.
 - Entegrasyonda: `mcp-server` policy türü, first-run şablon v5 (K1 seçenek A dahil) ve v4 göçü (`deckent init policy --upgrade`, ekleyerek; yönetilen eşi `deckent policy upgrade --template v5`), güven grant'i `require-approval`+`modeEligible`, `/mcp` HTTP/revoke/grant/realm bağlantısı, `/mode show`, protokol v22, i18n oracle onarımı ve L1 CLI metinleri, alpha.11.
 - Açık: L5 kararları, B4 kök nedeni, PTY'de yeni pencerelerin kanıtı. Kanıt: dış `proof/TUI3-2026-10-07/INTEGRATION-review.md`.
+
+## TOPLU-DÜZELTME 2026-10-07 — alpha.9 (PR #35, `8a940418`, `fix/batch-2026-10-07`)
+
+- Günlük toplu PR: iptal hatası `{missing}`, terminal "kullanılamıyor" i18n, `./extensions` types kapanışı, `/usage` ölçülmeyen değer, `/model` current işareti, wire10 gecikme dalı; pack-smoke ve belgeler dahil, sürüm alpha.9.
+- Kanıt: `proof/BATCH-FIX-2026-10-07/`.
 
 ## Jev host soru/sonuç hijyeni — 2026-10-06 (owner kabulüyle uygulandı)
 
