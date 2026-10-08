@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { AUDIT_EVENT_SCHEMA_VERSION, evaluatePolicy, policyResources, type AuditEvent, type VerifiedPrincipal } from '#domain/index.js';
 import { ErrorRegistry } from '#platform/index.js';
-import { isSecretName, isSecretValue, type SecretStore } from './port.js';
+import { isSecretName, isSecretValue, type SecretCustody, type SecretStore } from './port.js';
 
 /** Who asks to change which secret in which scope. The principal is the verified caller, never an input of the request body. */
 export interface SecretChangeRequest {
@@ -45,22 +45,36 @@ export function policySecretChangeAuthorization(policy: unknown, principal: Veri
  * and only an allowed change writes the store. No record of an allowed change, no change; a refusal that cannot be recorded is still a
  * refusal (the permission-mode rule). The value is passed straight to the store; it is never part of the request, the authorization input,
  * the audit event or an error. An audit that succeeded before a failed write records an intent that did not take effect (intent first).
+ * The decision, the record and the write run inside the installation's custody section (Astra 2456 P1-1): the store this change opened must
+ * still be the selected one there, else `SECRET_STORE_CHANGED` and nothing is decided, recorded or written (a store switch ran meanwhile).
  */
 export class SecretStoreAdministration {
   constructor(private readonly store: SecretStore, private readonly authorize: SecretChangeAuthorization, private readonly audit: SecretChangeAudit,
-    private readonly now: () => number) {}
+    private readonly now: () => number, private readonly custody: SecretCustody) {}
 
   async set(request: SecretChangeRequest, value: string): Promise<void> {
     this.check(request);
     if (!isSecretValue(value)) throw ErrorRegistry.createError('SECRET_VALUE_INVALID');
-    await this.record(request, 'set');
-    await this.store.set(request.name, value);
+    await this.custody.exclusive(async () => {
+      await this.selected();
+      await this.record(request, 'set');
+      await this.store.set(request.name, value);
+    });
   }
 
   async delete(request: SecretChangeRequest): Promise<boolean> {
     this.check(request);
-    await this.record(request, 'delete');
-    return this.store.delete(request.name);
+    return this.custody.exclusive(async () => {
+      await this.selected();
+      await this.record(request, 'delete');
+      return this.store.delete(request.name);
+    });
+  }
+
+  private async selected(): Promise<void> {
+    if (await this.custody.selected() !== this.store.descriptor.id) {
+      throw ErrorRegistry.createError('SECRET_STORE_CHANGED', { params: { backend: this.store.descriptor.id } });
+    }
   }
 
   private check(request: SecretChangeRequest): void {

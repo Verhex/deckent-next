@@ -6,6 +6,8 @@ import type { SecretStoreInspection } from '#engine/index.js';
 /** `doctor`'s secret store line (SECRET-K1, owner S1): which backend this installation uses and whether it can be read now. */
 export interface SecretStoreInspectionView extends SecretStoreInspection {
   readonly schemaVersion: 1; readonly backend: string; readonly writable: boolean; readonly enumerable: boolean;
+  /** Present when another Core store holds names (`entries`) or could not be listed now (`unverified`). */
+  readonly leftover?: Readonly<{ backends: readonly string[]; entries: number; unverified: readonly string[] }>;
 }
 export interface SecretNamesView { readonly schemaVersion: 1; readonly backend: string; readonly names: readonly string[] }
 
@@ -19,20 +21,22 @@ export async function inspectConfiguredSecretStore(projectRoot: string, options:
   const { store } = await selectedStore(projectRoot, options), health = await store.inspect();
   const leftover = await leftoverEntries(store.descriptor.id, options);
   return Object.freeze({ schemaVersion: 1, backend: store.descriptor.id, writable: store.descriptor.writable, enumerable: store.descriptor.enumerable, ...health,
-    ...(leftover.entries ? { leftover } : {}) });
+    ...(leftover.entries || leftover.unverified.length ? { leftover } : {}) });
 }
 /** SECRET-STORE-SWITCH: how many names another Core store still holds beside the selected one (an interrupted switch, or keys never moved);
- * names are counted, never read or shown. A store that cannot be listed counts as nothing here (its own inspection reports it). */
+ * names are counted, never read or shown. A store that cannot be listed now is `unverified` — not counted as empty (Astra 2456 N2): a copy
+ * there can be neither shown nor ruled out. */
 async function leftoverEntries(selected: string, options: ConfigLoadOptions) {
-  const env = options.env ?? process.env, backends: string[] = []; let entries = 0;
+  const env = options.env ?? process.env, backends: string[] = [], unverified: string[] = []; let entries = 0;
   for (const id of registeredSecretStores()) {
     if (id === selected || !id.startsWith('core.')) continue;
     const other = openRegisteredSecretStore(id, env, options.platform);
     if (!other.descriptor.enumerable) continue;
-    const count = await other.listNames().then(names => names.length, () => 0);
-    if (count) { backends.push(id); entries += count; }
+    const count = await other.listNames().then(names => names.length, () => null);
+    if (count === null) unverified.push(id);
+    else if (count) { backends.push(id); entries += count; }
   }
-  return Object.freeze({ backends: Object.freeze(backends), entries });
+  return Object.freeze({ backends: Object.freeze(backends), entries, unverified: Object.freeze(unverified) });
 }
 /** Names only, never values. A backend that cannot enumerate (the environment) refuses with `SECRET_STORE_UNSUPPORTED`. */
 export async function listConfiguredSecretNames(projectRoot: string, options: ConfigLoadOptions = {}): Promise<SecretNamesView> {

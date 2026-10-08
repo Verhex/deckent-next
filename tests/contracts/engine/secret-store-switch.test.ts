@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { SecretStoreSwitch, isSecretStoreDowngrade, policySecretStoreSwitchAuthorization, type SecretStore, type SecretStoreSwitchPorts } from '#engine/index.js';
+import { SecretStoreAdministration, SecretStoreSwitch, isSecretStoreDowngrade, policySecretStoreSwitchAuthorization, type SecretStore, type SecretStoreSwitchPorts } from '#engine/index.js';
 import { firstRunPolicyTemplate, resolvePolicyBindings, type AuditEvent } from '#domain/index.js';
 import { ErrorRegistry } from '#platform/index.js';
 
@@ -32,6 +32,9 @@ function harness(selected: string | null, stores: Record<string, ReturnType<type
     },
     authorize: async () => ({ policyRevision: 'p1', effect, ruleId: effect === 'allow' ? 'first-run-secret-switch' : null }),
     audit: event => { log.push('audit'); audits.push(event); }, now: () => 1,
+    // The custody section as the log sees it: everything the switch does happens between `enter` and `leave`.
+    custody: { async exclusive<T>(work: () => Promise<T>) { log.push('enter'); try { return await work(); } finally { log.push('leave'); } },
+      selected: async () => selection ?? ENV },
   };
   return { application: new SecretStoreSwitch(ports), log, audits, selection: () => selection };
 }
@@ -44,7 +47,7 @@ describe('secret store switch', () => {
     const h = harness(FILE, { [ENV]: memoryStore(ENV, {}, { writable: false, enumerable: false }), [FILE]: file, [SEALED]: sealed });
     const result = await h.application.switch(request(SEALED));
     expect(result).toEqual({ schemaVersion: 1, scopeId: 'installation', status: 'switched', from: FILE, to: SEALED, entries: 2, downgrade: false, cleaned: true });
-    expect(h.log).toEqual(['audit', `set ${SEALED} A_KEY`, `set ${SEALED} B_KEY`, `publish ${SEALED}`, `delete ${FILE} A_KEY`, `delete ${FILE} B_KEY`]);
+    expect(h.log).toEqual(['enter', 'audit', `set ${SEALED} A_KEY`, `set ${SEALED} B_KEY`, `publish ${SEALED}`, `delete ${FILE} A_KEY`, `delete ${FILE} B_KEY`, 'leave']);
     expect([...sealed.data]).toEqual([['A_KEY', 'synthetic-a'], ['B_KEY', 'synthetic-b']]);
     expect(file.data.size).toBe(0);
     expect(h.audits[0]!.subject).toEqual({ kind: 'secret-store-switch', from: FILE, to: SEALED, entries: 2, downgrade: false,
@@ -55,14 +58,14 @@ describe('secret store switch', () => {
   it('a fresh installation (environment, nothing to move) only changes the selection', async () => {
     const h = harness(null, { [ENV]: memoryStore(ENV, {}, { writable: false, enumerable: false }), [SEALED]: memoryStore(SEALED) });
     expect(await h.application.switch(request(SEALED))).toMatchObject({ status: 'switched', from: ENV, to: SEALED, entries: 0, cleaned: true });
-    expect(h.log).toEqual(['audit', `publish ${SEALED}`]);
+    expect(h.log).toEqual(['enter', 'audit', `publish ${SEALED}`, 'leave']);
   });
 
   it('a downgrade runs only with an explicit confirmation; refused, nothing is audited, moved or selected', async () => {
     const sealed = memoryStore(SEALED, { A_KEY: 'synthetic-a' }), file = memoryStore(FILE);
     const h = harness(SEALED, { [SEALED]: sealed, [FILE]: file, [ENV]: memoryStore(ENV, {}, { writable: false, enumerable: false }) });
     expect(await code(h.application.switch(request(FILE)))).toBe('SECRET_STORE_DOWNGRADE_UNCONFIRMED');
-    expect(h.log).toEqual([]); expect(h.selection()).toBe(SEALED);
+    expect(h.log).toEqual(['enter', 'leave']); expect(h.selection()).toBe(SEALED);
     expect(await h.application.switch(request(FILE, true))).toMatchObject({ status: 'switched', downgrade: true, entries: 1 });
     expect(isSecretStoreDowngrade(SEALED, ENV)).toBe(true);
     expect(isSecretStoreDowngrade(ENV, FILE)).toBe(false);
@@ -73,7 +76,7 @@ describe('secret store switch', () => {
     const sealed = memoryStore(SEALED, { A_KEY: 'synthetic-a' });
     const h = harness(SEALED, { [SEALED]: sealed, [ENV]: memoryStore(ENV, {}, { writable: false, enumerable: false }) });
     expect(await code(h.application.switch(request(ENV, true)))).toBe('SECRET_STORE_READ_ONLY');
-    expect(h.log).toEqual([]);
+    expect(h.log).toEqual(['enter', 'leave']);
     sealed.data.clear();
     expect(await h.application.switch(request(ENV, true))).toMatchObject({ status: 'switched', to: ENV, entries: 0 });
   });
@@ -82,9 +85,11 @@ describe('secret store switch', () => {
     const file = memoryStore(FILE, { A_KEY: 'synthetic-a' });
     const h = harness(FILE, { [FILE]: file, [SEALED]: memoryStore(SEALED) }, 'deny');
     expect(await code(h.application.switch(request(SEALED)))).toBe('SECRET_STORE_SWITCH_DENIED');
-    expect(h.log).toEqual(['audit']); expect(h.audits[0]!.subject).toMatchObject({ decision: { effect: 'deny' } });
+    expect(h.log).toEqual(['enter', 'audit', 'leave']); expect(h.audits[0]!.subject).toMatchObject({ decision: { effect: 'deny' } });
     expect(file.data.size).toBe(1); expect(h.selection()).toBe(FILE);
-    expect(await code(harness(FILE, { [FILE]: file }).application.switch(request('core.secret-store.nope@1')))).toBe('SECRET_STORE_UNKNOWN');
+    const unknown = harness(FILE, { [FILE]: file });
+    expect(await code(unknown.application.switch(request('core.secret-store.nope@1')))).toBe('SECRET_STORE_UNKNOWN');
+    expect(unknown.log).toEqual([]);
   });
 
   it('a copy that does not read back unchanged stops before publication: the old selection and its secrets stay', async () => {
@@ -106,20 +111,47 @@ describe('secret store switch', () => {
     expect(await again.application.switch(request(SEALED))).toEqual({ schemaVersion: 1, scopeId: 'installation', status: 'current', from: SEALED, to: SEALED,
       entries: 1, downgrade: false, cleaned: false });
     // The deletion of the identical leftover is a decision recorded before it happens; nothing is published.
-    expect(again.log).toEqual(['audit', `delete ${FILE} A_KEY`]);
+    expect(again.log).toEqual(['enter', 'audit', `delete ${FILE} A_KEY`, 'leave']);
     expect(again.audits[0]!.subject).toMatchObject({ kind: 'secret-store-switch', from: SEALED, to: SEALED, entries: 1 });
     expect([...file.data.keys()].sort()).toEqual(['B_KEY', 'C_ONLY']);
     // Nothing identical left: no change, no record.
     const quiet = harness(SEALED, stores);
     expect(await quiet.application.switch(request(SEALED))).toMatchObject({ status: 'current', entries: 0, cleaned: false });
-    expect(quiet.log).toEqual([]);
+    expect(quiet.log).toEqual(['enter', 'leave']);
   });
 
   it('a principal the policy denies cannot remove leftovers through a current-target switch', async () => {
     const file = memoryStore(FILE, { A_KEY: 'synthetic-a' }), sealed = memoryStore(SEALED, { A_KEY: 'synthetic-a' });
     const h = harness(SEALED, { [FILE]: file, [SEALED]: sealed }, 'deny');
     expect(await code(h.application.switch(request(SEALED)))).toBe('SECRET_STORE_SWITCH_DENIED');
-    expect(h.log).toEqual(['audit']); expect(file.data.get('A_KEY')).toBe('synthetic-a');
+    expect(h.log).toEqual(['enter', 'audit', 'leave']); expect(file.data.get('A_KEY')).toBe('synthetic-a');
+  });
+
+  it('a store that cannot be listed during cleanup leaves the result unverified (cleaned false), other stores are still cleaned (N2)', async () => {
+    const file = memoryStore(FILE, { A_KEY: 'synthetic-a' }), sealed = memoryStore(SEALED, { A_KEY: 'synthetic-a' });
+    const broken = memoryStore(ENV, {}, { writable: true, enumerable: true });
+    broken.store.listNames = async () => { throw new Error('unreadable'); };
+    const h = harness(SEALED, { [ENV]: broken, [FILE]: file, [SEALED]: sealed });
+    expect(await h.application.switch(request(SEALED))).toMatchObject({ status: 'current', entries: 1, cleaned: false });
+    expect(file.data.size).toBe(0);
+    const nothingElse = harness(SEALED, { [ENV]: broken, [SEALED]: sealed });
+    expect(await nothingElse.application.switch(request(SEALED))).toMatchObject({ status: 'current', entries: 0, cleaned: false });
+  });
+
+  it('a secret change runs inside the custody section and refuses typed when the store it opened is no longer selected (Astra 2456 P1-1)', async () => {
+    const file = memoryStore(FILE, { A_KEY: 'synthetic-a' }), log: string[] = []; shared.log = log;
+    let selected = FILE;
+    const custody = { async exclusive<T>(work: () => Promise<T>) { log.push('enter'); try { return await work(); } finally { log.push('leave'); } },
+      selected: async () => selected };
+    const admin = new SecretStoreAdministration(file.store, async request => { log.push(`authorize ${request.action}`); return { policyRevision: 'p1', effect: 'allow', ruleId: 'r' }; },
+      () => { log.push('audit'); }, () => 1, custody);
+    await admin.set({ principal: me, scopeId: 'installation', name: 'A_KEY' }, 'synthetic-b');
+    expect(log).toEqual(['enter', 'authorize set', 'audit', `set ${FILE} A_KEY`, 'leave']);
+    log.length = 0; selected = SEALED;
+    expect(await code(admin.set({ principal: me, scopeId: 'installation', name: 'A_KEY' }, 'synthetic-c'))).toBe('SECRET_STORE_CHANGED');
+    expect(await code(admin.delete({ principal: me, scopeId: 'installation', name: 'A_KEY' }))).toBe('SECRET_STORE_CHANGED');
+    expect(log).toEqual(['enter', 'leave', 'enter', 'leave']); expect(file.data.get('A_KEY')).toBe('synthetic-b');
+    expect(ErrorRegistry.has('SECRET_STORE_BUSY')).toBe(true);
   });
 
   it('policy: the template owner may switch; another principal is refused before evaluation', async () => {

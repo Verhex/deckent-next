@@ -213,9 +213,15 @@ Publication before deletion is the crash-safe order (the owner's stated order de
 reachable and `cleaned: false`; the same switch again (`status: current`) deletes copies elsewhere that are identical to the selected ones.
 The running service resolves through the new selection without a restart. `deckent secret store` picks from the registered stores on a
 terminal (numbered list, y/N for a downgrade) or takes `--to <store>` / `--confirm-downgrade` / `--list`; `doctor` names leftover entries in a
-non-selected Core store (counts only). Fresh installs on Linux/WSL/macOS through `init policy --apply` (no policy before) run the same switch with
-zero entries (the Docker `init apply` path does not yet: its installations keep the environment store until switched); with no ledger yet its record is the command result (owner 2026-10-08, Jev 0950f08e). Open limit: a secret set on the old
-store between the copy and the publication is not moved (secret changes are not serialized against a switch). A v18 secret change
+non-selected Core store (counts only) and a non-selected store it cannot list now as unverified (never as empty); a cleanup that cannot
+check a store returns `cleaned: false` (Astra 2456 N2). Fresh installs on Linux/WSL/macOS through `init policy --apply` (no policy before) run the same switch with
+zero entries (the Docker `init apply` path does not yet: its installations keep the environment store until switched); with no ledger yet its record is the command result (owner 2026-10-08, Jev 0950f08e). Concurrency (Astra 2456 P1-1, Jev ddfbc6b4): every
+secret mutation runs inside the installation's custody section (`SecretCustody` port; adapter `createInstallationSecretCustody`: the
+cross-process config writer lock on `<installation config>.secret-custody`, dead owners reclaimed, the directory created owner-only) — the
+whole switch from the selection read to the last removal, and each set/delete, which re-reads the selection there and refuses
+`SECRET_STORE_CHANGED` when the store it opened is no longer selected; a wait past 5 s is `SECRET_STORE_BUSY`. Lock order custody → store
+document → config document. Reference resolution stays lock-free (before publication the old store holds every value, after it the new
+one). A v18 secret change
 whose known answer cannot fit the delivery budget is refused (`RUNTIME_SERVICE_RESPONSE_LIMIT`) before the policy decision, audit or write
 (Astra 2185 R6). Enterprise/custom backends
 (vaults, KMS) register through `registerSecretStoreBackend` before `registerProviderConfig()` seals the registry — no Core edit; `core.` is

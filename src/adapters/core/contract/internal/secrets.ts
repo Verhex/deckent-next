@@ -1,7 +1,9 @@
+import { mkdir } from 'node:fs/promises';
+import { dirname } from 'node:path';
 import { z } from 'zod';
-import { CONFIG_CONTRACT_SINCE, ConfigValidationError, ErrorRegistry, installSecretResolverFactory, isRecord, normalizeGlobalScopePlatform, readJsonFile,
-  registerConfigSection, resolveGlobalConfigPaths, resolveGlobalScopePaths, writeConfig, type Environment } from '#platform/index.js';
-import { SECRET_STORE_ID_PATTERN, SecretStoreRegistry, type SecretStore, type SecretStoreFactory, type SecretStoreSelectionPort } from '#engine/index.js';
+import { CONFIG_CONTRACT_SINCE, ConfigValidationError, DeckentError, ErrorRegistry, installSecretResolverFactory, isRecord, normalizeGlobalScopePlatform, readJsonFile,
+  registerConfigSection, resolveGlobalConfigPaths, resolveGlobalScopePaths, withConfigWriteLock, writeConfig, type Environment } from '#platform/index.js';
+import { SECRET_STORE_ID_PATTERN, SecretStoreRegistry, type SecretCustody, type SecretStore, type SecretStoreFactory, type SecretStoreSelectionPort } from '#engine/index.js';
 import { ENV_SECRET_STORE_ID, encryptedFileSecretStoreFactory, environmentSecretStoreFactory, fileSecretStoreFactory } from '#adapters/core/secret-store/index.js';
 
 /**
@@ -58,6 +60,32 @@ export function createInstallationSecretStoreSelection(env: Environment, platfor
       if (digest !== expectDigest) throw ErrorRegistry.createError('CONFIG_CONCURRENT_REVISION_HOLD');
       await writeConfig(path, { ...document, secrets: secretsConfigSchema.parse({ store }) }, expectDigest);
     },
+  });
+}
+/** How long a secret change waits for the custody section before it is refused `SECRET_STORE_BUSY` (a switch of a full store takes far less). */
+export const SECRET_CUSTODY_WAIT_MS = 5_000;
+/**
+ * The installation's secret custody section (Astra 2456 P1-1, Jev ddfbc6b4): the existing cross-process config writer lock on its own path
+ * beside the installation config (`<config>.secret-custody.write-lock`), so every runtime service and CLI process of this installation shares
+ * it and a dead owner is reclaimed as for any config lock. Lock order: custody → a store's document lock → the config document lock (the
+ * selection publish); nothing takes them the other way and the paths differ, so the non-reentrant lock never nests on itself. Only a wait
+ * for the section itself becomes `SECRET_STORE_BUSY`; a lock refusal inside the work keeps its own code.
+ */
+export function createInstallationSecretCustody(env: Environment, platform: string = process.platform, waitMs = SECRET_CUSTODY_WAIT_MS): SecretCustody {
+  const path = `${resolveGlobalConfigPaths(env, platform).platformPath}.secret-custody`, selection = createInstallationSecretStoreSelection(env, platform);
+  return Object.freeze({
+    async exclusive<T>(work: () => Promise<T>): Promise<T> {
+      let entered = false;
+      // The installation directory is also the private store root: created owner-only here (the config lock alone would create it with the
+      // process umask, which the file-backed stores then refuse as not private). An existing directory is left as it is.
+      try { await mkdir(dirname(path), { recursive: true, mode: 0o700 }); } catch { throw ErrorRegistry.createError('SECRET_STORE_UNAVAILABLE', { params: { backend: dirname(path) } }); }
+      try { return await withConfigWriteLock(path, () => { entered = true; return work(); }, waitMs); }
+      catch (error) {
+        if (!entered && error instanceof DeckentError && error.code === 'CONFIG_WRITE_LOCKED') throw ErrorRegistry.createError('SECRET_STORE_BUSY');
+        throw error;
+      }
+    },
+    async selected() { return (await selection.read()).store ?? ENV_SECRET_STORE_ID; },
   });
 }
 /** Opens the backend the (validated, unresolved) configuration selects; opening reads nothing yet. */
