@@ -604,6 +604,7 @@
   "error.PROVIDER_SPEND_INVALID": "Yerel harcama kaydı geçersiz. Yeni harcama kabul edilmedi.",
   "error.PROVIDER_SPEND_CONFLICT": "Bütçe veya fiyatlandırma hesabı kayıtlı kimliğiyle çelişiyor. Mevcut rezervasyonlar korundu.",
   "error.PROVIDER_SPEND_EXHAUSTED": "Kapsam harcama bütçesi tükendi. deckent models spending ile inceleyin; bekleyen kayıt için models reconcile-spending, limiti artırmak için models revise-budget kullanın.",
+  "error.PROVIDER_SPEND_BUDGET_EXISTS": "Bu kapsamın zaten bir harcama bütçesi var (kayıtta ya da provider_spending içinde). deckent models revise-budget ile (ya da /model → Bütçeyi değiştir) değiştirin.",
   "error.PROVIDER_SPEND_FROZEN": "Harcama hesabı aşım nedeniyle donduruldu. models reconcile-spending ile kaydı uzlaştırın, ardından models revise-budget içinde unfreeze=true gönderin.",
   "error.PROVIDER_SPEND_RESULT_LIMIT": "Tam sağlayıcı-harcama denetim makbuzu bu yüzeyin yapılandırılmış kapasitesini aşıyor. Denetim makbuzu kaydedilmedi.",
   "error.CLI_CODING_INPUT_LIMIT": "Kodlama profili girdisi yapılandırılmış sınırı aşıyor: {limit} bayt.",
@@ -852,5 +853,12 @@
   "cli.help.modelsManageSpending": "Kullanım: deckent models reconcile-spending|revise-budget --input <dosya|-> [--json]",
   "models.spending.managementRecorded": "Harcama yönetimi makbuzu kaydedildi: {command}.",
   "models.invocation.spendingSettledMeasuredTariff": "Kullanım × sabitlenmiş tarife: {exactAmount} alt birim ({currency}); kademe {tier}, tarife {tariff}.",
-  "models.invocation.spendingReconciled": "Uzlaştırıldı: {resolution}, {exactAmount} alt birim ({currency}); makbuz {command}."
+  "models.invocation.spendingReconciled": "Uzlaştırıldı: {resolution}, {exactAmount} alt birim ({currency}); makbuz {command}.",
+  "cli.help.action.create-budget": "Kapsamın ilk harcama bütçesini oluştur",
+  "cli.help.modelsBudget": "Kullanım:\n  deckent models create-budget --scope <id> --usd <n> [--json]\n  deckent models revise-budget --scope <id> --usd <n> [--unfreeze] [--json]\n  deckent models revise-budget --input <dosya|-> [--json]\nHer API sağlayıcısı için kapsam başına tek ortak ABD doları sınırı, tam dolar\n(1-1000). create-budget ilk bütçeyi yazar; revise-budget onu değiştirir\n(--unfreeze aşım dondurmasını da kaldırır). --command-id <id> aynı değişikliği\ngüvenle tekrarlar. Policy: provider-spend-account budget-revision (deckent init\npolicy --upgrade ekler). Terminal aynısını /model içinde sunar.",
+  "models.budget.created": "{scope} kapsamı için bütçe oluşturuldu: {usd} USD (revizyon {revision}).",
+  "models.budget.revised": "{scope} kapsamının bütçesi değişti: {usd} USD (revizyon {revision}).",
+  "models.budget.unfrozen": "Aşım dondurması kaldırıldı.",
+  "models.budget.replayed": "(zaten kayıtlı; hiçbir şey değişmedi)",
+  "error.PROVIDER_SPEND_BUDGET_ABSENT": "{scope} kapsamının henüz harcama bütçesi yok. Oluşturun: deckent models create-budget --scope {scope} --usd <tutar> (ya da /model → Bütçe oluştur)."
 }

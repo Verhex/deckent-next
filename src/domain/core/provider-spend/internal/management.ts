@@ -11,6 +11,9 @@ export const providerSpendManagementCommandSchema = z.discriminatedUnion('kind',
     evidence: z.object({ kind: z.enum(['provider-usage', 'console-figure', 'write-off']), digest }).strict() }).strict(),
   z.object({ ...common, kind: z.literal('budget-revision'), budget: providerSpendBudgetSchema,
     unfreeze: z.boolean(), evidenceDigest: digest }).strict(),
+  // Stage 1: the scope's first account at revision 1 (no checkpoint exists yet, so no expected digest); the engine checks the budget names it.
+  z.object({ schemaVersion: z.literal(1), scopeId: identitySchema, commandId: identitySchema, kind: z.literal('budget-create'), budgetId: identitySchema,
+    budgetRevision: z.literal(1), budget: providerSpendBudgetSchema, evidenceDigest: digest }).strict(),
 ]).readonly();
 export const providerSpendManagementCommandInputSchema = immutableJsonObjectSchema.pipe(providerSpendManagementCommandSchema);
 export function parseProviderSpendManagementCommand(input: unknown) {

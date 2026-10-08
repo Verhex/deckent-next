@@ -26,5 +26,5 @@ export { OPERATOR_TARIFF_PRICING_ID, operatorTariffLocalSettlement } from './int
 
 export { parseProviderSpendMeasurement, parseProviderSpendTariffMeasurement, measuredTariffExactMinorUnits } from './internal/measured.js';
 export type { ProviderSpendMeasurement, ProviderSpendTariffMeasurement } from './internal/measured.js';
-export { ProviderSpendManagementApplication, parseProviderSpendManagementReceipt, parseProviderSpendManagementResultForCommand, reconcileProviderSpend, reviseProviderSpendBudget } from './internal/management.js';
+export { ProviderSpendManagementApplication, parseProviderSpendManagementReceipt, parseProviderSpendManagementResultForCommand, reconcileProviderSpend, reviseProviderSpendBudget, createGovernedProviderSpendAccount } from './internal/management.js';
 export type { ProviderSpendManagementAuthorization, ProviderSpendManagementReceipt, ProviderSpendManagementResult, ProviderSpendManagementStore } from './internal/management.js';

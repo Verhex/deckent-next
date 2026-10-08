@@ -24,7 +24,7 @@ export function registerProviderConfig(): void {
   registerIdentityProfileConfig();
   registered = true;
 }
-export { providerSpendingBudgetFor, providerSpendingSchema, registerProviderSpendingConfig, validateProviderSpendingLayers } from './spending.js';
+export { providerSpendingBudgetFor, providerSpendingConfiguredBudget, providerSpendingSchema, registerProviderSpendingConfig, validateProviderSpendingLayers } from './spending.js';
 export { providerSpendAuditConfigSchema, validateProviderSpendAuditLayers } from './spend-audit.js';
 export { openConfiguredSecretStore, readSecretsConfig, registerSecretStoreBackend, secretsConfigSchema, type SecretsConfig, createInstallationSecretStoreSelection,
   isRegisteredSecretStore, openRegisteredSecretStore, registeredSecretStores } from './secrets.js';

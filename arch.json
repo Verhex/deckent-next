@@ -1474,6 +1474,7 @@
         "src/engine/core/policy",
         "src/engine/core/provider-catalog",
         "src/engine/core/provider-spend",
+        "src/domain/core/provider-spend",
         "src/platform/core/clock",
         "src/platform/core/config",
         "src/engine/core/runtime",

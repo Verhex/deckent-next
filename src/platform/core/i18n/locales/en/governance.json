@@ -604,6 +604,7 @@
   "error.PROVIDER_SPEND_INVALID": "The local spending record is invalid. No new spending was admitted.",
   "error.PROVIDER_SPEND_CONFLICT": "The budget or quote conflicts with its recorded identity. Existing reservations were preserved.",
   "error.PROVIDER_SPEND_EXHAUSTED": "Scope spending budget exhausted. Run deckent models spending, then models reconcile-spending for held reservations or models revise-budget to raise the limit.",
+  "error.PROVIDER_SPEND_BUDGET_EXISTS": "This scope already has a spending budget (in the ledger or in provider_spending). Change it with deckent models revise-budget (or /model → Change budget).",
   "error.PROVIDER_SPEND_FROZEN": "Spending account frozen after overrun. Reconcile the held reservation with models reconcile-spending, then models revise-budget with unfreeze=true.",
   "error.PROVIDER_SPEND_RESULT_LIMIT": "The complete provider-spending audit receipt exceeds this surface's configured capacity. No audit receipt was recorded.",
   "error.CLI_CODING_INPUT_LIMIT": "Coding profile input exceeds the configured limit: {limit} bytes.",
@@ -852,5 +853,12 @@
   "cli.help.modelsManageSpending": "Usage: deckent models reconcile-spending|revise-budget --input <file|-> [--json]",
   "models.spending.managementRecorded": "Spending governance receipt recorded: {command}.",
   "models.invocation.spendingSettledMeasuredTariff": "Measured tariff charge: {exactAmount} minor units ({currency}); tier {tier}, tariff {tariff}. Provider usage × pinned tariff.",
-  "models.invocation.spendingReconciled": "Reconciled: {resolution}, {exactAmount} minor units ({currency}); receipt {command}."
+  "models.invocation.spendingReconciled": "Reconciled: {resolution}, {exactAmount} minor units ({currency}); receipt {command}.",
+  "cli.help.action.create-budget": "Create the scope's first spending budget",
+  "cli.help.modelsBudget": "Usage: deckent models create-budget --scope <id> --usd <n> [--json]\n       deckent models revise-budget --scope <id> --usd <n> [--unfreeze] [--json]\n       deckent models revise-budget --input <file|-> [--json]\nOne shared US dollar limit per scope for every API provider, in whole dollars\n(1-1000). create-budget writes the first budget; revise-budget changes it\n(--unfreeze also lifts an overrun freeze). --command-id <id> repeats a change\nsafely. Policy: provider-spend-account budget-revision (deckent init policy\n--upgrade adds it). The terminal offers the same in /model.",
+  "models.budget.created": "Budget created for scope {scope}: {usd} USD (revision {revision}).",
+  "models.budget.revised": "Budget changed for scope {scope}: {usd} USD (revision {revision}).",
+  "models.budget.unfrozen": "The overrun freeze is lifted.",
+  "models.budget.replayed": "(already recorded; nothing changed)",
+  "error.PROVIDER_SPEND_BUDGET_ABSENT": "Scope {scope} has no spending budget yet. Create one: deckent models create-budget --scope {scope} --usd <amount> (or /model → Create budget)."
 }

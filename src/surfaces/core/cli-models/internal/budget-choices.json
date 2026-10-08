@@ -1,0 +1,7 @@
+{
+  "presetsUsd": [5, 10, 25, 50, 100],
+  "minUsd": 1,
+  "maxUsd": 1000,
+  "stepUsd": 1,
+  "minorUnitsPerUsd": 100
+}

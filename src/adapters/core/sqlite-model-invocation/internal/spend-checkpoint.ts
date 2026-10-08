@@ -22,7 +22,7 @@ export function readSpendCheckpoint(db: DatabaseSync, scopeId: string): Provider
       .get(scopeId, account.budgetRevisionCommandId);
     if (!row || typeof row.record !== 'string') throw new ProviderSpendError('PROVIDER_SPEND_INVALID');
     const receipt = parseProviderSpendManagementReceipt(JSON.parse(row.record) as ProviderSpendManagementReceipt);
-    if (row.digest !== receipt.digest || receipt.command.kind !== 'budget-revision'
+    if (row.digest !== receipt.digest || (receipt.command.kind !== 'budget-revision' && receipt.command.kind !== 'budget-create')
       || JSON.stringify(receipt.after.budget) !== JSON.stringify(account.budget)
       || providerSpendEvidenceDigest(receipt.command) !== account.budgetRevisionDigest
       || receipt.after.unfrozenAtBudgetRevision !== account.unfrozenAtBudgetRevision) throw new ProviderSpendError('PROVIDER_SPEND_INVALID');

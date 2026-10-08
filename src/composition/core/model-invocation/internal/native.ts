@@ -1,7 +1,7 @@
 import { isDeepStrictEqual } from 'node:util';
-import { modelInvocationProfileSchema, type ModelBindingDefinition, type ModelInvocationProfile } from '#domain/index.js';
+import { modelInvocationProfileSchema, PROVIDER_SPEND_SCOPE_BUDGET_ID, type ModelBindingDefinition, type ModelInvocationProfile } from '#domain/index.js';
 import { ProviderSpendError, type ModelInvocationNativePort, type ModelInvocationSpendingAuthority, type ModelInvocationSpendingInput } from '#engine/index.js';
-import { createOpenAiChatPricedNative, isOpenAiChatHttpAdapter, parseOpenAiChatHttpDefinition, createOpenRouterPricedNative, OPENROUTER_CHAT_HTTP_ADAPTER_ID, OPENROUTER_CHAT_HTTP_ADAPTER_VERSION, parseOpenRouterChatDefinition, type OpenRouterPricedNative, fetchOpenRouterTariff, createOpenRouterTariffCache, type OpenRouterMetadataObservation, providerSpendingBudgetFor, openSqliteProviderSpendAccountReader, createAnthropicMessagesPricedNative, parseAnthropicMessagesDefinition, createDecisionHttpNativePort, decisionHttpAdapter, parseDecisionHttpDefinition, quoteDecisionHttpOperatorTariff, ANTHROPIC_MESSAGES_HTTP_ADAPTER_ID, ANTHROPIC_MESSAGES_HTTP_ADAPTER_VERSION, type AnthropicMessagesPricedNative, localPrefixCacheSalt } from '#adapters/index.js';
+import { createOpenAiChatPricedNative, isOpenAiChatHttpAdapter, parseOpenAiChatHttpDefinition, createOpenRouterPricedNative, OPENROUTER_CHAT_HTTP_ADAPTER_ID, OPENROUTER_CHAT_HTTP_ADAPTER_VERSION, parseOpenRouterChatDefinition, type OpenRouterPricedNative, fetchOpenRouterTariff, createOpenRouterTariffCache, type OpenRouterMetadataObservation, providerSpendingBudgetFor, providerSpendingConfiguredBudget, openSqliteProviderSpendAccountReader, createAnthropicMessagesPricedNative, parseAnthropicMessagesDefinition, createDecisionHttpNativePort, decisionHttpAdapter, parseDecisionHttpDefinition, quoteDecisionHttpOperatorTariff, ANTHROPIC_MESSAGES_HTTP_ADAPTER_ID, ANTHROPIC_MESSAGES_HTTP_ADAPTER_VERSION, type AnthropicMessagesPricedNative, localPrefixCacheSalt } from '#adapters/index.js';
 import type { ConfigLoadOptions, TrustedClock } from '#platform/index.js';
 import { scopedInvocationCredentialResolver } from './credential.js';
 import type { loadInvocationContext } from './context.js';
@@ -14,13 +14,15 @@ const installationCacheSalt = (context: InvocationNativeContext, scopeId: string
 /** One invocation-scoped registry owns the exact OpenRouter native/quote pair. Metadata acquisition is unauthenticated and completes before pure preparation; credential resolution remains send-only. Tariff acquisition, preparation, quote and send read one trusted clock: the host wall may step backwards between them (I40), and the platform floor, not raw Date.now, keeps them ordered within this process. */
 export function createConfiguredModelInvocationNative(context: InvocationNativeContext, options: ConfigLoadOptions, clock: TrustedClock) {
   const now = () => clock.sample().wallMs;
+  // The scope's ledger account wins (governed create/revision, stage 1); a configured budget alone opens the first account; neither: unavailable.
   const budgetFor = async (scopeId: string) => {
-    const configured = providerSpendingBudgetFor(await context.freshConfig(), scopeId);
+    const configured = providerSpendingConfiguredBudget(await context.freshConfig(), scopeId);
     const reader = await openSqliteProviderSpendAccountReader(await context.path(), { busyTimeoutMs: context.config.storage.sqlite.busyTimeoutMs });
     try {
-      const snapshot = await reader.loadSnapshot({ schemaVersion: 1, scopeId, budgetId: configured.budgetId, budgetRevision: configured.revision });
+      const snapshot = await reader.loadSnapshot({ schemaVersion: 1, scopeId, budgetId: configured?.budgetId ?? PROVIDER_SPEND_SCOPE_BUDGET_ID, budgetRevision: configured?.revision ?? 1 });
       const current = snapshot.checkpoint?.account.budget;
-      if (!current) return configured;
+      const only = current && configured ? null : current ?? configured;
+      if (!current || !configured) { if (!only) throw new ProviderSpendError('PROVIDER_SPEND_UNAVAILABLE'); return only; }
       if (current.budgetId !== configured.budgetId || current.currency !== configured.currency || current.revision < configured.revision)
         throw new ProviderSpendError('PROVIDER_SPEND_CONFLICT');
       return current;
