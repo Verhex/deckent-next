@@ -64,3 +64,10 @@ export function ceilProviderSpendExactMinorUnits(input: unknown): number {
   if (ceiling > MAX_SAFE) invalid();
   return Number(ceiling);
 }
+
+/** Compare canonical decimals without converting to floating point. */
+export function compareProviderSpendExactMinorUnits(leftInput: unknown, rightInput: unknown): number {
+  const left = parseFixed(canonicalProviderSpendExactMinorUnits(leftInput)), right = parseFixed(canonicalProviderSpendExactMinorUnits(rightInput));
+  const scale = Math.max(left.scale, right.scale), a = left.coefficient * 10n ** BigInt(scale - left.scale), b = right.coefficient * 10n ** BigInt(scale - right.scale);
+  return a === b ? 0 : a < b ? -1 : 1;
+}

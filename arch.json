@@ -1474,7 +1474,8 @@
         "src/domain/core/provider-spend",
         "src/domain/core/model-invocation",
         "src/engine/core/authentication",
-        "src/domain/core/principal"
+        "src/domain/core/principal",
+        "src/domain/core/model-activation"
       ],
       "plan": "PROVIDERS"
     },
