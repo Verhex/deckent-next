@@ -124,7 +124,7 @@ async function reclaim(lock: string, observed: NonNullable<Awaited<ReturnType<ty
 /** Exclusive directory ownership, private metadata, bounded waiting, and inode-safe release.
  * Without a caller timeout the wait is the registered `configFile.writeLockTimeoutMs` default (single source). */
 export async function withConfigWriteLock<T>(path: string, fn: () => Promise<T>, timeoutMs = getConfigFieldDefault('configFile').writeLockTimeoutMs, options: ConfigLockOptions = {}): Promise<T> {
-  await mkdir(dirname(path), { recursive: true });
+  await mkdir(dirname(path), { recursive: true, mode: 0o700 });
   const clock = new SystemTrustedClock(), started = clock.sample();
   const lock = `${path}.write-lock`, deadline = started.monotonicMs + timeoutMs;
   while (true) {
