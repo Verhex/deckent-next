@@ -38,6 +38,8 @@ const EXPECTED: Readonly<Record<string, Annotations>> = Object.freeze({
   // WORKER-CURRENCY-2: ledger model catalog; apply replays by (scope, commandId) receipt (SqliteModelCatalogStore.apply).
   inspect_model_catalog: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
   apply_model_catalog: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
+  // T4-B models.connect: every step checks what is in place first; each sub-write is keyed by the command id.
+  connect_model: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
   // K5 typed pool hold; apply replays by (scope, commandId) receipt (SqlitePoolHoldJournal.applyPoolHold).
   inspect_pool_hold: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
   apply_pool_hold: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
@@ -64,7 +66,7 @@ const noop = async () => ({});
 // tools/list is exercised here, so stub bodies never execute a real effect.
 const applications: McpApplications = {
   renewApproval: noop, listApprovals: noop, inspectApproval: noop,
-  inspectModelActivation: noop, admitModelActivation: noop, inspectModelCatalog: noop, applyModelCatalog: noop, inspectPoolHold: noop, applyPoolHold: noop, inspectModelInvocation: noop, invokeModel: noop,
+  inspectModelActivation: noop, admitModelActivation: noop, inspectModelCatalog: noop, applyModelCatalog: noop, connectModel: noop, inspectPoolHold: noop, applyPoolHold: noop, inspectModelInvocation: noop, invokeModel: noop,
   purgeModelInvocationContent: noop, cancelModelInvocation: noop, inspectProviderSpendAccount: noop,
   auditProviderSpendAccount: noop, inspectDeclaredModels: noop, inspectModelBinding: noop, inspectToolchainCurrency: noop,
   updateToolchains: noop, createRun: noop, reserveRunTasks: noop, executeTask: noop, evaluateTask: noop,

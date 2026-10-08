@@ -4,7 +4,7 @@ import { operationToolDefinitions } from './operation-tools.js';
 import { modelActivationQuerySchema, modelActivationCommandSchema, modelCatalogCommandSchema, modelCatalogQuerySchema, modelInvocationCancellationCommandSchema, modelInvocationCommandSchema, modelInvocationPurgeCommandSchema, modelInvocationQuerySchema, providerSpendAccountQuerySchema, providerSpendAuditCommandInputSchema, providerSpendAuditCommandSchema,
   type ModelActivationQuery, type ModelActivationCommand, type ModelCatalogCommand, type ModelCatalogQuery, type ModelInvocationCancellationCommand, type ModelInvocationCommand, type ModelInvocationPurgeCommand, type ModelInvocationQuery, type ProviderSpendAccountQuery, type ProviderSpendAuditCommand } from '#domain/index.js';
 import type { ModelActivationInspection, ModelActivationResult, ModelCatalogInspection, ModelCatalogResult, ModelInvocationCancellationResult, ModelInvocationInspection, ModelInvocationPurgeResult, ModelInvocationResult, ModelInvocationDelivery, ProviderSpendAccountInspection, ProviderSpendAuditResult, RuntimeServiceDelivery } from '#engine/index.js';
-import { attemptIdentitySchema, modelReferenceSchema, type AttemptIdentity, type ModelReference, type EffectCommand, type OperationDescriptor } from '#domain/index.js';
+import { attemptIdentitySchema, modelConnectCommandSchema, modelReferenceSchema, type ModelConnectCommand, type ModelConnectResult, type AttemptIdentity, type ModelReference, type EffectCommand, type OperationDescriptor } from '#domain/index.js';
 import { Server, type Tool, type CallToolResult } from '@modelcontextprotocol/server';
 import { z } from 'zod';
 import { zodToJsonSchema } from 'zod-to-json-schema';
@@ -25,6 +25,8 @@ export interface McpApplications {
   admitModelActivation?(command: ModelActivationCommand): Promise<ModelActivationResult>;
   inspectModelCatalog?(query: ModelCatalogQuery): Promise<ModelCatalogInspection>;
   applyModelCatalog?(command: ModelCatalogCommand): Promise<ModelCatalogResult>;
+  /** T4-B `models.connect`: the same application as CLI `models connect`, SDK `connectModel` and the terminal (secret names only, never a value). */
+  connectModel?(command: ModelConnectCommand): Promise<ModelConnectResult>;
   inspectPoolCapacity?(query: PoolHoldQuery): Promise<PoolCapacityView>;
   applyPoolCapacity?(command: PoolCapacityCommand): Promise<PoolCapacityReceipt>;
   inspectPoolHold?(query: PoolHoldQuery): Promise<PoolHoldView>;
@@ -161,6 +163,11 @@ export function createMcpServer(applications: McpApplications, limits: McpLimits
   if (applyCatalog) definitions.push({ readOnly: false, destructive: true, idempotent: true, name: 'apply_model_catalog',
     description: t('mcp.tool.applyModelCatalog', {}, locale), schema: modelCatalogCommandSchema,
     invoke: input => applyCatalog.call(applications, modelCatalogCommandSchema.parse(input)) });
+  const connectModel = applications.connectModel;
+  // Destructive but idempotent: every step of `models.connect` first checks what is in place, and each sub-write is keyed by the command id.
+  if (connectModel) definitions.push({ readOnly: false, destructive: true, idempotent: true, name: 'connect_model',
+    description: t('mcp.tool.connectModel', {}, locale), schema: modelConnectCommandSchema,
+    invoke: input => connectModel.call(applications, modelConnectCommandSchema.parse(input)) });
   const applyPoolCapacity = applications.applyPoolCapacity, inspectPoolCapacity = applications.inspectPoolCapacity;
   if (applyPoolCapacity) definitions.push({ readOnly: false, destructive: true, idempotent: true, name: 'apply_pool_capacity', description: t('mcp.tool.applyPoolCapacity', {}, locale),
     schema: poolCapacityCommandSchema, invoke: input => applyPoolCapacity.call(applications, poolCapacityCommandSchema.parse(input)) });

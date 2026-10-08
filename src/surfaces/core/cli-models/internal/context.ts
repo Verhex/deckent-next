@@ -6,6 +6,7 @@ import type { ModelActivationAdmissionHandler, ModelActivationInspectionHandler 
 import type { ModelInvocationCancellationHandler, ModelInvocationHandler, ModelInvocationInspectionHandler, ModelInvocationPurgeHandler } from './model-invocation.js';
 import type { ProviderSpendAccountInspectionHandler, ProviderSpendAuditHandler } from './model-spending.js';
 import type { ModelCatalogApplyHandler, ModelCatalogInspectionHandler } from './model-catalog.js';
+import type { ModelConnectHandler } from './model-connect.js';
 
 export type InferenceMetricsReading =
   | { readonly ok: true; readonly url: string; readonly body: string }
@@ -26,4 +27,6 @@ export interface ModelCommandContext extends CliBaseContext {
   admitModelActivation?: ModelActivationAdmissionHandler;
   inspectModelCatalog?: ModelCatalogInspectionHandler;
   applyModelCatalog?: ModelCatalogApplyHandler;
+  /** T4-B `models.connect` (CLI `models connect`, the terminal's /provider model step). */
+  connectModel?: ModelConnectHandler;
 }

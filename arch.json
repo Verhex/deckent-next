@@ -266,7 +266,8 @@
         "src/composition/core/decision",
         "src/composition/core/scoped-request",
         "src/composition/core/root",
-        "src/composition/core/identity-profile"
+        "src/composition/core/identity-profile",
+        "src/composition/core/model-connect"
       ],
       "plan": "SURFACES"
     },
@@ -329,7 +330,9 @@
         "src/platform/core/errors",
         "src/composition/core/operations",
         "src/composition/core/decision",
-        "src/composition/core/root"
+        "src/composition/core/root",
+        "src/composition/core/model-connect",
+        "src/composition/core/secrets"
       ],
       "plan": "SURFACES"
     },

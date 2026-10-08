@@ -10,6 +10,8 @@ import { createBoundedMcpTransport } from '#adapters/index.js';
 import { loadMcpSurface } from '#surfaces/index.js';
 import { createConfiguredRuntimeClient } from '#composition/core/runtime-service/index.js';
 import { inspectDeclaredModels, inspectModelBinding } from '#composition/core/provider-catalog/index.js';
+import { connectConfiguredModel } from '#composition/core/model-connect/index.js';
+import { listConfiguredSecretNames } from '#composition/core/secrets/index.js';
 import { inspectConfiguredToolchainCurrency, updateConfiguredToolchains } from '#composition/core/toolchains/index.js';
 import { describeMcpInference } from './inference-query.js';
 import { describeConfiguredOperationTools } from '#composition/core/operations/index.js';
@@ -35,6 +37,7 @@ export async function main(root = process.cwd()) {
     auditProviderSpendAccount: (command, delivery) => runtime.auditProviderSpendAccount(command, delivery),
     inspectModelActivation: query => inspectConfiguredModelActivation(root, query),
     admitModelActivation: command => admitConfiguredModelActivation(root, command), inspectModelCatalog: query => inspectConfiguredModelCatalog(root, query), applyModelCatalog: command => applyConfiguredModelCatalog(root, command),
+    connectModel: command => connectConfiguredModel(root, command, {}, { listSecretNames: listConfiguredSecretNames }),
     applyPoolCapacity: command => applyConfiguredPoolCapacity(root, command), inspectPoolCapacity: query => inspectConfiguredPoolCapacity(root, query),
     inspectPoolHold: query => inspectConfiguredPoolHold(root, query), applyPoolHold: command => applyConfiguredPoolHold(root, command),
     inferencePlan: input => describeMcpInference(root, 'plan', input.profileId),

@@ -64,6 +64,9 @@ export type { ModelBindingInspection } from '#engine/index.js';
 export type { ModelReference, ModelBindingDefinition } from '#domain/index.js';
 export { admitConfiguredModelActivation as admitModelActivation, inspectConfiguredModelActivation as inspectModelActivation,
   applyConfiguredModelCatalog as applyModelCatalog, inspectConfiguredModelCatalog as inspectModelCatalog } from '#composition/index.js';
+// T4-B `models.connect`: the same application as CLI `models connect`, MCP `connect_model` and the terminal.
+export { connectConfiguredModel as connectModel } from '#composition/index.js';
+export type { ModelConnectCommand, ModelConnectResult } from '#domain/index.js';
 export type { ModelCatalogCommand, ModelCatalogQuery, ModelCatalogReceipt, WorkerModelView, TaskEvaluationModel } from '#domain/index.js';
 export type { ModelCatalogInspection, ModelCatalogChannelView, ModelCatalogResult, TaskWorkerModel } from '#engine/index.js';
 export type { ModelActivationCommand, ModelActivationQuery, ModelActivationRecord, ModelActivationReceipt } from '#domain/index.js';
