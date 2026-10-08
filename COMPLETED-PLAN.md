@@ -6,6 +6,7 @@
 - **İnceleme zinciri:** Astra 2467 REVISE (P1: kesin-son servis kademesi çelişkisi ölçümü geri çeker, çağrı held kalır; P2: boş `cached_tokens` raporlanmamış sayılır); düzeltmeden sonra exact head `de163ffe` üzerinde Astra 2469 PASS.
 - **Açık sınırlar:** gerçek ücretli OpenAI, DeepSeek veya Z.ai çağrısı henüz yapılmadı; kompozisyon testleri operatör-statik tarife kullanır; satıcı satırları yalnız adaptör düzeyinde kanıtlıdır.
 - **Kanıt:** `proof/PRICING-2026-10-08/`.
+- **Canlıya geçiş:** owner 2026-10-08 (switch `8cc60c2d3610-e1fa0203b60c`).
 
 ## alpha.16 — 2026-10-08 (PR #47 + #48)
 
