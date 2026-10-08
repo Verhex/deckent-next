@@ -11,3 +11,5 @@ export { ModelCatalogApplication, ModelCatalogInspectionApplication, sameModelCa
 export type { ModelCatalogAdmission, ModelCatalogResult, ModelCatalogStore, ModelCatalogReader, ModelCatalogAuthorizer, ModelCatalogInspection, ModelCatalogChannelView } from './internal/catalog.js';
 export { admitWorkerModels, WorkerModelAdmissionError } from './internal/worker-admission.js';
 export type { WorkerModelAdmissionCode, WorkerModelAdmissionDetail, WorkerAdmissionWarning, WorkerAdmissionOptions } from './internal/worker-admission.js';
+export { ModelConnectApplication, ModelConnectError, declareConnectedModel } from './internal/connect.js';
+export type { ModelConnectBinding, ModelConnectDefaults, ModelConnectKind, ModelConnectLayer, ModelConnectPorts } from './internal/connect.js';

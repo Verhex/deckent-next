@@ -1,0 +1,245 @@
+{
+  "schemaVersion": 3,
+  "revision": "openai-api-2026-10-08",
+  "providers": [
+    {
+      "id": "openai-api",
+      "version": 1,
+      "channel": {
+        "kind": "http-api",
+        "cli": null,
+        "aliases": [],
+        "client": null,
+        "billing": "per-token",
+        "protocolFamily": "openai-chat-completions",
+        "aliasesRefused": [],
+        "provenance": {
+          "sourceUrl": "https://developers.openai.com/api/docs/models",
+          "fetchedOn": "2026-10-08"
+        }
+      },
+      "models": [
+        {
+          "id": "gpt-6-astra",
+          "version": 1,
+          "nativeId": "gpt-6-astra",
+          "protocols": [
+            {
+              "family": "openai-chat-completions",
+              "version": "v1",
+              "capabilities": [
+                {
+                  "id": "tool-calls",
+                  "version": 1,
+                  "state": "supported"
+                }
+              ]
+            }
+          ],
+          "lifecycle": {
+            "state": "active",
+            "deprecatedOn": null,
+            "retireNotBefore": null,
+            "retiredOn": null,
+            "source": {
+              "url": "https://developers.openai.com/api/docs/models/gpt-6-astra",
+              "observedOn": "2026-10-08"
+            }
+          },
+          "minCliVersion": null,
+          "efforts": [],
+          "aliases": [],
+          "channelModelId": "gpt-6-astra",
+          "vendorId": "openai",
+          "canonicalModelId": "gpt-6-astra",
+          "displayName": "GPT-6 Astra",
+          "modalities": {
+            "input": [
+              "text"
+            ],
+            "output": [
+              "text"
+            ]
+          },
+          "contextWindow": 1050000,
+          "maxOutputTokens": 128000,
+          "reasoning": {
+            "supportedEfforts": [],
+            "defaultEffort": null
+          },
+          "capabilities": {
+            "tools": "supported",
+            "vision": "unknown",
+            "pdf": "unknown",
+            "structuredOutput": "unknown",
+            "promptCaching": "unknown",
+            "streaming": "supported"
+          },
+          "pricing": {
+            "kind": "per-token",
+            "source": {
+              "sourceUrl": "https://developers.openai.com/api/docs/models/gpt-6-astra",
+              "fetchedOn": "2026-10-08"
+            },
+            "asOf": "2026-10-08",
+            "inputPerMTok": "10",
+            "outputPerMTok": "50",
+            "cacheReadPerMTok": "1"
+          },
+          "minClientVersion": null,
+          "provenance": {
+            "sourceUrl": "https://developers.openai.com/api/docs/models/gpt-6-astra",
+            "fetchedOn": "2026-10-08"
+          }
+        },
+        {
+          "id": "gpt-6.1-sol",
+          "version": 1,
+          "nativeId": "gpt-6.1-sol",
+          "protocols": [
+            {
+              "family": "openai-chat-completions",
+              "version": "v1",
+              "capabilities": [
+                {
+                  "id": "tool-calls",
+                  "version": 1,
+                  "state": "supported"
+                }
+              ]
+            }
+          ],
+          "lifecycle": {
+            "state": "active",
+            "deprecatedOn": null,
+            "retireNotBefore": null,
+            "retiredOn": null,
+            "source": {
+              "url": "https://developers.openai.com/api/docs/models/gpt-6.1-sol",
+              "observedOn": "2026-10-08"
+            }
+          },
+          "minCliVersion": null,
+          "efforts": [],
+          "aliases": [],
+          "channelModelId": "gpt-6.1-sol",
+          "vendorId": "openai",
+          "canonicalModelId": "gpt-6.1-sol",
+          "displayName": "GPT-6.1 Sol",
+          "modalities": {
+            "input": [
+              "text"
+            ],
+            "output": [
+              "text"
+            ]
+          },
+          "contextWindow": 1050000,
+          "maxOutputTokens": 128000,
+          "reasoning": {
+            "supportedEfforts": [],
+            "defaultEffort": null
+          },
+          "capabilities": {
+            "tools": "supported",
+            "vision": "unknown",
+            "pdf": "unknown",
+            "structuredOutput": "unknown",
+            "promptCaching": "unknown",
+            "streaming": "supported"
+          },
+          "pricing": {
+            "kind": "per-token",
+            "source": {
+              "sourceUrl": "https://developers.openai.com/api/docs/models/gpt-6.1-sol",
+              "fetchedOn": "2026-10-08"
+            },
+            "asOf": "2026-10-08",
+            "inputPerMTok": "2",
+            "outputPerMTok": "10",
+            "cacheReadPerMTok": "0.1"
+          },
+          "minClientVersion": null,
+          "provenance": {
+            "sourceUrl": "https://developers.openai.com/api/docs/models/gpt-6.1-sol",
+            "fetchedOn": "2026-10-08"
+          }
+        },
+        {
+          "id": "gpt-6-luna",
+          "version": 1,
+          "nativeId": "gpt-6-luna",
+          "protocols": [
+            {
+              "family": "openai-chat-completions",
+              "version": "v1",
+              "capabilities": [
+                {
+                  "id": "tool-calls",
+                  "version": 1,
+                  "state": "supported"
+                }
+              ]
+            }
+          ],
+          "lifecycle": {
+            "state": "active",
+            "deprecatedOn": null,
+            "retireNotBefore": null,
+            "retiredOn": null,
+            "source": {
+              "url": "https://developers.openai.com/api/docs/models/gpt-6-luna",
+              "observedOn": "2026-10-08"
+            }
+          },
+          "minCliVersion": null,
+          "efforts": [],
+          "aliases": [],
+          "channelModelId": "gpt-6-luna",
+          "vendorId": "openai",
+          "canonicalModelId": "gpt-6-luna",
+          "displayName": "GPT-6 Luna",
+          "modalities": {
+            "input": [
+              "text"
+            ],
+            "output": [
+              "text"
+            ]
+          },
+          "contextWindow": 1050000,
+          "maxOutputTokens": 128000,
+          "reasoning": {
+            "supportedEfforts": [],
+            "defaultEffort": null
+          },
+          "capabilities": {
+            "tools": "supported",
+            "vision": "unknown",
+            "pdf": "unknown",
+            "structuredOutput": "unknown",
+            "promptCaching": "unknown",
+            "streaming": "supported"
+          },
+          "pricing": {
+            "kind": "per-token",
+            "source": {
+              "sourceUrl": "https://developers.openai.com/api/docs/models/gpt-6-luna",
+              "fetchedOn": "2026-10-08"
+            },
+            "asOf": "2026-10-08",
+            "inputPerMTok": "0.1",
+            "outputPerMTok": "0.5",
+            "cacheReadPerMTok": "0.01"
+          },
+          "minClientVersion": null,
+          "provenance": {
+            "sourceUrl": "https://developers.openai.com/api/docs/models/gpt-6-luna",
+            "fetchedOn": "2026-10-08"
+          }
+        }
+      ]
+    }
+  ],
+  "recommendedActivations": []
+}

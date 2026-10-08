@@ -1278,7 +1278,8 @@
         "src/domain/core/provider-catalog",
         "src/engine/core/authentication",
         "src/engine/core/provider-catalog",
-        "src/domain/core/model-invocation"
+        "src/domain/core/model-invocation",
+        "src/domain/core/audit"
       ],
       "plan": "PROVIDERS"
     },
@@ -1323,6 +1324,27 @@
         "src/platform/core/config",
         "src/engine/core/model-invocation",
         "src/composition/core/model-invocation"
+      ],
+      "plan": "PROVIDERS"
+    },
+    "src/composition/core/model-connect": {
+      "dependencies": [
+        "src/domain/core/model-activation",
+        "src/engine/core/model-activation",
+        "src/engine/core/audit",
+        "src/engine/core/config",
+        "src/engine/core/model-invocation",
+        "src/adapters/core/provider-connect",
+        "src/adapters/core/local-keyring",
+        "src/adapters/core/audit-store",
+        "src/platform/core/errors",
+        "src/platform/core/config",
+        "src/composition/core/config",
+        "src/composition/core/provider-catalog",
+        "src/composition/core/scoped-request",
+        "src/composition/core/query-errors",
+        "src/composition/core/model-invocation",
+        "src/composition/core/model-activation"
       ],
       "plan": "PROVIDERS"
     },
@@ -1497,7 +1519,11 @@
     },
     "src/adapters/core/provider-connect": {
       "dependencies": [
-        "src/engine/core/agent-turn"
+        "src/engine/core/agent-turn",
+        "src/domain/core/provider-catalog",
+        "src/domain/core/primitives",
+        "src/adapters/core/provider-openai-chat",
+        "src/adapters/core/provider-anthropic-messages"
       ],
       "plan": "PROVIDERS"
     },

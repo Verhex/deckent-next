@@ -1,0 +1,172 @@
+{
+  "schemaVersion": 3,
+  "revision": "zai-api-2026-10-08",
+  "providers": [
+    {
+      "id": "zai-api",
+      "version": 1,
+      "channel": {
+        "kind": "http-api",
+        "cli": null,
+        "aliases": [],
+        "client": null,
+        "billing": "per-token",
+        "protocolFamily": "openai-chat-completions",
+        "aliasesRefused": [],
+        "provenance": {
+          "sourceUrl": "https://docs.z.ai/api-reference/llm/chat-completion",
+          "fetchedOn": "2026-10-08"
+        }
+      },
+      "models": [
+        {
+          "id": "glm-5.3",
+          "version": 1,
+          "nativeId": "glm-5.3",
+          "protocols": [
+            {
+              "family": "openai-chat-completions",
+              "version": "v1",
+              "capabilities": [
+                {
+                  "id": "tool-calls",
+                  "version": 1,
+                  "state": "supported"
+                }
+              ]
+            }
+          ],
+          "lifecycle": {
+            "state": "active",
+            "deprecatedOn": null,
+            "retireNotBefore": null,
+            "retiredOn": null,
+            "source": {
+              "url": "https://docs.z.ai/guides/llm/glm-5.3",
+              "observedOn": "2026-10-08"
+            }
+          },
+          "minCliVersion": null,
+          "efforts": [],
+          "aliases": [],
+          "channelModelId": "glm-5.3",
+          "vendorId": "zai",
+          "canonicalModelId": "glm-5.3",
+          "displayName": "GLM-5.3",
+          "modalities": {
+            "input": [
+              "text"
+            ],
+            "output": [
+              "text"
+            ]
+          },
+          "contextWindow": 1000000,
+          "maxOutputTokens": 131072,
+          "reasoning": {
+            "supportedEfforts": [],
+            "defaultEffort": null
+          },
+          "capabilities": {
+            "tools": "supported",
+            "vision": "unknown",
+            "pdf": "unknown",
+            "structuredOutput": "unknown",
+            "promptCaching": "unknown",
+            "streaming": "supported"
+          },
+          "pricing": {
+            "kind": "per-token",
+            "source": {
+              "sourceUrl": "https://docs.z.ai/guides/overview/pricing",
+              "fetchedOn": "2026-10-08"
+            },
+            "asOf": "2026-10-08",
+            "inputPerMTok": "1.4",
+            "outputPerMTok": "4.4",
+            "cacheReadPerMTok": "0.26"
+          },
+          "minClientVersion": null,
+          "provenance": {
+            "sourceUrl": "https://docs.z.ai/guides/llm/glm-5.3",
+            "fetchedOn": "2026-10-08"
+          }
+        },
+        {
+          "id": "glm-4.7-flash",
+          "version": 1,
+          "nativeId": "glm-4.7-flash",
+          "protocols": [
+            {
+              "family": "openai-chat-completions",
+              "version": "v1",
+              "capabilities": [
+                {
+                  "id": "tool-calls",
+                  "version": 1,
+                  "state": "supported"
+                }
+              ]
+            }
+          ],
+          "lifecycle": {
+            "state": "active",
+            "deprecatedOn": null,
+            "retireNotBefore": null,
+            "retiredOn": null,
+            "source": {
+              "url": "https://docs.z.ai/api-reference/llm/chat-completion",
+              "observedOn": "2026-10-08"
+            }
+          },
+          "minCliVersion": null,
+          "efforts": [],
+          "aliases": [],
+          "channelModelId": "glm-4.7-flash",
+          "vendorId": "zai",
+          "canonicalModelId": "glm-4.7-flash",
+          "displayName": "GLM-4.7-Flash",
+          "modalities": {
+            "input": [
+              "text"
+            ],
+            "output": [
+              "text"
+            ]
+          },
+          "contextWindow": null,
+          "maxOutputTokens": 131072,
+          "reasoning": {
+            "supportedEfforts": [],
+            "defaultEffort": null
+          },
+          "capabilities": {
+            "tools": "supported",
+            "vision": "unknown",
+            "pdf": "unknown",
+            "structuredOutput": "unknown",
+            "promptCaching": "unknown",
+            "streaming": "supported"
+          },
+          "pricing": {
+            "kind": "per-token",
+            "source": {
+              "sourceUrl": "https://docs.z.ai/guides/overview/pricing",
+              "fetchedOn": "2026-10-08"
+            },
+            "asOf": "2026-10-08",
+            "inputPerMTok": "0",
+            "outputPerMTok": "0",
+            "cacheReadPerMTok": "0"
+          },
+          "minClientVersion": null,
+          "provenance": {
+            "sourceUrl": "https://docs.z.ai/api-reference/llm/chat-completion",
+            "fetchedOn": "2026-10-08"
+          }
+        }
+      ]
+    }
+  ],
+  "recommendedActivations": []
+}

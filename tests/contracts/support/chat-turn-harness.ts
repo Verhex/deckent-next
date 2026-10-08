@@ -55,9 +55,11 @@ export async function runtime(options: { toolGrant?: boolean | 'approval'; token
   await mkdir(data, { recursive: true, mode: 0o700 });
   await writeFile(join(project, 'src', 'a.ts'), 'export const a = 1;\n');
   const state = { requests: [] as Record<string, unknown>[], raw: [] as string[], tokenize: [] as Record<string, unknown>[], script: [] as Script[], closed: 0 };
+  // The answering model echoes the requested one (T4-B: a connected seed model is served by the same scripted server).
+  let served = 'native-chat';
   const chunk = (delta: Record<string, unknown>, finish: string | null = null) => `data: ${JSON.stringify({ id: 'chatcmpl-turn',
-    object: 'chat.completion.chunk', created: 1, model: 'native-chat', choices: [{ index: 0, delta, finish_reason: finish }] })}\n\n`;
-  const usageOf = (completion = 8) => `data: ${JSON.stringify({ id: 'chatcmpl-turn', object: 'chat.completion.chunk', created: 1, model: 'native-chat', choices: [],
+    object: 'chat.completion.chunk', created: 1, model: served, choices: [{ index: 0, delta, finish_reason: finish }] })}\n\n`;
+  const usageOf = (completion = 8) => `data: ${JSON.stringify({ id: 'chatcmpl-turn', object: 'chat.completion.chunk', created: 1, model: served, choices: [],
     usage: { prompt_tokens: 20, completion_tokens: completion, total_tokens: 20 + completion } })}\n\n`;
   const server = createServer((req: IncomingMessage, res: ServerResponse) => {
     const body: Buffer[] = []; req.on('data', part => body.push(part));
@@ -70,6 +72,7 @@ export async function runtime(options: { toolGrant?: boolean | 'approval'; token
       }
       state.raw.push(Buffer.concat(body).toString('utf8'));
       state.requests.push(JSON.parse(Buffer.concat(body).toString('utf8')) as Record<string, unknown>);
+      served = typeof state.requests.at(-1)!['model'] === 'string' ? state.requests.at(-1)!['model'] as string : 'native-chat';
       const step = state.script[state.requests.length - 1] ?? { content: 'no script' };
       if (step.status !== undefined) {
         // A provider rejection shaped like the owner's vLLM answer to a lone surrogate (SURROGATE-CUT 2026-09-30).
@@ -79,7 +82,7 @@ export async function runtime(options: { toolGrant?: boolean | 'approval'; token
       }
       if (step.summary !== undefined) {
         res.writeHead(200, { 'content-type': 'application/json' });
-        res.end(JSON.stringify({ id: 'chatcmpl-sum', object: 'chat.completion', created: 1, model: 'native-chat',
+        res.end(JSON.stringify({ id: 'chatcmpl-sum', object: 'chat.completion', created: 1, model: served,
           choices: [{ index: 0, finish_reason: 'stop', message: { role: 'assistant', content: step.summary } }],
           usage: { prompt_tokens: 50, completion_tokens: 20, total_tokens: 70 } })); return;
       }

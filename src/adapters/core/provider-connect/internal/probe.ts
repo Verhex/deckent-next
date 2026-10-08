@@ -73,10 +73,13 @@ export function providerProbeBase(kind: ProviderConnectKind, endpoint: string | 
  */
 export async function probeProviderConnection(input: ProviderProbeInput, options: ProviderProbeOptions = {}): Promise<ProviderProbeResult> {
   const kind = providerConnectKind(input.kind);
-  if (!kind?.available || !kind.probe || !kind.key) throw new ProviderProbeError('PROVIDER_KIND_UNAVAILABLE');
+  if (!kind?.available || !kind.key) throw new ProviderProbeError('PROVIDER_KIND_UNAVAILABLE');
   const key = input.key === null || input.key === '' ? null : input.key;
   if (kind.key.required && key === null) throw new ProviderProbeError('PROVIDER_KEY_REQUIRED');
   const base = providerProbeBase(kind, input.endpoint);
+  // A provider that documents no free read (T4-B: Z.ai GLM has no models list): nothing is sent; the key is kept unverified (`httpStatus` null)
+  // and the first turn shows any rejection.
+  if (!kind.probe) return { outcome: 'ok', httpStatus: null, key: key === null ? 'none' : 'unverified' };
   const headers: Record<string, string> = { accept: 'application/json', ...kind.probe.headers };
   if (key !== null) headers[kind.probe.auth.type === 'bearer' ? 'authorization' : kind.probe.auth.name] = kind.probe.auth.type === 'bearer' ? `Bearer ${key}` : key;
   const timeout = AbortSignal.timeout(options.timeoutMs ?? PROVIDER_CONNECT_LIMITS.timeoutMs);
