@@ -6,9 +6,7 @@ import { ErrorRegistry, type ConfigLoadOptions } from '#platform/index.js';
 import { extractOpenAiChatTextFromInvocation, openAiChatStoppedAtLength, readTerminalChatConfig, type TerminalModelSource } from '#adapters/index.js';
 import { inspectModelBinding } from '#composition/core/provider-catalog/index.js';
 import { configuredTerminalModel } from '#composition/core/config/index.js';
-
 export type TerminalChatMessage = Readonly<{ role: 'system' | 'user' | 'assistant'; content: string }>;
-
 export type TerminalChatPlan = Readonly<{
   schemaVersion: 1;
   status: 'ready' | 'not-configured' | 'model-not-declared';
@@ -19,13 +17,11 @@ export type TerminalChatPlan = Readonly<{
   maxCompletionTokens: number | null;
   historyMessages: number | null;
 }>;
-
 /** Governed model invocation service; the shipped executable wires the local runtime client. */
 export interface TerminalChatInvocationPorts {
   invoke(projectRoot: string, command: ModelInvocationCommand, options: ConfigLoadOptions, signal?: AbortSignal): Promise<ModelInvocationResult>;
   cancel(projectRoot: string, command: ModelInvocationCancellationCommand, options: ConfigLoadOptions): Promise<unknown>;
 }
-
 export interface TerminalChatTurnInput {
   readonly projectRoot: string;
   readonly scopeId: string;
@@ -33,7 +29,6 @@ export interface TerminalChatTurnInput {
   readonly options: ConfigLoadOptions;
   readonly signal?: AbortSignal;
 }
-
 export async function describeTerminalChat(projectRoot: string, options: ConfigLoadOptions = {}): Promise<TerminalChatPlan> {
   const chat = readTerminalChatConfig(await loadComposedConfig(projectRoot, options) as Record<string, unknown>);
   if (!chat) return Object.freeze({ schemaVersion: 1, status: 'not-configured', reference: null, source: null, catalogRevision: null, maxCompletionTokens: null, historyMessages: null });
@@ -44,7 +39,6 @@ export async function describeTerminalChat(projectRoot: string, options: ConfigL
   return Object.freeze({ schemaVersion: 1, status: binding.status === 'declared' ? 'ready' : 'model-not-declared', reference, source: choice?.source ?? 'user',
     catalogRevision: binding.catalogRevision, maxCompletionTokens: chat.maxCompletionTokens, historyMessages: chat.historyMessages });
 }
-
 /**
  * One chat turn is one governed model invocation: principal, policy, activation and spending are enforced by the
  * invocation service for the caller's scope. Abort stops the wait and requests cancellation of that invocation.
@@ -67,13 +61,11 @@ export async function prepareTerminalChatCommand(input: TerminalChatTurnInput, s
     reference, catalogRevision: binding.catalogRevision, expectedBinding: binding.binding, nativeRequest };
   return { chat, command };
 }
-
 /** Governed cancellation of the turn's exact invocation, as a separately authorized command. */
 export function terminalChatCancellation(command: ModelInvocationCommand): ModelInvocationCancellationCommand {
   return { schemaVersion: 1, commandId: randomUUID(), scopeId: command.scopeId, targetCommandId: command.commandId,
     reference: command.reference, expectedRequestDigest: modelInvocationRequestDigest(command) };
 }
-
 /**
  * One chat turn is one governed model invocation: principal, policy, activation and spending are enforced by the
  * invocation service for the caller's scope. Abort stops the wait and requests cancellation of that invocation.
@@ -96,7 +88,6 @@ export async function completeTerminalChatTurn(input: TerminalChatTurnInput, por
   }
   return text;
 }
-
 /**
  * The same configuration check the plain turn makes, before an agent turn contacts the service; returns the service's admission from
  * that configuration, so the stream can name the summarizing phase (TL-A).

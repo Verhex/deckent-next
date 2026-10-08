@@ -48,13 +48,11 @@ export function createRuntimeChatTurnHost(model: RuntimeModelInvocationHost, sig
   void shellSandboxCapabilities(globalStateRoot()); // Start once with the service; turns await the same bounded observation (BWRAP-SELECT: launcher under the global state root).
   return Object.freeze({ model, signal, running: new Map(), scratch, fetchTransport, shellSandboxes, mcp: new McpClientPool(signal, mcpMaxServers ? { maxServers: mcpMaxServers } : {}), decisions: createTurnDecisionCapabilities(), answers: new SessionApprovalAnswers(signal) });
 }
-
 const sha256 = (text: string) => createHash('sha256').update(text).digest('hex');
 const principalKeyOf = (principal: { readonly issuer: string; readonly subject: string }) => sha256(`agent-turn-principal:1\0${principal.issuer}\0${principal.subject}`);
 const runningKey = (scopeId: string, turnId: string) => `${scopeId}\0${turnId}`;
 /** Compaction command id: the n-th compaction of a turn is one governed invocation, never billed twice on replay. */
 export const chatTurnCompactionCommandId = (scopeId: string, turnId: string, sequence: number) => sha256(`turn-compact:1\0${scopeId}\0${turnId}\0${sequence}`);
-
 /** MODES-3: a turn launched in full access is admitted only on the company grant, and recorded before anything runs (no record, no turn; a
  * refusal is recorded when it can be). */
 async function admitFullAccess(context: Awaited<ReturnType<typeof loadPeerInvocationContext>>, command: { readonly scopeId: string; readonly turnId: string;
@@ -65,12 +63,10 @@ async function admitFullAccess(context: Awaited<ReturnType<typeof loadPeerInvoca
   if (!admission.allowed) throw ErrorRegistry.createError('PERMISSION_MODE_DENIED', { params: { mode: 'full-access' } });
   if (!recorded) throw ErrorRegistry.createError('AUDIT_UNAVAILABLE');
 }
-
 /** What the owner sees before deciding a call: the tool and its arguments (slice 2 adds the edit diff). Bounded presentation. */
 export function chatTurnApprovalPreview(tool: string, args: Record<string, unknown>): string { return projectModelIngressField(boundApprovalPreview(`${tool} ${JSON.stringify(args, null, 2)}`)).modelText; }
 /** Round command id (Astra 2074 D3): the same turn and round is the same governed invocation, so a replay never bills twice. */
 export const chatTurnRoundCommandId = (scopeId: string, turnId: string, round: number) => sha256(`turn-round:1\0${scopeId}\0${turnId}\0${round}`);
-
 /** One governed terminal turn: authenticated peer, fresh policy and tools; the engine owns execution.
  * Required events drain before further work; disconnect, own-principal cancellation and stop abort the turn. */
 export async function runPeerConfiguredChatTurn(projectRoot: string, input: unknown, peer: LocalPeerIdentity, options: ConfigLoadOptions,
@@ -349,7 +345,6 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
     store?.close();
   }
 }
-
 /** Cancels a running turn of the same principal at once; another principal's turn or an unknown id is `not-running`. */
 export async function cancelPeerConfiguredChatTurn(projectRoot: string, input: unknown, peer: LocalPeerIdentity, options: ConfigLoadOptions,
   host: RuntimeChatTurnHost): Promise<ChatTurnCancellationResult> {

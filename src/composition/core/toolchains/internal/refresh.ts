@@ -5,7 +5,6 @@ import { loadConfig, inspectProductDirectory, prepareProductDirectory, writeJson
 import { registryLayerHold, REGISTRY_WRITE_ATTEMPTS, unverifiedReason, refreshAuditName, refreshIntervalMs, refreshInProgress, refreshStatus, refreshTriggerAllowed, toolchainRefreshStateSchema, reviseRegistryForProposal, type ToolchainRefreshState, type ToolchainRefreshTrigger } from '#engine/index.js';
 import { createConfiguredConfigApplication, resolveConfiguredConfigPrincipal, snapshotConfiguredConfig } from '#composition/core/config/index.js';
 import { updateConfiguredToolchains, writeArtifact, type ToolchainUpdateDependencies } from './update.js';
-
 /** Typed event of one refresh: `started` when a build was admitted, then exactly one of `current` or `failed` (WORKER-AUTO-REFRESH). */
 export type ToolchainRefreshEvent = Readonly<{ schemaVersion: 1; event: 'toolchain-refresh'; phase: 'started' | 'current' | 'failed' | 'unverified'; trigger: ToolchainRefreshTrigger;
   imageVersion: string | null; imageId: string | null; appliedProfiles: number; code: string | null }>;
@@ -14,7 +13,6 @@ export interface ToolchainRefreshObserver { onToolchainRefresh?(event: Toolchain
 const MARKER_GRACE_MS = 60_000;
 const holdError = (code: string) => Object.assign(new Error(code), { code });
 const failureCode = (error: unknown) => (error && typeof error === 'object' && 'code' in error && typeof (error as { code: unknown }).code === 'string' ? (error as { code: string }).code : 'UNKNOWN').slice(0, 128);
-
 /** The durable refresh marker (null when none was ever written or it is unreadable). Admission, doctor and monitor read it; only the refresh writes it. */
 export async function readToolchainRefreshState(projectRoot: string, options: ConfigLoadOptions = {}): Promise<ToolchainRefreshState | null> {
   try {
@@ -34,7 +32,6 @@ export async function isToolchainRefreshInProgress(projectRoot: string, options:
   return refreshInProgress(await readToolchainRefreshState(projectRoot, options), Date.now());
 }
 async function writeState(home: string, state: ToolchainRefreshState) { await mkdir(home, { recursive: true, mode: 0o700 }); await writeJsonAtomic(join(home, 'refresh-state.json'), state); }
-
 export type ToolchainRefreshOutcome = Readonly<{ outcome: 'skipped' | 'current' | 'failed' | 'unverified'; event: ToolchainRefreshEvent | null }>;
 export interface ToolchainRefreshDependencies extends ToolchainUpdateDependencies {
   /** Test seam: runs after the registry was read and the revision derived, immediately before the compare-and-set write. */
@@ -115,7 +112,6 @@ async function runRefresh(projectRoot: string, trigger: ToolchainRefreshTrigger,
   const event = await emit(phase, { imageVersion, imageId, appliedProfiles: applied, code: code ?? unverified });
   return Object.freeze({ outcome: phase, event });
 }
-
 export interface ToolchainRefreshHandle { readonly done: Promise<void> }
 /**
  * The service's refresh schedule: one start refresh and, when `intervalMs` is positive, one per interval. Never awaited by readiness,
