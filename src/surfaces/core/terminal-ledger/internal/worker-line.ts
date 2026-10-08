@@ -63,7 +63,8 @@ function clip(value: string): string {
 
 function activityText(entry: WorkLedgerWorkerEntry, labels: WorkerLineLabels): string {
   const live = entry.live;
-  if (!live?.phase) return entry.process;
+  // Without a live phase the observed process state is named in the catalog's words (TUI2 L3), never the raw state name.
+  if (!live?.phase) return labels.card?.workerProcess[entry.process] ?? entry.process;
   const phase = labels.phases[live.phase];
   if (live.phase === 'finished' || live.phase === 'failed') return fillTemplate(labels.reported, { phase });
   if (live.phase === 'starting') return phase;

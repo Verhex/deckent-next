@@ -8,6 +8,7 @@ import { join, resolve } from 'node:path';
 import { promisify } from 'node:util';
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, describe, expect, it } from 'vitest';
+import { terminalScreen } from '../../fixtures/terminal-screen.js';
 import { CURRENT_LEDGER_VERSION } from '#adapters/core/sqlite-ledger/index.js';
 import { encodeModelBindingDefinition } from '#domain/core/provider-catalog/index.js';
 import { openSqliteModelActivationStore, readLocalOsIdentity } from '#adapters/index.js';
@@ -202,15 +203,44 @@ describe.skipIf(process.platform === 'win32')('deckent terminal in a real pseudo
     const f = await project();
     const result = await inPty(f.projectRoot, f.env, ['terminal', 'workline', '--scope', 'pty-scope'], [
       ['Deckent workline', '/workers\r'],
-      ['POLICY_UNAVAILABLE', 'hello\r'],
+      // SLASH-WINDOWS (SW-2): the policy refusal is shown in the /workers window; Esc closes it and leaves the one system line.
+      ['POLICY_UNAVAILABLE', '\u001b'],
+      ['◆ Deckent system · The trusted policy', 'hello\r'],
       ['TERMINAL_CHAT_NOT_CONFIGURED', '/nope\r'],
-      ['Unknown command: /nope', '/exit\r'],
+      // SLASH-WINDOWS: an unknown command is a small window naming it (no error line in the chat); Esc closes it.
+      ['is not a Deckent command', '\u001b'],
+      ['Deckent workline', '/exit\r'],
     ]);
     expect(result.timeout, result.output).toBeUndefined();
     expect(result.status).toBe(0);
+    expect(result.output).not.toContain('Unknown command: /nope');
     expect(result.output).toContain('pty-scope');
     const colour = new RegExp(`${String.fromCharCode(27)}\\[(3[0-7]|9[0-7]|38;)`);
     expect(result.output).not.toMatch(colour);
+  });
+
+  // Owner 2026-10-08: /clear erases the visible screen AND the terminal's scrollback (ED 2 + ED 3); afterwards only its one system line remains.
+  // NO_COLOR concerns colour only, so /clear still clears with it; on TERM=dumb it sends no escape sequence at all (second run).
+  it('/clear erases the screen and the scrollback in a real terminal (also with NO_COLOR); on TERM=dumb it sends nothing', async () => {
+    const f = await project();
+    const colour = Object.fromEntries(Object.entries(f.env).filter(([key]) => key !== 'NO_COLOR'));
+    const steps: ReadonlyArray<readonly [string, string]> = [['Deckent workline', 'hello\r'], ['TERMINAL_CHAT_NOT_CONFIGURED', '/clear\r'], ['New conversation started.', '/exit\r']];
+    const result = await inPty(f.projectRoot, colour, ['terminal', 'workline', '--scope', 'pty-scope'], steps);
+    expect(result.timeout, result.output).toBeUndefined();
+    expect(result.status).toBe(0);
+    const at = result.output.lastIndexOf('\u001b[3J');
+    expect(at, 'ED 3 sent').toBeGreaterThan(-1);
+    expect(result.output.lastIndexOf('\u001b[2J', at)).toBeGreaterThan(result.output.indexOf('TERMINAL_CHAT_NOT_CONFIGURED'));
+    // The replayed terminal, scrollback included: the earlier conversation is gone; the new conversation's one system line is there.
+    const screen = terminalScreen(result.output, 120);
+    expect(screen).not.toContain('TERMINAL_CHAT_NOT_CONFIGURED'); expect(screen).not.toMatch(/│ hello/u);
+    expect(screen).toContain('◆ Deckent system · New conversation started.');
+    const noColour = await inPty(f.projectRoot, f.env, ['terminal', 'workline', '--scope', 'pty-scope'], steps);
+    expect(noColour.timeout, noColour.output).toBeUndefined();
+    expect(noColour.output.slice(noColour.output.indexOf('TERMINAL_CHAT_NOT_CONFIGURED'))).toContain('\u001b[3J');
+    const dumb = await inPty(f.projectRoot, { ...f.env, TERM: 'dumb' }, ['terminal', 'workline', '--scope', 'pty-scope'], steps);
+    expect(dumb.timeout, dumb.output).toBeUndefined();
+    expect(dumb.output.slice(Math.max(0, dumb.output.indexOf('TERMINAL_CHAT_NOT_CONFIGURED')))).not.toContain('\u001b[3J');
   });
 
   it('arms exit on the first idle Ctrl+C and exits on the second in a real terminal', async () => {
@@ -259,8 +289,10 @@ describe.skipIf(process.platform === 'win32')('deckent terminal in a real pseudo
     const result = await inPty(f.projectRoot, f.env, ['terminal', 'workline', '--scope', 'scope'], [
       ['Deckent workline', '/hel'],
       ['/help', '\r'],
-      // S08: /help lists registry rows (name, two spaces, detail); the palette pads names to a column, so this row only matches the notice.
-      ['/watch-stop  Stop following workers and runs', 'see @READ'],
+      // SW-1: /help opens its window (registry rows: name, two spaces, detail; the palette pads names to a column); Esc closes it and leaves
+      // the one framed system summary line, then the composer owns the keyboard again.
+      ['Stop following workers and runs', '\u001b'],
+      ['Help: ', 'see @READ'],
       ['> @README.md', '\r'],
       ['see @README.md |', '\r'],
       ['pty-ok', '/exit\r'],

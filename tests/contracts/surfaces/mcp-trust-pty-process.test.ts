@@ -164,14 +164,16 @@ describe.skipIf(process.platform !== 'linux')('MCP first-use trust card and /mcp
       ['Deckent workline', 'hello\r'],
       ['mcp_trust · mcp:fx · launch', 'y'],
       ['mcp_trust · mcp:fx · tools', 'y'],
-      ['Trusted turn done.', '/mcp list\r'], // T3 L4: a bare /mcp is the window; `list` keeps the text list
-      ['fx · project · trusted · 1 tool', '/exit\r'],
+      // SLASH-WINDOWS I-1 (owner 2026-10-08): in the terminal a typed `/mcp list` opens the /mcp window with the one-time note (the CLI keeps `list`).
+      ['Trusted turn done.', '/mcp list\r'],
+      ['Typed arguments are not used in the terminal', '\u001b'],
+      ['Typed arguments are not used in the terminal', '/exit\r'],
     ]);
     expect(run.timeout, run.output).toBeUndefined();
     expect(run.status, run.output).toBe(0);
     expect(run.output).toContain('MCP server fx (project scope'); expect(run.output).toContain('start it?');
     expect(run.output).toContain('trust it and pin these tools?'); expect(run.output).toContain('echo');
-    expect(run.output).toMatch(/fx · project · trusted/u);
+    expect(run.output).toMatch(/fx › +trusted · 1 tool · [^ ]+ · project/u);
     expect(f.seen.tools[0]).toContain('mcp__fx__echo');
     expect(f.started()).toBeGreaterThan(0);
     const db = new DatabaseSync(f.ledger, { readOnly: true });

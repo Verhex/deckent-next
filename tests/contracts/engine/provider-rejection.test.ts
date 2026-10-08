@@ -31,8 +31,10 @@ describe('provider refusal classification', () => {
     expect(classifyProviderRejection(withBody(429, { type: 'insufficient_quota', code: 'insufficient_quota', message: 'quota' }))).toBe('spend-limit');
     expect(classifyProviderRejection(withBody(429, { type: 'rate_limit_error', message: 'Number of request tokens has exceeded your per-minute rate limit' }))).toBe('rate-limit');
     expect(classifyProviderRejection(withBody(400, { type: 'invalid_request_error', message: 'max_tokens: too large' }))).toBeNull();
-    // A body that is not the provider's JSON error never decides a spend limit.
-    expect(classifyProviderRejection({ reason: 'http-status', httpStatus: 429, body: { data: Buffer.from('<html>busy</html>').toString('base64') } })).toBe('rate-limit');
+    // A body that is not the provider's JSON error decides neither a spend nor a rate limit (Astra 2450 a).
+    expect(classifyProviderRejection({ reason: 'http-status', httpStatus: 429, body: { data: Buffer.from('<html>busy</html>').toString('base64') } })).toBe('limit-reached');
+    expect(classifyProviderRejection(withBody(429, { type: 'overloaded_error', message: 'busy' }))).toBe('limit-reached');
+    expect(classifyProviderRejection(withBody(429, { type: 'requests', code: 'rate_limit_exceeded', message: 'slow down' }))).toBe('rate-limit');
   });
   it('the turn note carries the token next to the status; the body never enters it', () => {
     const body = { encoding: 'base64' as const, byteLength: 159, observedBytes: 159, complete: true, digest: 'f'.repeat(64) };

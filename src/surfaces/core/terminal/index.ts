@@ -1,6 +1,8 @@
 export { runTerminalWorkline, WorklineApp, type WorklineCompleteTurn, type WorklineLabels, type WorklineProps, type WorklineRunOptions } from './internal/workline.js';
 export { resumedHistoryEntries, RESUME_SHOWN_MESSAGES, RESUME_USER_TEXT_CHARS, type ResumedHistoryLabels } from './internal/workline-history.js';
 export type { WorklineReasoningLabels } from './internal/workline-reasoning.js';
+export type { SlashWindowLabels } from './internal/workline-windows.js';
+export { helpInfoModel } from './internal/workline-info.js';
 export { mentionNotices, type WorklineAttachMentions, type WorklineMentionAttachment, type WorklineMentionLabels, type WorklineMentionNote } from './internal/workline-mentions.js';
 export { PermissionModeKeys, runModeCommand, cyclePermissionMode, permissionModeCycle, permissionModeStop, nextPermissionModeStop, type WorklineModeLabels, type WorklinePermissionModePort } from './internal/workline-mode.js';
 export { bindSessionScope, useConversationSession, type TerminalSessionStoreView, type ConversationSessionLabels, type ConversationSessionPort, type ConversationSessionSummary, type SessionCommandResult, type SessionRefusal } from './internal/workline-sessions.js';
@@ -44,4 +46,4 @@ export { COMPOSER_LIMITS, EMPTY_COMPOSER, composerMenu, exitArmed, reduceCompose
 export { composerKey } from '#surfaces/core/terminal-composer/index.js';
 export { PASTE_COLLAPSE, expandChips, mentionAt, pendingArgument, slashMatches, type ComposerMentionPort, type PasteChip, type PastePolicy } from '#surfaces/core/terminal-composer/index.js';
 export { caretRow, displayWidth, graphemes, layoutRows } from '#surfaces/core/terminal-composer/index.js';
-export { CLEAR_VISIBLE_SCREEN, clearVisibleScreen, STARTUP_BANNERS, STARTUP_BANNER_MIN_COLUMNS, StartupBanner, startupFrame, writeStartup, type WorklineStartup } from './internal/startup-banner.js';
+export { CLEAR_SCREEN_AND_SCROLLBACK, CLEAR_VISIBLE_SCREEN, clearVisibleScreen, STARTUP_BANNERS, STARTUP_BANNER_MIN_COLUMNS, StartupBanner, startupFrame, writeStartup, type WorklineStartup } from './internal/startup-banner.js';

@@ -48,3 +48,16 @@ export interface SecretStoreFactory { readonly id: string; create(context: Secre
 export const isSecretName = (name: unknown): name is string => typeof name === 'string' && SECRET_NAME_PATTERN.test(name);
 export const isSecretValue = (value: unknown): value is string => typeof value === 'string' && value.length > 0
   && Buffer.byteLength(value, 'utf8') <= SECRET_VALUE_MAX_BYTES;
+
+/**
+ * The installation's one consistency boundary for secret mutations (SECRET-STORE-SWITCH, Astra 2456 P1-1). Every change of a stored secret
+ * and every store switch (selection read, copy, read back, publish, old-copy removal, leftover cleanup) runs inside `exclusive`, so a write can
+ * never interleave with a move and be removed with the old copy. The section spans processes (several runtime services and the CLI share one
+ * installation store); a wait it cannot get within its bound is the typed `SECRET_STORE_BUSY`, never a hang. Reference resolution stays
+ * outside: before publication the old store holds every value, after it the new one does.
+ */
+export interface SecretCustody {
+  exclusive<T>(work: () => Promise<T>): Promise<T>;
+  /** The installation's selected store id, read now (an absent selection is the environment backend); called inside `exclusive`. */
+  selected(): Promise<string>;
+}

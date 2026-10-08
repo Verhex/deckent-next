@@ -104,7 +104,15 @@ async function fixture(locale: Locale, settings: { fullAccess?: boolean; path?: 
   cleanups.push(async () => { view.instance.unmount(); controller.abort(); await rm(root, { recursive: true, force: true }); });
   const type = async (text: string) => { for (const ch of text) { view.stdin.write(ch); await settle(3); } };
   const rows = (sql: string) => { const db = new DatabaseSync(opened.path, { readOnly: true }); try { return db.prepare(sql).all(); } finally { db.close(); } };
-  return { view, type, events, requests, rows, project, client, host, faults };
+  // SLASH-WINDOWS (SW-2): `/approvals` takes no typed argument in the terminal; clearing the session's answers is the picker's last row,
+  // confirmed in its own window (y), and its acknowledgement is the one system line (whitespace and window rails folded for matching).
+  const clearSession = async () => {
+    const jobs = workSurfaceLabels(locale).jobs!;
+    await type('/approvals\r'); await until(() => view.stdout.frame.includes(jobs.clearSession), 'clear-session row');
+    await settle(40); await type('\r'); await until(() => view.stdout.frame.includes(jobs.clearDetail), 'clear-session confirmation'); await settle(40); await type('y');
+  };
+  const shown = () => view.stdout.text.replace(/[┃│]/g, ' ').replace(/\s+/g, ' ');
+  return { view, type, events, requests, rows, project, client, host, faults, clearSession, shown };
 }
 it.each(['en', 'tr'] as const)('producer → runtime service → real Workline s and clear-session: visible %s text, real writes, remembered/used audit and next prompt', async locale => {
   const f = await fixture(locale);
@@ -131,10 +139,10 @@ it.each(['en', 'tr'] as const)('producer → runtime service → real Workline s
   expect(await readFile(join(f.project, 'src/a.ts'), 'utf8')).toBe('value-3\n');
   const subjects = f.rows('SELECT record FROM audit_events').map(row => JSON.parse(String(row.record)).event.subject);
   expect(subjects.filter(s => s.kind === 'standing-approval').map(s => s.phase).sort()).toEqual(['remembered', 'used']);
-  await settle(50); await f.type('/approvals clear-session\r');
-  await until(() => f.requests.some(r => r.operation === 'clearSessionStanding'), 'typed clear operation');
+  await settle(50); await f.clearSession();
+  await until(() => f.requests.some(r => r.operation === 'clearSessionStanding'), 'picked clear operation');
   const clear = f.requests.find(r => r.operation === 'clearSessionStanding')!.input as { sessionId: string };
-  await until(() => f.view.stdout.text.includes(t('terminal.approval.sessionCleared', { session: clear.sessionId }, locale)), 'visible clear acknowledgement');
+  await until(() => f.shown().includes(t('terminal.approval.sessionCleared', { session: clear.sessionId }, locale)), 'visible clear acknowledgement');
   const command = f.requests.find(r => r.operation === 'decideApproval')!.input;
   expect(await f.client.decideApproval(command)).toMatchObject({ record: { status: 'decided', decision: { decision: 'allow' } }, standing: { status: 'unconfirmed' } });
   await f.type('third\r'); await until(() => f.events.filter(e => e.kind === 'approval.requested').length === 2, 'fresh card after clear');
@@ -195,12 +203,12 @@ it('clear-session follows new and resumed conversation identity and leaves anoth
   const own = SessionStanding.sessionKey('scope', { issuer: hostname(), subject: String(userInfo().uid) }, original), key = 'v1:session:edit-self-source:write_file:directory:src/*';
   expect(f.host.answers.memory.has(own, key)).toBe(true);
   await f.type('/clear\r'); await until(() => f.view.stdout.text.includes('NEW-SESSION'), 'new conversation');
-  await f.type('/approvals clear-session\r'); await until(() => f.requests.filter(r => r.operation === 'clearSessionStanding').length === 1, 'new conversation clear');
+  await f.clearSession(); await until(() => f.requests.filter(r => r.operation === 'clearSessionStanding').length === 1, 'new conversation clear');
   const fresh = (f.requests.find(r => r.operation === 'clearSessionStanding')!.input as { sessionId: string }).sessionId;
   expect(fresh).not.toBe(original); expect(f.host.answers.memory.has(own, key)).toBe(true);
-  await until(() => f.view.stdout.text.includes(t('terminal.approval.sessionCleared', { session: fresh }, 'en')), 'fresh clear notice');
+  await until(() => f.shown().includes(t('terminal.approval.sessionCleared', { session: fresh }, 'en')), 'fresh clear notice');
   await f.type(`/resume ${original}\r`); await until(() => f.view.stdout.text.includes(`RESUMED 4 ${original.slice(0, 8)}`), 'resumed original conversation');
-  await f.type('/approvals clear-session\r'); await until(() => f.requests.filter(r => r.operation === 'clearSessionStanding').length === 2, 'resumed clear');
+  await f.clearSession(); await until(() => f.requests.filter(r => r.operation === 'clearSessionStanding').length === 2, 'resumed clear');
   expect((f.requests.filter(r => r.operation === 'clearSessionStanding').at(-1)!.input as { sessionId: string }).sessionId).toBe(original);
   await until(() => !f.host.answers.memory.has(own, key), 'original memory withdrawn');
 }, 20000);

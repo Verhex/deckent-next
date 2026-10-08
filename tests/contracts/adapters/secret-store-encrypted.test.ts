@@ -127,7 +127,7 @@ it('doctor names who can read the keys for each Core backend, in both languages,
   expect(sealed).toContain('diğer programlar okuyabilir');
   expect(render('core.secret-store.encrypted-file@1', 'en')).toContain('other programs running as your user can');
   expect(render('core.secret-store.file@1', 'tr')).toContain('düz metin');
-  expect(render('core.secret-store.env@1', 'en')).toContain('secrets.store = core.secret-store.encrypted-file@1');
+  expect(render('core.secret-store.env@1', 'en')).toContain('deckent secret store');
   expect(render('enterprise.secret-store.vault@1', 'en').split('\n').filter(line => line.startsWith('  '))).toEqual([]);
   for (const backend of ['core.secret-store.env@1', 'core.secret-store.file@1', 'core.secret-store.encrypted-file@1']) {
     for (const locale of ['tr', 'en'] as const) expect(redactForRecord(render(backend, locale))).toBe(render(backend, locale));

@@ -2,10 +2,13 @@ export type ColorTier = 'none' | 'ansi16' | 'ansi256' | 'truecolor';
 import { THEME_PALETTES, type PaletteRole, type PaletteTheme } from './generated/palette.js';
 
 /** Workline layout roles projected from semantic palette roles, plus the rendered-answer roles (markdown, status). T2 (T-READABLE): the person's
- * line (`userBar` rail, `userLabel`), the answer heading (`assistantLabel`), worker cards, windows, selection, diff marks and the mode indicator. */
+ * line (`userBar` rail, `userLabel`), the answer heading (`assistantLabel`), worker cards, windows, selection, diff marks and the mode indicator.
+ * SW-1 (2026-10-08): information windows (`sectionHeader`, bold `keyLabel`, `mutedId`, the `chipOk`/`chipWarn`/`chipFail` states) and the
+ * system summary line (`systemLabel`, `systemRail`), which must never look like the assistant's answer. */
 export type WorklineInkRole = 'accent' | 'muted' | 'user' | 'assistant' | 'error' | 'code' | 'link' | 'info' | 'success' | 'warning'
   | 'userBar' | 'userLabel' | 'assistantLabel' | 'workerCard' | 'windowBorder' | 'windowTitle' | 'focus' | 'selection' | 'diffAdded' | 'diffRemoved'
-  | 'modeIndicator' | 'strong' | 'emphasis' | 'strike';
+  | 'modeIndicator' | 'sectionHeader' | 'keyLabel' | 'mutedId' | 'chipOk' | 'chipWarn' | 'chipFail' | 'systemLabel' | 'systemRail'
+  | 'strong' | 'emphasis' | 'strike';
 
 export type InkRoleStyle = Readonly<{ color?: string; bold?: boolean; italic?: boolean; strikethrough?: boolean; underline?: boolean; inverse?: boolean; dimColor?: boolean }>;
 
@@ -39,6 +42,14 @@ const WORKLINE_ROLE_MAP: Readonly<Record<Exclude<WorklineInkRole, AttributeRole>
   diffAdded: 'diffAdded',
   diffRemoved: 'diffRemoved',
   modeIndicator: 'modeIndicator',
+  sectionHeader: 'sectionHeader',
+  keyLabel: 'keyLabel',
+  mutedId: 'mutedId',
+  chipOk: 'chipOk',
+  chipWarn: 'chipWarn',
+  chipFail: 'chipFail',
+  systemLabel: 'systemLabel',
+  systemRail: 'systemRail',
 };
 /** Text attributes carry emphasis on every host theme; the `none` tier (NO_COLOR) drops them with the colours. */
 const ATTRIBUTE_ROLES: Readonly<Record<AttributeRole, InkRoleStyle>> = { strong: { bold: true }, emphasis: { italic: true }, strike: { strikethrough: true } };

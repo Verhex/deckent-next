@@ -1,5 +1,6 @@
 export { readIdentityProfileConfig, registerProviderConfig, providerSpendingSchema, providerSpendingBudgetFor, providerSpendAuditConfigSchema, readTerminalChatConfig, readTerminalConfig, readTerminalFetchConfig, readTerminalScratchConfig, readTerminalShellConfig, terminalConfigSchema, TERMINAL_BANNERS, TERMINAL_THEMES, type TerminalChatConfig, type TerminalFetchConfig, type TerminalScratchConfig, type TerminalShellConfig, readOperationsConfig, operationsConfigSchema, registerOperationAdapterModule, resolveOperationCatalog, resolveOperationTargets, type OperationsConfig,
-  openConfiguredSecretStore, readSecretsConfig, registerSecretStoreBackend, secretsConfigSchema, type SecretsConfig } from '#adapters/core/contract/index.js';
+  openConfiguredSecretStore, readSecretsConfig, registerSecretStoreBackend, secretsConfigSchema, type SecretsConfig, createInstallationSecretStoreSelection, createInstallationSecretCustody, SECRET_CUSTODY_WAIT_MS, isRegisteredSecretStore,
+  openRegisteredSecretStore, registeredSecretStores } from '#adapters/core/contract/index.js';
 export { openSqliteAttemptStore, openSqliteInventoryReader, inventoryReadsPerCall, upgradeExistingProductLedger, type LedgerUpgrade } from '#adapters/core/attempt-store/index.js';
 export type { SqliteAttemptStore, SqliteInventoryReader, SqliteInventoryOptions } from '#adapters/core/attempt-store/index.js';
 export { readMonitorLedger, readMonitorInstall, prepareMonitorInstall, readMonitorRunResults, listSurfaceRunIds, followLedgerSurface, type MonitorLedgerOptions } from '#adapters/core/monitor-ledger/index.js';
@@ -77,7 +78,7 @@ export * from '#adapters/core/mcp-import/index.js';
 export * from '#adapters/core/agent-workspace-floor/index.js';
 export * from '#adapters/core/secret-store/index.js';
 
-export { createConfigFileDocuments, createConfigFileAuthority } from '#adapters/core/config-file/index.js';
+export { createConfigFileDocuments, createConfigFileAuthority, CONFIG_DISCOVERY_BOUNDS, discoverConfigExecutables, discoverConfigBranches, discoverConfigImages, discoverConfigFiles, discoverConfigPools } from '#adapters/core/config-file/index.js';
 export * from '#adapters/core/provider-decision-http/index.js';
 export * from '#adapters/core/decision-store/index.js';
 export { readDecisionPolicy } from '#adapters/core/contract/index.js';

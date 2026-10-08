@@ -1,6 +1,6 @@
 import { loadComposedConfig } from '#composition/core/root/index.js';
 import { runtimeWorkspaceFileMethods, runtimeEffectOperationMethods, clearSessionStandingSchema, acceptSessionStandingClearance, approvalCommandSchema, parseApprovalAnswer, type ClearSessionStanding, type SessionStandingClearance, RUNTIME_SERVICE_LIFECYCLE_VERSIONS, RUNTIME_SERVICE_SCHEMA_VERSION, isRuntimeServiceBoundedResultOperation, acceptSecretChangeResult, prepareSecretChange, type RuntimeServiceLifecycleVersion, type RuntimeServiceRequest,
-  type SecretChangeResult, type SecretDeleteCommand, type SecretSetCommand } from '#engine/index.js';
+  type SecretChangeResult, type SecretDeleteCommand, type SecretSetCommand, type SecretStoreSwitchCommand, secretStoreSwitchCommandSchema, acceptSecretStoreSwitchResult } from '#engine/index.js';
 import { socketOptions } from './socket-options.js';
 import { randomUUID } from 'node:crypto';
 import { setTimeout as sleep } from 'node:timers/promises';
@@ -61,6 +61,8 @@ export type ConfiguredRuntimeClient = ConfiguredRuntimeOperations & Readonly<{
   /** v18 (SECRET-WRITE): one secret of the installation's store, set or deleted by the socket peer under the `secret` policy cell. */
   setSecret(command: SecretSetCommand, signal?: AbortSignal): Promise<SecretChangeResult>;
   deleteSecret(command: SecretDeleteCommand, signal?: AbortSignal): Promise<SecretChangeResult>;
+  /** v24 (SECRET-STORE-SWITCH): every secret moved into another registered store and selected, under the `secret`/`switch` cell. */
+  switchSecretStore(command: SecretStoreSwitchCommand, signal?: AbortSignal): Promise<import('#engine/index.js').SecretStoreSwitchResult>;
 }>;
 type RuntimeCall = (operation: RuntimeServiceOperation, input: unknown, delivery?: RuntimeServiceDelivery, signal?: AbortSignal) => Promise<unknown>;
 /** v15 permission-mode methods: both ends validate; an answer for another scope, or a set answer for another mode, is not trusted. */
@@ -112,8 +114,18 @@ function secretMethods(call: RuntimeCall) {
       return result;
     } catch (error) { throw queryFailure(error); }
   };
+  // v24 SECRET-STORE-SWITCH: the target is checked against the wire shape first; an answer for another switch is not trusted.
+  const switchSecretStore = async (input: SecretStoreSwitchCommand, signal?: AbortSignal) => {
+    try {
+      const parsed = secretStoreSwitchCommandSchema.safeParse(input);
+      if (!parsed.success) throw ErrorRegistry.createError('CLI_USAGE');
+      const result = acceptSecretStoreSwitchResult(parsed.data, await call('switchSecretStore', parsed.data, undefined, signal));
+      if (!result) throw ErrorRegistry.createError('RUNTIME_SERVICE_TRANSPORT');
+      return result;
+    } catch (error) { throw queryFailure(error); }
+  };
   return { setSecret: (input: SecretSetCommand, signal?: AbortSignal) => change('setSecret', input, signal),
-    deleteSecret: (input: SecretDeleteCommand, signal?: AbortSignal) => change('deleteSecret', input, signal) };
+    deleteSecret: (input: SecretDeleteCommand, signal?: AbortSignal) => change('deleteSecret', input, signal), switchSecretStore };
 }
 type RuntimeCallRest = [onDelta?: ModelInvocationDeltaSink, version?: RuntimeServiceLifecycleVersion, onEvent?: (event: AgentTurnStreamEvent) => void];
 /** BUSY is refused before anything was admitted, so a retry cannot repeat an effect. Bounded: at most `service.busyRetryLimit` more

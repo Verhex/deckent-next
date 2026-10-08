@@ -61,6 +61,11 @@ export function slashMatches(text: string, commands: readonly SlashCommand[] = W
   return [...prefix, ...commands.filter(command => !prefix.includes(command) && isSubsequence(query, command.name))];
 }
 
+/** The palette row form of a command: no argument hint, because the terminal palette takes no typed arguments (the registry keeps `argumentKey` for line mode and the CLI). */
+export function paletteCommand(command: SlashCommand): SlashCommand {
+  return { name: command.name, descriptionKey: command.descriptionKey, ...(command.group ? { group: command.group } : {}) };
+}
+
 /** The command whose argument is being typed: `/run ` with nothing after it shows the argument hint. */
 export function pendingArgument(text: string, commands: readonly SlashCommand[] = WORKLINE_SLASH_COMMANDS): SlashCommand | null {
   const match = /^\/(\S+) $/u.exec(text);

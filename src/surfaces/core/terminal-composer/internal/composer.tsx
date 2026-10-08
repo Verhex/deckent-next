@@ -5,9 +5,9 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { Box, Text, useInput, usePaste, useWindowSize } from 'ink';
 import { slashCommandRow, useWorklinePalette } from '#surfaces/core/terminal-kit/index.js';
-import { mentionText, pendingArgument, type ComposerMentionPort, type PastePolicy } from './assist.js';
+import { mentionText, paletteCommand, type ComposerMentionPort, type PastePolicy } from './assist.js';
 import { composerKey } from './keys.js';
-import { COMPOSER_LIMITS, composerMenu, EMPTY_COMPOSER, exitArmed, reduceComposer, searchMatches, type ComposerHistoryPort, type ComposerKey, type ComposerMenu } from './reducer.js';
+import { COMPOSER_LIMITS, composerMenu, EMPTY_COMPOSER, exitArmed, reduceComposer, searchMatches, type ComposerHistoryEntry, type ComposerHistoryPort, type ComposerKey, type ComposerMenu } from './reducer.js';
 import { caretRow, displayWidth, graphemes, layoutRows } from './text.js';
 
 export interface ComposerLabels {
@@ -35,6 +35,9 @@ export interface ComposerProps {
   readonly onExit: () => void;
   /** Persistent history; load/append failures never block input (history is a convenience, not a submit precondition). */
   readonly history?: ComposerHistoryPort;
+  /** What a submitted line is remembered as (in-memory recall and `history`); the owner strips what must never be kept (SLASH-WINDOWS I-1:
+   *  a rich terminal keeps only `/command`, never a typed slash argument). The submitted text itself is unchanged. */
+  readonly historyText?: (text: string) => string;
   readonly mentions?: ComposerMentionPort;
   /** Quiet time after the last key before `mentions` is asked (default 60 ms); earlier lookups are aborted. */
   readonly mentionDelayMs?: number;
@@ -58,7 +61,7 @@ function MenuRows({ menu, labels }: { readonly menu: ComposerMenu; readonly labe
   const palette = useWorklinePalette();
   const first = Math.max(0, Math.min(menu.selected - MENU_ROWS + 1, menu.items.length - MENU_ROWS));
   const rows = menu.kind === 'slash'
-    ? menu.items.map(command => slashCommandRow(command, labels.slash))
+    ? menu.items.map(command => slashCommandRow(paletteCommand(command), labels.slash))
     : menu.items.map(path => ({ name: mentionText(path), detail: '' }));
   const width = Math.max(...rows.map(row => displayWidth(row.name)));
   return (
@@ -91,16 +94,25 @@ export function Composer(props: ComposerProps): ReactNode {
   const clock = () => (latest.current.now ?? Date.now)();
 
   const dispatch = useCallback((key: ComposerKey): void => {
-    const { busy, policy, onSubmit, onCancel, onExit, history, mentions } = latest.current;
+    const { busy, policy, onSubmit, onCancel, onExit, history, mentions, historyText } = latest.current;
     const result = reduceComposer(current.current, key, { now: clock(), busy, pasteChip: latest.current.labels.pasteChip, ...(policy ? { policy } : {}) });
     // Exit before any state update: a render scheduled beside unmount can keep the TTY referenced.
     if (result.intents.some(intent => intent.type === 'exit')) { onExit(); return; }
-    current.current = result.state;
-    setState(result.state);
+    // The remembered form of a submitted line (recall and persistent history) is the owner's; the in-memory entry is replaced in place.
+    const remembered = new Map<object, ComposerHistoryEntry>();
+    for (const intent of result.intents) {
+      if (intent.type !== 'submit' || !historyText) continue;
+      const text = historyText(intent.entry.text);
+      if (text !== intent.entry.text) remembered.set(intent.entry, { text, pastes: intent.entry.pastes.filter(paste => text.includes(paste.chip)) });
+    }
+    const next = remembered.size ? { ...result.state, history: result.state.history.map(entry => remembered.get(entry) ?? entry) } : result.state;
+    current.current = next;
+    setState(next);
     for (const intent of result.intents) {
       if (intent.type === 'cancel') onCancel();
       else if (intent.type === 'submit') {
-        void (async () => history?.append(intent.entry))().catch(ignore);
+        const entry = remembered.get(intent.entry) ?? intent.entry;
+        void (async () => history?.append(entry))().catch(ignore);
         onSubmit(intent.text, intent.mentions);
       } else if (intent.type === 'mention' && mentions) {
         lookup.current?.abort();
@@ -140,7 +152,6 @@ export function Composer(props: ComposerProps): ReactNode {
 
   const marker = (props.caret ?? (Object.keys(palette.accent).length === 0 ? 'marker' : 'inverse')) === 'marker';
   const menu = composerMenu(state);
-  const argument = pendingArgument(state.text);
   const indent = ' '.repeat(displayWidth(prompt));
   // Border (2) and padding (2) plus one cell so the caret after a full row never wraps.
   const rows = layoutRows(state.text.replace(/\t/gu, ' '), (columns || 80) - 5 - displayWidth(prompt));
@@ -160,7 +171,6 @@ export function Composer(props: ComposerProps): ReactNode {
             {index ? indent : prompt}
             {index === caretAt ? <CaretRow text={row.text} at={state.cursor - row.start} marker={marker} /> : row.text}
             {placeholder && index === 0 ? <Text {...(dimmable ? { dimColor: true } : {})}>{marker ? ` ${placeholder}` : placeholder}</Text> : null}
-            {argument && index === rows.length - 1 ? <Text {...palette.muted}>{labels.slash[argument.argumentKey!] ?? ''}</Text> : null}
           </Text>
         ))}
       </Box>

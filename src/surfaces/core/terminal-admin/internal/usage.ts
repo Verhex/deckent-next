@@ -1,4 +1,5 @@
-import { t } from '#platform/index.js';
+import { loadConfig, t } from '#platform/index.js';
+import type { InfoSection, InfoView } from '#surfaces/core/terminal-window/index.js';
 import { parseProviderSpendAccountQuery } from '#domain/index.js';
 import type { SessionUsageView } from '#surfaces/core/terminal-kit/index.js';
 import { queryFailureText } from './failure.js';
@@ -41,4 +42,71 @@ export async function usageLines(call: TerminalAdminCall, args: string, usage: S
     t('models.spending.frozen', { value: account.frozen ? t('models.spending.frozenYes', {}, locale) : t('models.spending.frozenNo', {}, locale) }, locale),
     t('terminal.admin.usage.notBilling', {}, locale)];
   } catch (error) { return [t('terminal.admin.partFailed', { part: t('terminal.admin.usage.partSpend', {}, locale), reason: queryFailureText(error, locale) }, locale)]; }
+}
+
+type Budget = Readonly<{ budgetId: string; revision: number; currency: string; limitMinorUnits: number }>;
+/** The spend budgets this scope's configuration declares (`provider_spending.budgets`), read as data: the picker's source, not an authority. */
+function scopeBudgets(config: Readonly<Record<string, unknown>>, scopeId: string): readonly Budget[] {
+  const budgets = (config['provider_spending'] as { budgets?: unknown } | undefined)?.budgets;
+  if (!Array.isArray(budgets)) return [];
+  return budgets.flatMap(entry => {
+    const value = entry as Partial<Budget & { scopeId: string }>;
+    return value && value.scopeId === scopeId && typeof value.budgetId === 'string' && Number.isInteger(value.revision) && typeof value.currency === 'string'
+      && typeof value.limitMinorUnits === 'number' ? [{ budgetId: value.budgetId, revision: value.revision!, currency: value.currency, limitMinorUnits: value.limitMinorUnits }] : [];
+  });
+}
+
+/** One spend account through the typed query, as a section; a failed or unwired query names itself and shows no figure. */
+async function accountSection(call: TerminalAdminCall, budget: Budget): Promise<InfoSection> {
+  const { root, scopeId, options, locale, context } = call;
+  const title = t('terminal.info.usage.section.account', { budget: budget.budgetId }, locale);
+  if (!context.inspectProviderSpendAccount) return { title, chip: { state: 'neutral', text: t('terminal.info.chip.unavailable', {}, locale) }, notes: [t('terminal.admin.partUnavailable', { part: t('terminal.admin.usage.partSpend', {}, locale) }, locale)] };
+  try {
+    const result = await context.inspectProviderSpendAccount(root, parseProviderSpendAccountQuery({ schemaVersion: 1, scopeId, budgetId: budget.budgetId, budgetRevision: budget.revision }), options);
+    if (result.checkpoint === null) return { title, chip: { state: 'warn', text: t('terminal.info.usage.chip.noSnapshot', {}, locale) },
+      notes: [t('models.spending.absent', { scope: result.scopeId, budget: result.budgetId, revision: result.budgetRevision }, locale)] };
+    const { account } = result.checkpoint, currency = account.budget.currency, minor = (amount: number | string | bigint) => t('terminal.info.usage.minor', { amount: count(amount, locale), currency }, locale);
+    return { title, chip: account.frozen ? { state: 'warn', text: t('terminal.info.usage.chip.frozen', {}, locale) } : { state: 'ok', text: t('terminal.info.usage.chip.open', {}, locale) }, rows: [
+      { key: t('terminal.info.usage.key.limit', {}, locale), value: minor(account.budget.limitMinorUnits) },
+      { key: t('terminal.info.usage.key.reserved', {}, locale), value: minor(account.reservedMinorUnits) },
+      { key: t('terminal.info.usage.key.settled', {}, locale), value: minor(account.settledExactMinorUnits) },
+      { key: t('terminal.info.usage.key.frozen', {}, locale), value: account.frozen ? t('models.spending.frozenYes', {}, locale) : t('models.spending.frozenNo', {}, locale) },
+      { key: t('terminal.info.usage.key.reservations', {}, locale), value: count(result.checkpoint.reservationCount, locale) },
+      { key: t('terminal.info.usage.key.checkpoint', {}, locale), value: String(result.checkpoint.revision) }], notes: [t('terminal.admin.usage.notBilling', {}, locale)] };
+  } catch (error) {
+    return { title, chip: { state: 'fail', text: t('terminal.info.chip.notRead', {}, locale) }, notes: [t('terminal.admin.partFailed', { part: t('terminal.admin.usage.partSpend', {}, locale), reason: queryFailureText(error, locale) }, locale)] };
+  }
+}
+
+/**
+ * `/usage` as a window (SW-1): what this terminal measured for the open conversation, and the scope's spend budgets as a list to pick from
+ * (no typed budget id or revision); picking one reads that account through the typed query and shows it in the same window.
+ */
+export async function usageView(call: TerminalAdminCall, usage: SessionUsageView): Promise<InfoView> {
+  const { root, scopeId, options, locale } = call;
+  const conversation: InfoSection = usage.reports === 0 ? { title: t('terminal.info.usage.section.conversation', {}, locale), notes: [t('terminal.admin.usage.none', {}, locale)] }
+    : { title: t('terminal.info.usage.section.conversation', {}, locale), rows: [{ key: t('terminal.info.usage.key.reports', {}, locale), value: count(usage.reports, locale) },
+      { key: t('terminal.info.usage.key.prompt', {}, locale), value: t('terminal.info.usage.tokens', { tokens: count(usage.promptTokens, locale) }, locale) },
+      { key: t('terminal.info.usage.key.completion', {}, locale), value: t('terminal.info.usage.tokens', { tokens: count(usage.completionTokens, locale) }, locale) },
+      { key: t('terminal.info.usage.key.reasoning', {}, locale), value: reasoningText(usage, locale), ...(usage.reasoningUnmeasured ? { chip: { state: 'neutral' as const, text: t('terminal.info.chip.unknown', {}, locale) } } : {}) }],
+    notes: [t('terminal.admin.usage.notBilling', {}, locale)] };
+  const budgetsTitle = t('terminal.info.usage.section.budgets', {}, locale);
+  let budgets: readonly Budget[] = [], budgetSection: InfoSection;
+  try {
+    budgets = scopeBudgets(await loadConfig(root, options), scopeId);
+    budgetSection = budgets.length ? { title: budgetsTitle, choices: budgets.map((budget, index) => ({ id: `budget-${index}`,
+      label: t('terminal.info.usage.budgetChoice', { budget: budget.budgetId, limit: count(budget.limitMinorUnits, locale), currency: budget.currency }, locale),
+      detail: t('terminal.info.usage.budgetRevision', { revision: budget.revision }, locale) })), notes: [t('terminal.info.usage.pick', {}, locale)] }
+      : { title: budgetsTitle, notes: [t('terminal.info.usage.noBudgets', {}, locale)] };
+  } catch (error) {
+    budgetSection = { title: budgetsTitle, chip: { state: 'fail', text: t('terminal.info.chip.notRead', {}, locale) }, notes: [t('terminal.admin.partFailed', { part: budgetsTitle, reason: queryFailureText(error, locale) }, locale)] };
+  }
+  const summary = usage.reports === 0 ? t('terminal.info.usage.summaryNone', {}, locale)
+    : t('terminal.info.usage.summary', { prompt: count(usage.promptTokens, locale), completion: count(usage.completionTokens, locale), reports: count(usage.reports, locale) }, locale);
+  const base = { title: t('terminal.info.usage.title', {}, locale), summary };
+  const view = (account: InfoSection | null): InfoView => ({ model: { ...base, sections: [conversation, budgetSection, ...(account ? [account] : [])] }, pick: async choice => {
+    const budget = budgets[Number(choice.slice('budget-'.length))];
+    return budget && choice.startsWith('budget-') ? view(await accountSection(call, budget)) : null;
+  } });
+  return view(null);
 }

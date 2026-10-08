@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useRef } from 'react';
 import { notice, type WorkLedgerEntry } from '#surfaces/core/terminal-ledger/index.js';
-import type { LocalExecution, WorklinePanel } from '#surfaces/core/terminal-work/index.js';
+import { systemSummaryEntry, type LocalExecution, type WorklinePanel } from '#surfaces/core/terminal-work/index.js';
 import type { PanelSnapshot, TerminalLocalContext } from '#surfaces/core/terminal-kit/index.js';
 import { SettingsPanel, type ModelPanelChoice, type ModelPanelReference, type ModelPanelSource, type PanelKind, type PanelLabels, type PanelPorts } from '#surfaces/core/terminal-panels/index.js';
 import type { PermissionModeStop } from '#surfaces/core/terminal-render/index.js';
@@ -14,9 +14,15 @@ export type WorklineSessionModel = Readonly<{ pinned: () => ModelPanelReference 
 type Mode = Readonly<{ stop: PermissionModeStop | undefined; select: (stop: PermissionModeStop) => Promise<void> }>;
 
 const PANEL_COMMANDS: readonly PanelKind[] = ['mode', 'config', 'mcp', 'model', 'provider'];
-/** The settings window a bare `/mode`, `/config`, `/mcp`, `/model` or `/provider` opens, when its port is here (any argument keeps the text command). */
+/**
+ * The settings window a `/mode`, `/config`, `/mcp`, `/model` or `/provider` opens, when its port is here. The rich workline already runs a
+ * typed slash command bare (I-1, with its one-time note); CS-1: `/config` opens its panel even with a typed argument (never a typed write),
+ * the others keep a typed argument for the text command where no window words exist.
+ */
 function settingsPanelOf(command: string, args: string, ports: PanelPorts | null): PanelKind | null {
-  if (!ports || args.trim()) return null;
+  if (!ports) return null;
+  if (command === 'config' && ports.config) return 'config';
+  if (args.trim()) return null;
   const kind = PANEL_COMMANDS.find(item => item === command);
   return kind && ports[kind] ? kind : null;
 }
@@ -57,8 +63,10 @@ export function useWorklineSettings(input: { readonly panels: WorklinePanels | u
   const presentation = panel.presentation(state), kind = presentation?.kind === 'settings' && state.picker ? presentation.panel : null;
   const handle = useRef<string | undefined>(undefined); handle.current = kind ? state.picker?.pickerHandle : undefined;
   const window = kind && ports && panels && !input.blocked
-    ? <SettingsPanel kind={kind} ports={ports} labels={panels.labels} push={notices => push(notices.map(item => notice(item.level, item.text)))}
-      onError={error => push([notice('error', errorText(error))])} errorText={errorText} openApproval={approvalId => { approvalAfter.current = approvalId; }}
+    // SLASH-WINDOWS: what a settings window reports when it closes (a `/model` pin, a `/config` or `/mcp` outcome, a `/provider` result) is the
+    // one system summary line, never a chat notice.
+    ? <SettingsPanel kind={kind} ports={ports} labels={panels.labels} push={notices => push(notices.map(item => systemSummaryEntry(item.text, item.level)))}
+      onError={error => push([systemSummaryEntry(errorText(error), 'error')])} errorText={errorText} openApproval={approvalId => { approvalAfter.current = approvalId; }}
       onClose={() => { panel.choose(handle.current, 'close'); }} /> : null;
   return { open, openKind: kind, window };
 }

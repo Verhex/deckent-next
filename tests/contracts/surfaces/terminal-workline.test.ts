@@ -9,7 +9,7 @@ import { WORKLINE_SLASH_COMMANDS } from '#surfaces/core/terminal-kit/index.js';
 import type { WorkerObservationReport } from '#engine/index.js';
 import { workSurfaceLabels } from '#surfaces/core/work-labels/index.js';
 
-const labels: WorklineLabels = { banner: 'BANNER', prompt: '> ', statusReady: 'READY', statusBusy: 'BUSY', statusCancelling: 'CANCELLING',
+const labels: WorklineLabels = { work: workSurfaceLabels('en'), banner: 'BANNER', prompt: '> ', statusReady: 'READY', statusBusy: 'BUSY', statusCancelling: 'CANCELLING',
   hint: 'HINT', roleUser: 'you', roleAssistant: 'bot', runCard: 'Run', workerCard: 'Worker', watchFailed: 'WATCH-FAILED', commandUnavailable: 'NO-PORT {part}',
   ledgerUnavailable: 'NO-LEDGER', runNotFound: 'NO-RUN', workersEmpty: 'NO-WORKERS', runsEmpty: 'NO-RUNS', serviceRestartUnavailable: 'NO-RESTART', queued: 'QUEUED', runUsage: 'USAGE', watchStarted: 'WATCH-ON',
   watchRunsStarted: 'RUNS-ON', watchStopped: 'WATCH-OFF', statusLine: 'STATUS-LINE', unknownCommand: 'UNKNOWN',
@@ -235,22 +235,20 @@ describe('workline view rendered by Ink', () => {
     const view = mount({ labels: liveLabels, completeTurn: async () => 'ok', pollMs: 5, ledger: { scopeId: 'scope-a',
       async listWorkers() { polls += 1; return workers(1, 0); }, async inspectRun() { return null; }, followWorkers } });
     await view.type('/watch-workers\r');
-    await until(() => view.stdout.text.includes('pushed-task'), 'pushed worker');
+    await until(() => view.stdout.text.includes('worker 1 · docker'), 'pushed worker');
     await settle(40);
     expect(polls).toBe(0);
   });
 
-  it('prints every ledger row past the former 400-row cap', async () => {
-    let offset = 0;
-    const view = mount({ completeTurn: async () => 'unused', ledger: { scopeId: 'scope-a', async listWorkers() { const report = workers(300, offset); offset += 300; return report; },
-      async inspectRun() { return null; } } });
-    await view.type('/workers\r'); await until(() => view.stdout.text.includes('task-299'), 'first page');
-    await view.type('/workers\r'); await until(() => view.stdout.text.includes('task-599'), 'second page');
-    await view.type('/help\r'); await until(() => view.stdout.text.includes(HELP_NOTICE), 'help after 600 rows');
-    for (const id of ['task-0', 'task-401', 'task-599']) expect(view.stdout.text).toContain(id);
+  it('keeps all 300 workers in the scrollable list without appending ledger cards', async () => {
+    const view = mount({ completeTurn: async () => 'unused', ledger: { scopeId: 'scope-a', async listWorkers() { return workers(300, 0); }, async inspectRun() { return null; } } });
+    await view.type('/workers\r'); await until(() => view.stdout.frame.includes('worker 1'), 'list'); await settle(40);
+    view.stdin.write('\u001B[F'); await until(() => view.stdout.frame.includes('worker 300'), 'last row');
+    view.stdin.write(ESC); await until(() => view.stdout.frame.includes('◆ Deckent system ·') && view.stdout.frame.includes(': 300'), 'list summary');
+    expect(view.stdout.frame).not.toContain('task-299');
   });
 
-  it('appends one inspection card per inventory run and does not invent a run', async () => {
+  it('shows one row per inventory run and does not invent a run', async () => {
     const seen: string[] = [];
     const view = mount({ completeTurn: async () => 'unused', ledger: { scopeId: 'scope-a',
       async listWorkers() { return workers(0, 0); },
@@ -268,11 +266,11 @@ describe('workline view rendered by Ink', () => {
     const empty = mount({ completeTurn: async () => 'unused', ledger: { scopeId: 'scope-a',
       async listWorkers() { return workers(0, 0); }, async listRunIds() { return []; }, async inspectRun() { return null; } } });
     await empty.type('/runs\r');
-    await until(() => empty.stdout.text.includes('NO-RUNS'), 'empty inventory');
+    await until(() => empty.stdout.text.includes('Nothing observed yet'), 'empty inventory');
     const unwired = mount({ completeTurn: async () => 'unused', ledger: { scopeId: 'scope-a',
       async listWorkers() { return workers(0, 0); }, async inspectRun() { return null; } } });
     await unwired.type('/runs\r');
-    await until(() => unwired.stdout.text.includes('NO-LEDGER'), 'inventory not wired');
+    await until(() => unwired.stdout.text.includes(workSurfaceLabels('en').unavailable), 'inventory not wired');
   });
 
   it('closes the view with /exit after a completed turn', async () => {
@@ -341,10 +339,11 @@ describe('workline view rendered by Ink', () => {
     await settle(40);
     expect(sent).toEqual([]);
     release();
+    await until(() => view.stdout.frame.includes('worker 1'), 'worker list'); await settle(40); view.stdin.write(ESC);
     await until(() => sent.length === 1 && view.stdout.text.includes('REPLY-AFTER'), 'queued text runs after /workers');
     await settle(40);
     expect(calls).toBe(1); expect(sent).toEqual(['after']);
-    expect(view.stdout.text.indexOf('task-0')).toBeLessThan(view.stdout.text.indexOf('REPLY-AFTER'));
+    expect(view.stdout.text.indexOf('worker 1')).toBeLessThan(view.stdout.text.indexOf('REPLY-AFTER'));
   });
 
   it('applies queued watch toggles in order and exits on a queued /exit without running what follows it', async () => {
@@ -357,7 +356,7 @@ describe('workline view rendered by Ink', () => {
     await until(() => view.stdout.text.includes('QUEUED: never'), 'lines queued');
     gates[0]!(); await until(() => sent.length === 2, 'queued text turn after the watch toggles');
     // A stale watch would make the queued /watch-stop a no-op: both toggles must be applied in order before `two`.
-    expect(view.stdout.text).toContain('WATCH-ON'); expect(view.stdout.text).toContain('WATCH-OFF');
+    expect(view.stdout.text).toContain('Workers window closed');
     expect(exited).toBe(false);
     gates[1]!(); await until(() => exited, 'queued /exit closes the view');
     await settle(40);
@@ -366,7 +365,7 @@ describe('workline view rendered by Ink', () => {
 
   it('renders no colour escape sequences at the none tier (NO_COLOR / --no-color / non-TTY)', async () => {
     const plain = mount({ completeTurn: async () => 'ok', ledger: { scopeId: 'scope-a', async listWorkers() { return workers(1, 0); }, async inspectRun() { return null; } } }, 'none');
-    await plain.type('/workers\r'); await until(() => plain.stdout.text.includes('task-0'), 'plain worker');
+    await plain.type('/workers\r'); await until(() => plain.stdout.text.includes('worker 1'), 'plain worker');
     const colour = new RegExp(`${String.fromCharCode(27)}\\[(3[0-7]|9[0-7]|38;)`);
     expect(plain.stdout.text).not.toMatch(colour);
   });

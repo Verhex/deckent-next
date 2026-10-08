@@ -42,26 +42,22 @@ describe('slash palette keys through the real workline', () => {
     await view.type('/wa', DOWN);
     await until(() => view.stdout.text.includes('> /watch-runs'), 'second row highlighted');
     await view.type('\r');
-    await until(() => view.stdout.text.includes('RUNS-ON'), 'watch-runs executed');
+    await until(() => view.stdout.text.includes('Watching · polling'), 'watch-runs executed');
     expect(view.stdout.text).not.toContain('WATCH-ON');
     expect(view.stdout.text).not.toContain('UNKNOWN');
   });
 
-  it('a command that takes an argument completes to "/cmd " and waits; the next Enter runs it with the argument', async () => {
+  it('Enter on a command that has a registry argument runs it at once; the palette never waits for typed text (SLASH-WINDOWS)', async () => {
     const inspected: string[] = [];
     const view = await open({ ledger: { workerHeartbeatMs: 60_000, inspectWorkers: async () => ({ schemaVersion: 1, scopeId: 's', sources: [] }) as never,
       inspectRun: async runId => { inspected.push(runId); return null; } } as never });
     await view.type('/ru');
     await until(() => view.stdout.text.includes('RUN-DESC') || view.stdout.text.includes('> /run'), 'palette');
     await view.type('\r');
-    await until(() => view.stdout.text.includes('> /run |'), 'completed, waiting');
-    await settle(30);
-    expect(view.stdout.text).not.toContain('UNKNOWN');
-    expect(view.stdout.text).not.toContain('USAGE');
+    // SW-2: the bare command opens its window at once (here the "not wired" window: the test ledger cannot list runs); nothing waits for typed text.
+    await until(() => view.stdout.frame.includes('UNWIRED'), 'bare /run answered at once in its window');
+    expect(view.stdout.text).not.toContain('> /run |');
     expect(inspected).toEqual([]);
-    await view.type('r-1\r');
-    await until(() => inspected.length === 1, 'run inspected');
-    expect(inspected).toEqual(['r-1']);
   });
 
   it('Tab completes, Esc closes the palette, and Enter without suggestions sends the text as typed', async () => {
@@ -81,7 +77,7 @@ describe('slash palette keys through the real workline', () => {
     await view.type('/wwk');
     await until(() => view.stdout.text.includes('> /watch-workers'), 'fuzzy match offered');
     await view.type('\r');
-    await until(() => view.stdout.text.includes('NO-LEDGER'), 'watch-workers ran (no ledger wired)');
+    await until(() => view.stdout.text.includes('UNWIRED'), 'watch-workers ran (no ledger wired)');
     expect(view.stdout.text).not.toContain('UNKNOWN');
   });
 });

@@ -2,15 +2,17 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { fillTemplate, span } from '#surfaces/core/terminal-render/index.js';
 import { ListPicker, pickerView, PICKER_INITIAL, type PickerNode, type PickerResult, type PickerState, type PickerTree } from '#surfaces/core/terminal-picker/index.js';
 import { Window, type WindowLine } from '#surfaces/core/terminal-window/index.js';
+import { configEntryAllowed } from '#platform/index.js';
+import { ConfigNumberWindow } from './config-stepper.js';
 import { EntryWindow } from './entry.js';
 import { usePickerRoom } from './lines.js';
 import type { ConfigPanelField, ConfigPanelLabels, ConfigPanelLayer, ConfigPanelPort, ConfigPanelView, PanelLabels, PanelNotice } from './contract.js';
 
 /** Value-level row ids that are not schema choices (a schema choice id never starts with `:`). */
-const FREE = ':entry', UNSET = ':unset';
+const FREE = ':entry', UNSET = ':unset', STEPPER = ':stepper', REGENERATE = ':regenerate';
 const LAYERS: readonly ConfigPanelLayer[] = ['project', 'global'];
 /** The focused key's rows: description, facts, what it takes. */
-const FOCUS_ROWS = 3;
+const FOCUS_ROWS = 4;
 
 /** A key row's facts: its value, the layer it comes from and whether it applies live or on restart. */
 const rowFacts = (field: ConfigPanelField) => [field.value, field.source, field.apply].join(' · ');
@@ -22,11 +24,12 @@ export function configPanelTree(view: ConfigPanelView, labels: ConfigPanelLabels
   for (const field of view.fields) {
     const section = sectionOf(field.key, labels.general), list = sections.get(section) ?? [];
     const blocked = LAYERS.every(layer => field.locks[layer].blocked) ? field.locks.project.blocked : null;
-    const values: PickerNode[] = [...field.choices.map(choice => ({ id: choice.id, label: choice.label === field.value ? `${choice.label} · ${labels.current}` : choice.label })),
-      ...(field.free ? [{ id: FREE, label: labels.freeEntry }] : []), ...(field.unsettable ? [{ id: UNSET, label: labels.unset }] : [])];
+    const values: PickerNode[] = [...field.choices.map(choice => ({ id: choice.id, label: choice.label === field.value ? `${choice.label} · ${labels.current}` : choice.label, ...(choice.detail ? { detail: choice.detail.length > 28 ? choice.detail.slice(0, 25) + '…' : choice.detail, keywords: [choice.detail] } : {}) })),
+      ...(field.free && configEntryAllowed(field.key, field.sensitive) ? [{ id: FREE, label: labels.freeEntry }] : []),
+      ...(field.stepper ? [{ id: STEPPER, label: labels.stepper }] : []), ...(field.generated ? [{ id: REGENERATE, label: labels.regenerate }] : []), ...(field.unsettable ? [{ id: UNSET, label: labels.unset }] : [])];
     list.push({ id: field.key, label: section === labels.general ? field.key : field.key.slice(section.length + 1),
       detail: rowFacts(field), keywords: [field.key, field.description],
-      ...(blocked ? { blocked: { reason: blocked } } : {}), childTitle: field.key, children: values });
+      ...(blocked || field.readOnly ? { blocked: { reason: blocked ?? field.readOnly! } } : {}), childTitle: field.key, children: values });
     sections.set(section, list);
   }
   const field = focusedKey ? view.fields.find(item => item.key === focusedKey) : undefined;
@@ -39,10 +42,11 @@ export function configPanelTree(view: ConfigPanelView, labels: ConfigPanelLabels
 function focusLines(field: ConfigPanelField | undefined, labels: ConfigPanelLabels): WindowLine[] {
   if (!field) return [];
   return [{ spans: [span(field.description)] }, { spans: [span(rowFacts(field), { role: 'muted' })] },
-    { spans: [span(fillTemplate(labels.expected, { expected: field.expected }), { role: 'muted' })] }];
+    { spans: [span(fillTemplate(labels.expected, { expected: field.expected }), { role: 'muted' })] },
+    ...(field.choiceNotice ? [{ spans: [span(field.choiceNotice, { role: 'warning' })] }] : [])];
 }
 
-type Step = Readonly<{ kind: 'pick' } | { kind: 'entry'; field: ConfigPanelField; layer: ConfigPanelLayer }>;
+type Step = Readonly<{ kind: 'pick' } | { kind: 'entry' | 'number'; field: ConfigPanelField; layer: ConfigPanelLayer } | { kind: 'preview'; field: ConfigPanelField; layer: ConfigPanelLayer; value: unknown }>;
 
 /**
  * `/config` as a window: sections → key → value, then the layer (project or user) with each layer's policy lock. Choosing writes through the
@@ -52,6 +56,7 @@ export function ConfigPanel({ port, labels, push, openApproval, onError, onClose
   readonly push: (notices: readonly PanelNotice[]) => void; readonly openApproval: (approvalId: string) => void; readonly onError: (error: unknown) => void;
   readonly onClose: () => void }) {
   const words = labels.config;
+  const busy = useRef(false);
   const [view, setView] = useState<ConfigPanelView | null>(null);
   const [state, setState] = useState<PickerState>(PICKER_INITIAL);
   const [generation, setGeneration] = useState(0);
@@ -69,23 +74,33 @@ export function ConfigPanel({ port, labels, push, openApproval, onError, onClose
   // Back where the person was: the key list of the section, on the key just written.
   const backToKeys = (at: PickerState): PickerState => ({ ...PICKER_INITIAL, trail: at.trail.slice(0, 1), pos: at.trail[1]?.pos ?? 0 });
   const write = async (request: Parameters<ConfigPanelPort['write']>[0], at: PickerState) => {
+    if (busy.current) return;
+    busy.current = true;
     try {
       const outcome = await port.write(request);
-      push([{ level: outcome.status === 'applied' ? 'info' : 'warning', text: outcome.lines.join('\n') }]);
+      push([{ level: outcome.status === 'applied' ? 'info' : 'warning', text: fillTemplate(words.summary, { text: outcome.lines[0] ?? view.title }) }]);
       if (outcome.status === 'approval-pending' && outcome.approvalId) { onClose(); openApproval(outcome.approvalId); return; }
       await reload();
-    } catch (error) { onError(error); }
+    } catch (error) { onError(error); } finally { busy.current = false; }
     setState(backToKeys(at)); setGeneration(value => value + 1); setStep({ kind: 'pick' });
   };
   const chosen = (result: PickerResult, at: PickerState) => {
     if (result.kind !== 'selected') { onClose(); return; }
     const [, key, value] = result.path, target = view.fields.find(item => item.key === key), layer = LAYERS.find(item => item === result.scope) ?? 'project';
     if (!target) { onClose(); return; }
-    if (value === FREE) { setStep({ kind: 'entry', field: target, layer }); return; }
+    if (value === REGENERATE) { void reload().catch(onError); return; }
+    if (value === STEPPER && target.stepper) { setStep({ kind: 'number', field: target, layer }); return; }
+    if (value === FREE && configEntryAllowed(target.key, target.sensitive)) { setStep({ kind: 'entry', field: target, layer }); return; }
     if (value === UNSET) { void write({ action: 'unset', keyPath: target.key, layer }, at); return; }
     const choice = target.choices.find(item => item.id === value);
     if (choice) void write({ action: 'set', keyPath: target.key, value: choice.value, layer }, at);
   };
+  const cancelStep = () => { setState(backToKeys(state)); setGeneration(value => value + 1); setStep({ kind: 'pick' }); };
+  if (step.kind === 'number' && step.field.stepper) return <ConfigNumberWindow title={step.field.key} stepper={step.field.stepper} hints={words.stepperHint}
+    position={labels.position} onCancel={cancelStep} onSubmit={value => { void write({ action: 'set', keyPath: step.field.key, value, layer: step.layer }, state); }} />;
+  if (step.kind === 'preview') return <Window title={[span(words.preview, { bold: true })]} body={[...focusLines(step.field, words),
+    { spans: [span(step.field.sensitive ? step.field.value : JSON.stringify(step.value), { bold: true })] }]} hints={words.previewHint} position={labels.position} onClose={cancelStep}
+    onInput={(input, key) => { if (key.escape || key.ctrl && input === 'c') cancelStep(); else if (key.return) void write({ action: 'set', keyPath: step.field.key, value: step.value, layer: step.layer }, state); return true; }} />;
   if (step.kind === 'entry') {
     const at = state;
     return <EntryWindow title={fillTemplate(words.entryTitle, { key: step.field.key, expected: step.field.expected })} body={focusLines(step.field, words)}
@@ -94,7 +109,7 @@ export function ConfigPanel({ port, labels, push, openApproval, onError, onClose
       onSubmit={text => {
         const parsed = port.parse(step.field.key, text);
         if (!parsed.ok) return parsed.reason;
-        void write({ action: 'set', keyPath: step.field.key, value: parsed.value, layer: step.layer }, at);
+        setStep({ kind: 'preview', field: step.field, layer: step.layer, value: parsed.value });
         return null;
       }} />;
   }

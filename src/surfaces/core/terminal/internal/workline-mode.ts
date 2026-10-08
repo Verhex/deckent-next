@@ -4,6 +4,7 @@ import { PERMISSION_MODES, type PermissionMode, type PermissionModeChange, type 
 import { type WorkLedgerEntry, notice, fillTemplate } from '#surfaces/core/terminal-ledger/index.js';
 import type { PermissionModeStop } from '#surfaces/core/terminal-render/index.js';
 import { useFocusOwner } from '#surfaces/core/terminal-window/index.js';
+import { systemSummaryEntry } from '#surfaces/core/terminal-work/index.js';
 
 /**
  * The person's permission mode through the runtime service (T-L4 slice 4c, protocol v15; MODES-3 v17). The surface reads and writes no
@@ -157,8 +158,9 @@ async function stepPermissionMode(port: WorklinePermissionModePort, base: Permis
     askEdits: changed.askEdits, revision: changed.revision, eligible: changed.eligible, fullAccess: changed.fullAccess, ...(changed.fullAuto === undefined ? {} : { fullAuto: changed.fullAuto }) });
   const word = (stop: PermissionModeStop) => labels.stops?.[stop] ?? stop;
   const template = next === 'full-access' ? labels.cycledFullAccess ?? labels.changed : labels.cycled ?? labels.changed;
-  // T3 L4 (owner 2026-10-07): entering full access is said in the warning tone (text and mark carry it without colour).
-  return { entries: [notice(next === 'full-access' ? 'warning' : 'info', fillTemplate(template, { previous: word(current), mode: word(next) }))], view, fullAccess: next === 'full-access' };
+  // T3 L4 (owner 2026-10-07): entering full access is said in the warning tone (text and mark carry it without colour). SLASH-WINDOWS: the
+  // change (the `/mode` window and Shift+Tab alike) is the one system summary line, never a chat notice.
+  return { entries: [systemSummaryEntry(fillTemplate(template, { previous: word(current), mode: word(next) }), next === 'full-access' ? 'warning' : 'info')], view, fullAccess: next === 'full-access' };
 }
 
 /** The status row's mode stop (null: unknown or unsupported — no segment; full access always shown), `/mode` and the Shift+Tab step. A failure

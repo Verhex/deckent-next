@@ -48,6 +48,8 @@ const labels = {
     assuranceTurnElsewhere: 'R-TURN-ELSEWHERE', assurancePeer: 'R-PEER', assuranceOther: 'R-OTHER {level}' },
     cancelUsage: 'C', cancelTitle: 'C', cancelDetail: 'C', cancelAlreadyRequested: 'C', cancelPrompt: 'C',
     cancelPending: 'C', cancelKept: 'C', window: EN_WORK.window, approvalWindow: EN_WORK.approvalWindow,
+    // SLASH-WINDOWS (SW-2): the job and approval windows need their words; without them the commands answer "not wired".
+    jobs: EN_WORK.jobs, live: EN_WORK.live,
   },
 };
 

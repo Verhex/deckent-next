@@ -4,6 +4,7 @@ import { createPanelController, type PanelExecution, type PanelApprovalView, typ
   type ConversationSessionPort, type TurnDelta, type StandingScope } from '#surfaces/core/terminal-kit/index.js';
 import type { RunView } from '#engine/index.js';
 import type { WorklineApproval } from '#surfaces/core/terminal-ledger/index.js';
+import type { JobWindowPresentation } from './job-windows.js';
 import type { Span } from '#surfaces/core/terminal-render/index.js';
 import type { TurnApprovalRequest } from './work-surface.js';
 
@@ -14,8 +15,8 @@ type Approval = Readonly<{ kind: 'approval'; approval: WorklineApproval; remaini
 export type PanelWindowPresentation = Readonly<{ kind: 'window'; title: string; body: readonly string[]; hints: string; confirm: boolean }>;
 /** T3 L4: an open `/mode`, `/config` or `/mcp` window; it holds the command (queued lines wait) until it closes (item `close`). */
 export type SettingsPanelPresentation = Readonly<{ kind: 'settings'; panel: 'mode' | 'config' | 'mcp' | 'model' | 'provider' }>;
-export type PanelPresentation = Approval | Readonly<{ kind: 'cancel'; run: RunView }> | PanelWindowPresentation | SettingsPanelPresentation
-  | Readonly<{ kind: 'approvals'; rows: readonly WorklineApproval[] }> | Readonly<{ kind: 'resume'; rows: readonly ResumePickerItem[] }>;
+export type PanelPresentation = JobWindowPresentation | Approval | Readonly<{ kind: 'cancel'; run: RunView }> | PanelWindowPresentation | SettingsPanelPresentation
+  | Readonly<{ kind: 'approvals'; rows: readonly WorklineApproval[]; clearSession?: string; status?: string }> | Readonly<{ kind: 'resume'; rows: readonly ResumePickerItem[] }>;
 type PrivateCard = { view: PanelApprovalView<TerminalLocalContext>; presentation: Approval; standing?: StandingScope; unknown: () => void };
 export type WorklinePanel = ReturnType<typeof createWorklinePanel>;
 

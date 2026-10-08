@@ -179,29 +179,30 @@ describe('/monitor window', () => {
     // The monitor's own keys work inside the window (tab number), and typed text does not reach the composer.
     view.stdin.write('2'); await until(() => view.stdout.frame.includes('[2 '), 'tab 2 selected');
     view.stdin.write('hello\r'); await settle(60); expect(sent).toEqual([]);
-    // Esc backs out of help first and only then closes the window.
+    // Owner SW-2: Esc stops the open monitor window, including while its help is visible.
     view.stdin.write('?'); await settle(40); view.stdin.write(ESC); await settle(80);
-    expect(view.stdout.frame).toContain(EN.live!.monitorHints);
-    view.stdin.write(ESC); await until(() => !view.stdout.frame.includes(EN.live!.monitorHints), 'Esc at the top closes the window');
+    await until(() => !view.stdout.frame.includes(EN.live!.monitorHints), 'Esc at the top closes the window');
     view.stdin.write('hello\r'); await until(() => sent.length === 1, 'composer listens again');
     view.stdin.write('/monitor\r'); await until(() => view.stdout.frame.includes(EN.live!.monitorHints), 'reopened');
     view.stdin.write('q'); await until(() => !view.stdout.frame.includes(EN.live!.monitorHints), 'q closes');
   });
 
-  it('keeps /monitor with arguments as the text snapshot and a bare /monitor without a window port as the typed unavailable notice', async () => {
-    const asked: string[] = [];
-    const view = mountWorkline({ monitorWindow: await monitorPort(), monitor: async args => { asked.push(args); return ['TEXT-SNAPSHOT']; } }); mountedViews.push(view.instance);
-    await settle(20); view.stdin.write('/monitor --scope scope-a\r');
-    await until(() => view.stdout.text.includes('TEXT-SNAPSHOT'), 'text path'); expect(asked).toEqual(['--scope scope-a']);
-    expect(view.stdout.frame).not.toContain(EN.live!.monitorHints);
-    const bare = mountWorkline({}); mountedViews.push(bare.instance);
-    await settle(20); bare.stdin.write('/monitor\r'); await until(() => bare.stdout.text.includes('NO-PORT'), 'unwired notice');
+  it('without window words a typed /monitor argument keeps the text command; the bare command uses a window for the text port fallback', async () => {
+    const calls: string[] = [];
+    const view = mountWorkline({ monitor: async args => { calls.push(args); return ['TEXT-MONITOR']; } }); mountedViews.push(view.instance);
+    await settle(20); view.stdin.write('/monitor --scope x\r');
+    await until(() => calls.length === 1 && view.stdout.text.includes('TEXT-MONITOR'), 'typed text command (TERM=dumb style)');
+    expect(calls).toEqual(['--scope x']); await settle(30);
+    view.stdin.write('/monitor\r'); await until(() => view.stdout.frame.includes(EN.live!.monitorTitle) && calls.length === 2, 'fallback window');
+    expect(calls).toEqual(['--scope x', '']); view.stdin.write(ESC); await until(() => view.stdout.frame.includes('Monitor closed'), 'summary');
   });
 
-  it('shows a typed failure when the body cannot load and opens no window', async () => {
+  it('keeps a monitor load failure in its window, then leaves one labelled summary', async () => {
     const view = mountWorkline({ monitorWindow: async () => { throw new Error('load-failed'); } }); mountedViews.push(view.instance);
     await settle(20); view.stdin.write('/monitor\r');
-    await until(() => view.stdout.text.includes(`${EN.live!.monitorFailed}: ERR:load-failed`), 'failure notice'); expect(view.stdout.frame).not.toContain(EN.live!.monitorHints);
+    await until(() => view.stdout.frame.includes('ERR:load-failed'), 'failure window');
+    expect(view.stdout.frame).toContain(EN.live!.monitorTitle);
+    view.stdin.write(ESC); await until(() => view.stdout.frame.includes('◆ Deckent system · Monitor closed'), 'summary');
   });
 
   it('an inactive monitor body ignores keys (a window below the top layer must not react)', async () => {

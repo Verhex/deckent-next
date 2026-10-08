@@ -27,7 +27,7 @@ it('publishes the versioned policy action/resource matrix through the SDK', () =
   // PERSISTENT-APPROVALS G6: a person's standing approval of one call pattern; the resource id is the pattern key.
   expect(getPolicyVocabulary().resources.find(r => r.kind === 'agent-tool-call')!.actions).toEqual(['invoke']);
   // SECRET-WRITE (owner 2026-09-29 option A): a change of one stored secret; the resource id is the secret's name.
-  expect(getPolicyVocabulary().resources.find(r => r.kind === 'secret')!.actions).toEqual(['set', 'delete']);
+  expect(getPolicyVocabulary().resources.find(r => r.kind === 'secret')!.actions).toEqual(['set', 'delete', 'switch']);
   // CONFIG-SURFACE: governed configuration writes are one policy cell (the first-run template grants it to the installing owner).
   expect(getPolicyVocabulary().resources.find(r => r.kind === 'config')!.actions).toEqual(['write']);
   // WORK-TARGETS (owner 2026-09-30 K2 = A): one configured work target; use at admission/reservation, adopt when its branch moves.

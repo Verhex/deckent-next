@@ -403,6 +403,13 @@ const definitions: Readonly<Record<string, Definition>> = Object.freeze({
   // SECRET-BOUNDS (Astra 2185 R5): the change would grow the store document past the bound its reader enforces (params backend, maxBytes;
   // nothing written).
   SECRET_STORE_FULL: { category: 'error', render: (p, l) => ({ message: t('error.SECRET_STORE_FULL', p, l) }) },
+  SECRET_STORE_DOWNGRADE_UNCONFIRMED: { category: 'error', render: (p, l) => ({ message: t('error.SECRET_STORE_DOWNGRADE_UNCONFIRMED', p, l) }) },
+  SECRET_STORE_SWITCH_UNVERIFIED: { category: 'error', render: (p, l) => ({ message: t('error.SECRET_STORE_SWITCH_UNVERIFIED', p, l) }) },
+  SECRET_STORE_SWITCH_DENIED: { category: 'error', render: (p, l) => ({ message: t('error.SECRET_STORE_SWITCH_DENIED', p, l) }) },
+  // Astra 2456 P1-1: another secret change or store switch holds the installation's custody section past the wait bound (nothing changed).
+  SECRET_STORE_BUSY: { category: 'error', render: (p, l) => ({ message: t('error.SECRET_STORE_BUSY', p, l) }) },
+  // A store switch published another store after this change opened {backend}: nothing was decided, recorded or written.
+  SECRET_STORE_CHANGED: { category: 'error', render: (p, l) => ({ message: t('error.SECRET_STORE_CHANGED', p, l) }) },
   // SECRET-WRITE: no allow grant on `secret`/`set|delete` for this name (params action, name — never a value); the text names the grant to add.
   // The prompt of `secret set` was ended with Ctrl-C (nothing sent).
   SECRET_CHANGE_DENIED: { category: 'error', render: (p, l) => ({ message: t('error.SECRET_CHANGE_DENIED', p, l) }) },

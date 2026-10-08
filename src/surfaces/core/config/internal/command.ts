@@ -10,6 +10,7 @@ import { applyWord, renderConfigExplanation, renderConfigInspection, sourceWord 
 
 export type ConfigApplicationFactory = (root: string, options: ConfigLoadOptions) => ConfigApplication;
 export interface ConfigCommandContext extends CliBaseContext {
+  configChoiceSources?: (root: string, options: ConfigLoadOptions) => import('./choices.js').ConfigChoiceSourcePort;
   configApplication?: ConfigApplicationFactory;
   loadInstallationIdentity?: (root: string, options: ConfigLoadOptions) => Promise<unknown>;
   /** Read-only service describe: a restart-apply change is compared with what the running service started with. */
@@ -161,4 +162,9 @@ export async function configSlash(root: string, args: string, context: ConfigCom
   if (words.length > 1) return [t('config.surface.slashUsage', {}, locale)];
   const view = await context.configApplication(root, options).inspect(verb ? { keyPath: verb } : {});
   return renderConfigInspection(view, locale, width).split('\n');
+}
+
+/** Interactive TTY adapter: typed arguments never reach either parser or submit, including TERM=dumb fallback. */
+export function configTtySlash(root: string, _args: string, context: ConfigCommandContext, options: ConfigLoadOptions, locale: Locale, width: number): Promise<readonly string[]> {
+  return configSlash(root, '', context, options, locale, width);
 }

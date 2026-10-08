@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { parseSlashLine, WORKLINE_SLASH_COMMANDS, type WorklineProps } from '#surfaces/core/terminal/index.js';
 import { slashCommandRow, slashHelpText, SLASH_GROUPS, SLASH_HELP_TITLE_KEY } from '#surfaces/core/terminal-kit/index.js';
+import { paletteCommand } from '#surfaces/core/terminal-composer/index.js';
 import { terminalComposerLabels } from '#surfaces/core/terminal-labels/index.js';
 import { snapshotKnownSecrets, t } from '#platform/index.js';
 import { mountWorkline, settle, until as harnessUntil, WORKLINE_TEST_LABELS } from '../support/workline-harness.js';
@@ -80,7 +81,8 @@ describe('terminal slash registry', () => {
     // Every row is selected by its exact prefix through the real composer, including the injected unhandled row.
     for (const command of WORKLINE_SLASH_COMMANDS) {
       await type(view, `/${command.name}`);
-      const row = slashCommandRow(command, composer.slash);
+      // The palette row carries no argument hint (SLASH-WINDOWS); /help keeps the registry's full row below.
+      const row = slashCommandRow(paletteCommand(command), composer.slash);
       await until(() => view.stdout.frame.includes(`> ${row.name}`) && view.stdout.frame.includes(row.detail), `palette ${locale}/${command.name}`);
       await type(view, '\u0015');
       await until(() => !view.stdout.frame.includes(`> ${row.name}`), 'clear draft');
@@ -110,8 +112,11 @@ describe('terminal slash registry', () => {
   it.each(WORKLINE_SLASH_COMMANDS.filter(command => !['exit', 'quit', 'registered-unhandled'].includes(command.name)))('existing /$name dispatch remains handled, even with unavailable ports', async command => {
     const completeTurn = vi.fn(async () => 'unexpected');
     const view = await open({ completeTurn });
-    // A trailing space closes the palette, so arg-less commands submit literally rather than selecting a different row.
-    await type(view, `/${command.name}${command.argumentKey ? ' fixture-id' : ' '}\r/status \r`);
+    // A trailing space closes the palette, so arg-less commands submit literally rather than selecting a different row. A command that answers in
+    // a window (SLASH-WINDOWS) holds the input line until Esc closes it; Esc on an empty composer changes nothing.
+    await type(view, `/${command.name}${command.argumentKey ? ' fixture-id' : ' '}\r`);
+    await settle(60); view.stdin.write('\u001B'); await settle(60);
+    await type(view, '/status \r');
     await until(() => view.stdout.text.includes('STATUS-LINE'), `dispatch ${command.name} then status`);
     expect(view.stdout.text).not.toContain('UNKNOWN');
     expect(completeTurn).not.toHaveBeenCalled();
@@ -125,24 +130,24 @@ describe('terminal slash registry', () => {
     expect(completeTurn).not.toHaveBeenCalled();
   });
 
-  it('argument completion waits and /config and /mcp forward their original arguments once', async () => {
+  it('Enter on a bare /run runs it at once (no typed argument) and /config and /mcp still forward typed arguments in text mode', async () => {
     const config = vi.fn(async (args: string) => [`CONFIG-READ ${args}`]), mcp = vi.fn(async (args: string) => [`MCP-READ ${args}`]);
-    const inspectRun = vi.fn(async (runId: string) => { expect(runId).toBe('r-1'); return null; });
+    const inspectRun = vi.fn(async () => null);
     const view = await open({ config, mcp, labels: { ...WORKLINE_TEST_LABELS, composer: terminalComposerLabels('tr') },
       ledger: { scopeId: 's', async listWorkers() { return { schemaVersion: 1, scopeId: 's', sources: [] } as never; }, inspectRun } });
     await type(view, '/ru\r');
-    await until(() => view.stdout.frame.includes('/run |<run-kimliği>'), 'argument hint after completion');
+    // SW-2: the bare command answers at once in its window (here "not wired": this ledger cannot list runs); Esc closes it.
+    await until(() => view.stdout.frame.includes('UNWIRED'), 'bare /run runs at once and answers in its window');
+    expect(view.stdout.frame).not.toContain('<run-kimliği>');
     expect(inspectRun).not.toHaveBeenCalled();
-    await type(view, 'r-1\r');
-    await until(() => inspectRun.mock.calls.length === 1, 'run with argument');
-    expect(inspectRun.mock.calls[0]).toEqual(['r-1']);
+    await settle(40); view.stdin.write('\u001B'); await settle(60);
     await type(view, '/config terminal.chat\r/mcp reconnect server-1\r');
     await until(() => config.mock.calls.length === 1 && mcp.mock.calls.length === 1, 'config/mcp args');
     expect(config.mock.calls[0]).toEqual(['terminal.chat']);
     expect(mcp.mock.calls[0]).toEqual(['reconnect server-1']);
   });
 
-  it.each([200, 55])('palette, pending argument and help project complete labels before display cuts (%s columns)', async columns => {
+  it.each([200, 55])('palette and help project complete labels before display cuts (%s columns)', async columns => {
     const canary = 'fictitious-s08-known-0123456789';
     const split = `${canary.slice(0, 12)}\u001b[31m${canary.slice(12)}`;
     const raw = `LABEL ${split} \u202e \u2066`;
@@ -154,8 +159,6 @@ describe('terminal slash registry', () => {
     await type(view, '/hel');
     await until(() => view.stdout.frame.includes('‹secret:S08_TEST›'), 'palette redacted');
     if (columns === 200) expect(view.stdout.frame).toContain('<U+202E> <U+2066>');
-    await type(view, '\u0015/run ');
-    await until(() => view.stdout.frame.includes('/run |LABEL ‹secret:S08_TEST›'), 'pending argument projected');
     await type(view, '\u0015/help\r');
     await until(() => view.stdout.text.includes('/help  LABEL ‹secret:S08_TEST›'), 'help projected');
     expect(view.stdout.text).toContain('<U+202E>');

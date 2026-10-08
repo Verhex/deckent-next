@@ -199,8 +199,10 @@ describe.skipIf(process.platform !== 'linux')('turn phases in a real pseudo-term
       // q6 compacts again (the stopped summary left nothing), this time it lands; the model then reasons and waits: Esc.
       ['RED line', '\u001b'],
       ['cancelled (model response)', 'q7\r'],
-      ['Answer seven.', '/reasoning off\r'],
-      ['Reasoning', 'q8\r'],
+      // SLASH-WINDOWS: `/reasoning` opens its picker (no typed `off`); the second row is "Model thinking off", and the status strip then says so.
+      ['Answer seven.', '/reasoning\r'],
+      ['Model thinking off', '\u001b[B\r'],
+      ['reasoning off', 'q8\r'],
       ['Answer eight.', '/exit\r'],
     ]);
     expect(run.timeout, run.output).toBeUndefined();
@@ -222,7 +224,7 @@ describe.skipIf(process.platform !== 'linux')('turn phases in a real pseudo-term
     expect(out).not.toContain('\u001b[31m'); expect(out).not.toContain('PWNED');
     expect(out).not.toContain('PREVIEW-8');
     // v16: the same `/reasoning off` asked the service to turn thinking off; only the round after it carries the switch.
-    expect(out).toMatch(/Reasoning (preview )?off/u);
+    expect(out).toMatch(/reasoning off/u);
     expect(f.calls.thinking).toEqual([null, null, null, null, null, null, { enable_thinking: false }]);
   }, 180_000);
 
@@ -230,9 +232,9 @@ describe.skipIf(process.platform !== 'linux')('turn phases in a real pseudo-term
     const f = await phasesProject(false);
     await startRuntime(f.projectRoot, f.env);
     const run = await inPty(f.projectRoot, f.env, ['terminal', 'workline', '--scope', 'scope'], [
-      ['Deckent workline', 'q1\r'], ['ANSWER-1', '/reasoning off\r'], ['Reasoning', 'q2\r'],
-      // The notice texts are catalog strings (lead); the waits use their stable first word, the slash runs at once when idle.
-      ['(code: AGENT_TURN_REASONING_UNSUPPORTED)', '/reasoning on\r'], ['(code: AGENT_TURN_REASONING_UNSUPPORTED)', 'q3\r'],
+      ['Deckent workline', 'q1\r'], ['ANSWER-1', '/reasoning\r'], ['Model thinking off', '\u001b[B\r'], ['reasoning off', 'q2\r'],
+      // The refusal is a catalog string with its code; the picker's first row turns thinking on again.
+      ['(code: AGENT_TURN_REASONING_UNSUPPORTED)', '/reasoning\r'], ['Model thinking off', '\r'], ['reasoning on', 'q3\r'],
       ['ANSWER-3', '/exit\r'],
     ]);
     expect(run.timeout, run.output).toBeUndefined();

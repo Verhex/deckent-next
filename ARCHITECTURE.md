@@ -422,6 +422,10 @@ refresh, usage and dogfood closure remain open.
   v21 was pushed with alpha.10 (released). v22 (T3 `wave/tui-3`, 2026-10-07, unpushed): approval records whose subject is `config-change` reach
   clients (list/inspect/decide); a v21 client still has them hidden (`approvalSubjectsHiddenFromProtocol`). Lifecycle window [22,21]. No other T3
   wire field (MCP trust and proposal windows reuse `approval.requested`; read-tool `diagnostic` stays in the service).
+  v23 (T4 MODEL-SWITCH) was pushed with alpha.14. v24 (SECRET-STORE-SWITCH, owner 2026-10-08, unpushed): one operation `switchSecretStore`;
+  lifecycle window [24,23] (a v22 service is outside; a v23 client cannot reach the switch). Secret set/delete and the switch share one
+  installation-wide custody section (Astra 2456 P1-1); a contended change is `SECRET_STORE_BUSY`, a change prepared on a store that a switch
+  replaced is `SECRET_STORE_CHANGED` (no wire field changes).
   v18 was introduced 2026-09-29 (SECRET-WRITE, lead decision under this rule) as the single v18 package: the control operations
   `setSecret` / `deleteSecret`; lifecycle window [18,17]; every other v17 operation is unchanged in v18. It is unreleased until pushed, and
   further v18 items add to it without another bump. Like every bump, the window's older version is lifecycle-only: a v17 client can
@@ -498,6 +502,7 @@ Core contracts and never requires editing Core. Core-memory law 10 records this 
   once under the layer lock after re-checking the digest (`CONFIG_APPROVAL_STALE`), the policy and the accept window; the audit `config-change`
   record names the consumed `approvalId`. `ConfigApplication.permissions` is a read-only per-layer view for the `/config` window; `set`/`unset`
   stay allow-only for other callers. Policy `approvalAssurance` may name `subject: config-change`. The model has no route to this write.
+- **Config selection (CS-1, owner 2026-10-08; lane author candidate):** `platform/core/config-fields` owns explicit value-choice declarations, numeric presets/units/steps and the small allowed-entry registry. Zod supplies bounds; nullable fields offer None/Never, `max_workers` includes auto, and single-value literals are hidden. One read-only surface `ConfigChoiceSourcePort.list(source, keyPath)` is composed with actual principal scopes, active scoped model catalog (one whole `terminal.chat.reference` choice), policy company, inspected pools, task kinds, layout key filenames, Git branches, PATH executables, probed local images, identity profiles and serving profiles. Discovery bounds (Astra 2456): Git/Docker processes have a timeout, output ceiling and entry limit; the PATH probe checks at most `CONFIG_DISCOVERY_BOUNDS.pathDirectories` (256) directories under one deadline; a directory listing reads at most `maxEntries × 16` entries (every entry seen counts) and stops at the timeout; symlinks are never candidates. Directory names, generated IDs and service environment names replace ordinary free text. Only masked secrets and explicitly new URL/host entries can open a validated preview; structured documents remain read-only for a later record editor/import lane. TTY config arguments open the picker and cannot reach the typed write parser, including its text fallback; script/CLI parsing stays unchanged. Every selected write retains the same governed `ConfigApplication` policy, approval, digest and audit path. Author tests and source proof are in external `proof/SLASH-WINDOWS-2026-10-08/CS1-WORKER.md`; independent review, packaged/native platforms and live acceptance remain separate.
 - **MCP servers (L1 + owner MCP decisions):** registry entries are stdio or Streamable HTTP (`type: http`, `url`, `headers`; SSE refused; https
   only, plain http only to loopback; `$DECK:` secret references in headers/env only in local/user files). The policy kind `mcp-server`
   (id = registry name, action `invoke`, Jev 04f75210) authorizes an MCP tool call instead of its `agent-tool` wire name (an explicit
@@ -528,6 +533,18 @@ Core contracts and never requires editing Core. Core-memory law 10 records this 
   `/mcp` bounded windows, presentation only, ports and words from `cli-terminal`); `/monitor`, `/watch-workers`, `/watch-runs`, `/tasks` are
   bounded modal live windows (L5: `MonitorBody` loaded through a host port; one visible window at a time). Full access shows a standing
   warning line above the composer. Detail: [terminal-surface](.deckent/docs/architecture/modules/terminal-surface.md).
+- **Slash windows and system summary line (SLASH-WINDOWS, owner 2026-10-08; `wave/slash-windows`, not landed):** in the TTY terminal every
+  informing slash command answers in a bounded `Window` (Esc closes), never in the chat stream; `/clear` erases the screen and the terminal's
+  scrollback (ED 2 + ED 3, TTY only, also with NO_COLOR; nothing on TERM=dumb or a non-TTY) and starts a new conversation (saved history stays for
+  `/resume`), `/exit` exits. A closed window leaves at most ONE system line: `systemSummaryEntry` (terminal-work) is the only factory, a
+  `notice` with `SYSTEM_SUMMARY_ENTRY_ID`; `LedgerEntryRow` is the only render point, through `SystemSummaryLine` (terminal-window: own rail,
+  `◆ Deckent system` label, tone from the level, secret-projected). The `/mode` change (window and Shift+Tab), settings window results (`/model`
+  pin, `/config`, `/mcp`, `/provider`), a feed access refusal and the opening line for running work (I-5; nothing when idle) use it too. Hosts: the panel controller (job, approval, resume, settings windows) and one local window slot (`useWindowSlot`: information and list
+  windows); all are `Window`s in one stack, which owns focus, and an approval card hides the slot until answered. **Typed arguments (owner I-1):**
+  with window words a slash command typed with an argument runs bare in every host and its window says once (`WindowNoteContext`, never on an
+  approval card) that the terminal takes no typed argument; the typed text is never shown, queued or kept in the input history
+  (only `/command`, Astra 2456). Information and list windows project every visible word through the known-secret / human-text projection,
+  whole, before layout (Astra 2456 P1-2). Line mode and the CLI keep arguments.
 - **Shell and identity (L6):** the shell scanner reads a redirection operator whole (`2>&1`, `N>&M`, `&>`); stream silencing/merging to
   `/dev/null` or a descriptor keeps a read a read, a file target stays a write; a sandboxed write to a protected path explains itself in the
   tool result (EN/TR); a registry directory that is its own tmpfs mount inside a sandbox is `*_IDENTITY_MASKED`, not a lost identity;

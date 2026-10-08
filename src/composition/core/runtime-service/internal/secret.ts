@@ -1,7 +1,8 @@
 import { AuditError, PolicyError } from '#domain/index.js';
-import { AuditApplication, policySecretChangeAuthorization, RuntimeServiceProtocolError, runtimeServiceResultCapacity, secretDeleteCommandSchema,
-  secretSetCommandSchema, SecretStoreAdministration, type RuntimeServiceRequest } from '#engine/index.js';
-import { openConfiguredSecretStore, openLocalIntegrityAuthority, openSqliteAuditStore, PolicyFileError, type LocalPeerIdentity } from '#adapters/index.js';
+import { AuditApplication, policySecretChangeAuthorization, policySecretStoreSwitchAuthorization, RuntimeServiceProtocolError, runtimeServiceResultCapacity,
+  secretDeleteCommandSchema, secretSetCommandSchema, secretStoreSwitchCommandSchema, SecretStoreAdministration, SecretStoreSwitch, type RuntimeServiceRequest } from '#engine/index.js';
+import { createInstallationSecretCustody, createInstallationSecretStoreSelection, isRegisteredSecretStore, openConfiguredSecretStore, openLocalIntegrityAuthority, openRegisteredSecretStore,
+  openSqliteAuditStore, PolicyFileError, type LocalPeerIdentity } from '#adapters/index.js';
 import { ErrorRegistry, SystemTrustedClock, type ConfigLoadOptions } from '#platform/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 import { loadConfiguredPeerScopeContext } from '#composition/core/scoped-request/index.js';
@@ -15,11 +16,12 @@ export async function executeConfiguredRuntimeSecretOperation(projectRoot: strin
   responseMaxBytes: number, options: ConfigLoadOptions): Promise<unknown> {
   if (!request.delivery) throw new RuntimeServiceProtocolError('RUNTIME_SERVICE_DELIVERY_INVALID');
   const capacity = runtimeServiceResultCapacity(request.requestId, responseMaxBytes, request.delivery.maxResultBytes);
+  if (request.operation === 'switchSecretStore') return switchStore(projectRoot, request, peer, capacity, options);
   const set = request.operation === 'setSecret' ? secretSetCommandSchema.parse(request.input) : null, command = set ?? secretDeleteCommandSchema.parse(request.input);
   let result: unknown;
   try {
     const context = await loadConfiguredPeerScopeContext(projectRoot, command.scopeId, options, peer, 'write');
-    const secrets = openConfiguredSecretStore(context.config, options.env ?? process.env, options.platform);
+    const env = options.env ?? process.env, platform = options.platform ?? process.platform, secrets = openConfiguredSecretStore(context.config, env, platform);
     const answer = (removed: boolean | null) => ({ schemaVersion: 1, scopeId: command.scopeId, name: command.name, action: set ? 'set' : 'delete',
       backend: secrets.descriptor.id, removed });
     if (Buffer.byteLength(JSON.stringify(answer(set ? null : false)), 'utf8') > capacity) throw new RuntimeServiceProtocolError('RUNTIME_SERVICE_RESPONSE_LIMIT');
@@ -27,7 +29,7 @@ export async function executeConfiguredRuntimeSecretOperation(projectRoot: strin
     try {
       const audit = new AuditApplication(store, await openLocalIntegrityAuthority(context.layout, context.config.approvals.keyFile, true)), clock = new SystemTrustedClock();
       const administration = new SecretStoreAdministration(secrets, policySecretChangeAuthorization(context.document, context.principal),
-        event => { audit.record(event); }, () => clock.sample().wallMs);
+        event => { audit.record(event); }, () => clock.sample().wallMs, createInstallationSecretCustody(env, platform));
       const change = { principal: { issuer: context.principal.issuer, subject: context.principal.subject }, scopeId: command.scopeId, name: command.name };
       result = answer(set ? (await administration.set(change, set.value), null) : await administration.delete(change));
     } finally { store.close(); }
@@ -38,4 +40,30 @@ export async function executeConfiguredRuntimeSecretOperation(projectRoot: strin
     throw queryFailure(error);
   }
   return result;
+}
+
+/** v24 SECRET-STORE-SWITCH: the socket peer moves every secret into another registered store under the `secret`/`switch` cell of this
+ * installation's policy, audited as `secret-store-switch` in the same ledger before anything moves. The answer carries store ids and counts
+ * only; its bound is checked before the decision (the largest answer: both ids at their bound and a full count). */
+async function switchStore(projectRoot: string, request: RuntimeServiceRequest, peer: LocalPeerIdentity, capacity: number, options: ConfigLoadOptions): Promise<unknown> {
+  const command = secretStoreSwitchCommandSchema.parse(request.input), env = options.env ?? process.env, platform = options.platform ?? process.platform;
+  const widest = { schemaVersion: 1, scopeId: command.scopeId, status: 'switched', from: 'x'.repeat(128), to: command.to, entries: Number.MAX_SAFE_INTEGER, downgrade: false, cleaned: false };
+  if (Buffer.byteLength(JSON.stringify(widest), 'utf8') > capacity) throw new RuntimeServiceProtocolError('RUNTIME_SERVICE_RESPONSE_LIMIT');
+  try {
+    const context = await loadConfiguredPeerScopeContext(projectRoot, command.scopeId, options, peer, 'write');
+    const store = await openSqliteAuditStore(await context.path(), context.config.storage.sqlite, 'forbid');
+    try {
+      const audit = new AuditApplication(store, await openLocalIntegrityAuthority(context.layout, context.config.approvals.keyFile, true)), clock = new SystemTrustedClock();
+      return await new SecretStoreSwitch({ has: isRegisteredSecretStore, open: id => openRegisteredSecretStore(id, env, platform),
+        selection: createInstallationSecretStoreSelection(env, platform), authorize: policySecretStoreSwitchAuthorization(context.document, context.principal),
+        audit: event => { audit.record(event); }, now: () => clock.sample().wallMs, custody: createInstallationSecretCustody(env, platform) })
+        .switch({ principal: { issuer: context.principal.issuer, subject: context.principal.subject }, scopeId: command.scopeId, to: command.to,
+          confirmDowngrade: command.confirmDowngrade });
+    } finally { store.close(); }
+  } catch (error) {
+    if (error instanceof RuntimeServiceProtocolError) throw error;
+    if (error instanceof AuditError) throw ErrorRegistry.createError(error.code);
+    if (error instanceof PolicyFileError || error instanceof PolicyError) throw ErrorRegistry.createError('POLICY_UNAVAILABLE');
+    throw queryFailure(error);
+  }
 }

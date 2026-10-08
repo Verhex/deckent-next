@@ -19,7 +19,7 @@ describe('/help grouped', () => {
     const sections = text.split('\n').slice(1).join('\n').split('\n\n');
     expect(sections.map(section => section.split('\n')[0])).toEqual(['Bilgi', 'İşler', 'Onaylar', 'Ayar', 'Oturum']);
     // /cancel is the window lane's text and is not pinned here.
-    expect(sections[1]!.split('\n').slice(0, -1).join('\n')).toBe(['İşler', '  /workers  İşçileri kartlar olarak listele', '  /watch-workers  İşçileri yerinde güncellenen bir pencerede canlı izle',
+    expect(sections[1]!.split('\n').slice(0, -1).join('\n')).toBe(['İşler', '  /workers  İşçileri ve her birinin ne yaptığını listele', '  /watch-workers  İşçileri yerinde güncellenen bir pencerede canlı izle',
       '  /watch-runs  İşleri yerinde güncellenen bir pencerede canlı izle', '  /watch-stop  İşçi ve iş izlemeyi durdur', '  /tasks  Arka plan işleri: işçiler ve işler tek canlı pencerede (salt okunur)', '  /run <run-kimliği>  Bir işi ayrıntılı göster',
       '  /runs  Bu kapsamdaki tüm işleri listele', '  /transcript <n|deneme-kimliği> [sayfa]  Bir işçinin mühürlü dökümünü göster'].join('\n'));
   });

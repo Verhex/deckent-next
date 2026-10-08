@@ -30,7 +30,8 @@ export const policyResources = Object.freeze({
   agentToolCall: Object.freeze({ kind: 'agent-tool-call' as const, actions: Object.freeze(['invoke'] as const) }),
   // A change of one stored secret of the installation's secret store (SECRET-WRITE, owner 2026-09-29 option A): the resource id is the secret's
   // name (the `$DECK:NAME` grammar). Reading a secret is not a policy action: references resolve for the configuration that names them.
-  secret: Object.freeze({ kind: 'secret' as const, actions: Object.freeze(['set', 'delete'] as const) }),
+  // `switch` (SECRET-STORE-SWITCH, owner 2026-10-08): move every secret into another registered store and select it.
+  secret: Object.freeze({ kind: 'secret' as const, actions: Object.freeze(['set', 'delete', 'switch'] as const) }),
   // A configured work target (WORK-TARGETS, owner 2026-09-30 K2 = A): the resource id is the target id of `execution.workTargets`.
   // `use` is checked at Run admission and reservation (like pool use), `adopt` when an adoption or rollback moves the target's branch.
   workTarget: Object.freeze({ kind: 'work-target' as const, actions: Object.freeze(['use', 'adopt'] as const) }),

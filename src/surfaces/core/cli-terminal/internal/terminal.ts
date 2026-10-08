@@ -1,16 +1,16 @@
 import type { WorklineStreamTurn } from '#surfaces/core/terminal-kit/index.js';
-import { configPanelPort, configSlash } from '#surfaces/core/config/index.js';
+import { configPanelPort, configTtySlash } from '#surfaces/core/config/index.js';
 import { userInfo } from 'node:os';
 import { createInterface } from 'node:readline';
 import { basename } from 'node:path';
 import { loadMonitorSurface, monitorSlash } from '#surfaces/core/monitor/index.js';
 import { DeckentError, ErrorRegistry, emit, getConfigKnownSecrets, loadConfig, readBuildIdentity, resolveLocale, t, formatValue, colorCapability, PACKAGE_VERSION, type ConfigLoadOptions, type Locale } from '#platform/index.js';
 import { buildInferenceServingPlan, estimateReplicaCapacity, readInferenceServingProfile, runtimeConfigFreshness, RUNTIME_SERVICE_HEARTBEAT_MS, type IdentityRead, type InstallationIdentityRead } from '#engine/index.js';
-import { prefersAsciiGlyphs, runTerminalWorkline, resolveWorklinePalette, resolveTerminalTheme, permissionModeStop, STARTUP_BANNERS, TERMINAL_THEME_SETTINGS, type TerminalThemeSetting, type WorklineStartup, buildWorklineBridgeSnapshot, streamLineTurn, boundAgentHistory, boundChatHistory, bindSessionScope, type AgentChatMessage, type ChatTurnMessage, type TurnDelta, type WorklineLabels } from '#surfaces/core/terminal/index.js';
+import { prefersAsciiGlyphs, runTerminalWorkline, resolveWorklinePalette, resolveTerminalTheme, permissionModeStop, STARTUP_BANNERS, TERMINAL_THEME_SETTINGS, type TerminalThemeSetting, type WorklineStartup, buildWorklineBridgeSnapshot, streamLineTurn, boundAgentHistory, boundChatHistory, bindSessionScope, type AgentChatMessage, type ChatTurnMessage, type TurnDelta, type WorklineLabels, type SlashWindowLabels } from '#surfaces/core/terminal/index.js';
 import { plainText, projectHumanText } from '#surfaces/core/terminal-render/index.js';
 import { terminalComposerLabels, terminalRenderLabels, terminalSessionLabels, terminalStartupLabels } from '#surfaces/core/terminal-labels/index.js';
 import { createWorklineLedgerPorts } from './terminal-ledger.js';
-import { runtimeBuildSkew, terminalPanelLabels, workSurfaceLabels } from '#surfaces/core/work-labels/index.js';
+import { pickerLabels, runtimeBuildSkew, terminalPanelLabels, workSurfaceLabels } from '#surfaces/core/work-labels/index.js';
 import { pickerNeedsTextFallback } from '#surfaces/core/terminal-picker/index.js';
 import { mcpPanelPort } from './mcp-panel.js';
 import { modelPanelSource } from './model-panel.js';
@@ -119,6 +119,20 @@ function statusPayload(tty: ReturnType<typeof ttyState>, config: Record<string, 
 function modeStopWords(locale: Locale) {
   return { standart: t('terminal.mode.stop.standart', {}, locale), 'ask-edits': t('terminal.mode.stop.ask-edits', {}, locale),
     'full-auto': t('terminal.mode.stop.full-auto', {}, locale), 'full-access': t('terminal.mode.stop.full-access', {}, locale) } as const;
+}
+
+/** SLASH-WINDOWS (owner 2026-10-08): the words of the `/reasoning`, `/scratch` and unknown-command windows; absent where the terminal cannot draw a list. */
+function slashWindowLabels(locale: Locale): SlashWindowLabels {
+  return { picker: pickerLabels(locale), position: t('terminal.window.position', {}, locale), hints: t('terminal.window.hints', {}, locale), infoHints: t('terminal.window.infoHints', {}, locale), typedArgument: t('terminal.window.typedArgument', {}, locale),
+    reasoning: { title: t('terminal.window.reasoning.title', {}, locale), thinkingOn: t('terminal.window.reasoning.thinkingOn', {}, locale), thinkingOnDetail: t('terminal.window.reasoning.thinkingOnDetail', {}, locale), thinkingOff: t('terminal.window.reasoning.thinkingOff', {}, locale),
+      thinkingOffDetail: t('terminal.window.reasoning.thinkingOffDetail', {}, locale), previewOn: t('terminal.window.reasoning.previewOn', {}, locale), previewOnDetail: t('terminal.window.reasoning.previewOnDetail', {}, locale), previewOff: t('terminal.window.reasoning.previewOff', {}, locale),
+      previewOffDetail: t('terminal.window.reasoning.previewOffDetail', {}, locale), current: t('terminal.window.reasoning.current', {}, locale), statusOn: t('terminal.window.reasoning.statusOn', {}, locale), statusOnHidden: t('terminal.window.reasoning.statusOnHidden', {}, locale),
+      statusOff: t('terminal.window.reasoning.statusOff', {}, locale) },
+    scratch: { title: t('terminal.window.scratch.title', {}, locale), status: t('terminal.window.scratch.status', {}, locale), folder: t('terminal.window.scratch.folder', {}, locale), more: t('terminal.window.scratch.more', {}, locale), empty: t('terminal.window.scratch.empty', {}, locale), fileDetail: t('terminal.window.scratch.fileDetail', {}, locale),
+      clear: t('terminal.window.scratch.clear', {}, locale), clearDetail: t('terminal.window.scratch.clearDetail', {}, locale), clearTitle: t('terminal.window.scratch.clearTitle', {}, locale), clearBody: t('terminal.window.scratch.clearBody', {}, locale), clearPrompt: t('terminal.window.scratch.clearPrompt', {}, locale),
+      pathTitle: t('terminal.window.scratch.pathTitle', {}, locale) },
+    unknown: { title: t('terminal.window.unknown.title', {}, locale), body: t('terminal.window.unknown.body', {}, locale), closest: t('terminal.window.unknown.closest', {}, locale), none: t('terminal.window.unknown.none', {}, locale),
+      all: t('terminal.window.unknown.all', {}, locale), allDetail: t('terminal.window.unknown.allDetail', {}, locale) } };
 }
 
 function worklineLabels(locale: Locale, statusLine: string): WorklineLabels {
@@ -373,8 +387,12 @@ export async function terminalCommand(argv: readonly string[], context: Terminal
     context: { installationId, projectId, scopeId },
     knownSecrets: getConfigKnownSecrets(config),
     selfSource: await context.selfSourceProject?.(root) ?? false,
-    labels: worklineLabels(locale, [t('terminal.status.chat', { target: chatTarget(chat, locale) }, locale), ...(serviceLine ? [serviceLine] : [])].join(' · ')),
+    labels: { ...worklineLabels(locale, [t('terminal.status.chat', { target: chatTarget(chat, locale) }, locale), ...(serviceLine ? [serviceLine] : [])].join(' · ')),
+      ...(pickerNeedsTextFallback(env, true) ? {} : { windows: slashWindowLabels(locale) }) },
     target, systemPrompt: t('terminal.chat.systemPrompt', {}, locale), historyMessages, projectRoot: root,
+    // Owner 2026-10-08: `/clear` clears screen and scrollback; no escape sequence on TERM=dumb (and never to a non-TTY).
+    // NO_COLOR concerns colour only, so it does not stop the clear.
+    clearScreen: env['TERM']?.trim().toLowerCase() !== 'dumb',
     completeTurn: turn, errorText: error => errorText(error, locale),
     ...(inputHistory ? { inputHistory } : {}),
     // T-L5 `@file`: candidates and content come from the runtime service's scoped read port; this surface reads no file.
@@ -394,9 +412,11 @@ export async function terminalCommand(argv: readonly string[], context: Terminal
     // TERMINAL-CLOSE S09: `/status`, `/model`, `/usage`, `/doctor`, `/scope` re-read their typed producers on every call (this surface keeps no copy).
     ...terminalAdminPorts({ root, scopeId, installationId, projectId, options, locale, context, principalName: hostUserName(),
       status: async () => renderStatus(statusPayload(ttyState(context), await loadConfig(root, options), context.describeTerminalChatPlan ? await context.describeTerminalChatPlan(root, options) : null, await readIdentity()), locale),
-      doctor: sink => ports.runKernelCommand(['doctor', '--lang', locale], { root, env, stdout: sink, stderr: sink }) }),
+      doctor: sink => ports.runKernelCommand(['doctor', '--lang', locale], { root, env, stdout: sink, stderr: sink }),
+      // SW-1: the `/doctor` window groups the same command's structured report by area.
+      doctorReport: sink => ports.runKernelCommand(['doctor', '--json', '--lang', locale], { root, env, stdout: sink, stderr: sink }) }),
     ...(ports.mcpSlash ? { mcp: (args: string) => ports.mcpSlash!(root, args, options, locale) } : {}),
-    ...(context.configApplication ? { config: (args: string) => configSlash(root, args, context, options, locale, Math.max(40, (tty.columns ?? 100) - 4)) } : {}),
+    ...(context.configApplication ? { config: (args: string) => configTtySlash(root, args, context, options, locale, Math.max(40, (tty.columns ?? 100) - 4)) } : {}),
     ...panelProps(root, scopeId, context, ports, options, locale, env),
     // MONITOR: `/monitor` prints the monitor's text snapshot as notice lines (the fullscreen view is `deckent monitor`).
     ...(context.inspectMonitor ? { monitor: (args: string) => monitorSlash(root, args, context, options, locale, Math.max(40, (tty.columns ?? 100) - 4)) } : {}),

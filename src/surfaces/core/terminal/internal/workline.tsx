@@ -1,24 +1,26 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, createElement, type ComponentProps } from 'react';
-import { render, Box, Static, Text, useApp, type Instance } from 'ink';
-import { useWorklinePanel, type LocalExecution, LedgerEntryRow, type LedgerEntryLabels, immediateSlashAction, runLedgerCommand, type WatchState, type MonitorWindowLoader, type WorklineActionLabels, useWorkSurface } from '#surfaces/core/terminal-work/index.js';
-import { WorklinePaletteProvider, useWorklinePalette, parseSlashLine, isInspectSlashCommand, addSessionUsage, bindInspectPorts, EMPTY_SESSION_USAGE, type InspectSlashPorts, type SessionUsageView, useWorklineWatch, surfaceDeliveryValues, surfaceFollowLine, useSurfacePushFeed,
+import { render, Box, Static, Text, useApp, useStdout, type Instance } from 'ink';
+import { useWorklinePanel, type LocalExecution, LedgerEntryRow, liveRunEntry, dispatchWorkCommand, openingWorkText, systemSummaryEntry, type LedgerEntryLabels, immediateSlashAction, type WatchState, type MonitorWindowLoader, type WorklineActionLabels, useWorkSurface } from '#surfaces/core/terminal-work/index.js';
+import { WorklinePaletteProvider, useWorklinePalette, parseSlashLine, WORKLINE_SLASH_COMMANDS, isInspectSlashCommand, addSessionUsage, bindInspectPorts, EMPTY_SESSION_USAGE, type InspectSlashPorts, type SessionUsageView, useWorklineWatch, surfaceFollowLine, useSurfacePushFeed,
   type TerminalLocalContext, type WorklineInkPalette, type WorklineStreamTurn } from '#surfaces/core/terminal-kit/index.js';
 import { StatusStrip } from './status-strip.js';
 import { useLiveWindows } from './workline-live.js';
 import { AssistantLive, openAssistantStream, renderAssistantStream, renderCompleteReply, type AssistantStreamStep, type AssistantRenderLabels } from '#surfaces/core/terminal-render/index.js';
 import { HumanTextContext, humanRecordText, projectHumanPickerText, RenderGlyphsContext, resolveRenderGlyphs, useRenderGlyphs } from '#surfaces/core/terminal-render/index.js';
 import type { KnownSecretSnapshot } from '#platform/index.js';
-import { assistantLedgerEntries, streamStepEntries, workerReportToLedgerEntries, WORK_LEDGER_SCHEMA_VERSION, type WorkLedgerEntry, ledgerEntriesForWorkers, ledgerEntriesForRuns, type WorklineLedgerPorts, fillTemplate, newWorkerTaskIds, newRunLedgerEntries, runViewToLedgerEntry, agentHistory, appendLedger, boundAgentHistory, compactLedger, EMPTY_LEDGER, plainChatHistory, type AgentChatMessage, type ChatTurnMessage, type LedgerBuffer, notice } from '#surfaces/core/terminal-ledger/index.js';
+import { assistantLedgerEntries, streamStepEntries, workerReportToLedgerEntries, WORK_LEDGER_SCHEMA_VERSION, type WorkLedgerEntry, ledgerEntriesForWorkers, loadRunViewsForWatch, type WorklineLedgerPorts, fillTemplate, agentHistory, appendLedger, boundAgentHistory, compactLedger, EMPTY_LEDGER, plainChatHistory, type AgentChatMessage, type ChatTurnMessage, type LedgerBuffer, notice } from '#surfaces/core/terminal-ledger/index.js';
 import { useConversationSession, type ConversationSessionLabels, type ConversationSessionPort } from './workline-sessions.js';
 import { ArrowPicker, ARROW_PICKER_ROWS } from '#surfaces/core/terminal-picker/index.js';
-import { Window, WindowStackProvider, WINDOW_RESERVED_ROWS, useFocusOwner } from '#surfaces/core/terminal-window/index.js';
+import { Window, WindowNoteContext, WindowStackProvider, WINDOW_RESERVED_ROWS, useFocusOwner, type WindowNote } from '#surfaces/core/terminal-window/index.js';
+import { INFO_WINDOW_COMMANDS, useInfoWindow, type WorklineInfo } from './workline-info.js';
 import { span } from '#surfaces/core/terminal-render/index.js';
-import { Composer, type ComposerLabels, type ComposerHistoryPort, type ComposerMentionPort } from '#surfaces/core/terminal-composer/index.js';
+import { Composer, slashMatches, type ComposerLabels, type ComposerHistoryPort, type ComposerMentionPort } from '#surfaces/core/terminal-composer/index.js';
 import { messageWithMentions, type WorklineAttachMentions, type WorklineMentionLabels } from './workline-mentions.js';
 import { PermissionModeKeys, useWorklineMode, type WorklineModeLabels, type WorklinePermissionModePort } from './workline-mode.js';
 import { useReasoningPreview, type WorklineReasoningLabels } from './workline-reasoning.js';
-import { useWorklineScratch, type WorklineScratchLabels, type WorklineScratchPort } from './workline-scratch.js';
-import { writeStartup, type WorklineStartup } from './startup-banner.js';
+import { runScratchWindow, useWorklineScratch, type WorklineScratchLabels, type WorklineScratchPort } from './workline-scratch.js';
+import { askSlashWindow, isReasoningChoice, reasoningSpec, reasoningStatus, unknownCommandSpec, useWindowSlot, type SlashPickSpec, type SlashWindowLabels } from './workline-windows.js';
+import { CLEAR_SCREEN_AND_SCROLLBACK, writeStartup, type WorklineStartup } from './startup-banner.js';
 import { useWorklineSettings, type WorklinePanels } from './workline-settings.js';
 import type { ModelPanelChoice, ModelPanelReference } from '#surfaces/core/terminal-panels/index.js';
 
@@ -48,6 +50,8 @@ export interface WorklineLabels extends WorklineActionLabels {
   readonly reasoning?: WorklineReasoningLabels;
   /** `/scratch` notices (SCR-A); neutral text until the catalog carries `terminal.scratch.*` (`i18n-delta.json`). */
   readonly scratch?: WorklineScratchLabels;
+  /** SLASH-WINDOWS (owner 2026-10-08): the words of the `/reasoning`, `/scratch` and unknown-command windows. Present = the rich terminal takes no typed slash arguments. */
+  readonly windows?: SlashWindowLabels;
 }
 
 export type WorklineCompleteTurn = (messages: readonly ChatTurnMessage[], signal: AbortSignal) => Promise<string>;
@@ -100,7 +104,14 @@ export interface WorklineProps {
   readonly monitorWindow?: MonitorWindowLoader;
   /** T3 L4: the `/config` and `/mcp` window ports and every panel's words; `/mode`'s port is this view's own mode port. Absent: text commands only. */
   readonly panels?: WorklinePanels;
+  /** SW-1: bare `/help`, `/status`, `/usage`, `/doctor`, `/scope`, `/context` open information windows (typed models; one summary line on close). Absent: text. */
+  readonly info?: WorklineInfo;
+  /** `/clear` erases the screen and the terminal's scrollback; false where escape sequences must not be sent (TERM=dumb, NO_COLOR — owner
+   *  2026-10-08). A non-TTY output is never cleared. */
+  readonly clearScreen?: boolean;
 }
+
+
 
 /** The composer listens only while no window is open (TS-WINDOW: one input owner, the window stack's top). */
 function StackComposer(props: ComponentProps<typeof Composer>) {
@@ -115,19 +126,22 @@ function chat(role: 'user' | 'assistant', text: string): WorkLedgerEntry {
 function useLedgerBuffer() {
   const [buffer, setBuffer] = useState<LedgerBuffer>(EMPTY_LEDGER);
   const push = useCallback((entries: readonly WorkLedgerEntry[]) => setBuffer(current => appendLedger(current, entries)), []);
+  // `/clear`: a new epoch is a fresh `Static`, so Ink's replay buffer (used when the terminal is resized) forgets the earlier conversation.
+  const reset = useCallback(() => setBuffer(current => Object.freeze({ epoch: current.epoch + 1, nextSeq: current.nextSeq, pending: Object.freeze([]), tail: Object.freeze([]) })), []);
   // Every pending row was printed by `Static` in this commit; compaction keeps rows appended after it.
   useLayoutEffect(() => {
     const printed = buffer.pending.length;
     setBuffer(current => compactLedger(current, printed));
   }, [buffer.pending.length]);
-  return { buffer, push };
+  return { buffer, push, reset };
 }
 
 export function WorklineApp(props: WorklineProps) {
   const { labels, target, systemPrompt, historyMessages, completeTurn, errorText, ledger } = props;
   const palette = useWorklinePalette();
   const { exit } = useApp();
-  const { buffer, push } = useLedgerBuffer();
+  const { buffer, push, reset } = useLedgerBuffer();
+  const stdout = useStdout();
   const { panel, state, execute, decide } = useWorklinePanel(props.context, props.sessions);
   const busy = state.phase === 'running' || state.phase === 'cancelling', cancelling = state.phase === 'cancelling';
   // A chat turn is running: Esc cancels it now (TL-A D5).
@@ -141,50 +155,67 @@ export function WorklineApp(props: WorklineProps) {
   const session = useConversationSession(props.sessions, labels.sessions, sessionId, props.knownSecrets);
   const presentation = panel.presentation(state);
   const resumePicker = presentation?.kind === 'resume' && state.picker ? presentation.rows : null;
-  const seenWorkers = useRef(new Set<string>()), seenRuns = useRef(new Map<string, string>()), snapshotOpened = useRef(false);
   const pollMs = props.pollMs ?? ledger?.workerHeartbeatMs ?? 5000;
   const workRef = useRef<ReturnType<typeof useWorkSurface> | null>(null), activeWorkers = useRef(false);
+  const [watchStatus, setWatchStatus] = useState('');
+  const [watchStatusLines, setWatchStatusLines] = useState<readonly string[]>([]);
   const liveRef = useRef<ReturnType<typeof useLiveWindows> | null>(null);
+  const announced = useRef(new Set<string>()), openingTold = useRef(false);
   const pushMode = useSurfacePushFeed(ledger?.followEvents, ledger?.scopeId ?? '', pollMs, step => {
     if (step.status === 'denied' || step.status === 'not-initialized') workRef.current?.observeWorkers([]);
-    // A stopped follow leaves nothing to update: the window closes (its summary line and the access notice stay in the scrollback).
-    if (step.status === 'denied' && step.stopped) liveRef.current?.close();
+    // A stopped follow leaves nothing to update: the window closes (its single summary line records the access refusal).
     // With snapshots, publications are invalidations, never a substitute for typed surface state.
     if (ledger?.readSurfaceSnapshot && step.status === 'applied') return;
     const text = surfaceFollowLine(step, watchRef.current, labels.watchStep, step.status === 'denied' && step.stopped ? labels.watchAccessStopped : labels.watchAccessDenied, labels.watchNotInitialized);
-    if (text) push([notice(step.status === 'applied' ? 'info' : 'error', text)]);
-  }, mode => { if (labels.watchDelivery) push([notice('info', fillTemplate(labels.watchDelivery, surfaceDeliveryValues(mode, pollMs)))]); },
+    if (text) setWatchStatusLines(lines => [...lines.filter(line => line !== text), text].slice(-4));
+    // SLASH-WINDOWS (integration): an access refusal or a missing identity is a system event the person must see even with no watch window open:
+    // one system line in the error tone, once per distinct text. A stopped follow with an open window says it in that window's closing line instead.
+    if (text && (step.status === 'denied' || step.status === 'not-initialized') && !announced.current.has(text)) {
+      announced.current.add(text);
+      if (!(step.status === 'denied' && step.stopped && liveRef.current?.isOpen())) push([systemSummaryEntry(text, 'error')]);
+    }
+    if (step.status === 'denied' && step.stopped) liveRef.current?.close(text ?? undefined);
+  }, delivery => {
+    // A refused or uninitialized feed delivers nothing: the window names no delivery mode then (its status lines carry the refusal).
+    if (labels.work?.jobs) setWatchStatus(delivery === 'push' || delivery === 'poll' ? fillTemplate(labels.work.jobs.watchStatus, { mode: delivery === 'poll' ? labels.work.jobs.poll : labels.work.jobs.push }) : '');
+  },
   ledger?.readSurfaceSnapshot ? async (kinds, signal) => {
     const snapshot = await ledger.readSurfaceSnapshot!(kinds, signal);
     if (signal.aborted) return [];
-    if (snapshot.scopeId !== ledger.scopeId) return kinds; const opening = !snapshotOpened.current; snapshotOpened.current = true;
+    if (snapshot.scopeId !== ledger.scopeId) return kinds;
+    let active = 0;
     if (snapshot.workers) {
-      activeWorkers.current = snapshot.workers.sources.some(source => source.workers.some(worker => !worker.terminal &&
-        (['running', 'created', 'paused'].includes(worker.process) || (worker.identity !== null && worker.process === 'unknown' && worker.files?.heartbeat.phase !== 'exited'))));
+      active = snapshot.workers.sources.reduce((sum, source) => sum + source.workers.filter(worker => !worker.terminal &&
+        (['running', 'created', 'paused'].includes(worker.process) || (worker.identity !== null && worker.process === 'unknown' && worker.files?.heartbeat.phase !== 'exited'))).length, 0);
+      activeWorkers.current = active > 0;
       const workers = workerReportToLedgerEntries(snapshot.workers, 'watch').filter(entry => entry.kind === 'worker');
       workRef.current?.observeWorkers(workers);
-      // A watch window shows the workers in place; only the opening read still prints the cards of workers already running at start.
-      if (opening || watchRef.current.workers) { const { seen, fresh } = newWorkerTaskIds(seenWorkers.current, workers); seenWorkers.current = seen; if (opening) push(fresh); }
     }
-    if (snapshot.runs && (opening || watchRef.current.runs)) {
-      const { seen, fresh } = newRunLedgerEntries(seenRuns.current, snapshot.runs, 'watch'); seenRuns.current = seen; if (opening) push(fresh);
-      if (watchRef.current.runs) liveRef.current?.setRuns(snapshot.runs.map((run, index) => runViewToLedgerEntry(run, `watch-run-${index}`)));
-    }
+    if (snapshot.runs && watchRef.current.runs) liveRef.current?.setRuns(snapshot.runs.map((run, index) => liveRunEntry(run, `watch-run-${index}`)));
     if (snapshot.approvals) workRef.current?.observeApprovals(snapshot.approvals);
+    // I-5: the opening snapshot says once whether work is running (one system line from what it was allowed to read; nothing when idle).
+    if (!openingTold.current) {
+      openingTold.current = true;
+      const text = labels.work?.jobs ? openingWorkText(snapshot.runs, active, labels.work.jobs) : null;
+      if (text) push([systemSummaryEntry(text)]);
+    }
     return snapshot.denied;
   } : undefined, ledger?.readSurfaceSnapshot ? `${watch.workers}:${watch.runs}` : '', { heartbeatMs: ledger?.workerHeartbeatMs ?? pollMs, active: () => watchRef.current.workers && activeWorkers.current });
   const pushLive = pushMode !== 'poll'; // A refused feed must not restart through fallback polling.
   const followWorkers = ledger?.followEvents ? undefined : ledger?.followWorkers, followRuns = ledger?.followEvents ? undefined : ledger?.followRuns;
-  const failed = useCallback((error: unknown) => push([notice('error', `${labels.watchFailed}: ${errorText(error)}`)]), [errorText, labels.watchFailed, push]);
+  const failed = useCallback((error: unknown) => setWatchStatusLines([`${labels.watchFailed}: ${errorText(error)}`]), [errorText, labels.watchFailed]);
   const mode = useWorklineMode(props.permissionMode, push, errorText, labels.work?.unavailable ?? labels.ledgerUnavailable, labels.mode, props.fullAccess === true, sessionId);
   const work = useWorkSurface({ panel, state, ledger, labels, push, errorText, pollMs, pushLive, watchingWorkers: watch.workers,
     context: { ...(props.projectRoot ? { project: props.projectRoot } : {}), ...(mode.stop ? { mode: mode.stop } : {}) },
     ...(props.approvalPollMs === undefined ? {} : { approvalPollMs: props.approvalPollMs }) });
   workRef.current = work; decide.current = work.decideApproval;
-  const liveWin = useLiveWindows({ work: labels.work, workers: work.workers, watch, watchRef, setWatch, push, errorText, monitorWindow: props.monitorWindow, positionLabel: labels.work?.window.position ?? '{from}-{to}/{total}' });
+  const liveWin = useLiveWindows({ work: labels.work, workers: work.workers, watch, watchRef, setWatch, push, errorText, monitorWindow: props.monitorWindow, status: humanRecordText(watchStatus, props.knownSecrets), statusLines: watchStatusLines.map(text => humanRecordText(text, props.knownSecrets)), positionLabel: labels.work?.window.position ?? '{from}-{to}/{total}' });
   liveRef.current = liveWin;
   const refreshMode = mode.refresh;
   const reasoning = useReasoningPreview(push, labels.reasoning);
+  // SLASH-WINDOWS: the one local window slot (information and list windows); `ask` shows a list window in it.
+  const slot = useWindowSlot();
+  const windows = { ask: (spec: SlashPickSpec) => askSlashWindow(slot, labels.windows, spec) };
   // T4 MODEL-SWITCH (S19): the model this session pinned with `/model`; read when a turn starts, so the next turn carries it (protocol v23).
   // Astra 2452 P1: the pin belongs to one conversation (sessionId → pin). `/clear` starts a conversation without one; `/resume` finds the resumed
   // conversation's own pin, or none (the configured model) — never another conversation's.
@@ -197,8 +228,12 @@ export function WorklineApp(props: WorklineProps) {
   const settings = useWorklineSettings({ panels: props.panels, permissionMode: props.permissionMode, mode, panel, state, push, errorText, blocked: work.modalOpen,
     // The pin rides only on the streamed turn (v23); a plain turn could not carry it, so no `/model` window is offered there.
     ...(props.streamTurn ? { sessionModel } : {}),
-    openApprovals: (approvalId, execution) => work.run('approvals', approvalId, execution) });
+    openApprovals: (approvalId, execution) => work.openApproval(approvalId, execution) });
 
+  // SW-1: bare information commands answer in a window; `/help` answers the command picked in it, which then runs here.
+  const infoWindow = useInfoWindow({ info: props.info, slot, push, errorText, slash: labels.composer.slash, ascii: useRenderGlyphs().ascii,
+    context: (info, ascii) => session.contextView(history.current, info, ascii), input: () => ({ usage: usage.current, sessionFullAccess: mode.fullAccess.current }) });
+  const performRef = useRef<(line: string, mentioned: readonly string[], execution: LocalExecution) => Promise<boolean>>(async () => true);
   const opening = useRef(props.openingNotices);
   useEffect(() => {
     const notices = opening.current;
@@ -208,7 +243,7 @@ export function WorklineApp(props: WorklineProps) {
     const workers = batch.filter(entry => entry.kind === 'worker').map(entry => ({ ...entry, observedAtMs: Date.now() }));
     work.observeWorkers(workers);
   }, failed);
-  useWorklineWatch(watch.runs && Boolean(ledger) && !pushLive && !ledger?.readSurfaceSnapshot, followRuns, pollMs, () => ledgerEntriesForRuns(ledger!, 'watch'), batch => {
+  useWorklineWatch(watch.runs && Boolean(ledger) && !pushLive && !ledger?.readSurfaceSnapshot, followRuns, pollMs, async () => (await loadRunViewsForWatch(ledger!)).map((run, index) => liveRunEntry(run, `watch-${index}`)), batch => {
     const runs = batch.filter(entry => entry.kind === 'run').map(entry => ({ ...entry, observedAtMs: Date.now() }));
     liveRef.current?.setRuns(runs);
   }, failed);
@@ -273,15 +308,41 @@ export function WorklineApp(props: WorklineProps) {
   }, [completeTurn, errorText, historyMessages, labels.mentions, mode.fullAccess, props.attachMentions, props.streamTurn, push, refreshMode, session, systemPrompt, work, panel]);
 
   // Runs exactly one line: a chat turn, an immediate slash command or an awaited slash operation. `false` means the view is closing.
-  const perform = useCallback(async (line: string, mentioned: readonly string[], execution: LocalExecution): Promise<boolean> => {
+  const performLine = useCallback(async (line: string, mentioned: readonly string[], execution: LocalExecution): Promise<boolean> => {
     const slash = parseSlashLine(line);
     if (!slash) { await runTurn(line, mentioned, execution); return true; }
-    if (slash.command === 'reasoning') { reasoning.run(slash.args); return true; }
-    if (await settings.open(slash.command, slash.args, execution)) return true;
+    // SLASH-WINDOWS (owner 2026-10-08): with window words the rich terminal takes no typed arguments; a bare command opens its window or picker.
+    const rich = labels.windows;
+    if (rich && !WORKLINE_SLASH_COMMANDS.some(command => command.name === slash.command)) {
+      const typed = slash.command;
+      const choice = await windows.ask(unknownCommandSpec(rich, typed, slashMatches(`/${typed}`).slice(0, 8), command => labels.composer.slash[command.descriptionKey] ?? ''));
+      if (choice !== null && !execution.signal.aborted) return performRef.current(`/${choice}`, [], execution);
+      return true;
+    }
+    // SW-1 info windows; SLASH-WINDOWS D1 (integration): the rich terminal ignores a typed argument and opens the window, as every other slash
+    // command there does; without window words (TERM=dumb) a typed argument keeps the text command.
+    if (props.info && (rich || !slash.args) && INFO_WINDOW_COMMANDS.has(slash.command)) {
+      const shown = await infoWindow.run(slash.command, execution);
+      if (shown.handled) return shown.picked === null ? true : performRef.current(`/${shown.picked}`, [], execution);
+    }
+    if (slash.command === 'reasoning') {
+      if (!rich) { reasoning.run(slash.args); return true; }
+      const choice = await windows.ask(reasoningSpec(rich, reasoning));
+      if (isReasoningChoice(choice)) reasoning.set(choice);
+      return true;
+    }
+    if (await settings.open(slash.command, rich && slash.command === 'mode' ? '' : slash.args, execution)) return true;
+    if (slash.command === 'scratch' && rich && props.scratch) {
+      const port = props.scratch, words = rich.scratch;
+      const confirm = async (summary: { count: number; bytes: number; path: string }) => (await panel.pick(execution, { kind: 'window', title: words.clearTitle,
+        body: [fillTemplate(words.clearBody, summary)], hints: words.clearPrompt, confirm: true }, ['allow', 'deny'])) === 'allow';
+      try { await runScratchWindow({ port, sessionId: session.id(), words: rich, ask: windows.ask, confirm, push, clearedText: labels.scratch?.cleared, signal: execution.signal }); }
+      catch (error) { push([notice('error', errorText(error))]); }
+      return true;
+    }
     if (slash.command === 'mode' || slash.command === 'scratch') { await (slash.command === 'mode' ? mode.run : scratch)(slash.args); return true; }
     const lineCommands: Readonly<Record<string, ((args: string) => Promise<readonly string[]>) | undefined>> = { ...bindInspectPorts(props.inspect, () => usage.current, () => mode.fullAccess.current), mcp: props.mcp, monitor: props.monitor, config: props.config };
-    // T3 L5: a bare `/monitor` opens the monitor window; with arguments (`--install`, `--scope`) it stays the text snapshot as notice lines.
-    if (slash.command === 'monitor' && !slash.args && liveWin.canOpenMonitor) { await liveWin.openMonitor(); return true; }
+    if (await dispatchWorkCommand(slash, { execution, panel, labels, ledger, push, errorText, pushMode, live: liveWin, monitor: props.monitor, watchRef, setWatch, setWatchStatus, runDecision: work.run, commandUnavailable: labels.commandUnavailable })) return true;
     // T4: `/provider` is a window only; without its port (TERM=dumb, no host) or with arguments it says the part is unavailable here.
     if (slash.command === 'mcp' || slash.command === 'monitor' || slash.command === 'config' || slash.command === 'provider' || (isInspectSlashCommand(slash.command) && (slash.command !== 'status' || lineCommands['status']))) {
       const lines = lineCommands[slash.command];
@@ -292,7 +353,10 @@ export function WorklineApp(props: WorklineProps) {
     }
     if (slash.command === 'resume' || slash.command === 'context' || slash.command === 'clear') {
       try {
-        const result = await session.run(slash.command, slash.args, history, execution);
+        const result = await session.run(slash.command, rich && slash.command === 'resume' ? '' : slash.args, history, execution);
+        // `/clear` really clears: the visible screen is wiped and Ink forgets the earlier conversation; only the summary line follows.
+        // Owner 2026-10-08: the terminal's scrollback goes too (ED 3); only on a TTY that takes escape sequences (`clearScreen`, see the prop).
+        if (slash.command === 'clear' && result.entries.length) { if (props.clearScreen !== false && stdout.stdout.isTTY) stdout.write(CLEAR_SCREEN_AND_SCROLLBACK); reset(); usage.current = EMPTY_SESSION_USAGE; }
         if (result.resumePicker) {
           // The drain stays inside this call, so a line queued while the list loads cannot run under the picker.
           const choice = await panel.pick(execution, { kind: 'resume', rows: result.resumePicker }, result.resumePicker.map((_, index) => String(index)));
@@ -321,20 +385,36 @@ export function WorklineApp(props: WorklineProps) {
         if (execution.signal.aborted || answer === null) return true;
         push([notice('info', answer === 'allow' ? await props.restartService!() : window.restartKept)]);
       }
-      else if (slash.command === 'approvals' || slash.command === 'cancel') await work.run(slash.command, slash.args, execution);
-      else push(await runLedgerCommand(slash.command as 'workers' | 'run' | 'runs' | 'transcript', slash.args, ledger!, labels));
     }
     catch (error) { push([notice('error', errorText(error))]); }
     return true;
-  }, [errorText, exit, labels, ledger, mode.run, settings, props.inspect, props.mcp, props.monitor, props.config, props.restartService, pollMs, pushMode, push, liveWin, reasoning.run, runTurn, scratch, session, work.run, panel]);
+  }, [errorText, exit, labels, ledger, mode.run, settings, windows, stdout, reset, props.inspect, props.info, props.mcp, props.monitor, props.config, props.restartService, pollMs, pushMode, push, liveWin, reasoning.run, runTurn, scratch, session, infoWindow, work.run, panel]);
+  // SLASH-WINDOWS I-1 (owner 2026-10-08, Jev b1e8286f): with window words a slash command typed with an argument runs bare — every host
+  // (information/list slot, panel controller) opens its window as usual — and that window says once that the terminal takes no typed
+  // argument. The typed text is never shown. Without window words (TERM=dumb) the line goes as typed; line mode and the CLI are elsewhere.
+  const [argumentNote, setArgumentNote] = useState<WindowNote | null>(null);
+  const perform = useCallback(async (line: string, mentioned: readonly string[], execution: LocalExecution, typedArgument = false): Promise<boolean> => {
+    const slash = parseSlashLine(line), words = labels.windows;
+    if (!slash || !words || (!slash.args && !typedArgument)) return performLine(line, mentioned, execution);
+    const note: WindowNote = { text: words.typedArgument, consume: () => setArgumentNote(current => current === note ? null : current) };
+    setArgumentNote(note);
+    try { return await performLine(`/${slash.command}`, mentioned, execution); }
+    // A watch window outlives its command (it is not awaited): it keeps the note until it closes; otherwise the note ends with the command.
+    finally { if (!liveRef.current?.isOpen()) note.consume(); }
+  }, [labels.windows, performLine]);
+  performRef.current = perform;
 
   execute.current = async execution => {
-    await perform(execution.input.text, execution.input.mentions, execution);
+    await perform(execution.input.text, execution.input.mentions, execution, typedArgumentInputs.current.delete(execution.input.inputId));
   };
-  const inputSequence = useRef(0);
-  const submit = (text: string, mentions: readonly string[] = []) => {
-    const before = panel.controller.snapshot();
-    if (panel.controller.send({ kind: 'submit', context: before.context, inputId: `input-${++inputSequence.current}`, text, mentions }) && before.active)
+  const inputSequence = useRef(0), typedArgumentInputs = useRef(new Set<string>());
+  // I-1 (Astra 2456): in the rich terminal a slash argument is dropped before the line is queued, shown as queued or remembered in the
+  // input history; only `/command` travels on, and the input id carries the fact that an argument was typed (for the window's one-time note).
+  const bareSlash = (text: string): string => { const slash = labels.windows ? parseSlashLine(text) : null; return slash?.args ? `/${slash.command}` : text; };
+  const submit = (typed: string, mentions: readonly string[] = []) => {
+    const before = panel.controller.snapshot(), text = bareSlash(typed), inputId = `input-${++inputSequence.current}`;
+    if (text !== typed) typedArgumentInputs.current.add(inputId);
+    if (panel.controller.send({ kind: 'submit', context: before.context, inputId, text, mentions }) && before.active)
       push([notice('info', `${labels.queued}: ${text.trim()}`)]);
   };
   const cancel = () => {
@@ -344,18 +424,21 @@ export function WorklineApp(props: WorklineProps) {
       : { kind: 'cancel-input', context: current.context, inputId: active.inputId });
   };
 
-  const ledgerLabels: LedgerEntryLabels = { runCard: labels.runCard, workerCard: labels.workerCard, chatUser: labels.roleUser, chatAssistant: labels.roleAssistant,
+  const localWindowOpen = slot.open;
+  const ledgerLabels: LedgerEntryLabels = { system: labels.work?.jobs?.system ?? props.info?.labels.systemLabel, runCard: labels.runCard, workerCard: labels.workerCard, chatUser: labels.roleUser, chatAssistant: labels.roleAssistant,
     render: labels.render, ...(labels.work ? { workerLine: labels.work.workerLine } : {}) };
-  const choosing = resumePicker !== null || work.pickerOpen || settings.openKind !== null;
+  // A window a slash command opened waits for the person, so the status row says Ready, not Working (an approval card during a turn keeps Working).
+  const choosing = resumePicker !== null || work.pickerOpen || (work.modalOpen && !turnRunning) || settings.openKind !== null || localWindowOpen;
   const fullAccessLine = mode.mode === 'full-access' ? labels.mode?.fullAccessLine : undefined, glyphs = useRenderGlyphs();
   // T2 T-MODE-CYCLE: Shift+Tab (Alt+M where the console cannot report Shift+Tab, e.g. Windows without VT input) steps the permission mode
   // while the composer owns the keyboard; an open card, picker or any window (stack not idle, `PermissionModeKeys`) owns Shift+Tab then. A running turn owns its
   // mode as `/mode` does (queued until it ends): the step waits for idle, so the status row never shows a mode the running turn is not in.
-  const composing = !work.modalOpen && !work.pickerOpen && resumePicker === null && settings.openKind === null;
+  const composing = !work.modalOpen && !work.pickerOpen && resumePicker === null && settings.openKind === null && !localWindowOpen;
   const finishResume = (choice: number | null) => { panel.choose(state.picker?.pickerHandle, choice === null ? null : String(choice)); };
   return (
     <HumanTextContext.Provider value={props.knownSecrets}>
     <WindowStackProvider reservedRows={WINDOW_RESERVED_ROWS + (fullAccessLine ? 1 : 0)}>
+    <WindowNoteContext.Provider value={argumentNote}>
     <Box flexDirection="column">
       <PermissionModeKeys active={composing && !busy && Boolean(props.permissionMode)} onCycle={() => void mode.cycle()} />
       <Static key={buffer.epoch} items={[...buffer.pending]}>
@@ -365,29 +448,32 @@ export function WorklineApp(props: WorklineProps) {
         waiting={live.step.waiting} reasoningPreview={reasoning.show ? live.step.reasoningPreview : []} /> : null}
       {work.region}
       {/* One window is visible at a time: a decision card, picker, approval or settings window takes the screen from the live window, which returns when it is answered. */}
-      {work.modalOpen || work.pickerOpen || resumePicker !== null || settings.openKind !== null ? null : liveWin.element}
+      {work.modalOpen || work.pickerOpen || resumePicker !== null || settings.openKind !== null || localWindowOpen ? null : liveWin.element}
       {resumePicker && !work.modalOpen && !work.pickerOpen
         ? <Window title={[span(labels.work?.window.resumeTitle ?? '/resume')]} status={[span(String(resumePicker.length))]} hints={labels.work?.window.pick ?? ''}
           position={labels.work?.window.position ?? '{from}-{to}/{total}'} footerRows={ARROW_PICKER_ROWS + 2}
           footer={focused => <ArrowPicker rows={resumePicker.map(item => item.label)} styledRows={resumePicker.map(item => item.spans ?? [])} active={focused}
             details={resumePicker.map(item => item.hiddenNotice)} onSelect={finishResume} onCancel={() => finishResume(null)} />} /> : null}
       {settings.window}
+      {/* The local window slot gives way to a decision card, picker, approval or settings window (approvals keep priority) and returns after it. */}
+      {work.modalOpen || work.pickerOpen || resumePicker !== null || settings.openKind !== null ? null : slot.element}
       <Text {...palette.accent}>{labels.banner}</Text>
-      <StatusStrip target={target} state={cancelling ? labels.statusCancelling : busy && !choosing ? labels.statusBusy : labels.statusReady} busy={busy && !choosing}
+      <StatusStrip target={target} state={cancelling ? labels.statusCancelling : busy && !choosing ? labels.statusBusy : [labels.statusReady, work.approvalStatus].filter(Boolean).join(' · ')} busy={busy && !choosing}
         queued={state.queued.length} labels={{ ...labels.render, selfSourceFloor: labels.selfSourceFloor, modeStops: labels.mode?.stops }} mode={mode.mode} stop={mode.stop}
-        selfSource={props.selfSource} cancellable={turnRunning && !cancelling} />
+        selfSource={props.selfSource} cancellable={turnRunning && !cancelling} reasoning={reasoningStatus(labels.windows, reasoning)} />
       {/* T3 L4 (owner 2026-10-07): while the session holds full access one standing line above the composer says so (text and mark; colour is a hint). */}
       {fullAccessLine ? <Text {...palette.warning} wrap="truncate-end">{`${glyphs.mode['full-access']} ${fullAccessLine}`}</Text> : null}
       {/* The composer owns input: Enter submits (queued FIFO while busy), Esc/Ctrl+C cancel a turn, exit is two Ctrl+C or Ctrl+D.
           An open decision card or arrow picker takes the keyboard away from it. */}
       <StackComposer prompt={labels.prompt} labels={{ ...labels.composer,
         slash: Object.fromEntries(Object.entries(labels.composer.slash).map(([key, text]) => [key, projectHumanPickerText(text, props.knownSecrets).label])) }}
-        busy={busy} active={composing}
+        busy={busy} active={composing} {...(labels.windows ? { historyText: bareSlash } : {})}
         onSubmit={(text, mentioned) => void submit(text, mentioned)} onCancel={cancel} onExit={() => { panel.close(); exit(); }}
         {...(props.inputHistory ? { history: props.inputHistory } : {})} {...(props.mentions ? { mentions: props.mentions } : {})}
         {...(props.mentionDelayMs === undefined ? {} : { mentionDelayMs: props.mentionDelayMs })} />
       <Text {...palette.muted}>{labels.hint}</Text>
     </Box>
+    </WindowNoteContext.Provider>
     </WindowStackProvider>
     </HumanTextContext.Provider>
   );
