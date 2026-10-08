@@ -116,3 +116,49 @@ salt-okunur check ve olağan hazırlama depolamayı sessizce migrate etmez.
 izni ister. Mevcut ledger ve değişmez manifest'ten `absent`, `pending` veya `manifest-recorded`
 raporlar. Execution config olmadan çalışır; depolamayı migrate etmez, adayı onarmaz ve mevcut aday
 dosyalarını yeniden kontrol etmez.
+
+
+## Kurulum kurtarma setleri
+
+`deckent backup create|verify|restore` aynı yetkili uygulama sözleşmesini kullanır. Kurulum
+sahibinin tüm kapsamlar için `backup` policy izni gerekir. Mevcut kurulumda önce
+`deckent init policy --scope <id> --upgrade --preview` ile ekleme planını görün; sonra
+`--apply --expect <önizlemedeki-revision>` kullanın. Çakışan kurallar değiştirilmez.
+
+```sh
+deckent backup create --scope <id> --set /private/recovery/set-1
+deckent backup verify --scope <id> --set /private/recovery/set-1
+deckent backup restore --scope <id> --set /private/recovery/set-1 --target /private/new-install
+```
+
+Parola maskeli terminal isteminden veya stdin'den okunur; komut argümanına yazılmaz.
+Parolayı setten ayrı saklayın. Set; çevrimiçi ledger kopyasını, parmak izini, manifest'i,
+küçük durum arşivini ve şifreli yetki anahtarını içerir. Worker klonları, provider oturumları
+ve secret-store kimlik bilgileri dışarıda kalır. Dosyalar 0600, dizinler 0700 olmalıdır.
+Değiştirilmiş bir setin SHA değerlerini yeniden yazmak yeterli değildir; verify şifreli
+zarfın doğrulamasını da yapar.
+
+Önce hedef servisi durdurun. Boş hedef doğrudan kullanılabilir; dolu hedef için
+`--confirm-target /tam/mutlak/hedef` ekleyin. Başka kurulum kimliğine bağlı hedef reddedilir.
+Mevcut kurulumda restore komutunu o kurulumun proje kökünden çalıştırın; başka bir hedefin
+yapılandırılmış yerleşimi uyumsuzsa ret verilir. Eski durum `.damaged-<uuid>` kopyalarında korunur. Taşınan kimlik açıkça raporlanır,
+installationId korunur; `deckent init identity --keep` operatörün açık onayını ister.
+Kurulum içindeki config yolları taşınır; dış yollar korunur. Restore zamanlamayı off yapar.
+Servisi açmadan dışarıda kalan kimlik bilgilerini yeniden sağlayın.
+`BACKUP_RESTORE_INCOMPLETE` halinde ara dizini, eski kopyaları ve dış audit kayıtlarını
+teşhis için koruyun; kaynakların tamamı tek atomik işlemle yayınlanmaz.
+
+Etkileşimli config seçicisinden `backup.schedule` için off, daily veya before-upgrade;
+`backup.retention` için 3, 7, 14 veya 30 seçin. Daily servis açıkken çalışır;
+before-upgrade ledger migration öncesinde çalışır. `BACKUP_PASSPHRASE` değerini seçili
+secret store'a mevcut `secret set` maskeli/stdin akışıyla sağlayın. Varsayılan environment
+backend için değer servis başlatıcısından sağlanmalıdır. Parola yoksa before-upgrade
+migration engellenir. Yalnız doğrulanmış zamanlanmış setlere saklama sınırı uygulanır;
+başka adlı operatör dosyaları korunur. Servis kapanışı devam eden yedeklemeyi bekler.
+
+Audit kayıtları parolasız olarak principal, scope ve policy taşır. Create/verify kayıtları
+`audit/backup-operations`, restore kayıtları setin yanındaki `.deckent-backup-audit`
+altındadır; ledger'ın değiştirilmesi restore niyetini silemez. Güvenilir yetki kurulmadan
+önceki ret mühürlenemez ve depolama etkisi üretmez. Linux kernel kilidi doğrulanmıştır;
+desteklenmeyen platformda restore reddedilir. KMS, bağımsız inceleme, paket kabulü ve
+owner DOGFOOD kararı ayrı kapılardır.

@@ -109,3 +109,48 @@ read-only check and ordinary preparation never silently migrate them.
 and requires only `read-output`. It reports `absent`, `pending`, or `manifest-recorded`
 from the existing ledger and immutable manifest. It works without execution configuration
 and does not migrate storage, repair candidates, or recheck their current files.
+
+
+## Installation recovery sets
+
+`deckent backup create|verify|restore` uses one governed contract. The installation owner
+needs the installation-wide `backup` policy grant. Existing installations can preview
+`deckent init policy --scope <id> --upgrade --preview`, then apply the add-only plan with
+`--apply --expect <previewed-revision>`; conflicting rules are preserved.
+
+```sh
+deckent backup create --scope <id> --set /private/recovery/set-1
+deckent backup verify --scope <id> --set /private/recovery/set-1
+deckent backup restore --scope <id> --set /private/recovery/set-1 --target /private/new-install
+```
+
+The passphrase is read by a masked terminal prompt or stdin; there is no passphrase argument.
+Keep it separately from the set. The set contains the online ledger snapshot, fingerprint,
+manifest, small state archive and encrypted authority key. Worker clones, provider logins and
+secret-store credentials are excluded. Files and directories must be private (0600/0700).
+SHA hashes alone do not authenticate a changed set: verification also opens the AEAD envelope.
+
+Stop the target service first. An empty target needs no replacement confirmation; for an
+existing target add `--confirm-target /exact/absolute/target`. A target bound to another
+installation is refused. For an existing installation run restore from its project root;
+a different target with an incompatible configured layout is refused. Old state stays in `.damaged-<uuid>` copies. A relocated identity is
+reported, its installationId is kept, and `deckent init identity --keep` requires explicit
+operator consent. Internal configuration paths are rewritten; external paths stay external.
+Restore resets scheduling to off. Re-provision excluded credentials before enabling service.
+If `BACKUP_RESTORE_INCOMPLETE` occurs, keep the staging directory, damaged copies and external
+audit receipts for diagnosis; publication across resources is not atomic.
+
+In the interactive configuration picker select `backup.schedule`: off, daily, or
+before-upgrade; select `backup.retention`: 3, 7, 14, or 30. Daily backups run while the service
+is up; before-upgrade runs before ledger migration. Set `BACKUP_PASSPHRASE` through the
+selected secret store (the existing `secret set` masked/stdin flow). The default environment
+backend must instead be provisioned by the service launcher. Missing credentials block an
+admitted before-upgrade migration. Only authenticated scheduled sets are retained/pruned;
+operator files with other names remain. Shutdown waits for a backup already in progress.
+
+Backup audit receipts contain principal, scope and policy, without credentials. Create/verify
+receipts live under `audit/backup-operations`; restore receipts live beside the set under
+`.deckent-backup-audit`, so replacement of the ledger cannot erase the restore intent.
+A failure before trusted authority exists cannot be sealed, and performs no storage effect.
+Linux kernel custody is verified here; other hosts refuse unsupported custody. KMS, independent
+review, packaged acceptance and owner DOGFOOD admission remain separate gates.

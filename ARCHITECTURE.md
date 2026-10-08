@@ -334,6 +334,39 @@ refresh, usage and dogfood closure remain open.
 - **Makine bağı yeteneği (VERIFY-ENV, 2026-10-06):** Makine bağı yeteneği yoksa (Linux'ta geçerli `/etc/machine-id` yok, örn. Docker konteyneri) kimlik bağsız v1 yazılır ve taşınma/kopya tespiti kapalıdır; bu düşüş `deckent doctor` çıktısında ve `--json` `installationBinding.capability` alanında görünür (kimlik/yetki davranışı değişmez). Yetenek denetimi proje dizinine karşı yapılır.
 - **Kurulum bağı v2 (IDENTITY-BINDING-V2, owner 2026-10-06, `wave/2`):** kaynak sırası yapılandırılmış `installation.machineIdentity.source` (mutlak yol, bozuksa tipli `INSTALLATION_IDENTITY_SOURCE_INVALID`, daha zayıfa düşülmez) → platform (`/etc/machine-id`, IOPlatformUUID) → zayıf bağ (canonicalRoot + device + inode). Platform makine bağı alpha.6 v1 şekliyle yazılır (rollback güvenli); v2 (`binding.schemaVersion: 2`, `strength` machine|weak, `source` configured|platform|location) yalnız configured ve weak bağlar içindir. Karşılaştırmanın tek sahibi engine `assessInstallationBinding`: makine kaydı + yalnız zayıf yakalama = RELOCATED; `installation.requireMachineBinding` (varsayılan false) true iken makine kanıtı yoksa kuruluma bağlı yazmalar tipli `INSTALLATION_IDENTITY_MACHINE_BINDING_REQUIRED` ile reddedilir. Kimlik yazma kabulü (Astra 2382 P1-3): `init policy --apply` ve `init apply/resume`, kimlik yazma kurallarını (configured kaynak, relocation, `requireMachineBinding`) `InstallationIdentityStore.admitWrite()` ile ilk kalıcı etkiden (journal, policy, bindings, config, ledger) önce salt okuma olarak uygular; apply/resume journal kilidi altında hedeflerden önce yeniden uygular; ret durumunda dosya veya journal yazılmaz. ID-1D korunur: read yolu yalnız gözler (`pendingWrite`), yükseltme yazma yolunda kilit altında olur. Yukarıdaki VERIFY-ENV "bağsız v1" düşüşü artık zayıf bağa yükselir. Rollback: weak/configured kayıtlar alpha.6'da INVALID okunur ([owner-decisions](.deckent/docs/decisions/owner-decisions.md) canlı geçiş notu); ayrıntı [platform-and-layers](.deckent/docs/architecture/modules/platform-and-layers.md).
 
+### Product backup and restore — BACKUP-COMMAND (author candidate, 2026-10-08)
+
+- `BackupApplication` owns one v1 typed create/verify/restore contract (`BackupCommand`, `BackupResult`), shared by the CLI and SDK;
+  adapters implement storage, online SQLite backup, encryption and portable audit. Passphrases are a separate credential argument,
+  absent from commands, policy decisions, receipts and errors. No MCP/model passphrase input is exposed.
+- Sets contain a read-only-source SQLite online snapshot, `ledger.fingerprint.json` (integrity, schema version, ordered table counts/digests),
+  a bounded gzip JSON archive of logical config/installation/project identity/policy/bindings/audit/artifact resources, encrypted
+  `authority.key.enc` and `MANIFEST.sha256`. Authored global and project configuration are merged without resolving secret references.
+  Worker clones, provider login caches and secret-store credentials are excluded. Directories/files are private (0700/0600), links refused.
+- Envelope v1 uses async scrypt (N=65536,r=8,p=1) + AES-256-GCM with fresh salt/nonce; AAD binds all payload hashes. Verification checks
+  manifest, authenticated key, ledger fingerprint and archive bounds. Regenerating SHA hashes alone cannot authenticate modified contents.
+- Whole-installation `backup/create|verify|restore` requires an all-scopes policy grant for the verified principal. Template v7 adds the
+  installing owner's grant; `init policy --upgrade` uses the existing add-only plan/conflict rules. Existing denies remain effective.
+- Each admitted operation first persists a sealed, immutable `backup-operation` audit receipt (principal/scope/policy, resource/path digests,
+  operation id/phase); successful outcomes bind the ledger digest. These portable one-record streams reuse the existing audit seal and
+  live under `audit/backup-operations`; restore receipts stay beside the set in `.deckent-backup-audit`, outside replaced state.
+  They are separate from ledger audit pagination. Missing outcome means unknown; failed intent persistence admits no effect.
+  Pre-authority parsing or total-loss authentication failures cannot produce a sealed policy receipt without a usable key/policy; they
+  fail closed before storage effects. This bootstrap audit limit is explicit, not an accepted exception to the product audit target.
+- Restore authenticates the entire set before publishing target state, requires an empty target or exact target confirmation, rejects a
+  present service socket and acquires the service's same kernel ledger custody until publication finishes. Old resources/ledger sidecars
+  are preserved as `.damaged-<uuid>`; the ledger lock inode stays. Relocation rewrites internal config paths, preserves installationId,
+  reports the existing identity check and leaves `init identity --keep` to the operator. Scheduling resets to off. Publication spans
+  several files: `BACKUP_RESTORE_INCOMPLETE` records uncertainty and retains the staging directory and damaged copies after partial
+  publication. A confirmed target with a different retained installationId is refused. No cross-file atomicity claim.
+- Config `backup.schedule` selects off/daily/before-upgrade; retention selects 3/7/14/30 sets. The service uses its configured scope and
+  its verified hosting OS principal, the same policy and `BACKUP_PASSPHRASE` from the selected secret store. Daily due state survives
+  restart in authenticated set timestamps; before-upgrade runs under service custody before schema migration. Stop waits in-flight work.
+  The shared schedule event reaches SDK observers and `runtime serve` (localized text/JSON, sanitized failure codes).
+  Only authenticated scheduled sets are pruned after a new complete set exists; other names are kept. Missing pre-upgrade credential
+  blocks migration. KMS remains future adapter work. Linux native custody is the verified restore platform; other hosts refuse unsupported custody.
+- Evidence: external `proof/BACKUP-COMMAND-2026-10-08/`; author checks, independent review, packaged acceptance and DOGFOOD admission remain separate.
+
 ### Deterministic storage and customer data access
 
 - Product-state operations (Run, Attempt, Approval, reservations, receipts) are typed domain operations.
@@ -514,18 +547,18 @@ Core contracts and never requires editing Core. Core-memory law 10 records this 
   sandbox → no start); `host` is explicit and warned. The client pool is keyed by scope view (scope id + project root) and launch identity
   and bounded by `mcp.maxServers`. `propose_mcp_server` (read tool) opens a human window in every mode, carries no secret or reference
   (Jev 30efcb91) and adds the server untrusted; `deckent mcp import` brings Claude Code/Desktop entries untrusted.
-- **First-run policy template v5 (Jev 04f75210, d3d1817d; K1 option A Jev 3e7c5b38):** the installing owner holds `mcp-server` for every server in
+- **First-run policy template v7 (v5 MCP decisions: Jev 04f75210, d3d1817d; K1 option A Jev 3e7c5b38):** the installing owner holds `mcp-server` for every server in
   every scope, the `mcp.tool.call` operation, the read tool `propose_mcp_server`, and in the installed scope the `policy.administer` operation
   and approval inspect/decide (every change still passes card, audit and I2). Existing installations: `deckent init policy --scope <id> --upgrade
   --preview|--apply [--expect <revision>]` (installer authority: only the installation owner — the caller's uid owns both authority documents —
-  and only when the first-run read rule names the caller explicitly; anyone else uses the governed path) adds the v5 rules that person lacks, removes
+  and only when the first-run read rule names the caller explicitly; anyone else uses the governed path) adds the current template rules that person lacks, removes
   or replaces nothing (same-id rules with other content are kept and named as conflicts; hand-added MCP wire-name rules are named), writes on the
   previewed revision through the archived authority writer and the configured layout; a second run is `current`; an untouched v4 becomes
-  exactly v5. `deckent policy upgrade --template v5 [--apply|--rollback]` applies the same plan through `policy.administer@1` (I2) where the
+  exactly v7 (v6 secret-store switch, v7 installation-wide backup). `deckent policy upgrade --template v5 [--apply|--rollback]` applies the same plan through `policy.administer@1` (I2) where the
   person already holds that authority.
   A hand-built policy (no first-run read rule; POLICY-UPGRADE-HANDBUILT, lead 2026-10-08, Jev b6dba079) takes the installer plan only with
   `--person <issuer>/<subject>`: the same owner gate, and the person must already be named explicitly (never `all`) on an allow rule listing the
-  scope; added rules are in that scope (`mcp-server` stays every scope) and name that person alone. Without `--person` the refusal names
+  scope; added rules are in that scope (`mcp-server` and installation-wide `backup` stay every scope) and name that person alone. Without `--person` the refusal names
   `--person` and the people the policy names there; on a template policy `--person` must be the person the read rule names. The installer
   path records the archive entry, not a sealed `authority-change` event (that event needs the governed chain's command, approval and decider).
 - **Terminal units:** `cli-terminal` (L0: the interactive launch, ledger ports and handler types moved out of `cli` behind ports; lazy
