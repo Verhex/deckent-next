@@ -8,21 +8,22 @@ import { ErrorRegistry } from '#platform/index.js';
 const ENV = 'core.secret-store.env@1', FILE = 'core.secret-store.file@1', SEALED = 'core.secret-store.encrypted-file@1';
 const me = { issuer: 'os', subject: '1000' };
 
-function memoryStore(id: string, entries: Record<string, string> = {}, options: { writable?: boolean; enumerable?: boolean; log?: string[] } = {}) {
-  const data = new Map(Object.entries(entries)), log = options.log ?? [];
+const shared: { log: string[] } = { log: [] };
+function memoryStore(id: string, entries: Record<string, string> = {}, options: { writable?: boolean; enumerable?: boolean } = {}) {
+  const data = new Map(Object.entries(entries));
   const failures = { delete: false, readBack: false };
   const store: SecretStore = {
     descriptor: { id, writable: options.writable ?? true, enumerable: options.enumerable ?? true },
     async get(name) { return failures.readBack ? 'altered' : data.get(name); },
-    async set(name, value) { log.push(`set ${id} ${name}`); data.set(name, value); },
-    async delete(name) { log.push(`delete ${id} ${name}`); if (failures.delete) throw new Error('crash'); return data.delete(name); },
+    async set(name, value) { shared.log.push(`set ${id} ${name}`); data.set(name, value); },
+    async delete(name) { shared.log.push(`delete ${id} ${name}`); if (failures.delete) throw new Error('crash'); return data.delete(name); },
     async listNames() { return [...data.keys()].sort(); },
     async inspect() { return { status: 'ready', code: null }; },
   };
-  return { store, data, failures, log };
+  return { store, data, failures };
 }
 function harness(selected: string | null, stores: Record<string, ReturnType<typeof memoryStore>>, effect: 'allow' | 'deny' | 'require-approval' = 'allow') {
-  const log: string[] = [], audits: AuditEvent[] = []; let selection = selected, digest = 'digest-0';
+  const log: string[] = [], audits: AuditEvent[] = []; let selection = selected, digest = 'digest-0'; shared.log = log;
   const ports: SecretStoreSwitchPorts = {
     has: id => Object.hasOwn(stores, id), open: id => stores[id]!.store,
     selection: {
@@ -32,7 +33,6 @@ function harness(selected: string | null, stores: Record<string, ReturnType<type
     authorize: async () => ({ policyRevision: 'p1', effect, ruleId: effect === 'allow' ? 'first-run-secret-switch' : null }),
     audit: event => { log.push('audit'); audits.push(event); }, now: () => 1,
   };
-  for (const entry of Object.values(stores)) entry.log.push = (...items: string[]) => log.push(...items);
   return { application: new SecretStoreSwitch(ports), log, audits, selection: () => selection };
 }
 const request = (to: string, confirmDowngrade = false) => ({ principal: me, scopeId: 'installation', to, confirmDowngrade });
@@ -95,18 +95,31 @@ describe('secret store switch', () => {
     expect(h.log).not.toContain(`publish ${SEALED}`);
   });
 
-  it('a crash after publication leaves secrets reachable (cleaned false); the same switch again removes identical leftovers only', async () => {
+  it('a crash after publication leaves secrets reachable (cleaned false); the same switch again removes identical leftovers only, decided and audited', async () => {
     const file = memoryStore(FILE, { A_KEY: 'synthetic-a', B_KEY: 'synthetic-b' }), sealed = memoryStore(SEALED); file.failures.delete = true;
     const stores: Record<string, ReturnType<typeof memoryStore>> = { [FILE]: file, [SEALED]: sealed, [ENV]: memoryStore(ENV, {}, { writable: false, enumerable: false }) };
     const h = harness(FILE, stores);
     expect(await h.application.switch(request(SEALED))).toMatchObject({ status: 'switched', cleaned: false });
     expect(h.selection()).toBe(SEALED); expect(sealed.data.size).toBe(2); expect(file.data.size).toBe(2);
     file.failures.delete = false; file.data.set('B_KEY', 'changed-since'); file.data.set('C_ONLY', 'synthetic-c');
-    const again = await new SecretStoreSwitch({ has: id => Object.hasOwn(stores, id), open: id => stores[id]!.store,
-      selection: { read: async () => ({ store: SEALED, digest: 'd' }), publish: async () => { throw new Error('not expected'); } },
-      authorize: async () => { throw new Error('not expected'); }, audit: () => { throw new Error('not expected'); }, now: () => 1 }).switch(request(SEALED));
-    expect(again).toEqual({ schemaVersion: 1, scopeId: 'installation', status: 'current', from: SEALED, to: SEALED, entries: 0, downgrade: false, cleaned: false });
+    const again = harness(SEALED, stores);
+    expect(await again.application.switch(request(SEALED))).toEqual({ schemaVersion: 1, scopeId: 'installation', status: 'current', from: SEALED, to: SEALED,
+      entries: 1, downgrade: false, cleaned: false });
+    // The deletion of the identical leftover is a decision recorded before it happens; nothing is published.
+    expect(again.log).toEqual(['audit', `delete ${FILE} A_KEY`]);
+    expect(again.audits[0]!.subject).toMatchObject({ kind: 'secret-store-switch', from: SEALED, to: SEALED, entries: 1 });
     expect([...file.data.keys()].sort()).toEqual(['B_KEY', 'C_ONLY']);
+    // Nothing identical left: no change, no record.
+    const quiet = harness(SEALED, stores);
+    expect(await quiet.application.switch(request(SEALED))).toMatchObject({ status: 'current', entries: 0, cleaned: false });
+    expect(quiet.log).toEqual([]);
+  });
+
+  it('a principal the policy denies cannot remove leftovers through a current-target switch', async () => {
+    const file = memoryStore(FILE, { A_KEY: 'synthetic-a' }), sealed = memoryStore(SEALED, { A_KEY: 'synthetic-a' });
+    const h = harness(SEALED, { [FILE]: file, [SEALED]: sealed }, 'deny');
+    expect(await code(h.application.switch(request(SEALED)))).toBe('SECRET_STORE_SWITCH_DENIED');
+    expect(h.log).toEqual(['audit']); expect(file.data.get('A_KEY')).toBe('synthetic-a');
   });
 
   it('policy: the template owner may switch; another principal is refused before evaluation', async () => {

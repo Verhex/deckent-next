@@ -101,12 +101,16 @@ export class SecretStoreSwitch {
     return Object.freeze({ schemaVersion: 1, scopeId: request.scopeId, status: 'switched', from, to: request.to, entries: names.length, downgrade, cleaned });
   }
 
-  /** The target is already selected: finish an interrupted switch by deleting copies elsewhere that are identical to the selected ones. */
+  /** The target is already selected: finish an interrupted switch by deleting copies elsewhere that are identical to the selected ones. The
+   * deletions are a switch decision too: with something to remove, the `secret`/`switch` cell decides and `secret-store-switch` records it
+   * (`entries` = copies removed) before anything is deleted; with nothing to remove, nothing changes and nothing is recorded. */
   private async finish(request: SecretStoreSwitchRequest, selected: string): Promise<SecretStoreSwitchResult> {
-    const target = this.ports.open(selected);
-    let cleaned = true;
+    const target = this.ports.open(selected), result = (cleaned: boolean): SecretStoreSwitchResult => Object.freeze({ schemaVersion: 1,
+      scopeId: request.scopeId, status: 'current', from: selected, to: selected, entries: 0, downgrade: false, cleaned });
     // A selection Deckent cannot list (the environment) proves no copy elsewhere redundant: nothing is cleaned against it.
-    if (!target.descriptor.enumerable) return Object.freeze({ schemaVersion: 1, scopeId: request.scopeId, status: 'current', from: selected, to: selected, entries: 0, downgrade: false, cleaned });
+    if (!target.descriptor.enumerable) return result(true);
+    let cleaned = true;
+    const candidates: { readonly store: SecretStore; readonly name: string }[] = [];
     for (const other of Object.keys(CORE_STORE_RANK)) {
       if (other === selected || !this.ports.has(other)) continue;
       const store = this.ports.open(other);
@@ -116,12 +120,16 @@ export class SecretStoreSwitch {
       for (const name of names) {
         try {
           const kept = await target.get(name);
-          if (kept !== undefined && kept === await store.get(name)) await store.delete(name);
-          else cleaned = false;
+          if (kept !== undefined && kept === await store.get(name)) candidates.push({ store, name }); else cleaned = false;
         } catch { cleaned = false; }
       }
     }
-    return Object.freeze({ schemaVersion: 1, scopeId: request.scopeId, status: 'current', from: selected, to: selected, entries: 0, downgrade: false, cleaned });
+    if (!candidates.length) return result(cleaned);
+    await this.record(request, selected, candidates.length, false);
+    for (const { store, name } of candidates) {
+      try { await store.delete(name); } catch { cleaned = false; }
+    }
+    return Object.freeze({ ...result(cleaned), entries: candidates.length });
   }
 
   private async record(request: SecretStoreSwitchRequest, from: string, entries: number, downgrade: boolean): Promise<void> {

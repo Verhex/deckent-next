@@ -34,7 +34,8 @@ export function acceptSecretChangeResult(operation: 'setSecret' | 'deleteSecret'
     && result.data.action === (operation === 'setSecret' ? 'set' : 'delete') ? result.data : null;
 }
 
-/** v24 (SECRET-STORE-SWITCH, owner 2026-10-08): move every secret into another registered store and select it; no actor field. */
+/** SECRET-STORE-SWITCH (owner 2026-10-08; protocol bump to v24 when rebased on T4-A's v23): move every secret into another registered store
+ * and select it; no actor field. */
 const storeId = z.string().max(128).regex(SECRET_STORE_ID_PATTERN);
 export const secretStoreSwitchCommandSchema = z.object({ schemaVersion: z.literal(1), scopeId: identitySchema, to: storeId,
   confirmDowngrade: z.boolean() }).strict().readonly();
