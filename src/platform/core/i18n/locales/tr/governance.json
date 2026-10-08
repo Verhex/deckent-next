@@ -550,6 +550,7 @@
   "error.AGENT_TURN_UNAVAILABLE": "Tur kaydı kullanılamıyor; bu tur için hiçbir şey çalıştırılmadı.",
   "error.AGENT_TURN_REASONING_UNSUPPORTED": "Bu model düşünmeyi kapatabildiğini bildirmiyor (katalog yeteneği chat-template-enable-thinking); tur gönderilmedi. Devam etmek için /reasoning on yazın ya da yeteneği kataloğa ekleyin.",
   "error.TERMINAL_CHAT_NOT_CONFIGURED": "Terminal sohbeti yapılandırılmamış: katalogda tanımlı bir modeli gösteren `terminal.chat` bölümü ekleyin.",
+  "error.TERMINAL_DEFAULT_MODEL_PROJECT_LAYER": "`terminal.defaultModel` kişinin kendi varsayılan modelidir: yalnız kullanıcı ayarlarında durabilir, proje dosyasında duramaz.",
   "error.TERMINAL_CHAT_MODEL_NOT_DECLARED": "Terminal sohbet modeli güncel sağlayıcı kataloğunda tanımlı değil.",
   "error.TERMINAL_CHAT_TRUNCATED": "Model yanıt vermeden tüm tamamlama bütçesini ({maxCompletionTokens} token) kullandı; düşünen modeller genelde daha fazlasına ihtiyaç duyar. terminal.chat.maxCompletionTokens değerini (profilin maxOutputTokens sınırı içinde) artırın.",
   "error.TERMINAL_CHAT_EMPTY": "Model bu tur için asistan metni döndürmedi.",

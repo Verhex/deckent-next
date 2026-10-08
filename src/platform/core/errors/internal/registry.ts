@@ -101,6 +101,7 @@ const definitions: Readonly<Record<string, Definition>> = Object.freeze({
   CLI_CATALOG_INPUT_UNAVAILABLE: { category: 'usage', render: (p, l) => ({ message: t('error.CLI_CATALOG_INPUT_UNAVAILABLE', p, l) }) },
   RUNTIME_CHAT_EVENT_TOO_LARGE: { category: 'error', render: (p, l) => ({ message: t('error.RUNTIME_CHAT_EVENT_TOO_LARGE', p, l) }) },
   TERMINAL_CHAT_NOT_CONFIGURED: { category: 'usage', render: (p, l) => ({ message: t('error.TERMINAL_CHAT_NOT_CONFIGURED', p, l) }) },
+  TERMINAL_DEFAULT_MODEL_PROJECT_LAYER: { category: 'config', render: (p, l) => ({ message: t('error.TERMINAL_DEFAULT_MODEL_PROJECT_LAYER', p, l) }) },
   TERMINAL_CHAT_MODEL_NOT_DECLARED: { category: 'error', render: (p, l) => ({ message: t('error.TERMINAL_CHAT_MODEL_NOT_DECLARED', p, l) }) },
   TERMINAL_CHAT_TRUNCATED: { category: 'error', render: (p, l) => ({ message: t('error.TERMINAL_CHAT_TRUNCATED', p, l) }) },
   TERMINAL_CHAT_EMPTY: { category: 'error', render: (p, l) => ({ message: t('error.TERMINAL_CHAT_EMPTY', p, l) }) },

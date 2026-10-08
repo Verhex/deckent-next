@@ -21,6 +21,7 @@ import { createMcpProposals } from './mcp-propose.js';
 import { createAgentCallApprovals, describeAgentCall } from './call-approvals.js';
 import { invokePeerConfiguredModel, loadPeerInvocationContext, measurePeerConfiguredModel, type RuntimeModelInvocationHost } from '#composition/core/model-invocation/index.js';
 import { inspectModelBinding } from '#composition/core/provider-catalog/index.js';
+import { configuredTerminalModel } from '#composition/core/config/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 import { watchTurnConnection } from './connection-watch.js';
 import { createAgentFileEdits } from './edits.js';
@@ -86,7 +87,8 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
   if (!chat) throw ErrorRegistry.createError('TERMINAL_CHAT_NOT_CONFIGURED');
   // v23 (T4 MODEL-SWITCH, S19): the session's pinned model, else the configured one. A pinned model that is not declared, has no profile or is
   // not active is refused typed by the same checks below; the configured model is never used in its place (no silent fallback).
-  const reference = command.reference ?? chat.reference;
+  // T4-B D1: without a pin the one precedence decides (project model > the user's default > the user's configured model).
+  const reference = command.reference ?? (await configuredTerminalModel(projectRoot, options))?.reference ?? chat.reference;
   const binding = await inspectModelBinding(projectRoot, reference, options);
   if (binding.status !== 'declared') throw ErrorRegistry.createError('TERMINAL_CHAT_MODEL_NOT_DECLARED');
   const declares = (id: string) => binding.definition.model.protocols.some(protocol => (protocol.family === OPENAI_CHAT_COMPLETIONS_FAMILY || protocol.family === ANTHROPIC_MESSAGES_FAMILY)

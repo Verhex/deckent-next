@@ -1,7 +1,7 @@
 import { isIP } from 'node:net';
 import { z } from 'zod';
-import { modelReferenceSchema } from '#domain/index.js';
-import { CONFIG_CONTRACT_SINCE, registerConfigSection } from '#platform/index.js';
+import { modelReferenceSchema, type ModelReference } from '#domain/index.js';
+import { CONFIG_CONTRACT_SINCE, ConfigValidationError, isRecord, registerConfigSection } from '#platform/index.js';
 
 /** T2 presentation vocabularies (first entry = default); the workline's own copy (`TERMINAL_THEME_SETTINGS`) is tested equal. */
 export const TERMINAL_THEMES = ['auto', 'dark', 'light', 'dark-daltonized', 'light-daltonized', 'ansi'] as const;
@@ -27,6 +27,9 @@ export const terminalConfigSchema = z.object({
   banner: z.enum(TERMINAL_BANNERS).default(TERMINAL_BANNERS[0]),
   /** T2 (T-STARTUP): clear the visible screen (never the scrollback) when the interactive workline opens on a terminal. */
   clearOnStart: z.boolean().default(true),
+  /** T4-B (owner 2026-10-08, Jev d84b248d): the person's own default terminal model — an exact catalog reference, nothing else. Only the user
+   * (global) layer may hold it; precedence is in {@link resolveTerminalModel}. Additive optional key (the `readResultMaxBytes` pattern). */
+  defaultModel: modelReferenceSchema.optional(),
   chat: z.object({
     schemaVersion: z.literal(1),
     reference: modelReferenceSchema,
@@ -103,6 +106,28 @@ export function readTerminalFetchConfig(config: Record<string, unknown>): Termin
   return Object.freeze({ egress, allowedHosts: Object.freeze([...allowedHosts]), maxBytes, timeoutMs, maxRedirects });
 }
 
+/** Which setting chose the terminal's model: the session's pin, the project's `terminal.chat.reference`, the user's `terminal.defaultModel`, or the
+ * user layer's own `terminal.chat.reference` (the installation-configured model). */
+export type TerminalModelSource = 'session' | 'project' | 'user-default' | 'user';
+export type TerminalModelChoice = Readonly<{ reference: ModelReference; source: TerminalModelSource }>;
+const authoredReference = (value: unknown): ModelReference | null => { const parsed = modelReferenceSchema.safeParse(value); return parsed.success ? parsed.data : null; };
+const authoredTerminal = (layer: unknown): Record<string, unknown> => isRecord(layer) && isRecord(layer['terminal']) ? layer['terminal'] : {};
+/**
+ * The one precedence of the terminal's model (T4-B D1, Jev d84b248d): session pin > project-authored `terminal.chat.reference` (an explicit
+ * project choice) > the user's `terminal.defaultModel` > the user layer's `terminal.chat.reference`. Pure over the two authored layer documents
+ * (never the merged config: a merged value cannot say which layer wrote it). Null: no layer names a model.
+ */
+export function resolveTerminalModel(layers: Readonly<{ global: unknown; project: unknown }>, pin?: ModelReference | null): TerminalModelChoice | null {
+  if (pin) return Object.freeze({ reference: pin, source: 'session' });
+  const project = authoredTerminal(layers.project), global = authoredTerminal(layers.global);
+  const projectChat = authoredReference(isRecord(project['chat']) ? project['chat']['reference'] : undefined);
+  if (projectChat) return Object.freeze({ reference: projectChat, source: 'project' });
+  const preferred = authoredReference(global['defaultModel']);
+  if (preferred) return Object.freeze({ reference: preferred, source: 'user-default' });
+  const userChat = authoredReference(isRecord(global['chat']) ? global['chat']['reference'] : undefined);
+  return userChat ? Object.freeze({ reference: userChat, source: 'user' }) : null;
+}
+
 export function readTerminalConfig(config: Record<string, unknown>): TerminalConfig {
   return terminalConfigSchema.parse(config['terminal'] ?? {});
 }
@@ -112,5 +137,9 @@ export function registerTerminalConfig(): void {
     optional: true,
     secretReferences: 'forbid',
     metadata: { descriptionKey: 'config.field.terminal', tier: 'core', since: CONFIG_CONTRACT_SINCE, binding: { state: 'bound', consumers: ['src/adapters/core/contract'] }, apply: 'restart' },
+    // The user's default is the person's own setting: a project document never carries it (it would silently apply to everyone in the project).
+    validateLayers: (_global, project) => {
+      if (isRecord(project) && project['defaultModel'] !== undefined) throw new ConfigValidationError([{ path: 'terminal.defaultModel', reason: 'TERMINAL_DEFAULT_MODEL_PROJECT_LAYER' }]);
+    },
   });
 }

@@ -1,10 +1,20 @@
 import { loadConfig, t, type ConfigLoadOptions, type Locale } from '#platform/index.js';
 import type { ModelReference } from '#domain/index.js';
 import type { ModelPanelChoice, ModelPanelSource, ModelPanelView } from '#surfaces/core/terminal-panels/index.js';
+import { terminalConfigWrite, type ConfigCommandContext } from '#surfaces/core/config/index.js';
 import type { TerminalLaunchContext } from './context.js';
 
 type Host = Pick<TerminalLaunchContext, 'inspectDeclaredModels' | 'inspectModelActivation' | 'inspectModelBinding' | 'inspectModelCatalog' | 'describeTerminalChatPlan'
-  | 'listSecretNames'>;
+  | 'listSecretNames'> & Pick<ConfigCommandContext, 'configApplication' | 'resolveConfigPrincipal' | 'describeRuntimeService'>;
+/** T4-B D1: the words of the setting that chose the model in effect (the `/model` window shows which layer wins). */
+function winnerNote(source: string | null | undefined, model: string, locale: Locale): string | null {
+  switch (source) {
+    case 'project': return t('tui.model.winner.project', { model }, locale);
+    case 'user-default': return t('tui.model.winner.userDefault', { model }, locale);
+    case 'user': return t('tui.model.winner.user', { model }, locale);
+    default: return null;
+  }
+}
 type Profile = Readonly<{ reference: ModelReference; credentialRef: string | null }>;
 
 const sameReference = (left: ModelReference, right: ModelReference) => left.providerId === right.providerId && left.providerVersion === right.providerVersion
@@ -24,15 +34,16 @@ const errorCode = (error: unknown) => String((error as { code?: unknown })?.code
  * stands between each and this scope's next turn, in the order the service checks them: an invocation profile in this scope (the connection),
  * the key that profile names in the secret store, and the model's activation. A model that fails one is listed with that reason and the exact
  * governed command, never pickable. Discovered models are never added or activated from here: the catalog changes only on its governed path.
- * Nothing here is a reachability probe; "ready" means every recorded precondition holds. The default write is not bound (open owner decision).
+ * Nothing here is a reachability probe; "ready" means every recorded precondition holds. The window names the setting that chose the model in effect.
  */
 export function modelPanelSource(root: string, scopeId: string, host: Host, options: ConfigLoadOptions, locale: Locale): ModelPanelSource {
+  const defaultBlocked = () => host.configApplication && host.resolveConfigPrincipal ? null : t('tui.model.defaultReadOnly', {}, locale);
   return {
     async inspect(): Promise<ModelPanelView> {
       const title = t('tui.model.title', { scope: scopeId }, locale), notes: string[] = [];
       const declared = host.inspectDeclaredModels ? await host.inspectDeclaredModels(root, options) : null;
       if (!declared || declared.status !== 'declared' || declared.catalog.providers.every(provider => provider.models.length === 0)) {
-        return { title, choices: [], notes: [t('tui.model.noneDeclared', {}, locale)], defaultBlocked: t('tui.model.defaultPending', {}, locale) };
+        return { title, choices: [], notes: [t('tui.model.noneDeclared', {}, locale)], defaultBlocked: defaultBlocked() };
       }
       const profiles = profilesOf(await loadConfig(root, options) as Record<string, unknown>, scopeId);
       let names: readonly string[] | null = null;
@@ -73,7 +84,18 @@ export function modelPanelSource(root: string, scopeId: string, host: Host, opti
           group: provider.id, blocked, exact: t('tui.model.exact', { reference: exact, native: model.nativeId }, locale), command,
           configured: plan?.reference ? sameReference(plan.reference, reference) : false };
       })));
-      return { title, choices, notes, defaultBlocked: t('tui.model.defaultPending', {}, locale) };
+      const inEffect = plan?.reference ? choices.find(choice => sameReference(choice.reference, plan.reference!)) : undefined;
+      const note = winnerNote(plan?.source, inEffect?.label ?? plan?.reference?.modelId ?? '-', locale);
+      return { title, choices, notes: [...notes, ...(note ? [note] : [])], defaultBlocked: defaultBlocked() };
     },
+    // "Also make default" (T4-B D1, Jev d84b248d): the user's `terminal.defaultModel` through the governed `/config` writer on the user (global)
+    // layer — policy-checked, approval-aware, audited; the file is created when the person has none yet. Never the project file.
+    ...(host.configApplication && host.resolveConfigPrincipal ? { async makeDefault(choice: { reference: ModelReference }) {
+      const outcome = await terminalConfigWrite(root, { action: 'set', keyPath: 'terminal.defaultModel', value: { ...choice.reference }, layer: 'global' }, host, options, locale);
+      const plan = host.describeTerminalChatPlan ? await host.describeTerminalChatPlan(root, options).catch(() => null) : null;
+      // A project that names its own model keeps it: the person is told, the project file is not touched.
+      const shadowed = outcome.status === 'applied' && plan?.source === 'project' ? [t('tui.model.defaultShadowed', {}, locale)] : [];
+      return { ...outcome, lines: [...outcome.lines, ...shadowed] };
+    } } : {}),
   };
 }

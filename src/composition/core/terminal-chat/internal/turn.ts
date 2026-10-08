@@ -3,8 +3,9 @@ import { randomUUID } from 'node:crypto';
 import type { JsonObject, ModelInvocationCancellationCommand, ModelInvocationCommand, ModelReference } from '#domain/index.js';
 import { agentTurnAdmission, modelInvocationRequestDigest, type AgentTurnAdmission, type ModelInvocationResult } from '#engine/index.js';
 import { ErrorRegistry, type ConfigLoadOptions } from '#platform/index.js';
-import { extractOpenAiChatTextFromInvocation, openAiChatStoppedAtLength, readTerminalChatConfig } from '#adapters/index.js';
+import { extractOpenAiChatTextFromInvocation, openAiChatStoppedAtLength, readTerminalChatConfig, type TerminalModelSource } from '#adapters/index.js';
 import { inspectModelBinding } from '#composition/core/provider-catalog/index.js';
+import { configuredTerminalModel } from '#composition/core/config/index.js';
 
 export type TerminalChatMessage = Readonly<{ role: 'system' | 'user' | 'assistant'; content: string }>;
 
@@ -12,6 +13,8 @@ export type TerminalChatPlan = Readonly<{
   schemaVersion: 1;
   status: 'ready' | 'not-configured' | 'model-not-declared';
   reference: ModelReference | null;
+  /** T4-B D1: which setting chose `reference` (null when not configured). */
+  source: TerminalModelSource | null;
   catalogRevision: string | null;
   maxCompletionTokens: number | null;
   historyMessages: number | null;
@@ -33,9 +36,11 @@ export interface TerminalChatTurnInput {
 
 export async function describeTerminalChat(projectRoot: string, options: ConfigLoadOptions = {}): Promise<TerminalChatPlan> {
   const chat = readTerminalChatConfig(await loadComposedConfig(projectRoot, options) as Record<string, unknown>);
-  if (!chat) return Object.freeze({ schemaVersion: 1, status: 'not-configured', reference: null, catalogRevision: null, maxCompletionTokens: null, historyMessages: null });
-  const binding = await inspectModelBinding(projectRoot, chat.reference, options);
-  return Object.freeze({ schemaVersion: 1, status: binding.status === 'declared' ? 'ready' : 'model-not-declared', reference: chat.reference,
+  if (!chat) return Object.freeze({ schemaVersion: 1, status: 'not-configured', reference: null, source: null, catalogRevision: null, maxCompletionTokens: null, historyMessages: null });
+  // T4-B D1: the same precedence the service applies (a project's model, else the user's default, else the user's configured model).
+  const choice = await configuredTerminalModel(projectRoot, options), reference = choice?.reference ?? chat.reference;
+  const binding = await inspectModelBinding(projectRoot, reference, options);
+  return Object.freeze({ schemaVersion: 1, status: binding.status === 'declared' ? 'ready' : 'model-not-declared', reference, source: choice?.source ?? 'user',
     catalogRevision: binding.catalogRevision, maxCompletionTokens: chat.maxCompletionTokens, historyMessages: chat.historyMessages });
 }
 
@@ -47,7 +52,8 @@ export async function describeTerminalChat(projectRoot: string, options: ConfigL
 export async function prepareTerminalChatCommand(input: TerminalChatTurnInput, streamed: boolean) {
   const chat = readTerminalChatConfig(await loadComposedConfig(input.projectRoot, input.options) as Record<string, unknown>);
   if (!chat) throw ErrorRegistry.createError('TERMINAL_CHAT_NOT_CONFIGURED');
-  const binding = await inspectModelBinding(input.projectRoot, chat.reference, input.options);
+  const reference = (await configuredTerminalModel(input.projectRoot, input.options))?.reference ?? chat.reference;
+  const binding = await inspectModelBinding(input.projectRoot, reference, input.options);
   if (binding.status !== 'declared') throw ErrorRegistry.createError('TERMINAL_CHAT_MODEL_NOT_DECLARED');
   const nativeRequest = {
     model: binding.definition.model.nativeId,
@@ -56,7 +62,7 @@ export async function prepareTerminalChatCommand(input: TerminalChatTurnInput, s
     ...(streamed ? { stream: true, stream_options: { include_usage: true } } : { stream: false }),
   } as unknown as JsonObject;
   const command: ModelInvocationCommand = { schemaVersion: 1, commandId: randomUUID(), scopeId: input.scopeId,
-    reference: chat.reference, catalogRevision: binding.catalogRevision, expectedBinding: binding.binding, nativeRequest };
+    reference, catalogRevision: binding.catalogRevision, expectedBinding: binding.binding, nativeRequest };
   return { chat, command };
 }
 

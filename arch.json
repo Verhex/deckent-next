@@ -410,7 +410,8 @@
         "src/platform/core/errors",
         "src/engine/core/agent-turn",
         "src/adapters/core/provider-openai-chat",
-        "src/composition/core/root"
+        "src/composition/core/root",
+        "src/composition/core/config"
       ],
       "plan": "SURFACES"
     },
@@ -1422,7 +1423,8 @@
         "src/platform/core/common",
         "src/composition/core/root",
         "src/adapters/core/mcp-import",
-        "src/composition/core/approvals"
+        "src/composition/core/approvals",
+        "src/composition/core/config"
       ],
       "plan": "SURFACES"
     },
@@ -2270,7 +2272,9 @@
         "src/domain/core/run",
         "src/adapters/core/local-principal",
         "src/surfaces/core/config",
-        "src/platform/core/managed-files"
+        "src/platform/core/managed-files",
+        "src/domain/core/provider-catalog",
+        "src/adapters/core/contract"
       ],
       "plan": "CONFIG-SURFACE"
     },

@@ -161,6 +161,10 @@ export const CONFIG_VALUE_CHOICES: Readonly<Record<string, ConfigChoiceDeclarati
   'terminal.theme': { kind: 'schema' },
   'terminal.banner': { kind: 'schema' },
   'terminal.clearOnStart': { kind: 'schema' },
+  'terminal.defaultModel.providerId': { kind: 'hidden' },
+  'terminal.defaultModel.providerVersion': { kind: 'hidden' },
+  'terminal.defaultModel.modelId': { kind: 'hidden' },
+  'terminal.defaultModel.modelVersion': { kind: 'hidden' },
   'terminal.chat.schemaVersion': { kind: 'schema' },
   'terminal.chat.reference.providerId': { kind: 'hidden' },
   'terminal.chat.reference.providerVersion': { kind: 'hidden' },
@@ -203,6 +207,7 @@ export const CONFIG_VALUE_CHOICES: Readonly<Record<string, ConfigChoiceDeclarati
   'execution.workTargets': { kind: 'document' },
   'service.identity': { kind: 'container' },
   'terminal.chat.reference': { kind: 'reference', source: 'models' },
+  'terminal.defaultModel': { kind: 'reference', source: 'models' },
   'identity.profile': { kind: 'reference', source: 'identity-profiles' },
   'execution.workTargets.targets.*.baseRef': { kind: 'reference', source: 'branches' },
 });

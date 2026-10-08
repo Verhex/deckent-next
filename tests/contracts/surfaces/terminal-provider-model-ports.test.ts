@@ -156,7 +156,32 @@ describe('/model source', () => {
     expect(view.choices[1]!.command).toBe('deckent models activate --scope scope --provider local-openai --provider-version 1 --model coder --model-version 1 --command-id <new id> '
       + `--expected-revision 3 --binding-digest ${'d'.repeat(64)} --catalog-revision catalog-1`);
     expect(view.choices[0]!.command).toBeNull();
-    expect(view.defaultBlocked).toBe('Coming soon.');
+    expect(view.defaultBlocked).toBe('Not offered here: this terminal has no settings writer.');
+  });
+  it('T4-B D1: "also make default" writes the user default through the governed writer (global layer) and the window names the winning setting', async () => {
+    const { root, options } = await project({ terminal: { scopeId: 'scope' } });
+    const writes: Record<string, unknown>[] = [];
+    let source: 'project' | 'user-default' = 'project';
+    const host: Parameters<typeof modelPanelSource>[2] = {
+      inspectDeclaredModels: async () => ({ schemaVersion: 1, status: 'declared', availability: 'not-observed', catalog }) as never,
+      describeTerminalChatPlan: async () => ({ schemaVersion: 1, status: 'ready', reference: ref('chat'), source, catalogRevision: 'catalog-1', maxCompletionTokens: 1, historyMessages: 1 }),
+      resolveConfigPrincipal: async () => ({ id: 'os:1', issuer: 'host', subject: '1', assurance: 'os-user', scopeIds: ['scope'] }) as never,
+      configApplication: (() => ({
+        submit: async (action: string, input: Record<string, unknown>) => { writes.push({ action, ...input }); return { status: 'applied', approvalId: null,
+          result: { keyPath: input['keyPath'], layer: input['layer'], beforeDigest: null, afterDigest: 'a'.repeat(64), backupPath: null, overridden: false } }; },
+        explain: async () => ({ apply: 'restart' }),
+      })) as never,
+    };
+    const source0 = modelPanelSource(root, 'scope', host, options, 'en');
+    const view = await source0.inspect();
+    expect(view.defaultBlocked).toBeNull();
+    expect(view.notes).toContain("In use: chat (from this project's setting; it wins over your default).");
+    const outcome = await source0.makeDefault!(view.choices[1]!);
+    expect(writes).toEqual([expect.objectContaining({ action: 'set', keyPath: 'terminal.defaultModel', layer: 'global', scopeId: 'scope', value: ref('coder') })]);
+    expect(outcome.status).toBe('applied');
+    expect(outcome.lines.at(-1)).toBe('This project names its own model, so the project setting still wins here.');
+    source = 'user-default';
+    expect((await source0.inspect()).notes).toContain('In use: chat (your default model).');
   });
   it('an empty catalog says models are never added from here', async () => {
     const { root, options } = await project({});

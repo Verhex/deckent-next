@@ -1,8 +1,8 @@
 import { composeCore } from '#composition/core/root/index.js';
 import { ConfigApplication, ConfigChangeApprovalBroker, evaluateConfigWrite, type ConfigApprovalPort, type ConfigChangeSubject, type ConfigDocumentPort,
   type ConfigSnapshot } from '#engine/index.js';
-import type { VerifiedPrincipal } from '#domain/index.js';
-import { createConfigFileDocuments, createConfigFileAuthority, openLocalIntegrityAuthority, openSqliteApprovalStore } from '#adapters/index.js';
+import type { ModelReference, VerifiedPrincipal } from '#domain/index.js';
+import { createConfigFileDocuments, createConfigFileAuthority, openLocalIntegrityAuthority, openSqliteApprovalStore, resolveTerminalModel, type TerminalModelChoice } from '#adapters/index.js';
 import { resolveLocale, SystemTrustedClock, t, type ConfigLoadOptions, type Locale } from '#platform/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
 export async function resolveConfiguredConfigPrincipal(projectRoot: string, scopeId: string, options: ConfigLoadOptions = {}): Promise<VerifiedPrincipal> {
@@ -61,4 +61,11 @@ function configuredConfigApprovals(load: (scopeId: string) => ReturnType<typeof 
       } finally { journal.close(); }
     },
   };
+}
+
+/** T4-B D1: the terminal's model by the one precedence (`resolveTerminalModel`), read from the two authored layer documents, never the merged config. */
+export async function configuredTerminalModel(projectRoot: string, options: ConfigLoadOptions = {}, pin?: ModelReference | null): Promise<TerminalModelChoice | null> {
+  if (pin) return resolveTerminalModel({ global: {}, project: {} }, pin);
+  const snapshot = await snapshotConfiguredConfig(projectRoot, options);
+  return resolveTerminalModel({ global: snapshot.global, project: snapshot.project });
 }

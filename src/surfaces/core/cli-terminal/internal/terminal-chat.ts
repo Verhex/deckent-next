@@ -9,6 +9,8 @@ export type TerminalChatPlanView = Readonly<{
   schemaVersion: 1;
   status: 'ready' | 'not-configured' | 'model-not-declared';
   reference: ModelReference | null;
+  /** T4-B D1: which setting chose the model (`project`, `user-default`, `user`); absent from an older host. */
+  source?: 'session' | 'project' | 'user-default' | 'user' | null;
   catalogRevision: string | null;
   maxCompletionTokens: number | null;
   historyMessages: number | null;

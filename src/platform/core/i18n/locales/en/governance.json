@@ -550,6 +550,7 @@
   "error.AGENT_TURN_UNAVAILABLE": "The turn store is unavailable; nothing was run for this turn.",
   "error.AGENT_TURN_REASONING_UNSUPPORTED": "This model does not declare that it can turn thinking off (catalog capability chat-template-enable-thinking), so the turn was not sent. Use /reasoning on to continue, or declare the capability.",
   "error.TERMINAL_CHAT_NOT_CONFIGURED": "Terminal chat is not configured: add a `terminal.chat` section that names a declared catalog model.",
+  "error.TERMINAL_DEFAULT_MODEL_PROJECT_LAYER": "`terminal.defaultModel` is your own default model: only your user settings can hold it, not the project file.",
   "error.TERMINAL_CHAT_MODEL_NOT_DECLARED": "The terminal chat model is not declared in the current provider catalog.",
   "error.TERMINAL_CHAT_TRUNCATED": "The model used its whole completion budget ({maxCompletionTokens} tokens) before answering; reasoning models often need more. Raise terminal.chat.maxCompletionTokens (within the profile maxOutputTokens).",
   "error.TERMINAL_CHAT_EMPTY": "The model returned no assistant text for this turn.",
