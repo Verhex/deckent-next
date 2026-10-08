@@ -48,6 +48,19 @@ export function connectionAdapter(kind: ProviderConnectKind, input: Readonly<{ e
     return Object.freeze({ adapter: { id: ANTHROPIC_MESSAGES_HTTP_ADAPTER_ID, version: ANTHROPIC_MESSAGES_HTTP_ADAPTER_VERSION, definition: definition as unknown as JsonObject },
       protocol: { family: anthropicMessagesProtocol.family, version: anthropicMessagesProtocol.version }, tariff: 'published' });
   }
+  const metadata = connect.metadataPricing, route = metadata?.routes.find(row => row.modelId === input.nativeId);
+  if (metadata) {
+    if (!route || input.currency !== 'USD' || new URL(route.sourceUrl).origin !== new URL(input.endpoint).origin) throw new ProviderConnectError('MODEL_CONNECT_TARIFF_UNVERIFIED');
+    if (!secure || input.credentialRef === null) throw new ProviderConnectError('MODEL_CONNECT_KEY_INSECURE');
+    const metadataEndpoint = new URL(`/api/v1/models/${input.nativeId.split('/').map(encodeURIComponent).join('/')}/endpoints`, input.endpoint).href;
+    const metadataLimits = { maxAgeMs: metadata.maxAgeMs, maxResponseBytes: metadata.maxResponseBytes, timeoutMs: metadata.timeoutMs };
+    const definition = { endpoint: input.endpoint, maxOutputTokens: input.maxOutputTokens,
+      dialect: { ...connect.dialect!, tokenLimitField: route.tokenLimitField }, authentication: { type: 'bearer', credentialRef: input.credentialRef },
+      tariff: { kind: 'openrouter-endpoint', version: 1, currency: 'USD', metadataEndpoint, endpointTag: route.endpointTag, metadataLimits } };
+    try { parseOpenAiChatHttpDefinition(definition); } catch { throw new ProviderConnectError('MODEL_CONNECT_DEFINITION_INVALID'); }
+    return Object.freeze({ adapter: { id: OPENAI_CHAT_HTTP_ADAPTER_ID, version: OPENAI_CHAT_HTTP_ADAPTER_VERSION, definition: definition as unknown as JsonObject },
+      protocol: { family: OPENAI_CHAT_COMPLETIONS_FAMILY, version: OPENAI_CHAT_COMPLETIONS_VERSION }, tariff: 'published' });
+  }
   const published = openAiChatLoopback(input.endpoint) ? null : lookupOpenAiCompatibleTariff(input.endpoint, input.nativeId);
   if (!published && !openAiChatLoopback(input.endpoint)) throw new ProviderConnectError('MODEL_CONNECT_TARIFF_UNVERIFIED');
   const definition = { endpoint: input.endpoint, maxOutputTokens: input.maxOutputTokens, dialect: connect.dialect,
@@ -70,6 +83,7 @@ export function providerConnectModelPriced(kind: ProviderConnectKind, nativeId: 
   const connect = kind.connect, base = kind.endpoint.default === null ? null : providerEndpoint(kind.endpoint.default);
   if (!connect || !base?.ok) return false;
   if (connect.adapter === ANTHROPIC_MESSAGES_HTTP_ADAPTER_ID) return anthropicPublishedTariff(nativeId) !== null;
+  if (connect.metadataPricing) return connect.metadataPricing.routes.some(route => route.modelId === nativeId);
   const endpoint = `${base.base}${connect.chatPath}`;
   return openAiChatLoopback(endpoint) || lookupOpenAiCompatibleTariff(endpoint, nativeId) !== null;
 }

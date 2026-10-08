@@ -1518,7 +1518,7 @@
     },
     "src/adapters/core/provider-openrouter-pricing": {
       "dependencies": [
-        "src/domain/core/agent-tool",
+        "src/adapters/core/provider-openai-chat",
         "src/domain/core/primitives"
       ],
       "plan": "PROVIDERS"
@@ -1543,6 +1543,7 @@
     },
     "src/adapters/core/provider-openrouter-chat": {
       "dependencies": [
+        "src/adapters/core/provider-openai-chat",
         "src/adapters/core/provider-http-json",
         "src/adapters/core/provider-openrouter-pricing",
         "src/domain/core/model-invocation",
