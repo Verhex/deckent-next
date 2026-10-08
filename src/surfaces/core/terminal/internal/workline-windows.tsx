@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import { Fragment, useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { ListPicker, pickerView, PICKER_INITIAL, type PickerLabels, type PickerState, type PickerTree } from '#surfaces/core/terminal-picker/index.js';
 import { Window, type WindowLine } from '#surfaces/core/terminal-window/index.js';
 import { usePickerRoom } from '#surfaces/core/terminal-panels/index.js';
@@ -55,19 +55,32 @@ function SlashPickWindow({ spec, labels, onAnswer }: { readonly spec: SlashPickS
 }
 
 /**
- * One list window at a time, asked from inside a slash command: `ask` resolves the chosen row id (null: Esc), so the command keeps the
- * input line (queued lines wait) exactly as a panel-controller picker does. `open` is true while the window is on screen.
+ * SLASH-WINDOWS (integration): the ONE local window host of the workline. A slash command asks it for one window at a time and awaits the
+ * answer (null: Esc / cancelled), so the command keeps the input line (queued lines wait) exactly as a panel-controller picker does. The
+ * information windows (SW-1) and the list windows (SW-3) both open here; the job, approval, resume and settings windows stay on the panel
+ * controller. Every window is a `Window` in the one `WindowStackProvider`, so the stack is the single focus owner and an approval card
+ * (controller, modal) hides this slot until it is answered.
  */
-export function useSlashWindow(labels: SlashWindowLabels | undefined) {
-  const [open, setOpen] = useState<{ readonly spec: SlashPickSpec; readonly resolve: (id: string | null) => void } | null>(null);
-  const pending = useRef<((id: string | null) => void) | null>(null);
+export function useWindowSlot() {
+  type Open = { readonly id: number; readonly render: (answer: (id: string | null) => void) => ReactNode; readonly settle: (id: string | null) => void };
+  const [open, setOpen] = useState<Open | null>(null);
+  const pending = useRef<((id: string | null) => void) | null>(null), sequence = useRef(0);
   useEffect(() => () => { pending.current?.(null); pending.current = null; }, []);
-  const ask = useCallback((spec: SlashPickSpec) => new Promise<string | null>(resolve => {
-    const settle = (id: string | null) => { pending.current = null; setOpen(null); resolve(id); };
-    pending.current = settle; setOpen({ spec, resolve: settle });
+  /** Shows `render` until it answers; a newer ask or `close` answers the older one with null first. */
+  const ask = useCallback((render: Open['render']) => new Promise<string | null>(resolve => {
+    pending.current?.(null);
+    const settle = (id: string | null) => { if (pending.current !== settle) return; pending.current = null; setOpen(null); resolve(id); };
+    pending.current = settle; setOpen({ id: ++sequence.current, render, settle });
   }), []);
-  const element = open && labels ? <SlashPickWindow key={open.spec.title} spec={open.spec} labels={labels} onAnswer={open.resolve} /> : null;
-  return { ask, element, open: open !== null };
+  const close = useCallback(() => { pending.current?.(null); }, []);
+  const element = open ? <Fragment key={open.id}>{open.render(open.settle)}</Fragment> : null;
+  return { ask, close, element, open: open !== null };
+}
+export type WindowSlot = ReturnType<typeof useWindowSlot>;
+
+/** A list window of the session and palette commands, shown in the workline's window slot (null without window words). */
+export function askSlashWindow(slot: WindowSlot, labels: SlashWindowLabels | undefined, spec: SlashPickSpec): Promise<string | null> {
+  return labels ? slot.ask(answer => <SlashPickWindow spec={spec} labels={labels} onAnswer={answer} />) : Promise.resolve(null);
 }
 
 const mark = (text: string, current: boolean, label: string) => current ? `${text} · ${label}` : text;

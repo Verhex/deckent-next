@@ -19,7 +19,7 @@ import { messageWithMentions, type WorklineAttachMentions, type WorklineMentionL
 import { PermissionModeKeys, useWorklineMode, type WorklineModeLabels, type WorklinePermissionModePort } from './workline-mode.js';
 import { useReasoningPreview, type WorklineReasoningLabels } from './workline-reasoning.js';
 import { runScratchWindow, useWorklineScratch, type WorklineScratchLabels, type WorklineScratchPort } from './workline-scratch.js';
-import { isReasoningChoice, reasoningSpec, reasoningStatus, unknownCommandSpec, useSlashWindow, type SlashWindowLabels } from './workline-windows.js';
+import { askSlashWindow, isReasoningChoice, reasoningSpec, reasoningStatus, unknownCommandSpec, useWindowSlot, type SlashPickSpec, type SlashWindowLabels } from './workline-windows.js';
 import { CLEAR_VISIBLE_SCREEN, writeStartup, type WorklineStartup } from './startup-banner.js';
 import { useWorklineSettings, type WorklinePanels } from './workline-settings.js';
 
@@ -201,7 +201,9 @@ export function WorklineApp(props: WorklineProps) {
   liveRef.current = liveWin;
   const refreshMode = mode.refresh;
   const reasoning = useReasoningPreview(push, labels.reasoning);
-  const windows = useSlashWindow(labels.windows);
+  // SLASH-WINDOWS: the one local window slot (information and list windows); `ask` shows a list window in it.
+  const slot = useWindowSlot();
+  const windows = { ask: (spec: SlashPickSpec) => askSlashWindow(slot, labels.windows, spec) };
   const scratch = useWorklineScratch(props.scratch, session.id, push, errorText, labels.work?.unavailable ?? labels.ledgerUnavailable, labels.scratch);
   useEffect(() => { void refreshMode(); }, [refreshMode]);
   // T3 L4: `/mode`, `/config`, `/mcp` windows; `/mode`'s port is this view's mode hook (the same service set, grant check and audit as Shift+Tab).
@@ -209,7 +211,7 @@ export function WorklineApp(props: WorklineProps) {
     openApprovals: (approvalId, execution) => work.openApproval(approvalId, execution) });
 
   // SW-1: bare information commands answer in a window; `/help` answers the command picked in it, which then runs here.
-  const infoWindow = useInfoWindow({ info: props.info, push, errorText, slash: labels.composer.slash, ascii: useRenderGlyphs().ascii,
+  const infoWindow = useInfoWindow({ info: props.info, slot, push, errorText, slash: labels.composer.slash, ascii: useRenderGlyphs().ascii,
     context: (info, ascii) => session.contextView(history.current, info, ascii), input: () => ({ usage: usage.current, sessionFullAccess: mode.fullAccess.current }) });
   const performRef = useRef<(line: string, mentioned: readonly string[], execution: LocalExecution) => Promise<boolean>>(async () => true);
   const opening = useRef(props.openingNotices);
@@ -381,8 +383,7 @@ export function WorklineApp(props: WorklineProps) {
       : { kind: 'cancel-input', context: current.context, inputId: active.inputId });
   };
 
-  // The two local slash-window hosts (information windows, list windows) share the gates: one window, one focus owner.
-  const localWindowOpen = infoWindow.isOpen || windows.open;
+  const localWindowOpen = slot.open;
   const ledgerLabels: LedgerEntryLabels = { system: labels.work?.jobs?.system ?? props.info?.labels.systemLabel, runCard: labels.runCard, workerCard: labels.workerCard, chatUser: labels.roleUser, chatAssistant: labels.roleAssistant,
     render: labels.render, ...(labels.work ? { workerLine: labels.work.workerLine } : {}) };
   const choosing = resumePicker !== null || work.pickerOpen || settings.openKind !== null || localWindowOpen;
@@ -405,14 +406,14 @@ export function WorklineApp(props: WorklineProps) {
       {work.region}
       {/* One window is visible at a time: a decision card, picker, approval or settings window takes the screen from the live window, which returns when it is answered. */}
       {work.modalOpen || work.pickerOpen || resumePicker !== null || settings.openKind !== null || localWindowOpen ? null : liveWin.element}
-      {work.modalOpen || work.pickerOpen ? null : infoWindow.element}
       {resumePicker && !work.modalOpen && !work.pickerOpen
         ? <Window title={[span(labels.work?.window.resumeTitle ?? '/resume')]} status={[span(String(resumePicker.length))]} hints={labels.work?.window.pick ?? ''}
           position={labels.work?.window.position ?? '{from}-{to}/{total}'} footerRows={ARROW_PICKER_ROWS + 2}
           footer={focused => <ArrowPicker rows={resumePicker.map(item => item.label)} styledRows={resumePicker.map(item => item.spans ?? [])} active={focused}
             details={resumePicker.map(item => item.hiddenNotice)} onSelect={finishResume} onCancel={() => finishResume(null)} />} /> : null}
       {settings.window}
-      {work.modalOpen || work.pickerOpen || resumePicker !== null || settings.openKind !== null ? null : windows.element}
+      {/* The local window slot gives way to a decision card, picker, approval or settings window (approvals keep priority) and returns after it. */}
+      {work.modalOpen || work.pickerOpen || resumePicker !== null || settings.openKind !== null ? null : slot.element}
       <Text {...palette.accent}>{labels.banner}</Text>
       <StatusStrip target={target} state={cancelling ? labels.statusCancelling : busy && !choosing ? labels.statusBusy : [labels.statusReady, work.approvalStatus].filter(Boolean).join(' · ')} busy={busy && !choosing}
         queued={state.queued.length} labels={{ ...labels.render, selfSourceFloor: labels.selfSourceFloor, modeStops: labels.mode?.stops }} mode={mode.mode} stop={mode.stop}
