@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, createElement, type ComponentProps } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, createElement, type ComponentProps } from 'react';
 import { render, Box, Static, Text, useApp, useStdout, type Instance } from 'ink';
 import { useWorklinePanel, type LocalExecution, LedgerEntryRow, liveRunEntry, dispatchWorkCommand, systemSummaryEntry, type LedgerEntryLabels, immediateSlashAction, type WatchState, type MonitorWindowLoader, type WorklineActionLabels, useWorkSurface } from '#surfaces/core/terminal-work/index.js';
 import { WorklinePaletteProvider, useWorklinePalette, parseSlashLine, WORKLINE_SLASH_COMMANDS, isInspectSlashCommand, addSessionUsage, bindInspectPorts, EMPTY_SESSION_USAGE, type InspectSlashPorts, type SessionUsageView, useWorklineWatch, surfaceFollowLine, useSurfacePushFeed,
@@ -22,6 +22,7 @@ import { runScratchWindow, useWorklineScratch, type WorklineScratchLabels, type 
 import { askSlashWindow, isReasoningChoice, reasoningSpec, reasoningStatus, unknownCommandSpec, useWindowSlot, type SlashPickSpec, type SlashWindowLabels } from './workline-windows.js';
 import { CLEAR_VISIBLE_SCREEN, writeStartup, type WorklineStartup } from './startup-banner.js';
 import { useWorklineSettings, type WorklinePanels } from './workline-settings.js';
+import type { ModelPanelChoice, ModelPanelReference } from '#surfaces/core/terminal-panels/index.js';
 
 export interface WorklineLabels extends WorklineActionLabels {
   readonly banner: string;
@@ -204,10 +205,18 @@ export function WorklineApp(props: WorklineProps) {
   // SLASH-WINDOWS: the one local window slot (information and list windows); `ask` shows a list window in it.
   const slot = useWindowSlot();
   const windows = { ask: (spec: SlashPickSpec) => askSlashWindow(slot, labels.windows, spec) };
+  // T4 MODEL-SWITCH (S19): the model this session pinned with `/model`; read when a turn starts, so the next turn carries it (protocol v23).
+  // Astra 2452 P1: the pin belongs to one conversation (sessionId → pin). `/clear` starts a conversation without one; `/resume` finds the resumed
+  // conversation's own pin, or none (the configured model) — never another conversation's.
+  const pinnedModels = useRef(new Map<string, ModelPanelReference>());
+  const sessionModel = useMemo(() => ({ pinned: () => pinnedModels.current.get(sessionId()) ?? null,
+    pin: (choice: ModelPanelChoice) => { pinnedModels.current.set(sessionId(), choice.reference); } }), [sessionId]);
   const scratch = useWorklineScratch(props.scratch, session.id, push, errorText, labels.work?.unavailable ?? labels.ledgerUnavailable, labels.scratch);
   useEffect(() => { void refreshMode(); }, [refreshMode]);
   // T3 L4: `/mode`, `/config`, `/mcp` windows; `/mode`'s port is this view's mode hook (the same service set, grant check and audit as Shift+Tab).
   const settings = useWorklineSettings({ panels: props.panels, permissionMode: props.permissionMode, mode, panel, state, push, errorText, blocked: work.modalOpen,
+    // The pin rides only on the streamed turn (v23); a plain turn could not carry it, so no `/model` window is offered there.
+    ...(props.streamTurn ? { sessionModel } : {}),
     openApprovals: (approvalId, execution) => work.openApproval(approvalId, execution) });
 
   // SW-1: bare information commands answer in a window; `/help` answers the command picked in it, which then runs here.
@@ -227,6 +236,8 @@ export function WorklineApp(props: WorklineProps) {
     const runs = batch.filter(entry => entry.kind === 'run').map(entry => ({ ...entry, observedAtMs: Date.now() }));
     liveRef.current?.setRuns(runs);
   }, failed);
+  /** The turn's conversation's own pin (the session the turn is sent under), or nothing: the configured model. */
+  const pinnedFor = (id: string | undefined) => { const reference = id ? pinnedModels.current.get(id) : undefined; return reference ? { reference } : {}; };
   const runTurn = useCallback(async (text: string, mentioned: readonly string[], execution: LocalExecution) => {
     push([chat('user', text)]);
     const startedAtMs = Date.now();
@@ -248,7 +259,7 @@ export function WorklineApp(props: WorklineProps) {
         let base: readonly AgentChatMessage[] = messages, appended: AgentChatMessage[] = [];
         // Forward the session and reasoning choices with the composition's generated binding callback.
         for await (const delta of props.streamTurn(messages, signal, { ...(reasoning.current.current ? {} : { reasoning: 'off' as const }), sessionId: execution.input.context.sessionId, onTurnBound: stream.onTurnBound,
-          ...(mode.fullAccess.current ? { fullAccess: true as const } : {}) })) {
+          ...(mode.fullAccess.current ? { fullAccess: true as const } : {}), ...pinnedFor(execution.input.context.sessionId) })) {
           if (delta.kind === 'text') answer += delta.text;
           if (delta.kind === 'message') appended.push(delta.message);
           session.noteContext(delta); if (delta.kind === 'usage') usage.current = addSessionUsage(usage.current, delta);
@@ -321,7 +332,8 @@ export function WorklineApp(props: WorklineProps) {
     if (slash.command === 'mode' || slash.command === 'scratch') { await (slash.command === 'mode' ? mode.run : scratch)(slash.args); return true; }
     const lineCommands: Readonly<Record<string, ((args: string) => Promise<readonly string[]>) | undefined>> = { ...bindInspectPorts(props.inspect, () => usage.current, () => mode.fullAccess.current), mcp: props.mcp, monitor: props.monitor, config: props.config };
     if (await dispatchWorkCommand(slash, { execution, panel, labels, ledger, push, errorText, pushMode, live: liveWin, monitor: props.monitor, watchRef, setWatch, setWatchStatus, runDecision: work.run, commandUnavailable: labels.commandUnavailable })) return true;
-    if (slash.command === 'mcp' || slash.command === 'monitor' || slash.command === 'config' || (isInspectSlashCommand(slash.command) && (slash.command !== 'status' || lineCommands['status']))) {
+    // T4: `/provider` is a window only; without its port (TERM=dumb, no host) or with arguments it says the part is unavailable here.
+    if (slash.command === 'mcp' || slash.command === 'monitor' || slash.command === 'config' || slash.command === 'provider' || (isInspectSlashCommand(slash.command) && (slash.command !== 'status' || lineCommands['status']))) {
       const lines = lineCommands[slash.command];
       // One notice for the whole answer, so its level words (`Info: `) open the answer once instead of every line.
       try { push([notice('info', (lines ? await lines(slash.args) : [fillTemplate(labels.commandUnavailable, { part: slash.command })]).join('\n'))]); }

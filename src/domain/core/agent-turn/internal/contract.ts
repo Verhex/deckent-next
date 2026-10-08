@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { agentToolCallSchema, agentToolCleanupSchema, type AgentToolCleanup } from '#domain/core/agent-tool/index.js';
 import { identitySchema } from '#domain/core/primitives/index.js';
+import { modelReferenceSchema } from '#domain/core/provider-catalog/index.js';
 import { agentShellPostureSchema, agentToolCardCallSchema, agentToolUndoSchema, approvalPreviewCutSchema, type AgentShellPosture, type AgentToolCardCall, type AgentToolUndo,
   type ApprovalPreviewCutFacts } from './card-facts.js';
 
@@ -101,7 +102,10 @@ export const CHAT_TURN_REASONING = Object.freeze(['on', 'off'] as const);
 export const chatTurnCommandSchema = z.object({ schemaVersion: z.literal(1), scopeId: identitySchema, turnId: identitySchema,
   messages: z.array(agentTurnMessageSchema).min(1), reasoning: z.enum(CHAT_TURN_REASONING).optional(), sessionId: identitySchema.optional(),
   /** v17 (MODES-3): the turn runs in full access — only when the person launched the terminal so and a company grant allows it; never implied. */
-  fullAccess: z.literal(true).optional() }).strict().refine(command => command.messages.at(-1)?.role === 'user',
+  fullAccess: z.literal(true).optional(),
+  /** v23 (T4 MODEL-SWITCH, S19): the model this session pinned with `/model`; the service uses exactly it or refuses typed (never the configured
+   * model in its place). Absent: the configured `terminal.chat.reference`. */
+  reference: modelReferenceSchema.optional() }).strict().refine(command => command.messages.at(-1)?.role === 'user',
   { path: ['messages'], message: 'CHAT_TURN_LAST_MESSAGE_NOT_USER' }).readonly();
 export type ChatTurnCommand = z.infer<typeof chatTurnCommandSchema>;
 export const parseChatTurnCommand = (value: unknown): ChatTurnCommand => chatTurnCommandSchema.parse(value);

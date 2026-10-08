@@ -118,6 +118,8 @@
   "tui.inbox_detail_id",
   "tui.native_reference_active_compact",
   "tui.picker.title.action",
+  "tui.provider.kind.anthropicApi",
+  "tui.provider.kind.openrouter",
   "tui.shortcuts.at_ref.keys",
   "tui.shortcuts.clear_screen.keys",
   "tui.shortcuts.ctrl_c.keys",

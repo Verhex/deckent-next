@@ -24,11 +24,13 @@ export type TerminalChatTurnHandler = (
 
 /**
  * Streamed agent turn (runtime `chatTurn`, T-L3): deltas in order (tool lines and history messages included), exactly one `done`
- * last. Aborting the signal or leaving the loop early cancels the turn. `reasoning: 'off'` asks for no model thinking (v16).
+ * last. Aborting the signal or leaving the loop early cancels the turn. `reasoning: 'off'` asks for no model thinking (v16); `reference` is the
+ * session's pinned model (v23).
  */
 export type TerminalChatStreamHandler = (
   root: string,
-  input: Readonly<{ scopeId: string; messages: readonly AgentChatMessage[]; reasoning?: 'off'; sessionId?: string; fullAccess?: true; onTurnBound?: (binding: PanelTurnBinding) => void }>,
+  input: Readonly<{ scopeId: string; messages: readonly AgentChatMessage[]; reasoning?: 'off'; sessionId?: string; fullAccess?: true; reference?: ModelReference;
+    onTurnBound?: (binding: PanelTurnBinding) => void }>,
   options: ConfigLoadOptions,
   signal?: AbortSignal,
 ) => AsyncIterable<TurnDelta>;
