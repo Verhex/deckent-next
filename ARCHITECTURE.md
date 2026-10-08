@@ -586,7 +586,10 @@ Core contracts and never requires editing Core. Core-memory law 10 records this 
   one `model-connect` audit subject. A config approval stops the run (`approval-pending`); the same command id continues. No key value is taken.
 - **Provider rows (Jev da5312fb):** OpenAI, DeepSeek, Z.ai GLM (global) and Zhipu GLM (China) each keep their own secret name; the generic
   OpenAI-compatible row derives `DECKENT_OAICOMPAT_<HOST[_PORT]>` from the chosen address and shows it before saving. Z.ai documents no free
-  read: its rows have no probe (the key is kept unverified). Seeds exist for Anthropic, OpenAI, DeepSeek and Z.ai global; not for Zhipu China or
+  read: its rows have no probe (the key is kept unverified). Owner 2026-10-08: no paid call to a remote endpoint without a verified price — the
+  generic row's remote address is refused (`MODEL_CONNECT_PRICE_REQUIRED`, its window row locked) until SPEND-SETTLEMENT brings the declared
+  price; the verified OpenAI/DeepSeek/GLM price records replace the zero-rate tariff at one point (`connectionAdapter`, provider-connect).
+  Seeds exist for Anthropic, OpenAI, DeepSeek and Z.ai global; not for Zhipu China or
   OpenRouter (ids/endpoint tag unverified). Open decisions (DeepSeek/Z.ai wire parameters, metered OpenAI-chat tariff) are in external
   `proof/T4B-2026-10-08/DECISIONS.md`.
 
