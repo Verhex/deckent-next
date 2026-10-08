@@ -1,5 +1,13 @@
 # Deckent Next — tamamlanan plan
 
+## alpha.17 — 2026-10-08 (PR #49)
+
+- **İnen iş (PR #49, merge `8cc60c2d`; PRICING):** sürümlü yayımlanmış tarife şeması; OpenAI amiral gemisi kademeleri (standart/flex/priority/fast servis kademesi, önbellekli girdi, önbellek yazma, uzun bağlam; en pahalı uygulanabilir kademe rezerve edilir, dönen kademe ve önbellek ayrımıyla kesinleşir); `gpt-6-astra`, `gpt-6.1-sol`, `gpt-6-luna`, Z.ai `glm-5.3` ve `glm-4.7-flash` için doğrulanmış satırlar; DeepSeek yayımlanmış peak fiyatından kesinleşir, `upper-bound` etiketli (sağlayıcı ücreti olarak asla gösterilmez); Zhipu Çin (CNY) kilitli kalır. Protokol 25, ledger 49, switch `8cc60c2d3610-e1fa0203b60c`.
+- **İnceleme zinciri:** Astra 2467 REVISE (P1: kesin-son servis kademesi çelişkisi ölçümü geri çeker, çağrı held kalır; P2: boş `cached_tokens` raporlanmamış sayılır); düzeltmeden sonra exact head `de163ffe` üzerinde Astra 2469 PASS.
+- **Açık sınırlar:** gerçek ücretli OpenAI, DeepSeek veya Z.ai çağrısı henüz yapılmadı; kompozisyon testleri operatör-statik tarife kullanır; satıcı satırları yalnız adaptör düzeyinde kanıtlıdır.
+- **Kanıt:** `proof/PRICING-2026-10-08/`.
+- **Canlıya geçiş:** owner 2026-10-08 (switch `8cc60c2d3610-e1fa0203b60c`).
+
 ## alpha.16 — 2026-10-08 (PR #47 + #48)
 
 - **İnen iş (PR #47, merge `4a6856db`; STAGE1 = T4-B + SPEND-SETTLEMENT + ilk bütçe):** `models connect` doğrulanmış tarifeyi profile yazar, fiyatsız uzak model reddedilir ve kilitlenir; `terminal.defaultModel`; satıcı satırları OpenAI, DeepSeek, Z.ai global/Çin (OpenRouter yalnız anahtar); openai-chat v5 lehçeleri; şablon v7; `measured-tariff` settlement (Anthropic cache 5m/1h, Haiku 5.5 100k kademesi); reservation v3 ve ledger 49 (yedekli geçiş); governed reconcile, bütçe revizyonu ve `models create-budget` (`/model` bütçe penceresi). Settlement yalnız son olayın kendi usage'ından; diğer durumda çağrı held kalır. Protokol 25, pencere [25,24].
