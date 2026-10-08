@@ -77,7 +77,7 @@ export * from '#adapters/core/mcp-import/index.js';
 export * from '#adapters/core/agent-workspace-floor/index.js';
 export * from '#adapters/core/secret-store/index.js';
 
-export { createConfigFileDocuments, createConfigFileAuthority } from '#adapters/core/config-file/index.js';
+export { createConfigFileDocuments, createConfigFileAuthority, discoverConfigExecutables, discoverConfigBranches, discoverConfigImages, discoverConfigFiles, discoverConfigPools } from '#adapters/core/config-file/index.js';
 export * from '#adapters/core/provider-decision-http/index.js';
 export * from '#adapters/core/decision-store/index.js';
 export { readDecisionPolicy } from '#adapters/core/contract/index.js';

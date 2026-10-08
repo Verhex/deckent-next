@@ -4,7 +4,7 @@ import { terminalPanelLabels } from '#surfaces/core/work-labels/index.js';
 import { mountWorkline, settle, until, WORKLINE_TEST_LABELS } from '../support/workline-harness.js';
 
 // T3 L4 PANELS on the real interactive workline (in-memory TTY): a bare `/mode`, `/config` or `/mcp` opens its window (one input owner: the
-// composer and Shift+Tab wait), an argument keeps the text command, a held config write opens its approval window in the same command, and
+// composer and Shift+Tab wait), typed config arguments remain in the picker, a held write opens approval in the same command, and
 // full access shows one standing warning line above the composer.
 const mounted: Array<{ unmount(): void }> = [];
 afterEach(() => { for (const view of mounted.splice(0)) view.unmount(); });
@@ -48,18 +48,17 @@ describe('settings windows in the workline', () => {
     await until(() => !frameOf(view).includes('Permission mode'), 'window closed');
     expect(view.stdout.text).toContain('CYCLED std->auto');
   });
-  it('an argument keeps the text command; Esc at the window\'s first level closes it and the composer takes keys again', async () => {
-    const texts: string[] = [];
+  it('typed config arguments still open selection;  Esc at the window\'s first level closes it and the composer takes keys again', async () => {
+    const texts: string[] = [], modelInputs: unknown[] = [];
     const ports: PanelPorts = { config: { inspect: async () => ({ title: 'CONFIG-WINDOW', notes: [], fields: [] }), parse: () => ({ ok: false, reason: '-' }),
       write: async () => { throw new Error('no write'); } } };
-    const view = mountWorkline({ labels, panels: { ports, labels: terminalPanelLabels('en') }, config: async args => { texts.push(args); return ['TEXT-CONFIG']; } });
+    const view = mountWorkline({ labels, panels: { ports, labels: terminalPanelLabels('en') }, config: async args => { texts.push(args); return ['TEXT-CONFIG']; }, completeTurn: async messages => { modelInputs.push(messages); return 'MODEL-OUTPUT'; } });
     mounted.push(view.instance);
     await settle(40);
-    view.stdin.write(`/config max_workers${ENTER}`);
-    await until(() => view.stdout.text.includes('TEXT-CONFIG'), 'text command');
-    expect(texts).toEqual(['max_workers']);
-    view.stdin.write(`/config${ENTER}`);
+    view.stdin.write(`/config set max_workers 2${ENTER}`);
+    expect(texts).toEqual([]);
     await until(() => frameOf(view).includes('CONFIG-WINDOW'), 'config window');
+    expect(modelInputs).toEqual([]); expect(view.stdout.text).not.toContain('TEXT-CONFIG');
     view.stdin.write(ESC);
     await until(() => !frameOf(view).includes('CONFIG-WINDOW'), 'closed');
     view.stdin.write('hello');

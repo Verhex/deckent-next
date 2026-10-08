@@ -1,3 +1,5 @@
+import { writeFile } from 'node:fs/promises';
+import { ConfigNumberWindow } from '#surfaces/core/terminal-panels/index.js';
 import { PassThrough, Writable } from 'node:stream';
 import { createElement, type ReactElement } from 'react';
 import { render } from 'ink';
@@ -6,7 +8,7 @@ import type { PermissionModeView } from '#domain/index.js';
 import { WorklinePaletteProvider, resolveWorklinePalette } from '#surfaces/core/terminal-kit/index.js';
 import { RenderGlyphsContext, cells, resolveRenderGlyphs } from '#surfaces/core/terminal-render/index.js';
 import { WindowStackProvider } from '#surfaces/core/terminal-window/index.js';
-import { SettingsPanel, editEntry, maskEntry, mcpArgs, mcpPair, mcpWizardSteps, modePanelTree, type ConfigPanelPort, type ConfigPanelView, type McpPanelPort,
+import { SettingsPanel, configPanelTree, editEntry, maskEntry, mcpArgs, mcpPair, mcpWizardSteps, modePanelTree, type ConfigPanelPort, type ConfigPanelView, type McpPanelPort,
   type McpServerDraft, type McpTrustQuestion, type PanelNotice } from '#surfaces/core/terminal-panels/index.js';
 import { terminalPanelLabels } from '#surfaces/core/work-labels/index.js';
 
@@ -78,7 +80,7 @@ const CONFIG: ConfigPanelView = { title: 'Configuration · acme', notes: [], fie
     choices: [{ id: '0', label: 'auto', value: 'auto' }, { id: '1', label: 'dark', value: 'dark' }], free: false, unsettable: false, sensitive: false,
     locks: { project: { blocked: null, note: null }, global: { blocked: 'GLOBAL-LOCKED', note: null } } },
   { key: 'max_workers', section: 'max_workers', description: 'Workers', value: '4', source: 'project', apply: 'restart', expected: 'integer; at least 1',
-    choices: [], free: true, unsettable: true, sensitive: false, locks: { project: { blocked: null, note: 'asks for approval (rule r1)' }, global: { blocked: null, note: null } } },
+    choices: [{ id: '0', label: '2', value: 2 }], free: false, stepper: { min: 1, max: 8, step: 1, unit: 'count', current: 4 }, unsettable: true, sensitive: false, locks: { project: { blocked: null, note: 'asks for approval (rule r1)' }, global: { blocked: null, note: null } } },
   { key: 'language', section: 'language', description: 'Language', value: 'en', source: 'default', apply: 'live', expected: 'en, tr',
     choices: [{ id: '0', label: 'en', value: 'en' }], free: false, unsettable: false, sensitive: false,
     locks: { project: { blocked: 'POLICY-SAYS-NO', note: null }, global: { blocked: 'POLICY-SAYS-NO', note: null } } }] };
@@ -111,23 +113,21 @@ describe('/config window', () => {
     expect(writes).toEqual([]);
     await view.press(`${DOWN}${ENTER}`, 80); // back on project
     expect(writes).toEqual([{ action: 'set', keyPath: 'terminal.theme', value: 'dark', layer: 'project' }]);
-    expect(calls.notices).toEqual([{ level: 'info', text: 'saved terminal.theme' }]);
+    expect(calls.notices).toEqual([{ level: 'info', text: 'Config: saved terminal.theme' }]);
     expect(view.frame()).toContain('theme'); // the key list again, ready for the next change
   });
-  it('a typed value is checked by the key\'s schema before anything is sent; a held write opens the approval window and closes the panel', async () => {
+  it('numeric selection has no EntryWindow; a held selection opens approval and leaves one system notice', async () => {
     const writes: unknown[] = [];
     const { element, calls } = panel('config', { config: configPort(writes, true) });
     const view = mount(element);
     await settle(80);
-    await view.press(`${DOWN}${ENTER}max${ENTER}`); // general → filter max_workers → its values
-    expect(view.frame()).toContain('Type a value');
-    await view.press(`${ENTER}${ENTER}`, 60); // type a value… → project layer
-    expect(view.frame()).toContain('New value · max_workers');
-    await view.press(`two${ENTER}`);
-    expect(view.frame()).toContain('NOT-AN-INTEGER'); expect(writes).toEqual([]);
-    await view.press(`\u007f\u007f\u007f2${ENTER}`, 80);
+    await view.press(`${DOWN}${ENTER}max${ENTER}`);
+    expect(view.frame()).toContain('Adjust with arrows');
+    if (process.env['CS1_RENDER_DIR']) await writeFile(`${process.env['CS1_RENDER_DIR']}/config-values.txt`, view.frame());
+    expect(view.frame()).not.toContain('New value');
+    await view.press(`${ENTER}${ENTER}`, 80);
     expect(writes).toEqual([{ action: 'set', keyPath: 'max_workers', value: 2, layer: 'project' }]);
-    expect(calls.notices).toEqual([{ level: 'warning', text: 'Nothing was written; appr-1 waits' }]);
+    expect(calls.notices).toEqual([{ level: 'warning', text: 'Config: Nothing was written; appr-1 waits' }]);
     expect(calls.approvals).toEqual(['appr-1']); expect(calls.closed).toBe(1);
   });
 });
@@ -220,5 +220,51 @@ describe('/mcp window', () => {
     expect(maskEntry('KEY=sécret', '*', '=')).toBe('KEY=******'); expect(maskEntry('noseparator', '*', '=')).toBe('noseparator');
     expect(editEntry({ text: 'ab', caret: 2 }, '', { backspace: true } as never)).toEqual({ text: 'a', caret: 1 });
     expect(editEntry({ text: 'ab', caret: 1 }, 'x\ny', {} as never)).toEqual({ text: 'ax yb', caret: 4 });
+  });
+});
+
+
+describe('CS-1 number window', () => {
+  it('shows human units with NO_COLOR, ignores digits, clamps arrows, Enter selects once and Esc cancels', async () => {
+    const selected: number[] = []; let canceled = 0;
+    const stepper = { min: 1000, max: 5000, step: 1000, unit: 'ms' as const, current: 2000 };
+    const view = mount(createElement(ConfigNumberWindow, { title: 'Timeout', stepper, hints: terminalPanelLabels('en').config.stepperHint,
+      position: '{pos} of {count}', onSubmit: value => selected.push(value), onCancel: () => { canceled++; } }), 40, 24, true);
+    await settle(60);
+    expect(view.frame()).toContain('2 s'); expect(view.frame()).toContain('1 s'); expect(view.frame()).toContain('5 s');
+    await view.press('999'); expect(view.frame()).toContain('2 s'); expect(selected).toEqual([]);
+    await view.press('-----'); expect(view.frame()).toContain('1 s');
+    await view.press('++++++'); expect(view.frame()).toContain('5 s');
+    for (const line of view.frame().split('\n')) expect(cells(line)).toBeLessThanOrEqual(40);
+    if (process.env['CS1_RENDER_DIR']) await writeFile(`${process.env['CS1_RENDER_DIR']}/number-window.txt`, view.frame());
+    await view.press(`${ENTER}${ENTER}`); expect(selected).toEqual([5000]);
+    const escape = mount(createElement(ConfigNumberWindow, { title: 'Timeout', stepper, hints: 'Esc', position: '-', onSubmit: value => selected.push(value), onCancel: () => { canceled++; } }));
+    await settle(60); await escape.press(ESC); expect(canceled).toBe(1); expect(selected).toEqual([5000]);
+  });
+  it('ignores a forged free-entry flag for any field outside the allowed-entry registry', () => {
+    const forged = { ...CONFIG, fields: [{ ...CONFIG.fields[1]!, free: true }] };
+    const tree = configPanelTree(forged, terminalPanelLabels('en').config, 'max_workers');
+    expect(tree.items[0]?.children?.[0]?.children?.some(row => row.id === ':entry')).toBe(false);
+  });
+});
+
+
+describe('CS-1 allowed new value preview', () => {
+  it('URL entry validates, previews without writing, Esc cancels and Enter sends one governed request', async () => {
+    const writes: unknown[] = [], urlField = { ...CONFIG.fields[0]!, key: 'toolchains.currency.registryEndpoint', description: 'Registry endpoint', expected: 'HTTPS URL', choices: [], free: true, value: 'https://registry.npmjs.org' };
+    const port = { ...configPort(writes), inspect: async () => ({ ...CONFIG, fields: [urlField] }),
+      parse: (_key: string, text: string) => text.startsWith('https://') ? { ok: true as const, value: text } : { ok: false as const, reason: 'INVALID-URL' } };
+    const { element, calls } = panel('config', { config: port }), view = mount(element, 80, 24, true);
+    await settle(80);
+    await view.press(`${ENTER}${ENTER}${ENTER}${ENTER}`);
+    expect(view.frame()).toContain('New value');
+    await view.press(`bad${ENTER}`); expect(view.frame()).toContain('INVALID-URL'); expect(writes).toEqual([]);
+    await view.press(`\u007f\u007f\u007fhttps://registry.example.com${ENTER}`);
+    expect(view.frame()).toContain('Preview change'); expect(view.frame()).toContain('https://registry.example.com'); expect(writes).toEqual([]);
+    if (process.env['CS1_RENDER_DIR']) await writeFile(`${process.env['CS1_RENDER_DIR']}/config-preview.txt`, view.frame());
+    await view.press(ESC); expect(writes).toEqual([]);
+    await view.press(`${ENTER}${ENTER}${ENTER}https://registry.example.com${ENTER}${ENTER}`);
+    expect(writes).toEqual([{ action: 'set', keyPath: urlField.key, value: 'https://registry.example.com', layer: 'project' }]);
+    expect(calls.notices).toHaveLength(1); expect(calls.errors).toEqual([]);
   });
 });

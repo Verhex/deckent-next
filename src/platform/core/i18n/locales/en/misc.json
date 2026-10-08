@@ -608,5 +608,22 @@
   "mcp.tool.renewApproval": "Explicitly renew a closed approval request.",
   "mcp.tool.executeOperation": "Execute a catalog operation on its declared target through the runtime service. A required approval returns approval-pending and sends nothing; resubmit the same command after the decision.",
   "mcp.tool.compensateOperation": "Compensate a settled catalog operation with its catalog compensation as a new operation (same approval rules).",
-  "mcp.tool.inspectOperation": "Inspect the durable record of a catalog operation command in a scope."
+  "mcp.tool.inspectOperation": "Inspect the durable record of a catalog operation command in a scope.",
+  "config.select.document": "Read only · edit via record editor (coming) or import",
+  "config.select.never": "Never",
+  "config.select.none": "None",
+  "config.select.generated": "Use generated value",
+  "config.select.add": "Add {label}",
+  "config.select.remove": "Remove {label}",
+  "config.select.selectionOnly": "Choose a value from the picker.",
+  "config.select.stepper": "Adjust with arrows…",
+  "config.select.stepperHint": "←/→ or +/− adjust · Enter selects · Esc cancels",
+  "config.select.regenerate": "Regenerate",
+  "config.select.preview": "Preview change",
+  "config.select.previewHint": "Enter confirms · Esc cancels",
+  "config.select.unavailable": "Choice source unavailable",
+  "config.select.empty": "No available choices",
+  "config.select.invalidHost": "Enter one hostname without a URL or path.",
+  "config.select.invalidUrl": "Enter an HTTP(S) URL without credentials.",
+  "config.select.summary": "Config: {text}"
 }

@@ -14,9 +14,15 @@ export type WorklineSessionModel = Readonly<{ pinned: () => ModelPanelReference 
 type Mode = Readonly<{ stop: PermissionModeStop | undefined; select: (stop: PermissionModeStop) => Promise<void> }>;
 
 const PANEL_COMMANDS: readonly PanelKind[] = ['mode', 'config', 'mcp', 'model', 'provider'];
-/** The settings window a bare `/mode`, `/config`, `/mcp`, `/model` or `/provider` opens, when its port is here (any argument keeps the text command). */
+/**
+ * The settings window a `/mode`, `/config`, `/mcp`, `/model` or `/provider` opens, when its port is here. The rich workline already runs a
+ * typed slash command bare (I-1, with its one-time note); CS-1: `/config` opens its panel even with a typed argument (never a typed write),
+ * the others keep a typed argument for the text command where no window words exist.
+ */
 function settingsPanelOf(command: string, args: string, ports: PanelPorts | null): PanelKind | null {
-  if (!ports || args.trim()) return null;
+  if (!ports) return null;
+  if (command === 'config' && ports.config) return 'config';
+  if (args.trim()) return null;
   const kind = PANEL_COMMANDS.find(item => item === command);
   return kind && ports[kind] ? kind : null;
 }

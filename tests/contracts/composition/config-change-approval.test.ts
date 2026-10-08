@@ -1,3 +1,4 @@
+import { configPanelPort } from '#surfaces/core/config/index.js';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -212,5 +213,27 @@ describe('config-change approval: negative paths (nothing is written)', () => {
     await expect(f.app.set({ ...f.command, commandId: 'cmd-legacy', keyPath: 'max_workers', value: 2 })).rejects.toMatchObject({ code: 'POLICY_APPROVAL_UNSUPPORTED' });
     expect(await bytesOf(f.path)).toBe(before); expect(await f.list()).toEqual([]);
     expect((await readdir(join(f.root, '.deckent'))).filter(name => name.includes('.bak.'))).toHaveLength(0);
+  });
+});
+
+
+describe('CS-1 selection through the real governed panel port', () => {
+  it('the picked value waits for approval, resubmits the same command after allow, and writes one sealed audit event', async () => {
+    const f = await setup();
+    await f.app.set({ ...f.command, commandId: 'seed-scope', keyPath: 'terminal.scopeId', value: 'installation' });
+    const port = configPanelPort(f.root, { configApplication: createConfiguredConfigApplication, resolveConfigPrincipal: resolveConfiguredConfigPrincipal }, f.options, 'en');
+    const view = await port.inspect(), workers = view.fields.find(field => field.key === 'max_workers')!;
+    expect(workers.free).toBe(false); expect(workers.choices.some(choice => choice.value === 'auto')).toBe(true);
+    expect(workers.locks.project.note).toContain('approval');
+    const picked = workers.choices.find(choice => choice.value === 2)!;
+    const before = await bytesOf(f.path), audits = f.auditCount();
+    const request = { action: 'set' as const, keyPath: workers.key, value: picked.value, layer: 'project' as const };
+    const pending = await port.write(request);
+    expect(pending.status).toBe('approval-pending'); expect(pending.approvalId).toBeTruthy();
+    expect(await bytesOf(f.path)).toBe(before); expect(f.auditCount()).toBe(audits);
+    await f.decide(pending.approvalId!, 'allow', 'allow-panel-selection');
+    const applied = await port.write(request); expect(applied).toMatchObject({ status: 'applied', approvalId: pending.approvalId });
+    expect(JSON.parse((await bytesOf(f.path))!).max_workers).toBe(2); expect(f.auditCount()).toBe(audits + 1);
+    expect(f.audits().at(-1)!.event.subject).toMatchObject({ kind: 'config-change', approvalId: pending.approvalId, keyPath: 'max_workers' });
   });
 });

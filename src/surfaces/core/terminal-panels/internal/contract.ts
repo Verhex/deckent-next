@@ -36,10 +36,14 @@ export type ConfigPanelLayer = 'project' | 'global';
 /** One key as the panel shows it: localized words only, plus the choices its schema allows and each layer's lock or note. */
 export type ConfigPanelField = Readonly<{
   key: string; section: string; description: string; value: string; source: string; apply: string; expected: string;
-  /** Values the schema enumerates (enum, boolean, constants); empty when only a typed entry fits. */
-  choices: readonly Readonly<{ id: string; label: string; value: unknown }>[];
+  /** Values the schema enumerates (enum, boolean, constants); empty when the source is unavailable or the document needs a record editor. */
+  choices: readonly Readonly<{ id: string; label: string; value: unknown; detail?: string }>[];
   /** A typed entry is offered (validated by the key's schema before anything is sent). */
   free: boolean;
+  stepper?: import('#platform/index.js').ConfigStepper | null;
+  readOnly?: string | null;
+  generated?: boolean;
+  choiceNotice?: string | null;
   /** The written layer holds this key, so "back to the lower layer" (unset) is offered. */
   unsettable: boolean;
   /** The value is redacted: an entry is masked while typed. */
@@ -64,6 +68,8 @@ export interface ConfigPanelLabels {
   readonly expected: string;
   /** Value-level rows: the typed entry and "back to the lower layer" (unset). */
   readonly freeEntry: string; readonly unset: string;
+  readonly summary: string;
+  readonly stepper: string; readonly stepperHint: string; readonly regenerate: string; readonly preview: string; readonly previewHint: string;
   /** `{key}`, `{expected}`: the entry prompt and its hint row. */
   readonly entryTitle: string; readonly entryHint: string;
 }
