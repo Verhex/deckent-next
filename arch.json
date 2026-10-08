@@ -2596,6 +2596,7 @@
         "src/domain/core/principal",
         "src/engine/core/backup",
         "src/adapters/core/backup-store",
+        "src/adapters/core/file-policy",
         "src/adapters/core/local-principal",
         "src/adapters/core/local-keyring",
         "src/adapters/core/installation-files",

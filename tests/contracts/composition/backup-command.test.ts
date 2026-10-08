@@ -281,3 +281,15 @@ it('same-root restore after a layout move publishes into the layout its restored
   expect(await readFile(join(reopened.path,'result.txt'),'utf8')).toBe('retained artifact');
   expect(await readdir(f.layout.root)).toContainEqual(expect.stringMatching(/^artifacts-v2\.damaged-/));
 });
+it('a damaged installation policy refuses restore with a typed code naming the file; moving it aside and rerunning restores the set policy (S1 D3)',async()=>{
+  const f=await fixture();await call(f,'create');const policyPath=productResourcePath(f.layout,'policy'),before=await readFile(policyPath,'utf8');
+  await writeFile(policyPath,'{corrupt');clearConfigCache();
+  await expect(call(f,'restore',phrase,{target:f.root,confirmTarget:f.root})).rejects.toMatchObject({code:'BACKUP_POLICY_UNREADABLE',params:{path:policyPath,reason:'POLICY_FILE_INVALID'}});
+  let errors='';
+  expect(await main(['backup','restore','--scope','scope','--set',f.set,'--target',f.root,'--confirm-target',f.root,'--json','--lang','tr'],{root:f.root,env:f.env,initialize:composeCore,executeBackup,
+    stdin:Readable.from([phrase+'\n']),stdout:{write:()=>{}},stderr:{write:text=>{errors+=text;}}})).not.toBe(0);
+  expect(JSON.parse(errors)).toMatchObject({code:'BACKUP_POLICY_UNREADABLE'});expect(errors).toContain(`mv ${policyPath} ${policyPath}.damaged`);expect(errors).toContain('hiçbir şey değiştirilmedi');
+  await rename(policyPath,`${policyPath}.damaged`);clearConfigCache();
+  await call(f,'restore',phrase,{target:f.root,confirmTarget:f.root});
+  expect(await readFile(policyPath,'utf8')).toBe(before);
+});
