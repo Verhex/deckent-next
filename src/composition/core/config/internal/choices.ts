@@ -19,17 +19,17 @@ export function configuredConfigChoiceSources(root: string, options: ConfigLoadO
     const limits = { timeoutMs: config.toolchains.currency.timeoutMs, outputBytes: config.toolchains.currency.responseMaxBytes, maxEntries: config.inspection.maxPageSize };
     const scopeId = (config['terminal'] as { scopeId?: string } | undefined)?.scopeId;
     if (source === 'environment') return values(Object.keys(env).filter(key => env[key] !== undefined).sort());
-    if (source === 'docker-executables' || source === 'git-executables') return values(await discoverConfigExecutables(source === 'docker-executables' ? 'docker' : 'git', env), basename);
+    if (source === 'docker-executables' || source === 'git-executables') return values(await discoverConfigExecutables(source === 'docker-executables' ? 'docker' : 'git', env, limits), basename);
     if (source === 'paths') return values([...new Set([root, dirname(root), config.productLayout.root])], basename);
     if (source === 'machine-files') return values((await discoverConfigFiles('/etc', limits)).filter(path => basename(path) === 'machine-id'), basename);
     if (source === 'key-files') return values((await discoverConfigFiles(await inspectProductDirectory(config.productLayout, 'approvals'), limits)).filter(path => /\.key$/u.test(path) && basename(path) !== 'prefix-cache-salt.key').map(path => basename(path)));
     if (source === 'branches') {
-      const git = (await discoverConfigExecutables('git', env))[0]; if (!git) return [];
+      const git = (await discoverConfigExecutables('git', env, limits))[0]; if (!git) return [];
       const index = /\.targets\.(\d+)\.baseRef$/u.exec(keyPath)?.[1];
       const target = index === undefined ? root : config.execution?.workTargets?.targets[Number(index)]?.path;
       return target ? values(await discoverConfigBranches(git, target, env, limits), value => value.replace(/^refs\/heads\//u, '')) : [];
     }
-    if (source === 'images') { const docker = (await discoverConfigExecutables('docker', env))[0]; return docker ? values(await discoverConfigImages(docker, limits), id => `Docker · ${id.slice(7, 19)}`) : []; }
+    if (source === 'images') { const docker = (await discoverConfigExecutables('docker', env, limits))[0]; return docker ? values(await discoverConfigImages(docker, limits), id => `Docker · ${id.slice(7, 19)}`) : []; }
     if (source === 'task-kinds') { const registry = executionRegistrySchema.safeParse(config.admission?.registry); return registry.success ? values(registry.data.kinds.map(kind => kind.kind)) : []; }
     if (source === 'identity-profiles') {
       const selection = config['identity'] as { packages?: readonly unknown[] } | undefined;
