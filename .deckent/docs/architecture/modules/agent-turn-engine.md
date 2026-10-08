@@ -234,7 +234,7 @@ turn as one snapshot per session in the managed `terminalSessions` directory (`o
 atomic temp + rename, known secret shapes redacted, at most 50 sessions per scope and 16 MiB each, oversize refused before redaction). A
 compaction simply rewrites the snapshot, so a resumed conversation can never carry pre-compaction messages twice (legacy defect).
 `/resume` opens an arrow-key picker of this scope's recent sessions (Enter continues the highlighted one, Esc closes; TERM-PICKERS) and `/resume <n|id>` continues one (its messages become the history; later turns save
-into it). TC-0 RESUME-REF source candidate (TERMINAL-S00-S01, 2026-10-03): ids are exact canonical lowercase ids, never prefixes.
+into it). TC-0 RESUME-REF (TERMINAL-S00-S01, 2026-10-03; landed, `efd2d78e`): ids are exact canonical lowercase ids, never prefixes.
 Indices (including picker Enter) resolve only against the last shown list after a fresh scope-bound query compares ordered ids,
 update times, message counts and previews. Missing/changed lists load nothing (`SESSION_LIST_STALE`); invalid references return
 `SESSION_REFERENCE_EXACT_REQUIRED`; a missing exact snapshot returns `SESSION_NOT_FOUND`, all with visible EN/TR notices.

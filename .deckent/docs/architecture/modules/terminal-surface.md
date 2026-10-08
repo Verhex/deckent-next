@@ -121,7 +121,7 @@ Market notes live outside the repo (`/home/alperen/deckent-refactor-work/proof/T
   `terminal-composer`; `terminal-ledger` (pure work-ledger model, `notice()`, run/worker/approval watches, bridge snapshot)
   ← `terminal-work` (work surface, slash dispatch, approval/cancel flow, cards) ← `terminal` (workline root, sessions, mode;
   its barrel re-exports the lower units); split by responsibility to keep each unit within the 2000-line budget.
-- **Units (T3, 2026-10-07; `wave/tui-3`, not landed):** `cli-terminal` (TERMINAL-LAUNCH, L0): the interactive terminal launch, ledger ports
+- **Units (T3, 2026-10-07; `wave/tui-3`; released with alpha.11, PR #42):** `cli-terminal` (TERMINAL-LAUNCH, L0): the interactive terminal launch, ledger ports
   and terminal handler types, moved out of `cli`. Its own `TerminalLaunchContext` (the CLI `CommandContext` extends it). CLI commands arrive as
   ports (`runKernelCommand`, `mcpSlash`, `renderRunCancellation`, `runMcp`), so the unit never imports `cli`. The launch loads lazily
   (`launchTerminal`), which keeps the barrel off the Ink graph. Named `cli-*` because it calls `t()`; it also binds the panel ports
@@ -134,7 +134,7 @@ Market notes live outside the repo (`/home/alperen/deckent-refactor-work/proof/T
   (the monitor's `MonitorBody` through `monitorWindow`, the terminal never imports the monitor), `/watch-workers`, `/watch-runs`, `/tasks` as
   modal live windows updated in place (Esc closes and stops the watch, one summary line stays); a card, picker, `/resume` or settings window
   takes the screen and the live window returns after it. Config-change approvals speak in setting words in the approval window.
-- **Bounded windows (TUI2 L1, 2026-10-07; integrated on `wave/tui-2`, not landed):** unit `terminal-window` (← terminal-kit, terminal-render)
+- **Bounded windows (TUI2 L1, 2026-10-07; `wave/tui-2`; released with alpha.10, PR #37):** unit `terminal-window` (← terminal-kit, terminal-render)
   owns the `Window` frame (title left, status right, body capped to the terminal rows and scrolled by ↑↓/PgUp/PgDn/Home/End, wrapped key
   hints, widths in display cells, ASCII frame with ASCII glyphs; `exact` rows keep commands/patterns/previews character for character)
   and the window stack: one input owner, the top layer (approval priority, then newest); the composer, cards and pickers listen through
@@ -194,7 +194,7 @@ Market notes live outside the repo (`/home/alperen/deckent-refactor-work/proof/T
   against that refreshed revision. `/run` picks a human-titled run and opens state/tasks/attempts/delivery sections with muted short identities. `/workers` opens the same rows as the watch body, with the complete list scrollable.
   Every closed job/approval command flow leaves the one system summary line (below); cards, results, watch startup/delivery and background approval notifications no longer append ordinary notices or cards to chat. Watch delivery appears in its status row (none for a refused feed), approval notifications in the status strip; `/monitor` leaves a close summary, `/watch-stop` calls the same close path as Esc.
   Total runtime is not present in these query DTOs: existing age means last worker event age, never invented elapsed runtime.
-- **Slash windows (SLASH-WINDOWS, owner 2026-10-08; SW-1/SW-2/SW-3 integrated on `wave/slash-windows`, not landed):** `terminal-window` owns
+- **Slash windows (SLASH-WINDOWS, owner 2026-10-08; SW-1/SW-2/SW-3 on `wave/slash-windows`; released with alpha.15, PR #46):** `terminal-window` owns
   `InfoWindow` (projects every visible model word through the workline's known-secret / human-text projection before layout, choice ids
   unchanged — `projectInfoModel`; SW-3 list windows do the same through `projectSlashPickSpec` / `projectPickerTree`, Astra 2456 P1-2; typed `InfoWindowModel`: sections of bold-key rows, chips with shape and word, muted shortened identities, lists, tables,
   choices; Esc/Enter/q close) and `SystemSummaryLine` (`◆ Deckent system` / `# ` in ASCII, `systemRail`/`systemLabel` roles, wraps rather than
@@ -250,7 +250,7 @@ than found: hit cap, byte-cap cut, skipped or unscanned files). The terminal's g
 the "no matches" line (`+` when the search was not complete); without it (older result, other producer, final byte-cap cut) no
 summary is shown — hit rows are never parsed back, since a workspace path may contain `:` (Astra 2145 R2). Tool `version` unchanged.
 
-**TC-M host measurement harness (TERMINAL-S00-S01 source candidate, 2026-10-03).** The existing fake Workline TTY harness
+**TC-M host measurement harness (TERMINAL-S00-S01, 2026-10-03; landed, `efd2d78e`).** The existing fake Workline TTY harness
 observes frame bytes at the in-memory stdout writer with same-process monotonic clocks. One host collector retains raw samples,
 nearest-rank p50/p95, invalid/missing counts; unresolved/invalid/backward/equal clock readings remain `unmeasured` with null
 percentiles, never zero. Version/source/harness/lock digests, installed dependency versions, host environment and fixed workload
@@ -272,7 +272,7 @@ equal by a contract test) and the tokens left, a size-estimate split of the visi
 it), the last summary, the three largest items and a `/clear` suggestion at ≥ 60 %. Protocol unchanged (v16). Open: `/compact` (protocol
 decision), redrawing an open suggestion list when the index refreshes.
 
-**Readability, opening banner and theme (TERMINAL-UX T2 L2, owner 2026-10-07; integrated on `wave/tui-2`, not landed).**
+**Readability, opening banner and theme (TERMINAL-UX T2 L2, owner 2026-10-07; `wave/tui-2`; released with alpha.10, PR #37).**
 Token map `design/tokens/terminal.map.json` adds the roles `userBar`, `userLabel`, `assistantLabel`, `workerCard`, `windowBorder`,
 `windowTitle`, `selection`, `diffAdded`, `diffRemoved`, `modeIndicator` and four themes (`dark`, `light`, `dark-daltonized`,
 `light-daltonized`, each with reference backgrounds); `scripts/build-terminal-palette.mjs` emits per-theme palettes (`THEME_PALETTES`,
@@ -307,7 +307,7 @@ cards through `WorkerLineLabels.card` (`LedgerCardLabels`), so the run/worker/no
 Open: context percentage in `/status`, a real principal name for `/scope` (the host user name is shown), the monitor window (T3),
 stream-failure footers.
 
-**T2 integration (`wave/tui-2`, 2026-10-07, not landed).** Shift+Tab/Alt+M step the mode only while the window stack is idle
+**T2 integration (`wave/tui-2`, 2026-10-07; released with alpha.10, PR #37).** Shift+Tab/Alt+M step the mode only while the window stack is idle
 (`PermissionModeKeys` inside the `WindowStackProvider`): any open window owns them, not only a card or picker. Windows take the L2 roles
 (`windowBorder` frame, `windowTitle` title while focused, muted otherwise), the picker's selected row `selection`, the reason caret
 `focus`, approval diff rows the span roles `diffAdded`/`diffRemoved`; meaning stays in text (`+`/`-`, `>`, caret glyph). `/approvals`,
