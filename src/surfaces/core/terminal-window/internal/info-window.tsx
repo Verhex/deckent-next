@@ -1,7 +1,7 @@
-import { useRef, useState } from 'react';
-import { span, useRenderGlyphs } from '#surfaces/core/terminal-render/index.js';
+import { useMemo, useRef, useState } from 'react';
+import { projectHumanPickerText, span, useHumanTextSecrets, useRenderGlyphs } from '#surfaces/core/terminal-render/index.js';
 import { Window } from './window.js';
-import { INFO_GLYPHS_ASCII, INFO_GLYPHS_UNICODE, infoChoices, infoWindowLines, type InfoWindowLabelsShape, type InfoWindowModel } from './info-model.js';
+import { INFO_GLYPHS_ASCII, INFO_GLYPHS_UNICODE, infoChoices, infoWindowLines, projectInfoModel, type InfoWindowLabelsShape, type InfoWindowModel } from './info-model.js';
 
 export type InfoWindowLabels = InfoWindowLabelsShape;
 
@@ -10,9 +10,11 @@ export type InfoWindowLabels = InfoWindowLabelsShape;
  * bold keys, coloured chips with a word and a shape, muted shortened identities, lists, tables and a scrollable body. Esc, Enter or q
  * closes it (`onClose(null)`). With choices, ↑↓ move the highlight (the body follows it) and Enter answers the highlighted `id`.
  */
-export function InfoWindow({ model, labels, onClose, priority }: { readonly model: InfoWindowModel; readonly labels: InfoWindowLabels;
+export function InfoWindow({ model: raw, labels, onClose, priority }: { readonly model: InfoWindowModel; readonly labels: InfoWindowLabels;
   readonly onClose: (choice: string | null) => void; readonly priority?: number }) {
-  const glyphs = useRenderGlyphs();
+  const glyphs = useRenderGlyphs(), known = useHumanTextSecrets();
+  // Astra 2456 P1-2: known secrets are masked (and hidden code points marked) on every whole value before layout; choice ids are untouched.
+  const model = useMemo(() => projectInfoModel(raw, text => projectHumanPickerText(text, known).label), [raw, known]);
   const info = glyphs.ascii ? INFO_GLYPHS_ASCII : INFO_GLYPHS_UNICODE;
   const choices = infoChoices(model);
   const [selected, setSelected] = useState(0);

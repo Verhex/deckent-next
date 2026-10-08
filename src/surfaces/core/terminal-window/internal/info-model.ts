@@ -52,6 +52,23 @@ function tail(chip: InfoChip | undefined, id: string | undefined, glyphs: InfoGl
   return parts.flatMap((part, index) => [...(index > 0 || lead ? [span(' ')] : []), ...part]);
 }
 
+/**
+ * Every visible word of the model through `project` (the workline's known-secret / human-text projection), each value whole, before any
+ * shortening, alignment or wrapping (Astra 2456 P1-2: a secret split by a cut would escape a later per-span mask). Choice ids and the
+ * summary (projected where it is drawn, `LedgerEntryRow`) are left as they are; identities are projected before they are shortened.
+ */
+export function projectInfoModel(model: InfoWindowModel, project: (text: string) => string): InfoWindowModel {
+  const chip = (value: InfoChip | undefined) => value ? { chip: { ...value, text: project(value.text) } } : {};
+  const id = (value: string | undefined) => value === undefined ? {} : { id: project(value) };
+  return { ...model, title: project(model.title), ...(model.chips ? { chips: model.chips.map(item => ({ ...item, text: project(item.text) })) } : {}),
+    sections: model.sections.map(section => ({ ...section, ...(section.title === undefined ? {} : { title: project(section.title) }), ...chip(section.chip),
+      ...(section.rows ? { rows: section.rows.map(row => ({ ...row, key: project(row.key), value: project(row.value), ...chip(row.chip), ...id(row.id) })) } : {}),
+      ...(section.items ? { items: section.items.map(item => ({ ...item, text: project(item.text), ...chip(item.chip), ...id(item.id) })) } : {}),
+      ...(section.table ? { table: { columns: section.table.columns.map(project), rows: section.table.rows.map(row => row.map(project)) } } : {}),
+      ...(section.choices ? { choices: section.choices.map(entry => ({ ...entry, label: project(entry.label), ...(entry.detail === undefined ? {} : { detail: project(entry.detail) }), ...chip(entry.chip) })) } : {}),
+      ...(section.notes ? { notes: section.notes.map(project) } : {}) })) };
+}
+
 /** Every choice of the model in display order (the arrow keys move through this list). */
 export function infoChoices(model: InfoWindowModel): readonly InfoChoice[] {
   return model.sections.flatMap(section => section.choices ?? []);

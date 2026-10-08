@@ -1,8 +1,8 @@
-import { Fragment, useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
-import { ListPicker, pickerView, PICKER_INITIAL, type PickerLabels, type PickerState, type PickerTree } from '#surfaces/core/terminal-picker/index.js';
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { ListPicker, pickerView, projectPickerTree, PICKER_INITIAL, type PickerLabels, type PickerState, type PickerTree } from '#surfaces/core/terminal-picker/index.js';
 import { Window, type WindowLine } from '#surfaces/core/terminal-window/index.js';
 import { usePickerRoom } from '#surfaces/core/terminal-panels/index.js';
-import { fillTemplate, span } from '#surfaces/core/terminal-render/index.js';
+import { fillTemplate, projectHumanPickerText, span, useHumanTextSecrets } from '#surfaces/core/terminal-render/index.js';
 import type { ScratchView } from '#domain/index.js';
 import type { SlashCommand } from '#surfaces/core/terminal-kit/index.js';
 
@@ -43,7 +43,21 @@ export type SlashPickSpec = Readonly<{
   info?: true;
 }>;
 
-function SlashPickWindow({ spec, labels, onAnswer }: { readonly spec: SlashPickSpec; readonly labels: SlashWindowLabels; readonly onAnswer: (id: string | null) => void }): ReactNode {
+/**
+ * Astra 2456 P1-2: every visible word of a list window (title, status, body, rows, details) goes through the workline's known-secret /
+ * human-text projection, whole, before the picker or the window cuts or wraps it; row ids (what a pick answers) stay unchanged.
+ */
+export function projectSlashPickSpec(spec: SlashPickSpec, project: (text: string) => string): SlashPickSpec {
+  const line = (row: WindowLine): WindowLine => ({ ...row, spans: row.spans.map(part => ({ ...part, text: project(part.text) })),
+    ...(row.label ? { label: row.label.map(part => ({ ...part, text: project(part.text) })) } : {}) });
+  const body = spec.body;
+  return { ...spec, title: project(spec.title), ...(spec.status === undefined ? {} : { status: project(spec.status) }), tree: projectPickerTree(spec.tree, project),
+    ...(body ? { body: (focused: string | null) => body(focused).map(line) } : {}) };
+}
+
+function SlashPickWindow({ spec: raw, labels, onAnswer }: { readonly spec: SlashPickSpec; readonly labels: SlashWindowLabels; readonly onAnswer: (id: string | null) => void }): ReactNode {
+  const known = useHumanTextSecrets();
+  const spec = useMemo(() => projectSlashPickSpec(raw, text => projectHumanPickerText(text, known).label), [raw, known]);
   const [state, setState] = useState<PickerState>(PICKER_INITIAL);
   const room = usePickerRoom(spec.bodyRows ?? 2);
   const shown = pickerView(spec.tree, state), focused = shown.rows[shown.pos]?.id ?? null;

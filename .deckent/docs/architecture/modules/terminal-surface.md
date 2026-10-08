@@ -195,7 +195,8 @@ Market notes live outside the repo (`/home/alperen/deckent-refactor-work/proof/T
   Every closed job/approval command flow leaves the one system summary line (below); cards, results, watch startup/delivery and background approval notifications no longer append ordinary notices or cards to chat. Watch delivery appears in its status row (none for a refused feed), approval notifications in the status strip; `/monitor` leaves a close summary, `/watch-stop` calls the same close path as Esc.
   Total runtime is not present in these query DTOs: existing age means last worker event age, never invented elapsed runtime.
 - **Slash windows (SLASH-WINDOWS, owner 2026-10-08; SW-1/SW-2/SW-3 integrated on `wave/slash-windows`, not landed):** `terminal-window` owns
-  `InfoWindow` (typed `InfoWindowModel`: sections of bold-key rows, chips with shape and word, muted shortened identities, lists, tables,
+  `InfoWindow` (projects every visible model word through the workline's known-secret / human-text projection before layout, choice ids
+  unchanged — `projectInfoModel`; SW-3 list windows do the same through `projectSlashPickSpec` / `projectPickerTree`, Astra 2456 P1-2; typed `InfoWindowModel`: sections of bold-key rows, chips with shape and word, muted shortened identities, lists, tables,
   choices; Esc/Enter/q close) and `SystemSummaryLine` (`◆ Deckent system` / `# ` in ASCII, `systemRail`/`systemLabel` roles, wraps rather than
   truncates). Bare `/help` `/status` `/usage` `/doctor` `/scope` `/context` (SW-1) answer in information windows filled by terminal-admin
   (`terminalAdminPorts(...).info`, `/doctor` from `deckent doctor --json`, `/usage` budgets picked from `provider_spending`); `/help` lists the
@@ -210,7 +211,8 @@ Market notes live outside the repo (`/home/alperen/deckent-refactor-work/proof/T
   (error tone, once per text, even with no watch window open) use it. **Typed arguments (owner I-1, Jev b1e8286f):** with window words (`WorklineLabels.windows`, absent on TERM=dumb) a slash command typed
   with an argument runs bare in every host (slot, panel controller, watch windows, `/config` included); the window it opens shows once "Typed
   arguments are not used in the terminal; choose in the window." (`WindowNoteContext`, consumed when that window closes, never on an approval
-  card); the typed text is never shown. Without window words SW-1/SW-3 keep the text command, SW-2 job windows open bare and `/monitor <args>`
+  card); the typed text is never shown, and it is stripped before the queue, the "queued" notice and the composer's input history (recall and
+  the persistent port keep only `/command`; Astra 2456). Without window words SW-1/SW-3 keep the text command, SW-2 job windows open bare and `/monitor <args>`
   stays the text command. Line mode and the CLI keep arguments. **Opening (owner I-5, Jev 59f75361):** the first surface snapshot leaves one
   system line when runs or workers are active ("Work running: N runs, M workers · /runs /workers"), nothing when idle; the approval count
   stays in the status row. Settings windows (`/model` pin, `/config`, `/mcp`, `/provider`) report through the same system line.
