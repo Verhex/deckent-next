@@ -568,7 +568,7 @@ Core contracts and never requires editing Core. Core-memory law 10 records this 
   GET that needs the key (models list / key record, no redirect, bounded), mapped by `classifyProviderRejection` (an unknown 429 is
   `limit-reached`) → only on success the key goes to `setSecret` (runtime service, policy cell `secret`, audited by name). The key is never in
   env, files, rows, scrollback, audit or model text; workers never get it. The check runs in the terminal process. Results stay in the window
-  (owner 2026-10-08: slash output only in a window). Binding models to the key is T4-B (`models.connect` operation, owner 2026-10-08).
+  (owner 2026-10-08: slash output only in a window). Binding models to the key is T4-B (`models.connect` operation, owner 2026-10-08; landed in alpha.16).
 
 ### TERMINAL-UX T4-B contracts (2026-10-08, `wave/stage1`, released with alpha.16, PRs #47/#48; owner D1/D2 2026-10-08, Jev d84b248d, da5312fb)
 
