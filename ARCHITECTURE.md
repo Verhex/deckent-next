@@ -641,6 +641,17 @@ Core contracts and never requires editing Core. Core-memory law 10 records this 
   prompt, digest and rounds, or refuses typed — the configured `terminal.chat.reference` never answers in its place (S19). "Also make default"
   writes `terminal.defaultModel` (T4-B below). Rows show human words; the exact
   reference and the fixing command appear dimmed for the focused row only.
+- **W6 MODEL-SWITCH (owner 2026-10-09, lane author candidate):** selection has one scope/context confirmation. Before pinning, the same scoped
+  `ModelInvocationApplication.preview` checks current invocation policy, binding, active record, profile, native preparation, verified quote and
+  read-only account capacity; policy/profile are rechecked after preparation. No invocation claim, spend reservation or model send occurs. Known
+  protocol/price/budget failures lock the row with an EN/TR next step; confirmation rechecks them. Only an already-active identical binding whose
+  catalog revision is stale can be refreshed, using the existing governed `activate` command and its exact revision compare-and-set. Inactive or
+  changed bindings refuse; invocation admission stays exact. Cache-only profile migration changes version/cache, not binding/catalog/activation;
+  every turn resolves the current profile. Session pins remain keyed by conversation; a switch discards its old context measurement. Esc closes
+  preparation and a late completion cannot pin. Unknown future prompts, remote availability and catalog capability errors remain invocation gates.
+  Turn closure/restart prose comes from EN/TR catalogs (old English restart receipts are localized on replay without rewriting evidence).
+  Context counts stay numeric for admission and use locale-aware compact units for display; model windows come from the selected profile and
+  provider count, taking the smaller known window. Local author proof and unperformed HTTP/TLS fixture gate: external `proof/MODEL-SWITCH-2026-10-09/`.
 - **`/provider` (PROVIDER-CONNECT):** kinds and endpoints are adapter data (`adapters/core/provider-connect`, registry v1; ChatGPT sign-in listed
   unavailable). Connect: the address, where the kind takes one, is chosen from a list (owner 2026-10-08 D3: the configured `inference_serving`
   server, the registry's known local servers, the provider default; a typed "new address…" is the last row only, checked by the endpoint rule —
