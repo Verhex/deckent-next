@@ -301,6 +301,9 @@ flowchart LR
   kazancı gösterir.
 - **Terminalde OpenRouter modelleri kullanın**: `/provider` ile kendi anahtarınızı bağlayın; araç ve akış çalışır,
   OpenRouter'ın bildirdiği her çağrı ücreti bütçenize kesinleşir.
+  İlk ücretli OpenRouter çağrısından önce https://openrouter.ai/settings/plugins sayfasında hiçbir eklentinin
+  "Prevent overrides" ile açık olmadığını kontrol edin ve OpenRouter kredi sınırını Deckent bütçenizden yüksek olmayacak
+  şekilde ayarlayın; Deckent bu iki ayarı göremez.
 - **Yedekleyin ve geri yükleyin**: `deckent backup create|verify|restore` şifreli, doğrulanabilir kurtarma kümeleri yazar;
   isterseniz zamanlayarak ve saklama süresiyle; geri yükleme yalnızca servis durmuşken çalışır.
 - **İşletin**: tüm kurulumlar için salt okunur `deckent monitor`, sağlık için `deckent doctor`, ayarlar için

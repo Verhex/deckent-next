@@ -303,6 +303,8 @@ flowchart LR
   by your choice; `/usage` shows the live account in USD, cache reads and writes, and the estimated net benefit.
 - **Use OpenRouter models in the terminal**: connect your key in `/provider`; tools and streaming work, and the cost
   OpenRouter reports settles each call under your budget.
+  Before the first paid OpenRouter call, check https://openrouter.ai/settings/plugins that no plugin is enabled with
+  "Prevent overrides", and set an OpenRouter credit limit no higher than your Deckent budget; Deckent cannot see either setting.
 - **Back up and restore**: `deckent backup create|verify|restore` writes encrypted, verifiable recovery sets, on a schedule
   if you choose, with retention; a restore runs only while the service is stopped.
 - **Operate**: `deckent monitor` for a read-only view of every installation, `deckent doctor` for health, `deckent
