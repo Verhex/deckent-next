@@ -150,13 +150,16 @@ export class ModelConnectApplication {
     const responseMaxBytes = this.deliverable(bytes => ports.delivers(build(1, bytes), binding));
     const authored = { global: layers.global['provider_invocation_profiles'] !== undefined, project: layers.project['provider_invocation_profiles'] !== undefined };
     const targets: ModelConnectLayer[] = authored.global && authored.project ? ['global', 'project'] : authored.global ? ['global'] : ['project'];
+    const mine = (item: Record<string, unknown>) => item['scopeId'] === scopeId && (item['id'] === profileId || isDeepStrictEqual(item['reference'], target.reference));
+    const layerProfiles = (layer: ModelConnectLayer) => ((layers[layer]['provider_invocation_profiles'] as { profiles?: Record<string, unknown>[] } | undefined)?.profiles) ?? [];
     for (const layer of targets) {
-      const profiles = ((layers[layer]['provider_invocation_profiles'] as { profiles?: Record<string, unknown>[] } | undefined)?.profiles) ?? [];
-      const mine = (item: Record<string, unknown>) => item['scopeId'] === scopeId && (item['id'] === profileId || isDeepStrictEqual(item['reference'], target.reference));
+      const profiles = layerProfiles(layer);
       const existing = profiles.find(mine), version = typeof existing?.['version'] === 'number' ? existing['version'] : 1;
-      // An existing profile keeps what the person chose in its definition (CACHE-SLICE1: no silent cache migration on a re-run).
-      const previous = (existing?.['adapter'] as { definition?: unknown } | undefined)?.definition;
-      const shaped = existing ? ports.adapter(kind.id, { ...adapterInput, existing: previous && typeof previous === 'object' ? previous as JsonObject : {} }) : adapter;
+      // An existing profile keeps what the person chose in its definition (CACHE-SLICE1: no silent cache migration on a re-run). A layer without
+      // its own copy takes the other authored layer's (the user layer first), so a project copy stays equal to the user-layer profile.
+      const known = existing ?? targets.map(item => layerProfiles(item).find(mine)).find(Boolean);
+      const previous = (known?.['adapter'] as { definition?: unknown } | undefined)?.definition;
+      const shaped = known ? ports.adapter(kind.id, { ...adapterInput, existing: previous && typeof previous === 'object' ? previous as JsonObject : {} }) : adapter;
       if (existing && isDeepStrictEqual(existing, build(version, responseMaxBytes, shaped))) continue;
       const stopped = await write('provider_invocation_profiles', { schemaVersion: 1, profiles: [...profiles.filter(item => !mine(item)), build(existing ? version + 1 : 1, responseMaxBytes, shaped)] },
         layer, step(command.commandId, 'profile', layer));

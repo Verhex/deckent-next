@@ -37,8 +37,8 @@ describe('connect registry data: the cache default of new profiles', () => {
 });
 
 /** `models.connect` over in-memory governed ports: the config writes are recorded, everything else is already in place. */
-function connectHarness(project: Record<string, unknown>) {
-  const writes: { keyPath: string; value: unknown }[] = [], state = { project: structuredClone(project) };
+function connectHarness(project: Record<string, unknown>, global: Record<string, unknown> = {}) {
+  const writes: { keyPath: string; value: unknown; layer: string }[] = [], state = { project: structuredClone(project), global: structuredClone(global) };
   const digest = { encodingVersion: 1 as const, algorithm: 'sha256' as const, digest: 'd'.repeat(64) };
   const ports: ModelConnectPorts = {
     kind: id => { const kind = providerConnectKind(id); return kind && { id: kind.id, available: kind.available, endpoint: kind.endpoint, keyRequired: true, connect: kind.connect }; },
@@ -47,8 +47,9 @@ function connectHarness(project: Record<string, unknown>) {
     secretName: () => 'DECKENT_ANTHROPIC_KEY', seed: readProviderConnectSeed,
     adapter: (id, value) => connectionAdapter(providerConnectKind(id)!, value),
     principal: async () => ({ issuer: 'local', subject: 'me' }) as never,
-    layers: async () => ({ global: {}, project: state.project, effective: state.project }),
-    write: async change => { writes.push({ keyPath: change.keyPath, value: change.value }); state.project = { ...state.project, [change.keyPath]: change.value }; return null; },
+    layers: async () => ({ global: state.global, project: state.project, effective: { ...state.global, ...state.project } }),
+    write: async change => { writes.push({ keyPath: change.keyPath, value: change.value, layer: change.layer });
+      state[change.layer] = { ...state[change.layer], [change.keyPath]: change.value }; return null; },
     catalogHas: async () => true, register: async () => undefined,
     binding: async () => ({ status: 'declared', catalogRevision: 'catalog', definition: {} as never, binding: digest }),
     activation: async () => ({ state: 'active', catalogRevision: 'catalog', binding: digest, revision: 1 }) as never,
@@ -62,6 +63,20 @@ const profileWrites = (writes: readonly { keyPath: string; value: unknown }[]) =
   .map(write => (write.value as { profiles: { adapter: { definition: Record<string, unknown> }; version: number }[] }).profiles);
 
 describe('models.connect writes the cache default only for a new profile', () => {
+  it('both layers author profiles and only the user layer has this one (no cache field): the project copy is written equal to it, without a cache field', async () => {
+    const first = connectHarness({});
+    await first.app.connect(connectCommand);
+    const written = (first.state.project['provider_invocation_profiles'] as { profiles: { adapter: { definition: Record<string, unknown> } }[] }).profiles[0]!;
+    const definition = { ...written.adapter.definition }; delete definition['cache'];
+    const legacy = { ...written, adapter: { ...written.adapter, definition } };
+    const run = connectHarness({ provider_catalog: first.state.project['provider_catalog'], provider_invocation_profiles: { schemaVersion: 1, profiles: [] } },
+      { provider_invocation_profiles: { schemaVersion: 1, profiles: [legacy] } });
+    await run.app.connect({ ...connectCommand, commandId: 'both-layers' });
+    const project = run.writes.filter(write => write.keyPath === 'provider_invocation_profiles');
+    expect(project.map(write => write.layer)).toEqual(['project']);
+    expect((project[0]!.value as { profiles: unknown[] }).profiles).toEqual([legacy]);
+  });
+
   it('a new Anthropic profile is written with cache 5m; the same command again changes nothing', async () => {
     const run = connectHarness({});
     expect((await run.app.connect(connectCommand)).steps.profile).toBe('written');
