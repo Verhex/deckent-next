@@ -946,7 +946,7 @@ The Markdown gate admits the five product/roadmap documents `README.md`, `ARCHIT
 `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `SECURITY.md`, `.github/PULL_REQUEST_TEMPLATE.md`,
 `.github/ISSUE_TEMPLATE/bug_report.md`, `.github/ISSUE_TEMPLATE/feature_request.md`;
 public reader guides `docs/glossary{,.tr}.md` and `docs/architecture-overview{,.tr}.md` (owner-approved pre-beta DOC-03/DOC-04 fixes, 2026-10-09);
-≤70-line permanent product-development contracts `CLAUDE.md`, `AGENTS.md`;
+byte-identical ≤70-line public contributor guidance `CLAUDE.md`, `AGENTS.md` (DOC-01, 2026-10-09);
 ≤5-line pointer `.codex/AGENTS.md`; `.deckent/docs/core-memory/*.md`;
 and the explicit refactor host-kit globs in `arch.json`: the remaining 20 `.agents/skills/<skill>`
 directories/references plus `.claude/agents`, `.claude/rules`, `.codex/rules`.
@@ -961,6 +961,14 @@ Owner 2026-10-02: `deckent-next-refactor` retains its name as the shared entry g
 Next development, fixes, refactoring, reviews and handoffs. Codex, Claude and Cursor resolve this skill
 to the same `.agents/skills/deckent-next-refactor` source; specialist skills supply task-specific methods.
 Jev details live in the skill's `jev-workflow.md`, read before case preparation or consultation.
+ROOT-DOCS (DOC-01/DOC-06, owner 2026-10-09): the complete former root contract is retained verbatim for
+`.agents/skills/deckent-next-refactor/internal-contract.md`; the skill must require reading it first.
+The internal guide and exact skill patch are staged in external `proof/ROOT-DOCS-2026-10-09/` for lead transfer
+with the public roots. Existing Claude rules and the Cursor always-apply rule select the internal skill;
+a full source clone therefore cannot be claimed to load public rules only. Fresh session loading and
+the public export boundary remain to verify. CONTRIBUTING requires responsibility, testing and a brief PR
+disclosure of material AI assistance; prompts/transcripts are not required and the review bar is shared.
+Bulk automated PRs require prior agreement in an issue. Author checks do not establish independent acceptance.
 Owner 2026-10-06 host amendment: checks remain Noul, with local advisory non-binary/multi-question diagnostics;
 report v3 orders recorded requests by time within a bounded scan and exposes missing decision/outcome and label coverage.
 Undated/truncated recency and absent outcomes remain unknown; agreement is not correctness. Provider thresholds,

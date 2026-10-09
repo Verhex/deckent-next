@@ -138,6 +138,23 @@ The root `README` files introduce the product, `docs/` explains public concepts 
 folders contain maintainer coordination and historical notes, which can include Turkish text.
 You do not need a private development dashboard to submit a contribution.
 
+## AI-assisted contributions
+
+AI-assisted contributions follow the same review bar as every other contribution.
+You must be able to explain the change, run the relevant checks and take responsibility
+for its correctness, security and suitability for the project.
+
+Material AI assistance means AI-generated or AI-directed code, tests, documentation or
+design decisions that substantially shape the submitted change, beyond spelling fixes
+or routine autocomplete.
+
+Briefly disclose material AI assistance in the PR description and identify what it helped
+with; if there was none, say so. Prompt or transcript uploads are not required.
+For example: “AI assistance: helped draft the parser tests; I reviewed the assertions
+and ran the targeted checks.” A disclosure does not replace an explanation or test evidence.
+
+Bulk automated PRs require prior agreement with maintainers in an issue before submission.
+
 ## Pull request expectations
 
 - Explain the problem, resulting behavior and affected paths. Link an issue when available.

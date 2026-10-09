@@ -5,6 +5,11 @@ description: Guide owner-admitted Deckent Next development, fixes, refactoring, 
 
 # Deckent Next development workflow
 
+Before following this workflow or acting on an internal Next card, read
+[internal-contract.md](internal-contract.md) in full. It retains the complete internal
+operating contract moved from the root guidance. If it is missing or unreadable,
+stop internal work and report the missing contract. Reuse the read only while it is unchanged.
+
 ## Purpose and authority
 
 This is the shared development entry point for Codex, Claude and Cursor. Its retained name

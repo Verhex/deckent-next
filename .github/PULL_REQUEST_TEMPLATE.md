@@ -10,6 +10,9 @@
 Describe the problem, what changes for the user and the bounded file/contract ownership.
 For worker delivery, identify the retained patch and final report; preserve attribution.
 
+- [ ] Material AI assistance briefly disclosed below (or stated as none); I can explain the change, ran the relevant checks and take responsibility for it.
+- AI assistance (what it helped with, or none; prompts/transcripts are not required):
+
 ## Checks run
 
 List **exact commands**, exit codes/results, candidate SHA and retained proof location.
