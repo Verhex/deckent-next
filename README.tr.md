@@ -96,10 +96,11 @@ flowchart LR
 ```
 
 1. **Kurulum**, proje başına bir kez: `deckent init policy --scope <id> --preview` ilk kurulum policy'sini gösterir,
-   `deckent init policy --scope <id> --apply` onu kurar. Bu policy o kapsamda model bağlamanıza ve çağırmanıza,
+   `deckent init policy --scope <id> --apply` onu kurar, varsayılan terminal kapsamını ve sohbet sınırlarını
+   yazar; iptal ayarlarını ve göçü tamamlanmış boş ledger’ı oluşturur. Örneğin kapsam adı olarak `my-project` seçin. Bu policy o kapsamda model bağlamanıza ve çağırmanıza,
    anahtar saklamanıza ve bütçe belirlemenize izin verir; bu eylemlerin her biri yine kontrol edilir ve kaydedilir.
    Linux, WSL ve macOS'ta yeni bir kurulum şifreli anahtar deposuyla başlar.
-2. **Terminali açın**: `deckent`.
+2. **Terminali açın**: `deckent` (kapsamı açıkça seçmek için `deckent --scope my-project`).
 3. **Sağlayıcı bağlayın**: `/provider` ile Anthropic API, OpenAI API, DeepSeek API, Z.ai GLM, herhangi bir OpenAI uyumlu
    adres ya da vLLM gibi yerel bir sunucu. Anahtarı gizlenen bir alana yazarsınız; Deckent onu ücretsiz bir istekle
    dener ve gizli depoya adıyla saklar; denemenin reddettiği anahtar asla saklanmaz. Ücretsiz denemesi olmayan bir
@@ -300,21 +301,32 @@ flowchart LR
 
 ## Başlarken
 
-Deckent, Linux ya da Windows WSL2 üzerinde Node.js ≥ 24.15.0 ile çalışır (Node 24 ve 26 desteklenir); kodlama
-işçileri için Docker gerekir. npm paketi yayımlanana kadar bir kez kaynaktan derleyin:
+Deckent Linux veya Windows üzerinde WSL2 ile, Node.js ≥ 24.15.0 kullanarak çalışır (Node 24 ve 26 desteklenir).
+Native Windows runtime taşıması desteklenmez. Yeni kaynak derlemesi, kilitli bubblewrap’ı (şu an 0.13.0)
+derleyip yerleştirmek için Docker ister; kilitli kaynağı indirir, kaynak ve binary özetlerini doğrular.
+Doğrulanmış hazır paket çevrimdışı yeniden kullanılabilir. Sistem bubblewrap seçilirse sürümü en az 0.12.0
+olmalıdır. Kodlama işçileri de Docker ister; ilk terminal oturumu Docker veya ücretli çağrı gerektirmez.
+npm paketi yayımlanana kadar bir kez kaynaktan derleyin:
 
 ```sh
 git clone https://github.com/Verhex/deckent-next.git && cd deckent-next
 npm ci && npm run build && npm link
 ```
 
+Bağladıktan sonra Deckent kaynak dizininin dışındaki kendi proje klasörünüze geçin.
+Uzun ve boşluklu yollar çalışır: yerel soket, kuruluma özel kısa ve 0700 izinli dizini kullanır.
+`npm run build`, kilitli bubblewrap yerleştirilemezse açık bir hatayla durur; Docker’ı başlatıp yeniden deneyin
+veya `DECKENT_BWRAP_BUILD=<doğrulanmış build-bwrap çıktısı> npm run build` kullanın.
+
 Bundan sonra her şey `deckent` ile yapılır:
 
 ```sh
 deckent --version
-deckent                                   # etkileşimli terminali aç
-deckent doctor                            # kurulum sağlığı
-deckent init policy --scope <id> --apply  # bir proje için ilk kurulum policy'si (bkz. Adım adım ilk oturum)
+deckent init policy --scope my-project --preview
+deckent init policy --scope my-project --apply
+deckent doctor                            # kurulum başlayamazsa sıfır dışı çıkış
+deckent                                   # init ile seçilen kapsamda açılır
+# deckent --scope my-project               # açık kapsam seçimi, aynı terminal
 deckent init preview --profile <dosya>    # bir proje için kurulumu önizle
 deckent mcp add context7 -- npx -y @upstash/context7-mcp   # MCP sunucusu ekle
 deckent monitor                           # kurulumları ve işleri izle

@@ -97,10 +97,11 @@ flowchart LR
 ```
 
 1. **Set up** once per project: `deckent init policy --scope <id> --preview` shows the first-run policy and
-   `deckent init policy --scope <id> --apply` installs it. It lets you connect and call models, keep keys and set
+   `deckent init policy --scope <id> --apply` installs it, writes the default terminal scope and chat limits,
+   and initializes cancellation settings and an empty migrated ledger. Choose a scope name such as `my-project`. It lets you connect and call models, keep keys and set
    budgets in that scope; every one of those actions is still checked and recorded. On Linux, WSL and macOS a fresh
    installation starts on the encrypted key store.
-2. **Open the terminal** with `deckent`.
+2. **Open the terminal** with `deckent` (or `deckent --scope my-project` for an explicit scope).
 3. **Connect a provider** with `/provider`: Anthropic API, OpenAI API, DeepSeek API, Z.ai GLM, any OpenAI-compatible
    address or a local server such as vLLM. You type the key into a masked field; Deckent checks it with a free request
    and stores it in the secret store under its name; a key the check rejects is never stored. Where a provider has no
@@ -302,21 +303,31 @@ flowchart LR
 
 ## Get started
 
-Deckent runs on Linux or Windows WSL2 with Node.js ≥ 24.15.0 (Node 24 and 26 are supported); Docker is needed for
-coding workers. Until the npm package is published, build it once from source:
+Deckent runs on Linux or Windows through WSL2 with Node.js ≥ 24.15.0 (Node 24 and 26 are supported).
+Native Windows runtime transport is not supported. A fresh source build needs Docker to build and stage the locked
+bubblewrap (currently 0.13.0); it downloads and verifies the locked source and binary digests. A verified staged
+bundle can be reused offline. System bubblewrap, when selected, must be ≥ 0.12.0. Docker is also required for coding
+workers; the first terminal session itself does not need Docker or a paid call. Until npm publication, build once:
 
 ```sh
 git clone https://github.com/Verhex/deckent-next.git && cd deckent-next
 npm ci && npm run build && npm link
 ```
 
+After linking, change to your own project folder, outside the Deckent source checkout.
+Long paths and spaces work: the local socket uses a short private directory per installation.
+`npm run build` fails clearly if it cannot stage the locked bubblewrap; start Docker and retry,
+or use `DECKENT_BWRAP_BUILD=<verified build-bwrap output> npm run build`.
+
 From then on, everything is `deckent`:
 
 ```sh
 deckent --version
-deckent                                   # open the interactive terminal
-deckent doctor                            # installation health
-deckent init policy --scope <id> --apply  # first-run policy for a project (see Your first session)
+deckent init policy --scope my-project --preview
+deckent init policy --scope my-project --apply
+deckent doctor                            # non-zero if setup cannot start
+deckent                                   # opens in the scope selected by init
+# deckent --scope my-project               # explicit scope, same terminal
 deckent init preview --profile <file>     # preview the installation for a project
 deckent mcp add context7 -- npx -y @upstash/context7-mcp   # add an MCP server
 deckent monitor                           # watch installations and work
