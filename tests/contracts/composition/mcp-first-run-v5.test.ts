@@ -1,3 +1,4 @@
+import { terminalRequest } from '../support/approval-terminal.js';
 import { appendFileSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -37,17 +38,12 @@ const mcpGrants = (data: string) => (JSON.parse(readFileSync(join(data, 'policy.
  * command id (the shared harness answers one card per turn). */
 async function turnOf(f: Awaited<ReturnType<typeof modeRuntime>>, name: string, args: Record<string, unknown>, decision: 'allow' | 'deny', turnId: string, fullAccess = false) {
   f.script(name, args);
-  const events: AgentTurnStreamEvent[] = [], pending: Promise<unknown>[] = [];
-  const result = await f.client.chatTurn({ schemaVersion: 1, scopeId: 'scope', turnId, messages: [{ role: 'user', content: 'go' }], ...(fullAccess ? { fullAccess: true as const } : {}) }, event => {
-    events.push(event);
-    if (event.kind === 'approval.requested') pending.push(f.client.decideApproval({ schemaVersion: 1, scopeId: 'scope', approvalId: event.approvalId,
-      commandId: `${decision}-${event.approvalId}`, expectedRevision: event.revision, decision, reason: 'Reviewed',
-      ...(event.decisionCapability ? { decisionCapability: event.decisionCapability } : {}) }));
-  });
-  await Promise.all(pending);
+  const answer = await terminalRequest(f, 'chatTurn', { schemaVersion: 1, scopeId: 'scope', turnId, messages: [{ role: 'user', content: 'go' }], ...(fullAccess ? { fullAccess: true as const } : {}) }, decision);
+  const events = answer.events as AgentTurnStreamEvent[];
+
   const finished = events.find(event => event.kind === 'tool.finished');
   const cards = events.filter(event => event.kind === 'approval.requested') as Extract<AgentTurnStreamEvent, { kind: 'approval.requested' }>[];
-  return { events, cards, status: finished?.kind === 'tool.finished' ? finished.status : null, note: String((result as { note?: unknown }).note ?? '') };
+  return { events, cards, status: finished?.kind === 'tool.finished' ? finished.status : null, note: String((answer.response.result as { note?: unknown }).note ?? '') };
 }
 const FULL_ACCESS = { id: 'company-full-access', effect: 'allow', actions: ['set'], scopes: ['scope'], principals: me, resource: { kind: 'permission-mode', ids: ['full-access'] } };
 async function v5Project(mode: Mode | null, person = me[0]!, extra: Record<string, unknown>[] = []) {

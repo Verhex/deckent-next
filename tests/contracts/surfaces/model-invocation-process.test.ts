@@ -138,8 +138,8 @@ type A5ProofInput = Readonly<{ root: string; project: string; env: Record<string
 function heldOpenRouterSpend(receipt: ModelInvocationResult['receipt']) {
   return expect.objectContaining({ schemaVersion: 3, measurement: null, descriptor: expect.objectContaining({ scopeId: receipt.claim.scopeId,
     invocationId: receipt.claim.invocationId, quote: expect.objectContaining({ currency: 'USD', maxChargeMinorUnits: 2,
-      pricing: expect.objectContaining({ id: 'openrouter-endpoint-tariff', version: 1 }),
-      meter: expect.objectContaining({ id: 'openrouter-text-reservation', version: 1 }) }) }),
+      pricing: expect.objectContaining({ id: 'openrouter-endpoint-tariff', version: 2 }), // OPENROUTER-GATE: tariff and meter v2
+      meter: expect.objectContaining({ id: 'openrouter-text-reservation', version: 2 }) }) }),
   disposition: expect.objectContaining({ state: 'held', reason: 'unknown', observedMinorUnits: null }) });
 }
 async function assertA5RejectedEvidence(input: A5ProofInput): Promise<void> {
@@ -168,9 +168,14 @@ async function assertA5RejectedEvidence(input: A5ProofInput): Promise<void> {
   expectNoRawBody(malformedReceipt, Buffer.from(malformedBody));
   expect(JSON.stringify(malformedReceipt)).not.toContain('prompt-malformed');
   expect(JSON.stringify(malformedReceipt)).not.toContain('never-evidence'); expect(input.bodies).toHaveLength(5);
-  const malformedReplay = await callMcp(input.project, input.env, 'invoke_model', input.command('malformed'));
-  expect(malformedReplay.structuredContent).toEqual({ replayed: true, receipt: malformedReceipt, response: null, contentStatus: 'retained', purge: null }); expect(input.bodies).toHaveLength(5);
-  expectNoRawBody((malformedReplay.structuredContent as ModelInvocationResult).receipt, Buffer.from(malformedBody));
+  // W3-AUTHORITY (lead 2026-10-09): the same actor (SDK) replays its own command id; MCP's replay of it is a cross-actor conflict, nothing sent.
+  const malformedReplay = await callSdk<ModelInvocationResult>(input.project, input.env, 'invoke', malformedPath);
+  expect(malformedReplay).toEqual({ ok: true, value: { replayed: true, receipt: malformedReceipt, response: null, contentStatus: 'retained', purge: null } }); expect(input.bodies).toHaveLength(5);
+  if (malformedReplay.ok) expectNoRawBody(malformedReplay.value.receipt, Buffer.from(malformedBody));
+  const malformedCrossActor = await callMcp(input.project, input.env, 'invoke_model', input.command('malformed'));
+  expect(malformedCrossActor.isError).toBe(true);
+  expect(JSON.parse((malformedCrossActor.content as { text: string }[])[0]!.text)).toMatchObject({ schemaVersion: 1, code: 'MODEL_INVOCATION_COMMAND_CONFLICT' });
+  expect(JSON.stringify(malformedCrossActor.content)).not.toContain('never-evidence'); expect(input.bodies).toHaveLength(5);
 
   input.setResponse('status'); const statusPath = join(input.root, 'status.json'); await writeFile(statusPath, JSON.stringify(input.command('status')), { mode: 0o600 });
   const status = JSON.parse((await timedExecute(process.execPath, [cli, 'models', 'invoke', '--input', statusPath, '--json'],
@@ -276,18 +281,20 @@ function invocationId(ledger: string, commandId: string): string {
 }
 function writeProcessPolicy(policyPath: string, identity: ReturnType<typeof readLocalOsIdentity>, target: string,
   allowed: boolean, evidenceAllowed = allowed, purgeAllowed = false, accountAllowed = false, auditAllowed = false) {
+  // W3-AUTHORITY: stdio MCP runs as the separate `<host>/mcp` actor; each rule names it explicitly next to the owner.
+  const people = [{ issuer: identity.issuer, subject: identity.subject }, { issuer: `${identity.issuer}/mcp`, subject: identity.subject }];
   return writeFile(policyPath, JSON.stringify({ schemaVersion: 1,
     revision: allowed ? (evidenceAllowed ? 'allow-with-evidence' : 'allow-without-evidence') : 'deny', restrictions: [], grants: allowed ? [
       { id: 'invoke-inspect', effect: 'allow', actions: ['invoke', 'inspect'], scopes: ['scope'],
-        principals: [{ issuer: identity.issuer, subject: identity.subject }], resource: { kind: 'model-invocation', ids: [target] } },
+        principals: people, resource: { kind: 'model-invocation', ids: [target] } },
       ...(accountAllowed ? [{ id: 'account-inspect', effect: 'allow', actions: ['inspect'], scopes: ['scope'],
-        principals: [{ issuer: identity.issuer, subject: identity.subject }], resource: { kind: 'provider-spend-account', ids: ['budget'] } }] : []),
+        principals: people, resource: { kind: 'provider-spend-account', ids: ['budget'] } }] : []),
       ...(auditAllowed ? [{ id: 'account-audit', effect: 'allow', actions: ['audit'], scopes: ['scope'],
-        principals: [{ issuer: identity.issuer, subject: identity.subject }], resource: { kind: 'provider-spend-account', ids: ['budget'] } }] : []),
+        principals: people, resource: { kind: 'provider-spend-account', ids: ['budget'] } }] : []),
       ...(purgeAllowed ? [{ id: 'purge-content', effect: 'allow', actions: ['purge-content'], scopes: ['scope'],
-        principals: [{ issuer: identity.issuer, subject: identity.subject }], resource: { kind: 'model-invocation', ids: [target] } }] : []),
+        principals: people, resource: { kind: 'model-invocation', ids: [target] } }] : []),
       ...(evidenceAllowed ? [{ id: 'inspect-content', effect: 'allow', actions: ['inspect-content'], scopes: ['scope'],
-        principals: [{ issuer: identity.issuer, subject: identity.subject }], resource: { kind: 'model-invocation', ids: [target] } }] : []),
+        principals: people, resource: { kind: 'model-invocation', ids: [target] } }] : []),
     ] : [] }), { mode: 0o600 });
 }
 async function assertAccountSurfaces(project: string, root: string, env: Record<string, string>, ledger: string,
@@ -337,6 +344,13 @@ async function assertAuditSurfaces(input: { project: string; root: string; env: 
   expect(JSON.stringify(limited)).toContain('MCP_RESPONSE_LIMIT');
   expect(await readFile(ledger)).toEqual(before);
   await input.writeConfig();
+  // W3-AUTHORITY (lead 2026-10-09): MCP runs as `<host>/mcp` and replays only its own command ids; it audits first, so the SDK's audit stays the latest.
+  const mcpCommand = { ...command, commandId: 'audit-process-mcp' };
+  const mcpAudit = await callMcp(project, env, 'audit_provider_spending', mcpCommand);
+  expect(mcpAudit.isError, JSON.stringify(mcpAudit.content)).not.toBe(true);
+  expect(mcpAudit.structuredContent).toMatchObject({ schemaVersion: 1, replayed: false, receipt: { command: mcpCommand } });
+  const mcpReplay = await callMcp(project, env, 'audit_provider_spending', mcpCommand);
+  expect(mcpReplay.isError).not.toBe(true); expect(mcpReplay.structuredContent).toEqual({ ...(mcpAudit.structuredContent as object), replayed: true });
   const result = await callSdk<ProviderSpendAuditResult>(project, env, 'audit-spending', path);
   if (!result.ok) throw new Error(`AUDIT_FAILED:${result.code}`);
   expect(result.value).toMatchObject({ schemaVersion: 1, replayed: false, receipt: { command,
@@ -344,8 +358,10 @@ async function assertAuditSurfaces(input: { project: string; root: string; env: 
   const cliReplay = JSON.parse((await timedExecute(process.execPath, [cli, 'models', 'audit-spending', '--input', path, '--json'],
     { cwd: project, env, timeout: 10_000 })).stdout);
   expect(cliReplay).toEqual({ ...result.value, replayed: true });
-  const mcpReplay = await callMcp(project, env, 'audit_provider_spending', command);
-  expect(mcpReplay.isError).not.toBe(true); expect(mcpReplay.structuredContent).toEqual(cliReplay);
+  // Cross-actor: MCP replaying the SDK's command id is refused as a conflict and records nothing.
+  const crossActor = await callMcp(project, env, 'audit_provider_spending', command);
+  expect(crossActor.isError).toBe(true);
+  expect(JSON.parse((crossActor.content as { text: string }[])[0]!.text)).toMatchObject({ schemaVersion: 1, code: 'PROVIDER_SPEND_CONFLICT' });
   expect(await callSdk(project, env, 'spending', queryPath)).toMatchObject({ ok: true, value: {
     schemaVersion: 2, checkpoint: inspected.value.checkpoint, audit: result.value.receipt, spendingHistoryIntegrity: 'consistent',
   } });
@@ -395,7 +411,13 @@ async function assertPurgedContent(input: { project: string; root: string; env: 
   const service = runtimeProcesses.at(-1)!; await stopRuntime(service); runtimeProcesses.splice(runtimeProcesses.indexOf(service), 1);
   await startRuntime(project, env);
   for (let index = 0; index < receipts.length; index++) {
-    expect(await callSdk(project, env, 'purge', join(root, `purge-${index}.json`)))
+    // W3-AUTHORITY (lead 2026-10-09): each purge is replayed by the actor that issued it; purge-1 came from MCP (`<host>/mcp`), so MCP replays it
+    // and the SDK's replay of that command id is the cross-actor conflict.
+    if (index === 1) {
+      const mcpReplay = await callMcp(project, env, 'purge_model_invocation_content', JSON.parse(await readFile(join(root, 'purge-1.json'), 'utf8')) as Record<string, unknown>);
+      expect(mcpReplay.isError).not.toBe(true); expect(mcpReplay.structuredContent).toEqual({ replayed: true, receipt: receipts[index] });
+      expect(await callSdk(project, env, 'purge', join(root, 'purge-1.json'))).toEqual({ ok: false, code: 'MODEL_INVOCATION_COMMAND_CONFLICT' });
+    } else expect(await callSdk(project, env, 'purge', join(root, `purge-${index}.json`)))
       .toEqual({ ok: true, value: { replayed: true, receipt: receipts[index] } });
     const replay = await callSdk<ModelInvocationResult>(project, env, 'invoke', join(root, ['first.json', 'malformed.json', 'large.json'][index]!));
     expect(replay).toMatchObject({ ok: true, value: { replayed: true, response: null, contentStatus: 'purged', purge: receipts[index] } });
@@ -532,28 +554,36 @@ describe.skipIf(process.platform !== 'linux')('[requires Linux local runtime soc
     const cliInspection = JSON.parse((await timedExecute(process.execPath, [cli, 'models', 'invocation', '--input', queryOnePath, '--json'],
       { cwd: project, env, timeout: 10_000, maxBuffer: 1_048_576 })).stdout) as ModelInvocationInspection;
     expect(cliInspection.invocation).toEqual(first);
-    replay = await callMcp(project, env, 'invoke_model', command('first'));
-    expect(replay.isError).not.toBe(true); expect(replay.structuredContent).toMatchObject({ replayed: true, receipt: first,
-      contentStatus: 'retained', response: { native: { model: 'vendor/model' } } }); expect(bodies).toHaveLength(1);
+    // W3-AUTHORITY (lead 2026-10-09): receipts are separated by actor. MCP runs as `<host>/mcp`, so replaying the SDK's command id is a
+    // different input: refused as a command conflict, with no new invocation and no provider call (no spend). MCP's own replay follows.
+    const crossActor = await callMcp(project, env, 'invoke_model', command('first'));
+    expect(crossActor.isError).toBe(true);
+    expect(JSON.parse((crossActor.content as { text: string }[])[0]!.text)).toMatchObject({ schemaVersion: 1, code: 'MODEL_INVOCATION_COMMAND_CONFLICT' });
+    expect(invocationCount('first')).toBe(1); expect(bodies).toHaveLength(1);
+    expect(first.outcome).toMatchObject({ state: 'responded' });
   });
 
   step('bounds MCP results before claim and on replay while SDK, CLI and MCP share the same receipts', async () => {
     const capCommand = command('mcp-result-cap'); const capPath = join(root, 'mcp-result-cap.json');
     await writeFile(capPath, JSON.stringify(capCommand), { mode: 0o600 });
-    // The inner result fits this limit; duplicated text/structured JSON-RPC does not.
-    const innerBytes = Buffer.byteLength(JSON.stringify(replay.structuredContent), 'utf8'), outerCap = innerBytes + 16;
-    expect(Buffer.byteLength(JSON.stringify({ jsonrpc: '2.0', id: 1, result: replay }) + '\n', 'utf8')).toBeGreaterThan(outerCap);
-    await writeConfig(outerCap);
-    const rejectedBeforeClaim = await callMcp(project, env, 'invoke_model', capCommand, false);
-    expect(rejectedBeforeClaim.isError).toBe(true);
-    expect(JSON.parse((rejectedBeforeClaim.content as { text: string }[])[0]!.text)).toMatchObject({ schemaVersion: 1,
-      code: 'MODEL_INVOCATION_RESULT_LIMIT', message: expect.stringMatching(/SDK.*CLI/) });
-    expect(invocationCount(capCommand.commandId)).toBe(0); expect(bodies).toHaveLength(1);
-    await writeConfig();
+    // MCP issues its own command, then replays it as the same actor: the stored receipt, retained content, no second provider call.
     const capAccepted = await callMcp(project, env, 'invoke_model', capCommand, false);
     expect(capAccepted.isError).not.toBe(true);
     expect(capAccepted.structuredContent).toMatchObject({ replayed: false }); expect(bodies).toHaveLength(2);
     const capReceipt = (capAccepted.structuredContent as ModelInvocationResult).receipt;
+    replay = await callMcp(project, env, 'invoke_model', capCommand);
+    expect(replay.isError).not.toBe(true); expect(replay.structuredContent).toMatchObject({ replayed: true, receipt: capReceipt,
+      contentStatus: 'retained', response: { native: { model: 'vendor/model' } } }); expect(bodies).toHaveLength(2);
+    // The inner result fits this limit; duplicated text/structured JSON-RPC does not.
+    const innerBytes = Buffer.byteLength(JSON.stringify(replay.structuredContent), 'utf8'), outerCap = innerBytes + 16;
+    expect(Buffer.byteLength(JSON.stringify({ jsonrpc: '2.0', id: 1, result: replay }) + '\n', 'utf8')).toBeGreaterThan(outerCap);
+    await writeConfig(outerCap);
+    const unclaimed = command('mcp-result-cap-unclaimed');
+    const rejectedBeforeClaim = await callMcp(project, env, 'invoke_model', unclaimed, false);
+    expect(rejectedBeforeClaim.isError).toBe(true);
+    expect(JSON.parse((rejectedBeforeClaim.content as { text: string }[])[0]!.text)).toMatchObject({ schemaVersion: 1,
+      code: 'MODEL_INVOCATION_RESULT_LIMIT', message: expect.stringMatching(/SDK.*CLI/) });
+    expect(invocationCount(unclaimed.commandId)).toBe(0); expect(bodies).toHaveLength(2);
     await writeConfig(1024);
     const cappedReplay = await callMcp(project, env, 'invoke_model', capCommand, false);
     expect(cappedReplay.isError).toBe(true);
@@ -565,9 +595,12 @@ describe.skipIf(process.platform !== 'linux')('[requires Linux local runtime soc
     expect(JSON.parse((cappedInspection.content as { text: string }[])[0]!.text)).toMatchObject({ schemaVersion: 1,
       code: 'MODEL_INVOCATION_RESULT_LIMIT', message: expect.stringMatching(/SDK.*CLI/) });
     expect(bodies).toHaveLength(2);
-    expect(await callSdk<ModelInvocationResult>(project, env, 'invoke', capPath)).toMatchObject({ ok: true, value: { replayed: true,
-      receipt: capReceipt, contentStatus: 'retained', response: { native: { model: 'vendor/model' } } } });
-    expect(bodies).toHaveLength(2);
+    // The SDK (owner actor) reads MCP's receipt through inspection; replaying MCP's command id is the cross-actor conflict, nothing sent.
+    const capQueryPath = join(root, 'mcp-result-cap-query.json');
+    await writeFile(capQueryPath, JSON.stringify({ schemaVersion: 2, scopeId: 'scope', invocationId: capReceipt.claim.invocationId, reference }), { mode: 0o600 });
+    expect(await callSdk<ModelInvocationInspection>(project, env, 'inspect', capQueryPath)).toMatchObject({ ok: true, value: { invocation: capReceipt } });
+    expect(await callSdk(project, env, 'invoke', capPath)).toEqual({ ok: false, code: 'MODEL_INVOCATION_COMMAND_CONFLICT' });
+    expect(invocationCount(capCommand.commandId)).toBe(1); expect(bodies).toHaveLength(2);
     await writeConfig();
 
     const secondPath = join(root, 'second.json'); await writeFile(secondPath, JSON.stringify(command('second')), { mode: 0o600 });

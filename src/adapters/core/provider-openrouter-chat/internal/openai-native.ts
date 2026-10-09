@@ -35,7 +35,10 @@ export function createOpenRouterOpenAiPricedNative(options: OpenRouterNativeOpti
       requestBodyDigest: createHash('sha256').update(prepared.body).digest('hex'), selectedEndpointTag: observation.tariff.selection.endpointTag }));
   };
   const delegate = createOpenAiChatNativePort({ ...(options.resolveCredential ? { resolveCredential: options.resolveCredential } : {}),
-    providerRouting: (definition, request) => quoteOpenRouterText(current(definition, request).tariff, wireRequest(definition, request), options.now()).provider as JsonObject,
+    providerRequestFields: (definition, request) => {
+      const reservation = quoteOpenRouterText(current(definition, request).tariff, wireRequest(definition, request), options.now());
+      return { provider: reservation.provider as JsonObject, ...reservation.requestControls };
+    },
     onResponse: observe,
     onFinalUsage(prepared, usage, _tier, frame) {
       if (!frame) return;
@@ -95,8 +98,8 @@ export function createOpenRouterOpenAiPricedNative(options: OpenRouterNativeOpti
       bodyDigest: createHash('sha256').update(prepared.body).digest('hex'), reservation,
       calculation: { inputBound: 'published-endpoint-prompt-or-context-including-tools', outputBound: 'requested-output-tokens', requestCount: 1 } };
     const quote = parseProviderSpendQuote({ schemaVersion: 1, scopeId: input.command.scopeId, requestDigest: input.requestDigest, profileDigest: input.profileDigest,
-      pricing: { id: 'openrouter-endpoint-tariff', version: 1, digest: reservation.tariffDigest, definition: observation.tariff.definition },
-      meter: { id: 'openrouter-chat-reservation', version: 1, evidenceDigest: providerSpendEvidenceDigest(evidence), evidence },
+      pricing: { id: 'openrouter-endpoint-tariff', version: observation.tariff.schemaVersion, digest: reservation.tariffDigest, definition: observation.tariff.definition },
+      meter: { id: 'openrouter-chat-reservation', version: reservation.schemaVersion, evidenceDigest: providerSpendEvidenceDigest(evidence), evidence },
       currency: 'USD', maxChargeMinorUnits: reservation.maxChargeMinorUnits });
     quotes.set(prepared, quote); return quote;
   } });

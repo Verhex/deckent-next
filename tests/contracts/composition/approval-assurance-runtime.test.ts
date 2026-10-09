@@ -1,6 +1,7 @@
 import { Client } from '@modelcontextprotocol/client';
 import { InMemoryTransport } from '@modelcontextprotocol/server';
 import { readFile } from 'node:fs/promises';
+import { terminalRequest } from '../support/approval-terminal.js';
 import { join } from 'node:path';
 import { Readable } from 'node:stream';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -61,61 +62,45 @@ async function turn(f: Runtime, turnId: string, path: string, answer: (event: Re
   return events;
 }
 
-describe.skipIf(process.platform !== 'linux')('B1 attested assurance through the runtime service', () => {
-  it('allows a hard-floor card only with the capability of the turn that asked; SDK, CLI, a lying channel, a forged capability and MCP are typed refusals', async () => {
-    const f = await modeRuntime({ ...HOST, grants: edit('allow', 'allow'), mode: null });
-    const seen: Record<string, unknown> = {};
-    // Every surface without the capability is refused while the card waits; the card's own answer then allows it.
-    const events = await turn(f, 'turn-surfaces', 'Makefile', async (event, base) => {
-      seen['sdk'] = await code(f.client.decideApproval({ ...base, commandId: 'sdk', decision: 'allow' }));
-      seen['cli'] = await cli(f, { ...base, commandId: 'cli', decision: 'allow' });
-      seen['lying'] = await code(f.client.decideApproval({ ...base, commandId: 'lying', decision: 'allow', channel: 'local-terminal-card' }));
-      seen['forged'] = await code(f.client.decideApproval({ ...base, commandId: 'forged', decision: 'allow', decisionCapability: 'A'.repeat(43) }));
-      seen['mcp'] = await mcp(f, { ...base, commandId: 'mcp', decision: 'allow' });
-      seen['pending'] = (await f.client.inspectApproval({ schemaVersion: 1, scopeId: 'scope', approvalId: event.approvalId }) as { status: string }).status;
-      seen['card'] = await code(f.client.decideApproval({ ...base, commandId: 'card', decision: 'allow', channel: 'local-terminal-card', decisionCapability: event.decisionCapability }));
+describe.skipIf(process.platform !== 'linux')('service-attested interactive human approval', () => {
+  it('refuses SDK, piped CLI, forged channel and a valid turn capability without interactive input/output; records stay pending', async () => {
+    const f = await modeRuntime({ ...HOST, grants: edit('require-approval', 'allow'), mode: null });
+    await turn(f, 'ordinary', 'src/b.ts', async (event, base) => {
+      for (const decision of ['allow', 'deny']) {
+        expect(await code(f.client.decideApproval({ ...base, commandId: `sdk-${decision}`, decision }))).toBe('APPROVAL_INTERACTIVE_REQUIRED');
+        expect(await cli(f, { ...base, commandId: `cli-${decision}`, decision })).toBe('APPROVAL_INTERACTIVE_REQUIRED');
+      }
+      expect(await code(f.client.decideApproval({ ...base, commandId: 'lying', decision: 'allow', channel: 'local-terminal-card',
+        decisionCapability: event.decisionCapability }))).toBe('APPROVAL_INTERACTIVE_REQUIRED');
+      for (const mode of ['piped-input', 'redirected-output']) {
+        const refused = await terminalRequest(f, 'decideApproval', { ...base, commandId: mode, decision: 'allow' }, undefined, mode);
+        expect(refused.response).toMatchObject({ ok: false, error: { code: 'APPROVAL_INTERACTIVE_REQUIRED' } });
+      }
+      expect(await mcp(f, { ...base, commandId: 'mcp', decision: 'allow' })).toContain('MCP_TOOL_UNKNOWN');
+      expect(await f.client.inspectApproval({ schemaVersion: 1, scopeId: 'scope', approvalId: event.approvalId })).toMatchObject({ status: 'pending' });
+      const accepted = await terminalRequest(f, 'decideApproval', { ...base, commandId: 'human', decision: 'allow', channel: 'local-cli' });
+      expect(accepted.response).toMatchObject({ ok: true, result: { status: 'decided', decision: { decision: 'allow', channel: 'local-cli', assurance: 'peer-session' } } });
     });
-    expect(seen['sdk']).toBe('APPROVAL_ASSURANCE_INSUFFICIENT');
-    expect(seen['cli']).toBe('APPROVAL_ASSURANCE_INSUFFICIENT');
-    expect(seen['lying']).toBe('APPROVAL_ASSURANCE_INSUFFICIENT');
-    expect(seen['forged']).toBe('APPROVAL_ASSURANCE_INSUFFICIENT');
-    expect(seen['mcp']).toContain('MCP_TOOL_UNKNOWN');
-    expect(seen['pending']).toBe('pending');
-    expect(seen['card']).toMatchObject({ status: 'decided', decision: { decision: 'allow', channel: 'local-terminal-card', assurance: 'turn-bound' } });
-    expect(events.find(event => event.kind === 'tool.finished')).toMatchObject({ status: 'ok' });
-    expect(await readFile(join(f.project, 'Makefile'), 'utf8')).toBe('{}\n');
-    // The harness answers as the terminal card of the turn it started (it forwards the capability): turn-bound, its own channel default.
-    const result = await f.call('write_file', { path: 'package.json', content: '{}\n' }, 'allow');
-    expect(result).toMatchObject({ card: true, status: 'ok' });
-    const card = result.events.find(event => event.kind === 'approval.requested') as Requested;
-    expect(card.decisionCapability).toMatch(/^[A-Za-z0-9_-]{43}$/u);
-    expect(card).toMatchObject({ risk: 'edit-floor', requiredAssurance: 'turn-bound' });
-    expect(await f.client.inspectApproval({ schemaVersion: 1, scopeId: 'scope', approvalId: card.approvalId })).toMatchObject({ status: 'decided',
-      request: { schemaVersion: 3, facts: { risk: { source: 'cell', cell: 'edit-floor' }, onExpiry: 'nothing-runs', requiredAssurance: 'turn-bound' } },
-      decision: { schemaVersion: 2, decision: 'allow', assurance: 'turn-bound', channel: 'local-sdk' } });
+    expect(await readFile(join(f.project, 'src/b.ts'), 'utf8')).toBe('{}\n');
   }, 60_000);
 
-  it('keeps the solo owner\'s ordinary card one CLI step (peer-session), keeps SDK/CLI deny while MCP cannot change the pending record', async () => {
-    const f = await modeRuntime({ ...HOST, grants: edit('require-approval', 'allow'), mode: null });
-    const decided: Record<string, unknown> = {};
-    await turn(f, 'turn-cli', 'src/b.ts', async (_event, base) => { decided['cli'] = await cli(f, { ...base, commandId: 'cli-allow', decision: 'allow' }); });
-    expect(decided['cli']).toMatchObject({ status: 'decided', decision: { decision: 'allow', channel: 'local-cli', assurance: 'peer-session' } });
-    expect(await readFile(join(f.project, 'src', 'b.ts'), 'utf8')).toBe('{}\n');
-    await f.writeAuthority(edit('allow', 'allow'), null, 'r2');
-    const denied: Record<string, unknown> = {};
-    await turn(f, 'turn-deny-sdk', 'package.json', async (_e, base) => { denied['sdk'] = await f.client.decideApproval({ ...base, commandId: 'sdk-deny', decision: 'deny' }); });
-    await turn(f, 'turn-deny-cli', 'package.json', async (_e, base) => { denied['cli'] = await cli(f, { ...base, commandId: 'cli-deny', decision: 'deny' }); });
-    await turn(f, 'turn-deny-mcp', 'package.json', async (event, base) => {
-      denied['mcp'] = await mcp(f, { ...base, commandId: 'mcp-deny', decision: 'deny' });
-      denied['mcp-record'] = await f.client.inspectApproval({ schemaVersion: 1, scopeId: 'scope', approvalId: event.approvalId });
-      // Settle through the authorized SDK so the waiting turn completes after the negative proof.
-      await f.client.decideApproval({ ...base, commandId: 'sdk-after-mcp', decision: 'deny' });
+  it('requires both a real terminal and the initiating process capability on hard-floor cards; another terminal cannot allow them', async () => {
+    const f = await modeRuntime({ ...HOST, grants: edit('allow', 'allow'), mode: null });
+    await turn(f, 'foreign-terminal', 'Makefile', async (event, base) => {
+      for (const extra of [{}, { decisionCapability: 'A'.repeat(43) }, { decisionCapability: event.decisionCapability }]) {
+        const refused = await terminalRequest(f, 'decideApproval', { ...base, ...extra, commandId: `foreign-${Object.keys(extra).length}-${String(extra.decisionCapability).slice(0, 4)}`,
+          decision: 'allow', channel: 'local-terminal-card' });
+        expect(refused.response).toMatchObject({ ok: false, error: { code: 'APPROVAL_ASSURANCE_INSUFFICIENT' } });
+      }
+      const denied = await terminalRequest(f, 'decideApproval', { ...base, commandId: 'human-deny', decision: 'deny' });
+      expect(denied.response).toMatchObject({ ok: true, result: { status: 'decided', decision: { decision: 'deny' } } });
     });
-    for (const [surface, channel] of [['sdk', 'local-sdk'], ['cli', 'local-cli']] as const) {
-      expect(denied[surface]).toMatchObject({ status: 'decided', decision: { decision: 'deny', channel, assurance: 'peer-session' } });
-    }
-    expect(denied['mcp']).toContain('MCP_TOOL_UNKNOWN');
-    expect(denied['mcp-record']).toMatchObject({ status: 'pending' });
-    await expect(readFile(join(f.project, 'package.json'), 'utf8')).rejects.toMatchObject({ code: 'ENOENT' });
+    await expect(readFile(join(f.project, 'Makefile'), 'utf8')).rejects.toMatchObject({ code: 'ENOENT' });
+    f.script('write_file', { path: 'package.json', content: '{}\n' });
+    const accepted = await terminalRequest(f, 'chatTurn', { schemaVersion: 1, scopeId: 'scope', turnId: 'own-terminal', messages: [{ role: 'user', content: 'go' }] }, 'allow');
+    expect(accepted.response.ok).toBe(true);
+    expect(accepted.decisions).toEqual([expect.objectContaining({ ok: true, result: expect.objectContaining({ status: 'decided',
+      decision: expect.objectContaining({ assurance: 'turn-bound', channel: 'local-terminal-card' }) }) })]);
+    expect(await readFile(join(f.project, 'package.json'), 'utf8')).toBe('{}\n');
   }, 60_000);
 });

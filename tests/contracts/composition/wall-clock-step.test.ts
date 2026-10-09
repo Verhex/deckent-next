@@ -1,3 +1,4 @@
+import { terminalApproval } from '../support/terminal-runtime-client.js';
 import { DatabaseSync } from 'node:sqlite';
 import { randomBytes } from 'node:crypto';
 import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
@@ -56,7 +57,7 @@ describe.skipIf(process.platform !== 'linux')('configured reservation after a ba
       { request: { approvalId: string; createdAt: number; taskId: string } }[];
     expect(pending).toHaveLength(1); expect(pending[0]!.request).toMatchObject({ taskId: 'held', createdAt: base });
     wall.raw = base + 10;
-    const decided = await configuredApproval(project, 'decide', { schemaVersion: 1, scopeId: 's', approvalId: pending[0]!.request.approvalId,
+    const decided = await terminalApproval(project, 'decide', { schemaVersion: 1, scopeId: 's', approvalId: pending[0]!.request.approvalId,
       commandId: 'allow-held', expectedRevision: 0, decision: 'allow', reason: 'Reviewed' }, options) as { decision: { decidedAt: number } };
     expect(decided.decision.decidedAt).toBe(base + 10);
     wall.raw = base + 10 - 2 * MAX_WALL_SKEW_MS; // a step larger than the cross-process allowance; only the floor can absorb it

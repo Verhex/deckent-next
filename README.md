@@ -22,7 +22,7 @@ Every action by people, AI agents and tools is authorized, isolated, executed an
 <!-- Node and pre-release badges read public main package.json, not this local branch.
 Keep package.json version and CHANGELOG.md release line together at each release.
 npm badges: enable only after the first npm publish. The unscoped name `deckent` is not usable (conflicts with an existing
-package); the planned name is the scoped `@verhex/deckent` (owner 2026-10-07, not final). Verify package identity first.
+package); the planned name is the scoped `@verhex/deckent` (proposed name; not finalized). Verify package identity first.
 [![npm version](https://img.shields.io/npm/v/%40verhex%2Fdeckent)](https://www.npmjs.com/package/@verhex/deckent)
 [![npm downloads](https://img.shields.io/npm/dm/%40verhex%2Fdeckent)](https://www.npmjs.com/package/@verhex/deckent)
 -->
@@ -43,8 +43,9 @@ is the tower and the runway together. It decides what a person or an agent may d
 place, and keeps a durable record you can check afterwards.
 
 You talk to Deckent through its terminal, its `deckent` command, its MCP server or its SDK. All of them use the same
-typed contract, so a human click and an agent's tool call go through exactly the same identity, policy and approval
-checks. The open-source Core (Apache-2.0) works on its own; the proprietary Enterprise edition layers on top
+typed contract for identity, policy and approval checks. MCP uses a separate actor with observation-only default grants;
+changing budgets, activating models or invoking them requires an explicit policy grant naming that MCP actor.
+Human approval decisions require interactive terminal input and output. The open-source Core (Apache-2.0) works on its own; the proprietary Enterprise edition layers on top
 without changing Core.
 
 | | |
@@ -94,6 +95,18 @@ flowchart LR
   B --> M["5 · Choose a model<br/><sub>/model · session or default</sub>"]
   M --> W["6 · Work<br/><sub>approvals · modes</sub>"]
   W --> U["7 · Check usage<br/><sub>/usage · spend account</sub>"]
+```
+
+A **scope** is the stable identifier used to bind policy, work records and spending to this project.
+`--scope my-project` selects that identifier, not a directory or a sandbox. For a new project, choose
+it when previewing the initial policy; for an existing installation, use its configured scope ID.
+Reuse the same ID for subsequent commands. The terminal defaults to `terminal.scopeId`; open it with
+`deckent --scope my-project` to select this scope explicitly. See the [glossary](docs/glossary.md)
+for scope and realm definitions.
+
+```sh
+deckent init policy --scope my-project --preview
+deckent init policy --scope my-project --apply
 ```
 
 1. **Set up** once per project: `deckent init policy --scope <id> --preview` shows the first-run policy and
@@ -184,7 +197,7 @@ flowchart LR
   C -->|Shift+Tab| A["Full auto<br/><sub>sandboxed shell and MCP run</sub>"]
   A -->|Shift+Tab| F["Full access<br/><sub>company grant · this session · every call audited</sub>"]
   F -->|Shift+Tab| S
-  H[["Hard floor · closed in every mode<br/>Deckent configuration, policy, approvals, secrets, MCP registry"]]
+  H[["Hard floor · enforced in every sandbox mode<br/>Deckent configuration, policy, approvals, secrets, MCP registry"]]
 ```
 
 | Mode | Runs without asking | Asks first |
@@ -194,11 +207,16 @@ flowchart LR
 | **Full auto** | Edits, sandbox-contained shell commands, MCP calls | Destructive commands (`rm -r`, …), protected paths |
 | **Full access** | Everything company policy allows above the hard floor; every effect call is audited | The hard floor and whatever company policy still requires (a deny always wins); needs a company grant and lasts for the session |
 
-In standard, careful and full auto, a sandboxed shell command gets a **closed view**: the project is writable, `.git`
-is read-only, there is no network and your home directory is hidden. **Full access opens that view on purpose**: the
-host file system, your real home directory (with credentials masked), the network and `.git` writes become
-available, and only the hard floor stays masked. When no sandbox is usable on a machine, a `prefer-sandbox` realm runs
-on the host and says so on every approval card, while a `require-sandbox` realm refuses to run.
+In standard, careful and full auto, sandboxed shell commands get a **closed view**: the project is writable within the call's approval rules,
+`.git` is read-only, HOME is hidden and network access is off. Approved commands still cannot write Deckent authority files.
+Landlock also refuses permission and ownership changes, and cannot add or remove entries in directories holding protected paths.
+Full access requires a usable **open bubblewrap sandbox**: network and HOME are available, while Deckent state, configuration,
+credential patterns and host Docker/session D-Bus sockets remain masked or read-only. Without an open sandbox, full-access shell
+calls are refused, including an explicit `host` realm. Closed modes retain the visible `prefer-sandbox` host fallback;
+that fallback has no enforced filesystem boundary, so use `require-sandbox` when confinement is required.
+The shared credential registry covers gh, Docker, kube, Codex, Git credentials and common cloud CLIs. HOME masking is bounded
+(depth 3, 20,000 entries); custom locations, arbitrary filenames and aliases outside those masks need separate isolation.
+Full auto still asks before `find -delete`, file truncation (`>`, `>|`) and moves (`mv`); appends (`>>`) remain modifications.
 
 ### API keys
 
@@ -212,7 +230,9 @@ profile or a `.env` file: other tools read those.
 | `core.secret-store.file@1` | plain text, a 0600 file | Deckent and other programs running as your user |
 | `core.secret-store.encrypted-file@1` (recommended; fresh installs start here) | encrypted (AES-256-GCM); the unlock key sits in the same folder, no passphrase | Deckent; other programs running as your user can still open it |
 
-Agents and workers never receive a key: the sandbox hides the store and a provider answer that echoes the key is refused.
+Provider calls resolve keys inside the runtime; keys are not placed in prompts or the shell environment.
+Supported sandbox views hide the store; a host realm or fallback has no filesystem confinement.
+A provider answer that echoes a stored key is refused.
 `deckent doctor` shows which store is active and who can read it. When a provider refuses a key (401/403) or a limit is
 reached, the terminal says so in plain words; spend limits stay in your provider account.
 
@@ -283,6 +303,8 @@ flowchart LR
   by your choice; `/usage` shows the live account in USD, cache reads and writes, and the estimated net benefit.
 - **Use OpenRouter models in the terminal**: connect your key in `/provider`; tools and streaming work, and the cost
   OpenRouter reports settles each call under your budget.
+  Before the first paid OpenRouter call, check https://openrouter.ai/settings/plugins that no plugin is enabled with
+  "Prevent overrides", and set an OpenRouter credit limit no higher than your Deckent budget; Deckent cannot see either setting.
 - **Back up and restore**: `deckent backup create|verify|restore` writes encrypted, verifiable recovery sets, on a schedule
   if you choose, with retention; a restore runs only while the service is stopped.
 - **Operate**: `deckent monitor` for a read-only view of every installation, `deckent doctor` for health, `deckent
@@ -303,12 +325,22 @@ flowchart LR
 ## Get started
 
 Deckent runs on Linux or Windows WSL2 with Node.js ≥ 24.15.0 (Node 24 and 26 are supported); Docker is needed for
-coding workers. Until the npm package is published, build it once from source:
+the pinned bubblewrap build as well as coding workers. A C build toolchain is also required for the native
+sandbox helper. Until the npm package is published, build it once from source:
 
 ```sh
-git clone https://github.com/Verhex/deckent-next.git && cd deckent-next
-npm ci && npm run build && npm link
+git clone https://github.com/Verhex/deckent-next.git
+cd deckent-next
+npm ci
+node scripts/build-bwrap.mjs --arch all --out .pack/bwrap/first-build
+node scripts/build-bwrap.mjs --stage-dev .pack/bwrap/first-build
+npm run build
+npm link
 ```
+
+Use a fresh `--out` directory for another build. Do not proceed with sandbox work if the build reports
+`bubblewrap=ABSENT`; inspect the sandbox posture with `deckent doctor`. See the
+[contributor quickstart](CONTRIBUTING.md#a-30-minute-quickstart) for prerequisites and one test without a provider key.
 
 From then on, everything is `deckent`:
 
@@ -325,7 +357,9 @@ deckent --help                            # every command; deckent <command> --h
 
 ## Learn more
 
-- [ARCHITECTURE.md](ARCHITECTURE.md): contracts, layers and invariants
+- [Architecture overview](docs/architecture-overview.md): layers, security, extension points and current limits
+- [Glossary](docs/glossary.md): scope, realm, work lifecycle, approvals and spending
+- [ARCHITECTURE.md](ARCHITECTURE.md): detailed engineering contracts and implementation notes (English/Turkish)
 - [Operator reference](.deckent/docs/architecture/operator-reference.md): worker toolchains, worker images, coding
   profiles, patch custody and installation custody rules
 - [CHANGELOG.md](CHANGELOG.md): what each release brought

@@ -212,6 +212,12 @@ export function agentCallAuditEvent(input: AgentCallAuditInput, decision: AgentT
   return { ...base, subject: { kind: 'permission-mode', mode: relaxation.mode, cell: relaxation.cell, tool, call, grants: { company: relaxation.company, person: relaxation.person },
     decision: { previous: 'require-approval', next: 'allow' }, summary: input.summary } };
 }
+/** SBX-05 x company policy (lead 2026-10-09): the record of one write-set entry applied as approved by the owner's card `approvalId`. */
+export function approvedWriteEntryAuditEvent(input: AgentCallAuditInput, revision: string, approvalId: string, cell: 'edit' | 'edit-floor' | 'edit-self-source'): AuditEvent {
+  return { schemaVersion: AUDIT_EVENT_SCHEMA_VERSION, eventId: input.eventId, scopeId: input.scopeId, principal: { issuer: input.principal.issuer, subject: input.principal.subject },
+    policyRevision: revision, atMs: input.atMs, subject: { kind: 'sandbox-write-approved', approvalId, cell, tool: { name: input.tool.name, version: input.tool.version },
+      call: { ...input.call }, summary: input.summary } };
+}
 /** One list of a `tracked-files-changed` event: the full count and the first project-relative paths. */
 export interface TrackedFilesAuditList { readonly count: number; readonly paths: readonly string[] }
 /**

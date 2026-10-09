@@ -2,7 +2,7 @@ import { relative, resolve, sep } from 'node:path';
 import { EffectError, type AgentToolOutcome, type EffectCommand } from '#domain/index.js';
 import { EffectApplication, OperationPolicyAuthorization, agentToolArgumentsDigest, type AgentTurnShellPosture, boundApprovalPreview, classifyReadOnlyShellCommand, classifyShellContainment, classifyShellMutation,
   classifyShellRisk, shellPermissionTier, type EffectApprovalGate, type ShellPermissionTier, type ShellRiskClassification } from '#engine/index.js';
-import { globalStateRoot, loadConfig, SystemTrustedClock, type ConfigLoadOptions, type Locale } from '#platform/index.js';
+import { globalStateRoot, loadConfig, SystemTrustedClock, t, type ConfigLoadOptions, type Locale } from '#platform/index.js';
 import { agentShellEffectCommandId, createGlobMatcher, createLocalPeerSession, createShellPathContext, createShellProtectedNames, createShellWriteContext, describeHostShellResult,
   describeShellEffectRefusal, hostShellCleanupNote, HOST_SHELL_COMMAND_MAX_CHARS, HOST_SHELL_RUN_OPERATION, HOST_SHELL_TARGET_KIND, HostShellTarget, HOST_SHELL_NOTES, resolveShellRealm,
   describeSandboxWriteSet, openShellRealm, prepareSandboxWriteSetDirectory, removeSandboxWriteSetDirectory, type SandboxWriteDecider, sandboxWriteView, shellPostureFacts, shellSandboxCapabilities, shellWritePosture,
@@ -40,7 +40,7 @@ export function createAgentShell(input: { readonly scope: WorkspaceScope; readon
   /** MODES-3: the turn was launched in full access (its sandbox layout: the configuration file as the floor, `.git` writable). */
   readonly fullAccess?: boolean;
   /** SHELL-OVERLAY: the installation's configuration file inside the project (a write-set entry there is `edit-authority`). */
-  readonly authority?: (rel: string) => boolean; readonly selfSource?: boolean; readonly writeFloor?: (rel: string) => boolean;
+  readonly authority?: (rel: string) => boolean; readonly selfSource?: boolean; readonly writeFloor?: (rel: string) => boolean; readonly sealed?: (rel: string) => boolean;
   /** SHELL-OVERLAY: where this turn's write-set directories live (outside the project), or null when nowhere can (no write sets). */
   readonly writeSetRoot?: () => Promise<string | null>;
   /** The person's locale (the turn's reply language): the language of the notes a result explains itself with (B3). */
@@ -53,7 +53,7 @@ export function createAgentShell(input: { readonly scope: WorkspaceScope; readon
   const key = (tool: string, args: Record<string, unknown>) => agentToolArgumentsDigest(tool, args);
   /** The realm a call of this turn resolves: the configured mode against the service's (memoized) host measurement and the turn's providers. */
   const resolveRealm = async () => resolveShellRealm(input.config.realm, await shellSandboxCapabilities(globalStateRoot()), input.sandboxes);
-  /** OPEN-SANDBOX: the realm a call runs in — an open write posture on a realm that cannot open moves or says so (`openShellRealm`). One rule
+  /** OPEN-SANDBOX: the realm a call runs in — an open write posture on a realm that cannot open refuses (`openShellRealm`). One rule
    * for the card, the effect and the prompt's posture. */
   const callRealm = (realm: Extract<ShellRealmResolution, { ok: true }>, open: boolean) => open ? openShellRealm(realm, input.config.realm) : realm;
   /** The approval card's view of a planned call: `.execute` runs a carded call as `owner-approved` (mode.ts), so the card uses that authority;
@@ -61,8 +61,9 @@ export function createAgentShell(input: { readonly scope: WorkspaceScope; readon
   const cardView = (tool: string, args: Record<string, unknown>) => {
     const planned = plans.get(key(tool, args));
     if (!planned?.ok) return null;
-    const write = shellWritePosture('owner-approved', planned.tier, input.fullAccess === true);
-    return { planned, view: sandboxWriteView({ repositoryWritable: input.fullAccess === true }, write), realm: callRealm(planned.realm, write.open) };
+    const write = shellWritePosture('owner-approved', planned.tier, input.fullAccess === true, planned.tier === 'destructive' && planned.realm.writeSets === true);
+    const realm = callRealm(planned.realm, write.open);
+    return realm.ok ? { planned, view: sandboxWriteView({ repositoryWritable: input.fullAccess === true }, write), realm } : null;
   };
   const previewText = (tool: string, args: Record<string, unknown>): string | undefined => {
     const card = cardView(tool, args);
@@ -74,6 +75,7 @@ export function createAgentShell(input: { readonly scope: WorkspaceScope; readon
     if (command.length > HOST_SHELL_COMMAND_MAX_CHARS) return { ok: false, text: `[deckent] run_shell: error=command-too-long (max ${HOST_SHELL_COMMAND_MAX_CHARS} characters)` };
     const realm = await resolveRealm();
     if (!realm.ok) return { ok: false, text: `[deckent] run_shell: error=${realm.code}; nothing was run` };
+    if (input.fullAccess === true && !callRealm(realm, true).ok) return { ok: false, text: `[deckent] run_shell: error=SHELL_SANDBOX_UNAVAILABLE; ${t('agent.shell.fullAccessUnavailable', {}, input.language)}` };
     const paths = createShellPathContext(scope, undefined, roots);
     const readOnly = await classifyReadOnlyShellCommand(command, paths);
     const risk = classifyShellRisk(command, readOnly);
@@ -95,7 +97,7 @@ export function createAgentShell(input: { readonly scope: WorkspaceScope; readon
      * calls take. A full-access turn's calls run as `full-access` or `owner-approved`, both open (`shellWritePosture`; the tier does not
      * change `open` or the floor for either); any other turn's calls are closed whatever their authority. In the open view the turn's write
      * floor is the configuration file (turn.ts): read-only for a `full-access` call, and for an `owner-approved` one as `shellWritePosture`
-     * says (Astra 2192 R9: the owner's card opens its existing content). The realm is known now: the configuration, the
+     * says (W3: the owner's card never opens configuration content). The realm is known now: the configuration, the
      * memoized host measurement and the turn's providers are those of every call. Per call only an exception differs, and that call's result
      * says so (its `sandbox:` marker and notices): a full-access call whose grant no longer holds runs unattended in the closed view, and an
      * open view that cannot be built (a state root holding HOME, the HOME walk over its bound) refuses the call.
@@ -106,6 +108,7 @@ export function createAgentShell(input: { readonly scope: WorkspaceScope; readon
       const fullAccess = input.fullAccess === true, approved = shellWritePosture('owner-approved', 'other-modify', fullAccess);
       const open = shellWritePosture(fullAccess ? 'full-access' : 'owner-approved', 'other-modify', fullAccess).open;
       const realm = callRealm(resolved, open);
+      if (!realm.ok) return { kind: 'unavailable' };
       if (realm.containment === 'host' || realm.realm.kind === 'host') return { kind: 'host' };
       return open && realm.opens === true ? { kind: 'sandbox', realm: realm.realm.kind, open: true, configuration: approved.writeFloorReadOnly ? 'read-only' : 'owner-approved' }
         : { kind: 'sandbox', realm: realm.realm.kind, open: false };
@@ -168,8 +171,10 @@ export function createAgentShell(input: { readonly scope: WorkspaceScope; readon
       const directory = root ? await prepareSandboxWriteSetDirectory(root, commandId.slice(0, 32)) : null;
       const { writeFloorReadOnly } = posture, projectReadOnly = posture.projectReadOnly || (posture.writeSet && !directory);
       const unavailable = posture.writeSet && !directory ? `\n${HOST_SHELL_NOTES.writeSetUnavailable}` : '';
-      // OPEN-SANDBOX: the open view where the realm builds it, else `openShellRealm` (host under prefer-sandbox, closed under require-sandbox).
-      const realm = callRealm(planned.realm, posture.open), open = posture.open && realm.opens === true;
+      // Full access requires an enforcing open sandbox, before any effect target exists.
+      const realm = callRealm(planned.realm, posture.open);
+      if (!realm.ok) return { status: 'error' as const, text: `[deckent] run_shell: error=${realm.code}; nothing was run` };
+      const open = posture.open && realm.opens === true;
       const target = new HostShellTarget(scope.root, { realm, ...(open ? { open: true } : {}), timeoutMs: input.config.timeoutMs, extraEnv: input.config.environment, signal, onOutput, writeFloorReadOnly, projectReadOnly,
         ...(directory ? { writeSet: { upper: directory.upper, work: directory.work } } : {}),
         ...(input.scratch ? { fixedEnv: { TMPDIR: input.scratch.dir } } : {}), onResult: value => { result = value; } });
@@ -207,7 +212,7 @@ export function createAgentShell(input: { readonly scope: WorkspaceScope; readon
           ? protectedPathShellNote(planned.command, ran.output, onWriteFloor(scope.root, input.writeFloor), input.language) : null;
         // SHELL-OVERLAY: the command exited (whatever its code: a direct-write posture keeps its writes too), so its write set is decided
         // and applied now, entry by entry, like edits; the directory is removed afterwards.
-        const settled = directory && writes ? describeSandboxWriteSet(await settleSandboxWriteSet({ directory, scope, decider: writes, authority: input.authority ?? (() => false), selfSource: input.selfSource === true,
+        const settled = directory && writes ? describeSandboxWriteSet(await settleSandboxWriteSet({ directory, scope, decider: writes, authority: input.authority ?? (() => false), selfSource: input.selfSource === true, ...(input.sealed ? { sealed: input.sealed } : {}),
           context, peer: input.peer, scopeId, shellCommandId: commandId, signal })) : '';
         return { status: ran.exitCode === 0 ? 'ok' : 'error', text: `${describeHostShellResult(planned.command, ran, realm, counts)}${note}${floorNote ? `\n${floorNote}` : ''}${unavailable}${settled ? `\n${settled}` : ''}${trackedLine}`,
           cleanup: ran.cleanup };

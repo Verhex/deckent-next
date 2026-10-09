@@ -18,6 +18,10 @@ export function multiplyRate(rate: DecimalRate, count: number): DecimalRate {
   if (!Number.isSafeInteger(count) || count < 0) throw new OpenRouterPricingError('INVALID_REQUEST');
   return { coefficient: rate.coefficient * BigInt(count), scale: rate.scale };
 }
+export function maxRate(a: DecimalRate, b: DecimalRate): DecimalRate {
+  const scale = Math.max(a.scale, b.scale);
+  return a.coefficient * 10n ** BigInt(scale - a.scale) >= b.coefficient * 10n ** BigInt(scale - b.scale) ? a : b;
+}
 export function decimalText(rate: DecimalRate): string {
   if (rate.scale === 0) return rate.coefficient.toString();
   const digits = rate.coefficient.toString().padStart(rate.scale + 1, '0');

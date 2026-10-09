@@ -27,10 +27,11 @@ const runtime = (mode: 'full-auto' | 'auto-edit' = 'full-auto', grants = GRANTS,
 it.skipIf(!ready)('Astra: write deny prevents overlay deletion of an empty directory', async () => {
  const f=await runtime('full-auto',[...GRANTS.slice(0,2),rule('write-op','operation',['workspace.file.write'],'deny')]);
  await mkdir(join(f.project,'src','empty'));
- const result=await f.call('run_shell',{command:'d=empty; mv src/$d /tmp/removed-empty; echo done'});
+ const result=await f.call('run_shell',{command:'d=empty; mv src/$d /tmp/removed-empty; echo done'},'allow');
+ expect(result.card).toBe(true);
+ expect(result.events.find(event=>event.kind==='approval.requested')).toMatchObject({risk:'shell-destructive',undo:'irreversible'});
  const exists=existsSync(join(f.project,'src','empty'));
  const effects=f.rows("SELECT target_kind,target_id,state FROM effect_intents");
  console.log('ASTRA_DIRECTORY_DENY',JSON.stringify({result,exists,effects}));
- expect(result).toMatchObject({card:false});
  expect(exists).toBe(true);
 },120000);

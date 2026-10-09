@@ -21,10 +21,9 @@ describe('shell posture facts (T2-FOLLOWUP POSTURE)', () => {
   it('a full-access card: an open realm reaches the network and writes .git; a realm that cannot open stays closed or moves to the host', () => {
     const open = view('owner-approved', 'modify', true);
     expect(shellPostureFacts(sandbox('bubblewrap', { opens: true }), open)).toMatchObject({ git: 'writable', network: 'reachable', containment: 'sandbox' });
-    const kept = openShellRealm(sandbox('landlock'), 'require-sandbox');
-    expect(shellPostureFacts(kept, open)).toMatchObject({ realm: 'landlock', network: 'closed' });
-    const moved = openShellRealm(sandbox('landlock', { rejected: [{ kind: 'bubblewrap', reason: 'absent' }] }), 'prefer-sandbox');
-    expect(shellPostureFacts(moved, open)).toEqual({ realm: 'host', containment: 'host', project: 'writable', git: 'writable', network: 'reachable', passedOver: ['bubblewrap'] });
+    for (const mode of ['prefer-sandbox', 'require-sandbox'] as const) {
+      expect(openShellRealm(sandbox('landlock'), mode)).toMatchObject({ ok: false, code: 'SHELL_SANDBOX_UNAVAILABLE' });
+    }
   });
   it('a degraded sandbox says so, and every result is a valid wire value', () => {
     const facts = shellPostureFacts(sandbox('landlock', { containment: 'degraded' }), view('owner-approved', 'modify'));

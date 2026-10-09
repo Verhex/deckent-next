@@ -27,6 +27,9 @@ const REALMS = {
 } as const;
 /** The live policy's shape: `run_shell` require-approval marked mode-eligible, `host.shell.run` allowed. */
 const LIVE = [rule('shell-tool', 'agent-tool', ['run_shell'], 'require-approval', true), rule('shell-run', 'operation', ['host.shell.run'], 'allow')];
+/** SBX-05 x company policy (lead 2026-10-09): an approved destructive call's writes are decided like edits, so the cases that prove an approved
+ * floor write carry the first-run template's project write grant (every real installation has it; without it no edit could land either). */
+const LIVE_WRITES = [...LIVE, rule('write-op', 'operation', ['workspace.file.write'], 'allow')];
 /** The owner's exact commands from the live session. */
 const OWNER_UNBOUNDED = ['touch /tmp/deckent-policy-test-$$ && ls -la /tmp/deckent-policy-test-$$', 'echo "policy test $(date +%H:%M:%S)"',
   'echo "full-auto otonom test: run_shell otomatik mi?" && date && whoami',
@@ -87,7 +90,7 @@ describe.skipIf(process.platform !== 'linux')('full-auto shell autonomy inside a
 
   for (const realm of ['bubblewrap', 'landlock'] as const) {
     it.skipIf(realm === 'bubblewrap' ? !bwrapReady : landlockAbi < 6)(`${realm}: the write floor never goes silent — a named floor path asks, a hidden one meets a read-only floor, an approved one writes`, async () => {
-      const f = await modeRuntime({ grants: LIVE, mode: 'full-auto', ...REALMS[realm] });
+      const f = await modeRuntime({ grants: LIVE_WRITES, mode: 'full-auto', ...REALMS[realm] });
       const manifest = join(f.project, 'package.json'), config = join(f.project, '.deckent/config.json');
       await writeFile(manifest, '{"name":"floor"}\n');
       const configured = await readFile(config, 'utf8');
@@ -163,8 +166,8 @@ describe.skipIf(process.platform !== 'linux')('full-auto shell autonomy inside a
       const f = await modeRuntime({ grants: LIVE, mode: 'full-auto', ...REALMS[realm] });
       const writeSet = realm === 'bubblewrap' && measured.bubblewrap.launcher?.overlay === true;
       const created = ['src/package.json', '.github/workflows/x.yml', 'Makefile', 'sub/Dockerfile', 'notes.txt'];
-      const commands = ['f=pack; echo X > src/${f}age.json', 'd=.git; mkdir -p ${d}hub/workflows && echo x > ${d}hub/workflows/x.yml', 'm=Make; echo x > ${m}file',
-        'mkdir -p sub && d=Docker; echo x > sub/${d}file', 'echo hi > notes.txt && cat notes.txt'];
+      const commands = ['f=pack; echo X >> src/${f}age.json', 'd=.git; mkdir -p ${d}hub/workflows && echo x >> ${d}hub/workflows/x.yml', 'm=Make; echo x >> ${m}file',
+        'mkdir -p sub && d=Docker; echo x >> sub/${d}file', 'echo hi >> notes.txt && cat notes.txt'];
       for (const [index, command] of commands.entries()) {
         const result = await f.call('run_shell', { command });
         expect({ command, card: result.card, status: result.status }).toEqual({ command, card: false, status: writeSet ? 'ok' : 'error' });
@@ -173,7 +176,7 @@ describe.skipIf(process.platform !== 'linux')('full-auto shell autonomy inside a
       for (const path of created) await expect(access(join(f.project, path))).rejects.toMatchObject({ code: 'ENOENT' });
       await expect(access(join(f.project, 'sub'))).rejects.toMatchObject({ code: 'ENOENT' });
       // Reading and writing outside the project stay silent and work; the narrow set writes the project as before.
-      expect(await f.call('run_shell', { command: 'cat src/a.ts && echo "$(date +%s)" > "$TMPDIR/stamp" 2>/dev/null; ls src' })).toMatchObject({ card: false });
+      expect(await f.call('run_shell', { command: 'cat src/a.ts && echo "$(date +%s)" >> "$TMPDIR/stamp" 2>/dev/null; ls src' })).toMatchObject({ card: false });
       // (`src/`: the Landlock realm's project root cannot gain entries — its carve, unchanged by this slice.)
       expect(await f.call('run_shell', { command: 'cp src/a.ts src/out.ts' })).toMatchObject({ card: false, status: 'ok' });
       expect(await readFile(join(f.project, 'src/out.ts'), 'utf8')).toBe('export const a = 1;\n');
@@ -181,8 +184,11 @@ describe.skipIf(process.platform !== 'linux')('full-auto shell autonomy inside a
   }
 
   it.skipIf(!bwrapReady)('bubblewrap: an owner-approved compound command still writes a new floor path', async () => {
-    const f = await modeRuntime({ grants: LIVE, mode: 'ask', ...REALMS.bubblewrap });
+    const f = await modeRuntime({ grants: LIVE_WRITES, mode: 'ask', ...REALMS.bubblewrap });
     expect(await f.call('run_shell', { command: 'f=pack; echo \'{}\' > src/${f}age.json' }, 'allow')).toMatchObject({ card: true, status: 'ok' });
     expect(await readFile(join(f.project, 'src/package.json'), 'utf8')).toBe('{}\n');
+    // SBX-05 x company policy: the floor file was applied as card-approved, recorded with the call's approval before its effect.
+    const approved = f.audit().map(record => record.event.subject).filter(subject => subject.kind === 'sandbox-write-approved');
+    expect(approved).toEqual([expect.objectContaining({ cell: 'edit-floor', approvalId: expect.any(String), summary: { kind: 'edit', path: 'src/package.json' } })]);
   }, 60_000);
 });

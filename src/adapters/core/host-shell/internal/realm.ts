@@ -1,6 +1,8 @@
 import { modelTextPrefix, type AgentShellPosture, type ShellRealm, type ShellRealmContainment, type ShellRealmMode } from '#domain/index.js';
 import type { ShellPermissionTier } from '#engine/index.js';
 import type { ShellCapabilities } from './probe.js';
+import { isAbsolute, relative } from 'node:path';
+import { DECKENT_DIR } from '#platform/index.js';
 import { runHostShell } from './run.js';
 
 /** The host has no write boundary, so it never accepts a write set (SHELL-OVERLAY): such a request is refused, nothing runs. */
@@ -9,6 +11,31 @@ export const hostShellRealm: ShellRealm = Object.freeze({ kind: 'host', run: (re
     totalBytes: 0, omittedBytes: 0, durationMs: 0, cleanup: 'clean' as const })) : runHostShell(request) });
 /** The approval card's line for a host run: what running there means (no write derivation applies — the host is never a boundary). */
 export const HOST_SHELL_POSTURE = 'Runs on this machine as your user in the project root: not a sandbox (files, processes and network are reachable).';
+/** Product authority stays read-only even when a card opens the ordinary approval floor. */
+export function sandboxHardFloored(layout: ShellSandboxLayout, rel: string): boolean {
+  const floor = layout.hardFloor;
+  if (floor?.product) return floor.product(rel);
+  // Without the turn's hard floor (lead 2026-10-09, fail closed): `.deckent` is floored whole, and the data root (made project-relative) too.
+  // The only exception is owner decision Y (2026-09-30): `.deckent/docs` and everything below it stay creatable and writable, so the
+  // `.deckent` directory entry itself (`.deckent/-`) is not bound read-only; every existing entry inside it, known or not, is.
+  if (!floor) {
+    const data = projectRelativeDataRoot(layout), under = (path: string) => rel === path || rel.startsWith(`${path}/`);
+    if (data && data !== DECKENT_DIR && under(data)) return true; // the data root wins even if configured below docs
+    if (under(DOCS_DIR) || rel === `${DECKENT_DIR}/-`) return false;
+    return under(DECKENT_DIR);
+  }
+  return floor.roots.some(root => {
+    const path = relative(layout.project.root, root);
+    return path !== '' && !path.startsWith('..') && !isAbsolute(path) && (rel === path || rel.startsWith(`${path}/`));
+  });
+}
+const DOCS_DIR = `${DECKENT_DIR}/docs`;
+/** The configured data root as a project-relative POSIX path, or null when it lies outside the project (an absolute input is normalized). */
+function projectRelativeDataRoot(layout: ShellSandboxLayout): string | null {
+  if (!layout.dataRoot) return null;
+  const rel = (isAbsolute(layout.dataRoot) ? relative(layout.project.root, layout.dataRoot) : layout.dataRoot).split('\\').join('/').replace(/\/+$/u, '');
+  return rel === '' || rel === '.' || rel.startsWith('..') || isAbsolute(rel) ? null : rel.replace(/^\.\//u, '');
+}
 /**
  * The write facts one sandboxed call's card describes (merge Astra 2170 x MODES-3, owner 2026-09-29): the same `writeFloorReadOnly`/
  * `projectReadOnly` the effect enforces (`shellWritePosture(authority, tier, fullAccessTurn)`), plus whether the turn's
@@ -59,10 +86,10 @@ export type ShellCallAuthority = 'owner-approved' | 'full-access' | 'full-auto' 
  * The one derivation of a sandboxed call's write posture (SHELL-AUTONOMY, Astra 2170 R1, MODES-3; owner 2026-09-29: full access is
  * comprehensive). The realm reads it with the turn's layout: its write floor (the approval floor; in a full-access turn only the
  * configuration file) and `.git` (writable only in a full-access turn, never under a read-only project).
- * - owner-approved: the project writes, the write floor included;
+ * - owner-approved: the project writes, the ordinary approval floor included; product authority stays read-only;
  * - full-access: the project, the write floor and `.git` write; the configuration file stays read-only (the layout's floor in that turn);
  *   the view is open (OPEN-SANDBOX: host network, HOME visible and writable, the product's state roots and credential-pattern files in
- *   HOME sealed — `ShellSandboxLayout.hardFloor`), as is an owner-approved call of a full-access turn;
+ *   HOME sealed — `ShellSandboxLayout.hardFloor`), as is an owner-approved call of a full-access turn (configuration stays read-only);
  * - unattended, the narrow mutating set: the project writes, the write floor's existing paths read-only (its literal targets passed the
  *   write check);
  * - unattended, every other tier: the whole project read-only (the scratch area and bubblewrap's private `/tmp` stay writable), so no name,
@@ -75,7 +102,10 @@ export function shellWritePosture(authority: ShellCallAuthority, tier: ShellPerm
   writeSets = false): { readonly writeFloorReadOnly: boolean; readonly projectReadOnly: boolean; readonly writeSet: boolean; readonly open: boolean } {
   // OPEN-SANDBOX (owner MODES-3 checkpoint 4): a call the launched full-access mode or the owner's card stands behind, in a full-access
   // turn, runs in the open view (network, HOME); an unattended call of that turn (the grant no longer holds) stays closed and read-only.
-  if (authority === 'owner-approved') return { writeFloorReadOnly: false, projectReadOnly: false, writeSet: false, open: fullAccessTurn };
+  // SBX-05 x company policy (lead 2026-10-09): an owner-approved call given a write set (a destructive call outside full access) keeps its writes
+  // aside with the floor writable inside it; each entry is decided after the call (policy denies still apply).
+  if (authority === 'owner-approved') return writeSets && !fullAccessTurn ? { writeFloorReadOnly: false, projectReadOnly: false, writeSet: true, open: false }
+    : { writeFloorReadOnly: fullAccessTurn, projectReadOnly: false, writeSet: false, open: fullAccessTurn };
   if (authority === 'full-access') return { writeFloorReadOnly: true, projectReadOnly: false, writeSet: false, open: true };
   // Everything else is the one unattended derivation (shared with long-lived MCP servers); SHELL-OVERLAY's write set is its
   // variant for a full-auto relaxation in a realm that keeps writes aside (a full-access turn's unattended call stays read-only).
@@ -88,12 +118,13 @@ export function shellWritePosture(authority: ShellCallAuthority, tier: ShellPerm
  */
 export function describeShellWritePosture(view: ShellSandboxWriteView): string {
   if (view.projectReadOnly) return 'the project is read-only, .git included';
-  if (view.writeSet) return 'the project\'s writes are kept aside and applied after the call like edits (write floor changes are not applied), .git read-only';
+  if (view.writeSet) return view.writeFloorReadOnly ? 'the project\'s writes are kept aside and applied after the call like edits (write floor changes are not applied), .git read-only'
+    : 'the project\'s writes are kept aside and applied after the call as this approval allows; policy denies still apply, the configuration file and floor-named directories are not applied, .git read-only';
   const git = `.git ${view.repositoryWritable ? 'writable' : 'read-only'}`;
   // Named, not just implied: an owner-approved call also writes what the write floor would otherwise protect (SHELL-AUTONOMY, "the
   // floor means the owner approves, not never") — the one case that unlocks it is the one the card should say so about out loud.
   return view.writeFloorReadOnly ? `the project is writable except its write floor's existing paths, which stay read-only; ${git}`
-    : `the project is writable, its write floor included, ${git}`;
+    : `the project is writable, ordinary approval-floor files included; product authority stays read-only, ${git}`;
 }
 /**
  * POSTURE (T2-FOLLOWUP, L1 D2): the same facts `describeShellWritePosture` and a realm's own sentence put in words, as data for a card that
@@ -160,7 +191,7 @@ export interface ShellSandboxLayout {
    * read-only; the inode floor still holds. */
   readonly repositoryWritable?: boolean;
   /**
-   * OPEN-SANDBOX: the hard floor an open view seals structurally (a full-access turn's layout only; an open request without it is refused,
+   * OPEN-SANDBOX: the hard floor an open view seals structurally (every managed turn's layout; an open request without it is refused,
    * fail closed). `roots`: the absolute state roots of this installation — the project's product root, the data root, the bootstrap
    * configuration's directory, the global state root(s); one inside the project is bound read-only (its product state masked by the deny
    * walk), one outside it is hidden (an empty read-only tmpfs), so no name, existing or new, is created in either. `homeDenied`: the Core
@@ -251,20 +282,9 @@ export function resolveShellRealm(mode: ShellRealmMode, capabilities: ShellCapab
   return { ok: true, realm: hostShellRealm, marker: 'sandbox: none', notice, posture: () => notice, containment: 'host', rejected: passed };
 }
 
-/**
- * OPEN-SANDBOX: the realm a call whose posture is open actually runs in. A realm that builds the open view keeps the call; the explicit host
- * mode and a host fallback are the host already (unchanged). Otherwise — a sandbox that cannot open the network and HOME (Landlock) —
- * `prefer-sandbox` runs the call on the host, as the owner's full access asks (owner 2026-09-29: host shell, network, HOME), and says so:
- * Deckent's state and credentials are then protected by name only; `require-sandbox` keeps the closed sandbox (the configuration asked for
- * one) and says the open view is not available. Never silent.
- */
-export function openShellRealm(resolution: Extract<ShellRealmResolution, { ok: true }>, mode: ShellRealmMode): Extract<ShellRealmResolution, { ok: true }> {
-  if (resolution.opens || resolution.containment === 'host') return resolution;
-  const why = [...(resolution.rejected ?? []).map(item => `${item.kind}: ${boundSandboxReason(item.reason)}`), `${resolution.realm.kind} cannot open the network and HOME`].join('; ');
-  if (mode === 'require-sandbox') {
-    const notice = `[deckent] full access: no open sandbox (${why}); terminal.shell.realm require-sandbox keeps this call in the closed ${resolution.realm.kind} view (no network, HOME hidden).`;
-    return { ...resolution, notice: resolution.notice ? `${resolution.notice} ${notice}` : notice, posture: view => `${resolution.posture(view)}\n${notice}` };
-  }
-  const notice = `[deckent] full access: no open sandbox (${why}); running on host: files, processes and network are reachable, Deckent's state and credentials are protected by name only.`;
-  return { ok: true, realm: hostShellRealm, marker: 'sandbox: none', notice, posture: () => notice, containment: 'host', ...(resolution.rejected ? { rejected: resolution.rejected } : {}) };
+/** Full access requires a provider that enforces the open view; host and closed-only providers refuse. */
+export function openShellRealm(resolution: Extract<ShellRealmResolution, { ok: true }>, mode: ShellRealmMode): ShellRealmResolution {
+  if (resolution.opens && resolution.containment !== 'host') return resolution;
+  return { ok: false, code: 'SHELL_SANDBOX_UNAVAILABLE', rejected: Object.freeze([...(resolution.rejected ?? []),
+    { kind: resolution.realm.kind, reason: `full access in ${mode} requires an open sandbox; host execution is refused` }]) };
 }

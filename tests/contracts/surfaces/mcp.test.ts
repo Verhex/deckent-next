@@ -8,6 +8,7 @@ import { tmpdir, userInfo, hostname } from 'node:os';
 import { resolve, join } from 'node:path';
 import { expect, it } from 'vitest';
 import { createMcpServer } from '#surfaces/core/mcp/index.js';
+import { withLocalPrincipalChannel } from '#adapters/index.js';
 import { getPolicyVocabulary, inspectRun, requestRunCancellation } from '../../../src/index.js';
 import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
 import { admitRunAttempts } from '../support/admission.js';
@@ -33,8 +34,10 @@ it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket] s
   await writeFile(join(project, '.deckent/config.json'), JSON.stringify({ layout: { root: data } }));
   const env = { HOME: join(root, 'home') }; const { store } = await openConfiguredAttemptStore(project, { env });
   try { await admitRunAttempts(store, [{ runId: 'r', scopeId: 's', taskId: 't', attemptId: 'a', layoutRevision: 'l', generation: 1 }]); } finally { store.close(); }
-  const writePolicy = async (allow: boolean, cancel = false) => writeFile(join(data, 'policy.json'), JSON.stringify({ schemaVersion: 1, revision: 'p', restrictions: [], grants: allow ? [
-    { id: 'read', effect: 'allow', actions: ['inspect', ...(cancel ? ['cancel'] : [])], scopes: ['s'], principals: [{ issuer: hostname(), subject: String(userInfo().uid) }], resource: { kind: 'run', ids: ['r'] } },
+  // W3-AUTHORITY: MCP calls run as the separate `<host>/mcp` actor; this fixture names it explicitly (`mcp`), the SDK parity calls run as the owner.
+  const owner = { issuer: hostname(), subject: String(userInfo().uid) }, mcpActor = { issuer: `${hostname()}/mcp`, subject: String(userInfo().uid) };
+  const writePolicy = async (allow: boolean, cancel = false, mcp = true) => writeFile(join(data, 'policy.json'), JSON.stringify({ schemaVersion: 1, revision: 'p', restrictions: [], grants: allow ? [
+    { id: 'read', effect: 'allow', actions: ['inspect', ...(cancel ? ['cancel'] : [])], scopes: ['s'], principals: [owner, ...(mcp ? [mcpActor] : [])], resource: { kind: 'run', ids: ['r'] } },
   ] : [] }), { mode: 0o600 });
   await writePolicy(true);
   const runtime = await startTestRuntimeService(project, env);
@@ -42,6 +45,11 @@ it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket] s
   const client = new Client({ name: 'deckent-proof', version: '1' });
   try {
     await client.connect(transport); const query = { schemaVersion: 1 as const, scopeId: 's', runId: 'r' };
+    // Negative (W3-AUTHORITY): the owner's grant alone does not reach the MCP actor; the owner's SDK call still reads the Run.
+    await writePolicy(true, false, false);
+    expect(JSON.stringify(await client.callTool({ name: 'inspect_run', arguments: query }))).toContain('POLICY_DENIED');
+    expect((await inspectRun(project, query, { env })).run).toBeTruthy();
+    await writePolicy(true);
     const result = await client.callTool({ name: 'inspect_run', arguments: query }); expect(result.isError).not.toBe(true);
     expect(result.structuredContent).toEqual(await inspectRun(project, query, { env }));
     expect((await client.callTool({ name: 'policy_vocabulary', arguments: {} })).structuredContent).toEqual(getPolicyVocabulary());
@@ -51,7 +59,10 @@ it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket] s
     await writePolicy(true, true);
     expect(JSON.stringify(await client.callTool({ name: 'request_run_cancellation', arguments: { ...command, principal: 'admin' } }))).toContain('MCP_INPUT_INVALID');
     const cancellation = await client.callTool({ name: 'request_run_cancellation', arguments: command });
-    expect(cancellation.isError).not.toBe(true); expect(cancellation.structuredContent).toEqual(await requestRunCancellation(project, command, { env }));
+    // SDK parity for the same actor: the MCP call ran as `<host>/mcp`, so the in-process replay of its command id runs in that channel too
+    // (an owner replay of an MCP-bound command id is a different input and is refused).
+    expect(cancellation.isError).not.toBe(true);
+    expect(cancellation.structuredContent).toEqual(await withLocalPrincipalChannel('mcp', () => requestRunCancellation(project, command, { env })));
     const recorded = (await inspectRun(project, query, { env })).run!;
     expect(recorded.cancellationRequested).toBe(true); expect(recorded.tasks[0]!.phase).toBe('cancelled');
     await writePolicy(true, false);
@@ -63,7 +74,7 @@ it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket] s
     expect(tools.filter(t => !['renew_approval', 'create_run', 'reserve_run_tasks', 'request_run_cancellation', 'deliver_run_cancellation', 'reconcile_attempt', 'execute_task', 'evaluate_task', 'shutdown_runtime_service', 'admit_model_activation', 'apply_model_catalog', 'connect_model', 'apply_pool_hold', 'apply_pool_capacity', 'invoke_model', 'purge_model_invocation_content', 'cancel_model_invocation', 'manage_provider_spending', 'audit_provider_spending', 'update_toolchains'].includes(t.name)).every(t => t.annotations?.readOnlyHint === true)).toBe(true);
     expect(tools.find(t => t.name === 'apply_pool_capacity')!.annotations).toMatchObject({ readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false });
     expect(tools.find(t => t.name === 'inspect_pool_capacity')!.annotations).toMatchObject({ readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false });
-    expect(tools.find(t => t.name === 'update_toolchains')!.annotations).toMatchObject({ readOnlyHint: false, destructiveHint: false, openWorldHint: true });
+    expect(tools.find(t => t.name === 'update_toolchains')!.annotations).toMatchObject({ readOnlyHint: false, destructiveHint: true, openWorldHint: true }); // W3-AUTHORITY corrected hint
     expect(tools.find(t => t.name === 'inspect_toolchain_currency')!.annotations).toMatchObject({ readOnlyHint: true, openWorldHint: true });
     expect(tools.find(t => t.name === 'cancel_model_invocation')!.annotations).toMatchObject({ readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false });
     expect(tools.find(t => t.name === 'purge_model_invocation_content')!.annotations).toMatchObject({ readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false });

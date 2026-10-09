@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { createTerminalRuntimeClient } from './terminal-runtime-client.js';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { hostname, tmpdir, userInfo } from 'node:os';
@@ -145,5 +146,5 @@ export async function runtime(options: { toolGrant?: boolean | 'approval'; token
   };
   const rows = (sql: string) => { const db = new DatabaseSync(ledger, { readOnly: true }); try { return db.prepare(sql).all(); } finally { db.close(); } };
   const writePolicy = (next: unknown[]) => writeFile(join(data, 'policy.json'), JSON.stringify({ schemaVersion: 1, revision: `r-${next.length}`, restrictions: [], grants: next }), { mode: 0o600 });
-  return { project, data, env, state, rows, ledger, start, interrupted, swept, released, scratchSwept, grants, writePolicy, binding, client: () => createConfiguredRuntimeClient(project, { env }) };
+  return { project, data, env, state, rows, ledger, start, interrupted, swept, released, scratchSwept, grants, writePolicy, binding, client: (headless = false) => headless ? createConfiguredRuntimeClient(project, { env }) : createTerminalRuntimeClient(project, { env }) };
 }

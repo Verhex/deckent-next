@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { identitySchema } from '#domain/core/primitives/index.js';
+import { isMcpPrincipal } from '#domain/core/principal/index.js';
 import { includes, policySchema, principalGrants } from './schema.js';
 
 /** Company identity (H34): one registry key per customer company; the same shape the installation config accepts. */
@@ -10,7 +11,7 @@ function allowGrants(input: unknown, actor: Actor) {
   const policy = policySchema.parse(input); const issuer = identitySchema.parse(actor.issuer); const subject = identitySchema.parse(actor.subject);
   // Explicit grants and the actor's role grants (H34 S2): a role binding makes a registered scope reachable like a grant does.
   return principalGrants(policy, { issuer, subject }).filter(rule => rule.effect === 'allow' && (rule.principals === 'all'
-    || rule.principals.some(principal => principal.issuer === issuer && principal.subject === subject)));
+    ? !isMcpPrincipal(actor) : rule.principals.some(principal => principal.issuer === issuer && principal.subject === subject)));
 }
 const unique = (candidates: readonly string[]) => [...new Set(candidates.map(candidate => identitySchema.parse(candidate)))];
 

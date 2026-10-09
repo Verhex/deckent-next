@@ -1,3 +1,4 @@
+import { createTerminalRuntimeClient, terminalRuntimePeer } from '../support/terminal-runtime-client.js';
 import { appendFileSync } from 'node:fs';
 import { hostname, tmpdir, userInfo } from 'node:os';
 import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
@@ -68,7 +69,8 @@ async function fixture(locale: Locale, settings: { fullAccess?: boolean; path?: 
         name: 'write_file', arguments: JSON.stringify({ path: settings.path ?? './src/a.ts', content: `value-${invocation}\n` }) } }] } : {}) } }] } } } as never;
   });
   const controller = new AbortController(), host = createRuntimeChatTurnHost({} as never, controller.signal, undefined, undefined, () => []);
-  const peer = { pid: process.pid, uid: userInfo().uid, gid: userInfo().gid, assurance: 'linux-so-peercred' as const, connection: controller.signal, isConnectionActive: () => !controller.signal.aborted };
+  const witness = await terminalRuntimePeer(createTerminalRuntimeClient(project, { env }));
+  const peer = { ...witness, connection: controller.signal, isConnectionActive: () => !controller.signal.aborted && witness.isConnectionActive!() };
   const events: AgentTurnStreamEvent[] = [], requests: RuntimeServiceRequest[] = [];
   const faults = { dropDecision: false, failAudit: false, holdAudit: null as Promise<void> | null, enteredAudit: () => undefined as void };
   const openAudit = adapters.openSqliteAuditStore;

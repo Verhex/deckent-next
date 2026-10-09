@@ -161,6 +161,8 @@ describe.skipIf(process.platform === 'win32')('bubblewrap realm selection (S9; r
     expect(view.view.emptiedDirectories ?? []).not.toContain(join(f.scope.root, '.deckent'));
     expect(view.view.maskedDirectories).toEqual(expect.arrayContaining([join(f.scope.root, '.deckent', 'host'), join(f.scope.root, 'locked'),
       join(f.scope.root, Array.from({ length: 33 }, () => 'd').join('/'))]));
+    // Owner Y (2026-09-30) / lead fix round 2026-10-09: without the turn's hard floor only the default layout's authority/state resources are
+    // floored, never `.deckent` whole (this fixture holds none of them), so `.deckent` stays writable for `.deckent/docs`.
     expect(view.view.readOnlyPaths).toEqual([join(f.scope.root, '.git')]);
     const all = [...view.view.maskedFiles, ...view.view.maskedDirectories, ...view.view.emptiedDirectories ?? []];
     expect(all).not.toContain(join(f.scope.root, 'env-link')); expect(all).not.toContain(join(f.scope.root, 'src', 'a.ts'));

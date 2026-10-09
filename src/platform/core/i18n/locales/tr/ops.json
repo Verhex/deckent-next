@@ -429,6 +429,7 @@
   "error.TOOLCHAIN_HISTORY_INVALID": "Worker imaj güncellemesi başarısız (TOOLCHAIN_HISTORY_INVALID); tekrar denemeden önce recipe, daemon ve saklanan receipt kanıtını inceleyin. {detail}",
   "error.TOOLCHAIN_RECEIPT_INVALID": "Worker imaj güncellemesi başarısız (TOOLCHAIN_RECEIPT_INVALID); tekrar denemeden önce recipe, daemon ve saklanan receipt kanıtını inceleyin. {detail}",
   "error.TOOLCHAIN_PLAN_INVALID": "Worker imaj güncellemesi başarısız (TOOLCHAIN_PLAN_INVALID); tekrar denemeden önce recipe, daemon ve saklanan receipt kanıtını inceleyin. {detail}",
+  "error.TOOLCHAIN_UPDATE_TERMINAL_ONLY": "MCP worker imaj araç zincirlerini yalnızca denetleyebilir; güncellemeyi derlemek ya da uygulamak MCP üzerinden reddedilir. Hiçbir şey planlanmadı, derlenmedi ya da yazılmadı. Güncellemeyi Deckent terminalinden çalıştırın: deckent toolchains update --apply.",
   "doctor.installationBinding.machine": "Kurulum bağı: makine ({source}) - taşınma ve kopya tespiti açık",
   "doctor.installationBinding.source.platform": "platform makine kimliği",
   "doctor.installationBinding.source.configured": "yapılandırılmış kaynak installation.machineIdentity.source",

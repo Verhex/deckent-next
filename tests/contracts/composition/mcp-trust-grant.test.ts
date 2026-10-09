@@ -4,12 +4,13 @@ import { DatabaseSync } from 'node:sqlite';
 import { hostname, tmpdir, userInfo } from 'node:os';
 import { join, resolve } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { FilePolicySource, registerProviderConfig } from '#adapters/index.js';
+import { FilePolicySource, registerProviderConfig, withLocalPrincipalChannel } from '#adapters/index.js';
 import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
 import { renderMcpStartNotice, runConfiguredMcpCommand } from '#composition/core/agent-turn/index.js';
 import { getPolicyVocabulary, installationOwnerPermissions, INSTALLATION_OWNER_ROLE_ID } from '#domain/index.js';
 import { decideAgentToolCall } from '#engine/index.js';
 import { clearConfigCache } from '#platform/index.js';
+import { createTerminalRuntimeClient, terminalRuntimePeer } from '../support/terminal-runtime-client.js';
 
 // L1 MCP-CORE K1 (Jev 8e908338, TUI3 2026-10-07) with the owner's MCP decisions (2026-10-07: `mcp-server` kind Jev 04f75210, effect Jev 71eeb4ab):
 // the trust approval writes the approver's OWN `mcp-server` grant for the server (require-approval, mode-eligible) through `policy.administer@1`
@@ -23,7 +24,9 @@ const me = { issuer: hostname(), subject: String(userInfo().uid) };
 const principal = { id: `${userInfo().username}@${hostname()}`, ...me, assurance: 'os-user' as const, scopeIds: ['proj'] };
 const echo = { name: 'echo', description: 'Echo', inputSchema: { type: 'object', properties: {} } };
 
-async function fixture(options: { owner?: boolean } = {}) {
+/** W3-AUTHORITY: the trust decision chain needs a service-attested interactive terminal. `headless` keeps the vitest worker (no TTY) as the
+ * deciding process; otherwise the composition is pointed at a real PTY process (the existing terminal fixture), never a client isTTY flag. */
+async function fixture(options: { owner?: boolean; headless?: boolean } = {}) {
   const base = mkdtempSync(join(tmpdir(), 'deckent-mcp-grant-')); roots.push(base);
   const project = join(base, 'project'), home = join(base, 'home'), data = join(project, 'data');
   mkdirSync(join(project, '.deckent'), { recursive: true, mode: 0o700 }); mkdirSync(home, { mode: 0o700 });
@@ -43,7 +46,9 @@ async function fixture(options: { owner?: boolean } = {}) {
   const setTools = (list: unknown[]) => writeFileSync(tools, JSON.stringify(list)); setTools([echo]);
   const args = ['--realm', 'host', '--', process.execPath, FIXTURE, '--mode', 'dual', '--tools', tools, '--log', log];
   const entry = { command: process.execPath, args: args.slice(4), realm: 'host' };
-  const run = (request: Parameters<typeof runConfiguredMcpCommand>[1]) => runConfiguredMcpCommand(project, request, { env }, async () => true) as Promise<Record<string, unknown>>;
+  const peer = options.headless ? undefined : await terminalRuntimePeer(createTerminalRuntimeClient(project, { env }));
+  const run = (request: Parameters<typeof runConfiguredMcpCommand>[1]) => withLocalPrincipalChannel(undefined,
+    () => runConfiguredMcpCommand(project, request, { env }, async () => true), peer) as Promise<Record<string, unknown>>;
   const policy = () => JSON.parse(readFileSync(join(data, 'policy.json'), 'utf8')) as { revision: string; grants: { id: string; scopes: unknown; principals: unknown; resource: { kind: string; ids: string[] } }[] };
   const mcpGrants = () => policy().grants.filter(grant => grant.id.startsWith('mcp-'));
   const source = new FilePolicySource({ path: join(data, 'policy.json'), bindingsPath: join(data, 'bindings.json'), archivePath: join(data, 'audit', 'authority-revisions'),
@@ -101,6 +106,12 @@ describe.skipIf(process.platform !== 'linux')('MCP trust writes the approver\'s 
     const f = await fixture();
     expect(await f.run({ verb: 'add', scope: 'user', name: 'fx', entry: f.entry })).toMatchObject({ grant: { status: 'granted' } });
     expect(f.mcpGrants().map(grant => grant.scopes)).toEqual(['all']);
+  }, 90_000);
+
+  it('W3-AUTHORITY negative: a headless approver (no controlling terminal) keeps the trust but writes no grant', async () => {
+    const f = await fixture({ headless: true });
+    expect(await f.run({ verb: 'add', scope: 'local', name: 'fx', entry: f.entry })).toMatchObject({ trust: 'trusted', grant: { status: 'refused', reason: 'APPROVAL_INTERACTIVE_REQUIRED' } });
+    expect(f.mcpGrants()).toEqual([]); expect(f.authorityChanges()).toEqual([]);
   }, 90_000);
 
   it('a person without that authority keeps the trust and is told why; nothing is written to policy', async () => {

@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { identitySchema } from '#domain/core/primitives/index.js';
-import { verifiedPrincipalSchema } from '#domain/core/principal/index.js';
+import { verifiedPrincipalSchema, isMcpPrincipal } from '#domain/core/principal/index.js';
 import { includes, policySchema, principalGrants, PolicyError, type PolicyRule } from './schema.js';
 export { includes, policySchema, PolicyError } from './schema.js';
 export type { Policy } from './schema.js';
@@ -11,7 +11,7 @@ export type PolicyRequest = z.infer<typeof policyRequestSchema>;
 export type PolicyDecision = Readonly<{ decision: 'allow' | 'deny' | 'require-approval'; revision: string; reason: 'GRANTED' | 'NO_GRANT' | 'DENIED' | 'SCOPE' | 'APPROVAL_REQUIRED'; ruleId?: string }>;
 function matches(rule: PolicyRule, request: PolicyRequest) {
   return includes(rule.actions, request.action) && includes(rule.scopes, request.scopeId) && rule.resource.kind === request.resource.kind
-    && includes(rule.resource.ids, request.resource.id) && (rule.principals === 'all' || rule.principals.some(principal =>
+    && includes(rule.resource.ids, request.resource.id) && (rule.principals === 'all' ? !('effect' in rule && rule.effect === 'allow' && isMcpPrincipal(request.principal)) : rule.principals.some(principal =>
       principal.issuer === request.principal.issuer && principal.subject === request.principal.subject));
 }
 /** Order is fixed and version-independent: scope → deny/restriction → require-approval → allow → NO_GRANT. Roles only add candidates. */

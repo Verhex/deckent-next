@@ -350,6 +350,7 @@ const definitions: Readonly<Record<string, Definition>> = Object.freeze({
   APPROVAL_SURFACE_RESTRICTED: { category: 'error', render: (p, l) => ({ message: t('error.APPROVAL_SURFACE_RESTRICTED', p, l) }) },
   // B1 APPROVAL-ASSURANCE: MCP never allows; an allow below the approval's minimum assurance (Core's, raised by policy) is refused.
   APPROVAL_ATTENDED_REQUIRED: { category: 'error', render: (p, l) => ({ message: t('error.APPROVAL_ATTENDED_REQUIRED', p, l) }) },
+  APPROVAL_INTERACTIVE_REQUIRED: { category: 'error', render: (p, l) => ({ message: t('error.APPROVAL_INTERACTIVE_REQUIRED', p, l) }) },
   APPROVAL_ASSURANCE_INSUFFICIENT: { category: 'error', render: (p, l) => ({ message: t('error.APPROVAL_ASSURANCE_INSUFFICIENT', p, l) }) },
   // MCP-CLIENT scoped registry and approval (`deckent mcp add|add-json|list|get|remove|approve`).
   MCP_SERVER_UNKNOWN: { category: 'usage', render: (p, l) => ({ message: t('error.MCP_SERVER_UNKNOWN', p, l) }) },
@@ -622,6 +623,7 @@ const definitions: Readonly<Record<string, Definition>> = Object.freeze({
   TOOLCHAIN_HISTORY_INVALID: { category: 'error', render: (p, l) => ({ message: t('error.TOOLCHAIN_HISTORY_INVALID', { detail: '', ...p }, l) }) },
   TOOLCHAIN_RECEIPT_INVALID: { category: 'error', render: (p, l) => ({ message: t('error.TOOLCHAIN_RECEIPT_INVALID', { detail: '', ...p }, l) }) },
   TOOLCHAIN_PLAN_INVALID: { category: 'error', render: (p, l) => ({ message: t('error.TOOLCHAIN_PLAN_INVALID', { detail: '', ...p }, l) }) },
+  TOOLCHAIN_UPDATE_TERMINAL_ONLY: { category: 'error', render: (p, l) => ({ message: t('error.TOOLCHAIN_UPDATE_TERMINAL_ONLY', p, l) }) },
   CLI_USAGE: { category: 'usage', render: (p, l) => ({ message: t('error.CLI_USAGE', { ...p, command: p.command ?? 'deckent', usage: p.usage ?? t('cli.usage.help', {}, l), flag: p.flag ?? t('cli.usage.arguments', {}, l) }, l) }) },
 });
 for (const definition of Object.values(definitions)) Object.freeze(definition);

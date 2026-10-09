@@ -1,7 +1,14 @@
 # Shell realms (bubblewrap, Landlock, doctor) — module note
 
 Shell realm, bubblewrap and Landlock providers, doctor report, sandbox scan speed (moved from ARCHITECTURE.md Packages 2026-10-05).
-Kaynak/Source: ARCHITECTURE.md @58537c7f lines 1278–1326, 1407–1498, 1663–1669; text below is verbatim.
+Kaynak/Source: ARCHITECTURE.md @58537c7f lines 1278–1326, 1407–1498, 1663–1669; historical module text below is reconciled for W3 (2026-10-09).
+
+**W3 security contract (owner 2026-10-09).** An approved shell may open the ordinary approval floor, but never product authority/configuration. Both sandbox providers enforce the hard floor independently of `writeFloorReadOnly`. Landlock's seccomp additionally denies chmod/chown syscall families globally (including mutating xattrs/ACLs), since Landlock filesystem rules do not mediate those metadata changes. This costs permission/ownership changes on ordinary project files in Landlock; bubblewrap keeps them outside protected read-only mounts.
+Full-access calls require an open sandbox; `openShellRealm` returns `SHELL_SANDBOX_UNAVAILABLE` for Landlock, a host fallback or explicit host mode before execution. Closed modes retain their documented fallback (which has no filesystem isolation).
+The shared data registry `workspace-read/internal/credential-paths.json` masks gh, Docker, kube, Codex, `.git-credentials`, AWS, Azure, gcloud, OCI, doctl, Aliyun, hcloud, IBM Cloud and Terraform credential carriers. Matched symlink credentials refuse the open view. HOME still has depth/entry bounds; custom credential locations and unmasked hard-link aliases remain outside this guarantee.
+Open bubblewrap hides `/run` (including `/var/run` aliases and user session buses), the selected XDG runtime directory, configured Docker/D-Bus pathname sockets (an abstract session bus refuses the open view) and existing `/tmp/dbus-*` sockets; HOME and project walks mask socket entries. Closed bubblewrap hides runtime directories and masks project sockets; Landlock denies AF_UNIX creation through seccomp. No owner IPC grant is added. Custom IPC outside these paths and same-user races remain limits; Docker daemon escape itself is not exercised.
+Full-auto classifies `find -delete`, `mv` and truncating file redirects as destructive; `>>`, descriptor duplication and `/dev/null` retain their separate classifications.
+Official references verified 2026-10-09: [Landlock](https://docs.kernel.org/userspace-api/landlock.html), [bubblewrap options](https://github.com/containers/bubblewrap/blob/main/bwrap.xml); Context7 `/containers/bubblewrap` confirms mounts apply in argument order. Host tests and limits: external `proof/W3-SANDBOX-2026-10-09/WORKER.md`.
 
 **Shell realm (S5, S9, S11; owner 2026-09-28).** Shell calls run through one `ShellRealm` port (host / bubblewrap / landlock).
 `terminal.shell.realm = require-sandbox | prefer-sandbox | host` (default `prefer-sandbox`). The service probes once per process
@@ -134,8 +141,8 @@ Landlock handles TCP — ABI < 4: every socket refused; `listen()` and MSG_FASTO
 reached `/var/run/docker.sock`, UDP left the machine, and the Landlock TCP rule missed a `listen()` autobind and a TCP Fast Open
 connect). Any setup failure is one line on fd 3 (close-on-exec), exit 125, no exec; the runner turns it into `spawn-failed` (effect
 refused), so a command cannot forge one. Posture: ABI ≥ 6 → marker `sandbox: landlock`; ABI < 6 → typed DEGRADED: marker `sandbox:
-degraded` and a notice naming what is open (signals ABI < 6, truncation ABI < 3, TCP by the socket filter ABI < 4) on the card, the
-live stream, the result and the finished line. Network is closed at every ABI. Open limits: the project root and every directory
+degraded` and a notice naming what is open (signals ABI < 6, TCP by the socket filter ABI < 4) on the card, the
+live stream, the result and the finished line. Network is closed at every supported ABI; ABI <3 is refused to preserve truncation protection. A system read grant overlapping an absolute installation root also refuses the call; closed bubblewrap hides external installation roots over system binds. Open limits: the project root and every directory
 holding a protected path or `.git` cannot gain, lose or rename entries inside the sandbox (`touch new-at-root`, `sed -i` of a root
 file, a first `mkdir dist`); tools installed under HOME do not run (unlike bubblewrap); glob-protected files inside ignored directories
 are not carved; no PID namespace — a `setsid` descendant escapes the process group (it stays in the Landlock domain); ≈ 310 ms rule-set

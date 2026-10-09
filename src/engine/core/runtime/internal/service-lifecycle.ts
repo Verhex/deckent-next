@@ -1,3 +1,4 @@
+import { AsyncResource } from 'node:async_hooks';
 import { z } from 'zod';
 
 const positiveSafeInteger = z.number().int().positive().safe();
@@ -52,7 +53,10 @@ export class RuntimeServiceLifecycle {
     const controller = new AbortController();
     return new Promise<T>((resolve, reject) => {
       // The slot is reserved by `pump`; the operation starts in the same turn, so a stop cannot fall between reservation and tracking.
-      const entry = { workClass, start: () => { controller.abort(); resolve(this.startAdmitted(operation, workClass)); }, reject: (error: unknown) => { controller.abort(); reject(error); } };
+      // The operation keeps the async context it was admitted in (P0 batch C): `pump` runs from another request's completion, whose
+      // context (e.g. its local-principal channel, owner vs MCP actor) must never become the waiter's.
+      const admitted = AsyncResource.bind(operation);
+      const entry = { workClass, start: () => { controller.abort(); resolve(this.startAdmitted(admitted, workClass)); }, reject: (error: unknown) => { controller.abort(); reject(error); } };
       this.admissionQueue.push(entry);
       const expire = (failure: unknown) => {
         const index = this.admissionQueue.indexOf(entry);

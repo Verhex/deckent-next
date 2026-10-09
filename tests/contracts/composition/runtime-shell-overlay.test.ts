@@ -22,12 +22,12 @@ const runtime = (mode: 'full-auto' | 'auto-edit' = 'full-auto', grants = GRANTS,
   modeRuntime({ grants, mode, shell: { schemaVersion: 1, realm: 'require-sandbox', ...shell } });
 
 describe.skipIf(!ready)('full-auto sandbox write set (SHELL-OVERLAY, C5)', () => {
-  it('a new floor name is not written; ordinary changes, a rename and an opaque directory are applied, each audited like an edit', async () => {
+  it('a new floor name is not written; ordinary changes, file copies/removals and a new directory are applied, each audited like an edit', async () => {
     const f = await runtime();
     await mkdir(join(f.project, 'sub', 'deep'), { recursive: true });
     await writeFile(join(f.project, 'sub', 'deep', 'f'), 'f\n'); await writeFile(join(f.project, 'src', 'gone.ts'), 'gone\n');
-    const result = await f.call('run_shell', { command: 'f=pack; echo \'{"name":"x"}\' > src/${f}age.json; echo new > src/x.ts; chmod +x src/x.ts; '
-      + 'mv src/gone.ts src/moved.ts; d=deep; mv sub/$d sub/old && mkdir sub/$d && echo z > sub/$d/z; g=.en; echo SECRET=1 > ${g}v; echo done' });
+    const result = await f.call('run_shell', { command: 'f=pack; echo \'{"name":"x"}\' >> src/${f}age.json; echo new >> src/x.ts; chmod +x src/x.ts; '
+      + 'cp src/gone.ts src/moved.ts && rm src/gone.ts; d=deep; cp -r sub/$d sub/old && rm sub/$d/f && echo z >> sub/$d/z; g=.en; echo SECRET=1 >> ${g}v; echo done' });
     expect(result).toMatchObject({ card: false, status: 'ok' });
     expect(result.text).toMatch(/^\[deckent\] run_shell: sandbox: bubblewrap; exit 0/u);
     // C5: the floor name the classifier could not see never reaches the project, and the model is told how it can.
@@ -46,7 +46,7 @@ describe.skipIf(!ready)('full-auto sandbox write set (SHELL-OVERLAY, C5)', () =>
     expect(events[0]).toMatchObject({ kind: 'permission-mode', mode: 'full-auto', cell: 'shell-modify' });
     const edits = events.slice(1);
     expect(edits.every(event => event.kind === 'permission-mode' && event.cell === 'edit-non-floor' && (event.tool as { name: string }).name === 'run_shell')).toBe(true);
-    // Astra 2182 R3: `mv sub/deep sub/old` is a copy plus a removal in the overlay, so `sub/old` is a new directory: decided (and audited)
+    // A copied directory is a new overlay entry: decided (and audited)
     // like an entry, shown as `sub/old/`, made before its file; it is not an effect of its own.
     expect(edits.map(event => (event.summary as { path: string }).path).sort()).toEqual(['src/gone.ts', 'src/moved.ts', 'src/x.ts', 'sub/deep/f', 'sub/deep/z', 'sub/old/', 'sub/old/f']);
     expect(result.text).toContain('[deckent] write set: new directories created: sub/old/.');
@@ -58,7 +58,7 @@ describe.skipIf(!ready)('full-auto sandbox write set (SHELL-OVERLAY, C5)', () =>
 
   it('a company rule that denies project writes keeps every change out; the command still ran', async () => {
     const f = await runtime('full-auto', [...GRANTS.slice(0, 2), rule('write-op', 'operation', ['workspace.file.write'], 'deny')]);
-    const result = await f.call('run_shell', { command: 'f=x; echo new > src/$f.ts; echo done' });
+    const result = await f.call('run_shell', { command: 'f=x; echo new >> src/$f.ts; echo done' });
     expect(result).toMatchObject({ card: false, status: 'ok' });
     expect(result.text).toContain('not applied: src/x.ts (denied by policy)');
     expect(existsSync(join(f.project, 'src', 'x.ts'))).toBe(false);
@@ -66,7 +66,7 @@ describe.skipIf(!ready)('full-auto sandbox write set (SHELL-OVERLAY, C5)', () =>
 
   it('the project changing under the call applies nothing; a stopped run applies nothing', async () => {
     const f = await runtime();
-    const running = f.call('run_shell', { command: 'f=a; sleep 1; echo mine >> src/$f.ts; echo new > src/y.ts' });
+    const running = f.call('run_shell', { command: 'f=a; sleep 1; echo mine >> src/$f.ts; echo new >> src/y.ts' });
     // Once the call's private directory exists the mark is taken; the owner's editor then writes the same file.
     const writes = join(f.data, 'state', 'file-effects', 'sandbox-writes');
     for (let tries = 0; tries < 200 && (await readdir(writes).catch(() => [])).length === 0; tries++) await new Promise(resolve => setTimeout(resolve, 20));
@@ -78,7 +78,7 @@ describe.skipIf(!ready)('full-auto sandbox write set (SHELL-OVERLAY, C5)', () =>
     expect(existsSync(join(f.project, 'src', 'y.ts'))).toBe(false);
     // A run that timed out kept its writes aside and none reached the project; its private directory is gone.
     const g = await runtime('full-auto', GRANTS, { timeoutMs: 1_500 });
-    const stopped = await g.call('run_shell', { command: 'f=x; echo new > src/$f.ts; sleep 20' });
+    const stopped = await g.call('run_shell', { command: 'f=x; echo new >> src/$f.ts; sleep 20' });
     expect(stopped.status).toBe('error');
     expect(stopped.text).toContain('what it changed was kept aside and not applied');
     expect(existsSync(join(g.project, 'src', 'x.ts'))).toBe(false);
@@ -87,20 +87,57 @@ describe.skipIf(!ready)('full-auto sandbox write set (SHELL-OVERLAY, C5)', () =>
 
   it('outside a full-auto relaxation nothing changes: standart asks, and the owner-approved call writes directly (no write set)', async () => {
     const f = await runtime('auto-edit');
-    const result = await f.call('run_shell', { command: 'f=x; echo new > src/$f.ts' }, 'allow');
+    const result = await f.call('run_shell', { command: 'f=x; echo new >> src/$f.ts' }, 'allow');
     expect(result).toMatchObject({ card: true, status: 'ok' });
     expect(result.text).not.toContain('write set');
     expect(await readFile(join(f.project, 'src', 'x.ts'), 'utf8')).toBe('new\n');
   }, 120_000);
 
+  // W3: moving directory trees is destructive. It is denied before an overlay or project effect exists.
+  describe('directory moves require approval before the write-set boundary', () => {
+    const effects = (f: Awaited<ReturnType<typeof runtime>>) => f.rows("SELECT target_id, state FROM effect_intents WHERE target_kind = 'workspace-file'");
+    it('workspace policy allow or deny never silently admits removal by a move', async () => {
+      for (const verdict of ['allow', 'deny'] as const) {
+        const f = await runtime('full-auto', [...GRANTS.slice(0, 2), rule('write-op', 'operation', ['workspace.file.write'], verdict)]);
+        await mkdir(join(f.project, 'src/empty'));
+        await mkdir(join(f.project, 'src/tree/sub'), { recursive: true });
+        await writeFile(join(f.project, 'src/tree/sub/a'), 'original');
+        const result = await f.call('run_shell', { command: 'd=empty; t=tree; mv src/$d /tmp/gone && mv src/$t /tmp/tree' });
+        expect(result).toMatchObject({ card: true, status: 'denied' });
+        expect(await readFile(join(f.project, 'src/tree/sub/a'), 'utf8')).toBe('original');
+        expect(existsSync(join(f.project, 'src/empty'))).toBe(true);
+        expect(effects(f)).toEqual([]);
+      }
+    }, 120_000);
+    it('moves of floor directories and a move followed by a long command are denied before execution', async () => {
+      const f = await runtime('full-auto', GRANTS, { timeoutMs: 1_500 });
+      await mkdir(join(f.project, '.github/workflows'), { recursive: true });
+      await mkdir(join(f.project, 'Makefile'));
+      await mkdir(join(f.project, 'src/empty'));
+      for (const command of ['d=.github; mv $d /tmp/g; echo done', 'd=Make; mv ${d}file /tmp/m', 'd=empty; mv src/$d /tmp/gone; sleep 20']) {
+        expect(await f.call('run_shell', { command })).toMatchObject({ card: true, status: 'denied' });
+      }
+      for (const path of ['.github/workflows', 'Makefile', 'src/empty']) expect(existsSync(join(f.project, path))).toBe(true);
+      expect(effects(f)).toEqual([]);
+    }, 120_000);
+    it('a move compounded with a later write has no partial effects', async () => {
+      const f = await runtime(); await mkdir(join(f.project, 'src/empty'));
+      const result = await f.call('run_shell', { command: 'd=empty; mv src/$d /tmp/gone; echo new >> src/other.ts; sleep 1' });
+      expect(result).toMatchObject({ card: true, status: 'denied' });
+      expect(existsSync(join(f.project, 'src/empty'))).toBe(true);
+      expect(existsSync(join(f.project, 'src/other.ts'))).toBe(false);
+      expect(effects(f)).toEqual([]);
+    }, 120_000);
+  });
+
   // Astra 2180 R1: a directory the command removed is an entry like a file — classified, decided, its own C11 effect, reported — never a
   // direct removal beside the write-set path.
-  describe('directory removals go through the same boundary as files (Astra 2180 R1)', () => {
+  describe('directory removals still settle through the file boundary (Astra 2180 R1)', () => {
     const effects = (f: Awaited<ReturnType<typeof runtime>>) => f.rows("SELECT target_id, state FROM effect_intents WHERE target_kind = 'workspace-file' ORDER BY target_id") as { target_id: string; state: string }[];
     it('policy deny: nothing is removed and the report holds it back; allow: the empty directory and a whole tree are removed, each as its own effect', async () => {
       const denied = await runtime('full-auto', [...GRANTS.slice(0, 2), rule('write-op', 'operation', ['workspace.file.write'], 'deny')]);
       await mkdir(join(denied.project, 'src', 'empty'));
-      const held = await denied.call('run_shell', { command: 'd=empty; mv src/$d /tmp/gone; echo done' });
+      const held = await denied.call('run_shell', { command: 'd=empty; rm -d src/$d; echo done' });
       expect(held).toMatchObject({ card: false, status: 'ok' });
       expect(held.text).toContain('not applied: src/empty/ (denied by policy)');
       expect(existsSync(join(denied.project, 'src', 'empty'))).toBe(true);
@@ -108,7 +145,7 @@ describe.skipIf(!ready)('full-auto sandbox write set (SHELL-OVERLAY, C5)', () =>
       const f = await runtime();
       await mkdir(join(f.project, 'src', 'empty')); await mkdir(join(f.project, 'src', 'tree', 'sub'), { recursive: true });
       await writeFile(join(f.project, 'src', 'tree', 'a'), 'a\n'); await writeFile(join(f.project, 'src', 'tree', 'sub', 'b'), 'b\n');
-      const removed = await f.call('run_shell', { command: 'd=empty; t=tree; mv src/$d /tmp/gone && mv src/$t /tmp/tree; echo done' });
+      const removed = await f.call('run_shell', { command: 'd=empty; t=tree; rm -d src/$d && rm src/$t/a src/$t/sub/b && rm -d src/$t/sub src/$t; echo done' });
       expect(removed).toMatchObject({ card: false, status: 'ok' });
       expect(removed.text).toContain('write set: applied 5 (');
       for (const name of ['src/empty/', 'src/tree/', 'src/tree/sub/', 'src/tree/a', 'src/tree/sub/b']) expect(removed.text).toContain(name);
@@ -122,18 +159,18 @@ describe.skipIf(!ready)('full-auto sandbox write set (SHELL-OVERLAY, C5)', () =>
       const f = await runtime('full-auto', GRANTS, { timeoutMs: 1_500 });
       // An existing floor tree is bound read-only in the view (defense in depth): the removal fails there already.
       await mkdir(join(f.project, '.github', 'workflows'), { recursive: true });
-      const bound = await f.call('run_shell', { command: 'd=.github; mv $d /tmp/g; echo done' });
+      const bound = await f.call('run_shell', { command: 'd=.github; rm -d $d/workflows $d; echo done' });
       expect(bound.text).toContain('Read-only file system');
       expect(existsSync(join(f.project, '.github', 'workflows'))).toBe(true);
       // A directory whose own name is on the floor (`Makefile`) is not bound read-only as a tree: its removal reaches the write set and is
       // held back by the same classification as a file of that name.
       await mkdir(join(f.project, 'Makefile'));
-      const floor = await f.call('run_shell', { command: 'd=Make; mv ${d}file /tmp/m; echo done' });
+      const floor = await f.call('run_shell', { command: 'd=Make; rm -d ${d}file; echo done' });
       expect(floor).toMatchObject({ card: false, status: 'ok' });
       expect(floor.text).toContain('not applied: Makefile/ (write floor: the owner approves');
       expect(existsSync(join(f.project, 'Makefile'))).toBe(true);
       await mkdir(join(f.project, 'src', 'empty'));
-      const stopped = await f.call('run_shell', { command: 'd=empty; mv src/$d /tmp/gone; sleep 20' });
+      const stopped = await f.call('run_shell', { command: 'd=empty; rm -d src/$d; sleep 20' });
       expect(stopped.status).toBe('error');
       expect(stopped.text).toContain('kept aside and not applied');
       expect(existsSync(join(f.project, 'src', 'empty'))).toBe(true);
@@ -143,7 +180,7 @@ describe.skipIf(!ready)('full-auto sandbox write set (SHELL-OVERLAY, C5)', () =>
     it('a lower directory that changed during the call (a file added to it) is a conflict: nothing is applied', async () => {
       const f = await runtime();
       await mkdir(join(f.project, 'src', 'empty'));
-      const running = f.call('run_shell', { command: 'd=empty; mv src/$d /tmp/gone; echo new > src/other.ts; sleep 1' });
+      const running = f.call('run_shell', { command: 'd=empty; rm -d src/$d; echo new >> src/other.ts; sleep 1' });
       const writes = join(f.data, 'state', 'file-effects', 'sandbox-writes');
       for (let tries = 0; tries < 200 && (await readdir(writes).catch(() => [])).length === 0; tries++) await new Promise(resolve => setTimeout(resolve, 20));
       await new Promise(resolve => setTimeout(resolve, 200));

@@ -1,5 +1,6 @@
 import { userInfo, hostname } from 'node:os';
-import { verifiedPrincipalSchema } from '#domain/index.js';
+import { mcpPrincipalRef, verifiedPrincipalSchema } from '#domain/index.js';
+import { localPrincipalChannel } from './channel.js';
 import { AuthenticationError, type PrincipalVerifier } from '#engine/index.js';
 
 /** Direct local process only. This verifies the current OS user, NOT a remote socket's peer.
@@ -19,7 +20,8 @@ export function readLocalOsIdentity() {
   const user = userInfo();
   if (!user.username || !Number.isSafeInteger(user.uid) || user.uid < 0) throw new AuthenticationError('AUTHENTICATION_REQUIRED');
   const issuer = hostname();
+  const owner = { issuer, subject: String(user.uid) }, mcp = localPrincipalChannel() === 'mcp';
   return verifiedPrincipalSchema.unwrap().omit({ scopeIds: true }).readonly().parse({
-    id: `${user.username}@${issuer}`, issuer, subject: String(user.uid), assurance: 'os-user',
+    id: `${user.username}@${issuer}${mcp ? '/mcp' : ''}`, ...(mcp ? mcpPrincipalRef(owner) : owner), assurance: 'os-user',
   });
 }

@@ -1,9 +1,9 @@
+import { terminalApproval } from '../support/terminal-runtime-client.js';
 import { describe, expect, it } from 'vitest';
 import { readFile, readdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { PROVIDER_CONNECT_REGISTRY, lookupOpenAiCompatibleTariff, parseProviderConnectRegistry } from '#adapters/index.js';
 import { connectConfiguredModel } from '#composition/core/model-connect/index.js';
-import { configuredApproval } from '#composition/core/approvals/index.js';
 import { clearConfigCache } from '#platform/index.js';
 import { modelActivationTargetId } from '#engine/index.js';
 import { me, runtime } from '../support/chat-turn-harness.js';
@@ -177,7 +177,7 @@ describe.skipIf(process.platform !== 'linux')('models.connect', () => {
     const pending = await connectConfiguredModel(f.project, asked, f.options, { registry: localRegistry });
     expect(pending).toMatchObject({ status: 'approval-pending', approval: { keyPath: 'provider_invocation_profiles', layer: 'project' },
       steps: { declaration: 'written', profile: 'present', activation: 'present' } });
-    await configuredApproval(f.project, 'decide', { schemaVersion: 1, scopeId: 'scope', approvalId: pending.approval!.approvalId, commandId: 'decide-connect', expectedRevision: 0,
+    await terminalApproval(f.project, 'decide', { schemaVersion: 1, scopeId: 'scope', approvalId: pending.approval!.approvalId, commandId: 'decide-connect', expectedRevision: 0,
       decision: 'allow', reason: 'Allowed in the terminal', channel: 'local-terminal-card' }, f.options);
     const done = await connectConfiguredModel(f.project, asked, f.options, { registry: localRegistry });
     expect(done).toMatchObject({ status: 'connected', steps: { declaration: 'present', profile: 'written', activation: 'written' } });

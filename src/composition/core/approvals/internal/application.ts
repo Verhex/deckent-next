@@ -1,7 +1,7 @@
-import { SystemTrustedClock, type ConfigLoadOptions } from '#platform/index.js';
+import { ErrorRegistry, SystemTrustedClock, type ConfigLoadOptions } from '#platform/index.js';
 import { ApprovalApplication, AuditApplication, authorizeApproval, approvalCommandSchema, approvalQuerySchema, approvalListSchema, approvalRenewalSchema, RuntimeServiceProtocolError,
   registerApprovalChannel, registeredApprovalChannels, parseApprovalAnswer, SessionApprovalAnswers, type ApprovalSubjectKind, type TurnDecisionCapabilities } from '#engine/index.js';
-import { openSqliteApprovalStore, openSqliteAuditStore, openLocalIntegrityAuthority, readOperationsConfig, resolveOperationCatalog, LocalOsSessionAuthority, createLocalPeerSession, type LocalPeerIdentity } from '#adapters/index.js';
+import { attestLocalInteractiveTerminal, openSqliteApprovalStore, openSqliteAuditStore, openLocalIntegrityAuthority, readOperationsConfig, resolveOperationCatalog, LocalOsSessionAuthority, createLocalPeerSession, type LocalPeerIdentity } from '#adapters/index.js';
 import type { AuditEvent } from '#domain/index.js';
 import { loadConfiguredScopeContext, loadConfiguredPeerScopeContext } from '#composition/core/scoped-request/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
@@ -16,10 +16,12 @@ export async function configuredApproval(projectRoot: string, action: 'list' | '
     const context = peer ? await loadConfiguredPeerScopeContext(projectRoot, parsed.scopeId, options, peer, access)
       : await loadConfiguredScopeContext(projectRoot, parsed.scopeId, options, access);
     const { config, layout, document, principal } = context; const id = 'approvalId' in parsed ? parsed.approvalId : parsed.scopeId;
+    if (action === 'decide' && !await attestLocalInteractiveTerminal(peer?.pid, peer?.uid)) throw ErrorRegistry.createError('APPROVAL_INTERACTIVE_REQUIRED');
     authorizeApproval(document, action === 'renew' ? 'renew' : action === 'decide' ? 'decide' : 'inspect', parsed.scopeId, id, principal);
     const clock = new SystemTrustedClock();
     const sessions = peer ? await createLocalPeerSession(peer, principal.scopeIds, config.approvals.sessionTtlMs, clock)
       : await LocalOsSessionAuthority.create(principal.scopeIds, config.approvals.sessionTtlMs, clock);
+    if (action === 'decide') sessions.requireInteractiveTerminal();
     const integrity = await openLocalIntegrityAuthority(layout, config.approvals.keyFile);
     const journal = openSqliteApprovalStore(await context.path(), config.storage.sqlite);
     try {

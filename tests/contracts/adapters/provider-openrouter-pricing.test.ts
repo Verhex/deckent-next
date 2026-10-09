@@ -26,8 +26,8 @@ function error(code: string) { return expect.objectContaining({ code }) as unkno
 it('selects one exact provider/region endpoint and quotes independently rounded cents from token and request rates', () => {
   const parsed = tariff({ request: '0.005' });
   const result = quoteOpenRouterText(parsed, quoteRequest(), 150);
-  expect(result).toEqual({ schemaVersion: 1, currency: 'USD', maxChargeMinorUnits: 9, metadataDigest: parsed.metadataDigest, tariffDigest: parsed.tariffDigest,
-    maxPromptTokens: 3, maxCompletionTokens: 2, provider: { only: ['provider/region'], allow_fallbacks: false, require_parameters: true,
+  expect(result).toEqual({ schemaVersion: 2, currency: 'USD', maxChargeMinorUnits: 8, metadataDigest: parsed.metadataDigest, tariffDigest: parsed.tariffDigest,
+    maxPromptTokens: 3, maxCompletionTokens: 2, requestControls: expect.objectContaining({ modalities: ['text'] }), provider: { only: ['provider/region'], allow_fallbacks: false, require_parameters: true,
       max_price: { prompt: '10000', completion: '20000', request: '0.005' } } });
   expect(parsed.pricedDimensions).toEqual(['completion', 'input_cache_read', 'input_cache_write', 'internal_reasoning', 'prompt', 'request']);
 });
@@ -40,11 +40,11 @@ it('rounds tiny dimension charges independently while explicitly zero dimensions
   expect(parsed.unpricedDimensions).toEqual([]);
   const allPositive = tariff({ prompt: '0.000001', completion: '0.000001', cache: '0.000001',
     cacheWrite: '0.000001', reasoning: '0.000001', request: '0.000001' });
-  expect(quoteOpenRouterText(allPositive, quoteRequest(), 150).maxChargeMinorUnits).toBe(6);
+  expect(quoteOpenRouterText(allPositive, quoteRequest(), 150).maxChargeMinorUnits).toBe(5);
 });
 
-it('does not treat a missing request price as zero merely because a routing cap can be sent', () => {
-  const parsed = tariff({ omitPricing: ['request'] });
+it('refuses an explicitly unpriced request fee even with a routing cap', () => {
+  const parsed = tariff({ extraPricing: { request: null } });
   expect(parsed.unpricedDimensions).toEqual(['request']);
   expect(() => quoteOpenRouterText(parsed, quoteRequest(), 150)).toThrow(error('INCOMPLETE_PRICING'));
 });
@@ -54,10 +54,11 @@ it('rejects overflow in the sum even when every rounded dimension fits a safe in
   expect(() => quoteOpenRouterText(parsed, quoteRequest(), 150)).toThrow(error('AMOUNT_OVERFLOW'));
 });
 
-it('rejects missing priced dimensions but accepts explicitly declared zero rates', () => {
+it('records absent optional SKUs as included and distinguishes explicit zero prices', () => {
   const incomplete = tariff({ omitPricing: ['input_cache_write'] });
-  expect(incomplete.unpricedDimensions).toContain('input_cache_write');
-  expect(() => quoteOpenRouterText(incomplete, quoteRequest(), 150)).toThrow(error('INCOMPLETE_PRICING'));
+  expect(incomplete.unpricedDimensions).toEqual([]);
+  expect(incomplete.includedDimensions).toContain('input_cache_write');
+  expect(quoteOpenRouterText(incomplete, quoteRequest(), 150).maxChargeMinorUnits).toBeGreaterThan(0);
   const declaredZero = tariff({ cacheWrite: '0' });
   expect(declaredZero.pricedDimensions).toContain('input_cache_write');
   expect(quoteOpenRouterText(declaredZero, quoteRequest(), 150).maxChargeMinorUnits).toBeGreaterThan(0);
@@ -73,12 +74,13 @@ it('separates complete source metadata evidence from selected tariff identity an
   expect(quoteOpenRouterText(baseline, quoteRequest(), 150).provider.max_price).toEqual({ prompt: '10000', completion: '20000', request: '0.005' });
 });
 
-it('requires an exact leaf endpoint suffix and rejects ambiguous or base provider tags', () => {
+it('bounds every provider variant for a bare slug and pins a full region slug exactly', () => {
   const base = metadata({ endpoints: [
-    { ...metadata().data.endpoints[0]!, tag: 'provider' }, { ...metadata().data.endpoints[0]!, tag: 'provider/region' },
+    { ...metadata().data.endpoints[0]!, tag: 'provider' }, { ...metadata().data.endpoints[0]!, tag: 'provider/region', pricing: { prompt: '0.1', completion: '0.2' } },
   ] });
-  expect(() => parseOpenRouterTariff(base, { ...selection, endpointTag: 'provider' })).toThrow(error('ENDPOINT_AMBIGUOUS'));
-  expect(() => parseOpenRouterTariff(metadata({ tag: 'provider' }), { ...selection, endpointTag: 'provider' })).toThrow(error('ENDPOINT_AMBIGUOUS'));
+  const parsed = parseOpenRouterTariff(base, { ...selection, endpointTag: 'provider' });
+  expect(quoteOpenRouterText(parsed, quoteRequest(), 150).provider.max_price.prompt).toBe('100000');
+  expect(quoteOpenRouterText(parseOpenRouterTariff(base, selection), quoteRequest(), 150).provider.only).toEqual(['provider/region']);
   expect(() => parseOpenRouterTariff(metadata({ tag: 'provider/region-extra' }), selection)).toThrow(error('ENDPOINT_AMBIGUOUS'));
 });
 
@@ -87,7 +89,7 @@ it('rejects unavailable or mismatched endpoint identity and malformed pricing me
   expect(() => tariff({ endpointModelId: 'other/model' })).toThrow(error('ENDPOINT_UNAVAILABLE'));
   expect(() => parseOpenRouterTariff(metadata({ modelId: 'other/model' }), selection)).toThrow(error('INVALID_METADATA'));
   expect(() => tariff({ prompt: 0 })).toThrow(error('INVALID_METADATA'));
-  expect(() => tariff({ extraPricing: { image: '0.000001' } })).toThrow(error('UNSUPPORTED_PRICING'));
+  expect(quoteOpenRouterText(tariff({ extraPricing: { image: '0.000001', web_search: null } }), quoteRequest(), 150).maxChargeMinorUnits).toBeGreaterThan(0);
   expect(() => tariff({ extraPricing: { unrecognized: '0' } })).toThrow(error('UNSUPPORTED_PRICING'));
   expect(() => tariff({ extraPricing: { overrides: [{ conditions: { region: 'x' }, pricing: { prompt: '0.1' } }] } })).toThrow(error('UNSUPPORTED_PRICING'));
   for (const key of ['constructor', 'toString', '__proto__']) {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { bindingsFileSchema, delegationWithin, evaluatePolicy, firstRunPolicyTemplate, FIRST_RUN_POLICY_TEMPLATE_ID, FIRST_RUN_POLICY_TEMPLATE_VERSION,
-  matchFirstRunPolicyTemplate, firstRunTemplateAdditions, mcpToolGrantChange, modeEligibleApproval, planPolicyChange, policyFileSchema, resolvePolicyBindings, upgradeFirstRunPolicy } from '#domain/index.js';
+  namedPersonPolicyAdditions, policyNamedPeople, mcpPrincipalRef, policyScopeGrants, matchFirstRunPolicyTemplate, firstRunTemplateAdditions, mcpToolGrantChange, modeEligibleApproval, planPolicyChange, policyFileSchema, resolvePolicyBindings, upgradeFirstRunPolicy } from '#domain/index.js';
 import { decideAgentToolCall, type AgentToolCallCell } from '#engine/index.js';
 
 // SCR-B (owner 2026-09-28, checkpoint option B, proof/SCR-B-2026-09-28/review.md): the versioned default policy
@@ -25,8 +25,8 @@ describe('firstRunPolicyTemplate (domain, pure)', () => {
     expect(template.id).toBe(FIRST_RUN_POLICY_TEMPLATE_ID); expect(template.version).toBe(FIRST_RUN_POLICY_TEMPLATE_VERSION);
     expect(policyFileSchema.safeParse(template.policy).success).toBe(true);
     expect(bindingsFileSchema.safeParse(template.bindings).success).toBe(true);
-    expect(template.policy).toMatchObject({ schemaVersion: 2, revision: 'first-run-template-v8' });
-    expect(template.bindings).toMatchObject({ schemaVersion: 1, revision: 'first-run-template-v8-bindings', bindings: [] });
+    expect(template.policy).toMatchObject({ schemaVersion: 2, revision: 'first-run-template-v9' });
+    expect(template.bindings).toMatchObject({ schemaVersion: 1, revision: 'first-run-template-v9-bindings', bindings: [] });
   });
   it('grants read tools and the given scratch tool names silently, asks for edit/shell tools, and grants no pool/service authority', () => {
     const policy = resolvePolicyBindings(firstRunPolicyTemplate(input).policy, firstRunPolicyTemplate(input).bindings);
@@ -65,7 +65,7 @@ describe('firstRunPolicyTemplate (domain, pure)', () => {
   });
   it('v2 (SECRET-WRITE, owner 2026-09-29 option A): the installing owner may set and delete every secret of their installation in its scope, nobody else', () => {
     const template = firstRunPolicyTemplate(input), policy = resolvePolicyBindings(template.policy, template.bindings);
-    expect(FIRST_RUN_POLICY_TEMPLATE_VERSION).toBe(8);
+    expect(FIRST_RUN_POLICY_TEMPLATE_VERSION).toBe(9);
     // v8 (BACKUP-COMMAND): installation-wide backup for the installing owner alone.
     expect(template.policy.grants.find(grant => grant.id === 'first-run-backup')).toEqual({ id: 'first-run-backup', effect: 'allow',
       actions: ['create', 'verify', 'restore'], scopes: 'all', principals: [me], resource: { kind: 'backup', ids: 'all' } });
@@ -109,7 +109,8 @@ describe('matchFirstRunPolicyTemplate (doctor recognition, never authority)', ()
     expect(matchFirstRunPolicyTemplate('custom-revision')).toBeNull();
     expect(matchFirstRunPolicyTemplate('first-run-template-v1+edit-shell')).toBeNull();
     expect(matchFirstRunPolicyTemplate('first-run-template-v8')).toEqual({ id: 'first-run-template', version: 8 });
-    expect(matchFirstRunPolicyTemplate('first-run-template-v9')).toBeNull();
+    expect(matchFirstRunPolicyTemplate('first-run-template-v9')).toEqual({ id: 'first-run-template', version: 9 });
+    expect(matchFirstRunPolicyTemplate('first-run-template-v10')).toBeNull();
     expect(matchFirstRunPolicyTemplate('first-run-template-v0')).toBeNull();
     expect(matchFirstRunPolicyTemplate('')).toBeNull();
   });
@@ -166,13 +167,15 @@ describe('first-run v5: MCP server authority, trust grant and the proposal tool'
 describe('first-run v4 → v5 migration (pure)', () => {
   const v4 = () => { const { proposeMcpToolName: _p, mcpCallOperationId: _o, ...rest } = input; void _p; void _o;
     const current = firstRunPolicyTemplate(input).policy as { grants: { id: string; resource: { ids: unknown } }[] };
-    return { ...current, revision: 'first-run-template-v4', grants: current.grants.filter(grant => !['first-run-mcp-servers', 'first-run-mcp-call-operation', 'first-run-policy-administer', 'first-run-approvals', 'first-run-secret-switch', 'first-run-model-activation', 'first-run-model-invocation', 'first-run-provider-spending', 'first-run-backup'].includes(grant.id))
+    return { ...current, revision: 'first-run-template-v4', grants: current.grants.filter(grant => !grant.id.startsWith('first-run-mcp-observe-') && !['first-run-mcp-servers', 'first-run-mcp-call-operation', 'first-run-policy-administer', 'first-run-approvals', 'first-run-secret-switch', 'first-run-model-activation', 'first-run-model-invocation', 'first-run-provider-spending', 'first-run-backup'].includes(grant.id))
       .map(grant => grant.id === 'first-run-read-tools' ? { ...grant, resource: { ...grant.resource, ids: rest.readToolNames } } : grant) }; };
-  it('exactly this installation\'s v4, v5, v6 or v7 template upgrades to exactly the current (v8) template; v8 is current', () => {
+  it('exactly this installation\'s v4, v5, v6 or v7 template upgrades to exactly the current (v9) template; v9 is current', () => {
     expect(upgradeFirstRunPolicy(v4(), input)).toEqual({ status: 'upgrade', from: 4, policy: firstRunPolicyTemplate(input).policy });
     const current = firstRunPolicyTemplate(input).policy as { grants: { id: string }[] };
     // v8 = BACKUP-COMMAND (installation-wide backup); v7 = T4-B K3 (model activation + invocation) and SPEND-SETTLEMENT (provider spend accounts) in one template version.
-    const v7 = { ...current, revision: 'first-run-template-v7', grants: current.grants.filter(grant => grant.id !== 'first-run-backup') };
+    const v8 = { ...current, revision: 'first-run-template-v8', grants: current.grants.filter(grant => !grant.id.startsWith('first-run-mcp-observe-')) };
+    expect(upgradeFirstRunPolicy(v8, input)).toEqual({ status: 'upgrade', from: 8, policy: firstRunPolicyTemplate(input).policy });
+    const v7 = { ...v8, revision: 'first-run-template-v7', grants: v8.grants.filter(grant => grant.id !== 'first-run-backup') };
     expect(upgradeFirstRunPolicy(v7, input)).toEqual({ status: 'upgrade', from: 7, policy: firstRunPolicyTemplate(input).policy });
     const v6 = { ...v7, revision: 'first-run-template-v6', grants: v7.grants.filter(grant => !['first-run-model-activation', 'first-run-model-invocation', 'first-run-provider-spending'].includes(grant.id)) };
     expect(upgradeFirstRunPolicy(v6, input)).toEqual({ status: 'upgrade', from: 6, policy: firstRunPolicyTemplate(input).policy });
@@ -192,7 +195,7 @@ describe('first-run v4 → v5 migration (pure)', () => {
 
 describe('first-run v4 → v5 governed additions (deckent policy upgrade --template v5, pure plan)', () => {
   const v4 = () => { const current = firstRunPolicyTemplate(input).policy as unknown as { grants: { id: string; resource: { ids: unknown } }[] };
-    return { ...current, revision: 'first-run-template-v4', grants: current.grants.filter(grant => !['first-run-mcp-servers', 'first-run-mcp-call-operation', 'first-run-policy-administer', 'first-run-approvals', 'first-run-secret-switch', 'first-run-model-activation', 'first-run-model-invocation', 'first-run-provider-spending', 'first-run-backup'].includes(grant.id))
+    return { ...current, revision: 'first-run-template-v4', grants: current.grants.filter(grant => !grant.id.startsWith('first-run-mcp-observe-') && !['first-run-mcp-servers', 'first-run-mcp-call-operation', 'first-run-policy-administer', 'first-run-approvals', 'first-run-secret-switch', 'first-run-model-activation', 'first-run-model-invocation', 'first-run-provider-spending', 'first-run-backup'].includes(grant.id))
       .map(grant => grant.id === 'first-run-read-tools' ? { ...grant, resource: { ...grant.resource, ids: READ_TOOLS } } : grant) }; };
   const names = { person: me, proposeMcpToolName: 'propose_mcp_server', mcpCallOperationId: 'mcp.tool.call', policyAdministerOperationId: 'policy.administer' };
   it('adds exactly the three missing rules and never replaces or removes one: hand-added rules and an edited read rule stay', () => {
@@ -210,7 +213,8 @@ describe('first-run v4 → v5 governed additions (deckent policy upgrade --templ
       ['first-run-model-activation', 'model-activation', 'all', 'all'], ['first-run-model-invocation', 'model-invocation', 'all', ['installation']],
       ['first-run-provider-spending', 'provider-spend-account', 'all', ['installation']],
       // v8 (BACKUP-COMMAND): installation-wide backup.
-      ['first-run-backup', 'backup', 'all', 'all']]);
+      ['first-run-backup', 'backup', 'all', 'all'],
+      ...['run', 'scope', 'approval', 'model-activation', 'model-invocation', 'provider-spend-account'].map(kind => [`first-run-mcp-observe-${kind}`, kind, 'all', ['installation']])]);
     expect(plan.conflicts).toEqual([]);
     // Applied (the plan's documents), a second run has nothing to add.
     const applied = { ...edited, grants: [...edited.grants, ...plan.rules] };
@@ -231,11 +235,51 @@ describe('first-run v4 → v5 governed additions (deckent policy upgrade --templ
     const shared = { ...v4(), grants: v4().grants.map(grant => grant.id === 'first-run-read-tools' ? { ...grant, principals: [me, { issuer: 'os', subject: 'colleague' }] } : grant) };
     const plan = firstRunTemplateAdditions(shared, { ...names, person: { issuer: 'os', subject: 'colleague' } });
     expect(plan.status).toBe('plan');
-    if (plan.status === 'plan') for (const rule of plan.rules) expect(rule.principals).toEqual([{ issuer: 'os', subject: 'colleague' }]);
+    if (plan.status === 'plan') for (const rule of plan.rules) expect(rule.principals).toEqual([{ issuer: rule.id.startsWith('first-run-mcp-observe-') ? 'os/mcp' : 'os', subject: 'colleague' }]);
   });
   it('a fresh v5 template is current (the proposal tool inside its read rule); a policy without the first-run read rule is not this template', () => {
     expect(firstRunTemplateAdditions(firstRunPolicyTemplate(input).policy, names)).toEqual({ status: 'current', conflicts: [] });
     expect(firstRunTemplateAdditions({ ...v4(), grants: v4().grants.filter(grant => grant.id !== 'first-run-read-tools') }, names)).toEqual({ status: 'unavailable', reason: 'not-first-run' });
     expect(firstRunTemplateAdditions({ nope: 1 }, names)).toEqual({ status: 'unavailable', reason: 'invalid' });
   });
+});
+
+describe('W3 MCP policy boundary', () => {
+  const mcp = { ...principal, id: `${principal.id}/mcp`, ...mcpPrincipalRef(me) };
+  const request = (actor = mcp) => ({ principal: actor, scopeId: 'installation', action: 'budget-revision', resource: { kind: 'provider-spend-account', id: 'budget' } });
+  it('does not delegate owner or all-principal grants to MCP; named MCP grants work, restrictions still deny', () => {
+    const built = firstRunPolicyTemplate(input), resolved = resolvePolicyBindings(built.policy, built.bindings);
+    expect(evaluatePolicy(resolved, request()).decision).toBe('deny');
+    expect(evaluatePolicy(resolved, request(principal)).decision).toBe('allow');
+    const broad = { id: 'broad', effect: 'allow', principals: 'all', scopes: ['installation'], actions: ['budget-revision'], resource: { kind: 'provider-spend-account', ids: 'all' } };
+    const legacy = { schemaVersion: 1, revision: 'legacy', grants: [broad], restrictions: [] };
+    expect(evaluatePolicy(legacy, request()).decision).toBe('deny');
+    expect(policyScopeGrants(legacy, mcp, ['installation'])).toEqual([]);
+    expect(delegationWithin(legacy, mcp, [{ ...broad, principals: [mcpPrincipalRef(me)] }] as never).ok).toBe(false);
+    expect(delegationWithin(legacy, principal, [{ ...broad, principals: [mcpPrincipalRef(me)] }] as never).ok).toBe(true);
+    const explicit = { ...broad, id: 'explicit-mcp', principals: [mcpPrincipalRef(me)] };
+    const granted = { ...legacy, grants: [explicit] };
+    expect(evaluatePolicy(granted, request()).decision).toBe('allow');
+    expect(evaluatePolicy({ ...granted, restrictions: [{ id: 'restriction', principals: 'all', scopes: ['installation'], actions: ['budget-revision'], resource: broad.resource }] }, request()).decision).toBe('deny');
+  });
+  it('adds only observation to custom v8 policies, preserves mutations/custom rows and is idempotent', () => {
+    const current = firstRunPolicyTemplate(input).policy;
+    const old = { ...current, revision: 'custom-v8', grants: current.grants.filter(rule => !rule.id.startsWith('first-run-mcp-observe-')) };
+    const names = { person: me, proposeMcpToolName: input.proposeMcpToolName, mcpCallOperationId: input.mcpCallOperationId, policyAdministerOperationId: input.policyAdministerOperationId };
+    const plan = firstRunTemplateAdditions(old, names);
+    expect(plan.status).toBe('plan'); if (plan.status !== 'plan') return;
+    expect(plan.rules).toHaveLength(6);
+    for (const rule of plan.rules) expect(rule).toMatchObject({ effect: 'allow', actions: ['inspect'], principals: [mcpPrincipalRef(me)] });
+    const next = { ...old, grants: [...old.grants, ...plan.rules] };
+    expect(next.grants.slice(0, old.grants.length)).toEqual(old.grants);
+    expect(firstRunTemplateAdditions(next, names)).toEqual({ status: 'current', conflicts: [] });
+  });
+});
+
+it('does not present the MCP actor as an installing person or upgrade its observation grants into owner authority', () => {
+  const policy = firstRunPolicyTemplate(input).policy;
+  expect(policyNamedPeople(policy, 'installation', 20)).toEqual([me]);
+  expect(namedPersonPolicyAdditions(policy, { person: mcpPrincipalRef(me), scopeId: 'installation',
+    proposeMcpToolName: input.proposeMcpToolName, mcpCallOperationId: input.mcpCallOperationId, policyAdministerOperationId: input.policyAdministerOperationId }))
+    .toEqual({ status: 'unavailable', reason: 'person-not-named' });
 });

@@ -5,7 +5,7 @@ import { agentTurnStreamEventSchema, effectCommandSchema, effectRecordSchema, ef
 import { clearSessionStandingSchema } from '#engine/core/approval/index.js';
 import { secretDeleteCommandSchema, secretSetCommandSchema, secretStoreSwitchCommandSchema } from '#engine/core/secret-store/index.js';
 
-export const RUNTIME_SERVICE_SCHEMA_VERSION = 25 as const;
+export const RUNTIME_SERVICE_SCHEMA_VERSION = 26 as const;
 export const RUNTIME_SERVICE_ERROR_PARAMS = 8;
 export const RUNTIME_SERVICE_ERROR_PARAM_CHARS = 512;
 /** Bounded, serializable message parameters for a typed error response (strings truncated, other values dropped). */
@@ -80,9 +80,10 @@ export const runtimeOperationOutcomeSchema = z.discriminatedUnion('status', [
     revision: z.number().int().nonnegative().safe(), expiresAt: z.number().int().nonnegative().safe(), summary: z.string().min(1).max(2048) }).strict() }).strict(),
 ]).readonly();
 export const runtimeOperationInspectionSchema = z.object({ schemaVersion: z.literal(1), record: effectRecordSchema.nullable() }).strict().readonly();
+// v26 (W3-AUTHORITY): `channel: mcp` selects the distinct MCP actor; it never claims another OS user.
 // Current local transport is same-OS-UID only. Requests never provide an actor; current peer policy supplies scope.
 // Invocation results carry an advisory replay flag; it is not independent evidence of spend or permission to retry.
-export const runtimeServiceRequestSchema = z.object({ schemaVersion: z.literal(RUNTIME_SERVICE_SCHEMA_VERSION), requestId: identitySchema,
+export const runtimeServiceRequestSchema = z.object({ schemaVersion: z.literal(RUNTIME_SERVICE_SCHEMA_VERSION), requestId: identitySchema, channel: z.literal('mcp').optional(),
   operation: runtimeServiceOperationSchema, input: z.unknown(), delivery: runtimeServiceDeliverySchema.optional(),
 }).strict().refine(value => Object.hasOwn(value, 'input'), { path: ['input'], message: 'RUNTIME_SERVICE_INPUT_REQUIRED' }).superRefine((value, context) => {
   if (isRuntimeServiceBoundedResultOperation(value.operation)) {
@@ -165,12 +166,12 @@ export class RuntimeServiceProtocolError extends Error {
  * A mismatched non-lifecycle envelope is closed unanswered (the client's typed `LOCAL_RUNTIME_TRANSPORT`); a v18 client's describe of a v17
  * service retries at v17 and the terminal shows the build skew. v18 (SECRET-WRITE) kept [18, 17]; v20 (S02) kept [20, 19]; v21 (T2) kept [21, 20]; v22 (T3) kept
  * [22, 21]; v23 (T4 MODEL-SWITCH: `chatTurn` carries the session's pinned `reference`) kept [23, 22]; v24 (SECRET-STORE-SWITCH: `switchSecretStore`)
- * kept [24, 23]; v25 (SPEND-SETTLEMENT: `manageProviderSpend`) keeps [25, 24]: a v23 service is outside.
+ * kept [24, 23]; v25 (SPEND-SETTLEMENT: `manageProviderSpend`) kept [25, 24]; v26 (MCP actor) keeps [26, 25]: a v24 service is outside.
  */
-export const RUNTIME_SERVICE_LIFECYCLE_VERSIONS = Object.freeze([RUNTIME_SERVICE_SCHEMA_VERSION, 24] as const);
+export const RUNTIME_SERVICE_LIFECYCLE_VERSIONS = Object.freeze([RUNTIME_SERVICE_SCHEMA_VERSION, 25] as const);
 export type RuntimeServiceLifecycleVersion = typeof RUNTIME_SERVICE_LIFECYCLE_VERSIONS[number];
-const lifecycleVersionSchema = z.union([z.literal(RUNTIME_SERVICE_SCHEMA_VERSION), z.literal(24)]);
-export const runtimeServiceLifecycleRequestSchema = z.object({ schemaVersion: lifecycleVersionSchema, requestId: identitySchema,
+const lifecycleVersionSchema = z.union([z.literal(RUNTIME_SERVICE_SCHEMA_VERSION), z.literal(25)]);
+export const runtimeServiceLifecycleRequestSchema = z.object({ schemaVersion: lifecycleVersionSchema, requestId: identitySchema, channel: z.literal('mcp').optional(),
   operation: z.enum(['describeService', 'shutdownService']), input: z.unknown() }).strict()
   .refine(value => Object.hasOwn(value, 'input'), { path: ['input'], message: 'RUNTIME_SERVICE_INPUT_REQUIRED' }).readonly();
 export type RuntimeServiceLifecycleRequest = z.infer<typeof runtimeServiceLifecycleRequestSchema>;

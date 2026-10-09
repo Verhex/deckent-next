@@ -319,6 +319,7 @@
     },
     "src/composition/core/mcp": {
       "dependencies": [
+        "src/adapters/core/local-principal",
         "src/composition/core/scoped-request",
         "src/composition/core/runs",
         "src/adapters/core/mcp-transport",
@@ -1741,6 +1742,7 @@
     },
     "src/adapters/core/host-shell": {
       "dependencies": [
+        "src/platform/core/common",
         "src/domain/core/agent-tool",
         "src/engine/core/effect",
         "src/engine/core/shell-classification",
@@ -1896,6 +1898,7 @@
     },
     "src/composition/core/approvals": {
       "dependencies": [
+        "src/platform/core/errors",
         "src/engine/core/installation",
         "src/platform/core/clock",
         "src/platform/core/config",
@@ -1961,7 +1964,10 @@
         "src/platform/core/config",
         "src/platform/core/managed-files",
         "src/platform/core/utils",
-        "src/composition/core/config"
+        "src/composition/core/config",
+        "src/platform/core/errors",
+        "src/platform/core/host",
+        "src/adapters/core/local-principal"
       ],
       "plan": "PROVIDERS"
     },
@@ -2743,6 +2749,10 @@
       "README.md",
       "README.tr.md",
       "CONTRIBUTING.md",
+      "docs/glossary.md",
+      "docs/glossary.tr.md",
+      "docs/architecture-overview.md",
+      "docs/architecture-overview.tr.md",
       "CODE_OF_CONDUCT.md",
       "SECURITY.md",
       ".github/PULL_REQUEST_TEMPLATE.md",

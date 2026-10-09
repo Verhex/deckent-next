@@ -9,7 +9,7 @@ import { SessionStanding, SessionApprovalAnswers, agentCallPermissionMode, agent
   renderAgentTurnSystemPrompt, requestAgentToolApproval, runDurableAgentTurn, withAgentTurnSystemPrompt, projectModelIngressField, type AgentRoundOutcome, type AgentTurnPorts, type TurnDecisionCapabilities,
   type ModelInvocationDelivery } from '#engine/index.js';
 import { t, globalStateRoot, ErrorRegistry, prepareProductDirectory, resolveLocale, SystemTrustedClock, type ConfigLoadOptions } from '#platform/index.js';
-import { agentTurnWriteFloor, isSelfSourceProject, agentAuthorityPaths, agentProductStateDeny, agentShellHardFloor, agentDataRootRel, agentWorkspaceDeny, createWorkspaceReadTools, WORKSPACE_EDIT_TOOL_SPECS, openLocalIntegrityAuthority, openSqliteApprovalStore, openSqliteAgentTurnStore, OPENAI_CHAT_COMPLETIONS_FAMILY, ANTHROPIC_MESSAGES_FAMILY,
+import { agentTurnWriteFloor, isSelfSourceProject, agentAuthorityPaths, agentProductStateDeny, agentShellHardFloor, sealedRootEntryRefused, agentDataRootRel, agentWorkspaceDeny, createWorkspaceReadTools, WORKSPACE_EDIT_TOOL_SPECS, openLocalIntegrityAuthority, openSqliteApprovalStore, openSqliteAgentTurnStore, OPENAI_CHAT_COMPLETIONS_FAMILY, ANTHROPIC_MESSAGES_FAMILY,
   OPENAI_CHAT_ENABLE_THINKING_CAPABILITY, OPENAI_CHAT_TOOL_CALLS_CAPABILITY, openScratchSession, projectEditArea, readTerminalChatConfig, readTerminalScratchConfig,
   readTerminalFetchConfig, FETCH_URL_TOOL_SPEC, PROPOSE_MCP_SERVER_TOOL_SPEC, SYSTEM_FETCH_TRANSPORT, readTerminalShellConfig, shellSandboxCapabilities, RUN_SHELL_TOOL_SPEC, SCRATCH_TOOL_SPECS, scratchSessionKey, createScratchActivity,
   isWriteApprovalFloored, isSelfSourceWriteFloored, shippedShellSandboxes, McpClientPool, type HttpFetchTransport, type LocalPeerIdentity,
@@ -134,10 +134,11 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
     const editsIn = (area: WorkspaceEditArea | null | undefined, project = false) => area ? createAgentFileEdits({ area, context, peer, scopeId: command.scopeId, turnId: command.turnId,
       ...(project ? { authority, selfSource: selfSource && !fullAccess ? isSelfSourceWriteFloored : () => false } : {}) }) : null;
     const edits = editsIn(workspace && projectEditArea(workspace.scope), true), scratchEdits = editsIn(scratch?.writes), editsOf = (name: string) => name === 'scratch_write' ? scratchEdits : edits;
+    const hardFloor = agentShellHardFloor(projectRoot, context.layout, [options.env ?? process.env, process.env]);
     const shell = workspace ? createAgentShell({ scope: workspace.scope, context, peer, scopeId: command.scopeId, turnId: command.turnId, channel, language,
       config: readTerminalShellConfig(config), scratch, productState: agentProductStateDeny(projectRoot, context.layout), fullAccess, authority, selfSource: selfSource && !fullAccess, writeFloor: fullAccess ? isWriteApprovalFloored : writeFloor, writeSetRoot: () => sandboxWriteSetRoot(projectRoot, context.layout, options.env ?? process.env),
-      sandboxes: host.shellSandboxes({ project: workspace.scope, scratchDir: scratch?.dir ?? null, writeFloor, ...(agentDataRootRel(projectRoot, context.layout) ? { dataRoot: agentDataRootRel(projectRoot, context.layout)! } : {}), ...(fullAccess ? { repositoryWritable: true,
-        hardFloor: agentShellHardFloor(projectRoot, context.layout, [options.env ?? process.env, process.env]) } : {}) }) }) : null;
+      sandboxes: host.shellSandboxes({ project: workspace.scope, scratchDir: scratch?.dir ?? null, writeFloor, ...(agentDataRootRel(projectRoot, context.layout) ? { dataRoot: agentDataRootRel(projectRoot, context.layout)! } : {}), ...(fullAccess ? { repositoryWritable: true } : {}),
+        hardFloor }), sealed: sealedRootEntryRefused(projectRoot, hardFloor) }) : null;
     const principalKey = principalKeyOf(context.principal);
     const toolAuthority = new AgentToolPolicyAuthorization(context.policy);
     // The service's model-facing instructions (TL-C D4) join the client's system text in every sent round; the digest binds them, so a

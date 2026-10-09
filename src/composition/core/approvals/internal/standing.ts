@@ -1,9 +1,9 @@
 import { userInfo } from 'node:os';
-import { SystemTrustedClock, type ConfigLoadOptions } from '#platform/index.js';
+import { ErrorRegistry, SystemTrustedClock, type ConfigLoadOptions } from '#platform/index.js';
 import { ApprovalApplication, AuditApplication, FIRST_RUN_MCP_CALL_OPERATION_ID, FIRST_RUN_POLICY_ADMINISTER_OPERATION_ID, FIRST_RUN_PROPOSE_MCP_TOOL_NAME, McpToolGrants, PersistentStanding, PolicyAdministrationApplication,
   PolicyTemplateUpgrade, type McpToolGrantOutcome, type McpToolGrantTarget, type TemplateUpgradeResult,
   type PersistentStandingDependencies, type StandingGrantView } from '#engine/index.js';
-import { LocalOsSessionAuthority, openLocalIntegrityAuthority, openSqliteApprovalStore, openSqliteAttemptStore, openSqliteAuditStore } from '#adapters/index.js';
+import { attestLocalInteractiveTerminal, localPrincipalPeer, LocalOsSessionAuthority, openLocalIntegrityAuthority, openSqliteApprovalStore, openSqliteAttemptStore, openSqliteAuditStore } from '#adapters/index.js';
 import { createLayoutPolicySource } from '#composition/core/policy/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
@@ -21,7 +21,7 @@ async function withPolicyAdministration<T>(root: string, scopeId: string, option
     const source = createLayoutPolicySource(layout, userInfo().uid, config.inspection.policyMaxBytes);
     const denied = () => Promise.reject(new Error('read-only'));
     if (access === 'read') return await use({ policy: source, administration: { submit: denied }, approve: denied }, principal);
-    const clock = new SystemTrustedClock(), sessions = await LocalOsSessionAuthority.create(principal.scopeIds, config.approvals.sessionTtlMs, clock);
+    const peer = localPrincipalPeer(), clock = new SystemTrustedClock(), sessions = await LocalOsSessionAuthority.create(principal.scopeIds, config.approvals.sessionTtlMs, clock, peer);
     const integrity = await openLocalIntegrityAuthority(layout, config.approvals.keyFile, true), ledger = await path();
     const effects = await openSqliteAttemptStore(ledger, config.storage.sqlite, { now: Date.now, timeoutMs: config.runRuntime.parking.timeoutMs }, 'forbid'), journal = openSqliteApprovalStore(ledger, config.storage.sqlite);
     const auditStore = await openSqliteAuditStore(ledger, config.storage.sqlite, 'forbid');
@@ -29,9 +29,13 @@ async function withPolicyAdministration<T>(root: string, scopeId: string, option
       const audit = new AuditApplication(auditStore, integrity);
       const administration = new PolicyAdministrationApplication({ authority: source, policy: source, effects, approvals: journal.store, integrity, sessions, clock,
         requestTtlMs: config.approvals.requestTtlMs, audit: event => { audit.record(event); } });
-      const approve = (approval: { approvalId: string; revision: number }, commandId: string, reason: string) => new ApprovalApplication(journal.store,
+      const approve = async (approval: { approvalId: string; revision: number }, commandId: string, reason: string) => {
+        if (!await attestLocalInteractiveTerminal(peer?.pid, peer?.uid)) throw ErrorRegistry.createError('APPROVAL_INTERACTIVE_REQUIRED');
+        sessions.requireInteractiveTerminal();
+        return new ApprovalApplication(journal.store,
         { verify: async () => principal }, sessions, source, integrity, clock, 'local-sdk', config.approvals.pageSize)
         .decide({ schemaVersion: 1, scopeId, approvalId: approval.approvalId, commandId, expectedRevision: approval.revision, decision: 'allow', reason });
+      };
       return await use({ administration, approve, policy: source }, principal);
     } finally { journal.close(); effects.close(); auditStore.close(); }
   } catch (error) { throw queryFailure(error); }

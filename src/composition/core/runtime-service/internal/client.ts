@@ -1,3 +1,4 @@
+import { localPrincipalChannel } from '#adapters/index.js';
 import type { ProviderSpendManagementCommand } from '#domain/index.js';
 import type { ProviderSpendManagementResult } from '#engine/index.js';
 import { loadComposedConfig } from '#composition/core/root/index.js';
@@ -94,7 +95,7 @@ export function createConfiguredRuntimeClient(projectRoot: string, options: Conf
       const requestId = randomUUID();
       const capacity = isRuntimeServiceBoundedResultOperation(operation)
         ? { delivery: { maxResultBytes: runtimeServiceResultCapacity(requestId, config.service.responseMaxBytes, delivery?.maxResultBytes) } } : {};
-      const request = { schemaVersion: version, requestId, operation, input, ...capacity } as RuntimeServiceRequest;
+      const request = { schemaVersion: version, requestId, operation, input, ...capacity, ...(localPrincipalChannel() === 'mcp' ? { channel: 'mcp' as const } : {}) } as RuntimeServiceRequest;
       // A conversation too large for one request is refused before anything is sent, by name (Astra 2106 R2), never as a transport fault.
       if (operation === 'chatTurn') {
         const bytes = Buffer.byteLength(JSON.stringify(request), 'utf8');

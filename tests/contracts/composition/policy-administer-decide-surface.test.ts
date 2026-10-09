@@ -1,9 +1,9 @@
+import { terminalApplication } from '../support/approval-terminal.js';
 import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
 import { hostname, tmpdir, userInfo } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, expect, it } from 'vitest';
-import { configuredApproval } from '#composition/core/approvals/index.js';
 import { openConfiguredAttemptStore } from '#composition/core/storage/index.js';
 import { createLayoutPolicySource } from '#composition/core/policy/index.js';
 import { LocalOsSessionAuthority, openLocalIntegrityAuthority, openSqliteApprovalStore } from '#adapters/index.js';
@@ -48,8 +48,8 @@ it.skipIf(process.platform !== 'linux')('[requires Linux live OS session /proc i
     return pending.approval;
   };
   const first = await ask('c1');
-  const decide = (approvalId: string, decision: 'allow' | 'deny') => configuredApproval(project, 'decide', { schemaVersion: 1, scopeId: 's', approvalId, commandId: `d-${decision}-${approvalId}`,
-    expectedRevision: 0, decision, reason: 'Reviewed' }, options);
+  const decide = (approvalId: string, decision: 'allow' | 'deny') => terminalApplication({ project, env: options.env ?? {} }, 'decide', 's', { schemaVersion: 1, scopeId: 's', approvalId, commandId: `d-${decision}-${approvalId}`,
+    expectedRevision: 0, decision, reason: 'Reviewed' });
   try {
     await expect(decide(first.approvalId, 'allow')).rejects.toMatchObject({ code: 'APPROVAL_SURFACE_RESTRICTED' });
     expect(journal.store.load('s', first.approvalId)).toMatchObject({ status: 'pending', decision: null });

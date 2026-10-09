@@ -1,5 +1,5 @@
 import { existsSync } from 'node:fs';
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -21,6 +21,13 @@ const ready = process.platform === 'linux' && measured.bubblewrap.status === 'av
 const GRANTS = [rule('shell-tool', 'agent-tool', ['run_shell'], 'require-approval', true), rule('shell-run', 'operation', ['host.shell.run'], 'allow'),
   rule('write-op', 'operation', ['workspace.file.write'], 'allow')];
 const runtime = (grants = GRANTS) => modeRuntime({ grants, mode: 'full-auto', shell: { schemaVersion: 1, realm: 'require-sandbox' } });
+/** W3-SANDBOX SBX-05 (owner 2026-10-09): a truncating redirect is destructive, so full auto first shows the destructive card; the owner
+ * approves it through the terminal approval path and the original write-set behaviour is then asserted unchanged. */
+const approvedDestructive = (result: { card: boolean; events: readonly unknown[] }) => {
+  expect(result.card).toBe(true);
+  expect((result.events as { kind: string }[]).find(event => event.kind === 'approval.requested'))
+    .toMatchObject({ risk: 'shell-destructive', undo: 'irreversible', preview: expect.stringContaining('risk: destructive (shell.destructive.output-truncation)') });
+};
 const workspaceFiles = (f: Awaited<ReturnType<typeof runtime>>) =>
   (f.rows("SELECT target_id, state FROM effect_intents WHERE target_kind = 'workspace-file'") as { target_id: string; state: string }[]).map(row => row.target_id).sort();
 
@@ -28,8 +35,9 @@ describe.skipIf(!ready)('full-auto write set: new parent directories (Astra 2182
   custodyIt('[requires Linux /proc/self/fd custody] a floor name nested under new ordinary directories makes none of them; the root .github tree too; an ordinary file beside is applied', async () => {
     const f = await runtime();
     const result = await f.call('run_shell', { command: 'd=package.json; mkdir -p a/b/$d/c; echo bad > a/b/$d/c/x.txt; '
-      + 'g=.github; mkdir -p $g/workflows; echo on > $g/workflows/x.yml; echo ok > src/ok.ts; echo done' });
-    expect(result).toMatchObject({ card: false, status: 'ok' });
+      + 'g=.github; mkdir -p $g/workflows; echo on > $g/workflows/x.yml; echo ok > src/ok.ts; echo done' }, 'allow');
+    approvedDestructive(result);
+    expect(result).toMatchObject({ status: 'ok' });
     expect(existsSync(join(f.project, 'a'))).toBe(false);
     expect(existsSync(join(f.project, '.github'))).toBe(false);
     expect(result.text).toContain('a/b/package.json/ (write floor: the owner approves — use edit_file/write_file)');
@@ -47,8 +55,9 @@ describe.skipIf(!ready)('full-auto write set: new parent directories (Astra 2182
 
   custodyIt('[requires Linux /proc/self/fd custody] ordinary new directories are made once for all their files and reported; a nested .github is an ordinary path by the T-L4 §5 contract', async () => {
     const f = await runtime();
-    const result = await f.call('run_shell', { command: 'mkdir -p n1/n2 && echo f > n1/n2/f && echo g > n1/n2/g; g=.github; mkdir -p a/$g/workflows && echo on > a/$g/workflows/x.yml; echo done' });
-    expect(result).toMatchObject({ card: false, status: 'ok' });
+    const result = await f.call('run_shell', { command: 'mkdir -p n1/n2 && echo f > n1/n2/f && echo g > n1/n2/g; g=.github; mkdir -p a/$g/workflows && echo on > a/$g/workflows/x.yml; echo done' }, 'allow');
+    approvedDestructive(result);
+    expect(result).toMatchObject({ status: 'ok' });
     expect(await readFile(join(f.project, 'n1', 'n2', 'g'), 'utf8')).toBe('g\n');
     // The floor's `.github/**` is anchored at the root (GitHub reads workflows only there): widening it is an owner checkpoint, not this fix.
     expect(await readFile(join(f.project, 'a', '.github', 'workflows', 'x.yml'), 'utf8')).toBe('on\n');
@@ -71,10 +80,60 @@ describe.skipIf(!ready)('full-auto write set: new parent directories (Astra 2182
     expect(existsSync(join(f.project, 'src', 'package.json'))).toBe(false);
   }, 120_000);
 
+  custodyIt('[requires Linux /proc/self/fd custody] an approved destructive call on allowed paths takes effect: the move and the truncating redirect are applied', async () => {
+    const f = await runtime();
+    await writeFile(join(f.project, 'src', 'old.ts'), 'old\n'); await writeFile(join(f.project, 'src', 'kept.ts'), 'long previous content\n');
+    const result = await f.call('run_shell', { command: 'f=old; mv src/$f.ts src/new.ts; echo short > src/kept.ts; echo done' }, 'allow');
+    expect(result.card).toBe(true);
+    expect((result.events as { kind: string }[]).find(event => event.kind === 'approval.requested')).toMatchObject({ risk: 'shell-destructive', undo: 'irreversible' });
+    expect(result).toMatchObject({ status: 'ok' });
+    expect(existsSync(join(f.project, 'src', 'old.ts'))).toBe(false);
+    expect(await readFile(join(f.project, 'src', 'new.ts'), 'utf8')).toBe('old\n');
+    expect(await readFile(join(f.project, 'src', 'kept.ts'), 'utf8')).toBe('short\n');
+    expect(workspaceFiles(f)).toEqual(['src/kept.ts', 'src/new.ts', 'src/old.ts']);
+  }, 120_000);
+
+  custodyIt('[requires Linux /proc/self/fd custody] standard mode: an approved mv cannot cross a company write deny (the card lifts only the destructive gate)', async () => {
+    const f = await modeRuntime({ grants: [...GRANTS.slice(0, 2), rule('write-op', 'operation', ['workspace.file.write'], 'deny')], mode: 'ask',
+      shell: { schemaVersion: 1, realm: 'require-sandbox' } });
+    await writeFile(join(f.project, 'src', 'keep.ts'), 'keep\n');
+    const result = await f.call('run_shell', { command: 'f=keep; mv src/$f.ts src/moved.ts; echo done' }, 'allow');
+    expect(result.card).toBe(true);
+    expect((result.events as { kind: string }[]).find(event => event.kind === 'approval.requested')).toMatchObject({ risk: 'shell-destructive', undo: 'irreversible' });
+    expect(await readFile(join(f.project, 'src', 'keep.ts'), 'utf8')).toBe('keep\n');
+    expect(existsSync(join(f.project, 'src', 'moved.ts'))).toBe(false);
+    expect(result.text).toContain('(denied by policy)');
+    expect(workspaceFiles(f)).toEqual([]);
+  }, 120_000);
+
+  // Astra 2486 P1: an existing `.deckent/docs` file reached by an approved destructive call goes through the write set like any entry —
+  // a company deny keeps it unchanged with no effect and no approved-entry record; an allowed write is applied and audited.
+  for (const [label, deny] of [['denied', true], ['allowed', false]] as const) {
+    custodyIt(`[requires Linux /proc/self/fd custody] standard mode: an approved write to an existing .deckent/docs file is ${label} through the write set`, async () => {
+      const f = await modeRuntime({ grants: deny ? [...GRANTS.slice(0, 2), rule('write-op', 'operation', ['workspace.file.write'], 'deny')] : GRANTS, mode: 'ask',
+        shell: { schemaVersion: 1, realm: 'require-sandbox' } });
+      await mkdir(join(f.project, '.deckent', 'docs'), { recursive: true }); await writeFile(join(f.project, '.deckent', 'docs', 'report.md'), 'original\n');
+      const result = await f.call('run_shell', { command: 'd=.deckent/docs; echo changed > "$d/report.md"; echo done' }, 'allow');
+      expect(result.card).toBe(true);
+      expect(result).toMatchObject({ status: 'ok' });
+      const approved = f.audit().map(record => record.event.subject).filter(subject => subject.kind === 'sandbox-write-approved');
+      if (deny) {
+        expect(await readFile(join(f.project, '.deckent', 'docs', 'report.md'), 'utf8')).toBe('original\n');
+        expect(result.text).toContain('.deckent/docs/report.md (denied by policy)');
+        expect(workspaceFiles(f)).toEqual([]); expect(approved).toEqual([]);
+      } else {
+        expect(await readFile(join(f.project, '.deckent', 'docs', 'report.md'), 'utf8')).toBe('changed\n');
+        expect(workspaceFiles(f)).toEqual(['.deckent/docs/report.md']);
+        expect(approved).toEqual([expect.objectContaining({ approvalId: expect.any(String), summary: { kind: 'edit', path: '.deckent/docs/report.md' } })]);
+      }
+    }, 120_000);
+  }
+
   it('a company write deny makes no parent directory', async () => {
     const f = await runtime([...GRANTS.slice(0, 2), rule('write-op', 'operation', ['workspace.file.write'], 'deny')]);
-    const result = await f.call('run_shell', { command: 'mkdir -p n1/n2 && echo f > n1/n2/f; echo done' });
-    expect(result).toMatchObject({ card: false, status: 'ok' });
+    const result = await f.call('run_shell', { command: 'mkdir -p n1/n2 && echo f > n1/n2/f; echo done' }, 'allow');
+    approvedDestructive(result);
+    expect(result).toMatchObject({ status: 'ok' });
     expect(existsSync(join(f.project, 'n1'))).toBe(false);
     // The entry's own decision refuses first; no directory is decided or made.
     expect(result.text).toContain('not applied: n1/n2/f (denied by policy)');
