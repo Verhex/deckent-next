@@ -1,5 +1,6 @@
-import { agentTurnOutcome, agentTurnResultDigest, type AgentTurnClaim, type AgentTurnStore } from './store.js';
+import { agentTurnOutcome, agentTurnResultDigest, agentTurnInterruptedNote, AGENT_TURN_INTERRUPTED_NOTE, type AgentTurnClaim, type AgentTurnStore } from './store.js';
 import { runAgentTurn, type AgentTurnInput, type AgentTurnPorts, type AgentTurnResult } from './loop.js';
+import { t } from '#platform/index.js';
 
 /**
  * A turn with durable identity (T-L3): claim first; a finished turn of the same request replays its stored outcome (the final
@@ -13,13 +14,14 @@ export async function runDurableAgentTurn(input: AgentTurnInput & { readonly cla
   const { claim } = input;
   const claimed = await store.claim(claim);
   if (claimed.status === 'finished') {
-    const { answer, finish, note, rounds, toolCalls } = claimed.outcome;
+    const { answer, finish, note: storedNote, rounds, toolCalls } = claimed.outcome;
+    const note = storedNote === AGENT_TURN_INTERRUPTED_NOTE ? agentTurnInterruptedNote(input.language) : storedNote;
     if (answer) input.emit({ kind: 'text', text: answer });
     input.emit({ kind: 'done', finish, note });
     return Object.freeze({ finish, note, rounds, toolCalls, answer, appendedCount: 0,
       appendedDigest: claimed.outcome.appendedDigest, replayed: true, recorded: true });
   }
-  const failed = agentTurnOutcome({ finish: 'error', note: 'The turn failed before it could finish; nothing more ran.', rounds: 0, toolCalls: 0,
+  const failed = agentTurnOutcome({ finish: 'error', note: t('agent.turn.outcome.interrupted', {}, input.language), rounds: 0, toolCalls: 0,
     answer: null, appendedDigest: null });
   let result: AgentTurnResult;
   try {
