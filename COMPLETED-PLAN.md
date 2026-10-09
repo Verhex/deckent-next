@@ -1,5 +1,13 @@
 # Deckent Next — tamamlanan plan
 
+## alpha.21 — 2026-10-09 (PR #60)
+
+- **İnen işler (PR #60, merge `4afa7c81`, sürüm `1.0.0-alpha.21`; parti `wave/batch-a`):** OPENROUTER-TERMINAL (OpenRouter v5 araç ve akış, ham `usage.cost` ile kesinleşme; gerçek birinci taraf çağrıları tarife kapılarıyla hâlâ reddedilir, owner kararı); FIRST-TEST-FIXES ve TERMINAL-UX T5 (`/usage` canlı hesap USD ve önbellek sayaçları, görünür odak satırı, oturum modeli durum satırında, yerelleştirilmiş harcama retleri, token sayımı girdi sınırı, 16k sohbet çıktısı, akışlı tam geçmiş ve mutlak sıkıştırma, `/tasks` satır içi eylemler, odak almayan izleme çerçevesi, `/model` bütçe ve gölge satırları); CACHE-SLICE1 (yeni Anthropic profilleri 5 dk önbellek, mevcut profiller yalnız açık seçimle; rezervasyon ıskalama + yazım + tam çıktı; ≥50k bağlamda model geçişi sorusu; `/usage` önbellek okuma/yazma ve tahmini net kazanç). `src/adapters` bütçesi 26000 (owner kararı). Ledger 49, protokol 25, policy değişikliği yok.
+- **İnceleme:** tek bağımsız inceleme Astra 2479 PASS, exact head `25b966ba` (PR #60 merge'i `4afa7c81`).
+- **Açık Astra notları (bloke etmeyen):** N1 `cache-panel.ts:28` iki katmanda yazılı profillerde atlama notunu gizliyor; N2 `application.ts:32` hazırlamanın saf olduğunu söylüyor, ama `transport.ts:117` bir `count_tokens` çağrısı yapıyor.
+- **Açık owner politika kalemleri:** OpenRouter tarife kapsamı; çaba (effort) tabanlı çıktı sınırı; token sayımı payı; 50k model-geçiş eşiği; sıkıştırma eşikleri (düz yolda 40 mesaj, akışlı yolda 100k mutlak; owner kararı açık).
+- **Kanıt ve geçiş:** `proof/BATCH-A-2026-10-09/` (dış proof klasörü); staged `4afa7c818f41-8c39f8921266`. Canlı ve N1 alpha.20'de kalır; geçiş yalnız owner `proof/ALPHA21-LIVE-2026-10-09/alpha21-owner.sh` betiğini çalıştırınca olur.
+
 ## alpha.20 — 2026-10-09 (PR #57)
 
 - **İnen işler (PR #57, merge `cfe6d2e4`; parti `wave/batch-b`):** CONFIG-RECORD-EDITORS (beş yapılandırma alanı seçimle düzenlenir, yönetilen katalog içe aktarma; `admission.registry` ve `identity.packages` salt okunur); SECRET-SWITCH-ENV-GUARD, SECRET-DEFAULT-INIT-APPLY ve INSTALLER-POLICY-AUDIT (env adı koruması, Docker `init apply` şifreli varsayılanı, mühürlü installer policy denetimi); EXT-SERVICE-ENTRY (`runtime serve` ve `deckent-mcp` `deckent/extensions` girişinden başlar); DOCS-GUARD (lint-docs sürüm ve landing kapısı; eski yardım ve i18n metinleri kaldırıldı); BACKUP-FIXES (D1–D4, O1, O4–O6; yedek geri yükleme, anahtarı hedefin etkin config'ine bağlar). Ledger 49, protokol 25, policy değişikliği yok.
