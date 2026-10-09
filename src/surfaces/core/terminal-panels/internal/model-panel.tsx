@@ -75,7 +75,7 @@ export function ModelPanel({ port, labels, push, openApproval, onError, onClose 
     if (preparingRef.current) return;
     preparingRef.current = true; setPreparing(true);
     // Recheck at confirmation; only a successful governed preparation can change the session pin.
-    Promise.resolve().then(() => port.prepare?.(choice)).then(async () => {
+    Promise.resolve().then(() => port.prepare?.(choice, port.reasoning?.())).then(async () => {
       if (!mounted.current) return;
       port.pin(choice, fresh === true);
       push([{ level: 'info', text: fillTemplate(words.pinned, { model: choice.label }) },

@@ -1508,6 +1508,7 @@
         "src/domain/core/model-invocation",
         "src/domain/core/provider-catalog",
         "src/engine/core/model-invocation",
+        "src/engine/core/model-activation",
         "src/engine/core/policy",
         "src/engine/core/provider-catalog",
         "src/engine/core/provider-spend",
@@ -2055,6 +2056,7 @@
     },
     "src/domain/core/agent-turn": {
       "dependencies": [
+        "src/domain/core/model-invocation",
         "src/domain/core/agent-tool",
         "src/domain/core/primitives",
         "src/domain/core/provider-catalog"

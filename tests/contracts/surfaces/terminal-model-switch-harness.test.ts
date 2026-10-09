@@ -26,7 +26,8 @@ async function fixture(locale: 'en' | 'tr' = 'tr') {
   const path = join(root, 'ledger.db'); await mkdir(join(root, '.deckent'));
   let revision = 'catalog-1', allowed = true, price = true, insufficient = false, holding = false, changedBinding = false, sequence = 0;
   const catalog = () => ({ schemaVersion: 1, revision, providers: refs.map(ref => ({ id: ref.providerId, version: 1, models: [{ id: ref.modelId,
-    version: 1, nativeId: `native-${ref.providerId}${changedBinding ? '-changed' : ''}`, protocols: [{ family: 'openai-chat-completions', version: 'v1', capabilities: [] }] }] })) });
+    version: 1, nativeId: `native-${ref.providerId}${changedBinding ? '-changed' : ''}`, protocols: [{ family: 'openai-chat-completions', version: 'v1', capabilities: ref.providerId === 'local'
+      ? [{ id: 'chat-template-enable-thinking', version: 1, state: 'supported' }] : [] }] }] })) });
   const bindings = new ModelBindingApplication({ async read() { return catalog(); } });
   const profiles = new Map<string, ModelInvocationProfile>();
   const authorization = { async authorize() { if (!allowed) throw Object.assign(new Error('DENIED'), { code: 'POLICY_DENIED' }); return { revision: 'policy-1', ruleId: 'owner' }; } };
@@ -48,15 +49,15 @@ async function fixture(locale: 'en' | 'tr' = 'tr') {
   const options = { env: { DECKENT_GLOBAL_HOME: join(root, 'global'), HOME: join(root, 'home') } };
   await writeFile(join(root, '.deckent/config.json'), JSON.stringify(config));
   const preparations: string[] = [], turnReferences: unknown[] = [];
-  const sends: { provider: string; cache: unknown; version: number; activation: number }[] = [];
+  const sends: { provider: string; cache: unknown; version: number; activation: number; reasoning: unknown }[] = [];
   const app = new ModelInvocationApplication({ async verify() { return principal; } }, authorization, bindings,
     () => openSqliteModelActivationReader(path, { busyTimeoutMs: sqlite.busyTimeoutMs }), { async resolve(_scope, reference) { return profiles.get(reference.providerId) ?? null; } },
     { resolve(profile) { if (profile.adapter.id !== 'fixture-native') return null; return {
-      async prepare() { return { profile }; }, async measure() { return { promptTokens: 30_000, windowTokens: profile.contextWindowTokens! }; }, async send(prepared, _signal, onDelta) {
-        const { profile: served } = prepared as { profile: ModelInvocationProfile };
+      async prepare(_profile, _definition, request) { return { profile, request }; }, async measure() { return { promptTokens: 30_000, windowTokens: profile.contextWindowTokens! }; }, async send(prepared, _signal, onDelta) {
+        const { profile: served, request } = prepared as { profile: ModelInvocationProfile; request: Record<string, unknown> };
         const reader = await openSqliteModelActivationReader(path, { busyTimeoutMs: sqlite.busyTimeoutMs });
         try { sends.push({ provider: served.reference.providerId, cache: served.adapter.definition.cache, version: served.version,
-          activation: (await reader.loadRecord('scope', served.reference))!.revision }); } finally { reader.close(); }
+          activation: (await reader.loadRecord('scope', served.reference))!.revision, reasoning: request['chat_template_kwargs'] }); } finally { reader.close(); }
         const text = `ANSWER-${served.reference.providerId}-${sends.length}`; onDelta?.({ kind: 'text', text });
         return { schemaVersion: 1 as const, native: { text }, usage: null };
       },
@@ -75,16 +76,17 @@ async function fixture(locale: 'en' | 'tr' = 'tr') {
     snapshot: async reference => ({ binding: await bindings.inspect(reference), outputTokens: 32 }), preview: command => app.preview(command), activate: command => activations.admit(command) };
   const source = modelPanelSource(root, 'scope', {
     inspectDeclaredModels: async () => ({ schemaVersion: 1, status: 'declared', catalog: catalog() }),
+    inspectModelBinding: (_root, reference) => bindings.inspect(reference),
     inspectModelActivation: async (_root, input) => { const reader = await openSqliteModelActivationReader(path, { busyTimeoutMs: sqlite.busyTimeoutMs });
       try { return { schemaVersion: 1, activation: await reader.loadRecord(input.scopeId, input.reference) }; } finally { reader.close(); } },
     inspectModelReadiness: (_root, scope, reference) => inspectModelSwitch(scope, reference, ports),
-    prepareModelSwitch: (_root, scope, reference) => { preparations.push(reference.providerId); return prepareModelSwitch(scope, reference, ports); },
+    prepareModelSwitch: (_root, scope, reference, _options, reasoning) => { preparations.push(reference.providerId); return prepareModelSwitch(scope, reference, ports, reasoning); },
   }, options, locale);
-  const view = mountWorkline({ model: 'local', labels: { ...WORKLINE_TEST_LABELS, render: terminalRenderLabels(locale) }, panels: { ports: { model: source }, labels: terminalPanelLabels(locale) },
+  const view = mountWorkline({ model: 'local', labels: { ...WORKLINE_TEST_LABELS, render: terminalRenderLabels(locale), reasoning: { on: 'ON', off: 'OFF', usage: 'USAGE', unsupported: t('tui.model.reason.reasoningOff', {}, locale) } }, panels: { ports: { model: source }, labels: terminalPanelLabels(locale) },
     async *streamTurn(messages, signal, input) {
       turnReferences.push(input?.reference ?? null);
       const reference = input?.reference ?? refs[0]!;
-      const { command } = await inspectModelSwitch('scope', reference, ports), events: AgentTurnEvent[] = [];
+      const { command } = await inspectModelSwitch('scope', reference, ports, input?.reasoning), events: AgentTurnEvent[] = [];
       await runAgentTurn({ language: locale, messages, tools: [], signal, emit: event => events.push(event) }, {
         async measure() { return (await app.measure(command))!; },
         async invokeRound(_round, onDelta) {
@@ -163,8 +165,23 @@ describe('W6: in-process terminal model switch with governed owners', () => {
 
   it('a changed binding is refused without reactivation', async () => {
     const f = await fixture(), before = await f.activation(); f.changeBinding();
+    expect((await f.source.inspect()).choices.every(choice => choice.blocked !== null)).toBe(true);
     await expect(prepareModelSwitch('scope', refs[1]!, f.ports)).rejects.toMatchObject({ code: 'MODEL_INVOCATION_ACTIVATION_CONFLICT' });
     expect(await f.activation()).toEqual(before); expect(f.sends).toHaveLength(0);
+  });
+
+  for (const locale of ['en', 'tr'] as const) it(`${locale}: reasoning off reaches a supported model and refuses an unsupported switch before activation or pin`, async () => {
+    const f = await fixture(locale); await f.choose(0);
+    expect(await f.source.reasoningOffSupported!(refs[0]!)).toBe(true); expect(await f.source.reasoningOffSupported!(refs[1]!)).toBe(false);
+    await f.press('/reasoning off', ENTER); await until(() => f.view.stdout.text.includes('OFF'), 'reasoning off');
+    await f.turn(); expect(f.sends[0]).toMatchObject({ provider: 'local', reasoning: { enable_thinking: false } });
+    const before = await f.activation(); f.revise(); await f.choose(1, false); await f.press(ENTER);
+    await until(() => f.view.stdout.text.includes(t('tui.model.reason.reasoningOff', {}, locale)), 'localized refusal');
+    expect(await f.activation()).toEqual(before); expect(f.sends).toHaveLength(1);
+    await f.press(ESC, ESC);
+    // The refused switch must leave both the original pin and its reasoning preference in force.
+    // Refresh only the serving model through the existing governed switch, then run the next turn.
+    await f.choose(0); await f.turn(); expect(f.sends[1]).toMatchObject({ provider: 'local', reasoning: { enable_thinking: false } });
   });
 
   it('Escape closes preparation; a late completion cannot pin the model', async () => {

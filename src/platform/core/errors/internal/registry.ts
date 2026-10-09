@@ -179,6 +179,7 @@ const definitions: Readonly<Record<string, Definition>> = Object.freeze({
   MODEL_INVOCATION_CORRUPT: { category: 'error', render: (p, l) => ({ message: t('error.MODEL_INVOCATION_CORRUPT', p, l) }) },
   MODEL_INVOCATION_UNAVAILABLE: { category: 'error', render: (p, l) => ({ message: t('error.MODEL_INVOCATION_UNAVAILABLE', p, l) }) },
   MODEL_INVOCATION_OUTCOME_UNKNOWN: { category: 'error', render: (p, l) => ({ message: t('error.MODEL_INVOCATION_OUTCOME_UNKNOWN', p, l) }) },
+  MODEL_INVOCATION_REASONING_UNSUPPORTED: { category: 'error', render: (p, l) => ({ message: t('error.MODEL_INVOCATION_REASONING_UNSUPPORTED', p, l) }) },
   MODEL_INVOCATION_ACTIVATION_CONFLICT: { category: 'error', render: (p, l) => ({ message: t('error.MODEL_INVOCATION_ACTIVATION_CONFLICT', p, l) }) },
   TERMINAL_MODEL_SWITCH_REFUSED: { category: 'error', render: (p, l) => ({ message: t('error.TERMINAL_MODEL_SWITCH_REFUSED', p, l) }) },
   MODEL_INVOCATION_ALLOCATION_CONFLICT: { category: 'error', render: (p, l) => ({ message: t('error.MODEL_INVOCATION_ALLOCATION_CONFLICT', p, l) }) },

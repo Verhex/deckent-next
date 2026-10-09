@@ -15,5 +15,5 @@ const ports = (root: string, options: ConfigLoadOptions): ModelSwitchPorts => ({
     return { binding: await inspectModelBinding(root, reference, options), outputTokens: chat.maxCompletionTokens };
   }, preview: command => previewConfiguredModel(root, command, options), activate: command => admitConfiguredModelActivation(root, command, options),
 });
-export const inspectConfiguredModelReadiness = (root: string, scopeId: string, reference: ModelReference, options: ConfigLoadOptions = {}) => inspectModelSwitch(scopeId, reference, ports(root, options));
-export const prepareConfiguredModelSwitch = (root: string, scopeId: string, reference: ModelReference, options: ConfigLoadOptions = {}) => prepareModelSwitch(scopeId, reference, ports(root, options));
+export const inspectConfiguredModelReadiness = (root: string, scopeId: string, reference: ModelReference, options: ConfigLoadOptions = {}, reasoning?: 'off') => inspectModelSwitch(scopeId, reference, ports(root, options), reasoning);
+export const prepareConfiguredModelSwitch = (root: string, scopeId: string, reference: ModelReference, options: ConfigLoadOptions = {}, reasoning?: 'off') => prepareModelSwitch(scopeId, reference, ports(root, options), reasoning);

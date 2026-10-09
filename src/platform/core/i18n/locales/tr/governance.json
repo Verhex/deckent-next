@@ -868,5 +868,6 @@
   "models.budget.replayed": "(zaten kayıtlı; hiçbir şey değişmedi)",
   "error.PROVIDER_SPEND_BUDGET_ABSENT": "{scope} kapsamının henüz harcama bütçesi yok. Oluşturun: deckent models create-budget --scope {scope} --usd <tutar> (ya da /model → Bütçe oluştur).",
   "agent.spend.budgetAbsent": "Bu kapsamda harcama bütçesi yok. /model → Bütçe oluştur.",
-  "error.TERMINAL_MODEL_SWITCH_REFUSED": "Model değiştirilemedi. {reason}"
+  "error.TERMINAL_MODEL_SWITCH_REFUSED": "Model değiştirilemedi. {reason}",
+  "error.MODEL_INVOCATION_REASONING_UNSUPPORTED": "Seçilen modelde düşünme kapatılamaz."
 }

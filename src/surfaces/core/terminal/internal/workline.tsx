@@ -247,7 +247,7 @@ export function WorklineApp(props: WorklineProps) {
   // T3 L4: `/mode`, `/config`, `/mcp` windows; `/mode`'s port is this view's mode hook (the same service set, grant check and audit as Shift+Tab).
   const settings = useWorklineSettings({ panels: props.panels, permissionMode: props.permissionMode, mode, panel, state, push, errorText, blocked: work.modalOpen,
     // The pin rides only on the streamed turn (v23); a plain turn could not carry it, so no `/model` window is offered there.
-    ...(props.streamTurn ? { sessionModel } : {}),
+    ...(props.streamTurn ? { sessionModel: { ...sessionModel, reasoning: () => reasoning.current.current ? undefined : 'off' as const } } : {}),
     openApprovals: (approvalId, execution) => work.openApproval(approvalId, execution) });
 
   // SW-1: bare information commands answer in a window; `/help` answers the command picked in it, which then runs here.
@@ -346,8 +346,13 @@ export function WorklineApp(props: WorklineProps) {
       if (shown.handled) return shown.picked === null ? true : performRef.current(`/${shown.picked}`, [], execution);
     }
     if (slash.command === 'reasoning') {
-      if (!rich) { reasoning.run(slash.args); return true; }
-      const choice = await windows.ask(reasoningSpec(rich, reasoning));
+      const offSupported = await props.panels?.ports.model?.reasoningOffSupported?.(sessionModel.pinned()).catch(() => false) ?? false;
+      if (!rich) {
+        const wantsOff = slash.args.trim().toLowerCase() === 'off' || (!slash.args.trim() && reasoning.current.current);
+        if (wantsOff && !offSupported) { push([notice('error', labels.reasoning?.unsupported ?? labels.ledgerUnavailable)]); return true; }
+        reasoning.run(slash.args); return true;
+      }
+      const choice = await windows.ask(reasoningSpec(rich, reasoning, offSupported));
       if (isReasoningChoice(choice)) reasoning.set(choice);
       return true;
     }

@@ -136,7 +136,7 @@ export type ModelDefaultOutcome = ConfigPanelOutcome & Readonly<{ shadow?: Reado
 export interface ModelPanelSource {
   inspect(): Promise<ModelPanelView>;
   /** Rechecks runnability and refreshes an eligible stale activation through its governed owner before any session pin. */
-  prepare?(choice: ModelPanelChoice): Promise<void>;
+  prepare?(choice: ModelPanelChoice, reasoning?: 'off'): Promise<void>;
   /** Stage 1: create or change the scope budget from this window (absent: not offered). */
   readonly budget?: BudgetPanelPort;
   /** CACHE-SLICE1: the governed one-step "turn the 5-minute prompt cache on" for existing profiles (absent: not offered). */
@@ -144,6 +144,9 @@ export interface ModelPanelSource {
   /** CACHE-SLICE1: the conversation's measured context when it is at or above the registry threshold (null: below it or not measured yet); a
    * model switch then asks "new context / continue" before it pins. */
   largeContext?(): number | null;
+  /** Current session preference, rechecked before pinning. */
+  reasoning?(): 'off' | undefined;
+  reasoningOffSupported?(reference: ModelPanelReference | null): Promise<boolean>;
   makeDefault?(choice: ModelPanelChoice): Promise<ModelDefaultOutcome>;
   /** The two governed answers to a shadowing project model (the `/config` writer on the project layer, `terminal.chat.reference` only): `remove`
    * drops the project's model so the user default applies; `align` makes the project's model this one. */
