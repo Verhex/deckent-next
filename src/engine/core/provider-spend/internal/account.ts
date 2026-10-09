@@ -107,11 +107,18 @@ export function reserveProviderSpend(accountInput: unknown, configuredBudgetInpu
   if (JSON.stringify(account.budget) !== JSON.stringify(configured)) throw new ProviderSpendError('PROVIDER_SPEND_CONFLICT');
   matches(account.budget, descriptor);
   if (descriptor.budgetRevision !== account.budget.revision) throw new ProviderSpendError('PROVIDER_SPEND_CONFLICT');
-  if (account.frozen) throw new ProviderSpendError('PROVIDER_SPEND_FROZEN');
+  assertProviderSpendCapacity(account, descriptor.quote);
   const reserved = BigInt(account.reservedMinorUnits) + BigInt(descriptor.quote.maxChargeMinorUnits);
-  if (reserved + BigInt(account.settledMinorUnits) > BigInt(account.budget.limitMinorUnits)) throw new ProviderSpendError('PROVIDER_SPEND_EXHAUSTED');
   return Object.freeze({ account: parseProviderSpendAccount({ ...account, reservedMinorUnits: Number(reserved) }),
     reservation: parseProviderSpendReservation({ schemaVersion: 3, descriptor, disposition: { state: 'reserved' }, measurement: null }) });
+}
+/** Same capacity rule for an atomic reservation and a read-only preview; preview is never a reservation. */
+export function assertProviderSpendCapacity(accountInput: unknown, quoteInput: unknown): void {
+  const account = parseProviderSpendAccount(accountInput), quote = parseProviderSpendQuote(quoteInput);
+  if (account.budget.scopeId !== quote.scopeId || account.budget.currency !== quote.currency) throw new ProviderSpendError('PROVIDER_SPEND_CONFLICT');
+  if (account.frozen) throw new ProviderSpendError('PROVIDER_SPEND_FROZEN');
+  if (BigInt(account.reservedMinorUnits) + BigInt(quote.maxChargeMinorUnits) + BigInt(account.settledMinorUnits) > BigInt(account.budget.limitMinorUnits))
+    throw new ProviderSpendError('PROVIDER_SPEND_EXHAUSTED');
 }
 export function settleProviderSpend(accountInput: unknown, reservationInput: unknown, settlementInput: unknown) {
   const account = parseProviderSpendAccount(accountInput), reservation = parseProviderSpendReservation(reservationInput);

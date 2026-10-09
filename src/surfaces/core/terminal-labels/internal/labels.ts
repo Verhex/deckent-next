@@ -7,6 +7,7 @@ import { SLASH_GROUPS, SLASH_HELP_TITLE_KEY, WORKLINE_SLASH_COMMANDS } from '#su
 /** Catalog strings of the rendered answer (terminal.render.*): narration, footer, tool lines, context, compaction. */
 export function terminalRenderLabels(locale: Locale): AssistantRenderLabels {
   return {
+    locale,
     hiddenCount: t('terminal.safety.hiddenCount', {}, locale),
     credentialLikeCount: t('terminal.safety.credentialLikeCount', {}, locale),
     assistant: t('terminal.workline.roleAssistant', {}, locale), thinking: t('terminal.render.thinking', {}, locale),
@@ -52,7 +53,7 @@ export function terminalComposerLabels(locale: Locale): ComposerLabels {
 
 /** Catalog strings of `/resume`, `/context` and `/clear` (terminal.session.*). */
 export function terminalSessionLabels(locale: Locale): ConversationSessionLabels {
-  return { entry: t('terminal.session.entry', {}, locale), hiddenCount: t('terminal.safety.hiddenCount', {}, locale), none: t('terminal.session.none', {}, locale), notFound: t('terminal.session.notFound', {}, locale),
+  return { locale, entry: t('terminal.session.entry', {}, locale), hiddenCount: t('terminal.safety.hiddenCount', {}, locale), none: t('terminal.session.none', {}, locale), notFound: t('terminal.session.notFound', {}, locale),
     unavailable: t('terminal.session.unavailable', {}, locale), saveFailed: t('terminal.session.saveFailed', {}, locale),
     exactRequired: t('terminal.session.exactRequired', {}, locale), listStale: t('terminal.session.listStale', {}, locale),
     resumed: t('terminal.session.resumed', {}, locale), started: t('terminal.session.started', {}, locale),

@@ -526,29 +526,26 @@ describe('CACHE-SLICE1: the governed cache migration row and the model-switch qu
       pin: (choice, fresh) => { pins.push({ model: choice.reference.modelId, fresh }); } };
     return { port, pins };
   };
-  it('a switch over a large context asks "new context / continue" before it pins; Esc pins nothing; the current model or a small context never asks', async () => {
-    for (const [answer, fresh] of [[ENTER, true], [`${DOWN}${ENTER}`, false]] as const) {
+  it('large context and scope use one confirmation; Esc never pins; small context stays fluent', async () => {
+    for (const [answer, fresh] of [[`${DOWN}${DOWN}${ENTER}`, true], [ENTER, false]] as const) {
       const { port, pins } = switchPort(60_000), { element, calls } = panel('model', { model: port });
       const screen = mount(element, 140, 40); await settle(80);
-      // Rows: chat (configured), coder (locked), fast. Pick fast for this session.
-      await screen.press(`${DOWN}${DOWN}${ENTER}${ENTER}`);
-      expect(screen.frame()).toContain('fast: this conversation is 60000 tokens'); expect(pins).toEqual([]);
+      await screen.press(`${DOWN}${DOWN}${ENTER}`);
+      expect(pins).toEqual([]);
+      expect(screen.frame()).toContain('New context');
+      expect(screen.frame()).toContain('Continue (the whole history');
       await screen.press(answer, 60);
       expect(pins).toEqual([{ model: 'fast', fresh }]);
       expect(calls.notices.map(item => item.text).join('\n')).toContain(fresh ? 'New context for fast' : 'fast continues with the whole history');
     }
     const esc = switchPort(60_000), escaped = panel('model', { model: esc.port });
     const screen = mount(escaped.element, 140, 40); await settle(80);
-    await screen.press(`${DOWN}${DOWN}${ENTER}${ENTER}`); await screen.press(ESC, 60);
+    await screen.press(`${DOWN}${DOWN}${ENTER}${ESC}`, 60);
     expect(esc.pins).toEqual([]);
     const small = switchPort(null), quiet = panel('model', { model: small.port });
     const other = mount(quiet.element, 140, 40); await settle(80);
     await other.press(`${DOWN}${DOWN}${ENTER}${ENTER}`, 60);
-    expect(small.pins).toEqual([{ model: 'fast', fresh: false }]); expect(other.all()).not.toContain('cold cache');
-    const same = switchPort(60_000), current = panel('model', { model: same.port });
-    const again = mount(current.element, 140, 40); await settle(80);
-    await again.press(`${ENTER}${ENTER}`, 60);
-    expect(same.pins).toEqual([{ model: 'chat', fresh: false }]);
+    expect(small.pins).toEqual([{ model: 'fast', fresh: false }]);
   });
 
   it('in the workline, "new context" keeps the person\'s own messages and leaves answers behind; the next turn carries the new pin', async () => {
@@ -566,9 +563,9 @@ describe('CACHE-SLICE1: the governed cache migration row and the model-switch qu
     view.stdin.write(`/model${ENTER}`);
     await until(() => view.stdout.frame.includes('Models · scope'), 'model window');
     await settleWorkline(60);
-    for (const key of [DOWN, DOWN, ENTER, ENTER]) { view.stdin.write(key); await settleWorkline(30); }
-    await until(() => view.stdout.frame.includes('this conversation is 60000 tokens'), 'switch question');
-    view.stdin.write(ENTER);
+    for (const key of [DOWN, DOWN, ENTER]) { view.stdin.write(key); await settleWorkline(30); }
+    await until(() => view.stdout.frame.includes('New context'), 'single switch confirmation');
+    for (const key of [DOWN, DOWN, ENTER]) { view.stdin.write(key); await settleWorkline(30); }
     await until(() => view.stdout.text.includes('New context for fast'), 'fresh context notice');
     view.stdin.write(`next${ENTER}`);
     await until(() => turns.length === 2, 'second turn');

@@ -139,6 +139,7 @@ export type InfoViewPorts = Readonly<Partial<Record<InfoViewCommand, (input: Inf
 
 /** Words of `/context` as a window (`terminal.info.context.*`); templates use `{name}` placeholders. */
 export interface ContextInfoLabels {
+  readonly locale?: 'en' | 'tr';
   readonly title: string;
   readonly section: Readonly<{ window: string; split: string; summaries: string; suggestion: string }>;
   readonly key: Readonly<{ fill: string; used: string; auto: string; messages: string; count: string; last: string; largest: string }>;

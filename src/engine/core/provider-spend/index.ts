@@ -1,5 +1,5 @@
 export { createProviderSpendAccount, parseProviderSpendAccount, parseProviderSpendReservation,
-  reserveProviderSpend, settleProviderSpend, providerSpendQuoteDigest, providerSpendEvidenceDigest } from './internal/account.js';
+  reserveProviderSpend, assertProviderSpendCapacity, settleProviderSpend, providerSpendQuoteDigest, providerSpendEvidenceDigest } from './internal/account.js';
 export type { ProviderSpendAccount, ProviderSpendReservation, ProviderSpendSettlement } from './internal/account.js';
 export { ProviderSpendError } from './internal/error.js';
 export type { ProviderSpendErrorCode, ProviderSpendNextAction } from './internal/error.js';

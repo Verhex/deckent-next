@@ -970,5 +970,9 @@
   "terminal.info.usage.key.cacheWrite1h": "Önbelleğe yazılan (1 saat)",
   "terminal.info.usage.key.cacheBenefit": "Önbellekten net kazanç",
   "terminal.info.usage.cacheBenefit": "{amount}, tahmin (aynı istekler önbelleksiz giriş fiyatıyla, yazma primi dahil)",
-  "terminal.info.usage.cacheBenefitPartial": "ölçülen raporlarda {amount}, tahmin ({measured}/{reports}); tüm oturum bilinmiyor"
+  "terminal.info.usage.cacheBenefitPartial": "ölçülen raporlarda {amount}, tahmin ({measured}/{reports}); tüm oturum bilinmiyor",
+  "tui.model.reason.budget": "Bütçe bu modeli engelliyor ({code}). /model içindeki Bütçe satırından limiti düzenleyin veya dondurmayı kaldırın; askıdaki harcamaları uzlaştırın.",
+  "tui.model.reason.price": "Fiyat doğrulanmadı. /provider ile fiyatı doğrulanmış bir model bağlayın; ücretli çağrı yapılmaz.",
+  "tui.model.reason.protocol": "Bu bağlantı terminal turunu çalıştıramıyor ({code}). /model ile başka bir model seçin veya /provider ile desteklenen protokolü kullanarak yeniden bağlayın.",
+  "tui.model.reason.notRunnable": "Bu model şu anda çalıştırılamıyor ({code}). /provider ile bağlantıyı kontrol edip /model içinden yeniden seçin."
 }

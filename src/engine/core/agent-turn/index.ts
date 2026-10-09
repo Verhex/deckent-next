@@ -5,7 +5,7 @@ export { agentTurnApproverNote, type AgentToolOwnerAnswer } from './internal/app
 export type { ModelIngressDisposition, ModelIngressProjection } from './internal/model-ingress-project.js';
 export type { AgentRoundOutcome, AgentTurnPorts, AgentTurnInput, AgentTurnResult } from './internal/loop.js';
 export { runDurableAgentTurn } from './internal/durable.js';
-export { AgentTurnStoreError, agentTurnOutcome, agentTurnResultDigest, AGENT_TURN_ANSWER_MAX_BYTES, AGENT_TURN_INTERRUPTED_NOTE } from './internal/store.js';
+export { AgentTurnStoreError, agentTurnOutcome, agentTurnResultDigest, agentTurnInterruptedNote, AGENT_TURN_ANSWER_MAX_BYTES, AGENT_TURN_INTERRUPTED_NOTE } from './internal/store.js';
 export type { AgentTurnStore, AgentTurnClaim, AgentTurnOutcome, AgentTurnToolCallRecord, AgentTurnStoreErrorCode } from './internal/store.js';
 export { AGENT_COMPACTION_HIGH_WATER, agentCompactionInstruction, AGENT_COMPACTION_KEEP_MESSAGES, agentCompactionSummarySchema,
   agentCompactionTranscript, parseAgentCompactionSummary, planAgentCompaction, renderAgentCompaction } from './internal/compaction.js';

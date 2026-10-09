@@ -970,5 +970,9 @@
   "terminal.info.usage.key.cacheWrite1h": "Cache write (1 hour)",
   "terminal.info.usage.key.cacheBenefit": "Net cache benefit",
   "terminal.info.usage.cacheBenefit": "{amount}, estimate (same requests at the uncached input price, write premium included)",
-  "terminal.info.usage.cacheBenefitPartial": "{amount}, estimate, in measured reports ({measured}/{reports}); full session unknown"
+  "terminal.info.usage.cacheBenefitPartial": "{amount}, estimate, in measured reports ({measured}/{reports}); full session unknown",
+  "tui.model.reason.budget": "Budget blocks this model ({code}). Open Budget in /model to revise or unfreeze it; reconcile held spending before retrying.",
+  "tui.model.reason.price": "Price is not verified. Reconnect a priced model in /provider; no paid call will run.",
+  "tui.model.reason.protocol": "This connection cannot run terminal turns ({code}). Choose another model in /model or reconnect it with a supported protocol in /provider.",
+  "tui.model.reason.notRunnable": "This model cannot run now ({code}). Check its connection in /provider and select it again in /model."
 }

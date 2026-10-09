@@ -81,10 +81,18 @@ export const AGENT_TURN_NO_PROGRESS_NOTE = agentTurnNoProgressNote();
  * Closure-note sentence of a turn that compacted without a model summary (TERM-FEEDBACK-1): the model answered the summary call with
  * nothing readable, so the older messages became Deckent's labelled mechanical excerpt.
  */
-export const AGENT_TURN_MECHANICAL_COMPACTION_NOTE = '[deckent] Earlier messages were compacted without a model summary (its summary could'
-  + ' not be read): they are kept as a shortened excerpt, and details from them may be missing. Repeat what still matters, or start a new conversation.';
+export const AGENT_TURN_MECHANICAL_COMPACTION_NOTE = `[deckent] ${t('agent.turn.outcome.mechanical', {}, LOCALES[0])}`;
 /** Final line of the partial assistant text kept in the history when a round is cancelled after text had streamed. */
-const AGENT_TURN_CANCELLED_MID_ANSWER = '[deckent] cancelled mid-answer';
+const cancelledMidAnswer = (language?: Locale) => `[deckent] ${t('agent.turn.outcome.cancelledMidAnswer', {}, language)}`;
+/** Keep diagnostic codes/classification tokens intact; the human state name follows the turn's language. */
+function outcomeState(state: string, language: Locale = LOCALES[0]): string {
+  const [name] = state.split(':', 1);
+  const labels: Readonly<Record<string, string>> = {
+    rejected: t('agent.turn.outcome.rejected', {}, language), unknown: t('agent.turn.outcome.unknown', {}, language),
+    prevented: t('agent.turn.outcome.prevented', {}, language),
+  };
+  return name && labels[name] ? labels[name] + state.slice(name.length) : state;
+}
 const NO_PROGRESS_STATUSES: ReadonlySet<AgentToolCallStatus> = new Set(['duplicate', 'invalid-arguments', 'error']);
 /**
  * What the model is told about a call of a round that reached its output limit (TRUNCATED-TOOLCALL, live 2026-09-30: large write_file / run_shell
@@ -98,9 +106,9 @@ export function agentTurnTruncatedCallResult(name: string, limitTokens: number |
     + ' one run_shell command. Keep each call well below the limit.';
 }
 /** Closure-note sentence of a turn in which calls were refused because their round reached the output limit (TRUNCATED-TOOLCALL). */
-export function agentTurnTruncatedCallsNote(count: number, limitTokens: number | null): string {
-  return `[deckent] ${count} tool call${count === 1 ? ' was' : 's were'} cut at the model's output limit${limitTokens === null ? '' : ` (${limitTokens} tokens)`}`
-    + ' and not run; the model was asked to write in smaller parts.';
+export function agentTurnTruncatedCallsNote(count: number, limitTokens: number | null, language: Locale = LOCALES[0]): string {
+  const params = { count, limit: limitTokens === null ? '' : t('agent.turn.outcome.limit', { tokens: limitTokens }, language) };
+  return `[deckent] ${count === 1 ? t('agent.turn.outcome.truncatedCall', params, language) : t('agent.turn.outcome.truncatedCalls', params, language)}`;
 }
 
 /** A tool call's position in its turn: the model round and its index in that round's response. */
@@ -241,7 +249,7 @@ export async function runAgentTurn(input: AgentTurnInput, ports: AgentTurnPorts)
       value = 'error'; closure = agentContextFailureNote('AGENT_CONTEXT_REQUEST_TOO_LARGE', input.language);
     }
     // A mechanical compaction and refused truncated calls are never silent: the turn's note says what happened and what to do.
-    const extra = [...(cut ? [agentTurnTruncatedCallsNote(cut, limitTokens)] : []), ...(mechanical ? [AGENT_TURN_MECHANICAL_COMPACTION_NOTE] : [])];
+    const extra = [...(cut ? [agentTurnTruncatedCallsNote(cut, limitTokens, input.language)] : []), ...(mechanical ? [`[deckent] ${t('agent.turn.outcome.mechanical', {}, input.language)}`] : [])];
     const note = extra.length ? [closure, ...extra].filter(Boolean).join(' ') : closure;
     emit({ kind: 'done', finish: value, note });
     const final = last as AgentTurnMessage | null;
@@ -249,10 +257,11 @@ export async function runAgentTurn(input: AgentTurnInput, ports: AgentTurnPorts)
     return Object.freeze({ finish: value, answer, appendedCount, appendedDigest: appendedCount ? appendedHash.update(']').digest('hex') : null,
       rounds, toolCalls, note });
   };
-  const summary = () => toolCalls === 0 ? 'no tool call ran' : `${toolCalls} tool call(s) ran in ${rounds} round(s); their results are above`;
+  const summary = () => toolCalls === 0 ? t('agent.turn.outcome.noTools', {}, input.language) : t('agent.turn.outcome.tools', { calls: toolCalls, rounds }, input.language);
+  const cancelled = () => t('agent.turn.outcome.cancelled', { summary: summary() }, input.language);
 
   for (;;) {
-    if (signal.aborted) return finish('cancelled', `Cancelled. ${summary()}.`);
+    if (signal.aborted) return finish('cancelled', cancelled());
     rounds++;
     // One measurement per round (when a counter port exists) drives the context line, compaction and admission.
     let measured: Awaited<ReturnType<NonNullable<AgentTurnPorts['measure']>>> | null = null;
@@ -262,7 +271,7 @@ export async function runAgentTurn(input: AgentTurnInput, ports: AgentTurnPorts)
       if (measured && !signal.aborted) emit({ kind: 'context', round: rounds, ...measured });
     };
     await measure();
-    if (signal.aborted) return finish('cancelled', `Cancelled. ${summary()}.`);
+    if (signal.aborted) return finish('cancelled', cancelled());
     const reserve = (input.admission?.outputReserveTokens ?? 0) + (input.admission?.safetyReserveTokens ?? 0);
     // Compaction (T-L5b) past the high-water mark of the measured window, or of the request byte bound (exact bytes of the history
     // the client will send next; needs no measurement): older messages become one labelled summary.
@@ -281,12 +290,11 @@ export async function runAgentTurn(input: AgentTurnInput, ports: AgentTurnPorts)
       compactions++;
       let summaryOf: AgentCompactionSummary | 'unreadable' | null;
       try { summaryOf = await ports.summarize({ sequence: compactions, messages: plan.older }, signal); } catch { summaryOf = null; }
-      if (signal.aborted) return finish('cancelled', `Cancelled. ${summary()}.`);
+      if (signal.aborted) return finish('cancelled', cancelled());
       if (!summaryOf) {
-        const reached = tokenPressure && current ? `${current.promptTokens} of ${current.windowTokens} context tokens` : `the request size bound (${byteBound} bytes)`;
-        return finish('error', `The conversation reached ${reached} and could not be`
-          + ` compacted (the summary call failed). Nothing more was sent and the history is unchanged. ${summary()}.`
-          + ' Send the message again to retry, or start a new conversation (this one stays saved).');
+        const reached = tokenPressure && current ? t('agent.turn.outcome.contextLimit', { prompt: current.promptTokens, window: current.windowTokens ?? '?' }, input.language)
+          : t('agent.turn.outcome.requestLimit', { bytes: byteBound ?? '?' }, input.language);
+        return finish('error', t('agent.turn.outcome.compactionFailed', { reached, summary: summary() }, input.language));
       }
       if (summaryOf === 'unreadable') mechanical++;
       const next = [...(plan.system ? [plan.system] : []), renderAgentCompaction(plan, summaryOf === 'unreadable' ? null : summaryOf, canonical), ...plan.tail];
@@ -298,7 +306,7 @@ export async function runAgentTurn(input: AgentTurnInput, ports: AgentTurnPorts)
       for (const [digest, seen] of seenReads) if (!visible.has(seen.message)) seenReads.delete(digest);
       emit({ kind: 'compacted', messages: next.filter(message => message.role !== 'system'), replacedMessages: plan.older.length });
       await measure();
-      if (signal.aborted) return finish('cancelled', `Cancelled. ${summary()}.`);
+      if (signal.aborted) return finish('cancelled', cancelled());
     }
     const admitted = measured as Awaited<ReturnType<NonNullable<AgentTurnPorts['measure']>>> | null;
     // Admission before any send: a prompt that cannot fit is never sent (the provider would reject it after a billed attempt).
@@ -316,12 +324,12 @@ export async function runAgentTurn(input: AgentTurnInput, ports: AgentTurnPorts)
     if (outcome.status === 'failed') {
       if (signal.aborted || outcome.state === 'cancelled') {
         // The user already saw the streamed text: keep it in the history so the next turn sees it too.
-        if (streamed) push({ role: 'assistant', content: `${streamed}\n${AGENT_TURN_CANCELLED_MID_ANSWER}`, toolCalls: [] });
-        return finish('cancelled', `Cancelled. ${summary()}.`);
+        if (streamed) push({ role: 'assistant', content: `${streamed}\n${cancelledMidAnswer(input.language)}`, toolCalls: [] });
+        return finish('cancelled', cancelled());
       }
       const spendNote = agentSpendFailureNote(outcome.state, input.language);
       if (spendNote) return finish('error', spendNote);
-      return finish('error', `The model round ended without an answer (${outcome.state}); it is recorded and not retried. ${summary()}.`);
+      return finish('error', t('agent.turn.outcome.failed', { state: outcomeState(outcome.state, input.language), summary: summary() }, input.language));
     }
     if (outcome.usage) emit({ kind: 'usage', round: rounds, ...outcome.usage });
     push({ role: 'assistant', content: outcome.content, toolCalls: outcome.toolCalls });
@@ -329,8 +337,8 @@ export async function runAgentTurn(input: AgentTurnInput, ports: AgentTurnPorts)
       if (outcome.content.trim()) return finish(outcome.finish === 'length' ? 'length' : 'stop', null);
       // Legacy RC1: reasoning spent the whole completion budget and left no answer. Close deterministically, no extra round.
       return finish(outcome.finish === 'length' ? 'length' : 'error', outcome.finish === 'length'
-        ? `The model reached its output limit before answering (reasoning used the budget). ${summary()}.`
-        : `The model returned no answer. ${summary()}.`);
+        ? t('agent.turn.outcome.outputLimit', { summary: summary() }, input.language)
+        : t('agent.turn.outcome.empty', { summary: summary() }, input.language));
     }
     let progressed = outcome.content.trim() !== '';
     // A round that reached its output limit carries incomplete calls, whatever its finish says and whether or not the arguments parse.

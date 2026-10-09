@@ -128,6 +128,16 @@ describe('model invocation streamed deltas', () => {
 });
 
 describe('model invocation application', () => {
+  it('readiness performs no claim or send and rechecks policy/profile after native preparation', async () => {
+    const ready = fixture();
+    expect(await ready.app.preview(command)).toMatchObject({ activation, refreshRequired: false });
+    expect(ready.calls).toMatchObject({ claims: 0, permissions: 0, sends: 0 });
+    const denied = fixture({ denySecond: true }); await expect(denied.app.preview(command)).rejects.toThrow('DENIED');
+    expect(denied.calls).toMatchObject({ claims: 0, permissions: 0, sends: 0 });
+    const drift = fixture({ changeProfile: true }); await expect(drift.app.preview(command)).rejects.toMatchObject({ code: 'MODEL_INVOCATION_PROFILE_CONFLICT' });
+    expect(drift.calls).toMatchObject({ claims: 0, permissions: 0, sends: 0 });
+  });
+
   it('releases live controller custody on claim/permission failures, prevention, native failure, settlement and concurrent replay', async () => {
     const cases = [{ claimError: true }, { permitError: true }, { permission: 'prevented' as const },
       { sendError: true }, { responseWriteError: true }, {}, { concurrentBarrier: true }];
