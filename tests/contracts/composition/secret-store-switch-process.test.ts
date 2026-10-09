@@ -9,6 +9,7 @@ import { createEncryptedFileSecretStore, registerProviderConfig } from '#adapter
 import { applyPolicyTemplateInstallation } from '#composition/core/installation/index.js';
 import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
 import { cliChildEnv } from '../support/child-env.js';
+import { createConfiguredRuntimeClient } from '#composition/core/runtime-service/index.js';
 
 // SECRET-STORE-SWITCH on the shipped processes (owner 2026-10-08, option B): compiled `runtime serve` + compiled `deckent secret store`. A key in
 // the plaintext file store is moved into the encrypted store, read back, the selection published and the plaintext copy removed; the switch is
@@ -99,5 +100,40 @@ it.skipIf(process.platform !== 'linux')('compiled CLI + service: file → encryp
   for (const entry of await readdir(globalRoot, { recursive: true })) {
     const bytes = await readFile(join(globalRoot, String(entry))).catch(() => null);
     expect(bytes?.includes(Buffer.from(CANARY)) ?? false, String(entry)).toBe(false);
+  }
+}, 60_000);
+
+it.skipIf(process.platform !== 'linux')('compiled env guard and direct runtime client block missing refs; confirmed switch never copies env values', async () => {
+  registerProviderConfig();
+  const root = await mkdtemp(join(tmpdir(), 'deckent-env-switch-')); cleanup.push(() => rm(root, { recursive: true, force: true }));
+  const project = join(root, 'project'), home = join(root, 'home');
+  await mkdir(project, { mode: 0o700 }); await mkdir(home, { mode: 0o700 });
+  const env = cliChildEnv({ HOME: home, DECKENT_GLOBAL_HOME: join(home, 'global'), DECKENT_LANGUAGE: 'en', NO_COLOR: '1', PROVIDER_TOKEN: CANARY });
+  await applyPolicyTemplateInstallation(project, 'installation');
+  await writeFile(join(project, '.deckent/config.json'), JSON.stringify({ projectName: '$DECK:PROVIDER_TOKEN', terminal: { scopeId: 'installation' },
+    cancellation: { maxConcurrentDeliveries: 1, recoveryPageSize: 1, maxAttempts: 1, retryDelayMs: 10, claimTtlMs: 100 },
+    cancellationRuntime: { scopeIds: ['installation'], pollIntervalMs: 1000, failureBackoffMs: 1000 } }), { mode: 0o600 });
+  await mkdir(env['DECKENT_GLOBAL_HOME']!, { recursive: true, mode: 0o700 });
+  const opened = await openConfiguredAttemptStore(project, { env }); opened.store.close(); clearConfigCache();
+  const service = spawn(process.execPath, [cli, 'runtime', 'serve', '--json'], { cwd: project, env, stdio: ['pipe', 'pipe', 'pipe'] }) as Child;
+  children.add(service); let printed = '';
+  service.stdout.on('data', chunk => { printed += String(chunk); }); service.stderr.on('data', chunk => { printed += String(chunk); });
+  await ready(service).catch(error => { throw new Error(`${(error as Error).message}: ${printed.split(CANARY).join('[canary]')}`); });
+  const blocked = await run(['secret', 'store', '--to', SEALED, '--json'], project, env);
+  expect(blocked.code).toBe(1); expect(blocked.stderr).toContain('PROVIDER_TOKEN'); printed += blocked.stdout + blocked.stderr;
+  const client = createConfiguredRuntimeClient(project, { env });
+  await expect(client.switchSecretStore({ schemaVersion: 1, scopeId: 'installation', to: SEALED, confirmDowngrade: false }))
+    .rejects.toMatchObject({ code: 'SECRET_STORE_ENV_UNCONFIRMED' });
+  const switched = await run(['secret', 'store', '--to', SEALED, '--confirm-env-missing', '--json'], project, env);
+  expect(switched.code, switched.stderr).toBe(0); expect(JSON.parse(switched.stdout)).toMatchObject({ status: 'switched', entries: 0 });
+  printed += switched.stdout + switched.stderr;
+  expect(await createEncryptedFileSecretStore({ root: env['DECKENT_GLOBAL_HOME']!, platform: 'linux' }).get('PROVIDER_TOKEN')).toBeUndefined();
+  service.kill('SIGTERM'); await new Promise(done => service.once('close', done));
+  expect(printed).not.toContain(CANARY);
+  for (const base of [env['DECKENT_GLOBAL_HOME']!, join(project, '.deckent')]) {
+    for (const entry of await readdir(base, { recursive: true })) {
+      const bytes = await readFile(join(base, String(entry))).catch(() => null);
+      expect(bytes?.includes(Buffer.from(CANARY)) ?? false, String(entry)).toBe(false);
+    }
   }
 }, 60_000);

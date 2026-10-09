@@ -40,6 +40,7 @@ export type ConfigPanelField = Readonly<{
   choices: readonly Readonly<{ id: string; label: string; value: unknown; detail?: string }>[];
   /** A typed entry is offered (validated by the key's schema before anything is sent). */
   free: boolean;
+  records?: boolean;
   stepper?: import('#platform/index.js').ConfigStepper | null;
   readOnly?: string | null;
   generated?: boolean;
@@ -54,6 +55,7 @@ export type ConfigPanelView = Readonly<{ title: string; fields: readonly ConfigP
 export type ConfigPanelWrite = Readonly<{ action: 'set' | 'unset'; keyPath: string; value?: unknown; layer: ConfigPanelLayer }>;
 export type ConfigPanelOutcome = Readonly<{ status: 'applied' | 'approval-pending'; lines: readonly string[]; approvalId: string | null }>;
 export interface ConfigPanelPort {
+  readonly records?: import('#surfaces/core/config/index.js').ConfigRecordPort;
   inspect(): Promise<ConfigPanelView>;
   /** The typed value of an entry for one key, or the localized reason it does not fit (nothing is sent then). */
   parse(keyPath: string, text: string): Readonly<{ ok: true; value: unknown }> | Readonly<{ ok: false; reason: string }>;
@@ -61,6 +63,7 @@ export interface ConfigPanelPort {
   write(request: ConfigPanelWrite): Promise<ConfigPanelOutcome>;
 }
 export interface ConfigPanelLabels {
+  readonly records: Readonly<Record<'edit' | 'add' | 'remove' | 'import' | 'save' | 'before' | 'after' | 'browse' | 'select' | 'empty', string>>;
   readonly hints: string; readonly scopes: Readonly<Record<ConfigPanelLayer, string>>;
   /** The section of top-level keys; the marker of the value in effect. */
   readonly general: string; readonly current: string;

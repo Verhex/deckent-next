@@ -535,7 +535,8 @@
         "src/engine/core/config",
         "src/composition/core/root",
         "src/composition/core/backup",
-        "src/engine/core/backup"
+        "src/engine/core/backup",
+        "src/composition/core/secrets"
       ],
       "plan": "EXECUTION"
     },
@@ -945,7 +946,8 @@
         "src/surfaces/core/approval-presentation",
         "src/domain/core/policy",
         "src/platform/core/redaction",
-        "src/platform/core/config-fields"
+        "src/platform/core/config-fields",
+        "src/surfaces/core/config"
       ],
       "plan": "SURFACES"
     },
@@ -1173,7 +1175,8 @@
         "src/domain/core/policy",
         "src/domain/core/run",
         "src/engine/core/runs",
-        "src/platform/core/bootstrap-state"
+        "src/platform/core/bootstrap-state",
+        "src/domain/core/audit"
       ],
       "plan": "INSTALLATION"
     },
@@ -1203,7 +1206,10 @@
         "src/platform/core/managed-files",
         "src/adapters/core/native-coding",
         "src/composition/core/scoped-request",
-        "src/composition/core/root"
+        "src/composition/core/root",
+        "src/adapters/core/audit-store",
+        "src/engine/core/audit",
+        "src/composition/core/secrets"
       ],
       "plan": "INSTALLATION"
     },
@@ -2288,7 +2294,11 @@
         "src/domain/core/principal",
         "src/surfaces/core/cli-kit",
         "src/surfaces/core/terminal-render",
-        "src/platform/core/config-fields"
+        "src/platform/core/config-fields",
+        "src/surfaces/core/cli-models",
+        "src/platform/core/host",
+        "src/platform/core/common",
+        "src/domain/core/provider-spend"
       ],
       "plan": "CONFIG-SURFACE"
     },
@@ -2333,7 +2343,8 @@
         "src/surfaces/core/config",
         "src/platform/core/managed-files",
         "src/domain/core/provider-catalog",
-        "src/adapters/core/contract"
+        "src/adapters/core/contract",
+        "src/platform/core/errors"
       ],
       "plan": "CONFIG-SURFACE"
     },
@@ -2599,6 +2610,7 @@
         "src/domain/core/principal",
         "src/engine/core/backup",
         "src/adapters/core/backup-store",
+        "src/adapters/core/file-policy",
         "src/adapters/core/local-principal",
         "src/adapters/core/local-keyring",
         "src/adapters/core/installation-files",
@@ -3479,7 +3491,7 @@
       ]
     },
     "publicExtensions": {
-      "note": "G-i/G-j (ENTERPRISE-EXT-1, owner K7 = A): an external package registers through deckent/extensions only, before the composition root seals the registries; an overlay fixture proves it with public imports only.",
+      "note": "G-i/G-j (ENTERPRISE-EXT-1, owner K7 = A; EXT-SERVICE-ENTRY): an external package registers through deckent/extensions only, before the composition root seals the registries; lazy CLI and MCP runners reach only their listed unit indexes; an overlay fixture proves it with public imports only.",
       "entry": "src/extensions.ts",
       "sdkEntry": "src/index.ts",
       "packageExport": "./extensions",
@@ -3508,7 +3520,8 @@
         "registerProviderConfig": "src/composition/core/root"
       },
       "unitImports": [
-        "src/composition/core/cli"
+        "src/composition/core/cli",
+        "src/composition/core/mcp"
       ],
       "fixture": {
         "root": "tests/fixtures/overlay-package",

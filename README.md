@@ -28,7 +28,7 @@ package); the planned name is the scoped `@verhex/deckent` (owner 2026-10-07, no
 -->
 
 > [!NOTE]
-> **Pre-release `1.0.0-alpha.18`**, live since 2026-10-09. Deckent is not on npm yet; install it from source
+> **Pre-release `1.0.0-alpha.20`** (released 2026-10-09). Deckent is not on npm yet; install it from source
 > as shown in [Get started](#get-started). Every release is listed in [CHANGELOG.md](CHANGELOG.md).
 
 ## What is Deckent
@@ -218,7 +218,9 @@ reached, the terminal says so in plain words; spend limits stay in your provider
 
 **Strict install**, for keys no other program on the machine should read:
 
-1. Move your keys into the encrypted store: `deckent secret store` lists the registered stores to pick from; it copies every key,
+Fresh Linux/WSL/macOS installations select the encrypted store through `init policy --apply` and Docker `init apply` when the installed policy permits the switch; existing installations keep their selection.
+
+1. Move your keys into the encrypted store: `deckent secret store` lists the registered stores to pick from; leaving env lists config reference names missing in the target and asks yes/no (scripts require `--confirm-env-missing`); `doctor` shows the same names; it copies every key,
    checks it, selects the new store and then removes the old copy (a move to a weaker store asks first). Installations set up
    with `deckent init policy` on Linux, WSL and macOS start on the encrypted store already.
 2. Keep other AI tools out of Deckent's state folder, e.g. `Read` deny rules for the store files in Claude Code's
@@ -289,7 +291,7 @@ a remote HTTP API, Desktop and Dashboard. A Docker worker shares the host kernel
 
 ```mermaid
 flowchart LR
-  L["Live · alpha.18<br/>terminal windows · approval window · slash-command windows<br/>/config · /mode · /mcp · /provider · /model<br/>easy MCP (HTTP, import, trust) · encrypted key store<br/>spend settlement and budgets"] --> P["In progress<br/>OpenRouter models in the terminal<br/>cost guards · per-provider spend limits<br/>first-use fixes (cache, usage line)"]
+  L["Released · alpha.20<br/>terminal windows · approval window · slash-command windows<br/>/config · /mode · /mcp · /provider · /model<br/>easy MCP (HTTP, import, trust) · encrypted key store<br/>spend settlement and budgets"] --> P["In progress<br/>OpenRouter models in the terminal<br/>cost guards · per-provider spend limits<br/>first-use fixes (cache, usage line)"]
   P --> N["Next<br/>subscriptions · worker credential modes<br/>system prompt and settings<br/>project instruction file"]
   N --> F["Planned<br/>Firecracker microVM sandbox<br/>HTTP API · Dashboard · Desktop"]
 ```

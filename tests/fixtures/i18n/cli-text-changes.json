@@ -430,7 +430,7 @@
     },
     "cli.memcat.mcp.help.paths": {
       "before": "\nMCP is a host-neutral standard: a server registered here is described by the protocol,\nnot by any single client, and the same entry can be consumed by any MCP-capable host.\nRead paths: `mcp list` and `mcp get` project the merged view (local > project > user).\nMutation paths: `mcp add` and `mcp remove` rewrite the .mcp.json of the selected scope.\n",
-      "after": "\nMCP is a host-neutral standard: a server registered here is described by the protocol,\nnot by any single client, and the same entry can be consumed by any MCP-capable host.\nRead paths: `mcp list` and `mcp get` project the merged view (local > project > user).\nMutation paths: `mcp add` and `mcp remove` rewrite the mcp.json of the selected scope (project: .deckent/mcp.json).\n"
+      "after": null
     },
     "terminal.mcp.approve": {
       "before": "mcp: {name} asks for trust on the next message",
@@ -438,7 +438,7 @@
     },
     "cli.memcat.mcp.opt.header": {
       "before": "HTTP header as key=value; repeat for several headers",
-      "after": "HTTP header as 'Name: value'; repeat for several headers"
+      "after": null
     },
     "tui.picker.hint_filter_esc": {
       "before": "Esc clears the filter · Enter select",
@@ -1004,7 +1004,7 @@
     },
     "cli.memcat.mcp.help.paths": {
       "before": "\nMCP host’tan bağımsız bir standarttır: burada kayıtlı bir sunucu tek bir istemciye göre değil,\nprotokole göre tanımlanır ve aynı entry MCP destekleyen her host tarafından tüketilebilir.\nOkuma yolları: `mcp list` ve `mcp get` birleşik görünümü projekte eder (local > project > user).\nMutasyon yolları: `mcp add` ve `mcp remove` seçilen scope’un .mcp.json dosyasını yeniden yazar.\n",
-      "after": "\nMCP host’tan bağımsız bir standarttır: burada kayıtlı bir sunucu tek bir istemciye göre değil,\nprotokole göre tanımlanır ve aynı entry MCP destekleyen her host tarafından tüketilebilir.\nOkuma yolları: `mcp list` ve `mcp get` birleşik görünümü projekte eder (local > project > user).\nMutasyon yolları: `mcp add` ve `mcp remove` seçilen scope’un mcp.json dosyasını yeniden yazar (project: .deckent/mcp.json).\n"
+      "after": null
     },
     "terminal.mcp.approve": {
       "before": "mcp: {name} bir sonraki mesajda güven isteyecek",
@@ -1012,7 +1012,7 @@
     },
     "cli.memcat.mcp.opt.header": {
       "before": "key=value biçiminde HTTP başlığı; birden fazlası için tekrarlayın",
-      "after": "'Ad: değer' biçiminde HTTP başlığı; birden fazlası için tekrarlayın"
+      "after": null
     },
     "tui.picker.hint_filter_esc": {
       "before": "Esc filtreyi temizler · Enter seç",

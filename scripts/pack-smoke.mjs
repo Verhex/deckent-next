@@ -4,6 +4,7 @@
 //   mcp      `deckent-mcp` stdio: initialize + tools/list
 //   client   `deckent mcp add --realm host` against the installed `deckent-mcp` (lazy MCP client SDK, cross-spawn, pinning)
 //   runtime  `deckent runtime serve` → ready → `runtime describe` (N-API peer_credentials.node next to the bundle, SO_PEERCRED) → SIGTERM
+//   extensions separate public overlay distribution: service + MCP execute, detached restart, replay, policy deny and unregistered refusal
 //   terminal start contract: TTY `deckent` workline (lazy ink/react/yoga render: banner, Ready, composer placeholder, no line prompt; Ctrl+C
 //            twice), piped `deckent terminal` typed refusal, line mode on a TTY (tr prompt) and piped (no prompt) — texts from the shipped catalogs
 //   native   every shipped .node addon loads in this Node (Node-API: one binary serves Node 24 and 26)
@@ -23,11 +24,12 @@ import { builtinModules } from 'node:module';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { checkExtensions } from './pack-smoke-extensions.mjs';
 
 /** Typical SDK use by a zero-dependency consumer: values, derived zod types (must be real types, not `any`), a hand-written Standard Schema, the `deckent/extensions` registration entry,
  * the i18n key union, errors — and the zod schema values removed from the entry (DEPS-SCHEMA C2-b) must stay absent. */
 const TYPES_CONSUMER = `import * as deckent from 'deckent';
-import { CORE_API_VERSION, RegistryError, registerOperationAdapterModule, type AdapterModuleRegistration } from 'deckent/extensions';
+import { CORE_API_VERSION, RegistryError, registerOperationAdapterModule, runCli, runMcp, type AdapterModuleRegistration } from 'deckent/extensions';
 import { createRun, inspectRun, createDefaultConfig, validateConfig, getConfigFieldDefault, t, isStandardSchemaV1, validateStandardSchemaSync, DeckentError,
   type RunAdmission, type RunQuery, type DeckentConfig, type MessageKey, type StandardSchemaV1 } from 'deckent';
 
@@ -56,6 +58,8 @@ export const removed = deckent.CORE_SCHEMA;
 // The registration entry (\`exports['./extensions']\`) type-checks from its own shipped declarations (Astra 2423 P2-1).
 export const coreApi: 1 = CORE_API_VERSION;
 export const register: (registration: AdapterModuleRegistration) => void = registerOperationAdapterModule;
+export const distributionCli: (argv: readonly string[], options?: { serviceEntry?: string }) => Promise<number> = runCli;
+export const distributionMcp: (argv: readonly string[]) => Promise<void> = runMcp;
 export const isRegistryError = (error: unknown): boolean => error instanceof RegistryError;
 // @ts-expect-error a registration is a typed object, not a string
 registerOperationAdapterModule('not-a-registration');
@@ -146,6 +150,10 @@ async function runtimeCheck() {
     { ready, instanceId: described?.instanceId ?? null, describe: typeof described?.instanceId === 'string' ? undefined : described, exit: end, stderr: stderr.trim().slice(-800) });
 }
 if (want('runtime') && report.checks.install?.ok !== false) await runtimeCheck();
+if (want('extensions') && report.checks.install?.ok !== false) {
+  try { const { ok, ...detail } = await checkExtensions({ root, base, node, env }); record('extensions', ok, detail); }
+  catch (error) { record('extensions', false, { error: error.message }); }
+}
 
 /** One pseudo-TTY session through util-linux `script`: each step waits until the (ANSI-stripped) output contains `wait`, then sends `send`
  * after `delayMs`. Resolves with the exit status, the stripped text and whether the time limit killed it. */
@@ -222,9 +230,9 @@ if (want('lazy') && report.checks.install?.ok !== false) {
       for (const match of code.matchAll(/^\/\/ node_modules\/((?:@[^/]+\/)?[^/]+)\//gm)) if (['ink', 'react', 'react-reconciler', 'yoga-layout', '@modelcontextprotocol'].some(name => match[1] === name || match[1].startsWith(`${name}/`))) heavy.add(match[1]);
       for (const match of code.matchAll(STATIC)) { const next = target(file, match[1] ?? match[2]); if (next) stack.push(next); } }
     return { files: seen.size, heavy: [...heavy].sort() }; };
-  const cli = reach(join(root, manifest.bin.deckent)), mcp = reach(join(root, manifest.bin['deckent-mcp']));
-  record('lazy', cli.heavy.length === 0 && mcp.heavy.every(name => name.startsWith('@modelcontextprotocol/server') || name === '@modelcontextprotocol/core'),
-    { cli, mcp });
+  const cli = reach(join(root, manifest.bin.deckent)), mcp = reach(join(root, manifest.bin['deckent-mcp'])), extensions = reach(join(root, manifest.exports['./extensions'].import));
+  record('lazy', cli.heavy.length === 0 && extensions.heavy.length === 0 && mcp.heavy.every(name => name.startsWith('@modelcontextprotocol/server') || name === '@modelcontextprotocol/core'),
+    { cli, mcp, extensions });
 }
 
 if (want('imports') && report.checks.install?.ok !== false) {

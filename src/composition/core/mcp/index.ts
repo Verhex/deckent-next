@@ -1,2 +1,2 @@
-export { main } from './internal/entry.js';
+export { main, run } from './internal/entry.js';
 export { describeMcpInference } from './internal/inference-query.js';

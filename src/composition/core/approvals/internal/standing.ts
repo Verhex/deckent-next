@@ -71,7 +71,7 @@ export function configuredMcpToolGrants(root: string, scopeId: string, options: 
 }
 
 /**
- * `deckent policy upgrade --template v5` (owner 2026-10-07): the first-run v5 rules for this local person through the governed chain. Preview reads
+ * `deckent policy upgrade --template current`: current first-run additions for this local person through the governed chain. Preview reads
  * only (no administration opened); apply and rollback run `policy.administer@1` as this person (its card decided by them, I2, audit, archive).
  */
 export function configuredPolicyTemplateUpgrade(root: string, scopeId: string, options: ConfigLoadOptions, input: { readonly mode: 'preview' | 'apply' | 'rollback';

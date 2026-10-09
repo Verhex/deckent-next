@@ -3,7 +3,7 @@
 ## Supported versions
 
 Security fixes target `main` and the current `1.0.0-alpha.N` pre-release line (currently
-`1.0.0-alpha.17`; see [CHANGELOG.md](CHANGELOG.md)). Older alpha snapshots are not maintained
+`1.0.0-alpha.20`; see [CHANGELOG.md](CHANGELOG.md)). Older alpha snapshots are not maintained
 separately; reproduce against current main/current alpha when possible. Pre-release support
 does not imply production or platform acceptance.
 

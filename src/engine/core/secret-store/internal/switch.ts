@@ -27,6 +27,8 @@ export interface SecretStoreSwitchPorts {
   readonly now: () => number;
   /** The installation's custody section: the whole switch runs inside it, as every secret change does. */
   readonly custody: SecretCustody;
+  /** Names resolving from env but absent in this target; reads config and target metadata inside custody, never values. */
+  readonly environmentReferences: (target: SecretStore) => Promise<readonly string[]>;
 }
 export interface SecretStoreSwitchRequest {
   readonly principal: { readonly issuer: string; readonly subject: string };
@@ -34,6 +36,7 @@ export interface SecretStoreSwitchRequest {
   readonly to: string;
   /** A move toward a weaker store (encrypted → file/env, or to/from a store Core cannot rank) runs only with this explicit confirmation. */
   readonly confirmDowngrade: boolean;
+  readonly confirmEnvMissing?: boolean;
 }
 /** `switched`: entries moved and the selection published; `current`: the target was already selected (leftover identical copies cleaned). */
 export interface SecretStoreSwitchResult {
@@ -87,11 +90,19 @@ export class SecretStoreSwitch {
     const selection = await this.ports.selection.read(), from = selection.store ?? ENVIRONMENT_STORE;
     if (from === request.to) return this.finish(request, from);
     const source = this.ports.open(from), target = this.ports.open(request.to);
+    if (from === ENVIRONMENT_STORE) {
+      const missing = await this.ports.environmentReferences(target);
+      if (missing.length && !request.confirmEnvMissing) throw ErrorRegistry.createError('SECRET_STORE_ENV_UNCONFIRMED', {
+        params: { to: request.to, names: missing.join(', ') } });
+    }
     // The environment backend (and any store that cannot list) has nothing Deckent can move: only the selection changes.
     const names = source.descriptor.enumerable ? [...await source.listNames()] : [];
     const downgrade = isSecretStoreDowngrade(from, request.to);
     if (downgrade && !request.confirmDowngrade) throw ErrorRegistry.createError('SECRET_STORE_DOWNGRADE_UNCONFIRMED', { params: { from, to: request.to } });
     if (names.length && !target.descriptor.writable) throw ErrorRegistry.createError('SECRET_STORE_READ_ONLY', { params: { backend: request.to } });
+    // S1 O1: a target that cannot be read now (not private, corrupt, unavailable) is refused typed before anything is recorded or selected,
+    // even when nothing moves; a missing store root is created owner-only by its first write, an existing one is never chmod'ed.
+    if (target.descriptor.enumerable) await target.listNames();
     await this.record(request, from, names.length, downgrade);
     const values = new Map<string, string>();
     for (const name of names) {

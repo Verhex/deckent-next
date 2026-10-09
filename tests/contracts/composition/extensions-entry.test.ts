@@ -15,8 +15,13 @@ const memoryBackend = (id: string) => ({ id, create: () => {
 
 it('exports exactly the reviewed extension surface; the SDK entry exports none of its registrations', () => {
   expect(Object.keys(extensions).sort()).toEqual(['CORE_API_VERSION', 'EffectTargetError', 'RegistryError', 'SECRET_STORE_ID_PATTERN',
-    'registerOperationAdapterModule', 'registerSecretStoreBackend', 'runCli']);
+    'registerOperationAdapterModule', 'registerSecretStoreBackend', 'runCli', 'runMcp']);
   expect(['registerOperationAdapterModule', 'registerSecretStoreBackend', 'registerProviderConfig'].filter(name => name in sdk)).toEqual([]);
+});
+
+it('the distribution MCP runner preserves Core argument validation', async () => {
+  await expect(extensions.runMcp(['--project', ' '])).rejects.toThrow('MCP_PROJECT_INVALID');
+  await expect(extensions.runMcp(['--unknown'])).rejects.toMatchObject({ code: 'ERR_PARSE_ARGS_UNKNOWN_OPTION' });
 });
 
 it('registers a non-Core secret backend before the composition root seals, and refuses every later registration with REGISTRY_SEALED', () => {

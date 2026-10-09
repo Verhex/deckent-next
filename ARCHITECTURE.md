@@ -345,8 +345,17 @@ refresh, usage and dogfood closure remain open.
   absent from commands, policy decisions, receipts and errors. No MCP/model passphrase input is exposed.
 - Sets contain a read-only-source SQLite online snapshot, `ledger.fingerprint.json` (integrity, schema version, ordered table counts/digests),
   a bounded gzip JSON archive of logical config/installation/project identity/policy/bindings/audit/artifact resources, encrypted
-  `authority.key.enc` and `MANIFEST.sha256`. Authored global and project configuration are merged without resolving secret references.
-  Worker clones, provider login caches and secret-store credentials are excluded. Directories/files are private (0700/0600), links refused.
+  `authority.key.enc` and `MANIFEST.sha256`. State v2 (S1 D1, 2026-10-09) archives the authored project and global configuration layers
+  apart, without resolving secret references; v1 (alpha.18, one merged document) stays readable and its project-forbidden sections (those a
+  registered `validateLayers` refuses in a project layer, e.g. `secrets`) move to the global layer. Restore publishes the project layer as
+  the project config and only fills archived global sections the per-user global config lacks (present ones are kept and reported as
+  `globalConfig.kept`; an unreadable file is kept as `.damaged-<uuid>`). Astra 2475: before any write restore computes the target's effective
+  config (that global layer under the restored project layer); a pair the loader would refuse is `BACKUP_TARGET_CONFIG_CONFLICT {path, section}`,
+  and when it names another `approvals.keyFile` the project layer pins the set's key name (`/approvals/keyFile` in `changedPaths`); the hold
+  is removed only after the key that name opens has the set's key id. The ledger snapshot uses the rollback journal and every set ledger
+  read is immutable, so no `-wal/-shm` appears in a set. Worker clones, provider login caches and secret-store credentials are excluded.
+  Files are 0600 and created directories 0700; an existing directory restore writes into must be this user's and not group/other-writable
+  (the policy/artifact/installation-file rule), checked before staging as `BACKUP_DIRECTORY_UNSAFE {path}` with `chmod 700`; links refused.
 - Envelope v1 uses async scrypt (N=65536,r=8,p=1) + AES-256-GCM with fresh salt/nonce; AAD binds all payload hashes. Verification checks
   manifest, authenticated key, ledger fingerprint and archive bounds. Regenerating SHA hashes alone cannot authenticate modified contents.
 - Whole-installation `backup/create|verify|restore` requires an all-scopes policy grant for the verified principal. Template v8 adds the
@@ -361,12 +370,16 @@ refresh, usage and dogfood closure remain open.
   present service socket and acquires the service's same kernel ledger custody until publication finishes. Old resources/ledger sidecars
   are preserved as `.damaged-<uuid>`; the ledger lock inode stays. Relocation rewrites internal config paths, preserves installationId,
   reports the existing identity check and leaves `init identity --keep` to the operator. Scheduling resets to off. Publication spans
-  several files: `BACKUP_RESTORE_INCOMPLETE` records uncertainty and retains the staging directory and damaged copies after partial
+  several files: `BACKUP_RESTORE_INCOMPLETE` records uncertainty and retains the stage (`<target>/.deckent/.backup-restore-<uuid>`, 0700,
+  never the decrypted key: it is decrypted at publication next to its final name) and damaged copies after partial
   publication. A confirmed target with a different retained installationId is refused. No cross-file atomicity claim. Astra 2471:
   a durable, fsync'd `.deckent/restore-hold.json` precedes the first replacement and is removed only after the last; config admission
   (`inspectInstallationBootstrap`, before the config cache) refuses it as `BACKUP_RESTORE_HOLD`, so service start and every configured
   command stay closed after a failure or process loss; only restore (`restoreHold: 'admit'`) proceeds and, while held, may fall back to
   the authenticated set's policy. Same-root restore keeps the current resource map: config and publication use one target layout (R2).
+  A damaged existing policy is `BACKUP_POLICY_UNREADABLE {path, reason}` (move it aside, rerun restore); it never falls back silently.
+  A successful restore removes earlier interrupted stages (also alpha.18's project-root location) and pending hold/key files; doctor lists
+  them and shows an installation directory mode open to group/other. Evidence: external `proof/BACKUP-FIXES-2026-10-09/`.
 - Config `backup.schedule` selects off/daily/before-upgrade; retention selects 3/7/14/30 sets. The service uses its configured scope and
   its verified hosting OS principal, the same policy and `BACKUP_PASSPHRASE` from the selected secret store. Daily due state survives
   restart in authenticated set timestamps; before-upgrade runs under service custody before schema migration. Stop waits in-flight work.
@@ -464,7 +477,7 @@ refresh, usage and dogfood closure remain open.
   clients (list/inspect/decide); a v21 client still has them hidden (`approvalSubjectsHiddenFromProtocol`). Lifecycle window [22,21]. No other T3
   wire field (MCP trust and proposal windows reuse `approval.requested`; read-tool `diagnostic` stays in the service).
   v23 (T4 MODEL-SWITCH) was pushed with alpha.14. v24 (SECRET-STORE-SWITCH, owner 2026-10-08, alpha.15): one operation `switchSecretStore`;
-  lifecycle window [24,23] (a v22 service is outside; a v23 client cannot reach the switch). Secret set/delete and the switch share one installation-wide custody section (Astra 2456 P1-1); a contended change is `SECRET_STORE_BUSY`, a change prepared on a store that a switch replaced is `SECRET_STORE_CHANGED` (no wire field changes). v25 (SPEND-SETTLEMENT, released with alpha.16, PRs #47/#48, 2026-10-08): bounded `manageProviderSpend` (reconcile, budget revision, stage 1 `budget-create`); lifecycle window [25,24]. T4-B adds no operation (`models.connect` runs in the CLI/SDK/MCP/terminal process). Stage 1 widened one input inside the unreleased 25: the account query also takes `{scopeId, current: true}`. Live since alpha.16 (window [25,24]); alpha.17 (PRICING) adds no protocol change.
+  lifecycle window [24,23] (a v22 service is outside; a v23 client cannot reach the switch). W2-SECRETS adds optional `confirmEnvMissing` to the switch command. When leaving env, config `$DECK:` names that resolve from env but are absent from target name metadata require this explicit confirmation; the check runs inside custody, before audit/publication, and never reads values. CLI asks yes/no on a TTY (also with `--to`); scripts use `--confirm-env-missing`; doctor exposes the same per-target names and explicit probe failures. A non-enumerable target cannot prove presence and is refused when env references exist. Secret set/delete and the switch share one installation-wide custody section (Astra 2456 P1-1); a contended change is `SECRET_STORE_BUSY`, a change prepared on a store that a switch replaced is `SECRET_STORE_CHANGED` (no wire field changes). v25 (SPEND-SETTLEMENT, released with alpha.16, PRs #47/#48, 2026-10-08): bounded `manageProviderSpend` (reconcile, budget revision, stage 1 `budget-create`); lifecycle window [25,24]. T4-B adds no operation (`models.connect` runs in the CLI/SDK/MCP/terminal process). Stage 1 widened one input inside the unreleased 25: the account query also takes `{scopeId, current: true}`. Live since alpha.16 (window [25,24]); alpha.17 (PRICING) adds no protocol change.
   v18 was introduced 2026-09-29 (SECRET-WRITE, lead decision under this rule) as the single v18 package: the control operations
   `setSecret` / `deleteSecret`; lifecycle window [18,17]; every other v17 operation is unchanged in v18. It is unreleased until pushed, and
   further v18 items add to it without another bump. Like every bump, the window's older version is lifecycle-only: a v17 client can
@@ -505,8 +518,17 @@ Core contracts and never requires editing Core. Core-memory law 10 records this 
   package proves overlay without Core edits before Enterprise features are claimed. Tiers never grant authority.
   Current state (2026-10-07, wave 4): the package entry `deckent/extensions` registers provider/config units before one
   composition root seals the registries (late registration is a typed refusal; the SDK root exports no `register*`).
-  It takes effect only in the CLI process; `runtime serve` and `deckent-mcp` still start from the Core entry
-  (EXT-SERVICE-ENTRY open), so overlay is not yet proven on the service or MCP surfaces.
+  EXT-SERVICE-ENTRY (2026-10-08, W2): a distribution registers its modules, then calls
+  `runCli(argv, { serviceEntry? })` or lazy `runMcp(argv)` from `deckent/extensions`. `runCli` carries the
+  distribution executable (`serviceEntry`, default `process.argv[1]`) through automatic service start and managed
+  restart, replaying registrations in the new process; direct `runtime serve` retains the same-process registry.
+  `runMcp` accepts the Core `--project` contract, resolves catalog hints from its registered modules and delegates
+  execution to the governed service. Both processes must use the same distribution; bare Core bins discover no
+  modules. SDK root exports no new entry or registration. Public entry imports no heavy package until called.
+  Until batch review and landing, Enterprise pluggability beyond the CLI remains unclaimed; candidate proof is
+  `proof/EXT-SERVICE-ENTRY-2026-10-08/` (17 targeted tests; offline tarball service/MCP, unregistered refusal,
+  detached restart, lazy graph and zero-dependency NodeNext/Bundler consumer types). These are author checks,
+  not independent acceptance; the fixture seeds its ledger via existing storage composition before public requests.
 - **ERP adapter family (Enterprise).** IFS (Cloud via MCP/REST and Applications 10 native), SAP, Oracle, Microsoft,
   Uyumsoft and Logo implement the same operation/effect/approval contracts. Customer ERP development projects are built
   on these adapters; Deckent-Enterprise owns writing and distributing internal packages as each customer's ERP version
@@ -541,7 +563,8 @@ Core contracts and never requires editing Core. Core-memory law 10 records this 
   once under the layer lock after re-checking the digest (`CONFIG_APPROVAL_STALE`), the policy and the accept window; the audit `config-change`
   record names the consumed `approvalId`. `ConfigApplication.permissions` is a read-only per-layer view for the `/config` window; `set`/`unset`
   stay allow-only for other callers. Policy `approvalAssurance` may name `subject: config-change`. The model has no route to this write.
-- **Config selection (CS-1, owner 2026-10-08; lane author candidate):** `platform/core/config-fields` owns explicit value-choice declarations, numeric presets/units/steps and the small allowed-entry registry. Zod supplies bounds; nullable fields offer None/Never, `max_workers` includes auto, and single-value literals are hidden. One read-only surface `ConfigChoiceSourcePort.list(source, keyPath)` is composed with actual principal scopes, active scoped model catalog (one whole `terminal.chat.reference` choice), policy company, inspected pools, task kinds, layout key filenames, Git branches, PATH executables, probed local images, identity profiles and serving profiles. Discovery bounds (Astra 2456): Git/Docker processes have a timeout, output ceiling and entry limit; the PATH probe checks at most `CONFIG_DISCOVERY_BOUNDS.pathDirectories` (256) directories under one deadline; a directory listing reads at most `maxEntries × 16` entries (every entry seen counts) and stops at the timeout; symlinks are never candidates. Directory names, generated IDs and service environment names replace ordinary free text. Only masked secrets and explicitly new URL/host entries can open a validated preview; structured documents remain read-only for a later record editor/import lane. TTY config arguments open the picker and cannot reach the typed write parser, including its text fallback; script/CLI parsing stays unchanged. Every selected write retains the same governed `ConfigApplication` policy, approval, digest and audit path. Author tests and source proof are in external `proof/SLASH-WINDOWS-2026-10-08/CS1-WORKER.md`; independent review, packaged/native platforms and live acceptance remain separate.
+- **Config selection (CS-1, owner 2026-10-08; lane author candidate):** `platform/core/config-fields` owns explicit value-choice declarations, numeric presets/units/steps and the small allowed-entry registry. Zod supplies bounds; nullable fields offer None/Never, `max_workers` includes auto, and single-value literals are hidden. One read-only surface `ConfigChoiceSourcePort.list(source, keyPath)` is composed with actual principal scopes, active scoped model catalog (one whole `terminal.chat.reference` choice), policy company, inspected pools, task kinds, layout key filenames, Git branches, PATH executables, probed local images, identity profiles and serving profiles. Discovery bounds (Astra 2456): Git/Docker processes have a timeout, output ceiling and entry limit; the PATH probe checks at most `CONFIG_DISCOVERY_BOUNDS.pathDirectories` (256) directories under one deadline; a directory listing reads at most `maxEntries × 16` entries (every entry seen counts) and stops at the timeout; symlinks are never candidates. Directory names, generated IDs and service environment names replace ordinary free text. Only masked secrets and explicitly new URL/host entries can open a validated preview; structured documents initially remain read-only; the W2 author candidate below adds bounded record editors/import. TTY config arguments open the picker and cannot reach the typed write parser, including its text fallback; script/CLI parsing stays unchanged. Every selected write retains the same governed `ConfigApplication` policy, approval, digest and audit path. Author tests and source proof are in external `proof/SLASH-WINDOWS-2026-10-08/CS1-WORKER.md`; independent review, packaged/native platforms and live acceptance remain separate.
+- **Config record editors (W2, owner 2026-10-08; source candidate, review/landing open):** `/config` adds selection-only add/edit/remove for `provider_spending.budgets`, `inspection.workers.sources`, `execution.adoption.targets`, `execution.workTargets.targets` and `layout.resources`. Budgets reuse stage-1 USD choices and declare config only; an existing ledger account still wins. Source ids are generated; work targets select branches from the chosen repository, retain the one-target/versioned contract, and removal unsets the optional parent to restore fallback. Layout selects registry resources and locations, refusing fixed resources, escapes and exact path collisions. `ConfigApplication.inspectValue` refuses secret-bearing records; `preview` uses the existing planner/layer validation/policy without publication. Confirmation uses the same `submit`/approval/audit path with the target-layer preview digest; it creates no other state owner. Large provider/profile/operation catalogs use bounded regular-file selection, schema/layer validation and redacted before/after preview; complete section imports support required siblings. Imports retain the selected bytes through confirmation. New-definition selection sources for `admission.registry` and `identity.packages` remain an owner decision in `proof/CONFIG-RECORD-EDITORS-2026-10-08/DECISIONS.md`; no new registry authority is inferred. Native platforms/live acceptance remain unperformed.
 - **MCP servers (L1 + owner MCP decisions):** registry entries are stdio or Streamable HTTP (`type: http`, `url`, `headers`; SSE refused; https
   only, plain http only to loopback; `$DECK:` secret references in headers/env only in local/user files). The policy kind `mcp-server`
   (id = registry name, action `invoke`, Jev 04f75210) authorizes an MCP tool call instead of its `agent-tool` wire name (an explicit
@@ -553,26 +576,30 @@ Core contracts and never requires editing Core. Core-memory law 10 records this 
   sandbox → no start); `host` is explicit and warned. The client pool is keyed by scope view (scope id + project root) and launch identity
   and bounded by `mcp.maxServers`. `propose_mcp_server` (read tool) opens a human window in every mode, carries no secret or reference
   (Jev 30efcb91) and adds the server untrusted; `deckent mcp import` brings Claude Code/Desktop entries untrusted.
+- **Fresh installer secret default (W2-SECRETS, 2026-10-08):** Docker `init apply` also runs the existing encrypted-store default after successful fresh publication on Linux/WSL/macOS. It keeps existing selections, leaves Windows on env, and reports policy/env-guard refusals without undoing installation. A supplied policy must authorize `secret`/`switch`; the installer adds no grant. Replay does not change the store.
 - **First-run policy template v8 (v5 MCP decisions: Jev 04f75210, d3d1817d; K1 option A Jev 3e7c5b38):** the installing owner holds `mcp-server` for every server in
   every scope, the `mcp.tool.call` operation, the read tool `propose_mcp_server`, and in the installed scope the `policy.administer` operation
   and approval inspect/decide (every change still passes card, audit and I2). Existing installations: `deckent init policy --scope <id> --upgrade
   --preview|--apply [--expect <revision>]` (installer authority: only the installation owner — the caller's uid owns both authority documents —
   and only when the first-run read rule names the caller explicitly; anyone else uses the governed path) adds the current template rules that person lacks, removes
   or replaces nothing (same-id rules with other content are kept and named as conflicts; hand-added MCP wire-name rules are named), writes on the
-  previewed revision through the archived authority writer and the configured layout; a second run is `current`; an untouched v4 becomes
-  exactly v8 (v6 secret-store switch, v7 model activation/invocation and provider spend accounts, v8 installation-wide backup). `deckent policy upgrade --template v5 [--apply|--rollback]` applies the same plan through `policy.administer@1` (I2) where the
-  person already holds that authority.
+  previewed revision through the archived authority writer and the configured layout; a second run is `current`; an older policy receives
+  only missing rules (an untouched v4 becomes exactly v8: v6 secret-store switch, v7 model activation/invocation and provider spend accounts,
+  v8 installation-wide backup). `deckent policy upgrade --template current [--apply|--rollback]` applies the same plan through `policy.administer@1` (I2) where the
+  person already holds that authority. The deprecated `--template v5` selector uses the same current add-only plan and emits an EN/TR warning.
   A hand-built policy (no first-run read rule; POLICY-UPGRADE-HANDBUILT, lead 2026-10-08, Jev b6dba079) takes the installer plan only with
   `--person <issuer>/<subject>`: the same owner gate, and the person must already be named explicitly (never `all`) on an allow rule listing the
   scope; added rules are in that scope (`mcp-server` and installation-wide `backup` stay every scope) and name that person alone. Without `--person` the refusal names
   `--person` and the people the policy names there; on a template policy `--person` must be the person the read rule names. The installer
-  path records the archive entry, not a sealed `authority-change` event (that event needs the governed chain's command, approval and decider).
+  path records a sealed `authority-change` before publication and keeps the archive. Its strict installer variant carries the OS caller,
+  target person, template/basis, deterministic change key, input digest, before/after revisions and counts; it has no approval/decider fields.
+  Preview, refusal, conflict and current do not record a change. No audit, no policy write; an event alone does not prove publication.
 - **Terminal units:** `cli-terminal` (L0: the interactive launch, ledger ports and handler types moved out of `cli` behind ports; lazy
   `launchTerminal`); `terminal-picker` gains the pure `pickerReduce` core and `ListPicker` (L3); `terminal-panels` (L4: `/mode`, `/config`,
   `/mcp` bounded windows, presentation only, ports and words from `cli-terminal`); `/monitor`, `/watch-workers`, `/watch-runs`, `/tasks` are
   bounded modal live windows (L5: `MonitorBody` loaded through a host port; one visible window at a time). Full access shows a standing
   warning line above the composer. Detail: [terminal-surface](.deckent/docs/architecture/modules/terminal-surface.md).
-- **Slash windows and system summary line (SLASH-WINDOWS, owner 2026-10-08; `wave/slash-windows`, not landed):** in the TTY terminal every
+- **Slash windows and system summary line (SLASH-WINDOWS, owner 2026-10-08; alpha.15 `4d6f1582`, PR #46):** in the TTY terminal every
   informing slash command answers in a bounded `Window` (Esc closes), never in the chat stream; `/clear` erases the screen and the terminal's
   scrollback (ED 2 + ED 3, TTY only, also with NO_COLOR; nothing on TERM=dumb or a non-TTY) and starts a new conversation (saved history stays for
   `/resume`), `/exit` exits. A closed window leaves at most ONE system line: `systemSummaryEntry` (terminal-work) is the only factory, a
@@ -893,7 +920,7 @@ and closed findings move to COMPLETED-PLAN.md (read only when history is needed)
 lives in the external refactor proof area (kept until the batch lands and its review closes), not an append-only product plan.
 
 
-Owner 2026-10-05 (SSOT simplification): detail documents under `.deckent/docs/decisions/`, `.deckent/docs/architecture/` (including `modules/`) and `.deckent/docs/plan/` are tracked, admitted by `arch.json` `markdown.trackedAllowGlobs` and written by humans/hosts only. `scripts/lint-docs.mjs` bounds PLAN.md (≤ 60 KB, no line > 800 chars) and this file (≤ 1200 lines); `scripts/check-doc-preservation.mjs` proves that text moved out of PLAN/ARCHITECTURE still exists verbatim.
+Owner 2026-10-05 (SSOT simplification): detail documents under `.deckent/docs/decisions/`, `.deckent/docs/architecture/` (including `modules/`) and `.deckent/docs/plan/` are tracked, admitted by `arch.json` `markdown.trackedAllowGlobs` and written by humans/hosts only. `scripts/lint-docs.mjs` bounds PLAN.md (≤ 60 KB, no line > 800 chars) and this file (≤ 1200 lines); it also binds the first CHANGELOG release and the highest README/README.tr/SECURITY alpha claim to package.json, requires commit-SHA + PR receipts for landed releases (alpha.1–4 predate PR-based landing, PR #1 opened 2026-10-04, and carry the SHA only), and rejects stale landing phrases in architecture documents (only a line prefixed `historical:` is exempt). A top release explicitly marked `Unreleased` alone may omit its landing receipt; `scripts/check-doc-preservation.mjs` proves that text moved out of PLAN/ARCHITECTURE still exists verbatim.
 Design reasoning goes into [decisions.md](.deckent/docs/architecture/decisions.md).
 
 ## Decision log

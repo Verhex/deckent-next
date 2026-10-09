@@ -1,9 +1,15 @@
 import { DatabaseSync } from 'node:sqlite';
 import { createHash } from 'node:crypto';
+import { pathToFileURL } from 'node:url';
 import { refuse } from './files.js';
+/** S1 O6: a set's ledger is opened immutable, so reading it (also a WAL-header snapshot of an alpha.18 set) never leaves -wal/-shm beside it. */
+export function openSetLedger(path: string): DatabaseSync {
+  const url = pathToFileURL(path); url.searchParams.set('immutable', '1');
+  return new DatabaseSync(url, { readOnly: true });
+}
 /** Stable table content fingerprint of the immutable online snapshot; identifiers are quoted, all integers read as bigint. */
 export function ledgerFingerprint(path: string): string {
-  const db = new DatabaseSync(path, { readOnly: true });
+  const db = openSetLedger(path);
   try {
     db.exec('BEGIN');
     const integrity = db.prepare('PRAGMA integrity_check').all().map(row => row['integrity_check']);

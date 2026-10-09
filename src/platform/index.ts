@@ -1,7 +1,7 @@
 export { PACKAGE_NAME, PACKAGE_VERSION } from '#platform/core/common/index.js';
 export { resolveLocale, t } from '#platform/core/i18n/index.js';
 export type { Locale, MessageKey } from '#platform/core/i18n/index.js';
-export { DECKENT_DIR, CONFIG_FILE, PROJECT_CONFIG_PATH, CONFIG_SCHEMA_VERSION, CONFIG_CONTRACT_SINCE, OUTPUT_MODES } from '#platform/core/common/index.js';
+export { PRODUCT_LAYOUT_REGISTRY, DECKENT_DIR, CONFIG_FILE, PROJECT_CONFIG_PATH, CONFIG_SCHEMA_VERSION, CONFIG_CONTRACT_SINCE, OUTPUT_MODES } from '#platform/core/common/index.js';
 export type { OutputMode } from '#platform/core/common/index.js';
 export { DECKENT_VERSION, NODE_ENGINE_RANGE } from '#platform/core/common/index.js';
 export { SUPPORTED_LANGUAGES } from '#platform/core/i18n/index.js';

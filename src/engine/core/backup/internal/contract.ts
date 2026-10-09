@@ -14,6 +14,9 @@ export interface BackupResult {
   readonly schemaVersion: 1; readonly action: BackupCommand['action']; readonly set: string;
   readonly ledgerDigest: string; readonly files: number; readonly createdAt: string;
   readonly relocation: { readonly required: boolean; readonly target: string; readonly changedPaths: readonly string[] } | null;
+  /** Restore only (S1 D1): the per-user global layer. `added` = archived sections written there (it lacked them); `kept` = archived sections
+   * the present global layer already holds with another value (the present one stays: the layer is shared by this user's installations). */
+  readonly globalConfig: { readonly path: string; readonly added: readonly string[]; readonly kept: readonly string[] } | null;
   readonly preserved: readonly string[];
 }
 export interface BackupDecision { readonly policyRevision: string; readonly effect: 'allow' | 'deny' | 'require-approval'; readonly ruleId: string | null }

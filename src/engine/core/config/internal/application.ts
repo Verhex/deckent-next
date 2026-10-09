@@ -14,6 +14,27 @@ export class ConfigApplication {
     return { schemaVersion: 1 as const, digest: snapshot.digest, layer: snapshot.layer, fields: keys.map(key => configFieldView(snapshot, key)) };
   }
   async explain(input: { readonly keyPath: string }) { const snapshot = await this.documents.snapshot('project'); return configFieldView(snapshot, input.keyPath); }
+  /** Authored value and its CAS digest from one snapshot; used by record editors, never a write. */
+  async inspectValue(input: { readonly keyPath: string; readonly layer: 'project' | 'global' }) {
+    definitionFor(input.keyPath);
+    const snapshot = await this.documents.snapshot(input.layer), path = configPath(input.keyPath);
+    if (path[0] === 'secrets' || configFieldView(snapshot, input.keyPath).redacted) throw new ConfigApplicationError('CONFIG_SECRET_SECTION_REFUSED');
+    const value = atConfigPath(snapshot.document, path), effective = atConfigPath(snapshot.effective, path);
+    if (JSON.stringify(value ?? null) !== configDisplayText(snapshot, input.keyPath, value, Number.MAX_SAFE_INTEGER)
+      || JSON.stringify(effective ?? null) !== configDisplayText(snapshot, input.keyPath, effective, Number.MAX_SAFE_INTEGER)) throw new ConfigApplicationError('CONFIG_SECRET_SECTION_REFUSED');
+    return { digest: snapshot.digest, value: structuredClone(value), effective: structuredClone(effective) };
+  }
+  /** Read-only governed preview. Uses the same planner, layer validation and policy as submit; grants no write authority. */
+  async preview(action: 'set' | 'unset', input: ConfigWriteInput) {
+    this.admitInput(input);
+    if (this.authority.approvals) await this.authority.approvals.evaluate(input); else await this.authority.authorize(input);
+    const snapshot = await this.documents.snapshot(input.layer ?? 'project');
+    if (input.expect !== undefined && input.expect !== snapshot.digest) throw new ConfigApplicationError('CONFIG_CONCURRENT_REVISION_HOLD');
+    const document = planConfigChange(snapshot.document, input.keyPath, input.value, action === 'unset');
+    validateConfigLayers(snapshot, document);
+    return { digest: snapshot.digest, before: configDisplayText(snapshot, input.keyPath, atConfigPath(snapshot.document, configPath(input.keyPath)), Number.MAX_SAFE_INTEGER),
+      after: configDisplayText(snapshot, input.keyPath, atConfigPath(document, configPath(input.keyPath)), Number.MAX_SAFE_INTEGER) };
+  }
   async validate() { validateConfigLayers(await this.documents.snapshot('project')); return { valid: true as const }; }
   /**
    * T3 L4 `/config` locks: what the principal's current policy says of a write of each key on each layer — one policy read for all of them
