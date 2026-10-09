@@ -47,6 +47,7 @@ const poisoned = { model: 'vendor/model', messages: [
 
 async function originOf(onPost: (body: string) => void) {
   const server = createServer({ key: privateKey, cert: certificate }, (req, res) => {
+    if (req.url === '/api/v1/endpoints/zdr') { res.writeHead(200, { 'content-type': 'application/json' }); res.end(JSON.stringify({ data: [{ model_id: 'vendor/model', tag: 'provider/region' }] })); return; }
     if (req.url === metadataPath) { res.writeHead(200, { 'content-type': 'application/json' }); res.end(JSON.stringify(source())); return; }
     const chunks: Buffer[] = []; req.on('data', (chunk: Buffer) => chunks.push(chunk));
     req.on('end', () => { onPost(Buffer.concat(chunks).toString('utf8')); res.end('{}'); });

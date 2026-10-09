@@ -17,7 +17,7 @@ import { ModelActivationApplication, modelInvocationTargetId, type ModelInvocati
   type ModelInvocationResult, type ModelInvocationPurgeResult, type ProviderSpendAccountInspection, type ProviderSpendAuditResult } from '#engine/index.js';
 import { ModelBindingApplication } from '#engine/core/provider-catalog/index.js';
 import { clearConfigCache, prepareProductFile, resolveProductLayout } from '#platform/index.js';
-import { createPricedProviderTls, fixtureBudget, pricedProviderDefinition, replyPricedProviderMetadata } from '../../fixtures/priced-provider.js';
+import { createPricedProviderTls, fixtureBudget, pricedProviderDefinition, replyPricedProviderMetadata, replyPricedProviderPrivacy } from '../../fixtures/priced-provider.js';
 
 const execute = promisify(execFile), roots: string[] = [], servers: Server[] = [], runtimeProcesses: ChildProcess[] = [], clientProcesses: ChildProcess[] = [],
   heldReleases: (() => void)[] = [];
@@ -447,7 +447,7 @@ type ProviderFixtureState = { bodies: string[]; response: 'normal' | 'oversize' 
 async function startProviderFixture(root: string, state: ProviderFixtureState) {
   const malformedBody = '{"private":"prompt-malformed\\n\\"echo\\""', statusBody = '{"private":"status-body"}';
   const tls = await createPricedProviderTls(root), server = createHttpsServer({ key: tls.key, cert: tls.caPem }, (request, reply) => {
-    if (replyPricedProviderMetadata(request, reply)) return;
+    if (replyPricedProviderPrivacy(request, reply) || replyPricedProviderMetadata(request, reply)) return;
     if (request.url !== '/chat' || request.method !== 'POST') { reply.writeHead(404); reply.end(); return; }
     const chunks: Buffer[] = [];
     request.on('data', chunk => chunks.push(Buffer.from(chunk))); request.on('end', async () => { state.bodies.push(Buffer.concat(chunks).toString('utf8'));

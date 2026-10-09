@@ -10,7 +10,7 @@ import { encodeModelBindingDefinition } from '#domain/core/provider-catalog/inde
 import { openSqliteAgentTurnStore, openSqliteModelActivationStore, readLocalOsIdentity } from '#adapters/index.js';
 import { ModelActivationApplication, ModelBindingApplication, modelInvocationTargetId } from '#engine/index.js';
 import { clearConfigCache, prepareProductFile, resolveProductLayout } from '#platform/index.js';
-import { createPricedProviderTls, fixtureBudget, pricedProviderDefinition, replyPricedProviderMetadata } from '../../fixtures/priced-provider.js';
+import { createPricedProviderTls, fixtureBudget, pricedProviderDefinition, replyPricedProviderMetadata, replyPricedProviderPrivacy } from '../../fixtures/priced-provider.js';
 
 // Owner 2026-09-28 (LEDGER-SINGLETON; Astra 2145/2147 class finding): one runtime service per ledger. The start work that assumes
 // "no live service of this installation" (ledger upgrade, closing running turns, settling open model calls of an ended owner,
@@ -64,7 +64,7 @@ async function installation() {
   const hold = (name: string) => new Promise<void>(done => { held.set(name, { seen: done }); });
   const release = (name: string) => held.get(name)?.release?.();
   const tls = await createPricedProviderTls(root), provider = createServer({ key: tls.key, cert: tls.caPem }, (request, reply) => {
-    if (replyPricedProviderMetadata(request, reply)) return;
+    if (replyPricedProviderPrivacy(request, reply) || replyPricedProviderMetadata(request, reply)) return;
     const chunks: Buffer[] = [];
     request.on('data', chunk => chunks.push(Buffer.from(chunk))); request.on('end', async () => {
       const body = Buffer.concat(chunks).toString('utf8'); bodies.push(body);

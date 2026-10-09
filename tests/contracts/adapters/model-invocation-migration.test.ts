@@ -36,7 +36,7 @@ async function seedV13(path: string) {
   authorization: { revision: 'policy', ruleId: 'activate' }, admittedAtMs: 1, definition }); }
   finally { activation.close(); }
   const db = new DatabaseSync(path);
-  try { db.exec(`DROP TABLE IF EXISTS provider_spend_management; DROP TABLE provider_spend_audits; DROP TABLE model_invocation_spend_reservations; DROP TABLE provider_spend_accounts; DROP TABLE model_invocation_allocation_checkpoints; DROP INDEX model_invocations_allocation_identity;
+  try { db.exec(`DROP INDEX IF EXISTS model_invocation_spend_unreconciled_holds; DROP TABLE IF EXISTS provider_spend_management; DROP TABLE provider_spend_audits; DROP TABLE model_invocation_spend_reservations; DROP TABLE provider_spend_accounts; DROP TABLE model_invocation_allocation_checkpoints; DROP INDEX model_invocations_allocation_identity;
     DROP TABLE model_invocation_cancellations; DROP TABLE model_invocation_controls;
     DROP INDEX model_invocations_allocation_state; DROP TABLE model_invocation_contents; DROP TABLE model_invocation_content_purges;
     DROP TABLE model_invocations; DROP TABLE model_invocation_allocations; DROP TABLE IF EXISTS run_execution_intents; DROP TABLE IF EXISTS task_evaluation_observations; DROP TABLE IF EXISTS workspace_integrations; DROP TABLE IF EXISTS workspace_deliveries; DROP TABLE IF EXISTS workspace_adoptions; DROP TABLE IF EXISTS effect_intents; DROP TABLE IF EXISTS agent_turn_tool_calls; DROP TABLE IF EXISTS agent_turns; DROP TABLE IF EXISTS worker_event_logs; DROP TABLE IF EXISTS approval_outbox; DROP TABLE IF EXISTS approval_receipts; DROP TABLE IF EXISTS approvals; PRAGMA user_version=13`); }
@@ -80,7 +80,7 @@ async function seedV14(path: string, corrupt?: 'receipt' | 'allocation') {
       if (corrupt === 'receipt' && row.invocation_id === 'unknown-invocation') old.unexpected = true;
       downgrade.prepare('UPDATE model_invocations SET record=? WHERE invocation_id=?').run(JSON.stringify(old), String(row.invocation_id));
     }
-    downgrade.exec(`DROP TABLE IF EXISTS provider_spend_management; DROP TABLE provider_spend_audits; DROP TABLE model_invocation_spend_reservations; DROP TABLE provider_spend_accounts; DROP TABLE model_invocation_allocation_checkpoints; DROP INDEX model_invocations_allocation_identity;
+    downgrade.exec(`DROP INDEX IF EXISTS model_invocation_spend_unreconciled_holds; DROP TABLE IF EXISTS provider_spend_management; DROP TABLE provider_spend_audits; DROP TABLE model_invocation_spend_reservations; DROP TABLE provider_spend_accounts; DROP TABLE model_invocation_allocation_checkpoints; DROP INDEX model_invocations_allocation_identity;
       DROP TABLE model_invocation_cancellations; DROP TABLE model_invocation_controls;
       DROP TABLE model_invocation_contents; DROP TABLE model_invocation_content_purges; DROP INDEX model_invocations_allocation_state;
       ALTER TABLE model_invocations RENAME TO model_invocations_current;
@@ -139,7 +139,7 @@ async function seedV15(path: string, corrupt?: 'state' | 'identity' | 'count') {
       }
       db.prepare('UPDATE model_invocations SET record=? WHERE invocation_id=?').run(JSON.stringify({ ...receipt, schemaVersion: 2, outcome: oldOutcome }), String(row.invocation_id));
     }
-    db.exec(`DROP TABLE IF EXISTS provider_spend_management; DROP TABLE provider_spend_audits; DROP TABLE model_invocation_spend_reservations; DROP TABLE provider_spend_accounts; DROP TABLE model_invocation_allocation_checkpoints; DROP INDEX model_invocations_allocation_identity;
+    db.exec(`DROP INDEX IF EXISTS model_invocation_spend_unreconciled_holds; DROP TABLE IF EXISTS provider_spend_management; DROP TABLE provider_spend_audits; DROP TABLE model_invocation_spend_reservations; DROP TABLE provider_spend_accounts; DROP TABLE model_invocation_allocation_checkpoints; DROP INDEX model_invocations_allocation_identity;
       DROP TABLE model_invocation_cancellations;
       DROP TABLE model_invocation_controls; DROP TABLE model_invocation_contents; DROP TABLE model_invocation_content_purges; DROP TABLE IF EXISTS run_execution_intents; DROP TABLE IF EXISTS task_evaluation_observations; DROP TABLE IF EXISTS workspace_integrations; DROP TABLE IF EXISTS workspace_deliveries; DROP TABLE IF EXISTS workspace_adoptions; DROP TABLE IF EXISTS effect_intents; DROP TABLE IF EXISTS agent_turn_tool_calls; DROP TABLE IF EXISTS agent_turns; DROP TABLE IF EXISTS worker_event_logs; DROP TABLE IF EXISTS approval_outbox; DROP TABLE IF EXISTS approval_receipts; DROP TABLE IF EXISTS approvals; PRAGMA user_version=15;`);
     restoreLegacyInFlight(db);

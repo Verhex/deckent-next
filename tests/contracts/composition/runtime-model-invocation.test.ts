@@ -18,7 +18,7 @@ import { ModelActivationApplication, ModelBindingApplication, ModelInvocationCon
 import { createConfiguredRuntimeClient, startConfiguredRuntimeService } from '#composition/core/runtime-service/index.js';
 import { ensureConfiguredTerminalIdentity } from '#composition/core/scoped-request/index.js';
 import { clearConfigCache, prepareProductFile, resolveProductLayout } from '#platform/index.js';
-import { createPricedProviderTls, fixtureBudget, pricedProviderDefinition, replyPricedProviderMetadata } from '../../fixtures/priced-provider.js';
+import { createPricedProviderTls, fixtureBudget, pricedProviderDefinition, replyPricedProviderMetadata, replyPricedProviderPrivacy } from '../../fixtures/priced-provider.js';
 
 const roots: string[] = [], httpServers: Server[] = [], services: Awaited<ReturnType<typeof startConfiguredRuntimeService>>[] = [],
   heldReleases: (() => void)[] = [];
@@ -52,6 +52,7 @@ async function fixture(nativeTimeoutMs = 2_000) {
   const heldObserved = () => new Promise<void>(resolve => { observeHeld = resolve; });
   const tls = await createPricedProviderTls(root);
   const native = createServer({ key: tls.key, cert: tls.caPem }, (request, reply) => {
+    if (replyPricedProviderPrivacy(request, reply)) return;
     if (request.method === 'GET' && request.url === '/api/v1/models/vendor/model/endpoints') {
       metadataRequests++;
       // The second GET answers late, so concurrent invocations are still waiting on it (in-flight share after a cache miss, WIRE10-DELAY).

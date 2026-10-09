@@ -12,7 +12,7 @@ import { openSqliteModelActivationStore, readLocalOsIdentity } from '#adapters/i
 import { ModelActivationApplication, ModelBindingApplication, modelInvocationTargetId } from '#engine/index.js';
 import { invokeConfiguredModel } from '#composition/core/model-invocation/index.js';
 import { clearConfigCache, prepareProductFile, resolveProductLayout } from '#platform/index.js';
-import { createPricedProviderTls, fixtureBudget, pricedProviderDefinition, replyPricedProviderMetadata } from '../../fixtures/priced-provider.js';
+import { createPricedProviderTls, fixtureBudget, pricedProviderDefinition, replyPricedProviderMetadata, replyPricedProviderPrivacy } from '../../fixtures/priced-provider.js';
 
 // Owner 2026-09-28 (FIX-2143-SLOTS): a service process killed while its model call is open leaves a `claimed` call holding a slot. The next
 // start, under endpoint custody, settles that call `unknown` (spending hold kept, lifetime count unchanged) and frees the slot; an open
@@ -64,7 +64,7 @@ async function installation(maxInFlight: number) {
   const held = new Map<string, { seen: () => void; release?: () => void }>(), seen = new Map<string, Promise<void>>(), bodies: string[] = [];
   const hold = (name: string) => { seen.set(name, new Promise<void>(done => { held.set(name, { seen: done }); })); return seen.get(name)!; };
   const tls = await createPricedProviderTls(root), provider = createServer({ key: tls.key, cert: tls.caPem }, (request, reply) => {
-    if (replyPricedProviderMetadata(request, reply)) return;
+    if (replyPricedProviderPrivacy(request, reply) || replyPricedProviderMetadata(request, reply)) return;
     const chunks: Buffer[] = [];
     request.on('data', chunk => chunks.push(Buffer.from(chunk))); request.on('end', async () => {
       const body = Buffer.concat(chunks).toString('utf8'); bodies.push(body);

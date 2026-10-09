@@ -1,7 +1,8 @@
 import { execFile } from 'node:child_process';
 import { resolve } from 'node:path';
 import { promisify } from 'node:util';
-import { ErrorRegistry, productResourcePath, resolveProductLayout } from '#platform/index.js';
+import { ErrorRegistry, resolveProductLayout } from '#platform/index.js';
+import { runtimeSocketLocation } from '#adapters/index.js';
 import { RUNTIME_SERVICE_SCHEMA_VERSION } from '#engine/index.js';
 
 // A PTY belongs to the child, not the test runner. Piped input/output variants retain the controlling TTY.
@@ -30,7 +31,8 @@ sys.stdout.write(json.dumps({'status': status, 'output': out.decode('utf8', 'rep
 `;
 export async function terminalRequest(f: { project: string; data: string; env: NodeJS.ProcessEnv }, operation: string, input: unknown,
   automatic?: 'allow' | 'deny', mode = 'tty') {
-  const endpoint = productResourcePath(resolveProductLayout({ projectRoot: f.project, root: f.data }), 'runtimeSocket');
+  // INSTALL-FLOW: the runtime socket lives in a short private per-installation directory (runtimeSocketLocation), not under the data root.
+  const endpoint = runtimeSocketLocation(resolveProductLayout({ projectRoot: f.project, root: f.data }));
   const request = { schemaVersion: RUNTIME_SERVICE_SCHEMA_VERSION, requestId: 'terminal-fixture', operation, input, delivery: { maxResultBytes: 65536 } };
   const argv = [process.execPath, resolve('tests/fixtures/approval-terminal-peer.mjs'), endpoint, JSON.stringify(request), automatic ?? ''];
   return driveTerminal(argv, f.env, mode);

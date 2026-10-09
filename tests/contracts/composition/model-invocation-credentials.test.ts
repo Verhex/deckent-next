@@ -24,6 +24,9 @@ async function fixture() {
   const { key, caPem: certificate } = await createLocalTls(root);
   const headers: (string | undefined)[] = []; const metadataHeaders: (string | undefined)[] = []; let echo = false;
   const server = createServer({ key, cert: certificate }, (request, reply) => {
+    if (request.url === '/api/v1/endpoints/zdr' && request.method === 'GET') { // ORPRIVACY-STATUS: official ZDR inventory, separate from the metadata headers
+      reply.writeHead(200, { 'content-type': 'application/json' }); reply.end(JSON.stringify({ data: [{ model_id: 'vendor/model', tag: 'provider/region' }] })); return;
+    }
     if (request.url === '/api/v1/models/vendor/model/endpoints' && request.method === 'GET') {
       metadataHeaders.push(request.headers.authorization);
       reply.writeHead(200, { 'content-type': 'application/json' });
