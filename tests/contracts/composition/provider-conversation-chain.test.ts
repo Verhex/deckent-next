@@ -44,6 +44,9 @@ const providers = {
   openrouter: { model: 'anthropic/claude-sonnet-5.5', endpoint: 'https://openrouter.ai/api/v1/chat/completions' },
   anthropic: { model: 'claude-sonnet-5-5', endpoint: 'https://api.anthropic.com/v1/messages' },
 } as const;
+// ORPRIVACY-STATUS: OpenRouter pricing also reads the official endpoint-level ZDR inventory; the fixture lists the selected Sonnet tag.
+const zdrInventory = JSON.stringify({ data: [{ model_id: providers.openrouter.model, tag: 'anthropic' }] });
+const metadataReply = (url: URL, metadata: string) => url.pathname === '/api/v1/endpoints/zdr' ? zdrInventory : metadata;
 type Provider = keyof typeof providers;
 const tool = { name: 'read', version: 1, toolClass: 'read' as const, description: 'Read fixture', inputSchema: { type: 'object' } };
 const details = [{ type: 'reasoning.encrypted', data: 'opaque==', id: 'r1', format: 'anthropic-claude-v1', index: 0 },
@@ -120,7 +123,7 @@ describe.skipIf(process.platform === 'win32')('W8 fixture producer â†’ history â
     const metadata = await readFile(new URL('../../fixtures/openrouter-endpoints/sonnet-endpoints.json', import.meta.url), 'utf8');
     let posts = 0;
     wire.reply = (url, body) => {
-      if (!body) { expect(url.href).toContain('/endpoints'); return metadata; }
+      if (!body) { expect(url.href).toContain('/endpoints'); return metadataReply(url, metadata); }
       const request = JSON.parse(body); posts++;
       if (posts >= 2) {
         if (provider === 'anthropic') {
@@ -187,7 +190,7 @@ describe.skipIf(process.platform === 'win32')('W8 fixture producer â†’ history â
   it.each(Object.keys(providers) as Provider[])('%s: an empty assistant settles usage but never persists a rejected next-request shape', async provider => {
     const f = await fixture(provider), events: AgentTurnEvent[] = [];
     const metadata = await readFile(new URL('../../fixtures/openrouter-endpoints/sonnet-endpoints.json', import.meta.url), 'utf8');
-    wire.reply = (_url, body) => !body ? metadata : provider === 'anthropic' ? anthropicReply(2).replace('"text":"answer"', '"text":""')
+    wire.reply = (url, body) => !body ? metadataReply(url, metadata) : provider === 'anthropic' ? anthropicReply(2).replace('"text":"answer"', '"text":""')
       : chatReply(provider, 2).replace('"content":"answer"', '"content":null');
     let result!: ModelInvocationResult;
     const turn = await runAgentTurn({ messages: [{ role: 'user', content: 'hi' }], tools: [tool], signal: new AbortController().signal, emit: event => events.push(event) }, {
@@ -205,7 +208,7 @@ describe.skipIf(process.platform === 'win32')('W8 fixture producer â†’ history â
     await store.save({ schemaVersion: 1, scopeId: 'scope', sessionId, updatedAtMs: 1,
       messages: [{ role: 'user', content: 'hi' }, { role: 'assistant', content: '', toolCalls: [] }] });
     const history = (await store.load('scope', sessionId))!; expect(history).toEqual([{ role: 'user', content: 'hi' }]);
-    wire.reply = (_url, body) => !body ? metadata : provider === 'anthropic' ? anthropicReply(2) : chatReply(provider, 2);
+    wire.reply = (url, body) => !body ? metadataReply(url, metadata) : provider === 'anthropic' ? anthropicReply(2) : chatReply(provider, 2);
     expect((await invokeConfiguredModel(f.project, f.command('after-empty', [...history, { role: 'user', content: 'next' }]), f.options)).receipt.outcome?.state).toBe('responded');
   });
 
@@ -254,7 +257,7 @@ describe.skipIf(process.platform !== 'linux')('W8 production chat composition fi
     const peer = { pid: process.pid, uid: process.getuid!(), gid: process.getgid!(), assurance: 'linux-so-peercred' as const, connection: controller.signal, isConnectionActive: () => true };
     const metadata = await readFile(new URL('../../fixtures/openrouter-endpoints/sonnet-endpoints.json', import.meta.url), 'utf8'); let posts = 0;
     wire.reply = (url, body) => {
-      if (!body) return metadata;
+      if (!body) return metadataReply(url, metadata);
       if (url.pathname.endsWith('/count_tokens')) return JSON.stringify({ input_tokens: 100 });
       const request = JSON.parse(body); posts++;
       if (posts >= 2) {
