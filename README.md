@@ -184,7 +184,7 @@ flowchart LR
   C -->|Shift+Tab| A["Full auto<br/><sub>sandboxed shell and MCP run</sub>"]
   A -->|Shift+Tab| F["Full access<br/><sub>company grant · this session · every call audited</sub>"]
   F -->|Shift+Tab| S
-  H[["Hard floor · closed in every mode<br/>Deckent configuration, policy, approvals, secrets, MCP registry"]]
+  H[["Hard floor · enforced in every sandbox mode<br/>Deckent configuration, policy, approvals, secrets, MCP registry"]]
 ```
 
 | Mode | Runs without asking | Asks first |
@@ -194,11 +194,16 @@ flowchart LR
 | **Full auto** | Edits, sandbox-contained shell commands, MCP calls | Destructive commands (`rm -r`, …), protected paths |
 | **Full access** | Everything company policy allows above the hard floor; every effect call is audited | The hard floor and whatever company policy still requires (a deny always wins); needs a company grant and lasts for the session |
 
-In standard, careful and full auto, a sandboxed shell command gets a **closed view**: the project is writable, `.git`
-is read-only, there is no network and your home directory is hidden. **Full access opens that view on purpose**: the
-host file system, your real home directory (with credentials masked), the network and `.git` writes become
-available, and only the hard floor stays masked. When no sandbox is usable on a machine, a `prefer-sandbox` realm runs
-on the host and says so on every approval card, while a `require-sandbox` realm refuses to run.
+In standard, careful and full auto, sandboxed shell commands get a **closed view**: the project is writable within the call's approval rules,
+`.git` is read-only, HOME is hidden and network access is off. Approved commands still cannot write Deckent authority files.
+Landlock also refuses permission and ownership changes, and cannot add or remove entries in directories holding protected paths.
+Full access requires a usable **open bubblewrap sandbox**: network and HOME are available, while Deckent state, configuration,
+credential patterns and host Docker/session D-Bus sockets remain masked or read-only. Without an open sandbox, full-access shell
+calls are refused, including an explicit `host` realm. Closed modes retain the visible `prefer-sandbox` host fallback;
+that fallback has no enforced filesystem boundary, so use `require-sandbox` when confinement is required.
+The shared credential registry covers gh, Docker, kube, Codex, Git credentials and common cloud CLIs. HOME masking is bounded
+(depth 3, 20,000 entries); custom locations, arbitrary filenames and aliases outside those masks need separate isolation.
+Full auto still asks before `find -delete`, file truncation (`>`, `>|`) and moves (`mv`); appends (`>>`) remain modifications.
 
 ### API keys
 
@@ -212,7 +217,9 @@ profile or a `.env` file: other tools read those.
 | `core.secret-store.file@1` | plain text, a 0600 file | Deckent and other programs running as your user |
 | `core.secret-store.encrypted-file@1` (recommended; fresh installs start here) | encrypted (AES-256-GCM); the unlock key sits in the same folder, no passphrase | Deckent; other programs running as your user can still open it |
 
-Agents and workers never receive a key: the sandbox hides the store and a provider answer that echoes the key is refused.
+Provider calls resolve keys inside the runtime; keys are not placed in prompts or the shell environment.
+Supported sandbox views hide the store; a host realm or fallback has no filesystem confinement.
+A provider answer that echoes a stored key is refused.
 `deckent doctor` shows which store is active and who can read it. When a provider refuses a key (401/403) or a limit is
 reached, the terminal says so in plain words; spend limits stay in your provider account.
 

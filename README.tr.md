@@ -183,7 +183,7 @@ flowchart LR
   C -->|Shift+Tab| A["Tam otomatik<br/><sub>sandbox'lı kabuk ve MCP çalışır</sub>"]
   A -->|Shift+Tab| F["Tam erişim<br/><sub>şirket izni · bu oturum · her çağrı denetimde</sub>"]
   F -->|Shift+Tab| S
-  H[["Sabit zemin · her modda kapalı<br/>Deckent ayarları, policy, onaylar, sırlar, MCP kayıt defteri"]]
+  H[["Sabit zemin · her sandbox modunda uygulanır<br/>Deckent ayarları, policy, onaylar, sırlar, MCP kayıt defteri"]]
 ```
 
 | Mod | Sormadan çalışır | Önce sorar |
@@ -193,11 +193,17 @@ flowchart LR
 | **Tam otomatik** | Düzenlemeler, sandbox içinde kalan kabuk komutları, MCP çağrıları | Yıkıcı komutlar (`rm -r`, …), korunan yollar |
 | **Tam erişim** | Şirket policy'sinin sabit zeminin üstünde izin verdiği her şey; her etkili çağrı denetime yazılır | Sabit zemin ve şirket policy'sinin hâlâ istediği onaylar (deny her zaman kazanır); şirket izni gerekir ve oturum boyunca geçerlidir |
 
-Standart, dikkatli ve tam otomatik modlarda sandbox'taki kabuk komutu **kapalı bir görünüm** alır: proje yazılabilir,
-`.git` salt okunur, ağ yoktur ve ev klasörünüz gizlidir. **Tam erişim bu görünümü bilerek açar**: host dosya sistemi,
-gerçek ev klasörünüz (sırlar maskeli), ağ ve `.git` yazımı kullanılabilir olur; yalnız sabit zemin maskeli kalır. Bir
-makinede sandbox kullanılamıyorsa `prefer-sandbox` ortamı host'ta çalışır ve bunu her onay kartında söyler,
-`require-sandbox` ortamı ise çalışmayı reddeder.
+Standart, dikkatli ve tam otomatik modlarda sandbox'taki kabuk komutu **kapalı bir görünüm** alır: proje, çağrının onay
+kuralları içinde yazılabilir; `.git` salt okunur, ağ kapalıdır ve ev klasörünüz gizlidir. Onaylanan komutlar da Deckent'in
+yetki dosyalarını değiştiremez. Landlock ayrıca izin ve sahiplik değişikliklerini reddeder; korunan yolları tutan
+dizinlerde giriş eklemeyi veya silmeyi de kısıtlar.
+Tam erişim, kullanılabilir bir **açık bubblewrap sandbox'ı** gerektirir: ağ ve ev klasörü açılır; Deckent durumu, ayarlar,
+kimlik bilgisi kalıpları ve host Docker/oturum D-Bus soketleri maskeli ya da salt okunur kalır. Açık sandbox yoksa tam
+erişim kabuk çağrıları, `host` seçilmiş olsa bile reddedilir. Kapalı modlarda `prefer-sandbox` açık bir bildirimle host'a
+düşebilir; bu yol dosya sistemi sınırı uygulamaz. Yalıtım gerekiyorsa `require-sandbox` seçin.
+Ortak kimlik bilgisi kataloğu gh, Docker, kube, Codex, Git ve yaygın bulut CLI'larını kapsar. Ev klasörü taraması sınırlıdır
+(3 derinlik, 20.000 giriş); özel konumlar, farklı dosya adları ve maskelerin dışındaki takma yollar ayrıca yalıtılmalıdır.
+Tam otomatik, `find -delete`, dosya kısaltma (`>`, `>|`) ve taşıma (`mv`) için onay ister; ekleme (`>>`) değişiklik sayılır.
 
 ### API anahtarları
 
@@ -211,7 +217,9 @@ profili ya da `.env` dosyasına koymayın: başka araçlar oraları okur.
 | `core.secret-store.file@1` | düz metin, 0600 dosya | Deckent ve sizin hesabınızla çalışan diğer programlar |
 | `core.secret-store.encrypted-file@1` (önerilen; yeni kurulumlar bununla başlar) | şifreli (AES-256-GCM); açma anahtarı aynı klasörde, parola yok | Deckent; sizin hesabınızla çalışan diğer programlar yine açabilir |
 
-Ajanlar ve worker'lar anahtarı hiç almaz: sandbox depoyu gizler, anahtarı geri yansıtan sağlayıcı yanıtı reddedilir.
+Ajan ve worker istekleri anahtara adıyla başvurur; çalışma zamanı anahtarı isteme veya shell ortamına koymadan çözer.
+Desteklenen sandbox'lar depoyu gizler; host'a düşen yol dosya sistemi yalıtımı sağlamaz. Anahtarı geri yansıtan sağlayıcı
+yanıtı reddedilir.
 `deckent doctor` hangi deponun etkin olduğunu ve kimin okuyabileceğini gösterir. Sağlayıcı anahtarı reddederse (401/403) ya da
 bir limit dolarsa terminal bunu açık sözlerle söyler; harcama limitleri sağlayıcı hesabınızda kalır.
 
