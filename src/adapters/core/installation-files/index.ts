@@ -4,3 +4,6 @@ export { InstallationFileError, inspectInstallationFile, publishInstallationFile
 export { FileProjectIdentityStore } from './internal/project-identity.js';
 export type { InstallationFileErrorCode, InstallationFileInspection, InstallationFilePublication,
   InstallationFileRequest, InstallationFilePublishRequest } from './internal/publication.js';
+
+export { inspectInstallationStartabilityFiles, type InstallationStartability } from './internal/startability.js';
+export { firstSessionTargets, firstSessionPublication } from './internal/first-session.js';

@@ -87,3 +87,7 @@ export * from '#adapters/core/provider-connect/index.js';
 export * from '#adapters/core/project-instructions/index.js';
 export * from '#adapters/core/backup-store/index.js';
 export { CURRENT_LEDGER_VERSION } from '#adapters/core/sqlite-ledger/index.js';
+
+export { openSqliteLedger, openSqliteLedgerReadOnly, requireLedgerVersion } from '#adapters/core/sqlite-ledger/index.js';
+export { inspectInstallationStartabilityFiles, type InstallationStartability } from '#adapters/core/installation-files/index.js';
+export { firstSessionTargets, firstSessionPublication } from '#adapters/core/installation-files/index.js';

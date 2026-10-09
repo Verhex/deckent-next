@@ -1,3 +1,4 @@
+import { runtimeSocketLocation } from '#adapters/core/local-runtime-socket/index.js';
 import { mkdtemp, mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { hostname, tmpdir, userInfo } from 'node:os';
 import { join } from 'node:path';
@@ -147,7 +148,7 @@ describe('inspectMonitor composition', () => {
   it('describes the service with one current-protocol attempt: an unanswering endpoint is unknown + diagnostic, no version fan-out', async context => {
     if (process.platform !== 'linux') context.skip('LOCAL_RUNTIME_UNSUPPORTED: authenticated runtime socket and live peer identity require Linux');
     const root = await mkdtemp(join(tmpdir(), 'deckent-monitor-')); roots.push(root);
-    const current = await project(root, 'current', ['s'], ['s']); const endpoint = productResourcePath(current.layout, 'runtimeSocket');
+    const current = await project(root, 'current', ['s'], ['s']); const endpoint = runtimeSocketLocation(current.layout); roots.push(join(endpoint, '..'));
     await mkdir(join(endpoint, '..'), { recursive: true, mode: 0o700 });
     let connections = 0; const sockets: Socket[] = [];
     const peer = createServer(socket => { connections++; sockets.push(socket); socket.on('error', () => undefined); socket.destroy(); });

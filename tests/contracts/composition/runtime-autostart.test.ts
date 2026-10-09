@@ -1,3 +1,5 @@
+import { prepareRuntimeSocket } from '#adapters/core/local-runtime-socket/index.js';
+import { resolveProductLayout } from '#platform/index.js';
 import { chmod, mkdtemp, mkdir, rm, stat, writeFile } from 'node:fs/promises';
 import { execFileSync } from 'node:child_process';
 import { createServer, type Server, type Socket } from 'node:net';
@@ -39,10 +41,11 @@ it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket] t
   expect((await stat(launches[0]!.logPath)).mode & 0o777).toBe(0o600);
 });
 
-it.skipIf(process.platform === 'win32')('requires POSIX managed storage; MANAGED_FILE_UNSUPPORTED — never starts a service over an endpoint that fails ownership checks', async () => {
+it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket] never starts a service over an endpoint that fails ownership checks', async () => {
   const f = await fixture();
   await mkdir(join(f.data, 'state'), { recursive: true, mode: 0o700 });
-  await writeFile(join(f.data, 'state/runtime.sock'), 'not a socket', { mode: 0o600 });
+  const endpoint = await prepareRuntimeSocket(resolveProductLayout({ projectRoot: f.project, root: f.data })); roots.push(join(endpoint, '..'));
+  await writeFile(endpoint, 'not a socket', { mode: 0o600 });
   let launched = 0;
   await expect(ensureConfiguredRuntimeService(f.project, f.options, async () => { launched++; return { pid: 1 }; })).rejects.toMatchObject({ code: expect.stringMatching(/UNSAFE/) });
   expect(launched).toBe(0);
@@ -61,7 +64,7 @@ it.skipIf(process.platform === 'win32')('requires POSIX managed storage; MANAGED
 it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket] treats an accepting but silent endpoint as a present service: bounded by the start deadline, reported, never replaced (Astra 2054 R2)', async () => {
   const f = await fixture({ serviceStartTimeoutMs: 1_000 });
   await mkdir(join(f.data, 'state'), { recursive: true, mode: 0o700 });
-  const endpoint = join(f.data, 'state/runtime.sock');
+  const endpoint = await prepareRuntimeSocket(resolveProductLayout({ projectRoot: f.project, root: f.data })); roots.push(join(endpoint, '..'));
   const peer = createServer(socket => { socket.on('error', () => undefined); sockets.push(socket); }); peers.push(peer);
   await new Promise<void>(resolve => peer.listen(endpoint, () => resolve())); await chmod(endpoint, 0o600);
   let launched = 0; const started = performance.now();
@@ -74,7 +77,7 @@ it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket] t
 it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket] treats a crashed host\'s stale socket (nothing listening) as no service and launches once', async () => {
   const f = await fixture({ serviceStartTimeoutMs: 1_000 });
   await mkdir(join(f.data, 'state'), { recursive: true, mode: 0o700 });
-  const endpoint = join(f.data, 'state/runtime.sock');
+  const endpoint = await prepareRuntimeSocket(resolveProductLayout({ projectRoot: f.project, root: f.data })); roots.push(join(endpoint, '..'));
   // A killed host leaves its socket file behind; nothing accepts on it any more.
   try { execFileSync(process.execPath, ['-e', `const p=${JSON.stringify(endpoint)};require('net').createServer().listen(p,()=>{require('fs').chmodSync(p,0o600);process.kill(process.pid,'SIGKILL')})`], { stdio: 'ignore' }); }
   catch (error) { expect(error).toMatchObject({ signal: 'SIGKILL' }); }
@@ -103,7 +106,8 @@ it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket] r
 /** A peer on the endpoint that answers describe with a stoppable descriptor, or nothing, and never answers shutdown. */
 async function stubbornPeer(data: string, answerDescribe: boolean) {
   await mkdir(join(data, 'state'), { recursive: true, mode: 0o700 });
-  const endpoint = join(data, 'state/runtime.sock');
+  const endpoint = await prepareRuntimeSocket(resolveProductLayout({ projectRoot: data, root: data }));
+  roots.push(join(endpoint, '..'));
   const seen: string[] = [];
   // A request is one frame followed by half-close; the answer (if any) is one frame, like the real host.
   const peer = createServer({ allowHalfOpen: true }, socket => {

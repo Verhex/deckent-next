@@ -187,7 +187,8 @@
         "src/domain/core/model-invocation",
         "src/engine/core/authentication",
         "src/engine/core/runtime",
-        "src/platform/core/clock"
+        "src/platform/core/clock",
+        "src/platform/core/host"
       ],
       "plan": "EXECUTION"
     },
@@ -536,7 +537,8 @@
         "src/composition/core/root",
         "src/composition/core/backup",
         "src/engine/core/backup",
-        "src/composition/core/secrets"
+        "src/composition/core/secrets",
+        "src/adapters/core/installation-files"
       ],
       "plan": "EXECUTION"
     },
@@ -1240,7 +1242,13 @@
         "src/platform/core/host",
         "src/platform/core/config",
         "src/platform/core/utils",
-        "src/platform/core/config-fields"
+        "src/platform/core/config-fields",
+        "src/adapters/core/sqlite-ledger",
+        "src/adapters/core/local-runtime-socket",
+        "src/adapters/core/shell-sandbox-bwrap",
+        "src/adapters/core/file-policy",
+        "src/platform/core/i18n",
+        "src/platform/core/errors"
       ],
       "plan": "INSTALLATION"
     },

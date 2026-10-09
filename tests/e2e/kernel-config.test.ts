@@ -60,11 +60,13 @@ describe('K1 real binary journeys', () => {
     // The fixture's installation directory (~/.deckent) is not owner-only, as a hand-made or pre-0da9f0d6 directory can be: pinned here so the
     // leftover report below does not depend on the umask.
     await chmod(dirname(resolveGlobalConfigPaths(f.env).platformPath), 0o755); await chmod(join(f.project, '.deckent'), 0o755);
-    const result = JSON.parse((await f.run(['doctor', '--json'])).stdout);
-    expect(result).toMatchObject({ schemaVersion: 2, principal: { assurance: 'os-user', provenance: 'cli' }, company: { companyId: 'default' }, status: 'ready', policyTemplate: null, modelInvocationDelivery: [] });
+    const checked = await f.run(['doctor', '--json']).then(value => ({ ...value, code: 0 }), error => error);
+    expect(checked.code).toBe(78);
+    const result = JSON.parse(checked.stdout);
+    expect(result).toMatchObject({ schemaVersion: 2, principal: { assurance: 'os-user', provenance: 'cli' }, company: { companyId: 'default' }, status: 'degraded', startability: { status: 'blocked' }, policyTemplate: null, modelInvocationDelivery: [] });
     // Doctor JSON 2 grows only by additive fields (shellRealm, poolReadiness before; wave 1: imageRefresh for WORKER-AUTO-REFRESH and
     // installationBinding for VERIFY-ENV, both always present, null when unwired or unreadable).
-    expect(Object.keys(result).sort()).toEqual(['company', 'environment', 'host', 'hostMemory', 'imageRefresh', 'installationBinding', 'modelInvocationDelivery', 'paths', 'platform', 'policyTemplate', 'poolReadiness', 'principal', 'recoveryFiles', 'schemaVersion', 'scope', 'secretStore', 'serviceConfig', 'shellRealm', 'status']);
+    expect(Object.keys(result).sort()).toEqual(['company', 'environment', 'host', 'hostMemory', 'imageRefresh', 'installationBinding', 'modelInvocationDelivery', 'paths', 'platform', 'policyTemplate', 'poolReadiness', 'principal', 'recoveryFiles', 'schemaVersion', 'scope', 'secretStore', 'serviceConfig', 'shellRealm', 'startability', 'status']);
     // No refresh ever ran in this installation (no Docker execution): nothing is claimed.
     expect(result.imageRefresh).toEqual({ status: 'unknown', reason: null, imageVersion: null });
     // Binding v2 (wave 2): the doctor reports the strength and source this host reaches by the product's own capture and whether company
@@ -88,16 +90,16 @@ describe('K1 real binary journeys', () => {
     expect(Object.keys(result.principal).sort()).toEqual(['assurance', 'id', 'identityClass', 'provenance', 'verifiedBy']);
     expect(result.company).toEqual({ companyId: 'default' });
     expect(result.host.cpuCores).toBeGreaterThan(0); expect(result.host.recommendedMaxWorkers).toBeGreaterThan(0);
-    expect((await f.run(['doctor'], { DECKENT_LANG: 'tr' })).stdout).toContain('Önerilen worker');
-    expect((await f.run(['doctor', '--lang', 'tr'])).stdout).toContain('Bellek:');
-    expect((await f.run(['doctor', '--lang', 'tr'])).stdout).toContain('Secret deposu: core.secret-store.env@1 (ready)');
+    expect((await f.run(['doctor'], { DECKENT_LANG: 'tr' }).catch(error => error)).stdout).toContain('Önerilen worker');
+    expect((await f.run(['doctor', '--lang', 'tr']).catch(error => error)).stdout).toContain('Bellek:');
+    expect((await f.run(['doctor', '--lang', 'tr']).catch(error => error)).stdout).toContain('Secret deposu: core.secret-store.env@1 (ready)');
   });
   it('shows the configured company in doctor JSON and rejects an invalid company id as a typed config error without changing bytes', async () => {
     const f = await fixture('project-override'), path = join(f.project, '.deckent/config.json');
-    expect(JSON.parse((await f.run(['doctor', '--json'])).stdout)).toMatchObject({ schemaVersion: 2, company: { companyId: 'default' }, status: 'ready' });
+    expect(JSON.parse((await f.run(['doctor', '--json']).catch(error => error)).stdout)).toMatchObject({ schemaVersion: 2, company: { companyId: 'default' }, status: 'degraded', startability: { status: 'blocked' } });
     expect(JSON.parse((await f.run(['config', 'get', 'company.id', '--json'])).stdout)).toBe('default');
     await writeFile(path, '{"company":{"id":"acme-tr"}}');
-    expect(JSON.parse((await f.run(['doctor', '--json'])).stdout).company).toEqual({ companyId: 'acme-tr' });
+    expect(JSON.parse((await f.run(['doctor', '--json']).catch(error => error)).stdout).company).toEqual({ companyId: 'acme-tr' });
     for (const invalid of ['{"company":{"id":"../outside"}}', '{"company":{"id":"Acme"}}', '{"company":{"id":"acme","site":"x"}}']) {
       await writeFile(path, invalid);
       try { await f.run(['doctor', '--json']); expect.fail('must reject'); }

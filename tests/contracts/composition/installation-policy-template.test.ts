@@ -10,7 +10,7 @@ import { installationBindingNotRunReason } from '../support/binding-capability.j
 const bindingNotRun = await installationBindingNotRunReason();
 
 // SCR-B (owner 2026-09-28, checkpoint option B, proof/SCR-B-2026-09-28/review.md): a real journal + real adapters
-// end to end. No Docker, no pool, no config.json is ever created or required for this path.
+// end to end. W5: no Docker or pool; absent config and ledger are initialized for the first session.
 const roots: string[] = [];
 afterEach(async () => { await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 async function project() { const root = await mkdtemp(join(tmpdir(), 'deckent-policy-template-')); roots.push(root); return root; }

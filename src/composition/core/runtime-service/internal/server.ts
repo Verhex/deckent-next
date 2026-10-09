@@ -7,8 +7,8 @@ import { socketOptions } from './socket-options.js';
 import { configuredServiceShutdown } from './shutdown.js';
 import { randomUUID } from 'node:crypto';
 import { setTimeout as wait } from 'node:timers/promises';
-import { ErrorRegistry, type DeckentError, inspectProductFile, ManagedFileError, readBuildIdentity, prepareProductCompanionPath, prepareProductDirectory, prepareProductSocket, type ConfigLoadOptions } from '#platform/index.js';
-import { acquireLocalRuntimeSocketGuard, LocalRuntimeSocketError, upgradeExistingProductLedger, validateDockerSupervisorProfile, type LedgerUpgrade,
+import { ErrorRegistry, type DeckentError, inspectProductFile, ManagedFileError, readBuildIdentity, prepareProductCompanionPath, prepareProductDirectory,  type ConfigLoadOptions } from '#platform/index.js';
+import { acquireLocalRuntimeSocketGuard, LocalRuntimeSocketError, prepareRuntimeSocket, upgradeExistingProductLedger, validateDockerSupervisorProfile, type LedgerUpgrade,
   type LocalRuntimeSocketGuard, openSqliteAgentTurnStore, openSqliteApprovalStore, openLocalIntegrityAuthority, createScratchActivity, readTerminalScratchConfig, resolveGitWorkTarget,
   startScratchSweeper, sweepScratch, createRuntimeWorkspaceFileHost, sweepFullPreviews, type HttpFetchTransport, type ScratchSweepResult, type ShellSandboxFactory } from '#adapters/index.js';
 import { ModelInvocationControllers, runtimeServiceModelOwnerId, RuntimeServiceLifecycle, classifyRuntimeServiceOperation, isRuntimeServiceEffectOperation, isRuntimeServicePermissionModeOperation, runtimeServiceDescriptorSchema, runtimeServiceDescriptionInputSchema,
@@ -98,7 +98,7 @@ async function startService(projectRoot: string, observer: ConfiguredRuntimeServ
   const missingCancellation = [...(config.cancellation ? [] : ['cancellation']), ...(config.cancellationRuntime ? [] : ['cancellationRuntime'])];
   if (missingCancellation.length) throw ErrorRegistry.createError('CANCELLATION_NOT_CONFIGURED', { params: { missing: missingCancellation.join(', ') } });
   await resolveGitWorkTarget(projectRoot, config.execution, config.productLayout); // WORK-TARGETS: typed refusal before any custody or write
-  const endpoint = await prepareProductSocket(config.productLayout, 'runtimeSocket');
+  const endpoint = await prepareRuntimeSocket(config.productLayout);
   // LEDGER-SINGLETON (Astra 2054 R1): acquire ledger then endpoint custody before upgrade; hold through listener start.
   const guard = await acquireLocalRuntimeSocketGuard(socketOptions(config.service, endpoint), await prepareProductCompanionPath(config.productLayout, 'ledger', '-lock'));
   try { return await startUnderCustody(projectRoot, observer, options, config, guard, ports); }

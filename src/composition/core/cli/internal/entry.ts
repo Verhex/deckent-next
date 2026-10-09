@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { inspectInstallationStartability } from '#composition/core/runtime-service/index.js';
 import { configuredProjectInstructions } from '#composition/core/project-instructions/index.js';
 import { executeConfiguredBackup, inspectConfiguredRecoveryFiles } from '#composition/core/backup/index.js';
 import { previewConfiguredIdentityProfile, listIdentityProfiles } from '#composition/core/identity-profile/index.js';
@@ -66,7 +67,7 @@ export async function main(argv: readonly string[] = process.argv.slice(2), serv
     runMcpCommand: runConfiguredMcpCommand,
     inspectSecretStore: inspectConfiguredSecretStore, listSecretNames: listConfiguredSecretNames, inspectRecoveryFiles: inspectConfiguredRecoveryFiles,
     inspectInstallationBinding: inspectConfiguredInstallationBinding,
-    inspectShellRealm: inspectConfiguredShellRealm, // REALM-NOTICE: doctor's selected shell realm and every provider passed over.
+    inspectInstallationStartability, inspectShellRealm: inspectConfiguredShellRealm, // REALM-NOTICE: doctor's selected shell realm and every provider passed over.
     setSecret: (projectRoot, input, options) => createConfiguredRuntimeClient(projectRoot, options).setSecret(input),
     // T4 PROVIDER-CONNECT: the /provider kinds (adapter data) and the free check, run in this terminal process with the key the person typed;
     // the key then goes only to `setSecret` above (runtime service, audited by name). No environment variable, file or worker sees it.

@@ -753,7 +753,7 @@
   "terminal.value.none": "yok",
   "config.field.terminal": "Operatör terminali: yönetilen sohbet modeli referansı, yanıt token sınırı ve satır modunun geçmiş uzunluğu (ajan konuşmasını runtime ölçer ve sıkıştırır)",
   "terminal.status.chat": "Sohbet modeli: {target}",
-  "terminal.chat.notConfigured": "yapılandırılmamış (terminal.chat ekleyin)",
+  "terminal.chat.notConfigured": "model seçin (/model)",
   "terminal.chat.modelNotDeclared": "sağlayıcı kataloğunda tanımlı değil",
   "terminal.chat.failed": "Sohbet turu başarısız oldu.",
   "terminal.chat.systemPrompt": "Sen Deckent operatör terminal asistanısın. Türkçe yanıt ver.",
@@ -1275,7 +1275,7 @@
   "terminal.admin.model.usage": "Kullanım: /model (salt okunur; model seçmek sonraki adımdır).",
   "terminal.admin.model.partIdentity": "Geçerli model",
   "terminal.admin.model.partCatalog": "Model kataloğu",
-  "terminal.admin.model.notConfigured": "Geçerli model: yapılandırılmamış (terminal.chat ekleyin).",
+  "terminal.admin.model.notConfigured": "Geçerli model: /model ile seçim yapın.",
   "terminal.admin.model.current": "Geçerli model: {model}",
   "terminal.admin.model.currentNotDeclared": "Geçerli model: {model} (sağlayıcı kataloğunda bildirilmemiş)",
   "terminal.admin.model.active": "etkin",
@@ -1357,5 +1357,6 @@
   "terminal.info.usage.cacheHit": "%{percent} ({read}/{prompt} istem tokeni)",
   "terminal.info.usage.cacheHitPartial": "ölçülen raporlarda %{percent} ({measured}/{reports}); tüm oturum bilinmiyor",
   "cli.policy.upgrade.deprecated": "v5 seçeneği kullanımdan kalkıyor; güncel ilk kurulum şablonunu kullanır.\ndeckent policy upgrade --template current --scope {scope} --preview kullanın.",
-  "cli.help.action.secret.store": "Gizli depoyu seç ve anahtarları güvenle taşı"
+  "cli.help.action.secret.store": "Gizli depoyu seç ve anahtarları güvenle taşı",
+  "doctor.startability": "Runtime başlatılabilirliği: {status} · soket {endpoint}"
 }

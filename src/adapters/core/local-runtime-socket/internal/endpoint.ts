@@ -3,9 +3,9 @@ import { lstat, realpath, rm } from 'node:fs/promises';
 import { dirname, isAbsolute, normalize, resolve } from 'node:path';
 
 export type LocalRuntimeSocketErrorCode = 'LOCAL_RUNTIME_UNSUPPORTED' | 'LOCAL_RUNTIME_OPTIONS'
-  | 'LOCAL_RUNTIME_ENDPOINT_UNSAFE' | 'LOCAL_RUNTIME_ALREADY_RUNNING' | 'LOCAL_RUNTIME_TRANSPORT' | 'LOCAL_RUNTIME_UNAVAILABLE';
+  | 'LOCAL_RUNTIME_SOCKET_PATH_TOO_LONG' | 'LOCAL_RUNTIME_ENDPOINT_UNSAFE' | 'LOCAL_RUNTIME_ALREADY_RUNNING' | 'LOCAL_RUNTIME_TRANSPORT' | 'LOCAL_RUNTIME_UNAVAILABLE';
 export class LocalRuntimeSocketError extends Error {
-  constructor(readonly code: LocalRuntimeSocketErrorCode, options?: ErrorOptions) {
+  constructor(readonly code: LocalRuntimeSocketErrorCode, options?: ErrorOptions, readonly path?: string) {
     super(code, options);
     this.name = 'LocalRuntimeSocketError';
   }
@@ -21,11 +21,12 @@ export function assertSocketPublicationBudget(endpoint: string): void {
   const parent = dirname(endpoint);
   // Native same-parent staging uses '/.sXXXXXX/s'; include the trailing NUL in sun_path's 108 bytes.
   if (Buffer.byteLength(parent === '/' ? '' : parent, 'utf8') + 11 >= 108) {
-    throw new LocalRuntimeSocketError('LOCAL_RUNTIME_OPTIONS');
+    throw new LocalRuntimeSocketError('LOCAL_RUNTIME_SOCKET_PATH_TOO_LONG', undefined, endpoint);
   }
 }
 export async function resolveSocketOptions(options: LocalRuntimeSocketOptions): Promise<ResolvedLocalRuntimeSocketOptions> {
   if (process.platform !== 'linux' || !process.getuid) throw new LocalRuntimeSocketError('LOCAL_RUNTIME_UNSUPPORTED');
+  if (options?.endpoint && Buffer.byteLength(options.endpoint, 'utf8') >= 108) throw new LocalRuntimeSocketError('LOCAL_RUNTIME_SOCKET_PATH_TOO_LONG', undefined, options.endpoint);
   if (!options || !isAbsolute(options.endpoint) || normalize(options.endpoint) !== options.endpoint
     || options.endpoint.includes('\0') || Buffer.byteLength(options.endpoint, 'utf8') >= 108
     || !positive(options.maxConnections) || !positive(options.inputMaxBytes) || options.inputMaxBytes > 0xffffffff

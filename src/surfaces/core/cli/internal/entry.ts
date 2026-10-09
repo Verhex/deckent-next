@@ -66,7 +66,8 @@ export async function main(argv: readonly string[] = process.argv.slice(2), cont
       return 0;
     }
     context.initialize?.();
-    const interactive = (argv.length === 0 && interactiveTerminal(context)) || (argv.length === 1 && argv[0] === '--full-access');
+    const terminalFlags = argv[0] === '--scope';
+    const interactive = terminalFlags || (argv.length === 0 && interactiveTerminal(context)) || (argv.length === 1 && argv[0] === '--full-access');
     // ID-1C: the relocation stop precedes every installation-bound command. Commands that own their installation load/recovery and
     // identity check (config, init) or need no installation (policy vocabulary) declare it in the catalog and are not gated here.
     if (context.loadInstallationIdentity && (interactive || CLI_COMMANDS.some(item => item.name === argv[0]))

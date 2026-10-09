@@ -50,6 +50,7 @@ export function queryFailure(error: unknown): DeckentError {
   // not an unavailable inventory; progress/revision codes stay internal (they describe stored state, never caller input).
   if (error instanceof TaskGraphError && GRAPH_INPUT_CODES.has(error.code)) return ErrorRegistry.createError('TASK_GRAPH_INVALID', {
     params: { reason: error.code, path: ['graph', ...(error.issues[0]?.path ?? [])].join('.') } });
+  if (error instanceof LocalRuntimeSocketError && error.path) return ErrorRegistry.createError(error.code, { params: { path: error.path } });
   if (error instanceof ZodError) return ErrorRegistry.createError('INVENTORY_QUERY_INVALID');
   if (error instanceof DispatchInventoryError) return ErrorRegistry.createError('DISPATCH_INVENTORY_LIMIT');
   if (error instanceof RunStoreError && error.code === 'RUN_CAPACITY_OR_ORDER' && error.diagnostic) {

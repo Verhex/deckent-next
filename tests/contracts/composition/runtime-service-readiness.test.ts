@@ -1,3 +1,5 @@
+import { runtimeSocketLocation } from '#adapters/core/local-runtime-socket/index.js';
+import { resolveProductLayout } from '#platform/index.js';
 import { lstat, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -23,7 +25,7 @@ it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket] r
   roots.push(project);
   const data = join(project, 'data');
   const configPath = join(project, '.deckent/config.json');
-  const endpoint = join(data, 'state/runtime.sock');
+  const endpoint = runtimeSocketLocation(resolveProductLayout({ projectRoot: project, root: data })); roots.push(join(endpoint, '..'));
   const env = { HOME: join(project, 'home') };
   await mkdir(join(project, '.deckent'), { recursive: true });
   await writeFile(configPath, JSON.stringify(config(data, ['scope', 'scope'])));
