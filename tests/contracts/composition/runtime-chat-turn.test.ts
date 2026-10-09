@@ -1,3 +1,4 @@
+import { createTerminalRuntimeClient } from '../support/terminal-runtime-client.js';
 import { createHash, randomUUID } from 'node:crypto';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { mkdir, mkdtemp, readFile, readdir, rename, rm, symlink, writeFile } from 'node:fs/promises';
@@ -12,7 +13,7 @@ import { bindSessionScope } from '#surfaces/core/terminal/index.js';
 import { mountWorkline, until } from '../support/workline-harness.js';
 import { AGENT_TURN_INTERRUPTED_NOTE, ModelActivationApplication, ModelBindingApplication, modelInvocationTargetId } from '#engine/index.js';
 import * as engine from '#engine/index.js';
-import { attachRuntimeWorkspaceFile, cancelRuntimeChatTurn, createConfiguredRuntimeClient, findRuntimeWorkspaceFiles, runRuntimeChatTurn,
+import { attachRuntimeWorkspaceFile, cancelRuntimeChatTurn, findRuntimeWorkspaceFiles, runRuntimeChatTurn,
   startConfiguredRuntimeService } from '#composition/core/runtime-service/index.js';
 import { attachTerminalMentions, findTerminalMentions, streamTerminalAgentTurn } from '#surfaces/core/terminal-turn/index.js';
 import { renderAssistantStream, startAssistantStream, type AssistantUnit } from '#surfaces/core/terminal-render/index.js';
@@ -139,7 +140,7 @@ async function runtime(options: { toolGrant?: boolean | 'approval'; tokenize?: b
   };
   const rows = (sql: string) => { const db = new DatabaseSync(ledger, { readOnly: true }); try { return db.prepare(sql).all(); } finally { db.close(); } };
   const writePolicy = (next: unknown[]) => writeFile(join(data, 'policy.json'), JSON.stringify({ schemaVersion: 1, revision: `r-${next.length}`, restrictions: [], grants: next }), { mode: 0o600 });
-  return { project, data, env, state, rows, ledger, start, interrupted, swept, released, grants, writePolicy, binding, client: () => createConfiguredRuntimeClient(project, { env }) };
+  return { project, data, env, state, rows, ledger, start, interrupted, swept, released, grants, writePolicy, binding, client: () => createTerminalRuntimeClient(project, { env }) };
 }
 const editGrants = (toolEffect: 'allow' | 'require-approval') => [
   { id: 'edit-tools', effect: toolEffect, actions: ['invoke'], scopes: ['scope'], principals: me, resource: { kind: 'agent-tool', ids: ['edit_file', 'write_file'] } },

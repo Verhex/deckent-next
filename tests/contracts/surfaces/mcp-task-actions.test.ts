@@ -37,9 +37,9 @@ it('advertises task actions only when injected with strict schemas and conservat
   expect(execute.inputSchema.required).toEqual(expect.arrayContaining(['runId', 'taskId', 'attemptId', 'scopeId', 'generation', 'layoutRevision']));
   expect(evaluate.inputSchema.required).toEqual(expect.arrayContaining(['schemaVersion', 'commandId', 'identity', 'expectedRevision']));
   expect(execute.annotations).toMatchObject({ readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: true });
-  expect(evaluate.annotations).toMatchObject({ readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false });
+  expect(evaluate.annotations).toMatchObject({ readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false });
   expect(create.annotations).toMatchObject({ readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false });
-  expect(reserve.annotations).toMatchObject({ readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false });
+  expect(reserve.annotations).toMatchObject({ readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false });
   expect(execute.description).toContain('pinned task profile'); expect(evaluate.description).toContain('never supply a verdict');
 });
 

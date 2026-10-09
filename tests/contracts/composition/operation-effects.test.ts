@@ -1,3 +1,4 @@
+import { terminalApproval } from '../support/terminal-runtime-client.js';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
@@ -84,7 +85,7 @@ it.skipIf(process.platform !== 'linux')('[requires Linux live OS session /proc i
 it.skipIf(process.platform !== 'linux')('[requires Linux live OS session /proc identity] brokers a required operation approval: pending, decided allow, the same command settles once, the approval is consumed and bound to its command and input (C12 G1/G2)', async () => {
   const f = await fixture();
   await f.policy('require-approval');
-  const decide = (approvalId: string, commandId: string, decision: 'allow' | 'deny') => configuredApproval(f.project, 'decide',
+  const decide = (approvalId: string, commandId: string, decision: 'allow' | 'deny') => terminalApproval(f.project, 'decide',
     { schemaVersion: 1, scopeId: 's', approvalId, commandId, expectedRevision: 0, decision, reason: 'Reviewed' }, f.options) as Promise<{ status: string }>;
   const pending = await f.execute(f.command('gated'));
   if (pending.status !== 'approval-pending') throw new Error(pending.status);
@@ -140,7 +141,7 @@ it.skipIf(process.platform !== 'linux')('[requires Linux live OS session /proc i
   expect(f.server.operations).toHaveLength(0); expect(f.state('cli-gated')).toBeUndefined();
   // The decision: the same session-authenticated `decideApproval` every surface uses (the CLI `approval decide` reaches it through the
   // running runtime service, which this test does not start; the SDK path is the local-sdk channel of the one application).
-  const decide = (approvalId: string, commandId: string, decision: 'allow' | 'deny') => configuredApproval(f.project, 'decide',
+  const decide = (approvalId: string, commandId: string, decision: 'allow' | 'deny') => terminalApproval(f.project, 'decide',
     { schemaVersion: 1, scopeId: 's', approvalId, commandId, expectedRevision: 0, decision, reason: 'Reviewed' }, f.options) as Promise<{ status: string }>;
   expect(await decide(pending.approval.approvalId, 'cli-allow', 'allow')).toMatchObject({ status: 'decided', decision: { decision: 'allow' } });
   const settled = await cli('operation', 'execute', '--input', input);
@@ -154,7 +155,7 @@ it.skipIf(process.platform !== 'linux')('[requires Linux live OS session /proc i
   expect(f.server.operations).toHaveLength(1);
   const settling = executeConfiguredOperation(f.project, f.command('sdk-gated', { expectedVersion: '"v2"' }) as never, f.options, { awaitApproval: { timeoutMs: 5_000, pollMs: 5 } });
   await new Promise(resolve => setTimeout(resolve, 30));
-  await configuredApproval(f.project, 'decide', { schemaVersion: 1, scopeId: 's', approvalId: waited.approval.approvalId, commandId: 'sdk-allow', expectedRevision: 0, decision: 'allow', reason: 'Reviewed' }, f.options);
+  await terminalApproval(f.project, 'decide', { schemaVersion: 1, scopeId: 's', approvalId: waited.approval.approvalId, commandId: 'sdk-allow', expectedRevision: 0, decision: 'allow', reason: 'Reviewed' }, f.options);
   expect(await settling).toMatchObject({ status: 'settled', commandId: 'sdk-gated', sequence: 2, version: '"v3"' });
   expect(f.server.operations).toHaveLength(2);
   // The CLI wait: `--wait` polls up to the given time; a deny while waiting is the typed refusal.

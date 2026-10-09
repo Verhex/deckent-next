@@ -1,4 +1,5 @@
 import { execFile } from 'node:child_process';
+import { terminalProgram } from '../support/approval-terminal.js';
 import { promisify } from 'node:util';
 import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
 import { DatabaseSync } from 'node:sqlite';
@@ -49,14 +50,22 @@ async function fixture() {
   return { project, data, env, own, colleague };
 }
 async function cli(f: { project: string; env: NodeJS.ProcessEnv }, args: readonly string[]) {
+  if (args[0] === 'approval' && args[1] === 'decide') {
+    const result = await terminalProgram([process.execPath, binary, ...args, '--json'], f.env, f.project);
+    const value = JSON.parse(result.output.slice(result.output.indexOf('{')).trim());
+    return result.status === 0 ? { exit: 0, value } : { exit: 1, code: value.code };
+  }
   try { return { exit: 0, value: JSON.parse((await exec(process.execPath, [binary, ...args, '--json'], { cwd: f.project, env: f.env })).stdout) }; }
   catch (error) { const failure = error as { code: number; stderr: string }; return { exit: failure.code, code: JSON.parse(failure.stderr).code }; }
 }
 async function library(f: { project: string; env: NodeJS.ProcessEnv }, body: string) {
-  const out = await exec(process.execPath, ['--input-type=module', '-e', `import * as sdk from ${JSON.stringify(sdk)};
+  const out = await terminalProgram([process.execPath, '--input-type=module', '-e', `import * as sdk from ${JSON.stringify(sdk)};
     try { console.log(JSON.stringify(await (async () => { ${body} })())); } catch (error) { console.log(JSON.stringify({ code: error.code ?? error.message })); }`],
-  { cwd: f.project, env: f.env });
-  return JSON.parse(out.stdout.trim());
+  f.env, f.project);
+  for (const line of out.output.split(/\r?\n/u).reverse()) {
+    try { return JSON.parse(line); } catch { /* terminal warnings are not the SDK result */ }
+  }
+  throw new Error(out.output);
 }
 const decide = (approvalId: string, commandId: string) => ({ schemaVersion: 1, scopeId: 'proj', approvalId, commandId, expectedRevision: 0, decision: 'allow', reason: 'four-eyes' });
 

@@ -1,9 +1,10 @@
+import { createTerminalRuntimeClient } from '../support/terminal-runtime-client.js';
 import { createHash } from 'node:crypto';
 import { hostname, tmpdir, userInfo } from 'node:os';
 import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { afterEach, expect, it } from 'vitest';
-import { configuredApproval, createConfiguredRuntimeClient } from '../../../src/index.js';
+import { configuredApproval } from '../../../src/index.js';
 import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
 import { openLocalIntegrityAuthority, openSqliteApprovalStore } from '#adapters/index.js';
 import { z } from 'zod';
@@ -54,7 +55,7 @@ async function fixture() {
 // threshold; v16 and v17 keep it), so a current runtime client receives operation-subject approvals. A released v14 client can no longer reach approval operations at all
 // (every non-lifecycle operation is current-version only, socket.test.ts); the v14 view below is kept as the engine contract.
 it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket] delivers operation-subject approvals to a v15 runtime client in the record shape the terminal parses, as the in-process SDK sees them (C12 G4)', async () => {
-  expect(RUNTIME_SERVICE_SCHEMA_VERSION).toBe(25);
+  expect(RUNTIME_SERVICE_SCHEMA_VERSION).toBe(26);
   // T3 L2: config-change records reach clients from v22 (the integration raises the protocol to it); below, they are hidden like operations below v15.
   expect(approvalSubjectsHiddenFromProtocol(14)).toEqual(['operation', 'config-change']);
   expect(approvalSubjectsHiddenFromProtocol(15)).toEqual(['config-change']);
@@ -62,7 +63,7 @@ it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket] d
   const f = await fixture();
   const service = await startTestRuntimeService(f.project, f.env);
   try {
-    const client = createConfiguredRuntimeClient(f.project, { env: f.env });
+    const client = createTerminalRuntimeClient(f.project, { env: f.env });
     const query = { schemaVersion: 1, scopeId: 's', afterId: null, limit: 10 };
     const listed = await client.listApprovals(query) as { request: { approvalId: string; subject?: { kind: string } } }[];
     expect(listed.map(record => record.request.approvalId).sort()).toEqual([f.task.request.approvalId, 'operation', 'tool-call'].sort());
@@ -82,7 +83,7 @@ it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket] p
   const f = await fixture();
   const service = await startTestRuntimeService(f.project, f.env);
   try {
-    const client = createConfiguredRuntimeClient(f.project, { env: f.env });
+    const client = createTerminalRuntimeClient(f.project, { env: f.env });
     // Ids order: <task uuid> | 'operation' | 'tool-call'. After 'n' the full page of one is the operation approval (SDK and v15 client);
     // the page of one of a view that hides operation subjects (the released-v14 view) is the next visible record, never an empty page.
     const query = { schemaVersion: 1, scopeId: 's', afterId: 'n', limit: 1 };
@@ -119,7 +120,7 @@ it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket] r
   seed('authority-a'); seed('authority-b'); journal.close();
   const service = await startTestRuntimeService(f.project, f.env);
   try {
-    const client = createConfiguredRuntimeClient(f.project, { env: f.env });
+    const client = createTerminalRuntimeClient(f.project, { env: f.env });
     const decide = (approvalId: string, decision: 'allow' | 'deny') => client.decideApproval({ schemaVersion: 1, scopeId: 's', approvalId, commandId: `${decision}-${approvalId}`,
       expectedRevision: 0, decision, reason: 'Reviewed' });
     await expect(decide('authority-a', 'allow')).rejects.toMatchObject({ code: 'APPROVAL_SURFACE_RESTRICTED' });
@@ -146,7 +147,7 @@ it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket] d
   journal.close();
   const service = await startTestRuntimeService(f.project, f.env);
   try {
-    const client = createConfiguredRuntimeClient(f.project, { env: f.env });
+    const client = createTerminalRuntimeClient(f.project, { env: f.env });
     const listed = await client.listApprovals({ schemaVersion: 1, scopeId: 's', afterId: null, limit: 10 }) as { request: { approvalId: string } }[];
     expect(listed.map(record => record.request.approvalId)).toContain('config');
     expect(() => z.array(approvalRecordSchema).parse(listed)).not.toThrow();

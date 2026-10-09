@@ -1,3 +1,4 @@
+import { terminalRequest } from './approval-terminal.js';
 import { createHash } from 'node:crypto';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
@@ -114,14 +115,11 @@ export async function modeRuntime(input: { grants: Record<string, unknown>[]; mo
    * the turn is launched in full access (MODES-3, v17 `chatTurn.fullAccess`). */
   const call = async (name: string, args: Record<string, unknown>, decision: 'allow' | 'deny' = 'deny', options: { readonly fullAccess?: boolean } = {}) => {
     state.script.push({ name, arguments: JSON.stringify(args) });
-    const events: AgentTurnStreamEvent[] = [], pending: Promise<unknown>[] = [], turnId = `turn-${++turns}`;
-    await client.chatTurn({ schemaVersion: 1, scopeId: 'scope', turnId, messages: [{ role: 'user', content: 'go' }], ...(options.fullAccess ? { fullAccess: true as const } : {}) }, event => {
-      events.push(event);
-      // The harness answers as the terminal card of the turn it started: it forwards the turn's one-time capability (B1).
-      if (event.kind === 'approval.requested') pending.push(client.decideApproval({ schemaVersion: 1, scopeId: 'scope', approvalId: event.approvalId,
-        commandId: `${decision}-${turnId}`, expectedRevision: event.revision, decision, reason: 'Reviewed', ...(event.decisionCapability ? { decisionCapability: event.decisionCapability } : {}) }));
-    });
-    await Promise.all(pending);
+    const turnId = `turn-${++turns}`;
+    const answer = await terminalRequest({ project, data, env }, 'chatTurn', { schemaVersion: 1, scopeId: 'scope', turnId,
+      messages: [{ role: 'user', content: 'go' }], ...(options.fullAccess ? { fullAccess: true as const } : {}) }, decision);
+    if (!answer.response.ok) throw new Error(JSON.stringify(answer.response));
+    const events = answer.events as AgentTurnStreamEvent[];
     const finished = events.find(event => event.kind === 'tool.finished');
     const text = events.flatMap(event => event.kind === 'message' && event.message.role === 'tool' ? [event.message.content] : [])[0] ?? '';
     return { events, card: events.some(event => event.kind === 'approval.requested'), status: finished?.kind === 'tool.finished' ? finished.status : null, text, turnId };

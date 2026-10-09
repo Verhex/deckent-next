@@ -1,3 +1,4 @@
+import { RUNTIME_SERVICE_SCHEMA_VERSION } from '#engine/index.js';
 import { Client } from '@modelcontextprotocol/client';
 import { StdioClientTransport } from '@modelcontextprotocol/client/stdio';
 import { execFile, spawn } from 'node:child_process';
@@ -110,11 +111,16 @@ async function fixture(nativeTimeoutMs = 2_000) {
   await activation.admit({ schemaVersion: 1, action: 'activate', commandId: 'activate', scopeId: 'scope', reference,
     expectedRevision: 0, catalogRevision: 'catalog', expectedBinding: binding });
   const policyPath = join(data, 'policy.json'), target = modelInvocationTargetId(reference);
-  const policy = async (allow: boolean) => writeFile(policyPath, JSON.stringify({ schemaVersion: 1, revision: allow ? 'allow' : 'deny', restrictions: [],
+  const policy = async (allow: boolean, mcpAllowed = false) => writeFile(policyPath, JSON.stringify({ schemaVersion: 1, revision: allow ? 'allow' : 'deny', restrictions: [],
     grants: allow ? [{ id: 'invoke', effect: 'allow', actions: ['invoke', 'inspect', 'inspect-content', 'cancel-invocation'], scopes: ['scope'],
       principals: [{ issuer: principal.issuer, subject: principal.subject }], resource: { kind: 'model-invocation', ids: [target] } },
     { id: 'scope', effect: 'allow', actions: ['inspect'], scopes: ['scope'], principals: [{ issuer: principal.issuer, subject: principal.subject }],
-      resource: { kind: 'scope', ids: ['scope'] } }] : [] }), { mode: 0o600 });
+      resource: { kind: 'scope', ids: ['scope'] } }, ...(mcpAllowed ? [
+      { id: 'explicit-mcp-cancellation', effect: 'allow', actions: ['cancel-invocation', 'inspect'], scopes: ['scope'],
+        principals: [{ issuer: `${principal.issuer}/mcp`, subject: principal.subject }], resource: { kind: 'model-invocation', ids: [target] } },
+      { id: 'explicit-mcp-scope', effect: 'allow', actions: ['inspect'], scopes: ['scope'],
+        principals: [{ issuer: `${principal.issuer}/mcp`, subject: principal.subject }], resource: { kind: 'scope', ids: ['scope'] } },
+    ] : [])] : [] }), { mode: 0o600 });
   await policy(true);
   const env = { HOME: home, PATH: process.env.PATH ?? '/usr/bin:/bin' };
   // ID-1D: identities are created at init/terminal start or the first governed write. Establish them through the production terminal
@@ -163,7 +169,7 @@ it.skipIf(process.platform !== 'linux')('owns bounded invocation through current
   const held = f.command('disconnect'), observed = f.holdResponse();
   const raw = createConnection(service.endpoint); raw.on('error', () => undefined);
   await new Promise<void>((resolve, reject) => { raw.once('connect', resolve); raw.once('error', reject); });
-  raw.end(encodeServiceFrame({ schemaVersion: 25, requestId: randomUUID(), operation: 'invokeModel', input: held,
+  raw.end(encodeServiceFrame({ schemaVersion: RUNTIME_SERVICE_SCHEMA_VERSION, requestId: randomUUID(), operation: 'invokeModel', input: held,
     delivery: { maxResultBytes: 60_000 } }, 65536));
   await within(observed, 'DISCONNECT_HTTP_NOT_OBSERVED'); raw.destroy();
   let drained = false; const stopping = service.stop().then(value => { drained = true; return value; });
@@ -183,7 +189,7 @@ it.skipIf(process.platform !== 'linux')('owns bounded invocation through current
   service = await startConfiguredRuntimeService(f.project, observer, { env: f.env }); services.push(service);
   const forged = f.command('forged-cap');
   const forgedResponse = await requestLocalRuntime({ endpoint: service.endpoint, ...f.serviceOptions }, {
-    schemaVersion: 25, requestId: randomUUID(), operation: 'invokeModel', input: forged,
+    schemaVersion: RUNTIME_SERVICE_SCHEMA_VERSION, requestId: randomUUID(), operation: 'invokeModel', input: forged,
     delivery: { maxResultBytes: Number.MAX_SAFE_INTEGER },
   });
   expect(forgedResponse).toMatchObject({ ok: false, error: { code: 'MODEL_INVOCATION_RESULT_LIMIT' } });
@@ -195,7 +201,7 @@ it.skipIf(process.platform !== 'linux')('owns bounded invocation through current
   const expiring = f.command('grace-expiry'), expiryObserved = f.holdResponse();
   const expirySocket = createConnection(service.endpoint); expirySocket.on('error', () => undefined);
   await new Promise<void>((resolve, reject) => { expirySocket.once('connect', resolve); expirySocket.once('error', reject); });
-  expirySocket.end(encodeServiceFrame({ schemaVersion: 25, requestId: randomUUID(), operation: 'invokeModel', input: expiring,
+  expirySocket.end(encodeServiceFrame({ schemaVersion: RUNTIME_SERVICE_SCHEMA_VERSION, requestId: randomUUID(), operation: 'invokeModel', input: expiring,
     delivery: { maxResultBytes: 60_000 } }, 65536));
   await within(expiryObserved, 'GRACE_EXPIRY_HTTP_NOT_OBSERVED'); expirySocket.destroy();
   expect(await service.stop()).toMatchObject({ state: 'incomplete', remainingRequests: 1 });
@@ -360,6 +366,7 @@ it.skipIf(process.platform !== 'linux')('records and replays a held model cancel
 it.skipIf(process.platform !== 'linux')('records and replays a held model cancellation through real stdio MCP', async () => {
   await access(mcp).catch(() => { throw new Error('BUILD_REQUIRED: run npm run build before this process proof'); });
   const f = await fixture(10_000), observer = { async onPage() {}, async onError() {} };
+  await f.policy(true, true); // Only the explicit MCP cancellation/scope grants authorize this external client.
   const service = await startConfiguredRuntimeService(f.project, observer, { env: f.env }); services.push(service);
   const client = createConfiguredRuntimeClient(f.project, { env: f.env }), command = f.command('mcp-cancel-held-partial');
   const observed = f.holdPartialResponse(), closed = f.heldResponseClosed();
@@ -395,6 +402,7 @@ it.skipIf(process.platform !== 'linux')('records and replays a held model cancel
 it.skipIf(process.platform !== 'linux')('rejects an MCP cancellation before effect when its full response cannot fit', async () => {
   await access(mcp).catch(() => { throw new Error('BUILD_REQUIRED: run npm run build before this process proof'); });
   const f = await fixture(10_000), observer = { async onPage() {}, async onError() {} };
+  await f.policy(true, true); // Only the explicit MCP cancellation/scope grants authorize this external client.
   const service = await startConfiguredRuntimeService(f.project, observer, { env: f.env }); services.push(service);
   const client = createConfiguredRuntimeClient(f.project, { env: f.env }), command = f.command('mcp-bounded-cancel-held-partial');
   const observed = f.holdPartialResponse(), closed = f.heldResponseClosed();

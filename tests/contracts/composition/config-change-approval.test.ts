@@ -1,3 +1,4 @@
+import { terminalApproval } from '../support/terminal-runtime-client.js';
 import { configPanelPort } from '#surfaces/core/config/index.js';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
@@ -49,7 +50,7 @@ async function setup(extra: (principals: unknown) => readonly Grant[] = principa
   };
   const auditCount = () => { const db = new DatabaseSync(ledger, { readOnly: true }); try { return Number(db.prepare('SELECT count(*) AS n FROM audit_events').get()!['n']); } finally { db.close(); } };
   const list = async () => await configuredApproval(root, 'list', { schemaVersion: 1, scopeId: 'installation', afterId: null, limit: 50 }, options) as ApprovalRecord[];
-  const decide = (approvalId: string, decision: 'allow' | 'deny', commandId: string) => configuredApproval(root, 'decide', { schemaVersion: 1, scopeId: 'installation', approvalId,
+  const decide = (approvalId: string, decision: 'allow' | 'deny', commandId: string) => terminalApproval(root, 'decide', { schemaVersion: 1, scopeId: 'installation', approvalId,
     commandId, expectedRevision: 0, decision, reason: decision === 'allow' ? 'Allowed in the terminal' : 'Denied in the terminal', channel: 'local-terminal-card' }, options);
   const command = { principal, scopeId: 'installation', layer: 'project' as const };
   return { root, options, app, path, command, auditCount, audits, assurance, list, decide, writePolicy };
