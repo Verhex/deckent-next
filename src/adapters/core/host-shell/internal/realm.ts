@@ -1,8 +1,8 @@
 import { modelTextPrefix, type AgentShellPosture, type ShellRealm, type ShellRealmContainment, type ShellRealmMode } from '#domain/index.js';
 import type { ShellPermissionTier } from '#engine/index.js';
 import type { ShellCapabilities } from './probe.js';
-import { isAbsolute, join, relative } from 'node:path';
-import { DECKENT_DIR } from '#platform/index.js';
+import { isAbsolute, relative } from 'node:path';
+import { DECKENT_DIR, productResourcePath, resolveProductLayout } from '#platform/index.js';
 import { runHostShell } from './run.js';
 
 /** The host has no write boundary, so it never accepts a write set (SHELL-OVERLAY): such a request is refused, nothing runs. */
@@ -15,11 +15,21 @@ export const HOST_SHELL_POSTURE = 'Runs on this machine as your user in the proj
 export function sandboxHardFloored(layout: ShellSandboxLayout, rel: string): boolean {
   const floor = layout.hardFloor;
   if (floor?.product) return floor.product(rel);
-  const roots = floor?.roots ?? [join(layout.project.root, DECKENT_DIR)];
-  return roots.some(root => {
+  // Without the turn's hard floor (owner Y 2026-09-30, INS-05): the default layout's authority and state resources (and the data root)
+  // are floored, never `.deckent` whole — the project's own `.deckent/docs` and notes stay creatable and writable.
+  if (!floor) return defaultProductPaths(layout).some(path => rel === path || rel.startsWith(`${path}/`));
+  return floor.roots.some(root => {
     const path = relative(layout.project.root, root);
     return path !== '' && !path.startsWith('..') && !isAbsolute(path) && (rel === path || rel.startsWith(`${path}/`));
   });
+}
+function defaultProductPaths(layout: ShellSandboxLayout): readonly string[] {
+  const root = layout.project.root;
+  let defaults: ReturnType<typeof resolveProductLayout>;
+  try { defaults = resolveProductLayout({ projectRoot: root }); } catch { return [DECKENT_DIR]; } // an unexpressible root: fail closed, `.deckent` whole
+  const inProject = (path: string) => { const rel = relative(root, path); return rel === '' || rel.startsWith('..') || isAbsolute(rel) ? [] : [rel.split('\\').join('/')]; };
+  return [...(Object.keys(defaults.resources) as (keyof typeof defaults.resources)[]).flatMap(resource => inProject(productResourcePath(defaults, resource))),
+    ...(layout.dataRoot ? [layout.dataRoot] : [])];
 }
 /**
  * The write facts one sandboxed call's card describes (merge Astra 2170 x MODES-3, owner 2026-09-29): the same `writeFloorReadOnly`/

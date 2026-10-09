@@ -124,3 +124,14 @@ describe('W3: real sandbox negative paths (synthetic files and IPC only)', () =>
   });
 
 });
+
+// Fix round 2026-10-09 (owner Y 2026-09-30 x INS-05): a layout without the turn's hard floor floors the default layout's authority and
+// state resources and the data root, never `.deckent` whole — `.deckent/docs` and other own files stay writable.
+it('without a turn hard floor, authority/state paths are floored and the project own .deckent files are not', async () => {
+  const { sandboxHardFloored } = await import('#adapters/core/host-shell/index.js');
+  const layout = { project: { root: '/tmp/hf-project', ignoredDirs: new Set<string>(), protectedAnchors: new Set<string>(), denied: () => false },
+    scratchDir: null, writeFloor: null, dataRoot: '.deckent/live-data' } as ShellSandboxLayout;
+  for (const rel of ['.deckent/config.json', '.deckent/policy.json', '.deckent/bindings.json', '.deckent/approvals/-', '.deckent/state/ledger.db',
+    '.deckent/project-identity/-', '.deckent/installation-identity/-', '.deckent/live-data/policy.json']) expect(sandboxHardFloored(layout, rel), rel).toBe(true);
+  for (const rel of ['.deckent/-', '.deckent/docs/-', '.deckent/docs/x.md', '.deckent/notes.md', 'src/a.ts']) expect(sandboxHardFloored(layout, rel), rel).toBe(false);
+});
